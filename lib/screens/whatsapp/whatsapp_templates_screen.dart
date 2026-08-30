@@ -607,6 +607,16 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
         icon: LucideIcons.save,
         busy: _saving,
         onPressed: _save,
+        // زرّ الحذف سقط سهواً عند نقل المحرّر إلى القوقعة الموحّدة
+        // (f607065): بقيت `_delete` معرّفة بلا مستدعٍ، فلم يعد بالإمكان
+        // حذف قالب من الواجهة إطلاقاً. أُعيد في خانة `leading`.
+        leading: widget.existing != null
+            ? SheetFooterIconButton(
+                icon: LucideIcons.trash2,
+                color: AppColors.error,
+                onTap: _saving ? null : _delete,
+              )
+            : null,
       ),
       maxHeightFactor: 0.95,
       scrollable: false,

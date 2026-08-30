@@ -45,7 +45,6 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
 
   bool _obscurePassword = true;
   bool _submitting = false;
-  bool _loadingCreds = false;
 
   @override
   void initState() {
@@ -94,7 +93,6 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
   }
 
   Future<void> _loadCredentials(int deviceId) async {
-    setState(() => _loadingCreds = true);
     try {
       final creds = await NetworkDevicesApi.getCredentials(deviceId);
       if (!mounted) return;
@@ -103,10 +101,9 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
         _passCtrl.text = (creds['pass'] ?? '').toString();
         _communityCtrl.text = (creds['community'] ?? 'public').toString();
         _snmpVersion = (creds['version'] ?? 'v2c').toString();
-        _loadingCreds = false;
       });
     } catch (_) {
-      if (mounted) setState(() => _loadingCreds = false);
+      // فشل جلب بيانات الدخول: الحقول تبقى فارغة والمستخدم يملؤها يدويّاً.
     }
   }
 

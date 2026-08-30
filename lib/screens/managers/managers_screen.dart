@@ -96,10 +96,6 @@ class _ManagersScreenState extends State<ManagersScreen> {
     });
   }
 
-  /// الدين الإجمالي على مدير = SAS + الديون الخارجية. يُستعمل في
-  /// الـchip + لتمريرها لـpay-debt sheet.
-  double _totalDebtFor(Manager m) => m.debt + (_customDebtByManager[m.id] ?? 0);
-
   List<Manager> get _filtered {
     Iterable<Manager> it = _rows;
     if (_query.isNotEmpty) {

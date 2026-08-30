@@ -56,7 +56,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   bool _waLoaded = false;
   bool _activationsLoaded = false;
-  bool _sas4Loaded = false;
   bool _debtorsLoaded = false;
   bool _walletLoaded = false;
 
@@ -139,7 +138,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         if (cachedSas4 != null) {
           _sas4Live = cachedSas4;
-          _sas4Loaded = true;
         }
         if (cachedWallet != null) {
           _walletLive = cachedWallet;
@@ -158,7 +156,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         _waLoaded = false;
         _activationsLoaded = false;
-        _sas4Loaded = false;
         _debtorsLoaded = false;
         _walletLoaded = false;
       });
@@ -213,7 +210,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (silent && failed && _sas4Live != null) return;
       setState(() {
         _sas4Live = r;
-        _sas4Loaded = true;
       });
       if (!failed) DashboardCache.saveSas4(r); // persist for next cold start
     });

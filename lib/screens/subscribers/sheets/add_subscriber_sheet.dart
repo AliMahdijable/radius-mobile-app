@@ -140,6 +140,7 @@ class _AddSheetState extends State<_AddSheet> {
         ? _parentId
         : int.tryParse(adminId ?? '');
     if (parentId == null) {
+      if (!mounted) return;
       showSheetSnack(context, 'تعذّر تحديد المدير الأصلي — أعد تسجيل الدخول',
           isError: true);
       return;
@@ -264,7 +265,7 @@ class _AddSheetState extends State<_AddSheet> {
                   ? null
                   : () async {
                       final r = await ContactPicker.pickPhone();
-                      if (!mounted) return;
+                      if (!mounted || !context.mounted) return;
                       if (r.phone != null) {
                         setState(() => _phone.text = r.phone!);
                       } else if (r.error != null) {

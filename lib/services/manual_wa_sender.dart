@@ -44,7 +44,9 @@ Future<bool> openManualWa({
   try {
     return await launchUrl(webUri, mode: LaunchMode.externalApplication);
   } catch (_) {
-    _snack(context, 'تعذّر فتح واتساب');
+    if (context != null && context.mounted) {
+      _snack(context, 'تعذّر فتح واتساب');
+    }
     return false;
   }
 }
@@ -84,7 +86,7 @@ Future<bool> handleWaPreviewAfterOp({
     final ok = await openManualWa(
       phone: preview.phone,
       message: preview.message,
-      context: context,
+      context: context.mounted ? context : null,
     );
     if (!ok && context.mounted) {
       showSheetSnack(context, 'تعذّر فتح واتساب', isError: true);

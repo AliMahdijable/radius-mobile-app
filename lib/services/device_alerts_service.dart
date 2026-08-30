@@ -278,6 +278,10 @@ class DeviceAlertsService {
     }
   }
 
+  // مُلغاة صراحةً بطلب المستخدم (2026-08-18): تنبيهات الأجهزة داخل
+  // التطبيق فقط. تبقى جاهزةً لو تغيّر القرار — الاستدعاء المعلَّق
+  // في `_raise` أعلاه.
+  // ignore: unused_element
   Future<void> _showOsNotification(DeviceAlert a) async {
     final isOffline = a.kind == DeviceAlertKind.offline;
     final title = isOffline

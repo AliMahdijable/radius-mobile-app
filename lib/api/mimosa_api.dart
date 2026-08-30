@@ -49,10 +49,16 @@ class MimosaApi {
   //     11 = mimosaPtmpStaDistance   (int, meters)
   //     12 = mimosaPtmpStaUptime     (int, seconds)
   //     13 = mimosaPtmpStaOnline     (int, 1=online 0=offline)
+  // ⚠️ هذه الثلاثة غير مستعملة بعد: جدول محطّات PtMP لم يُنفَّذ
+  // (بند مؤجَّل في خارطة الأجهزة). تبقى مكتوبةً لأنّ استخراج OIDs
+  // من MIB عمل مستقلّ، وحذفها يعني إعادته عند تنفيذ الميزة.
+  // ignore: unused_field
   static const String _oidPtmpStaTable = '$_ptmp.2';
   static const String _oidPtmpStaIP = '$_ptmp.2.1.2';
   static const String _oidPtmpStaName = '$_ptmp.2.1.3';
+  // ignore: unused_field
   static const String _oidPtmpStaHw = '$_ptmp.2.1.4';
+  // ignore: unused_field
   static const String _oidPtmpStaFw = '$_ptmp.2.1.5';
   static const String _oidPtmpStaRssi = '$_ptmp.2.1.6';
   static const String _oidPtmpStaSnr = '$_ptmp.2.1.7';

@@ -849,25 +849,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
   // ══════════════════════════════════════════════════════════════
   // Interfaces section
   // ══════════════════════════════════════════════════════════════
-  Widget _interfacesSection() {
-    final ethers = _stats!.interfaces.where(_isDataIface).toList();
-    if (ethers.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.all(Sp.md),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Icon(LucideIcons.network, size: 14, color: AppColors.brandAccent),
-          const SizedBox(width: 6),
-          Text('Ethernet (${ethers.length})',
-              style: AppType.bodyBold()),
-        ]),
-        const SizedBox(height: 8),
-        for (final iface in ethers) _interfaceRow(iface),
-      ]),
-    );
-  }
-
-  Widget _interfaceRow(UbntInterface iface) {
+Widget _interfaceRow(UbntInterface iface) {
     final rate = _rates[iface.ifname];
     final up = iface.plugged && iface.enabled;
     final color = up ? AppColors.success : AppColors.error;
@@ -918,30 +900,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
   // ══════════════════════════════════════════════════════════════
   // Stations section (لو AP mode)
   // ══════════════════════════════════════════════════════════════
-  Widget _stationsSection() {
-    final ss = _stats!.stations;
-    return Padding(
-      padding: const EdgeInsets.all(Sp.md),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Icon(LucideIcons.users, size: 14, color: AppColors.brandAccent),
-          const SizedBox(width: 6),
-          Text('العملاء المتّصلون (${ss.length})',
-              style: AppType.bodyBold()),
-        ]),
-        const SizedBox(height: 8),
-        for (final s in ss.take(20)) _stationRow(s),
-        if (ss.length > 20)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text('+ ${ss.length - 20} عميل آخر',
-                style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textLow)),
-          ),
-      ]),
-    );
-  }
-
-  Widget _stationRow(UbntStation s) {
+Widget _stationRow(UbntStation s) {
     final signalColor = _signalColor(s.signal);
     return Container(
       margin: const EdgeInsets.only(bottom: 6),

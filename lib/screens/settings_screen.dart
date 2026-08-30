@@ -31,16 +31,12 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   String _name = '';
-  String _id = '';
 
   @override
   void initState() {
     super.initState();
     AuthStorage.readDisplayName().then((n) {
       if (mounted) setState(() => _name = n ?? '');
-    });
-    AuthStorage.readAdminId().then((i) {
-      if (mounted) setState(() => _id = i ?? '');
     });
   }
 
@@ -312,7 +308,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     );
                     if (ok == true) {
                       await SavedProfilesStore.clearAll();
-                      if (!mounted) return;
+                      // الحارسان معاً: `mounted` للحالة، و`context.mounted`
+                      // لعنصر الباني المحلّي — قد يموت أحدهما دون الآخر.
+                      if (!mounted || !context.mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: const Text('تمّ مسح الحسابات المحفوظة'),
@@ -425,16 +423,6 @@ class _SectionLabel extends StatelessWidget {
       ),
     );
   }
-}
-
-void _todo(BuildContext ctx, String msg) {
-  ScaffoldMessenger.of(ctx).showSnackBar(
-    SnackBar(
-      content: Text(msg),
-      backgroundColor: AppColors.textHi,
-      behavior: SnackBarBehavior.floating,
-    ),
-  );
 }
 
 void _openThemePicker(BuildContext ctx) {

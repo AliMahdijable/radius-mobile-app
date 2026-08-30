@@ -1635,6 +1635,9 @@ class _CopyChipState extends State<_CopyChip> {
     await Clipboard.setData(ClipboardData(text: widget.value));
     if (!mounted) return;
     setState(() => _copied = true);
+    // `widget.context` سياق ويدجت أخرى: `mounted` أعلاه يخصّ هذه
+    // الحالة لا تلك، فقد تكون تلك ماتت وهذه حيّة.
+    if (!widget.context.mounted) return;
     showSheetSnack(
       widget.context,
       'تم نسخ ${widget.value}',

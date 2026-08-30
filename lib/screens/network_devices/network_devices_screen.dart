@@ -1002,63 +1002,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     );
   }
 
-  Widget _statusFilterRow() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 6),
-      child: Row(children: [
-        _statusChip(null, 'الكلّ', _all.length),
-        const SizedBox(width: 6),
-        _statusChip('online', 'متّصل', _countByStatus('online')),
-        const SizedBox(width: 6),
-        _statusChip('offline', 'غير متّصل', _countByStatus('offline')),
-        const SizedBox(width: 6),
-        _statusChip('unknown', 'لم يُفحص', _countByStatus('unknown')),
-      ]),
-    );
-  }
-
-  Widget _statusChip(String? status, String label, int count) {
-    final active = _statusFilter == status;
-    final color = status == null ? AppColors.brand : _statusColor(status);
-    return InkWell(
-      onTap: () => setState(() => _statusFilter = active ? null : status),
-      borderRadius: BorderRadius.circular(R.card),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 6),
-        decoration: BoxDecoration(
-          color: active ? color : AppColors.surfaceInput,
-          borderRadius: BorderRadius.circular(R.card),
-          border: Border.all(
-            color: active ? color : AppColors.border,
-            width: 1,
-          ),
-        ),
-        child: Row(children: [
-          if (status != null) ...[
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: active ? AppColors.onBrand : color,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 6),
-          ],
-          Text(
-            '$label ($count)',
-            style: TextStyle(
-              fontSize: 11, height: 1.25,
-              fontWeight: FontWeight.w600,
-              color: active ? AppColors.onBrand : AppColors.textHi,
-            ),
-          ),
-        ]),
-      ),
-    );
-  }
-
-  // _list() القديمة أُزيلت — استعملنا CustomScrollView + Slivers مباشرة في build.
+// _list() القديمة أُزيلت — استعملنا CustomScrollView + Slivers مباشرة في build.
 
   Widget _deviceCard(NetworkDevice d) {
     final statusCol = _statusColor(d.lastStatus);

@@ -34,8 +34,13 @@ class RuijieApi {
 
   // — HOST-RESOURCES-MIB fallback (يشتغل حتى لو Ruijie enterprise mib غير موجود) —
   static const String _oidHrProcessorLoad = '1.3.6.1.2.1.25.3.3.1.2';
+  // النوع والوحدة غير مقروءين حاليّاً — نكتفي بـSize/Used ونفترض
+  // وحدة البايت. يبقيان لاكتمال صفّ الـMIB وللاستعمال عند دعم
+  // أقراص بوحدات مختلفة.
+  // ignore: unused_field
   static const String _oidHrStorageType = '1.3.6.1.2.1.25.2.3.1.2';
   static const String _oidHrStorageDescr = '1.3.6.1.2.1.25.2.3.1.3';
+  // ignore: unused_field
   static const String _oidHrStorageUnits = '1.3.6.1.2.1.25.2.3.1.4';
   static const String _oidHrStorageSize = '1.3.6.1.2.1.25.2.3.1.5';
   static const String _oidHrStorageUsed = '1.3.6.1.2.1.25.2.3.1.6';

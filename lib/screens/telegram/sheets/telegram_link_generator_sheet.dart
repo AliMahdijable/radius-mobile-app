@@ -161,6 +161,27 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
       body: Column(
         children: [
           const SizedBox(height: 12),
+          // ⚠️ حقل البحث سقط كاملاً عند نقل الشيت إلى القوقعة (602c357):
+          // بقيت `_searchCtrl` تُقرأ في الفلترة وتُكتب عند الاختيار، بلا
+          // أيّ ويدجت تربطها — فالشيت يعرض «ابدأ الكتابة» ولا مكان
+          // للكتابة، ولا سبيل لاختيار مشترك أو توليد رابط إطلاقاً.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Sp.xl, 0, Sp.xl, Sp.md),
+            child: SheetSearchField(
+              controller: _searchCtrl,
+              hint: 'ابحث بالاسم أو اليوزر أو الهاتف',
+              autofocus: true,
+              onChanged: (_) {
+                // السلوك قبل الهجرة: الكتابة بعد اختيار مشترك تُلغي
+                // الاختيار وتعود للبحث.
+                if (_selected != null) {
+                  _reset();
+                } else {
+                  setState(() {});
+                }
+              },
+            ),
+          ),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())

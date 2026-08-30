@@ -1086,7 +1086,9 @@ class WhatsAppApi {
       final ok = await openManualWa(
         phone: phone,
         message: rendered,
-        context: context,
+        // السياق قد يكون مات أثناء انتظار اختيار المستخدم أعلاه.
+        // `openManualWa` تقبل null وتتخطّى الـsnack عندها.
+        context: context.mounted ? context : null,
       );
       return WhatsSendResult(
         ok: ok,

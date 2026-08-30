@@ -1001,61 +1001,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   // ══════════════════════════════════════════════════════════════
   // Interfaces section — فقط ether + sfp، مع RX/TX rates
   // ══════════════════════════════════════════════════════════════
-  Widget _interfacesSection() {
-    final s = _stats!;
-    final ethers = s.interfaces.where(_isEther).toList();
-    if (ethers.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(Sp.md),
-        child: Text('لا يوجد ethernet interfaces',
-            style: AppType.muted()),
-      );
-    }
-    final up = ethers.where((i) => i.running && !i.disabled).length;
-    final down = ethers.where((i) => !i.running && !i.disabled).length;
-    // ابحث عن أعلى معدّل لعرض bars نسبيّة
-    int maxRate = 0;
-    for (final iface in ethers) {
-      final r = _rates[iface.name];
-      if (r != null) {
-        maxRate = math.max(maxRate, math.max(r.rxBps, r.txBps));
-      }
-    }
-
-    return Padding(
-      padding: const EdgeInsets.all(Sp.md),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Icon(LucideIcons.network, size: 14, color: AppColors.brand),
-          const SizedBox(width: 6),
-          Text('Ethernet Interfaces (${ethers.length})',
-              style: AppType.bodyBold()),
-          const SizedBox(width: 8),
-          _countBadge('↑ $up', AppColors.success),
-          if (down > 0) ...[
-            const SizedBox(width: 4),
-            _countBadge('↓ $down', AppColors.error),
-          ],
-        ]),
-        const SizedBox(height: 8),
-        for (final iface in ethers) _interfaceRow(iface, maxRate),
-      ]),
-    );
-  }
-
-  Widget _countBadge(String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(R.sm),
-      ),
-      child: Text(text,
-          style: AppType.microBold(color: color)),
-    );
-  }
-
-  Widget _interfaceRow(MikrotikInterface iface, int maxRate) {
+Widget _interfaceRow(MikrotikInterface iface, int maxRate) {
     final rate = _rates[iface.name];
     final color = iface.disabled
         ? AppColors.textLow
@@ -1146,24 +1092,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   // ══════════════════════════════════════════════════════════════
   // Wireless section — للـMikrotik links/sectors/APs
   // ══════════════════════════════════════════════════════════════
-  Widget _wirelessSection() {
-    final wls = _stats!.wirelessInterfaces;
-    return Padding(
-      padding: const EdgeInsets.all(Sp.md),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Icon(LucideIcons.wifi, size: 14, color: AppColors.brand),
-          const SizedBox(width: 6),
-          Text('Wireless (${wls.length})',
-              style: AppType.bodyBold()),
-        ]),
-        const SizedBox(height: 8),
-        for (final w in wls) _wirelessCard(w),
-      ]),
-    );
-  }
-
-  Widget _wirelessCard(MikrotikWireless w) {
+Widget _wirelessCard(MikrotikWireless w) {
     final active = w.running && !w.disabled;
     final color = active ? AppColors.success : AppColors.error;
     return Container(
@@ -1230,30 +1159,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   // ══════════════════════════════════════════════════════════════
   // Wireless clients (registration table)
   // ══════════════════════════════════════════════════════════════
-  Widget _wirelessClientsSection() {
-    final cs = _stats!.wirelessClients;
-    return Padding(
-      padding: const EdgeInsets.all(Sp.md),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Icon(LucideIcons.users, size: 14, color: AppColors.brand),
-          const SizedBox(width: 6),
-          Text('العملاء المتّصلون (${cs.length})',
-              style: AppType.bodyBold()),
-        ]),
-        const SizedBox(height: 8),
-        for (final c in cs.take(30)) _clientRow(c),
-        if (cs.length > 30)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text('+ ${cs.length - 30} عميل آخر',
-                style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textLow)),
-          ),
-      ]),
-    );
-  }
-
-  Widget _clientRow(MikrotikWirelessClient c) {
+Widget _clientRow(MikrotikWirelessClient c) {
     final signalColor = _signalColorFor(c.signalStrength);
     final hasName = c.hostname != null || c.comment != null;
     // Use best CCQ (tx-ccq usually higher)

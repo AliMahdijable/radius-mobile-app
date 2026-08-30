@@ -135,6 +135,9 @@ class _SplashScreenState extends State<SplashScreen> {
       next = const LoginScreen();
     }
 
+    // بلا هذا الحارس: لو غادر المستخدم الشاشة أثناء التحميل أعلاه
+    // (أو أُعيد بناء الجذر) رمى `Navigator.of` على سياق ميّت.
+    if (!mounted) return;
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (_, __, ___) => next,

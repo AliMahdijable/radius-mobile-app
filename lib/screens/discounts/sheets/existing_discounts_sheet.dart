@@ -173,7 +173,9 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
       header: SheetHeaderBar(
         icon: LucideIcons.tag,
         title: 'الخصومات القائمة',
-        subtitle: '',
+        // العدّ والإجمالي كانا في ترويسة الشيت قبل الهجرة (d5ee6f6)
+        // فسقطا مع الترويسة القديمة. السطر الفرعي مكانهما الطبيعي.
+        subtitle: '${_rows.length} خصم · إجمالي ${formatIQD(_total)} د.ع',
         tint: AppColors.success,
         tintBg: AppColors.successSoftBg,
         onClose: () => Navigator.of(context).pop(_changed),

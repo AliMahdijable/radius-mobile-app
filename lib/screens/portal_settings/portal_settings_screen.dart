@@ -81,7 +81,6 @@ class _InfoTab extends StatefulWidget {
 }
 
 class _InfoTabState extends State<_InfoTab> {
-  Branding? _draft;
   bool _loading = true;
   bool _saving = false;
   bool _dirty = false;
@@ -119,7 +118,6 @@ class _InfoTabState extends State<_InfoTab> {
     final b = await PortalSettingsApi.getBranding();
     if (!mounted) return;
     setState(() {
-      _draft = b;
       _displayName.text = b.displayName ?? '';
       _logoUrl.text = b.logoUrl ?? '';
       _about.text = b.aboutText ?? '';
@@ -155,7 +153,6 @@ class _InfoTabState extends State<_InfoTab> {
     setState(() {
       _saving = false;
       if (ok) {
-        _draft = b;
         _dirty = false;
       }
     });

@@ -43,8 +43,6 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
   // الـsheet بالتوازي مع رسم القالب الافتراضي. v1 يمرّر extraDebt من
   // الأب (managers_screen) لأنه يحتفظ بـsummary cached؛ v2 لا يحتفظ
   // فيها فنجلبها هنا. عند الوصول، نُعيد بناء النص بالقيم الصحيحة.
-  double _extraDebt = 0;
-  bool _extraLoaded = false;
 
   @override
   void initState() {
@@ -58,8 +56,6 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
     if (!mounted) return;
     final extra = summary?.remainingForDebtor(widget.manager.id) ?? 0;
     setState(() {
-      _extraDebt = extra;
-      _extraLoaded = true;
       _msgCtrl.text = _composeMessage(extra);
     });
   }

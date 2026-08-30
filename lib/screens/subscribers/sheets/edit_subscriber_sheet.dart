@@ -380,7 +380,7 @@ class _EditSheetState extends State<_EditSheet> {
                   ? null
                   : () async {
                       final r = await ContactPicker.pickPhone();
-                      if (!mounted) return;
+                      if (!mounted || !context.mounted) return;
                       if (r.phone != null) {
                         setState(() => _phone.text = r.phone!);
                       } else if (r.error != null) {
