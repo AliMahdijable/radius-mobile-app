@@ -88,7 +88,7 @@ class SubscribersCard extends StatelessWidget {
                           ? null
                           : () => onOpen!(SubscriberFilter.active),
                     ),
-                    const SizedBox(height: 9),
+                    const SizedBox(height: Sp.sm),
                     _RingStatRow(
                       tone: AppTone.danger,
                       icon: LucideIcons.timerOff,
@@ -98,7 +98,7 @@ class SubscribersCard extends StatelessWidget {
                           ? null
                           : () => onOpen!(SubscriberFilter.expired),
                     ),
-                    const SizedBox(height: 9),
+                    const SizedBox(height: Sp.sm),
                     _RingStatRow(
                       tone: AppTone.success,
                       icon: LucideIcons.wifi,
@@ -108,7 +108,7 @@ class SubscribersCard extends StatelessWidget {
                           ? null
                           : () => onOpen!(SubscriberFilter.online),
                     ),
-                    const SizedBox(height: 9),
+                    const SizedBox(height: Sp.sm),
                     // صفٌّ رابع لا حبّة: أربع حبّات في سطر تُنتج ازدحاماً
                     // وتسميات مقصوصة، وثلاث تتّسع بأريحيّة. (بلاغ 2026-08-30)
                     _RingStatRow(
@@ -125,64 +125,23 @@ class SubscribersCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          // شريط الحالات الاستثنائيّة. حلّ محلّ شريط النسبة القديم
-          // (active/expired) عمداً: النسبة نفسها تقرأها الحلقة أعلاه،
-          // فالشريط كان يكرّرها بلغة ثانية ويأكل الموضع الذي تحتاجه
-          // هذه الثلاثة.
-          // شريط أفقي مضغوط بدل أربع بلاطات عموديّة.
+          const SizedBox(height: Sp.md),
+          // ── درج الاستثناءات ──
           //
-          // البلاطات كانت 53px بعمودَين (رقم فوق تسمية) وربعِ العرض
-          // لكلٍّ، فتُجبر «قربوا الانتهاء» على سطرين. الحبّة هنا سطر
-          // واحد بعرض محتواها — 30px بدل 53، وبلا قصّ ولا التفاف.
+          // كانت ثلاث بلاطات عموديّة جنباً إلى جنب (رقم فوق تسمية). طلب
+          // المستخدم أن تُصمَّم «مثل الي اعلى لكن يكونون افقي».
           //
-          // ثلاث بلاطات متساوية العرض — بعد نقل «غير متصل» إلى الصفوف.
+          // ⚠️ الأفقيّة داخل ثلث العرض مستحيلة قياساً لا رأياً: بعد
+          // حسم الحشوات والأيقونة والرقم يبقى للتسمية 36.5dp على شاشة
+          // 393، بينما «قربوا الانتهاء» تقيس 53.7dp و«Expiring soon»
+          // تقيس 72.1dp بالخطّ المُجمَّع نفسه. فالأفقيّة تفرض العرض
+          // الكامل — والعرض الكامل يفرض التكديس.
           //
-          // بأربع كان نصيب كلٍّ رُبع العرض، فتُقصّ «قربوا الانتهاء» أو
-          // تلتفّ إلى سطر ثانٍ. بثلاث يبلغ نصيبها الثلث فتتّسع التسمية
-          // كاملةً في سطر واحد بلا قصّ ولا التفاف.
-          Row(
-            children: [
-              Expanded(
-                child: _StatPill(
-                  tone: AppTone.warning,
-                  icon: LucideIcons.triangleAlert,
-                  label: 'dashboard.near_expiry'.tr(),
-                  value: s.nearExpiry,
-                  onTap: onOpen == null
-                      ? null
-                      : () => onOpen!(SubscriberFilter.nearExpiry),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _StatPill(
-                  tone: AppTone.neutral,
-                  icon: LucideIcons.userX,
-                  label: 'dashboard.disabled'.tr(),
-                  value: s.disabled,
-                  onTap: onOpen == null
-                      ? null
-                      : () => onOpen!(SubscriberFilter.disabled),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _StatPill(
-                  // «متصل بلا باقة» شذوذ لا حالة عاديّة — لونه البنفسجي
-                  // نفسه في القائمة والويب، وأيقونته `wifi` لا `wifiOff`
-                  // لأنّ اتّصالهم **هو** موضع الشذوذ.
-                  tone: AppTone.anomaly,
-                  icon: LucideIcons.wifi,
-                  label: 'dashboard.online_no_plan'.tr(),
-                  value: s.onlineNoPlan,
-                  onTap: onOpen == null
-                      ? null
-                      : () => onOpen!(SubscriberFilter.onlineNoPlan),
-                ),
-              ),
-            ],
-          ),
+          // والتكديس بلا إطار يُنتج سبعة صفوف متطابقة بلا تسلسل، وهو
+          // ما رُفض سابقاً. فالإطار الواحد يجمعها رتبةً ثانية: صفّ 30dp
+          // مقابل 32، وأيقونة 22 مقابل 32، بينما يبقى لون النغمة كما
+          // هو أعلى — التدرّج في الحجم لا في اللغة اللونيّة.
+          _ExceptionsTray(stats: s, onOpen: onOpen),
         ],
       ),
     );
@@ -197,7 +156,7 @@ class _Skeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return Container(
-      height: 268, // مقيس لا مُقدَّر — يحرسه dashboard_card_height_test
+      height: 302, // مقيس لا مُقدَّر — يحرسه dashboard_card_height_test
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.card),
@@ -424,12 +383,80 @@ class _RingPainter extends CustomPainter {
       old.isDark != isDark;
 }
 
-/// حبّة حالة استثنائيّة أسفل البطاقة — رتبة أدنى من صفوف الحلقة.
+/// درج الاستثناءات — الرتبة الثانية أسفل البطاقة.
 ///
-/// أصغر من `_RingStatRow` عمداً: هذه حالات تُتابَع عند وقوعها لا تُقرأ
-/// يوميّاً، والفرق في الحجم هو ما يجعل الصفوف الثلاثة أعلاه تُقرأ أوّلاً.
-class _StatPill extends StatelessWidget {
-  const _StatPill({
+/// إطار واحد يضمّ الثلاثة بدل ثلاثة إطارات متجاورة: الحدّ الواحد يقول
+/// «هذه مجموعة» بينما ثلاثة حدود ملوّنة متجاورة تقول «ثلاثة تنبيهات
+/// تتنافس»، وهو ما شكا منه المستخدم. ولون النغمة انتقل إلى حدّ الأيقونة
+/// وحدها فبقي التمييز بلا صخب.
+class _ExceptionsTray extends StatelessWidget {
+  const _ExceptionsTray({required this.stats, this.onOpen});
+
+  final SubscribersStats stats;
+  final ValueChanged<SubscriberFilter?>? onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Material(
+      // `surface` لا `sunken`: البطاقة نفسها على `surface`، والغائر
+      // داخلها يقرأه العين حفرةً لا مجموعة.
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(R.lg),
+      // بلا قصّ يتجاوز حبر النقر الزوايا المدوّرة في الصفّ الأوّل والأخير.
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(R.lg),
+          border: Border.all(color: AppColors.border, width: BW.normal),
+        ),
+        padding: const EdgeInsets.symmetric(vertical: Sp.xxs),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ExceptionRow(
+              tone: AppTone.warning,
+              icon: LucideIcons.triangleAlert,
+              label: 'dashboard.near_expiry'.tr(),
+              value: stats.nearExpiry,
+              onTap: onOpen == null
+                  ? null
+                  : () => onOpen!(SubscriberFilter.nearExpiry),
+            ),
+            _ExceptionRow(
+              tone: AppTone.neutral,
+              icon: LucideIcons.userX,
+              label: 'dashboard.disabled'.tr(),
+              value: stats.disabled,
+              onTap: onOpen == null
+                  ? null
+                  : () => onOpen!(SubscriberFilter.disabled),
+            ),
+            _ExceptionRow(
+              // «متصل بلا باقة» شذوذ لا حالة عاديّة — لونه البنفسجي
+              // نفسه في القائمة والويب، وأيقونته `wifi` لا `wifiOff`
+              // لأنّ اتّصالهم **هو** موضع الشذوذ.
+              tone: AppTone.anomaly,
+              icon: LucideIcons.wifi,
+              label: 'dashboard.online_no_plan'.tr(),
+              value: stats.onlineNoPlan,
+              onTap: onOpen == null
+                  ? null
+                  : () => onOpen!(SubscriberFilter.onlineNoPlan),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// صفّ واحد داخل الدرج — تشريح `_RingStatRow` نفسه بمقاس أصغر.
+///
+/// الارتفاع ضمنيّ (حشوة لا `SizedBox`) كي ينمو الصفّ مع تكبير خطّ
+/// النظام بدل أن يُقصّ النصّ داخل علبة ثابتة.
+class _ExceptionRow extends StatelessWidget {
+  const _ExceptionRow({
     required this.tone,
     required this.icon,
     required this.label,
@@ -446,49 +473,46 @@ class _StatPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return Material(
-      // ⚠️ بلا خلفيّة ملوّنة (طلب المستخدم): ثلاث خلفيّات مصمتة متجاورة
-      // تجعل الصفّ كتلاً متنافسة على الانتباه بدل أن يُقرأ بلمحة.
-      // اللون في الأيقونة والرقم والحدّ يكفي للتمييز.
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(R.md),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(R.md),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(R.md),
-            // `fill` لا `softBorder`: الأخير مُعايَر ليقع على خلفيّته
-            // الناعمة، وعلى سطح محايد يُقرأ رماديّاً فيضيع التمييز.
-            border: Border.all(color: tone.fill),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon, size: 14, color: tone.fill),
-                  const SizedBox(width: 6),
-                  Text('$value',
-                      style: AppType.cardTitleBold(color: tone.fill)),
-                ],
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsetsDirectional.symmetric(
+          horizontal: Sp.md,
+          vertical: Sp.xs,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                color: tone.softBg,
+                borderRadius: BorderRadius.circular(R.sm),
+                // حدّ البلاطة القديمة انتقل إلى هنا: التلوين على 22×22
+                // يميّز بلا أن يصبغ عرض الكارت كلّه.
+                border: Border.all(color: tone.fill, width: BW.normal),
               ),
-              const SizedBox(height: 3),
-              // سطر واحد: بثلث العرض تتّسع أطول تسمية («قربوا الانتهاء»)
-              // كاملةً. القصّ حارسٌ للغات أطول لا للحالة العاديّة.
-              Text(
+              child: Icon(icon, color: tone.fill, size: 12),
+            ),
+            const SizedBox(width: Sp.sm),
+            Expanded(
+              // القصّ حارسٌ نظريّ: أضيق ميزانيّة (360dp) تعطي التسمية
+              // 188dp وأطولها «Expiring soon» = 72.1dp.
+              child: Text(
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: AppType.micro(color: AppColors.textMid),
+                style: AppType.label(color: AppColors.textMid),
               ),
-            ],
-          ),
+            ),
+            const SizedBox(width: Sp.sm),
+            // لون النغمة لا يتدرّج مع الحجم: لو بهت هنا لانقطعت اللغة
+            // اللونيّة بين الرتبتين.
+            Text('$value', style: AppType.cardTitleBold(color: tone.fill)),
+          ],
         ),
       ),
     );
   }
 }
+
