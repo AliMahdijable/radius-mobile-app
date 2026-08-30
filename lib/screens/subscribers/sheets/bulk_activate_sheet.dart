@@ -1130,29 +1130,17 @@ class _PartialTextFieldState extends State<_PartialTextField> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return AmountShorthandBox(
-        controller: widget.controller,
-        enabled: widget.enabled,
-        child: TextField(
-          controller: widget.controller,
-          enabled: widget.enabled,
-          keyboardType: TextInputType.number,
-          style: AppType.input(color: AppColors.textHi),
-          decoration: InputDecoration(
-            hintText: 'sheets.amount_example_10k'.tr(),
-            hintStyle: AppType.input(color: AppColors.textLow),
-            filled: true,
-            fillColor: AppColors.surface,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(R.sm),
-              borderSide: BorderSide(color: AppColors.border),
-            ),
-            isDense: true,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            suffixText: 'common.currency'.tr(),
-          ),
-        ));
+    // ⚠️ `AmountTextField` نفسها التي يستعملها شيت المشترك المفرد لا
+    // حقلاً خاماً: نفس العمليّة بواجهتين مختلفتين تُربك، والخام كان
+    // بنصف قطر `R.sm` وحدٍّ مسطّح بينما المفرد مستدير. واختصار المبلغ
+    // (25 ← 25,000) بداخلها فلا يُعاد تركيبه هنا.
+    return AmountTextField(
+      controller: widget.controller,
+      enabled: widget.enabled,
+      currency: 'common.currency'.tr(),
+      hint: 'sheets.amount_example_10k'.tr(),
+      onValue: (_) => _relay(),
+    );
   }
 }
 

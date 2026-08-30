@@ -453,37 +453,19 @@ class _PayRowCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           // Amount field
-          AmountShorthandBox(
-              controller: row.controller,
-              enabled: enabled && !row.payAll,
-              child: TextField(
-                controller: row.controller,
-                enabled: enabled && !row.payAll,
-                keyboardType: TextInputType.number,
-                style: AppType.input(color: AppColors.textHi),
-                decoration: InputDecoration(
-                  hintText: 'sheets.paid_amount'.tr(),
-                  hintStyle: AppType.input(color: AppColors.textLow),
-                  filled: true,
-                  fillColor: AppColors.surface,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(R.sm),
-                    borderSide: BorderSide(color: AppColors.border),
-                  ),
-                  isDense: true,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                  suffixText: 'common.currency'.tr(),
-                  suffixIcon:
-                      enabled && !row.payAll && row.controller.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(LucideIcons.x, size: 16),
-                              onPressed: onClear,
-                              visualDensity: VisualDensity.compact,
-                            )
-                          : null,
-                ),
-              )),
+          // ⚠️ `AmountTextField` نفسها التي يستعملها شيت المشترك المفرد
+          // لا حقلاً خاماً: نفس العمليّة بواجهتين مختلفتين تُربك، والخام
+          // كان بنصف قطر `R.sm` وحدٍّ مسطّح بينما المفرد مستدير. وهي
+          // تحمل اختصار المبلغ (25 ← 25,000) داخلها فلا يُعاد تركيبه.
+          AmountTextField(
+            controller: row.controller,
+            enabled: enabled && !row.payAll,
+            currency: 'common.currency'.tr(),
+            hint: 'sheets.paid_amount'.tr(),
+            // الأب يستمع لهذا المتحكّم أصلاً (`addListener` عند البناء)،
+            // فالمجموع يتحدّث بلا ردّ نداء ثانٍ.
+            onValue: (_) {},
+          ),
           if (chips.isNotEmpty && !row.payAll) ...[
             const SizedBox(height: 6),
             Wrap(
@@ -491,33 +473,16 @@ class _PayRowCard extends StatelessWidget {
               runSpacing: 6,
               children: [
                 for (final amount in chips)
-                  InkWell(
-                    onTap: enabled
-                        ? () {
-                            HapticFeedback.selectionClick();
-                            onChipTap(amount);
-                          }
-                        : null,
-                    borderRadius: BorderRadius.circular(R.pill),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: accent.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(R.pill),
-                        border: Border.all(
-                          color: accent.withValues(alpha: 0.25),
-                        ),
-                      ),
-                      child: Text(
-                        formatIQD(amount),
-                        style: AppType.muted(color: accent).copyWith(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
+                SheetQuickChip(
+                  label: _BulkPayDebtSheetState._formatThousands(amount),
+                  selected: false,
+                  onTap: enabled
+                      ? () {
+                          HapticFeedback.selectionClick();
+                          onChipTap(amount);
+                        }
+                      : () {},
+                ),
               ],
             ),
           ],

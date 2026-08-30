@@ -124,58 +124,56 @@ class SubscribersCard extends StatelessWidget {
           // لكلٍّ، فتُجبر «قربوا الانتهاء» على سطرين. الحبّة هنا سطر
           // واحد بعرض محتواها — 30px بدل 53، وبلا قصّ ولا التفاف.
           //
-          // والتمرير الأفقي لأنّ مجموع العروض قد يتجاوز الشاشة الضيّقة:
-          // إخفاء طرفٍ خلف تمريرة أهون من قصّ كلّ تسمية.
-          SizedBox(
-            height: 30,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: EdgeInsets.zero,
-              children: [
-                _StatPill(
-                  tone: AppTone.warning,
-                  icon: LucideIcons.triangleAlert,
-                  label: 'dashboard.near_expiry'.tr(),
-                  value: s.nearExpiry,
-                  onTap: onOpen == null
-                      ? null
-                      : () => onOpen!(SubscriberFilter.nearExpiry),
-                ),
-                const SizedBox(width: 6),
-                _StatPill(
-                  tone: AppTone.neutral,
-                  icon: LucideIcons.userX,
-                  label: 'dashboard.disabled'.tr(),
-                  value: s.disabled,
-                  onTap: onOpen == null
-                      ? null
-                      : () => onOpen!(SubscriberFilter.disabled),
-                ),
-                const SizedBox(width: 6),
-                _StatPill(
-                  // «متصل بلا باقة» شذوذ لا حالة عاديّة — لونه البنفسجي
-                  // نفسه في القائمة والويب، وأيقونته `wifi` لا `wifiOff`
-                  // لأنّ اتّصالهم **هو** موضع الشذوذ.
-                  tone: AppTone.anomaly,
-                  icon: LucideIcons.wifi,
-                  label: 'dashboard.online_no_plan'.tr(),
-                  value: s.onlineNoPlan,
-                  onTap: onOpen == null
-                      ? null
-                      : () => onOpen!(SubscriberFilter.onlineNoPlan),
-                ),
-                const SizedBox(width: 6),
-                _StatPill(
-                  tone: AppTone.info,
-                  icon: LucideIcons.wifiOff,
-                  label: 'dashboard.offline'.tr(),
-                  value: s.offline,
-                  onTap: onOpen == null
-                      ? null
-                      : () => onOpen!(SubscriberFilter.offline),
-                ),
-              ],
-            ),
+          // ⚠️ `Wrap` لا تمريراً أفقيّاً: مجموع عروض الأربع يتجاوز عرض
+          // البطاقة، والتمرير كان يقصّ الحبّة الأخيرة عند الحافّة —
+          // والقصّ يُقرأ عطلاً لا دعوةً للتمرير. (بلاغ المستخدم)
+          //
+          // والالتفاف يتكيّف: على شاشة عريضة تصطفّ الأربع، وعلى ضيّقة
+          // تنزل حبّتان إلى سطر ثانٍ — بلا قصّ في الحالين.
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              _StatPill(
+                tone: AppTone.warning,
+                icon: LucideIcons.triangleAlert,
+                label: 'dashboard.near_expiry'.tr(),
+                value: s.nearExpiry,
+                onTap: onOpen == null
+                    ? null
+                    : () => onOpen!(SubscriberFilter.nearExpiry),
+              ),
+              _StatPill(
+                tone: AppTone.neutral,
+                icon: LucideIcons.userX,
+                label: 'dashboard.disabled'.tr(),
+                value: s.disabled,
+                onTap: onOpen == null
+                    ? null
+                    : () => onOpen!(SubscriberFilter.disabled),
+              ),
+              _StatPill(
+                // «متصل بلا باقة» شذوذ لا حالة عاديّة — لونه البنفسجي
+                // نفسه في القائمة والويب، وأيقونته `wifi` لا `wifiOff`
+                // لأنّ اتّصالهم **هو** موضع الشذوذ.
+                tone: AppTone.anomaly,
+                icon: LucideIcons.wifi,
+                label: 'dashboard.online_no_plan'.tr(),
+                value: s.onlineNoPlan,
+                onTap: onOpen == null
+                    ? null
+                    : () => onOpen!(SubscriberFilter.onlineNoPlan),
+              ),
+              _StatPill(
+                tone: AppTone.info,
+                icon: LucideIcons.wifiOff,
+                label: 'dashboard.offline'.tr(),
+                value: s.offline,
+                onTap: onOpen == null
+                    ? null
+                    : () => onOpen!(SubscriberFilter.offline),
+              ),
+            ],
           ),
         ],
       ),
@@ -191,7 +189,7 @@ class _Skeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return Container(
-      height: 216, // مقيس لا مُقدَّر — يحرسه dashboard_card_height_test
+      height: 268, // مقيس لا مُقدَّر — يحرسه dashboard_card_height_test
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.card),
@@ -449,7 +447,9 @@ class _StatPill extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(R.pill),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 11),
+          // ضيّقة عمداً: أربع حبّات بتسمياتها تتجاوز عرض البطاقة على
+          // هاتف 360، فكلّ بكسل في الحشوة يقرّب اصطفافها في سطر واحد.
+          padding: const EdgeInsets.symmetric(horizontal: 7),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(R.pill),
             // `fill` لا `softBorder`: الأخير مُعايَر ليقع على خلفيّته
@@ -459,10 +459,10 @@ class _StatPill extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 13, color: tone.fill),
-              const SizedBox(width: 6),
-              Text('$value', style: AppType.pillBold(color: tone.fill)),
-              const SizedBox(width: 5),
+              Icon(icon, size: 12, color: tone.fill),
+              const SizedBox(width: 4),
+              Text('\$value', style: AppType.pillBold(color: tone.fill)),
+              const SizedBox(width: 4),
               Text(label, style: AppType.micro(color: AppColors.textMid)),
             ],
           ),

@@ -94,8 +94,26 @@ class DeviceImage extends StatelessWidget {
   /// اسم ملفّ الصورة الموافق للموديل، أو null.
   ///
   /// مكشوفة للاختبار: المطابقة بالسابقة سهلة الانزلاق إلى جهاز مجاور.
-  /// بادئات أسماء ملفّات ميكروتك — تُستعمل لبوّابة العلامة.
-  static const _mikrotikPrefixes = ['ccr', 'crs', 'css', 'rb', 'l0', 'l1', 'l2'];
+  /// ملفّات علامة Ubiquiti — **تعداد صريح لا تخمين ببادئة**.
+  ///
+  /// ⚠️ كانت البوّابة تخمّن العلامة من بادئة اسم الملفّ (ccr/crs/rb/…)،
+  /// فأسقطت ما لا يبدأ بها: صور LHG الثلاث (LHG 60G · LHG-5axD ·
+  /// LHG-5axD-XL) وهي ميكروتك، فرُفضت على أجهزة ميكروتك ولم تظهر رغم
+  /// وجودها. (بلاغ المستخدم: «LHG لا تأخذ صورة»)
+  ///
+  /// التعداد أطول لكنّه لا يكذب: ما ليس هنا فهو ميكروتك، والمجموعة
+  /// تُراجَع مع أيّ صورة جديدة تُضاف.
+  static const _ubntFiles = <String>{
+    '5x airfiber.png',
+    'AirFIBER 5 af-5.png',
+    'c5c-ptmp-hero.png',
+    'nanobridge m5.png',
+    'nano m5-2.png',
+    'powerbeam M5.webp',
+    'rocket m5.png',
+    'ubiquiti-airfiber-4x.png',
+    'ubiquiti-airfiber-af24hd.png',
+  };
 
   static String? assetFor(String? model, {String? brand}) {
     if (model == null) return null;
@@ -180,11 +198,12 @@ class DeviceImage extends StatelessWidget {
   static String? _gate(String file, String? brand) {
     if (brand == null || brand.isEmpty) return file;
     final b = brand.toLowerCase();
-    final f = file.toLowerCase();
-    final looksMikrotik = _mikrotikPrefixes.any(f.startsWith);
-    if (looksMikrotik && b != 'mikrotik') return null;
-    if (!looksMikrotik && b == 'mikrotik') return null;
-    return file;
+    // ما ليس في التعداد فهو ميكروتك. وكلّ علامة تُقصر على صورها:
+    // mimosa وcisco لا صور لهما بعد، فتبقيان على الشارة — وهو الصواب،
+    // لأنّ صورة سويتش ميكروتك على سكتور Mimosa تبدو صحيحة فيُبنى
+    // عليها قرار.
+    final want = _ubntFiles.contains(file) ? 'ubnt' : 'mikrotik';
+    return b == want ? file : null;
   }
 
   /// كلّ الصور المتاحة، مرتّبة أبجديّاً — للمنتقي اليدوي.
