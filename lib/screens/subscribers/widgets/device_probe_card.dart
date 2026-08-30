@@ -5,7 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/device_config_api.dart';
 import '../../../api/device_probe_api.dart';
-import '../../../core/net/ubiquiti_service.dart';
+import '../../../api/ubnt_api.dart';
 import '../../../models/device_health.dart';
 import '../sheets/device_config_sheet.dart';
 import '../../../theme/colors.dart';
@@ -63,7 +63,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   // جلسة قائمة.
   static const _pulse = Duration(seconds: 3);
   Timer? _trafficTimer;
-  UbiquitiLoginResult? _session;
+  UbntTrafficSession? _session;
   int? _lastRx;
   int? _lastTx;
   DateTime? _lastSample;
@@ -105,6 +105,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _trafficTimer?.cancel();
+    _session?.close();
     super.dispose();
   }
 
@@ -117,6 +118,10 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     } else {
       _trafficTimer?.cancel();
       _trafficTimer = null;
+      // نُغلق قناة SSH أيضاً — إبقاؤها مفتوحة والتطبيق في الخلفيّة
+      // يستهلك جلسة على جهاز المشترك بلا أيّ فائدة.
+      _session?.close();
+      _session = null;
     }
   }
 
@@ -128,8 +133,13 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   void _maybeStartTraffic() {
     if (_trafficTimer != null) return;
     final snap = _snap;
+    // ⚠️ الشرط على **نوع الجهاز** لا على وجود عدّادات في لقطة الفحص:
+    // لقطة الفحص تأتي من `status.cgi` وهو لا يُصدّر عدّادات بايت على
+    // airOS — لذلك كان الشرط السابق (`ubnt?.rxBytes != null`) يمنع
+    // الاستطلاع من البدء إطلاقاً، فتبقى بلاطة SNR إلى الأبد.
+    // العدّادات تأتي من SSH كما تفعل لوحة الأجهزة، وهو المسار المُثبَت.
     if (snap == null || snap.kind != DeviceKind.ubiquiti) return;
-    if (snap.ubnt?.rxBytes == null) return; // الإصدار لا يُصدّر العدّادات
+    _pulseTraffic(); // نبضة فوريّة تزرع المرجع بلا انتظار 3 ثوانٍ
     _trafficTimer = Timer.periodic(_pulse, (_) => _pulseTraffic());
   }
 
@@ -137,27 +147,38 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     if (_pulsing || !mounted) return;
     _pulsing = true;
     try {
-      // الجلسة تُفتح مرّة وتُعاد؛ وحين تنتهي صلاحيّتها نفتح غيرها.
-      _session ??= await DeviceProbeApi.openUbntSession(
-        fallbackIp: widget.ip,
-        subscriberUsername: widget.username,
-      );
+      // الجلسة تُفتح مرّة وتُعاد. الأمر الوحيد في كلّ نبضة هو
+      // `cat /proc/net/dev` — بضع مئات من البايتات وتفرّع عمليّة واحدة.
+      if (_session == null) {
+        final creds = await DeviceProbeApi.resolveUbntCreds(
+          fallbackIp: widget.ip,
+          subscriberUsername: widget.username,
+        );
+        if (creds == null) return;
+        _session = await UbntTrafficSession.open(
+          ip: creds.ip,
+          user: creds.user,
+          pass: creds.pass,
+        );
+      }
       final sess = _session;
       if (sess == null) return;
-      final st = await UbiquitiService.fetchStatus(sess);
-      if (st == null) {
-        _session = null; // غالباً انتهت الجلسة — نُعيد الدخول لاحقاً
+
+      final read = await sess.sample();
+      if (read == null) {
+        // الجلسة ماتت غالباً (انقطاع أو مهلة الجهاز) — نُغلقها ليُعاد
+        // فتحها في النبضة القادمة بدل الإصرار على قناة ميّتة.
+        sess.close();
+        _session = null;
         return;
       }
-      final rx = st.rxBytes;
-      final tx = st.txBytes;
+
       final now = DateTime.now();
-      if (rx == null || tx == null) return;
       if (_lastRx != null && _lastSample != null) {
         final secs = now.difference(_lastSample!).inMilliseconds / 1000.0;
-        final dRx = rx - _lastRx!;
-        final dTx = tx - _lastTx!;
-        // الفرق السالب يعني التفاف عدّاد أو إعادة إقلاع — نتخطّاه بدل
+        final dRx = read.rx - _lastRx!;
+        final dTx = read.tx - _lastTx!;
+        // الفرق السالب يعني التفاف عدّاد أو إعادة إقلاع — يُتخطّى بدل
         // عرض قيمة سالبة أو قفزة كاذبة.
         if (secs > 0.5 && dRx >= 0 && dTx >= 0) {
           final r = (dRx * 8 / secs).round();
@@ -172,12 +193,13 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           }
         }
       }
-      _lastRx = rx;
-      _lastTx = tx;
+      _lastRx = read.rx;
+      _lastTx = read.tx;
       _lastSample = now;
     } catch (_) {
       // نبضة فاشلة: لا نمسّ المرجع، فالنبضة الناجحة التالية تحسب
       // المعدّل على كامل الفجوة — متوسّط صحيح لا قفزة.
+      _session?.close();
       _session = null;
     } finally {
       _pulsing = false;
@@ -536,7 +558,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       //
       // SNR يبقى احتياطاً حين لا يُصدّر الإصدار عدّادات بايت: بلاطة
       // فارغة أسوأ من بلاطة تحمل معلومة أقلّ فائدة.
-      if (u.rxBytes != null)
+      if (_snap?.kind == DeviceKind.ubiquiti)
         _MetricTile(
           label: 'الترافيك',
           value: _rxBps == null

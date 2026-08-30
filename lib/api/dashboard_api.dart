@@ -305,31 +305,7 @@ class DashboardApi {
 
       // السلسلة اختياريّة: غيابها لا يمنع عرض الرقم — الخادم القديم
       // (قبل إصلاح 2026-08-30) يُرجعها صفريّة، والأقدم لا يُرجعها.
-      final rawSeries = (body['data'] as Map?)?['timeseries'];
-      final series = <RevenuePoint>[];
-      if (rawSeries is List) {
-        for (final e in rawSeries) {
-          if (e is! Map) continue;
-          final d = DateTime.tryParse(e['date']?.toString() ?? '');
-          if (d == null) continue;
-          final a = e['payments_sum'];
-          series.add(RevenuePoint(
-            date: DateTime(d.year, d.month, d.day),
-            // ⚠️ `num.tryParse` لا `int.tryParse`: عمود `payments_sum`
-            // نوعه DECIMAL، وسائق MySQL يُرجعه **نصّاً** («35000.00»)
-            // لا رقماً. و`int.tryParse('35000.00')` تُعيد null — فكانت
-            // كلّ نقاط السلسلة تصير صفراً والرسم لا يظهر إطلاقاً رغم
-            // أنّ الخادم يُرجع القيم صحيحة. (بلاغ 2026-08-30)
-            //
-            // الرقم المُجمَّع لم يُصَب لأنّه يُبنى في JS بـ`Number()`
-            // فيصل رقماً — ولهذا ظهر 520,000 صحيحاً فوق رسم فارغ.
-            amount: a is num
-                ? a.toInt()
-                : (num.tryParse(a.toString())?.round() ?? 0),
-          ));
-        }
-        series.sort((x, y) => x.date.compareTo(y.date));
-      }
+      final series = parseRevenueSeries((body['data'] as Map?)?['timeseries']);
       return RevenueResult(amount: amount, series: series);
     } on DioException catch (e) {
       _logErr('reports/finance(${period.name}) from=$from to=$to', e);
@@ -338,6 +314,39 @@ class DashboardApi {
       _logErr('reports/finance(${period.name})', e);
       return null;
     }
+  }
+
+  /// يحلّل `data.timeseries` من استجابة تقرير المالية.
+  ///
+  /// ⚠️ مكشوفة للاختبار عمداً. كانت مدفونة داخل الدالّة الشبكيّة،
+  /// فاختباري الأوّل فحص `RevenueResult.fromJson` — وهي تقرأ مفاتيح
+  /// التخزين المحلّي (`d`/`a`) لا مفاتيح الخادم (`date`/`payments_sum`).
+  /// مرّ الاختبار والعطل قائم. (2026-08-30)
+  static List<RevenuePoint> parseRevenueSeries(Object? raw) {
+    final series = <RevenuePoint>[];
+    if (raw is List) {
+      for (final e in raw) {
+        if (e is! Map) continue;
+        final d = DateTime.tryParse(e['date']?.toString() ?? '');
+        if (d == null) continue;
+        final a = e['payments_sum'];
+        series.add(RevenuePoint(
+          date: DateTime(d.year, d.month, d.day),
+          // ⚠️ `num.tryParse` لا `int.tryParse`: العمود DECIMAL وسائق
+          // MySQL يُرجعه **نصّاً** («35000.00»)، و`int.tryParse` عليه
+          // تُعيد null فتصير كلّ نقطة صفراً والرسم لا يظهر إطلاقاً رغم
+          // أنّ الخادم يُرجع القيم صحيحة.
+          //
+          // والرقم المُجمَّع لم يُصَب لأنّه يُبنى في JS بـ`Number()`
+          // فيصل رقماً — ولهذا ظهر 520,000 صحيحاً فوق رسم فارغ.
+          amount: a is num
+              ? a.toInt()
+              : (num.tryParse(a.toString())?.round() ?? 0),
+        ));
+      }
+      series.sort((x, y) => x.date.compareTo(y.date));
+    }
+    return series;
   }
 
   static (String, String) _rangeFor(RevenuePeriod p) {

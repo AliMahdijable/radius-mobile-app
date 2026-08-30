@@ -384,15 +384,12 @@ class DeviceProbeApi {
     return DeviceHealthSnapshot(kind: DeviceKind.ont, ip: ip, ont: optical);
   }
 
-  /// جلسة Ubiquiti حيّة لجهاز مشترك — لقياس الترافيك اللحظي.
+  /// بيانات دخول Ubiquiti لجهاز مشترك + عنوانه الفعّال.
   ///
-  /// حلّ بيانات الدخول يعيش هنا لا في الواجهة: نفس ترتيب الأفضليّة
-  /// الذي يستعمله الفحص (تجاوز المشترك ← افتراضات المدير ← ubnt/ubnt)،
-  /// فلا يتفرّع منطقان يختلفان بصمت.
-  ///
-  /// المتّصل يحتفظ بالجلسة العائدة ويعيد استعمالها — الغرض تجنّب
-  /// تسجيل دخول في كلّ نبضة.
-  static Future<UbiquitiLoginResult?> openUbntSession({
+  /// حلّ الاعتمادات يعيش هنا لا في الواجهة: نفس ترتيب أفضليّة الفحص
+  /// (تجاوز المشترك ← افتراضات المدير ← ubnt/ubnt)، فلا يتفرّع منطقان
+  /// يختلفان بصمت فيعمل الفحص ويفشل القياس على الجهاز نفسه.
+  static Future<({String ip, String user, String pass})?> resolveUbntCreds({
     required String fallbackIp,
     String? subscriberUsername,
   }) async {
@@ -418,7 +415,7 @@ class DeviceProbeApi {
         : (defaults.ubntPassword?.isNotEmpty == true
             ? defaults.ubntPassword!
             : _kUbntPass);
-    return UbiquitiService.login(effectiveIp, user, pass);
+    return (ip: effectiveIp, user: user, pass: pass);
   }
 
   static Future<DeviceHealthSnapshot?> _probeUbnt(
