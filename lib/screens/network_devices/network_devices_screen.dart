@@ -18,6 +18,7 @@ import 'network_device_details_screen.dart';
 import 'network_device_form_sheet.dart';
 import 'regions_screen.dart';
 import 'widgets/brand_badge.dart';
+import 'widgets/device_image.dart';
 import '../../theme/typography.dart';
 
 /// قائمة أجهزة الشبكة. راجع project_devices_monitoring_plan.
@@ -1042,7 +1043,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 const SizedBox(width: Sp.sm),
               ],
               Stack(children: [
-                BrandBadge(brand: d.brand, size: 44),
+                DeviceImage(brand: d.brand, model: d.model, size: 44),
                 // Type icon صغير في الزاوية العلوى (لتمييز router عن switch عن link)
                 Positioned(
                   top: -3,

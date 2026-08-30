@@ -14,6 +14,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import 'network_device_form_sheet.dart';
 import 'widgets/brand_badge.dart';
+import 'widgets/device_image.dart';
 import 'widgets/airfiber60_live_panel.dart';
 import 'widgets/mikrotik_live_panel.dart';
 import 'widgets/mimosa_live_panel.dart';
@@ -438,7 +439,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
         Row(children: [
           // Big brand badge with type icon corner + pulse ring
           Stack(clipBehavior: Clip.none, children: [
-            BrandBadge(brand: _d.brand, size: 64),
+            DeviceImage(brand: _d.brand, model: _d.model, size: 64),
             // Pulse ring when online
             if (online)
               Positioned.fill(
