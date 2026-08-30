@@ -410,7 +410,12 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                 _mikrotikHint(),
             ] else if (_d.brand == 'ubnt') ...[
               const SizedBox(height: Sp.md),
-              if (_d.protocol == 'api' && _d.hasCredentials)
+              // ⚠️ `ssh` مقبول كـ`api`: اتّصال UBNT في هذا التطبيق **هو**
+              // SSH على المنفذ 22 (mca-status — يعمل على airOS 5/6/7/8 بلا
+              // فروق). و«api» هنا تسمية عامّة للمراقبة الحيّة لا بروتوكولاً.
+              // فمن يسجّل جهازه بـ`ssh` — وهو الأصحّ وصفاً — كان يُحرَم من
+              // اللوحة كلّها ومن كشف الطراز معها.
+              if (_isUbntMonitorable(_d) && _d.hasCredentials)
                 // 2026-08-18: نستعمل static detection من model + runtime
                 // detection من stats — الاثنين معاً يضمنان route صحيح
                 // للأجهزة الي model حقلها ما مضبوطة كـAF-60.
@@ -864,10 +869,20 @@ bool _isAirFiber60(NetworkDevice d) {
   return false;
 }
 
+/// هل يمكن مراقبة جهاز UBNT هذا حيّاً؟
+///
+/// اتّصاله SSH فعليّاً، والمشروع يسمّيه «api» تاريخيّاً — فنقبل الاثنين.
+/// و`null` كذلك: أجهزة قديمة سُجّلت بلا بروتوكول.
+bool _isUbntMonitorable(NetworkDevice d) =>
+    d.protocol == null || d.protocol == 'api' || d.protocol == 'ssh';
+
 extension _UbntHint on _NetworkDeviceDetailsScreenState {
   Widget _ubntHint() {
     final needsApi = _d.protocol != 'api';
-    final needsCreds = _d.protocol == 'api' && !_d.hasCredentials;
+    // UBNT: `ssh` يعادل `api` — الاتّصال واحد.
+    final needsCreds = (_d.protocol == 'api' ||
+            (_d.brand == 'ubnt' && _isUbntMonitorable(_d))) &&
+        !_d.hasCredentials;
     final msg = needsApi
         ? 'اختر بروتوكول API + أدخل user/password للـUBNT لعرض signal + throughput + stations'
         : (needsCreds
@@ -951,7 +966,10 @@ extension _UbntHint on _NetworkDeviceDetailsScreenState {
 extension _MikrotikHint on _NetworkDeviceDetailsScreenState {
   Widget _mikrotikHint() {
     final needsApi = _d.protocol != 'api';
-    final needsCreds = _d.protocol == 'api' && !_d.hasCredentials;
+    // UBNT: `ssh` يعادل `api` — الاتّصال واحد.
+    final needsCreds = (_d.protocol == 'api' ||
+            (_d.brand == 'ubnt' && _isUbntMonitorable(_d))) &&
+        !_d.hasCredentials;
     final msg = needsApi
         ? 'اختر بروتوكول API + أدخل user/password للراوتر لتفعيل المراقبة الحيّة (CPU/RAM/interfaces)'
         : (needsCreds

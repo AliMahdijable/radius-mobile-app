@@ -1175,7 +1175,12 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                             borderRadius: BorderRadius.circular(R.pill),
                           ),
                           child: Text(
-                            d.protocol!.toUpperCase(),
+                            // ⚠️ UBNT تُعرض SSH لا API: الاتّصال بها
+                            // SSH على 22 فعليّاً، و«api» تسمية داخليّة.
+                            // الشارة كانت تقول للمستخدم شيئاً غير صحيح.
+                            (d.brand == 'ubnt' && d.protocol == 'api')
+                                ? 'SSH'
+                                : d.protocol!.toUpperCase(),
                             style: AppType.daysWordBold(color: AppColors.brand),
                           ),
                         ),

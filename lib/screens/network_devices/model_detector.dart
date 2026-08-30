@@ -144,7 +144,9 @@ class ModelDetector {
     if (user.isEmpty) return null;
     final sess = await UbntTrafficSession.open(
       ip: d.ip,
-      port: d.apiPort ?? 22,
+      // ⚠️ `port` احتياطاً: جهاز سُجّل ببروتوكول ssh يضع 22 في `port`
+      // لا في `apiPort` — وبدون هذا يُجرَّب 22 على جهاز منفذه مختلف.
+      port: d.apiPort ?? d.port,
       user: user,
       pass: pass,
       timeout: const Duration(seconds: 8),
