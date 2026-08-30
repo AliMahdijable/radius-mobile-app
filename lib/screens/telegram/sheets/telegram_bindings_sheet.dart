@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../api/telegram_api.dart';
 import '../../../models/subscriber.dart';
+import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 
@@ -143,167 +144,98 @@ class _BindingsSheetState extends State<_BindingsSheet> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context);
-    return SafeArea(
-      top: false,
-      child: DraggableScrollableSheet(
-        initialChildSize: 0.85,
-        maxChildSize: 0.95,
-        minChildSize: 0.5,
-        expand: false,
-        builder: (_, scrollCtrl) => Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(R.card)),
-          ),
-          child: Column(
-            children: [
-              const SizedBox(height: 8),
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(R.pill),
-                ),
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.link2,
+        title: 'المرتبطون',
+        subtitle: 'المشتركون المربوطون ببوت تلغرام',
+        tint: AppColors.channelTelegram,
+        tintBg: AppColors.channelTelegramSoftBg,
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      scrollable: false,
+      bodyPadding: EdgeInsets.zero,
+      body: Column(
+        children: [
+          const SizedBox(height: 12),
+          // Search
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Container(
+              height: 44,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceInput,
+                borderRadius: BorderRadius.circular(R.sm),
               ),
-              const SizedBox(height: 12),
-              // Header
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: AppColors.successSoftBg,
-                        borderRadius: BorderRadius.circular(R.chip),
+              child: Row(
+                children: [
+                  Icon(LucideIcons.search, size: 16, color: AppColors.textMid),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: _searchCtrl,
+                      onChanged: (_) => setState(() {}),
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 13,
+                        color: AppColors.textHi,
                       ),
-                      alignment: Alignment.center,
-                      child: Icon(LucideIcons.users,
-                          color: AppColors.success, size: 18),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('المرتبطون',
-                              style: TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textHi,
-                              )),
-                          const SizedBox(height: 2),
-                          Text(
-                            _searchCtrl.text.trim().isEmpty
-                                ? '${_all.length} مشترك مربوط ببوت تلغرام'
-                                : '${_filtered.length} من ${_all.length} مشترك مربوط ببوت تلغرام',
-                            style: TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textMid,
-                            ),
-                          ),
-                        ],
+                      decoration: InputDecoration(
+                        border: InputBorder.none,
+                        isCollapsed: true,
+                        hintText: 'بحث بالاسم / اليوزر / الرقم',
+                        hintStyle: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 12.5,
+                          color: AppColors.textLow,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
+                  ),
+                  if (_searchCtrl.text.isNotEmpty)
                     IconButton(
                       icon: Icon(LucideIcons.x,
-                          size: 20, color: AppColors.textMid),
-                      onPressed: () => Navigator.of(context).pop(),
-                      splashRadius: 20,
+                          size: 14, color: AppColors.textMid),
+                      onPressed: () {
+                        _searchCtrl.clear();
+                        setState(() {});
+                      },
+                      splashRadius: 14,
                     ),
-                  ],
-                ),
+                ],
               ),
-              const SizedBox(height: 12),
-              // Search
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Container(
-                  height: 44,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceInput,
-                    borderRadius: BorderRadius.circular(R.sm),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(LucideIcons.search,
-                          size: 16, color: AppColors.textMid),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: _searchCtrl,
-                          onChanged: (_) => setState(() {}),
-                          style: TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 13,
-                            color: AppColors.textHi,
-                          ),
-                          decoration: InputDecoration(
-                            border: InputBorder.none,
-                            isCollapsed: true,
-                            hintText: 'بحث بالاسم / اليوزر / الرقم',
-                            hintStyle: TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 12.5,
-                              color: AppColors.textLow,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (_searchCtrl.text.isNotEmpty)
-                        IconButton(
-                          icon: Icon(LucideIcons.x,
-                              size: 14, color: AppColors.textMid),
-                          onPressed: () {
-                            _searchCtrl.clear();
-                            setState(() {});
-                          },
-                          splashRadius: 14,
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              // List
-              Expanded(
-                child: _loading
-                    ? const Center(child: CircularProgressIndicator())
-                    : _all.isEmpty
-                        ? _emptyState()
-                        : _filtered.isEmpty
-                            ? Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(24),
-                                  child: Text(
-                                    'لا نتائج مطابقة للبحث',
-                                    style: TextStyle(
-                                      fontFamily: 'Cairo',
-                                      fontSize: 13,
-                                      color: AppColors.textMid,
-                                    ),
-                                  ),
-                                ),
-                              )
-                            : ListView.builder(
-                                controller: scrollCtrl,
-                                padding: const EdgeInsets.only(bottom: 24),
-                                itemCount: _filtered.length,
-                                itemBuilder: (_, i) =>
-                                    _bindingTile(_filtered[i]),
-                              ),
-              ),
-            ],
+            ),
           ),
-        ),
+          const SizedBox(height: 8),
+          // List
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _all.isEmpty
+                    ? _emptyState()
+                    : _filtered.isEmpty
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Text(
+                                'لا نتائج مطابقة للبحث',
+                                style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontSize: 13,
+                                  color: AppColors.textMid,
+                                ),
+                              ),
+                            ),
+                          )
+                        : ListView.builder(
+                            padding: const EdgeInsets.only(bottom: 24),
+                            itemCount: _filtered.length,
+                            itemBuilder: (_, i) => _bindingTile(_filtered[i]),
+                          ),
+          ),
+        ],
       ),
     );
   }

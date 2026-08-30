@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/telegram_api.dart';
+import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 
@@ -102,129 +103,68 @@ class _BulkSheetState extends State<_BulkSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.paddingOf(context).bottom + 16,
-          left: 16,
-          right: 16,
-          top: 12,
-        ),
-        child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(R.card),
-          ),
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(R.pill),
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.megaphone,
+        title: 'بث روابط جماعي',
+        subtitle: 'إرسال روابط الربط لكل مَن لم يرتبط بعد',
+        tint: AppColors.warningFill,
+        tintBg: AppColors.warningSoftBg,
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      scrollable: false,
+      bodyPadding: EdgeInsets.zero,
+      body: Column(
+        children: [
+          const SizedBox(height: 20),
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: CircularProgressIndicator(),
+            )
+          else if (_preview == null)
+            Text('تعذّر جلب المعاينة',
+                style: TextStyle(
+                  fontFamily: 'Cairo',
+                  color: AppColors.error,
+                ))
+          else
+            _previewCard(_preview!),
+          const SizedBox(height: 16),
+          if (_preview != null && _preview!.eligible > 0)
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: FilledButton.icon(
+                onPressed: _sending ? null : _send,
+                icon: _sending
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 1.5, color: AppColors.onBrand))
+                    : const Icon(LucideIcons.send, size: 16),
+                label: Text('أرسل لـ${_preview!.eligible} مشترك',
+                    style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    )),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.warning,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(R.md)),
                 ),
               ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: AppColors.warningSoftBg,
-                      borderRadius: BorderRadius.circular(R.md),
-                    ),
-                    alignment: Alignment.center,
-                    child: Icon(LucideIcons.megaphone,
-                        color: AppColors.warning, size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('بث روابط جماعي',
-                            style: TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textHi,
-                            )),
-                        const SizedBox(height: 2),
-                        Text(
-                            'يُرسَل رابط ربط تلغرام لكل مشترك عنده واتساب وليس مربوطاً',
-                            style: TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textMid,
-                            )),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon:
-                        Icon(LucideIcons.x, size: 20, color: AppColors.textMid),
-                    onPressed: () => Navigator.of(context).pop(),
-                    splashRadius: 20,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              if (_loading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24),
-                  child: CircularProgressIndicator(),
-                )
-              else if (_preview == null)
-                Text('تعذّر جلب المعاينة',
-                    style: TextStyle(
-                      fontFamily: 'Cairo',
-                      color: AppColors.error,
-                    ))
-              else
-                _previewCard(_preview!),
-              const SizedBox(height: 16),
-              if (_preview != null && _preview!.eligible > 0)
-                SizedBox(
-                  width: double.infinity,
-                  height: 46,
-                  child: FilledButton.icon(
-                    onPressed: _sending ? null : _send,
-                    icon: _sending
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 1.5, color: AppColors.onBrand))
-                        : const Icon(LucideIcons.send, size: 16),
-                    label: Text('أرسل لـ${_preview!.eligible} مشترك',
-                        style: const TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                        )),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.warning,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(R.md)),
-                    ),
-                  ),
-                )
-              else if (_preview != null)
-                Text('لا يوجد مشتركون مؤهّلون',
-                    style: TextStyle(
-                      fontFamily: 'Cairo',
-                      color: AppColors.textMid,
-                      fontSize: 12.5,
-                    )),
-            ],
-          ),
-        ),
+            )
+          else if (_preview != null)
+            Text('لا يوجد مشتركون مؤهّلون',
+                style: TextStyle(
+                  fontFamily: 'Cairo',
+                  color: AppColors.textMid,
+                  fontSize: 12.5,
+                )),
+        ],
       ),
     );
   }
