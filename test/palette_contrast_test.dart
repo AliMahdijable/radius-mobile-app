@@ -48,6 +48,36 @@ double contrast(Color a, Color b) {
   return (hi + 0.05) / (lo + 0.05);
 }
 
+/// المسافة الإدراكيّة CIELAB ΔE76 — تقيس فرق **الصبغة والسطوع معاً**.
+/// نسبة التباين وحدها لا تكفي للترميز التصنيفي: لونان قد يتساويان في
+/// السطوع (نسبة ≈1) ويختلفان في الصبغة اختلافاً بيّناً.
+double deltaE(Color a, Color b) {
+  (double, double, double) toLab(Color c) {
+    double ch(double v) {
+      v = v / 255.0;
+      return v <= 0.04045
+          ? v / 12.92
+          : math.pow((v + 0.055) / 1.055, 2.4).toDouble();
+    }
+
+    final r = ch((c.r * 255).roundToDouble());
+    final g = ch((c.g * 255).roundToDouble());
+    final bl = ch((c.b * 255).roundToDouble());
+    final x = (0.4124 * r + 0.3576 * g + 0.1805 * bl) / 0.95047;
+    final y = 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+    final z = (0.0193 * r + 0.1192 * g + 0.9505 * bl) / 1.08883;
+    double f(double t) =>
+        t > 0.008856 ? math.pow(t, 1 / 3).toDouble() : 7.787 * t + 16 / 116;
+    final fx = f(x), fy = f(y), fz = f(z);
+    return (116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz));
+  }
+
+  final la = toLab(a), lb = toLab(b);
+  return math.sqrt(math.pow(la.$1 - lb.$1, 2) +
+      math.pow(la.$2 - lb.$2, 2) +
+      math.pow(la.$3 - lb.$3, 2));
+}
+
 /// يسطّح لوناً شفّافاً فوق خلفيّة معتمة قبل القياس — الطبقات الشفّافة
 /// (onBrandFill*, softBg) لا يصحّ قياسها كما هي.
 Color flatten(Color fg, Color bg) {
@@ -296,6 +326,48 @@ void main() {
             reason: 'سطح البطاقة الداكنة يجب ألّا يتغيّر — طبقات onBrand* '
                 'معايرة عليه، وتغييره يُسقطها تحت العتبة.');
         AppColors.setDarkMode(dark);
+      });
+
+      test('ألوان حالة المشترك متمايزة داخل كل مجموعة أيقونة', () {
+        AppColors.setDarkMode(dark);
+        // رمز الحالة في القائمة يحمل **بعدين مستقلّين**:
+        //   • الأيقونة = الاتصال اللحظي (wifi · wifiOff · block)
+        //   • اللون    = حالة الاشتراك (فعّال · قارب الانتهاء · منتهي)
+        //
+        // فالتمييز اللوني مطلوب **داخل المجموعة الواحدة فقط** — حيث
+        // الأيقونة متطابقة واللون هو القناة الوحيدة. عبر المجموعات
+        // تكفي الأيقونة، ولا معنى لاشتراط فارق لوني هناك.
+        //
+        // القياس بـΔE76 لا بنسبة السطوع: لونان قد يتساويان في السطوع
+        // ويختلفان في الصبغة اختلافاً واضحاً — وهذا بالضبط ما أوقع
+        // المحاولة الأولى في خطأ تشخيصي.
+        //
+        // انحدار 2026-08-29: توحيد اللوحة ابتلع الأزرق والبنفسجي في
+        // brandAccent فسقطت ثلاث حالات من السبع بلا أن يشتكي شيء.
+        final groups = <String, List<(String, Color)>>{
+          'wifi (متصل)': [
+            ('فعّال', AppColors.info),
+            ('قارب الانتهاء', AppColors.warning),
+            ('منتهي', AppColors.anomaly),
+          ],
+          'wifiOff (غير متصل)': [
+            ('فعّال', AppColors.success),
+            ('قارب الانتهاء', AppColors.warning),
+            ('منتهي', AppColors.error),
+          ],
+        };
+        for (final entry in groups.entries) {
+          final items = entry.value;
+          for (var i = 0; i < items.length; i++) {
+            for (var j = i + 1; j < items.length; j++) {
+              final d = deltaE(items[i].$2, items[j].$2);
+              expect(d, greaterThanOrEqualTo(30.0),
+                  reason: '$mode — ${entry.key}: «${items[i].$1}» و'
+                      '«${items[j].$1}» متقاربان إدراكيّاً '
+                      '(ΔE=${d.toStringAsFixed(1)}) فلا يُفرَّق بينهما');
+            }
+          }
+        }
       });
 
       test('الأسطح الأربعة متمايزة عن بعضها', () {

@@ -215,13 +215,18 @@ class _ActionsSheet extends StatelessWidget {
             // بلون الدائرة + label تحت الزر بلون النص العادي.
             Padding(
               padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
+              // ⚠️ انحدار 2026-08-29: النسبة 0.82 كانت معايرة للدائرة
+              // القديمة (52dp + ظلّ + تسمية بسطرين). البلاطة الجديدة
+              // مسطّحة وأقصر — أيقونة 22 + فجوة 8 + سطر تسمية + حشوة
+              // 12×2 ≈ 66dp — فبقيت ~20dp فراغاً أسفل كلّ زرّ.
+              // النسبة 1.0 تطابق ارتفاع المحتوى الفعلي.
               child: GridView.count(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 crossAxisCount: 4,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 14,
-                childAspectRatio: 0.82,
+                crossAxisSpacing: Sp.sm,
+                mainAxisSpacing: Sp.sm,
+                childAspectRatio: 1.0,
                 children: [
                   for (final a in actions) _actionTile(context, a),
                 ],

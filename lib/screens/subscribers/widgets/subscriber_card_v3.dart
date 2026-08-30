@@ -267,102 +267,147 @@ class SubscriberCardV3 extends StatelessWidget {
 
   // ─────────────────── الصفّ 3 ───────────────────
 
+  /// صفّ الانتهاء ونصّ الجلسة.
+  ///
+  /// ⚠️ انحدار 2026-08-29: كان الطرفان `Flexible` بنفس الوزن على سطر
+  /// واحد، فيقتسمان العرض ويُقصّ «متصل منذ …» على الشاشات الضيّقة.
+  /// الآن: تحت 340dp ينزل نصّ الجلسة إلى سطر ثانٍ بعرض كامل بدل أن
+  /// يُقصّ. المعلومتان زمنيّتان ومستقلّتان — لا داعي لحشرهما معاً.
   Widget _expiryRow() {
     final session = _sessionVisual();
-    return Row(
-      children: [
-        Icon(Icons.event_rounded, size: 15, color: AppColors.textHint),
-        const SizedBox(width: 6),
-        Text(
-          'ينتهي',
-          style:
-              AppType.body(color: AppColors.textLabel).copyWith(fontSize: 12.5),
-        ),
-        const SizedBox(width: 6),
-        Flexible(
-          child: Text(
-            _formatExpiry(sub.parsedExpiration),
-            textDirection: TextDirection.ltr,
-            style: AppType.body()
-                .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        const SizedBox(width: 8),
-        if (session != null)
-          Flexible(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(session.icon, size: 14, color: session.color),
-                const SizedBox(width: 5),
-                Flexible(
-                  child: Text(
-                    session.text,
-                    style: AppType.muted(color: session.color)
-                        .copyWith(fontSize: 11.5),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+    return LayoutBuilder(
+      builder: (context, c) {
+        final stacked = session != null && c.maxWidth < 340;
+        final expiry = Row(
+          children: [
+            Icon(Icons.event_rounded, size: 15, color: AppColors.textHint),
+            const SizedBox(width: 6),
+            Text(
+              'ينتهي',
+              style: AppType.body(color: AppColors.textLabel)
+                  .copyWith(fontSize: 12.5),
             ),
-          ),
-      ],
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                _formatExpiry(sub.parsedExpiration),
+                textDirection: TextDirection.ltr,
+                style: AppType.body()
+                    .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        );
+        if (session == null) return expiry;
+        final sessionRow = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(session.icon, size: 14, color: session.color),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                session.text,
+                style: AppType.muted(color: session.color)
+                    .copyWith(fontSize: 11.5),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        );
+        if (stacked) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              expiry,
+              const SizedBox(height: 5),
+              sessionRow,
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Flexible(flex: 5, child: expiry),
+            const SizedBox(width: 8),
+            Flexible(flex: 4, child: sessionRow),
+          ],
+        );
+      },
     );
   }
 
   // ─────────────────── الصفّ 4 ───────────────────
 
   Widget _debtBar(double debt) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: BoxDecoration(
-        color: AppColors.dangerSoftBg,
-        borderRadius: BorderRadius.circular(R.icon),
-        border: Border.all(color: AppColors.dangerSoftBorder),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.credit_card_rounded,
-              size: 16, color: AppColors.dangerOnSoft),
-          const SizedBox(width: 7),
-          Text(
-            'دين',
-            style: AppType.body(color: AppColors.dangerOnSoft),
+    // ⚠️ انحدار 2026-08-29: كان `Spacer()` بين المبلغ والزرّين، وكلاهما
+    // مرن بنفس الوزن — فيقتسمان الفراغ ويُقصّ المبلغ («دين …»). الآن
+    // المجموعة النصّيّة `Expanded` وحدها، والزرّان بمقاسهما الطبيعي:
+    // في الـRow تأخذ العناصر غير المرنة مقاسها أوّلاً ثمّ يذهب الباقي
+    // للمرنة — فيحصل النصّ على كلّ ما تبقّى بالضبط.
+    //
+    // وعلى الشاشات الضيّقة يسقط نصّ الزرّين وتبقى الأيقونة وحدها بدل
+    // أن يُقصّ المبلغ — المبلغ معلومة والزرّ إجراء معروف بأيقونته.
+    return LayoutBuilder(
+      builder: (context, c) {
+        final tight = c.maxWidth < 330;
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            color: AppColors.dangerSoftBg,
+            borderRadius: BorderRadius.circular(R.icon),
+            border: Border.all(color: AppColors.dangerSoftBorder),
           ),
-          const SizedBox(width: 7),
-          Flexible(
-            child: Text(
-              '${formatIQD(debt)} د.ع',
-              style: AppType.bodyStrong(color: AppColors.error)
-                  .copyWith(fontWeight: FontWeight.w700),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+          child: Row(
+            children: [
+              Icon(Icons.credit_card_rounded,
+                  size: 16, color: AppColors.dangerOnSoft),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('دين',
+                        style: AppType.body(color: AppColors.dangerOnSoft)),
+                    const SizedBox(width: 7),
+                    Flexible(
+                      child: Text(
+                        '${formatIQD(debt)} د.ع',
+                        style: AppType.bodyStrong(color: AppColors.error)
+                            .copyWith(fontWeight: FontWeight.w700),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 7),
+              if (onSendDebtReminder != null) ...[
+                _MiniButton(
+                  label: tight ? '' : 'تذكير دين',
+                  icon: Icons.notifications_active_rounded,
+                  filled: false,
+                  color: AppColors.warning,
+                  borderColor: AppColors.warningSoftBorder,
+                  onTap: onSendDebtReminder!,
+                ),
+                const SizedBox(width: 7),
+              ],
+              if (onPayDebt != null)
+                _MiniButton(
+                  label: tight ? '' : 'تسديد',
+                  icon: Icons.payments_rounded,
+                  filled: true,
+                  color: AppColors.errorFill,
+                  onTap: onPayDebt!,
+                ),
+            ],
           ),
-          const Spacer(),
-          if (onSendDebtReminder != null) ...[
-            _MiniButton(
-              label: 'تذكير دين',
-              icon: Icons.notifications_active_rounded,
-              filled: false,
-              color: AppColors.warning,
-              borderColor: AppColors.warningSoftBorder,
-              onTap: onSendDebtReminder!,
-            ),
-            const SizedBox(width: 7),
-          ],
-          if (onPayDebt != null)
-            _MiniButton(
-              label: 'تسديد',
-              filled: true,
-              color: AppColors.errorFill,
-              onTap: onPayDebt!,
-            ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -402,23 +447,59 @@ class SubscriberCardV3 extends StatelessWidget {
 
   // ─────────────────── منطق العرض ───────────────────
 
-  /// حالة الصفّ — «معطّل» تطغى، ثمّ «منتهي»، ثمّ الاتصال اللحظي.
-  /// (المخطّط: منتهي يطغى على offline، ودليله بياناته الوهميّة.)
+  /// حالة الصفّ — **سبع تركيبات** كما في v1، لا أربع.
+  ///
+  /// ⚠️ انحدار 2026-08-29 (بلاغ المستخدم): إعادة التصميم اختصرت الحالة
+  /// إلى أربع فضاعت ثلاث معلومات كان المدير يقرؤها من اللون وحده. الرمز
+  /// يحمل **بعدين مستقلّين** لا بعداً واحداً:
+  ///   • **الأيقونة** = الاتصال اللحظي (wifi / wifiOff / block).
+  ///   • **اللون** = حالة الاشتراك (فعّال / قارب الانتهاء / منتهي)،
+  ///     ويتغيّر معناه حسب الاتصال.
+  ///
+  /// الجدول الأصلي (subscriber_card.dart:498-511 قبل حذفه):
+  /// | الحالة | اللون |
+  /// |---|---|
+  /// | معطّل | رمادي |
+  /// | متصل + فعّال | **أزرق** (`info`) |
+  /// | متصل + قارب الانتهاء | كهرماني |
+  /// | متصل + منتهي | **بنفسجي** (`anomaly`) — تناقض يستحقّ لوناً خاصّاً |
+  /// | غير متصل + فعّال | **أخضر** (`success`) |
+  /// | غير متصل + قارب الانتهاء | كهرماني |
+  /// | غير متصل + منتهي | أحمر |
+  ///
+  /// لماذا الأزرق للمتصل والأخضر لغير المتصل (وهو ما يبدو مقلوباً):
+  /// الأخضر هنا يعني «اشتراكه سليم» لا «متصل الآن»، والأزرق يعني «متصل
+  /// الآن». مشترك سليم غير متصل حالة طبيعيّة تماماً، ومشترك منتهٍ لكنّه
+  /// متصل حالة شاذّة — ولذلك لها لونها الخاصّ.
   _StatusVisual _status() {
     if (sub.isDisabled) {
       return _StatusVisual('معطّل', Icons.block_rounded, AppColors.textLabel,
           AppColors.surfaceDisabled);
     }
+    if (sub.isOnline) {
+      if (sub.isExpired) {
+        return _StatusVisual('منتهي · متصل', Icons.wifi_rounded,
+            AppColors.anomaly, AppColors.anomalySoftBg);
+      }
+      if (sub.isNearExpiry) {
+        // `warning` لا `warningFill`: الثاني ثابت #97650B فلا يُرى على
+        // سطح داكن (2.16:1)، والأوّل يفتح ليلاً إلى #E0B457.
+        return _StatusVisual('متصل', Icons.wifi_rounded, AppColors.warning,
+            AppColors.warningSoftBg);
+      }
+      return _StatusVisual(
+          'متصل', Icons.wifi_rounded, AppColors.info, AppColors.brandSoftBg);
+    }
     if (sub.isExpired) {
-      return _StatusVisual('منتهي', Icons.timer_off_rounded, AppColors.error,
+      return _StatusVisual('منتهي', Icons.wifi_off_rounded, AppColors.error,
           AppColors.dangerSoftBg);
     }
-    if (sub.isOnline) {
-      return _StatusVisual(
-          'متصل', Icons.wifi_rounded, AppColors.success, AppColors.brandSoftBg);
+    if (sub.isNearExpiry) {
+      return _StatusVisual('غير متصل', Icons.wifi_off_rounded,
+          AppColors.warning, AppColors.warningSoftBg);
     }
-    return _StatusVisual('غير متصل', Icons.wifi_off_rounded,
-        AppColors.textLabel, AppColors.surfaceDisabled);
+    return _StatusVisual('غير متصل', Icons.wifi_off_rounded, AppColors.success,
+        AppColors.successSoftBg);
   }
 
   /// بلاطة الأيّام. تُحسب من `parsedExpiration` — لا من `remainingDays`
@@ -658,19 +739,21 @@ class _MiniButton extends StatelessWidget {
                 ? null
                 : Border.all(color: borderColor ?? AppColors.border),
           ),
+          // تسمية فارغة ⇒ زرّ أيقونة فقط (الشاشات الضيّقة). الأيقونة
+          // وحدها تكفي لإجراء معروف، والمساحة المحرَّرة تذهب للمبلغ.
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (icon != null) ...[
+              if (icon != null)
                 Icon(icon, size: 15, color: filled ? AppColors.onBrand : color),
-                const SizedBox(width: 4),
-              ],
-              Text(
-                label,
-                style: AppType.body(
-                  color: filled ? AppColors.onBrand : color,
-                ).copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
-              ),
+              if (icon != null && label.isNotEmpty) const SizedBox(width: 4),
+              if (label.isNotEmpty)
+                Text(
+                  label,
+                  style: AppType.body(
+                    color: filled ? AppColors.onBrand : color,
+                  ).copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
+                ),
             ],
           ),
         ),
