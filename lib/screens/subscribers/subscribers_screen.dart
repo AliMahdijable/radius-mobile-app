@@ -735,26 +735,14 @@ class _SubscribersScreenState extends State<SubscribersScreen>
         .where((s) => s.isOnline && s.idx != null)
         .toList();
     if (online.isEmpty) return;
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text('subscribers.disconnect_users'.tr()),
-        content: Text(
-          'subscribers.disconnect_users_body'
-              .tr(namedArgs: {'count': '${online.length}'}),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text('common.cancel'.tr()),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text('subscribers.disconnect'.tr()),
-          ),
-        ],
-      ),
+    final confirm = await showConfirmSheet(
+      context,
+      icon: LucideIcons.power,
+      tone: AppTone.danger,
+      title: 'subscribers.disconnect_users'.tr(),
+      message: 'subscribers.disconnect_users_body'
+          .tr(namedArgs: {'count': '${online.length}'}),
+      confirmLabel: 'subscribers.disconnect'.tr(),
     );
     if (confirm != true || !mounted) return;
 
@@ -864,33 +852,31 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     );
   }
 
+  /// تأكيد إجراء جماعي — بالقوقعة الموحّدة لا `AlertDialog`.
+  ///
+  /// ⚠️ نفس الإجراء على مشترك واحد يُؤكَّد بشيت، وعلى عشرة كان يُؤكَّد
+  /// بحوار Material خام: نمطان لفعل واحد، والأخطر منهما — الجماعي —
+  /// كان يبدو أخفّ. (طلب المستخدم 2026-08-30: مودالات الجماعي تُشبه
+  /// مودالات كارت المشترك.)
   Future<bool> _confirmBulk(_BulkAction action, int count) async {
-    final res = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text('subscribers.confirm_bulk_action'
-            .tr(namedArgs: {'label': action.label, 'count': '$count'})),
-        content: Text(action == _BulkAction.delete
-            ? 'subscribers.confirm_bulk_delete'
-                .tr(namedArgs: {'count': '$count'})
-            : 'subscribers.confirm_bulk_generic'
-                .tr(namedArgs: {'label': action.label, 'count': '$count'})),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text('common.cancel'.tr()),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: action == _BulkAction.delete
-                  ? AppColors.error
-                  : AppColors.brand,
-            ),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(action.label),
-          ),
-        ],
-      ),
+    final destructive = action == _BulkAction.delete;
+    final res = await showConfirmSheet(
+      context,
+      icon: switch (action) {
+        _BulkAction.delete => LucideIcons.trash2,
+        _BulkAction.disable => LucideIcons.ban,
+        _BulkAction.enable => LucideIcons.circleCheck,
+      },
+      tone: destructive ? AppTone.danger : AppTone.brand,
+      title: 'subscribers.confirm_bulk_action'
+          .tr(namedArgs: {'label': action.label, 'count': '$count'}),
+      subtitle: 'subscribers.selected_count'
+          .tr(namedArgs: {'count': '$count'}, args: ['$count']),
+      message: destructive
+          ? 'subscribers.confirm_bulk_delete'.tr(namedArgs: {'count': '$count'})
+          : 'subscribers.confirm_bulk_generic'
+              .tr(namedArgs: {'label': action.label, 'count': '$count'}),
+      confirmLabel: action.label,
     );
     return res ?? false;
   }

@@ -1695,24 +1695,41 @@ class UbntTrafficSession {
 }
 
 extension UbntBoardName on UbntTrafficSession {
-  /// طراز اللوحة من `/etc/board.info` — أخفّ من `mca-dump` بكثير.
+  /// طراز الجهاز كما يُبلّغ به airOS.
   ///
-  /// الملفّ نصّ `key=value` موجود على كلّ إصدارات airOS، وفيه
-  /// `board.name` (الاسم التجاري) و`board.shortname`. نُفضّل الأوّل
-  /// لأنّه ما يُطابق أسماء ملفّات الصور.
+  /// ⚠️ `mca-status` أوّلاً لا `/etc/board.info`: الأخير كان تخميناً
+  /// لم يُتحقَّق منه، بينما سجلّ جهاز حقيقي (airOS 6.1.7 على XM) يُظهر
+  /// أنّ `mca-status` يُخرج `platform=NanoStation M5` صراحةً — وهو
+  /// الاسم التجاري الذي تُسمّى به ملفّات الصور.
+  ///
+  /// و`board.info` يبقى احتياطاً: بعض الإصدارات لا تُخرج `platform`.
   Future<String?> readBoardName() async {
-    final out = await runCommand('cat /etc/board.info 2>/dev/null');
+    final mca = await runCommand('mca-status 2>/dev/null');
+    final fromMca = _valueOf(mca, const ['platform', 'devmodel']);
+    if (fromMca != null) return fromMca;
+    final info = await runCommand('cat /etc/board.info 2>/dev/null');
+    return _valueOf(info, const ['board.name', 'board.shortname']);
+  }
+
+  /// أوّل قيمة غير فارغة لأحد المفاتيح، بترتيب الأفضليّة.
+  static String? _valueOf(String? out, List<String> keys) {
     if (out == null || out.trim().isEmpty) return null;
-    String? shortName;
-    for (final line in out.split('\n')) {
+    final map = <String, String>{};
+    for (final line in out.split(RegExp(r'[\r\n]+'))) {
       final i = line.indexOf('=');
       if (i <= 0) continue;
       final k = line.substring(0, i).trim().toLowerCase();
-      final v = line.substring(i + 1).trim();
-      if (v.isEmpty) continue;
-      if (k == 'board.name') return v;
-      if (k == 'board.shortname') shortName = v;
+      // `mca-status` يضع السطر الأوّل حقولاً مفصولة بفواصل — نأخذ ما
+      // قبل أوّل فاصلة كي لا يلتصق الحقل التالي بالقيمة.
+      var v = line.substring(i + 1).trim();
+      final c = v.indexOf(',');
+      if (c > 0) v = v.substring(0, c).trim();
+      if (v.isNotEmpty) map[k] = v;
     }
-    return shortName;
+    for (final k in keys) {
+      final v = map[k.toLowerCase()];
+      if (v != null && v.isNotEmpty) return v;
+    }
+    return null;
   }
 }

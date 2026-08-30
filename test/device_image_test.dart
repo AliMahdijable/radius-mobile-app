@@ -155,4 +155,38 @@ void main() {
       expect(all.toSet().length, all.length);
     });
   });
+
+  group('عائلات Ubiquiti — من سجلّ جهاز حقيقي', () {
+    // ⚠️ القيم من سجلّ airOS 6.1.7 على XM: `platform=NanoStation M5`.
+    // هذه هي الصيغة التي يُبلّغ بها الجهاز فعلاً — لا تخميناً.
+
+    test('NanoStation M5 كما يُبلّغ بها الجهاز', () {
+      expect(DeviceImage.assetFor('NanoStation M5'), 'nano m5-2.png');
+      expect(DeviceImage.assetFor('NanoStation M5', brand: 'ubnt'),
+          'nano m5-2.png');
+    });
+
+    test('M2 وM5 صورةٌ واحدة — الهيكل نفسه', () {
+      // أكّده المستخدم: «nano m2, m5 نفس الشكل». الفرق نطاق التردّد لا
+      // الشكل، والصورة تُعرّف بصريّاً لا تُوثّق مواصفات.
+      final m5 = DeviceImage.assetFor('NanoStation M5');
+      expect(DeviceImage.assetFor('NanoStation M2'), m5);
+      expect(DeviceImage.assetFor('Rocket M2'),
+          DeviceImage.assetFor('Rocket M5'));
+    });
+
+    test('بقيّة العائلات التي ذكرها المستخدم', () {
+      expect(DeviceImage.assetFor('Rocket M5'), 'rocket m5.png');
+      expect(DeviceImage.assetFor('NanoBridge M5'), 'nanobridge m5.png');
+      expect(DeviceImage.assetFor('PowerBeam 5AC'), 'powerbeam M5.webp');
+      expect(DeviceImage.assetFor('PowerBeam M5 400'), 'powerbeam M5.webp');
+    });
+
+    test('كلّها ترفض على علامة ميكروتك', () {
+      for (final m in ['NanoStation M5', 'Rocket M5', 'PowerBeam 5AC']) {
+        expect(DeviceImage.assetFor(m, brand: 'mikrotik'), isNull,
+            reason: m);
+      }
+    });
+  });
 }

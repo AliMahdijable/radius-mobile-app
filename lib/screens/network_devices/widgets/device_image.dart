@@ -60,11 +60,31 @@ class DeviceImage extends StatelessWidget {
     'omnitik5poeac': 'rbomnitikpg5hacd',
     'mantbox212s': 'rb911g2hpnd12s',
     'hexpoe': 'rb960pgspb',
-    // يوبيكويتي — devmodel يُرجع الاسم التجاري
+    // يوبيكويتي — `platform` في mca-status يُرجع الاسم التجاري.
+    //
+    // ⚠️ عائلات M2 وM5 تشترك في الهيكل نفسه (أكّده المستخدم: «nano m2,
+    // m5 نفس الشكل»)، فتُشير إلى الصورة ذاتها. الفرق نطاق التردّد لا
+    // الشكل، والصورة تُعرّف الجهاز بصريّاً لا تُوثّق مواصفاته.
     'nanostationm5': 'nanom52',
+    'nanostationm2': 'nanom52',
     'nanostationloco m5': 'nanom52',
     'nanostationlocom5': 'nanom52',
+    'nanostationlocom2': 'nanom52',
+    'locom5': 'nanom52',
+    'locom2': 'nanom52',
+    'nano5': 'nanom52',
+    'nanom5': 'nanom52',
+    'nanom2': 'nanom52',
     'nanobridgem5': 'nanobridgem5',
+    'nanobridgem2': 'nanobridgem5',
+    'nanobridge': 'nanobridgem5',
+    'rocketm2': 'rocketm5',
+    'rocket5': 'rocketm5',
+    'rocketm5': 'rocketm5',
+    'powerbeam': 'powerbeamm5',
+    'powerbeam5ac': 'powerbeamm5',
+    'powerbeamm2': 'powerbeamm5',
+    'pb5ac': 'powerbeamm5',
   };
 
   /// مفتاح مُطبَّع: حروف وأرقام لاتينيّة فقط.
@@ -93,20 +113,33 @@ class DeviceImage extends StatelessWidget {
     for (final e in _byKey.entries) {
       if (e.key.length >= 6 && k2.contains(e.key)) return _gate(e.value, brand);
     }
-    // وأخيراً: المكتوب سابقةٌ لاسم ملفّ — «912» لـRB912UAG-5HPnD-OUT،
-    // و«rb5009» لـRB5009UG+S+IN.
-    //
-    // ⚠️ **بشرط ألّا يُطابق أكثر من ملفّ**: لو تعدّدت المطابقات فالمكتوب
-    // لا يميّز جهازاً بعينه، وعرض أحدها اعتباطاً أسوأ من الشارة — يبدو
-    // صحيحاً فيُبنى عليه قرار. مثال: «CCR1036» تُطابق أربعة طُرُز.
-    if (k2.length >= 3) {
-      String? only;
-      for (final e in _byKey.entries) {
-        if (!e.key.contains(k2)) continue;
-        if (only != null) return null; // تعدّد ⇒ لا نُخمّن
-        only = e.value;
-      }
-      if (only != null) return _gate(only, brand);
+    // وأخيراً: المكتوب سابقةٌ لاسم ملفّ — «912» لـRB912UAG-5HPnD-OUT.
+    final partial = <MapEntry<String, String>>[];
+    for (final e in _byKey.entries) {
+      if (e.key.contains(k2)) partial.add(e);
+    }
+    if (partial.length == 1 && k2.length >= 3) {
+      return _gate(partial.first.value, brand);
+    }
+    if (partial.length > 1) {
+      // ⚠️ التعدّد: عتبتان لا قاعدة واحدة.
+      //
+      // مفتاح قصير («208» من اسم عربيّ بعد حذف حروفه) لا يميّز جهازاً،
+      // وعرض أحد مطابقاته اعتباطاً أسوأ من الشارة — يبدو صحيحاً فيُبنى
+      // عليه قرار في الميدان. يبقى مرفوضاً.
+      //
+      // أمّا المفتاح الطويل فتعدّده لاحقةٌ لا جهاز آخر: «CRS326-24G-2S+»
+      // يُطابق نسختَي IN وRM — وهما الجهاز نفسه بتثبيت مختلف. رفضُهما
+      // يترك المستخدم بشارة عامّة بينما صورة إحداهما تُعرّفه فوراً.
+      // (طلب المستخدم 2026-08-30: «مو لازم 100% الاسم».)
+      if (k2.length < 8) return null;
+      // اختيار حتميّ لا اعتباطيّ: الأقرب طولاً للمكتوب (أقلّ لاحقة)،
+      // ثمّ أبجديّاً — فلا تتبدّل الصورة بين تشغيل وآخر.
+      partial.sort((a, b) {
+        final c = a.key.length.compareTo(b.key.length);
+        return c != 0 ? c : a.key.compareTo(b.key);
+      });
+      return _gate(partial.first.value, brand);
     }
     return null;
   }
