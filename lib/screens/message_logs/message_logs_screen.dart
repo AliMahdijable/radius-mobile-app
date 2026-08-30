@@ -482,7 +482,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
                                   m.recipientPhone!,
                                   style: AppType.muted().copyWith(
                                     fontSize: 10.5,
-                                    fontFamily: 'Cairo',
+                                    fontFamily: AppType.family,
                                     fontFeatures: const [
                                       FontFeature.tabularFigures()
                                     ],
@@ -826,7 +826,7 @@ class _MessageDetailSheet extends StatelessWidget {
               value,
               style: AppType.subtitle(color: AppColors.textHi).copyWith(
                 fontSize: 12.5,
-                fontFamily: 'Cairo',
+                fontFamily: AppType.family,
                 fontFeatures:
                     mono ? const [FontFeature.tabularFigures()] : null,
               ),

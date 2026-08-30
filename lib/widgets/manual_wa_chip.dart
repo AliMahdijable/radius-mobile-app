@@ -70,7 +70,7 @@ class ManualWaChip extends StatelessWidget {
               Text(
                 isManual ? 'وضع يدوي' : 'وضع تلقائي',
                 style: TextStyle(
-                  fontFamily: 'Cairo',
+                  fontFamily: AppType.family,
                   fontSize: compact ? 11 : 11.5,
                   height: compact ? 1.25 : 1.35,
                   fontWeight: FontWeight.w700,
@@ -223,7 +223,7 @@ class _WaPreviewSheet extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text('إلى: $phone',
                             style: TextStyle(
-                              fontFamily: 'Cairo',
+                              fontFamily: AppType.family,
                               fontSize: 11, height: 1.25,
                               fontWeight: FontWeight.w600,
                               color: AppColors.textMid,
@@ -251,7 +251,7 @@ class _WaPreviewSheet extends StatelessWidget {
                 child: Text(
                   messagePreview,
                   style: TextStyle(
-                    fontFamily: 'Cairo',
+                    fontFamily: AppType.family,
                     fontSize: 12.5,
                     color: AppColors.textHi,
                     height: 1.6,
@@ -292,7 +292,7 @@ class _WaPreviewSheet extends StatelessWidget {
                         label: Text(
                           manualMode ? 'افتح واتسابي' : 'إرسال تلقائي',
                           style: const TextStyle(
-                            fontFamily: 'Cairo',
+                            fontFamily: AppType.family,
                             fontSize: 13.5, height: 1.35,
                             fontWeight: FontWeight.w700,
                           ),

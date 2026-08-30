@@ -1096,7 +1096,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                 '${_msg.text.length} / 2000',
                 style: AppType.muted().copyWith(
                   fontSize: 10.5,
-                  fontFamily: 'Cairo',
+                  fontFamily: AppType.family,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),

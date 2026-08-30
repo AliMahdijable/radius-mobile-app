@@ -84,20 +84,20 @@ class _BindingsSheetState extends State<_BindingsSheet> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('فكّ الربط',
-            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+            style: TextStyle(fontFamily: AppType.family, fontWeight: FontWeight.w700)),
         content: Text('فكّ ربط "$display" من بوت تلغرام؟',
-            style: const TextStyle(fontFamily: 'Cairo', height: 1.5)),
+            style: const TextStyle(fontFamily: AppType.family, height: 1.5)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo')),
+            child: const Text('إلغاء', style: TextStyle(fontFamily: AppType.family)),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('فكّ',
                 style: TextStyle(
-                    fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+                    fontFamily: AppType.family, fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -108,7 +108,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
     if (done) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content:
-            const Text('تمّ فكّ الربط', style: TextStyle(fontFamily: 'Cairo')),
+            const Text('تمّ فكّ الربط', style: TextStyle(fontFamily: AppType.family)),
         backgroundColor: AppColors.brand,
         behavior: SnackBarBehavior.floating,
       ));
@@ -117,7 +117,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content:
-            const Text('فشل فكّ الربط', style: TextStyle(fontFamily: 'Cairo')),
+            const Text('فشل فكّ الربط', style: TextStyle(fontFamily: AppType.family)),
         backgroundColor: AppColors.errorFill,
         behavior: SnackBarBehavior.floating,
       ));
@@ -303,7 +303,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                         if (tgHandle.isNotEmpty) tgHandle,
                       ].join(' · '),
                       style: TextStyle(
-                        fontFamily: 'Cairo',
+                        fontFamily: AppType.family,
                         fontSize: 11, height: 1.25,
                         fontWeight: FontWeight.w600,
                         color: AppColors.textMid,

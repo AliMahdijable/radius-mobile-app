@@ -235,7 +235,7 @@ class _RevealSheetState extends State<_RevealSheet>
                         label: const Text(
                           'نسخ',
                           style: TextStyle(
-                            fontFamily: 'Cairo',
+                            fontFamily: AppType.family,
                             fontSize: 13, height: 1.35,
                             fontWeight: FontWeight.w700,
                           ),
@@ -263,7 +263,7 @@ class _RevealSheetState extends State<_RevealSheet>
                         label: const Text(
                           'تم',
                           style: TextStyle(
-                            fontFamily: 'Cairo',
+                            fontFamily: AppType.family,
                             fontSize: 13, height: 1.35,
                             fontWeight: FontWeight.w700,
                           ),

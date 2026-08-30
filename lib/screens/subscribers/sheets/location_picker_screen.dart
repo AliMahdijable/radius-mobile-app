@@ -208,7 +208,7 @@ class _MapPickerScreenState extends State<_MapPickerScreen> {
                           Expanded(
                             child: Text(_error!,
                                 style: TextStyle(
-                                  fontFamily: 'Cairo',
+                                  fontFamily: AppType.family,
                                   fontSize: 12.5,
                                   color: AppColors.error,
                                   height: 1.6,
@@ -240,7 +240,7 @@ class _MapPickerScreenState extends State<_MapPickerScreen> {
                   'حرّك الخريطة حتى يقع الدبّوس على بيت المشترك',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontFamily: 'Cairo',
+                    fontFamily: AppType.family,
                     color: AppColors.textMid,
                     fontSize: 11.5,
                     height: 1.6,
@@ -256,7 +256,7 @@ class _MapPickerScreenState extends State<_MapPickerScreen> {
                     label: const Text(
                       'تأكيد الموقع',
                       style: TextStyle(
-                        fontFamily: 'Cairo',
+                        fontFamily: AppType.family,
                         fontSize: 13.5, height: 1.35,
                         fontWeight: FontWeight.w700,
                       ),

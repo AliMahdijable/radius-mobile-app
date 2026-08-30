@@ -466,7 +466,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
           Text(
             options.firstWhere((o) => o.value == _defaultChannel).hint,
             style: TextStyle(
-              fontFamily: 'Cairo',
+              fontFamily: AppType.family,
               fontSize: 10.5,
               fontWeight: FontWeight.w500,
               color: AppColors.textMid,

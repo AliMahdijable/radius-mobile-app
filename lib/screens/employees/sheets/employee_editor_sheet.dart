@@ -516,7 +516,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
                         child: Text(
                           'بلا قيد — يشاهد كل بياناتك',
                           style: TextStyle(
-                            fontFamily: 'Cairo',
+                            fontFamily: AppType.family,
                             fontSize: 13, height: 1.35,
                             fontWeight: FontWeight.w600,
                             color: AppColors.textHi,
@@ -530,7 +530,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
                           child: Text(
                             _managerLabel(m),
                             style: TextStyle(
-                              fontFamily: 'Cairo',
+                              fontFamily: AppType.family,
                               fontSize: 13, height: 1.35,
                               fontWeight: FontWeight.w600,
                               color: AppColors.textHi,
@@ -556,7 +556,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
                 ? 'الموظّف يشاهد كل مشتركين ومدراء حسابك.'
                 : 'الموظّف مقيَّد — يرى بيانات المدير الفرعي المختار فقط.',
             style: TextStyle(
-              fontFamily: 'Cairo',
+              fontFamily: AppType.family,
               fontSize: 10.5, height: 1.3,
               fontWeight: FontWeight.w500,
               color:

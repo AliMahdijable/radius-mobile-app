@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
+import '../../theme/typography.dart';
 
 /// 2026-08-26: نسخ نصّ للحافظة مع haptic خفيف + toast تأكيد.
 /// helper مشترك حتى لا نكرّر الـpattern في كل tile/card.
@@ -21,7 +22,7 @@ Future<void> copyToClipboard(
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
     content: Text(
       'تمّ نسخ $label',
-      style: const TextStyle(fontFamily: 'Cairo', fontSize: 12.5, height: 1.4),
+      style: const TextStyle(fontFamily: AppType.family, fontSize: 12.5, height: 1.4),
     ),
     backgroundColor: AppColors.brand,
     behavior: SnackBarBehavior.floating,

@@ -808,7 +808,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
           Text(
             options.firstWhere((o) => o.value == current).hint,
             style: TextStyle(
-              fontFamily: 'Cairo',
+              fontFamily: AppType.family,
               fontSize: 10.5,
               fontWeight: FontWeight.w500,
               color: AppColors.textMid,

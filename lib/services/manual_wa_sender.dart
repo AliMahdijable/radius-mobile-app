@@ -5,6 +5,7 @@ import '../api/subscribers_api.dart';
 import '../api/whatsapp_api.dart';
 import '../core/widgets/sheet_scaffold.dart';
 import '../widgets/manual_wa_chip.dart';
+import '../theme/typography.dart';
 
 /// 2026-08-26: يفتح واتساب المدير الشخصي مع رسالة جاهزة عبر deep-link
 /// `wa.me/{phone}?text={message}`. المدير يضغط "إرسال" بيده فتصير
@@ -54,7 +55,7 @@ Future<bool> openManualWa({
 void _snack(BuildContext? ctx, String msg) {
   if (ctx == null || !ctx.mounted) return;
   ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-    content: Text(msg, style: const TextStyle(fontFamily: 'Cairo')),
+    content: Text(msg, style: const TextStyle(fontFamily: AppType.family)),
     behavior: SnackBarBehavior.floating,
   ));
 }

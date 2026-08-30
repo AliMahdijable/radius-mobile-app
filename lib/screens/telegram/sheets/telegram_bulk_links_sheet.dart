@@ -5,6 +5,7 @@ import '../../../api/telegram_api.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
+import '../../../theme/typography.dart';
 
 /// telegramBulkLinksSheet — إرسال رابط الربط لكل مشترك عبر واتساب.
 /// Dry-run أوّلاً (يعرض عدد المؤهّلين)، ثم confirm للإرسال الفعلي.
@@ -58,21 +59,21 @@ class _BulkSheetState extends State<_BulkSheet> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('تأكيد الإرسال',
-            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+            style: TextStyle(fontFamily: AppType.family, fontWeight: FontWeight.w700)),
         content: Text(
             'سيُدرَج ${_preview!.eligible} رسالة في طابور واتساب. الإرسال يحترم حدود الإرسال.',
-            style: const TextStyle(fontFamily: 'Cairo', height: 1.5)),
+            style: const TextStyle(fontFamily: AppType.family, height: 1.5)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo')),
+            child: const Text('إلغاء', style: TextStyle(fontFamily: AppType.family)),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.warning),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('أرسل الآن',
                 style: TextStyle(
-                    fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+                    fontFamily: AppType.family, fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -85,7 +86,7 @@ class _BulkSheetState extends State<_BulkSheet> {
     if (res.ok) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('أُدرج ${res.enqueued} رسالة في طابور واتساب',
-            style: const TextStyle(fontFamily: 'Cairo')),
+            style: const TextStyle(fontFamily: AppType.family)),
         backgroundColor: AppColors.brand,
         behavior: SnackBarBehavior.floating,
       ));
@@ -94,7 +95,7 @@ class _BulkSheetState extends State<_BulkSheet> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res.message ?? 'فشل الإرسال',
-            style: const TextStyle(fontFamily: 'Cairo')),
+            style: const TextStyle(fontFamily: AppType.family)),
         backgroundColor: AppColors.errorFill,
         behavior: SnackBarBehavior.floating,
       ));
@@ -125,7 +126,7 @@ class _BulkSheetState extends State<_BulkSheet> {
           else if (_preview == null)
             Text('تعذّر جلب المعاينة',
                 style: TextStyle(
-                  fontFamily: 'Cairo',
+                  fontFamily: AppType.family,
                   color: AppColors.error,
                 ))
           else
@@ -146,7 +147,7 @@ class _BulkSheetState extends State<_BulkSheet> {
                     : const Icon(LucideIcons.send, size: 16),
                 label: Text('أرسل لـ${_preview!.eligible} مشترك',
                     style: const TextStyle(
-                      fontFamily: 'Cairo',
+                      fontFamily: AppType.family,
                       fontSize: 13, height: 1.35,
                       fontWeight: FontWeight.w700,
                     )),
@@ -160,7 +161,7 @@ class _BulkSheetState extends State<_BulkSheet> {
           else if (_preview != null)
             Text('لا يوجد مشتركون مؤهّلون',
                 style: TextStyle(
-                  fontFamily: 'Cairo',
+                  fontFamily: AppType.family,
                   color: AppColors.textMid,
                   fontSize: 12.5, height: 1.4,
                 )),
@@ -198,7 +199,7 @@ class _BulkSheetState extends State<_BulkSheet> {
         Expanded(
           child: Text(label,
               style: TextStyle(
-                fontFamily: 'Cairo',
+                fontFamily: AppType.family,
                 fontSize: bold ? 13 : 12,
                 height: bold ? 1.35 : 1.4,
                 fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
@@ -207,7 +208,7 @@ class _BulkSheetState extends State<_BulkSheet> {
         ),
         Text('$n',
             style: TextStyle(
-              fontFamily: 'Cairo',
+              fontFamily: AppType.family,
               fontSize: bold ? 15 : 13,
               height: bold ? 1.2 : 1.35,
               fontWeight: FontWeight.w700,

@@ -118,7 +118,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
     if (res.ok) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('أُرسل الرابط لـ${_selected!.fullName} عبر واتساب ✅',
-            style: const TextStyle(fontFamily: 'Cairo')),
+            style: const TextStyle(fontFamily: AppType.family)),
         backgroundColor: AppColors.brand,
         behavior: SnackBarBehavior.floating,
       ));
@@ -127,7 +127,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(res.message ?? 'فشل الإرسال',
-            style: const TextStyle(fontFamily: 'Cairo')),
+            style: const TextStyle(fontFamily: AppType.family)),
         backgroundColor: AppColors.errorFill,
         behavior: SnackBarBehavior.floating,
       ));
@@ -236,7 +236,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                       children: [
                         Text(s.fullName,
                             style: TextStyle(
-                              fontFamily: 'Cairo',
+                              fontFamily: AppType.family,
                               fontSize: 13.5, height: 1.35,
                               fontWeight: FontWeight.w700,
                               color: AppColors.textHi,
@@ -301,7 +301,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
               children: [
                 Text('المشترك',
                     style: TextStyle(
-                      fontFamily: 'Cairo',
+                      fontFamily: AppType.family,
                       fontSize: 10.5, height: 1.3,
                       fontWeight: FontWeight.w700,
                       color: AppColors.textLow,
@@ -313,7 +313,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                 const SizedBox(height: 2),
                 Text('@${_selected!.username}',
                     style: TextStyle(
-                      fontFamily: 'Cairo',
+                      fontFamily: AppType.family,
                       fontSize: 11, height: 1.25,
                       fontWeight: FontWeight.w600,
                       color: AppColors.textMid,
@@ -336,7 +336,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                   children: [
                     Text('رابط الربط',
                         style: TextStyle(
-                          fontFamily: 'Cairo',
+                          fontFamily: AppType.family,
                           fontSize: 10.5, height: 1.3,
                           fontWeight: FontWeight.w700,
                           color: AppColors.textLow,
@@ -428,7 +428,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                         child: Text(
                           'اعرض الشاشة على المشترك — يفتحه بكاميرا هاتفه',
                           style: TextStyle(
-                            fontFamily: 'Cairo',
+                            fontFamily: AppType.family,
                             fontSize: 10.5, height: 1.3,
                             fontWeight: FontWeight.w600,
                             color: AppColors.textMid,
@@ -464,7 +464,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                   icon: const Icon(LucideIcons.copy, size: 16),
                   label: const Text('نسخ',
                       style: TextStyle(
-                        fontFamily: 'Cairo',
+                        fontFamily: AppType.family,
                         fontSize: 13, height: 1.35,
                         fontWeight: FontWeight.w700,
                       )),
@@ -495,7 +495,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                       : const Icon(LucideIcons.messageCircle, size: 16),
                   label: const Text('أرسل عبر واتساب',
                       style: TextStyle(
-                        fontFamily: 'Cairo',
+                        fontFamily: AppType.family,
                         fontSize: 13, height: 1.35,
                         fontWeight: FontWeight.w700,
                       )),

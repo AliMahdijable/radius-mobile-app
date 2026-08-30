@@ -106,8 +106,10 @@ class ReportExportBar extends StatelessWidget {
 
   Future<void> _printPdf(BuildContext context) async {
     try {
-      // خط عربي — نستعمل NotoNaskh من Google Fonts (Cairo نستعملها بالتطبيق
-      // لكن NotoNaskh أنقى للـPDF). أو أي خط مضمّن بالمشروع.
+      // خطّ عربي للتقرير — NotoNaskh عمداً لا خطّ التطبيق: التقرير
+      // جدول كثيف يُقرأ مطبوعاً، والخطّ الناسخي أوضح فيه من خطّ
+      // الواجهة. الوصولات مختلفة (print_service) وتستعمل خطّ التطبيق
+      // لأنّها تُقرأ كامتداد للشاشة.
       final font = await PdfGoogleFonts.cairoRegular();
       final fontBold = await PdfGoogleFonts.cairoBold();
       final doc = pw.Document();

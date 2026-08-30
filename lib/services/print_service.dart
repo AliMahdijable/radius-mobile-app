@@ -138,20 +138,21 @@ class PrintService {
     required String title,
     String? companyName,
   }) async {
-    // تحميل خط Cairo (يدعم العربي). PdfGoogleFonts يجيبه من CDN ويكاش.
-    // لو الجهاز offline، pdf package يستعمل fallback (لن يعرض عربي صحيح).
-    pw.Font? cairoRegular;
-    pw.Font? cairoBold;
+    // 2026-08-30: IBM Plex Sans Arabic بدل Cairo — الوصل المطبوع يخرج
+    // بخطّ الشاشة نفسه. PdfGoogleFonts يجيبه من CDN ويكاش؛ لو الجهاز
+    // offline يستعمل fallback (لن يعرض عربيّاً صحيحاً).
+    pw.Font? arabicRegular;
+    pw.Font? arabicBold;
     try {
-      cairoRegular = await PdfGoogleFonts.cairoRegular();
-      cairoBold = await PdfGoogleFonts.cairoBold();
+      arabicRegular = await PdfGoogleFonts.iBMPlexSansArabicRegular();
+      arabicBold = await PdfGoogleFonts.iBMPlexSansArabicBold();
     } catch (e) {
       if (kDebugMode) debugPrint('[PrintService] cairo font fetch failed: $e');
     }
 
     final theme = pw.ThemeData.withFont(
-      base: cairoRegular ?? pw.Font.helvetica(),
-      bold: cairoBold ?? pw.Font.helveticaBold(),
+      base: arabicRegular ?? pw.Font.helvetica(),
+      bold: arabicBold ?? pw.Font.helveticaBold(),
     );
 
     final doc = pw.Document(theme: theme);

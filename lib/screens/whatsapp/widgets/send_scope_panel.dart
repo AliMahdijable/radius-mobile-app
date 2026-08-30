@@ -228,7 +228,7 @@ class _SendScopePanelState extends State<SendScopePanel> {
                 decoration: InputDecoration(
                   hintText: 'بحث في المدراء…',
                   hintStyle: TextStyle(
-                    fontFamily: 'Cairo',
+                    fontFamily: AppType.family,
                     fontSize: 11.5, height: 1.35,
                     color: AppColors.textLow,
                   ),
@@ -387,7 +387,7 @@ class _SendScopePanelState extends State<SendScopePanel> {
                 username,
                 style: AppType.button(
                   color: checked ? AppColors.brand : AppColors.textMid,
-                ).copyWith(fontSize: 11, fontFamily: 'Cairo'),
+                ).copyWith(fontSize: 11, fontFamily: AppType.family),
                 textDirection: TextDirection.ltr,
               ),
             ],

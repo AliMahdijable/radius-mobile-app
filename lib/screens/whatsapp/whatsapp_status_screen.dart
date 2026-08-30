@@ -1231,7 +1231,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
                       ? '✅ بعد كل عمليّة (تسديد/تفعيل/تمديد/تذكير/QR/إرسال معلومات) تفتح نافذة معاينة الرسالة → تضغط "افتح واتسابي" → واتسابك يفتح مع النصّ جاهز → تضغط إرسال. يشتغل حتى لو WA السيرفر مقطوع.'
                       : 'الإرسالات تمرّ عبر جلسة WA السيرفر تلقائياً. لو حصل ban/تعليق للجلسة أو تخاف من مخاطر WA على السيرفر، فعّل الوضع اليدوي.',
                   style: TextStyle(
-                    fontFamily: 'Cairo',
+                    fontFamily: AppType.family,
                     fontSize: 12.5,
                     fontWeight: FontWeight.w500,
                     color: AppColors.textMid,

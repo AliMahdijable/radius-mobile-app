@@ -245,12 +245,14 @@ class _MyServicesAppState extends State<MyServicesApp>
       useMaterial3: true,
       brightness: brightness,
       scaffoldBackgroundColor: AppColors.bg,
-      // Cairo as the default font for the WHOLE app. Perf 2026-08-05:
-      // كان GoogleFonts.cairoTextTheme يفتح network fetch → text flash.
-      // الآن apply(fontFamily: 'Cairo') يستعمل الـfont المُضمَّن في
+      // خطّ التطبيق كلّه من `AppType.family` — مصدر واحد، فتبديله
+      // (Cairo → IBM Plex Sans Arabic في 2026-08-30) لا يتطلّب المرور
+      // على الشاشات. Perf 2026-08-05: كان GoogleFonts يفتح network
+      // fetch → text flash.
+      // الآن apply(fontFamily: AppType.family) يستعمل الـfont المُضمَّن في
       // assets (see pubspec.yaml fonts section). Offline من اللحظة
       // الأولى، لا flash.
-      textTheme: base.textTheme.apply(fontFamily: 'Cairo'),
+      textTheme: base.textTheme.apply(fontFamily: AppType.family),
       colorScheme: brightness == Brightness.dark
           ? ColorScheme.dark(
               primary: AppColors.brand,

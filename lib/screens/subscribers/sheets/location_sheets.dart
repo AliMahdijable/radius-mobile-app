@@ -174,7 +174,7 @@ class _ChooserSheet extends StatelessWidget {
               Expanded(
                 child: Text(label,
                     style: TextStyle(
-                      fontFamily: 'Cairo',
+                      fontFamily: AppType.family,
                       fontSize: 13.5, height: 1.35,
                       fontWeight: FontWeight.w700,
                       color: AppColors.textHi,
@@ -323,20 +323,20 @@ class _EditSheetState extends State<_EditSheet> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('حذف الموقع',
-            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+            style: TextStyle(fontFamily: AppType.family, fontWeight: FontWeight.w700)),
         content: const Text('سيُحذف موقع GPS المخزَّن. متأكّد؟',
-            style: TextStyle(fontFamily: 'Cairo', height: 1.5)),
+            style: TextStyle(fontFamily: AppType.family, height: 1.5)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo')),
+            child: const Text('إلغاء', style: TextStyle(fontFamily: AppType.family)),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('حذف',
                 style: TextStyle(
-                    fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+                    fontFamily: AppType.family, fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -361,7 +361,7 @@ class _EditSheetState extends State<_EditSheet> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('الحقل مستخدَم',
-            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+            style: TextStyle(fontFamily: AppType.family, fontWeight: FontWeight.w700)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -369,7 +369,7 @@ class _EditSheetState extends State<_EditSheet> {
             Text(
               'حقل العنوان في SAS4 يحتوي نصّاً يدوياً:',
               style: TextStyle(
-                  fontFamily: 'Cairo', height: 1.6, color: AppColors.textMid),
+                  fontFamily: AppType.family, height: 1.6, color: AppColors.textMid),
             ),
             const SizedBox(height: 8),
             Container(
@@ -387,7 +387,7 @@ class _EditSheetState extends State<_EditSheet> {
             Text(
               'احذفه من SAS4 (لوحة الإدارة → المشترك → العنوان) أوّلاً، ثم أعد المحاولة.',
               style: TextStyle(
-                  fontFamily: 'Cairo', height: 1.6, color: AppColors.textMid),
+                  fontFamily: AppType.family, height: 1.6, color: AppColors.textMid),
             ),
           ],
         ),
@@ -397,7 +397,7 @@ class _EditSheetState extends State<_EditSheet> {
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('فهمت',
                 style: TextStyle(
-                    fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+                    fontFamily: AppType.family, fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -454,7 +454,7 @@ class _EditSheetState extends State<_EditSheet> {
                     child: Text(
                       'حقل العنوان في SAS4 يحتوي نصّاً يدوياً — احذفه من لوحة SAS4 أوّلاً.',
                       style: TextStyle(
-                        fontFamily: 'Cairo',
+                        fontFamily: AppType.family,
                         fontSize: 11.5,
                         color: AppColors.textHi,
                         height: 1.5,
@@ -478,7 +478,7 @@ class _EditSheetState extends State<_EditSheet> {
                 label: const Text(
                   'اختر من الخريطة (موقعك الحالي)',
                   style: TextStyle(
-                    fontFamily: 'Cairo',
+                    fontFamily: AppType.family,
                     fontSize: 13, height: 1.35,
                     fontWeight: FontWeight.w700,
                   ),
@@ -518,7 +518,7 @@ class _EditSheetState extends State<_EditSheet> {
                   decoration: InputDecoration(
                     hintText: 'https://maps.google.com/… أو 33.315,44.366',
                     hintStyle: TextStyle(
-                      fontFamily: 'Cairo',
+                      fontFamily: AppType.family,
                       fontSize: 11.5, height: 1.35,
                       color: AppColors.textLow,
                     ),
@@ -559,7 +559,7 @@ class _EditSheetState extends State<_EditSheet> {
             Text(
               _parseError!,
               style: TextStyle(
-                fontFamily: 'Cairo',
+                fontFamily: AppType.family,
                 fontSize: 11,
                 color: AppColors.error,
                 height: 1.5,

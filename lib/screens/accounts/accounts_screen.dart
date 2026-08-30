@@ -119,23 +119,23 @@ class _AccountsScreenState extends State<AccountsScreen> {
         backgroundColor: AppColors.surface,
         title: const Text(
           'تبديل الحساب',
-          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700),
+          style: TextStyle(fontFamily: AppType.family, fontWeight: FontWeight.w700),
         ),
         content: Text(
           'سيتمّ تسجيل دخول بحساب "${row.username}". الحساب الحاليّ يُحفظ في شاشة الدخول للعودة السريعة.',
-          style: const TextStyle(fontFamily: 'Cairo', height: 1.5),
+          style: const TextStyle(fontFamily: AppType.family, height: 1.5),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo')),
+            child: const Text('إلغاء', style: TextStyle(fontFamily: AppType.family)),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.brand),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('تبديل',
                 style: TextStyle(
-                    fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+                    fontFamily: AppType.family, fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -311,7 +311,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
   void _snack(String msg, {bool error = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg, style: const TextStyle(fontFamily: 'Cairo')),
+      content: Text(msg, style: const TextStyle(fontFamily: AppType.family)),
       backgroundColor: error ? AppColors.error : AppColors.brand,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.sm)),
@@ -331,7 +331,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
         title: const Text(
           'الصفحات',
           style: TextStyle(
-            fontFamily: 'Cairo',
+            fontFamily: AppType.family,
             fontSize: 16, height: 1.3,
             fontWeight: FontWeight.w700,
           ),
@@ -365,7 +365,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                             child: Text(
                               'لا يوجد مدراء تحت هذا الحساب — استعمل زر "العودة" أعلاه للرجوع للحساب الأصلي.',
                               style: TextStyle(
-                                fontFamily: 'Cairo',
+                                fontFamily: AppType.family,
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.w500,
                                 color: AppColors.textMid,
@@ -412,7 +412,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 Text(
                   'التبديل السريع',
                   style: TextStyle(
-                    fontFamily: 'Cairo',
+                    fontFamily: AppType.family,
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textHi,
@@ -423,7 +423,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 Text(
                   'اضغط "دخول" لتسجيل الدخول بحساب مدير آخر بلا كتابة كلمة السر.',
                   style: TextStyle(
-                    fontFamily: 'Cairo',
+                    fontFamily: AppType.family,
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
                     color: AppColors.textMid,
@@ -494,7 +494,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                       const Text(
                         'العودة للحساب الأصلي',
                         style: TextStyle(
-                          fontFamily: 'Cairo',
+                          fontFamily: AppType.family,
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                           color: AppColors.onBrand,
@@ -507,7 +507,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                             ? '${orig.displayName}  ·  @${orig.username}'
                             : '@${orig.username}',
                         style: TextStyle(
-                          fontFamily: 'Cairo',
+                          fontFamily: AppType.family,
                           fontSize: 11.5, height: 1.35,
                           fontWeight: FontWeight.w600,
                           color: AppColors.onBrand.withValues(alpha: 0.9),
@@ -601,7 +601,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                           child: Text(
                             row.username,
                             style: TextStyle(
-                              fontFamily: 'Cairo',
+                              fontFamily: AppType.family,
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
                               color: AppColors.textHi,
@@ -652,7 +652,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                       Text(
                         row.fullName,
                         style: TextStyle(
-                          fontFamily: 'Cairo',
+                          fontFamily: AppType.family,
                           fontSize: 11, height: 1.25,
                           fontWeight: FontWeight.w600,
                           color: AppColors.textMid,
@@ -692,7 +692,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     label: const Text(
                       'دخول',
                       style: TextStyle(
-                        fontFamily: 'Cairo',
+                        fontFamily: AppType.family,
                         fontSize: 12.5, height: 1.4,
                         fontWeight: FontWeight.w700,
                       ),
@@ -723,7 +723,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
           Text(
             'لا يوجد مدراء فرعيّون',
             style: TextStyle(
-              fontFamily: 'Cairo',
+              fontFamily: AppType.family,
               fontSize: 13, height: 1.35,
               fontWeight: FontWeight.w600,
               color: AppColors.textMid,
@@ -751,7 +751,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
             onPressed: _load,
             icon: const Icon(LucideIcons.refreshCw, size: 14),
             label: const Text('إعادة المحاولة',
-                style: TextStyle(fontFamily: 'Cairo')),
+                style: TextStyle(fontFamily: AppType.family)),
           ),
         ],
       ),

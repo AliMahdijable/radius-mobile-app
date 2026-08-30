@@ -74,21 +74,21 @@ class _TelegramScreenState extends State<TelegramScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('فصل البوت',
-            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+            style: TextStyle(fontFamily: AppType.family, fontWeight: FontWeight.w700)),
         content: const Text(
             'سيتوقّف كل إرسال تلغرام. المشتركون المربوطون يبقون في قاعدة البيانات — يمكن إعادة الربط لاحقاً بنفس التوكن.',
-            style: TextStyle(fontFamily: 'Cairo', height: 1.5)),
+            style: TextStyle(fontFamily: AppType.family, height: 1.5)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo')),
+            child: const Text('إلغاء', style: TextStyle(fontFamily: AppType.family)),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('فصل',
                 style: TextStyle(
-                    fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+                    fontFamily: AppType.family, fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -107,7 +107,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
   void _snack(String msg, {bool error = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg, style: const TextStyle(fontFamily: 'Cairo')),
+      content: Text(msg, style: const TextStyle(fontFamily: AppType.family)),
       backgroundColor: error ? AppColors.error : AppColors.brand,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.sm)),
@@ -126,7 +126,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
         title: const Text(
           'تلغرام',
           style: TextStyle(
-            fontFamily: 'Cairo',
+            fontFamily: AppType.family,
             fontSize: 16, height: 1.3,
             fontWeight: FontWeight.w700,
           ),
@@ -253,7 +253,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
             Text(
               '$value',
               style: TextStyle(
-                fontFamily: 'Cairo',
+                fontFamily: AppType.family,
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
                 color: color,
@@ -353,7 +353,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
                     Text(
                       a.title,
                       style: TextStyle(
-                        fontFamily: 'Cairo',
+                        fontFamily: AppType.family,
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
                         color: AppColors.textHi,
@@ -388,7 +388,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
           label: const Text(
             'فصل البوت',
             style: TextStyle(
-              fontFamily: 'Cairo',
+              fontFamily: AppType.family,
               fontSize: 13, height: 1.35,
               fontWeight: FontWeight.w700,
             ),
@@ -438,7 +438,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
                 Text(
                   title,
                   style: TextStyle(
-                    fontFamily: 'Cairo',
+                    fontFamily: AppType.family,
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textHi,
@@ -468,7 +468,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
         padding: const EdgeInsets.all(24),
         child: Text('تعذّر قراءة هويّة الحساب. سجّل دخول من جديد.',
             style: TextStyle(
-              fontFamily: 'Cairo',
+              fontFamily: AppType.family,
               color: AppColors.textMid,
             )),
       ),
@@ -541,7 +541,7 @@ class _StepsCard extends StatelessWidget {
             alignment: Alignment.center,
             child: Text('$n',
                 style: TextStyle(
-                  fontFamily: 'Cairo',
+                  fontFamily: AppType.family,
                   fontSize: 11, height: 1.25,
                   fontWeight: FontWeight.w700,
                   color: tgBlue,
@@ -555,7 +555,7 @@ class _StepsCard extends StatelessWidget {
               children: [
                 Text(prefix,
                     style: TextStyle(
-                      fontFamily: 'Cairo',
+                      fontFamily: AppType.family,
                       fontSize: 12.5,
                       fontWeight: FontWeight.w500,
                       color: AppColors.textMid,
@@ -570,7 +570,7 @@ class _StepsCard extends StatelessWidget {
                     },
                     child: Text(botLink,
                         style: TextStyle(
-                          fontFamily: 'Cairo',
+                          fontFamily: AppType.family,
                           fontSize: 12.5, height: 1.4,
                           fontWeight: FontWeight.w700,
                           color: tgBlue,
@@ -662,7 +662,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
       HapticFeedback.mediumImpact();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('تمّ الربط بـ@${res.botUsername ?? "?"}',
-            style: const TextStyle(fontFamily: 'Cairo')),
+            style: const TextStyle(fontFamily: AppType.family)),
         backgroundColor: AppColors.success,
         behavior: SnackBarBehavior.floating,
         shape:
@@ -689,7 +689,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
         children: [
           Text('توكن البوت',
               style: TextStyle(
-                fontFamily: 'Cairo',
+                fontFamily: AppType.family,
                 fontSize: 11, height: 1.25,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textLow,
@@ -714,7 +714,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
                     controller: _ctrl,
                     obscureText: false,
                     style: const TextStyle(
-                      fontFamily: 'Cairo',
+                      fontFamily: AppType.family,
                       fontSize: 12.5, height: 1.4,
                       fontWeight: FontWeight.w600,
                       fontFeatures: [FontFeature.tabularFigures()],
@@ -762,7 +762,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
                   : const Icon(LucideIcons.link, size: 16),
               label: const Text('ربط البوت',
                   style: TextStyle(
-                    fontFamily: 'Cairo',
+                    fontFamily: AppType.family,
                     fontSize: 13, height: 1.35,
                     fontWeight: FontWeight.w700,
                   )),
@@ -781,7 +781,7 @@ class _TokenEntryCardState extends State<_TokenEntryCard> {
               const SizedBox(width: 5),
               Text('التوكن يُحفظ مشفَّراً — لا يظهر مجدَّداً.',
                   style: TextStyle(
-                    fontFamily: 'Cairo',
+                    fontFamily: AppType.family,
                     fontSize: 10.5, height: 1.3,
                     color: AppColors.textLow,
                     fontWeight: FontWeight.w600,

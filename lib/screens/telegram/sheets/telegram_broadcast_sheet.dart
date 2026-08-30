@@ -68,14 +68,14 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('تأكيد الإرسال',
-            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+            style: TextStyle(fontFamily: AppType.family, fontWeight: FontWeight.w700)),
         content: Text(
             'سيتمّ إرسال الرسالة لـ${_preview!.eligible} مشترك مربوط. متأكّد؟',
-            style: const TextStyle(fontFamily: 'Cairo', height: 1.5)),
+            style: const TextStyle(fontFamily: AppType.family, height: 1.5)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo')),
+            child: const Text('إلغاء', style: TextStyle(fontFamily: AppType.family)),
           ),
           FilledButton(
             style:
@@ -83,7 +83,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('أرسل',
                 style: TextStyle(
-                    fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+                    fontFamily: AppType.family, fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -103,7 +103,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
 
   void _snack(String msg, {bool error = false}) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg, style: const TextStyle(fontFamily: 'Cairo')),
+      content: Text(msg, style: const TextStyle(fontFamily: AppType.family)),
       backgroundColor: error ? AppColors.error : AppColors.brand,
       behavior: SnackBarBehavior.floating,
     ));
@@ -142,7 +142,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
               minLines: 4,
               maxLength: 2000,
               style: TextStyle(
-                fontFamily: 'Cairo',
+                fontFamily: AppType.family,
                 fontSize: 13,
                 color: AppColors.textHi,
                 height: 1.5,
@@ -153,7 +153,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                 hintText: 'اكتب الرسالة هنا...',
                 hintStyle: AppType.body(color: AppColors.textLow),
                 counterStyle: TextStyle(
-                  fontFamily: 'Cairo',
+                  fontFamily: AppType.family,
                   fontSize: 10.5, height: 1.3,
                   color: AppColors.textLow,
                 ),
@@ -191,7 +191,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
               Text(
                 'لا يوجد مشتركون مربوطون — استعمل «ربط مشترك» أوّلاً',
                 style: TextStyle(
-                  fontFamily: 'Cairo',
+                  fontFamily: AppType.family,
                   fontSize: 11.5,
                   color: AppColors.textMid,
                   height: 1.4,
@@ -215,7 +215,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                         : const Icon(LucideIcons.search, size: 16),
                     label: const Text('فحص مسبق',
                         style: TextStyle(
-                          fontFamily: 'Cairo',
+                          fontFamily: AppType.family,
                           fontSize: 13, height: 1.35,
                           fontWeight: FontWeight.w700,
                         )),
@@ -248,7 +248,7 @@ class _BroadcastSheetState extends State<_BroadcastSheet> {
                         : const Icon(LucideIcons.send, size: 16),
                     label: const Text('إرسال',
                         style: TextStyle(
-                          fontFamily: 'Cairo',
+                          fontFamily: AppType.family,
                           fontSize: 13, height: 1.35,
                           fontWeight: FontWeight.w700,
                         )),
