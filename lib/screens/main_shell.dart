@@ -248,11 +248,15 @@ class _MainShellState extends State<MainShell> {
           // (4px فوق حافّته العلويّة). لا نقدر نضعه داخله لأن الـpill
           // في body's Stack والـnav يُرسم فوق (فيختفي). 4px يعطيه
           // إحساس أنّه ملحق بالتنقّل بلا فراغ.
-          Positioned(
-            right: Sp.lg,
-            bottom: 64 + Sp.sm + MediaQuery.paddingOf(context).bottom + 4,
-            child: _SearchPill(onTap: () => showQuickSearch(context)),
-          ),
+          // 2026-08-30: الحبّة صارت على الرئيسيّة وحدها. كانت تطفو فوق
+          // كلّ تبويب، وفي شاشة المشتركين تحديداً تُزاحم شريط بحث
+          // كامل في رأس الصفحة — زرّان لوظيفة واحدة.
+          if (_tab == 0)
+            Positioned(
+              right: Sp.lg,
+              bottom: 64 + Sp.sm + MediaQuery.paddingOf(context).bottom + 4,
+              child: _SearchPill(onTap: () => showQuickSearch(context)),
+            ),
         ],
       ),
       // 2026-08-29 (S6): الشريط صار مسطّحاً من الحافة للحافة بحدّ علوي

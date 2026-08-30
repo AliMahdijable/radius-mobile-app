@@ -18,6 +18,7 @@ import '../../services/auth_storage.dart';
 import '../../services/permissions_service.dart';
 import '../../services/subscriber_events.dart';
 import '../../core/widgets/design_sheet.dart';
+import '../../core/widgets/voice_search_button.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -113,6 +114,20 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   /// والمستخدم يبحث عن مشترك بعينه لا عن «الصفحة الرابعة».
   int _visibleCount = _kPageStep;
 
+  final _scrollCtrl = ScrollController();
+
+  /// هل انزلق الرأس الكامل خارج الشاشة؟ يحكم محتوى الشريط المثبَّت.
+  bool _compactHeader = false;
+
+  /// عتبة التبديل — أقلّ قليلاً من ارتفاع الرأس حتى يتمّ التبديل
+  /// وقت اختفائه لا بعده. القيمتان المختلفتان (56 نزولاً · 40 صعوداً)
+  /// تمنعان الرفرفة حين يستقرّ التمرير عند العتبة تماماً.
+  void _onScroll() {
+    final o = _scrollCtrl.hasClients ? _scrollCtrl.offset : 0.0;
+    final next = _compactHeader ? o > 40 : o > 56;
+    if (next != _compactHeader) setState(() => _compactHeader = next);
+  }
+
   bool _selectionMode = false;
   final Set<String> _selected = {};
 
@@ -121,6 +136,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   @override
   void initState() {
     super.initState();
+    _scrollCtrl.addListener(_onScroll);
     WidgetsBinding.instance.addObserver(this);
     _filter = widget.filterCmd?.value ?? SubscriberFilter.all;
     _applyDefaultSortFor(_filter);
@@ -201,6 +217,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
   @override
   void dispose() {
+    _scrollCtrl.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _autoRefreshTimer?.cancel();
     widget.filterCmd?.removeListener(_onFilterCmd);
@@ -929,6 +946,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                         child:
                             CircularProgressIndicator(color: AppColors.brand))
                     : CustomScrollView(
+                        controller: _scrollCtrl,
                         slivers: [
                           SliverToBoxAdapter(
                             child: Column(
@@ -976,6 +994,19 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                           SliverPersistentHeader(
                             pinned: true,
                             delegate: _ChipsBarDelegate(
+                              compact: _compactHeader,
+                              compactChild: _CompactSearchBar(
+                                controller: _searchCtrl,
+                                filterActive: _managerFilter != null,
+                                onFilter: _availableManagers.isEmpty
+                                    ? null
+                                    : _openManagerFilterSheet,
+                                onBackToTop: () => _scrollCtrl.animateTo(
+                                  0,
+                                  duration: const Duration(milliseconds: 260),
+                                  curve: Curves.easeOutCubic,
+                                ),
+                              ),
                               child: ColoredBox(
                                 color: AppColors.bg,
                                 child: Column(
@@ -1294,7 +1325,11 @@ class _ListHeader extends StatelessWidget {
                   onTap: controller.clear,
                   child: Icon(Icons.close_rounded,
                       size: 18, color: AppColors.textLow),
-                ),
+                )
+              else
+                // الإملاء الصوتي في مكان زرّ المسح: أحدهما فقط ذو معنى
+                // في كل لحظة — الحقل فارغ فيُملى، أو فيه نصّ فيُمسح.
+                VoiceSearchButton(controller: controller),
             ],
           ),
         ),
@@ -2021,16 +2056,26 @@ class _LoadMoreButton extends StatelessWidget {
 /// الشريط المثبَّت يطفو فوق البطاقات وهي تمرّ تحته، وبلا خلفيّة
 /// معتمة تظهر البطاقات من خلاله.
 class _ChipsBarDelegate extends SliverPersistentHeaderDelegate {
-  _ChipsBarDelegate({required this.child}) : isDark = AppColors.isDark;
+  _ChipsBarDelegate({
+    required this.child,
+    required this.compactChild,
+    required this.compact,
+  }) : isDark = AppColors.isDark;
 
+  /// المحتوى وقت الاستقرار في الأعلى — شرائح الفلتر.
   final Widget child;
+
+  /// المحتوى بعد انزلاق الرأس — شريط بحث نحيف.
+  final Widget compactChild;
+  final bool compact;
 
   /// لقطة من راية الوضع الليلي وقت الإنشاء. `shouldRebuild` تقارنها
   /// حتى يُعاد رسم الشريط عند تبديل الثيم — بدونها يبقى بلوحته
   /// القديمة بينما تنقلب بقيّة الشاشة (نفس فخّ ترويسة الداشبورد).
   final bool isDark;
 
-  /// ارتفاع الشريحة + تنفّس فوقها وتحتها.
+  /// ارتفاع الشريحة + تنفّس فوقها وتحتها. ثابت في الحالتين: تغيّره مع
+  /// التبديل يُقفز المحتوى تحته.
   static const double _height = H.chipSm + 12;
 
   @override
@@ -2040,9 +2085,112 @@ class _ChipsBarDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlaps) =>
-      SizedBox(height: _height, child: child);
+      SizedBox(
+        height: _height,
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 180),
+          child: compact
+              ? KeyedSubtree(
+                  key: const ValueKey('compact'), child: compactChild)
+              : KeyedSubtree(key: const ValueKey('chips'), child: child),
+        ),
+      );
 
   @override
   bool shouldRebuild(_ChipsBarDelegate old) =>
-      old.child != child || old.isDark != isDark;
+      old.child != child ||
+      old.compactChild != compactChild ||
+      old.compact != compact ||
+      old.isDark != isDark;
+}
+
+/// الشريط النحيف الذي يحلّ محلّ شرائح الفلتر بعد انزلاق الرأس.
+///
+/// اختير هذا على «إخفاء الرأس كلّه» لأنّ حبّة البحث العائمة رُفعت من
+/// هذه الشاشة (2026-08-30): لو ذهب الرأس بالكامل لصار البحث في قائمة
+/// من مئات الصفوف يتطلّب رجوعاً إلى القمّة أوّلاً. هنا البحث يبقى على
+/// بُعد لمسة، بالارتفاع نفسه الذي كانت تشغله الشرائح — بلا كلفة.
+class _CompactSearchBar extends StatelessWidget {
+  const _CompactSearchBar({
+    required this.controller,
+    required this.filterActive,
+    required this.onFilter,
+    required this.onBackToTop,
+  });
+
+  final TextEditingController controller;
+  final bool filterActive;
+  final VoidCallback? onFilter;
+  final VoidCallback onBackToTop;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return ColoredBox(
+      color: AppColors.bg,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(Sp.lg, 4, Sp.lg, 4),
+        child: Row(
+          children: [
+            // العودة للقمّة: تكشف الرأس الكامل بشرائحه وأزراره. سهم
+            // لأعلى لا أيقونة فلتر — الوجهة أصدق من الوظيفة هنا.
+            InkResponse(
+              radius: 18,
+              onTap: onBackToTop,
+              child: Icon(Icons.keyboard_arrow_up_rounded,
+                  size: 20, color: AppColors.textLow),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Container(
+                height: H.chipSm,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(R.pill),
+                  border: Border.all(color: AppColors.borderSoft),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.search_rounded,
+                        size: 16, color: AppColors.textLow),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: controller,
+                        style: AppType.body(color: AppColors.textHi),
+                        decoration: InputDecoration(
+                          hintText: 'subscribers.search_hint'.tr(),
+                          hintStyle: AppType.body(color: AppColors.textLow),
+                          border: InputBorder.none,
+                          isCollapsed: true,
+                        ),
+                      ),
+                    ),
+                    if (controller.text.isNotEmpty)
+                      InkResponse(
+                        radius: 16,
+                        onTap: controller.clear,
+                        child: Icon(Icons.close_rounded,
+                            size: 16, color: AppColors.textLow),
+                      )
+                    else
+                      VoiceSearchButton(controller: controller, size: 17),
+                  ],
+                ),
+              ),
+            ),
+            if (onFilter != null) ...[
+              const SizedBox(width: 8),
+              _HeaderIconButton(
+                icon: LucideIcons.slidersHorizontal,
+                active: filterActive,
+                onTap: onFilter!,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
