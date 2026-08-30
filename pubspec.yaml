@@ -1,7 +1,7 @@
 name: rad_mysvcs
 description: "MyServices Radius — Login (v2 in progress)"
 publish_to: 'none'
-version: 2.8.0+148
+version: 2.9.0+149
 
 environment:
   sdk: '>=3.4.0 <4.0.0'

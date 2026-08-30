@@ -183,14 +183,33 @@ class UbiquitiService {
     }
   }
 
+  /// واجهات تحمل حركة المشترك. `lo` مستثناة، والواجهات الافتراضيّة
+  /// (vlan/tun) كذلك لأنّها تُضاعف نفس البايتات.
+  static bool _isDataIface(String n) =>
+      n.startsWith('eth') ||
+      n.startsWith('ath') ||
+      n.startsWith('wlan') ||
+      n == 'br0';
+
   static UbiquitiStatus _parseStatus(Map<String, dynamic> j, String base) {
     final host = (j['host'] ?? const {}) as Map;
     final wireless = (j['wireless'] ?? const {}) as Map;
     final interfaces = (j['interfaces'] ?? const []) as List;
     final lanPorts = <LanPort>[];
+    // عدّادات البايت: نجمع واجهات البيانات كلّها لا منافذ eth وحدها،
+    // فالحركة على CPE قد تمرّ على ath0 أو br0 حسب الوضع.
+    int? rxTotal;
+    int? txTotal;
     for (final iface in interfaces) {
       if (iface is! Map) continue;
       final name = (iface['ifname'] ?? '').toString().toLowerCase();
+      final st = iface['status'] as Map?;
+      if (_isDataIface(name) && st != null) {
+        final rx = _int(st['rx_bytes']);
+        final tx = _int(st['tx_bytes']);
+        if (rx != null) rxTotal = (rxTotal ?? 0) + rx;
+        if (tx != null) txTotal = (txTotal ?? 0) + tx;
+      }
       if (!name.startsWith('eth')) continue;
       final s = iface['status'] as Map?;
       final plugged = (s?['plugged'] == true) || (s?['plugged'] == 1);
@@ -212,6 +231,8 @@ class UbiquitiService {
       mode: (wireless['mode'] ?? '').toString(),
       signalDbm: _int(wireless['signal']),
       noiseFloorDbm: _int(wireless['noisef']),
+      rxBytes: rxTotal,
+      txBytes: txTotal,
       ccqPercent: _ccq(wireless['ccq']),
       distanceMeters: _int(wireless['distance']),
       txRateKbps: _rateToKbps(wireless['txrate']),

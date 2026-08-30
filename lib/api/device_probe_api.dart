@@ -384,6 +384,43 @@ class DeviceProbeApi {
     return DeviceHealthSnapshot(kind: DeviceKind.ont, ip: ip, ont: optical);
   }
 
+  /// جلسة Ubiquiti حيّة لجهاز مشترك — لقياس الترافيك اللحظي.
+  ///
+  /// حلّ بيانات الدخول يعيش هنا لا في الواجهة: نفس ترتيب الأفضليّة
+  /// الذي يستعمله الفحص (تجاوز المشترك ← افتراضات المدير ← ubnt/ubnt)،
+  /// فلا يتفرّع منطقان يختلفان بصمت.
+  ///
+  /// المتّصل يحتفظ بالجلسة العائدة ويعيد استعمالها — الغرض تجنّب
+  /// تسجيل دخول في كلّ نبضة.
+  static Future<UbiquitiLoginResult?> openUbntSession({
+    required String fallbackIp,
+    String? subscriberUsername,
+  }) async {
+    final ip = fallbackIp.trim();
+    DeviceConfig? cfg;
+    String effectiveIp = ip;
+    if (subscriberUsername != null && subscriberUsername.isNotEmpty) {
+      cfg = await DeviceConfigApi.fetchConfig(subscriberUsername);
+      final custom = cfg?.customIp?.trim();
+      if (custom != null && custom.isNotEmpty) effectiveIp = custom;
+    }
+    if (effectiveIp.isEmpty) return null;
+    final defaults = await _loadAdminDefaults();
+    final overrides = (cfg?.username?.isNotEmpty ?? false) ||
+        (cfg?.password?.isNotEmpty ?? false);
+    final user = overrides && (cfg?.username?.isNotEmpty ?? false)
+        ? cfg!.username!
+        : (defaults.ubntUsername?.isNotEmpty == true
+            ? defaults.ubntUsername!
+            : _kUbntUser);
+    final pass = overrides && (cfg?.password?.isNotEmpty ?? false)
+        ? cfg!.password!
+        : (defaults.ubntPassword?.isNotEmpty == true
+            ? defaults.ubntPassword!
+            : _kUbntPass);
+    return UbiquitiService.login(effectiveIp, user, pass);
+  }
+
   static Future<DeviceHealthSnapshot?> _probeUbnt(
       String ip, String user, String pass) async {
     final session = await UbiquitiService.login(ip, user, pass);

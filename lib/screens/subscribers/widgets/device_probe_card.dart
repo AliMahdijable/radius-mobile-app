@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/device_config_api.dart';
 import '../../../api/device_probe_api.dart';
+import '../../../core/net/ubiquiti_service.dart';
 import '../../../models/device_health.dart';
 import '../sheets/device_config_sheet.dart';
 import '../../../theme/colors.dart';
@@ -43,14 +46,35 @@ class DeviceProbeCard extends StatefulWidget {
   State<DeviceProbeCard> createState() => _DeviceProbeCardState();
 }
 
-class _DeviceProbeCardState extends State<DeviceProbeCard> {
+class _DeviceProbeCardState extends State<DeviceProbeCard>
+    with WidgetsBindingObserver {
   bool _loading = true;
   DeviceHealthSnapshot? _snap;
   String? _notes;
 
+  // ═══════════ الترافيك اللحظي ═══════════
+  //
+  // عدّادات البايت تصل أصلاً في كلّ استجابة `/status.cgi` — نفس الطلب
+  // الذي يجريه الفحص. المعدّل فرق قراءتين مقسوماً على الزمن بينهما،
+  // فالنبضة الأولى تزرع المرجع ولا تُنتج قيمة.
+  //
+  // ⚠️ **الجلسة تُفتح مرّة واحدة** ثمّ يُعاد استعمالها: تسجيل دخول كلّ
+  // 3 ثوانٍ على معالج CPE ضعيف عبء لا مبرّر له، و`fetchStatus` تقبل
+  // جلسة قائمة.
+  static const _pulse = Duration(seconds: 3);
+  Timer? _trafficTimer;
+  UbiquitiLoginResult? _session;
+  int? _lastRx;
+  int? _lastTx;
+  DateTime? _lastSample;
+  int? _rxBps;
+  int? _txBps;
+  bool _pulsing = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // ⚠️ اقرأ ما فحصته موجة القائمة قبل أن تفحص.
     //
     // كان الكارت يُطلق فحصاً كاملاً عند كل فتح بلا سؤال الكاش، بينما
@@ -68,6 +92,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
     if (hit != null) {
       _snap = hit.snap;
       _loading = false;
+      _maybeStartTraffic();
       _loadNotesOnly();
       if (hit.stale) _refreshQuietly();
       return;
@@ -76,6 +101,89 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
   }
 
   /// الجهاز مفحوص أصلاً: نكمل بجلب الملاحظات بلا دوّارة ولا فحص.
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _trafficTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // ⚠️ بدون هذا يبقى المؤقّت يطرق جهاز المشترك كلّ 3 ثوانٍ والتطبيق
+    // في الخلفيّة — شاشة التفاصيل كانت خالية من أيّ مراقب دورة حياة.
+    if (state == AppLifecycleState.resumed) {
+      _maybeStartTraffic();
+    } else {
+      _trafficTimer?.cancel();
+      _trafficTimer = null;
+    }
+  }
+
+  /// يبدأ الاستطلاع لأجهزة Ubiquiti وحدها.
+  ///
+  /// ONT مستثناة عمداً: عميل Huawei يكشط صفحة بصريّات بلا أيّ عدّاد
+  /// بايت، ومهلاته 15 ثانية لأنّ تلك الأجهزة بطيئة — فاستطلاعها كلّ
+  /// 3 ثوانٍ غير وارد أصلاً.
+  void _maybeStartTraffic() {
+    if (_trafficTimer != null) return;
+    final snap = _snap;
+    if (snap == null || snap.kind != DeviceKind.ubiquiti) return;
+    if (snap.ubnt?.rxBytes == null) return; // الإصدار لا يُصدّر العدّادات
+    _trafficTimer = Timer.periodic(_pulse, (_) => _pulseTraffic());
+  }
+
+  Future<void> _pulseTraffic() async {
+    if (_pulsing || !mounted) return;
+    _pulsing = true;
+    try {
+      // الجلسة تُفتح مرّة وتُعاد؛ وحين تنتهي صلاحيّتها نفتح غيرها.
+      _session ??= await DeviceProbeApi.openUbntSession(
+        fallbackIp: widget.ip,
+        subscriberUsername: widget.username,
+      );
+      final sess = _session;
+      if (sess == null) return;
+      final st = await UbiquitiService.fetchStatus(sess);
+      if (st == null) {
+        _session = null; // غالباً انتهت الجلسة — نُعيد الدخول لاحقاً
+        return;
+      }
+      final rx = st.rxBytes;
+      final tx = st.txBytes;
+      final now = DateTime.now();
+      if (rx == null || tx == null) return;
+      if (_lastRx != null && _lastSample != null) {
+        final secs = now.difference(_lastSample!).inMilliseconds / 1000.0;
+        final dRx = rx - _lastRx!;
+        final dTx = tx - _lastTx!;
+        // الفرق السالب يعني التفاف عدّاد أو إعادة إقلاع — نتخطّاه بدل
+        // عرض قيمة سالبة أو قفزة كاذبة.
+        if (secs > 0.5 && dRx >= 0 && dTx >= 0) {
+          final r = (dRx * 8 / secs).round();
+          final t = (dTx * 8 / secs).round();
+          // سقف عقلانيّة: قراءة شاذّة بعد التفاف 32-bit تمرّ بلا هذا.
+          const sane = 10000000000;
+          if (r <= sane && t <= sane && mounted) {
+            setState(() {
+              _rxBps = r;
+              _txBps = t;
+            });
+          }
+        }
+      }
+      _lastRx = rx;
+      _lastTx = tx;
+      _lastSample = now;
+    } catch (_) {
+      // نبضة فاشلة: لا نمسّ المرجع، فالنبضة الناجحة التالية تحسب
+      // المعدّل على كامل الفجوة — متوسّط صحيح لا قفزة.
+      _session = null;
+    } finally {
+      _pulsing = false;
+    }
+  }
+
   Future<void> _loadNotesOnly() async {
     final cfg = await DeviceConfigApi.fetchConfig(widget.username);
     if (!mounted) return;
@@ -113,6 +221,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
       _notes = cfg?.notes?.trim();
       _loading = false;
     });
+    _maybeStartTraffic();
   }
 
   Future<void> _openConfig() async {
@@ -421,7 +530,21 @@ class _DeviceProbeCardState extends State<DeviceProbeCard> {
           value: '${u.signalDbm} dBm',
           color: _healthColor(u.signalHealth),
         ),
-      if (u.snrDb != null)
+      // الترافيك اللحظي محلّ SNR (طلب المستخدم 2026-08-30): SNR رقم
+      // شبه ثابت يُنظر إليه عند التركيب، والترافيك هو ما يُسأل عنه
+      // يوميّاً — «هل المشترك يسحب فعلاً؟».
+      //
+      // SNR يبقى احتياطاً حين لا يُصدّر الإصدار عدّادات بايت: بلاطة
+      // فارغة أسوأ من بلاطة تحمل معلومة أقلّ فائدة.
+      if (u.rxBytes != null)
+        _MetricTile(
+          label: 'الترافيك',
+          value: _rxBps == null
+              ? '—'
+              : '↓${_fmtBps(_rxBps!)} ↑${_fmtBps(_txBps ?? 0)}',
+          color: _rxBps == null ? AppColors.textLow : AppColors.brandAccent,
+        )
+      else if (u.snrDb != null)
         _MetricTile(
           label: 'SNR',
           value: '${u.snrDb} dB',
@@ -711,4 +834,15 @@ class _SkeletonBar extends StatelessWidget {
       ),
     );
   }
+}
+
+/// صياغة معدّل بالبت/ثانية بوحدة مقروءة.
+///
+/// منزلة عشريّة واحدة: البلاطة ضيّقة، ومنزلتان تدفعان النصّ للقصّ في
+/// «↓12.34 ↑3.45».
+String _fmtBps(int bps) {
+  if (bps < 1000) return '0K';
+  if (bps < 1000000) return '${(bps / 1000).toStringAsFixed(0)}K';
+  if (bps < 1000000000) return '${(bps / 1000000).toStringAsFixed(1)}M';
+  return '${(bps / 1000000000).toStringAsFixed(1)}G';
 }

@@ -140,6 +140,8 @@ class UbiquitiStatus {
     required this.distanceMeters,
     required this.txRateKbps,
     required this.rxRateKbps,
+    this.rxBytes,
+    this.txBytes,
     required this.lanPorts,
     required this.peerMac,
     required this.peerCount,
@@ -159,6 +161,16 @@ class UbiquitiStatus {
   final List<LanPort> lanPorts;
   final String? peerMac;
   final int? peerCount;
+
+  /// مجموع عدّادات البايت على واجهات البيانات لحظة القراءة.
+  ///
+  /// airOS يضعها داخل `interfaces[].status` — نفس الكائن الذي تُقرأ
+  /// منه `plugged` و`speed`. كانت تصل في كلّ استجابة وتُرمى.
+  ///
+  /// ⚠️ عدّاد تراكميّ لا معدّل: المعدّل = فرق قراءتين ÷ الزمن بينهما.
+  /// ولا ضمان بوجودها — بعض الإصدارات لا تُصدّرها، فتبقى null.
+  final int? rxBytes;
+  final int? txBytes;
   final String baseUrl;
 
   LanPort? get primaryLan => lanPorts.firstWhere(
