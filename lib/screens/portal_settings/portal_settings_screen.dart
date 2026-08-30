@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/portal_settings_api.dart';
+import '../../core/widgets/design_sheet.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -736,160 +737,98 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(R.xl)),
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.package,
+        title: widget.pkg.sasName,
+        subtitle: "${'portal.original_price'.tr()}: ${widget.pkg.price} د.ع",
+        onClose: _saving ? () {} : () => Navigator.of(context).pop(),
       ),
-      padding: EdgeInsets.only(bottom: bottomInset),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.all(Sp.lg),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // grabber
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.textMid.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(R.pill),
+      footer: SheetFooterBar(
+        label: 'common.save'.tr(),
+        icon: LucideIcons.save,
+        busy: _saving,
+        onPressed: _save,
+        leading: SheetFooterIconButton(
+          icon: LucideIcons.rotateCcw,
+          color: AppColors.error,
+          onTap: _saving ? null : _reset,
+        ),
+      ),
+      body: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: Sp.lg),
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _labeledField(
+                    label: 'portal.pkg_display_name'.tr(),
+                    hint: widget.pkg.sasName,
+                    controller: _displayName,
+                    maxLength: 200,
+                    helperText: 'portal.pkg_display_name_hint'.tr(),
                   ),
-                ),
-              ),
-              const SizedBox(height: Sp.md),
-              Text(
-                widget.pkg.sasName,
-                style: AppType.title(color: AppColors.textHi)
-                    .copyWith(fontSize: 16),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                '${'portal.original_price'.tr()}: ${widget.pkg.price} د.ع',
-                style: AppType.subtitle(color: AppColors.textMid),
-              ),
-              const SizedBox(height: Sp.lg),
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  const SizedBox(height: Sp.md),
+                  _labeledField(
+                    label: 'portal.pkg_description'.tr(),
+                    hint: 'portal.pkg_description_hint'.tr(),
+                    controller: _description,
+                    maxLength: 5000,
+                    maxLines: 4,
+                  ),
+                  const SizedBox(height: Sp.md),
+                  _labeledField(
+                    label: 'portal.pkg_image_url'.tr(),
+                    hint: 'https://example.com/pkg.png',
+                    controller: _imageUrl,
+                    maxLength: 500,
+                    keyboardType: TextInputType.url,
+                  ),
+                  const SizedBox(height: Sp.md),
+                  Row(
                     children: [
-                      _labeledField(
-                        label: 'portal.pkg_display_name'.tr(),
-                        hint: widget.pkg.sasName,
-                        controller: _displayName,
-                        maxLength: 200,
-                        helperText: 'portal.pkg_display_name_hint'.tr(),
+                      Expanded(
+                        child: Text('portal.pkg_display_order'.tr(),
+                            style: AppType.subtitle(color: AppColors.textMid)),
                       ),
-                      const SizedBox(height: Sp.md),
-                      _labeledField(
-                        label: 'portal.pkg_description'.tr(),
-                        hint: 'portal.pkg_description_hint'.tr(),
-                        controller: _description,
-                        maxLength: 5000,
-                        maxLines: 4,
+                      IconButton(
+                        icon: const Icon(LucideIcons.minus, size: 16),
+                        onPressed: () => setState(
+                            () => _order = (_order - 10).clamp(0, 999)),
                       ),
-                      const SizedBox(height: Sp.md),
-                      _labeledField(
-                        label: 'portal.pkg_image_url'.tr(),
-                        hint: 'https://example.com/pkg.png',
-                        controller: _imageUrl,
-                        maxLength: 500,
-                        keyboardType: TextInputType.url,
+                      Container(
+                        width: 48,
+                        alignment: Alignment.center,
+                        child: Text('$_order',
+                            style: AppType.title(color: AppColors.textHi)),
                       ),
-                      const SizedBox(height: Sp.md),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text('portal.pkg_display_order'.tr(),
-                                style:
-                                    AppType.subtitle(color: AppColors.textMid)),
-                          ),
-                          IconButton(
-                            icon: const Icon(LucideIcons.minus, size: 16),
-                            onPressed: () => setState(
-                                () => _order = (_order - 10).clamp(0, 999)),
-                          ),
-                          Container(
-                            width: 48,
-                            alignment: Alignment.center,
-                            child: Text('$_order',
-                                style: AppType.title(color: AppColors.textHi)),
-                          ),
-                          IconButton(
-                            icon: const Icon(LucideIcons.plus, size: 16),
-                            onPressed: () => setState(
-                                () => _order = (_order + 10).clamp(0, 999)),
-                          ),
-                        ],
-                      ),
-                      SwitchListTile(
-                        value: _hidden,
-                        onChanged: (v) => setState(() => _hidden = v),
-                        title: Text('portal.pkg_hidden'.tr(),
-                            style: AppType.subtitle(color: AppColors.textHi)),
-                        subtitle: Text('portal.pkg_hidden_hint'.tr(),
-                            style: AppType.subtitle(color: AppColors.textMid)
-                                .copyWith(fontSize: 10.5)),
-                        activeColor: AppColors.brand,
-                        contentPadding: EdgeInsets.zero,
+                      IconButton(
+                        icon: const Icon(LucideIcons.plus, size: 16),
+                        onPressed: () => setState(
+                            () => _order = (_order + 10).clamp(0, 999)),
                       ),
                     ],
                   ),
-                ),
-              ),
-              const SizedBox(height: Sp.lg),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _saving ? null : _reset,
-                      icon: Icon(LucideIcons.rotateCcw,
-                          size: 16, color: AppColors.error),
-                      label: Text('portal.reset'.tr(),
-                          style: TextStyle(color: AppColors.error)),
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: AppColors.dangerSoftBorder),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: Sp.md),
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton(
-                      onPressed: _saving ? null : _save,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.brand,
-                        foregroundColor: AppColors.onBrand,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(R.md)),
-                      ),
-                      child: _saving
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor:
-                                    AlwaysStoppedAnimation(AppColors.onBrand),
-                              ),
-                            )
-                          : Text('portal.save'.tr(),
-                              style: AppType.button(color: AppColors.onBrand)),
-                    ),
+                  SwitchListTile(
+                    value: _hidden,
+                    onChanged: (v) => setState(() => _hidden = v),
+                    title: Text('portal.pkg_hidden'.tr(),
+                        style: AppType.subtitle(color: AppColors.textHi)),
+                    subtitle: Text('portal.pkg_hidden_hint'.tr(),
+                        style: AppType.subtitle(color: AppColors.textMid)
+                            .copyWith(fontSize: 10.5)),
+                    activeColor: AppColors.brand,
+                    contentPadding: EdgeInsets.zero,
                   ),
                 ],
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/broadcast_api.dart';
+import '../../core/widgets/design_sheet.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -689,133 +690,123 @@ class _MessageDetailSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.75,
-      minChildSize: 0.4,
-      maxChildSize: 0.95,
-      builder: (_, scroll) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
-        child: ListView(
-          controller: scroll,
-          children: [
-            const SizedBox(height: 8),
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.borderStrong,
-                  borderRadius: BorderRadius.circular(R.pill),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            _row('المستلم',
-                message.recipientName ?? message.recipientUsername ?? '—'),
-            if ((message.recipientPhone ?? '').isNotEmpty)
-              _row('الهاتف', message.recipientPhone!, mono: true),
-            if ((message.recipientUsername ?? '').isNotEmpty &&
-                (message.recipientName ?? '').isNotEmpty)
-              _row('اسم المستخدم', message.recipientUsername!, mono: true),
-            _row('الحالة', _statusText(message.status)),
-            if ((message.messageType ?? '').isNotEmpty)
-              _row('النوع', _typeLabel(message.messageType!)),
-            _row('التاريخ', _formatFullDateTime(message.createdAt)),
-            if (message.isFailed && (message.errorMessage ?? '').isNotEmpty)
-              Container(
-                margin: const EdgeInsets.only(top: 8),
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.dangerSoftBg,
-                  borderRadius: BorderRadius.circular(R.sm),
-                  border: Border.all(color: AppColors.dangerSoftBorder),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(LucideIcons.triangleAlert,
-                        size: 14, color: AppColors.error),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        message.errorMessage!,
-                        style: AppType.subtitle(color: AppColors.error)
-                            .copyWith(fontSize: 12.5),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            const SizedBox(height: 12),
-            Text(
-              'نصّ الرسالة',
-              style: AppType.label(color: AppColors.textMid)
-                  .copyWith(fontSize: 12.5),
-            ),
-            const SizedBox(height: 6),
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.messageSquare,
+        title: 'تفاصيل الرسالة',
+        subtitle: '',
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      scrollable: false,
+      bodyPadding: EdgeInsets.zero,
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.lg, Sp.xl, Sp.xxl),
+        children: [
+          const SizedBox(height: 12),
+          _row('المستلم',
+              message.recipientName ?? message.recipientUsername ?? '—'),
+          if ((message.recipientPhone ?? '').isNotEmpty)
+            _row('الهاتف', message.recipientPhone!, mono: true),
+          if ((message.recipientUsername ?? '').isNotEmpty &&
+              (message.recipientName ?? '').isNotEmpty)
+            _row('اسم المستخدم', message.recipientUsername!, mono: true),
+          _row('الحالة', _statusText(message.status)),
+          if ((message.messageType ?? '').isNotEmpty)
+            _row('النوع', _typeLabel(message.messageType!)),
+          _row('التاريخ', _formatFullDateTime(message.createdAt)),
+          if (message.isFailed && (message.errorMessage ?? '').isNotEmpty)
             Container(
-              width: double.infinity,
+              margin: const EdgeInsets.only(top: 8),
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.surfaceInput,
+                color: AppColors.dangerSoftBg,
                 borderRadius: BorderRadius.circular(R.sm),
-                border: Border.all(color: AppColors.border),
+                border: Border.all(color: AppColors.dangerSoftBorder),
               ),
-              child: SelectableText(
-                (message.messagePreview ?? '').isEmpty
-                    ? '—'
-                    : message.messagePreview!,
-                style: AppType.input(color: AppColors.textHi)
-                    .copyWith(fontSize: 13, height: 1.6),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Clipboard.setData(
-                          ClipboardData(text: message.messagePreview ?? ''));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Text('تمّ نسخ النصّ'),
-                          backgroundColor: AppColors.brand,
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    },
-                    icon: const Icon(LucideIcons.copy, size: 14),
-                    label: const Text('نسخ النصّ'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.textMid,
-                      side: BorderSide(color: AppColors.border),
-                    ),
-                  ),
-                ),
-                if (message.isFailed) ...[
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(LucideIcons.triangleAlert,
+                      size: 14, color: AppColors.error),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () async {
-                        Navigator.of(context).pop();
-                        await onRetry(message);
-                      },
-                      icon: const Icon(LucideIcons.rotateCw, size: 14),
-                      label: const Text('إعادة المحاولة'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.warning,
-                        foregroundColor: AppColors.onBrand,
-                      ),
+                    child: Text(
+                      message.errorMessage!,
+                      style: AppType.subtitle(color: AppColors.error)
+                          .copyWith(fontSize: 12.5),
                     ),
                   ),
                 ],
-              ],
+              ),
             ),
-            const SizedBox(height: 20),
-          ],
-        ),
+          const SizedBox(height: 12),
+          Text(
+            'نصّ الرسالة',
+            style: AppType.label(color: AppColors.textMid)
+                .copyWith(fontSize: 12.5),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceInput,
+              borderRadius: BorderRadius.circular(R.sm),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: SelectableText(
+              (message.messagePreview ?? '').isEmpty
+                  ? '—'
+                  : message.messagePreview!,
+              style: AppType.input(color: AppColors.textHi)
+                  .copyWith(fontSize: 13, height: 1.6),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Clipboard.setData(
+                        ClipboardData(text: message.messagePreview ?? ''));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text('تمّ نسخ النصّ'),
+                        backgroundColor: AppColors.brand,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                  icon: const Icon(LucideIcons.copy, size: 14),
+                  label: const Text('نسخ النصّ'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textMid,
+                    side: BorderSide(color: AppColors.border),
+                  ),
+                ),
+              ),
+              if (message.isFailed) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      Navigator.of(context).pop();
+                      await onRetry(message);
+                    },
+                    icon: const Icon(LucideIcons.rotateCw, size: 14),
+                    label: const Text('إعادة المحاولة'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.warning,
+                      foregroundColor: AppColors.onBrand,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 20),
+        ],
       ),
     );
   }
