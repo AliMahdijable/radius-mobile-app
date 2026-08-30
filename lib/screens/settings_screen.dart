@@ -488,8 +488,9 @@ class _LanguagePickerSheet extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     final current = context.locale;
     return Material(
-      color: AppColors.surface,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(R.card)),
+      // سطح الشيت ونصف قطره من الطقم — الفرق ليلاً بنيوي.
+      color: AppColors.surfaceSheet,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(R.sheet)),
       clipBehavior: Clip.antiAlias,
       child: SafeArea(
         top: false,
@@ -501,10 +502,10 @@ class _LanguagePickerSheet extends StatelessWidget {
             children: [
               Center(
                 child: Container(
-                  width: 38,
-                  height: 4,
+                  width: 42,
+                  height: H.grabber,
                   decoration: BoxDecoration(
-                    color: AppColors.border,
+                    color: AppColors.grabber,
                     borderRadius: BorderRadius.circular(R.pill),
                   ),
                 ),
@@ -560,8 +561,9 @@ class _ThemePickerSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return Material(
-      color: AppColors.surface,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(R.card)),
+      // سطح الشيت ونصف قطره من الطقم — الفرق ليلاً بنيوي.
+      color: AppColors.surfaceSheet,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(R.sheet)),
       clipBehavior: Clip.antiAlias,
       child: SafeArea(
         top: false,
@@ -573,10 +575,10 @@ class _ThemePickerSheet extends StatelessWidget {
             children: [
               Center(
                 child: Container(
-                  width: 38,
-                  height: 4,
+                  width: 42,
+                  height: H.grabber,
                   decoration: BoxDecoration(
-                    color: AppColors.border,
+                    color: AppColors.grabber,
                     borderRadius: BorderRadius.circular(R.pill),
                   ),
                 ),
@@ -650,8 +652,9 @@ class _PrinterFormatPickerSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return Material(
-      color: AppColors.surface,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(R.card)),
+      // سطح الشيت ونصف قطره من الطقم — الفرق ليلاً بنيوي.
+      color: AppColors.surfaceSheet,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(R.sheet)),
       clipBehavior: Clip.antiAlias,
       child: SafeArea(
         top: false,
@@ -663,10 +666,10 @@ class _PrinterFormatPickerSheet extends StatelessWidget {
             children: [
               Center(
                 child: Container(
-                  width: 38,
-                  height: 4,
+                  width: 42,
+                  height: H.grabber,
                   decoration: BoxDecoration(
-                    color: AppColors.border,
+                    color: AppColors.grabber,
                     borderRadius: BorderRadius.circular(R.pill),
                   ),
                 ),

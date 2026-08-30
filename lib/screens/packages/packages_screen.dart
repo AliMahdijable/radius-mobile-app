@@ -459,9 +459,9 @@ class _PackagesScreenState extends State<PackagesScreen> {
             // background DecoratedBox يخفي ink splashes. نلفّ بـMaterial
             // ونعطي اللون فيه ليتعامل مع الـink طبيعياً.
             builder: (_) => Material(
-              color: AppColors.surface,
+              color: AppColors.surfaceSheet,
               borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(R.card)),
+                  const BorderRadius.vertical(top: Radius.circular(R.sheet)),
               clipBehavior: Clip.antiAlias,
               child: SafeArea(
                 top: false,
