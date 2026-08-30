@@ -425,7 +425,11 @@ class _StatPill extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return Material(
-      color: tone.softBg,
+      // ⚠️ بلا خلفيّة ملوّنة (طلب المستخدم 2026-08-30): الحبّات الثلاث
+      // متجاورة، وثلاث خلفيّات مصمتة تجعل الصفّ كتلاً متنافسة على
+      // الانتباه بدل أن يقرأها بلمحة. اللون في الأيقونة والإطار والرقم
+      // يكفي للتمييز، والسطح المحايد يُبقي الصفّ هادئاً.
+      color: AppColors.surface,
       borderRadius: BorderRadius.circular(R.md),
       child: InkWell(
         onTap: onTap,
@@ -434,7 +438,10 @@ class _StatPill extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(R.md),
-            border: Border.all(color: tone.softBorder),
+            // `fill` لا `softBorder`: الأخير مُعايَر ليقع على خلفيّته
+            // الناعمة، وعلى سطح محايد يُقرأ رماديّاً (1.26-1.49) فيضيع
+            // التمييز الذي هو غرضه.
+            border: Border.all(color: tone.fill),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -442,7 +449,7 @@ class _StatPill extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(icon, size: 13, color: tone.onSoft),
+                  Icon(icon, size: 13, color: tone.fill),
                   const SizedBox(width: 5),
                   Text('$value', style: AppType.cardTitleBold(color: tone.fill)),
                 ],
@@ -452,7 +459,9 @@ class _StatPill extends StatelessWidget {
               // الثلاث متساوية العرض ولا تُزيح إحداها الأخريين.
               Text(
                 label,
-                style: AppType.micro(color: tone.onSoft),
+                // التسمية محايدة: `onSoft` مُعايَر للخلفيّة الناعمة،
+                // وعلى السطح المحايد يقلّ تباينه.
+                style: AppType.micro(color: AppColors.textMid),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
