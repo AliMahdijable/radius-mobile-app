@@ -68,6 +68,7 @@ class DebtorsResult {
     required this.expired,
     required this.totalSubs,
     required this.onlineNoPlan,
+    required this.disabled,
   });
   final int count;
   final int total;
@@ -89,6 +90,10 @@ class DebtorsResult {
   /// الإدمن يحتاج يمدّد أو يفصل. نحسبها هنا مرة واحدة لتُستهلك في
   /// dashboard KPI ولتفادي تمرير القائمة الكاملة للـstats-mapper.
   final int onlineNoPlan;
+
+  /// المشتركون الموقوفون بيد المدير (`isDisabled`) — يختلفون عن
+  /// المنتهين: هؤلاء انتهت باقتهم، وأولئك أوقفهم المدير عمداً.
+  final int disabled;
 }
 
 enum RevenuePeriod { day, week, month }
@@ -197,6 +202,7 @@ class DashboardApi {
     var active = 0;
     var expired = 0;
     var onlineNoPlan = 0;
+    var disabled = 0;
     for (final s in list) {
       if (s.hasDebt) {
         debtCount++;
@@ -210,6 +216,10 @@ class DashboardApi {
       if (s.isExpired) expired++;
       if (s.isActive) active++; // matches isExpired==false
       if (s.isOnline && s.isExpired) onlineNoPlan++;
+      // 2026-08-30: «غير مفعّل» — حساب موقوف بيد المدير، لا منتهٍ.
+      // يُحسب هنا لأنّ الحلقة تمرّ على القائمة مرّةً واحدة أصلاً،
+      // فالعدّاد الجديد بلا كلفة شبكيّة ولا مرور ثانٍ.
+      if (s.isDisabled) disabled++;
     }
     return DebtorsResult(
       count: debtCount,
@@ -221,6 +231,7 @@ class DashboardApi {
       expired: expired,
       totalSubs: list.length,
       onlineNoPlan: onlineNoPlan,
+      disabled: disabled,
     );
   }
 

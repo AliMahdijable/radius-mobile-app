@@ -25,6 +25,8 @@ import '../subscribers/widgets/filter_chips_bar.dart';
 import '../settings_screen.dart';
 import 'widgets/hero_revenue_card.dart';
 import 'widgets/recent_activities.dart';
+import 'widgets/quick_actions_row.dart';
+import 'widgets/reconnect_banner.dart';
 import 'widgets/section_header.dart';
 import 'widgets/stats_grid.dart';
 import 'widgets/subscribers_card.dart';
@@ -277,6 +279,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       expired: d.expired,
       nearExpiry: d.nearExpiry,
       onlineNoPlan: d.onlineNoPlan,
+      disabled: d.disabled,
     );
   }
 
@@ -324,6 +327,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
+                  // أعلى كلّ شيء عمداً: انقطاع الجلسة يوقف كلّ تنبيهات
+                  // المشتركين وفواتيرهم، فلا يجوز أن يُقرأ بعد الأرقام.
+                  ReconnectBanner(
+                    status: _waStatus,
+                    onDone: _refreshLive,
+                  ),
                   SubscribersCard(
                     stats: _subscribersStats,
                     onOpen: widget.onOpenSubscribers,
@@ -349,6 +358,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       .animate()
                       .fadeIn(
                         delay: const Duration(milliseconds: 160),
+                        duration: const Duration(milliseconds: 280),
+                      )
+                      .slideY(begin: 0.03, end: 0),
+                  const SizedBox(height: Sp.md),
+                  // الإجراءات الأربعة كانت خلف زرّ «+» في الشريط السفلي:
+                  // نقرتان ومعرفةٌ مسبقة بأنّها هناك. وهي أكثر ما يُفعل
+                  // يوميّاً، فمكانها سطح الشاشة الأولى.
+                  const QuickActionsRow()
+                      .animate()
+                      .fadeIn(
+                        delay: const Duration(milliseconds: 200),
                         duration: const Duration(milliseconds: 280),
                       )
                       .slideY(begin: 0.03, end: 0),

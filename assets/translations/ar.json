@@ -233,6 +233,7 @@
     "offline": "غير متصل",
     "debtors": "المدينون",
     "near_expiry": "قربوا الانتهاء",
+    "disabled": "غير مفعّل",
     "online_no_plan": "بدون نت",
     "manager_balance": "رصيد المدير",
     "manager_points": "نقاط المدير",
@@ -252,7 +253,8 @@
     "balance": "الرصيد",
     "points_singular": "نقطة",
     "recent_activity_label": "آخر النشاطات",
-    "recent_activity_fetch_failed": "آخر النشاطات (تعذّر الجلب)"
+    "recent_activity_fetch_failed": "آخر النشاطات (تعذّر الجلب)",
+    "reports": "التقارير"
   },
   "subscribers": {
     "title": "المشتركون",

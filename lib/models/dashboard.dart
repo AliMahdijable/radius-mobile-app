@@ -24,6 +24,7 @@ class SubscribersStats {
     required this.expired,
     required this.nearExpiry,
     required this.onlineNoPlan,
+    required this.disabled,
   });
 
   final int total;
@@ -38,6 +39,10 @@ class SubscribersStats {
   /// bandwidth without a valid subscription; admin needs to either
   /// extend or disconnect them.
   final int onlineNoPlan;
+
+  /// موقوفون بيد المدير — لا منتهون. الفرق مقصود: المنتهي يُجدَّد،
+  /// والموقوف يُفعَّل.
+  final int disabled;
 }
 
 class WhatsAppStatus {

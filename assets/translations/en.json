@@ -233,6 +233,7 @@
     "offline": "Offline",
     "debtors": "Debtors",
     "near_expiry": "Expiring soon",
+    "disabled": "Disabled",
     "online_no_plan": "No plan",
     "manager_balance": "Manager balance",
     "manager_points": "Manager points",
@@ -252,7 +253,8 @@
     "balance": "Balance",
     "points_singular": "pt",
     "recent_activity_label": "Recent activity",
-    "recent_activity_fetch_failed": "Recent activity (couldn't load)"
+    "recent_activity_fetch_failed": "Recent activity (couldn't load)",
+    "reports": "Reports"
   },
   "subscribers": {
     "title": "Subscribers",

@@ -31,8 +31,18 @@ class SubscribersCard extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     if (stats == null) return const _Skeleton();
     final s = stats!;
-    final activeRatio = s.total > 0 ? s.active / s.total : 0.0;
-    final expiredRatio = s.total > 0 ? s.expired / s.total : 0.0;
+    // ⚠️ الحدّ ليس احتياطاً نظريّاً: `total` مصدره widget الـSAS4 بينما
+    // `active` و`expired` محسوبان محليّاً من القائمة، فلا ضمان أنّ
+    // مجموعهما ≤ الإجمالي. بلا حدّ يتجاوز مجموع الأقواس دورةً كاملة
+    // فيلفّ القوس فوق نفسه ويعرض نسبةً كاذبة.
+    final denom = s.total > 0 ? s.total : (s.active + s.expired);
+    final rawActive = denom > 0 ? s.active / denom : 0.0;
+    final rawExpired = denom > 0 ? s.expired / denom : 0.0;
+    final scale = (rawActive + rawExpired) > 1.0
+        ? 1.0 / (rawActive + rawExpired)
+        : 1.0;
+    final activeRatio = rawActive * scale;
+    final expiredRatio = rawExpired * scale;
 
     return Container(
       padding: const EdgeInsets.all(Sp.xl),
@@ -56,6 +66,17 @@ class SubscribersCard extends StatelessWidget {
                     onOpen == null ? null : () => onOpen!(SubscriberFilter.all),
               ),
               const SizedBox(width: 16),
+              // ⚠️ ثلاثة صفوف لا ستّة (إعادة تصميم 2026-08-30).
+              //
+              // الستّة كانت تجعل العمود 227px بينما الحلقة 130px، فيرتفع
+              // الكارت 283px — نصف الشاشة قبل أن يُرى أيّ شيء آخر. والأهمّ
+              // أنّ ستّة صفوف متطابقة الشكل لا تُنشئ تسلسلاً: العين لا
+              // تعرف أيّها الأهمّ فتقرأها كلّها أو لا تقرأ شيئاً.
+              //
+              // الثلاثة هنا هي ما يُنظر إليه يوميّاً؛ والثلاثة الأخرى
+              // (قربوا الانتهاء · غير مفعّل · بدون نت) استثناءات تُتابَع
+              // عند وقوعها — فنزلت حبّاتٍ أصغر تحت. نفس الأرقام، ورتبتان
+              // بصريّتان بدل رتبة واحدة مسطّحة.
               Expanded(
                 child: Column(
                   children: [
@@ -68,27 +89,7 @@ class SubscribersCard extends StatelessWidget {
                           ? null
                           : () => onOpen!(SubscriberFilter.active),
                     ),
-                    const SizedBox(height: 7),
-                    _RingStatRow(
-                      tone: AppTone.success,
-                      icon: LucideIcons.wifi,
-                      label: 'dashboard.online'.tr(),
-                      value: s.online,
-                      onTap: onOpen == null
-                          ? null
-                          : () => onOpen!(SubscriberFilter.online),
-                    ),
-                    const SizedBox(height: 7),
-                    _RingStatRow(
-                      tone: AppTone.neutral,
-                      icon: LucideIcons.wifiOff,
-                      label: 'dashboard.offline'.tr(),
-                      value: s.offline,
-                      onTap: onOpen == null
-                          ? null
-                          : () => onOpen!(SubscriberFilter.offline),
-                    ),
-                    const SizedBox(height: 7),
+                    const SizedBox(height: 9),
                     _RingStatRow(
                       tone: AppTone.danger,
                       icon: LucideIcons.timerOff,
@@ -98,62 +99,67 @@ class SubscribersCard extends StatelessWidget {
                           ? null
                           : () => onOpen!(SubscriberFilter.expired),
                     ),
-                    const SizedBox(height: 7),
+                    const SizedBox(height: 9),
                     _RingStatRow(
-                      tone: AppTone.warning,
-                      icon: LucideIcons.triangleAlert,
-                      label: 'dashboard.near_expiry'.tr(),
-                      value: s.nearExpiry,
-                      onTap: onOpen == null
-                          ? null
-                          : () => onOpen!(SubscriberFilter.nearExpiry),
-                    ),
-                    const SizedBox(height: 7),
-                    // "بدون نت" — متصل + منتهي. لون بنفسجي مطابق
-                    // للـchip في صفحة المشتركين والويب.
-                    _RingStatRow(
-                      // «متصل بلا باقة» = نفس شذوذ «منتهي ومتصل» في
-                      // القائمة، فيأخذ لونه البنفسجي. والأيقونة `wifi`
-                      // لا `wifiOff`: هؤلاء **متصلون** فعلاً — وهذا
-                      // بالضبط ما يجعل الحالة شاذّة. (بلاغ 2026-08-30)
-                      tone: AppTone.anomaly,
+                      tone: AppTone.success,
                       icon: LucideIcons.wifi,
-                      label: 'dashboard.online_no_plan'.tr(),
-                      value: s.onlineNoPlan,
+                      label: 'dashboard.online'.tr(),
+                      value: s.online,
                       onTap: onOpen == null
                           ? null
-                          : () => onOpen!(SubscriberFilter.onlineNoPlan),
+                          : () => onOpen!(SubscriberFilter.online),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          // Active vs expired gradient bar. Flex ratios match v1: when
-          // there are 0 active subs the active strip still shows a
-          // 1-flex hint so the bar isn't entirely red.
-          // ألوان مصمتة لا تدرّجات: المخطّط لا يستعمل تدرّجاً واحداً،
-          // والتدرّج هنا كان يمزج أربع درجات لا تحمل أيّ معلومة إضافيّة
-          // عن النسبة — الطول وحده يحملها.
-          ClipRRect(
-            borderRadius: BorderRadius.circular(R.pill),
-            child: SizedBox(
-              height: 6,
-              child: Row(
-                children: [
-                  Expanded(
-                    flex: s.active > 0 ? s.active : 1,
-                    child: ColoredBox(color: AppColors.brandAccent),
-                  ),
-                  if (s.expired > 0)
-                    Expanded(
-                      flex: s.expired,
-                      child: ColoredBox(color: AppColors.errorFill),
-                    ),
-                ],
+          const SizedBox(height: 14),
+          // شريط الحالات الاستثنائيّة. حلّ محلّ شريط النسبة القديم
+          // (active/expired) عمداً: النسبة نفسها تقرأها الحلقة أعلاه،
+          // فالشريط كان يكرّرها بلغة ثانية ويأكل الموضع الذي تحتاجه
+          // هذه الثلاثة.
+          Row(
+            children: [
+              Expanded(
+                child: _StatPill(
+                  tone: AppTone.warning,
+                  icon: LucideIcons.triangleAlert,
+                  label: 'dashboard.near_expiry'.tr(),
+                  value: s.nearExpiry,
+                  onTap: onOpen == null
+                      ? null
+                      : () => onOpen!(SubscriberFilter.nearExpiry),
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _StatPill(
+                  tone: AppTone.neutral,
+                  icon: LucideIcons.userX,
+                  label: 'dashboard.disabled'.tr(),
+                  value: s.disabled,
+                  onTap: onOpen == null
+                      ? null
+                      : () => onOpen!(SubscriberFilter.disabled),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _StatPill(
+                  // «متصل بلا باقة» شذوذ لا حالة عاديّة — لونه البنفسجي
+                  // نفسه في القائمة والويب، وأيقونته `wifi` لا `wifiOff`
+                  // لأنّ اتّصالهم **هو** موضع الشذوذ.
+                  tone: AppTone.anomaly,
+                  icon: LucideIcons.wifi,
+                  label: 'dashboard.online_no_plan'.tr(),
+                  value: s.onlineNoPlan,
+                  onTap: onOpen == null
+                      ? null
+                      : () => onOpen!(SubscriberFilter.onlineNoPlan),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -169,7 +175,7 @@ class _Skeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return Container(
-      height: 220,
+      height: 241, // مقيس لا مُقدَّر — يحرسه dashboard_card_height_test
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.card),
@@ -288,8 +294,14 @@ class _RingStatRow extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Expanded(
+            // ⚠️ `maxLines: 1` ليس تجميلاً: بدونه يلتفّ النصّ فيتغيّر
+            // ارتفاع الصفّ بتغيّر اللغة — التسميات الإنجليزيّة أطول
+            // («Near expiry» مقابل «قربوا الانتهاء» في عرض 76px)، فترتفع
+            // البطاقة كلّها وتنفصل عن ارتفاع هيكلها فتقفز الشاشة.
             child: Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: AppType.label(color: AppColors.textMid)
                   .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
             ),
@@ -320,6 +332,9 @@ class _RingStatRow extends StatelessWidget {
 class _RingPainter extends CustomPainter {
   _RingPainter({required this.activeRatio, required this.expiredRatio});
 
+  /// لقطة من راية الوضع الليلي وقت الإنشاء — `shouldRepaint` تقارنها.
+  final bool isDark = AppColors.isDark;
+
   final double activeRatio;
   final double expiredRatio;
 
@@ -338,8 +353,12 @@ class _RingPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
     canvas.drawCircle(center, radius, bgPaint);
 
-    if (activeRatio <= 0) return;
-
+    // ⚠️ لا خروج مبكّر عند activeRatio == 0.
+    //
+    // كان `if (activeRatio <= 0) return;` هنا، أي أنّ حساباً كلّ
+    // مشتركيه منتهون يعرض حلقةً رماديّة فارغة بلا القوس الأحمر —
+    // أسوأ حالة ممكنة تُرسم كأنّها لا شيء. الآن يُرسم كلّ قوس بشرطه
+    // وحده.
     final rect = Rect.fromCircle(center: center, radius: radius);
     final activeSweep = 2 * math.pi * activeRatio;
 
@@ -350,11 +369,15 @@ class _RingPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = _stroke
       ..strokeCap = StrokeCap.round;
-    canvas.drawArc(rect, _startAngle, activeSweep, false, activePaint);
+    if (activeRatio > 0) {
+      canvas.drawArc(rect, _startAngle, activeSweep, false, activePaint);
+    }
 
     if (expiredRatio <= 0) return;
 
-    const gap = 0.04;
+    // الفجوة تفصل القوسين بصريّاً — لكن لا معنى لها حين لا قوس قبلها،
+    // وطرحها من قوس قصير قد يجعله سالباً فلا يُرسم إطلاقاً.
+    final gap = activeRatio > 0 ? 0.04 : 0.0;
     final expiredSweep = 2 * math.pi * expiredRatio;
     final expiredPaint = Paint()
       ..color = AppColors.errorFill
@@ -364,7 +387,7 @@ class _RingPainter extends CustomPainter {
     canvas.drawArc(
       rect,
       _startAngle + activeSweep + gap,
-      expiredSweep - gap,
+      math.max(expiredSweep - gap, 0.0),
       false,
       expiredPaint,
     );
@@ -372,5 +395,72 @@ class _RingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_RingPainter old) =>
-      old.activeRatio != activeRatio || old.expiredRatio != expiredRatio;
+      old.activeRatio != activeRatio ||
+      old.expiredRatio != expiredRatio ||
+      // الألوان تُقرأ من `AppColors` داخل `paint`، فبلا مقارنة الوضع
+      // تبقى الحلقة بلوحتها القديمة بينما تنقلب الشاشة حولها.
+      old.isDark != isDark;
+}
+
+/// حبّة حالة استثنائيّة أسفل البطاقة — رتبة أدنى من صفوف الحلقة.
+///
+/// أصغر من `_RingStatRow` عمداً: هذه حالات تُتابَع عند وقوعها لا تُقرأ
+/// يوميّاً، والفرق في الحجم هو ما يجعل الصفوف الثلاثة أعلاه تُقرأ أوّلاً.
+class _StatPill extends StatelessWidget {
+  const _StatPill({
+    required this.tone,
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.onTap,
+  });
+
+  final AppTone tone;
+  final IconData icon;
+  final String label;
+  final int value;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Material(
+      color: tone.softBg,
+      borderRadius: BorderRadius.circular(R.md),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(R.md),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.md),
+            border: Border.all(color: tone.softBorder),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 13, color: tone.onSoft),
+                  const SizedBox(width: 5),
+                  Text('$value', style: AppType.cardTitleBold(color: tone.fill)),
+                ],
+              ),
+              const SizedBox(height: 3),
+              // التسمية قد تطول بالإنجليزيّة — سطر واحد بقصّ، فالحبّات
+              // الثلاث متساوية العرض ولا تُزيح إحداها الأخريين.
+              Text(
+                label,
+                style: AppType.micro(color: tone.onSoft),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
