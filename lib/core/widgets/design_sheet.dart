@@ -1,3 +1,6 @@
+// `hide TextDirection`: الحزمة تصدّر نوع intl الذي يحجب نوع
+// dart:ui المستعمَل في `textDirection` عبر الملفّ.
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 
 import '../../theme/colors.dart';
@@ -1022,6 +1025,115 @@ class SheetPlanCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// شيت التأكيد الموحّد — بديل `AlertDialog` في كل عمليّة تحتاج «متأكّد؟».
+///
+/// كان في التطبيق **٣٧ حواراً** بلغة Material الافتراضيّة: نصف قطر 28
+/// وحشوة وأزرار وخطّ كلّها خارج سلّم المخطّط، ولا تعرف نغمة العمليّة.
+/// وأخطرها أنّ حوار الحذف وحوار التأكيد العادي يبدوان متطابقين — فلا
+/// شيء بصريّ يبطّئ اليد قبل فعل لا رجعة فيه.
+///
+/// هنا: مربّع أيقونة بنغمة العمليّة · عنوان `sheetTitle` · نصّ الجسم
+/// `rowValue` بارتفاع سطر مريح · وزرّان بارتفاع `H.button` — المدمّر
+/// منهما مملوء بلون عائلته لا رماديّاً.
+///
+/// يرجع `true` عند التأكيد، و`null`/`false` عند الإلغاء أو السحب.
+Future<bool?> showConfirmSheet(
+  BuildContext context, {
+  required String title,
+  required String message,
+  required String confirmLabel,
+  String? cancelLabel,
+  IconData icon = Icons.help_outline_rounded,
+  SheetTone tone = SheetTone.brand,
+  String subtitle = '',
+}) {
+  final (tint, tintBg, fill) = switch (tone) {
+    SheetTone.danger => (
+        AppColors.error,
+        AppColors.dangerSoftBg,
+        AppColors.errorFill,
+      ),
+    SheetTone.warning => (
+        AppColors.warningFill,
+        AppColors.warningSoftBg,
+        AppColors.warningFill,
+      ),
+    SheetTone.brand => (
+        AppColors.brand,
+        AppColors.brandSoftBg,
+        AppColors.brand,
+      ),
+  };
+  return showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    barrierColor: AppColors.scrim,
+    builder: (ctx) => DesignSheet(
+      header: SheetHeaderBar(
+        icon: icon,
+        title: title,
+        subtitle: subtitle,
+        tint: tint,
+        tintBg: tintBg,
+        onClose: () => Navigator.of(ctx).pop(false),
+      ),
+      footer: SheetFooterBar(
+        label: confirmLabel,
+        icon: tone == SheetTone.danger
+            ? Icons.delete_outline_rounded
+            : Icons.check_rounded,
+        color: fill,
+        onPressed: () => Navigator.of(ctx).pop(true),
+        // زرّ الإلغاء يسبق المؤكِّد ويأخذ عرضه من نصّه — الترتيب في
+        // RTL يضعه يمين المدمِّر، وهو الموضع الذي تقع عليه الإبهام أوّلاً.
+        leading: _ConfirmCancelButton(
+          label: cancelLabel ?? 'common.cancel'.tr(),
+          onTap: () => Navigator.of(ctx).pop(false),
+        ),
+      ),
+      body: Text(
+        message,
+        style:
+            AppType.rowValue(color: AppColors.textBody).copyWith(height: 1.6),
+      ),
+    ),
+  );
+}
+
+class _ConfirmCancelButton extends StatelessWidget {
+  const _ConfirmCancelButton({required this.label, required this.onTap});
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return SizedBox(
+      height: H.button,
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.button),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(R.button),
+          child: Ink(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(R.button),
+              border: Border.all(color: AppColors.borderSoft),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: Sp.xl),
+            child: Center(
+              child:
+                  Text(label, style: AppType.button(color: AppColors.textBody)),
+            ),
+          ),
+        ),
       ),
     );
   }

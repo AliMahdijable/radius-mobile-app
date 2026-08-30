@@ -24,6 +24,8 @@ import 'services/permissions_service.dart';
 import 'services/print_prefs.dart';
 import 'services/theme_service.dart';
 import 'theme/colors.dart';
+import 'theme/spacing.dart';
+import 'theme/typography.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -264,6 +266,56 @@ class _MyServicesAppState extends State<MyServicesApp>
               onSurface: AppColors.textHi,
               error: AppColors.error,
             ),
+      // ═══ حوارات التأكيد ═══
+      // 37 حواراً موزّعاً على 20 ملفّاً كانت ترث ثيم Material الافتراضي:
+      // نصف قطر 28 وخطّ Roboto-metrics وأزرار خارج السلّم. تنسيقها هنا
+      // مرّة واحدة أرخص وأأمن من إعادة كتابة 37 موضعاً، ويشمل ما يُضاف
+      // مستقبلاً تلقائيّاً.
+      dialogTheme: DialogThemeData(
+        backgroundColor: AppColors.surfaceSheet,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(R.xl),
+        ),
+        insetPadding:
+            const EdgeInsets.symmetric(horizontal: Sp.xxl, vertical: Sp.xxl),
+        titleTextStyle: AppType.sheetTitle(),
+        contentTextStyle:
+            AppType.rowValue(color: AppColors.textBody).copyWith(height: 1.6),
+        actionsPadding: const EdgeInsets.fromLTRB(Sp.xl, Sp.sm, Sp.xl, Sp.lg),
+      ),
+      // أزرار الحوارات: ارتفاع وسلّم المخطّط بدل مقاسات Material.
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(0, H.chip),
+          padding: const EdgeInsets.symmetric(horizontal: Sp.xl),
+          textStyle: AppType.button(),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(R.md),
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          minimumSize: const Size(0, H.chip),
+          padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
+          foregroundColor: AppColors.textBody,
+          textStyle: AppType.button(),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(R.md),
+          ),
+        ),
+      ),
+      // الرسائل الطافية (SnackBar) — كانت تأخذ زوايا Material الحادّة.
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: AppColors.textHi,
+        contentTextStyle: AppType.body(color: AppColors.onBrand),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(R.md),
+        ),
+      ),
       splashFactory: InkSparkle.splashFactory,
       // Swipe-to-back gesture — Cupertino page-transitions تعكس الاتجاه
       // تلقائياً حسب Directionality: في RTL يكون Swipe من اليمين، وفي

@@ -718,8 +718,13 @@ class _PackageTile extends StatelessWidget {
                 .copyWith(fontSize: 10.5, fontWeight: FontWeight.w600),
           ),
         ),
+        // ⚠️ `onExpanded` ليس اختياريّاً هنا: ضبط `controller.value`
+        // برمجيّاً يُطلق الـlisteners لكنّه **لا يُطلق `onChanged`**،
+        // فكانت القيمة الموسَّعة تظهر في الحقل ولا تصل حالة الشاشة —
+        // يكتب المدير 25 فيرى 25,000 ويُحفظ 25. عطل مالي صامت.
         AmountShorthandBox(
             controller: ctrl,
+            onExpanded: (v) => onChanged(v.toString()),
             child: TextField(
               controller: ctrl,
               onChanged: onChanged,
