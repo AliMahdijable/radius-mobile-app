@@ -107,6 +107,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   SubscriberFilter _filter = SubscriberFilter.all;
   SortField _sortField = SortField.remainingDays;
   SortDirection _sortDir = SortDirection.desc;
+
   /// كم مشتركاً معروضاً الآن. يكبر بـ`_kPageStep` عند «تحميل المزيد»
   /// بدل التنقّل بين صفحات مرقّمة: القائمة نتيجة بحث لا فهرس كتاب،
   /// والمستخدم يبحث عن مشترك بعينه لا عن «الصفحة الرابعة».
@@ -911,27 +912,34 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                 onRefresh: _refresh,
                 child: _loading
                     ? Center(
-                        child: CircularProgressIndicator(
-                            color: AppColors.brand))
+                        child:
+                            CircularProgressIndicator(color: AppColors.brand))
                     : CustomScrollView(
                         slivers: [
                           SliverToBoxAdapter(
                             child: Column(
                               children: [
                                 Padding(
-                                  padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.sm),
+                                  padding: const EdgeInsets.fromLTRB(
+                                      Sp.lg, Sp.md, Sp.lg, Sp.sm),
                                   child: _selectionMode
                                       ? _SelectionHeader(
                                           count: _selected.length,
                                           total: page.length,
                                           onExit: _exitSelection,
-                                          onSelectAll: () => _selectAllOnPage(page),
+                                          onSelectAll: () =>
+                                              _selectAllOnPage(page),
                                         )
                                       : _ListHeader(
                                           controller: _searchCtrl,
-                                          total: _counts()[SubscriberFilter.all] ?? 0,
-                                          online: _counts()[SubscriberFilter.online] ?? 0,
-                                          sortActive: _sortField != SortField.remainingDays ||
+                                          total:
+                                              _counts()[SubscriberFilter.all] ??
+                                                  0,
+                                          online: _counts()[
+                                                  SubscriberFilter.online] ??
+                                              0,
+                                          sortActive: _sortField !=
+                                                  SortField.remainingDays ||
                                               _sortDir != SortDirection.desc,
                                           filterActive: _managerFilter != null,
                                           sortLabel: _sortLabel(),
@@ -942,8 +950,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                           // 2026-08-29: زرّ فحص الأجهزة انتقل من شريط شرائح
                                           // الفرز إلى هنا بجانب الفرز والتصفية — طلب المستخدم.
                                           probing: _probing,
-                                          onScanDevices:
-                                              _probing ? null : () => _runProbeWave(force: true),
+                                          onScanDevices: _probing
+                                              ? null
+                                              : () =>
+                                                  _runProbeWave(force: true),
                                         ),
                                 ),
                               ],
@@ -985,14 +995,16 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                 // subscribers_screen.dart:875) — يظهر عند فلتر "المدينون"
                                 // ويحترم تلقائياً فلتر المدير الفرعي لأنّه يحسب من
                                 // _filteredAll الي بنفسه محكوم بـ_managerScoped.
-                                if (_filter == SubscriberFilter.debtors && !_selectionMode)
+                                if (_filter == SubscriberFilter.debtors &&
+                                    !_selectionMode)
                                   _DebtSummaryCard(subscribers: _filteredAll),
                                 // مطلب 2026-06-11: شريط رفيع يبيّن تقدم فحص الأجهزة
                                 // (لكل المشتركين المتصلين). يختفي لما الفحص يخلص. يظهر
                                 // عدد المفحوص / الإجمالي بدون أن يحجب أي تفاعل آخر.
                                 if (_probing && _probeTotal > 0)
                                   Padding(
-                                    padding: const EdgeInsets.fromLTRB(Sp.lg, 6, Sp.lg, 0),
+                                    padding: const EdgeInsets.fromLTRB(
+                                        Sp.lg, 6, Sp.lg, 0),
                                     child: Row(
                                       children: [
                                         SizedBox(
@@ -1005,11 +1017,13 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                         ),
                                         const SizedBox(width: 6),
                                         Text(
-                                          'subscribers.probing_devices'.tr(namedArgs: {
-                                            'done': '$_probeDone',
-                                            'total': '$_probeTotal'
-                                          }),
-                                          style: AppType.muted().copyWith(fontSize: 10.5),
+                                          'subscribers.probing_devices'.tr(
+                                              namedArgs: {
+                                                'done': '$_probeDone',
+                                                'total': '$_probeTotal'
+                                              }),
+                                          style: AppType.muted()
+                                              .copyWith(fontSize: 10.5),
                                         ),
                                       ],
                                     ),
@@ -1036,63 +1050,64 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                     MediaQuery.paddingOf(context).bottom,
                               ),
                               sliver: SliverList.separated(
-                            // صفّ إضافي في الذيل لزرّ «تحميل المزيد»:
-                            // داخل القائمة لا تحتها، فلا يحجز ارتفاعاً
-                            // ثابتاً ولا يظهر إلّا حين يبقى ما يُحمَّل.
-                            itemCount: page.length + (remaining > 0 ? 1 : 0),
-                            // 2026-08-26: 8dp → 6dp بين الكارت والكارت.
-                            // مع padding داخلي مخفَّض + borders أخف = تركيز
-                            // بصري أعلى، صفوف أكثر مرئيّة.
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 6),
-                            itemBuilder: (_, i) {
-                              if (i == page.length) {
-                                return _LoadMoreButton(
-                                  remaining: remaining,
-                                  onTap: () => setState(
-                                      () => _visibleCount += _kPageStep),
-                                );
-                              }
-                              final s = page[i];
-                              final isSelected =
-                                  s.idx != null && _selected.contains(s.idx);
-                              return SubscriberCardV3(
-                                // بلا مفتاح ثابت يعيد Flutter استعمال
-                                // الـElement لمشترك آخر بعد كل موجة فحص
-                                // أجهزة فتنتقل حالة الصفّ للجار.
-                                key: ValueKey(s.idx ?? s.username),
-                                sub: s,
-                                selected: isSelected,
-                                lastPayment: _lastPayments[s.username],
-                                hasTelegram: s.idx != null &&
-                                    _telegramBoundIdx
-                                        .contains(s.idx.toString()),
-                                onTap: () {
-                                  if (_selectionMode) {
-                                    _toggleSelect(s);
-                                  } else {
-                                    _openDetail(s);
+                                // صفّ إضافي في الذيل لزرّ «تحميل المزيد»:
+                                // داخل القائمة لا تحتها، فلا يحجز ارتفاعاً
+                                // ثابتاً ولا يظهر إلّا حين يبقى ما يُحمَّل.
+                                itemCount:
+                                    page.length + (remaining > 0 ? 1 : 0),
+                                // 2026-08-26: 8dp → 6dp بين الكارت والكارت.
+                                // مع padding داخلي مخفَّض + borders أخف = تركيز
+                                // بصري أعلى، صفوف أكثر مرئيّة.
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 6),
+                                itemBuilder: (_, i) {
+                                  if (i == page.length) {
+                                    return _LoadMoreButton(
+                                      remaining: remaining,
+                                      onTap: () => setState(
+                                          () => _visibleCount += _kPageStep),
+                                    );
                                   }
+                                  final s = page[i];
+                                  final isSelected = s.idx != null &&
+                                      _selected.contains(s.idx);
+                                  return SubscriberCardV3(
+                                    // بلا مفتاح ثابت يعيد Flutter استعمال
+                                    // الـElement لمشترك آخر بعد كل موجة فحص
+                                    // أجهزة فتنتقل حالة الصفّ للجار.
+                                    key: ValueKey(s.idx ?? s.username),
+                                    sub: s,
+                                    selected: isSelected,
+                                    lastPayment: _lastPayments[s.username],
+                                    hasTelegram: s.idx != null &&
+                                        _telegramBoundIdx
+                                            .contains(s.idx.toString()),
+                                    onTap: () {
+                                      if (_selectionMode) {
+                                        _toggleSelect(s);
+                                      } else {
+                                        _openDetail(s);
+                                      }
+                                    },
+                                    onLongPress: () => _enterSelectionWith(s),
+                                    // تذكير دين — لكل مدين بغض النظر عن حالة
+                                    // الاتصال. طلب 2026-07-13. مسار
+                                    // /api/v2/subscribers/:idx/send-debt-reminder
+                                    onSendDebtReminder: s.hasDebt &&
+                                            !_selectionMode &&
+                                            s.idx != null
+                                        ? () => _sendDebtReminderFromList(s)
+                                        : null,
+                                    // «تسديد» داخل شريط الدين — نفس شيت
+                                    // التفاصيل بلا اختصار، ومحكوم بنفس
+                                    // الصلاحيّة (subscribers.pay_debt).
+                                    onPayDebt: s.hasDebt &&
+                                            !_selectionMode &&
+                                            Perms.has('subscribers.pay_debt')
+                                        ? () => _payDebtFromList(s)
+                                        : null,
+                                  );
                                 },
-                                onLongPress: () => _enterSelectionWith(s),
-                                // تذكير دين — لكل مدين بغض النظر عن حالة
-                                // الاتصال. طلب 2026-07-13. مسار
-                                // /api/v2/subscribers/:idx/send-debt-reminder
-                                onSendDebtReminder: s.hasDebt &&
-                                        !_selectionMode &&
-                                        s.idx != null
-                                    ? () => _sendDebtReminderFromList(s)
-                                    : null,
-                                // «تسديد» داخل شريط الدين — نفس شيت
-                                // التفاصيل بلا اختصار، ومحكوم بنفس
-                                // الصلاحيّة (subscribers.pay_debt).
-                                onPayDebt: s.hasDebt &&
-                                        !_selectionMode &&
-                                        Perms.has('subscribers.pay_debt')
-                                    ? () => _payDebtFromList(s)
-                                    : null,
-                              );
-                            },
                               ),
                             ),
                         ],
@@ -1751,7 +1766,8 @@ class _PrimaryPill extends StatelessWidget {
           label,
           overflow: TextOverflow.ellipsis,
           maxLines: 1,
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5, height: 1.4),
+          style: const TextStyle(
+              fontWeight: FontWeight.w700, fontSize: 12.5, height: 1.4),
         ),
       ),
     );
@@ -1794,7 +1810,8 @@ class _SecondaryBtn extends StatelessWidget {
       icon: Icon(icon, size: 13),
       label: Text(label,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5, height: 1.35)),
+          style: const TextStyle(
+              fontWeight: FontWeight.w700, fontSize: 11.5, height: 1.35)),
     );
   }
 }
@@ -2015,4 +2032,3 @@ class _ChipsBarDelegate extends SliverPersistentHeaderDelegate {
   bool shouldRebuild(_ChipsBarDelegate old) =>
       old.child != child || old.isDark != isDark;
 }
-
