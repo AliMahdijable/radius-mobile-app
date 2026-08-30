@@ -38,9 +38,8 @@ class SubscribersCard extends StatelessWidget {
     final denom = s.total > 0 ? s.total : (s.active + s.expired);
     final rawActive = denom > 0 ? s.active / denom : 0.0;
     final rawExpired = denom > 0 ? s.expired / denom : 0.0;
-    final scale = (rawActive + rawExpired) > 1.0
-        ? 1.0 / (rawActive + rawExpired)
-        : 1.0;
+    final scale =
+        (rawActive + rawExpired) > 1.0 ? 1.0 / (rawActive + rawExpired) : 1.0;
     final activeRatio = rawActive * scale;
     final expiredRatio = rawExpired * scale;
 
@@ -119,47 +118,65 @@ class SubscribersCard extends StatelessWidget {
           // (active/expired) عمداً: النسبة نفسها تقرأها الحلقة أعلاه،
           // فالشريط كان يكرّرها بلغة ثانية ويأكل الموضع الذي تحتاجه
           // هذه الثلاثة.
-          Row(
-            children: [
-              Expanded(
-                child: _StatPill(
-                  tone: AppTone.warning,
-                  icon: LucideIcons.triangleAlert,
-                  label: 'dashboard.near_expiry'.tr(),
-                  value: s.nearExpiry,
-                  onTap: onOpen == null
-                      ? null
-                      : () => onOpen!(SubscriberFilter.nearExpiry),
+          // ⚠️ `IntrinsicHeight` لأنّ التسميات تختلف في عدد الأسطر
+          // («قربوا الانتهاء» سطران في عرض الرُبع، و«بدون نت» سطر) —
+          // وبدونه تختلف ارتفاعات الحبّات فيبدو الصفّ مكسوراً.
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _StatPill(
+                    tone: AppTone.warning,
+                    icon: LucideIcons.triangleAlert,
+                    label: 'dashboard.near_expiry'.tr(),
+                    value: s.nearExpiry,
+                    onTap: onOpen == null
+                        ? null
+                        : () => onOpen!(SubscriberFilter.nearExpiry),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _StatPill(
-                  tone: AppTone.neutral,
-                  icon: LucideIcons.userX,
-                  label: 'dashboard.disabled'.tr(),
-                  value: s.disabled,
-                  onTap: onOpen == null
-                      ? null
-                      : () => onOpen!(SubscriberFilter.disabled),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _StatPill(
+                    tone: AppTone.neutral,
+                    icon: LucideIcons.userX,
+                    label: 'dashboard.disabled'.tr(),
+                    value: s.disabled,
+                    onTap: onOpen == null
+                        ? null
+                        : () => onOpen!(SubscriberFilter.disabled),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _StatPill(
-                  // «متصل بلا باقة» شذوذ لا حالة عاديّة — لونه البنفسجي
-                  // نفسه في القائمة والويب، وأيقونته `wifi` لا `wifiOff`
-                  // لأنّ اتّصالهم **هو** موضع الشذوذ.
-                  tone: AppTone.anomaly,
-                  icon: LucideIcons.wifi,
-                  label: 'dashboard.online_no_plan'.tr(),
-                  value: s.onlineNoPlan,
-                  onTap: onOpen == null
-                      ? null
-                      : () => onOpen!(SubscriberFilter.onlineNoPlan),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _StatPill(
+                    // «متصل بلا باقة» شذوذ لا حالة عاديّة — لونه البنفسجي
+                    // نفسه في القائمة والويب، وأيقونته `wifi` لا `wifiOff`
+                    // لأنّ اتّصالهم **هو** موضع الشذوذ.
+                    tone: AppTone.anomaly,
+                    icon: LucideIcons.wifi,
+                    label: 'dashboard.online_no_plan'.tr(),
+                    value: s.onlineNoPlan,
+                    onTap: onOpen == null
+                        ? null
+                        : () => onOpen!(SubscriberFilter.onlineNoPlan),
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _StatPill(
+                    tone: AppTone.info,
+                    icon: LucideIcons.wifiOff,
+                    label: 'dashboard.offline'.tr(),
+                    value: s.offline,
+                    onTap: onOpen == null
+                        ? null
+                        : () => onOpen!(SubscriberFilter.offline),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -175,7 +192,7 @@ class _Skeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return Container(
-      height: 241, // مقيس لا مُقدَّر — يحرسه dashboard_card_height_test
+      height: 255, // مقيس لا مُقدَّر — يحرسه dashboard_card_height_test
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.card),
@@ -451,7 +468,8 @@ class _StatPill extends StatelessWidget {
                 children: [
                   Icon(icon, size: 13, color: tone.fill),
                   const SizedBox(width: 5),
-                  Text('$value', style: AppType.cardTitleBold(color: tone.fill)),
+                  Text('$value',
+                      style: AppType.cardTitleBold(color: tone.fill)),
                 ],
               ),
               const SizedBox(height: 3),
@@ -462,7 +480,9 @@ class _StatPill extends StatelessWidget {
                 // التسمية محايدة: `onSoft` مُعايَر للخلفيّة الناعمة،
                 // وعلى السطح المحايد يقلّ تباينه.
                 style: AppType.micro(color: AppColors.textMid),
-                maxLines: 1,
+                // سطران: أربع حبّات في صفّ تعني رُبع العرض لكلٍّ،
+                // و«قربوا الانتهاء» لا تسع سطراً واحداً هناك.
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
               ),
