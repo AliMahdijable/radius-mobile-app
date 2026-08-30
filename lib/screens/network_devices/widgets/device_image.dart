@@ -27,6 +27,42 @@ class DeviceImage extends StatelessWidget {
   final String? model;
   final double size;
 
+
+  /// الاسم التجاري ← اسم اللوحة.
+  ///
+  /// ⚠️ ميكروتك تُسمّي الجهاز الواحد باسمين: **اسم لوحة** (RB912UAG-5HPnD-OUT)
+  /// و**اسم تجاري** (BaseBox 5). و`board-name` في RouterOS يُرجع أحدهما
+  /// بحسب الطراز والإصدار — فالجهاز نفسه قد يُبلّغ باسم لا يُطابق ملفّ
+  /// الصورة رغم أنّه هو هو. (أكّده المستخدم: BaseBox 5 = RB912)
+  ///
+  /// الأسماء هنا مقتصرة على ما يقابل صورةً موجودة فعلاً — لا نُضيف
+  /// مرادفاً لطراز لا صورة له، فذلك يُوهم بالتغطية.
+  static const Map<String, String> _aliases = {
+    // ميكروتك — لاسلكيّات
+    'basebox5': 'rb912uag5hpndout',
+    'basebox': 'rb912uag5hpndout',
+    'sxtsq5ac': 'rbsxtsqg5acd',
+    'sxtsqlite5': 'rbsxtsq5nd',
+    'sxtsqlite2': 'rbsxtsq2nd',
+    'sxtsq5nd': 'rbsxtsq5nd',
+    'sxtsq2nd': 'rbsxtsq2nd',
+    'sxt5achpsa': 'rbsxtg5hpacdsa',
+    'lhg5': 'rblhg5nd',
+    'lhgxl5': 'rblhg5hpndxl',
+    'ldf5': 'rbldf5nd',
+    'groove52ac': 'rbgroovega52hpacn',
+    'groovea52hpn': 'rbgroovea52hpn',
+    'groove52hpn': 'rbgroove52hpn',
+    'omnitik5poeac': 'rbomnitikpg5hacd',
+    'mantbox212s': 'rb911g2hpnd12s',
+    'hexpoe': 'rb960pgspb',
+    // يوبيكويتي — devmodel يُرجع الاسم التجاري
+    'nanostationm5': 'nanom52',
+    'nanostationloco m5': 'nanom52',
+    'nanostationlocom5': 'nanom52',
+    'nanobridgem5': 'nanobridgem5',
+  };
+
   /// مفتاح مُطبَّع: حروف وأرقام لاتينيّة فقط.
   static String _key(String s) =>
       s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
@@ -41,13 +77,17 @@ class DeviceImage extends StatelessWidget {
     if (model == null) return null;
     final k = _key(model);
     if (k.isEmpty) return null;
-    // مطابقة تامّة أوّلاً — أدقّ ما يمكن.
-    final exact = _byKey[k];
+    // المرادف أوّلاً: يُترجم الاسم التجاري إلى اسم اللوحة ثمّ يُطابَق
+    // كما لو كُتب اسم اللوحة مباشرةً.
+    final k2 = _aliases[k] ?? k;
+
+    // مطابقة تامّة — أدقّ ما يمكن.
+    final exact = _byKey[k2];
     if (exact != null) return _gate(exact, brand);
     // ثمّ احتواء: المدير قد يكتب «Mikrotik CCR2116-12G-4S+ router».
     // المفاتيح مرتّبة تنازليّاً بالطول فيفوز الأطول = الأدقّ.
     for (final e in _byKey.entries) {
-      if (e.key.length >= 6 && k.contains(e.key)) return _gate(e.value, brand);
+      if (e.key.length >= 6 && k2.contains(e.key)) return _gate(e.value, brand);
     }
     // وأخيراً: المكتوب سابقةٌ لاسم ملفّ — «912» لـRB912UAG-5HPnD-OUT،
     // و«rb5009» لـRB5009UG+S+IN.
@@ -55,10 +95,10 @@ class DeviceImage extends StatelessWidget {
     // ⚠️ **بشرط ألّا يُطابق أكثر من ملفّ**: لو تعدّدت المطابقات فالمكتوب
     // لا يميّز جهازاً بعينه، وعرض أحدها اعتباطاً أسوأ من الشارة — يبدو
     // صحيحاً فيُبنى عليه قرار. مثال: «CCR1036» تُطابق أربعة طُرُز.
-    if (k.length >= 3) {
+    if (k2.length >= 3) {
       String? only;
       for (final e in _byKey.entries) {
-        if (!e.key.contains(k)) continue;
+        if (!e.key.contains(k2)) continue;
         if (only != null) return null; // تعدّد ⇒ لا نُخمّن
         only = e.value;
       }

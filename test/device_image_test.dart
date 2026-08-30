@@ -104,4 +104,37 @@ void main() {
       expect(DeviceImage.assetFor('208', brand: 'ubnt'), isNull);
     });
   });
+
+  group('المرادفات: اسم تجاري ← اسم لوحة', () {
+    // ⚠️ ميكروتك تُسمّي الجهاز الواحد باسمين، و`board-name` في RouterOS
+    // يُرجع أحدهما بحسب الطراز. فالجهاز نفسه قد يُبلّغ باسم لا يُطابق
+    // ملفّ صورته رغم أنّه هو هو — وهو ما حدث فعلاً: كُشف «BaseBox 5»
+    // ولا ملفّ بهذا الاسم، بينما الصورة موجودة باسم اللوحة RB912.
+
+    test('BaseBox 5 هو RB912 — أكّده المستخدم', () {
+      expect(DeviceImage.assetFor('BaseBox 5'), 'RB912UAG-5HPnD-OUT.webp');
+      expect(DeviceImage.assetFor('basebox 5', brand: 'mikrotik'),
+          'RB912UAG-5HPnD-OUT.webp');
+      // واسم اللوحة نفسه يبقى يُطابق
+      expect(DeviceImage.assetFor('RB912UAG-5HPnD-OUT'),
+          'RB912UAG-5HPnD-OUT.webp');
+    });
+
+    test('أسماء تجاريّة أخرى لها صور', () {
+      expect(DeviceImage.assetFor('SXTsq 5 ac'), 'RBSXTsqG-5acD.png');
+      expect(DeviceImage.assetFor('LHG 5'), 'RBLHG-5nD.webp');
+      expect(DeviceImage.assetFor('LDF 5'), 'RBLDF-5nD.webp');
+      expect(DeviceImage.assetFor('hEX PoE'), 'RB960PGS-PB.webp');
+    });
+
+    test('المرادف يخضع لبوّابة العلامة أيضاً', () {
+      expect(DeviceImage.assetFor('BaseBox 5', brand: 'ubnt'), isNull);
+    });
+
+    test('اسم تجاري بلا صورة يبقى بلا مطابقة', () {
+      // لا نُضيف مرادفاً لطراز لا صورة له — ذلك يُوهم بالتغطية.
+      expect(DeviceImage.assetFor('NetBox 5'), isNull);
+      expect(DeviceImage.assetFor('Chateau LTE12'), isNull);
+    });
+  });
 }
