@@ -6,6 +6,7 @@ import '../../../api/subscribers_api.dart';
 import '../../../api/telegram_api.dart';
 import '../../../core/util/clipboard_helper.dart';
 import '../../../models/subscriber.dart';
+import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 
@@ -145,150 +146,34 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context);
-    return SafeArea(
-      top: false,
-      child: DraggableScrollableSheet(
-        initialChildSize: 0.85,
-        maxChildSize: 0.95,
-        minChildSize: 0.6,
-        expand: false,
-        builder: (_, scrollCtrl) => Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(R.card)),
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.link,
+        title: 'ربط مشترك',
+        subtitle: 'ابحث عن المشترك ثم أرسل الرابط عبر واتساب',
+        tint: AppColors.channelTelegram,
+        tintBg: AppColors.channelTelegramSoftBg,
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      scrollable: false,
+      bodyPadding: EdgeInsets.zero,
+      body: Column(
+        children: [
+          const SizedBox(height: 12),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _selected == null
+                    ? _searchResults()
+                    : _generatedView(),
           ),
-          child: Column(
-            children: [
-              const SizedBox(height: 8),
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(R.pill),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF229ED9).withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(R.chip),
-                      ),
-                      alignment: Alignment.center,
-                      child: const Icon(LucideIcons.link,
-                          color: Color(0xFF229ED9), size: 18),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('ربط مشترك',
-                              style: TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textHi,
-                              )),
-                          const SizedBox(height: 2),
-                          Text('ابحث عن المشترك ثم أرسل الرابط عبر واتساب',
-                              style: TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textMid,
-                              )),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: Icon(LucideIcons.x,
-                          size: 20, color: AppColors.textMid),
-                      onPressed: () => Navigator.of(context).pop(),
-                      splashRadius: 20,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              // Search input
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Container(
-                  height: 44,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceInput,
-                    borderRadius: BorderRadius.circular(R.sm),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(LucideIcons.search,
-                          size: 16, color: AppColors.textMid),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: _searchCtrl,
-                          onChanged: (_) {
-                            if (_selected != null) {
-                              _reset();
-                            } else {
-                              setState(() {});
-                            }
-                          },
-                          style: TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 13,
-                            color: AppColors.textHi,
-                          ),
-                          decoration: InputDecoration(
-                            border: InputBorder.none,
-                            isCollapsed: true,
-                            hintText: 'ابحث بالاسم / اليوزر / الرقم...',
-                            hintStyle: TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 12.5,
-                              color: AppColors.textLow,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (_selected != null || _searchCtrl.text.isNotEmpty)
-                        IconButton(
-                          icon: Icon(LucideIcons.x,
-                              size: 14, color: AppColors.textMid),
-                          onPressed: _reset,
-                          splashRadius: 14,
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: _loading
-                    ? const Center(child: CircularProgressIndicator())
-                    : _selected == null
-                        ? _searchResults(scrollCtrl)
-                        : _generatedView(),
-              ),
-              if (_selected != null && _generatedLink != null) _actionBar(),
-            ],
-          ),
-        ),
+          if (_selected != null && _generatedLink != null) _actionBar(),
+        ],
       ),
     );
   }
 
-  Widget _searchResults(ScrollController scrollCtrl) {
+  Widget _searchResults() {
     final matches = _matches;
     if (_searchCtrl.text.trim().isEmpty) {
       return Center(
@@ -312,7 +197,6 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
       );
     }
     return ListView.builder(
-      controller: scrollCtrl,
       itemCount: matches.length,
       itemBuilder: (_, i) {
         final s = matches[i];
