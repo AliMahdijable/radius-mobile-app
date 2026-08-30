@@ -48,9 +48,13 @@ class _SkeletonBoxState extends State<SkeletonBox>
 
   @override
   Widget build(BuildContext context) {
-    // ألوان محايدة — تشتغل مع light + dark
-    final base = AppColors.surfaceInput;
-    final highlight = AppColors.border;
+    // ⚠️ التباين هنا ليس ذوقاً: `surfaceInput ⇄ border` يعطي 1.18:1
+    // ليلاً و1.15:1 نهاراً — أي حركة لا تكاد تُرى، فتبدو الشاشة
+    // متجمّدة لا محمَّلة، والمستخدم يظنّ التطبيق معلَّقاً.
+    // `borderStrong` يرفعها إلى 1.58:1 ليلاً و1.44:1 نهاراً: ظاهرة
+    // بوضوح وما تزال أهدأ من أن تُشتّت.
+    final base = AppColors.surfaceSunken;
+    final highlight = AppColors.borderStrong;
 
     return SizedBox(
       width: widget.width,
@@ -92,10 +96,13 @@ class SkeletonDeviceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      // الحشوة ونصف القطر مأخوذان من `subscriber_card_v3` حرفيّاً
+      // (15×14 · R.card): أيّ فرق يجعل القائمة تقفز لحظة استبدال
+      // الهيكل بالمحتوى، وهي القفزة التي يُفترض بالهيكل منعها.
+      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.md),
+        borderRadius: BorderRadius.circular(R.card),
         border: Border.all(color: AppColors.border),
       ),
       child: Row(children: [
@@ -148,10 +155,10 @@ class SkeletonRegionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.md),
+        borderRadius: BorderRadius.circular(R.card),
         border: Border.all(color: AppColors.border),
       ),
       child: Row(children: [

@@ -422,4 +422,26 @@ void main() {
       });
     });
   }
+
+  test('وميض الهيكل العظمي مرئيّ في الوضعين', () {
+    // الهيكل يعِد المستخدم بأنّ شيئاً يجري. إن كان تباين الوميض
+    // منخفضاً جدّاً بدت الشاشة متجمّدة — وهو أسوأ من غياب الهيكل
+    // أصلاً، لأنّه يوحي بالتعليق لا بالتحميل.
+    //
+    // الحدّ 1.35:1 تجريبي: أقلّ منه لا تُرى الحركة على شاشة هاتف
+    // في ضوء النهار، وأكثر من ~1.8:1 يصير الوميض مُشتّتاً.
+    for (final dark in [false, true]) {
+      AppColors.setDarkMode(dark);
+      final ratio = contrast(AppColors.surfaceSunken, AppColors.borderStrong);
+      final mode = dark ? 'الليلي' : 'النهاري';
+      expect(ratio, greaterThan(1.35),
+          reason: 'وميض الهيكل في الوضع $mode باهت '
+              '(${ratio.toStringAsFixed(2)}:1) — يبدو متجمّداً');
+      expect(ratio, lessThan(2.2),
+          reason: 'وميض الهيكل في الوضع $mode صارخ '
+              '(${ratio.toStringAsFixed(2)}:1) — يُشتّت عن المحتوى');
+    }
+    AppColors.setDarkMode(false);
+  });
+
 }

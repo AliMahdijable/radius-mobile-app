@@ -125,18 +125,21 @@ class _RevealSheetState extends State<_RevealSheet>
         child: Container(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            // سطح الشيت لا سطح الكارت: ليلاً يفصلهما درجة كاملة،
+            // وبدونها يذوب الشيت في الخلفيّة خلفه.
+            color: AppColors.surfaceSheet,
             borderRadius: BorderRadius.circular(R.xl),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Grabber
+              // المقبض بمقاس الطقم نفسه (42 × H.grabber) — يظهر مع
+              // شيتات أخرى في الجلسة الواحدة، فاختلافه يُلاحَظ.
               Container(
-                width: 40,
-                height: 4,
+                width: 42,
+                height: H.grabber,
                 decoration: BoxDecoration(
-                  color: AppColors.border,
+                  color: AppColors.grabber,
                   borderRadius: BorderRadius.circular(R.pill),
                 ),
               ),

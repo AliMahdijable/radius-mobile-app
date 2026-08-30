@@ -178,8 +178,10 @@ class _WaPreviewSheet extends StatelessWidget {
         ),
         child: Container(
           decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(R.card),
+            // نفس سطح ونصف قطر `reveal_password_sheet` — الشيتان
+            // عائمان بالشكل ذاته وقد يتتابعان في الجلسة الواحدة.
+            color: AppColors.surfaceSheet,
+            borderRadius: BorderRadius.circular(R.xl),
           ),
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
           child: Column(
@@ -188,10 +190,10 @@ class _WaPreviewSheet extends StatelessWidget {
             children: [
               Center(
                 child: Container(
-                  width: 40,
-                  height: 4,
+                  width: 42,
+                  height: H.grabber,
                   decoration: BoxDecoration(
-                    color: AppColors.border,
+                    color: AppColors.grabber,
                     borderRadius: BorderRadius.circular(R.pill),
                   ),
                 ),
