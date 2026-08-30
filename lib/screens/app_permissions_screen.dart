@@ -360,7 +360,7 @@ class _PermCard extends StatelessWidget {
                 : Text(
                     switchLabel,
                     style: const TextStyle(
-                        fontSize: 11.5, fontWeight: FontWeight.w700),
+                        fontSize: 11.5, height: 1.35, fontWeight: FontWeight.w700),
                   ),
           ),
         ],

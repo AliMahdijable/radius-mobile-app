@@ -175,7 +175,7 @@ class _InboxScreenState extends State<InboxScreen> {
                   'notifications.mark_all_read'.tr(),
                   style: TextStyle(
                     color: AppColors.brand,
-                    fontSize: 12.5,
+                    fontSize: 12.5, height: 1.4,
                     fontWeight: FontWeight.w700,
                   ),
                 ),

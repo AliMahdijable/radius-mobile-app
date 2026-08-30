@@ -548,7 +548,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                 label,
                 style: TextStyle(
                   fontFamily: 'Cairo',
-                  fontSize: 11.5,
+                  fontSize: 11.5, height: 1.35,
                   fontWeight: FontWeight.w700,
                   color: selected ? color : AppColors.textMid,
                 ),

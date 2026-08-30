@@ -449,7 +449,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         return FilterChip(
           label: Text(labels[i],
               style: TextStyle(
-                fontSize: 12.5,
+                fontSize: 12.5, height: 1.4,
                 fontWeight: FontWeight.w600,
                 color: isSelected ? AppColors.onBrand : AppColors.textMid,
               )),
@@ -507,7 +507,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
                 'wa_schedules.save'.tr(),
                 style: const TextStyle(
                   color: AppColors.onBrand,
-                  fontSize: 14,
+                  fontSize: 14, height: 1.3,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -702,7 +702,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 13,
+            fontSize: 13, height: 1.35,
             fontWeight: FontWeight.w700,
             color: selected ? AppColors.onBrand : AppColors.textMid,
           ),
@@ -729,7 +729,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         return FilterChip(
           label: Text(label,
               style: TextStyle(
-                fontSize: 12.5,
+                fontSize: 12.5, height: 1.4,
                 fontWeight: FontWeight.w600,
                 color: selected ? AppColors.onBrand : AppColors.textMid,
               )),
@@ -804,7 +804,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
           Text('قناة الإرسال',
               style: TextStyle(
                 fontFamily: 'Cairo',
-                fontSize: 12.5,
+                fontSize: 12.5, height: 1.4,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textHi,
               )),
@@ -872,7 +872,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
               child: Text(label,
                   style: TextStyle(
                     fontFamily: 'Cairo',
-                    fontSize: 11,
+                    fontSize: 11, height: 1.25,
                     fontWeight: FontWeight.w700,
                     color: selected ? color : AppColors.textMid,
                   ),

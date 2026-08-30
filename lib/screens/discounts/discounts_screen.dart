@@ -399,7 +399,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
                               ? 'تطبيق ${_fmt(_amount)} على ${_selected.length}'
                               : 'تطبيق الخصم'),
                       style: const TextStyle(
-                          fontWeight: FontWeight.w700, fontSize: 14),
+                          fontWeight: FontWeight.w700, fontSize: 14, height: 1.3),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: accent,
@@ -526,7 +526,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
             '+${_fmt(v)}',
             style: TextStyle(
               color: accent,
-              fontSize: 11,
+              fontSize: 11, height: 1.25,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -622,7 +622,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
                 label,
                 style: TextStyle(
                   color: disabled ? AppColors.textLow : color,
-                  fontSize: 10.5,
+                  fontSize: 10.5, height: 1.3,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -834,7 +834,7 @@ class _SubscriberCard extends StatelessWidget {
                         '-${formatIQD(existingDiscount!)}',
                         style: TextStyle(
                           color: AppColors.warning,
-                          fontSize: 9.5,
+                          fontSize: 9.5, height: 1.2,
                           fontWeight: FontWeight.w700,
                         ),
                       ),

@@ -228,7 +228,7 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
             '+${_fmt(v)}',
             style: TextStyle(
               color: accent,
-              fontSize: 11,
+              fontSize: 11, height: 1.25,
               fontWeight: FontWeight.w700,
             ),
           ),

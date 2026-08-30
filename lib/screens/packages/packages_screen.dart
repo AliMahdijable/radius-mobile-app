@@ -256,7 +256,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
                           : 'pkg.save_changes'
                               .tr(namedArgs: {'n': '$changedCount'}),
                       style: const TextStyle(
-                          fontWeight: FontWeight.w700, fontSize: 14),
+                          fontWeight: FontWeight.w700, fontSize: 14, height: 1.3),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: accent,

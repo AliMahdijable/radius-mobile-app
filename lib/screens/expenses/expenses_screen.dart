@@ -299,7 +299,7 @@ class _CompactHeader extends StatelessWidget {
                 child: Text(
                   '$count عملية',
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 11, height: 1.25,
                     fontWeight: FontWeight.w700,
                     color: accent,
                   ),
@@ -326,7 +326,7 @@ class _CompactHeader extends StatelessWidget {
                     child: Text(
                       '${_fmt(from)}  →  ${_fmt(to)}',
                       style: TextStyle(
-                        fontSize: 12.5,
+                        fontSize: 12.5, height: 1.4,
                         fontWeight: FontWeight.w700,
                         color: AppColors.textHi,
                       ),
@@ -398,7 +398,7 @@ class _ExpenseTile extends StatelessWidget {
                         Text(
                           row.expenseDate,
                           style: TextStyle(
-                            fontSize: 11.5,
+                            fontSize: 11.5, height: 1.35,
                             fontWeight: FontWeight.w700,
                             color: AppColors.textHi,
                           ),
@@ -406,7 +406,7 @@ class _ExpenseTile extends StatelessWidget {
                         if ((row.actingEmployeeUsername ?? '').isNotEmpty) ...[
                           Text('  ·  ',
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: 11, height: 1.35,
                                 color: AppColors.textLow,
                               )),
                           Icon(Icons.badge,
@@ -416,7 +416,7 @@ class _ExpenseTile extends StatelessWidget {
                             child: Text(
                               row.actingEmployeeUsername!,
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: 11, height: 1.25,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.brandAccent,
                               ),
@@ -449,7 +449,7 @@ class _ExpenseTile extends StatelessWidget {
               Text(
                 '${formatIQD(row.amount)} د.ع',
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 14, height: 1.3,
                   fontWeight: FontWeight.w700,
                   color: AppColors.error,
                   fontFeatures: const [FontFeature.tabularFigures()],

@@ -21,7 +21,7 @@ Future<void> copyToClipboard(
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
     content: Text(
       'تمّ نسخ $label',
-      style: const TextStyle(fontFamily: 'Cairo', fontSize: 12.5),
+      style: const TextStyle(fontFamily: 'Cairo', fontSize: 12.5, height: 1.4),
     ),
     backgroundColor: AppColors.brand,
     behavior: SnackBarBehavior.floating,

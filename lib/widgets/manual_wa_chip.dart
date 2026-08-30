@@ -71,6 +71,7 @@ class ManualWaChip extends StatelessWidget {
                 style: TextStyle(
                   fontFamily: 'Cairo',
                   fontSize: compact ? 11 : 11.5,
+                  height: compact ? 1.25 : 1.35,
                   fontWeight: FontWeight.w700,
                   color: color,
                 ),
@@ -217,7 +218,7 @@ class _WaPreviewSheet extends StatelessWidget {
                         Text(title,
                             style: TextStyle(
                               fontFamily: 'Cairo',
-                              fontSize: 15,
+                              fontSize: 15, height: 1.2,
                               fontWeight: FontWeight.w700,
                               color: AppColors.textHi,
                             )),
@@ -225,7 +226,7 @@ class _WaPreviewSheet extends StatelessWidget {
                         Text('إلى: $phone',
                             style: TextStyle(
                               fontFamily: 'Cairo',
-                              fontSize: 11,
+                              fontSize: 11, height: 1.25,
                               fontWeight: FontWeight.w600,
                               color: AppColors.textMid,
                             ),
@@ -294,7 +295,7 @@ class _WaPreviewSheet extends StatelessWidget {
                           manualMode ? 'افتح واتسابي' : 'إرسال تلقائي',
                           style: const TextStyle(
                             fontFamily: 'Cairo',
-                            fontSize: 13.5,
+                            fontSize: 13.5, height: 1.35,
                             fontWeight: FontWeight.w700,
                           ),
                         ),

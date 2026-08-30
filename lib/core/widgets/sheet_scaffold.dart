@@ -99,7 +99,7 @@ class _SheetSnackEntry {
                       message,
                       style: const TextStyle(
                         color: AppColors.onBrand,
-                        fontSize: 13,
+                        fontSize: 13, height: 1.35,
                         fontWeight: FontWeight.w600,
                       ),
                       textDirection: TextDirection.rtl,

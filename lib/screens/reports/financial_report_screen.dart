@@ -298,7 +298,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                 value,
                 style: TextStyle(
                   color: color,
-                  fontSize: 13,
+                  fontSize: 13, height: 1.35,
                   fontWeight: FontWeight.w700,
                 ),
                 overflow: TextOverflow.ellipsis,
@@ -389,7 +389,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                     color: it.isCount
                         ? AppColors.textHi
                         : (it.isDebit ? AppColors.error : AppColors.success),
-                    fontSize: 12.5,
+                    fontSize: 12.5, height: 1.4,
                     fontWeight: FontWeight.w700,
                     letterSpacing: -0.3,
                   ),

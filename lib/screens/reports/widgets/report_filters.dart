@@ -244,7 +244,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                               Text('common.clear'.tr(),
                                   style: TextStyle(
                                       color: AppColors.error,
-                                      fontSize: 10.5,
+                                      fontSize: 10.5, height: 1.3,
                                       fontWeight: FontWeight.w700)),
                             ],
                           ),
@@ -348,7 +348,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                           child: Text('common.clear'.tr(),
                               style: TextStyle(
                                   color: AppColors.error,
-                                  fontSize: 11,
+                                  fontSize: 11, height: 1.25,
                                   fontWeight: FontWeight.w700)),
                         ),
                     ],
@@ -401,7 +401,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                               Expanded(
                                 child: Text(o.displayLabel,
                                     style: TextStyle(
-                                        fontSize: 13,
+                                        fontSize: 13, height: 1.45,
                                         color: AppColors.textHi,
                                         fontWeight: checked
                                             ? FontWeight.w700
@@ -446,7 +446,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                                   ? 'common.apply'.tr()
                                   : '${'common.apply'.tr()} (${set.length})',
                               style: const TextStyle(
-                                  fontWeight: FontWeight.w700, fontSize: 13)),
+                                  fontWeight: FontWeight.w700, fontSize: 13, height: 1.35)),
                         ),
                       ),
                     ],
@@ -564,7 +564,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
               color: selected ? AppColors.brand : AppColors.textLow,
             ),
             const SizedBox(width: 10),
-            Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
+            Expanded(child: Text(text, style: const TextStyle(fontSize: 13, height: 1.45))),
           ],
         ),
       ),
@@ -646,7 +646,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: active ? AppColors.brand : AppColors.textMid,
-                  fontSize: 11.5,
+                  fontSize: 11.5, height: 1.35,
                   fontWeight: FontWeight.w700,
                 ),
               ),

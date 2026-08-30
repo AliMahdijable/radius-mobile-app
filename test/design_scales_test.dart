@@ -128,4 +128,50 @@ void main() {
         reason: 'أضِف `barrierColor: AppColors.scrim` إلى:\n'
             '${offenders.join('\n')}');
   });
+
+  test('كل نمط خطّ بمقاس يصرّح بارتفاع سطره', () {
+    // Cairo صندوقه أطول من افتراضي Flutter، فـ`TextStyle(fontSize: …)`
+    // بلا `height` يترك التباعد لمقاييس الخطّ لا للتصميم. هكذا بدت
+    // شاشات الأجهزة وتلغرام فضفاضة رغم أنّ مقاساتها مطابقة للسلّم —
+    // الفرق كان في السطر لا في الحرف.
+    //
+    // `AppType` يصرّح دائماً، فالاستدعاء عبره يمرّ تلقائيّاً. هذا
+    // الاختبار يحرس الأنماط الخام التي تُكتب مباشرةً.
+    //
+    // الاستثناء الوحيد: مولّدات PDF — `pw.TextStyle` من حزمة `pdf`
+    // لها مقاييسها الخاصّة ولا تفهم `height` بمعنى Flutter.
+    const pdfGenerators = {
+      'lib/services/print_service.dart',
+      'lib/screens/reports/widgets/report_export.dart',
+    };
+
+    final offenders = <String>[];
+    for (final f in dartFiles()) {
+      final path = f.path.replaceAll(r'\', '/');
+      if (path.startsWith('lib/theme/') || pdfGenerators.contains(path)) {
+        continue;
+      }
+      final src = f.readAsStringSync();
+      for (final m in RegExp(r'TextStyle\(').allMatches(src)) {
+        // تخطَّ `pw.TextStyle`
+        if (m.start >= 3 && src.substring(m.start - 3, m.start) == 'pw.') {
+          continue;
+        }
+        var depth = 1, i = m.end;
+        while (depth > 0 && i < src.length) {
+          if (src[i] == '(') depth++;
+          if (src[i] == ')') depth--;
+          i++;
+        }
+        final body = src.substring(m.end, i - 1);
+        if (!body.contains('fontSize') || body.contains('height:')) continue;
+        final line = '\n'.allMatches(src.substring(0, m.start)).length + 1;
+        offenders.add('$path:$line');
+      }
+    }
+    expect(offenders, isEmpty,
+        reason: 'أنماط بمقاس بلا ارتفاع سطر — استعمل AppType أو صرّح '
+            'بـheight من سلّمه:\n${offenders.join('\n')}');
+  });
+
 }

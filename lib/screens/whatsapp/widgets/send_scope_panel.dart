@@ -226,14 +226,14 @@ class _SendScopePanelState extends State<SendScopePanel> {
                 onChanged: (v) => setState(() => _searchQuery = v.trim()),
                 style: TextStyle(
                   fontFamily: 'Cairo',
-                  fontSize: 12.5,
+                  fontSize: 12.5, height: 1.4,
                   color: AppColors.textHi,
                 ),
                 decoration: InputDecoration(
                   hintText: 'بحث في المدراء…',
                   hintStyle: TextStyle(
                     fontFamily: 'Cairo',
-                    fontSize: 11.5,
+                    fontSize: 11.5, height: 1.35,
                     color: AppColors.textLow,
                   ),
                   isDense: true,
@@ -310,7 +310,7 @@ class _SendScopePanelState extends State<SendScopePanel> {
                 label,
                 style: TextStyle(
                   fontFamily: 'Cairo',
-                  fontSize: 10.5,
+                  fontSize: 10.5, height: 1.3,
                   fontWeight: FontWeight.w700,
                   color: disabled ? AppColors.textLow : AppColors.textMid,
                 ),

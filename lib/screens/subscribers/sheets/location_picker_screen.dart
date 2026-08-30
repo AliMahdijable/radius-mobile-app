@@ -120,7 +120,7 @@ class _MapPickerScreenState extends State<_MapPickerScreen> {
             style: TextStyle(
               fontFamily: 'Cairo',
               fontWeight: FontWeight.w700,
-              fontSize: 15,
+              fontSize: 15, height: 1.2,
               color: AppColors.textHi,
             )),
         iconTheme: IconThemeData(color: AppColors.textHi),
@@ -261,7 +261,7 @@ class _MapPickerScreenState extends State<_MapPickerScreen> {
                       'تأكيد الموقع',
                       style: TextStyle(
                         fontFamily: 'Cairo',
-                        fontSize: 13.5,
+                        fontSize: 13.5, height: 1.35,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -320,7 +320,7 @@ class _Attribution extends StatelessWidget {
             child: Text(
               '© OpenStreetMap',
               textDirection: TextDirection.ltr,
-              style: TextStyle(fontSize: 9.5, color: Color(0xFF444444)),
+              style: TextStyle(fontSize: 9.5, height: 1.2, color: Color(0xFF444444)),
             ),
           ),
         ),

@@ -169,7 +169,7 @@ class _RevealSheetState extends State<_RevealSheet>
                     child: Text(
                       firstChar,
                       style: const TextStyle(
-                        fontSize: 20,
+                        fontSize: 20, height: 1.25,
                         fontWeight: FontWeight.w700,
                         color: AppColors.onBrand,
                       ),
@@ -195,7 +195,7 @@ class _RevealSheetState extends State<_RevealSheet>
                         Text(
                           widget.subtitle,
                           style: TextStyle(
-                            fontSize: 11.5,
+                            fontSize: 11.5, height: 1.35,
                             fontWeight: FontWeight.w600,
                             color: AppColors.textMid,
                           ),
@@ -237,7 +237,7 @@ class _RevealSheetState extends State<_RevealSheet>
                           'نسخ',
                           style: TextStyle(
                             fontFamily: 'Cairo',
-                            fontSize: 13,
+                            fontSize: 13, height: 1.35,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -265,7 +265,7 @@ class _RevealSheetState extends State<_RevealSheet>
                           'تم',
                           style: TextStyle(
                             fontFamily: 'Cairo',
-                            fontSize: 13,
+                            fontSize: 13, height: 1.35,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -290,7 +290,7 @@ class _RevealSheetState extends State<_RevealSheet>
                   Text(
                     'كلمة السرّ مخزَّنة بتشفير AES.',
                     style: TextStyle(
-                      fontSize: 10.5,
+                      fontSize: 10.5, height: 1.3,
                       color: AppColors.textLow,
                       fontWeight: FontWeight.w600,
                     ),
@@ -339,7 +339,7 @@ class _PasswordDisplay extends StatelessWidget {
               Text(
                 'كلمة السرّ',
                 style: TextStyle(
-                  fontSize: 10.5,
+                  fontSize: 10.5, height: 1.3,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textLow,
                   letterSpacing: 0.5,
@@ -357,7 +357,7 @@ class _PasswordDisplay extends StatelessWidget {
                   child: Text(
                     'يُخفى بعد ${remaining}s',
                     style: TextStyle(
-                      fontSize: 10.5,
+                      fontSize: 10.5, height: 1.3,
                       fontWeight: FontWeight.w700,
                       color: accent,
                       fontFeatures: const [FontFeature.tabularFigures()],

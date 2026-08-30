@@ -155,7 +155,7 @@ class DateRangeChipBar extends StatelessWidget {
                 label,
                 style: TextStyle(
                   color: c,
-                  fontSize: 11.5,
+                  fontSize: 11.5, height: 1.35,
                   fontWeight: FontWeight.w700,
                 ),
               ),

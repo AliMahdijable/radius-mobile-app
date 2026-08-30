@@ -220,7 +220,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                         Text(s.fullName,
                             style: TextStyle(
                               fontFamily: 'Cairo',
-                              fontSize: 13.5,
+                              fontSize: 13.5, height: 1.35,
                               fontWeight: FontWeight.w700,
                               color: AppColors.textHi,
                             ),

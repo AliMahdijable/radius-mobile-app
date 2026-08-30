@@ -200,6 +200,7 @@ class _BulkSheetState extends State<_BulkSheet> {
               style: TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: bold ? 13 : 12,
+                height: bold ? 1.35 : 1.4,
                 fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
                 color: AppColors.textMid,
               )),
@@ -208,6 +209,7 @@ class _BulkSheetState extends State<_BulkSheet> {
             style: TextStyle(
               fontFamily: 'Cairo',
               fontSize: bold ? 15 : 13,
+              height: bold ? 1.2 : 1.35,
               fontWeight: FontWeight.w700,
               color: color,
             )),

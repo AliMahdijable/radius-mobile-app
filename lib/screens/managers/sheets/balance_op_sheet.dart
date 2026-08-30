@@ -465,7 +465,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                         ? 'إرسال رسالة واتساب للمدير'
                         : 'إرسال واتساب — لا يوجد رقم',
                     style: const TextStyle(
-                        fontSize: 12.5, fontWeight: FontWeight.w600),
+                        fontSize: 12.5, height: 1.4, fontWeight: FontWeight.w600),
                   ),
                 ),
               ],
@@ -485,7 +485,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                   child: Text(
                     'إشعار داخل تطبيق المدير',
                     style:
-                        TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                        TextStyle(fontSize: 12.5, height: 1.4, fontWeight: FontWeight.w600),
                   ),
                 ),
               ],
@@ -531,7 +531,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                 op.label,
                 style: TextStyle(
                   color: selected ? op.color : AppColors.textMid,
-                  fontSize: 12.5,
+                  fontSize: 12.5, height: 1.4,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -567,7 +567,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
             '+${_fmt(v)}',
             style: TextStyle(
               color: _op.color,
-              fontSize: 11,
+              fontSize: 11, height: 1.25,
               fontWeight: FontWeight.w700,
             ),
           ),

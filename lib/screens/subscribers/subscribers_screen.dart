@@ -1863,7 +1863,7 @@ class _PrimaryPill extends StatelessWidget {
           label,
           overflow: TextOverflow.ellipsis,
           maxLines: 1,
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5, height: 1.4),
         ),
       ),
     );
@@ -1906,7 +1906,7 @@ class _SecondaryBtn extends StatelessWidget {
       icon: Icon(icon, size: 13),
       label: Text(label,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5)),
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5, height: 1.35)),
     );
   }
 }
@@ -1994,7 +1994,7 @@ class _DebtSummaryCard extends StatelessWidget {
                 child: Text(
                   '${formatIQD(total)} د.ع  •  $count مشترك',
                   style: TextStyle(
-                    fontSize: 12.5,
+                    fontSize: 12.5, height: 1.4,
                     fontWeight: FontWeight.w700,
                     color: AppColors.warning,
                   ),

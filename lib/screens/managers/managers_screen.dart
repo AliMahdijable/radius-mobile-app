@@ -391,7 +391,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
             child: Text(
               '$_total مدير',
               style: TextStyle(
-                fontSize: 12.5,
+                fontSize: 12.5, height: 1.4,
                 fontWeight: FontWeight.w700,
                 color: accent,
               ),
@@ -492,7 +492,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
                 s.label,
                 style: TextStyle(
                   color: active ? accent : AppColors.textMid,
-                  fontSize: 11,
+                  fontSize: 11, height: 1.25,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -637,7 +637,7 @@ class _ManagerTile extends StatelessWidget {
                                 child: Text(
                                   'معطّل',
                                   style: TextStyle(
-                                    fontSize: 9.5,
+                                    fontSize: 9.5, height: 1.2,
                                     fontWeight: FontWeight.w700,
                                     color: AppColors.error,
                                   ),
@@ -651,7 +651,7 @@ class _ManagerTile extends StatelessWidget {
                           Text(
                             manager.fullName,
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: 11, height: 1.25,
                               fontWeight: FontWeight.w600,
                               color: AppColors.textMid,
                             ),
@@ -776,7 +776,7 @@ class _ManagerTile extends StatelessWidget {
             label,
             style: TextStyle(
               color: color,
-              fontSize: 10.5,
+              fontSize: 10.5, height: 1.3,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -806,7 +806,7 @@ class _ManagerTile extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              fontSize: 10.5,
+              fontSize: 10.5, height: 1.3,
               fontWeight: FontWeight.w600,
               color: color.withValues(alpha: 0.85),
             ),
@@ -815,7 +815,7 @@ class _ManagerTile extends StatelessWidget {
           Text(
             value,
             style: TextStyle(
-              fontSize: 11.5,
+              fontSize: 11.5, height: 1.35,
               fontWeight: FontWeight.w700,
               color: color,
               fontFeatures: const [FontFeature.tabularFigures()],

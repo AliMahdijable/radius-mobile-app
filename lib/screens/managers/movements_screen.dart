@@ -311,7 +311,7 @@ class _MovementCard extends StatelessWidget {
                       '${movement.signLabel}${formatIQD(movement.amount)}',
                       style: TextStyle(
                         color: style.color,
-                        fontSize: 13,
+                        fontSize: 13, height: 1.35,
                         fontWeight: FontWeight.w700,
                       ),
                     ),

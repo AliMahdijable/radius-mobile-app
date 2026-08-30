@@ -261,7 +261,7 @@ class _DailyActivationsReportScreenState
         Text(value,
             style: TextStyle(
               color: AppColors.textHi,
-              fontSize: 14,
+              fontSize: 14, height: 1.3,
               fontWeight: FontWeight.w700,
             ),
             maxLines: 1,
@@ -292,7 +292,7 @@ class _DailyActivationsReportScreenState
               r.day,
               style: TextStyle(
                 color: AppColors.brand,
-                fontSize: 12.5,
+                fontSize: 12.5, height: 1.4,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -409,7 +409,7 @@ class _DailyActivationsReportScreenState
                   Text(
                     c.$2,
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 11, height: 1.25,
                       fontWeight: FontWeight.w700,
                       color: selected ? c.$4 : AppColors.textMid,
                     ),
@@ -426,7 +426,7 @@ class _DailyActivationsReportScreenState
                     child: Text(
                       '${c.$3}',
                       style: TextStyle(
-                        fontSize: 10.5,
+                        fontSize: 10.5, height: 1.3,
                         fontWeight: FontWeight.w700,
                         color: selected ? c.$4 : AppColors.textMid,
                       ),

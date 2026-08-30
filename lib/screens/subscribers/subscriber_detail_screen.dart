@@ -1720,7 +1720,7 @@ class _PasswordRowState extends State<_PasswordRow> {
             display,
             style: TextStyle(
               color: AppColors.onBrand.withValues(alpha: 0.85),
-              fontSize: 13,
+              fontSize: 13, height: 1.35,
               fontWeight: FontWeight.w600,
               letterSpacing: _visible ? 0 : 2,
             ),

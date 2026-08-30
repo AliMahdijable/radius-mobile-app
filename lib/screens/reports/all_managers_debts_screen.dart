@@ -902,7 +902,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                           meta.label,
                           style: TextStyle(
                             color: meta.color,
-                            fontSize: 10.5,
+                            fontSize: 10.5, height: 1.3,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -915,7 +915,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                             color: meta.debit
                                 ? AppColors.error
                                 : AppColors.success,
-                            fontSize: 12.5,
+                            fontSize: 12.5, height: 1.4,
                             fontWeight: FontWeight.w700,
                           ),
                         ),

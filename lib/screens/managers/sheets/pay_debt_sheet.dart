@@ -550,7 +550,7 @@ class _SourceBadge extends StatelessWidget {
                 '${formatIQD(amount)} د.ع',
                 style: TextStyle(
                   color: color,
-                  fontSize: 14,
+                  fontSize: 14, height: 1.3,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -589,7 +589,7 @@ class _Chip extends StatelessWidget {
             label,
             style: TextStyle(
               color: emphasized ? accent : AppColors.textHi,
-              fontSize: 12.5,
+              fontSize: 12.5, height: 1.4,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -627,7 +627,7 @@ class _PayPreview extends StatelessWidget {
             '${formatIQD(after)} د.ع',
             style: TextStyle(
               color: after == 0 ? AppColors.success : AppColors.textHi,
-              fontSize: 14,
+              fontSize: 14, height: 1.3,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -747,7 +747,7 @@ class _SubmitBar extends StatelessWidget {
                 : Icon(icon, size: 16),
             label: Text(label,
                 style:
-                    const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                    const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, height: 1.3)),
           ),
         ),
       ),

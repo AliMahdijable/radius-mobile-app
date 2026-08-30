@@ -151,7 +151,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
                         foregroundColor: AppColors.onBrand,
                         textStyle: const TextStyle(
                           fontWeight: FontWeight.w700,
-                          fontSize: 14,
+                          fontSize: 14, height: 1.3,
                         ),
                       ),
                     ),
@@ -230,7 +230,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
             _labelText('login.username'.tr()),
             TextField(
               controller: userController,
-              style: const TextStyle(fontSize: 13),
+              style: const TextStyle(fontSize: 13, height: 1.45),
               decoration: _dec(),
             ),
             const SizedBox(height: 10),
@@ -238,7 +238,7 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
             TextField(
               controller: passController,
               obscureText: obscure,
-              style: const TextStyle(fontSize: 13),
+              style: const TextStyle(fontSize: 13, height: 1.45),
               decoration: _dec(
                 suffix: IconButton(
                   icon: Icon(

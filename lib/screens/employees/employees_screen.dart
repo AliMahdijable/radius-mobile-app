@@ -264,7 +264,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
           Text(
             '$count',
             style: TextStyle(
-              fontSize: 12.5,
+              fontSize: 12.5, height: 1.4,
               fontWeight: FontWeight.w700,
               color: color,
               fontFeatures: const [FontFeature.tabularFigures()],
@@ -274,7 +274,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
           Text(
             label,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 11, height: 1.25,
               fontWeight: FontWeight.w700,
               color: color,
             ),
@@ -401,7 +401,7 @@ class _EmployeeTile extends StatelessWidget {
                 child: Text(
                   display.characters.isEmpty ? '?' : display.characters.first,
                   style: TextStyle(
-                    fontSize: 15,
+                    fontSize: 15, height: 1.2,
                     fontWeight: FontWeight.w700,
                     color: accentColor,
                   ),
@@ -440,7 +440,7 @@ class _EmployeeTile extends StatelessWidget {
                             child: Text(
                               'معطّل',
                               style: TextStyle(
-                                fontSize: 9.5,
+                                fontSize: 9.5, height: 1.2,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.textLow,
                               ),
@@ -455,7 +455,7 @@ class _EmployeeTile extends StatelessWidget {
                         Text(
                           emp.username,
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: 11, height: 1.25,
                             fontWeight: FontWeight.w600,
                             color: AppColors.textMid,
                           ),
@@ -464,7 +464,7 @@ class _EmployeeTile extends StatelessWidget {
                         ),
                         Text('  ·  ',
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: 11, height: 1.35,
                               color: AppColors.textLow,
                             )),
                         Icon(LucideIcons.shield,
@@ -473,7 +473,7 @@ class _EmployeeTile extends StatelessWidget {
                         Text(
                           '${emp.activePermsCount} صلاحية',
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: 11, height: 1.25,
                             fontWeight: FontWeight.w700,
                             color: AppColors.brand,
                           ),
@@ -493,7 +493,7 @@ class _EmployeeTile extends StatelessWidget {
                               'مقيَّد بـ@${emp.scopeAdminUsername ?? emp.scopeAdminId}',
                               style: TextStyle(
                                 fontFamily: 'Cairo',
-                                fontSize: 10.5,
+                                fontSize: 10.5, height: 1.3,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.brandAccent,
                               ),

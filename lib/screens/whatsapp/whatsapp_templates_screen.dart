@@ -368,7 +368,7 @@ class _TemplateTile extends StatelessWidget {
         label,
         style: TextStyle(
           color: color,
-          fontSize: 9.5,
+          fontSize: 9.5, height: 1.2,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -449,7 +449,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
           Text('قناة الإرسال',
               style: TextStyle(
                 fontFamily: 'Cairo',
-                fontSize: 12.5,
+                fontSize: 12.5, height: 1.4,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textHi,
               )),
@@ -518,7 +518,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
               child: Text(label,
                   style: TextStyle(
                     fontFamily: 'Cairo',
-                    fontSize: 11,
+                    fontSize: 11, height: 1.25,
                     fontWeight: FontWeight.w700,
                     color: selected ? color : AppColors.textMid,
                   ),
@@ -633,7 +633,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
             activeColor: accent,
             title: const Text(
               'القالب مفعّل',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+              style: TextStyle(fontSize: 13, height: 1.35, fontWeight: FontWeight.w700),
             ),
             subtitle: Text(
               _isActive
@@ -740,7 +740,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
                   arabicLabel,
                   style: TextStyle(
                     color: AppColors.successFill,
-                    fontSize: 10.5,
+                    fontSize: 10.5, height: 1.3,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -750,7 +750,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
                 ph,
                 style: const TextStyle(
                   color: Color(0xFF25D366),
-                  fontSize: 10.5,
+                  fontSize: 10.5, height: 1.3,
                   fontWeight: FontWeight.w700,
                   fontFamily: 'Cairo',
                 ),

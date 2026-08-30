@@ -351,7 +351,7 @@ class _Tile extends StatelessWidget {
                 '-${formatIQD(discount.discountAmount)}',
                 style: TextStyle(
                   color: AppColors.warning,
-                  fontSize: 14,
+                  fontSize: 14, height: 1.3,
                   fontWeight: FontWeight.w700,
                 ),
               ),

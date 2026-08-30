@@ -352,7 +352,7 @@ class _DebtTile extends StatelessWidget {
                       child: Text(
                         'مسدَّد',
                         style: TextStyle(
-                          fontSize: 10.5,
+                          fontSize: 10.5, height: 1.3,
                           fontWeight: FontWeight.w700,
                           color: AppColors.brand,
                         ),

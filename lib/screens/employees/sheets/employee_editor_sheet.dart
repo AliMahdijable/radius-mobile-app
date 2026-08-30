@@ -440,7 +440,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
                   p.key,
                   style: TextStyle(
                     color: AppColors.textLow,
-                    fontSize: 10.5,
+                    fontSize: 10.5, height: 1.3,
                   ),
                 ),
               ],
@@ -476,7 +476,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
             Text('جارٍ تحميل المدراء...',
                 style: TextStyle(
                   fontFamily: 'Cairo',
-                  fontSize: 12.5,
+                  fontSize: 12.5, height: 1.4,
                   color: AppColors.textLow,
                 )),
           ],
@@ -504,7 +504,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
                       'مقيَّد بمدير فرعي (بلا قيد)',
                       style: TextStyle(
                         fontFamily: 'Cairo',
-                        fontSize: 13,
+                        fontSize: 13, height: 1.45,
                         color: AppColors.textLow,
                         fontWeight: FontWeight.w500,
                       ),
@@ -516,7 +516,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
                           'بلا قيد — يشاهد كل بياناتك',
                           style: TextStyle(
                             fontFamily: 'Cairo',
-                            fontSize: 13,
+                            fontSize: 13, height: 1.35,
                             fontWeight: FontWeight.w600,
                             color: AppColors.textHi,
                           ),
@@ -530,7 +530,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
                             _managerLabel(m),
                             style: TextStyle(
                               fontFamily: 'Cairo',
-                              fontSize: 13,
+                              fontSize: 13, height: 1.35,
                               fontWeight: FontWeight.w600,
                               color: AppColors.textHi,
                             ),
@@ -556,7 +556,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
                 : 'الموظّف مقيَّد — يرى بيانات المدير الفرعي المختار فقط.',
             style: TextStyle(
               fontFamily: 'Cairo',
-              fontSize: 10.5,
+              fontSize: 10.5, height: 1.3,
               fontWeight: FontWeight.w500,
               color:
                   selected == null ? AppColors.textLow : AppColors.brandAccent,
@@ -661,7 +661,7 @@ class _PresetChip extends StatelessWidget {
                 preset.label,
                 style: TextStyle(
                   color: AppColors.brandAccent,
-                  fontSize: 11,
+                  fontSize: 11, height: 1.25,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -709,7 +709,7 @@ class _ActionChip extends StatelessWidget {
                 label,
                 style: TextStyle(
                   color: color,
-                  fontSize: 11,
+                  fontSize: 11, height: 1.25,
                   fontWeight: FontWeight.w700,
                 ),
               ),

@@ -174,7 +174,7 @@ class _ChooserSheet extends StatelessWidget {
                 child: Text(label,
                     style: TextStyle(
                       fontFamily: 'Cairo',
-                      fontSize: 13.5,
+                      fontSize: 13.5, height: 1.35,
                       fontWeight: FontWeight.w700,
                       color: AppColors.textHi,
                     )),
@@ -380,7 +380,7 @@ class _EditSheetState extends State<_EditSheet> {
                 existing,
                 style: TextStyle(
                   fontFamily: 'Cairo',
-                  fontSize: 12.5,
+                  fontSize: 12.5, height: 1.4,
                   color: AppColors.textHi,
                 ),
               ),
@@ -481,7 +481,7 @@ class _EditSheetState extends State<_EditSheet> {
                   'اختر من الخريطة (موقعك الحالي)',
                   style: TextStyle(
                     fontFamily: 'Cairo',
-                    fontSize: 13,
+                    fontSize: 13, height: 1.35,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -501,7 +501,7 @@ class _EditSheetState extends State<_EditSheet> {
                   child: Text('أو',
                       style: TextStyle(
                         fontFamily: 'Cairo',
-                        fontSize: 11,
+                        fontSize: 11, height: 1.35,
                         color: AppColors.textMid,
                       )),
                 ),
@@ -513,7 +513,7 @@ class _EditSheetState extends State<_EditSheet> {
           Text('الصق رابط Google Maps أو "lat,lng"',
               style: TextStyle(
                 fontFamily: 'Cairo',
-                fontSize: 12.5,
+                fontSize: 12.5, height: 1.4,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textMid,
               )),
@@ -527,14 +527,14 @@ class _EditSheetState extends State<_EditSheet> {
                   textDirection: TextDirection.ltr,
                   style: TextStyle(
                     fontFamily: 'Cairo',
-                    fontSize: 12.5,
+                    fontSize: 12.5, height: 1.4,
                     color: AppColors.textHi,
                   ),
                   decoration: InputDecoration(
                     hintText: 'https://maps.google.com/… أو 33.315,44.366',
                     hintStyle: TextStyle(
                       fontFamily: 'Cairo',
-                      fontSize: 11.5,
+                      fontSize: 11.5, height: 1.35,
                       color: AppColors.textLow,
                     ),
                     filled: true,
@@ -603,7 +603,7 @@ class _EditSheetState extends State<_EditSheet> {
                       'تمّ استخراج: ${_lat!.toStringAsFixed(6)}, ${_lng!.toStringAsFixed(6)}',
                       style: TextStyle(
                         fontFamily: 'Cairo',
-                        fontSize: 12.5,
+                        fontSize: 12.5, height: 1.4,
                         fontWeight: FontWeight.w700,
                         color: AppColors.textHi,
                       ),

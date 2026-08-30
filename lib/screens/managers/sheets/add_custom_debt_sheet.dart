@@ -272,7 +272,7 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
             '+${_fmt(v)}',
             style: TextStyle(
               color: accent,
-              fontSize: 11,
+              fontSize: 11, height: 1.25,
               fontWeight: FontWeight.w700,
             ),
           ),

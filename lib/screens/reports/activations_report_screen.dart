@@ -322,7 +322,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
         Text(value,
             style: TextStyle(
               color: AppColors.textHi,
-              fontSize: 13,
+              fontSize: 13, height: 1.35,
               fontWeight: FontWeight.w700,
             ),
             maxLines: 1,
