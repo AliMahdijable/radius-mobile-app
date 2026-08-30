@@ -118,62 +118,61 @@ class SubscribersCard extends StatelessWidget {
           // (active/expired) عمداً: النسبة نفسها تقرأها الحلقة أعلاه،
           // فالشريط كان يكرّرها بلغة ثانية ويأكل الموضع الذي تحتاجه
           // هذه الثلاثة.
-          // ⚠️ `IntrinsicHeight` لأنّ التسميات تختلف في عدد الأسطر
-          // («قربوا الانتهاء» سطران في عرض الرُبع، و«بدون نت» سطر) —
-          // وبدونه تختلف ارتفاعات الحبّات فيبدو الصفّ مكسوراً.
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+          // شريط أفقي مضغوط بدل أربع بلاطات عموديّة.
+          //
+          // البلاطات كانت 53px بعمودَين (رقم فوق تسمية) وربعِ العرض
+          // لكلٍّ، فتُجبر «قربوا الانتهاء» على سطرين. الحبّة هنا سطر
+          // واحد بعرض محتواها — 30px بدل 53، وبلا قصّ ولا التفاف.
+          //
+          // والتمرير الأفقي لأنّ مجموع العروض قد يتجاوز الشاشة الضيّقة:
+          // إخفاء طرفٍ خلف تمريرة أهون من قصّ كلّ تسمية.
+          SizedBox(
+            height: 30,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.zero,
               children: [
-                Expanded(
-                  child: _StatPill(
-                    tone: AppTone.warning,
-                    icon: LucideIcons.triangleAlert,
-                    label: 'dashboard.near_expiry'.tr(),
-                    value: s.nearExpiry,
-                    onTap: onOpen == null
-                        ? null
-                        : () => onOpen!(SubscriberFilter.nearExpiry),
-                  ),
+                _StatPill(
+                  tone: AppTone.warning,
+                  icon: LucideIcons.triangleAlert,
+                  label: 'dashboard.near_expiry'.tr(),
+                  value: s.nearExpiry,
+                  onTap: onOpen == null
+                      ? null
+                      : () => onOpen!(SubscriberFilter.nearExpiry),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _StatPill(
-                    tone: AppTone.neutral,
-                    icon: LucideIcons.userX,
-                    label: 'dashboard.disabled'.tr(),
-                    value: s.disabled,
-                    onTap: onOpen == null
-                        ? null
-                        : () => onOpen!(SubscriberFilter.disabled),
-                  ),
+                const SizedBox(width: 6),
+                _StatPill(
+                  tone: AppTone.neutral,
+                  icon: LucideIcons.userX,
+                  label: 'dashboard.disabled'.tr(),
+                  value: s.disabled,
+                  onTap: onOpen == null
+                      ? null
+                      : () => onOpen!(SubscriberFilter.disabled),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _StatPill(
-                    // «متصل بلا باقة» شذوذ لا حالة عاديّة — لونه البنفسجي
-                    // نفسه في القائمة والويب، وأيقونته `wifi` لا `wifiOff`
-                    // لأنّ اتّصالهم **هو** موضع الشذوذ.
-                    tone: AppTone.anomaly,
-                    icon: LucideIcons.wifi,
-                    label: 'dashboard.online_no_plan'.tr(),
-                    value: s.onlineNoPlan,
-                    onTap: onOpen == null
-                        ? null
-                        : () => onOpen!(SubscriberFilter.onlineNoPlan),
-                  ),
+                const SizedBox(width: 6),
+                _StatPill(
+                  // «متصل بلا باقة» شذوذ لا حالة عاديّة — لونه البنفسجي
+                  // نفسه في القائمة والويب، وأيقونته `wifi` لا `wifiOff`
+                  // لأنّ اتّصالهم **هو** موضع الشذوذ.
+                  tone: AppTone.anomaly,
+                  icon: LucideIcons.wifi,
+                  label: 'dashboard.online_no_plan'.tr(),
+                  value: s.onlineNoPlan,
+                  onTap: onOpen == null
+                      ? null
+                      : () => onOpen!(SubscriberFilter.onlineNoPlan),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _StatPill(
-                    tone: AppTone.info,
-                    icon: LucideIcons.wifiOff,
-                    label: 'dashboard.offline'.tr(),
-                    value: s.offline,
-                    onTap: onOpen == null
-                        ? null
-                        : () => onOpen!(SubscriberFilter.offline),
-                  ),
+                const SizedBox(width: 6),
+                _StatPill(
+                  tone: AppTone.info,
+                  icon: LucideIcons.wifiOff,
+                  label: 'dashboard.offline'.tr(),
+                  value: s.offline,
+                  onTap: onOpen == null
+                      ? null
+                      : () => onOpen!(SubscriberFilter.offline),
                 ),
               ],
             ),
@@ -192,7 +191,7 @@ class _Skeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return Container(
-      height: 255, // مقيس لا مُقدَّر — يحرسه dashboard_card_height_test
+      height: 216, // مقيس لا مُقدَّر — يحرسه dashboard_card_height_test
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(R.card),
@@ -442,50 +441,29 @@ class _StatPill extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return Material(
-      // ⚠️ بلا خلفيّة ملوّنة (طلب المستخدم 2026-08-30): الحبّات الثلاث
-      // متجاورة، وثلاث خلفيّات مصمتة تجعل الصفّ كتلاً متنافسة على
-      // الانتباه بدل أن يقرأها بلمحة. اللون في الأيقونة والإطار والرقم
-      // يكفي للتمييز، والسطح المحايد يُبقي الصفّ هادئاً.
+      // ⚠️ بلا خلفيّة ملوّنة (طلب المستخدم): أربع خلفيّات مصمتة متجاورة
+      // تجعل الصفّ كتلاً متنافسة على الانتباه بدل أن يُقرأ بلمحة.
       color: AppColors.surface,
-      borderRadius: BorderRadius.circular(R.md),
+      borderRadius: BorderRadius.circular(R.pill),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(R.md),
+        borderRadius: BorderRadius.circular(R.pill),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+          padding: const EdgeInsets.symmetric(horizontal: 11),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(R.md),
+            borderRadius: BorderRadius.circular(R.pill),
             // `fill` لا `softBorder`: الأخير مُعايَر ليقع على خلفيّته
-            // الناعمة، وعلى سطح محايد يُقرأ رماديّاً (1.26-1.49) فيضيع
-            // التمييز الذي هو غرضه.
+            // الناعمة، وعلى سطح محايد يُقرأ رماديّاً فيضيع التمييز.
             border: Border.all(color: tone.fill),
           ),
-          child: Column(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon, size: 13, color: tone.fill),
-                  const SizedBox(width: 5),
-                  Text('$value',
-                      style: AppType.cardTitleBold(color: tone.fill)),
-                ],
-              ),
-              const SizedBox(height: 3),
-              // التسمية قد تطول بالإنجليزيّة — سطر واحد بقصّ، فالحبّات
-              // الثلاث متساوية العرض ولا تُزيح إحداها الأخريين.
-              Text(
-                label,
-                // التسمية محايدة: `onSoft` مُعايَر للخلفيّة الناعمة،
-                // وعلى السطح المحايد يقلّ تباينه.
-                style: AppType.micro(color: AppColors.textMid),
-                // سطران: أربع حبّات في صفّ تعني رُبع العرض لكلٍّ،
-                // و«قربوا الانتهاء» لا تسع سطراً واحداً هناك.
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-              ),
+              Icon(icon, size: 13, color: tone.fill),
+              const SizedBox(width: 6),
+              Text('$value', style: AppType.pillBold(color: tone.fill)),
+              const SizedBox(width: 5),
+              Text(label, style: AppType.micro(color: AppColors.textMid)),
             ],
           ),
         ),
