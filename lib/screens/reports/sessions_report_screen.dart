@@ -26,8 +26,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
   List<SessionRow> _rows = const [];
   bool _loading = true;
   String? _error;
-  int _page = 0;
-  int _pageSize = 25;
+  int _visibleCount = kReportPageStep;
   final _searchCtrl = TextEditingController();
   String _searchField = 'username'; // username / ip / mac
   String _searchValue = '';
@@ -70,7 +69,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
       _loading = false;
       _rows = r.rows;
       _error = r.ok ? null : (r.error ?? 'common.load_failed'.tr());
-      _page = 0;
+      _visibleCount = kReportPageStep;
     });
   }
 
@@ -95,12 +94,11 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep
     final visible = _visibleRows;
-    final totalPages = (visible.length / _pageSize).ceil().clamp(1, 99999);
-    final pageStart = _page * _pageSize;
-    final pageEnd = (pageStart + _pageSize).clamp(0, visible.length);
+    final shown = _visibleCount.clamp(0, visible.length);
+    final remaining = visible.length - shown;
     final pageRows = visible.isEmpty
         ? const <SessionRow>[]
-        : visible.sublist(pageStart, pageEnd);
+        : visible.take(_visibleCount).toList();
 
     return ReportPermissionGate(
       permission: 'reports.sessions',
@@ -225,7 +223,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                       onChanged: (v) {
                         setState(() {
                           _filters = v;
-                          _page = 0;
+                          _visibleCount = kReportPageStep;
                         });
                       },
                     ),
@@ -265,14 +263,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                                         Expanded(
                                           child: ReportStatsBar(
                                             totalItems: visible.length,
-                                            pageStart: pageStart,
-                                            pageEnd: pageEnd,
-                                            pageSize: _pageSize,
-                                            onPageSizeChange: (s) =>
-                                                setState(() {
-                                              _pageSize = s;
-                                              _page = 0;
-                                            }),
+                                            shown: shown,
                                           ),
                                         ),
                                         ReportExportBar(
@@ -304,12 +295,11 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                                       _sessionTile(s),
                                       const SizedBox(height: 6),
                                     ],
-                                    if (totalPages > 1)
-                                      ReportPager(
-                                        page: _page,
-                                        totalPages: totalPages,
-                                        onPrev: () => setState(() => _page--),
-                                        onNext: () => setState(() => _page++),
+                                    if (remaining > 0)
+                                      ReportLoadMore(
+                                        remaining: remaining,
+                                        onTap: () => setState(() =>
+                                            _visibleCount += kReportPageStep),
                                       ),
                                   ],
                                 ),

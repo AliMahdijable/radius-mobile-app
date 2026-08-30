@@ -32,8 +32,7 @@ class _DailyActivationsReportScreenState
   bool _loading = true;
   String? _error;
   List<String>? _scopeIds;
-  int _page = 0;
-  int _pageSize = 25;
+  int _visibleCount = kReportPageStep;
 
   /// فلاتر متقدّمة (مدير الحركة/المستخدم/الموظف) — بلا actionTypes لأن
   /// الشاشة scope=تفعيلات-اليوم أصلاً.
@@ -83,7 +82,7 @@ class _DailyActivationsReportScreenState
       _loading = false;
       _rows = r.rows;
       _error = r.ok ? null : (r.error ?? 'common.load_failed'.tr());
-      _page = 0;
+      _visibleCount = kReportPageStep;
     });
   }
 
@@ -107,12 +106,11 @@ class _DailyActivationsReportScreenState
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep
     final visible = _visibleRows;
-    final totalPages = (visible.length / _pageSize).ceil().clamp(1, 99999);
-    final pageStart = _page * _pageSize;
-    final pageEnd = (pageStart + _pageSize).clamp(0, visible.length);
+    final shown = _visibleCount.clamp(0, visible.length);
+    final remaining = visible.length - shown;
     final pageRows = visible.isEmpty
         ? const <DailyActivationRow>[]
-        : visible.sublist(pageStart, pageEnd);
+        : visible.take(_visibleCount).toList();
     return ReportPermissionGate(
       permission: 'reports.daily_activations',
       title: 'reports.daily_activations'.tr(),
@@ -146,7 +144,7 @@ class _DailyActivationsReportScreenState
                   onChanged: (v) {
                     setState(() {
                       _filters = v;
-                      _page = 0;
+                      _visibleCount = kReportPageStep;
                     });
                     _load();
                   },
@@ -171,13 +169,7 @@ class _DailyActivationsReportScreenState
                       Expanded(
                         child: ReportStatsBar(
                           totalItems: visible.length,
-                          pageStart: pageStart,
-                          pageEnd: pageEnd,
-                          pageSize: _pageSize,
-                          onPageSizeChange: (s) => setState(() {
-                            _pageSize = s;
-                            _page = 0;
-                          }),
+                          shown: shown,
                         ),
                       ),
                       ReportExportBar(
@@ -200,12 +192,11 @@ class _DailyActivationsReportScreenState
                     _dayRow(r),
                     const SizedBox(height: 6),
                   ],
-                  if (totalPages > 1)
-                    ReportPager(
-                      page: _page,
-                      totalPages: totalPages,
-                      onPrev: () => setState(() => _page--),
-                      onNext: () => setState(() => _page++),
+                  if (remaining > 0)
+                    ReportLoadMore(
+                      remaining: remaining,
+                      onTap: () =>
+                          setState(() => _visibleCount += kReportPageStep),
                     ),
                 ],
               ],
@@ -380,7 +371,7 @@ class _DailyActivationsReportScreenState
             borderRadius: BorderRadius.circular(R.sm),
             onTap: () => setState(() {
               _typeFilter = c.$1;
-              _page = 0;
+              _visibleCount = kReportPageStep;
             }),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -400,7 +391,8 @@ class _DailyActivationsReportScreenState
                 children: [
                   Text(
                     c.$2,
-                    style: AppType.pillBold(color: selected ? c.$4 : AppColors.textMid),
+                    style: AppType.pillBold(
+                        color: selected ? c.$4 : AppColors.textMid),
                   ),
                   const SizedBox(width: 5),
                   Container(
@@ -413,7 +405,8 @@ class _DailyActivationsReportScreenState
                     ),
                     child: Text(
                       '${c.$3}',
-                      style: AppType.microBold(color: selected ? c.$4 : AppColors.textMid),
+                      style: AppType.microBold(
+                          color: selected ? c.$4 : AppColors.textMid),
                     ),
                   ),
                 ],

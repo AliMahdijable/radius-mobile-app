@@ -906,9 +906,10 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                       if (e.amount != 0)
                         Text(
                           '${meta.debit ? '-' : '+'}${formatIQD(e.amount.abs().round())} د.ع',
-                          style: AppType.bodyBold(color: meta.debit
-                                ? AppColors.error
-                                : AppColors.success),
+                          style: AppType.bodyBold(
+                              color: meta.debit
+                                  ? AppColors.error
+                                  : AppColors.success),
                         ),
                     ],
                   ),

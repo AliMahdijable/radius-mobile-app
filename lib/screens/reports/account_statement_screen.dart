@@ -39,8 +39,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
   StatementResponse? _data;
   bool _loading = true;
   String? _error;
-  int _page = 0;
-  int _pageSize = 25;
+  int _visibleCount = kReportPageStep;
 
   /// فلتر الأنواع فقط (المشترك محدّد سلفاً — لا حاجة لفلاتر مدير/موظف).
   ReportFilters _filters = const ReportFilters();
@@ -67,7 +66,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
       _loading = false;
       _data = r.data;
       _error = r.ok ? null : (r.error ?? 'common.load_failed'.tr());
-      _page = 0;
+      _visibleCount = kReportPageStep;
     });
   }
 
@@ -96,12 +95,11 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
     Theme.of(context);
     final rows = _data?.rows ?? const <StatementRow>[];
     final summary = _data?.summary ?? const StatementSummary();
-    final totalPages = (rows.length / _pageSize).ceil().clamp(1, 99999);
-    final pageStart = _page * _pageSize;
-    final pageEnd = (pageStart + _pageSize).clamp(0, rows.length);
+    final shown = _visibleCount.clamp(0, rows.length);
+    final remaining = rows.length - shown;
     final pageRows = rows.isEmpty
         ? const <StatementRow>[]
-        : rows.sublist(pageStart, pageEnd);
+        : rows.take(_visibleCount).toList();
 
     return ReportPermissionGate(
       permission: 'reports.account_statement',
@@ -155,7 +153,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
                   onChanged: (v) {
                     setState(() {
                       _filters = v;
-                      _page = 0;
+                      _visibleCount = kReportPageStep;
                     });
                     _load();
                   },
@@ -178,13 +176,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
                       Expanded(
                         child: ReportStatsBar(
                           totalItems: rows.length,
-                          pageStart: pageStart,
-                          pageEnd: pageEnd,
-                          pageSize: _pageSize,
-                          onPageSizeChange: (s) => setState(() {
-                            _pageSize = s;
-                            _page = 0;
-                          }),
+                          shown: shown,
                         ),
                       ),
                       ReportExportBar(
@@ -220,12 +212,11 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
                     ),
                     const SizedBox(height: 4),
                   ],
-                  if (totalPages > 1)
-                    ReportPager(
-                      page: _page,
-                      totalPages: totalPages,
-                      onPrev: () => setState(() => _page--),
-                      onNext: () => setState(() => _page++),
+                  if (remaining > 0)
+                    ReportLoadMore(
+                      remaining: remaining,
+                      onTap: () =>
+                          setState(() => _visibleCount += kReportPageStep),
                     ),
                 ],
               ],

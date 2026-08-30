@@ -508,8 +508,14 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
   // WhatsApp chip and the subscribers card below the header.
   static const double _contentHeight = 86;
 
+  /// 2026-08-30: الترويسة كانت مثبَّتة بلا انكماش (minExtent == maxExtent)
+  /// فتحجز 86px + الشقّ العلوي طوال التمرير. الآن تنكمش إلى الاسم
+  /// والأيقونات وحدها: التحيّة وشارة واتساب معلومتان تُقرآن مرّة عند
+  /// الفتح ولا حاجة لبقائهما معلّقتين فوق كلّ تمريرة.
+  static const double _collapsedHeight = 44;
+
   @override
-  double get minExtent => _contentHeight + topInset;
+  double get minExtent => _collapsedHeight + topInset;
   @override
   double get maxExtent => _contentHeight + topInset;
 
@@ -518,6 +524,8 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
       BuildContext context, double shrinkOffset, bool overlapsContent) {
     Theme.of(
         context); // theme-dep (dark-mode) — delegate.build skipped by injector
+    // نسبة الانكماش: 0 مفرودة · 1 مطويّة بالكامل.
+    final t = (shrinkOffset / (maxExtent - minExtent)).clamp(0.0, 1.0);
     return Container(
       color: AppColors.bg,
       padding: EdgeInsets.fromLTRB(Sp.lg, topInset + Sp.sm, Sp.lg, 2),
@@ -528,12 +536,25 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  greeting,
-                  style: AppType.subtitle(color: AppColors.textMid)
-                      .copyWith(fontSize: 12.5, fontWeight: FontWeight.w500),
+                // ⚠️ `ClipRect` حول `Align` ضروريّ: `heightFactor` يقصّ
+                // الارتفاع المحجوز لكنّه لا يمنع الرسم خارجه، فبدون
+                // القصّ يطفو النصّ على ما تحته أثناء الطيّ.
+                ClipRect(
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    heightFactor: 1 - t,
+                    child: Opacity(
+                      opacity: 1 - t,
+                      child: Text(
+                        greeting,
+                        style: AppType.subtitle(color: AppColors.textMid)
+                            .copyWith(
+                                fontSize: 12.5, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 2),
+                SizedBox(height: 2 * (1 - t)),
                 Text(
                   displayName.isEmpty ? 'dashboard.hello'.tr() : displayName,
                   style: AppType.title(color: AppColors.textHi).copyWith(
@@ -544,8 +565,18 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 6),
-                _WAStatusChip(status: whatsApp, loaded: waLoaded),
+                SizedBox(height: 6 * (1 - t)),
+                ClipRect(
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    heightFactor: 1 - t,
+                    child: Opacity(
+                      opacity: 1 - t,
+                      child:
+                          _WAStatusChip(status: whatsApp, loaded: waLoaded),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

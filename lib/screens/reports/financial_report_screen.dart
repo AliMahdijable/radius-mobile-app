@@ -34,8 +34,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   bool _loading = true;
   String? _error;
   List<String>? _scopeIds; // cache — لا يتغيّر خلال الجلسة عملياً
-  int _page = 0;
-  int _pageSize = 25;
+  int _visibleCount = kReportPageStep;
 
   /// فلاتر متقدّمة (مدير الحركة / مدير المستخدم / الموظف).
   ReportFilters _filters = const ReportFilters();
@@ -73,7 +72,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
       _loading = false;
       _data = r.data;
       _error = r.ok ? null : (r.error ?? 'common.load_failed'.tr());
-      _page = 0;
+      _visibleCount = kReportPageStep;
     });
   }
 
@@ -117,7 +116,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                   onChanged: (v) {
                     setState(() {
                       _filters = v;
-                      _page = 0;
+                      _visibleCount = kReportPageStep;
                     });
                     _load();
                   },
@@ -507,12 +506,11 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
       );
     }
     final filtered = _filterLogs(logs);
-    final totalPages = (filtered.length / _pageSize).ceil().clamp(1, 99999);
-    final pageStart = _page * _pageSize;
-    final pageEnd = (pageStart + _pageSize).clamp(0, filtered.length);
+    final shown = _visibleCount.clamp(0, filtered.length);
+    final remaining = filtered.length - shown;
     final pageRows = filtered.isEmpty
         ? const <FinanceLog>[]
-        : filtered.sublist(pageStart, pageEnd);
+        : filtered.take(_visibleCount).toList();
     // ترتيب أعمدة Excel/PDF المطلوب (2026-07-12): اسم المشترك (بارز
     // بالعربي) → المبلغ → التاريخ → الوصف → البقية. الاسم العربي أولاً
     // ويجمع firstname+lastname؛ نضيف عمود username منفصل لتسهيل الفرز
@@ -553,13 +551,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
             Expanded(
               child: ReportStatsBar(
                 totalItems: filtered.length,
-                pageStart: pageStart,
-                pageEnd: pageEnd,
-                pageSize: _pageSize,
-                onPageSizeChange: (s) => setState(() {
-                  _pageSize = s;
-                  _page = 0;
-                }),
+                shown: shown,
               ),
             ),
             ReportExportBar(
@@ -598,12 +590,10 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
           ),
           const SizedBox(height: 4),
         ],
-        if (totalPages > 1)
-          ReportPager(
-            page: _page,
-            totalPages: totalPages,
-            onPrev: () => setState(() => _page--),
-            onNext: () => setState(() => _page++),
+        if (remaining > 0)
+          ReportLoadMore(
+            remaining: remaining,
+            onTap: () => setState(() => _visibleCount += kReportPageStep),
           ),
       ],
     );

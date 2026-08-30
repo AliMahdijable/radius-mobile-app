@@ -242,7 +242,8 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                                   size: 12, color: AppColors.error),
                               const SizedBox(width: 3),
                               Text('common.clear'.tr(),
-                                  style: AppType.microBold(color: AppColors.error)),
+                                  style: AppType.microBold(
+                                      color: AppColors.error)),
                             ],
                           ),
                         ),
@@ -395,7 +396,8 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                               Expanded(
                                 child: Text(o.displayLabel,
                                     style: TextStyle(
-                                        fontSize: 13, height: 1.45,
+                                        fontSize: 13,
+                                        height: 1.45,
                                         color: AppColors.textHi,
                                         fontWeight: checked
                                             ? FontWeight.w700
@@ -440,7 +442,9 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                                   ? 'common.apply'.tr()
                                   : '${'common.apply'.tr()} (${set.length})',
                               style: const TextStyle(
-                                  fontWeight: FontWeight.w700, fontSize: 13, height: 1.35)),
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                  height: 1.35)),
                         ),
                       ),
                     ],
@@ -473,8 +477,8 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
       active: selected != null,
       onTap: () => _showManagerMenu(
         byId: true,
-        onPick: (v) => widget
-            .onChanged(widget.value.copyWith(actionManagerId: v)),
+        onPick: (v) =>
+            widget.onChanged(widget.value.copyWith(actionManagerId: v)),
         current: selected,
       ),
     );
@@ -492,8 +496,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
       active: selected != null,
       onTap: () => _showManagerMenu(
         byId: false,
-        onPick: (v) =>
-            widget.onChanged(widget.value.copyWith(userManager: v)),
+        onPick: (v) => widget.onChanged(widget.value.copyWith(userManager: v)),
         current: selected,
       ),
     );
@@ -558,7 +561,9 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
               color: selected ? AppColors.brand : AppColors.textLow,
             ),
             const SizedBox(width: 10),
-            Expanded(child: Text(text, style: const TextStyle(fontSize: 13, height: 1.45))),
+            Expanded(
+                child: Text(text,
+                    style: const TextStyle(fontSize: 13, height: 1.45))),
           ],
         ),
       ),
@@ -638,7 +643,8 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: AppType.labelBold(color: active ? AppColors.brand : AppColors.textMid),
+                style: AppType.labelBold(
+                    color: active ? AppColors.brand : AppColors.textMid),
               ),
             ),
             Icon(LucideIcons.chevronDown, size: 13, color: AppColors.textLow),

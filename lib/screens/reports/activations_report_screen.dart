@@ -31,8 +31,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
   bool _loading = true;
   String? _error;
   List<String>? _scopeIds;
-  int _page = 0;
-  int _pageSize = 25;
+  int _visibleCount = kReportPageStep;
 
   /// فلاتر متقدّمة (مدير الحركة / مدير المستخدم / الموظف).
   ReportFilters _filters = const ReportFilters();
@@ -81,7 +80,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
       _loading = false;
       _rows = filtered;
       _error = r.ok ? null : (r.error ?? 'common.load_failed'.tr());
-      _page = 0;
+      _visibleCount = kReportPageStep;
     });
   }
 
@@ -133,12 +132,11 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
   Widget build(BuildContext context) {
     Theme.of(context);
     final visible = _visibleRows;
-    final totalPages = (visible.length / _pageSize).ceil().clamp(1, 99999);
-    final pageStart = _page * _pageSize;
-    final pageEnd = (pageStart + _pageSize).clamp(0, visible.length);
+    final shown = _visibleCount.clamp(0, visible.length);
+    final remaining = visible.length - shown;
     final pageRows = visible.isEmpty
         ? const <ActivityRow>[]
-        : visible.sublist(pageStart, pageEnd);
+        : visible.take(_visibleCount).toList();
 
     return ReportPermissionGate(
       permission: 'reports.activations',
@@ -177,7 +175,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
                   onChanged: (v) {
                     setState(() {
                       _filters = v;
-                      _page = 0;
+                      _visibleCount = kReportPageStep;
                     });
                     _load();
                   },
@@ -200,13 +198,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
                       Expanded(
                         child: ReportStatsBar(
                           totalItems: visible.length,
-                          pageStart: pageStart,
-                          pageEnd: pageEnd,
-                          pageSize: _pageSize,
-                          onPageSizeChange: (s) => setState(() {
-                            _pageSize = s;
-                            _page = 0;
-                          }),
+                          shown: shown,
                         ),
                       ),
                       ReportExportBar(
@@ -243,12 +235,11 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
                     ),
                     const SizedBox(height: 4),
                   ],
-                  if (totalPages > 1)
-                    ReportPager(
-                      page: _page,
-                      totalPages: totalPages,
-                      onPrev: () => setState(() => _page--),
-                      onNext: () => setState(() => _page++),
+                  if (remaining > 0)
+                    ReportLoadMore(
+                      remaining: remaining,
+                      onTap: () =>
+                          setState(() => _visibleCount += kReportPageStep),
                     ),
                 ],
               ],
