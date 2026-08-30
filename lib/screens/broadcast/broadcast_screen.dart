@@ -468,14 +468,14 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
         value: 'whatsapp',
         label: 'واتساب فقط',
         icon: LucideIcons.messageCircle,
-        color: const Color(0xFF25D366),
+        color: AppColors.channelWhatsApp,
         hint: 'يجبر الواتساب حتى للمربوطين بتلغرام',
       ),
       (
         value: 'telegram',
         label: 'تلغرام فقط',
         icon: LucideIcons.send,
-        color: const Color(0xFF229ED9),
+        color: AppColors.channelTelegram,
         hint: 'يجبر تلغرام — يتخطّى غير المربوطين',
       ),
     ];

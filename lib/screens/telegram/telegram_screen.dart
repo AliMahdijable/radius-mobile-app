@@ -44,7 +44,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
   String? _adminId;
   String? _adminUsername;
 
-  static const _tgBlue = Color(0xFF229ED9);
+  static const _tgBlue = AppColors.channelTelegram;
 
   @override
   void initState() {

@@ -447,7 +447,7 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
                       .copyWith(fontSize: 12.5),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF25D366),
+                  backgroundColor: AppColors.channelWhatsApp,
                   foregroundColor: AppColors.onBrand,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),

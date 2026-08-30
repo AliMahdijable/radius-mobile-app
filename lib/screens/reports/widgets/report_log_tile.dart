@@ -335,16 +335,16 @@ _ActionMeta _actionMeta(String at, String desc) {
       return _ActionMeta('إزالة خصم', LucideIcons.tag, AppColors.warning);
     case 'WHATSAPP_SEND_MESSAGE':
       return const _ActionMeta(
-          'إرسال واتساب', LucideIcons.messageCircle, Color(0xFF25D366));
+          'إرسال واتساب', LucideIcons.messageCircle, AppColors.channelWhatsApp);
     case 'WHATSAPP_CONNECT':
       return const _ActionMeta(
-          'اتصال واتساب', LucideIcons.smartphone, Color(0xFF25D366));
+          'اتصال واتساب', LucideIcons.smartphone, AppColors.channelWhatsApp);
     case 'WHATSAPP_DISCONNECT':
       return _ActionMeta(
           'فصل واتساب', LucideIcons.smartphone, AppColors.warning);
     case 'WHATSAPP_TEMPLATE_SAVE':
       return const _ActionMeta(
-          'حفظ قالب WA', LucideIcons.fileText, Color(0xFF25D366));
+          'حفظ قالب WA', LucideIcons.fileText, AppColors.channelWhatsApp);
     case 'WHATSAPP_TEMPLATE_DELETE':
       return _ActionMeta(
           'حذف قالب WA', LucideIcons.fileText, AppColors.warning);

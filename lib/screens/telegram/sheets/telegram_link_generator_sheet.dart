@@ -352,12 +352,12 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                             horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
                           color: _showQr
-                              ? const Color(0xFF229ED9).withValues(alpha: 0.14)
+                              ? AppColors.channelTelegram.withValues(alpha: 0.14)
                               : AppColors.surface,
                           borderRadius: BorderRadius.circular(R.sm),
                           border: Border.all(
                             color: _showQr
-                                ? const Color(0xFF229ED9)
+                                ? AppColors.channelTelegram
                                 : AppColors.border,
                             width: 0.5,
                           ),
@@ -368,12 +368,12 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                             Icon(LucideIcons.qrCode,
                                 size: 12,
                                 color: _showQr
-                                    ? const Color(0xFF229ED9)
+                                    ? AppColors.channelTelegram
                                     : AppColors.textMid),
                             const SizedBox(width: 4),
                             Text(_showQr ? 'إخفاء QR' : 'عرض QR',
                                 style: AppType.pillBold(color: _showQr
-                                      ? const Color(0xFF229ED9)
+                                      ? AppColors.channelTelegram
                                       : AppColors.textMid)),
                           ],
                         ),
@@ -469,9 +469,9 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                         fontWeight: FontWeight.w700,
                       )),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF229ED9),
+                    foregroundColor: AppColors.channelTelegram,
                     side: BorderSide(
-                        color: const Color(0xFF229ED9).withValues(alpha: 0.5),
+                        color: AppColors.channelTelegram.withValues(alpha: 0.5),
                         width: 1),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(R.md)),
@@ -500,7 +500,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                         fontWeight: FontWeight.w700,
                       )),
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF25D366),
+                    backgroundColor: AppColors.channelWhatsApp,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(R.md)),
                   ),

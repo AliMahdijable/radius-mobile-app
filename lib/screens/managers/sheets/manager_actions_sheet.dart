@@ -64,7 +64,7 @@ enum ManagerAction {
 
   /// أخضر واتساب للأيقونة وحدها — تعريف قناة لا حالة.
   Color? get brandGlyph =>
-      this == ManagerAction.sendInfo ? const Color(0xFF25D366) : null;
+      this == ManagerAction.sendInfo ? AppColors.channelWhatsApp : null;
 
   Color get color => brandGlyph ?? tone.fill;
 

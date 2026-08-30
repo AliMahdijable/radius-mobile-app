@@ -668,7 +668,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
       return const SizedBox.shrink();
     }
     final isTg = ch == 'telegram';
-    final color = isTg ? const Color(0xFF229ED9) : const Color(0xFF25D366);
+    final color = isTg ? AppColors.channelTelegram : AppColors.channelWhatsApp;
     final icon = isTg ? LucideIcons.send : LucideIcons.messageCircle;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),

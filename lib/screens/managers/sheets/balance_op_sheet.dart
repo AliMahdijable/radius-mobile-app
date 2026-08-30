@@ -457,7 +457,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
             title: Row(
               children: [
                 const Icon(LucideIcons.send,
-                    size: 14, color: Color(0xFF25D366)),
+                    size: 14, color: AppColors.channelWhatsApp),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(

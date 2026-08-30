@@ -188,7 +188,7 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    const accent = Color(0xFF25D366);
+    const accent = AppColors.channelWhatsApp;
     // نضيف ديناميكياً أي type رجّعه الـbackend غير معروف.
     final extras = _templates
         .where((t) => !_knownTypes.any((d) => d.type == t.templateType))
@@ -274,7 +274,7 @@ class _TemplateTile extends StatelessWidget {
     final isActive = existing?.isActive == true;
     final hasBody = (existing?.messageContent ?? '').trim().isNotEmpty;
     final accent = isActive
-        ? const Color(0xFF25D366)
+        ? AppColors.channelWhatsApp
         : (hasBody ? AppColors.warning : AppColors.textLow);
     return Material(
       color: AppColors.surface,
@@ -349,7 +349,7 @@ class _TemplateTile extends StatelessWidget {
     Color color;
     if (isActive) {
       label = 'مفعّل';
-      color = const Color(0xFF25D366);
+      color = AppColors.channelWhatsApp;
     } else if (hasBody) {
       label = 'معطّل';
       color = AppColors.warning;
@@ -421,14 +421,14 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
         value: 'whatsapp',
         label: 'واتساب فقط',
         icon: LucideIcons.messageCircle,
-        color: const Color(0xFF25D366),
+        color: AppColors.channelWhatsApp,
         hint: 'يجبر الواتساب حتى للمربوطين بتلغرام',
       ),
       (
         value: 'telegram',
         label: 'تلغرام فقط',
         icon: LucideIcons.send,
-        color: const Color(0xFF229ED9),
+        color: AppColors.channelTelegram,
         hint: 'يجبر تلغرام — يفشل للمشترك غير المربوط',
       ),
     ];
@@ -587,7 +587,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    const accent = Color(0xFF25D366);
+    const accent = AppColors.channelWhatsApp;
     // مطلب 2026-06-12 (iPhone): على iOS ما يوجد زر "خلف" يخفي
     // الكيبورد فيستحيل على المدير يطلع من حقل التعديل. GestureDetector
     // بـHitTestBehavior.translucent يلتقط أي نقر فاضي ويخفي الكيبورد
@@ -722,10 +722,10 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            color: const Color(0xFF25D366).withValues(alpha: 0.08),
+            color: AppColors.channelWhatsApp.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(R.sm),
             border: Border.all(
-                color: const Color(0xFF25D366).withValues(alpha: 0.3)),
+                color: AppColors.channelWhatsApp.withValues(alpha: 0.3)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -740,7 +740,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
               ],
               Text(
                 ph,
-                style: AppType.microBold(color: const Color(0xFF25D366)),
+                style: AppType.microBold(color: AppColors.channelWhatsApp),
               ),
             ],
           ),

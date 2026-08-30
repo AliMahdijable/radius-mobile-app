@@ -132,7 +132,7 @@ Future<ManualWaChoice?> showManualWaPreviewSheet(
   required String title,
   required String phone,
   required String messagePreview,
-  Color accent = const Color(0xFF25D366),
+  Color accent = AppColors.channelWhatsApp,
 }) {
   return showModalBottomSheet<ManualWaChoice>(
     context: context,

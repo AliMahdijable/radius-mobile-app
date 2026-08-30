@@ -391,7 +391,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    const accent = Color(0xFF25D366);
+    const accent = AppColors.channelWhatsApp;
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -1148,7 +1148,7 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
     return SwitchListTile.adaptive(
       contentPadding: EdgeInsets.zero,
       dense: true,
-      activeThumbColor: const Color(0xFF25D366),
+      activeThumbColor: AppColors.channelWhatsApp,
       title: Text(
         label,
         style:

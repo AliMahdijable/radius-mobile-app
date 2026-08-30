@@ -80,7 +80,7 @@ class MoreModulesScreen extends StatelessWidget {
             _ModuleCard(
               icon: LucideIcons.send,
               tone: AppTone.brand,
-              brandGlyph: const Color(0xFF229ED9), // أزرق تلغرام
+              brandGlyph: AppColors.channelTelegram, // أزرق تلغرام
               title: 'تلغرام',
               subtitle: 'ربط بوت + إشعارات المشتركين عبر تلغرام',
               onTap: () => Navigator.of(context).push(
@@ -95,7 +95,7 @@ class MoreModulesScreen extends StatelessWidget {
             _ModuleCard(
               icon: LucideIcons.bell,
               tone: AppTone.brand,
-              brandGlyph: const Color(0xFF25D366), // أخضر واتساب
+              brandGlyph: AppColors.channelWhatsApp, // أخضر واتساب
               title: 'more.broadcast'.tr(),
               subtitle: 'more.broadcast_hint'.tr(),
               onTap: () => Navigator.of(context).push(

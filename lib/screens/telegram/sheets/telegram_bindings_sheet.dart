@@ -260,12 +260,12 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF229ED9).withValues(alpha: 0.14),
+                  color: AppColors.channelTelegram.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(R.button),
                 ),
                 alignment: Alignment.center,
                 child: const Icon(LucideIcons.send,
-                    size: 15, color: Color(0xFF229ED9)),
+                    size: 15, color: AppColors.channelTelegram),
               ),
               const SizedBox(width: 10),
               Expanded(
