@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/managers_api.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../services/subscriber_events.dart';
+import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -180,203 +181,108 @@ class _ManagerFormSheetState extends State<ManagerFormSheet> {
     Theme.of(context); // theme-dep (dark-mode)
     // iOS keyboard-avoidance: push the sheet up so the text fields +
     // save button stay visible when the keyboard opens.
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    return DraggableScrollableSheet(
-      initialChildSize: 0.85,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (_, controller) {
-        return Container(
-          decoration: BoxDecoration(
-            // سطح الشيت لا سطح الكارت: الفرق نهاراً طفيف (#FBFBF9 مقابل
-            // أبيض) وبنيويّ ليلاً (#1B231F مقابل #161D19) — الشيت يجب
-            // أن يعلو الشاشة لا أن يغرق فيها.
-            color: AppColors.surfaceSheet,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(R.sheet)),
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: widget.icon,
+        title: widget.title,
+        subtitle: widget.subtitle,
+        onClose: _submitting ? () {} : () => Navigator.of(context).pop(),
+      ),
+      footer: SheetFooterBar(
+        label: _submitting ? 'جاري الحفظ...' : widget.submitLabel,
+        icon: LucideIcons.save,
+        enabled: _canSubmit,
+        busy: _submitting,
+        onPressed: _doSubmit,
+      ),
+      scrollable: false,
+      bodyPadding: EdgeInsets.zero,
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.lg, Sp.xl, Sp.xxl),
+        children: [
+          _label('اسم المستخدم *'),
+          _field(_user, hint: 'manager_xxx'),
+          const SizedBox(height: Sp.md),
+          _label(widget.requirePassword
+              ? 'كلمة السر *'
+              : 'كلمة السر (اتركها فاضية لعدم التغيير)'),
+          _field(
+            _pass,
+            hint: '••••••••',
+            obscure: _obscurePass,
+            suffix: IconButton(
+              icon: Icon(
+                _obscurePass ? LucideIcons.eye : LucideIcons.eyeOff,
+                size: 16,
+                color: AppColors.textMid,
+              ),
+              onPressed: () => setState(() => _obscurePass = !_obscurePass),
+            ),
           ),
-          padding: EdgeInsets.only(bottom: bottomInset),
-          child: Column(
+          const SizedBox(height: Sp.md),
+          Row(
             children: [
-              const SizedBox(height: 8),
-              Center(
-                child: Container(
-                  width: 42,
-                  height: H.grabber,
-                  decoration: BoxDecoration(
-                    color: AppColors.grabber,
-                    borderRadius: BorderRadius.circular(R.pill),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(7),
-                      decoration: BoxDecoration(
-                        color: widget.accent.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(R.md),
-                      ),
-                      child: Icon(widget.icon, size: 16, color: widget.accent),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(widget.title,
-                              style: AppType.title(color: AppColors.textHi)
-                                  .copyWith(fontSize: 15)),
-                          Text(widget.subtitle,
-                              style: AppType.muted().copyWith(fontSize: 11),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: _submitting
-                          ? null
-                          : () => Navigator.of(context).pop(),
-                      icon: const Icon(LucideIcons.x, size: 16),
-                      color: AppColors.textMid,
-                    ),
-                  ],
-                ),
-              ),
               Expanded(
-                child: ListView(
-                  controller: controller,
-                  padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.huge),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _label('اسم المستخدم *'),
-                    _field(_user, hint: 'manager_xxx'),
-                    const SizedBox(height: Sp.md),
-                    _label(widget.requirePassword
-                        ? 'كلمة السر *'
-                        : 'كلمة السر (اتركها فاضية لعدم التغيير)'),
-                    _field(
-                      _pass,
-                      hint: '••••••••',
-                      obscure: _obscurePass,
-                      suffix: IconButton(
-                        icon: Icon(
-                          _obscurePass ? LucideIcons.eye : LucideIcons.eyeOff,
-                          size: 16,
-                          color: AppColors.textMid,
-                        ),
-                        onPressed: () =>
-                            setState(() => _obscurePass = !_obscurePass),
-                      ),
-                    ),
-                    const SizedBox(height: Sp.md),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _label('الاسم الأول'),
-                              _field(_first, hint: 'محمد'),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _label('الكنية'),
-                              _field(_last, hint: 'علي'),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: Sp.md),
-                    _label('الهاتف'),
-                    _field(_mobile,
-                        hint: '07XXXXXXXXX', keyboard: TextInputType.phone),
-                    const SizedBox(height: Sp.md),
-                    _label('البريد الإلكتروني'),
-                    _field(_email,
-                        hint: 'example@mail.com',
-                        keyboard: TextInputType.emailAddress),
-                    const SizedBox(height: Sp.md),
-                    _label('مجموعة الصلاحيات *'),
-                    _aclPicker(),
-                    // مطلب 2026-06-12: parent picker مطابق v1 — يظهر
-                    // فقط لما الـbackend يرجّع قائمة مدراء (السوبر أو
-                    // المدير اللي عنده فرعيين). لو فاضي = مدير عادي بدون
-                    // tree، يخفى الـpicker (السيرفر يفترض الـadmin
-                    // الحالي parent تلقائياً).
-                    if ((_parents ?? []).isNotEmpty) ...[
-                      const SizedBox(height: Sp.md),
-                      _label('تابع إلى'),
-                      _parentPicker(),
-                    ],
-                    const SizedBox(height: Sp.md),
-                    SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(
-                        'الحساب مفعّل',
-                        style: AppType.label(color: AppColors.textHi).copyWith(
-                            fontSize: 13, fontWeight: FontWeight.w700),
-                      ),
-                      subtitle: Text(
-                        _enabled
-                            ? 'يستطيع المدير تسجيل الدخول'
-                            : 'الحساب معطّل — لا يستطيع الدخول',
-                        style: AppType.muted().copyWith(fontSize: 11),
-                      ),
-                      value: _enabled,
-                      activeColor: AppColors.brand,
-                      onChanged: (v) => setState(() => _enabled = v),
-                    ),
+                    _label('الاسم الأول'),
+                    _field(_first, hint: 'محمد'),
                   ],
                 ),
               ),
-              SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
-                  child: SizedBox(
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: _canSubmit ? _doSubmit : null,
-                      icon: _submitting
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppColors.onBrand,
-                              ),
-                            )
-                          : const Icon(LucideIcons.save, size: 16),
-                      label: Text(
-                        _submitting ? 'جاري الحفظ...' : widget.submitLabel,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w700, fontSize: 14),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: widget.accent,
-                        foregroundColor: AppColors.onBrand,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(R.md),
-                        ),
-                      ),
-                    ),
-                  ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _label('الكنية'),
+                    _field(_last, hint: 'علي'),
+                  ],
                 ),
               ),
             ],
           ),
-        );
-      },
+          const SizedBox(height: Sp.md),
+          _label('الهاتف'),
+          _field(_mobile, hint: '07XXXXXXXXX', keyboard: TextInputType.phone),
+          const SizedBox(height: Sp.md),
+          _label('البريد الإلكتروني'),
+          _field(_email,
+              hint: 'example@mail.com', keyboard: TextInputType.emailAddress),
+          const SizedBox(height: Sp.md),
+          _label('مجموعة الصلاحيات *'),
+          _aclPicker(),
+          // مطلب 2026-06-12: parent picker مطابق v1 — يظهر
+          // فقط لما الـbackend يرجّع قائمة مدراء (السوبر أو
+          // المدير اللي عنده فرعيين). لو فاضي = مدير عادي بدون
+          // tree، يخفى الـpicker (السيرفر يفترض الـadmin
+          // الحالي parent تلقائياً).
+          if ((_parents ?? []).isNotEmpty) ...[
+            const SizedBox(height: Sp.md),
+            _label('تابع إلى'),
+            _parentPicker(),
+          ],
+          const SizedBox(height: Sp.md),
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: Text(
+              'الحساب مفعّل',
+              style: AppType.label(color: AppColors.textHi)
+                  .copyWith(fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+            subtitle: Text(
+              _enabled
+                  ? 'يستطيع المدير تسجيل الدخول'
+                  : 'الحساب معطّل — لا يستطيع الدخول',
+              style: AppType.muted().copyWith(fontSize: 11),
+            ),
+            value: _enabled,
+            activeColor: AppColors.brand,
+            onChanged: (v) => setState(() => _enabled = v),
+          ),
+        ],
+      ),
     );
   }
 

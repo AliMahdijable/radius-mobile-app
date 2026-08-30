@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/managers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../services/manager_notice.dart';
+import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -45,11 +46,14 @@ enum _BalanceOp {
 
   /// getter لا حقل const — نفس سبب `ManagerAction.color`: حقل الـenum
   /// الثابت لا يقبل توكناً يعرف الوضع الليلي.
-  Color get color => switch (this) {
-        _BalanceOp.deposit => AppColors.success,
-        _BalanceOp.withdraw => AppColors.warning,
-        _BalanceOp.addPoints => AppColors.brandAccent,
+  /// النغمة تحمل التعبئة والخلفيّة والحدّ معاً — راجع `AppTone`.
+  AppTone get tone => switch (this) {
+        _BalanceOp.deposit => AppTone.success,
+        _BalanceOp.withdraw => AppTone.warning,
+        _BalanceOp.addPoints => AppTone.brand,
       };
+
+  Color get color => tone.fill;
 
   static _BalanceOp fromKind(BalanceOpKind? k) {
     switch (k) {
@@ -248,299 +252,186 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     Theme.of(context); // theme-dep (dark-mode)
     // iOS keyboard-avoidance: push the sheet up so amount + note +
     // submit button stay visible when the keyboard opens.
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    return DraggableScrollableSheet(
-      initialChildSize: 0.7,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (_, controller) {
-        return Container(
-          decoration: BoxDecoration(
-            // سطح الشيت لا سطح الكارت: الفرق نهاراً طفيف (#FBFBF9 مقابل
-            // أبيض) وبنيويّ ليلاً (#1B231F مقابل #161D19) — الشيت يجب
-            // أن يعلو الشاشة لا أن يغرق فيها.
-            color: AppColors.surfaceSheet,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(R.sheet)),
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: _op.icon,
+        title: _op.label,
+        subtitle: widget.manager.username,
+        subtitleLtr: true,
+        tint: _op.color,
+        tintBg: _op.tone.softBg,
+        onClose: _submitting ? () {} : () => Navigator.of(context).pop(),
+      ),
+      footer: SheetFooterBar(
+        label: _submitting ? 'جارٍ التنفيذ...' : _op.label,
+        icon: _op.icon,
+        color: _op.color,
+        enabled: _amount > 0 && !_submitting,
+        busy: _submitting,
+        onPressed: _submit,
+      ),
+      scrollable: false,
+      bodyPadding: EdgeInsets.zero,
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.lg, Sp.xl, Sp.xxl),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  _op.color.withValues(alpha: 0.16),
+                  _op.color.withValues(alpha: 0.04),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(R.md),
+              border: Border.all(color: _op.color.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                Icon(LucideIcons.wallet, size: 16, color: AppColors.textMid),
+                const SizedBox(width: 8),
+                Text(
+                  'الرصيد الحالي ',
+                  style: AppType.muted().copyWith(fontSize: 12.5),
+                ),
+                Text(
+                  '${formatIQD(widget.manager.balance ?? 0)} د.ع',
+                  style: AppType.label(color: AppColors.textHi)
+                      .copyWith(fontSize: 14, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
           ),
-          padding: EdgeInsets.only(bottom: bottomInset),
-          child: Column(
+          const SizedBox(height: Sp.md),
+          _label('نوع العملية'),
+          Row(
             children: [
-              const SizedBox(height: 8),
-              Center(
-                child: Container(
-                  width: 42,
-                  height: H.grabber,
-                  decoration: BoxDecoration(
-                    color: AppColors.grabber,
-                    borderRadius: BorderRadius.circular(R.pill),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(7),
-                      decoration: BoxDecoration(
-                        color: _op.color.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(R.md),
-                      ),
-                      child: Icon(_op.icon, size: 16, color: _op.color),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'عملية رصيد',
-                            style: AppType.title(color: AppColors.textHi)
-                                .copyWith(fontSize: 15),
-                          ),
-                          Text(
-                            widget.manager.fullName.isNotEmpty
-                                ? widget.manager.fullName
-                                : widget.manager.username,
-                            style: AppType.muted().copyWith(fontSize: 11),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: _submitting
-                          ? null
-                          : () => Navigator.of(context).pop(),
-                      icon: const Icon(LucideIcons.x, size: 16),
-                      color: AppColors.textMid,
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: ListView(
-                  controller: controller,
-                  padding:
-                      const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            _op.color.withValues(alpha: 0.16),
-                            _op.color.withValues(alpha: 0.04),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(R.md),
-                        border:
-                            Border.all(color: _op.color.withValues(alpha: 0.3)),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(LucideIcons.wallet,
-                              size: 16, color: AppColors.textMid),
-                          const SizedBox(width: 8),
-                          Text(
-                            'الرصيد الحالي ',
-                            style: AppType.muted().copyWith(fontSize: 12.5),
-                          ),
-                          Text(
-                            '${formatIQD(widget.manager.balance ?? 0)} د.ع',
-                            style: AppType.label(color: AppColors.textHi)
-                                .copyWith(
-                                    fontSize: 14, fontWeight: FontWeight.w700),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: Sp.md),
-                    _label('نوع العملية'),
-                    Row(
-                      children: [
-                        for (final op in _BalanceOp.values) ...[
-                          Expanded(child: _opChip(op)),
-                          if (op != _BalanceOp.values.last)
-                            const SizedBox(width: 6),
-                        ],
-                      ],
-                    ),
-                    // مطلب 2026-06-12: toggle "آجل" يظهر فقط في وضع
-                    // الشحن — يحوّل الإيداع لـدين على المدير الفرعي
-                    // (مطابق v1 loan deposit).
-                    if (_op == _BalanceOp.deposit) ...[
-                      const SizedBox(height: Sp.md),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: _isLoan
-                              ? AppColors.warningSoftBg
-                              : AppColors.surfaceInput,
-                          borderRadius: BorderRadius.circular(R.sm),
-                          border: Border.all(
-                              color: _isLoan
-                                  ? AppColors.warningSoftBorder
-                                  : AppColors.borderSoft),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              _isLoan
-                                  ? LucideIcons.handCoins
-                                  : LucideIcons.banknote,
-                              size: 14,
-                              color: _isLoan
-                                  ? AppColors.warning
-                                  : AppColors.textMid,
-                            ),
-                            const SizedBox(width: 7),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _isLoan ? 'إيداع آجل' : 'شحن نقدي',
-                                    style:
-                                        AppType.label(color: AppColors.textHi)
-                                            .copyWith(
-                                                fontSize: 12.5,
-                                                fontWeight: FontWeight.w700),
-                                  ),
-                                  Text(
-                                    _isLoan
-                                        ? 'دين على المدير الفرعي'
-                                        : 'استلام كاش الآن',
-                                    style: AppType.muted().copyWith(
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.w600),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Switch.adaptive(
-                              value: _isLoan,
-                              activeColor: AppColors.warning,
-                              onChanged: (v) => setState(() => _isLoan = v),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: Sp.md),
-                    _label('المبلغ *'),
-                    AmountShorthandBox(
-                        controller: _amountCtrl,
-                        child: TextField(
-                          controller: _amountCtrl,
-                          keyboardType: TextInputType.number,
-                          style: AppType.input(color: AppColors.textHi),
-                          decoration: InputDecoration(
-                            hintText: 'مثلاً 50,000',
-                            hintStyle: AppType.input(color: AppColors.textLow),
-                            filled: true,
-                            fillColor: AppColors.surface,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(R.sm),
-                              borderSide: BorderSide(color: AppColors.border),
-                            ),
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 10),
-                            suffixText:
-                                _op == _BalanceOp.addPoints ? 'نقطة' : 'د.ع',
-                          ),
-                        )),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        // مطلب 2026-06-12: chips مطابق v1 — 6 مبالغ
-                        // إضافية للوصول السريع، تتراكم على المجموع.
-                        for (final v in const [
-                          10000,
-                          25000,
-                          50000,
-                          100000,
-                          250000,
-                          500000
-                        ])
-                          _quickChip(v),
-                      ],
-                    ),
-                    const SizedBox(height: Sp.md),
-                    // مطلب 2026-06-12: toggles إشعار للمدير. مطابق v1
-                    // _NotifyToggles. الـWA يقفل تلقائياً لو ما عنده
-                    // رقم. الـpush بيشتغل لو المدير عنده FCM token مسجّل.
-                    _notifyToggles(),
-                    const SizedBox(height: Sp.md),
-                    _label('ملاحظة (اختياري)'),
-                    TextField(
-                      controller: _noteCtrl,
-                      maxLines: 2,
-                      style: AppType.input(color: AppColors.textHi),
-                      decoration: InputDecoration(
-                        hintText: 'سبب العملية…',
-                        hintStyle: AppType.input(color: AppColors.textLow),
-                        filled: true,
-                        fillColor: AppColors.surface,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(R.sm),
-                          borderSide: BorderSide(color: AppColors.border),
-                        ),
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 10),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
-                  child: SizedBox(
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: (_amount > 0 && !_submitting) ? _submit : null,
-                      icon: _submitting
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppColors.onBrand,
-                              ),
-                            )
-                          : Icon(_op.icon, size: 16),
-                      label: Text(
-                        _submitting
-                            ? 'جاري التنفيذ...'
-                            : (_amount > 0
-                                ? '${_op.label} ${formatIQD(_amount)}'
-                                : _op.label),
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w700, fontSize: 14),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _op.color,
-                        foregroundColor: AppColors.onBrand,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(R.md),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              for (final op in _BalanceOp.values) ...[
+                Expanded(child: _opChip(op)),
+                if (op != _BalanceOp.values.last) const SizedBox(width: 6),
+              ],
             ],
           ),
-        );
-      },
+          // مطلب 2026-06-12: toggle "آجل" يظهر فقط في وضع
+          // الشحن — يحوّل الإيداع لـدين على المدير الفرعي
+          // (مطابق v1 loan deposit).
+          if (_op == _BalanceOp.deposit) ...[
+            const SizedBox(height: Sp.md),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color:
+                    _isLoan ? AppColors.warningSoftBg : AppColors.surfaceInput,
+                borderRadius: BorderRadius.circular(R.sm),
+                border: Border.all(
+                    color: _isLoan
+                        ? AppColors.warningSoftBorder
+                        : AppColors.borderSoft),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _isLoan ? LucideIcons.handCoins : LucideIcons.banknote,
+                    size: 14,
+                    color: _isLoan ? AppColors.warning : AppColors.textMid,
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _isLoan ? 'إيداع آجل' : 'شحن نقدي',
+                          style: AppType.label(color: AppColors.textHi)
+                              .copyWith(
+                                  fontSize: 12.5, fontWeight: FontWeight.w700),
+                        ),
+                        Text(
+                          _isLoan ? 'دين على المدير الفرعي' : 'استلام كاش الآن',
+                          style: AppType.muted().copyWith(
+                              fontSize: 10.5, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch.adaptive(
+                    value: _isLoan,
+                    activeColor: AppColors.warning,
+                    onChanged: (v) => setState(() => _isLoan = v),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: Sp.md),
+          _label('المبلغ *'),
+          AmountShorthandBox(
+              controller: _amountCtrl,
+              child: TextField(
+                controller: _amountCtrl,
+                keyboardType: TextInputType.number,
+                style: AppType.input(color: AppColors.textHi),
+                decoration: InputDecoration(
+                  hintText: 'مثلاً 50,000',
+                  hintStyle: AppType.input(color: AppColors.textLow),
+                  filled: true,
+                  fillColor: AppColors.surface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(R.sm),
+                    borderSide: BorderSide(color: AppColors.border),
+                  ),
+                  isDense: true,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  suffixText: _op == _BalanceOp.addPoints ? 'نقطة' : 'د.ع',
+                ),
+              )),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              // مطلب 2026-06-12: chips مطابق v1 — 6 مبالغ
+              // إضافية للوصول السريع، تتراكم على المجموع.
+              for (final v in const [
+                10000,
+                25000,
+                50000,
+                100000,
+                250000,
+                500000
+              ])
+                _quickChip(v),
+            ],
+          ),
+          const SizedBox(height: Sp.md),
+          // مطلب 2026-06-12: toggles إشعار للمدير. مطابق v1
+          // _NotifyToggles. الـWA يقفل تلقائياً لو ما عنده
+          // رقم. الـpush بيشتغل لو المدير عنده FCM token مسجّل.
+          _notifyToggles(),
+          const SizedBox(height: Sp.md),
+          _label('ملاحظة (اختياري)'),
+          TextField(
+            controller: _noteCtrl,
+            maxLines: 2,
+            style: AppType.input(color: AppColors.textHi),
+            decoration: InputDecoration(
+              hintText: 'سبب العملية…',
+              hintStyle: AppType.input(color: AppColors.textLow),
+              filled: true,
+              fillColor: AppColors.surface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(R.sm),
+                borderSide: BorderSide(color: AppColors.border),
+              ),
+              isDense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

@@ -6,6 +6,7 @@ import '../../../api/managers_api.dart';
 import '../../../api/whatsapp_api.dart';
 import '../../../core/util/format.dart';
 import '../../../services/manual_wa_sender.dart';
+import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../widgets/manual_wa_chip.dart';
 import '../../../theme/spacing.dart';
@@ -151,178 +152,85 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
     final hasPhone = (widget.manager.mobile ?? '').trim().isNotEmpty;
     // iOS keyboard-avoidance: push the sheet up so the editable message
     // text field + send button stay visible when the keyboard opens.
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    return DraggableScrollableSheet(
-      initialChildSize: 0.75,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (_, controller) {
-        return Container(
-          decoration: BoxDecoration(
-            // سطح الشيت لا سطح الكارت: الفرق نهاراً طفيف (#FBFBF9 مقابل
-            // أبيض) وبنيويّ ليلاً (#1B231F مقابل #161D19) — الشيت يجب
-            // أن يعلو الشاشة لا أن يغرق فيها.
-            color: AppColors.surfaceSheet,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(R.sheet)),
-          ),
-          padding: EdgeInsets.only(bottom: bottomInset),
-          child: Column(
-            children: [
-              const SizedBox(height: 8),
-              Center(
-                child: Container(
-                  width: 42,
-                  height: H.grabber,
-                  decoration: BoxDecoration(
-                    color: AppColors.grabber,
-                    borderRadius: BorderRadius.circular(R.pill),
-                  ),
-                ),
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.send,
+        title: 'إرسال المعلومات',
+        subtitle: widget.manager.username,
+        subtitleLtr: true,
+        tint: AppColors.channelWhatsApp,
+        tintBg: AppColors.channelWhatsAppSoftBg,
+        onClose: _submitting ? () {} : () => Navigator.of(context).pop(),
+      ),
+      footer: SheetFooterBar(
+        label: _submitting ? 'جارٍ الإرسال...' : 'إرسال',
+        icon: LucideIcons.send,
+        color: AppColors.channelWhatsApp,
+        enabled: hasPhone && !_submitting,
+        busy: _submitting,
+        onPressed: _send,
+      ),
+      scrollable: false,
+      bodyPadding: EdgeInsets.zero,
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.lg, Sp.xl, Sp.xxl),
+        children: [
+          if (!hasPhone) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.dangerSoftBg,
+                borderRadius: BorderRadius.circular(R.md),
+                border: Border.all(color: AppColors.dangerSoftBorder),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(7),
-                      decoration: BoxDecoration(
-                        color: accent.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(R.md),
-                      ),
-                      child: const Icon(LucideIcons.smartphone,
-                          size: 16, color: accent),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'إرسال معلومات',
-                            style: AppType.title(color: AppColors.textHi)
-                                .copyWith(fontSize: 15),
-                          ),
-                          Text(
-                            widget.manager.username,
-                            style: AppType.muted().copyWith(fontSize: 11),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: _submitting
-                          ? null
-                          : () => Navigator.of(context).pop(),
-                      icon: const Icon(LucideIcons.x, size: 16),
-                      color: AppColors.textMid,
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: ListView(
-                  controller: controller,
-                  padding:
-                      const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
-                  children: [
-                    if (!hasPhone) ...[
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppColors.dangerSoftBg,
-                          borderRadius: BorderRadius.circular(R.md),
-                          border: Border.all(color: AppColors.dangerSoftBorder),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(LucideIcons.triangleAlert,
-                                size: 14, color: AppColors.error),
-                            SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                'لا يوجد رقم هاتف محفوظ — لن يُرسل واتساب',
-                                style: TextStyle(
-                                    fontSize: 12.5,
-                                    color: AppColors.error,
-                                    fontWeight: FontWeight.w700),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: Sp.md),
-                    ],
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 4, right: 2),
-                      child: Text('الرسالة (قابلة للتعديل)',
-                          style: AppType.muted(color: AppColors.textMid)
-                              .copyWith(
-                                  fontSize: 11, fontWeight: FontWeight.w700)),
-                    ),
-                    TextField(
-                      controller: _msgCtrl,
-                      maxLines: 12,
-                      minLines: 8,
-                      style: AppType.input(color: AppColors.textHi),
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: AppColors.surface,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(R.sm),
-                          borderSide: BorderSide(color: AppColors.borderSoft),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(R.sm),
-                          borderSide: BorderSide(color: AppColors.borderSoft),
-                        ),
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 10),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
-                  child: SizedBox(
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: (hasPhone && !_submitting) ? _send : null,
-                      icon: _submitting
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppColors.onBrand,
-                              ),
-                            )
-                          : const Icon(LucideIcons.send, size: 16),
-                      label: Text(
-                        _submitting ? 'جاري الإرسال...' : 'إرسال واتساب',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w700, fontSize: 14),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: accent,
-                        foregroundColor: AppColors.onBrand,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(R.md),
-                        ),
-                      ),
+              child: Row(
+                children: [
+                  Icon(LucideIcons.triangleAlert,
+                      size: 14, color: AppColors.error),
+                  SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'لا يوجد رقم هاتف محفوظ — لن يُرسل واتساب',
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.error,
+                          fontWeight: FontWeight.w700),
                     ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
+            const SizedBox(height: Sp.md),
+          ],
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4, right: 2),
+            child: Text('الرسالة (قابلة للتعديل)',
+                style: AppType.muted(color: AppColors.textMid)
+                    .copyWith(fontSize: 11, fontWeight: FontWeight.w700)),
           ),
-        );
-      },
+          TextField(
+            controller: _msgCtrl,
+            maxLines: 12,
+            minLines: 8,
+            style: AppType.input(color: AppColors.textHi),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: AppColors.surface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(R.sm),
+                borderSide: BorderSide(color: AppColors.borderSoft),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(R.sm),
+                borderSide: BorderSide(color: AppColors.borderSoft),
+              ),
+              isDense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

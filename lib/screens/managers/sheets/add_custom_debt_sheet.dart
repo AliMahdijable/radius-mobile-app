@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/manager_debts_api.dart';
 import '../../../api/managers_api.dart';
 import '../../../core/util/format.dart';
+import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -114,205 +115,110 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
     final dateLabel = '${_date.year}/${two(_date.month)}/${two(_date.day)}';
     // iOS keyboard-avoidance: push the sheet up so amount + note +
     // submit button stay visible when the keyboard opens.
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    return DraggableScrollableSheet(
-      initialChildSize: 0.7,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (_, controller) {
-        return Container(
-          decoration: BoxDecoration(
-            // سطح الشيت لا سطح الكارت: الفرق نهاراً طفيف (#FBFBF9 مقابل
-            // أبيض) وبنيويّ ليلاً (#1B231F مقابل #161D19) — الشيت يجب
-            // أن يعلو الشاشة لا أن يغرق فيها.
-            color: AppColors.surfaceSheet,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(R.sheet)),
-          ),
-          padding: EdgeInsets.only(bottom: bottomInset),
-          child: Column(
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.receipt,
+        title: 'إضافة دين',
+        subtitle: widget.manager.username,
+        subtitleLtr: true,
+        tint: AppColors.warningFill,
+        tintBg: AppColors.warningSoftBg,
+        onClose: _submitting ? () {} : () => Navigator.of(context).pop(),
+      ),
+      footer: SheetFooterBar(
+        label: _submitting ? 'جارٍ الإضافة...' : 'إضافة الدين',
+        icon: LucideIcons.plus,
+        color: AppColors.warningFill,
+        enabled: _amount > 0 && !_submitting,
+        busy: _submitting,
+        onPressed: _submit,
+      ),
+      scrollable: false,
+      bodyPadding: EdgeInsets.zero,
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.lg, Sp.xl, Sp.xxl),
+        children: [
+          _label('المبلغ *'),
+          AmountShorthandBox(
+              controller: _amountCtrl,
+              child: TextField(
+                controller: _amountCtrl,
+                keyboardType: TextInputType.number,
+                style: AppType.input(color: AppColors.textHi),
+                decoration: _dec(suffix: 'د.ع'),
+              )),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
             children: [
-              const SizedBox(height: 8),
-              Center(
-                child: Container(
-                  width: 42,
-                  height: H.grabber,
-                  decoration: BoxDecoration(
-                    color: AppColors.grabber,
-                    borderRadius: BorderRadius.circular(R.pill),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(7),
-                      decoration: BoxDecoration(
-                        color: accent.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(R.md),
-                      ),
-                      child: Icon(LucideIcons.receipt, size: 16, color: accent),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'إضافة دين',
-                            style: AppType.title(color: AppColors.textHi)
-                                .copyWith(fontSize: 15),
-                          ),
-                          Text(
-                            widget.manager.username,
-                            style: AppType.muted().copyWith(fontSize: 11),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: _submitting
-                          ? null
-                          : () => Navigator.of(context).pop(),
-                      icon: const Icon(LucideIcons.x, size: 16),
-                      color: AppColors.textMid,
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: ListView(
-                  controller: controller,
-                  padding:
-                      const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
-                  children: [
-                    _label('المبلغ *'),
-                    AmountShorthandBox(
-                        controller: _amountCtrl,
-                        child: TextField(
-                          controller: _amountCtrl,
-                          keyboardType: TextInputType.number,
-                          style: AppType.input(color: AppColors.textHi),
-                          decoration: _dec(suffix: 'د.ع'),
-                        )),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        for (final v in const [
-                          10000,
-                          25000,
-                          50000,
-                          100000,
-                          250000,
-                          500000
-                        ])
-                          _quick(v, accent),
-                      ],
-                    ),
-                    const SizedBox(height: Sp.md),
-                    _label('التاريخ'),
-                    Material(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(R.sm),
-                      clipBehavior: Clip.antiAlias,
-                      child: InkWell(
-                        onTap: _submitting
-                            ? null
-                            : () async {
-                                final picked = await showDatePicker(
-                                  context: context,
-                                  initialDate: _date,
-                                  firstDate: DateTime(_date.year - 2, 1, 1),
-                                  lastDate: DateTime.now(),
-                                );
-                                if (picked != null) {
-                                  setState(() => _date = picked);
-                                }
-                              },
-                        borderRadius: BorderRadius.circular(R.sm),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 12),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(R.sm),
-                            border: Border.all(color: AppColors.borderSoft),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(LucideIcons.calendar,
-                                  size: 16, color: AppColors.textMid),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  dateLabel,
-                                  style: AppType.input(color: AppColors.textHi),
-                                ),
-                              ),
-                              Icon(LucideIcons.chevronDown,
-                                  size: 14, color: AppColors.textLow),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: Sp.md),
-                    _label('ملاحظة (اختياري)'),
-                    TextField(
-                      controller: _noteCtrl,
-                      maxLines: 2,
-                      style: AppType.input(color: AppColors.textHi),
-                      decoration: _dec(hint: 'سبب الدين…'),
-                    ),
-                  ],
-                ),
-              ),
-              SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
-                  child: SizedBox(
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: (_amount > 0 && !_submitting) ? _submit : null,
-                      icon: _submitting
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppColors.onBrand,
-                              ),
-                            )
-                          : const Icon(LucideIcons.plus, size: 16),
-                      label: Text(
-                        _submitting
-                            ? 'جاري التسجيل...'
-                            : (_amount > 0
-                                ? 'تسجيل ${formatIQD(_amount)}'
-                                : 'تسجيل الدين'),
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w700, fontSize: 14),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: accent,
-                        foregroundColor: AppColors.onBrand,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(R.md),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              for (final v in const [
+                10000,
+                25000,
+                50000,
+                100000,
+                250000,
+                500000
+              ])
+                _quick(v, accent),
             ],
           ),
-        );
-      },
+          const SizedBox(height: Sp.md),
+          _label('التاريخ'),
+          Material(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(R.sm),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: _submitting
+                  ? null
+                  : () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _date,
+                        firstDate: DateTime(_date.year - 2, 1, 1),
+                        lastDate: DateTime.now(),
+                      );
+                      if (picked != null) {
+                        setState(() => _date = picked);
+                      }
+                    },
+              borderRadius: BorderRadius.circular(R.sm),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(R.sm),
+                  border: Border.all(color: AppColors.borderSoft),
+                ),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.calendar,
+                        size: 16, color: AppColors.textMid),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        dateLabel,
+                        style: AppType.input(color: AppColors.textHi),
+                      ),
+                    ),
+                    Icon(LucideIcons.chevronDown,
+                        size: 14, color: AppColors.textLow),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: Sp.md),
+          _label('ملاحظة (اختياري)'),
+          TextField(
+            controller: _noteCtrl,
+            maxLines: 2,
+            style: AppType.input(color: AppColors.textHi),
+            decoration: _dec(hint: 'سبب الدين…'),
+          ),
+        ],
+      ),
     );
   }
 
