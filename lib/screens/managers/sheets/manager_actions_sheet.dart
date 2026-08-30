@@ -99,10 +99,10 @@ class _ActionsSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final totalDebt = (manager.debt ?? 0) + customDebt;
+    final totalDebt = (manager.debt) + customDebt;
     final hasDebt = totalDebt > 0;
-    final hasBalance = (manager.balance ?? 0) > 0;
-    final hasPhone = (manager.mobile ?? '').isNotEmpty;
+    final hasBalance = (manager.balance) > 0;
+    final hasPhone = manager.mobile.isNotEmpty;
     // 9 actions — ترتيب مطابق v1.
     // مطلب 2026-06-11: كل action يختفي إذا الموظف ما عنده الصلاحية.
     // payDebt يستعمل managers.deposit (نفس الدور — تحويل من الـbalance
@@ -146,7 +146,7 @@ class _ActionsSheet extends StatelessWidget {
                 _summaryChip(
                   LucideIcons.wallet,
                   'managers.chip_balance'.tr(
-                      namedArgs: {'amount': formatIQD(manager.balance ?? 0)}),
+                      namedArgs: {'amount': formatIQD(manager.balance)}),
                   AppTone.brand,
                 ),
                 if (hasDebt)
@@ -159,7 +159,7 @@ class _ActionsSheet extends StatelessWidget {
                 _summaryChip(
                   LucideIcons.users,
                   'managers.chip_subs'
-                      .tr(namedArgs: {'n': '${manager.usersCount ?? 0}'}),
+                      .tr(namedArgs: {'n': '${manager.usersCount}'}),
                   AppTone.brand,
                 ),
               ],

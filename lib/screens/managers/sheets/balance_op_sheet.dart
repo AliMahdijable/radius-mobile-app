@@ -141,8 +141,8 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     final id = widget.manager.id;
     final note = _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim();
     // التقاط الأرصدة قبل العملية ل passing them للإشعار
-    final previousCredit = widget.manager.balance ?? 0;
-    final previousDebt = widget.manager.debt ?? 0;
+    final previousCredit = widget.manager.balance;
+    final previousDebt = widget.manager.debt;
     late ({bool ok, String? message}) r;
     switch (_op) {
       case _BalanceOp.deposit:
@@ -296,7 +296,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                   style: AppType.muted().copyWith(fontSize: 12.5),
                 ),
                 Text(
-                  '${formatIQD(widget.manager.balance ?? 0)} د.ع',
+                  '${formatIQD(widget.manager.balance)} د.ع',
                   style: AppType.label(color: AppColors.textHi)
                       .copyWith(fontSize: 14, fontWeight: FontWeight.w700),
                 ),
@@ -436,7 +436,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
   }
 
   Widget _notifyToggles() {
-    final hasPhone = (widget.manager.mobile ?? '').trim().isNotEmpty;
+    final hasPhone = (widget.manager.mobile).trim().isNotEmpty;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(

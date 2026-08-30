@@ -103,7 +103,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
       it = it.where((m) {
         return m.username.toLowerCase().contains(q) ||
             m.fullName.toLowerCase().contains(q) ||
-            (m.mobile ?? '').contains(q);
+            m.mobile.contains(q);
       });
     }
     final list = it.toList();
@@ -112,13 +112,13 @@ class _ManagersScreenState extends State<ManagersScreen> {
         case _ManagerSort.username:
           return a.username.compareTo(b.username);
         case _ManagerSort.firstname:
-          return (a.firstname ?? '').compareTo(b.firstname ?? '');
+          return a.firstname.compareTo(b.firstname);
         case _ManagerSort.lastname:
-          return (a.lastname ?? '').compareTo(b.lastname ?? '');
+          return a.lastname.compareTo(b.lastname);
         case _ManagerSort.balance:
-          return (a.balance ?? 0).compareTo(b.balance ?? 0);
+          return a.balance.compareTo(b.balance);
         case _ManagerSort.usersCount:
-          return (a.usersCount ?? 0).compareTo(b.usersCount ?? 0);
+          return a.usersCount.compareTo(b.usersCount);
       }
     }
 
@@ -127,7 +127,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
   }
 
   num get _totalBalance =>
-      _rows.fold<num>(0, (acc, m) => acc + (m.balance ?? 0));
+      _rows.fold<num>(0, (acc, m) => acc + (m.balance));
 
   Future<void> _openAdd() async {
     final added = await showAddManagerSheet(context);
@@ -544,12 +544,12 @@ class _ManagerTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final balance = manager.balance ?? 0;
+    final balance = manager.balance;
     // 2026-07-14: نفصل SAS عن الديون الأخرى في العرض بدل الدمج تحت رقم
     // واحد — يخفي الديون الأخرى في الـchip الموحّد.
     final sasDebt = manager.debt;
     final otherDebt = extraDebt;
-    final points = manager.rewardPoints ?? 0;
+    final points = manager.rewardPoints;
     return Material(
       color: AppColors.surface,
       child: InkWell(
@@ -670,13 +670,13 @@ class _ManagerTile extends StatelessWidget {
                         label: manager.aclName!,
                         color: AppColors.brandAccent,
                       ),
-                    if ((manager.mobile ?? '').isNotEmpty)
+                    if (manager.mobile.isNotEmpty)
                       _badge(
                         icon: LucideIcons.phone,
                         label: manager.mobile,
                         color: AppColors.success,
                       ),
-                    if ((manager.company ?? '').isNotEmpty)
+                    if (manager.company.isNotEmpty)
                       _badge(
                         icon: LucideIcons.briefcase,
                         label: manager.company,
@@ -700,7 +700,7 @@ class _ManagerTile extends StatelessWidget {
                   _statChip(
                     icon: LucideIcons.users,
                     label: 'nav.subscribers'.tr(),
-                    value: '${manager.usersCount ?? 0}',
+                    value: '${manager.usersCount}',
                     color: AppColors.brandAccent,
                   ),
                   if (points > 0)
@@ -735,8 +735,8 @@ class _ManagerTile extends StatelessWidget {
 
   bool get _hasInfoBadges =>
       (manager.aclName ?? '').isNotEmpty ||
-      (manager.mobile ?? '').isNotEmpty ||
-      (manager.company ?? '').isNotEmpty;
+      manager.mobile.isNotEmpty ||
+      manager.company.isNotEmpty;
 
   /// 2026-08-26: badge flat (بلا حدود) — لون خلفيّة خفيف + نصّ ملوّن.
   Widget _badge({

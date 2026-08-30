@@ -253,6 +253,21 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
                 ],
               ),
             ),
+          // ⚠️ `TabBar` سقط عند نقل الشيت إلى القوقعة: بقي `TabBarView`
+          // و`TabController` بلا أيّ مبدّل ظاهر، فلا سبيل للوصول إلى
+          // تبويب الصلاحيات إلّا برمجيّاً عند فشل التحقّق (سطر 128).
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Sp.xl, 0, Sp.xl, Sp.md),
+            child: AnimatedBuilder(
+              animation: _tab,
+              builder: (_, __) => SheetSegmented(
+                labels: ['المعلومات', 'الصلاحيات ($activeCount)'],
+                icons: const [LucideIcons.userCog, LucideIcons.shieldCheck],
+                selectedIndex: _tab.index,
+                onSelect: (i) => _tab.animateTo(i),
+              ),
+            ),
+          ),
           Expanded(
             child: TabBarView(
               controller: _tab,

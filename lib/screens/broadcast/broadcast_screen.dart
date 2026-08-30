@@ -232,9 +232,6 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     final txt = _msg.text;
     final start = sel.start < 0 ? txt.length : sel.start;
     final end = sel.end < 0 ? txt.length : sel.end;
-    final next = txt.substring(0, start) +
-        token +
-        (start == txt.length ? '' : txt.substring(end));
     final needsSpace = start > 0 && !txt.substring(0, start).endsWith(' ');
     final withSpace = needsSpace ? ' $token' : token;
     final finalText = txt.substring(0, start) + withSpace + txt.substring(end);

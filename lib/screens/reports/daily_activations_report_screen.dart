@@ -350,7 +350,7 @@ class _DailyActivationsReportScreenState
   }
 
   String _fmtToday() {
-    final n = _range.from ?? DateTime.now();
+    final n = _range.from;
     String p(int v) => v.toString().padLeft(2, '0');
     return '${n.year}-${p(n.month)}-${p(n.day)}';
   }

@@ -42,7 +42,7 @@ void main() {
         body: const Text('محتوى قصير'),
       ),
     );
-    expect(tester_exception(t), isNull);
+    expect(takenException(t), isNull);
     expect(find.text('عنوان الشيت'), findsOneWidget);
   });
 
@@ -59,7 +59,7 @@ void main() {
         ),
       ),
     );
-    expect(tester_exception(t), isNull);
+    expect(takenException(t), isNull);
   });
 
   testWidgets('مع شريط سفلي — الزرّ يبقى مرئيّاً فوق جسم طويل', (t) async {
@@ -80,7 +80,7 @@ void main() {
         ),
       ),
     );
-    expect(tester_exception(t), isNull);
+    expect(takenException(t), isNull);
     // الزرّ جزء من الشلّ لا من الجسم — يبقى مرسوماً مهما طال المحتوى.
     expect(find.text('تنفيذ'), findsOneWidget);
   });
@@ -108,7 +108,7 @@ void main() {
         ),
       ),
     );
-    expect(tester_exception(t), isNull);
+    expect(takenException(t), isNull);
     expect(find.text('شريط ثابت'), findsOneWidget);
   });
 
@@ -131,7 +131,7 @@ void main() {
         body: const Text('محتوى'),
       ),
     );
-    expect(tester_exception(t), isNull);
+    expect(takenException(t), isNull);
     expect(find.text('خانة إضافيّة'), findsOneWidget);
     expect(find.text('حفظ'), findsOneWidget);
   });
@@ -149,7 +149,7 @@ void main() {
         body: const Text('محتوى'),
       ),
     );
-    expect(tester_exception(t), isNull);
+    expect(takenException(t), isNull);
   });
 
   testWidgets('يعمل في الوضع الليلي كما في النهاري', (t) async {
@@ -167,10 +167,10 @@ void main() {
         body: const Text('محتوى ليلي'),
       ),
     );
-    expect(tester_exception(t), isNull);
+    expect(takenException(t), isNull);
     expect(find.text('محتوى ليلي'), findsOneWidget);
   });
 }
 
 /// يلتقط أوّل استثناء رسم إن وقع — `takeException` تُفرّغ الطابور.
-Object? tester_exception(WidgetTester t) => t.takeException();
+Object? takenException(WidgetTester t) => t.takeException();

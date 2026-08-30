@@ -271,8 +271,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
 
   @override
   Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    final accent = AppColors.brandAccent; // sky blue — pay-debt
+    Theme.of(context); // theme-dep (dark-mode) // sky blue — pay-debt
     final hasSas = _sasDebt > 0;
     final hasCustom = _customRemaining > 0;
     final showSegmented = hasSas && hasCustom;

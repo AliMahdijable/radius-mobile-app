@@ -167,7 +167,6 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final accent = AppColors.success;
     final filtered = _filtered;
     return DesignSheet(
       header: SheetHeaderBar(

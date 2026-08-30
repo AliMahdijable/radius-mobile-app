@@ -90,7 +90,7 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
 
   Future<void> _send() async {
     if (_submitting) return;
-    final phone = (widget.manager.mobile ?? '').trim();
+    final phone = (widget.manager.mobile).trim();
     if (phone.isEmpty) {
       showSheetSnack(context, 'لا يوجد رقم هاتف للمدير', isError: true);
       return;
@@ -144,8 +144,7 @@ class _SendInfoSheetState extends State<_SendInfoSheet> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    const accent = Color(0xFF25D366);
-    final hasPhone = (widget.manager.mobile ?? '').trim().isNotEmpty;
+    final hasPhone = (widget.manager.mobile).trim().isNotEmpty;
     // iOS keyboard-avoidance: push the sheet up so the editable message
     // text field + send button stay visible when the keyboard opens.
     return DesignSheet(

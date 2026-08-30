@@ -54,7 +54,7 @@ class ManagerNoticeService {
 
     // WhatsApp branch
     if (sendWhatsApp) {
-      final phone = (manager.mobile ?? '').trim();
+      final phone = manager.mobile.trim();
       if (phone.isEmpty) {
         whatsAppMessage = 'لا يوجد رقم هاتف للمدير';
       } else {

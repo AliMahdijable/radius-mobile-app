@@ -59,12 +59,16 @@ class UbntApi {
       }
     }
     // كل الـusernames فشلت — رسالة واضحة للمستخدم
+    // الخطأ الفعلي كان يُلتقط في `lastAuthErr` ويُهمَل، فيرى المستخدم
+    // إرشاداً عامّاً بدل السبب (رفض اتصال · مضيف غير قابل للوصول ·
+    // فشل مصادقة). النظير `rebootDevice` يستعمله أصلاً — نوحّدهما.
     throw UbntException(
         'فشل SSH auth مع كل الـusernames (${userList.join(", ")}).\n'
         'تحقّق من:\n'
         '  • SSH مفعّل على الجهاز (Services → SSH Server)\n'
         '  • الـpassword المدخل صحيح (طول=${pass.length})\n'
-        '  • بعض airFiber يستعمل SSH-user منفصل عن web-user');
+        '  • بعض airFiber يستعمل SSH-user منفصل عن web-user'
+        '${lastAuthErr != null ? '\n\nآخر خطأ: ${lastAuthErr.message}' : ''}');
   }
 
   /// إعادة تشغيل الجهاز عبر SSH `reboot` command (مدعوم على airMax + airFiber).
@@ -588,9 +592,11 @@ class UbntApi {
       List sta = const [];
       if (w?['sta'] is List) {
         sta = w!['sta'] as List;
-      } else if (root['stations'] is List)
+      } else if (root['stations'] is List) {
         sta = root['stations'] as List;
-      else if (root['peers'] is List) sta = root['peers'] as List;
+      } else if (root['peers'] is List) {
+        sta = root['peers'] as List;
+      }
       // airFiber remote peer
       final remote = (root['remote'] as Map?)?.cast<String, dynamic>();
       if (sta.isEmpty && remote != null) sta = [remote];
