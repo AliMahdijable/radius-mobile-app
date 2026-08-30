@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -242,90 +243,23 @@ class _MoreActionsSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final live = groups.where((g) => g.items.isNotEmpty).toList();
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.88,
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: Icons.more_horiz_rounded,
+        title: 'إجراءات أخرى',
+        subtitle: subtitle,
+        subtitleLtr: true,
+        onClose: () => Navigator.of(context).pop(),
       ),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius:
-            const BorderRadius.vertical(top: Radius.circular(R.sheet)),
-        boxShadow: Sh.sheet,
-      ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: Sp.md),
-            Container(
-              width: 42,
-              height: H.grabber,
-              decoration: BoxDecoration(
-                color: AppColors.grabber,
-                borderRadius: BorderRadius.circular(R.pill),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.lg, Sp.xl, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('إجراءات أخرى',
-                            style: AppType.sheetTitle().copyWith(fontSize: 16)),
-                        const SizedBox(height: 1),
-                        Text(
-                          subtitle,
-                          textDirection: TextDirection.ltr,
-                          style: AppType.muted().copyWith(fontSize: 11.5),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  _CloseCircle(onTap: () => Navigator.of(context).pop()),
-                ],
-              ),
-            ),
-            Flexible(
-              child: ListView.separated(
-                shrinkWrap: true,
-                padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.lg, Sp.xl, Sp.xxl),
-                itemCount: live.length,
-                separatorBuilder: (_, __) => const SizedBox(height: Sp.md),
-                itemBuilder: (_, i) => _Group(group: live[i]),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CloseCircle extends StatelessWidget {
-  const _CloseCircle({required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      // سطح غاطس لا خلفيّة الشاشة: `bg` داخل شيت سطحه
-      // `surfaceSheet` يبدو ثقباً ليلاً لا زرّاً.
-      color: AppColors.surfaceSunken,
-      shape: const CircleBorder(),
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const CircleBorder(),
-        child: SizedBox(
-          width: H.closeBtn,
-          height: H.closeBtn,
-          child: Icon(Icons.close_rounded, size: 18, color: AppColors.textMid),
-        ),
+      maxHeightFactor: 0.88,
+      scrollable: false,
+      bodyPadding: EdgeInsets.zero,
+      body: ListView.separated(
+        shrinkWrap: true,
+        padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.lg, Sp.xl, Sp.xxl),
+        itemCount: live.length,
+        separatorBuilder: (_, __) => const SizedBox(height: Sp.md),
+        itemBuilder: (_, i) => _Group(group: live[i]),
       ),
     );
   }

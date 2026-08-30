@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -48,13 +49,10 @@ Future<({SortField field, SortDirection direction})?> showSortSheet(
   required SortDirection currentDirection,
 }) {
   return showModalBottomSheet<({SortField field, SortDirection direction})>(
-    barrierColor: AppColors.scrim,
     context: context,
-    backgroundColor: AppColors.surface,
-    showDragHandle: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(R.xl)),
-    ),
+    backgroundColor: Colors.transparent,
+    barrierColor: AppColors.scrim,
+    isScrollControlled: true,
     builder: (_) => _SortSheet(
       currentField: currentField,
       currentDirection: currentDirection,
@@ -81,79 +79,62 @@ class _SortSheetState extends State<_SortSheet> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.lg),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(LucideIcons.arrowDownUp, color: AppColors.brand),
-                const SizedBox(width: Sp.sm),
-                Text('sort.title'.tr(),
-                    style: AppType.title(color: AppColors.textHi)
-                        .copyWith(fontSize: 16, fontWeight: FontWeight.w700)),
-              ],
-            ),
-            const SizedBox(height: Sp.md),
-            // Direction picker
-            Row(
-              children: [
-                Expanded(
-                  child: _DirBtn(
-                    label: 'sort.asc'.tr(),
-                    icon: LucideIcons.arrowUp,
-                    selected: _direction == SortDirection.asc,
-                    onTap: () => setState(() => _direction = SortDirection.asc),
-                  ),
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.arrowDownUp,
+        title: 'sort.title'.tr(),
+        subtitle: '',
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      footer: SheetFooterBar(
+        label: 'common.apply'.tr(),
+        icon: LucideIcons.check,
+        onPressed: () =>
+            Navigator.of(context).pop((field: _field, direction: _direction)),
+      ),
+      body: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: Sp.md),
+          // Direction picker
+          Row(
+            children: [
+              Expanded(
+                child: _DirBtn(
+                  label: 'sort.asc'.tr(),
+                  icon: LucideIcons.arrowUp,
+                  selected: _direction == SortDirection.asc,
+                  onTap: () => setState(() => _direction = SortDirection.asc),
                 ),
-                const SizedBox(width: Sp.sm),
-                Expanded(
-                  child: _DirBtn(
-                    label: 'sort.desc'.tr(),
-                    icon: LucideIcons.arrowDown,
-                    selected: _direction == SortDirection.desc,
-                    onTap: () =>
-                        setState(() => _direction = SortDirection.desc),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: Sp.md),
-            // Field grid
-            Wrap(
-              spacing: Sp.sm,
-              runSpacing: Sp.sm,
-              children: [
-                for (final d in _fieldDefs)
-                  _FieldChip(
-                    label: d.$2.tr(),
-                    icon: d.$3,
-                    selected: _field == d.$1,
-                    onTap: () => setState(() => _field = d.$1),
-                  ),
-              ],
-            ),
-            const SizedBox(height: Sp.lg),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.brand,
-                  padding: const EdgeInsets.symmetric(vertical: Sp.md),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(R.md),
-                  ),
-                ),
-                onPressed: () => Navigator.of(context)
-                    .pop((field: _field, direction: _direction)),
-                child: Text('common.apply'.tr()),
               ),
-            ),
-          ],
-        ),
+              const SizedBox(width: Sp.sm),
+              Expanded(
+                child: _DirBtn(
+                  label: 'sort.desc'.tr(),
+                  icon: LucideIcons.arrowDown,
+                  selected: _direction == SortDirection.desc,
+                  onTap: () => setState(() => _direction = SortDirection.desc),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: Sp.md),
+          // Field grid
+          Wrap(
+            spacing: Sp.sm,
+            runSpacing: Sp.sm,
+            children: [
+              for (final d in _fieldDefs)
+                _FieldChip(
+                  label: d.$2.tr(),
+                  icon: d.$3,
+                  selected: _field == d.$1,
+                  onTap: () => setState(() => _field = d.$1),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }
