@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import '../../../theme/spacing.dart';
 
 /// Brand badge — تصميم قريب من هويّة كل براند بدون نسخ اللوقو الفعلي.
 ///

@@ -6,7 +6,6 @@ import '../core/util/format.dart';
 import '../models/subscriber.dart';
 import '../models/whatsapp_schedule.dart';
 import '../services/auth_storage.dart';
-import '../services/manual_wa_prefs.dart';
 import '../services/manual_wa_sender.dart';
 import '../widgets/manual_wa_chip.dart';
 import 'api_client.dart';

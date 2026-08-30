@@ -8,6 +8,7 @@ import '../../../api/manager_debts_api.dart';
 import '../../../api/managers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../services/manager_notice.dart';
+import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -277,170 +278,146 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     final showSegmented = hasSas && hasCustom;
     // iOS keyboard-avoidance: push the sheet up so amount + note +
     // submit button stay visible when the keyboard opens.
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    return DraggableScrollableSheet(
-      initialChildSize: 0.86,
-      minChildSize: 0.55,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (_, controller) {
-        return Container(
-          decoration: BoxDecoration(
-            // سطح الشيت لا سطح الكارت: الفرق نهاراً طفيف (#FBFBF9 مقابل
-            // أبيض) وبنيويّ ليلاً (#1B231F مقابل #161D19) — الشيت يجب
-            // أن يعلو الشاشة لا أن يغرق فيها.
-            color: AppColors.surfaceSheet,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(R.sheet)),
-          ),
-          padding: EdgeInsets.only(bottom: bottomInset),
-          child: Column(
-            children: [
-              _SheetHandle(),
-              _SheetHeader(
-                icon: LucideIcons.banknote,
-                title: 'تسديد دين',
-                subtitle: widget.manager.username,
-                color: accent,
-                onClose: () => Navigator.of(context).pop(false),
-              ),
-              Expanded(
-                child: _loading
-                    ? const Center(child: CircularProgressIndicator())
-                    : ListView(
-                        controller: controller,
-                        padding: const EdgeInsets.fromLTRB(
-                            Sp.lg, Sp.sm, Sp.lg, Sp.huge),
-                        children: [
-                          // Source badges — clickable when both sources
-                          // have debt, otherwise visual-only.
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _SourceBadge(
-                                  label: 'دين الساس',
-                                  amount: _sasDebt,
-                                  selected: _source == _PaySource.sas,
-                                  enabled: hasSas,
-                                  onTap: showSegmented && hasSas
-                                      ? () => setState(() {
-                                            _source = _PaySource.sas;
-                                            _amountCtrl.clear();
-                                            _amount = 0;
-                                          })
-                                      : null,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _SourceBadge(
-                                  label: 'ديون أخرى',
-                                  amount: _customRemaining,
-                                  selected: _source == _PaySource.custom,
-                                  enabled: hasCustom,
-                                  onTap: showSegmented && hasCustom
-                                      ? () => setState(() {
-                                            _source = _PaySource.custom;
-                                            _amountCtrl.clear();
-                                            _amount = 0;
-                                          })
-                                      : null,
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (!hasSas && !hasCustom) ...[
-                            const SizedBox(height: Sp.xl),
-                            Center(
-                              child: Text(
-                                'لا يوجد دين على هذا المدير',
-                                style: AppType.label(color: AppColors.textMid),
-                              ),
-                            ),
-                          ] else ...[
-                            const SizedBox(height: Sp.md),
-                            // Amount input
-                            AmountShorthandBox(
-                                controller: _amountCtrl,
-                                child: TextField(
-                                  controller: _amountCtrl,
-                                  keyboardType: TextInputType.number,
-                                  inputFormatters: [
-                                    FilteringTextInputFormatter.digitsOnly,
-                                  ],
-                                  decoration: InputDecoration(
-                                    labelText: 'المبلغ',
-                                    suffixText: 'د.ع',
-                                    helperText:
-                                        'الحدّ الأقصى ${formatIQD(_maxForSource)}',
-                                  ),
-                                )),
-                            const SizedBox(height: Sp.sm),
-                            // Quick chips + pay-full
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: [
-                                for (final v in const [
-                                  10000,
-                                  25000,
-                                  50000,
-                                  100000,
-                                  250000,
-                                  500000,
-                                ])
-                                  _Chip(
-                                    label: '+${formatIQD(v)}',
-                                    onTap: () => _addToAmount(v),
-                                  ),
-                                _Chip(
-                                  label: 'تسديد كامل',
-                                  emphasized: true,
-                                  onTap: _fillFull,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: Sp.md),
-                            TextField(
-                              controller: _noteCtrl,
-                              decoration: const InputDecoration(
-                                labelText: 'ملاحظة (اختياري)',
-                              ),
-                              minLines: 1,
-                              maxLines: 3,
-                            ),
-                            const SizedBox(height: Sp.md),
-                            _PayPreview(
-                              amount: _amount.toDouble(),
-                              previousDebt: _source == _PaySource.sas
-                                  ? _sasDebt
-                                  : _customRemaining,
-                            ),
-                            const SizedBox(height: Sp.md),
-                            _NotifyToggles(
-                              sendWhatsApp: _sendWhatsApp,
-                              sendPush: _sendPush,
-                              waEnabled:
-                                  widget.manager.mobile.trim().isNotEmpty,
-                              onWa: (v) => setState(() => _sendWhatsApp = v),
-                              onPush: (v) => setState(() => _sendPush = v),
-                            ),
-                          ],
-                        ],
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.banknote,
+        title: 'تسديد دين',
+        subtitle: widget.manager.username,
+        subtitleLtr: true,
+        tint: AppColors.brandAccent,
+        onClose: () => Navigator.of(context).pop(false),
+      ),
+      footer: SheetFooterBar(
+        label: _submitting ? 'جارٍ التسديد...' : 'تسديد',
+        icon: LucideIcons.banknote,
+        color: AppColors.brandAccent,
+        enabled: _canSubmit,
+        busy: _submitting,
+        onPressed: _submit,
+      ),
+      scrollable: false,
+      bodyPadding: EdgeInsets.zero,
+      body: _loading
+          ? Center(
+              child: CircularProgressIndicator(
+                  color: AppColors.brandAccent, strokeWidth: 2.5))
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.lg, Sp.xl, Sp.xxl),
+              children: [
+                // Source badges — clickable when both sources
+                // have debt, otherwise visual-only.
+                Row(
+                  children: [
+                    Expanded(
+                      child: _SourceBadge(
+                        label: 'دين الساس',
+                        amount: _sasDebt,
+                        selected: _source == _PaySource.sas,
+                        enabled: hasSas,
+                        onTap: showSegmented && hasSas
+                            ? () => setState(() {
+                                  _source = _PaySource.sas;
+                                  _amountCtrl.clear();
+                                  _amount = 0;
+                                })
+                            : null,
                       ),
-              ),
-              _SubmitBar(
-                label: _submitting ? 'جاري التسديد...' : 'تسديد الآن',
-                color: accent,
-                icon: LucideIcons.banknote,
-                enabled: _canSubmit,
-                busy: _submitting,
-                onPressed: _submit,
-              ),
-            ],
-          ),
-        );
-      },
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _SourceBadge(
+                        label: 'ديون أخرى',
+                        amount: _customRemaining,
+                        selected: _source == _PaySource.custom,
+                        enabled: hasCustom,
+                        onTap: showSegmented && hasCustom
+                            ? () => setState(() {
+                                  _source = _PaySource.custom;
+                                  _amountCtrl.clear();
+                                  _amount = 0;
+                                })
+                            : null,
+                      ),
+                    ),
+                  ],
+                ),
+                if (!hasSas && !hasCustom) ...[
+                  const SizedBox(height: Sp.xl),
+                  Center(
+                    child: Text(
+                      'لا يوجد دين على هذا المدير',
+                      style: AppType.label(color: AppColors.textMid),
+                    ),
+                  ),
+                ] else ...[
+                  const SizedBox(height: Sp.md),
+                  // Amount input
+                  AmountShorthandBox(
+                      controller: _amountCtrl,
+                      child: TextField(
+                        controller: _amountCtrl,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        decoration: InputDecoration(
+                          labelText: 'المبلغ',
+                          suffixText: 'د.ع',
+                          helperText:
+                              'الحدّ الأقصى ${formatIQD(_maxForSource)}',
+                        ),
+                      )),
+                  const SizedBox(height: Sp.sm),
+                  // Quick chips + pay-full
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final v in const [
+                        10000,
+                        25000,
+                        50000,
+                        100000,
+                        250000,
+                        500000,
+                      ])
+                        _Chip(
+                          label: '+${formatIQD(v)}',
+                          onTap: () => _addToAmount(v),
+                        ),
+                      _Chip(
+                        label: 'تسديد كامل',
+                        emphasized: true,
+                        onTap: _fillFull,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: Sp.md),
+                  TextField(
+                    controller: _noteCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'ملاحظة (اختياري)',
+                    ),
+                    minLines: 1,
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: Sp.md),
+                  _PayPreview(
+                    amount: _amount.toDouble(),
+                    previousDebt:
+                        _source == _PaySource.sas ? _sasDebt : _customRemaining,
+                  ),
+                  const SizedBox(height: Sp.md),
+                  _NotifyToggles(
+                    sendWhatsApp: _sendWhatsApp,
+                    sendPush: _sendPush,
+                    waEnabled: widget.manager.mobile.trim().isNotEmpty,
+                    onWa: (v) => setState(() => _sendWhatsApp = v),
+                    onPush: (v) => setState(() => _sendPush = v),
+                  ),
+                ],
+              ],
+            ),
     );
   }
 }

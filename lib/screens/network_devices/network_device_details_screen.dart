@@ -1,13 +1,11 @@
 import 'dart:math' as math;
 
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/mikrotik_api.dart';
 import '../../api/mimosa_api.dart';
-import '../../api/network_devices_api.dart';
 import '../../api/ubnt_api.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/device_region.dart';
@@ -22,6 +20,7 @@ import 'widgets/mikrotik_live_panel.dart';
 import 'widgets/mimosa_live_panel.dart';
 import 'widgets/ruijie_live_panel.dart';
 import 'widgets/ubnt_live_panel.dart';
+import '../../api/network_devices_api.dart';
 
 /// شاشة تفاصيل جهاز — تصميم متقدّم:
 /// - Hero card بـpulse للـonline + brand icon + stats

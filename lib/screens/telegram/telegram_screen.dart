@@ -6,7 +6,6 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/telegram_api.dart';
-import '../../core/util/clipboard_helper.dart';
 import '../../services/auth_storage.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
