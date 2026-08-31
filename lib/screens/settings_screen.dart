@@ -20,6 +20,7 @@ import 'print_templates/print_templates_screen.dart';
 import 'whatsapp/whatsapp_schedules_screen.dart';
 import 'whatsapp/whatsapp_status_screen.dart';
 import 'whatsapp/whatsapp_templates_screen.dart';
+import 'view_scope_screen.dart';
 
 /// Basic settings — version, identity, logout. Will grow next iteration.
 class SettingsScreen extends StatefulWidget {
@@ -183,6 +184,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                 ),
+              const SizedBox(height: Sp.md),
+            ],
+            // «نطاق العرض» — تفضيل عرضٍ لا تحكّم وصول، لكنّه يغيّر ما
+            // يراه كلّ موظّفي الحساب، فيُقفل بـsettings.edit كنظائره.
+            if (Perms.has('settings.edit')) ...[
+              const _SectionLabel('العرض'),
+              _Row(
+                icon: Icons.visibility_off_outlined,
+                label: 'نطاق العرض',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ViewScopeScreen(),
+                  ),
+                ),
+              ),
               const SizedBox(height: Sp.md),
             ],
             // اعتمادات الأجهزة = إعدادات حسّاسة، نقفلها بـsettings.edit.
