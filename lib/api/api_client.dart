@@ -70,7 +70,10 @@ class ApiClient {
     // خلف nginx يدعمها أصلاً.
     d.httpClientAdapter = IOHttpClientAdapter(
       createHttpClient: () => HttpClient()
-        ..idleTimeout = const Duration(seconds: 60)
+        // 15 لا 60: أطول من إيقاع الاستطلاع (5ث) فيبقى المكسب،
+        // وأقصر من مهلة الإبقاء على معظم الخوادم فيقلّ احتمال
+        // إرسال طلب في مقبس أغلقه الطرف الآخر.
+        ..idleTimeout = const Duration(seconds: 15)
         ..maxConnectionsPerHost = 8,
     );
     d.interceptors.add(_AuthInterceptor(d));
@@ -143,6 +146,33 @@ class _AuthInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
+    // ── إعادة محاولة واحدة على مقبس ميت ──
+    //
+    // 🐛 بلاغ 2026-08-31: «HttpException: Connection reset by peer» على
+    // نداءات SAS4، وطلبات تعود بـ`status=null body=null`.
+    //
+    // هذا الأثر الجانبيّ المعروف لإبقاء الاتّصال حيّاً (أُضيف في
+    // 4.1.0): المقبس المُعاد استعماله قد يكون الخادم أو الوسيط قد أغلقه
+    // بالفعل، فيُرسَل الطلب في أنبوب ميت ويعود «reset by peer». لا
+    // يكشفه العميل إلّا بالمحاولة — فالمحاولة الثانية تفتح مقبساً
+    // جديداً وتنجح.
+    //
+    // مقصورةٌ على GET: وحدها آمنة التكرار. وعلى أخطاء النقل وحدها —
+    // لا على ردٍّ وصل بحالة خطأ.
+    final isTransport = err.type == DioExceptionType.connectionError ||
+        (err.type == DioExceptionType.unknown && err.response == null);
+    final isIdempotent = err.requestOptions.method.toUpperCase() == 'GET';
+    if (isTransport && isIdempotent && err.requestOptions.extra['_retried'] != true) {
+      err.requestOptions.extra['_retried'] = true;
+      try {
+        final res = await _dio.fetch<dynamic>(err.requestOptions);
+        return handler.resolve(res);
+      } catch (_) {
+        // فشلت الثانية أيضاً — انقطاع حقيقي لا مقبس بائت.
+        return handler.next(err);
+      }
+    }
+
     if (err.response?.statusCode != 401) {
       return handler.next(err);
     }
