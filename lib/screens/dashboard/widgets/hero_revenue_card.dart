@@ -146,12 +146,23 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
                 ),
               ),
               const SizedBox(width: Sp.sm),
-              Text(
-                '${'dashboard.revenue'.tr()} • $_periodLabel',
-                style: AppType.label(color: AppColors.textMid)
-                    .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
+              // ⚠️ `Expanded` لا `Flexible` ولا نصّ عارٍ.
+              //
+              // ابنُ `Row` بلا flex يحصل على قيدٍ غير محدود فلا يُقصّ
+              // أبداً، فيدفع `Spacer` إلى الصفر ويُخرج تبويبات المدّة
+              // (يومي/أسبوعي/شهري) خارج حافّة الكارت. و`Flexible`
+              // فضفاضة: تأخذ عرضها الطبيعيّ ويصير الباقي فراغاً
+              // خلفيّاً، فتنزلق التبويبات عن الطرف. `Expanded` تملأ
+              // فتلتصق التبويبات بالحافّة كما هي مصمَّمة.
+              Expanded(
+                child: Text(
+                  '${'dashboard.revenue'.tr()} • $_periodLabel',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.label(color: AppColors.textMid)
+                      .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
+                ),
               ),
-              const Spacer(),
               _PeriodTabs(current: _period, onSelect: _select),
             ],
           ),

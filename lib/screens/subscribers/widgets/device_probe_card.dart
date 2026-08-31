@@ -545,32 +545,34 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   // ═══════════════ Ubiquiti ═══════════════
 
   Widget _ubntBody(UbiquitiStatus u) {
-    final tiles = <Widget>[
+    // 🐛 بلاغ 2026-08-31 بصورة: «↓587K ↑3…» — رقم الرفع مقصوص.
+    //
+    // القياس من ملفّ الخطّ المشحون نفسه (IBMPlexSansArabic-700، upem
+    // 1000) لا بالتقدير:
+    //
+    //   المتاح للبلاطة @414dp = (414 − 82) ÷ 3 − 24 = 86.67 نقطة
+    //   «↓587K ↑3.2M» @14px    = 6.861em × 14      = 96.05 نقطة
+    //
+    // والسهمان وحدهما 1.800em — **26٪ من النصّ** بلا أيّ معلومة
+    // رقميّة (U+2191/U+2193 عرضهما 0.900em، أوسع من الرقم بـ50٪).
+    //
+    // ولا يوجد هاتف يتّسع لها: 320→55.3 · 360→68.7 · 393→79.7 ·
+    // 414→86.7 · 430→92.0 نقطة، وكلّها دون الـ96.05. حتّى القيمة
+    // الدنيا «↓0K ↑0K» (64.8) تفيض على 320.
+    //
+    // والأسوأ أنّ القصّ يكذب لا يُخفي فقط: على 360 يختفي الرفع كلّه،
+    // وعلى 320 تختفي وحدة القياس فيُقرأ «587» بلا معرفة أكيلو هي أم
+    // ميغا، وعلى 320 مع تكبير 1.2 يصير «↓58…» — رقمٌ **خاطئ**.
+    //
+    // الحلّ بنيويّ لا تجميليّ: القصيرتان ثابتتا الطول تتقاسمان الصفّ،
+    // والترافيك — الوحيد المتغيّر الطول — يأخذ العرض الكامل (324 نقطة
+    // على 414dp = 3.4× حاجته، و226 على 320dp = 2.4×).
+    final short = <Widget>[
       if (u.signalDbm != null)
         _MetricTile(
           label: 'الإشارة',
           value: '${u.signalDbm} dBm',
           color: _healthColor(u.signalHealth),
-        ),
-      // الترافيك اللحظي محلّ SNR (طلب المستخدم 2026-08-30): SNR رقم
-      // شبه ثابت يُنظر إليه عند التركيب، والترافيك هو ما يُسأل عنه
-      // يوميّاً — «هل المشترك يسحب فعلاً؟».
-      //
-      // SNR يبقى احتياطاً حين لا يُصدّر الإصدار عدّادات بايت: بلاطة
-      // فارغة أسوأ من بلاطة تحمل معلومة أقلّ فائدة.
-      if (_snap?.kind == DeviceKind.ubiquiti)
-        _MetricTile(
-          label: 'الترافيك',
-          value: _rxBps == null
-              ? '—'
-              : '↓${_fmtBps(_rxBps!)} ↑${_fmtBps(_txBps ?? 0)}',
-          color: _rxBps == null ? AppColors.textLow : AppColors.brandAccent,
-        )
-      else if (u.snrDb != null)
-        _MetricTile(
-          label: 'SNR',
-          value: '${u.snrDb} dB',
-          color: AppColors.textHi,
         ),
       if (u.ccqPercent != null)
         _MetricTile(
@@ -578,21 +580,49 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           value: '${u.ccqPercent}%',
           color: _healthColor(u.ccqHealth),
         ),
+      // SNR يبقى في الصفّ: قصيرٌ ثابت («28 dB») ولا يظهر إلّا حين لا
+      // يُصدّر الإصدار عدّادات بايت، فلا يزاحم الترافيك أبداً.
+      if (_snap?.kind != DeviceKind.ubiquiti && u.snrDb != null)
+        _MetricTile(
+          label: 'SNR',
+          value: '${u.snrDb} dB',
+          color: AppColors.textHi,
+        ),
     ];
+
+    // الترافيك اللحظي محلّ SNR (طلب المستخدم 2026-08-30): SNR رقم
+    // شبه ثابت يُنظر إليه عند التركيب، والترافيك هو ما يُسأل عنه
+    // يوميّاً — «هل المشترك يسحب فعلاً؟».
+    final Widget? wide = _snap?.kind == DeviceKind.ubiquiti
+        ? _MetricTile(
+            label: 'الترافيك',
+            value: _rxBps == null
+                ? '—'
+                : '↓${_fmtBps(_rxBps!)} ↑${_fmtBps(_txBps ?? 0)}',
+            color: _rxBps == null ? AppColors.textLow : AppColors.brandAccent,
+          )
+        : null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (tiles.isNotEmpty) ...[
+        if (short.isNotEmpty)
+          // ⚠️ بلا `crossAxisAlignment: CrossAxisAlignment.stretch` هنا.
+          // هي الغريزة لتسوية ارتفاع البلاطات، لكنّها تُعيد المشكلة:
+          // تفرض قيداً ضيّقاً على الأبناء فيُقصّ النصّ من جديد.
           Row(
             children: [
-              for (var i = 0; i < tiles.length; i++) ...[
+              for (var i = 0; i < short.length; i++) ...[
                 if (i > 0) const SizedBox(width: Sp.sm),
-                Expanded(child: tiles[i]),
+                Expanded(child: short[i]),
               ],
             ],
           ),
-          const SizedBox(height: 14),
+        if (wide != null) ...[
+          if (short.isNotEmpty) const SizedBox(height: Sp.sm),
+          wide, // العرض الكامل — بلا Expanded وبلا جار
         ],
+        if (short.isNotEmpty || wide != null) const SizedBox(height: 14),
         _DetailRow(
           label: 'نوع الجهاز',
           value: u.hostname.isEmpty ? 'Ubiquiti' : '${u.hostname} (UBNT)',
@@ -862,8 +892,20 @@ class _SkeletonBar extends StatelessWidget {
 ///
 /// منزلة عشريّة واحدة: البلاطة ضيّقة، ومنزلتان تدفعان النصّ للقصّ في
 /// «↓12.34 ↑3.45».
+/// يُنسّق معدّلاً بالبت/ثانية.
+///
+/// 🐛 كان يفتح بـ`if (bps < 1000) return '0K';` — فمشتركٌ يسحب 400 إلى
+/// 999 بت/ث يُعرَض «0K»، وهو **بصريّاً مطابق** للوصلة الميّتة. فيستنتج
+/// المدير أنّ المشترك لا يسحب شيئاً وقد يقطعه. جوابٌ خاطئ بثقة، لا نقص.
+///
+/// و«0K» ليست أقصر ممّا يستحقّ: بعد أن أخذت بلاطة الترافيك العرض
+/// الكامل (2026-08-31) صار الفارق بين «0K» و«587b» بلا أثر على التخطيط.
+@visibleForTesting
+String fmtBpsForTest(int bps) => _fmtBps(bps);
+
 String _fmtBps(int bps) {
-  if (bps < 1000) return '0K';
+  if (bps <= 0) return '0';
+  if (bps < 1000) return '${bps}b'; // الصدق أهمّ من التوحيد
   if (bps < 1000000) return '${(bps / 1000).toStringAsFixed(0)}K';
   if (bps < 1000000000) return '${(bps / 1000000).toStringAsFixed(1)}M';
   return '${(bps / 1000000000).toStringAsFixed(1)}G';

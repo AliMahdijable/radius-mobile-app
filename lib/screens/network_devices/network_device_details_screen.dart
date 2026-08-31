@@ -789,13 +789,21 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           crossAxisAlignment: CrossAxisAlignment.baseline,
           textBaseline: TextBaseline.alphabetic,
           children: [
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textHi,
-                height: 1,
+            // ابنٌ بلا flex يحصل على قيدٍ غير محدود، فيفيض بدل أن
+            // يُقصّ — و«min/max» هنا البلاطة **الوسطى** من ثلاث، فيسيل
+            // الفائض تحت جارتها في RTL ويُرسَم فوقه. `Flexible` فضفاضة
+            // فلا فرق حيث يتّسع أصلاً.
+            Flexible(
+              child: Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textHi,
+                  height: 1,
+                ),
               ),
             ),
             if (unit.isNotEmpty) ...[

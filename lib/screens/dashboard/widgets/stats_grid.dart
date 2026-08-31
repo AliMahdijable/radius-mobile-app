@@ -135,10 +135,17 @@ class _DebtCard extends StatelessWidget {
                   children: [
                     Icon(LucideIcons.users, color: AppColors.textMid, size: 12),
                     const SizedBox(width: 4),
-                    Text(
-                      '${debtors!.count} ${'dashboard.subscriber_singular'.tr()}',
-                      style: AppType.muted(color: AppColors.textMid)
-                          .copyWith(fontSize: 11, fontWeight: FontWeight.w600),
+                    // الكارت التوأم (`_BalancePointsCard`) يلفّ نصّه
+                    // بـ`Flexible` وهذا لا — فيفيض حيث يقصّ الآخر.
+                    // `loose` فلا فرق بصريّ حيث يتّسع أصلاً.
+                    Flexible(
+                      child: Text(
+                        '${debtors!.count} ${'dashboard.subscriber_singular'.tr()}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppType.muted(color: AppColors.textMid)
+                            .copyWith(fontSize: 11, fontWeight: FontWeight.w600),
+                      ),
                     ),
                   ],
                 ),

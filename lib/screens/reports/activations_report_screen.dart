@@ -314,8 +314,13 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
             style: AppType.rowLabelBold(),
             maxLines: 1,
             overflow: TextOverflow.ellipsis),
+        // `maxLines: 1` بلا `overflow` تعني `TextOverflow.clip` —
+        // تُشرَّح الكلمة من منتصف الحرف بلا «…»، فيرى المستخدم كلمةً
+        // تبدو تامّةً لكنّها **مختلفة**. الحذف الظاهر أصدق من بترٍ صامت.
         Text(label,
-            style: AppType.muted().copyWith(fontSize: 10.5), maxLines: 1),
+            style: AppType.muted().copyWith(fontSize: 10.5),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis),
       ],
     );
   }

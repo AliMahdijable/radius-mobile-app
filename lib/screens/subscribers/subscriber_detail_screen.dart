@@ -760,6 +760,19 @@ class _LiveSessionCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
+          // 🐛 بلاغ 2026-08-31: عنوان الـIP مقصوص — «10.100.11…».
+          //
+          // كان ثلاث بلاطات في صفّ، فالعنوان يأخذ الثلث:
+          //   المتاح @430dp ≈ 91 نقطة · @414 ≈ 86 · @360 ≈ 68 · @320 ≈ 55
+          //   «192.168.100.254» يحتاج 113.8 نقطة
+          // فلم يتّسع على **أيّ** جهاز قطّ. والقصّ يأكل آخر العنوان —
+          // أي رقم المضيف نفسه، وهو الجزء الوحيد الذي يميّز جهازاً عن
+          // آخر. والبلاطة قابلة للنقر لفتح الجهاز، فالمدير ينقر عنواناً
+          // لا يستطيع قراءته.
+          //
+          // التحميل والرفع قصيران وثابتا الشكل («4.9 GB») فيبقيان
+          // شريكَين؛ والعنوان ينزل صفّاً كاملاً — 348 نقطة على 414dp،
+          // أي 3× حاجته.
           Row(
             children: [
               Expanded(
@@ -779,23 +792,21 @@ class _LiveSessionCard extends StatelessWidget {
                   color: AppColors.info,
                 ),
               ),
-              if (ip.isNotEmpty) ...[
-                const SizedBox(width: 9),
-                Expanded(
-                  child: _SunkenTile(
-                    icon: Icons.open_in_new_rounded,
-                    label: 'IP',
-                    value: ip,
-                    color: AppColors.textHi,
-                    onTap: () => launchUrl(
-                      Uri.parse('http://$ip'),
-                      mode: LaunchMode.externalApplication,
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
+          if (ip.isNotEmpty) ...[
+            const SizedBox(height: 9),
+            _SunkenTile(
+              icon: Icons.open_in_new_rounded,
+              label: 'IP',
+              value: ip,
+              color: AppColors.textHi,
+              onTap: () => launchUrl(
+                Uri.parse('http://$ip'),
+                mode: LaunchMode.externalApplication,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -811,12 +822,21 @@ class _LiveSessionCard extends StatelessWidget {
     return '$mد';
   }
 
+  /// 🐛 كان يقفز إلى الميغابايت دائماً، فـ20 كيلوبايت تُعرَض «0.0 MB» —
+  /// وهي بصريّاً «لا شيء». مشتركٌ فتح جلسةً وسحب قليلاً يبدو كمن لم
+  /// يسحب أبداً، وهو الفرق بين «الخطّ يعمل» و«الخطّ ميّت».
+  ///
+  /// الدرجات الأصغر تُضاف لأنّ الصدق أهمّ من ثبات الوحدة، والبلاطة
+  /// تتّسع لها («512 KB» ليست أطول من «0.0 MB»).
   static String _formatBytes(int bytes) {
-    if (bytes <= 0) return '0 MB';
+    if (bytes <= 0) return '0';
     const gb = 1024 * 1024 * 1024;
     const mb = 1024 * 1024;
+    const kb = 1024;
     if (bytes >= gb) return '${(bytes / gb).toStringAsFixed(1)} GB';
-    return '${(bytes / mb).toStringAsFixed(1)} MB';
+    if (bytes >= mb) return '${(bytes / mb).toStringAsFixed(1)} MB';
+    if (bytes >= kb) return '${(bytes / kb).toStringAsFixed(0)} KB';
+    return '$bytes B';
   }
 }
 
@@ -1405,11 +1425,23 @@ class _SubscriberHero extends StatelessWidget {
     String two(int n) => n.toString().padLeft(2, '0');
     return Row(
       children: [
+        // ⚠️ `Flexible` و`Spacer` شقيقان بنفس الـflex الافتراضيّ (1)،
+        // فيتقاسمان الفراغ **مناصفةً** — والفضفاض (loose) لا يستطيع
+        // مطالبة الضيّق (tight) بنصفه ولو كان فارغاً. فاسم المدير
+        // محبوسٌ في نصف الصفّ مهما اتّسع الباقي:
+        //   «تابع إلى najaf650» يحتاج 100.9 نقطة، والنصف يعطيه أقلّ
+        //   على 320 و360 — فيُقصّ إلى «تابع إلى naja…».
+        //
+        // الحلّ إعطاء الاسم `Expanded` (tight) فيأخذ كلّ ما تبقّى بعد
+        // التاريخ. و`Spacer` تبقى في فرع «لا مدير أب» — وهي ليست
+        // اختياريّة هناك: المشتركون تحت الأدمن الأعلى `parentUsername`
+        // فيهم null وهي الحالة الشائعة، وبلا الفراغ يلتصق التاريخ
+        // بالطرف الخطأ.
         if (parent != null && parent.isNotEmpty) ...[
           const Icon(Icons.shield_rounded,
               size: 15, color: AppColors.onBrandSecondary),
           const SizedBox(width: 6),
-          Flexible(
+          Expanded(
             child: Text(
               'تابع إلى $parent',
               style: AppType.muted(color: AppColors.onBrandSecondary)
@@ -1418,8 +1450,9 @@ class _SubscriberHero extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-        ],
-        const Spacer(),
+          const SizedBox(width: Sp.sm),
+        ] else
+          const Spacer(),
         if (exp != null)
           Text(
             '${exp.year}/${two(exp.month)}/${two(exp.day)} '
