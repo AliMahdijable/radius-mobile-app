@@ -56,51 +56,58 @@ class DesignSheet extends StatelessWidget {
     final inset = media.viewInsets.bottom;
     Widget content = Padding(padding: bodyPadding, child: body);
     if (scrollable) {
-      content = SingleChildScrollView(
-        padding: EdgeInsets.only(bottom: inset),
-        child: content,
-      );
-    } else {
-      // 🐛 بلاغ 2026-08-31: «فورم تعديل الأجهزة أكو أجزاء ما يكدر يرفع
-      // المحتوى من يكتب» — لوحة المفاتيح تغطّي الحقل ولا شيء يتحرّك.
-      //
-      // كانت حشوة لوحة المفاتيح **داخل شرط `scrollable`** وحده. فالشيت
-      // الذي يدير تمريره بنفسه (`scrollable: false`) لا يعلم بوجود
-      // اللوحة إطلاقاً: يبقى بارتفاعه الكامل، وتُرسَم اللوحة فوق ثلثه
-      // السفلي، والحقل تحتها.
-      //
-      // وليست علّة نموذج الأجهزة وحده: عشرون شيتاً تحمل حقولاً وتمرّر
-      // `scrollable: false`.
-      //
-      // ⚠️ والحشوة هنا **خارج** الجسم لا داخله: الجسم في هذه الحالة
-      // `Column` فيها `Expanded`، فحشوة سفليّة تُقلّص المساحة المتاحة
-      // للقائمة الداخليّة — وعندها يعمل تمرير فلاتر التلقائيّ إلى
-      // الحقل المركَّز. لو وُضعت داخل الـ`Expanded` لما تقلّص شيء.
-      content = Padding(
-        padding: EdgeInsets.only(bottom: inset),
-        child: content,
-      );
+      content = SingleChildScrollView(child: content);
     }
-    return Container(
-      constraints:
-          BoxConstraints(maxHeight: media.size.height * maxHeightFactor),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceSheet,
-        borderRadius:
-            const BorderRadius.vertical(top: Radius.circular(R.sheet)),
-        boxShadow: Sh.sheet,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SheetHandle(),
-          header,
-          Flexible(child: content),
-          if (footer != null)
-            SafeArea(top: false, child: footer!)
-          else
-            SizedBox(height: media.padding.bottom + Sp.sm),
-        ],
+    // 🐛 بلاغ 2026-08-31 بصورة: «المودل من أنقر سعر ما أكدر أخرج منه أو
+    // أزر ماكو» — زرّ الإجراء مختفٍ خلف لوحة المفاتيح، فالمستخدم يكتب
+    // المبلغ ثمّ لا يجد ما يضغطه.
+    //
+    // ⚠️ وإصلاحي الأوّل (4.5.1) لم يكفِ: أضفتُ الحشوة داخل **الجسم**
+    // وحده. لكنّ الزرّ شقيقٌ أسفله في عمود الشيت، والشيت ملتصق بقاع
+    // الشاشة — فارتفع الجسم وبقي الزرّ تحت اللوحة كما هو.
+    //
+    // الصواب رفع الشيت **كلّه**: حشوة سفليّة على الحاوية بأكملها، فيعلو
+    // الرأس والجسم والزرّ معاً فوق اللوحة. والسقف يُحسب من الارتفاع
+    // **المرئيّ** (`size.height - inset`) لا الكلّي — وإلّا امتدّ الشيت
+    // تحت اللوحة من جديد على الشاشات القصيرة.
+    return Padding(
+      padding: EdgeInsets.only(bottom: inset),
+      child: Container(
+        constraints: BoxConstraints(
+            maxHeight: (media.size.height - inset) * maxHeightFactor),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceSheet,
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(R.sheet)),
+          boxShadow: Sh.sheet,
+        ),
+        // 🐛 بلاغ 2026-08-31: «كل المودلات الي بيها نوع الكيبورد رقم
+        // كلها ما تكدر تخرج بالنقر ع أي مكان».
+        //
+        // لوحة الأرقام لا تحمل زرّ «تمّ» ولا «إدخال» — لا في iOS ولا في
+        // أندرويد. فمن يفتحها يعلق: لا مفتاح يُغلقها، والنقر خارج الحقل
+        // لا يفعل شيئاً لأنّ لا أحد يستمع له.
+        //
+        // ⚠️ `opaque` لا `translucent`: الأوّل يجعل الكاشف يلتقط النقر
+        // في **الفراغ** أيضاً — وهو ما يعنيه المستخدم بـ«أي مكان».
+        // والأزرار والحقول لا تتأثّر: النقر عند نقطة واحدة يفوز به
+        // الأعمق في الشجرة، فزرّ الإجراء يبقى يعمل.
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SheetHandle(),
+              header,
+              Flexible(child: content),
+              if (footer != null)
+                SafeArea(top: false, child: footer!)
+              else
+                SizedBox(height: media.padding.bottom + Sp.sm),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -726,7 +733,6 @@ class SheetResultBanner extends StatelessWidget {
   }
 }
 
-
 /// بطاقة النتيجة الداكنة — «السعر بعد الخصم» في شيت الخصم و«الملخّص»
 /// في شيت التجديد. سطحها براند ثابت في الوضعين (طبقات `onBrand*`)،
 /// فلا تحتاج تعديلاً في الوضع الداكن.
@@ -1064,7 +1070,11 @@ Future<bool?> showConfirmSheet(
     // الأزرار الأخرى في الشاشة نفسها.
     AppTone.brand => (AppColors.brand, AppColors.brandSoftBg, AppColors.brand),
     // والخطر يستعمل `errorFill` للتعبئة — أغمق من `error` النصّي.
-    AppTone.danger => (AppColors.error, AppColors.dangerSoftBg, AppColors.errorFill),
+    AppTone.danger => (
+        AppColors.error,
+        AppColors.dangerSoftBg,
+        AppColors.errorFill
+      ),
     _ => (tone.fill, tone.softBg, tone.fill),
   };
   return showModalBottomSheet<bool>(

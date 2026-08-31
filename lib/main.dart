@@ -259,7 +259,28 @@ class _MyServicesAppState extends State<MyServicesApp>
           builder: (context, child) => MediaQuery.withClampedTextScaling(
             minScaleFactor: 0.9,
             maxScaleFactor: 1.2,
-            child: child ?? const SizedBox.shrink(),
+            // 🐛 بلاغ 2026-08-31: «كل المودلات الي بيها الكيبورد رقم ما
+            // تكدر تخرج بالنقر ع أي مكان».
+            //
+            // لوحة الأرقام لا تحمل زرّ «تمّ» ولا «إدخال» — لا في iOS ولا
+            // في أندرويد. فمن يفتحها يعلق ما لم يكن هناك من يستمع للنقر
+            // خارج الحقل.
+            //
+            // وهنا لا في كلّ شاشة: `builder` يلفّ `Navigator` كلّه، فيغطّي
+            // كلّ شاشة وكلّ حوار وكلّ مودل — الموجود منها والذي يُكتب
+            // غداً. الترقيع شاشةً شاشةً كان سيترك ما يُضاف لاحقاً مكسوراً.
+            //
+            // ⚠️ `translucent` لا `opaque`: الأوّل يستقبل النقر **ولا
+            // يبتلعه**، فيصل إلى ما تحته. عند الجذر يعني ذلك أنّ كلّ
+            // زرّ وحقل يعمل كما كان، والفراغ وحده يُلغي التركيز.
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: () {
+                final f = FocusManager.instance.primaryFocus;
+                if (f != null && f.hasFocus) f.unfocus();
+              },
+              child: child ?? const SizedBox.shrink(),
+            ),
           ),
           home: const SplashScreen(),
           navigatorKey: _appNavigatorKey,

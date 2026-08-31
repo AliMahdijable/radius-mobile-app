@@ -59,29 +59,39 @@ class _ManagerMovementsScreenState extends State<ManagerMovementsScreen> {
         title: Text('تعديل ${m.arabicLabel}',
             style:
                 AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AmountShorthandBox(
-                controller: amountCtrl,
-                child: TextField(
-                  controller: amountCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'المبلغ',
-                    helperText:
-                        'تعديل المبلغ يحدّث السجل فقط — لا يُعكَس على الساس',
-                    helperMaxLines: 2,
-                  ),
-                )),
-            const SizedBox(height: Sp.sm),
-            TextField(
-              controller: noteCtrl,
-              decoration: const InputDecoration(labelText: 'الملاحظة'),
-              minLines: 1,
-              maxLines: 3,
+        // 🐛 بلاغ 2026-08-31: لوحة الأرقام بلا زرّ «تمّ» في النظامين،
+        // فالنقر في الفراغ هو المخرج الوحيد. والمحتوى يُمرَّر كذلك:
+        // الحوار يعلو فوق اللوحة (فلاتر يتكفّل بذلك) لكنّه قد يفيض على
+        // الشاشات القصيرة، فيُقصّ الحقل الثاني أو زرّا الإجراء.
+        content: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AmountShorthandBox(
+                    controller: amountCtrl,
+                    child: TextField(
+                      controller: amountCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'المبلغ',
+                        helperText:
+                            'تعديل المبلغ يحدّث السجل فقط — لا يُعكَس على الساس',
+                        helperMaxLines: 2,
+                      ),
+                    )),
+                const SizedBox(height: Sp.sm),
+                TextField(
+                  controller: noteCtrl,
+                  decoration: const InputDecoration(labelText: 'الملاحظة'),
+                  minLines: 1,
+                  maxLines: 3,
+                ),
+              ],
             ),
-          ],
+          ),
         ),
         actions: [
           TextButton(
