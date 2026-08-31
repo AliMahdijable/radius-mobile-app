@@ -1012,6 +1012,12 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                             CircularProgressIndicator(color: AppColors.brand))
                     : CustomScrollView(
                         controller: _scrollCtrl,
+                        // بلا هذا لا يعمل السحب للتحديث حين يفرغ الفلتر:
+                        // المحتوى يملأ الشاشة تماماً ولا يفيض، فلا
+                        // إفراط تمرير تلتقطه `RefreshIndicator`. كان
+                        // `_EmptyState` يحمل `ListView` لهذا الغرض —
+                        // وهو ما فجّر الشاشة.
+                        physics: const AlwaysScrollableScrollPhysics(),
                         slivers: [
                           SliverToBoxAdapter(
                             child: Column(
@@ -1968,20 +1974,43 @@ class _EmptyState extends StatelessWidget {
     final msg = query.isNotEmpty
         ? 'subscribers.no_search_results'.tr(namedArgs: {'q': query})
         : 'subscribers.empty_filter'.tr();
-    return ListView(
-      // ListView so RefreshIndicator can still pull-to-refresh.
-      physics: const AlwaysScrollableScrollPhysics(),
-      children: [
-        SizedBox(height: MediaQuery.sizeOf(context).height * 0.2),
-        Icon(LucideIcons.inbox, size: 40, color: AppColors.textLow),
-        const SizedBox(height: Sp.sm),
-        Text(
-          msg,
-          textAlign: TextAlign.center,
-          style: AppType.label(color: AppColors.textMid)
-              .copyWith(fontSize: 14, fontWeight: FontWeight.w600),
-        ),
-      ],
+    // 🐛 ⚠️ لا `ListView` هنا — ولا أيّ شيء قابل للتمرير. أبداً.
+    //
+    // بلاغ 2026-08-31 (شاشة بيضاء + فيض لا ينقطع): كان هذا `ListView`،
+    // وهو موضوع داخل `SliverFillRemaining(hasScrollBody: false)`. وتلك
+    // تسأل طفلها عن ارتفاعه الذاتيّ — و`RenderViewport` لا يملك ارتفاعاً
+    // ذاتيّاً بحكم تعريفه (حسابه يوجب إنشاء كلّ الأبناء، وهو نقيض
+    // الكسل الذي وُجد له). فيرمي:
+    //   «RenderViewport does not support returning intrinsic dimensions»
+    //
+    // ثمّ يتسلسل: `geometry` تبقى null → `layoutChildSequence` يرمي على
+    // `child.geometry!` → `visitChildrenForSemantics` يرمي على
+    // `sliver.geometry!` في كلّ إطار. فالثلاثة التي رآها المستخدم
+    // (parentDataDirty · Null check · deactivated ancestor) عرَضٌ واحد
+    // لهذا السطر.
+    //
+    // ويقع حصراً حين **يفرغ** الفلتر — ولهذا ظهر في قسم «غير مفعّل».
+    //
+    // والسحب للتحديث لم يضع: `CustomScrollView` أعلاه صارت
+    // `AlwaysScrollableScrollPhysics`، فالإيماءة تعمل من الخارج وهو
+    // موضعها الصحيح أصلاً.
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(LucideIcons.inbox, size: 40, color: AppColors.textLow),
+          const SizedBox(height: Sp.sm),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Sp.xl),
+            child: Text(
+              msg,
+              textAlign: TextAlign.center,
+              style: AppType.label(color: AppColors.textMid)
+                  .copyWith(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
