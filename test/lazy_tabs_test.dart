@@ -12,7 +12,12 @@ import 'package:rad_mysvcs/screens/main_shell.dart';
 ///
 /// هذه الاختبارات تحرس الشكل لا النيّة: من يُعيد `children: tabs`
 /// مباشرةً يُعيد العطل كاملاً، وسيسقط هنا.
-Widget? _unwrap(Widget w) => w is ExcludeSemantics ? w.child : w;
+Widget? _unwrap(Widget w) {
+  var cur = w;
+  if (cur is TickerMode) cur = cur.child;
+  if (cur is ExcludeSemantics) return cur.child;
+  return cur;
+}
 
 void main() {
   _semanticsGuard();
@@ -91,9 +96,14 @@ void _semanticsGuard() {
     final out = lazyTabChildren(tabs, {0, 1, 2}, 1);
     for (var i = 0; i < tabs.length; i++) {
       final w = out[i];
-      expect(w, isA<ExcludeSemantics>(),
-          reason: 'الخانة $i غير ملفوفة — يعود العطل');
-      expect((w as ExcludeSemantics).excluding, i != 1,
+      expect(w, isA<TickerMode>(),
+          reason: 'الخانة $i بلا TickerMode — حركاتها تنبض وهي مخفيّة');
+      final tm = w as TickerMode;
+      expect(tm.enabled, i == 1,
+          reason: 'الخانة $i: المعروض وحده تنبض حركاته');
+      expect(tm.child, isA<ExcludeSemantics>(),
+          reason: 'الخانة $i غير ملفوفة بـExcludeSemantics — يعود العطل');
+      expect((tm.child as ExcludeSemantics).excluding, i != 1,
           reason: 'الخانة $i: المعروض وحده لا يُستثنى');
     }
   });
@@ -101,7 +111,7 @@ void _semanticsGuard() {
   test('غير المزار يبقى SizedBox لا ExcludeSemantics فارغة', () {
     final out = lazyTabChildren(tabs, {1}, 1);
     expect(out[0], isA<SizedBox>());
-    expect(out[1], isA<ExcludeSemantics>());
+    expect(out[1], isA<TickerMode>());
     expect(out[2], isA<SizedBox>());
   });
 }

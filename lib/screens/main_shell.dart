@@ -76,7 +76,24 @@ List<Widget> lazyTabChildren(List<Widget> tabs, Set<int> visited, int active) =>
           // يُجبر إعادة إسناد `parentData` عند كلّ تبديل تبويب.
           //
           // (فلاتر 3.47.0 — تُحقّق من stack.dart قبل إزالة هذا.)
-          ExcludeSemantics(excluding: i != active, child: tabs[i])
+          // ⚠️ `TickerMode` كذلك — `IndexedStack` لا يلفّ أبناءه بها.
+          //
+          // فحركات التبويبات المخفيّة تظلّ تنبض: AnimatedSwitcher في
+          // device_chip_micro، وAnimatedOpacity في أربع لوحات أجهزة
+          // حيّة، وشمعة الهيكل بـ`..repeat()` التي لا تتوقّف أبداً.
+          // كلّ واحدة تُوقظ إطاراً في كلّ نبضة لشاشة لا يراها أحد —
+          // بطّاريّة تُحرَق، وشجرة دلالات تُوسَّخ وهي مخفيّة (وذاك
+          // بالضبط ما يجعل `ExcludeSemantics` أعلاه ضروريّة).
+          //
+          // الإيقاف آمن: لا شيء في المشروع يعلّق حالةً على اكتمال
+          // حركة (فُحص: صفر `addStatusListener` وصفر
+          // `AnimationStatus.completed`). المتوقّفة تستأنف من موضعها
+          // عند العودة، والمؤقّتات (`Timer.periodic`) لا تتأثّر —
+          // فجلب البيانات يبقى كما هو.
+          TickerMode(
+            enabled: i == active,
+            child: ExcludeSemantics(excluding: i != active, child: tabs[i]),
+          )
         else
           const SizedBox.shrink(),
     ];
