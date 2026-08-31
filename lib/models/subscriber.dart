@@ -64,7 +64,10 @@ class Subscriber {
   /// موقع نظيف؛ خلاف ذلك = نصّ قديم يجب تنظيفه من SAS4 أوّلاً.
   final String? addressRaw;
 
-  const Subscriber({
+  // ⚠️ ليس `const`: الحقلان المحفوظان (`balanceAmount` · `parsedExpiration`)
+  // حقلا `late final`، ولا يجتمعان مع باني ثابت. لا موضع في المشروع
+  // ينشئ `const Subscriber(...)`، فالكلفة صفر.
+  Subscriber({
     this.idx,
     required this.username,
     required this.firstname,
@@ -118,7 +121,17 @@ class Subscriber {
       (phone?.isNotEmpty ?? false) ? phone! : (mobile ?? '');
 
   /// Signed amount from notes (negative = debt, positive = credit).
-  double get balanceAmount {
+  ///
+  /// ⚡ محفوظ لا محسوب في كلّ قراءة (تدقيق أداء 2026-08-31). كان جالباً
+  /// عاديّاً، و`hasDebt`/`hasCredit`/`debtAbs` كلّها تمرّ به — فبناءٌ
+  /// واحد لشاشة المشتركين كان يُعيد التحليل عشرات الآلاف من المرّات.
+  ///
+  /// آمن لأنّ كلّ مدخلاته (`notes` · `hasDebtFlag` · `debt`) حقول
+  /// `final`: الكائن لا يتغيّر بعد إنشائه، والجلب الجديد يبني كائنات
+  /// جديدة.
+  late final double balanceAmount = _computeBalanceAmount();
+
+  double _computeBalanceAmount() {
     final raw = notes?.trim() ?? '';
     if (raw.isEmpty) {
       // Fallback: backend's hasDebt + debt fields.
@@ -138,11 +151,18 @@ class Subscriber {
   /// Parsed expiration date — null when SAS4 sent an unparseable value.
   /// Mirrors v1's SubscriberModel._parsedExpiration so the date-based
   /// predicates below behave identically to v1.
-  DateTime? get parsedExpiration {
+  ///
+  /// ⚡ محفوظ كـ`balanceAmount` وللسبب نفسه: `isExpired` و`isNearExpiry`
+  /// و`isActive` ومُقارِن الفرز كلّها تمرّ به، فكان `DateTime.tryParse`
+  /// أثقل عمل في الشاشة كلّها. و`late` يحفظ `null` أيضاً — فالقيم
+  /// غير القابلة للتحليل لا تُعاد محاولتها في كلّ إطار.
+  late final DateTime? parsedExpiration = _computeParsedExpiration();
+
+  DateTime? _computeParsedExpiration() {
     final raw = expiration;
     if (raw == null || raw.trim().isEmpty) return null;
-    return DateTime.tryParse(raw.trim()) ??
-        DateTime.tryParse(raw.trim().split(' ').first);
+    final t = raw.trim();
+    return DateTime.tryParse(t) ?? DateTime.tryParse(t.split(' ').first);
   }
 
   /// Matches v1: prefer the parsed date (so we catch expirations that
@@ -162,8 +182,11 @@ class Subscriber {
   bool get isNearExpiry {
     final exp = parsedExpiration;
     if (exp != null) {
-      if (exp.isBefore(DateTime.now())) return false;
-      return exp.difference(DateTime.now()).inDays <= 3;
+      // نداء واحد لا اثنان: القيمتان يجب أن تُقاسا على اللحظة نفسها،
+      // وإلّا أمكن لاشتراك أن يكون «غير منتهٍ» و«باقٍ له -1 يوم» معاً.
+      final now = DateTime.now();
+      if (exp.isBefore(now)) return false;
+      return exp.difference(now).inDays <= 3;
     }
     final d = remainingDays;
     return d != null && d >= 1 && d <= 3;

@@ -58,7 +58,17 @@ const _defaultSortByFilter = <SubscriberFilter, (SortField, SortDirection)>{
 /// sort sheet, pagination, multi-select via long-press, bulk action bar
 /// (toggle/delete wired to backend, renew deferred to Phase 5).
 class SubscribersScreen extends StatefulWidget {
-  const SubscribersScreen({super.key, this.filterCmd});
+  const SubscribersScreen({super.key, this.filterCmd, this.isActive});
+
+  /// هل هذا التبويب مرئيّ الآن؟ (يمرّرها `MainShell`)
+  ///
+  /// 🐛 تدقيق أداء 2026-08-31: الاستطلاع كان محروساً بـ`_appActive`
+  /// وحدها — وهي دورة حياة **التطبيق** لا رؤية التبويب. فبمجرّد فتح
+  /// المشتركين مرّة (ونقرة واحدة على أيّ عدّاد في الرئيسيّة تفتحها)
+  /// يظلّ يستطلع بقيّة الجلسة مهما كان التبويب المعروض: ثلاثة طلبات
+  /// بلا كاش كلّ خمس ثوانٍ = 36 في الدقيقة على شبكة خلويّة، لشاشة
+  /// لا يراها أحد.
+  final ValueListenable<bool>? isActive;
 
   /// Filter command from MainShell. When dashboard KPIs are tapped the
   /// ValueNotifier fires with the desired filter and this screen
@@ -148,13 +158,31 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     SubscriberEvents.dataChanged.addListener(_onDataChanged);
     _load();
     _searchCtrl.addListener(_onSearchChanged);
+    widget.isActive?.addListener(_onActiveChanged);
     _startAutoRefresh();
   }
 
   /// Timer صامت — يفجّر _silentRefresh كل 5 ثواني ما دام التطبيق active.
   /// نلغي ونعيد التشغيل عند resume، ونوقف تماماً في pause/inactive.
+  /// الشاشة حيّة **ومرئيّة** معاً.
+  bool get _mayRefresh => widget.isActive?.value ?? true;
+
+  void _onActiveChanged() {
+    if (_mayRefresh) {
+      _startAutoRefresh();
+      // تحديث فوري عند العودة: القيم قد تكون قديمة بدقائق.
+      if (!_refreshing && !_loading) _silentRefresh();
+    } else {
+      _autoRefreshTimer?.cancel();
+    }
+  }
+
   void _startAutoRefresh() {
     _autoRefreshTimer?.cancel();
+    // ⚠️ الحارس هنا لا عند الاستدعاء: ثلاثة مسارات تستدعيها
+    // (initState · didChangeAppLifecycleState · _onActiveChanged)،
+    // ونسيانه في واحدة يعيد الاستنزاف كاملاً.
+    if (!_mayRefresh) return;
     _autoRefreshTimer = Timer.periodic(_autoRefreshInterval, (_) {
       if (!mounted || !_appActive) return;
       // نتفادى overlap مع pull-to-refresh أو _load الأولي. نستخدم
@@ -171,6 +199,11 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     // يجيب online status حديث في كل مرة (loadOnline لا يُخزَّن).
     try {
       await _fetchAndMerge();
+      // ⚠️ بلا هذا السطر يُدفع ثمن الاستطلاع كاملاً بلا أثر:
+      // `_fetchAndMerge` يُسند `_all = merged` بلا `setState`، فالحالة
+      // الحيّة (متصل/منتهي) لا تُرسَم حتّى يقع `setState` من سبب آخر.
+      // أي أنّ الحلقة كانت تعمل على الفراغ منذ إنشائها.
+      if (mounted) setState(() {});
     } catch (_) {
       // silent — لا نُشوّش المستخدم بأخطاء polling. الـpull-to-refresh
       // يُعيد المحاولة صريحاً لو الاتصال انقطع.
@@ -223,6 +256,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     _autoRefreshTimer?.cancel();
     widget.filterCmd?.removeListener(_onFilterCmd);
     SubscriberEvents.dataChanged.removeListener(_onDataChanged);
+    widget.isActive?.removeListener(_onActiveChanged);
     _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
@@ -496,8 +530,11 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     // (ألف→ياء). للاتيني: نتجاهل حالة الأحرف (Ali و ali نفس الشيء).
     // whitespace متعدّد يُقلَّص لحرف واحد قبل المقارنة.
     int alphaCmp(String? a, String? b) {
-      final na = (a ?? '').trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
-      final nb = (b ?? '').trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+      // ⚠️ `_wsRun` ثابتة الصنف لا محلّيّة: كانت `RegExp(r'\s+')` تُترجَم
+      // مرّتين في كلّ **مقارنة**، وفرز 384 عنصراً ≈ 3400 مقارنة — أي
+      // نحو 6800 ترجمة تعبير نمطيّ لكلّ فرزة.
+      final na = (a ?? '').trim().replaceAll(_wsRun, ' ').toLowerCase();
+      final nb = (b ?? '').trim().replaceAll(_wsRun, ' ').toLowerCase();
       // فارغ يسقط لأسفل بغض النظر عن الاتجاه.
       if (na.isEmpty && nb.isEmpty) return 0;
       if (na.isEmpty) return 1;
@@ -548,6 +585,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
     list.sort(_sortDir == SortDirection.asc ? cmp : (a, b) => -cmp(a, b));
   }
+
+  /// تسلسل مسافات — تُترجَم مرّة واحدة لعمر الصنف لا مرّة لكلّ مقارنة.
+  static final RegExp _wsRun = RegExp(r'\s+');
 
   Map<SubscriberFilter, int> _counts() {
     // Manager-scoped so chip counters reflect the current sub-manager
@@ -910,7 +950,20 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    // ⚡ تُحسب مرّةً واحدة للإطار (تدقيق أداء 2026-08-31).
+    //
+    // كانت `_filteredAll` تُستدعى ثلاثاً و`_counts()` ثلاثاً
+    // و`_availableManagers` مرّتين في البناء الواحد — وكلّها جالبات
+    // تُعيد الحساب كاملاً في كلّ قراءة. و`_counts()` وحدها ثمانية
+    // مرورات على القائمة، فثلاث استدعاءات = 24 مروراً على 384 مشتركاً
+    // في كلّ إطار، وكلّ ضغطة مفتاح في البحث تُطلق إطاراً.
+    //
+    // لا ذاكرة بمفتاح إبطال هنا عمداً: مفتاح خاطئ يعني قائمةً بائتة،
+    // وهي عطل أسوأ من الثقل. الحساب مرّة لكلّ إطار يُبقي الصحّة
+    // مضمونةً بالبناء.
     final filtered = _filteredAll;
+    final counts = _counts();
+    final managers = _availableManagers;
     final page = filtered.take(_visibleCount).toList();
     final remaining = filtered.length - page.length;
 
@@ -952,9 +1005,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                       : _ListHeader(
                                           controller: _searchCtrl,
                                           total:
-                                              _counts()[SubscriberFilter.all] ??
+                                              counts[SubscriberFilter.all] ??
                                                   0,
-                                          online: _counts()[
+                                          online: counts[
                                                   SubscriberFilter.online] ??
                                               0,
                                           sortActive: _sortField !=
@@ -963,7 +1016,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                           filterActive: _managerFilter != null,
                                           sortLabel: _sortLabel(),
                                           onSort: _openSortSheet,
-                                          onFilter: _availableManagers.isEmpty
+                                          onFilter: managers.isEmpty
                                               ? null
                                               : _openManagerFilterSheet,
                                           // 2026-08-29: زرّ فحص الأجهزة انتقل من شريط شرائح
@@ -985,7 +1038,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                               compactChild: _CompactSearchBar(
                                 controller: _searchCtrl,
                                 filterActive: _managerFilter != null,
-                                onFilter: _availableManagers.isEmpty
+                                onFilter: managers.isEmpty
                                     ? null
                                     : _openManagerFilterSheet,
                                 onBackToTop: () => _scrollCtrl.animateTo(
@@ -1001,7 +1054,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                   children: [
                                     FilterChipsBar(
                                       current: _filter,
-                                      counts: _counts(),
+                                      counts: counts,
                                       onSelect: (f) => setState(() {
                                         _filter = f;
                                         _applyDefaultSortFor(f);
@@ -1018,7 +1071,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                               children: [
                                 if (!_selectionMode)
                                   _ResultSortBar(
-                                    count: _filteredAll.length,
+                                    count: filtered.length,
                                     sortLabel: _sortLabel(),
                                     descending: _sortDir == SortDirection.desc,
                                     onTap: _openSortSheet,
@@ -1029,7 +1082,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                 // _filteredAll الي بنفسه محكوم بـ_managerScoped.
                                 if (_filter == SubscriberFilter.debtors &&
                                     !_selectionMode)
-                                  _DebtSummaryCard(subscribers: _filteredAll),
+                                  _DebtSummaryCard(subscribers: filtered),
                                 // مطلب 2026-06-11: شريط رفيع يبيّن تقدم فحص الأجهزة
                                 // (لكل المشتركين المتصلين). يختفي لما الفحص يخلص. يظهر
                                 // عدد المفحوص / الإجمالي بدون أن يحجب أي تفاعل آخر.

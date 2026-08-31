@@ -523,6 +523,13 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
   @override
   Widget build(BuildContext context) {
+    // ⚡ مرّة واحدة للإطار (تدقيق أداء 2026-08-31).
+    //
+    // `_filtered` جالبٌ يُرشّح ثمّ **يفرز** القائمة كلّها، ومقارنُه
+    // `_compareIps` يشقّ العنوانين ويُجري أربع `int.tryParse` لكلّ
+    // طرف. وكان يُستدعى داخل `itemBuilder` — أي فرزةٌ كاملة لكلّ صفّ
+    // مرسوم، فقائمةٌ من 40 جهازاً تُفرَز 40 مرّة في الإطار الواحد.
+    final devices = _filtered;
     // Selection mode → AppBar تعرض عدد المحدَّد + أزرار bulk actions
     // بدل الـtitle العادي. زرّ الـback (Android) يخرج من selection بدل الخروج من الشاشة.
     if (_selectionMode) {
@@ -671,7 +678,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       SliverToBoxAdapter(child: _typeFilterRow()),
                       const SliverToBoxAdapter(child: SizedBox(height: 8)),
                       // List
-                      _filtered.isEmpty
+                      devices.isEmpty
                           ? SliverFillRemaining(
                               hasScrollBody: false,
                               child: _EmptyDevices(
@@ -691,9 +698,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                               padding: const EdgeInsets.fromLTRB(
                                   Sp.md, 0, Sp.md, 90),
                               sliver: SliverList.separated(
-                                itemCount: _filtered.length,
+                                itemCount: devices.length,
                                 itemBuilder: (_, i) =>
-                                    _deviceCard(_filtered[i]),
+                                    _deviceCard(devices[i]),
                                 separatorBuilder: (_, __) =>
                                     const SizedBox(height: 8),
                               ),
@@ -707,6 +714,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// Scaffold بديل يظهر في selection mode — AppBar فيها عدد المحدَّد
   /// وأزرار bulk actions. القائمة تبقى نفسها لكن الكارتات تعرض checkbox.
   Widget _buildSelectionScaffold() {
+    // نفس الرفع كما في build: الفرزة كانت تتكرّر لكلّ صفّ.
+    final devices = _filtered;
     final canManage = Perms.has('devices.manage');
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -754,7 +763,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
             SliverToBoxAdapter(child: _summaryRow()),
             SliverToBoxAdapter(child: _typeFilterRow()),
             const SliverToBoxAdapter(child: SizedBox(height: 8)),
-            _filtered.isEmpty
+            devices.isEmpty
                 ? const SliverFillRemaining(
                     hasScrollBody: false,
                     child: _EmptyDevices(),
@@ -762,8 +771,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 : SliverPadding(
                     padding: const EdgeInsets.fromLTRB(Sp.md, 0, Sp.md, 90),
                     sliver: SliverList.separated(
-                      itemCount: _filtered.length,
-                      itemBuilder: (_, i) => _deviceCard(_filtered[i]),
+                      itemCount: devices.length,
+                      itemBuilder: (_, i) => _deviceCard(devices[i]),
                       separatorBuilder: (_, __) => const SizedBox(height: 8),
                     ),
                   ),

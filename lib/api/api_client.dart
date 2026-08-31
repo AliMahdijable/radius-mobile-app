@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 
 import '../services/auth_storage.dart';
@@ -55,6 +58,21 @@ class ApiClient {
       },
       validateStatus: (s) => s != null && s < 500,
     ));
+    // ⚡ إبقاء الاتّصال حيّاً 60 ثانية (تدقيق أداء 2026-08-31).
+    //
+    // `IOHttpClientAdapter` الافتراضيّ يضبط `idleTimeout` على **ثلاث**
+    // ثوانٍ، وإيقاع التطبيق الغالب استطلاعٌ كلّ خمس — أي أنّ المقبس
+    // يموت قبل الطلب التالي دائماً، فيدفع كلّ طلب مصافحة TCP + TLS
+    // كاملة من جديد. على شبكة خلويّة عراقيّة هذه مئات الميلي ثانية
+    // قبل أن تُرسَل بايت واحدة من الطلب.
+    //
+    // ستّون ثانية تغطّي كلّ الإيقاعات الدوريّة في التطبيق، والخادم
+    // خلف nginx يدعمها أصلاً.
+    d.httpClientAdapter = IOHttpClientAdapter(
+      createHttpClient: () => HttpClient()
+        ..idleTimeout = const Duration(seconds: 60)
+        ..maxConnectionsPerHost = 8,
+    );
     d.interceptors.add(_AuthInterceptor(d));
     return d;
   }

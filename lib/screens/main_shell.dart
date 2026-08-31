@@ -60,6 +60,7 @@ class _MainShellState extends State<MainShell> {
   /// فهرس تبويب الأجهزة داخل `tabs` — مذكور مرّة واحدة لأنّ ثلاثة
   /// مواضع تعتمد عليه.
   static const _devicesTab = 2;
+  static const _subsTab = 1;
 
   /// التبويبات التي زارها المستخدم فعلاً.
   ///
@@ -85,6 +86,10 @@ class _MainShellState extends State<MainShell> {
   /// للخلفيّة — وهذه الراية تمدّ المنطق نفسه إلى الاختفاء خلف تبويب.
   final ValueNotifier<bool> _devicesActive = ValueNotifier<bool>(false);
 
+  /// ونفسها لتبويب المشتركين — واستطلاعه أثقل: كلّ خمس ثوانٍ لا
+  /// عشرين، وثلاثة طلبات بلا كاش في كلّ دورة.
+  final ValueNotifier<bool> _subsActive = ValueNotifier<bool>(false);
+
   /// المدخل الوحيد لتبديل التبويب — يُسجّل الزيارة ويُحدّث الراية.
   /// أيّ مسار يكتب `_tab` مباشرةً يُفلت من الاثنين.
   void _setTab(int i) {
@@ -93,6 +98,7 @@ class _MainShellState extends State<MainShell> {
       _visited.add(i);
     });
     _devicesActive.value = i == _devicesTab;
+    _subsActive.value = i == _subsTab;
   }
   // Filter command channel for the subscribers screen. Updating this
   // notifier from a dashboard KPI tap pushes the new filter into the
@@ -195,6 +201,7 @@ class _MainShellState extends State<MainShell> {
     accessBlockedSignal.removeListener(_onAccessBlocked);
     _subsFilterCmd.dispose();
     _devicesActive.dispose();
+    _subsActive.dispose();
     super.dispose();
   }
 
@@ -264,7 +271,7 @@ class _MainShellState extends State<MainShell> {
     Theme.of(context); // theme-dep (dark-mode)
     final tabs = <Widget>[
       DashboardScreen(onOpenSubscribers: _openSubscribers),
-      SubscribersScreen(filterCmd: _subsFilterCmd),
+      SubscribersScreen(filterCmd: _subsFilterCmd, isActive: _subsActive),
       // مطلب 2026-08-12: أجهزة الشبكة صار tab رئيسي بدل التقارير —
       // WISP يفتحها يوميّاً لمراقبة اللنكات/السكاتر. التقارير انتقلت
       // لـ"قوائم أخرى" كأوّل عنصر (الاستعمال أقلّ).

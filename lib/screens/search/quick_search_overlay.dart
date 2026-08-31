@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -73,8 +75,33 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _focus.requestFocus());
-    _ctrl.addListener(() => setState(() => _q = _ctrl.text));
+    // ⚡ تخميد (تدقيق أداء 2026-08-31): كان هذا المستمع الوحيد في
+    // التطبيق بلا تخميد، فكلّ ضغطة مفتاح تُعيد البناء — وبناءُ
+    // `_Results` كان يُنشئ مستقبلاً جديداً في كلّ مرّة (انظر أدناه).
+    _ctrl.addListener(_onQueryChanged);
     _initSpeech();
+  }
+
+  /// مستقبلٌ **واحد** لعمر الطبقة.
+  ///
+  /// كان `future: SubscribersApi.loadAllWithOnline()` مكتوباً داخل
+  /// `build`، فيُنشأ مستقبلٌ جديد في كلّ إعادة بناء: طلبٌ شبكيّ بلا
+  /// كاش لكلّ ضغطة مفتاح، والأسوأ أنّ `connectionState` يعود
+  /// `waiting` فتُمحى النتائج المعروضة وتُستبدل بدوّارة — أي أنّ
+  /// الكتابة السريعة كانت تُظهر دوّارةً لا نتائج.
+  late final Future<List<Subscriber>?> _subsFuture =
+      SubscribersApi.loadAllWithOnline();
+
+  Timer? _queryDebounce;
+
+  void _onQueryChanged() {
+    _queryDebounce?.cancel();
+    _queryDebounce = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      final v = _ctrl.text;
+      if (v == _q) return;
+      setState(() => _q = v);
+    });
   }
 
   Future<void> _initSpeech() async {
@@ -187,6 +214,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
 
   @override
   void dispose() {
+    _queryDebounce?.cancel();
     _ctrl.dispose();
     _focus.dispose();
     _speech.stop();
@@ -372,7 +400,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
                             ),
                           )
                         else
-                          _Results(query: _q),
+                          _Results(query: _q, future: _subsFuture),
                       ],
                     ),
                   ),
@@ -461,8 +489,12 @@ class _MicButton extends StatelessWidget {
 /// uses, with all its operations live (activate / extend / pay-debt /
 /// toggle / disconnect).
 class _Results extends StatelessWidget {
-  const _Results({required this.query});
+  const _Results({required this.query, required this.future});
   final String query;
+
+  /// يُمرَّر من الأعلى ولا يُنشأ هنا — إنشاؤه داخل `build` كان يُطلق
+  /// طلباً جديداً ويمحو النتائج مع كلّ ضغطة مفتاح.
+  final Future<List<Subscriber>?> future;
 
   static const _maxResults = 12;
 
@@ -472,7 +504,7 @@ class _Results extends StatelessWidget {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return const _EmptyHints();
     return FutureBuilder<List<Subscriber>?>(
-      future: SubscribersApi.loadAllWithOnline(),
+      future: future,
       builder: (_, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Padding(

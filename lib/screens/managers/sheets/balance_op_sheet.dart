@@ -437,61 +437,78 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
 
   Widget _notifyToggles() {
     final hasPhone = (widget.manager.mobile).trim().isNotEmpty;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceInput,
+    // ⚠️ `Material` لا `Container` — وليس تفضيلاً.
+    //
+    // بلاغ 2026-08-31 (assertion في وضع التطوير): «ListTile background
+    // color or ink splashes may be invisible». بلاطات القائمة ترسم
+    // خلفيّتها وحبر النقر على أقرب `Material` **فوقها**، وكان ذلك
+    // سطح الشيت — أي تحت هذا الصندوق المزخرف، فيغطّيه الصندوق ويبتلع
+    // الحبر فلا يظهر أثر للنقر.
+    //
+    // `Material` بـ`shape` يحمل اللون والحدّ ونصف القطر نفسها ويصير
+    // هو السطح الذي ترسم عليه البلاطات — مظهرٌ مطابق، وحبرٌ يظهر.
+    return Material(
+      color: AppColors.surfaceInput,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(R.sm),
-        border: Border.all(color: AppColors.borderSoft),
+        side: BorderSide(color: AppColors.borderSoft),
       ),
-      child: Column(
-        children: [
-          CheckboxListTile.adaptive(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            value: hasPhone ? _sendWhatsApp : false,
-            onChanged: hasPhone
-                ? (v) => setState(() => _sendWhatsApp = v ?? false)
-                : null,
-            title: Row(
-              children: [
-                const Icon(LucideIcons.send,
-                    size: 14, color: AppColors.channelWhatsApp),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    hasPhone
-                        ? 'إرسال رسالة واتساب للمدير'
-                        : 'إرسال واتساب — لا يوجد رقم',
-                    style: const TextStyle(
-                        fontSize: 12.5, height: 1.4, fontWeight: FontWeight.w600),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        child: Column(
+          children: [
+            CheckboxListTile.adaptive(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: hasPhone ? _sendWhatsApp : false,
+              onChanged: hasPhone
+                  ? (v) => setState(() => _sendWhatsApp = v ?? false)
+                  : null,
+              title: Row(
+                children: [
+                  const Icon(LucideIcons.send,
+                      size: 14, color: AppColors.channelWhatsApp),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      hasPhone
+                          ? 'إرسال رسالة واتساب للمدير'
+                          : 'إرسال واتساب — لا يوجد رقم',
+                      style: const TextStyle(
+                          fontSize: 12.5,
+                          height: 1.4,
+                          fontWeight: FontWeight.w600),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          CheckboxListTile.adaptive(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            value: _sendPush,
-            onChanged: (v) => setState(() => _sendPush = v ?? false),
-            title: Row(
-              children: [
-                Icon(LucideIcons.bell, size: 14, color: AppColors.brandAccent),
-                const SizedBox(width: 6),
-                const Expanded(
-                  child: Text(
-                    'إشعار داخل تطبيق المدير',
-                    style:
-                        TextStyle(fontSize: 12.5, height: 1.4, fontWeight: FontWeight.w600),
+            CheckboxListTile.adaptive(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: _sendPush,
+              onChanged: (v) => setState(() => _sendPush = v ?? false),
+              title: Row(
+                children: [
+                  Icon(LucideIcons.bell,
+                      size: 14, color: AppColors.brandAccent),
+                  const SizedBox(width: 6),
+                  const Expanded(
+                    child: Text(
+                      'إشعار داخل تطبيق المدير',
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          height: 1.4,
+                          fontWeight: FontWeight.w600),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -529,7 +546,8 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
               const SizedBox(width: 5),
               Text(
                 op.label,
-                style: AppType.bodyBold(color: selected ? op.color : AppColors.textMid),
+                style: AppType.bodyBold(
+                    color: selected ? op.color : AppColors.textMid),
               ),
             ],
           ),

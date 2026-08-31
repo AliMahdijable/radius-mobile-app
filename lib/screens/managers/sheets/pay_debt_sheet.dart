@@ -508,7 +508,8 @@ class _Chip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           child: Text(
             label,
-            style: AppType.bodyBold(color: emphasized ? accent : AppColors.textHi),
+            style:
+                AppType.bodyBold(color: emphasized ? accent : AppColors.textHi),
           ),
         ),
       ),
@@ -542,7 +543,8 @@ class _PayPreview extends StatelessWidget {
           ),
           Text(
             '${formatIQD(after)} د.ع',
-            style: AppType.cardTitleBold(color: after == 0 ? AppColors.success : AppColors.textHi),
+            style: AppType.cardTitleBold(
+                color: after == 0 ? AppColors.success : AppColors.textHi),
           ),
         ],
       ),
@@ -567,49 +569,51 @@ class _NotifyToggles extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceInput,
-        borderRadius: BorderRadius.circular(R.md),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 4),
-      child: Column(
-        children: [
-          SwitchListTile(
-            value: waEnabled && sendWhatsApp,
-            onChanged: waEnabled ? onWa : null,
-            dense: true,
-            title: Text(
-              'إشعار واتساب',
-              style: AppType.label(color: AppColors.textHi)
-                  .copyWith(fontWeight: FontWeight.w700),
+    // ⚠️ `Material` لا `Container` — العلّة نفسها التي في balance_op_sheet
+    // (بلاغ 2026-08-31): بلاطات القائمة ترسم حبر النقر على أقرب
+    // `Material` فوقها، وكان سطح الشيت تحت هذا الصندوق المزخرف فيبتلعه.
+    return Material(
+      color: AppColors.surfaceInput,
+      borderRadius: BorderRadius.circular(R.md),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 4),
+        child: Column(
+          children: [
+            SwitchListTile(
+              value: waEnabled && sendWhatsApp,
+              onChanged: waEnabled ? onWa : null,
+              dense: true,
+              title: Text(
+                'إشعار واتساب',
+                style: AppType.label(color: AppColors.textHi)
+                    .copyWith(fontWeight: FontWeight.w700),
+              ),
+              subtitle: !waEnabled
+                  ? Text(
+                      'لا يوجد رقم هاتف محفوظ',
+                      style: AppType.muted(color: AppColors.textLow)
+                          .copyWith(fontSize: 11),
+                    )
+                  : null,
+              secondary: const Icon(LucideIcons.messageCircle, size: 18),
+              contentPadding: EdgeInsets.zero,
             ),
-            subtitle: !waEnabled
-                ? Text(
-                    'لا يوجد رقم هاتف محفوظ',
-                    style: AppType.muted(color: AppColors.textLow)
-                        .copyWith(fontSize: 11),
-                  )
-                : null,
-            secondary: const Icon(LucideIcons.messageCircle, size: 18),
-            contentPadding: EdgeInsets.zero,
-          ),
-          Divider(height: 1, color: AppColors.border),
-          SwitchListTile(
-            value: sendPush,
-            onChanged: onPush,
-            dense: true,
-            title: Text(
-              'إشعار داخل التطبيق',
-              style: AppType.label(color: AppColors.textHi)
-                  .copyWith(fontWeight: FontWeight.w700),
+            Divider(height: 1, color: AppColors.border),
+            SwitchListTile(
+              value: sendPush,
+              onChanged: onPush,
+              dense: true,
+              title: Text(
+                'إشعار داخل التطبيق',
+                style: AppType.label(color: AppColors.textHi)
+                    .copyWith(fontWeight: FontWeight.w700),
+              ),
+              secondary: const Icon(LucideIcons.bell, size: 18),
+              contentPadding: EdgeInsets.zero,
             ),
-            secondary: const Icon(LucideIcons.bell, size: 18),
-            contentPadding: EdgeInsets.zero,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
-
