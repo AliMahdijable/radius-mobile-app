@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../api/view_scope_api.dart';
+import '../services/subscriber_events.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
@@ -86,7 +87,17 @@ class _ViewScopeScreenState extends State<ViewScopeScreen> {
         ];
       }
     });
-    if (!r.ok) {
+    if (r.ok) {
+      // 🐛 بلاغ 2026-08-31: «من انقر اخفاء الا ارفرش يلا يتحدث».
+      //
+      // الترشيح يقع على الخادم، لكنّ التطبيق يحمل قائمة مُخزَّنة 45
+      // ثانية — فتبديل المفتاح كان يغيّر الخادم بينما تعرض الشاشات
+      // اللقطة القديمة حتّى تنتهي المهلة أو يسحب المستخدم يدويّاً.
+      //
+      // `notifyChange` تُسقط الكاش وتُنبّه كلّ الشاشات المشتركة —
+      // نفس ما تفعله أيّ عمليّة تعديل ناجحة على مشترك.
+      SubscriberEvents.notifyChange();
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(r.message ?? 'تعذّر الحفظ'),

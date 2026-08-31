@@ -6,7 +6,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/dashboard_api.dart';
-import '../../api/sas4_api.dart';
 import '../../models/dashboard.dart';
 import '../../services/alerts_service.dart';
 import '../../services/app_resumed_signal.dart';
@@ -51,7 +50,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _displayName = '';
   WhatsAppStatusResult? _waLive;
   DailyActivationsResult? _activationsLive;
-  Sas4Stats? _sas4Live;
   DebtorsResult? _debtorsLive;
   WalletResult? _walletLive;
 
@@ -129,17 +127,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// the network catches up. Non-fatal on failure.
   Future<void> _hydrateFromCache() async {
     try {
-      final results = await Future.wait([
-        DashboardCache.readSas4(),
-        DashboardCache.readWallet(),
-      ]);
+      // كاش SAS4 لم يعد يُقرأ: الأرقام كلّها تُشتقّ من قائمة المشتركين
+      // منذ حذف النداء المباشر (2026-08-31).
+      final cachedWallet = await DashboardCache.readWallet();
       if (!mounted) return;
-      final cachedSas4 = results[0] as Sas4Stats?;
-      final cachedWallet = results[1] as WalletResult?;
       setState(() {
-        if (cachedSas4 != null) {
-          _sas4Live = cachedSas4;
-        }
         if (cachedWallet != null) {
           _walletLive = cachedWallet;
           _walletLoaded = true;
@@ -197,30 +189,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _activationsLoaded = true;
       });
     });
-    Sas4Api.fetchAll()
-        .timeout(kMaxLoad, onTimeout: () => const Sas4Stats())
-        .catchError((_) => const Sas4Stats())
-        .then((r) {
-      if (!mounted) return;
-      // Sas4Stats non-nullable — نستعمل total==null كإشارة على fetch فشل.
-      final failed = r.total == null &&
-          r.active == null &&
-          r.expired == null &&
-          r.online == null &&
-          r.balance == null;
-      if (silent && failed && _sas4Live != null) return;
-      setState(() {
-        _sas4Live = r;
-      });
-      if (!failed) DashboardCache.saveSas4(r); // persist for next cold start
-    });
+    // ⚠️ نداء SAS4 المباشر حُذف (2026-08-31).
+    //
+    // كان يطلق **خمسة** طلبات هاتف→reseller-supernet.net في كلّ تحديث،
+    // ولا يُقرأ منها إلّا `total`. والأربعة الباقية — active · expired
+    // · online · balance — تُجلب وتُحلَّل وتُخزَّن ثمّ **تُهمَل**:
+    // الثلاثة الأولى تُحسب محلّيّاً من القائمة (التعليق تحت يشرح لماذا:
+    // widget الـactive في SAS4 يُرجع offline=0 على بعض الحسابات)،
+    // والرصيد يأتي من /api/v2/admin-widgets.
+    //
+    // ثمّ صار `total` نفسه ضارّاً: يتجاوز خادمنا فلا يعرف «نطاق العرض»،
+    // فيعرض إجمالي المستأجر كلّه فوق قائمة مرشَّحة.
+    //
+    // ومعه سقط مبرّر تأخير الـ800ms أدناه — كان موضوعاً ليترك النطاق
+    // الترددّي لهذه النداءات الميتة.
     // Defer debtors 800ms so the faster widgets (SAS4/wallet/finance)
     // grab bandwidth first. `subscribers/with-phones` is the heaviest
     // fetch (loads every subscriber's row + notes + package) — running
     // it in parallel with the light widgets was starving them.
     // On silent refresh we still fire immediately (no cold start).
-    Future.delayed(silent ? Duration.zero : const Duration(milliseconds: 800),
-        () {
+    Future.delayed(Duration.zero, () {
       if (!mounted) return;
       DashboardApi.fetchDebtors()
           .timeout(kMaxLoad, onTimeout: () => null)
@@ -271,7 +259,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // يطابق predicate v1 (isOnline / isOffline / isExpired) بدقة.
     final d = _debtorsLive!;
     return SubscribersStats(
-      total: _sas4Live?.total ?? d.totalSubs,
+      // 🐛 بلاغ 2026-08-31: بعد إخفاء مدير فرعي صارت الحلقة تقول 384
+      // والقائمة تقول 156 — وهو بالضبط الرقمان المتناقضان اللذان
+      // وُجدت ميزة «نطاق العرض» لمنعهما.
+      //
+      // السبب أنّ `_sas4Live.total` يأتي من نداء مباشر هاتف→SAS4
+      // يتجاوز خادمنا كلّيّاً، فلا يعرف شيئاً عن الإخفاء. بينما
+      // active/online/expired تُحسب محلّيّاً من القائمة **المرشَّحة**.
+      //
+      // مصدر واحد لكلّ الأرقام: القائمة نفسها.
+      total: d.totalSubs,
       active: d.active,
       online: d.online,
       offline: d.offline,
