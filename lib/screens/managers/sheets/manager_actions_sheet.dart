@@ -177,19 +177,32 @@ class _ActionsSheet extends StatelessWidget {
             // مسطّحة وأقصر — أيقونة 22 + فجوة 8 + سطر تسمية + حشوة
             // 12×2 ≈ 66dp — فبقيت ~20dp فراغاً أسفل كلّ زرّ.
             // النسبة 1.0 تطابق ارتفاع المحتوى الفعلي.
-            child: GridView.count(
+            // ⚠️ `mainAxisExtent` لا `childAspectRatio` — والفرق جوهريّ.
+            //
+            // النسبة تشتقّ ارتفاع البلاطة من **عرضها**، والعرض يقسم
+            // الشاشة أرباعاً. فعلى 320dp يصير الارتفاع 48.7 نقطة بينما
+            // المحتوى يحتاج 68.85 (حدّ 2 + حشوة 24 + أيقونة 22 + فجوة 6
+            // + سطر تسمية) — فتُضغط التسمية وتُقصّ. والمحتوى لا علاقة
+            // له بعرض الشاشة أصلاً.
+            //
+            // بالارتفاع الصريح ينقطع الاشتقاق: 54 ثابتة (2+24+22+6)
+            // زائد سطر التسمية مقيساً بسلّم الخطّ الفعليّ. وعندها فقط
+            // يصير `maxLines: 2` ممكناً — كان مستحيلاً لأنّ الارتفاع
+            // محكومٌ بالعرض.
+            //
+            // الأثر على 414dp: 0.28 نقطة. الشاشة التي اعتُمدت لم تتغيّر.
+            child: GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 4,
-              crossAxisSpacing: Sp.sm,
-              mainAxisSpacing: Sp.sm,
-              // 2026-08-30: 1.0 ما زالت تترك فراغاً — الحشوة الرأسيّة
-              // Sp.md×2 كانت معايرة للدائرة. صارت Sp.sm×2 والنسبة
-              // 1.15، فالبلاطة تلتصق بمحتواها.
-              childAspectRatio: 1.15,
-              children: [
-                for (final a in actions) _actionTile(context, a),
-              ],
+              itemCount: actions.length,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4,
+                crossAxisSpacing: Sp.sm,
+                mainAxisSpacing: Sp.sm,
+                mainAxisExtent:
+                    54 + MediaQuery.textScalerOf(context).scale(14.85) * 2,
+              ),
+              itemBuilder: (context, i) => _actionTile(context, actions[i]),
             ),
           ),
         ],
@@ -245,10 +258,13 @@ class _ActionsSheet extends StatelessWidget {
               Icon(action.icon,
                   color: action.brandGlyph ?? tone.fill, size: 22),
               const SizedBox(height: Sp.x6),
+              // سطران ممكنان الآن بعد أن انقطع اشتقاق الارتفاع من
+              // العرض — «تسديد دين» و«شحن رصيد» تتّسعان بلا قصّ على
+              // أضيق شاشة.
               Text(
                 action.label,
                 style: AppType.muted(color: AppColors.textBody),
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
               ),

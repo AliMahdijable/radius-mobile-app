@@ -632,11 +632,19 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           _DetailRow(label: 'الإصدار', value: u.firmware, small: true),
         if (u.ssid.isNotEmpty)
           _DetailRow(label: 'SSID', value: u.ssid, small: true),
-        if ((u.txRateKbps ?? 0) > 0 || (u.rxRateKbps ?? 0) > 0)
-          _DetailRow(
-            label: 'الإرسال / الاستقبال',
-            value: '${_rate(u.txRateKbps)} / ${_rate(u.rxRateKbps)}',
-          ),
+        // 🐛 كانت صفّاً واحداً بتسمية «الإرسال / الاستقبال» (7.24em —
+        // أطول تسمية في الكارت) وقيمة «144.4 Mbps / 300.0 Mbps». وفي
+        // `_DetailRow` التسمية بلا flex فتأخذ عرضها كاملاً أوّلاً،
+        // والقيمة `Expanded` تمتصّ النقص كلّه — فتُقصّ سرعة الاستقبال
+        // كلّيّاً على 360dp، وهي الرقم الذي يقرّر به الفنّيّ إن كان
+        // اللنك يحتاج إعادة توجيه.
+        //
+        // القسمة إلى صفّين تُقصّر أطول تسمية من 7.24em إلى 2.76em ولا
+        // تمسّ `_DetailRow` ولا السبعة الآخرين الذين يستعملونه.
+        if ((u.txRateKbps ?? 0) > 0)
+          _DetailRow(label: 'الإرسال', value: _rate(u.txRateKbps)),
+        if ((u.rxRateKbps ?? 0) > 0)
+          _DetailRow(label: 'الاستقبال', value: _rate(u.rxRateKbps)),
         if (u.peerMac != null && u.peerMac!.isNotEmpty)
           _DetailRow(label: 'Peer MAC', value: u.peerMac!, small: true),
         if (u.peerCount != null && u.peerCount! > 0)
@@ -830,7 +838,19 @@ class _DetailRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: Sp.xs),
       child: Row(
         children: [
-          Text(label, style: AppType.body(color: AppColors.textLabel)),
+          // ⚠️ `Flexible` **مع** `maxLines`+`overflow` معاً لا وحدها:
+          // `softWrap` افتراضها true، فتسمية عربيّة طويلة تلتفّ سطرين
+          // بدل أن تُختصر — فيتغيّر ارتفاع الكارت بدل أن يُحلّ شيء.
+          //
+          // والغاية أن تتنازل التسمية أوّلاً: البيانات أثمن من عنوانها.
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.body(color: AppColors.textLabel),
+            ),
+          ),
           const SizedBox(width: Sp.md),
           Expanded(
             child: Text(

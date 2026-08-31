@@ -707,8 +707,22 @@ class _WAStatusChip extends StatelessWidget {
                   BoxDecoration(color: tone.fill, shape: BoxShape.circle),
             ),
           const SizedBox(width: 6),
-          Text(label,
-              style: AppType.muted(color: tone.onSoft).copyWith(fontSize: 11)),
+          // 🐛 كان نصّاً عارياً بلا `maxLines` ولا `overflow`، وهو ابن
+          // `Row` بلا flex — فيُقصّ قصّاً صلباً (`clip`) بلا «…» حين
+          // يضيق الرأس.
+          //
+          // والمقصوص هنا ليس زينة: هذه حبّة حالة الواتساب، ونصّها قد
+          // يكون «جلسة واتساب تحتاج إعادة ربط» — أي التحذير الذي يخبر
+          // المدير لماذا توقّف الإرسال. بترُه صامتاً يعني مديراً يظنّ
+          // النظام سليماً ورسائله لا تصل.
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.muted(color: tone.onSoft).copyWith(fontSize: 11),
+            ),
+          ),
         ],
       ),
     );
