@@ -268,6 +268,40 @@ class TelegramApi {
     }
   }
 
+  /// رابط ربط **قناة المدير نفسه** بالبوت.
+  ///
+  /// ⚠️ بلا هذا الربط لا يعرف البوت أين يرسل ردود المشتركين — فالاتّجاه
+  /// الوارد كلّه معلَّق على فتح المدير هذا الرابط مرّة واحدة.
+  ///
+  /// `linked` تقول إن كانت القناة مربوطة سلفاً، فتعرض الشاشة «مربوط ✅»
+  /// بدل دعوةٍ لا داعي لها.
+  static Future<({String? link, bool linked, String? message})>
+      adminLink(String adminId) async {
+    try {
+      final r = await ApiClient.dio
+          .get<Map<String, dynamic>>('/api/telegram/admin-link/$adminId');
+      final b = r.data ?? const {};
+      if (b['success'] != true) {
+        return (
+          link: null,
+          linked: false,
+          message: (b['message'] ?? 'تعذّر توليد الرابط').toString()
+        );
+      }
+      return (
+        link: b['link']?.toString(),
+        linked: b['linked'] == true,
+        message: null
+      );
+    } on DioException catch (e) {
+      _log('admin-link', e);
+      return (link: null, linked: false, message: 'تعذّر الاتصال بالخادم');
+    } catch (e) {
+      _log('admin-link', e);
+      return (link: null, linked: false, message: 'تعذّر توليد الرابط');
+    }
+  }
+
   static Future<({bool ok, String? message})> sendLinkViaWa(
       String adminId, String idx) async {
     try {

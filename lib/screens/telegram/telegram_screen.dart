@@ -273,8 +273,55 @@ class _TelegramScreenState extends State<TelegramScreen> {
     );
   }
 
+  /// يفتح رابط ربط قناة المدير في تلغرام.
+  ///
+  /// نفتحه مباشرةً لا نعرضه نصّاً: الرابط موقَّع وطويل، ونسخُه يدويّاً
+  /// مدعاةٌ لخطأ. وإن كان مربوطاً سلفاً نقول ذلك بدل فتحه بلا داعٍ.
+  Future<void> _openAdminLink() async {
+    final id = _adminId;
+    if (id == null) return;
+    final r = await TelegramApi.adminLink(id);
+    if (!mounted) return;
+    if (r.link == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(r.message ?? 'تعذّر توليد الرابط'),
+        backgroundColor: AppColors.errorFill,
+        behavior: SnackBarBehavior.floating,
+      ));
+      return;
+    }
+    if (r.linked) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('قناتك مربوطة ✅ — ردود المشتركين تصلك هنا'),
+        backgroundColor: AppColors.successFill,
+        behavior: SnackBarBehavior.floating,
+      ));
+      return;
+    }
+    final uri = Uri.parse(r.link!);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!mounted) return;
+      // تعذّر الفتح (تلغرام غير مثبَّت مثلاً) — ننسخه فلا يضيع.
+      await Clipboard.setData(ClipboardData(text: r.link!));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('نُسخ الرابط — افتحه بتلغرام'),
+        behavior: SnackBarBehavior.floating,
+      ));
+    }
+  }
+
   Widget _actionsGrid() {
     final actions = <_TgAction>[
+      // ⚠️ الأولى عمداً: بلا ربط قناة المدير لا يصل ردّ أيّ مشترك.
+      // الميزة كلّها معلَّقة على فتح هذا الرابط مرّة واحدة.
+      _TgAction(
+        icon: LucideIcons.inbox,
+        color: _tgBlue,
+        title: 'استقبال ردود المشتركين',
+        subtitle: 'اربط حسابك بالبوت لتصلك ردودهم وترد عليهم',
+        onTap: _openAdminLink,
+      ),
       _TgAction(
         icon: LucideIcons.link,
         color: _tgBlue,

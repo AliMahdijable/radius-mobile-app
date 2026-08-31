@@ -311,6 +311,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 whatsApp: _waStatus,
                 waLoaded: _waLoaded,
                 topInset: MediaQuery.paddingOf(context).top,
+                // ⚠️ قراءةٌ مقصودة لا زائدة: `paddingOf` تبعيّة
+                // **مقصورة على الحشوة**، فالشاشة لا تُعاد بناؤها عند
+                // تغيير سلّم الخطّ. قراءة `textScalerOf` هنا هي ما
+                // يُنشئ تلك التبعيّة. من «يُحسّنها» بحذفها يُعيد العطل.
+                textScale: MediaQuery.textScalerOf(context).scale(1),
               ),
             ),
             SliverPadding(
@@ -495,6 +500,7 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
     required this.whatsApp,
     required this.waLoaded,
     required this.topInset,
+    required this.textScale,
   }) : isDark = AppColors.isDark;
 
   final String displayName;
@@ -502,6 +508,10 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
   final WhatsAppStatus? whatsApp;
   final bool waLoaded;
   final double topInset;
+
+  /// سلّم خطّ النظام وقت الإنشاء (مقيَّد 0.9–1.2 في main.dart).
+  final double textScale;
+
   // Snapshot of the global dark-mode flag at delegate-creation time.
   // shouldRebuild compares this so a theme switch (with everything
   // else unchanged) still triggers a repaint — without it the pinned
@@ -511,13 +521,26 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
 
   // Tightened from 108 → 86 so there's no dead space between the
   // WhatsApp chip and the subscribers card below the header.
-  static const double _contentHeight = 86;
+  //
+  // 🐛 صار محسوباً لا ثابتاً (2026-08-31): الارتفاع كان 86 مهما كبّر
+  // المستخدم خطّ النظام، فالنصّ ينمو داخل علبة لا تنمو — فيُقصّ اسم
+  // المدير وتُبتر شارة الواتساب.
+  //
+  // ⚠️ ولا يُضرَب الـ86 كلّه في السلّم: منه 28 نقطة حشوات وحدود
+  // **لا تكبر مع الخطّ**. ضربُ المجموع يحجز 103 حيث تكفي 94 عند 1.2،
+  // فيعود الفراغ الميّت الذي أزاله 0afcbbe حين شُدَّ الرأس 108 → 86.
+  static const double _textHeight = 58;
+  static const double _fixedChrome = 28;
+  double get _contentHeight => _textHeight * textScale + _fixedChrome;
 
   /// 2026-08-30: الترويسة كانت مثبَّتة بلا انكماش (minExtent == maxExtent)
   /// فتحجز 86px + الشقّ العلوي طوال التمرير. الآن تنكمش إلى الاسم
   /// والأيقونات وحدها: التحيّة وشارة واتساب معلومتان تُقرآن مرّة عند
   /// الفتح ولا حاجة لبقائهما معلّقتين فوق كلّ تمريرة.
-  static const double _collapsedHeight = 44;
+  // والمطويّ كذلك: منه 10 نقاط حشوة ثابتة.
+  static const double _collapsedText = 34;
+  static const double _collapsedChrome = 10;
+  double get _collapsedHeight => _collapsedText * textScale + _collapsedChrome;
 
   @override
   double get minExtent => _collapsedHeight + topInset;
@@ -647,7 +670,12 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
       old.whatsApp?.needsPairing != whatsApp?.needsPairing ||
       old.whatsApp?.sendingRestricted != whatsApp?.sendingRestricted ||
       old.whatsApp?.cappingWarning != whatsApp?.cappingWarning ||
-      old.isDark != isDark;
+      old.isDark != isDark ||
+      // بلا هذين لا يُعاد بناء الرأس عند تدوير الجهاز (يتغيّر الشقّ
+      // العلوي) ولا عند تغيير سلّم الخطّ — فيبقى بارتفاعه القديم بينما
+      // محتواه تغيّر.
+      old.topInset != topInset ||
+      old.textScale != textScale;
 }
 
 class _WAStatusChip extends StatelessWidget {
