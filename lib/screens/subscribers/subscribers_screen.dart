@@ -173,8 +173,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       // تحديث فوري عند العودة: القيم قد تكون قديمة بدقائق. ولو وصل
       // حدث تغيير أثناء الاختفاء نُنفّذ تحديثاً كاملاً لا صامتاً.
       if (!_refreshing && !_loading) {
-        if (_refreshPending) {
-          _refreshPending = false;
+        if (_dataStale) {
           _refresh();
         } else {
           _silentRefresh();
@@ -197,6 +196,13 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       // نافذة زمنية بدل قفل صريح — لو حصل sync أثناء poll، الـpoll
       // يتخطّى ويأخذ الدور التالي بعد 5 ثواني.
       if (_refreshing || _loading) return;
+      // شبكة الأمان: لو أفلتت كلّ المسارات الأخرى، النبضة تلتقط الفارق
+      // خلال خمس ثوانٍ. `_refresh` لا `_silentRefresh` لأنّ الأخيرة
+      // تمرّ بكاش الـ45 ثانية فقد تُعيد اللقطة القديمة نفسها.
+      if (_dataStale) {
+        _refresh();
+        return;
+      }
       _silentRefresh();
     });
   }
@@ -231,8 +237,24 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     super.didChangeAppLifecycleState(state);
   }
 
-  /// طلب تحديث وصل بينما التبويب مخفيّ — يُنفَّذ عند العودة إليه.
-  bool _refreshPending = false;
+  /// آخر نسخة بيانات رآها هذا الشاشة.
+  ///
+  /// 🐛 بلاغ 2026-08-31: «الداش بورد يتحدث تلقائي فقط المشتركون الا
+  /// رفرش». الرئيسيّة مستمعها بلا بوّابة فتُحدَّث فوراً؛ وهذه بوّبتُها
+  /// أمس لمنع `setState` على تبويب مخفيّ، فصار التحديث معلَّقاً على
+  /// سلسلة أحداث (تغيّر الراية ← المستمع ← العلم) — وأيّ حلقة تُفلت
+  /// تعني بياناتٍ بائتة إلى الأبد.
+  ///
+  /// الختم يقلب المنطق: بدل «تذكّر أن تُحدّث» صار «قارن ما رأيتَه بما
+  /// هو موجود». المقارنة تصحّ من أيّ مسار — عودة التبويب أو نبضة
+  /// الاستطلاع — فالتقارب مضمون خلال خمس ثوانٍ على أسوأ تقدير، لا
+  /// معلَّقاً على حدثٍ قد لا يقع.
+  int _seenDataVersion = SubscriberEvents.dataChanged.value;
+
+  /// هل تغيّرت البيانات منذ آخر تحميل لهذه الشاشة؟
+  bool get _dataStale => SubscriberEvents.dataChanged.value != _seenDataVersion;
+
+  void _markDataSeen() => _seenDataVersion = SubscriberEvents.dataChanged.value;
 
   void _onDataChanged() {
     if (!mounted) return;
@@ -246,10 +268,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     //
     // ولا تضيع البيانات: العلم يُستهلك في `_onActiveChanged` لحظة
     // العودة، فيُحدَّث ما تراه قبل أن تراه.
-    if (!_mayRefresh) {
-      _refreshPending = true;
-      return;
-    }
+    // مخفيّ ⇒ لا نفعل شيئاً ولا نختم. الفارق بين الختمين هو ما
+    // يلتقطه أوّل مسارٍ يعود إلى الرؤية.
+    if (!_mayRefresh) return;
     _refresh();
   }
 
@@ -317,6 +338,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
     await _fetchAndMerge();
     if (!mounted) return;
+    _markDataSeen();
     setState(() => _loading = false);
     _runProbeWave();
   }
@@ -426,6 +448,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     await SubscribersApi.refreshAll();
     await _fetchAndMerge();
     if (!mounted) return;
+    _markDataSeen();
     setState(() => _refreshing = false);
     // مطلب 2026-06-11: السحب والتحديث ما يفجّر فحص كامل للأجهزة
     // (يأخّر استجابة عرض المشتركين). الـcache الحالي للأجهزة يبقى
