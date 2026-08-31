@@ -39,8 +39,61 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 
+
+/// أبناء `IndexedStack` كسولاً: غير المزار يبقى `SizedBox` فلا يُنشأ
+/// له `State` ولا يُنفَّذ `initState`.
+///
+/// `IndexedStack` يبني **كلّ** أبنائه ويرسم المحدَّد وحده — وهو ما جعل
+/// شاشة الأجهزة تفحص شبكةً محلّيّة بعيدة من لحظة الإقلاع لشاشة لم
+/// تُفتَح. (بلاغ 2026-08-31)
+///
+/// المزار يبقى في الشجرة بعدها: التنقّل بين التبويبات لا يُفقد الحالة
+/// ولا يُعيد الجلب.
+List<Widget> lazyTabChildren(List<Widget> tabs, Set<int> visited) => [
+  for (var i = 0; i < tabs.length; i++)
+    if (visited.contains(i)) tabs[i] else const SizedBox.shrink(),
+];
+
 class _MainShellState extends State<MainShell> {
   int _tab = 0;
+
+  /// فهرس تبويب الأجهزة داخل `tabs` — مذكور مرّة واحدة لأنّ ثلاثة
+  /// مواضع تعتمد عليه.
+  static const _devicesTab = 2;
+
+  /// التبويبات التي زارها المستخدم فعلاً.
+  ///
+  /// 🐛 بلاغ 2026-08-31 («التطبيق ثكيل كلش»): `IndexedStack` يبني **كلّ**
+  /// أبنائه لا المرئيّ منهم — فكان `NetworkDevicesScreen.initState`
+  /// يُنفَّذ لحظة الإقلاع، فيجلب الأجهزة ويُشغّل مؤقّتاً كلّ 20 ثانية
+  /// يفتح مقبساً TCP لكلّ جهاز على شبكة الـLAN. وهاتف المدير خارج تلك
+  /// الشبكة، فكلّ فحص ينتظر مهلته كاملة (ثانيتان) ثمّ يفشل حتماً —
+  /// 14 مقبساً كلّ 20 ثانية، إلى الأبد، لشاشة لم تُفتَح قطّ.
+  ///
+  /// السجلّ كان يمتلئ بـ`tcpProbe … errno = 110` والمستخدم على
+  /// الرئيسيّة. والكلفة على نسخة الإصدار كالتطوير: بطّاريّة وبيانات
+  /// وإعادتا بناء لشجرة غير مرئيّة في كلّ جولة.
+  ///
+  /// الحلّ: لا يُبنى التبويب حتّى يُزار. وبعد الزيارة يبقى حيّاً —
+  /// فحالته وقوائمه المحمَّلة لا تضيع عند التنقّل.
+  final Set<int> _visited = <int>{0};
+
+  /// هل تبويب الأجهزة مرئيّ الآن؟
+  ///
+  /// الزيارة وحدها لا تكفي: بعد فتحه مرّة يبقى حيّاً فيظلّ يفحص وأنت
+  /// في تبويب آخر لساعات. الشاشة تُوقف مؤقّتها أصلاً حين يذهب التطبيق
+  /// للخلفيّة — وهذه الراية تمدّ المنطق نفسه إلى الاختفاء خلف تبويب.
+  final ValueNotifier<bool> _devicesActive = ValueNotifier<bool>(false);
+
+  /// المدخل الوحيد لتبديل التبويب — يُسجّل الزيارة ويُحدّث الراية.
+  /// أيّ مسار يكتب `_tab` مباشرةً يُفلت من الاثنين.
+  void _setTab(int i) {
+    setState(() {
+      _tab = i;
+      _visited.add(i);
+    });
+    _devicesActive.value = i == _devicesTab;
+  }
   // Filter command channel for the subscribers screen. Updating this
   // notifier from a dashboard KPI tap pushes the new filter into the
   // already-mounted SubscribersScreen WITHOUT rebuilding it — which
@@ -141,6 +194,7 @@ class _MainShellState extends State<MainShell> {
     authExpiredSignal.removeListener(_onAuthExpired);
     accessBlockedSignal.removeListener(_onAccessBlocked);
     _subsFilterCmd.dispose();
+    _devicesActive.dispose();
     super.dispose();
   }
 
@@ -168,7 +222,7 @@ class _MainShellState extends State<MainShell> {
   /// the widget being recreated — instant tab switch, no refetch.
   void _openSubscribers(SubscriberFilter? filter) {
     HapticFeedback.selectionClick();
-    if (_tab != 1) setState(() => _tab = 1);
+    _setTab(1);
     // Push BOTH a marker (incrementing a value internal to the notifier
     // by wrapping in a unique object) and the filter so same-filter
     // re-taps still fire. We just set the value; ValueNotifier suppresses
@@ -185,7 +239,7 @@ class _MainShellState extends State<MainShell> {
   ///      second press within 2s: let the pop proceed (exits app).
   Future<bool> _onWillPop() async {
     if (_tab != 0) {
-      setState(() => _tab = 0);
+      _setTab(0);
       return false;
     }
     final now = DateTime.now();
@@ -214,7 +268,7 @@ class _MainShellState extends State<MainShell> {
       // مطلب 2026-08-12: أجهزة الشبكة صار tab رئيسي بدل التقارير —
       // WISP يفتحها يوميّاً لمراقبة اللنكات/السكاتر. التقارير انتقلت
       // لـ"قوائم أخرى" كأوّل عنصر (الاستعمال أقلّ).
-      const NetworkDevicesScreen(),
+      NetworkDevicesScreen(isActive: _devicesActive),
       // مطلب 2026-06-10: الـtab السفلي الأخير صار "قوائم أخرى" يعرض
       // مديولات إضافية (صرفيات/مدراء/تسعير). شاشة الإعدادات الفعلية
       // انتقلت لزر الـgear بالشريط العلوي على Home.
@@ -243,7 +297,12 @@ class _MainShellState extends State<MainShell> {
       extendBody: true, // body draws under the floating bar
       body: Stack(
         children: [
-          IndexedStack(index: _tab, children: tabs),
+          // كسول: غير المزار يبقى `SizedBox` فلا يُنشأ `State` له ولا
+          // يُنفَّذ `initState`. وبعد الزيارة يبقى في الشجرة كما كان.
+          IndexedStack(
+            index: _tab,
+            children: lazyTabChildren(tabs, _visited),
+          ),
           // Standalone search pill — 2026-07-14: أقرب ما يمكن للـnav
           // (4px فوق حافّته العلويّة). لا نقدر نضعه داخله لأن الـpill
           // في body's Stack والـnav يُرسم فوق (فيختفي). 4px يعطيه
@@ -264,7 +323,7 @@ class _MainShellState extends State<MainShell> {
       // ليمتدّ البياض تحت شريط الإيماءات.
       bottomNavigationBar: _PillBar(
         current: _tab,
-        onTabTap: (i) => setState(() => _tab = i),
+        onTabTap: _setTab,
         onFabTap: _onFabTap,
       ),
     );

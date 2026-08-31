@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -30,7 +31,18 @@ import 'model_detector.dart';
 /// - Row 2 (chips): فلتر بالحالة (الكلّ/متصل/غير متصل/لم يُفحص)
 /// - القائمة: cards بتصميم متسق مع باقي المشروع (AppColors)
 class NetworkDevicesScreen extends StatefulWidget {
-  const NetworkDevicesScreen({super.key});
+  const NetworkDevicesScreen({super.key, this.isActive});
+
+  /// هل هذا التبويب مرئيّ الآن؟ (يمرّرها `MainShell`)
+  ///
+  /// حلقة الفحص تفتح مقبساً TCP لكلّ جهاز على الـLAN كلّ 20 ثانية.
+  /// خارج الشبكة يفشل كلّ فحص بعد مهلته كاملة، فتصير الحلقة استنزافاً
+  /// صافياً للبطّاريّة والبيانات. الشاشة تُوقف مؤقّتها أصلاً حين يذهب
+  /// التطبيق للخلفيّة — وهذه الراية تمدّ المنطق نفسه إلى الاختفاء خلف
+  /// تبويب آخر، وهي الحالة الأشيع بفارق كبير.
+  ///
+  /// `null` = بلا بوّابة (تُستعمل حين تُفتح الشاشة بمسار مستقلّ).
+  final ValueListenable<bool>? isActive;
 
   @override
   State<NetworkDevicesScreen> createState() => _NetworkDevicesScreenState();
@@ -77,6 +89,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    widget.isActive?.addListener(_onActiveChanged);
     _initialLoad();
     // نطلب صلاحيّة الإشعارات مرّة واحدة (Android 13+/iOS)
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -88,6 +101,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    widget.isActive?.removeListener(_onActiveChanged);
     _probeTimer?.cancel();
     _searchDebounce?.cancel();
     _searchCtrl.dispose();
@@ -107,8 +121,25 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     }
   }
 
+  /// الشاشة حيّة **ومرئيّة** — الشرطان معاً يفتحان حلقة الفحص.
+  bool get _mayProbe => widget.isActive?.value ?? true;
+
+  void _onActiveChanged() {
+    if (_mayProbe) {
+      _startProbeTimer();
+      // فحص فوري عند العودة — القيم المعروضة قد تكون قديمة بدقائق.
+      if (_all.isNotEmpty) _probeAll();
+    } else {
+      _probeTimer?.cancel();
+    }
+  }
+
   void _startProbeTimer() {
     _probeTimer?.cancel();
+    // ⚠️ الحارس هنا لا عند الاستدعاء: `initState` و`didChangeAppLifecycle`
+    // و`_onActiveChanged` كلّها تستدعيها، ونسيان الحارس في واحدة يعيد
+    // العطل كاملاً.
+    if (!_mayProbe) return;
     _probeTimer = Timer.periodic(_probeInterval, (_) => _probeAll());
   }
 
@@ -255,7 +286,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   }
 
   Future<void> _probeAll() async {
-    if (_probing || _all.isEmpty) return;
+    if (_probing || _all.isEmpty || !_mayProbe) return;
     // 2026-08-18: setState — الـAppBar refresh icon يعتمد على _probing
     // لتبديل CPI ↔ زرّ. تغيير الـflag بلا setState → الأيقونة تعلق.
     setState(() => _probing = true);
