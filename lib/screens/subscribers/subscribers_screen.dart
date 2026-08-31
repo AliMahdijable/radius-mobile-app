@@ -2150,17 +2150,30 @@ class _ChipsBarDelegate extends SliverPersistentHeaderDelegate {
   @override
   double get maxExtent => _height;
 
+  /// ⚠️ بلا `AnimatedSwitcher` — وإزالتها إصلاح عطل لا تبسيط.
+  ///
+  /// بلاغ 2026-08-31: فيضٌ لا ينقطع في قسم «غير مفعّل» وغيره —
+  ///   Failed assertion: '!semantics.parentDataDirty': is not true.
+  ///   Null check operator used on a null value
+  /// مئات المرّات في الثانية، بلا توقّف.
+  ///
+  /// السبب أُثبت بالعزل (اختبار بنفس البنية: مع المبدّل 4 أخطاء، بلاه
+  /// صفر): المبدّل يُبقي الطفل الخارج حيّاً 180ms أثناء التلاشي. وعتبة
+  /// الانضغاط هنا 56/40 بكسل — تمريرة سريعة تعبرها ذهاباً وإياباً داخل
+  /// تلك النافذة، فيعود **نفس** المفتاح (`ValueKey('chips')`) بينما
+  /// القديم ما زال خارجاً. فيقع «Duplicate keys found»، وتنكسر شجرة
+  /// العناصر، ثمّ يفيض محرّك الدلالات على الشجرة المكسورة إلى الأبد.
+  ///
+  /// و`AnimatedCrossFade` ليست بديلاً: تُبقي الطفلين مركَّبَين دائماً،
+  /// فيصير `_searchCtrl` مربوطاً بحقلَي نصّ وزرَّي إملاء معاً.
+  ///
+  /// الثمن: التبديل صار فوريّاً بلا تلاشٍ 180ms. والارتفاع ثابت في
+  /// الحالتين أصلاً، فلا قفزة.
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlaps) =>
       SizedBox(
         height: _height,
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 180),
-          child: compact
-              ? KeyedSubtree(
-                  key: const ValueKey('compact'), child: compactChild)
-              : KeyedSubtree(key: const ValueKey('chips'), child: child),
-        ),
+        child: compact ? compactChild : child,
       );
 
   @override
