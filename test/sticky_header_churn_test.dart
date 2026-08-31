@@ -150,12 +150,9 @@ void main() {
     }
     await t.pumpAndSettle();
     FlutterError.onError = prev;
-    // ignore: avoid_print
-    for (final c in caught.toSet()) {
-      print('‼️ $c');
-    }
-    // ignore: avoid_print
-    print('عدد الأخطاء: ${caught.length} · فريدة: ${caught.toSet().length}');
+    // الحكم لا الطباعة: أيّ خطأ هنا يعني عودة العطل.
+    expect(caught, isEmpty,
+        reason: 'الرأس المثبَّت رمى تحت التمرير: ${caught.toSet()}');
     handle.dispose();
   });
 }
