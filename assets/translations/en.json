@@ -549,7 +549,11 @@
     "remaining_days": "Remaining days",
     "session_time": "Session time",
     "debts": "Debts",
-    "parent": "Parent admin"
+    "parent": "Parent admin",
+    "device_rx": "Optical RX",
+    "device_signal": "Wireless signal",
+    "device_ccq": "Link quality (CCQ)",
+    "device_lan": "LAN port speed"
   },
   "more": {
     "title": "More",

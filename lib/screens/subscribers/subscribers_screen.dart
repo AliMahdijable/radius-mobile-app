@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/device_probe_api.dart';
+import '../../models/device_health.dart';
 import '../../api/subscribers_api.dart';
 import '../../api/telegram_api.dart';
 import '../../api/whatsapp_api.dart';
@@ -595,6 +596,23 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   }
 
   void _applySort(List<Subscriber> list) {
+    // مقاييس الأجهزة مسارٌ مستقلّ: قيمتها تأتي من كاش الفحص لا من صفّ
+    // المشترك، وغير المفحوص يغوص في الاتّجاهين معاً — وهو ما لا يعبّر
+    // عنه مقارنٌ عاديّ.
+    if (_deviceFields.contains(_sortField)) {
+      final asc = _sortDir == SortDirection.asc;
+      list.sort((a, b) {
+        final ka =
+            _deviceSortKey(_sortField, DeviceProbeApi.cached(a.ipAddress ?? ''));
+        final kb =
+            _deviceSortKey(_sortField, DeviceProbeApi.cached(b.ipAddress ?? ''));
+        if (ka == null && kb == null) return 0;
+        if (ka == null) return 1; // غير المفحوص أسفلَ دائماً
+        if (kb == null) return -1;
+        return asc ? ka.compareTo(kb) : kb.compareTo(ka);
+      });
+      return;
+    }
     // مطلب 2026-06-11: device-metric sort له الأولوية فوق sort field
     // العادي. مشتركون بلا snapshot (الـwave لم يصلهم بعد، أو الفحص
     // فشل) يسقطون لأسفل القائمة بأي اتجاه — admin ما يريد سطور
@@ -654,11 +672,58 @@ class _SubscribersScreenState extends State<SubscribersScreen>
           if (!aHas) return _sortDir == SortDirection.asc ? 1 : -1;
           if (!bHas) return _sortDir == SortDirection.asc ? -1 : 1;
           return a.sessionTime!.compareTo(b.sessionTime!);
+        // حقول الأجهزة لا تصل هنا — تُعالَج في المسار المستقلّ أعلى
+        // الدالّة وتعود قبل بناء هذا المقارن. الفرع للاكتمال النحويّ.
+        case SortField.deviceRx:
+        case SortField.deviceSignal:
+        case SortField.deviceCcq:
+        case SortField.deviceLan:
+          return 0;
       }
     }
 
     list.sort(_sortDir == SortDirection.asc ? cmp : (a, b) => -cmp(a, b));
   }
+
+  /// يحوّل مقياس جهاز إلى رقم واحد قابل للمقارنة.
+  ///
+  /// اصطلاح الإشارة مقصود:
+  ///   • RX الضوئي وإشارة اللاسلكي **سالبان** — الأقرب إلى الصفر أقوى.
+  ///   • CCQ وسرعة LAN موجبان — الأعلى أفضل.
+  ///   • منفذ LAN مفصول يُرجع -1 فيغوص تحت أيّ وصلة 10Mbps في
+  ///     الاتّجاهين — المدير يريدهم آخراً دائماً لا أوّلاً في أحدهما.
+  ///
+  /// `null` = لا لقطة (الموجة لم تصله أو الفحص فشل) — يغوص أسفل
+  /// القائمة بأيّ اتّجاه: سطرٌ غامض فوق سطور مفحوصة أسوأ من غيابه.
+  static double? _deviceSortKey(SortField f, DeviceHealthSnapshot? snap) {
+    if (snap == null) return null;
+    switch (f) {
+      case SortField.deviceRx:
+        if (snap.kind != DeviceKind.ont || snap.ont == null) return null;
+        return double.tryParse(snap.ont!.rxPower);
+      case SortField.deviceSignal:
+        if (snap.kind != DeviceKind.ubiquiti || snap.ubnt == null) return null;
+        return snap.ubnt!.signalDbm?.toDouble();
+      case SortField.deviceCcq:
+        if (snap.kind != DeviceKind.ubiquiti || snap.ubnt == null) return null;
+        return snap.ubnt!.ccqPercent?.toDouble();
+      case SortField.deviceLan:
+        if (snap.kind != DeviceKind.ubiquiti || snap.ubnt == null) return null;
+        final speed = snap.ubnt!.primaryLan?.speed ?? '';
+        final m = RegExp(r'^(\d+)Mbps').firstMatch(speed);
+        if (m == null) return snap.ubnt!.lanUp ? 0 : -1;
+        return double.tryParse(m.group(1)!);
+      default:
+        return null;
+    }
+  }
+
+  static const _deviceFields = {
+    SortField.deviceRx,
+    SortField.deviceSignal,
+    SortField.deviceCcq,
+    SortField.deviceLan,
+  };
 
   /// تسلسل مسافات — تُترجَم مرّة واحدة لعمر الصنف لا مرّة لكلّ مقارنة.
   static final RegExp _wsRun = RegExp(r'\s+');

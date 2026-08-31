@@ -549,7 +549,11 @@
     "remaining_days": "الأيام المتبقية",
     "session_time": "مدة الجلسة",
     "debts": "الديون",
-    "parent": "تابع إلى"
+    "parent": "تابع إلى",
+    "device_rx": "قوّة الضوء RX",
+    "device_signal": "إشارة اللاسلكي",
+    "device_ccq": "جودة الاتصال CCQ",
+    "device_lan": "سرعة منفذ LAN"
   },
   "more": {
     "title": "قوائم أخرى",
