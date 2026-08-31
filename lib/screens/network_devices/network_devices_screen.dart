@@ -23,6 +23,7 @@ import 'widgets/device_image.dart';
 import '../../theme/typography.dart';
 import 'detected_model.dart';
 import 'model_detector.dart';
+import '../../core/util/error_text.dart';
 
 /// قائمة أجهزة الشبكة. راجع project_devices_monitoring_plan.
 ///
@@ -175,7 +176,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'فشل التحميل: $e';
+        _error = humanError(e, fallback: 'فشل التحميل');
         _loading = false;
       });
     }
@@ -262,7 +263,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       if (_all.isNotEmpty) {
         await _probeAll();
       } else if (mounted) {
-        setState(() => _error = 'فشل التحميل: $e');
+        setState(() => _error = humanError(e, fallback: 'فشل التحميل'));
       }
     }
   }

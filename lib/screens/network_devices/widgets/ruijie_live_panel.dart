@@ -13,6 +13,7 @@ import '../../../theme/spacing.dart';
 import 'expandable_section.dart';
 import '_grade.dart';
 import '../../../theme/typography.dart';
+import '../../../core/util/error_text.dart';
 
 /// لوحة مراقبة حيّة لأجهزة Ruijie / Reyee (SNMP v2c فقط).
 ///
@@ -146,7 +147,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e is RuijieException ? e.message : e.toString();
+        _error = e is RuijieException ? e.message : humanError(e);
         _loading = false;
       });
     }

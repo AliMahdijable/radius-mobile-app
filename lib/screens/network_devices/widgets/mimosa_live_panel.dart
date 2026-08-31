@@ -13,6 +13,7 @@ import '../../../theme/spacing.dart';
 import 'expandable_section.dart';
 import '_grade.dart';
 import '../../../theme/typography.dart';
+import '../../../core/util/error_text.dart';
 
 /// لوحة مراقبة حيّة لأجهزة Mimosa (B5/B5c/B11/B24/A5/C5/C5c) — SNMP v2c فقط.
 ///
@@ -109,7 +110,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e is MimosaException ? e.message : e.toString();
+        _error = e is MimosaException ? e.message : humanError(e);
         _loading = false;
       });
     }

@@ -13,6 +13,7 @@ import '../../theme/colors.dart';
 import '../main_shell.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../core/util/error_text.dart';
 
 /// شاشة "الصفحات" — التبديل السريع بين حسابات المدراء الفرعيّين
 /// (2026-08-26). طلب المستخدم:
@@ -100,7 +101,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
       if (!mounted) return;
       setState(() {
         _rows = const [];
-        _error = _original == null ? e.toString() : null;
+        _error = _original == null ? humanError(e) : null;
         _loading = false;
       });
     }

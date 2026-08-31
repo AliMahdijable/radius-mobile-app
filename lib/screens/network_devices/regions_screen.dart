@@ -9,6 +9,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../widgets/skeleton.dart';
 import '../../theme/typography.dart';
+import '../../core/util/error_text.dart';
 
 /// شاشة إدارة مناطق الأجهزة — قائمة + إضافة + تعديل + حذف.
 /// راجع [[project_devices_monitoring_plan]].
@@ -48,7 +49,7 @@ class _RegionsScreenState extends State<RegionsScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = humanError(e);
         _loading = false;
       });
     }

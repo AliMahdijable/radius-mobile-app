@@ -14,6 +14,7 @@ import 'expandable_section.dart';
 import '_grade.dart';
 import '../../../theme/typography.dart';
 import '../detected_model.dart';
+import '../../../core/util/error_text.dart';
 
 /// Panel للمراقبة الحيّة لجهاز Mikrotik.
 /// - Auto-start عند فتح الصفحة (لا يحتاج المستخدم يضغط "بدء")
@@ -226,7 +227,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e is MikrotikException ? e.message : e.toString();
+        _error = e is MikrotikException ? e.message : humanError(e);
         _loading = false;
       });
     }
