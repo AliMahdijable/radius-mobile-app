@@ -725,7 +725,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     );
     if (picked == null) return; // أُغلق بلا «تطبيق»
     setState(() {
-      _managerFilter = picked is String ? picked : null;
+      _managerFilter = normalizeManagerFilter(picked);
       _visibleCount = _kPageStep;
     });
   }
@@ -1469,6 +1469,26 @@ class _ResultSortBar extends StatelessWidget {
       ),
     );
   }
+}
+
+/// يُطبّع خرج `_ManagerFilterSheet` إلى ثنائيّة واحدة: مديرٌ مختار،
+/// أو `null` = «الكل».
+///
+/// 🐛 بلاغ 2026-08-31: اختيار مدير فرعي ثمّ العودة إلى «الكل» كان
+/// يُفرّغ القائمة تماماً (0 مشترك، 0 نتيجة) حتّى إغلاق التطبيق وفتحه.
+///
+/// السبب أنّ الشيت يُرجع `_picked ?? ''` — فـ«الكل» تصل سلسلةً فارغة
+/// لا `null` — بينما المستقبِل كان يقول `picked is String ? picked :
+/// null`. والفارغة **سلسلة**، فيصير الفلتر `''` ويبحث `_managerScoped`
+/// عمّن `parentUsername == ''` ولا أحد كذلك. ولأنّ الحقل يُبنى `null`
+/// عند إنشاء الحالة، كان الخروج من التطبيق يبدو «إصلاحاً».
+///
+/// الثابتة التي تحرسها هذه الدالّة: `_managerFilter` إمّا `null` أو
+/// نصّ غير فارغ — أبداً بينهما. عليها يعتمد `filterActive` أيضاً.
+String? normalizeManagerFilter(Object? picked) {
+  if (picked is! String) return null;
+  final trimmed = picked.trim();
+  return trimmed.isEmpty ? null : trimmed;
 }
 
 /// شيت تصفية القائمة — النسخة الخفيفة (بلا رأس مفصول، عنوان + إعادة
