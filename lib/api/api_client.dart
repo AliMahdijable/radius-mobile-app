@@ -161,14 +161,39 @@ class _AuthInterceptor extends Interceptor {
     // لا على ردٍّ وصل بحالة خطأ.
     final isTransport = err.type == DioExceptionType.connectionError ||
         (err.type == DioExceptionType.unknown && err.response == null);
+
+    // ── وبوّابة عابرة من الوسيط ──
+    //
+    // 🐛 بلاغ 2026-08-31: موجة 502 من Cloudflare بجسمٍ يقول صراحةً
+    // `origin_bad_gateway` و`retryable: true`. الطابع الزمنيّ طابق
+    // إعادة تشغيل الخادم إلى الثانية: كلّ طلب كان في الطريق أثناء
+    // نافذة الإقلاع (~ثانيتان) ارتدّ لأنّ المنفذ كان مغلقاً.
+    //
+    // وهذا يتكرّر مع **كلّ** نشر. ووضع cluster بنسختين — الحلّ
+    // المعتاد — خطرٌ هنا: نسختان تعنيان جدولَي مهامّ ورسائل واتساب
+    // مكرّرة. فالمكان الصحيح للمعالجة هو العميل.
+    //
+    // 502/503/504 وحدها: أخطاء وسيط عابرة. 500 مستثناة عمداً — عطل
+    // تطبيقٍ حقيقي، وإعادته تُخفي الخلل وتضاعف الحمل.
+    final code = err.response?.statusCode ?? 0;
+    final isGatewayBlip = code == 502 || code == 503 || code == 504;
+
     final isIdempotent = err.requestOptions.method.toUpperCase() == 'GET';
-    if (isTransport && isIdempotent && err.requestOptions.extra['_retried'] != true) {
+    if ((isTransport || isGatewayBlip) &&
+        isIdempotent &&
+        err.requestOptions.extra['_retried'] != true) {
       err.requestOptions.extra['_retried'] = true;
+      // مهلة قبل إعادة بوّابة عابرة: الخادم يحتاج ثوانيَ ليقلع، وإعادة
+      // فوريّة تصطدم بالنافذة نفسها. أمّا المقبس البائت فيُعاد فوراً —
+      // المقبس الجديد جاهز حالاً.
+      if (isGatewayBlip) {
+        await Future<void>.delayed(const Duration(milliseconds: 1200));
+      }
       try {
         final res = await _dio.fetch<dynamic>(err.requestOptions);
         return handler.resolve(res);
       } catch (_) {
-        // فشلت الثانية أيضاً — انقطاع حقيقي لا مقبس بائت.
+        // فشلت الثانية أيضاً — انقطاع حقيقي لا نافذة إقلاع.
         return handler.next(err);
       }
     }
