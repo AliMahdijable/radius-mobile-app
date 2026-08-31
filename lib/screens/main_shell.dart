@@ -49,10 +49,37 @@ class MainShell extends StatefulWidget {
 ///
 /// المزار يبقى في الشجرة بعدها: التنقّل بين التبويبات لا يُفقد الحالة
 /// ولا يُعيد الجلب.
-List<Widget> lazyTabChildren(List<Widget> tabs, Set<int> visited) => [
-  for (var i = 0; i < tabs.length; i++)
-    if (visited.contains(i)) tabs[i] else const SizedBox.shrink(),
-];
+List<Widget> lazyTabChildren(List<Widget> tabs, Set<int> visited, int active) =>
+    [
+      for (var i = 0; i < tabs.length; i++)
+        if (visited.contains(i))
+          // ⚠️ `ExcludeSemantics` ليس تجميلاً لإمكانيّة الوصول — إنّه
+          // يسدّ فجوةً في الإطار نفسه.
+          //
+          // `RenderIndexedStack.visitChildrenForSemantics`
+          // (rendering/stack.dart:782-788) تزور **الطفل المعروض وحده**،
+          // فالمخفيّون لا يستلمون `parentData` للدلالات أبداً. وحين
+          // يستدعي تبويبٌ مخفيّ `setState` (وعندنا مُنبّهات عامّة تفعل
+          // ذلك: SubscriberEvents.dataChanged وغيرها) يُفرَّغ
+          // `parentData` عبر شجرته ولا يُعاد إسناده — لأنّ المحرّك لا
+          // ينزل إلى المخفيّين.
+          //
+          // ثمّ الطامّة: `set index` (stack.dart:792-797) تستدعي
+          // `markNeedsLayout()` **فقط** — لا `markNeedsSemanticsUpdate()`
+          // — رغم أنّ تغيير الفهرس يبدّل مجموعة أبناء الدلالات كاملةً.
+          // فيُكشَف التبويب بـ`parentData == null`، وتسقط الثابتة
+          // `!semantics.parentDataDirty` في **كلّ إطار** إلى الأبد.
+          //
+          // و`RenderExcludeSemantics.excluding` (proxy_box.dart:4408-4414)
+          // تستدعي `markNeedsSemanticsUpdate()` في مُعيِّنها — وهي
+          // الإشعار الذي يُغفله `IndexedStack`. فالتفافها حول كلّ خانة
+          // يُجبر إعادة إسناد `parentData` عند كلّ تبديل تبويب.
+          //
+          // (فلاتر 3.47.0 — تُحقّق من stack.dart قبل إزالة هذا.)
+          ExcludeSemantics(excluding: i != active, child: tabs[i])
+        else
+          const SizedBox.shrink(),
+    ];
 
 class _MainShellState extends State<MainShell> {
   int _tab = 0;
@@ -308,7 +335,7 @@ class _MainShellState extends State<MainShell> {
           // يُنفَّذ `initState`. وبعد الزيارة يبقى في الشجرة كما كان.
           IndexedStack(
             index: _tab,
-            children: lazyTabChildren(tabs, _visited),
+            children: lazyTabChildren(tabs, _visited, _tab),
           ),
           // Standalone search pill — 2026-07-14: أقرب ما يمكن للـnav
           // (4px فوق حافّته العلويّة). لا نقدر نضعه داخله لأن الـpill

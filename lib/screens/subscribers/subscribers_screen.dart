@@ -170,8 +170,16 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   void _onActiveChanged() {
     if (_mayRefresh) {
       _startAutoRefresh();
-      // تحديث فوري عند العودة: القيم قد تكون قديمة بدقائق.
-      if (!_refreshing && !_loading) _silentRefresh();
+      // تحديث فوري عند العودة: القيم قد تكون قديمة بدقائق. ولو وصل
+      // حدث تغيير أثناء الاختفاء نُنفّذ تحديثاً كاملاً لا صامتاً.
+      if (!_refreshing && !_loading) {
+        if (_refreshPending) {
+          _refreshPending = false;
+          _refresh();
+        } else {
+          _silentRefresh();
+        }
+      }
     } else {
       _autoRefreshTimer?.cancel();
     }
@@ -223,8 +231,25 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     super.didChangeAppLifecycleState(state);
   }
 
+  /// طلب تحديث وصل بينما التبويب مخفيّ — يُنفَّذ عند العودة إليه.
+  bool _refreshPending = false;
+
   void _onDataChanged() {
     if (!mounted) return;
+    // ⚠️ لا `setState` على تبويب مخفيّ.
+    //
+    // `SubscriberEvents.dataChanged` مُنبّه على مستوى العمليّة: أيّ
+    // عمليّة في **أيّ** شاشة تُطلقه (شحن رصيد مدير مثلاً)، فتُعيد هذه
+    // الشاشة البناء وهي غير مرئيّة داخل `IndexedStack`. وذلك يُفرّغ
+    // `parentData` للدلالات عبر شجرتها بلا إعادة إسناد — راجع تعليق
+    // `lazyTabChildren` في main_shell.
+    //
+    // ولا تضيع البيانات: العلم يُستهلك في `_onActiveChanged` لحظة
+    // العودة، فيُحدَّث ما تراه قبل أن تراه.
+    if (!_mayRefresh) {
+      _refreshPending = true;
+      return;
+    }
     _refresh();
   }
 

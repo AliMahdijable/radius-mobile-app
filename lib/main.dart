@@ -87,6 +87,8 @@ void main() async {
     }),
   ]);
 
+  _installDebugErrorAggregator();
+
   runApp(
     EasyLocalization(
       // اللغتان المدعومتان (نتّبع نفس ثوابت LocaleService حتى المكوّنات
@@ -104,6 +106,43 @@ void main() async {
       child: const MyServicesApp(),
     ),
   );
+}
+
+
+/// يطبع كلّ خطأ **فريد** مرّةً واحدة بأثره الكامل، ويكتم تكراره.
+///
+/// 🐛 سبب وجوده (2026-08-31): بلاغ فيضٍ لا ينقطع —
+///   Failed assertion: '!semantics.parentDataDirty': is not true.
+///   Null check operator used on a null value
+///   Looking up a deactivated widget's ancestor is unsafe.
+/// مئات السطور في الثانية. وفلاتر يطبع الخطأ كاملاً (بأثر المكدّس واسم
+/// الودجة المسبِّبة) **مرّةً واحدة** ثمّ يكتفي بسطر «Another exception
+/// was thrown» لكلّ تكرار. فالكتلة الوحيدة المفيدة تُدفن تحت آلاف
+/// السطور خلال ثوانٍ، ويستحيل على أحد أن يعثر عليها.
+///
+/// وهذا يتفاقم بأنّ Crashlytics يستبدل `FlutterError.onError` أعلاه —
+/// فنُغلّفه لا نستبدله: التقرير يستمرّ، ويُضاف إليه أثرٌ مقروء.
+///
+/// وضع التطوير حصراً: لا كلفة ولا ضجيج في نسخة الإصدار.
+void _installDebugErrorAggregator() {
+  if (!kDebugMode) return;
+  final seen = <String, int>{};
+  final downstream = FlutterError.onError;
+  FlutterError.onError = (details) {
+    // المفتاح النصّ لا الكائن: نفس الثابتة من موضعين مختلفين تُعدّ
+    // خطأين، وهو المطلوب — الموضع هو ما يهمّ.
+    final key = '${details.exceptionAsString()}|${details.library}';
+    final n = (seen[key] ?? 0) + 1;
+    seen[key] = n;
+    if (n == 1) {
+      debugPrint('\n🔴🔴🔴 خطأ فريد رقم ${seen.length} — الأثر الكامل تحته');
+      FlutterError.dumpErrorToConsole(details, forceReport: true);
+    } else if (n == 50 || n == 500 || n == 5000) {
+      debugPrint('🔁 تكرّر الخطأ رقم ${seen.keys.toList().indexOf(key) + 1} '
+          '$n مرّة: ${details.exceptionAsString().split('\n').first}');
+    }
+    downstream?.call(details);
+  };
 }
 
 /// المرجع الأساسي للـNavigator — نستعمله لعرض الـInAppNotificationBanner
