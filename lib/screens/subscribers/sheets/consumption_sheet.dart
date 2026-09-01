@@ -359,34 +359,24 @@ class _Bars extends StatelessWidget {
           // «كانون٢» و«تشرين١» لا يعرفهما أغلب المستخدمين، وSAS4 نفسه
           // يكتبها `2026-1` في جدوله. الرقم لا يحتاج ترجمة ولا يُقصّ.
           label: '${b.index}',
-          narrow: type == 'daily',
         ),
     ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // الوحدة مرّة واحدة فوق الرسم — لا على كلّ عمود.
-        Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: Text(
-            'القيم بالـ${unit.name}',
-            textAlign: TextAlign.center,
-            style: AppType.micro(color: AppColors.textLow),
-          ),
-        ),
-        SizedBox(
-      height: 150,
-      child: type == 'daily'
-          ? ListView(
-              scrollDirection: Axis.horizontal,
-              reverse: true, // RTL: اليوم 1 يمين
-              children: bars,
-            )
-          : Row(
-              children: [for (final b in bars) Expanded(child: b)],
-            ),
-        ),
-      ],
+    // ⚠️ الوضعان يُمرَّران أفقيّاً بعرضٍ ثابت.
+    //
+    // كان الشهريّ يوزّع 12 عموداً على العرض بـ`Expanded`، فينال كلٌّ
+    // نحو 28 نقطة — لا تتّسع لرقمٍ ووحدته. والتوزيع يجعل العمود يضيق
+    // كلّما ضاقت الشاشة، فالجهاز الصغير يفقد الأرقام أوّلاً.
+    //
+    // العرض الثابت يفصل قراءة العمود عن حجم الشاشة: يُرى منه ما يُرى،
+    // ويُمرَّر الباقي. (طلب المستخدم 2026-09-01: «وسّع السجلات».)
+    return SizedBox(
+      height: 158,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        reverse: true, // RTL: الخانة 1 على اليمين
+        padding: const EdgeInsets.symmetric(horizontal: Sp.xs),
+        children: bars,
+      ),
     );
   }
 }
@@ -397,13 +387,11 @@ class _Bar extends StatelessWidget {
     required this.peak,
     required this.unit,
     required this.label,
-    required this.narrow,
   });
   final TrafficBucket bucket;
   final int peak;
   final ({int div, String name}) unit;
   final String label;
-  final bool narrow;
 
   @override
   Widget build(BuildContext context) {
@@ -411,9 +399,10 @@ class _Bar extends StatelessWidget {
     final ratio = peak > 0 ? bucket.total / peak : 0.0;
     final on = bucket.total > 0;
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: narrow ? 3 : 2),
+      padding: const EdgeInsets.symmetric(horizontal: 3),
       child: SizedBox(
-        width: narrow ? 30 : null,
+        // 46 يتّسع لـ«660GB» بمقاس `micro` بلا قصّ.
+        width: 46,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [

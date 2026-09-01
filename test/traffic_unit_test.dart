@@ -44,6 +44,16 @@ void main() {
     expect(scaledForTest((0.25 * gb).round(), d), '0.25');
   });
 
+  test('أطول نصّ عمود يتّسع في 46 نقطة', () {
+    // العمود عرضه 46 والنصّ `micro` (10.5). أطول ما يمكن: ثلاث خانات
+    // + وحدة من حرفين = «660GB» ≈ 34 نقطة بالخطّ المُجمَّع. الهامش
+    // مقصود: تكبير خطّ النظام مسموح حتّى 1.2 (main.dart:259).
+    const u = (div: 1000 * 1000 * 1000, name: 'GB');
+    final longest = scaledForTest(999 * u.div, u.div) + u.name;
+    expect(longest.length, lessThanOrEqualTo(5),
+        reason: 'نصّ أطول من 5 محارف يُقصّ في عمود 46 نقطة: «$longest»');
+  });
+
   test('التنسيق الكامل يحمل وحدته — للإجماليّات لا للأعمدة', () {
     expect(fmtBytes(660 * gb), contains('GB'));
     expect(fmtBytes(500 * mb), contains('MB'));
