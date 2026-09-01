@@ -553,7 +553,8 @@
     "device_rx": "Optical RX",
     "device_signal": "Wireless signal",
     "device_ccq": "Link quality (CCQ)",
-    "device_lan": "LAN port speed"
+    "device_lan": "LAN port speed",
+    "daily_traffic": "Today's usage"
   },
   "more": {
     "title": "More",

@@ -25,6 +25,11 @@ enum SortField {
   // ذهب ولم يصل شيء إلى الشيت، فضاع الفرز بالإشارة والبور كلّيّاً.
   //
   // المستخدم طلب حذف **الشريط** لا الوظيفة، وهذا موضعها الصحيح.
+  /// استهلاك اليوم — يأتي مجّاناً في صفّ المشترك
+  /// (`daily_traffic_details`) فلا يكلّف نداءً. وهو أنفع فرز يوميّ:
+  /// يُظهر فوراً مَن يشرب سعة البرج.
+  dailyTraffic,
+
   deviceRx, // قوّة الاستقبال الضوئي (ONT) — سالبة، الأقرب للصفر أقوى
   deviceSignal, // إشارة اللاسلكي (UBNT) — سالبة كذلك
   deviceCcq, // جودة الاتصال — موجبة، الأعلى أفضل
@@ -44,6 +49,7 @@ const _fieldDefs = <(SortField, String, IconData)>[
   (SortField.sessionTime, 'sort.session_time', LucideIcons.timer),
   (SortField.notes, 'sort.debts', LucideIcons.wallet),
   (SortField.parentUsername, 'sort.parent', LucideIcons.userCog),
+  (SortField.dailyTraffic, 'sort.daily_traffic', LucideIcons.activity),
   (SortField.deviceRx, 'sort.device_rx', LucideIcons.zap),
   (SortField.deviceSignal, 'sort.device_signal', LucideIcons.wifi),
   (SortField.deviceCcq, 'sort.device_ccq', LucideIcons.gauge),

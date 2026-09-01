@@ -661,6 +661,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
           return (a.remainingDays ?? 99999).compareTo(b.remainingDays ?? 99999);
         case SortField.notes:
           return a.balanceAmount.compareTo(b.balanceAmount);
+        // استهلاك اليوم — الرقم في الصفّ أصلاً، فالفرز بلا كلفة.
+        // ومن لم يستهلك يُعدّ صفراً لا مجهولاً: صفرٌ حقيقة لا نقص بيانات.
+        case SortField.dailyTraffic:
+          return (a.dailyTrafficTotal ?? 0).compareTo(b.dailyTrafficTotal ?? 0);
         case SortField.parentUsername:
           return alphaCmp(a.parentUsername, b.parentUsername);
         case SortField.sessionTime:

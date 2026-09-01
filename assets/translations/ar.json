@@ -553,7 +553,8 @@
     "device_rx": "قوّة الضوء RX",
     "device_signal": "إشارة اللاسلكي",
     "device_ccq": "جودة الاتصال CCQ",
-    "device_lan": "سرعة منفذ LAN"
+    "device_lan": "سرعة منفذ LAN",
+    "daily_traffic": "استهلاك اليوم"
   },
   "more": {
     "title": "قوائم أخرى",

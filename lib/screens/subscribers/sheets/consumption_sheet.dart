@@ -1,15 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../../models/subscriber.dart';
+import '../../../api/traffic_api.dart';
 import '../../../core/widgets/design_sheet.dart';
+import '../../../models/subscriber.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 
-/// مطلب 2026-06-11: مودل سريع يعرض استهلاك المشترك المتصل
-/// (IP، تحميل، رفع، مدة الجلسة، الجهاز). يُفتح من زر "الاستهلاك"
-/// أسفل كل بطاقة في تاب "متصل" بدون الحاجة لفتح صفحة التفاصيل.
+/// استهلاك المشترك — يوميّ عبر أيّام الشهر، أو شهريّ عبر شهور السنة.
+///
+/// 🔬 المصدر: `GET /api/v2/subscribers/:id/traffic` الذي يغلّف
+/// `user/traffic` في SAS4 (اكتُشف 2026-09-01 بفكّ حمولة من واجهته —
+/// الحقل `report_type` غير موثَّق وبدونه يُرجع 500 صامتاً).
+///
+/// ⚠️ وأصلح هذا الشيت عطلاً صامتاً عاش منذ 2026-07-13: كان يعرض
+/// «تحميل اليوم» و«رفع اليوم» من `daily_traffic_details.upload/download`
+/// — وهما **غير موجودين** في ردّ SAS4 (يرسل `{user_id, traffic}` فقط).
+/// فكانت البلاطتان تعرضان صفراً دائماً تحت إجماليٍّ صحيح. التفصيل
+/// الحقيقيّ يأتي الآن من `rx`/`tx` لكلّ خانة.
 Future<void> showConsumptionSheet(BuildContext context, Subscriber sub) {
   return showModalBottomSheet(
     context: context,
@@ -20,9 +29,100 @@ Future<void> showConsumptionSheet(BuildContext context, Subscriber sub) {
   );
 }
 
-class _ConsumptionSheet extends StatelessWidget {
+const _months = [
+  'كانون٢', 'شباط', 'آذار', 'نيسان', 'أيار', 'حزيران',
+  'تموز', 'آب', 'أيلول', 'تشرين١', 'تشرين٢', 'كانون١',
+];
+
+String fmtBytes(int b) {
+  if (b <= 0) return '0';
+  const gb = 1000 * 1000 * 1000;
+  const mb = 1000 * 1000;
+  const kb = 1000;
+  if (b >= gb) return '${(b / gb).toStringAsFixed(b >= 10 * gb ? 0 : 1)} GB';
+  if (b >= mb) return '${(b / mb).toStringAsFixed(0)} MB';
+  if (b >= kb) return '${(b / kb).toStringAsFixed(0)} KB';
+  return '$b B';
+}
+
+class _ConsumptionSheet extends StatefulWidget {
   const _ConsumptionSheet({required this.sub});
   final Subscriber sub;
+
+  @override
+  State<_ConsumptionSheet> createState() => _ConsumptionSheetState();
+}
+
+class _ConsumptionSheetState extends State<_ConsumptionSheet> {
+  late int _year = DateTime.now().year;
+  late int _month = DateTime.now().month;
+  String _type = 'daily';
+  TrafficReport? _report;
+  String? _error;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final id = widget.sub.idx;
+    if (id == null || id.isEmpty) {
+      setState(() {
+        _loading = false;
+        _error = 'لا معرّف لهذا المشترك';
+      });
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final r = await TrafficApi.fetch(
+      subscriberId: id,
+      type: _type,
+      month: _month,
+      year: _year,
+    );
+    if (!mounted) return;
+    setState(() {
+      _report = r.report;
+      _error = r.error;
+      _loading = false;
+    });
+  }
+
+  void _switch(String t) {
+    if (t == _type) return;
+    setState(() => _type = t);
+    _load();
+  }
+
+  void _shift(int delta) {
+    setState(() {
+      if (_type == 'monthly') {
+        _year += delta;
+      } else {
+        var m = _month + delta;
+        var y = _year;
+        if (m < 1) {
+          m = 12;
+          y--;
+        } else if (m > 12) {
+          m = 1;
+          y++;
+        }
+        _month = m;
+        _year = y;
+      }
+    });
+    _load();
+  }
+
+  String get _periodLabel =>
+      _type == 'monthly' ? '$_year' : '${_months[_month - 1]} $_year';
 
   @override
   Widget build(BuildContext context) {
@@ -30,301 +130,302 @@ class _ConsumptionSheet extends StatelessWidget {
     return DesignSheet(
       header: SheetHeaderBar(
         icon: LucideIcons.activity,
-        title: 'استهلاك المشترك',
-        subtitle: sub.fullName.isNotEmpty ? sub.fullName : sub.username,
+        title: 'الاستهلاك',
+        subtitle: widget.sub.fullName.isNotEmpty
+            ? widget.sub.fullName
+            : widget.sub.username,
         onClose: () => Navigator.of(context).pop(),
       ),
       body: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: _bigStat(
-                  icon: LucideIcons.download,
-                  label: 'تحميل',
-                  value: _fmtBytes(sub.downloadBytes ?? 0),
-                  color: AppColors.brand,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _bigStat(
-                  icon: LucideIcons.upload,
-                  label: 'رفع',
-                  value: _fmtBytes(sub.uploadBytes ?? 0),
-                  color: AppColors.brandAccent,
-                ),
-              ),
-            ],
+          _TypeToggle(type: _type, onChanged: _switch),
+          const SizedBox(height: Sp.md),
+          _PeriodBar(
+            label: _periodLabel,
+            onPrev: () => _shift(-1),
+            // لا تقدّم إلى مستقبلٍ لا بيانات فيه.
+            onNext: _isCurrentPeriod ? null : () => _shift(1),
           ),
-          // مطلب 2026-06-11: إذا الـSAS4 ما رجّع بايتات بعد
-          // (شائع للجلسات الجديدة)، نبيّن للمدير وضوحاً أن
-          // المودل مفتوح وفيه بيانات بدل ما يحس فاضي.
-          if ((sub.downloadBytes ?? 0) == 0 && (sub.uploadBytes ?? 0) == 0) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppColors.warningSoftBg,
-                borderRadius: BorderRadius.circular(R.md),
-                border: Border.all(
-                  color: AppColors.warningSoftBorder,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(LucideIcons.info, size: 13, color: AppColors.warning),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'لا يوجد استهلاك مسجَّل بعد — الجلسة قد تكون '
-                      'حديثة أو لم يتم تحديث الـSAS بعد.',
-                      style: AppType.muted(color: AppColors.textHi)
-                          .copyWith(fontSize: 11.5, height: 1.4),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          // 2026-07-13: قسم "الاستهلاك اليومي" الجديد — يعرض إجمالي
-          // المشترك خلال اليوم (من SAS4 daily_traffic_details).
-          // يظهر فقط لو backend رجّع البيانات (لبعض الجلسات null).
-          if (_hasDailyTraffic) ...[
+          const SizedBox(height: Sp.md),
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: Sp.huge),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_error != null)
+            _Notice(icon: LucideIcons.triangleAlert, text: _error!)
+          else if (_report == null || _report!.isEmpty)
+            const _Notice(
+              icon: LucideIcons.inbox,
+              text: 'لا استهلاك مسجَّل في هذه المدّة',
+            )
+          else ...[
+            _Totals(report: _report!),
             const SizedBox(height: Sp.md),
-            _sectionLabel('الاستهلاك اليومي', LucideIcons.calendar),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Expanded(
-                  child: _bigStat(
-                    icon: LucideIcons.download,
-                    label: 'تحميل اليوم',
-                    value: _fmtBytes(sub.dailyDownload ?? 0),
-                    color: AppColors.success,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _bigStat(
-                    icon: LucideIcons.upload,
-                    label: 'رفع اليوم',
-                    value: _fmtBytes(sub.dailyUpload ?? 0),
-                    color: AppColors.brandAccent,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.brandSoftBg,
-                borderRadius: BorderRadius.circular(R.md),
-                border: Border.all(
-                  color: AppColors.brandSoftBorder,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(LucideIcons.activity, size: 14, color: AppColors.brand),
-                  const SizedBox(width: 6),
-                  Text(
-                    'إجمالي اليوم:',
-                    style: AppType.muted().copyWith(fontSize: 12.5),
-                  ),
-                  const Spacer(),
-                  Text(
-                    _fmtBytes(sub.dailyTrafficTotal ?? 0),
-                    style: AppType.title(color: AppColors.brand)
-                        .copyWith(fontSize: 14),
-                  ),
-                ],
-              ),
-            ),
+            _Bars(report: _report!, type: _type),
           ],
-          const SizedBox(height: Sp.md),
-          _sectionLabel('معلومات الجلسة الحاليّة', LucideIcons.info),
-          const SizedBox(height: 6),
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.surfaceInput,
-              borderRadius: BorderRadius.circular(R.md),
-            ),
-            child: Column(
-              children: [
-                _row(
-                  icon: LucideIcons.network,
-                  label: 'IP',
-                  value: (sub.ipAddress?.isNotEmpty ?? false)
-                      ? sub.ipAddress!
-                      : '—',
-                ),
-                _divider(),
-                _row(
-                  icon: LucideIcons.timer,
-                  label: 'مدة الجلسة',
-                  value: (sub.sessionTime != null && sub.sessionTime! > 0)
-                      ? _fmtDuration(sub.sessionTime!)
-                      : '—',
-                ),
-                _divider(),
-                _row(
-                  icon: LucideIcons.cpu,
-                  label: 'الجهاز',
-                  value: (sub.deviceVendor?.isNotEmpty ?? false)
-                      ? sub.deviceVendor!
-                      : '—',
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: Sp.md),
-          SizedBox(
-            width: double.infinity,
-            height: 46,
-            child: OutlinedButton.icon(
-              onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(LucideIcons.x, size: 16),
-              label: const Text('إغلاق'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.textMid,
-                side: BorderSide(color: AppColors.border),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(R.md),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );
   }
 
-  /// true لو backend رجّع أي قيمة داخل daily_traffic_details.
-  bool get _hasDailyTraffic =>
-      (sub.dailyTrafficTotal ?? 0) > 0 ||
-      (sub.dailyUpload ?? 0) > 0 ||
-      (sub.dailyDownload ?? 0) > 0;
+  bool get _isCurrentPeriod {
+    final now = DateTime.now();
+    if (_type == 'monthly') return _year >= now.year;
+    return _year > now.year || (_year == now.year && _month >= now.month);
+  }
+}
 
-  Widget _sectionLabel(String text, IconData icon) => Padding(
-        padding: const EdgeInsets.only(right: 4),
-        child: Row(
+class _TypeToggle extends StatelessWidget {
+  const _TypeToggle({required this.type, required this.onChanged});
+  final String type;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Row(
+      children: [
+        for (final e in const [('daily', 'يوميّ'), ('monthly', 'شهريّ')]) ...[
+          if (e.$1 != 'daily') const SizedBox(width: Sp.sm),
+          Expanded(
+            child: InkWell(
+              onTap: () => onChanged(e.$1),
+              borderRadius: BorderRadius.circular(R.md),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: type == e.$1 ? AppColors.brand : AppColors.surface,
+                  borderRadius: BorderRadius.circular(R.md),
+                  border: Border.all(
+                    color: type == e.$1 ? AppColors.brand : AppColors.border,
+                  ),
+                ),
+                child: Text(
+                  e.$2,
+                  style: AppType.bodyStrong(
+                    color: type == e.$1 ? AppColors.onBrand : AppColors.textBody,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _PeriodBar extends StatelessWidget {
+  const _PeriodBar({
+    required this.label,
+    required this.onPrev,
+    required this.onNext,
+  });
+  final String label;
+  final VoidCallback? onPrev;
+  final VoidCallback? onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Row(
+      children: [
+        IconButton(
+          onPressed: onPrev,
+          icon: Icon(LucideIcons.chevronRight, size: 18, color: AppColors.textMid),
+        ),
+        Expanded(
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: AppType.cardTitleBold(color: AppColors.textHi),
+          ),
+        ),
+        IconButton(
+          onPressed: onNext,
+          icon: Icon(
+            LucideIcons.chevronLeft,
+            size: 18,
+            // المعطَّل باهت: الحدّ الزمنيّ يُرى لا يُكتشف بالمحاولة.
+            color: onNext == null ? AppColors.textLow : AppColors.textMid,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Totals extends StatelessWidget {
+  const _Totals({required this.report});
+  final TrafficReport report;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final rx = report.buckets.fold<int>(0, (a, b) => a + b.rx);
+    final tx = report.buckets.fold<int>(0, (a, b) => a + b.tx);
+    return Row(
+      children: [
+        Expanded(child: _tile('الإجمالي', report.total, AppColors.brand)),
+        const SizedBox(width: Sp.sm),
+        Expanded(child: _tile('تحميل', rx, AppColors.success)),
+        const SizedBox(width: Sp.sm),
+        Expanded(child: _tile('رفع', tx, AppColors.info)),
+      ],
+    );
+  }
+
+  Widget _tile(String label, int bytes, Color c) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceInput,
+          borderRadius: BorderRadius.circular(R.md),
+          border: Border.all(color: AppColors.borderSoft),
+        ),
+        child: Column(
           children: [
-            Icon(icon, size: 13, color: AppColors.brand),
-            const SizedBox(width: 5),
+            Text(label, style: AppType.micro(color: AppColors.textMid)),
+            const SizedBox(height: 3),
             Text(
-              text,
-              style: AppType.title(color: AppColors.textHi)
-                  .copyWith(fontSize: 12.5),
+              fmtBytes(bytes),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.cardTitleBold(color: c),
             ),
           ],
         ),
       );
+}
 
-  Widget _bigStat({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(R.md),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 14, color: color),
-              const SizedBox(width: 5),
-              Text(
-                label,
-                style: AppType.muted()
-                    .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: AppType.title(color: color)
-                .copyWith(fontSize: 17, letterSpacing: -0.3),
-          ),
-        ],
-      ),
-    );
-  }
+/// أعمدة بسيطة مرسومة بالودجات لا بمكتبة رسم.
+///
+/// المطلوب هنا مقارنةٌ بصريّة بين خانات لا تحليلٌ بيانيّ: أيّ يومٍ
+/// أثقل، وهل الشهر يتصاعد. الأعمدة تكفي، ولا تجرّ مكتبةً إلى شاشة
+/// تُفتح من شيت.
+class _Bars extends StatelessWidget {
+  const _Bars({required this.report, required this.type});
+  final TrafficReport report;
+  final String type;
 
-  Widget _row({
-    required IconData icon,
-    required String label,
-    required String value,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(icon, size: 14, color: AppColors.textMid),
-          ),
-          const SizedBox(width: 7),
-          Text(
-            label,
-            style: AppType.muted(color: AppColors.textMid)
-                .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(width: 8),
-          // مطلب 2026-06-11: اسم الجهاز الطويل (مثل
-          // 'Guangzhou V-SOLUTION') كان يتقطع. شيلنا maxLines=1
-          // وخلّينا التفاف طبيعي حتى 3 أسطر، WordWrap حتى لو
-          // النص بدون فراغات.
-          Expanded(
-            child: Text(
-              value,
-              style: AppType.label(color: AppColors.textHi)
-                  .copyWith(fontSize: 13, fontWeight: FontWeight.w700),
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              softWrap: true,
-              textAlign: TextAlign.end,
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final peak = report.peak;
+    if (peak <= 0) return const SizedBox.shrink();
+    // اليوميّ 31 عموداً لا تتّسع في عرض الشاشة، فيُمرَّر أفقيّاً.
+    final bars = [
+      for (final b in report.buckets)
+        _Bar(
+          bucket: b,
+          peak: peak,
+          label: type == 'monthly' ? _months[b.index - 1] : '${b.index}',
+          narrow: type == 'daily',
+        ),
+    ];
+    return SizedBox(
+      height: 150,
+      child: type == 'daily'
+          ? ListView(
+              scrollDirection: Axis.horizontal,
+              reverse: true, // RTL: اليوم 1 يمين
+              children: bars,
+            )
+          : Row(
+              children: [for (final b in bars) Expanded(child: b)],
             ),
+    );
+  }
+}
+
+class _Bar extends StatelessWidget {
+  const _Bar({
+    required this.bucket,
+    required this.peak,
+    required this.label,
+    required this.narrow,
+  });
+  final TrafficBucket bucket;
+  final int peak;
+  final String label;
+  final bool narrow;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final ratio = peak > 0 ? bucket.total / peak : 0.0;
+    final on = bucket.total > 0;
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: narrow ? 3 : 2),
+      child: SizedBox(
+        width: narrow ? 34 : null,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            if (on)
+              Text(
+                fmtBytes(bucket.total).split(' ').first,
+                maxLines: 1,
+                // `micro` كما هي — حارس design_scales يمنع المقاسات
+                // خارج السلّم، وهو محقّ: مقاسٌ يتيم لا يُعاد استعماله
+                // يصير دَيناً في كلّ إعادة تصميم لاحقة.
+                style: AppType.micro(color: AppColors.textMid),
+              ),
+            const SizedBox(height: 2),
+            Expanded(
+              child: FractionallySizedBox(
+                alignment: Alignment.bottomCenter,
+                // حدٌّ أدنى مرئيّ: عمودٌ بارتفاع صفر لا يُميَّز عن غيابٍ
+                // تامّ، والفرق بينهما معلومة.
+                heightFactor: on ? (ratio < 0.02 ? 0.02 : ratio) : 0.0,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.brand,
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(3),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.micro(color: AppColors.textLow),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Notice extends StatelessWidget {
+  const _Notice({required this.icon, required this.text});
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Sp.huge),
+      child: Column(
+        children: [
+          Icon(icon, size: 30, color: AppColors.textLow),
+          const SizedBox(height: Sp.sm),
+          Text(
+            text,
+            textAlign: TextAlign.center,
+            style: AppType.label(color: AppColors.textMid),
           ),
         ],
       ),
     );
-  }
-
-  Widget _divider() => Container(
-        margin: const EdgeInsets.symmetric(horizontal: 12),
-        height: 1,
-        color: AppColors.border,
-      );
-
-  static String _fmtBytes(int bytes) {
-    if (bytes <= 0) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    var i = 0;
-    var v = bytes.toDouble();
-    while (v >= 1024 && i < units.length - 1) {
-      v /= 1024;
-      i++;
-    }
-    return '${v.toStringAsFixed(v >= 100 ? 0 : 1)} ${units[i]}';
-  }
-
-  static String _fmtDuration(int seconds) {
-    final h = seconds ~/ 3600;
-    final m = (seconds % 3600) ~/ 60;
-    if (h > 0) return '$hس $mد';
-    return '$mد';
   }
 }
