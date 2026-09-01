@@ -299,6 +299,62 @@ class NetworkDevicesApi {
     }
   }
 
+  /// يرسل نتائج جولة الفحص **كلّها** في طلب واحد.
+  ///
+  /// 🐛 ما يُصلحه: [saveProbeResult] أعلاه كانت تُستدعى مرّة لكلّ جهاز.
+  /// بحساب ٨٠ جهازاً وجولة كلّ ٢٠ ثانية = **٢٤٠ طلباً في الدقيقة من
+  /// هاتف واحد**، متواصلةً ما دامت الصفحة مفتوحة. وCloudflare سبق أن
+  /// ردّ ٤٢٩ على هذا المشروع في الإنشاء الجماعيّ.
+  ///
+  /// يعيد `true` إن قبِلها الخادم — والاستدعاء يبقى ثانويّاً: الفحص
+  /// المحلّيّ نجح أصلاً، وفشل الحفظ لا يُبطله.
+  static Future<bool> saveProbeResults(
+      List<({int id, String status, int? responseMs})> results) async {
+    if (results.isEmpty) return true;
+    try {
+      await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/admin/devices/probe-results',
+        data: {
+          'results': [
+            for (final r in results)
+              {'id': r.id, 'status': r.status, 'response_ms': r.responseMs},
+          ],
+        },
+      );
+      return true;
+    } on DioException catch (e) {
+      if (kDebugMode) print('⚠️ saveProbeResults: ${e.message}');
+      return false;
+    }
+  }
+
+  /// نسبة التشغيل والتذبذب لآخر [hours] ساعة — من `device_status_history`.
+  /// يعيد خريطة `deviceId → (onlinePct, flaps)`؛ الجهاز بلا تاريخ يغيب
+  /// عن النتيجة (لا نُلفّق صفراً لجهاز لم نرصده بعد).
+  static Future<Map<int, ({double onlinePct, int flaps})>> fetchUptime(
+      List<int> ids, {int hours = 24}) async {
+    if (ids.isEmpty) return {};
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/v2/admin/devices/uptime',
+        queryParameters: {'ids': ids.join(','), 'hours': hours},
+      );
+      final raw = r.data?['uptime'];
+      if (raw is! Map) return {};
+      return {
+        for (final e in raw.entries)
+          if (int.tryParse('${e.key}') != null && e.value is Map)
+            int.parse('${e.key}'): (
+              onlinePct: ((e.value as Map)['onlinePct'] as num?)?.toDouble() ?? 0,
+              flaps: ((e.value as Map)['flaps'] as num?)?.toInt() ?? 0,
+            ),
+      };
+    } on DioException catch (e) {
+      if (kDebugMode) print('⚠️ fetchUptime: ${e.message}');
+      return {};
+    }
+  }
+
   // ══════════════════════════════════════════════════════════
   // Bulk IP scan (2026-08-18)
   // TCP-connect probing لكل الـIPs في /24 على 6 ports شائعة.

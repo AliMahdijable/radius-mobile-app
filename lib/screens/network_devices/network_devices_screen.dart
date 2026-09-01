@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'package:flutter/foundation.dart';
 
 import 'package:flutter/material.dart';
@@ -9,12 +10,14 @@ import '../../api/network_devices_api.dart';
 import '../../models/device_region.dart';
 import '../../models/network_device.dart';
 import '../../services/device_alerts_service.dart';
+import '../../services/device_sweep_coordinator.dart';
 import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../widgets/skeleton.dart';
 import 'bulk_scan_screen.dart';
 import 'device_alerts_screen.dart';
+import 'devices_wall_screen.dart';
 import 'network_device_details_screen.dart';
 import 'network_device_form_sheet.dart';
 import 'regions_screen.dart';
@@ -86,6 +89,10 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   // 20s = توازن بين responsiveness والـbattery/network.
   static const _probeInterval = Duration(seconds: 20);
 
+  /// سقف المقابس المتزامنة في جولة المسح. ٢٤ يُبقي جولة الثمانين تحت
+  /// ثانيتين ولا يُغرق مكدّس الشبكة على الهواتف الضعيفة.
+  static const _probeConcurrency = 24;
+
   @override
   void initState() {
     super.initState();
@@ -123,7 +130,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   }
 
   /// الشاشة حيّة **ومرئيّة** — الشرطان معاً يفتحان حلقة الفحص.
-  bool get _mayProbe => widget.isActive?.value ?? true;
+  /// ⚠️ لا نمسح إن كان جدار الأجهزة مفتوحاً فوقنا — راجع [DeviceSweep].
+  bool get _mayProbe =>
+      (widget.isActive?.value ?? true) && !DeviceSweep.suspended;
 
   void _onActiveChanged() {
     if (_mayProbe) {
@@ -298,50 +307,70 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       // الآن: 1 setState بعد كل الـFuture.wait
       final pendingTransitions = <_PendingTransition>[];
       final updates = <int, NetworkDevice>{}; // id → updated device
+      // نتائج الجولة تُجمَع هنا وتُرسل **دفعةً واحدة** بعد اكتمالها.
+      // كان كلّ جهاز يُرسل طلبه بنفسه = ٢٤٠ طلباً/دقيقة على ٨٠ جهازاً.
+      final probed = <({int id, String status, int? responseMs})>[];
 
-      await Future.wait(
-          _all.where((d) => _shouldProbeInRound(d.id)).map((d) async {
-        try {
-          // TCP probe (أدقّ من ICMP على iOS) — نستعمل apiPort لو موجود
-          // (Mikrotik=8728، UBNT=22، Mimosa=161)، وإلا الـport الأساسي.
-          final r = await NetworkDevicesApi.localIcmpPing(
-            ip: d.ip,
-            tcpPort: d.apiPort ?? d.port,
-          );
-          final oldStatus = _lastKnownStatus[d.id] ?? 'unknown';
-          final newStatus = r.status;
+      // ⚠️ طابور عمّال بسقف، لا `Future.wait` على الكلّ.
+      //
+      // كان المسح يفتح مقبساً لكلّ جهاز دفعةً — ثمانون معاً على أكبر
+      // حساب اليوم. يعمل لأنّ فحص TCP رخيص، لكن لا سقف يمنع حساباً
+      // بثلاثمئة جهاز من فتح ثلاثمئة مقبس. السقف نفسه المُختبَر في
+      // `bulkScanSubnet`.
+      final queue = Queue<NetworkDevice>.from(
+          _all.where((d) => _shouldProbeInRound(d.id)));
+      Future<void> probeWorker() async {
+        while (queue.isNotEmpty) {
+          final d = queue.removeFirst();
+          try {
+            // TCP probe (أدقّ من ICMP على iOS) — نستعمل apiPort لو موجود
+            // (Mikrotik=8728، UBNT=22، Mimosa=161)، وإلا الـport الأساسي.
+            final r = await NetworkDevicesApi.localIcmpPing(
+              ip: d.ip,
+              tcpPort: d.apiPort ?? d.port,
+            );
+            final oldStatus = _lastKnownStatus[d.id] ?? 'unknown';
+            final newStatus = r.status;
 
-          if (oldStatus != newStatus && oldStatus != 'unknown') {
-            pendingTransitions.add(_PendingTransition(
-              device: d,
-              oldStatus: oldStatus,
-              newStatus: newStatus,
-            ));
+            if (oldStatus != newStatus && oldStatus != 'unknown') {
+              pendingTransitions.add(_PendingTransition(
+                device: d,
+                oldStatus: oldStatus,
+                newStatus: newStatus,
+              ));
+            }
+            _lastKnownStatus[d.id] = newStatus;
+            // تحديث backoff counter
+            if (newStatus == 'offline') {
+              _consecutiveFailures[d.id] = (_consecutiveFailures[d.id] ?? 0) + 1;
+            } else {
+              _consecutiveFailures[d.id] = 0;
+            }
+
+            probed.add((id: d.id, status: newStatus, responseMs: r.responseMs));
+
+            updates[d.id] = d.copyWith(
+              lastProbedAt: DateTime.now(),
+              lastStatus: newStatus,
+              lastResponseMs: r.responseMs,
+            );
+          } catch (_) {
+            // فشل probe لجهاز واحد ما يوقف الباقي
           }
-          _lastKnownStatus[d.id] = newStatus;
-          // تحديث backoff counter
-          if (newStatus == 'offline') {
-            _consecutiveFailures[d.id] = (_consecutiveFailures[d.id] ?? 0) + 1;
-          } else {
-            _consecutiveFailures[d.id] = 0;
-          }
-
-          // fire-and-forget — نُصرّح unawaited لتوضيح النية
-          unawaited(NetworkDevicesApi.saveProbeResult(
-            deviceId: d.id,
-            status: newStatus,
-            responseMs: r.responseMs,
-          ).catchError((_) {}));
-
-          updates[d.id] = d.copyWith(
-            lastProbedAt: DateTime.now(),
-            lastStatus: newStatus,
-            lastResponseMs: r.responseMs,
-          );
-        } catch (_) {
-          // فشل probe لجهاز واحد ما يوقف الباقي
         }
-      }));
+      }
+
+      await Future.wait(List.generate(
+        queue.length < _probeConcurrency ? queue.length : _probeConcurrency,
+        (_) => probeWorker(),
+      ));
+
+      // طلب واحد لكلّ الجولة. fire-and-forget مقصود: الفحص المحلّيّ
+      // انتهى وحالة الشاشة تُحدَّث من `updates` أدناه بلا انتظار الخادم.
+      if (probed.isNotEmpty) {
+        unawaited(
+            NetworkDevicesApi.saveProbeResults(probed).catchError((_) => false));
+      }
 
       // setState **واحد** لكل التحديثات
       if (mounted && updates.isNotEmpty) {
@@ -436,6 +465,16 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
   /// شاشة Bulk scan — يرجع bool لو أُضيف أي جهاز.
   /// نمرّر IPs الحاليّة عشان الـscanner يميّز المكرّرات ("مضاف مسبقاً").
+  /// يفتح جدار المراقبة. الجدار يمسك [DeviceSweep] فتتوقّف جولتنا ما
+  /// دام مفتوحاً، ثمّ نُحدّث عند العودة لأنّه مسح نيابةً عنّا.
+  Future<void> _openWall() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const DevicesWallScreen()),
+    );
+    if (mounted) _refresh();
+  }
+
   Future<void> _openBulkScan() async {
     final existingIps = _all.map((d) => d.ip).toSet();
     final added = await Navigator.of(context).push<bool>(
@@ -592,6 +631,13 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                   ),
               ]);
             },
+          ),
+          // جدار المراقبة — يتبع `devices.view` كبقيّة العرض، فلا مفتاح
+          // صلاحيّة رابع لشاشةٍ تُظهر ما تُظهره هذه أصلاً.
+          IconButton(
+            icon: const Icon(LucideIcons.layoutGrid, size: 20),
+            onPressed: _openWall,
+            tooltip: 'جدار الأجهزة',
           ),
           // Manage-tier tools — 2026-08-18: مخفيّة للـview-only.
           if (Perms.has('devices.manage')) ...[

@@ -20,6 +20,12 @@ class NetworkDevice {
   final bool hasCredentials;
   final DateTime? lastProbedAt;
   final String lastStatus; // online|offline|unknown
+
+  /// منذ متى والجهاز على [lastStatus] الحاليّة — من `status_since`.
+  ///
+  /// يتحرّك **عند التحوّل فقط**، لا مع كلّ فحص. وهو ما يسمح بعرض
+  /// «معطّل منذ ٤ دقائق» بدل «معطّل» المجرّدة.
+  final DateTime? statusSince;
   final int? lastResponseMs;
   final DateTime createdAt;
 
@@ -41,6 +47,7 @@ class NetworkDevice {
     this.hasCredentials = false,
     this.lastProbedAt,
     required this.lastStatus,
+    this.statusSince,
     this.lastResponseMs,
     required this.createdAt,
   });
@@ -51,6 +58,7 @@ class NetworkDevice {
   NetworkDevice copyWith({
     DateTime? lastProbedAt,
     String? lastStatus,
+    DateTime? statusSince,
     int? lastResponseMs,
     bool? hasCredentials,
     String? name,
@@ -84,6 +92,7 @@ class NetworkDevice {
         hasCredentials: hasCredentials ?? this.hasCredentials,
         lastProbedAt: lastProbedAt ?? this.lastProbedAt,
         lastStatus: lastStatus ?? this.lastStatus,
+        statusSince: statusSince ?? this.statusSince,
         lastResponseMs: lastResponseMs ?? this.lastResponseMs,
         createdAt: createdAt,
       );
@@ -113,6 +122,9 @@ class NetworkDevice {
             ? DateTime.tryParse(j['last_probed_at'].toString())
             : null,
         lastStatus: (j['last_status'] ?? 'unknown').toString(),
+        statusSince: j['status_since'] != null
+            ? DateTime.tryParse(j['status_since'].toString())?.toLocal()
+            : null,
         lastResponseMs: j['last_response_ms'] as int?,
         createdAt: DateTime.tryParse(j['created_at']?.toString() ?? '') ??
             DateTime.now(),
