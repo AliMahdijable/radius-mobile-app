@@ -29,11 +29,6 @@ Future<void> showConsumptionSheet(BuildContext context, Subscriber sub) {
   );
 }
 
-const _months = [
-  'كانون٢', 'شباط', 'آذار', 'نيسان', 'أيار', 'حزيران',
-  'تموز', 'آب', 'أيلول', 'تشرين١', 'تشرين٢', 'كانون١',
-];
-
 String fmtBytes(int b) {
   if (b <= 0) return '0';
   const gb = 1000 * 1000 * 1000;
@@ -122,7 +117,7 @@ class _ConsumptionSheetState extends State<_ConsumptionSheet> {
   }
 
   String get _periodLabel =>
-      _type == 'monthly' ? '$_year' : '${_months[_month - 1]} $_year';
+      _type == 'monthly' ? '$_year' : '$_year-$_month';
 
   @override
   Widget build(BuildContext context) {
@@ -322,7 +317,10 @@ class _Bars extends StatelessWidget {
         _Bar(
           bucket: b,
           peak: peak,
-          label: type == 'monthly' ? _months[b.index - 1] : '${b.index}',
+          // ⚠️ أرقام لا أسماء شهور عربيّة (طلب المستخدم 2026-09-01):
+          // «كانون٢» و«تشرين١» لا يعرفهما أغلب المستخدمين، وSAS4 نفسه
+          // يكتبها `2026-1` في جدوله. الرقم لا يحتاج ترجمة ولا يُقصّ.
+          label: '${b.index}',
           narrow: type == 'daily',
         ),
     ];
@@ -361,7 +359,7 @@ class _Bar extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: narrow ? 3 : 2),
       child: SizedBox(
-        width: narrow ? 34 : null,
+        width: narrow ? 30 : null,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
