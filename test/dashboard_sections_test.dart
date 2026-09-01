@@ -68,4 +68,46 @@ void main() {
     }
     expect(server.contains('DASHBOARD_SECTIONS'), isTrue);
   });
+
+  // ── بلاغ 2026-09-01: «خفّيتهن كلهن وماكو شي تغيّر» ──
+  //
+  // الخادم كان يحفظ الأقسام الخمسة صحيحةً (تحقّقتُ من الجدول)، والعطل
+  // كلّه في التطبيق: قراءةٌ واحدة عند الإنشاء، وترتيبٌ يجعل أوّل جلب
+  // يسبق وصول التفضيلات.
+
+  test('الأقسام تُقرأ قبل أوّل جلب لا بعده', () {
+    // لو انطلق `_refreshLive` قبل `_loadSections` لخرجت النداءات كلّها
+    // في أوّل فتح ثمّ أُخفيت نتائجها — إخفاءٌ بصريّ بكلفة كاملة.
+    expect(
+      RegExp(r'_loadSections\(\)\s*\.then\(\(_\)\s*\{\s*if \(mounted\) _refreshLive')
+          .hasMatch(src),
+      isTrue,
+      reason: 'أوّل جلب غير مقيَّد بوصول الأقسام',
+    );
+    expect(
+      RegExp(r'^\s*_refreshLive\(silent: false\);', multiLine: true).hasMatch(src),
+      isFalse,
+      reason: 'بقي جلب غير مقيَّد — يسبق التفضيلات',
+    );
+  });
+
+  test('تبدّل النطاق يبلغ الرئيسيّة وهي مركَّبة', () {
+    // الرئيسيّة تعيش في `IndexedStack` طوال الجلسة، فلا `initState`
+    // ثانٍ ينقل إليها تبديل الإعدادات. الإشارة هي الجسر الوحيد.
+    expect(src.contains('ViewScopeEvents.changed.addListener'), isTrue,
+        reason: 'الرئيسيّة لا تسمع تبدّل النطاق');
+    expect(src.contains('ViewScopeEvents.changed.removeListener'), isTrue,
+        reason: 'مستمع بلا فكّ — تسرّب');
+    final scope = File('lib/screens/view_scope_screen.dart').readAsStringSync();
+    expect(RegExp(r'notifyChanged\(\)').allMatches(scope).length, greaterThanOrEqualTo(2),
+        reason: 'الإشارة تُطلق في مفاتيح الأقسام والمدراء كليهما');
+  });
+
+  test('تحديث صامت مبرَّد والسحب-للتحديث معفى', () {
+    // أربعة مصادر تحديث قد تتلاقى؛ والسحب يجب أن يستجيب دائماً وإلّا
+    // بدا المؤشّر يدور بلا أثر.
+    expect(src.contains('if (silent) {'), isTrue);
+    expect(RegExp(r'if \(silent\) \{\s*\n\s*if \(_cooling\) return;').hasMatch(src), isTrue,
+        reason: 'التبريد يجب أن يقيّد الصامت وحده');
+  });
 }

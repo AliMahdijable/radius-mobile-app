@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/dashboard_api.dart';
 import '../../api/view_scope_api.dart';
+import '../../services/view_scope_events.dart';
 import '../../models/dashboard.dart';
 import '../../services/alerts_service.dart';
 import '../../services/app_resumed_signal.dart';
@@ -78,6 +79,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// أهون من شاشة تبدو معطوبة عند كلّ فتح.
   bool _shown(String key) => !_sectionsLoaded || !_hiddenSections.contains(key);
 
+  /// ⚠️ لا `_refreshLive` هنا: `initState` يستدعيه بعدها مباشرةً،
+  /// وإضافته كانت تُنتج جولتَي جلب لكلّ فتح (بلاغ 2026-09-01: أربع
+  /// موجات نداءات متتالية في السجلّ).
   Future<void> _loadSections() async {
     final r = await ViewScopeApi.load();
     if (!mounted) return;
@@ -88,20 +92,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
       };
       _sectionsLoaded = true;
     });
+  }
+
+  /// تبدّل نطاق العرض في شاشة الإعدادات — أعِد قراءة الأقسام ثمّ اجلب.
+  ///
+  /// بلا هذا تبقى الرئيسيّة على ما قرأته عند إنشائها: هي مركَّبة في
+  /// `IndexedStack` طوال الجلسة، فلا `initState` ثانٍ يُنقذها.
+  Future<void> _onScopeChanged() async {
+    if (!mounted) return;
+    await _loadSections();
+    if (!mounted) return;
     _refreshLive(silent: true);
   }
 
   @override
   void initState() {
     super.initState();
-    _loadSections();
     _loadIdentity();
     // Cache-first: hydrate KPIs from SharedPreferences BEFORE the live
     // fetch fires. الـSpinner ما يظهر لو عندنا بيانات محفوظة — يظهر
     // فقط أوّل مرّة أو بعد logout. الـlive fetch يشتغل بالتوازي ويحدّث
     // الأرقام لمّا يوصل.
     _hydrateFromCache();
-    _refreshLive(silent: false);
+    // ⚠️ الأقسام **قبل** أوّل جلب لا بعده: الغاية إسقاط نداء القسم
+    // المخفيّ، وجلبٌ يسبق معرفة التفضيلات يُطلق النداءات كلّها ثمّ
+    // يُخفي نتائجها — وهو نقيض الميزة. والكاش يرسم الأرقام القديمة
+    // فوراً فلا يرى المستخدم انتظاراً.
+    _loadSections().then((_) {
+      if (mounted) _refreshLive(silent: false);
+    });
     // Re-fetch dashboard KPIs whenever any subscriber operation
     // anywhere in the app succeeds (activate/extend/disconnect/bulk
     // toggle/delete). Matches v1's pattern of state-driven refresh.
@@ -110,6 +129,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // إذا المدير خرج للـHome ورجع بعد فترة، الـKPIs تبقى قديمة لأن
     // IndexedStack يحتفظ بالـDashboard مركّبة وinitState ما ينطلق ثانية.
     AppResumedSignal.tick.addListener(_onAppResumed);
+    ViewScopeEvents.changed.addListener(_onScopeChanged);
   }
 
   void _onDataChanged() {
@@ -141,6 +161,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _refreshDebounce?.cancel();
     SubscriberEvents.dataChanged.removeListener(_onDataChanged);
     AppResumedSignal.tick.removeListener(_onAppResumed);
+    ViewScopeEvents.changed.removeListener(_onScopeChanged);
     super.dispose();
   }
 
@@ -168,7 +189,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (_) {/* silent — cache is best-effort */}
   }
 
+  /// مهلة تبريد بين موجتَي تحديث صامت.
+  ///
+  /// للرئيسيّة أربعة مصادر تحديث (الإقلاع · العودة من الخلفيّة ·
+  /// تغيّر بيانات مشترك · تبدّل نطاق العرض)، ولو تلاقى اثنان انطلقت
+  /// موجتا نداءات متطابقة — وهو ما ظهر في سجلّ 2026-09-01.
+  ///
+  /// ⚠️ تبريد **لا** قفل «جلب جارٍ»: القفل الحقيقيّ يعلق أبداً إن تعلّق
+  /// طلب واحد، فيُجمّد كلّ تحديث لاحق. والتبريد يُفلت وحده.
+  /// والسحب-للتحديث معفى — المستخدم طلبه صراحةً وينتظر مؤشّره.
+  bool _cooling = false;
+
   Future<void> _refreshLive({bool silent = false}) async {
+    if (silent) {
+      if (_cooling) return;
+      _cooling = true;
+      Future.delayed(const Duration(seconds: 3), () => _cooling = false);
+    }
     // silent=false (initial mount + pull-to-refresh): نُسقط الـloaded
     //   flags فتظهر spinners حتى البيانات الجديدة.
     // silent=true (event-driven refresh): نبقي القيم القديمة معروضة

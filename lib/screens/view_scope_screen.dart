@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../api/view_scope_api.dart';
+import '../services/view_scope_events.dart';
 import '../services/subscriber_events.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
@@ -89,6 +90,7 @@ class _ViewScopeScreenState extends State<ViewScopeScreen> {
         ];
       }
     });
+    if (r.ok) ViewScopeEvents.notifyChanged();
     if (r.ok) {
       // 🐛 بلاغ 2026-08-31: «من انقر اخفاء الا ارفرش يلا يتحدث».
       //
@@ -125,6 +127,9 @@ class _ViewScopeScreenState extends State<ViewScopeScreen> {
       // نتبنّى حقيقة الخادم لا تخميننا — كما في مفاتيح المدراء.
       if (r.ok && r.sections.isNotEmpty) _sections = r.sections;
     });
+    // بلّغ الشاشات المركَّبة أصلاً — الرئيسيّة تعيش في `IndexedStack`
+    // فلا `initState` ثانٍ يوصل إليها التبديل.
+    if (r.ok) ViewScopeEvents.notifyChanged();
     if (!r.ok) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(r.message ?? 'تعذّر الحفظ'),
