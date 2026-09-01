@@ -65,6 +65,9 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
   Timer? _timer;
   final Set<int> _expanded = {};
 
+  /// وسيط زمن الاستجابة في آخر جولة — أساس الحكم على «البطيء».
+  int? _roundMedianMs;
+
   /// مقاييس كلّ جهاز — مُنبّه مستقلّ لكلّ بطاقة.
   ///
   /// يعيش في الشاشة لا في البطاقة: البطاقة تُهدم مع التمرير، ولو ماتت
@@ -205,9 +208,26 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
       );
     }
 
+    // ── وسيط الجولة ──────────────────────────────────────────────
+    //
+    // 🐛 بلاغ ٢٠٢٦-٠٩-٠١: اثنا عشر جهازاً كلّها «بطيء · ٢٣٠ms» — نفس
+    // الرقم بالضبط. والقياس سليم، لكنّ **التزامن يُفسده**: أربعة
+    // وعشرون مقبساً تُفتح معاً، فما يقيسه المؤقّت هو ازدحام الدفعة لا
+    // زمن الجهاز. الرقم يحمل إزاحةً مشتركة تُصيب الجميع بالتساوي.
+    //
+    // فالحكم صار **نسبيّاً**: بطيءٌ من تجاوز ضعف وسيط جولته. الإزاحة
+    // المشتركة تسقط من الطرفين، ويبقى ما يميّز جهازاً عن أقرانه فعلاً.
+    final lat = probed
+        .map((p) => p.responseMs)
+        .whereType<int>()
+        .toList()
+      ..sort();
+    final median = lat.isEmpty ? null : lat[lat.length ~/ 2];
+
     if (!mounted) return;
     setState(() {
       _sweeping = false;
+      _roundMedianMs = median;
       _offNetwork = reachable == 0 && attempted >= _offNetworkThreshold;
       _all = [for (final d in _all) updates[d.id] ?? d];
     });
@@ -350,6 +370,7 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
           final _HeaderRow r => _GroupHeader(
               title: r.region?.name ?? 'بلا منطقة',
               down: r.down,
+              slow: r.slow,
               total: r.total,
             ),
           final _DeviceRow r => _DeviceCard(
@@ -360,6 +381,7 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
               device: r.device,
               vitals: _vitals.of(r.device.id),
               onVitals: (v) => _vitals.set(r.device.id, v),
+              medianMs: _roundMedianMs,
               prevSample: () => _vitals.sampleOf(r.device.id),
               onSample: (c) => _vitals.saveSample(r.device.id, c),
               open: _expanded.contains(r.device.id),
@@ -392,7 +414,12 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
     if (_offNetwork) out.add(const _BannerRow());
     for (final g in _groups) {
       final down = g.devices.where((d) => d.lastStatus == 'offline').length;
-      out.add(_HeaderRow(g.region, down, g.devices.length));
+      final slow = g.devices
+          .where((d) =>
+              d.lastStatus == 'online' &&
+              _DeviceCard.isSlow(d.lastResponseMs, _roundMedianMs))
+          .length;
+      out.add(_HeaderRow(g.region, down, slow, g.devices.length));
       for (final d in g.devices) {
         out.add(_DeviceRow(d));
       }
@@ -412,9 +439,10 @@ class _BannerRow extends _Row {
 }
 
 class _HeaderRow extends _Row {
-  const _HeaderRow(this.region, this.down, this.total);
+  const _HeaderRow(this.region, this.down, this.slow, this.total);
   final DeviceRegion? region;
   final int down;
+  final int slow;
   final int total;
 }
 
@@ -461,16 +489,28 @@ class _GroupHeader extends StatelessWidget {
   const _GroupHeader({
     required this.title,
     required this.down,
+    required this.slow,
     required this.total,
   });
 
   final String title;
   final int down;
+  final int slow;
   final int total;
+
+  /// ⚠️ الملخّص يجب أن يوافق البطاقات تحته.
+  ///
+  /// كان يعدّ المعطّل وحده، فيقول «الكلّ سليم» فوق اثنَي عشر جهازاً
+  /// موسومةٍ كلّها بالبطء. ملخّصٌ يناقض ما تحته أسوأ من غيابه.
+  (String, AppTone) get _summary {
+    if (down > 0) return ('$down من $total معطّل', AppTone.danger);
+    if (slow > 0) return ('$slow بطيء', AppTone.warning);
+    return ('الكلّ سليم', AppTone.success);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final tone = down == 0 ? AppTone.success : AppTone.danger;
+    final (text, tone) = _summary;
     return Padding(
       padding: const EdgeInsets.fromLTRB(Sp.xs, Sp.md, Sp.xs, Sp.sm),
       child: Row(
@@ -494,10 +534,7 @@ class _GroupHeader extends StatelessWidget {
               borderRadius: BorderRadius.circular(R.chip),
               border: Border.all(color: tone.softBorder),
             ),
-            child: Text(
-              down == 0 ? 'الكلّ سليم' : '$down من $total معطّل',
-              style: AppType.muted(color: tone.fill),
-            ),
+            child: Text(text, style: AppType.muted(color: tone.fill)),
           ),
         ],
       ),
@@ -511,6 +548,7 @@ class _DeviceCard extends StatefulWidget {
     required this.device,
     required this.vitals,
     required this.onVitals,
+    required this.medianMs,
     required this.prevSample,
     required this.onSample,
     required this.open,
@@ -521,32 +559,46 @@ class _DeviceCard extends StatefulWidget {
   final NetworkDevice device;
   final ValueNotifier<VitalsState> vitals;
   final ValueChanged<VitalsState> onVitals;
+  final int? medianMs;
   final CounterSample? Function() prevSample;
   final ValueChanged<Map<String, ({int rx, int tx})>> onSample;
   final bool open;
   final VoidCallback onToggle;
   final VoidCallback onOpen;
 
-  /// عتبة «بطيء» — فوقها الجهاز حيٌّ رقميّاً ومريضٌ فعليّاً.
-  static const slowMs = 150;
+  /// أرضيّة مطلقة: تحت هذه لا يُوصف جهاز بالبطء مهما بلغ وسيط جولته.
+  /// شبكةٌ كلّها تحت ٨٠ms شبكةٌ سليمة، ولو تفاوتت أضعافاً.
+  static const slowFloorMs = 80;
 
-  /// النغمة من الحالة **وزمن الاستجابة معاً**.
+  /// كم ضِعفاً من الوسيط يُعدّ شذوذاً.
+  static const slowFactor = 2;
+
+  /// هل هذا الجهاز بطيءٌ **قياساً بأقرانه في الجولة نفسها**؟
   ///
-  /// «حيّ» و«معطّل» لا تكفيان: الجهاز الذي يردّ بعد ٢٠٠ملي‌ثانية على
-  /// شبكة محلّيّة في الطريق إلى السقوط، ويستحقّ لوناً ثالثاً قبل أن يقع.
-  static AppTone toneFor(String status, int? ms) {
+  /// ⚠️ لا عتبة مطلقة. الجولة تفحص العشرات معاً، فيحمل كلّ رقم إزاحةَ
+  /// ازدحامٍ مشتركة — وعتبةٌ ثابتة تُسمّي الجميع بطيئاً أو لا أحد.
+  /// المقارنة بالوسيط تُسقط الإزاحة وتُبقي التمايز.
+  static bool isSlow(int? ms, int? medianMs) {
+    if (ms == null || ms < slowFloorMs) return false;
+    if (medianMs == null || medianMs <= 0) return false;
+    return ms >= medianMs * slowFactor;
+  }
+
+  /// النغمة من الحالة وزمن الاستجابة معاً.
+  static AppTone toneFor(String status, int? ms, int? medianMs) {
     if (status == 'offline') return AppTone.danger;
     if (status == 'unknown') return AppTone.neutral;
-    if (ms != null && ms >= slowMs) return AppTone.warning;
+    if (isSlow(ms, medianMs)) return AppTone.warning;
     return AppTone.success;
   }
 
-  static String labelFor(String status, int? ms) => switch (status) {
+  static String labelFor(String status, int? ms, int? medianMs) =>
+      switch (status) {
         'offline' => 'معطّل',
         'unknown' => 'لم يُفحص',
         _ => ms == null
             ? 'حيّ'
-            : (ms >= slowMs ? 'بطيء · ${ms}ms' : 'حيّ · ${ms}ms'),
+            : (isSlow(ms, medianMs) ? 'بطيء · ${ms}ms' : '${ms}ms'),
       };
 
   /// «منذ ٤ دقائق» — من `status_since` الذي يتحرّك عند التحوّل فقط.
@@ -655,8 +707,8 @@ class _DeviceCardState extends State<_DeviceCard> {
     final open = widget.open;
     final onToggle = widget.onToggle;
     final onOpen = widget.onOpen;
-    final tone =
-        _DeviceCard.toneFor(device.lastStatus, device.lastResponseMs);
+    final tone = _DeviceCard.toneFor(
+        device.lastStatus, device.lastResponseMs, widget.medianMs);
     final since = _DeviceCard.sinceText(device.statusSince);
     final isDown = device.lastStatus == 'offline';
 
@@ -667,8 +719,22 @@ class _DeviceCardState extends State<_DeviceCard> {
         borderRadius: BorderRadius.circular(R.md),
         border: Border.all(color: isDown ? tone.softBorder : AppColors.border),
       ),
-      child: Column(
+      clipBehavior: Clip.antiAlias,
+      // شريط الحالة على الحافّة الأماميّة.
+      //
+      // يحمل ما كانت تحمله الشارة الكبيرة — بعرض ثلاث نقاط بدل ثلث
+      // السطر. ويجعل عمود البطاقات يُقرأ رأسيّاً: تمسح العين الحافّة
+      // فترى أين الأحمر قبل أن تقرأ اسماً واحداً.
+      child: Stack(
         children: [
+          PositionedDirectional(
+            start: 0,
+            top: 0,
+            bottom: 0,
+            child: Container(width: 3, color: tone.fill),
+          ),
+          Column(
+            children: [
           InkWell(
             onTap: onOpen,
             borderRadius: BorderRadius.circular(R.md),
@@ -714,8 +780,8 @@ class _DeviceCardState extends State<_DeviceCard> {
                   const SizedBox(width: Sp.sm),
                   _StatusPill(
                     tone: tone,
-                    text: _DeviceCard.labelFor(
-                        device.lastStatus, device.lastResponseMs),
+                    text: _DeviceCard.labelFor(device.lastStatus,
+                        device.lastResponseMs, widget.medianMs),
                   ),
                 ],
               ),
@@ -744,23 +810,26 @@ class _DeviceCardState extends State<_DeviceCard> {
                 style: AppType.muted(color: tone.fill),
               ),
             ),
-          if (open)
-            ValueListenableBuilder<VitalsState>(
-              valueListenable: widget.vitals,
-              builder: (_, st, __) =>
-                  _CardDetails(device: device, detail: st.detail),
-            ),
+              if (open)
+                ValueListenableBuilder<VitalsState>(
+                  valueListenable: widget.vitals,
+                  builder: (_, st, __) =>
+                      _CardDetails(device: device, detail: st.detail),
+                ),
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-/// شريط الخانات الثلاث.
+/// شريط المقاييس — أرقام مضمّنة لا صندوق.
 ///
-/// المواضع ثابتة والمعاني متغيّرة: كلّ علامة تملأ الخانات بأهمّ ثلاثة
-/// مقاييس عندها. فتصطفّ البطاقات بصريّاً وإن اختلفت التسميات — راجع
-/// [DeviceVitals].
+/// كان صندوقاً بحدود وفواصل وتسميةٍ نصّيّة فوق كلّ رقم، فأخذ نصف ارتفاع
+/// البطاقة لثلاثة أرقام. والتسميات («المعالج» · «الذاكرة» · «الحرارة»)
+/// تُحفَظ بعد مرّتين ثمّ تصير حبراً. الأيقونة تحمل المعنى في جزءٍ من
+/// المساحة.
 class _VitalsStrip extends StatelessWidget {
   const _VitalsStrip({required this.state});
   final VitalsState state;
@@ -769,8 +838,6 @@ class _VitalsStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final v = state.vitals;
 
-    // امتناعٌ معلن (بلا بيانات دخول · علامة غير مدعومة) — سطر هادئ لا
-    // خانات فارغة توحي بعطل.
     if (v == null && state.error != null) {
       return _Note(state.error!, tone: AppTone.neutral);
     }
@@ -781,18 +848,13 @@ class _VitalsStrip extends StatelessWidget {
     return Opacity(
       // القيم القديمة تبهت أثناء التحديث بدل أن تختفي.
       opacity: state.loading ? 0.55 : 1,
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(Sp.md, 0, Sp.md, Sp.md),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(R.sm),
-          border: Border.all(color: AppColors.border),
-        ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(Sp.md, 0, Sp.md, Sp.md),
         child: Row(
           children: [
-            for (var i = 0; i < v.length; i++) ...[
-              if (i > 0)
-                Container(width: 1, height: 34, color: AppColors.divider),
-              Expanded(child: _VitalCell(v[i])),
+            for (final x in v) ...[
+              _VitalChip(x),
+              const SizedBox(width: Sp.lg),
             ],
           ],
         ),
@@ -801,38 +863,38 @@ class _VitalsStrip extends StatelessWidget {
   }
 }
 
-class _VitalCell extends StatelessWidget {
-  const _VitalCell(this.vital);
+class _VitalChip extends StatelessWidget {
+  const _VitalChip(this.vital);
   final Vital vital;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: Sp.x6),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(vital.label,
-              style: AppType.muted(), maxLines: 1, overflow: TextOverflow.ellipsis),
-          Text.rich(
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(vital.icon, size: 13, color: AppColors.textMid),
+        const SizedBox(width: Sp.xs),
+        // ⚠️ اتّجاه صريح: الرقم ووحدته وحدةٌ لاتينيّة داخل صفحةٍ عربيّة.
+        // بلا هذا يقلبهما محرّك الاتّجاه الثنائيّ فيظهر «٪ ٣٤» و«° ٥٩»
+        // بدل «٣٤٪» و«٥٩°». (بلاغ ٢٠٢٦-٠٩-٠١ — ظاهرٌ في اللقطة.)
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Text.rich(
             TextSpan(children: [
               TextSpan(
                 text: vital.value,
                 style: AppType.rowValue(color: vital.tone.fill),
               ),
-              // الوحدة بلون أخفت وحجم أصغر — الرقم هو المقروء، والوحدة
-              // تُفهم ولا تُقرأ. (طلب المستخدم في رسوم الاستهلاك.)
               if (vital.unit != null)
                 TextSpan(
-                  text: ' ${vital.unit}',
+                  text: vital.unit!,
                   style: AppType.muted(color: vital.tone.fill),
                 ),
             ]),
             maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -929,6 +991,16 @@ class _CardDetails extends StatelessWidget {
         }
       }
 
+      // ── الوصلة ──
+      // قبل المتّصلين: على وصلة نقطة-لنقطة لا متّصلين أصلاً، وهذه هي
+      // كلّ ما يُشخّص بها.
+      if (d.link.isNotEmpty) {
+        live.add(const _DetailHeading('الوصلة اللاسلكيّة'));
+        for (final e in d.link) {
+          live.add(_InfoRow(e.k, e.v));
+        }
+      }
+
       // ── المتّصلون ──
       if (d.peers.isNotEmpty) {
         // الأضعف إشارةً أوّلاً — من يفتح هذه القائمة يبحث عن الشكوى.
@@ -966,21 +1038,7 @@ class _CardDetails extends StatelessWidget {
           Container(height: 1, color: AppColors.divider),
           ...live,
           const _DetailHeading('النظام'),
-          for (final r in info)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: Sp.xxs),
-              child: Row(
-                children: [
-                  SizedBox(width: 84, child: Text(r.k, style: AppType.muted())),
-                  Expanded(
-                    child: Text(r.v,
-                        style: AppType.body(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis),
-                  ),
-                ],
-              ),
-            ),
+          for (final r in info) _InfoRow(r.k, r.v),
           if (device.notes?.isNotEmpty ?? false) ...[
             const SizedBox(height: Sp.sm),
             Align(
@@ -995,6 +1053,30 @@ class _CardDetails extends StatelessWidget {
 
   static String _clock(DateTime t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+}
+
+class _InfoRow extends StatelessWidget {
+  const _InfoRow(this.k, this.v);
+  final String k;
+  final String v;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Sp.xxs),
+      child: Row(
+        children: [
+          SizedBox(width: 92, child: Text(k, style: AppType.muted())),
+          Expanded(
+            child: Text(v,
+                style: AppType.body(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _DetailHeading extends StatelessWidget {
@@ -1073,34 +1155,68 @@ class _PeerRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sig = peer.signal;
-    final tone = sig == null || sig == 0 ? AppTone.neutral : Grade.signal(sig);
+    final sigTone = sig == null || sig == 0 ? null : Grade.signal(sig);
+    // ⚠️ CCQ سلّمه «الأعلى أفضل» عكس المعالج والذاكرة. تمريره على
+    // `percentLowerBetter` يقلب الحكم: وصلةٌ بجودة ٩٦٪ تُصبَغ حمراء.
+    final ccqTone = peer.hasCcq ? Grade.percentHigherBetter(peer.ccq) : null;
+
+    final sub = <String>[
+      if (peer.rxRate != null && peer.txRate != null)
+        '${peer.rxRate}/${peer.txRate} Mbps',
+      if (peer.uptimeSec != null && peer.uptimeSec! > 0)
+        DeviceVitals.fmtUptime(peer.uptimeSec!),
+    ].join(' · ');
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: Sp.xxs),
-      child: Row(
+      padding: const EdgeInsets.symmetric(vertical: Sp.x6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Text(peer.name,
-                style: AppType.body(),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-          ),
-          if (peer.txRate != null && peer.rxRate != null) ...[
-            Text('${peer.rxRate}/${peer.txRate}', style: AppType.muted()),
-            const SizedBox(width: Sp.sm),
-          ],
-          if (sig != null && sig != 0)
-            Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: Sp.x6, vertical: Sp.xxs),
-              decoration: BoxDecoration(
-                color: tone.softBg,
-                borderRadius: BorderRadius.circular(R.chip),
-                border: Border.all(color: tone.softBorder),
+          Row(
+            children: [
+              Expanded(
+                child: Text(peer.name,
+                    style: AppType.body(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
               ),
-              child: Text('$sig', style: AppType.muted(color: tone.fill)),
+              // الجودة قبل الإشارة: الإشارة وحدها تكذب — وصلةٌ قويّة
+              // وسط تداخلٍ شديد تبدو ممتازةً وهي تُعيد الإرسال باستمرار.
+              if (ccqTone != null) ...[
+                _MiniChip(text: '${peer.ccq}٪', tone: ccqTone),
+                const SizedBox(width: Sp.x6),
+              ],
+              if (sigTone != null)
+                _MiniChip(text: '$sig', tone: sigTone),
+            ],
+          ),
+          if (sub.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Text(sub, style: AppType.muted()),
             ),
         ],
       ),
+    );
+  }
+}
+
+class _MiniChip extends StatelessWidget {
+  const _MiniChip({required this.text, required this.tone});
+  final String text;
+  final AppTone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding:
+          const EdgeInsets.symmetric(horizontal: Sp.x6, vertical: Sp.xxs),
+      decoration: BoxDecoration(
+        color: tone.softBg,
+        borderRadius: BorderRadius.circular(R.chip),
+        border: Border.all(color: tone.softBorder),
+      ),
+      child: Text(text, style: AppType.muted(color: tone.fill)),
     );
   }
 }

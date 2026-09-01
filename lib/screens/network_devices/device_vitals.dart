@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/mikrotik_api.dart';
 import '../../api/mimosa_api.dart';
@@ -15,18 +16,30 @@ class Vital {
     required this.label,
     required this.value,
     required this.tone,
+    required this.icon,
     this.unit,
   });
 
   final String label;
   final String value;
 
+  /// أيقونة صغيرة بدل التسمية النصّيّة.
+  ///
+  /// «المعالج» و«الذاكرة» و«الحرارة» فوق كلّ رقمٍ تستهلك سطراً كاملاً
+  /// في كلّ بطاقة، وهي تسمياتٌ تُحفَظ بعد مرّتين. الأيقونة تُعرَّف مرّةً
+  /// وتُقرأ دائماً، وتُعيد ذلك السطر إلى الكثافة.
+  final IconData icon;
+
   /// الوحدة منفصلة عن الرقم لتُرسَم بلون مميّز بجانبه — طلب المستخدم
   /// في رسوم الاستهلاك، ونفس المبدأ هنا.
   final String? unit;
   final AppTone tone;
 
-  static const empty = Vital(label: '—', value: '—', tone: AppTone.neutral);
+  static const empty = Vital(
+      label: '—',
+      value: '—',
+      tone: AppTone.neutral,
+      icon: LucideIcons.minus);
 }
 
 /// حالة مقاييس جهاز واحد.
@@ -82,6 +95,7 @@ class PeerLink {
   const PeerLink({
     required this.name,
     this.signal,
+    this.ccq,
     this.txRate,
     this.rxRate,
     this.uptimeSec,
@@ -89,9 +103,20 @@ class PeerLink {
 
   final String name;
   final int? signal;
+
+  /// جودة الاتّصال ٪ — CCQ.
+  ///
+  /// الإشارة وحدها تكذب: وصلةٌ بـ−٥٥dBm وسط تداخلٍ شديد تبدو ممتازةً
+  /// وهي تُعيد الإرسال باستمرار. وCCQ هو ما يكشف ذلك.
+  ///
+  /// الصفر يعني «غير متوفّر» لا «جودة صفر» — بعض الطُرُز (airFiber
+  /// ٦٠GHz خاصّةً) لا تُرجعه أصلاً.
+  final int? ccq;
   final int? txRate;
   final int? rxRate;
   final int? uptimeSec;
+
+  bool get hasCcq => ccq != null && ccq! > 0;
 }
 
 /// تفصيل الجهاز — من **نفس حمولة الجلسة** التي ملأت الخانات الثلاث.
@@ -107,6 +132,7 @@ class DeviceDetail {
     this.ports = const [],
     this.peers = const [],
     this.peersLabel = 'المتّصلون',
+    this.link = const [],
     this.extras = const [],
   });
 
@@ -116,6 +142,14 @@ class DeviceDetail {
   final List<PortTraffic> ports;
   final List<PeerLink> peers;
   final String peersLabel;
+
+  /// مقاييس الوصلة اللاسلكيّة — قسمٌ خاصّ لا يُدفَن في «النظام».
+  ///
+  /// CCQ تحديداً: الإشارة وحدها تكذب، ووصلةٌ قويّة وسط تداخلٍ شديد
+  /// تبدو ممتازةً وهي تُعيد الإرسال باستمرار. فوضعُها بين MAC والموقع
+  /// يُخفي أهمّ رقمٍ تشخيصيّ في الصفحة.
+  final List<({String k, String v})> link;
+
   final List<({String k, String v})> extras;
 }
 
@@ -292,6 +326,9 @@ class DeviceVitals {
               ? c.hostname!
               : (c.ip?.isNotEmpty == true ? c.ip! : c.mac),
           signal: c.signalStrength,
+          // نُفضّل txCcq: يقيس جودة ما نُرسله إلى العميل، وهو ما يشعر
+          // به المشترك. ونسقط إلى rxCcq حين لا يُرجع الطرازُ الأوّل.
+          ccq: c.txCcq > 0 ? c.txCcq : (c.rxCcq > 0 ? c.rxCcq : null),
           txRate: c.txRate,
           rxRate: c.rxRate,
           uptimeSec: c.uptime,
@@ -303,23 +340,26 @@ class DeviceVitals {
         Vital(
           label: 'المعالج',
           value: '${s.cpuLoad}',
-          unit: '%',
+          unit: '٪',
+          icon: LucideIcons.cpu,
           tone: Grade.percentLowerBetter(s.cpuLoad),
         ),
         Vital(
           label: 'الذاكرة',
           value: '${s.memUsedPercent}',
-          unit: '%',
+          unit: '٪',
+          icon: LucideIcons.memoryStick,
           tone: Grade.percentLowerBetter(s.memUsedPercent),
         ),
         // الحرارة غير متوفّرة على كلّ الطُرُز (CCR2116 بلا مجسّ مثلاً).
         // نُظهر شرطةً لا صفراً — الصفر رقمٌ يكذب.
         s.temperature == null
-            ? Vital.empty.copyLabel('الحرارة')
+            ? Vital.empty.withIcon(LucideIcons.thermometer)
             : Vital(
                 label: 'الحرارة',
                 value: '${s.temperature}',
                 unit: '°',
+                icon: LucideIcons.thermometer,
                 tone: Grade.temperature(s.temperature),
               ),
       ],
@@ -382,6 +422,7 @@ class DeviceVitals {
               ? st.hostname!
               : (st.ip?.isNotEmpty == true ? st.ip! : st.mac),
           signal: st.signal,
+          ccq: st.ccq > 0 ? st.ccq : null,
           txRate: st.txRate,
           rxRate: st.rxRate,
           uptimeSec: st.linkUptimeSec ?? st.connTime,
@@ -393,25 +434,28 @@ class DeviceVitals {
         // نقطة الوصول لا إشارة لها (هي المصدر) — والصفر هنا يعني «غير
         // متوفّر» لا «إشارة صفر dBm»، وهي قيمة ممتازة لو صُدّقت.
         (w == null || w.signal == 0)
-            ? Vital.empty.copyLabel('الإشارة')
+            ? Vital.empty.withIcon(LucideIcons.signal)
             : Vital(
                 label: 'الإشارة',
                 value: '${w.signal}',
                 unit: 'dBm',
+                icon: LucideIcons.signal,
                 tone: Grade.signal(w.signal),
               ),
         Vital(
           label: 'المعالج',
           value: '${s.host.cpuload}',
-          unit: '%',
+          unit: '٪',
+          icon: LucideIcons.cpu,
           tone: Grade.percentLowerBetter(s.host.cpuload),
         ),
         s.host.temperature == 0
-            ? Vital.empty.copyLabel('الحرارة')
+            ? Vital.empty.withIcon(LucideIcons.thermometer)
             : Vital(
                 label: 'الحرارة',
                 value: '${s.host.temperature}',
                 unit: '°',
+                icon: LucideIcons.thermometer,
                 tone: Grade.temperature(s.host.temperature),
               ),
       ],
@@ -422,14 +466,21 @@ class DeviceVitals {
         ports: ports,
         peers: peers,
         peersLabel: 'المحطّات',
+        link: [
+          if (w != null && w.ccq > 0) (k: 'الجودة CCQ', v: '${w.ccq}٪'),
+          if (w != null && w.hasNoise)
+            (k: 'أرضيّة الضجيج', v: '${w.noise} dBm'),
+          if (w != null && w.explicitSnr > 0)
+            (k: 'SNR', v: '${w.explicitSnr} dB'),
+          if (w != null && (w.txRate > 0 || w.rxRate > 0))
+            (k: 'المعدّل', v: '${w.rxRate}/${w.txRate} Mbps'),
+          if (w != null && w.frequency > 0)
+            (k: 'التردّد', v: '${w.frequency} MHz'),
+          if (w != null && w.distance > 0) (k: 'المسافة', v: '${w.distance} م'),
+        ],
         extras: [
           if (w != null && w.essid.isNotEmpty) (k: 'الشبكة', v: w.essid),
           if (w != null && w.mode.isNotEmpty) (k: 'الوضع', v: w.mode),
-          if (w != null && w.frequency > 0)
-            (k: 'التردّد', v: '${w.frequency} MHz'),
-          if (w != null && w.ccq > 0) (k: 'الجودة', v: '${w.ccq}%'),
-          if (w != null && w.distance > 0)
-            (k: 'المسافة', v: '${w.distance} م'),
           if (s.lanSpeed != null) (k: 'منفذ LAN', v: s.lanSpeed!),
         ],
       ),
@@ -454,27 +505,30 @@ class DeviceVitals {
     return ProbeResult(
       vitals: [
         s.totalRxPowerDbm == null
-            ? Vital.empty.copyLabel('الاستقبال')
+            ? Vital.empty.withIcon(LucideIcons.signal)
             : Vital(
                 label: 'الاستقبال',
                 value: s.totalRxPowerDbm!.toStringAsFixed(0),
                 unit: 'dBm',
+                icon: LucideIcons.signal,
                 tone: Grade.rxPower(s.totalRxPowerDbm),
               ),
         s.phyRxRateMbps == null
-            ? Vital.empty.copyLabel('معدّل RX')
+            ? Vital.empty.withIcon(LucideIcons.gauge)
             : Vital(
                 label: 'معدّل RX',
                 value: '${s.phyRxRateMbps}',
                 unit: 'M',
+                icon: LucideIcons.gauge,
                 tone: Grade.speedMbps(s.phyRxRateMbps),
               ),
         s.temperatureC == null
-            ? Vital.empty.copyLabel('الحرارة')
+            ? Vital.empty.withIcon(LucideIcons.thermometer)
             : Vital(
                 label: 'الحرارة',
                 value: s.temperatureC!.toStringAsFixed(0),
                 unit: '°',
+                icon: LucideIcons.thermometer,
                 tone: Grade.temperature(s.temperatureC),
               ),
       ],
@@ -483,15 +537,18 @@ class DeviceVitals {
         firmware: s.firmwareVersion,
         model: s.deviceName,
         peersLabel: 'المحطّات',
-        extras: [
+        link: [
           if (s.phyTxRateMbps != null)
             (k: 'معدّل TX', v: '${s.phyTxRateMbps} Mbps'),
           if (s.totalTxPowerDbm != null)
-            (k: 'قدرة الإرسال', v: '${s.totalTxPowerDbm!.toStringAsFixed(0)} dBm'),
+            (k: 'قدرة الإرسال',
+                v: '${s.totalTxPowerDbm!.toStringAsFixed(0)} dBm'),
           if (s.perRxRatePct != null)
-            (k: 'أخطاء RX', v: '${s.perRxRatePct!.toStringAsFixed(1)}%'),
+            (k: 'أخطاء RX', v: '${s.perRxRatePct!.toStringAsFixed(1)}٪'),
           if (s.perTxRatePct != null)
-            (k: 'أخطاء TX', v: '${s.perTxRatePct!.toStringAsFixed(1)}%'),
+            (k: 'أخطاء TX', v: '${s.perTxRatePct!.toStringAsFixed(1)}٪'),
+        ],
+        extras: [
           if (s.serialNumber != null) (k: 'التسلسل', v: s.serialNumber!),
         ],
       ),
@@ -501,7 +558,8 @@ class DeviceVitals {
 }
 
 extension on Vital {
-  Vital copyLabel(String l) => Vital(label: l, value: value, tone: tone);
+  Vital withIcon(IconData i) =>
+      Vital(label: label, value: value, tone: tone, icon: i);
 }
 
 /// مخزن المقاييس — مُنبّه لكلّ جهاز على حدة.

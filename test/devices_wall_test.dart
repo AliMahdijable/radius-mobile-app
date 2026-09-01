@@ -61,9 +61,15 @@ void main() {
     });
 
     test('البطيء له نغمة خاصّة لا نغمة الحيّ', () {
-      // «حيّ» و«معطّل» لا تكفيان: الردّ بعد ٢٠٠ملي‌ثانية على شبكة
-      // محلّيّة يسبق السقوط.
-      expect(src.contains('static const slowMs = 150'), isTrue);
+      // «حيّ» و«معطّل» لا تكفيان: البطء يسبق السقوط.
+      //
+      // ⚠️ تغيّر المعيار ٢٠٢٦-٠٩-٠١: كانت عتبةً مطلقة (١٥٠ms) فوسمت
+      // اثنَي عشر جهازاً كلَّها بالبطء — الجولة تفحص العشرات معاً
+      // فيحمل كلّ رقم إزاحةَ ازدحامٍ مشتركة. صار الحكم نسبيّاً لوسيط
+      // الجولة، مع أرضيّةٍ مطلقة تحمي الشبكة السريعة.
+      expect(src.contains('static const slowFloorMs = 80'), isTrue);
+      expect(src.contains('static const slowFactor = 2'), isTrue);
+      expect(src.contains('ms >= medianMs * slowFactor'), isTrue);
       expect(src.contains('AppTone.warning'), isTrue,
           reason: 'لا نغمة ثالثة — البطيء يبدو سليماً حتّى يسقط');
     });

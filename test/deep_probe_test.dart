@@ -298,4 +298,120 @@ void main() {
           reason: 'الأكثر مروراً أوّلاً');
     });
   });
+
+  group('CCQ', () {
+    late String vitals;
+    late String wall;
+    setUpAll(() {
+      vitals = File('lib/screens/network_devices/device_vitals.dart')
+          .readAsStringSync();
+      wall = File('lib/screens/network_devices/devices_wall_screen.dart')
+          .readAsStringSync();
+    });
+
+    test('PeerLink يحمل الحقل', () {
+      // كان غائباً كلّيّاً — فلا CCQ لأيّ متّصل رغم أنّ العلامتين
+      // تُرجعانه. (بلاغ ٢٠٢٦-٠٩-٠١)
+      const p = PeerLink(name: 'x', ccq: 96);
+      expect(p.hasCcq, isTrue);
+      expect(p.ccq, 96);
+    });
+
+    test('الصفر يعني «غير متوفّر» لا «جودة صفر»', () {
+      // airFiber ٦٠GHz لا يُرجعه أصلاً؛ عرض «٠٪» يقول إنّ الوصلة
+      // منهارة وهي سليمة.
+      expect(const PeerLink(name: 'x', ccq: 0).hasCcq, isFalse);
+      expect(const PeerLink(name: 'x').hasCcq, isFalse);
+    });
+
+    test('العلامتان تُغذّيانه', () {
+      expect(vitals.contains('ccq: st.ccq > 0 ? st.ccq : null'), isTrue,
+          reason: 'محطّات UBNT');
+      expect(
+          vitals.contains(
+              'ccq: c.txCcq > 0 ? c.txCcq : (c.rxCcq > 0 ? c.rxCcq : null)'),
+          isTrue,
+          reason: 'عملاء ميكروتك — txCcq أوّلاً فهو ما يشعر به المشترك');
+    });
+
+    test('🚨 سلّم CCQ «الأعلى أفضل» لا العكس', () {
+      // أخطر خطأ محتمل هنا: تمريره على percentLowerBetter (سلّم المعالج
+      // والذاكرة) يقلب الحكم فتُصبَغ وصلةٌ بجودة ٩٦٪ حمراء، وتبدو
+      // المنهارة سليمة.
+      expect(wall.contains('Grade.percentHigherBetter(peer.ccq)'), isTrue);
+      expect(wall.contains('percentLowerBetter(peer.ccq)'), isFalse);
+    });
+
+    test('الجودة تسبق الإشارة في الصفّ', () {
+      final i = wall.indexOf('class _PeerRow');
+      final body = wall.substring(i, wall.indexOf('class _MiniChip'));
+      expect(body.indexOf('peer.ccq'), lessThan(body.indexOf("'\$sig'")),
+          reason: 'الإشارة وحدها تكذب — الجودة هي التشخيص');
+    });
+
+    test('الوصلة قسم مستقلّ لا مدفون في النظام', () {
+      expect(wall.contains("_DetailHeading('الوصلة اللاسلكيّة')"), isTrue);
+      expect(vitals.contains("(k: 'الجودة CCQ'"), isTrue);
+      final i = wall.indexOf("_DetailHeading('الوصلة اللاسلكيّة')");
+      final j = wall.indexOf("_DetailHeading('النظام')");
+      expect(i, lessThan(j), reason: 'الوصلة قبل النظام');
+    });
+  });
+
+  group('البطء نسبيّ لا مطلق', () {
+    // 🐛 لقطة ٢٠٢٦-٠٩-٠١: اثنا عشر جهازاً كلّها «بطيء · ٢٣٠ms» — نفس
+    // الرقم بالضبط. القياس سليم، لكنّ أربعة وعشرين مقبساً تُفتح معاً
+    // فيحمل كلّ رقم إزاحةَ ازدحامٍ مشتركة. عتبةٌ ثابتة تُسمّي الجميع
+    // بطيئاً أو لا أحد.
+    bool slow(int? ms, int? median) {
+      if (ms == null || ms < 80) return false;
+      if (median == null || median <= 0) return false;
+      return ms >= median * 2;
+    }
+
+    test('شبكة كلّها ٢٣٠ms: لا أحد بطيء', () {
+      expect(slow(230, 230), isFalse, reason: 'الإزاحة المشتركة تسقط');
+    });
+
+    test('الشاذّ وحده يُوسَم', () {
+      expect(slow(900, 230), isTrue);
+      expect(slow(300, 230), isFalse, reason: 'أقلّ من الضعف');
+    });
+
+    test('شبكة سريعة لا تُوسَم مهما تفاوتت', () {
+      // ٤ms مقابل وسيط ١ms = أربعة أضعاف، لكنّها شبكةٌ سليمة.
+      expect(slow(4, 1), isFalse, reason: 'الأرضيّة المطلقة تحميها');
+    });
+
+    test('بلا وسيط لا حكم', () {
+      expect(slow(500, null), isFalse);
+      expect(slow(null, 100), isFalse);
+    });
+  });
+
+  group('عرض عصريّ', () {
+    late String wall;
+    setUpAll(() {
+      wall = File('lib/screens/network_devices/devices_wall_screen.dart')
+          .readAsStringSync();
+    });
+
+    test('اتّجاه صريح للرقم ووحدته', () {
+      // بلا هذا يقلبهما محرّك الاتّجاه الثنائيّ: «٪ ٣٤» بدل «٣٤٪».
+      final i = wall.indexOf('class _VitalChip');
+      final body = wall.substring(i, wall.indexOf('class _Note'));
+      expect(body.contains('Directionality('), isTrue);
+      expect(body.contains('TextDirection.ltr'), isTrue);
+    });
+
+    test('شريط حالة على الحافّة بدل الصندوق', () {
+      expect(wall.contains('PositionedDirectional('), isTrue);
+      expect(wall.contains('Container(width: 3, color: tone.fill)'), isTrue);
+    });
+
+    test('الملخّص يوافق البطاقات تحته', () {
+      // «الكلّ سليم» فوق اثنَي عشر جهازاً بطيئاً أسوأ من غياب الملخّص.
+      expect(wall.contains("if (slow > 0) return ('\$slow بطيء'"), isTrue);
+    });
+  });
 }
