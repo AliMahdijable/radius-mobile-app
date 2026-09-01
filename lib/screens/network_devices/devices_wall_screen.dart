@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/network_devices_api.dart';
+import '../../core/util/bidi.dart';
 import '../../models/device_region.dart';
 import '../../models/network_device.dart';
 import '../../services/device_alerts_service.dart';
@@ -502,15 +503,20 @@ class _GroupHeader extends StatelessWidget {
   ///
   /// كان يعدّ المعطّل وحده، فيقول «الكلّ سليم» فوق اثنَي عشر جهازاً
   /// موسومةٍ كلّها بالبطء. ملخّصٌ يناقض ما تحته أسوأ من غيابه.
-  (String, AppTone) get _summary {
+  /// ⚠️ لا شارة حين يكون كلّ شيء سليماً.
+  ///
+  /// «الكلّ سليم» مكرّرةً فوق كلّ منطقة تُدرَّب العين على تجاهل ذلك
+  /// الموضع — فحين يظهر فيه «٣ معطّل» لا تراه. الشارة تحمل خبراً أو
+  /// تغيب، ولا خبر خبرٌ سارّ.
+  (String, AppTone)? get _summary {
     if (down > 0) return ('$down من $total معطّل', AppTone.danger);
     if (slow > 0) return ('$slow بطيء', AppTone.warning);
-    return ('الكلّ سليم', AppTone.success);
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
-    final (text, tone) = _summary;
+    final summary = _summary;
     return Padding(
       padding: const EdgeInsets.fromLTRB(Sp.xs, Sp.md, Sp.xs, Sp.sm),
       child: Row(
@@ -525,17 +531,20 @@ class _GroupHeader extends StatelessWidget {
           ),
           const SizedBox(width: Sp.sm),
           Expanded(child: Container(height: 1, color: AppColors.divider)),
-          const SizedBox(width: Sp.sm),
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: Sp.xxs),
-            decoration: BoxDecoration(
-              color: tone.softBg,
-              borderRadius: BorderRadius.circular(R.chip),
-              border: Border.all(color: tone.softBorder),
+          if (summary != null) ...[
+            const SizedBox(width: Sp.sm),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: Sp.sm, vertical: Sp.xxs),
+              decoration: BoxDecoration(
+                color: summary.$2.softBg,
+                borderRadius: BorderRadius.circular(R.chip),
+                border: Border.all(color: summary.$2.softBorder),
+              ),
+              child: Text(summary.$1,
+                  style: AppType.muted(color: summary.$2.fill)),
             ),
-            child: Text(text, style: AppType.muted(color: tone.fill)),
-          ),
+          ],
         ],
       ),
     );
@@ -768,8 +777,8 @@ class _DeviceCardState extends State<_DeviceCard> {
                             overflow: TextOverflow.ellipsis),
                         Text(
                           (device.model?.isNotEmpty ?? false)
-                              ? '${device.ip} · ${device.model}'
-                              : device.ip,
+                              ? isoJoin([device.ip, device.model!], ' · ')
+                              : iso(device.ip),
                           style: AppType.muted(),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -984,10 +993,10 @@ class _CardDetails extends StatelessWidget {
           live.add(_PortRow(p));
         }
         if (up.length > _maxPorts || off > 0) {
-          live.add(_DetailFoot([
+          live.add(_DetailFoot(isoJoin([
             if (up.length > _maxPorts) 'و${up.length - _maxPorts} منفذاً آخر',
             if (off > 0) '$off مطفأ',
-          ].join(' · ')));
+          ], ' · ')));
         }
       }
 
@@ -1011,7 +1020,7 @@ class _CardDetails extends StatelessWidget {
           live.add(_PeerRow(p));
         }
         if (peers.length > _maxPeers) {
-          live.add(_DetailFoot('و${peers.length - _maxPeers} آخرين'));
+          live.add(_DetailFoot(iso('و${peers.length - _maxPeers} آخرين')));
         }
       }
     }
@@ -1068,7 +1077,8 @@ class _InfoRow extends StatelessWidget {
         children: [
           SizedBox(width: 92, child: Text(k, style: AppType.muted())),
           Expanded(
-            child: Text(v,
+            // ⚠️ عزل: «23.1 V» تظهر «V 23.1» بلا هذا — راجع [iso].
+            child: Text(iso(v),
                 style: AppType.body(),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis),
@@ -1121,7 +1131,9 @@ class _PortRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 84,
-            child: Text(port.name,
+            // القوس الزاويّ في أسماء ppp يُمثَّل معكوساً في السياق
+            // العربيّ: «<pppoe-x» تظهر «pppoe-x>».
+            child: Text(iso(port.name),
                 style: AppType.body(),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis),
@@ -1131,17 +1143,17 @@ class _PortRow extends StatelessWidget {
           else ...[
             Icon(LucideIcons.arrowDown, size: 12, color: AppColors.success),
             const SizedBox(width: 2),
-            Text(DeviceVitals.fmtBps(port.rxBps),
+            Text(iso(DeviceVitals.fmtBps(port.rxBps)),
                 style: AppType.rowValue(color: AppColors.success)),
             const SizedBox(width: Sp.md),
             Icon(LucideIcons.arrowUp, size: 12, color: AppColors.info),
             const SizedBox(width: 2),
-            Text(DeviceVitals.fmtBps(port.txBps),
+            Text(iso(DeviceVitals.fmtBps(port.txBps)),
                 style: AppType.rowValue(color: AppColors.info)),
           ],
           const Spacer(),
           if (port.linkSpeed != null)
-            Text(port.linkSpeed!, style: AppType.muted()),
+            Text(iso(port.linkSpeed!), style: AppType.muted()),
         ],
       ),
     );
@@ -1160,12 +1172,15 @@ class _PeerRow extends StatelessWidget {
     // `percentLowerBetter` يقلب الحكم: وصلةٌ بجودة ٩٦٪ تُصبَغ حمراء.
     final ccqTone = peer.hasCcq ? Grade.percentHigherBetter(peer.ccq) : null;
 
-    final sub = <String>[
+    // 🐛 بلاغ ٢٠٢٦-٠٩-٠١: «86/78 Mbps · 10 يوماً» كانت تظهر
+    // «86/78 10 Mbps · يوماً» — كلمة «يوماً» تسحب رقمها إلى المقطع
+    // اللاتينيّ المجاور. العزل لكلّ مقطع لا للناتج مجتمعاً.
+    final sub = isoJoin([
       if (peer.rxRate != null && peer.txRate != null)
         '${peer.rxRate}/${peer.txRate} Mbps',
       if (peer.uptimeSec != null && peer.uptimeSec! > 0)
         DeviceVitals.fmtUptime(peer.uptimeSec!),
-    ].join(' · ');
+    ], ' · ');
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Sp.x6),
@@ -1175,7 +1190,7 @@ class _PeerRow extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(peer.name,
+                child: Text(iso(peer.name),
                     style: AppType.body(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
