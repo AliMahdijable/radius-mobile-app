@@ -44,14 +44,46 @@ void main() {
     expect(scaledForTest((0.25 * gb).round(), d), '0.25');
   });
 
-  test('أطول نصّ عمود يتّسع في 46 نقطة', () {
-    // العمود عرضه 46 والنصّ `micro` (10.5). أطول ما يمكن: ثلاث خانات
-    // + وحدة من حرفين = «660GB» ≈ 34 نقطة بالخطّ المُجمَّع. الهامش
-    // مقصود: تكبير خطّ النظام مسموح حتّى 1.2 (main.dart:259).
-    const u = (div: 1000 * 1000 * 1000, name: 'GB');
-    final longest = scaledForTest(999 * u.div, u.div) + u.name;
-    expect(longest.length, lessThanOrEqualTo(5),
-        reason: 'نصّ أطول من 5 محارف يُقصّ في عمود 46 نقطة: «$longest»');
+  test('أطول نصّ عمود يتّسع في 58 نقطة', () {
+    // ⚠️ الفاصلة غيّرت الحساب: «1,200GB» ثمانية محارف لا سبعة. العمود
+    // وُسّع من 46 إلى 58 لأجلها، وهذا الحكم يحرس الاثنين معاً — من
+    // يضيّق العمود أو يُطيل التنسيق يصطدم به.
+    const u = (div: 1000 * 1000, name: 'MB');
+    // أسوأ حالة واقعيّة: 4 خانات + فاصلة + وحدة.
+    final longest = scaledForTest(1200 * u.div, u.div) + u.name;
+    expect(longest, '1,200MB');
+    expect(longest.length, lessThanOrEqualTo(8),
+        reason: 'نصّ أطول من 8 محارف يُقصّ في عمود 58 نقطة: «$longest»');
+  });
+
+  group('فاصلة الآلاف', () {
+    test('تُدرَج كلّ ثلاث خانات', () {
+      expect(groupForTest('600'), '600');
+      expect(groupForTest('1200'), '1,200');
+      expect(groupForTest('4896'), '4,896');
+      expect(groupForTest('12345'), '12,345');
+      expect(groupForTest('1234567'), '1,234,567');
+    });
+
+    test('الكسر لا يُقسَّم', () {
+      // ⚠️ التجميع على الجزء الصحيح وحده — «1.500» ليست ألفاً ونصفاً.
+      expect(groupForTest('1.5'), '1.5');
+      expect(groupForTest('1234.5'), '1,234.5');
+      expect(groupForTest('0.25'), '0.25');
+    });
+
+    test('الحدود', () {
+      expect(groupForTest(''), '');
+      expect(groupForTest('1'), '1');
+      expect(groupForTest('999'), '999');
+      expect(groupForTest('1000'), '1,000');
+    });
+  });
+
+  test('عمود كبير يحمل فاصلة', () {
+    const mb = 1000 * 1000;
+    // 1200 ميغا بوحدة MB → «1,200»
+    expect(scaledForTest(1200 * mb, mb), '1,200');
   });
 
   test('التنسيق الكامل يحمل وحدته — للإجماليّات لا للأعمدة', () {

@@ -50,12 +50,26 @@ Future<void> showConsumptionSheet(BuildContext context, Subscriber sub) {
   return (div: 1, name: 'B');
 }
 
-/// رقم العمود بالوحدة الموحَّدة — بلا كسورٍ لا تُقرأ في 27 نقطة.
+/// فاصلة الآلاف. `4896` تُقرأ ببطء و`4,896` تُقرأ بلمحة — والفرق
+/// يتضاعف مع الأرقام التي تتجاوز الألف، وهي الأشيع هنا.
+/// (طلب المستخدم 2026-09-01)
+String _group(String n) {
+  final dot = n.indexOf('.');
+  final head = dot < 0 ? n : n.substring(0, dot);
+  final tail = dot < 0 ? '' : n.substring(dot);
+  final buf = StringBuffer();
+  for (var i = 0; i < head.length; i++) {
+    if (i > 0 && (head.length - i) % 3 == 0) buf.write(',');
+    buf.write(head[i]);
+  }
+  return buf.toString() + tail;
+}
+
+/// رقم العمود بالوحدة الموحَّدة — بلا كسورٍ لا تُقرأ في عمودٍ ضيّق.
 String _scaled(int bytes, int div) {
   if (bytes <= 0) return '';
   final v = bytes / div;
-  if (v >= 100) return v.toStringAsFixed(0);
-  if (v >= 10) return v.toStringAsFixed(0);
+  if (v >= 10) return _group(v.toStringAsFixed(0));
   if (v >= 1) return v.toStringAsFixed(1);
   return v.toStringAsFixed(2);
 }
@@ -64,16 +78,19 @@ String _scaled(int bytes, int div) {
 /// اختيار الوحدة منطقٌ يستحقّ حارساً.
 ({int div, String name}) unitForTest(int peak) => _unitFor(peak);
 String scaledForTest(int bytes, int div) => _scaled(bytes, div);
+String groupForTest(String n) => _group(n);
 
 String fmtBytes(int b) {
   if (b <= 0) return '0';
   const gb = 1000 * 1000 * 1000;
   const mb = 1000 * 1000;
   const kb = 1000;
-  if (b >= gb) return '${(b / gb).toStringAsFixed(b >= 10 * gb ? 0 : 1)} GB';
-  if (b >= mb) return '${(b / mb).toStringAsFixed(0)} MB';
-  if (b >= kb) return '${(b / kb).toStringAsFixed(0)} KB';
-  return '$b B';
+  if (b >= gb) {
+    return '${_group((b / gb).toStringAsFixed(b >= 10 * gb ? 0 : 1))} GB';
+  }
+  if (b >= mb) return '${_group((b / mb).toStringAsFixed(0))} MB';
+  if (b >= kb) return '${_group((b / kb).toStringAsFixed(0))} KB';
+  return '${_group('$b')} B';
 }
 
 class _ConsumptionSheet extends StatefulWidget {
@@ -401,19 +418,37 @@ class _Bar extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 3),
       child: SizedBox(
-        // 46 يتّسع لـ«660GB» بمقاس `micro` بلا قصّ.
-        width: 46,
+        // ⚠️ 58 لا 46: الفاصلة أضافت محرفاً («1,200GB» = 8 محارف بدل
+        // 7)، والوحدة الملوّنة محرفان. القياس بالخطّ المُجمَّع يعطي
+        // نحو 50 نقطة لأطول نصّ، والباقي هامش لتكبير خطّ النظام
+        // المسموح حتّى 1.2.
+        width: 58,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
             if (on)
-              Text(
-                _scaled(bucket.total, unit.div),
+              // الرقم بلون النصّ والوحدة بلون البراند بجانبه: الوحدة
+              // حاضرة ولا تزاحم الرقم على الانتباه.
+              //
+              // ⚠️ والمقارنة تبقى سليمة لأنّ الوحدة **واحدة للرسم
+              // كلّه** (مشتقّة من أعلى عمود). لو اختلفت بين عمودين
+              // لعاد العيب: «500M» و«20G» رقمان لا يُقارَنان بينما
+              // العمودان فوقهما يُقارَنان.
+              //
+              // `micro` بلا copyWith — حارس design_scales يمنع
+              // المقاسات خارج السلّم وهو محقّ.
+              Text.rich(
+                TextSpan(children: [
+                  TextSpan(
+                    text: _scaled(bucket.total, unit.div),
+                    style: AppType.micro(color: AppColors.textHi),
+                  ),
+                  TextSpan(
+                    text: unit.name,
+                    style: AppType.micro(color: AppColors.brandAccent),
+                  ),
+                ]),
                 maxLines: 1,
-                // `micro` كما هي — حارس design_scales يمنع المقاسات
-                // خارج السلّم، وهو محقّ: مقاسٌ يتيم لا يُعاد استعماله
-                // يصير دَيناً في كلّ إعادة تصميم لاحقة.
-                style: AppType.micro(color: AppColors.textMid),
               ),
             const SizedBox(height: 2),
             Expanded(
