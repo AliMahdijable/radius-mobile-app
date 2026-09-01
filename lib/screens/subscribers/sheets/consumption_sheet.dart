@@ -29,6 +29,42 @@ Future<void> showConsumptionSheet(BuildContext context, Subscriber sub) {
   );
 }
 
+/// وحدة موحَّدة للرسم كلّه، مشتقّة من أعلى عمود.
+///
+/// 🐛 بلاغ 2026-09-01: «القيم ليش بس أرقام بدون وحدات — شمعرّفه هو
+/// كيغا ميغا كيلو بايت تيرا؟». كنتُ أقصّ الوحدة لتوفير العرض، فصار
+/// الرقم بلا معنى.
+///
+/// ⚠️ ولا تُكتب الوحدة على كلّ عمود: ثلاثة أحرف إضافيّة في عمودٍ عرضه
+/// 27 نقطة تُقصّ. والأهمّ أنّ وحدةً لكلّ عمود تُفسد المقارنة نفسها —
+/// «500M» و«20G» رقمان لا يُقارَنان بالنظر رغم أنّ العمودين يُقارَنان.
+///
+/// فالوحدة واحدة للرسم كلّه، تُشتقّ من الأعلى وتُعلَن مرّة فوقه.
+({int div, String name}) _unitFor(int peak) {
+  const gb = 1000 * 1000 * 1000;
+  const mb = 1000 * 1000;
+  const kb = 1000;
+  if (peak >= gb) return (div: gb, name: 'GB');
+  if (peak >= mb) return (div: mb, name: 'MB');
+  if (peak >= kb) return (div: kb, name: 'KB');
+  return (div: 1, name: 'B');
+}
+
+/// رقم العمود بالوحدة الموحَّدة — بلا كسورٍ لا تُقرأ في 27 نقطة.
+String _scaled(int bytes, int div) {
+  if (bytes <= 0) return '';
+  final v = bytes / div;
+  if (v >= 100) return v.toStringAsFixed(0);
+  if (v >= 10) return v.toStringAsFixed(0);
+  if (v >= 1) return v.toStringAsFixed(1);
+  return v.toStringAsFixed(2);
+}
+
+/// منفذان للاختبار — الدالّتان خاصّتان لأنّهما تفصيل عرض، لكنّ
+/// اختيار الوحدة منطقٌ يستحقّ حارساً.
+({int div, String name}) unitForTest(int peak) => _unitFor(peak);
+String scaledForTest(int bytes, int div) => _scaled(bytes, div);
+
 String fmtBytes(int b) {
   if (b <= 0) return '0';
   const gb = 1000 * 1000 * 1000;
@@ -311,12 +347,14 @@ class _Bars extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     final peak = report.peak;
     if (peak <= 0) return const SizedBox.shrink();
+    final unit = _unitFor(peak);
     // اليوميّ 31 عموداً لا تتّسع في عرض الشاشة، فيُمرَّر أفقيّاً.
     final bars = [
       for (final b in report.buckets)
         _Bar(
           bucket: b,
           peak: peak,
+          unit: unit,
           // ⚠️ أرقام لا أسماء شهور عربيّة (طلب المستخدم 2026-09-01):
           // «كانون٢» و«تشرين١» لا يعرفهما أغلب المستخدمين، وSAS4 نفسه
           // يكتبها `2026-1` في جدوله. الرقم لا يحتاج ترجمة ولا يُقصّ.
@@ -324,7 +362,19 @@ class _Bars extends StatelessWidget {
           narrow: type == 'daily',
         ),
     ];
-    return SizedBox(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // الوحدة مرّة واحدة فوق الرسم — لا على كلّ عمود.
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Text(
+            'القيم بالـ${unit.name}',
+            textAlign: TextAlign.center,
+            style: AppType.micro(color: AppColors.textLow),
+          ),
+        ),
+        SizedBox(
       height: 150,
       child: type == 'daily'
           ? ListView(
@@ -335,6 +385,8 @@ class _Bars extends StatelessWidget {
           : Row(
               children: [for (final b in bars) Expanded(child: b)],
             ),
+        ),
+      ],
     );
   }
 }
@@ -343,11 +395,13 @@ class _Bar extends StatelessWidget {
   const _Bar({
     required this.bucket,
     required this.peak,
+    required this.unit,
     required this.label,
     required this.narrow,
   });
   final TrafficBucket bucket;
   final int peak;
+  final ({int div, String name}) unit;
   final String label;
   final bool narrow;
 
@@ -365,7 +419,7 @@ class _Bar extends StatelessWidget {
           children: [
             if (on)
               Text(
-                fmtBytes(bucket.total).split(' ').first,
+                _scaled(bucket.total, unit.div),
                 maxLines: 1,
                 // `micro` كما هي — حارس design_scales يمنع المقاسات
                 // خارج السلّم، وهو محقّ: مقاسٌ يتيم لا يُعاد استعماله
