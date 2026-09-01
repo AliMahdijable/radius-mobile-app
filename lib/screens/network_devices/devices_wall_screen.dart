@@ -9,9 +9,11 @@ import '../../models/device_region.dart';
 import '../../models/network_device.dart';
 import '../../services/device_alerts_service.dart';
 import '../../services/device_sweep_coordinator.dart';
+import '../../services/deep_probe_scheduler.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'device_vitals.dart';
 import 'network_device_details_screen.dart';
 
 /// جدار الأجهزة — كلّ الأجهزة في صفحة واحدة، مجموعةً حسب المنطقة.
@@ -62,6 +64,12 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
   Timer? _timer;
   final Set<int> _expanded = {};
 
+  /// مقاييس كلّ جهاز — مُنبّه مستقلّ لكلّ بطاقة.
+  ///
+  /// يعيش في الشاشة لا في البطاقة: البطاقة تُهدم مع التمرير، ولو ماتت
+  /// القيمة معها لأعادت كلّ عودةٍ إلى الأعلى فتحَ الجلسات من الصفر.
+  final VitalsStore _vitals = VitalsStore();
+
   @override
   void initState() {
     super.initState();
@@ -77,6 +85,7 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
     _timer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     DeviceSweep.release();
+    _vitals.dispose();
     super.dispose();
   }
 
@@ -322,42 +331,93 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
       );
     }
 
-    final groups = _groups;
-    final lead = _offNetwork ? 1 : 0;
+    // ⚠️ تسطيح: البطاقة **ابن مباشر** للقائمة لا حفيدٌ داخل مجموعة.
+    //
+    // `ListView.builder` لا يبني إلّا ما قارب الشاشة — وهذا بالضبط
+    // تبويب النظر الذي تقوم عليه المرحلة الثانية. ولو بقيت المجموعة
+    // عنصراً واحداً يضمّ بطاقاتها، لبُنيت منطقةٌ فيها أربعون جهازاً
+    // دفعةً، ولفتحت أربعين جلسةً لجهازٍ واحدٍ مرئيّ.
+    final rows = _rows;
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(Sp.md, Sp.sm, Sp.md, Sp.mega),
-        itemCount: groups.length + lead,
-        itemBuilder: (context, i) {
-          if (_offNetwork && i == 0) return const _OffNetworkBanner();
-          final g = groups[i - lead];
-          return _RegionGroup(
-            region: g.region,
-            devices: g.devices,
-            expanded: _expanded,
-            onToggle: (id) => setState(() {
-              if (_expanded.contains(id)) {
-                _expanded.remove(id);
-              } else {
-                _expanded.add(id);
-              }
-            }),
-            onOpen: (d) async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => NetworkDeviceDetailsScreen(device: d),
-                ),
-              );
-              if (mounted) _load(silent: true);
-            },
-          );
+        itemCount: rows.length,
+        itemBuilder: (context, i) => switch (rows[i]) {
+          _BannerRow() => const _OffNetworkBanner(),
+          final _HeaderRow r => _GroupHeader(
+              title: r.region?.name ?? 'بلا منطقة',
+              down: r.down,
+              total: r.total,
+            ),
+          final _DeviceRow r => _DeviceCard(
+              // ⚠️ مفتاح ثابت بمعرّف الجهاز: بلا مفتاح يُعيد Flutter
+              // استعمال حالة البطاقة لجهازٍ آخر عند تغيّر الترتيب،
+              // فتظهر مقاييس برجٍ فوق اسم برجٍ غيره.
+              key: ValueKey(r.device.id),
+              device: r.device,
+              vitals: _vitals.of(r.device.id),
+              onVitals: (v) => _vitals.set(r.device.id, v),
+              open: _expanded.contains(r.device.id),
+              onToggle: () => setState(() {
+                if (_expanded.contains(r.device.id)) {
+                  _expanded.remove(r.device.id);
+                } else {
+                  _expanded.add(r.device.id);
+                }
+              }),
+              onOpen: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        NetworkDeviceDetailsScreen(device: r.device),
+                  ),
+                );
+                if (mounted) _load(silent: true);
+              },
+            ),
         },
       ),
     );
   }
+
+  /// يُسطّح المجموعات إلى صفوف: لافتة ثمّ عنوان مجموعة ثمّ بطاقاتها.
+  List<_Row> get _rows {
+    final out = <_Row>[];
+    if (_offNetwork) out.add(const _BannerRow());
+    for (final g in _groups) {
+      final down = g.devices.where((d) => d.lastStatus == 'offline').length;
+      out.add(_HeaderRow(g.region, down, g.devices.length));
+      for (final d in g.devices) {
+        out.add(_DeviceRow(d));
+      }
+    }
+    return out;
+  }
+}
+
+// ── صفوف القائمة المسطّحة ────────────────────────────────────────
+
+sealed class _Row {
+  const _Row();
+}
+
+class _BannerRow extends _Row {
+  const _BannerRow();
+}
+
+class _HeaderRow extends _Row {
+  const _HeaderRow(this.region, this.down, this.total);
+  final DeviceRegion? region;
+  final int down;
+  final int total;
+}
+
+class _DeviceRow extends _Row {
+  const _DeviceRow(this.device);
+  final NetworkDevice device;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -394,80 +454,68 @@ class _OffNetworkBanner extends StatelessWidget {
   }
 }
 
-class _RegionGroup extends StatelessWidget {
-  const _RegionGroup({
-    required this.region,
-    required this.devices,
-    required this.expanded,
-    required this.onToggle,
-    required this.onOpen,
+class _GroupHeader extends StatelessWidget {
+  const _GroupHeader({
+    required this.title,
+    required this.down,
+    required this.total,
   });
 
-  final DeviceRegion? region;
-  final List<NetworkDevice> devices;
-  final Set<int> expanded;
-  final ValueChanged<int> onToggle;
-  final ValueChanged<NetworkDevice> onOpen;
+  final String title;
+  final int down;
+  final int total;
 
   @override
   Widget build(BuildContext context) {
-    final down = devices.where((d) => d.lastStatus == 'offline').length;
     final tone = down == 0 ? AppTone.success : AppTone.danger;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(Sp.xs, Sp.md, Sp.xs, Sp.sm),
-          child: Row(
-            children: [
-              Flexible(
-                child: Text(
-                  region?.name ?? 'بلا منطقة',
-                  style: AppType.bodyStrong(color: AppColors.textMid),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: Sp.sm),
-              Expanded(child: Container(height: 1, color: AppColors.divider)),
-              const SizedBox(width: Sp.sm),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: Sp.sm, vertical: Sp.xxs),
-                decoration: BoxDecoration(
-                  color: tone.softBg,
-                  borderRadius: BorderRadius.circular(R.chip),
-                  border: Border.all(color: tone.softBorder),
-                ),
-                child: Text(
-                  down == 0 ? 'الكلّ سليم' : '$down من ${devices.length} معطّل',
-                  style: AppType.muted(color: tone.fill),
-                ),
-              ),
-            ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Sp.xs, Sp.md, Sp.xs, Sp.sm),
+      child: Row(
+        children: [
+          Flexible(
+            child: Text(
+              title,
+              style: AppType.bodyStrong(color: AppColors.textMid),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-        ),
-        for (final d in devices)
-          _DeviceCard(
-            device: d,
-            open: expanded.contains(d.id),
-            onToggle: () => onToggle(d.id),
-            onOpen: () => onOpen(d),
+          const SizedBox(width: Sp.sm),
+          Expanded(child: Container(height: 1, color: AppColors.divider)),
+          const SizedBox(width: Sp.sm),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: Sp.xxs),
+            decoration: BoxDecoration(
+              color: tone.softBg,
+              borderRadius: BorderRadius.circular(R.chip),
+              border: Border.all(color: tone.softBorder),
+            ),
+            child: Text(
+              down == 0 ? 'الكلّ سليم' : '$down من $total معطّل',
+              style: AppType.muted(color: tone.fill),
+            ),
           ),
-      ],
+        ],
+      ),
     );
   }
 }
 
-class _DeviceCard extends StatelessWidget {
+class _DeviceCard extends StatefulWidget {
   const _DeviceCard({
+    super.key,
     required this.device,
+    required this.vitals,
+    required this.onVitals,
     required this.open,
     required this.onToggle,
     required this.onOpen,
   });
 
   final NetworkDevice device;
+  final ValueNotifier<VitalsState> vitals;
+  final ValueChanged<VitalsState> onVitals;
   final bool open;
   final VoidCallback onToggle;
   final VoidCallback onOpen;
@@ -507,9 +555,88 @@ class _DeviceCard extends StatelessWidget {
   }
 
   @override
+  State<_DeviceCard> createState() => _DeviceCardState();
+}
+
+class _DeviceCardState extends State<_DeviceCard> {
+  /// نبضة الجلب العميق للبطاقة المرئيّة.
+  ///
+  /// أبطأ من نبضة اللوحة المفردة (٨ث لميكروتك): الجدار يعرض ستّاً لا
+  /// واحدة، والمجموع هو ما يُسخّن الهاتف.
+  static const _pulse = Duration(seconds: 15);
+
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    // بعد الإطار: الجلب يكتب في مُنبّهٍ يستمع إليه بناؤنا، والكتابة
+    // أثناء البناء تُسقط إطاراً بخطأ setState-during-build.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _kick());
+    _timer = Timer.periodic(_pulse, (_) => _kick());
+  }
+
+  @override
+  void didUpdateWidget(covariant _DeviceCard old) {
+    super.didUpdateWidget(old);
+    // جهاز عاد للحياة بعد مسحٍ سطحيّ: امتنعنا عن جلسته وهو معطّل،
+    // فلولا هذا لبقيت خاناته فارغةً حتّى تُهدم البطاقة وتُبنى.
+    if (old.device.lastStatus != widget.device.lastStatus) _kick();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    // ⚠️ نصف فائدة المجدول: بطاقة خرجت من الشاشة قبل دورها تُسحب من
+    // الطابور فلا تُفتح لها جلسة أصلاً.
+    DeepProbeScheduler.instance.cancel(this);
+    super.dispose();
+  }
+
+  void _kick() {
+    if (!mounted) return;
+    final st = widget.vitals.value;
+    if (st.loading || st.isFresh) return;
+
+    // الامتناع الصريح أرخص من محاولةٍ تفشل: كلّ محاولة تحجز خانةً من
+    // ستّ وتنتظر مهلتها كاملةً قبل أن تُحرّرها.
+    final skip = DeviceVitals.skipReason(widget.device);
+    if (skip != null) {
+      widget.onVitals(VitalsState(error: skip, at: DateTime.now()));
+      return;
+    }
+
+    // نُبقي القيم القديمة معروضةً أثناء التحديث — وميضُ فراغٍ ثمّ رقمٍ
+    // كلّ خمس عشرة ثانية أسوأ من رقمٍ عمره ثانيتان.
+    widget.onVitals(
+        VitalsState(vitals: st.vitals, loading: true, at: st.at));
+
+    DeepProbeScheduler.instance.submit(this, () async {
+      if (!mounted) return;
+      try {
+        final v = await DeviceVitals.fetch(widget.device);
+        if (!mounted) return;
+        widget.onVitals(VitalsState(vitals: v, at: DateTime.now()));
+      } catch (_) {
+        if (!mounted) return;
+        widget.onVitals(VitalsState(
+          vitals: st.vitals,
+          error: 'تعذّر الاتّصال',
+          at: DateTime.now(),
+        ));
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final tone = toneFor(device.lastStatus, device.lastResponseMs);
-    final since = sinceText(device.statusSince);
+    final device = widget.device;
+    final open = widget.open;
+    final onToggle = widget.onToggle;
+    final onOpen = widget.onOpen;
+    final tone =
+        _DeviceCard.toneFor(device.lastStatus, device.lastResponseMs);
+    final since = _DeviceCard.sinceText(device.statusSince);
     final isDown = device.lastStatus == 'offline';
 
     return Container(
@@ -566,12 +693,20 @@ class _DeviceCard extends StatelessWidget {
                   const SizedBox(width: Sp.sm),
                   _StatusPill(
                     tone: tone,
-                    text: labelFor(device.lastStatus, device.lastResponseMs),
+                    text: _DeviceCard.labelFor(
+                        device.lastStatus, device.lastResponseMs),
                   ),
                 ],
               ),
             ),
           ),
+          // الخانات الثلاث — لا تُرسَم للمعطّل: لا معنى لقراءة معالجٍ
+          // لجهازٍ لا يردّ، ولافتة «آخر ظهور» أنفع في مكانها.
+          if (!isDown)
+            ValueListenableBuilder<VitalsState>(
+              valueListenable: widget.vitals,
+              builder: (_, st, __) => _VitalsStrip(state: st),
+            ),
           if (isDown && since != null)
             Container(
               width: double.infinity,
@@ -590,6 +725,106 @@ class _DeviceCard extends StatelessWidget {
             ),
           if (open) _CardDetails(device: device),
         ],
+      ),
+    );
+  }
+}
+
+/// شريط الخانات الثلاث.
+///
+/// المواضع ثابتة والمعاني متغيّرة: كلّ علامة تملأ الخانات بأهمّ ثلاثة
+/// مقاييس عندها. فتصطفّ البطاقات بصريّاً وإن اختلفت التسميات — راجع
+/// [DeviceVitals].
+class _VitalsStrip extends StatelessWidget {
+  const _VitalsStrip({required this.state});
+  final VitalsState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final v = state.vitals;
+
+    // امتناعٌ معلن (بلا بيانات دخول · علامة غير مدعومة) — سطر هادئ لا
+    // خانات فارغة توحي بعطل.
+    if (v == null && state.error != null) {
+      return _Note(state.error!, tone: AppTone.neutral);
+    }
+    if (v == null) {
+      return const _Note('يقرأ المقاييس…', tone: AppTone.neutral, dim: true);
+    }
+
+    return Opacity(
+      // القيم القديمة تبهت أثناء التحديث بدل أن تختفي.
+      opacity: state.loading ? 0.55 : 1,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(Sp.md, 0, Sp.md, Sp.md),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(R.sm),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            for (var i = 0; i < v.length; i++) ...[
+              if (i > 0)
+                Container(width: 1, height: 34, color: AppColors.divider),
+              Expanded(child: _VitalCell(v[i])),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _VitalCell extends StatelessWidget {
+  const _VitalCell(this.vital);
+  final Vital vital;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Sp.x6),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(vital.label,
+              style: AppType.muted(), maxLines: 1, overflow: TextOverflow.ellipsis),
+          Text.rich(
+            TextSpan(children: [
+              TextSpan(
+                text: vital.value,
+                style: AppType.rowValue(color: vital.tone.fill),
+              ),
+              // الوحدة بلون أخفت وحجم أصغر — الرقم هو المقروء، والوحدة
+              // تُفهم ولا تُقرأ. (طلب المستخدم في رسوم الاستهلاك.)
+              if (vital.unit != null)
+                TextSpan(
+                  text: ' ${vital.unit}',
+                  style: AppType.muted(color: vital.tone.fill),
+                ),
+            ]),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Note extends StatelessWidget {
+  const _Note(this.text, {required this.tone, this.dim = false});
+  final String text;
+  final AppTone tone;
+  final bool dim;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Sp.md, 0, Sp.md, Sp.md),
+      child: Opacity(
+        opacity: dim ? 0.6 : 1,
+        child: Text(text,
+            textAlign: TextAlign.center, style: AppType.muted(color: tone.fill)),
       ),
     );
   }
