@@ -26,6 +26,7 @@ class ViewScopeScreen extends StatefulWidget {
 
 class _ViewScopeScreenState extends State<ViewScopeScreen> {
   List<ViewScopeManager>? _managers;
+  List<DashSection> _sections = const [];
   bool _loading = true;
   bool _failed = false;
   final Set<String> _saving = <String>{};
@@ -41,11 +42,12 @@ class _ViewScopeScreenState extends State<ViewScopeScreen> {
       _loading = true;
       _failed = false;
     });
-    final list = await ViewScopeApi.load();
+    final r = await ViewScopeApi.load();
     if (!mounted) return;
     setState(() {
-      _managers = list;
-      _failed = list == null;
+      _managers = r.managers;
+      _sections = r.sections;
+      _failed = r.managers == null;
       _loading = false;
     });
   }
@@ -108,6 +110,30 @@ class _ViewScopeScreenState extends State<ViewScopeScreen> {
     }
   }
 
+  Future<void> _toggleSection(DashSection sec, bool hidden) async {
+    setState(() {
+      _saving.add(sec.key);
+      _sections = [
+        for (final x in _sections)
+          x.key == sec.key ? x.copyWith(hidden: hidden) : x
+      ];
+    });
+    final r = await ViewScopeApi.setSection(sec.key, hidden);
+    if (!mounted) return;
+    setState(() {
+      _saving.remove(sec.key);
+      // نتبنّى حقيقة الخادم لا تخميننا — كما في مفاتيح المدراء.
+      if (r.ok && r.sections.isNotEmpty) _sections = r.sections;
+    });
+    if (!r.ok) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(r.message ?? 'تعذّر الحفظ'),
+        backgroundColor: AppColors.errorFill,
+        behavior: SnackBarBehavior.floating,
+      ));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
@@ -156,6 +182,23 @@ class _ViewScopeScreenState extends State<ViewScopeScreen> {
                             _toggle(m, hideSubscribers: v),
                         onDebts: (v) => _toggle(m, hideDebts: v),
                       ),
+                  if (_sections.isNotEmpty) ...[
+                    const SizedBox(height: Sp.lg),
+                    const _GroupLabel(
+                      icon: LucideIcons.layoutDashboard,
+                      title: 'ما يظهر في الرئيسيّة',
+                      // إخفاء القسم يُسقط نداءه كذلك — فالفائدة سرعة
+                      // إقلاع لا ترتيب شاشة فقط. يستحقّ أن يُقال.
+                      sub: 'القسم المخفيّ لا يُرسَم ولا تُجلب بياناته',
+                    ),
+                    const SizedBox(height: Sp.sm),
+                    for (final sec in _sections)
+                      _SectionRow(
+                        section: sec,
+                        busy: _saving.contains(sec.key),
+                        onChanged: (hide) => _toggleSection(sec, hide),
+                      ),
+                  ],
                 ],
               ),
             ),
@@ -355,6 +398,112 @@ class _MiniToggle extends StatelessWidget {
             ),
           ),
           Switch.adaptive(value: value, onChanged: onChanged),
+        ],
+      ),
+    );
+  }
+}
+
+class _GroupLabel extends StatelessWidget {
+  const _GroupLabel({
+    required this.icon,
+    required this.title,
+    required this.sub,
+  });
+  final IconData icon;
+  final String title;
+  final String sub;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 15, color: AppColors.textMid),
+        const SizedBox(width: Sp.sm),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title,
+                  style: AppType.label(color: AppColors.textHi)
+                      .copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 2),
+              Text(sub, style: AppType.micro(color: AppColors.textLow)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SectionRow extends StatelessWidget {
+  const _SectionRow({
+    required this.section,
+    required this.busy,
+    required this.onChanged,
+  });
+  final DashSection section;
+  final bool busy;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final meta = dashSectionLabels[section.key];
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsetsDirectional.fromSTEB(Sp.md, 4, Sp.sm, 4),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(
+          color: section.hidden ? AppColors.warningSoftBorder : AppColors.border,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            section.hidden ? LucideIcons.eyeOff : LucideIcons.eye,
+            size: 15,
+            color: section.hidden ? AppColors.warning : AppColors.textLow,
+          ),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  meta?.title ?? section.key,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.label(color: AppColors.textHi),
+                ),
+                if (meta != null)
+                  Text(
+                    meta.sub,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.micro(color: AppColors.textLow),
+                  ),
+              ],
+            ),
+          ),
+          if (busy)
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            // المفتاح يعني «ظاهر» لا «مخفيّ»: الإيجاب أسهل قراءةً من
+            // النفي، ومفتاحٌ مطفأ يعني غياباً بلا تفكير مزدوج.
+            Switch.adaptive(
+              value: !section.hidden,
+              onChanged: (visible) => onChanged(!visible),
+            ),
         ],
       ),
     );

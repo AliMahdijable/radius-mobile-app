@@ -6,6 +6,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/dashboard_api.dart';
+import '../../api/view_scope_api.dart';
 import '../../models/dashboard.dart';
 import '../../services/alerts_service.dart';
 import '../../services/app_resumed_signal.dart';
@@ -64,9 +65,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// نوقف الـtimer ونعيد جدولته فيتم تنفيذ refresh واحد فقط.
   Timer? _refreshDebounce;
 
+  /// أقسام الرئيسيّة المخفيّة لهذا الحساب.
+  ///
+  /// ⚠️ تُقرأ **قبل** الجلب لا بعده: الغاية أن يسقط نداء القسم المخفيّ
+  /// لا أن يُجلب ثمّ يُرمى. من يُخفي الإيرادات والنشاطات يسقط عنه
+  /// نداءان من خمسة عند كلّ إقلاع.
+  Set<String> _hiddenSections = <String>{};
+  bool _sectionsLoaded = false;
+
+  /// ⚠️ قبل وصول التفضيلات نعتبر كلّ شيء ظاهراً — وإلّا ومضت الشاشة
+  /// فارغةً ثمّ امتلأت. والخطأ في هذا الاتّجاه أرحم: قسمٌ يظهر لحظةً
+  /// أهون من شاشة تبدو معطوبة عند كلّ فتح.
+  bool _shown(String key) => !_sectionsLoaded || !_hiddenSections.contains(key);
+
+  Future<void> _loadSections() async {
+    final r = await ViewScopeApi.load();
+    if (!mounted) return;
+    setState(() {
+      _hiddenSections = {
+        for (final s in r.sections)
+          if (s.hidden) s.key
+      };
+      _sectionsLoaded = true;
+    });
+    _refreshLive(silent: true);
+  }
+
   @override
   void initState() {
     super.initState();
+    _loadSections();
     _loadIdentity();
     // Cache-first: hydrate KPIs from SharedPreferences BEFORE the live
     // fetch fires. الـSpinner ما يظهر لو عندنا بيانات محفوظة — يظهر
@@ -167,28 +195,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // فشل (r==null) وعندنا بيانات جيّدة سابقة، ما نستبدلها بـerror state.
     // يمنع flash "فشل جلب" العابر على شبكات ضعيفة. Pull-to-refresh
     // (silent==false) يعرض الحقيقة دائماً.
-    DashboardApi.fetchWhatsAppStatus()
-        .timeout(kMaxLoad, onTimeout: () => null)
-        .catchError((_) => null)
-        .then((r) {
-      if (!mounted) return;
-      if (silent && r == null && _waLive != null) return;
-      setState(() {
-        _waLive = r;
-        _waLoaded = true;
+    if (_shown('wa_banner')) {
+      DashboardApi.fetchWhatsAppStatus()
+          .timeout(kMaxLoad, onTimeout: () => null)
+          .catchError((_) => null)
+          .then((r) {
+        if (!mounted) return;
+        if (silent && r == null && _waLive != null) return;
+        setState(() {
+          _waLive = r;
+          _waLoaded = true;
+        });
       });
-    });
-    DashboardApi.fetchDailyActivations()
-        .timeout(kMaxLoad, onTimeout: () => null)
-        .catchError((_) => null)
-        .then((r) {
-      if (!mounted) return;
-      if (silent && r == null && _activationsLive != null) return;
-      setState(() {
-        _activationsLive = r;
-        _activationsLoaded = true;
+    }
+    if (_shown('activities')) {
+      DashboardApi.fetchDailyActivations()
+          .timeout(kMaxLoad, onTimeout: () => null)
+          .catchError((_) => null)
+          .then((r) {
+        if (!mounted) return;
+        if (silent && r == null && _activationsLive != null) return;
+        setState(() {
+          _activationsLive = r;
+          _activationsLoaded = true;
+        });
       });
-    });
+    }
     // ⚠️ نداء SAS4 المباشر حُذف (2026-08-31).
     //
     // كان يطلق **خمسة** طلبات هاتف→reseller-supernet.net في كلّ تحديث،
@@ -225,20 +257,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
         AlertsService.refresh();
       });
     });
-    DashboardApi.fetchWallet()
-        .timeout(kMaxLoad, onTimeout: () => null)
-        .catchError((_) => null)
-        .then((r) {
-      if (!mounted) return;
-      if (silent && r == null && _walletLive != null) return;
-      setState(() {
-        _walletLive = r;
-        _walletLoaded = true;
+    // ⚠️ التبويب على النداء لا على العرض: الغاية إسقاط الطلب لا
+    // إخفاء نتيجته. القسم المخفيّ يجب ألّا يكلّف شبكةً أصلاً.
+    if (_shown('wallet')) {
+      DashboardApi.fetchWallet()
+          .timeout(kMaxLoad, onTimeout: () => null)
+          .catchError((_) => null)
+          .then((r) {
+        if (!mounted) return;
+        if (silent && r == null && _walletLive != null) return;
+        setState(() {
+          _walletLive = r;
+          _walletLoaded = true;
+        });
+        if (r != null) {
+          DashboardCache.saveWallet(r); // persist for next cold start
+        }
       });
-      if (r != null) {
-        DashboardCache.saveWallet(r); // persist for next cold start
-      }
-    });
+    }
   }
 
   String _greeting() {
@@ -330,20 +366,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 delegate: SliverChildListDelegate([
                   // أعلى كلّ شيء عمداً: انقطاع الجلسة يوقف كلّ تنبيهات
                   // المشتركين وفواتيرهم، فلا يجوز أن يُقرأ بعد الأرقام.
-                  ReconnectBanner(
-                    status: _waStatus,
-                    onDone: _refreshLive,
-                  ),
-                  SubscribersCard(
-                    stats: _subscribersStats,
-                    onOpen: widget.onOpenSubscribers,
-                  )
-                      .animate()
-                      .fadeIn(duration: const Duration(milliseconds: 280))
-                      .slideY(begin: 0.03, end: 0),
+                  if (_shown('wa_banner'))
+                    ReconnectBanner(
+                      status: _waStatus,
+                      onDone: _refreshLive,
+                    ),
+                  if (_shown('subscribers'))
+                    SubscribersCard(
+                      stats: _subscribersStats,
+                      onOpen: widget.onOpenSubscribers,
+                    )
+                        .animate()
+                        .fadeIn(duration: const Duration(milliseconds: 280))
+                        .slideY(begin: 0.03, end: 0),
                   const SizedBox(height: Sp.md),
-                  StatsGrid(
-                    wallet: _walletLoaded ? _walletLive : null,
+                  if (_shown('wallet'))
+                    StatsGrid(
+                      wallet: _walletLoaded ? _walletLive : null,
                     debtors: _debtorsLoaded ? _debtorsLive : null,
                     onOpenDebtors: () => widget.onOpenSubscribers
                         ?.call(SubscriberFilter.debtors),
@@ -355,15 +394,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       )
                       .slideY(begin: 0.03, end: 0),
                   const SizedBox(height: Sp.md),
-                  const HeroRevenueCard()
-                      .animate()
+                  // الكارت يجلب بنفسه (`reports/finance`)، فعدم بنائه
+                  // يُسقط نداءه بلا تبويبٍ إضافيّ.
+                  if (_shown('revenue'))
+                    const HeroRevenueCard()
+                        .animate()
                       .fadeIn(
                         delay: const Duration(milliseconds: 160),
                         duration: const Duration(milliseconds: 280),
                       )
                       .slideY(begin: 0.03, end: 0),
-                  SectionHeader(
-                    label: !_activationsLoaded
+                  if (_shown('activities'))
+                    SectionHeader(
+                      label: !_activationsLoaded
                         ? 'dashboard.recent_activity_label'.tr()
                         : _activationsLive == null
                             ? 'dashboard.recent_activity_fetch_failed'.tr()
@@ -379,8 +422,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                   ),
-                  if (!_activationsLoaded)
-                    const _ActivitiesLoading()
+                  if (_shown('activities'))
+                    if (!_activationsLoaded)
+                      const _ActivitiesLoading()
                   else if (_activationsLive == null)
                     const _ActivitiesError()
                   else if (_activationsLive!.recent.isEmpty)
@@ -392,6 +436,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           delay: const Duration(milliseconds: 240),
                           duration: const Duration(milliseconds: 280),
                         ),
+                  // ⚠️ لو أُخفي كلّ شيء لا تُترك الشاشة بيضاء: المدير
+                  // لن يعرف أنّه هو من أخفاها، وسيظنّها معطوبة.
+                  if (_sectionsLoaded && _hiddenSections.length >= 5)
+                    const _AllHidden(),
                 ]),
               ),
             ),
@@ -600,8 +648,7 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
                     heightFactor: 1 - t,
                     child: Opacity(
                       opacity: 1 - t,
-                      child:
-                          _WAStatusChip(status: whatsApp, loaded: waLoaded),
+                      child: _WAStatusChip(status: whatsApp, loaded: waLoaded),
                     ),
                   ),
                 ),
@@ -807,6 +854,34 @@ class _IconChip extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// كلّ الأقسام مخفيّة — لا تُترك الشاشة بيضاء.
+class _AllHidden extends StatelessWidget {
+  const _AllHidden();
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Sp.mega),
+      child: Column(
+        children: [
+          Icon(LucideIcons.eyeOff, size: 32, color: AppColors.textLow),
+          const SizedBox(height: Sp.sm),
+          Text(
+            'كلّ أقسام الرئيسيّة مخفيّة',
+            style: AppType.label(color: AppColors.textMid),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'أعِدها من الإعدادات ← نطاق العرض',
+            style: AppType.micro(color: AppColors.textLow),
+          ),
+        ],
+      ),
     );
   }
 }
