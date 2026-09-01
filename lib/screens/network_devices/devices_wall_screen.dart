@@ -14,6 +14,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'device_vitals.dart';
+import 'widgets/_grade.dart';
 import 'network_device_details_screen.dart';
 
 /// جدار الأجهزة — كلّ الأجهزة في صفحة واحدة، مجموعةً حسب المنطقة.
@@ -359,6 +360,8 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
               device: r.device,
               vitals: _vitals.of(r.device.id),
               onVitals: (v) => _vitals.set(r.device.id, v),
+              prevSample: () => _vitals.sampleOf(r.device.id),
+              onSample: (c) => _vitals.saveSample(r.device.id, c),
               open: _expanded.contains(r.device.id),
               onToggle: () => setState(() {
                 if (_expanded.contains(r.device.id)) {
@@ -508,6 +511,8 @@ class _DeviceCard extends StatefulWidget {
     required this.device,
     required this.vitals,
     required this.onVitals,
+    required this.prevSample,
+    required this.onSample,
     required this.open,
     required this.onToggle,
     required this.onOpen,
@@ -516,6 +521,8 @@ class _DeviceCard extends StatefulWidget {
   final NetworkDevice device;
   final ValueNotifier<VitalsState> vitals;
   final ValueChanged<VitalsState> onVitals;
+  final CounterSample? Function() prevSample;
+  final ValueChanged<Map<String, ({int rx, int tx})>> onSample;
   final bool open;
   final VoidCallback onToggle;
   final VoidCallback onOpen;
@@ -608,19 +615,33 @@ class _DeviceCardState extends State<_DeviceCard> {
 
     // نُبقي القيم القديمة معروضةً أثناء التحديث — وميضُ فراغٍ ثمّ رقمٍ
     // كلّ خمس عشرة ثانية أسوأ من رقمٍ عمره ثانيتان.
-    widget.onVitals(
-        VitalsState(vitals: st.vitals, loading: true, at: st.at));
+    widget.onVitals(VitalsState(
+      vitals: st.vitals,
+      detail: st.detail,
+      loading: true,
+      at: st.at,
+    ));
 
     DeepProbeScheduler.instance.submit(this, () async {
       if (!mounted) return;
       try {
-        final v = await DeviceVitals.fetch(widget.device);
+        final r = await DeviceVitals.fetch(
+          widget.device,
+          prev: widget.prevSample(),
+        );
         if (!mounted) return;
-        widget.onVitals(VitalsState(vitals: v, at: DateTime.now()));
+        // العيّنة تُحفظ **قبل** النشر: الجلسة القادمة تطرح منها.
+        widget.onSample(r.counters);
+        widget.onVitals(VitalsState(
+          vitals: r.vitals,
+          detail: r.detail,
+          at: DateTime.now(),
+        ));
       } catch (_) {
         if (!mounted) return;
         widget.onVitals(VitalsState(
           vitals: st.vitals,
+          detail: st.detail,
           error: 'تعذّر الاتّصال',
           at: DateTime.now(),
         ));
@@ -723,7 +744,12 @@ class _DeviceCardState extends State<_DeviceCard> {
                 style: AppType.muted(color: tone.fill),
               ),
             ),
-          if (open) _CardDetails(device: device),
+          if (open)
+            ValueListenableBuilder<VitalsState>(
+              valueListenable: widget.vitals,
+              builder: (_, st, __) =>
+                  _CardDetails(device: device, detail: st.detail),
+            ),
         ],
       ),
     );
@@ -862,34 +888,90 @@ class _StatusPill extends StatelessWidget {
 
 /// المطويّ المفتوح — المرحلة الأولى تعرض ما يعرفه الخادم بلا جلسة.
 /// المرحلة الثانية تُضيف هنا حمولة الجلسة الحيّة نفسها.
+/// المطويّ المفتوح.
+///
+/// ⚠️ لا نداء شبكة هنا: [detail] يأتي من **نفس الحمولة** التي ملأت
+/// الخانات الثلاث. كنّا نجلبها كاملةً ونقرأ منها ثلاثة أرقام ونرمي
+/// الباقي — المرور والمتّصلون والنظام كانوا في اليد طوال الوقت.
 class _CardDetails extends StatelessWidget {
-  const _CardDetails({required this.device});
+  const _CardDetails({required this.device, this.detail});
   final NetworkDevice device;
+  final DeviceDetail? detail;
+
+  /// كم منفذاً نعرض. المنافذ المطفأة تُطوى في سطر واحد.
+  static const _maxPorts = 4;
+
+  /// كم متّصلاً نعرض قبل «وآخرون».
+  static const _maxPeers = 5;
 
   @override
   Widget build(BuildContext context) {
-    final rows = <({String k, String v})>[
-      (k: 'العلامة', v: device.brand),
-      (k: 'النوع', v: device.type),
+    final d = detail;
+    final live = <Widget>[];
+
+    if (d != null) {
+      // ── المرور ──
+      // المنافذ العاملة فقط، والأكثر مروراً أوّلاً: منفذٌ مطفأ في
+      // مقسمٍ ذي ستّة عشر منفذاً يُغرق ما يهمّ.
+      final up = d.ports.where((p) => p.up).toList()
+        ..sort((a, b) => b.total.compareTo(a.total));
+      final off = d.ports.length - up.length;
+      if (up.isNotEmpty) {
+        live.add(const _DetailHeading('المرور'));
+        for (final p in up.take(_maxPorts)) {
+          live.add(_PortRow(p));
+        }
+        if (up.length > _maxPorts || off > 0) {
+          live.add(_DetailFoot([
+            if (up.length > _maxPorts) 'و${up.length - _maxPorts} منفذاً آخر',
+            if (off > 0) '$off مطفأ',
+          ].join(' · ')));
+        }
+      }
+
+      // ── المتّصلون ──
+      if (d.peers.isNotEmpty) {
+        // الأضعف إشارةً أوّلاً — من يفتح هذه القائمة يبحث عن الشكوى.
+        final peers = [...d.peers]
+          ..sort((a, b) => (a.signal ?? 0).compareTo(b.signal ?? 0));
+        live.add(_DetailHeading('${d.peersLabel} (${d.peers.length})'));
+        for (final p in peers.take(_maxPeers)) {
+          live.add(_PeerRow(p));
+        }
+        if (peers.length > _maxPeers) {
+          live.add(_DetailFoot('و${peers.length - _maxPeers} آخرين'));
+        }
+      }
+    }
+
+    // ── النظام ── (يجمع ما جاء من الجلسة وما تعرفه قاعدة البيانات)
+    final info = <({String k, String v})>[
+      if (d?.uptime != null) (k: 'التشغيل', v: d!.uptime!),
+      if (d?.firmware != null) (k: 'الإصدار', v: d!.firmware!),
+      (k: 'الطراز', v: d?.model ?? device.model ?? device.brand),
       if (device.mac?.isNotEmpty ?? false) (k: 'MAC', v: device.mac!),
       if (device.location?.isNotEmpty ?? false)
         (k: 'الموقع', v: device.location!),
+      ...?d?.extras,
       if (device.lastProbedAt != null)
         (k: 'آخر فحص', v: _clock(device.lastProbedAt!)),
     ];
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(Sp.md, 0, Sp.md, Sp.md),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(height: 1, color: AppColors.divider),
-          const SizedBox(height: Sp.sm),
-          for (final r in rows)
+          ...live,
+          const _DetailHeading('النظام'),
+          for (final r in info)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: Sp.xxs),
               child: Row(
                 children: [
-                  SizedBox(width: 78, child: Text(r.k, style: AppType.muted())),
+                  SizedBox(width: 84, child: Text(r.k, style: AppType.muted())),
                   Expanded(
                     child: Text(r.v,
                         style: AppType.body(),
@@ -913,6 +995,114 @@ class _CardDetails extends StatelessWidget {
 
   static String _clock(DateTime t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+}
+
+class _DetailHeading extends StatelessWidget {
+  const _DetailHeading(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, Sp.md, 0, Sp.xs),
+      child: Text(text,
+          style: AppType.muted(color: AppColors.brandAccent)),
+    );
+  }
+}
+
+class _DetailFoot extends StatelessWidget {
+  const _DetailFoot(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: Sp.xxs),
+      child: Text(text, style: AppType.muted()),
+    );
+  }
+}
+
+class _PortRow extends StatelessWidget {
+  const _PortRow(this.port);
+  final PortTraffic port;
+
+  @override
+  Widget build(BuildContext context) {
+    // ⚠️ الشرطة لا الصفر حين لا معدّل بعد: العيّنة الأولى بلا سابقة
+    // فلا فارق يُقسَم، و«٠ بت» يوحي بمنفذٍ صامت وهو يحمل غيغابت.
+    final has = port.rxBps != null || port.txBps != null;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Sp.xxs),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 84,
+            child: Text(port.name,
+                style: AppType.body(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+          ),
+          if (!has)
+            Text('يقيس…', style: AppType.muted())
+          else ...[
+            Icon(LucideIcons.arrowDown, size: 12, color: AppColors.success),
+            const SizedBox(width: 2),
+            Text(DeviceVitals.fmtBps(port.rxBps),
+                style: AppType.rowValue(color: AppColors.success)),
+            const SizedBox(width: Sp.md),
+            Icon(LucideIcons.arrowUp, size: 12, color: AppColors.info),
+            const SizedBox(width: 2),
+            Text(DeviceVitals.fmtBps(port.txBps),
+                style: AppType.rowValue(color: AppColors.info)),
+          ],
+          const Spacer(),
+          if (port.linkSpeed != null)
+            Text(port.linkSpeed!, style: AppType.muted()),
+        ],
+      ),
+    );
+  }
+}
+
+class _PeerRow extends StatelessWidget {
+  const _PeerRow(this.peer);
+  final PeerLink peer;
+
+  @override
+  Widget build(BuildContext context) {
+    final sig = peer.signal;
+    final tone = sig == null || sig == 0 ? AppTone.neutral : Grade.signal(sig);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Sp.xxs),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(peer.name,
+                style: AppType.body(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+          ),
+          if (peer.txRate != null && peer.rxRate != null) ...[
+            Text('${peer.rxRate}/${peer.txRate}', style: AppType.muted()),
+            const SizedBox(width: Sp.sm),
+          ],
+          if (sig != null && sig != 0)
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: Sp.x6, vertical: Sp.xxs),
+              decoration: BoxDecoration(
+                color: tone.softBg,
+                borderRadius: BorderRadius.circular(R.chip),
+                border: Border.all(color: tone.softBorder),
+              ),
+              child: Text('$sig', style: AppType.muted(color: tone.fill)),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 class _Notice extends StatelessWidget {

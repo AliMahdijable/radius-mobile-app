@@ -180,4 +180,122 @@ void main() {
           reason: 'الشريط يُرسَم للحيّ فقط');
     });
   });
+
+  group('حساب معدّل المرور', () {
+    // الدالّة private؛ نُعيد قواعدها هنا حرفيّاً — والحارس الحقيقيّ أنّ
+    // أيّ انحراف بينهما يظهر فوراً في القيم على الجهاز.
+    ({int? rx, int? tx}) rate({
+      required int rxNow,
+      required int txNow,
+      Map<String, ({int rx, int tx})>? before,
+      double secs = 15,
+    }) {
+      if (before == null) return (rx: null, tx: null);
+      final b = before['eth'];
+      if (b == null) return (rx: null, tx: null);
+      if (secs < 1 || secs > 300) return (rx: null, tx: null);
+      if (rxNow < b.rx || txNow < b.tx) return (rx: null, tx: null);
+      return (
+        rx: ((rxNow - b.rx) * 8 / secs).round(),
+        tx: ((txNow - b.tx) * 8 / secs).round(),
+      );
+    }
+
+    test('بلا عيّنة سابقة لا معدّل', () {
+      // «٠ بت» يوحي بمنفذٍ صامت وهو يحمل غيغابت — الشرطة أصدق.
+      expect(rate(rxNow: 1000, txNow: 500).rx, isNull);
+    });
+
+    test('الفارق يُقسَم على الزمن الحقيقيّ', () {
+      // ٢٥٠ ميغابايت في ١٥ث = ١٣٣ ميغابت/ث تقريباً
+      final r = rate(
+        rxNow: 250000000,
+        txNow: 0,
+        before: {'eth': (rx: 0, tx: 0)},
+      );
+      expect(r.rx, 133333333);
+    });
+
+    test('زمن قصير يُرفَض — الفخّ الذي أعطى ٤ غيغا بدل ١٣٠ ميغا', () {
+      // ٢٠٢٦-٠٨-١٣ في اللوحات المفردة: قسمة على نصف ثانية بدل ١٥
+      // أظهرت ether1 يحمل 4.10Gbps وهو يحمل 130Mbps. الحارس هنا يمنع
+      // أن يتكرّر في الجدار.
+      final r = rate(
+        rxNow: 250000000,
+        txNow: 0,
+        before: {'eth': (rx: 0, tx: 0)},
+        secs: 0.5,
+      );
+      expect(r.rx, isNull, reason: 'نافذة أقصر من ثانية تُضخّم أيّ ضجيج');
+    });
+
+    test('زمن طويل يُرفَض — متوسّط لا معدّل', () {
+      final r = rate(
+        rxNow: 250000000,
+        txNow: 0,
+        before: {'eth': (rx: 0, tx: 0)},
+        secs: 600,
+      );
+      expect(r.rx, isNull);
+    });
+
+    test('ارتداد العدّاد (إقلاع الجهاز) لا يُنتج رقماً', () {
+      final r = rate(
+        rxNow: 100,
+        txNow: 50,
+        before: {'eth': (rx: 999999999, tx: 999999999)},
+      );
+      expect(r.rx, isNull, reason: 'الطرح يُخرج سالباً أو رقماً ضخماً كاذباً');
+    });
+
+    test('منفذ جديد لم يكن في العيّنة السابقة', () {
+      final r = rate(rxNow: 100, txNow: 50, before: {'other': (rx: 0, tx: 0)});
+      expect(r.rx, isNull);
+    });
+  });
+
+  group('التنسيق', () {
+    test('المرور يتدرّج بالوحدات', () {
+      expect(DeviceVitals.fmtBps(null), '—');
+      expect(DeviceVitals.fmtBps(800), '800');
+      expect(DeviceVitals.fmtBps(45000), '45 K');
+      expect(DeviceVitals.fmtBps(133333333), '133.3 M');
+      expect(DeviceVitals.fmtBps(4100000000), '4.10 G');
+    });
+
+    test('مدّة التشغيل تتدرّج', () {
+      expect(DeviceVitals.fmtUptime(0), '—');
+      expect(DeviceVitals.fmtUptime(300), '5 دقيقة');
+      expect(DeviceVitals.fmtUptime(7200), '2 ساعة');
+      expect(DeviceVitals.fmtUptime(86400 * 12), '12 يوماً');
+    });
+  });
+
+  group('عرض المطويّ', () {
+    late String src;
+    setUpAll(() {
+      src = File('lib/screens/network_devices/devices_wall_screen.dart')
+          .readAsStringSync();
+    });
+
+    test('الفتح لا يفتح جلسة جديدة', () {
+      // التفصيل يأتي من نفس الحمولة — أيّ نداء هنا يُبطل جوهر التصميم.
+      final i = src.indexOf('class _CardDetails');
+      final body = src.substring(i, src.indexOf('class _DetailHeading'));
+      expect(body.contains('DeviceVitals.fetch'), isFalse);
+      expect(body.contains('await '), isFalse,
+          reason: 'المطويّ يرسم ما وصل، لا يجلب');
+    });
+
+    test('الأضعف إشارةً أوّلاً', () {
+      // من يفتح قائمة المتّصلين يبحث عن الشكوى لا عن الأفضل.
+      expect(src.contains('(a.signal ?? 0).compareTo(b.signal ?? 0)'), isTrue);
+    });
+
+    test('المنافذ المطفأة لا تُغرق العاملة', () {
+      expect(src.contains('d.ports.where((p) => p.up)'), isTrue);
+      expect(src.contains('b.total.compareTo(a.total)'), isTrue,
+          reason: 'الأكثر مروراً أوّلاً');
+    });
+  });
 }

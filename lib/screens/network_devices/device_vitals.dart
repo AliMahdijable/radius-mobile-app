@@ -32,9 +32,18 @@ class Vital {
 /// حالة مقاييس جهاز واحد.
 @immutable
 class VitalsState {
-  const VitalsState({this.vitals, this.loading = false, this.error, this.at});
+  const VitalsState({
+    this.vitals,
+    this.detail,
+    this.loading = false,
+    this.error,
+    this.at,
+  });
 
   final List<Vital>? vitals;
+
+  /// تفصيل المطويّ المفتوح — من نفس الحمولة، فالفتح لا يكلّف شبكة.
+  final DeviceDetail? detail;
   final bool loading;
   final String? error;
   final DateTime? at;
@@ -43,6 +52,95 @@ class VitalsState {
 
   bool get isFresh =>
       at != null && DateTime.now().difference(at!) < DeviceVitals.freshFor;
+}
+
+/// منفذ ومروره — المعدّل محسوب من فارق العدّادات بين جلستين.
+@immutable
+class PortTraffic {
+  const PortTraffic({
+    required this.name,
+    required this.up,
+    this.rxBps,
+    this.txBps,
+    this.linkSpeed,
+  });
+
+  final String name;
+  final bool up;
+
+  /// `null` = لا عيّنة سابقة بعد، أو العدّاد ارتدّ (إقلاع الجهاز).
+  final int? rxBps;
+  final int? txBps;
+  final String? linkSpeed;
+
+  int get total => (rxBps ?? 0) + (txBps ?? 0);
+}
+
+/// طرفٌ متّصل — عميل لاسلكيّ أو محطّة.
+@immutable
+class PeerLink {
+  const PeerLink({
+    required this.name,
+    this.signal,
+    this.txRate,
+    this.rxRate,
+    this.uptimeSec,
+  });
+
+  final String name;
+  final int? signal;
+  final int? txRate;
+  final int? rxRate;
+  final int? uptimeSec;
+}
+
+/// تفصيل الجهاز — من **نفس حمولة الجلسة** التي ملأت الخانات الثلاث.
+///
+/// فتح البطاقة لا يكلّف شبكةً: الحمولة تصل كاملةً أصلاً، وكنّا نقرأ
+/// منها ثلاثة أرقام ونرمي الباقي.
+@immutable
+class DeviceDetail {
+  const DeviceDetail({
+    this.uptime,
+    this.firmware,
+    this.model,
+    this.ports = const [],
+    this.peers = const [],
+    this.peersLabel = 'المتّصلون',
+    this.extras = const [],
+  });
+
+  final String? uptime;
+  final String? firmware;
+  final String? model;
+  final List<PortTraffic> ports;
+  final List<PeerLink> peers;
+  final String peersLabel;
+  final List<({String k, String v})> extras;
+}
+
+/// حصيلة جلسة واحدة.
+@immutable
+class ProbeResult {
+  const ProbeResult({
+    required this.vitals,
+    required this.detail,
+    required this.counters,
+  });
+
+  final List<Vital> vitals;
+  final DeviceDetail detail;
+
+  /// عدّادات البايت الخام — تُحفظ لتُطرح منها عيّنةُ الجلسة القادمة.
+  final Map<String, ({int rx, int tx})> counters;
+}
+
+/// عيّنة عدّادات سابقة مع لحظتها.
+@immutable
+class CounterSample {
+  const CounterSample(this.counters, this.at);
+  final Map<String, ({int rx, int tx})> counters;
+  final DateTime at;
 }
 
 /// خريطة «العلامة ← ثلاثة مقاييس».
@@ -85,14 +183,18 @@ class DeviceVitals {
     return null;
   }
 
-  /// يفتح جلسةً ويُعيد ثلاثة مقاييس. يرمي عند الفشل.
-  static Future<List<Vital>> fetch(NetworkDevice d) async {
+  /// يفتح جلسةً ويُعيد المقاييس والتفصيل معاً. يرمي عند الفشل.
+  ///
+  /// [prev] عيّنة العدّادات السابقة — بلا سابقةٍ لا يمكن حساب معدّل
+  /// مرور، فتُعرض شرطة حتّى الجلسة الثانية.
+  static Future<ProbeResult> fetch(NetworkDevice d,
+      {CounterSample? prev}) async {
     final creds = await NetworkDevicesApi.getCredentials(d.id);
     switch (d.brand.toLowerCase()) {
       case 'mikrotik':
-        return _mikrotik(d, creds);
+        return _mikrotik(d, creds, prev);
       case 'ubnt':
-        return _ubnt(d, creds);
+        return _ubnt(d, creds, prev);
       case 'mimosa':
         return _mimosa(d, creds);
       default:
@@ -100,10 +202,61 @@ class DeviceVitals {
     }
   }
 
+  // ── حساب المعدّل من فارق العدّادات ───────────────────────────────
+
+  /// يحوّل عدّادات البايت إلى معدّل بت/ثانية.
+  ///
+  /// ⚠️ الزمن المستعمل هو الفاصل بين **عيّنتين كاملتين**. أخطر فخّ في
+  /// هذا الحساب أن يُؤخذ زمنٌ أقصر من الحقيقيّ: الجدار يجلب كلّ ١٥
+  /// ثانية، ولو قسمنا على نصف ثانية لظهر منفذٌ يحمل ١٣٠ ميغا وكأنّه
+  /// يحمل أربعة غيغا. (وقع هذا فعلاً في اللوحات المفردة ٢٠٢٦-٠٨-١٣.)
+  static ({int? rx, int? tx}) _rate(
+    String port,
+    int rxNow,
+    int txNow,
+    CounterSample? prev,
+  ) {
+    if (prev == null) return (rx: null, tx: null);
+    final before = prev.counters[port];
+    if (before == null) return (rx: null, tx: null);
+
+    final secs = DateTime.now().difference(prev.at).inMilliseconds / 1000.0;
+    // نافذة معقولة: أقلّ من ثانية يُضخّم أيّ ضجيج، وأكثر من خمس دقائق
+    // يُعطي متوسّطاً لا معدّلاً حاليّاً.
+    if (secs < 1 || secs > 300) return (rx: null, tx: null);
+
+    // ارتداد العدّاد = إقلاع الجهاز أو التفاف ٣٢-بت. لا نطرح فنُخرج
+    // رقماً سالباً أو ضخماً كاذباً.
+    if (rxNow < before.rx || txNow < before.tx) return (rx: null, tx: null);
+
+    return (
+      rx: ((rxNow - before.rx) * 8 / secs).round(),
+      tx: ((txNow - before.tx) * 8 / secs).round(),
+    );
+  }
+
+  /// «١٢ يوماً» من ثوانٍ.
+  static String fmtUptime(int seconds) {
+    if (seconds <= 0) return '—';
+    final d = Duration(seconds: seconds);
+    if (d.inDays >= 1) return '${d.inDays} يوماً';
+    if (d.inHours >= 1) return '${d.inHours} ساعة';
+    return '${d.inMinutes} دقيقة';
+  }
+
+  /// «٣٤٠ M» من بت/ثانية — للمرور.
+  static String fmtBps(int? bps) {
+    if (bps == null) return '—';
+    if (bps < 1000) return '$bps';
+    if (bps < 1000000) return '${(bps / 1000).toStringAsFixed(0)} K';
+    if (bps < 1000000000) return '${(bps / 1000000).toStringAsFixed(1)} M';
+    return '${(bps / 1000000000).toStringAsFixed(2)} G';
+  }
+
   // ── ميكروتك: معالج · ذاكرة · حرارة ───────────────────────────────
 
-  static Future<List<Vital>> _mikrotik(
-      NetworkDevice d, Map<String, dynamic> creds) async {
+  static Future<ProbeResult> _mikrotik(
+      NetworkDevice d, Map<String, dynamic> creds, CounterSample? prev) async {
     final user = (creds['user'] ?? '').toString();
     final pass = (creds['pass'] ?? '').toString();
     if (user.isEmpty || pass.isEmpty) throw StateError('بيانات دخول ناقصة');
@@ -114,36 +267,85 @@ class DeviceVitals {
       user: user,
       pass: pass,
     );
-    return [
-      Vital(
-        label: 'المعالج',
-        value: '${s.cpuLoad}',
-        unit: '%',
-        tone: Grade.percentLowerBetter(s.cpuLoad),
-      ),
-      Vital(
-        label: 'الذاكرة',
-        value: '${s.memUsedPercent}',
-        unit: '%',
-        tone: Grade.percentLowerBetter(s.memUsedPercent),
-      ),
-      // الحرارة غير متوفّرة على كلّ الطُرُز (CCR2116 مثلاً بلا مجسّ).
-      // نُظهر شرطةً لا صفراً — الصفر رقمٌ يكذب.
-      s.temperature == null
-          ? Vital.empty.copyLabel('الحرارة')
-          : Vital(
-              label: 'الحرارة',
-              value: '${s.temperature}',
-              unit: '°',
-              tone: Grade.temperature(s.temperature),
-            ),
+
+    final counters = <String, ({int rx, int tx})>{};
+    final ports = <PortTraffic>[];
+    for (final i in s.interfaces) {
+      if (i.disabled) continue;
+      final rx = i.rxBytes ?? 0;
+      final tx = i.txBytes ?? 0;
+      counters[i.name] = (rx: rx, tx: tx);
+      final r = _rate(i.name, rx, tx, prev);
+      ports.add(PortTraffic(
+        name: i.name,
+        up: i.running,
+        rxBps: r.rx,
+        txBps: r.tx,
+        linkSpeed: i.linkSpeed,
+      ));
+    }
+
+    final peers = [
+      for (final c in s.wirelessClients)
+        PeerLink(
+          name: c.hostname?.isNotEmpty == true
+              ? c.hostname!
+              : (c.ip?.isNotEmpty == true ? c.ip! : c.mac),
+          signal: c.signalStrength,
+          txRate: c.txRate,
+          rxRate: c.rxRate,
+          uptimeSec: c.uptime,
+        ),
     ];
+
+    return ProbeResult(
+      vitals: [
+        Vital(
+          label: 'المعالج',
+          value: '${s.cpuLoad}',
+          unit: '%',
+          tone: Grade.percentLowerBetter(s.cpuLoad),
+        ),
+        Vital(
+          label: 'الذاكرة',
+          value: '${s.memUsedPercent}',
+          unit: '%',
+          tone: Grade.percentLowerBetter(s.memUsedPercent),
+        ),
+        // الحرارة غير متوفّرة على كلّ الطُرُز (CCR2116 بلا مجسّ مثلاً).
+        // نُظهر شرطةً لا صفراً — الصفر رقمٌ يكذب.
+        s.temperature == null
+            ? Vital.empty.copyLabel('الحرارة')
+            : Vital(
+                label: 'الحرارة',
+                value: '${s.temperature}',
+                unit: '°',
+                tone: Grade.temperature(s.temperature),
+              ),
+      ],
+      detail: DeviceDetail(
+        uptime: s.uptime.isNotEmpty ? s.uptime : null,
+        firmware: s.version.isNotEmpty ? s.version : null,
+        model: s.boardName.isNotEmpty ? s.boardName : null,
+        ports: ports,
+        peers: peers,
+        peersLabel: 'العملاء اللاسلكيّون',
+        extras: [
+          if (s.pppActiveCount > 0)
+            (k: 'جلسات PPP', v: '${s.pppActiveCount}'),
+          if (s.voltage != null)
+            (k: 'الفولتيّة', v: '${s.voltage!.toStringAsFixed(1)} V'),
+          if (s.fans.isNotEmpty) (k: 'المراوح', v: '${s.fans.length}'),
+        ],
+      ),
+      counters: counters,
+    );
   }
 
   // ── UBNT: الإشارة · المعالج · الحرارة ────────────────────────────
 
-  static Future<List<Vital>> _ubnt(
-      NetworkDevice d, Map<String, dynamic> creds) async {
+  static Future<ProbeResult> _ubnt(
+      NetworkDevice d, Map<String, dynamic> creds, CounterSample? prev) async {
     final user = (creds['user'] ?? '').toString();
     final pass = (creds['pass'] ?? '').toString();
     if (user.isEmpty || pass.isEmpty) throw StateError('بيانات دخول ناقصة');
@@ -155,37 +357,92 @@ class DeviceVitals {
       pass: pass,
     );
     final w = s.wireless;
-    return [
-      // نقطة الوصول لا إشارة لها (هي المصدر) — والصفر هنا يعني «غير
-      // متوفّر» لا «إشارة صفر dBm»، وهي قيمة ممتازة لو صُدّقت.
-      (w == null || w.signal == 0)
-          ? Vital.empty.copyLabel('الإشارة')
-          : Vital(
-              label: 'الإشارة',
-              value: '${w.signal}',
-              unit: 'dBm',
-              tone: Grade.signal(w.signal),
-            ),
-      Vital(
-        label: 'المعالج',
-        value: '${s.host.cpuload}',
-        unit: '%',
-        tone: Grade.percentLowerBetter(s.host.cpuload),
-      ),
-      s.host.temperature == 0
-          ? Vital.empty.copyLabel('الحرارة')
-          : Vital(
-              label: 'الحرارة',
-              value: '${s.host.temperature}',
-              unit: '°',
-              tone: Grade.temperature(s.host.temperature),
-            ),
+
+    final counters = <String, ({int rx, int tx})>{};
+    final ports = <PortTraffic>[];
+    for (final i in s.interfaces) {
+      if (!i.enabled) continue;
+      final rx = i.rxBytes ?? 0;
+      final tx = i.txBytes ?? 0;
+      counters[i.ifname] = (rx: rx, tx: tx);
+      final r = _rate(i.ifname, rx, tx, prev);
+      ports.add(PortTraffic(
+        name: i.ifname,
+        up: i.plugged,
+        rxBps: r.rx,
+        txBps: r.tx,
+        linkSpeed: i.speed != null && i.speed! > 0 ? '${i.speed}M' : null,
+      ));
+    }
+
+    final peers = [
+      for (final st in s.stations)
+        PeerLink(
+          name: st.hostname?.isNotEmpty == true
+              ? st.hostname!
+              : (st.ip?.isNotEmpty == true ? st.ip! : st.mac),
+          signal: st.signal,
+          txRate: st.txRate,
+          rxRate: st.rxRate,
+          uptimeSec: st.linkUptimeSec ?? st.connTime,
+        ),
     ];
+
+    return ProbeResult(
+      vitals: [
+        // نقطة الوصول لا إشارة لها (هي المصدر) — والصفر هنا يعني «غير
+        // متوفّر» لا «إشارة صفر dBm»، وهي قيمة ممتازة لو صُدّقت.
+        (w == null || w.signal == 0)
+            ? Vital.empty.copyLabel('الإشارة')
+            : Vital(
+                label: 'الإشارة',
+                value: '${w.signal}',
+                unit: 'dBm',
+                tone: Grade.signal(w.signal),
+              ),
+        Vital(
+          label: 'المعالج',
+          value: '${s.host.cpuload}',
+          unit: '%',
+          tone: Grade.percentLowerBetter(s.host.cpuload),
+        ),
+        s.host.temperature == 0
+            ? Vital.empty.copyLabel('الحرارة')
+            : Vital(
+                label: 'الحرارة',
+                value: '${s.host.temperature}',
+                unit: '°',
+                tone: Grade.temperature(s.host.temperature),
+              ),
+      ],
+      detail: DeviceDetail(
+        uptime: fmtUptime(s.host.uptime),
+        firmware: s.host.fwversion.isNotEmpty ? s.host.fwversion : null,
+        model: s.host.devmodel.isNotEmpty ? s.host.devmodel : null,
+        ports: ports,
+        peers: peers,
+        peersLabel: 'المحطّات',
+        extras: [
+          if (w != null && w.essid.isNotEmpty) (k: 'الشبكة', v: w.essid),
+          if (w != null && w.mode.isNotEmpty) (k: 'الوضع', v: w.mode),
+          if (w != null && w.frequency > 0)
+            (k: 'التردّد', v: '${w.frequency} MHz'),
+          if (w != null && w.ccq > 0) (k: 'الجودة', v: '${w.ccq}%'),
+          if (w != null && w.distance > 0)
+            (k: 'المسافة', v: '${w.distance} م'),
+          if (s.lanSpeed != null) (k: 'منفذ LAN', v: s.lanSpeed!),
+        ],
+      ),
+      counters: counters,
+    );
   }
 
   // ── ميموزا: قدرة الاستقبال · معدّل الاستقبال · الحرارة ───────────
+  //
+  // ⚠️ بلا منافذ: SNMP هنا يُرجع مقاييس الوصلة لا عدّادات المنافذ،
+  // فلا فارق عدّادات يُحسب. المرور يظهر معدّلاً لحظيّاً في «إضافات».
 
-  static Future<List<Vital>> _mimosa(
+  static Future<ProbeResult> _mimosa(
       NetworkDevice d, Map<String, dynamic> creds) async {
     final community =
         (creds['community'] ?? creds['user'] ?? 'public').toString();
@@ -194,32 +451,52 @@ class DeviceVitals {
       port: d.apiPort ?? 161,
       community: community,
     );
-    return [
-      s.totalRxPowerDbm == null
-          ? Vital.empty.copyLabel('الاستقبال')
-          : Vital(
-              label: 'الاستقبال',
-              value: s.totalRxPowerDbm!.toStringAsFixed(0),
-              unit: 'dBm',
-              tone: Grade.rxPower(s.totalRxPowerDbm),
-            ),
-      s.phyRxRateMbps == null
-          ? Vital.empty.copyLabel('معدّل RX')
-          : Vital(
-              label: 'معدّل RX',
-              value: '${s.phyRxRateMbps}',
-              unit: 'M',
-              tone: Grade.speedMbps(s.phyRxRateMbps),
-            ),
-      s.temperatureC == null
-          ? Vital.empty.copyLabel('الحرارة')
-          : Vital(
-              label: 'الحرارة',
-              value: s.temperatureC!.toStringAsFixed(0),
-              unit: '°',
-              tone: Grade.temperature(s.temperatureC),
-            ),
-    ];
+    return ProbeResult(
+      vitals: [
+        s.totalRxPowerDbm == null
+            ? Vital.empty.copyLabel('الاستقبال')
+            : Vital(
+                label: 'الاستقبال',
+                value: s.totalRxPowerDbm!.toStringAsFixed(0),
+                unit: 'dBm',
+                tone: Grade.rxPower(s.totalRxPowerDbm),
+              ),
+        s.phyRxRateMbps == null
+            ? Vital.empty.copyLabel('معدّل RX')
+            : Vital(
+                label: 'معدّل RX',
+                value: '${s.phyRxRateMbps}',
+                unit: 'M',
+                tone: Grade.speedMbps(s.phyRxRateMbps),
+              ),
+        s.temperatureC == null
+            ? Vital.empty.copyLabel('الحرارة')
+            : Vital(
+                label: 'الحرارة',
+                value: s.temperatureC!.toStringAsFixed(0),
+                unit: '°',
+                tone: Grade.temperature(s.temperatureC),
+              ),
+      ],
+      detail: DeviceDetail(
+        uptime: fmtUptime(s.sysUptimeSec),
+        firmware: s.firmwareVersion,
+        model: s.deviceName,
+        peersLabel: 'المحطّات',
+        extras: [
+          if (s.phyTxRateMbps != null)
+            (k: 'معدّل TX', v: '${s.phyTxRateMbps} Mbps'),
+          if (s.totalTxPowerDbm != null)
+            (k: 'قدرة الإرسال', v: '${s.totalTxPowerDbm!.toStringAsFixed(0)} dBm'),
+          if (s.perRxRatePct != null)
+            (k: 'أخطاء RX', v: '${s.perRxRatePct!.toStringAsFixed(1)}%'),
+          if (s.perTxRatePct != null)
+            (k: 'أخطاء TX', v: '${s.perTxRatePct!.toStringAsFixed(1)}%'),
+          if (s.serialNumber != null) (k: 'التسلسل', v: s.serialNumber!),
+        ],
+      ),
+      counters: const {},
+    );
   }
 }
 
@@ -235,15 +512,29 @@ extension on Vital {
 class VitalsStore {
   final Map<int, ValueNotifier<VitalsState>> _byId = {};
 
+  /// آخر عيّنة عدّادات لكلّ جهاز — أساس حساب معدّل المرور.
+  ///
+  /// تعيش هنا لا في البطاقة: البطاقة تُهدم مع التمرير، ولو ماتت العيّنة
+  /// معها لما ظهر معدّل مرورٍ أبداً — كلّ عودةٍ تبدأ من «لا سابقة».
+  final Map<int, CounterSample> _samples = {};
+
   ValueNotifier<VitalsState> of(int deviceId) =>
       _byId.putIfAbsent(deviceId, () => ValueNotifier(VitalsState.idle));
 
   void set(int deviceId, VitalsState s) => of(deviceId).value = s;
+
+  CounterSample? sampleOf(int deviceId) => _samples[deviceId];
+
+  void saveSample(int deviceId, Map<String, ({int rx, int tx})> counters) {
+    if (counters.isEmpty) return;
+    _samples[deviceId] = CounterSample(counters, DateTime.now());
+  }
 
   void dispose() {
     for (final n in _byId.values) {
       n.dispose();
     }
     _byId.clear();
+    _samples.clear();
   }
 }
