@@ -25,8 +25,22 @@ class MimosaApi {
   /// Enterprise root — `.1.3.6.1.4.1.43356`
   static const String _enterprise = '1.3.6.1.4.1.43356';
 
-  /// BFIVE (B5, B5c, B11, B24 PtP) — `.enterprise.2.1`
-  static const String _bfive = '$_enterprise.2.1';
+  /// شجرة بيانات الجهاز — `.enterprise.2.1.2` (mimosaBFive).
+  ///
+  /// 🐛 عطلٌ صامت منذ بناء دعم ميموزا، كُشف ٢٠٢٦-٠٩-٠٢:
+  ///
+  /// كانت هنا `.2.1` بمستوىً ناقص، فكلّ استعلام يقع على
+  /// `43356.2.1.<مجموعة>` بدل `43356.2.1.2.<مجموعة>`. والأسوأ أنّ
+  /// `43356.2.1.1` **فرع الفخّاخ** (mimosaTrapMessage · mimosaOldSpeed
+  /// · mimosaNewSpeed) لا بيانات الجهاز — فكنّا نسأل عن إشعاراتٍ
+  /// تُرسَل، لا عن قياساتٍ تُقرأ.
+  ///
+  /// والجهاز يردّ `noSuchObject` على الجميع، وكان العميل يترجمه صفراً
+  /// (راجع `Varbind.isAbsent`) — فبدت اللوحة مليئةً بأصفارٍ صادقة.
+  ///
+  /// المصدر: MIMOSA-NETWORKS-BFIVE-MIB — وطُوبق على مسح جهاز C5c حيّ
+  /// (najaf2262) قُورنت قيمُه بلوحته الشبكيّة واحدةً واحدة.
+  static const String _bfive = '$_enterprise.2.1.2';
 
   /// PTMP (A5, A5c, A6, C5, C5c, C5x — Sector APs) — `.enterprise.2.2`.
   /// جدول العملاء المتصلين بالسكتور. LibreNMS MIB reference:
@@ -98,6 +112,9 @@ class MimosaApi {
   static const String _oidGpsSats = '$_bfive.2.7.0';
 
   //   mimosaTdmaInfo.1 = wirelessMode, .3 = tdmaMode
+  //   mimosaWirelessInfo.1 = SSID
+  static const String _oidSsid = '$_bfive.3.1.0';
+
   static const String _oidWirelessMode = '$_bfive.4.1.0';
   static const String _oidTdmaMode = '$_bfive.4.3.0';
 
@@ -116,15 +133,33 @@ class MimosaApi {
   static const String _oidPerTxRate = '$_bfive.7.3.0';
   static const String _oidPerRxRate = '$_bfive.7.4.0';
 
-  // — Mimosa chain table (per-chain signal) —
-  //   mimosaRfInfo.3.1.2.<chain> = mimosaChain (int)
-  //   mimosaRfInfo.3.1.3.<chain> = mimosaTxPower
-  //   mimosaRfInfo.3.1.4.<chain> = mimosaRxPower
-  //   mimosaRfInfo.3.1.5.<chain> = mimosaRxNoise
-  //   mimosaRfInfo.3.1.6.<chain> = mimosaSNR
-  static const String _oidChainRxPower = '$_bfive.6.3.1.4'; // GETBULK
-  static const String _oidChainRxNoise = '$_bfive.6.3.1.5';
-  static const String _oidChainSnr = '$_bfive.6.3.1.6';
+  // — جدول السلاسل (mimosaChainTable) = mimosaRfInfo.1.1.<عمود>.<سلسلة> —
+  //
+  // 🐛 خطأ ثانٍ مستقلّ عن الجذر: كان الجدول `6.3.1` والأعمدة ٤ و٥ و٦.
+  // والحقيقة `6.1.1` والأعمدة ٣ و٤ و٥ — أي **الجدول خطأ والأعمدة
+  // منزاحةٌ بواحد**. فحتّى لو صحّ الجذر لقرأنا الضجيج مكان الاستقبال،
+  // وSNR مكان الضجيج، والتردّد مكان SNR.
+  //
+  //   عمود ٢ = قدرة الإرسال (dBm)      [مسح C5c: ٢١ لكلّ سلسلة]
+  //   عمود ٣ = قدرة الاستقبال (dBm)    [−٤٥ · واللوحة تقول −٤٣٫١ مجموعاً]
+  //   عمود ٤ = أرضيّة الضجيج (dBm)     [−٧٤ · واللوحة −٧٤٫٤]
+  //   عمود ٥ = SNR (dB)                [٢٩ · واللوحة ٢٨]
+  //   عمود ٦ = التردّد المركزيّ (MHz)   [٦٢٧٥ · واللوحة ٦٢٧٥]
+  static const String _oidChainTxPower = '$_bfive.6.1.1.2';
+  static const String _oidChainRxPower = '$_bfive.6.1.1.3'; // GETBULK
+  static const String _oidChainRxNoise = '$_bfive.6.1.1.4';
+  static const String _oidChainSnr = '$_bfive.6.1.1.5';
+  static const String _oidChainFreq = '$_bfive.6.1.1.6';
+
+  // — جدول التدفّقات (mimosaStreamTable) = mimosaRfInfo.2.1.<عمود> —
+  //   عمود ٢ = معدّل PHY للإرسال   [٣٢٥ لكلّ تدفّق · واللوحة ٦٥٠ مجموعاً]
+  //   عمود ٥ = معدّل PHY للاستقبال [٣٢٥ · واللوحة ٦٥٠]
+  static const String _oidStreamTxPhy = '$_bfive.6.2.1.2';
+  static const String _oidStreamRxPhy = '$_bfive.6.2.1.5';
+
+  // — جدول القناة (mimosaChannelTable) = mimosaRfInfo.3.1.<عمود> —
+  //   عمود ٣ = عرض القناة (MHz) [٨٠ · واللوحة ٨٠]
+  static const String _oidChannelWidth = '$_bfive.6.3.1.3';
 
   /// جلب صورة كاملة عن حالة الجهاز عبر SNMP GET متعدّد + GETBULK للـchain table.
   ///
@@ -164,6 +199,7 @@ class MimosaApi {
     ];
     // ═══ Tier 2 (~500ms إضافيّة): RF details ═══
     final scalarBatch2 = <String>[
+      _oidSsid,
       _oidWirelessMode,
       _oidTdmaMode,
       _oidAntennaGain,
@@ -200,28 +236,60 @@ class MimosaApi {
           'SNMP مفعّل من web UI للجهاز (Preferences → Management → SNMP)');
     }
 
+    // ⚠️ قيم الجدول تُقرأ **بلا قسمة**.
+    //
+    // خطأ رابع كُشف ٢٠٢٦-٠٩-٠٢: كان الجدول يمرّ على `_asDbmScaled`
+    // فيُقسم على عشرة. لكنّ المقياسة هي **المجاميع وحدها**
+    // (‎6.5.0=240 → ٢٤ dBm · ‎6.6.0=−425 → −٤٢٫٥)، أمّا الجدول فيعطي
+    // القيمة كما هي (−٤٥ · −٧٤ · ٢٩ — طابقتها لوحة الجهاز). فالقسمة
+    // كانت ستُظهر إشارةً بـ‎−٤٫٥ dBm.
     // Chain table via walk (2-4 chains عادة) — Tier 3 (اختياري)
     final chains = <MimosaChain>[];
+    int? txPhyTotal;
+    int? rxPhyTotal;
+    int? channelWidth;
     try {
+      final txPowers = await snmp.walk(_oidChainTxPower, chunkSize: 8);
       final rxPowers = await snmp.walk(_oidChainRxPower, chunkSize: 8);
       final rxNoises = await snmp.walk(_oidChainRxNoise, chunkSize: 8);
       final snrs = await snmp.walk(_oidChainSnr, chunkSize: 8);
+      final freqs = await snmp.walk(_oidChainFreq, chunkSize: 8);
+      // معدّلات PHY من **جدول التدفّقات** لا من `mimosaPerfInfo`.
+      //
+      // الـMIB يسمّي ‎7.1/7.2 «PhyTxRate/PhyRxRate» بوحدة kbps، لكنّ
+      // جهاز C5c حيّاً يعيد فيهما ١٤٦٧٢٨٣ و٣٥٩٣١٧١ — أي ١٫٥ و٣٫٦
+      // غيغابت، وسعة الجهاز ٦٥٠ ميغا. فهما عدّادان تراكميّان على هذا
+      // الإصدار لا معدّلان.
+      //
+      // وجدول التدفّقات يعطي ٣٢٥ لكلّ تدفّق × ٢ = ٦٥٠ — وهو **بالضبط**
+      // ما تعرضه لوحة الجهاز (PHY Tx/Rx 650/650). فالمجموع هو الصادق.
+      txPhyTotal = _sumStream(await snmp.walk(_oidStreamTxPhy, chunkSize: 8));
+      rxPhyTotal = _sumStream(await snmp.walk(_oidStreamRxPhy, chunkSize: 8));
+      final widths = await snmp.walk(_oidChannelWidth, chunkSize: 4);
+      if (widths.isNotEmpty && !widths.first.isAbsent) {
+        channelWidth = widths.first.asInt;
+      }
 
+      final indexTxPower = _byIndex(txPowers, _oidChainTxPower);
       final indexRxPower = _byIndex(rxPowers, _oidChainRxPower);
       final indexRxNoise = _byIndex(rxNoises, _oidChainRxNoise);
       final indexSnr = _byIndex(snrs, _oidChainSnr);
+      final indexFreq = _byIndex(freqs, _oidChainFreq);
 
       final allIndices = <int>{
+        ...indexTxPower.keys,
         ...indexRxPower.keys,
         ...indexRxNoise.keys,
-        ...indexSnr.keys
+        ...indexSnr.keys,
       };
       for (final i in allIndices.toList()..sort()) {
         chains.add(MimosaChain(
           index: i,
-          rxPowerDbm: _asDbmScaled(indexRxPower[i]),
-          rxNoiseDbm: _asDbmScaled(indexRxNoise[i]),
-          snrDb: _asDbmScaled(indexSnr[i]),
+          txPowerDbm: _asPlain(indexTxPower[i]),
+          rxPowerDbm: _asPlain(indexRxPower[i]),
+          rxNoiseDbm: _asPlain(indexRxNoise[i]),
+          snrDb: _asPlain(indexSnr[i]),
+          centerFreqMhz: _asPlain(indexFreq[i])?.round(),
         ));
       }
     } catch (e) {
@@ -263,7 +331,13 @@ class MimosaApi {
       debugPrint('════════════════════════════════');
     }
 
-    return MimosaStats.fromVarbinds(results, chains: chains);
+    return MimosaStats.fromVarbinds(
+      results,
+      chains: chains,
+      txPhyMbps: txPhyTotal,
+      rxPhyMbps: rxPhyTotal,
+      channelWidthMhz: channelWidth,
+    );
   }
 
   /// index → varbind (على أساس آخر ID في الـOID كـsubIndex)
@@ -278,11 +352,25 @@ class MimosaApi {
   }
 
   /// Mimosa returns dBm × 10 in most fields (e.g. 427 = 42.7 dBm)
-  static double? _asDbmScaled(Varbind? vb) {
-    if (vb == null) return null;
-    final v = vb.asInt;
-    return v == 0 ? null : v / 10.0;
+  /// مجموع عمودٍ في جدول التدفّقات — الوصلة تحمل تدفّقين فأكثر،
+  /// والمعدّل الكلّيّ مجموعُها لا واحدٌ منها.
+  static int? _sumStream(List<Varbind> vbs) {
+    var total = 0;
+    var seen = false;
+    for (final vb in vbs) {
+      if (vb.isAbsent) continue;
+      total += vb.asInt;
+      seen = true;
+    }
+    return seen ? total : null;
   }
+
+  /// قيمة جدولٍ كما هي — بلا القسمة على عشرة التي تحتاجها المجاميع.
+  static double? _asPlain(Varbind? vb) {
+    if (vb == null || vb.isAbsent) return null;
+    return vb.asInt.toDouble();
+  }
+
 
   /// جلب قائمة العملاء (Stations) المتصلة بسكتور PtMP.
   ///
@@ -457,6 +545,12 @@ class MimosaStats {
   // Performance
   final int? phyTxRateMbps;
   final int? phyRxRateMbps;
+
+  /// عرض القناة MHz — من `mimosaChannelTable`.
+  final int? channelWidthMhz;
+
+  /// اسم الوصلة اللاسلكيّة — كان يُجلَب ولا يُقرأ.
+  final String? ssid;
   final double? perTxRatePct; // packet error rate %
   final double? perRxRatePct;
 
@@ -482,6 +576,8 @@ class MimosaStats {
     this.targetRxPowerDbm,
     this.phyTxRateMbps,
     this.phyRxRateMbps,
+    this.channelWidthMhz,
+    this.ssid,
     this.perTxRatePct,
     this.perRxRatePct,
     this.chains = const [],
@@ -514,11 +610,16 @@ class MimosaStats {
   factory MimosaStats.fromVarbinds(
     Map<String, Varbind> m, {
     List<MimosaChain> chains = const [],
+    int? txPhyMbps,
+    int? rxPhyMbps,
+    int? channelWidthMhz,
   }) {
     Varbind? g(String oid) => m[oid];
     double? n10(String oid) {
       final vb = m[oid];
-      if (vb == null) return null;
+      // ⚠️ الغياب ≠ الصفر: `asInt` كان يعيد صفراً لوسم «غير موجود»،
+      // فيُخفى الفرق بين «الجهاز لا يدعمه» و«القيمة صفر».
+      if (vb == null || vb.isAbsent) return null;
       final v = vb.asInt;
       return v == 0 ? null : v / 10.0;
     }
@@ -564,8 +665,14 @@ class MimosaStats {
       totalTxPowerDbm: n10(MimosaApi._oidTotalTxPower),
       totalRxPowerDbm: n10(MimosaApi._oidTotalRxPower),
       targetRxPowerDbm: n10(MimosaApi._oidTargetRxPower),
-      phyTxRateMbps: n(MimosaApi._oidPhyTxRate),
-      phyRxRateMbps: n(MimosaApi._oidPhyRxRate),
+      // من جدول التدفّقات — راجع التعليق في `fetchStats`. ونسقط إلى
+      // `mimosaPerfInfo` فقط إن غاب الجدول كلّيّاً.
+      phyTxRateMbps: txPhyMbps ?? n(MimosaApi._oidPhyTxRate),
+      phyRxRateMbps: rxPhyMbps ?? n(MimosaApi._oidPhyRxRate),
+      channelWidthMhz: channelWidthMhz,
+      ssid: g(MimosaApi._oidSsid)?.isAbsent == false
+          ? g(MimosaApi._oidSsid)!.asString
+          : null,
       perTxRatePct: n10(MimosaApi._oidPerTxRate),
       perRxRatePct: n10(MimosaApi._oidPerRxRate),
       chains: chains,
@@ -575,15 +682,19 @@ class MimosaStats {
 
 class MimosaChain {
   final int index; // 1..N
+  final double? txPowerDbm;
   final double? rxPowerDbm;
   final double? rxNoiseDbm;
   final double? snrDb;
+  final int? centerFreqMhz;
 
   const MimosaChain({
     required this.index,
+    this.txPowerDbm,
     this.rxPowerDbm,
     this.rxNoiseDbm,
     this.snrDb,
+    this.centerFreqMhz,
   });
 }
 

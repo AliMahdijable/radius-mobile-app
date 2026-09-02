@@ -540,6 +540,9 @@ class DeviceVitals {
         model: s.deviceName,
         peersLabel: 'المحطّات',
         link: [
+          if (s.ssid?.isNotEmpty ?? false) (k: 'الوصلة', v: s.ssid!),
+          if (s.channelWidthMhz != null)
+            (k: 'عرض القناة', v: '${s.channelWidthMhz} MHz'),
           if (s.phyTxRateMbps != null)
             (k: 'معدّل TX', v: '${s.phyTxRateMbps} Mbps'),
           if (s.totalTxPowerDbm != null)
