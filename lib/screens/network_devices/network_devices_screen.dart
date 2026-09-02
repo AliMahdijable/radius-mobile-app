@@ -17,6 +17,7 @@ import '../../theme/spacing.dart';
 import '../../widgets/skeleton.dart';
 import 'bulk_scan_screen.dart';
 import 'device_alerts_screen.dart';
+import 'device_sort.dart';
 import 'devices_wall_screen.dart';
 import 'network_device_details_screen.dart';
 import 'network_device_form_sheet.dart';
@@ -79,6 +80,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// عدد الفشل المتتالي لكل جهاز — للـexponential backoff.
   /// جهاز يفشل باستمرار → نتجاهله في بعض الجولات لتوفير باتري وشبكة.
   final Map<int, int> _consecutiveFailures = {};
+  DeviceSortField _sortField = DeviceSortField.ip;
+  SortDir _sortDir = SortDir.asc;
+
   int _probeRoundCount = 0;
 
   Timer? _probeTimer;
@@ -465,6 +469,19 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
   /// شاشة Bulk scan — يرجع bool لو أُضيف أي جهاز.
   /// نمرّر IPs الحاليّة عشان الـscanner يميّز المكرّرات ("مضاف مسبقاً").
+  Future<void> _pickSort() async {
+    final r = await showDeviceSortSheet(
+      context,
+      field: _sortField,
+      dir: _sortDir,
+    );
+    if (r == null || !mounted) return;
+    setState(() {
+      _sortField = r.field;
+      _sortDir = r.dir;
+    });
+  }
+
   /// يفتح «نظرة عامّة». الشاشة تمسك [DeviceSweep] فتتوقّف جولتنا ما
   /// دامت مفتوحة، ثمّ نُحدّث عند العودة لأنّها مسحت نيابةً عنّا.
   Future<void> _openWall() async {
@@ -523,21 +540,11 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       }
       return true;
     }).toList();
-    // 2026-08-18: ترتيب بالـIP تصاعديّاً (من الأصغر). طلب المستخدم لكل شاشات الأجهزة.
-    result.sort((a, b) => _compareIps(a.ip, b.ip));
+    // 2026-08-18: كان ترتيباً ثابتاً بالـIP تصاعديّاً. صار قابلاً
+    // للاختيار (٢٠٢٦-٠٩-٠٢) بنفس وحدة «نظرة عامّة» — شاشتان تعرضان
+    // الأجهزة نفسها يجب ألّا ترتّباها بمنطقين.
+    result.sort((a, b) => compareDevices(a, b, _sortField, _sortDir));
     return result;
-  }
-
-  /// يقارن IPv4 كأربعة أرقام (بدل lex string). "10.0.0.5" < "10.0.0.20".
-  static int _compareIps(String a, String b) {
-    final pa = a.split('.').map(int.tryParse).toList();
-    final pb = b.split('.').map(int.tryParse).toList();
-    for (var i = 0; i < 4; i++) {
-      final va = (i < pa.length ? pa[i] : null) ?? 0;
-      final vb = (i < pb.length ? pb[i] : null) ?? 0;
-      if (va != vb) return va.compareTo(vb);
-    }
-    return 0;
   }
 
   int _countByType(String type) => _all.where((d) => d.type == type).length;
@@ -566,9 +573,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     // ⚡ مرّة واحدة للإطار (تدقيق أداء 2026-08-31).
     //
     // `_filtered` جالبٌ يُرشّح ثمّ **يفرز** القائمة كلّها، ومقارنُه
-    // `_compareIps` يشقّ العنوانين ويُجري أربع `int.tryParse` لكلّ
-    // طرف. وكان يُستدعى داخل `itemBuilder` — أي فرزةٌ كاملة لكلّ صفّ
-    // مرسوم، فقائمةٌ من 40 جهازاً تُفرَز 40 مرّة في الإطار الواحد.
+    // يشقّ العنوانين ويُجري أربع `int.tryParse` لكلّ طرف. وكان
+    // يُستدعى داخل `itemBuilder` — أي فرزةٌ كاملة لكلّ صفّ مرسوم،
+    // فقائمةٌ من 40 جهازاً تُفرَز 40 مرّة في الإطار الواحد.
     final devices = _filtered;
     // Selection mode → AppBar تعرض عدد المحدَّد + أزرار bulk actions
     // بدل الـtitle العادي. زرّ الـback (Android) يخرج من selection بدل الخروج من الشاشة.
@@ -638,6 +645,11 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
             icon: const Icon(LucideIcons.layoutGrid, size: 20),
             onPressed: _openWall,
             tooltip: 'نظرة عامّة',
+          ),
+          IconButton(
+            icon: Icon(_sortField.icon, size: 20),
+            onPressed: _pickSort,
+            tooltip: 'الترتيب · ${_sortField.label}',
           ),
           // Manage-tier tools — 2026-08-18: مخفيّة للـview-only.
           if (Perms.has('devices.manage')) ...[

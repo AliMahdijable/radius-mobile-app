@@ -1,7 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rad_mysvcs/screens/network_devices/devices_wall_screen.dart';
+import 'package:rad_mysvcs/models/network_device.dart';
+import 'package:rad_mysvcs/screens/network_devices/device_sort.dart';
 
 /// ترتيب «نظرة عامّة».
 void main() {
@@ -57,12 +58,65 @@ void main() {
 
   group('معايير الترتيب', () {
     test('ثلاثة، والحالة أوّلها', () {
-      expect(WallSort.values.length, 3);
-      expect(WallSort.values.first, WallSort.health,
-          reason: 'الافتراضيّ — تفتح الصفحة لتجد العطل لا لتتصفّح');
-      expect(WallSort.health.label, 'الحالة');
-      expect(WallSort.name.label, 'الاسم');
-      expect(WallSort.ip.label, 'العنوان');
+      expect(DeviceSortField.values.length, 3);
+      expect(DeviceSortField.values.first, DeviceSortField.health,
+          reason: 'الافتراضيّ — تفتح الشاشة لتجد العطل لا لتتصفّح');
+      expect(DeviceSortField.health.label, 'الحالة');
+      expect(DeviceSortField.name.label, 'الاسم');
+      expect(DeviceSortField.ip.label, 'العنوان');
+    });
+  });
+
+  group('الاتّجاه', () {
+    NetworkDevice d(String name, String ip, String status, {int? ms}) =>
+        NetworkDevice(
+          id: name.hashCode,
+          adminId: '2',
+          name: name,
+          type: 'link',
+          brand: 'ubnt',
+          ip: ip,
+          port: 80,
+          hasCredentials: false,
+          lastStatus: status,
+          lastResponseMs: ms,
+          createdAt: DateTime(2026),
+        );
+
+    final a = d('ألف', '10.0.0.2', 'online', ms: 5);
+    final b = d('باء', '10.0.0.10', 'offline');
+
+    test('تنازليّ يعكس تصاعديّ تماماً', () {
+      for (final f in DeviceSortField.values) {
+        final asc = compareDevices(a, b, f, SortDir.asc);
+        final desc = compareDevices(a, b, f, SortDir.desc);
+        expect(desc, -asc, reason: 'المعيار ${f.label}');
+      }
+    });
+
+    test('تصاعديّ في «الحالة» = غير المتّصل أوّلاً', () {
+      // الرتبة تصعد من صفر (ساقط) إلى اثنين (سليم).
+      expect(compareDevices(b, a, DeviceSortField.health, SortDir.asc),
+          lessThan(0),
+          reason: 'الساقط يجب أن يسبق');
+      expect(compareDevices(b, a, DeviceSortField.health, SortDir.desc),
+          greaterThan(0));
+    });
+
+    test('تصاعديّ في «العنوان» = الأصغر أوّلاً', () {
+      expect(compareDevices(a, b, DeviceSortField.ip, SortDir.asc),
+          lessThan(0), reason: '.2 قبل .10');
+    });
+
+    test('🚨 ترتيب مستقرّ — لا قفز بين الجولات', () {
+      // متساويان في المعيار: بلا فاصلٍ حاسم يتبدّل موضعاهما مع كلّ
+      // فرزة، فتقفز البطاقتان أمام العين كلّ عشرين ثانية.
+      final x = d('ألف', '10.0.0.5', 'online', ms: 7);
+      final y = d('باء', '10.0.0.5', 'online', ms: 7);
+      for (final f in DeviceSortField.values) {
+        expect(compareDevices(x, y, f, SortDir.asc), isNot(0),
+            reason: 'المعيار ${f.label} لا يفصل المتساويات');
+      }
     });
   });
 
@@ -78,13 +132,31 @@ void main() {
 
     test('المناطق تتبع المعيار نفسه', () {
       // بطاقاتٌ مرتّبةٌ أبجديّاً داخل مناطق مرتّبةٍ بالأعطال تبدو عشوائيّة.
-      expect(wall.contains('if (_sort == WallSort.health)'), isTrue);
+      expect(wall.contains('if (_sortField == DeviceSortField.health)'),
+          isTrue);
       expect(wall.contains("a.region!.name.compareTo(b.region!.name)"), isTrue);
     });
 
     test('«بلا منطقة» تبقى في الذيل', () {
       // مجموعةٌ باقية لا اسمٌ يُرتَّب أبجديّاً.
       expect(wall.contains('if (a.region == null) return 1;'), isTrue);
+    });
+
+    test('🚨 لا نسختين من منطق الترتيب', () {
+      // كانت القائمة تحمل `_compareIps` و«نظرة عامّة» تحمل `ipSortKey`
+      // — دالّتان لمسألةٍ واحدة تنحرفان حتماً، فيرى المستخدم ترتيبين
+      // مختلفين لنفس الأجهزة في شاشتين متجاورتين.
+      expect(devices.contains('_compareIps'), isFalse);
+      expect(wall.contains('int ipSortKey('), isFalse);
+      for (final f in [devices, wall]) {
+        expect(f.contains('compareDevices('), isTrue);
+      }
+    });
+
+    test('القسم العامّ يرتّب باختيار المستخدم', () {
+      expect(devices.contains('showDeviceSortSheet('), isTrue);
+      expect(devices.contains('compareDevices(a, b, _sortField, _sortDir)'),
+          isTrue);
     });
 
     test('التسمية «نظرة عامّة» في الشاشة ومدخلها', () {

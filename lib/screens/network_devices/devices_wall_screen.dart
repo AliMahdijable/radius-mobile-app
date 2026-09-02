@@ -6,7 +6,6 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/network_devices_api.dart';
 import '../../core/util/bidi.dart';
-import '../../core/widgets/design_sheet.dart';
 import '../../models/device_region.dart';
 import '../../models/network_device.dart';
 import '../../services/device_alerts_service.dart';
@@ -15,6 +14,7 @@ import '../../services/deep_probe_scheduler.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'device_sort.dart';
 import 'device_vitals.dart';
 import 'widgets/_grade.dart';
 import 'network_device_details_screen.dart';
@@ -31,43 +31,6 @@ import 'network_device_details_screen.dart';
 /// عميقة واحدة (معالج/ذاكرة/إشارة) — تلك تأتي في المرحلة الثانية
 /// مربوطةً بنافذة الرؤية. والصفحة مفيدة قبلها: أن ترى المعطّل مجموعاً
 /// حسب البرج هو جوهر ما تفتح الصفحة لأجله.
-/// معيار ترتيب البطاقات داخل كلّ منطقة.
-enum WallSort {
-  /// غير المتّصل أوّلاً ثمّ الأبطأ — الافتراضيّ، لأنّك تفتح الصفحة
-  /// لتجد العطل لا لتتصفّح.
-  health('الحالة', LucideIcons.activity),
-
-  /// أبجديّاً بالاسم — حين تبحث عن جهازٍ بعينه تعرف اسمه.
-  name('الاسم', LucideIcons.arrowDownAZ),
-
-  /// بالعنوان — يجمع أجهزة الشبكة الفرعيّة الواحدة متجاورةً.
-  ip('العنوان', LucideIcons.network);
-
-  const WallSort(this.label, this.icon);
-  final String label;
-  final IconData icon;
-}
-
-/// مفتاح ترتيب العنوان — **رقميّ لا نصّيّ**.
-///
-/// ⚠️ المقارنة النصّيّة تضع `10.70.241.10` قبل `10.70.241.9` لأنّ '1'
-/// يسبق '9' حرفيّاً. والنتيجة قائمةٌ تبدو مرتّبةً وليست كذلك، وهي أسوأ
-/// من قائمةٍ غير مرتّبة لأنّ العين تثق بها.
-///
-/// نُعبّئ الخانات الأربع في عددٍ واحد فتصير المقارنة عدديّةً بحتة.
-/// وما ليس IPv4 صالحاً يُدفع إلى الآخر بدل أن يرمي.
-int ipSortKey(String ip) {
-  final parts = ip.trim().split('.');
-  if (parts.length != 4) return 1 << 33; // ليس IPv4 — إلى الذيل
-  var key = 0;
-  for (final p in parts) {
-    final n = int.tryParse(p);
-    if (n == null || n < 0 || n > 255) return 1 << 33;
-    key = (key << 8) | n;
-  }
-  return key;
-}
-
 class DevicesWallScreen extends StatefulWidget {
   const DevicesWallScreen({super.key});
 
@@ -104,7 +67,8 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
   Timer? _timer;
   final Set<int> _expanded = {};
 
-  WallSort _sort = WallSort.health;
+  DeviceSortField _sortField = DeviceSortField.health;
+  SortDir _sortDir = SortDir.asc;
 
   /// وسيط زمن الاستجابة في آخر جولة — أساس الحكم على «البطيء».
   int? _roundMedianMs;
@@ -146,29 +110,17 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
   }
 
   Future<void> _pickSort() async {
-    final picked = await showModalBottomSheet<WallSort>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      barrierColor: AppColors.scrim,
-      isScrollControlled: true,
-      builder: (ctx) => DesignSheet(
-        header: SheetHeaderBar(
-          icon: LucideIcons.arrowDownUp,
-          title: 'ترتيب الأجهزة',
-          subtitle: 'داخل كلّ منطقة',
-          onClose: () => Navigator.pop(ctx),
-        ),
-        body: SheetChoiceTiles(
-          labels: [for (final m in WallSort.values) m.label],
-          icons: [for (final m in WallSort.values) m.icon],
-          selectedIndex: WallSort.values.indexOf(_sort),
-          onSelect: (i) => Navigator.pop(ctx, WallSort.values[i]),
-        ),
-      ),
+    final r = await showDeviceSortSheet(
+      context,
+      field: _sortField,
+      dir: _sortDir,
+      subtitle: 'داخل كلّ منطقة',
     );
-    if (picked != null && mounted && picked != _sort) {
-      setState(() => _sort = picked);
-    }
+    if (r == null || !mounted) return;
+    setState(() {
+      _sortField = r.field;
+      _sortDir = r.dir;
+    });
   }
 
   void _start() {
@@ -302,30 +254,8 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
 
   // ── ترتيب وتجميع ───────────────────────────────────────────────
 
-  /// غير المتّصل أوّلاً، والمجهول قبله السليم: لم يُفحص بعدُ فقد يكون ساقطاً.
-  /// تفتح هذه الصفحة لتجد العطل، لا لتتصفّح.
-  static int _rank(NetworkDevice d) => switch (d.lastStatus) {
-        'offline' => 0,
-        'unknown' => 1,
-        _ => 2,
-      };
-
-  int _compare(NetworkDevice a, NetworkDevice b) {
-    switch (_sort) {
-      case WallSort.name:
-        return a.name.compareTo(b.name);
-      case WallSort.ip:
-        final k = ipSortKey(a.ip).compareTo(ipSortKey(b.ip));
-        // عنوانان متطابقان (جهازان على نفس الـIP بمنفذين) — الاسم يفصل.
-        return k != 0 ? k : a.name.compareTo(b.name);
-      case WallSort.health:
-        final r = _rank(a).compareTo(_rank(b));
-        if (r != 0) return r;
-        // ثمّ الأبطأ أوّلاً — البطء يسبق السقوط.
-        final ms = (b.lastResponseMs ?? 0).compareTo(a.lastResponseMs ?? 0);
-        return ms != 0 ? ms : a.name.compareTo(b.name);
-    }
-  }
+  int _compare(NetworkDevice a, NetworkDevice b) =>
+      compareDevices(a, b, _sortField, _sortDir);
 
   List<({DeviceRegion? region, List<NetworkDevice> devices})> get _groups {
     final byRegion = <int?, List<NetworkDevice>>{};
@@ -353,7 +283,7 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
     }
     // ⚠️ ترتيب المناطق يتبع المعيار نفسه، وإلّا تناقض المستويان:
     // بطاقاتٌ مرتّبةٌ أبجديّاً داخل مناطق مرتّبةٍ بالأعطال تبدو عشوائيّة.
-    if (_sort == WallSort.health) {
+    if (_sortField == DeviceSortField.health) {
       // الأكثر انقطاعاً أوّلاً — تُبصر البرج الساقط قبل أن تُمرّر.
       out.sort((a, b) {
         final ao = a.devices.where((d) => d.lastStatus == 'offline').length;
@@ -398,8 +328,8 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
         ),
         actions: [
           IconButton(
-            icon: Icon(_sort.icon, size: 20),
-            tooltip: 'الترتيب · ${_sort.label}',
+            icon: Icon(_sortField.icon, size: 20),
+            tooltip: 'الترتيب · ${_sortField.label}',
             onPressed: _pickSort,
           ),
           if (_sweeping)

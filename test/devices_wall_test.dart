@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
+import 'package:rad_mysvcs/screens/network_devices/device_sort.dart';
 import 'package:rad_mysvcs/services/device_sweep_coordinator.dart';
 
 /// جدار الأجهزة — حرّاس المنطق الذي لا يُرى في لقطة شاشة.
@@ -74,11 +75,13 @@ void main() {
           reason: 'لا نغمة ثالثة — البطيء يبدو سليماً حتّى يسقط');
     });
 
-    test('المعطّل أوّلاً ثمّ المجهول ثمّ السليم', () {
-      final ranks = RegExp(r"'offline' => 0,\s*'unknown' => 1,\s*_ => 2")
-          .hasMatch(src);
-      expect(ranks, isTrue,
-          reason: 'المجهول لم يُفحص بعد — يسبق السليم لا يتبعه');
+    test('غير المتّصل أوّلاً ثمّ المجهول ثمّ السليم', () {
+      // ⚠️ الرتبة انتقلت إلى `device_sort.dart` (٢٠٢٦-٠٩-٠٢) لتشترك
+      // فيها الشاشتان — الحارس يتبعها إلى موضعها الجديد.
+      expect(healthRank(dev(1, 'offline')), 0);
+      expect(healthRank(dev(2, 'unknown')), 1,
+          reason: 'لم يُفحص بعد — يسبق السليم لا يتبعه');
+      expect(healthRank(dev(3, 'online')), 2);
     });
   });
 
