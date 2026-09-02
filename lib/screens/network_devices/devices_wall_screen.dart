@@ -183,10 +183,7 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
         final d = queue.removeFirst();
         attempted++;
         try {
-          final r = await NetworkDevicesApi.localIcmpPing(
-            ip: d.ip,
-            tcpPort: d.apiPort ?? d.port,
-          );
+          final r = await NetworkDevicesApi.probeDevice(d);
           if (r.status == 'online') reachable++;
           final was = _lastKnown[d.id] ?? 'unknown';
           if (was != r.status && was != 'unknown') {
@@ -385,7 +382,8 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
       onRefresh: _load,
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(Sp.md, Sp.sm, Sp.md, Sp.mega),
+        padding: EdgeInsets.fromLTRB(
+            Sp.md, Sp.sm, Sp.md, Inset.route(context)),
         itemCount: rows.length,
         itemBuilder: (context, i) => switch (rows[i]) {
           _BannerRow() => const _OffNetworkBanner(),

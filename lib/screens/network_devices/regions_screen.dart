@@ -161,7 +161,8 @@ class _RegionsScreenState extends State<RegionsScreen> {
         ),
         body: _loading
             ? ListView.separated(
-                padding: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, 90),
+                padding: EdgeInsets.fromLTRB(
+                    Sp.md, Sp.md, Sp.md, Inset.route(context)),
                 itemCount: 5,
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (_, __) => const SkeletonRegionCard(),

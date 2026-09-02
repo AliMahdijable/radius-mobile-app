@@ -360,7 +360,8 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
             child: _found.isEmpty
                 ? _empty()
                 : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(Sp.md, 8, Sp.md, 90),
+                    padding: EdgeInsets.fromLTRB(
+                        Sp.md, 8, Sp.md, Inset.route(context)),
                     itemCount: _found.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 6),
                     itemBuilder: (_, i) => _resultTile(_found[i]),

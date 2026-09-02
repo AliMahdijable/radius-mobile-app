@@ -327,12 +327,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
         while (queue.isNotEmpty) {
           final d = queue.removeFirst();
           try {
-            // TCP probe (أدقّ من ICMP على iOS) — نستعمل apiPort لو موجود
-            // (Mikrotik=8728، UBNT=22، Mimosa=161)، وإلا الـport الأساسي.
-            final r = await NetworkDevicesApi.localIcmpPing(
-              ip: d.ip,
-              tcpPort: d.apiPort ?? d.port,
-            );
+            // الطريقة تتبع البروتوكول: TCP لميكروتك وUBNT، وSNMP على
+            // UDP لمنفذ ١٦١، وICMP لمن لا منفذ له. راجع [probeDevice].
+            final r = await NetworkDevicesApi.probeDevice(d);
             final oldStatus = _lastKnownStatus[d.id] ?? 'unknown';
             final newStatus = r.status;
 
@@ -828,7 +825,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                     child: _EmptyDevices(),
                   )
                 : SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(Sp.md, 0, Sp.md, 90),
+                    padding: EdgeInsets.fromLTRB(
+                        Sp.md, 0, Sp.md, Inset.tabBar(context)),
                     sliver: SliverList.separated(
                       itemCount: devices.length,
                       itemBuilder: (_, i) => _deviceCard(devices[i]),

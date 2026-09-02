@@ -2,6 +2,8 @@ import 'dart:io' show Socket;
 
 import 'package:dart_ping/dart_ping.dart';
 import 'package:dio/dio.dart';
+
+import 'snmp_client.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/device_region.dart';
@@ -211,13 +213,95 @@ class NetworkDevicesApi {
     int count = 3,
     Duration timeout = const Duration(seconds: 2),
     int? tcpPort, // نُفضّله على ICMP
+    /// يُستعمل حين يكون [tcpPort] هو ١٦١. الافتراضيّ يكفي معظم الأجهزة،
+    /// ومن غيّرها يُمرّر قيمته المخزَّنة.
+    String snmpCommunity = 'public',
   }) async {
-    // ── 1. TCP probe (الأولوية) ──
+    // ── 1. SNMP probe (منفذ ١٦١) ──
+    //
+    // 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «كلّ الميموسات ما تشتغل». والسبب أنّ **١٦١
+    // منفذ UDP**، وفحص TCP عليه يُردّ بـ`Connection refused` دائماً —
+    // لا لأنّ الجهاز ساقط بل لأنّه لا يستمع بـTCP أصلاً.
+    //
+    // فكان ٣٠ جهازاً من ٣١ يُعرَض «غير متّصل» أبداً، وهي حالةٌ قائمة
+    // منذ إضافة دعم SNMP لا عطلٌ جديد.
+    //
+    // والعلاج ليس ICMP: استعلام SNMP حقيقيّ يُثبت أنّ **الخدمة** حيّة
+    // وأنّ الـcommunity صحيحة، لا أنّ العنوان يردّ فحسب.
+    if (tcpPort == 161) {
+      return _snmpProbe(
+          ip: ip, port: tcpPort!, community: snmpCommunity, timeout: timeout);
+    }
+    // ── 2. TCP probe ──
     if (tcpPort != null && tcpPort > 0) {
       return _tcpProbe(ip: ip, port: tcpPort, timeout: timeout);
     }
-    // ── 2. ICMP fallback (لو ما فيه port) ──
+    // ── 3. ICMP fallback (لو ما فيه port) ──
     return _icmpProbe(ip: ip, count: count, timeout: timeout);
+  }
+
+  /// يفحص جهازاً بالطريقة المناسبة **لبروتوكوله**.
+  ///
+  /// ⚠️ نقطة واحدة لاختيار طريقة الفحص. كانت الشاشتان تكتبان
+  /// `tcpPort: d.apiPort ?? d.port` كلٌّ على حدة — فحين اتّضح أنّ ١٦١
+  /// منفذ UDP لا TCP كان لا بدّ من إصلاح موضعين، وهو بالضبط ما يجعل
+  /// أحدهما يُنسى.
+  ///
+  /// وأجهزة SNMP تحتاج الـcommunity المخزَّنة: `public` تكفي معظمها،
+  /// لكنّ من غيّرها يبدو ساقطاً أبداً. والجلب مخزَّن ٦٠ ثانية فلا يكلّف
+  /// طلباً في كلّ جولة.
+  static Future<({String status, int? responseMs, double? packetLoss})>
+      probeDevice(NetworkDevice d) async {
+    final port = d.apiPort ?? d.port;
+    var community = 'public';
+    if (port == 161 && d.hasCredentials) {
+      try {
+        final creds = await getCredentials(d.id);
+        final c = (creds['community'] ?? '').toString();
+        if (c.isNotEmpty) community = c;
+      } catch (_) {
+        // فشل الجلب لا يمنع الفحص — نجرّب الافتراضيّة.
+      }
+    }
+    return localIcmpPing(ip: d.ip, tcpPort: port, snmpCommunity: community);
+  }
+
+  /// `sysUpTime.0` — أخفّ استعلام قياسيّ، تدعمه كلّ أجهزة SNMP.
+  static const _oidSysUpTime = '1.3.6.1.2.1.1.3.0';
+
+  /// فحص SNMP على UDP — نجاحه يعني أنّ الخدمة تردّ والـcommunity صحيحة.
+  ///
+  /// ⚠️ لا نفرّق بين «الجهاز ساقط» و«الـcommunity خطأ»: كلاهما صمت على
+  /// UDP. والنتيجة `offline` في الحالتين — وهو ما يراه المستخدم فعلاً.
+  static Future<({String status, int? responseMs, double? packetLoss})>
+      _snmpProbe({
+    required String ip,
+    required int port,
+    required String community,
+    required Duration timeout,
+  }) async {
+    final sw = Stopwatch()..start();
+    try {
+      final snmp = SnmpV2c(
+        host: ip,
+        port: port,
+        community: community,
+        timeout: timeout,
+      );
+      final r = await snmp.get([_oidSysUpTime]);
+      sw.stop();
+      if (r.isEmpty) {
+        return (status: 'offline', responseMs: null, packetLoss: 100.0);
+      }
+      return (
+        status: 'online',
+        responseMs: sw.elapsedMilliseconds,
+        packetLoss: 0.0
+      );
+    } catch (e) {
+      if (kDebugMode) print('⚠️ snmpProbe $ip:$port failed: $e');
+      return (status: 'offline', responseMs: null, packetLoss: 100.0);
+    }
   }
 
   /// TCP connect probe — أدقّ probe للأجهزة على LAN.
