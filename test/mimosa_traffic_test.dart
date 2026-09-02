@@ -82,11 +82,57 @@ void main() {
     });
   });
 
-  group('العرض', () {
+  group('العرض يطابق ميكروتك', () {
+    late String mt;
+    setUpAll(() {
+      mt = File('lib/screens/network_devices/widgets/mikrotik_live_panel.dart')
+          .readAsStringSync();
+    });
+
+    test('🚨 التسمية من مفردات اللوحات لا مخترَعة', () {
+      // بلاغ ٢٠٢٦-٠٩-٠٢: «التزم بمسمّيات بقيّة الأجهزة، شنو المرور
+      // الفعليّ؟». شاشتان تعرضان الشيء نفسه يجب أن تُسمّياه سواءً.
+      expect(panel.contains("Text('سير الترفك'"), isTrue);
+      expect(mt.contains('سير الترفك'), isTrue,
+          reason: 'المفردة مأخوذة من ميكروتك لا مخترَعة');
+      // ⚠️ نفحص النصوص المعروضة وحدها — سطراً سطراً مع تخطّي
+      // التعليقات، فالتعليق التاريخيّ يشرح العطل ولا يراه المستخدم.
+      final ui = [
+        for (final line in panel.split('\n'))
+          if (!line.trimLeft().startsWith('//') &&
+              line.contains("'المرور الفعليّ'"))
+            line.trim()
+      ];
+      expect(ui, isEmpty, reason: 'بقي نصّ واجهة بالتسمية المخترَعة: $ui');
+    });
+
+    test('🚨 محور مختصر — «48M» لا «47.9 Mbps»', () {
+      // الثاني أعرض من الحيّز المحجوز فيلتفّ سطرين ويركب الرسم.
+      expect(panel.contains('_formatBpsShort(v.toInt())'), isTrue);
+      expect(panel.contains('reservedSize: 44'), isTrue,
+          reason: 'نفس حيّز ميكروتك');
+      expect(panel.contains('_fmtUnit('), isFalse,
+          reason: 'الوحدة داخل المحور هي ما لفّ السطر');
+    });
+
+    test('شارات في الرأس لا بطاقتان ضخمتان', () {
+      expect(panel.contains('_legendChip('), isTrue);
+      expect(mt.contains('_legendChip('), isTrue);
+    });
+
+    test('تنسيق الأرقام واحدٌ في اللوحتين', () {
+      for (final fn in ['String _formatBps(int bps)',
+                        'String _formatBpsShort(int bps)']) {
+        expect(panel.contains(fn), isTrue, reason: 'ميموزا: $fn');
+        expect(mt.contains(fn), isTrue, reason: 'ميكروتك: $fn');
+      }
+    });
+
     test('لا رقم قبل عيّنتين', () {
-      // «٠ بت» يوحي بوصلةٍ صامتة وهي تحمل عشرات الميغا.
+      // «٠» يوحي بوصلةٍ صامتة وهي تحمل عشرات الميغا.
       expect(panel.contains("Text('يقيس…'"), isTrue);
       expect(panel.contains('if (_history.isEmpty)'), isTrue);
+      expect(panel.contains('if (_history.length >= 2)'), isTrue);
     });
 
     test('🚨 «سعة» لا «أداء» للـPHY', () {
@@ -95,16 +141,52 @@ void main() {
       expect(panel.contains("'الأداء (PHY 5s)'"), isFalse);
     });
 
-    test('المرور الفعليّ يسبق السعة', () {
-      final iT = panel.indexOf('_trafficCard(),');
+    test('سير الترفك يسبق السعة', () {
+      final iT = panel.indexOf('_trafficGraph(),');
       final iR = panel.indexOf('_ratesCard(s),');
       expect(iT, greaterThan(0));
-      expect(iT, lessThan(iR), reason: 'السعة سقفٌ ثابت — المرور هو المتغيّر');
+      expect(iT, lessThan(iR), reason: 'السعة سقفٌ ثابت — الترفك هو المتغيّر');
+    });
+  });
+
+  group('الواجهة مثبَّتة لا منتخَبة كلّ جولة', () {
+    test('🚨 الانتخاب الدوريّ يقلب الخطّين', () {
+      // بلاغ ٢٠٢٦-٠٩-٠٢: «شو مرّة أبلود أعلى ظاهر وهو نهائيّاً ماكو
+      // هيج أبلود».
+      //
+      // نقطة الوصول لها واجهتان تحملان الحركة نفسها في اتّجاهين
+      // متعاكسين: اللاسلكيّة تستقبل ٤٦ ميغا والإيثرنت تُرسلها.
+      // ومجموعهما متساوٍ تقريباً — فالمحاكاة أدناه تُظهر كيف يقلب
+      // الانتخاب الدوريّ الخطّين بتذبذبٍ طفيف.
+      const wireless = (rx: 46000000, tx: 2800000); // if5
+      const ethernet = (rx: 2800000, tx: 46100000); // if2 — مرآتها
+
+      int sum(({int rx, int tx}) r) => r.rx + r.tx;
+      expect(sum(ethernet) > sum(wireless), isTrue,
+          reason: 'فرقٌ مئة كيلوبت يكفي لقلب الفائز');
+
+      // بالتثبيت: الاختيار مرّةً ثمّ الالتزام.
+      const pinned = 5;
+      final rates = {5: wireless, 2: ethernet};
+      expect(rates[pinned], wireless,
+          reason: 'المثبَّتة تبقى مهما تفوّقت جارتها');
     });
 
-    test('الوحدة منفصلة عن الرقم', () {
-      expect(panel.contains('static String _fmtRate('), isTrue);
-      expect(panel.contains('static String _fmtUnit('), isTrue);
+    test('التثبيت مُعلَن في الشيفرة', () {
+      expect(panel.contains('int? _pinnedIf;'), isTrue);
+      expect(panel.contains('!rates.containsKey(pin)'), isTrue,
+          reason: 'إعادة الانتخاب عند اختفاء المثبَّتة فقط');
+      expect(panel.contains('_electBusiest('), isTrue);
+    });
+
+    test('لا نعلق على واجهةٍ ماتت', () {
+      expect(panel.contains('_repinAfterIdle = 4'), isTrue);
+      expect(panel.contains('if (r.rx + r.tx == 0)'), isTrue);
+    });
+
+    test('سقفٌ يرفض خللَ العدّاد', () {
+      // عشرة غيغابت لا تبلغها وصلةٌ لاسلكيّة — ما فوقه قفزةُ عدّاد.
+      expect(panel.contains('rx > 10000000000 || tx > 10000000000'), isTrue);
     });
   });
 }

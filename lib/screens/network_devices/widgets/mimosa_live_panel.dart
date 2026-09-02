@@ -46,10 +46,24 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
   Map<int, ({int rx, int tx})>? _lastCounters;
   DateTime? _lastCountersAt;
 
-  /// معدّل الواجهة الأنشط — بت/ثانية.
-  int _rxBps = 0;
-  int _txBps = 0;
-  String? _busiestIface;
+  /// الواجهة المثبَّتة للرسم.
+  ///
+  /// 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «شو مرّة أبلود أعلى ظاهر وهو نهائيّاً ماكو
+  /// هيج أبلود».
+  ///
+  /// كنّا ننتخب «الأنشط» في **كلّ جولة**. ونقطة الوصول لها واجهتان
+  /// تحملان الحركة نفسها في اتّجاهين متعاكسين: اللاسلكيّة تستقبل ٤٦
+  /// ميغا، والإيثرنت تُرسلها. ومجموع (rx+tx) متساوٍ تقريباً، فأيّ
+  /// تذبذبٍ طفيف يقلب الفائز — فينقلب الخطّان ويظهر صعودٌ ٤٨ ميغا
+  /// على وصلةٍ صعودها ٣.
+  ///
+  /// الانتخاب مرّةً والتثبيت: سلسلةٌ متماسكة من واجهةٍ واحدة.
+  int? _pinnedIf;
+
+  /// كم جولةً متتالية والمثبَّتة صامتة — بعدها نُعيد الانتخاب فلا نعلق
+  /// على واجهةٍ ماتت.
+  int _pinnedIdleRounds = 0;
+  static const int _repinAfterIdle = 4;
 
   /// ٣٠ × نبضة ≈ عدّة دقائق.
   static const int _maxHistory = 30;
@@ -186,25 +200,60 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
     final secs = now.difference(prevAt).inMilliseconds / 1000.0;
     if (secs < 1 || secs > 300) return;
 
-    var bestRx = 0, bestTx = 0;
-    String? bestName;
+    // معدّل كلّ واجهة أوّلاً، ثمّ الاختيار — لا اختيارٌ أثناء الحساب.
+    final rates = <int, ({int rx, int tx})>{};
     for (final c in s.counters) {
       final b = prev[c.index];
       if (b == null) continue;
       if (c.rxOctets < b.rx || c.txOctets < b.tx) continue; // ارتداد
       final rx = ((c.rxOctets - b.rx) * 8 / secs).round();
       final tx = ((c.txOctets - b.tx) * 8 / secs).round();
-      if (rx + tx > bestRx + bestTx) {
-        bestRx = rx;
-        bestTx = tx;
-        bestName = c.name;
+      // عشرة غيغابت سقفٌ لا تبلغه وصلةٌ لاسلكيّة — ما فوقه خللُ عدّاد.
+      if (rx > 10000000000 || tx > 10000000000) continue;
+      rates[c.index] = (rx: rx, tx: tx);
+    }
+    if (rates.isEmpty) return;
+
+    // ⚠️ التثبيت لا الانتخاب الدوريّ — راجع [_pinnedIf].
+    var pin = _pinnedIf;
+    if (pin == null || !rates.containsKey(pin)) {
+      pin = _electBusiest(rates);
+      _pinnedIdleRounds = 0;
+    } else {
+      final r = rates[pin]!;
+      if (r.rx + r.tx == 0) {
+        _pinnedIdleRounds++;
+        if (_pinnedIdleRounds >= _repinAfterIdle) {
+          pin = _electBusiest(rates);
+          _pinnedIdleRounds = 0;
+        }
+      } else {
+        _pinnedIdleRounds = 0;
       }
     }
-    _rxBps = bestRx;
-    _txBps = bestTx;
-    _busiestIface = bestName;
+    _pinnedIf = pin;
+
+    final chosen = rates[pin]!;
+    final bestRx = chosen.rx;
+    final bestTx = chosen.tx;
+    // القراءة من ذيل التاريخ لا من حقولٍ موازية — مصدرٌ واحد للرقم
+    // المعروض وللرسم، فلا ينحرف أحدهما عن الآخر.
     _history.add(_TrafficSample(at: now, rxBps: bestRx, txBps: bestTx));
     if (_history.length > _maxHistory) _history.removeAt(0);
+  }
+
+  /// أكثر الواجهات حركةً — يُستدعى عند التثبيت الأوّل فقط.
+  static int _electBusiest(Map<int, ({int rx, int tx})> rates) {
+    var best = rates.keys.first;
+    var bestSum = -1;
+    for (final e in rates.entries) {
+      final sum = e.value.rx + e.value.tx;
+      if (sum > bestSum) {
+        bestSum = sum;
+        best = e.key;
+      }
+    }
+    return best;
   }
 
   @override
@@ -242,7 +291,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
       ],
       // المرور الفعليّ **قبل** السعة: هو ما يُسأل عنه، والسعة سقفٌ
       // ثابت لا يتغيّر بين النبضات.
-      _trafficCard(),
+      _trafficGraph(),
       _ratesCard(s),
       const SizedBox(height: Sp.md),
       _systemCard(s),
@@ -722,23 +771,15 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
   }
 
   // ═══════════════════════════════════════════════════════
-  // 📈 المرور الفعليّ — من فارق عدّادات الأوكتِتات
+  // 📈 سير الترفك — من فارق عدّادات الأوكتِتات
+  //
+  // ⚠️ التسمية والتخطيط من لوحة ميكروتك حرفيّاً (`_trafficGraph`).
+  // اخترعتُ لها اسماً ومظهراً مختلفَين فبدت غريبةً عن أخواتها
+  // (بلاغ ٢٠٢٦-٠٩-٠٢: «التزم بمسمّيات بقيّة الأجهزة · شوف المايكروتيك
+  // كيف مرتّب وسوّي مثله»). الشارات في الرأس لا بطاقتان ضخمتان،
+  // والمحور بتنسيقٍ مختصر.
   // ═══════════════════════════════════════════════════════
-  Widget _trafficCard() {
-    // لا نرسم شيئاً قبل عيّنتين: العيّنة الأولى بلا سابقة فلا فارق،
-    // و«٠ بت» يوحي بوصلةٍ صامتة وهي تحمل عشرات الميغا.
-    if (_history.isEmpty) {
-      return _cardWrapper(
-        child: Row(children: [
-          Icon(LucideIcons.activity, size: 16, color: AppColors.brand),
-          const SizedBox(width: 6),
-          Text('المرور الفعليّ', style: AppType.bodyBold()),
-          const Spacer(),
-          Text('يقيس…', style: AppType.muted()),
-        ]),
-      );
-    }
-
+  Widget _trafficGraph() {
     final rxSpots = <FlSpot>[];
     final txSpots = <FlSpot>[];
     for (var i = 0; i < _history.length; i++) {
@@ -748,41 +789,33 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
     final peak = _history.fold<int>(
         0, (m, x) => math.max(m, math.max(x.rxBps, x.txBps)));
     final maxY = (peak * 1.25).clamp(1000, double.infinity).toDouble();
+    final lastRx = _history.isNotEmpty ? _history.last.rxBps : 0;
+    final lastTx = _history.isNotEmpty ? _history.last.txBps : 0;
+
+    final rxColor = AppColors.success;
+    final txColor = AppColors.brandAccent;
 
     return _cardWrapper(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Icon(LucideIcons.activity, size: 16, color: AppColors.brand),
+          Icon(LucideIcons.chartLine, size: 14, color: AppColors.brand),
           const SizedBox(width: 6),
-          Text('المرور الفعليّ', style: AppType.bodyBold()),
+          Text('سير الترفك', style: AppType.pillBold(color: AppColors.textHi)),
           const Spacer(),
-          if (_busiestIface != null)
-            Text(_busiestIface!, style: AppType.muted()),
-        ]),
-        const SizedBox(height: 12),
-        Row(children: [
-          Expanded(
-              child: _valueCard(
-            icon: LucideIcons.arrowDown,
-            label: 'نزول',
-            value: _fmtRate(_rxBps),
-            unit: _fmtUnit(_rxBps),
-            color: AppColors.success,
-          )),
-          const SizedBox(width: 8),
-          Expanded(
-              child: _valueCard(
-            icon: LucideIcons.arrowUp,
-            label: 'صعود',
-            value: _fmtRate(_txBps),
-            unit: _fmtUnit(_txBps),
-            color: AppColors.info,
-          )),
+          // لا رقم قبل عيّنتين: «٠» يوحي بوصلةٍ صامتة وهي تحمل عشرات
+          // الميغا، والعيّنة الأولى بلا سابقة فلا فارق.
+          if (_history.isEmpty)
+            Text('يقيس…', style: AppType.muted())
+          else ...[
+            _legendChip('↓', _formatBps(lastRx), rxColor),
+            const SizedBox(width: 6),
+            _legendChip('↑', _formatBps(lastTx), txColor),
+          ],
         ]),
         if (_history.length >= 2) ...[
           const SizedBox(height: 12),
           SizedBox(
-            height: 110,
+            height: 120,
             child: RepaintBoundary(
               child: LineChart(
                 duration: Duration.zero,
@@ -805,11 +838,16 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
                     leftTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
-                        reservedSize: 46,
+                        reservedSize: 44,
                         interval: maxY / 3,
+                        // ⚠️ مختصر («48M») لا «47.9 Mbps»: الثاني أعرض
+                        // من الحيّز المحجوز فيلتفّ سطرين ويركب الرسم.
                         getTitlesWidget: (v, _) => Text(
-                          '${_fmtRate(v.toInt())} ${_fmtUnit(v.toInt())}',
-                          style: AppType.muted(color: AppColors.textLow),
+                          _formatBpsShort(v.toInt()),
+                          style: TextStyle(
+                              fontSize: 9.5,
+                              height: 1.2,
+                              color: AppColors.textLow),
                         ),
                       ),
                     ),
@@ -820,9 +858,23 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
                   minX: 0,
                   maxX: (_history.length - 1).toDouble(),
                   lineBarsData: [
-                    _trafficLine(txSpots, AppColors.info),
-                    _trafficLine(rxSpots, AppColors.success),
+                    _trafficLine(txSpots, txColor),
+                    _trafficLine(rxSpots, rxColor),
                   ],
+                  lineTouchData: LineTouchData(
+                    enabled: true,
+                    touchTooltipData: LineTouchTooltipData(
+                      getTooltipColor: (_) =>
+                          AppColors.textHi.withValues(alpha: 0.9),
+                      getTooltipItems: (spots) => spots.map((sp) {
+                        final isTx = sp.barIndex == 0;
+                        return LineTooltipItem(
+                          '${isTx ? "↑" : "↓"} ${_formatBps(sp.y.toInt())}',
+                          AppType.microBold(color: isTx ? txColor : rxColor),
+                        );
+                      }).toList(),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -832,32 +884,42 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
     );
   }
 
-  LineChartBarData _trafficLine(List<FlSpot> spots, Color c) => LineChartBarData(
+  LineChartBarData _trafficLine(List<FlSpot> spots, Color c) =>
+      LineChartBarData(
         spots: spots,
         isCurved: true,
         curveSmoothness: 0.25,
         color: c,
         barWidth: 2,
         dotData: const FlDotData(show: false),
-        belowBarData: BarAreaData(
-          show: true,
-          color: c.withValues(alpha: 0.14),
-        ),
+        belowBarData: BarAreaData(show: true, color: c.withValues(alpha: 0.14)),
       );
 
-  /// الرقم وحده — الوحدة تُطلب بـ[_fmtUnit] لتُرسَم بلونٍ مميّز.
-  static String _fmtRate(int bps) {
-    if (bps < 1000) return '$bps';
-    if (bps < 1000000) return (bps / 1000).toStringAsFixed(0);
-    if (bps < 1000000000) return (bps / 1000000).toStringAsFixed(1);
-    return (bps / 1000000000).toStringAsFixed(2);
+  Widget _legendChip(String arrow, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(R.sm),
+      ),
+      child: Text('$arrow $value', style: AppType.microBold(color: color)),
+    );
   }
 
-  static String _fmtUnit(int bps) {
-    if (bps < 1000) return 'bps';
-    if (bps < 1000000) return 'Kbps';
-    if (bps < 1000000000) return 'Mbps';
-    return 'Gbps';
+  /// نفس تنسيق ميكروتك حرفيّاً — الشاشتان تعرضان الشيء نفسه.
+  String _formatBps(int bps) {
+    if (bps <= 0) return '0';
+    if (bps < 1000) return '${bps}bps';
+    if (bps < 1000000) return '${(bps / 1000).toStringAsFixed(1)}K';
+    if (bps < 1000000000) return '${(bps / 1000000).toStringAsFixed(1)}M';
+    return '${(bps / 1000000000).toStringAsFixed(2)}G';
+  }
+
+  String _formatBpsShort(int bps) {
+    if (bps < 1000) return '0';
+    if (bps < 1000000) return '${(bps / 1000).round()}K';
+    if (bps < 1000000000) return '${(bps / 1000000).round()}M';
+    return '${(bps / 1000000000).toStringAsFixed(1)}G';
   }
 
   // ═══════════════════════════════════════════════════════
