@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../services/manual_wa_prefs.dart';
+import '../api/wa_contact_risk.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
@@ -154,7 +155,7 @@ class ManualWaChoice {
   final bool manualMode;
 }
 
-class _WaPreviewSheet extends StatelessWidget {
+class _WaPreviewSheet extends StatefulWidget {
   const _WaPreviewSheet({
     required this.title,
     required this.phone,
@@ -165,6 +166,33 @@ class _WaPreviewSheet extends StatelessWidget {
   final String phone;
   final String messagePreview;
   final Color accent;
+
+  @override
+  State<_WaPreviewSheet> createState() => _WaPreviewSheetState();
+}
+
+class _WaPreviewSheetState extends State<_WaPreviewSheet> {
+  /// ⚠️ يبدأ آمناً لا مجهولاً: الحارس لا يجوز أن يُعطّل الإرسال ريثما
+  /// يسأل. تأخيرُ زرٍّ بانتظار استعلامٍ ثانويّ يُفسد كلّ إرسالٍ لأجل
+  /// تحذيرٍ يخصّ واحداً من كلّ سبعين.
+  WaContactRisk _risk = WaContactRisk.unknown;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRisk();
+  }
+
+  Future<void> _loadRisk() async {
+    final r = await WaContactRiskApi.one(widget.phone);
+    if (!mounted) return;
+    setState(() => _risk = r);
+  }
+
+  String get title => widget.title;
+  String get phone => widget.phone;
+  String get messagePreview => widget.messagePreview;
+  Color get accent => widget.accent;
 
   @override
   Widget build(BuildContext context) {
@@ -261,6 +289,8 @@ class _WaPreviewSheet extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
+              // حارس الحظر — راجع [_RiskBanner].
+              _RiskBanner(risk: _risk),
               ManualWaModeBuilder(
                 builder: (ctx, manualMode, setMode) => Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -298,8 +328,12 @@ class _WaPreviewSheet extends StatelessWidget {
                           ),
                         ),
                         style: FilledButton.styleFrom(
-                          backgroundColor:
-                              manualMode ? AppColors.brandAccent : accent,
+                          // ⚠️ في درجة التأكيد يفقد الزرّ بريقه: يبقى
+                          // متاحاً (المنع يُسكت ٦٠٪ من النظام) لكنّه لا
+                          // يعود الخيار الذي تقع عليه الإصبع بلا تفكير.
+                          backgroundColor: _risk.tier == WaRiskTier.confirm
+                              ? AppColors.textMid
+                              : (manualMode ? AppColors.brandAccent : accent),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(R.md)),
                         ),
@@ -313,5 +347,87 @@ class _WaPreviewSheet extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// لافتة الحارس — ثلاث درجات، وما يُعرض يتناسب مع الخطر.
+///
+/// 🐛 طلب المستخدم ٢٠٢٦-٠٩-٠٢: تنبيهٌ قبل مراسلة من لم يسبق أن راسلك.
+///
+/// ── لماذا لا نافذةَ تأكيدٍ للجميع ────────────────────────────────
+/// ٦٠٪ من رسائل الشهر تذهب إلى من لم يراسل — إشعارُ انتهاءٍ وتأكيدُ
+/// تفعيلٍ وتذكيرُ دين. ونافذةٌ تظهر في ستّ حالاتٍ من عشر يتعلّم
+/// المستخدم أن يضغط «موافق» بلا قراءة خلال يومين.
+///
+/// **التحذير الذي يُعتاد يصير زينة.** فيبقى صامتاً لمن بادرك، وسطراً
+/// هادئاً لمن لم يراسلك، ولافتةً تُوقف لمن تجاهل ستّ رسائل — وهم
+/// ١٫٥٪ من الحالات، نادرون بما يكفي ليُقرأ التحذير.
+class _RiskBanner extends StatelessWidget {
+  const _RiskBanner({required this.risk});
+  final WaContactRisk risk;
+
+  @override
+  Widget build(BuildContext context) {
+    switch (risk.tier) {
+      case WaRiskTier.safe:
+        return const SizedBox.shrink();
+
+      case WaRiskTier.notice:
+        // سطرٌ يُعلِم ولا يُعطّل ولا يُعتاد.
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Row(
+            children: [
+              Icon(LucideIcons.info, size: 13, color: AppColors.textMid),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'لم يسبق أن راسلك — الإرسال متاح',
+                  style: AppType.muted(),
+                ),
+              ),
+            ],
+          ),
+        );
+
+      case WaRiskTier.confirm:
+        final why = risk.dead
+            ? 'هذا الرقم لا يستقبل رسائلك — أُثبت ذلك بمحاولاتٍ سابقة.'
+            : 'أرسلتَ له ${risk.ignored} رسالة ولم يردّ مرّةً واحدة.';
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(Sp.md),
+          decoration: BoxDecoration(
+            color: AppColors.dangerSoftBg,
+            borderRadius: BorderRadius.circular(R.md),
+            border: Border.all(color: AppColors.dangerSoftBorder),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(LucideIcons.triangleAlert,
+                  size: 16, color: AppColors.error),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('إرسالٌ يعرّضك للحظر',
+                        style: AppType.bodyStrong(color: AppColors.error)),
+                    const SizedBox(height: 2),
+                    Text(why, style: AppType.muted()),
+                    const SizedBox(height: 2),
+                    Text(
+                      'هذا النمط — رسائل متكرّرة بلا ردّ — هو ما يُبلَّغ عنه '
+                      'فتُحظر جلستك. وبلاغٌ واحد يكفي.',
+                      style: AppType.muted(color: AppColors.error),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+    }
   }
 }
