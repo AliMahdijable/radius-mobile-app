@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'dart:math' as math;
+
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -35,6 +38,22 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
   Timer? _timer;
   bool _monitoring = false;
   DateTime? _lastFetch;
+
+  /// آخر عدّادات أوكتِتات + لحظتها — أساس حساب المرور الفعليّ.
+  ///
+  /// 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «ترفك لحد هسه ماكو». وما كان يُعرض (٦٥٠/٦٥٠)
+  /// سعةُ الوصلة لا حركتها.
+  Map<int, ({int rx, int tx})>? _lastCounters;
+  DateTime? _lastCountersAt;
+
+  /// معدّل الواجهة الأنشط — بت/ثانية.
+  int _rxBps = 0;
+  int _txBps = 0;
+  String? _busiestIface;
+
+  /// ٣٠ × نبضة ≈ عدّة دقائق.
+  static const int _maxHistory = 30;
+  final List<_TrafficSample> _history = [];
 
   static const _refreshInterval = Duration(seconds: 15);
 
@@ -113,6 +132,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
       );
       if (!mounted) return;
       setState(() {
+        _computeTraffic(s);
         _stats = s;
         _lastFetch = DateTime.now();
         _loading = false;
@@ -141,6 +161,50 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
     } catch (_) {
       // silent — البانل يبقى يعمل بدون قسم العملاء
     }
+  }
+
+  /// يحوّل عدّادات الأوكتِتات إلى معدّل، بفارق لقطتين.
+  ///
+  /// ⚠️ الزمن هو الفاصل بين **عيّنتين كاملتين**. نافذةٌ أقصر من ثانية
+  /// تُضخّم أيّ ضجيج، وأطول من خمس دقائق تُعطي متوسّطاً لا معدّلاً.
+  /// (نفس الحارس في جدار الأجهزة — فخّ ٢٠٢٦-٠٨-١٣ الذي أظهر ٤ غيغا
+  /// مكان ١٣٠ ميغا.)
+  ///
+  /// وارتدادُ العدّاد (إقلاعٌ أو التفافُ ٣٢-بت) يُهمَل، فلا نُخرج رقماً
+  /// سالباً أو ضخماً كاذباً.
+  void _computeTraffic(MimosaStats s) {
+    final now = DateTime.now();
+    final fresh = <int, ({int rx, int tx})>{
+      for (final c in s.counters) c.index: (rx: c.rxOctets, tx: c.txOctets),
+    };
+    final prev = _lastCounters;
+    final prevAt = _lastCountersAt;
+    _lastCounters = fresh.isEmpty ? prev : fresh;
+    if (fresh.isNotEmpty) _lastCountersAt = now;
+    if (prev == null || prevAt == null || fresh.isEmpty) return;
+
+    final secs = now.difference(prevAt).inMilliseconds / 1000.0;
+    if (secs < 1 || secs > 300) return;
+
+    var bestRx = 0, bestTx = 0;
+    String? bestName;
+    for (final c in s.counters) {
+      final b = prev[c.index];
+      if (b == null) continue;
+      if (c.rxOctets < b.rx || c.txOctets < b.tx) continue; // ارتداد
+      final rx = ((c.rxOctets - b.rx) * 8 / secs).round();
+      final tx = ((c.txOctets - b.tx) * 8 / secs).round();
+      if (rx + tx > bestRx + bestTx) {
+        bestRx = rx;
+        bestTx = tx;
+        bestName = c.name;
+      }
+    }
+    _rxBps = bestRx;
+    _txBps = bestTx;
+    _busiestIface = bestName;
+    _history.add(_TrafficSample(at: now, rxBps: bestRx, txBps: bestTx));
+    if (_history.length > _maxHistory) _history.removeAt(0);
   }
 
   @override
@@ -176,6 +240,9 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
         _clientsSection(),
         const SizedBox(height: Sp.md),
       ],
+      // المرور الفعليّ **قبل** السعة: هو ما يُسأل عنه، والسعة سقفٌ
+      // ثابت لا يتغيّر بين النبضات.
+      _trafficCard(),
       _ratesCard(s),
       const SizedBox(height: Sp.md),
       _systemCard(s),
@@ -655,6 +722,145 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
   }
 
   // ═══════════════════════════════════════════════════════
+  // 📈 المرور الفعليّ — من فارق عدّادات الأوكتِتات
+  // ═══════════════════════════════════════════════════════
+  Widget _trafficCard() {
+    // لا نرسم شيئاً قبل عيّنتين: العيّنة الأولى بلا سابقة فلا فارق،
+    // و«٠ بت» يوحي بوصلةٍ صامتة وهي تحمل عشرات الميغا.
+    if (_history.isEmpty) {
+      return _cardWrapper(
+        child: Row(children: [
+          Icon(LucideIcons.activity, size: 16, color: AppColors.brand),
+          const SizedBox(width: 6),
+          Text('المرور الفعليّ', style: AppType.bodyBold()),
+          const Spacer(),
+          Text('يقيس…', style: AppType.muted()),
+        ]),
+      );
+    }
+
+    final rxSpots = <FlSpot>[];
+    final txSpots = <FlSpot>[];
+    for (var i = 0; i < _history.length; i++) {
+      rxSpots.add(FlSpot(i.toDouble(), _history[i].rxBps.toDouble()));
+      txSpots.add(FlSpot(i.toDouble(), _history[i].txBps.toDouble()));
+    }
+    final peak = _history.fold<int>(
+        0, (m, x) => math.max(m, math.max(x.rxBps, x.txBps)));
+    final maxY = (peak * 1.25).clamp(1000, double.infinity).toDouble();
+
+    return _cardWrapper(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(LucideIcons.activity, size: 16, color: AppColors.brand),
+          const SizedBox(width: 6),
+          Text('المرور الفعليّ', style: AppType.bodyBold()),
+          const Spacer(),
+          if (_busiestIface != null)
+            Text(_busiestIface!, style: AppType.muted()),
+        ]),
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(
+              child: _valueCard(
+            icon: LucideIcons.arrowDown,
+            label: 'نزول',
+            value: _fmtRate(_rxBps),
+            unit: _fmtUnit(_rxBps),
+            color: AppColors.success,
+          )),
+          const SizedBox(width: 8),
+          Expanded(
+              child: _valueCard(
+            icon: LucideIcons.arrowUp,
+            label: 'صعود',
+            value: _fmtRate(_txBps),
+            unit: _fmtUnit(_txBps),
+            color: AppColors.info,
+          )),
+        ]),
+        if (_history.length >= 2) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 110,
+            child: RepaintBoundary(
+              child: LineChart(
+                duration: Duration.zero,
+                LineChartData(
+                  gridData: FlGridData(
+                    show: true,
+                    drawVerticalLine: false,
+                    horizontalInterval: maxY / 4,
+                    getDrawingHorizontalLine: (_) =>
+                        FlLine(color: AppColors.borderSoft, strokeWidth: 0.5),
+                  ),
+                  titlesData: FlTitlesData(
+                    show: true,
+                    topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    bottomTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 46,
+                        interval: maxY / 3,
+                        getTitlesWidget: (v, _) => Text(
+                          '${_fmtRate(v.toInt())} ${_fmtUnit(v.toInt())}',
+                          style: AppType.muted(color: AppColors.textLow),
+                        ),
+                      ),
+                    ),
+                  ),
+                  borderData: FlBorderData(show: false),
+                  minY: 0,
+                  maxY: maxY,
+                  minX: 0,
+                  maxX: (_history.length - 1).toDouble(),
+                  lineBarsData: [
+                    _trafficLine(txSpots, AppColors.info),
+                    _trafficLine(rxSpots, AppColors.success),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ]),
+    );
+  }
+
+  LineChartBarData _trafficLine(List<FlSpot> spots, Color c) => LineChartBarData(
+        spots: spots,
+        isCurved: true,
+        curveSmoothness: 0.25,
+        color: c,
+        barWidth: 2,
+        dotData: const FlDotData(show: false),
+        belowBarData: BarAreaData(
+          show: true,
+          color: c.withValues(alpha: 0.14),
+        ),
+      );
+
+  /// الرقم وحده — الوحدة تُطلب بـ[_fmtUnit] لتُرسَم بلونٍ مميّز.
+  static String _fmtRate(int bps) {
+    if (bps < 1000) return '$bps';
+    if (bps < 1000000) return (bps / 1000).toStringAsFixed(0);
+    if (bps < 1000000000) return (bps / 1000000).toStringAsFixed(1);
+    return (bps / 1000000000).toStringAsFixed(2);
+  }
+
+  static String _fmtUnit(int bps) {
+    if (bps < 1000) return 'bps';
+    if (bps < 1000000) return 'Kbps';
+    if (bps < 1000000000) return 'Mbps';
+    return 'Gbps';
+  }
+
+  // ═══════════════════════════════════════════════════════
   // 📊 Rates card
   // ═══════════════════════════════════════════════════════
   Widget _ratesCard(MimosaStats s) {
@@ -663,9 +869,12 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
         Row(children: [
           Icon(LucideIcons.chartLine, size: 16, color: AppColors.brand),
           const SizedBox(width: 6),
-          Text('الأداء (PHY 5s)',
-              style: AppType.bodyBold()),
+          Text('سعة الوصلة (PHY)', style: AppType.bodyBold()),
         ]),
+        // ⚠️ «سعة» لا «أداء»: هذان الرقمان معدّل الطبقة الفيزيائيّة —
+        // أقصى ما تحمله الوصلة، لا ما تحمله فعلاً. والمرور الحقيقيّ في
+        // البطاقة تحتها. تسميتُهما «أداءً» أوهمت أنّ الوصلة تحمل ٦٥٠
+        // ميغا وهي تحمل بضعة.
         const SizedBox(height: 12),
         Row(children: [
           Expanded(
@@ -727,14 +936,14 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
               style: AppType.bodyBold()),
         ]),
         const SizedBox(height: 12),
-        // مدّة الوصلة أوّلاً — هي ما يسأل عنه من يراقب برجاً. وعمر
-        // وكيل SNMP يبقى تحتها للتشخيص، ولا يُعرض إن ساواها.
-        if (s.linkUptimeSec != null)
-          _infoRow('مدّة الوصلة', _formatUptime(s.linkUptimeSec!)),
-        _infoRow(
-          s.linkUptimeSec != null ? 'تشغيل الجهاز' : 'Uptime',
-          _formatUptime(s.sysUptimeSec),
-        ),
+        // ⚠️ سطرٌ واحد لا سطران (طلب المستخدم ٢٠٢٦-٠٩-٠٢).
+        //
+        // «زمن التشغيل» هنا = منذ متى **والوصلة قائمة**. وعمر وكيل
+        // SNMP حُذف: لا يعني المراقِبَ شيئاً، وإعادةُ تشغيل وكيلٍ
+        // تُصفّره فيبدو البرج ساقطاً وهو لم يتزحزح — عرضُه بجانب
+        // الصحيح يدعو للخلط لا للتشخيص.
+        _infoRow('زمن التشغيل',
+            _formatUptime(s.linkUptimeSec ?? s.sysUptimeSec)),
         if (s.antennaGainDbi != null)
           _infoRow('Antenna Gain', '${s.antennaGainDbi} dBi'),
         if (s.wirelessMode != null)
@@ -940,4 +1149,12 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
     if (h > 0) return '${h}h ${m}m';
     return '${m}m';
   }
+}
+
+class _TrafficSample {
+  const _TrafficSample(
+      {required this.at, required this.rxBps, required this.txBps});
+  final DateTime at;
+  final int rxBps;
+  final int txBps;
 }

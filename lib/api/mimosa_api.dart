@@ -93,6 +93,27 @@ class MimosaApi {
   static const String _oidSysUpTime = '1.3.6.1.2.1.1.3.0';
   static const String _oidSysName = '1.3.6.1.2.1.1.5.0';
 
+  // ── عدّادات المرور (IF-MIB القياسيّ) ──────────────────────────────
+  //
+  // 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «ترفك لحد هسه ماكو». وما كانت اللوحة تعرضه
+  // (٦٥٠/٦٥٠) هو **سعة** الوصلة لا حركتها.
+  //
+  // ⚠️ ولم أستعمل `mimosaPerfInfo` رغم أنّ الـMIB يسمّيه «معدّل على
+  // خمس ثوانٍ»: قيمه على C5c حيّ ١٤٦٧٢٨٣ و٣٥٩٣١٧١ بوحدة «kbps»
+  // المذكورة = ١٫٥ و٣٫٦ غيغابت، وسعة الجهاز ٦٥٠ ميغا. فالوحدة ليست ما
+  // يقوله المصدر، وعرضُ رقمٍ بوحدةٍ مجهولة أسوأ من عدم عرضه.
+  //
+  // والأوكتِتات لا لبس فيها: عدّاد تراكميّ بالبايت، والفارق بين
+  // لقطتين ÷ الزمن = بت/ثانية. نفس تقنية جدار الأجهزة.
+  //
+  // نُفضّل عدّادات ٦٤-بت (ifHC*) فعدّاد ٣٢-بت يلتفّ كلّ ٣٤ ثانية على
+  // غيغابت — أي بين نبضتين.
+  static const String _oidIfName = '1.3.6.1.2.1.31.1.1.1.1';
+  static const String _oidIfHcIn = '1.3.6.1.2.1.31.1.1.1.6';
+  static const String _oidIfHcOut = '1.3.6.1.2.1.31.1.1.1.10';
+  static const String _oidIfIn32 = '1.3.6.1.2.1.2.2.1.10';
+  static const String _oidIfOut32 = '1.3.6.1.2.1.2.2.1.16';
+
   // — Mimosa scalar OIDs (BFIVE) —
   //   mimosaGeneral.1 = mimosaDeviceName          → 2.1.1.1.0
   //   mimosaGeneral.2 = mimosaSerialNumber        → 2.1.1.2.0
@@ -268,6 +289,7 @@ class MimosaApi {
     int? txPhyTotal;
     int? rxPhyTotal;
     int? channelWidth;
+    final counters = <MimosaIfCounter>[];
     try {
       // ⚠️ مشيةٌ واحدة على **جذر الجدول** لا مشيةٌ لكلّ عمود.
       //
@@ -297,6 +319,35 @@ class MimosaApi {
       rxPhyTotal = _sumStream(_column(streamRows, _oidStreamRxPhy));
 
       final channelRows = await snmp.walk(_oidChannelTable, chunkSize: 8);
+
+      // عدّادات المرور — ٦٤-بت أوّلاً والسقوط إلى ٣٢-بت عند غيابها.
+      var inRows = await snmp.walk(_oidIfHcIn, chunkSize: 16);
+      var outRows = await snmp.walk(_oidIfHcOut, chunkSize: 16);
+      if (inRows.isEmpty || outRows.isEmpty) {
+        inRows = await snmp.walk(_oidIfIn32, chunkSize: 16);
+        outRows = await snmp.walk(_oidIfOut32, chunkSize: 16);
+      }
+      final names = await snmp.walk(_oidIfName, chunkSize: 16);
+      final nameByIdx = <int, String>{};
+      for (final vb in names) {
+        final i = _lastIndex(vb.oid);
+        if (i != null && !vb.isAbsent) nameByIdx[i] = vb.asString;
+      }
+      final inByIdx = <int, int>{};
+      for (final vb in inRows) {
+        final i = _lastIndex(vb.oid);
+        if (i != null && !vb.isAbsent) inByIdx[i] = vb.asInt;
+      }
+      for (final vb in outRows) {
+        final i = _lastIndex(vb.oid);
+        if (i == null || vb.isAbsent || !inByIdx.containsKey(i)) continue;
+        counters.add(MimosaIfCounter(
+          index: i,
+          name: nameByIdx[i] ?? 'if$i',
+          rxOctets: inByIdx[i]!,
+          txOctets: vb.asInt,
+        ));
+      }
       final widths = _column(channelRows, _oidChannelWidth);
       if (widths.isNotEmpty) channelWidth = widths.first.asInt;
 
@@ -367,6 +418,7 @@ class MimosaApi {
       txPhyMbps: txPhyTotal,
       rxPhyMbps: rxPhyTotal,
       channelWidthMhz: channelWidth,
+      counters: counters,
     );
   }
 
@@ -382,6 +434,13 @@ class MimosaApi {
   }
 
   /// Mimosa returns dBm × 10 in most fields (e.g. 427 = 42.7 dBm)
+  /// آخر رقم في الـOID — فهرس الواجهة.
+  static int? _lastIndex(String oid) {
+    final i = oid.lastIndexOf('.');
+    if (i < 0) return null;
+    return int.tryParse(oid.substring(i + 1));
+  }
+
   /// يستخرج عموداً من صفوف جدولٍ مُمشيّ.
   ///
   /// الفاصل نقطة صريحة: بلاها يلتقط `.11` مرشّحُ `.1`.
@@ -595,6 +654,9 @@ class MimosaStats {
 
   /// اسم الوصلة اللاسلكيّة — كان يُجلَب ولا يُقرأ.
   final String? ssid;
+
+  /// عدّادات الواجهات — تُطرح منها لقطةُ الجولة التالية.
+  final List<MimosaIfCounter> counters;
   final double? perTxRatePct; // packet error rate %
   final double? perRxRatePct;
 
@@ -623,6 +685,7 @@ class MimosaStats {
     this.phyRxRateMbps,
     this.channelWidthMhz,
     this.ssid,
+    this.counters = const [],
     this.perTxRatePct,
     this.perRxRatePct,
     this.chains = const [],
@@ -659,6 +722,7 @@ class MimosaStats {
     int? txPhyMbps,
     int? rxPhyMbps,
     int? channelWidthMhz,
+    List<MimosaIfCounter> counters = const [],
   }) {
     Varbind? g(String oid) => m[oid];
     double? n10(String oid) {
@@ -719,6 +783,7 @@ class MimosaStats {
       phyTxRateMbps: txPhyMbps ?? n(MimosaApi._oidPhyTxRate),
       phyRxRateMbps: rxPhyMbps ?? n(MimosaApi._oidPhyRxRate),
       channelWidthMhz: channelWidthMhz,
+      counters: counters,
       ssid: g(MimosaApi._oidSsid)?.isAbsent == false
           ? g(MimosaApi._oidSsid)!.asString
           : null,
@@ -727,6 +792,23 @@ class MimosaStats {
       chains: chains,
     );
   }
+}
+
+/// عدّاد أوكتِتات واجهة — أساس حساب المرور الفعليّ.
+///
+/// عدّادٌ تراكميّ بالبايت، والفارق بين لقطتين ÷ الزمن = بت/ثانية.
+class MimosaIfCounter {
+  const MimosaIfCounter({
+    required this.index,
+    required this.name,
+    required this.rxOctets,
+    required this.txOctets,
+  });
+
+  final int index;
+  final String name;
+  final int rxOctets;
+  final int txOctets;
 }
 
 class MimosaChain {

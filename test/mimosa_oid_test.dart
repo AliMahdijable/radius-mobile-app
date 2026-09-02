@@ -164,11 +164,15 @@ void main() {
       expect(secs % 86400 ~/ 3600, 3);
     });
 
-    test('مدّة الوصلة تسبق عمر الوكيل في العرض', () {
-      final iLink = panel.indexOf("'مدّة الوصلة'");
-      final iSys = panel.indexOf("'تشغيل الجهاز'");
-      expect(iLink, greaterThan(0), reason: 'لا تُعرض مدّة الوصلة');
-      expect(iLink, lessThan(iSys), reason: 'الأهمّ أوّلاً');
+    test('سطرٌ واحد اسمه «زمن التشغيل»', () {
+      // طلب المستخدم: سطران يدعوان للخلط. وعمر وكيل SNMP لا يعني
+      // المراقِبَ شيئاً — تصفيرُه بإعادة تشغيلٍ يُظهر البرج ساقطاً
+      // وهو لم يتزحزح.
+      expect(panel.contains("_infoRow('زمن التشغيل'"), isTrue);
+      expect(panel.contains("'تشغيل الجهاز'"), isFalse);
+      expect(panel.contains("'مدّة الوصلة'"), isFalse);
+      expect(panel.contains('s.linkUptimeSec ?? s.sysUptimeSec'), isTrue,
+          reason: 'الوصلة أوّلاً والسقوط إلى عمر الوكيل عند غيابها');
     });
 
     test('غيابها لا يكسر شيئاً', () {
