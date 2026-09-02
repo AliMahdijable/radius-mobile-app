@@ -110,7 +110,7 @@ void main() {
 
   group('الامتناع الصريح', () {
     test('المعطّل لا تُفتح له جلسة', () {
-      expect(DeviceVitals.skipReason(dev(status: 'offline')), 'معطّل',
+      expect(DeviceVitals.skipReason(dev(status: 'offline')), 'غير متّصل',
           reason: 'قراءة معالجِ جهازٍ لا يردّ تحجز خانةً وتنتظر مهلتها');
     });
 

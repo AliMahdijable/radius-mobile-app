@@ -236,7 +236,7 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
 
   // ── ترتيب وتجميع ───────────────────────────────────────────────
 
-  /// المعطّل أوّلاً، والمجهول قبل السليم: لم يُفحص بعدُ فقد يكون ساقطاً.
+  /// غير المتّصل أوّلاً، والمجهول قبله السليم: لم يُفحص بعدُ فقد يكون ساقطاً.
   /// تفتح هذه الصفحة لتجد العطل، لا لتتصفّح.
   static int _rank(NetworkDevice d) => switch (d.lastStatus) {
         'offline' => 0,
@@ -304,7 +304,7 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
               Text(
                 down == 0
                     ? '${_all.length} جهازاً · الكلّ سليم'
-                    : '$down معطّل من ${_all.length}',
+                    : '$down غير متّصل من ${_all.length}',
                 style: AppType.muted(
                     color: down == 0 ? AppColors.success : AppColors.error),
               ),
@@ -509,7 +509,7 @@ class _GroupHeader extends StatelessWidget {
   /// الموضع — فحين يظهر فيه «٣ معطّل» لا تراه. الشارة تحمل خبراً أو
   /// تغيب، ولا خبر خبرٌ سارّ.
   (String, AppTone)? get _summary {
-    if (down > 0) return ('$down من $total معطّل', AppTone.danger);
+    if (down > 0) return ('$down من $total غير متّصل', AppTone.danger);
     if (slow > 0) return ('$slow بطيء', AppTone.warning);
     return null;
   }
@@ -603,7 +603,7 @@ class _DeviceCard extends StatefulWidget {
 
   static String labelFor(String status, int? ms, int? medianMs) =>
       switch (status) {
-        'offline' => 'معطّل',
+        'offline' => 'غير متّصل',
         'unknown' => 'لم يُفحص',
         _ => ms == null
             ? 'حيّ'
@@ -803,22 +803,23 @@ class _DeviceCardState extends State<_DeviceCard> {
               valueListenable: widget.vitals,
               builder: (_, st, __) => _VitalsStrip(state: st),
             ),
-          if (isDown && since != null)
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.fromLTRB(Sp.md, 0, Sp.md, Sp.md),
-              padding: const EdgeInsets.symmetric(vertical: Sp.sm),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(R.sm),
-                border: Border.all(color: tone.softBorder),
-              ),
-              child: Text(
-                'آخر ظهور $since',
-                textAlign: TextAlign.center,
-                style: AppType.muted(color: tone.fill),
-              ),
-            ),
+              // سطرٌ مضمّن بوزن شريط المقاييس نفسه — لا صندوق.
+              //
+              // الصندوق الأبيض بحدوده كان يأخذ من البطاقة غير المتّصلة
+              // ضعف ما يأخذه الشريط من المتّصلة، لحقيقةٍ واحدة. وحين
+              // تسقط منطقةٌ كاملة تصير الشاشة صناديق فارغة.
+              if (isDown && since != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(Sp.md, 0, Sp.md, Sp.md),
+                  child: Row(
+                    children: [
+                      Icon(LucideIcons.clock, size: 13, color: tone.fill),
+                      const SizedBox(width: Sp.xs),
+                      Text('آخر ظهور $since',
+                          style: AppType.muted(color: tone.fill)),
+                    ],
+                  ),
+                ),
               if (open)
                 ValueListenableBuilder<VitalsState>(
                   valueListenable: widget.vitals,

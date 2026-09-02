@@ -70,6 +70,37 @@ void main() {
       });
     }
 
+    test('التسمية «غير متّصل» لا «معطّل»', () {
+      // «معطّل» تعني مُوقَفاً بقرار المدير، وهذا جهازٌ لا يردّ فحسب.
+      // وبقيّة التطبيق تستعملها أصلاً — الجدار وحده شذّ.
+      // (بلاغ المستخدم ٢٠٢٦-٠٩-٠١)
+      //
+      // ⚠️ سطراً سطراً مع تخطّي التعليقات: مطابقةٌ على الملفّ كلّه
+      // تعبر الأسطر فتلتقط تعليقاً بين اقتباسَي شيفرةٍ متباعدين.
+      final offenders = <String>[];
+      for (final line in wall.split('\n')) {
+        final t = line.trimLeft();
+        if (t.startsWith('//')) continue;
+        for (final m in RegExp("'[^']*معطّل[^']*'").allMatches(line)) {
+          offenders.add(m[0]!);
+        }
+      }
+      expect(offenders, isEmpty,
+          reason: 'بقي نصّ واجهة يقول «معطّل»: $offenders');
+      expect(wall.contains("'offline' => 'غير متّصل'"), isTrue);
+    });
+
+    test('«آخر ظهور» سطر لا صندوق', () {
+      // الصندوق كان يأخذ من البطاقة غير المتّصلة ضعف ما يأخذه شريط
+      // المقاييس من المتّصلة، لحقيقةٍ واحدة.
+      final i = wall.indexOf('if (isDown && since != null)');
+      expect(i, greaterThan(0), reason: 'لم يُعثر على كتلة «آخر ظهور»');
+      final block = wall.substring(i, wall.indexOf('if (open)', i));
+      expect(block.contains('BoxDecoration'), isFalse, reason: 'عاد الصندوق');
+      expect(block.contains('LucideIcons.clock'), isTrue);
+      expect(block.contains('آخر ظهور'), isTrue);
+    });
+
     test('لا شارة «الكلّ سليم»', () {
       // مكرّرةً فوق كلّ منطقة تُدرَّب العين على تجاهل ذلك الموضع، فحين
       // يظهر فيه «٣ معطّل» لا تراه. (طلب المستخدم ٢٠٢٦-٠٩-٠١)

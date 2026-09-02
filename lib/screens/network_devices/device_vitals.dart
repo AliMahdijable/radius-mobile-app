@@ -211,7 +211,9 @@ class DeviceVitals {
   /// نمتنع صراحةً بدل أن نحاول ونفشل: كلّ محاولة فاشلة تحجز خانةً من
   /// ستّ وتنتظر مهلتها كاملةً.
   static String? skipReason(NetworkDevice d) {
-    if (d.lastStatus == 'offline') return 'معطّل';
+    // «غير متّصل» لا «معطّل»: الثانية تعني مُوقَفاً بقرار المدير،
+    // وهذا جهازٌ لا يردّ فحسب. وبقيّة التطبيق تستعمل الأولى.
+    if (d.lastStatus == 'offline') return 'غير متّصل';
     if (!d.hasCredentials) return 'بلا بيانات دخول';
     if (!supports(d.brand)) return 'لا مقاييس لهذه العلامة';
     return null;
