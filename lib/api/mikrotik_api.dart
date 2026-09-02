@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/util/dev_log.dart';
+
 import 'mikrotik_binary_api.dart';
 
 /// Mikrotik high-level API — يستعمل Binary API (port 8728 افتراضي).
@@ -21,6 +23,29 @@ class MikrotikApi {
   ///   t=0: skeleton
   ///   t=500ms: CPU/RAM/interfaces (partial)
   ///   t=2s: wireless + clients (complete)
+  /// أيّ طريقٍ نجح في قراءة جدول التسجيل على هذا الجهاز.
+  ///
+  /// 🐛 هدرٌ يكشفه سجلّ المستخدم ٢٠٢٦-٠٩-٠٢: كلّ نقطة وصول ميكروتك
+  /// تدفع الثمن كاملاً في **كلّ** نبضة —
+  ///
+  ///     جدول التسجيل عبر الـAPI  → ٠ صفوف
+  ///     صيغة متعدّدة الكلمات      → !trap
+  ///     سقوط إلى SSH              → مصافحة كاملة → العملاء
+  ///
+  /// والمحاولتان الأوليان لم تنجحا مرّةً واحدة في سجلٍّ كامل. فهما
+  /// جولتا شبكةٍ مهدورتان كلّ خمس عشرة ثانية لكلّ جهاز.
+  ///
+  /// نتذكّر أنّ SSH هو الطريق هنا فنقصده مباشرةً. والذاكرة عمرُها عمرُ
+  /// التشغيل: ترقيةُ الجهاز قد تُصلح الـAPI، ولا نريد أن نحرمه منها
+  /// إلى الأبد.
+  ///
+  /// ⚠️ ولا نتذكّر **الفشل** بل النجاح: جهازٌ بلا عملاء اليوم يعطي
+  /// صفراً من الطريقين، وتذكُّرُ ذلك يمنعنا من قراءة عملائه غداً.
+  static final Map<String, bool> _regTableNeedsSsh = {};
+
+  /// للاختبار — يُنسي ما تعلّمه.
+  static void resetRegTableMemoForTest() => _regTableNeedsSsh.clear();
+
   static Future<MikrotikStats> fetchStats({
     required String ip,
     required int port, // 8728 (api) أو 8729 (api-ssl)
@@ -51,7 +76,8 @@ class MikrotikApi {
         // Debug: طباعة كل صفوف health لنعرف بأي أسماء fields يستعمل الراوتر
         // (CCR2116 مثلاً قد يستعمل psu1-voltage/psu2-voltage بدل voltage)
         if (kDebugMode && healthRows.isNotEmpty) {
-          debugPrint('🔵 [mikrotik health] rows count=${healthRows.length}');
+          DevLog.trace(
+              () => '🔵 [mikrotik health] rows count=${healthRows.length}');
           for (final r in healthRows) {
             debugPrint('   $r');
           }
@@ -339,7 +365,10 @@ class MikrotikApi {
       // path واحد بـslashes. غير معياريّ لكن يعمل على بعض firmware.
       if (wirelessClients.isEmpty &&
           failureMsg == null &&
-          wirelessRows.isNotEmpty) {
+          wirelessRows.isNotEmpty &&
+          // نعرف أنّ هذا الجهاز لا يقرأ الجدول إلّا عبر SSH — لا نُهدر
+          // جولةً على صيغةٍ ردّت `!trap` في كلّ مرّة.
+          _regTableNeedsSsh[ip] != true) {
         try {
           if (kDebugMode) debugPrint('🔁 [mikrotik] جرّب multi-word format');
           final regs = await client.query(
@@ -347,6 +376,9 @@ class MikrotikApi {
             debugLog: true,
           ).timeout(const Duration(seconds: 8));
           if (regs.isNotEmpty) {
+            // نجح الـAPI — ننسى ما تعلّمناه عن هذا الجهاز (ترقية
+            // firmware قد تُصلحه، والذاكرة يجب أن تتبع الواقع).
+            _regTableNeedsSsh.remove(ip);
             wirelessClients.addAll(regs);
             if (kDebugMode) {
               debugPrint(
@@ -369,6 +401,9 @@ class MikrotikApi {
         try {
           final sshClients = await _fetchClientsViaSsh(ip, user, pass);
           if (sshClients.isNotEmpty) {
+            // تعلّمنا: هذا الجهاز طريقُه SSH. الجولة القادمة تقصده
+            // مباشرةً وتوفّر محاولةً فاشلة.
+            _regTableNeedsSsh[ip] = true;
             wirelessClients.addAll(sshClients);
             if (kDebugMode) {
               debugPrint(
@@ -610,7 +645,7 @@ class MikrotikApi {
       );
       if (kDebugMode) {
         final preview = out.length > 400 ? out.substring(0, 400) : out;
-        debugPrint('📥 [mikrotik SSH] raw:\n$preview');
+        DevLog.trace(() => '📥 [mikrotik SSH] raw:\n$preview');
       }
       return _parseSshScript(out);
     } finally {

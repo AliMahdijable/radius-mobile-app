@@ -6,6 +6,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
+import '../core/util/dev_log.dart';
+
 /// Mikrotik RouterOS Binary API client (port 8728/8729).
 /// بروتوكول ثنائي رسمي من Mikrotik يعمل مع RouterOS 3.x → 7.x.
 ///
@@ -89,7 +91,7 @@ class MikrotikBinaryClient {
   Future<List<Map<String, String>>> query(List<String> command,
       {bool debugLog = false}) async {
     if (kDebugMode && debugLog) {
-      debugPrint('▶️ [mtk-api] send: ${command.join(" ")}');
+      DevLog.trace(() => '▶️ [mtk-api] send: ${command.join(" ")}');
     }
     await _writeSentence(command);
     final results = <Map<String, String>>[];
@@ -100,7 +102,7 @@ class MikrotikBinaryClient {
       if (sentence.isEmpty) continue;
       final tag = sentence.first;
       if (kDebugMode && debugLog) {
-        debugPrint(
+        DevLog.trace(() =>
             '◀️ [mtk-api] sentence #$sentenceCount tag=$tag words=${sentence.length}');
         if (tag == '!re' && sentence.length > 1) {
           // اطبع أول 3 keys لنتأكّد من شكل الحقول
@@ -125,7 +127,7 @@ class MikrotikBinaryClient {
       }
     }
     if (kDebugMode && debugLog) {
-      debugPrint('✅ [mtk-api] query done — ${results.length} rows');
+      DevLog.trace(() => '✅ [mtk-api] query done — ${results.length} rows');
     }
     return results;
   }
