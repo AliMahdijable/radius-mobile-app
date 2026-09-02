@@ -229,12 +229,20 @@ class DeviceVitals {
   ///
   /// [prev] عيّنة العدّادات السابقة — بلا سابقةٍ لا يمكن حساب معدّل
   /// مرور، فتُعرض شرطة حتّى الجلسة الثانية.
+  /// [detailed] يجلب التفاصيل (العملاء · المنافذ) — للبطاقة المفتوحة
+  /// واللوحة المفردة. والمطويّة تكتفي بالثلاثة.
+  ///
+  /// 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «جهاز واحد فقط ظهر معلومات، البقيّة تكتب
+  /// يقيس». والبطاقة المطويّة كانت تدفع ثمن الجلسة كاملةً لثلاثة
+  /// أرقام: جدول اللاسلكيّ، ثمّ جدول التسجيل، ثمّ صيغةٌ ثانية، ثمّ
+  /// جلسة SSH — نحو خمس عشرة ثانية لما يصل في أقلّ من ثانيتين.
+  /// وبستّ خانات، كلّ جلسةٍ طويلة تحجب خمس بطاقات.
   static Future<ProbeResult> fetch(NetworkDevice d,
-      {CounterSample? prev}) async {
+      {CounterSample? prev, bool detailed = false}) async {
     final creds = await NetworkDevicesApi.getCredentials(d.id);
     switch (d.brand.toLowerCase()) {
       case 'mikrotik':
-        return _mikrotik(d, creds, prev);
+        return _mikrotik(d, creds, prev, detailed);
       case 'ubnt':
         return _ubnt(d, creds, prev);
       case 'mimosa':
@@ -297,8 +305,8 @@ class DeviceVitals {
 
   // ── ميكروتك: معالج · ذاكرة · حرارة ───────────────────────────────
 
-  static Future<ProbeResult> _mikrotik(
-      NetworkDevice d, Map<String, dynamic> creds, CounterSample? prev) async {
+  static Future<ProbeResult> _mikrotik(NetworkDevice d,
+      Map<String, dynamic> creds, CounterSample? prev, bool detailed) async {
     final user = (creds['user'] ?? '').toString();
     final pass = (creds['pass'] ?? '').toString();
     if (user.isEmpty || pass.isEmpty) throw StateError('بيانات دخول ناقصة');
@@ -308,6 +316,7 @@ class DeviceVitals {
       port: d.apiPort ?? 8728,
       user: user,
       pass: pass,
+      vitalsOnly: !detailed,
     );
 
     final counters = <String, ({int rx, int tx})>{};

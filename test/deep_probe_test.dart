@@ -493,7 +493,74 @@ void main() {
       expect(wall.contains('if (!old.open && widget.open) _kick(urgent: true)'),
           isTrue);
       // والطازج يُحترم حتّى مع الاستعجال — لا جلسة لجهازٍ قُرئ قبل ثوانٍ.
-      expect(wall.contains('if (st.loading || st.isFresh) return;'), isTrue);
+      expect(wall.contains('if (st.loading || (st.isFresh && !needsDetail)) return;'),
+          isTrue);
+    });
+  });
+
+  group('المطويّ لا يدفع ثمن التفاصيل', () {
+    late String vitals;
+    late String wall;
+    late String mtk;
+    setUpAll(() {
+      vitals = File('lib/screens/network_devices/device_vitals.dart')
+          .readAsStringSync();
+      wall = File('lib/screens/network_devices/devices_wall_screen.dart')
+          .readAsStringSync();
+      mtk = File('lib/api/mikrotik_api.dart').readAsStringSync();
+    });
+
+    test('🚨 وضعٌ خفيف يقف عند الطبقة الأولى', () {
+      // البطاقة المطويّة تحتاج ثلاثة أرقام وكانت تدفع ثمن الجلسة
+      // كاملةً: جدول اللاسلكيّ، ثمّ جدول التسجيل، ثمّ صيغة ثانية، ثمّ
+      // جلسة SSH — نحو ١٥ث لما يصل في أقلّ من ثانيتين. وبستّ خانات
+      // فقط، كلّ جلسةٍ طويلة تحجب خمس بطاقات.
+      expect(mtk.contains('bool vitalsOnly = false,'), isTrue);
+      expect(mtk.contains('if (vitalsOnly) return tier1;'), isTrue);
+      final i = mtk.indexOf('if (vitalsOnly) return tier1;');
+      final j = mtk.indexOf('TIER 2', i);
+      expect(j, greaterThan(i), reason: 'الخروج قبل الطبقة الثانية');
+    });
+
+    test('المفتوح وحده يطلب التفاصيل', () {
+      expect(vitals.contains('bool detailed = false'), isTrue);
+      expect(vitals.contains('vitalsOnly: !detailed'), isTrue);
+      expect(wall.contains('detailed: widget.open'), isTrue);
+    });
+
+    test('🚨 الفتح يتجاوز الطزاجة حين تنقص التفاصيل', () {
+      // القراءة المطويّة خفيفة، فطزاجتُها لا تُغني المفتوحَ عن جلسته.
+      // ولولا الاستثناء لبقي المفتوح بلا تفصيلٍ عشرين ثانية بحجّة أنّ
+      // أرقامه حديثة.
+      expect(wall.contains('final needsDetail = widget.open'), isTrue);
+      expect(wall.contains('st.isFresh && !needsDetail'), isTrue);
+    });
+  });
+
+  group('التسخين لا يزاحم المرئيّ', () {
+    late String warm;
+    setUpAll(() =>
+        warm = File('lib/services/device_warmup.dart').readAsStringSync());
+
+    test('🚨 ينتظر اكتمال جلسته قبل التالية', () {
+      // كانت تُطلَق كلّ ٣ث وجلسة ميكروتك ١٥ث — فتتراكم خمسُ مهامّ على
+      // ستّ خانات، ولا يبقى للمرئيّ إلّا واحدة. الفجوة كانت بين
+      // الإطلاقين لا بين الجلستين.
+      expect(warm.contains('final done = Completer<void>();'), isTrue);
+      expect(warm.contains('await done.future'), isTrue);
+      final i = warm.indexOf('await done.future');
+      final j = warm.indexOf('_timer = Timer(gap, _tick);', i);
+      expect(j, greaterThan(i), reason: 'الفجوة بعد الاكتمال لا قبله');
+    });
+
+    test('🚨 يستأذن قبل كلّ جهاز', () {
+      // الأولويّة ترتّب المنتظرين ولا تُخرج من بدأ.
+      expect(warm.contains('DeepProbeScheduler.instance.hasFirstPending'),
+          isTrue);
+    });
+
+    test('ولا يقف لو أُسقطت مهمّته', () {
+      expect(warm.contains('DeepProbeScheduler.jobTimeout +'), isTrue);
     });
   });
 }

@@ -52,6 +52,12 @@ class DeepProbeScheduler {
   int get activeCount => _active;
   int get pendingCount => _pending.length;
 
+  /// هل ينتظر أحدٌ قراءته **الأولى**؟
+  ///
+  /// التسخين يسأل قبل كلّ جهاز: لا نُسخّن لجهازٍ قد يُفتح غداً بينما
+  /// بطاقةٌ أمام عين المستخدم تنتظر رقمها الأوّل.
+  bool get hasFirstPending => _pending.any((j) => j.first);
+
   /// يُدرج مهمّة باسم [owner]. المالك مفتاح الإلغاء — مرّر البطاقة
   /// نفسها (`this` من الـState) فيسهل سحبها عند التخلّص منها.
   ///

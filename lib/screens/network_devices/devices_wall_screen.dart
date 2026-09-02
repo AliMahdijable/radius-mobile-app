@@ -719,9 +719,13 @@ class _DeviceCardState extends State<_DeviceCard> {
   void _kick({bool urgent = false}) {
     if (!mounted) return;
     final st = widget.vitals.value;
-    // ⚠️ الطازج يُحترم حتّى مع الاستعجال: الفتح يُقدّم من ينتظر، ولا
-    // يُبرّر جلسةً لجهازٍ قُرئ قبل ثوانٍ.
-    if (st.loading || st.isFresh) return;
+    // ⚠️ الطازج يُحترم — إلّا عند الفتح بلا تفاصيل.
+    //
+    // القراءة المطويّة خفيفة (ثلاثة أرقام بلا عملاء ولا منافذ)، فطزاجتُها
+    // لا تُغني المفتوحَ عن جلسته. ولولا هذا الاستثناء لبقي المطويّ
+    // المفتوح بلا تفصيلٍ عشرين ثانية بحجّة أنّ أرقامه حديثة.
+    final needsDetail = widget.open && st.detail?.ports.isEmpty != false;
+    if (st.loading || (st.isFresh && !needsDetail)) return;
 
     // الامتناع الصريح أرخص من محاولةٍ تفشل: كلّ محاولة تحجز خانةً من
     // ستّ وتنتظر مهلتها كاملةً قبل أن تُحرّرها.
@@ -748,6 +752,8 @@ class _DeviceCardState extends State<_DeviceCard> {
         final r = await DeviceVitals.fetch(
           widget.device,
           prev: widget.prevSample(),
+          // المفتوحة وحدها تدفع ثمن التفاصيل — راجع [DeviceVitals.fetch].
+          detailed: widget.open,
         );
         if (!mounted) return;
         // العيّنة تُحفظ **قبل** النشر: الجلسة القادمة تطرح منها.

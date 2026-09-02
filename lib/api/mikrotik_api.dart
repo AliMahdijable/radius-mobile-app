@@ -53,6 +53,20 @@ class MikrotikApi {
     required String pass,
     Duration timeout = const Duration(seconds: 6),
     void Function(MikrotikStats partial)? onPartialReady,
+
+    /// يقف عند الطبقة الأولى: موارد النظام والصحّة والمنافذ.
+    ///
+    /// 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «جهاز واحد فقط ظهر معلومات، البقيّة تكتب
+    /// يقيس». والسبب أنّ البطاقة المطويّة تحتاج **ثلاثة أرقام** (معالج
+    /// · ذاكرة · حرارة) وتدفع ثمن الجلسة كاملةً: جدول اللاسلكيّ، ثمّ
+    /// جدول التسجيل، ثمّ صيغةٌ ثانية، ثمّ جلسة SSH — نحو خمس عشرة
+    /// ثانية لجهازٍ تُقرأ منه ثلاثة أرقام تصل في أقلّ من ثانيتين.
+    ///
+    /// وبستّ خانات فقط، كلّ جلسةٍ طويلة تحجب خمس بطاقات.
+    ///
+    /// ⚠️ ولا يُستعمل حيث تُعرض التفاصيل: اللوحة المفردة والبطاقة
+    /// المفتوحة تحتاجان العملاء والمنافذ فعلاً.
+    bool vitalsOnly = false,
   }) async {
     final client = MikrotikBinaryClient(
       host: ip,
@@ -255,6 +269,9 @@ class MikrotikApi {
           onPartialReady(tier1);
         } catch (_) {}
       }
+
+      // في الوضع الخفيف نكتفي بالطبقة الأولى — راجع [vitalsOnly].
+      if (vitalsOnly) return tier1;
 
       // ═══════ TIER 2 (تفاصيل — wireless + enrichment) ═══════
       // 2026-08-18: أجهزة Mikrotik تستعمل حزم wireless مختلفة حسب النوع:
