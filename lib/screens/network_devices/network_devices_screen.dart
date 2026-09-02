@@ -465,8 +465,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
   /// شاشة Bulk scan — يرجع bool لو أُضيف أي جهاز.
   /// نمرّر IPs الحاليّة عشان الـscanner يميّز المكرّرات ("مضاف مسبقاً").
-  /// يفتح جدار المراقبة. الجدار يمسك [DeviceSweep] فتتوقّف جولتنا ما
-  /// دام مفتوحاً، ثمّ نُحدّث عند العودة لأنّه مسح نيابةً عنّا.
+  /// يفتح «نظرة عامّة». الشاشة تمسك [DeviceSweep] فتتوقّف جولتنا ما
+  /// دامت مفتوحة، ثمّ نُحدّث عند العودة لأنّها مسحت نيابةً عنّا.
   Future<void> _openWall() async {
     await Navigator.push(
       context,
@@ -637,7 +637,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
           IconButton(
             icon: const Icon(LucideIcons.layoutGrid, size: 20),
             onPressed: _openWall,
-            tooltip: 'جدار الأجهزة',
+            tooltip: 'نظرة عامّة',
           ),
           // Manage-tier tools — 2026-08-18: مخفيّة للـview-only.
           if (Perms.has('devices.manage')) ...[
