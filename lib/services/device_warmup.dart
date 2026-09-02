@@ -48,12 +48,36 @@ class DeviceWarmup {
   /// يبدأ التسخين لقائمة الأجهزة الحاليّة. استدعاؤه مرّةً ثانيةً بقائمةٍ
   /// أحدث يُحدّث الطابور بلا إعادة ما سُخِّن.
   void start(List<NetworkDevice> devices) {
+    // ⚠️ مرحلتان بترتيبٍ مقصود.
+    //
+    // 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «بقت بس معلومات الترفك والمتّصلين، هم جاي
+    // تنطلب بطلب ثاني وتتأخّر».
+    //
+    // وهو الثمن المباشر لفصل الخفيف عن الكامل: البطاقة تمتلئ بسرعة،
+    // ثمّ يدفع الفتحُ ثمن جلسةٍ ثانية أمام عين المستخدم.
+    //
+    // الحلّ ألّا ينتظرها: نُرقّي الحمولة الخفيفة إلى كاملة **في
+    // الخلفيّة** بعد أن يمتلئ كلّ شيء. فحين يفتح البطاقة تكون
+    // التفاصيل في المخزن أصلاً.
+    //
+    // والترتيب: من لا قراءة له أوّلاً (رقمٌ لا شيء)، ثمّ الترقيات
+    // (تفصيلٌ فوق رقم). فرقُ «لا أعرف» عن «أعرف» يسبق فرقَ «أعرف
+    // بعضه» عن «أعرف كلّه».
+    final fresh = devices.where(_worth).toList();
+    final upgrades = devices.where(_needsUpgrade).toList();
     _queue
       ..clear()
-      ..addAll(devices.where(_worth));
+      ..addAll(fresh)
+      ..addAll(upgrades);
     if (_running) return;
     _running = true;
     _tick();
+  }
+
+  /// جهازٌ قُرئ خفيفاً وتفاصيله ناقصة.
+  bool _needsUpgrade(NetworkDevice d) {
+    if (DeviceVitals.skipReason(d) != null) return false;
+    return DeviceStatsCache.instance.needsUpgrade(d.id);
   }
 
   void stop() {
@@ -79,6 +103,11 @@ class DeviceWarmup {
     if (DeviceVitals.skipReason(d) != null) return false;
     return DeviceStatsCache.instance.ageOf(d.id) == null;
   }
+
+  /// جولة الترقية تُعاد كلّما فتح المستخدم القسم — فما رُقّي يبقى
+  /// مرقّىً، وما شاخ يُرقّى ثانيةً. لذلك لا نستعمل `_done` هنا.
+  ///
+  /// وهي رخيصة: `needsUpgrade` تُرجع false لمن حمولته كاملةٌ طازجة.
 
   Future<void> _tick() async {
     if (!_running) return;
@@ -114,8 +143,13 @@ class DeviceWarmup {
     final done = Completer<void>();
     DeepProbeScheduler.instance.submit(_WarmOwner(d.id), () async {
       try {
-        final r = await DeviceVitals.fetch(d);
-        if (r.raw != null) DeviceStatsCache.instance.putRaw(d.id, r.raw!);
+        // ⚠️ التسخين يجلب **الكامل** دائماً: غايته أن يجد المستخدمُ
+        // التفاصيلَ جاهزةً حين يفتح. وجلبٌ خفيف هنا يؤجّل المشكلة لا
+        // يحلّها.
+        final r = await DeviceVitals.fetch(d, detailed: true);
+        if (r.raw != null) {
+          DeviceStatsCache.instance.putRaw(d.id, r.raw!, detailed: true);
+        }
         DeviceStatsCache.instance.putSample(d.id, r.counters);
       } catch (_) {
         // فشلُ تسخينٍ لا يُبلَّغ: المستخدم لم يطلبه، وسيرى الخطأ

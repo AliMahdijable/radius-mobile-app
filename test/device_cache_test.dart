@@ -122,4 +122,76 @@ void main() {
       });
     }
   });
+
+  group('رتبة الحمولة', () {
+    setUp(cache.clear);
+
+    test('🚨 الخفيفة لا تُحسب كاملة', () {
+      // بلا التمييز نظنّ الخفيفة كافيةً فنعرض تفصيلاً فارغاً، ولا
+      // تُرقَّى أبداً.
+      cache.putRaw(1, 'خفيفة', detailed: false);
+      expect(cache.isDetailed(1), isFalse);
+      expect(cache.needsUpgrade(1), isTrue);
+    });
+
+    test('الكاملة تُنهي الحاجة', () {
+      cache.putRaw(1, 'كاملة', detailed: true);
+      expect(cache.isDetailed(1), isTrue);
+      expect(cache.needsUpgrade(1), isFalse);
+    });
+
+    test('🚨 خفيفةٌ بعد كاملة لا تمحو التفاصيل', () {
+      // البطاقة المطويّة تُجدّد أرقامها كلّ نبضة بجلسةٍ خفيفة. ولو
+      // أنزلت الرتبة لأُعيدت الترقية إلى الأبد، ولاختفى التفصيل من
+      // بطاقةٍ مفتوحة.
+      cache.putRaw(1, 'كاملة', detailed: true);
+      cache.putRaw(1, 'خفيفة', detailed: false);
+      expect(cache.isDetailed(1), isTrue, reason: 'الرتبة نزلت');
+      expect(cache.seedFor<String>(1), 'كاملة',
+          reason: 'والحمولة استُبدلت بالناقصة');
+    });
+
+    test('من لا قراءة له ليس مرشَّحاً للترقية', () {
+      expect(cache.needsUpgrade(99), isFalse);
+      expect(cache.isDetailed(99), isFalse);
+    });
+  });
+
+  group('الترقية الصامتة', () {
+    late String warm;
+    late String wall;
+    setUpAll(() {
+      warm = File('lib/services/device_warmup.dart').readAsStringSync();
+      wall = File('lib/screens/network_devices/devices_wall_screen.dart')
+          .readAsStringSync();
+    });
+
+    test('🚨 من لا قراءة له يسبق الترقيات', () {
+      // فرقُ «لا أعرف» عن «أعرف» يسبق فرقَ «أعرف بعضه» عن «أعرف كلّه».
+      final iFresh = warm.indexOf('..addAll(fresh)');
+      final iUp = warm.indexOf('..addAll(upgrades)');
+      expect(iFresh, greaterThan(0));
+      expect(iFresh, lessThan(iUp));
+    });
+
+    test('🚨 التسخين يجلب الكامل دائماً', () {
+      // جلبٌ خفيف هنا يؤجّل المشكلة لا يحلّها.
+      expect(warm.contains('DeviceVitals.fetch(d, detailed: true)'), isTrue);
+      expect(warm.contains('putRaw(d.id, r.raw!, detailed: true)'), isTrue);
+    });
+
+    test('الجدار يُشغّلها ويوقفها', () {
+      expect(wall.contains('DeviceWarmup.instance.start(_all)'), isTrue);
+      expect(wall.contains('DeviceWarmup.instance.stop()'), isTrue);
+    });
+
+    test('🚨 البطاقة تُصدّق المخزن لا حالتها', () {
+      // الترقية الصامتة قد تكون جلبت التفاصيل بعد آخر نشرٍ للبطاقة —
+      // فلو سألت حالتها وحدها لأعادت جلسةً بلا داعٍ.
+      expect(wall.contains('DeviceStatsCache.instance.isDetailed(widget.device.id)'),
+          isTrue);
+      expect(wall.contains('detailed: widget.open'), isTrue,
+          reason: 'الرتبة تتبع ما طُلب فعلاً');
+    });
+  });
 }

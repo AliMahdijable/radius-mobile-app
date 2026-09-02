@@ -11,6 +11,7 @@ import '../../models/network_device.dart';
 import '../../services/device_alerts_service.dart';
 import '../../services/device_stats_cache.dart';
 import '../../services/device_sweep_coordinator.dart';
+import '../../services/device_warmup.dart';
 import '../../services/deep_probe_scheduler.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -96,6 +97,7 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
     _timer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     DeviceSweep.release();
+    DeviceWarmup.instance.stop();
     _vitals.dispose();
     super.dispose();
   }
@@ -158,6 +160,10 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
       }
       _start();
       _sweep();
+      // ترقيةٌ صامتة في الخلفيّة: تُحوّل القراءات الخفيفة إلى كاملة
+      // فتكون التفاصيل جاهزةً حين يفتح المستخدم بطاقة. تستأذن قبل كلّ
+      // جهاز فلا تُزاحم من ينتظر رقمه الأوّل — راجع [DeviceWarmup].
+      DeviceWarmup.instance.start(_all);
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -724,7 +730,10 @@ class _DeviceCardState extends State<_DeviceCard> {
     // القراءة المطويّة خفيفة (ثلاثة أرقام بلا عملاء ولا منافذ)، فطزاجتُها
     // لا تُغني المفتوحَ عن جلسته. ولولا هذا الاستثناء لبقي المطويّ
     // المفتوح بلا تفصيلٍ عشرين ثانية بحجّة أنّ أرقامه حديثة.
-    final needsDetail = widget.open && st.detail?.ports.isEmpty != false;
+    // المخزن هو المرجع لا الحالة المعروضة: الترقية الصامتة قد تكون
+    // جلبت التفاصيل بعد آخر نشرٍ لهذه البطاقة.
+    final hasDetail = DeviceStatsCache.instance.isDetailed(widget.device.id);
+    final needsDetail = widget.open && !hasDetail;
     if (st.loading || (st.isFresh && !needsDetail)) return;
 
     // الامتناع الصريح أرخص من محاولةٍ تفشل: كلّ محاولة تحجز خانةً من
@@ -761,7 +770,10 @@ class _DeviceCardState extends State<_DeviceCard> {
         // والحمولة الخام تُحفظ لتُبذَر بها اللوحة المفردة — فلا يدفع
         // المستخدم ثمن الجلسة مرّتين حين ينقر البطاقة.
         if (r.raw != null) {
-          DeviceStatsCache.instance.putRaw(widget.device.id, r.raw!);
+          // الرتبة تتبع ما طلبناه فعلاً — وإلّا ظننّا الخفيفة كاملةً
+          // فعرضنا تفصيلاً فارغاً ولم تُرقَّ أبداً.
+          DeviceStatsCache.instance
+              .putRaw(widget.device.id, r.raw!, detailed: widget.open);
         }
         widget.onVitals(VitalsState(
           vitals: r.vitals,

@@ -36,10 +36,36 @@ class DeviceStatsCache {
   final Map<int, _Entry> _byId = {};
 
   /// يحفظ حمولة علامةٍ خام بعد جلسةٍ ناجحة.
-  void putRaw(int deviceId, Object raw) {
+  ///
+  /// [detailed] تُفرّق بين حمولةٍ خفيفة (ثلاثة أرقام) وأخرى كاملة (مع
+  /// المنافذ والعملاء). فالبطاقة المطويّة تكتفي بالأولى، والمفتوحة
+  /// واللوحة المفردة تحتاجان الثانية — وبلا هذا التمييز نظنّ الخفيفة
+  /// كافيةً فنعرض تفصيلاً فارغاً.
+  void putRaw(int deviceId, Object raw, {bool detailed = true}) {
     final e = _byId.putIfAbsent(deviceId, _Entry.new);
+    // ⚠️ لا نُنزل الرتبة: جلسةٌ خفيفة بعد كاملةٍ طازجة لا تمحو
+    // تفاصيلها — القيم تُحدَّث والتفصيل يبقى.
+    if (e.detailed && !detailed && e.raw != null && _fresh(e.rawAt)) {
+      return;
+    }
     e.raw = raw;
     e.rawAt = DateTime.now();
+    e.detailed = detailed;
+  }
+
+  static bool _fresh(DateTime? at) =>
+      at != null && DateTime.now().difference(at) <= seedTtl;
+
+  /// هل الحمولة المحفوظة تحمل التفاصيل (منافذ · عملاء)؟
+  bool isDetailed(int deviceId) {
+    final e = _byId[deviceId];
+    return e != null && e.detailed && _fresh(e.rawAt);
+  }
+
+  /// جهازٌ قُرئ خفيفاً وينتظر ترقيةً إلى الكامل.
+  bool needsUpgrade(int deviceId) {
+    final e = _byId[deviceId];
+    return e != null && e.raw != null && !e.detailed && _fresh(e.rawAt);
   }
 
   /// حمولةٌ خام صالحة للبذر، أو `null`.
@@ -86,6 +112,9 @@ class DeviceStatsCache {
 class _Entry {
   Object? raw;
   DateTime? rawAt;
+
+  /// هل تحمل المنافذ والعملاء، أم ثلاثة أرقام فقط؟
+  bool detailed = false;
   Map<String, ({int rx, int tx})>? counters;
   DateTime? countersAt;
 }
