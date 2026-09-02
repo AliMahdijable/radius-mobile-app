@@ -79,6 +79,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
 
   @override
   void dispose() {
+    _quickSampleTimer?.cancel();
     _timer?.cancel();
     super.dispose();
   }
@@ -146,9 +147,10 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
       );
       if (!mounted) return;
       setState(() {
-        _computeTraffic(s);
+        _computeTraffic(s.counters);
         _stats = s;
         _lastFetch = DateTime.now();
+        _maybeQuickSecondSample();
         _loading = false;
       });
       // العملاء PtMP (اختياري — للسكتورات فقط A5/A6/C5). لا يوقف الـpanel لو
@@ -186,10 +188,10 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
   ///
   /// وارتدادُ العدّاد (إقلاعٌ أو التفافُ ٣٢-بت) يُهمَل، فلا نُخرج رقماً
   /// سالباً أو ضخماً كاذباً.
-  void _computeTraffic(MimosaStats s) {
+  void _computeTraffic(List<MimosaIfCounter> counters) {
     final now = DateTime.now();
     final fresh = <int, ({int rx, int tx})>{
-      for (final c in s.counters) c.index: (rx: c.rxOctets, tx: c.txOctets),
+      for (final c in counters) c.index: (rx: c.rxOctets, tx: c.txOctets),
     };
     final prev = _lastCounters;
     final prevAt = _lastCountersAt;
@@ -202,7 +204,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
 
     // معدّل كلّ واجهة أوّلاً، ثمّ الاختيار — لا اختيارٌ أثناء الحساب.
     final rates = <int, ({int rx, int tx})>{};
-    for (final c in s.counters) {
+    for (final c in counters) {
       final b = prev[c.index];
       if (b == null) continue;
       if (c.rxOctets < b.rx || c.txOctets < b.tx) continue; // ارتداد
@@ -240,6 +242,38 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
     // المعروض وللرسم، فلا ينحرف أحدهما عن الآخر.
     _history.add(_TrafficSample(at: now, rxBps: bestRx, txBps: bestTx));
     if (_history.length > _maxHistory) _history.removeAt(0);
+  }
+
+  Timer? _quickSampleTimer;
+
+  /// عيّنة ثانية سريعة — لئلّا ينتظر الترفك نبضتين كاملتين.
+  ///
+  /// 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «الترفك الوحيد يتأخّر ٣٠ ثانية». والسبب
+  /// حسابيّ لا شبكيّ: المعدّل فارقُ عيّنتين والنبضة كلّ ١٥ ثانية، أمّا
+  /// بقيّة القيم فمطلقةٌ تظهر من الأولى.
+  ///
+  /// نأخذ الثانية بعد أربع ثوانٍ بجلبٍ مقتصر على العدّادات (ثلاث مشيات
+  /// بدل عشر). وأربعٌ لا واحدة: نافذةٌ أقصر تُضخّم ضجيج العدّاد.
+  void _maybeQuickSecondSample() {
+    if (_history.isNotEmpty || _quickSampleTimer != null) return;
+    _quickSampleTimer = Timer(const Duration(seconds: 4), () async {
+      _quickSampleTimer = null;
+      if (!mounted || _history.isNotEmpty) return;
+      try {
+        final creds = await NetworkDevicesApi.getCredentials(widget.device.id);
+        final community =
+            (creds['community'] ?? creds['user'] ?? 'public').toString();
+        final counters = await MimosaApi.fetchCounters(
+          host: widget.device.ip,
+          port: widget.device.apiPort ?? 161,
+          community: community,
+        );
+        if (!mounted || counters.isEmpty) return;
+        setState(() => _computeTraffic(counters));
+      } catch (_) {
+        // فشلها لا يضرّ — النبضة العاديّة ستُنتج الرقم بعد قليل.
+      }
+    });
   }
 
   /// أكثر الواجهات حركةً — يُستدعى عند التثبيت الأوّل فقط.
@@ -815,7 +849,13 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
         if (_history.length >= 2) ...[
           const SizedBox(height: 12),
           SizedBox(
-            height: 120,
+            // ⚠️ ١٢٨ لا ١٢٠، والفارق حشوٌ سفليّ داخل الصندوق.
+            //
+            // `fl_chart` يمدّ منطقة الرسم إلى حافّة صندوقها تماماً حين
+            // تُخفى تسميات المحور السفليّ، فلا يفصل خطَّ الصفر عن حدّ
+            // البطاقة إلّا حشوُها — ويبدو الرسم ملتصقاً بالقاع.
+            // (بلاغ ٢٠٢٦-٠٩-٠٢)
+            height: 128,
             child: RepaintBoundary(
               child: LineChart(
                 duration: Duration.zero,
@@ -853,6 +893,8 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
                     ),
                   ),
                   borderData: FlBorderData(show: false),
+                  // حشوٌ داخل الرسم نفسه: يُبعد خطّ الصفر عن الحافّة
+                  // ويترك للتعبئة أن تُقرأ.
                   minY: 0,
                   maxY: maxY,
                   minX: 0,
@@ -879,6 +921,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
               ),
             ),
           ),
+          const SizedBox(height: Sp.xs),
         ],
       ]),
     );
@@ -998,14 +1041,18 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
               style: AppType.bodyBold()),
         ]),
         const SizedBox(height: 12),
-        // ⚠️ سطرٌ واحد لا سطران (طلب المستخدم ٢٠٢٦-٠٩-٠٢).
+        // ⚠️ «زمن التشغيل» = منذ متى **والوصلة قائمة**. ولا سقوطَ إلى
+        // عمر وكيل SNMP عند غيابها.
         //
-        // «زمن التشغيل» هنا = منذ متى **والوصلة قائمة**. وعمر وكيل
-        // SNMP حُذف: لا يعني المراقِبَ شيئاً، وإعادةُ تشغيل وكيلٍ
-        // تُصفّره فيبدو البرج ساقطاً وهو لم يتزحزح — عرضُه بجانب
-        // الصحيح يدعو للخلط لا للتشخيص.
-        _infoRow('زمن التشغيل',
-            _formatUptime(s.linkUptimeSec ?? s.sysUptimeSec)),
+        // 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «أوّل ما أفتح ميموزا يطلع زمن الاتصال
+        // الذي قلتُ لك عليه». والسبب أنّ الحمولة الأولى (Tier 1) بلا
+        // مدّة وصلة، فيسقط العرض إلى عمر الوكيل ويومض رقمٌ قصير خاطئ
+        // (٤١ دقيقة) قبل أن يصحّح إلى ٩ أيّام.
+        //
+        // فالسطر يغيب حتّى تصل قيمتُه الصحيحة. غيابُ سطرٍ لحظةً أهون
+        // من رقمٍ يكذب — والرقم هنا يقول إنّ البرج سقط قبل دقائق.
+        if (s.linkUptimeSec != null)
+          _infoRow('زمن التشغيل', _formatUptime(s.linkUptimeSec!)),
         if (s.antennaGainDbi != null)
           _infoRow('Antenna Gain', '${s.antennaGainDbi} dBi'),
         if (s.wirelessMode != null)

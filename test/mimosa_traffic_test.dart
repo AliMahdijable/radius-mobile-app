@@ -189,4 +189,37 @@ void main() {
       expect(panel.contains('rx > 10000000000 || tx > 10000000000'), isTrue);
     });
   });
+
+  group('لا انتظار ثلاثين ثانية', () {
+    late String api;
+    setUpAll(() => api = File('lib/api/mimosa_api.dart').readAsStringSync());
+
+    test('🚨 عيّنة ثانية سريعة بعد أوّل جلب', () {
+      // بلاغ ٢٠٢٦-٠٩-٠٢: «الترفك الوحيد يتأخّر — كلّ البيانات تظهر
+      // وهو يأخذ ٣٠ ثانية». والسبب حسابيّ لا شبكيّ: المعدّل فارقُ
+      // عيّنتين والنبضة كلّ ١٥ ثانية، أمّا بقيّة القيم فمطلقة.
+      expect(panel.contains('_maybeQuickSecondSample()'), isTrue);
+      expect(panel.contains('Timer(const Duration(seconds: 4)'), isTrue,
+          reason: 'أربعٌ لا واحدة — نافذةٌ أقصر تُضخّم ضجيج العدّاد');
+    });
+
+    test('الجلب السريع مقتصر على العدّادات', () {
+      // ثلاث مشيات بدل عشر، فلا يُثقل الجهاز.
+      expect(api.contains('static Future<List<MimosaIfCounter>> fetchCounters('),
+          isTrue);
+      final i = api.indexOf('fetchCounters(');
+      final body = api.substring(i, api.indexOf('_lastIndex(String oid)', i));
+      for (final heavy in ['_oidChainTable', '_oidStreamTable',
+                           '_oidChannelTable', '_oidSsid']) {
+        expect(body.contains(heavy), isFalse, reason: 'الجلب السريع يجرّ $heavy');
+      }
+    });
+
+    test('لا تتكرّر ولا تسبق نفسها', () {
+      expect(panel.contains('if (_history.isNotEmpty || _quickSampleTimer != null) return;'),
+          isTrue, reason: 'واحدةٌ فقط، ولا تعمل بعد وجود تاريخ');
+      expect(panel.contains('_quickSampleTimer?.cancel();'), isTrue,
+          reason: 'تُلغى مع الشاشة وإلّا نادت setState على ميّت');
+    });
+  });
 }

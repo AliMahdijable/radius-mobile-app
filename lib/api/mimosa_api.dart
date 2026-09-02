@@ -434,6 +434,50 @@ class MimosaApi {
   }
 
   /// Mimosa returns dBm × 10 in most fields (e.g. 427 = 42.7 dBm)
+  /// جلبٌ خفيف للعدّادات وحدها — بلا RF ولا سلاسل ولا نظام.
+  ///
+  /// 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «الترفك الوحيد يتأخّر — كلّ البيانات تظهر
+  /// وهو يأخذ ٣٠ ثانية».
+  ///
+  /// والسبب حسابيّ لا شبكيّ: المعدّل فارقُ عيّنتين، والنبضة كلّ ١٥
+  /// ثانية — فأوّل رقم لا يُولد قبل الثلاثين. وبقيّة القيم مطلقةٌ
+  /// تظهر من العيّنة الأولى.
+  ///
+  /// فالعيّنة الثانية تُؤخذ بعد ثوانٍ قليلة بجلبٍ مقتصر: ثلاث مشيات
+  /// بدل عشر، فلا تُثقل ولا تنتظر النبضة.
+  static Future<List<MimosaIfCounter>> fetchCounters({
+    required String host,
+    int port = 161,
+    required String community,
+    Duration timeout = const Duration(seconds: 4),
+  }) async {
+    final snmp = SnmpV2c(
+        host: host, port: port, community: community, timeout: timeout);
+    var inRows = await snmp.walk(_oidIfHcIn, chunkSize: 16);
+    var outRows = await snmp.walk(_oidIfHcOut, chunkSize: 16);
+    if (inRows.isEmpty || outRows.isEmpty) {
+      inRows = await snmp.walk(_oidIfIn32, chunkSize: 16);
+      outRows = await snmp.walk(_oidIfOut32, chunkSize: 16);
+    }
+    final inByIdx = <int, int>{};
+    for (final vb in inRows) {
+      final i = _lastIndex(vb.oid);
+      if (i != null && !vb.isAbsent) inByIdx[i] = vb.asInt;
+    }
+    final out = <MimosaIfCounter>[];
+    for (final vb in outRows) {
+      final i = _lastIndex(vb.oid);
+      if (i == null || vb.isAbsent || !inByIdx.containsKey(i)) continue;
+      out.add(MimosaIfCounter(
+        index: i,
+        name: 'if$i',
+        rxOctets: inByIdx[i]!,
+        txOctets: vb.asInt,
+      ));
+    }
+    return out;
+  }
+
   /// آخر رقم في الـOID — فهرس الواجهة.
   static int? _lastIndex(String oid) {
     final i = oid.lastIndexOf('.');

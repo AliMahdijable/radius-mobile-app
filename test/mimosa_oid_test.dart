@@ -180,14 +180,19 @@ void main() {
       expect(panel.contains("_infoRow('زمن التشغيل'"), isTrue);
       expect(panel.contains("'تشغيل الجهاز'"), isFalse);
       expect(panel.contains("'مدّة الوصلة'"), isFalse);
-      expect(panel.contains('s.linkUptimeSec ?? s.sysUptimeSec'), isTrue,
-          reason: 'الوصلة أوّلاً والسقوط إلى عمر الوكيل عند غيابها');
+      expect(panel.contains("_infoRow('زمن التشغيل',"), isTrue,
+          reason: 'الوصلة وحدها — لا سقوطَ إلى عمر الوكيل');
     });
 
-    test('غيابها لا يكسر شيئاً', () {
-      // طُرُزٌ قد لا تعرضها — عندها نسقط إلى عمر الوكيل بلا تلفيق.
+    test('🚨 لا سقوطَ إلى عمر وكيل SNMP', () {
+      // بلاغ ٢٠٢٦-٠٩-٠٢: الحمولة الأولى بلا مدّة وصلة، فكان يومض رقمٌ
+      // قصير خاطئ (٤١ دقيقة) قبل التصحيح إلى ٩ أيّام. والرقم لا يكذب
+      // كذباً محايداً — يقول إنّ البرج سقط قبل دقائق.
       expect(src.contains('linkUptimeSec: _parseUptime('), isTrue);
-      expect(panel.contains('s.linkUptimeSec ?? s.sysUptimeSec'), isTrue);
+      expect(panel.contains('s.linkUptimeSec ?? s.sysUptimeSec'), isFalse,
+          reason: 'عاد السقوط إلى عمر الوكيل');
+      expect(panel.contains('if (s.linkUptimeSec != null)'), isTrue,
+          reason: 'السطر يغيب حتّى تصل قيمتُه الصحيحة');
     });
   });
 }

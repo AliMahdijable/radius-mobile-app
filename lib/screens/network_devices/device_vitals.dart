@@ -535,9 +535,12 @@ class DeviceVitals {
               ),
       ],
       detail: DeviceDetail(
-        // مدّة الوصلة لا عمر وكيل SNMP — الأوّل ما يهمّ من يراقب برجاً،
-        // وإعادةُ تشغيل وكيلٍ تُصفّر الثاني ولا تمسّ الأوّل.
-        uptime: fmtUptime(s.linkUptimeSec ?? s.sysUptimeSec),
+        // مدّة الوصلة وحدها — لا سقوطَ إلى عمر وكيل SNMP.
+        //
+        // الأوّل ما يهمّ من يراقب برجاً، والثاني يُصفَّر بإعادة تشغيل
+        // وكيلٍ فيقول إنّ البرج سقط قبل دقائق وهو لم يتزحزح. شرطةٌ
+        // أصدق من رقمٍ يكذب.
+        uptime: s.linkUptimeSec == null ? null : fmtUptime(s.linkUptimeSec!),
         firmware: s.firmwareVersion,
         model: s.deviceName,
         peersLabel: 'المحطّات',
