@@ -70,7 +70,19 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
   static const int _maxHistory = 30;
   final List<_TrafficSample> _history = [];
 
-  static const _refreshInterval = Duration(seconds: 15);
+  /// نبضة الشاشة المفتوحة.
+  ///
+  /// 🐛 ملاحظة المستخدم ٢٠٢٦-٠٩-٠٢: «فترة التحديث تتأخّر هواي».
+  ///
+  /// وكانت خمس عشرة ثانية — وهي مناسبةٌ لمسحٍ جماعيّ، لا لشاشةٍ يقف
+  /// أمامها المستخدم ينظر إلى **جهازٍ واحد**. الجلسة هنا لا تُزاحم
+  /// أحداً: لا سقف ستّ خانات ولا ثمانون جهازاً — جهازٌ واحد وشاشةٌ
+  /// مفتوحة.
+  ///
+  /// ⚠️ ولا نهبط إلى ثمانٍ كميكروتك: جلستُه عبر الـAPI الثنائيّ
+  /// بأجزاء الثانية، وجلسة SSH/SNMP هنا أثقل — نبضةٌ أسرع من زمن
+  /// الجلسة تُنتج طابوراً لا تحديثاً.
+  static const _refreshInterval = Duration(seconds: 10);
 
   @override
   void initState() {
@@ -88,6 +100,19 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
     // والنوع مفحوص داخل المخزن: جهازٌ غُيّرت علامته يحمل حمولةً من
     // النوع القديم، وبذرُها هنا ترمي.
     _stats = DeviceStatsCache.instance.seedFor<MimosaStats>(widget.device.id);
+    // ⚠️ وعمرُها الحقيقيّ معها.
+    //
+    // 🐛 تحذير المستخدم ٢٠٢٦-٠٩-٠٢: «المعلومات الحيّة ما تتغيّر، تبقى
+    // ثابتة». والبذرة لقطةٌ قد يبلغ عمرها دقيقتين، وكانت تُعرض تحت
+    // شارة «مباشر» كأنّها الآن.
+    //
+    // فنُورّث لحظتَها لا لحظتنا: الشارة تقول «قبل ٤٥ث» صادقةً، ثمّ
+    // تهبط إلى «قبل ٠ث» حين يصل جلبُنا بعد جزءٍ من الثانية.
+    // رقمٌ قديمٌ **معلومُ القِدَم** أمانة؛ ومعروضٌ كأنّه الآن كذبة.
+    final seedAge = DeviceStatsCache.instance.ageOf(widget.device.id);
+    if (_stats != null && seedAge != null) {
+      _lastFetch = DateTime.now().subtract(seedAge);
+    }
     _startMonitoring();
   }
 

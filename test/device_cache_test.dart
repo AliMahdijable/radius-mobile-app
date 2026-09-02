@@ -140,6 +140,19 @@ void main() {
       expect(cache.needsUpgrade(1), isFalse);
     });
 
+    test('🚨 خفيفةٌ بعد كاملة تُحدّث العمر ولا تُجمّده', () {
+      // تحذير المستخدم «المعلومات الحيّة ما تتغيّر»: كان الفرع يعود
+      // صامتاً فلا يمسّ الطابع الزمنيّ — فتشيخ اللقطة حتّى تُطرح، ومن
+      // يُبذَر منها يرى رقماً ميّتاً تحت شارة «مباشر».
+      cache.putRaw(1, 'كاملة', detailed: true);
+      final before = cache.ageOf(1);
+      cache.putRaw(1, 'خفيفة', detailed: false);
+      final after = cache.ageOf(1);
+      expect(before, isNotNull);
+      expect(after!.compareTo(before!), lessThanOrEqualTo(0),
+          reason: 'العمر لم يُحدَّث — البذرة تشيخ وهي تُقرأ كلّ نبضة');
+    });
+
     test('🚨 خفيفةٌ بعد كاملة لا تمحو التفاصيل', () {
       // البطاقة المطويّة تُجدّد أرقامها كلّ نبضة بجلسةٍ خفيفة. ولو
       // أنزلت الرتبة لأُعيدت الترقية إلى الأبد، ولاختفى التفصيل من
@@ -192,6 +205,35 @@ void main() {
           isTrue);
       expect(wall.contains('detailed: widget.open'), isTrue,
           reason: 'الرتبة تتبع ما طُلب فعلاً');
+    });
+  });
+
+  group('البذرة لا تدّعي أنّها الآن', () {
+    test('🚨 اللوحات تُورّث عمر البذرة لا لحظتها', () {
+      // تحذير المستخدم: «المعلومات الحيّة ما تتغيّر، تبقى ثابتة».
+      // والبذرة لقطةٌ قد يبلغ عمرها دقيقتين، وكانت تُعرض تحت شارة
+      // «مباشر» كأنّها الآن. رقمٌ قديمٌ معلومُ القِدَم أمانة، ومعروضٌ
+      // كأنّه الآن كذبة.
+      for (final b in ['mikrotik', 'ubnt', 'mimosa']) {
+        final src =
+            File('lib/screens/network_devices/widgets/${b}_live_panel.dart')
+                .readAsStringSync();
+        expect(src.contains('DeviceStatsCache.instance.ageOf(widget.device.id)'),
+            isTrue, reason: '$b لا تقرأ عمر البذرة');
+        expect(src.contains('_lastFetch = DateTime.now().subtract(seedAge)'),
+            isTrue, reason: '$b تدّعي أنّ البذرة لحظيّة');
+      }
+    });
+
+    test('نبضة الشاشة المفتوحة أقصر — جهازٌ واحد لا ثمانون', () {
+      for (final b in ['ubnt', 'mimosa', 'airfiber60', 'ruijie']) {
+        final src =
+            File('lib/screens/network_devices/widgets/${b}_live_panel.dart')
+                .readAsStringSync();
+        expect(src.contains('Duration(seconds: 10)'), isTrue, reason: b);
+        expect(src.contains('_refreshInterval = Duration(seconds: 15)'), isFalse,
+            reason: b);
+      }
     });
   });
 }

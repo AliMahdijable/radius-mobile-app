@@ -38,7 +38,19 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
   final Map<String, _BytesPoint> _lastBytes = {};
   final Map<String, _IfaceRate> _rates = {};
 
-  static const _refreshInterval = Duration(seconds: 15);
+  /// نبضة الشاشة المفتوحة.
+  ///
+  /// 🐛 ملاحظة المستخدم ٢٠٢٦-٠٩-٠٢: «فترة التحديث تتأخّر هواي».
+  ///
+  /// وكانت خمس عشرة ثانية — وهي مناسبةٌ لمسحٍ جماعيّ، لا لشاشةٍ يقف
+  /// أمامها المستخدم ينظر إلى **جهازٍ واحد**. الجلسة هنا لا تُزاحم
+  /// أحداً: لا سقف ستّ خانات ولا ثمانون جهازاً — جهازٌ واحد وشاشةٌ
+  /// مفتوحة.
+  ///
+  /// ⚠️ ولا نهبط إلى ثمانٍ كميكروتك: جلستُه عبر الـAPI الثنائيّ
+  /// بأجزاء الثانية، وجلسة SSH/SNMP هنا أثقل — نبضةٌ أسرع من زمن
+  /// الجلسة تُنتج طابوراً لا تحديثاً.
+  static const _refreshInterval = Duration(seconds: 10);
 
   @override
   void initState() {

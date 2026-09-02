@@ -75,6 +75,19 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     // والنوع مفحوص داخل المخزن: جهازٌ غُيّرت علامته يحمل حمولةً من
     // النوع القديم، وبذرُها هنا ترمي.
     _stats = DeviceStatsCache.instance.seedFor<MikrotikStats>(widget.device.id);
+    // ⚠️ وعمرُها الحقيقيّ معها.
+    //
+    // 🐛 تحذير المستخدم ٢٠٢٦-٠٩-٠٢: «المعلومات الحيّة ما تتغيّر، تبقى
+    // ثابتة». والبذرة لقطةٌ قد يبلغ عمرها دقيقتين، وكانت تُعرض تحت
+    // شارة «مباشر» كأنّها الآن.
+    //
+    // فنُورّث لحظتَها لا لحظتنا: الشارة تقول «قبل ٤٥ث» صادقةً، ثمّ
+    // تهبط إلى «قبل ٠ث» حين يصل جلبُنا بعد جزءٍ من الثانية.
+    // رقمٌ قديمٌ **معلومُ القِدَم** أمانة؛ ومعروضٌ كأنّه الآن كذبة.
+    final seedAge = DeviceStatsCache.instance.ageOf(widget.device.id);
+    if (_stats != null && seedAge != null) {
+      _lastFetch = DateTime.now().subtract(seedAge);
+    }
     _startMonitoring();
   }
 
