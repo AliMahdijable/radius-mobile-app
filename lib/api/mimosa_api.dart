@@ -73,6 +73,8 @@ class MimosaApi {
   static const String _oidPtmpStaOnline = '$_ptmp.2.1.13';
 
   // — Standard MIB-II (works for any SNMP device) —
+  /// جذر شجرة ميموزا (رقم المؤسّسة IANA ‎43356).
+  static const String _oidMimosaRoot = '1.3.6.1.4.1.43356';
   static const String _oidSysDescr = '1.3.6.1.2.1.1.1.0';
   static const String _oidSysUpTime = '1.3.6.1.2.1.1.3.0';
   static const String _oidSysName = '1.3.6.1.2.1.1.5.0';
@@ -227,11 +229,37 @@ class MimosaApi {
     }
 
     if (kDebugMode) {
+      final absent = results.values.where((v) => v.isAbsent).length;
       debugPrint('══════ Mimosa SNMP scalars ══════');
       results.forEach((oid, vb) {
         debugPrint('  $oid: ${vb.asString}');
       });
-      debugPrint('  chains: ${chains.length}');
+      debugPrint('  chains: ${chains.length}  |  غائبة: $absent/${results.length}');
+
+      // ── مسح استكشافيّ ────────────────────────────────────────────
+      //
+      // حين تغيب أغلب OIDs الخاصّة بميموزا، فالشجرة التي تفترضها هذه
+      // الشيفرة لا تطابق ما يعرضه هذا الطراز/الإصدار. المسح يطبع ما
+      // **يملكه الجهاز فعلاً** بدل أن نُخمّن OIDs واحداً واحداً.
+      //
+      // ⚠️ في وضع التطوير فقط، ومرّةً حين يكون الغياب أغلبيّاً: المسح
+      // عشرات الطلبات على UDP ولا يُحتمل في كلّ نبضة.
+      if (absent > results.length ~/ 2) {
+        debugPrint('⚠️ أغلب OIDs غائبة — أمسح شجرة ميموزا لاكتشاف الصحيح…');
+        try {
+          final found = await snmp.walk(_oidMimosaRoot, maxIterations: 10);
+          debugPrint('── ما يعرضه الجهاز تحت $_oidMimosaRoot ──');
+          if (found.isEmpty) {
+            debugPrint('  (فارغة — الجهاز لا يعرض شجرة ميموزا أصلاً)');
+          }
+          for (final vb in found) {
+            debugPrint('  ${vb.oid} = ${vb.asString}');
+          }
+          debugPrint('── نهاية المسح (${found.length} عنصراً) ──');
+        } catch (e) {
+          debugPrint('⚠️ فشل المسح الاستكشافيّ: $e');
+        }
+      }
       debugPrint('════════════════════════════════');
     }
 

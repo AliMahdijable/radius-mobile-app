@@ -408,8 +408,23 @@ class Varbind {
 
   Varbind({required this.oid, required this.rawTag, required this.rawBytes});
 
+  /// هل ردّ الجهاز بأنّ هذا الـOID **غير موجود** عنده؟
+  ///
+  /// 🐛 عطلٌ صامت (٢٠٢٦-٠٩-٠٢): `asInt` يعيد صفراً لأيّ وسمٍ مجهول،
+  /// بما فيه هذه الوسوم الثلاثة. فكان «الـOID غير موجود» يظهر في
+  /// السجلّ وفي الواجهة رقماً صفراً لا يُميَّز عن قيمةٍ حقيقيّة —
+  /// وضاعت أشهرٌ من قراءة أصفارٍ تُظنّ بيانات.
+  ///
+  /// 0x80 noSuchObject · 0x81 noSuchInstance · 0x82 endOfMibView
+  bool get isAbsent => rawTag == 0x80 || rawTag == 0x81 || rawTag == 0x82;
+
+  /// `null` حين يكون الـOID غائباً — لتُميّز الشاشة «لا يدعمه الجهاز»
+  /// عن «القيمة صفر».
+  int? get asIntOrNull => isAbsent ? null : asInt;
+
   /// القيمة كنص — يعمل مع OctetString + OID + IpAddress.
   String get asString {
+    if (isAbsent) return '<غير موجود>';
     switch (rawTag) {
       case 0x04: // OCTET STRING
         return String.fromCharCodes(rawBytes);
