@@ -315,6 +315,39 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       // كان كلّ جهاز يُرسل طلبه بنفسه = ٢٤٠ طلباً/دقيقة على ٨٠ جهازاً.
       final probed = <({int id, String status, int? responseMs})>[];
 
+      // ── دفقٌ تدريجيّ مخنوق ──────────────────────────────────────
+      //
+      // 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «فحص الأجهزة بطيء بالعرض، كأنّه ينتظر
+      // جواب جهاز جهاز».
+      //
+      // والجولة كانت ترسم **مرّةً واحدة بعد اكتمالها كلّها**: ثمانون
+      // جهازاً على أربعة وعشرين عاملاً، والمنقطع يستهلك مهلته كاملةً
+      // (ثانيتان) — فأربع موجاتٍ = ثماني ثوانٍ من الجمود قبل أن يتحرّك
+      // شيء. والحال أنّ أوّل جهازٍ ردّ بعد جزءٍ من الثانية.
+      //
+      // ⚠️ ولا setState لكلّ جهاز: التعليق أدناه يشرح لماذا (ثمانون
+      // إعادة بناء كاملة للقائمة = إطارات ساقطة). الخنق يجمع بينهما —
+      // دفعةٌ كلّ ٤٠٠ms، أي رسمتان أو ثلاث في الثانية على الأكثر.
+      var pendingFlush = false;
+      void flush() {
+        if (!mounted || updates.isEmpty) return;
+        setState(() {
+          for (var i = 0; i < _all.length; i++) {
+            final u = updates[_all[i].id];
+            if (u != null) _all[i] = u;
+          }
+        });
+      }
+
+      void scheduleFlush() {
+        if (pendingFlush) return;
+        pendingFlush = true;
+        Future.delayed(const Duration(milliseconds: 400), () {
+          pendingFlush = false;
+          flush();
+        });
+      }
+
       // ⚠️ طابور عمّال بسقف، لا `Future.wait` على الكلّ.
       //
       // كان المسح يفتح مقبساً لكلّ جهاز دفعةً — ثمانون معاً على أكبر
@@ -355,6 +388,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
               lastStatus: newStatus,
               lastResponseMs: r.responseMs,
             );
+            scheduleFlush();
           } catch (_) {
             // فشل probe لجهاز واحد ما يوقف الباقي
           }
@@ -373,15 +407,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
             NetworkDevicesApi.saveProbeResults(probed).catchError((_) => false));
       }
 
-      // setState **واحد** لكل التحديثات
-      if (mounted && updates.isNotEmpty) {
-        setState(() {
-          for (int i = 0; i < _all.length; i++) {
-            final u = updates[_all[i].id];
-            if (u != null) _all[i] = u;
-          }
-        });
-      }
+      // رسمةٌ ختاميّة: تضمن وصول ما جاء بعد آخر خنق.
+      flush();
 
       // كشف تغيير شبكة الهاتف (بدل مشكلة الأجهزة):
       // - "خروج من الشبكة": ≥70% من الأجهزة راحت offline في جولة واحدة → suppress
@@ -751,8 +778,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                               ),
                             )
                           : SliverPadding(
-                              padding: const EdgeInsets.fromLTRB(
-                                  Sp.md, 0, Sp.md, 90),
+                              padding: EdgeInsets.fromLTRB(
+                                  Sp.md, 0, Sp.md, Inset.tabBar(context)),
                               sliver: SliverList.separated(
                                 itemCount: devices.length,
                                 itemBuilder: (_, i) =>

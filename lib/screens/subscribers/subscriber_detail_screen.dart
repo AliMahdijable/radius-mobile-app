@@ -619,12 +619,19 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           ),
       ]),
       SubActionGroup('subscribers.group_records'.tr(), [
-        if (sub.isOnline)
-          SubAction(
-            icon: LucideIcons.chartLine,
-            label: 'subscribers.op_consumption'.tr(),
-            onTap: () => showConsumptionSheet(context, sub),
-          ),
+        // ⚠️ لا شرطَ اتّصال.
+        //
+        // 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «الاستهلاك مفروض يظهر حتّى لو طافي
+        // المشترك». والاستهلاك **تاريخٌ** يقرأه SAS4 من سجلّاته
+        // (يوميّ ٣١ خانة · شهريّ ١٢)، لا قياسٌ لحظيّ من الجلسة.
+        //
+        // بل هو أنفع للمنقطع: من يشكو انقطاعاً تُسأل عن استهلاكه
+        // أمس، ومن يُخفيه الشرطُ عنك هو بالضبط من تحتاج بياناته.
+        SubAction(
+          icon: LucideIcons.chartLine,
+          label: 'subscribers.op_consumption'.tr(),
+          onTap: () => showConsumptionSheet(context, sub),
+        ),
         if (Perms.has('subscribers.view_activity'))
           SubAction(
             icon: LucideIcons.history,

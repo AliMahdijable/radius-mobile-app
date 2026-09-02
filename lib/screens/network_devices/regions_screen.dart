@@ -176,8 +176,8 @@ class _RegionsScreenState extends State<RegionsScreen> {
                     : RefreshIndicator(
                         onRefresh: _load,
                         child: ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(
-                              Sp.md, Sp.md, Sp.md, 90),
+                          padding: EdgeInsets.fromLTRB(
+                    Sp.md, Sp.md, Sp.md, Inset.route(context)),
                           itemCount: _regions.length,
                           separatorBuilder: (_, __) =>
                               const SizedBox(height: 8),

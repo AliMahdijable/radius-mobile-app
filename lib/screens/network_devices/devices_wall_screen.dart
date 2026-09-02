@@ -17,6 +17,7 @@ import '../../theme/typography.dart';
 import 'device_sort.dart';
 import 'device_vitals.dart';
 import 'widgets/_grade.dart';
+import 'widgets/device_image.dart';
 import 'network_device_details_screen.dart';
 
 /// نظرة عامّة على الأجهزة — كلّها في صفحة واحدة، مجموعةً حسب المنطقة.
@@ -177,6 +178,28 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
     var reachable = 0;
     var attempted = 0;
 
+    // دفقٌ تدريجيّ مخنوق — نفس علاج قائمة الأجهزة (٢٠٢٦-٠٩-٠٢).
+    //
+    // الجولة كانت ترسم مرّةً بعد اكتمالها كلّها، والمنقطع يستهلك مهلته
+    // كاملةً — فيجمد الجدار ثوانيَ وأوّل جهازٍ ردّ بعد جزءٍ من الثانية.
+    // دفعةٌ كلّ ٤٠٠ms: لا جمود، ولا ثمانون إعادة بناء.
+    var pendingFlush = false;
+    void flush() {
+      if (!mounted || updates.isEmpty) return;
+      setState(() {
+        _all = [for (final d in _all) updates[d.id] ?? d];
+      });
+    }
+
+    void scheduleFlush() {
+      if (pendingFlush) return;
+      pendingFlush = true;
+      Future.delayed(const Duration(milliseconds: 400), () {
+        pendingFlush = false;
+        flush();
+      });
+    }
+
     final queue = Queue<NetworkDevice>.from(_all);
     Future<void> worker() async {
       while (queue.isNotEmpty) {
@@ -199,6 +222,7 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
             // الحقيقيّة ويعيدها في الجلب التالي؛ ولو كتبناها هنا لأعلنّا
             // «معطّل منذ لحظات» لجهاز ساقط منذ ساعة.
           );
+          scheduleFlush();
         } catch (_) {
           // فشل جهاز واحد لا يوقف الجولة.
         }
@@ -245,6 +269,7 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
       _sweeping = false;
       _roundMedianMs = median;
       _offNetwork = reachable == 0 && attempted >= _offNetworkThreshold;
+      // رسمةٌ ختاميّة: تضمن وصول ما جاء بعد آخر خنق.
       _all = [for (final d in _all) updates[d.id] ?? d];
     });
   }
@@ -784,6 +809,17 @@ class _DeviceCardState extends State<_DeviceCard> {
                         color: AppColors.textMid,
                       ),
                     ),
+                  ),
+                  const SizedBox(width: Sp.sm),
+                  // 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «صورة الجهاز مو معروضة».
+                  //
+                  // الجدار لم يعرضها إطلاقاً — كانت في المخطّط وسقطت
+                  // من التنفيذ. والصورة ليست زينة: تُميّز السكتور من
+                  // السويتش من البرج بلمحة، قبل قراءة اسمٍ واحد.
+                  DeviceImage(
+                    brand: device.brand,
+                    model: device.model,
+                    size: 34,
                   ),
                   const SizedBox(width: Sp.sm),
                   Expanded(
