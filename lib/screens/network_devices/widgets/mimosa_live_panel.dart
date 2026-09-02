@@ -90,13 +90,26 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
         port: port,
         community: community,
         // ⚡ Tier 1 partial بعد ~500ms: device name/temp/GPS/uptime
-        // بدل انتظار RF details + chains (~1s إضافيّة)
-        onPartialReady: (partial) {
-          if (!mounted) return;
-          setState(() {
-            _stats = partial;
-          });
-        },
+        // بدل انتظار RF details + chains (~1s إضافيّة).
+        //
+        // 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «من يحدّث يخفي القراءات السابقة · كارت
+        // الجاينات يختفي ويظهر».
+        //
+        // ⚠️ **لأوّل تحميل وحده**. الجزئيّة بلا RF ولا سلاسل، فقبولها
+        // في التحديث يستبدل بياناتٍ كاملةً معروضةً بأخرى ناقصة: تختفي
+        // SNR والقدرتان، ويختفي كارت السلاسل كلّه، ثمّ تعود بعد ثانية.
+        // وميضٌ كلّ نبضة.
+        //
+        // اللوحتان الأخريان (ميكروتك · UBNT) تُقيّدانها هكذا منذ
+        // 2026-08-18 — وميموزا وحدها شذّت.
+        onPartialReady: _stats == null
+            ? (partial) {
+                if (!mounted) return;
+                setState(() {
+                  _stats = partial;
+                });
+              }
+            : null,
       );
       if (!mounted) return;
       setState(() {

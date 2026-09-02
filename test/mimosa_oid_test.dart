@@ -86,4 +86,56 @@ void main() {
       });
     }
   });
+
+  group('سلوك التحديث', () {
+    late String panel;
+    setUpAll(() {
+      panel = File('lib/screens/network_devices/widgets/mimosa_live_panel.dart')
+          .readAsStringSync();
+    });
+
+    test('🚨 الجزئيّة لأوّل تحميل وحده', () {
+      // بلاغ ٢٠٢٦-٠٩-٠٢: «من يحدّث يخفي القراءات السابقة · كارت
+      // الجاينات يختفي ويظهر». الجزئيّة بلا RF ولا سلاسل، فقبولها في
+      // التحديث يستبدل بياناتٍ كاملةً معروضةً بأخرى ناقصة.
+      expect(panel.contains('onPartialReady: _stats == null'), isTrue,
+          reason: 'ميموزا تشذّ عن ميكروتك وUBNT في سلوك التحديث');
+    });
+
+    test('اللوحات الثلاث متّفقة', () {
+      for (final f in ['mikrotik', 'ubnt']) {
+        final other = File(
+                'lib/screens/network_devices/widgets/${f}_live_panel.dart')
+            .readAsStringSync();
+        expect(other.contains('isFirstLoad'), isTrue,
+            reason: '$f فقدت الحارس');
+      }
+    });
+  });
+
+  group('كلفة الجولة', () {
+    test('🚨 مشيةٌ لكلّ جدول لا لكلّ عمود', () {
+      // ثمانِ مشياتٍ على وصلةٍ بـ٢١٣ms تجعل التحديث ثقيلاً ومتقطّعاً.
+      // والمشية الواحدة أصدق أيضاً: كلّ الأعمدة من لقطةٍ واحدة.
+      // ⚠️ نستثني المسح التشخيصيّ: يعمل في وضع التطوير وحده وبشرط
+      // أن تغيب أغلب الـOIDs، فلا يدخل الجولة العاديّة.
+      final walks = RegExp(r'await snmp\.walk\((?!_oidMimosaRoot)')
+          .allMatches(src)
+          .length;
+      expect(walks, 3, reason: 'عدد المشيات $walks — عاد التفريع لكلّ عمود');
+      // ولا مشية على عمودٍ مفرد.
+      for (final col in ['_oidChainRxPower', '_oidChainSnr', '_oidStreamTxPhy',
+                         '_oidChannelWidth']) {
+        expect(src.contains('snmp.walk($col'), isFalse, reason: col);
+      }
+      expect(src.contains('_oidChainTable'), isTrue);
+      expect(src.contains('_oidStreamTable'), isTrue);
+      expect(src.contains('_oidChannelTable'), isTrue);
+    });
+
+    test('مرشّح العمود يفصل بنقطة صريحة', () {
+      // بلا النقطة يلتقط `.11` مرشّحُ `.1`.
+      expect(src.contains("final prefix = '\$columnOid.';"), isTrue);
+    });
+  });
 }

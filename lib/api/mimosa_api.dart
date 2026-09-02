@@ -145,6 +145,11 @@ class MimosaApi {
   //   عمود ٤ = أرضيّة الضجيج (dBm)     [−٧٤ · واللوحة −٧٤٫٤]
   //   عمود ٥ = SNR (dB)                [٢٩ · واللوحة ٢٨]
   //   عمود ٦ = التردّد المركزيّ (MHz)   [٦٢٧٥ · واللوحة ٦٢٧٥]
+  /// جذور الجداول — تُمشى مرّةً ثمّ تُقسَّم أعمدةً.
+  static const String _oidChainTable = '$_bfive.6.1.1';
+  static const String _oidStreamTable = '$_bfive.6.2.1';
+  static const String _oidChannelTable = '$_bfive.6.3.1';
+
   static const String _oidChainTxPower = '$_bfive.6.1.1.2';
   static const String _oidChainRxPower = '$_bfive.6.1.1.3'; // GETBULK
   static const String _oidChainRxNoise = '$_bfive.6.1.1.4';
@@ -249,11 +254,20 @@ class MimosaApi {
     int? rxPhyTotal;
     int? channelWidth;
     try {
-      final txPowers = await snmp.walk(_oidChainTxPower, chunkSize: 8);
-      final rxPowers = await snmp.walk(_oidChainRxPower, chunkSize: 8);
-      final rxNoises = await snmp.walk(_oidChainRxNoise, chunkSize: 8);
-      final snrs = await snmp.walk(_oidChainSnr, chunkSize: 8);
-      final freqs = await snmp.walk(_oidChainFreq, chunkSize: 8);
+      // ⚠️ مشيةٌ واحدة على **جذر الجدول** لا مشيةٌ لكلّ عمود.
+      //
+      // كانت خمس مشياتٍ للسلاسل واثنتان للتدفّقات وواحدة للقناة = ثمانٍ،
+      // كلٌّ منها عدّة جولات UDP. على وصلةٍ زمنها ٢١٣ms صار التحديث
+      // ثقيلاً ومتقطّعاً — وأنا من رفع العدد حين أضفتُ الأعمدة.
+      //
+      // والمشية الواحدة أصدق أيضاً: كلّ الأعمدة من **لقطةٍ واحدة**، لا
+      // من ثوانٍ متفرّقة قد يتغيّر الجهاز بينها.
+      final chainRows = await snmp.walk(_oidChainTable, chunkSize: 16);
+      final txPowers = _column(chainRows, _oidChainTxPower);
+      final rxPowers = _column(chainRows, _oidChainRxPower);
+      final rxNoises = _column(chainRows, _oidChainRxNoise);
+      final snrs = _column(chainRows, _oidChainSnr);
+      final freqs = _column(chainRows, _oidChainFreq);
       // معدّلات PHY من **جدول التدفّقات** لا من `mimosaPerfInfo`.
       //
       // الـMIB يسمّي ‎7.1/7.2 «PhyTxRate/PhyRxRate» بوحدة kbps، لكنّ
@@ -263,12 +277,13 @@ class MimosaApi {
       //
       // وجدول التدفّقات يعطي ٣٢٥ لكلّ تدفّق × ٢ = ٦٥٠ — وهو **بالضبط**
       // ما تعرضه لوحة الجهاز (PHY Tx/Rx 650/650). فالمجموع هو الصادق.
-      txPhyTotal = _sumStream(await snmp.walk(_oidStreamTxPhy, chunkSize: 8));
-      rxPhyTotal = _sumStream(await snmp.walk(_oidStreamRxPhy, chunkSize: 8));
-      final widths = await snmp.walk(_oidChannelWidth, chunkSize: 4);
-      if (widths.isNotEmpty && !widths.first.isAbsent) {
-        channelWidth = widths.first.asInt;
-      }
+      final streamRows = await snmp.walk(_oidStreamTable, chunkSize: 16);
+      txPhyTotal = _sumStream(_column(streamRows, _oidStreamTxPhy));
+      rxPhyTotal = _sumStream(_column(streamRows, _oidStreamRxPhy));
+
+      final channelRows = await snmp.walk(_oidChannelTable, chunkSize: 8);
+      final widths = _column(channelRows, _oidChannelWidth);
+      if (widths.isNotEmpty) channelWidth = widths.first.asInt;
 
       final indexTxPower = _byIndex(txPowers, _oidChainTxPower);
       final indexRxPower = _byIndex(rxPowers, _oidChainRxPower);
@@ -352,6 +367,17 @@ class MimosaApi {
   }
 
   /// Mimosa returns dBm × 10 in most fields (e.g. 427 = 42.7 dBm)
+  /// يستخرج عموداً من صفوف جدولٍ مُمشيّ.
+  ///
+  /// الفاصل نقطة صريحة: بلاها يلتقط `.11` مرشّحُ `.1`.
+  static List<Varbind> _column(List<Varbind> rows, String columnOid) {
+    final prefix = '$columnOid.';
+    return [
+      for (final vb in rows)
+        if (vb.oid.startsWith(prefix) && !vb.isAbsent) vb
+    ];
+  }
+
   /// مجموع عمودٍ في جدول التدفّقات — الوصلة تحمل تدفّقين فأكثر،
   /// والمعدّل الكلّيّ مجموعُها لا واحدٌ منها.
   static int? _sumStream(List<Varbind> vbs) {
