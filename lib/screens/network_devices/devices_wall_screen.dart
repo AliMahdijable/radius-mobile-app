@@ -727,7 +727,9 @@ class _DeviceCardState extends State<_DeviceCard> {
       at: st.at,
     ));
 
-    DeepProbeScheduler.instance.submit(this, () async {
+    // القراءة الأولى تتقدّم — راجع [DeepProbeScheduler.submit].
+    DeepProbeScheduler.instance.submit(this, first: st.vitals == null,
+        () async {
       if (!mounted) return;
       try {
         final r = await DeviceVitals.fetch(

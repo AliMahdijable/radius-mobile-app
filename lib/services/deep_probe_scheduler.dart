@@ -28,6 +28,24 @@ class DeepProbeScheduler {
   /// وهي كلفة لوحة جهاز واحد اليوم مضروبة بستّة، لا بثمانين.
   static const maxConcurrent = 6;
 
+  /// مهلة قصوى لكلّ مهمّة — **حارس الحياة**.
+  ///
+  /// 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «شوف هذا جاب بس كم واحد وتوقّف بالكامل».
+  ///
+  /// المجدول كان يُحرّر الخانة في `whenComplete` وحدها. وتعهّدٌ لا
+  /// يكتمل أبداً لا يُنادى فيه `whenComplete` — فتبقى خانته محجوزة،
+  /// وستٌّ معلَّقة تُجمّد الطابور كلّه وتظلّ البطاقات على «يقرأ
+  /// المقاييس…» إلى الأبد.
+  ///
+  /// وجلسات ميكروتك أطول مسارٍ هنا: جدول التسجيل، ثمّ صيغةٌ ثانية عند
+  /// `!trap`، ثمّ سقوطٌ إلى SSH بمصافحةٍ كاملة. لكلّ خطوةٍ مهلتُها،
+  /// ولا مهلة على مجموعها — والمجموع هو ما يُمسك الخانة.
+  ///
+  /// ⚠️ الحارس هنا لا في عميل كلّ علامة عمداً: طبقةٌ واحدة تحمي من
+  /// **أيّ** عميلٍ يتعلّق، حاضراً أو يُضاف لاحقاً. ومهلةٌ في العميل
+  /// وحده تحمي من عطلٍ واحد تعرفه، لا من الصنف كلّه.
+  static const jobTimeout = Duration(seconds: 25);
+
   final Queue<_Job> _pending = Queue<_Job>();
   int _active = 0;
 
@@ -39,9 +57,36 @@ class DeepProbeScheduler {
   ///
   /// مهمّة بنفس المالك تُلغي سابقتها المنتظِرة: بطاقة تُعيد الطلب مع
   /// كلّ نبضة مؤقّت، ولا معنى لتكديس طلبين لنفس الجهاز.
-  void submit(Object owner, Future<void> Function() job) {
+  ///
+  /// [first] لبطاقةٍ **لم تقرأ بعد** — تتقدّم الطابور.
+  ///
+  /// 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «جاب بس كم واحد وتوقّف». والطابور كان يعامل
+  /// من لم يقرأ قطّ كمن يُحدّث قراءةً عمرها ثانية. فالبطاقات الأولى
+  /// تُجدّد كلّ عشرين ثانية وتستهلك الخانات الستّ، والأخيرة تبقى على
+  /// «يقرأ المقاييس…» أبداً — لأنّ دورها لا يأتي.
+  ///
+  /// وقيمة القراءة الأولى تفوق قيمة التجديد بكثير: فرقُ «لا أعرف» عن
+  /// «أعرف»، لا فرقُ رقمٍ عمره ثانيةٌ عن رقمٍ عمره عشرون.
+  void submit(Object owner, Future<void> Function() job,
+      {bool first = false}) {
     _pending.removeWhere((j) => identical(j.owner, owner));
-    _pending.add(_Job(owner, job));
+    final entry = _Job(owner, job, first: first);
+    if (first) {
+      // ⚠️ خلف الأوائل الآخرين لا أمامهم: التقدّم على المُجدِّدين
+      // مقصود، والتقدّم على قرينٍ ينتظر قراءته الأولى ظلمٌ يجعل
+      // الترتيب عشوائيّاً.
+      var at = 0;
+      final list = _pending.toList();
+      while (at < list.length && list[at].first) {
+        at++;
+      }
+      list.insert(at, entry);
+      _pending
+        ..clear()
+        ..addAll(list);
+    } else {
+      _pending.add(entry);
+    }
     _pump();
   }
 
@@ -55,9 +100,16 @@ class DeepProbeScheduler {
     while (_active < maxConcurrent && _pending.isNotEmpty) {
       final job = _pending.removeFirst();
       _active++;
-      // نلتقط كلّ خطأ هنا: مهمّة ساقطة يجب أن تُحرّر خانتها، وإلّا
-      // امتلأ السقف بجلسات ميّتة وتوقّف الجدار كلّه.
-      job.run().catchError((_) {}).whenComplete(() {
+      // نلتقط كلّ خطأ **ونفرض مهلة**: مهمّة ساقطة أو معلَّقة يجب أن
+      // تُحرّر خانتها، وإلّا امتلأ السقف بجلسات ميّتة وتوقّف الجدار.
+      //
+      // `timeout` يُكمل تعهّدنا حتّى لو بقي الأصليّ معلّقاً — الجلسة
+      // المتروكة تموت وحدها بمهلة مقبسها، ونحن لا ننتظرها.
+      job
+          .run()
+          .timeout(jobTimeout)
+          .catchError((_) {})
+          .whenComplete(() {
         _active--;
         _pump();
       });
@@ -72,8 +124,11 @@ class DeepProbeScheduler {
 }
 
 class _Job {
-  _Job(this.owner, this._fn);
+  _Job(this.owner, this._fn, {this.first = false});
   final Object owner;
+
+  /// قراءةٌ أولى لا تجديد — تتقدّم الطابور.
+  final bool first;
   final Future<void> Function() _fn;
   Future<void> run() => _fn();
 }

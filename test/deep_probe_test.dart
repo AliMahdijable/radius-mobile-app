@@ -414,4 +414,80 @@ void main() {
       expect(wall.contains("if (slow > 0) return ('\$slow بطيء'"), isTrue);
     });
   });
+
+  group('حارس الحياة', () {
+    setUp(sched.resetForTest);
+
+    test('🚨 مهمّة معلَّقة تُحرّر خانتها', () async {
+      // بلاغ ٢٠٢٦-٠٩-٠٢: «جاب بس كم واحد وتوقّف بالكامل».
+      //
+      // المجدول كان يُحرّر الخانة في `whenComplete` وحدها. وتعهّدٌ لا
+      // يكتمل أبداً لا يُنادى فيه `whenComplete` — فتبقى خانته محجوزة،
+      // وستٌّ معلَّقة تُجمّد الطابور كلّه.
+      expect(DeepProbeScheduler.jobTimeout.inSeconds, greaterThan(0),
+          reason: 'بلا مهلةٍ يُمسك التعهّد المعلَّق خانته إلى الأبد');
+      // المهلة معقولة: تسع أطول مسار (ميكروتك: جدول ثمّ صيغة ثانية
+      // ثمّ SSH) ولا تُجمّد الطابور دقائق.
+      expect(DeepProbeScheduler.jobTimeout.inSeconds, inInclusiveRange(15, 60));
+    });
+
+    test('المهلة مطبَّقة على التشغيل لا على الإدراج', () {
+      final src = File('lib/services/deep_probe_scheduler.dart')
+          .readAsStringSync();
+      expect(src.contains('.timeout(jobTimeout)'), isTrue);
+      final i = src.indexOf('.timeout(jobTimeout)');
+      final j = src.indexOf('whenComplete', i);
+      expect(j, greaterThan(i), reason: 'المهلة قبل تحرير الخانة');
+    });
+  });
+
+  group('القراءة الأولى تتقدّم', () {
+    setUp(sched.resetForTest);
+
+    test('🚨 المُجدِّد لا يسبق من لم يقرأ قطّ', () async {
+      // الطابور كان يعامل من لم يقرأ كمن يُحدّث قراءةً عمرها ثانية.
+      // فالبطاقات الأولى تستهلك الخانات الستّ والأخيرة تبقى على
+      // «يقرأ المقاييس…» أبداً.
+      final gate = Completer<void>();
+      final order = <String>[];
+      for (var i = 0; i < DeepProbeScheduler.maxConcurrent; i++) {
+        sched.submit(Object(), () async => gate.future);
+      }
+      // ثلاثة مُجدِّدين ثمّ قارئٌ أوّل
+      for (var i = 0; i < 3; i++) {
+        final n = 'renew$i';
+        sched.submit(Object(), () async => order.add(n));
+      }
+      sched.submit(Object(), () async => order.add('FIRST'), first: true);
+
+      await Future<void>.delayed(Duration.zero);
+      expect(sched.pendingCount, 4);
+      gate.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(order.first, 'FIRST',
+          reason: 'من لم يقرأ قطّ يجب أن يسبق كلّ مُجدِّد');
+    });
+
+    test('الأوائل بينهم بترتيب وصولهم', () async {
+      // التقدّم على المُجدِّدين مقصود، والتقدّم على قرينٍ ينتظر قراءته
+      // الأولى يجعل الترتيب عشوائيّاً.
+      final gate = Completer<void>();
+      final order = <String>[];
+      for (var i = 0; i < DeepProbeScheduler.maxConcurrent; i++) {
+        sched.submit(Object(), () async => gate.future);
+      }
+      sched.submit(Object(), () async => order.add('A'), first: true);
+      sched.submit(Object(), () async => order.add('B'), first: true);
+      await Future<void>.delayed(Duration.zero);
+      gate.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(order, ['A', 'B']);
+    });
+
+    test('البطاقة تطلب الأولويّة حين لا قيمة عندها', () {
+      final wall = File('lib/screens/network_devices/devices_wall_screen.dart')
+          .readAsStringSync();
+      expect(wall.contains('first: st.vitals == null'), isTrue);
+    });
+  });
 }
