@@ -112,8 +112,22 @@ class MimosaApi {
   static const String _oidGpsSats = '$_bfive.2.7.0';
 
   //   mimosaTdmaInfo.1 = wirelessMode, .3 = tdmaMode
-  //   mimosaWirelessInfo.1 = SSID
+  //   mimosaWirelessInfo.1 = SSID · .4 = مدّة الوصلة (TimeTicks)
   static const String _oidSsid = '$_bfive.3.1.0';
+
+  /// مدّة بقاء **الوصلة** قائمةً — بجزء من مئة الثانية.
+  ///
+  /// 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «لنك أب تايم — هنا يكتب الوقت خطأ». اللوحة
+  /// كانت تعرض `sysUpTime` (‎1.3.6.1.2.1.1.3.0) وهو عمر **وكيل SNMP**
+  /// لا عمر الوصلة. ففي جهاز najaf2262 قال وكيلُه ١٠ دقائق بينما
+  /// وصلته قائمة منذ ٩ أيّام.
+  ///
+  /// والفرق ليس تفصيلاً: من يراقب برجاً يسأل «منذ متى والوصلة ثابتة»،
+  /// وإعادةُ تشغيل وكيلٍ تُصفّر الرقم الأوّل ولا تمسّ الثاني.
+  ///
+  /// تحقّق: مسح الجهاز أعطى ‎78966700 ÷ ١٠٠ = ٧٨٩٦٦٧ ثانية = ٩ي ٠٣س
+  /// ٢١د، ولوحته وقتها ٩d 03h 46m — والفارق زمن اللقطتين.
+  static const String _oidLinkUptime = '$_bfive.3.4.0';
 
   static const String _oidWirelessMode = '$_bfive.4.1.0';
   static const String _oidTdmaMode = '$_bfive.4.3.0';
@@ -205,6 +219,7 @@ class MimosaApi {
     // ═══ Tier 2 (~500ms إضافيّة): RF details ═══
     final scalarBatch2 = <String>[
       _oidSsid,
+      _oidLinkUptime,
       _oidWirelessMode,
       _oidTdmaMode,
       _oidAntennaGain,
@@ -547,6 +562,9 @@ class MimosaStats {
   final String? sysDescr;
   final String? sysName;
   final int sysUptimeSec;
+
+  /// مدّة بقاء الوصلة — `null` إن لم يعرضها الطراز.
+  final int? linkUptimeSec;
   final String? deviceName;
   final String? serialNumber;
   final String? firmwareVersion;
@@ -586,6 +604,7 @@ class MimosaStats {
     this.sysDescr,
     this.sysName,
     this.sysUptimeSec = 0,
+    this.linkUptimeSec,
     this.deviceName,
     this.serialNumber,
     this.firmwareVersion,
@@ -628,8 +647,9 @@ class MimosaStats {
   }
 
   /// Uptime (sysUpTime.0 يجي بوحدة TimeTicks = centiseconds)
+  /// TimeTicks (جزء من مئة الثانية) → ثوانٍ. صفرٌ للغائب.
   static int _parseUptime(Varbind? vb) {
-    if (vb == null) return 0;
+    if (vb == null || vb.isAbsent) return 0;
     return vb.asInt ~/ 100;
   }
 
@@ -677,6 +697,9 @@ class MimosaStats {
       sysDescr: s(MimosaApi._oidSysDescr),
       sysName: s(MimosaApi._oidSysName),
       sysUptimeSec: _parseUptime(g(MimosaApi._oidSysUpTime)),
+      linkUptimeSec: _parseUptime(g(MimosaApi._oidLinkUptime)) == 0
+          ? null
+          : _parseUptime(g(MimosaApi._oidLinkUptime)),
       deviceName: s(MimosaApi._oidDeviceName),
       serialNumber: s(MimosaApi._oidSerialNumber),
       firmwareVersion: s(MimosaApi._oidFirmwareVersion),

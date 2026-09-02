@@ -138,4 +138,43 @@ void main() {
       expect(src.contains("final prefix = '\$columnOid.';"), isTrue);
     });
   });
+
+  group('مدّة الوصلة', () {
+    late String panel;
+    setUpAll(() {
+      panel = File('lib/screens/network_devices/widgets/mimosa_live_panel.dart')
+          .readAsStringSync();
+    });
+
+    test('🚨 الـOID موجود ومستعلَم عنه', () {
+      // بلاغ ٢٠٢٦-٠٩-٠٢: اللوحة كانت تعرض `sysUpTime` وهو عمر **وكيل
+      // SNMP** لا الوصلة. في najaf2262 قال الوكيل ١٠ دقائق ووصلته
+      // قائمة منذ ٩ أيّام.
+      expect(src.contains(r"_oidLinkUptime = '$_bfive.3.4.0'"), isTrue);
+      expect(src.contains('      _oidLinkUptime,'), isTrue,
+          reason: 'مُعرَّفٌ ولا يُستعلَم عنه');
+    });
+
+    test('الحساب يطابق لوحة الجهاز', () {
+      // مسح najaf2262: 78966700 جزءاً من مئة الثانية.
+      const ticks = 78966700;
+      final secs = ticks ~/ 100;
+      expect(secs, 789667);
+      expect(secs ~/ 86400, 9, reason: 'واللوحة وقتها 9d 03h 46m');
+      expect(secs % 86400 ~/ 3600, 3);
+    });
+
+    test('مدّة الوصلة تسبق عمر الوكيل في العرض', () {
+      final iLink = panel.indexOf("'مدّة الوصلة'");
+      final iSys = panel.indexOf("'تشغيل الجهاز'");
+      expect(iLink, greaterThan(0), reason: 'لا تُعرض مدّة الوصلة');
+      expect(iLink, lessThan(iSys), reason: 'الأهمّ أوّلاً');
+    });
+
+    test('غيابها لا يكسر شيئاً', () {
+      // طُرُزٌ قد لا تعرضها — عندها يبقى الاسم القديم ولا يُلفَّق رقم.
+      expect(src.contains('linkUptimeSec: _parseUptime('), isTrue);
+      expect(panel.contains('s.linkUptimeSec != null'), isTrue);
+    });
+  });
 }

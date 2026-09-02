@@ -727,7 +727,14 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
               style: AppType.bodyBold()),
         ]),
         const SizedBox(height: 12),
-        _infoRow('Uptime', _formatUptime(s.sysUptimeSec)),
+        // مدّة الوصلة أوّلاً — هي ما يسأل عنه من يراقب برجاً. وعمر
+        // وكيل SNMP يبقى تحتها للتشخيص، ولا يُعرض إن ساواها.
+        if (s.linkUptimeSec != null)
+          _infoRow('مدّة الوصلة', _formatUptime(s.linkUptimeSec!)),
+        _infoRow(
+          s.linkUptimeSec != null ? 'تشغيل الجهاز' : 'Uptime',
+          _formatUptime(s.sysUptimeSec),
+        ),
         if (s.antennaGainDbi != null)
           _infoRow('Antenna Gain', '${s.antennaGainDbi} dBi'),
         if (s.wirelessMode != null)

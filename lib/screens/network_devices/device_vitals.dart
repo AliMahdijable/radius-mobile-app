@@ -535,7 +535,9 @@ class DeviceVitals {
               ),
       ],
       detail: DeviceDetail(
-        uptime: fmtUptime(s.sysUptimeSec),
+        // مدّة الوصلة لا عمر وكيل SNMP — الأوّل ما يهمّ من يراقب برجاً،
+        // وإعادةُ تشغيل وكيلٍ تُصفّر الثاني ولا تمسّ الأوّل.
+        uptime: fmtUptime(s.linkUptimeSec ?? s.sysUptimeSec),
         firmware: s.firmwareVersion,
         model: s.deviceName,
         peersLabel: 'المحطّات',
