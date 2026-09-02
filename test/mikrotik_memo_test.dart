@@ -18,34 +18,29 @@ void main() {
     binary = File('lib/api/mikrotik_binary_api.dart').readAsStringSync();
   });
 
-  group('ذاكرة الطريق', () {
-    test('🚨 تُتخطّى المحاولة الفاشلة بعد تعلّم SSH', () {
-      expect(api.contains('_regTableNeedsSsh[ip] != true'), isTrue,
-          reason: 'الصيغة متعدّدة الكلمات تُجرَّب رغم أنّنا نعرف أنّها تفشل');
-      expect(api.contains('_regTableNeedsSsh[ip] = true;'), isTrue,
-          reason: 'لا نتعلّم شيئاً من نجاح SSH');
+  group('مساران لا ثلاثة', () {
+    test('🚨 الصيغة متعدّدة الكلمات حُذفت', () {
+      // قاعدة المستخدم ٢٠٢٦-٠٩-٠٢: «خلّ ميكروتك ثابت API، والأولويّة
+      // له، وUBNT SSH». والمحاولة الثالثة لم تنجح مرّةً واحدة في سجلٍّ
+      // كامل — ترد !trap دائماً، فهي جولة شبكةٍ مهدورة قبل كلّ سقوط.
+      expect(api.contains("'/interface', 'wireless', 'registration-table'"),
+          isFalse, reason: 'عادت الصيغة الفاشلة');
+      expect(api.contains('multi-word format'), isFalse);
     });
 
-    test('🚨 نتعلّم من النجاح لا من الفشل', () {
-      // جهازٌ بلا عملاء اليوم يعطي صفراً من الطريقين، وتذكُّرُ ذلك
-      // يمنعنا من قراءة عملائه غداً.
-      final i = api.indexOf('_regTableNeedsSsh[ip] = true;');
-      expect(i, greaterThan(0));
-      final before = api.substring(i - 300, i);
-      expect(before.contains('sshClients.isNotEmpty'), isTrue,
-          reason: 'التعلّم يجب أن يكون داخل فرع النجاح');
+    test('والذاكرة التي كانت تخدمها حُذفت معها', () {
+      // كانت تتخطّى المحاولة الثالثة وحدها؛ بلا تلك المحاولة لا وظيفة
+      // لها — وحقلٌ يُكتب ولا يُقرأ دَيْنٌ لا أصل.
+      expect(api.contains('_regTableNeedsSsh'), isFalse);
     });
 
-    test('ننسى إن نجح الـAPI — ترقية firmware', () {
-      expect(api.contains('_regTableNeedsSsh.remove(ip);'), isTrue,
-          reason: 'الذاكرة يجب أن تتبع الواقع لا أن تُجمّده');
-    });
-
-    test('عمرُها عمرُ التشغيل لا القرص', () {
-      // حفظُها بين تشغيلين يُجمّد حكماً على جهازٍ قد يُرقّى.
-      expect(api.contains('SharedPreferences'), isFalse);
-      expect(api.contains('static final Map<String, bool> _regTableNeedsSsh'),
-          isTrue);
+    test('🚨 SSH في المسار المفصَّل وحده', () {
+      // الجدار والخلفيّة يقفان عند vitalsOnly قبل قسم اللاسلكيّ.
+      final iVitals = api.indexOf('if (vitalsOnly) return tier1;');
+      final iSsh = api.indexOf('_fetchClientsViaSsh(ip, user, pass)');
+      expect(iVitals, greaterThan(0));
+      expect(iSsh, greaterThan(iVitals),
+          reason: 'SSH قبل مخرج الوضع الخفيف — الجدار سيدفع ثمنه');
     });
   });
 

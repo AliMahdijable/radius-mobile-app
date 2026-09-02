@@ -48,37 +48,20 @@ class DeviceWarmup {
   /// يبدأ التسخين لقائمة الأجهزة الحاليّة. استدعاؤه مرّةً ثانيةً بقائمةٍ
   /// أحدث يُحدّث الطابور بلا إعادة ما سُخِّن.
   void start(List<NetworkDevice> devices) {
-    // ⚠️ مرحلتان بترتيبٍ مقصود.
+    // ⚠️ من لا قراءة له فقط — ولا ترقيةَ جماعيّة.
     //
-    // 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «بقت بس معلومات الترفك والمتّصلين، هم جاي
-    // تنطلب بطلب ثاني وتتأخّر».
-    //
-    // وهو الثمن المباشر لفصل الخفيف عن الكامل: البطاقة تمتلئ بسرعة،
-    // ثمّ يدفع الفتحُ ثمن جلسةٍ ثانية أمام عين المستخدم.
-    //
-    // الحلّ ألّا ينتظرها: نُرقّي الحمولة الخفيفة إلى كاملة **في
-    // الخلفيّة** بعد أن يمتلئ كلّ شيء. فحين يفتح البطاقة تكون
-    // التفاصيل في المخزن أصلاً.
-    //
-    // والترتيب: من لا قراءة له أوّلاً (رقمٌ لا شيء)، ثمّ الترقيات
-    // (تفصيلٌ فوق رقم). فرقُ «لا أعرف» عن «أعرف» يسبق فرقَ «أعرف
-    // بعضه» عن «أعرف كلّه».
-    final fresh = devices.where(_worth).toList();
-    final upgrades = devices.where(_needsUpgrade).toList();
+    // جرّبتُ ٢٠٢٦-٠٩-٠٢ أن أُرقّي كلّ حمولةٍ خفيفة إلى كاملة في
+    // الخلفيّة ليجد المستخدمُ التفاصيلَ جاهزة، فأشبعتُ الشبكة بسبع
+    // عشرة جلسة SSH متتالية وعاد كلّ شيء بطيئاً. راجع `_tick`.
     _queue
       ..clear()
-      ..addAll(fresh)
-      ..addAll(upgrades);
+      ..addAll(devices.where(_worth));
     if (_running) return;
     _running = true;
     _tick();
   }
 
-  /// جهازٌ قُرئ خفيفاً وتفاصيله ناقصة.
-  bool _needsUpgrade(NetworkDevice d) {
-    if (DeviceVitals.skipReason(d) != null) return false;
-    return DeviceStatsCache.instance.needsUpgrade(d.id);
-  }
+
 
   void stop() {
     _running = false;
@@ -143,12 +126,19 @@ class DeviceWarmup {
     final done = Completer<void>();
     DeepProbeScheduler.instance.submit(_WarmOwner(d.id), () async {
       try {
-        // ⚠️ التسخين يجلب **الكامل** دائماً: غايته أن يجد المستخدمُ
-        // التفاصيلَ جاهزةً حين يفتح. وجلبٌ خفيف هنا يؤجّل المشكلة لا
-        // يحلّها.
-        final r = await DeviceVitals.fetch(d, detailed: true);
+        // ⚠️ **خفيف** لا كامل.
+        //
+        // 🐛 انحدارٌ أدخلتُه ٢٠٢٦-٠٩-٠٢ ثمّ كشفه سجلّ المستخدم: جعلتُ
+        // التسخين يجلب الكامل ليجد المستخدمُ التفاصيلَ جاهزة. فعاد إلى
+        // الخلفيّة بالضبط ما أزلتُه من المقدّمة — جلسة SSH لكلّ جهاز
+        // ميكروتك، سبع عشرة جلسة متتالية تُشبع الشبكة والمجدول.
+        //
+        // والحساب لا يستقيم: التفاصيل تُجلَب لثمانين جهازاً ليُفتح
+        // منها واحد. الخلفيّة يجب أن تبقى **رخيصة** — والغالي يُدفع
+        // عند الطلب وحده، والفتحُ يتقدّم الطابور أصلاً.
+        final r = await DeviceVitals.fetch(d);
         if (r.raw != null) {
-          DeviceStatsCache.instance.putRaw(d.id, r.raw!, detailed: true);
+          DeviceStatsCache.instance.putRaw(d.id, r.raw!, detailed: false);
         }
         DeviceStatsCache.instance.putSample(d.id, r.counters);
       } catch (_) {

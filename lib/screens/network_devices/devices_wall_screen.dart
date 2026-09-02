@@ -11,7 +11,6 @@ import '../../models/network_device.dart';
 import '../../services/device_alerts_service.dart';
 import '../../services/device_stats_cache.dart';
 import '../../services/device_sweep_coordinator.dart';
-import '../../services/device_warmup.dart';
 import '../../services/deep_probe_scheduler.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -97,7 +96,6 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
     _timer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     DeviceSweep.release();
-    DeviceWarmup.instance.stop();
     _vitals.dispose();
     super.dispose();
   }
@@ -160,10 +158,11 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
       }
       _start();
       _sweep();
-      // ترقيةٌ صامتة في الخلفيّة: تُحوّل القراءات الخفيفة إلى كاملة
-      // فتكون التفاصيل جاهزةً حين يفتح المستخدم بطاقة. تستأذن قبل كلّ
-      // جهاز فلا تُزاحم من ينتظر رقمه الأوّل — راجع [DeviceWarmup].
-      DeviceWarmup.instance.start(_all);
+      // ⚠️ لا تسخين هنا.
+      //
+      // بطاقات الجدار تقرأ أجهزتها بنفسها وهي مرئيّة، فالتسخين لا
+      // يضيف إلّا مزاحمةً على الخانات الستّ. وقائمة الأجهزة تُشغّله
+      // للأجهزة التي لم تُقرأ بعد — وذلك يكفي.
     } catch (_) {
       if (!mounted) return;
       setState(() {

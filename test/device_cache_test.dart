@@ -170,7 +170,7 @@ void main() {
     });
   });
 
-  group('الترقية الصامتة', () {
+  group('الخلفيّة رخيصة', () {
     late String warm;
     late String wall;
     setUpAll(() {
@@ -179,32 +179,33 @@ void main() {
           .readAsStringSync();
     });
 
-    test('🚨 من لا قراءة له يسبق الترقيات', () {
-      // فرقُ «لا أعرف» عن «أعرف» يسبق فرقَ «أعرف بعضه» عن «أعرف كلّه».
-      final iFresh = warm.indexOf('..addAll(fresh)');
-      final iUp = warm.indexOf('..addAll(upgrades)');
-      expect(iFresh, greaterThan(0));
-      expect(iFresh, lessThan(iUp));
+    test('🚨 التسخين يجلب الخفيف لا الكامل', () {
+      // انحدارٌ أُدخل ثمّ تُرووجع ٢٠٢٦-٠٩-٠٢: جعلتُه يجلب الكامل ليجد
+      // المستخدمُ التفاصيلَ جاهزة، فعاد إلى الخلفيّة ما أُزيل من
+      // المقدّمة — جلسة SSH لكلّ جهاز ميكروتك، سبع عشرة متتالية.
+      //
+      // والحساب لا يستقيم: تفاصيلُ ثمانين جهازاً ليُفتح منها واحد.
+      expect(warm.contains('detailed: true'), isFalse,
+          reason: 'عاد التسخين يجرّ التفاصيل');
+      expect(warm.contains('putRaw(d.id, r.raw!, detailed: false)'), isTrue);
     });
 
-    test('🚨 التسخين يجلب الكامل دائماً', () {
-      // جلبٌ خفيف هنا يؤجّل المشكلة لا يحلّها.
-      expect(warm.contains('DeviceVitals.fetch(d, detailed: true)'), isTrue);
-      expect(warm.contains('putRaw(d.id, r.raw!, detailed: true)'), isTrue);
+    test('🚨 ولا ترقيةَ جماعيّة', () {
+      expect(warm.contains('_needsUpgrade'), isFalse);
+      expect(warm.contains('..addAll(upgrades)'), isFalse);
     });
 
-    test('الجدار يُشغّلها ويوقفها', () {
-      expect(wall.contains('DeviceWarmup.instance.start(_all)'), isTrue);
-      expect(wall.contains('DeviceWarmup.instance.stop()'), isTrue);
+    test('🚨 الجدار لا يُشغّل التسخين', () {
+      // بطاقاته تقرأ أجهزتها بنفسها وهي مرئيّة — فالتسخين لا يضيف
+      // إلّا مزاحمةً على الخانات الستّ.
+      expect(wall.contains('DeviceWarmup'), isFalse);
     });
 
-    test('🚨 البطاقة تُصدّق المخزن لا حالتها', () {
-      // الترقية الصامتة قد تكون جلبت التفاصيل بعد آخر نشرٍ للبطاقة —
-      // فلو سألت حالتها وحدها لأعادت جلسةً بلا داعٍ.
-      expect(wall.contains('DeviceStatsCache.instance.isDetailed(widget.device.id)'),
-          isTrue);
-      expect(wall.contains('detailed: widget.open'), isTrue,
-          reason: 'الرتبة تتبع ما طُلب فعلاً');
+    test('القائمة وحدها تُشغّله', () {
+      final list =
+          File('lib/screens/network_devices/network_devices_screen.dart')
+              .readAsStringSync();
+      expect(list.contains('DeviceWarmup.instance.start(_all)'), isTrue);
     });
   });
 

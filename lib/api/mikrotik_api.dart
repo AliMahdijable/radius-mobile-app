@@ -23,28 +23,6 @@ class MikrotikApi {
   ///   t=0: skeleton
   ///   t=500ms: CPU/RAM/interfaces (partial)
   ///   t=2s: wireless + clients (complete)
-  /// أيّ طريقٍ نجح في قراءة جدول التسجيل على هذا الجهاز.
-  ///
-  /// 🐛 هدرٌ يكشفه سجلّ المستخدم ٢٠٢٦-٠٩-٠٢: كلّ نقطة وصول ميكروتك
-  /// تدفع الثمن كاملاً في **كلّ** نبضة —
-  ///
-  ///     جدول التسجيل عبر الـAPI  → ٠ صفوف
-  ///     صيغة متعدّدة الكلمات      → !trap
-  ///     سقوط إلى SSH              → مصافحة كاملة → العملاء
-  ///
-  /// والمحاولتان الأوليان لم تنجحا مرّةً واحدة في سجلٍّ كامل. فهما
-  /// جولتا شبكةٍ مهدورتان كلّ خمس عشرة ثانية لكلّ جهاز.
-  ///
-  /// نتذكّر أنّ SSH هو الطريق هنا فنقصده مباشرةً. والذاكرة عمرُها عمرُ
-  /// التشغيل: ترقيةُ الجهاز قد تُصلح الـAPI، ولا نريد أن نحرمه منها
-  /// إلى الأبد.
-  ///
-  /// ⚠️ ولا نتذكّر **الفشل** بل النجاح: جهازٌ بلا عملاء اليوم يعطي
-  /// صفراً من الطريقين، وتذكُّرُ ذلك يمنعنا من قراءة عملائه غداً.
-  static final Map<String, bool> _regTableNeedsSsh = {};
-
-  /// للاختبار — يُنسي ما تعلّمه.
-  static void resetRegTableMemoForTest() => _regTableNeedsSsh.clear();
 
   static Future<MikrotikStats> fetchStats({
     required String ip,
@@ -377,33 +355,14 @@ class MikrotikApi {
           failureMsg = msg.length > 80 ? msg.substring(0, 80) : msg;
         }
       }
-      // 2026-08-20: صيغة multi-word — بعض RouterOS 6.4x تعامل الأمر كسلسلة
-      // كلمات (`/interface`, `wireless`, `registration-table`, `print`) بدل
-      // path واحد بـslashes. غير معياريّ لكن يعمل على بعض firmware.
-      if (wirelessClients.isEmpty &&
-          failureMsg == null &&
-          wirelessRows.isNotEmpty &&
-          // نعرف أنّ هذا الجهاز لا يقرأ الجدول إلّا عبر SSH — لا نُهدر
-          // جولةً على صيغةٍ ردّت `!trap` في كلّ مرّة.
-          _regTableNeedsSsh[ip] != true) {
-        try {
-          if (kDebugMode) debugPrint('🔁 [mikrotik] جرّب multi-word format');
-          final regs = await client.query(
-            ['/interface', 'wireless', 'registration-table', 'print'],
-            debugLog: true,
-          ).timeout(const Duration(seconds: 8));
-          if (regs.isNotEmpty) {
-            // نجح الـAPI — ننسى ما تعلّمناه عن هذا الجهاز (ترقية
-            // firmware قد تُصلحه، والذاكرة يجب أن تتبع الواقع).
-            _regTableNeedsSsh.remove(ip);
-            wirelessClients.addAll(regs);
-            if (kDebugMode) {
-              debugPrint(
-                  '🟢 [mikrotik] multi-word worked → ${regs.length} clients');
-            }
-          }
-        } catch (_) {}
-      }
+      // ⚠️ الصيغة متعدّدة الكلمات حُذفت ٢٠٢٦-٠٩-٠٢.
+      //
+      // قاعدة المستخدم: «خلّ ميكروتك ثابت API، والأولويّة له، وUBNT
+      // SSH». وهذه المحاولة لم تنجح **مرّةً واحدة** في سجلٍّ كامل —
+      // ترد `!trap` دائماً. فهي جولة شبكةٍ مهدورة قبل كلّ سقوطٍ إلى
+      // SSH، ومسارٌ ثالث يُعقّد الشيفرة بلا مقابل.
+      //
+      // بقي مساران لا ثلاثة: الـAPI الثنائيّ، ثمّ SSH عند فشله.
       // 2026-08-20: RouterOS 6.49.x + Binary API bug — reg-table يرجع !done
       // بـ 0 rows حتى لو Winbox يعرض عملاء. مؤكّد على BaseBox 5 / 6.49.13
       // (user admin/full، الأمر ينجح بلا !trap لكن سطر واحد !done فقط).
@@ -418,9 +377,6 @@ class MikrotikApi {
         try {
           final sshClients = await _fetchClientsViaSsh(ip, user, pass);
           if (sshClients.isNotEmpty) {
-            // تعلّمنا: هذا الجهاز طريقُه SSH. الجولة القادمة تقصده
-            // مباشرةً وتوفّر محاولةً فاشلة.
-            _regTableNeedsSsh[ip] = true;
             wirelessClients.addAll(sshClients);
             if (kDebugMode) {
               debugPrint(
