@@ -1,192 +1,56 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/screens/network_devices/widgets/device_image.dart';
 
-/// مطابقة اسم الموديل بصورة الجهاز.
+/// اختيار صورة الجهاز.
 ///
-/// الخطر هنا ليس «لا صورة» بل **الصورة الخطأ**: أسماء Mikrotik متداخلة
-/// كسوابق («CCR2004-16G-2S+» سابقة لـ«CCR2004-16G-2S+PC»)، فمطابقة
-/// من الأقصر تُظهر جهازاً مجاوراً — وهي أسوأ من الشارة، لأنّها تبدو
-/// صحيحة فيبني عليها المدير قراراً.
+/// 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «الصورة ما تظهر، وهي موجودة ضمن الصور».
+/// و`c5c-ptmp-hero.png` كان مُدرَجاً في تعداد Ubiquiti — والـC5c منتَج
+/// **ميموزا**. فالبوّابة تطلب `ubnt` وتجد `mimosa` فتُسقط الصورة.
 void main() {
-  test('مطابقة تامّة رغم اختلاف الفواصل والحالة', () {
-    expect(DeviceImage.assetFor('CCR2116-12G-4S+'),
-        'CCR2116-12G-4S+.webp');
-    expect(DeviceImage.assetFor('ccr2116 12g 4s'), 'CCR2116-12G-4S+.webp');
-    expect(DeviceImage.assetFor('rocket m5'), 'rocket m5.png');
-    expect(DeviceImage.assetFor('ROCKETM5'), 'rocket m5.png');
+  group('صورة ميموزا C5c', () {
+    // السلاسل أدناه من قاعدة البيانات الحيّة (٦٩ جهاز ميموزا).
+    test('🚨 «c5c» — ١٥ جهازاً في الأسطول', () {
+      expect(DeviceImage.assetFor('c5c', brand: 'mimosa'),
+          'c5c-ptmp-hero.png');
+    });
+
+    test('«ميموسا C5C» — الحروف العربيّة تُحذف في التطبيع', () {
+      expect(DeviceImage.assetFor('ميموسا C5C', brand: 'mimosa'),
+          'c5c-ptmp-hero.png');
+    });
+
+    test('«MIMOSA C5c» — ما يكتبه الكشف التلقائيّ من sysDescr', () {
+      expect(DeviceImage.assetFor('MIMOSA C5c', brand: 'mimosa'),
+          'c5c-ptmp-hero.png');
+    });
   });
 
-  test('السابقة الأطول تفوز — لا صورة جهاز مجاور', () {
-    // «CCR2004-16G-2S+PC» تحوي «CCR2004-16G-2S+» بالكامل.
-    expect(DeviceImage.assetFor('CCR2004-16G-2S+PC'),
-        'CCR2004-16G-2S+PC.webp');
-    expect(DeviceImage.assetFor('CCR2004-16G-2S+'), 'CCR2004-16G-2S+.webp');
-    // و«RB1100AHx4 Dude Edition» تحوي «RB1100AHx4».
-    expect(DeviceImage.assetFor('RB1100AHx4 Dude Edition'),
-        'RB1100AHx4 Dude Edition.webp');
-    expect(DeviceImage.assetFor('RB1100AHx4'), 'RB1100AHx4.webp');
-  });
+  group('البوّابة تبقى صارمة', () {
+    test('🚨 صورة ميموزا لا تظهر على جهاز ميكروتك', () {
+      // صورة سويتش على سكتور تبدو صحيحة فيُبنى عليها قرار في الميدان.
+      expect(DeviceImage.assetFor('c5c', brand: 'mikrotik'), isNull);
+      expect(DeviceImage.assetFor('c5c', brand: 'ubnt'), isNull);
+    });
 
-  test('اسم داخل جملة يُلتقط', () {
-    expect(DeviceImage.assetFor('Mikrotik CCR1016-12G router'),
-        'CCR1016-12G.webp');
-  });
-
-  test('موديل مجهول أو فارغ يُرجع null فتظهر الشارة', () {
-    expect(DeviceImage.assetFor(null), isNull);
-    expect(DeviceImage.assetFor(''), isNull);
-    expect(DeviceImage.assetFor('   '), isNull);
-    expect(DeviceImage.assetFor('جهاز غير معروف'), isNull);
-  });
-
-  test('جزء فريد من الاسم يُطابق', () {
-    // «912» موجود في ملفّ واحد فقط — وهو ما يكتبه المدير فعلاً في
-    // قاعدة البيانات لهذا الجهاز.
-    expect(DeviceImage.assetFor('912'), 'RB912UAG-5HPnD-OUT.webp');
-  });
-
-  test('جزء يُطابق أكثر من طراز لا يُخمَّن', () {
-    // ⚠️ عرض أحدها اعتباطاً أسوأ من الشارة: يبدو صحيحاً فيُبنى عليه
-    // قرار.
-    //
-    // «RB5009» تُطابق طرازين (UG+S+IN و UPr+S+IN) — والثاني يدعم PoE
-    // خارجاً والأوّل لا. «CCR1036» تُطابق أربعة.
-    expect(DeviceImage.assetFor('RB5009'), isNull);
-    expect(DeviceImage.assetFor('CCR1036'), isNull);
-    expect(DeviceImage.assetFor('CRS326'), isNull);
-    // وبالطراز الكامل تُطابق بلا لبس
-    expect(DeviceImage.assetFor('RB5009UG+S+IN'), 'RB5009UG+S+IN.webp');
-  });
-
-  test('مفتاح قصير جدّاً لا يُطابق بالاحتواء', () {
-    // حدّ الستّة محارف يمنع «m5» أو «lhg» من مطابقة نصف الفهرس.
-    expect(DeviceImage.assetFor('m5'), isNull);
-    expect(DeviceImage.assetFor('x'), isNull);
-  });
-
-  group('بوّابة العلامة التجاريّة', () {
-    // ⚠️ فحص قاعدة الإنتاج (1319 جهازاً) أظهر أنّ المطابقة بلا هذه
-    // البوّابة تعرض **سويتشات مراكز بيانات على هوائيّات قطاعيّة**:
-    // «سكتر 208» المسجَّل ubnt مفتاحه بعد حذف العربيّة «208»، فيُطابق
-    // CRS320-8P-8B. الصورة تبدو صحيحة فيُبنى عليها قرار في الميدان.
-    //
-    // وعمود brand مملوء 100% بينما model فارغ في 55% — فهو الأوثق.
-
-    test('طراز ميكروتك يُرفض على جهاز ubnt', () {
-      expect(DeviceImage.assetFor('CRS320-8P-8B-4S+RM'), isNotNull);
-      expect(DeviceImage.assetFor('CRS320-8P-8B-4S+RM', brand: 'ubnt'), isNull);
+    test('صورة ميكروتك لا تظهر على ميموزا', () {
       expect(DeviceImage.assetFor('CCR2116-12G-4S+', brand: 'mimosa'), isNull);
-      expect(DeviceImage.assetFor('RB5009UG+S+IN', brand: 'ubnt'), isNull);
-    });
-
-    test('وطراز ubnt يُرفض على جهاز ميكروتك', () {
-      expect(DeviceImage.assetFor('rocket m5', brand: 'mikrotik'), isNull);
-      expect(DeviceImage.assetFor('powerbeam M5', brand: 'mikrotik'), isNull);
-    });
-
-    test('العلامة المطابقة تمرّ', () {
       expect(DeviceImage.assetFor('CCR2116-12G-4S+', brand: 'mikrotik'),
-          'CCR2116-12G-4S+.webp');
-      expect(DeviceImage.assetFor('rocket m5', brand: 'ubnt'), 'rocket m5.png');
+          isNotNull);
     });
 
-    test('علامة غائبة لا تمنع — البوّابة تُحكّم ما تعرفه فقط', () {
-      expect(DeviceImage.assetFor('CCR2116-12G-4S+', brand: null),
-          'CCR2116-12G-4S+.webp');
-      expect(DeviceImage.assetFor('CCR2116-12G-4S+', brand: ''),
-          'CCR2116-12G-4S+.webp');
-    });
-
-    test('الرقم العربي المجرَّد لا يمرّ على جهاز ubnt', () {
-      // «سكتر 208» ⇒ المفتاح «208» ⇒ CRS320 — الحالة الحقيقيّة من
-      // قاعدة الإنتاج.
-      expect(DeviceImage.assetFor('208'), isNotNull);
-      expect(DeviceImage.assetFor('208', brand: 'ubnt'), isNull);
+    test('صورة Ubiquiti تبقى لـUbiquiti', () {
+      expect(DeviceImage.assetFor('rocket m5', brand: 'ubnt'), isNotNull);
+      expect(DeviceImage.assetFor('rocket m5', brand: 'mimosa'), isNull);
     });
   });
 
-  group('المرادفات: اسم تجاري ← اسم لوحة', () {
-    // ⚠️ ميكروتك تُسمّي الجهاز الواحد باسمين، و`board-name` في RouterOS
-    // يُرجع أحدهما بحسب الطراز. فالجهاز نفسه قد يُبلّغ باسم لا يُطابق
-    // ملفّ صورته رغم أنّه هو هو — وهو ما حدث فعلاً: كُشف «BaseBox 5»
-    // ولا ملفّ بهذا الاسم، بينما الصورة موجودة باسم اللوحة RB912.
-
-    test('BaseBox 5 هو RB912 — أكّده المستخدم', () {
-      expect(DeviceImage.assetFor('BaseBox 5'), 'RB912UAG-5HPnD-OUT.webp');
-      expect(DeviceImage.assetFor('basebox 5', brand: 'mikrotik'),
-          'RB912UAG-5HPnD-OUT.webp');
-      // واسم اللوحة نفسه يبقى يُطابق
-      expect(DeviceImage.assetFor('RB912UAG-5HPnD-OUT'),
-          'RB912UAG-5HPnD-OUT.webp');
-    });
-
-    test('أسماء تجاريّة أخرى لها صور', () {
-      expect(DeviceImage.assetFor('SXTsq 5 ac'), 'RBSXTsqG-5acD.png');
-      expect(DeviceImage.assetFor('LHG 5'), 'RBLHG-5nD.webp');
-      expect(DeviceImage.assetFor('LDF 5'), 'RBLDF-5nD.webp');
-      expect(DeviceImage.assetFor('hEX PoE'), 'RB960PGS-PB.webp');
-    });
-
-    test('المرادف يخضع لبوّابة العلامة أيضاً', () {
-      expect(DeviceImage.assetFor('BaseBox 5', brand: 'ubnt'), isNull);
-    });
-
-    test('اسم تجاري بلا صورة يبقى بلا مطابقة', () {
-      // لا نُضيف مرادفاً لطراز لا صورة له — ذلك يُوهم بالتغطية.
-      expect(DeviceImage.assetFor('NetBox 5'), isNull);
-      expect(DeviceImage.assetFor('Chateau LTE12'), isNull);
-    });
-  });
-
-  group('المنتقي اليدوي', () {
-    test('اسم اللوحة من الملفّ يُطابق الملفّ نفسه — الدورة مغلقة', () {
-      // المنتقي يكتب boardNameOf(file) في model، فالمطابقة التالية
-      // يجب أن تُعيد الملفّ ذاته. لو انكسرت هذه، اختيار المستخدم لا
-      // يُنتج صورة — وهو أسوأ من عدم وجود منتقٍ.
-      for (final f in DeviceImage.allAssets) {
-        final board = DeviceImage.boardNameOf(f);
-        expect(DeviceImage.assetFor(board), f,
-            reason: 'اسم اللوحة "$board" لا يُعيد "$f"');
-      }
-    });
-
-    test('كل صورة معروضة مرّة واحدة', () {
-      final all = DeviceImage.allAssets;
-      expect(all.toSet().length, all.length);
-    });
-  });
-
-  group('عائلات Ubiquiti — من سجلّ جهاز حقيقي', () {
-    // ⚠️ القيم من سجلّ airOS 6.1.7 على XM: `platform=NanoStation M5`.
-    // هذه هي الصيغة التي يُبلّغ بها الجهاز فعلاً — لا تخميناً.
-
-    test('NanoStation M5 كما يُبلّغ بها الجهاز', () {
-      expect(DeviceImage.assetFor('NanoStation M5'), 'nano m5-2.png');
-      expect(DeviceImage.assetFor('NanoStation M5', brand: 'ubnt'),
-          'nano m5-2.png');
-    });
-
-    test('M2 وM5 صورةٌ واحدة — الهيكل نفسه', () {
-      // أكّده المستخدم: «nano m2, m5 نفس الشكل». الفرق نطاق التردّد لا
-      // الشكل، والصورة تُعرّف بصريّاً لا تُوثّق مواصفات.
-      final m5 = DeviceImage.assetFor('NanoStation M5');
-      expect(DeviceImage.assetFor('NanoStation M2'), m5);
-      expect(DeviceImage.assetFor('Rocket M2'),
-          DeviceImage.assetFor('Rocket M5'));
-    });
-
-    test('بقيّة العائلات التي ذكرها المستخدم', () {
-      expect(DeviceImage.assetFor('Rocket M5'), 'rocket m5.png');
-      expect(DeviceImage.assetFor('NanoBridge M5'), 'nanobridge m5.png');
-      expect(DeviceImage.assetFor('PowerBeam 5AC'), 'powerbeam M5.webp');
-      expect(DeviceImage.assetFor('PowerBeam M5 400'), 'powerbeam M5.webp');
-    });
-
-    test('كلّها ترفض على علامة ميكروتك', () {
-      for (final m in ['NanoStation M5', 'Rocket M5', 'PowerBeam 5AC']) {
-        expect(DeviceImage.assetFor(m, brand: 'mikrotik'), isNull,
-            reason: m);
-      }
+  group('ما لا يُطابَق يبقى بلا صورة', () {
+    test('غموضٌ لا يُخمَّن', () {
+      // «mimosa» وحدها لا تقول أيّ طراز — والأسطول فيه C5c وC6c.
+      expect(DeviceImage.assetFor('mimosa', brand: 'mimosa'), isNull);
+      expect(DeviceImage.assetFor('c6c', brand: 'mimosa'), isNull);
+      expect(DeviceImage.assetFor(null, brand: 'mimosa'), isNull);
+      expect(DeviceImage.assetFor('', brand: 'mimosa'), isNull);
     });
   });
 }

@@ -85,6 +85,8 @@ class DeviceImage extends StatelessWidget {
     'powerbeam5ac': 'powerbeamm5',
     'powerbeamm2': 'powerbeamm5',
     'pb5ac': 'powerbeamm5',
+    // الكشف التلقائيّ يكتب `sysDescr` كما هي: «MIMOSA C5c».
+    'mimosac5c': 'c5cptmphero',
   };
 
   /// مفتاح مُطبَّع: حروف وأرقام لاتينيّة فقط.
@@ -106,13 +108,22 @@ class DeviceImage extends StatelessWidget {
   static const _ubntFiles = <String>{
     '5x airfiber.png',
     'AirFIBER 5 af-5.png',
-    'c5c-ptmp-hero.png',
     'nanobridge m5.png',
     'nano m5-2.png',
     'powerbeam M5.webp',
     'rocket m5.png',
     'ubiquiti-airfiber-4x.png',
     'ubiquiti-airfiber-af24hd.png',
+  };
+
+  /// ملفّات ميموزا.
+  ///
+  /// 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «الصورة ما تظهر، وهي موجودة ضمن الصور».
+  /// و`c5c-ptmp-hero.png` كان مُدرَجاً في تعداد Ubiquiti — والـC5c
+  /// منتَج **ميموزا**. فالبوّابة تطلب علامة `ubnt` وتجد `mimosa`
+  /// فتُسقط الصورة، والملفّ موجودٌ طوال الوقت.
+  static const _mimosaFiles = <String>{
+    'c5c-ptmp-hero.png',
   };
 
   static String? assetFor(String? model, {String? brand}) {
@@ -198,11 +209,17 @@ class DeviceImage extends StatelessWidget {
   static String? _gate(String file, String? brand) {
     if (brand == null || brand.isEmpty) return file;
     final b = brand.toLowerCase();
-    // ما ليس في التعداد فهو ميكروتك. وكلّ علامة تُقصر على صورها:
-    // mimosa وcisco لا صور لهما بعد، فتبقيان على الشارة — وهو الصواب،
-    // لأنّ صورة سويتش ميكروتك على سكتور Mimosa تبدو صحيحة فيُبنى
-    // عليها قرار.
-    final want = _ubntFiles.contains(file) ? 'ubnt' : 'mikrotik';
+    // ما ليس في تعدادٍ فهو ميكروتك. وكلّ علامة تُقصر على صورها، لأنّ
+    // صورة سويتش ميكروتك على سكتور Mimosa تبدو صحيحة فيُبنى عليها
+    // قرار.
+    //
+    // ⚠️ كلّ صورةٍ تُضاف لعلامةٍ غير ميكروتك **يجب** أن تُدرَج في
+    // تعدادها، وإلّا حُسبت ميكروتك وسقطت صامتةً عن أجهزتها.
+    final want = _ubntFiles.contains(file)
+        ? 'ubnt'
+        : _mimosaFiles.contains(file)
+            ? 'mimosa'
+            : 'mikrotik';
     return b == want ? file : null;
   }
 
