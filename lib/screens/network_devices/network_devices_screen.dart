@@ -11,6 +11,7 @@ import '../../models/device_region.dart';
 import '../../models/network_device.dart';
 import '../../services/device_alerts_service.dart';
 import '../../services/device_sweep_coordinator.dart';
+import '../../services/device_warmup.dart';
 import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -112,6 +113,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
   @override
   void dispose() {
+    // التسخين خدمةٌ لهذه الشاشة — يتوقّف بخروجها فلا يستنزف الشبكة
+    // والمستخدم في مكانٍ آخر.
+    DeviceWarmup.instance.stop();
     WidgetsBinding.instance.removeObserver(this);
     widget.isActive?.removeListener(_onActiveChanged);
     _probeTimer?.cancel();
@@ -126,10 +130,17 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
       _probeTimer?.cancel();
+      // ⚠️ والتسخين معه: خدمةٌ صامتة لا معنى لها والتطبيق في الخلفيّة،
+      // وتركُها تستنزف الشبكة والبطّاريّة بلا ناظر.
+      DeviceWarmup.instance.stop();
     } else if (state == AppLifecycleState.resumed) {
       _startProbeTimer();
       // probe فوري لتحديث الحالة بعد العودة
-      if (_all.isNotEmpty) _probeAll();
+      if (_all.isNotEmpty) {
+        _probeAll();
+        // يستأنف من حيث وقف — ما سُخِّن لا يُعاد.
+        DeviceWarmup.instance.start(_all);
+      }
     }
   }
 
@@ -185,6 +196,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
         _loading = false;
       });
       // 🔥 probe فوري — لا ننتظر 20s للـTimer الأوّل.
+      // تسخينٌ صامت في الخلفيّة: يملأ مخزن القراءات ما دام المدير
+      // هنا، فيكون فتحُ أيّ جهازٍ فوريّاً. راجع [DeviceWarmup].
+      DeviceWarmup.instance.start(_all);
       _probeAll();
     } catch (e) {
       if (!mounted) return;

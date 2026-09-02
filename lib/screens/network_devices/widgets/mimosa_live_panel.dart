@@ -11,6 +11,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/mimosa_api.dart';
 import '../../../api/network_devices_api.dart';
 import '../../../models/network_device.dart';
+import '../../../services/device_stats_cache.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import 'expandable_section.dart';
@@ -74,6 +75,19 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
   @override
   void initState() {
     super.initState();
+    // ── بذرةٌ من المخزن ────────────────────────────────────────────
+    //
+    // 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «بكلّ جهاز أنقر عليه لازم يعيد إرسال الطلب،
+    // وهذا مزعج. هو كلّهن طلب واحد، مفروض يجلب كلّ المعلومات ويبقى
+    // يحافظها — وقت ما أنقر على الكارت تطلع لي».
+    //
+    // «نظرة عامّة» فتحت جلسةً لهذا الجهاز قبل قليل وحفظت حمولتها.
+    // نعرضها فوراً ثمّ نُحدّث في الخلفيّة — فالنقر يُظهر بيانات لا
+    // دوّاراً، والجلسة الثانية تصحّح ما شاخ منها.
+    //
+    // والنوع مفحوص داخل المخزن: جهازٌ غُيّرت علامته يحمل حمولةً من
+    // النوع القديم، وبذرُها هنا ترمي.
+    _stats = DeviceStatsCache.instance.seedFor<MimosaStats>(widget.device.id);
     _startMonitoring();
   }
 
@@ -149,6 +163,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
       setState(() {
         _computeTraffic(s.counters);
         _stats = s;
+        DeviceStatsCache.instance.putRaw(widget.device.id, s);
         _lastFetch = DateTime.now();
         _maybeQuickSecondSample();
         _loading = false;

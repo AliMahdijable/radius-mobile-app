@@ -9,6 +9,7 @@ import '../../core/util/bidi.dart';
 import '../../models/device_region.dart';
 import '../../models/network_device.dart';
 import '../../services/device_alerts_service.dart';
+import '../../services/device_stats_cache.dart';
 import '../../services/device_sweep_coordinator.dart';
 import '../../services/deep_probe_scheduler.dart';
 import '../../theme/colors.dart';
@@ -694,6 +695,16 @@ class _DeviceCardState extends State<_DeviceCard> {
     // جهاز عاد للحياة بعد مسحٍ سطحيّ: امتنعنا عن جلسته وهو معطّل،
     // فلولا هذا لبقيت خاناته فارغةً حتّى تُهدم البطاقة وتُبنى.
     if (old.device.lastStatus != widget.device.lastStatus) _kick();
+
+    // ⚠️ الفتح إعلانُ نيّة — يُقدّم البطاقة على الطابور.
+    //
+    // 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «ليش من أنقر على الكارت السهم مال جهاز يضلّ
+    // يقيس؟ مو منطقيّ». وكان النقر لا يغيّر شيئاً في الأولويّة: البطاقة
+    // تنتظر دورها كأنّ أحداً لم يفتحها — بينما بطاقاتٌ لا ينظر إليها
+    // أحد تُجدّد قراءاتها أمامها.
+    //
+    // من فتح بطاقةً ينتظر تفصيلها الآن. تقديمُه هو المنطق.
+    if (!old.open && widget.open) _kick(urgent: true);
   }
 
   @override
@@ -705,9 +716,11 @@ class _DeviceCardState extends State<_DeviceCard> {
     super.dispose();
   }
 
-  void _kick() {
+  void _kick({bool urgent = false}) {
     if (!mounted) return;
     final st = widget.vitals.value;
+    // ⚠️ الطازج يُحترم حتّى مع الاستعجال: الفتح يُقدّم من ينتظر، ولا
+    // يُبرّر جلسةً لجهازٍ قُرئ قبل ثوانٍ.
     if (st.loading || st.isFresh) return;
 
     // الامتناع الصريح أرخص من محاولةٍ تفشل: كلّ محاولة تحجز خانةً من
@@ -728,8 +741,8 @@ class _DeviceCardState extends State<_DeviceCard> {
     ));
 
     // القراءة الأولى تتقدّم — راجع [DeepProbeScheduler.submit].
-    DeepProbeScheduler.instance.submit(this, first: st.vitals == null,
-        () async {
+    DeepProbeScheduler.instance.submit(
+        this, first: urgent || st.vitals == null, () async {
       if (!mounted) return;
       try {
         final r = await DeviceVitals.fetch(
@@ -739,6 +752,11 @@ class _DeviceCardState extends State<_DeviceCard> {
         if (!mounted) return;
         // العيّنة تُحفظ **قبل** النشر: الجلسة القادمة تطرح منها.
         widget.onSample(r.counters);
+        // والحمولة الخام تُحفظ لتُبذَر بها اللوحة المفردة — فلا يدفع
+        // المستخدم ثمن الجلسة مرّتين حين ينقر البطاقة.
+        if (r.raw != null) {
+          DeviceStatsCache.instance.putRaw(widget.device.id, r.raw!);
+        }
         widget.onVitals(VitalsState(
           vitals: r.vitals,
           detail: r.detail,

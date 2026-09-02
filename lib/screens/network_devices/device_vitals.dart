@@ -6,6 +6,7 @@ import '../../api/mimosa_api.dart';
 import '../../api/network_devices_api.dart';
 import '../../api/ubnt_api.dart';
 import '../../models/network_device.dart';
+import '../../services/device_stats_cache.dart';
 import '../../theme/colors.dart';
 import 'widgets/_grade.dart';
 
@@ -160,10 +161,15 @@ class ProbeResult {
     required this.vitals,
     required this.detail,
     required this.counters,
+    this.raw,
   });
 
   final List<Vital> vitals;
   final DeviceDetail detail;
+
+  /// حمولة العلامة كما جاءت — تُحفظ في [DeviceStatsCache] لتُبذَر بها
+  /// اللوحة المفردة، فلا يدفع المستخدم ثمن الجلسة مرّتين.
+  final Object? raw;
 
   /// عدّادات البايت الخام — تُحفظ لتُطرح منها عيّنةُ الجلسة القادمة.
   final Map<String, ({int rx, int tx})> counters;
@@ -381,6 +387,7 @@ class DeviceVitals {
         ],
       ),
       counters: counters,
+      raw: s,
     );
   }
 
@@ -487,6 +494,7 @@ class DeviceVitals {
         ],
       ),
       counters: counters,
+      raw: s,
     );
   }
 
@@ -563,6 +571,7 @@ class DeviceVitals {
         ],
       ),
       counters: const {},
+      raw: s,
     );
   }
 }
@@ -580,29 +589,30 @@ extension on Vital {
 class VitalsStore {
   final Map<int, ValueNotifier<VitalsState>> _byId = {};
 
-  /// آخر عيّنة عدّادات لكلّ جهاز — أساس حساب معدّل المرور.
-  ///
-  /// تعيش هنا لا في البطاقة: البطاقة تُهدم مع التمرير، ولو ماتت العيّنة
-  /// معها لما ظهر معدّل مرورٍ أبداً — كلّ عودةٍ تبدأ من «لا سابقة».
-  final Map<int, CounterSample> _samples = {};
-
   ValueNotifier<VitalsState> of(int deviceId) =>
       _byId.putIfAbsent(deviceId, () => ValueNotifier(VitalsState.idle));
 
   void set(int deviceId, VitalsState s) => of(deviceId).value = s;
 
-  CounterSample? sampleOf(int deviceId) => _samples[deviceId];
-
-  void saveSample(int deviceId, Map<String, ({int rx, int tx})> counters) {
-    if (counters.isEmpty) return;
-    _samples[deviceId] = CounterSample(counters, DateTime.now());
+  /// ⚠️ العيّنات في [DeviceStatsCache] لا هنا.
+  ///
+  /// 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «بكلّ جهاز أنقر عليه لازم يعيد إرسال الطلب».
+  /// كانت تعيش في هذا المخزن، والمخزن في حالة الشاشة — فالخروج من
+  /// «نظرة عامّة» يمحوها، والعودة تبدأ من «يقيس…».
+  CounterSample? sampleOf(int deviceId) {
+    final s = DeviceStatsCache.instance.sampleOf(deviceId);
+    return s == null ? null : CounterSample(s.counters, s.at);
   }
 
+  void saveSample(int deviceId, Map<String, ({int rx, int tx})> counters) =>
+      DeviceStatsCache.instance.putSample(deviceId, counters);
+
+  /// ⚠️ نتخلّص من المُنبّهات وحدها. القيم نفسها في المخزن العالميّ
+  /// وتبقى — وهي كلّ الفائدة.
   void dispose() {
     for (final n in _byId.values) {
       n.dispose();
     }
     _byId.clear();
-    _samples.clear();
   }
 }

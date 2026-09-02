@@ -8,6 +8,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/network_devices_api.dart';
 import '../../../api/ubnt_api.dart';
 import '../../../models/network_device.dart';
+import '../../../services/device_stats_cache.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import 'expandable_section.dart';
@@ -64,6 +65,19 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
   @override
   void initState() {
     super.initState();
+    // ── بذرةٌ من المخزن ────────────────────────────────────────────
+    //
+    // 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «بكلّ جهاز أنقر عليه لازم يعيد إرسال الطلب،
+    // وهذا مزعج. هو كلّهن طلب واحد، مفروض يجلب كلّ المعلومات ويبقى
+    // يحافظها — وقت ما أنقر على الكارت تطلع لي».
+    //
+    // «نظرة عامّة» فتحت جلسةً لهذا الجهاز قبل قليل وحفظت حمولتها.
+    // نعرضها فوراً ثمّ نُحدّث في الخلفيّة — فالنقر يُظهر بيانات لا
+    // دوّاراً، والجلسة الثانية تصحّح ما شاخ منها.
+    //
+    // والنوع مفحوص داخل المخزن: جهازٌ غُيّرت علامته يحمل حمولةً من
+    // النوع القديم، وبذرُها هنا ترمي.
+    _stats = DeviceStatsCache.instance.seedFor<UbntStats>(widget.device.id);
     _startMonitoring();
   }
 
@@ -177,6 +191,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
 
       setState(() {
         _stats = stats;
+        DeviceStatsCache.instance.putRaw(widget.device.id, stats);
         _loading = false;
         _error = null;
         _lastFetch = now;

@@ -484,10 +484,16 @@ void main() {
       expect(order, ['A', 'B']);
     });
 
-    test('البطاقة تطلب الأولويّة حين لا قيمة عندها', () {
+    test('البطاقة تطلب الأولويّة حين لا قيمة عندها — أو عند فتحها', () {
       final wall = File('lib/screens/network_devices/devices_wall_screen.dart')
           .readAsStringSync();
-      expect(wall.contains('first: st.vitals == null'), isTrue);
+      expect(wall.contains('first: urgent || st.vitals == null'), isTrue);
+      // والفتح إعلانُ نيّة: من فتح بطاقةً ينتظر تفصيلها الآن، بينما
+      // بطاقاتٌ لا ينظر إليها أحد كانت تُجدّد أمامها.
+      expect(wall.contains('if (!old.open && widget.open) _kick(urgent: true)'),
+          isTrue);
+      // والطازج يُحترم حتّى مع الاستعجال — لا جلسة لجهازٍ قُرئ قبل ثوانٍ.
+      expect(wall.contains('if (st.loading || st.isFresh) return;'), isTrue);
     });
   });
 }
