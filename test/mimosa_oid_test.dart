@@ -117,16 +117,25 @@ void main() {
     test('🚨 مشيةٌ لكلّ جدول لا لكلّ عمود', () {
       // ثمانِ مشياتٍ على وصلةٍ بـ٢١٣ms تجعل التحديث ثقيلاً ومتقطّعاً.
       // والمشية الواحدة أصدق أيضاً: كلّ الأعمدة من لقطةٍ واحدة.
-      // ⚠️ نستثني المسح التشخيصيّ: يعمل في وضع التطوير وحده وبشرط
-      // أن تغيب أغلب الـOIDs، فلا يدخل الجولة العاديّة.
-      final walks = RegExp(r'await snmp\.walk\((?!_oidMimosaRoot)')
-          .allMatches(src)
-          .length;
-      expect(walks, 3, reason: 'عدد المشيات $walks — عاد التفريع لكلّ عمود');
-      // ولا مشية على عمودٍ مفرد.
-      for (final col in ['_oidChainRxPower', '_oidChainSnr', '_oidStreamTxPhy',
-                         '_oidChannelWidth']) {
-        expect(src.contains('snmp.walk($col'), isFalse, reason: col);
+      // الحارس على **التفريع لكلّ عمود** لا على العدد المطلق: مشيات
+      // المرور (ifHC + الاحتياط ٣٢-بت + الأسماء) أُضيفت لاحقاً وهي
+      // مشروعة — كلٌّ منها جدولٌ مستقلّ لا عمودٌ من جدولٍ مُمشيّ أصلاً.
+      for (final col in [
+        '_oidChainTxPower',
+        '_oidChainRxPower',
+        '_oidChainRxNoise',
+        '_oidChainSnr',
+        '_oidChainFreq',
+        '_oidStreamTxPhy',
+        '_oidStreamRxPhy',
+        '_oidChannelWidth',
+      ]) {
+        expect(src.contains('snmp.walk($col'), isFalse,
+            reason: 'عاد التفريع: $col يُمشى وحده بدل جدوله');
+      }
+      // والجداول الثلاثة تُمشى بجذورها.
+      for (final t in ['_oidChainTable', '_oidStreamTable', '_oidChannelTable']) {
+        expect(src.contains('snmp.walk($t'), isTrue, reason: t);
       }
       expect(src.contains('_oidChainTable'), isTrue);
       expect(src.contains('_oidStreamTable'), isTrue);
@@ -176,9 +185,9 @@ void main() {
     });
 
     test('غيابها لا يكسر شيئاً', () {
-      // طُرُزٌ قد لا تعرضها — عندها يبقى الاسم القديم ولا يُلفَّق رقم.
+      // طُرُزٌ قد لا تعرضها — عندها نسقط إلى عمر الوكيل بلا تلفيق.
       expect(src.contains('linkUptimeSec: _parseUptime('), isTrue);
-      expect(panel.contains('s.linkUptimeSec != null'), isTrue);
+      expect(panel.contains('s.linkUptimeSec ?? s.sysUptimeSec'), isTrue);
     });
   });
 }
