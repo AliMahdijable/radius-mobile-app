@@ -199,20 +199,34 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                   _SubscriberHero(sub: sub, password: _subscriberPassword),
                   // بلوك الدين مباشرةً تحت بطاقة الهويّة كما في المخطّط
                   // (كان أسفل الصفحة بعد كارت الجهاز).
-                  if (sub.balanceAmount != 0) ...[
-                    const SizedBox(height: Sp.md),
-                    _BalanceCard(
-                      sub: sub,
-                      onRemind: sub.hasDebt &&
-                              _sendingTemplate == null &&
-                              sub.displayPhone.isNotEmpty
-                          ? () => _sendTemplate('debt_reminder')
-                          : null,
-                      onPay: Perms.has('subscribers.pay_debt')
-                          ? () => showPayDebtSheet(context, sub)
-                          : null,
-                    ),
-                  ],
+                  // ⚠️ تظهر دائماً — حتّى عند الصفر.
+                  //
+                  // 🐛 طلب المستخدم ٢٠٢٦-٠٩-٠٢: «بدل حقّ دين على
+                  // المشترك يظهر رصيده إن كان عنده رصيد، ويصير إضافة
+                  // دين».
+                  //
+                  // وكانت تختفي عند الصفر كلّيّاً، فيبقى المدير بلا
+                  // جواب عن سؤالٍ يسأله في كلّ زيارة: «كم له وكم
+                  // عليه؟». والصفر جوابٌ لا فراغ.
+                  //
+                  // ومعها مدخل «إضافة دين» على البطاقة نفسها بدل أن
+                  // يبقى مدفوناً في «إجراءات أخرى».
+                  const SizedBox(height: Sp.md),
+                  _BalanceCard(
+                    sub: sub,
+                    onRemind: sub.hasDebt &&
+                            _sendingTemplate == null &&
+                            sub.displayPhone.isNotEmpty
+                        ? () => _sendTemplate('debt_reminder')
+                        : null,
+                    onPay: sub.balanceAmount != 0 &&
+                            Perms.has('subscribers.pay_debt')
+                        ? () => showPayDebtSheet(context, sub)
+                        : null,
+                    onAddDebt: Perms.has('subscribers.add_debt')
+                        ? () => showAddDebtSheet(context, sub)
+                        : null,
+                  ),
                   // صفّ الإجراءات الأربعة — المخطّط يضعه مباشرةً تحت
                   // بلوك الدين وفوق كارت الاتصال. الباقي انتقل إلى شيت
                   // «إجراءات أخرى» خلف بلاطة «المزيد».
@@ -240,13 +254,24 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                   // كان v2 يشترط sub.isOnline + IP نشط، يخفي كل الكارت
                   // للمشتركين اللي مفروض المدير يفحصهم أو يضبطهم
                   // (بلاغ 2026-07-13).
-                  if (!sub.isExpired && !sub.isDisabled) ...[
-                    DeviceProbeCard(
-                      ip: sub.ipAddress ?? '',
-                      username: sub.username,
-                    ),
-                    const SizedBox(height: Sp.sm),
-                  ],
+                  //
+                  // ⚠️ ٢٠٢٦-٠٩-٠٢: وسقط الشرطان الباقيان أيضاً.
+                  //
+                  // بلاغ المستخدم: «معلومات الاتصال مال النانو مفروض
+                  // حتّى لو معطّل تظهر». وهو محقّ، والسبب أعمق من
+                  // الراحة: **التعطيل قرارٌ في الفوترة، والنانو جهازٌ
+                  // على سطح بيت**. تعطيلُ الخدمة لا يُطفئ الجهاز ولا
+                  // يُنزله.
+                  //
+                  // ومن يُعطَّل هو بالضبط من تحتاج فحص جهازه: هل
+                  // ما زال في مكانه؟ هل نُقل إلى جارٍ؟ هل يُسحب منه
+                  // إنترنت؟ وإخفاءُ الكارت عنه يمنع السؤال الذي
+                  // يُطرح لأجله.
+                  DeviceProbeCard(
+                    ip: sub.ipAddress ?? '',
+                    username: sub.username,
+                  ),
+                  const SizedBox(height: Sp.sm),
                   // مطلب 2026-06-12: _SubscriptionCard المنفصل أُلغي
                   // — كل معلوماته (الباقة/السعر/الانتهاء/التابع/الهاتف)
                   // صارت داخل _SubscriberHero. كرت الرصيد لا يزال يظهر
@@ -922,21 +947,37 @@ class _SunkenTile extends StatelessWidget {
 /// يظهر أيضاً للرصيد الدائن (بلغة خضراء) لأنّ `pay_debt_sheet` يدعمه
 /// صراحةً — والمخطّط لا يوفّر مدخلاً آخر للتسديد خارج هذا البلوك.
 class _BalanceCard extends StatelessWidget {
-  const _BalanceCard({required this.sub, this.onRemind, this.onPay});
+  const _BalanceCard({
+    required this.sub,
+    this.onRemind,
+    this.onPay,
+    this.onAddDebt,
+  });
   final Subscriber sub;
 
   /// null = الزرّ يختفي (لا صلاحيّة أو لا رقم هاتف أو إرسال جارٍ).
   final VoidCallback? onRemind;
   final VoidCallback? onPay;
+  final VoidCallback? onAddDebt;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    // ⚠️ ثلاث حالات: دَينٌ · رصيدٌ دائن · صفر.
+    //
+    // الصفر ليس رصيداً دائناً ولا ديناً — وصبغُه بالأخضر يُوهم أنّ له
+    // مالاً عندك، وبالأحمر يتّهمه. فله لونٌ محايد ونصٌّ صريح.
     final isDebt = sub.hasDebt;
-    final accent = isDebt ? AppColors.error : AppColors.success;
-    final softBg = isDebt ? AppColors.dangerSoftBg : AppColors.successSoftBg;
-    final borderCol =
-        isDebt ? AppColors.dangerBorderCard : AppColors.successSoftBorder;
+    final isZero = sub.balanceAmount == 0;
+    final accent = isZero
+        ? AppColors.textMid
+        : (isDebt ? AppColors.error : AppColors.success);
+    final softBg = isZero
+        ? AppColors.surfaceSunken
+        : (isDebt ? AppColors.dangerSoftBg : AppColors.successSoftBg);
+    final borderCol = isZero
+        ? AppColors.border
+        : (isDebt ? AppColors.dangerBorderCard : AppColors.successSoftBorder);
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -955,7 +996,11 @@ class _BalanceCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(R.icon),
             ),
             child: Icon(
-              isDebt ? Icons.credit_card_rounded : Icons.savings_rounded,
+              isZero
+                  ? Icons.account_balance_wallet_rounded
+                  : (isDebt
+                      ? Icons.credit_card_rounded
+                      : Icons.savings_rounded),
               size: 21,
               color: accent,
             ),
@@ -967,20 +1012,36 @@ class _BalanceCard extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  isDebt
-                      ? 'subscribers.label_debt_on_sub'.tr()
-                      : 'subscribers.label_balance_credit'.tr(),
+                  isZero
+                      ? 'الرصيد'
+                      : (isDebt
+                          ? 'subscribers.label_debt_on_sub'.tr()
+                          : 'subscribers.label_balance_credit'.tr()),
                   style: AppType.body(color: AppColors.textLabel),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${formatIQD(sub.debtAbs.round())} د.ع',
-                  textDirection: ui.TextDirection.ltr,
-                  style: AppType.statValue(color: accent),
+                  isZero ? 'لا دين ولا رصيد' : '${formatIQD(sub.debtAbs.round())} د.ع',
+                  textDirection:
+                      isZero ? ui.TextDirection.rtl : ui.TextDirection.ltr,
+                  style: isZero
+                      ? AppType.bodyStrong(color: accent)
+                      : AppType.statValue(color: accent),
                 ),
               ],
             ),
           ),
+          if (onAddDebt != null) ...[
+            _DebtButton(
+              label: 'إضافة دين',
+              icon: Icons.add_rounded,
+              filled: false,
+              color: AppColors.warning,
+              borderColor: AppColors.warningSoftBorder,
+              onTap: onAddDebt!,
+            ),
+            const SizedBox(width: 7),
+          ],
           if (onRemind != null) ...[
             _DebtButton(
               label: 'تذكير',
@@ -1302,7 +1363,13 @@ class _SubscriberHero extends StatelessWidget {
           Expanded(
             child: _stat(
               value: debt == 0 ? '—' : formatIQD(debt.abs()),
-              label: debt > 0 ? 'رصيد دائن' : 'الدين',
+              // ⚠️ ثلاث حالات لا اثنتان: من رصيده صفر لا دين عليه،
+              // ووسمُه بـ«الدين» يجعل الشاشة تتّهمه بما ليس فيه.
+              label: debt > 0
+                  ? 'رصيد دائن'
+                  : debt < 0
+                      ? 'الدين'
+                      : 'الرصيد',
               color: debt < 0 ? AppColors.onBrandDanger : AppColors.onBrand,
             ),
           ),
