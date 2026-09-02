@@ -67,6 +67,16 @@ void main() {
       expect(api.contains("DevLog.trace(() => '📥 [mikrotik SSH] raw:"), isTrue);
     });
 
+    test('🚨 UBNT أيضاً — آخر مصدر ضجيج', () {
+      // خمسون سطراً لكلّ جهاز UBNT في كلّ نبضة، بقيت بعد إسكات ميكروتك.
+      final ubnt = File('lib/api/ubnt_api.dart').readAsStringSync();
+      expect(ubnt.contains("DevLog.trace(() =>\n          '══════ UBNT output"),
+          isTrue, reason: 'الحمولة الخام ما زالت تُطبع دائماً');
+      expect(ubnt.contains("debugPrint(\n            '══════ UBNT output"),
+          isFalse);
+      expect(ubnt.contains("DevLog.trace(() => '🔑 UBNT SSH try"), isTrue);
+    });
+
     test('🚨 الوسيط دالّة لا نصّ', () {
       // بناء السلسلة نفسه يكلّف، وفي `quiet` لا ندفع ثمن نصٍّ لن يُطبع.
       final src = File('lib/core/util/dev_log.dart').readAsStringSync();

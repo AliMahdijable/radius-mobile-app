@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/util/dev_log.dart';
+
 /// UBNT airOS SSH client — يستعمل SSH لتشغيل `mca-status` وجلب المعلومات.
 ///
 /// **لماذا SSH بدل HTTP**:
@@ -36,10 +38,9 @@ class UbntApi {
     UbntException? lastAuthErr;
     for (final u in userList) {
       try {
-        if (kDebugMode) {
-          debugPrint('🔑 UBNT SSH try user="$u" pass_len=${pass.length} '
-              'ip=$ip:$port');
-        }
+        // الحارس داخل `DevLog` — لا حاجة إلى `kDebugMode` هنا.
+        DevLog.trace(() => '🔑 UBNT SSH try user="$u" pass_len=${pass.length} '
+            'ip=$ip:$port');
         return await _fetchWithUser(
             ip: ip,
             port: port,
@@ -224,13 +225,17 @@ class UbntApi {
         throw UbntException('لم نستلم بيانات — تحقّق من صلاحيّات المستخدم');
       }
 
-      if (kDebugMode) {
-        debugPrint(
-            '══════ UBNT output (${isJsonDump ? "JSON" : "key=value"}) ══════');
-        debugPrint(
-            output.substring(0, output.length > 2000 ? 2000 : output.length));
-        debugPrint('════════════════════════════════');
-      }
+      // ⚠️ الحمولة الخام في `trace` وحدها.
+      //
+      // خمسون سطراً لكلّ جهاز UBNT في كلّ نبضة — وهي آخر ما بقي يُغرق
+      // السجلّ بعد إسكات ميكروتك. والسجلّ الذي لا يُقرأ يُخفي العطل
+      // الذي نبحث عنه.
+      //
+      // ارفع `DevLog.level` إلى `verbose` حين تُشخّص جلسةً بعينها.
+      DevLog.trace(() =>
+          '══════ UBNT output (${isJsonDump ? "JSON" : "key=value"}) ══════\n'
+          '${output.substring(0, output.length > 2000 ? 2000 : output.length)}\n'
+          '════════════════════════════════');
 
       // لو JSON: نحوّله لـflat map key=value ليعمل مع نفس الـparser
       final parsed =
