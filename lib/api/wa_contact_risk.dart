@@ -120,3 +120,75 @@ class WaContactRiskApi {
     return d.length <= 9 ? d : d.substring(d.length - 9);
   }
 }
+
+/// ملخّص خطر **دفعةٍ كاملة** — يُقرأ قبل الضغط على إرسال.
+///
+/// ⚠️ لماذا ملخّصٌ لا قائمة درجات: `WaContactRiskApi.fetch` تُرجع صفّاً
+/// لكلّ رقم، وهي كافيةٌ لبطاقةٍ واحدة. أمّا مئتا رقم فتُرجع مئتَي صفّ
+/// لا يقرؤها أحد. الحارس الجماعيّ جملةٌ واحدة أو لا شيء.
+@immutable
+class WaBulkRisk {
+  const WaBulkRisk({
+    required this.total,
+    required this.noInbound,
+    required this.highRisk,
+    this.sample = const [],
+  });
+
+  /// عدد الأرقام الفريدة بعد التطبيع — لا طول المصفوفة المُرسَلة.
+  final int total;
+
+  /// من لم يبادر بمراسلتك. **لا يُستبعَد**: قياسٌ على البيانات الحيّة
+  /// قال إنّ نصف جمهور البثّ منهم، فاستبعادُهم يُعطّل البثّ لا يحرسه.
+  final int noInbound;
+
+  /// من تجاهل ستّ رسائل فأكثر، أو ثبت أنّ رقمه ميّت. **يُستبعَد
+  /// افتراضيّاً** — قِيست نسبتُه على ستّة مدراء حقيقيّين: ٦٪ وسطيّاً
+  /// (٢٫٢٪ إلى ١٢٫٣٪). نادرٌ بما يكفي ليبقى التحذير مقروءاً.
+  final int highRisk;
+
+  /// عيّنةٌ من المستبعَدين لعرضها في الحوار (٢٠ كحدّ أقصى من الخادم).
+  final List<({String phone, String reason})> sample;
+
+  bool get hasWarning => noInbound > 0 || highRisk > 0;
+
+  /// الافتراضيّ حين يتعذّر السؤال — **بلا تحذير**.
+  ///
+  /// عجزُ الشبكة ليس دليل خطر، وحارسٌ يصرخ عند كلّ انقطاع يُطفَأ.
+  static const none = WaBulkRisk(total: 0, noInbound: 0, highRisk: 0);
+}
+
+class WaBulkRiskApi {
+  /// POST /api/v2/whatsapp/bulk-risk
+  ///
+  /// لا ترمي أبداً: الفشل يُرجع [WaBulkRisk.none] فيمضي الإرسال.
+  static Future<WaBulkRisk> fetch(List<String> phones) async {
+    final clean = phones.where((p) => p.trim().isNotEmpty).toList();
+    if (clean.isEmpty) return WaBulkRisk.none;
+    try {
+      final res = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/whatsapp/bulk-risk',
+        data: {'phones': clean},
+      );
+      final d = res.data;
+      if (d == null || d['success'] != true) return WaBulkRisk.none;
+      final raw = (d['highRiskSample'] as List?) ?? const [];
+      return WaBulkRisk(
+        total: (d['total'] as num?)?.toInt() ?? 0,
+        noInbound: (d['noInbound'] as num?)?.toInt() ?? 0,
+        highRisk: (d['highRisk'] as num?)?.toInt() ?? 0,
+        sample: [
+          for (final e in raw.whereType<Map>())
+            (
+              phone: '${e['phone'] ?? ''}',
+              reason: '${e['reason'] ?? ''}',
+            ),
+        ],
+      );
+    } on DioException catch (_) {
+      return WaBulkRisk.none;
+    } catch (_) {
+      return WaBulkRisk.none;
+    }
+  }
+}

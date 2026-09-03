@@ -156,7 +156,8 @@ class BroadcastApi {
   /// [imageBytes] اختياريّة — صورة تُرسل كمرفق (caption = نص الرسالة).
   /// يجب أن تكون ≤ [maxImageBytes] بعد الضغط، وإلا نرمي [ArgumentError]
   /// قبل الشبكة (توفيراً للـbandwidth). Backend عنده نفس السقف كحارس ثانٍ.
-  static Future<({bool ok, int? queued, String? message})> broadcast({
+  static Future<({bool ok, int? queued, int? excludedHighRisk, String? message})>
+      broadcast({
     required MessageIntent intent,
     required String message,
     List<String>? targetUsernames,
@@ -166,11 +167,15 @@ class BroadcastApi {
     // 2026-08-26 (tg parity): 'auto' | 'whatsapp' | 'telegram'.
     // 'auto' = يحترم ربط المشترك، 'telegram' = يفلتر المربوطين فقط، 'whatsapp' = يجبر واتساب.
     String? forceChannel,
+    // 2026-09-03: الخادم يستبعد الدرجة الحرجة افتراضيّاً. true يُعيدهم
+    // بعد أن يكون المدير رأى عددهم في حوار التأكيد.
+    bool includeHighRisk = false,
   }) async {
     try {
       final body = <String, dynamic>{
         'message': message,
         'type': intent.apiValue,
+        if (includeHighRisk) 'includeHighRisk': true,
       };
       if (targetUsernames != null && targetUsernames.isNotEmpty) {
         body['targetUsernames'] = targetUsernames;
@@ -183,6 +188,7 @@ class BroadcastApi {
           return (
             ok: false,
             queued: null,
+            excludedHighRisk: null,
             message:
                 'الصورة أكبر من الحدّ (${(maxImageBytes / 1024).round()}KB).',
           );
@@ -200,24 +206,34 @@ class BroadcastApi {
         return (
           ok: false,
           queued: null,
+          excludedHighRisk: null,
           message: data['message']?.toString() ?? 'فشل الإرسال',
         );
       }
-      final queued = data['queued'] ?? data['totalQueued'] ?? data['count'];
+      // ⚠️ الخادم يضع العدّادات في `summary` — والقراءة من الجذر وحده
+      // كانت تُرجع null دائماً، فيعرض التطبيق عدد المستهدَفين بدل عدد
+      // ما دخل الطابور فعلاً.
+      final sum = data['summary'] is Map
+          ? (data['summary'] as Map).cast<String, dynamic>()
+          : const <String, dynamic>{};
+      final queued = sum['queued'] ??
+          data['queued'] ?? data['totalQueued'] ?? data['count'];
+      final excluded = sum['excludedHighRisk'];
       return (
         ok: true,
         queued: queued == null ? null : _toInt(queued),
-        message: null
+        excludedHighRisk: excluded == null ? null : _toInt(excluded),
+        message: null,
       );
     } on DioException catch (e) {
       _log('broadcast', e);
       final m = e.response?.data is Map
           ? (e.response!.data as Map)['message']?.toString()
           : null;
-      return (ok: false, queued: null, message: m ?? 'خطأ في الشبكة');
+      return (ok: false, queued: null, excludedHighRisk: null, message: m ?? 'خطأ في الشبكة');
     } catch (e) {
       _log('broadcast', e);
-      return (ok: false, queued: null, message: e.toString());
+      return (ok: false, queued: null, excludedHighRisk: null, message: e.toString());
     }
   }
 

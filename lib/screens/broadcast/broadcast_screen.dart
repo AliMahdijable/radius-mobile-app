@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/broadcast_api.dart';
 import '../../api/send_scope_api.dart';
+import '../../api/wa_contact_risk.dart';
 import '../../api/subscribers_api.dart';
 import '../../models/subscriber.dart';
 import '../../services/permissions_service.dart';
@@ -39,6 +40,13 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   List<Subscriber> _subs = const [];
   bool _loading = true;
   bool _sending = false;
+
+  /// جارٍ سؤال الخادم عن خطر الأرقام — بين الضغط والحوار.
+  bool _checkingRisk = false;
+
+  /// هل يقبل المدير مراسلة الدرجة الحرجة؟ يُعاد إلى false بعد كلّ
+  /// بثّ عمداً: موافقةٌ على حملةٍ ليست موافقةً دائمة.
+  bool _includeHighRisk = false;
   bool _retrying = false;
 
   /// المدراء الفرعيون المتاحون للفلترة (من SendScopeApi.fetch).
@@ -184,6 +192,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
 
   bool get _canSend =>
       !_sending &&
+      // الفحص لحظةٌ واحدة، لكنّ نقرةً ثانيةً فيها تفتح حوارين.
+      !_checkingRisk &&
       _targets.isNotEmpty &&
       // مع وجود صورة، الرسالة النصّية اختياريّة (تصبح caption).
       (_messageOptional ||
@@ -245,12 +255,23 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   Future<void> _send() async {
     final targets = _targets;
     if (targets.isEmpty) return;
-    final confirm = await _confirmDialog(
-      'إرسال الرسالة',
-      'إرسال إلى ${targets.length} مشترك؟',
-      confirmLabel: 'إرسال',
-      confirmColor: AppColors.brand,
+
+    // ── حارس الحظر — يُسأل **قبل** الحوار ─────────────────────────
+    //
+    // الحارس المفرد يقف أمام رسالةٍ واحدة والمدير يقرأ ويقرّر. أمّا
+    // هنا فمئتا رسالة بنقرة، ولا أحد يقرأ مئتَي تحذير — فالملخّص
+    // جملةٌ واحدة أو لا شيء.
+    //
+    // ⚠️ ولا يوقف: الفشل يُرجع `none` فيمضي الإرسال بحواره المعتاد.
+    // حارسٌ يمنع البثّ عند أوّل انقطاع شبكة يُطفَأ في يومه الأوّل.
+    setState(() => _checkingRisk = true);
+    final risk = await WaBulkRiskApi.fetch(
+      [for (final t in targets) t.displayPhone].where((p) => p.isNotEmpty).toList(),
     );
+    if (!mounted) return;
+    setState(() => _checkingRisk = false);
+
+    final confirm = await _confirmSend(targets.length, risk);
     if (confirm != true) return;
     setState(() => _sending = true);
     final r = await BroadcastApi.broadcast(
@@ -263,12 +284,18 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       imageMime: 'image/jpeg',
       imageFilename: _imageName ?? 'broadcast.jpg',
       forceChannel: _forceChannel == 'auto' ? null : _forceChannel,
+      includeHighRisk: _includeHighRisk,
     );
     if (!mounted) return;
     setState(() => _sending = false);
     if (r.ok) {
+      // ⚠️ الاستبعاد يُذكر دائماً: عمليّةٌ صامتة تُنقص ٦٪ من حملة
+      // تذكيرٍ بالديون تُكتشَف بعد أسبوع «ليش ما وصلته رسالة؟».
+      final ex = r.excludedHighRisk ?? 0;
       _snack(
-        'تم إرسال ${r.queued ?? targets.length} رسالة إلى الطابور',
+        ex > 0
+            ? 'أُدرجت ${r.queued ?? 0} رسالة — واستُبعد $ex لخطر الحظر'
+            : 'تم إرسال ${r.queued ?? targets.length} رسالة إلى الطابور',
         isError: false,
       );
       setState(() {
@@ -349,6 +376,103 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
         builder: (_) => const MessageLogsScreen(),
       ),
     );
+  }
+
+  /// حوار التأكيد مع ملخّص الخطر.
+  ///
+  /// ── لماذا رقمان لا واحد ──────────────────────────────────────────
+  /// «لم يراسلوك» و«تجاهلوا ستّاً» ليسا درجتين من شيءٍ واحد، بل
+  /// شيئان مختلفان في القرار:
+  ///
+  /// الأوّل نصف الجمهور تقريباً (قِيس: ٥٢٪) — واستبعادُه يُلغي البثّ
+  /// لا يحرسه. يُذكَر ليعرف المدير طبيعة جمهوره، ولا يُطرح أحد.
+  ///
+  /// الثاني ٦٪ وسطيّاً على ستّة مدراء حقيقيّين — وهو من راسلتَه ستّاً
+  /// فلم يردّ مرّة، أو ثبت أنّ رقمه لا يستقبل. هؤلاء يُطرحون
+  /// افتراضيّاً، ويستطيع المدير إعادتهم بمفتاحٍ في هذا الحوار.
+  ///
+  /// ⚠️ ودمجُ الرقمين في تحذيرٍ واحد يُفقد كليهما معناه: «١٠٤ من ٢٠٠
+  /// في خطر» رقمٌ يُتجاهَل في اليوم الثاني، بينما «١٢ سيُستبعَدون»
+  /// رقمٌ يُقرأ ويُقرَّر فيه.
+  Future<bool?> _confirmSend(int count, WaBulkRisk risk) async {
+    if (!risk.hasWarning) {
+      return _confirmDialog(
+        'إرسال الرسالة',
+        'إرسال إلى $count مشترك؟',
+        confirmLabel: 'إرسال',
+        confirmColor: AppColors.brand,
+      );
+    }
+    var include = _includeHighRisk;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) {
+          final willSend = include ? count : count - risk.highRisk;
+          return AlertDialog(
+            backgroundColor: AppColors.surface,
+            title: Text('إرسال إلى $count مشترك',
+                style: AppType.title(color: AppColors.textHi)
+                    .copyWith(fontSize: 16)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (risk.noInbound > 0)
+                  Text(
+                    '${risk.noInbound} من ${risk.total} لم تسبق لهم مراسلتك.',
+                    style: AppType.subtitle(color: AppColors.textMid),
+                  ),
+                if (risk.highRisk > 0) ...[
+                  const SizedBox(height: Sp.sm),
+                  Container(
+                    padding: const EdgeInsets.all(Sp.sm),
+                    decoration: BoxDecoration(
+                      color: AppColors.dangerSoftBg,
+                      borderRadius: BorderRadius.circular(R.sm),
+                      border: Border.all(color: AppColors.dangerSoftBorder),
+                    ),
+                    child: Text(
+                      'منهم ${risk.highRisk} تجاهلوا ٦ رسائل فأكثر بلا ردّ — '
+                      'وهؤلاء أكثر من يُبلّغ عنك فيُحظر رقمك.',
+                      style: AppType.subtitle(color: AppColors.error),
+                    ),
+                  ),
+                  const SizedBox(height: Sp.xs),
+                  // ⚠️ المفتاح لا زرّ: القرار قابلٌ للتراجع قبل الإرسال،
+                  // والمدير يرى أثره في السطر الذي تحته فوراً.
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    value: include,
+                    activeThumbColor: AppColors.error,
+                    onChanged: (v) => setLocal(() => include = v),
+                    title: Text('أرسل لهم أيضاً',
+                        style: AppType.subtitle(color: AppColors.textHi)),
+                  ),
+                ],
+                const SizedBox(height: Sp.xs),
+                Text('سيصل الآن: $willSend',
+                    style: AppType.bodyStrong(color: AppColors.brand)),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('إلغاء'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: Text('إرسال',
+                    style: TextStyle(color: AppColors.brand)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (ok == true) _includeHighRisk = include;
+    return ok;
   }
 
   Future<bool?> _confirmDialog(
@@ -1244,7 +1368,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
             // send
             ElevatedButton.icon(
               onPressed: _canSend ? _send : null,
-              icon: _sending
+              icon: (_sending || _checkingRisk)
                   ? const SizedBox(
                       width: 14,
                       height: 14,
@@ -1255,7 +1379,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                     )
                   : const Icon(LucideIcons.send, size: 14),
               label: Text(
-                _sending ? 'جاري الإرسال...' : 'إرسال',
+                _checkingRisk
+                    ? 'يفحص الأرقام...'
+                    : (_sending ? 'جاري الإرسال...' : 'إرسال'),
                 style: AppType.button(color: AppColors.onBrand)
                     .copyWith(fontSize: 13),
               ),
