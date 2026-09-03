@@ -6,27 +6,9 @@ import '../core/constants/api_constants.dart';
 import '../core/network/dio_client.dart';
 import '../core/services/storage_service.dart';
 import '../core/services/encryption_service.dart';
-import '../core/utils/sas4_errors.dart';
 import '../models/subscriber_model.dart';
 import 'dashboard_provider.dart';
 import 'reports_provider.dart';
-
-/// العمليات الجماعية على تحديد متعدّد للمشتركين. زرّ واحد يبدّل بين
-/// `disable`/`enable` حسب حالة المحدّدين (إعادة التفعيل = رفع علامة
-/// التعطيل فقط — ليست "تفعيل اشتراك" المتشعّب)، بالإضافة إلى `delete`.
-enum BulkAction { disable, enable, delete }
-
-/// نتيجة عملية جماعية — حالة كل مشترك على حدة (id → نجاح/فشل).
-class BulkActionResult {
-  final Map<int, bool> results;
-  const BulkActionResult(this.results);
-
-  int get total => results.length;
-  int get successCount => results.values.where((v) => v).length;
-  int get failCount => results.values.where((v) => !v).length;
-  List<int> get failedIds =>
-      results.entries.where((e) => !e.value).map((e) => e.key).toList();
-}
 
 class SubscribersState {
   final List<SubscriberModel> subscribers;
@@ -54,12 +36,8 @@ class SubscribersState {
     this.error,
     this.totalRecords = 0,
     this.filter = 'all',
-    // Default sort: newest activation first. remaining_days desc puts
-    // freshly-renewed subs at the top and pushes expired ones to the
-    // bottom — matches the admin's expected mental model when the
-    // "الكل" tab opens.
-    this.sortBy = 'remaining_days',
-    this.sortDirection = 'desc',
+    this.sortBy = 'username',
+    this.sortDirection = 'asc',
     this.lastPayments = const {},
     this.managerFilter,
     this.sas4OfflineCount,
@@ -101,9 +79,6 @@ class SubscribersState {
       case 'offline':
         list = source.where((s) => s.isOffline).toList();
         break;
-      case 'disabled':
-        list = source.where((s) => s.isDisabled).toList();
-        break;
       case 'debtors':
         list = source.where((s) => s.hasDebt).toList();
         break;
@@ -135,27 +110,7 @@ class SubscribersState {
           result = (a.debtAmount).compareTo(b.debtAmount);
           break;
         case 'remaining_days':
-          // Sort by the precise expiration timestamp (down to the minute)
-          // rather than the truncated integer `remainingDays`, otherwise
-          // all subs with "1 day X minutes" tie on integer 1 and end up in
-          // arbitrary order even though the card shows distinct
-          // minute-level remainders. Falls back to integer days when the
-          // expiration string is missing/unparseable.
-          final ax = DateTime.tryParse(
-                  (a.expiration ?? '').replaceAll(' ', 'T'))
-              ?.millisecondsSinceEpoch;
-          final bx = DateTime.tryParse(
-                  (b.expiration ?? '').replaceAll(' ', 'T'))
-              ?.millisecondsSinceEpoch;
-          if (ax != null && bx != null) {
-            result = ax.compareTo(bx);
-          } else if (ax != null) {
-            result = -1;
-          } else if (bx != null) {
-            result = 1;
-          } else {
-            result = (a.remainingDays ?? 0).compareTo(b.remainingDays ?? 0);
-          }
+          result = (a.remainingDays ?? 0).compareTo(b.remainingDays ?? 0);
           break;
         case 'session_time':
           result = (a.sessionTime ?? 0).compareTo(b.sessionTime ?? 0);
@@ -192,7 +147,6 @@ class SubscribersState {
   }
   int get debtorsCount => _managerScoped.where((s) => s.hasDebt).length;
   int get nearExpiryCount => _managerScoped.where((s) => s.isNearExpiry).length;
-  int get disabledCount => _managerScoped.where((s) => s.isDisabled).length;
 
   /// Sum of outstanding debt across subscribers in the current
   /// manager-filter scope (respects the "المدراء" dropdown so when the
@@ -277,15 +231,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           ? DateTime.tryParse(raw)
           : DateTime.tryParse('${raw.replaceAll(' ', 'T')}+03:00');
       if (parsed == null) return null;
-      final diff = parsed.difference(DateTime.now());
-      if (diff.isNegative) return diff.inDays;
-      // Use ceil rather than truncating `inDays`. SAS4 sets `expiration =
-      // server_now + N*86400s` exactly on activation; by the time the client
-      // parses the response, `client_now` is a few seconds later, so the diff
-      // is N days minus a tiny epsilon — `inDays` would drop a whole day
-      // (showing 29 instead of 30 right after activation). Ceil keeps that
-      // boundary stable.
-      return (diff.inSeconds / 86400.0).ceil();
+      return parsed.difference(DateTime.now()).inDays;
     } catch (_) {
       return null;
     }
@@ -335,15 +281,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           existing.profileId,
       'balance': _nonEmptyString(details['balance']) ?? existing.balance,
       'price': existing.price,
-      // Refresh parent_username from the SAS4 response when present (so a
-      // re-parent done from the Edit sheet is reflected on the list/cards
-      // immediately). Fall back to the existing value when SAS4 doesn't
-      // include it.
-      'parent_username': _nonEmptyString(details['parent_username']) ??
-          (details['parent_details'] is Map
-              ? _nonEmptyString(details['parent_details']['username'])
-              : null) ??
-          existing.parentUsername,
+      'parent_username': existing.parentUsername,
       'is_online': existing.isOnline,
       'enabled': details['enabled'] ?? existing.enabled,
       'framedipaddress':
@@ -354,10 +292,6 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       'acctinputoctets': existing.uploadBytes,
       'acctoutputoctets': existing.downloadBytes,
       'oui': existing.deviceVendor,
-      // الخصم يجي من /api/subscribers/with-phones، و SAS4 ما يعرفه.
-      // نحفظ القيمة الحالية عند الـrefresh عشان الـchip ما يضيع
-      // لمّا المستخدم يفتح المشترك ثم يرجع للقائمة.
-      'discount': existing.discount,
     };
 
     var updated = SubscriberModel.fromJson(merged);
@@ -421,7 +355,6 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
               price: (pi?['user_price'] ?? pi?['price'])?.toString() ?? sub.price,
               parentUsername: sub.parentUsername,
               isOnlineFlag: sub.isOnlineFlag, enabled: sub.enabled,
-              discount: sub.discount,
             );
           }).toList();
         }
@@ -500,11 +433,6 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
                 ? e['acctinputoctets']
                 : int.tryParse(e['acctinputoctets']?.toString() ?? ''),
             deviceVendor: e['oui']?.toString(),
-            // الخصم يجي من backend فقط — SAS4 ما عنده الخصم. كان السبب
-            // الفعلي لعدم ظهور chip الخصم: هذا الـmerger يبني model
-            // جديد بدون تمرير discount → قيمة الـbackend اللي فيها
-            // discount=10000 تضيع.
-            discount: backend?.discount,
           ));
         }
       } else {
@@ -791,7 +719,6 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       uploadBytes: s.uploadBytes,
       downloadBytes: s.downloadBytes,
       deviceVendor: s.deviceVendor,
-      discount: s.discount,
     );
   }
 
@@ -863,45 +790,6 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         }
       }
       dev.log('PriceList loaded: ${_priceMap.length} by ID, ${_priceByName.length} by name', name: 'SUBS');
-
-      // Fallback لـsub-reseller: priceList يرجع فاضي، نجلب أسعار من
-      // /index/profile (نفس fix loadPackages). يخلّي عرض السعر بكرت
-      // المشترك يشتغل لـadmin@husxxx وأمثاله.
-      if (_priceMap.isEmpty) {
-        try {
-          final encryptedPayload = EncryptionService.encrypt({
-            'page': 1, 'count': 200, 'sortBy': null, 'direction': 'asc',
-            'search': '',
-            'columns': ['id', 'name', 'price', 'sale_price', 'user_price'],
-          });
-          final r = await _sas4Dio.post(
-            ApiConstants.sas4Profiles,
-            data: {'payload': encryptedPayload},
-            options: Options(contentType: 'application/x-www-form-urlencoded'),
-          );
-          var d = r.data;
-          if (d is String) d = EncryptionService.decrypt(d);
-          final items2 = (d is Map && d['data'] is List) ? d['data'] as List : <dynamic>[];
-          for (final raw in items2) {
-            if (raw is Map<String, dynamic>) {
-              final id = raw['id'] is int ? raw['id'] as int : int.tryParse(raw['id']?.toString() ?? '') ?? 0;
-              if (id <= 0) continue;
-              final name = raw['name']?.toString();
-              _priceMap[id] = {
-                'id': id,
-                'name': name,
-                'price': raw['price'],
-                'sale_price': raw['sale_price'],
-                'user_price': raw['user_price'],
-              };
-              if (name != null && name.isNotEmpty) _priceByName[name] = _priceMap[id]!;
-            }
-          }
-          dev.log('PriceList /index/profile fallback: ${_priceMap.length} by ID', name: 'SUBS');
-        } catch (e) {
-          dev.log('PriceList fallback failed: $e', name: 'SUBS');
-        }
-      }
     } catch (e) {
       dev.log('loadPriceList error: $e', name: 'SUBS');
     }
@@ -993,15 +881,8 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         ? plName
         : sub.profileName;
 
-    // الـbackend (/api/subscribers/with-phones) يحسب سعر البيع الصحيح
-    // عبر activationData لكل profile_id (MAX of user_price + n_required).
-    // لا نطغى عليه — نستعمل priceMap كـfallback فقط إذا sub.price فاضي.
-    // قبلاً كان priceMap يطغى ويرجع cost (19k) بدل sale (35k) لـsub-reseller.
-    final hasBackendPrice = sub.price != null
-        && sub.price!.isNotEmpty
-        && sub.price != '0'
-        && sub.price != '0.00';
-    final resolvedPrice = hasBackendPrice ? sub.price : plPrice;
+    // user_price from priceList ALWAYS takes priority over subscriber.price
+    final resolvedPrice = plPrice ?? sub.price;
 
     if (resolvedName == sub.profileName && resolvedPrice == sub.price && resolvedId == sub.profileId) {
       return sub;
@@ -1026,7 +907,6 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       parentUsername: sub.parentUsername,
       isOnlineFlag: sub.isOnlineFlag,
       enabled: sub.enabled,
-      discount: sub.discount,
     );
   }
 
@@ -1150,7 +1030,6 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       parentUsername: sub.parentUsername,
       isOnlineFlag: sub.isOnlineFlag,
       enabled: sub.enabled,
-      discount: sub.discount,
     );
   }
 
@@ -1178,11 +1057,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       onlineMap[o.username.toLowerCase()] = o;
     }
 
-    // قيّد البحث على التبويب الحالي (online/active/expired/...) بدل قائمة
-    // المشتركين الكاملة. كان الـbug: المستخدم بتبويب "اونلاين" يبحث "ali"
-    // → يطلع كل المشتركين باسم ali حتى المنقطعين.
-    final scoped = state.filteredSubscribers;
-    final localResults = scoped.where(matchesQuery).map((s) {
+    final localResults = state.subscribers.where(matchesQuery).map((s) {
       final online = onlineMap[s.username.toLowerCase()];
       if (online != null) {
         return SubscriberModel(
@@ -1201,7 +1076,6 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           sessionTime: online.sessionTime,
           downloadBytes: online.downloadBytes, uploadBytes: online.uploadBytes,
           deviceVendor: online.deviceVendor,
-          discount: s.discount,
         );
       }
       return s;
@@ -1218,17 +1092,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
   //   - debtors      → largest debt first
   //   - nearExpiry   → soonest to expire first
   // Users can still override via the sort picker while on the tab.
-  // Default sort per filter chip — applied automatically when the admin
-  // taps a chip so each tab opens in the order they expect (no need
-  // to also touch the sort dropdown). Per admin spec:
-  //   • all / active   → newest activation first (remaining_days desc)
-  //   • online         → longest connection time first
-  //   • nearExpiry     → closest to expiry first (lowest remaining)
-  //   • expired        → most recently expired first
-  //   • debtors        → largest debt first (debtAmount is negative,
-  //                       so ascending = most-negative = biggest debt)
   static const Map<String, (String, String)> _defaultSortByFilter = {
-    'all':         ('remaining_days', 'desc'),
     'active':      ('remaining_days', 'desc'),
     'online':      ('session_time',   'desc'),
     'expired':     ('expiration',     'desc'),
@@ -1337,10 +1201,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           final match = subMap[o.username.toLowerCase()];
           if (match != null) {
             return SubscriberModel(
-              // SAS4 /index/online لا يُرجع id موثوقاً (أحياناً null أو
-              // radacctid) — نأخذ idx الحقيقي من القائمة الرئيسية كي تشتغل
-              // عمليات التعديل/التفعيل/الحذف على المشترك من صفحة المتصلين.
-              idx: match.idx ?? o.idx, username: o.username,
+              idx: o.idx, username: o.username,
               firstname: match.firstname.isNotEmpty ? match.firstname : o.firstname,
               lastname: match.lastname.isNotEmpty ? match.lastname : o.lastname,
               phone: o.phone ?? match.phone,
@@ -1357,7 +1218,6 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
               sessionTime: o.sessionTime,
               downloadBytes: o.downloadBytes, uploadBytes: o.uploadBytes,
               deviceVendor: o.deviceVendor,
-              discount: match.discount,
             );
           }
           return o;
@@ -1368,106 +1228,6 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       }
     } catch (e) {
       dev.log('loadOnlineUsers error: $e', name: 'SUBS');
-    }
-  }
-
-  /// يجلب بيانات الاتصال الحيّة لمشترك واحد بالاسم من `/index/online`
-  /// (IP/MAC/مدّة الجلسة/النقل) ويُراكِبها على صفّ المشترك في
-  /// `state.subscribers` (وعلى `onlineUsers` إن كان موجوداً فيها) — يُستدعى
-  /// عند فتح شاشة التفاصيل كي يظهر الـIP حتى لو وصلنا للشاشة من البحث لا
-  /// من صفحة المتصلين. لا نُدرج صفاً جديداً في `onlineUsers` إن كانت
-  /// فارغة كي لا يظنّ تبويب "المتصلين" أن هذا المشترك هو الوحيد المتصل.
-  Future<void> fetchOnlineInfo(String username) async {
-    final un = username.trim();
-    if (un.isEmpty) return;
-    try {
-      final payload = EncryptionService.encrypt({
-        'page': 1,
-        'count': 5,
-        'sortBy': 'username',
-        'direction': 'asc',
-        'search': un,
-        'columns': [
-          'id', 'username', 'framedipaddress', 'callingstationid',
-          'acctsessiontime', 'acctoutputoctets', 'acctinputoctets', 'oui',
-        ],
-      });
-      final response = await _sas4Dio.post(
-        ApiConstants.sas4OnlineUsers,
-        data: {'payload': payload},
-        options: Options(contentType: 'application/x-www-form-urlencoded'),
-      );
-      dynamic parsed = response.data;
-      if (parsed is String) parsed = EncryptionService.decrypt(parsed);
-      final rows = (parsed is Map && parsed['data'] is List)
-          ? (parsed['data'] as List)
-          : const [];
-      final lower = un.toLowerCase();
-      Map? row;
-      for (final e in rows) {
-        if (e is Map && '${e['username'] ?? ''}'.toLowerCase() == lower) {
-          row = e;
-          break;
-        }
-      }
-      final m = row == null ? null : Map<String, dynamic>.from(row);
-      int? toInt(dynamic v) => v is int ? v : int.tryParse('${v ?? ''}');
-
-      // يبني نسخة من المشترك بعد مراكبة بيانات الاتصال الحيّة (أو إزالتها
-      // إن خرج من النت).
-      SubscriberModel apply(SubscriberModel s) => SubscriberModel(
-            idx: s.idx,
-            username: s.username,
-            firstname: s.firstname,
-            lastname: s.lastname,
-            phone: s.phone,
-            mobile: s.mobile,
-            expiration: s.expiration,
-            remainingDays: s.remainingDays,
-            notes: s.notes,
-            debt: s.debt,
-            hasDebtFlag: s.hasDebtFlag,
-            profileName: s.profileName,
-            profileId: s.profileId,
-            balance: s.balance,
-            price: s.price,
-            parentUsername: s.parentUsername,
-            isOnlineFlag: m != null,
-            enabled: s.enabled,
-            ipAddress: m == null
-                ? null
-                : (m['framedipaddress'] ?? m['framed_ip_address'])?.toString(),
-            macAddress: m == null ? null : m['callingstationid']?.toString(),
-            sessionTime: m == null ? null : toInt(m['acctsessiontime']),
-            downloadBytes: m == null ? null : toInt(m['acctoutputoctets']),
-            uploadBytes: m == null ? null : toInt(m['acctinputoctets']),
-            deviceVendor: m == null ? null : m['oui']?.toString(),
-            discount: s.discount,
-          );
-
-      var changed = false;
-      final newSubs = state.subscribers.map((s) {
-        if (s.username.toLowerCase() == lower) {
-          changed = true;
-          return apply(s);
-        }
-        return s;
-      }).toList();
-      // في onlineUsers: حدّث الموجود فقط أو أزله إن خرج — لا تُضف جديداً.
-      final onlineHas = state.onlineUsers.any((s) => s.username.toLowerCase() == lower);
-      final newOnline = m == null
-          ? (onlineHas
-              ? state.onlineUsers.where((s) => s.username.toLowerCase() != lower).toList()
-              : state.onlineUsers)
-          : (onlineHas
-              ? state.onlineUsers.map((s) => s.username.toLowerCase() == lower ? apply(s) : s).toList()
-              : state.onlineUsers);
-      if (changed ||
-          !identical(newOnline, state.onlineUsers)) {
-        state = state.copyWith(subscribers: newSubs, onlineUsers: newOnline);
-      }
-    } catch (e) {
-      dev.log('fetchOnlineInfo error: $e', name: 'SUBS');
     }
   }
 
@@ -1490,7 +1250,6 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
             parentUsername: s.parentUsername,
             isOnlineFlag: false,
             enabled: s.enabled,
-            discount: s.discount,
           );
         }
         return s;
@@ -1511,18 +1270,6 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
 
   void setSort(String field, String direction) {
     state = state.copyWith(sortBy: field, sortDirection: direction);
-  }
-
-  /// Re-applies the per-filter default sort for the currently active
-  /// filter tab. Called by the subscribers screen after clearing the
-  /// device-health sort so the list snaps back to the expected order
-  /// (e.g. remaining_days desc on "active") instead of staying in
-  /// whatever order the device sort produced.
-  void resetSortToFilterDefault() {
-    final def = _defaultSortByFilter[state.filter];
-    if (def != null) {
-      state = state.copyWith(sortBy: def.$1, sortDirection: def.$2);
-    }
   }
 
   Future<void> loadPackages() async {
@@ -1561,43 +1308,6 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         dev.log('/list/profile/5 failed: $e', name: 'PKG');
       }
 
-      // Step 2.5: Fallback لما _priceMap فاضي (sub-reseller، normal-reseller).
-      // /priceList/{adminId} يرجع فاضي للمدير الفرعي. نجلب الأسعار من
-      // /index/profile الذي يحتوي p.price مباشرة (يشتغل لكل المدراء).
-      // هذا يصلح bug admin@husxxx — كانت الباقات تطلع 0 ع كل مكان.
-      if (_priceMap.isEmpty && listProfileItems.isNotEmpty) {
-        try {
-          final encryptedPayload = EncryptionService.encrypt({
-            'page': 1, 'count': 200, 'sortBy': null, 'direction': 'asc',
-            'search': '',
-            'columns': ['id', 'name', 'price', 'sale_price', 'user_price'],
-          });
-          final r = await _sas4Dio.post(
-            ApiConstants.sas4Profiles,
-            data: {'payload': encryptedPayload},
-            options: Options(contentType: 'application/x-www-form-urlencoded'),
-          );
-          var d = r.data;
-          if (d is String) d = EncryptionService.decrypt(d);
-          final items = (d is Map && d['data'] is List) ? d['data'] as List : <dynamic>[];
-          for (final raw in items) {
-            if (raw is Map<String, dynamic>) {
-              final id = raw['id'] is int ? raw['id'] as int : int.tryParse(raw['id']?.toString() ?? '') ?? 0;
-              if (id <= 0) continue;
-              _priceMap[id] = {
-                'price': raw['price'],
-                'sale_price': raw['sale_price'],
-                'user_price': raw['user_price'],
-                'name': raw['name'],
-              };
-            }
-          }
-          dev.log('[/index/profile fallback] _priceMap now ${_priceMap.length} entries', name: 'PKG');
-        } catch (e) {
-          dev.log('/index/profile fallback failed: $e', name: 'PKG');
-        }
-      }
-
       // Step 3: Build packages.
       //   - If /list/profile/5 returned items → use them as the source (covers sub-managers)
       //     and enrich prices from _priceMap when the id matches.
@@ -1616,7 +1326,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           packages.add(PackageModel(
             idx: id,
             name: name,
-            price: (priced?['price'] ?? priced?['profile_price'] ?? priced?['sale_price'] ?? item['price'])?.toString(),
+            price: (priced?['price'] ?? priced?['profile_price'] ?? item['price'])?.toString(),
             userPrice: (priced?['user_price'] ?? item['user_price'])?.toString(),
           ));
         }
@@ -1653,18 +1363,16 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     required String lastname,
     required String phone,
     required String expiration,
-    int? parentId,
   }) async {
     try {
       final adminId = await _storage.getAdminId();
-      final resolvedParentId = parentId ?? int.tryParse(adminId ?? '');
       final payload = EncryptionService.encrypt({
         'username': username,
         'enabled': 1,
         'password': password,
         'confirm_password': password,
         'profile_id': profileId,
-        'parent_id': resolvedParentId,
+        'parent_id': int.tryParse(adminId ?? ''),
         'site_id': null,
         'mac_auth': 0,
         'allowed_macs': null,
@@ -1729,34 +1437,6 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       }
       return null;
     } catch (_) {
-      return null;
-    }
-  }
-
-  /// آخر اتصال (آخر جلسة) لمشترك غير متصل. نستدعي الـbackend
-  /// /api/v2/subscribers/last-macs الذي يسحب bulk من SAS4 UserSessions
-  /// ويفلتر بالكود — لأن SAS4 /index/UserSessions لا يفلتر بـusername/search
-  /// مباشرة (يرجّع 0 صفوف مع الفلتر). الـbackend يرجّع lastConnections[username]
-  /// = أحدث جلسة (acctstoptime، fallback acctstarttime). يرجّع نص datetime أو
-  /// null. لا يُعدّل الـstate العام.
-  Future<String?> getLastConnection(String username) async {
-    final un = username.trim();
-    if (un.isEmpty) return null;
-    try {
-      final response = await _backendDio.post(
-        ApiConstants.subscribersLastMacs,
-        data: {
-          'usernames': [un],
-        },
-      );
-      final data = response.data;
-      if (data is Map && data['lastConnections'] is Map) {
-        final ts = (data['lastConnections'] as Map)[un]?.toString();
-        if (ts != null && ts.trim().isNotEmpty) return ts.trim();
-      }
-      return null;
-    } catch (e) {
-      dev.log('getLastConnection error: $e', name: 'SUBS');
       return null;
     }
   }
@@ -1856,19 +1536,8 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       if (data is Map && data['status'] == 200 && data['data'] != null) {
         return Map<String, dynamic>.from(data['data']);
       }
-      dev.log(
-        'getActivationData unexpected payload: ${data is Map ? "status=${data['status']} message=${data['message']}" : data.runtimeType}',
-        name: 'SUBS',
-      );
       return null;
-    } on DioException catch (e) {
-      dev.log(
-        'getActivationData failed: ${e.response?.statusCode} ${e.requestOptions.uri} body=${e.response?.data}',
-        name: 'SUBS',
-      );
-      return null;
-    } catch (e) {
-      dev.log('getActivationData error: $e', name: 'SUBS');
+    } catch (_) {
       return null;
     }
   }
@@ -1924,7 +1593,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     }
   }
 
-  Future<({bool ok, String? errorMessage})> activateSubscriber({
+  Future<bool> activateSubscriber({
     required int userId,
     required double userPrice,
     required dynamic activationUnits,
@@ -1971,19 +1640,10 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       );
 
       final rData = response.data;
-      // كان: HTTP 200 OR data.status==200 OR data.success — الـOR كانت تخلّي
-      // أي رد HTTP 200 يبان كنجاح حتى لو body فيه status:-1 (مثل
-      // rsp_insufficient_balance). الحقيقة الوحيدة هي data.status == 200.
-      final isSuccess = rData is Map && rData['status'] == 200;
+      final isSuccess = response.statusCode == 200 ||
+          rData?['status'] == 200 ||
+          rData?['success'] == true;
 
-      if (!isSuccess) {
-        final rspMsg = (rData is Map ? rData['message']?.toString() : null);
-        return (
-          ok: false,
-          errorMessage: Sas4Errors.translate(rspMsg, fallback: 'فشل التفعيل'),
-        );
-      }
-      // success path — ندخل block النجاح القديم
       if (isSuccess) {
         await updateUserNotes(userId, newNotes);
 
@@ -2028,23 +1688,15 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           },
         );
 
-        return (ok: true, errorMessage: null);
+        return true;
       }
-      return (ok: false, errorMessage: 'فشل التفعيل');
-    } on DioException catch (e) {
-      // SAS4 ممكن يرجع HTTP 4xx/5xx مع body يحتوي rsp_*. نلتقطها ونترجمها.
-      final rData = e.response?.data;
-      final rspMsg = (rData is Map ? rData['message']?.toString() : null) ?? e.message;
-      return (
-        ok: false,
-        errorMessage: Sas4Errors.translate(rspMsg, fallback: 'فشل التفعيل'),
-      );
-    } catch (e) {
-      return (ok: false, errorMessage: 'فشل التفعيل: $e');
+      return false;
+    } catch (_) {
+      return false;
     }
   }
 
-  Future<({bool ok, String? errorMessage})> extendSubscription({
+  Future<bool> extendSubscription({
     required int userId,
     required int profileId,
     required String method,
@@ -2065,8 +1717,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
         options: Options(contentType: 'application/x-www-form-urlencoded'),
       );
 
-      final rData = response.data;
-      if (rData is Map && rData['status'] == 200) {
+      if (response.data?['status'] == 200) {
         final subName = _findUsername(userId);
         logActivity(
           action: 'extend_subscriber',
@@ -2080,23 +1731,11 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
             'username': subName,
           },
         );
-        return (ok: true, errorMessage: null);
+        return true;
       }
-      // SAS رجع status != 200 → نترجم الرسالة بدل ما نرمي bool فقط
-      final rspMsg = (rData is Map ? rData['message']?.toString() : null);
-      return (
-        ok: false,
-        errorMessage: Sas4Errors.translate(rspMsg, fallback: 'فشل التمديد'),
-      );
-    } on DioException catch (e) {
-      final rData = e.response?.data;
-      final rspMsg = (rData is Map ? rData['message']?.toString() : null) ?? e.message;
-      return (
-        ok: false,
-        errorMessage: Sas4Errors.translate(rspMsg, fallback: 'فشل التمديد'),
-      );
-    } catch (e) {
-      return (ok: false, errorMessage: 'فشل التمديد: $e');
+      return false;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -2175,8 +1814,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     }
   }
 
-  Future<bool> toggleSubscriber(int id,
-      {required bool enable, bool refreshOnline = true}) async {
+  Future<bool> toggleSubscriber(int id, {required bool enable}) async {
     try {
       final subName = _findUsername(id);
       final payload = EncryptionService.encrypt({'user_ids': [id]});
@@ -2192,13 +1830,6 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
           response.data?['success'] == true ||
           response.statusCode == 200;
       if (ok) {
-        // عند التعطيل: نفصل الجلسة الحيّة من RADIUS كمان — مطابق للويب
-        // (server.js → /api/v2/subscribers/:idx/toggle-enabled). SAS4
-        // disable لحاله لا يقطع الجلسة النشطة، تستمر حتى accounting timeout.
-        // best-effort: فشله لا يفشل العملية.
-        if (!enable) {
-          await _disconnectActiveSessionByUsername(id);
-        }
         logActivity(
           action: 'edit_subscriber',
           description: enable
@@ -2211,93 +1842,10 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
             'username': subName,
           },
         );
-        if (!enable && refreshOnline) {
-          // حدّث القائمة الحيّة كي يختفي المشترك المُعطَّل فوراً.
-          await loadOnlineUsers();
-        }
       }
       return ok;
     } catch (_) {
       return false;
-    }
-  }
-
-  /// يبحث عن الجلسة النشطة للمشترك ويُرسل أمر الفصل — يطابق منطق الويب:
-  /// `/index/online` ← acctsessionid/radacctid ← `/user/disconnect/acctid/{id}`.
-  /// يُطابق بالـid أولاً (ثابت رغم تغيير الاسم) ثم بالـusername. كل الأخطاء
-  /// تُبتلع — خطوة تكميلية (للتعطيل أو لتعديل الاسم/الرمز).
-  ///
-  /// [knownUsername] يُمرَّر عند تعديل الاسم لأنّ الحالة المحلية قد تكون
-  /// بالاسم القديم.
-  Future<void> disconnectActiveSession(int userId, {String? knownUsername}) =>
-      _disconnectActiveSessionByUsername(userId, knownUsername: knownUsername);
-
-  Future<void> _disconnectActiveSessionByUsername(int userId,
-      {String? knownUsername}) async {
-    try {
-      // 1) احصل على username للبحث — المُمرَّر، أو الحالة المحلية، أو بطلب.
-      String username = (knownUsername ?? '').trim();
-      if (username.isEmpty) {
-        username = _findUsername(userId);
-        if (username == userId.toString()) {
-          try {
-            final r =
-                await _sas4Dio.get('${ApiConstants.sas4GetUser}/$userId');
-            dynamic d = r.data;
-            if (d is String) d = EncryptionService.decrypt(d);
-            if (d is Map) {
-              username =
-                  (d['data']?['username'] ?? d['username'] ?? '').toString();
-            }
-          } catch (_) {/* نُكمل بلا username */}
-        }
-      }
-
-      // 2) ابحث في /index/online (نطلب id كي نُطابق رغم تغيير الاسم).
-      final payload = EncryptionService.encrypt({
-        'page': 1,
-        'count': 50,
-        'sortBy': 'username',
-        'direction': 'asc',
-        'search': username == userId.toString() ? '' : username,
-        'columns': ['id', 'username', 'acctsessionid', 'radacctid'],
-      });
-      final onlineRes = await _sas4Dio.post(
-        ApiConstants.sas4OnlineUsers,
-        data: {'payload': payload},
-        options: Options(contentType: 'application/x-www-form-urlencoded'),
-      );
-      dynamic parsed = onlineRes.data;
-      if (parsed is String) parsed = EncryptionService.decrypt(parsed);
-      final rows = (parsed is Map && parsed['data'] is List)
-          ? (parsed['data'] as List)
-          : const [];
-      final lower = username.toLowerCase();
-      Map? row;
-      for (final e in rows) {
-        if (e is Map && '${e['id'] ?? ''}' == '$userId') {
-          row = e;
-          break;
-        }
-      }
-      if (row == null && lower.isNotEmpty && username != userId.toString()) {
-        for (final e in rows) {
-          if (e is Map &&
-              (e['username']?.toString().toLowerCase() ?? '') == lower) {
-            row = e;
-            break;
-          }
-        }
-      }
-      final acctId = (row?['acctsessionid'] ?? row?['radacctid'])?.toString();
-      if (acctId == null || acctId.isEmpty) return;
-
-      // 3) أمر الفصل.
-      await _sas4Dio.get('${ApiConstants.sas4DisconnectUser}/$acctId');
-      dev.log('disconnected active session for user $userId (acctid=$acctId)',
-          name: 'SUBS');
-    } catch (e) {
-      dev.log('disconnect step failed: $e', name: 'SUBS');
     }
   }
 
@@ -2390,22 +1938,6 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     }
   }
 
-  /// تحديث لوحة المعلومات بعد تغيير دين (إضافة/تسديد). الباكند يسجّل النشاط
-  /// بنفسه، فهنا فقط ننعش العدّادات والقوائم بدون POST نشاط مكرّر.
-  Future<void> _refreshAfterDebtChange() async {
-    final adminId = await _storage.getAdminId();
-    if (adminId == null) return;
-    try {
-      await _ref.read(dashboardProvider.notifier).refreshDailyActivations(adminId);
-    } catch (_) {}
-    try {
-      await _ref.read(dashboardProvider.notifier).refreshCountsOnly();
-    } catch (_) {}
-    try {
-      _ref.read(reportsProvider.notifier).triggerRefresh();
-    } catch (_) {}
-  }
-
   /// Matches React's updateUserComments: GET full user, merge notes, PUT back.
   Future<bool> updateUserNotes(int userId, double newNotesValue) async {
     try {
@@ -2430,9 +1962,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     }
   }
 
-  /// Pay debt — عبر backend endpoint المتين (نفس مسار الويب). الباكند يبني
-  /// payload نظيف لـSAS4 (مع confirm_password وكل الحقول) فلا يفشل للمشتركين
-  /// ناقصي البيانات مثل ما كان يصير مع الـPUT المباشر، ويسجّل النشاط بنفسه.
+  /// Pay debt: newNotes = current + amount (moves negative toward zero)
   Future<bool> payDebt({
     required int userId,
     required String username,
@@ -2440,18 +1970,32 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     String? paymentNotes,
   }) async {
     try {
-      final res = await _backendDio.post(
-        '/api/v2/subscribers/$userId/pay-debt',
-        data: {
-          'amount': amount,
-          if (paymentNotes != null && paymentNotes.isNotEmpty)
-            'comment': paymentNotes,
-        },
-      );
-      final ok = res.statusCode == 200 &&
-          res.data is Map &&
-          res.data['success'] == true;
-      if (ok) await _refreshAfterDebtChange();
+      final details = await getSubscriberDetails(userId);
+      if (details == null) return false;
+
+      final currentNotes = _parseNotes(details);
+      final newNotes = currentNotes + amount;
+      final remaining = newNotes < 0 ? newNotes.abs() : 0.0;
+      final credit = newNotes > 0 ? newNotes : 0.0;
+
+      final ok = await updateUserNotes(userId, newNotes);
+      if (ok) {
+        logActivity(
+          action: 'deduct_balance',
+          description: 'تسديد دين ${_formatIQD(amount)} IQD من المشترك: $username${paymentNotes != null ? ' - $paymentNotes' : ''}',
+          targetId: userId,
+          targetName: username,
+          refreshDashboard: true,
+          metadata: {
+            'amount': amount,
+            'previous_balance': currentNotes,
+            'new_balance': newNotes,
+            'remaining_debt': remaining,
+            'credit': credit,
+            'payment_notes': paymentNotes,
+          },
+        );
+      }
       return ok;
     } catch (e) {
       dev.log('payDebt error: $e', name: 'SUBS');
@@ -2459,7 +2003,7 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     }
   }
 
-  /// Add debt — عبر backend endpoint المتين (نفس مسار الويب). انظر [payDebt].
+  /// Add debt: newNotes = current - amount (makes more negative)
   Future<bool> addDebt({
     required int userId,
     required String username,
@@ -2467,17 +2011,28 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
     String? comment,
   }) async {
     try {
-      final res = await _backendDio.post(
-        '/api/v2/subscribers/$userId/add-debt',
-        data: {
-          'amount': amount,
-          if (comment != null && comment.isNotEmpty) 'comment': comment,
-        },
-      );
-      final ok = res.statusCode == 200 &&
-          res.data is Map &&
-          res.data['success'] == true;
-      if (ok) await _refreshAfterDebtChange();
+      final details = await getSubscriberDetails(userId);
+      if (details == null) return false;
+
+      final currentNotes = _parseNotes(details);
+      final newNotes = currentNotes - amount;
+
+      final ok = await updateUserNotes(userId, newNotes);
+      if (ok) {
+        logActivity(
+          action: 'add_balance',
+          description: 'إضافة دين ${_formatIQD(amount)} IQD للمشترك: $username${comment != null ? ' - $comment' : ''}',
+          targetId: userId,
+          targetName: username,
+          refreshDashboard: true,
+          metadata: {
+            'amount': amount,
+            'previous_comment': currentNotes,
+            'new_comment': newNotes,
+            'comment': comment,
+          },
+        );
+      }
       return ok;
     } catch (e) {
       dev.log('addDebt error: $e', name: 'SUBS');
@@ -2510,72 +2065,6 @@ class SubscribersNotifier extends StateNotifier<SubscribersState> {
       return ok;
     } catch (_) {
       return false;
-    }
-  }
-
-  /// ينفّذ عملية جماعية على عدّة مشتركين بالتسلسل ويعيد حالة كلٍّ منهم.
-  /// التعطيل يفصل الجلسة الحيّة لكلِّ واحد (مطابق للويب). تُحدَّث القوائم
-  /// مرّة واحدة في النهاية بدل تحديثها لكل مشترك.
-  Future<BulkActionResult> runBulkAction(
-    List<int> ids,
-    BulkAction action, {
-    void Function(int done, int total)? onProgress,
-  }) async {
-    final results = <int, bool>{};
-    var done = 0;
-    for (final id in ids) {
-      bool ok;
-      try {
-        switch (action) {
-          case BulkAction.disable:
-            ok = await toggleSubscriber(id,
-                enable: false, refreshOnline: false);
-            break;
-          case BulkAction.enable:
-            ok = await toggleSubscriber(id,
-                enable: true, refreshOnline: false);
-            break;
-          case BulkAction.delete:
-            ok = await deleteSubscriber(id);
-            break;
-        }
-      } catch (_) {
-        ok = false;
-      }
-      results[id] = ok;
-      onProgress?.call(++done, ids.length);
-    }
-    // عكس الحالات الجديدة في الواجهة (enabled / محذوف / أونلاين).
-    try {
-      await loadSubscribers();
-      await loadOnlineUsers();
-    } catch (_) {/* الواجهة ستُحدَّث بأي pull-to-refresh لاحق */}
-    return BulkActionResult(results);
-  }
-
-  /// يُدرج إشعارات «تفعيل» لقائمة مشتركين في قائمة انتظار الواتساب
-  /// بالباك-اند — يرسلها queueProcessor واحدة بعد الأخرى (تقييد + إعادة
-  /// محاولة)، فلا نرسل من التطبيق. يعيد (queued, skipped, reason?).
-  Future<({int queued, int skipped, String? reason})> queueActivationNotices(
-      List<Map<String, dynamic>> items) async {
-    if (items.isEmpty) return (queued: 0, skipped: 0, reason: null);
-    try {
-      final res = await _backendDio.post(
-        '/api/v2/whatsapp/queue-activations',
-        data: {'items': items},
-      );
-      final d = res.data;
-      if (d is Map) {
-        return (
-          queued: (d['queued'] is num) ? (d['queued'] as num).toInt() : 0,
-          skipped: (d['skipped'] is num) ? (d['skipped'] as num).toInt() : 0,
-          reason: d['reason']?.toString(),
-        );
-      }
-      return (queued: 0, skipped: items.length, reason: null);
-    } catch (e) {
-      dev.log('queueActivationNotices error: $e', name: 'SUBS');
-      return (queued: 0, skipped: items.length, reason: 'error');
     }
   }
 

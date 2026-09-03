@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:app_badge_plus/app_badge_plus.dart';
-import '../core/utils/platform_utils.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dashboard_screen.dart';
@@ -85,7 +83,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                   color: theme.colorScheme.primary.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(LucideIcons.megaphone, color: theme.colorScheme.primary),
+                child: Icon(Icons.campaign_rounded, color: theme.colorScheme.primary),
               ),
               const SizedBox(width: 10),
               Expanded(child: Text(ann.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
@@ -106,7 +104,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                     }
                   } catch (_) {}
                 },
-                icon: const Icon(LucideIcons.externalLink, size: 18),
+                icon: const Icon(Icons.open_in_new, size: 18),
                 label: Text(ann.actionLabel ?? 'المزيد'),
               ),
             FilledButton(
@@ -133,9 +131,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
   Future<void> _syncAppIconBadge(int count) async {
     if (count == _lastBadgeCount) return;
     _lastBadgeCount = count;
-    // app_badge_plus يدعم Android/iOS فقط — desktop ما عنده taskbar badge
-    // (Windows عنده taskbar overlay icons لكن plugin مختلف). نتجاوز.
-    if (!PlatformUtils.supportsAppBadge) return;
     try {
       final supported = await AppBadgePlus.isSupported();
       if (!supported) return;
@@ -243,127 +238,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     setState(() => _currentIndex = 1);
   }
 
-  /// Bottom nav. يخفي "إضافة" لو ما عنده subscribers.add، و"التقارير"
-  /// لو ما عنده أي reports.* perm. الـ_currentIndex يبقى يشير لـscreen index
-  /// الثابت (0=dashboard, 1=subs, 2=add, 3=reports, 4=settings) ونعمل remap
-  /// بين الـvisible position والـscreen index.
-  Widget _buildBottomNav(ThemeData theme) {
-    final user = ref.watch(authProvider).user;
-    final canAdd = user?.hasEmployeePermission('subscribers.add') ?? true;
-    final canReports = user?.hasAnyEmployeePermission(const [
-          'reports.activity_log',
-          'reports.daily_activations',
-          'reports.activations',
-          'reports.financial',
-          'reports.sessions',
-          'reports.account_statement',
-        ]) ??
-        true;
-
-    // قائمة المداخل (screenIndex, destination, visible)
-    final items = <_NavEntry>[
-      _NavEntry(
-        screenIdx: 0,
-        visible: true,
-        destination: const NavigationDestination(
-          icon: Icon(LucideIcons.layoutDashboard),
-          selectedIcon: Icon(LucideIcons.layoutDashboard),
-          label: 'الرئيسية',
-        ),
-      ),
-      _NavEntry(
-        screenIdx: 1,
-        visible: true,
-        destination: const NavigationDestination(
-          icon: Icon(LucideIcons.users),
-          selectedIcon: Icon(LucideIcons.users),
-          label: 'المشتركين',
-        ),
-      ),
-      _NavEntry(
-        screenIdx: 2,
-        visible: canAdd,
-        destination: NavigationDestination(
-          icon: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppTheme.primary,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Icon(LucideIcons.userPlus,
-                color: Colors.white, size: 22),
-          ),
-          selectedIcon: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppTheme.teal800,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Icon(LucideIcons.userPlus,
-                color: Colors.white, size: 22),
-          ),
-          label: 'إضافة',
-        ),
-      ),
-      _NavEntry(
-        screenIdx: 3,
-        visible: canReports,
-        destination: const NavigationDestination(
-          icon: Icon(LucideIcons.chartLine),
-          selectedIcon: Icon(LucideIcons.chartLine),
-          label: 'التقارير',
-        ),
-      ),
-      _NavEntry(
-        screenIdx: 4,
-        visible: true,
-        destination: const NavigationDestination(
-          icon: Icon(LucideIcons.settings),
-          selectedIcon: Icon(LucideIcons.settings),
-          label: 'الإعدادات',
-        ),
-      ),
-    ];
-    final visibleEntries = items.where((e) => e.visible).toList();
-    // حول _currentIndex (screen idx) لـvisible position. إذا الشاشة الحالية
-    // مخفية الآن (مثلاً الموظف فاقد reports وكنت تقف على /reports)، نقع على 0.
-    int visibleIdx =
-        visibleEntries.indexWhere((e) => e.screenIdx == _currentIndex);
-    if (visibleIdx < 0) {
-      visibleIdx = 0;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) setState(() => _currentIndex = visibleEntries.first.screenIdx);
-      });
-    }
-
-    return NavigationBar(
-      selectedIndex: visibleIdx,
-      onDestinationSelected: (visiblePos) {
-        final entry = visibleEntries[visiblePos];
-        final i = entry.screenIdx;
-        if (i != 0) _alertsDismissed = false;
-        if (i == 2) {
-          _openAddSubscriberSheet();
-          return;
-        }
-        if (i == 0) {
-          final auth = ref.read(authProvider);
-          if (auth.user != null) {
-            ref.read(dashboardProvider.notifier).loadDashboard(
-                  adminId: auth.user!.id,
-                  token: auth.user!.token,
-                );
-          }
-        }
-        if (i == 3) {
-          ref.read(reportsProvider.notifier).triggerRefresh();
-        }
-        setState(() => _currentIndex = i);
-      },
-      destinations: visibleEntries.map((e) => e.destination).toList(),
-    );
-  }
-
   Future<void> _openAddSubscriberSheet() async {
     await showModalBottomSheet<void>(
       context: context,
@@ -442,7 +316,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                     child: const Icon(
-                                      LucideIcons.bellRing,
+                                      Icons.notifications_active,
                                       color: AppTheme.primary,
                                       size: 22,
                                     ),
@@ -473,7 +347,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                   ),
                                   const SizedBox(width: 8),
                                   IconButton(
-                                    icon: const Icon(LucideIcons.x, size: 20),
+                                    icon: const Icon(Icons.close, size: 20),
                                     onPressed: () => Navigator.pop(ctx),
                                   ),
                                 ],
@@ -524,7 +398,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                             .dismissAll();
                                       },
                                       icon: const Icon(
-                                        LucideIcons.listX,
+                                        Icons.clear_all,
                                         size: 16,
                                       ),
                                       label: const Text(
@@ -558,7 +432,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                   title: 'إشعارات التطبيق',
                                   count: appNotificationCount,
                                   color: AppTheme.primary,
-                                  icon: LucideIcons.bell,
+                                  icon: Icons.notifications_rounded,
                                 ),
                                 ...visibleAppNotifs.map(
                                   // Each notification is swipeable. We use
@@ -593,7 +467,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                   title: 'انتهى اليوم',
                                   count: dash.expiredTodayCount,
                                   color: Colors.red,
-                                  icon: LucideIcons.circleAlert,
+                                  icon: Icons.error_outline,
                                 ),
                                 ...dash.expiredTodayList.map(
                                   (sub) => _AlertItem(
@@ -604,7 +478,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                         sub['username']?.toString() ?? '',
                                     detail: 'انتهى الاشتراك اليوم',
                                     color: Colors.red,
-                                    icon: LucideIcons.timerOff,
+                                    icon: Icons.timer_off_rounded,
                                   ),
                                 ),
                                 const SizedBox(height: 12),
@@ -615,7 +489,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                   title: 'قريب الانتهاء',
                                   count: dash.nearExpiryCount,
                                   color: Colors.orange,
-                                  icon: LucideIcons.triangleAlert,
+                                  icon: Icons.warning_amber_rounded,
                                 ),
                                 ...dash.nearExpiryList.map((sub) {
                                   final detail = _formatRemaining(
@@ -629,7 +503,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                         sub['username']?.toString() ?? '',
                                     detail: detail,
                                     color: Colors.orange,
-                                    icon: LucideIcons.clock,
+                                    icon: Icons.schedule,
                                   );
                                 }),
                                 const SizedBox(height: 12),
@@ -641,7 +515,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                   child: Column(
                                     children: [
                                       Icon(
-                                        LucideIcons.bellOff,
+                                        Icons.notifications_off_outlined,
                                         size: 48,
                                         color: theme.colorScheme.onSurface
                                             .withValues(alpha: 0.3),
@@ -666,7 +540,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                                   child: Column(
                                     children: [
                                       Icon(
-                                        LucideIcons.circleCheck,
+                                        Icons.check_circle_outline,
                                         size: 48,
                                         color: Colors.green.withValues(
                                           alpha: 0.5,
@@ -739,14 +613,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       });
     }
 
-    // الموظف يشوف اسمه العربي (full_name) كبادج رئيسي بدل اسم الأب.
-    // الأدمن العادي يبقى يشوف username الـSAS4 الخاص بيه.
-    final _u = authState.user;
-    final managerName = (_u != null && _u.isEmployee)
-        ? (_u.employeeFullName?.isNotEmpty == true
-            ? _u.employeeFullName!
-            : (_u.employeeUsername ?? _u.username))
-        : (_u?.username ?? '');
+    final managerName = authState.user?.username ?? '';
     final totalBellCount =
         appNotifications.unreadCount +
         (_alertsEnabled && !_alertsDismissed ? dash.totalAlerts : 0);
@@ -815,10 +682,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                   ? Badge(
                       label: Text('$totalBellCount',
                           style: const TextStyle(fontSize: 9)),
-                      child: Icon(LucideIcons.bell,
+                      child: Icon(Icons.notifications_outlined,
                           color: Colors.orange.shade700, size: 22),
                     )
-                  : Icon(LucideIcons.bell,
+                  : Icon(Icons.notifications_none,
                       color: theme.colorScheme.onSurface
                           .withValues(alpha: 0.4),
                       size: 22),
@@ -835,45 +702,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          managerName.isNotEmpty ? managerName : '—',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.7),
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        if (_u?.isEmployee == true) ...[
-                          const SizedBox(width: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.primary
-                                  .withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              'موظف',
-                              style: TextStyle(
-                                fontSize: 8,
-                                fontWeight: FontWeight.w800,
-                                color: theme.colorScheme.primary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
+                    Text(
+                      managerName.isNotEmpty ? managerName : '—',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurface
+                            .withValues(alpha: 0.7),
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          LucideIcons.messageCircle,
+                          Icons.chat_rounded,
                           size: 10,
                           color: wa.status.connected
                               ? AppTheme.whatsappGreen
@@ -912,33 +754,90 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
           const SettingsScreen(),
         ],
       ),
-      bottomNavigationBar: _buildBottomNav(theme),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (i) {
+          if (i != 0) _alertsDismissed = false;
+          if (i == 2) {
+            // بدل التنقل لصفحة "إضافة"، نفتح bottom sheet مثل مودل التعديل
+            _openAddSubscriberSheet();
+            return;
+          }
+          if (i == 0) {
+            final auth = ref.read(authProvider);
+            if (auth.user != null) {
+              ref.read(dashboardProvider.notifier).loadDashboard(
+                adminId: auth.user!.id,
+                token: auth.user!.token,
+              );
+            }
+          }
+          if (i == 3) {
+            ref.read(reportsProvider.notifier).triggerRefresh();
+          }
+          setState(() => _currentIndex = i);
+        },
+        destinations: [
+          const NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard),
+            label: 'الرئيسية',
+          ),
+          // المشتركين: no badge — the same "urgent subscribers" count
+          // already appears in two louder places (the bell icon top-right
+          // and the red "قريب الانتهاء" card on the dashboard), so a
+          // third indicator on the nav tab was noise.
+          const NavigationDestination(
+            icon: Icon(Icons.people_outline),
+            selectedIcon: Icon(Icons.people),
+            label: 'المشتركين',
+          ),
+          NavigationDestination(
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.primary,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(Icons.person_add_alt_1,
+                  color: Colors.white, size: 22),
+            ),
+            selectedIcon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.teal800,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(Icons.person_add_alt_1,
+                  color: Colors.white, size: 22),
+            ),
+            label: 'إضافة',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.assessment_outlined),
+            selectedIcon: Icon(Icons.assessment),
+            label: 'التقارير',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'الإعدادات',
+          ),
+        ],
+      ),
       floatingActionButton: _currentIndex == 0
           ? FloatingActionButton(
               heroTag: 'dashboard_search',
               backgroundColor: theme.colorScheme.primary,
               onPressed: () => showSubscriberSearchSheet(context),
               tooltip: 'بحث عن مشترك',
-              child: const Icon(LucideIcons.search, color: Colors.white),
+              child: const Icon(Icons.search_rounded, color: Colors.white),
             )
           : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
     ),
     );
   }
-}
-
-/// Bottom-nav entry. screenIdx يحدد أي child بـIndexedStack يمثل (0..4).
-/// visible يخفي/يظهر الإدخال حسب الصلاحية.
-class _NavEntry {
-  final int screenIdx;
-  final bool visible;
-  final NavigationDestination destination;
-  const _NavEntry({
-    required this.screenIdx,
-    required this.visible,
-    required this.destination,
-  });
 }
 
 String _formatNotificationTime(String? value) {
@@ -1005,91 +904,70 @@ class _AppNotificationItem extends StatelessWidget {
       _ => AppTheme.primary,
     };
     final icon = switch (notification.type) {
-      'cash_deposit' => LucideIcons.wallet,
-      'loan_deposit' => LucideIcons.fileText,
-      'withdraw_balance' => LucideIcons.circleMinus,
-      'pay_debt' => LucideIcons.banknote,
-      'add_points' => LucideIcons.star,
-      _ => LucideIcons.bell,
+      'cash_deposit' => Icons.account_balance_wallet_rounded,
+      'loan_deposit' => Icons.request_quote_rounded,
+      'withdraw_balance' => Icons.remove_circle_outline_rounded,
+      'pay_debt' => Icons.paid_rounded,
+      'add_points' => Icons.stars_rounded,
+      _ => Icons.notifications_rounded,
     };
 
-    // نفس نمط KpiCard: خلفية card محايدة + شريط جانبي ملوّن (RTL start)
-    // + أيقونة ملوّنة + فاصل أفقي بين العنوان والـbody. يضمن مظهر
-    // موحّد بين الإشعارات والكارتات الإحصائية على الخلفية البيضاء.
-    final cardBg = theme.cardTheme.color ?? theme.colorScheme.surface;
-    final divider = theme.colorScheme.onSurface.withValues(alpha: 0.08);
-    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.6);
-
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
+      margin: const EdgeInsets.only(bottom: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: divider, width: 1),
+        color: accent.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: accent.withValues(alpha: 0.12)),
       ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // الشريط الجانبي الملوّن — start = right في RTL.
-          PositionedDirectional(
-            start: 0,
-            top: 0,
-            bottom: 0,
-            child: Container(width: 4, color: accent),
+          Container(
+            padding: const EdgeInsets.all(5),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(7),
+            ),
+            child: Icon(icon, color: accent, size: 13),
           ),
-          Padding(
-            padding: const EdgeInsetsDirectional.fromSTEB(12, 9, 10, 9),
-            child: Row(
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(icon, color: accent, size: 18),
-                const SizedBox(width: 9),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              notification.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w700,
-                                color: accent,
-                                fontFamily: 'Cairo',
-                                height: 1.1,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            _formatNotificationTime(notification.createdAt),
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: muted,
-                              fontFamily: 'Cairo',
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Container(height: 1, color: divider),
-                      const SizedBox(height: 5),
-                      Text(
-                        notification.body,
-                        maxLines: 2,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        notification.title,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          height: 1.35,
-                          color: muted,
-                          fontFamily: 'Cairo',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                    ],
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _formatNotificationTime(notification.createdAt),
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  notification.body,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    height: 1.35,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.70),
                   ),
                 ),
               ],
@@ -1184,7 +1062,7 @@ Widget _dismissBackground(ThemeData theme, {required bool alignStart}) {
       borderRadius: BorderRadius.circular(12),
     ),
     alignment: alignStart ? Alignment.centerLeft : Alignment.centerRight,
-    child: Icon(LucideIcons.trash2,
+    child: Icon(Icons.delete_sweep_rounded,
         color: Colors.redAccent, size: 22),
   );
 }

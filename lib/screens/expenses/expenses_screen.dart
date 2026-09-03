@@ -1,16 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 
-import '../../core/theme/app_theme.dart';
-import '../../core/utils/bottom_sheet_utils.dart';
 import '../../core/utils/helpers.dart';
 import '../../models/admin_expense.dart';
 import '../../providers/expenses_provider.dart';
-import '../../widgets/date_range_picker_row.dart';
-import '../../widgets/employee_filter_dropdown.dart';
 
 /// Admin's own expense ledger. The list is sorted newest first and the
 /// header shows the period total — which is what the financial reports
@@ -25,78 +20,30 @@ class ExpensesScreen extends ConsumerStatefulWidget {
 class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
   DateTime? _from;
   DateTime? _to;
-  String _employeeId = 'all';
 
   ExpensesRangeArgs get _args =>
-      ExpensesRangeArgs(from: _from, to: _to, employeeId: _employeeId);
+      ExpensesRangeArgs(from: _from, to: _to);
 
   @override
   Widget build(BuildContext context) {
     final asyncPage = ref.watch(expensesProvider(_args));
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('الصرفيات'),
-        actions: [
-          IconButton(
-            icon: const Icon(LucideIcons.plus),
-            tooltip: 'إضافة',
-            onPressed: () => _openForm(context),
-          ),
-        ],
+      appBar: AppBar(title: const Text('الصرفيات')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _openForm(context),
+        icon: const Icon(Icons.add),
+        label: const Text('إضافة'),
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: GestureDetector(
-              onTap: _showFilterSheet,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainerHighest.withValues(alpha: .3),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(children: [
-                  Icon(LucideIcons.funnel, size: 16, color: cs.primary),
-                  const SizedBox(width: 6),
-                  Text('الفلاتر',
-                      style: TextStyle(fontSize: 12, color: cs.onSurface.withValues(alpha: .75))),
-                  const Spacer(),
-                  Text(_summarizeFilters(),
-                      style: TextStyle(fontSize: 11, color: cs.onSurface.withValues(alpha: .5)),
-                      overflow: TextOverflow.ellipsis),
-                  const SizedBox(width: 4),
-                  Icon(LucideIcons.slidersHorizontal, size: 14, color: cs.onSurface.withValues(alpha: .4)),
-                ]),
-              ),
-            ),
+          _FilterRow(
+            from: _from,
+            to: _to,
+            onFromChanged: (d) => setState(() => _from = d),
+            onToChanged: (d) => setState(() => _to = d),
+            onClear: () => setState(() { _from = null; _to = null; }),
           ),
-          if (_from != null || _to != null || _employeeId != 'all')
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-              child: Wrap(spacing: 6, children: [
-                if (_from != null || _to != null)
-                  Chip(
-                    label: Text(
-                      '${_from != null ? intl.DateFormat('y-MM-dd').format(_from!) : '...'} — ${_to != null ? intl.DateFormat('y-MM-dd').format(_to!) : '...'}',
-                      style: const TextStyle(fontSize: 10),
-                    ),
-                    deleteIcon: const Icon(LucideIcons.x, size: 14),
-                    onDeleted: () => setState(() { _from = null; _to = null; }),
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                if (_employeeId != 'all')
-                  Chip(
-                    label: const Text('موظف محدّد', style: TextStyle(fontSize: 10)),
-                    deleteIcon: const Icon(LucideIcons.x, size: 14),
-                    onDeleted: () => setState(() => _employeeId = 'all'),
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-              ]),
-            ),
           _TotalBanner(asyncPage: asyncPage),
           Expanded(
             child: asyncPage.when(
@@ -108,7 +55,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(LucideIcons.inbox, size: 48, color: cs.onSurfaceVariant),
+                        Icon(Icons.inbox_outlined, size: 48, color: cs.onSurfaceVariant),
                         const SizedBox(height: 12),
                         const Text('لا توجد صرفيات'),
                       ],
@@ -118,8 +65,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                 return RefreshIndicator(
                   onRefresh: () async => ref.invalidate(expensesProvider(_args)),
                   child: ListView.separated(
-                    padding: EdgeInsets.fromLTRB(
-                        12, 4, 12, AppHelpers.fabListBottom(context)),
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 96),
                     itemCount: page.expenses.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 6),
                     itemBuilder: (_, i) => _ExpenseTile(
@@ -134,94 +80,6 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  String _summarizeFilters() {
-    final parts = <String>[];
-    if (_from != null || _to != null) {
-      final f = _from != null ? intl.DateFormat('y-MM-dd').format(_from!) : '...';
-      final t = _to != null ? intl.DateFormat('y-MM-dd').format(_to!) : '...';
-      parts.add('$f → $t');
-    }
-    if (_employeeId != 'all') parts.add('موظف');
-    return parts.isEmpty ? 'الكل' : parts.join(' • ');
-  }
-
-  void _showFilterSheet() {
-    showModalBottomSheet(
-      useSafeArea: true,
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) {
-        String from = _from != null ? intl.DateFormat('yyyy-MM-dd').format(_from!) : '';
-        String to = _to != null ? intl.DateFormat('yyyy-MM-dd').format(_to!) : '';
-        String emp = _employeeId;
-        return StatefulBuilder(builder: (ctx, setSheet) {
-          return SafeArea(
-            child: Padding(
-              padding: bottomSheetContentPadding(ctx, horizontal: 20, top: 20, extraBottom: 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Center(child: Container(width: 40, height: 4,
-                      decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)))),
-                  const SizedBox(height: 16),
-                  Text('الفلاتر', style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 14),
-
-                  Text('فترة سريعة', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
-                      color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: .6))),
-                  const SizedBox(height: 6),
-                  Wrap(spacing: 8, children: [
-                    ActionChip(label: const Text('اليوم', style: TextStyle(fontSize: 11)),
-                        onPressed: () { final t = intl.DateFormat('yyyy-MM-dd').format(DateTime.now()); setSheet(() { from = t; to = t; }); },
-                        visualDensity: VisualDensity.compact),
-                    ActionChip(label: const Text('آخر 7 أيام', style: TextStyle(fontSize: 11)),
-                        onPressed: () { final n = DateTime.now(); setSheet(() { to = intl.DateFormat('yyyy-MM-dd').format(n); from = intl.DateFormat('yyyy-MM-dd').format(n.subtract(const Duration(days: 7))); }); },
-                        visualDensity: VisualDensity.compact),
-                    ActionChip(label: const Text('آخر 30 يوم', style: TextStyle(fontSize: 11)),
-                        onPressed: () { final n = DateTime.now(); setSheet(() { to = intl.DateFormat('yyyy-MM-dd').format(n); from = intl.DateFormat('yyyy-MM-dd').format(n.subtract(const Duration(days: 30))); }); },
-                        visualDensity: VisualDensity.compact),
-                    ActionChip(label: const Text('مسح', style: TextStyle(fontSize: 11)),
-                        onPressed: () => setSheet(() { from = ''; to = ''; }),
-                        visualDensity: VisualDensity.compact),
-                  ]),
-                  const SizedBox(height: 10),
-                  DateRangePickerRow(
-                    fromDate: from,
-                    toDate: to,
-                    onFromChanged: (v) => setSheet(() => from = v),
-                    onToChanged: (v) => setSheet(() => to = v),
-                  ),
-                  const SizedBox(height: 14),
-
-                  EmployeeFilterDropdown(
-                    value: emp,
-                    padding: EdgeInsets.zero,
-                    onChanged: (v) => setSheet(() => emp = v),
-                  ),
-                  const SizedBox(height: 14),
-
-                  SizedBox(height: AppTheme.actionButtonHeight, child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      setState(() {
-                        _from = from.isEmpty ? null : DateTime.tryParse(from);
-                        _to = to.isEmpty ? null : DateTime.tryParse(to);
-                        _employeeId = emp;
-                      });
-                    },
-                    child: const Text('تطبيق'),
-                  )),
-                ],
-              ),
-            ),
-          );
-        });
-      },
     );
   }
 
@@ -280,7 +138,7 @@ class _TotalBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(LucideIcons.wallet, color: cs.error),
+          Icon(Icons.account_balance_wallet, color: cs.error),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -306,6 +164,62 @@ class _TotalBanner extends StatelessWidget {
             child: Text('$count حركة', style: const TextStyle(fontSize: 12)),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FilterRow extends StatelessWidget {
+  final DateTime? from;
+  final DateTime? to;
+  final ValueChanged<DateTime?> onFromChanged;
+  final ValueChanged<DateTime?> onToChanged;
+  final VoidCallback onClear;
+  const _FilterRow({
+    required this.from,
+    required this.to,
+    required this.onFromChanged,
+    required this.onToChanged,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Row(
+        children: [
+          Expanded(child: _dateField(context, label: 'من', value: from, onChanged: onFromChanged)),
+          const SizedBox(width: 6),
+          Expanded(child: _dateField(context, label: 'إلى', value: to, onChanged: onToChanged)),
+          IconButton(icon: const Icon(Icons.clear), onPressed: onClear),
+        ],
+      ),
+    );
+  }
+
+  Widget _dateField(BuildContext context,
+      {required String label, required DateTime? value, required ValueChanged<DateTime?> onChanged}) {
+    final text = value == null ? '—' : intl.DateFormat('y-MM-dd').format(value);
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: value ?? DateTime.now(),
+          firstDate: DateTime(2020),
+          lastDate: DateTime(2100),
+        );
+        if (picked != null) onChanged(picked);
+      },
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          border: const OutlineInputBorder(),
+        ),
+        child: Text(text, style: const TextStyle(fontSize: 13)),
       ),
     );
   }
@@ -341,7 +255,7 @@ class _ExpenseTile extends StatelessWidget {
                   color: cs.error.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(LucideIcons.circleMinus, color: cs.error, size: 20),
+                child: Icon(Icons.remove_circle_outline, color: cs.error, size: 20),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -363,7 +277,7 @@ class _ExpenseTile extends StatelessWidget {
                 ),
               ),
               IconButton(
-                icon: Icon(LucideIcons.trash2, color: cs.error, size: 20),
+                icon: Icon(Icons.delete_outline, color: cs.error, size: 20),
                 onPressed: onDelete,
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
@@ -479,7 +393,7 @@ class _ExpenseFormDialogState extends ConsumerState<_ExpenseFormDialog> {
               decoration: const InputDecoration(
                 labelText: 'المبلغ',
                 suffixText: 'IQD',
-                prefixIcon: Icon(LucideIcons.dollarSign, size: 20),
+                prefixIcon: Icon(Icons.monetization_on_outlined, size: 20),
                 isDense: true,
                 border: OutlineInputBorder(),
               ),
@@ -512,7 +426,7 @@ class _ExpenseFormDialogState extends ConsumerState<_ExpenseFormDialog> {
               controller: _note,
               decoration: const InputDecoration(
                 labelText: 'ملاحظة (اختياري)',
-                prefixIcon: Icon(LucideIcons.fileText),
+                prefixIcon: Icon(Icons.note_outlined),
                 isDense: true,
                 border: OutlineInputBorder(),
               ),
@@ -525,7 +439,7 @@ class _ExpenseFormDialogState extends ConsumerState<_ExpenseFormDialog> {
               child: InputDecorator(
                 decoration: const InputDecoration(
                   labelText: 'التاريخ والوقت',
-                  prefixIcon: Icon(LucideIcons.calendar),
+                  prefixIcon: Icon(Icons.calendar_today),
                   isDense: true,
                   border: OutlineInputBorder(),
                 ),

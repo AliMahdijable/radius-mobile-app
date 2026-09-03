@@ -1,20 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart' as intl;
 
 import '../core/theme/app_theme.dart';
 import '../core/utils/bottom_sheet_utils.dart';
-import '../core/utils/helpers.dart';
-import '../models/manager_debt.dart';
 import '../models/manager_model.dart';
 import '../models/template_model.dart';
 import '../providers/auth_provider.dart';
-import '../providers/manager_debts_provider.dart';
 import '../providers/managers_provider.dart';
 import '../providers/templates_provider.dart';
 import '../providers/whatsapp_provider.dart';
@@ -29,38 +24,12 @@ enum _ManagerActionType {
   withdraw,
   payDebt,
   addPoints,
-  // Inline sheet to record a custom inter-admin debt — separate from
-  // the SAS4-native `debt` field handled by `payDebt`.
-  otherDebts,
-  // Phase 2: opens the unified movements timeline (deposits, debts,
-  // payments, points) for this manager as a read-only bottom sheet.
-  movements,
-  // Manual "send info" — fires the manager_agent WA template with
-  // current balances and the SAS / other / total debt breakdown,
-  // without recording any transaction. Only shown when the manager
-  // has any debt to surface.
-  sendInfo,
   delete,
 }
 
 enum _ManagerBalanceActionType { deposit, withdraw }
 
-enum _ManagerFinancialNoticeKind { cashDeposit, loanDeposit, debtPayment, info }
-
-/// Reads the cached custom-debts summary and returns the remaining
-/// total for [managerId] (the manager-as-debtor row). Returns 0 when
-/// the summary hasn't loaded yet — the deposit / pay sheets all fetch
-/// it on mount, so by the time the admin hits "save" it's typically
-/// warm. Out-of-date values just under-report the "ديون أخرى" line in
-/// one notification — the next message will be accurate.
-double _customDebtTotalFor(WidgetRef ref, int managerId) {
-  final summary = ref.read(managerDebtsSummaryProvider).valueOrNull;
-  if (summary == null) return 0;
-  for (final e in summary.perDebtor) {
-    if (e.debtorAdminId == managerId) return e.totalRemaining;
-  }
-  return 0;
-}
+enum _ManagerFinancialNoticeKind { cashDeposit, loanDeposit, debtPayment }
 
 class _ManagerFinancialNoticeData {
   final ManagerModel manager;
@@ -71,14 +40,6 @@ class _ManagerFinancialNoticeData {
   final double previousDebt;
   final double currentCredit;
   final double currentDebt;
-  // Breakdown of what the manager owes the admin AFTER the operation:
-  //   {sas_debts}   = sasDebts     → SAS-tracked debt slice
-  //   {other_debts} = otherDebts   → custom "ديون أخرى" slice
-  // Their sum equals `currentDebt` — callers MUST pass values that
-  // satisfy `currentDebt == sasDebts + otherDebts` so the placeholders
-  // don't disagree with each other in the rendered message.
-  final double sasDebts;
-  final double otherDebts;
 
   const _ManagerFinancialNoticeData({
     required this.manager,
@@ -89,8 +50,6 @@ class _ManagerFinancialNoticeData {
     required this.previousDebt,
     required this.currentCredit,
     required this.currentDebt,
-    this.sasDebts = 0,
-    this.otherDebts = 0,
   });
 
   bool get isLoanDeposit => kind == _ManagerFinancialNoticeKind.loanDeposit;
@@ -107,8 +66,6 @@ class _ManagerFinancialNoticeData {
         return 'loan_deposit';
       case _ManagerFinancialNoticeKind.debtPayment:
         return 'debt_payment';
-      case _ManagerFinancialNoticeKind.info:
-        return 'info';
     }
   }
 
@@ -119,14 +76,12 @@ class _ManagerFinancialNoticeData {
               _ManagerFinancialNoticeKind.cashDeposit => 'إضافة رصيد نقدي',
               _ManagerFinancialNoticeKind.loanDeposit => 'إضافة رصيد آجل',
               _ManagerFinancialNoticeKind.debtPayment => 'تسديد دين مدير',
-              _ManagerFinancialNoticeKind.info => 'استعلام عن الحساب',
             };
 
   String get actionTypeLabel => switch (kind) {
         _ManagerFinancialNoticeKind.cashDeposit => 'إيداع نقدي',
         _ManagerFinancialNoticeKind.loanDeposit => 'إيداع دين',
         _ManagerFinancialNoticeKind.debtPayment => 'تسديد دين',
-        _ManagerFinancialNoticeKind.info => 'معلومات الحساب',
       };
 
   String applyTemplate(String raw) {
@@ -141,13 +96,6 @@ class _ManagerFinancialNoticeData {
       '{current_credit}': _formatCurrency(currentCredit),
       '{previous_debt}': _formatCurrency(previousDebt),
       '{current_debt}': _formatCurrency(currentDebt),
-      '{sas_debts}': _formatCurrency(sasDebts),
-      '{other_debts}': _formatCurrency(otherDebts),
-      // Alias of currentDebt — same value, exposed under a more
-      // explicit name. Admins who write templates around the SAS /
-      // other breakdown reach for "total_debts" naturally; the legacy
-      // {current_debt} stays for older templates.
-      '{total_debts}': _formatCurrency(sasDebts + otherDebts),
       '{movement_description}': movementDescription,
     };
     var result = raw;
@@ -188,20 +136,6 @@ class _ManagerFinancialNoticeData {
           'وصف الحركة: $movementDescription',
         ];
         return lines.join('\n');
-      case _ManagerFinancialNoticeKind.info:
-        // Used as fallback only — the "send info" action always uses the
-        // admin's manager_agent template via applyTemplate, never this
-        // text. Kept so the switch is exhaustive.
-        final lines = <String>[
-          'عزيزي المدير $managerName،',
-          '',
-          'معلومات حسابك الحالية:',
-          'الرصيد: ${_formatCurrency(currentCredit)}',
-          'ديون الساس: ${_formatCurrency(sasDebts)}',
-          'ديون أخرى: ${_formatCurrency(otherDebts)}',
-          'مجموع الديون: ${_formatCurrency(sasDebts + otherDebts)}',
-        ];
-        return lines.join('\n');
     }
   }
 }
@@ -234,154 +168,6 @@ Future<({bool success, String? error})> _sendManagerWhatsAppNotification({
     return ref.read(whatsappProvider.notifier).sendMessage(phone, message);
   } catch (_) {
     return (success: false, error: 'حدث خطأ غير متوقع أثناء إرسال واتساب');
-  }
-}
-
-/// Fires WhatsApp + in-app push for a financial event without a
-/// confirmation dialog — driven by per-sheet checkbox toggles. Failures
-/// are surfaced via snackbars so the admin sees what happened, but the
-/// underlying balance/debt operation has already succeeded by the time
-/// this runs (we never block the action on the notification).
-Future<void> _autoSendManagerNotice({
-  required BuildContext context,
-  required WidgetRef ref,
-  required _ManagerFinancialNoticeData notice,
-  required bool sendWhatsApp,
-  required bool sendPush,
-}) async {
-  if (!sendWhatsApp && !sendPush) return;
-
-  // Resolve the WA message via the manager_agent template (same path the
-  // confirmation dialog used) so admins keep editing one template only.
-  final templatesState = ref.read(templatesProvider);
-  if (templatesState.templates.isEmpty && !templatesState.isLoading) {
-    await ref.read(templatesProvider.notifier).loadTemplates();
-  }
-  final managerTemplates = ref
-      .read(templatesProvider)
-      .templates
-      .where((t) => t.templateType == 'manager_agent' && t.isActive)
-      .toList();
-  final TemplateModel? managerTemplate =
-      managerTemplates.isEmpty ? null : managerTemplates.first;
-  final resolvedMessage = managerTemplate != null
-      ? notice.applyTemplate(managerTemplate.messageContent)
-      : notice.previewMessage;
-
-  if (sendWhatsApp) {
-    if (notice.manager.mobile.trim().isEmpty) {
-      if (context.mounted) {
-        AppSnackBar.warning(context, 'لا يوجد رقم هاتف محفوظ — لم يُرسل واتساب');
-      }
-    } else {
-      final result = await _sendManagerWhatsAppNotification(
-        ref: ref,
-        manager: notice.manager,
-        message: resolvedMessage,
-      );
-      if (context.mounted) {
-        if (result.success) {
-          AppSnackBar.whatsapp(context, 'تم إرسال واتساب للمدير');
-        } else {
-          AppSnackBar.whatsappError(
-            context,
-            'فشل إرسال واتساب',
-            detail: result.error,
-          );
-        }
-      }
-    }
-  }
-
-  if (sendPush) {
-    final result =
-        await ref.read(managersProvider.notifier).sendManagerBalanceUpdateNotification(
-              manager: notice.manager,
-              amount: notice.amount,
-              isLoan: notice.isLoanDeposit,
-              previousCredit: notice.previousCredit,
-              previousDebt: notice.previousDebt,
-              currentCredit: notice.currentCredit,
-              currentDebt: notice.currentDebt,
-              actionKind: notice.pushActionKind,
-              notes: notice.notes,
-            );
-    if (context.mounted && !result.$1) {
-      // Only surface failures — success is implicit (the bell row is
-      // already there once the action completes server-side).
-      AppSnackBar.warning(
-        context,
-        result.$2 ?? 'تعذّر إرسال إشعار التطبيق',
-      );
-    }
-  }
-}
-
-/// Compact two-checkbox row for the bottom of pay/add sheets — both
-/// default ON. Lets the admin opt out of WhatsApp / app push BEFORE
-/// executing the action instead of clicking through a post-success
-/// confirmation dialog.
-class _NotifyToggles extends StatelessWidget {
-  final bool sendWhatsApp;
-  final bool sendPush;
-  final bool whatsAppDisabled; // true when manager has no phone — toggle reads off + locked
-  final ValueChanged<bool> onWhatsAppChanged;
-  final ValueChanged<bool> onPushChanged;
-  const _NotifyToggles({
-    required this.sendWhatsApp,
-    required this.sendPush,
-    required this.onWhatsAppChanged,
-    required this.onPushChanged,
-    this.whatsAppDisabled = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        CheckboxListTile.adaptive(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          controlAffinity: ListTileControlAffinity.leading,
-          value: whatsAppDisabled ? false : sendWhatsApp,
-          onChanged: whatsAppDisabled ? null : (v) => onWhatsAppChanged(v ?? false),
-          title: Row(
-            children: [
-              const Icon(LucideIcons.flame, size: 16, color: Color(0xFF25D366)),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  whatsAppDisabled
-                      ? 'إرسال واتساب — لا يوجد رقم'
-                      : 'إرسال رسالة واتساب للمدير',
-                  style: const TextStyle(fontSize: 13),
-                ),
-              ),
-            ],
-          ),
-        ),
-        CheckboxListTile.adaptive(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          controlAffinity: ListTileControlAffinity.leading,
-          value: sendPush,
-          onChanged: (v) => onPushChanged(v ?? false),
-          title: const Row(
-            children: [
-              Icon(LucideIcons.bellRing,
-                  size: 16, color: Colors.blueGrey),
-              SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'إشعار داخل التطبيق',
-                  style: TextStyle(fontSize: 13),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
   }
 }
 
@@ -424,7 +210,7 @@ Future<void> _showManagerFinancialNoticeDialog({
             title: Row(
               children: [
                 Icon(
-                  LucideIcons.checkCheck,
+                  Icons.mark_chat_read_rounded,
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(width: 10),
@@ -492,7 +278,7 @@ Future<void> _showManagerFinancialNoticeDialog({
                   if (!canSendWhatsApp)
                     const _InlineInfoBanner(
                       color: AppTheme.warningColor,
-                      icon: LucideIcons.phoneOff,
+                      icon: Icons.phone_disabled_outlined,
                       text: 'لا يمكن إرسال واتساب لأن رقم هاتف المدير غير محفوظ.',
                     )
                   else
@@ -540,8 +326,8 @@ Future<void> _showManagerFinancialNoticeDialog({
                             )
                           : Icon(
                               whatsappSent
-                                  ? LucideIcons.circleCheck
-                                  : LucideIcons.messageSquare,
+                                  ? Icons.check_circle_rounded
+                                  : Icons.message_outlined,
                             ),
                       label: Text(
                         whatsappSent
@@ -599,8 +385,8 @@ Future<void> _showManagerFinancialNoticeDialog({
                             )
                           : Icon(
                               pushSent
-                                  ? LucideIcons.bellRing
-                                  : LucideIcons.bell,
+                                  ? Icons.notifications_active_rounded
+                                  : Icons.notifications_outlined,
                             ),
                       label: Text(
                         pushSent
@@ -650,6 +436,7 @@ class ManagersScreen extends ConsumerStatefulWidget {
 class _ManagersScreenState extends ConsumerState<ManagersScreen> {
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounce;
+  int? _selectedManagerId;
   bool _showAdvancedFilters = false;
   static const List<(String value, String label, String shortLabel)> _sortItems = [
     ('username', 'اسم المستخدم', 'المستخدم'),
@@ -701,6 +488,10 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
           direction: direction,
         );
     if (!mounted) return;
+    final ids = ref.read(managersProvider).managers.map((e) => e.id).toSet();
+    if (_selectedManagerId != null && !ids.contains(_selectedManagerId)) {
+      setState(() => _selectedManagerId = null);
+    }
   }
 
   void _handleSearchChanged(String value) {
@@ -808,46 +599,6 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
     }
   }
 
-  Future<void> _openUnifiedPaySheet(
-    ManagerModel manager, {
-    required double extraDebt,
-  }) async {
-    final paid = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (_) => _PayDebtUnifiedSheet(
-        manager: manager,
-        customDebtTotal: extraDebt,
-      ),
-    );
-    if (paid == true && mounted) {
-      AppSnackBar.success(context, 'تم تسديد الدين');
-      await _reloadManagers();
-    }
-  }
-
-  Future<void> _openOtherDebtSheet(
-    ManagerModel manager, {
-    double currentTotalDebt = 0,
-  }) async {
-    final added = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (_) => _AddOtherDebtSheet(
-        manager: manager,
-        currentTotalDebt: currentTotalDebt,
-      ),
-    );
-
-    if (added == true && mounted) {
-      AppSnackBar.success(context, 'تم إضافة الدين');
-      // managerDebtsSummaryProvider is invalidated by the mutation, so
-      // the card's combined-debt badge refreshes on the next build.
-    }
-  }
-
   Future<void> _openPointsSheet(ManagerModel manager) async {
     final changed = await showModalBottomSheet<bool>(
       context: context,
@@ -869,195 +620,16 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
     );
 
     if (result == true && mounted) {
+      setState(() => _selectedManagerId = null);
       AppSnackBar.success(context, 'تم حذف المدير بنجاح');
       await _reloadManagers();
     }
   }
 
-  // Bottom-sheet grid of operations for a manager — replaces the old
-  // inline expand-and-show-buttons UX so the targets are tappable
-  // (the inline OutlinedButtons were 32px tall and easy to mis-tap).
-  void _showManagerActionsSheet(
-    BuildContext anchorCtx,
-    ManagerModel manager, {
-    double extraDebt = 0,
-  }) {
-    final canWithdraw = manager.credit > 0;
-    final hasAnyDebt = (manager.debt + extraDebt) > 0;
-
-    // فحص صلاحية الفاعل (موظف أو أدمن). الأدمن دائماً = full access.
-    final user = ref.read(authProvider).user;
-    bool can(String key) => user?.hasEmployeePermission(key) ?? true;
-
-    final actions = <_ManagerSheetAction>[
-      if (can('managers.edit'))
-        _ManagerSheetAction(
-          icon: LucideIcons.pencil,
-          label: 'تعديل',
-          color: AppTheme.primary,
-          type: _ManagerActionType.edit,
-        ),
-      if (can('managers.deposit'))
-        _ManagerSheetAction(
-          icon: LucideIcons.plus,
-          label: 'رصيد',
-          color: AppTheme.successColor,
-          type: _ManagerActionType.deposit,
-        ),
-      if (canWithdraw && can('managers.withdraw'))
-        _ManagerSheetAction(
-          icon: LucideIcons.circleMinus,
-          label: 'سحب',
-          color: AppTheme.warningColor,
-          type: _ManagerActionType.withdraw,
-        ),
-      // تسديد ديون المدير = نوع آخر من البالانس، نتبع managers.deposit
-      if (hasAnyDebt && can('managers.deposit'))
-        _ManagerSheetAction(
-          icon: LucideIcons.banknote,
-          label: 'تسديد',
-          color: AppTheme.infoColor,
-          type: _ManagerActionType.payDebt,
-        ),
-      if (can('managers.add_points'))
-        _ManagerSheetAction(
-          icon: LucideIcons.star,
-          label: 'نقاط',
-          color: AppTheme.secondary,
-          type: _ManagerActionType.addPoints,
-        ),
-      // ديون أخرى = عرض manager_debts ledger، تتبع reports.manager_debts
-      if (can('reports.manager_debts'))
-        _ManagerSheetAction(
-          icon: LucideIcons.receipt,
-          label: 'ديون أخرى',
-          color: AppTheme.infoColor,
-          type: _ManagerActionType.otherDebts,
-        ),
-      _ManagerSheetAction(
-        icon: LucideIcons.activity,
-        label: 'حركات',
-        color: AppTheme.teal600,
-        type: _ManagerActionType.movements,
-      ),
-      if (hasAnyDebt && can('subscribers.send_whatsapp'))
-        _ManagerSheetAction(
-          icon: LucideIcons.smartphone,
-          label: 'إرسال معلومات',
-          color: AppTheme.whatsappGreen,
-          type: _ManagerActionType.sendInfo,
-        ),
-      if (can('managers.delete'))
-        _ManagerSheetAction(
-          icon: LucideIcons.trash2,
-          label: 'حذف',
-          color: AppTheme.dangerColor,
-          type: _ManagerActionType.delete,
-        ),
-    ];
-
-    final managerName = manager.fullName.isNotEmpty
-        ? manager.fullName
-        : manager.username;
-
-    showModalBottomSheet(
-      useSafeArea: true,
-      context: anchorCtx,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (sheetCtx) {
-        final theme = Theme.of(sheetCtx);
-        return SafeArea(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              16,
-              12,
-              16,
-              bottomSheetBottomInset(sheetCtx, extra: 16),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      LucideIcons.shield,
-                      size: 18,
-                      color: theme.colorScheme.primary,
-                    ),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        managerName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'العمليات',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface
-                        .withValues(alpha: 0.6),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                GridView.count(
-                  crossAxisCount: 4,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 8,
-                  childAspectRatio: 0.85,
-                  children: actions
-                      .map(
-                        (a) => _ManagerSheetItem(
-                          icon: a.icon,
-                          label: a.label,
-                          color: a.color,
-                          onTap: () {
-                            Navigator.pop(sheetCtx);
-                            _handleManagerAction(
-                              manager,
-                              a.type,
-                              extraDebt: extraDebt,
-                            );
-                          },
-                        ),
-                      )
-                      .toList(),
-                ),
-                const SizedBox(height: 8),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   Future<void> _handleManagerAction(
     ManagerModel manager,
-    _ManagerActionType action, {
-    double extraDebt = 0,
-  }) async {
+    _ManagerActionType action,
+  ) async {
     switch (action) {
       case _ManagerActionType.edit:
         await _openManagerForm(manager: manager);
@@ -1069,86 +641,14 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
         await _openBalanceSheet(manager, _ManagerBalanceActionType.withdraw);
         break;
       case _ManagerActionType.payDebt:
-        // Single unified pay sheet — same look as the SAS4 sheet, with a
-        // segmented selector at top when both sources have debt. No
-        // chooser list, no detail-screen jump.
-        if (manager.debt <= 0 && extraDebt <= 0) {
-          await _openDebtSheet(manager); // surfaces "لا يوجد دين" UI
-        } else {
-          await _openUnifiedPaySheet(manager, extraDebt: extraDebt);
-        }
+        await _openDebtSheet(manager);
         break;
       case _ManagerActionType.addPoints:
         await _openPointsSheet(manager);
         break;
-      case _ManagerActionType.otherDebts:
-        await _openOtherDebtSheet(manager,
-            currentTotalDebt: manager.debt + extraDebt);
-        break;
-      case _ManagerActionType.movements:
-        // Full-screen movements view per user request — popup model was
-        // too cramped for the timeline + per-row edit affordances.
-        await context.push('/manager-movements', extra: manager);
-        break;
-      case _ManagerActionType.sendInfo:
-        await _sendManagerInfoMessage(manager, extraDebt: extraDebt);
-        break;
       case _ManagerActionType.delete:
         await _confirmDeleteManager(manager);
         break;
-    }
-  }
-
-  /// Manually fires a slim "current state" message at the manager —
-  /// no transaction is recorded, no push notification is sent, and
-  /// the regular manager_agent template is intentionally bypassed
-  /// (that template assumes a movement just happened, with previous
-  /// vs current balances; an info ping just shows what the manager
-  /// owes today). Format is fixed: greeting + current credit + the
-  /// three-debt breakdown.
-  Future<void> _sendManagerInfoMessage(
-    ManagerModel manager, {
-    double extraDebt = 0,
-  }) async {
-    if (manager.mobile.trim().isEmpty) {
-      AppSnackBar.warning(context, 'لا يوجد رقم هاتف محفوظ لهذا المدير');
-      return;
-    }
-    final sas = manager.debt;
-    final other = extraDebt;
-    final total = sas + other;
-    final managerName =
-        manager.fullName.isNotEmpty ? manager.fullName : manager.username;
-    // The Arabic comma after the name is load-bearing — server.js's
-    // nameExpr in /api/whatsapp/messages uses SUBSTRING_INDEX between
-    // "عزيزي " and "،" to derive the recipient_name shown in the
-    // logs list. Without the ،, the regex grabs the rest of the
-    // message body and the log entry renders as a wall of text.
-    final message = [
-      'عزيزي المدير $managerName، 👋',
-      '',
-      '💳 رصيدك الحالي: ${_formatCurrency(manager.credit)}',
-      '',
-      '— الديون عليك —',
-      '🧾 ديون الساس: ${_formatCurrency(sas)}',
-      '📑 ديون أخرى: ${_formatCurrency(other)}',
-      '📊 المجموع: ${_formatCurrency(total)}',
-    ].join('\n');
-
-    final result = await _sendManagerWhatsAppNotification(
-      ref: ref,
-      manager: manager,
-      message: message,
-    );
-    if (!mounted) return;
-    if (result.success) {
-      AppSnackBar.whatsapp(context, 'تم إرسال واتساب للمدير');
-    } else {
-      AppSnackBar.whatsappError(
-        context,
-        'فشل إرسال واتساب',
-        detail: result.error,
-      );
     }
   }
 
@@ -1158,32 +658,20 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
     final state = ref.watch(managersProvider);
     final canAccessManagers = authState.user?.canAccessManagers ?? false;
     final totalPages = _totalPages(state);
-
-    // Custom inter-admin debts — added inline via the "ديون أخرى"
-    // action and summed into each manager's displayed debt total. The
-    // summary endpoint returns one row per debtor, so a quick map
-    // lookup gives us O(1) per card.
-    final customDebtSummary = ref.watch(managerDebtsSummaryProvider);
-    final Map<int, double> customDebtByManager = {
-      for (final d in customDebtSummary.asData?.value.perDebtor ?? const [])
-        d.debtorAdminId: d.totalRemaining,
-    };
-
     final visibleCredit = state.managers.fold<double>(
       0,
       (sum, manager) => sum + manager.credit,
     );
     final visibleDebt = state.managers.fold<double>(
       0,
-      (sum, manager) =>
-          sum + manager.debt + (customDebtByManager[manager.id] ?? 0),
+      (sum, manager) => sum + manager.debt,
     );
 
     if (!canAccessManagers) {
       return Scaffold(
         appBar: AppBar(title: const Text('المدراء الفرعيون')),
         body: const EmptyState(
-          icon: LucideIcons.lock,
+          icon: Icons.lock_outline,
           title: 'لا تملك صلاحية الوصول',
           subtitle: 'هذا القسم متاح فقط للمدراء الذين لديهم صلاحية إدارة المدراء.',
         ),
@@ -1194,20 +682,17 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
       appBar: AppBar(
         title: const Text('المدراء الفرعيون'),
         actions: [
-          if (ref.watch(authProvider).user
-                  ?.hasEmployeePermission('managers.add') ??
-              true)
-            IconButton(
-              onPressed: () => _openManagerForm(),
-              tooltip: 'إضافة مدير',
-              icon: const Icon(LucideIcons.userPlus),
-            ),
           IconButton(
             onPressed: state.loading ? null : () => _reloadManagers(),
             tooltip: 'تحديث',
-            icon: const Icon(LucideIcons.refreshCw),
+            icon: const Icon(Icons.refresh_rounded),
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.small(
+        onPressed: () => _openManagerForm(),
+        tooltip: 'إضافة مدير',
+        child: const Icon(Icons.person_add_alt_1_rounded),
       ),
       body: Column(
         children: [
@@ -1242,7 +727,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                       ),
                                       hintText: 'بحث...',
                                       prefixIcon:
-                                          const Icon(LucideIcons.search),
+                                          const Icon(Icons.search_rounded),
                                       suffixIcon:
                                           _searchController.text.isNotEmpty
                                               ? IconButton(
@@ -1253,7 +738,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                                   },
                                                   padding: EdgeInsets.zero,
                                                   icon: const Icon(
-                                                    LucideIcons.x,
+                                                    Icons.close_rounded,
                                                   ),
                                                 )
                                               : null,
@@ -1274,8 +759,8 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                     },
                                     icon: Icon(
                                       _showAdvancedFilters
-                                          ? LucideIcons.slidersHorizontal
-                                          : LucideIcons.slidersHorizontal,
+                                          ? Icons.tune_rounded
+                                          : Icons.tune_outlined,
                                     ),
                                   ),
                                 ),
@@ -1288,7 +773,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                     onPressed: state.loading
                                         ? null
                                         : () => _reloadManagers(),
-                                    icon: const Icon(LucideIcons.refreshCw),
+                                    icon: const Icon(Icons.sync_rounded),
                                   ),
                                 ),
                               ],
@@ -1357,8 +842,8 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                       },
                                       icon: Icon(
                                         state.direction == 'asc'
-                                            ? LucideIcons.arrowUp
-                                            : LucideIcons.arrowDown,
+                                            ? Icons.arrow_upward_rounded
+                                            : Icons.arrow_downward_rounded,
                                       ),
                                     ),
                                   ),
@@ -1371,7 +856,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                 runSpacing: 6,
                                 children: [
                                   _ManagersMiniStatChip(
-                                    icon: LucideIcons.arrowUpDown,
+                                    icon: Icons.sort_rounded,
                                     label:
                                         'فرز: ${_labelForSort(state.sortBy, compact: true)}',
                                     color: AppTheme.infoColor,
@@ -1379,8 +864,8 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                   ),
                                   _ManagersMiniStatChip(
                                     icon: state.direction == 'asc'
-                                        ? LucideIcons.arrowUp
-                                        : LucideIcons.arrowDown,
+                                        ? Icons.arrow_upward_rounded
+                                        : Icons.arrow_downward_rounded,
                                     label: state.direction == 'asc'
                                         ? 'تصاعدي'
                                         : 'تنازلي',
@@ -1388,7 +873,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                     neutral: true,
                                   ),
                                   _ManagersMiniStatChip(
-                                    icon: LucideIcons.listOrdered,
+                                    icon: Icons.format_list_numbered_rounded,
                                     label: '${state.rowsPerPage} عنصر',
                                     color: AppTheme.warningColor,
                                     neutral: true,
@@ -1408,17 +893,17 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                   runSpacing: 6,
                   children: [
                     _ManagersMiniStatChip(
-                      icon: LucideIcons.shield,
+                      icon: Icons.admin_panel_settings_outlined,
                       label: 'المدراء ${state.totalCount}',
                       color: AppTheme.infoColor,
                     ),
                     _ManagersMiniStatChip(
-                      icon: LucideIcons.wallet,
+                      icon: Icons.account_balance_wallet_outlined,
                       label: 'رصيد ${_formatCurrency(visibleCredit)}',
                       color: AppTheme.successColor,
                     ),
                     _ManagersMiniStatChip(
-                      icon: LucideIcons.trendingDown,
+                      icon: Icons.trending_down_rounded,
                       label: 'دين ${_formatCurrency(visibleDebt)}',
                       color: AppTheme.warningColor,
                     ),
@@ -1428,7 +913,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                   const SizedBox(height: 10),
                   _InlineInfoBanner(
                     color: AppTheme.dangerColor,
-                    icon: LucideIcons.circleAlert,
+                    icon: Icons.error_outline_rounded,
                     text: state.error!,
                   ),
                 ],
@@ -1441,11 +926,10 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                 : state.managers.isEmpty
                     ? ListView(
                         physics: const AlwaysScrollableScrollPhysics(),
-                        padding: EdgeInsets.fromLTRB(
-                            12, 18, 12, AppHelpers.fabListBottom(context)),
+                        padding: const EdgeInsets.fromLTRB(12, 18, 12, 96),
                         children: [
                           EmptyState(
-                            icon: LucideIcons.userCog,
+                            icon: Icons.manage_accounts_outlined,
                             title: state.search.isNotEmpty
                                 ? 'لا توجد نتائج مطابقة'
                                 : 'لا يوجد مدراء حاليًا',
@@ -1460,7 +944,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                       setState(() {});
                                     },
                                     icon:
-                                        const Icon(LucideIcons.funnelX),
+                                        const Icon(Icons.filter_alt_off_rounded),
                                     label: const Text('مسح الفلاتر'),
                                   )
                                 : null,
@@ -1471,23 +955,25 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                         onRefresh: () => _reloadManagers(),
                         child: ListView.separated(
                           physics: const AlwaysScrollableScrollPhysics(),
-                          padding: EdgeInsets.fromLTRB(
-                              12, 0, 12, AppHelpers.fabListBottom(context)),
+                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 96),
                           itemCount: state.managers.length,
                           separatorBuilder: (_, __) =>
                               const SizedBox(height: 8),
                           itemBuilder: (context, index) {
                             final manager = state.managers[index];
-                            final extra =
-                                customDebtByManager[manager.id] ?? 0;
+                            final selected = manager.id == _selectedManagerId;
+
                             return _ManagerListCard(
                               manager: manager,
-                              extraDebt: extra,
-                              onTap: () => _showManagerActionsSheet(
-                                context,
-                                manager,
-                                extraDebt: extra,
-                              ),
+                              selected: selected,
+                              onTap: () {
+                                setState(() {
+                                  _selectedManagerId =
+                                      selected ? null : manager.id;
+                                });
+                              },
+                              onActionSelected: (action) =>
+                                  _handleManagerAction(manager, action),
                             );
                           },
                         ),
@@ -1540,7 +1026,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                       page: state.currentPage - 1,
                                     )
                                 : null,
-                            icon: const Icon(LucideIcons.chevronRight),
+                            icon: const Icon(Icons.chevron_right_rounded),
                           ),
                           IconButton(
                             tooltip: 'التالي',
@@ -1550,7 +1036,7 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
                                           page: state.currentPage + 1,
                                         )
                                     : null,
-                            icon: const Icon(LucideIcons.chevronLeft),
+                            icon: const Icon(Icons.chevron_left_rounded),
                           ),
                         ],
                       );
@@ -1589,16 +1075,15 @@ class _ManagersScreenState extends ConsumerState<ManagersScreen> {
 
 class _ManagerListCard extends StatelessWidget {
   final ManagerModel manager;
-  // Sum of remaining custom debts (open + partial) — folded into the
-  // displayed debt badge so the parent admin sees one combined total
-  // instead of having to add SAS4 debt + custom debts in their head.
-  final double extraDebt;
+  final bool selected;
   final VoidCallback onTap;
+  final ValueChanged<_ManagerActionType> onActionSelected;
 
   const _ManagerListCard({
     required this.manager,
-    this.extraDebt = 0,
+    required this.selected,
     required this.onTap,
+    required this.onActionSelected,
   });
 
   @override
@@ -1609,14 +1094,19 @@ class _ManagerListCard extends StatelessWidget {
         manager.fullName != manager.username &&
         !manager.fullName.contains(manager.username);
     final compact = MediaQuery.sizeOf(context).width < 390;
+    final borderColor = selected
+        ? theme.colorScheme.primary
+        : theme.colorScheme.outline.withValues(alpha: 0.14);
+    final background = selected
+        ? theme.colorScheme.primary.withValues(alpha: 0.04)
+        : theme.cardTheme.color ?? theme.colorScheme.surface;
 
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
       decoration: BoxDecoration(
-        color: theme.cardTheme.color ?? theme.colorScheme.surface,
+        color: background,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: theme.colorScheme.outline.withValues(alpha: 0.14),
-        ),
+        border: Border.all(color: borderColor, width: selected ? 1.5 : 1),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.03),
@@ -1641,7 +1131,7 @@ class _ManagerListCard extends StatelessWidget {
                         backgroundColor:
                             AppTheme.primary.withValues(alpha: 0.12),
                         child: Icon(
-                          LucideIcons.shield,
+                          Icons.admin_panel_settings_outlined,
                           color: AppTheme.primary,
                           size: compact ? 16 : 18,
                         ),
@@ -1695,16 +1185,27 @@ class _ManagerListCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Container(
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
                     padding: EdgeInsets.all(compact ? 4 : 6),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                      color: selected
+                          ? theme.colorScheme.primary.withValues(alpha: 0.10)
+                          : theme.colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.4),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(
-                      LucideIcons.ellipsis,
-                      size: compact ? 18 : 20,
-                      color: theme.colorScheme.primary,
+                    child: AnimatedRotation(
+                      turns: selected ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 180),
+                      child: Icon(
+                        Icons.expand_more_rounded,
+                        size: compact ? 18 : 20,
+                        color: selected
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurface
+                                .withValues(alpha: 0.72),
+                      ),
                     ),
                   ),
                 ],
@@ -1716,8 +1217,8 @@ class _ManagerListCard extends StatelessWidget {
                 children: [
                   _InfoBadge(
                     icon: manager.isActive
-                        ? LucideIcons.circleCheck
-                        : LucideIcons.ban,
+                        ? Icons.check_circle_outline_rounded
+                        : Icons.block_rounded,
                     label: manager.isActive ? 'مفعّل' : 'معطّل',
                     color: manager.isActive
                         ? AppTheme.successColor
@@ -1725,19 +1226,19 @@ class _ManagerListCard extends StatelessWidget {
                   ),
                   if ((manager.aclName ?? '').isNotEmpty)
                     _InfoBadge(
-                      icon: LucideIcons.shieldCheck,
+                      icon: Icons.verified_user_outlined,
                       label: manager.aclName!,
                       color: AppTheme.infoColor,
                     ),
-                  if (manager.mobile.isNotEmpty)
+                  if (selected && manager.mobile.isNotEmpty)
                     _InfoBadge(
-                      icon: LucideIcons.phone,
+                      icon: Icons.phone_outlined,
                       label: manager.mobile,
                       color: AppTheme.primary,
                     ),
-                  if (manager.company.isNotEmpty)
+                  if (selected && manager.company.isNotEmpty)
                     _InfoBadge(
-                      icon: LucideIcons.building2,
+                      icon: Icons.business_outlined,
                       label: manager.company,
                       color: AppTheme.warningColor,
                     ),
@@ -1749,44 +1250,94 @@ class _ManagerListCard extends StatelessWidget {
                 runSpacing: 6,
                 children: [
                   _ManagersMiniStatChip(
-                    icon: LucideIcons.users,
+                    icon: Icons.people_outline_rounded,
                     label: 'مشتركون ${manager.usersCount}',
                     color: AppTheme.infoColor,
                   ),
                   _ManagersMiniStatChip(
-                    icon: LucideIcons.star,
+                    icon: Icons.stars_rounded,
                     label: 'نقاط ${manager.rewardPoints}',
                     color: AppTheme.secondary,
                   ),
                   _ManagersMiniStatChip(
-                    icon: LucideIcons.wallet,
+                    icon: Icons.account_balance_wallet_outlined,
                     label: 'رصيد ${_formatCurrency(manager.credit)}',
                     color: AppTheme.successColor,
                   ),
-                  // Three debt chips: SAS (yellow), custom/other (blue),
-                  // and the combined total (red) — only render the ones
-                  // that actually have value so empty managers stay
-                  // clean.
-                  if (manager.debt > 0)
-                    _ManagersMiniStatChip(
-                      icon: LucideIcons.banknote,
-                      label: 'دين الساس ${_formatCurrency(manager.debt)}',
-                      color: AppTheme.warningColor,
-                    ),
-                  if (extraDebt > 0)
-                    _ManagersMiniStatChip(
-                      icon: LucideIcons.receipt,
-                      label: 'ديون أخرى ${_formatCurrency(extraDebt)}',
-                      color: AppTheme.infoColor,
-                    ),
-                  if (manager.debt + extraDebt > 0)
-                    _ManagersMiniStatChip(
-                      icon: LucideIcons.fileText,
-                      label:
-                          'المجموع ${_formatCurrency(manager.debt + extraDebt)}',
-                      color: AppTheme.dangerColor,
-                    ),
+                  _ManagersMiniStatChip(
+                    icon: Icons.trending_down_rounded,
+                    label: 'دين ${_formatCurrency(manager.debt)}',
+                    color: AppTheme.warningColor,
+                  ),
                 ],
+              ),
+              AnimatedCrossFade(
+                firstChild: const SizedBox.shrink(),
+                secondChild: Column(
+                  children: [
+                    SizedBox(height: compact ? 8 : 10),
+                    const Divider(height: 1),
+                    SizedBox(height: compact ? 8 : 10),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        _ManagerActionButton(
+                          icon: Icons.edit_outlined,
+                          label: 'تعديل',
+                          color: AppTheme.primary,
+                          onPressed: () =>
+                              onActionSelected(_ManagerActionType.edit),
+                        ),
+                        _ManagerActionButton(
+                          icon: Icons.add_card_rounded,
+                          label: 'رصيد',
+                          color: AppTheme.successColor,
+                          onPressed: () =>
+                              onActionSelected(_ManagerActionType.deposit),
+                        ),
+                        _ManagerActionButton(
+                          icon: Icons.remove_circle_outline_rounded,
+                          label: 'سحب',
+                          color: AppTheme.warningColor,
+                          onPressed: manager.credit > 0
+                              ? () => onActionSelected(
+                                    _ManagerActionType.withdraw,
+                                  )
+                              : null,
+                        ),
+                        _ManagerActionButton(
+                          icon: Icons.payments_outlined,
+                          label: 'تسديد',
+                          color: AppTheme.infoColor,
+                          onPressed: manager.debt > 0
+                              ? () => onActionSelected(
+                                    _ManagerActionType.payDebt,
+                                  )
+                              : null,
+                        ),
+                        _ManagerActionButton(
+                          icon: Icons.stars_rounded,
+                          label: 'نقاط',
+                          color: AppTheme.secondary,
+                          onPressed: () =>
+                              onActionSelected(_ManagerActionType.addPoints),
+                        ),
+                        _ManagerActionButton(
+                          icon: Icons.delete_outline_rounded,
+                          label: 'حذف',
+                          color: AppTheme.dangerColor,
+                          onPressed: () =>
+                              onActionSelected(_ManagerActionType.delete),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                crossFadeState: selected
+                    ? CrossFadeState.showSecond
+                    : CrossFadeState.showFirst,
+                duration: const Duration(milliseconds: 180),
               ),
             ],
           ),
@@ -1966,8 +1517,8 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
     return _SheetScaffold(
       title: _isEdit ? 'تعديل مدير' : 'إضافة مدير جديد',
       icon: _isEdit
-          ? LucideIcons.userCog
-          : LucideIcons.userPlus,
+          ? Icons.manage_accounts_outlined
+          : Icons.person_add_alt_1_rounded,
       subtitle: _isEdit
           ? 'يمكنك تعديل بيانات المدير وصلاحياته وحالته من هنا.'
           : 'أنشئ مديرًا فرعيًا جديدًا وحدد بياناته وصلاحياته الأساسية.',
@@ -1983,14 +1534,14 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                 children: [
                   _SheetSectionCard(
                     title: 'بيانات الحساب',
-                    icon: LucideIcons.user,
+                    icon: Icons.account_circle_outlined,
                     child: Column(
                       children: [
                         TextFormField(
                           controller: _usernameController,
                           decoration: const InputDecoration(
                             labelText: 'اسم المستخدم',
-                            prefixIcon: Icon(LucideIcons.user),
+                            prefixIcon: Icon(Icons.person_outline_rounded),
                           ),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
@@ -2004,7 +1555,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                           value: _selectedAclId,
                           decoration: const InputDecoration(
                             labelText: 'مجموعة الصلاحيات',
-                            prefixIcon: Icon(LucideIcons.shieldCheck),
+                            prefixIcon: Icon(Icons.verified_user_outlined),
                           ),
                           items: _aclGroups
                               .map(
@@ -2025,7 +1576,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                           value: _selectedParentId,
                           decoration: const InputDecoration(
                             labelText: 'تابع إلى',
-                            prefixIcon: Icon(LucideIcons.network),
+                            prefixIcon: Icon(Icons.account_tree_outlined),
                           ),
                           items: [
                             const DropdownMenuItem<int?>(
@@ -2067,14 +1618,14 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                   const SizedBox(height: 12),
                   _SheetSectionCard(
                     title: 'البيانات الشخصية',
-                    icon: LucideIcons.badgeCheck,
+                    icon: Icons.badge_outlined,
                     child: Column(
                       children: [
                         TextFormField(
                           controller: _firstnameController,
                           decoration: const InputDecoration(
                             labelText: 'الاسم الأول',
-                            prefixIcon: Icon(LucideIcons.type),
+                            prefixIcon: Icon(Icons.text_fields_rounded),
                           ),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
@@ -2088,7 +1639,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                           controller: _lastnameController,
                           decoration: const InputDecoration(
                             labelText: 'الاسم الأخير',
-                            prefixIcon: Icon(LucideIcons.type),
+                            prefixIcon: Icon(Icons.text_fields_rounded),
                           ),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
@@ -2103,7 +1654,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                           keyboardType: TextInputType.emailAddress,
                           decoration: const InputDecoration(
                             labelText: 'البريد الإلكتروني',
-                            prefixIcon: Icon(LucideIcons.mail),
+                            prefixIcon: Icon(Icons.email_outlined),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -2112,10 +1663,10 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                           keyboardType: TextInputType.phone,
                           decoration: InputDecoration(
                             labelText: 'رقم الهاتف',
-                            prefixIcon: const Icon(LucideIcons.phone),
+                            prefixIcon: const Icon(Icons.phone_outlined),
                             suffixIcon: IconButton(
                               tooltip: 'اختر من جهات الاتصال',
-                              icon: const Icon(LucideIcons.contact, size: 20),
+                              icon: const Icon(Icons.contacts_rounded, size: 20),
                               onPressed: () async {
                                 final phone = await pickContactPhone(context);
                                 if (phone != null && phone.isNotEmpty) {
@@ -2130,7 +1681,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                           controller: _companyController,
                           decoration: const InputDecoration(
                             labelText: 'الشركة',
-                            prefixIcon: Icon(LucideIcons.building2),
+                            prefixIcon: Icon(Icons.business_outlined),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -2138,7 +1689,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                           controller: _cityController,
                           decoration: const InputDecoration(
                             labelText: 'المدينة',
-                            prefixIcon: Icon(LucideIcons.building),
+                            prefixIcon: Icon(Icons.location_city_outlined),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -2147,7 +1698,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                           maxLines: 2,
                           decoration: const InputDecoration(
                             labelText: 'العنوان',
-                            prefixIcon: Icon(LucideIcons.house),
+                            prefixIcon: Icon(Icons.home_outlined),
                           ),
                         ),
                       ],
@@ -2156,7 +1707,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                   const SizedBox(height: 12),
                   _SheetSectionCard(
                     title: _isEdit ? 'كلمة المرور والملاحظات' : 'كلمة المرور',
-                    icon: LucideIcons.lock,
+                    icon: Icons.lock_outline_rounded,
                     child: Column(
                       children: [
                         TextFormField(
@@ -2165,7 +1716,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                           decoration: InputDecoration(
                             labelText:
                                 _isEdit ? 'كلمة مرور جديدة (اختياري)' : 'كلمة المرور',
-                            prefixIcon: const Icon(LucideIcons.lock),
+                            prefixIcon: const Icon(Icons.lock_outline_rounded),
                           ),
                           validator: (value) {
                             final trimmed = value?.trim() ?? '';
@@ -2187,7 +1738,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                             obscureText: true,
                             decoration: const InputDecoration(
                               labelText: 'تأكيد كلمة المرور',
-                              prefixIcon: Icon(LucideIcons.lockKeyholeOpen),
+                              prefixIcon: Icon(Icons.lock_reset_rounded),
                             ),
                             validator: (value) {
                               if ((value ?? '').trim() !=
@@ -2204,7 +1755,7 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                           maxLines: 3,
                           decoration: const InputDecoration(
                             labelText: 'ملاحظات',
-                            prefixIcon: Icon(LucideIcons.fileText),
+                            prefixIcon: Icon(Icons.note_alt_outlined),
                           ),
                         ),
                       ],
@@ -2225,8 +1776,8 @@ class _ManagerFormSheetState extends ConsumerState<_ManagerFormSheet> {
                           onPressed: _saving ? null : _submit,
                           icon: Icon(
                             _isEdit
-                                ? LucideIcons.save
-                                : LucideIcons.userPlus,
+                                ? Icons.save_outlined
+                                : Icons.person_add_alt_1_rounded,
                           ),
                           label:
                               Text(_isEdit ? 'حفظ التعديلات' : 'إضافة المدير'),
@@ -2261,8 +1812,6 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
   final TextEditingController _notesController = TextEditingController();
   bool _isLoan = false;
   bool _saving = false;
-  bool _sendWa = true;
-  bool _sendPush = true;
 
   bool get _isDeposit => widget.action == _ManagerBalanceActionType.deposit;
 
@@ -2309,18 +1858,9 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
 
     if (success) {
       if (_isDeposit) {
-        // Build a consistent before/after picture: every value below
-        // is a grand total (SAS slice + custom "ديون أخرى" slice). The
-        // operation only touches the SAS slice (loan deposit) — custom
-        // stays put.
-        final priorSas = widget.manager.debt;
-        final priorOther = _customDebtTotalFor(ref, widget.manager.id);
-        final newSas = priorSas + (_isLoan ? amount : 0);
-        await _autoSendManagerNotice(
+        await _showManagerFinancialNoticeDialog(
           context: context,
           ref: ref,
-          sendWhatsApp: _sendWa,
-          sendPush: _sendPush,
           notice: _ManagerFinancialNoticeData(
             manager: widget.manager,
             amount: amount,
@@ -2329,11 +1869,9 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
                 : _ManagerFinancialNoticeKind.cashDeposit,
             notes: _notesController.text.trim(),
             previousCredit: widget.manager.credit,
-            previousDebt: priorSas + priorOther,
+            previousDebt: widget.manager.debt,
             currentCredit: widget.manager.credit + amount,
-            currentDebt: newSas + priorOther,
-            sasDebts: newSas,
-            otherDebts: priorOther,
+            currentDebt: widget.manager.debt + (_isLoan ? amount : 0),
           ),
         );
         if (!mounted) return;
@@ -2352,8 +1890,8 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
     return _SheetScaffold(
       title: _isDeposit ? 'إضافة رصيد' : 'سحب رصيد',
       icon: _isDeposit
-          ? LucideIcons.plus
-          : LucideIcons.circleMinus,
+          ? Icons.add_card_rounded
+          : Icons.remove_circle_outline_rounded,
       subtitle: _isDeposit
           ? 'أضف رصيدًا نقديًا أو آجلًا للمدير المحدد.'
           : 'اسحب مبلغًا من رصيد المدير الحالي.',
@@ -2364,7 +1902,7 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
           children: [
             _SheetSectionCard(
               title: 'ملخص المدير',
-              icon: LucideIcons.user,
+              icon: Icons.person_outline_rounded,
               child: Column(
                 children: [
                   _SummaryLine(
@@ -2393,7 +1931,7 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
             const SizedBox(height: 12),
             _SheetSectionCard(
               title: _isDeposit ? 'بيانات الإضافة' : 'بيانات السحب',
-              icon: LucideIcons.banknote,
+              icon: Icons.payments_outlined,
               child: Column(
                 children: [
                   TextFormField(
@@ -2406,11 +1944,11 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
                       labelText: _isDeposit
                           ? 'المبلغ المراد إضافته'
                           : 'المبلغ المراد سحبه',
-                      prefixIcon: const Icon(LucideIcons.arrowRightLeft),
+                      prefixIcon: const Icon(Icons.currency_exchange_rounded),
                       suffixIcon: _amountController.text.isEmpty
                           ? null
                           : IconButton(
-                              icon: const Icon(LucideIcons.x, size: 18),
+                              icon: const Icon(Icons.close_rounded, size: 18),
                               onPressed: () {
                                 _amountController.clear();
                                 setState(() {});
@@ -2451,7 +1989,7 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
                     maxLines: 2,
                     decoration: const InputDecoration(
                       labelText: 'ملاحظات',
-                      prefixIcon: Icon(LucideIcons.fileText),
+                      prefixIcon: Icon(Icons.note_alt_outlined),
                     ),
                   ),
                   if (_isDeposit) ...[
@@ -2473,17 +2011,7 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
                 ],
               ),
             ),
-            if (_isDeposit) ...[
-              const SizedBox(height: 8),
-              _NotifyToggles(
-                sendWhatsApp: _sendWa,
-                sendPush: _sendPush,
-                whatsAppDisabled: widget.manager.mobile.trim().isEmpty,
-                onWhatsAppChanged: (v) => setState(() => _sendWa = v),
-                onPushChanged: (v) => setState(() => _sendPush = v),
-              ),
-            ],
-            const SizedBox(height: 14),
+            const SizedBox(height: 18),
             Row(
               children: [
                 Expanded(
@@ -2498,8 +2026,8 @@ class _ManagerBalanceSheetState extends ConsumerState<_ManagerBalanceSheet> {
                     onPressed: _saving ? null : _submit,
                     icon: Icon(
                       _isDeposit
-                          ? LucideIcons.plus
-                          : LucideIcons.circleMinus,
+                          ? Icons.add_card_rounded
+                          : Icons.remove_circle_outline_rounded,
                     ),
                     label: Text(
                       _isDeposit ? 'تنفيذ الإضافة' : 'تنفيذ السحب',
@@ -2594,26 +2122,17 @@ class _ManagerDebtPaymentSheetState
       await _showManagerFinancialNoticeDialog(
         context: context,
         ref: ref,
-        // SAS-only payment sheet — only the SAS slice changes; the
-        // custom "ديون أخرى" slice is untouched. Compute the after-state
-        // grand total from the new SAS + the unchanged custom.
-        notice: () {
-          final priorSas = _outstandingDebt;
-          final priorOther = _customDebtTotalFor(ref, widget.manager.id);
-          final newSas = (priorSas - amount).clamp(0, double.infinity).toDouble();
-          return _ManagerFinancialNoticeData(
-            manager: widget.manager,
-            amount: amount,
-            kind: _ManagerFinancialNoticeKind.debtPayment,
-            notes: _notesController.text.trim(),
-            previousCredit: widget.manager.credit,
-            previousDebt: priorSas + priorOther,
-            currentCredit: widget.manager.credit,
-            currentDebt: newSas + priorOther,
-            sasDebts: newSas,
-            otherDebts: priorOther,
-          );
-        }(),
+        notice: _ManagerFinancialNoticeData(
+          manager: widget.manager,
+          amount: amount,
+          kind: _ManagerFinancialNoticeKind.debtPayment,
+          notes: _notesController.text.trim(),
+          previousCredit: widget.manager.credit,
+          previousDebt: _outstandingDebt,
+          currentCredit: widget.manager.credit,
+          currentDebt:
+              (_outstandingDebt - amount).clamp(0, double.infinity).toDouble(),
+        ),
       );
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -2626,7 +2145,7 @@ class _ManagerDebtPaymentSheetState
   Widget build(BuildContext context) {
     return _SheetScaffold(
       title: 'تسديد دين',
-      icon: LucideIcons.banknote,
+      icon: Icons.payments_outlined,
       subtitle: 'سدّد كامل الدين أو جزءًا منه للمدير المحدد.',
       isLoading: _saving,
       child: _loadingDebt
@@ -2639,7 +2158,7 @@ class _ManagerDebtPaymentSheetState
                   children: [
                     const _InlineInfoBanner(
                       color: AppTheme.successColor,
-                      icon: LucideIcons.circleCheck,
+                      icon: Icons.check_circle_outline_rounded,
                       text: 'لا يوجد دين مستحق على هذا المدير حاليًا.',
                     ),
                     const SizedBox(height: 16),
@@ -2658,7 +2177,7 @@ class _ManagerDebtPaymentSheetState
                     children: [
                       _SheetSectionCard(
                         title: 'ملخص الدين',
-                        icon: LucideIcons.banknote,
+                        icon: Icons.account_balance_outlined,
                         child: Column(
                           children: [
                             _SummaryLine(
@@ -2688,7 +2207,7 @@ class _ManagerDebtPaymentSheetState
                       const SizedBox(height: 12),
                       _SheetSectionCard(
                         title: 'بيانات التسديد',
-                        icon: LucideIcons.fileText,
+                        icon: Icons.request_quote_outlined,
                         child: Column(
                           children: [
                             CheckboxListTile.adaptive(
@@ -2722,7 +2241,7 @@ class _ManagerDebtPaymentSheetState
                               decoration: const InputDecoration(
                                 labelText: 'المبلغ المراد تسديده',
                                 prefixIcon:
-                                    Icon(LucideIcons.arrowRightLeft),
+                                    Icon(Icons.currency_exchange_rounded),
                               ),
                               validator: (value) {
                                 final amount =
@@ -2739,7 +2258,7 @@ class _ManagerDebtPaymentSheetState
                               maxLines: 2,
                               decoration: const InputDecoration(
                                 labelText: 'ملاحظات',
-                                prefixIcon: Icon(LucideIcons.fileText),
+                                prefixIcon: Icon(Icons.note_alt_outlined),
                               ),
                             ),
                           ],
@@ -2758,7 +2277,7 @@ class _ManagerDebtPaymentSheetState
                           Expanded(
                             child: ElevatedButton.icon(
                               onPressed: _saving ? null : _submit,
-                              icon: const Icon(LucideIcons.banknote),
+                              icon: const Icon(Icons.payments_outlined),
                               label: const Text('تنفيذ التسديد'),
                             ),
                           ),
@@ -2826,7 +2345,7 @@ class _ManagerPointsSheetState extends ConsumerState<_ManagerPointsSheet> {
   Widget build(BuildContext context) {
     return _SheetScaffold(
       title: 'إضافة نقاط',
-      icon: LucideIcons.star,
+      icon: Icons.stars_rounded,
       subtitle: 'أضف نقاطًا تشجيعية للمدير مع ملاحظة اختيارية.',
       isLoading: _saving,
       child: Form(
@@ -2835,7 +2354,7 @@ class _ManagerPointsSheetState extends ConsumerState<_ManagerPointsSheet> {
           children: [
             _SheetSectionCard(
               title: 'بيانات العملية',
-              icon: LucideIcons.trophy,
+              icon: Icons.emoji_events_outlined,
               child: Column(
                 children: [
                   _SummaryLine(label: 'المدير', value: widget.manager.username),
@@ -2856,7 +2375,7 @@ class _ManagerPointsSheetState extends ConsumerState<_ManagerPointsSheet> {
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     decoration: const InputDecoration(
                       labelText: 'عدد النقاط',
-                      prefixIcon: Icon(LucideIcons.star),
+                      prefixIcon: Icon(Icons.stars_rounded),
                     ),
                     validator: (value) {
                       final points = int.tryParse((value ?? '').trim());
@@ -2872,7 +2391,7 @@ class _ManagerPointsSheetState extends ConsumerState<_ManagerPointsSheet> {
                     maxLines: 2,
                     decoration: const InputDecoration(
                       labelText: 'ملاحظات',
-                      prefixIcon: Icon(LucideIcons.fileText),
+                      prefixIcon: Icon(Icons.note_alt_outlined),
                     ),
                   ),
                 ],
@@ -2891,7 +2410,7 @@ class _ManagerPointsSheetState extends ConsumerState<_ManagerPointsSheet> {
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: _saving ? null : _submit,
-                    icon: const Icon(LucideIcons.star),
+                    icon: const Icon(Icons.stars_rounded),
                     label: const Text('إضافة النقاط'),
                   ),
                 ),
@@ -2966,7 +2485,7 @@ class _DeleteManagerDialogState extends ConsumerState<_DeleteManagerDialog> {
               autofocus: true,
               decoration: const InputDecoration(
                 labelText: 'اسم المستخدم',
-                prefixIcon: Icon(LucideIcons.user),
+                prefixIcon: Icon(Icons.person_outline),
               ),
               onSubmitted: (_) {
                 if (!_deleting) {
@@ -2996,681 +2515,10 @@ class _DeleteManagerDialogState extends ConsumerState<_DeleteManagerDialog> {
                     color: Colors.white,
                   ),
                 )
-              : const Icon(LucideIcons.trash2),
+              : const Icon(Icons.delete_outline),
           label: Text(_deleting ? 'جارٍ الحذف...' : 'حذف المدير'),
         ),
       ],
-    );
-  }
-}
-
-/// Inline sheet for the "ديون أخرى" action on a manager card. Records
-/// a custom inter-admin debt against `manager` via the same backend
-/// endpoint the standalone debts screen uses; the parent's debts
-/// summary provider is invalidated by the mutation, so the card's
-/// combined "دين" badge refreshes on the next build.
-class _AddOtherDebtSheet extends ConsumerStatefulWidget {
-  final ManagerModel manager;
-  // Combined SAS4 + custom remaining at the moment the sheet was opened
-  // — used for the inline "الدين الحالي" line.
-  final double currentTotalDebt;
-  const _AddOtherDebtSheet({required this.manager, this.currentTotalDebt = 0});
-
-  @override
-  ConsumerState<_AddOtherDebtSheet> createState() => _AddOtherDebtSheetState();
-}
-
-class _AddOtherDebtSheetState extends ConsumerState<_AddOtherDebtSheet> {
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  final TextEditingController _amountController = TextEditingController();
-  final TextEditingController _notesController = TextEditingController();
-  DateTime _debtDate = DateTime.now();
-  bool _saving = false;
-  bool _sendWa = true;
-  bool _sendPush = true;
-
-  @override
-  void dispose() {
-    _amountController.dispose();
-    _notesController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _debtDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 30)),
-    );
-    if (picked != null && mounted) setState(() => _debtDate = picked);
-  }
-
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-    final amount = _parseFormattedAmount(_amountController.text);
-    if (amount == null || amount <= 0) {
-      AppSnackBar.warning(context, 'أدخل مبلغًا صحيحًا');
-      return;
-    }
-    setState(() => _saving = true);
-    final ok = await createManagerDebt(
-      ref,
-      debtorAdminId: widget.manager.id,
-      amount: amount,
-      note: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
-      debtDate: _debtDate,
-    );
-    if (!mounted) return;
-    setState(() => _saving = false);
-    if (ok) {
-      // Auto-fire WA / push per the toggles. Use loanDeposit semantics
-      // (a debt is being added; balance is unchanged) for the template
-      // placeholders — admins can edit the manager_agent template if
-      // they want different wording for "add debt".
-      // Custom-debt sheet: SAS slice untouched, "ديون أخرى" grows by
-      // `amount`. The grand total currentDebt = new sas + new other.
-      final sas = widget.manager.debt;
-      final priorOther = (widget.currentTotalDebt - sas)
-          .clamp(0, double.infinity)
-          .toDouble();
-      final newOther = priorOther + amount;
-      await _autoSendManagerNotice(
-        context: context,
-        ref: ref,
-        sendWhatsApp: _sendWa,
-        sendPush: _sendPush,
-        notice: _ManagerFinancialNoticeData(
-          manager: widget.manager,
-          amount: amount,
-          kind: _ManagerFinancialNoticeKind.loanDeposit,
-          notes: _notesController.text.trim(),
-          previousCredit: widget.manager.credit,
-          previousDebt: sas + priorOther,
-          currentCredit: widget.manager.credit,
-          currentDebt: sas + newOther,
-          sasDebts: sas,
-          otherDebts: newOther,
-        ),
-      );
-      if (!mounted) return;
-      Navigator.of(context).pop(true);
-    } else {
-      AppSnackBar.error(context, 'تعذّر حفظ الدين');
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final dateFmt = intl.DateFormat('yyyy-MM-dd');
-    return _SheetScaffold(
-      title: 'إضافة دين',
-      icon: LucideIcons.receipt,
-      // Compact layout per user request — no subtitle, no large summary
-      // card. The single header line shows username + combined debt
-      // (SAS4 + open custom) so the admin can see the total they're
-      // adding to before saving.
-      isLoading: _saving,
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              widget.manager.username,
-              style: const TextStyle(fontWeight: FontWeight.w700),
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 8),
-            _DebtSourcesBadges(
-              sasAmount: widget.manager.debt,
-              // currentTotalDebt = sas + custom; subtract to isolate
-              customAmount: (widget.currentTotalDebt - widget.manager.debt)
-                  .clamp(0, double.infinity)
-                  .toDouble(),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _amountController,
-              keyboardType: TextInputType.number,
-              inputFormatters: [_ThousandsSeparatorInputFormatter()],
-              decoration: InputDecoration(
-                labelText: 'مبلغ الدين',
-                prefixIcon: const Icon(LucideIcons.arrowRightLeft),
-                isDense: true,
-                suffixIcon: _amountController.text.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: const Icon(LucideIcons.x, size: 18),
-                        onPressed: () {
-                          _amountController.clear();
-                          setState(() {});
-                        },
-                      ),
-              ),
-              onChanged: (_) => setState(() {}),
-              validator: (value) {
-                final amount = _parseFormattedAmount(value ?? '');
-                if (amount == null || amount <= 0) return 'أدخل مبلغًا صحيحًا';
-                return null;
-              },
-            ),
-            const SizedBox(height: 8),
-            QuickAmountChips(
-              amounts: const [
-                10000.0, 25000.0, 50000.0, 100000.0, 250000.0, 500000.0,
-              ],
-              selectedAmount:
-                  _parseFormattedAmount(_amountController.text) ?? 0,
-              enabled: !_saving,
-              onSelected: (v) {
-                FocusScope.of(context).unfocus();
-                final current =
-                    _parseFormattedAmount(_amountController.text) ?? 0;
-                final total = current + v;
-                final formatter = intl.NumberFormat('#,##0', 'en_US');
-                _amountController.text = formatter.format(total);
-                setState(() {});
-              },
-            ),
-            const SizedBox(height: 10),
-            TextFormField(
-              controller: _notesController,
-              maxLines: 1,
-              decoration: const InputDecoration(
-                labelText: 'ملاحظة (اختياري)',
-                prefixIcon: Icon(LucideIcons.fileText),
-                isDense: true,
-              ),
-            ),
-            const SizedBox(height: 8),
-            // Date as a compact tappable row instead of a full ListTile.
-            InkWell(
-              onTap: _saving ? null : _pickDate,
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                child: Row(
-                  children: [
-                    const Icon(LucideIcons.calendar, size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'تاريخ الدين: ${dateFmt.format(_debtDate)}',
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                    ),
-                    const Icon(LucideIcons.calendarClock, size: 18),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            _NotifyToggles(
-              sendWhatsApp: _sendWa,
-              sendPush: _sendPush,
-              whatsAppDisabled: widget.manager.mobile.trim().isEmpty,
-              onWhatsAppChanged: (v) => setState(() => _sendWa = v),
-              onPushChanged: (v) => setState(() => _sendPush = v),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed:
-                        _saving ? null : () => Navigator.of(context).pop(false),
-                    child: const Text('إلغاء'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _saving ? null : _submit,
-                    icon: const Icon(LucideIcons.save),
-                    label: const Text('حفظ الدين'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Single sheet that pays manager debt — same compact shape as the
-/// add-debt sheet. When both SAS4 and custom debts exist, a small
-/// segmented control at the top lets the admin pick the source. For
-/// custom debts the entered amount is distributed FIFO across the
-/// manager's open custom debts oldest-first via the existing
-/// per-debt payment endpoint.
-class _PayDebtUnifiedSheet extends ConsumerStatefulWidget {
-  final ManagerModel manager;
-  final double customDebtTotal;
-  const _PayDebtUnifiedSheet({
-    required this.manager,
-    required this.customDebtTotal,
-  });
-
-  @override
-  ConsumerState<_PayDebtUnifiedSheet> createState() =>
-      _PayDebtUnifiedSheetState();
-}
-
-enum _PaySource { sas, custom }
-
-class _PayDebtUnifiedSheetState extends ConsumerState<_PayDebtUnifiedSheet> {
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  final TextEditingController _amountController = TextEditingController();
-  final TextEditingController _notesController = TextEditingController();
-  late _PaySource _source;
-  bool _saving = false;
-  // Notify-on-success toggles — both default ON; admin can opt out
-  // before tapping save instead of being prompted afterward.
-  bool _sendWa = true;
-  bool _sendPush = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _source = widget.manager.debt > 0 ? _PaySource.sas : _PaySource.custom;
-  }
-
-  @override
-  void dispose() {
-    _amountController.dispose();
-    _notesController.dispose();
-    super.dispose();
-  }
-
-  double get _max => _source == _PaySource.sas
-      ? widget.manager.debt
-      : widget.customDebtTotal;
-
-  String get _maxLabel =>
-      'الحد الأقصى: ${_formatCurrency(_max)}';
-
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-    final amount = _parseFormattedAmount(_amountController.text);
-    if (amount == null || amount <= 0) {
-      AppSnackBar.warning(context, 'أدخل مبلغًا صحيحًا');
-      return;
-    }
-    if (amount > _max + 0.01) {
-      AppSnackBar.warning(context, 'المبلغ أكبر من المتاح');
-      return;
-    }
-
-    setState(() => _saving = true);
-    bool ok = false;
-
-    if (_source == _PaySource.sas) {
-      ok = await ref.read(managersProvider.notifier).payDebt(
-            manager: widget.manager,
-            amount: amount,
-            debtForMe: widget.manager.debt,
-            totalDebt: widget.manager.debt,
-            notes: _notesController.text,
-          );
-    } else {
-      ok = await _payCustomFifo(amount, _notesController.text.trim());
-    }
-
-    if (!mounted) return;
-    setState(() => _saving = false);
-    if (ok) {
-      // Auto-fire WA / push per the toggles (no confirmation dialog).
-      // Unified sheet: payment comes out of either slice based on
-      // _source. previousDebt / currentDebt are GRAND TOTALS so the
-      // manager always sees the full picture instead of just one
-      // slice. sasDebts / otherDebts give the breakdown after payment.
-      final paidFromSas = _source == _PaySource.sas;
-      final priorSas = widget.manager.debt;
-      final priorOther = widget.customDebtTotal;
-      final newSas = paidFromSas
-          ? (priorSas - amount).clamp(0, double.infinity).toDouble()
-          : priorSas;
-      final newOther = paidFromSas
-          ? priorOther
-          : (priorOther - amount).clamp(0, double.infinity).toDouble();
-      await _autoSendManagerNotice(
-        context: context,
-        ref: ref,
-        sendWhatsApp: _sendWa,
-        sendPush: _sendPush,
-        notice: _ManagerFinancialNoticeData(
-          manager: widget.manager,
-          amount: amount,
-          kind: _ManagerFinancialNoticeKind.debtPayment,
-          notes: _notesController.text.trim(),
-          previousCredit: widget.manager.credit,
-          previousDebt: priorSas + priorOther,
-          currentCredit: widget.manager.credit,
-          currentDebt: newSas + newOther,
-          sasDebts: newSas,
-          otherDebts: newOther,
-        ),
-      );
-      if (!mounted) return;
-      Navigator.of(context).pop(true);
-    } else {
-      AppSnackBar.error(context, 'تعذّر تنفيذ التسديد');
-    }
-  }
-
-  /// Distributes [amount] across the manager's open custom debts
-  /// oldest-first by calling the per-debt payment endpoint sequentially.
-  /// Returns true once everything posted; partial-success is treated as
-  /// failure so the admin retries with the right remainder.
-  Future<bool> _payCustomFifo(double amount, String note) async {
-    final list = await ref.read(
-      managerDebtsListProvider(
-        DebtsFilterArgs(debtorAdminId: widget.manager.id),
-      ).future,
-    );
-    final open = list
-        .where((d) =>
-            d.status != ManagerDebtStatus.paid && d.remainingAmount > 0)
-        .toList()
-      ..sort((a, b) => a.debtDate.compareTo(b.debtDate));
-
-    double left = amount;
-    for (final d in open) {
-      if (left <= 0) break;
-      final pay = left > d.remainingAmount ? d.remainingAmount : left;
-      final res = await addManagerDebtPayment(
-        ref,
-        d.id,
-        amountPaid: pay,
-        note: note.isEmpty ? null : note,
-      );
-      if (!res.success) return false;
-      left -= pay;
-    }
-    return left <= 0.01;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final hasSas = widget.manager.debt > 0;
-    final hasCustom = widget.customDebtTotal > 0;
-    final showSelector = hasSas && hasCustom;
-
-    return _SheetScaffold(
-      title: 'تسديد دين',
-      icon: LucideIcons.banknote,
-      isLoading: _saving,
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              widget.manager.username,
-              style: const TextStyle(fontWeight: FontWeight.w700),
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 8),
-            _DebtSourcesBadges(
-              sasAmount: widget.manager.debt,
-              customAmount: widget.customDebtTotal,
-              highlightSas: _source == _PaySource.sas,
-              highlightCustom: _source == _PaySource.custom,
-            ),
-            const SizedBox(height: 12),
-            if (showSelector) ...[
-              SegmentedButton<_PaySource>(
-                segments: const [
-                  ButtonSegment(
-                    value: _PaySource.sas,
-                    label: Text('دين الساس'),
-                    icon: Icon(LucideIcons.banknote, size: 16),
-                  ),
-                  ButtonSegment(
-                    value: _PaySource.custom,
-                    label: Text('ديون أخرى'),
-                    icon: Icon(LucideIcons.receipt, size: 16),
-                  ),
-                ],
-                selected: {_source},
-                onSelectionChanged: (s) {
-                  setState(() {
-                    _source = s.first;
-                    _amountController.clear();
-                  });
-                },
-                style: const ButtonStyle(
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
-              const SizedBox(height: 10),
-            ],
-            TextFormField(
-              controller: _amountController,
-              keyboardType: TextInputType.number,
-              inputFormatters: [_ThousandsSeparatorInputFormatter()],
-              decoration: InputDecoration(
-                labelText: 'مبلغ التسديد',
-                helperText: _maxLabel,
-                prefixIcon: const Icon(LucideIcons.arrowRightLeft),
-                isDense: true,
-                suffixIcon: _amountController.text.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: const Icon(LucideIcons.x, size: 18),
-                        onPressed: () {
-                          _amountController.clear();
-                          setState(() {});
-                        },
-                      ),
-              ),
-              onChanged: (_) => setState(() {}),
-              validator: (v) {
-                final a = _parseFormattedAmount(v ?? '');
-                if (a == null || a <= 0) return 'أدخل مبلغًا صحيحًا';
-                if (a > _max + 0.01) return 'أكبر من المتاح';
-                return null;
-              },
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                TextButton.icon(
-                  onPressed: _saving
-                      ? null
-                      : () {
-                          final formatter = intl.NumberFormat('#,##0', 'en_US');
-                          _amountController.text = formatter.format(_max);
-                          setState(() {});
-                        },
-                  icon: const Icon(LucideIcons.checkCheck, size: 16),
-                  label: const Text('تسديد كامل المبلغ'),
-                ),
-              ],
-            ),
-            QuickAmountChips(
-              amounts: const [
-                10000.0, 25000.0, 50000.0, 100000.0, 250000.0,
-              ],
-              selectedAmount:
-                  _parseFormattedAmount(_amountController.text) ?? 0,
-              enabled: !_saving,
-              onSelected: (v) {
-                FocusScope.of(context).unfocus();
-                final current =
-                    _parseFormattedAmount(_amountController.text) ?? 0;
-                final total = current + v;
-                final capped = total > _max ? _max : total;
-                final formatter = intl.NumberFormat('#,##0', 'en_US');
-                _amountController.text = formatter.format(capped);
-                setState(() {});
-              },
-            ),
-            const SizedBox(height: 10),
-            TextFormField(
-              controller: _notesController,
-              maxLines: 1,
-              decoration: const InputDecoration(
-                labelText: 'ملاحظة (اختياري)',
-                prefixIcon: Icon(LucideIcons.fileText),
-                isDense: true,
-              ),
-            ),
-            const SizedBox(height: 6),
-            _NotifyToggles(
-              sendWhatsApp: _sendWa,
-              sendPush: _sendPush,
-              whatsAppDisabled: widget.manager.mobile.trim().isEmpty,
-              onWhatsAppChanged: (v) => setState(() => _sendWa = v),
-              onPushChanged: (v) => setState(() => _sendPush = v),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _saving
-                        ? null
-                        : () => Navigator.of(context).pop(false),
-                    child: const Text('إلغاء'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _saving ? null : _submit,
-                    icon: const Icon(LucideIcons.check),
-                    label: const Text('تسديد'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Two split badges — one per debt source — so the admin always sees
-/// at a glance which kind of debt each value belongs to:
-///   • دين الساس → warning yellow
-///   • ديون أخرى → info blue (سمائي)
-/// Renders only the sources whose amount is > 0; collapses to a single
-/// badge when only one side has debt. The optional [highlightSas] /
-/// [highlightCustom] flags add a thicker border around the currently
-/// selected source (used by the pay-sheet segmented control).
-class _DebtSourcesBadges extends StatelessWidget {
-  final double sasAmount;
-  final double customAmount;
-  final bool highlightSas;
-  final bool highlightCustom;
-  const _DebtSourcesBadges({
-    required this.sasAmount,
-    required this.customAmount,
-    this.highlightSas = false,
-    this.highlightCustom = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final hasSas = sasAmount > 0;
-    final hasCustom = customAmount > 0;
-    if (!hasSas && !hasCustom) {
-      return _DebtBadge(
-        label: 'لا يوجد دين',
-        amount: 0,
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-        icon: LucideIcons.circleCheck,
-      );
-    }
-    final children = <Widget>[
-      if (hasSas)
-        Expanded(
-          child: _DebtBadge(
-            label: 'دين الساس',
-            amount: sasAmount,
-            color: AppTheme.warningColor,
-            icon: LucideIcons.banknote,
-            highlighted: highlightSas,
-          ),
-        ),
-      if (hasSas && hasCustom) const SizedBox(width: 8),
-      if (hasCustom)
-        Expanded(
-          child: _DebtBadge(
-            label: 'ديون أخرى',
-            amount: customAmount,
-            color: AppTheme.infoColor,
-            icon: LucideIcons.receipt,
-            highlighted: highlightCustom,
-          ),
-        ),
-    ];
-    return Row(children: children);
-  }
-}
-
-class _DebtBadge extends StatelessWidget {
-  final String label;
-  final double amount;
-  final Color color;
-  final IconData icon;
-  final bool highlighted;
-  const _DebtBadge({
-    required this.label,
-    required this.amount,
-    required this.color,
-    required this.icon,
-    this.highlighted = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: highlighted ? 0.18 : 0.10),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: color.withValues(alpha: highlighted ? 0.65 : 0.30),
-          width: highlighted ? 1.5 : 1,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 14, color: color),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: color,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          Text(
-            _formatCurrency(amount),
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              color: color,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -3770,7 +2618,7 @@ class _SheetScaffold extends StatelessWidget {
                     ),
                     IconButton(
                       onPressed: () => Navigator.of(context).pop(false),
-                      icon: const Icon(LucideIcons.x),
+                      icon: const Icon(Icons.close_rounded),
                     ),
                   ],
                 ),
@@ -3940,6 +2788,45 @@ class _ManagersMiniStatChip extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ManagerActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback? onPressed;
+
+  const _ManagerActionButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: onPressed == null ? Colors.grey : color,
+        side: BorderSide(
+          color: (onPressed == null ? Colors.grey : color)
+              .withValues(alpha: 0.28),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        minimumSize: const Size(68, 32),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+        textStyle: const TextStyle(
+          fontFamily: AppTheme.fontFamily,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      onPressed: onPressed,
+      icon: Icon(icon, size: 18),
+      label: Text(label),
     );
   }
 }
@@ -4114,72 +3001,6 @@ class _ThousandsSeparatorInputFormatter extends TextInputFormatter {
     return TextEditingValue(
       text: formatted,
       selection: TextSelection.collapsed(offset: formatted.length),
-    );
-  }
-}
-
-class _ManagerSheetAction {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final _ManagerActionType type;
-  const _ManagerSheetAction({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.type,
-  });
-}
-
-class _ManagerSheetItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _ManagerSheetItem({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: color.withValues(alpha: 0.35),
-                  blurRadius: 8,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Icon(icon, color: Colors.white, size: 22),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
@@ -52,93 +51,64 @@ class ConnectionStatusCard extends ConsumerWidget {
       },
     );
 
-    final showGlobe = asyncSnap.maybeWhen(
-      data: (snap) => snap != null && snap.kind == DeviceKind.ubiquiti,
-      orElse: () => false,
-    );
-
-    final actions = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Config gear — always enabled, even during loading/error.
-        InkResponse(
-          onTap: () => _openConfig(context, ref),
-          radius: 16,
-          child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: Icon(LucideIcons.settings, size: 16, color: cs.onSurfaceVariant),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(Icons.router_rounded, size: 16, color: cs.primary),
+          const SizedBox(width: 8),
+          Text('الاتصال', style: labelStyle),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: valueChild,
+            ),
           ),
-        ),
-        // Globe — opens the Ubiquiti admin page (http://<ip>) in the
-        // system browser. Only rendered for NanoStation/Ubiquiti units;
-        // ONTs don't serve a stock HTTP UI the admin would recognise.
-        if (showGlobe)
+          // Config gear — always enabled, even during loading/error.
           InkResponse(
-            onTap: () => _openInBrowser(context, ref),
+            onTap: () => _openConfig(context, ref),
             radius: 16,
             child: Padding(
               padding: const EdgeInsets.all(4),
-              child: Icon(LucideIcons.globe, size: 16, color: cs.primary),
+              child: Icon(Icons.settings_outlined, size: 16, color: cs.onSurfaceVariant),
             ),
           ),
-        // Refresh — disabled while a probe is in flight so the admin
-        // doesn't queue duplicate requests against the router.
-        InkResponse(
-          onTap: isLoading
-              ? null
-              : () => ref.invalidate(deviceStatusProvider(args)),
-          radius: 16,
-          child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: Icon(
-              LucideIcons.refreshCw,
-              size: 16,
-              color: isLoading
-                  ? cs.onSurfaceVariant.withValues(alpha: 0.35)
-                  : cs.onSurfaceVariant,
-            ),
-          ),
-        ),
-      ],
-    );
-
-    final headerLeading = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(LucideIcons.router, size: 16, color: cs.primary),
-        const SizedBox(width: 8),
-        Text('الاتصال', style: labelStyle),
-      ],
-    );
-
-    // Two-row layout (per user request):
-    //   Row 1 — icon + label + the metric chips ("info on top")
-    //   Row 2 — action icons aligned to the visual LEFT (RTL end)
-    // Action buttons used to share the same line as the chips, which
-    // crowded the row on most phones. Splitting them gives the chips
-    // full breathing room and the actions a predictable position.
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              headerLeading,
-              const SizedBox(width: 8),
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: valueChild,
-                ),
+          // Globe — opens the Ubiquiti admin page (http://<ip>) in the
+          // system browser. Only rendered when the probe came back
+          // healthy AND the device is a NanoStation/Ubiquiti unit, so
+          // admins can't tap it for an ONT (those don't serve a stock
+          // HTTP UI the admin would recognise).
+          if (asyncSnap.maybeWhen(
+            data: (snap) => snap != null && snap.kind == DeviceKind.ubiquiti,
+            orElse: () => false,
+          ))
+            InkResponse(
+              onTap: () => _openInBrowser(context, ref),
+              radius: 16,
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(Icons.public, size: 16, color: cs.primary),
               ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: actions,
+            ),
+          // Refresh — disabled while a probe is in flight so the admin
+          // doesn't queue duplicate requests against the router.
+          InkResponse(
+            onTap: isLoading
+                ? null
+                : () => ref.invalidate(deviceStatusProvider(args)),
+            radius: 16,
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Icon(
+                Icons.refresh_rounded,
+                size: 16,
+                color: isLoading
+                    ? cs.onSurfaceVariant.withValues(alpha: 0.35)
+                    : cs.onSurfaceVariant,
+              ),
+            ),
           ),
         ],
       ),
@@ -335,17 +305,9 @@ class _MetricsInlineRow extends StatelessWidget {
             decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           const SizedBox(width: 4),
-          Text(label,
-              style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  color: cs.onSurfaceVariant)),
+          Text(label, style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant)),
           const SizedBox(width: 3),
-          Text(value,
-              style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w800,
-                  color: color)),
+          Text(value, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: color)),
         ],
       ),
     );

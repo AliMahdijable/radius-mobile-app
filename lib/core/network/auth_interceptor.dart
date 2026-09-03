@@ -3,7 +3,6 @@ import 'package:dio/dio.dart';
 import '../services/storage_service.dart';
 import '../services/session_refresh_service.dart';
 import '../services/session_events.dart';
-import '../../widgets/app_snackbar.dart';
 
 class AuthInterceptor extends Interceptor {
   final StorageService _storage;
@@ -21,23 +20,12 @@ class AuthInterceptor extends Interceptor {
       await SessionRefreshService.ensureValidSession(_storage);
     }
 
-    // التمييز بين backend Dio و sas4 Dio بحسب الـbaseUrl. الموظف عنده JWT
-    // كـtoken رئيسي + SAS4 token مخزَّن منفصل للاستدعاءات المباشرة لـSAS4.
-    final isSas4Direct = options.baseUrl.contains('reseller-supernet.net') ||
-        options.uri.host.contains('reseller-supernet.net');
-    String? token;
-    if (isSas4Direct) {
-      // استدعاء مباشر لـSAS4 — نستخدم SAS4 token المخزَّن. للأدمن العادي
-      // هو نفسه الـtoken الرئيسي. للموظف هو توكن الأب.
-      token = await _storage.getSas4Token() ?? await _storage.getToken();
-    } else {
-      token = await _storage.getToken();
-    }
+    final token = await _storage.getToken();
     if (token != null) {
       options.headers['Authorization'] = 'Bearer $token';
       options.headers['x-auth-token'] = token;
       dev.log(
-        'REQUEST: ${options.method} ${options.uri} [Token: ${token.substring(0, 20)}... isSas4=$isSas4Direct]',
+        'REQUEST: ${options.method} ${options.uri} [Token: ${token.substring(0, 20)}...]',
         name: 'HTTP',
       );
     } else {
@@ -66,19 +54,6 @@ class AuthInterceptor extends Interceptor {
       name: 'HTTP',
     );
 
-    // 403 من backend مع code=PERMISSION_DENIED → الموظف ما عنده صلاحية.
-    // AppSnackBar.errorGlobal يستعمل appNavigatorKey فما يحتاج context.
-    if (err.response?.statusCode == 403) {
-      final data = err.response?.data;
-      if (data is Map && data['code'] == 'PERMISSION_DENIED') {
-        final msg = (data['message']?.toString() ?? 'لا تملك صلاحية لهذه العملية');
-        try {
-          AppSnackBar.errorGlobal(msg);
-        } catch (_) { /* ignore */ }
-      }
-      return handler.next(err);
-    }
-
     if (err.response?.statusCode != 401) {
       return handler.next(err);
     }
@@ -96,16 +71,8 @@ class AuthInterceptor extends Interceptor {
 
       if (refreshResult != null) {
         final retryOptions = err.requestOptions;
-        // اختار التوكن المناسب: استدعاء SAS4 مباشر يستعمل sas4Token الجديد،
-        // backend يستعمل JWT/الـtoken العادي. SessionRefreshService الآن
-        // يحدّث sas4Token بالستوريج، فنقرأ الفريش منه.
-        final isSas4Direct = retryOptions.baseUrl.contains('reseller-supernet.net') ||
-            retryOptions.uri.host.contains('reseller-supernet.net');
-        final retryToken = isSas4Direct
-            ? (await _storage.getSas4Token() ?? refreshResult.token)
-            : refreshResult.token;
-        retryOptions.headers['Authorization'] = 'Bearer $retryToken';
-        retryOptions.headers['x-auth-token'] = retryToken;
+        retryOptions.headers['Authorization'] = 'Bearer ${refreshResult.token}';
+        retryOptions.headers['x-auth-token'] = refreshResult.token;
 
         final retryResponse = await _dio.fetch(retryOptions);
         return handler.resolve(retryResponse);

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
@@ -127,89 +126,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     }
   }
 
-  /// شاشة سبلاش بسيطة (نفس هوية شاشة الدخول) تُعرض أثناء فحص الجلسة وتسجيل
-  /// الدخول التلقائي. اللوغو + اسم التطبيق + مؤشّر تحميل.
-  Widget _buildSplash() {
-    return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Colors.white,
-              Color(0xFFF0F5F3),
-              Color(0xFFE2F1E7),
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(26),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.primary.withValues(alpha: 0.15),
-                        blurRadius: 24,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  padding: const EdgeInsets.all(16),
-                  child: Image.asset(
-                    'assets/images/myservice_raduis.png',
-                    fit: BoxFit.contain,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  'MyServices Radius',
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF1A2E2B),
-                    letterSpacing: 0.3,
-                  ),
-                ),
-                const SizedBox(height: 28),
-                SizedBox(
-                  width: 26,
-                  height: 26,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.6,
-                    valueColor:
-                        AlwaysStoppedAnimation<Color>(AppTheme.primary),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-
-    // أثناء فحص الجلسة / تسجيل الدخول التلقائي (status = initial/loading) نعرض
-    // سبلاش بدل نموذج الدخول، حتى لا يومض النموذج لجزء من الثانية قبل ما
-    // يقرّر النظام (مسجَّل تلقائياً أو يحتاج إدخال). بمجرّد ما يصير
-    // authenticated يحوّل الـrouter للرئيسية، ولو unauthenticated يظهر النموذج.
-    final authStatus = ref.watch(authProvider.select((s) => s.status));
-    if (authStatus == AuthStatus.initial || authStatus == AuthStatus.loading) {
-      return _buildSplash();
-    }
 
     return Scaffold(
       body: Container(
@@ -328,7 +247,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                 decoration: InputDecoration(
                                   labelText: 'اسم المستخدم',
                                   prefixIcon: Icon(
-                                    LucideIcons.user,
+                                    Icons.person_outline_rounded,
                                     color: AppTheme.secondary,
                                     size: 22,
                                   ),
@@ -356,7 +275,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                 decoration: InputDecoration(
                                   labelText: 'كلمة المرور',
                                   prefixIcon: Icon(
-                                    LucideIcons.lock,
+                                    Icons.lock_outline_rounded,
                                     color: AppTheme.secondary,
                                     size: 22,
                                   ),
@@ -364,8 +283,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                   suffixIcon: IconButton(
                                     icon: Icon(
                                       _obscurePassword
-                                          ? LucideIcons.eyeOff
-                                          : LucideIcons.eye,
+                                          ? Icons.visibility_off_outlined
+                                          : Icons.visibility_outlined,
                                       color: Colors.grey.shade400,
                                       size: 20,
                                     ),
@@ -443,7 +362,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                         child: Row(
                                           children: [
                                             const Icon(
-                                              LucideIcons.circleAlert,
+                                              Icons.error_outline_rounded,
                                               color: Color(0xFFDC2626),
                                               size: 18,
                                             ),
@@ -508,41 +427,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                           ),
                         ),
                       ),
-                      const SizedBox(height: 24),
-
-                      // فوتر — حقوق + نسخة. نفس صياغة v2 web (الإصدار الثاني).
-                      Center(
-                        child: Column(
-                          children: [
-                            Text(
-                              '© 2026 — جميع الحقوق محفوظة لمجموعة خدماتي',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 11,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurface
-                                    .withValues(alpha: 0.5),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'MyServices • إدارة المشتركين',
-                              style: TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .primary
-                                    .withValues(alpha: 0.7),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 40),
                     ],
                   ),
                 ),

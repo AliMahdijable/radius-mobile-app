@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/admin_device_defaults.dart';
@@ -84,7 +83,7 @@ class _DeviceDefaultsScreenState extends ConsumerState<DeviceDefaultsScreen> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(LucideIcons.info, size: 18, color: cs.primary),
+                        Icon(Icons.info_outline, size: 18, color: cs.primary),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -102,7 +101,7 @@ class _DeviceDefaultsScreenState extends ConsumerState<DeviceDefaultsScreen> {
                   const SizedBox(height: 20),
                   _sectionCard(
                     context,
-                    icon: LucideIcons.radio,
+                    icon: Icons.sensors,
                     title: 'أجهزة الألياف الضوئية (ONT)',
                     subtitle: 'Huawei HG8145C وما شابه',
                     children: [
@@ -116,7 +115,7 @@ class _DeviceDefaultsScreenState extends ConsumerState<DeviceDefaultsScreen> {
                   const SizedBox(height: 12),
                   _sectionCard(
                     context,
-                    icon: LucideIcons.wifi,
+                    icon: Icons.wifi,
                     title: 'أجهزة Ubiquiti',
                     subtitle: 'NanoStation / LiteBeam / airCube …',
                     children: [
@@ -134,7 +133,7 @@ class _DeviceDefaultsScreenState extends ConsumerState<DeviceDefaultsScreen> {
                       onPressed: _saving ? null : _save,
                       icon: _saving
                           ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(LucideIcons.save),
+                          : const Icon(Icons.save),
                       label: Text(_saving ? 'جاري الحفظ...' : 'حفظ'),
                     ),
                   ),
@@ -207,7 +206,7 @@ class _DeviceDefaultsScreenState extends ConsumerState<DeviceDefaultsScreen> {
         suffixIcon: onToggleObscure == null
             ? null
             : IconButton(
-                icon: Icon(obscure ? LucideIcons.eye : LucideIcons.eyeOff, size: 18),
+                icon: Icon(obscure ? Icons.visibility : Icons.visibility_off, size: 18),
                 onPressed: onToggleObscure,
               ),
       ),

@@ -23,13 +23,6 @@ class SubscriberModel {
   final int? downloadBytes;
   final int? uploadBytes;
   final String? deviceVendor;
-  /// مبلغ الخصم النشط للمشترك (0 لو ما عندو). الـbackend يعطيه عبر
-  /// /api/subscribers/with-phones من جدول subscriber_discounts.
-  final double? discount;
-  /// وقت آخر اتصال (آخر جلسة) للمشترك غير المتصل — يُجلب عند الطلب من
-  /// SAS4 /index/UserSessions. نَص datetime كما يرجّعه SAS (مثل
-  /// "2026-05-19 14:30:00"). يبقى null للمتصل أو لو ما عنده جلسة سابقة.
-  final String? lastConnection;
 
   const SubscriberModel({
     this.idx,
@@ -56,12 +49,7 @@ class SubscriberModel {
     this.downloadBytes,
     this.uploadBytes,
     this.deviceVendor,
-    this.discount,
-    this.lastConnection,
   });
-
-  /// هل عند المشترك خصم نشط؟
-  bool get hasDiscount => discount != null && discount! > 0;
 
   String get fullName => '$firstname $lastname'.trim();
 
@@ -142,13 +130,9 @@ class SubscriberModel {
 
   bool get isEnabled => enabled == null || enabled == 1;
 
-  bool get isDisabled => !isEnabled;
-
   bool get isOnline => isOnlineFlag == true;
 
-  // غير متصل: ليس متصل وليس منتهي. المعطّل قطعاً غير متصل فيُضمّ هنا.
-  // (المعطّل له فلتر منفصل لو المدير يحتاج فقط المعطّلين.)
-  bool get isOffline => !isOnline && !isExpired;
+  bool get isOffline => isActive && isEnabled && !isOnline;
 
   factory SubscriberModel.fromJson(Map<String, dynamic> json) {
     final profileDetails = json['profile_details'];
@@ -196,14 +180,6 @@ class SubscriberModel {
           ? json['acctinputoctets']
           : int.tryParse(json['acctinputoctets']?.toString() ?? ''),
       deviceVendor: json['oui']?.toString(),
-      discount: json['discount'] is num
-          ? (json['discount'] as num).toDouble()
-          : double.tryParse(json['discount']?.toString() ?? ''),
-      lastConnection: (json['last_connection'] ??
-              json['lastConnection'] ??
-              json['acctstoptime'] ??
-              json['acctstarttime'])
-          ?.toString(),
     );
   }
 
@@ -248,12 +224,7 @@ class PackageModel {
     this.expirationAmount,
   });
 
-  /// السعر اللي يدفعه المشترك النهائي (priceList.user_price بـSAS4).
   String? get displayPrice => userPrice ?? price;
-
-  /// سعر الشراء/الكلفة من الأدمن (priceList.price بـSAS4) — للعرض
-  /// في نماذج الإضافة/التعديل حتى يعرف الأدمن كم يدفع لكل باقة.
-  String? get costPrice => price ?? userPrice;
 
   bool get isMonthly =>
       type == null || type == 'monthly' || type!.isEmpty;

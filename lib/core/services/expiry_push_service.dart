@@ -62,13 +62,6 @@ class ExpiryPushService {
 
   static Future<void> init() async {
     if (_initialized) return;
-    // Local notifications على Windows ممكن (flutter_local_notifications v18)
-    // لكن WorkManager (الجدولة بالخلفية) لا يدعم desktop. نتجاوز كلياً
-    // على desktop — التطبيق يفتح ويعرض تنبيهات in-app بدل OS notifications.
-    if (!Platform.isAndroid && !Platform.isIOS) {
-      _initialized = true;
-      return;
-    }
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosInit = DarwinInitializationSettings();
     await _fln.initialize(
@@ -91,12 +84,6 @@ class ExpiryPushService {
 
   static Future<void> ensureWorkmanagerInitialized() async {
     if (_workmanagerInitialized) return;
-    // WorkManager لا يدعم Windows/macOS/Linux. على desktop التطبيق يفتح
-    // مستمراً، فلا حاجة لـbackground task scheduler.
-    if (!Platform.isAndroid && !Platform.isIOS) {
-      _workmanagerInitialized = true;
-      return;
-    }
     await Workmanager().initialize(
       expiryPushCallbackDispatcher,
       isInDebugMode: kDebugMode,

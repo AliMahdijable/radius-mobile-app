@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:dio/dio.dart';
@@ -361,7 +360,7 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
             ),
             child: Row(
               children: [
-                Icon(LucideIcons.triangleAlert,
+                Icon(Icons.warning_amber_rounded,
                     color: AppTheme.warningColor, size: 28),
                 const SizedBox(width: 12),
                 Expanded(
@@ -386,7 +385,7 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
               height: AppTheme.actionButtonHeight,
               child: ElevatedButton.icon(
                 onPressed: (_isLoading || _isBulkApplying) ? null : _pickFile,
-                icon: const Icon(LucideIcons.upload),
+                icon: const Icon(Icons.file_upload_rounded),
                 label: Text(_fileName ?? 'اختر ملف CSV'),
               ),
             ),
@@ -400,7 +399,7 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  Icon(LucideIcons.table,
+                  Icon(Icons.table_chart_rounded,
                       color: theme.colorScheme.primary),
                   const SizedBox(width: 8),
                   Text(
@@ -452,7 +451,7 @@ class _DebtImportScreenState extends ConsumerState<DebtImportScreen> {
                       height: AppTheme.actionButtonHeight,
                       child: ElevatedButton.icon(
                         onPressed: _isBulkApplying ? null : _applyAllMatched,
-                        icon: const Icon(LucideIcons.checkCheck),
+                        icon: const Icon(Icons.done_all_rounded),
                         label: Text(
                           _isBulkApplying
                               ? 'جاري الإضافة...'
@@ -611,9 +610,9 @@ class _ImportRowCard extends StatelessWidget {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           else if (isSuccess)
-            const Icon(LucideIcons.circleCheck, color: AppTheme.successColor, size: 28)
+            const Icon(Icons.check_circle, color: AppTheme.successColor, size: 28)
           else if (isFailed)
-            const Icon(LucideIcons.circleAlert, color: AppTheme.dangerColor, size: 28)
+            const Icon(Icons.error, color: AppTheme.dangerColor, size: 28)
           else if (canApply)
             SizedBox(
               height: 42,
@@ -627,7 +626,7 @@ class _ImportRowCard extends StatelessWidget {
               ),
             )
           else if (isNotFound)
-            Icon(LucideIcons.userX, color: Colors.grey.shade400, size: 24),
+            Icon(Icons.person_off, color: Colors.grey.shade400, size: 24),
         ],
       ),
     );

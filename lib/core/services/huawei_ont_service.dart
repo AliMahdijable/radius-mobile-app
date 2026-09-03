@@ -10,12 +10,8 @@ class HuaweiOntService {
   static Dio _buildDio(String baseUrl) {
     final dio = Dio(BaseOptions(
       baseUrl: baseUrl,
-      // Aggressive timeouts: a reachable Huawei ONT typically responds
-      // in well under a second on the management LAN. 4s is generous
-      // enough to absorb a momentary blip, short enough that the bulk
-      // probe wave doesn't stall on dead IPs.
-      connectTimeout: const Duration(seconds: 4),
-      receiveTimeout: const Duration(seconds: 4),
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 15),
       validateStatus: (_) => true,
       followRedirects: false,
       headers: {'Accept': 'text/html,application/xhtml+xml,*/*'},

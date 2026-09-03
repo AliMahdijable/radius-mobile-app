@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:intl/intl.dart' as intl;
 import '../constants/app_constants.dart';
 
@@ -10,13 +9,6 @@ class AppHelpers {
   static DateTime toBaghdadTime(DateTime utcTime) {
     return utcTime.add(const Duration(hours: AppConstants.baghdadUtcOffset));
   }
-
-  /// المسافة السفلية لأي قائمة قابلة للتمرير تقع تحت زر إضافة عائم
-  /// (FloatingActionButton)، بحيث آخر عنصر دائماً يتزحلق فوق الزر ولا ينخفي
-  /// تحته — حتى على الشاشات الصغيرة. نضيف شريط الأمان السفلي (home indicator
-  /// / gesture nav) لأن الزر يطفو فوقه. 88 = زر (56) + هامشه (16) + تنفّس (16).
-  static double fabListBottom(BuildContext ctx) =>
-      88 + MediaQuery.of(ctx).viewPadding.bottom;
 
   /// Format date to Arabic-friendly format (24h)
   static String formatDate(String? dateStr) {
@@ -106,34 +98,6 @@ class AppHelpers {
     return formatDate(dateStr);
   }
 
-  /// وقت نسبي عربي granular: "الآن / منذ X ثانية / دقيقة / ساعة / يوم / شهر /
-  /// سنة". يفسّر نصوص SAS الخام (مثل "2026-05-21 13:03:00") كوقت بغداد عبر
-  /// تثبيتها بـ+03:00 — فيظهر الفرق صحيحاً مهما كانت منطقة الجهاز. يرجّع ''
-  /// لو النص فارغ/غير صالح (حتى يقدر النداء يتعامل معه).
-  static String formatRelativeArabic(String? dateStr) {
-    if (dateStr == null || dateStr.trim().isEmpty) return '';
-    final s = dateStr.trim();
-    final dt = (s.contains('T') || s.contains('+') || s.endsWith('Z'))
-        ? DateTime.tryParse(s)
-        : DateTime.tryParse('${s.replaceAll(' ', 'T')}+03:00');
-    if (dt == null) return '';
-    var diff = DateTime.now().difference(dt);
-    if (diff.isNegative) diff = Duration.zero;
-    final sec = diff.inSeconds;
-    if (sec < 10) return 'الآن';
-    if (sec < 60) return 'منذ $sec ثانية';
-    final mins = diff.inMinutes;
-    if (mins < 60) return 'منذ $mins دقيقة';
-    final hrs = diff.inHours;
-    if (hrs < 24) return 'منذ $hrs ساعة';
-    final days = diff.inDays;
-    if (days < 30) return 'منذ $days يوم';
-    final months = (days / 30).floor();
-    if (months < 12) return 'منذ $months شهر';
-    final years = (days / 365).floor();
-    return 'منذ $years سنة';
-  }
-
   /// Format money with IQD currency
   static String formatMoney(dynamic amount) {
     if (amount == null) return '0';
@@ -218,25 +182,25 @@ class AppHelpers {
   static IconData getMessageTypeIcon(String type) {
     switch (type) {
       case MessageTypes.debtReminder:
-        return LucideIcons.creditCard;
+        return Icons.credit_card;
       case MessageTypes.expiryWarning:
-        return LucideIcons.triangleAlert;
+        return Icons.warning_amber;
       case MessageTypes.serviceEnd:
-        return LucideIcons.calendarOff;
+        return Icons.event_busy;
       case MessageTypes.broadcast:
-        return LucideIcons.megaphone;
+        return Icons.campaign;
       case MessageTypes.manual:
-        return LucideIcons.mousePointerClick;
+        return Icons.touch_app;
       case MessageTypes.activationNotice:
-        return LucideIcons.circleCheck;
+        return Icons.check_circle;
       case MessageTypes.payment:
-        return LucideIcons.banknote;
+        return Icons.payments;
       case MessageTypes.welcomeMessage:
-        return LucideIcons.handHeart;
+        return Icons.waving_hand;
       case MessageTypes.renewal:
-        return LucideIcons.repeat;
+        return Icons.autorenew;
       default:
-        return LucideIcons.messageCircle;
+        return Icons.message;
     }
   }
 

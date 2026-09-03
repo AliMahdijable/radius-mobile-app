@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import '../../core/theme/app_theme.dart';
@@ -7,11 +6,7 @@ import '../../core/utils/helpers.dart';
 import '../../core/utils/bottom_sheet_utils.dart';
 import '../../core/utils/csv_export.dart';
 import '../../providers/reports_provider.dart';
-import '../../providers/subscribers_provider.dart';
 import '../../widgets/app_snackbar.dart';
-import '../../widgets/date_range_picker_row.dart';
-import '../../widgets/employee_filter_dropdown.dart';
-import '../../widgets/kpi_card.dart';
 import '../../widgets/report_controls.dart';
 
 class FinancialTab extends ConsumerStatefulWidget {
@@ -28,7 +23,6 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
   bool _loaded = false;
   String _managerId = 'all';
   String _userManagerId = 'all';
-  String _employeeId = 'all';
   String _searchQuery = '';
   final Set<String> _selectedActionTypes = {};
   int _logsPage = 1;
@@ -73,7 +67,6 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
           managerId: _managerId,
           actionTypes: _selectedActionTypes.isNotEmpty ? _selectedActionTypes.toList() : null,
           userManager: _userManagerId != 'all' ? _userManagerId : null,
-          employeeId: _employeeId,
         );
     if (mounted) setState(() => _loaded = true);
   }
@@ -120,45 +113,20 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
     }
 
     final kpis = state.kpis;
-    // ديون المشتركين الحالية (snapshot) — نفس مصدر الداشبورد. مش flow،
-    // فلا يعتمد على فلتر التاريخ. يستفيد من القائمة المُحمَّلة بالـsubscribersProvider
-    // (لو الأدمن دخل الداشبورد مرة وحدة، تكون cached).
-    final subsList = ref.watch(subscribersProvider).subscribers;
-    double subscribersDebtOutstanding = 0;
-    int debtorsCount = 0;
-    for (final s in subsList) {
-      final raw = s.notes ?? '';
-      final cleaned = raw.replaceAll(RegExp(r'[^0-9.\-]'), '');
-      final n = double.tryParse(cleaned);
-      if (n != null && n < 0) {
-        debtorsCount++;
-        subscribersDebtOutstanding += n.abs();
-      }
-    }
-    // النقد الفعلي المُستلم (cash basis) — تعريف الأدمن للربح:
-    // "الربح = تفعيل نقدي + تسديد دين − صرفيات".
-    final debtCollections = _num(kpis['payments_sum']) +
+    final collections = _num(kpis['payments_sum']) +
         _num(kpis['debt_pay_sum']) +
-        _num(kpis['balance_deduct_sum']);
-    final cashActivations = _num(kpis['activate_cash_sum']);
-    final cashCollected = cashActivations + debtCollections;
-    // الإيراد المستحق غير المحصّل (تفعيل غير نقدي + ديون مضافة).
-    // يتحول لنقد لما يتسدد الدين بفترات لاحقة — ما يدخل بالربح الآن.
-    final nonCashActivations = _num(kpis['activate_non_cash_sum']);
-    final receivable = nonCashActivations + _num(kpis['balance_add_sum']);
+        _num(kpis['balance_deduct_sum']) +
+        _num(kpis['activate_cash_sum']);
+    final debts =
+        _num(kpis['balance_add_sum']) + _num(kpis['activate_non_cash_sum']);
     final expenses = _num(kpis['expenses_sum']);
-    // Outstanding inter-admin debts (snapshot — للعرض فقط، لا يطرح من الربح)
-    final managerDebtsCustom = _num(kpis['manager_debts_outstanding']);
-    final sasManagerDebtSum = state.managers.fold<double>(
-      0,
-      (sum, m) => sum + (m.debt > 0 ? m.debt : 0),
-    );
-    final managerDebtsOutstanding = managerDebtsCustom + sasManagerDebtSum;
-    // الربح = نقد − صرفيات (cash basis، بدون snapshot).
-    final netProfit = cashCollected - expenses;
-    final activationsCount = _num(kpis['activations_count']);
-    final extendCount = _num(kpis['extend_count']);
-    final activationsTotal = activationsCount + extendCount;
+    // Outstanding inter-admin debts (parent admin is owed this much by
+    // sub-admins). Reduces effective cash position same way subscriber
+    // debts do — mirror the web formula.
+    final managerDebtsOutstanding = _num(kpis['manager_debts_outstanding']);
+    final netProfit = collections - debts - expenses - managerDebtsOutstanding;
+    final activationsTotal =
+        _num(kpis['activations_count']) + _num(kpis['extend_count']);
 
     final rawLogs = state.recentLogs;
     final allLogs = _searchQuery.isEmpty
@@ -188,12 +156,12 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
             onChanged: (v) => setState(() { _searchQuery = v; _logsPage = 1; }),
             decoration: InputDecoration(
               hintText: 'بحث باسم المشترك أو المدير...',
-              prefixIcon: const Icon(LucideIcons.search, size: 20),
+              prefixIcon: const Icon(Icons.search, size: 20),
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
               suffixIcon: _searchQuery.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(LucideIcons.x, size: 18),
+                      icon: const Icon(Icons.clear, size: 18),
                       onPressed: () => setState(() { _searchQuery = ''; _logsPage = 1; }),
                     )
                   : null,
@@ -213,28 +181,28 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(children: [
-                    Icon(LucideIcons.calendarRange, size: 14, color: theme.colorScheme.primary),
+                    Icon(Icons.date_range, size: 14, color: theme.colorScheme.primary),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text('$_dateFrom — $_dateTo',
                           style: const TextStyle(fontSize: 11),
                           overflow: TextOverflow.ellipsis),
                     ),
-                    Icon(LucideIcons.slidersHorizontal, size: 14,
+                    Icon(Icons.tune, size: 14,
                         color: theme.colorScheme.onSurface.withValues(alpha: .4)),
                   ]),
                 ),
               ),
             ),
             const SizedBox(width: 6),
-            _ActionBtn(LucideIcons.download, 'تصدير', _exportCsv),
+            _ActionBtn(Icons.download_rounded, 'تصدير', _exportCsv),
             const SizedBox(width: 4),
-            _ActionBtn(LucideIcons.refreshCw, 'تحديث', _load),
+            _ActionBtn(Icons.refresh_rounded, 'تحديث', _load),
           ]),
           const SizedBox(height: 8),
 
           // Active filter chips
-          if (_managerId != 'all' || _userManagerId != 'all' || _employeeId != 'all' || _selectedActionTypes.isNotEmpty)
+          if (_managerId != 'all' || _userManagerId != 'all' || _selectedActionTypes.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Wrap(spacing: 6, runSpacing: 4, children: [
@@ -248,11 +216,6 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
                     label: 'مدير المستخدم: $_userManagerId',
                     onRemove: () { setState(() => _userManagerId = 'all'); _load(); },
                   ),
-                if (_employeeId != 'all')
-                  _RemovableChip(
-                    label: 'موظف محدد',
-                    onRemove: () { setState(() => _employeeId = 'all'); _load(); },
-                  ),
                 ..._selectedActionTypes.map((t) {
                   final lbl = _actionTypeOptions.firstWhere((o) => o['value'] == t, orElse: () => {'label': t})['label']!;
                   return _RemovableChip(
@@ -263,75 +226,57 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
               ]),
             ),
 
-          // KPIs — كل الكارتات في grid واحد (نشاط الفترة + لقطة snapshot).
-          // الـlabel يميّز "الديون الجديدة" (flow) عن "ديون المشتركين الحالية"
-          // (snapshot)، فلا حاجة لـsection headers منفصلة. كارت snapshot يظهر
-          // دائماً حتى لو 0 — رسالة "كل الديون مُحصَّلة ✓" مهمة بحد ذاتها.
+          // KPI cards — built dynamically so we only render rows that
+          // have meaningful data. Empty categories stay hidden instead
+          // of taking grid space with "0 IQD" cards. Net profit is
+          // always present as the hero summary.
           _KpiGrid(
             items: [
-              if (cashCollected > 0)
+              if (collections > 0)
                 _KpiItem(
-                  label: 'النقد المُستلم',
-                  value: AppHelpers.formatMoney(cashCollected),
-                  sub:
-                      'تفعيل ${AppHelpers.formatMoney(cashActivations)} • ديون ${AppHelpers.formatMoney(debtCollections)}',
-                  icon: LucideIcons.wallet,
-                  accent: KpiAccent.emerald,
+                  label: 'إجمالي التحصيلات',
+                  value: AppHelpers.formatMoney(collections),
+                  icon: Icons.trending_up_rounded,
+                  colors: const [Color(0xFF10b981), Color(0xFF059669)],
                 ),
-              if (nonCashActivations > 0)
+              if (activationsTotal > 0)
                 _KpiItem(
-                  label: 'الديون الجديدة',
-                  value: AppHelpers.formatMoney(nonCashActivations),
-                  sub: 'من تفعيلات غير نقدية — ستُحصَّل لاحقاً',
-                  icon: LucideIcons.triangleAlert,
-                  accent: KpiAccent.amber,
+                  label: 'تفعيل + تمديد',
+                  value: activationsTotal.toInt().toString(),
+                  icon: Icons.check_circle_rounded,
+                  colors: const [Color(0xFFf59e0b), Color(0xFFd97706)],
+                ),
+              if (debts > 0)
+                _KpiItem(
+                  label: 'إجمالي الديون',
+                  value: AppHelpers.formatMoney(debts),
+                  icon: Icons.payments_rounded,
+                  colors: const [Color(0xFF16a34a), Color(0xFF0f9d58)],
                 ),
               if (expenses > 0)
                 _KpiItem(
                   label: 'الصرفيات',
                   value: AppHelpers.formatMoney(expenses),
-                  sub: '${_num(kpis['expenses_count']).toInt()} صرفية',
-                  icon: LucideIcons.receipt,
-                  accent: KpiAccent.rose,
-                ),
-              if (activationsTotal > 0)
-                _KpiItem(
-                  label: 'العمليات',
-                  value: activationsTotal.toInt().toString(),
-                  sub: 'تفعيل ${activationsCount.toInt()} • تمديد ${extendCount.toInt()}',
-                  icon: LucideIcons.zap,
-                  accent: KpiAccent.primary,
-                ),
-              if (subscribersDebtOutstanding > 0)
-                _KpiItem(
-                  label: 'ديون المشتركين الحالية',
-                  value: AppHelpers.formatMoney(subscribersDebtOutstanding),
-                  sub: '$debtorsCount مدين من أصل ${subsList.length}',
-                  icon: LucideIcons.wallet,
-                  accent: KpiAccent.amber,
+                  icon: Icons.account_balance_wallet_rounded,
+                  colors: const [Color(0xFFef4444), Color(0xFFdc2626)],
                 ),
               if (managerDebtsOutstanding > 0)
                 _KpiItem(
                   label: 'ديون المدراء',
                   value: AppHelpers.formatMoney(managerDebtsOutstanding),
-                  sub: 'snapshot — مستحق على المدراء الفرعيين',
-                  icon: LucideIcons.userCheck,
-                  accent: KpiAccent.amber,
+                  icon: Icons.assignment_ind_rounded,
+                  colors: const [Color(0xFFf59e0b), Color(0xFFb45309)],
                 ),
             ],
           ),
           const SizedBox(height: 12),
-          // الربح/الخسارة hero — أخضر للموجب، أحمر للسالب. يبيّن من أين
-          // أتى الرقم (نقد − صرفيات) وملاحظة بالإيراد المستحق إن وُجد.
-          KpiCard(
-            label: netProfit >= 0 ? 'الربح الصافي للفترة' : 'الخسارة الصافية للفترة',
-            value: (netProfit < 0 ? '- ' : '') + AppHelpers.formatMoney(netProfit.abs()),
-            sub: nonCashActivations > 0
-                ? 'نقد ${AppHelpers.formatMoney(cashCollected)} − صرفيات ${AppHelpers.formatMoney(expenses)} • +${AppHelpers.formatMoney(nonCashActivations)} دين جديد سيُحصَّل لاحقاً'
-                : 'نقد ${AppHelpers.formatMoney(cashCollected)} − صرفيات ${AppHelpers.formatMoney(expenses)}',
-            icon: LucideIcons.trendingUp,
-            accent: netProfit >= 0 ? KpiAccent.emerald : KpiAccent.rose,
-            hero: true,
+          // Net profit hero — always shown even when 0 because it's the
+          // bottom line number the admin opens the screen to see.
+          _KpiHero(
+            label: 'صافي الربح',
+            value: AppHelpers.formatMoney(netProfit),
+            icon: Icons.savings_rounded,
+            colors: const [Color(0xFF0ea5e9), Color(0xFF0284c7)],
           ),
           const SizedBox(height: 20),
 
@@ -384,7 +329,6 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
         String to = _dateTo;
         String mgr = _managerId;
         String userMgr = _userManagerId;
-        String emp = _employeeId;
         final types = Set<String>.from(_selectedActionTypes);
         return StatefulBuilder(builder: (ctx, setSheet) {
           return SafeArea(
@@ -413,13 +357,6 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
                     _qc('آخر 30 يوم', () { final n = DateTime.now(); setSheet(() { to = intl.DateFormat('yyyy-MM-dd').format(n); from = intl.DateFormat('yyyy-MM-dd').format(n.subtract(const Duration(days: 30))); }); }),
                     _qc('3 أشهر', () { final n = DateTime.now(); setSheet(() { to = intl.DateFormat('yyyy-MM-dd').format(n); from = intl.DateFormat('yyyy-MM-dd').format(n.subtract(const Duration(days: 90))); }); }),
                   ]),
-                  const SizedBox(height: 10),
-                  DateRangePickerRow(
-                    fromDate: from,
-                    toDate: to,
-                    onFromChanged: (v) => setSheet(() => from = v),
-                    onToChanged: (v) => setSheet(() => to = v),
-                  ),
                   const SizedBox(height: 14),
 
                   _SectionLabel('نوع الحركة'),
@@ -463,13 +400,6 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
                     const SizedBox(height: 14),
                   ],
 
-                  EmployeeFilterDropdown(
-                    value: emp,
-                    padding: EdgeInsets.zero,
-                    onChanged: (v) => setSheet(() => emp = v),
-                  ),
-                  const SizedBox(height: 14),
-
                   SizedBox(height: AppTheme.actionButtonHeight, child: ElevatedButton(
                     onPressed: () {
                       Navigator.pop(ctx);
@@ -478,7 +408,6 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
                         _dateTo = to;
                         _managerId = mgr;
                         _userManagerId = userMgr;
-                        _employeeId = emp;
                         _selectedActionTypes..clear()..addAll(types);
                         _logsPage = 1;
                       });
@@ -505,15 +434,13 @@ class _FinancialTabState extends ConsumerState<FinancialTab>
 class _KpiItem {
   final String label;
   final String value;
-  final String? sub;
   final IconData icon;
-  final KpiAccent accent;
+  final List<Color> colors;
   const _KpiItem({
     required this.label,
     required this.value,
-    this.sub,
     required this.icon,
-    required this.accent,
+    required this.colors,
   });
 }
 
@@ -539,14 +466,16 @@ class _KpiGrid extends StatelessWidget {
         final cols = constraints.maxWidth >= 600 ? 3 : 2;
         const spacing = 10.0;
         final tileWidth = (constraints.maxWidth - spacing * (cols - 1)) / cols;
-        // الـKpiCard أفقي (icon يسار + label فوق value)، الارتفاع
-        // يتحدد ذاتياً حسب المحتوى — ما نقفله بـSizedBox عشان الكلام
-        // ما ينقص. نقفل العرض بس.
+        // Aspect ratio tuned so the gradient tiles don't squish on small
+        // phones: ~2.1 gives enough headroom for two lines of text +
+        // icon without clipping the value.
+        final tileHeight = tileWidth / 2.1;
         return Wrap(
           spacing: spacing,
           runSpacing: spacing,
           children: items.map((it) => SizedBox(
             width: tileWidth,
+            height: tileHeight,
             child: _KpiTile(item: it),
           )).toList(),
         );
@@ -568,7 +497,7 @@ class _EmptyKpis extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(LucideIcons.chartBar, size: 22, color: cs.onSurfaceVariant),
+          Icon(Icons.bar_chart_rounded, size: 22, color: cs.onSurfaceVariant),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -582,222 +511,190 @@ class _EmptyKpis extends StatelessWidget {
   }
 }
 
-/// تيلة الـKPI الفردية — wrapper نحيف على KpiCard المشترك.
 class _KpiTile extends StatelessWidget {
   final _KpiItem item;
   const _KpiTile({required this.item});
 
   @override
   Widget build(BuildContext context) {
-    return KpiCard(
-      label: item.label,
-      value: item.value,
-      sub: item.sub,
-      icon: item.icon,
-      accent: item.accent,
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: item.colors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: item.colors.last.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Icon(item.icon, size: 16, color: Colors.white),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  item.label,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(
+              item.value,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+                letterSpacing: -0.3,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-/// كرت "تقرير حسب المدير" — collapsible.
-///   - مطوي افتراضياً عشان لمّا يكون عند الأدمن 20+ مدير الصفحة
-///     ما تطول. يضغط للتوسيع.
-///   - الـheader (اسم + صافي + chevron) دائماً ظاهر.
-///   - عند التوسيع: 3 أرقام مالية + counters تفعيل/تمديد.
-class _AdminRow extends StatefulWidget {
+/// Hero card used for "صافي الربح" — sized to feel like a headline
+/// among the grid tiles, not a giant panel that dominates the screen.
+/// Intentionally compact: icon + label on one side, value on the other,
+/// all on a single row so total height matches the grid tiles above.
+class _KpiHero extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final List<Color> colors;
+  const _KpiHero({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.colors,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: colors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: colors.last.withOpacity(0.25),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.18),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Icon(icon, color: Colors.white, size: 16),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const Spacer(),
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerEnd,
+              child: Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  letterSpacing: -0.3,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AdminRow extends StatelessWidget {
   final Map<String, dynamic> admin;
   const _AdminRow({required this.admin});
 
   @override
-  State<_AdminRow> createState() => _AdminRowState();
-}
-
-class _AdminRowState extends State<_AdminRow> with SingleTickerProviderStateMixin {
-  bool _expanded = false;
-
-  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final admin = widget.admin;
     final name = admin['admin_username']?.toString() ?? '—';
-    // النقد المُستلم: تفعيلات نقدية + تسديدات الديون.
-    final cashCollected = _toDouble(admin['payments_sum']) +
-        _toDouble(admin['debt_pay_sum']) +
-        _toDouble(admin['balance_deduct_sum']) +
-        _toDouble(admin['activate_cash_sum']);
-    // الإيراد المستحق غير المحصّل (تفعيلات غير نقدية + ديون مضافة).
-    final receivable =
-        _toDouble(admin['activate_non_cash_sum']) + _toDouble(admin['balance_add_sum']);
+    final revenue = _toDouble(admin['revenue_total']);
+    final debt = _toDouble(admin['debt_total']);
     final expenses = _toDouble(admin['expenses_total']);
-    // الربح = نقد − صرفيات (تعريف الأدمن).
-    final net = cashCollected - expenses;
+    final net = revenue - debt - expenses;
     final activations = _toInt(admin['activations_count']);
     final extends_ = _toInt(admin['extend_count']);
 
-    // اللون يدلّ على الإشارة: أخضر للموجب، أحمر للسالب.
-    final netColor = net >= 0
-        ? (isDark ? const Color(0xFF34D399) : const Color(0xFF047857))
-        : (isDark ? const Color(0xFFFB7185) : const Color(0xFFBE123C));
-
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: theme.cardTheme.color ?? Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: .07)),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: .06)),
       ),
-      clipBehavior: Clip.antiAlias,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header — clickable للتوسيع/الطيّ
-          InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-              child: Row(
-                children: [
-                  Container(
-                    width: 30, height: 30,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(LucideIcons.userCog,
-                        size: 16, color: theme.colorScheme.primary),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          name,
-                          style: const TextStyle(
-                            fontSize: 13.5, fontWeight: FontWeight.w800,
-                            fontFamily: 'Cairo',
-                            height: 1.1,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'صافي الفترة',
-                          style: TextStyle(
-                            fontSize: 10.5, fontWeight: FontWeight.w500,
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                            fontFamily: 'Cairo',
-                            height: 1.0,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Text(
-                    (net < 0 ? '- ' : '') + AppHelpers.formatMoney(net),
-                    style: TextStyle(
-                      fontSize: 16.5, fontWeight: FontWeight.w900,
-                      color: netColor, fontFamily: 'Cairo',
-                      letterSpacing: -0.3, height: 1.0,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  AnimatedRotation(
-                    turns: _expanded ? 0.5 : 0.0,
-                    duration: const Duration(milliseconds: 200),
-                    child: Icon(
-                      LucideIcons.chevronDown,
-                      size: 18,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // المحتوى الموسّع — financials + counters.
-          // AnimatedSize يعطي transition سلس من 0 لـnatural height.
-          AnimatedSize(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-            alignment: Alignment.topCenter,
-            child: _expanded
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // فاصل
-                      Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 12),
-                        height: 1,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
-                      ),
-                      // 3 أرقام مالية على cash-basis: نقد مُستلم • إيراد
-                      // مستحق (يُحصَّل لاحقاً) • صرفيات.
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-                        child: Row(
-                          children: [
-                            _MiniMetric(
-                              label: 'نقد مُستلم',
-                              value: AppHelpers.formatMoney(cashCollected),
-                              color: isDark ? const Color(0xFF34D399) : const Color(0xFF047857),
-                            ),
-                            _Divider(),
-                            _MiniMetric(
-                              label: 'إيراد مستحق',
-                              value: AppHelpers.formatMoney(receivable),
-                              color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309),
-                            ),
-                            _Divider(),
-                            _MiniMetric(
-                              label: 'صرفيات',
-                              value: AppHelpers.formatMoney(expenses),
-                              color: isDark ? const Color(0xFFFB7185) : const Color(0xFFBE123C),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // counters
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.025),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(LucideIcons.circleCheck, size: 12,
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.55)),
-                            const SizedBox(width: 4),
-                            Text('تفعيل: ',
-                                style: TextStyle(fontSize: 11,
-                                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                                    fontFamily: 'Cairo')),
-                            Text('$activations',
-                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
-                                    color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
-                                    fontFamily: 'Cairo')),
-                            const SizedBox(width: 14),
-                            Icon(LucideIcons.repeat, size: 12,
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.55)),
-                            const SizedBox(width: 4),
-                            Text('تمديد: ',
-                                style: TextStyle(fontSize: 11,
-                                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                                    fontFamily: 'Cairo')),
-                            Text('$extends_',
-                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800,
-                                    color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
-                                    fontFamily: 'Cairo')),
-                          ],
-                        ),
-                      ),
-                    ],
-                  )
-                : const SizedBox(width: double.infinity),
-          ),
+          Text(name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          // 3-column grid × 2 rows — compact and still reads well.
+          Row(children: [
+            _MiniStat('إيرادات', AppHelpers.formatMoney(revenue), Colors.green),
+            const SizedBox(width: 4),
+            _MiniStat('ديون', AppHelpers.formatMoney(debt), Colors.red),
+            const SizedBox(width: 4),
+            _MiniStat('صرفيات', AppHelpers.formatMoney(expenses), const Color(0xFFef4444)),
+          ]),
+          const SizedBox(height: 4),
+          Row(children: [
+            _MiniStat('صافي', AppHelpers.formatMoney(net), Colors.blue),
+            const SizedBox(width: 4),
+            _MiniStat('تفعيل', '$activations', AppTheme.successColor),
+            const SizedBox(width: 4),
+            _MiniStat('تمديد', '$extends_', AppTheme.warningColor),
+          ]),
         ],
       ),
     );
@@ -817,56 +714,34 @@ class _AdminRowState extends State<_AdminRow> with SingleTickerProviderStateMixi
   }
 }
 
-class _MiniMetric extends StatelessWidget {
+class _MiniStat extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
-  const _MiniMetric({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
+  const _MiniStat(this.label, this.value, this.color);
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10.5, fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-              fontFamily: 'Cairo',
-            ),
-          ),
-          const SizedBox(height: 3),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: .08),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withValues(alpha: .18)),
+        ),
+        child: Column(children: [
           FittedBox(
             fit: BoxFit.scaleDown,
-            child: Text(
-              value,
-              style: TextStyle(
-                fontSize: 13, fontWeight: FontWeight.w800,
-                color: color, fontFamily: 'Cairo',
-                letterSpacing: -0.2, height: 1.0,
-              ),
-            ),
+            child: Text(value,
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: color)),
           ),
-        ],
+          const SizedBox(height: 2),
+          Text(label,
+              style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .55))),
+        ]),
       ),
-    );
-  }
-}
-
-class _Divider extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 1, height: 28,
-      margin: const EdgeInsets.symmetric(horizontal: 4),
-      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.07),
     );
   }
 }
@@ -889,9 +764,6 @@ class _LogRow extends StatelessWidget {
     final subtitle = (username.isNotEmpty && username != title) ? username : '';
     final desc = AppHelpers.formatNumbersInText(log['action_description']?.toString() ?? '');
     final amount = _parseAmount(log);
-    final admin = log['admin_username']?.toString() ?? '';
-    final empUsername = log['acting_employee_username']?.toString() ?? '';
-    final empFullName = log['acting_employee_full_name']?.toString() ?? '';
     final time = log['created_at']?.toString() ?? '';
     final isDebt = type == 'BALANCE_ADD' || (type == 'SUBSCRIBER_ACTIVATE' && (desc.toLowerCase().contains('غير نقدي')));
 
@@ -925,32 +797,6 @@ class _LogRow extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(desc, style: TextStyle(fontSize: 11.5, color: theme.colorScheme.onSurface.withValues(alpha: .55)),
                       maxLines: 3, overflow: TextOverflow.ellipsis),
-                ),
-              if (admin.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Wrap(
-                    spacing: 4,
-                    runSpacing: 2,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text(
-                        empUsername.isNotEmpty
-                            ? 'المنفّذ: ${empFullName.isNotEmpty ? empFullName : empUsername}'
-                            : 'المدير: $admin',
-                        style: TextStyle(fontSize: 11, color: theme.colorScheme.primary.withValues(alpha: .8), fontWeight: FontWeight.w600),
-                      ),
-                      if (empUsername.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary.withValues(alpha: .12),
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                          child: Text('موظف', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: theme.colorScheme.primary)),
-                        ),
-                    ],
-                  ),
                 ),
             ]),
           ),
@@ -1031,7 +877,7 @@ class _RemovableChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Chip(
       label: Text(label, style: const TextStyle(fontSize: 10)),
-      deleteIcon: const Icon(LucideIcons.x, size: 14),
+      deleteIcon: const Icon(Icons.close, size: 14),
       onDeleted: onRemove,
       visualDensity: VisualDensity.compact,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,

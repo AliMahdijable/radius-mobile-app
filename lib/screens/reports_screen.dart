@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/theme/app_theme.dart';
-import '../providers/auth_provider.dart';
 import 'reports/activity_log_tab.dart';
 import 'reports/daily_activations_tab.dart';
 import 'reports/activations_tab.dart';
@@ -16,29 +15,28 @@ class ReportsScreen extends ConsumerStatefulWidget {
   ConsumerState<ReportsScreen> createState() => _ReportsScreenState();
 }
 
-class _ReportsTabDef {
-  final String label;
-  final String permission;
-  final Widget Function() builder;
-  const _ReportsTabDef(this.label, this.permission, this.builder);
-}
-
 class _ReportsScreenState extends ConsumerState<ReportsScreen>
     with TickerProviderStateMixin {
-  TabController? _tabCtrl;
+  late final TabController _tabCtrl;
 
-  static final _allTabs = <_ReportsTabDef>[
-    _ReportsTabDef('سجل الحركات', 'reports.activity_log', () => const ActivityLogTab()),
-    _ReportsTabDef('تفعيلات اليوم', 'reports.daily_activations', () => const DailyActivationsTab()),
-    _ReportsTabDef('التفعيلات', 'reports.activations', () => const ActivationsTab()),
-    _ReportsTabDef('تقارير مالية', 'reports.financial', () => const FinancialTab()),
-    _ReportsTabDef('الجلسات', 'reports.sessions', () => const SessionsTab()),
-    _ReportsTabDef('كشف حساب', 'reports.account_statement', () => const AccountStatementTab()),
+  static const _tabs = [
+    Tab(text: 'سجل الحركات'),
+    Tab(text: 'تفعيلات اليوم'),
+    Tab(text: 'التفعيلات'),
+    Tab(text: 'تقارير مالية'),
+    Tab(text: 'الجلسات'),
+    Tab(text: 'كشف حساب'),
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _tabCtrl = TabController(length: _tabs.length, vsync: this);
+  }
+
+  @override
   void dispose() {
-    _tabCtrl?.dispose();
+    _tabCtrl.dispose();
     super.dispose();
   }
 
@@ -46,28 +44,6 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final user = ref.watch(authProvider).user;
-    // فلترة التبويبات حسب صلاحية الفاعل (أدمن = الكل).
-    final visibleTabs = _allTabs
-        .where((t) => user?.hasEmployeePermission(t.permission) ?? true)
-        .toList();
-    if (visibleTabs.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(32),
-          child: Text(
-            'لا توجد تقارير متاحة لصلاحياتك',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, fontFamily: 'Cairo'),
-          ),
-        ),
-      );
-    }
-    // Re-create TabController if length changed (e.g. perms re-fetched).
-    if (_tabCtrl == null || _tabCtrl!.length != visibleTabs.length) {
-      _tabCtrl?.dispose();
-      _tabCtrl = TabController(length: visibleTabs.length, vsync: this);
-    }
 
     return Column(
       children: [
@@ -92,13 +68,20 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
                 fontFamily: 'Cairo'),
             dividerColor: isDark ? Colors.white10 : Colors.grey.shade200,
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            tabs: visibleTabs.map((t) => Tab(text: t.label)).toList(),
+            tabs: _tabs,
           ),
         ),
         Expanded(
           child: TabBarView(
             controller: _tabCtrl,
-            children: visibleTabs.map((t) => t.builder()).toList(),
+            children: const [
+              ActivityLogTab(),
+              DailyActivationsTab(),
+              ActivationsTab(),
+              FinancialTab(),
+              SessionsTab(),
+              AccountStatementTab(),
+            ],
           ),
         ),
       ],

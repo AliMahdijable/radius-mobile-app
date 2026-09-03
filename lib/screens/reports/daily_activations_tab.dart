@@ -1,15 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/helpers.dart';
 import '../../core/utils/bottom_sheet_utils.dart';
 import '../../providers/reports_provider.dart';
-import '../../widgets/employee_filter_dropdown.dart';
-import '../../widgets/kpi_card.dart';
 import '../../widgets/report_controls.dart';
-import '../../widgets/wa_status_badge.dart';
 
 class DailyActivationsTab extends ConsumerStatefulWidget {
   const DailyActivationsTab({super.key});
@@ -23,7 +19,6 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
     with AutomaticKeepAliveClientMixin {
   bool _loaded = false;
   String _managerId = 'all';
-  String _employeeId = 'all';
   String _searchQuery = '';
   int _page = 1;
   int _perPage = 10;
@@ -51,7 +46,6 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
   Future<void> _load() async {
     await ref.read(reportsProvider.notifier).fetchDailyActivations(
           managerId: _managerId,
-          employeeId: _employeeId,
         );
     if (mounted) setState(() { _loaded = true; _page = 1; });
   }
@@ -93,12 +87,12 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
             onChanged: (v) => setState(() { _searchQuery = v; _page = 1; }),
             decoration: InputDecoration(
               hintText: 'بحث باسم المشترك...',
-              prefixIcon: const Icon(LucideIcons.search, size: 20),
+              prefixIcon: const Icon(Icons.search, size: 20),
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
               suffixIcon: _searchQuery.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(LucideIcons.x, size: 18),
+                      icon: const Icon(Icons.clear, size: 18),
                       onPressed: () => setState(() { _searchQuery = ''; _page = 1; }),
                     )
                   : null,
@@ -118,7 +112,7 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(children: [
-                    Icon(LucideIcons.funnel, size: 14, color: theme.colorScheme.primary),
+                    Icon(Icons.filter_list_rounded, size: 14, color: theme.colorScheme.primary),
                     const SizedBox(width: 6),
                     Text('الفلاتر', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withValues(alpha: .7))),
                     if (_managerId != 'all') ...[
@@ -130,7 +124,7 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
                       ),
                     ],
                     const Spacer(),
-                    Icon(LucideIcons.slidersHorizontal, size: 14, color: theme.colorScheme.onSurface.withValues(alpha: .4)),
+                    Icon(Icons.tune, size: 14, color: theme.colorScheme.onSurface.withValues(alpha: .4)),
                   ]),
                 ),
               ),
@@ -143,62 +137,32 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
                 borderRadius: BorderRadius.circular(10),
                 onTap: _load,
                 child: Padding(padding: const EdgeInsets.all(8),
-                    child: Icon(LucideIcons.refreshCw, size: 18, color: theme.colorScheme.primary)),
+                    child: Icon(Icons.refresh_rounded, size: 18, color: theme.colorScheme.primary)),
               ),
             ),
           ]),
           const SizedBox(height: 10),
 
           // Active filters
-          if (_managerId != 'all' || _employeeId != 'all')
+          if (_managerId != 'all')
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: Wrap(spacing: 6, children: [
-                if (_managerId != 'all')
-                  Chip(
-                    label: Text('مدير: ${state.managers.firstWhere((m) => m.id == _managerId, orElse: () => const ManagerOption(id: '', name: '?')).name}',
-                        style: const TextStyle(fontSize: 10)),
-                    deleteIcon: const Icon(LucideIcons.x, size: 14),
-                    onDeleted: () { setState(() => _managerId = 'all'); _load(); },
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                if (_employeeId != 'all')
-                  Chip(
-                    label: const Text('موظف محدد', style: TextStyle(fontSize: 10)),
-                    deleteIcon: const Icon(LucideIcons.x, size: 14),
-                    onDeleted: () { setState(() => _employeeId = 'all'); _load(); },
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-              ]),
+              child: Chip(
+                label: Text('مدير: ${state.managers.firstWhere((m) => m.id == _managerId, orElse: () => const ManagerOption(id: '', name: '?')).name}',
+                    style: const TextStyle(fontSize: 10)),
+                deleteIcon: const Icon(Icons.close, size: 14),
+                onDeleted: () { setState(() => _managerId = 'all'); _load(); },
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
 
-          // Stats — تصميم مطابق لـv2 KPI (tinted bg + icon يسار).
           Row(children: [
-            Expanded(child: KpiCard(
-              icon: LucideIcons.zap,
-              label: 'الإجمالي',
-              value: '${counts['total'] ?? 0}',
-              accent: KpiAccent.primary,
-              compact: true,
-            )),
+            _StatMini(label: 'الإجمالي', value: '${counts['total'] ?? 0}', color: AppTheme.primary),
             const SizedBox(width: 8),
-            Expanded(child: KpiCard(
-              icon: LucideIcons.circleCheck,
-              label: 'تفعيل',
-              value: '${counts['activate'] ?? 0}',
-              accent: KpiAccent.emerald,
-              compact: true,
-            )),
+            _StatMini(label: 'تفعيل', value: '${counts['activate'] ?? 0}', color: AppTheme.successColor),
             const SizedBox(width: 8),
-            Expanded(child: KpiCard(
-              icon: LucideIcons.repeat,
-              label: 'تمديد',
-              value: '${counts['extend'] ?? 0}',
-              accent: KpiAccent.amber,
-              compact: true,
-            )),
+            _StatMini(label: 'تمديد', value: '${counts['extend'] ?? 0}', color: AppTheme.warningColor),
           ]),
           const SizedBox(height: 8),
 
@@ -232,7 +196,6 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) {
         String mgr = _managerId;
-        String emp = _employeeId;
         return StatefulBuilder(builder: (ctx, setSheet) {
           return SafeArea(
             child: Padding(
@@ -278,17 +241,10 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
                     const SizedBox(height: 14),
                   ],
 
-                  EmployeeFilterDropdown(
-                    value: emp,
-                    padding: EdgeInsets.zero,
-                    onChanged: (v) => setSheet(() => emp = v),
-                  ),
-                  const SizedBox(height: 14),
-
                   SizedBox(height: AppTheme.actionButtonHeight, child: ElevatedButton(
                     onPressed: () {
                       Navigator.pop(ctx);
-                      setState(() { _managerId = mgr; _employeeId = emp; _page = 1; });
+                      setState(() { _managerId = mgr; _page = 1; });
                       _load();
                     },
                     child: const Text('تطبيق'),
@@ -303,6 +259,27 @@ class _DailyActivationsTabState extends ConsumerState<DailyActivationsTab>
   }
 }
 
+class _StatMini extends StatelessWidget {
+  final String label; final String value; final Color color;
+  const _StatMini({required this.label, required this.value, required this.color});
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: [color, color.withValues(alpha: .7)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(children: [
+          Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white)),
+          const SizedBox(height: 2),
+          Text(label, style: const TextStyle(fontSize: 11, color: Colors.white70)),
+        ]),
+      ),
+    );
+  }
+}
 
 class _ActivationRow extends StatelessWidget {
   final Map<String, dynamic> record;
@@ -313,7 +290,7 @@ class _ActivationRow extends StatelessWidget {
     final isExtend = (record['action_type'] ?? '').toString() == 'SUBSCRIBER_EXTEND';
     final label = isExtend ? 'تمديد' : 'تفعيل';
     final color = isExtend ? AppTheme.warningColor : AppTheme.successColor;
-    final icon = isExtend ? LucideIcons.clock : LucideIcons.circleCheck;
+    final icon = isExtend ? Icons.schedule_rounded : Icons.check_circle_rounded;
     final firstname = (record['user_firstname'] ?? '').toString().trim();
     final lastname = (record['user_lastname'] ?? '').toString().trim();
     final fullname = [firstname, lastname].where((s) => s.isNotEmpty).join(' ');
@@ -323,9 +300,6 @@ class _ActivationRow extends StatelessWidget {
     final target = fullname.isNotEmpty ? fullname : username;
     final subtitle = (username.isNotEmpty && username != target) ? username : '';
     final desc = AppHelpers.formatNumbersInText(record['action_description']?.toString() ?? '');
-    final admin = record['admin_username']?.toString() ?? '';
-    final empUsername = record['acting_employee_username']?.toString() ?? '';
-    final empFullName = record['acting_employee_full_name']?.toString() ?? '';
     final time = record['created_at']?.toString() ?? '';
     String formattedTime = '';
     final dt = DateTime.tryParse(time);
@@ -366,41 +340,6 @@ class _ActivationRow extends StatelessWidget {
               Padding(padding: const EdgeInsets.only(top: 3),
                   child: Text(desc, style: TextStyle(fontSize: 11.5, color: theme.colorScheme.onSurface.withValues(alpha: .55)),
                       maxLines: 3, overflow: TextOverflow.ellipsis)),
-            if (admin.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(
-                      empUsername.isNotEmpty
-                          ? 'المنفّذ: ${empFullName.isNotEmpty ? empFullName : empUsername}'
-                          : 'المدير: $admin',
-                      style: TextStyle(fontSize: 11.5, color: theme.colorScheme.primary.withValues(alpha: .8), fontWeight: FontWeight.w600),
-                    ),
-                    if (empUsername.isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary.withValues(alpha: .12),
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                        child: Text('موظف', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: theme.colorScheme.primary)),
-                      ),
-                  ],
-                ),
-              ),
-            // شارة حالة الواتساب — null/فارغ ما تظهر شي.
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: WaStatusBadge(
-                status: record['wa_status']?.toString(),
-                reason: record['wa_reason']?.toString(),
-                compact: true,
-              ),
-            ),
           ]),
         ),
         Text(formattedTime, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
@@ -419,7 +358,7 @@ class _EmptyState extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 60),
       child: Column(children: [
-        Icon(LucideIcons.inbox, size: 48, color: theme.colorScheme.onSurface.withValues(alpha: .2)),
+        Icon(Icons.inbox_rounded, size: 48, color: theme.colorScheme.onSurface.withValues(alpha: .2)),
         const SizedBox(height: 8),
         Text(message, style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: .4))),
       ]),

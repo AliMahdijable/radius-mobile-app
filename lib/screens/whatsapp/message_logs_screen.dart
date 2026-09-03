@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import '../../providers/messages_provider.dart';
@@ -427,7 +426,7 @@ class _MessageLogsScreenState extends ConsumerState<MessageLogsScreen> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(LucideIcons.circleAlert,
+                      const Icon(Icons.error_outline,
                           color: AppTheme.dangerColor, size: 20),
                       const SizedBox(width: 8),
                       Expanded(
@@ -460,7 +459,7 @@ class _MessageLogsScreenState extends ConsumerState<MessageLogsScreen> {
                       }
                     }
                   },
-                  icon: const Icon(LucideIcons.refreshCw),
+                  icon: const Icon(Icons.refresh),
                   label: const Text('إعادة المحاولة'),
                 ),
               const SizedBox(height: 8),
@@ -549,14 +548,14 @@ class _MessageLogsScreenState extends ConsumerState<MessageLogsScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(LucideIcons.trash2),
+            icon: const Icon(Icons.delete_sweep_outlined),
             onPressed: _showClearDialog,
             tooltip: 'مسح السجل',
           ),
           IconButton(
             icon: Badge(
               isLabelVisible: hasActiveFilters,
-              child: const Icon(LucideIcons.funnel),
+              child: const Icon(Icons.filter_list),
             ),
             onPressed: _showFilterSheet,
           ),
@@ -572,10 +571,10 @@ class _MessageLogsScreenState extends ConsumerState<MessageLogsScreen> {
               textAlign: TextAlign.left,
               decoration: InputDecoration(
                 hintText: 'بحث بالاسم أو الرقم أو نص الرسالة...',
-                prefixIcon: const Icon(LucideIcons.search, size: 20),
+                prefixIcon: const Icon(Icons.search, size: 20),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(LucideIcons.x, size: 18),
+                        icon: const Icon(Icons.clear, size: 18),
                         onPressed: () {
                           _searchController.clear();
                           ref.read(messagesProvider.notifier).setFilters(
@@ -627,18 +626,18 @@ class _MessageLogsScreenState extends ConsumerState<MessageLogsScreen> {
                 ? const ShimmerList()
                 : state.error != null && state.messages.isEmpty
                     ? EmptyState(
-                        icon: LucideIcons.circleAlert,
+                        icon: Icons.error_outline,
                         title: 'حدث خطأ',
                         subtitle: state.error,
                         action: ElevatedButton.icon(
                           onPressed: () => ref.read(messagesProvider.notifier).loadMessages(refresh: true),
-                          icon: const Icon(LucideIcons.refreshCw),
+                          icon: const Icon(Icons.refresh),
                           label: const Text('إعادة المحاولة'),
                         ),
                       )
                     : state.messages.isEmpty
                         ? const EmptyState(
-                            icon: LucideIcons.messageSquare,
+                            icon: Icons.message_outlined,
                             title: 'لا توجد رسائل',
                           )
                     : RefreshIndicator(
@@ -750,7 +749,7 @@ class _MessageLogsScreenState extends ConsumerState<MessageLogsScreen> {
                                 trailing: msg.canRetry
                                     ? IconButton(
                                         icon: const Icon(
-                                          LucideIcons.refreshCw,
+                                          Icons.refresh,
                                           color: Colors.orange,
                                           size: 20,
                                         ),
@@ -843,10 +842,10 @@ class _DateButton extends StatelessWidget {
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           suffixIcon: value != null
               ? IconButton(
-                  icon: const Icon(LucideIcons.x, size: 18),
+                  icon: const Icon(Icons.clear, size: 18),
                   onPressed: onClear,
                 )
-              : const Icon(LucideIcons.calendar, size: 18),
+              : const Icon(Icons.calendar_today, size: 18),
         ),
         child: Text(
           value ?? '—',

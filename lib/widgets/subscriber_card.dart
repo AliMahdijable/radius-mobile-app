@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
-import '../core/services/device_status_cache.dart';
 import '../core/utils/helpers.dart';
 import '../core/theme/app_theme.dart';
 import '../models/subscriber_model.dart';
@@ -12,26 +10,19 @@ import '../providers/device_provider.dart';
 class SubscriberCard extends StatelessWidget {
   final SubscriberModel subscriber;
   final VoidCallback? onTap;
-  final VoidCallback? onLongPress;
   final bool showOnlineDetails;
   final Map<String, dynamic>? lastPayment;
   final VoidCallback? onDisconnect;
   final VoidCallback? onPreview;
-  // وضع التحديد المتعدّد — يُظهر دائرة اختيار قبل البطاقة ويُلوّن المحدّد.
-  final bool selectionMode;
-  final bool selected;
 
   const SubscriberCard({
     super.key,
     required this.subscriber,
     this.onTap,
-    this.onLongPress,
     this.showOnlineDetails = false,
     this.lastPayment,
     this.onDisconnect,
     this.onPreview,
-    this.selectionMode = false,
-    this.selected = false,
   });
 
   static String formatBytes(int? bytes) {
@@ -56,12 +47,13 @@ class SubscriberCard extends StatelessWidget {
     final isDisabled = !subscriber.isEnabled;
     final daysColor = isDisabled ? Colors.grey : AppHelpers.getRemainingDaysColor(subscriber.remainingDays);
     final isOnline = subscriber.isOnline;
-    const badgeSize = 22.0;
+    const badgeSize = 18.0;
     const badgeGap = 10.0;
     final badgeIndent = badgeSize + badgeGap;
-    // أيقونة الحالة — مطابقة للويب: Wifi/WifiOff/Ban بألوان مختلفة حسب
-    // (online × (active/near-expiry/expired)) + معطّل.
-    final statusVisual = _resolveStatusVisual(subscriber);
+    final badgeStyle = _resolveBadgeStyle(
+      subscriber,
+      isOnlinePage: showOnlineDetails,
+    );
     final hasProfile = subscriber.profileName != null &&
         subscriber.profileName!.isNotEmpty;
     final hasPhone = subscriber.displayPhone.trim().isNotEmpty;
@@ -76,22 +68,16 @@ class SubscriberCard extends StatelessWidget {
         subscriber.username.isNotEmpty && subscriber.username != displayName;
 
     return Opacity(
-      opacity: isDisabled && !selected ? 0.55 : 1.0,
+      opacity: isDisabled ? 0.55 : 1.0,
       child: InkWell(
       onTap: onTap,
-      onLongPress: onLongPress,
       child: Container(
-        padding: EdgeInsetsDirectional.fromSTEB(selected ? 13 : 16, 12, 16, 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: selected
-              ? AppTheme.primary.withOpacity(0.10)
-              : (isDisabled
-                  ? theme.colorScheme.onSurface.withOpacity(0.03)
-                  : null),
-          border: BorderDirectional(
-            start: selected
-                ? BorderSide(color: AppTheme.primary, width: 3)
-                : BorderSide.none,
+          color: isDisabled
+              ? theme.colorScheme.onSurface.withOpacity(0.03)
+              : null,
+          border: Border(
             bottom: BorderSide(
               color: theme.colorScheme.onSurface.withOpacity(0.06),
             ),
@@ -105,21 +91,104 @@ class SubscriberCard extends StatelessWidget {
                 SizedBox(
                   width: badgeSize,
                   height: badgeSize,
-                  child: selectionMode
-                      ? Icon(
-                          selected
-                              ? Icons.check_circle_rounded
-                              : Icons.circle_outlined,
+                  child: badgeStyle.isSplit
+                      ? _SplitSubscriberBadge(
                           size: badgeSize,
-                          color: selected
-                              ? AppTheme.primary
-                              : theme.colorScheme.onSurface.withOpacity(0.35),
+                          leftColor: badgeStyle.primaryColor,
+                          rightColor: badgeStyle.secondaryColor!,
+                          borderColor: badgeStyle.borderColor,
+                          dividerColor: badgeStyle.dividerColor,
                         )
-                      : Icon(
-                          statusVisual.icon,
-                          size: badgeSize - 1,
-                          color: statusVisual.color,
+                      : Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: badgeStyle.borderColor,
+                        width: 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: badgeStyle.borderColor.withOpacity(0.10),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
                         ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(5),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          if (badgeStyle.secondaryColor != null)
+                            Row(
+                              textDirection: TextDirection.ltr,
+                              children: [
+                                Expanded(
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: badgeStyle.primaryColor,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: badgeStyle.secondaryColor!,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          else
+                            DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    _tintColor(
+                                      badgeStyle.primaryColor,
+                                      0.18,
+                                    ),
+                                    badgeStyle.primaryColor,
+                                  ],
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                ),
+                              ),
+                            ),
+                          if (badgeStyle.secondaryColor == null)
+                            Positioned(
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              height: badgeSize * 0.45,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.white.withOpacity(0.20),
+                                      Colors.white.withOpacity(0.03),
+                                    ],
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                  ),
+                                ),
+                              ),
+                          ),
+                          Center(
+                            child: Text(
+                              _badgeLabel(subscriber),
+                              style: TextStyle(
+                                color: badgeStyle.foregroundColor,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 9,
+                                height: 1,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
                 const SizedBox(width: badgeGap),
                 Expanded(
@@ -161,7 +230,7 @@ class SubscriberCard extends StatelessWidget {
                           textDirection: TextDirection.ltr,
                           style: TextStyle(
                             fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w600,
                             color: isDisabled
                                 ? Colors.grey
                                 : theme.colorScheme.onSurface.withOpacity(0.5),
@@ -197,7 +266,7 @@ class SubscriberCard extends StatelessWidget {
                         style: TextStyle(
                           color: daysColor,
                           fontSize: 10,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     );
@@ -215,7 +284,7 @@ class SubscriberCard extends StatelessWidget {
                           style: TextStyle(
                             color: theme.colorScheme.onSurface.withOpacity(0.55),
                             fontSize: 9,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w500,
                             height: 1.1,
                           ),
                         ),
@@ -223,7 +292,7 @@ class SubscriberCard extends StatelessWidget {
                     );
                   }),
                   const SizedBox(width: 4),
-                  Icon(LucideIcons.chevronLeft, size: 14,
+                  Icon(Icons.chevron_left, size: 14,
                       color: theme.colorScheme.onSurface.withOpacity(0.15)),
                 ],
               ],
@@ -240,7 +309,7 @@ class SubscriberCard extends StatelessWidget {
                   if (hasProfile) ...[
                     _metaChip(
                       theme: theme,
-                      icon: LucideIcons.wifi,
+                      icon: Icons.wifi_rounded,
                       text: subscriber.profileName!,
                       iconColor: isDisabled ? Colors.grey : AppTheme.primary,
                       textColor: isDisabled ? Colors.grey : AppTheme.primary,
@@ -255,7 +324,7 @@ class SubscriberCard extends StatelessWidget {
                   if (hasPrice) ...[
                     _metaChip(
                       theme: theme,
-                      icon: LucideIcons.tag,
+                      icon: Icons.sell_outlined,
                       text: AppHelpers.formatMoney(subscriber.price),
                       iconColor: isDisabled ? Colors.grey : AppTheme.warningColor,
                       textColor: isDisabled ? Colors.grey : AppTheme.warningColor,
@@ -265,23 +334,6 @@ class SubscriberCard extends StatelessWidget {
                       borderColor: isDisabled
                           ? Colors.grey.withOpacity(0.12)
                           : AppTheme.warningColor.withOpacity(0.18),
-                    ),
-                  ],
-                  // chip للخصم النشط — يُعرض إذا المشترك عنده خصم
-                  // مسجَّل بصفحة الخصومات. اللون أخضر للتوفير الإيجابي.
-                  if (subscriber.hasDiscount) ...[
-                    _metaChip(
-                      theme: theme,
-                      icon: LucideIcons.percent,
-                      text: '-${AppHelpers.formatMoney(subscriber.discount)}',
-                      iconColor: isDisabled ? Colors.grey : Colors.teal,
-                      textColor: isDisabled ? Colors.grey : Colors.teal,
-                      backgroundColor: isDisabled
-                          ? Colors.grey.withOpacity(0.08)
-                          : Colors.teal.withOpacity(0.10),
-                      borderColor: isDisabled
-                          ? Colors.grey.withOpacity(0.12)
-                          : Colors.teal.withOpacity(0.20),
                     ),
                   ],
                   // CPE health pill — probes the subscriber's router
@@ -310,7 +362,7 @@ class SubscriberCard extends StatelessWidget {
                     if (hasExpiration)
                       _metaChip(
                         theme: theme,
-                        icon: LucideIcons.calendar,
+                        icon: Icons.event_outlined,
                         text: AppHelpers.formatExpiration(subscriber.expiration),
                         iconColor: isDisabled ? Colors.grey : daysColor,
                         isLtr: true,
@@ -318,7 +370,7 @@ class SubscriberCard extends StatelessWidget {
                     if (hasPhone)
                       _metaChip(
                         theme: theme,
-                        icon: LucideIcons.phone,
+                        icon: Icons.phone_outlined,
                         text: AppHelpers.formatPhone(subscriber.displayPhone),
                         iconColor: AppTheme.infoColor,
                         isLtr: true,
@@ -333,13 +385,13 @@ class SubscriberCard extends StatelessWidget {
                 padding: EdgeInsets.only(top: 4, right: badgeIndent),
                 child: Row(
                   children: [
-                    Icon(LucideIcons.creditCard, size: 11, color: Colors.red.withOpacity(0.6)),
+                    Icon(Icons.credit_card, size: 11, color: Colors.red.withOpacity(0.6)),
                     const SizedBox(width: 3),
                     Text(
                       'دين: ${AppHelpers.formatMoney(subscriber.debtAmount.abs())}',
                       style: const TextStyle(
                         fontSize: 10,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                         color: Colors.red,
                       ),
                     ),
@@ -351,14 +403,14 @@ class SubscriberCard extends StatelessWidget {
                 padding: EdgeInsets.only(top: 4, right: badgeIndent),
                 child: Row(
                   children: [
-                    Icon(LucideIcons.wallet, size: 11,
+                    Icon(Icons.account_balance_wallet, size: 11,
                         color: Colors.green.withOpacity(0.6)),
                     const SizedBox(width: 3),
                     Text(
                       'رصيد: +${AppHelpers.formatMoney(subscriber.debtAmount)}',
                       style: const TextStyle(
                         fontSize: 10,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                         color: Colors.green,
                       ),
                     ),
@@ -437,13 +489,12 @@ class SubscriberCard extends StatelessWidget {
   }
 
   static String _formatRemaining(SubscriberModel sub) {
-    // Derive the precise breakdown straight from `expiration` so the card
-    // matches the actual expiration timestamp to the minute (e.g. "29 يوم و
-    // 23 س و 59 د") instead of rounding to whole days. Falls back to the
-    // integer `remaining_days` only when expiration can't be parsed.
-    final expStr = sub.expiration?.trim();
-    if (expStr != null && expStr.isNotEmpty) {
+    final days = sub.remainingDays ?? 0;
+    if (days > 0) return '$days يوم';
+    // remaining_days = 0 → نحسب الساعات/الدقائق من تاريخ الانتهاء
+    if (sub.expiration != null && sub.expiration!.isNotEmpty) {
       try {
+        final expStr = sub.expiration!.trim();
         DateTime? expDate;
         if (expStr.contains('T') || expStr.contains('+')) {
           expDate = DateTime.tryParse(expStr);
@@ -453,69 +504,68 @@ class SubscriberCard extends StatelessWidget {
         if (expDate != null) {
           final diff = expDate.difference(DateTime.now());
           if (diff.isNegative) return 'منتهي';
-          final days = diff.inDays;
-          final hours = diff.inHours % 24;
+          final hours = diff.inHours;
           final minutes = diff.inMinutes % 60;
-          final parts = <String>[];
-          if (days > 0) parts.add('$days يوم');
-          if (hours > 0) parts.add('$hours س');
-          if (minutes > 0) parts.add('$minutes د');
-          if (parts.isEmpty) return 'ينتهي الآن';
-          // Use a thin space rather than "و" so the precise breakdown still
-          // fits inside the compact 10px-font remaining-days pill.
-          return parts.join(' ');
+          if (hours > 0) return '$hours س $minutes د';
+          if (minutes > 0) return '$minutes دقيقة';
+          return 'ينتهي الآن';
         }
       } catch (_) {}
     }
-    final days = sub.remainingDays ?? 0;
-    if (days > 0) return '$days يوم';
     return '0 يوم';
   }
 
-  // أيقونة الحالة + لونها — مطابقة لـClient-v2 ROW_STYLE.
-  // disabled→Ban (رمادي)، online×{active=أزرق, near=كهرماني, expired=بنفسجي}،
-  // offline×{active=أخضر, near=كهرماني, expired=أحمر}.
-  static _StatusVisual _resolveStatusVisual(SubscriberModel sub) {
-    if (sub.isDisabled) {
-      return const _StatusVisual(
-        icon: LucideIcons.ban,
-        color: Color(0xFF94A3B8), // slate-400
+  static String _badgeLabel(SubscriberModel sub) {
+    final firstName = sub.firstname.trim();
+    if (firstName.isNotEmpty) return firstName[0];
+    final username = sub.username.trim();
+    if (username.isNotEmpty) return username[0];
+    return '?';
+  }
+
+  static _SubscriberBadgeStyle _resolveBadgeStyle(
+    SubscriberModel sub, {
+    required bool isOnlinePage,
+  }) {
+    if (isOnlinePage && sub.isExpired && sub.isOnline) {
+      return const _SubscriberBadgeStyle(
+        primaryColor: Color(0xFF8B5CF6),
+        borderColor: Color(0xFF7C3AED),
+        foregroundColor: Colors.white,
       );
     }
-    if (sub.isOnline) {
-      if (sub.isExpired) {
-        return const _StatusVisual(
-          icon: LucideIcons.wifi,
-          color: Color(0xFF8B5CF6), // purple-500
-        );
-      }
-      if (sub.isNearExpiry) {
-        return const _StatusVisual(
-          icon: LucideIcons.wifi,
-          color: Color(0xFFF59E0B), // amber-500
-        );
-      }
-      return const _StatusVisual(
-        icon: LucideIcons.wifi,
-        color: Color(0xFF2563EB), // blue-600
+
+    if (sub.isExpired && sub.isOnline) {
+      return const _SubscriberBadgeStyle(
+        primaryColor: Color(0xFFF59E0B),
+        secondaryColor: Color(0xFF2563EB),
+        borderColor: Color(0xFFD4D9E1),
+        foregroundColor: Colors.white,
+        dividerColor: Color(0xFFF8FAFC),
+        isSplit: true,
       );
     }
-    // offline
+
     if (sub.isExpired) {
-      return const _StatusVisual(
-        icon: LucideIcons.wifiOff,
-        color: Color(0xFFEF4444), // red-500
+      return const _SubscriberBadgeStyle(
+        primaryColor: Color(0xFFF59E0B),
+        borderColor: Color(0xFFE38906),
+        foregroundColor: Colors.white,
       );
     }
-    if (sub.isNearExpiry) {
-      return const _StatusVisual(
-        icon: LucideIcons.wifiOff,
-        color: Color(0xFFF59E0B), // amber-500
+
+    if (sub.isOnline) {
+      return const _SubscriberBadgeStyle(
+        primaryColor: Color(0xFF2563EB),
+        borderColor: Color(0xFF1D4ED8),
+        foregroundColor: Colors.white,
       );
     }
-    return const _StatusVisual(
-      icon: LucideIcons.wifiOff,
-      color: Color(0xFF10B981), // emerald-500
+
+    return const _SubscriberBadgeStyle(
+      primaryColor: Color(0xFF22A06B),
+      borderColor: Color(0xFF19784E),
+      foregroundColor: Colors.white,
     );
   }
 
@@ -548,11 +598,8 @@ class SubscriberCard extends StatelessWidget {
             textDirection: isLtr ? TextDirection.ltr : null,
             style: TextStyle(
               fontSize: 10,
-              fontWeight: FontWeight.w800,
-              // Was 0.55 — at that opacity the w700 read as visually thin.
-              // Lift to 0.78 so the weight actually shows on phone/date row.
-              color: textColor ??
-                  theme.colorScheme.onSurface.withOpacity(0.78),
+              fontWeight: FontWeight.w600,
+              color: textColor ?? theme.colorScheme.onSurface.withOpacity(0.55),
             ),
           ),
         ],
@@ -560,12 +607,111 @@ class SubscriberCard extends StatelessWidget {
     );
   }
 
+  static Color _tintColor(Color color, double amount) {
+    return Color.lerp(color, Colors.white, amount) ?? color;
+  }
 }
 
-class _StatusVisual {
-  final IconData icon;
-  final Color color;
-  const _StatusVisual({required this.icon, required this.color});
+class _SubscriberBadgeStyle {
+  final Color primaryColor;
+  final Color? secondaryColor;
+  final Color borderColor;
+  final Color foregroundColor;
+  final Color dividerColor;
+  final bool isSplit;
+
+  const _SubscriberBadgeStyle({
+    required this.primaryColor,
+    this.secondaryColor,
+    required this.borderColor,
+    required this.foregroundColor,
+    this.dividerColor = const Color(0xFFF8FAFC),
+    this.isSplit = false,
+  });
+}
+
+class _SplitSubscriberBadge extends StatelessWidget {
+  final double size;
+  final Color leftColor;
+  final Color rightColor;
+  final Color borderColor;
+  final Color dividerColor;
+
+  const _SplitSubscriberBadge({
+    required this.size,
+    required this.leftColor,
+    required this.rightColor,
+    required this.borderColor,
+    required this.dividerColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(
+          color: borderColor,
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: borderColor.withOpacity(0.10),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Row(
+              textDirection: TextDirection.ltr,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: ColoredBox(
+                    color: leftColor,
+                  ),
+                ),
+                ColoredBox(
+                  color: dividerColor.withOpacity(0.75),
+                  child: const SizedBox(width: 1),
+                ),
+                Expanded(
+                  child: ColoredBox(
+                    color: rightColor,
+                  ),
+                ),
+              ],
+            ),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: size * 0.42,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.white.withOpacity(0.18),
+                        Colors.white.withOpacity(0.03),
+                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _OnlineRow extends StatelessWidget {
@@ -603,36 +749,36 @@ class _OnlineRow extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(LucideIcons.network, size: 12, color: AppTheme.teal600),
+                          const Icon(Icons.lan_rounded, size: 12, color: AppTheme.teal600),
                           const SizedBox(width: 4),
                           Text(subscriber.ipAddress ?? '—',
                               style: const TextStyle(fontSize: 11,
-                                  color: AppTheme.teal600, fontWeight: FontWeight.w800)),
+                                  color: AppTheme.teal600, fontWeight: FontWeight.w600)),
                           const SizedBox(width: 3),
-                          const Icon(LucideIcons.externalLink, size: 9, color: AppTheme.teal400),
+                          const Icon(Icons.open_in_new_rounded, size: 9, color: AppTheme.teal400),
                         ],
                       ),
                     ),
                     const SizedBox(width: 14),
-                    Icon(LucideIcons.timer, size: 12, color: muted),
+                    Icon(Icons.timer_outlined, size: 12, color: muted),
                     const SizedBox(width: 3),
                     Text(SubscriberCard.formatDuration(subscriber.sessionTime),
-                        style: TextStyle(fontSize: 11, color: muted, fontWeight: FontWeight.w800)),
+                        style: TextStyle(fontSize: 11, color: muted, fontWeight: FontWeight.w600)),
                   ],
                 ),
                 const SizedBox(height: 5),
                 // Download + Upload
                 Row(
                   children: [
-                    const Icon(LucideIcons.arrowDownToLine, size: 12, color: AppTheme.teal600),
+                    const Icon(Icons.download_rounded, size: 12, color: AppTheme.teal600),
                     const SizedBox(width: 3),
                     Text(SubscriberCard.formatBytes(subscriber.downloadBytes),
-                        style: const TextStyle(fontSize: 11, color: AppTheme.teal600, fontWeight: FontWeight.w800)),
+                        style: const TextStyle(fontSize: 11, color: AppTheme.teal600, fontWeight: FontWeight.w600)),
                     const SizedBox(width: 14),
-                    Icon(LucideIcons.arrowUpFromLine, size: 12, color: AppTheme.infoColor),
+                    Icon(Icons.upload_rounded, size: 12, color: AppTheme.infoColor),
                     const SizedBox(width: 3),
                     Text(SubscriberCard.formatBytes(subscriber.uploadBytes),
-                        style: TextStyle(fontSize: 11, color: AppTheme.infoColor, fontWeight: FontWeight.w800)),
+                        style: TextStyle(fontSize: 11, color: AppTheme.infoColor, fontWeight: FontWeight.w600)),
                     if (subscriber.deviceVendor != null &&
                         subscriber.deviceVendor != 'unknown') ...[
                       const SizedBox(width: 10),
@@ -651,7 +797,7 @@ class _OnlineRow extends StatelessWidget {
           if (onDisconnect != null) ...[
             const SizedBox(width: 10),
             _ActionBtn(
-              icon: LucideIcons.power,
+              icon: Icons.power_settings_new_rounded,
               label: 'فصل',
               color: Colors.red,
               onTap: onDisconnect!,
@@ -750,7 +896,7 @@ class _LastPaymentRow extends StatelessWidget {
       padding: const EdgeInsets.only(top: 3, right: 46),
       child: Row(
         children: [
-          Icon(LucideIcons.dollarSign, size: 10,
+          Icon(Icons.monetization_on_rounded, size: 10,
               color: AppTheme.teal600.withOpacity(0.7)),
           const SizedBox(width: 3),
           Expanded(
@@ -758,7 +904,7 @@ class _LastPaymentRow extends StatelessWidget {
               '$movementLabel | $timeLabel${amountText.isNotEmpty ? ' | $amountText' : ''}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700,
+              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600,
                 color: AppTheme.teal600),
             ),
           ),
@@ -804,45 +950,13 @@ class _ConnectionHealthPill extends ConsumerWidget {
     );
     final asyncSnap = ref.watch(deviceStatusProvider(args));
     final cs = Theme.of(context).colorScheme;
-    final isLoading = asyncSnap.isLoading;
-    final refreshBtn = InkResponse(
-      onTap: isLoading ? null : () => ref.invalidate(deviceStatusProvider(args)),
-      radius: 14,
-      child: Padding(
-        padding: const EdgeInsets.all(3),
-        child: Icon(
-          LucideIcons.refreshCw,
-          size: 13,
-          color: isLoading
-              ? cs.onSurfaceVariant.withOpacity(0.35)
-              : cs.onSurfaceVariant.withOpacity(0.75),
-        ),
-      ),
-    );
 
-    // Stale-while-revalidate: only fall back to the on-disk cache while
-    // the live probe is still in flight. If the probe has *completed*
-    // and explicitly returned null (timeout / unreachable), respect
-    // that and show "no data" — otherwise a permanently-down device
-    // would always render its last known good values, masking outages.
-    final cached = asyncSnap.isLoading
-        ? DeviceStatusCache.instance.get(subscriberUsername)
-        : null;
-    final effectiveSnap = asyncSnap.value ?? cached;
-
-    if (effectiveSnap == null) {
-      return Wrap(
-        spacing: 4,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          _dotOnly(cs.onSurfaceVariant.withOpacity(0.4)),
-          refreshBtn,
-        ],
-      );
-    }
-    {
-      final snap = effectiveSnap;
-      final kindLabel = snap.kind.toString().endsWith('ont') ? 'ONT' : 'Ubnt';
+    return asyncSnap.when(
+      loading: () => _dotOnly(cs.onSurfaceVariant.withOpacity(0.4)),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (snap) {
+        if (snap == null) return const SizedBox.shrink();
+        final kindLabel = snap.kind.toString().endsWith('ont') ? 'ONT' : 'Ubnt';
         // All three metrics are shown so the admin can spot exactly which
         // one is failing without opening the details screen. Each metric
         // is its own tiny pill so they wrap cleanly on narrow phones.
@@ -905,10 +1019,10 @@ class _ConnectionHealthPill extends ConsumerWidget {
               ),
             ),
             for (final m in metrics) _metricPill(m, cs),
-            refreshBtn,
           ],
         );
-    }
+      },
+    );
   }
 
   String _shortLabel(String label) {

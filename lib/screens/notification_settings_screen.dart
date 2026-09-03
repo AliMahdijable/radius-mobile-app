@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/notification_prefs.dart';
@@ -55,7 +54,7 @@ class _NotificationSettingsScreenState
                   child: Column(
                     children: [
                       _PrefTile(
-                        icon: LucideIcons.triangleAlert,
+                        icon: Icons.warning_amber_rounded,
                         iconColor: Colors.orange,
                         title: 'قرب الانتهاء',
                         subtitle: 'المشتركين الذين يتبقى لهم 3 أيام أو أقل',
@@ -64,7 +63,7 @@ class _NotificationSettingsScreenState
                       ),
                       _Divider(),
                       _PrefTile(
-                        icon: LucideIcons.circleAlert,
+                        icon: Icons.error_outline,
                         iconColor: Colors.redAccent,
                         title: 'الانتهاء',
                         subtitle: 'المشتركين الذين انتهى اشتراكهم اليوم',
@@ -73,7 +72,7 @@ class _NotificationSettingsScreenState
                       ),
                       _Divider(),
                       _PrefTile(
-                        icon: LucideIcons.userCheck,
+                        icon: Icons.assignment_ind_rounded,
                         iconColor: Colors.amber,
                         title: 'ديون المدراء',
                         subtitle: 'إضافة دين أو تسديد من المدير الرئيسي',
@@ -91,7 +90,7 @@ class _NotificationSettingsScreenState
                   child: Column(
                     children: [
                       _PrefTile(
-                        icon: LucideIcons.moon,
+                        icon: Icons.nights_stay_rounded,
                         iconColor: Colors.indigo,
                         title: 'تفعيل ساعات الصمت',
                         subtitle: 'لا يصل Push خلال الفترة المحددة',
@@ -130,7 +129,7 @@ class _NotificationSettingsScreenState
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(LucideIcons.info, size: 16, color: Colors.indigo.shade700),
+                        Icon(Icons.info_outline, size: 16, color: Colors.indigo.shade700),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -190,7 +189,7 @@ class _HeaderNote extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(LucideIcons.bellRing, size: 20, color: cs.primary),
+          Icon(Icons.notifications_active_outlined, size: 20, color: cs.primary),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -350,7 +349,7 @@ class _TimeRow extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
         child: Row(
           children: [
-            Icon(LucideIcons.clock, size: 18, color: cs.onSurfaceVariant),
+            Icon(Icons.schedule_rounded, size: 18, color: cs.onSurfaceVariant),
             const SizedBox(width: 10),
             Expanded(
               child: Text(label, style: const TextStyle(fontSize: 14)),
@@ -372,7 +371,7 @@ class _TimeRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            Icon(LucideIcons.chevronRight, size: 18, color: cs.onSurfaceVariant),
+            Icon(Icons.chevron_right, size: 18, color: cs.onSurfaceVariant),
           ],
         ),
       ),

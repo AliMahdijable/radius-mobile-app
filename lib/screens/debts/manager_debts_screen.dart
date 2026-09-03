@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
@@ -13,14 +12,8 @@ import 'manager_debt_detail_screen.dart';
 /// Parent-admin ledger: lists debts owed BY sub-admins. Gated by the
 /// /access endpoint so sub-admins who don't manage anyone get an empty
 /// state even if they deep-link into the route.
-///
-/// [initialDebtorFilter] — when set (from a deep-link out of a single
-/// manager card), the list opens pre-filtered to that debtor and the
-/// "إضافة دين" sheet preselects them, so the screen acts as that
-/// manager's personal debt ledger.
 class ManagerDebtsScreen extends ConsumerStatefulWidget {
-  final int? initialDebtorFilter;
-  const ManagerDebtsScreen({super.key, this.initialDebtorFilter});
+  const ManagerDebtsScreen({super.key});
 
   @override
   ConsumerState<ManagerDebtsScreen> createState() => _ManagerDebtsScreenState();
@@ -29,12 +22,6 @@ class ManagerDebtsScreen extends ConsumerStatefulWidget {
 class _ManagerDebtsScreenState extends ConsumerState<ManagerDebtsScreen> {
   String? _statusFilter;
   int? _debtorFilter;
-
-  @override
-  void initState() {
-    super.initState();
-    _debtorFilter = widget.initialDebtorFilter;
-  }
 
   DebtsFilterArgs get _args =>
       DebtsFilterArgs(status: _statusFilter, debtorAdminId: _debtorFilter);
@@ -65,7 +52,7 @@ class _ManagerDebtsScreenState extends ConsumerState<ManagerDebtsScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(LucideIcons.lock, size: 48, color: cs.onSurfaceVariant),
+                    Icon(Icons.lock_outline, size: 48, color: cs.onSurfaceVariant),
                     const SizedBox(height: 12),
                     const Text(
                       'هذه الخاصية متاحة فقط للمدراء الذين لديهم مدراء فرعيون.',
@@ -82,13 +69,11 @@ class _ManagerDebtsScreenState extends ConsumerState<ManagerDebtsScreen> {
           appBar: AppBar(
             title: const Text('ديون المدراء'),
             elevation: 0,
-            actions: [
-              IconButton(
-                icon: const Icon(LucideIcons.plus),
-                tooltip: 'إضافة دين',
-                onPressed: () => _openCreate(context, acc.subAdmins),
-              ),
-            ],
+          ),
+          floatingActionButton: FloatingActionButton.extended(
+            onPressed: () => _openCreate(context, acc.subAdmins),
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('إضافة دين'),
           ),
           body: RefreshIndicator(
             onRefresh: () async {
@@ -126,7 +111,7 @@ class _ManagerDebtsScreenState extends ConsumerState<ManagerDebtsScreen> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(LucideIcons.inbox,
+                              Icon(Icons.inbox_outlined,
                                   size: 64, color: cs.onSurfaceVariant.withOpacity(0.5)),
                               const SizedBox(height: 12),
                               const Text(
@@ -147,8 +132,7 @@ class _ManagerDebtsScreenState extends ConsumerState<ManagerDebtsScreen> {
                       );
                     }
                     return SliverPadding(
-                      padding: EdgeInsets.fromLTRB(
-                          14, 4, 14, AppHelpers.fabListBottom(context)),
+                      padding: const EdgeInsets.fromLTRB(14, 4, 14, 100),
                       sliver: SliverList.separated(
                         itemCount: debts.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 10),
@@ -177,11 +161,7 @@ class _ManagerDebtsScreenState extends ConsumerState<ManagerDebtsScreen> {
       BuildContext context, List<SubAdminRef> subAdmins) async {
     final saved = await showDialog<bool>(
       context: context,
-      builder: (_) => _CreateDebtDialog(
-        subAdmins: subAdmins,
-        // Preselect when we entered the screen filtered to one debtor.
-        preselectedDebtorId: _debtorFilter,
-      ),
+      builder: (_) => _CreateDebtDialog(subAdmins: subAdmins),
     );
     if (saved == true && mounted) {
       AppSnackBar.success(context, 'تم إضافة الدين');
@@ -206,7 +186,7 @@ class _SummaryGrid extends StatelessWidget {
             children: [
               Expanded(
                 child: _StatCard(
-                  icon: LucideIcons.hourglass,
+                  icon: Icons.hourglass_bottom_rounded,
                   label: 'المتبقي',
                   valueText: AppHelpers.formatMoney(s.totalRemaining),
                   color: Colors.redAccent,
@@ -215,7 +195,7 @@ class _SummaryGrid extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: _StatCard(
-                  icon: LucideIcons.piggyBank,
+                  icon: Icons.savings_outlined,
                   label: 'المسدّد',
                   valueText: AppHelpers.formatMoney(s.totalPaid),
                   color: Colors.green.shade700,
@@ -228,7 +208,7 @@ class _SummaryGrid extends StatelessWidget {
             children: [
               Expanded(
                 child: _StatCard(
-                  icon: LucideIcons.fileText,
+                  icon: Icons.request_quote_outlined,
                   label: 'إجمالي الديون',
                   valueText: AppHelpers.formatMoney(s.totalAmount),
                   color: Theme.of(context).colorScheme.primary,
@@ -237,7 +217,7 @@ class _SummaryGrid extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: _StatCard(
-                  icon: LucideIcons.users,
+                  icon: Icons.people_alt_outlined,
                   label: 'عدد المدراء',
                   valueText: s.debtorsCount.toString(),
                   color: Colors.deepPurple,
@@ -362,9 +342,9 @@ class _Filters extends StatelessWidget {
             DropdownButtonFormField<int?>(
               value: debtorFilter,
               isDense: true,
-              icon: const Icon(LucideIcons.chevronDown),
+              icon: const Icon(Icons.expand_more_rounded),
               decoration: InputDecoration(
-                prefixIcon: const Icon(LucideIcons.userSearch, size: 18),
+                prefixIcon: const Icon(Icons.person_search_rounded, size: 18),
                 hintText: 'فلترة بمدير فرعي',
                 contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -489,7 +469,7 @@ class _DebtCard extends StatelessWidget {
                         const SizedBox(height: 2),
                         Row(
                           children: [
-                            Icon(LucideIcons.calendar,
+                            Icon(Icons.calendar_month_rounded,
                                 size: 11, color: cs.onSurfaceVariant),
                             const SizedBox(width: 3),
                             Text(
@@ -628,8 +608,7 @@ class _InlineStat extends StatelessWidget {
 
 class _CreateDebtDialog extends ConsumerStatefulWidget {
   final List<SubAdminRef> subAdmins;
-  final int? preselectedDebtorId;
-  const _CreateDebtDialog({required this.subAdmins, this.preselectedDebtorId});
+  const _CreateDebtDialog({required this.subAdmins});
 
   @override
   ConsumerState<_CreateDebtDialog> createState() => _CreateDebtDialogState();
@@ -641,12 +620,6 @@ class _CreateDebtDialogState extends ConsumerState<_CreateDebtDialog> {
   final _noteCtrl = TextEditingController();
   DateTime _date = DateTime.now();
   bool _saving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _debtorId = widget.preselectedDebtorId;
-  }
 
   @override
   void dispose() {
@@ -721,7 +694,7 @@ class _CreateDebtDialogState extends ConsumerState<_CreateDebtDialog> {
               value: _debtorId,
               decoration: const InputDecoration(
                 labelText: 'المدير الفرعي',
-                prefixIcon: Icon(LucideIcons.user),
+                prefixIcon: Icon(Icons.person_outline),
                 isDense: true,
                 border: OutlineInputBorder(),
               ),
@@ -743,7 +716,7 @@ class _CreateDebtDialogState extends ConsumerState<_CreateDebtDialog> {
               decoration: const InputDecoration(
                 labelText: 'المبلغ',
                 suffixText: 'IQD',
-                prefixIcon: Icon(LucideIcons.dollarSign, size: 20),
+                prefixIcon: Icon(Icons.monetization_on_outlined, size: 20),
                 isDense: true,
                 border: OutlineInputBorder(),
               ),
@@ -772,7 +745,7 @@ class _CreateDebtDialogState extends ConsumerState<_CreateDebtDialog> {
               controller: _noteCtrl,
               decoration: const InputDecoration(
                 labelText: 'ملاحظة (اختياري)',
-                prefixIcon: Icon(LucideIcons.fileText),
+                prefixIcon: Icon(Icons.note_outlined),
                 isDense: true,
                 border: OutlineInputBorder(),
               ),
@@ -785,7 +758,7 @@ class _CreateDebtDialogState extends ConsumerState<_CreateDebtDialog> {
               child: InputDecorator(
                 decoration: const InputDecoration(
                   labelText: 'تاريخ الدين',
-                  prefixIcon: Icon(LucideIcons.calendar),
+                  prefixIcon: Icon(Icons.calendar_today),
                   isDense: true,
                   border: OutlineInputBorder(),
                 ),
@@ -807,7 +780,7 @@ class _CreateDebtDialogState extends ConsumerState<_CreateDebtDialog> {
                   width: 14, height: 14,
                   child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                 )
-              : const Icon(LucideIcons.save, size: 18),
+              : const Icon(Icons.save_outlined, size: 18),
           label: Text(_saving ? 'حفظ...' : 'حفظ'),
         ),
       ],

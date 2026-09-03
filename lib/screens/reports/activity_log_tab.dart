@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import '../../core/network/dio_client.dart';
@@ -12,9 +11,6 @@ import '../../core/services/storage_service.dart';
 import '../../core/utils/csv_export.dart';
 import '../../providers/reports_provider.dart';
 import '../../widgets/app_snackbar.dart';
-import '../../widgets/date_range_picker_row.dart';
-import '../../widgets/wa_status_badge.dart';
-import '../../widgets/employee_filter_dropdown.dart';
 import '../../widgets/report_controls.dart';
 
 class ActivityLogTab extends ConsumerStatefulWidget {
@@ -32,7 +28,6 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
   late String _dateFrom;
   late String _dateTo;
   String _managerId = 'all';
-  String _employeeId = 'all';
   String _activityType = 'all';
   int _page = 1;
   int _perPage = 10;
@@ -80,9 +75,6 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
         final allIds = [adminId, ...managers.map((m) => m.id)];
         params['user_ids'] = allIds.toSet().join(',');
       }
-      if (_employeeId != 'all') {
-        params['employee_id'] = _employeeId;
-      }
 
       final response = await dio.get('/api/activities', queryParameters: params);
 
@@ -122,58 +114,58 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
       case 'MANAGER_ADD':
         return _ActionStyle(
           'إضافة مدير',
-          LucideIcons.userPlus,
+          Icons.person_add_alt_1_rounded,
           Colors.blue,
         );
       case 'MANAGER_EDIT':
         if (targetType == 'MANAGER' && managerAction == 'add_points') {
           return _ActionStyle(
             'إضافة نقاط للمدير',
-            LucideIcons.star,
+            Icons.stars_rounded,
             Colors.teal,
           );
         }
-        return _ActionStyle('تعديل مدير', LucideIcons.userCog, Colors.indigo);
+        return _ActionStyle('تعديل مدير', Icons.manage_accounts_rounded, Colors.indigo);
       case 'MANAGER_DELETE':
-        return _ActionStyle('حذف مدير', LucideIcons.userMinus, Colors.red);
+        return _ActionStyle('حذف مدير', Icons.person_remove_rounded, Colors.red);
       case 'SUBSCRIBER_ACTIVATE':
-        return _ActionStyle('تفعيل مشترك', LucideIcons.circleCheck, Colors.green);
+        return _ActionStyle('تفعيل مشترك', Icons.check_circle_rounded, Colors.green);
       case 'SUBSCRIBER_EXTEND':
-        return _ActionStyle('تمديد مشترك', LucideIcons.clock, Colors.amber.shade700);
+        return _ActionStyle('تمديد مشترك', Icons.schedule_rounded, Colors.amber.shade700);
       case 'SUBSCRIBER_ADD':
-        return _ActionStyle('إضافة مشترك', LucideIcons.userPlus, Colors.blue);
+        return _ActionStyle('إضافة مشترك', Icons.person_add_rounded, Colors.blue);
       case 'SUBSCRIBER_EDIT':
-        return _ActionStyle('تعديل مشترك', LucideIcons.pencil, Colors.purple);
+        return _ActionStyle('تعديل مشترك', Icons.edit_rounded, Colors.purple);
       case 'SUBSCRIBER_DELETE':
-        return _ActionStyle('حذف مشترك', LucideIcons.userMinus, Colors.red);
+        return _ActionStyle('حذف مشترك', Icons.person_remove_rounded, Colors.red);
       case 'BALANCE_ADD':
         if (targetType == 'MANAGER') {
           return _ActionStyle(
             paymentType == 'loan' ? 'إضافة دين مدير' : 'إيداع للمدير',
             paymentType == 'loan'
-                ? LucideIcons.wallet
-                : LucideIcons.piggyBank,
+                ? Icons.account_balance_wallet_rounded
+                : Icons.savings_rounded,
             paymentType == 'loan' ? Colors.deepOrange : Colors.green,
           );
         }
-        return _ActionStyle('إضافة دين', LucideIcons.circlePlus, Colors.red);
+        return _ActionStyle('إضافة دين', Icons.add_circle_rounded, Colors.red);
       case 'BALANCE_DEDUCT':
         if (targetType == 'MANAGER') {
-          return _ActionStyle('سحب من المدير', LucideIcons.circleMinus, Colors.orange);
+          return _ActionStyle('سحب من المدير', Icons.remove_circle_outline_rounded, Colors.orange);
         }
-        return _ActionStyle('تسديد دين', LucideIcons.circleMinus, Colors.green);
+        return _ActionStyle('تسديد دين', Icons.remove_circle_rounded, Colors.green);
       case 'PAYMENT_ADD':
       case 'DEBT_PAY':
         if (targetType == 'MANAGER') {
-          return _ActionStyle('تسديد دين مدير', LucideIcons.wallet, Colors.green);
+          return _ActionStyle('تسديد دين مدير', Icons.account_balance_wallet_rounded, Colors.green);
         }
-        return _ActionStyle('تسديد دين', LucideIcons.wallet, Colors.green);
+        return _ActionStyle('تسديد دين', Icons.account_balance_wallet_rounded, Colors.green);
       case 'LOGIN':
-        return _ActionStyle('تسجيل دخول', LucideIcons.logIn, Colors.indigo);
+        return _ActionStyle('تسجيل دخول', Icons.login_rounded, Colors.indigo);
       case 'WHATSAPP_SEND_MESSAGE':
-        return _ActionStyle('رسالة واتساب', LucideIcons.messageCircle, AppTheme.whatsappGreen);
+        return _ActionStyle('رسالة واتساب', Icons.chat_rounded, AppTheme.whatsappGreen);
       default:
-        return _ActionStyle(type.isNotEmpty ? type : 'أخرى', LucideIcons.settings, Colors.grey);
+        return _ActionStyle(type.isNotEmpty ? type : 'أخرى', Icons.settings_rounded, Colors.grey);
     }
   }
 
@@ -292,25 +284,25 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
                 onSubmitted: (_) => _fetchActivities(),
                 decoration: InputDecoration(
                   hintText: 'بحث في الحركات...',
-                  prefixIcon: const Icon(LucideIcons.search, size: 20),
+                  prefixIcon: const Icon(Icons.search, size: 20),
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                   suffixIcon: IconButton(
-                    icon: const Icon(LucideIcons.funnel, size: 20),
+                    icon: const Icon(Icons.filter_list_rounded, size: 20),
                     onPressed: _showDateFilter,
                   ),
                 ),
               ),
             ),
             const SizedBox(width: 6),
-            _SmallBtn(LucideIcons.download, _exportCsv),
+            _SmallBtn(Icons.download_rounded, _exportCsv),
             const SizedBox(width: 4),
-            _SmallBtn(LucideIcons.refreshCw, _fetchActivities),
+            _SmallBtn(Icons.refresh_rounded, _fetchActivities),
           ]),
         ),
 
         // Active filters indicator
-        if (_managerId != 'all' || _activityType != 'all' || _employeeId != 'all')
+        if (_managerId != 'all' || _activityType != 'all')
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
             child: Wrap(spacing: 6, children: [
@@ -318,16 +310,8 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
                 Chip(
                   label: Text(managers.firstWhere((m) => m.id == _managerId, orElse: () => const ManagerOption(id: '', name: '?')).name,
                       style: const TextStyle(fontSize: 10)),
-                  deleteIcon: const Icon(LucideIcons.x, size: 14),
+                  deleteIcon: const Icon(Icons.close, size: 14),
                   onDeleted: () { setState(() => _managerId = 'all'); _fetchActivities(); },
-                  visualDensity: VisualDensity.compact,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              if (_employeeId != 'all')
-                Chip(
-                  label: const Text('موظف محدّد', style: TextStyle(fontSize: 10)),
-                  deleteIcon: const Icon(LucideIcons.x, size: 14),
-                  onDeleted: () { setState(() => _employeeId = 'all'); _fetchActivities(); },
                   visualDensity: VisualDensity.compact,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
@@ -335,7 +319,7 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
                 Chip(
                   label: Text(_activityTypeOptions.firstWhere((o) => o['value'] == _activityType, orElse: () => {'label': _activityType})['label']!,
                       style: const TextStyle(fontSize: 10)),
-                  deleteIcon: const Icon(LucideIcons.x, size: 14),
+                  deleteIcon: const Icon(Icons.close, size: 14),
                   onDeleted: () { setState(() => _activityType = 'all'); _fetchActivities(); },
                   visualDensity: VisualDensity.compact,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -360,7 +344,7 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
               : _activities.isEmpty
                   ? Center(
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(LucideIcons.chartLine, size: 48,
+                        Icon(Icons.assessment_outlined, size: 48,
                             color: theme.colorScheme.onSurface.withValues(alpha: .2)),
                         const SizedBox(height: 8),
                         Text('لا توجد حركات',
@@ -399,7 +383,6 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
         String from = _dateFrom;
         String to = _dateTo;
         String mgr = _managerId;
-        String emp = _employeeId;
         String aType = _activityType;
         return StatefulBuilder(builder: (ctx, setSheet) {
           return SafeArea(
@@ -428,13 +411,6 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
                     _qc('آخر 7 أيام', () { final n = DateTime.now(); setSheet(() { to = intl.DateFormat('yyyy-MM-dd').format(n); from = intl.DateFormat('yyyy-MM-dd').format(n.subtract(const Duration(days: 7))); }); }),
                     _qc('آخر 30 يوم', () { final n = DateTime.now(); setSheet(() { to = intl.DateFormat('yyyy-MM-dd').format(n); from = intl.DateFormat('yyyy-MM-dd').format(n.subtract(const Duration(days: 30))); }); }),
                   ]),
-                  const SizedBox(height: 10),
-                  DateRangePickerRow(
-                    fromDate: from,
-                    toDate: to,
-                    onFromChanged: (v) => setSheet(() => from = v),
-                    onToChanged: (v) => setSheet(() => to = v),
-                  ),
                   const SizedBox(height: 14),
 
                   // Activity type
@@ -481,13 +457,6 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
                     const SizedBox(height: 14),
                   ],
 
-                  EmployeeFilterDropdown(
-                    value: emp,
-                    padding: EdgeInsets.zero,
-                    onChanged: (v) => setSheet(() => emp = v),
-                  ),
-                  const SizedBox(height: 14),
-
                   SizedBox(height: AppTheme.actionButtonHeight, child: ElevatedButton(
                     onPressed: () {
                       Navigator.pop(ctx);
@@ -495,7 +464,6 @@ class _ActivityLogTabState extends ConsumerState<ActivityLogTab>
                         _dateFrom = from;
                         _dateTo = to;
                         _managerId = mgr;
-                        _employeeId = emp;
                         _activityType = aType;
                         _page = 1;
                       });
@@ -534,8 +502,6 @@ class _ActivityRow extends StatelessWidget {
     final target = fullname.isNotEmpty ? fullname : username;
     final subtitle = (username.isNotEmpty && username != target) ? username : '';
     final admin = activity['admin_username']?.toString() ?? '';
-    final empUsername = activity['acting_employee_username']?.toString() ?? '';
-    final empFullName = activity['acting_employee_full_name']?.toString() ?? '';
     final time = activity['created_at']?.toString() ?? '';
 
     String formattedTime = time;
@@ -580,58 +546,8 @@ class _ActivityRow extends StatelessWidget {
                     child: Text(desc, style: TextStyle(fontSize: 11.5, color: theme.colorScheme.onSurface.withValues(alpha: .55)),
                         maxLines: 2, overflow: TextOverflow.ellipsis)),
               if (admin.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 4,
-                    children: [
-                      Text(
-                        empUsername.isNotEmpty
-                            ? 'المنفّذ: ${empFullName.isNotEmpty ? empFullName : empUsername}'
-                            : 'المدير: $admin',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: theme.colorScheme.primary.withValues(alpha: .8),
-                        ),
-                      ),
-                      if (empUsername.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 4, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary
-                                .withValues(alpha: .12),
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                          child: Text(
-                            'موظف',
-                            style: TextStyle(
-                              fontSize: 8.5,
-                              fontWeight: FontWeight.w800,
-                              color: theme.colorScheme.primary,
-                            ),
-                          ),
-                        ),
-                      if (empUsername.isNotEmpty && admin.isNotEmpty)
-                        Text(
-                          '· تابع لـ $admin',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: .5),
-                          ),
-                        ),
-                      // شارة حالة إشعار الواتساب — null/فارغ ما يظهر شي.
-                      WaStatusBadge(
-                        status: activity['wa_status']?.toString(),
-                        reason: activity['wa_reason']?.toString(),
-                        compact: true,
-                      ),
-                    ],
-                  ),
-                ),
+                Padding(padding: const EdgeInsets.only(top: 2),
+                    child: Text('المدير: $admin', style: TextStyle(fontSize: 11.5, color: theme.colorScheme.primary.withValues(alpha: .7)))),
             ]),
           ),
         ],

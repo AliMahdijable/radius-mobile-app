@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/templates_provider.dart';
 import '../providers/auth_provider.dart';
 import '../models/template_model.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/bottom_sheet_utils.dart';
-import '../core/utils/helpers.dart';
 import '../widgets/app_snackbar.dart';
 
 class TemplatesScreen extends ConsumerStatefulWidget {
@@ -31,7 +29,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
     switch (type) {
       case 'debt_reminder':
         return 'عزيزي {firstname} 🙏\n'
-            'نود تذكيركم بوجود مبلغ دين قدره {debt_amount} على حسابكم.\n'
+            'نود تذكيركم بوجود مبلغ دين قدره {debt_amount} IQD على حسابكم.\n'
             'الباقة: {package_name}\n'
             'تاريخ الانتهاء: {expiry_date}\n'
             'المتبقي: {days_remaining}\n\n'
@@ -41,20 +39,20 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
             'عزيزي {firstname}،\n'
             'باقتكم ({package_name}) ستنتهي خلال {days_remaining}.\n'
             'تاريخ الانتهاء: {expiry_date}\n'
-            'سعر التجديد: {package_price}\n\n'
+            'سعر التجديد: {package_price} IQD\n\n'
             'يرجى التجديد قبل الانقطاع.';
       case 'service_end':
         return 'انتهاء الاشتراك 🚫\n\n'
             'عزيزي {firstname}،\n'
             'انتهت صلاحية اشتراكك في باقة {package_name} بتاريخ {expiry_date}.\n'
-            'سعر التجديد: {package_price}\n\n'
+            'سعر التجديد: {package_price} IQD\n\n'
             'نرجو التواصل لتجديد الخدمة.';
       case 'activation_notice':
         return 'تم التفعيل بنجاح ✅\n\n'
             'أهلاً {firstname}،\n'
             'تم تفعيل اشتراكك في {package_name}.\n'
-            'السعر: {package_price}\n'
-            'المبلغ المدفوع: {paid_amount}\n'
+            'السعر: {package_price} IQD\n'
+            'المبلغ المدفوع: {paid_amount} IQD\n'
             'تاريخ الانتهاء: {expiry_date}\n'
             'المتبقي: {days_remaining}\n\n'
             'نتمنى لك تجربة ممتازة 🌐';
@@ -65,16 +63,16 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
             'تم تمديد اشتراكك في {package_name}.\n'
             'تاريخ الانتهاء الجديد: {expiry_date}\n'
             'المتبقي: {days_remaining}\n'
-            'السعر: {package_price}\n'
-            'المبلغ المدفوع: {paid_amount}\n'
-            'الدين الحالي: {debt_amount}\n\n'
+            'السعر: {package_price} IQD\n'
+            'المبلغ المدفوع: {paid_amount} IQD\n'
+            'الدين الحالي: {debt_amount} IQD\n\n'
             'شكراً لاستمراركم معنا 💚';
       case 'payment_confirmation':
         return 'تم استلام تسديد 💳\n\n'
             'عزيزي {firstname}،\n'
-            'استلمنا منكم مبلغ {paid_amount}.\n'
-            'الدين الحالي: {debt_amount}\n'
-            'الرصيد الحالي: {credit_amount}\n\n'
+            'استلمنا منكم مبلغ {paid_amount} IQD.\n'
+            'الدين الحالي: {debt_amount} IQD\n'
+            'الرصيد الحالي: {credit_amount} IQD\n\n'
             'شكراً لكم 🙏';
       case 'welcome_message':
         return 'أهلاً بك في خدماتنا 🎉\n\n'
@@ -87,28 +85,25 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
       case 'manager_agent':
         return 'عزيزي المدير {manager_name} 👋\n\n'
             'تم تسجيل حركة مالية على حسابك:\n'
-            '🧾 النوع: {action_type}\n'
-            '💰 المبلغ: {amount}\n'
-            '📝 الوصف: {movement_description}\n\n'
-            '— الرصيد —\n'
-            '💳 السابق: {previous_credit}\n'
-            '💳 الحالي: {current_credit}\n\n'
-            '— الديون عليك —\n'
-            '🧾 ديون الساس: {sas_debts}\n'
-            '📑 ديون أخرى: {other_debts}\n'
-            '📊 المجموع: {total_debts}';
+            'النوع: {action_type}\n'
+            'المبلغ: {amount} IQD\n'
+            'الوصف: {movement_description}\n\n'
+            'الرصيد السابق: {previous_credit} IQD\n'
+            'الرصيد الحالي: {current_credit} IQD\n'
+            'الدين السابق: {previous_debt} IQD\n'
+            'الدين الحالي: {current_debt} IQD';
       case 'subscriber_info':
         return 'مرحباً {subscriber_name} 👋\n\n'
             '📋 معلومات اشتراكك:\n\n'
             '👤 اسم المستخدم: {username}\n'
             '📦 الباقة: {package_name}\n'
-            '💰 سعر الباقة: {package_price}\n'
+            '💰 سعر الباقة: {package_price} IQD\n'
             '📅 تاريخ الانتهاء: {expiry_date}\n'
             '⏰ الأيام المتبقية: {days_remaining}\n\n'
             '💳 الحساب:\n'
-            '• الدين المستحق: {debt_amount}\n'
-            '• الخصم: {discount_amount}\n'
-            '• الرصيد: {credit_amount}\n\n'
+            '• الدين المستحق: {debt_amount} IQD\n'
+            '• الخصم: {discount_amount} IQD\n'
+            '• الرصيد: {credit_amount} IQD\n\n'
             'للاستفسار يرجى التواصل معنا 🙏';
       default:
         return '';
@@ -321,7 +316,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                               setSheetState(() {});
                             }
                           },
-                          icon: const Icon(LucideIcons.sparkles, size: 16),
+                          icon: const Icon(Icons.auto_awesome_rounded, size: 16),
                           label: const Text(
                             'توليد قالب جاهز',
                             style: TextStyle(fontSize: 11.5),
@@ -491,17 +486,10 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('قوالب الرسائل'),
-        // زر الإضافة في الشريط العلوي بدل FAB عائم — لا يغطّي آخر عنصر
-        // بالقائمة مهما كان طولها.
-        actions: [
-          IconButton(
-            icon: const Icon(LucideIcons.plus),
-            tooltip: 'إضافة قالب',
-            onPressed: () => _showEditSheet(null),
-          ),
-        ],
+      appBar: AppBar(title: const Text('قوالب الرسائل')),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showEditSheet(null),
+        child: const Icon(Icons.add),
       ),
       body: state.isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -510,7 +498,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(LucideIcons.fileText,
+                      Icon(Icons.description_outlined,
                           size: 64,
                           color:
                               theme.colorScheme.onSurface.withOpacity(0.2)),
@@ -519,7 +507,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                       const SizedBox(height: 12),
                       ElevatedButton.icon(
                         onPressed: () => _showEditSheet(null),
-                        icon: const Icon(LucideIcons.plus),
+                        icon: const Icon(Icons.add),
                         label: const Text('إنشاء قالب'),
                       ),
                     ],
@@ -529,8 +517,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                   onRefresh: () =>
                       ref.read(templatesProvider.notifier).loadTemplates(),
                   child: ListView.builder(
-                    padding: EdgeInsets.fromLTRB(
-                        16, 16, 16, AppHelpers.fabListBottom(context)),
+                    padding: const EdgeInsets.all(16),
                     itemCount: state.templates.length,
                     itemBuilder: (context, index) {
                       final tmpl = state.templates[index];
@@ -550,7 +537,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                                 decoration: BoxDecoration(
                                   color: theme.colorScheme.primary.withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(10)),
-                                child: Icon(LucideIcons.fileText, size: 18,
+                                child: Icon(Icons.description, size: 18,
                                     color: theme.colorScheme.primary),
                               ),
                               const SizedBox(width: 10),
@@ -593,7 +580,7 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                                 },
                               ),
                               IconButton(
-                                icon: Icon(LucideIcons.trash2,
+                                icon: Icon(Icons.delete_outline,
                                     color: theme.colorScheme.error, size: 20),
                                 visualDensity: VisualDensity.compact,
                                 padding: EdgeInsets.zero,

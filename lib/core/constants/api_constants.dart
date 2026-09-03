@@ -11,18 +11,12 @@ class ApiConstants {
   static const String login = '/api/auth/login';
   static const String refreshToken = '/api/auth/refresh-token';
   static const String verifyToken = '/api/auth/verify-token';
-  // /auth/me — يجلب الصلاحيات الفريش من الباكند (للموظف يقرأ من DB
-  // بدل JWT المجمَّد، فأي تعديل من الأدمن يصل بدون re-login).
-  static const String authMe = '/api/auth/me';
 
   // Announcements (admin broadcast shown as in-app popup)
   static const String announcementsCurrent = '/api/announcements/current';
 
   // Subscribers
   static const String subscribersWithPhones = '/api/subscribers/with-phones';
-  // يرجّع آخر MAC + آخر اتصال (lastConnections) لكل username — backend يسحب
-  // bulk من SAS4 UserSessions ويفلتر بالكود (SAS4 لا يفلتر بـusername مباشرة).
-  static const String subscribersLastMacs = '/api/v2/subscribers/last-macs';
   static const String subscribersSearch = '/api/subscribers/search';
   static const String lastPayments = '/api/subscribers/last-payments';
   static const String lastFinancialMovements = '/api/subscribers/last-financial-movements';

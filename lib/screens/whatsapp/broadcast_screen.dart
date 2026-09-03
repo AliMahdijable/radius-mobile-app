@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../providers/auth_provider.dart';
 import '../../providers/messages_provider.dart';
 import '../../providers/subscribers_provider.dart';
 import '../../models/subscriber_model.dart';
@@ -36,7 +34,7 @@ const _tabs = <_TabType, _TabConfig>{
     apiType: 'general',
     hasCustomMessage: true,
     hasSubscriberSelection: false,
-    icon: LucideIcons.megaphone,
+    icon: Icons.campaign,
   ),
   _TabType.specific: _TabConfig(
     key: 'specific',
@@ -44,7 +42,7 @@ const _tabs = <_TabType, _TabConfig>{
     apiType: 'general',
     hasCustomMessage: true,
     hasSubscriberSelection: true,
-    icon: LucideIcons.userSearch,
+    icon: Icons.person_search,
   ),
   _TabType.expiredSpecific: _TabConfig(
     key: 'expired_specific',
@@ -52,7 +50,7 @@ const _tabs = <_TabType, _TabConfig>{
     apiType: 'expired',
     hasCustomMessage: true,
     hasSubscriberSelection: true,
-    icon: LucideIcons.timerOff,
+    icon: Icons.timer_off,
   ),
   _TabType.debtors: _TabConfig(
     key: 'debtors',
@@ -60,7 +58,7 @@ const _tabs = <_TabType, _TabConfig>{
     apiType: 'debtors',
     hasCustomMessage: false,
     hasSubscriberSelection: false,
-    icon: LucideIcons.creditCard,
+    icon: Icons.credit_card,
   ),
   _TabType.debtorsSpecific: _TabConfig(
     key: 'debtors_specific',
@@ -68,7 +66,7 @@ const _tabs = <_TabType, _TabConfig>{
     apiType: 'debtors',
     hasCustomMessage: false,
     hasSubscriberSelection: true,
-    icon: LucideIcons.creditCard,
+    icon: Icons.credit_score,
   ),
 };
 
@@ -277,32 +275,6 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final user = ref.watch(authProvider).user;
-    // دفاع بعمق: حتى لو وصل لنا deep-link أو nav-stack قديم، الموظف بدون
-    // whatsapp.broadcast ما يقدر يستعمل الشاشة. الـtile بالـsettings مخفي
-    // أصلاً، والـbackend يرفض بـ403، بس الواجهة تعرض رسالة بدلاً من توست.
-    if (!(user?.hasEmployeePermission('whatsapp.broadcast') ?? true)) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('التبليغات')),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(LucideIcons.lock,
-                    size: 48,
-                    color: theme.colorScheme.onSurface.withValues(alpha: .3)),
-                const SizedBox(height: 12),
-                Text('لا تملك صلاحية بث الرسائل',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.titleMedium),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
 
     return Scaffold(
       appBar: AppBar(
@@ -385,7 +357,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
                       color: Colors.white,
                     ),
                   )
-                : const Icon(LucideIcons.megaphone),
+                : const Icon(Icons.campaign),
             label: Text(
               _submitting ? 'جاري الإرسال...' : 'بدء البث',
               style: const TextStyle(
@@ -415,7 +387,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (broadcast.isPaused)
-                const Icon(LucideIcons.circlePause, color: Colors.orange, size: 24)
+                const Icon(Icons.pause_circle, color: Colors.orange, size: 24)
               else
                 const SizedBox(
                   width: 20,
@@ -469,7 +441,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
           OutlinedButton.icon(
             onPressed: () =>
                 ref.read(messagesProvider.notifier).cancelBroadcast(),
-            icon: const Icon(LucideIcons.square, color: Colors.red),
+            icon: const Icon(Icons.stop, color: Colors.red),
             label:
                 const Text('إيقاف البث', style: TextStyle(fontFamily: 'Cairo', color: Colors.red)),
             style: OutlinedButton.styleFrom(
@@ -492,7 +464,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
       ),
       child: Column(
         children: [
-          const Icon(LucideIcons.circleCheck, color: Colors.green, size: 40),
+          const Icon(Icons.check_circle, color: Colors.green, size: 40),
           const SizedBox(height: 10),
           const Text(
             'اكتمل البث',
@@ -531,10 +503,10 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
           textAlign: TextAlign.left,
           decoration: InputDecoration(
             hintText: 'بحث عن مشترك...',
-            prefixIcon: const Icon(LucideIcons.search),
+            prefixIcon: const Icon(Icons.search),
             suffixIcon: (_searchQueries[tab] ?? '').isNotEmpty
                 ? IconButton(
-                    icon: const Icon(LucideIcons.x),
+                    icon: const Icon(Icons.clear),
                     onPressed: () {
                       _searchControllers[tab]!.clear();
                       setState(() => _searchQueries[tab] = '');
@@ -554,13 +526,13 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
           children: [
             _ActionChip(
               label: 'تحديد الكل',
-              icon: LucideIcons.checkCheck,
+              icon: Icons.select_all,
               onTap: () => _selectAll(tab),
             ),
             const SizedBox(width: 8),
             _ActionChip(
               label: 'إلغاء التحديد',
-              icon: LucideIcons.squareDashed,
+              icon: Icons.deselect,
               onTap: () => _deselectAll(tab),
             ),
             const Spacer(),
@@ -662,7 +634,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen>
       ),
       child: Row(
         children: [
-          Icon(LucideIcons.info, color: AppTheme.warningColor, size: 28),
+          Icon(Icons.info_outline, color: AppTheme.warningColor, size: 28),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -783,7 +755,7 @@ class _SubscriberTile extends StatelessWidget {
                       ),
                       if (subscriber.displayPhone.isNotEmpty) ...[
                         const SizedBox(width: 8),
-                        Icon(LucideIcons.phone, size: 12, color: Colors.grey[500]),
+                        Icon(Icons.phone, size: 12, color: Colors.grey[500]),
                         const SizedBox(width: 2),
                         Text(
                           subscriber.displayPhone,

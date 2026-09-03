@@ -41,7 +41,6 @@ class WhatsAppNotifier extends StateNotifier<WhatsAppState> {
   final StorageService _storage;
   StreamSubscription? _statusSub;
   StreamSubscription? _qrSub;
-  bool _pollingQr = false;
 
   WhatsAppNotifier(this._dio, this._socket, this._storage)
       : super(const WhatsAppState()) {
@@ -86,12 +85,12 @@ class WhatsAppNotifier extends StateNotifier<WhatsAppState> {
   Future<String?> _getAdminId() => _storage.getAdminId();
   Future<String?> _getUsername() => _storage.getAdminUsername();
 
-  Future<void> fetchStatus({bool live = true}) async {
+  Future<void> fetchStatus() async {
     final adminId = await _getAdminId();
     if (adminId == null) return;
     try {
       final response = await _dio.get(
-        '${ApiConstants.waConnectionStatus}/$adminId?live=$live',
+        '${ApiConstants.waConnectionStatus}/$adminId?live=true',
       );
       if (response.data['success'] == true) {
         final s = WhatsAppStatusModel.fromJson(response.data);
@@ -101,21 +100,6 @@ class WhatsAppNotifier extends StateNotifier<WhatsAppState> {
         );
       }
     } catch (_) {}
-  }
-
-  /// تُستدعى عند فتح شاشة الاتصال: تتحقق من الحالة، وإن لم تكن متصلة قد تكون
-  /// جلسة محفوظة قيد الاستعادة بالـbackend (live=true تُحفّزها). نتحقق بضع
-  /// مرّات خلال ~12 ثانية بدون الاعتماد على الـsocket، فتظهر "متصل" حتى لو
-  /// الـsocket مكسور. الإعادات بـlive=false (خفيفة، بلا تكرار محاولة استعادة).
-  Future<void> refreshStatusOnOpen() async {
-    await fetchStatus(live: true);
-    for (var i = 0; i < 4; i++) {
-      if (!mounted) return;
-      if (state.status.connected) return;
-      await Future<void>.delayed(const Duration(seconds: 3));
-      if (!mounted) return;
-      await fetchStatus(live: false);
-    }
   }
 
   Future<void> startSession() async {
@@ -128,10 +112,6 @@ class WhatsAppNotifier extends StateNotifier<WhatsAppState> {
         'adminId': adminId,
         'adminUsername': username ?? '',
       });
-      // احتياطي: الـQR يُرسَل عبر socket مرّة واحدة بعد ثوانٍ (توليد عملية Go).
-      // لو الـsocket مو جاهز/فاتته اللحظة، نلتقط الـQR المخزَّن مؤقتاً (cache
-      // 60s) عبر polling — وإلا يبقى المستخدم على "جاري الاتصال" بلا نهاية.
-      unawaited(_pollForQr(adminId));
     } catch (e) {
       state = state.copyWith(isConnecting: false, error: 'فشل بدء الجلسة');
     }
@@ -147,74 +127,14 @@ class WhatsAppNotifier extends StateNotifier<WhatsAppState> {
         'adminId': adminId,
         'adminUsername': username ?? '',
       });
-      unawaited(_pollForQr(adminId));
     } catch (e) {
       state = state.copyWith(isConnecting: false, error: 'فشل إعادة الاتصال');
-    }
-  }
-
-  /// Polling احتياطي للـQR بعد بدء/إعادة الجلسة. الـsocket هو الأساس (فوري)؛
-  /// هذا يلتقط الحالات اللي تفوت فيها رسالة الـsocket. يتوقف فور ظهور QR (من
-  /// socket أو poll) أو الاتصال، ويضع رسالة واضحة عند انتهاء المهلة بدل تعليق
-  /// لا نهائي على "جاري الاتصال".
-  Future<void> _pollForQr(String adminId) async {
-    if (_pollingQr) return;
-    _pollingQr = true;
-    try {
-      // نبقى نُحدّث الـQR كل 3 ثوانٍ لمدة ~90 ثانية (مثل الويب) — whatsmeow
-      // يولّد QR جديد كل ~20 ثانية، والـcache يتحدّث، فحتى لو الـsocket مكسور
-      // يبقى الـQR المعروض حديثاً قابلاً للمسح. نتوقف عند الاتصال أو المهلة.
-      var elapsed = 0;
-      while (elapsed < 90) {
-        await Future<void>.delayed(const Duration(seconds: 3));
-        elapsed += 3;
-        if (!_pollingQr) return; // أُلغي (disconnect/dispose)
-        if (state.status.connected) return; // اتصل عبر socket
-        try {
-          final res = await _dio.get('${ApiConstants.waPendingQr}/$adminId');
-          final data = res.data;
-          if (data is Map) {
-            if (data['alreadyConnected'] == true) {
-              state = state.copyWith(
-                status: WhatsAppStatusModel(
-                  connected: true,
-                  phone: data['phone']?.toString(),
-                  pushname: data['pushname']?.toString(),
-                  platform: data['platform']?.toString(),
-                ),
-                isConnecting: false,
-                qrCode: null,
-              );
-              return;
-            }
-            final qr = data['qrCode']?.toString();
-            if (qr != null && qr.isNotEmpty && qr != state.qrCode) {
-              // حدّث الـQR كل مرة يتغيّر (refresh) — لا نتوقف، نكمل المتابعة.
-              state = state.copyWith(qrCode: qr, isConnecting: false);
-            }
-          }
-        } catch (_) {
-          // تجاهل أخطاء poll مؤقتة وأعد المحاولة
-        }
-      }
-      // انتهت المهلة (~90s) بلا اتصال — أخرج المستخدم من حالة الانتظار.
-      if (!state.status.connected) {
-        state = state.copyWith(
-          isConnecting: false,
-          error: state.qrCode == null
-              ? 'تعذّر توليد رمز QR. حاول مرة أخرى.'
-              : 'انتهت مهلة الانتظار. حاول مجدداً.',
-        );
-      }
-    } finally {
-      _pollingQr = false;
     }
   }
 
   Future<void> disconnect() async {
     final adminId = await _getAdminId();
     if (adminId == null) return;
-    _pollingQr = false; // أوقف أي polling جارٍ للـQR
     try {
       await _dio.post(ApiConstants.waDisconnect, data: {
         'adminId': adminId,
@@ -293,7 +213,6 @@ class WhatsAppNotifier extends StateNotifier<WhatsAppState> {
 
   @override
   void dispose() {
-    _pollingQr = false;
     _statusSub?.cancel();
     _qrSub?.cancel();
     super.dispose();

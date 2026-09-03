@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../core/theme/app_theme.dart';
 import '../models/subscriber_model.dart';
-import '../providers/device_provider.dart';
 import '../providers/subscribers_provider.dart';
 
 /// Shows a bottom sheet that searches loaded subscribers by username, name,
@@ -102,7 +100,7 @@ class _SearchSheetState extends ConsumerState<_SearchSheet> {
               padding: const EdgeInsets.fromLTRB(18, 14, 18, 6),
               child: Row(
                 children: [
-                  Icon(LucideIcons.search,
+                  Icon(Icons.search_rounded,
                       color: theme.colorScheme.primary),
                   const SizedBox(width: 10),
                   Text(
@@ -131,11 +129,11 @@ class _SearchSheetState extends ConsumerState<_SearchSheet> {
                 textInputAction: TextInputAction.search,
                 decoration: InputDecoration(
                   hintText: 'ابحث بالاسم أو المعرّف أو رقم الهاتف…',
-                  prefixIcon: const Icon(LucideIcons.search),
+                  prefixIcon: const Icon(Icons.search_rounded),
                   suffixIcon: _q.isEmpty
                       ? null
                       : IconButton(
-                          icon: const Icon(LucideIcons.x, size: 18),
+                          icon: const Icon(Icons.close_rounded, size: 18),
                           onPressed: () {
                             _ctrl.clear();
                             setState(() => _q = '');
@@ -201,20 +199,6 @@ class _SearchSheetState extends ConsumerState<_SearchSheet> {
                                             : Colors.grey);
                                 return ListTile(
                                   onTap: () {
-                                    // Prefetch device status before
-                                    // pushing — same pattern as the
-                                    // main subscribers list. Warms the
-                                    // 5-min cache so ConnectionStatusCard
-                                    // renders instantly on the details
-                                    // screen.
-                                    ref
-                                        .read(deviceStatusProvider(
-                                          DeviceStatusArgs(
-                                            subscriberUsername: s.username,
-                                            fallbackIp: s.ipAddress,
-                                          ),
-                                        ).future)
-                                        .catchError((_) => null);
                                     Navigator.of(ctx).pop();
                                     context.push(
                                       '/subscriber/${s.username}',
@@ -253,7 +237,7 @@ class _SearchSheetState extends ConsumerState<_SearchSheet> {
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                   trailing: Icon(
-                                    LucideIcons.chevronLeft,
+                                    Icons.chevron_left_rounded,
                                     color: theme.colorScheme.primary,
                                   ),
                                 );

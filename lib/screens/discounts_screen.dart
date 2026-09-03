@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/discounts_provider.dart';
 import '../providers/subscribers_provider.dart';
@@ -220,7 +219,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
             onPressed: () {
               ref.read(discountsProvider.notifier).loadDiscounts();
             },
-            icon: const Icon(LucideIcons.refreshCw),
+            icon: const Icon(Icons.refresh_rounded),
             tooltip: 'تحديث',
           ),
         ],
@@ -268,7 +267,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
                   color: AppTheme.teal50,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(LucideIcons.circlePlus,
+                child: const Icon(Icons.add_circle_outline_rounded,
                     color: AppTheme.primary, size: 22),
               ),
               const SizedBox(width: 10),
@@ -329,7 +328,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
               decoration: const InputDecoration(
                 labelText: 'مبلغ مخصص',
                 suffixText: 'IQD',
-                prefixIcon: Icon(LucideIcons.pencil),
+                prefixIcon: Icon(Icons.edit_rounded),
               ),
               onChanged: (_) => setState(() {}),
             ),
@@ -342,7 +341,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
             textAlign: TextAlign.left,
             decoration: const InputDecoration(
               labelText: 'بحث عن مشترك...',
-              prefixIcon: Icon(LucideIcons.search),
+              prefixIcon: Icon(Icons.search_rounded),
             ),
             onChanged: (v) => setState(() => _subscriberSearchQuery = v.toLowerCase()),
           ),
@@ -368,7 +367,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
                           color: Colors.white,
                         ),
                       )
-                    : const Icon(LucideIcons.percent),
+                    : const Icon(Icons.discount_rounded),
                 label: Text(
                   'إضافة الخصم (${_selectedSubscribers.length})',
                 ),
@@ -403,7 +402,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
               );
             });
           },
-          icon: const Icon(LucideIcons.checkCheck, size: 18),
+          icon: const Icon(Icons.select_all_rounded, size: 18),
           label: const Text('تحديد الكل'),
           style: TextButton.styleFrom(
             foregroundColor: AppTheme.primary,
@@ -413,7 +412,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
         const SizedBox(width: 4),
         TextButton.icon(
           onPressed: () => setState(() => _selectedSubscribers.clear()),
-          icon: const Icon(LucideIcons.squareDashed, size: 18),
+          icon: const Icon(Icons.deselect_rounded, size: 18),
           label: const Text('إلغاء التحديد'),
           style: TextButton.styleFrom(
             foregroundColor: Colors.grey,
@@ -436,11 +435,9 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
   Widget _buildSubscribersGrid(ThemeData theme, bool isDark, SubscribersState subsState) {
     final filtered = _filterSubscribers(subsState);
     final discountsState = ref.read(discountsProvider);
-    // Map للقيمة بدل Set عشان نعرض المبلغ على بطاقة المشترك مباشرة.
-    final existingDiscounts = <String, double>{
-      for (final d in discountsState.discounts)
-        d.subscriberUsername: d.discountAmount,
-    };
+    final existingUsernames = discountsState.discounts
+        .map((d) => d.subscriberUsername)
+        .toSet();
 
     if (subsState.isLoading) {
       return const Padding(
@@ -480,24 +477,23 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          // 3 أعمدة بدل 2 + aspect أنحف → بطاقة مشترك مدمجة.
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            mainAxisSpacing: 6,
-            crossAxisSpacing: 6,
-            childAspectRatio: 1.25,
+            crossAxisCount: 2,
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            childAspectRatio: 1.6,
           ),
           itemCount: visibleSubs.length,
           itemBuilder: (ctx, i) {
             final sub = visibleSubs[i];
             final isSelected = _selectedSubscribers.contains(sub.username);
-            final existingAmount = existingDiscounts[sub.username];
+            final hasExisting = existingUsernames.contains(sub.username);
 
             return _SubscriberSelectCard(
               username: sub.username,
               fullName: sub.fullName,
               packageName: sub.profileName,
-              existingDiscountAmount: existingAmount,
+              hasExistingDiscount: hasExisting,
               isSelected: isSelected,
               isDark: isDark,
               onTap: () {
@@ -556,7 +552,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
                   color: AppTheme.teal50,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(LucideIcons.percent,
+                child: const Icon(Icons.discount_rounded,
                     color: AppTheme.primary, size: 22),
               ),
               const SizedBox(width: 10),
@@ -571,7 +567,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
               if (allDiscounts.isNotEmpty)
                 TextButton.icon(
                   onPressed: _confirmDeleteAll,
-                  icon: const Icon(LucideIcons.trash2, size: 18),
+                  icon: const Icon(Icons.delete_sweep_rounded, size: 18),
                   label: const Text('إزالة الكل'),
                   style: TextButton.styleFrom(
                     foregroundColor: AppTheme.dangerColor,
@@ -590,7 +586,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
               textAlign: TextAlign.left,
               decoration: const InputDecoration(
                 labelText: 'بحث في الخصومات...',
-                prefixIcon: Icon(LucideIcons.search),
+                prefixIcon: Icon(Icons.search_rounded),
               ),
               onChanged: (v) =>
                   setState(() => _discountSearchQuery = v.toLowerCase()),
@@ -604,7 +600,7 @@ class _DiscountsScreenState extends ConsumerState<DiscountsScreen> {
               child: Center(
                 child: Column(
                   children: [
-                    Icon(LucideIcons.percent,
+                    Icon(Icons.discount_outlined,
                         size: 48, color: Colors.grey.shade400),
                     const SizedBox(height: 8),
                     Text(
@@ -685,8 +681,7 @@ class _SubscriberSelectCard extends StatelessWidget {
   final String username;
   final String fullName;
   final String? packageName;
-  /// مبلغ الخصم الحالي للمشترك (null لا يوجد خصم).
-  final double? existingDiscountAmount;
+  final bool hasExistingDiscount;
   final bool isSelected;
   final bool isDark;
   final VoidCallback onTap;
@@ -695,7 +690,7 @@ class _SubscriberSelectCard extends StatelessWidget {
     required this.username,
     required this.fullName,
     this.packageName,
-    this.existingDiscountAmount,
+    required this.hasExistingDiscount,
     required this.isSelected,
     required this.isDark,
     required this.onTap,
@@ -709,25 +704,23 @@ class _SubscriberSelectCard extends StatelessWidget {
     final bgColor = isSelected
         ? (isDark ? AppTheme.teal900.withValues(alpha: 0.3) : AppTheme.teal50)
         : (isDark ? const Color(0xFF252525) : const Color(0xFFF8FAFA));
-    final hasExisting = existingDiscountAmount != null && existingDiscountAmount! > 0;
 
     return Material(
       color: bgColor,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(14),
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(color: borderColor, width: isSelected ? 2 : 1),
           ),
-          padding: const EdgeInsets.all(7),
+          padding: const EdgeInsets.all(10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // أعلى: username + علامة التحديد
               Row(
                 children: [
                   Expanded(
@@ -736,54 +729,59 @@ class _SubscriberSelectCard extends StatelessWidget {
                       style: const TextStyle(
                         fontFamily: 'Cairo',
                         fontWeight: FontWeight.w700,
-                        fontSize: 11.5,
+                        fontSize: 13,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   if (isSelected)
-                    const Icon(LucideIcons.circleCheck,
-                        color: AppTheme.primary, size: 14),
+                    const Icon(Icons.check_circle_rounded,
+                        color: AppTheme.primary, size: 18),
                 ],
               ),
-              // الاسم العربي + الباقة بسطر واحد لو وجدا
-              if (fullName.isNotEmpty)
+              if (fullName.isNotEmpty) ...[
+                const SizedBox(height: 2),
                 Text(
                   fullName,
                   style: TextStyle(
-                    fontSize: 9.5,
+                    fontSize: 11,
                     color: Colors.grey.shade500,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
-              if (packageName != null && packageName!.isNotEmpty)
+              ],
+              if (packageName != null && packageName!.isNotEmpty) ...[
+                const SizedBox(height: 2),
                 Text(
                   packageName!,
-                  style: const TextStyle(
-                    fontSize: 9.5,
+                  style: TextStyle(
+                    fontSize: 11,
                     color: AppTheme.teal600,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w500,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
-              // أسفل: قيمة الخصم بـcompact chip بدل "خصم موجود"
-              if (hasExisting)
+              ],
+              if (hasExistingDiscount) ...[
+                const SizedBox(height: 4),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: AppTheme.warningColor.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(5),
+                    color: AppTheme.warningColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Text(
-                    '-${AppHelpers.formatMoney(existingDiscountAmount!)}',
-                    style: const TextStyle(
+                  child: const Text(
+                    'خصم موجود',
+                    style: TextStyle(
                       fontFamily: 'Cairo',
-                      fontSize: 9.5,
+                      fontSize: 10,
                       color: AppTheme.warningColor,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
+              ],
             ],
           ),
         ),
@@ -830,7 +828,7 @@ class _DiscountCard extends StatelessWidget {
                   color: AppTheme.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(LucideIcons.user,
+                child: const Icon(Icons.person_rounded,
                     color: AppTheme.primary, size: 20),
               ),
               const SizedBox(width: 10),
@@ -860,14 +858,14 @@ class _DiscountCard extends StatelessWidget {
               ),
               IconButton(
                 onPressed: onEdit,
-                icon: const Icon(LucideIcons.pencil, size: 20),
+                icon: const Icon(Icons.edit_rounded, size: 20),
                 color: AppTheme.infoColor,
                 tooltip: 'تعديل',
                 visualDensity: VisualDensity.compact,
               ),
               IconButton(
                 onPressed: onDelete,
-                icon: const Icon(LucideIcons.trash2, size: 20),
+                icon: const Icon(Icons.delete_rounded, size: 20),
                 color: AppTheme.dangerColor,
                 tooltip: 'حذف',
                 visualDensity: VisualDensity.compact,
@@ -920,7 +918,7 @@ class _DiscountCard extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                Icon(LucideIcons.clock,
+                Icon(Icons.access_time_rounded,
                     size: 14, color: Colors.grey.shade400),
                 const SizedBox(width: 4),
                 Text(

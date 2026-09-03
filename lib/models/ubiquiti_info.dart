@@ -73,22 +73,17 @@ class UbiquitiStatus {
   String get ccqHealth {
     final c = ccqPercent;
     if (c == null) return 'unknown';
-    // Per admin request: 80+ is good, anything below is a problem. The
-    // earlier 50–79 "warn" band was misleading because real-world links
-    // either stay above 80% or drop fast — there's no useful middle.
-    return c >= 80 ? 'good' : 'bad';
+    if (c >= 80) return 'good';
+    if (c >= 50) return 'warn';
+    return 'bad';
   }
 
   String get lanHealth {
     if (!lanUp) return 'bad';
     final s = lanSpeed ?? '';
-    // Match the leading number so "100Mbps" doesn't accidentally fall
-    // through the 1000Mbps test. Per admin request: 100/1000 are both
-    // healthy; only 10Mbps or unplugged counts as bad.
-    final m = RegExp(r'^(\d+)Mbps').firstMatch(s);
-    final mbps = m == null ? null : int.tryParse(m.group(1)!);
-    if (mbps == null) return 'bad';
-    return mbps >= 100 ? 'good' : 'bad';
+    if (s.contains('1000')) return 'good';
+    if (s.contains('100')) return 'warn';
+    return 'bad';
   }
 
   int? get snrDb {

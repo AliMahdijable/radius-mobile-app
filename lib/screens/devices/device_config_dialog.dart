@@ -20,7 +20,6 @@ class _DeviceConfigDialogState extends ConsumerState<DeviceConfigDialog> {
   final _user = TextEditingController();
   final _pass = TextEditingController();
   final _ip = TextEditingController();
-  final _notes = TextEditingController();
   bool _loading = true;
   bool _saving = false;
 
@@ -28,15 +27,6 @@ class _DeviceConfigDialogState extends ConsumerState<DeviceConfigDialog> {
   void initState() {
     super.initState();
     _loadExisting();
-  }
-
-  @override
-  void dispose() {
-    _user.dispose();
-    _pass.dispose();
-    _ip.dispose();
-    _notes.dispose();
-    super.dispose();
   }
 
   Future<void> _loadExisting() async {
@@ -47,7 +37,6 @@ class _DeviceConfigDialogState extends ConsumerState<DeviceConfigDialog> {
       _user.text = cfg?.username ?? '';
       _pass.text = cfg?.password ?? '';
       _ip.text = cfg?.customIp ?? '';
-      _notes.text = cfg?.notes ?? '';
       _loading = false;
     });
   }
@@ -59,7 +48,6 @@ class _DeviceConfigDialogState extends ConsumerState<DeviceConfigDialog> {
       username: _user.text.trim().isEmpty ? null : _user.text.trim(),
       password: _pass.text.isEmpty ? null : _pass.text,
       customIp: _ip.text.trim().isEmpty ? null : _ip.text.trim(),
-      notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
     );
     final ok = await saveDeviceConfig(ref, widget.subscriberUsername, cfg);
     if (!mounted) return;
@@ -166,17 +154,6 @@ class _DeviceConfigDialogState extends ConsumerState<DeviceConfigDialog> {
                   Text(
                     'IP المخصص مفيد لـ Ubiquiti خلف NAT.',
                     style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _notes,
-                    style: const TextStyle(fontSize: 13),
-                    minLines: 2,
-                    maxLines: 4,
-                    decoration: _dec(
-                      'ملاحظات (اختياري)',
-                      'مثال: VLAN 102، تقسيم فايبر للطابق الثاني، إلخ',
-                    ),
                   ),
                 ],
               ),

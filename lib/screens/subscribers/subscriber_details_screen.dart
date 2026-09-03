@@ -1,7 +1,5 @@
-import 'dart:convert';
 import 'dart:developer' as dev;
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -16,14 +14,9 @@ import 'package:dio/dio.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/services/storage_service.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/device_provider.dart';
-import '../../providers/managers_provider.dart';
 import '../../providers/whatsapp_provider.dart';
 import '../../providers/subscribers_provider.dart';
-import '../../models/manager_model.dart';
-import '../../providers/receipt_archive_provider.dart';
 import '../../providers/templates_provider.dart';
-import '../../models/print_template_model.dart';
 import '../../providers/print_templates_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../core/utils/receipt_printer.dart';
@@ -46,89 +39,50 @@ class _SubscriberDetailsScreenState
     extends ConsumerState<SubscriberDetailsScreen> {
   bool _isProcessing = false;
 
-  /// آخر اتصال للمشترك غير المتصل — يُجلب مرّة عند فتح الشاشة من SAS4
-  /// /index/UserSessions ويُعرض فقط لو المشترك غير متصل.
-  String? _lastConnection;
-
   @override
   void initState() {
     super.initState();
     // حقول SAS4 admin_list لا تعيد دائماً framedipaddress/macAddress.
     // نعيد تحميل التفاصيل الدقيقة عند فتح الصفحة لنكشف عن الـ IP الحالي عند الاتصال.
-    // عند فتح الشاشة: اجلب بيانات الاتصال الحيّة (IP/MAC/الجلسة) للمشترك
-    // بالاسم من /index/online — تشتغل حتى لو وصلنا للشاشة من البحث لا من
-    // صفحة المتصلين. (هذا يحلّ محلّ refreshSubscriberAfterOperation الذي
-    // كان غرضه نفسه — كشف الـIP الحالي عند الاتصال.)
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final notifier = ref.read(subscribersProvider.notifier);
-      notifier.fetchOnlineInfo(widget.subscriber.username).catchError((_) {});
-      // آخر اتصال — مكالمة منفصلة لـ/index/UserSessions، نعرضها لو offline.
-      notifier.getLastConnection(widget.subscriber.username).then((ts) {
-        if (mounted && ts != null && ts.isNotEmpty) {
-          setState(() => _lastConnection = ts);
-        }
-      });
+      final id = _subscriberId;
+      if (id == null || !mounted) return;
+      ref
+          .read(subscribersProvider.notifier)
+          .refreshSubscriberAfterOperation(id)
+          .catchError((_) {});
     });
   }
 
-  /// نص "آخر اتصال": الوقت النسبي (منذ X دقيقة/ساعة/يوم) + التاريخ الكامل.
-  /// مثال: «منذ 5 ساعات • 2026/05/21 01:03 مساءً». لو تعذّر النسبي نعرض
-  /// التاريخ فقط.
-  String _lastConnectionLabel() {
-    final date = AppHelpers.formatReportDateTime(_lastConnection);
-    final rel = AppHelpers.formatRelativeArabic(_lastConnection);
-    return rel.isEmpty ? date : '$rel  •  $date';
-  }
-
-  /// idx الحقيقي للمشترك. الـmodel القادم من صفحة المتصلين قد يحمل idx
-  /// مفقوداً أو خاطئاً (SAS4 /index/online لا يُرجع id موثوقاً)، فنحاول
-  /// أولاً idx الـextra ثم idx المشترك المُطابَق بالاسم من القائمة الرئيسية.
-  int? get _subscriberId {
-    final fromExtra = int.tryParse(widget.subscriber.idx ?? '');
-    final resolved = int.tryParse(_readCurrentSubscriber().idx ?? '');
-    return resolved ?? fromExtra;
-  }
+  int? get _subscriberId =>
+      int.tryParse(widget.subscriber.idx ?? '');
 
   bool _matchesCurrentSubscriber(SubscriberModel candidate) {
-    // نُطابق بالاسم دائماً (فريد في SAS4) — يصحّح حتى لو حمل الـextra
-    // idx خاطئاً من صفحة المتصلين — مع قبول التطابق بالـidx أيضاً.
-    if (candidate.username.isNotEmpty &&
-        candidate.username == widget.subscriber.username) {
-      return true;
-    }
     final originalIdx = widget.subscriber.idx;
-    return originalIdx != null &&
-        originalIdx.isNotEmpty &&
-        candidate.idx == originalIdx;
+    if (originalIdx != null && originalIdx.isNotEmpty) {
+      return candidate.idx == originalIdx;
+    }
+    return candidate.username == widget.subscriber.username;
   }
 
-  /// نبحث في قائمة المتصلين أولاً (تحمل IP/MAC/الجلسة الحيّة التي لا
-  /// تُرجعها قائمة المشتركين العامة) ثم القائمة العامة، وإلا الـmodel
-  /// المُمرَّر. لولا هذا الترتيب لظهر "لا يوجد اتصال نشط" لمشترك متصل لأن
-  /// مطابقة الاسم كانت تختار صفّ القائمة العامة الفقير من البيانات.
   SubscriberModel _resolveCurrentSubscriber(
-    Iterable<SubscriberModel> onlineUsers,
-    Iterable<SubscriberModel> subscribers,
-  ) {
-    for (final candidate in onlineUsers) {
-      if (_matchesCurrentSubscriber(candidate)) return candidate;
-    }
+      Iterable<SubscriberModel> subscribers) {
     for (final candidate in subscribers) {
-      if (_matchesCurrentSubscriber(candidate)) return candidate;
+      if (_matchesCurrentSubscriber(candidate)) {
+        return candidate;
+      }
     }
     return widget.subscriber;
   }
 
   SubscriberModel _readCurrentSubscriber() {
-    final st = ref.read(subscribersProvider);
-    return _resolveCurrentSubscriber(st.onlineUsers, st.subscribers);
+    return _resolveCurrentSubscriber(ref.read(subscribersProvider).subscribers);
   }
 
   SubscriberModel _watchCurrentSubscriber() {
     return ref.watch(
       subscribersProvider.select(
-        (state) => _resolveCurrentSubscriber(state.onlineUsers, state.subscribers),
+        (state) => _resolveCurrentSubscriber(state.subscribers),
       ),
     );
   }
@@ -200,16 +154,7 @@ class _SubscriberDetailsScreenState
     }
   }
 
-  /// يطبع الوصل ويأرشفه. الأرشفة fire-and-forget — فشلها ما يبطّل الطباعة.
-  /// كل عملية تطبع وصل (تفعيل/تمديد/تسديد دين/إضافة دين) تنتهي بصف بـ
-  /// printed_receipts بالـbackend، يتعرض بشاشة "أرشيف الوصولات".
-  Future<void> _printReceiptNow(
-    ReceiptData data, {
-    required ReceiptOperation operation,
-    ReceiptPaymentMethod paymentMethod = ReceiptPaymentMethod.cash,
-    String? subscriberId,
-    String? subscriberUsername,
-  }) async {
+  Future<void> _printReceiptNow(ReceiptData data) async {
     if (!mounted) return;
     try {
       final ptState = ref.read(printTemplatesProvider);
@@ -217,44 +162,13 @@ class _SubscriberDetailsScreenState
         await ref.read(printTemplatesProvider.notifier).loadTemplates();
       }
       final activeTemplate = ref.read(printTemplatesProvider).activeTemplate;
-      // 1) أرشفة أولاً عشان نأخذ receipt_no من العدّاد الخاص بالمدير،
-      //    ثم نطبع الـPDF بالرقم الصحيح بدلاً من INV-{timestamp}. الترتيب
-      //    مهم — لو طبعنا أولاً، الوصل المطبوع ما يقدر يحوي receipt_no.
-      final receiptNo = await archivePrintedReceipt(
-        ref,
-        data: data,
-        operation: operation,
-        paymentMethod: paymentMethod,
-        subscriberId: subscriberId,
-        subscriberUsername: subscriberUsername,
-        templateId: activeTemplate?.id,
-      );
-      // 2) طباعة بالرقم + إعدادات التصميم المخزّنة (margins, font, colors)
-      //    + نوع الورق (POS/A4). الـnative renderer هو المسار الوحيد الآن.
-      final design = activeTemplate?.templateData != null
-          ? _parseDesignSafe(activeTemplate!.templateData!)
-          : null;
       await ReceiptPrinter.printReceipt(
         data: data,
         htmlTemplate: activeTemplate?.content,
-        design: design,
-        type: activeTemplate?.templateType ?? 'pos',
-        receiptNo: receiptNo,
       );
     } catch (_) {
       if (mounted) AppSnackBar.error(context, 'فشل في طباعة الوصل');
     }
-  }
-
-  /// يفك JSON المُخزَّن في template_data. عند الفشل يرجع null (يستخدم
-  /// الـrenderer إعداداته الافتراضية حينها).
-  static ReceiptDesign? _parseDesignSafe(String raw) {
-    if (raw.trim().isEmpty) return null;
-    try {
-      final m = jsonDecode(raw);
-      if (m is Map<String, dynamic>) return ReceiptDesign.fromJson(m);
-    } catch (_) {}
-    return null;
   }
 
   // ── Edit ───────────────────────────────────────────────────────────────
@@ -264,8 +178,6 @@ class _SubscriberDetailsScreenState
     final canEditExpiration =
         (_authUser?.canAccessManagers ?? false) ||
             (_authUser?.canAccessPackages ?? false);
-    // "تابع إلى" يظهر فقط للمدراء الذين يملكون صلاحية إدارة المدراء.
-    final canPickParent = _authUser?.canAccessManagers ?? false;
     final id = _subscriberId;
     if (id == null) {
       _showSnack('معرف المشترك غير متوفر', success: false);
@@ -282,12 +194,8 @@ class _SubscriberDetailsScreenState
     if (ref.read(subscribersProvider).packages.isEmpty) {
       futures.add(notifier.loadPackages());
     }
-    final parentManagersFuture = canPickParent
-        ? ref.read(managersProvider.notifier).fetchParentManagers()
-        : Future<List<ManagerModel>>.value(const []);
 
     final results = await Future.wait(futures);
-    final parentManagers = await parentManagersFuture;
     if (!mounted) return;
     setState(() => _isProcessing = false);
 
@@ -310,10 +218,6 @@ class _SubscriberDetailsScreenState
 
     final sub = _readCurrentSubscriber();
     final originalUsername = details['username']?.toString() ?? sub.username;
-    final originalFirstname =
-        (details['firstname']?.toString() ?? sub.firstname).trim();
-    final originalLastname =
-        (details['lastname']?.toString() ?? sub.lastname).trim();
     final originalProfileId = details['profile_id'] ??
         (details['profile_details'] is Map ? details['profile_details']['id'] : null) ??
         sub.profileId;
@@ -327,13 +231,6 @@ class _SubscriberDetailsScreenState
     int? selectedProfileId = originalProfileId is int
         ? originalProfileId
         : int.tryParse(originalProfileId?.toString() ?? '');
-    final originalParentId = details['parent_id'] is int
-        ? details['parent_id'] as int
-        : int.tryParse(details['parent_id']?.toString() ?? '');
-    int? selectedParentId = originalParentId != null &&
-            parentManagers.any((m) => m.id == originalParentId)
-        ? originalParentId
-        : null;
     bool saving = false;
     bool showAllPackages = false;
 
@@ -390,7 +287,7 @@ class _SubscriberDetailsScreenState
                       decoration: BoxDecoration(
                         color: AppTheme.primary.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(10)),
-                      child: const Icon(LucideIcons.pencil, color: AppTheme.primary, size: 20)),
+                      child: const Icon(Icons.edit, color: AppTheme.primary, size: 20)),
                     const SizedBox(width: 10),
                     Text('تعديل بيانات المشترك',
                         style: Theme.of(ctx).textTheme.titleMedium
@@ -409,7 +306,7 @@ class _SubscriberDetailsScreenState
                       textAlign: TextAlign.left,
                       decoration: const InputDecoration(
                         labelText: 'الاسم الأول',
-                        prefixIcon: Icon(LucideIcons.user, size: 20)),
+                        prefixIcon: Icon(Icons.person_outline, size: 20)),
                     )),
                     const SizedBox(width: 10),
                     Expanded(child: TextField(
@@ -426,10 +323,10 @@ class _SubscriberDetailsScreenState
                     textDirection: TextDirection.ltr, textAlign: TextAlign.left,
                     decoration: InputDecoration(
                       labelText: 'رقم الهاتف',
-                      prefixIcon: const Icon(LucideIcons.phone, size: 20),
+                      prefixIcon: const Icon(Icons.phone_outlined, size: 20),
                       suffixIcon: IconButton(
                         tooltip: 'اختر من جهات الاتصال',
-                        icon: const Icon(LucideIcons.contact, size: 20),
+                        icon: const Icon(Icons.contacts_rounded, size: 20),
                         onPressed: () async {
                           final phone = await pickContactPhone(context);
                           if (phone != null && phone.isNotEmpty) {
@@ -451,7 +348,7 @@ class _SubscriberDetailsScreenState
                     textAlign: TextAlign.left,
                     decoration: const InputDecoration(
                       labelText: 'اسم المستخدم',
-                      prefixIcon: Icon(LucideIcons.atSign, size: 20)),
+                      prefixIcon: Icon(Icons.alternate_email, size: 20)),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -460,7 +357,7 @@ class _SubscriberDetailsScreenState
                     textAlign: TextAlign.left,
                     decoration: const InputDecoration(
                       labelText: 'كلمة المرور',
-                      prefixIcon: Icon(LucideIcons.lock, size: 20)),
+                      prefixIcon: Icon(Icons.lock_outline, size: 20)),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -505,9 +402,9 @@ class _SubscriberDetailsScreenState
                       helperText: canEditExpiration
                           ? 'اضغط لتغيير التاريخ والوقت'
                           : 'لا تملك صلاحية تعديل تاريخ الانتهاء',
-                      prefixIcon: const Icon(LucideIcons.calendar, size: 20),
+                      prefixIcon: const Icon(Icons.calendar_today, size: 20),
                       suffixIcon: canEditExpiration
-                          ? const Icon(LucideIcons.calendarClock, size: 18)
+                          ? const Icon(Icons.edit_calendar_rounded, size: 18)
                           : null,
                     ),
                   ),
@@ -523,7 +420,7 @@ class _SubscriberDetailsScreenState
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(LucideIcons.info, size: 16, color: Colors.orange),
+                          const Icon(Icons.info_outline, size: 16, color: Colors.orange),
                           const SizedBox(width: 8),
                           const Text('لا توجد باقات متاحة',
                               style: TextStyle(fontSize: 13, color: Colors.orange)),
@@ -533,7 +430,7 @@ class _SubscriberDetailsScreenState
                               await notifier.loadPackages();
                               setSheet(() {});
                             },
-                            child: const Icon(LucideIcons.refreshCw, size: 16, color: Colors.orange),
+                            child: const Icon(Icons.refresh, size: 16, color: Colors.orange),
                           ),
                         ],
                       ),
@@ -560,7 +457,7 @@ class _SubscriberDetailsScreenState
                       iconEnabledColor:
                           Theme.of(ctx).colorScheme.onSurface.withOpacity(0.7),
                       decoration: InputDecoration(
-                        prefixIcon: const Icon(LucideIcons.wifi, size: 18),
+                        prefixIcon: const Icon(Icons.wifi_rounded, size: 18),
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 10),
@@ -584,9 +481,8 @@ class _SubscriberDetailsScreenState
                                       ),
                                     ),
                                     const SizedBox(width: 6),
-                                    // نموذج التعديل يعرض سعر الشراء.
                                     Text(
-                                      AppHelpers.formatMoney(pkg.costPrice),
+                                      AppHelpers.formatMoney(pkg.displayPrice),
                                       style: const TextStyle(
                                         fontSize: 11.5,
                                         fontWeight: FontWeight.w700,
@@ -610,38 +506,6 @@ class _SubscriberDetailsScreenState
                           ),
                         ),
                       ),
-                  ],
-                  // تابع إلى — same gated dropdown as the Add form. Only
-                  // admins with canAccessManagers can change a subscriber's
-                  // parent; sub-managers don't see the field at all.
-                  if (canPickParent) ...[
-                    const SizedBox(height: 16),
-                    Text('تابع إلى', style: TextStyle(fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<int?>(
-                      value: selectedParentId,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        prefixIcon: Icon(LucideIcons.network, size: 20),
-                        hintText: 'اختر المدير الأب',
-                      ),
-                      items: parentManagers
-                          .map(
-                            (m) => DropdownMenuItem<int?>(
-                              value: m.id,
-                              child: Text(
-                                m.fullName.isNotEmpty
-                                    ? '${m.username} - ${m.fullName}'
-                                    : m.username,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) => setSheet(() => selectedParentId = v),
-                    ),
                   ],
                   const SizedBox(height: 24),
 
@@ -672,14 +536,6 @@ class _SubscriberDetailsScreenState
                         } else {
                           details.remove('expiration');
                         }
-                        if (canPickParent) {
-                          // المدير اللي يقدر يغيّر الـparent — نرسل المختار.
-                          details['parent_id'] = selectedParentId;
-                        }
-                        // المدراء الفرعيون (normal-reseller): نُبقي parent_id
-                        // الأصلي اللي رجع من SAS4 — حذفه يخلّي SAS4 يرفض الـPUT
-                        // بـ403 message فارغ (تجربة admin@husxxx). v1 يفعل نفس
-                        // الشي (يحفظ كل الحقول الأصلية).
                         if (pwCtrl.text.isNotEmpty) {
                           details['password'] = pwCtrl.text;
                           details['confirm_password'] = pwCtrl.text;
@@ -691,36 +547,11 @@ class _SubscriberDetailsScreenState
                         final ok = await notifier.updateSubscriber(id, details);
                         if (!ok) anySuccess = false;
 
-                        // عند تغيير الاسم أو اسم المستخدم (الرمز): نفصل
-                        // الجلسة الحيّة كي يعيد المشترك الاتصال (مطابق التعطيل).
-                        final nameOrCodeChanged =
-                            (newUsername != originalUsername && newUsername.isNotEmpty) ||
-                                fnCtrl.text.trim() != originalFirstname ||
-                                lnCtrl.text.trim() != originalLastname;
-                        if (anySuccess && nameOrCodeChanged) {
-                          await notifier.disconnectActiveSession(
-                            id,
-                            knownUsername: newUsername.isNotEmpty
-                                ? newUsername
-                                : originalUsername,
-                          );
-                        }
-
                         if (mounted) {
                           Navigator.pop(ctx);
                           _showSnack(anySuccess ? 'تم التعديل بنجاح' : 'فشل بعض التعديلات',
                               success: anySuccess);
-                          // When the parent changed, do a full reload so the
-                          // manager-filter dropdown and any per-manager
-                          // counts/groupings reflect the new ownership across
-                          // every page. Otherwise a single refresh is enough.
-                          final parentChanged = canPickParent &&
-                              selectedParentId != originalParentId;
-                          if (parentChanged) {
-                            await notifier.loadSubscribers();
-                          } else if (id != null) {
-                            await notifier.refreshSingleSubscriber(id);
-                          }
+                          if (id != null) await notifier.refreshSingleSubscriber(id);
                           if (mounted) context.pop();
                         }
                       } finally {
@@ -730,7 +561,7 @@ class _SubscriberDetailsScreenState
                     icon: saving
                         ? const SizedBox(width: 20, height: 20,
                             child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Icon(LucideIcons.save),
+                        : const Icon(Icons.save),
                     label: Text(saving ? 'جاري الحفظ...' : 'حفظ التعديلات'),
                   )),
                   const SizedBox(height: 20),
@@ -780,7 +611,7 @@ class _SubscriberDetailsScreenState
                 width: 1.5),
             ),
             child: Row(children: [
-              Icon(isSelected ? LucideIcons.circleCheck : LucideIcons.circle,
+              Icon(isSelected ? Icons.check_circle : Icons.circle_outlined,
                   size: 18, color: isSelected ? AppTheme.primary : Colors.grey),
               const SizedBox(width: 10),
               Expanded(child: Row(children: [
@@ -801,9 +632,7 @@ class _SubscriberDetailsScreenState
                   ),
                 ],
               ])),
-              // عرض سعر الشراء (الكلفة) في انتقاء الباقة بنماذج
-              // التعديل/الإضافة. سعر البيع يظهر بكرت المشترك.
-              Text(AppHelpers.formatMoney(pkg.costPrice),
+              Text(AppHelpers.formatMoney(pkg.displayPrice),
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
                   color: isSelected ? AppTheme.primary : AppTheme.teal600)),
             ]),
@@ -992,7 +821,7 @@ class _SubscriberDetailsScreenState
                     decoration: BoxDecoration(
                       color: AppTheme.teal600.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(10)),
-                    child: const Icon(LucideIcons.repeat, color: AppTheme.teal600, size: 20)),
+                    child: const Icon(Icons.autorenew, color: AppTheme.teal600, size: 20)),
                   const SizedBox(width: 10),
                   Text('تمديد المشترك', style: Theme.of(ctx).textTheme.titleMedium
                       ?.copyWith(fontWeight: FontWeight.w700)),
@@ -1089,15 +918,13 @@ class _SubscriberDetailsScreenState
                 const SizedBox(height: 6),
                 Row(children: [
                   Expanded(child: _MethodBtn(
-                    icon: LucideIcons.star, label: 'بالنقاط',
-                    accentColor: Colors.amber.shade700, // ذهبي — نقاط مكافأة
+                    icon: Icons.star_rounded, label: 'بالنقاط',
                     selected: method == 'reward_points',
                     onTap: () => setSheet(() => method = 'reward_points'),
                   )),
                   const SizedBox(width: 8),
                   Expanded(child: _MethodBtn(
-                    icon: LucideIcons.wallet, label: 'برصيد المدير',
-                    accentColor: AppTheme.teal600, // فيروزي — رصيد المدير
+                    icon: Icons.account_balance_wallet_rounded, label: 'برصيد المدير',
                     selected: method == 'credit',
                     onTap: () => setSheet(() => method = 'credit'),
                   )),
@@ -1115,17 +942,12 @@ class _SubscriberDetailsScreenState
                 SizedBox(height: AppTheme.actionButtonHeight, child: ElevatedButton.icon(
                   onPressed: submitting ? null : () async {
                     setSheet(() => submitting = true);
-                    final result = await notifier.extendSubscription(
+                    final success = await notifier.extendSubscription(
                       userId: id, profileId: selectedPkgId, method: method);
-                    final success = result.ok;
                     if (mounted) {
                       Navigator.pop(ctx);
-                      _showSnack(
-                        success
-                            ? 'تم التمديد بنجاح'
-                            : (result.errorMessage ?? 'فشل التمديد'),
-                        success: success,
-                      );
+                      _showSnack(success ? 'تم التمديد بنجاح' : 'فشل التمديد',
+                          success: success);
                       if (success) {
                         if (id != null) {
                           await notifier.refreshSubscriberAfterOperation(id);
@@ -1134,35 +956,36 @@ class _SubscriberDetailsScreenState
                         final fresh = await notifier.getSubscriberDetails(id);
                         final expDate = fresh?['expiration']?.toString() ?? '';
                         final newDebt = _toDouble(fresh?['notes'] ?? fresh?['comments']);
-                        // WA 2.0 cleanup (Build 82): إشعار التمديد يطلقه backend
-                        // تلقائياً من /api/v2/subscribers/.../extend مع
-                        // idempotencyKey مرتبط بالـactivity_log. كان الاستدعاء
-                        // هنا يسبّب رسالتين لنفس الحدث (مرة من الموبايل، مرة
-                        // من v2). راجع memory project_whatsapp_v2_phase1_done.
+                        final remDays = _calcRemainingDays(expDate);
+                        // حساب المبلغ المسدد بناءً على طريقة التمديد
+                        final paidAmountForMsg = method == 'credit'
+                          ? _formatNumber(double.tryParse(pkgPrice ?? '0') ?? 0)
+                          : '0'; // نقاط: لا يوجد مبلغ نقدي
+
+                        await _sendWhatsAppFromTemplate('renewal',
+                          extraVars: {
+                            '{package_price}': _formatNumber(double.tryParse(pkgPrice ?? '0') ?? 0),
+                            '{paid_amount}': paidAmountForMsg,
+                            '{debt_amount}': newDebt < 0 ? _formatNumber(newDebt.abs()) : '0',
+                            '{credit_amount}': newDebt > 0 ? _formatNumber(newDebt) : '0',
+                            '{expiry_date}': expDate,
+                            '{expiration_date}': expDate,
+                            '{days_remaining}': remDays,
+                            '{remaining_days}': remDays,
+                          });
                         final extPrice = double.tryParse(pkgPrice ?? '0') ?? 0;
                         if (printReceipt) {
-                          await _printReceiptNow(
-                            ReceiptData(
-                              subscriberName: currentSub.username,
-                              firstName: currentSub.fullName,
-                              phoneNumber: currentSub.displayPhone,
-                              packageName: currentSub.profileName ?? '',
-                              packagePrice: extPrice,
-                              paidAmount: method == 'credit' ? extPrice : 0,
-                              debtAmount: newDebt < 0 ? newDebt.abs() : 0,
-                              remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
-                              expiryDate: expDate,
-                              operationType: 'extension',
-                            ),
-                            operation: ReceiptOperation.extend,
-                            paymentMethod: method == 'partial'
-                                ? ReceiptPaymentMethod.partial
-                                : (method == 'credit'
-                                    ? ReceiptPaymentMethod.credit
-                                    : ReceiptPaymentMethod.cash),
-                            subscriberId: currentSub.idx,
-                            subscriberUsername: currentSub.username,
-                          );
+                          await _printReceiptNow(ReceiptData(
+                            subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
+                            phoneNumber: currentSub.displayPhone,
+                            packageName: currentSub.profileName ?? '',
+                            packagePrice: extPrice,
+                            paidAmount: method == 'credit' ? extPrice : 0,
+                            debtAmount: newDebt < 0 ? newDebt.abs() : 0,
+                            remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
+                            expiryDate: expDate,
+                            operationType: 'activation',
+                          ));
                         }
                         if (mounted) context.pop();
                       }
@@ -1171,7 +994,7 @@ class _SubscriberDetailsScreenState
                   icon: submitting
                       ? const SizedBox(width: 20, height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Icon(LucideIcons.repeat),
+                      : const Icon(Icons.autorenew),
                   label: Text(submitting ? 'جاري التمديد...' : 'تمديد'),
                   style: ElevatedButton.styleFrom(backgroundColor: AppTheme.teal600),
                 )),
@@ -1351,7 +1174,7 @@ class _SubscriberDetailsScreenState
                       gradient: const LinearGradient(
                         colors: [Color(0xFF43A047), Color(0xFF2E7D32)]),
                       borderRadius: BorderRadius.circular(12)),
-                    child: const Icon(LucideIcons.zap, color: Colors.white, size: 22)),
+                    child: const Icon(Icons.bolt_rounded, color: Colors.white, size: 22)),
                   const SizedBox(width: 12),
                   Expanded(child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1377,14 +1200,14 @@ class _SubscriberDetailsScreenState
                   child: Column(children: [
                     Row(children: [
                       Expanded(child: _ActivationInfoTile(
-                        icon: LucideIcons.wifi,
+                        icon: Icons.wifi_rounded,
                         label: 'الباقة',
                         value: profileName,
                         color: AppTheme.teal600,
                       )),
                       Container(width: 1, height: 40, color: AppTheme.teal600.withOpacity(0.1)),
                       Expanded(child: _ActivationInfoTile(
-                        icon: LucideIcons.clock,
+                        icon: Icons.schedule_rounded,
                         label: 'المدة',
                         value: profileDuration,
                         color: AppTheme.infoColor,
@@ -1400,7 +1223,7 @@ class _SubscriberDetailsScreenState
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(LucideIcons.tag, size: 18, color: AppTheme.successColor),
+                          const Icon(Icons.sell_rounded, size: 18, color: AppTheme.successColor),
                           const SizedBox(width: 8),
                           Text('السعر: ', style: TextStyle(fontSize: 13,
                               color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
@@ -1430,7 +1253,7 @@ class _SubscriberDetailsScreenState
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(LucideIcons.fileText, size: 16, color: AppTheme.warningColor),
+                            const Icon(Icons.request_quote_rounded, size: 16, color: AppTheme.warningColor),
                             const SizedBox(width: 6),
                             Text('التكلفة عليك: ',
                                 style: TextStyle(fontSize: 12,
@@ -1459,7 +1282,7 @@ class _SubscriberDetailsScreenState
                           border: Border.all(color: AppTheme.secondary.withOpacity(0.2)),
                         ),
                         child: Row(children: [
-                          const Icon(LucideIcons.gift, size: 18, color: AppTheme.secondary),
+                          const Icon(Icons.redeem_rounded, size: 18, color: AppTheme.secondary),
                           const SizedBox(width: 8),
                           Expanded(child: Text(
                             'خصم خاص: ${AppHelpers.formatMoney(discountAmount)}',
@@ -1484,7 +1307,7 @@ class _SubscriberDetailsScreenState
                     ),
                     child: Row(children: [
                       Icon(
-                        currentBalance < 0 ? LucideIcons.triangleAlert : LucideIcons.wallet,
+                        currentBalance < 0 ? Icons.warning_amber_rounded : Icons.account_balance_wallet_rounded,
                         size: 18, color: currentBalance < 0 ? Colors.red : Colors.green),
                       const SizedBox(width: 8),
                       Text(currentBalance < 0 ? 'دين سابق: ' : 'رصيد سابق: ',
@@ -1503,26 +1326,17 @@ class _SubscriberDetailsScreenState
                     color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
                 const SizedBox(height: 8),
                 Row(children: [
-                  Expanded(child: _MethodBtn(
-                    icon: LucideIcons.banknote,
-                    label: 'نقدي',
-                    accentColor: AppTheme.successColor, // أخضر — تحصيل كامل
+                  Expanded(child: _MethodBtn(icon: Icons.money_rounded, label: 'نقدي',
                     selected: isCash && !isPartialCash,
                     onTap: () => setSheet(() { isCash = true; isPartialCash = false; partialCtrl.clear(); }),
                   )),
                   const SizedBox(width: 6),
-                  Expanded(child: _MethodBtn(
-                    icon: LucideIcons.slidersHorizontal,
-                    label: 'جزئي',
-                    accentColor: AppTheme.warningColor, // برتقالي — تحصيل جزئي
+                  Expanded(child: _MethodBtn(icon: Icons.tune_rounded, label: 'جزئي',
                     selected: isCash && isPartialCash,
                     onTap: () => setSheet(() { isCash = true; isPartialCash = true; }),
                   )),
                   const SizedBox(width: 6),
-                  Expanded(child: _MethodBtn(
-                    icon: LucideIcons.clock,
-                    label: 'آجل',
-                    accentColor: AppTheme.dangerColor, // أحمر — يضاف كدين
+                  Expanded(child: _MethodBtn(icon: Icons.schedule_rounded, label: 'آجل',
                     selected: !isCash,
                     onTap: () => setSheet(() { isCash = false; isPartialCash = false; partialCtrl.clear(); }),
                   )),
@@ -1539,9 +1353,9 @@ class _SubscriberDetailsScreenState
                     decoration: InputDecoration(
                       labelText: 'المبلغ المدفوع نقداً',
                       suffixText: 'IQD',
-                      prefixIcon: const Icon(LucideIcons.dollarSign, size: 20),
+                      prefixIcon: const Icon(Icons.monetization_on_outlined, size: 20),
                       suffixIcon: IconButton(
-                        icon: const Icon(LucideIcons.x, size: 18),
+                        icon: const Icon(Icons.clear, size: 18),
                         onPressed: () {
                           partialCtrl.clear();
                           partialFocus.unfocus();
@@ -1715,7 +1529,7 @@ class _SubscriberDetailsScreenState
                     final cashAmount = _parseMoney(partialCtrl.text);
                     setSheet(() => submitting = true);
                     final notifier = ref.read(subscribersProvider.notifier);
-                    final result = await notifier.activateSubscriber(
+                    final success = await notifier.activateSubscriber(
                       userId: id,
                       userPrice: userPrice,
                       activationUnits: units,
@@ -1727,15 +1541,9 @@ class _SubscriberDetailsScreenState
                       originalPrice: originalPrice,
                       discountAmount: discountAmount > 0 ? discountAmount : 0,
                     );
-                    final success = result.ok;
                     if (mounted) {
                       Navigator.pop(ctx);
-                      _showSnack(
-                        success
-                            ? 'تم التفعيل بنجاح'
-                            : (result.errorMessage ?? 'فشل التفعيل'),
-                        success: success,
-                      );
+                      _showSnack(success ? 'تم التفعيل بنجاح' : 'فشل التفعيل', success: success);
                       if (success) {
                         if (id != null) {
                           final paymentLabel = isCash
@@ -1763,37 +1571,35 @@ class _SubscriberDetailsScreenState
                         final currentSub = _readCurrentSubscriber();
                         final fresh = await notifier.getSubscriberDetails(id);
                         final newDebt = _toDouble(fresh?['notes'] ?? fresh?['comments']);
+                        final freshExpDate = fresh?['expiration']?.toString() ?? '';
+                        final freshRemDays = _calcRemainingDays(freshExpDate);
                         final actualPaidAmount = isCash
                           ? (isPartialCash ? cashAmount : userPrice)
                           : 0.0;
-                        // WA 2.0 cleanup (Build 82): إشعار التفعيل يطلقه backend
-                        // تلقائياً من /api/v2/subscribers/.../activate مع
-                        // idempotencyKey مرتبط بالـactivity_log. الاستدعاء اليدوي
-                        // هنا كان يسبّب رسالتين لنفس الحدث. v2 يحترم feature
-                        // flag sendOnActivation. راجع project_whatsapp_v2_phase1_done.
+                        final paidAmountForMsg = _formatNumber(actualPaidAmount);
+                        await _sendWhatsAppFromTemplate('activation_notice', extraVars: {
+                          '{package_name}': profileName,
+                          '{package_price}': _formatNumber(userPrice),
+                          '{paid_amount}': paidAmountForMsg,
+                          '{debt_amount}': newDebt < 0 ? _formatNumber(newDebt.abs()) : '0',
+                          '{credit_amount}': newDebt > 0 ? _formatNumber(newDebt) : '0',
+                          '{expiry_date}': freshExpDate,
+                          '{expiration_date}': freshExpDate,
+                          '{remaining_days}': freshRemDays,
+                          '{days_remaining}': freshRemDays,
+                        });
                         if (printReceipt) {
-                          await _printReceiptNow(
-                            ReceiptData(
-                              subscriberName: currentSub.username,
-                              firstName: currentSub.fullName,
-                              phoneNumber: currentSub.displayPhone,
-                              packageName: profileName,
-                              packagePrice: userPrice,
-                              paidAmount: actualPaidAmount,
-                              debtAmount: newDebt < 0 ? newDebt.abs() : 0,
-                              remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
-                              expiryDate: fresh?['expiration']?.toString() ?? '',
-                              operationType: 'activation',
-                            ),
-                            operation: ReceiptOperation.activate,
-                            paymentMethod: !isCash
-                                ? ReceiptPaymentMethod.credit
-                                : (isPartialCash
-                                    ? ReceiptPaymentMethod.partial
-                                    : ReceiptPaymentMethod.cash),
-                            subscriberId: currentSub.idx,
-                            subscriberUsername: currentSub.username,
-                          );
+                          await _printReceiptNow(ReceiptData(
+                            subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
+                            phoneNumber: currentSub.displayPhone,
+                            packageName: profileName,
+                            packagePrice: userPrice,
+                            paidAmount: actualPaidAmount,
+                            debtAmount: newDebt < 0 ? newDebt.abs() : 0,
+                            remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
+                            expiryDate: fresh?['expiration']?.toString() ?? '',
+                            operationType: 'activation',
+                          ));
                         }
                         if (mounted) context.pop();
                       }
@@ -1802,7 +1608,7 @@ class _SubscriberDetailsScreenState
                   icon: submitting
                       ? const SizedBox(width: 20, height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Icon(LucideIcons.zap),
+                      : const Icon(Icons.bolt_rounded),
                   label: Text(submitting ? 'جاري التفعيل...' : 'تفعيل الآن'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.successColor,
@@ -1849,13 +1655,6 @@ class _SubscriberDetailsScreenState
       if (exp == null) return 'غير محدد';
       final diff = exp.difference(DateTime.now());
       if (diff.isNegative) return 'منتهي';
-      // Within the last second of a day boundary (e.g. 29d 23h 59m 59s right
-      // after activation, when SAS4 set expiration = now + 30d exactly), round
-      // up so the user sees "30 يوم" not "29 يوم و 23 ساعة...".
-      final remainder = diff.inSeconds - (diff.inDays * 86400);
-      if (remainder >= 86399) {
-        return '${diff.inDays + 1} يوم';
-      }
       final days = diff.inDays;
       final hours = diff.inHours % 24;
       final minutes = diff.inMinutes % 60;
@@ -1925,13 +1724,6 @@ class _SubscriberDetailsScreenState
     if (!settingsSnapshot.hasLoaded && !settingsSnapshot.isLoading) {
       await ref.read(settingsProvider.notifier).loadFeatures();
     }
-    // Master switch — لو الأدمن طفّى التنبيهات بإرادته، نسكت تماماً.
-    // التحذير في كل تفعيل/تمديد بـsnackbar يكون مزعج لأنه قرار واعٍ
-    // لا خطأ تكوين. يقدر يشوفها مغلقة من شاشة الإعدادات لمّا يحتاج.
-    final featuresNow = ref.read(settingsProvider).features;
-    if (!featuresNow.notificationsEnabled) {
-      return;
-    }
     final featureEnabled = _featureValueForTemplate(templateType);
     if (featureEnabled == false) {
       if (mounted) {
@@ -2000,18 +1792,12 @@ class _SubscriberDetailsScreenState
       final debtVal = sub.hasDebt ? _formatNumber(sub.debtAmount.abs()) : '0';
       final creditVal = sub.debtAmount > 0 ? _formatNumber(sub.debtAmount) : '0';
       final pkgPriceFormatted = _formatNumber(double.tryParse(sub.price ?? '0') ?? 0);
-      // الاتفاق (2026-05-06):
-      //   {subscriber_name} = username (لاتيني)
-      //   {firstname}       = الاسم العربي (fullName)
-      // الـfallback يضمن إن كل واحد عنده قيمة معقولة لو الحقل ناقص.
-      final arabicName = sub.fullName.trim();
-      final subscriberNameVar = sub.username.isNotEmpty ? sub.username : arabicName;
-      final firstnameVar = arabicName.isNotEmpty ? arabicName : sub.username;
+      final displayName = sub.fullName.isNotEmpty ? sub.fullName : sub.username;
 
       String msg = match.first.messageContent;
       final vars = {
-        '{subscriber_name}': subscriberNameVar,
-        '{firstname}': firstnameVar,
+        '{subscriber_name}': displayName,
+        '{firstname}': sub.firstname.isNotEmpty ? sub.firstname : sub.username,
         '{lastname}': sub.lastname,
         '{phone}': sub.displayPhone,
         '{remaining_days}': _calcRemainingDays(sub.expiration),
@@ -2117,7 +1903,7 @@ class _SubscriberDetailsScreenState
                       gradient: const LinearGradient(
                         colors: [Color(0xFF43A047), Color(0xFF2E7D32)]),
                       borderRadius: BorderRadius.circular(12)),
-                    child: const Icon(LucideIcons.banknote, color: Colors.white, size: 22)),
+                    child: const Icon(Icons.payments_rounded, color: Colors.white, size: 22)),
                   const SizedBox(width: 12),
                   Expanded(child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -2190,9 +1976,9 @@ class _SubscriberDetailsScreenState
                   decoration: InputDecoration(
                     labelText: 'المبلغ المسدد',
                     suffixText: 'IQD',
-                    prefixIcon: const Icon(LucideIcons.dollarSign, size: 20),
+                    prefixIcon: const Icon(Icons.monetization_on_outlined, size: 20),
                     suffixIcon: !payAll ? IconButton(
-                      icon: const Icon(LucideIcons.x, size: 18),
+                      icon: const Icon(Icons.clear, size: 18),
                       onPressed: () {
                         amountCtrl.clear();
                         amountFocusPay.unfocus();
@@ -2237,7 +2023,7 @@ class _SubscriberDetailsScreenState
                         color: payAll ? Colors.green.withOpacity(0.3) : Colors.transparent),
                     ),
                     child: Row(children: [
-                      Icon(payAll ? LucideIcons.squareCheck : LucideIcons.square,
+                      Icon(payAll ? Icons.check_box : Icons.check_box_outline_blank,
                           size: 20, color: payAll ? Colors.green : Colors.grey),
                       const SizedBox(width: 8),
                       const Text('تسديد كامل الدين', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
@@ -2259,7 +2045,7 @@ class _SubscriberDetailsScreenState
                     labelText: 'ملاحظات (اختياري)',
                     prefixIcon: Padding(
                       padding: EdgeInsets.only(bottom: 20),
-                      child: Icon(LucideIcons.fileText, size: 20)),
+                      child: Icon(Icons.note_outlined, size: 20)),
                   ),
                 ),
 
@@ -2286,7 +2072,7 @@ class _SubscriberDetailsScreenState
                             decoration: BoxDecoration(
                               color: (livePreview >= 0 ? Colors.green : Colors.orange).withOpacity(0.1),
                               borderRadius: BorderRadius.circular(8)),
-                            child: Icon(livePreview >= 0 ? LucideIcons.circleCheck : LucideIcons.timer,
+                            child: Icon(livePreview >= 0 ? Icons.check_circle_rounded : Icons.timelapse_rounded,
                                 size: 18, color: livePreview >= 0 ? Colors.green : Colors.orange),
                           ),
                           const SizedBox(width: 10),
@@ -2350,30 +2136,30 @@ class _SubscriberDetailsScreenState
                             final currentSub = _readCurrentSubscriber();
                             final fresh = await notifier.getSubscriberDetails(id);
                             final newDebt = _toDouble(fresh?['notes'] ?? fresh?['comments']);
-                            // WA 2.0 cleanup (Build 82): إشعار التسديد يطلقه
-                            // backend تلقائياً من /api/v2/subscribers/.../pay-debt
-                            // مع idempotencyKey=v2:wa:{activity_log_id}:payment_confirmation.
-                            // الاستدعاء اليدوي هنا كان يسبّب رسالتين لنفس الحدث.
-                            // راجع memory project_whatsapp_v2_phase1_done.
+                            final freshExpDate2 = fresh?['expiration']?.toString() ?? '';
+                            final freshRemDays2 = _calcRemainingDays(freshExpDate2);
+                            await _sendWhatsAppFromTemplate('payment_confirmation',
+                              extraVars: {
+                                '{paid_amount}': _formatNumber(payAmount),
+                                '{debt_amount}': newDebt < 0 ? _formatNumber(newDebt.abs()) : '0',
+                                '{credit_amount}': newDebt > 0 ? _formatNumber(newDebt) : '0',
+                                '{expiry_date}': freshExpDate2,
+                                '{expiration_date}': freshExpDate2,
+                                '{remaining_days}': freshRemDays2,
+                                '{days_remaining}': freshRemDays2,
+                              });
                             if (printReceipt) {
-                              await _printReceiptNow(
-                                ReceiptData(
-                                  subscriberName: currentSub.username,
-                              firstName: currentSub.fullName,
-                                  phoneNumber: currentSub.displayPhone,
-                                  packageName: currentSub.profileName ?? '',
-                                  packagePrice: 0,
-                                  paidAmount: payAmount,
-                                  debtAmount: newDebt < 0 ? newDebt.abs() : 0,
-                                  remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
-                                  expiryDate: fresh?['expiration']?.toString() ?? '',
-                                  operationType: 'debt_payment',
-                                ),
-                                operation: ReceiptOperation.payDebt,
-                                paymentMethod: ReceiptPaymentMethod.cash,
-                                subscriberId: currentSub.idx,
-                                subscriberUsername: currentSub.username,
-                              );
+                              await _printReceiptNow(ReceiptData(
+                                subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
+                                phoneNumber: currentSub.displayPhone,
+                                packageName: currentSub.profileName ?? '',
+                                packagePrice: 0,
+                                paidAmount: payAmount,
+                                debtAmount: newDebt < 0 ? newDebt.abs() : 0,
+                                remainingAmount: newDebt < 0 ? newDebt.abs() : 0,
+                                expiryDate: fresh?['expiration']?.toString() ?? '',
+                                operationType: 'debt_payment',
+                              ));
                             }
                             if (mounted) context.pop();
                           }
@@ -2382,7 +2168,7 @@ class _SubscriberDetailsScreenState
                       icon: submitting
                           ? const SizedBox(width: 20, height: 20,
                               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Icon(LucideIcons.banknote),
+                          : const Icon(Icons.payments_rounded),
                       label: Text(submitting ? 'جاري التسديد...' : 'تسديد'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green.shade700,
@@ -2461,7 +2247,7 @@ class _SubscriberDetailsScreenState
                       gradient: const LinearGradient(
                         colors: [Color(0xFFF9A825), Color(0xFFF57F17)]),
                       borderRadius: BorderRadius.circular(12)),
-                    child: const Icon(LucideIcons.plus, color: Colors.white, size: 22)),
+                    child: const Icon(Icons.add_card_rounded, color: Colors.white, size: 22)),
                   const SizedBox(width: 12),
                   Expanded(child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -2479,7 +2265,7 @@ class _SubscriberDetailsScreenState
                 Row(children: [
                   if (currentDebt > 0)
                     Expanded(child: _DebtInfoCard(
-                      icon: LucideIcons.trendingDown,
+                      icon: Icons.trending_down_rounded,
                       label: 'الدين الحالي',
                       value: AppHelpers.formatMoney(currentDebt),
                       color: Colors.red,
@@ -2488,14 +2274,14 @@ class _SubscriberDetailsScreenState
                     const SizedBox(width: 10),
                   if (currentCredit > 0)
                     Expanded(child: _DebtInfoCard(
-                      icon: LucideIcons.wallet,
+                      icon: Icons.account_balance_wallet_rounded,
                       label: 'الرصيد الحالي',
                       value: AppHelpers.formatMoney(currentCredit),
                       color: Colors.green,
                     )),
                   if (currentDebt <= 0 && currentCredit <= 0)
                     Expanded(child: _DebtInfoCard(
-                      icon: LucideIcons.circleCheck,
+                      icon: Icons.check_circle_outline_rounded,
                       label: 'الرصيد',
                       value: 'لا يوجد دين أو رصيد',
                       color: Colors.grey,
@@ -2512,9 +2298,9 @@ class _SubscriberDetailsScreenState
                   decoration: InputDecoration(
                     labelText: 'قيمة الدين المضاف',
                     suffixText: 'IQD',
-                    prefixIcon: const Icon(LucideIcons.dollarSign, size: 20),
+                    prefixIcon: const Icon(Icons.monetization_on_outlined, size: 20),
                     suffixIcon: IconButton(
-                      icon: const Icon(LucideIcons.x, size: 18),
+                      icon: const Icon(Icons.clear, size: 18),
                       onPressed: () {
                         amountCtrl.clear();
                         amountFocusAdd.unfocus();
@@ -2548,7 +2334,7 @@ class _SubscriberDetailsScreenState
                     labelText: 'ملاحظات (اختياري)',
                     prefixIcon: Padding(
                       padding: EdgeInsets.only(bottom: 20),
-                      child: Icon(LucideIcons.fileText, size: 20)),
+                      child: Icon(Icons.note_outlined, size: 20)),
                   ),
                 ),
 
@@ -2573,7 +2359,7 @@ class _SubscriberDetailsScreenState
                             decoration: BoxDecoration(
                               color: Colors.red.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(8)),
-                            child: const Icon(LucideIcons.triangleAlert,
+                            child: const Icon(Icons.warning_amber_rounded,
                                 size: 18, color: Colors.red),
                           ),
                           const SizedBox(width: 10),
@@ -2591,7 +2377,7 @@ class _SubscriberDetailsScreenState
                                       decoration: TextDecoration.lineThrough)),
                                 const Padding(
                                   padding: EdgeInsets.symmetric(horizontal: 6),
-                                  child: Icon(LucideIcons.arrowLeft, size: 14, color: Colors.red)),
+                                  child: Icon(Icons.arrow_forward, size: 14, color: Colors.red)),
                                 Text(AppHelpers.formatMoney(livePreview.abs()),
                                     style: const TextStyle(fontSize: 14,
                                       fontWeight: FontWeight.w700, color: Colors.red)),
@@ -2656,21 +2442,14 @@ class _SubscriberDetailsScreenState
                             }
                             final currentSub = _readCurrentSubscriber();
                             if (printReceipt) {
-                              await _printReceiptNow(
-                                ReceiptData(
-                                  subscriberName: currentSub.username,
-                              firstName: currentSub.fullName,
-                                  phoneNumber: currentSub.displayPhone,
-                                  packageName: currentSub.profileName ?? '',
-                                  debtAmount: btnAmount,
-                                  remainingAmount: btnAmount,
-                                  operationType: 'debt_add',
-                                ),
-                                operation: ReceiptOperation.addDebt,
-                                paymentMethod: ReceiptPaymentMethod.credit,
-                                subscriberId: currentSub.idx,
-                                subscriberUsername: currentSub.username,
-                              );
+                              await _printReceiptNow(ReceiptData(
+                                subscriberName: currentSub.fullName.isNotEmpty ? currentSub.fullName : currentSub.username,
+                                phoneNumber: currentSub.displayPhone,
+                                packageName: currentSub.profileName ?? '',
+                                debtAmount: btnAmount,
+                                remainingAmount: btnAmount,
+                                operationType: 'debt_add',
+                              ));
                             }
                             if (mounted) context.pop();
                           }
@@ -2679,7 +2458,7 @@ class _SubscriberDetailsScreenState
                       icon: submitting
                           ? const SizedBox(width: 20, height: 20,
                               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Icon(LucideIcons.plus),
+                          : const Icon(Icons.add_card_rounded),
                       label: Text(submitting ? 'جاري الإضافة...' : 'إضافة دين'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.warningColor,
@@ -2689,293 +2468,6 @@ class _SubscriberDetailsScreenState
                   },
                 ),
                 const SizedBox(height: 20),
-              ],
-            ));
-          }),
-        );
-      },
-    );
-  }
-
-  // ── Quick Discount (خصم سريع) ────────────────────────────────────────
-  // مودال صغير لتعيين/تعديل/حذف خصم المشترك بدون فتح صفحة الخصومات
-  // كاملة. يعرض السعر الأصلي + الخصم الحالي + معاينة السعر بعد الخصم.
-  Future<void> _showQuickDiscountSheet() async {
-    final id = _subscriberId;
-    if (id == null) {
-      _showSnack('معرف المشترك غير متوفر', success: false);
-      return;
-    }
-    final sub = _readCurrentSubscriber();
-
-    setState(() => _isProcessing = true);
-    // نجلب السعر الأصلي + الخصم الحالي.
-    final dio = ref.read(backendDioProvider);
-    double originalPrice = _toDouble(sub.price ?? 0);
-    // الخصم الحالي يجي من model الـsub مباشرة (الـbackend يضيفه عبر
-    // /api/subscribers/with-phones). أسرع وأدق من نداء API ثاني.
-    double currentDiscount = sub.discount ?? 0;
-    try {
-      final r = await dio.get('/api/v2/subscribers/$id/activation-data');
-      final actData = r.data?['data'] as Map<String, dynamic>?;
-      if (actData != null) {
-        final p = _toDouble(
-          actData['user_price'] ?? actData['price'] ?? actData['package_price'] ?? 0,
-        );
-        if (p > 0) originalPrice = p;
-      }
-    } catch (_) { /* تجاهل، نكمل بـsub.price */ }
-    // fallback: لو ما عرفنا الخصم من model، نسأل الـAPI. الـresponse
-    // مغلَّفة بـ{success, data: {...}}.
-    if (currentDiscount == 0 && sub.username.isNotEmpty) {
-      try {
-        final r = await dio.get('${ApiConstants.discounts}/${sub.username}');
-        final wrap = r.data as Map<String, dynamic>?;
-        final discData = wrap?['data'] as Map<String, dynamic>?;
-        final amt = discData?['discount_amount'];
-        if (amt != null) currentDiscount = _toDouble(amt);
-      } catch (_) { /* لا يوجد خصم، نكمل بصفر */ }
-    }
-    if (!mounted) return;
-    setState(() => _isProcessing = false);
-
-    final amountCtrl = TextEditingController(
-      text: currentDiscount > 0 ? currentDiscount.toInt().toString() : '',
-    );
-    final amountFocus = FocusNode();
-    bool submitting = false;
-
-    showModalBottomSheet(
-      useSafeArea: true,
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetCtx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: bottomSheetBottomInset(sheetCtx, extra: 0),
-            left: 20, right: 20, top: 16,
-          ),
-          child: StatefulBuilder(builder: (ctx, setSheet) {
-            final amountNum = _parseMoney(amountCtrl.text);
-            final isRemoval = currentDiscount > 0 && amountNum == 0;
-            final finalPrice = originalPrice > 0
-                ? (originalPrice - amountNum).clamp(0.0, double.infinity)
-                : 0.0;
-
-            // فوكس تلقائي بعد فتح الـsheet — مرة واحدة فقط.
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (!amountFocus.hasFocus && amountCtrl.text.isEmpty) {
-                amountFocus.requestFocus();
-              }
-            });
-
-            return SingleChildScrollView(child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(child: Container(width: 40, height: 4,
-                  decoration: BoxDecoration(color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2)))),
-                const SizedBox(height: 16),
-                Row(children: [
-                  Container(padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.teal.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(12)),
-                    child: const Icon(LucideIcons.tag, color: Colors.teal, size: 22)),
-                  const SizedBox(width: 12),
-                  Expanded(child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('خصم سريع', style: Theme.of(ctx).textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w700)),
-                      Text(sub.fullName,
-                          style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
-                    ],
-                  )),
-                ]),
-                const SizedBox(height: 16),
-
-                // السعر الأصلي + الخصم الحالي
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.04),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Column(children: [
-                    Row(children: [
-                      Text('السعر الأصلي',
-                          style: TextStyle(fontSize: 12,
-                              color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
-                      const Spacer(),
-                      Text(originalPrice > 0 ? AppHelpers.formatMoney(originalPrice) : '—',
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                    ]),
-                    if (currentDiscount > 0) ...[
-                      const SizedBox(height: 6),
-                      Row(children: [
-                        Text('الخصم الحالي',
-                            style: TextStyle(fontSize: 11.5,
-                                color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5))),
-                        const Spacer(),
-                        Text('-${AppHelpers.formatMoney(currentDiscount)}',
-                            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600,
-                                color: Colors.teal)),
-                      ]),
-                    ],
-                  ]),
-                ),
-                const SizedBox(height: 16),
-
-                TextField(
-                  controller: amountCtrl,
-                  focusNode: amountFocus,
-                  keyboardType: TextInputType.number,
-                  textDirection: TextDirection.ltr,
-                  inputFormatters: [_ThousandsFormatter()],
-                  decoration: InputDecoration(
-                    labelText: 'قيمة الخصم (0 = إلغاء)',
-                    suffixText: 'IQD',
-                    prefixIcon: const Icon(LucideIcons.tag, size: 20),
-                    suffixIcon: IconButton(
-                      icon: const Icon(LucideIcons.x, size: 18),
-                      onPressed: () {
-                        amountCtrl.clear();
-                        setSheet(() {});
-                      },
-                    ),
-                  ),
-                  onChanged: (_) => setSheet(() {}),
-                ),
-                const SizedBox(height: 10),
-
-                QuickAmountChips(
-                  amounts: const [1000.0, 2500.0, 5000.0, 10000.0, 15000.0, 20000.0],
-                  selectedAmount: amountNum,
-                  enabled: true,
-                  // الخصم REPLACE وليس accumulate — الـpreset قيمة كاملة.
-                  onSelected: (v) {
-                    amountFocus.unfocus();
-                    amountCtrl.text = v.toInt().toString();
-                    setSheet(() {});
-                  },
-                ),
-                const SizedBox(height: 14),
-
-                // معاينة السعر بعد الخصم
-                if (originalPrice > 0)
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: amountNum > 0
-                          ? Colors.teal.withOpacity(0.08)
-                          : Theme.of(ctx).colorScheme.onSurface.withOpacity(0.04),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: amountNum > 0
-                            ? Colors.teal.withOpacity(0.30)
-                            : Colors.transparent,
-                      ),
-                    ),
-                    child: Row(children: [
-                      Text('السعر بعد الخصم',
-                          style: TextStyle(fontSize: 12,
-                              color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6))),
-                      const Spacer(),
-                      if (amountNum > 0 && amountNum < originalPrice) ...[
-                        Text(AppHelpers.formatMoney(originalPrice),
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              decoration: TextDecoration.lineThrough,
-                              color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.45),
-                            )),
-                        const SizedBox(width: 6),
-                      ],
-                      Text(AppHelpers.formatMoney(finalPrice),
-                          style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w800,
-                            color: amountNum > 0 ? Colors.teal : null,
-                          )),
-                    ]),
-                  ),
-
-                if (amountNum > 0 && originalPrice > 0 && amountNum >= originalPrice) ...[
-                  const SizedBox(height: 8),
-                  Row(children: [
-                    const Icon(LucideIcons.triangleAlert, size: 14, color: Colors.orange),
-                    const SizedBox(width: 6),
-                    Expanded(child: Text('الخصم يساوي أو يتجاوز السعر — السعر النهائي صفر',
-                        style: TextStyle(fontSize: 11.5, color: Colors.orange.shade800))),
-                  ]),
-                ],
-
-                const SizedBox(height: 18),
-                Row(children: [
-                  Expanded(child: OutlinedButton(
-                    onPressed: submitting ? null : () => Navigator.pop(sheetCtx),
-                    child: const Text('إلغاء'),
-                  )),
-                  const SizedBox(width: 10),
-                  Expanded(flex: 2, child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: isRemoval ? Colors.red.shade600 : Colors.teal,
-                      foregroundColor: Colors.white,
-                    ),
-                    icon: submitting
-                        ? const SizedBox(width: 16, height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2,
-                                color: Colors.white))
-                        : Icon(isRemoval ? LucideIcons.trash2 : LucideIcons.tag, size: 18),
-                    label: Text(submitting
-                        ? 'جارٍ الحفظ…'
-                        : (isRemoval ? 'حذف الخصم' : (amountNum > 0 ? 'حفظ الخصم' : 'حفظ'))),
-                    onPressed: submitting ? null : () async {
-                      setSheet(() => submitting = true);
-                      try {
-                        final r = await dio.post(
-                          '/api/v2/subscribers/$id/discount',
-                          data: {'amount': amountNum},
-                        );
-                        if (r.data?['success'] == true) {
-                          if (mounted) {
-                            _showSnack(
-                              isRemoval
-                                  ? 'تم حذف الخصم'
-                                  : (amountNum > 0
-                                      ? 'تم حفظ خصم ${AppHelpers.formatMoney(amountNum)}'
-                                      : 'تم الحفظ'),
-                              success: true,
-                            );
-                          }
-                          if (mounted) Navigator.pop(sheetCtx);
-                          // refresh + إعادة تحميل القائمة عشان حقل
-                          // discount يأخذ القيمة الجديدة (refreshSingle
-                          // يجلب من SAS4 الذي لا يعرف الخصم).
-                          final notifier = ref.read(subscribersProvider.notifier);
-                          await notifier.refreshSingleSubscriber(id);
-                          await notifier.loadSubscribers();
-                        } else {
-                          setSheet(() => submitting = false);
-                          if (mounted) {
-                            _showSnack(
-                              r.data?['message']?.toString() ?? 'فشل حفظ الخصم',
-                              success: false,
-                            );
-                          }
-                        }
-                      } catch (e) {
-                        setSheet(() => submitting = false);
-                        if (mounted) _showSnack('فشل حفظ الخصم', success: false);
-                      }
-                    },
-                  )),
-                ]),
-                const SizedBox(height: 8),
               ],
             ));
           }),
@@ -2998,12 +2490,7 @@ class _SubscriberDetailsScreenState
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('تأكيد $action'),
-        content: Text(
-          enable
-              ? 'هل تريد تفعيل حساب المشترك "${sub.fullName}"؟'
-              : 'سيُمنع المشترك "${sub.fullName}" من الاتصال، وإن كان متصلاً '
-                  'الآن سيُفصل فوراً. يبقى الحساب في النظام.\n\nهل تريد المتابعة؟',
-        ),
+        content: Text('هل تريد $action للمشترك "${sub.fullName}"؟'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -3098,46 +2585,12 @@ class _SubscriberDetailsScreenState
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
-                          () {
-                            // Compute precise breakdown straight from
-                            // expiration: big number = whole days, sub-line =
-                            // remaining hours+minutes within the day, so the
-                            // header matches the actual expiration timestamp.
-                            String value = '${sub.remainingDays ?? 0}';
-                            String? sub2;
-                            if (!sub.isExpired) {
-                              final raw = sub.expiration?.trim() ?? '';
-                              if (raw.isNotEmpty) {
-                                DateTime? exp;
-                                if (raw.contains('T') || raw.contains('+')) {
-                                  exp = DateTime.tryParse(raw);
-                                } else {
-                                  exp = DateTime.tryParse(
-                                      '${raw.replaceAll(' ', 'T')}+03:00');
-                                }
-                                if (exp != null) {
-                                  final diff =
-                                      exp.difference(DateTime.now());
-                                  if (!diff.isNegative) {
-                                    value = '${diff.inDays}';
-                                    final h = diff.inHours % 24;
-                                    final m = diff.inMinutes % 60;
-                                    final parts = <String>[];
-                                    if (h > 0) parts.add('$h س');
-                                    if (m > 0) parts.add('$m د');
-                                    if (parts.isNotEmpty) {
-                                      sub2 = parts.join(' ');
-                                    }
-                                  }
-                                }
-                              }
-                            }
-                            return _HeaderStat(
-                              label: 'الأيام المتبقية',
-                              value: sub.isExpired ? 'منتهي' : value,
-                              subValue: sub2,
-                            );
-                          }(),
+                          _HeaderStat(
+                            label: 'الأيام المتبقية',
+                            value: sub.isExpired
+                                ? 'منتهي'
+                                : '${sub.remainingDays ?? 0}',
+                          ),
                           Container(width: 1, height: 30,
                               color: Colors.white.withOpacity(0.2)),
                           _HeaderStat(
@@ -3171,7 +2624,7 @@ class _SubscriberDetailsScreenState
                   title: 'معلومات الحساب',
                   children: [
                     _DetailRow(
-                      icon: LucideIcons.user,
+                      icon: Icons.person_outline,
                       label: 'اسم المستخدم',
                       value: sub.username,
                     ),
@@ -3186,25 +2639,17 @@ class _SubscriberDetailsScreenState
                       },
                     ),
                     _DetailRow(
-                      icon: LucideIcons.wifi,
+                      icon: Icons.wifi,
                       label: 'الباقة',
                       value: sub.profileName ?? '—',
                     ),
-                    // سعر الباقة — لو فيه خصم، السعر الأصلي مشطوب
-                    // بجانبه السعر النهائي (مع شارة "-X خصم").
-                    if (sub.hasDiscount)
-                      _PriceWithDiscountRow(
-                        originalPrice: sub.price,
-                        discount: sub.discount!,
-                      )
-                    else
-                      _DetailRow(
-                        icon: LucideIcons.dollarSign,
-                        label: 'سعر الباقة',
-                        value: sub.price != null
-                            ? AppHelpers.formatMoney(sub.price)
-                            : '—',
-                      ),
+                    _DetailRow(
+                      icon: Icons.attach_money,
+                      label: 'سعر الباقة',
+                      value: sub.price != null
+                          ? AppHelpers.formatMoney(sub.price)
+                          : '—',
+                    ),
                     _StatusRow(sub: sub),
                   ],
                 ),
@@ -3212,52 +2657,46 @@ class _SubscriberDetailsScreenState
                 const SizedBox(height: 12),
 
                 // ── Connection & Device ──
-                // يُعرض دائماً (حتى لو الاشتراك أوف-لاين) — أجهزة النانو/ONT
-                // كثيراً ما تكون متصلة بالكهرباء/الشبكة والمشترك طافٍ، فنحتاج
-                // الزرّ في كل الحالات: إن أرجع الجهاز قراءةً ظهرت المعلومات،
-                // وإلا يبقى زرّا إعادة التحميل والإعدادات (لإدخال IP/credentials).
-                _DetailSection(
-                  title: 'الاتصال والجهاز',
-                  children: [
-                    if ((sub.ipAddress ?? '').trim().isNotEmpty)
-                      _IpDetailRow(
-                        ip: sub.ipAddress!.trim(),
-                        sessionSeconds: sub.sessionTime,
-                        onTap: () => _launchIpInBrowser(sub.ipAddress!),
-                      )
-                    else
-                      const _NoIpHint(),
-                    // آخر اتصال — يظهر فقط للمشترك غير المتصل (المتصل عنده
-                    // جلسة حيّة أعلاه). يساعد على معرفة آخر مرّة كان online.
-                    if (!sub.isOnline && _lastConnection != null)
-                      _DetailRow(
-                        icon: LucideIcons.history,
-                        label: 'آخر اتصال',
-                        value: _lastConnectionLabel(),
+                // Shown for every subscriber except the purely offline
+                // (active subscription but not currently connected). IP
+                // row + live uptime on top, CPE probe card below. When
+                // SAS4 hasn't returned an IP yet we still show the card
+                // with a placeholder so the admin can open the config
+                // dialog and enter custom creds.
+                if (!sub.isOffline)
+                  _DetailSection(
+                    title: 'الاتصال والجهاز',
+                    children: [
+                      if ((sub.ipAddress ?? '').trim().isNotEmpty)
+                        _IpDetailRow(
+                          ip: sub.ipAddress!.trim(),
+                          sessionSeconds: sub.sessionTime,
+                          onTap: () => _launchIpInBrowser(sub.ipAddress!),
+                        )
+                      else
+                        const _NoIpHint(),
+                      ConnectionStatusCard(
+                        subscriberUsername: sub.username,
+                        fallbackIp: (sub.ipAddress ?? '').trim().isNotEmpty
+                            ? sub.ipAddress!.trim()
+                            : null,
                       ),
-                    ConnectionStatusCard(
-                      subscriberUsername: sub.username,
-                      fallbackIp: (sub.ipAddress ?? '').trim().isNotEmpty
-                          ? sub.ipAddress!.trim()
-                          : null,
-                    ),
-                    _DeviceNotesRow(subscriberUsername: sub.username),
-                  ],
-                ),
+                    ],
+                  ),
 
-                const SizedBox(height: 12),
+                if (!sub.isOffline) const SizedBox(height: 12),
 
                 // ── Subscription Status ──
                 _DetailSection(
                   title: 'حالة الاشتراك',
                   children: [
                     _DetailRow(
-                      icon: LucideIcons.calendar,
+                      icon: Icons.calendar_today,
                       label: 'تاريخ الانتهاء',
                       value: AppHelpers.formatExpiration(sub.expiration),
                     ),
                     _DetailRow(
-                      icon: LucideIcons.creditCard,
+                      icon: Icons.credit_card,
                       label: 'الدين / الرصيد',
                       value: sub.hasDebt
                           ? '${AppHelpers.formatMoney(sub.debtAmount.abs())} (مديون)'
@@ -3295,7 +2734,7 @@ class _SubscriberDetailsScreenState
                           ? '${AppHelpers.formatMoney(amountValue)} IQD'
                           : (RegExp(r'([\d,.-]+)\s*IQD').firstMatch(desc)?.group(0) ?? '');
                       return _DetailRow(
-                        icon: LucideIcons.dollarSign,
+                        icon: Icons.monetization_on_rounded,
                         label: 'آخر حركة مالية',
                         value:
                             '$movementLabel — $timeLabel${amountText.isNotEmpty ? ' — $amountText' : ''}',
@@ -3305,13 +2744,13 @@ class _SubscriberDetailsScreenState
                   ],
                 ),
 
-                SizedBox(height: AppHelpers.fabListBottom(context)),
+                const SizedBox(height: 80),
               ],
             ),
       floatingActionButton: FloatingActionButton(
         onPressed: _isProcessing ? null : () => _showActionsSheet(isEnabled),
         backgroundColor: AppTheme.primary,
-        child: const Icon(LucideIcons.layoutGrid, color: Colors.white, size: 26),
+        child: const Icon(Icons.apps_rounded, color: Colors.white, size: 26),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
@@ -3394,7 +2833,7 @@ class _SubscriberDetailsScreenState
       }
 
       final token = linkResponse['token'];
-      final linkUrl = '${ApiConstants.backendUrl}/v2/user-info/$token';
+      final linkUrl = '${ApiConstants.backendUrl}/user-info/$token';
       debugPrint('[GEN-LINK] Generated link: $linkUrl');
 
       final subscriberName = '${sub.firstname} ${sub.lastname}'.trim();
@@ -3429,100 +2868,47 @@ class _SubscriberDetailsScreenState
     }
   }
 
-  // Opens the subscriber movements timeline (تفعيل/تمديد/تسديد دين/إضافة دين)
-  // as a 75%-height bottom sheet. Pulls a 5-year window of activity_logs
-  // from the same backend endpoint that powers the account-statement report,
-  // so admins see the same history whether they open this from the card or
-  // from reports.
-  void _showMovementsSheet() {
-    final sub = _readCurrentSubscriber();
-    final theme = Theme.of(context);
-    showModalBottomSheet(
-      useSafeArea: true,
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetCtx) {
-        return Container(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.75,
-          ),
-          decoration: BoxDecoration(
-            color: theme.scaffoldBackgroundColor,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: _SubscriberMovementsSheetContent(subscriber: sub),
-        );
-      },
-    );
-  }
-
   void _showActionsSheet(bool isEnabled) {
     final sub = _readCurrentSubscriber();
-    // فحص صلاحية الفاعل: موظف يستعمل employeePermissions، أدمن يستعمل
-    // SAS4 permissions (canSas يقيّم canonical key مثل 'subscribers.delete').
-    // المفاتيح المحلية (subscribers.send_whatsapp، generate_link) ترجع true
-    // افتراضياً للأدمن لأنها مش في SAS4.
-    final user = ref.read(authProvider).user;
-    bool can(String key) => user?.can(key) ?? true;
-
-    final actions = <_FabAction>[
-      if (can('subscribers.edit'))
-        _FabAction(LucideIcons.pencil, 'تعديل', AppTheme.primary, _showEditSheet),
-      if (can('subscribers.activate'))
-        _FabAction(LucideIcons.zap, 'تفعيل', AppTheme.successColor, _activateSubscriber),
-      if (can('subscribers.extend'))
-        _FabAction(LucideIcons.repeat, 'تمديد', AppTheme.teal600, _extendSubscription),
-      if (can('subscribers.add_debt'))
-        _FabAction(LucideIcons.plus, 'إضافة دين', AppTheme.warningColor, _showAddDebtSheet),
-      if (sub.hasDebt && can('subscribers.pay_debt'))
-        _FabAction(LucideIcons.banknote, 'تسديد دين', Colors.green, _showPayDebtSheet),
-      if (can('discounts.manage'))
-        _FabAction(LucideIcons.tag, 'خصم سريع', Colors.teal, _showQuickDiscountSheet),
-      if (can('subscribers.view_activity'))
+    final actions = [
+      _FabAction(Icons.edit_outlined, 'تعديل', AppTheme.primary, _showEditSheet),
+      _FabAction(Icons.bolt, 'تفعيل', AppTheme.successColor, _activateSubscriber),
+      _FabAction(Icons.autorenew, 'تمديد', AppTheme.teal600, _extendSubscription),
+      _FabAction(Icons.add_card_rounded, 'إضافة دين', AppTheme.warningColor, _showAddDebtSheet),
+      if (sub.hasDebt)
+        _FabAction(Icons.payments_rounded, 'تسديد دين', Colors.green, _showPayDebtSheet),
+      if (sub.hasDebt)
         _FabAction(
-          LucideIcons.history,
-          'سجل الحركات',
-          AppTheme.teal600,
-          _showMovementsSheet,
-        ),
-      if (sub.hasDebt && can('subscribers.send_whatsapp'))
-        _FabAction(
-          LucideIcons.bellRing,
+          Icons.notifications_active_outlined,
           'تذكير دين',
           Colors.orange,
           () {
             _sendWhatsAppFromTemplate('debt_reminder');
           },
         ),
-      if (sub.isNearExpiry && can('subscribers.send_whatsapp'))
+      if (sub.isNearExpiry)
         _FabAction(
-          LucideIcons.alarmClock,
+          Icons.alarm_rounded,
           'تذكير انتهاء',
           Colors.deepOrange,
           () => _sendWhatsAppFromTemplate('expiry_warning'),
         ),
-      if (can('subscribers.generate_link'))
-        _FabAction(LucideIcons.link, 'توليد رابط', Colors.indigo, _generateInfoLink),
+      _FabAction(Icons.link_rounded, 'توليد رابط', Colors.indigo, _generateInfoLink),
       // إرسال قالب "معلومات المشترك" الكامل عبر واتساب — يختلف عن "توليد
       // رابط" الذي يبعث URL قصير العمر؛ هنا الرسالة ذاتها تحمل التفاصيل.
-      if (can('subscribers.send_whatsapp'))
-        _FabAction(
-          LucideIcons.info,
-          'إرسال المعلومات',
-          Colors.blueAccent,
-          () => _sendWhatsAppFromTemplate('subscriber_info'),
-        ),
-      if (can('subscribers.delete'))
-        _FabAction(LucideIcons.trash2, 'حذف', AppTheme.dangerColor, _deleteSubscriber),
-      if (can('subscribers.toggle'))
-        _FabAction(
-          isEnabled ? LucideIcons.ban : LucideIcons.circleCheck,
-          isEnabled ? 'تعطيل' : 'تفعيل حساب',
-          isEnabled ? AppTheme.warningColor : AppTheme.successColor,
-          () => _toggleSubscriber(enable: !isEnabled),
-        ),
+      _FabAction(
+        Icons.info_outline_rounded,
+        'إرسال المعلومات',
+        Colors.blueAccent,
+        () => _sendWhatsAppFromTemplate('subscriber_info'),
+      ),
+      _FabAction(Icons.delete_outline, 'حذف', AppTheme.dangerColor, _deleteSubscriber),
+      _FabAction(
+        isEnabled ? Icons.block : Icons.check_circle_outline,
+        isEnabled ? 'تعطيل' : 'تفعيل حساب',
+        isEnabled ? AppTheme.warningColor : AppTheme.successColor,
+        () => _toggleSubscriber(enable: !isEnabled),
+      ),
     ];
 
     showModalBottomSheet(
@@ -3667,8 +3053,7 @@ class _InfoChip extends StatelessWidget {
 class _HeaderStat extends StatelessWidget {
   final String label;
   final String value;
-  final String? subValue;
-  const _HeaderStat({required this.label, required this.value, this.subValue});
+  const _HeaderStat({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -3679,16 +3064,6 @@ class _HeaderStat extends StatelessWidget {
               color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700,
             ),
             textAlign: TextAlign.center),
-        if (subValue != null && subValue!.isNotEmpty) ...[
-          const SizedBox(height: 1),
-          Text(subValue!,
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.85),
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-              ),
-              textAlign: TextAlign.center),
-        ],
         const SizedBox(height: 2),
         Text(label,
             style: TextStyle(
@@ -3731,48 +3106,42 @@ class _MethodBtn extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
-  /// لون مميز لكل طريقة دفع (نقدي=أخضر، جزئي=برتقالي، آجل=أحمر).
-  /// لو null، يقع على لون primary من الثيم.
-  final Color? accentColor;
   const _MethodBtn({
     required this.icon, required this.label,
     required this.selected, required this.onTap,
-    this.accentColor,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = accentColor ?? theme.colorScheme.primary;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           color: selected
-              ? accent.withOpacity(0.14)
+              ? theme.colorScheme.primary.withOpacity(0.12)
               : theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: selected
-                ? accent.withOpacity(0.55)
-                : accent.withOpacity(0.18),
-            width: selected ? 1.5 : 1,
+                ? theme.colorScheme.primary.withOpacity(0.4)
+                : Colors.transparent,
           ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(icon, size: 16, color: selected
-                ? accent
-                : accent.withOpacity(0.55)),
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurface.withOpacity(0.5)),
             const SizedBox(width: 6),
             Text(label, style: TextStyle(
               fontSize: 13,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
               color: selected
-                  ? accent
-                  : accent.withOpacity(0.75),
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurface.withOpacity(0.7),
             )),
           ],
         ),
@@ -3931,7 +3300,7 @@ class _IpDetailRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          Icon(LucideIcons.network, size: 16, color: accent),
+          Icon(Icons.lan_rounded, size: 16, color: accent),
           const SizedBox(width: 8),
           Text(
             'IP',
@@ -3975,7 +3344,7 @@ class _IpDetailRow extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 4),
-                          Icon(LucideIcons.externalLink,
+                          Icon(Icons.open_in_new_rounded,
                               size: 11, color: accent),
                         ],
                       ),
@@ -3994,7 +3363,7 @@ class _IpDetailRow extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(LucideIcons.clock,
+                          Icon(Icons.schedule_rounded,
                               size: 11, color: AppTheme.successColor),
                           const SizedBox(width: 4),
                           Text(
@@ -4038,7 +3407,7 @@ class _NoIpHint extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          Icon(LucideIcons.network, size: 16, color: accent),
+          Icon(Icons.lan_rounded, size: 16, color: accent),
           const SizedBox(width: 8),
           Text('IP', style: labelStyle),
           const SizedBox(width: 8),
@@ -4075,15 +3444,15 @@ class _StatusRow extends StatelessWidget {
     if (!isEnabled) {
       statusText = 'معطّل';
       statusColor = AppTheme.dangerColor;
-      statusIcon = LucideIcons.ban;
+      statusIcon = Icons.block_rounded;
     } else if (isExpired) {
       statusText = 'منتهي';
       statusColor = AppTheme.warningColor;
-      statusIcon = LucideIcons.clock;
+      statusIcon = Icons.schedule_rounded;
     } else {
       statusText = 'مفعّل';
       statusColor = AppTheme.successColor;
-      statusIcon = LucideIcons.circleCheck;
+      statusIcon = Icons.check_circle_rounded;
     }
 
     // الاتصال: متصل/غير متصل — لا نعرضه للمعطّل (بلا معنى)
@@ -4091,15 +3460,15 @@ class _StatusRow extends StatelessWidget {
     final connText = isOnline ? 'متصل' : 'غير متصل';
     final connColor = isOnline ? AppTheme.successColor : Colors.grey;
     final connIcon = isOnline
-        ? LucideIcons.wifi
-        : LucideIcons.wifiOff;
+        ? Icons.wifi_rounded
+        : Icons.wifi_off_rounded;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(LucideIcons.toggleRight,
+          Icon(Icons.toggle_on_outlined,
               size: 18, color: theme.colorScheme.primary),
           const SizedBox(width: 10),
           Text('الحالة',
@@ -4165,73 +3534,6 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
-/// Renders the admin's free-form note for a subscriber's CPE, if any.
-/// Pulled from the same deviceConfigProvider that backs the gear-icon
-/// edit dialog, so saves there reflect here without a manual refresh.
-/// Hidden entirely when there's no note — the connection section stays
-/// tight for the common case.
-class _DeviceNotesRow extends ConsumerWidget {
-  final String subscriberUsername;
-  const _DeviceNotesRow({required this.subscriberUsername});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final asyncCfg = ref.watch(deviceConfigProvider(subscriberUsername));
-    final notes = asyncCfg.value?.notes?.trim() ?? '';
-    if (notes.isEmpty) return const SizedBox.shrink();
-
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    // Inline footnote — left-aligned (RTL visual left = the end of the
-    // line, where the gear/refresh icons sit). Width hugs the content
-    // so a long note still wraps within a maxWidth that doesn't cross
-    // the section to the right where the metric chips live.
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 280),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(LucideIcons.fileText,
-                  size: 14, color: cs.primary.withOpacity(0.75)),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text.rich(
-                  TextSpan(children: [
-                    TextSpan(
-                      text: 'ملاحظة: ',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: cs.primary.withOpacity(0.85),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        height: 1.3,
-                      ),
-                    ),
-                    TextSpan(
-                      text: notes,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: cs.onSurface.withOpacity(0.85),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        height: 1.3,
-                      ),
-                    ),
-                  ]),
-                  textAlign: TextAlign.start,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _DetailRow extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -4277,76 +3579,6 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
-/// سطر يجمع سعر الباقة + الخصم + السعر النهائي. يحلّ محلّ سطر منفصل
-/// للخصم. السعر الأصلي مشطوب، يليه السعر النهائي بعد الخصم بلون أخضر.
-class _PriceWithDiscountRow extends StatelessWidget {
-  final String? originalPrice;
-  final double discount;
-
-  const _PriceWithDiscountRow({
-    required this.originalPrice,
-    required this.discount,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final origNum = double.tryParse(originalPrice ?? '0') ?? 0;
-    final finalPrice = (origNum - discount).clamp(0, double.infinity);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(LucideIcons.dollarSign, size: 18, color: theme.colorScheme.primary),
-          ),
-          const SizedBox(width: 10),
-          Text('سعر الباقة',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
-              )),
-          const Spacer(),
-          // السعر الأصلي (مشطوب)
-          Text(
-            AppHelpers.formatMoney(origNum),
-            style: theme.textTheme.bodySmall?.copyWith(
-              decoration: TextDecoration.lineThrough,
-              color: theme.colorScheme.onSurface.withOpacity(0.45),
-            ),
-          ),
-          const SizedBox(width: 6),
-          // الخصم — chip صغير
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-            decoration: BoxDecoration(
-              color: Colors.teal.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              '-${AppHelpers.formatMoney(discount)}',
-              style: const TextStyle(
-                fontSize: 10.5, fontWeight: FontWeight.w800,
-                color: Colors.teal, fontFamily: 'Cairo',
-              ),
-            ),
-          ),
-          const SizedBox(width: 6),
-          // السعر النهائي
-          Text(
-            AppHelpers.formatMoney(finalPrice),
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: Colors.green.shade700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _PhoneDetailRow extends StatelessWidget {
   final String value;
   final bool enabled;
@@ -4373,7 +3605,7 @@ class _PhoneDetailRow extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 2),
             child: Icon(
-              LucideIcons.phone,
+              Icons.phone_outlined,
               size: 18,
               color: theme.colorScheme.primary,
             ),
@@ -4404,13 +3636,13 @@ class _PhoneDetailRow extends StatelessWidget {
                 if (enabled) ...[
                   const SizedBox(width: 8),
                   _PhoneActionIcon(
-                    icon: LucideIcons.phone,
+                    icon: Icons.call_rounded,
                     color: AppTheme.teal600,
                     onTap: onCall,
                   ),
                   const SizedBox(width: 6),
                   _PhoneActionIcon(
-                    icon: LucideIcons.messageCircle,
+                    icon: Icons.chat_rounded,
                     color: AppTheme.whatsappGreen,
                     onTap: onWhatsApp,
                   ),
@@ -4525,7 +3757,7 @@ class _PrintReceiptCheckbox extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 10),
-            Icon(LucideIcons.printer, size: 18, color: primary),
+            Icon(Icons.print_rounded, size: 18, color: primary),
             const SizedBox(width: 6),
             const Text(
               'طباعة وصل تلقائياً',
@@ -4537,528 +3769,6 @@ class _PrintReceiptCheckbox extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Subscriber movements sheet — timeline of activate/extend/pay/add-debt
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _SubscriberMovementsSheetContent extends ConsumerStatefulWidget {
-  final SubscriberModel subscriber;
-  const _SubscriberMovementsSheetContent({required this.subscriber});
-
-  @override
-  ConsumerState<_SubscriberMovementsSheetContent> createState() =>
-      _SubscriberMovementsSheetContentState();
-}
-
-class _SubscriberMovementsSheetContentState
-    extends ConsumerState<_SubscriberMovementsSheetContent> {
-  bool _loading = true;
-  String? _error;
-  List<Map<String, dynamic>> _all = const [];
-  String _typeFilter = 'all';
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final dio = ref.read(backendDioProvider);
-      // Wide window: 5 years back → today. account-statement endpoint
-      // requires both bounds; this captures the entire realistic history
-      // without paging.
-      final now = DateTime.now();
-      final from = DateTime(now.year - 5, now.month, now.day);
-      String fmt(DateTime d) =>
-          '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-      final res = await dio.get(
-        ApiConstants.accountStatement,
-        queryParameters: {
-          'username': widget.subscriber.username,
-          'user_id': widget.subscriber.idx ?? '',
-          'date_from': '${fmt(from)} 00:00:00',
-          'date_to': '${fmt(now)} 23:59:59',
-        },
-      );
-      if (res.data?['success'] == true && res.data?['data'] != null) {
-        final data = res.data['data'];
-        final txs = (data['transactions'] as List? ?? const [])
-            .map((e) => Map<String, dynamic>.from(e))
-            .toList();
-        if (!mounted) return;
-        setState(() {
-          _all = txs;
-          _loading = false;
-        });
-      } else {
-        if (!mounted) return;
-        setState(() {
-          _error = 'فشل جلب الحركات';
-          _loading = false;
-        });
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = 'خطأ في الاتصال';
-        _loading = false;
-      });
-    }
-  }
-
-  List<Map<String, dynamic>> get _filtered {
-    if (_typeFilter == 'all') return _all;
-    return _all
-        .where((t) =>
-            (t['action_type'] ?? '').toString().toUpperCase() == _typeFilter)
-        .toList();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final sub = widget.subscriber;
-    final displayName = sub.fullName.isNotEmpty ? sub.fullName : sub.username;
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const SizedBox(height: 10),
-        Container(
-          width: 40,
-          height: 4,
-          decoration: BoxDecoration(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              Icon(LucideIcons.history,
-                  size: 20, color: theme.colorScheme.primary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'سجل الحركات',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    Text(
-                      displayName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.6),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                tooltip: 'تحديث',
-                icon: const Icon(LucideIcons.refreshCw, size: 20),
-                onPressed: _loading ? null : _load,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        SizedBox(
-          height: 36,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            children: [
-              _MovFilterChip(
-                label: 'الكل',
-                value: 'all',
-                current: _typeFilter,
-                onTap: (v) => setState(() => _typeFilter = v),
-              ),
-              const SizedBox(width: 6),
-              _MovFilterChip(
-                label: 'تفعيل',
-                value: 'SUBSCRIBER_ACTIVATE',
-                current: _typeFilter,
-                onTap: (v) => setState(() => _typeFilter = v),
-              ),
-              const SizedBox(width: 6),
-              _MovFilterChip(
-                label: 'تمديد',
-                value: 'SUBSCRIBER_EXTEND',
-                current: _typeFilter,
-                onTap: (v) => setState(() => _typeFilter = v),
-              ),
-              const SizedBox(width: 6),
-              _MovFilterChip(
-                label: 'تسديد',
-                value: 'BALANCE_DEDUCT',
-                current: _typeFilter,
-                onTap: (v) => setState(() => _typeFilter = v),
-              ),
-              const SizedBox(width: 6),
-              _MovFilterChip(
-                label: 'إضافة دين',
-                value: 'BALANCE_ADD',
-                current: _typeFilter,
-                onTap: (v) => setState(() => _typeFilter = v),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        const Divider(height: 1),
-        Expanded(child: _buildBody()),
-      ],
-    );
-  }
-
-  Widget _buildBody() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(LucideIcons.circleAlert,
-                size: 48, color: Colors.redAccent),
-            const SizedBox(height: 8),
-            Text(_error!, style: const TextStyle(fontSize: 13)),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: _load,
-              icon: const Icon(LucideIcons.refreshCw, size: 16),
-              label: const Text('إعادة المحاولة'),
-            ),
-          ],
-        ),
-      );
-    }
-    final list = _filtered;
-    if (list.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(LucideIcons.inbox,
-                size: 48,
-                color: Theme.of(context)
-                    .colorScheme
-                    .onSurface
-                    .withValues(alpha: 0.25)),
-            const SizedBox(height: 8),
-            Text(
-              _typeFilter == 'all'
-                  ? 'لا توجد حركات لعرضها'
-                  : 'لا توجد حركات بهذا النوع',
-              style: TextStyle(
-                fontSize: 13,
-                color: Theme.of(context)
-                    .colorScheme
-                    .onSurface
-                    .withValues(alpha: 0.5),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Group by date label (today/yesterday/yyyy-MM-dd) preserving the
-    // server-provided DESC order.
-    final grouped = <String, List<Map<String, dynamic>>>{};
-    final order = <String>[];
-    for (final t in list) {
-      final key = _dateGroupKey(t['created_at']?.toString() ?? '');
-      if (!grouped.containsKey(key)) {
-        grouped[key] = [];
-        order.add(key);
-      }
-      grouped[key]!.add(t);
-    }
-
-    final items = <Widget>[];
-    for (final key in order) {
-      items.add(_DateHeader(label: key));
-      for (final t in grouped[key]!) {
-        items.add(_MovementTile(txn: t));
-      }
-    }
-
-    return ListView(
-      padding: EdgeInsets.fromLTRB(
-        12, 8, 12, bottomSheetBottomInset(context, extra: 12),
-      ),
-      children: items,
-    );
-  }
-
-  String _dateGroupKey(String iso) {
-    final dt = DateTime.tryParse(iso);
-    if (dt == null) return '—';
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final d = DateTime(dt.year, dt.month, dt.day);
-    final diff = today.difference(d).inDays;
-    if (diff == 0) return 'اليوم';
-    if (diff == 1) return 'أمس';
-    return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-  }
-}
-
-class _MovFilterChip extends StatelessWidget {
-  final String label;
-  final String value;
-  final String current;
-  final ValueChanged<String> onTap;
-  const _MovFilterChip({
-    required this.label,
-    required this.value,
-    required this.current,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final selected = value == current;
-    final theme = Theme.of(context);
-    return GestureDetector(
-      onTap: () => onTap(value),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected
-              ? theme.colorScheme.primary.withValues(alpha: 0.12)
-              : theme.colorScheme.surfaceContainerHighest
-                  .withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: selected
-                ? theme.colorScheme.primary.withValues(alpha: 0.4)
-                : Colors.transparent,
-          ),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-            color: selected
-                ? theme.colorScheme.primary
-                : theme.colorScheme.onSurface.withValues(alpha: 0.7),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DateHeader extends StatelessWidget {
-  final String label;
-  const _DateHeader({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
-      child: Row(
-        children: [
-          Text(
-            label,
-            style: theme.textTheme.bodySmall?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: theme.colorScheme.primary,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Container(
-              height: 1,
-              color: theme.colorScheme.outline.withValues(alpha: 0.12),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MovementTile extends StatelessWidget {
-  final Map<String, dynamic> txn;
-  const _MovementTile({required this.txn});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final type = (txn['action_type'] ?? '').toString().toUpperCase();
-    final desc = AppHelpers.formatNumbersInText(
-      txn['description']?.toString() ?? '',
-    );
-    final admin = txn['admin_name']?.toString() ?? '';
-    final notes = txn['notes']?.toString() ?? '';
-    final createdAt = txn['created_at']?.toString() ?? '';
-    final rawAmt = txn['amount'];
-    final amount = (rawAmt is num)
-        ? rawAmt.toDouble().abs()
-        : double.tryParse(
-                  (rawAmt?.toString() ?? '')
-                      .replaceAll(RegExp(r'[^0-9.\-]'), ''),
-                )
-                ?.abs() ??
-            0;
-
-    final isDebt = type == 'BALANCE_ADD' ||
-        (type == 'SUBSCRIBER_ACTIVATE' &&
-            desc.toLowerCase().contains('غير نقدي'));
-
-    final (icon, color, label) = switch (type) {
-      'SUBSCRIBER_ACTIVATE' =>
-        (LucideIcons.zap, AppTheme.successColor, 'تفعيل'),
-      'SUBSCRIBER_EXTEND' =>
-        (LucideIcons.repeat, AppTheme.teal600, 'تمديد'),
-      'BALANCE_DEDUCT' || 'DEBT_PAY' =>
-        (LucideIcons.banknote, Colors.green, 'تسديد دين'),
-      'BALANCE_ADD' =>
-        (LucideIcons.plus, AppTheme.warningColor, 'إضافة دين'),
-      _ => (LucideIcons.receipt, theme.colorScheme.primary, type),
-    };
-
-    String formattedTime = '';
-    final dt = DateTime.tryParse(createdAt);
-    if (dt != null) {
-      final h = dt.hour.toString().padLeft(2, '0');
-      final m = dt.minute.toString().padLeft(2, '0');
-      formattedTime = '$h:$m';
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: theme.cardTheme.color ?? theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.colorScheme.outline.withValues(alpha: 0.10),
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.14),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, size: 18, color: color),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          color: color,
-                        ),
-                      ),
-                    ),
-                    const Spacer(),
-                    if (formattedTime.isNotEmpty)
-                      Text(
-                        formattedTime,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: theme.colorScheme.onSurface
-                              .withValues(alpha: 0.5),
-                        ),
-                      ),
-                  ],
-                ),
-                if (desc.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    desc,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11.5, height: 1.35),
-                  ),
-                ],
-                if (notes.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    notes,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      color:
-                          theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                    ),
-                  ),
-                ],
-                if (admin.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    'المنفذ: $admin',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color:
-                          theme.colorScheme.primary.withValues(alpha: 0.55),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (amount > 0) ...[
-            const SizedBox(width: 8),
-            Text(
-              '${isDebt ? '-' : '+'}${AppHelpers.formatMoney(amount)}',
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w800,
-                color: isDebt ? Colors.red : Colors.green,
-              ),
-            ),
-          ],
-        ],
       ),
     );
   }

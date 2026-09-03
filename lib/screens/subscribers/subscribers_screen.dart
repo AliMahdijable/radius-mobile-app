@@ -1,22 +1,17 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../core/services/device_status_cache.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/device_provider.dart';
 import '../../providers/subscribers_provider.dart';
 import '../../providers/dashboard_provider.dart';
-import '../../models/device_config.dart';
 import '../../models/subscriber_model.dart';
 import '../../widgets/subscriber_card.dart';
 import '../../widgets/loading_overlay.dart';
 import '../../widgets/app_snackbar.dart';
 import '../../widgets/add_subscriber_sheet.dart';
-import 'bulk_renew_sheet.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/helpers.dart';
 import '../../core/utils/bottom_sheet_utils.dart';
@@ -43,415 +38,18 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
   int _pageSize = 25;
   int _currentPage = 0;
   String? _lastScrolledFilter;
-  // Device-health sort. ONE picker, FOUR metrics (RX / Sig / CCQ /
-  // LAN), two directions. Earlier we shipped a dual filter+sort UI
-  // (13 chips total) that admins found noisy — collapsed to just
-  // sort, because "show problems only" was redundant with
-  // sorting-worst-first. Stored format: '<metric>_asc' or
-  // '<metric>_desc'. Examples on real values:
-  //   'rx_desc'  → highest RX first  (-18 → -22 → -30)
-  //   'rx_asc'   → lowest RX first   (-30 → -22 → -18)
-  //   'ccq_desc' → highest CCQ first (95 → 60 → 30)
-  //   'ccq_asc'  → lowest CCQ first  (30 → 60 → 95)
-  //   'sig_desc' → highest Sig first (-58 → -72 → -85)
-  //   'lan_desc' → fastest LAN first (1000 → 100 → 10)
-  String? _deviceSort;
-  // Cache of probe results keyed by subscriber username. Populated by
-  // _runDeviceProbes when filter/sort is active. The actual provider's
-  // 5-min cacheFor handles the underlying HTTP calls; this map is just
-  // a synchronously-readable mirror so the build method can filter/sort
-  // without awaiting.
-  final Map<String, DeviceHealthSnapshot?> _probeCache = {};
-  bool _probing = false;
-  int _probeProgress = 0;
-  int _probeTotal = 0;
-  // Bumps each time a probe wave starts so an in-flight wave can be
-  // cancelled when the admin changes filter/sort/search mid-probe.
-  int _probeRunId = 0;
-  // Hash of the list we last probed against — re-probe whenever the
-  // list shape changes (search results changed, filter chip changed,
-  // etc.).
-  String _lastProbedHash = '';
-
-  // ── تحديد متعدّد ──────────────────────────────────────────────────
-  // يُفعَّل بالضغط المطوّل على بطاقة. نخزّن idx (الرقمي) للمشتركين
-  // المحدّدين — هو ما تحتاجه عمليات التفعيل/التعطيل/الحذف.
-  bool _selectionMode = false;
-  final Set<String> _selectedIdx = {};
-
-  void _exitSelection() {
-    setState(() {
-      _selectionMode = false;
-      _selectedIdx.clear();
-    });
-  }
-
-  void _toggleSelect(SubscriberModel sub) {
-    final id = sub.idx;
-    if (id == null) return;
-    setState(() {
-      if (_selectedIdx.contains(id)) {
-        _selectedIdx.remove(id);
-        if (_selectedIdx.isEmpty) _selectionMode = false;
-      } else {
-        _selectedIdx.add(id);
-        _selectionMode = true;
-      }
-    });
-  }
-
-  void _enterSelectionWith(SubscriberModel sub) {
-    final id = sub.idx;
-    if (id == null) return;
-    setState(() {
-      _selectionMode = true;
-      _selectedIdx.add(id);
-    });
-  }
-
-  // شريط رأس وضع التحديد — بديل صفّ البحث.
-  Widget _buildSelectionHeader(ThemeData theme, List<SubscriberModel> pool) {
-    final selectable = pool.where((s) => s.idx != null).toList();
-    final allSelected = selectable.isNotEmpty &&
-        selectable.every((s) => _selectedIdx.contains(s.idx));
-    return Row(
-      children: [
-        IconButton(
-          icon: const Icon(LucideIcons.x),
-          tooltip: 'إنهاء التحديد',
-          visualDensity: VisualDensity.compact,
-          onPressed: _exitSelection,
-        ),
-        Text(
-          '${_selectedIdx.length} محدد',
-          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
-        ),
-        const Spacer(),
-        TextButton(
-          onPressed: selectable.isEmpty
-              ? null
-              : () {
-                  setState(() {
-                    if (allSelected) {
-                      for (final s in selectable) {
-                        _selectedIdx.remove(s.idx);
-                      }
-                      if (_selectedIdx.isEmpty) _selectionMode = false;
-                    } else {
-                      for (final s in selectable) {
-                        _selectedIdx.add(s.idx!);
-                      }
-                    }
-                  });
-                },
-          child: Text(
-            allSelected ? 'إلغاء تحديد الكل' : 'تحديد الكل',
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// يقرأ حالة المشتركين المحدّدين (مفعّل/معطّل) من القوائم المحمّلة —
-  /// لأنّ بعض المحدّدين قد لا يكون ضمن الصفحة المعروضة حالياً. النتيجة
-  /// تحدّد أزرار الشريط السفلي: مفعّلون فقط → [تعطيل]، معطّلون فقط →
-  /// [تفعيل]، خليط → [تعطيل][تفعيل]. (و"حذف" دائماً.)
-  ({bool hasEnabled, bool hasDisabled}) _selectionStatus(
-      SubscribersState state) {
-    final byIdx = <String, SubscriberModel>{};
-    for (final s in state.subscribers) {
-      final i = s.idx;
-      if (i != null) byIdx[i] = s;
-    }
-    for (final s in state.searchResults) {
-      final i = s.idx;
-      if (i != null) byIdx.putIfAbsent(i, () => s);
-    }
-    for (final s in state.onlineUsers) {
-      final i = s.idx;
-      if (i != null) byIdx.putIfAbsent(i, () => s);
-    }
-    var hasEnabled = false;
-    var hasDisabled = false;
-    for (final id in _selectedIdx) {
-      final s = byIdx[id];
-      if (s == null) continue;
-      if (s.isEnabled) {
-        hasEnabled = true;
-      } else {
-        hasDisabled = true;
-      }
-      if (hasEnabled && hasDisabled) break;
-    }
-    // لو لم نتعرّف على حالة أيٍّ منهم، اعرض "تعطيل" افتراضياً.
-    if (!hasEnabled && !hasDisabled) hasEnabled = true;
-    return (hasEnabled: hasEnabled, hasDisabled: hasDisabled);
-  }
-
-  /// المشتركون المحدّدون فعلياً (من القوائم المحمّلة) — للتجديد الجماعي.
-  List<SubscriberModel> _selectedSubscribers(SubscribersState state) {
-    final byIdx = <String, SubscriberModel>{};
-    for (final s in state.subscribers) {
-      final i = s.idx;
-      if (i != null) byIdx[i] = s;
-    }
-    for (final s in state.searchResults) {
-      final i = s.idx;
-      if (i != null) byIdx.putIfAbsent(i, () => s);
-    }
-    for (final s in state.onlineUsers) {
-      final i = s.idx;
-      if (i != null) byIdx.putIfAbsent(i, () => s);
-    }
-    return [for (final id in _selectedIdx) if (byIdx[id] != null) byIdx[id]!];
-  }
-
-  Future<void> _openBulkRenew(SubscribersState state) async {
-    final subs = _selectedSubscribers(state);
-    if (subs.isEmpty) return;
-    final didRenew = await showBulkRenewSheet(context, subs);
-    if (!mounted) return;
-    if (didRenew == true) {
-      setState(() {
-        _selectionMode = false;
-        _selectedIdx.clear();
-        _currentPage = 0;
-      });
-    }
-  }
-
-  // الشريط السفلي بالعمليات — صف "تجديد الاشتراك" بارز، ثم تعطيل/تفعيل/حذف.
-  Widget _buildBulkBar(ThemeData theme, SubscribersState state) {
-    final enabled = _selectedIdx.isNotEmpty;
-    final status = _selectionStatus(state);
-    Widget btn(IconData icon, String label, Color color, BulkAction action) {
-      return Expanded(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: ElevatedButton.icon(
-            onPressed: enabled ? () => _runBulkAction(action) : null,
-            icon: Icon(icon, size: 16),
-            label: Text(
-              label,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: color,
-              foregroundColor: Colors.white,
-              disabledBackgroundColor: color.withOpacity(0.30),
-              disabledForegroundColor: Colors.white.withOpacity(0.8),
-              minimumSize: const Size.fromHeight(42),
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              shape:
-                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-          ),
-        ),
-      );
-    }
-
-    final secondary = <Widget>[
-      if (status.hasEnabled)
-        btn(LucideIcons.ban, 'تعطيل', AppTheme.warningColor,
-            BulkAction.disable),
-      if (status.hasDisabled)
-        btn(LucideIcons.circleCheck, 'تفعيل', AppTheme.successColor,
-            BulkAction.enable),
-      btn(LucideIcons.trash2, 'حذف', const Color(0xFFE53935),
-          BulkAction.delete),
-    ];
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border(
-          top: BorderSide(color: theme.colorScheme.onSurface.withOpacity(0.12)),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 8,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // تجديد الاشتراك — العملية الرئيسية، صفّ كامل بالأعلى.
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 0, 4, 6),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: enabled ? () => _openBulkRenew(state) : null,
-                  icon: const Icon(LucideIcons.calendarPlus, size: 17),
-                  label: Text(
-                    'تجديد الاشتراك (${_selectedIdx.length})',
-                    style: const TextStyle(
-                        fontSize: 13.5, fontWeight: FontWeight.w900),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: AppTheme.primary.withOpacity(0.30),
-                    disabledForegroundColor: Colors.white.withOpacity(0.8),
-                    minimumSize: const Size.fromHeight(46),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                  ),
-                ),
-              ),
-            ),
-            Row(children: secondary),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _runBulkAction(BulkAction action) async {
-    // اقرأ حالة المحدّدين كي يطبّق "تعطيل" على المفعّلين فقط و"تفعيل" على
-    // المعطّلين فقط (الحذف على الكل) — فلا يُرسل أوامر بلا فائدة والعدّاد دقيق.
-    final st = ref.read(subscribersProvider);
-    final enabledByIdx = <String, bool>{};
-    for (final s in [
-      ...st.subscribers,
-      ...st.searchResults,
-      ...st.onlineUsers,
-    ]) {
-      final i = s.idx;
-      if (i != null) enabledByIdx.putIfAbsent(i, () => s.isEnabled);
-    }
-    Iterable<String> sel = _selectedIdx;
-    if (action == BulkAction.disable) {
-      // غير المعروف نعتبره مفعّلاً (الافتراضي).
-      sel = _selectedIdx.where((id) => enabledByIdx[id] ?? true);
-    } else if (action == BulkAction.enable) {
-      sel = _selectedIdx.where((id) => enabledByIdx[id] == false);
-    }
-    final ids = sel.map(int.tryParse).whereType<int>().toList();
-    if (ids.isEmpty) {
-      if (mounted) {
-        AppSnackBar.info(context, 'لا مشترك ضمن التحديد بحاجة لهذه العملية');
-      }
-      return;
-    }
-    final n = ids.length;
-    final verb = switch (action) {
-      BulkAction.disable => 'تعطيل',
-      BulkAction.enable => 'تفعيل',
-      BulkAction.delete => 'حذف',
-    };
-    final accent = switch (action) {
-      BulkAction.disable => AppTheme.warningColor,
-      BulkAction.enable => AppTheme.successColor,
-      BulkAction.delete => const Color(0xFFE53935),
-    };
-    final body = switch (action) {
-      BulkAction.disable =>
-        'سيتم تعطيل $n مشترك، وإن كان أيٌّ منهم متصلاً الآن سيُفصل فوراً. '
-            'تبقى الحسابات في النظام.\n\nهل تريد المتابعة؟',
-      BulkAction.enable =>
-        'سيتم رفع التعطيل عن $n مشترك (يعودون قادرين على الاتصال). '
-            'لا يغيّر هذا الاشتراك أو التواريخ.\n\nهل تريد المتابعة؟',
-      BulkAction.delete =>
-        'سيتم حذف $n مشترك نهائياً ولا يمكن التراجع. '
-            'المشتركون الذين عليهم دين لن يُحذفوا.\n\nهل تريد المتابعة؟',
-    };
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('تأكيد $verb ($n)'),
-        content: Text(body),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('إلغاء'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: accent, foregroundColor: Colors.white),
-            child: Text(verb),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    final navigator = Navigator.of(context, rootNavigator: true);
-    final progress = ValueNotifier<int>(0);
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        content: Row(
-          children: [
-            const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2.5),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: ValueListenableBuilder<int>(
-                valueListenable: progress,
-                builder: (_, done, __) => Text(
-                  'جارٍ $verb المشتركين... $done/$n',
-                  style: const TextStyle(fontSize: 13),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    final result = await ref.read(subscribersProvider.notifier).runBulkAction(
-          ids,
-          action,
-          onProgress: (done, _) => progress.value = done,
-        );
-
-    navigator.pop(); // أغلق نافذة التقدّم
-    progress.dispose();
-    if (!mounted) return;
-
-    setState(() {
-      _selectionMode = false;
-      _selectedIdx.clear();
-      _currentPage = 0;
-    });
-
-    final ok = result.successCount;
-    final bad = result.failCount;
-    final hint = action == BulkAction.delete ? ' — المتعذّرون غالباً عليهم دين' : '';
-    if (bad == 0) {
-      AppSnackBar.success(context, 'تم $verb $ok مشترك بنجاح');
-    } else if (ok == 0) {
-      AppSnackBar.error(context, 'فشل $verb المشتركين ($bad)$hint');
-    } else {
-      AppSnackBar.error(context, 'تم $verb $ok — فشل $bad$hint');
-    }
-  }
 
   static const _pageSizes = [10, 25, 50, 100, 250, 500];
 
   static const _sortFields = [
-    _SortFieldDef('username', 'اسم المستخدم', LucideIcons.user),
-    _SortFieldDef('firstname', 'الاسم', LucideIcons.badgeCheck),
-    _SortFieldDef('name', 'الباقة', LucideIcons.package),
-    _SortFieldDef('mobile', 'رقم الهاتف', LucideIcons.phone),
-    _SortFieldDef('expiration', 'تاريخ الانتهاء', LucideIcons.calendar),
-    _SortFieldDef('remaining_days', 'الأيام المتبقية', LucideIcons.clock),
-    _SortFieldDef('notes', 'الديون', LucideIcons.wallet),
-    _SortFieldDef('parent_username', 'تابع إلى', LucideIcons.userCog),
+    _SortFieldDef('username', 'اسم المستخدم', Icons.person_rounded),
+    _SortFieldDef('firstname', 'الاسم', Icons.badge_rounded),
+    _SortFieldDef('name', 'الباقة', Icons.inventory_2_rounded),
+    _SortFieldDef('mobile', 'رقم الهاتف', Icons.phone_rounded),
+    _SortFieldDef('expiration', 'تاريخ الانتهاء', Icons.event_rounded),
+    _SortFieldDef('remaining_days', 'الأيام المتبقية', Icons.schedule_rounded),
+    _SortFieldDef('notes', 'الديون', Icons.account_balance_wallet_rounded),
+    _SortFieldDef('parent_username', 'تابع إلى', Icons.supervisor_account_rounded),
   ];
 
   @override
@@ -459,18 +57,6 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
     super.initState();
     Future.microtask(() {
       ref.read(subscribersProvider.notifier).loadSubscribers();
-    });
-    // Hydrate the screen-level probe map from the on-disk cache so the
-    // filter / sort UI has data to work with the moment the admin
-    // taps "RX سيء" — even before the live wave fires its first probe.
-    Future.microtask(() async {
-      await DeviceStatusCache.instance.ready();
-      if (!mounted) return;
-      final cached = DeviceStatusCache.instance.snapshotsByUsername();
-      if (cached.isEmpty) return;
-      setState(() {
-        _probeCache.addAll(cached);
-      });
     });
     FcmService.pendingSubscriberSearch.addListener(_consumePendingSearch);
     if (FcmService.pendingSubscriberSearch.value != null) {
@@ -488,57 +74,6 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
     FcmService.pendingSubscriberSearch.removeListener(_consumePendingSearch);
     super.dispose();
   }
-
-  // Throttled probe wave for the full subscriber list. Concurrent probes
-  // are capped so we don't fan out 1000 simultaneous router logins; the
-  // underlying deviceStatusProvider keeps each result warm for 5 min so
-  // re-running this with a populated cache is essentially free.
-  Future<void> _runDeviceProbes(List<SubscriberModel> subs) async {
-    if (!mounted) return;
-    _probeRunId += 1;
-    final myRun = _probeRunId;
-    final probable = subs.where((s) =>
-        !s.isOffline && (s.ipAddress ?? '').trim().isNotEmpty).toList();
-    setState(() {
-      _probing = true;
-      _probeTotal = probable.length;
-      _probeProgress = 0;
-    });
-
-    // 25 concurrent probes is a sweet spot on a typical Android device:
-    // each probe is I/O-bound (HTTP login + status fetch), so going wide
-    // doesn't stall the UI thread, and the per-probe 6s cap means even
-    // 100 dead IPs finish in 4 batches × 6s = 24s. Was 8 — a 3× lift.
-    const concurrency = 25;
-    var done = 0;
-    for (var i = 0; i < probable.length; i += concurrency) {
-      if (!mounted || _probeRunId != myRun) return;
-      final batch = probable.skip(i).take(concurrency).toList();
-      await Future.wait(batch.map((sub) async {
-        final args = DeviceStatusArgs(
-          subscriberUsername: sub.username,
-          fallbackIp: sub.ipAddress!.trim(),
-        );
-        try {
-          final snap = await ref.read(deviceStatusProvider(args).future);
-          _probeCache[sub.username] = snap;
-        } catch (_) {
-          _probeCache[sub.username] = null;
-        }
-      }));
-      if (!mounted || _probeRunId != myRun) return;
-      done += batch.length;
-      setState(() => _probeProgress = done);
-    }
-    if (!mounted || _probeRunId != myRun) return;
-    setState(() => _probing = false);
-  }
-
-  // Stable hash of the visible-list shape. Changes when search results,
-  // filter chip, or manager filter shifts the list. Used to decide
-  // whether the cached probe wave is still valid for the new list.
-  String _hashList(List<SubscriberModel> list) =>
-      '${list.length}|${list.isEmpty ? '' : list.first.username}|${list.isEmpty ? '' : list.last.username}';
 
   void _consumePendingSearch() {
     final username = FcmService.pendingSubscriberSearch.value;
@@ -595,7 +130,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      Icon(LucideIcons.arrowUpDown, size: 20, color: theme.colorScheme.primary),
+                      Icon(Icons.sort_rounded, size: 20, color: theme.colorScheme.primary),
                       const SizedBox(width: 8),
                       Text('ترتيب حسب', style: TextStyle(
                         fontSize: 16, fontWeight: FontWeight.w700,
@@ -637,14 +172,14 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                               const SizedBox(width: 6),
                               Text(f.label, style: TextStyle(
                                 fontSize: 12,
-                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                                 color: isSelected
                                     ? theme.colorScheme.primary
                                     : theme.colorScheme.onSurface.withOpacity(0.7),
                               )),
                               if (isSelected) ...[
                                 const SizedBox(width: 4),
-                                Icon(LucideIcons.check, size: 14,
+                                Icon(Icons.check_rounded, size: 14,
                                     color: theme.colorScheme.primary),
                               ],
                             ],
@@ -656,7 +191,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      Icon(LucideIcons.arrowUpDown, size: 20, color: theme.colorScheme.primary),
+                      Icon(Icons.swap_vert_rounded, size: 20, color: theme.colorScheme.primary),
                       const SizedBox(width: 8),
                       Text('الاتجاه', style: TextStyle(
                         fontSize: 16, fontWeight: FontWeight.w700,
@@ -669,7 +204,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                     children: [
                       Expanded(
                         child: _DirectionBtn(
-                          icon: LucideIcons.arrowUp,
+                          icon: Icons.arrow_upward_rounded,
                           label: 'تصاعدي',
                           selected: selectedDir == 'asc',
                           onTap: () {
@@ -683,7 +218,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: _DirectionBtn(
-                          icon: LucideIcons.arrowDown,
+                          icon: Icons.arrow_downward_rounded,
                           label: 'تنازلي',
                           selected: selectedDir == 'desc',
                           onTap: () {
@@ -799,7 +334,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                     ),
                     IconButton(
                       onPressed: () => Navigator.pop(ctx),
-                      icon: Icon(LucideIcons.x, color: theme.colorScheme.onSurface.withOpacity(0.4)),
+                      icon: Icon(Icons.close, color: theme.colorScheme.onSurface.withOpacity(0.4)),
                       style: IconButton.styleFrom(
                         backgroundColor: theme.colorScheme.onSurface.withOpacity(0.06),
                       ),
@@ -821,11 +356,11 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                   ),
                   children: [
                     // Connection info section
-                    _sheetSection(theme, 'معلومات الاتصال', LucideIcons.wifi),
+                    _sheetSection(theme, 'معلومات الاتصال', Icons.wifi_rounded),
                     const SizedBox(height: 8),
                     _sheetInfoTile(
                       theme,
-                      icon: LucideIcons.network,
+                      icon: Icons.lan_rounded,
                       label: 'عنوان IP',
                       value: sub.ipAddress ?? '—',
                       valueColor: AppTheme.teal600,
@@ -836,12 +371,12 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                             )
                           : null,
                       trailing: sub.ipAddress != null && sub.ipAddress!.isNotEmpty
-                          ? const Icon(LucideIcons.externalLink, size: 14, color: AppTheme.teal400)
+                          ? const Icon(Icons.open_in_new_rounded, size: 14, color: AppTheme.teal400)
                           : null,
                     ),
                     _sheetInfoTile(
                       theme,
-                      icon: LucideIcons.router,
+                      icon: Icons.router_rounded,
                       label: 'MAC Address',
                       value: sub.macAddress ?? '—',
                       isLtr: true,
@@ -856,20 +391,20 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                     ),
                     _sheetInfoTile(
                       theme,
-                      icon: LucideIcons.timer,
+                      icon: Icons.timer_outlined,
                       label: 'مدة الجلسة',
                       value: SubscriberCard.formatDuration(sub.sessionTime),
                     ),
 
                     const SizedBox(height: 16),
-                    _sheetSection(theme, 'الاستهلاك', LucideIcons.chartPie),
+                    _sheetSection(theme, 'الاستهلاك', Icons.data_usage_rounded),
                     const SizedBox(height: 8),
                     Row(
                       children: [
                         Expanded(
                           child: _sheetStatCard(
                             theme,
-                            icon: LucideIcons.download,
+                            icon: Icons.download_rounded,
                             label: 'التحميل',
                             value: SubscriberCard.formatBytes(sub.downloadBytes),
                             color: AppTheme.teal600,
@@ -879,7 +414,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                         Expanded(
                           child: _sheetStatCard(
                             theme,
-                            icon: LucideIcons.upload,
+                            icon: Icons.upload_rounded,
                             label: 'الرفع',
                             value: SubscriberCard.formatBytes(sub.uploadBytes),
                             color: AppTheme.infoColor,
@@ -889,12 +424,12 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                     ),
 
                     const SizedBox(height: 16),
-                    _sheetSection(theme, 'معلومات الاشتراك', LucideIcons.package),
+                    _sheetSection(theme, 'معلومات الاشتراك', Icons.inventory_2_rounded),
                     const SizedBox(height: 8),
                     if (sub.profileName != null && sub.profileName!.isNotEmpty)
                       _sheetInfoTile(
                         theme,
-                        icon: LucideIcons.idCard,
+                        icon: Icons.card_membership_rounded,
                         label: 'الباقة',
                         value: sub.profileName!,
                         valueColor: theme.colorScheme.primary,
@@ -902,14 +437,14 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                     if (sub.expiration != null && sub.expiration!.isNotEmpty)
                       _sheetInfoTile(
                         theme,
-                        icon: LucideIcons.calendar,
+                        icon: Icons.event_rounded,
                         label: 'تاريخ الانتهاء',
                         value: AppHelpers.formatExpiration(sub.expiration),
                         isLtr: true,
                       ),
                     _sheetInfoTile(
                       theme,
-                      icon: LucideIcons.clock,
+                      icon: Icons.schedule_rounded,
                       label: 'الأيام المتبقية',
                       value: sub.isExpired
                           ? 'منتهي'
@@ -919,7 +454,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                     if (sub.deviceVendor != null && sub.deviceVendor != 'unknown' && sub.deviceVendor!.isNotEmpty)
                       _sheetInfoTile(
                         theme,
-                        icon: LucideIcons.monitor,
+                        icon: Icons.devices_rounded,
                         label: 'اسم الجهاز',
                         value: sub.deviceVendor!,
                       ),
@@ -962,7 +497,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                               }
                             }
                           },
-                          icon: const Icon(LucideIcons.power, size: 18),
+                          icon: const Icon(Icons.power_settings_new_rounded, size: 18),
                           label: const Text('فصل المستخدم', style: TextStyle(fontWeight: FontWeight.w700)),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.red,
@@ -1016,7 +551,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
           SizedBox(
             width: 95,
             child: Text(label, style: TextStyle(
-              fontSize: 12, fontWeight: FontWeight.w600,
+              fontSize: 12, fontWeight: FontWeight.w500,
               color: theme.colorScheme.onSurface.withOpacity(0.5),
             )),
           ),
@@ -1025,7 +560,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
               value,
               textDirection: isLtr ? TextDirection.ltr : null,
               style: TextStyle(
-                fontSize: 13, fontWeight: FontWeight.w700,
+                fontSize: 13, fontWeight: FontWeight.w600,
                 color: valueColor ?? theme.colorScheme.onSurface.withOpacity(0.85),
               ),
             ),
@@ -1063,7 +598,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label, style: TextStyle(
-                  fontSize: 10, fontWeight: FontWeight.w600,
+                  fontSize: 10, fontWeight: FontWeight.w500,
                   color: theme.colorScheme.onSurface.withOpacity(0.5),
                 )),
                 const SizedBox(height: 2),
@@ -1079,14 +614,13 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
   }
 
   static const _filters = [
-    _FilterDef('all', 'الكل', LucideIcons.users, AppTheme.primary),
-    _FilterDef('active', 'الفعالين', LucideIcons.circleCheck, AppTheme.teal600),
-    _FilterDef('online', 'متصل', LucideIcons.wifi, AppTheme.teal400),
-    _FilterDef('offline', 'غير متصل', LucideIcons.wifiOff, Color(0xFF90A4AE)),
-    _FilterDef('disabled', 'معطّل', LucideIcons.ban, Color(0xFF6D4C41)),
-    _FilterDef('expired', 'المنتهي', LucideIcons.timerOff, Color(0xFFC62828)),
-    _FilterDef('debtors', 'المديونين', LucideIcons.creditCard, Color(0xFFF57F17)),
-    _FilterDef('nearExpiry', 'قريب الانتهاء', LucideIcons.triangleAlert, Colors.deepOrange),
+    _FilterDef('all', 'الكل', Icons.people_alt_rounded, AppTheme.primary),
+    _FilterDef('active', 'الفعالين', Icons.check_circle_rounded, AppTheme.teal600),
+    _FilterDef('online', 'متصل', Icons.wifi_rounded, AppTheme.teal400),
+    _FilterDef('offline', 'غير متصل', Icons.wifi_off_rounded, Color(0xFF90A4AE)),
+    _FilterDef('expired', 'المنتهي', Icons.timer_off_rounded, Color(0xFFC62828)),
+    _FilterDef('debtors', 'المديونين', Icons.credit_card_off_rounded, Color(0xFFF57F17)),
+    _FilterDef('nearExpiry', 'قريب الانتهاء', Icons.warning_amber_rounded, Colors.deepOrange),
   ];
 
   @override
@@ -1097,64 +631,10 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
         ref.watch(authProvider).user?.canAccessManagers ?? false;
     final theme = Theme.of(context);
 
-    // When a filter chip is set from OUTSIDE this screen (e.g. the
-    // admin tapped a KPI card on the dashboard), clear any stale
-    // search query. Without this, the screen kept showing the previous
-    // search results because _isSearchMode stays true and the build
-    // method below picks state.searchResults instead of the
-    // newly-filtered list.
-    ref.listen<String>(
-      subscribersProvider.select((s) => s.filter),
-      (prev, next) {
-        if (prev == next || prev == null) return;
-        if (!_isSearchMode && _searchController.text.isEmpty) return;
-        _searchController.clear();
-        ref.read(subscribersProvider.notifier).searchSubscribers('');
-        setState(() {
-          _isSearchMode = false;
-          _currentPage = 0;
-        });
-      },
-    );
-
     final fullList =
         _isSearchMode ? state.searchResults : state.filteredSubscribers;
 
-    // When a device filter or sort is on, kick off a throttled probe
-    // wave for the FULL list (not just the visible page) so the
-    // filter/sort decisions have data to work with. Done in a
-    // post-frame callback so we don't trigger a state update during
-    // build. The hash short-circuits the wave when the list shape
-    // hasn't actually changed.
-    final sortModeOn = _deviceSort != null;
-    final listHash = _hashList(fullList);
-    if (sortModeOn && listHash != _lastProbedHash) {
-      _lastProbedHash = listHash;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _runDeviceProbes(fullList);
-      });
-    } else if (!sortModeOn && _lastProbedHash.isNotEmpty) {
-      _lastProbedHash = '';
-    }
-
-    // Apply device sort to the FULL list. Rows without a probe (or
-    // whose probe doesn't have the requested metric — e.g. CCQ on an
-    // ONT) get null and sink to the bottom regardless of direction.
-    var visibleList = fullList;
-    if (_deviceSort != null) {
-      final sk = _deviceSort!;
-      final asc = sk.endsWith('_asc');
-      visibleList = [...visibleList]..sort((a, b) {
-        final ka = _deviceSortKey(sk, _probeCache[a.username]);
-        final kb = _deviceSortKey(sk, _probeCache[b.username]);
-        if (ka == null && kb == null) return 0;
-        if (ka == null) return 1;
-        if (kb == null) return -1;
-        return asc ? ka.compareTo(kb) : kb.compareTo(ka);
-      });
-    }
-
-    final totalItems = visibleList.length;
+    final totalItems = fullList.length;
     final totalPages = (totalItems / _pageSize).ceil();
     if (_currentPage >= totalPages && totalPages > 0) {
       _currentPage = totalPages - 1;
@@ -1163,7 +643,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
     final startIdx = _currentPage * _pageSize;
     final endIdx = (startIdx + _pageSize).clamp(0, totalItems);
     final displayList = totalItems > 0
-        ? visibleList.sublist(startIdx, endIdx)
+        ? fullList.sublist(startIdx, endIdx)
         : <SubscriberModel>[];
 
     final currentFilter = state.filter;
@@ -1195,7 +675,6 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
         case 'active': return '${state.activeCount}';
         case 'online': return '${state.onlineCount}';
         case 'offline': return '${state.offlineCount}';
-        case 'disabled': return '${state.disabledCount}';
         case 'expired': return '${state.expiredCount}';
         case 'debtors': return '${state.debtorsCount}';
         case 'nearExpiry': return '${state.nearExpiryCount}';
@@ -1213,9 +692,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
       children: [
         Container(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          child: _selectionMode
-              ? _buildSelectionHeader(theme, visibleList)
-              : Row(
+          child: Row(
             children: [
               Expanded(
                 child: TextField(
@@ -1231,10 +708,10 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                   },
                   decoration: InputDecoration(
                     hintText: 'بحث عن مشترك...',
-                    prefixIcon: const Icon(LucideIcons.search),
+                    prefixIcon: const Icon(Icons.search),
                     suffixIcon: _isSearchMode
                         ? IconButton(
-                            icon: const Icon(LucideIcons.x),
+                            icon: const Icon(Icons.close),
                             onPressed: () {
                               _searchController.clear();
                               setState(() {
@@ -1251,11 +728,6 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              _DeviceFilterButton(
-                active: _deviceSort != null,
-                onTap: () => _showDeviceFilterSheet(context),
-              ),
-              const SizedBox(width: 8),
               _SortButton(
                 label: sortLabel,
                 isAsc: currentDirection == 'asc',
@@ -1265,43 +737,6 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
           ),
         ),
 
-        if (_deviceSort != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-            child: _ActiveDeviceFilterBanner(
-              sortLabel: (() {
-                final isAsc = _deviceSort!.endsWith('_asc');
-                final base = _deviceSort!.replaceFirst(
-                    RegExp(r'_(asc|desc)$'), '');
-                final def = _deviceSortMetrics.firstWhere(
-                  (d) => d.key == base,
-                  orElse: () => _deviceSortMetrics.first,
-                );
-                final dirLabel = isAsc ? 'الأدنى أولاً' : 'الأعلى أولاً';
-                return '${def.label} — $dirLabel';
-              })(),
-              probing: _probing,
-              probeProgress: _probeProgress,
-              probeTotal: _probeTotal,
-              onClear: () {
-                // Cancel any in-flight probe wave so progress callbacks
-                // don't keep firing after we've returned to default sort,
-                // then re-apply the per-filter default sort explicitly so
-                // the list snaps back to (e.g.) remaining_days desc on
-                // "active" instead of staying in the device-sort order.
-                _probeRunId += 1;
-                ref
-                    .read(subscribersProvider.notifier)
-                    .resetSortToFilterDefault();
-                setState(() {
-                  _deviceSort = null;
-                  _probing = false;
-                  _currentPage = 0;
-                });
-              },
-            ),
-          ),
-
         // Manager filter (per-sub-manager dropdown) only for managers who
         // can actually see sub-managers. A sub-manager without that
         // permission has nothing to pick from.
@@ -1310,7 +745,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Row(
               children: [
-                Icon(LucideIcons.shield, size: 16,
+                Icon(Icons.admin_panel_settings_rounded, size: 16,
                     color: theme.colorScheme.onSurface.withOpacity(0.4)),
                 const SizedBox(width: 6),
                 Expanded(
@@ -1329,46 +764,33 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                       ),
                     ),
                     child: DropdownButtonHideUnderline(
-                      child: Builder(builder: (_) {
-                        // Guard against the assertion that fires when the
-                        // current `managerFilter` username is no longer in
-                        // `availableManagers` (e.g. after a subscriber's
-                        // parent gets reassigned and the old parent now has
-                        // zero subscribers). In that case fall back to null
-                        // (the "كل المدراء" hint) instead of crashing.
-                        final filterValue = state.managerFilter != null &&
-                                state.availableManagers
-                                    .contains(state.managerFilter)
-                            ? state.managerFilter
-                            : null;
-                        return DropdownButton<String>(
-                          value: filterValue,
-                          hint: Text('كل المدراء',
-                              style: TextStyle(fontSize: 12,
-                                  color: theme.colorScheme.onSurface.withOpacity(0.5))),
-                          isExpanded: true,
-                          icon: Icon(LucideIcons.chevronDown, size: 18,
-                              color: theme.colorScheme.onSurface.withOpacity(0.4)),
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
-                              color: theme.colorScheme.onSurface,
-                              fontFamily: 'Cairo'),
-                          items: [
-                            DropdownMenuItem<String>(
-                              value: null,
-                              child: Text('كل المدراء', style: TextStyle(fontSize: 12,
-                                  color: theme.colorScheme.onSurface.withOpacity(0.5))),
-                            ),
-                            ...state.availableManagers.map((m) =>
-                              DropdownMenuItem(value: m,
-                                child: Text(m, style: const TextStyle(fontSize: 12))),
-                            ),
-                          ],
-                          onChanged: (v) {
-                            ref.read(subscribersProvider.notifier).setManagerFilter(v);
-                            setState(() => _currentPage = 0);
-                          },
-                        );
-                      }),
+                      child: DropdownButton<String>(
+                        value: state.managerFilter,
+                        hint: Text('كل المدراء',
+                            style: TextStyle(fontSize: 12,
+                                color: theme.colorScheme.onSurface.withOpacity(0.5))),
+                        isExpanded: true,
+                        icon: Icon(Icons.keyboard_arrow_down, size: 18,
+                            color: theme.colorScheme.onSurface.withOpacity(0.4)),
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurface,
+                            fontFamily: 'Cairo'),
+                        items: [
+                          DropdownMenuItem<String>(
+                            value: null,
+                            child: Text('كل المدراء', style: TextStyle(fontSize: 12,
+                                color: theme.colorScheme.onSurface.withOpacity(0.5))),
+                          ),
+                          ...state.availableManagers.map((m) =>
+                            DropdownMenuItem(value: m,
+                              child: Text(m, style: const TextStyle(fontSize: 12))),
+                          ),
+                        ],
+                        onChanged: (v) {
+                          ref.read(subscribersProvider.notifier).setManagerFilter(v);
+                          setState(() => _currentPage = 0);
+                        },
+                      ),
                     ),
                   ),
                 ),
@@ -1442,7 +864,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                       color: const Color(0xFFF57F17).withOpacity(0.15),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(LucideIcons.creditCard,
+                    child: const Icon(Icons.credit_card_off_rounded,
                         size: 18, color: Color(0xFFF57F17)),
                   ),
                   const SizedBox(width: 10),
@@ -1455,7 +877,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                           style: TextStyle(
                             fontSize: 11,
                             color: theme.colorScheme.onSurface.withOpacity(0.65),
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -1491,14 +913,14 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                   '${startIdx + 1}-$endIdx من $totalItems',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurface.withOpacity(0.5),
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w600,
                     fontSize: 11,
                   ),
                 ),
                 const Spacer(),
                 if (totalPages > 1) ...[
                   _NavBtn(
-                    icon: LucideIcons.chevronRight,
+                    icon: Icons.chevron_right,
                     enabled: _currentPage > 0,
                     onTap: () => setState(() => _currentPage--),
                   ),
@@ -1513,7 +935,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                     ),
                   ),
                   _NavBtn(
-                    icon: LucideIcons.chevronLeft,
+                    icon: Icons.chevron_left,
                     enabled: _currentPage < totalPages - 1,
                     onTap: () => setState(() => _currentPage++),
                   ),
@@ -1534,7 +956,7 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                       isDense: true,
                       menuMaxHeight: 200,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w600,
                         fontSize: 11,
                         color: theme.colorScheme.onSurface,
                       ),
@@ -1563,8 +985,8 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
               : displayList.isEmpty
                   ? EmptyState(
                       icon: _isSearchMode
-                          ? LucideIcons.searchX
-                          : LucideIcons.users,
+                          ? Icons.search_off
+                          : Icons.people_outline,
                       title: _isSearchMode
                           ? 'لا توجد نتائج'
                           : 'لا يوجد مشتركين',
@@ -1583,56 +1005,17 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                         itemCount: displayList.length,
                         itemBuilder: (context, index) {
                           final sub = displayList[index];
-                          final card = SubscriberCard(
+                          return SubscriberCard(
                             subscriber: sub,
                             showOnlineDetails: isOnlineFilter,
                             lastPayment: state.lastPayments[sub.username],
-                            selectionMode: _selectionMode,
-                            selected: sub.idx != null &&
-                                _selectedIdx.contains(sub.idx),
-                            onLongPress: () {
-                              if (_selectionMode) {
-                                _toggleSelect(sub);
-                              } else {
-                                _enterSelectionWith(sub);
-                              }
-                            },
-                            // The online filter used to disable onTap so
-                            // the disconnect button could own the row.
-                            // Per user request, mirror every other tab:
-                            // tapping a row opens the subscriber details.
-                            // The disconnect button still works as its
-                            // own tap target inside the card.
-                            onTap: _selectionMode
-                                ? () => _toggleSelect(sub)
-                                : () {
-                              // Prefetch device status the moment the
-                              // admin taps the row, so by the time the
-                              // details screen mounts the
-                              // ConnectionStatusCard the result (or at
-                              // least the in-flight Future) is already
-                              // warm in the provider's 5-min cache.
-                              // ref.read(...).future kicks off the work
-                              // without subscribing — autoDispose's
-                              // cacheFor in deviceStatusProvider keeps
-                              // it alive long enough for the next
-                              // screen to pick up.
-                              ref
-                                  .read(deviceStatusProvider(
-                                    DeviceStatusArgs(
-                                      subscriberUsername: sub.username,
-                                      fallbackIp: sub.ipAddress,
-                                    ),
-                                  ).future)
-                                  .catchError((_) => null);
+                            onTap: isOnlineFilter ? null : () {
                               context.push(
                                 '/subscriber/${sub.username}',
                                 extra: sub,
                               );
                             },
-                            onDisconnect: !_selectionMode &&
-                                    isOnlineFilter &&
-                                    sub.idx != null
+                            onDisconnect: isOnlineFilter && sub.idx != null
                                 ? () async {
                                     final confirm = await showDialog<bool>(
                                       context: context,
@@ -1662,423 +1045,11 @@ class _SubscribersScreenState extends ConsumerState<SubscribersScreen> {
                                   }
                                 : null,
                           );
-                          return card;
                         },
                       ),
                     ),
         ),
-
-        if (_selectionMode) _buildBulkBar(theme, state),
       ],
-    );
-  }
-
-  void _showDeviceFilterSheet(BuildContext context) {
-    final theme = Theme.of(context);
-    showModalBottomSheet(
-      useSafeArea: true,
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setSheetState) {
-            return SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                20, 12, 20, bottomSheetBottomInset(ctx, extra: 24),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40, height: 4,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.onSurface.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Icon(LucideIcons.network, size: 20,
-                          color: theme.colorScheme.primary),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text('ترتيب القائمة حسب الفحص', style: TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w700,
-                          color: theme.colorScheme.onSurface,
-                        )),
-                      ),
-                      if (_deviceSort != null)
-                        TextButton.icon(
-                          onPressed: () {
-                            // Same teardown as the banner's "إلغاء" — cancel
-                            // probes + restore per-filter default sort.
-                            _probeRunId += 1;
-                            ref
-                                .read(subscribersProvider.notifier)
-                                .resetSortToFilterDefault();
-                            setState(() {
-                              _deviceSort = null;
-                              _probing = false;
-                              _currentPage = 0;
-                            });
-                            setSheetState(() {});
-                          },
-                          icon: const Icon(LucideIcons.x, size: 16),
-                          label: const Text('إلغاء',
-                              style: TextStyle(fontSize: 11)),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'اختر مقياساً ثم اتجاه الترتيب',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: theme.colorScheme.onSurface.withOpacity(0.55),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  for (final m in _deviceSortMetrics)
-                    _SortMetricRow(
-                      def: m,
-                      activeKey: _deviceSort,
-                      onPickAsc: () {
-                        setState(() {
-                          _deviceSort = '${m.key}_asc';
-                          _currentPage = 0;
-                        });
-                        setSheetState(() {});
-                      },
-                      onPickDesc: () {
-                        setState(() {
-                          _deviceSort = '${m.key}_desc';
-                          _currentPage = 0;
-                        });
-                        setSheetState(() {});
-                      },
-                    ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-}
-
-/// Four metrics the admin can sort by — picked because they're what
-/// shows up in the `_ConnectionHealthPill` chips on each card and
-/// they're the values the admin has working knowledge of. Dropped
-/// from the previous set: ONT TX (rarely diagnostic), ONT Temp (rarely
-/// the bottleneck on the field). Both still resolve in the snapshot
-/// — they're just not exposed as sort keys.
-///
-/// Worked example using admin@popq's typical row values:
-///
-///   user                  kind    RX     Sig    CCQ    LAN
-///   yousif.moh@popq      ONT    -19.5    —      —     —
-///   ali.h@popq           ONT    -22.4    —      —     —
-///   saed.abs@popq        ONT    -26.7    —      —     —
-///   karar.wale@popq      Ubnt    —     -58     92    100Mbps
-///   ahmed.mheasan@popq   Ubnt    —     -72     45    10Mbps
-///
-///   sort=rx_desc  → yousif(-19.5), ali(-22.4), saed(-26.7), [Ubnt rows null → end]
-///   sort=rx_asc   → saed(-26.7), ali(-22.4), yousif(-19.5), [Ubnt rows → end]
-///   sort=ccq_desc → karar(92), ahmed(45), [ONT rows → end]
-///   sort=ccq_asc  → ahmed(45), karar(92), [ONT rows → end]
-///   sort=sig_desc → karar(-58), ahmed(-72), [ONT rows → end]   (closer to 0 = better)
-///   sort=lan_desc → karar(100), ahmed(10), [ONT rows → end]    (Mbps int)
-const List<_DeviceSortMetric> _deviceSortMetrics = [
-  _DeviceSortMetric('rx',  'إشارة الضوئي', LucideIcons.circle, Color(0xFF6A1B9A)),
-  _DeviceSortMetric('sig', 'إشارة النانو', LucideIcons.signal, Color(0xFF1565C0)),
-  _DeviceSortMetric('ccq', 'CCQ',           LucideIcons.chartLine,         Color(0xFF1565C0)),
-  _DeviceSortMetric('lan', 'الإيثرنت',      LucideIcons.network,                Color(0xFF1565C0)),
-];
-
-/// Numeric sort key for the active sort metric. Returns null when the
-/// row's snapshot is missing or doesn't carry the requested metric
-/// (e.g. CCQ on an ONT subscriber) — those rows sink to the bottom
-/// regardless of direction so they never crowd the meaningful values.
-///
-/// Sign conventions matter — the values below come straight from the
-/// device, no normalization:
-///   • RX (optical):    parsed from "-22.4" → -22.4   (negative; closer to 0 = better)
-///   • Signal (wireless): int -62                      (negative; closer to 0 = better)
-///   • CCQ:             int 92                         (positive; higher = better)
-///   • LAN:             int 100 / 1000                 (positive; higher = faster)
-double? _deviceSortKey(String key, DeviceHealthSnapshot? snap) {
-  if (snap == null) return null;
-  final base = key.endsWith('_asc')
-      ? key.substring(0, key.length - 4)
-      : key.endsWith('_desc')
-          ? key.substring(0, key.length - 5)
-          : key;
-  switch (base) {
-    case 'rx':
-      if (snap.kind != DeviceKind.ont || snap.ont == null) return null;
-      return double.tryParse(snap.ont!.rxPower);
-    case 'sig':
-      if (snap.kind != DeviceKind.ubiquiti || snap.ubiquiti == null) return null;
-      return snap.ubiquiti!.signalDbm?.toDouble();
-    case 'ccq':
-      if (snap.kind != DeviceKind.ubiquiti || snap.ubiquiti == null) return null;
-      return snap.ubiquiti!.ccqPercent?.toDouble();
-    case 'lan':
-      if (snap.kind != DeviceKind.ubiquiti || snap.ubiquiti == null) return null;
-      final s = snap.ubiquiti!.lanSpeed ?? '';
-      // Match the leading number — "100Mbps-Full" → 100, "1000Mbps" → 1000.
-      // Unplugged ports return -1 so they sink below 10Mbps in either
-      // sort direction (admin almost always wants them at the bottom).
-      final m = RegExp(r'^(\d+)Mbps').firstMatch(s);
-      if (m == null) return snap.ubiquiti!.lanUp ? 0 : -1;
-      return double.tryParse(m.group(1)!);
-  }
-  return null;
-}
-
-class _DeviceSortMetric {
-  final String key;       // 'rx' / 'sig' / 'ccq' / 'lan'
-  final String label;     // user-facing Arabic label
-  final IconData icon;
-  final Color color;
-  const _DeviceSortMetric(this.key, this.label, this.icon, this.color);
-}
-
-class _DeviceFilterButton extends StatelessWidget {
-  final bool active;
-  final VoidCallback onTap;
-  const _DeviceFilterButton({required this.active, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final accent = active
-        ? const Color(0xFFC62828)
-        : theme.colorScheme.primary;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 48,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        decoration: BoxDecoration(
-          color: accent.withOpacity(active ? 0.14 : 0.08),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: accent.withOpacity(active ? 0.5 : 0.2)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(LucideIcons.network, size: 18, color: accent),
-            if (active) ...[
-              const SizedBox(width: 4),
-              Container(
-                width: 6, height: 6,
-                decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ActiveDeviceFilterBanner extends StatelessWidget {
-  final String sortLabel;
-  final bool probing;
-  final int probeProgress;
-  final int probeTotal;
-  final VoidCallback onClear;
-  const _ActiveDeviceFilterBanner({
-    required this.sortLabel,
-    required this.probing,
-    required this.probeProgress,
-    required this.probeTotal,
-    required this.onClear,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    const accent = Color(0xFFC62828);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: accent.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: accent.withOpacity(0.25)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          const Icon(LucideIcons.network, size: 14, color: accent),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'ترتيب: $sortLabel',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: theme.colorScheme.onSurface.withOpacity(0.85),
-                  ),
-                ),
-                if (probing && probeTotal > 0) ...[
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 10, height: 10,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 1.5,
-                          valueColor: const AlwaysStoppedAnimation<Color>(accent),
-                          value: probeTotal == 0 ? null : probeProgress / probeTotal,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'فحص الأجهزة: $probeProgress / $probeTotal',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: theme.colorScheme.onSurface.withOpacity(0.6),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ),
-          GestureDetector(
-            onTap: onClear,
-            child: const Padding(
-              padding: EdgeInsets.all(2),
-              child: Icon(LucideIcons.x, size: 14, color: accent),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// One row in the sort sheet: metric icon + label on the right (RTL),
-/// and two compact direction buttons on the left ("⬆ الأعلى" / "⬇ الأدنى").
-/// Tapping a direction immediately commits — no separate "save" button —
-/// so the admin sees the list reorder as soon as they tap.
-class _SortMetricRow extends StatelessWidget {
-  final _DeviceSortMetric def;
-  final String? activeKey;
-  final VoidCallback onPickAsc;
-  final VoidCallback onPickDesc;
-  const _SortMetricRow({
-    required this.def,
-    required this.activeKey,
-    required this.onPickAsc,
-    required this.onPickDesc,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final ascSelected = activeKey == '${def.key}_asc';
-    final descSelected = activeKey == '${def.key}_desc';
-    final isAnyActive = ascSelected || descSelected;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        children: [
-          Icon(def.icon, size: 18,
-              color: isAnyActive ? def.color : theme.colorScheme.onSurface.withOpacity(0.6)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              def.label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: isAnyActive ? FontWeight.w800 : FontWeight.w700,
-                color: isAnyActive ? def.color : theme.colorScheme.onSurface.withOpacity(0.85),
-              ),
-            ),
-          ),
-          _DirChip(
-            icon: LucideIcons.arrowUp,
-            label: 'الأعلى',
-            selected: descSelected,
-            color: def.color,
-            onTap: onPickDesc,
-          ),
-          const SizedBox(width: 6),
-          _DirChip(
-            icon: LucideIcons.arrowDown,
-            label: 'الأدنى',
-            selected: ascSelected,
-            color: def.color,
-            onTap: onPickAsc,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DirChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final Color color;
-  final VoidCallback onTap;
-  const _DirChip({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected ? color.withOpacity(0.16)
-              : theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: selected ? color.withOpacity(0.55) : Colors.transparent,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14,
-                color: selected ? color : theme.colorScheme.onSurface.withOpacity(0.55)),
-            const SizedBox(width: 4),
-            Text(label, style: TextStyle(
-              fontSize: 11,
-              fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
-              color: selected ? color : theme.colorScheme.onSurface.withOpacity(0.7),
-            )),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -2147,10 +1118,10 @@ class _SortButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.arrowUpDown, size: 18, color: theme.colorScheme.primary),
+            Icon(Icons.sort_rounded, size: 18, color: theme.colorScheme.primary),
             const SizedBox(width: 4),
             Icon(
-              isAsc ? LucideIcons.arrowUp : LucideIcons.arrowDown,
+              isAsc ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
               size: 14, color: theme.colorScheme.primary,
             ),
           ],
@@ -2197,7 +1168,7 @@ class _DirectionBtn extends StatelessWidget {
             const SizedBox(width: 6),
             Text(label, style: TextStyle(
               fontSize: 13,
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
               color: selected
                   ? theme.colorScheme.primary
                   : theme.colorScheme.onSurface.withOpacity(0.7),
@@ -2270,7 +1241,7 @@ class _FilterChip extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 11,
-                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
                 color: selected
                     ? activeColor
                     : theme.colorScheme.onSurface.withOpacity(0.6),

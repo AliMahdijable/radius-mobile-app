@@ -2,7 +2,6 @@ import 'dart:developer' as dev;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/api_constants.dart';
@@ -139,7 +138,7 @@ class _WhatsAppSendScopeScreenState
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(LucideIcons.circleAlert,
+                        Icon(Icons.error_outline,
                             size: 48,
                             color: theme.colorScheme.error.withOpacity(0.6)),
                         const SizedBox(height: 12),
@@ -151,7 +150,7 @@ class _WhatsAppSendScopeScreenState
                         const SizedBox(height: 16),
                         FilledButton.icon(
                           onPressed: _load,
-                          icon: const Icon(LucideIcons.refreshCw),
+                          icon: const Icon(Icons.refresh),
                           label: const Text('إعادة المحاولة'),
                         ),
                       ],
@@ -213,7 +212,7 @@ class _WhatsAppSendScopeScreenState
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(LucideIcons.info,
+          Icon(Icons.info_outline_rounded,
               size: 18, color: theme.colorScheme.primary),
           const SizedBox(width: 10),
           Expanded(
@@ -270,7 +269,7 @@ class _WhatsAppSendScopeScreenState
             color: AppTheme.whatsappGreen.withOpacity(0.1),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: const Icon(LucideIcons.users,
+          child: const Icon(Icons.groups_rounded,
               color: AppTheme.whatsappGreen, size: 20),
         ),
         title: const Text(
@@ -318,7 +317,7 @@ class _WhatsAppSendScopeScreenState
             color: theme.colorScheme.primary.withOpacity(0.08),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(LucideIcons.user,
+          child: Icon(Icons.person_outline_rounded,
               size: 18, color: theme.colorScheme.primary),
         ),
         title: Text(

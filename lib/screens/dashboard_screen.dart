@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/whatsapp_provider.dart';
 import '../providers/auth_provider.dart';
@@ -88,7 +87,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.wifiOff, size: 64, color: theme.colorScheme.outline),
+            Icon(Icons.wifi_off_rounded, size: 64, color: theme.colorScheme.outline),
             const SizedBox(height: 16),
             Text('لا يوجد اتصال بالشبكة',
                 style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
@@ -100,7 +99,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: _refresh,
-              icon: const Icon(LucideIcons.refreshCw),
+              icon: const Icon(Icons.refresh),
               label: const Text('إعادة المحاولة'),
             ),
           ],
@@ -167,8 +166,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final wa = ref.watch(whatsappProvider);
     final authState = ref.watch(authProvider);
     final subsState = ref.watch(subscribersProvider);
-    final canDailyActivations =
-        authState.user?.hasEmployeePermission('reports.daily_activations') ?? true;
     final theme = Theme.of(context);
     final realDebtors = subsState.subscribers.where((s) => s.hasDebt).length;
     final realTotalDebt = subsState.subscribers.where((s) => s.hasDebt).fold<double>(0, (sum, s) => sum + s.debtAmount.abs());
@@ -199,7 +196,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                     child: Row(
                       children: [
-                        Icon(LucideIcons.circleAlert,
+                        Icon(Icons.error_outline,
                             color: Colors.red.shade600, size: 20),
                         const SizedBox(width: 8),
                         Expanded(
@@ -208,7 +205,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                   color: Colors.red.shade700, fontSize: 12)),
                         ),
                         IconButton(
-                          icon: const Icon(LucideIcons.refreshCw, size: 20),
+                          icon: const Icon(Icons.refresh, size: 20),
                           onPressed: _refresh,
                         ),
                       ],
@@ -260,63 +257,61 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   ],
                 ),
 
-                if (canDailyActivations) ...[
-                  const SizedBox(height: 14),
+                const SizedBox(height: 14),
 
-                  Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: theme.cardTheme.color,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: AppTheme.infoColor.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Icon(LucideIcons.calendar,
-                                  color: AppTheme.infoColor, size: 20),
-                            ),
-                            const SizedBox(width: 10),
-                            Text('نشاط اليوم',
-                                style: theme.textTheme.titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w700)),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _TodayStatItem(
-                                label: 'تفعيلات',
-                                value: '${dash.todayActivations}',
-                                icon: LucideIcons.circlePlus,
-                                color: AppTheme.successColor,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _TodayStatItem(
-                                label: 'تمديدات',
-                                value: '${dash.todayExtensions}',
-                                icon: LucideIcons.repeat,
-                                color: AppTheme.infoColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: theme.cardTheme.color,
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                ],
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppTheme.infoColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.today_rounded,
+                                color: AppTheme.infoColor, size: 20),
+                          ),
+                          const SizedBox(width: 10),
+                          Text('نشاط اليوم',
+                              style: theme.textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _TodayStatItem(
+                              label: 'تفعيلات',
+                              value: '${dash.todayActivations}',
+                              icon: Icons.add_circle_outline,
+                              color: AppTheme.successColor,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _TodayStatItem(
+                              label: 'تمديدات',
+                              value: '${dash.todayExtensions}',
+                              icon: Icons.autorenew_rounded,
+                              color: AppTheme.infoColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
 
-                if (canDailyActivations && dash.recentActivities.isNotEmpty) ...[
+                if (dash.recentActivities.isNotEmpty) ...[
                   const SizedBox(height: 20),
                   Text('آخر العمليات',
                       style: theme.textTheme.titleMedium
@@ -359,8 +354,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             ),
                             child: Icon(
                               isActivation
-                                  ? LucideIcons.userPlus
-                                  : LucideIcons.repeat,
+                                  ? Icons.person_add_alt_1
+                                  : Icons.autorenew,
                               size: 18,
                               color: accentColor,
                             ),
@@ -405,7 +400,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                   Row(
                                     children: [
                                       Icon(
-                                        LucideIcons.atSign,
+                                        Icons.alternate_email_rounded,
                                         size: 13,
                                         color: theme.colorScheme.onSurface
                                             .withValues(alpha: 0.45),
@@ -431,7 +426,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 Row(
                                   children: [
                                     Icon(
-                                      LucideIcons.calendar,
+                                      Icons.event_outlined,
                                       size: 13,
                                       color: theme.colorScheme.onSurface
                                           .withValues(alpha: 0.42),
@@ -572,19 +567,19 @@ class _SubscribersRingCard extends StatelessWidget {
               Expanded(
                 child: Column(
                   children: [
-                    _RingStatRow(color: AppTheme.teal600, icon: LucideIcons.circleCheck,
+                    _RingStatRow(color: AppTheme.teal600, icon: Icons.check_circle_rounded,
                       label: 'الفعالين', value: active, onTap: onTapActive, isLoading: isLoading),
                     const SizedBox(height: 7),
-                    _RingStatRow(color: AppTheme.teal400, icon: LucideIcons.wifi,
+                    _RingStatRow(color: AppTheme.teal400, icon: Icons.wifi_rounded,
                       label: 'متصل الآن', value: online, onTap: onTapOnline, isLoading: isLoading),
                     const SizedBox(height: 7),
-                    _RingStatRow(color: const Color(0xFF90A4AE), icon: LucideIcons.wifiOff,
+                    _RingStatRow(color: const Color(0xFF90A4AE), icon: Icons.wifi_off_rounded,
                       label: 'غير متصل', value: offline, onTap: onTapOffline, isLoading: isLoading || offlineLoading),
                     const SizedBox(height: 7),
-                    _RingStatRow(color: const Color(0xFFEF5350), icon: LucideIcons.timerOff,
+                    _RingStatRow(color: const Color(0xFFEF5350), icon: Icons.timer_off_rounded,
                       label: 'منتهي', value: expired, onTap: onTapExpired, isLoading: isLoading),
                     const SizedBox(height: 7),
-                    _RingStatRow(color: Colors.deepOrange, icon: LucideIcons.triangleAlert,
+                    _RingStatRow(color: Colors.deepOrange, icon: Icons.warning_amber_rounded,
                       label: 'قريب الانتهاء', value: nearExpiry, onTap: onTapNearExpiry, isLoading: isLoading),
                   ],
                 ),
@@ -751,7 +746,7 @@ class _RingStatRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 4),
-          Icon(LucideIcons.chevronLeft, size: 16,
+          Icon(Icons.chevron_left, size: 16,
               color: theme.colorScheme.onSurface.withValues(alpha: 0.2)),
         ],
       ),
@@ -901,7 +896,7 @@ class _BalancePointsCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(LucideIcons.wallet,
+              const Icon(Icons.account_balance_wallet_rounded,
                   color: Colors.white, size: 18),
               const SizedBox(width: 6),
               Text('الرصيد',
@@ -924,7 +919,7 @@ class _BalancePointsCard extends StatelessWidget {
             const SizedBox(height: 6),
             Row(
               children: [
-                Icon(LucideIcons.star, color: Colors.amber.shade300, size: 14),
+                Icon(Icons.stars_rounded, color: Colors.amber.shade300, size: 14),
                 const SizedBox(width: 4),
                 Text('$points نقطة',
                     style: TextStyle(
@@ -963,7 +958,7 @@ class _DebtCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Icon(LucideIcons.creditCard,
+                const Icon(Icons.credit_card_off_rounded,
                     color: Colors.white, size: 18),
                 const SizedBox(width: 6),
                 Text('المديونين',
@@ -985,7 +980,7 @@ class _DebtCard extends StatelessWidget {
             const SizedBox(height: 6),
             Row(
               children: [
-                Icon(LucideIcons.users,
+                Icon(Icons.people_rounded,
                     color: Colors.white.withValues(alpha: 0.6), size: 14),
                 const SizedBox(width: 4),
                 Text('$debtors مشترك',
@@ -1032,7 +1027,7 @@ class _WhatsAppCompactBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(LucideIcons.messageCircle,
+          Icon(Icons.chat_rounded,
               color: isConnected ? AppTheme.whatsappGreen : Colors.grey,
               size: 18),
           const SizedBox(width: 8),
@@ -1095,7 +1090,7 @@ class _AlertsSummaryCard extends StatelessWidget {
                   color: Colors.orange.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(LucideIcons.bellRing,
+                child: const Icon(Icons.notifications_active,
                     color: Colors.orange, size: 20),
               ),
               const SizedBox(width: 10),
@@ -1124,7 +1119,7 @@ class _AlertsSummaryCard extends StatelessWidget {
           const SizedBox(height: 14),
           if (expiredTodayCount > 0)
             _AlertRow(
-              icon: LucideIcons.circleAlert,
+              icon: Icons.error_outline,
               color: Colors.red,
               label: 'انتهى اليوم',
               count: expiredTodayCount,
@@ -1140,7 +1135,7 @@ class _AlertsSummaryCard extends StatelessWidget {
                 height: 16),
           if (nearExpiryCount > 0)
             _AlertRow(
-              icon: LucideIcons.triangleAlert,
+              icon: Icons.warning_amber_rounded,
               color: Colors.orange,
               label: 'قريب الانتهاء',
               count: nearExpiryCount,

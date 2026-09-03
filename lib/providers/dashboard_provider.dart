@@ -4,7 +4,6 @@ import 'package:dio/dio.dart';
 import '../core/constants/api_constants.dart';
 import '../core/network/dio_client.dart';
 import '../core/services/encryption_service.dart';
-import '../core/services/storage_service.dart';
 
 class DashboardState {
   final int totalSubscribers;
@@ -111,9 +110,8 @@ class DashboardState {
 class DashboardNotifier extends StateNotifier<DashboardState> {
   final Dio _sas4Dio;
   final Dio _backendDio;
-  final StorageService _storage;
 
-  DashboardNotifier(this._sas4Dio, this._backendDio, this._storage)
+  DashboardNotifier(this._sas4Dio, this._backendDio)
       : super(const DashboardState());
 
   void updateOfflineCount(int count) {
@@ -134,22 +132,11 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     );
   }
 
-  /// الموظف اللي ما عنده reports.daily_activations ينحجب عنه استدعاء
-  /// /reports/daily-activations عشان ما يطلع toast "لا تملك صلاحية"
-  /// كل مرة الداش بورد يعيد التحميل. الـUI يخفي الكارت بنفس الشرط.
-  Future<bool> _canAccessDailyActivations() async {
-    final isEmp = await _storage.getIsEmployee();
-    if (!isEmp) return true;
-    final perms = await _storage.getEmployeePermissions();
-    return perms['reports.daily_activations'] == true;
-  }
-
   /// Lightweight refresh of today's activation/extension counts and the
   /// recent-activities list without touching the heavy SAS4 widgets.
   /// Called after a local activate/extend so the dashboard reflects the
   /// action immediately instead of waiting for the next full reload.
   Future<void> refreshDailyActivations(String adminId) async {
-    if (!await _canAccessDailyActivations()) return;
     try {
       final response = await _backendDio
           .get('${ApiConstants.dailyActivations}?admin_id=$adminId');
@@ -251,7 +238,6 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
   }) async {
     state = state.copyWith(isLoading: true, error: null);
 
-    final canDailyAct = await _canAccessDailyActivations();
     try {
       // تشغيل كل الطلبات بالتوازي لتسريع التحميل
       final offlinePayload = EncryptionService.encrypt({
@@ -291,13 +277,10 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
         _backendDio
             .get('${ApiConstants.subscribersWithPhones}?adminId=$adminId')
             .catchError((_) => null),
-        // [7] Backend daily activations (يُحجب لو الموظف ما عنده الصلاحية
-        // عشان ما يطلع 403/toast على كل تحميل للداش بورد).
-        canDailyAct
-            ? _backendDio
-                .get('${ApiConstants.dailyActivations}?admin_id=$adminId')
-                .catchError((_) => null)
-            : Future<dynamic>.value(null),
+        // [7] Backend daily activations
+        _backendDio
+            .get('${ApiConstants.dailyActivations}?admin_id=$adminId')
+            .catchError((_) => null),
         // [8-9] SAS4 offline + expired counts
         _sas4Dio
             .post(
@@ -503,6 +486,5 @@ final dashboardProvider =
   return DashboardNotifier(
     ref.read(sas4DioProvider),
     ref.read(backendDioProvider),
-    ref.read(storageServiceProvider),
   );
 });

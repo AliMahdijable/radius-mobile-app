@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import '../../providers/auth_provider.dart';
 import '../../providers/whatsapp_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/helpers.dart';
@@ -25,7 +23,7 @@ class _WhatsAppConnectionScreenState
   void initState() {
     super.initState();
     Future.microtask(() {
-      ref.read(whatsappProvider.notifier).refreshStatusOnOpen();
+      ref.read(whatsappProvider.notifier).fetchStatus();
     });
   }
 
@@ -53,8 +51,6 @@ class _WhatsAppConnectionScreenState
   @override
   Widget build(BuildContext context) {
     final wa = ref.watch(whatsappProvider);
-    final user = ref.watch(authProvider).user;
-    final canConnect = user?.hasEmployeePermission('whatsapp.connect') ?? true;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final bottomInset = MediaQuery.of(context).viewPadding.bottom;
@@ -99,8 +95,8 @@ class _WhatsAppConnectionScreenState
                     ),
                     child: Icon(
                       wa.status.connected
-                          ? LucideIcons.circleCheck
-                          : LucideIcons.unlink,
+                          ? Icons.check_circle
+                          : Icons.link_off,
                       size: 48,
                       color: wa.status.connected
                           ? Colors.white
@@ -181,7 +177,7 @@ class _WhatsAppConnectionScreenState
                     const SizedBox(height: 14),
                     OutlinedButton.icon(
                       onPressed: () => _shareQr(wa.qrCode!),
-                      icon: const Icon(LucideIcons.share2, size: 18),
+                      icon: const Icon(Icons.ios_share_rounded, size: 18),
                       label: const Text('مشاركة / حفظ الصورة'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.black87,
@@ -227,7 +223,7 @@ class _WhatsAppConnectionScreenState
                 ),
                 child: Row(
                   children: [
-                    const Icon(LucideIcons.circleAlert, color: Colors.red),
+                    const Icon(Icons.error_outline, color: Colors.red),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
@@ -241,10 +237,8 @@ class _WhatsAppConnectionScreenState
               const SizedBox(height: 20),
             ],
 
-            // Action Buttons — مخفية تماماً للموظف اللي ما عنده whatsapp.connect.
-            // الباكند يرفض الاستدعاء أصلاً لكن إخفاء الأزرار يمنع توست
-            // "لا تملك صلاحية" ويعكس الحالة الصحيحة في الواجهة.
-            if (canConnect && !wa.status.connected) ...[
+            // Action Buttons
+            if (!wa.status.connected) ...[
               SizedBox(
                 height: AppTheme.actionButtonHeight,
                 child: ElevatedButton.icon(
@@ -252,7 +246,7 @@ class _WhatsAppConnectionScreenState
                       ? null
                       : () =>
                           ref.read(whatsappProvider.notifier).startSession(),
-                  icon: const Icon(LucideIcons.scanLine),
+                  icon: const Icon(Icons.qr_code_scanner),
                   label: const Text('بدء جلسة جديدة'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.whatsappGreen,
@@ -266,17 +260,17 @@ class _WhatsAppConnectionScreenState
                   onPressed: wa.isConnecting
                       ? null
                       : () => ref.read(whatsappProvider.notifier).reconnect(),
-                  icon: const Icon(LucideIcons.refreshCw),
+                  icon: const Icon(Icons.refresh),
                   label: const Text('إعادة اتصال'),
                 ),
               ),
-            ] else if (canConnect) ...[
+            ] else ...[
               SizedBox(
                 height: AppTheme.actionButtonHeight,
                 child: OutlinedButton.icon(
                   onPressed: () =>
                       ref.read(whatsappProvider.notifier).disconnect(),
-                  icon: const Icon(LucideIcons.unlink, color: Colors.red),
+                  icon: const Icon(Icons.link_off, color: Colors.red),
                   label: const Text(
                     'قطع الاتصال',
                     style: TextStyle(color: Colors.red),

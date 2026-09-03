@@ -3,8 +3,6 @@ import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-
-import '../../firebase_options.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:dio/dio.dart';
@@ -33,11 +31,7 @@ class FcmEnableResult {
 
 @pragma('vm:entry-point')
 Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
-  // نعتمد options الصريحة بدل auto-load عشان iOS — لو GoogleService-Info.plist
-  // ما أُضيف لـXcode project يصير exception → شاشة بيضاء بـTestFlight.
-  if (Firebase.apps.isEmpty) {
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  }
+  await Firebase.initializeApp();
   debugPrint('FCM background message: ${message.messageId}');
 }
 
@@ -64,114 +58,70 @@ class FcmService {
   static const Duration _softResyncWindow = Duration(minutes: 30);
 
   static bool _initialized = false;
-  static Future<void>? _initFuture;
   static bool _tokenRefreshListenerAttached = false;
   static bool _deferredRegistrationRunning = false;
   static final FlutterLocalNotificationsPlugin _fln =
       FlutterLocalNotificationsPlugin();
 
-  /// Idempotent + serialized: if init is already in-flight, return the
-  /// same future instead of starting a second parallel init (which on iOS
-  /// can deadlock the Firebase Messaging plugin).
-  static Future<void> init() {
-    if (_initialized) return Future.value();
-    return _initFuture ??= _doInit();
-  }
+  static Future<void> init() async {
+    if (_initialized) return;
 
-  static Future<void> _doInit() async {
-    try {
-      // Firebase Messaging ما يدعم Windows/macOS/Linux أصلاً — نتجاوز
-      // مباشرةً على desktop. يبقى flag _initialized=true حتى لا تُستدعى مجدداً.
-      if (!Platform.isAndroid && !Platform.isIOS) {
-        _initialized = true;
-        debugPrint('ℹ️ FCM Service skipped (desktop platform)');
-        return;
-      }
+    await Firebase.initializeApp();
+    await FirebaseMessaging.instance.setAutoInitEnabled(true);
+    FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundHandler);
 
-      // نُمرّر options الصريحة بدل auto-load. على iOS auto-load يفشل إن لم
-      // يُسجَّل GoogleService-Info.plist في Xcode project → exception.
-      if (Firebase.apps.isEmpty) {
-        await Firebase.initializeApp(
-          options: DefaultFirebaseOptions.currentPlatform,
-        ).timeout(const Duration(seconds: 10), onTimeout: () {
-          throw TimeoutException('Firebase.initializeApp timed out');
-        });
-      }
+    // إعداد local notifications لعرض الإشعارات في foreground
+    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosInit = DarwinInitializationSettings();
+    await _fln.initialize(
+      const InitializationSettings(android: androidInit, iOS: iosInit),
+      onDidReceiveNotificationResponse: _handleLocalNotificationTap,
+    );
 
-      // setAutoInitEnabled على iOS قد يَعلَق ينتظر APNs — نضع timeout صارم
-      // ولا نسمح بفشلها يقطع باقي init.
-      try {
-        await FirebaseMessaging.instance
-            .setAutoInitEnabled(true)
-            .timeout(const Duration(seconds: 5));
-      } catch (e) {
-        debugPrint('FCM: setAutoInitEnabled warning: $e');
-      }
+    if (Platform.isAndroid) {
+      const ch = AndroidNotificationChannel(
+        'mysvcs_fcm',
+        'إشعارات التطبيق',
+        description: 'إشعارات Firebase Cloud Messaging',
+        importance: Importance.high,
+        playSound: true,
+        enableVibration: true,
+        showBadge: true,
+      );
+      await _fln
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(ch);
 
-      FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundHandler);
-
-      const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-      const iosInit = DarwinInitializationSettings();
-      try {
-        await _fln.initialize(
-          const InitializationSettings(android: androidInit, iOS: iosInit),
-          onDidReceiveNotificationResponse: _handleLocalNotificationTap,
-        ).timeout(const Duration(seconds: 10));
-      } catch (e) {
-        debugPrint('FCM: flutter_local_notifications init warning: $e');
-      }
-
-      if (Platform.isAndroid) {
-        const ch = AndroidNotificationChannel(
-          'mysvcs_fcm',
-          'إشعارات التطبيق',
-          description: 'إشعارات Firebase Cloud Messaging',
-          importance: Importance.high,
-          playSound: true,
-          enableVibration: true,
-          showBadge: true,
-        );
-        await _fln
-            .resolvePlatformSpecificImplementation<
-                AndroidFlutterLocalNotificationsPlugin>()
-            ?.createNotificationChannel(ch);
-
-        const appAlertsChannel = AndroidNotificationChannel(
-          'mysvcs_app_alerts',
-          'تنبيهات التطبيق المباشرة',
-          description: 'تنبيهات الجرس المباشرة عند فتح التطبيق',
-          importance: Importance.max,
-          playSound: true,
-          enableVibration: true,
-          showBadge: true,
-        );
-        await _fln
-            .resolvePlatformSpecificImplementation<
-                AndroidFlutterLocalNotificationsPlugin>()
-            ?.createNotificationChannel(appAlertsChannel);
-      }
-
-      FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
-      FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationOpen);
-
-      // getInitialMessage على iOS قد يَعلَق إن FIRMessaging لم يكمل بعد —
-      // نضع timeout قصير ونمضي قُدماً.
-      try {
-        final initialMessage = await FirebaseMessaging.instance
-            .getInitialMessage()
-            .timeout(const Duration(seconds: 3));
-        if (initialMessage != null) {
-          _handleNotificationOpen(initialMessage);
-        }
-      } catch (e) {
-        debugPrint('FCM: getInitialMessage skipped: $e');
-      }
-
-      _initialized = true;
-      debugPrint('✅ FCM Service initialized');
-    } finally {
-      _initFuture = null;
+      const appAlertsChannel = AndroidNotificationChannel(
+        'mysvcs_app_alerts',
+        'تنبيهات التطبيق المباشرة',
+        description: 'تنبيهات الجرس المباشرة عند فتح التطبيق',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+        showBadge: true,
+      );
+      await _fln
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(appAlertsChannel);
     }
+
+    // عرض الإشعارات عندما التطبيق مفتوح (foreground)
+    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+
+    // التعامل مع نقر الإشعار عند إعادة فتح التطبيق من الخلفية
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationOpen);
+
+    // التعامل مع نقر الإشعار الذي أدى إلى تشغيل التطبيق من حالة الإغلاق
+    final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
+    if (initialMessage != null) {
+      _handleNotificationOpen(initialMessage);
+    }
+
+    _initialized = true;
+    debugPrint('✅ FCM Service initialized');
   }
 
   /// Routes the app to the relevant subscriber when an expiry-related FCM
@@ -320,28 +270,8 @@ class FcmService {
         debugPrint('FCM: requestPermission warning: $error');
       }
 
-      // iOS فقط: FCM token يحتاج APNs token صالح أولاً. iOS يسجّل مع APNs
-      // عادةً خلال ثوانٍ قليلة بعد قبول الإذن، فلو ناديت getToken() فوراً
-      // يرجع null. ننتظر حتى ~10 ثوانٍ بـpolling ثم نُكمل.
-      if (Platform.isIOS) {
-        String? apns;
-        for (var i = 0; i < 5; i++) {
-          try {
-            apns = await messaging.getAPNSToken();
-          } catch (e) {
-            debugPrint('FCM: getAPNSToken error: $e');
-          }
-          if (apns != null && apns.isNotEmpty) break;
-          if (i < 4) await Future<void>.delayed(const Duration(seconds: 2));
-        }
-        if (apns == null || apns.isEmpty) {
-          debugPrint('FCM: APNs token still null after 10s');
-          return null;
-        }
-      }
-
       final token = await messaging.getToken();
-      debugPrint('FCM token: ${token?.substring(0, 30) ?? "null"}…');
+      debugPrint('FCM token: $token');
       return token;
     } catch (error) {
       debugPrint('FCM: getToken failed: $error');
@@ -589,12 +519,7 @@ class FcmService {
     _ensureTokenRefreshListener();
 
     final ok = await _registerCurrentTokenWithRecovery();
-    // Workmanager registerPeriodicSyncTask على iOS قد يفشل صامتاً — نحاصره.
-    try {
-      await registerPeriodicSyncTask();
-    } catch (e) {
-      debugPrint('FCM: registerPeriodicSyncTask warning: $e');
-    }
+    await registerPeriodicSyncTask();
     if (!ok) {
       _scheduleDeferredRegistration();
     }

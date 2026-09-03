@@ -9,12 +9,7 @@ import '../core/services/encryption_service.dart';
 class ManagerOption {
   final String id;
   final String name;
-  // SAS-side outstanding debt for this manager (manager.debt in SAS).
-  // Populated when present in the /manager/tree node so the financial
-  // tab can sum it alongside the custom-debts ledger without an extra
-  // round-trip.
-  final double debt;
-  const ManagerOption({required this.id, required this.name, this.debt = 0});
+  const ManagerOption({required this.id, required this.name});
 }
 
 class ReportsState {
@@ -133,32 +128,17 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
       state = state.copyWith(managers: const []);
       return;
     }
-    // Always re-fetch — the tree carries each manager's current SAS
-    // debt, which the financial tab sums into the debts KPI. Skipping
-    // when state.managers wasn't empty kept stale debt totals.
+    if (state.managers.isNotEmpty) return;
     try {
-      // Drop the calling admin from the tree so their own debt isn't
-      // counted in sums (the SAS tree returns the caller as the root,
-      // and the financial KPI is "what sub-admins owe me" — adding
-      // self distorts the figure for an admin who has any SAS debt of
-      // their own).
-      final selfId = (await _storage.getAdminId() ?? '').toString();
       final res = await _sas4Dio.get(ApiConstants.sas4ManagerTree);
       final data = res.data;
       final flat = <ManagerOption>[];
-      double _num(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0;
       void flatten(dynamic node) {
         if (node is Map) {
           final id = (node['id'] ?? node['idx'] ?? '').toString();
           final name = (node['username'] ?? node['name'] ?? '').toString();
-          if (id.isNotEmpty && name.isNotEmpty && id != selfId) {
-            flat.add(ManagerOption(
-              id: id,
-              name: name,
-              // SAS uses different key spellings across builds; probe
-              // the common ones. Falls back to 0 when missing.
-              debt: _num(node['debt'] ?? node['totalDebt'] ?? node['debt_total']),
-            ));
+          if (id.isNotEmpty && name.isNotEmpty) {
+            flat.add(ManagerOption(id: id, name: name));
           }
           if (node['children'] is List) {
             for (final c in node['children']) {
@@ -176,29 +156,7 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
       } else {
         flatten(data);
       }
-      // Tree carries id+username only — SAS debt lives behind a
-      // dedicated /manager/debt/:id endpoint. Fetch each in parallel
-      // so the financial tab's "ديون المدراء" KPI sums SAS + custom
-      // debts without an extra user-triggered round trip. Failures
-      // fall through to debt=0 (the manager just doesn't contribute
-      // to the SAS-side bucket).
-      final enriched = await Future.wait(flat.map((m) async {
-        final id = int.tryParse(m.id);
-        if (id == null) return m;
-        try {
-          final dr = await _sas4Dio.get('/manager/debt/$id');
-          final body = dr.data;
-          final node = body is Map && body['data'] is Map
-              ? body['data'] as Map
-              : (body is Map ? body : const {});
-          final raw = node['total'] ?? node['totalDebt'] ?? node['debt'];
-          final v = _num(raw).abs();
-          return ManagerOption(id: m.id, name: m.name, debt: v);
-        } catch (_) {
-          return m;
-        }
-      }));
-      state = state.copyWith(managers: enriched);
+      state = state.copyWith(managers: flat);
     } catch (e) {
       dev.log('fetchManagers error: $e', name: 'REPORTS');
     }
@@ -209,7 +167,6 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
     String? managerId,
     List<String>? actionTypes,
     String? userManager,
-    String? employeeId,
   }) async {
     state = state.copyWith(loading: true, error: null);
     try {
@@ -230,9 +187,6 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
       }
       if (userManager != null && userManager.isNotEmpty) {
         params['user_manager'] = userManager;
-      }
-      if (employeeId != null && employeeId != 'all') {
-        params['employee_id'] = employeeId;
       }
 
       final res = await _dio.get(
@@ -262,7 +216,7 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
   }
 
   // ── Daily Activations ─────────────────────────────────────────────
-  Future<void> fetchDailyActivations({String? managerId, String? employeeId}) async {
+  Future<void> fetchDailyActivations({String? managerId}) async {
     state = state.copyWith(loading: true, error: null);
     try {
       final adminId = await _getAdminId();
@@ -271,9 +225,6 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
         params['admin_id'] = managerId;
       } else if (adminId != null) {
         params['admin_id'] = adminId;
-      }
-      if (employeeId != null && employeeId != 'all') {
-        params['employee_id'] = employeeId;
       }
 
       final res = await _dio.get(
@@ -308,7 +259,6 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
   // ── Activations Report ────────────────────────────────────────────
   Future<void> fetchActivationsReport(String dateFrom, String dateTo, {
     String? managerId,
-    String? employeeId,
   }) async {
     state = state.copyWith(loading: true, error: null);
     try {
@@ -323,9 +273,6 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
       } else if (adminId != null) {
         final allIds = [adminId, ...state.managers.map((m) => m.id)];
         params['user_ids'] = allIds.toSet().join(',');
-      }
-      if (employeeId != null && employeeId != 'all') {
-        params['employee_id'] = employeeId;
       }
 
       final res = await _dio.get(
@@ -440,7 +387,6 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
     required String dateFrom,
     required String dateTo,
     List<String>? actionTypes,
-    String? employeeId,
   }) async {
     state = state.copyWith(loading: true, error: null);
     try {
@@ -452,9 +398,6 @@ class ReportsNotifier extends StateNotifier<ReportsState> {
       };
       if (actionTypes != null && actionTypes.isNotEmpty) {
         params['action_types'] = actionTypes.join(',');
-      }
-      if (employeeId != null && employeeId != 'all') {
-        params['employee_id'] = employeeId;
       }
 
       final res = await _dio.get(

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_native_contact_picker/flutter_native_contact_picker.dart';
-import '../core/utils/platform_utils.dart';
 import 'app_snackbar.dart';
 
 /// Launches the OS-native single contact picker and returns the selected
@@ -13,15 +12,6 @@ import 'app_snackbar.dart';
 /// contact's data. This keeps us out of Google Play's expanded
 /// contacts-permission review.
 Future<String?> pickContactPhone(BuildContext context) async {
-  // Contact picker مدعوم فقط على Android/iOS — desktop ما عنده دفتر
-  // عناوين يصلحه plugin. على desktop نخبر المستخدم يكتب الرقم يدوياً.
-  if (!PlatformUtils.supportsContactPicker) {
-    if (context.mounted) {
-      AppSnackBar.info(context, 'اكتب الرقم يدوياً (جهات الاتصال غير متاحة على Windows)');
-    }
-    return null;
-  }
-
   final picker = FlutterNativeContactPicker();
 
   dynamic contact;

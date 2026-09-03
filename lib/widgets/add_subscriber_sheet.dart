@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import '../providers/auth_provider.dart';
-import '../providers/managers_provider.dart';
 import '../providers/subscribers_provider.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/helpers.dart';
-import '../models/manager_model.dart';
 import '../models/subscriber_model.dart';
 import 'app_snackbar.dart';
 import 'contact_picker.dart';
@@ -33,17 +30,13 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
   final _phoneCtrl = TextEditingController();
   final _expCtrl = TextEditingController();
   int? _selectedPackageId;
-  int? _selectedParentId;
-  List<ManagerModel> _parentManagers = const [];
   bool _isLoading = false;
   bool _loadingPackages = false;
-  bool _loadingParents = false;
 
   @override
   void initState() {
     super.initState();
     _ensurePackagesLoaded();
-    _loadParents();
   }
 
   Future<void> _ensurePackagesLoaded() async {
@@ -54,30 +47,6 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
       await ref.read(subscribersProvider.notifier).loadPackages();
       if (mounted) setState(() => _loadingPackages = false);
     }
-  }
-
-  Future<void> _loadParents() async {
-    if (!mounted) return;
-    final authUser = ref.read(authProvider).user;
-    // Skip the manager-tree fetch for admins who can't pick a parent
-    // anyway — sub-managers without canAccessManagers won't see the field.
-    if (!(authUser?.canAccessManagers ?? false)) return;
-    setState(() => _loadingParents = true);
-    final list = await ref.read(managersProvider.notifier).fetchParentManagers();
-    if (!mounted) return;
-    final currentAdminId = int.tryParse(authUser?.id?.toString() ?? '');
-    setState(() {
-      _parentManagers = list;
-      // Default the new subscriber's parent to the currently logged-in admin,
-      // matching the prior behavior of createSubscriber when no parent_id was
-      // selected. Only set if the current admin actually appears in the list.
-      if (_selectedParentId == null &&
-          currentAdminId != null &&
-          list.any((m) => m.id == currentAdminId)) {
-        _selectedParentId = currentAdminId;
-      }
-      _loadingParents = false;
-    });
   }
 
   @override
@@ -144,7 +113,6 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
           lastname: _lastnameCtrl.text.trim(),
           phone: _phoneCtrl.text.trim(),
           expiration: expStr,
-          parentId: _selectedParentId,
         );
 
     if (!mounted) return;
@@ -178,9 +146,6 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
     final canEditExpiration =
         (authUser?.canAccessManagers ?? false) ||
             (authUser?.canAccessPackages ?? false);
-    // "تابع إلى" يظهر فقط للمدراء الذين يملكون صلاحية إدارة المدراء (أي
-    // الذين يستطيعون إنشاء مدراء فرعيين تحتهم).
-    final canPickParent = authUser?.canAccessManagers ?? false;
 
     final seen = <int>{};
     final uniquePkgs = packages.where((p) {
@@ -217,7 +182,7 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
                   color: AppTheme.primary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(LucideIcons.userPlus,
+                child: const Icon(Icons.person_add_alt_1,
                     color: AppTheme.primary, size: 20),
               ),
               const SizedBox(width: 10),
@@ -244,7 +209,7 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
                 textAlign: TextAlign.left,
                 decoration: const InputDecoration(
                   labelText: 'الاسم الأول',
-                  prefixIcon: Icon(LucideIcons.user, size: 20),
+                  prefixIcon: Icon(Icons.person_outline, size: 20),
                 ),
                 validator: (v) =>
                     v == null || v.trim().isEmpty ? 'مطلوب' : null,
@@ -269,10 +234,10 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
             textAlign: TextAlign.left,
             decoration: InputDecoration(
               labelText: 'رقم الهاتف',
-              prefixIcon: const Icon(LucideIcons.phone, size: 20),
+              prefixIcon: const Icon(Icons.phone_outlined, size: 20),
               suffixIcon: IconButton(
                 tooltip: 'اختر من جهات الاتصال',
-                icon: const Icon(LucideIcons.contact, size: 20),
+                icon: const Icon(Icons.contacts_rounded, size: 20),
                 onPressed: () async {
                   final phone = await pickContactPhone(context);
                   if (phone != null && phone.isNotEmpty) {
@@ -298,7 +263,7 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
             textAlign: TextAlign.left,
             decoration: const InputDecoration(
               labelText: 'اسم المستخدم',
-              prefixIcon: Icon(LucideIcons.atSign, size: 20),
+              prefixIcon: Icon(Icons.alternate_email, size: 20),
               hintText: 'user@domain',
             ),
             validator: (v) => v == null || v.trim().isEmpty ? 'مطلوب' : null,
@@ -310,63 +275,11 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
             textAlign: TextAlign.left,
             decoration: const InputDecoration(
               labelText: 'كلمة المرور',
-              prefixIcon: Icon(LucideIcons.lock, size: 20),
+              prefixIcon: Icon(Icons.lock_outline, size: 20),
             ),
             validator: (v) => v == null || v.trim().isEmpty ? 'مطلوب' : null,
           ),
           const SizedBox(height: 12),
-
-          // تابع إلى (parent manager) — same dropdown style as the manager
-          // form's "تابع إلى" field. Defaults to the currently logged-in admin
-          // so behavior matches the prior auto-assignment in createSubscriber.
-          // Only shown to admins who can manage sub-admins; sub-managers
-          // (without canAccessManagers) never see or change the parent.
-          if (canPickParent) ...[
-            if (_loadingParents)
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2)),
-                    SizedBox(width: 10),
-                    Text('جاري تحميل المدراء...',
-                        style: TextStyle(fontSize: 12)),
-                  ],
-                ),
-              )
-            else
-              DropdownButtonFormField<int?>(
-                value: _selectedParentId,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'تابع إلى',
-                  prefixIcon: Icon(LucideIcons.network, size: 20),
-                ),
-                items: _parentManagers
-                    .map(
-                      (m) => DropdownMenuItem<int?>(
-                        value: m.id,
-                        child: Text(
-                          m.fullName.isNotEmpty
-                              ? '${m.username} - ${m.fullName}'
-                              : m.username,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) => setState(() => _selectedParentId = v),
-              ),
-            const SizedBox(height: 12),
-          ],
 
           // تاريخ الانتهاء (date-picker تفاعلي) — مُحكم بنفس صلاحيات التعديل
           TextField(
@@ -383,9 +296,9 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
               helperText: canEditExpiration
                   ? 'اختياري — إن لم يُحدَّد يبدأ من الآن'
                   : 'لا تملك صلاحية تعديل تاريخ الانتهاء',
-              prefixIcon: const Icon(LucideIcons.calendar, size: 20),
+              prefixIcon: const Icon(Icons.calendar_today, size: 20),
               suffixIcon: canEditExpiration
-                  ? const Icon(LucideIcons.calendarClock, size: 18)
+                  ? const Icon(Icons.edit_calendar_rounded, size: 18)
                   : null,
             ),
           ),
@@ -425,7 +338,7 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
                 child: const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(LucideIcons.refreshCw, size: 18, color: Colors.orange),
+                    Icon(Icons.refresh, size: 18, color: Colors.orange),
                     SizedBox(width: 8),
                     Text('لا توجد باقات — اضغط لإعادة التحميل',
                         style: TextStyle(fontSize: 13, color: Colors.orange)),
@@ -456,7 +369,7 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
                   theme.cardTheme.color ?? theme.colorScheme.surface,
               iconEnabledColor: theme.colorScheme.onSurface.withOpacity(0.7),
               decoration: const InputDecoration(
-                prefixIcon: Icon(LucideIcons.wifi, size: 18),
+                prefixIcon: Icon(Icons.wifi_rounded, size: 18),
                 hintText: 'اختر الباقة',
               ),
               items: uniquePkgs
@@ -475,9 +388,8 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
                               ),
                             ),
                             const SizedBox(width: 6),
-                            // سعر الشراء (كلفة الباقة على الأدمن).
                             Text(
-                              AppHelpers.formatMoney(pkg.costPrice),
+                              AppHelpers.formatMoney(pkg.displayPrice),
                               style: const TextStyle(
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.w700,
@@ -506,7 +418,7 @@ class _AddSubscriberSheetState extends ConsumerState<AddSubscriberSheet> {
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white),
                     )
-                  : const Icon(LucideIcons.save),
+                  : const Icon(Icons.save),
               label: Text(_isLoading ? 'جاري الحفظ...' : 'حفظ المشترك'),
             ),
           ),

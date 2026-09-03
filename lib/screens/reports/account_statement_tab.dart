@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' as intl;
 import '../../core/theme/app_theme.dart';
@@ -11,8 +10,6 @@ import '../../core/utils/pdf_statement.dart';
 import '../../providers/reports_provider.dart';
 import '../../providers/whatsapp_provider.dart';
 import '../../widgets/app_snackbar.dart';
-import '../../widgets/date_range_picker_row.dart';
-import '../../widgets/employee_filter_dropdown.dart';
 import '../../widgets/report_controls.dart';
 
 class AccountStatementTab extends ConsumerStatefulWidget {
@@ -33,7 +30,6 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
 
   late String _dateFrom;
   late String _dateTo;
-  String _employeeId = 'all';
   int _txnPage = 1;
   int _txnPerPage = 10;
 
@@ -112,7 +108,6 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
           dateFrom: _dateFrom,
           dateTo: _dateTo,
           actionTypes: _selectedActionTypes.toList(),
-          employeeId: _employeeId,
         );
   }
 
@@ -270,12 +265,12 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
               onChanged: _onSearchChanged,
               decoration: InputDecoration(
                 hintText: 'بحث عن مشترك...',
-                prefixIcon: const Icon(LucideIcons.userSearch, size: 20),
+                prefixIcon: const Icon(Icons.person_search_rounded, size: 20),
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                 suffixIcon: _selectedSub != null
                     ? IconButton(
-                        icon: const Icon(LucideIcons.x, size: 16),
+                        icon: const Icon(Icons.close, size: 16),
                         onPressed: () {
                           _searchCtrl.clear();
                           ref.read(reportsProvider.notifier).clearStatement();
@@ -291,13 +286,13 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
           ),
           const SizedBox(width: 6),
           _SmallBtn(
-            LucideIcons.fileText,
+            Icons.picture_as_pdf_rounded,
             hasData ? _handleSharePdf : null,
             tooltip: 'مشاركة PDF',
           ),
           const SizedBox(width: 4),
           _SmallBtn(
-            LucideIcons.printer,
+            Icons.print_rounded,
             hasData ? _handlePrint : null,
             tooltip: 'طباعة',
           ),
@@ -307,7 +302,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
                   child: Padding(padding: EdgeInsets.all(6),
                     child: CircularProgressIndicator(strokeWidth: 2)))
               : _SmallBtn(
-                  LucideIcons.send,
+                  Icons.send_rounded,
                   hasData ? _handleSendWhatsApp : null,
                   color: const Color(0xFF25D366),
                   tooltip: 'إرسال واتساب',
@@ -362,7 +357,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
                   leading: CircleAvatar(
                     radius: 16,
                     backgroundColor: AppTheme.primary.withValues(alpha: .1),
-                    child: Icon(LucideIcons.user,
+                    child: Icon(Icons.person,
                         size: 16, color: AppTheme.primary),
                   ),
                   onTap: () => _selectSubscriber(sub),
@@ -386,7 +381,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Row(children: [
-                Icon(LucideIcons.calendarRange,
+                Icon(Icons.date_range,
                     size: 14, color: theme.colorScheme.primary),
                 const SizedBox(width: 4),
                 Expanded(
@@ -394,7 +389,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
                       style: const TextStyle(fontSize: 11),
                       overflow: TextOverflow.ellipsis),
                 ),
-                Icon(LucideIcons.funnel,
+                Icon(Icons.filter_list_rounded,
                     size: 14,
                     color: theme.colorScheme.onSurface
                         .withValues(alpha: .4)),
@@ -436,7 +431,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 40),
                 child: Column(children: [
-                  Icon(LucideIcons.receipt,
+                  Icon(Icons.receipt_long_rounded,
                       size: 48,
                       color: theme.colorScheme.onSurface
                           .withValues(alpha: .2)),
@@ -467,7 +462,7 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 80),
             child: Column(children: [
-              Icon(LucideIcons.userSearch,
+              Icon(Icons.person_search_rounded,
                   size: 56,
                   color:
                       theme.colorScheme.onSurface.withValues(alpha: .15)),
@@ -494,7 +489,6 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
       builder: (ctx) {
         String from = _dateFrom;
         String to = _dateTo;
-        String emp = _employeeId;
         final types = Set<String>.from(_selectedActionTypes);
 
         return StatefulBuilder(builder: (ctx, setSheet) {
@@ -555,13 +549,6 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
                       });
                     }),
                   ]),
-                  const SizedBox(height: 10),
-                  DateRangePickerRow(
-                    fromDate: from,
-                    toDate: to,
-                    onFromChanged: (v) => setSheet(() => from = v),
-                    onToChanged: (v) => setSheet(() => to = v),
-                  ),
                   const SizedBox(height: 14),
 
                   // Action type filter
@@ -575,13 +562,6 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
                     _TypeChip('تسديد دين', 'BALANCE_DEDUCT', types, setSheet),
                     _TypeChip('إضافة دين', 'BALANCE_ADD', types, setSheet),
                   ]),
-                  const SizedBox(height: 14),
-
-                  EmployeeFilterDropdown(
-                    value: emp,
-                    padding: EdgeInsets.zero,
-                    onChanged: (v) => setSheet(() => emp = v),
-                  ),
                   const SizedBox(height: 16),
 
                   SizedBox(
@@ -592,7 +572,6 @@ class _AccountStatementTabState extends ConsumerState<AccountStatementTab>
                           setState(() {
                             _dateFrom = from;
                             _dateTo = to;
-                            _employeeId = emp;
                             _selectedActionTypes
                               ..clear()
                               ..addAll(types);

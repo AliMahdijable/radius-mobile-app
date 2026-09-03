@@ -4,10 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../models/subscriber_model.dart';
-import '../../models/manager_model.dart';
-import '../../models/print_template_model.dart';
 import '../../screens/login_screen.dart';
-import '../../screens/managers/manager_movements_screen.dart';
 import '../../screens/home_screen.dart';
 import '../../screens/subscribers/subscriber_details_screen.dart';
 import '../../screens/whatsapp/whatsapp_connection_screen.dart';
@@ -15,15 +12,13 @@ import '../../screens/whatsapp/whatsapp_send_scope_screen.dart';
 import '../../screens/whatsapp/message_logs_screen.dart';
 import '../../screens/whatsapp/broadcast_screen.dart';
 import '../../screens/schedules_screen.dart';
-import '../../screens/print_template_editor_screen.dart';
-import '../../screens/print_templates_screen.dart';
 import '../../screens/templates_screen.dart';
 import '../../screens/discounts_screen.dart';
 import '../../screens/debt_export_screen.dart';
 import '../../screens/debt_import_screen.dart';
 import '../../screens/managers_screen.dart';
 import '../../screens/packages_screen.dart';
-import '../../screens/receipts_archive_screen.dart';
+import '../../screens/print_templates_screen.dart';
 import '../../screens/devices/device_defaults_screen.dart';
 import '../../screens/devices/ont_device_screen.dart';
 import '../../screens/devices/ubiquiti_device_screen.dart';
@@ -31,7 +26,6 @@ import '../../screens/expenses/expenses_screen.dart';
 import '../../screens/debts/manager_debts_screen.dart';
 import '../../screens/debts/my_debts_screen.dart';
 import '../../screens/notification_settings_screen.dart';
-import '../../screens/employees_screen.dart';
 
 /// Root navigator for in-app overlays (e.g. [AppSnackBar]) after route changes.
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
@@ -96,13 +90,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const MyDebtsScreen(),
       ),
       GoRoute(
-        path: '/manager-movements',
-        builder: (context, state) {
-          final manager = state.extra as ManagerModel;
-          return ManagerMovementsScreen(manager: manager);
-        },
-      ),
-      GoRoute(
         path: '/notification-settings',
         builder: (context, state) => const NotificationSettingsScreen(),
       ),
@@ -137,22 +124,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const TemplatesScreen(),
       ),
       GoRoute(
-        path: '/print-templates',
-        builder: (context, state) => const PrintTemplatesScreen(),
-      ),
-      GoRoute(
-        path: '/print-template-editor',
-        builder: (context, state) {
-          final initial = state.extra;
-          if (initial is! PrintTemplateModel) {
-            return const Scaffold(
-              body: Center(child: Text('قالب غير صالح')),
-            );
-          }
-          return PrintTemplateEditorScreen(initial: initial);
-        },
-      ),
-      GoRoute(
         path: '/discounts',
         builder: (context, state) => const DiscountsScreen(),
       ),
@@ -172,15 +143,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/managers',
         builder: (context, state) => const ManagersScreen(),
       ),
-      // /print-templates: مزال من الموبايل — التصميم/التعديل فقط بالويب.
-      // الموبايل يقرأ القالب النشط للطباعة ولكن ما عنده محرّر.
       GoRoute(
-        path: '/receipts-archive',
-        builder: (context, state) => const ReceiptsArchiveScreen(),
-      ),
-      GoRoute(
-        path: '/employees',
-        builder: (context, state) => const EmployeesScreen(),
+        path: '/print-templates',
+        builder: (context, state) => const PrintTemplatesScreen(),
       ),
     ],
   );

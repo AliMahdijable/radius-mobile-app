@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/app_constants.dart';
@@ -71,12 +70,6 @@ class StorageService {
     List<String> permissions = const [],
     bool canAccessManagers = false,
     bool canAccessPackages = false,
-    bool isEmployee = false,
-    int? employeeId,
-    String? employeeUsername,
-    String? employeeFullName,
-    Map<String, bool> employeePermissions = const {},
-    String? sas4Token,
   }) async {
     final sp = await _sp;
     await Future.wait([
@@ -87,68 +80,7 @@ class StorageService {
       sp.setStringList(AppConstants.storagePermissions, permissions),
       sp.setBool(AppConstants.storageCanAccessManagers, canAccessManagers),
       sp.setBool(AppConstants.storageCanAccessPackages, canAccessPackages),
-      sp.setBool(AppConstants.storageIsEmployee, isEmployee),
-      if (employeeId != null)
-        sp.setInt(AppConstants.storageEmployeeId, employeeId)
-      else
-        sp.remove(AppConstants.storageEmployeeId),
-      if (employeeUsername != null)
-        sp.setString(AppConstants.storageEmployeeUsername, employeeUsername)
-      else
-        sp.remove(AppConstants.storageEmployeeUsername),
-      if (employeeFullName != null)
-        sp.setString(AppConstants.storageEmployeeFullName, employeeFullName)
-      else
-        sp.remove(AppConstants.storageEmployeeFullName),
-      sp.setString(
-        AppConstants.storageEmployeePermissions,
-        jsonEncode(employeePermissions),
-      ),
-      if (sas4Token != null && sas4Token.isNotEmpty)
-        sp.setString(AppConstants.storageSas4Token, sas4Token)
-      else
-        sp.remove(AppConstants.storageSas4Token),
     ]);
-  }
-
-  Future<String?> getSas4Token() async =>
-      (await _sp).getString(AppConstants.storageSas4Token);
-
-  Future<void> saveSas4Token(String token) async =>
-      (await _sp).setString(AppConstants.storageSas4Token, token);
-
-  Future<bool> getIsEmployee() async =>
-      (await _sp).getBool(AppConstants.storageIsEmployee) ?? false;
-
-  Future<int?> getEmployeeId() async =>
-      (await _sp).getInt(AppConstants.storageEmployeeId);
-
-  Future<String?> getEmployeeUsername() async =>
-      (await _sp).getString(AppConstants.storageEmployeeUsername);
-
-  Future<String?> getEmployeeFullName() async =>
-      (await _sp).getString(AppConstants.storageEmployeeFullName);
-
-  Future<Map<String, bool>> getEmployeePermissions() async {
-    final raw = (await _sp).getString(AppConstants.storageEmployeePermissions);
-    if (raw == null || raw.isEmpty) return const {};
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is Map) {
-        return decoded.map((k, v) => MapEntry(k.toString(), v == true));
-      }
-    } catch (_) { /* ignore corrupt JSON */ }
-    return const {};
-  }
-
-  /// تحديث صلاحيات الموظف بالـstorage بدون تغيير باقي حقول الجلسة.
-  /// يستعمله auth_provider لمّا /api/auth/me يرجع perms فريش.
-  Future<void> saveEmployeePermissions(Map<String, bool> permissions) async {
-    final sp = await _sp;
-    await sp.setString(
-      AppConstants.storageEmployeePermissions,
-      jsonEncode(permissions),
-    );
   }
 
   Future<void> clearAll() async {
@@ -160,12 +92,6 @@ class StorageService {
     await sp.remove(AppConstants.storagePermissions);
     await sp.remove(AppConstants.storageCanAccessManagers);
     await sp.remove(AppConstants.storageCanAccessPackages);
-    await sp.remove(AppConstants.storageIsEmployee);
-    await sp.remove(AppConstants.storageEmployeeId);
-    await sp.remove(AppConstants.storageEmployeeUsername);
-    await sp.remove(AppConstants.storageEmployeeFullName);
-    await sp.remove(AppConstants.storageEmployeePermissions);
-    await sp.remove(AppConstants.storageSas4Token);
     final appNotificationKeys = sp
         .getKeys()
         .where(

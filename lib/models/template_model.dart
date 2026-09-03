@@ -40,13 +40,6 @@ class TemplateModel {
     }
   }
 
-  // Chip list shown in the editor. {previous_debt} and {current_debt}
-  // were the original debt placeholders — both still resolve at render
-  // time (so legacy templates keep working) but they're omitted here
-  // because admins kept getting confused when they collapsed to the
-  // same value as {sas_debts} for managers without "ديون أخرى".
-  // The new trio (sas / other / total) is the canonical way to compose
-  // a debt section.
   static const List<String> managerAgentVariables = [
     '{manager_name}',
     '{manager_username}',
@@ -54,9 +47,8 @@ class TemplateModel {
     '{action_type}',
     '{previous_credit}',
     '{current_credit}',
-    '{sas_debts}',
-    '{other_debts}',
-    '{total_debts}',
+    '{previous_debt}',
+    '{current_debt}',
     '{movement_description}',
   ];
 
@@ -82,7 +74,6 @@ class TemplateModel {
     '{debt_amount}',
     '{credit_amount}',
     '{paid_amount}',
-    '{payment_date}',
     '{discount_amount}',
     '{discounted_price}',
   ];
@@ -99,7 +90,6 @@ class TemplateModel {
     '{debt_amount}':      'مبلغ الدين',
     '{credit_amount}':    'الرصيد',
     '{paid_amount}':      'المبلغ المدفوع',
-    '{payment_date}':     'تاريخ التسديد',
     '{discount_amount}':  'قيمة الخصم',
     '{discounted_price}': 'السعر بعد الخصم',
     '{manager_name}':        'اسم المدير',
@@ -110,9 +100,6 @@ class TemplateModel {
     '{current_credit}':      'الرصيد الحالي',
     '{previous_debt}':       'الدين السابق',
     '{current_debt}':        'الدين الحالي',
-    '{sas_debts}':           'ديون الساس',
-    '{other_debts}':         'ديون أخرى',
-    '{total_debts}':         'مجموع الديون',
     '{movement_description}': 'وصف الحركة',
   };
 
@@ -128,7 +115,6 @@ class TemplateModel {
     '{debt_amount}':      '💸',
     '{credit_amount}':    '💳',
     '{paid_amount}':      '✅',
-    '{payment_date}':     '📅',
     '{discount_amount}':  '🏷️',
     '{discounted_price}': '🏷️',
     '{manager_name}':        '👤',
@@ -139,9 +125,6 @@ class TemplateModel {
     '{current_credit}':      '💳',
     '{previous_debt}':       '💸',
     '{current_debt}':        '💸',
-    '{sas_debts}':           '🧾',
-    '{other_debts}':         '📑',
-    '{total_debts}':         '📊',
     '{movement_description}': '📝',
   };
 

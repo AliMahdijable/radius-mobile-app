@@ -7,8 +7,7 @@ import '../models/admin_expense.dart';
 class ExpensesRangeArgs {
   final DateTime? from;
   final DateTime? to;
-  final String? employeeId;
-  const ExpensesRangeArgs({this.from, this.to, this.employeeId});
+  const ExpensesRangeArgs({this.from, this.to});
 
   String? get fromIso => from?.toIso8601String();
   String? get toIso => to?.toIso8601String();
@@ -16,13 +15,10 @@ class ExpensesRangeArgs {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is ExpensesRangeArgs &&
-          other.from == from &&
-          other.to == to &&
-          other.employeeId == employeeId);
+      (other is ExpensesRangeArgs && other.from == from && other.to == to);
 
   @override
-  int get hashCode => Object.hash(from, to, employeeId);
+  int get hashCode => Object.hash(from, to);
 }
 
 final expensesProvider = FutureProvider.family
@@ -31,9 +27,6 @@ final expensesProvider = FutureProvider.family
   final qp = <String, String>{};
   if (args.fromIso != null) qp['from'] = args.fromIso!;
   if (args.toIso != null) qp['to'] = args.toIso!;
-  if (args.employeeId != null && args.employeeId != 'all') {
-    qp['employee_id'] = args.employeeId!;
-  }
   try {
     final res = await dio.get(
       '/api/admin/expenses',
