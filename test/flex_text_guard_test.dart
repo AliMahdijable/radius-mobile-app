@@ -52,7 +52,9 @@ void main() {
               m.end - 1, _balanced(child.first, m.end - 1) + 1);
           if (args.contains('maxLines:')) continue;
           if (args.contains('TextOverflow.ellipsis') ||
-              args.contains('TextOverflow.fade')) continue;
+              args.contains('TextOverflow.fade')) {
+            continue;
+          }
           final name = f.path.split('/').last;
           if (allowed.contains(name)) continue;
           final line = '\n'.allMatches(src.substring(0, row.at)).length + 1;
