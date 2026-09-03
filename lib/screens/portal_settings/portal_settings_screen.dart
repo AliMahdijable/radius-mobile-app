@@ -513,7 +513,8 @@ class _PackageRow extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(Sp.md),
           decoration: BoxDecoration(
-            border: Border.all(color: AppColors.textMid.withValues(alpha: 0.15)),
+            border:
+                Border.all(color: AppColors.textMid.withValues(alpha: 0.15)),
             borderRadius: BorderRadius.circular(R.md),
           ),
           child: Row(
@@ -789,8 +790,12 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
                   Row(
                     children: [
                       Expanded(
-                        child: Text('portal.pkg_display_order'.tr(),
-                            style: AppType.subtitle(color: AppColors.textMid)),
+                        child: Text(
+                          'portal.pkg_display_order'.tr(),
+                          style: AppType.subtitle(color: AppColors.textMid),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                       IconButton(
                         icon: const Icon(LucideIcons.minus, size: 16),
@@ -878,11 +883,13 @@ Widget _labeledField({
           fillColor: AppColors.surfaceInput,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(R.sm),
-            borderSide: BorderSide(color: AppColors.textMid.withValues(alpha: 0.2)),
+            borderSide:
+                BorderSide(color: AppColors.textMid.withValues(alpha: 0.2)),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(R.sm),
-            borderSide: BorderSide(color: AppColors.textMid.withValues(alpha: 0.2)),
+            borderSide:
+                BorderSide(color: AppColors.textMid.withValues(alpha: 0.2)),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(R.sm),

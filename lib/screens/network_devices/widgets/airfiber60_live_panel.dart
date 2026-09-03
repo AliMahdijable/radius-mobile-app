@@ -259,7 +259,8 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
               _monitoring
                   ? (freshMs != null ? 'مباشر · قبل $freshMsث' : 'مباشر')
                   : 'موقوف',
-              style: AppType.microBold(color: _monitoring ? AppColors.success : AppColors.textMid)),
+              style: AppType.microBold(
+                  color: _monitoring ? AppColors.success : AppColors.textMid)),
         ]),
       ),
       const Spacer(),
@@ -318,11 +319,16 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(peerName,
-                style: TextStyle(
-                    fontSize: 16, height: 1.3,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi)),
+            child: Text(
+              peerName,
+              style: TextStyle(
+                  fontSize: 16,
+                  height: 1.3,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textHi),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -401,7 +407,8 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           alignment: AlignmentDirectional.centerStart,
           child: Text(peer.mac,
               textDirection: TextDirection.ltr,
-              style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textLow)),
+              style: TextStyle(
+                  fontSize: 10.5, height: 1.3, color: AppColors.textLow)),
         ),
       ]),
     );
@@ -417,11 +424,9 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
   }) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
-        Text(label,
-            style: AppType.microBold(color: AppColors.textMid)),
+        Text(label, style: AppType.microBold(color: AppColors.textMid)),
         const Spacer(),
-        Text(badge,
-            style: AppType.microBold(color: color)),
+        Text(badge, style: AppType.microBold(color: color)),
         const SizedBox(width: 6),
         Text('${percent.round()}%',
             textDirection: TextDirection.ltr,
@@ -479,8 +484,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
     return Column(mainAxisSize: MainAxisSize.min, children: [
       Icon(icon, size: 12, color: color),
       const SizedBox(height: 2),
-      Text(label,
-          style: AppType.daysWordBold(color: AppColors.textMid)),
+      Text(label, style: AppType.daysWordBold(color: AppColors.textMid)),
       const SizedBox(height: 2),
       Text(value,
           textDirection: TextDirection.ltr,
@@ -490,8 +494,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
               color: color,
               height: 1)),
       if (unit.isNotEmpty)
-        Text(unit,
-            style: AppType.daysWord(color: AppColors.textLow)),
+        Text(unit, style: AppType.daysWord(color: AppColors.textLow)),
     ]);
   }
 
@@ -523,8 +526,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
         Row(children: [
           Icon(LucideIcons.gauge, size: 16, color: AppColors.brand),
           const SizedBox(width: 6),
-          Text('هامش الإشارة والسعة',
-              style: AppType.bodyBold()),
+          Text('هامش الإشارة والسعة', style: AppType.bodyBold()),
         ]),
         const SizedBox(height: 12),
         // Signal margin
@@ -588,8 +590,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
     required Color color,
   }) {
     return Column(mainAxisSize: MainAxisSize.min, children: [
-      Text(label,
-          style: AppType.daysWordBold(color: AppColors.textMid)),
+      Text(label, style: AppType.daysWordBold(color: AppColors.textMid)),
       const SizedBox(height: 2),
       Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -604,7 +605,9 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
                   color: color,
                   height: 1)),
           const SizedBox(width: 2),
-          Text(unit, style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow)),
+          Text(unit,
+              style: TextStyle(
+                  fontSize: 9.5, height: 1.2, color: AppColors.textLow)),
         ],
       ),
     ]);
@@ -631,8 +634,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
         Row(children: [
           Icon(LucideIcons.radioTower, size: 16, color: AppColors.brand),
           const SizedBox(width: 6),
-          Text('أداء اللنك',
-              style: AppType.bodyBold()),
+          Text('أداء اللنك', style: AppType.bodyBold()),
         ]),
         const SizedBox(height: 12),
         // Row 1: DL Capacity | UL Capacity
@@ -707,8 +709,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
         Row(children: [
           Icon(LucideIcons.cpu, size: 16, color: AppColors.brand),
           const SizedBox(width: 6),
-          Text('النظام',
-              style: AppType.bodyBold()),
+          Text('النظام', style: AppType.bodyBold()),
           const Spacer(),
           if (s.host.temperature != 0)
             Row(mainAxisSize: MainAxisSize.min, children: [
@@ -717,7 +718,8 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
               const SizedBox(width: 2),
               Text('${s.host.temperature}°C',
                   textDirection: TextDirection.ltr,
-                  style: AppType.pillBold(color: _tempColor(s.host.temperature))),
+                  style:
+                      AppType.pillBold(color: _tempColor(s.host.temperature))),
             ]),
         ]),
         const SizedBox(height: 12),
@@ -742,12 +744,10 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
         Row(children: [
           Icon(LucideIcons.timer, size: 14, color: AppColors.textMid),
           const SizedBox(width: 6),
-          Text('Uptime',
-              style: AppType.pillBold(color: AppColors.textMid)),
+          Text('Uptime', style: AppType.pillBold(color: AppColors.textMid)),
           const Spacer(),
           Text(_formatUptime(s.host.uptime),
-              textDirection: TextDirection.ltr,
-              style: AppType.bodyBold()),
+              textDirection: TextDirection.ltr, style: AppType.bodyBold()),
         ]),
       ]),
     );
@@ -765,8 +765,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
       const SizedBox(width: 6),
       SizedBox(
         width: 32,
-        child: Text(label,
-            style: AppType.pillBold(color: AppColors.textMid)),
+        child: Text(label, style: AppType.pillBold(color: AppColors.textMid)),
       ),
       Expanded(
         child: ClipRRect(
@@ -802,8 +801,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
         Row(children: [
           Icon(LucideIcons.cable, size: 16, color: AppColors.brand),
           const SizedBox(width: 6),
-          Text('Ethernet',
-              style: AppType.bodyBold()),
+          Text('Ethernet', style: AppType.bodyBold()),
           const Spacer(),
           if (s.lanSpeed != null)
             Container(
@@ -837,8 +835,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           ),
         ),
         const SizedBox(width: 6),
-        Text(iface.ifname,
-            style: AppType.pillBold(color: AppColors.textHi)),
+        Text(iface.ifname, style: AppType.pillBold(color: AppColors.textHi)),
         if (iface.speed != null && iface.speed! > 0) ...[
           const SizedBox(width: 6),
           Container(
@@ -881,8 +878,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
         Row(children: [
           Icon(LucideIcons.mapPin, size: 16, color: AppColors.brand),
           const SizedBox(width: 6),
-          Text('الموقع',
-              style: AppType.bodyBold()),
+          Text('الموقع', style: AppType.bodyBold()),
         ]),
         const SizedBox(height: 8),
         Row(children: [
@@ -895,7 +891,8 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
                     style: AppType.pillBold(color: AppColors.textHi)),
                 const SizedBox(height: 2),
                 Text('اضغط لنسخ الإحداثيّات',
-                    style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow)),
+                    style: TextStyle(
+                        fontSize: 9.5, height: 1.2, color: AppColors.textLow)),
               ])),
           IconButton(
             onPressed: () async {
@@ -944,8 +941,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
       header: Row(children: [
         Icon(LucideIcons.info, size: 16, color: AppColors.brand),
         const SizedBox(width: 6),
-        Text('معلومات الجهاز',
-            style: AppType.bodyBold()),
+        Text('معلومات الجهاز', style: AppType.bodyBold()),
       ]),
       content: Column(children: [
         _infoRow('Platform', s.host.devmodel),
@@ -960,8 +956,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(children: [
-        Text(label,
-            style: AppType.pillBold(color: AppColors.textMid)),
+        Text(label, style: AppType.pillBold(color: AppColors.textMid)),
         const SizedBox(width: Sp.sm),
         // ⚠️ `Expanded` لا `Spacer()+Flexible`: لكليهما flex=1 فيتقاسمان
         // الفراغ، و`Flexible` بالملاءمة الرخوة تأخذ مقاسها الطبيعي فقط

@@ -3,10 +3,20 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 /// كارت الرصيد وكارت النانو — بلاغا ٢٠٢٦-٠٩-٠٢.
+/// ⚠️ **درسٌ من ٢٠٢٦-٠٩-٠٣**: هذه الاختبارات مرّت كلّها بينما البطاقة
+/// منهارة على شاشة المستخدم — المبلغ حرفاً في كلّ سطر. لأنّها تفتّش
+/// **نصّ الملفّ** لا ما يُرسَم: «هل الزرّ مذكور؟» نعم، وهو مسحوقٌ إلى
+/// صفر عرضاً.
+///
+/// فبقيت هنا لأنّها تحرس **النيّة** (الصفر محايد · الزرّ على البطاقة لا
+/// مدفوناً)، أمّا التخطيط فيحرسه `text_crush_test.dart` بالرسم الفعليّ.
+/// لا تُضِف هنا تأكيداً على شكلٍ بصريّ — أضِفه هناك.
 void main() {
-  late String src;
+  late String src, card;
   setUpAll(() {
     src = File('lib/screens/subscribers/subscriber_detail_screen.dart')
+        .readAsStringSync();
+    card = File('lib/screens/subscribers/widgets/balance_card.dart')
         .readAsStringSync();
   });
 
@@ -16,14 +26,14 @@ void main() {
       // كلّ زيارة: «كم له وكم عليه؟». والصفر جوابٌ لا فراغ.
       expect(src.contains('if (sub.balanceAmount != 0) ...[\n'), isFalse,
           reason: 'عاد الشرط الذي يُخفي البطاقة');
-      expect(src.contains('final isZero = sub.balanceAmount == 0;'), isTrue);
+      expect(card.contains('final isZero = sub.balanceAmount == 0;'), isTrue);
     });
 
     test('🚨 الصفر لا يُصبَغ أخضر ولا أحمر', () {
       // الأخضر يُوهم أنّ له مالاً عندك، والأحمر يتّهمه.
-      expect(src.contains('final accent = isZero\n        ? AppColors.textMid'),
-          isTrue);
-      expect(src.contains("isZero ? 'لا دين ولا رصيد'"), isTrue);
+      expect(card.contains('final accent = isZero'), isTrue);
+      expect(card.contains('? AppColors.textMid'), isTrue);
+      expect(card.contains("'لا دين ولا رصيد'"), isTrue);
     });
 
     test('التسمية في الهيرو ثلاثيّة', () {
@@ -35,7 +45,7 @@ void main() {
     test('🚨 إضافة الدين على البطاقة لا مدفونة', () {
       expect(src.contains('onAddDebt: Perms.has(\'subscribers.add_debt\')'),
           isTrue);
-      expect(src.contains("label: 'إضافة دين',"), isTrue);
+      expect(card.contains("label: 'إضافة دين',"), isTrue);
     });
 
     test('التسديد يبقى مشروطاً برصيدٍ غير صفر', () {

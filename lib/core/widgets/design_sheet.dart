@@ -1016,8 +1016,12 @@ class SheetPlanCard extends StatelessWidget {
             textBaseline: TextBaseline.alphabetic,
             children: [
               Expanded(
-                child: Text(amountLabel,
-                    style: AppType.body(color: AppColors.onBrandSecondary)),
+                child: Text(
+                  amountLabel,
+                  style: AppType.body(color: AppColors.onBrandSecondary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               if ((strikethrough ?? '').isNotEmpty) ...[
                 Text(

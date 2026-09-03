@@ -570,8 +570,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(children: [
-                      Text(r.ip,
-                          style: AppType.cardTitleBold()),
+                      Text(r.ip, style: AppType.cardTitleBold()),
                       const SizedBox(width: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -582,7 +581,9 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                         ),
                         child: Text('${r.responseMs}ms',
                             style: TextStyle(
-                                color: AppColors.textLow, fontSize: 10.5, height: 1.3)),
+                                color: AppColors.textLow,
+                                fontSize: 10.5,
+                                height: 1.3)),
                       ),
                       if (alreadyExists) ...[
                         const SizedBox(width: 6),
@@ -597,14 +598,14 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                             ),
                           ),
                           child: Text('مضاف مسبقاً',
-                              style: AppType.daysWordBold(color: AppColors.success)),
+                              style: AppType.daysWordBold(
+                                  color: AppColors.success)),
                         ),
                       ],
                     ]),
                     const SizedBox(height: 2),
                     Text('$label · port ${r.openPort} · ${r.guessProtocol}',
-                        style:
-                            AppType.muted(color: AppColors.textMid)),
+                        style: AppType.muted(color: AppColors.textMid)),
                   ],
                 ),
               ),
@@ -679,6 +680,8 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
               child: Text(
                 'محدَّد: ${_selected.length}',
                 style: AppType.rowLabelBold(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             FilledButton.icon(
@@ -862,8 +865,7 @@ class _BulkAddOptionsSheetState extends State<_BulkAddOptionsSheet> {
                     Expanded(
                         child: Text(r.name, overflow: TextOverflow.ellipsis)),
                     if (r.deviceCount > 0)
-                      Text(' (${r.deviceCount})',
-                          style: AppType.muted()),
+                      Text(' (${r.deviceCount})', style: AppType.muted()),
                   ]),
                 ),
             ],

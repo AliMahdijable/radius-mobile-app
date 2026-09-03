@@ -412,7 +412,8 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
             _monitoring
                 ? (freshS != null ? 'مباشر · قبل $freshSث' : 'مباشر')
                 : 'موقوف',
-            style: AppType.microBold(color: _monitoring ? AppColors.success : AppColors.textMid),
+            style: AppType.microBold(
+                color: _monitoring ? AppColors.success : AppColors.textMid),
           ),
         ]),
       ),
@@ -468,7 +469,8 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
             child: Center(
               child: Text('M',
                   style: TextStyle(
-                      fontSize: 16, height: 1.3,
+                      fontSize: 16,
+                      height: 1.3,
                       fontWeight: FontWeight.w700,
                       color: AppColors.warning)),
             ),
@@ -477,11 +479,11 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
           Expanded(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(name,
-                  style: AppType.buttonBold()),
+              Text(name, style: AppType.buttonBold()),
               if (s.sysDescr != null)
                 Text(s.sysDescr!,
-                    style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow),
+                    style: TextStyle(
+                        fontSize: 9.5, height: 1.2, color: AppColors.textLow),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
             ]),
@@ -547,8 +549,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
     return Column(mainAxisSize: MainAxisSize.min, children: [
       Icon(icon, size: 12, color: color),
       const SizedBox(height: 2),
-      Text(label,
-          style: AppType.daysWordBold(color: AppColors.textMid)),
+      Text(label, style: AppType.daysWordBold(color: AppColors.textMid)),
       const SizedBox(height: 2),
       Text(value,
           textDirection: TextDirection.ltr,
@@ -558,8 +559,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
               color: color,
               height: 1)),
       if (unit.isNotEmpty)
-        Text(unit,
-            style: AppType.daysWord(color: AppColors.textLow)),
+        Text(unit, style: AppType.daysWord(color: AppColors.textLow)),
     ]);
   }
 
@@ -580,8 +580,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
         Row(children: [
           Icon(LucideIcons.gauge, size: 16, color: AppColors.brand),
           const SizedBox(width: 6),
-          Text('هامش الإشارة',
-              style: AppType.bodyBold()),
+          Text('هامش الإشارة', style: AppType.bodyBold()),
         ]),
         const SizedBox(height: 12),
         Row(children: [
@@ -611,8 +610,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
 
   Widget _marginTile(String label, String value, String unit, Color color) {
     return Column(mainAxisSize: MainAxisSize.min, children: [
-      Text(label,
-          style: AppType.daysWordBold(color: AppColors.textMid)),
+      Text(label, style: AppType.daysWordBold(color: AppColors.textMid)),
       const SizedBox(height: 2),
       Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -628,7 +626,8 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
                     height: 1)),
             const SizedBox(width: 2),
             Text(unit,
-                style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow)),
+                style: TextStyle(
+                    fontSize: 9.5, height: 1.2, color: AppColors.textLow)),
           ]),
     ]);
   }
@@ -643,8 +642,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
       header: Row(children: [
         Icon(LucideIcons.signal, size: 14, color: AppColors.warning),
         const SizedBox(width: 6),
-        Text('Chains (${s.chains.length})',
-            style: AppType.bodyBold()),
+        Text('Chains (${s.chains.length})', style: AppType.bodyBold()),
       ]),
       content: Column(children: [
         for (final c in s.chains) _chainRow(c),
@@ -755,7 +753,8 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(label,
-                    style: AppType.bodyBold(color: c.online ? AppColors.textHi : AppColors.textMid),
+                    style: AppType.bodyBold(
+                        color: c.online ? AppColors.textHi : AppColors.textMid),
                     overflow: TextOverflow.ellipsis),
               ),
               if (c.rssiDbm != null)
@@ -780,15 +779,18 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
                 const SizedBox(width: 3),
                 Text(c.ip!,
                     textDirection: TextDirection.ltr,
-                    style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textMid)),
+                    style: TextStyle(
+                        fontSize: 10.5, height: 1.3, color: AppColors.textMid)),
                 const SizedBox(width: 8),
                 Icon(LucideIcons.wifi, size: 10, color: AppColors.textLow),
                 const SizedBox(width: 3),
                 Expanded(
                     child: Text(c.mac,
                         textDirection: TextDirection.ltr,
-                        style:
-                            TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow),
+                        style: TextStyle(
+                            fontSize: 9.5,
+                            height: 1.2,
+                            color: AppColors.textLow),
                         overflow: TextOverflow.ellipsis)),
               ]),
               const SizedBox(height: 4),
@@ -836,7 +838,9 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
 
   Widget _chainMetric(String label, String value, Color color) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(label, style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow)),
+      Text(label,
+          style:
+              TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow)),
       const SizedBox(height: 2),
       Text(value,
           textDirection: TextDirection.ltr,
@@ -1077,8 +1081,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
         Row(children: [
           Icon(LucideIcons.cpu, size: 16, color: AppColors.brand),
           const SizedBox(width: 6),
-          Text('النظام',
-              style: AppType.bodyBold()),
+          Text('النظام', style: AppType.bodyBold()),
         ]),
         const SizedBox(height: 12),
         // ⚠️ «زمن التشغيل» = منذ متى **والوصلة قائمة**. ولا سقوطَ إلى
@@ -1101,7 +1104,8 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
           padding: const EdgeInsets.only(top: 6),
           child: Text('CPU/RAM غير متوفّرين — firmware Mimosa يخفيهما',
               style: TextStyle(
-                  fontSize: 9.5, height: 1.2,
+                  fontSize: 9.5,
+                  height: 1.2,
                   fontStyle: FontStyle.italic,
                   color: AppColors.textLow)),
         ),
@@ -1121,19 +1125,23 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
         Row(children: [
           Icon(LucideIcons.mapPin, size: 16, color: AppColors.brand),
           const SizedBox(width: 6),
-          Text('GPS',
-              style: AppType.bodyBold()),
+          Text('GPS', style: AppType.bodyBold()),
           const Spacer(),
           if (s.gpsSats != null)
             Text('${s.gpsSats} satellites',
-                style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textLow)),
+                style: TextStyle(
+                    fontSize: 10.5, height: 1.3, color: AppColors.textLow)),
         ]),
         const SizedBox(height: 8),
         Row(children: [
           Expanded(
-              child: Text('$lat, $lng',
-                  textDirection: TextDirection.ltr,
-                  style: AppType.pillBold(color: AppColors.textHi))),
+              child: Text(
+            '$lat, $lng',
+            textDirection: TextDirection.ltr,
+            style: AppType.pillBold(color: AppColors.textHi),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          )),
           IconButton(
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: mapsUrl));
@@ -1164,8 +1172,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
       header: Row(children: [
         Icon(LucideIcons.info, size: 14, color: AppColors.textMid),
         const SizedBox(width: 6),
-        Text('معلومات الجهاز',
-            style: AppType.bodyBold()),
+        Text('معلومات الجهاز', style: AppType.bodyBold()),
       ]),
       content: Column(children: [
         if (s.firmwareVersion != null) _infoRow('Firmware', s.firmwareVersion!),
@@ -1178,8 +1185,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(children: [
-        Text(label,
-            style: AppType.pillBold(color: AppColors.textMid)),
+        Text(label, style: AppType.pillBold(color: AppColors.textMid)),
         const SizedBox(width: Sp.sm),
         // ⚠️ `Expanded` لا `Spacer()+Flexible`: لكليهما flex=1 فيتقاسمان
         // الفراغ، و`Flexible` بالملاءمة الرخوة تأخذ مقاسها الطبيعي فقط
@@ -1228,8 +1234,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
         Row(children: [
           Icon(icon, size: 12, color: color),
           const SizedBox(width: 4),
-          Text(label,
-              style: AppType.daysWordBold(color: AppColors.textMid)),
+          Text(label, style: AppType.daysWordBold(color: AppColors.textMid)),
         ]),
         const SizedBox(height: 8),
         Row(
@@ -1244,8 +1249,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
                       color: color,
                       height: 1)),
               const SizedBox(width: 2),
-              Text(unit,
-                  style: AppType.daysWord(color: AppColors.textLow)),
+              Text(unit, style: AppType.daysWord(color: AppColors.textLow)),
             ]),
       ]),
     );

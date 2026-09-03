@@ -315,6 +315,8 @@ class _MovementCard extends StatelessWidget {
                         movement.arabicLabel,
                         style: AppType.label(color: AppColors.textHi)
                             .copyWith(fontWeight: FontWeight.w700),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     Text(

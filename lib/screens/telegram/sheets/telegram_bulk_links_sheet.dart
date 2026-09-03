@@ -59,14 +59,16 @@ class _BulkSheetState extends State<_BulkSheet> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('تأكيد الإرسال',
-            style: TextStyle(fontFamily: AppType.family, fontWeight: FontWeight.w700)),
+            style: TextStyle(
+                fontFamily: AppType.family, fontWeight: FontWeight.w700)),
         content: Text(
             'سيُدرَج ${_preview!.eligible} رسالة في طابور واتساب. الإرسال يحترم حدود الإرسال.',
             style: const TextStyle(fontFamily: AppType.family, height: 1.5)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('إلغاء', style: TextStyle(fontFamily: AppType.family)),
+            child: const Text('إلغاء',
+                style: TextStyle(fontFamily: AppType.family)),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.warning),
@@ -148,7 +150,8 @@ class _BulkSheetState extends State<_BulkSheet> {
                 label: Text('أرسل لـ${_preview!.eligible} مشترك',
                     style: const TextStyle(
                       fontFamily: AppType.family,
-                      fontSize: 13, height: 1.35,
+                      fontSize: 13,
+                      height: 1.35,
                       fontWeight: FontWeight.w700,
                     )),
                 style: FilledButton.styleFrom(
@@ -163,7 +166,8 @@ class _BulkSheetState extends State<_BulkSheet> {
                 style: TextStyle(
                   fontFamily: AppType.family,
                   color: AppColors.textMid,
-                  fontSize: 12.5, height: 1.4,
+                  fontSize: 12.5,
+                  height: 1.4,
                 )),
         ],
       ),
@@ -197,14 +201,18 @@ class _BulkSheetState extends State<_BulkSheet> {
     return Row(
       children: [
         Expanded(
-          child: Text(label,
-              style: TextStyle(
-                fontFamily: AppType.family,
-                fontSize: bold ? 13 : 12,
-                height: bold ? 1.35 : 1.4,
-                fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
-                color: AppColors.textMid,
-              )),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontFamily: AppType.family,
+              fontSize: bold ? 13 : 12,
+              height: bold ? 1.35 : 1.4,
+              fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
+              color: AppColors.textMid,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         Text('$n',
             style: TextStyle(

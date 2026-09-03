@@ -539,6 +539,8 @@ class _PayPreview extends StatelessWidget {
               'الدين بعد التسديد',
               style: AppType.label(color: AppColors.textMid)
                   .copyWith(fontSize: 12.5),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           Text(

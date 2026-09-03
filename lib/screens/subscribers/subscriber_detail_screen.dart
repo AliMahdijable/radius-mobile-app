@@ -28,6 +28,7 @@ import 'sheets/consumption_sheet.dart';
 import 'sheets/pay_debt_sheet.dart';
 import 'sheets/qr_login_sheet.dart';
 import 'sheets/quick_discount_sheet.dart';
+import 'widgets/balance_card.dart';
 import 'widgets/device_probe_card.dart';
 import 'widgets/subscriber_actions.dart';
 
@@ -85,10 +86,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   /// المستخدم 2026-06-09: لا شيء يدل على التحميل وكل الأزرار تبقى
   /// فعّالة.
   bool get _isBusy =>
-      _disconnecting ||
-      _toggling ||
-      _sendingTemplate != null ||
-      _deleting;
+      _disconnecting || _toggling || _sendingTemplate != null || _deleting;
 
   @override
   void initState() {
@@ -212,7 +210,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                   // ومعها مدخل «إضافة دين» على البطاقة نفسها بدل أن
                   // يبقى مدفوناً في «إجراءات أخرى».
                   const SizedBox(height: Sp.md),
-                  _BalanceCard(
+                  BalanceCard(
                     sub: sub,
                     onRemind: sub.hasDebt &&
                             _sendingTemplate == null &&
@@ -940,185 +938,6 @@ class _SunkenTile extends StatelessWidget {
 /// render a single inline row: icon + label on the leading edge, the
 /// amount as a colored chip on the trailing edge. Reads at-a-glance
 /// without dominating the screen like the previous hero number did.
-/// بلوك «الدين المستحقّ» — البلوك الثاني في المخطّط، مباشرةً تحت بطاقة
-/// الهويّة. كارت أبيض r20 بحدّ أحمر خافت، فيه مربّع أيقونة 40×40 والمبلغ
-/// بارزاً، ومقابله زرّان: «تذكير» شبحي كهرماني و«تسديد» مملوء أحمر.
-///
-/// يظهر أيضاً للرصيد الدائن (بلغة خضراء) لأنّ `pay_debt_sheet` يدعمه
-/// صراحةً — والمخطّط لا يوفّر مدخلاً آخر للتسديد خارج هذا البلوك.
-class _BalanceCard extends StatelessWidget {
-  const _BalanceCard({
-    required this.sub,
-    this.onRemind,
-    this.onPay,
-    this.onAddDebt,
-  });
-  final Subscriber sub;
-
-  /// null = الزرّ يختفي (لا صلاحيّة أو لا رقم هاتف أو إرسال جارٍ).
-  final VoidCallback? onRemind;
-  final VoidCallback? onPay;
-  final VoidCallback? onAddDebt;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    // ⚠️ ثلاث حالات: دَينٌ · رصيدٌ دائن · صفر.
-    //
-    // الصفر ليس رصيداً دائناً ولا ديناً — وصبغُه بالأخضر يُوهم أنّ له
-    // مالاً عندك، وبالأحمر يتّهمه. فله لونٌ محايد ونصٌّ صريح.
-    final isDebt = sub.hasDebt;
-    final isZero = sub.balanceAmount == 0;
-    final accent = isZero
-        ? AppColors.textMid
-        : (isDebt ? AppColors.error : AppColors.success);
-    final softBg = isZero
-        ? AppColors.surfaceSunken
-        : (isDebt ? AppColors.dangerSoftBg : AppColors.successSoftBg);
-    final borderCol = isZero
-        ? AppColors.border
-        : (isDebt ? AppColors.dangerBorderCard : AppColors.successSoftBorder);
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.card),
-        border: Border.all(color: borderCol),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: softBg,
-              borderRadius: BorderRadius.circular(R.icon),
-            ),
-            child: Icon(
-              isZero
-                  ? Icons.account_balance_wallet_rounded
-                  : (isDebt
-                      ? Icons.credit_card_rounded
-                      : Icons.savings_rounded),
-              size: 21,
-              color: accent,
-            ),
-          ),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  isZero
-                      ? 'الرصيد'
-                      : (isDebt
-                          ? 'subscribers.label_debt_on_sub'.tr()
-                          : 'subscribers.label_balance_credit'.tr()),
-                  style: AppType.body(color: AppColors.textLabel),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  isZero ? 'لا دين ولا رصيد' : '${formatIQD(sub.debtAbs.round())} د.ع',
-                  textDirection:
-                      isZero ? ui.TextDirection.rtl : ui.TextDirection.ltr,
-                  style: isZero
-                      ? AppType.bodyStrong(color: accent)
-                      : AppType.statValue(color: accent),
-                ),
-              ],
-            ),
-          ),
-          if (onAddDebt != null) ...[
-            _DebtButton(
-              label: 'إضافة دين',
-              icon: Icons.add_rounded,
-              filled: false,
-              color: AppColors.warning,
-              borderColor: AppColors.warningSoftBorder,
-              onTap: onAddDebt!,
-            ),
-            const SizedBox(width: 7),
-          ],
-          if (onRemind != null) ...[
-            _DebtButton(
-              label: 'تذكير',
-              icon: Icons.notifications_active_rounded,
-              filled: false,
-              color: AppColors.warning,
-              borderColor: AppColors.warningSoftBorder,
-              onTap: onRemind!,
-            ),
-            const SizedBox(width: 7),
-          ],
-          if (onPay != null)
-            _DebtButton(
-              label: 'تسديد',
-              icon: Icons.payments_rounded,
-              filled: true,
-              color: isDebt ? AppColors.errorFill : AppColors.successFill,
-              onTap: onPay!,
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// زرّ داخل بلوك الدين — height 36 · r12 · font 12.5/w600 · أيقونة 16.
-class _DebtButton extends StatelessWidget {
-  const _DebtButton({
-    required this.label,
-    required this.icon,
-    required this.filled,
-    required this.color,
-    required this.onTap,
-    this.borderColor,
-  });
-  final String label;
-  final IconData icon;
-  final bool filled;
-  final Color color;
-  final VoidCallback onTap;
-  final Color? borderColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: filled ? color : AppColors.surface,
-      borderRadius: BorderRadius.circular(R.md),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(R.md),
-        child: Container(
-          height: H.chip,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(R.md),
-            border: filled
-                ? null
-                : Border.all(color: borderColor ?? AppColors.border),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 16, color: filled ? AppColors.onBrand : color),
-              const SizedBox(width: 5),
-              Text(
-                label,
-                style: AppType.bodyStrong(
-                  color: filled ? AppColors.onBrand : color,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 /// مطلب 2026-06-12: AppBar نظيف مطابق screenshot v1 — الاسم العربي
 /// مركزي + سهم رجوع يميني (RTL يعكس). بدون ظل.
@@ -1457,7 +1276,8 @@ class _SubscriberHero extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.call_rounded, size: 17, color: AppColors.onBrandSecondary),
+          const Icon(Icons.call_rounded,
+              size: 17, color: AppColors.onBrandSecondary),
           const SizedBox(width: 10),
           Expanded(
             child: InkWell(
@@ -1740,7 +1560,8 @@ class _PasswordRowState extends State<_PasswordRow> {
             display,
             style: TextStyle(
               color: AppColors.onBrand.withValues(alpha: 0.85),
-              fontSize: 13, height: 1.35,
+              fontSize: 13,
+              height: 1.35,
               fontWeight: FontWeight.w600,
               letterSpacing: _visible ? 0 : 2,
             ),

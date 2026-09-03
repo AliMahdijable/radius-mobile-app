@@ -849,7 +849,12 @@ class _Row extends StatelessWidget {
           Icon(icon, color: AppColors.textMid, size: 20),
           const SizedBox(width: Sp.md),
           Expanded(
-            child: Text(label, style: AppType.label(color: AppColors.textHi)),
+            child: Text(
+              label,
+              style: AppType.label(color: AppColors.textHi),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           if (trailing != null) ...[
             Text(trailing!,

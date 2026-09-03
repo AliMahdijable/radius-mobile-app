@@ -394,14 +394,18 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                               ),
                               const SizedBox(width: 10),
                               Expanded(
-                                child: Text(o.displayLabel,
-                                    style: TextStyle(
-                                        fontSize: 13,
-                                        height: 1.45,
-                                        color: AppColors.textHi,
-                                        fontWeight: checked
-                                            ? FontWeight.w700
-                                            : FontWeight.w500)),
+                                child: Text(
+                                  o.displayLabel,
+                                  style: TextStyle(
+                                      fontSize: 13,
+                                      height: 1.45,
+                                      color: AppColors.textHi,
+                                      fontWeight: checked
+                                          ? FontWeight.w700
+                                          : FontWeight.w500),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                             ],
                           ),
