@@ -1,4 +1,5 @@
 import '../core/util/format.dart';
+import '../core/util/server_time.dart';
 
 /// Network device inventory — routers/switches/APs/links/sectors.
 /// راجع project_devices_monitoring_plan في memory.
@@ -118,15 +119,19 @@ class NetworkDevice {
         location: normalizeDigits(j['location']?.toString()),
         notes: normalizeDigits(j['notes']?.toString()),
         hasCredentials: _parseHasCreds(j['has_credentials']),
-        lastProbedAt: j['last_probed_at'] != null
-            ? DateTime.tryParse(j['last_probed_at'].toString())
-            : null,
+        // ⚠️ الثلاثة من `admin_devices` — جدولُنا، وقيمُه UTC.
+        //
+        // تُحقّق بالقياس: `last_probed_at` يساوي `NOW()` في القاعدة،
+        // والخادم على UTC. فقراءتها محلّيّاً تُقدّم «آخر فحص» ثلاث
+        // ساعات، ويصير جهازٌ فُحص للتوّ يبدو مفحوصاً منذ ثلاث ساعات.
+        //
+        // و`.toLocal()` على `status_since` كان بلا أثر: النصّ العاري
+        // يُنتج DateTime محلّيّاً أصلاً.
+        lastProbedAt: parseServerUtc(j['last_probed_at']?.toString()),
         lastStatus: (j['last_status'] ?? 'unknown').toString(),
-        statusSince: j['status_since'] != null
-            ? DateTime.tryParse(j['status_since'].toString())?.toLocal()
-            : null,
+        statusSince: parseServerUtc(j['status_since']?.toString()),
         lastResponseMs: j['last_response_ms'] as int?,
-        createdAt: DateTime.tryParse(j['created_at']?.toString() ?? '') ??
+        createdAt: parseServerUtc(j['created_at']?.toString()) ??
             DateTime.now(),
       );
 }

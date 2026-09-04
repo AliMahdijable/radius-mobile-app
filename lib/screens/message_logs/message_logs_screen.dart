@@ -9,6 +9,7 @@ import '../../core/widgets/design_sheet.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../core/util/server_time.dart';
 
 /// شاشة "حالة الرسائل" — نُقلت من v1 mobile-app/message_logs_screen.
 ///
@@ -646,7 +647,13 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
   }
 
   String _formatTime(String raw) {
-    final dt = DateTime.tryParse(raw)?.toLocal();
+    // ⚠️ من `whatsapp_message_queue` و`whatsapp_send_logs` — جدولانا،
+    // وقيمُهما UTC (تُحقّق: الخادم وMySQL على UTC).
+    //
+    // و`.toLocal()` السابق كان بلا أثر: النصّ العاري يُنتج DateTime
+    // محلّيّاً أصلاً، فتحويلُه إلى محلّيّ لا يفعل شيئاً. يبدو كأنّه
+    // يحرس ولا يحرس.
+    final dt = parseServerUtc(raw);
     if (dt == null) return raw;
     final now = DateTime.now();
     final diff = now.difference(dt);
@@ -897,7 +904,13 @@ class _MessageDetailSheet extends StatelessWidget {
   /// الـbackend يرسل createdAt بصيغة `2026-07-08T19:08:42.000Z` — العرض
   /// الخام غير مفهوم للمستخدم فنحوّله لتاريخ محلي مع 12h + إشارة ص/م.
   String _formatFullDateTime(String raw) {
-    final dt = DateTime.tryParse(raw)?.toLocal();
+    // ⚠️ من `whatsapp_message_queue` و`whatsapp_send_logs` — جدولانا،
+    // وقيمُهما UTC (تُحقّق: الخادم وMySQL على UTC).
+    //
+    // و`.toLocal()` السابق كان بلا أثر: النصّ العاري يُنتج DateTime
+    // محلّيّاً أصلاً، فتحويلُه إلى محلّيّ لا يفعل شيئاً. يبدو كأنّه
+    // يحرس ولا يحرس.
+    final dt = parseServerUtc(raw);
     if (dt == null) return raw;
     String two(int n) => n.toString().padLeft(2, '0');
     final h24 = dt.hour;

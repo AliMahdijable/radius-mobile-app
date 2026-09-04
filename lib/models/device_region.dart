@@ -1,4 +1,5 @@
 import '../core/util/format.dart';
+import '../core/util/server_time.dart';
 
 /// منطقة أجهزة (كرخ/رصافة/شرق/غرب…) — grouping للـfilter و bulk-scan.
 /// راجع [[project_devices_monitoring_plan]] في memory.
@@ -30,7 +31,8 @@ class DeviceRegion {
         deviceCount: (j['device_count'] is int)
             ? j['device_count'] as int
             : int.tryParse('${j['device_count']}') ?? 0,
-        createdAt: DateTime.tryParse(j['created_at']?.toString() ?? '') ??
+        // من `admin_device_regions` — جدولُنا، UTC.
+        createdAt: parseServerUtc(j['created_at']?.toString()) ??
             DateTime.now(),
       );
 }

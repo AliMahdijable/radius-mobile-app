@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/util/server_time.dart';
 
 import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
@@ -583,7 +584,9 @@ class _Row extends StatelessWidget {
 
   static String _humanCreatedAt(String? iso) {
     if (iso == null || iso.isEmpty) return '';
-    final t = DateTime.tryParse(iso);
+    // ⚠️ `created_at` من `activity_logs` — جدولُنا، UTC. قراءتُه
+    // محلّيّاً تجعل نشاطاً وقع الآن يُقرأ «قبل ٣ س».
+    final t = parseServerUtc(iso);
     if (t == null) return '';
     final diff = DateTime.now().difference(t);
     if (diff.inMinutes < 1) return 'الآن';
