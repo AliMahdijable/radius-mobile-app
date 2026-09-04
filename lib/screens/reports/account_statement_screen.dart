@@ -209,7 +209,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
                       adminUsername: r.adminName,
                       targetName: widget.displayName ?? widget.username,
                       createdAt: r.createdAt,
-balanceAfter: r.balanceAfter,
+                      balanceAfter: r.balanceAfter,
                     ),
                     const SizedBox(height: 4),
                   ],
@@ -261,44 +261,69 @@ balanceAfter: r.balanceAfter,
                           .copyWith(fontSize: 11.5),
                     ),
                     const SizedBox(height: 3),
-                    Text(
-                      '${balance < 0 ? '-' : ''}${formatIQD(balance.abs())} د.ع',
-                      textDirection: ui.TextDirection.ltr,
-                      style: AppType.amount(
-                        color: balance < 0
-                            ? AppColors.onBrandDanger
-                            : AppColors.onBrand,
+                    // ⚠️ يتقلّص ولا يُقصّ — رقمٌ ماليٌّ ناقص أسوأ من صغير.
+                    //
+                    // 🐛 حبّة المدى إلى اليسار كانت **بلا مرونة**، فتأخذ
+                    // مقاسها كاملاً أوّلاً ويأخذ الرصيد ما بقي. قِيس
+                    // بالخطّ الحقيقيّ عند ٣٦٠: الحبّة ١٨٦٫٤ نقطة فيبقى
+                    // للرصيد ٩٧٫٦ وهو يحتاج ١٣٠٫١ لـ«-25,000 د.ع» —
+                    // فينكسر **عنوان الشاشة نفسه**، والأرقام الكبيرة
+                    // (-1,250,000 = ١٦٦٫٣) أسوأ.
+                    //
+                    // والحبّة صارت مرنة فينال الرصيد نصف الفراغ (١٤٢
+                    // عند ٣٦٠) — تكفي الشائع. وما زاد يتقلّص بـ
+                    // `scaleDown` بدل أن يُبتر: «-1,250,000» يُقرأ
+                    // بحجمٍ أصغر، ولا يُقرأ «-1,250,0…» أبداً.
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: AlignmentDirectional.centerStart,
+                      child: Text(
+                        '${balance < 0 ? '-' : ''}${formatIQD(balance.abs())} د.ع',
+                        textDirection: ui.TextDirection.ltr,
+                        maxLines: 1,
+                        style: AppType.amount(
+                          color: balance < 0
+                              ? AppColors.onBrandDanger
+                              : AppColors.onBrand,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: Sp.sm),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 11, vertical: Sp.x6),
-                decoration: BoxDecoration(
-                  color: AppColors.onBrandFill2,
-                  borderRadius: BorderRadius.circular(R.pill),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      balance < 0
-                          ? LucideIcons.trendingDown
-                          : LucideIcons.trendingUp,
-                      size: 15,
-                      color: AppColors.onBrand,
-                    ),
-                    const SizedBox(width: 5),
-                    Text(
-                      '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
-                      textDirection: ui.TextDirection.ltr,
-                      style: AppType.bodyStrong(color: AppColors.onBrand)
-                          .copyWith(fontSize: 11.5),
-                    ),
-                  ],
+              // مرنةٌ الآن: المدى معلومةٌ مساعدة، والرصيد هو الخبر.
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 11, vertical: Sp.x6),
+                  decoration: BoxDecoration(
+                    color: AppColors.onBrandFill2,
+                    borderRadius: BorderRadius.circular(R.pill),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        balance < 0
+                            ? LucideIcons.trendingDown
+                            : LucideIcons.trendingUp,
+                        size: 15,
+                        color: AppColors.onBrand,
+                      ),
+                      const SizedBox(width: 5),
+                      Flexible(
+                        child: Text(
+                          '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
+                          textDirection: ui.TextDirection.ltr,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppType.bodyStrong(color: AppColors.onBrand)
+                              .copyWith(fontSize: 11.5),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],

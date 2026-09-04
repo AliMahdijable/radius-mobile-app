@@ -751,42 +751,63 @@ class _LiveSessionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // ⚠️ لا `Spacer` هنا — بل `Expanded` يلفّ الشارة و`Align` يدفعها.
+          //
+          // 🐛 كان الصفّ: أيقونة + عنوان **ثابت** + `Spacer` + شارةٌ ثابتة،
+          // فلا مرنَ فيه يمتصّ الضيق. قِيس بالخطّ الحقيقيّ عند ٣٢٠:
+          //   ١٨ + ٨ + عنوان ٩٢٫٥ + شارة ١٧٤٫٨ = ٢٩٣٫٣ في ٢٥٦ متاحة
+          // → **فيضٌ أحمر بمقدار ٣٧ نقطة**. وعند ٣٦٠ يمرّ بفارق ٢٫٧ نقطة
+          // فقط — فجلسةٌ أطول («100 يوم») تُفيضه هناك أيضاً.
+          //
+          // والعنوان يبقى ثابتاً عمداً: نصٌّ واحدٌ معلوم لا يحتاج مرونة.
+          // والشارة داخل `Expanded` + `Align.centerEnd` تنال الطرف كما
+          // كانت مع `Spacer`، لكنّها الآن **محدودةٌ بالمتاح** فتقصّ مدّتها
+          // بدل أن تفيض. راجع `test/text_truncation_test.dart`.
           Row(
             children: [
               Icon(Icons.wifi_rounded, size: 18, color: AppColors.brandAccent),
               const SizedBox(width: Sp.sm),
               Text('subscribers.section_connection'.tr(),
                   style: AppType.cardTitle()),
-              const Spacer(),
+              const SizedBox(width: Sp.sm),
               if (secs > 0)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: AppColors.brandSoftBg,
-                    borderRadius: BorderRadius.circular(R.pill),
-                    border: Border.all(color: AppColors.brandSoftBorder),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: AppColors.successDot,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        'متصل منذ ${_formatDuration(secs)}',
-                        style: AppType.bodyStrong(color: AppColors.brandOnSoft)
-                            .copyWith(fontWeight: FontWeight.w700),
-                      ),
-                    ],
-                  ),
-                ),
+                Expanded(
+                    child: Align(
+                        alignment: AlignmentDirectional.centerEnd,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 11, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: AppColors.brandSoftBg,
+                            borderRadius: BorderRadius.circular(R.pill),
+                            border:
+                                Border.all(color: AppColors.brandSoftBorder),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: AppColors.successDot,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Flexible(
+                                child: Text(
+                                  'متصل منذ ${_formatDuration(secs)}',
+                                  style: AppType.bodyStrong(
+                                          color: AppColors.brandOnSoft)
+                                      .copyWith(fontWeight: FontWeight.w700),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ))),
             ],
           ),
           const SizedBox(height: 14),

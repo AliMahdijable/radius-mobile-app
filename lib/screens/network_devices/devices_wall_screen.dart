@@ -263,10 +263,7 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
     //
     // فالحكم صار **نسبيّاً**: بطيءٌ من تجاوز ضعف وسيط جولته. الإزاحة
     // المشتركة تسقط من الطرفين، ويبقى ما يميّز جهازاً عن أقرانه فعلاً.
-    final lat = probed
-        .map((p) => p.responseMs)
-        .whereType<int>()
-        .toList()
+    final lat = probed.map((p) => p.responseMs).whereType<int>().toList()
       ..sort();
     final median = lat.isEmpty ? null : lat[lat.length ~/ 2];
 
@@ -438,8 +435,7 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
       onRefresh: _load,
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.fromLTRB(
-            Sp.md, Sp.sm, Sp.md, Inset.route(context)),
+        padding: EdgeInsets.fromLTRB(Sp.md, Sp.sm, Sp.md, Inset.route(context)),
         itemCount: rows.length,
         // البطاقات وحدها مفاتيح؛ الترويسات والشريط بلا مفاتيح فتُطابَق
         // بالموضع كالعادة.
@@ -598,34 +594,47 @@ class _GroupHeader extends StatelessWidget {
     final summary = _summary;
     return Padding(
       padding: const EdgeInsets.fromLTRB(Sp.xs, Sp.md, Sp.xs, Sp.sm),
-      child: Row(
-        children: [
-          Flexible(
-            child: Text(
-              title,
-              style: AppType.bodyStrong(color: AppColors.textMid),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: Sp.sm),
-          Expanded(child: Container(height: 1, color: AppColors.divider)),
-          if (summary != null) ...[
-            const SizedBox(width: Sp.sm),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: Sp.sm, vertical: Sp.xxs),
-              decoration: BoxDecoration(
-                color: summary.$2.softBg,
-                borderRadius: BorderRadius.circular(R.chip),
-                border: Border.all(color: summary.$2.softBorder),
+      // ⚠️ سقفٌ نسبيّ للعنوان، لا `Flexible` يزاحم الخطّ الفاصل.
+      //
+      // 🐛 كان العنوان `Flexible(flex: 1)` والفاصل `Expanded(flex: 1)`،
+      // فيقتسمان الفراغ **مناصفةً**. قِيس بالخطّ الحقيقيّ عند ٣٢٠:
+      // «منطقة الكرادة الشمالية» يحتاج ١١١٫١ نقطة ويُعطى ٨٥٫٨ — فيُقصّ،
+      // بينما خطٌّ فاصلٌ عرضُه نقطةٌ واحدة يملك ٨٥٫٨.
+      //
+      // والفاصل زينةٌ يجب أن يبتلع الباقي لا أن يطالب بنصفه. فالعنوان
+      // الآن يأخذ مقاسه حتّى ٥٥٪ من العرض، والفاصل يملأ ما بقي بالضبط
+      // — فلا قصَّ ولا فراغَ ميّت.
+      child: LayoutBuilder(builder: (context, c) {
+        return Row(
+          children: [
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: c.maxWidth * 0.55),
+              child: Text(
+                title,
+                style: AppType.bodyStrong(color: AppColors.textMid),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              child: Text(summary.$1,
-                  style: AppType.muted(color: summary.$2.fill)),
             ),
+            const SizedBox(width: Sp.sm),
+            Expanded(child: Container(height: 1, color: AppColors.divider)),
+            if (summary != null) ...[
+              const SizedBox(width: Sp.sm),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: Sp.sm, vertical: Sp.xxs),
+                decoration: BoxDecoration(
+                  color: summary.$2.softBg,
+                  borderRadius: BorderRadius.circular(R.chip),
+                  border: Border.all(color: summary.$2.softBorder),
+                ),
+                child: Text(summary.$1,
+                    style: AppType.muted(color: summary.$2.fill)),
+              ),
+            ],
           ],
-        ],
-      ),
+        );
+      }),
     );
   }
 }
@@ -880,8 +889,8 @@ class _DeviceCardState extends State<_DeviceCard> {
 
     // القراءة الأولى تتقدّم — راجع [DeepProbeScheduler.submit].
     _inFlight = true;
-    DeepProbeScheduler.instance.submit(
-        this, first: urgent || st.vitals == null, () async {
+    DeepProbeScheduler.instance.submit(this, first: urgent || st.vitals == null,
+        () async {
       // ⚠️ `finally` لا حارسٌ عند كلّ مخرج: المخارج أربعة، ونسيان واحدٍ
       // منها يُعيد التجمّد كاملاً. و`!mounted` داخله لا قبله للسبب نفسه.
       try {
@@ -970,76 +979,76 @@ class _DeviceCardState extends State<_DeviceCard> {
           ),
           Column(
             children: [
-          InkWell(
-            onTap: onOpen,
-            borderRadius: BorderRadius.circular(R.md),
-            child: Padding(
-              padding: const EdgeInsets.all(Sp.md),
-              child: Row(
-                children: [
-                  // السهم وحده يطوي؛ بقيّة البطاقة تفتح الصفحة الكاملة.
-                  InkWell(
-                    onTap: onToggle,
-                    borderRadius: BorderRadius.circular(R.sm),
-                    child: Padding(
-                      padding: const EdgeInsets.all(Sp.xs),
-                      child: Icon(
-                        open
-                            ? LucideIcons.chevronDown
-                            : LucideIcons.chevronLeft,
-                        size: 18,
-                        color: AppColors.textMid,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: Sp.sm),
-                  // 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «صورة الجهاز مو معروضة».
-                  //
-                  // الجدار لم يعرضها إطلاقاً — كانت في المخطّط وسقطت
-                  // من التنفيذ. والصورة ليست زينة: تُميّز السكتور من
-                  // السويتش من البرج بلمحة، قبل قراءة اسمٍ واحد.
-                  DeviceImage(
-                    brand: device.brand,
-                    model: device.model,
-                    size: 34,
-                  ),
-                  const SizedBox(width: Sp.sm),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(device.name,
-                            style: AppType.listName(),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis),
-                        Text(
-                          (device.model?.isNotEmpty ?? false)
-                              ? isoJoin([device.ip, device.model!], ' · ')
-                              : iso(device.ip),
-                          style: AppType.muted(),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+              InkWell(
+                onTap: onOpen,
+                borderRadius: BorderRadius.circular(R.md),
+                child: Padding(
+                  padding: const EdgeInsets.all(Sp.md),
+                  child: Row(
+                    children: [
+                      // السهم وحده يطوي؛ بقيّة البطاقة تفتح الصفحة الكاملة.
+                      InkWell(
+                        onTap: onToggle,
+                        borderRadius: BorderRadius.circular(R.sm),
+                        child: Padding(
+                          padding: const EdgeInsets.all(Sp.xs),
+                          child: Icon(
+                            open
+                                ? LucideIcons.chevronDown
+                                : LucideIcons.chevronLeft,
+                            size: 18,
+                            color: AppColors.textMid,
+                          ),
                         ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(width: Sp.sm),
+                      // 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «صورة الجهاز مو معروضة».
+                      //
+                      // الجدار لم يعرضها إطلاقاً — كانت في المخطّط وسقطت
+                      // من التنفيذ. والصورة ليست زينة: تُميّز السكتور من
+                      // السويتش من البرج بلمحة، قبل قراءة اسمٍ واحد.
+                      DeviceImage(
+                        brand: device.brand,
+                        model: device.model,
+                        size: 34,
+                      ),
+                      const SizedBox(width: Sp.sm),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(device.name,
+                                style: AppType.listName(),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
+                            Text(
+                              (device.model?.isNotEmpty ?? false)
+                                  ? isoJoin([device.ip, device.model!], ' · ')
+                                  : iso(device.ip),
+                              style: AppType.muted(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: Sp.sm),
+                      _StatusPill(
+                        tone: tone,
+                        text: _DeviceCard.labelFor(device.lastStatus,
+                            device.lastResponseMs, widget.medianMs),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: Sp.sm),
-                  _StatusPill(
-                    tone: tone,
-                    text: _DeviceCard.labelFor(device.lastStatus,
-                        device.lastResponseMs, widget.medianMs),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
-          // الخانات الثلاث — لا تُرسَم للمعطّل: لا معنى لقراءة معالجٍ
-          // لجهازٍ لا يردّ، ولافتة «آخر ظهور» أنفع في مكانها.
-          if (!isDown)
-            ValueListenableBuilder<VitalsState>(
-              valueListenable: widget.vitals,
-              builder: (_, st, __) => _VitalsStrip(state: st),
-            ),
+              // الخانات الثلاث — لا تُرسَم للمعطّل: لا معنى لقراءة معالجٍ
+              // لجهازٍ لا يردّ، ولافتة «آخر ظهور» أنفع في مكانها.
+              if (!isDown)
+                ValueListenableBuilder<VitalsState>(
+                  valueListenable: widget.vitals,
+                  builder: (_, st, __) => _VitalsStrip(state: st),
+                ),
               // سطرٌ مضمّن بوزن شريط المقاييس نفسه — لا صندوق.
               //
               // الصندوق الأبيض بحدوده كان يأخذ من البطاقة غير المتّصلة
@@ -1159,7 +1168,8 @@ class _Note extends StatelessWidget {
       child: Opacity(
         opacity: dim ? 0.6 : 1,
         child: Text(text,
-            textAlign: TextAlign.center, style: AppType.muted(color: tone.fill)),
+            textAlign: TextAlign.center,
+            style: AppType.muted(color: tone.fill)),
       ),
     );
   }
@@ -1335,8 +1345,7 @@ class _DetailHeading extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, Sp.md, 0, Sp.xs),
-      child: Text(text,
-          style: AppType.muted(color: AppColors.brandAccent)),
+      child: Text(text, style: AppType.muted(color: AppColors.brandAccent)),
     );
   }
 }
@@ -1439,8 +1448,7 @@ class _PeerRow extends StatelessWidget {
                 _MiniChip(text: '${peer.ccq}٪', tone: ccqTone),
                 const SizedBox(width: Sp.x6),
               ],
-              if (sigTone != null)
-                _MiniChip(text: '$sig', tone: sigTone),
+              if (sigTone != null) _MiniChip(text: '$sig', tone: sigTone),
             ],
           ),
           if (sub.isNotEmpty)
@@ -1462,8 +1470,7 @@ class _MiniChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: Sp.x6, vertical: Sp.xxs),
+      padding: const EdgeInsets.symmetric(horizontal: Sp.x6, vertical: Sp.xxs),
       decoration: BoxDecoration(
         color: tone.softBg,
         borderRadius: BorderRadius.circular(R.chip),
