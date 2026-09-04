@@ -97,6 +97,29 @@ class DeviceStatsCache {
     return at == null ? null : DateTime.now().difference(at);
   }
 
+  /// يحفظ القراءة المعروضة — لتُعاد البطاقة بلا جلسة.
+  ///
+  /// 🐛 بلاغ المستخدم ٢٠٢٦-٠٩-٠٤: «إذا أطلع وأطبّ للتطبيق عشر مرّات كلّ
+  /// مرّة يرجع يفحصهن». والسبب أنّ حالة الشاشة تموت مع الشاشة، والمخزن
+  /// لم يكن يحمل ما يُعيد الرسم — فلا خيار إلّا جلسةٌ جديدة.
+  void putVitals(int deviceId, List<Object?> vitals, Object? detail) {
+    final e = _byId.putIfAbsent(deviceId, _Entry.new);
+    e.vitals = vitals;
+    e.detail = detail;
+    e.vitalsAt = DateTime.now();
+  }
+
+  /// القراءة المحفوظة إن كانت أحدث من [maxAge]، وإلّا `null`.
+  ({List<Object?> vitals, Object? detail, DateTime at})? vitalsOf(
+    int deviceId,
+    Duration maxAge,
+  ) {
+    final e = _byId[deviceId];
+    if (e == null || e.vitals == null || e.vitalsAt == null) return null;
+    if (DateTime.now().difference(e.vitalsAt!) > maxAge) return null;
+    return (vitals: e.vitals!, detail: e.detail, at: e.vitalsAt!);
+  }
+
   /// عيّنة عدّادات لحساب المرور.
   void putSample(int deviceId, Map<String, ({int rx, int tx})> counters) {
     if (counters.isEmpty) return;
@@ -122,6 +145,15 @@ class DeviceStatsCache {
 class _Entry {
   Object? raw;
   DateTime? rawAt;
+
+  /// القراءة **المعروضة** كما بُنيت من الحمولة — لا الحمولة نفسها.
+  ///
+  /// ⚠️ بلا هذا لا سبيل لإعادة رسم بطاقةٍ من المخزن: تحويل `raw` إلى
+  /// خاناتٍ يقع داخل `DeviceVitals.fetch` التي تبدأ بفتح جلسة. فكانت
+  /// `seedTtl` نافذةَ **بذرٍ للوحة المفردة** لا نافذةَ منعِ فحص.
+  List<Object?>? vitals;
+  Object? detail;
+  DateTime? vitalsAt;
 
   /// هل تحمل المنافذ والعملاء، أم ثلاثة أرقام فقط؟
   bool detailed = false;

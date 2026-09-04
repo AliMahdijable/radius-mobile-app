@@ -688,6 +688,30 @@ class _DeviceCardState extends State<_DeviceCard> {
   @override
   void initState() {
     super.initState();
+    // ── بذرٌ من المخزن قبل أيّ جلسة ────────────────────────────
+    //
+    // 🐛 بلاغ المستخدم ٢٠٢٦-٠٩-٠٤: «إذا أطلع وأطبّ للتطبيق عشر مرّات
+    // كلّ مرّة يرجع يفحصهن. كلّش مزعج».
+    //
+    // والسبب أنّ حاجز الطزاجة كان يقرأ من `VitalsStore` — وهي حقلٌ في
+    // حالة الشاشة يُمسح في `dispose`. فكلّ عودةٍ تبدأ من `idle`، فيرى
+    // الحاجزُ «لا قراءة» ويُرسل جلسةً بأولويّةٍ قصوى لكلّ بطاقة مرئيّة.
+    //
+    // والمخزن العالميّ كان يحمل الحمولة طازجةً طوال الوقت — لكنّ أحداً
+    // لم يسأله. الآن نبذر منه، فتظهر الأرقام فوراً ويصمت الحاجز.
+    final seed = DeviceStatsCache.instance
+        .vitalsOf(widget.device.id, DeviceVitals.freshFor);
+    if (seed != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        widget.onVitals(VitalsState(
+          vitals: seed.vitals.cast<Vital>(),
+          detail: seed.detail as DeviceDetail?,
+          at: seed.at,
+        ));
+      });
+    }
+
     // بعد الإطار: الجلب يكتب في مُنبّهٍ يستمع إليه بناؤنا، والكتابة
     // أثناء البناء تُسقط إطاراً بخطأ setState-during-build.
     WidgetsBinding.instance.addPostFrameCallback((_) => _kick());
@@ -735,6 +759,16 @@ class _DeviceCardState extends State<_DeviceCard> {
     final needsDetail = widget.open && !hasDetail;
     if (st.loading || (st.isFresh && !needsDetail)) return;
 
+    // ⚠️ والمخزن مرجعٌ ثانٍ — لأنّ حالة الشاشة تموت مع الشاشة.
+    //
+    // `st.isFresh` أعلاه يكفي ما دام المستخدم في القسم. أمّا بعد خروجٍ
+    // وعودة فهي دائماً `false`، والمخزن وحده يعرف أنّ الجهاز قُرئ قبل
+    // ثوانٍ. بلا هذا السطر يبقى كلّ رجوعٍ جولةَ فحصٍ كاملة.
+    if (!needsDetail && !urgent) {
+      final age = DeviceStatsCache.instance.ageOf(widget.device.id);
+      if (age != null && age < DeviceVitals.freshFor) return;
+    }
+
     // الامتناع الصريح أرخص من محاولةٍ تفشل: كلّ محاولة تحجز خانةً من
     // ستّ وتنتظر مهلتها كاملةً قبل أن تُحرّرها.
     final skip = DeviceVitals.skipReason(widget.device);
@@ -763,17 +797,31 @@ class _DeviceCardState extends State<_DeviceCard> {
           // المفتوحة وحدها تدفع ثمن التفاصيل — راجع [DeviceVitals.fetch].
           detailed: widget.open,
         );
-        if (!mounted) return;
-        // العيّنة تُحفظ **قبل** النشر: الجلسة القادمة تطرح منها.
-        widget.onSample(r.counters);
-        // والحمولة الخام تُحفظ لتُبذَر بها اللوحة المفردة — فلا يدفع
-        // المستخدم ثمن الجلسة مرّتين حين ينقر البطاقة.
+        // ── الكتابة في المخزن **قبل** حارس mounted ─────────────
+        //
+        // 🐛 كان `if (!mounted) return;` هنا يسبق الحفظ، فجلسةٌ اكتملت
+        // بعد مغادرة المستخدم تُرمى كلّيّاً: لا حمولة ولا عيّنة. وستّ
+        // جلساتٍ جارية (سقف المجدول) تُهدر هكذا في كلّ خروج.
+        //
+        // والأسوأ أنّ `ageOf` يبقى `null` لتلك الأجهزة، فيُعيدها
+        // التسخين إلى الطابور عند العودة — جولةٌ ثانية على ما دُفع
+        // ثمنه فعلاً.
+        //
+        // المخزن عالميٌّ لا علاقة له بالويدجت، فالكتابة فيه آمنةٌ بعد
+        // التخلّص. والحارس يبقى — لكن قبل النشر في الواجهة وحده.
         if (r.raw != null) {
           // الرتبة تتبع ما طلبناه فعلاً — وإلّا ظننّا الخفيفة كاملةً
           // فعرضنا تفصيلاً فارغاً ولم تُرقَّ أبداً.
           DeviceStatsCache.instance
               .putRaw(widget.device.id, r.raw!, detailed: widget.open);
         }
+        // والقراءة المعروضة تُحفظ كذلك — بها يُبذَر رجوعُ المستخدم.
+        DeviceStatsCache.instance
+            .putVitals(widget.device.id, r.vitals, r.detail);
+
+        if (!mounted) return;
+        // العيّنة تُحفظ **قبل** النشر: الجلسة القادمة تطرح منها.
+        widget.onSample(r.counters);
         widget.onVitals(VitalsState(
           vitals: r.vitals,
           detail: r.detail,

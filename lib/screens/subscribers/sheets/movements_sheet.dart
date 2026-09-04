@@ -9,6 +9,7 @@ import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/util/server_time.dart';
 
 /// Subscriber movements / account-statement sheet — direct port of
 /// v1's _SubscriberMovementsSheetContent from
@@ -191,7 +192,10 @@ class _MovementsSheetState extends State<_MovementsSheet> {
   }
 
   String _dateGroupKey(String iso) {
-    final dt = DateTime.tryParse(iso);
+    // ⚠️ `parseServerUtc` لا `DateTime.tryParse`: التوقيت من قاعدتنا
+    // وهي UTC، والنصّ عارٍ. القراءة المحلّيّة تُزيحه ثلاث ساعات — فحركةٌ
+    // بعد منتصف الليل تُجمَّع تحت «أمس».
+    final dt = parseServerUtc(iso);
     if (dt == null) return '—';
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -409,9 +413,23 @@ class _MovementTile extends StatelessWidget {
     final rawAmt = txn['amount'];
     final amount = _readAmount(rawAmt);
 
+    // 🐛 بلاغ ٢٠٢٦-٠٩-٠٤: «من أسدّد دين أو أفعّل ما يطلع لي الدين
+    // الباقي وراء الحركة».
+    //
+    // القيمة كانت مسجّلةً في `action_data.new_balance` طوال الوقت
+    // (٢٢ ألف تفعيل و١٢ ألف تسديد)، لكنّ نقطة الـAPI كانت تُسقطها من
+    // الردّ. الآن تصل باسم `balance_after`.
+    //
+    // ⚠️ و`null` ليس صفراً: سجلٌّ قديم بلا القيمة يجب أن **يُخفي**
+    // السطر لا أن يعرض «الدين: 0» — وهو رقمٌ يكذب.
+    final rawBalance = txn['balance_after'];
+    final double? balanceAfter =
+        rawBalance == null ? null : _readAmount(rawBalance);
+
     final (icon, color, label) = _visualFor(type, desc);
 
-    final dt = DateTime.tryParse(createdAt);
+    // ⚠️ نفس السبب: UTC عارٍ يُقرأ محلّيّاً فيتأخّر ثلاث ساعات.
+    final dt = parseServerUtc(createdAt);
     final timeStr = dt != null
         ? '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}'
         : '';
@@ -491,6 +509,52 @@ class _MovementTile extends StatelessWidget {
                         .copyWith(fontSize: 12.5, height: 1.55),
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                // ── الدين المتبقّي بعد هذه الحركة ──────────────
+                //
+                // ⚠️ يُخفى عند `null` لا يُعرض صفراً: الصفر رقمٌ يعني
+                // «لا دين عليه»، والغياب يعني «لا نعرف». خلطُهما يجعل
+                // سجلّاً قديماً يبدو كأنّه سدّد كلّ شيء.
+                if (balanceAfter != null) ...[
+                  const SizedBox(height: 5),
+                  Row(
+                    children: [
+                      Icon(
+                        balanceAfter < 0
+                            ? LucideIcons.trendingDown
+                            : (balanceAfter > 0
+                                ? LucideIcons.trendingUp
+                                : LucideIcons.check),
+                        size: 11,
+                        color: balanceAfter < 0
+                            ? AppColors.error
+                            : (balanceAfter > 0
+                                ? AppColors.success
+                                : AppColors.textMid),
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          balanceAfter == 0
+                              ? 'لا دين بعدها'
+                              : (balanceAfter < 0
+                                  ? 'الدين بعدها: '
+                                      '${formatIQD(balanceAfter.abs().round())} د.ع'
+                                  : 'رصيد دائن: '
+                                      '${formatIQD(balanceAfter.round())} د.ع'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppType.label(
+                            color: balanceAfter < 0
+                                ? AppColors.error
+                                : (balanceAfter > 0
+                                    ? AppColors.success
+                                    : AppColors.textMid),
+                          ).copyWith(fontSize: 11.5, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
                 if (admin.isNotEmpty) ...[
