@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/util/server_time.dart';
 
 import '../../../api/device_probe_api.dart';
 import '../../../core/util/format.dart';
@@ -589,7 +590,13 @@ class SubscriberCardV3 extends StatelessWidget {
     }
     final last = sub.lastOnline;
     if (last == null || last.trim().isEmpty) return null;
-    final t = DateTime.tryParse(last.trim());
+    // ⚠️ **لا `parseServerUtc` هنا** — خلافاً لـ`_lastPayText` أسفله.
+    //
+    // `last_online` يأتي من ردّ SAS4 كما هو (server.js:10804 يوسمه
+    // صراحةً `SAS4: data.last_online`)، وتوقيتُ الساس بغداد لا UTC.
+    // فوسمُه Z يُقدّمه ثلاث ساعات ويجعل متّصلاً الآن يبدو متّصلاً منذ
+    // ثلاث. حقلان في ملفٍّ واحد ومصدران مختلفان.
+    final t = parseSasLocal(last);
     if (t == null) return null;
     final mins = DateTime.now().difference(t).inMinutes;
     if (mins < 0) return null;
@@ -605,7 +612,13 @@ class SubscriberCardV3 extends StatelessWidget {
     if (p == null) return null;
     final raw = (p['date'] ?? p['created_at'] ?? p['payment_date'])?.toString();
     if (raw == null || raw.isEmpty) return 'آخر تسديد';
-    final t = DateTime.tryParse(raw.split('.').first.replaceAll('T', ' '));
+    // 🐛 هذا بالضبط ما بلّغ عنه المستخدم ٢٠٢٦-٠٩-٠٤: «تسديد دين منذ:
+    // يقرأ ٣ ساعات حتّى لو هسّة سدّدته».
+    //
+    // تُتبّع الحقل كاملاً: `/api/subscribers/last-payments/:adminId`
+    // → `db.getLastSubscriberFinancialMovements` → `activity_logs.created_at`
+    // — جدولُنا، وقيمُه UTC. فقراءتُه محلّيّاً تُقدّم العدّاد ثلاث ساعات.
+    final t = parseServerUtc(raw);
     if (t == null) return 'آخر تسديد';
     final mins = DateTime.now().difference(t).inMinutes;
     if (mins < 0) return 'آخر تسديد';

@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import '../core/util/server_time.dart';
 import 'package:flutter/foundation.dart';
 
 import 'api_client.dart';
@@ -224,12 +225,19 @@ double _toDouble(dynamic v) {
   return double.tryParse(v?.toString() ?? '') ?? 0;
 }
 
-/// Mirrors v1 manager_movement.dart:51-56 — server stamps UTC; we
-/// add +3h so the displayed timestamp matches Baghdad local. Kept
-/// `isUtc=true` so equality/comparisons in DateTime don't apply the
-/// system's local offset on top.
-DateTime _baghdadTime(dynamic v) {
-  final parsed = DateTime.tryParse(v?.toString() ?? '');
-  return parsed?.toUtc().add(const Duration(hours: 3)) ??
-      DateTime.now().toUtc();
-}
+/// توقيت حركة المدير — من `manager_balance_movements`، وهو جدولُنا بـUTC.
+///
+/// ⚠️ كان هنا ترقيعٌ يدويّ: `.toUtc().add(const Duration(hours: 3))` مع
+/// إبقاء `isUtc = true`. وهو **ثالث** ترقيعٍ بـ٣ ساعات في المشروع
+/// (الآخران في `report_log_tile` و`account-statement`).
+///
+/// وكان يُصلح العرض ويكسر المقارنة: `DateTime` بـ`isUtc=true` تحمل
+/// «١٤:٠٠» تعني ١٤:٠٠ عالميّاً أي ١٧:٠٠ ببغداد. و
+/// `all_managers_debts_screen.dart:213` يقارنها بـ`isBefore` مع تاريخٍ
+/// **محلّيّ** من منتقي التواريخ — فالفلترة بالمدى منحرفةٌ ثلاث ساعات.
+/// حركةٌ في أوّل يومٍ مختار قد تسقط من التقرير.
+///
+/// `parseServerUtc` تُعطي **نفس العرض** في بغداد (`_fmtTime` يقرأ
+/// `.hour` من قيمةٍ محلّيّة)، وتُصلح المقارنة، وتعمل في أيّ منطقة.
+DateTime _baghdadTime(dynamic v) =>
+    parseServerUtc(v?.toString()) ?? DateTime.now();
