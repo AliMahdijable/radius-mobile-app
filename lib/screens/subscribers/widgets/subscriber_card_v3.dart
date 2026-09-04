@@ -441,6 +441,22 @@ class SubscriberCardV3 extends StatelessWidget {
 
   Widget _lastPayBar() {
     final amount = _lastPayAmount();
+    // 🐛 انحدار ٢٠٢٦-٠٩-٠٤ (لقطة المستخدم): «تسديد دين قبل 22…» مقصوصاً
+    // عند الرقم، وإلى جانبه فراغٌ واسع ثمّ المبلغ.
+    //
+    // السبب `Spacer()` كان هنا. و`Spacer` **هو** `Expanded(flex: 1)`،
+    // فيقتسم الفراغ الحرّ مع `Flexible(flex: 1)` بالتساوي: قِيس عند
+    // ٣٦٠px فنال النصّ ٥٩٫٨ نقطة وهو يحتاج ٢٢٥٫٥.
+    //
+    // ⚠️ وهذا **العطل نفسه** الذي أُصلح في `_debtBar` أعلاه يوم
+    // ٢٠٢٦-٠٨-٢٩ — بقي في توأمه أسفله. فحين يُصلَح نمطٌ في دالّة،
+    // تُفتّش أخواتها في الملفّ نفسه قبل إغلاق الأمر.
+    //
+    // والعلاج: `Expanded` وحده مرناً. في الـ`Row` تأخذ العناصر غير
+    // المرنة مقاسها الطبيعيّ أوّلاً، ثمّ يذهب **كلّ** الباقي للمرن —
+    // فالمبلغ كاملٌ دائماً والنصّ يأخذ ما تبقّى بالضبط، بلا فراغٍ ميّت.
+    //
+    // الحارس: `test/text_truncation_test.dart` (يسقط على النسخة القديمة).
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
@@ -452,7 +468,7 @@ class SubscriberCardV3 extends StatelessWidget {
         children: [
           Icon(Icons.task_alt_rounded, size: 16, color: AppColors.success),
           const SizedBox(width: 8),
-          Flexible(
+          Expanded(
             child: Text(
               _lastPayText()!,
               style: AppType.body(),
@@ -461,7 +477,7 @@ class SubscriberCardV3 extends StatelessWidget {
             ),
           ),
           if (amount != null) ...[
-            const Spacer(),
+            const SizedBox(width: 8),
             Text(
               '${formatIQD(amount)} د.ع',
               style: AppType.bodyStrong(color: AppColors.success)
