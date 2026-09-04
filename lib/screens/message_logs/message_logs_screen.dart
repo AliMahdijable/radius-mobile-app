@@ -647,12 +647,11 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
   }
 
   String _formatTime(String raw) {
-    // ⚠️ من `whatsapp_message_queue` و`whatsapp_send_logs` — جدولانا،
-    // وقيمُهما UTC (تُحقّق: الخادم وMySQL على UTC).
+    // من `whatsapp_message_queue` و`whatsapp_send_logs` — جدولانا.
     //
-    // و`.toLocal()` السابق كان بلا أثر: النصّ العاري يُنتج DateTime
-    // محلّيّاً أصلاً، فتحويلُه إلى محلّيّ لا يفعل شيئاً. يبدو كأنّه
-    // يحرس ولا يحرس.
+    // ⚠️ **لم يكن معطوباً**: `.toLocal()` السابق كان يعمل صحيحاً لأنّ
+    // الخلفيّة ترسل النصّ موسوماً بـZ. التبديل هنا توحيدٌ للمدخل لا
+    // إصلاحُ عطل — فيُقرأ الاصطلاح من اسم الدالّة بدل أن يُستنتج.
     final dt = parseServerUtc(raw);
     if (dt == null) return raw;
     final now = DateTime.now();

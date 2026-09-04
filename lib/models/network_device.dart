@@ -119,14 +119,15 @@ class NetworkDevice {
         location: normalizeDigits(j['location']?.toString()),
         notes: normalizeDigits(j['notes']?.toString()),
         hasCredentials: _parseHasCreds(j['has_credentials']),
-        // ⚠️ الثلاثة من `admin_devices` — جدولُنا، وقيمُه UTC.
+        // الثلاثة من `admin_devices` — جدولُنا، وتصل موسومةً بـZ.
         //
-        // تُحقّق بالقياس: `last_probed_at` يساوي `NOW()` في القاعدة،
-        // والخادم على UTC. فقراءتها محلّيّاً تُقدّم «آخر فحص» ثلاث
-        // ساعات، ويصير جهازٌ فُحص للتوّ يبدو مفحوصاً منذ ثلاث ساعات.
+        // 🐛 و`lastProbedAt` **كان معطوباً**: بلا `toLocal()` تبقى
+        // القيمة عالميّة، ومن يقرأ منها `.hour` — كـ`_clock` في
+        // `devices_wall_screen` — يعرض ١٢:٢٤ بدل ١٥:٢٤. فجهازٌ فُحص
+        // للتوّ يبدو مفحوصاً منذ ثلاث ساعات.
         //
-        // و`.toLocal()` على `status_since` كان بلا أثر: النصّ العاري
-        // يُنتج DateTime محلّيّاً أصلاً.
+        // أمّا `statusSince` فكان سليماً (كان يستدعي `toLocal`)،
+        // والتبديل هنا توحيدٌ للمدخل لا إصلاح.
         lastProbedAt: parseServerUtc(j['last_probed_at']?.toString()),
         lastStatus: (j['last_status'] ?? 'unknown').toString(),
         statusSince: parseServerUtc(j['status_since']?.toString()),

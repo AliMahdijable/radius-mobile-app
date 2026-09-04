@@ -584,8 +584,10 @@ class _Row extends StatelessWidget {
 
   static String _humanCreatedAt(String? iso) {
     if (iso == null || iso.isEmpty) return '';
-    // ⚠️ `created_at` من `activity_logs` — جدولُنا، UTC. قراءتُه
-    // محلّيّاً تجعل نشاطاً وقع الآن يُقرأ «قبل ٣ س».
+    // `created_at` من `activity_logs` — جدولُنا.
+    //
+    // ⚠️ **لم يكن معطوباً**: الاستعمال هنا `difference` وهي تقارن
+    // لحظاتٍ مطلقة بلا نظرٍ إلى `isUtc`. التبديل توحيدٌ للمدخل.
     final t = parseServerUtc(iso);
     if (t == null) return '';
     final diff = DateTime.now().difference(t);
