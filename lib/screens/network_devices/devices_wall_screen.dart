@@ -409,6 +409,31 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
     // عنصراً واحداً يضمّ بطاقاتها، لبُنيت منطقةٌ فيها أربعون جهازاً
     // دفعةً، ولفتحت أربعين جلسةً لجهازٍ واحدٍ مرئيّ.
     final rows = _rows;
+
+    // ── معرّف الجهاز → موضعه، لإعادة تموضع البطاقة بدل هدمها ────────
+    //
+    // 🐛 النصف الثاني من بلاغ «يجلب ٣ ويوقف».
+    //
+    // الترتيب الافتراضيّ `health`، وفاصلُ التعادل فيه `lastResponseMs`
+    // تنازليّاً (`device_sort.dart`). وجولة المسح تدفع أزمنة استجابةٍ
+    // جديدة إلى `_all` **كلّ ٤٠٠ms** — فيتبدّل الترتيب مراراً في الجولة
+    // الواحدة، وتُعاد المناطق نفسها ترتيباً بعدد المنقطعين.
+    //
+    // و`ListView.builder` بلا `findChildIndexCallback` لا يعرف أنّ
+    // البطاقة ذات المفتاح انتقلت — يهدمها ويبني غيرها. وهدمُها يستدعي
+    // `cancel(this)` فتُسحب جلستُها من الطابور قبل أن تبدأ. فتُقصف
+    // الجلسات وتُعاد بلا نهاية، وقد لا تكتمل واحدةٌ منها.
+    //
+    // ⚠️ والمفتاح `ValueKey(device.id)` موجودٌ سلفاً — وهو ما يجعل هذا
+    // آمناً: نُرجع موضع **نفس** المعرّف لا موضعاً مجاوراً. وخطأٌ هنا
+    // يعني مقاييس برجٍ فوق اسم برجٍ آخر، وهو ما يحذّر منه تعليق المفتاح
+    // أدناه — لذا نبني الخريطة من `rows` نفسها لا من مصدرٍ ثانٍ.
+    final indexById = <int, int>{};
+    for (var i = 0; i < rows.length; i++) {
+      final r = rows[i];
+      if (r is _DeviceRow) indexById[r.device.id] = i;
+    }
+
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.builder(
@@ -416,6 +441,10 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
         padding: EdgeInsets.fromLTRB(
             Sp.md, Sp.sm, Sp.md, Inset.route(context)),
         itemCount: rows.length,
+        // البطاقات وحدها مفاتيح؛ الترويسات والشريط بلا مفاتيح فتُطابَق
+        // بالموضع كالعادة.
+        findChildIndexCallback: (key) =>
+            key is ValueKey<int> ? indexById[key.value] : null,
         itemBuilder: (context, i) => switch (rows[i]) {
           _BannerRow() => const _OffNetworkBanner(),
           final _HeaderRow r => _GroupHeader(
@@ -712,6 +741,28 @@ class _DeviceCardState extends State<_DeviceCard> {
       });
     }
 
+    // ── ومحوُ علَمٍ ورثناه عن بطاقةٍ ميّتة ─────────────────────
+    //
+    // الحارس صار محلّيّاً، فالعلَم الموروث لم يعد يجمّدنا. لكنّه يبقى
+    // مرئيّاً: `_VitalsStrip` يعتّم القيمة إلى ٠٫٥٥ ما دام `loading`.
+    // فبطاقةٌ سليمةٌ تُعرض باهتةً بلا سبب حتّى أوّل نتيجة.
+    //
+    // ⚠️ ولو ارتدّ حارسُ الطزاجة (`isFresh`) لبقيت باهتةً إلى الأبد.
+    final inherited = widget.vitals.value;
+    if (inherited.loading) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final cur = widget.vitals.value;
+        if (!cur.loading || _inFlight) return;
+        widget.onVitals(VitalsState(
+          vitals: cur.vitals,
+          detail: cur.detail,
+          error: cur.error,
+          at: cur.at,
+        ));
+      });
+    }
+
     // بعد الإطار: الجلب يكتب في مُنبّهٍ يستمع إليه بناؤنا، والكتابة
     // أثناء البناء تُسقط إطاراً بخطأ setState-during-build.
     WidgetsBinding.instance.addPostFrameCallback((_) => _kick());
@@ -745,6 +796,47 @@ class _DeviceCardState extends State<_DeviceCard> {
     super.dispose();
   }
 
+  /// جلسةٌ لهذه البطاقة قيد التنفيذ.
+  ///
+  /// 🐛 بلاغ المستخدم ٢٠٢٦-٠٩-٠٤: «الدخول ع الأجهزة نظرة عامّة يجلب ٣
+  /// ويوقف، أخرج وأرجع ٣ مرّات حتّى يظهرهم كلّهم».
+  ///
+  /// ⚠️ وهو **تكرارٌ** لبلاغ ٢٠٢٦-٠٩-٠٢ («جاب بس كم واحد وتوقّف بالكامل»)
+  /// المذكور في `DeepProbeScheduler.jobTimeout`. تلك الجولة أصلحت تسريب
+  /// **خانة المجدول**؛ وبقي تسريبٌ ثانٍ في **علَم الواجهة** يُنتج العرَض
+  /// نفسه بآليّةٍ أخرى.
+  ///
+  /// ── الآليّة ────────────────────────────────────────────────────
+  /// كان الحارس يقرأ `widget.vitals.value.loading` — وذلك المُنبّه يعيش
+  /// في `VitalsStore` **على الشاشة** لا على البطاقة، و`of()` تُرجع
+  /// المُنبّه نفسه لكلّ بطاقةٍ تُبنى لاحقاً لهذا الجهاز.
+  ///
+  /// و`loading: true` يُنشر **قبل** `submit`، وكلّ مسارٍ يُطفئه محروسٌ
+  /// بـ`mounted` ولا واحد منها في `finally`. فبطاقةٌ تُهدَم بعد النشر
+  /// تترك `true` في مُنبّهٍ بلا مالك:
+  ///
+  ///   • `dispose` يستدعي `cancel(this)` فتُسحب المهمّة ولا تُنشر أبداً
+  ///   • أو تبدأ بعد الموت فترتدّ عند `if (!mounted) return`
+  ///   • أو تنتهي بعده فترتدّ عند الحارسين ٨٢٢ و٨٣١
+  ///
+  /// فالبطاقة البديلة ترث `true`، ويرتدّ حارسُها فوراً، ولا `pulse` ولا
+  /// `didUpdateWidget` ولا نقرةٌ تُحرّرها — لأنّ الحارس **يسبق** فحص
+  /// المخزن أدناه. تجمد على «يقيس…» ما دامت الشاشة مفتوحة، والرقم
+  /// موجودٌ في المخزن العالميّ لا يقرؤه أحد.
+  ///
+  /// والخروج يُهدم `VitalsStore` فتُمحى الأعلام كلّها، والعودة تبذر من
+  /// المخزن — فيظهر من نجح سابقاً وتُنفَق الخانات الستّ على جددٍ غيرهم.
+  /// ثلاث دخلاتٍ فيظهر الجميع. وهو وصف المستخدم حرفاً بحرف.
+  ///
+  /// ── ولماذا العلَم هنا لا هناك ──────────────────────────────────
+  /// «جلسةٌ قيد التنفيذ» صفةُ **البطاقة** لا صفةُ الجهاز: مالكها هو من
+  /// أطلقها، فيجب أن تموت بموته. ووضعُها في مخزنٍ يعمّر أطول منها هو
+  /// الخطأ نفسه بصيغةٍ أخرى.
+  ///
+  /// و`loading` يبقى منشوراً في المخزن — لكن للعرض وحده (تعتيم ٠٫٥٥ في
+  /// `_VitalsStrip`)، لا كحارس.
+  bool _inFlight = false;
+
   void _kick({bool urgent = false}) {
     if (!mounted) return;
     final st = widget.vitals.value;
@@ -757,7 +849,7 @@ class _DeviceCardState extends State<_DeviceCard> {
     // جلبت التفاصيل بعد آخر نشرٍ لهذه البطاقة.
     final hasDetail = DeviceStatsCache.instance.isDetailed(widget.device.id);
     final needsDetail = widget.open && !hasDetail;
-    if (st.loading || (st.isFresh && !needsDetail)) return;
+    if (_inFlight || (st.isFresh && !needsDetail)) return;
 
     // ⚠️ والمخزن مرجعٌ ثانٍ — لأنّ حالة الشاشة تموت مع الشاشة.
     //
@@ -787,10 +879,13 @@ class _DeviceCardState extends State<_DeviceCard> {
     ));
 
     // القراءة الأولى تتقدّم — راجع [DeepProbeScheduler.submit].
+    _inFlight = true;
     DeepProbeScheduler.instance.submit(
         this, first: urgent || st.vitals == null, () async {
-      if (!mounted) return;
+      // ⚠️ `finally` لا حارسٌ عند كلّ مخرج: المخارج أربعة، ونسيان واحدٍ
+      // منها يُعيد التجمّد كاملاً. و`!mounted` داخله لا قبله للسبب نفسه.
       try {
+        if (!mounted) return;
         final r = await DeviceVitals.fetch(
           widget.device,
           prev: widget.prevSample(),
@@ -835,6 +930,8 @@ class _DeviceCardState extends State<_DeviceCard> {
           error: 'تعذّر الاتّصال',
           at: DateTime.now(),
         ));
+      } finally {
+        _inFlight = false;
       }
     });
   }

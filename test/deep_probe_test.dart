@@ -493,8 +493,23 @@ void main() {
       expect(wall.contains('if (!old.open && widget.open) _kick(urgent: true)'),
           isTrue);
       // والطازج يُحترم حتّى مع الاستعجال — لا جلسة لجهازٍ قُرئ قبل ثوانٍ.
-      expect(wall.contains('if (st.loading || (st.isFresh && !needsDetail)) return;'),
+      expect(
+          wall.contains('if (_inFlight || (st.isFresh && !needsDetail)) return;'),
           isTrue);
+
+      // 🚨 والحارس لا يقرأ `loading` من المخزن — هذا هو العطل بعينه.
+      //
+      // بلاغ ٢٠٢٦-٠٩-٠٤: «يجلب ٣ ويوقف». المُنبّه يعيش في `VitalsStore`
+      // على **الشاشة**، و`of()` تُرجعه لكلّ بطاقةٍ تالية لنفس الجهاز.
+      // فبطاقةٌ تُهدَم بعد نشر `loading: true` تترك العلَم مرفوعاً بلا
+      // مالك، فتجمد كلّ بطاقةٍ بعدها على «يقيس…» ما دامت الشاشة مفتوحة.
+      //
+      // العلَم الآن `_inFlight` في حالة البطاقة، ويُخفَض في `finally`.
+      expect(wall.contains('st.loading ||'), isFalse,
+          reason: '🚨 عاد الحارس يقرأ علَماً يعمّر أطول من البطاقة');
+      expect(wall.contains('bool _inFlight = false;'), isTrue);
+      expect(wall.contains('_inFlight = false;'), isTrue,
+          reason: 'يجب أن يُخفَض في finally لا عند كلّ مخرج');
     });
   });
 
