@@ -19,6 +19,7 @@ import '../../widgets/skeleton.dart';
 import 'bulk_scan_screen.dart';
 import 'device_alerts_screen.dart';
 import 'device_sort.dart';
+import 'probe_backoff.dart';
 import 'devices_wall_screen.dart';
 import 'network_device_details_screen.dart';
 import 'network_device_form_sheet.dart';
@@ -86,6 +87,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
   int _probeRoundCount = 0;
 
+  /// طلب فحصٍ شاملٍ وصل وجولةٌ جارية — يُنفَّذ بعدها. راجع [_probeAll].
+  bool _forcePending = false;
+
   Timer? _probeTimer;
 
   /// كشف الطُرُز جارٍ — يمنع تشغيلين متوازيين.
@@ -137,7 +141,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       _startProbeTimer();
       // probe فوري لتحديث الحالة بعد العودة
       if (_all.isNotEmpty) {
-        _probeAll();
+        _probeAll(force: true);
         // يستأنف من حيث وقف — ما سُخِّن لا يُعاد.
         DeviceWarmup.instance.start(_all);
       }
@@ -153,7 +157,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     if (_mayProbe) {
       _startProbeTimer();
       // فحص فوري عند العودة — القيم المعروضة قد تكون قديمة بدقائق.
-      if (_all.isNotEmpty) _probeAll();
+      if (_all.isNotEmpty) _probeAll(force: true);
     } else {
       _probeTimer?.cancel();
     }
@@ -165,6 +169,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     // و`_onActiveChanged` كلّها تستدعيها، ونسيان الحارس في واحدة يعيد
     // العطل كاملاً.
     if (!_mayProbe) return;
+    // ⚠️ المؤقّت وحده بلا `force` — هو صاحب التباطؤ وسببُ وجوده.
     _probeTimer = Timer.periodic(_probeInterval, (_) => _probeAll());
   }
 
@@ -199,7 +204,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       // تسخينٌ صامت في الخلفيّة: يملأ مخزن القراءات ما دام المدير
       // هنا، فيكون فتحُ أيّ جهازٍ فوريّاً. راجع [DeviceWarmup].
       DeviceWarmup.instance.start(_all);
-      _probeAll();
+      _probeAll(force: true);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -284,11 +289,11 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
         _regionsById = {for (final r in regions) r.id: r};
         _error = null;
       });
-      await _probeAll();
+      await _probeAll(force: true);
     } catch (e) {
       // فشل الـlist fetch لا يوقف الـprobe — الأجهزة القديمة تُفحص كما هي.
       if (_all.isNotEmpty) {
-        await _probeAll();
+        await _probeAll(force: true);
       } else if (mounted) {
         setState(() => _error = humanError(e, fallback: 'فشل التحميل'));
       }
@@ -301,20 +306,40 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// alerts أم نتخطّاها. السبب: لو المدير خرج من شبكة الـWiFi (رجع لسيلولار
   /// مثلاً)، **كل** الأجهزة رح تفشل في نفس الجولة — هذا مو "أعطال أجهزة"
   /// بل تغيير شبكة عند الهاتف. نتخطّى الـalerts في هذي الحالة.
-  /// هل نُفحص هذا الجهاز في الجولة الحاليّة (backoff)؟
-  /// جهاز بـ0 فشل: كل جولة (20s)
-  /// جهاز بـ2 فشل: كل جولتين (40s)
-  /// جهاز بـ4 فشل: كل 4 جولات (80s)
-  /// جهاز بـ6+ فشل: كل 6 جولات (120s max — يوفّر باتري)
-  bool _shouldProbeInRound(int deviceId) {
-    final fails = _consecutiveFailures[deviceId] ?? 0;
-    if (fails == 0) return true;
-    final skipEvery = fails.clamp(1, 6);
-    return _probeRoundCount % skipEvery == 0;
-  }
+  bool _shouldProbeInRound(int deviceId, {required bool force}) =>
+      deviceProbeDue(
+        force: force,
+        consecutiveFailures: _consecutiveFailures[deviceId] ?? 0,
+        round: _probeRoundCount,
+      );
 
-  Future<void> _probeAll() async {
-    if (_probing || _all.isEmpty || !_mayProbe) return;
+  /// [force] يتخطّى تباطؤ الفشل ويفحص **كلّ** جهاز.
+  ///
+  /// 🐛 بلاغ المستخدم ٢٠٢٦-٠٩-٠٤: «الدخول ع الأجهزة يجلب ٣ ويوقف، أخرج
+  /// وأرجع للقسم ٣ مرّات حتّى يظهرهم كلّهم».
+  ///
+  /// والسبب أنّ التباطؤ كان يُطبَّق على **كلّ** استدعاء. وهو مقصودٌ
+  /// للمؤقّت وحده (جولة كلّ ٢٠ ثانية بلا ناظر)، بينما دخول التبويب
+  /// وسحب التحديث والعودة من الخلفيّة كلّها أفعال **يطلبها المستخدم**
+  /// وينتظر جوابها الآن.
+  ///
+  /// ولماذا كانت ثلاثة بالذات: هاتف المدير غالباً على بيانات الجوّال لا
+  /// على شبكة الأجهزة، فتتراكم إخفاقاتها حتّى تبلغ السقف ٦. وشاشة
+  /// التبويب داخل `IndexedStack` **لا تُهدَم**، فيبقى `_probeRoundCount`
+  /// و`_consecutiveFailures` حيّين طوال عمر التطبيق. فكلّ دخولٍ يفحص من
+  /// تقسم دورتُه رقمَ الجولة وحده — أقلّيّةٌ تتبدّل في كلّ مرّة، وثلاث
+  /// دخلاتٍ تلزم لتغطية الجميع. وهو بالضبط ما وصفه المستخدم.
+  Future<void> _probeAll({bool force = false}) async {
+    // ⚠️ جولةٌ جارية لا تُسقط طلب المستخدم بل تؤجّله.
+    //
+    // المؤقّت يطلق كلّ ٢٠ ثانية، فاحتمال أن يدخل المدير التبويب أثناء
+    // جولةٍ سارية عالٍ. والحارس القديم كان يبتلع الطلب صامتاً — فيدخل
+    // المدير فلا يتحدّث شيء، وهو نصف الشكوى.
+    if (_probing) {
+      if (force) _forcePending = true;
+      return;
+    }
+    if (_all.isEmpty || !_mayProbe) return;
     // 2026-08-18: setState — الـAppBar refresh icon يعتمد على _probing
     // لتبديل CPI ↔ زرّ. تغيير الـflag بلا setState → الأيقونة تعلق.
     setState(() => _probing = true);
@@ -369,7 +394,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       // بثلاثمئة جهاز من فتح ثلاثمئة مقبس. السقف نفسه المُختبَر في
       // `bulkScanSubnet`.
       final queue = Queue<NetworkDevice>.from(
-          _all.where((d) => _shouldProbeInRound(d.id)));
+          _all.where((d) => _shouldProbeInRound(d.id, force: force)));
       Future<void> probeWorker() async {
         while (queue.isNotEmpty) {
           final d = queue.removeFirst();
@@ -456,6 +481,11 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       }
     } finally {
       if (mounted) setState(() => _probing = false);
+      // طلبٌ وصل أثناء الجولة — يُنفَّذ الآن بدل أن يضيع.
+      if (_forcePending && mounted) {
+        _forcePending = false;
+        unawaited(_probeAll(force: true));
+      }
     }
   }
 
@@ -482,9 +512,14 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     if (changed == true) {
       _refresh();
     } else {
-      // Reset backoff لكل الأجهزة عند الرجوع — يضمن probe فوري بلا تخطّي
-      _consecutiveFailures.clear();
-      _probeAll();
+      // ⚠️ كان هنا `_consecutiveFailures.clear()` — التفافٌ موضعيّ على
+      // العطل نفسه الذي بلّغ عنه المستخدم لاحقاً في التبويب كلّه. وهو
+      // يعمل لكنّه يمحو تباطؤ **كلّ** الأجهزة، فتُقصَف المنقطعة ستّ
+      // جولاتٍ كاملة قبل أن يستقرّ التباطؤ من جديد.
+      //
+      // و`force` يفعل المقصود بلا هدم: جولةٌ شاملةٌ واحدة، والتباطؤ
+      // يبقى محفوظاً لما بعدها.
+      _probeAll(force: true);
     }
   }
 
