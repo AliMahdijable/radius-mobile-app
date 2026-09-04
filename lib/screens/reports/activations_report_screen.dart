@@ -232,6 +232,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
                       subscriberUsername: r.userUsername,
                       targetName: r.targetName ?? r.userUsername,
                       createdAt: r.createdAt,
+balanceAfter: r.balanceAfter,
                     ),
                     const SizedBox(height: 4),
                   ],

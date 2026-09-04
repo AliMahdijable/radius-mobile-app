@@ -98,6 +98,7 @@ class FinanceLog {
     this.userManager,
     this.targetName,
     required this.createdAt,
+    this.balanceAfter,
   });
   final int id;
   final String actionType;
@@ -115,6 +116,9 @@ class FinanceLog {
   final String? userManager;
   final String? targetName;
   final String createdAt;
+
+  /// الدين المتبقّي بعد الحركة — سالبٌ = دَين. `null` = لا نعرف.
+  final num? balanceAfter;
 
   /// اسم كامل عربي مدمَج (firstname + lastname)، أو null لو أحدهما فارغ.
   String? get userFullName {
@@ -146,6 +150,8 @@ class FinanceLog {
       userManager: j['user_manager']?.toString(),
       targetName: j['target_name']?.toString(),
       createdAt: ts,
+      balanceAfter:
+          j['balance_after'] == null ? null : FinanceKPIs._n(j['balance_after']),
     );
   }
 }
@@ -171,6 +177,7 @@ class ActivityRow {
     this.userLastname,
     this.targetName,
     required this.createdAt,
+    this.balanceAfter,
   });
   final int id;
   final String actionType;
@@ -186,6 +193,11 @@ class ActivityRow {
   final String? userLastname;
   final String? targetName;
   final String createdAt;
+  /// الدين المتبقّي بعد هذه الحركة — موقَّعاً: سالبٌ = دَينٌ عليه.
+  ///
+  /// ⚠️ `null` ليس صفراً: حركةٌ لا تمسّ الرصيد، أو سجلٌّ قديم بلا القيمة.
+  /// الواجهة تُخفي السطر حينها بدل أن تعرض «الدين: 0» — وهو رقمٌ يكذب.
+  final num? balanceAfter;
 
   String? get userFullName {
     final full = '${userFirstname ?? ''} ${userLastname ?? ''}'.trim();
@@ -213,6 +225,8 @@ class ActivityRow {
       userLastname: j['user_lastname']?.toString(),
       targetName: j['target_name']?.toString(),
       createdAt: ts,
+      balanceAfter:
+          j['balance_after'] == null ? null : FinanceKPIs._n(j['balance_after']),
     );
   }
 }
@@ -329,6 +343,7 @@ class StatementRow {
     this.amount = 0,
     this.adminName,
     this.notes,
+    this.balanceAfter,
   });
   final int id;
   final String createdAt;
@@ -337,6 +352,11 @@ class StatementRow {
   final num amount;
   final String? adminName;
   final String? notes;
+  /// الدين المتبقّي بعد هذه الحركة — موقَّعاً: سالبٌ = دَينٌ عليه.
+  ///
+  /// ⚠️ `null` ليس صفراً: حركةٌ لا تمسّ الرصيد، أو سجلٌّ قديم بلا القيمة.
+  /// الواجهة تُخفي السطر حينها بدل أن تعرض «الدين: 0» — وهو رقمٌ يكذب.
+  final num? balanceAfter;
 
   static StatementRow? fromJson(Map<String, dynamic> j) {
     final rawId = j['id']?.toString() ?? '';
@@ -351,6 +371,8 @@ class StatementRow {
       amount: FinanceKPIs._n(j['amount']),
       adminName: j['admin_name']?.toString(),
       notes: j['notes']?.toString(),
+      balanceAfter:
+          j['balance_after'] == null ? null : FinanceKPIs._n(j['balance_after']),
     );
   }
 }

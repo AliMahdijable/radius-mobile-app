@@ -209,6 +209,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
                       adminUsername: r.adminName,
                       targetName: widget.displayName ?? widget.username,
                       createdAt: r.createdAt,
+balanceAfter: r.balanceAfter,
                     ),
                     const SizedBox(height: 4),
                   ],

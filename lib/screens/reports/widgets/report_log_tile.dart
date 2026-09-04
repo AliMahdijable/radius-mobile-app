@@ -5,6 +5,7 @@ import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/util/server_time.dart';
 
 /// سطر موحَّد لعرض حركة في التقارير المالية + سجل النشاط.
 /// يكشف: الـaction (badge ملوّن) + الوصف + المنفِّذ (موظف لو موجود)
@@ -22,6 +23,7 @@ class ReportLogTile extends StatelessWidget {
     this.subscriberUsername,
     this.targetName,
     required this.createdAt,
+    this.balanceAfter,
   });
 
   final String actionType;
@@ -38,6 +40,15 @@ class ReportLogTile extends StatelessWidget {
   final String? subscriberUsername;
   final String? targetName;
   final String createdAt;
+
+  /// الدين المتبقّي **بعد** هذه الحركة — موقَّعاً: سالبٌ = دَينٌ عليه.
+  ///
+  /// 🐛 طلب المستخدم ٢٠٢٦-٠٩-٠٤: «مفروض يظهر المتبقّي للدين أو رصيد في
+  /// جميع التقارير».
+  ///
+  /// ⚠️ و`null` ليس صفراً: حركةٌ لا تمسّ الرصيد، أو سجلٌّ قديم بلا
+  /// القيمة. يُخفى السطر حينها بدل أن يُعرض «الدين: 0» — وهو رقمٌ يكذب.
+  final num? balanceAfter;
 
   @override
   Widget build(BuildContext context) {
@@ -161,6 +172,55 @@ class ReportLogTile extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
+                // ── الدين المتبقّي بعد الحركة ──────────────────
+                //
+                // في المكوّن المشترك عمداً: خمس شاشات تقارير تستعمله
+                // (كشف حساب · سجلّ نشاط · ماليّ · تفعيلات · ديون
+                // المدراء). وضعُه هنا يجعله يظهر فيها جميعاً بسطرٍ
+                // واحد بدل خمسة تنحرف عن بعضها.
+                if (balanceAfter != null) ...[
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Icon(
+                        balanceAfter! < 0
+                            ? LucideIcons.trendingDown
+                            : (balanceAfter! > 0
+                                ? LucideIcons.trendingUp
+                                : LucideIcons.check),
+                        size: 10,
+                        color: balanceAfter! < 0
+                            ? AppColors.error
+                            : (balanceAfter! > 0
+                                ? AppColors.success
+                                : AppColors.textMid),
+                      ),
+                      const SizedBox(width: 3),
+                      Flexible(
+                        child: Text(
+                          balanceAfter == 0
+                              ? 'لا دين بعدها'
+                              : (balanceAfter! < 0
+                                  ? 'الدين بعدها: '
+                                      '${formatIQD(balanceAfter!.abs().round())} د.ع'
+                                  : 'رصيد دائن: '
+                                      '${formatIQD(balanceAfter!.round())} د.ع'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppType.muted().copyWith(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: balanceAfter! < 0
+                                ? AppColors.error
+                                : (balanceAfter! > 0
+                                    ? AppColors.success
+                                    : AppColors.textMid),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 2),
                 Row(
                   children: [
@@ -199,10 +259,18 @@ class ReportLogTile extends StatelessWidget {
   }
 
   /// تنسيق تاريخ ISO إلى "YYYY-MM-DD HH:MM" — مختصر.
-  /// الـbackend يرجع UTC؛ نحوّل لتوقيت Asia/Baghdad (UTC+3).
+  ///
+  /// ⚠️ كان هنا `.add(const Duration(hours: 3))` — ترقيعٌ يدويّ يفترض
+  /// أنّ القارئ في بغداد دائماً. صحيحٌ في العراق، لكنّه يكسر أيّ جهازٍ
+  /// بمنطقةٍ أخرى، ويُخفي أنّ المشكلة عامّة: ٣٠ موضعاً في التطبيق يقرأ
+  /// توقيتاً بلا تمييز اصطلاحَي الخادم (قاعدتنا UTC · الساس بغداد).
+  ///
+  /// `parseServerUtc` تسم النصّ Z ثمّ تُحوّل لتوقيت الجهاز — فتُعطي
+  /// النتيجة نفسها في بغداد، والصحيحة في غيرها.
   String _formatDate(String iso) {
     try {
-      final dt = DateTime.parse(iso).add(const Duration(hours: 3));
+      final dt = parseServerUtc(iso);
+      if (dt == null) return iso;
       final m = dt.month.toString().padLeft(2, '0');
       final d = dt.day.toString().padLeft(2, '0');
       final h = dt.hour.toString().padLeft(2, '0');

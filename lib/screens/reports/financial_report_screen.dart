@@ -587,6 +587,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
             subscriberUsername: l.userUsername,
             targetName: l.targetName ?? l.userUsername,
             createdAt: l.createdAt,
+balanceAfter: l.balanceAfter,
           ),
           const SizedBox(height: 4),
         ],

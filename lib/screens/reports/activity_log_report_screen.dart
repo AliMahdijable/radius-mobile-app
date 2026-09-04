@@ -294,6 +294,7 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
                                         targetName:
                                             r.targetName ?? r.userUsername,
                                         createdAt: r.createdAt,
+balanceAfter: r.balanceAfter,
                                       ),
                                       const SizedBox(height: 4),
                                     ],
