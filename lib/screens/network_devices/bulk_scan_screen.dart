@@ -570,7 +570,15 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(children: [
-                      Text(r.ip, style: AppType.cardTitleBold()),
+                      // ⚠️ مرنٌ ليتنازل قبل شارتَي الاستجابة و«مضاف
+                      // مسبقاً»: قِيس عند ٣٢٠ فبلغ المجموع ٢٠٨ نقطة في
+                      // ٢٠٠ متاحة — فيضٌ بثمان نقاط، ويزيد مع عنوانٍ أطول.
+                      Flexible(
+                        child: Text(r.ip,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppType.cardTitleBold()),
+                      ),
                       const SizedBox(width: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(

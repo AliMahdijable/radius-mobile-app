@@ -1149,7 +1149,16 @@ class _SubscriberHero extends StatelessWidget {
       ),
       child: Row(
         children: [
+          // ⚠️ وزنٌ بحسب المحتوى: اسم المستخدم أطول من كلمة السرّ عادةً.
+          //
+          // 🐛 كانا `Flexible(1)` و`Expanded(1)` — أي مناصفةً. وعند ٣٢٠
+          // يبقى للطرفين ١٧٥ نقطة، فيُحدّ الاسم بـ٨٧٫٥ بينما
+          // «unc.thaaer@popq» يحتاج نحو ١٠٥. والاثنان بيانات دخولٍ
+          // تُنسخ، فقصُّ أحدهما يُفقده معناه.
+          //
+          // ٣:٢ يعطي الاسم ١٠٥ وكلمة السرّ ٧٠ — يكفيان المقيس.
           Flexible(
+            flex: 3,
             child: Text(
               sub.username,
               textDirection: ui.TextDirection.ltr,
@@ -1181,7 +1190,7 @@ class _SubscriberHero extends StatelessWidget {
               ),
             )
           else
-            Expanded(child: _HeroPassword(password: pass)),
+            Expanded(flex: 2, child: _HeroPassword(password: pass)),
         ],
       ),
     );
@@ -1250,14 +1259,26 @@ class _SubscriberHero extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          value,
-          textDirection: ui.TextDirection.ltr,
-          style: AppType.statValue(color: color ?? AppColors.onBrand)
-              .copyWith(fontSize: valueSize),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
+        // ⚠️ يتقلّص ولا يُقصّ.
+        //
+        // 🐛 الأعمدة الثلاثة `Expanded` متساوية = ٧٦٫٧ نقطة لكلٍّ عند
+        // ٣٢٠. واسم الباقة أطولها بكثير («10M-Unlimited-30D» = ١٤٠
+        // نقطة) فيُقصّ **عند كلّ العروض حتّى ٤٣٠**.
+        //
+        // والوزن غير المتساوي يحلّ الباقة ويكسر الرصيد. و`scaleDown`
+        // يحلّ الثلاثة معاً: كلٌّ يتقلّص بقدر حاجته ويبقى مقروءاً
+        // كاملاً — واسم باقةٍ ناقصٌ لا يُعرف صاحبه.
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            value,
+            textDirection: ui.TextDirection.ltr,
+            style: AppType.statValue(color: color ?? AppColors.onBrand)
+                .copyWith(fontSize: valueSize),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+          ),
         ),
         const SizedBox(height: 3),
         Text(

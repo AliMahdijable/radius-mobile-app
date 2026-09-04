@@ -1321,9 +1321,17 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       Icon(LucideIcons.globe,
                           size: 11, color: AppColors.textLow),
                       const SizedBox(width: 3),
-                      Text(
-                        d.ip,
-                        style: AppType.muted(color: AppColors.textMid),
+                      // ⚠️ مرنٌ ليتنازل قبل الشارات: عنوانٌ من ١٥ محرفاً
+                      // («192.168.100.200») + شاراتُ الطراز والبروتوكول
+                      // تتجاوز الصفّ عند ٣٢٠ — وبلا مرونةٍ يفيض بدل أن
+                      // يُقصّ، والفيض عطلٌ ظاهر.
+                      Flexible(
+                        child: Text(
+                          d.ip,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppType.muted(color: AppColors.textMid),
+                        ),
                       ),
                       const SizedBox(width: 8),
                       Container(

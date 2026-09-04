@@ -352,6 +352,44 @@ void main() {
     });
   });
 
+  group('بطاقة المشترك — الحالات الطرفيّة', () {
+    // 🐛 بلاطة الأيّام كانت بـ`minWidth` بلا سقف، فتنمو لتسع «منتهي
+    // الاشتراك» وتقتطع الفارق من `Expanded` الاسم بجانبها.
+    testWidgets('مشتركٌ منتهٍ باسمٍ طويل — البلاطة لا تسرق العمود',
+        (t) async {
+      await _pump(
+        t,
+        SubscriberCardV3(
+          sub: Subscriber(
+            username: 'abdulrahman.j@popq',
+            firstname: 'عبد الرحمن جاسم',
+            lastname: 'محمد الجبوري',
+            mobile: '9647707800797',
+            profileName: 'Economy--2',
+            expiration: '2026-08-01 21:34:00',
+            remainingDays: 0,
+            hasDebtFlag: false,
+          ),
+          selected: false,
+          onTap: () {},
+          onLongPress: () {},
+        ),
+        320,
+      );
+      final bad = findTruncatedWithSlack(t);
+      expect(bad, isEmpty, reason: bad.join('\n'));
+
+      // والكلمة نفسها تظهر كاملة — لا «منتهي الاشت…».
+      final w = _paragraphOf(t, 'منتهي');
+      expect(w, isNotNull, reason: 'كلمة الحالة لم تُرسم');
+      expect(
+        w!.size.width + 0.5 >= w.getMaxIntrinsicWidth(double.infinity),
+        isTrue,
+        reason: 'كلمة الحالة مقصوصة',
+      );
+    });
+  });
+
   group('قسم الورقة (نظام التصميم)', () {
     // 🐛 كان `Spacer()` بين العنوان والتلميح — يقتسم لا يدفع.
     for (final w in <double>[320, 360, 430]) {

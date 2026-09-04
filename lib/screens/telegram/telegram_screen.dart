@@ -495,10 +495,16 @@ class _TelegramScreenState extends State<TelegramScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 3),
+                // ⚠️ سطران: الشرح تعليماتٌ لا زينة.
+                //
+                // 🐛 «أنشئ بوت من @BotFather وربطه هنا خلال دقيقتين»
+                // يحتاج ٢٤٥٫٥ نقطة والخانة ٢٣٤ عند ٣٢٠ — فيُقصّ في
+                // **أوّل شاشةٍ يراها المدير**، وهي الشاشة التي تشرح له
+                // ما يفعل. والترويسة تنمو بحرّيّة فالسطر الثاني آمن.
                 Text(
                   subtitle,
                   style: AppType.label(color: AppColors.textMid),
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
               ],

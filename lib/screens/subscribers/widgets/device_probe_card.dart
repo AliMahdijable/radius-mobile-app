@@ -535,7 +535,8 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           ],
         ),
         const SizedBox(height: 14),
-        const _DetailRow(label: 'نوع الجهاز', value: 'Huawei ONT', strong: true),
+        const _DetailRow(
+            label: 'نوع الجهاز', value: 'Huawei ONT', strong: true),
         if (o.sendStatus.trim().isNotEmpty && o.sendStatus.trim() != '--')
           _DetailRow(label: 'حالة الليف', value: o.sendStatus),
       ],
@@ -838,18 +839,21 @@ class _DetailRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: Sp.xs),
       child: Row(
         children: [
-          // ⚠️ `Flexible` **مع** `maxLines`+`overflow` معاً لا وحدها:
-          // `softWrap` افتراضها true، فتسمية عربيّة طويلة تلتفّ سطرين
-          // بدل أن تُختصر — فيتغيّر ارتفاع الكارت بدل أن يُحلّ شيء.
+          // ⚠️ التسمية **بلا مرونة**، والقيمة `Expanded` تبتلع الباقي.
           //
-          // والغاية أن تتنازل التسمية أوّلاً: البيانات أثمن من عنوانها.
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppType.body(color: AppColors.textLabel),
-            ),
+          // 🐛 كانت التسمية `Flexible(1)` والقيمة `Expanded(1)` —
+          // فيقتسمان مناصفةً، والفضفاض الذي يأخذ أقلّ لا يُعيد الباقي.
+          // فـSSID طويلٌ يُقصّ عند النصف بينما «SSID» يشغل خُمس نصفه.
+          //
+          // والتسميات هنا ثوابتُ قصيرة («SSID» · «Peer MAC» · «نوع
+          // الجهاز») لا تتجاوز عشرة محارف — فتثبيتُها آمن، والقيمة هي
+          // المتغيّرة فتستحقّ كلّ ما تبقّى. البيانات أثمن من عنوانها،
+          // وهذا هو تحقيق تلك النيّة لا نقضُها.
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.body(color: AppColors.textLabel),
           ),
           const SizedBox(width: Sp.md),
           Expanded(

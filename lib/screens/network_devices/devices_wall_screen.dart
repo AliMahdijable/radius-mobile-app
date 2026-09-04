@@ -1376,8 +1376,15 @@ class _PortRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: Sp.xxs),
       child: Row(
         children: [
-          SizedBox(
-            width: 84,
+          // ⚠️ مرنٌ لا صندوقٌ بـ٨٤ نقطة.
+          //
+          // 🐛 الاسم كان محبوساً في ٨٤ نقطةً ثابتة بينما `Spacer` أدناه
+          // يحمل ١٤ نقطةً فارغة (و٤٠-٥٥ حين تقصر الأرقام). وأسماء ppp
+          // تتجاوز ٨٤ فعلاً — «<pppoe-ahmed>» نحو ٩٥.
+          //
+          // الآن يأخذ ما يحتاج حتّى ضعف حصّة `Spacer`، ويتنازل قبله.
+          Flexible(
+            flex: 2,
             // القوس الزاويّ في أسماء ppp يُمثَّل معكوساً في السياق
             // العربيّ: «<pppoe-x» تظهر «pppoe-x>».
             child: Text(iso(port.name),
@@ -1385,6 +1392,7 @@ class _PortRow extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis),
           ),
+          const SizedBox(width: Sp.sm),
           if (!has)
             Text('يقيس…', style: AppType.muted())
           else ...[

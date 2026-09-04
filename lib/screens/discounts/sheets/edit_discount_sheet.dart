@@ -123,20 +123,42 @@ class _EditDiscountSheetState extends State<_EditDiscountSheet> {
                 borderRadius: BorderRadius.circular(R.md),
                 border: Border.all(color: AppColors.border),
               ),
+              // ⚠️ لا `Spacer` مع نصٍّ مرن — بل `Expanded` يلفّ المجموعة.
+              //
+              // 🐛 لم يكن في هذا الصفّ **مرنٌ واحد**، وفيه ثلاثة نصوصٍ
+              // متغيّرة الطول. فمصيره عند الضيق فيضٌ أحمر لا قصّ.
+              //
+              // والحيلة نفسها المستعملة في `_debtBar`: `Expanded` يلفّ
+              // المجموعة النصّيّة فيؤدّي دور `Spacer` (يدفع الحبّة إلى
+              // الطرف) **وفي الوقت نفسه** يحدّ المجموعة فتتنازل
+              // التسمية داخله. مرنٌ واحدٌ لا اثنان يقتسمان.
               child: Row(
                 children: [
                   Icon(LucideIcons.tag, size: 13, color: AppColors.textMid),
                   const SizedBox(width: 6),
-                  Text(
-                    'السعر الأصلي ',
-                    style: AppType.muted().copyWith(fontSize: 11),
+                  Expanded(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            'السعر الأصلي ',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppType.muted().copyWith(fontSize: 11),
+                          ),
+                        ),
+                        Text(
+                          '${formatIQD(d.packagePrice!)} د.ع',
+                          maxLines: 1,
+                          style: AppType.label(color: AppColors.textHi)
+                              .copyWith(
+                                  fontSize: 13, fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
                   ),
-                  Text(
-                    '${formatIQD(d.packagePrice!)} د.ع',
-                    style: AppType.label(color: AppColors.textHi)
-                        .copyWith(fontSize: 13, fontWeight: FontWeight.w700),
-                  ),
-                  const Spacer(),
+                  const SizedBox(width: Sp.sm),
                   if (_amount > 0)
                     Container(
                       padding: const EdgeInsets.symmetric(

@@ -200,7 +200,13 @@ class SubscriberCardV3 extends StatelessWidget {
         ),
         const SizedBox(width: 11),
         Container(
-          constraints: const BoxConstraints(minWidth: 62),
+          // ⚠️ سقفٌ **وأرضيّة**: كان `minWidth` وحده.
+          //
+          // 🐛 والبلاطة ابنٌ غير مرنٍ في الصفّ، فتُقاس بعرضٍ غير محدود
+          // وتنمو إلى ما تشاء. و«منتهي الاشتراك» (السطر ٥٦٦) يوسّعها إلى
+          // نحو ٩٧ نقطةً بدل ٦٢ — والفارق يُقتطع من `Expanded` الاسم
+          // بجانبها. سرقةٌ لا قصّ: البلاطة سليمةٌ والاسم هو من يُقصّ.
+          constraints: const BoxConstraints(minWidth: 62, maxWidth: 92),
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
           decoration: BoxDecoration(
             color: days.bg,
@@ -218,6 +224,10 @@ class SubscriberCardV3 extends StatelessWidget {
                   color: days.color.withValues(alpha: 0.8),
                 ),
                 maxLines: 1,
+                // ⚠️ `maxLines` بلا `overflow` تعني `clip` — بترٌ من
+                // منتصف الحرف بلا «…»، فتبدو الكلمة تامّةً وهي مبتورة.
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
               ),
             ],
           ),
@@ -563,7 +573,10 @@ class SubscriberCardV3 extends StatelessWidget {
     final now = DateTime.now();
     final diff = exp.difference(now);
     if (diff.isNegative) {
-      return _DaysVisual('0', 'منتهي الاشتراك', AppColors.error,
+      // «منتهي» لا «منتهي الاشتراك»: البلاطة مصمَّمةٌ لكلمةٍ تحت رقم،
+      // والطويلة توسّعها فتأكل من اسم المشترك. وهي الكلمة نفسها
+      // المستعملة في شارة الحالة في شاشة التفاصيل — فاتّسق الاثنان.
+      return _DaysVisual('0', 'منتهي', AppColors.error,
           AppColors.dangerSoftBg, AppColors.dangerSoftBorder);
     }
     final days = diff.inDays;

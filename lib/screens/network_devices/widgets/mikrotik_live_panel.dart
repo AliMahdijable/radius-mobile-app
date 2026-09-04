@@ -916,8 +916,15 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           const SizedBox(width: 6),
           // الكراف يعرض trajectory أعلى interface (يتطابق مع كروت
           // "أعلى iface ↓ / ↑" اللي فوق)
-          Text('أعلى interface (سير الترفك)',
-              style: AppType.pillBold(color: AppColors.textHi)),
+          // ⚠️ مرنٌ لأنّ الصفّ بلا مرنٍ يفيض ولا يُقصّ: النصّ غير المرن
+          // يُقاس بلا حدٍّ أعلى، فـ`maxLines` و`ellipsis` عليه لا تعملان
+          // أبداً — يأخذ مقاسه كاملاً ويدفع الصفّ إلى الخطوط الصفراء.
+          Flexible(
+            child: Text('أعلى interface (سير الترفك)',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppType.pillBold(color: AppColors.textHi)),
+          ),
           const Spacer(),
           _legendChip('↓', _formatBps(lastRx), rxColor),
           const SizedBox(width: 6),

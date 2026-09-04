@@ -23,10 +23,22 @@ class SectionHeader extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: Sp.md, top: Sp.lg),
       child: Row(
         children: [
-          Text(label,
-              style: AppType.title(color: AppColors.textHi)
-                  .copyWith(fontSize: 14, fontWeight: FontWeight.w700)),
-          const Spacer(),
+          // ⚠️ `Expanded` لا `Text` عارياً، و`Spacer` حُذف معه.
+          //
+          // 🐛 كان العنوان بلا مرونة **وبلا `maxLines`** — فالصفّ بلا
+          // مطاطيّة إطلاقاً. و`Spacer` لا يخنقه هنا (يأخذ ما فضل فقط)،
+          // لكنّ العنوان يأخذ مقاسه كاملاً فيفيض على الشاشات الضيّقة
+          // وعند تكبير الخطّ (`main.dart` يسمح حتّى ١٫٢).
+          //
+          // و`Expanded` يؤدّي دور `Spacer` أيضاً: يملأ ما بين العنوان
+          // والزرّ، فلا حاجة إلى الاثنين.
+          Expanded(
+            child: Text(label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppType.title(color: AppColors.textHi)
+                    .copyWith(fontSize: 14, fontWeight: FontWeight.w700)),
+          ),
           if (trailingLabel != null)
             TextButton(
               onPressed: onTrailingTap,

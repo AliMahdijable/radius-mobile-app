@@ -448,7 +448,8 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         final isSelected = selected.contains(i);
         return FilterChip(
           label: Text(labels[i],
-              style: AppType.bodyStrong(color: isSelected ? AppColors.onBrand : AppColors.textMid)),
+              style: AppType.bodyStrong(
+                  color: isSelected ? AppColors.onBrand : AppColors.textMid)),
           selected: isSelected,
           onSelected: (_) {
             final next = List<int>.from(selected);
@@ -693,7 +694,8 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         ),
         child: Text(
           label,
-          style: AppType.rowLabelBold(color: selected ? AppColors.onBrand : AppColors.textMid),
+          style: AppType.rowLabelBold(
+              color: selected ? AppColors.onBrand : AppColors.textMid),
         ),
       ),
     );
@@ -716,7 +718,8 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
         final selected = _debtMonthDays.contains(day);
         return FilterChip(
           label: Text(label,
-              style: AppType.bodyStrong(color: selected ? AppColors.onBrand : AppColors.textMid)),
+              style: AppType.bodyStrong(
+                  color: selected ? AppColors.onBrand : AppColors.textMid)),
           selected: selected,
           onSelected: (_) {
             setState(() {
@@ -785,8 +788,7 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('قناة الإرسال',
-              style: AppType.bodyBold()),
+          Text('قناة الإرسال', style: AppType.bodyBold()),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -847,11 +849,18 @@ class _WhatsAppSchedulesScreenState extends State<WhatsAppSchedulesScreen> {
           children: [
             Icon(icon, size: 13, color: selected ? color : AppColors.textMid),
             const SizedBox(width: 4),
+            // ⚠️ يتقلّص ولا يُقصّ: ثلاث حبّاتٍ في صفٍّ واحد لا تترك
+            // للتسمية إلّا ٤٧ نقطة عند ٣٢٠، و«واتساب فقط» تحتاج ٥٧٫٣.
+            // و«واتسا…» لا تعني شيئاً؛ الحجم الأصغر يُقرأ.
             Flexible(
-              child: Text(label,
-                  style: AppType.pillBold(color: selected ? color : AppColors.textMid),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(label,
+                    style: AppType.pillBold(
+                        color: selected ? color : AppColors.textMid),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+              ),
             ),
           ],
         ),

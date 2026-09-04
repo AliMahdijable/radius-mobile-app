@@ -705,9 +705,12 @@ class _ManagerItemLabel extends StatelessWidget {
         [firstname, lastname].where((s) => s.isNotEmpty).join(' ').trim();
     final primary = full.isNotEmpty ? full : username;
     final showSecondary = full.isNotEmpty && full != username;
+    // الاسم `Expanded` والمعرّف بمقاسه: مرنان بالوزن نفسه يقتسمان
+    // مناصفةً، فيُقصّ «عبد الرحمن الجبوري» (١٢٨٫٣ نقطة) في حدٍّ قدره
+    // ١٢١ بينما «@najaf650» يترك نصفه فارغاً.
     return Row(
       children: [
-        Flexible(
+        Expanded(
           child: Text(
             primary,
             style: AppType.input(color: AppColors.textHi),
@@ -717,13 +720,11 @@ class _ManagerItemLabel extends StatelessWidget {
         ),
         if (showSecondary) ...[
           const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              '@$username',
-              style: AppType.subtitle(color: AppColors.textLow),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+          Text(
+            '@$username',
+            style: AppType.subtitle(color: AppColors.textLow),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ],

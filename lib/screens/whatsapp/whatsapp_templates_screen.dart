@@ -442,8 +442,7 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('قناة الإرسال',
-              style: AppType.bodyBold()),
+          Text('قناة الإرسال', style: AppType.bodyBold()),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -505,11 +504,18 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
           children: [
             Icon(icon, size: 13, color: selected ? color : AppColors.textMid),
             const SizedBox(width: 4),
+            // ⚠️ يتقلّص ولا يُقصّ: ثلاث حبّاتٍ في صفٍّ واحد لا تترك
+            // للتسمية إلّا ٤٧ نقطة عند ٣٢٠، و«واتساب فقط» تحتاج ٥٧٫٣.
+            // و«واتسا…» لا تعني شيئاً؛ الحجم الأصغر يُقرأ.
             Flexible(
-              child: Text(label,
-                  style: AppType.pillBold(color: selected ? color : AppColors.textMid),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(label,
+                    style: AppType.pillBold(
+                        color: selected ? color : AppColors.textMid),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+              ),
             ),
           ],
         ),
@@ -629,7 +635,8 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
             activeThumbColor: accent,
             title: const Text(
               'القالب مفعّل',
-              style: TextStyle(fontSize: 13, height: 1.35, fontWeight: FontWeight.w700),
+              style: TextStyle(
+                  fontSize: 13, height: 1.35, fontWeight: FontWeight.w700),
             ),
             subtitle: Text(
               _isActive

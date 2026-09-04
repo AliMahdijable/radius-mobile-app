@@ -573,12 +573,19 @@ class _PackageRow extends StatelessWidget {
                     Row(
                       children: [
                         if (hasOverride) ...[
-                          Text(
-                            pkg.sasName,
-                            style: AppType.subtitle(color: AppColors.textMid)
-                                .copyWith(fontSize: 10.5),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          // ⚠️ `Flexible` — بدونه `ellipsis` أدناه **حبرٌ
+                          // على ورق**: ابن `Row` غير المرن يُقاس بعرضٍ
+                          // غير محدود، فلا يبلغ حدَّه أبداً ولا يُقصّ،
+                          // بل يفيض الصفّ. الإعلان كان موجوداً والأثر
+                          // معدوماً.
+                          Flexible(
+                            child: Text(
+                              pkg.sasName,
+                              style: AppType.subtitle(color: AppColors.textMid)
+                                  .copyWith(fontSize: 10.5),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                           const SizedBox(width: Sp.sm),
                           Container(

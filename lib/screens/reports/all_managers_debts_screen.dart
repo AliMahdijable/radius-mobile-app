@@ -589,6 +589,8 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
               children: [
                 Text(
                   label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: AppType.title(color: color)
                       .copyWith(fontSize: 12.5, fontWeight: FontWeight.w700),
                 ),
@@ -603,22 +605,36 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
             ),
           ),
           const SizedBox(width: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                formatIQD(value.round()),
-                style: AppType.title(color: color).copyWith(
-                    fontSize: 17, fontWeight: FontWeight.w700, height: 1.1),
+          // ⚠️ المبلغ مرنٌ ويتقلّص — كان جامداً يأخذ مقاسه أوّلاً.
+          //
+          // 🐛 مجموع ديون **كلّ** المدراء يبلغ سبعة إلى تسعة أرقام،
+          // فيشغل ١٠٥-١٢٦ نقطةً من ٢٨٠ في البطاقة، ولا يبقى لعمود
+          // التسمية والتلميح إلّا مئةٌ ونيّف — فيُقصّان.
+          //
+          // و`scaleDown` يجعل المبلغ يتنازل بالحجم لا بالبتر: رقمٌ
+          // ماليٌّ أصغر يُقرأ، ومبتورٌ يُقرأ خطأً.
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerEnd,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    formatIQD(value.round()),
+                    style: AppType.title(color: color).copyWith(
+                        fontSize: 17, fontWeight: FontWeight.w700, height: 1.1),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'د.ع',
+                    style: AppType.muted(color: color)
+                        .copyWith(fontSize: 10.5, fontWeight: FontWeight.w700),
+                  ),
+                ],
               ),
-              const SizedBox(width: 4),
-              Text(
-                'د.ع',
-                style: AppType.muted(color: color)
-                    .copyWith(fontSize: 10.5, fontWeight: FontWeight.w700),
-              ),
-            ],
+            ),
           ),
         ],
       ),
@@ -924,7 +940,9 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                               ? AppColors.brandLight
                               : AppColors.brand),
                       const SizedBox(width: 4),
-                      Flexible(
+                      // الاسم يبتلع الباقي والمعرّف يأخذ مقاسه — نفس
+                      // إصلاح `report_log_tile`، وهذا نسخةٌ منه.
+                      Expanded(
                         child: Text(
                           e.manager.fullName.isEmpty
                               ? e.manager.username

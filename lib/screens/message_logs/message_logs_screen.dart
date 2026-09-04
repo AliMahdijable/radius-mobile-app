@@ -566,9 +566,16 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
                     const SizedBox(width: 8),
                     Icon(LucideIcons.tag, size: 10, color: AppColors.textLow),
                     const SizedBox(width: 3),
-                    Text(
-                      _typeLabel(m.messageType!),
-                      style: AppType.muted().copyWith(fontSize: 10.5),
+                    // ⚠️ مرنٌ لأنّ طوله غير مضمون: `_typeLabel` تُرجع
+                    // القيمة **الخام** لكلّ نوعٍ لا تعرفه — و
+                    // `telegram_link_invite` (server.js) واحدٌ منها.
+                    Flexible(
+                      child: Text(
+                        _typeLabel(m.messageType!),
+                        style: AppType.muted().copyWith(fontSize: 10.5),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                   const Spacer(),

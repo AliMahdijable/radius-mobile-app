@@ -277,7 +277,10 @@ class _Row extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Flexible(
+                        // الاسم يبتلع الباقي، والمعرّف يأخذ مقاسه.
+                        // مرنان بالوزن نفسه يقتسمان مناصفةً ولا يتنازل
+                        // أحدهما لأخيه — راجع `report_log_tile`.
+                        Expanded(
                           child: Text(
                             sub.fullName,
                             style:
@@ -291,17 +294,15 @@ class _Row extends StatelessWidget {
                         ),
                         if (sub.username != sub.fullName) ...[
                           const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              '(${sub.username})',
-                              style: AppType.muted(color: AppColors.textLow)
-                                  .copyWith(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                          Text(
+                            '(${sub.username})',
+                            style: AppType.muted(color: AppColors.textLow)
+                                .copyWith(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w500,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ],

@@ -311,10 +311,15 @@ balanceAfter: r.balanceAfter,
       children: [
         Icon(icon, size: 16, color: color),
         const SizedBox(height: 4),
-        Text(value,
-            style: AppType.rowLabelBold(),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis),
+        // ⚠️ الإيراد يتقلّص ولا يُقصّ: العمود ٦٥ نقطةً عند ٣٢٠،
+        // و«12,500,000» يتجاوزها — ورقمٌ ماليٌّ مبتورٌ يُقرأ خطأً.
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(value,
+              style: AppType.rowLabelBold(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
+        ),
         // `maxLines: 1` بلا `overflow` تعني `TextOverflow.clip` —
         // تُشرَّح الكلمة من منتصف الحرف بلا «…»، فيرى المستخدم كلمةً
         // تبدو تامّةً لكنّها **مختلفة**. الحذف الظاهر أصدق من بترٍ صامت.
