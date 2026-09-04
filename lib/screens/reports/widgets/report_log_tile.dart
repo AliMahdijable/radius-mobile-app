@@ -127,7 +127,25 @@ class ReportLogTile extends StatelessWidget {
                       children: [
                         Icon(LucideIcons.user, size: 11, color: nameColor),
                         const SizedBox(width: 4),
-                        Flexible(
+                        // ⚠️ `Expanded` للاسم و**بلا مرونة** للمعرّف.
+                        //
+                        // 🐛 كانا `Flexible` كلاهما بالوزن الافتراضيّ ١،
+                        // فيقتسمان الفراغ مناصفةً — والفضفاض الذي يأخذ
+                        // أقلّ **لا يُعيد** الباقي لأخيه. قِيس بالخطّ
+                        // الحقيقيّ عند ٣٦٠: الاسم يُحدّ بـ١٢٢٫٥ نقطة
+                        // بينما «عبد الرحمن جاسم محمد الجبوري» يحتاج
+                        // ١٧٢٫٥، والمعرّف يشغل ٨٨٫٥ من نصفه فيضيع
+                        // الباقي فارغاً. وعند ٣٢٠ يُقصّ حتّى «مصطفى باسم
+                        // محمود» (١١٣٫١ في حدٍّ قدره ١٠٢٫٥).
+                        //
+                        // والمعرّف غير مرنٍ عمداً: هو **هويّة** يُنسخ
+                        // ويُبحث بها، وقصُّه أسوأ من قصّ الاسم. وحدّه
+                        // مقيس: أطول ما في القاعدة نحو ٨٨٫٥ نقطة من
+                        // ٢٠٥ متاحة عند ٣٢٠ — فيبقى للاسم ١١٦٫٥، تكفي
+                        // الأسماء الشائعة كلّها.
+                        //
+                        // خمس شاشات تقارير تستعمل هذا المكوّن.
+                        Expanded(
                           child: Text(
                             subscriberFullName?.isNotEmpty == true
                                 ? subscriberFullName!
@@ -146,18 +164,16 @@ class ReportLogTile extends StatelessWidget {
                         if (subscriberFullName?.isNotEmpty == true &&
                             subscriberUsername?.isNotEmpty == true) ...[
                           const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              subscriberUsername!,
-                              style: AppType.muted().copyWith(
-                                fontSize: 10.5,
-                                height: 1.2,
-                                color: AppColors.textLow,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                          Text(
+                            subscriberUsername!,
+                            style: AppType.muted().copyWith(
+                              fontSize: 10.5,
+                              height: 1.2,
+                              color: AppColors.textLow,
+                              fontWeight: FontWeight.w500,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ],

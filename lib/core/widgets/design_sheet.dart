@@ -404,8 +404,22 @@ class SheetSection extends StatelessWidget {
           children: [
             Text(label, style: AppType.label()),
             if ((hint ?? '').isNotEmpty) ...[
-              const Spacer(),
-              Flexible(
+              // ⚠️ `SizedBox` لا `Spacer` — والتلميح `Expanded` لا
+              // `Flexible`.
+              //
+              // 🐛 كان `Spacer()` هنا، وهو `Expanded(flex: 1)`. فيقتسم
+              // الفراغ مع `Flexible(flex: 1)` **مناصفةً** بدل أن يدفع
+              // التلميح إلى الطرف. قِيس بالخطّ الحقيقيّ عند ٣٦٠:
+              // «اختياري — يستخدم القالب التلقائي لو فاضي» يحتاج ١٧٩٫٤
+              // نقطة ويُعطى ١٢٥٫٥، فيُقصّ وإلى جانبه ١٢٥ نقطةً فارغة.
+              //
+              // و`Expanded` مع `textAlign.end` يعطي المظهر نفسه —
+              // التلميح ملتصقٌ بالطرف — وينال كلّ المتبقّي.
+              //
+              // ⚠️ والموضع حسّاس: هذه ورقةٌ في نظام التصميم تستعملها
+              // كلّ الأوراق، فالعطل كان يتكرّر في كلّ واحدةٍ منها.
+              const SizedBox(width: Sp.sm),
+              Expanded(
                 child: Text(hint!,
                     style: AppType.muted(color: AppColors.textHint),
                     textAlign: TextAlign.end,

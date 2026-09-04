@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
+import 'package:rad_mysvcs/core/widgets/design_sheet.dart';
+import 'package:rad_mysvcs/screens/reports/widgets/report_log_tile.dart';
 import 'package:rad_mysvcs/screens/subscribers/widgets/subscriber_card_v3.dart';
 import 'package:rad_mysvcs/theme/colors.dart';
+
+import 'support/app_fonts.dart';
 
 /// كاشف **القصّ مع وجود فراغ** — النقطة العمياء التي تركها
 /// `text_crush_test.dart` عمداً، فمرّ منها عطلٌ حقيقيّ.
@@ -52,8 +56,10 @@ import 'package:rad_mysvcs/theme/colors.dart';
 double _deadSpace(RenderFlex row) {
   if (!row.hasSize) return 0;
   var dead = 0.0;
+  var used = 0.0;
   row.visitChildren((c) {
     if (c is! RenderBox || !c.hasSize) return;
+    used += c.size.width;
     final pd = c.parentData;
     final flex = pd is FlexParentData ? (pd.flex ?? 0) : 0;
     // مرنٌ وفارغ = `Spacer`: يأخذ عرضاً ولا يعرض شيئاً.
@@ -61,6 +67,20 @@ double _deadSpace(RenderFlex row) {
       dead += c.size.width;
     }
   });
+
+  // ── والآليّة الثانية: فراغٌ لم يأخذه أحد ────────────────────────
+  //
+  // مرنان فضفاضان (`Flexible`) بالوزن نفسه يقتسمان الفراغ مناصفةً،
+  // و**من يأخذ أقلّ لا يُعيد الباقي لأخيه** — فيُقصّ الطويل ويبقى نصف
+  // القصير فارغاً. لا `Spacer` هنا، لكنّ الصفّ لا يمتلئ.
+  //
+  // ⚠️ ولا يُحتسب إلّا مع `MainAxisAlignment.start`: `spaceBetween`
+  // و`center` وأخواتها تترك فراغاً **عن قصد**، واحتسابُه إنذارٌ كاذب.
+  if (row.mainAxisAlignment == MainAxisAlignment.start &&
+      row.mainAxisSize == MainAxisSize.max) {
+    final leftover = row.size.width - used;
+    if (leftover > 1) dead += leftover;
+  }
   return dead;
 }
 
@@ -90,6 +110,18 @@ List<String> findTruncatedWithSlack(WidgetTester t) {
 
   walk(t.binding.renderViews.first, null);
   return bad;
+}
+
+/// أوّل فقرةٍ نصُّها [text] — للتأكيدات المُوجَّهة.
+RenderParagraph? _paragraphOf(WidgetTester t, String text) {
+  RenderParagraph? found;
+  void walk(RenderObject o) {
+    if (o is RenderParagraph && o.text.toPlainText() == text) found ??= o;
+    o.visitChildren(walk);
+  }
+
+  walk(t.binding.renderViews.first);
+  return found;
 }
 
 Subscriber _sub() => Subscriber(
@@ -125,6 +157,10 @@ Future<void> _pump(WidgetTester t, Widget child, double width) async {
 }
 
 void main() {
+  // ⚠️ الخطّ الحقيقيّ لا الاحتياطيّ — وإلّا قِيس خطٌّ لا يستعمله أحد.
+  // قِيس بالفعل: «تسديد دين قبل 22 س» = ١٠٩٫٥ نقطة بالخطّ الحقيقيّ،
+  // و٢٢٥٫٥ بالاحتياطيّ (١٨ محرفاً × ١٢٫٥ بالضبط). الفرق ضعفان.
+  setUpAll(loadAppFonts);
   setUp(() => AppColors.setDarkMode(false));
 
   // ── الكاشف يجب أن يُطلق النار قبل أن نأتمنه ──────────────────────
@@ -190,17 +226,13 @@ void main() {
     });
   }
 
-  // ── والتأكيد الصريح: النصّ ينال **كلّ** ما تبقّى ──────────────────
+  // ── والتأكيد الصريح: يتّسع فعلاً، وينال كلّ ما تبقّى ─────────────
   //
-  // ⚠️ ولا يُقاس ذلك بعرضٍ مطلق. `flutter test` يستبدل خطّاً احتياطيّاً
-  // كلّ محرفٍ فيه بعرض حجم الخطّ تماماً — قِيس: «تسديد دين قبل 22 س»
-  // ١٨ محرفاً × ١٢٫٥ = ٢٢٥٫٥ بالضبط. فالخطّ الحقيقيّ
-  // (IBM Plex Sans Arabic) أضيق من ذلك بنحو النصف، وأيّ تأكيدٍ على
-  // «يجب أن يتّسع» يقيس الخطّ الاحتياطيّ لا التصميم.
-  //
-  // فالثابت الصحيح **نسبيّ**: عرض النصّ = عرض الصفّ ناقص الأبناء
-  // الثابتة، بلا بقيّة. أي أنّه أخذ كلّ نقطةٍ متاحة. وهذا صحيحٌ مع أيّ
-  // خطّ، ويسقط لحظة يعود `Spacer` أو مرنٌ ثانٍ يقتسم معه.
+  // تأكيدان لا واحد، ولكلٍّ دورُه:
+  //   • **مطلق** — «تسديد دين قبل 22 س» يظهر كاملاً. ممكنٌ الآن لأنّ
+  //     الخطّ حقيقيّ (١٠٩٫٥ نقطة)، وهو ما رآه المستخدم مقصوصاً.
+  //   • **نسبيّ** — النصّ نال كلّ المتبقّي ومرنٌ واحدٌ في الصفّ. يبقى
+  //     صحيحاً لو تغيّر الخطّ أو الحجم، ويسقط لحظة يعود `Spacer`.
   testWidgets('نصّ «تسديد دين …» ينال كلّ العرض المتبقّي', (t) async {
     final paidAt = DateTime.now().toUtc().subtract(const Duration(hours: 22));
     await _pump(
@@ -259,5 +291,84 @@ void main() {
           'والمتاح ${available.toStringAsFixed(1)} — ضاعت '
           '${(available - pay!.size.width).toStringAsFixed(1)} نقطة',
     );
+
+    // والمطلق: لا قصّ أصلاً بالخطّ الحقيقيّ.
+    final needed = pay!.getMaxIntrinsicWidth(double.infinity);
+    expect(
+      pay!.size.width + 0.5 >= needed,
+      isTrue,
+      reason: '«${pay!.text.toPlainText()}» يحتاج '
+          '${needed.toStringAsFixed(1)} ونال '
+          '${pay!.size.width.toStringAsFixed(1)} — ما زال مقصوصاً',
+    );
+  });
+
+  // ═══ مكوّنان مشتركان أصلحهما فحصُ ٢٠٢٦-٠٩-٠٤ ═══════════════════
+  //
+  // كلاهما يُستعمل في شاشاتٍ كثيرة، فعطلُهما يتكرّر بعددها: `SheetSection`
+  // في كلّ ورقةٍ في التطبيق، و`ReportLogTile` في خمس شاشات تقارير.
+
+  group('بطاقة سجلّ التقارير', () {
+    // 🐛 كان الاسم والمعرّف `Flexible` كلاهما بالوزن ١ فيقتسمان
+    // مناصفةً — والفضفاض الذي يأخذ أقلّ لا يُعيد الباقي.
+    for (final w in <double>[320, 360, 430]) {
+      testWidgets('اسمٌ عربيٌّ طويل ومعرّف — ${w.toInt()}px', (t) async {
+        await _pump(
+          t,
+          const ReportLogTile(
+            actionType: 'SUBSCRIBER_ACTIVATE',
+            description: 'تفعيل اشتراك',
+            amount: 35000,
+            subscriberFullName: 'عبد الرحمن جاسم محمد',
+            subscriberUsername: 'mustafa.ba@popq',
+            createdAt: '2026-09-04T12:35:54.000Z',
+          ),
+          w,
+        );
+        final bad = findTruncatedWithSlack(t);
+        expect(bad, isEmpty, reason: bad.join('\n'));
+      });
+    }
+
+    testWidgets('🚨 المعرّف لا يُقصّ أبداً — هو هويّة تُنسخ', (t) async {
+      await _pump(
+        t,
+        const ReportLogTile(
+          actionType: 'SUBSCRIBER_ACTIVATE',
+          description: 'تفعيل اشتراك',
+          subscriberFullName: 'عبد الرحمن جاسم محمد الجبوري الطويل جدّاً',
+          subscriberUsername: 'mustafa.ba@popq',
+          createdAt: '2026-09-04T12:35:54.000Z',
+        ),
+        320,
+      );
+      final u = _paragraphOf(t, 'mustafa.ba@popq');
+      expect(u, isNotNull);
+      expect(
+        u!.size.width + 0.5 >= u.getMaxIntrinsicWidth(double.infinity),
+        isTrue,
+        reason: 'المعرّف قُصّ — والاسم هو من يجب أن يتراجع',
+      );
+    });
+  });
+
+  group('قسم الورقة (نظام التصميم)', () {
+    // 🐛 كان `Spacer()` بين العنوان والتلميح — يقتسم لا يدفع.
+    for (final w in <double>[320, 360, 430]) {
+      testWidgets('تلميحٌ طويل لا يُقصّ — ${w.toInt()}px', (t) async {
+        await _pump(
+          t,
+          // أطول تلميحٍ حقيقيّ في التطبيق (٤٨ محرفاً) — لا نصٌّ مخترع.
+          const SheetSection(
+            label: 'قناة الإرسال',
+            hint: 'يحترم ربط المشترك (تلغرام لو مربوط، وإلا واتساب)',
+            child: SizedBox(height: 20),
+          ),
+          w,
+        );
+        final bad = findTruncatedWithSlack(t);
+        expect(bad, isEmpty, reason: bad.join('\n'));
+      });
+    }
   });
 }
