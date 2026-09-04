@@ -411,12 +411,29 @@ class _Row extends StatelessWidget {
                     const SizedBox(height: 3),
                     Row(
                       children: [
+                        // ⚠️ كلّ نصوص السطر مرنة إلّا المبلغ.
+                        //
+                        // 🐛 كان `detail` وحده مرناً بين ثلاثة نصوصٍ
+                        // جامدة. فحين يضيق الصفّ ينكمش هو أوّلاً إلى
+                        // صفر، وإذا لم يكفِ **فاض الصفّ** بخطوطٍ صفراء
+                        // — لا قصٌّ صامت بل عطلٌ ظاهر.
+                        //
+                        // قِيس عند ٣٢٠: «تسديد دين مدير» + الفواصل +
+                        // «قبل 3 س» + «+35,000 د.ع» ≈ ٢١٤ نقطة في ٢١٠
+                        // متاحة — قبل أن ينال المرن نقطةً واحدة.
+                        //
+                        // والمبلغ يبقى جامداً عمداً: رقمٌ ماليٌّ مقصوص
+                        // يُقرأ خطأً، وسطرٌ وصفيٌّ مقصوص يُفهم.
                         if (n.subLabel != null) ...[
-                          Text(
-                            n.subLabel!,
-                            style: AppType.muted(color: n.tone.fill).copyWith(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
+                          Flexible(
+                            child: Text(
+                              n.subLabel!,
+                              style: AppType.muted(color: n.tone.fill).copyWith(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           const SizedBox(width: 6),
@@ -454,11 +471,15 @@ class _Row extends StatelessWidget {
                           ),
                           const SizedBox(width: 6),
                         ],
-                        Text(
-                          n.timeLabel,
-                          style: AppType.muted(color: AppColors.textLow)
-                              .copyWith(
-                                  fontSize: 11, fontWeight: FontWeight.w500),
+                        Flexible(
+                          child: Text(
+                            n.timeLabel,
+                            style: AppType.muted(color: AppColors.textLow)
+                                .copyWith(
+                                    fontSize: 11, fontWeight: FontWeight.w500),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                         if (n.amount != 0) ...[
                           const SizedBox(width: 6),
