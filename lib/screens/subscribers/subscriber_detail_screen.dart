@@ -217,8 +217,12 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                             sub.displayPhone.isNotEmpty
                         ? () => _sendTemplate('debt_reminder')
                         : null,
-                    onPay: sub.balanceAmount != 0 &&
-                            Perms.has('subscribers.pay_debt')
+                    // 2026-09-05: كان الشرط `balanceAmount != 0` فيفتح
+                    // «تسديد» لصاحب الرصيد الدائن أيضاً — والتسديد يجمع
+                    // على الرصيد لا يطرح منه، فمشتركٌ له ٣٠٬٠٠٠ يصير له
+                    // ٦٠٬٠٠٠. ومَن أراد استهلاك رصيدٍ دائن فبابه «إضافة
+                    // دين» وهو ظاهرٌ له أصلاً.
+                    onPay: sub.hasDebt && Perms.has('subscribers.pay_debt')
                         ? () => showPayDebtSheet(context, sub)
                         : null,
                     onAddDebt: Perms.has('subscribers.add_debt')
@@ -575,17 +579,17 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             color: AppColors.warningFill,
             onTap: () => showAddDebtSheet(context, sub),
           ),
-        // 2026-08-29: الشرط صار `balanceAmount != 0` بدل `hasDebt` —
-        // صاحب الرصيد الدائن يحتاج المدخل أيضاً، ومَن رصيده صفر لا
-        // يستفيد من فتح شيت يقول له «لا يوجد دين».
-        if (sub.balanceAmount != 0 && Perms.has('subscribers.pay_debt'))
+        // 2026-08-29 وسّع الشرط إلى `balanceAmount != 0` ليصل المدخلُ
+        // صاحبَ الرصيد الدائن. وكان ذلك خطأً: التسديد يجمع على الرصيد
+        // (newBalance = balance + amount)، فصاحب ٣٠٬٠٠٠ دائن يخرج بـ
+        // ٦٠٬٠٠٠، والشيت يسمّي رصيده «الدين الحالي» بالأحمر لأنّ
+        // `debtAbs` قيمةٌ مطلقة لا دين. استهلاك الرصيد بابه «إضافة دين».
+        if (sub.hasDebt && Perms.has('subscribers.pay_debt'))
           SubAction(
             icon: LucideIcons.banknote,
             label: 'subscribers.op_pay_debt'.tr(),
             color: AppColors.brandAccent,
-            meta: sub.balanceAmount != 0
-                ? formatIQD(sub.balanceAmount.abs())
-                : null,
+            meta: formatIQD(sub.debtAbs.round()),
             onTap: () => showPayDebtSheet(context, sub),
           ),
         if (Perms.has('discounts.manage'))
