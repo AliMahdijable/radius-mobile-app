@@ -95,6 +95,11 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
   bool _sendWhatsApp = true;
   bool _sendPush = true;
 
+  /// ⚠️ مطفأ افتراضياً: تلغرام قناةٌ **إضافيّة** لا بديلة، وتشغيلها
+  /// تلقائياً يعني رسالتين للمدير المربوط في كلّ عمليّة. يُشغّله من
+  /// يريده — والمفتاح لا يُعرض أصلاً لمن لم يربط.
+  bool _sendTelegram = false;
+
   @override
   void initState() {
     super.initState();
@@ -204,7 +209,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     required String actionKind,
     String? notes,
   }) async {
-    if (!_sendWhatsApp && !_sendPush) return;
+    if (!_sendWhatsApp && !_sendPush && !_sendTelegram) return;
     final r = await ManagerNoticeService.notify(
       manager: widget.manager,
       amount: _amount,
@@ -222,6 +227,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
       notes: notes,
       sendWhatsApp: _sendWhatsApp,
       sendPush: _sendPush,
+      sendTelegram: _sendTelegram,
     );
     // التغذية الراجعة عن الإشعار تظهر فقط إذا أحدها فشل — نتجنب
     // إغراق الـadmin بـ"تم إرسال الواتساب" snackbars متعدّدة.
@@ -232,6 +238,11 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     }
     if (_sendPush && !r.pushOk) {
       failures.add('الإشعار: ${r.pushMessage ?? "فشل"}');
+    }
+    // ⚠️ كلّ قناةٍ تُبلَّغ على حدة: «فشل الإرسال» وحدها لا تقول أيّها
+    // وصل. والمدير قد يعيد العمليّة ظنّاً أنّ شيئاً لم يصل.
+    if (_sendTelegram && !r.telegramOk) {
+      failures.add('تلغرام: ${r.telegramMessage ?? "فشل"}');
     }
     if (failures.isNotEmpty) {
       // The sheet may be popped already; use the navigator's root
@@ -507,6 +518,34 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                 ],
               ),
             ),
+            // ⚠️ يظهر **فقط** لمن ربط حسابه بتلغرام. وبخلاف واتساب لا
+            // يُعرض معطّلاً: هناك الرقم بيد المدير فيُضيفه ويُرسل؛
+            // وهنا الربط بيد **التابع** وحده، فمفتاحٌ معطّل أبداً لا
+            // يفعل شيئاً سوى إرباك من يضغطه.
+            if (widget.manager.telegramLinked)
+              CheckboxListTile.adaptive(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: _sendTelegram,
+                onChanged: (v) => setState(() => _sendTelegram = v ?? false),
+                title: Row(
+                  children: [
+                    Icon(LucideIcons.send,
+                        size: 14, color: AppColors.channelTelegram),
+                    const SizedBox(width: 6),
+                    const Expanded(
+                      child: Text(
+                        'إرسال رسالة تلغرام للمدير',
+                        style: TextStyle(
+                            fontSize: 12.5,
+                            height: 1.4,
+                            fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),

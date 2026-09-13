@@ -81,6 +81,8 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
   // admin can opt out of either channel before submitting.
   bool _sendWhatsApp = true;
   bool _sendPush = true;
+  /// مطفأ افتراضياً — قناةٌ إضافيّة لا بديلة (انظر ManagerNoticeService).
+  bool _sendTelegram = false;
 
   @override
   void initState() {
@@ -226,6 +228,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
       actionKind: 'debt_payment',
       sendWhatsApp: _sendWhatsApp,
       sendPush: _sendPush,
+      sendTelegram: _sendTelegram,
       notes: note,
     ));
 
@@ -413,6 +416,9 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                     waEnabled: widget.manager.mobile.trim().isNotEmpty,
                     onWa: (v) => setState(() => _sendWhatsApp = v),
                     onPush: (v) => setState(() => _sendPush = v),
+                    sendTelegram: _sendTelegram,
+                    tgEnabled: widget.manager.telegramLinked,
+                    onTg: (v) => setState(() => _sendTelegram = v),
                   ),
                 ],
               ],
@@ -561,12 +567,22 @@ class _NotifyToggles extends StatelessWidget {
     required this.waEnabled,
     required this.onWa,
     required this.onPush,
+    this.sendTelegram = false,
+    this.tgEnabled = false,
+    this.onTg,
   });
   final bool sendWhatsApp;
   final bool sendPush;
   final bool waEnabled;
   final ValueChanged<bool> onWa;
   final ValueChanged<bool> onPush;
+  final bool sendTelegram;
+
+  /// هل ربط هذا المدير حسابه بتلغرام؟ المفتاح لا يُعرض أصلاً بدونه —
+  /// الربط بيد **التابع** لا بيد من يفتح الصفيحة، فمفتاحٌ معطّل لا
+  /// يفعل شيئاً سوى الإرباك.
+  final bool tgEnabled;
+  final ValueChanged<bool>? onTg;
 
   @override
   Widget build(BuildContext context) {
@@ -613,6 +629,22 @@ class _NotifyToggles extends StatelessWidget {
               secondary: const Icon(LucideIcons.bell, size: 18),
               contentPadding: EdgeInsets.zero,
             ),
+            if (tgEnabled) ...[
+              Divider(height: 1, color: AppColors.border),
+              SwitchListTile(
+                value: sendTelegram,
+                onChanged: onTg,
+                dense: true,
+                title: Text(
+                  'إشعار تلغرام',
+                  style: AppType.label(color: AppColors.textHi)
+                      .copyWith(fontWeight: FontWeight.w700),
+                ),
+                secondary: const Icon(LucideIcons.send,
+                    size: 18, color: AppColors.channelTelegram),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ],
           ],
         ),
       ),

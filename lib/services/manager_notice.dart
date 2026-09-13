@@ -7,13 +7,17 @@ class ManagerNoticeResult {
   const ManagerNoticeResult({
     required this.whatsAppOk,
     required this.pushOk,
+    this.telegramOk = false,
     this.whatsAppMessage,
     this.pushMessage,
+    this.telegramMessage,
   });
   final bool whatsAppOk;
   final bool pushOk;
+  final bool telegramOk;
   final String? whatsAppMessage;
   final String? pushMessage;
+  final String? telegramMessage;
 }
 
 /// مطلب 2026-06-12: إشعار للمدير الفرعي بعد كل عملية رصيد. مطابق
@@ -46,11 +50,66 @@ class ManagerNoticeService {
     String? notes,
     bool sendWhatsApp = true,
     bool sendPush = true,
+
+    /// ⚠️ الافتراضيّ **مطفأ**: تلغرام قناةٌ إضافيّة لا بديلة، وتشغيلها
+    /// تلقائياً يعني رسالتين لكلّ مديرٍ مربوط في كلّ عمليّة. المُستدعي
+    /// يقرّر — والواجهة تعرض المفتاح فقط لمن يستطيع استقباله.
+    bool sendTelegram = false,
   }) async {
     bool whatsAppOk = false;
     bool pushOk = false;
+    bool telegramOk = false;
     String? whatsAppMessage;
     String? pushMessage;
+    String? telegramMessage;
+
+    // ── نصُّ الرسالة يُبنى **مرّةً واحدة** ────────────────────────
+    // ⚠️ كان يُبنى داخل فرع واتساب. وبناؤه مرّتين لقناتين يعني قالبين
+    // يفترقان بصمت: يُعدَّل أحدهما وينسى الآخر، فيتلقّى المدير نصّين
+    // مختلفين عن العمليّة نفسها.
+    //
+    // ويُجلب القالب مرّةً كذلك — نداء شبكةٍ واحد لا اثنان.
+    String? body;
+    if (sendWhatsApp || sendTelegram) {
+      final templates = await WhatsAppApi.loadTemplates();
+      WhatsTemplate? managerTemplate;
+      if (templates != null) {
+        for (final t in templates) {
+          if (t.templateType == 'manager_agent' && t.isActive) {
+            managerTemplate = t;
+            break;
+          }
+        }
+      }
+      body = managerTemplate != null
+          ? _renderTemplate(
+              managerTemplate.messageContent,
+              manager: manager,
+              amount: amount,
+              isLoan: isLoan,
+              previousCredit: previousCredit,
+              previousDebt: previousDebt,
+              currentCredit: currentCredit,
+              currentDebt: currentDebt,
+              sasDebts: sasDebts,
+              otherDebts: otherDebts,
+              actionKind: actionKind,
+              notes: notes,
+            )
+          : _defaultMessage(
+              manager: manager,
+              amount: amount,
+              isLoan: isLoan,
+              previousCredit: previousCredit,
+              previousDebt: previousDebt,
+              currentCredit: currentCredit,
+              currentDebt: currentDebt,
+              sasDebts: sasDebts,
+              otherDebts: otherDebts,
+              actionKind: actionKind,
+              notes: notes,
+            );
+    }
 
     // WhatsApp branch
     if (sendWhatsApp) {
@@ -58,51 +117,31 @@ class ManagerNoticeService {
       if (phone.isEmpty) {
         whatsAppMessage = 'لا يوجد رقم هاتف للمدير';
       } else {
-        final templates = await WhatsAppApi.loadTemplates();
-        WhatsTemplate? managerTemplate;
-        if (templates != null) {
-          for (final t in templates) {
-            if (t.templateType == 'manager_agent' && t.isActive) {
-              managerTemplate = t;
-              break;
-            }
-          }
-        }
-        final body = managerTemplate != null
-            ? _renderTemplate(
-                managerTemplate.messageContent,
-                manager: manager,
-                amount: amount,
-                isLoan: isLoan,
-                previousCredit: previousCredit,
-                previousDebt: previousDebt,
-                currentCredit: currentCredit,
-                currentDebt: currentDebt,
-                sasDebts: sasDebts,
-                otherDebts: otherDebts,
-                actionKind: actionKind,
-                notes: notes,
-              )
-            : _defaultMessage(
-                manager: manager,
-                amount: amount,
-                isLoan: isLoan,
-                previousCredit: previousCredit,
-                previousDebt: previousDebt,
-                currentCredit: currentCredit,
-                currentDebt: currentDebt,
-                sasDebts: sasDebts,
-                otherDebts: otherDebts,
-                actionKind: actionKind,
-                notes: notes,
-              );
         final r = await WhatsAppApi.sendMessage(
           to: phone,
-          message: body,
+          message: body!,
           intent: 'manager_notice',
         );
         whatsAppOk = r.ok;
         whatsAppMessage = r.message;
+      }
+    }
+
+    // Telegram branch — **نفس النصّ حرفيّاً**
+    //
+    // ⚠️ يُرسَل عبر بوت المدير نفسه إلى محادثته هو (الخادم يتولّى ذلك)،
+    // لأنّ بوت تلغرام لا يستطيع بدء محادثة فلا يصل من لم يبدأ بوت
+    // المُرسِل. وقناةٌ فاشلة لا تُفشل الأخرى: كلٌّ تُبلَّغ على حدة.
+    if (sendTelegram) {
+      if (!manager.telegramLinked) {
+        telegramMessage = 'المدير لم يربط حسابه بتلغرام';
+      } else {
+        final r = await ManagersApi.sendTelegram(
+          id: manager.id,
+          message: body!,
+        );
+        telegramOk = r.ok;
+        telegramMessage = r.message;
       }
     }
 
@@ -126,8 +165,10 @@ class ManagerNoticeService {
     return ManagerNoticeResult(
       whatsAppOk: whatsAppOk,
       pushOk: pushOk,
+      telegramOk: telegramOk,
       whatsAppMessage: whatsAppMessage,
       pushMessage: pushMessage,
+      telegramMessage: telegramMessage,
     );
   }
 
