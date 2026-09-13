@@ -84,11 +84,25 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
   /// مطفأ افتراضياً — قناةٌ إضافيّة لا بديلة (انظر ManagerNoticeService).
   bool _sendTelegram = false;
 
+  /// ⚠️ **لا نثق بلقطة القائمة وحدها.** الراية مأخوذةٌ وقت تحميل
+  /// القائمة، و**الربط يقع في تلغرام على جهاز التابع** — فلا حدثٌ يصل
+  /// التطبيق. نبدأ من اللقطة ونسأل مرّةً عند الفتح، بلا قرعِ ساس.
+  late bool _tgLinked = widget.manager.telegramLinked;
+
+  Future<void> _refreshTgStatus() async {
+    final st = await ManagersApi.telegramStatus(widget.manager.id);
+    if (!mounted) return;
+    // ⚠️ `st.ok` شرطٌ لازم: الفشل يعني «لا نعرف» لا «غير مرتبط» —
+    // وبدونه يُطفئ انقطاعُ شبكةٍ لحظيّ قناةً مرتبطة.
+    if (st.ok && st.bound) setState(() => _tgLinked = true);
+  }
+
   @override
   void initState() {
     super.initState();
     _amountCtrl.addListener(_onAmount);
     _loadFresh();
+    if (!_tgLinked) _refreshTgStatus();
   }
 
   Future<void> _loadFresh() async {
@@ -417,7 +431,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                     onWa: (v) => setState(() => _sendWhatsApp = v),
                     onPush: (v) => setState(() => _sendPush = v),
                     sendTelegram: _sendTelegram,
-                    tgEnabled: widget.manager.telegramLinked,
+                    tgEnabled: _tgLinked,
                     onTg: (v) => setState(() => _sendTelegram = v),
                   ),
                 ],

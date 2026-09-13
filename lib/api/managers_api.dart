@@ -156,6 +156,10 @@ class Manager {
     );
   }
 
+  /// ⚠️ **كلّ حقلٍ جديد يجب أن يمرّ من هنا.** الحقل الغائب لا يُسبّب
+  /// خطأ ترجمة — يُصفَّر صامتاً إلى قيمته الافتراضيّة. و`telegramLinked`
+  /// افتراضيّها `false`، أي أنّ نسخةً واحدة تُطفئ قناة تلغرام لمديرٍ
+  /// مرتبط. لا مُستدعي لها اليوم، وهذا بالضبط وقت السدّ.
   Manager copyWith({
     int? id,
     String? username,
@@ -177,6 +181,8 @@ class Manager {
     double? totalDebt,
     double? debtForMe,
     int? rewardPoints,
+    bool? telegramLinked,
+    String? telegramChannel,
   }) =>
       Manager(
         id: id ?? this.id,
@@ -199,6 +205,8 @@ class Manager {
         totalDebt: totalDebt ?? this.totalDebt,
         debtForMe: debtForMe ?? this.debtForMe,
         rewardPoints: rewardPoints ?? this.rewardPoints,
+        telegramLinked: telegramLinked ?? this.telegramLinked,
+        telegramChannel: telegramChannel ?? this.telegramChannel,
       );
 }
 

@@ -100,10 +100,28 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
   /// يريده — والمفتاح لا يُعرض أصلاً لمن لم يربط.
   bool _sendTelegram = false;
 
+  /// ⚠️ **لا نثق بلقطة القائمة وحدها.** الراية مأخوذةٌ وقت تحميل
+  /// القائمة، و**الربط يقع في تلغرام على جهاز التابع** — فلا حدثٌ يصل
+  /// التطبيق. فمن أرسل الرابط وأغلق الصفيحة ثمّ ضغط تابعه START بعد
+  /// ذلك يجد المفتاح معطّلاً بلا سببٍ ظاهر.
+  ///
+  /// فنبدأ من اللقطة ونسأل مرّةً واحدةً عند الفتح. والنداء رخيص:
+  /// استعلاما قاعدة بلا قرعِ ساس (`/telegram-status`).
+  late bool _tgLinked = widget.manager.telegramLinked;
+
+  Future<void> _refreshTgStatus() async {
+    final st = await ManagersApi.telegramStatus(widget.manager.id);
+    if (!mounted) return;
+    // ⚠️ `st.ok` شرطٌ لازم: الفشل يعني «لا نعرف» لا «غير مرتبط» —
+    // وبدونه يُطفئ انقطاعُ شبكةٍ لحظيّ قناةً مرتبطة.
+    if (st.ok && st.bound) setState(() => _tgLinked = true);
+  }
+
   @override
   void initState() {
     super.initState();
     _amountCtrl.addListener(_onAmount);
+    if (!_tgLinked) _refreshTgStatus();
   }
 
   @override
@@ -533,8 +551,8 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
               dense: true,
               contentPadding: EdgeInsets.zero,
               controlAffinity: ListTileControlAffinity.leading,
-              value: widget.manager.telegramLinked ? _sendTelegram : false,
-              onChanged: widget.manager.telegramLinked
+              value: _tgLinked ? _sendTelegram : false,
+              onChanged: _tgLinked
                   ? (v) => setState(() => _sendTelegram = v ?? false)
                   : null,
               title: Row(
@@ -544,7 +562,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      widget.manager.telegramLinked
+                      _tgLinked
                           ? 'إرسال رسالة تلغرام للمدير'
                           : 'تلغرام — المدير لم يربط حسابه',
                       style: const TextStyle(
