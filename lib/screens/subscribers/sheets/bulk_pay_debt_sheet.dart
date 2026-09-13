@@ -28,10 +28,28 @@ import '../../../core/util/amount_input.dart';
 /// Only subscribers with debt > 0 are included (the screen pre-filters
 /// before opening — see the caller). Returns true when at least one
 /// payment succeeded so the caller can refresh.
+/// ⚠️ **يُمنَع فتحه على نسخةٍ محفوظة** (`offlineSnapshotAt != null`).
+///
+/// والمنع لا التحذير: الإرسال يفشل بلا شبكة على أيّ حال، فلا يُفقَد
+/// شيء بالمنع. أمّا الضرر فليس في الإرسال بل فيما قبله — رقمُ دينٍ
+/// قديم يُقرأ فيُنطَق أمام الزبون ويُطبَع على وصل. وشيتُ التسديد هو
+/// بالضبط الموضع الذي تتحوّل فيه اللقطة البائتة إلى رقمٍ مُلزِم.
+///
+/// ويبقى كلّ شيءٍ آخر مقروءاً بلا نت — وهو غرض الكاش أصلاً.
 Future<bool?> showBulkPayDebtSheet(
   BuildContext context, {
   required List<Subscriber> subs,
 }) {
+  // ⚠️ حارسٌ قبل العرض لا داخله: الشيت المفتوح يحمل الرقم القديم في
+  // حالته، فلا يكفي أن نُعطّل زرّ الإرسال.
+  if (SubscribersApi.offlineSnapshotAt != null) {
+    showSheetSnack(
+      context,
+      'التسديد يحتاج اتصالاً — الأرقام المعروضة نسخةٌ محفوظة',
+      isError: true,
+    );
+    return Future.value(false);
+  }
   return showModalBottomSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
@@ -198,6 +216,12 @@ class _BulkPayDebtSheetState extends State<_BulkPayDebtSheet> {
       }
       final res = await SubscribersApi.payDebt(
         idx: r.sub.idx!,
+        // ⚠️ العلَم لا الرقم حين «كامل» — والخطر هنا **أكبر** منه في
+        //    الشيت المفرد: الصفوف تُختار من لقطةٍ واحدة ثمّ تُرسَل
+        //    دفعةً، فبين أوّل صفٍّ وآخره تمرّ ثوانٍ، وكلّها تحمل
+        //    أرقاماً حُسبت قبل الضغط. والخادم يقرأ لكلّ صفٍّ دينَه
+        //    الحيّ.
+        payAll: r.payAll,
         amount: r.effectiveAmount,
       );
       if (!mounted) return;

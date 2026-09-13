@@ -32,7 +32,25 @@ import '_print_receipt_checkbox.dart';
 ///   7. Submit → /api/v2/subscribers/:idx/pay-debt.
 ///
 /// Returns true on success so the caller can refresh local state.
+/// ⚠️ **يُمنَع فتحه على نسخةٍ محفوظة** (`offlineSnapshotAt != null`).
+///
+/// والمنع لا التحذير: الإرسال يفشل بلا شبكة على أيّ حال، فلا يُفقَد
+/// شيء بالمنع. أمّا الضرر فليس في الإرسال بل فيما قبله — رقمُ دينٍ
+/// قديم يُقرأ فيُنطَق أمام الزبون ويُطبَع على وصل. وشيتُ التسديد هو
+/// بالضبط الموضع الذي تتحوّل فيه اللقطة البائتة إلى رقمٍ مُلزِم.
+///
+/// ويبقى كلّ شيءٍ آخر مقروءاً بلا نت — وهو غرض الكاش أصلاً.
 Future<bool?> showPayDebtSheet(BuildContext context, Subscriber sub) {
+  // ⚠️ حارسٌ قبل العرض لا داخله: الشيت المفتوح يحمل الرقم القديم في
+  // حالته، فلا يكفي أن نُعطّل زرّ الإرسال.
+  if (SubscribersApi.offlineSnapshotAt != null) {
+    showSheetSnack(
+      context,
+      'التسديد يحتاج اتصالاً — الأرقام المعروضة نسخةٌ محفوظة',
+      isError: true,
+    );
+    return Future.value(false);
+  }
   return showModalBottomSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
@@ -160,6 +178,10 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     final manualMode = ManualWaPrefs.enabled.value;
     final result = await SubscribersApi.payDebt(
       idx: idx,
+      // ⚠️ حين يكون «كامل الدين» مفعّلاً نرسل **العلَم لا الرقم**:
+      //    رقمُنا مأخوذٌ من كائنٍ قد يكون قديماً، والخادم يقرأ الدين
+      //    حيّاً من الساس. فالقبض الزائد يصير مستحيلاً لا مُضيَّقاً.
+      payAll: _payAll,
       amount: _effectiveAmount,
       comment: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
       skipAutoWa: manualMode,

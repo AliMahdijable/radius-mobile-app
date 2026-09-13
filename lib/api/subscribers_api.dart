@@ -1007,12 +1007,25 @@ class SubscribersApi {
     required double amount,
     String? comment,
     bool skipAutoWa = false,
+
+    /// «سدّد كامل الدين» — يُرسَل علَماً لا مبلغاً.
+    ///
+    /// ⚠️ والفرق جوهريّ لا تجميليّ: المبلغ المحسوب في التطبيق مأخوذٌ
+    /// من كائنٍ قد يكون قديماً (كاش الذاكرة ٤٥ ثانية، وكاش القرص حتّى
+    /// ثلاثة أيّام). فلو سدّد الزبون ١٠٬٠٠٠ عند الموظّف ثمّ ضغط المدير
+    /// «كامل الدين» على لقطةٍ تقول ١٥٬٠٠٠ — قُبض ١٠٬٠٠٠ زائدةً.
+    ///
+    /// أمّا العلَم فيجعل الخادم يقرأ الدين **حيّاً من الساس** ويسدّده
+    /// بالضبط. فالزيادة تصير مستحيلةً رياضيّاً لا مُضيَّقةً.
+    bool payAll = false,
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
         '/api/v2/subscribers/$idx/pay-debt',
         data: {
-          'amount': amount,
+          // ⚠️ لا نرسل الاثنين: الخادم يُفضّل `payAll` ويتجاهل المبلغ،
+          //    لكنّ إرسال رقمٍ لا يُقرأ يُضلّل من يقرأ السجلّ لاحقاً.
+          if (payAll) 'payAll': true else 'amount': amount,
           if (comment != null && comment.isNotEmpty) 'comment': comment,
           if (skipAutoWa) 'skipAutoWa': true,
         },
