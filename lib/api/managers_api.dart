@@ -31,6 +31,7 @@ class Manager {
     this.totalDebt = 0,
     this.debtForMe = 0,
     this.rewardPoints = 0,
+    this.telegramLinked = false,
   });
 
   final int id;
@@ -65,6 +66,17 @@ class Manager {
   /// Debt this sub-manager owes *to me specifically* (in multi-parent
   /// trees). Used as a parameter to /manager/payDebt.
   final double debtForMe;
+
+  /// هل ربط هذا المدير حسابه الشخصيّ ببوت تلغرام **وبوته متّصل**؟
+  ///
+  /// ⚠️ الشرطان معاً لا أحدهما. وبدونهما لا يمكن مراسلته إطلاقاً:
+  /// بوت تلغرام **لا يستطيع بدء محادثة** — الطرف الآخر يجب أن يبدأ
+  /// أوّلاً. فهذا قيدٌ في تلغرام لا في نظامنا، ولا حيلة فيه.
+  ///
+  /// تُقرأ من `/api/v2/managers/full` (الخادم يحسبها باستعلامٍ واحد
+  /// للصفحة كلّها). الافتراضيّ `false` — فنقطةٌ قديمة لا تُرسلها تعني
+  /// إخفاء الخيار لا إظهاره معطوباً.
+  final bool telegramLinked;
 
   final int rewardPoints;
 
@@ -113,6 +125,7 @@ class Manager {
       totalDebt:
           _toDouble(j['total_debt'] ?? j['debt'] ?? j['total'] ?? 0).abs(),
       debtForMe: _toDouble(j['debt_for_me']).abs(),
+      telegramLinked: _toBool(j['telegram_linked'] ?? false),
       // v1 manager_model:74 — reward_points lives in many places
       // depending on the endpoint. Mirror the full fallback list.
       rewardPoints: _toInt(
@@ -683,6 +696,46 @@ class ManagersApi {
     } catch (e) {
       _log('v2/managers/$id/add-points', e);
       return (ok: false, message: 'فشل إضافة النقاط');
+    }
+  }
+
+  // ===========================================================
+  // TELEGRAM
+  // ===========================================================
+
+  /// POST /api/v2/managers/:id/send-telegram — يرسل رسالةً للمدير عبر
+  /// تلغرام.
+  ///
+  /// ⚠️ الرسالة تُرسَل عبر **بوت المدير نفسه** إلى محادثته هو — لا عبر
+  /// بوت المُرسِل. والسبب قيدٌ في تلغرام: البوت لا يستطيع بدء محادثة،
+  /// فمن لم يفتح بوت أبيه لا يصله شيء منه. أمّا بوته هو فقد بدأه سلفاً.
+  ///
+  /// ولا يُرسَل `chat_id` من هنا ولا يُستقبَل: الخادم يقرؤه ويستعمله.
+  ///
+  /// يُنادى فقط حين `manager.telegramLinked` — وإلّا فالخادم يردّ 409
+  /// برمزٍ يميّز السبب (`NO_TELEGRAM` · `NOT_LINKED` · `BOT_DISCONNECTED`).
+  static Future<ApiResult> sendTelegram({
+    required int id,
+    required String message,
+  }) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/managers/$id/send-telegram',
+        data: {'message': message},
+      );
+      final body = r.data ?? const {};
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString()
+      );
+    } on DioException catch (e) {
+      _log('v2/managers/$id/send-telegram', e);
+      final body = e.response?.data;
+      final msg = body is Map ? body['message']?.toString() : null;
+      return (ok: false, message: msg ?? 'تعذّر الإرسال عبر تلغرام');
+    } catch (e) {
+      _log('v2/managers/$id/send-telegram', e);
+      return (ok: false, message: 'تعذّر الإرسال عبر تلغرام');
     }
   }
 
