@@ -18,6 +18,7 @@ import 'sheets/edit_manager_sheet.dart';
 import 'sheets/manager_actions_sheet.dart';
 import 'sheets/pay_debt_sheet.dart';
 import 'sheets/send_info_sheet.dart';
+import 'sheets/telegram_link_sheet.dart';
 import '../../core/util/clipboard_helper.dart';
 import '../../services/permissions_service.dart';
 import '../../services/subscriber_events.dart';
@@ -188,6 +189,12 @@ class _ManagersScreenState extends State<ManagersScreen> {
         );
       case ManagerAction.sendInfo:
         await showSendInfoSheet(context, m);
+      case ManagerAction.linkTelegram:
+        // ⚠️ نعيد التحميل حين تغيّرت حالة الربط فقط: الراية
+        // `telegram_linked` تُقرأ من الخادم، وبدون إعادة تحميلٍ تبقى
+        // المفاتيح في صفائح الشحن معطّلةً بعد ربطٍ ناجح.
+        final changed = await showTelegramLinkSheet(context, m);
+        if (changed == true) _load();
       case ManagerAction.showPassword:
         await _showManagerPassword(m);
       case ManagerAction.copyUsername:

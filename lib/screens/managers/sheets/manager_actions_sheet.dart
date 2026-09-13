@@ -26,6 +26,10 @@ enum ManagerAction {
   otherDebts('managers.action_other_debts', LucideIcons.receipt),
   movements('managers.action_movements', LucideIcons.activity),
   sendInfo('managers.action_send_info', LucideIcons.smartphone),
+  // 2026-09-13: ربط المدير الفرعيّ ببوت تلغرام الأب.
+  // ⚠️ عمليّةٌ مستقلّة لا خيارٌ داخل «إرسال معلومات»: الربط يسبق أيّ
+  // إرسال، وإخفاؤه داخل صفيحة إرسالٍ يعني ألّا يجده من لم يُرسل بعد.
+  linkTelegram('managers.action_link_telegram', LucideIcons.send),
   // 2026-08-26: إظهار كلمة السرّ الحاليّة (طلب المستخدم).
   // مصدرها whatsapp_sessions.admin_password_encrypted — الأدمن الفرعي
   // يجب يسجّل دخول مرّة أولاً حتى تُخزَّن.
@@ -62,9 +66,12 @@ enum ManagerAction {
         _ => AppTone.brand,
       };
 
-  /// أخضر واتساب للأيقونة وحدها — تعريف قناة لا حالة.
-  Color? get brandGlyph =>
-      this == ManagerAction.sendInfo ? AppColors.channelWhatsApp : null;
+  /// ألوان القنوات للأيقونة وحدها — تعريف قناة لا حالة.
+  Color? get brandGlyph => switch (this) {
+        ManagerAction.sendInfo => AppColors.channelWhatsApp,
+        ManagerAction.linkTelegram => AppColors.channelTelegram,
+        _ => null,
+      };
 
   Color get color => brandGlyph ?? tone.fill;
 
@@ -116,8 +123,17 @@ class _ActionsSheet extends StatelessWidget {
       if (Perms.has('managers.add_points')) ManagerAction.addPoints,
       if (Perms.has('reports.manager_debts')) ManagerAction.otherDebts,
       ManagerAction.movements,
-      if (hasDebt && hasPhone && Perms.has('subscribers.send_whatsapp'))
+      // ⚠️ `hasPhone || telegramLinked` لا `hasPhone` وحدها: منذ صارت
+      // تلغرام قناةً حقيقيّة، صار مديرٌ مرتبطٌ بها بلا رقمٍ في الساس
+      // قابلاً للمراسلة — وشرطُ الرقم وحده كان يُخفي العمليّة عنه.
+      if (hasDebt &&
+          (hasPhone || manager.telegramLinked) &&
+          Perms.has('subscribers.send_whatsapp'))
         ManagerAction.sendInfo,
+      // ⚠️ بلا شرط `hasPhone`: الرابط يُنسخ ويُشارَك بأيّ وسيلة، ورقم
+      // الواتساب ييسّره ولا يشترطه. واشتراطه يُخفي الميزة عمّن لا رقم
+      // له في الساس — وهم كُثر.
+      if (Perms.has('managers.view')) ManagerAction.linkTelegram,
       // كلمة السرّ متاحة لكل من عنده managers.edit — نفس صلاحيّة
       // التعديل. الـbackend يفحصها كذلك.
       if (Perms.has('managers.edit')) ManagerAction.showPassword,

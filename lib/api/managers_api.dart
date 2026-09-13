@@ -32,6 +32,7 @@ class Manager {
     this.debtForMe = 0,
     this.rewardPoints = 0,
     this.telegramLinked = false,
+    this.telegramChannel,
   });
 
   final int id;
@@ -77,6 +78,13 @@ class Manager {
   /// للصفحة كلّها). الافتراضيّ `false` — فنقطةٌ قديمة لا تُرسلها تعني
   /// إخفاء الخيار لا إظهاره معطوباً.
   final bool telegramLinked;
+
+  /// أيّ قناةٍ تصل هذا المدير: `parent_bot` (ربط ببوتك بضغطة رابط) أو
+  /// `own_bot` (أنشأ بوته وربط حسابه) أو `null`.
+  ///
+  /// ⚠️ والتمييز ليس زينة: «مرتبط ببوتك» يمكنك فكّه، و«له بوته» لا
+  /// شأن لك به. عرضُهما واحداً يَعِد المستخدم بما لا يملك.
+  final String? telegramChannel;
 
   final int rewardPoints;
 
@@ -126,6 +134,7 @@ class Manager {
           _toDouble(j['total_debt'] ?? j['debt'] ?? j['total'] ?? 0).abs(),
       debtForMe: _toDouble(j['debt_for_me']).abs(),
       telegramLinked: _toBool(j['telegram_linked'] ?? false),
+      telegramChannel: j['telegram_channel']?.toString(),
       // v1 manager_model:74 — reward_points lives in many places
       // depending on the endpoint. Mirror the full fallback list.
       rewardPoints: _toInt(
@@ -706,9 +715,10 @@ class ManagersApi {
   /// POST /api/v2/managers/:id/send-telegram — يرسل رسالةً للمدير عبر
   /// تلغرام.
   ///
-  /// ⚠️ الرسالة تُرسَل عبر **بوت المدير نفسه** إلى محادثته هو — لا عبر
-  /// بوت المُرسِل. والسبب قيدٌ في تلغرام: البوت لا يستطيع بدء محادثة،
-  /// فمن لم يفتح بوت أبيه لا يصله شيء منه. أمّا بوته هو فقد بدأه سلفاً.
+  /// ⚠️ الخادم يختار القناة بترتيب أفضليّة: **بوتك أنت** إن كان التابع
+  /// ضغط رابط الدعوة، وإلّا **بوت التابع نفسه** إن كان له واحد. والسبب
+  /// قيدٌ في تلغرام: البوت لا يستطيع بدء محادثة، فمن لم يبدأ بوتاً لا
+  /// يصله منه شيء.
   ///
   /// ولا يُرسَل `chat_id` من هنا ولا يُستقبَل: الخادم يقرؤه ويستعمله.
   ///
@@ -736,6 +746,61 @@ class ManagersApi {
     } catch (e) {
       _log('v2/managers/$id/send-telegram', e);
       return (ok: false, message: 'تعذّر الإرسال عبر تلغرام');
+    }
+  }
+
+  /// GET /api/v2/managers/:id/telegram-link — رابط دعوةٍ يربط المدير
+  /// الفرعيّ **ببوتك أنت**.
+  ///
+  /// ⚠️ ولماذا بوتك لا بوته: قِيس أنّ ١١ مديراً من ٨٥٠ أنشأوا بوتاً
+  /// عبر BotFather. فالانتظار حتّى ينشئ التابع بوتاً يعني ألّا تصل
+  /// الميزة أحداً. ورابطُك ضغطةٌ واحدة عنده: يفتح، يضغط START، انتهى.
+  ///
+  /// ولا مفرّ من الرابط: بوت تلغرام **لا يستطيع بدء محادثة** — يجب أن
+  /// يبدأها المستقبِل. فلا وسيلة لربطه من طرفنا وحده.
+  static Future<({bool ok, String? link, String? bot, bool bound, String? message})>
+      fetchTelegramLink(int id) async {
+    try {
+      final r = await ApiClient.dio
+          .get<Map<String, dynamic>>('/api/v2/managers/$id/telegram-link');
+      final d = (r.data ?? const {})['data'];
+      if (d is! Map) return (ok: false, link: null, bot: null, bound: false, message: 'ردٌّ غير متوقَّع');
+      return (
+        ok: true,
+        link: d['link']?.toString(),
+        bot: d['botUsername']?.toString(),
+        bound: d['alreadyBound'] == true,
+        message: null,
+      );
+    } on DioException catch (e) {
+      _log('v2/managers/$id/telegram-link', e);
+      final b = e.response?.data;
+      final msg = b is Map ? b['message']?.toString() : null;
+      return (
+        ok: false, link: null, bot: null, bound: false,
+        // ٤٠٩ من الخادم = بوتك أنت غير متّصل. رسالته أدقّ من أيّ تعميم.
+        message: msg ?? 'تعذّر توليد الرابط',
+      );
+    } catch (e) {
+      _log('v2/managers/$id/telegram-link', e);
+      return (ok: false, link: null, bot: null, bound: false, message: 'تعذّر توليد الرابط');
+    }
+  }
+
+  /// DELETE /api/v2/managers/:id/telegram-link — فكّ الربط ببوتك.
+  /// لا يمسّ بوت المدير الخاصّ إن كان له واحد.
+  static Future<ApiResult> unlinkTelegram(int id) async {
+    try {
+      final r = await ApiClient.dio
+          .delete<Map<String, dynamic>>('/api/v2/managers/$id/telegram-link');
+      return (ok: (r.data ?? const {})['success'] == true, message: null);
+    } on DioException catch (e) {
+      _log('DELETE v2/managers/$id/telegram-link', e);
+      final b = e.response?.data;
+      return (ok: false, message: b is Map ? b['message']?.toString() : 'تعذّر فكّ الربط');
+    } catch (e) {
+      _log('DELETE v2/managers/$id/telegram-link', e);
+      return (ok: false, message: 'تعذّر فكّ الربط');
     }
   }
 
