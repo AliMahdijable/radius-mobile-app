@@ -787,6 +787,34 @@ class ManagersApi {
     }
   }
 
+  /// GET /api/v2/managers/:id/telegram-status — هل ارتبط بعد؟
+  ///
+  /// ⚠️ **نقطةٌ منفصلة عن `fetchTelegramLink` عمداً**. تلك تسأل الساس
+  /// عن شجرة المدراء للتحقّق من الملكيّة، وهذه تُستجوَب كلّ بضع ثوانٍ
+  /// بينما ينتظر المدير تابعَه أن يضغط START. واستجوابٌ يقرع الساس
+  /// لمديرٍ له ثمانمئة تابع ليس استجواباً بل قصفاً.
+  ///
+  /// ولماذا الاستجواب أصلاً: **الربط يقع في تلغرام لا في التطبيق**.
+  /// فلا حدث يصل التطبيق، ولا سبيل لمعرفته إلّا بالسؤال.
+  static Future<({bool ok, bool bound, String? channel})> telegramStatus(
+      int id) async {
+    try {
+      final r = await ApiClient.dio
+          .get<Map<String, dynamic>>('/api/v2/managers/$id/telegram-status');
+      final d = (r.data ?? const {})['data'];
+      if (d is! Map) return (ok: false, bound: false, channel: null);
+      return (
+        ok: true,
+        bound: d['bound'] == true,
+        channel: d['channel']?.toString(),
+      );
+    } catch (e) {
+      // ⚠️ صامتةٌ عمداً: تُنادى دوريّاً، وتوستٌ لكلّ محاولةٍ فاشلة
+      // يُغرق الشاشة. الفشل يعني «لا نعرف بعد» لا «غير مرتبط».
+      return (ok: false, bound: false, channel: null);
+    }
+  }
+
   /// DELETE /api/v2/managers/:id/telegram-link — فكّ الربط ببوتك.
   /// لا يمسّ بوت المدير الخاصّ إن كان له واحد.
   static Future<ApiResult> unlinkTelegram(int id) async {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -58,10 +60,64 @@ class _TelegramLinkSheetState extends State<_TelegramLinkSheet> {
   /// هل تغيّر شيءٌ يستوجب إعادة تحميل القائمة عند الإغلاق.
   bool _dirty = false;
 
+  /// ── استجواب حالة الربط ──────────────────────────────────────
+  /// ⚠️ **الربط يقع في تلغرام لا في التطبيق**: التابع يفتح الرابط
+  /// ويضغط START على جهازه هو. فلا حدثٌ يصل التطبيق ولا شيء يُخطره.
+  ///
+  /// وبلا هذا الاستجواب تبقى الراية `telegramLinked` قديمةً حتّى
+  /// يسحب المدير القائمة يدويّاً — فيفتح «شحن» ويجد مفتاح تلغرام
+  /// معطّلاً مكتوباً عليه «لم يربط حسابه» بينما التابع ربط تواً.
+  /// حدث ذلك فعلاً قبل هذا الإصلاح.
+  Timer? _poll;
+  int _polls = 0;
+
+  /// حدٌّ زمنيّ لا عدديّ في المعنى: ٤ ثوانٍ × ٧٥ = خمس دقائق. وهي
+  /// أطول ممّا يحتاجه من يضغط رابطاً وصله تواً، وأقصر من أن تستنزف
+  /// بطّاريّةً لصفيحةٍ نُسيت مفتوحة.
+  static const _pollEvery = Duration(seconds: 4);
+  static const _maxPolls = 75;
+
   @override
   void initState() {
     super.initState();
     _fetch();
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  void _startPolling() {
+    _poll?.cancel();
+    if (_bound) return; // مرتبطٌ سلفاً — لا شيء ننتظره
+    _poll = Timer.periodic(_pollEvery, (t) async {
+      if (!mounted) { t.cancel(); return; }
+      if (++_polls > _maxPolls) { t.cancel(); return; }
+      final st = await ManagersApi.telegramStatus(widget.manager.id);
+      if (!mounted) { t.cancel(); return; }
+      // ⚠️ `st.ok` شرطٌ لازم: الفشل يعني «لا نعرف» لا «غير مرتبط».
+      // وبدونه يمحو انقطاعُ شبكةٍ لحظيّ حالةَ ربطٍ صحيحة.
+      if (st.ok && st.bound) {
+        t.cancel();
+        HapticFeedback.mediumImpact();
+        setState(() { _bound = true; _dirty = true; });
+      }
+    });
+  }
+
+  Future<void> _checkNow() async {
+    setState(() => _busy = true);
+    final st = await ManagersApi.telegramStatus(widget.manager.id);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      if (st.ok && st.bound) { _bound = true; _dirty = true; _poll?.cancel(); }
+    });
+    if (!(st.ok && st.bound)) {
+      showSheetSnack(context, 'لم يضغط START بعد', isError: true);
+    }
   }
 
   Future<void> _fetch() async {
@@ -74,6 +130,7 @@ class _TelegramLinkSheetState extends State<_TelegramLinkSheet> {
       _bound = r.bound;
       _error = r.ok ? null : r.message;
     });
+    if (r.ok && !r.bound) _startPolling();
   }
 
   String get _invite {
@@ -127,8 +184,10 @@ class _TelegramLinkSheetState extends State<_TelegramLinkSheet> {
       if (r.ok) {
         _bound = false;
         _dirty = true;
+        _polls = 0;
       }
     });
+    if (r.ok) _startPolling();
     showSheetSnack(
       context,
       r.ok ? 'فُكّ الربط' : (r.message ?? 'تعذّر فكّ الربط'),
@@ -210,12 +269,7 @@ class _TelegramLinkSheetState extends State<_TelegramLinkSheet> {
                   'عبره. وإن ربطته ببوتك صارت تصله منك.',
             )
           else
-            _note(
-              icon: LucideIcons.send,
-              tone: AppTone.info,
-              text: 'أرسل له هذا الرابط. يفتحه ويضغط START مرّةً واحدة، '
-                  'فتصله بعدها إشعارات الشحن والسحب وتسديد الديون.',
-            ),
+            _waitingNote(),
           const SizedBox(height: Sp.md),
           _linkBox(),
           const SizedBox(height: Sp.md),
@@ -263,6 +317,20 @@ class _TelegramLinkSheetState extends State<_TelegramLinkSheet> {
               style: AppType.muted(color: AppColors.textLow),
             ),
           ],
+          if (!_bound) ...[
+            const SizedBox(height: Sp.sm),
+            // ⚠️ زرٌّ يدويّ **إلى جانب** الاستجواب لا بديلاً عنه: من
+            // أرسل الرابط ثمّ خرج من التطبيق وعاد بعد ساعة لا يُدركه
+            // الاستجواب (خمس دقائق)، فيحتاج سؤالاً صريحاً.
+            Center(
+              child: TextButton.icon(
+                onPressed: _busy ? null : _checkNow,
+                icon: const Icon(LucideIcons.refreshCw, size: 15),
+                label: const Text('تحقّق الآن'),
+                style: TextButton.styleFrom(foregroundColor: AppColors.brand),
+              ),
+            ),
+          ],
           if (_bound) ...[
             const SizedBox(height: Sp.md),
             TextButton.icon(
@@ -272,6 +340,45 @@ class _TelegramLinkSheetState extends State<_TelegramLinkSheet> {
               style: TextButton.styleFrom(foregroundColor: AppTone.danger.fill),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// ملاحظة الانتظار — تقول للمدير إنّ التطبيق **يراقب** فلا يظنّ
+  /// أنّه مطالبٌ بالخروج والعودة. والمؤشّر الدوّار هو الفرق بين
+  /// «انتظِر» و«لا شيء يحدث».
+  Widget _waitingNote() {
+    final watching = _poll?.isActive == true;
+    return Container(
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: AppTone.info.softBg,
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(color: AppTone.info.softBorder),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 16,
+            height: 16,
+            child: watching
+                ? CircularProgressIndicator(
+                    strokeWidth: 1.8, color: AppTone.info.fill)
+                : Icon(LucideIcons.send, size: 16, color: AppTone.info.fill),
+          ),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: Text(
+              watching
+                  ? 'أرسل له الرابط. يفتحه ويضغط START مرّةً واحدة — '
+                      'وسنُبلّغك هنا فور ارتباطه.'
+                  : 'أرسل له الرابط. يفتحه ويضغط START مرّةً واحدة، '
+                      'ثمّ اضغط «تحقّق الآن».',
+              style: AppType.muted(color: AppTone.info.onSoft),
+            ),
+          ),
         ],
       ),
     );

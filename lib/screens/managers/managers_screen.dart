@@ -190,11 +190,17 @@ class _ManagersScreenState extends State<ManagersScreen> {
       case ManagerAction.sendInfo:
         await showSendInfoSheet(context, m);
       case ManagerAction.linkTelegram:
-        // ⚠️ نعيد التحميل حين تغيّرت حالة الربط فقط: الراية
-        // `telegram_linked` تُقرأ من الخادم، وبدون إعادة تحميلٍ تبقى
-        // المفاتيح في صفائح الشحن معطّلةً بعد ربطٍ ناجح.
-        final changed = await showTelegramLinkSheet(context, m);
-        if (changed == true) _load();
+        // ⚠️ إعادة تحميلٍ **غير مشروطة**، وقد كانت مشروطةً فأخطأت.
+        //
+        // الصفيحة تُرجع `true` حين رصدت الارتباط وهي مفتوحة. لكنّ
+        // **الربط يقع في تلغرام لا في التطبيق**: التابع قد يضغط START
+        // بعد ساعة، أو بينما التطبيق مُغلق. فالصفيحة لا ترصد كلّ شيء،
+        // واشتراطُ رصدها يترك الراية قديمةً — فيفتح المدير «شحن»
+        // ويجد مفتاح تلغرام معطّلاً بينما تابعه ربط تواً. حدث فعلاً.
+        //
+        // وثمن إعادة التحميل نداءان بعد فعلٍ صريح من المستخدم. رخيص.
+        await showTelegramLinkSheet(context, m);
+        if (mounted) _load();
       case ManagerAction.showPassword:
         await _showManagerPassword(m);
       case ManagerAction.copyUsername:
