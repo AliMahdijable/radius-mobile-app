@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/whatsapp_api.dart';
 import '../../core/widgets/design_sheet.dart';
+import 'template_defaults.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -172,6 +173,72 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
     return null;
   }
 
+  bool _bulkBusy = false;
+
+  /// الأنواع التي **لا قالب لها ولها نصٌّ افتراضيّ**.
+  /// ⚠️ لا نعدّ الأنواع الغريبة التي ردّها الخادم ولا نعرف لها نصّاً —
+  /// «توليد ٣» يجب أن يعني ثلاثة تُولَّد فعلاً.
+  List<_TemplateDef> _missingTypes(List<_TemplateDef> all) => all
+      .where((d) => _templateOf(d.type) == null && TemplateDefaults.has(d.type))
+      .toList();
+
+  /// يُنشئ كلّ قالبٍ ناقصٍ بنصّه الجاهز.
+  ///
+  /// ⚠️ **لا يمسّ القوالب القائمة إطلاقاً** — لا تحديث ولا استبدال.
+  /// فمن أمضى وقتاً في صياغة قالبه لا يجوز أن تمحوه ضغطةٌ واحدة،
+  /// والاستبدال متاحٌ فرديّاً داخل المحرّر بتأكيدٍ صريح.
+  Future<void> _generateMissing(List<_TemplateDef> all) async {
+    final missing = _missingTypes(all);
+    if (missing.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('توليد ${missing.length} قالباً؟'),
+        content: Text(
+          'ستُنشأ القوالب الناقصة بنصوصٍ جاهزة صالحة للإرسال:\n\n'
+          '${missing.map((d) => '• ${d.label}').join('\n')}\n\n'
+          'القوالب الموجودة لن تتغيّر.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(c).pop(false),
+              child: const Text('إلغاء')),
+          TextButton(
+              onPressed: () => Navigator.of(c).pop(true),
+              child: const Text('توليد')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    setState(() => _bulkBusy = true);
+    var done = 0;
+    final failed = <String>[];
+    for (final d in missing) {
+      final body = TemplateDefaults.forType(d.type);
+      if (body == null) continue;
+      final r = await WhatsAppApi.saveTemplate(
+        templateType: d.type,
+        templateName: d.label,
+        messageContent: body,
+        isActive: true,
+      );
+      // ⚠️ نُحصي الفشل بالاسم لا بالعدد: «فشل ٢» لا يقول أيّهما
+      // يحتاج إعادة محاولة.
+      if (r.ok) { done++; } else { failed.add(d.label); }
+    }
+    if (!mounted) return;
+    setState(() => _bulkBusy = false);
+    await _load();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(failed.isEmpty
+          ? 'تم توليد $done قالباً'
+          : 'تم $done · تعذّر: ${failed.join('، ')}'),
+      backgroundColor: failed.isEmpty ? AppColors.brand : AppColors.error,
+      behavior: SnackBarBehavior.floating,
+    ));
+  }
+
   Future<void> _openEdit(_TemplateDef def) async {
     final existing = _templateOf(def.type);
     final result = await showModalBottomSheet<bool>(
@@ -211,6 +278,21 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
           style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
+        actions: [
+          // ⚠️ يظهر **فقط** حين يوجد ناقص: زرٌّ لا يفعل شيئاً حين يُضغط
+          // أسوأ من زرٍّ غائب.
+          if (!_loading && _missingTypes(all).isNotEmpty)
+            TextButton.icon(
+              onPressed: _bulkBusy ? null : () => _generateMissing(all),
+              icon: _bulkBusy
+                  ? const SizedBox(
+                      width: 14, height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 1.8))
+                  : const Icon(LucideIcons.sparkles, size: 16),
+              label: Text('توليد ${_missingTypes(all).length}'),
+              style: TextButton.styleFrom(foregroundColor: accent),
+            ),
+        ],
       ),
       body: SafeArea(
         child: RefreshIndicator(
@@ -389,11 +471,26 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
   late String _defaultChannel;
   bool _saving = false;
 
+  /// هل النصّ المعروض افتراضيٌّ مُعبّأ لا محفوظ — لنُخبر المدير
+  /// صراحةً بدل أن يظنّه قالباً قائماً.
+  bool _prefilled = false;
+
   @override
   void initState() {
     super.initState();
-    _bodyCtrl =
-        TextEditingController(text: widget.existing?.messageContent ?? '');
+    // ⚠️ **لا نفتح فارغاً.** كان يفتح كذلك، فكانت الشاشة تطلب
+    // تأليفاً لا تعبئة — ومن يُطالَب بتأليف رسالةٍ وتذكّر أسماء
+    // متغيّراتها لا يفعل. قِيس: `manager_agent` له ١٨ قالباً بينما
+    // `activation_notice` له ٣٥٢، وقالب صاحب المشروع نفسه كان
+    // «تم {amount}لان{action_type}» — محاولةٌ بدأت وتوقّفت.
+    //
+    // فالجديد يبدأ بنصٍّ جاهزٍ صالحٍ للإرسال كما هو، والمدير يُعدّل
+    // لا يُنشئ. وما كُتب سابقاً لا يُمسّ.
+    final seed = widget.existing?.messageContent
+        ?? TemplateDefaults.forType(widget.def.type)
+        ?? '';
+    _prefilled = widget.existing == null && seed.isNotEmpty;
+    _bodyCtrl = TextEditingController(text: seed);
     _isActive = widget.existing?.isActive ?? true;
     _defaultChannel = widget.existing?.defaultChannel ?? 'auto';
   }
@@ -535,6 +632,60 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
     );
   }
 
+  Widget _prefilledBanner() {
+    return Container(
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: AppTone.info.softBg,
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(color: AppTone.info.softBorder),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(LucideIcons.sparkles, size: 15, color: AppTone.info.fill),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: Text(
+              'نصٌّ مقترح جاهز — عدّله كما تشاء، ثمّ اضغط «حفظ» ليُعتمد. '
+              'لم يُحفظ بعد.',
+              style: AppType.muted(color: AppTone.info.onSoft),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// استعادة النصّ المقترح فوق ما هو مكتوب — بتأكيدٍ صريح.
+  /// ⚠️ الكتابة فوق نصٍّ كتبه المدير لا تُفعل بضغطةٍ واحدة مهما كان
+  /// النصّ رديئاً: قد يكون فيه رقم هاتفٍ أو صيغةٌ يريدها.
+  Future<void> _restoreDefault() async {
+    final def = TemplateDefaults.forType(widget.def.type);
+    if (def == null) return;
+    final current = _bodyCtrl.text.trim();
+    if (current.isNotEmpty && current != def.trim()) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('استعادة النصّ المقترح؟'),
+          content: const Text('سيُستبدل النصّ الحاليّ بالنصّ الجاهز. '
+              'لن يُحفظ إلّا بعد ضغطك «حفظ».'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.of(c).pop(false),
+                child: const Text('إلغاء')),
+            TextButton(
+                onPressed: () => Navigator.of(c).pop(true),
+                child: const Text('استعادة')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    setState(() => _bodyCtrl.text = def);
+  }
+
   Future<void> _save() async {
     if (_saving) return;
     setState(() => _saving = true);
@@ -554,7 +705,10 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
         behavior: SnackBarBehavior.floating,
       ),
     );
-    if (r.ok) Navigator.of(context).pop(true);
+    if (r.ok) {
+      _prefilled = false;
+      Navigator.of(context).pop(true);
+    }
   }
 
   Future<void> _delete() async {
@@ -616,13 +770,29 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
         // زرّ الحذف سقط سهواً عند نقل المحرّر إلى القوقعة الموحّدة
         // (f607065): بقيت `_delete` معرّفة بلا مستدعٍ، فلم يعد بالإمكان
         // حذف قالب من الواجهة إطلاقاً. أُعيد في خانة `leading`.
-        leading: widget.existing != null
-            ? SheetFooterIconButton(
+        // ⚠️ الحذف **والاستعادة** معاً: من عنده قالبٌ مكسور لا يريد
+        // حذفه بل استبداله بنصٍّ صالح — والحذف وحده يجعله يبدأ من
+        // الصفر ثانيةً، وهي المشكلة نفسها.
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.existing != null)
+              SheetFooterIconButton(
                 icon: LucideIcons.trash2,
                 color: AppColors.error,
                 onTap: _saving ? null : _delete,
-              )
-            : null,
+              ),
+            if (widget.existing != null &&
+                TemplateDefaults.has(widget.def.type))
+              const SizedBox(width: Sp.sm),
+            if (TemplateDefaults.has(widget.def.type))
+              SheetFooterIconButton(
+                icon: LucideIcons.sparkles,
+                color: AppColors.brandAccent,
+                onTap: _saving ? null : _restoreDefault,
+              ),
+          ],
+        ),
       ),
       maxHeightFactor: 0.95,
       scrollable: false,
@@ -630,6 +800,11 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.lg, Sp.xl, Sp.xxl),
         children: [
+          // ⚠️ شريطٌ يقول الحقيقة: النصّ معروضٌ لكنّه **غير محفوظ**.
+          // بدونه يظنّه المدير قالباً قائماً فيُغلق الصفيحة بلا حفظ،
+          // ويبقى بلا قالب وهو يحسب أنّ عنده واحداً.
+          if (_prefilled) _prefilledBanner(),
+          if (_prefilled) const SizedBox(height: Sp.md),
           SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
             activeThumbColor: accent,
