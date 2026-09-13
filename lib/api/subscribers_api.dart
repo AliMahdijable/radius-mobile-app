@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/subscriber.dart';
 import '../services/auth_storage.dart';
+import '../services/subscribers_offline_cache.dart';
 import 'api_client.dart';
 
 /// Outcome of a backend-initiated WhatsApp send (post-activate /
@@ -146,6 +149,10 @@ class _SubsListCache {
 
   static Future<List<Subscriber>?> get() {
     final now = DateTime.now();
+    // ⚠️ `_at != null` يُقصي نسخة القرص من هذا الاختصار عمداً — فهي
+    // لا تضبط `_at`. وبهذا تُحاوَل الشبكة في كلّ نداء ما دمنا نعرض
+    // نسخةً قديمة، وهو ما يجعلها تتحدّث «من تلقاء نفسها» أوّل ما
+    // تعود الشبكة.
     if (_list != null && _at != null && now.difference(_at!) < _ttl) {
       return Future.value(_list);
     }
@@ -156,14 +163,39 @@ class _SubsListCache {
     return fresh;
   }
 
+  /// عمر النسخة المعروضة حين تأتي من القرص — و`null` حين تأتي من
+  /// الشبكة. الواجهة تقرؤه لتقول للمدير إنّ ما يراه قديم.
+  static DateTime? _servedFromDiskAt;
+  static DateTime? get servedFromDiskAt => _servedFromDiskAt;
+
   static Future<List<Subscriber>?> _fetch() async {
     try {
       final result = await SubscribersApi._loadAllRaw();
       if (result != null) {
         _list = result;
         _at = DateTime.now();
+        _servedFromDiskAt = null; // طازجٌ من الشبكة
+        return result;
       }
-      return result;
+      // ── الشبكة سقطت ──────────────────────────────────────────
+      // ⚠️ الرجوع إلى القرص **هنا** لا في الشاشات: لو تركناه لكلّ
+      // شاشة لاختلفت الشاشات في ما تعرضه وفي ما تقوله عن عمره.
+      // وموضعٌ واحد يعني سلوكاً واحداً.
+      //
+      // ⚠️ وإن كانت النسخة محيّاةً سلفاً فلا نُعيد قراءة الملفّ.
+      // شاشة المشتركين تنبض كلّ **٥ ثوانٍ**، فبلا هذا الشرط نقرأ
+      // ملفّاً ونحلّل آلاف الصفوف اثنتي عشرة مرّةً في الدقيقة طوال
+      // انقطاع الشبكة — استنزافٌ صامت لا يظهر إلّا في البطّاريّة.
+      if (_list != null && _servedFromDiskAt != null) return _list;
+      final disk = await SubscribersOfflineCache.read();
+      if (disk == null) return null;
+      final revived = disk.rows.map(Subscriber.fromJson).toList();
+      _servedFromDiskAt = disk.at;
+      // ⚠️ **لا نضبط `_at`**: النسخة من القرص ليست جلباً حديثاً، ولو
+      // عاملناها كذلك لأسكتنا المحاولة التالية ٤٥ ثانية. ونحن نريد
+      // العكس تماماً — أن تُعاد المحاولة فور عودة الشبكة.
+      _list = revived;
+      return revived;
     } finally {
       _inFlight = null;
     }
@@ -183,6 +215,7 @@ class _SubsListCache {
     _list = null;
     _at = null;
     _inFlight = null;
+    _servedFromDiskAt = null;
   }
 }
 
@@ -402,6 +435,9 @@ class SubscribersApi {
   /// تسجيل الخروج عشان admin جديد ما يشوف بيانات admin السابق.
   static void clearAllCaches() {
     _SubsListCache.reset();
+    // ⚠️ ومسحُ القرص **ليس هنا** بل في `SessionManager` ضمن كتلته
+    // المنتظَرة: هذه الدالّة متزامنة، و`unawaited` فيها يترك نافذةً
+    // يموت فيها التطبيق بعد الخروج والملفّ لم يُحذف بعد.
     // 2026-08-28 (Google 2027 audit HIGH): _packagesCache كان يبقى لـ5د
     // بعد logout — invalidatePackagesCache موجودة لكن غير مستدعاة.
     invalidatePackagesCache();
@@ -423,6 +459,15 @@ class SubscribersApi {
   static void invalidateListCache() {
     _SubsListCache.invalidate();
   }
+
+  /// متى أُخذت النسخة المعروضة، حين تكون من القرص لا من الشبكة.
+  /// `null` = البيانات طازجة.
+  ///
+  /// ⚠️ الواجهة **ملزَمة** بعرض هذا. رقمٌ قديمٌ بلا علامةٍ عمره ليس
+  /// أفضل من لا رقم — هو أسوأ، لأنّه يُتّخذ عليه قرار. وهذا بالضبط ما
+  /// ينقص `DashboardCache` اليوم (تعليقه يقول صراحةً إنّه لا يفرض
+  /// عمراً، «فالقيمة القديمة أفضل من دوّارة»).
+  static DateTime? get offlineSnapshotAt => _SubsListCache.servedFromDiskAt;
 
   /// Raw fetch — used internally by the cache. Don't call directly.
   /// Hits /api/v2/subscribers (NOT /api/subscribers/with-phones).
@@ -450,10 +495,16 @@ class SubscribersApi {
       final data = (body['data'] as List?) ?? const [];
       // (Removed 5 diagnostic prints — كانت تنفّذ interpolation ثقيل لكل
       //  subscriber على كل load. المشكلة اللي أُضيفت من أجلها انحلّت.)
-      return data
+      final maps = data
           .whereType<Map>()
-          .map((m) => Subscriber.fromJson(Map<String, dynamic>.from(m)))
+          .map((m) => Map<String, dynamic>.from(m))
           .toList();
+      // ⚠️ نحفظ **الخام** قبل التحليل لا الكائنات بعده: القراءة من
+      //    القرص تمرّ بـ`fromJson` نفسها، فمحلّلٌ واحد لا اثنان.
+      // ⚠️ وبلا `await`: الكتابة على القرص لا يجوز أن تُبطئ شاشةً
+      //    وصلت بياناتها. وفشلُها مبتلَعٌ داخل `save` نفسها.
+      unawaited(SubscribersOfflineCache.save(maps));
+      return maps.map(Subscriber.fromJson).toList();
     } on DioException catch (e) {
       _log('with-phones', e);
       return null;

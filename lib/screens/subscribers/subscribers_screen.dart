@@ -1116,6 +1116,12 @@ class _SubscribersScreenState extends State<SubscribersScreen>
         bottom: false,
         child: Column(
           children: [
+            // ⚠️ **عمر البيانات على الشاشة لا في الكود.** حين تُعرض
+            // نسخةٌ محفوظة بلا شبكة، يجب أن يعرف المدير أنّها قديمة
+            // قبل أن يقول لزبونه «عليك ٢٥ ألفاً». رقمٌ قديمٌ بلا علامة
+            // يُتّخذ عليه قرار — وهو أسوأ من لا رقم.
+            if (SubscribersApi.offlineSnapshotAt != null)
+              _OfflineBanner(at: SubscribersApi.offlineSnapshotAt!),
             // ⚠️ البنية هنا ليست تجميلاً: كانت أربعة صفوف ثابتة فوق
             // القائمة (بحث · شرائح · فرز · ترقيم) تحجز نحو ثلث الشاشة
             // قبل أن يُرى مشترك واحد. الآن الشرائح وحدها تثبت — وهي
@@ -2442,6 +2448,45 @@ class _CompactSearchBar extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// شريط «نسخة محفوظة» — يُعرض فقط حين تكون القائمة من القرص.
+///
+/// ⚠️ يقول **عمرها** لا مجرّد «بلا اتصال»: الفرق بين نسخةٍ عمرها
+/// خمس دقائق ونسخةٍ عمرها يومان هو الفرق بين رقمٍ يُعتمد عليه ورقمٍ
+/// يُضلّل. و«بلا اتصال» وحدها لا تقول أيّهما.
+class _OfflineBanner extends StatelessWidget {
+  const _OfflineBanner({required this.at});
+  final DateTime at;
+
+  String get _age {
+    final d = DateTime.now().difference(at);
+    if (d.inMinutes < 1) return 'الآن';
+    if (d.inMinutes < 60) return 'قبل ${d.inMinutes} دقيقة';
+    if (d.inHours < 24) return 'قبل ${d.inHours} ساعة';
+    return 'قبل ${d.inDays} يوم';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.sm),
+      color: AppTone.warning.softBg,
+      child: Row(
+        children: [
+          Icon(LucideIcons.history, size: 14, color: AppTone.warning.fill),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: Text(
+              'نسخة محفوظة · آخر تحديث $_age — الأرقام قد تكون تغيّرت',
+              style: AppType.muted(color: AppTone.warning.onSoft),
+            ),
+          ),
+        ],
       ),
     );
   }

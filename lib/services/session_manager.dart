@@ -10,6 +10,7 @@ import 'alerts_service.dart';
 import 'auth_storage.dart';
 import 'badge_service.dart';
 import 'dashboard_cache.dart';
+import 'subscribers_offline_cache.dart';
 import 'device_alerts_service.dart';
 import 'fcm_service.dart';
 import 'inbox_service.dart';
@@ -75,6 +76,13 @@ class SessionManager {
       // ينصّ صراحةً "call on logout" لكن ما استُدعيت من قبل — المدير
       // الجديد كان يرى KPIs المدير السابق حتى تعود شبكته بأرقام جديدة.
       _guardAsync('DashboardCache.clear', DashboardCache.clear()),
+      // 2026-09-13: نسخة المشتركين المحفوظة على القرص (تعمل بلا نت).
+      // ⚠️ **منتظَرة لا مُطلَقة**: لو مات التطبيق بعد الخروج مباشرةً
+      // والملفّ لم يُحذف، يفتحه المدير التالي فيرى مشتركي سابقه. وقد
+      // حدث تسريبان كهذا سلفاً (قوالب الواتساب · مؤشّرات اللوحة)،
+      // وسطراهما فوق شاهدان.
+      _guardAsync('SubscribersOfflineCache.clear',
+          SubscribersOfflineCache.clear()),
     ]);
 
     // 3) FCM unregister (network — only on real logout).
