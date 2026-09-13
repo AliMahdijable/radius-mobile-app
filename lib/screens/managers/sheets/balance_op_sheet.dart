@@ -518,34 +518,44 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                 ],
               ),
             ),
-            // ⚠️ يظهر **فقط** لمن ربط حسابه بتلغرام. وبخلاف واتساب لا
-            // يُعرض معطّلاً: هناك الرقم بيد المدير فيُضيفه ويُرسل؛
-            // وهنا الربط بيد **التابع** وحده، فمفتاحٌ معطّل أبداً لا
-            // يفعل شيئاً سوى إرباك من يضغطه.
-            if (widget.manager.telegramLinked)
-              CheckboxListTile.adaptive(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                value: _sendTelegram,
-                onChanged: (v) => setState(() => _sendTelegram = v ?? false),
-                title: Row(
-                  children: [
-                    Icon(LucideIcons.send,
-                        size: 14, color: AppColors.channelTelegram),
-                    const SizedBox(width: 6),
-                    const Expanded(
-                      child: Text(
-                        'إرسال رسالة تلغرام للمدير',
-                        style: TextStyle(
-                            fontSize: 12.5,
-                            height: 1.4,
-                            fontWeight: FontWeight.w600),
-                      ),
+            // ⚠️ يُعرض **معطّلاً لا مخفيّاً** حين لا يكون التابع مربوطاً
+            // — كما يفعل صفّ واتساب فوقه تماماً حين لا يوجد رقم.
+            //
+            // وكنتُ أُخفيه أوّلاً بحجّة أنّ الربط بيد التابع فالمفتاح
+            // المعطّل لا يفيد. وأثبت الاستعمال خطأ ذلك: صاحب المشروع
+            // سحب النسخة ولم يرَ شيئاً، فبدت الميّزة غير منشورة. وميّزةٌ
+            // غيرُ مرئيّة لا تُميَّز عن نشرةٍ فاشلة.
+            //
+            // فالصفّ المعطّل يقول: القناة موجودة، واطلب من تابعك ربط
+            // حسابه. وهو أيضاً متّسقٌ مع جاره — وصندوقٌ يُخفي صفّاً
+            // ويُعطّل آخر لنفس السبب يربك أكثر ممّا يوضّح.
+            CheckboxListTile.adaptive(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: widget.manager.telegramLinked ? _sendTelegram : false,
+              onChanged: widget.manager.telegramLinked
+                  ? (v) => setState(() => _sendTelegram = v ?? false)
+                  : null,
+              title: Row(
+                children: [
+                  Icon(LucideIcons.send,
+                      size: 14, color: AppColors.channelTelegram),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      widget.manager.telegramLinked
+                          ? 'إرسال رسالة تلغرام للمدير'
+                          : 'تلغرام — المدير لم يربط حسابه',
+                      style: const TextStyle(
+                          fontSize: 12.5,
+                          height: 1.4,
+                          fontWeight: FontWeight.w600),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
+            ),
           ],
         ),
       ),

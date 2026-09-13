@@ -629,22 +629,29 @@ class _NotifyToggles extends StatelessWidget {
               secondary: const Icon(LucideIcons.bell, size: 18),
               contentPadding: EdgeInsets.zero,
             ),
-            if (tgEnabled) ...[
-              Divider(height: 1, color: AppColors.border),
-              SwitchListTile(
-                value: sendTelegram,
-                onChanged: onTg,
-                dense: true,
-                title: Text(
-                  'إشعار تلغرام',
-                  style: AppType.label(color: AppColors.textHi)
-                      .copyWith(fontWeight: FontWeight.w700),
-                ),
-                secondary: const Icon(LucideIcons.send,
-                    size: 18, color: AppColors.channelTelegram),
-                contentPadding: EdgeInsets.zero,
+            // ⚠️ معطّلٌ لا مخفيّ — كصفّ واتساب فوقه حين لا يوجد رقم.
+            // الإخفاء يجعل الميّزة تبدو غير منشورة (حدث فعلاً).
+            Divider(height: 1, color: AppColors.border),
+            SwitchListTile(
+              value: tgEnabled && sendTelegram,
+              onChanged: tgEnabled ? onTg : null,
+              dense: true,
+              title: Text(
+                'إشعار تلغرام',
+                style: AppType.label(color: AppColors.textHi)
+                    .copyWith(fontWeight: FontWeight.w700),
               ),
-            ],
+              subtitle: !tgEnabled
+                  ? Text(
+                      'المدير لم يربط حسابه بتلغرام',
+                      style: AppType.muted(color: AppColors.textLow)
+                          .copyWith(fontSize: 11),
+                    )
+                  : null,
+              secondary: const Icon(LucideIcons.send,
+                  size: 18, color: AppColors.channelTelegram),
+              contentPadding: EdgeInsets.zero,
+            ),
           ],
         ),
       ),
