@@ -7,7 +7,6 @@ import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
-import '../expenses/expenses_screen.dart';
 import 'activations_report_screen.dart';
 import 'activity_log_report_screen.dart';
 import 'all_managers_debts_screen.dart';
@@ -15,16 +14,18 @@ import 'daily_activations_report_screen.dart';
 import 'financial_report_screen.dart';
 import 'sessions_report_screen.dart';
 
-/// شاشة hub للتقارير — 8 كروت تنقل لكل تقرير منفصل.
+/// شاشة hub للتقارير — 7 كروت تنقل لكل تقرير منفصل.
 /// تستبدل reports_screen.dart placeholder "تأتي قريباً".
 ///
 /// كل كرت مرتبط بـperm حسب catalog الـbackend:
 ///   reports.financial / reports.activations / reports.daily_activations
-///   reports.expenses / reports.manager_debts / reports.account_statement
+///   reports.manager_debts / reports.account_statement
 ///   reports.sessions / reports.activity_log
 ///
-/// Expenses + ManagerDebts يحوّلان للصفحات الموجودة فعلاً
-/// (لا داعي لـduplication). AccountStatement يفتح من تفاصيل المشترك
+/// 2026-09-13: المصروفات خرجت من هنا إلى «قوائم أخرى» وحدها — كانت
+/// مكرّرةً في الشاشتين. وهي إدارةٌ لا تقرير (تُنشئ وتُعدّل وتحذف)،
+/// فموضعها مع الوحدات لا مع التقارير التي تُقرأ فقط.
+/// ManagerDebts يحوّل لصفحةٍ موجودة. AccountStatement يفتح من تفاصيل المشترك
 /// لاحقاً، حالياً لا tile مستقل (مرتبط بمشترك واحد).
 class ReportsHubScreen extends StatelessWidget {
   const ReportsHubScreen({super.key});
@@ -69,17 +70,10 @@ class ReportsHubScreen extends StatelessWidget {
                     builder: (_) => const DailyActivationsReportScreen()),
               ),
             ),
-          if (Perms.has('reports.expenses'))
-            _ReportCard(
-              icon: LucideIcons.receipt,
-              color: AppColors.warning,
-              title: 'reports.expenses'.tr(),
-              subtitle: 'reports.expenses_hint'.tr(),
-              // ExpensesScreen موجودة فعلاً — نُحوّل لها.
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ExpensesScreen()),
-              ),
-            ),
+          // ⚠️ **المصروفات ليست هنا**، وإنّما في «قوائم أخرى» وحدها.
+          // كانت في الشاشتين بنفس الأيقونة والعنوان والوجهة — مدخلان
+          // إلى صفحةٍ واحدة يجعلان المستخدم يظنّهما شيئين مختلفين
+          // ويظلّ يبحث عن الفرق. (حُذفت من هنا بطلب صاحب المشروع.)
           if (Perms.has('reports.manager_debts'))
             _ReportCard(
               icon: LucideIcons.users,
