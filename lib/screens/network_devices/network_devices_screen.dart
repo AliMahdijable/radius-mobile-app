@@ -806,7 +806,17 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
           // زر "+" إضافة جهاز — manage tier فقط
           if (Perms.has('devices.manage'))
             Padding(
-              padding: const EdgeInsets.only(left: 4, right: 8),
+              // ⚠️ `EdgeInsetsDirectional` لا `EdgeInsets`: الثانية
+              //    فيزيائيّة، فـ`left: 4` كانت تعني أربع نقاطٍ من
+              //    الحافّة **اليسرى** — وهي في العربيّة حافّة الشاشة
+              //    التي ينتهي عندها شريط الإجراءات. فبدا الزرّ ملتصقاً
+              //    بالحرف. و`start/end` تتبعان اتّجاه القراءة فتصحّ في
+              //    اللغتين معاً.
+              //
+              // و`Sp.md` لا رقماً اعتباطيّاً: هي حافّة شريط البحث
+              // تحته (`EdgeInsets.fromLTRB(Sp.md, …)`). فيُحاذي الزرّ
+              // حافّة المحتوى، ويُقرأ الفراغ متعمَّداً لا منسيّاً.
+              padding: const EdgeInsetsDirectional.only(start: Sp.sm, end: Sp.md),
               child: Material(
                 color: AppColors.brand,
                 shape: const CircleBorder(),
