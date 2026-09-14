@@ -259,7 +259,10 @@ class DeviceProbeApi {
   ///
   /// * [priorityUsernames] — تُفحص أوّلاً. للـviewport-visible subs،
   ///   يمنح إحساس بأن الفحص "فوري" حتى مع قوائم كبيرة.
-  /// * [concurrency=25] — عدد probes متزامنة.
+  /// * [concurrency=25] — عدد العمّال المتزامنين. حوضٌ منزلق لا
+  ///   دفعاتٌ متتابعة: من فرغ أخذ الهدف التالي فوراً.
+  /// * [onProgress] — يُنادى بعد **كلّ هدف** لا بعد كلّ دفعة. فليكن
+  ///   رخيصاً؛ لا `setState` على شاشةٍ كاملة فيه.
   static Future<void> warmProbe(
     List<({String username, String ip})> targets, {
     Set<String>? priorityUsernames,
@@ -295,18 +298,55 @@ class DeviceProbeApi {
       await DeviceConfigApi.warmBatch(usernames);
     } catch (_) {}
 
+    // ── حوض عمّالٍ منزلق، لا دفعاتٍ متتابعة ───────────────────────
+    //
+    // ⚠️ البنية السابقة كانت `Future.wait` على كلّ ٢٥ ثمّ الانتقال —
+    // أي أنّ **كلّ دفعةٍ تنتظر أبطأ عضوٍ فيها**. و`_probeCap` خمس عشرة
+    // ثانية، والمهل الداخليّة ثانيتان: فجهازٌ ميّتٌ واحد يُجمّد أربعةً
+    // وعشرين فحصاً انتهت سلفاً، وهو ينتظر مهلته وحده.
+    //
+    // على ١١٢ هدفاً ذلك خمسة حواجز. ومع توزيعٍ واقعيّ (أغلبها يردّ في
+    // جزءٍ من الثانية وبعضها ميّت) يصير الزمن الكلّيّ ≈ خمسة أضعاف
+    // المهلة، بينما العمل الفعليّ أقلّ من ذلك بكثير.
+    //
+    // وهنا `concurrency` عاملاً يسحبون من مؤشّرٍ مشترك: من فرغ أخذ
+    // التالي فوراً. فالزمن الكلّيّ يصير محكوماً بمجموع العمل مقسوماً
+    // على عدد العمّال، لا بأبطأ عضوٍ في كلّ دفعة.
+    //
+    // ⚠️ والترتيب محفوظ: العمّال يسحبون بالتسلسل من `ordered`، فأهداف
+    // الأولويّة (المرئيّون على الشاشة) تُلتقط أوّلاً كما كانت.
+    var next = 0;
     var done = 0;
-    for (var i = 0; i < ordered.length; i += concurrency) {
-      if (isCanceled?.call() ?? false) return;
-      final batch = ordered.skip(i).take(concurrency).toList();
-      await Future.wait(batch.map((t) async {
+    var canceled = false;
+
+    Future<void> worker() async {
+      while (true) {
+        if (canceled) return;
+        // ⚠️ الفحص هنا لا بين الدفعات: بلا حواجز لم يعد ثمّة «بين».
+        //    وبدونه تُكمل الموجة بعد إغلاق الشاشة.
+        if (isCanceled?.call() ?? false) {
+          canceled = true;
+          return;
+        }
+        // ⚠️ السحب والزيادة في نفس الخطوة المتزامنة. ومحرّك Dart أحاديّ
+        //    الخيط فلا سباق هنا ما دام بينهما لا `await`.
+        final i = next++;
+        if (i >= ordered.length) return;
+        final t = ordered[i];
         try {
           await probe(fallbackIp: t.ip, subscriberUsername: t.username);
         } catch (_) {}
-      }));
-      done += batch.length;
-      onProgress?.call(done, ordered.length);
+        done++;
+        // ⚠️ يُنادى الآن **لكلّ هدف** لا لكلّ دفعة. وهذا آمنٌ لأنّ
+        //    المستدعي لم يعد يستدعي `setState` فيه — يوقظ بطاقات
+        //    الأجهزة المرئيّة وحدها. ولو أُعيد `setState` يوماً فهذا
+        //    الموضع هو ما يجب خنقه.
+        onProgress?.call(done, ordered.length);
+      }
     }
+
+    final workers = concurrency < ordered.length ? concurrency : ordered.length;
+    await Future.wait(List.generate(workers, (_) => worker()));
   }
 
   static void invalidateAdminDefaults() {

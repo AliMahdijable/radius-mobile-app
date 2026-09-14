@@ -320,7 +320,6 @@
     "disconnect_ok": "Disconnected",
     "disconnect_failed": "Couldn't disconnect",
     "signal": "Signal",
-    "probing_devices": "Probing devices {done}/{total}",
     "stop": "Stop",
     "probe_devices": "Probe devices",
     "busy_action": "{label} in progress…",

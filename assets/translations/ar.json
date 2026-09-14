@@ -320,7 +320,6 @@
     "disconnect_ok": "تم الفصل",
     "disconnect_failed": "تعذّر الفصل",
     "signal": "إشارة",
-    "probing_devices": "يفحص الأجهزة {done}/{total}",
     "stop": "إيقاف",
     "probe_devices": "فحص الأجهزة",
     "busy_action": "جارٍ {label}...",

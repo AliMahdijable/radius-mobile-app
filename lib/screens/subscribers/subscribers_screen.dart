@@ -108,9 +108,12 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   // surface a small spinner. Bumped each call to invalidate any
   // in-flight wave whose list shape no longer matches.
   int _probeRunId = 0;
+  /// موجة فحصٍ جارية — يقرؤها زرّ «فحص الأجهزة» وحده ليعرض دوّارته.
+  /// ولا عدّاد معها: المقدار المعروض حُذف، فلا داعي لتتبّعه.
   bool _probing = false;
-  int _probeDone = 0;
-  int _probeTotal = 0;
+
+  /// آخر إيقاظٍ لبطاقات الأجهزة — لخنق تواتره أثناء الموجة.
+  DateTime? _lastProbeBump;
 
   /// مطلب 2026-06-11: زر تكويل عام — true يخفي قسم الاتصال على
   /// كل البطاقات المعروضة. الـSubscriberCardV3 يلتقط الـprop عبر
@@ -388,8 +391,6 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     if (targets.isEmpty) {
       setState(() {
         _probing = false;
-        _probeDone = 0;
-        _probeTotal = 0;
       });
       return;
     }
@@ -401,11 +402,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       }
       DeviceProbeBus.bump();
     }
-    setState(() {
-      _probing = true;
-      _probeDone = 0;
-      _probeTotal = targets.length;
-    });
+    _lastProbeBump = null;
+    setState(() => _probing = true);
     // مطلب المستخدم 2026-07-12: أولوية للـviewport-visible subs.
     // الـwave يفحص هؤلاء أوّلاً حتى المستخدم يشوف حالتهم فوراً بدون
     // انتظار الـ500 مشترك يخلصون. الـpage الحالية أفضل تقريب متاح.
@@ -415,18 +413,32 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     DeviceProbeApi.warmProbe(
       targets,
       priorityUsernames: priorityUsernames.isEmpty ? null : priorityUsernames,
+      // ⚠️ **بلا `setState`.** كان يُعيد بناء الشاشة كاملةً مع كلّ دفعة
+      //    ليُحدّث رقم العدّاد — والرقم حُذف. و`DeviceProbeBus.bump()`
+      //    وحده يوقظ بطاقات الأجهزة المرئيّة لتقرأ الكاش من جديد، وهي
+      //    وحدها ما يحتاج التحديث.
+      //
+      // ⚠️ وبخنقٍ زمنيّ: بعد تحويل الموجة إلى حوض عمّالٍ صار هذا
+      //    يُنادى **لكلّ هدف** لا لكلّ دفعة — ١١٢ إيقاظاً بدل خمسة.
+      //    وكلّ إيقاظٍ يُعيد بناء كلّ بطاقة جهازٍ مرئيّة. وربع الثانية
+      //    أسرع ممّا تلتقطه العين، فالخنق لا يُؤخّر شيئاً يُرى.
       onProgress: (done, total) {
         if (!mounted || _probeRunId != myRun) return;
-        setState(() {
-          _probeDone = done;
-          _probeTotal = total;
-        });
-        // Wake every visible DeviceChipMicro to consult the cache anew.
-        DeviceProbeBus.bump();
+        final now = DateTime.now();
+        if (done >= total ||
+            _lastProbeBump == null ||
+            now.difference(_lastProbeBump!) >= const Duration(milliseconds: 250)) {
+          _lastProbeBump = now;
+          DeviceProbeBus.bump();
+        }
       },
       isCanceled: () => !mounted || _probeRunId != myRun,
     ).whenComplete(() {
       if (!mounted || _probeRunId != myRun) return;
+      // ⚠️ إيقاظٌ أخير غير مخنوق: آخر نتائج الموجة قد تقع داخل ربع
+      //    الثانية الأخيرة فتُبتلع، فتبقى بطاقةٌ أو اثنتان فارغةً حتّى
+      //    أوّل تمرير.
+      DeviceProbeBus.bump();
       setState(() => _probing = false);
     });
   }
@@ -1238,36 +1250,17 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                 if (_filter == SubscriberFilter.debtors &&
                                     !_selectionMode)
                                   _DebtSummaryCard(subscribers: filtered),
-                                // مطلب 2026-06-11: شريط رفيع يبيّن تقدم فحص الأجهزة
-                                // (لكل المشتركين المتصلين). يختفي لما الفحص يخلص. يظهر
-                                // عدد المفحوص / الإجمالي بدون أن يحجب أي تفاعل آخر.
-                                if (_probing && _probeTotal > 0)
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                        Sp.lg, 6, Sp.lg, 0),
-                                    child: Row(
-                                      children: [
-                                        SizedBox(
-                                          width: 10,
-                                          height: 10,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 1.5,
-                                            color: AppColors.brandAccent,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          'subscribers.probing_devices'.tr(
-                                              namedArgs: {
-                                                'done': '$_probeDone',
-                                                'total': '$_probeTotal'
-                                              }),
-                                          style: AppType.muted()
-                                              .copyWith(fontSize: 10.5),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                // 2026-09-14: عدّاد «يفحص الأجهزة n/N» حُذف بطلب صاحب
+                                // المشروع — الدوّارة داخل زرّ فحص الأجهزة تكفي للدلالة
+                                // على أنّ موجةً تعمل، وصفٌّ إضافيّ فوق القائمة يزاحم
+                                // كلّ نتيجة.
+                                //
+                                // ⚠️ وحذفه **تسريعٌ لا تجميل**: عرضه كان يُلزم
+                                // `onProgress` باستدعاء `setState` على الشاشة كلّها
+                                // مع كلّ دفعة، والبناء الواحد هنا يُعيد حساب
+                                // `_filteredAll` و`_counts()` (ثمانية مرورات على
+                                // القائمة). فكان ثمن العدّاد خمس إعادات بناءٍ كاملة
+                                // في كلّ موجة.
                                 // 2026-08-29: شريط شرائح فرز الأجهزة (RX · إشارة · CCQ ·
                                 // LAN) حُذف بطلب المستخدم — شيت «ترتيب القائمة» يغطّي
                                 // الحاجة، والشريط كان يزاحم كلّ نتيجة بصفّ إضافي.
