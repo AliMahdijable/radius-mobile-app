@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/dashboard_api.dart';
 import '../../../core/util/format.dart';
 import '../../../services/app_resumed_signal.dart';
+import '../../../services/dashboard_refresh_signal.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -54,6 +55,13 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
     // ولا يعتمد على _refreshLive في DashboardScreen، فبدون هذا
     // الـlistener الإيرادات تبقى قديمة بعد رجوع التطبيق.
     AppResumedSignal.tick.addListener(_onDataChanged);
+    // ⚠️ **سحب التحديث ودخول التبويب** — وهما ما كان ينقص.
+    //
+    // `onRefresh` في اللوحة ينادي دوالّها هي، ولا سبيل له إلى حالة
+    // هذه الودجة. فكان المدير يسحب، فتتحدّث بقيّة الكارتات ويبقى هذا
+    // على «تعذّر الجلب — اسحب للتحديث» مهما سحب. بلاغٌ حقيقيّ
+    // (٢٠٢٦-٠٩-١٤): «من يرجع النت يكول اسحب للتحديث، اسحب ومايحدث».
+    DashboardRefreshSignal.tick.addListener(_onDataChanged);
   }
 
   void _onDataChanged() {
@@ -75,6 +83,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
   void dispose() {
     SubscriberEvents.dataChanged.removeListener(_onDataChanged);
     AppResumedSignal.tick.removeListener(_onDataChanged);
+    DashboardRefreshSignal.tick.removeListener(_onDataChanged);
     super.dispose();
   }
 

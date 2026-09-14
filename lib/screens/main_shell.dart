@@ -105,6 +105,7 @@ class _MainShellState extends State<MainShell> {
   /// مواضع تعتمد عليه.
   static const _devicesTab = 2;
   static const _subsTab = 1;
+  static const _dashTab = 0;
 
   /// التبويبات التي زارها المستخدم فعلاً.
   ///
@@ -134,6 +135,15 @@ class _MainShellState extends State<MainShell> {
   /// عشرين، وثلاثة طلبات بلا كاش في كلّ دورة.
   final ValueNotifier<bool> _subsActive = ValueNotifier<bool>(false);
 
+  /// وللوحة — **لسببٍ معاكس**: لا لإيقاف استطلاعٍ بل لإطلاق تحديث.
+  ///
+  /// اللوحة مركَّبةٌ في `IndexedStack` طوال الجلسة، فـ`initState` لا
+  /// ينطلق إلّا مرّة. وكانت تتحدّث على أربعة أحداث ليس منها **دخول
+  /// التبويب**: فمن انقطعت شبكته ثمّ عادت وهو داخل التطبيق يفتح
+  /// اللوحة فلا يتحدّث شيء، لأنّ التطبيق لم يذهب للخلفيّة ولم تقع
+  /// عمليّةٌ على مشترك.
+  final ValueNotifier<bool> _dashActive = ValueNotifier<bool>(true);
+
   /// المدخل الوحيد لتبديل التبويب — يُسجّل الزيارة ويُحدّث الراية.
   /// أيّ مسار يكتب `_tab` مباشرةً يُفلت من الاثنين.
   void _setTab(int i) {
@@ -143,6 +153,7 @@ class _MainShellState extends State<MainShell> {
     });
     _devicesActive.value = i == _devicesTab;
     _subsActive.value = i == _subsTab;
+    _dashActive.value = i == _dashTab;
   }
   // Filter command channel for the subscribers screen. Updating this
   // notifier from a dashboard KPI tap pushes the new filter into the
@@ -246,6 +257,7 @@ class _MainShellState extends State<MainShell> {
     _subsFilterCmd.dispose();
     _devicesActive.dispose();
     _subsActive.dispose();
+    _dashActive.dispose();
     super.dispose();
   }
 
@@ -314,7 +326,8 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final tabs = <Widget>[
-      DashboardScreen(onOpenSubscribers: _openSubscribers),
+      DashboardScreen(
+          onOpenSubscribers: _openSubscribers, isActive: _dashActive),
       SubscribersScreen(filterCmd: _subsFilterCmd, isActive: _subsActive),
       // مطلب 2026-08-12: أجهزة الشبكة صار tab رئيسي بدل التقارير —
       // WISP يفتحها يوميّاً لمراقبة اللنكات/السكاتر. التقارير انتقلت

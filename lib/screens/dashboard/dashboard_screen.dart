@@ -11,6 +11,7 @@ import '../../services/view_scope_events.dart';
 import '../../models/dashboard.dart';
 import '../../services/alerts_service.dart';
 import '../../services/app_resumed_signal.dart';
+import '../../services/dashboard_refresh_signal.dart';
 import '../../services/auth_storage.dart';
 import '../../services/dashboard_cache.dart';
 import '../../services/inbox_service.dart';
@@ -37,12 +38,20 @@ import 'widgets/subscribers_card.dart';
 /// loading shimmer; when a fetch fails the card shows an explicit
 /// error state, never invented numbers.
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key, this.onOpenSubscribers});
+  const DashboardScreen({super.key, this.onOpenSubscribers, this.isActive});
 
   /// Set by MainShell — when any dashboard KPI tile is tapped, calls
   /// this with the matching filter so the shell can switch tabs and
   /// pre-apply the filter on the subscribers screen.
   final ValueChanged<SubscriberFilter?>? onOpenSubscribers;
+
+  /// ترتفع حين يصير هذا هو التبويب المعروض.
+  ///
+  /// ⚠️ اللوحة مركَّبةٌ في `IndexedStack` طوال الجلسة فلا `initState`
+  /// ثانٍ. وكانت تتحدّث على أربعة أحداث ليس منها **دخول التبويب** —
+  /// فمن انقطعت شبكته ثمّ عادت وهو داخل التطبيق يفتح اللوحة فلا
+  /// يتحدّث شيء: التطبيق لم يذهب للخلفيّة ولم تقع عمليّةٌ على مشترك.
+  final ValueNotifier<bool>? isActive;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -130,6 +139,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // IndexedStack يحتفظ بالـDashboard مركّبة وinitState ما ينطلق ثانية.
     AppResumedSignal.tick.addListener(_onAppResumed);
     ViewScopeEvents.changed.addListener(_onScopeChanged);
+    widget.isActive?.addListener(_onActiveChanged);
+  }
+
+  /// دخول التبويب ⇒ تحديثٌ صامت لكلّ شيء.
+  ///
+  /// ⚠️ صامتٌ لا ظاهر: المدير يتنقّل بين التبويبات كثيراً، ودوّارةٌ
+  /// كاملة مع كلّ دخولٍ ضجيجٌ لا خبر. والأرقام القديمة تبقى معروضةً
+  /// حتّى تصل الجديدة.
+  void _onActiveChanged() {
+    if (!mounted) return;
+    if (widget.isActive?.value != true) return;
+    _scheduleSilentRefresh();
+    // والودجات التي تجلب بنفسها — كارت الإيرادات — لا تسمع
+    // `_scheduleSilentRefresh` لأنّها تملك حالتها.
+    DashboardRefreshSignal.bump();
   }
 
   void _onDataChanged() {
@@ -161,6 +185,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _refreshDebounce?.cancel();
     SubscriberEvents.dataChanged.removeListener(_onDataChanged);
     AppResumedSignal.tick.removeListener(_onAppResumed);
+    widget.isActive?.removeListener(_onActiveChanged);
     ViewScopeEvents.changed.removeListener(_onScopeChanged);
     super.dispose();
   }
@@ -372,6 +397,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       body: RefreshIndicator(
         color: AppColors.brand,
         onRefresh: () async {
+          // ⚠️ الإشارة **أوّلاً** لا بعد الانتظار: كارت الإيرادات يجلب
+          //    بنفسه، فإطلاقها قبل `await` يجعل الجلبين متوازيين بدل
+          //    أن ينتظر أحدهما الآخر — ومؤشّر السحب يختفي حين تنتهي
+          //    الدالّة، فلا نُطيله بانتظارٍ متسلسل.
+          //
+          // وبدونها كان المدير يسحب فتتحدّث بقيّة الكارتات ويبقى كارت
+          // الإيرادات على «تعذّر الجلب — اسحب للتحديث» مهما سحب:
+          // `onRefresh` ينادي دوالّ اللوحة، ولا سبيل له إلى حالة ودجةٍ
+          // ابنة تملك جلبها.
+          DashboardRefreshSignal.bump();
           await Future.wait([_loadIdentity(), _refreshLive()]);
         },
         child: CustomScrollView(
