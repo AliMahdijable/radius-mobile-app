@@ -26,12 +26,26 @@ class UbiquitiService {
     return dio;
   }
 
+  /// ⚠️ [budget] — ميزانيّة زمنيّة للسلسلة كلّها. راجع الشرح المفصّل
+  /// في `HuaweiOntService.login`: المستدعي يتخلّى عنّا عند سقف الفحص،
+  /// و`.timeout` في Dart لا يُلغي العمل تحته — فتُكمل السلسلة وحدها
+  /// بلا قارئ. وهذه أقصر من سلسلة Huawei (عنوانان × محاولتين × خمس
+  /// ثوانٍ = عشرون) لكنّها تتجاوز السقف كذلك، والنمط يجب أن يكون
+  /// واحداً في المسارين وإلّا صار السلوك يعتمد على نوع الجهاز.
   static Future<UbiquitiLoginResult?> login(
-      String host, String user, String pass) async {
+    String host,
+    String user,
+    String pass, {
+    Duration? budget,
+  }) async {
     final bases = ['https://$host', 'http://$host'];
+    final deadline = budget == null ? null : DateTime.now().add(budget);
+    bool spent() => deadline != null && !DateTime.now().isBefore(deadline);
     for (final base in bases) {
+      if (spent()) return null;
       final v6 = await _tryLoginV6(base, user, pass);
       if (v6 != null) return v6;
+      if (spent()) return null;
       final v8 = await _tryLoginV8(base, user, pass);
       if (v8 != null) return v8;
     }

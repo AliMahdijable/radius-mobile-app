@@ -493,7 +493,13 @@ class DeviceProbeApi {
 
   static Future<DeviceHealthSnapshot?> _probeOnt(
       String ip, String user, String pass) async {
-    final session = await HuaweiOntService.login(ip, user, pass);
+    // ⚠️ ميزانيّةٌ تساوي سقف الفحص: المستدعي يتخلّى عنّا عند
+    //    `_probeCap`، و`.timeout` لا يُلغي عملنا. فبلا هذه الميزانيّة
+    //    نُكمل ثلاث محاولاتٍ أُخَر (٤٥ ثانية) لا يقرأ نتيجتها أحد —
+    //    سلاسل يتيمة تتراكم وتضغط المقابس، فيُفشل الضغطُ جهازاً حيّاً
+    //    بطيئاً ويُعلَن ميّتاً.
+    final session =
+        await HuaweiOntService.login(ip, user, pass, budget: _probeCap);
     if (session == null) return null;
     final optical = await HuaweiOntService.fetchOptical(session);
     if (optical == null) return null;
@@ -536,7 +542,8 @@ class DeviceProbeApi {
 
   static Future<DeviceHealthSnapshot?> _probeUbnt(
       String ip, String user, String pass) async {
-    final session = await UbiquitiService.login(ip, user, pass);
+    final session =
+        await UbiquitiService.login(ip, user, pass, budget: _probeCap);
     if (session == null) return null;
     final status = await UbiquitiService.fetchStatus(session);
     if (status == null) return null;
