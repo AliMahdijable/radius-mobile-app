@@ -293,10 +293,48 @@ class DeviceProbeApi {
 
     // Prime DeviceConfig cache بـbatch endpoint (لو الـbackend يدعمه).
     // يمنع 500 fetch منفصلة عند أوّل wave.
+    var configsAuthoritative = false;
     try {
       final usernames = ordered.map((t) => t.username).toList();
-      await DeviceConfigApi.warmBatch(usernames);
+      configsAuthoritative = await DeviceConfigApi.warmBatch(usernames);
     } catch (_) {}
+
+    // ── إسقاط ما لا عنوان له أصلاً ────────────────────────────────
+    //
+    // ⚠️ **ليس ترشيحاً على «متّصل»**: المشترك المطفأ يُفحص كما كان —
+    // فقد يكون جهاز وصوله (ONT/UBNT) حيّاً وله عنوانٌ وبيانات دخولٍ
+    // محفوظة، وخطّ الراديوس وحده هو المقطوع. هذا مطلبٌ صريح لصاحب
+    // المشروع، ونقضُه يُعمي أهمّ حالةٍ تشخيصيّة عنده.
+    //
+    // إنّما نُسقط من **لا عنوان له في أيّ مكان**: لا عنوان راديوس ولا
+    // `customIp` محفوظ. وهؤلاء لا يُفحصون أصلاً — `probe` يخرج عندهم
+    // بـ`null` عند `effectiveIp.isEmpty`. لكنّه يخرج **بعد** أن يحجز
+    // عاملاً وينتظر `fetchConfig`. فإسقاطهم هنا يُحرّر عمّالاً لمن
+    // يستحقّ الفحص فعلاً.
+    //
+    // ⚠️ و**الفشل إلى الأمان**: لا نُرشّح إلّا إذا أكّد `warmBatch` أنّ
+    // الكاش مرجعٌ موثوق. فلو سقطت الشبكة أو غابت نقطة الدفعات، صار
+    // «لا إعداد في الكاش» يعني «لم نسأل» لا «لا يوجد» — والترشيح
+    // عندها يُسقط بالضبط من له إعدادٌ محفوظ. نفحص الجميع حينها كما
+    // كنّا: بطءٌ أهون من عمى.
+    if (configsAuthoritative) {
+      final before = ordered.length;
+      ordered = ordered.where((t) {
+        if (t.ip.trim().isNotEmpty) return true; // عنوان من الراديوس
+        final cfg = DeviceConfigApi.peekConfig(t.username);
+        return (cfg?.customIp?.trim().isNotEmpty ?? false); // أو محفوظ
+      }).toList();
+      // ⚠️ `onProgress(0,0)` لا مجرّد `return`: المستدعي يُطفئ دوّارة
+      //    الزرّ في `whenComplete`، لكنّ خروجاً صامتاً هنا يترك حالةً
+      //    لا تُبلَّغ. والصفر/صفر يقول «لا شيء يُفحص» صراحةً.
+      if (ordered.isEmpty) {
+        onProgress?.call(0, 0);
+        return;
+      }
+      // (`before` محفوظ للتشخيص عند الحاجة — لا طباعة هنا: الملفّ لا
+      //  يستورد `foundation`، واستيرادٌ كامل لأجل سطرٍ تشخيصيّ مبالغة.)
+      assert(before >= ordered.length);
+    }
 
     // ── حوض عمّالٍ منزلق، لا دفعاتٍ متتابعة ───────────────────────
     //

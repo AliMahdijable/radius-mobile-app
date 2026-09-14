@@ -138,8 +138,29 @@ class DeviceConfigApi {
   /// الـbatch endpoint، يفشل بصمت (fallback على الـfetchConfig الفردي).
   ///
   /// آمن للاستدعاء المتكرّر: يتخطّى الـusernames اللي في الكاش أصلاً.
-  static Future<void> warmBatch(List<String> usernames) async {
-    if (usernames.isEmpty) return;
+  /// قراءةٌ **متزامنة** من الكاش — بلا أيّ رحلة شبكيّة.
+  ///
+  /// تُرجع `null` حين لا يكون هذا المستخدم في الكاش أو شاخ سجلّه، و
+  /// `DeviceConfig()` فارغاً حين يكون مفحوصاً ولا إعداد له. والفرق
+  /// بينهما جوهريّ لمن يبني عليه قراراً: «لا أعرف» ليست «لا يوجد».
+  static DeviceConfig? peekConfig(String username) {
+    final key = username.trim();
+    if (key.isEmpty) return null;
+    final c = _cache[key];
+    if (c == null) return null;
+    if (DateTime.now().difference(c.at) >= _cacheTtl) return null;
+    return c.cfg;
+  }
+
+  /// يُرجع `true` حين يصير الكاش **مرجعاً موثوقاً** لهؤلاء المستخدمين
+  /// — أي أنّ غياب الإعداد عن الكاش يعني حقّاً أنّه لا إعداد له.
+  ///
+  /// ⚠️ وهذا ليس ترفاً: من يبني ترشيحاً على الكاش يجب أن يعرف الفرق
+  /// بين «سألنا فلم نجد» و«لم نسأل أصلاً». وكانت الدالّة تبتلع كلّ
+  /// فشلٍ صامتةً وتُرجع `void`، فيبدو الفشل نجاحاً — ومن يُرشّح عندها
+  /// يُسقط كلّ من له إعدادٌ محفوظ.
+  static Future<bool> warmBatch(List<String> usernames) async {
+    if (usernames.isEmpty) return true;
     final now = DateTime.now();
     final needed = <String>[];
     for (final u in usernames) {
@@ -149,7 +170,7 @@ class DeviceConfigApi {
       if (cached != null && now.difference(cached.at) < _cacheTtl) continue;
       needed.add(key);
     }
-    if (needed.isEmpty) return;
+    if (needed.isEmpty) return true; // الكاش يغطّيهم سلفاً
     try {
       // نُقسّم لدفعات صغيرة (100/دفعة) لتفادي URL/body ضخم.
       for (var i = 0; i < needed.length; i += 100) {
@@ -159,9 +180,9 @@ class DeviceConfigApi {
           data: {'usernames': chunk},
         );
         final body = r.data ?? const {};
-        if (body['success'] != true) return; // backend لا يدعم أو رفض
+        if (body['success'] != true) return false; // backend لا يدعم أو رفض
         final configs = body['configs'];
-        if (configs is! Map) return;
+        if (configs is! Map) return false;
         for (final entry in configs.entries) {
           final key = entry.key.toString();
           final val = entry.value;
@@ -180,9 +201,11 @@ class DeviceConfigApi {
           }
         }
       }
+      return true;
     } catch (_) {
       // Backend endpoint غير موجود أو خطأ شبكة — تجاهل، الـfetchConfig
-      // الفردي يبقى الطريق الاحتياطي.
+      // الفردي يبقى الطريق الاحتياطي. لكنّ الكاش **ليس مرجعاً** الآن.
+      return false;
     }
   }
 
