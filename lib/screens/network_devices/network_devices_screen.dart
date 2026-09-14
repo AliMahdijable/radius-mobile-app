@@ -600,6 +600,25 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     ));
   }
 
+  /// عنصر قائمةٍ منسدلة بأيقونةٍ ونصّ — شكلٌ واحد لكلّ العناصر.
+  PopupMenuItem<String> _menuItem(String value, IconData icon, String label) {
+    return PopupMenuItem<String>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: AppColors.textMid),
+          const SizedBox(width: 10),
+          // ⚠️ `Expanded` لا نصٌّ عارٍ: «الترتيب · اسم الحقل» قد يطول،
+          //    وصفٌّ فيه نصٌّ بلا مرونة يفيض ويُرسم شريطاً أصفر.
+          Expanded(
+            child: Text(label,
+                maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+        ],
+      ),
+    );
+  }
+
   List<NetworkDevice> get _filtered {
     final q = _search.trim().toLowerCase();
     final result = _all.where((d) {
@@ -712,31 +731,6 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
               ]);
             },
           ),
-          // جدار المراقبة — يتبع `devices.view` كبقيّة العرض، فلا مفتاح
-          // صلاحيّة رابع لشاشةٍ تُظهر ما تُظهره هذه أصلاً.
-          IconButton(
-            icon: const Icon(LucideIcons.layoutGrid, size: 20),
-            onPressed: _openWall,
-            tooltip: 'نظرة عامّة',
-          ),
-          IconButton(
-            icon: Icon(_sortField.icon, size: 20),
-            onPressed: _pickSort,
-            tooltip: 'الترتيب · ${_sortField.label}',
-          ),
-          // Manage-tier tools — 2026-08-18: مخفيّة للـview-only.
-          if (Perms.has('devices.manage')) ...[
-            IconButton(
-              icon: const Icon(LucideIcons.mapPin, size: 20),
-              onPressed: _openRegions,
-              tooltip: 'إدارة المناطق',
-            ),
-            IconButton(
-              icon: const Icon(LucideIcons.radar, size: 20),
-              onPressed: _openBulkScan,
-              tooltip: 'اكتشاف أجهزة الشبكة',
-            ),
-          ],
           // زر تحديث — يظهر animation دوران أثناء الـprobe
           _probing
               ? Container(
@@ -753,24 +747,62 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                   onPressed: _refresh,
                   tooltip: 'تحديث فوري',
                 ),
-          // زرّ كشف الطُرُز — **ظاهر** لا ضغطة مخفيّة: لا يظهر إلّا حين
-          // يوجد جهاز يحتاجه، ويختفي حين تكتمل الطُرُز. لا يُشغَّل
-          // تلقائيّاً لأنّه يفتح جلسة مصادَقة على كلّ جهاز، وذلك قرار
-          // المستخدم لا سلوك خفيّ يتّصل بأجهزته دون علمه.
-          if (_all.any(DetectedModel.needsDetection))
-            _detecting
-                ? const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2)),
-                  )
-                : IconButton(
-                    icon: const Icon(LucideIcons.scanSearch, size: 20),
-                    onPressed: _detectModels,
-                    tooltip: 'كشف طُرُز الأجهزة',
-                  ),
+          // ── ما تبقّى في قائمةٍ منسدلة ──────────────────────────────
+          //
+          // ⚠️ كانت سبعة أزرارٍ في الشريط، وكلّ `IconButton` عرضه ٤٨
+          // نقطة بحكم `kMinInteractiveDimension`. أي ٣٣٦ نقطة للأزرار
+          // وحدها على شاشةٍ عرضها ٣٩٠ — فلم يبقَ للعنوان شيء، وظهر
+          // «الأجهزة» مقصوصاً إلى «الأ…».
+          //
+          // والبقاء في الشريط حقٌّ يُكتسب: الإضافة والتحديث يُستعملان
+          // في كلّ زيارة، والجرس يحمل **عدداً** لا يُرى داخل قائمة
+          // مطويّة. وما عداها يُفتح مرّةً كلّ حين — وضغطةٌ زائدة ثمنٌ
+          // أرخص من عنوانٍ مقصوص.
+          //
+          // ⚠️ والدوّارات لا تدخل القائمة: `_detecting` تحتاج أن تُرى
+          // وهي تعمل، فتبقى في الشريط بديلاً عن العنصر نفسه.
+          if (_detecting)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2)),
+            )
+          else
+            PopupMenuButton<String>(
+              tooltip: 'المزيد',
+              icon: const Icon(LucideIcons.ellipsisVertical, size: 20),
+              onSelected: (v) {
+                switch (v) {
+                  case 'wall':
+                    _openWall();
+                  case 'sort':
+                    _pickSort();
+                  case 'regions':
+                    _openRegions();
+                  case 'scan':
+                    _openBulkScan();
+                  case 'detect':
+                    _detectModels();
+                }
+              },
+              itemBuilder: (_) => [
+                _menuItem('wall', LucideIcons.layoutGrid, 'نظرة عامّة'),
+                // الترتيب الحاليّ في التسمية — القائمة المطويّة تُخفي
+                // الأيقونة التي كانت تدلّ عليه.
+                _menuItem('sort', _sortField.icon, 'الترتيب · ${_sortField.label}'),
+                if (Perms.has('devices.manage'))
+                  _menuItem('regions', LucideIcons.mapPin, 'إدارة المناطق'),
+                if (Perms.has('devices.manage'))
+                  _menuItem('scan', LucideIcons.radar, 'اكتشاف أجهزة الشبكة'),
+                // كشف الطُرُز — لا يظهر إلّا حين يوجد جهاز يحتاجه، ولا
+                // يُشغَّل تلقائيّاً لأنّه يفتح جلسة مصادَقة على كلّ
+                // جهاز، وذلك قرار المستخدم لا سلوك خفيّ.
+                if (_all.any(DetectedModel.needsDetection))
+                  _menuItem('detect', LucideIcons.scanSearch, 'كشف طُرُز الأجهزة'),
+              ],
+            ),
           // زر "+" إضافة جهاز — manage tier فقط
           if (Perms.has('devices.manage'))
             Padding(
