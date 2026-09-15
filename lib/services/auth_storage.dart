@@ -190,6 +190,11 @@ class AuthStorage {
       _storage.delete(key: _kCanAccessManagers),
       _storage.delete(key: _kCanAccessPackages),
       _storage.delete(key: _kIsEmployee),
+      // توكن الساس: كان ينجو من كلّ خروج. لا قارئ له في التطبيق منذ
+      // حذف العميل المباشر (`c4fe3c3`) — فهو اعتمادٌ مكتوبٌ لا يُقرأ،
+      // يبقى في الـkeychain بعد الخروج، وعلى iOS يُنسَخ إلى iCloud
+      // (`synchronizable: true` أعلاه). الخروج يعني الخروج.
+      _storage.delete(key: _kSas4Token),
     ]);
   }
 }
