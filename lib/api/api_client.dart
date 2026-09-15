@@ -244,9 +244,10 @@ class _AuthInterceptor extends Interceptor {
     if (failed.extra['__retried_after_refresh'] == true) return null;
     failed.extra['__retried_after_refresh'] = true;
     // كلّ نداءات التطبيق تمرّ على خادمنا (/api/**)، فالتوكن الصحيح هو
-    // `token` دائماً — `empJWT` للموظّف و`admin token` للأدمن.
-    // `sas4Token` يبقى مخزَّناً للخادم لا للعميل: لا نداء مباشر على
-    // الساس من هنا، ولا يجوز أن يعود (انظر رأس الملفّ).
+    // `token` دائماً — `admin token` للأدمن. والموظّف لا يصل هنا أصلاً:
+    // `AuthApi.refreshToken()` تردّ null له، فيمرّ من فرع الطرد أعلاه.
+    // ولا يوجد توكن ساسٍ على الجهاز: حُذف في 2026-09-15 لأنّه كان
+    // يُكتب ولا يُقرأ (انظر `_kSas4TokenLegacy`).
     final newToken = await AuthStorage.readToken();
     if (newToken == null) return null;
     failed.headers['Authorization'] = 'Bearer $newToken';

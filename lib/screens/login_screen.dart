@@ -94,7 +94,6 @@ class _LoginScreenState extends State<LoginScreen> {
           :final canAccessManagers,
           :final canAccessPackages,
           :final isEmployee,
-          :final sas4Token,
         ):
         // 2026-07-14: مسح كل caches الجلسة السابقة قبل تفعيل الجديدة —
         // يحمي من رواسب admin سابق (لو 401 kick شغّل واحد ما مسح
@@ -117,7 +116,6 @@ class _LoginScreenState extends State<LoginScreen> {
           canAccessManagers: canAccessManagers,
           canAccessPackages: canAccessPackages,
           isEmployee: isEmployee,
-          sas4Token: sas4Token,
         );
         // 2026-08-26: احفظ الحساب في profiles.* حتى يبقى بعد Logout —
         // شاشة الدخول تعرضه كـchip + قسم "الصفحات" يستعمله لـ"العودة

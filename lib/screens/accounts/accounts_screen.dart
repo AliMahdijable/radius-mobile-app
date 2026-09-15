@@ -191,7 +191,6 @@ class _AccountsScreenState extends State<AccountsScreen> {
             :final canAccessManagers,
             :final canAccessPackages,
             :final isEmployee,
-            :final sas4Token,
           ):
           // 3) امسح الجلسة الحاليّة (بدون مسح الملفّات المحفوظة).
           await SessionManager.clearAllSessionData(
@@ -210,7 +209,6 @@ class _AccountsScreenState extends State<AccountsScreen> {
             canAccessManagers: canAccessManagers,
             canAccessPackages: canAccessPackages,
             isEmployee: isEmployee,
-            sas4Token: sas4Token,
           );
           // 5) أضف الحساب الجديد للملفّات المحفوظة (حتى يظهر chip
           //    لاحقاً)، والحساب السابق موجود سلفاً لأنّه سجّل دخول من
@@ -266,7 +264,6 @@ class _AccountsScreenState extends State<AccountsScreen> {
             :final canAccessManagers,
             :final canAccessPackages,
             :final isEmployee,
-            :final sas4Token,
           ):
           await SessionManager.clearAllSessionData(
             unregisterFcm: false,
@@ -283,7 +280,6 @@ class _AccountsScreenState extends State<AccountsScreen> {
             canAccessManagers: canAccessManagers,
             canAccessPackages: canAccessPackages,
             isEmployee: isEmployee,
-            sas4Token: sas4Token,
           );
           // نظّف مرجع الأصلي — رجعنا فعلاً.
           await SavedProfilesStore.clearOriginal();

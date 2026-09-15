@@ -51,11 +51,23 @@ class AuthStorage {
   // me() يرجع is_employee:false، الـcache يصير empty، Perms.has()=true
   // لكل شي. الفلتر هذا flag يخلي refreshToken() ترفض التجديد للموظف
   // (يستعمل empToken طول مدته 24h، ثم relogin).
+  //
+  // 2026-09-15: صار الرفض حقيقيّاً. كانت `refreshToken()` تجدّد توكن
+  // الأب وتحفظه في `sas4Token` ثمّ **تُعلن النجاح** — فلم يكن الموظّف
+  // المنتهية جلسته يُطرد إلى الدخول أبداً. التفصيل في `auth_api.dart`.
   static const _kIsEmployee = 'auth.is_employee';
-  // 2026-07-12 fix: للموظف — sas4Token المخزّن منفصل عن token (empJWT).
-  // token يبقى empJWT للاستدعاءات الداخلية، sas4Token يُحدَّث عند refresh
-  // لاستدعاءات SAS4 المباشرة. لأدمن عادي، الاثنين متطابقان.
-  static const _kSas4Token = 'auth.sas4_token';
+  // ⚠️ مفتاحٌ متروك: لا يُكتب ولا يُقرأ، ويبقى اسمه هنا لسببٍ واحدٍ —
+  // أن يمسحه `clear()` من الأجهزة التي كتبته قبل الحذف.
+  //
+  // كان يحمل توكن الساس لنداءات الهاتف المباشرة عليه. النداءات ماتت في
+  // 2026-08-31 (`a58acd7`) والعميل في 2026-09-15 (`c4fe3c3`) — ولم
+  // يقرأ أحدٌ هذا الحقل يوماً: كُتب عند كلّ دخولٍ وكلّ تجديد، وصفر
+  // قراءة في كامل `lib/`. فما وصفته تعليقاته — «يُستعمل للاستدعاءات
+  // المباشرة على SAS4» — لم يقع قطّ.
+  //
+  // ولا تُحيِه للساس الثاني: الهاتف لا يعرف أيّ ساسٍ يخصّ هذا المدير،
+  // وخادمنا وحده يعرف (انظر رأس `api_client.dart`).
+  static const _kSas4TokenLegacy = 'auth.sas4_token';
 
   static Future<void> saveSession({
     required String token,
@@ -68,7 +80,6 @@ class AuthStorage {
     bool canAccessManagers = false,
     bool canAccessPackages = false,
     bool isEmployee = false,
-    String? sas4Token,
   }) async {
     await Future.wait([
       _storage.write(key: _kToken, value: token),
@@ -82,24 +93,9 @@ class AuthStorage {
       _storage.write(
           key: _kCanAccessPackages, value: canAccessPackages ? '1' : '0'),
       _storage.write(key: _kIsEmployee, value: isEmployee ? '1' : '0'),
-      // sas4Token: للموظف نخزّنه من الـlogin response (توكن الأب). للأدمن
-      // العادي نخزّن نفس token (هو أصلاً توكن SAS4).
-      _storage.write(key: _kSas4Token, value: sas4Token ?? token),
       if (tokenExpiry != null)
         _storage.write(key: _kTokenExpiry, value: tokenExpiry),
     ]);
-  }
-
-  /// توكن SAS4 المستخدم في استدعاءات SAS4 المباشرة. للأدمن العادي هو
-  /// نفس التوكن الرئيسي؛ للموظف هو توكن الأب المحفوظ من الـlogin أو
-  /// المُجدَّد من /api/auth/refresh-token.
-  static Future<String?> readSas4Token() async {
-    return await _storage.read(key: _kSas4Token) ??
-        await _storage.read(key: _kToken);
-  }
-
-  static Future<void> saveSas4Token(String token) async {
-    await _storage.write(key: _kSas4Token, value: token);
   }
 
   /// True إذا الـuser سجل دخول كموظف (empToken). يقرأها
@@ -190,11 +186,10 @@ class AuthStorage {
       _storage.delete(key: _kCanAccessManagers),
       _storage.delete(key: _kCanAccessPackages),
       _storage.delete(key: _kIsEmployee),
-      // توكن الساس: كان ينجو من كلّ خروج. لا قارئ له في التطبيق منذ
-      // حذف العميل المباشر (`c4fe3c3`) — فهو اعتمادٌ مكتوبٌ لا يُقرأ،
-      // يبقى في الـkeychain بعد الخروج، وعلى iOS يُنسَخ إلى iCloud
-      // (`synchronizable: true` أعلاه). الخروج يعني الخروج.
-      _storage.delete(key: _kSas4Token),
+      // توكن الساس: كان ينجو من كلّ خروج، وصار لا يُكتب أصلاً
+      // (`_kSas4TokenLegacy` أعلاه). يبقى المسح لتنظيف الأجهزة التي
+      // كتبته قبل الحذف — وعلى iOS نسخته في iCloud معه.
+      _storage.delete(key: _kSas4TokenLegacy),
     ]);
   }
 }
