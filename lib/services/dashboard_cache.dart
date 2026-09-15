@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/dashboard_api.dart';
-import '../api/sas4_api.dart';
 
 /// Persists dashboard widget values to SharedPreferences so the next
 /// cold start can render KPIs INSTANTLY from the last successful fetch,
@@ -15,36 +14,23 @@ import '../api/sas4_api.dart';
 ///      cheap enough this is nearly imperceptible)
 ///   → live fetch fires + updates when it returns
 ///
-/// Only the numeric KPIs are cached (SAS4 stats + wallet). Debtors +
+/// Only the numeric KPIs are cached (wallet + revenue). Debtors +
 /// activation list are heavier / more likely to be stale, so they stay
 /// fetch-only. TTL is not enforced here — even a stale value is better
 /// than a spinner for perceived-performance.
 class DashboardCache {
   DashboardCache._();
 
-  static const _kSas4 = 'dash.cache.sas4';
+  // ⚠️ مفتاحٌ متروك لا يُكتب: إحصاءات الساس المباشرة حُذفت
+  // (2026-08-31 `a58acd7` نداءً، و2026-09-15 صنفاً). يبقى الاسم هنا
+  // ليمسحه `clear()` من أجهزةٍ كتبته قبل الحذف.
+  static const _kSas4Legacy = 'dash.cache.sas4';
   static const _kWallet = 'dash.cache.wallet';
   static const _kRevenue = 'dash.cache.revenue'; // day-scope only
 
   /// Read + save operations use SharedPreferences.getInstance() which is
   /// async on first call but cached on subsequent — so all reads after
   /// the first are effectively O(1).
-
-  static Future<void> saveSas4(Sas4Stats s) async {
-    final p = await SharedPreferences.getInstance();
-    await p.setString(_kSas4, jsonEncode(s.toJson()));
-  }
-
-  static Future<Sas4Stats?> readSas4() async {
-    final p = await SharedPreferences.getInstance();
-    final raw = p.getString(_kSas4);
-    if (raw == null) return null;
-    try {
-      return Sas4Stats.fromJson(jsonDecode(raw) as Map<String, dynamic>);
-    } catch (_) {
-      return null;
-    }
-  }
 
   static Future<void> saveWallet(WalletResult w) async {
     final p = await SharedPreferences.getInstance();
@@ -83,7 +69,7 @@ class DashboardCache {
   static Future<void> clear() async {
     final p = await SharedPreferences.getInstance();
     await Future.wait([
-      p.remove(_kSas4),
+      p.remove(_kSas4Legacy),
       p.remove(_kWallet),
       p.remove(_kRevenue),
     ]);
