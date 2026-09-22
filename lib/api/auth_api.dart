@@ -64,6 +64,9 @@ class LoginFailure extends LoginResult {
   final String message;
 }
 
+/// نتيجة تجديد التوكن: نجاحٌ، أو رفضٌ صريح من الخادم، أو تعثّر شبكة.
+enum RefreshOutcome { ok, serverRejected, networkFailure }
+
 class AuthApi {
   AuthApi._();
 
@@ -198,17 +201,30 @@ class AuthApi {
   /// الموظف يبقى موظف (perms.cache، is_employee=true) لكن استدعاءات
   /// SAS4 تحصل على توكن حديث. يطابق mobile-app v1
   /// (SessionRefreshService._refreshSession).
-  static Future<({String token, String? expiresAt})?> refreshToken() async {
+  /// نتيجة محاولة التجديد — والتمييز بينها ليس ترفاً.
+  ///
+  /// 🐛 كان كلّ فشلٍ يُعامَل «جلسةً ميتة» فتُمحى: انقطاع شبكةٍ لحظيّ،
+  /// أو مهلة عشر ثوانٍ، أو حدّ طلباتٍ من الخادم — كلّها تُخرج الموظّف
+  /// من حسابه وسط عمله. والجلسة لا تموت إلّا بحكمٍ صريح من الخادم.
+  static Future<RefreshOutcome> refreshTokenDetailed() async {
     final adminId = await AuthStorage.readAdminId();
-    if (adminId == null) return null;
+    if (adminId == null) return RefreshOutcome.serverRejected;
     final isEmp = await AuthStorage.isEmployee();
     try {
       // Fresh Dio without the auth interceptor — otherwise a 401 on the
       // refresh call itself would try to refresh recursively.
+      // ⚠️ `validateStatus` لازمة لا تجميل.
+      //
+      // 🐛 بدونها يستعمل Dio الافتراضيّ (2xx فقط)، فيرمي على **كلّ**
+      // ردٍّ ٤٠١/٤٠٣ — والرمية تسقط في `catch` العامّ فتُصنَّف
+      // «تعثّر شبكة». والنتيجة عكس المقصود تماماً: رفضٌ صريح من
+      // الخادم يُقرأ انقطاعاً، فلا تُمحى الجلسة أبداً ويبقى المستخدم
+      // في تطبيقٍ ميّت لا يطلب منه الدخول.
       final dio = Dio(BaseOptions(
         baseUrl: ApiClient.baseUrl,
         connectTimeout: const Duration(seconds: 10),
         receiveTimeout: const Duration(seconds: 10),
+        validateStatus: (s) => s != null && s < 500,
         headers: const {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -219,16 +235,26 @@ class AuthApi {
         data: {'adminId': adminId},
       );
       dio.close();
+      // ٤xx = حكمٌ صريح من الخادم. (٥xx و٤٢٩ لا تصل هنا — تُرمى وتُعامَل
+      // تعثّراً، وهو الصواب: خادمٌ متعثّر لا يعني جلسةً ميتة.)
+      final code = res.statusCode ?? 0;
+      if (code >= 400) {
+        if (!kReleaseMode) debugPrint('🟡 refresh-token: HTTP $code');
+        return RefreshOutcome.serverRejected;
+      }
       final body = res.data ?? const {};
       if (body['success'] != true) {
         if (!kReleaseMode) {
           debugPrint('🟡 refresh-token: success!=true body=$body');
         }
-        return null;
+        // ردٌّ وصل وقال «لا» — حكمٌ صريح لا تعثّر شبكة.
+        return RefreshOutcome.serverRejected;
       }
       final newToken = body['token']?.toString();
       final expiresAt = body['expiresAt']?.toString();
-      if (newToken == null || newToken.isEmpty) return null;
+      if (newToken == null || newToken.isEmpty) {
+        return RefreshOutcome.serverRejected;
+      }
       // 2026-07-12 fix: للموظف نحدّث sas4Token فقط. الـempJWT الرئيسي
       // (token) يبقى كما هو — الـmiddleware في backend يقرأ empJWT
       // ويستعمله للتحقق من is_employee + perms، وسـsas4Token المُخزَّن
@@ -247,12 +273,22 @@ class AuthApi {
         debugPrint(
             '🟢 refresh-token: ${isEmp ? "sas4Token only (employee)" : "token+sas4Token"} saved, expires=$expiresAt');
       }
-      return (token: newToken, expiresAt: expiresAt);
+      return RefreshOutcome.ok;
+    } on DioException catch (e) {
+      // ٥xx أو ٤٢٩ أو مهلةٌ أو انقطاع — الخادم متعثّر لا رافض.
+      if (!kReleaseMode) {
+        debugPrint('🔴 refresh-token dio: ${e.type} ${e.response?.statusCode}');
+      }
+      return RefreshOutcome.networkFailure;
     } catch (e) {
       if (!kReleaseMode) debugPrint('🔴 refresh-token failed: $e');
-      return null;
+      return RefreshOutcome.networkFailure;
     }
   }
+
+  /// غلافٌ للمستدعين القدامى الذين يريدون «نجح أم لا» فقط.
+  static Future<bool> refreshToken() async =>
+      await refreshTokenDetailed() == RefreshOutcome.ok;
 
   static String _friendlyDioError(DioException e) {
     // 2026-07-13: dio 5.10+ أضاف DioExceptionType.transformTimeout. نستعمل

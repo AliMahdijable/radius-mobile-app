@@ -88,7 +88,15 @@ class _AuthInterceptor extends Interceptor {
   // Concurrency: many calls fire in parallel from the dashboard. When a
   // 401 hits, the first one starts a refresh; everyone else awaits the
   // same future so we don't hammer /refresh-token. Cleared on completion.
-  static Future<bool>? _refreshing;
+  static Future<RefreshOutcome>? _refreshing;
+
+  /// جيلُ التجديد — يرتفع مع كلّ تجديدٍ ناجح.
+  ///
+  /// 🐛 علامة «حاولتُ بعد التجديد» كانت مطلقة، فطلبٌ استهلك محاولته
+  /// في موجةٍ سابقة يُرفض في الموجة التالية **رغم أنّ الجلسة صارت
+  /// سليمة** — فتظهر بطاقةٌ واحدة «تعذّر الجلب» في شاشةٍ كلّ ما فيها
+  /// يعمل. والعلامة تعني «حاولتُ بهذا التوكن» لا «حاولتُ إلى الأبد».
+  static int _refreshGen = 0;
 
   @override
   void onRequest(
@@ -130,6 +138,13 @@ class _AuthInterceptor extends Interceptor {
     // Some endpoints return 200 OK with `{success:false, message:'Token has expired'}`
     // (SAS4 widget endpoints do exactly that — see status=401 in user logs).
     // Trigger a refresh + retry the SAME way we do for HTTP 401.
+    // 🐛 `validateStatus: s < 500` يجعل الـ401 **نجاحاً** في نظر Dio،
+    // فيُعالَج هنا لا في `onError` — و`onError` وحده كان يستثني
+    // `/api/auth/`. فموظّفٌ يُخطئ كلمة سرّه على `/api/auth/login`
+    // يُشغّل مسار التجديد، وقد يُمحى حسابه بسبب خطأٍ مطبعيّ.
+    if (response.requestOptions.path.contains('/api/auth/')) {
+      return handler.next(response);
+    }
     final isExpiredEnvelope = response.statusCode == 401 ||
         (data is Map &&
             data['message'] is String &&
@@ -215,14 +230,34 @@ class _AuthInterceptor extends Interceptor {
   /// new token. Concurrent callers (5 dashboard fetches racing) all wait
   /// on the same future so refresh-token is hit at most once.
   Future<Response?> _refreshAndRetry(RequestOptions failed) async {
-    final ok = await _runRefresh();
-    if (!ok) {
+    // 🐛 كان هذا الفحص **بعد** التجديد، فكلّ ٤٠١ يُطلق تجديدَين:
+    // الأوّل يضع العلامة، والمحاولة المُعادة تفشل فتدخل هنا فتُجدّد
+    // ثانيةً قبل أن تقرأ العلامة. تقديمه يوقف الازدواج من أصله.
+    // الرفض يقع فقط إن كانت المحاولة السابقة **بهذا التوكن نفسه**.
+    if (failed.extra['__retried_after_refresh'] == true &&
+        failed.extra['__refresh_gen'] == _refreshGen) {
+      return null;
+    }
+    failed.extra['__retried_after_refresh'] = true;
+    failed.extra['__refresh_gen'] = _refreshGen;
+
+    // نلتقط التوكن **قبل** التجديد لنعرف لاحقاً هل تغيّر فعلاً.
+    final before = await AuthStorage.readToken();
+    final outcome = await _runRefresh();
+    if (outcome != RefreshOutcome.ok) {
       // 2026-07-12 fix (v1 parity): refresh فشل حقيقي (شبكة/توكن الأب
       // منتهي). نمسح ونرمي المستخدم لـlogin. سابقاً كان الموظف يمسح
       // فوراً حتى عند 401 عابر بدون refresh — تم الإصلاح بالسماح للـ
       // refresh أوّلاً في AuthApi.refreshToken.
-      final isEmp = await AuthStorage.isEmployee();
-      if (isEmp) {
+      // الجلسة لا تُمحى إلّا بحكمٍ صريح من الخادم. انقطاعُ شبكةٍ أو
+      // مهلةٌ أو حدُّ طلبات ليست دليلاً على موت الجلسة — وكانت تُخرج
+      // الموظّف من حسابه وسط عمله.
+      if (outcome == RefreshOutcome.networkFailure) return null;
+      // 🐛 كان المسح مشروطاً بكون المستخدم موظّفاً — فمديرٌ عاديّ
+      // رُفضت جلسته صراحةً لا يُمحى ولا يُطالَب بالدخول أبداً، إذ لا
+      // سبيل آخر في التطبيق كلّه إلى شاشة الدخول. الرفض الصريح ينهي
+      // الجلسة أيّاً كان صاحبها.
+      {
         // 2026-07-14: نمسح كل caches الجلسة عبر SessionManager بدلاً
         // من Auth + Perms فقط — سابقاً كان الأدمن التالي يشوف رواسب
         // (subscribers list، device snapshots) من الجلسة السابقة.
@@ -231,10 +266,6 @@ class _AuthInterceptor extends Interceptor {
       }
       return null;
     }
-    // Prevent infinite loops: tag the retried request and skip refresh
-    // if it fails a second time.
-    if (failed.extra['__retried_after_refresh'] == true) return null;
-    failed.extra['__retried_after_refresh'] = true;
     // 2026-07-12 fix: الاستدعاءات الداخلية (/api/**) تستعمل token (empJWT
     // للموظف، admin token للأدمن). الاستدعاءات المباشرة على SAS4 (لو
     // موجودة) تستعمل sas4Token. حالياً كل الـclient calls تمر عبر
@@ -244,21 +275,42 @@ class _AuthInterceptor extends Interceptor {
     if (newToken == null) return null;
     failed.headers['Authorization'] = 'Bearer $newToken';
     failed.headers['x-auth-token'] = newToken;
+    Response? retried;
     try {
-      return await _dio.fetch(failed);
+      retried = await _dio.fetch(failed);
     } catch (e) {
       if (!kReleaseMode) debugPrint('🔴 retry after refresh failed: $e');
       return null;
     }
+
+    // ⚠️ **الجلسة الشبح.**
+    //
+    // تجديد الموظّف «ينجح» ولا يُجدّد شيئاً: يكتب في `auth.sas4_token`
+    // بينما التوكن المُرسَل هو `auth.token` ولا يُمسّ. فلو اكتفينا بـ
+    // `outcome == ok` لَما خرج الموظّف أبداً بعد موت توكنه (٢٤ ساعة)،
+    // ولبقي يرى شاشاتٍ فارغة إلى الأبد بلا طلب دخولٍ ولا سبيل تعافٍ.
+    //
+    // والحكم القاطع: تجديدٌ **لم يغيّر التوكن** ثمّ محاولةٌ عادت ٤٠١
+    // ⇒ الجلسة ميتة حقّاً. وهذا ليس تعثّر شبكة، فالخادم ردّ فعلاً.
+    final unchanged = before != null && before == newToken;
+    if (unchanged && retried.statusCode == 401) {
+      await SessionManager.clearAllSessionData(unregisterFcm: false);
+      authExpiredSignal.value = authExpiredSignal.value + 1;
+      return null;
+    }
+    return retried;
   }
 
-  Future<bool> _runRefresh() async {
+  Future<RefreshOutcome> _runRefresh() async {
     final inFlight = _refreshing;
     if (inFlight != null) return inFlight;
-    final f = AuthApi.refreshToken().then((r) => r != null);
+    final f = AuthApi.refreshTokenDetailed();
     _refreshing = f;
     try {
-      return await f;
+      final r = await f;
+      // جيلٌ جديد ⇒ التوكن تغيّر ⇒ من استهلك محاولته سابقاً يستحقّ أخرى.
+      if (r == RefreshOutcome.ok) _refreshGen++;
+      return r;
     } finally {
       _refreshing = null;
     }

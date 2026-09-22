@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'notification_router.dart';
 
 import 'package:flutter/foundation.dart';
 
@@ -81,13 +82,15 @@ class SessionManager {
       // والملفّ لم يُحذف، يفتحه المدير التالي فيرى مشتركي سابقه. وقد
       // حدث تسريبان كهذا سلفاً (قوالب الواتساب · مؤشّرات اللوحة)،
       // وسطراهما فوق شاهدان.
-      _guardAsync('SubscribersOfflineCache.clear',
-          SubscribersOfflineCache.clear()),
+      _guardAsync(
+          'SubscribersOfflineCache.clear', SubscribersOfflineCache.clear()),
     ]);
 
     // 3) FCM unregister (network — only on real logout).
     if (unregisterFcm) {
       await _guardAsync('FcmService.unregister', FcmService.unregister());
+      // لا تُفتح شاشةٌ لحسابٍ انتهت جلسته بنقرةٍ محفوظة.
+      NotificationRouter.reset();
     }
 
     // 4) Auth wipe — last so anything above that reads auth still works.
