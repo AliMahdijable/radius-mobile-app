@@ -14,6 +14,7 @@ import 'api/subscribers_api.dart';
 import 'services/app_resumed_signal.dart';
 import 'services/device_alerts_service.dart';
 import 'services/fcm_service.dart';
+import 'services/notification_router.dart';
 import 'services/inbox_service.dart';
 import 'services/locale_service.dart';
 import 'services/manual_wa_prefs.dart';
@@ -170,6 +171,13 @@ class _MyServicesAppState extends State<MyServicesApp>
         InAppNotificationBanner.show(ctx, notification: n);
       }
     };
+
+    // 🐛 كان `onNotificationTap` معلَّقاً بلا مُسنِد: ينقر المدير
+    // إشعاراً **داخل صندوق الوارد** فيُفتح كرت المشترك، وينقر الإشعار
+    // **نفسه** من شاشة القفل فيُفتح التطبيق على آخر شاشةٍ كان فيها
+    // ولا شيء غير ذلك. المنطق كان موجوداً ومحبوساً في شاشةٍ واحدة.
+    NotificationRouter.attach(_appNavigatorKey);
+    FcmService.onNotificationTap = NotificationRouter.handle;
   }
 
   @override

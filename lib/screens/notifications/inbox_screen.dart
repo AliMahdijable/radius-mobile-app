@@ -1,5 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+
+import '../../services/notification_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/subscribers_api.dart';
@@ -119,33 +121,13 @@ class _InboxScreenState extends State<InboxScreen> {
 
   /// نبحث في payload عن أشهر الـkeys اللي backend يمرّرها لتحديد
   /// المشترك. تُعاد قيمة string غير فارغة أو null.
-  String? _extractUsername(AppNotification n) {
-    for (final k in const [
-      'subscriber_username',
-      'username',
-      'subscriber',
-      'user',
-      'subscriber_id',
-    ]) {
-      final v = n.data[k]?.trim();
-      if (v != null && v.isNotEmpty) return v;
-    }
-    return null;
-  }
+  /// مُفوَّضةٌ إلى [NotificationRouter] — مصدرٌ واحد للحقيقة مع نقرة
+  /// النظام، وإلّا تفرّع منطقان يختلفان بصمت.
+  String? _extractUsername(AppNotification n) =>
+      NotificationRouter.extractUsername(n);
 
-  Future<Subscriber?> _findSubscriber(String usernameOrId) async {
-    final list = await SubscribersApi.loadAllWithOnline();
-    if (list == null) return null;
-    final needle = usernameOrId.toLowerCase();
-    for (final s in list) {
-      if (s.username.toLowerCase() == needle) return s;
-    }
-    // Fallback بالـidx لو الـpayload id بدل username.
-    for (final s in list) {
-      if (s.idx == usernameOrId) return s;
-    }
-    return null;
-  }
+  Future<Subscriber?> _findSubscriber(String usernameOrId) =>
+      NotificationRouter.findSubscriber(usernameOrId);
 
   @override
   Widget build(BuildContext context) {

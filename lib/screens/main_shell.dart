@@ -20,6 +20,8 @@ import 'subscribers/sheets/add_debt_sheet.dart';
 import 'subscribers/sheets/add_subscriber_sheet.dart';
 import 'subscribers/sheets/pay_debt_sheet.dart';
 import 'subscribers/sheets/subscriber_picker_sheet.dart';
+import 'managers/managers_screen.dart';
+import '../services/notification_router.dart';
 import 'subscribers/subscribers_screen.dart';
 import 'subscribers/widgets/filter_chips_bar.dart';
 
@@ -241,9 +243,33 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
+  /// يترجم وجهة الإشعار المجرّدة إلى تبويبٍ ومرشِّح.
+  ///
+  /// الغلاف وحده يعرف بنية التبويبات، فـ`NotificationRouter` يُصدر
+  /// وجهةً مجرّدة ولا يعرف أنّ المشتركين هم التبويب رقم ١.
+  void _handleNotificationDestination(NotificationDestination dest) {
+    if (!mounted) return;
+    switch (dest) {
+      case NotificationDestination.subscribersNearExpiry:
+        _openSubscribers(SubscriberFilter.nearExpiry);
+      case NotificationDestination.subscribersExpired:
+        _openSubscribers(SubscriberFilter.expired);
+      case NotificationDestination.managers:
+        // المدراء ليسوا تبويباً بل داخل «قوائم أخرى» — فندفع شاشتهم.
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ManagersScreen()),
+        );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    NotificationRouter.onDestination = _handleNotificationDestination;
+    // الشاشة الأولى بُنيت والجلسة قائمة — نفّذ نقرةً محفوظة إن وُجدت.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NotificationRouter.markReady();
+    });
     _authExpiredSeen = authExpiredSignal.value;
     authExpiredSignal.addListener(_onAuthExpired);
     _accessBlockedSeen = accessBlockedSignal.value;
