@@ -1,7 +1,7 @@
 name: rad_mysvcs
 description: "MyServices Radius — Login (v2 in progress)"
 publish_to: 'none'
-version: 2.2.0+131
+version: 2.2.6+145
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -23,13 +23,24 @@ dependencies:
   # Firebase Crashlytics — يجمع stack traces + device info لكل crash
   # يحصل مع أي مدير. بدونه لا نعرف بالمشاكل إلا لمّا يشتكي المدير
   # يدوياً. مطلب 2026-08-05.
-  firebase_crashlytics: ^4.1.3
+  firebase_crashlytics: ^5.4.0
 
   # Biometric login
   local_auth: ^2.3.0
 
   # Token storage
-  flutter_secure_storage: ^9.2.4
+  # ⚠️ **10.x لا 11.x — عمداً.**
+  #
+  # سجلّ التغيير صريح: «أيّ بياناتٍ حُفظت بالخوارزميّات المهمَلة تصير
+  # غير قابلةٍ للقراءة بعد 11؛ من كان دون 10 فليُرقِّ إلى 10 أوّلاً
+  # ليُهاجَر الموجود». ونحن على 9.2.4، وهنا تعيش **توكنات الدخول**
+  # والبصمة والملفّات المحفوظة — فالقفزة المباشرة كانت ستُخرج كلّ
+  # مستخدمي أندرويد من حساباتهم وتمحو تفضيلاتهم بلا إنذار.
+  #
+  # 10.3.4 يُهاجر تلقائيّاً، ويجلب `flutter_secure_storage_darwin`
+  # الذي يدعم SPM. و11 تنتظر نسخةً تالية بعد أن يكون الجميع قد مرّ
+  # على 10.
+  flutter_secure_storage: ^10.3.4
 
   # HTTP
   dio: ^5.7.0
@@ -42,8 +53,8 @@ dependencies:
   # through firebase_messaging which uses the same iOS API as
   # permission_handler under the hood but with proper UNUserNotificationCenter
   # delegate registration via FlutterFire's iOS plugin.
-  firebase_core: ^3.6.0
-  firebase_messaging: ^15.1.3
+  firebase_core: ^4.15.0
+  firebase_messaging: ^16.7.0
 
   # Charts (sparkline on hero revenue card, etc.)
   fl_chart: ^0.70.2
@@ -79,7 +90,7 @@ dependencies:
   # field's contact icon on the add/edit subscriber sheets to pull a
   # number from the OS address book instead of re-typing. Supports
   # both iOS (Contacts framework) and Android (ContactsContract).
-  flutter_contacts: ^1.1.9+2
+  flutter_contacts: ^2.5.0
 
   # تصدير التقارير — CSV/Excel + PDF + مشاركة (2026-07-10). csv خفيف
   # (pure Dart) وتفتحه Excel/Sheets مباشرة. printing/pdf يخلق PDF
@@ -138,6 +149,21 @@ flutter_launcher_icons:
   adaptive_icon_foreground: 'assets/images/app_icon.png'
 
 flutter:
+  # ⚠️ تثبيتُ إدارة الاعتماديّات في المستودع لا في حاسوب أحدنا.
+  #
+  # 🐛 Swift Package Manager **مُفعَّلٌ افتراضيّاً** في Flutter 3.44 على
+  # كلّ القنوات، ونحن معطّلوه — لكنّ التعطيل يعيش في
+  # `~/.config/flutter/settings` على هذا الجهاز وحده، والمستودع لا
+  # يثبّت شيئاً. فأيّ زميلٍ أو خادم تكامل على 3.44 كان سيحصل على SPM
+  # مُفعَّلاً، **فيُهاجِر مشروع Xcode تلقائيّاً** عند أوّل تشغيل ويأتي
+  # بفروقٍ في `project.pbxproj` لم يطلبها أحد.
+  #
+  # ٢٠٢٦-٠٩-٢٢: هُوجرنا إلى SPM. والحِزم التي لا تدعمه تبقى على
+  # CocoaPods جنباً إلى جنب — التعايش تلقائيّ في أدوات Flutter
+  # (useCocoapods = swiftPackageCount < totalCount)، فـPodfile يبقى
+  # و pod install يظلّ يعمل.
+  config:
+    enable-swift-package-manager: true
   uses-material-design: true
   generate: true
 

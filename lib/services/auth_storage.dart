@@ -7,7 +7,10 @@ class AuthStorage {
   AuthStorage._();
 
   static const _storage = FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    // ٢٠٢٦-٠٩-٢٢: `encryptedSharedPreferences` أُهمل في 10.x (‏Google
+    // أهملت Jetpack Security) ويُزال في 11. والهجرة إلى التشفير
+    // الجديد تجري تلقائيّاً عند أوّل قراءة.
+    aOptions: AndroidOptions(),
     // 2026-08-28 (Google 2027 Zero-Tap iOS parity):
     // synchronizable=true → الـkeychain items تُنسخ عبر iCloud Keychain.
     // المدير الذي ينتقل لـiPhone جديد ويستعيد من iCloud backup يفتح

@@ -12,7 +12,10 @@ class BiometricService {
   BiometricService._();
 
   static const _storage = FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    // ٢٠٢٦-٠٩-٢٢: `encryptedSharedPreferences` أُهمل في 10.x (‏Google
+    // أهملت Jetpack Security) ويُزال في 11. والهجرة إلى التشفير
+    // الجديد تجري تلقائيّاً عند أوّل قراءة.
+    aOptions: AndroidOptions(),
     iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
   );
   static const _kEnabled = 'bio.enabled';

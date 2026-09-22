@@ -23,25 +23,44 @@ class ContactPicker {
     //   3) لو المستخدم اختار جهة بلا هاتف، نُرجع خطأ مفهوم بدل null.
     try {
       // 1) request permission — best-effort, لا يفتح إذا رفض
+      // ٢٠٢٦-٠٩-٢٢ — واجهة flutter_contacts 2.x:
+      //   requestPermission(readonly:) → permissions.request(PermissionType)
+      // و«ممنوح» صارت حالتين: `granted` و`limited` (‏iOS 18 يسمح بمشاركة
+      // جهاتٍ بعينها). واعتبار المحدودة رفضاً يمنع مستخدماً أعطانا إذناً
+      // فعليّاً من استعمال الميزة.
       bool granted = false;
       try {
-        granted = await FlutterContacts.requestPermission(readonly: true);
+        final st = await FlutterContacts.permissions.request(
+          PermissionType.read,
+        );
+        granted =
+            st == PermissionStatus.granted || st == PermissionStatus.limited;
       } catch (e) {
         if (kDebugMode) debugPrint('ContactPicker.perm: $e');
       }
 
       // 2) primary path: OS-native picker
       try {
-        final contact = await FlutterContacts.openExternalPick();
+        // openExternalPick() → native.showPicker() — ونطلب الأرقام صراحةً
+        // فيرجع الاختيار محمّلاً بها بلا جولةٍ ثانية في الغالب.
+        final contact = await FlutterContacts.native.showPicker(
+          properties: {ContactProperty.phone},
+        );
         if (contact == null) return (phone: null, error: null);
         // openExternalPick يرجع contact خفيف (بدون phones أحياناً على Android)
         // — أعِد جلب الجهة كاملة بالـid لضمان الأرقام.
         var full = contact;
-        if (contact.phones.isEmpty && granted && contact.id.isNotEmpty) {
+        // `id` صار `String?` في 2.x — لا نفترض وجوده.
+        final id = contact.id;
+        if (contact.phones.isEmpty &&
+            granted &&
+            id != null &&
+            id.isNotEmpty) {
           try {
-            final fetched = await FlutterContacts.getContact(
-              contact.id,
-              withProperties: true,
+            // getContact(id, withProperties:) → get(id, properties:)
+            final fetched = await FlutterContacts.get(
+              id,
+              properties: {ContactProperty.phone},
             );
             if (fetched != null) full = fetched;
           } catch (_) {/* keep original */}

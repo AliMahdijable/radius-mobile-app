@@ -64,6 +64,48 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(_loadAppFont);
 
+  // ═══════════════════════════════════════════════════════════
+  // صفّ «TX / RX» المدموج في كارت معلومات الجهاز
+  //
+  // 🐛 كان صفّاً واحداً بتسمية «الإرسال / الاستقبال» فتُقصّ سرعة
+  // الاستقبال على 360dp، فقُسِّم صفّين. ثمّ أُعيد الدمج بطلب المستخدم
+  // بتسمية لاتينيّة قصيرة ووحدةٍ واحدة. هذا الحارس يثبّت أنّ السبب
+  // الذي فرض القسمة زال فعلاً — لا أنّنا أعدنا العطل بثوبٍ جديد.
+  // ═══════════════════════════════════════════════════════════
+  group('كارت الجهاز — صفّ TX / RX', () {
+    // `_DetailRow`: التسمية بلا مرونة تأخذ عرضها كاملاً، والقيمة
+    // `Expanded` تأخذ ما تبقّى. الكارت بحشوة ١٦ جانبيّة داخل شاشةٍ
+    // بحشوة ١٦ → المتاح = العرض ناقص ٦٤. والفجوة بينهما Sp.md = ١٢.
+    const cardChrome = 64.0;
+    const gap = 12.0;
+
+    for (final e in _widths) {
+      test('يتّسع على ${e.name} (${e.dp.toInt()}dp)', () {
+        final labelStyle = AppType.body(color: AppColors.textLabel);
+        final valueStyle = AppType.body(color: AppColors.textBody);
+
+        // أسوأ حالة واقعيّة: رقمان من أربعة محارف لكلٍّ.
+        final labelW = _width('TX / RX', labelStyle);
+        final valueW = _width('144.4 / 300.0 Mbps', valueStyle);
+        final available = e.dp - cardChrome;
+
+        expect(labelW + gap + valueW, lessThanOrEqualTo(available),
+            reason: 'الصفّ المدموج يفيض على ${e.name}: '
+                'يحتاج ${(labelW + gap + valueW).toStringAsFixed(1)} '
+                'والمتاح ${available.toStringAsFixed(1)}');
+      });
+    }
+
+    test('التسمية الجديدة أقصر من القديمة التي سبّبت العطل', () {
+      final style = AppType.body(color: AppColors.textLabel);
+      final oldLabel = _width('الإرسال / الاستقبال', style);
+      final newLabel = _width('TX / RX', style);
+      expect(newLabel, lessThan(oldLabel),
+          reason: 'لو لم تكن أقصر لعاد العطل نفسه');
+    });
+  });
+
+
   group('بلاطة الترافيك — بعد أن أخذت العرض الكامل', () {
     // سلسلة القيود: الشاشة − 32 حشوة القائمة − 32 حشوة الكارت
     // − 2 الحدّ = العرض الداخلي؛ ثمّ − 24 حشوة البلاطة.
