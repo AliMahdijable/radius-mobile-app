@@ -100,7 +100,8 @@ class SubscribersOfflineCache {
   /// ⚠️ فحص `adminId` ليس تكراراً لمسح الخروج بل حزامٌ ثانٍ: مسحٌ فشل
   /// أو خروجٌ لم يمرّ بالقناة المعتادة يعني أن يرى مديرٌ مشتركي آخر.
   /// وثمن الفحص مقارنةُ نصّين.
-  static Future<({List<Map<String, dynamic>> rows, DateTime at})?> read() async {
+  static Future<({List<Map<String, dynamic>> rows, DateTime at})?>
+      read() async {
     try {
       final adminId = await AuthStorage.readAdminId();
       if (adminId == null) return null;

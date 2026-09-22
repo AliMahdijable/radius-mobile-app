@@ -29,7 +29,17 @@ class Subscriber {
   final String? password;
   final bool isEnabled;
   final bool isOnlineFlag;
+  /// IP الجلسة الجارية — يأتي من جدول المحاسبة ويزول بانتهاء الاتصال.
   final String? ipAddress;
+
+  /// **الـIP الثابت المحجوز للمشترك** (SAS4 `framed_ip_address`).
+  ///
+  /// يختلف عن [ipAddress] اختلافاً جوهريّاً: هذا خاصّيّةٌ في حساب
+  /// المشترك تبقى سواءٌ اتّصل أم لا، وذاك عنوانُ جلسةٍ عابرة.
+  /// وكانا مدمجَين في حقلٍ واحد فيضيع الثابت مرّتين: تُخفيه الواجهة
+  /// عن غير المتّصل، ويمحوه عنوانُ الجلسة عن المتّصل.
+  final String? staticIp;
+
   final int? sessionTime;
   final int? downloadBytes;
   final int? uploadBytes;
@@ -87,6 +97,7 @@ class Subscriber {
     this.isEnabled = true,
     this.isOnlineFlag = false,
     this.ipAddress,
+    this.staticIp,
     this.sessionTime,
     this.downloadBytes,
     this.uploadBytes,
@@ -217,6 +228,14 @@ class Subscriber {
       return double.tryParse(v.toString().replaceAll(',', ''));
     }
 
+    // SAS4 يرسل «0.0.0.0» أو نصّاً فارغاً حين لا IP ثابت — وكلاهما
+    // «لا شيء» لا عنوان، فعرضه يكذب على من يقرأ الكرت.
+    String? blankToNull(String? v) {
+      final t = v?.trim() ?? '';
+      if (t.isEmpty || t == '0.0.0.0' || t.toLowerCase() == 'null') return null;
+      return t;
+    }
+
     bool toBool(dynamic v, {bool dflt = false}) {
       if (v == null) return dflt;
       if (v is bool) return v;
@@ -277,6 +296,16 @@ class Subscriber {
           j['framedipaddress']?.toString() ??
           j['framed_ip_address']?.toString() ??
           j['ipAddress']?.toString(),
+      // ⚠️ من `framed_ip_address` وحدها — **لا** من `ip`. الأخيرة
+      // عنوانُ الجلسة في مسار المتّصلين، ولو قرأناها هنا لصار
+      // «الثابت» يتغيّر مع كلّ اتّصال وهو نقيض معناه.
+      // ⚠️ `??` تتخطّى null لا النصّ الفارغ: حقلٌ يصل `''` كان يحجب
+      // الحقول التي بعده. لذلك يُنظَّف كلٌّ على حدة ثمّ يُختار أوّل
+      // ما بقي. و`static_ip` أوّلاً لأنّه حقل SAS4 الصريح للعنوان
+      // المحجوز، و`framed_ip_address` احتياطٌ بعده.
+      staticIp: blankToNull(j['static_ip']?.toString()) ??
+          blankToNull(j['framed_ip_address']?.toString()) ??
+          blankToNull(j['staticIp']?.toString()),
       sessionTime: toInt(j['session_time'] ?? j['sessionTime']),
       downloadBytes: toInt(j['download'] ?? j['downloadBytes']),
       uploadBytes: toInt(j['upload'] ?? j['uploadBytes']),
@@ -336,6 +365,7 @@ class Subscriber {
       isEnabled: isEnabled,
       isOnlineFlag: isOnlineFlag,
       ipAddress: ipAddress,
+      staticIp: staticIp,
       sessionTime: sessionTime,
       downloadBytes: downloadBytes,
       uploadBytes: uploadBytes,
@@ -378,6 +408,8 @@ class Subscriber {
       isEnabled: isEnabled,
       isOnlineFlag: online,
       ipAddress: ip ?? ipAddress,
+      // الجلسة لا تمسّ الثابت — هذا بيت الداء الذي نُصلحه.
+      staticIp: staticIp,
       sessionTime: session ?? sessionTime,
       downloadBytes: dl ?? downloadBytes,
       uploadBytes: ul ?? uploadBytes,
@@ -417,6 +449,7 @@ class Subscriber {
       isEnabled: isEnabled,
       isOnlineFlag: isOnlineFlag,
       ipAddress: ipAddress,
+      staticIp: staticIp,
       sessionTime: sessionTime,
       downloadBytes: downloadBytes,
       uploadBytes: uploadBytes,

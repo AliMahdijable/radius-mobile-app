@@ -488,7 +488,7 @@ class _MicButton extends StatelessWidget {
 /// overlay and pushes the same SubscriberDetailScreen the list tab
 /// uses, with all its operations live (activate / extend / pay-debt /
 /// toggle / disconnect).
-class _Results extends StatelessWidget {
+class _Results extends StatefulWidget {
   const _Results({required this.query, required this.future});
   final String query;
 
@@ -496,15 +496,35 @@ class _Results extends StatelessWidget {
   /// طلباً جديداً ويمحو النتائج مع كلّ ضغطة مفتاح.
   final Future<List<Subscriber>?> future;
 
-  static const _maxResults = 12;
+  @override
+  State<_Results> createState() => _ResultsState();
+}
+
+class _ResultsState extends State<_Results> {
+  /// الدفعة الأولى، ثمّ تنمو بالنقر على الشريط.
+  ///
+  /// 🐛 كانت `static const _maxResults = 12` تقصّ النتائج قصّاً نهائيّاً
+  /// بعد الترتيب: المطابقة سليمة، لكنّ النتيجة الثالثة عشرة فصاعداً
+  /// **لا تُبنى أصلاً** ولا سبيل للوصول إليها. والشريط كان يقول «أوّل
+  /// ١٢ من ٤٠» ولا يفعل شيئاً — إخبارٌ بالحرمان لا علاج له.
+  static const _pageSize = 12;
+  static const _growStep = 30;
+  int _limit = _pageSize;
+
+  @override
+  void didUpdateWidget(_Results old) {
+    super.didUpdateWidget(old);
+    // استعلامٌ جديد يعني قائمةً جديدة — لا يرث سقف الاستعلام السابق.
+    if (old.query != widget.query) _limit = _pageSize;
+  }
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final trimmed = query.trim();
+    final trimmed = widget.query.trim();
     if (trimmed.isEmpty) return const _EmptyHints();
     return FutureBuilder<List<Subscriber>?>(
-      future: future,
+      future: widget.future,
       builder: (_, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Padding(
@@ -548,7 +568,8 @@ class _Results extends StatelessWidget {
             ),
           );
         }
-        final clipped = matches.take(_maxResults).toList();
+        final clipped = matches.take(_limit).toList();
+        final hasMore = matches.length > _limit;
         return Padding(
           padding: const EdgeInsets.fromLTRB(Sp.sm, Sp.xs, Sp.sm, Sp.sm),
           child: Column(
@@ -557,14 +578,31 @@ class _Results extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.fromLTRB(Sp.sm, Sp.sm, Sp.sm, 4),
                 child: Text(
-                  matches.length > _maxResults
-                      ? 'أول $_maxResults من ${matches.length} نتيجة'
+                  hasMore
+                      ? 'أول $_limit من ${matches.length} نتيجة'
                       : '${matches.length} نتيجة',
                   style: AppType.muted(color: AppColors.textLow)
                       .copyWith(fontSize: 10.5, letterSpacing: 0.4),
                 ),
               ),
               for (final s in clipped) _ResultRow(sub: s),
+              if (hasMore)
+                InkWell(
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    setState(() => _limit += _growStep);
+                  },
+                  borderRadius: BorderRadius.circular(R.sm),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Center(
+                      child: Text(
+                        'عرض ${matches.length - _limit} نتيجة أخرى',
+                        style: AppType.bodyStrong(color: AppColors.brand),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         );

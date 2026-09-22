@@ -265,7 +265,9 @@ class DeviceProbeApi {
   /// للواجهات التي تفضّل عرض نتيجة قديمة فوراً على إظهار دوّارة: الجهاز
   /// الذي فُحص مرّة لا ينبغي أن يبدو مجهولاً بعدها أبداً. المتصل بها
   /// يعرض القيمة ثمّ يُحدّث في الخلفيّة إن كانت `stale`.
-  static ({DeviceHealthSnapshot? snap, bool stale})? peek({
+  /// [at] وقت التقاط اللقطة — يحتاجه الكرت ليقول «آخر تحديث قبل كذا»
+  /// بدل ثنائيّة «حديث/قديم» التي لا تُخبر المستخدم متى قُرئت البيانات.
+  static ({DeviceHealthSnapshot? snap, bool stale, DateTime at})? peek({
     String? username,
     String? ip,
   }) {
@@ -275,7 +277,11 @@ class DeviceProbeApi {
       c = _snapCache[ip.trim()];
     }
     if (c == null) return null;
-    return (snap: c.snap, stale: DateTime.now().difference(c.at) >= _ttl);
+    return (
+      snap: c.snap,
+      stale: DateTime.now().difference(c.at) >= _ttl,
+      at: c.at,
+    );
   }
 
   /// Wave batched probe.
@@ -537,6 +543,38 @@ class DeviceProbeApi {
         : (defaults.ubntPassword?.isNotEmpty == true
             ? defaults.ubntPassword!
             : _kUbntPass);
+    return (ip: effectiveIp, user: user, pass: pass);
+  }
+
+  /// بيانات دخول ONT لجهاز مشترك + عنوانه الفعّال — بنفس ترتيب
+  /// أفضليّة [resolveUbntCreds] حرفاً بحرف، كي لا يعمل الفحص ويفشل
+  /// أمرُ إعادة التشغيل على الجهاز نفسه.
+  static Future<({String ip, String user, String pass})?> resolveOntCreds({
+    required String fallbackIp,
+    String? subscriberUsername,
+  }) async {
+    final ip = fallbackIp.trim();
+    DeviceConfig? cfg;
+    String effectiveIp = ip;
+    if (subscriberUsername != null && subscriberUsername.isNotEmpty) {
+      cfg = await DeviceConfigApi.fetchConfig(subscriberUsername);
+      final custom = cfg?.customIp?.trim();
+      if (custom != null && custom.isNotEmpty) effectiveIp = custom;
+    }
+    if (effectiveIp.isEmpty) return null;
+    final defaults = await _loadAdminDefaults();
+    final overrides = (cfg?.username?.isNotEmpty ?? false) ||
+        (cfg?.password?.isNotEmpty ?? false);
+    final user = overrides && (cfg?.username?.isNotEmpty ?? false)
+        ? cfg!.username!
+        : (defaults.ontUsername?.isNotEmpty == true
+            ? defaults.ontUsername!
+            : _kOntUser);
+    final pass = overrides && (cfg?.password?.isNotEmpty ?? false)
+        ? cfg!.password!
+        : (defaults.ontPassword?.isNotEmpty == true
+            ? defaults.ontPassword!
+            : _kOntPass);
     return (ip: effectiveIp, user: user, pass: pass);
   }
 

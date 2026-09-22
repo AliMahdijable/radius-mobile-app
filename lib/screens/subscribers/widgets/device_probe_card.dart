@@ -1,11 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/device_config_api.dart';
 import '../../../api/device_probe_api.dart';
 import '../../../api/ubnt_api.dart';
+import '../../../core/net/huawei_ont_service.dart';
+import '../../../services/subscriber_refresh_signal.dart';
+import '../../../core/util/clipboard_helper.dart';
+import '../../../services/permissions_service.dart';
 import '../../../models/device_health.dart';
 import '../sheets/device_config_sheet.dart';
 import '../../../theme/colors.dart';
@@ -62,7 +67,33 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   // 3 ثوانٍ على معالج CPE ضعيف عبء لا مبرّر له، و`fetchStatus` تقبل
   // جلسة قائمة.
   static const _pulse = Duration(seconds: 3);
+
+  /// نبضة إعادة فحص الإشارة.
+  ///
+  /// 🐛 بلاغ المستخدم: «اجعل إشارة النانو تتحدّث بوقت سريع مو ثابتة».
+  /// وكان الكرت يفحص **مرّةً واحدة** ثمّ لا يُعيد إلّا إن تجاوزت اللقطة
+  /// خمس دقائق — فالإشارة وCCQ يتجمّدان أمام الفنّيّ وهو يوجّه الطبق.
+  /// عشرٌ تطابق لوحة UBNT في قسم الأجهزة (المسار المُثبَت).
+  ///
+  /// ⚠️ **`force: true` لا غنى عنه**: مخزن الفحص عمره خمس دقائق، ونداءٌ
+  /// بلا إجبار يُعيد اللقطة نفسها فيبدو التحديث حيّاً وهو ميّت.
+  static const _signalPulse = Duration(seconds: 10);
+  Timer? _signalTimer;
+  Timer? _agoTimer;
   Timer? _trafficTimer;
+
+  /// وقت آخر لقطة ناجحة — لمؤشّر «آخر تحديث».
+  DateTime? _lastAt;
+
+  /// فحصٌ واحد في الطريق لا غير.
+  ///
+  /// 🐛 صار للكرت ثلاثة مصادر فحص: نبضة العشر ثوانٍ، والتحديث الفوريّ
+  /// عند الفتح، والسحب للتحديث. وبلا حارس تتراكم ثلاث سلاسل دخولٍ
+  /// على **جهاز المشترك نفسه** — وهو أضعف ما في الشبكة، ويُفحَص
+  /// تحديداً لأنّه مشكوكٌ فيه. ثمّ تتسابق نتائجها فيرتدّ الكرت بين
+  /// قراءةٍ جديدة وأخرى قديمة أمام عين المدير.
+  bool _probing = false;
+  bool _rebooting = false;
   UbntTrafficSession? _session;
   int? _lastRx;
   int? _lastTx;
@@ -75,6 +106,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    SubscriberRefreshSignal.tick.addListener(_onPullRefresh);
     // ⚠️ اقرأ ما فحصته موجة القائمة قبل أن تفحص.
     //
     // كان الكارت يُطلق فحصاً كاملاً عند كل فتح بلا سؤال الكاش، بينما
@@ -91,20 +123,42 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     );
     if (hit != null) {
       _snap = hit.snap;
+      _lastAt = hit.at;
       _loading = false;
       _maybeStartTraffic();
+      _maybeStartSignal();
       _loadNotesOnly();
-      if (hit.stale) _refreshQuietly();
+      // 🐛 كان: `if (hit.stale) _refreshQuietly()` — أي لا تحديث إلّا
+      // إن تجاوزت اللقطة خمس دقائق. فمن يفتح كرت المشترك يرى أرقاماً
+      // عمرها أربع دقائق **وهي معروضة كأنّها الآن**، ولا شيء يقول له.
+      // والمدير يفتح الكرت تحديداً ليعرف حال الجهاز هذه اللحظة.
+      //
+      // الآن: يُرسم المخزَّن فوراً بلا دوّارة (فلا شاشة فارغة)، ويُطلق
+      // فحصٌ **مُجبَر** في الخلفيّة يُحدّثه بعد ثانية أو ثانيتين.
+      _refreshQuietly(force: true);
       return;
     }
     _run();
   }
 
   /// الجهاز مفحوص أصلاً: نكمل بجلب الملاحظات بلا دوّارة ولا فحص.
+  /// السحب للتحديث يصل هذا الكرت عبر الإشارة — لا عبر الأب.
+  ///
+  /// وأشدّ ما يحتاجها حالتان لا نبضة دوريّة لهما أصلاً: جهاز ONT،
+  /// وجهازٌ تعذّر الوصول إليه (`_snap == null`) — وهو بالضبط ما يسحب
+  /// المدير ليُعيد المحاولة عليه.
+  void _onPullRefresh() {
+    if (!mounted) return;
+    _run(force: true);
+  }
+
   @override
   void dispose() {
+    SubscriberRefreshSignal.tick.removeListener(_onPullRefresh);
     WidgetsBinding.instance.removeObserver(this);
     _trafficTimer?.cancel();
+    _signalTimer?.cancel();
+    _agoTimer?.cancel();
     _session?.close();
     super.dispose();
   }
@@ -115,9 +169,14 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     // في الخلفيّة — شاشة التفاصيل كانت خالية من أيّ مراقب دورة حياة.
     if (state == AppLifecycleState.resumed) {
       _maybeStartTraffic();
+      _maybeStartSignal();
     } else {
       _trafficTimer?.cancel();
       _trafficTimer = null;
+      _signalTimer?.cancel();
+      _signalTimer = null;
+      _agoTimer?.cancel();
+      _agoTimer = null;
       // نُغلق قناة SSH أيضاً — إبقاؤها مفتوحة والتطبيق في الخلفيّة
       // يستهلك جلسة على جهاز المشترك بلا أيّ فائدة.
       _session?.close();
@@ -130,6 +189,22 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   /// ONT مستثناة عمداً: عميل Huawei يكشط صفحة بصريّات بلا أيّ عدّاد
   /// بايت، ومهلاته 15 ثانية لأنّ تلك الأجهزة بطيئة — فاستطلاعها كلّ
   /// 3 ثوانٍ غير وارد أصلاً.
+  /// إعادة فحصٍ دوريّة للإشارة — لأجهزة Ubiquiti وحدها.
+  ///
+  /// ONT مستثناة كما في الترافيك: عميل Huawei يكشط صفحة ومهلاته ١٥
+  /// ثانية، فطرقُه كلّ عشر ثوانٍ يُنتج طابوراً لا تحديثاً.
+  void _maybeStartSignal() {
+    if (_signalTimer != null) return;
+    if (_snap?.kind != DeviceKind.ubiquiti) return;
+    _signalTimer =
+        Timer.periodic(_signalPulse, (_) => _refreshQuietly(force: true));
+    // عدّاد «آخر تحديث» يتقدّم بنفسه ولو لم يصل جديد — وإلّا جمد
+    // النصّ على «قبل ٣ د» بينما الوقت يمضي.
+    _agoTimer ??= Timer.periodic(const Duration(seconds: 20), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
   void _maybeStartTraffic() {
     if (_trafficTimer != null) return;
     final snap = _snap;
@@ -214,16 +289,43 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
 
   /// تحديث صامت لنتيجة قديمة: بلا `_loading` فلا دوّارة ولا وميض.
   /// إن فشل الفحص تبقى النتيجة القديمة معروضة — أفضل من فراغ.
-  Future<void> _refreshQuietly() async {
+  /// تحديثٌ بلا دوّارة. [force] يتجاوز مخزن الخمس دقائق — بدونه تُعيد
+  /// الدالّة اللقطة المخزَّنة نفسها، فتبدو النبضة الدوريّة عاملةً
+  /// والأرقام لا تتغيّر.
+  Future<void> _refreshQuietly({bool force = false}) async {
+    if (_probing) return;
+    _probing = true;
+    try {
+      await _refreshQuietlyInner(force: force);
+    } finally {
+      _probing = false;
+    }
+  }
+
+  Future<void> _refreshQuietlyInner({bool force = false}) async {
     final snap = await DeviceProbeApi.probe(
       fallbackIp: widget.ip,
       subscriberUsername: widget.username,
+      force: force,
     );
     if (!mounted || snap == null) return;
-    setState(() => _snap = snap);
+    setState(() {
+      _snap = snap;
+      _lastAt = DateTime.now();
+    });
   }
 
   Future<void> _run({bool force = false}) async {
+    if (_probing) return;
+    _probing = true;
+    try {
+      await _runInner(force: force);
+    } finally {
+      _probing = false;
+    }
+  }
+
+  Future<void> _runInner({bool force = false}) async {
     setState(() => _loading = true);
     // Probe + notes in parallel — both go through small caches so the
     // total cost on a warm session is sub-100ms.
@@ -242,8 +344,99 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       _snap = snap;
       _notes = cfg?.notes?.trim();
       _loading = false;
+      if (snap != null) _lastAt = DateTime.now();
     });
     _maybeStartTraffic();
+    _maybeStartSignal();
+  }
+
+  /// الإقلاع متاحٌ للنانو وللـONU — ومسار كلٍّ مُستخرَجٌ من جهازٍ
+  /// حقيقيّ لا مُخمَّن (انظر [HuaweiOntService.reboot]).
+  bool _canReboot() {
+    if (!Perms.has('devices.manage')) return false;
+    final k = _snap?.kind;
+    return k == DeviceKind.ubiquiti || k == DeviceKind.ont;
+  }
+
+  Future<void> _confirmReboot() async {
+    final isOnt = _snap?.kind == DeviceKind.ont;
+    final name = _snap?.ubnt?.hostname.isNotEmpty == true
+        ? _snap!.ubnt!.hostname
+        : (isOnt ? 'ONU المشترك' : 'جهاز المشترك');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(LucideIcons.power, color: AppColors.warning, size: 32),
+        title: const Text('إعادة تشغيل الجهاز'),
+        content: Text('سيُعاد تشغيل "$name" الآن.\n'
+            'ينقطع اتّصال المشترك دقيقة إلى دقيقتين.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.warning),
+            icon: const Icon(LucideIcons.power, size: 16),
+            label: const Text('إعادة تشغيل'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _rebooting = true);
+    HapticFeedback.mediumImpact();
+    String text;
+    Color color;
+    try {
+      final creds = isOnt
+          ? await DeviceProbeApi.resolveOntCreds(
+              fallbackIp: widget.ip,
+              subscriberUsername: widget.username,
+            )
+          : await DeviceProbeApi.resolveUbntCreds(
+              fallbackIp: widget.ip,
+              subscriberUsername: widget.username,
+            );
+      if (creds == null) {
+        throw Exception('لا بيانات دخول للجهاز — اضبطها من زرّ الإعدادات');
+      }
+      if (isOnt) {
+        final session = await HuaweiOntService.login(
+          creds.ip,
+          creds.user,
+          creds.pass,
+          budget: const Duration(seconds: 25),
+        );
+        if (session == null) {
+          throw Exception('تعذّر تسجيل الدخول إلى ONU');
+        }
+        final ok = await HuaweiOntService.reboot(session);
+        if (!ok) throw Exception('رفض الـONU أمر إعادة التشغيل');
+      } else {
+        await UbntApi.rebootDevice(
+          ip: creds.ip,
+          user: creds.user,
+          pass: creds.pass,
+        );
+      }
+      text = 'أُرسل أمر إعادة التشغيل — الجهاز يقلع الآن';
+      color = AppColors.success;
+    } catch (e) {
+      text = 'تعذّرت إعادة التشغيل: '
+          '${e.toString().replaceFirst('Exception: ', '')}';
+      color = AppColors.error;
+    }
+    if (!mounted) return;
+    setState(() => _rebooting = false);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(text),
+      backgroundColor: color,
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 4),
+    ));
   }
 
   Future<void> _openConfig() async {
@@ -335,9 +528,32 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
               ),
               const SizedBox(width: Sp.sm),
               chip,
+              // «آخر تحديث» — يقول متى قُرئت البيانات بدل أن يترك
+              // المستخدم يخمّن إن كان ما يراه حيّاً أم من ساعة.
+              if (_lastAt != null) ...[
+                const SizedBox(width: Sp.x6),
+                Flexible(
+                  child: Text(
+                    _ago(_lastAt!),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.micro(color: AppColors.textLabel),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
+        // إعادة تشغيل الجهاز — للنانو وحده اليوم (انظر `_canReboot`).
+        if (_canReboot()) ...[
+          _HeaderIcon(
+            icon: LucideIcons.power,
+            busy: _rebooting,
+            color: AppColors.error,
+            onTap: _rebooting ? null : _confirmReboot,
+          ),
+          const SizedBox(width: Sp.sm),
+        ],
         _HeaderIcon(
           icon: LucideIcons.settings,
           onTap: _openConfig,
@@ -632,24 +848,36 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         if (u.firmware.isNotEmpty)
           _DetailRow(label: 'الإصدار', value: u.firmware, small: true),
         if (u.ssid.isNotEmpty)
-          _DetailRow(label: 'SSID', value: u.ssid, small: true),
-        // 🐛 كانت صفّاً واحداً بتسمية «الإرسال / الاستقبال» (7.24em —
-        // أطول تسمية في الكارت) وقيمة «144.4 Mbps / 300.0 Mbps». وفي
-        // `_DetailRow` التسمية بلا flex فتأخذ عرضها كاملاً أوّلاً،
-        // والقيمة `Expanded` تمتصّ النقص كلّه — فتُقصّ سرعة الاستقبال
-        // كلّيّاً على 360dp، وهي الرقم الذي يقرّر به الفنّيّ إن كان
-        // اللنك يحتاج إعادة توجيه.
-        //
-        // القسمة إلى صفّين تُقصّر أطول تسمية من 7.24em إلى 2.76em ولا
-        // تمسّ `_DetailRow` ولا السبعة الآخرين الذين يستعملونه.
-        if ((u.txRateKbps ?? 0) > 0)
-          _DetailRow(label: 'الإرسال', value: _rate(u.txRateKbps)),
-        if ((u.rxRateKbps ?? 0) > 0)
-          _DetailRow(label: 'الاستقبال', value: _rate(u.rxRateKbps)),
+          _DetailRow(
+            label: 'SSID',
+            value: u.ssid,
+            small: true,
+            // اسم السكتور يُنسَخ كثيراً (بحثٌ عنه في اللوحة، إرسالٌ
+            // لفنّيّ) — ونسخه يدويّاً من شاشةٍ لا تُحدَّد نصوصها متعذّر.
+            trailing: _CopyIcon(
+              value: u.ssid,
+              label: 'SSID',
+            ),
+          ),
+        if ((u.uptimeSeconds ?? 0) > 0)
+          _DetailRow(
+            label: 'مدّة التشغيل',
+            value: _uptime(u.uptimeSeconds!),
+            rtlValue: true,
+          ),
+        // 🐛 كانتا صفّاً واحداً بتسمية «الإرسال / الاستقبال» (7.24em —
+        // أطول تسمية في الكارت) فتُقصّ سرعة الاستقبال على 360dp،
+        // فقُسِّمتا صفّين. والآن تعودان صفّاً واحداً **بتسمية لاتينيّة
+        // قصيرة** «TX / RX» (‏≈2.6em، أقصر من «الإرسال» وحدها) ووحدةٍ
+        // واحدة في آخر القيمة بدل تكرارها مرّتين — فالسبب الذي فرض
+        // القسمة زال، لا أُهمل.
+        if ((u.txRateKbps ?? 0) > 0 || (u.rxRateKbps ?? 0) > 0)
+          _DetailRow(
+            label: 'TX / RX',
+            value: _ratePair(u.txRateKbps, u.rxRateKbps),
+          ),
         if (u.peerMac != null && u.peerMac!.isNotEmpty)
           _DetailRow(label: 'Peer MAC', value: u.peerMac!, small: true),
-        if (u.peerCount != null && u.peerCount! > 0)
-          _DetailRow(label: 'المتصلون', value: '${u.peerCount}'),
         // مطلب 2026-06-11: عرض كل المنافذ (لا فقط primary) — كل
         // eth interface بحبّة منفصلة مع plugged/speed.
         if (u.lanPorts.isNotEmpty) _lanPortsRow(u.lanPorts),
@@ -682,8 +910,15 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
 
   Widget _lanChip(LanPort p) {
     final unplugged = !p.plugged;
+    // 🐛 `displaySpeed` تُرجع «Unplugged» لمنفذٍ **موصول** لا سرعة له —
+    // وairOS 5 لا يُصدّر سرعة إطلاقاً، فكان منفذ المشترك المتّصل
+    // يُعرَض «LAN · Unplugged». الحقيقة أنّه متّصلٌ وسرعته مجهولة،
+    // وهذا غير «مفصول» تماماً.
+    final speedUnknown = p.speedUnknown;
     final speed = p.displaySpeed;
-    final Color fg = unplugged ? AppColors.textLow : _speedColor(speed);
+    final Color fg = unplugged
+        ? AppColors.textLow
+        : (speedUnknown ? AppColors.success : _speedColor(speed));
     final Color bg = unplugged ? AppColors.bg : AppColors.brandSoftBg;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: Sp.xs),
@@ -693,7 +928,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       ),
       child: Text(
         '${p.label} · ${unplugged ? 'مفصول' : speed}',
-        textDirection: TextDirection.ltr,
+        textDirection: speedUnknown ? TextDirection.rtl : TextDirection.ltr,
         style: AppType.pillLabel(color: fg).copyWith(letterSpacing: 0),
       ),
     );
@@ -725,14 +960,94 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     if (kbps >= 1000) return '${(kbps / 1000).toStringAsFixed(1)} Mbps';
     return '$kbps Kbps';
   }
+
+  /// «39.0 / 72.2 Mbps» — الوحدة مرّةً واحدة في الآخر.
+  ///
+  /// تكرارها («39.0 Mbps / 72.2 Mbps») يضيف ٥ محارف بلا معلومة، وهي
+  /// نفسها المحارف التي كانت تُقصّ سرعة الاستقبال على الشاشات الضيّقة.
+  /// وتختلف الوحدتان؟ حينها نكتبهما كاملتين — الصدق قبل الاختصار.
+  static String _ratePair(int? txKbps, int? rxKbps) {
+    final tx = txKbps ?? 0;
+    final rx = rxKbps ?? 0;
+    bool isMb(int v) => v >= 1000;
+    String num(int v) =>
+        isMb(v) ? (v / 1000).toStringAsFixed(1) : v.toString();
+    if (tx == 0 && rx == 0) return '—';
+    if (tx == 0 || rx == 0 || isMb(tx) != isMb(rx)) {
+      return '${_rate(txKbps)} / ${_rate(rxKbps)}';
+    }
+    return '${num(tx)} / ${num(rx)} ${isMb(tx) ? 'Mbps' : 'Kbps'}';
+  }
+
+  /// «10 أيّام و3 ساعات و25 دقيقة» — بصيغة عربيّة سليمة.
+  ///
+  /// 🐛 كانت «10 يوم 3 س»: مفردٌ بعد العشرة، واختصاراتٌ بلا رابط.
+  /// والعربيّة تُميّز المفرد والمثنّى وجمعَي القلّة والكثرة، وتجاهلُها
+  /// يجعل النصّ يبدو آليّاً في شاشةٍ عربيّةٍ بالكامل.
+  static String _uptime(int seconds) {
+    final d = seconds ~/ 86400;
+    final h = (seconds % 86400) ~/ 3600;
+    final m = (seconds % 3600) ~/ 60;
+    final parts = <String>[
+      if (d > 0) _plural(d, 'يوم', 'يومان', 'أيّام', 'يوماً'),
+      if (h > 0) _plural(h, 'ساعة', 'ساعتان', 'ساعات', 'ساعة'),
+      if (m > 0 && d == 0) _plural(m, 'دقيقة', 'دقيقتان', 'دقائق', 'دقيقة'),
+    ];
+    if (parts.isEmpty) return 'أقلّ من دقيقة';
+    return parts.join(' و');
+  }
+
+  /// تصريف العدد في العربيّة: الواحد والاثنان بلا رقم، ومن ثلاثةٍ إلى
+  /// عشرةٍ جمعُ قلّة، وما فوقها مفردٌ منصوب (تمييز).
+  static String _plural(
+      int n, String one, String two, String few, String many) {
+    if (n == 1) return one;
+    if (n == 2) return two;
+    if (n <= 10) return '$n $few';
+    return '$n $many';
+  }
+
+  /// «قبل ٣ د» — عمر آخر قراءة ناجحة.
+  static String _ago(DateTime at) {
+    final d = DateTime.now().difference(at);
+    if (d.inSeconds < 45) return 'الآن';
+    if (d.inMinutes < 60) return 'قبل ${d.inMinutes} د';
+    if (d.inHours < 24) return 'قبل ${d.inHours} س';
+    return 'قبل ${d.inDays} يوم';
+  }
+}
+
+/// أيقونة نسخٍ صغيرة تُلصق بقيمة صفّ التفصيل.
+class _CopyIcon extends StatelessWidget {
+  const _CopyIcon({required this.value, required this.label});
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkResponse(
+      radius: 16,
+      onTap: () => copyToClipboard(context, value, label: label),
+      child: Padding(
+        padding: const EdgeInsets.all(2),
+        child: Icon(LucideIcons.copy, size: 13, color: AppColors.textLabel),
+      ),
+    );
+  }
 }
 
 /// زرّ أيقوني في رأس الكارت — 18dp بلا خلفيّة، كما في المخطّط.
 class _HeaderIcon extends StatelessWidget {
-  const _HeaderIcon({required this.icon, this.onTap, this.busy = false});
+  const _HeaderIcon({
+    required this.icon,
+    this.onTap,
+    this.busy = false,
+    this.color,
+  });
   final IconData icon;
   final VoidCallback? onTap;
   final bool busy;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -750,7 +1065,7 @@ class _HeaderIcon extends StatelessWidget {
                   child: CircularProgressIndicator(
                       strokeWidth: 2, color: AppColors.textLow),
                 )
-              : Icon(icon, size: 18, color: AppColors.textLow),
+              : Icon(icon, size: 18, color: color ?? AppColors.textLow),
         ),
       ),
     );
@@ -818,9 +1133,19 @@ class _DetailRow extends StatelessWidget {
     required this.value,
     this.strong = false,
     this.small = false,
+    this.trailing,
+    this.rtlValue = false,
   });
   final String label;
   final String value;
+
+  /// ودجة تُلصق بعد القيمة (زرّ نسخ مثلاً). تأخذ مقاسها الطبيعيّ
+  /// فقط، فلا تُزاحم القيمة على العرض.
+  final Widget? trailing;
+
+  /// القيم العربيّة (مدّة التشغيل) تُعرَض باتّجاه عربيّ؛ الإجبار على
+  /// `ltr` يقلب ترتيب كلماتها. أمّا العناوين والأرقام فتبقى `ltr`.
+  final bool rtlValue;
 
   /// أوّل صفّ في المجموعة (نوع الجهاز) بلون نصّ عالٍ.
   final bool strong;
@@ -859,13 +1184,21 @@ class _DetailRow extends StatelessWidget {
           Expanded(
             child: Text(
               value,
-              textAlign: TextAlign.end,
-              textDirection: TextDirection.ltr,
+              // الطرف الأيسر لكلّ القيم: الصفّ عربيّ فالتسمية يميناً،
+              // والقيم كانت تلتصق بها وتترك فراغاً يسارها. توحيدُها
+              // على الحافّة يجعل الأرقام في عمودٍ واحد تُقرأ مسحاً.
+              textAlign: rtlValue ? TextAlign.end : TextAlign.left,
+              textDirection:
+                  rtlValue ? TextDirection.rtl : TextDirection.ltr,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: style,
             ),
           ),
+          if (trailing != null) ...[
+            const SizedBox(width: Sp.x6),
+            trailing!,
+          ],
         ],
       ),
     );

@@ -29,6 +29,9 @@ import 'sheets/pay_debt_sheet.dart';
 import 'sheets/qr_login_sheet.dart';
 import 'sheets/quick_discount_sheet.dart';
 import 'widgets/balance_card.dart';
+import '../../api/device_config_api.dart';
+import 'widgets/device_chip_micro.dart';
+import '../../services/subscriber_refresh_signal.dart';
 import 'widgets/device_probe_card.dart';
 import 'widgets/subscriber_actions.dart';
 
@@ -128,7 +131,10 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     super.dispose();
   }
 
-  Future<void> _onDataChanged() async {
+  /// [force] يتجاوز مخزن القائمة ويجلب حالة الاتّصال معها — للسحب
+  /// اليدويّ. المستمعون (حدث تغيّر البيانات، والعودة من الخلفيّة)
+  /// يتركونه `false`: مخزنهم مُبطَلٌ أصلاً، فالإجبار جولةٌ زائدة.
+  Future<void> _onDataChanged({bool force = false}) async {
     if (!mounted) return;
     // Safety timeout — لمّا نُستدعى من AppResumedSignal بعد فترة
     // غياب طويلة، الـbackend ممكن يتأخّر (SubscribersApi.loadAll
@@ -136,8 +142,17 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     // stale بلا مؤشّر بصري.
     List<Subscriber>? list;
     try {
-      list =
-          await SubscribersApi.loadAll().timeout(const Duration(seconds: 20));
+      // السحب اليدويّ يتجاوز المخزن **ويجلب حالة الاتّصال معها**.
+      //
+      // 🐛 الجلب العاديّ يأتي من `/api/v2/subscribers` وهو لا يحمل
+      // بيانات الجلسة، فكان الكود أدناه يُرجّع القديمة إلى مكانها —
+      // فتتحدّث الباقة والانتهاء والدين، وتبقى مدّة الجلسة والتحميل
+      // والرفع مجمَّدةً على ما كانت لحظة فتح الشاشة. وهي بالضبط
+      // الأرقام التي يسحب المدير ليراها.
+      list = await (force
+              ? SubscribersApi.loadAllWithOnline()
+              : SubscribersApi.loadAll())
+          .timeout(const Duration(seconds: 20));
     } catch (_) {
       list = null;
     }
@@ -161,13 +176,17 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     // carry online state. Without this, an open detail screen of a
     // currently-connected subscriber would lose its session card.
     setState(() {
-      sub = fresh!.copyWithOnline(
-        online: sub.isOnline,
-        ip: sub.ipAddress,
-        session: sub.sessionTime,
-        dl: sub.downloadBytes,
-        ul: sub.uploadBytes,
-      );
+      // عند الجلب المُجبَر يحمل الصفّ حالة اتّصالٍ حقيقيّة فنأخذها؛
+      // وإلّا نحفظ القديمة كي لا يفقد المتّصل كرت جلسته.
+      sub = force
+          ? fresh!
+          : fresh!.copyWithOnline(
+              online: sub.isOnline,
+              ip: sub.ipAddress,
+              session: sub.sessionTime,
+              dl: sub.downloadBytes,
+              ul: sub.uploadBytes,
+            );
     });
   }
 
@@ -185,7 +204,16 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
               onClose: () => Navigator.of(context).pop(),
             ),
             Expanded(
-              child: ListView(
+              child: RefreshIndicator(
+                color: AppColors.brand,
+                onRefresh: () async {
+                  // الإشارة **أوّلاً**: كرت الجهاز يفحص بنفسه، فإطلاقها
+                  // قبل `await` يجعل الجلبين متوازيين ولا يُطيل المؤشّر
+                  // بانتظار فحص CPE بطيء. نفس ترتيب اللوحة.
+                  SubscriberRefreshSignal.bump();
+                  await _onDataChanged(force: true);
+                },
+                child: ListView(
                 padding: const EdgeInsets.fromLTRB(
                   Sp.lg,
                   Sp.sm,
@@ -235,18 +263,11 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                   const SizedBox(height: Sp.md),
                   SubscriberActionTiles(actions: _quickActions()),
                   const SizedBox(height: Sp.md),
-                  // معلومات الجلسة الحية (IP + مدّة + DL/UL) فقط عند الاتصال
-                  // النشط الفعلي — أي RADIUS session قائم. مشترك online في
-                  // SAS4 بلا session data (عادة تأخّر sync online-users)
-                  // ما نعرض له كارت فارغ.
-                  if (sub.isOnline &&
-                      ((sub.ipAddress ?? '').isNotEmpty ||
-                          (sub.sessionTime ?? 0) > 0 ||
-                          (sub.downloadBytes ?? 0) > 0 ||
-                          (sub.uploadBytes ?? 0) > 0)) ...[
-                    _LiveSessionCard(sub: sub),
-                    const SizedBox(height: Sp.sm),
-                  ],
+                  // كرتُ الاتّصال يقرّر ظهوره بنفسه: يظهر عند جلسةٍ
+                  // قائمة، **أو** حين يوجد IP مثبَّت وإن كان مفصولاً —
+                  // فالعنوان المثبَّت لا يزول بزوال الجلسة. وكان
+                  // بطاقةً مستقلّة فأكل مساحةً لا يستحقّها لسطرٍ واحد.
+                  _LiveSessionCard(sub: sub),
                   // معلومات الجهاز (ONT/UBNT) — تظهر لأي مشترك غير معطَّل
                   // ولم ينتهِ اشتراكه. الـcard يجرّب:
                   //   1) SAS4 IP لو موجود
@@ -292,6 +313,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                     ),
                   ],
                 ],
+              ),
               ),
             ),
           ],
@@ -553,6 +575,20 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           busy: _toggling,
           onTap: (sub.idx == null || _isBusy) ? null : _confirmToggleEnabled,
         ),
+      // فصل الجلسة إجراءٌ يوميّ يُطلَب والمشترك على الهاتف — ودفنُه
+      // في «المزيد ← منطقة الخطر» يكلّف نقرتين وبحثاً. وهو مشروطٌ
+      // بالاتّصال: لا معنى لفصل مفصول.
+      if (sub.isOnline && sub.idx != null)
+        SubAction(
+          icon: LucideIcons.power,
+          // «فصل» لا «فصل المستخدم»: البلاطات تتقاسم العرض، وخمسٌ منها
+          // على شاشة ٣٢٠ تترك ~٥١ نقطة فتُقصّ الطويلة إلى «فصل الم…».
+          // والأيقونة وحوار التأكيد يحملان بقيّة المعنى.
+          label: 'subscribers.disconnect'.tr(),
+          color: AppColors.error,
+          busy: _disconnecting,
+          onTap: _isBusy ? null : _confirmDisconnect,
+        ),
       SubAction(
         icon: LucideIcons.ellipsis,
         label: 'subscribers.more_actions'.tr(),
@@ -699,15 +735,9 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             },
           ),
       ]),
+      // «فصل المستخدم» صعد إلى البلاطات السريعة — ولا يتكرّر هنا،
+      // كما لا يتكرّر التمديد والتعديل والتعطيل.
       SubActionGroup('subscribers.group_danger'.tr(), [
-        if (sub.isOnline && sub.idx != null)
-          SubAction(
-            icon: LucideIcons.power,
-            label: 'subscribers.disconnect_user'.tr(),
-            color: AppColors.error,
-            busy: _disconnecting,
-            onTap: _confirmDisconnect,
-          ),
         if (Perms.has('subscribers.delete'))
           SubAction(
             icon: LucideIcons.trash2,
@@ -742,9 +772,38 @@ class _LiveSessionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // النبضة تُعيد القراءة بعد حفظ شيت الإعدادات (الحفظ يُبطل الكاش)،
+    // فلا يبقى عنوانٌ قديم معروضاً بعد تغييره.
+    return ValueListenableBuilder<int>(
+      valueListenable: DeviceProbeBus.tick,
+      builder: (_, __, ___) => FutureBuilder<DeviceConfig?>(
+        future: DeviceConfigApi.fetchConfig(sub.username),
+        builder: (context, snap) {
+          final pinned = snap.data?.customIp?.trim().isNotEmpty == true
+              ? snap.data!.customIp!.trim()
+              : (sub.staticIp?.trim() ?? '');
+          final hasSession = sub.isOnline &&
+              ((sub.ipAddress ?? '').isNotEmpty ||
+                  (sub.sessionTime ?? 0) > 0 ||
+                  (sub.downloadBytes ?? 0) > 0 ||
+                  (sub.uploadBytes ?? 0) > 0);
+          // لا جلسةَ ولا عنوانَ مثبَّت ⇒ لا كرت. (كارتٌ فارغ يوحي
+          // بقيمةٍ تعذّر جلبها، وهو أسوأ من غيابه.)
+          if (!hasSession && pinned.isEmpty) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.only(bottom: Sp.sm),
+            child: _body(context, hasSession: hasSession, pinned: pinned),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _body(BuildContext context,
+      {required bool hasSession, required String pinned}) {
     Theme.of(context); // theme-dep (dark-mode)
     final ip = sub.ipAddress ?? '';
-    final secs = sub.sessionTime ?? 0;
+    final secs = hasSession ? (sub.sessionTime ?? 0) : 0;
     return Container(
       padding: const EdgeInsets.all(Sp.lg),
       decoration: BoxDecoration(
@@ -771,7 +830,10 @@ class _LiveSessionCard extends StatelessWidget {
             children: [
               Icon(Icons.wifi_rounded, size: 18, color: AppColors.brandAccent),
               const SizedBox(width: Sp.sm),
-              Text('subscribers.section_connection'.tr(),
+              Text(
+                  hasSession
+                      ? 'subscribers.section_connection'.tr()
+                      : 'عنوان الجهاز',
                   style: AppType.cardTitle()),
               const SizedBox(width: Sp.sm),
               if (secs > 0)
@@ -828,43 +890,92 @@ class _LiveSessionCard extends StatelessWidget {
           // التحميل والرفع قصيران وثابتا الشكل («4.9 GB») فيبقيان
           // شريكَين؛ والعنوان ينزل صفّاً كاملاً — 348 نقطة على 414dp،
           // أي 3× حاجته.
-          Row(
-            children: [
-              Expanded(
-                child: _SunkenTile(
-                  icon: Icons.south_rounded,
-                  label: 'subscribers.label_download'.tr(),
-                  value: _formatBytes(sub.downloadBytes ?? 0),
-                  color: AppColors.success,
+          // التحميل والرفع بيانات جلسة — لا معنى لهما لمفصولٍ نعرض
+          // له عنوانه المثبَّت وحده.
+          if (hasSession)
+            Row(
+              children: [
+                Expanded(
+                  child: _SunkenTile(
+                    icon: Icons.south_rounded,
+                    label: 'subscribers.label_download'.tr(),
+                    value: _formatBytes(sub.downloadBytes ?? 0),
+                    color: AppColors.success,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: _SunkenTile(
-                  icon: Icons.north_rounded,
-                  label: 'subscribers.label_upload'.tr(),
-                  value: _formatBytes(sub.uploadBytes ?? 0),
-                  color: AppColors.info,
+                const SizedBox(width: 9),
+                Expanded(
+                  child: _SunkenTile(
+                    icon: Icons.north_rounded,
+                    label: 'subscribers.label_upload'.tr(),
+                    value: _formatBytes(sub.uploadBytes ?? 0),
+                    color: AppColors.info,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          if (ip.isNotEmpty) ...[
-            const SizedBox(height: 9),
-            _SunkenTile(
-              icon: Icons.open_in_new_rounded,
-              label: 'IP',
-              value: ip,
-              color: AppColors.textHi,
-              onTap: () => launchUrl(
-                Uri.parse('http://$ip'),
-                mode: LaunchMode.externalApplication,
-              ),
+              ],
             ),
-          ],
+          // العنوانان صفّان كاملان لا نصفان: النصف على شاشة ٣٢٠ يترك
+          // ٩٥ نقطة للنصّ و«192.168.100.254» يحتاج ١١٤ — فيُقصّ رقم
+          // المضيف، وهو المميِّز الوحيد بين جهازٍ وآخر.
+          ..._ipRow(hasSession: hasSession, ip: ip, pinned: pinned),
         ],
       ),
     );
+  }
+
+  /// العنوانان في **صفٍّ واحد عمودين** حين يتوفّران معاً، وعمودٌ
+  /// كامل حين ينفرد أحدهما: عنوان الجلسة للمتّصل، والمثبَّت للمفصول.
+  ///
+  /// والقيمة تُصغَّر بـ`FittedBox` لا تُقصّ: النصف على شاشة ٣٢٠ يترك
+  /// ~١١٥ نقطة و«192.168.100.254» يحتاج ~١١٤ — على الحافّة تماماً.
+  /// والقصّ هنا يأكل رقم المضيف وهو المميِّز الوحيد بين جهازٍ وآخر،
+  /// فالتصغير اليسير أهون من عنوانٍ ناقص.
+  List<Widget> _ipRow({
+    required bool hasSession,
+    required String ip,
+    required String pinned,
+  }) {
+    final tiles = <Widget>[
+      if (hasSession && ip.isNotEmpty)
+        _SunkenTile(
+          icon: Icons.open_in_new_rounded,
+          label: 'IP الجلسة',
+          value: ip,
+          color: AppColors.textHi,
+          shrinkValue: true,
+          onTap: () => launchUrl(Uri.parse('http://$ip'),
+              mode: LaunchMode.externalApplication),
+        ),
+      if (pinned.isNotEmpty)
+        _SunkenTile(
+          icon: Icons.push_pin_rounded,
+          label: 'IP المثبَّت',
+          value: pinned,
+          color: AppColors.info,
+          shrinkValue: true,
+          onTap: () => launchUrl(Uri.parse('http://$pinned'),
+              mode: LaunchMode.externalApplication),
+        ),
+    ];
+    if (tiles.isEmpty) return const [];
+    return [
+      SizedBox(height: hasSession ? 9 : 0),
+      if (tiles.length == 2)
+        // `IntrinsicHeight` يسوّي ارتفاع العمودين؛ بدونه يتفاوتان لو
+        // التفّ عنوانٌ دون الآخر.
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: tiles[0]),
+              const SizedBox(width: 9),
+              Expanded(child: tiles[1]),
+            ],
+          ),
+        )
+      else
+        tiles.first,
+    ];
   }
 
   /// «11 يوم 6س 28د». النسخة السابقة كانت ساعات فقط فتعرض «270س».
@@ -903,6 +1014,7 @@ class _SunkenTile extends StatelessWidget {
     required this.value,
     required this.color,
     this.onTap,
+    this.shrinkValue = false,
   });
   final IconData icon;
   final String label;
@@ -910,15 +1022,14 @@ class _SunkenTile extends StatelessWidget {
   final Color color;
   final VoidCallback? onTap;
 
+  /// يُصغّر القيمة لتتّسع بدل أن تُقصّ — للأعمدة الضيّقة.
+  final bool shrinkValue;
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final body = Container(
+    final body = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceSunken,
-        borderRadius: BorderRadius.circular(R.icon),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -938,22 +1049,39 @@ class _SunkenTile extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 3),
-          Text(
-            value,
-            textDirection: ui.TextDirection.ltr,
-            style: AppType.cardTitle(color: color)
-                .copyWith(fontWeight: FontWeight.w700),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
+          Builder(builder: (_) {
+            final text = Text(
+              value,
+              textDirection: ui.TextDirection.ltr,
+              style: AppType.cardTitle(color: color)
+                  .copyWith(fontWeight: FontWeight.w700),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            );
+            if (!shrinkValue) return text;
+            return FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerStart,
+              child: text,
+            );
+          }),
         ],
       ),
     );
-    if (onTap == null) return body;
-    return InkWell(
-      onTap: onTap,
+    // 🐛 كانت الخلفيّة على `Container` **داخل** الـInkWell، فتغطّي أثر
+    // النقر فتبدو البلاطة ميّتة — والمستخدم يظنّ أنّ الأيقونة وحدها
+    // هي الزرّ. الآن اللون على `Material` والـInkWell فوقه، فالموجة
+    // تظهر على كامل المساحة وهي مساحة النقر نفسها.
+    return Material(
+      color: AppColors.surfaceSunken,
       borderRadius: BorderRadius.circular(R.icon),
-      child: body,
+      clipBehavior: Clip.antiAlias,
+      child: onTap == null
+          ? body
+          : InkWell(
+              onTap: onTap,
+              child: body,
+            ),
     );
   }
 }

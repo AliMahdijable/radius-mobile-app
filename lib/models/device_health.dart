@@ -101,8 +101,16 @@ class LanPort {
   final String? speed;
   final bool plugged;
 
+  /// موصولٌ والسرعة مجهولة — لا يُصدّرها كلّ جهاز (airOS 5 مثلاً
+  /// يعطي `lan_state="ON"` ولا شيء غيرها).
+  bool get speedUnknown => plugged && (speed == null || speed!.isEmpty);
+
   String get displaySpeed {
     if (!plugged) return 'Unplugged';
+    // 🐛 كان «موصولٌ بلا سرعة» يُعرَض «Unplugged» — معلومةٌ **معكوسة**
+    // تُرسل الفنّيّ إلى السطح والكبل بخير. والفرق بين «لا أعرف سرعته»
+    // و«مفصول» هو الفرق بين إجراءين مختلفين تماماً.
+    if (speedUnknown) return 'متّصل';
     final s = speed;
     if (s == null || s == '0Mbps' || s.startsWith('0')) return 'Unplugged';
     if (s.contains('1000')) return '1 Gbps';
@@ -200,6 +208,8 @@ class UbiquitiStatus {
 
   String get lanHealth {
     if (!lanUp) return 'bad';
+    // موصولٌ والسرعة مجهولة ليس عطلاً — لا نصبغه بالأحمر.
+    if (primaryLan?.speedUnknown ?? false) return 'unknown';
     final s = primaryLan?.speed ?? '';
     final m = RegExp(r'^(\d+)Mbps').firstMatch(s);
     final mbps = m == null ? null : int.tryParse(m.group(1)!);
