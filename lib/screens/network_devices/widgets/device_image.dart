@@ -27,7 +27,6 @@ class DeviceImage extends StatelessWidget {
   final String? model;
   final double size;
 
-
   /// الاسم التجاري ← اسم اللوحة.
   ///
   /// ⚠️ ميكروتك تُسمّي الجهاز الواحد باسمين: **اسم لوحة** (RB912UAG-5HPnD-OUT)
@@ -126,8 +125,55 @@ class DeviceImage extends StatelessWidget {
     'c5c-ptmp-hero.png',
   };
 
+  // صور عائلات Catalyst الرسمية؛ أطول اسم أولاً لمنع خلط CX وC.
+  static const _ciscoFiles = <String>{
+    'WS-C2960-24TC-L.png',
+    'WS-C2960-24TT-L.png',
+    'WS-C2960-48TC-L.jpg',
+    'WS-C2960-48TT-L.jpg',
+    'WS-C2960G-24TC-L.jpg',
+    'WS-C2960G-48TC-L.png',
+    'WS-C3750G-16TD.jpg',
+    'Catalyst 2960-S.jpg',
+    'Catalyst 2960-CX.png',
+    'Catalyst 2960-L.png',
+    'Catalyst 2960-X.png',
+    'Catalyst 3560-CX.png',
+    'Catalyst 9200.png',
+    'Catalyst 9300.png',
+  };
+
+  static String? _ciscoFamily(String model) {
+    final m = model.toUpperCase();
+    for (final family in [
+      '2960-CX',
+      '3560-CX',
+      '2960-L',
+      '2960-X',
+      '2960-S',
+      '9200',
+      '9300'
+    ]) {
+      final pattern = family.replaceAll('-', r'[- ]?');
+      // رقم الطراز يجب أن ينتهي هنا؛ 93000 ليس 9300، و2960XR عائلة أخرى.
+      final suffix = family == '9200' || family == '9300'
+          ? r'(?:L|X)?(?=[- /]|$)'
+          : r'(?=[- /]|$)';
+      if (RegExp(r'(?:^|[^A-Z0-9]|C)' + pattern + suffix).hasMatch(m)) {
+        return family == '2960-S'
+            ? 'Catalyst 2960-S.jpg'
+            : 'Catalyst $family.png';
+      }
+    }
+    return null;
+  }
+
   static String? assetFor(String? model, {String? brand}) {
     if (model == null) return null;
+    if (brand == null || brand.isEmpty || brand.toLowerCase() == 'cisco') {
+      final cisco = _ciscoFamily(model);
+      if (cisco != null) return cisco;
+    }
     final k = _key(model);
     if (k.isEmpty) return null;
     // المرادف أوّلاً: يُترجم الاسم التجاري إلى اسم اللوحة ثمّ يُطابَق
@@ -185,9 +231,13 @@ class DeviceImage extends StatelessWidget {
       decoration: BoxDecoration(
         // سطح فاتح ثابت خلف الصورة: صور المصنّعين على خلفيّة بيضاء
         // شفّافة، وعلى سطح داكن تختفي حوافّها.
-        color: AppColors.surfaceSunken,
+        color: brand.toLowerCase() == 'cisco'
+            ? Colors.transparent
+            : AppColors.surfaceSunken,
         borderRadius: BorderRadius.circular(R.icon),
-        border: Border.all(color: AppColors.borderSoft),
+        border: brand.toLowerCase() == 'cisco'
+            ? null
+            : Border.all(color: AppColors.borderSoft),
       ),
       child: Image.asset(
         'assets/devices-images/$file',
@@ -219,6 +269,8 @@ class DeviceImage extends StatelessWidget {
         ? 'ubnt'
         : _mimosaFiles.contains(file)
             ? 'mimosa'
+            : _ciscoFiles.contains(file)
+                ? 'cisco'
             : 'mikrotik';
     return b == want ? file : null;
   }
@@ -238,6 +290,20 @@ class DeviceImage extends StatelessWidget {
 
   /// مفتاح مُطبَّع ← اسم الملفّ. مرتّب تنازليّاً بطول المفتاح.
   static const Map<String, String> _byKey = {
+    'wsc296024tcl': 'WS-C2960-24TC-L.png',
+    'wsc296024ttl': 'WS-C2960-24TT-L.png',
+    'wsc296048tcl': 'WS-C2960-48TC-L.jpg',
+    'wsc296048ttl': 'WS-C2960-48TT-L.jpg',
+    'wsc2960g24tcl': 'WS-C2960G-24TC-L.jpg',
+    'wsc2960g48tcl': 'WS-C2960G-48TC-L.png',
+    'wsc3750g16td': 'WS-C3750G-16TD.jpg',
+    'catalyst2960s': 'Catalyst 2960-S.jpg',
+    'catalyst2960cx': 'Catalyst 2960-CX.png',
+    'catalyst3560cx': 'Catalyst 3560-CX.png',
+    'catalyst2960l': 'Catalyst 2960-L.png',
+    'catalyst2960x': 'Catalyst 2960-X.png',
+    'catalyst9200': 'Catalyst 9200.png',
+    'catalyst9300': 'Catalyst 9300.png',
   'ubiquitiairfiberaf24hd': 'ubiquiti-airfiber-af24hd.png',
   'rb1100ahx4dudeedition': 'RB1100AHx4 Dude Edition.webp',
   'l23ugsr5haxd2haxdnm': 'L23UGSR-5HaxD2HaxD-NM.webp',

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../../api/mikrotik_binary_api.dart';
+import '../../api/cisco_api.dart';
 import '../../api/network_devices_api.dart';
 import '../../api/ubnt_api.dart';
 import '../../api/snmp_client.dart';
@@ -49,7 +50,7 @@ class ModelDetector {
     final targets = devices.where((d) {
       if (!DetectedModel.needsDetection(d)) return false;
       if (d.lastStatus != 'online') return false;
-      return const ['mikrotik', 'ubnt', 'mimosa', 'roji', 'ruijie']
+      return const ['mikrotik', 'ubnt', 'mimosa', 'roji', 'ruijie', 'cisco']
           .contains(d.brand.toLowerCase());
     }).toList();
 
@@ -86,7 +87,9 @@ class ModelDetector {
     final byCap = <int, List<NetworkDevice>>{};
     for (final d in targets) {
       final b = d.brand.toLowerCase();
-      final cap = b == 'ubnt' ? _capSsh : (b == 'mikrotik' ? _capApi : _capSnmp);
+      final cap = (b == 'ubnt' || b == 'cisco')
+          ? _capSsh
+          : (b == 'mikrotik' ? _capApi : _capSnmp);
       byCap.putIfAbsent(cap, () => []).add(d);
     }
     await Future.wait(byCap.entries.map((e) async {
@@ -104,9 +107,28 @@ class ModelDetector {
         return _mikrotik(d);
       case 'ubnt':
         return _ubnt(d);
+      case 'cisco':
+        return _cisco(d);
       default:
         return _snmp(d);
     }
+  }
+
+  static Future<String?> _cisco(NetworkDevice d) async {
+    if (!d.hasCredentials || !{'ssh', 'telnet'}.contains(d.protocol)) {
+      return null;
+    }
+    final creds = await NetworkDevicesApi.getCredentials(d.id);
+    final user = (creds['user'] ?? '').toString();
+    final pass = (creds['pass'] ?? '').toString();
+    if (user.isEmpty) return null;
+    return CiscoApi.detectModel(
+      host: d.ip,
+      user: user,
+      pass: pass,
+      protocol: d.protocol!,
+      port: d.apiPort ?? d.port,
+    );
   }
 
   static Future<String?> _mikrotik(NetworkDevice d) async {
@@ -126,8 +148,8 @@ class ModelDetector {
       await client.connect();
       await client.login();
       // `.proplist` يقصر الحمولة على العمود المطلوب وحده.
-      final rows =
-          await client.query(['/system/resource/print', '=.proplist=board-name']);
+      final rows = await client
+          .query(['/system/resource/print', '=.proplist=board-name']);
       if (rows.isEmpty) return null;
       final v = rows.first['board-name'];
       return (v == null || v.isEmpty) ? null : v;
