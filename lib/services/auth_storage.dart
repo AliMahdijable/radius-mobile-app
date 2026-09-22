@@ -10,7 +10,13 @@ class AuthStorage {
     // ٢٠٢٦-٠٩-٢٢: `encryptedSharedPreferences` أُهمل في 10.x (‏Google
     // أهملت Jetpack Security) ويُزال في 11. والهجرة إلى التشفير
     // الجديد تجري تلقائيّاً عند أوّل قراءة.
-    aOptions: AndroidOptions(),
+    aOptions: AndroidOptions(
+      // ٢٠٢٦-٠٩-٢٢ — `resetOnError` انقلب افتراضيّاً في 10.x من false إلى
+      // true، وDart يرسله دائماً فلا تُقرأ قيمة جافا الافتراضيّة أبداً.
+      // معناه أنّ أيّ خطأ قراءةٍ عابر يحذف المفتاح بدل أن يُبلّغ عنه —
+      // فيتحوّل عطلٌ مؤقّت إلى فقدٍ دائمٍ صامت. نُبقي سلوك 9.2.4.
+      resetOnError: false,
+    ),
     // 2026-08-28 (Google 2027 Zero-Tap iOS parity):
     // synchronizable=true → الـkeychain items تُنسخ عبر iCloud Keychain.
     // المدير الذي ينتقل لـiPhone جديد ويستعيد من iCloud backup يفتح

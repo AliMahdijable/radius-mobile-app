@@ -12,7 +12,10 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 class ManualWaPrefs {
   ManualWaPrefs._();
 
-  static const _storage = FlutterSecureStorage();
+  static const _storage = FlutterSecureStorage(
+    // ٢٠٢٦-٠٩-٢٢ — كان بلا خيارات، فورث انقلاب `resetOnError` في 10.x.
+    aOptions: AndroidOptions(resetOnError: false),
+  );
   static const _kEnabled = 'wa.manual_mode.enabled';
 
   /// ValueNotifier مركزي — كل الـUI يستمع له فيتحدّث فوراً عند التبديل

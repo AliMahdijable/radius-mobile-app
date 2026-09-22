@@ -16,7 +16,13 @@ class PrintPrefs {
     // ٢٠٢٦-٠٩-٢٢: `encryptedSharedPreferences` أُهمل في 10.x (‏Google
     // أهملت Jetpack Security) ويُزال في 11. والهجرة إلى التشفير
     // الجديد تجري تلقائيّاً عند أوّل قراءة.
-    aOptions: AndroidOptions(),
+    aOptions: AndroidOptions(
+      // ٢٠٢٦-٠٩-٢٢ — `resetOnError` انقلب افتراضيّاً في 10.x من false إلى
+      // true، وDart يرسله دائماً فلا تُقرأ قيمة جافا الافتراضيّة أبداً.
+      // معناه أنّ أيّ خطأ قراءةٍ عابر يحذف المفتاح بدل أن يُبلّغ عنه —
+      // فيتحوّل عطلٌ مؤقّت إلى فقدٍ دائمٍ صامت. نُبقي سلوك 9.2.4.
+      resetOnError: false,
+    ),
     iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
   );
 
