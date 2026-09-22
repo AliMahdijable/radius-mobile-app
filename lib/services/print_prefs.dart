@@ -33,8 +33,14 @@ class PrintPrefs {
       ValueNotifier<PrintFormatChoice>(PrintFormatChoice.pos);
 
   static Future<void> load() async {
-    final raw = await _storage.read(key: _kFormat);
-    notifier.value = _decode(raw);
+    // ٢٠٢٦-٠٩-٢٢ — انظر ThemeService.load: قراءةٌ ترمي داخل Future.wait
+    // في main تُسقط الإقلاع كلّه. قالب الطباعة يُستبدل بالافتراضيّ.
+    try {
+      final raw = await _storage.read(key: _kFormat);
+      notifier.value = _decode(raw);
+    } catch (_) {
+      notifier.value = _decode(null);
+    }
   }
 
   static Future<void> setFormat(PrintFormatChoice choice) async {

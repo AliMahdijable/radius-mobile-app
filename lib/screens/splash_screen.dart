@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
@@ -55,7 +56,21 @@ class _SplashScreenState extends State<SplashScreen> {
     // يكون flash-of-nothing". الفعليّة: splash يظهر فعلاً لأن main.dart
     // يستهلك 500ms+ قبله، فالـsplash يعرض ~1s على الأقل بلا تأخير مصنّع.
     // احذفنا الـdelay → نفتح 350ms أسرع.
-    await _route();
+    //
+    // ٢٠٢٦-٠٩-٢٢ — `_route` يقرأ ثلاث قيمٍ من الخزنة بلا حماية، وقراءة
+    // الخزنة ترمي عند عطل KeyStore. والرمية هنا لا تُظهر خطأً ولا تنقل
+    // إلى شاشة: الـsplash يبقى معلّقاً للأبد بشعارٍ ودوّارة. المخرج
+    // الآمن شاشة الدخول — الجلسة قد تكون سليمة، لكنّ بابها يُفتح باليد
+    // خيرٌ من بابٍ لا يُفتح.
+    try {
+      await _route();
+    } catch (e, st) {
+      if (kDebugMode) debugPrint('🔴 توجيه الإقلاع: $e\n$st');
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+      );
+    }
   }
 
   /// Fire-and-forget: يتحقّق من انتهاء الـtoken ويجدّد لو منتهي.

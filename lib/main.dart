@@ -43,6 +43,11 @@ void main() async {
   // بالتوازي عبر Future.wait. كانت متتالية (~570-1290ms شاشة سوداء
   // قبل ظهور splash). الآن الوقت = مدّة أبطأ عمليّة، مو مجموعهم.
   // كل واحدة idempotent وتكتب في storage منفصل، فلا race conditions.
+  // ٢٠٢٦-٠٩-٢٢ — حاجزٌ أخير. Future.wait تسقط عند أوّل رمية، ورمية
+  // واحدة هنا تُنهي main قبل runApp: شاشةٌ سوداء في كلّ إقلاع بلا مخرج
+  // إلّا إعادة التثبيت. وقراءات الخزنة ترمي فعلاً عند عطل KeyStore.
+  // كلّ خدمةٍ تحمي نفسها أيضاً — وهذا يحمي من التي تُضاف غداً وتنسى.
+  try {
   await Future.wait([
     // Theme — يحمّل تفضيل المستخدم قبل أول frame (يمنع light-flash → dark).
     ThemeService.load(),
@@ -87,6 +92,9 @@ void main() async {
       NotificationService.markFirebaseReady(false);
     }),
   ]);
+  } catch (e, st) {
+    if (kDebugMode) debugPrint('🔴 تهيئة الإقلاع: $e\n$st');
+  }
 
   _installDebugErrorAggregator();
 

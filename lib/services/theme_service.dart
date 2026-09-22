@@ -38,8 +38,17 @@ class ThemeService {
       ValueNotifier<ThemeMode>(ThemeMode.system);
 
   static Future<void> load() async {
-    final raw = await _storage.read(key: _kThemeMode);
-    notifier.value = _decode(raw);
+    // ٢٠٢٦-٠٩-٢٢ — تُستدعى داخل Future.wait في main قبل runApp، وقراءة
+    // الخزنة ترمي عند عطل KeyStore (‏resetOnError: false). ورمية واحدة
+    // هنا كانت تُسقط main كلّه قبل أوّل إطار: شاشةٌ سوداء في كلّ إقلاع
+    // ولا مخرج إلّا إعادة التثبيت. المظهر تفضيلٌ لا أكثر — يُستبدل
+    // بالافتراضيّ ويمضي التطبيق.
+    try {
+      final raw = await _storage.read(key: _kThemeMode);
+      notifier.value = _decode(raw);
+    } catch (_) {
+      notifier.value = _decode(null);
+    }
   }
 
   static Future<void> setMode(ThemeMode mode) async {
