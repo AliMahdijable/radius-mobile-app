@@ -61,8 +61,6 @@ class DeviceWarmup {
     _tick();
   }
 
-
-
   void stop() {
     _running = false;
     _timer?.cancel();

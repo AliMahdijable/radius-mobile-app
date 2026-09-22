@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/cisco_api.dart';
 import '../../api/mikrotik_api.dart';
 import '../../api/ubnt_api.dart';
 import '../../core/widgets/sheet_scaffold.dart';
@@ -19,6 +20,7 @@ import 'widgets/airfiber60_live_panel.dart';
 import 'widgets/mikrotik_live_panel.dart';
 import 'widgets/mimosa_live_panel.dart';
 import 'widgets/ruijie_live_panel.dart';
+import 'widgets/cisco_live_panel.dart';
 import 'widgets/ubnt_live_panel.dart';
 import '../../api/network_devices_api.dart';
 import '../../theme/typography.dart';
@@ -214,8 +216,16 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
   bool _canReboot() {
     if (!Perms.has('devices.manage')) return false;
     if (!_d.hasCredentials) return false;
-    if (_d.protocol != 'api' && _d.protocol != 'ssh') return false;
-    return _d.brand == 'mikrotik' || _d.brand == 'ubnt';
+    // سسكو يُدار بـTelnet أيضاً — وبعض السويتشات لا تفتح ٢٢ إطلاقاً.
+    const viaTelnet = {'cisco'};
+    if (_d.protocol != 'api' &&
+        _d.protocol != 'ssh' &&
+        !(_d.protocol == 'telnet' && viaTelnet.contains(_d.brand))) {
+      return false;
+    }
+    return _d.brand == 'mikrotik' ||
+        _d.brand == 'ubnt' ||
+        _d.brand == 'cisco';
   }
 
   /// dialog تأكيد + spinner + snackbar للنجاح/الفشل.
@@ -269,6 +279,16 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
             pass: pass,
           );
           break;
+        case 'cisco':
+          // `reload` — لا إطفاء على Catalyst، والجهاز يعود وحده.
+          await CiscoApi.rebootDevice(
+            host: _d.ip,
+            user: user,
+            pass: pass,
+            port: _d.apiPort ?? _d.port,
+            protocol: _d.protocol ?? 'ssh',
+          );
+          break;
         default:
           throw Exception('البراند ${_d.brand} غير مدعوم للـreboot');
       }
@@ -292,7 +312,9 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           ? e.message
           : e is UbntException
               ? e.message
-              : e.toString();
+              : e is CiscoException
+                  ? e.message
+                  : e.toString();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Row(children: [
           const Icon(LucideIcons.circleAlert,
@@ -437,6 +459,12 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                 MimosaLivePanel(device: _d)
               else
                 _mimosaHint(),
+            ] else if (_d.brand == 'cisco') ...[
+              const SizedBox(height: Sp.md),
+              if ({'ssh', 'telnet'}.contains(_d.protocol) && _d.hasCredentials)
+                CiscoLivePanel(device: _d)
+              else
+                _ciscoHint(),
             ] else if (_d.brand == 'ruijie') ...[
               const SizedBox(height: Sp.md),
               if (_d.protocol == 'snmp' && _d.hasCredentials)
@@ -444,7 +472,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
               else
                 _ruijieHint(),
             ],
-          ] else if ({'mikrotik', 'ubnt', 'mimosa', 'ruijie'}
+          ] else if ({'mikrotik', 'ubnt', 'mimosa', 'ruijie', 'cisco'}
               .contains(_d.brand)) ...[
             const SizedBox(height: Sp.md),
             _noMonitorPermHint(),
@@ -1140,4 +1168,38 @@ Color? _parseRegionColorHex(String? hex) {
   final n = int.tryParse(s, radix: 16);
   if (n == null) return null;
   return Color(0xFF000000 | n);
+}
+
+extension _CiscoHint on _NetworkDeviceDetailsScreenState {
+  Widget _ciscoHint() => Container(
+        padding: const EdgeInsets.all(Sp.md),
+        decoration: BoxDecoration(
+          color: AppColors.brandSoftBg,
+          borderRadius: BorderRadius.circular(R.lg),
+          border: Border.all(color: AppColors.brandSoftBorder),
+        ),
+        child: Row(children: [
+          Icon(LucideIcons.network, color: AppColors.brand, size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('مراقبة سويتش Cisco', style: AppType.bodyBold()),
+              const SizedBox(height: 4),
+              Text(
+                'اختر SSH وأدخل بيانات دخول السويتش لعرض النظام والمنافذ. '
+                'إذا كان الجهاز يدعم Telnet فقط، اختره وحدّد منفذه. '
+                'تحتاج صلاحية قراءة أوامر show.',
+                style: AppType.body(color: AppColors.textMid),
+              ),
+            ]),
+          ),
+          if (Perms.has('devices.manage'))
+            IconButton(
+              icon: Icon(LucideIcons.pencil, size: 18, color: AppColors.brand),
+              onPressed: _edit,
+              tooltip: 'إعداد الاتصال',
+            ),
+        ]),
+      );
 }

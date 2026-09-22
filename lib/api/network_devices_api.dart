@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Socket;
 
 import 'package:dart_ping/dart_ping.dart';
@@ -447,11 +448,29 @@ class NetworkDevicesApi {
 
   /// Port fingerprints — أوّل port ينجح يحدّد التخمين المبدئي.
   /// الترتيب مهمّ: نجرّب المميّز أوّلاً (8728 قبل 22).
-  static const List<int> scanPorts = [8728, 22, 443, 80, 161, 23];
+  // ⚠️ الترتيب **حاسم**: الحلقة تتوقّف عند أوّل منفذٍ مفتوح، وقراءة
+  // الترويسة لا تجري إلّا على ٢٢ و٢٣. فمنافذ الإدارة المميِّزة تسبق
+  // منافذ الويب العامّة.
+  //
+  // 🐛 كان ٢٣ في آخر القائمة بعد ٤٤٣ و٨٠: وسويتش سسكو لا يفتح ٢٢
+  // (مثل جهازنا في الميدان) يفتح ٨٠ لأنّ IOS يشغّل `ip http server`
+  // افتراضيّاً — فتتوقّف الحلقة عند ٨٠ ولا تبلغ ٢٣ أبداً، فلا تُقرأ
+  // ترويسة ولا يُعرَف البراند: يُضاف الجهاز «other» بنوع «other».
+  // فكشفُ الترويسة كان صحيحاً لكنّه لا يُبلَغ أصلاً.
+  static const List<int> scanPorts = [8728, 22, 23, 443, 80, 161];
 
   /// خمّن brand + protocol + apiPort من أوّل port فُتح.
   static ({String brand, String protocol, int apiPort}) guessDeviceFromPort(
-      int port) {
+      int port, {String? banner}) {
+    // الترويسة تسبق المنفذ: المنفذ ٢٢ يقول «فيه SSH» لا «هذا UBNT».
+    final fromBanner = banner == null ? null : brandFromBanner(banner);
+    if (fromBanner != null) {
+      return (
+        brand: fromBanner,
+        protocol: port == 23 ? 'telnet' : (port == 22 ? 'ssh' : 'api'),
+        apiPort: port,
+      );
+    }
     return switch (port) {
       8728 => (brand: 'mikrotik', protocol: 'api', apiPort: 8728),
       22 => (brand: 'ubnt', protocol: 'ssh', apiPort: 22),
@@ -461,6 +480,70 @@ class NetworkDevicesApi {
       23 => (brand: 'other', protocol: 'telnet', apiPort: 23),
       _ => (brand: 'other', protocol: 'api', apiPort: port),
     };
+  }
+
+  /// يستنتج الصانع من ترويسة الخدمة.
+  ///
+  /// الأجهزة تُعرّف نفسها عند أوّل اتّصال **بلا أن نسألها**: SSH يرسل
+  /// سطر النسخة فوراً، وTelnet يرسل محثّه بعد تفاوض IAC. التخمين
+  /// بالمنفذ وحده يجعل كلّ ما فتح ٢٢ «UBNT» — وسويتش سسكو منها.
+  ///
+  /// مُلتقَطٌ من جهازين حقيقيّين:
+  /// - `SSH-2.0-Cisco-1.25`
+  /// - `\xff\xfb\x01…\r\n\r\nUser Access Verification\r\n\r\nUsername: `
+  ///
+  /// يرجع `null` حين لا تحسم الترويسة شيئاً، فيعود القرار للمنفذ.
+  static String? brandFromBanner(String banner) {
+    final b = banner.toLowerCase();
+    if (b.isEmpty) return null;
+
+    // سسكو: اسمها في ترويسة SSH، أو عبارتها الكلاسيكيّة في Telnet.
+    if (b.contains('cisco') ||
+        b.contains('user access verification')) {
+      return 'cisco';
+    }
+    // RouterOS: ترويسته `SSH-2.0-ROSSSH`.
+    if (b.contains('rosssh') || b.contains('mikrotik') || b.contains('routeros')) {
+      return 'mikrotik';
+    }
+    if (b.contains('ubnt') || b.contains('ubiquiti') || b.contains('airos')) {
+      return 'ubnt';
+    }
+    if (b.contains('mimosa')) return 'mimosa';
+    if (b.contains('ruijie') || b.contains('reyee')) return 'ruijie';
+    // `dropbear` و`openssh` عامّتان تشترك فيهما أجهزةٌ كثيرة — لا تحسمان.
+    return null;
+  }
+
+  /// يقرأ ما يرسله الجهاز تلقائيّاً عند الاتّصال، بلا أن يكتب شيئاً.
+  ///
+  /// بايتات تفاوض Telnet (‏≥ ١٢٨) تُسقَط كي يظهر النصّ نظيفاً.
+  static Future<String?> readBanner(Socket socket,
+      {Duration wait = const Duration(milliseconds: 500)}) async {
+    try {
+      final bytes = <int>[];
+      final done = Completer<void>();
+      final sub = socket.listen(
+        (d) {
+          bytes.addAll(d);
+          if (bytes.length >= 256 && !done.isCompleted) done.complete();
+        },
+        onError: (_) {
+          if (!done.isCompleted) done.complete();
+        },
+        onDone: () {
+          if (!done.isCompleted) done.complete();
+        },
+        cancelOnError: false,
+      );
+      await done.future.timeout(wait, onTimeout: () {});
+      await sub.cancel();
+      if (bytes.isEmpty) return null;
+      return String.fromCharCodes(
+          bytes.where((b) => b == 10 || b == 13 || (b >= 32 && b < 127)));
+    } catch (_) {
+      return null;
+    }
   }
 
   /// ماسح subnet /24 — يستهلك [base] كـ`192.168.1` ويفحص [start].. [end].
@@ -499,8 +582,13 @@ class NetworkDevicesApi {
             final sw = Stopwatch()..start();
             final socket = await Socket.connect(ip, port, timeout: timeout);
             sw.stop();
+            // على منفذَي الإدارة فقط: قراءةٌ قصيرة تُميّز الصانع، ولا
+            // نُبطئ بقيّة المنافذ بانتظارٍ لا يفيد.
+            final banner = (port == 22 || port == 23)
+                ? await readBanner(socket)
+                : null;
             socket.destroy();
-            final guess = guessDeviceFromPort(port);
+            final guess = guessDeviceFromPort(port, banner: banner);
             final res = ScanResult(
               ip: ip,
               openPort: port,

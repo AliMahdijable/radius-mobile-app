@@ -63,6 +63,12 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   String? _error;
   String? _typeFilter;
   String? _statusFilter;
+
+  /// مُرشِّح المنطقة. `null` = الكلّ، و[_kNoRegion] = «بلا منطقة».
+  /// وهذه الأخيرة ليست ترفاً: أجهزةٌ لم تُسنَد إلى منطقة تضيع في
+  /// القائمة، ولا سبيل إلى جمعها لتصنيفها إلّا بمُرشِّحٍ لها.
+  int? _regionFilter;
+  static const int _kNoRegion = -1;
   String _search = '';
   final _searchCtrl = TextEditingController();
   Timer? _searchDebounce;
@@ -198,6 +204,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       setState(() {
         _all = rows;
         _regionsById = {for (final r in regions) r.id: r};
+        _recomputeRegionCounts();
         _loading = false;
       });
       // 🔥 probe فوري — لا ننتظر 20s للـTimer الأوّل.
@@ -287,6 +294,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       setState(() {
         _all = merged;
         _regionsById = {for (final r in regions) r.id: r};
+        _recomputeRegionCounts();
         _error = null;
       });
       await _probeAll(force: true);
@@ -624,9 +632,21 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     final result = _all.where((d) {
       if (_typeFilter != null && d.type != _typeFilter) return false;
       if (_statusFilter != null && d.lastStatus != _statusFilter) return false;
+      if (_regionFilter != null) {
+        if (_regionFilter == _kNoRegion) {
+          if (d.regionId != null) return false;
+        } else if (d.regionId != _regionFilter) {
+          return false;
+        }
+      }
       if (q.isNotEmpty) {
+        // اسم المنطقة جزءٌ من الكومة: المنطقة تُعرَض على كلّ كرت،
+        // والبحث الذي لا يجد ما تراه العين يبدو مكسوراً.
+        final regionName = d.regionId == null
+            ? ''
+            : (_regionsById[d.regionId!]?.name ?? '');
         final haystack =
-            '${d.name} ${d.ip} ${d.mac ?? ''} ${d.location ?? ''} ${d.model ?? ''}'
+            '${d.name} ${d.ip} ${d.mac ?? ''} ${d.location ?? ''} ${d.model ?? ''} $regionName'
                 .toLowerCase();
         if (!haystack.contains(q)) return false;
       }
@@ -640,6 +660,25 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   }
 
   int _countByType(String type) => _all.where((d) => d.type == type).length;
+
+  /// عدد الأجهزة لكلّ منطقة — يُحسَب **مرّةً عند تغيّر البيانات**.
+  ///
+  /// 🐛 كان يُحسَب في كلّ بناء: صفّ المناطق يُعاد بناؤه مع كلّ ضغطة
+  /// مفتاح في البحث ومع كلّ نبضة فحص، وكلّ شريحةٍ تمسح قائمة الأجهزة
+  /// كاملة. أربعون منطقة × ألفا جهاز = ثمانون ألف فحصٍ في الإطار
+  /// الواحد — تلعثمٌ مرئيّ على كلّ حرفٍ يُكتب.
+  Map<int?, int> _regionCounts = const {};
+
+  void _recomputeRegionCounts() {
+    final m = <int?, int>{};
+    for (final d in _all) {
+      m[d.regionId] = (m[d.regionId] ?? 0) + 1;
+    }
+    _regionCounts = m;
+  }
+
+  int _countByRegion(int? regionId) =>
+      _regionCounts[regionId == _kNoRegion ? null : regionId] ?? 0;
   int _countByStatus(String s) => _all.where((d) => d.lastStatus == s).length;
 
   IconData _typeIcon(String type) {
@@ -850,6 +889,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       SliverToBoxAdapter(child: _summaryRow()),
                       // Type filters (chips الحالة أُزيلت — تدمج بكارتات الملخّص)
                       SliverToBoxAdapter(child: _typeFilterRow()),
+                      SliverToBoxAdapter(child: _regionFilterRow()),
                       const SliverToBoxAdapter(child: SizedBox(height: 8)),
                       // List
                       devices.isEmpty
@@ -859,10 +899,12 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                                 hasActiveFilter: _all.isNotEmpty &&
                                     (_typeFilter != null ||
                                         _statusFilter != null ||
+                                        _regionFilter != null ||
                                         _search.isNotEmpty),
                                 onClearFilter: () => setState(() {
                                   _typeFilter = null;
                                   _statusFilter = null;
+                                  _regionFilter = null;
                                   _search = '';
                                   _searchCtrl.clear();
                                 }),
@@ -1224,6 +1266,75 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 _typeIcon(entry.key)),
             const SizedBox(width: 6),
           ],
+        ]),
+      ),
+    );
+  }
+
+  /// صفّ المناطق — يظهر فقط حين توجد مناطق فعلاً.
+  ///
+  /// بلا هذا كانت المنطقة شارةً على الكرت لا أكثر: تُرى ولا يُبنى
+  /// عليها. وشبكة المزوّد تُدار بالمناطق — «أيّ أجهزة الكرادة معطّلة؟»
+  /// سؤالٌ يوميّ لم يكن له جواب إلّا بالقراءة اليدويّة.
+  Widget _regionFilterRow() {
+    if (_regionsById.isEmpty) return const SizedBox.shrink();
+    final regions = _regionsById.values.toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+    final orphans = _countByRegion(_kNoRegion);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 2),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(children: [
+          _regionChip(null, 'كلّ المناطق', _all.length, AppColors.brand),
+          const SizedBox(width: 6),
+          for (final r in regions) ...[
+            _regionChip(r.id, r.name, _countByRegion(r.id),
+                _parseRegionColor(r.color) ?? AppColors.brand),
+            const SizedBox(width: 6),
+          ],
+          if (orphans > 0)
+            _regionChip(_kNoRegion, 'بلا منطقة', orphans, AppColors.textMid),
+        ]),
+      ),
+    );
+  }
+
+  Widget _regionChip(int? id, String label, int count, Color color) {
+    final active = _regionFilter == id;
+    return InkWell(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        setState(() => _regionFilter = active ? null : id);
+      },
+      borderRadius: BorderRadius.circular(R.card),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 6),
+        decoration: BoxDecoration(
+          color: active ? color.withValues(alpha: 0.12) : AppColors.surfaceInput,
+          borderRadius: BorderRadius.circular(R.card),
+          border: Border.all(
+            color: active ? color : AppColors.border,
+            width: active ? 1.5 : 1,
+          ),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(label,
+              style: AppType.bodyStrong(
+                  color: active ? color : AppColors.textHi)),
+          const SizedBox(width: 5),
+          Text('$count',
+              style: TextStyle(
+                  fontSize: 10.5,
+                  height: 1.3,
+                  fontWeight: FontWeight.bold,
+                  color: active ? color : AppColors.textMid)),
         ]),
       ),
     );

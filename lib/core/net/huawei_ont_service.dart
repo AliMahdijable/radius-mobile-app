@@ -147,6 +147,92 @@ class HuaweiOntService {
     }
   }
 
+  /// **إعادة تشغيل ONU** — العمليّة الوحيدة غير القرائيّة هنا.
+  ///
+  /// المسار مُستخرَجٌ من أجهزةٍ حقيقيّة لا مُخمَّن، و**الإصدارات تختلف
+  /// اختلافاً جوهريّاً** — ولهذا نجرّب صيغتين:
+  ///
+  /// **(أ) صفحة إعادة تشغيل مستقلّة** (`/html/ssmp/reset/reset.asp`):
+  /// ```js
+  /// Form.setAction('set.cgi?x=InternetGatewayDevice.X_HW_DEBUG.SMP.DM.ResetBoard'
+  ///                + '&RequestFile=html/ssmp/reset/reset.asp');
+  /// ```
+  ///
+  /// **(ب) داخل صفحة ملفّ الإعدادات** (`/html/ssmp/cfgfile/cfgfile.asp`)
+  /// على إصداراتٍ لا صفحة إعادة تشغيل فيها أصلاً — زرّها
+  /// `btnsaveandreboot`:
+  /// ```js
+  /// set.cgi?x=...SSP.DBSave&y=...SMP.DM.ResetBoard
+  /// ```
+  /// ⚠️ هذه الصيغة **تحفظ الإعدادات ثمّ تُعيد التشغيل** — وهو ما يفعله
+  /// زرّ الجهاز نفسه؛ لا نملك على هذا الإصدار إقلاعاً مجرّداً.
+  ///
+  /// وفي الصيغتين يُقرأ الرمز من حقلٍ مخفيّ اسمه `onttoken` **في
+  /// الصفحة نفسها**، لا من `GetRandCount.asp` التي يستعملها الدخول —
+  /// ولكلّ صفحةٍ رمزها، ويُبطَل بعد الاستعمال.
+  ///
+  /// يرجع `true` إن قُبل الأمر. وقطعُ الجهاز للاتّصال بلا ردّ **نجاح**
+  /// لا فشل.
+  static Future<bool> reboot(OntLoginResult session) async {
+    const variants = [
+      (
+        page: '/html/ssmp/reset/reset.asp',
+        dir: '/html/ssmp/reset',
+        query: 'x=InternetGatewayDevice.X_HW_DEBUG.SMP.DM.ResetBoard'
+            '&RequestFile=html/ssmp/reset/reset.asp',
+      ),
+      (
+        page: '/html/ssmp/cfgfile/cfgfile.asp',
+        dir: '/html/ssmp/cfgfile',
+        query: 'x=InternetGatewayDevice.X_HW_DEBUG.SSP.DBSave'
+            '&y=InternetGatewayDevice.X_HW_DEBUG.SMP.DM.ResetBoard'
+            '&RequestFile=html/ssmp/cfgfile/cfgfile.asp',
+      ),
+    ];
+
+    for (final v in variants) {
+      final dio = _buildDio(session.baseUrl);
+      try {
+        final pageRes = await dio.get(
+          v.page,
+          options: Options(headers: {
+            'Cookie': session.sessionCookie,
+            'Referer': '${session.baseUrl}/index.asp',
+          }),
+        );
+        // الصفحة غير موجودة على هذا الإصدار — جرّب الصيغة التالية.
+        if (pageRes.statusCode != 200) continue;
+        final token = RegExp(r'name="onttoken"[^>]*value="([0-9a-fA-F]+)"')
+            .firstMatch((pageRes.data ?? '').toString())
+            ?.group(1);
+        if (token == null || token.isEmpty) continue;
+
+        await dio.post(
+          '${v.dir}/set.cgi?${v.query}',
+          data: 'x.X_HW_Token=${Uri.encodeQueryComponent(token)}',
+          options: Options(headers: {
+            'Cookie': session.sessionCookie,
+            'Referer': '${session.baseUrl}${v.page}',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Origin': session.baseUrl,
+          }),
+        );
+        return true;
+      } on DioException catch (e) {
+        // انقطاع الاتّصال بعد الإرسال = الجهاز بدأ يقلع.
+        final t = e.type;
+        if (t == DioExceptionType.connectionError ||
+            t == DioExceptionType.receiveTimeout) {
+          return true;
+        }
+        continue;
+      } catch (_) {
+        continue;
+      }
+    }
+    return false;
+  }
+
   static String _unescapeJs(String s) {
     return s.replaceAllMapped(
       RegExp(r'\\x([0-9a-fA-F]{2})'),

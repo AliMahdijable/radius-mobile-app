@@ -73,8 +73,7 @@ class DeepProbeScheduler {
   ///
   /// وقيمة القراءة الأولى تفوق قيمة التجديد بكثير: فرقُ «لا أعرف» عن
   /// «أعرف»، لا فرقُ رقمٍ عمره ثانيةٌ عن رقمٍ عمره عشرون.
-  void submit(Object owner, Future<void> Function() job,
-      {bool first = false}) {
+  void submit(Object owner, Future<void> Function() job, {bool first = false}) {
     _pending.removeWhere((j) => identical(j.owner, owner));
     final entry = _Job(owner, job, first: first);
     if (first) {
@@ -111,11 +110,7 @@ class DeepProbeScheduler {
       //
       // `timeout` يُكمل تعهّدنا حتّى لو بقي الأصليّ معلّقاً — الجلسة
       // المتروكة تموت وحدها بمهلة مقبسها، ونحن لا ننتظرها.
-      job
-          .run()
-          .timeout(jobTimeout)
-          .catchError((_) {})
-          .whenComplete(() {
+      job.run().timeout(jobTimeout).catchError((_) {}).whenComplete(() {
         _active--;
         _pump();
       });

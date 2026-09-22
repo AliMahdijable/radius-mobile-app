@@ -412,7 +412,17 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
               'mimosa' => '💡 Mimosa يستعمل HTTPS 443 — أدخل admin credentials',
               _ => '💡 تأكّد من تفعيل API service على الجهاز',
             },
-            style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow),
+            style:
+                TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow),
+          ),
+        ],
+        if (_brand == 'cisco') ...[
+          const SizedBox(height: 8),
+          Text(
+            _protocol == 'telnet'
+                ? 'Cisco عبر Telnet: الاتصال غير مشفّر. استخدمه داخل الشبكة الموثوقة فقط؛ SSH هو المفضّل عند توفره.'
+                : 'مراقبة Cisco تدعم SSH (22) أو Telnet (23)، ببيانات حساب يستطيع قراءة أوامر show.',
+            style: AppType.micro(color: AppColors.textMid),
           ),
         ],
         const SizedBox(height: 10),

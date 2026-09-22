@@ -40,6 +40,15 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
   int _total = 254;
   final List<ScanResult> _found = [];
   final Set<String> _selected = {}; // ip strings
+
+  /// نسخةٌ **حيّة** من `widget.existingIps`.
+  ///
+  /// 🐛 كان الصفّ يقرأ `widget.existingIps` مباشرةً — وهي لقطةٌ تُلتقط
+  /// عند فتح الشاشة ولا تتغيّر أبداً. فبعد إضافةٍ ناجحة يُمسح التحديد
+  /// فتختفي علامة الاختيار، ولا تظهر شارة «مضاف مسبقاً» لأنّ المجموعة
+  /// لم تنمُ — فيعود الصفّ كأنّ شيئاً لم يحدث، ويظنّ المستخدم أنّ
+  /// الإضافة فشلت.
+  late final Set<String> _existing = {...widget.existingIps};
   bool _adding = false;
   int _added = 0;
   int _mutated = 0; // كم جهاز أُضيف — للـcaller
@@ -281,12 +290,19 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
           creds['pass'] = opts.pass!;
         }
       }
+      // بادئةٌ فارغة كانت تُنتج اسماً يبدأ بمسافة («‏ 254») يبدو فارغاً
+      // في القائمة — نسقط إلى اسم البراند بدل ذلك.
+      final prefix = opts.prefix.trim().isEmpty
+          ? NetworkDeviceLabels.brandLabel(r.guessBrand)
+          : opts.prefix.trim();
       payload.add({
-        'name': '${opts.prefix} $lastOctet',
+        'name': '$prefix $lastOctet',
         'type': _typeFromBrand(r.guessBrand),
         'brand': r.guessBrand,
         'ip': r.ip,
-        'port': 80,
+        // 🐛 كان ٨٠ ثابتاً مهما كان المفتوح فعلاً — فجهازٌ لا ويب له
+        // يُسجَّل بمنفذٍ مغلق.
+        'port': r.openPort,
         'api_port': r.guessApiPort,
         'protocol': r.guessProtocol,
         'region_id': opts.regionId,
@@ -298,12 +314,19 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
       });
     }
 
+    // العناوين التي نحاول إضافتها — لنعلّمها فور نجاح الطلب.
+    final attemptedIps = _found
+        .where((r) => _selected.contains(r.ip))
+        .map((r) => r.ip)
+        .toList();
+
     String snackText;
     Color snackColor;
     try {
       final created = await NetworkDevicesApi.bulkCreate(payload);
       _added = created.length;
       _mutated += created.length;
+      _existing.addAll(attemptedIps);
       snackText = 'أُضيف ${created.length} جهاز بنجاح';
       snackColor = AppColors.success;
     } catch (e) {
@@ -329,6 +352,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
       'ubnt' => 'link',
       'mimosa' => 'link',
       'ruijie' => 'ap',
+      'cisco' => 'switch',
       _ => 'other',
     };
   }
@@ -501,7 +525,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
   }
 
   Widget _resultTile(ScanResult r) {
-    final alreadyExists = widget.existingIps.contains(r.ip);
+    final alreadyExists = _existing.contains(r.ip);
     final selected = _selected.contains(r.ip);
     final label = NetworkDeviceLabels.brandLabel(r.guessBrand);
     // أجهزة مضافة مسبقاً: تظهر باهتة + badge + لا تُختار + لا onTap
