@@ -22,14 +22,9 @@ class LoginSuccess extends LoginResult {
     this.canAccessManagers = false,
     this.canAccessPackages = false,
     this.isEmployee = false,
-    this.sas4Token,
   });
 
   final String token;
-
-  /// للموظف: توكن SAS4 الأب (parent admin) من الـlogin response. للأدمن
-  /// العادي: null (نستعمل token نفسه).
-  final String? sas4Token;
   final String adminId;
   final String adminUsername;
   final String displayName;
@@ -165,11 +160,9 @@ class AuthApi {
         displayName =
             (user['display_name'] ?? user['username'] ?? 'مستخدم').toString();
       }
-      // 2026-07-12 fix: sas4Token يجي في response للموظف — توكن الأب
-      // للاستدعاءات المباشرة على SAS4. للأدمن العادي، الـtoken هو نفسه
-      // (سنُخزّنه كـsas4Token لتوحيد قراءات SAS4).
-      final sas4Token =
-          body['sas4Token']?.toString() ?? body['sas4_token']?.toString();
+      // الردّ يحمل `sas4Token` أيضاً (توكن الساس للأب). نتجاهله عمداً:
+      // الهاتف لا يخاطب الساس، وحفظه كان يترك سرّاً لا يقرؤه أحد —
+      // انظر `_kSas4TokenLegacy` ورأس `api_client.dart`.
       return LoginSuccess(
         token: token,
         adminId: (user['admin_id'] ?? user['id'] ?? '').toString(),
@@ -181,7 +174,6 @@ class AuthApi {
         canAccessManagers: canAccessManagers,
         canAccessPackages: canAccessPackages,
         isEmployee: isEmployee,
-        sas4Token: sas4Token,
       );
     } on DioException catch (e) {
       return LoginFailure(_friendlyDioError(e));
@@ -196,11 +188,6 @@ class AuthApi {
   /// the new token IS the new SAS4 token. Returns null on any failure
   /// so the caller can fall back to forcing logout.
   ///
-  /// 2026-07-12 fix (v1 parity): للموظفين، نجدّد SAS4 admin token فقط
-  /// (نُخزّنه في sas4Token المنفصل)، بدون لمس empJWT الرئيسي. هيك
-  /// الموظف يبقى موظف (perms.cache، is_employee=true) لكن استدعاءات
-  /// SAS4 تحصل على توكن حديث. يطابق mobile-app v1
-  /// (SessionRefreshService._refreshSession).
   /// نتيجة محاولة التجديد — والتمييز بينها ليس ترفاً.
   ///
   /// 🐛 كان كلّ فشلٍ يُعامَل «جلسةً ميتة» فتُمحى: انقطاع شبكةٍ لحظيّ،
@@ -209,7 +196,33 @@ class AuthApi {
   static Future<RefreshOutcome> refreshTokenDetailed() async {
     final adminId = await AuthStorage.readAdminId();
     if (adminId == null) return RefreshOutcome.serverRejected;
-    final isEmp = await AuthStorage.isEmployee();
+
+    // ── الموظّف لا يُجدَّد، ونقولها رفضاً لا نجاحاً كاذباً ──
+    //
+    // النقطة تأخذ `adminId` وحدها ولا تعرف الموظّفين أصلاً: تفكّ كلمة
+    // سرّ **الأب** المخزَّنة وتسجّل دخوله في الساس فتُعيد توكناً له.
+    // و`adminId` المحفوظ للموظّف هو معرّف أبيه (ردّ الدخول يضع
+    // `user.id = parent_admin_id`) — فالنداء ينجح دائماً ويُعيد توكناً
+    // لا يصلح للموظّف: `empJWT` وحده يحمل صلاحيّاته.
+    //
+    // وكان ذلك التوكن يُحفظ في `sas4Token` — حقلٌ لم يقرأه أحدٌ قطّ —
+    // ثمّ يُعلَن النجاح. فيعيد المعترض الطلبَ بالـ`empJWT` المنتهي
+    // نفسه، فيفشل ثانيةً، ويُبتلَع الفشل. والنتيجة موظّفٌ انتهت جلسته
+    // يبقى في واجهةٍ كلُّ نداءٍ فيها 401 صامت، ولا يُطرد أبداً.
+    //
+    // ومع النجاح الكاذب نداءُ شبكةٍ بلا طائل يُعيد تسجيل دخول الأب في
+    // الساس ويكتب توكنه في قاعدتنا عند كلّ موجة 401.
+    //
+    // فالرفض صريحٌ هنا: الموظّف يستعمل `empJWT` طوال مدّته (٢٤ ساعة)
+    // ثمّ يُعيد الدخول. و`serverRejected` لا `networkFailure` — هذا
+    // حكمٌ قاطع لا تعثّرٌ عابر، فيجب أن يُطرد لا أن يُنتظَر.
+    if (await AuthStorage.isEmployee()) {
+      if (!kReleaseMode) {
+        debugPrint('🟡 refresh-token: موظّف — لا تجديد، الطرد إلى الدخول');
+      }
+      return RefreshOutcome.serverRejected;
+    }
+
     try {
       // Fresh Dio without the auth interceptor — otherwise a 401 on the
       // refresh call itself would try to refresh recursively.
@@ -255,23 +268,15 @@ class AuthApi {
       if (newToken == null || newToken.isEmpty) {
         return RefreshOutcome.serverRejected;
       }
-      // 2026-07-12 fix: للموظف نحدّث sas4Token فقط. الـempJWT الرئيسي
-      // (token) يبقى كما هو — الـmiddleware في backend يقرأ empJWT
-      // ويستعمله للتحقق من is_employee + perms، وسـsas4Token المُخزَّن
-      // يُستعمل للاستدعاءات المباشرة على SAS4.
-      // للأدمن العادي نحدّث الاثنين (نفس التوكن).
-      if (isEmp) {
-        await AuthStorage.saveSas4Token(newToken);
-      } else {
-        await AuthStorage.saveRefreshedToken(
-          token: newToken,
-          tokenExpiry: expiresAt,
-        );
-        await AuthStorage.saveSas4Token(newToken);
-      }
+      // أدمنٌ عاديّ وحده يصل هنا — الموظّف ارتدّ أعلاه — وتوكنه هو
+      // توكن الساس نفسه. و`saveSas4Token` حُذف في ٢٠٢٦-٠٩-١٥ لأنّه
+      // كان يُكتب ولا يُقرأ.
+      await AuthStorage.saveRefreshedToken(
+        token: newToken,
+        tokenExpiry: expiresAt,
+      );
       if (!kReleaseMode) {
-        debugPrint(
-            '🟢 refresh-token: ${isEmp ? "sas4Token only (employee)" : "token+sas4Token"} saved, expires=$expiresAt');
+        debugPrint('🟢 refresh-token: token saved, expires=$expiresAt');
       }
       return RefreshOutcome.ok;
     } on DioException catch (e) {

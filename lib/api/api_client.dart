@@ -23,11 +23,21 @@ final ValueNotifier<int> authExpiredSignal = ValueNotifier<int>(0);
 final ValueNotifier<int> accessBlockedSignal = ValueNotifier<int>(0);
 String? blockedMessage;
 
-/// Two shared Dio instances:
-///  • `dio` → backend (rad.mysvcs.net)
-///  • `sas4` → SAS4 (reseller-supernet.net), direct widget endpoints
+/// عميلٌ واحدٌ مشترك: `dio` → خادمنا (rad.mysvcs.net).
 ///
-/// Both share the same auth interceptor that:
+/// ⚠️ **التطبيق لا يخاطب الساس مباشرةً، ولا يعرف عنوانه.** كان هنا
+/// عميلٌ ثانٍ `sas4` مثبَّتٌ على `reseller-supernet.net` يخدم خمسة
+/// widgets في الداشبورد؛ حُذفت نداءاته في 2026-08-31 (`a58acd7`) ثمّ
+/// حُذف هو في 2026-09-15 مع آخر كودٍ ميّت يحمل العنوان.
+///
+/// ولحذفه سببٌ يتجاوز التنظيف: عنوان الساس كان **ثابتاً نصّيّاً**
+/// يُبنى مرّةً عند تحميل الصنف، والمعترض يلصق `readToken()` — وهو
+/// `empJWT` خادِمنا في حالة الموظّف — على كلّ طلب. فأيّ إحياءٍ لذلك
+/// العميل يرسل توكن خادمنا إلى مضيفٍ ثالث، ويقصر التطبيق على ساسٍ
+/// واحدٍ إلى الأبد. من احتاج رقماً من الساس فليطلبه من خادمنا: هناك
+/// وحده يُعرف أيّ ساسٍ يخصّ هذا المدير. يحرسه `test/no_direct_sas_test.dart`.
+///
+/// والمعترض:
 ///   1. Attaches `Authorization: Bearer <token>` + `x-auth-token: <token>`
 ///      to every request (mirrors v1's AuthInterceptor.onRequest).
 ///   2. On 401 / 'Token has expired', calls /api/auth/refresh-token,
@@ -40,11 +50,8 @@ class ApiClient {
   ApiClient._();
 
   static const String baseUrl = 'https://rad.mysvcs.net';
-  static const String sas4BaseUrl =
-      'https://reseller-supernet.net/admin/api/index.php/api';
 
   static final Dio dio = _buildDio(baseUrl);
-  static final Dio sas4 = _buildDio(sas4BaseUrl);
 
   static Dio _buildDio(String url) {
     final d = Dio(BaseOptions(
@@ -135,16 +142,21 @@ class _AuthInterceptor extends Interceptor {
       return handler.next(response);
     }
 
-    // Some endpoints return 200 OK with `{success:false, message:'Token has expired'}`
-    // (SAS4 widget endpoints do exactly that — see status=401 in user logs).
-    // Trigger a refresh + retry the SAME way we do for HTTP 401.
     // 🐛 `validateStatus: s < 500` يجعل الـ401 **نجاحاً** في نظر Dio،
-    // فيُعالَج هنا لا في `onError` — و`onError` وحده كان يستثني
-    // `/api/auth/`. فموظّفٌ يُخطئ كلمة سرّه على `/api/auth/login`
+    // فيُعالَج هنا لا في `onError`. و`onError` وحده كان يستثني
+    // `/api/auth/` — فموظّفٌ يُخطئ كلمة سرّه على `/api/auth/login`
     // يُشغّل مسار التجديد، وقد يُمحى حسابه بسبب خطأٍ مطبعيّ.
+    //
+    // والاستثناء لازمٌ في **الموضعين**: وجوده في `onError` وحده هو
+    // ما أخفى العطل، لأنّ الردّ لا يمرّ بـ`onError` أصلاً.
     if (response.requestOptions.path.contains('/api/auth/')) {
       return handler.next(response);
     }
+
+    // ردٌّ 200 يحمل `{success:false, message:'Token has expired'}` يُعامَل
+    // معاملة 401. كان هذا سلوك widgets الساس المباشرة؛ خادمنا لا يُصدر
+    // هذا المغلّف اليوم (فُحص: صفر موضع)، فالشرط احتياطٌ لا مسارٌ حيّ —
+    // أبقيناه لأنّه مجّانيّ، لا لأنّ نداءً مباشراً على الساس عاد.
     final isExpiredEnvelope = response.statusCode == 401 ||
         (data is Map &&
             data['message'] is String &&
@@ -275,11 +287,15 @@ class _AuthInterceptor extends Interceptor {
       }
       return null;
     }
-    // 2026-07-12 fix: الاستدعاءات الداخلية (/api/**) تستعمل token (empJWT
-    // للموظف، admin token للأدمن). الاستدعاءات المباشرة على SAS4 (لو
-    // موجودة) تستعمل sas4Token. حالياً كل الـclient calls تمر عبر
-    // /api/ فنستعمل token — لكن نحتفظ بـsas4Token في التخزين لو تُضاف
-    // استدعاءات مباشرة لاحقاً.
+    // كلّ نداءات التطبيق تمرّ على خادمنا (/api/**)، فالتوكن الصحيح هو
+    // `token` دائماً — `admin token` للأدمن. والموظّف لا يصل هنا أصلاً:
+    // `AuthApi.refreshToken()` تردّ null له، فيمرّ من فرع الطرد أعلاه.
+    // ولا يوجد توكن ساسٍ على الجهاز: حُذف في 2026-09-15 لأنّه كان
+    // يُكتب ولا يُقرأ (انظر `_kSas4TokenLegacy`).
+    //
+    // ⚠️ وحارس «لا تُعِد مرّتين» لم يُنقَل إلى هنا في الدمج: هو أعلى
+    // في الدالّة بصيغةٍ أقوى — سقفُ محاولاتٍ مطلق فوق حارس الجيل.
+    // وضعُ نسخةٍ ثانيةٍ هنا يجعل الأولى ميّتةً ويُخفي أيّهما يعمل.
     final newToken = await AuthStorage.readToken();
     if (newToken == null) return null;
     failed.headers['Authorization'] = 'Bearer $newToken';
