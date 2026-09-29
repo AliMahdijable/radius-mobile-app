@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -34,6 +35,31 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
   Timer? _timer;
   bool _monitoring = false;
   DateTime? _lastFetch;
+
+  /// آخر عمرِ ارتباطٍ رأيناه، ومتى رأيناه أوّل مرّة.
+  ///
+  /// ⚠️ فيرموير airMetro يُحدّث جدوله اللاسلكيّ على فتراتٍ متباعدة —
+  /// رصدتُه ثابتاً عشر دقائق كاملة بينما `sysUpTime` يتقدّم لحظيّاً.
+  /// فلو عرضنا «الإشارة −43 · مباشر» لكذبنا على المشغّل وهو يقرّر
+  /// بناءً عليها. نتتبّع التكرار لنقول عمر القياس صراحةً.
+  int? _lastActive;
+  DateTime? _lastActiveSeenAt;
+
+  /// سلسلة الترفك الكلّيّ للرسم. تُبنى من فروق العدّادات لأنّ IF-MIB
+  /// لا يعطي معدّلاً — ولذلك تحتاج قراءتين قبل أن يظهر المنحنى.
+  final List<_TrafficPoint> _traffic = [];
+  static const _maxTraffic = 30;
+
+  /// اسم المنفذ الذي يرسمه المنحنى — يُعرَض في العنوان حتّى لا يُقرأ
+  /// الرسم على أنّه «كلّ شيء».
+  String? _uplinkName;
+
+  /// هل عُرف المنفذ بالاسم (‏WAN) أم اختير لأنّه الأثقل؟
+  ///
+  /// الفرق ليس تفصيلاً: على منفذ صعودٍ حقيقيّ «الوارد» تنزيلٌ من
+  /// الإنترنت. وعلى منفذ سويتش لا اتّجاه إنترنت أصلاً — ما يدخل من
+  /// منفذٍ يخرج من جاره، فتسميته «تنزيلاً» تُضلّل المشغّل.
+  bool _uplinkIsWan = false;
 
   /// آخر bytes لكل interface — لحساب rate delta
   final Map<int, _BytesPoint> _lastBytes = {};
@@ -149,6 +175,31 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
           );
         }
       }
+        // 🐛 بلاغ المستخدم ٢٠٢٦-٠٩-٢٨: «خابط أعلى أبلود وعلى داونلود».
+        //
+        // كان المنحنى يجمع معدّلات **كلّ** الواجهات. والبايت الواحد
+        // يمرّ على منفذ LAN وعلى WAN وعلى الجسر، فيُعَدّ ثلاث مرّات —
+        // رقمٌ مضخَّمٌ واتّجاهٌ بلا معنى: ما هو «صاعد» على LAN هو
+        // «نازل» على WAN، فجمعهما يُلغي الدلالة أصلاً.
+        //
+        // الصواب منفذٌ واحدٌ يُسمّى في العنوان: منفذ الصعود. وعليه
+        // «نازل» تعني من الإنترنت و«صاعد» إليه — كما يفهمها المشغّل.
+        final up = stats.uplink;
+        _uplinkName = up?.name;
+        _uplinkIsWan = stats.uplinkIsWan;
+        final r = up == null ? null : _rates[up.index];
+        if (r != null) {
+          _traffic.add(_TrafficPoint(rx: r.rxBps, tx: r.txBps));
+          if (_traffic.length > _maxTraffic) {
+            _traffic.removeRange(0, _traffic.length - _maxTraffic);
+          }
+        }
+
+        final a = stats.link?.activeSeconds;
+        if (a != null && a != _lastActive) {
+          _lastActive = a;
+          _lastActiveSeenAt = DateTime.now();
+        }
 
       setState(() {
         _stats = stats;
@@ -194,6 +245,28 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
         _monitorControls(),
         const SizedBox(height: Sp.md),
         _systemStats(s),
+        if (_traffic.length >= 2) ...[
+          const SizedBox(height: 4),
+          _trafficGraph(),
+        ],
+        if (s.isBridge) ...[
+          const SizedBox(height: Sp.md),
+          ExpandableSection(
+            key: PageStorageKey('ruijie-${widget.device.id}-bridge'),
+            initiallyExpanded: true,
+            header: Row(children: [
+              Icon(LucideIcons.radioTower, size: 14, color: AppColors.brand),
+              const SizedBox(width: 6),
+              Text('الوصلة اللاسلكيّة', style: AppType.bodyBold()),
+              if (s.bridgeRole != null) ...[
+                const SizedBox(width: 6),
+                Text('(${s.bridgeRole})',
+                    style: AppType.micro(color: AppColors.textLow)),
+              ],
+            ]),
+            content: RepaintBoundary(child: _bridgeContent(s)),
+          ),
+        ],
         if (s.ifaces.isNotEmpty) ...[
           const SizedBox(height: Sp.md),
           ExpandableSection(
@@ -359,6 +432,361 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
     );
   }
 
+  // ══════════════════════════════════════════════════════════
+  // منحنى الترفك
+  // ══════════════════════════════════════════════════════════
+
+  /// مجموع معدّلات المنافذ عبر الزمن.
+  ///
+  /// يحتاج قراءتين قبل أن يظهر لأنّه فروق عدّادات لا قيمةً جاهزة —
+  /// ولذلك يُخفى عند أوّل فتح بدل أن يُرسَم خطّاً مسطّحاً على الصفر
+  /// يوهم بأنّ الوصلة خامدة.
+  Widget _trafficGraph() {
+    final rx = <FlSpot>[], tx = <FlSpot>[];
+    for (var i = 0; i < _traffic.length; i++) {
+      rx.add(FlSpot(i.toDouble(), _traffic[i].rx.toDouble()));
+      tx.add(FlSpot(i.toDouble(), _traffic[i].tx.toDouble()));
+    }
+    var peak = 0;
+    for (final t in _traffic) {
+      peak = math.max(peak, math.max(t.rx, t.tx));
+    }
+    final last = _traffic.last;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Sp.md, 8, Sp.md, 0),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Text(
+            _uplinkName == null
+                ? 'الترفك'
+                : (_uplinkIsWan
+                    ? 'ترفك ${_uplinkName!}'
+                    : 'أنشط منفذ · ${_uplinkName!}'),
+            style: AppType.microBold(),
+          ),
+          const Spacer(),
+          // على منفذ صعودٍ حقيقيّ: تنزيلٌ ورفع. وعلى غيره — منفذ
+          // سويتشٍ مثلاً — «وارد» و«صادر» لأنّ اتّجاه الإنترنت لا
+          // معنى له هناك.
+          _chip(_uplinkIsWan ? '▼ تنزيل' : '▼ وارد', _fmtBps(last.rx),
+              AppColors.success),
+          const SizedBox(width: 6),
+          _chip(_uplinkIsWan ? '▲ رفع' : '▲ صادر', _fmtBps(last.tx),
+              AppColors.brand),
+        ]),
+        const SizedBox(height: 6),
+        SizedBox(
+          height: 64,
+          child: LineChart(
+            LineChartData(
+              minY: 0,
+              // سقفٌ أعلى بقليل من الذروة وإلّا لامس المنحنى الحافّة
+              // فبدا مشبعاً دائماً.
+              maxY: peak == 0 ? 1 : peak * 1.15,
+              gridData: const FlGridData(show: false),
+              titlesData: const FlTitlesData(show: false),
+              borderData: FlBorderData(show: false),
+              lineTouchData: const LineTouchData(enabled: false),
+              lineBarsData: [
+                _line(rx, AppColors.success),
+                _line(tx, AppColors.brand),
+              ],
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  LineChartBarData _line(List<FlSpot> spots, Color c) => LineChartBarData(
+        spots: spots,
+        isCurved: true,
+        curveSmoothness: 0.28,
+        color: c,
+        barWidth: 2.5,
+        isStrokeCapRound: true,
+        dotData: const FlDotData(show: false),
+        belowBarData: BarAreaData(
+          show: true,
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [c.withValues(alpha: 0.25), c.withValues(alpha: 0.02)],
+          ),
+        ),
+      );
+
+  Widget _chip(String arrow, String v, Color c) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: c.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(R.sm),
+        ),
+        child: Text('$arrow $v', style: AppType.microBold(color: c)),
+      );
+
+  static String _fmtBps(int bps) {
+    if (bps <= 0) return '0';
+    if (bps >= 1000000000) return '${(bps / 1e9).toStringAsFixed(1)}Gb';
+    if (bps >= 1000000) return '${(bps / 1e6).toStringAsFixed(1)}Mb';
+    if (bps >= 1000) return '${(bps / 1e3).toStringAsFixed(0)}Kb';
+    return '$bps';
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // الوصلة اللاسلكيّة — جسور airMetro
+  // ══════════════════════════════════════════════════════════
+
+  Widget _bridgeContent(RuijieStats s) {
+    final l = s.link!;
+    final age = _measurementAge();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      if (age != null) _ageNotice(age),
+      if (l.ssid != null) _ssidRow(l),
+      const SizedBox(height: 8),
+      IntrinsicHeight(
+        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Expanded(
+              child: _tile('الإشارة', l.signalDbm?.toString(), 'dBm',
+                  _signalColor(l.signalDbm), LucideIcons.signal)),
+          const SizedBox(width: 8),
+          Expanded(
+              child: _tile('الضجيج', l.noiseDbm?.toString(), 'dBm',
+                  AppColors.textMid, LucideIcons.activity)),
+          const SizedBox(width: 8),
+          Expanded(
+              child: _tile('SNR', l.snrDb?.toString(), 'dB',
+                  _snrColor(l.snrDb), LucideIcons.chartNoAxesColumn)),
+        ]),
+      ),
+      const SizedBox(height: 8),
+      IntrinsicHeight(
+        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          // التردّد أوّلاً لا رقم القناة — بلاغ المستخدم ٢٠٢٦-٠٩-٢٨:
+          // «٥٨٢٠ أوضح من ١٦٤». والمشغّل الميدانيّ يوائم الهوائيات
+          // بالتردّد، ورقم القناة ترجمةٌ له تهمّ الإعداد لا التشخيص.
+          Expanded(
+              child: _tile(
+                  l.channel == null ? 'التردّد' : 'التردّد (ق ${l.channel})',
+                  l.freqMhz?.toString(),
+                  'MHz',
+                  AppColors.brand,
+                  LucideIcons.radio)),
+          const SizedBox(width: 8),
+          Expanded(
+              child: _tile('المسافة', l.distanceM?.toString(), 'م',
+                  AppColors.brand, LucideIcons.ruler)),
+          const SizedBox(width: 8),
+          Expanded(
+              child: _tile('الارتباط', _linkAge(l.activeSeconds), '',
+                  AppColors.textMid, LucideIcons.clock)),
+        ]),
+      ),
+      if (s.peer != null && !s.peer!.isEmpty) ...[
+        const SizedBox(height: 10),
+        _peerRow(s.peer!),
+      ],
+    ]);
+  }
+
+  /// ختمٌ صريحٌ لعمر القياس.
+  ///
+  /// نعرضه **فقط** حين يتجاوز العمر نصف دقيقة، لأنّ الطبيعيّ ألّا
+  /// يُذكَر. وحين يظهر فهو يقول للمشغّل: ما تراه ليس الآن.
+  Widget _ageNotice(Duration age) {
+    final bad = age.inMinutes >= 5;
+    final c = bad ? AppColors.warning : AppColors.textMid;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: bad ? AppColors.warningSoftBg : AppColors.surfaceSunken,
+        borderRadius: BorderRadius.circular(R.sm),
+      ),
+      child: Row(children: [
+        Icon(LucideIcons.history, size: 12, color: c),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            bad
+                ? 'الجهاز لم يُحدّث قياساته منذ ${_fmtAge(age)} — الأرقام أدناه قديمة'
+                : 'عمر القياس ${_fmtAge(age)}',
+            style: AppType.micro(color: c),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Duration? _measurementAge() {
+    final at = _lastActiveSeenAt;
+    if (at == null) return null;
+    final d = DateTime.now().difference(at);
+    return d.inSeconds < 30 ? null : d;
+  }
+
+  static String _fmtAge(Duration d) => d.inMinutes < 1
+      ? '${d.inSeconds} ثانية'
+      : (d.inMinutes < 60 ? '${d.inMinutes} دقيقة' : '${d.inHours} ساعة');
+
+  static String? _linkAge(int? sec) {
+    if (sec == null || sec <= 0) return null;
+    final d = sec ~/ 86400, h = (sec % 86400) ~/ 3600;
+    if (d > 0) return '${d}ي ${h}س';
+    final m = (sec % 3600) ~/ 60;
+    return h > 0 ? '${h}س ${m}د' : '${m}د';
+  }
+
+  Widget _ssidRow(RuijieWirelessLink l) => Row(children: [
+        Icon(LucideIcons.wifi, size: 13, color: AppColors.brand),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(l.ssid!,
+              style: AppType.bodyBold(), overflow: TextOverflow.ellipsis),
+        ),
+        if (l.band != null)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppColors.brandSoftBg,
+              borderRadius: BorderRadius.circular(R.sm),
+            ),
+            child:
+                Text(l.band!, style: AppType.microBold(color: AppColors.brand)),
+          ),
+      ]);
+
+  /// الطرف المقابل — صفٌّ لكلّ حقيقة.
+  ///
+  /// كان الثلاثة مكدّسين في سطرٍ واحدٍ فيُقصّ العنوان («10.162.167.»)
+  /// ويلتصق الرقم التسلسليّ بالطراز. وهذه بياناتُ تشخيصٍ تُقرأ رقماً
+  /// رقماً حين تتعطّل وصلة، لا عنواناً عابراً.
+  Widget _peerRow(RuijiePeer p) {
+    Widget line(IconData ic, String label, String? value) {
+      if (value == null || value.isEmpty) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.only(top: 5),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(ic, size: 11, color: AppColors.textLow),
+          const SizedBox(width: 5),
+          SizedBox(
+            width: 62,
+            child: Text(label, style: AppType.micro(color: AppColors.textMid)),
+          ),
+          Expanded(
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: Text(
+                value,
+                textAlign: TextAlign.left,
+                style: AppType.rowLabelBold(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ]),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSunken,
+        borderRadius: BorderRadius.circular(R.sm),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(LucideIcons.arrowLeftRight, size: 13, color: AppColors.brand),
+          const SizedBox(width: 6),
+          Text('الطرف المقابل', style: AppType.bodyBold()),
+          if (p.vendor != null) ...[
+            const Spacer(),
+            Text(p.vendor!, style: AppType.micro(color: AppColors.textLow)),
+          ],
+        ]),
+        line(LucideIcons.cpu, 'الطراز', p.model),
+        line(LucideIcons.globe, 'العنوان', p.ip),
+        line(LucideIcons.hash, 'التسلسليّ', p.serial),
+      ]),
+    );
+  }
+
+  /// بطاقةٌ لقيمةٍ مفردة — «—» حين تغيب، ولا صفرٌ يوهم بقياسٍ حقيقيّ.
+  Widget _tile(String label, String? value, String unit, Color color,
+      IconData icon) {
+    final has = value != null && value.isNotEmpty;
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSunken,
+        borderRadius: BorderRadius.circular(R.sm),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(children: [
+            Icon(icon, size: 12, color: has ? color : AppColors.textLow),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(label,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.microBold(color: AppColors.textMid)),
+            ),
+          ]),
+          const SizedBox(height: 6),
+          // ⚠️ اتّجاهٌ لاتينيٌّ مفروض. الصفحة عربيّةٌ من اليمين، فكانت
+          // «−43 dBm» تُرسَم «dBm43−»: الوحدة قبل الرقم والإشارة
+          // السالبة في آخره. والقراءة الخاطئة لقيمةٍ سالبةٍ ليست
+          // تجميلاً — المشغّل يقرأ الإشارة ليقرّر.
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Flexible(
+                  child: Text(has ? value : '—',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          height: 1,
+                          color: has ? color : AppColors.textLow)),
+                ),
+                if (has && unit.isNotEmpty) ...[
+                  const SizedBox(width: 2),
+                  Text(unit, style: AppType.muted()),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// عتبات الإشارة كما يقرؤها مشغّلٌ ميدانيّ لا كما يقرؤها جدول.
+  static Color _signalColor(int? dbm) {
+    if (dbm == null) return AppColors.textLow;
+    if (dbm >= -55) return AppColors.success;
+    if (dbm >= -70) return AppColors.warning;
+    return AppColors.error;
+  }
+
+  /// SNR هو الحَكم الحقيقيّ: تحت ١٥ الوصلة تتهاوى مهما بدت الإشارة قويّة.
+  static Color _snrColor(int? db) {
+    if (db == null) return AppColors.textLow;
+    if (db >= 25) return AppColors.success;
+    if (db >= 15) return AppColors.warning;
+    return AppColors.error;
+  }
+
   Widget _interfaceRow(RuijieInterface iface) {
     final rate = _rates[iface.index];
     final rxBps = rate?.rxBps ?? 0;
@@ -492,6 +920,11 @@ class _BytesPoint {
   final int rxBytes, txBytes;
   final DateTime at;
   _BytesPoint({required this.rxBytes, required this.txBytes, required this.at});
+}
+
+class _TrafficPoint {
+  const _TrafficPoint({required this.rx, required this.tx});
+  final int rx, tx;
 }
 
 class _IfaceRate {

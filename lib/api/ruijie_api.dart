@@ -58,6 +58,42 @@ class RuijieApi {
   static const String _oidRuijieCpuTable = '$_enterprise.1.1.10.2.36.1.1';
   static const String _oidRuijieMemTable = '$_enterprise.1.1.10.2.35.1.1.1';
 
+  // ═══ جسور airMetro — جداول روجي الخاصّة ═══
+  //
+  // اكتُشفت بالمسح على AIRMETRO460G فعليّ (٢٠٢٦-٠٩-٢٨) لا من توثيق:
+  // روجي لا تنشر MIB لهذه العائلة. والأعمدة سُمّيت بمطابقة القيم
+  // بما تعرضه واجهة الجهاز نفسها في اللحظة نفسها.
+  //
+  //   2.1.1  = دور الجهاز («ap» / «cpe»)
+  //   2.2.x  = جدول الطرف المقابل: MAC · تسلسليّ · IP · مُصنّع · طراز
+  //   2.3.x  = جدول الارتباط اللاسلكيّ: انظر الثوابت أدناه
+  static const String _oidRjBridgeRole = '$_enterprise.1.1.10.2.195.1.1.0';
+  static const String _oidRjPeer = '$_enterprise.1.1.10.2.195.2.2.1';
+  static const String _oidRjLink = '$_enterprise.1.1.10.2.195.2.3.1';
+
+  // أعمدة جدول الطرف المقابل
+  static const int _peerSerial = 2, _peerIp = 3, _peerVendor = 4, _peerModel = 5;
+
+  // أعمدة جدول الارتباط — المحسومة بالمطابقة
+  static const int _linkBand = 3; // «5G»
+  static const int _linkSsid = 4; // اسم شبكة الجسر
+  static const int _linkNoise = 6; // dBm
+  static const int _linkSignal = 7; // dBm
+  static const int _linkActive = 8; // ثوانٍ منذ قيام الارتباط
+  static const int _linkRxRate = 9; // ميجابت/ث
+  static const int _linkChannel = 14; // قناة التحكّم
+  static const int _linkFreq = 16; // تردّد التحكّم MHz
+  // والمرجَّحة — تُعرَض بأسمائها الحذرة حتّى تُثبَّت بمطابقةٍ ثانية:
+  // 🐛 ظننتُها «القناة المركزيّة» فقرأتُها 156، ثمّ صارت 468 بعد ساعة
+  // — والقنوات لا تتغيّر. فهي معدّلٌ يرافق `.9`، والأرجح أنّه اتّجاه
+  // الإرسال. أُبقيها باسمٍ محايدٍ حتّى تُثبَّت بمطابقةٍ لحظيّة، ولا
+  // أعرضها بعنوانٍ قد يكذب على المشغّل.
+  static const int _linkRateB = 10;
+  static const int _linkFlowA = 11;
+  static const int _linkFlowB = 12;
+  static const int _linkDistance = 13; // متر (مرجَّح)
+  static const int _linkCenterFreq = 15;
+
   /// جلب بيانات كاملة عن الجهاز عبر SNMP.
   static Future<RuijieStats> fetchStats({
     required String host,
@@ -183,15 +219,47 @@ class RuijieApi {
     // ═══ Tier 3 (~500ms-1s): Interfaces عبر IF-MIB ═══
     final ifaces = <RuijieInterface>[];
     try {
-      final descrs = await snmp.walk(_oidIfDescr, chunkSize: 20);
-      final ops = await snmp.walk(_oidIfOperStatus, chunkSize: 20);
-      final speeds = await snmp.walk(_oidIfSpeed, chunkSize: 20);
-      final inOctets = await snmp.walk(_oidIfHCInOctets, chunkSize: 20);
-      final outOctets = await snmp.walk(_oidIfHCOutOctets, chunkSize: 20);
+      // كلّها عبر `_walkSafe`: أيّ مسحٍ يرمي كان يُسقط الكتلة بأسرها
+      // فتصير المنافذ صفراً — وهو ما رأيناه على airMetro.
+      final descrs = await _walkSafe(snmp, _oidIfDescr);
+      final ops = await _walkSafe(snmp, _oidIfOperStatus);
+      final speeds = await _walkSafe(snmp, _oidIfSpeed);
+      // 🐛 ٢٠٢٦-٠٩-٢٨ — المسح كان يرجع فارغاً دائماً فلا يظهر ترفك.
+      // السبب أنّ منفذاً **واحداً** (‏LAN1 على airMetro) يردّ `genError`
+      // على عدّاداته، والمسح يتوقّف عند أوّل خطأ فيُسقط المنافذ كلّها
+      // — ومنها `br-wan` الذي يحمل الترفك الحقيقيّ. نفس المصيدة التي
+      // أوقعت `snmpwalk` في سطر الأوامر.
+      //
+      // الحلّ: نحاول المسح، وإن رجع ناقصاً نسأل كلّ منفذٍ وحده
+      // ونتجاوز من يفشل. منفذٌ بلا عدّاد أهون من لوحةٍ بلا ترفك.
+      var inOctets = await _walkSafe(snmp, _oidIfHCInOctets);
+      var outOctets = await _walkSafe(snmp, _oidIfHCOutOctets);
 
       final descrByIdx = _mapByLastIndex(descrs, _oidIfDescr);
-      final opsByIdx = _mapByLastIndex(ops, _oidIfOperStatus);
-      final speedByIdx = _mapByLastIndex(speeds, _oidIfSpeed);
+
+      // البديل الفرديّ: حين يسقط مسح العدّادات (منفذٌ واحدٌ يردّ
+      // genErr فيُسقط الجدول) نسأل كلّ فهرسٍ وحده ونتجاوز من يفشل.
+      // بلا هذا يظهر الترفك صفراً على أجهزةٍ تحمله فعلاً.
+      // الحالة والسرعة تسقطان بالسبب نفسه، ومنفذٌ بلا حالةٍ يُعرَض
+      // «ساقطاً» وهو يعمل — كذبٌ أسوأ من الفراغ. فنُعمّم البديل.
+      var ops2 = ops, speeds2 = speeds;
+      Future<List<Varbind>> perIndex(String base) async {
+        final out = <Varbind>[];
+        for (final idx in descrByIdx.keys) {
+          try {
+            final r = await snmp.get(['$base.$idx']);
+            if (r.isNotEmpty) out.add(r.first);
+          } catch (_) {/* هذا المنفذ لا يجيب — نتجاوزه */}
+        }
+        return out;
+      }
+
+      if (ops2.isEmpty) ops2 = await perIndex(_oidIfOperStatus);
+      if (speeds2.isEmpty) speeds2 = await perIndex(_oidIfSpeed);
+      if (inOctets.isEmpty) inOctets = await perIndex(_oidIfHCInOctets);
+      if (outOctets.isEmpty) outOctets = await perIndex(_oidIfHCOutOctets);
+      final opsByIdx = _mapByLastIndex(ops2, _oidIfOperStatus);
+      final speedByIdx = _mapByLastIndex(speeds2, _oidIfSpeed);
       final inByIdx = _mapByLastIndex(inOctets, _oidIfHCInOctets);
       final outByIdx = _mapByLastIndex(outOctets, _oidIfHCOutOctets);
 
@@ -214,7 +282,63 @@ class RuijieApi {
       if (kDebugMode) debugPrint('⚠️ Ruijie IF-MIB walk فشل: $e');
     }
 
+    // ═══ Tier 4: الجسر اللاسلكيّ — جداول روجي الخاصّة ═══
+    //
+    // تُقرأ أخيراً وبصمت: أغلب أجهزة روجي ليست جسوراً، وغيابها ليس
+    // عطلاً. ومن لا يدعمها يمرّ بلا تأخيرٍ يُذكَر لأنّ الجدول صغير.
+    RuijieWirelessLink? link;
+    RuijiePeer? peer;
+    String? role;
+    try {
+      final linkCols = await _readRjTable(snmp, _oidRjLink);
+      if (linkCols.isNotEmpty) {
+        int? n(int c) => linkCols[c]?.asInt;
+        String? t(int c) {
+          final v = linkCols[c]?.asString.trim();
+          return (v == null || v.isEmpty) ? null : v;
+        }
+
+        link = RuijieWirelessLink(
+          ssid: t(_linkSsid),
+          band: t(_linkBand),
+          signalDbm: n(_linkSignal),
+          noiseDbm: n(_linkNoise),
+          activeSeconds: n(_linkActive),
+          rxRateMbps: n(_linkRxRate),
+          channel: n(_linkChannel),
+          freqMhz: n(_linkFreq),
+          txRateMbps: n(_linkRateB),
+          centerFreqMhz: n(_linkCenterFreq),
+          distanceM: n(_linkDistance),
+          flowA: n(_linkFlowA),
+          flowB: n(_linkFlowB),
+        );
+
+        final peerCols = await _readRjTable(snmp, _oidRjPeer);
+        if (peerCols.isNotEmpty) {
+          String? pt(int c) {
+            final v = peerCols[c]?.asString.trim();
+            return (v == null || v.isEmpty) ? null : v;
+          }
+
+          peer = RuijiePeer(
+            serial: pt(_peerSerial),
+            ip: pt(_peerIp),
+            vendor: pt(_peerVendor),
+            model: pt(_peerModel),
+          );
+        }
+        try {
+          role = (await snmp.get([_oidRjBridgeRole])).first.asString.trim();
+        } catch (_) {}
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('Ruijie bridge tables: $e');
+    }
+
     if (kDebugMode) {
+      debugPrint('  link:     ${link?.ssid} ${link?.signalDbm}dBm '
+          'SNR ${link?.snrDb} · peer ${peer?.ip}');
       debugPrint('══════ Ruijie SNMP snapshot ══════');
       debugPrint('  sysDescr: ${results[_oidSysDescr]?.asString}');
       debugPrint('  sysName:  ${results[_oidSysName]?.asString}');
@@ -230,7 +354,41 @@ class RuijieApi {
       cpuPercent: cpuPercent,
       memPercent: memPercent,
       ifaces: ifaces,
+      link: link,
+      peer: peer,
+      bridgeRole: role,
     );
+  }
+
+  /// مسحٌ يتحمّل الأخطاء الجزئيّة.
+  ///
+  /// `walk` القياسيّ يتوقّف عند أوّل `genError` فيُضيّع ما بعده. وأجهزة
+  /// روجي تردّ بذلك على أعمدةٍ بعينها دون غيرها، فالتوقّف يعني خسارة
+  /// كلّ شيء بسبب صفٍّ واحد.
+  static Future<List<Varbind>> _walkSafe(SnmpV2c snmp, String base) async {
+    try {
+      final r = await snmp.walk(base, chunkSize: 20);
+      if (r.isNotEmpty) return r;
+    } catch (_) {/* نهبط إلى الاستعلام الفرديّ */}
+    return const [];
+  }
+
+  /// يقرأ جدولاً خاصّاً بروجي ويُعيده مفهرساً بالعمود.
+  ///
+  /// مفتاح الصفّ هنا **عنوان MAC** لا رقماً، فلا يصلح `_mapByLastIndex`
+  /// الذي يقرأ أوّل جزءٍ بعد الأساس.
+  static Future<Map<int, Varbind>> _readRjTable(
+      SnmpV2c snmp, String base) async {
+    final out = <int, Varbind>{};
+    try {
+      for (final vb in await snmp.walk(base, chunkSize: 16)) {
+        if (!vb.oid.startsWith('$base.')) continue;
+        final rest = vb.oid.substring(base.length + 1);
+        final col = int.tryParse(rest.split('.').first);
+        if (col != null) out.putIfAbsent(col, () => vb);
+      }
+    } catch (_) {/* الجهاز لا يدعم الجدول — ليس جسراً */}
+    return out;
   }
 
   /// نُظّم varbinds حسب آخر جزء من OID (index الصفّ في الجدول).
@@ -270,6 +428,51 @@ class RuijieInterface {
   });
 }
 
+/// الطرف المقابل في جسرٍ لاسلكيّ.
+class RuijiePeer {
+  const RuijiePeer({this.mac, this.serial, this.ip, this.vendor, this.model});
+  final String? mac, serial, ip, vendor, model;
+  bool get isEmpty => (ip ?? mac ?? model) == null;
+}
+
+/// حالة الارتباط اللاسلكيّ.
+///
+/// ⚠️ **هذه القيم قد تكون قديمة.** فيرموير airMetro يُحدّث جدوله
+/// الخاصّ على فتراتٍ متباعدة — رصدتُه ثابتاً عشر دقائق كاملة بينما
+/// `sysUpTime` القياسيّ يتقدّم لحظيّاً. ولذلك يحمل النموذج
+/// [activeSeconds] عمداً: تكراره بين قراءتين يعني أنّ الجهاز لم
+/// يُحدّث قياسه، وواجب اللوحة أن تقول ذلك لا أن تعرضه كأنّه لحظيّ.
+class RuijieWirelessLink {
+  const RuijieWirelessLink({
+    this.ssid,
+    this.band,
+    this.signalDbm,
+    this.noiseDbm,
+    this.activeSeconds,
+    this.rxRateMbps,
+    this.channel,
+    this.freqMhz,
+    this.txRateMbps,
+    this.centerFreqMhz,
+    this.distanceM,
+    this.flowA,
+    this.flowB,
+  });
+
+  final String? ssid, band;
+  final int? signalDbm, noiseDbm, activeSeconds, rxRateMbps;
+  final int? channel, freqMhz, txRateMbps, centerFreqMhz, distanceM;
+  final int? flowA, flowB;
+
+  /// نسبة الإشارة إلى الضجيج — المقياس الذي يقرّر جودة الوصلة فعلاً،
+  /// لا الإشارة وحدها: ‏−44 مع ضجيج ‏−50 وصلةٌ سيّئة، ومع ‏−86 ممتازة.
+  int? get snrDb => (signalDbm != null && noiseDbm != null)
+      ? signalDbm! - noiseDbm!
+      : null;
+
+  bool get isEmpty => ssid == null && signalDbm == null;
+}
+
 class RuijieStats {
   final String? sysDescr;
   final String? sysName;
@@ -277,6 +480,9 @@ class RuijieStats {
   final double? cpuPercent;
   final double? memPercent;
   final List<RuijieInterface> ifaces;
+  final RuijieWirelessLink? link;
+  final RuijiePeer? peer;
+  final String? bridgeRole;
 
   const RuijieStats({
     this.sysDescr,
@@ -285,13 +491,59 @@ class RuijieStats {
     this.cpuPercent,
     this.memPercent,
     this.ifaces = const [],
+    this.link,
+    this.peer,
+    this.bridgeRole,
   });
+
+  /// هل هذا جسرٌ لاسلكيّ — يقرّر أيّ أقسامٍ تُعرَض.
+  bool get isBridge => link != null && !link!.isEmpty;
+
+  /// المنفذ الذي يُرسَم منحنى الترفك عليه.
+  ///
+  /// ⚠️ **منفذٌ واحدٌ لا مجموع.** جمع الواجهات يعدّ البايت الواحد
+  /// مرّتين أو ثلاثاً — يدخل من منفذ LAN ويخرج من WAN ويمرّ على
+  /// الجسر — فيخرج رقمٌ مضخَّمٌ واتّجاهٌ يُلغي نفسه: ما هو صادرٌ هنا
+  /// واردٌ هناك. (بلاغ المستخدم ٢٠٢٦-٠٩-٢٨.)
+  ///
+  /// الترتيب: `WAN` بالاسم، ثمّ `br-wan` وهو جسر الخروج في فيرموير
+  /// Reyee، ثمّ الأثقل بين المنافذ الفيزيائيّة. و`lo` مستبعدٌ لأنّه
+  /// حلقةٌ محلّيّة لا تعبر شيئاً، والجسور مستبعدةٌ من جولة «الأثقل»
+  /// لأنّها تُظلّل المنافذ التي تحتها.
+  RuijieInterface? get uplink {
+    if (ifaces.isEmpty) return null;
+    final byName = <String, RuijieInterface>{
+      for (final i in ifaces) i.name.toLowerCase(): i,
+    };
+    for (final k in const ['wan', 'br-wan']) {
+      final hit = byName[k];
+      if (hit != null) return hit;
+    }
+    RuijieInterface? best;
+    for (final i in ifaces) {
+      final n = i.name.toLowerCase();
+      if (n == 'lo' || n.startsWith('br-')) continue;
+      if (best == null || i.rxBytes + i.txBytes > best.rxBytes + best.txBytes) {
+        best = i;
+      }
+    }
+    return best;
+  }
+
+  /// هل المنفذ المختار منفذ صعودٍ حقيقيّ — يقرّر تسمية الاتّجاهين.
+  bool get uplinkIsWan {
+    final u = uplink;
+    return u != null && const ['wan', 'br-wan'].contains(u.name.toLowerCase());
+  }
 
   factory RuijieStats.fromResults(
     Map<String, Varbind> r, {
     double? cpuPercent,
     double? memPercent,
     required List<RuijieInterface> ifaces,
+    RuijieWirelessLink? link,
+    RuijiePeer? peer,
+    String? bridgeRole,
   }) {
     // sysUpTime في SNMP = timeticks (1/100 ثانية)
     final upTicks = r[RuijieApi._oidSysUpTime]?.asInt ?? 0;
@@ -302,6 +554,9 @@ class RuijieStats {
       cpuPercent: cpuPercent,
       memPercent: memPercent,
       ifaces: ifaces,
+      link: link,
+      peer: peer,
+      bridgeRole: bridgeRole,
     );
   }
 }
