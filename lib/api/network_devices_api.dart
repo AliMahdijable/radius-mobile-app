@@ -254,8 +254,12 @@ class NetworkDevicesApi {
   static Future<({String status, int? responseMs, double? packetLoss})>
       probeDevice(NetworkDevice d) async {
     final port = d.apiPort ?? d.port;
+    // ⚠️ بلا اشتراط `hasCredentials`: جهاز SNMP يحمل community مخزَّنةً
+    // دون أن تُحسب «اعتماداً» في النموذج، واشتراطها يُعيدنا إلى
+    // `public`. وروجي تمنعه في فيرمويرها، فيُعرَض جهازٌ حيٌّ «مفصولاً»
+    // وهو يبثّ بياناته في اللوحة تحته. ٢٠٢٦-٠٩-٢٨.
     var community = 'public';
-    if (port == 161 && d.hasCredentials) {
+    if (port == 161) {
       try {
         final creds = await getCredentials(d.id);
         final c = (creds['community'] ?? '').toString();

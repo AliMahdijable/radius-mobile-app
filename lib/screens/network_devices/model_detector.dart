@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../../api/mikrotik_binary_api.dart';
 import '../../api/cisco_api.dart';
+import '../../api/edgeswitch_api.dart';
 import '../../api/network_devices_api.dart';
 import '../../api/ubnt_api.dart';
 import '../../api/snmp_client.dart';
@@ -50,10 +51,21 @@ class ModelDetector {
     final targets = devices.where((d) {
       if (!DetectedModel.needsDetection(d)) return false;
       if (d.lastStatus != 'online') return false;
-      return const ['mikrotik', 'ubnt', 'mimosa', 'roji', 'ruijie', 'cisco']
-          .contains(d.brand.toLowerCase());
+      final b = d.brand.toLowerCase();
+      if (const ['mikrotik', 'ubnt', 'mimosa', 'roji', 'ruijie', 'cisco']
+          .contains(b)) {
+        return true;
+      }
+      // ٢٠٢٦-٠٩-٢٨ — `other` يُفحص **حين يكون SNMP وحده**.
+      //
+      // الخادم يرفض علاماتٍ لا يعرفها («براند غير صالح»)، فأجهزةٌ
+      // حقيقيّة تُسجَّل `other` — كـOLT من VSOL. وكانت تُستبعَد من
+      // الكشف فلا تعرف اللوحة نوعها ولا تجد صورتها.
+      //
+      // والشرط على البروتوكول مقصود: استعلام SNMP واحدٌ رخيص، أمّا
+      // فتح جلسة SSH على جهازٍ مجهول فمهلةٌ كاملة بلا طائل.
+      return b == 'other' && d.protocol == 'snmp';
     }).toList();
-
     if (targets.isEmpty) {
       onProgress?.call(0, 0);
       return (updated: const <NetworkDevice>[], unmatched: <String>{});
@@ -164,6 +176,17 @@ class ModelDetector {
     final user = (c['user'] ?? '').toString();
     final pass = (c['pass'] ?? '').toString();
     if (user.isEmpty) return null;
+
+    // ٢٠٢٦-٠٩-٢٨ — EdgeSwitch يحمل العلامة `ubnt` نفسها ويفتح المنفذ ٢٢
+    // نفسه، لكنّه **لا يعرف `mca-status`** الذي تقوم عليه قراءة airOS.
+    // فلو مضينا إلى الجلسة أدناه لانتظرنا مهلةً كاملة ثمّ رجعنا بلا
+    // طراز. الفحص أدناه بلا اعتماد ولا جلسة — عنوانُ صفحةٍ واحد.
+    if (await EdgeSwitchApi.probe(host: d.ip)) {
+      final m = await EdgeSwitchApi.detectModel(
+          host: d.ip, user: user, pass: pass);
+      if (m != null) return m;
+    }
+
     final sess = await UbntTrafficSession.open(
       ip: d.ip,
       // ⚠️ `port` احتياطاً: جهاز سُجّل ببروتوكول ssh يضع 22 في `port`
@@ -182,9 +205,26 @@ class ModelDetector {
   }
 
   static Future<String?> _snmp(NetworkDevice d) async {
+    // 🐛 ٢٠٢٦-٠٩-٢٨ — كانت `public` مثبَّتةً هنا، فلم يُكتشف طراز أيّ
+    // جهاز روجي قطّ ولم تظهر له صورة. وفيرموير Reyee **يمنع** أن
+    // تُسمّى الـcommunity ‏public أو private أو admin نصّاً («Cannot
+    // contain admin/public/private»)، فالافتراض خاطئٌ دائماً هناك.
+    // نقرأ المخزَّنة ونرجع إلى `public` حين لا تكون.
+    // ولا نشترط `hasCredentials`: جهاز SNMP قد يحمل community مخزَّنةً
+    // دون أن تُحسب «اعتماداً» في النموذج، فاشتراطها يُعيدنا إلى
+    // `public` ويُفشل الكشف من حيث أردنا إصلاحه.
+    var community = 'public';
+    {
+      try {
+        final c = await NetworkDevicesApi.getCredentials(d.id);
+        final v = (c['community'] ?? c['pass'] ?? '').toString().trim();
+        if (v.isNotEmpty) community = v;
+      } catch (_) {/* نُبقي الافتراضيّ */}
+    }
     final snmp = SnmpV2c(
       host: d.ip,
-      community: 'public',
+      port: d.apiPort ?? 161,
+      community: community,
       timeout: const Duration(seconds: 4),
     );
     try {

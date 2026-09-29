@@ -21,6 +21,9 @@ import 'widgets/mikrotik_live_panel.dart';
 import 'widgets/mimosa_live_panel.dart';
 import 'widgets/ruijie_live_panel.dart';
 import 'widgets/cisco_live_panel.dart';
+import '../../api/edgeswitch_api.dart';
+import 'widgets/edgeswitch_live_panel.dart';
+import 'widgets/vsol_live_panel.dart';
 import 'widgets/ubnt_live_panel.dart';
 import '../../api/network_devices_api.dart';
 import '../../theme/typography.dart';
@@ -50,6 +53,13 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
   double? _lastPacketLoss;
   DeviceRegion? _region; // يُحمَّل asynchronously — لعرض اسم/لون المنطقة
 
+  /// runtime override — لو `EdgeSwitchApi.probe` أكّد أنّ الجهاز سويتش
+  /// EdgeSwitch لا راديو airOS. الاثنان يحملان العلامة `ubnt` نفسها
+  /// ويفتحان المنفذ ٢٢ نفسه، لكنّ لوحة airOS تقوم على `mca-status`
+  /// الذي لا يعرفه EdgeSwitch — فتنتظر مهلةً كاملة ثمّ تعرض فراغاً.
+  /// ٢٠٢٦-٠٩-٢٨.
+  bool _edgeSwitchDetected = false;
+
   /// runtime override — لو UbntLivePanel اكتشف الجهاز فعلاً airFiber 60
   /// (رغم أن model حقلها ما فيه AF-60)، نبدّل تلقائياً للـAirFiber60LivePanel.
   /// 2026-08-18.
@@ -64,6 +74,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
   void initState() {
     super.initState();
     _d = widget.device;
+    _maybeProbeEdgeSwitch();
     _pulseCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1600),
@@ -104,6 +115,18 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
     } catch (_) {}
   }
 
+  /// فحصٌ واحدٌ بلا اعتماد: صفحة جذر EdgeSwitch تحمل عنوانها قبل أيّ
+  /// دخول. نُجريه فقط حين يكون الطراز مجهولاً — فمن يعرف طرازه لا
+  /// يحتاج شبكةً ليُعرَف.
+  Future<void> _maybeProbeEdgeSwitch() async {
+    if (_d.brand != 'ubnt' || _isEdgeSwitch(_d)) return;
+    if (_d.ip.isEmpty) return;
+    final ok = await EdgeSwitchApi.probe(host: _d.ip);
+    if (!mounted || !ok) return;
+    setState(() => _edgeSwitchDetected = true);
+  }
+
+
   @override
   void dispose() {
     _pulseCtrl.dispose();
@@ -115,10 +138,11 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
     setState(() => _probing = true);
     try {
       // TCP probe (أدقّ من ICMP على iOS)
-      final r = await NetworkDevicesApi.localIcmpPing(
-        ip: _d.ip,
-        tcpPort: _d.apiPort ?? _d.port,
-      );
+      // 🐛 كانت تستدعي `localIcmpPing` مباشرةً بلا `snmpCommunity`،
+      // فتسأل بـ`public` دائماً. `probeDevice` هي النقطة الوحيدة التي
+      // تقرأ المخزَّنة — والتعليق فوقها يقول حرفيّاً إنّ وجود مسارين
+      // يجعل أحدهما يُنسى. وهو ما حدث.
+      final r = await NetworkDevicesApi.probeDevice(_d);
       NetworkDevicesApi.saveProbeResult(
         deviceId: _d.id,
         status: r.status,
@@ -441,9 +465,11 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                 // 2026-08-18: نستعمل static detection من model + runtime
                 // detection من stats — الاثنين معاً يضمنان route صحيح
                 // للأجهزة الي model حقلها ما مضبوطة كـAF-60.
-                (_isAirFiber60(_d) || _af60RuntimeDetected)
-                    ? AirFiber60LivePanel(device: _d)
-                    : UbntLivePanel(
+                (_isEdgeSwitch(_d) || _edgeSwitchDetected)
+                    ? EdgeSwitchLivePanel(device: _d)
+                    : (_isAirFiber60(_d) || _af60RuntimeDetected)
+                        ? AirFiber60LivePanel(device: _d)
+                        : UbntLivePanel(
                         device: _d,
                         onAirFiber60Detected: () {
                           if (mounted && !_af60RuntimeDetected) {
@@ -472,6 +498,14 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
               else
                 _ruijieHint(),
             ],
+          ] else if (_isVsolOlt(_d)) ...[
+            const SizedBox(height: Sp.md),
+            // OLT من VSOL — SNMP وحده. الجهاز يكشف كلّ ONU كواجهةٍ
+            // مستقلّة، فمسحةٌ واحدة تعطي حالة المشتركين كلّهم.
+            if (_d.protocol == 'snmp' && _d.hasCredentials)
+              VsolLivePanel(device: _d)
+            else
+              _vsolHint(),
           ] else if ({'mikrotik', 'ubnt', 'mimosa', 'ruijie', 'cisco'}
               .contains(_d.brand)) ...[
             const SizedBox(height: Sp.md),
@@ -879,6 +913,31 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
 /// 2026-08-18: نستثني موديلات AF-60-XG (5 GHz — مو 60 GHz) — كانت
 /// `af60` تُطابقها بالخطأ. نتحقّق من variants الـ60 GHz الحقيقيّة:
 /// LR / XR / XG (raw) لا / gp.
+/// تمييزٌ ساكن من الطراز — يوفّر فحصاً شبكيّاً حين يكون الطراز معروفاً.
+///
+/// رموز EdgeSwitch تبدأ بـ`ES-` (‏ES-24-250W، ES-8-150W، ES-16-XG…)
+/// ولا يبدأ بها أيّ راديو airOS. ومن سجّل الجهاز يدويّاً وكتب الاسم
+/// الطويل «EdgeSwitch 24 250W» يُلتقط كذلك.
+bool _isEdgeSwitch(NetworkDevice d) {
+  final c = '${d.model ?? ''} ${d.name}'.toLowerCase();
+  return c.contains('edgeswitch') ||
+      RegExp(r'\bes-\d').hasMatch(c);
+}
+
+/// هل هذا OLT من VSOL — بالطراز لا بالعلامة.
+///
+/// الخادم يرفض علامة `vsol` («براند غير صالح»)، فيُسجَّل الجهاز
+/// `other` ويُعرَف بطرازه. و`sysDescr` عبر SNMP يُرجع `V1600D` نصّاً،
+/// فيكتبه كاشف الطراز في السجلّ وتلتقطه هذه الدالّة بعدها.
+///
+/// والمطابقة ضيّقةٌ عمداً: «olt» وحدها تلتقط أسماءً كثيرةً لا تخصّنا،
+/// فنشترط اسم المصنّع أو رمز السلسلة.
+bool _isVsolOlt(NetworkDevice d) {
+  if (d.brand == 'vsol') return true;
+  final c = '${d.model ?? ''} ${d.name}'.toLowerCase();
+  return c.contains('vsol') || RegExp(r'v1600|v16\d\d').hasMatch(c);
+}
+
 bool _isAirFiber60(NetworkDevice d) {
   final combined = '${d.model ?? ''} ${d.name}'.toLowerCase();
   if (combined.trim().isEmpty) return false;
@@ -1103,6 +1162,52 @@ extension _MimosaHint on _NetworkDeviceDetailsScreenState {
 }
 
 extension _RuijieHint on _NetworkDeviceDetailsScreenState {
+  /// إرشادٌ يقول **أين** يُفعَّل SNMP على الـOLT، لا «فعّله» وحدها.
+  ///
+  /// المشغّل يقف أمام جهازٍ لا يعرف قوائمه، وإرشادٌ عامٌّ يُبقيه واقفاً.
+  Widget _vsolHint() {
+    final needsSnmp = _d.protocol != 'snmp';
+    final msg = needsSnmp
+        ? 'اختر بروتوكول SNMP وأدخل الـcommunity.\n'
+            'VSOL V1600D: الافتراضيّة عادةً "public" للقراءة، وتُضبط من '
+            'واجهة الجهاز أو بالأمر snmp-server community.'
+        : 'أدخل الـcommunity string. الافتراضيّة على V1600D عادةً "public".';
+    return Container(
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: AppColors.brandSoftBg,
+        borderRadius: BorderRadius.circular(R.lg),
+        border: Border.all(color: AppColors.brandSoftBorder),
+      ),
+      child: Row(children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: AppColors.brandSoftBg,
+            borderRadius: BorderRadius.circular(R.sm),
+          ),
+          child: Icon(LucideIcons.server, color: AppColors.brandAccent),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('مراقبة OLT عبر SNMP', style: AppType.bodyBold()),
+            const SizedBox(height: 4),
+            Text(msg,
+                style: TextStyle(
+                    fontSize: 11, color: AppColors.textMid, height: 1.4)),
+          ]),
+        ),
+        IconButton(
+          icon: Icon(LucideIcons.pencil, size: 18, color: AppColors.brand),
+          onPressed: _edit,
+        ),
+      ]),
+    );
+  }
+
   Widget _ruijieHint() {
     final needsSnmp = _d.protocol != 'snmp';
     final needsCreds = _d.protocol == 'snmp' && !_d.hasCredentials;
