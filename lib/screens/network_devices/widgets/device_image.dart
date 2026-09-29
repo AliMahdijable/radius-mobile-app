@@ -1,3 +1,5 @@
+import 'device_image_ruijie_catalog.dart';
+import 'device_image_ubnt_catalog.dart';
 import 'package:flutter/material.dart';
 
 import '../../../theme/colors.dart';
@@ -89,6 +91,19 @@ class DeviceImage extends StatelessWidget {
   };
 
   /// مفتاح مُطبَّع: حروف وأرقام لاتينيّة فقط.
+  /// مدخلات الكتالوج مرتّبةً تنازليّاً بالطول — تُبنى مرّةً عند أوّل
+  /// استعمال. بلا الترتيب يفوز `af24` على `af24hd` فتظهر صورة الجهاز
+  /// المجاور وهي تبدو صحيحة.
+  /// كتالوج روجي مرتّباً بالطول — للسبب نفسه: بلا الترتيب يفوز
+  /// `nbs3200` على `nbs320024gt4xs`.
+  static final List<MapEntry<String, String>> _ruijieByLength =
+      kRuijieCatalog.entries.toList()
+        ..sort((a, b) => b.key.length.compareTo(a.key.length));
+
+  static final List<MapEntry<String, String>> _catByLength =
+      kUbntCatalog.entries.toList()
+        ..sort((a, b) => b.key.length.compareTo(a.key.length));
+
   static String _key(String s) =>
       s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
 
@@ -105,6 +120,9 @@ class DeviceImage extends StatelessWidget {
   /// التعداد أطول لكنّه لا يكذب: ما ليس هنا فهو ميكروتك، والمجموعة
   /// تُراجَع مع أيّ صورة جديدة تُضاف.
   static const _ubntFiles = <String>{
+    // ٢٠٢٦-٠٩-٢٨ — سويتشات EdgeSwitch. بلا إدراجها هنا تُرفض الصورة
+    // على جهازٍ علامته `ubnt` رغم وجود الملفّ، كما حدث مع LHG وC5c.
+    'ES-24-250W.png',
     '5x airfiber.png',
     'AirFIBER 5 af-5.png',
     'nanobridge m5.png',
@@ -183,9 +201,25 @@ class DeviceImage extends StatelessWidget {
     // مطابقة تامّة — أدقّ ما يمكن.
     final exact = _byKey[k2];
     if (exact != null) return _gate(exact, brand);
+    // ثمّ كتالوج Ubiquiti المولَّد. مطابقةٌ تامّةٌ على رمز SKU رسميّ
+    // أوثق من أيّ احتواءٍ تخمينيّ، فتسبق الجولة التالية.
+    //
+    // ⚠️ وهو **بعد** `_byKey` عمداً: خمسة مفاتيح تتقاطع بينهما
+    // (rocketm5 · rocketm2 · locom5 · locom2 · es24250w) واختيار
+    // المستخدم في المنسَّقة يدويّاً مقصود فلا يُطغى عليه.
+    final cat = kUbntCatalog[k2] ?? kRuijieCatalog[k2];
+    if (cat != null) return _gate(cat, brand);
     // ثمّ احتواء: المدير قد يكتب «Mikrotik CCR2116-12G-4S+ router».
     // المفاتيح مرتّبة تنازليّاً بالطول فيفوز الأطول = الأدقّ.
     for (final e in _byKey.entries) {
+      if (e.key.length >= 6 && k2.contains(e.key)) return _gate(e.value, brand);
+    }
+    // واحتواءٌ في الكتالوج كذلك — «Ubiquiti NanoStation LocoM5 outdoor».
+    // الأطول أوّلاً وإلّا التقط `af24` ما هو `af24hd`.
+    for (final e in _catByLength) {
+      if (e.key.length >= 6 && k2.contains(e.key)) return _gate(e.value, brand);
+    }
+    for (final e in _ruijieByLength) {
       if (e.key.length >= 6 && k2.contains(e.key)) return _gate(e.value, brand);
     }
     // وأخيراً: المكتوب سابقةٌ لاسم ملفّ — «912» لـRB912UAG-5HPnD-OUT.
@@ -265,8 +299,14 @@ class DeviceImage extends StatelessWidget {
     //
     // ⚠️ كلّ صورةٍ تُضاف لعلامةٍ غير ميكروتك **يجب** أن تُدرَج في
     // تعدادها، وإلّا حُسبت ميكروتك وسقطت صامتةً عن أجهزتها.
-    final want = _ubntFiles.contains(file)
-        ? 'ubnt'
+    // كلّ ما في `ubnt/` من الكتالوج المولَّد — فحصٌ بالمسار لا بحثٌ
+    // في ٣٦٤ قيمة، والمجلّد نفسه يوثّق العلامة.
+    // المجلّدان المولَّدان يوثّقان علامتهما بالمسار — فحصٌ فوريّ بدل
+    // بحثٍ في ألفٍ وستّمئة قيمة.
+    final want = file.startsWith('ruijie/')
+        ? 'ruijie'
+        : (file.startsWith('ubnt/') || _ubntFiles.contains(file))
+            ? 'ubnt'
         : _mimosaFiles.contains(file)
             ? 'mimosa'
             : _ciscoFiles.contains(file)
@@ -290,6 +330,12 @@ class DeviceImage extends StatelessWidget {
 
   /// مفتاح مُطبَّع ← اسم الملفّ. مرتّب تنازليّاً بطول المفتاح.
   static const Map<String, String> _byKey = {
+    // ٢٠٢٦-٠٩-٢٨ — أُضيف يدويّاً بعد أن كشف جهازٌ حقيقيّ غيابه عن
+    // الحصاد. وموضعه هنا لا في الكتالوج المولَّد عمداً: أيّ حصادٍ
+    // لاحقٍ يُعيد توليد ذاك الملفّ فيمحو ما أُضيف فيه.
+    'eg1510xs': 'ruijie/RG-EG1510XS.png',
+    'rgeg1510xs': 'ruijie/RG-EG1510XS.png',
+    'es24250w': 'ES-24-250W.png',
     'wsc296024tcl': 'WS-C2960-24TC-L.png',
     'wsc296024ttl': 'WS-C2960-24TT-L.png',
     'wsc296048tcl': 'WS-C2960-48TC-L.jpg',

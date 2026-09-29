@@ -170,6 +170,11 @@ flutter:
   assets:
     # صور الأجهزة الفعليّة — تحلّ محلّ شارة العلامة حين يُطابَق الموديل.
     - assets/devices-images/
+    # ٣٦٤ صورةً رسميّةً من قاعدة بصمات Ubiquiti — مولَّدة، تُراجَع
+    # ككتلة لا ملفاً ملفاً. انظر device_image_ubnt_catalog.dart.
+    - assets/devices-images/ubnt/
+    # وصور روجي/ريي — مولَّدة كذلك. device_image_ruijie_catalog.dart
+    - assets/devices-images/ruijie/
     - assets/images/
     - assets/translations/
 
