@@ -197,6 +197,14 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
   void _onBrandChanged(String v) {
     setState(() {
       _brand = v;
+      // OLT من VSOL لا يُراقَب إلّا بـSNMP — نختاره بدل أن نتركه للمشغّل
+      // يكتشفه من لوحةٍ فارغة. ولا نمسّ بروتوكولاً اختاره هو.
+      if (v == 'vsol' && _protocol == null) {
+        _protocol = 'snmp';
+        _apiPortCtrl.text =
+            NetworkDeviceLabels.portForBrandProtocol(v, 'snmp').toString();
+        return;
+      }
       if (_protocol == 'api') {
         final current = _apiPortCtrl.text.trim();
         final isDefault = current.isEmpty || _defaultApiPorts.contains(current);

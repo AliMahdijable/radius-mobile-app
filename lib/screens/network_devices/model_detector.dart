@@ -52,7 +52,7 @@ class ModelDetector {
       if (!DetectedModel.needsDetection(d)) return false;
       if (d.lastStatus != 'online') return false;
       final b = d.brand.toLowerCase();
-      if (const ['mikrotik', 'ubnt', 'mimosa', 'roji', 'ruijie', 'cisco']
+      if (const ['mikrotik', 'ubnt', 'mimosa', 'roji', 'ruijie', 'cisco', 'vsol']
           .contains(b)) {
         return true;
       }

@@ -497,17 +497,22 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                 RuijieLivePanel(device: _d)
               else
                 _ruijieHint(),
+            ] else if (_isVsolOlt(_d)) ...[
+              // 🐛 كان هذا الفرع **خارج** كتلة `devices.monitor` — بديلاً
+              // عنها لا جزءاً منها. فالمدير (‏`Perms.has` تُرجع له true
+              // دائماً) يدخل الكتلة، ولا علامة فيها تطابق، فلا يرى اللوحة
+              // أبداً. ولا يراها إلّا موظّفٌ **محرومٌ** من المراقبة.
+              const SizedBox(height: Sp.md),
+              // OLT من VSOL — SNMP وحده. الجهاز يكشف كلّ ONU كواجهةٍ
+              // مستقلّة، فمسحةٌ واحدة تعطي حالة المشتركين كلّهم.
+              if (_d.protocol == 'snmp' && _d.hasCredentials)
+                VsolLivePanel(device: _d)
+              else
+                _vsolHint(),
             ],
-          ] else if (_isVsolOlt(_d)) ...[
-            const SizedBox(height: Sp.md),
-            // OLT من VSOL — SNMP وحده. الجهاز يكشف كلّ ONU كواجهةٍ
-            // مستقلّة، فمسحةٌ واحدة تعطي حالة المشتركين كلّهم.
-            if (_d.protocol == 'snmp' && _d.hasCredentials)
-              VsolLivePanel(device: _d)
-            else
-              _vsolHint(),
-          ] else if ({'mikrotik', 'ubnt', 'mimosa', 'ruijie', 'cisco'}
-              .contains(_d.brand)) ...[
+          ] else if ({'mikrotik', 'ubnt', 'mimosa', 'ruijie', 'cisco', 'vsol'}
+                  .contains(_d.brand) ||
+              _isVsolOlt(_d)) ...[
             const SizedBox(height: Sp.md),
             _noMonitorPermHint(),
           ],
@@ -924,11 +929,12 @@ bool _isEdgeSwitch(NetworkDevice d) {
       RegExp(r'\bes-\d').hasMatch(c);
 }
 
-/// هل هذا OLT من VSOL — بالطراز لا بالعلامة.
+/// هل هذا OLT من VSOL — بالعلامة، أو بالطراز للأجهزة القديمة.
 ///
-/// الخادم يرفض علامة `vsol` («براند غير صالح»)، فيُسجَّل الجهاز
-/// `other` ويُعرَف بطرازه. و`sysDescr` عبر SNMP يُرجع `V1600D` نصّاً،
-/// فيكتبه كاشف الطراز في السجلّ وتلتقطه هذه الدالّة بعدها.
+/// قبل ٢٠٢٦-١٠-٠١ كان الخادم يرفض علامة `vsol` («براند غير صالح»)،
+/// فسُجّلت أجهزةٌ `other` وتُعرَف بطرازها. و`sysDescr` عبر SNMP
+/// يُرجع `V1600D` نصّاً، فيكتبه كاشف الطراز في السجلّ وتلتقطه هذه
+/// الدالّة بعدها.
 ///
 /// والمطابقة ضيّقةٌ عمداً: «olt» وحدها تلتقط أسماءً كثيرةً لا تخصّنا،
 /// فنشترط اسم المصنّع أو رمز السلسلة.

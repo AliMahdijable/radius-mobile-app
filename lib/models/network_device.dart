@@ -9,7 +9,7 @@ class NetworkDevice {
   final int? regionId;
   final String name;
   final String type; // router|switch|ap|link|sector|camera|other
-  final String brand; // mikrotik|ubnt|mimosa|cisco|roji|other
+  final String brand; // mikrotik|ubnt|mimosa|cisco|ruijie|vsol|other
   final String? model;
   final String ip;
   final int port;
@@ -165,15 +165,11 @@ class NetworkDeviceLabels {
     'mimosa': 'Mimosa',
     'cisco': 'Cisco',
     'ruijie': 'Ruijie / Reyee',
-    // ⚠️ **لا تُضِف `vsol` هنا قبل أن يقبلها الخادم.**
-    //
-    // ٢٠٢٦-٠٩-٢٨: أضفتُها فردّ الخادم «براند غير صالح» — قائمته
-    // البيضاء لا تعرفها، والعميل لا يملك توسيعها. فاختيارها من
-    // القائمة كان يعني رفضاً مضموناً عند الحفظ.
-    //
-    // وحتّى يُضاف على الخادم: يُسجَّل الـOLT بعلامة `other` وبروتوكول
-    // SNMP، وتُوجَّه لوحته بالطراز (`V1600D`) الذي يكشفه SNMP —
-    // انظر `_isVsolOlt` في شاشة التفاصيل.
+    // ٢٠٢٦-١٠-٠١: الخادم صار يقبل `vsol` (‏`_DEVICE_BRANDS` + هجرة
+    // ENUM). قبلها كان يردّ «براند غير صالح» فيُسجَّل الـOLT `other`
+    // ويُعرَف بطرازه — وتلك الأجهزة القديمة ما زالت تُلتقط بالطراز في
+    // `_isVsolOlt`، فلا يلزم تعديلها.
+    'vsol': 'VSOL (OLT)',
     'other': 'آخر',
   };
 

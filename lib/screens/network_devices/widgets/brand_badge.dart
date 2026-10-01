@@ -17,6 +17,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 /// - Mimosa    → حرف M مع نقطة (mimosa = زهرة، نقطة توحي بذلك)
 /// - Cisco     → أعمدة رأسيّة متدرّجة (توحي بجسر الشبكة)
 /// - Roji      → حرف R نظيف
+/// - VSOL      → حرف V (‏OLT)
 /// - Other     → 3 نقاط generic
 class BrandBadge extends StatelessWidget {
   final String brand;
@@ -34,6 +35,7 @@ class BrandBadge extends StatelessWidget {
     'mimosa': (color: Color(0xFFEA580C), accent: Color(0xFFF97316)),
     'cisco': (color: Color(0xFF049FD9), accent: Color(0xFF00BCEB)),
     'ruijie': (color: Color(0xFF5B4CDB), accent: Color(0xFF7B6EE8)),
+    'vsol': (color: Color(0xFF0F766E), accent: Color(0xFF14B8A6)),
     'other': (color: Color(0xFF4B5563), accent: Color(0xFF6B7280)),
   };
 
@@ -95,6 +97,9 @@ class _BrandGlyphPainter extends CustomPainter {
         break;
       case 'ruijie':
         _paintLetter(canvas, size, 'R');
+        break;
+      case 'vsol':
+        _paintLetter(canvas, size, 'V');
         break;
       default:
         _paintOther(canvas, size);
