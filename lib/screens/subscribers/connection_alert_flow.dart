@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/device_probe_api.dart';
 import '../../api/whatsapp_api.dart';
@@ -14,7 +13,8 @@ import '../../theme/typography.dart';
 import '../../widgets/manual_wa_chip.dart';
 import 'widgets/device_chip_micro.dart';
 
-/// «تنبيه المشترك» اليدويّ — من شريط القائمة ومن داخل كارت المشترك.
+/// «تنبيه المشترك» اليدويّ — من شريط القائمة ومن بلاطة «تنبيه» في كارت
+/// المشترك. كلاهما يظهر عند المشكلة وحدها.
 ///
 /// ١. لقطة الجهاز: من الكاش إن كانت طازجة (الخمس دقائق)، وإلّا فحصٌ لهذا
 ///    المشترك وحده. لا نرسل على قراءةٍ قديمة: مشتركٌ أصلح كيبله قبل
@@ -203,97 +203,6 @@ class _ProbingDialog extends StatelessWidget {
                 ),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// زرّ «تنبيه المشترك» داخل كارت المشترك.
-///
-/// بخلاف شريط القائمة (يظهر عند المشكلة وحدها) هنا يظهر ما دامت الميزة
-/// مفعّلة: من فتح الكارت قد يريد أن يتأكّد بنفسه، و«لا توجد مشكلة»
-/// جوابٌ مفيد. والميزة متوقّفة = لا زرّ.
-class ConnectionAlertButton extends StatefulWidget {
-  const ConnectionAlertButton({super.key, required this.sub});
-
-  final Subscriber sub;
-
-  @override
-  State<ConnectionAlertButton> createState() => _ConnectionAlertButtonState();
-}
-
-class _ConnectionAlertButtonState extends State<ConnectionAlertButton> {
-  bool _busy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // الكارت قد يُفتح من البحث لا من القائمة — فلا نفترض أنّ أحداً جلب
-    // الحدود قبلنا. والقراءة من الكاش إن كانت حديثة.
-    ConnectionAlertSettings.ensureLoaded();
-  }
-
-  Future<void> _run() async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      await showConnectionAlertFlow(context, widget.sub);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ValueListenableBuilder<ConnectionAlertThresholds>(
-      valueListenable: ConnectionAlertSettings.current,
-      builder: (context, settings, _) {
-        if (!settings.enabled) return const SizedBox.shrink();
-        return Padding(
-          padding: const EdgeInsets.only(top: Sp.sm),
-          child: _button(context),
-        );
-      },
-    );
-  }
-
-  Widget _button(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    final fg = AppColors.warningOnSoft;
-    return SizedBox(
-      height: H.button,
-      child: Material(
-        color: AppColors.warningSoftBg,
-        borderRadius: BorderRadius.circular(R.button),
-        child: InkWell(
-          onTap: _busy ? null : _run,
-          borderRadius: BorderRadius.circular(R.button),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(R.button),
-              border: Border.all(color: AppColors.warningSoftBorder),
-            ),
-            alignment: Alignment.center,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (_busy)
-                  SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: fg,
-                    ),
-                  )
-                else
-                  Icon(LucideIcons.bellRing, size: 19, color: fg),
-                const SizedBox(width: Sp.sm),
-                Text('تنبيه المشترك', style: AppType.button(color: fg)),
-              ],
-            ),
           ),
         ),
       ),
