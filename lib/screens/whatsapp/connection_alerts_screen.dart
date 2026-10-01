@@ -116,8 +116,19 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
             type,
       ];
 
+  /// أنواعٌ لا صفّ لها في الخادم بعد — تعمل بالافتراضيّ ولا تُرى محفوظة.
+  List<String> get _missingTypes => [
+        for (final type in ConnectionAlertTemplates.allTypes)
+          if (_exists[type] != true) type,
+      ];
+
+  /// ⚠️ الناقص يُعدّ تغييراً: بدونه يبقى زرّ الحفظ معطّلاً لمن لم يعدّل
+  /// شيئاً، فلا يُثبَّت النصّ أبداً وتبقى بطاقته في القوالب «فاضي».
   bool get _dirty =>
-      _thresholdsChanged || _enabled != _savedEnabled || _changedTypes.isNotEmpty;
+      _thresholdsChanged ||
+      _enabled != _savedEnabled ||
+      _changedTypes.isNotEmpty ||
+      _missingTypes.isNotEmpty;
 
   Future<void> _save() async {
     if (_saving || !_canEdit) return;
@@ -140,8 +151,11 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
     }
 
     // الرسالة العامّة تُحفظ أيضاً حين يتغيّر التفعيل وحده: هي حاملته.
+    // والناقص يُحفظ بنصّه الحاليّ (الافتراضيّ إن لم يُعدَّل) فيصير ما
+    // يُرسل هو ما يُرى في القوالب، وتجده المرحلة المجدولة في الخادم.
     final types = {
       ..._changedTypes,
+      ..._missingTypes,
       if (_enabled != _savedEnabled) ConnectionAlertTemplates.envelopeType,
     };
     for (final type in types) {

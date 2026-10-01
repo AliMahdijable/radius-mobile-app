@@ -339,8 +339,20 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
                         icon: LucideIcons.bellRing,
                         placeholders: [],
                       ),
+                      // 🐛 بلا صفٍّ محفوظ كانت البطاقة تقول «فاضي» بينما
+                      // الميزة تعمل فعلاً بالنصّ الافتراضيّ، ومفتاحها في
+                      // الداخل «فعّال» — تناقضٌ سأل عنه المستخدم. فما لم
+                      // يُحفظ شيء نعرض ما سيُرسل فعلاً: الافتراضيّ، مفعّلاً.
                       existing:
-                          _templateOf(ConnectionAlertTemplates.envelopeType),
+                          _templateOf(ConnectionAlertTemplates.envelopeType) ??
+                              WhatsTemplate(
+                                templateType:
+                                    ConnectionAlertTemplates.envelopeType,
+                                isActive: true,
+                                messageContent:
+                                    ConnectionAlertTemplates.defaultFor(
+                                        ConnectionAlertTemplates.envelopeType),
+                              ),
                       onTap: _openConnectionAlerts,
                     ),
                     const SizedBox(height: 8),
