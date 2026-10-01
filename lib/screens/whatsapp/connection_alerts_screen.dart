@@ -160,7 +160,7 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
     }
 
     // الناقص يُحفظ بنصّه الحاليّ (الافتراضيّ إن لم يُعدَّل) فيصير ما يُرسل
-    // هو ما يُرى في القوالب، وتجده المرحلة المجدولة في الخادم.
+    // هو المحفوظ لا نصّاً ضمنيّاً في الكود.
     final types = {
       ..._changedTypes,
       ..._missingTypes,

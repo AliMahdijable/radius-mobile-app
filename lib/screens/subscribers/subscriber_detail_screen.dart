@@ -6,12 +6,14 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../api/device_probe_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../api/whatsapp_api.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/subscriber.dart';
 import '../../services/app_resumed_signal.dart';
+import '../../services/connection_alerts.dart';
 import '../../services/permissions_service.dart';
 import '../../services/subscriber_events.dart';
 import '../../theme/colors.dart';
@@ -62,6 +64,7 @@ class SubscriberDetailScreen extends StatefulWidget {
 class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   late Subscriber sub = widget.sub;
   bool _disconnecting = false;
+  bool _alerting = false;
   bool _toggling = false;
 
   /// Currently in-flight template send, or null. Drives the tile
@@ -90,11 +93,18 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   /// المستخدم 2026-06-09: لا شيء يدل على التحميل وكل الأزرار تبقى
   /// فعّالة.
   bool get _isBusy =>
-      _disconnecting || _toggling || _sendingTemplate != null || _deleting;
+      _disconnecting ||
+      _toggling ||
+      _sendingTemplate != null ||
+      _deleting ||
+      _alerting;
 
   @override
   void initState() {
     super.initState();
+    // حدود «تنبيه المشترك» وتفعيله — الكارت قد يُفتح من البحث لا من
+    // القائمة، فلا نفترض أنّ أحداً جلبها قبلنا.
+    ConnectionAlertSettings.ensureLoaded();
     // Keep the open detail screen in sync with backend state. Any
     // mutation done from the operations grid (activate / extend /
     // pay-debt / add-debt / discount / disconnect / toggle / …)
@@ -262,7 +272,14 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                   // بلوك الدين وفوق كارت الاتصال. الباقي انتقل إلى شيت
                   // «إجراءات أخرى» خلف بلاطة «المزيد».
                   const SizedBox(height: Sp.md),
-                  SubscriberActionTiles(actions: _quickActions()),
+                  // يُعاد بناؤه مع كلّ قراءةٍ للجهاز ومع وصول حدود المدير:
+                  // بلاطة «تنبيه» تظهر وتختفي بحسبهما.
+                  AnimatedBuilder(
+                    animation: Listenable.merge(
+                        [DeviceProbeBus.tick, ConnectionAlertSettings.current]),
+                    builder: (context, _) =>
+                        SubscriberActionTiles(actions: _quickActions()),
+                  ),
                   const SizedBox(height: Sp.md),
                   // كرتُ الاتّصال يقرّر ظهوره بنفسه: يظهر عند جلسةٍ
                   // قائمة، **أو** حين يوجد IP مثبَّت وإن كان مفصولاً —
@@ -295,11 +312,6 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                     ip: sub.ipAddress ?? '',
                     username: sub.username,
                   ),
-                  // «تنبيه المشترك» — ما دامت الميزة مفعّلة (بخلاف شريط
-                  // القائمة لا يشترط مشكلة): يفحص إن لزم ثمّ يقول المشكلة أو
-                  // «لا توجد مشكلة». والفراغ فوقه داخله، فيختفي معه.
-                  if (Perms.has('whatsapp.send'))
-                    ConnectionAlertButton(sub: sub),
                   const SizedBox(height: Sp.sm),
                   // مطلب 2026-06-12: _SubscriptionCard المنفصل أُلغي
                   // — كل معلوماته (الباقة/السعر/الانتهاء/التابع/الهاتف)
@@ -595,6 +607,20 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           busy: _disconnecting,
           onTap: _isBusy ? null : _confirmDisconnect,
         ),
+      // «تنبيه المشترك» — **عند المشكلة وحدها**، كشريط القائمة. لا تظهر
+      // لمشتركٍ سليم، ولا لمن تعذّر الوصول إلى جهازه: لا مشكلةَ معروفة
+      // نُنبّهه عليها. (طلب المستخدم ٢٠٢٦-١٠-٠١، بعد أن كان زرّاً دائماً
+      // أسفل كارت الجهاز.)
+      if (_connectionProblems().isNotEmpty)
+        SubAction(
+          icon: LucideIcons.bellRing,
+          // قصيرة: البلاطات قد تصير ستّاً، وعلى شاشة ٣٢٠ يبقى للتسمية
+          // نحو ثلاثين نقطة.
+          label: 'تنبيه',
+          color: AppColors.warningFill,
+          busy: _alerting,
+          onTap: _isBusy ? null : _alertConnection,
+        ),
       SubAction(
         icon: LucideIcons.ellipsis,
         label: 'subscribers.more_actions'.tr(),
@@ -606,6 +632,34 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
         ),
       ),
     ];
+  }
+
+  /// مشاكل آخر قراءةٍ **طازجة** لجهاز المشترك بحدود المدير، أو فارغة.
+  ///
+  /// الكاش يُقرأ بمهلة الخمس دقائق: قراءةٌ أقدم لا تُظهر البلاطة، فلا
+  /// نُنبّه مشتركاً على حالٍ ربّما تغيّرت. وكارت الجهاز يُحدّثها ثمّ ينادي
+  /// `DeviceProbeBus` فتظهر.
+  List<ConnectionProblem> _connectionProblems() {
+    if (!Perms.has('whatsapp.send') || sub.displayPhone.isEmpty) {
+      return const [];
+    }
+    final settings = ConnectionAlertSettings.current.value;
+    if (!settings.enabled) return const [];
+    final ip = sub.ipAddress?.trim() ?? '';
+    final snap = DeviceProbeApi.cachedForUser(sub.username) ??
+        (ip.isEmpty ? null : DeviceProbeApi.cached(ip));
+    if (snap == null) return const [];
+    return ConnectionAlerts.detect(snap, settings);
+  }
+
+  Future<void> _alertConnection() async {
+    if (_alerting) return;
+    setState(() => _alerting = true);
+    try {
+      await showConnectionAlertFlow(context, sub);
+    } finally {
+      if (mounted) setState(() => _alerting = false);
+    }
   }
 
   /// مجموعات شيت «إجراءات أخرى». ما ظهر كبلاطة أعلاه (تمديد/تعديل/

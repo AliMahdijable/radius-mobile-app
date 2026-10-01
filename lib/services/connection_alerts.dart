@@ -8,6 +8,9 @@ import '../models/device_health.dart';
 
 /// «تنبيه المشترك» بمشكلة الاتصال — الحدود والكشف وتركيب الرسالة.
 ///
+/// **يدويّةٌ وحدها**: المدير يضغط الزرّ ويرى المعاينة ثمّ يرسل. الوضع
+/// المجدول أُلغي (قرار المستخدم ٢٠٢٦-١٠-٠١: «بس يدوي»).
+///
 /// ── أين يجري الكشف ولماذا ────────────────────────────────────────
 /// على الهاتف وحده: هو من يصل أجهزة المشتركين (نانو / ONT) على شبكة
 /// المزوّد، وكاش فحصها في `DeviceProbeApi` محلّيّ. الخادم يحفظ حدود
@@ -22,14 +25,13 @@ import '../models/device_health.dart';
 /// المسموح لكلّ حدّ — مطابقٌ `CONNECTION_ALERT_LIMITS` في server.js.
 ///
 /// ⚠️ الحدود حمايةٌ لا تجميل: حدٌّ متهوّر (إشارة -40) يجعل كلّ المشتركين
-/// «مشكلة»، فيرسل المجدول لهم جميعاً في يومٍ واحد.
+/// «مشكلة»، فيصير الشريط على كلّ كارت ويفقد معناه.
 class ConnectionAlertLimits {
   ConnectionAlertLimits._();
   static const signalMin = -85, signalMax = -55;
   static const ccqMin = 20, ccqMax = 90;
   static const rxMin = -32.0, rxMax = -20.0;
   static const tempMin = 50, tempMax = 90;
-  static const cooldownMin = 1, cooldownMax = 30;
 }
 
 class ConnectionAlertThresholds {
@@ -39,7 +41,6 @@ class ConnectionAlertThresholds {
     this.ccqPct = 50,
     this.fiberRxDbm = -27,
     this.fiberTempC = 70,
-    this.cooldownDays = 3,
     this.isDefault = true,
   });
 
@@ -58,9 +59,6 @@ class ConnectionAlertThresholds {
 
   /// أعلى من هذا = مشكلة.
   final int fiberTempC;
-
-  /// للمرحلة المجدولة: لا يتكرّر التنبيه لنفس المشكلة قبلها.
-  final int cooldownDays;
 
   /// لم يحفظ المدير حدوداً بعد — هذه الافتراضيّات.
   final bool isDefault;
@@ -87,7 +85,6 @@ class ConnectionAlertThresholds {
       ccqPct: i('ccq_pct', defaults.ccqPct),
       fiberRxDbm: d('fiber_rx_dbm', defaults.fiberRxDbm),
       fiberTempC: i('fiber_temp_c', defaults.fiberTempC),
-      cooldownDays: i('cooldown_days', defaults.cooldownDays),
       isDefault: j['is_default'] == true,
     );
   }
@@ -98,7 +95,6 @@ class ConnectionAlertThresholds {
         'ccq_pct': ccqPct,
         'fiber_rx_dbm': fiberRxDbm,
         'fiber_temp_c': fiberTempC,
-        'cooldown_days': cooldownDays,
       };
 
   ConnectionAlertThresholds copyWith({
@@ -107,7 +103,6 @@ class ConnectionAlertThresholds {
     int? ccqPct,
     double? fiberRxDbm,
     int? fiberTempC,
-    int? cooldownDays,
   }) =>
       ConnectionAlertThresholds(
         enabled: enabled ?? this.enabled,
@@ -115,7 +110,6 @@ class ConnectionAlertThresholds {
         ccqPct: ccqPct ?? this.ccqPct,
         fiberRxDbm: fiberRxDbm ?? this.fiberRxDbm,
         fiberTempC: fiberTempC ?? this.fiberTempC,
-        cooldownDays: cooldownDays ?? this.cooldownDays,
         isDefault: false,
       );
 }
@@ -332,10 +326,10 @@ class ConnectionAlerts {
       v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
 }
 
-/// أنواع القوالب ونصوصها الافتراضيّة.
+/// أنواع القوالب ونصوصها الافتراضيّة — **المصدر الوحيد** لها.
 ///
-/// ⚠️ النصوص نفسها في الخادم (`getDefaultTemplates` في
-/// whatsapp/templateHelper.js) — من غيّر هنا غيّر هناك.
+/// الخادم لا يحمل نسخةً: الرسالة تُركَّب على الهاتف دائماً، وكانت
+/// نسخته للوضع المجدول الذي أُلغي.
 class ConnectionAlertTemplates {
   ConnectionAlertTemplates._();
 

@@ -13,6 +13,7 @@ import '../../../core/util/clipboard_helper.dart';
 import '../../../services/permissions_service.dart';
 import '../../../models/device_health.dart';
 import '../sheets/device_config_sheet.dart';
+import 'device_chip_micro.dart' show DeviceProbeBus;
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -313,6 +314,9 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       _snap = snap;
       _lastAt = DateTime.now();
     });
+    // من يقرأ الكاش نفسه (بلاطة «تنبيه» فوق، وبطاقة القائمة تحت) لا يعرف
+    // أنّ قراءةً جديدة وصلت إلّا بهذا.
+    DeviceProbeBus.bump();
   }
 
   Future<void> _run({bool force = false}) async {
@@ -346,6 +350,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       _loading = false;
       if (snap != null) _lastAt = DateTime.now();
     });
+    DeviceProbeBus.bump();
     _maybeStartTraffic();
     _maybeStartSignal();
   }
