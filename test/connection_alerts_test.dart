@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/core/util/bidi.dart';
 import 'package:rad_mysvcs/models/device_health.dart';
@@ -56,6 +59,49 @@ void main() {
   List<ConnectionProblemKind> kinds(DeviceHealthSnapshot s,
           [ConnectionAlertThresholds th = t]) =>
       ConnectionAlerts.detect(s, th).map((p) => p.kind).toList();
+
+  group('الترجمة', () {
+    // كلّ مفتاح `conn_alerts.*` في الكود موجودٌ في اللغتين، واللغتان
+    // متطابقتا المفاتيح. خطأ إملائيّ في مفتاح لا يكسر البناء — يظهر
+    // للمستخدم اسمَ المفتاح نفسه بدل النصّ.
+    test('🚨 لا مفتاح مستعمل غائب عن ar.json أو en.json', () {
+      Map<String, dynamic> load(String loc) => (jsonDecode(
+              File('assets/translations/$loc.json').readAsStringSync())
+          as Map<String, dynamic>)['conn_alerts'] as Map<String, dynamic>;
+      final ar = load('ar'), en = load('en');
+      expect(ar.keys.toSet(), en.keys.toSet(),
+          reason: 'اللغتان غير متطابقتين');
+      final used = <String>{};
+      for (final f in [
+        'lib/services/connection_alerts.dart',
+        'lib/screens/subscribers/connection_alert_flow.dart',
+        'lib/screens/whatsapp/connection_alerts_screen.dart',
+        'lib/screens/subscribers/subscriber_detail_screen.dart',
+        'lib/screens/subscribers/widgets/subscriber_card_v3.dart',
+        'lib/screens/settings_screen.dart',
+      ]) {
+        final src = File(f).readAsStringSync();
+        used.addAll(RegExp(r"'conn_alerts\.([a-z0-9_]+)'")
+            .allMatches(src)
+            .map((m) => m.group(1)!));
+      }
+      expect(used, isNotEmpty);
+      for (final k in used) {
+        expect(ar.containsKey(k), isTrue, reason: 'conn_alerts.$k مفقود');
+      }
+    });
+
+    test('🚨 ما يذهب للمشترك عربيٌّ دائماً — والواجهة وحدها تُترجَم', () {
+      final u = ubnt(lan: const [
+        LanPort(name: 'eth0', speed: null, plugged: false),
+      ]);
+      final p = ConnectionAlerts.detect(snapU(u), t).single;
+      expect(p.vars['{lan_state}'], 'غير مربوط');
+      // `easy_localization` غير مهيّأة هنا فـ`.tr()` تُرجع المفتاح:
+      // التسمية تمرّ بالترجمة، والمتغيّر لا يمرّ.
+      expect(p.label, 'conn_alerts.p_lan_unplugged');
+    });
+  });
 
   group('التفعيل — المدير يفعّلها بنفسه', () {
     test('🚨 الافتراضيّ متوقّف', () {

@@ -194,7 +194,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               if (Perms.has('whatsapp.templates'))
                 _Row(
                   icon: Icons.notifications_active_outlined,
-                  label: 'تنبيهات الاتصال',
+                  label: 'conn_alerts.title'.tr(),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => const ConnectionAlertsScreen(),

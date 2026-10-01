@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import '../../../core/util/server_time.dart';
 
@@ -794,6 +795,7 @@ class _ConnectionIssueBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return AnimatedBuilder(
       animation: Listenable.merge(
           [DeviceProbeBus.tick, ConnectionAlertSettings.current]),
@@ -837,7 +839,9 @@ class _ConnectionIssueBar extends StatelessWidget {
                     ),
                     const SizedBox(width: 7),
                     _MiniButton(
-                      label: tight ? '' : 'تنبيه المشترك',
+                      // الكارت نفسه لم يُدوَّل بعد («دين»، «تذكير دين»…)،
+                      // لكنّ ما يخصّ «تنبيه المشترك» مدوَّلٌ كلّه.
+                      label: tight ? '' : 'conn_alerts.alert_subscriber'.tr(),
                       icon: Icons.notifications_active_rounded,
                       filled: true,
                       color: AppColors.warningFill,

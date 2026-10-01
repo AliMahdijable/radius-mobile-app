@@ -616,7 +616,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           icon: LucideIcons.bellRing,
           // قصيرة: البلاطات قد تصير ستّاً، وعلى شاشة ٣٢٠ يبقى للتسمية
           // نحو ثلاثين نقطة.
-          label: 'تنبيه',
+          label: 'conn_alerts.tile'.tr(),
           color: AppColors.warningFill,
           busy: _alerting,
           onTap: _isBusy ? null : _alertConnection,

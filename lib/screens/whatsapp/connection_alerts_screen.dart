@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -142,7 +143,7 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
     final envelopeText =
         _ctrls[ConnectionAlertTemplates.envelopeType]!.text.trim();
     if (envelopeText.isEmpty) {
-      showSheetSnack(context, 'نصّ الرسالة العامّة فارغ', isError: true);
+      showSheetSnack(context, 'conn_alerts.envelope_empty'.tr(), isError: true);
       return;
     }
     setState(() => _saving = true);
@@ -155,7 +156,7 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
         _t = _savedT;
         _savedEnabled = _savedT.enabled;
       } else {
-        failed.add(r.message ?? 'تعذّر حفظ الحدود');
+        failed.add(r.message ?? 'conn_alerts.save_thresholds_failed'.tr());
       }
     }
 
@@ -185,7 +186,7 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
         if (isEnvelope) _envelopeInactive = false;
       } else {
         failed.add(
-            'تعذّر حفظ «${ConnectionAlertTemplates.labels[type] ?? type}»');
+            'conn_alerts.save_template_failed'.tr(args: [_typeTitle(type)]));
       }
     }
     // ⚠️ `saveTemplate` لا يمسّ كاش القوالب (عشر دقائق). بدون هذا يُرسل
@@ -198,7 +199,7 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
       context,
       // كلّ عنصرٍ جملةٌ تامّة («تعذّر حفظ …») — كان يُسبق بـ«تعذّر:»
       // فيصير «تعذّر: تعذّر حفظ الحدود».
-      failed.isEmpty ? 'تم حفظ إعدادات التنبيه' : failed.join(' • '),
+      failed.isEmpty ? 'conn_alerts.save_ok'.tr() : failed.join(' • '),
       isError: failed.isNotEmpty,
     );
   }
@@ -219,7 +220,7 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text(
-          'تنبيهات الاتصال',
+          'conn_alerts.title'.tr(),
           style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
@@ -235,7 +236,7 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
               child: SafeArea(
                 top: false,
                 child: SheetFooterBar(
-                  label: 'حفظ',
+                  label: 'common.save'.tr(),
                   icon: LucideIcons.check,
                   busy: _saving,
                   enabled: _dirty,
@@ -257,24 +258,24 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
                     onChanged:
                         _canEdit ? (v) => setState(() => _enabled = v) : null,
                     activeTrackColor: AppColors.brand,
-                    title: Text('تفعيل تنبيه المشترك',
+                    title: Text('conn_alerts.enable'.tr(),
                         style: AppType.bodyStrong(color: AppColors.textHi)),
                     subtitle: Text(
                       _enabled
-                          ? 'الزرّ يظهر على كارت المشترك عند وجود مشكلة'
-                          : 'متوقّف — فعّله ليظهر زرّ «تنبيه المشترك»',
+                          ? 'conn_alerts.enabled_hint'.tr()
+                          : 'conn_alerts.disabled_hint'.tr(),
                       style: AppType.muted(color: AppColors.textMid),
                     ),
                   ),
                 ]),
                 const SizedBox(height: Sp.lg),
-                _sectionTitle('حدود المشاكل'),
+                _sectionTitle('conn_alerts.thresholds'.tr()),
                 const SizedBox(height: Sp.sm),
                 _card(children: [
                   _slider(
                     icon: LucideIcons.signal,
-                    label: 'الإشارة',
-                    rule: 'أضعف من',
+                    label: 'conn_alerts.signal'.tr(),
+                    rule: 'conn_alerts.rule_weaker'.tr(),
                     valueText: iso('${_t.signalDbm} dBm'),
                     value: _t.signalDbm.toDouble(),
                     min: ConnectionAlertLimits.signalMin.toDouble(),
@@ -287,8 +288,8 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
                   _divider(),
                   _slider(
                     icon: LucideIcons.gauge,
-                    label: 'CCQ',
-                    rule: 'هذا أو أقلّ',
+                    label: 'conn_alerts.ccq'.tr(),
+                    rule: 'conn_alerts.rule_at_most'.tr(),
                     valueText: iso('${_t.ccqPct}%'),
                     value: _t.ccqPct.toDouble(),
                     min: ConnectionAlertLimits.ccqMin.toDouble(),
@@ -301,8 +302,8 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
                   _divider(),
                   _slider(
                     icon: LucideIcons.signalHigh,
-                    label: 'الإشارة الضوئيّة',
-                    rule: 'أضعف من',
+                    label: 'conn_alerts.fiber_rx'.tr(),
+                    rule: 'conn_alerts.rule_weaker'.tr(),
                     valueText: iso('${_fmt(_t.fiberRxDbm)} dBm'),
                     value: _t.fiberRxDbm,
                     min: ConnectionAlertLimits.rxMin,
@@ -318,8 +319,8 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
                   _divider(),
                   _slider(
                     icon: LucideIcons.thermometer,
-                    label: 'حرارة جهاز الفايبر',
-                    rule: 'أعلى من',
+                    label: 'conn_alerts.fiber_temp'.tr(),
+                    rule: 'conn_alerts.rule_above'.tr(),
                     valueText: iso('${_t.fiberTempC}°C'),
                     value: _t.fiberTempC.toDouble(),
                     min: ConnectionAlertLimits.tempMin.toDouble(),
@@ -335,12 +336,13 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
                 const SizedBox(height: Sp.lg),
                 Row(
                   children: [
-                    Expanded(child: _sectionTitle('نصّ الرسالة')),
+                    Expanded(
+                        child: _sectionTitle('conn_alerts.message_text'.tr())),
                     if (_canEdit)
                       TextButton.icon(
                         onPressed: _restoreDefaults,
                         icon: const Icon(LucideIcons.rotateCcw, size: 14),
-                        label: Text('النصوص الافتراضيّة',
+                        label: Text('conn_alerts.restore_defaults'.tr(),
                             style: AppType.label(color: AppColors.brand)),
                         style: TextButton.styleFrom(
                             foregroundColor: AppColors.brand),
@@ -351,8 +353,8 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
                 _card(children: [
                   _field(
                     ConnectionAlertTemplates.envelopeType,
-                    title: 'الرسالة العامّة',
-                    hint: '{problems} مكان أسطر المشاكل · {subscriber_name} اسم المشترك',
+                    title: _typeTitle(ConnectionAlertTemplates.envelopeType),
+                    hint: 'conn_alerts.envelope_hint'.tr(),
                     minLines: 5,
                   ),
                   if (!_ctrls[ConnectionAlertTemplates.envelopeType]!
@@ -361,7 +363,7 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
                     Padding(
                       padding: const EdgeInsets.only(top: Sp.xs),
                       child: Text(
-                        'لا يوجد {problems} — ستُضاف أسطر المشاكل في نهاية الرسالة',
+                        'conn_alerts.no_problems_var'.tr(),
                         style: AppType.micro(color: AppColors.warning),
                       ),
                     ),
@@ -369,15 +371,14 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
                     _divider(),
                     _field(
                       type,
-                      title: (ConnectionAlertTemplates.labels[type] ?? type)
-                          .replaceFirst('سطر: ', ''),
+                      title: _typeTitle(type),
                       hint: _lineHint(type),
                       minLines: 2,
                     ),
                   ],
                 ]),
                 const SizedBox(height: Sp.lg),
-                _sectionTitle('معاينة'),
+                _sectionTitle('conn_alerts.preview'.tr()),
                 const SizedBox(height: Sp.sm),
                 _preview(),
               ],
@@ -402,10 +403,7 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
           const SizedBox(width: Sp.sm),
           Expanded(
             child: Text(
-              'حين يكشف فحص جهاز المشترك مشكلةً بالحدود أدناه، يظهر زرّ '
-              '«تنبيه المشترك» على كارته في القائمة، وهو حاضرٌ دائماً داخل '
-              'الكارت. الرسالة تُرسل تلقائيّاً: عبر بوت تلغرام إن كان '
-              'المشترك مربوطاً، وإلّا عبر واتساب.',
+              'conn_alerts.intro'.tr(),
               style: AppType.muted(color: AppColors.textMid)
                   .copyWith(height: 1.6),
               maxLines: 6,
@@ -501,7 +499,7 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
           const SizedBox(width: Sp.x6),
           Expanded(
             child: Text(
-              'كيبل LAN · 10 ميكا أو غير مربوط',
+              'conn_alerts.cable_fixed'.tr(),
               style: AppType.body(color: AppColors.textHi),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -513,18 +511,31 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
               color: AppColors.surfaceInput,
               borderRadius: BorderRadius.circular(R.sm),
             ),
-            child: Text('ثابت', style: AppType.label(color: AppColors.textMid)),
+            child: Text('conn_alerts.fixed'.tr(),
+                style: AppType.label(color: AppColors.textMid)),
           ),
         ],
       ),
     );
   }
 
+  /// عنوان كلّ قالب بلغة الواجهة. (`ConnectionAlertTemplates.labels`
+  /// عربيّةٌ لأنّها اسم القالب المحفوظ في الخادم — بيانات لا واجهة.)
+  String _typeTitle(String type) => switch (type) {
+        'connection_alert' => 'conn_alerts.envelope'.tr(),
+        'conn_alert_cable' => 'conn_alerts.line_cable'.tr(),
+        'conn_alert_signal' => 'conn_alerts.line_signal'.tr(),
+        'conn_alert_ccq' => 'conn_alerts.line_ccq'.tr(),
+        'conn_alert_fiber_rx' => 'conn_alerts.line_fiber_rx'.tr(),
+        'conn_alert_fiber_temp' => 'conn_alerts.line_fiber_temp'.tr(),
+        _ => type,
+      };
+
   String _lineHint(String type) {
     final v = ConnectionAlertTemplates.lineVariable[type];
     return switch (type) {
-      'conn_alert_cable' => '$v = «غير مربوط» أو «يقرأ 10 ميكا» (اختياريّ)',
-      _ => '$v = القيمة المقروءة',
+      'conn_alert_cable' => '$v ${'conn_alerts.hint_cable'.tr()}',
+      _ => '$v ${'conn_alerts.hint_value'.tr()}',
     };
   }
 
@@ -583,7 +594,7 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
       const ConnectionProblem(
         kind: ConnectionProblemKind.cable,
         label: '',
-        vars: {'{lan_state}': 'غير مربوط'},
+        vars: {'{lan_state}': ConnectionAlerts.lanUnplugged},
       ),
       ConnectionProblem(
         kind: ConnectionProblemKind.signal,
