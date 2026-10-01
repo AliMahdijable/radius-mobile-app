@@ -798,12 +798,14 @@ class _ConnectionIssueBar extends StatelessWidget {
       animation: Listenable.merge(
           [DeviceProbeBus.tick, ConnectionAlertSettings.current]),
       builder: (context, _) {
+        final settings = ConnectionAlertSettings.current.value;
+        // متوقّفة حتّى يفعّلها المدير.
+        if (!settings.enabled) return const SizedBox.shrink();
         final ip = sub.ipAddress?.trim() ?? '';
         final snap = DeviceProbeApi.cachedForUser(sub.username) ??
             (ip.isEmpty ? null : DeviceProbeApi.cached(ip));
         if (snap == null) return const SizedBox.shrink();
-        final problems = ConnectionAlerts.detect(
-            snap, ConnectionAlertSettings.current.value);
+        final problems = ConnectionAlerts.detect(snap, settings);
         if (problems.isEmpty) return const SizedBox.shrink();
         return Padding(
           padding: const EdgeInsets.only(top: 11),

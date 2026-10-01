@@ -295,12 +295,11 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                     ip: sub.ipAddress ?? '',
                     username: sub.username,
                   ),
-                  // «تنبيه المشترك» — حاضرٌ دائماً هنا (بخلاف شريط القائمة):
-                  // الزرّ يفحص إن لزم ثمّ يقول المشكلة أو «لا توجد مشكلة».
-                  if (Perms.has('whatsapp.send')) ...[
-                    const SizedBox(height: Sp.sm),
+                  // «تنبيه المشترك» — ما دامت الميزة مفعّلة (بخلاف شريط
+                  // القائمة لا يشترط مشكلة): يفحص إن لزم ثمّ يقول المشكلة أو
+                  // «لا توجد مشكلة». والفراغ فوقه داخله، فيختفي معه.
+                  if (Perms.has('whatsapp.send'))
                     ConnectionAlertButton(sub: sub),
-                  ],
                   const SizedBox(height: Sp.sm),
                   // مطلب 2026-06-12: _SubscriptionCard المنفصل أُلغي
                   // — كل معلوماته (الباقة/السعر/الانتهاء/التابع/الهاتف)

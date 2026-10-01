@@ -53,6 +53,16 @@ Future<void> showConnectionAlertFlow(
   // ── ٢. الكشف ─────────────────────────────────────────────────
   final thresholds = await ConnectionAlertSettings.ensureLoaded();
   if (!context.mounted) return;
+  // الزرّ والشريط لا يظهران أصلاً والميزة متوقّفة — هذا حارسٌ لمن ضغط
+  // قبل أن يُطفئها مديرٌ آخر على الحساب نفسه.
+  if (!thresholds.enabled) {
+    showSheetSnack(
+      context,
+      'تنبيه المشترك متوقّف — فعّله من الإعدادات ← واتساب ← تنبيهات الاتصال',
+      isError: true,
+    );
+    return;
+  }
   final problems = ConnectionAlerts.detect(snap, thresholds);
   if (problems.isEmpty) {
     showSheetSnack(context, 'لا توجد مشكلة في آخر فحص لجهاز المشترك ✅');
@@ -69,16 +79,9 @@ Future<void> showConnectionAlertFlow(
     return null;
   }
 
+  // التفعيل في حدود المدير (`enabled`) لا في `is_active` القالب — فلا
+  // نقرأ هذا هنا كي لا يحكم الميزةَ مفتاحان.
   final envelopeTpl = own(ConnectionAlertTemplates.envelopeType);
-  // المدير أطفأ القالب عمداً = أطفأ الميزة. لا نرسل بالافتراضيّ من ورائه.
-  if (envelopeTpl != null && !envelopeTpl.isActive) {
-    showSheetSnack(
-      context,
-      'قالب «تنبيه مشكلة الاتصال» معطّل — فعّله من إعدادات تنبيهات الاتصال',
-      isError: true,
-    );
-    return;
-  }
   final envelope = (envelopeTpl?.messageContent.trim().isNotEmpty ?? false)
       ? envelopeTpl!.messageContent
       : ConnectionAlertTemplates.defaultFor(
@@ -207,10 +210,11 @@ class _ProbingDialog extends StatelessWidget {
   }
 }
 
-/// زرّ «تنبيه المشترك» داخل كارت المشترك — حاضرٌ دائماً.
+/// زرّ «تنبيه المشترك» داخل كارت المشترك.
 ///
-/// بخلاف شريط القائمة (يظهر عند المشكلة وحدها) هنا يظهر دائماً: من فتح
-/// الكارت قد يريد أن يتأكّد بنفسه، والجواب «لا توجد مشكلة» جوابٌ مفيد.
+/// بخلاف شريط القائمة (يظهر عند المشكلة وحدها) هنا يظهر ما دامت الميزة
+/// مفعّلة: من فتح الكارت قد يريد أن يتأكّد بنفسه، و«لا توجد مشكلة»
+/// جوابٌ مفيد. والميزة متوقّفة = لا زرّ.
 class ConnectionAlertButton extends StatefulWidget {
   const ConnectionAlertButton({super.key, required this.sub});
 
@@ -222,6 +226,14 @@ class ConnectionAlertButton extends StatefulWidget {
 
 class _ConnectionAlertButtonState extends State<ConnectionAlertButton> {
   bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // الكارت قد يُفتح من البحث لا من القائمة — فلا نفترض أنّ أحداً جلب
+    // الحدود قبلنا. والقراءة من الكاش إن كانت حديثة.
+    ConnectionAlertSettings.ensureLoaded();
+  }
 
   Future<void> _run() async {
     if (_busy) return;
@@ -235,6 +247,19 @@ class _ConnectionAlertButtonState extends State<ConnectionAlertButton> {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<ConnectionAlertThresholds>(
+      valueListenable: ConnectionAlertSettings.current,
+      builder: (context, settings, _) {
+        if (!settings.enabled) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(top: Sp.sm),
+          child: _button(context),
+        );
+      },
+    );
+  }
+
+  Widget _button(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final fg = AppColors.warningOnSoft;
     return SizedBox(
