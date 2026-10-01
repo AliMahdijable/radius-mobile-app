@@ -4,7 +4,6 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../api/whatsapp_api.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../services/connection_alerts.dart';
-import 'connection_alerts_screen.dart';
 import 'template_defaults.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -160,12 +159,7 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    // حالة «تنبيه المشترك» (مفعّل/معطّل) في حدود المدير لا في القالب.
-    final results = await Future.wait([
-      WhatsAppApi.loadTemplates(refresh: true),
-      ConnectionAlertSettings.ensureLoaded(force: true),
-    ]);
-    final list = results[0] as List<WhatsTemplate>?;
+    final list = await WhatsAppApi.loadTemplates(refresh: true);
     if (!mounted) return;
     setState(() {
       _templates = list ?? const [];
@@ -246,13 +240,6 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
     ));
   }
 
-  Future<void> _openConnectionAlerts() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ConnectionAlertsScreen()),
-    );
-    if (mounted) _load();
-  }
-
   Future<void> _openEdit(_TemplateDef def) async {
     final existing = _templateOf(def.type);
     final result = await showModalBottomSheet<bool>(
@@ -271,8 +258,9 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
     Theme.of(context); // theme-dep (dark-mode)
     const accent = AppColors.channelWhatsApp;
     // نضيف ديناميكياً أي type رجّعه الـbackend غير معروف.
-    // قوالب «تنبيه المشترك» السبعة لها شاشتها — لا تُعرض هنا أسطراً
-    // متفرّقة بأسمائها الخام.
+    // قوالب «تنبيه المشترك» لها شاشتها وحدها (الإعدادات ← واتساب ←
+    // تنبيهات الاتصال) — لا تُعرض هنا أسطراً متفرّقة بأسمائها الخام،
+    // ولا بطاقةً تكرّر تلك الشاشة (طلب المستخدم ٢٠٢٦-١٠-٠١).
     final extras = _templates
         .where((t) => !_knownTypes.any((d) => d.type == t.templateType))
         .where((t) =>
@@ -335,37 +323,6 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
                       ),
                       const SizedBox(height: 8),
                     ],
-                    // «تنبيه المشترك» بمشكلة الاتصال: رسالةٌ عامّة وأسطر
-                    // مشاكل وحدود — تُحرَّر معاً في شاشتها.
-                    _TemplateTile(
-                      def: const _TemplateDef(
-                        type: ConnectionAlertTemplates.envelopeType,
-                        label: 'تنبيه مشكلة الاتصال',
-                        icon: LucideIcons.bellRing,
-                        placeholders: [],
-                      ),
-                      // 🐛 بلا صفٍّ محفوظ كانت البطاقة تقول «فاضي» والميزة
-                      // تعمل بالنصّ الافتراضيّ — تناقضٌ سأل عنه المستخدم.
-                      // فنعرض ما سيُرسل فعلاً (المحفوظ أو الافتراضيّ)،
-                      // وحالتها من تفعيل المدير لا من `is_active` القالب.
-                      existing: WhatsTemplate(
-                        templateType: ConnectionAlertTemplates.envelopeType,
-                        isActive: ConnectionAlertSettings.current.value.enabled,
-                        messageContent: (_templateOf(ConnectionAlertTemplates
-                                        .envelopeType)
-                                    ?.messageContent
-                                    .trim()
-                                    .isNotEmpty ??
-                                false)
-                            ? _templateOf(
-                                    ConnectionAlertTemplates.envelopeType)!
-                                .messageContent
-                            : ConnectionAlertTemplates.defaultFor(
-                                ConnectionAlertTemplates.envelopeType),
-                      ),
-                      onTap: _openConnectionAlerts,
-                    ),
-                    const SizedBox(height: 8),
                   ],
                 ),
             ],
