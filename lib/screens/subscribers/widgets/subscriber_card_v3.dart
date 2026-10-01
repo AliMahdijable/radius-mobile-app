@@ -287,9 +287,23 @@ class SubscriberCardV3 extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   '${formatIQD(price)} د.ع',
-                  style: AppType.body(color: AppColors.textMid)
+                  style: AppType.body(
+                          color: sub.isFixedPrice
+                              ? AppColors.brandAccent
+                              : AppColors.textMid)
                       .copyWith(fontSize: 12.5),
                 ),
+                // «أسعار المشتركين»: قفلٌ = سعرٌ ثابت لهذا المشترك، وتنبيهٌ
+                // = باقته تغيّرت منذ التسعير (اختياريّ، لا يمنع شيئاً).
+                if (sub.isFixedPrice) ...[
+                  const SizedBox(width: 3),
+                  Icon(Icons.lock_outline_rounded,
+                      size: 12, color: AppColors.brandAccent),
+                ] else if (sub.needsRepricing) ...[
+                  const SizedBox(width: 3),
+                  Icon(Icons.error_outline,
+                      size: 12, color: AppColors.warning),
+                ],
               ],
             ]),
           ),

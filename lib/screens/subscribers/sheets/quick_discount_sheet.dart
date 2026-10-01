@@ -58,6 +58,10 @@ class _QuickDiscountSheetState extends State<_QuickDiscountSheet> {
   double _originalPrice = 0;
   double _currentDiscount = 0;
 
+  /// «أسعار المشتركين»: للمشترك سعرٌ ثابت سارٍ يلغي الخصم. الخصم يُحفظ
+  /// ولا يُطبَّق ما دام الثابت قائماً.
+  double? _fixedPrice;
+
   @override
   void initState() {
     super.initState();
@@ -89,10 +93,20 @@ class _QuickDiscountSheetState extends State<_QuickDiscountSheet> {
           return num.tryParse(v.toString().replaceAll(',', '')) ?? 0;
         }
 
-        final p = readNum('user_price');
+        // 🐛 مع «أسعار المشتركين» صار `user_price` الثابتَ حين يسري،
+        // و`discount_amount` صفراً — فكانت الشيت ستعرض الثابت «سعراً
+        // أصليّاً» وتُخفي الخصم القائم. الطبيعيّ في `base_price`، والخصم
+        // الذي ألغاه الثابت في `overridden_discount`.
+        final fixed = data['price_source']?.toString() == 'custom';
+        final base = readNum('base_price');
+        final p = base > 0 ? base : readNum('user_price');
         if (p > 0) _originalPrice = p.toDouble();
-        final d = readNum('discount_amount');
+        final d = fixed
+            ? readNum('overridden_discount')
+            : readNum('discount_amount');
         if (d > 0) _currentDiscount = d.toDouble();
+        final c = readNum('custom_price');
+        _fixedPrice = fixed && c > 0 ? c.toDouble() : null;
       }
     }
 
@@ -278,7 +292,16 @@ class _QuickDiscountSheetState extends State<_QuickDiscountSheet> {
                     ],
                   ),
                 ),
-                if (_originalPrice > 0) ...[
+                if (_fixedPrice != null) ...[
+                  const SizedBox(height: Sp.lg),
+                  SheetResultBanner(
+                    icon: LucideIcons.banknote,
+                    label: 'sp.fixed_overrides_discount'
+                        .tr(args: [formatIQD(_fixedPrice!.round())]),
+                    value: 'sp.discount_kept'.tr(),
+                    tone: AppTone.info,
+                  ),
+                ] else if (_originalPrice > 0) ...[
                   const SizedBox(height: Sp.lg),
                   SheetBrandResultCard(
                     label: 'السعر بعد الخصم',

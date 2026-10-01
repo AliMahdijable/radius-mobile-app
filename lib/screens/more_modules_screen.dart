@@ -10,6 +10,7 @@ import '../theme/typography.dart';
 import 'broadcast/broadcast_screen.dart';
 import 'telegram/telegram_screen.dart';
 import 'discounts/discounts_screen.dart';
+import 'subscriber_prices/subscriber_prices_screen.dart';
 import 'message_logs/message_logs_screen.dart';
 import 'employees/employees_screen.dart';
 import 'expenses/expenses_screen.dart';
@@ -152,6 +153,20 @@ class MoreModulesScreen extends StatelessWidget {
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const DiscountsScreen(),
+                ),
+              ),
+            ),
+          // «أسعار المشتركين» — سعر بيعٍ ثابت لمشتركٍ بعينه، بجانب الخصومات
+          // لأنّه أخوها: الثابت يلغي الخصم.
+          if (Perms.has('subscriber_prices.view'))
+            _ModuleCard(
+              icon: LucideIcons.banknote,
+              tone: AppTone.brand,
+              title: 'sp.title'.tr(),
+              subtitle: 'sp.module_hint'.tr(),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const SubscriberPricesScreen(),
                 ),
               ),
             ),

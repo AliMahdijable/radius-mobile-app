@@ -30,6 +30,7 @@ import 'sheets/consumption_sheet.dart';
 import 'sheets/pay_debt_sheet.dart';
 import 'sheets/qr_login_sheet.dart';
 import 'sheets/quick_discount_sheet.dart';
+import 'sheets/subscriber_price_sheet.dart';
 import 'widgets/balance_card.dart';
 import '../../api/device_config_api.dart';
 import 'widgets/device_chip_micro.dart';
@@ -693,6 +694,20 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             icon: LucideIcons.tag,
             label: 'subscribers.op_quick_discount'.tr(),
             onTap: () => showQuickDiscountSheet(context, sub),
+          ),
+        // «أسعار المشتركين» — بجانب الخصم لأنّه أخوه: الثابت يلغي الخصم.
+        if (Perms.has('subscriber_prices.manage') && sub.idx != null)
+          SubAction(
+            icon: LucideIcons.banknote,
+            label: 'sp.op_fixed_price'.tr(),
+            meta: sub.isFixedPrice && sub.price != null
+                ? formatIQD(sub.price!)
+                : (sub.needsRepricing ? 'sp.needs_repricing_short'.tr() : null),
+            onTap: () => showSubscriberPriceSheet(
+              context,
+              idx: sub.idx!,
+              name: sub.fullName.trim().isNotEmpty ? sub.fullName : sub.username,
+            ),
           ),
       ]),
       SubActionGroup('subscribers.group_contact'.tr(), [
