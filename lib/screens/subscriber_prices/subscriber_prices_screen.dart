@@ -6,6 +6,7 @@ import '../../api/subscriber_prices_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../core/util/amount_input.dart';
 import '../../core/util/format.dart';
+import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/subscriber.dart';
 import '../../services/permissions_service.dart';
@@ -31,6 +32,7 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
   final _amountCtrl = TextEditingController();
   final _searchCtrl = TextEditingController();
   int _amount = 0;
+  bool _suppressFormat = false;
   bool _submitting = false;
   bool _loading = true;
   bool _loadFailed = false;
@@ -47,6 +49,7 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
   @override
   void initState() {
     super.initState();
+    _amountCtrl.addListener(_onAmount);
     _searchCtrl.addListener(() {
       final q = _searchCtrl.text.trim();
       if (q != _query) setState(() => _query = q);
@@ -66,18 +69,51 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
     final results = await Future.wait([
       SubscribersApi.loadAll(),
       SubscriberPricesApi.list(),
+      // سعر الباقة الأصليّ على كلّ كارت — كما تفعل شاشة المشتركين: القائمة
+      // لا تحمله، والكتالوج يملؤه (ولا يكتب فوق الثابت).
+      SubscribersApi.loadPackages(),
     ]);
     if (!mounted) return;
     final subs = results[0] as List<Subscriber>?;
     final prices = results[1] as List<SubscriberPrice>?;
+    final packages = results[2] as Map<String, PackageInfo>? ?? const {};
     setState(() {
       _all = (subs ?? const <Subscriber>[])
           .where((s) => s.idx != null)
+          .map((s) => s.enrichWithPackages(packages))
           .toList();
       _prices = {for (final p in prices ?? const <SubscriberPrice>[]) p.idx: p};
       _loadFailed = prices == null;
       _loading = false;
     });
+  }
+
+  /// تنسيق الآلاف أثناء الكتابة — كحقل شاشة الخصومات حرفيّاً.
+  void _onAmount() {
+    if (_suppressFormat) return;
+    final digits = _amountCtrl.text.replaceAll(RegExp(r'[^0-9]'), '');
+    final parsed = int.tryParse(digits) ?? 0;
+    final formatted = _fmt(parsed);
+    if (formatted != _amountCtrl.text) {
+      _suppressFormat = true;
+      _amountCtrl.value = TextEditingValue(
+        text: formatted,
+        selection: TextSelection.collapsed(offset: formatted.length),
+      );
+      _suppressFormat = false;
+    }
+    if (parsed != _amount) setState(() => _amount = parsed);
+  }
+
+  static String _fmt(int v) {
+    if (v == 0) return '';
+    final s = v.toString();
+    final buf = StringBuffer();
+    for (int i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
+      buf.write(s[i]);
+    }
+    return buf.toString();
   }
 
   List<Subscriber> get _filtered {
@@ -258,52 +294,27 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
           ],
         ),
       ),
+      // 🐛 كان `FilledButton` بنصٍّ لونه أبيض صراحةً — فغلب لون المعطّل
+      // وصار أبيضَ على رماديّ فاتح لا يُقرأ. الآن زرّ النظام نفسه.
       bottomNavigationBar: !_canManage
           ? null
-          : SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: H.button,
-                  child: FilledButton.icon(
-                    onPressed: (_amount > 0 && _selected.isNotEmpty && !_submitting)
-                        ? _apply
-                        : null,
-                    icon: _submitting
-                        ? SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppColors.onBrand,
-                            ),
-                          )
-                        : const Icon(LucideIcons.banknote, size: 16),
-                    label: Text(
-                      _submitting
-                          ? 'sp.applying'.tr()
-                          : (_amount > 0 && _selected.isNotEmpty
-                              ? 'sp.apply_n'.tr(args: [
-                                  formatIQD(_amount),
-                                  '${_selected.length}',
-                                ])
-                              : 'sp.apply'.tr()),
-                      style: AppType.button(color: AppColors.onBrand),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: accent,
-                      foregroundColor: AppColors.onBrand,
-                      disabledBackgroundColor: AppColors.surfaceDisabled,
-                      disabledForegroundColor: AppColors.textHint,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(R.button),
-                      ),
-                    ),
-                  ),
+          : ColoredBox(
+              color: AppColors.surface,
+              child: SafeArea(
+                top: false,
+                child: SheetFooterBar(
+                  label: _submitting
+                      ? 'sp.applying'.tr()
+                      : (_amount > 0 && _selected.isNotEmpty
+                          ? 'sp.apply_n'.tr(args: [
+                              formatIQD(_amount),
+                              '${_selected.length}',
+                            ])
+                          : 'sp.apply'.tr()),
+                  icon: LucideIcons.banknote,
+                  busy: _submitting,
+                  enabled: _amount > 0 && _selected.isNotEmpty,
+                  onPressed: _apply,
                 ),
               ),
             ),
@@ -360,19 +371,34 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
     );
   }
 
+  /// حقلٌ مدمج كحقل شاشة الخصومات. (كان `AmountTextField` — حقل الشيتات
+  /// بخطّه الكبير — فظهر التلميح ضخماً في رأس الشاشة.)
   Widget _amountField() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.sm),
-        border: Border.all(color: AppColors.borderSoft),
-      ),
-      child: AmountTextField(
+    return AmountShorthandBox(
+      controller: _amountCtrl,
+      child: TextField(
         controller: _amountCtrl,
-        hint: 'sp.amount_hint'.tr(),
-        currency: 'common.currency'.tr(),
-        onValue: (v) => setState(() => _amount = v),
+        keyboardType: TextInputType.number,
+        style: AppType.input(color: AppColors.textHi),
+        decoration: InputDecoration(
+          hintText: 'sp.amount_hint'.tr(),
+          hintStyle: AppType.input(color: AppColors.textLow),
+          filled: true,
+          fillColor: AppColors.surface,
+          prefixIcon: Icon(LucideIcons.banknote, size: 16, color: AppColors.textMid),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(R.sm),
+            borderSide: BorderSide(color: AppColors.borderSoft),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(R.sm),
+            borderSide: BorderSide(color: AppColors.borderSoft),
+          ),
+          isDense: true,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          suffixText: 'common.currency'.tr(),
+        ),
       ),
     );
   }
@@ -606,6 +632,9 @@ class _SubscriberCard extends StatelessWidget {
   final num? fixedPrice;
   final VoidCallback? onTap;
 
+  num? get _originalPrice =>
+      sub.isFixedPrice ? (sub.basePackagePrice ?? sub.price) : sub.price;
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
@@ -659,8 +688,12 @@ class _SubscriberCard extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
+                    // الباقة وسعرها الأصليّ — للثابت: الطبيعيّ لا الثابت.
                     child: Text(
-                      sub.profileName ?? '',
+                      [
+                        if ((sub.profileName ?? '').isNotEmpty) sub.profileName!,
+                        if (_originalPrice != null) formatIQD(_originalPrice!),
+                      ].join(' · '),
                       style: AppType.label(color: AppColors.success)
                           .copyWith(fontSize: 9.5, fontWeight: FontWeight.w700),
                       maxLines: 1,
