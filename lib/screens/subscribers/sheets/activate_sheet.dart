@@ -161,6 +161,12 @@ class _ActivateSheetState extends State<_ActivateSheet> {
 
   num get _userPrice => _readNum('user_price');
   num get _discount => _readNum('discount_amount');
+
+  /// «أسعار المشتركين»: الخادم طبّق سعراً ثابتاً (`user_price` = الثابت،
+  /// والخصم صفر). الطبيعيّ في `base_price` يُعرض مشطوباً بجانبه.
+  bool get _isFixedPrice => _data?['price_source'] == 'custom';
+  bool get _needsRepricing => _data?['needs_repricing'] == true;
+  num get _basePrice => _readNum('base_price');
   num get _effectivePrice => _readNum('price_after_discount');
   num get _currentBalance => _readNum('current_balance');
   num get _managerBalance => _readNum('manager_balance');
@@ -340,11 +346,27 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         amount: '${formatIQD(price.round())} $cur',
         // السعر الأصلي مشطوباً بجانب النهائي — أوضح من صفَّي «السعر
         // الأصلي» و«الخصم» المنفصلين اللذين كانا في الكارت الأبيض.
-        strikethrough: _discount > 0 ? formatIQD(_userPrice.round()) : null,
+        strikethrough: _discount > 0
+            ? formatIQD(_userPrice.round())
+            : (_isFixedPrice && _basePrice > 0 && _basePrice != price
+                ? formatIQD(_basePrice.round())
+                : null),
       ),
       const SizedBox(height: 14),
       SheetRowsGroup(
         rows: [
+          if (_isFixedPrice)
+            SheetRowData(
+              label: 'sp.fixed_price'.tr(),
+              value: 'sp.fixed_for_subscriber'.tr(),
+              valueColor: AppColors.brandAccent,
+            )
+          else if (_needsRepricing)
+            SheetRowData(
+              label: 'sp.fixed_price'.tr(),
+              value: 'sp.needs_repricing_short'.tr(),
+              valueColor: AppColors.warning,
+            ),
           if (_discount > 0)
             SheetRowData(
               label: 'subscribers.label_discount'.tr(),

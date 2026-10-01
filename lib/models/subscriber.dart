@@ -74,6 +74,17 @@ class Subscriber {
   /// موقع نظيف؛ خلاف ذلك = نصّ قديم يجب تنظيفه من SAS4 أوّلاً.
   final String? addressRaw;
 
+  /// «أسعار المشتركين»: للمشترك سعر بيعٍ ثابت سارٍ — [price] هو الثابت.
+  /// يأتي من القائمة (`price_source: 'custom'`) لصفوف الثابت وحدها.
+  final bool isFixedPrice;
+
+  /// له سعرٌ ثابت لكنّ باقته تغيّرت: يُطبَّق الطبيعيّ، والتنبيه اختياريّ
+  /// (قرار المستخدم ٢٠٢٦-١٠-٠١: «للتنبيه، مو إجباري»).
+  final bool needsRepricing;
+
+  /// السعر الطبيعي للباقة حين يسري الثابت — للعرض بجانبه.
+  final num? basePackagePrice;
+
   // ⚠️ ليس `const`: الحقلان المحفوظان (`balanceAmount` · `parsedExpiration`)
   // حقلا `late final`، ولا يجتمعان مع باني ثابت. لا موضع في المشروع
   // ينشئ `const Subscriber(...)`، فالكلفة صفر.
@@ -110,6 +121,9 @@ class Subscriber {
     this.latitude,
     this.longitude,
     this.addressRaw,
+    this.isFixedPrice = false,
+    this.needsRepricing = false,
+    this.basePackagePrice,
   });
 
   /// true فقط لو الـbackend أرجع إحداثيّات صالحة (parse من prefix gps:).
@@ -327,6 +341,9 @@ class Subscriber {
       latitude: toDouble(j['latitude']),
       longitude: toDouble(j['longitude']),
       addressRaw: j['address_raw']?.toString(),
+      isFixedPrice: j['price_source'] == 'custom',
+      needsRepricing: j['price_needs_repricing'] == true,
+      basePackagePrice: toDouble(j['base_package_price']),
     );
   }
 
@@ -377,6 +394,9 @@ class Subscriber {
       latitude: latitude,
       longitude: longitude,
       addressRaw: addressRaw,
+      isFixedPrice: isFixedPrice,
+      needsRepricing: needsRepricing,
+      basePackagePrice: basePackagePrice,
     );
   }
 
@@ -422,6 +442,9 @@ class Subscriber {
       latitude: latitude,
       longitude: longitude,
       addressRaw: addressRaw,
+      isFixedPrice: isFixedPrice,
+      needsRepricing: needsRepricing,
+      basePackagePrice: basePackagePrice,
     );
   }
 
@@ -462,6 +485,9 @@ class Subscriber {
       latitude: latitude,
       longitude: longitude,
       addressRaw: addressRaw ?? this.addressRaw,
+      isFixedPrice: isFixedPrice,
+      needsRepricing: needsRepricing,
+      basePackagePrice: basePackagePrice,
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
@@ -183,9 +184,9 @@ class ConnectionAlertSettings {
     } on DioException catch (e) {
       final data = e.response?.data;
       final msg = data is Map ? data['message']?.toString() : null;
-      return (ok: false, message: msg ?? 'تعذّر حفظ الحدود');
+      return (ok: false, message: msg ?? 'conn_alerts.save_thresholds_failed'.tr());
     } catch (_) {
-      return (ok: false, message: 'تعذّر حفظ الحدود');
+      return (ok: false, message: 'conn_alerts.save_thresholds_failed'.tr());
     }
   }
 }
@@ -202,11 +203,15 @@ class ConnectionProblem {
 
   final ConnectionProblemKind kind;
 
-  /// ما يراه المدير: «LAN غير مربوط» · «إشارة -68 dBm». القيم معزولة
-  /// الاتّجاه كي لا تنقلب ‎-68 إلى 68- داخل النصّ العربيّ.
+  /// ما يراه المدير بلغة الواجهة: «LAN غير مربوط» · «Signal -68 dBm».
+  /// القيم معزولة الاتّجاه كي لا تنقلب ‎-68 إلى 68- داخل النصّ العربيّ.
   final String label;
 
   /// متغيّرات سطر هذه المشكلة في القالب ({signal} …).
+  ///
+  /// ⚠️ **عربيّةٌ دائماً** وإن كانت الواجهة إنجليزيّة: تدخل رسالةً تذهب
+  /// للمشترك لا للمدير، كبقيّة رسائل الواتساب (قاعدة التدويل في
+  /// المشروع).
   final Map<String, String> vars;
 
   String get templateType => ConnectionAlertTemplates.lineType(kind);
@@ -228,7 +233,9 @@ class ConnectionAlerts {
       if (lan != null) {
         out.add(ConnectionProblem(
           kind: ConnectionProblemKind.cable,
-          label: 'LAN $lan',
+          label: lan == lanUnplugged
+              ? 'conn_alerts.p_lan_unplugged'.tr()
+              : 'conn_alerts.p_lan_10'.tr(),
           vars: {'{lan_state}': lan},
         ));
       }
@@ -238,7 +245,7 @@ class ConnectionAlerts {
         final v = iso('$s dBm');
         out.add(ConnectionProblem(
           kind: ConnectionProblemKind.signal,
-          label: 'إشارة $v',
+          label: 'conn_alerts.p_signal'.tr(args: [v]),
           vars: {'{signal}': v},
         ));
       }
@@ -247,7 +254,7 @@ class ConnectionAlerts {
         final v = iso('$c%');
         out.add(ConnectionProblem(
           kind: ConnectionProblemKind.ccq,
-          label: 'CCQ $v',
+          label: 'conn_alerts.p_ccq'.tr(args: [v]),
           vars: {'{ccq}': v},
         ));
       }
@@ -258,7 +265,7 @@ class ConnectionAlerts {
         final v = iso('${_num(rx)} dBm');
         out.add(ConnectionProblem(
           kind: ConnectionProblemKind.fiberRx,
-          label: 'ضوئي $v',
+          label: 'conn_alerts.p_fiber_rx'.tr(args: [v]),
           vars: {'{rx_power}': v},
         ));
       }
@@ -267,7 +274,7 @@ class ConnectionAlerts {
         final v = iso('${_num(temp)}°C');
         out.add(ConnectionProblem(
           kind: ConnectionProblemKind.fiberTemp,
-          label: 'حرارة $v',
+          label: 'conn_alerts.p_fiber_temp'.tr(args: [v]),
           vars: {'{temperature}': v},
         ));
       }
@@ -275,7 +282,11 @@ class ConnectionAlerts {
     return out;
   }
 
-  /// حالة كيبل LAN إن كانت عطلاً: «غير مربوط» أو «يقرأ 10 ميكا».
+  /// قيمتا `{lan_state}` — عربيّتان لأنّهما في رسالة المشترك.
+  static const lanUnplugged = 'غير مربوط';
+  static const lan10 = 'يقرأ 10 ميكا';
+
+  /// حالة كيبل LAN إن كانت عطلاً: [lanUnplugged] أو [lan10].
   /// `null` = سليم أو مجهول.
   @visibleForTesting
   static String? lanState(UbiquitiStatus u) {
@@ -283,14 +294,14 @@ class ConnectionAlerts {
     if (u.lanPorts.isEmpty) return null;
     final p = u.primaryLan;
     if (p == null) return null;
-    if (!p.plugged) return 'غير مربوط';
+    if (!p.plugged) return lanUnplugged;
     // موصولٌ والسرعة مجهولة (airOS 5) ليس عطلاً.
     if (p.speedUnknown) return null;
     final m = RegExp(r'^(\d+)Mbps').firstMatch(p.speed ?? '');
     final mbps = m == null ? null : int.tryParse(m.group(1)!);
     // `0Mbps` يعرضه التطبيق «Unplugged» — والكارت والرسالة يتّفقان.
-    if (mbps == 0) return 'غير مربوط';
-    if (mbps == 10) return 'يقرأ 10 ميكا';
+    if (mbps == 0) return lanUnplugged;
+    if (mbps == 10) return lan10;
     return null;
   }
 

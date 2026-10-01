@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import '../../../core/util/server_time.dart';
 
@@ -286,9 +287,23 @@ class SubscriberCardV3 extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   '${formatIQD(price)} د.ع',
-                  style: AppType.body(color: AppColors.textMid)
+                  style: AppType.body(
+                          color: sub.isFixedPrice
+                              ? AppColors.brandAccent
+                              : AppColors.textMid)
                       .copyWith(fontSize: 12.5),
                 ),
+                // «أسعار المشتركين»: قفلٌ = سعرٌ ثابت لهذا المشترك، وتنبيهٌ
+                // = باقته تغيّرت منذ التسعير (اختياريّ، لا يمنع شيئاً).
+                if (sub.isFixedPrice) ...[
+                  const SizedBox(width: 3),
+                  Icon(Icons.lock_outline_rounded,
+                      size: 12, color: AppColors.brandAccent),
+                ] else if (sub.needsRepricing) ...[
+                  const SizedBox(width: 3),
+                  Icon(Icons.error_outline,
+                      size: 12, color: AppColors.warning),
+                ],
               ],
             ]),
           ),
@@ -794,6 +809,7 @@ class _ConnectionIssueBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return AnimatedBuilder(
       animation: Listenable.merge(
           [DeviceProbeBus.tick, ConnectionAlertSettings.current]),
@@ -837,7 +853,9 @@ class _ConnectionIssueBar extends StatelessWidget {
                     ),
                     const SizedBox(width: 7),
                     _MiniButton(
-                      label: tight ? '' : 'تنبيه المشترك',
+                      // الكارت نفسه لم يُدوَّل بعد («دين»، «تذكير دين»…)،
+                      // لكنّ ما يخصّ «تنبيه المشترك» مدوَّلٌ كلّه.
+                      label: tight ? '' : 'conn_alerts.alert_subscriber'.tr(),
                       icon: Icons.notifications_active_rounded,
                       filled: true,
                       color: AppColors.warningFill,

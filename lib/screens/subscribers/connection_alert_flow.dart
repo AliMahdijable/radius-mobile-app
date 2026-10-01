@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import '../../api/device_probe_api.dart';
@@ -29,7 +30,7 @@ Future<void> showConnectionAlertFlow(
     BuildContext context, Subscriber sub) async {
   final phone = sub.displayPhone;
   if (phone.isEmpty) {
-    showSheetSnack(context, 'لا يوجد رقم هاتف للمشترك', isError: true);
+    showSheetSnack(context, 'conn_alerts.no_phone'.tr(), isError: true);
     return;
   }
 
@@ -42,11 +43,7 @@ Future<void> showConnectionAlertFlow(
     if (!context.mounted) return;
   }
   if (snap == null) {
-    showSheetSnack(
-      context,
-      'تعذّر الوصول إلى جهاز المشترك — لا يمكن تحديد المشكلة',
-      isError: true,
-    );
+    showSheetSnack(context, 'conn_alerts.unreachable'.tr(), isError: true);
     return;
   }
 
@@ -56,16 +53,12 @@ Future<void> showConnectionAlertFlow(
   // الزرّ والشريط لا يظهران أصلاً والميزة متوقّفة — هذا حارسٌ لمن ضغط
   // قبل أن يُطفئها مديرٌ آخر على الحساب نفسه.
   if (!thresholds.enabled) {
-    showSheetSnack(
-      context,
-      'تنبيه المشترك متوقّف — فعّله من الإعدادات ← واتساب ← تنبيهات الاتصال',
-      isError: true,
-    );
+    showSheetSnack(context, 'conn_alerts.disabled'.tr(), isError: true);
     return;
   }
   final problems = ConnectionAlerts.detect(snap, thresholds);
   if (problems.isEmpty) {
-    showSheetSnack(context, 'لا توجد مشكلة في آخر فحص لجهاز المشترك ✅');
+    showSheetSnack(context, 'conn_alerts.no_problem'.tr());
     return;
   }
 
@@ -99,10 +92,14 @@ Future<void> showConnectionAlertFlow(
 
   // ── ٤. المعاينة ──────────────────────────────────────────────
   // العنوان يحمل السبب الدقيق («LAN غير مربوط» لا «خلل الكيبل») —
-  // المشترك يقرأ سطراً عامّاً، والمدير يعرف ما وراءه.
+  // المشترك يقرأ سطراً عامّاً، والمدير يعرف ما وراءه. والعنوان بلغة
+  // الواجهة، أمّا نصّ الرسالة تحته فعربيّ: يذهب للمشترك.
   final choice = await showManualWaPreviewSheet(
     context,
-    title: 'تنبيه المشترك · ${problems.map((p) => p.label).join('، ')}',
+    title: [
+      'conn_alerts.alert_subscriber'.tr(),
+      ...problems.map((p) => p.label),
+    ].join(' · '),
     phone: phone,
     messagePreview: message,
   );
@@ -118,7 +115,7 @@ Future<void> showConnectionAlertFlow(
     if (!context.mounted) return;
     showSheetSnack(
       context,
-      ok ? 'افتح واتساب واضغط "إرسال" لإتمام التنبيه' : 'تعذّر فتح واتساب',
+      ok ? 'conn_alerts.manual_open'.tr() : 'conn_alerts.manual_failed'.tr(),
       isError: !ok,
     );
     return;
@@ -130,12 +127,18 @@ Future<void> showConnectionAlertFlow(
     sas4Idx: sub.idx,
   );
   if (!context.mounted) return;
-  final ch = result.channelArabic;
+  // اسم القناة من مفتاحه لا من `channelArabic`: تلك عربيّةٌ دائماً،
+  // فتصير «Alert sent · via تلغرام» في الواجهة الإنجليزيّة.
+  final sentMsg = switch (result.channel) {
+    'telegram' => 'conn_alerts.sent_via_telegram'.tr(),
+    'whatsapp' => 'conn_alerts.sent_via_whatsapp'.tr(),
+    _ => 'conn_alerts.sent'.tr(),
+  };
   showSheetSnack(
     context,
     result.ok
-        ? (ch != null ? 'تم إرسال التنبيه · عبر $ch' : 'تم إرسال التنبيه')
-        : (result.message ?? 'تعذّر إرسال التنبيه'),
+        ? sentMsg
+        : (result.message ?? 'conn_alerts.send_failed'.tr()),
     isError: !result.ok,
   );
 }
@@ -196,7 +199,7 @@ class _ProbingDialog extends StatelessWidget {
               const SizedBox(width: Sp.md),
               Flexible(
                 child: Text(
-                  'جاري فحص جهاز المشترك…',
+                  'conn_alerts.probing'.tr(),
                   style: AppType.body(color: AppColors.textHi),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
