@@ -36,10 +36,11 @@ void main() {
     }
   });
 
-  test('مقاييس الأجهزة الأربعة موجودة', () {
+  test('مقاييس الأجهزة الخمسة موجودة', () {
     // تُذكَر بالاسم لا بالعدد: من يحذف واحداً يجب أن يواجه هذا السطر.
     for (final f in [
       SortField.deviceRx,
+      SortField.deviceTemp,
       SortField.deviceSignal,
       SortField.deviceCcq,
       SortField.deviceLan,
@@ -53,6 +54,7 @@ void main() {
       final raw = File('assets/translations/$loc.json').readAsStringSync();
       for (final key in [
         'device_rx',
+        'device_temp',
         'device_signal',
         'device_ccq',
         'device_lan',

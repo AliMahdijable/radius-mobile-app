@@ -550,6 +550,7 @@
     "debts": "الديون",
     "parent": "تابع إلى",
     "device_rx": "قوّة الضوء RX",
+    "device_temp": "حرارة الـONU",
     "device_signal": "إشارة اللاسلكي",
     "device_ccq": "جودة الاتصال CCQ",
     "device_lan": "سرعة منفذ LAN",
