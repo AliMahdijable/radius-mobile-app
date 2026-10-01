@@ -17,6 +17,7 @@ import 'devices/device_defaults_screen.dart';
 import 'login_screen.dart';
 import 'notifications_settings_screen.dart';
 import 'print_templates/print_templates_screen.dart';
+import 'whatsapp/connection_alerts_screen.dart';
 import 'whatsapp/whatsapp_schedules_screen.dart';
 import 'whatsapp/whatsapp_status_screen.dart';
 import 'whatsapp/whatsapp_templates_screen.dart';
@@ -181,6 +182,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => const WhatsAppSchedulesScreen(),
+                    ),
+                  ),
+                ),
+              // «تنبيه المشترك» بمشكلة الاتصال — تفعيله وحدوده ونصوصه.
+              // كان مدخله الوحيد بطاقةً في آخر قائمة القوالب، فسأل
+              // المستخدم «الميزة منين يفعّلها المدير؟». هنا مكانه بين
+              // إعدادات الواتساب الأخرى.
+              if (Perms.has('whatsapp.templates'))
+                const SizedBox(height: Sp.xs),
+              if (Perms.has('whatsapp.templates'))
+                _Row(
+                  icon: Icons.notifications_active_outlined,
+                  label: 'تنبيهات الاتصال',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const ConnectionAlertsScreen(),
                     ),
                   ),
                 ),

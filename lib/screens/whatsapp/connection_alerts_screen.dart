@@ -35,8 +35,13 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
   ConnectionAlertThresholds _t = ConnectionAlertThresholds.defaults;
   ConnectionAlertThresholds _savedT = ConnectionAlertThresholds.defaults;
 
-  bool _enabled = true;
-  bool _savedEnabled = true;
+  /// التفعيل في حدود المدير على الخادم (`enabled`) — متوقّفٌ حتّى يفعّله.
+  bool _enabled = false;
+  bool _savedEnabled = false;
+
+  /// قالبٌ عامّ حُفظ معطّلاً في نسخةٍ سابقة (كان التفعيل فيه). يُعاد
+  /// تفعيله عند الحفظ كي لا يبقى مفتاحٌ قديم يُعطّل ما فعّله المدير.
+  bool _envelopeInactive = false;
 
   /// نصّ كلّ نوع كما وصل (أو الافتراضيّ) — لمعرفة ما تغيّر عند الحفظ.
   final Map<String, String> _savedText = {};
@@ -89,8 +94,9 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
     setState(() {
       _t = t;
       _savedT = t;
-      _enabled = envelope?.isActive ?? true;
-      _savedEnabled = _enabled;
+      _enabled = t.enabled;
+      _savedEnabled = t.enabled;
+      _envelopeInactive = envelope != null && !envelope.isActive;
       for (final type in ConnectionAlertTemplates.allTypes) {
         final tpl = own(type);
         final text = (tpl?.messageContent.trim().isNotEmpty ?? false)
@@ -116,8 +122,19 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
             type,
       ];
 
+  /// أنواعٌ لا صفّ لها في الخادم بعد — تعمل بالافتراضيّ ولا تُرى محفوظة.
+  List<String> get _missingTypes => [
+        for (final type in ConnectionAlertTemplates.allTypes)
+          if (_exists[type] != true) type,
+      ];
+
+  /// ⚠️ الناقص يُعدّ تغييراً: بدونه يبقى زرّ الحفظ معطّلاً لمن لم يعدّل
+  /// شيئاً، فلا يُثبَّت النصّ أبداً وتبقى بطاقته في القوالب «فاضي».
   bool get _dirty =>
-      _thresholdsChanged || _enabled != _savedEnabled || _changedTypes.isNotEmpty;
+      _thresholdsChanged ||
+      _enabled != _savedEnabled ||
+      _changedTypes.isNotEmpty ||
+      _missingTypes.isNotEmpty;
 
   Future<void> _save() async {
     if (_saving || !_canEdit) return;
@@ -130,19 +147,23 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
     setState(() => _saving = true);
     final failed = <String>[];
 
-    if (_thresholdsChanged || _savedT.isDefault) {
-      final r = await ConnectionAlertSettings.save(_t);
+    if (_thresholdsChanged || _savedT.isDefault || _enabled != _savedEnabled) {
+      final r = await ConnectionAlertSettings.save(_t.copyWith(enabled: _enabled));
       if (r.ok) {
         _savedT = ConnectionAlertSettings.current.value;
+        _t = _savedT;
+        _savedEnabled = _savedT.enabled;
       } else {
-        failed.add(r.message ?? 'الحدود');
+        failed.add(r.message ?? 'تعذّر حفظ الحدود');
       }
     }
 
-    // الرسالة العامّة تُحفظ أيضاً حين يتغيّر التفعيل وحده: هي حاملته.
+    // الناقص يُحفظ بنصّه الحاليّ (الافتراضيّ إن لم يُعدَّل) فيصير ما يُرسل
+    // هو ما يُرى في القوالب، وتجده المرحلة المجدولة في الخادم.
     final types = {
       ..._changedTypes,
-      if (_enabled != _savedEnabled) ConnectionAlertTemplates.envelopeType,
+      ..._missingTypes,
+      if (_envelopeInactive) ConnectionAlertTemplates.envelopeType,
     };
     for (final type in types) {
       final isEnvelope = type == ConnectionAlertTemplates.envelopeType;
@@ -153,15 +174,17 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
         templateType: type,
         templateName: ConnectionAlertTemplates.labels[type] ?? type,
         messageContent: body,
-        isActive: isEnvelope ? _enabled : true,
+        // القالب نفسه فعّالٌ دائماً — التفعيل في `enabled` لا هنا.
+        isActive: true,
       );
       if (r.ok) {
         _savedText[type] = body;
         _exists[type] = true;
         if (text.isEmpty) _ctrls[type]!.text = body;
-        if (isEnvelope) _savedEnabled = _enabled;
+        if (isEnvelope) _envelopeInactive = false;
       } else {
-        failed.add(ConnectionAlertTemplates.labels[type] ?? type);
+        failed.add(
+            'تعذّر حفظ «${ConnectionAlertTemplates.labels[type] ?? type}»');
       }
     }
     // ⚠️ `saveTemplate` لا يمسّ كاش القوالب (عشر دقائق). بدون هذا يُرسل
@@ -172,7 +195,9 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
     setState(() => _saving = false);
     showSheetSnack(
       context,
-      failed.isEmpty ? 'تم حفظ إعدادات التنبيه' : 'تعذّر: ${failed.join('، ')}',
+      // كلّ عنصرٍ جملةٌ تامّة («تعذّر حفظ …») — كان يُسبق بـ«تعذّر:»
+      // فيصير «تعذّر: تعذّر حفظ الحدود».
+      failed.isEmpty ? 'تم حفظ إعدادات التنبيه' : failed.join(' • '),
       isError: failed.isNotEmpty,
     );
   }
@@ -248,7 +273,7 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
                     subtitle: Text(
                       _enabled
                           ? 'الزرّ يظهر على كارت المشترك عند وجود مشكلة'
-                          : 'متوقّف — لا يُرسل أيّ تنبيه',
+                          : 'متوقّف — فعّله ليظهر زرّ «تنبيه المشترك»',
                       style: AppType.muted(color: AppColors.textMid),
                     ),
                   ),

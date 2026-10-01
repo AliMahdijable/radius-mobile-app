@@ -34,6 +34,7 @@ class ConnectionAlertLimits {
 
 class ConnectionAlertThresholds {
   const ConnectionAlertThresholds({
+    this.enabled = false,
     this.signalDbm = -60,
     this.ccqPct = 50,
     this.fiberRxDbm = -27,
@@ -41,6 +42,10 @@ class ConnectionAlertThresholds {
     this.cooldownDays = 3,
     this.isDefault = true,
   });
+
+  /// الميزة **متوقّفة حتّى يفعّلها المدير** (قرار المستخدم ٢٠٢٦-١٠-٠١):
+  /// بدونه لا شريط في القائمة ولا زرّ في الكارت.
+  final bool enabled;
 
   /// أضعف من هذا = مشكلة (‎-65 أضعف من ‎-60).
   final int signalDbm;
@@ -75,7 +80,9 @@ class ConnectionAlertThresholds {
       return double.tryParse('$v') ?? fb;
     }
 
+    final en = j['enabled'];
     return ConnectionAlertThresholds(
+      enabled: en == true || en == 1 || en == '1',
       signalDbm: i('signal_dbm', defaults.signalDbm),
       ccqPct: i('ccq_pct', defaults.ccqPct),
       fiberRxDbm: d('fiber_rx_dbm', defaults.fiberRxDbm),
@@ -86,6 +93,7 @@ class ConnectionAlertThresholds {
   }
 
   Map<String, dynamic> toJson() => {
+        'enabled': enabled,
         'signal_dbm': signalDbm,
         'ccq_pct': ccqPct,
         'fiber_rx_dbm': fiberRxDbm,
@@ -94,6 +102,7 @@ class ConnectionAlertThresholds {
       };
 
   ConnectionAlertThresholds copyWith({
+    bool? enabled,
     int? signalDbm,
     int? ccqPct,
     double? fiberRxDbm,
@@ -101,6 +110,7 @@ class ConnectionAlertThresholds {
     int? cooldownDays,
   }) =>
       ConnectionAlertThresholds(
+        enabled: enabled ?? this.enabled,
         signalDbm: signalDbm ?? this.signalDbm,
         ccqPct: ccqPct ?? this.ccqPct,
         fiberRxDbm: fiberRxDbm ?? this.fiberRxDbm,

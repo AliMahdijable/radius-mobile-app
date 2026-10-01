@@ -57,6 +57,30 @@ void main() {
           [ConnectionAlertThresholds th = t]) =>
       ConnectionAlerts.detect(s, th).map((p) => p.kind).toList();
 
+  group('التفعيل — المدير يفعّلها بنفسه', () {
+    test('🚨 الافتراضيّ متوقّف', () {
+      expect(ConnectionAlertThresholds.defaults.enabled, isFalse);
+      expect(ConnectionAlertThresholds.fromJson(const {}).enabled, isFalse);
+    });
+
+    test('يُقرأ من الخادم بأشكاله (true · 1 · "1")', () {
+      for (final v in [true, 1, '1']) {
+        expect(ConnectionAlertThresholds.fromJson({'enabled': v}).enabled,
+            isTrue,
+            reason: '$v');
+      }
+      for (final v in [false, 0, '0', null]) {
+        expect(ConnectionAlertThresholds.fromJson({'enabled': v}).enabled,
+            isFalse,
+            reason: '$v');
+      }
+    });
+
+    test('يُرسَل مع الحدود عند الحفظ', () {
+      expect(t.copyWith(enabled: true).toJson()['enabled'], isTrue);
+    });
+  });
+
   group('نانو سليم = لا مشكلة', () {
     test('القيم الجيّدة', () {
       expect(kinds(snapU(ubnt())), isEmpty);

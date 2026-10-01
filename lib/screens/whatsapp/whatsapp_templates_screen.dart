@@ -160,7 +160,12 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final list = await WhatsAppApi.loadTemplates(refresh: true);
+    // حالة «تنبيه المشترك» (مفعّل/معطّل) في حدود المدير لا في القالب.
+    final results = await Future.wait([
+      WhatsAppApi.loadTemplates(refresh: true),
+      ConnectionAlertSettings.ensureLoaded(force: true),
+    ]);
+    final list = results[0] as List<WhatsTemplate>?;
     if (!mounted) return;
     setState(() {
       _templates = list ?? const [];
@@ -339,8 +344,25 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
                         icon: LucideIcons.bellRing,
                         placeholders: [],
                       ),
-                      existing:
-                          _templateOf(ConnectionAlertTemplates.envelopeType),
+                      // 🐛 بلا صفٍّ محفوظ كانت البطاقة تقول «فاضي» والميزة
+                      // تعمل بالنصّ الافتراضيّ — تناقضٌ سأل عنه المستخدم.
+                      // فنعرض ما سيُرسل فعلاً (المحفوظ أو الافتراضيّ)،
+                      // وحالتها من تفعيل المدير لا من `is_active` القالب.
+                      existing: WhatsTemplate(
+                        templateType: ConnectionAlertTemplates.envelopeType,
+                        isActive: ConnectionAlertSettings.current.value.enabled,
+                        messageContent: (_templateOf(ConnectionAlertTemplates
+                                        .envelopeType)
+                                    ?.messageContent
+                                    .trim()
+                                    .isNotEmpty ??
+                                false)
+                            ? _templateOf(
+                                    ConnectionAlertTemplates.envelopeType)!
+                                .messageContent
+                            : ConnectionAlertTemplates.defaultFor(
+                                ConnectionAlertTemplates.envelopeType),
+                      ),
                       onTap: _openConnectionAlerts,
                     ),
                     const SizedBox(height: 8),
