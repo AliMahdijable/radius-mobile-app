@@ -56,16 +56,26 @@ class VsolOltApi {
   /// وضياع جزءٍ واحد يُسقط الحزمة كلّها فتُعاد.
   static const _bulkSize = 50;
 
+  /// أجهزةٌ ثبت أنّها بلا عدّادات ٦٤ بت.
+  ///
+  /// ⚡ العمود الغائب لا يُرفَض بل **يُهمَل الطلب**، فندفع مهلة خمس
+  /// ثوانٍ في كلّ مسحة. والدرس يُشترى مرّةً واحدة.
+  static final Set<String> _narrowHosts = <String>{};
+
   /// بديلا العدّادين حين تغيب نسخة ٦٤ بت — انظر `_readIfTable`.
   static const String _oidIfIn32 = '1.3.6.1.2.1.2.2.1.10';
   static const String _oidIfOut32 = '1.3.6.1.2.1.2.2.1.16';
 
   /// لقطةٌ كاملة. يرمي [VsolException] حين يتعذّر الاتّصال.
+  /// [structureOnly] — أسماءٌ وحالةٌ فقط، بلا عدّادات ولا عناوين.
+  /// ستّ ثوانٍ بدل أربعٍ وثلاثين على أولتٍ فيه ٣٢٧ واجهة.
   static Future<VsolOltStats> fetchStats({
     required String host,
     int port = 161,
     required String community,
     Duration timeout = const Duration(seconds: 5),
+    bool structureOnly = false,
+    bool withCounters = true,
     void Function(VsolOltStats partial)? onPartialReady,
   }) async {
     final snmp = SnmpV2c(
@@ -109,7 +119,8 @@ class VsolOltApi {
     //
     // (بلاغ المستخدم ٢٠٢٦-١٠-٠١: «يصير تأخير بعرض البيانات… يعني
     // ١٥ ثانية تقريباً»)
-    final scan = await _readIfTable(snmp, onNames: (rows) {
+    final scan =
+        await _readIfTable(snmp, structureOnly: structureOnly, onNames: (rows) {
       final early = VsolParse.build(rows);
       onPartialReady?.call(VsolOltStats(
         sysDescr: descr,
@@ -121,6 +132,25 @@ class VsolOltApi {
       ));
     });
     final parsed = VsolParse.build(scan.rows);
+
+    // ⚠️ **مشتركون بلا منافذَ تحملهم = قراءةٌ ناقصة، لا جهازٌ غريب.**
+    //
+    // 🐛 ٢٠٢٦-١٠-٠١ — ظهرت متقطّعةً في لقطات المستخدم وفي المحاكاة:
+    // «PON 0 · ONU 301 · صعود 0». و`walk` يتوقّف صامتاً إن ضاعت حزمة،
+    // فيُرجع ذيل الجدول بلا رأسه — والمنافذ والصعود في أوّل أربعٍ
+    // وعشرين فهرساً.
+    //
+    // وكنتُ أقبل الناقص كأنّه كامل: فتُعرَض «٠/٠»، وتُحفَظ في المخزن،
+    // وتُبنى عليها الطبقة السريعة التي تسأل عن فهارس لا تعرفها —
+    // فيتجمّد كلّ شيء على أصفار.
+    //
+    // كلّ ONU على هذه الأجهزة يجلس على منفذ PON، فغيابُ المنافذ مع
+    // وجود المشتركين تناقضٌ لا يحتمل تأويلاً.
+    if (parsed.onus.isNotEmpty && parsed.ponPorts.isEmpty) {
+      throw VsolException(
+          'قراءةٌ ناقصة: ${parsed.onus.length} مشتركاً بلا منافذ PON — '
+          'لم يُجب الجهاز بالجدول كاملاً');
+    }
 
     if (kDebugMode) {
       debugPrint('══════ VSOL OLT ══════');
@@ -139,6 +169,8 @@ class VsolOltApi {
       ponPorts: parsed.ponPorts,
       onus: parsed.onus,
       narrowCounters: scan.narrowCounters,
+      rxAt: scan.rxAt,
+      txAt: scan.txAt,
     );
   }
 
@@ -179,10 +211,12 @@ class VsolOltApi {
     Future<Map<int, int>> col(String wide, String narrow) async {
       // نبدأ من حيث انتهت المسحة الكاملة: إن كانت ضيّقةً فلا نُعيد
       // شراء مهلة الخمس ثوانٍ على عمودٍ نعرف أنّه غائب.
-      var vbs =
-          previous.narrowCounters ? const <Varbind>[] : await safeWalk(wide);
+      final known = previous.narrowCounters || _narrowHosts.contains(host);
+      var vbs = known ? const <Varbind>[] : await safeWalk(wide);
       var base = wide;
-      if (vbs.isEmpty) {
+      // والقاعدة نفسها هنا: أصفارٌ كلّها = عمودٌ غائب.
+      if (vbs.isEmpty || !vbs.any((v) => v.asInt > 0)) {
+        if (!known) _narrowHosts.add(host);
         vbs = await safeWalk(narrow);
         base = narrow;
       }
@@ -195,7 +229,9 @@ class VsolOltApi {
     }
 
     final rx = await col(_oidIfHCIn, _oidIfIn32);
+    final rxAt = DateTime.now();
     final tx = await col(_oidIfHCOut, _oidIfOut32);
+    final txAt = DateTime.now();
     if (rx.isEmpty && tx.isEmpty) return previous;
 
     return VsolOltStats(
@@ -203,6 +239,8 @@ class VsolOltApi {
       sysName: previous.sysName,
       uptime: previous.uptime,
       narrowCounters: previous.narrowCounters,
+      rxAt: rxAt,
+      txAt: txAt,
       uplinks: [
         for (final u in previous.uplinks)
           u.withBytes(rx[u.index] ?? u.rxBytes, tx[u.index] ?? u.txBytes)
@@ -250,8 +288,6 @@ class VsolOltApi {
       community: community,
       timeout: timeout,
     );
-    final wide = !previous.narrowCounters;
-
     Future<Map<int, int>> col(String base) async {
       final out = <int, int>{};
       try {
@@ -264,15 +300,43 @@ class VsolOltApi {
       return out;
     }
 
-    final rx = await col(wide ? _oidIfHCIn : _oidIfIn32);
-    final tx = await col(wide ? _oidIfHCOut : _oidIfOut32);
+    /// ⚠️ **المعرفة مشتركة، والسقوط هنا لا في المستدعي.**
+    ///
+    /// 🐛 ٢٠٢٦-١٠-٠١: مسحة البنية لا تقرأ عدّاداتٍ، فلا تتعلّم أنّ
+    /// الجهاز بلا ٦٤ بت. وكانت هذه الدالّة تثق بعَلَم اللقطة وحده،
+    /// فتسأل عموداً غائباً ويُهمَل طلبُها، فتنتظر المهلة كاملةً ثمّ
+    /// ترجع فارغة — عشر ثوانٍ وصفرُ ترفك.
+    Future<Map<int, int>> counter(String wideOid, String narrowOid) async {
+      if (previous.narrowCounters || _narrowHosts.contains(host)) {
+        return col(narrowOid);
+      }
+      final w = await col(wideOid);
+      // ⚠️ **عمودٌ كلّه أصفار ليس قراءةً ناجحة.**
+      //
+      // 🐛 ٢٠٢٦-١٠-٠١: الجهاز لا يرفض عدّاد ٦٤ بت في طلب GET بل يُرجع
+      // أربعاً وعشرين قيمةً صفريّة. فكنتُ أحسبها نجاحاً وأبني عليها،
+      // فظهرت اللوحة كلّها «0 bps» — وهي كذبةٌ أهدأ من القفزة لكنّها
+      // كذبة. (لقطة المستخدم: «؟؟؟؟؟»)
+      //
+      // ثماني واجهات نشطةٍ لا تكون أصفاراً كلّها، فهذا دليل الغياب.
+      if (w.values.any((v) => v > 0)) return w;
+      _narrowHosts.add(host);
+      return col(narrowOid);
+    }
+
+    final rx = await counter(_oidIfHCIn, _oidIfIn32);
+    final rxAt = DateTime.now();
+    final tx = await counter(_oidIfHCOut, _oidIfOut32);
+    final txAt = DateTime.now();
     if (rx.isEmpty && tx.isEmpty) return previous;
 
     return VsolOltStats(
       sysDescr: previous.sysDescr,
       sysName: previous.sysName,
       uptime: previous.uptime,
-      narrowCounters: previous.narrowCounters,
+      narrowCounters: previous.narrowCounters || _narrowHosts.contains(host),
+      rxAt: rxAt,
+      txAt: txAt,
       onus: previous.onus,
       uplinks: [
         for (final u in previous.uplinks)
@@ -290,9 +354,17 @@ class VsolOltApi {
   /// ⚠️ المسح يتوقّف عند أوّل `genErr` فيُسقط ما بعده — وهي المصيدة
   /// نفسها التي أفقدتنا ترفك روجي كلّه. فحين يرجع عمودٌ فارغاً نسأل
   /// كلّ فهرسٍ وحده ونتجاوز من يفشل.
-  static Future<({List<VsolIfRow> rows, bool narrowCounters})> _readIfTable(
+  static Future<
+      ({
+        List<VsolIfRow> rows,
+        bool narrowCounters,
+        DateTime? rxAt,
+        DateTime? txAt
+      })> _readIfTable(
     SnmpV2c snmp, {
     void Function(List<VsolIfRow> rows)? onNames,
+    bool structureOnly = false,
+    bool withCounters = true,
   }) async {
     Future<List<Varbind>> safeWalk(String base) async {
       try {
@@ -302,28 +374,43 @@ class VsolOltApi {
       }
     }
 
+    // ── الأسماء: `ifName` أوّلاً ─────────────────────────────────
+    //
+    // 🐛 ٢٠٢٦-١٠-٠١ — فيرموير V1600D الثاني يُرجع `ifDescr` **فارغةً
+    // لكلّ الواجهات الـ٣٢٧**، ويضع الأسماء في `ifName` من `ifXTable`.
+    //
+    // ⚡ وكان الترتيب معكوساً: نمسح `ifDescr` كاملاً (‏٣٢٧ سطراً من
+    // الفراغ · ~٥ ثوانٍ) ثمّ نمسح `ifName`. فالعمود الفارغ يُدفَع ثمنه
+    // في **كلّ** مسحة قبل أن تبدأ.
+    //
+    // `ifName` هو القياسيّ في `ifXTable` والمأهول على الجهازين، فهو
+    // الأصل. و`ifDescr` احتياطٌ لا يُقرأ إلّا إن خاب الأوّل.
+    //
+    // (بلاغ المستخدم ٢٠٢٦-١٠-٠١: «شوف بنفسك التأخير شكد فضيع»)
     final byIdx = <int, String>{};
-    for (final vb in await safeWalk(_oidIfDescr)) {
-      final i = _lastIndex(vb.oid, _oidIfDescr);
+    for (final vb in await safeWalk(_oidIfName)) {
+      final i = _lastIndex(vb.oid, _oidIfName);
       final n = vb.asString.trim();
       if (i != null && n.isNotEmpty) byIdx[i] = n;
     }
-
-    // 🐛 ٢٠٢٦-١٠-٠١ — فيرموير V1600D الثاني يُرجع `ifDescr` **فارغةً
-    // لكلّ الواجهات الـ٣٢٧**، ويضع الأسماء في `ifName` من `ifXTable`.
-    // فكانت اللوحة تعرض «٠ مشتركين» على جهازٍ عامر، لأنّ كلّ اسمٍ
-    // فارغٍ يسقط من التصنيف. نُكمل الناقص من `ifName` ولا نستبدل
-    // الموجود: `ifDescr` أدقّ حين تكون مأهولة.
-    final missing = byIdx.isEmpty;
-    for (final vb in await safeWalk(_oidIfName)) {
-      final i = _lastIndex(vb.oid, _oidIfName);
-      if (i == null) continue;
-      final n = vb.asString.trim();
-      if (n.isEmpty) continue;
-      if (missing || !byIdx.containsKey(i)) byIdx[i] = n;
-    }
     if (byIdx.isEmpty) {
-      return (rows: const <VsolIfRow>[], narrowCounters: false);
+      for (final vb in await safeWalk(_oidIfDescr)) {
+        final i = _lastIndex(vb.oid, _oidIfDescr);
+        final n = vb.asString.trim();
+        if (i != null && n.isNotEmpty) byIdx[i] = n;
+      }
+    }
+    // ⚠️ **بنيةٌ فارغة ليست نتيجة — بل فشل.**
+    //
+    // 🐛 ٢٠٢٦-١٠-٠١: حين يسقط مسح الأسماء بمهلةٍ (والجهاز يسقط كثيراً
+    // تحت الضغط) كنتُ أُرجع قائمةً فارغةً بصمت. فتُمحى اللوحة إلى
+    // «٠/٠»، وتُحفَظ الفراغة في المخزن، وتُبنى عليها الطبقة السريعة.
+    // (لقطة المستخدم: ثمانية منافذ كلّها `0 bps`)
+    //
+    // والرمي هنا يُبقي آخر قراءةٍ صحيحةٍ معروضةً — وهو الصواب: بيانٌ
+    // قديمٌ معلومُ القِدَم خيرٌ من فراغٍ يُقرأ حقيقة.
+    if (byIdx.isEmpty) {
+      throw VsolException('تعذّرت قراءة جدول الواجهات — لم يُجب الجهاز');
     }
 
     Map<int, Varbind> index(List<Varbind> vbs, String base) {
@@ -351,7 +438,7 @@ class VsolOltApi {
     /// الجهاز لا يرفض العمود الغائب بل **يُهمِل الطلب**، فنُنتظره خمس
     /// ثوانٍ حتّى تنقضي المهلة. والعدّادان في الجدول نفسه (`ifXTable`)،
     /// فإذا غاب أحدهما غاب الآخر — فلا نشتري الدرس مرّتين.
-    var wideCountersGone = false;
+    var wideCountersGone = _narrowHosts.contains(snmp.host);
     Future<Map<int, Varbind>> column(String base,
         {String? fallbackOid, bool wide = false}) async {
       var vbs =
@@ -376,10 +463,15 @@ class VsolOltApi {
     }
 
     final oper = await column(_oidIfOper);
-    final phys = await column(_oidIfPhys);
 
-    // لقطةٌ مبكّرة: أسماءٌ وحالةٌ وعناوين، بلا عدّادات. تكفي لعدّ
-    // المشتركين وبناء قائمة منافذ PON.
+    // ⚡ **لقطةٌ مبكّرة: أسماءٌ وحالةٌ فقط.**
+    //
+    // عدد المشتركين المتّصلين وقائمة منافذ PON لا يحتاجان عنواناً ولا
+    // سرعةً ولا عدّاداً. فننشرهما بعد عمودين (~٤٫٥ث) بدل انتظار
+    // المسحة كلّها (~٢١ث).
+    //
+    // (بلاغ المستخدم ٢٠٢٦-١٠-٠١: «أوّل ما يعرض البطاقات يتأخّر يلا
+    // يظهر المعلومات»)
     if (onNames != null) {
       onNames([
         for (final i in byIdx.keys.toList()..sort())
@@ -387,7 +479,7 @@ class VsolOltApi {
             index: i,
             name: byIdx[i]!,
             up: oper[i]?.asInt == 1,
-            mac: _macOf(phys[i]),
+            mac: null,
             speedMbps: 0,
             rxBytes: 0,
             txBytes: 0,
@@ -395,12 +487,75 @@ class VsolOltApi {
       ]);
     }
 
-    final speed = await column(_oidIfHighSpeed);
+    // ⚡ **مسحةٌ خفيفة: بنيةٌ فقط.**
+    //
+    // قياسٌ على `Popq3-olt` ‏(٣٢٧ واجهة): الأسماء والحالة ٦ ثوانٍ،
+    // والعدّادات ١٧ أخرى، والعناوين والسرعات ١١. فالمسحة الكاملة ٣٤
+    // ثانيةً قبل أن يظهر رقمٌ واحد.
+    //
+    // والعدّادات تأتي من الطبقات السريعة (‏٢٤ واجهةً في ثانية)، فلا
+    // داعيَ لحملها في مسحة البنية. والعناوين والسرعات زينةٌ تتبع.
+    //
+    // (بلاغ المستخدم ٢٠٢٦-١٠-٠١: «شوف بنفسك التأخير شكد فضيع»)
+    if (structureOnly) {
+      return (
+        rows: [
+          for (final i in byIdx.keys.toList()..sort())
+            VsolIfRow(
+              index: i,
+              name: byIdx[i]!,
+              up: oper[i]?.asInt == 1,
+              mac: null,
+              speedMbps: 0,
+              rxBytes: 0,
+              txBytes: 0,
+            ),
+        ],
+        narrowCounters: _narrowHosts.contains(snmp.host),
+        rxAt: null,
+        txAt: null,
+      );
+    }
+
+    // ⚡ **العدّادات قبل العناوين والسرعات.**
+    //
+    // الترفك يحتاج عيّنتين، وكلّ تأخيرٍ في العيّنة الأولى يؤخّر أوّل
+    // رقمٍ مرّتين. والعناوين والسرعات زينةٌ لا يتوقّف عليها شيء.
+    //
     // ٦٤ بت أوّلاً، و٣٢ بت بديلاً: فيرموير V1600D الثاني لا ينفّذ
     // `ifXTable` للعدّادات ويضعها في الجدول الأساسيّ وحده.
-    final inOct = await column(_oidIfHCIn, fallbackOid: _oidIfIn32, wide: true);
-    final outOct =
-        await column(_oidIfHCOut, fallbackOid: _oidIfOut32, wide: true);
+    // ⚡ مسحة التفاصيل (عناوين وسرعات) لا تحتاج عدّادات: الطبقتان
+    // الخفيفتان تجلبانهما أرخص. وتخطّيهما يوفّر ثلاث عشرة ثانيةً من
+    // تجميد اللوحة.
+    final inOct = withCounters
+        ? await column(_oidIfHCIn, fallbackOid: _oidIfIn32, wide: true)
+        : const <int, Varbind>{};
+    final rxAt = withCounters ? DateTime.now() : null;
+    final outOct = withCounters
+        ? await column(_oidIfHCOut, fallbackOid: _oidIfOut32, wide: true)
+        : const <int, Varbind>{};
+    final txAt = withCounters ? DateTime.now() : null;
+
+    if (wideCountersGone) _narrowHosts.add(snmp.host);
+
+    // لقطةٌ ثانية: بنيةٌ **وعدّادات**.
+    if (onNames != null && withCounters) {
+      onNames([
+        for (final i in byIdx.keys.toList()..sort())
+          VsolIfRow(
+            index: i,
+            name: byIdx[i]!,
+            up: oper[i]?.asInt == 1,
+            mac: null,
+            speedMbps: 0,
+            rxBytes: inOct[i]?.asInt ?? 0,
+            txBytes: outOct[i]?.asInt ?? 0,
+          ),
+      ]);
+    }
+
+    final phys = await column(_oidIfPhys);
+    final speed = await column(_oidIfHighSpeed);
 
     final out = <VsolIfRow>[];
     for (final i in byIdx.keys.toList()..sort()) {
@@ -414,7 +569,12 @@ class VsolOltApi {
         txBytes: outOct[i]?.asInt ?? 0,
       ));
     }
-    return (rows: out, narrowCounters: wideCountersGone);
+    return (
+      rows: out,
+      narrowCounters: wideCountersGone,
+      rxAt: rxAt,
+      txAt: txAt,
+    );
   }
 
   static int? _lastIndex(String oid, String base) {
@@ -710,6 +870,8 @@ class VsolOltStats {
     this.ponPorts = const [],
     this.onus = const [],
     this.narrowCounters = false,
+    this.rxAt,
+    this.txAt,
   });
 
   final String? sysDescr, sysName;
@@ -725,6 +887,25 @@ class VsolOltStats {
   ///
   /// (بلاغ المستخدم: «قيم الترفك مبالغ بيها ٣٧ كيكا»)
   final bool narrowCounters;
+
+  /// ⚠️ **لحظة قراءة العدّادات — لا لحظة انتهاء المسحة.**
+  ///
+  /// 🐛 بلاغ المستخدم ٢٠٢٦-١٠-٠١: «أكو شي مو منطقي… ٧٥٩ ميكا» ثمّ
+  /// قفزاتٌ إلى ٣٠٦١ ميجابت في المحاكاة.
+  ///
+  /// المسحة الكاملة ثلاثٌ وثلاثون ثانية وتقرأ عدّاداتها في منتصفها.
+  /// فختمُها بلحظة الانتهاء يُؤخّر العيّنة ثمانيَ عشرة ثانية، ثمّ
+  /// يُقسَم الفرق التالي على ثانيتين بدل عشرين — تضخيمٌ أحد عشر ضعفاً.
+  ///
+  /// فالعدّاد يحمل ختمه معه، والمعدّل يُحسب من الختمين لا من ساعة
+  /// المستدعي.
+  ///
+  /// ⚠️ **وختمان لا واحد.** الوارد والصادر عمودان يُمسحان بالتتابع،
+  /// وبينهما خمس ثوانٍ على جدولٍ فيه ٣٢٧ واجهة. فختمٌ مشترَكٌ يُخطئ
+  /// أحدهما بخمسٍ — وهي عشرة أضعافٍ حين يكون الفاصل نصف ثانية.
+  final DateTime? rxAt, txAt;
+
+  DateTime? get countersAt => rxAt;
   final List<VsolUplink> uplinks;
   final List<VsolPonPort> ponPorts;
   final List<VsolOnu> onus;
@@ -742,6 +923,33 @@ class VsolOltStats {
   int get ponTxBytes => ponPorts.fold(0, (s, p) => s + p.txBytes);
 
   bool get isEmpty => onus.isEmpty && ponPorts.isEmpty && uplinks.isEmpty;
+
+  /// كم واجهةً تحملها هذه اللقطة — مقياسُ «الأغنى».
+  int get interfaceCount => ponPorts.length + onus.length + uplinks.length;
+
+  /// هل فيها عدّاداتٌ أصلاً؟ لقطةُ البنية تأتي بأصفار.
+  bool get hasCounters =>
+      ponPorts.any((p) => p.rxBytes > 0 || p.txBytes > 0) ||
+      uplinks.any((u) => u.rxBytes > 0 || u.txBytes > 0);
+
+  /// هل [next] أغنى من [cur]؟
+  ///
+  /// 🐛 بلاغ المستخدم ٢٠٢٦-١٠-٠١: «هيج صافن». المسحة تبعث لقطتين:
+  /// الهويّة (اسمٌ ورفع، صفر واجهات) بعد ثانية، ثمّ الأسماء والحالة
+  /// (‏٨ منافذ و٣٠١ مشترك) بعد عشر. وكانت اللوحة تقبل الأولى وترفض
+  /// الثانية بشرط `_stats == null`، فتبقى على «٠/٠» إحدى وعشرين
+  /// ثانيةً بلا سبب.
+  ///
+  /// والقاعدة: **لا نُفقر المعروض**. وهي تحمي الاتّجاه الآخر أيضاً —
+  /// لقطة هويّةٍ في مسحةٍ دوريّةٍ لاحقة لا تمحو لوحةً مكتملة.
+  static bool richer(VsolOltStats? cur, VsolOltStats next) {
+    if (cur == null) return true;
+    if (next.interfaceCount != cur.interfaceCount) {
+      return next.interfaceCount > cur.interfaceCount;
+    }
+    // عند تساوي الواجهات: من يحمل عدّاداتٍ أغنى ممّن لا يحملها.
+    return next.hasCounters && !cur.hasCounters;
+  }
 }
 
 /// معدّل المرور بين لقطتين، بالبت في الثانية.
@@ -774,6 +982,19 @@ class VsolTraffic {
   }) {
     final secs = elapsed.inMilliseconds / 1000.0;
     if (secs <= 0) return null;
+
+    // ⚠️ **صفرٌ في العيّنة الأولى معناه «لم نقرأ» لا «لم يمرّ شيء».**
+    //
+    // 🐛 بلاغ المستخدم ٢٠٢٦-١٠-٠١: «أكو شي مو منطقي بسحوبات
+    // المشتركين، لاحظت بلحظة ٧٥٩ ميكا!».
+    //
+    // مسحة البنية تُرجع العدّادات أصفاراً لأنّها لا تقرأها. فالطرح
+    // منها يُنتج **العدّاد كلّه منذ الإقلاع** مقسوماً على ثوانٍ
+    // قليلة: ‏٤ جيجابايت ÷ ٤٢ث ≈ ٧٦٢ ميجابت — وهو ما رآه.
+    //
+    // وعدّادٌ صفرٌ بقي صفراً فهو خاملٌ حقّاً، فنُبقي له صفره.
+    if (before == 0 && now > 0) return null;
+
     var delta = now - before;
     if (delta < 0) {
       if (!narrow) return null; // ٦٤ بت لا يلتفّ عمليّاً — فهذه إعادة تصفير
@@ -798,8 +1019,14 @@ class VsolTraffic {
   static Map<String, VsolTraffic> between(
     VsolOltStats before,
     VsolOltStats now,
-    Duration elapsed,
+    Duration fallbackElapsed,
   ) {
+    // ⏱️ الختمان أصدق من ساعة المستدعي: المسحة قد تقرأ عدّاداتها في
+    // منتصفها ثمّ تستمرّ عشرين ثانيةً أخرى.
+    Duration span(DateTime? a, DateTime? b) =>
+        (a != null && b != null) ? b.difference(a) : fallbackElapsed;
+    final rxSpan = span(before.rxAt, now.rxAt);
+    final txSpan = span(before.txAt, now.txAt);
     final prev = <String, (int, int)>{};
     for (final p in before.ponPorts) {
       prev[p.label] = (p.rxBytes, p.txBytes);
@@ -819,13 +1046,13 @@ class VsolTraffic {
         _rate(
             before: b.$1,
             now: rx,
-            elapsed: elapsed,
+            elapsed: rxSpan,
             speedMbps: speedMbps,
             narrow: now.narrowCounters),
         _rate(
             before: b.$2,
             now: tx,
-            elapsed: elapsed,
+            elapsed: txSpan,
             speedMbps: speedMbps,
             narrow: now.narrowCounters),
       );

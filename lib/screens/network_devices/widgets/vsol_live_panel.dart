@@ -65,14 +65,44 @@ class _VsolLivePanelState extends State<VsolLivePanel>
   /// كلفة آخر دورةٍ خفيفة — أساس الإيقاع.
   Duration _lightCost = _minInterval;
 
+  /// هل قرأنا البنية بأنفسنا في هذه الجلسة؟
+  ///
+  /// 🐛 بلاغ المستخدم ٢٠٢٦-١٠-٠١: «منافذ ومرور ما ظهر شي… أكو شي جاي
+  /// يضرب على شي». كان الشرط `base == null` — والبذرة من المخزن تجعله
+  /// غير فارغ، فلا تُطلَب مسحةٌ كاملة أصلاً. وبذرةٌ ناقصة (محفوظةٌ من
+  /// لقطةٍ جزئيّة في تشغيلٍ سابق) تنتقل عبر الطبقة السريعة كما هي، ثمّ
+  /// تُحفَظ في المخزن ثانيةً — حلقةٌ تُطعم نفسها ولا تُشفى إلّا بعد
+  /// أربعٍ وعشرين دورة.
+  ///
+  /// **البذرة للعرض لا للبنية.** فأوّل جلبةٍ كاملةٌ دائماً.
+  bool _haveStructure = false;
+
+  /// وهل جلبنا الزينة — عناوين MAC والسرعات؟
+  ///
+  /// 🐛 بلاغ المستخدم ٢٠٢٦-١٠-٠١: «المشتركين مجاي يظهر الماك مالتهم».
+  /// مسحة البنية تتخطّى عمود العناوين كي تصل في عشر ثوانٍ بدل أربعٍ
+  /// وثلاثين، وكانت المسحة الكاملة تتأخّر أربعاً وعشرين دورة — فيبقى
+  /// المشترك بلا عنوانٍ دقيقةً وأكثر.
+  ///
+  /// فترتيب الأولويّات: بنيةٌ ثمّ ترفك ثمّ عناوين. والعناوين تلحق بعد
+  /// نبضتين لا بعد دورةٍ كاملة.
+  bool _haveDetails = false;
+
+  /// ترتيب الأولويّات بعد البنية: ترفك المنافذ، ثمّ ترفك المشتركين،
+  /// ثمّ العناوين. فالتفاصيل تنتظر أربع نبضاتٍ لا نبضتين.
+  static const _detailsAfter = 4;
+
   int _sinceFull = 0;
   int _sinceAll = 0;
 
   /// كلّ كم نبضةٍ نُجدّد عدّادات المشتركين، وكلّ كم نُعيد قراءة البنية.
   ///
   /// بنبضةٍ من ثلاث ثوانٍ: المشتركون كلّ ~٩ث، والبنية كلّ ~٧٢ث.
-  static const _allEvery = 3;
-  static const _fullEvery = 24;
+  static const _allEvery = 2;
+
+  /// ⚠️ مسحة التفاصيل تُجمّد اللوحة ~١٩ ثانية، والعناوين والسرعات لا
+  /// تتغيّر إلّا نادراً. فتُعاد كلّ خمس دقائق لا كلّ دقيقة.
+  static const _fullEvery = 100;
 
   /// المسحة الكاملة تستغرق ~٢٫٢ ثانية على أولت فيه ٣٨ واجهة. فنبضةٌ
   /// أسرع من ذلك تُنتج طابوراً لا تحديثاً.
@@ -137,8 +167,12 @@ class _VsolLivePanelState extends State<VsolLivePanel>
   void _arm() {
     _timer?.cancel();
     if (!_monitoring || !_foreground) return;
+    // ⚡ ما دمنا بلا معدّلٍ بعد، فالنبضة التالية **فوريّة**: المعدّل
+    // يحتاج قراءةً ثانية، وكلّ انتظارٍ هنا يُضاف إلى زمن ظهور أوّل
+    // رقم. والقراءة السريعة ثانيةٌ واحدة.
+    final gap = _rates.isEmpty && _stats != null ? Duration.zero : _interval;
     // مؤقّتٌ يُعيد تسليح نفسه — لأنّ الفاصل يتغيّر بعد كلّ مسحة.
-    _timer = Timer(_interval, () {
+    _timer = Timer(gap, () {
       _fetch();
       _arm();
     });
@@ -178,18 +212,46 @@ class _VsolLivePanelState extends State<VsolLivePanel>
       //
       // (بلاغ المستخدم ٢٠٢٦-١٠-٠١: «الترفك ما يتحدّث، يعني مو لحظي»)
       final base = _stats;
-      final wantFull = base == null || _sinceFull >= _fullEvery;
+      final wantFull = base == null ||
+          !_haveStructure ||
+          (!_haveDetails && _sinceFull >= _detailsAfter) ||
+          _sinceFull >= _fullEvery;
+      final structureOnly = !_haveStructure;
       final wantAll = wantFull || _sinceAll >= _allEvery;
+      // ⚡ أوّل مسحةٍ **بنيةٌ فقط** (‏٦ث): أسماءٌ وحالة، بلا عدّادات
+      // ولا عناوين. العدّادات تأتي من الطبقة السريعة بعدها بثانية،
+      // والعناوين والسرعات في المسحة الكاملة الدوريّة.
       final s = wantFull
           ? await VsolOltApi.fetchStats(
               host: d.ip,
               port: d.apiPort ?? 161,
               community: community,
+              structureOnly: structureOnly,
+              // العدّادات من الطبقتين الخفيفتين — أرخص وأحدث.
+              withCounters: structureOnly,
               onPartialReady: (partial) {
                 if (!mounted || gen != _gen) return;
-                // ⚡ أسماءٌ وحالةٌ تصل قبل العدّادات بخمس عشرة ثانية —
-                // فنعرض الأعداد فوراً بدل «٠/٠».
-                if (_stats == null) setState(() => _stats = partial);
+                // ⚡ المسحة تبعث لقطتين: الهويّة (اسمٌ ورفع، صفر واجهات)
+                // بعد ثانية، ثمّ الأسماء والحالة (‏٨ منافذ و٣٠١ مشترك)
+                // بعد عشر. والعدّادات تأخذ إحدى عشرة أخرى.
+                //
+                // 🐛 بلاغ المستخدم ٢٠٢٦-١٠-٠١: «هيج صافن». كان الشرط
+                // `_stats == null` فتملؤه لقطة الهويّة الفارغة، ثمّ
+                // تُرفَض الغنيّة بعدها — فتبقى اللوحة «٠/٠» إحدى
+                // وعشرين ثانيةً كاملة بلا سبب.
+                //
+                // والقاعدة الصحيحة: **لا نُفقر المعروض**. نقبل الأغنى
+                // أيّاً كان ترتيبها — وهذا أيضاً يمنع لقطة الهويّة في
+                // مسحةٍ دوريّةٍ لاحقة من محو لوحةٍ مكتملة.
+                if (!VsolOltStats.richer(_stats, partial)) return;
+                setState(() => _stats = partial);
+                // ⚠️ ولا نتّخذها عيّنةً أولى للمعدّل.
+                //
+                // 🐛 جرّبتُ ذلك فأعطى `0.0 Mbps`: اللقطة والنتيجة
+                // الكاملة تحملان **القراءة نفسها** (العمودان يُمسحان
+                // مرّةً ثمّ يُبَثّان مرّتين)، فالفرق بينهما صفرٌ
+                // بالضرورة. العيّنة الثانية لا بدّ أن تكون قراءةً
+                // جديدة.
               },
             )
           : wantAll
@@ -210,10 +272,12 @@ class _VsolLivePanelState extends State<VsolLivePanel>
       final at = DateTime.now();
       // كلّ طبقةٍ تُقارَن بلقطتها، والنتيجة تُدمَج فوق السابقة: فصفوف
       // المشتركين تُبقي آخر معدّلٍ معروفٍ لها بدل أن تُصفَّر كلّ نبضة.
+      // ⚠️ لقطةٌ بلا عدّادات ليست عيّنة. مسحة البنية تُرجع أصفاراً،
+      // والطرح منها يُنتج العدّاد كلّه منذ الإقلاع — قفزةٌ كاذبة.
       final ref = wantAll ? _prevAll : _prevHot;
       final refAt = wantAll ? _prevAllAt : _prevHotAt;
       final rates = Map<String, VsolTraffic>.from(_rates);
-      if (ref != null && refAt != null) {
+      if (ref != null && refAt != null && ref.hasCounters) {
         final fresh = VsolTraffic.between(ref, s, at.difference(refAt));
         if (wantAll) {
           rates.addAll(fresh);
@@ -240,15 +304,28 @@ class _VsolLivePanelState extends State<VsolLivePanel>
       setState(() {
         _loading = false;
         _error = null;
-        _stats = s;
-        DeviceStatsCache.instance.putRaw(widget.device.id, s);
-        _prevHot = s;
-        _prevHotAt = at;
-        if (wantAll) {
-          _prevAll = s;
-          _prevAllAt = at;
+        // لقطةٌ فارغة لا تُعرَض ولا تُحفَظ: تُبقى القراءة السابقة.
+        if (!s.isEmpty || _stats == null) _stats = s;
+        // ⚠️ لا نحفظ لقطةً ناقصة: بذرةٌ بلا واجهات تُعرَض «٠/٠» في
+        // الفتحة التالية، وهي أسوأ من غياب البذرة.
+        if (!s.isEmpty) {
+          DeviceStatsCache.instance.putRaw(widget.device.id, s);
+        }
+        // ولا نحفظها عيّنةً للمرّة القادمة كذلك.
+        if (s.hasCounters) {
+          _prevHot = s;
+          _prevHotAt = at;
+          if (wantAll) {
+            _prevAll = s;
+            _prevAllAt = at;
+          }
         }
         _rates = rates;
+        // ولا نُعلن «عندنا بنية» على نتيجةٍ فارغة.
+        if (wantFull && !s.isEmpty) {
+          _haveStructure = true;
+          if (!structureOnly) _haveDetails = true;
+        }
         _sinceFull = wantFull ? 0 : _sinceFull + 1;
         _sinceAll = wantAll ? 0 : _sinceAll + 1;
         _lastFetch = at;

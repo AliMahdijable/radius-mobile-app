@@ -373,4 +373,115 @@ void main() {
       expect(merged['EPON0/1:2']!.rxBps, 40000000);
     });
   });
+
+  group('اللقطة الجزئيّة لا تُفقر المعروض', () {
+    // 🐛 بلاغ المستخدم ٢٠٢٦-١٠-٠١: «هيج صافن» (ولقطةٌ تُظهر «منافذ
+    // PON ٠/٠» مع «المشتركون ١٩٦/٣٠١»).
+    //
+    // قياسٌ من داخل اللوحة أظهر السبب حرفيّاً:
+    //   🔍 جزئيّة: PON 0 ONU 0 · _stats=فارغ    ← تُعرَض
+    //   🔍 جزئيّة: PON 8 ONU 301 · _stats=موجود ← تُهمَل
+    //
+    // المسحة تبعث الهويّة أوّلاً (صفر واجهات) ثمّ الأسماء والحالة.
+    // وشرطُ `_stats == null` يقبل الأولى ويرفض الثانية.
+    const identity = VsolOltStats(sysName: 'Popq3-olt');
+    final named = VsolOltStats(
+      sysName: 'Popq3-olt',
+      ponPorts: [
+        const VsolPonPort(
+            index: 9, slot: 0, port: 1, up: true, rxBytes: 0, txBytes: 0)
+      ],
+      onus: [
+        const VsolOnu(ifIndex: 26, slot: 0, ponPort: 1, onuId: 2, online: true)
+      ],
+    );
+
+    test('🚨 الغنيّة تحلّ محلّ الفارغة', () {
+      expect(VsolOltStats.richer(identity, named), isTrue);
+    });
+
+    test('ولا تحلّ الفارغة محلّ الغنيّة — مسحةٌ دوريّةٌ لا تمحو لوحة', () {
+      expect(VsolOltStats.richer(named, identity), isFalse);
+    });
+
+    test('وأوّل لقطةٍ تُقبَل مهما كانت', () {
+      expect(VsolOltStats.richer(null, identity), isTrue);
+    });
+
+    test('والمساوية لا تُعيد الرسم بلا داعٍ', () {
+      expect(VsolOltStats.richer(named, named), isFalse);
+    });
+  });
+
+  group('صفرٌ في العيّنة الأولى ليس «لم يمرّ شيء»', () {
+    // 🐛 بلاغ المستخدم ٢٠٢٦-١٠-٠١: «أكو شي مو منطقي بسحوبات
+    // المشتركين، لاحظت بلحظة ٧٥٩ ميكا!» ثمّ «ورة شوي يرجع طبيعي».
+    //
+    // مسحة البنية السريعة (‏١٠ث بدل ٣٤) لا تقرأ أعمدة العدّادات،
+    // فتُرجعها أصفاراً. وكانت تُتّخذ عيّنةً أولى، فالقراءة التالية
+    // تطرح من صفر فتُنتج **العدّاد كلّه منذ الإقلاع** مقسوماً على
+    // ثوانٍ قليلة. والقفزةُ تزول بعدها لأنّ العيّنتين التاليتين
+    // حقيقيّتان — وهو ما وصفه المستخدم حرفيّاً.
+    VsolOltStats one(int rx) => VsolOltStats(
+          narrowCounters: true,
+          ponPorts: [
+            VsolPonPort(
+                index: 9, slot: 0, port: 1, up: true, rxBytes: rx, txBytes: 0)
+          ],
+        );
+
+    test('🚨 الطرح من صفرٍ لا يُنتج رقماً', () {
+      // ٤ جيجابايت على ٤٢ ثانية = ٧٦٢ ميجابت — رقم المستخدم.
+      final r = VsolTraffic.between(
+          one(0), one(4000000000), const Duration(seconds: 42));
+      expect(r['EPON0/1']!.rxBps, isNull);
+    });
+
+    test('وخاملٌ بقي صفراً يبقى صفراً لا «—»', () {
+      final r =
+          VsolTraffic.between(one(0), one(0), const Duration(seconds: 10));
+      expect(r['EPON0/1']!.rxBps, 0);
+    });
+
+    test('ولقطةٌ بلا عدّادات تُعرَف بنفسها', () {
+      expect(one(0).hasCounters, isFalse);
+      expect(one(5000).hasCounters, isTrue);
+    });
+  });
+
+  group('قراءةٌ ناقصة تُرفَض لا تُعرَض', () {
+    // 🐛 ٢٠٢٦-١٠-٠١ — ظهرت متقطّعةً في لقطات المستخدم: «منافذ PON
+    // ٠/٠» مع «المشتركون ١٩٦/٣٠١». و`walk` يتوقّف صامتاً إن ضاعت
+    // حزمة فيُرجع ذيل الجدول بلا رأسه، والمنافذ في أوّل الفهارس.
+    test('🚨 مشتركون بلا منافذَ تحملهم تناقضٌ بنيويّ', () {
+      final b = VsolParse.build([
+        VsolIfRow(
+            index: 60,
+            name: 'EPON01ONU34',
+            up: true,
+            mac: null,
+            speedMbps: 0,
+            rxBytes: 0,
+            txBytes: 0),
+      ]);
+      expect(b.onus, isNotEmpty);
+      expect(b.ponPorts, isEmpty,
+          reason: 'هذه هي الحالة التي يجب أن ترفضها `fetchStats`');
+    });
+
+    test('ومنافذُ بلا مشتركين مقبولة — أولتٌ جديدٌ أو فارغ', () {
+      final b = VsolParse.build([
+        VsolIfRow(
+            index: 17,
+            name: 'EPON0/1',
+            up: true,
+            mac: null,
+            speedMbps: 0,
+            rxBytes: 0,
+            txBytes: 0),
+      ]);
+      expect(b.ponPorts, hasLength(1));
+      expect(b.onus, isEmpty);
+    });
+  });
 }
