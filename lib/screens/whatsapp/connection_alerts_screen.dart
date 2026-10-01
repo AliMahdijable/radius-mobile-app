@@ -135,7 +135,7 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
       if (r.ok) {
         _savedT = ConnectionAlertSettings.current.value;
       } else {
-        failed.add(r.message ?? 'الحدود');
+        failed.add(r.message ?? 'تعذّر حفظ الحدود');
       }
     }
 
@@ -161,7 +161,8 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
         if (text.isEmpty) _ctrls[type]!.text = body;
         if (isEnvelope) _savedEnabled = _enabled;
       } else {
-        failed.add(ConnectionAlertTemplates.labels[type] ?? type);
+        failed.add(
+            'تعذّر حفظ «${ConnectionAlertTemplates.labels[type] ?? type}»');
       }
     }
     // ⚠️ `saveTemplate` لا يمسّ كاش القوالب (عشر دقائق). بدون هذا يُرسل
@@ -172,7 +173,9 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
     setState(() => _saving = false);
     showSheetSnack(
       context,
-      failed.isEmpty ? 'تم حفظ إعدادات التنبيه' : 'تعذّر: ${failed.join('، ')}',
+      // كلّ عنصرٍ جملةٌ تامّة («تعذّر حفظ …») — كان يُسبق بـ«تعذّر:»
+      // فيصير «تعذّر: تعذّر حفظ الحدود».
+      failed.isEmpty ? 'تم حفظ إعدادات التنبيه' : failed.join(' • '),
       isError: failed.isNotEmpty,
     );
   }
