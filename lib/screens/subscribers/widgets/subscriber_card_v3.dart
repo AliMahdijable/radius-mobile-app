@@ -5,6 +5,7 @@ import '../../../api/device_probe_api.dart';
 import '../../../core/util/format.dart';
 import '../../../models/device_health.dart';
 import '../../../models/subscriber.dart';
+import '../../../services/connection_alerts.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -51,6 +52,7 @@ class SubscriberCardV3 extends StatelessWidget {
     this.onSendDebtReminder,
     this.onPayDebt,
     this.onOpenLocation,
+    this.onAlertConnection,
     this.hasTelegram = false,
   });
 
@@ -74,6 +76,11 @@ class SubscriberCardV3 extends StatelessWidget {
   /// فتح موقع المشترك في خرائط جوجل أو Waze. يُمرَّر فقط لمن له موقع
   /// محفوظ — والزرّ لا يُبنى بدونه، فلا يشغل مكاناً في السطر.
   final VoidCallback? onOpenLocation;
+
+  /// «تنبيه المشترك» بمشكلة الاتصال. null = الشريط لا يُبنى أصلاً
+  /// (صلاحيّات · وضع التحديد · لا رقم هاتف). والشريط نفسه يظهر **فقط**
+  /// حين يكشف آخر فحصٍ مشكلة — قرار المستخدم ٢٠٢٦-١٠-٠١.
+  final VoidCallback? onAlertConnection;
 
   @override
   Widget build(BuildContext context) {
@@ -116,6 +123,8 @@ class SubscriberCardV3 extends StatelessWidget {
                   const SizedBox(height: 11),
                   _lastPayBar(),
                 ],
+                if (onAlertConnection != null)
+                  _ConnectionIssueBar(sub: sub, onAlert: onAlertConnection!),
               ],
             ),
           ),
@@ -766,6 +775,79 @@ class _NetworkMetrics extends StatelessWidget {
           style: AppType.muted(color: color).copyWith(fontSize: 11.5),
         ),
       ],
+    );
+  }
+}
+
+// ─────────────────── شريط مشكلة الاتصال ───────────────────
+
+/// يظهر حين يكشف آخر فحصٍ لجهاز المشترك مشكلةً بحدود المدير، وإلّا لا
+/// يشغل شيئاً — ولا حتّى الفراغ فوقه (الحشو داخله لا خارجه).
+///
+/// يقرأ الكاش نفسه الذي يقرؤه `_NetworkMetrics`، فيستمع لـ`DeviceProbeBus`
+/// ويتحدّث مع موجة الفحص، ولـ`ConnectionAlertSettings.current` فيُعاد
+/// حين تصل حدود المدير. ولا يبدأ فحصاً بنفسه.
+class _ConnectionIssueBar extends StatelessWidget {
+  const _ConnectionIssueBar({required this.sub, required this.onAlert});
+  final Subscriber sub;
+  final VoidCallback onAlert;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge(
+          [DeviceProbeBus.tick, ConnectionAlertSettings.current]),
+      builder: (context, _) {
+        final ip = sub.ipAddress?.trim() ?? '';
+        final snap = DeviceProbeApi.cachedForUser(sub.username) ??
+            (ip.isEmpty ? null : DeviceProbeApi.cached(ip));
+        if (snap == null) return const SizedBox.shrink();
+        final problems = ConnectionAlerts.detect(
+            snap, ConnectionAlertSettings.current.value);
+        if (problems.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(top: 11),
+          child: LayoutBuilder(
+            builder: (context, c) {
+              // نفس قاعدة شريط الدين: على الضيّق يسقط نصّ الزرّ وتبقى
+              // أيقونته، فلا يُقصّ وصف المشكلة.
+              final tight = c.maxWidth < 330;
+              return Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                decoration: BoxDecoration(
+                  color: AppColors.warningSoftBg,
+                  borderRadius: BorderRadius.circular(R.icon),
+                  border: Border.all(color: AppColors.warningSoftBorder),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.wifi_off_rounded,
+                        size: 16, color: AppColors.warningOnSoft),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        problems.map((p) => p.label).join(' · '),
+                        style: AppType.body(color: AppColors.warningOnSoft),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 7),
+                    _MiniButton(
+                      label: tight ? '' : 'تنبيه المشترك',
+                      icon: Icons.notifications_active_rounded,
+                      filled: true,
+                      color: AppColors.warningFill,
+                      onTap: onAlert,
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }

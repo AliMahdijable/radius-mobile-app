@@ -34,6 +34,7 @@ import 'widgets/device_chip_micro.dart';
 import '../../services/subscriber_refresh_signal.dart';
 import 'widgets/device_probe_card.dart';
 import 'widgets/subscriber_actions.dart';
+import 'connection_alert_flow.dart';
 
 /// Subscriber details — v2 visual shell over v1's structure. Layout
 /// top→bottom (info → operations):
@@ -294,6 +295,12 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                     ip: sub.ipAddress ?? '',
                     username: sub.username,
                   ),
+                  // «تنبيه المشترك» — حاضرٌ دائماً هنا (بخلاف شريط القائمة):
+                  // الزرّ يفحص إن لزم ثمّ يقول المشكلة أو «لا توجد مشكلة».
+                  if (Perms.has('whatsapp.send')) ...[
+                    const SizedBox(height: Sp.sm),
+                    ConnectionAlertButton(sub: sub),
+                  ],
                   const SizedBox(height: Sp.sm),
                   // مطلب 2026-06-12: _SubscriptionCard المنفصل أُلغي
                   // — كل معلوماته (الباقة/السعر/الانتهاء/التابع/الهاتف)

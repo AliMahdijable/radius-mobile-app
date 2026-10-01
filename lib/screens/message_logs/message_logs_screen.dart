@@ -648,6 +648,8 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
         return 'ترحيب';
       case 'subscriber_info':
         return 'معلومات';
+      case 'connection_alert':
+        return 'تنبيه اتصال';
       default:
         return t;
     }
@@ -901,6 +903,8 @@ class _MessageDetailSheet extends StatelessWidget {
         return 'ترحيب';
       case 'subscriber_info':
         return 'معلومات';
+      case 'connection_alert':
+        return 'تنبيه اتصال';
       default:
         return t;
     }

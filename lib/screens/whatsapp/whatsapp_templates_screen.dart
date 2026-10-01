@@ -3,6 +3,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/whatsapp_api.dart';
 import '../../core/widgets/design_sheet.dart';
+import '../../services/connection_alerts.dart';
+import 'connection_alerts_screen.dart';
 import 'template_defaults.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -239,6 +241,13 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
     ));
   }
 
+  Future<void> _openConnectionAlerts() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const ConnectionAlertsScreen()),
+    );
+    if (mounted) _load();
+  }
+
   Future<void> _openEdit(_TemplateDef def) async {
     final existing = _templateOf(def.type);
     final result = await showModalBottomSheet<bool>(
@@ -257,8 +266,12 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
     Theme.of(context); // theme-dep (dark-mode)
     const accent = AppColors.channelWhatsApp;
     // نضيف ديناميكياً أي type رجّعه الـbackend غير معروف.
+    // قوالب «تنبيه المشترك» السبعة لها شاشتها — لا تُعرض هنا أسطراً
+    // متفرّقة بأسمائها الخام.
     final extras = _templates
         .where((t) => !_knownTypes.any((d) => d.type == t.templateType))
+        .where((t) =>
+            !ConnectionAlertTemplates.isConnectionType(t.templateType))
         .map((t) => _TemplateDef(
               type: t.templateType,
               label: t.templateType,
@@ -317,6 +330,20 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
                       ),
                       const SizedBox(height: 8),
                     ],
+                    // «تنبيه المشترك» بمشكلة الاتصال: رسالةٌ عامّة وأسطر
+                    // مشاكل وحدود — تُحرَّر معاً في شاشتها.
+                    _TemplateTile(
+                      def: const _TemplateDef(
+                        type: ConnectionAlertTemplates.envelopeType,
+                        label: 'تنبيه مشكلة الاتصال',
+                        icon: LucideIcons.bellRing,
+                        placeholders: [],
+                      ),
+                      existing:
+                          _templateOf(ConnectionAlertTemplates.envelopeType),
+                      onTap: _openConnectionAlerts,
+                    ),
+                    const SizedBox(height: 8),
                   ],
                 ),
             ],
