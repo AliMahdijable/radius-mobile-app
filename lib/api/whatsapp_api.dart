@@ -1107,6 +1107,12 @@ class WhatsAppApi {
     );
   }
 
+  /// المدخل العامّ لملء متغيّرات المشترك — لقوالب تُركَّب خارج هذا
+  /// الملفّ (‏«تنبيه المشترك» يركّب أسطر المشاكل أوّلاً ثمّ يملأ الباقي
+  /// هنا) فتبقى قائمة المتغيّرات واحدةً لا نسختين.
+  static String renderForSubscriber(String body, Subscriber sub) =>
+      _renderTemplate(body, sub);
+
   /// Replaces every {placeholder} in the template body. Mirrors v1's
   /// var set from subscriber_details_screen.dart line ~2012 — same
   /// keys so existing admin templates keep working unchanged.
@@ -1177,6 +1183,8 @@ class WhatsAppApi {
         return 'إشعار التمديد';
       case 'service_end':
         return 'انتهاء الخدمة';
+      case 'connection_alert':
+        return 'تنبيه مشكلة الاتصال';
       default:
         return type;
     }

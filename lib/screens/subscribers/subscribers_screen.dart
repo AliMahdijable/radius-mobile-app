@@ -16,6 +16,7 @@ import '../../core/util/format.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/subscriber.dart';
 import '../../services/auth_storage.dart';
+import '../../services/connection_alerts.dart';
 import '../../services/permissions_service.dart';
 import '../../services/subscriber_events.dart';
 import '../../core/widgets/design_sheet.dart';
@@ -26,6 +27,7 @@ import '../../theme/typography.dart';
 import 'sheets/bulk_activate_sheet.dart';
 import 'sheets/bulk_pay_debt_sheet.dart';
 import 'sheets/pay_debt_sheet.dart';
+import 'connection_alert_flow.dart';
 import 'subscriber_detail_screen.dart';
 import 'widgets/device_chip_micro.dart';
 import 'widgets/filter_chips_bar.dart';
@@ -161,6 +163,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     // bulk action). Mirrors v1's notifier pattern.
     SubscriberEvents.dataChanged.addListener(_onDataChanged);
     _load();
+    // حدود «تنبيه المشترك» — شريط المشكلة يعمل بالافتراضيّات حتّى تصل
+    // حدود المدير، ثمّ يُعاد رسمه وحده عبر `ConnectionAlertSettings.current`.
+    ConnectionAlertSettings.ensureLoaded();
     _searchCtrl.addListener(_onSearchChanged);
     widget.isActive?.addListener(_onActiveChanged);
     _startAutoRefresh();
@@ -1346,6 +1351,16 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                         ? null
                                         : () =>
                                             showLocationSheet(context, sub: s),
+                                    // «تنبيه المشترك» — الشريط نفسه لا يظهر
+                                    // إلّا حين يكشف آخر فحصٍ مشكلة. والإرسال
+                                    // محكومٌ بصلاحيّة «إرسال رسالة لمشترك»
+                                    // التي يفحصها الخادم على send-message.
+                                    onAlertConnection: !_selectionMode &&
+                                            Perms.has('whatsapp.send') &&
+                                            s.displayPhone.isNotEmpty
+                                        ? () => showConnectionAlertFlow(
+                                            context, s)
+                                        : null,
                                   );
                                 },
                               ),
