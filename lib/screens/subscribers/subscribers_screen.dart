@@ -618,11 +618,21 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     // عنه مقارنٌ عاديّ.
     if (_deviceFields.contains(_sortField)) {
       final asc = _sortDir == SortDirection.asc;
+      // 🐛 كان يقرأ الكاش بالـIP وحده، بينما البطاقة تقرؤه بالـusername
+      // أوّلاً. فالمشترك ذو عنوان الجهاز المخصّص (customIp) تظهر قراءته
+      // على بطاقته ويغوص في الفرز كأنّه غير مفحوص. والمفتاح يُحسب مرّةً
+      // لكلّ مشترك لا مرّتين في كلّ مقارنة.
+      final keys = <Subscriber, double?>{
+        for (final s in list)
+          s: _deviceSortKey(
+            _sortField,
+            DeviceProbeApi.cachedForUser(s.username) ??
+                DeviceProbeApi.cached(s.ipAddress ?? ''),
+          ),
+      };
       list.sort((a, b) {
-        final ka =
-            _deviceSortKey(_sortField, DeviceProbeApi.cached(a.ipAddress ?? ''));
-        final kb =
-            _deviceSortKey(_sortField, DeviceProbeApi.cached(b.ipAddress ?? ''));
+        final ka = keys[a];
+        final kb = keys[b];
         if (ka == null && kb == null) return 0;
         if (ka == null) return 1; // غير المفحوص أسفلَ دائماً
         if (kb == null) return -1;
@@ -696,6 +706,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
         // حقول الأجهزة لا تصل هنا — تُعالَج في المسار المستقلّ أعلى
         // الدالّة وتعود قبل بناء هذا المقارن. الفرع للاكتمال النحويّ.
         case SortField.deviceRx:
+        case SortField.deviceTemp:
         case SortField.deviceSignal:
         case SortField.deviceCcq:
         case SortField.deviceLan:
@@ -711,6 +722,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   /// اصطلاح الإشارة مقصود:
   ///   • RX الضوئي وإشارة اللاسلكي **سالبان** — الأقرب إلى الصفر أقوى.
   ///   • CCQ وسرعة LAN موجبان — الأعلى أفضل.
+  ///   • حرارة الـONU موجبة — الأعلى أخطر، فـ«تنازليّ» يُقدّم الأسخن.
   ///   • منفذ LAN مفصول يُرجع -1 فيغوص تحت أيّ وصلة 10Mbps في
   ///     الاتّجاهين — المدير يريدهم آخراً دائماً لا أوّلاً في أحدهما.
   ///
@@ -722,6 +734,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       case SortField.deviceRx:
         if (snap.kind != DeviceKind.ont || snap.ont == null) return null;
         return double.tryParse(snap.ont!.rxPower);
+      case SortField.deviceTemp:
+        if (snap.kind != DeviceKind.ont || snap.ont == null) return null;
+        return double.tryParse(snap.ont!.temperature.trim());
       case SortField.deviceSignal:
         if (snap.kind != DeviceKind.ubiquiti || snap.ubnt == null) return null;
         return snap.ubnt!.signalDbm?.toDouble();
@@ -741,6 +756,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
   static const _deviceFields = {
     SortField.deviceRx,
+    SortField.deviceTemp,
     SortField.deviceSignal,
     SortField.deviceCcq,
     SortField.deviceLan,

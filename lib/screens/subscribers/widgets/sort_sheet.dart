@@ -31,6 +31,7 @@ enum SortField {
   dailyTraffic,
 
   deviceRx, // قوّة الاستقبال الضوئي (ONT) — سالبة، الأقرب للصفر أقوى
+  deviceTemp, // حرارة الـONU — موجبة، الأعلى أخطر (طلب المستخدم 2026-10-01)
   deviceSignal, // إشارة اللاسلكي (UBNT) — سالبة كذلك
   deviceCcq, // جودة الاتصال — موجبة، الأعلى أفضل
   deviceLan, // سرعة منفذ LAN — موجبة، والمفصول -1 فيغوص دائماً
@@ -51,6 +52,7 @@ const _fieldDefs = <(SortField, String, IconData)>[
   (SortField.parentUsername, 'sort.parent', LucideIcons.userCog),
   (SortField.dailyTraffic, 'sort.daily_traffic', LucideIcons.activity),
   (SortField.deviceRx, 'sort.device_rx', LucideIcons.zap),
+  (SortField.deviceTemp, 'sort.device_temp', LucideIcons.thermometer),
   (SortField.deviceSignal, 'sort.device_signal', LucideIcons.wifi),
   (SortField.deviceCcq, 'sort.device_ccq', LucideIcons.gauge),
   (SortField.deviceLan, 'sort.device_lan', LucideIcons.cable),

@@ -550,6 +550,7 @@
     "debts": "Debts",
     "parent": "Parent admin",
     "device_rx": "Optical RX",
+    "device_temp": "ONU temperature",
     "device_signal": "Wireless signal",
     "device_ccq": "Link quality (CCQ)",
     "device_lan": "LAN port speed",
