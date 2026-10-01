@@ -9,6 +9,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/ruijie_api.dart';
 import '../../../api/network_devices_api.dart';
 import '../../../models/network_device.dart';
+import '../../../services/device_stats_cache.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import 'expandable_section.dart';
@@ -82,6 +83,19 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
   @override
   void initState() {
     super.initState();
+    // ── بذرةٌ من المخزن ────────────────────────────────────────────
+    //
+    // ⚡ بلا بذرٍ تُدفَع جلسةٌ كاملة في **كلّ** فتحةٍ للجهاز ولو أُغلق
+    // قبل ثوانٍ، فيرى المدير دوّارةً على بياناتٍ كانت بين يديه.
+    //
+    // (طلب المستخدم ٢٠٢٦-١٠-٠١: «أهمّ شي عندي سرعة الاستجابة وعرض
+    // البيانات وتحديثها… وهلشي بجميع الأجهزة»)
+    _stats = DeviceStatsCache.instance.seedFor<RuijieStats>(widget.device.id);
+    // وعمرُها معها: رقمٌ قديمٌ تحت شارة «مباشر» كذبة.
+    final seedAge = DeviceStatsCache.instance.ageOf(widget.device.id);
+    if (_stats != null && seedAge != null) {
+      _lastFetch = DateTime.now().subtract(seedAge);
+    }
     _startMonitoring();
   }
 
@@ -203,6 +217,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
 
       setState(() {
         _stats = stats;
+        DeviceStatsCache.instance.putRaw(widget.device.id, stats);
         _loading = false;
         _error = null;
         _lastFetch = now;

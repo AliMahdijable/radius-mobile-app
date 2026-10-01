@@ -175,6 +175,10 @@ flutter:
     - assets/devices-images/ubnt/
     # وصور روجي/ريي — مولَّدة كذلك. device_image_ruijie_catalog.dart
     - assets/devices-images/ruijie/
+    # وأولتيات: VSOL تحت براندها، وC-Data/FiberHome تحت «أخرى».
+    # device_image_olt_catalog.dart
+    - assets/devices-images/vsol/
+    - assets/devices-images/olt/
     - assets/images/
     - assets/translations/
 

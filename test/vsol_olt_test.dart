@@ -129,6 +129,41 @@ void main() {
     });
   });
 
+  group('صيغة التسمية الثانية — فيرموير V1600D آخر', () {
+    // 🐛 ٢٠٢٦-١٠-٠١: جهازٌ ثانٍ من الطراز نفسه يسمّي مشتركيه
+    // `EPON01ONU34` لا `EPON0/1:34`. ومنافذ PON صيغتها واحدة في
+    // الفيرمويرين — فكانت تُقرأ بينما يسقط المشتركون كلّهم بصمت،
+    // واللوحة تقول «٠ مشتركين» على جهازٍ فيه مئات.
+    final alt = VsolParse.build([
+      r(1, 'GE0/1', up: true),
+      r(9, 'EPON0/1', up: true, rx: 700, tx: 900),
+      r(60, 'EPON01ONU34', up: true, mac: 'aa:bb:cc:dd:ee:01'),
+      r(61, 'EPON01ONU35'),
+      r(62, 'EPON07ONU2', up: true, mac: 'aa:bb:cc:dd:ee:02'),
+    ]);
+
+    test('تُقرأ ويُستخرج منها المنفذ والرقم', () {
+      expect(alt.onus.length, 3);
+      final o = alt.onus.firstWhere((o) => o.onuId == 34);
+      expect(o.ponPort, 1);
+      expect(o.slot, 0);
+    });
+
+    test('ولا تختلط بمنفذ PON نفسه', () {
+      expect(alt.ponPorts.length, 1);
+      expect(alt.ponPorts.single.label, 'EPON0/1');
+    });
+
+    test('والترقيم يميّز المنفذ السابع عن الأوّل', () {
+      final o7 = alt.onus.firstWhere((o) => o.ponPort == 7);
+      expect(o7.onuId, 2);
+    });
+
+    test('وعدّ المتّصلين صحيح', () {
+      expect(alt.onusOnline, 2);
+    });
+  });
+
   group('المتانة', () {
     test('قائمةٌ فارغة لا ترمي', () {
       final b = VsolParse.build(const []);
@@ -183,6 +218,159 @@ void main() {
     test('التسمية تطابق ما يكتبه المشغّل في الـCLI', () {
       final b = VsolParse.build([r(9, 'EPON0/3:2', up: true)]);
       expect(b.onus.single.label, 'EPON0/3:2');
+    });
+  });
+
+  group('المعدّل بدل التراكميّ', () {
+    // 🐛 بلاغ المستخدم ٢٠٢٦-١٠-٠١: «قيم الترفك مبالغ بيها ٣٧ كيكا».
+    //
+    // قياسٌ فعليّ على `Popq3-olt`: مرفوعٌ ٦٨ ساعة، ١٨٩ مشتركاً متّصلاً،
+    // ومجموع منافذه الثمانية ٣٧٫٥ جيجابايت — أي ١٫٥ كيلوبت/ث لكلّ
+    // مشترك على مدى ثلاثة أيّام. والعدّادات الستّة عشر كلّها دون ٢³²
+    // وأربعةٌ منها على بُعد ١٪ من السقف. المجموع لم يكن مبالغاً فيه،
+    // بل بلا معنى: موضعُ كلّ عدّادٍ في لفّته الحاليّة.
+    VsolOltStats snap(int rx, int tx, {bool narrow = true}) => VsolOltStats(
+          ponPorts: [
+            VsolPonPort(
+                index: 9, slot: 0, port: 1, up: true, rxBytes: rx, txBytes: tx)
+          ],
+          narrowCounters: narrow,
+        );
+
+    test('الفرق بين لقطتين يعطي بتاتٍ في الثانية', () {
+      final r = VsolTraffic.between(
+          snap(1000, 0), snap(126000, 0), const Duration(seconds: 10));
+      // ‏١٢٥٬٠٠٠ بايت في عشر ثوانٍ = ١٢٬٥٠٠ بايت/ث = ١٠٠ كيلوبت/ث
+      expect(r['EPON0/1']!.rxBps, closeTo(100000, 1));
+    });
+
+    test('⚠️ الالتفاف يُصحَّح لا يُقرأ هبوطاً', () {
+      // عدّادٌ عند ٤٫٢٩ جيجا ناقص ألفاً ثمّ صار ألفاً: مرّ ألفان لا أن
+      // الجهاز «أرجع» أربع جيجات.
+      final r = VsolTraffic.between(
+        snap(4294966296, 0),
+        snap(1000, 0),
+        const Duration(seconds: 1),
+      );
+      expect(r['EPON0/1']!.rxBps, closeTo(2000 * 8, 1));
+    });
+
+    test('⚠️ ما يتجاوز سرعة المنفذ لا يُعرَض رقماً', () {
+      // 🐛 لبّ العطل: عدّادٌ ضيّق على منفذ EPON يلتفّ كلّ ٢٧ ثانيةً عند
+      // الإشباع. فحين يُنتج الفرق معدّلاً فوق ١٫٢٥ جيجابت فقد فاتتنا
+      // لفّةٌ كاملة — والرقم عندها تخمينٌ يُبنى عليه قرار.
+      final r = VsolTraffic.between(
+        snap(0, 0),
+        snap(4000000000, 0),
+        const Duration(seconds: 1),
+      );
+      expect(r['EPON0/1']!.rxBps, isNull);
+      expect(r['EPON0/1']!.known, isFalse);
+    });
+
+    test('وعلى ٦٤ بت الهبوط إعادة تصفيرٍ لا التفاف', () {
+      // عدّاد ٦٤ بت لا يلتفّ في عمر الجهاز، فهبوطه يعني إقلاعاً — ولا
+      // نُصحّحه بإضافة ٢³² فنخترع مروراً لم يحدث.
+      final r = VsolTraffic.between(
+        snap(5000000000, 0, narrow: false),
+        snap(1000, 0, narrow: false),
+        const Duration(seconds: 1),
+      );
+      expect(r['EPON0/1']!.rxBps, isNull);
+    });
+
+    test('لقطةٌ واحدة لا تعطي معدّلاً', () {
+      final r = VsolTraffic.between(
+          const VsolOltStats(), snap(1000, 0), const Duration(seconds: 10));
+      expect(r, isEmpty);
+    });
+
+    test('زمنٌ صفر لا يقسم على صفر', () {
+      final r = VsolTraffic.between(snap(0, 0), snap(1000, 0), Duration.zero);
+      expect(r['EPON0/1']!.rxBps, isNull);
+    });
+
+    test('المفتاح هو الاسم لا فهرس SNMP', () {
+      // الفهرس يتغيّر بإعادة تسجيل الـONU بينما `EPON0/3:2` يبقى هو هو،
+      // فالمقارنة بالفهرس تُنتج معدّلاً لمشتركٍ آخر.
+      VsolOltStats withOnu(int ifIndex, int rx) => VsolOltStats(
+            onus: [
+              VsolOnu(
+                  ifIndex: ifIndex,
+                  slot: 0,
+                  ponPort: 3,
+                  onuId: 2,
+                  online: true,
+                  speedMbps: 1000,
+                  rxBytes: rx)
+            ],
+            narrowCounters: true,
+          );
+      final r = VsolTraffic.between(
+          withOnu(26, 1000), withOnu(91, 126000), const Duration(seconds: 10));
+      expect(r['EPON0/3:2']!.rxBps, closeTo(100000, 1));
+    });
+  });
+
+  group('الطبقة السريعة لا تمحو المشتركين', () {
+    // 🐛 بلاغ المستخدم ٢٠٢٦-١٠-٠١: «المشتركون يظهر ترفك ويصير صفر
+    // بسرعة، أمّا البونات طبيعي».
+    //
+    // الطبقة السريعة تسأل عن منافذ PON والصعود وحدها (‏٢٤ واجهةً في
+    // ثانية) وتنقل عدّادات المشتركين كما هي. فالفرق عليها صفرٌ
+    // بالضرورة — وهو ليس «لا مرور» بل «لم نقِس».
+    VsolOltStats snap({required int pon, required int onu}) => VsolOltStats(
+          narrowCounters: true,
+          ponPorts: [
+            VsolPonPort(
+                index: 9, slot: 0, port: 1, up: true, rxBytes: pon, txBytes: 0)
+          ],
+          onus: [
+            VsolOnu(
+                ifIndex: 26,
+                slot: 0,
+                ponPort: 1,
+                onuId: 2,
+                online: true,
+                speedMbps: 1000,
+                rxBytes: onu,
+                txBytes: 0)
+          ],
+        );
+
+    test('🚨 الفرق على عدّادٍ منقولٍ يعطي صفراً — فلا يُكتَب', () {
+      // منفذ PON تحرّك، والمشترك لم تُقرأ عدّاداته (نُقلت كما هي).
+      final r = VsolTraffic.between(
+        snap(pon: 1000, onu: 5000),
+        snap(pon: 126000, onu: 5000),
+        const Duration(seconds: 10),
+      );
+      expect(r['EPON0/1']!.rxBps, closeTo(100000, 1));
+      // الصفر هنا حقيقيٌّ حسابيّاً، ولذلك **يجب ألّا تدمجه اللوحة**:
+      // هذا الحارس يوثّق أنّ المصدر يُنتجه، والتصفية مسؤوليّة الدامج.
+      expect(r['EPON0/1:2']!.rxBps, 0);
+    });
+
+    test('الدمج الانتقائيّ يُبقي آخر معدّلٍ معروفٍ للمشترك', () {
+      // محاكاةُ ما تفعله اللوحة: نبدأ بمعدّلٍ معروف، ثمّ تأتي نبضةٌ
+      // سريعة — فلا يُكتَب إلّا ما جُدّد.
+      final known = <String, VsolTraffic>{
+        'EPON0/1': const VsolTraffic(1000, 0),
+        'EPON0/1:2': const VsolTraffic(40000000, 0),
+      };
+      final now = snap(pon: 126000, onu: 5000);
+      final fresh = VsolTraffic.between(
+          snap(pon: 1000, onu: 5000), now, const Duration(seconds: 10));
+
+      final merged = Map<String, VsolTraffic>.from(known);
+      for (final p in now.ponPorts) {
+        final v = fresh[p.label];
+        if (v != null) merged[p.label] = v;
+      }
+
+      expect(merged['EPON0/1']!.rxBps, closeTo(100000, 1));
+      // ولم يُمسّ المشترك — لا صفرَ ولا وميض.
+      expect(merged['EPON0/1:2']!.rxBps, 40000000);
     });
   });
 }

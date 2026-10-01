@@ -1,3 +1,4 @@
+import 'device_image_olt_catalog.dart';
 import 'device_image_ruijie_catalog.dart';
 import 'device_image_ubnt_catalog.dart';
 import 'package:flutter/material.dart';
@@ -98,6 +99,12 @@ class DeviceImage extends StatelessWidget {
   /// `nbs3200` على `nbs320024gt4xs`.
   static final List<MapEntry<String, String>> _ruijieByLength =
       kRuijieCatalog.entries.toList()
+        ..sort((a, b) => b.key.length.compareTo(a.key.length));
+
+  /// وكتالوج الأولتيات كذلك: بلا الترتيب يفوز `fd1608s` على
+  /// `fd1608sb1` فتظهر مراجعةٌ أخرى من العتاد نفسه.
+  static final List<MapEntry<String, String>> _oltByLength =
+      kOltCatalog.entries.toList()
         ..sort((a, b) => b.key.length.compareTo(a.key.length));
 
   static final List<MapEntry<String, String>> _catByLength =
@@ -207,7 +214,7 @@ class DeviceImage extends StatelessWidget {
     // ⚠️ وهو **بعد** `_byKey` عمداً: خمسة مفاتيح تتقاطع بينهما
     // (rocketm5 · rocketm2 · locom5 · locom2 · es24250w) واختيار
     // المستخدم في المنسَّقة يدويّاً مقصود فلا يُطغى عليه.
-    final cat = kUbntCatalog[k2] ?? kRuijieCatalog[k2];
+    final cat = kUbntCatalog[k2] ?? kRuijieCatalog[k2] ?? kOltCatalog[k2];
     if (cat != null) return _gate(cat, brand);
     // ثمّ احتواء: المدير قد يكتب «Mikrotik CCR2116-12G-4S+ router».
     // المفاتيح مرتّبة تنازليّاً بالطول فيفوز الأطول = الأدقّ.
@@ -220,6 +227,9 @@ class DeviceImage extends StatelessWidget {
       if (e.key.length >= 6 && k2.contains(e.key)) return _gate(e.value, brand);
     }
     for (final e in _ruijieByLength) {
+      if (e.key.length >= 6 && k2.contains(e.key)) return _gate(e.value, brand);
+    }
+    for (final e in _oltByLength) {
       if (e.key.length >= 6 && k2.contains(e.key)) return _gate(e.value, brand);
     }
     // وأخيراً: المكتوب سابقةٌ لاسم ملفّ — «912» لـRB912UAG-5HPnD-OUT.
@@ -303,6 +313,23 @@ class DeviceImage extends StatelessWidget {
     // في ٣٦٤ قيمة، والمجلّد نفسه يوثّق العلامة.
     // المجلّدان المولَّدان يوثّقان علامتهما بالمسار — فحصٌ فوريّ بدل
     // بحثٍ في ألفٍ وستّمئة قيمة.
+    // ⚠️ **الأولتيات استثناءٌ مقصود: تُقبل على «أخرى» كذلك.**
+    //
+    // الخادم لم يكن يعرف براند `vsol` حين سُجّلت أولتيات المستخدم،
+    // فحُفظت `other` — و`_isVsolOlt` تعتمد على ذلك صراحةً. فبوّابةٌ
+    // تقصرها على `vsol` كانت ستُخفي الصورة عن الأجهزة نفسها التي
+    // جُلبت لها. وC-Data وFiberHome بلا براندٍ أصلاً فليس لها غيره.
+    //
+    // وهذا لا يفتح الباب الذي أُغلق على ميكروتك: مفاتيح الأولتيات
+    // رموزٌ لا تشبه شيئاً آخر (`V1600D8` · `FD1608S-B1` · `AN6000-17`)
+    // فلا تُلتقط صدفةً على سويتشٍ أو سكتور.
+    if (file.startsWith('vsol/')) {
+      return (b == 'vsol' || b == 'other') ? file : null;
+    }
+    if (file.startsWith('olt/')) {
+      return b == 'other' ? file : null;
+    }
+
     final want = file.startsWith('ruijie/')
         ? 'ruijie'
         : (file.startsWith('ubnt/') || _ubntFiles.contains(file))

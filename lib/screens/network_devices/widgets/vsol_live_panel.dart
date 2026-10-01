@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/network_devices_api.dart';
 import '../../../api/vsol_olt_api.dart';
 import '../../../models/network_device.dart';
+import '../../../services/device_stats_cache.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -40,13 +41,73 @@ class _VsolLivePanelState extends State<VsolLivePanel>
   bool _onlineOnly = false;
   String _query = '';
 
-  /// المسحة الكاملة تستغرق ~٢٫٢ ثانية على جهازٍ فعليّ (‏٣٨ واجهة ×
-  /// ستّة أعمدة). فنبضةٌ أسرع من ذلك تُنتج طابوراً لا تحديثاً.
-  static const _interval = Duration(seconds: 12);
+  /// اللقطة السابقة ولحظتُها — منهما يُحسب المعدّل.
+  ///
+  /// 🐛 بلاغ المستخدم ٢٠٢٦-١٠-٠١: «قيم الترفك مبالغ بيها ٣٧ كيكا».
+  /// كانت البطاقة تعرض **المجموع التراكميّ** باسم «ترفك». وعلى هذا
+  /// الجهاز عدّاداته ٣٢ بت تلتفّ عند ٤٫٢٩ جيجا، فالمجموع لم يكن
+  /// مبالغاً فيه بل بلا معنى: موضعُ كلّ عدّادٍ في لفّته الحاليّة.
+  /// والمعدّل من الفرق بين لقطتين يَسلم من ذلك — وهو المطلوب أصلاً.
+  /// لقطتان سابقتان لا واحدة — واحدةٌ لكلّ إيقاع.
+  ///
+  /// ⚠️ الطبقة السريعة تنقل عدّادات المشتركين كما هي ولا تُجدّدها.
+  /// فمقارنتها بلقطةٍ سريعةٍ أخرى تُعطي فرقاً صفريّاً لكلّ مشترك، ثمّ
+  /// قفزةً حين تصل الطبقة الكاملة. فكلّ طبقةٍ تُقارَن بمثيلتها.
+  VsolOltStats? _prevHot, _prevAll;
+  DateTime? _prevHotAt, _prevAllAt;
+  Map<String, VsolTraffic> _rates = const {};
+
+  /// كم مسحةً خفيفةً مرّت منذ آخر مسحةٍ كاملة.
+  ///
+  /// الخفيفة تجلب العدّادين وحدهما (~١٠ث) والكاملة ستّة أعمدة (~٣١ث).
+  /// فالترفك يتجدّد سريعاً، والبنية — حالة المشترك وظهور مشتركٍ جديد —
+  /// تتجدّد كلّ خمس دورات.
+  /// كلفة آخر دورةٍ خفيفة — أساس الإيقاع.
+  Duration _lightCost = _minInterval;
+
+  int _sinceFull = 0;
+  int _sinceAll = 0;
+
+  /// كلّ كم نبضةٍ نُجدّد عدّادات المشتركين، وكلّ كم نُعيد قراءة البنية.
+  ///
+  /// بنبضةٍ من ثلاث ثوانٍ: المشتركون كلّ ~٩ث، والبنية كلّ ~٧٢ث.
+  static const _allEvery = 3;
+  static const _fullEvery = 24;
+
+  /// المسحة الكاملة تستغرق ~٢٫٢ ثانية على أولت فيه ٣٨ واجهة. فنبضةٌ
+  /// أسرع من ذلك تُنتج طابوراً لا تحديثاً.
+  static const _minInterval = Duration(seconds: 3);
+
+  /// ⚠️ **الفاصل يتكيّف مع حجم الجهاز لا يُفرَض عليه.**
+  ///
+  /// 🐛 ٢٠٢٦-١٠-٠١ — أولتٌ ثانٍ فيه ٣٢٧ واجهة تستغرق مسحته ~٢٠ ثانية،
+  /// فنبضةُ الاثنتي عشرة تَجِد الجلب السابق جارياً فتُلغى (`_loading`).
+  /// النتيجة جلبٌ متّصل بلا انقطاع: شبكةٌ مشغولة دائماً، وبطّاريّةٌ
+  /// تذوب، ولا تحديث أسرع — لأنّ الحدّ هو الجهاز لا المؤقّت.
+  ///
+  /// فنقيس ونُهلة: مرّةً ونصفاً من آخر مسحةٍ ناجحة، فيبقى للجهاز متنفَّس.
+  Duration _interval = _minInterval;
 
   @override
   void initState() {
     super.initState();
+    // ── بذرةٌ من المخزن ────────────────────────────────────────────
+    //
+    // ⚡ المسحة الكاملة على هذا الأولت ثلاثٌ وأربعون ثانية. وبلا بذرٍ
+    // تُدفَع كاملةً في **كلّ** فتحةٍ للجهاز ولو أُغلق قبل ثوانٍ.
+    //
+    // (طلب المستخدم ٢٠٢٦-١٠-٠١: «أهمّ شي عندي سرعة الاستجابة وعرض
+    // البيانات وتحديثها… وهلشي بجميع الأجهزة»)
+    _stats = DeviceStatsCache.instance.seedFor<VsolOltStats>(widget.device.id);
+    // وعمرُها معها: رقمٌ عمره دقيقةٌ تحت شارة «مباشر» كذبة.
+    final age = DeviceStatsCache.instance.ageOf(widget.device.id);
+    if (_stats != null && age != null) {
+      _lastFetch = DateTime.now().subtract(age);
+      // ⚡ والبذرة **لقطةٌ أولى** لا مجرّد صورةٍ تُعرَض: فأوّل دورةٍ
+      // خفيفة (٧ث) تُنتج معدّلاً، بدل انتظار دورتين كاملتين.
+      _prevHot = _prevAll = _stats;
+      _prevHotAt = _prevAllAt = _lastFetch;
+    }
     WidgetsBinding.instance.addObserver(this);
     _fetch();
     _arm();
@@ -76,13 +137,18 @@ class _VsolLivePanelState extends State<VsolLivePanel>
   void _arm() {
     _timer?.cancel();
     if (!_monitoring || !_foreground) return;
-    _timer = Timer.periodic(_interval, (_) => _fetch());
+    // مؤقّتٌ يُعيد تسليح نفسه — لأنّ الفاصل يتغيّر بعد كلّ مسحة.
+    _timer = Timer(_interval, () {
+      _fetch();
+      _arm();
+    });
   }
 
   Future<void> _fetch() async {
     if (_loading) return;
     final d = widget.device;
     final gen = ++_gen;
+    final clock = Stopwatch()..start();
     if (mounted) setState(() => _loading = true);
 
     try {
@@ -100,21 +166,105 @@ class _VsolLivePanelState extends State<VsolLivePanel>
         return;
       }
 
-      final s = await VsolOltApi.fetchStats(
-        host: d.ip,
-        port: d.apiPort ?? 161,
-        community: community,
-        onPartialReady: (partial) {
-          if (!mounted || gen != _gen) return;
-          if (_stats == null) setState(() => _stats = partial);
-        },
-      );
+      // ── ثلاث طبقاتٍ بحسب ما يُنظَر إليه ───────────────────────
+      //
+      // ⚡ الوكيل يعالج ~١٠٠ قيمةً في الثانية، فالتحديث الكامل لكلّ
+      // الـ٣٢٥ واجهةً يكلّف ستّ ثوانٍ مهما فعلنا. والبطاقة ومنافذ PON
+      // أربعٌ وعشرون واجهةً فقط — ثانيةٌ واحدة.
+      //
+      //   سريعة (كلّ نبضة)  : منافذ PON والصعود    ~١٫١ث
+      //   كاملة العدّادات    : + الثلاثمئة مشترك    ~٦ث
+      //   بنية (نادرة)      : أسماء وحالة وعناوين  ~٢١ث
+      //
+      // (بلاغ المستخدم ٢٠٢٦-١٠-٠١: «الترفك ما يتحدّث، يعني مو لحظي»)
+      final base = _stats;
+      final wantFull = base == null || _sinceFull >= _fullEvery;
+      final wantAll = wantFull || _sinceAll >= _allEvery;
+      final s = wantFull
+          ? await VsolOltApi.fetchStats(
+              host: d.ip,
+              port: d.apiPort ?? 161,
+              community: community,
+              onPartialReady: (partial) {
+                if (!mounted || gen != _gen) return;
+                // ⚡ أسماءٌ وحالةٌ تصل قبل العدّادات بخمس عشرة ثانية —
+                // فنعرض الأعداد فوراً بدل «٠/٠».
+                if (_stats == null) setState(() => _stats = partial);
+              },
+            )
+          : wantAll
+              ? await VsolOltApi.refreshCounters(
+                  host: d.ip,
+                  port: d.apiPort ?? 161,
+                  community: community,
+                  previous: base,
+                )
+              : await VsolOltApi.refreshHotCounters(
+                  host: d.ip,
+                  port: d.apiPort ?? 161,
+                  community: community,
+                  previous: base,
+                );
       if (!mounted || gen != _gen) return;
+      final cost = clock.elapsed;
+      final at = DateTime.now();
+      // كلّ طبقةٍ تُقارَن بلقطتها، والنتيجة تُدمَج فوق السابقة: فصفوف
+      // المشتركين تُبقي آخر معدّلٍ معروفٍ لها بدل أن تُصفَّر كلّ نبضة.
+      final ref = wantAll ? _prevAll : _prevHot;
+      final refAt = wantAll ? _prevAllAt : _prevHotAt;
+      final rates = Map<String, VsolTraffic>.from(_rates);
+      if (ref != null && refAt != null) {
+        final fresh = VsolTraffic.between(ref, s, at.difference(refAt));
+        if (wantAll) {
+          rates.addAll(fresh);
+        } else {
+          // 🐛 بلاغ المستخدم ٢٠٢٦-١٠-٠١: «المشتركون يظهر ترفك ويصير
+          // صفر بسرعة، أمّا البونات طبيعي».
+          //
+          // ⚠️ الطبقة السريعة تنقل عدّادات المشتركين **كما هي**، فالفرق
+          // عليها صفرٌ بالضرورة. وكنتُ أدمج ما تُرجعه كلَّه، فتمحو
+          // أصفارُ المشتركين معدّلاتِهم الصحيحة كلّ ثلاث ثوانٍ — ثمّ
+          // تعود مع الطبقة الكاملة، فتومض.
+          //
+          // فلا نكتب إلّا مفاتيح ما جُدّد فعلاً.
+          for (final p in s.ponPorts) {
+            final v = fresh[p.label];
+            if (v != null) rates[p.label] = v;
+          }
+          for (final u in s.uplinks) {
+            final v = fresh[u.name];
+            if (v != null) rates[u.name] = v;
+          }
+        }
+      }
       setState(() {
         _loading = false;
         _error = null;
         _stats = s;
-        _lastFetch = DateTime.now();
+        DeviceStatsCache.instance.putRaw(widget.device.id, s);
+        _prevHot = s;
+        _prevHotAt = at;
+        if (wantAll) {
+          _prevAll = s;
+          _prevAllAt = at;
+        }
+        _rates = rates;
+        _sinceFull = wantFull ? 0 : _sinceFull + 1;
+        _sinceAll = wantAll ? 0 : _sinceAll + 1;
+        _lastFetch = at;
+        // ⚠️ **الإيقاع من الدورة الخفيفة لا من الكاملة.**
+        //
+        // 🐛 بلاغ المستخدم ٢٠٢٦-١٠-٠١: «الترفك ما يتحدّث، يعني مو
+        // لحظي». والسبب أنّي كنتُ أُسعّر الفاصل بكلفة **آخر** دورة؛
+        // فبعد كلّ مسحةٍ كاملة (٤٣ث) يصير الفاصل ٦٤ ثانيةً فيتجمّد
+        // العرض دقيقةً كاملة.
+        //
+        // والكاملة حدثٌ دوريّ نادر لا يصحّ أن يُملي إيقاع الشاشة،
+        // فنُسعّر بالخفيفة وحدها — وهي التي تجلب الترفك أصلاً.
+        // الإيقاع من الطبقة السريعة وحدها — وهي النبضة الفعليّة.
+        if (!wantFull && !wantAll) _lightCost = cost;
+        final paced = _lightCost * 1.5;
+        _interval = paced > _minInterval ? paced : _minInterval;
       });
     } on VsolException catch (e) {
       if (!mounted || gen != _gen) return;
@@ -237,8 +387,8 @@ class _VsolLivePanelState extends State<VsolLivePanel>
             visualDensity: VisualDensity.compact,
           ),
           IconButton(
-            icon:
-                Icon(_monitoring ? LucideIcons.pause : LucideIcons.play, size: 16),
+            icon: Icon(_monitoring ? LucideIcons.pause : LucideIcons.play,
+                size: 16),
             onPressed: () {
               setState(() => _monitoring = !_monitoring);
               _arm();
@@ -282,9 +432,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(
-                s.sysName?.isNotEmpty == true
-                    ? s.sysName!
-                    : widget.device.name,
+                s.sysName?.isNotEmpty == true ? s.sysName! : widget.device.name,
                 style: TextStyle(
                     fontSize: 11,
                     height: 1.25,
@@ -341,8 +489,8 @@ class _VsolLivePanelState extends State<VsolLivePanel>
               LucideIcons.arrowUpDown,
               // ⚠️ من منافذ PON لا من جمع المشتركين: ما يمرّ على ONU
               // يمرّ على منفذه، فجمعهما يعدّ البايت مرّتين.
-              'ترفك PON',
-              _bytes(s.ponRxBytes + s.ponTxBytes),
+              'مرور PON',
+              _ponFlow(s),
               '',
               AppColors.brand,
             )),
@@ -388,7 +536,8 @@ class _VsolLivePanelState extends State<VsolLivePanel>
           header: Row(children: [
             Icon(LucideIcons.network, size: 14, color: AppColors.brand),
             const SizedBox(width: 6),
-            Text('منافذ الصعود (${s.uplinks.where((u) => u.up).length}'
+            Text(
+                'منافذ الصعود (${s.uplinks.where((u) => u.up).length}'
                 '/${s.uplinks.length})',
                 style: AppType.bodyBold()),
           ]),
@@ -431,18 +580,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
                   style: AppType.micro(color: AppColors.textMid)),
             ]),
           ),
-          Directionality(
-            textDirection: TextDirection.ltr,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text('▼ ${_bytes(p.rxBytes)}',
-                    style: AppType.micro(color: AppColors.success)),
-                Text('▲ ${_bytes(p.txBytes)}',
-                    style: AppType.micro(color: AppColors.brand)),
-              ],
-            ),
-          ),
+          _flow(p.label),
         ]),
       );
 
@@ -528,19 +666,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
               ),
             ]),
           ),
-          if (o.online)
-            Directionality(
-              textDirection: TextDirection.ltr,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text('▼ ${_bytes(o.rxBytes)}',
-                      style: AppType.micro(color: AppColors.success)),
-                  Text('▲ ${_bytes(o.txBytes)}',
-                      style: AppType.micro(color: AppColors.brand)),
-                ],
-              ),
-            ),
+          if (o.online) _flow(o.label),
         ]),
       );
 
@@ -568,6 +694,10 @@ class _VsolLivePanelState extends State<VsolLivePanel>
                 overflow: TextOverflow.ellipsis,
                 style: AppType.rowLabelBold()),
           ),
+          if (u.up) ...[
+            _flow(u.name),
+            const SizedBox(width: 8),
+          ],
           Text(u.up ? '${u.speedMbps}M' : '—',
               style: AppType.microBold(
                   color: u.up ? AppColors.textMid : AppColors.textLow)),
@@ -637,16 +767,73 @@ class _VsolLivePanelState extends State<VsolLivePanel>
     return '${d.inMinutes} دقيقة';
   }
 
-  static String _bytes(int b) {
-    if (b <= 0) return '0';
-    const u = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
-    var v = b.toDouble();
+  /// معدّلٌ بالبت في الثانية ← نصّ. و`null` تُكتب «—» لا صفراً:
+  /// «لا نعرف» ليست «لا مرور».
+  static String _rate(double? bps) {
+    if (bps == null) return '—';
+    const u = ['bps', 'Kbps', 'Mbps', 'Gbps'];
+    var v = bps;
     var i = 0;
-    while (v >= 1024 && i < u.length - 1) {
-      v /= 1024;
+    while (v >= 1000 && i < u.length - 1) {
+      v /= 1000;
       i++;
     }
-    return '${v.toStringAsFixed(v >= 100 || i == 0 ? 0 : 1)}${u[i]}';
+    return '${v.toStringAsFixed(v >= 100 || i == 0 ? 0 : 1)} ${u[i]}';
+  }
+
+  /// مجموع معدّلات منافذ PON — المعروفُ منها وحده.
+  ///
+  /// إن جهلنا بعضها (عدّادٌ التفّ بين لقطتين) نقول «جزئيّ» بدل أن
+  /// نجمع ما نعرف ونُقدّمه مجموعاً كاملاً.
+  String _ponFlow(VsolOltStats s) {
+    if (_rates.isEmpty) return '…';
+    var total = 0.0;
+    var unknown = 0;
+    for (final p in s.ponPorts) {
+      final t = _rates[p.label];
+      if (t == null || !t.known) {
+        unknown++;
+        continue;
+      }
+      total += t.rxBps! + t.txBps!;
+    }
+    if (unknown == s.ponPorts.length) return '—';
+    return unknown == 0 ? _rate(total) : '${_rate(total)} (جزئيّ)';
+  }
+
+  /// سطرا الوارد والصادر — معدّلاً إن عرفناه، وإلّا «…» حتّى اللقطة
+  /// الثانية.
+  Widget _flow(String key) {
+    final t = _rates[key];
+    // ⚠️ **الاتّجاه من زاوية المشترك لا من زاوية الأولت.**
+    //
+    // `ifOutOctets` هو ما يُرسله الأولت نزولاً إلى الـONU — أي
+    // **تنزيل** المشترك. و`ifInOctets` ما يصعد منه — أي **رفعه**.
+    // قياسٌ فعليّ ٢٠٢٦-١٠-٠١ يؤكّده: `EPON0/1` خرج ٤٥ ميجابت ودخل
+    // ٣٫١ — وهي نسبة الاستهلاك المنزليّ المعروفة، معكوسةً لو قرأناها
+    // بالمقلوب.
+    //
+    // (بلاغ المستخدم على لوحة روجي ٢٠٢٦-٠٩-٢٨: «خابط أعلى أبلود
+    // وعلى داونلود وهلشي خطأ»)
+    Widget line(String tag, double? bps, Color c) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(tag, style: AppType.micro(color: AppColors.textLow)),
+            const SizedBox(width: 3),
+            Directionality(
+              textDirection: TextDirection.ltr,
+              child: Text(t == null ? '…' : _rate(bps),
+                  style: AppType.micro(color: c)),
+            ),
+          ],
+        );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        line('▼ تنزيل', t?.txBps, AppColors.success),
+        line('▲ رفع', t?.rxBps, AppColors.brand),
+      ],
+    );
   }
 
   static String _clock(DateTime t) =>

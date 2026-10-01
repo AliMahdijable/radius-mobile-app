@@ -10,6 +10,7 @@ import '../../../api/network_devices_api.dart';
 import '../../../core/util/error_text.dart';
 import '../../../models/network_device.dart';
 import '../../../services/permissions_service.dart';
+import '../../../services/device_stats_cache.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -60,6 +61,19 @@ class _CiscoLivePanelState extends State<CiscoLivePanel>
   @override
   void initState() {
     super.initState();
+    // ── بذرةٌ من المخزن ────────────────────────────────────────────
+    //
+    // ⚡ بلا بذرٍ تُدفَع جلسةٌ كاملة في **كلّ** فتحةٍ للجهاز ولو أُغلق
+    // قبل ثوانٍ، فيرى المدير دوّارةً على بياناتٍ كانت بين يديه.
+    //
+    // (طلب المستخدم ٢٠٢٦-١٠-٠١: «أهمّ شي عندي سرعة الاستجابة وعرض
+    // البيانات وتحديثها… وهلشي بجميع الأجهزة»)
+    _stats = DeviceStatsCache.instance.seedFor<CiscoStats>(widget.device.id);
+    // وعمرُها معها: رقمٌ قديمٌ تحت شارة «مباشر» كذبة.
+    final seedAge = DeviceStatsCache.instance.ageOf(widget.device.id);
+    if (_stats != null && seedAge != null) {
+      _lastFetch = DateTime.now().subtract(seedAge);
+    }
     WidgetsBinding.instance.addObserver(this);
     _schedule();
     unawaited(_fetch());
@@ -148,6 +162,7 @@ class _CiscoLivePanelState extends State<CiscoLivePanel>
       _computeRates(stats, now);
       setState(() {
         _stats = stats;
+        DeviceStatsCache.instance.putRaw(widget.device.id, stats);
         _lastFetch = now;
         _error = null;
       });

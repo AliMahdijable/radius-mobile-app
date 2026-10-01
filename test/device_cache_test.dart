@@ -89,7 +89,8 @@ void main() {
     test('يمتنع بنفس أسباب البطاقة', () {
       expect(warm.contains('DeviceVitals.skipReason(d) != null'), isTrue);
       expect(warm.contains('DeviceStatsCache.instance.ageOf(d.id) == null'),
-          isTrue, reason: 'ومن حمولتُه في المخزن لا يحتاج جلسة');
+          isTrue,
+          reason: 'ومن حمولتُه في المخزن لا يحتاج جلسة');
     });
 
     test('🚨 مالكٌ مستقلّ عن البطاقة', () {
@@ -104,21 +105,47 @@ void main() {
           File('lib/screens/network_devices/network_devices_screen.dart')
               .readAsStringSync();
       expect(list.contains('DeviceWarmup.instance.start(_all)'), isTrue);
-      expect(RegExp(r'DeviceWarmup\.instance\.stop\(\)').allMatches(list).length,
-          2, reason: 'عند التخلّص وعند دخول الخلفيّة');
+      expect(
+          RegExp(r'DeviceWarmup\.instance\.stop\(\)').allMatches(list).length,
+          2,
+          reason: 'عند التخلّص وعند دخول الخلفيّة');
     });
   });
 
   group('اللوحات تُبذَر وتُغذّي', () {
-    for (final b in ['mikrotik', 'ubnt', 'mimosa']) {
-      test(b, () {
-        final src =
-            File('lib/screens/network_devices/widgets/${b}_live_panel.dart')
-                .readAsStringSync();
+    // ⚠️ **القائمة تُقرأ من القرص لا تُكتب هنا.**
+    //
+    // كانت ثلاثة أسماءٍ مكتوبةً يدويّاً، فبقيت خمس لوحاتٍ خارج الحارس
+    // بلا أن يصرخ شيء: Cisco وEdgeSwitch وRuijie وAirFiber60 وVSOL —
+    // كلٌّ منها تفتح جلسةً كاملةً في كلّ نقرةٍ على الجهاز.
+    //
+    // (طلب المستخدم ٢٠٢٦-١٠-٠١: «أهمّ شي عندي سرعة الاستجابة وعرض
+    // البيانات وتحديثها… وهلشي بجميع الأجهزة»)
+    //
+    // فنعدّها من المجلّد: أيّ لوحةٍ تُضاف تدخل الحارس بلا تذكُّر.
+    final panels = Directory('lib/screens/network_devices/widgets')
+        .listSync()
+        .whereType<File>()
+        .where((f) => f.path.endsWith('_live_panel.dart'))
+        .toList()
+      ..sort((a, b) => a.path.compareTo(b.path));
+
+    test('لا لوحةَ حيّةً خارج العدّ', () {
+      expect(panels.length, greaterThanOrEqualTo(8),
+          reason: 'اختفت لوحاتٌ أو تغيّرت التسمية — الحارس صار أعمى');
+    });
+
+    for (final f in panels) {
+      final name = f.uri.pathSegments.last.replaceAll('_live_panel.dart', '');
+      test(name, () {
+        final src = f.readAsStringSync();
         expect(src.contains('DeviceStatsCache.instance.seedFor<'), isTrue,
-            reason: '$b لا تُبذَر — تفتح جلسةً والحمولة في اليد');
+            reason: '$name لا تُبذَر — تفتح جلسةً والحمولة في اليد');
         expect(src.contains('DeviceStatsCache.instance.putRaw('), isTrue,
-            reason: '$b لا تُغذّي المخزن — الطريق ذهاباً وإياباً');
+            reason: '$name لا تُغذّي المخزن — الطريق ذهاباً وإياباً');
+        // والبذرة تحمل عمرها: رقمٌ قديمٌ تحت «مباشر» كذبة.
+        expect(src.contains('ageOf(widget.device.id)'), isTrue,
+            reason: '$name تبذر بلا عمر — تعرض القديم كأنّه الآن');
       });
     }
   });
@@ -219,10 +246,13 @@ void main() {
         final src =
             File('lib/screens/network_devices/widgets/${b}_live_panel.dart')
                 .readAsStringSync();
-        expect(src.contains('DeviceStatsCache.instance.ageOf(widget.device.id)'),
-            isTrue, reason: '$b لا تقرأ عمر البذرة');
+        expect(
+            src.contains('DeviceStatsCache.instance.ageOf(widget.device.id)'),
+            isTrue,
+            reason: '$b لا تقرأ عمر البذرة');
         expect(src.contains('_lastFetch = DateTime.now().subtract(seedAge)'),
-            isTrue, reason: '$b تدّعي أنّ البذرة لحظيّة');
+            isTrue,
+            reason: '$b تدّعي أنّ البذرة لحظيّة');
       }
     });
 
@@ -232,7 +262,8 @@ void main() {
             File('lib/screens/network_devices/widgets/${b}_live_panel.dart')
                 .readAsStringSync();
         expect(src.contains('Duration(seconds: 10)'), isTrue, reason: b);
-        expect(src.contains('_refreshInterval = Duration(seconds: 15)'), isFalse,
+        expect(
+            src.contains('_refreshInterval = Duration(seconds: 15)'), isFalse,
             reason: b);
       }
     });

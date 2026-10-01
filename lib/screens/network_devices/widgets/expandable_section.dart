@@ -31,6 +31,21 @@ class ExpandableSection extends StatefulWidget {
 class _ExpandableSectionState extends State<ExpandableSection>
     with SingleTickerProviderStateMixin {
   late bool _expanded;
+
+  /// 🐛 ٢٠٢٦-١٠-٠١ — **خانةٌ خاصّة بنا لا يشاركنا فيها أحد.**
+  ///
+  /// بلا `identifier` يُشتقّ مفتاح PageStorage من **سلسلة مفاتيح
+  /// السياق**، فكلّ متمرِّدٍ (`Scrollable`) بداخلنا بلا `PageStorageKey`
+  /// خاصٍّ به يقرأ السلسلة نفسها — فيجد `bool` التوسيع ويحاول
+  /// تحويله إلى `double?` فينهار:
+  ///
+  ///   type 'bool' is not a subtype of type 'double?' in type cast
+  ///   ScrollPosition.restoreScrollOffset
+  ///
+  /// ظهر أوّل مرّةٍ على حقل البحث في لوحة OLT — وهو أوّل قسمٍ يحوي
+  /// حقلاً قابلاً للتمرير. والعطل كامنٌ هنا لا هناك، فكلّ قسمٍ يُضاف
+  /// إليه مثلُه ينهار. فنُعزل خانتنا باسمٍ صريح.
+  Object get _slot => ('expandable-section', widget.key);
   late final AnimationController _ctrl;
   late final Animation<double> _iconTurns;
 
@@ -57,7 +72,8 @@ class _ExpandableSectionState extends State<ExpandableSection>
     // نقرأ PageStorage هنا (وليس في initState) لأن context لا يزال ما
     // ينفع في initState. mounted بعد أول build.
     if (widget.key is PageStorageKey) {
-      final stored = PageStorage.of(context).readState(context) as bool?;
+      final stored = PageStorage.of(context)
+          .readState(context, identifier: _slot) as bool?;
       if (stored != null && stored != _expanded) {
         _expanded = stored;
         _ctrl.value = stored ? 1.0 : 0.0;
@@ -80,7 +96,7 @@ class _ExpandableSectionState extends State<ExpandableSection>
     }
     // احفظ الحالة في PageStorage لو الـwidget عنده PageStorageKey.
     if (widget.key is PageStorageKey) {
-      PageStorage.of(context).writeState(context, _expanded);
+      PageStorage.of(context).writeState(context, _expanded, identifier: _slot);
     }
   }
 
