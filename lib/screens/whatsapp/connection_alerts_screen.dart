@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/whatsapp_api.dart';
 import '../../core/util/bidi.dart';
+import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../services/connection_alerts.dart';
 import '../../services/permissions_service.dart';
@@ -223,34 +224,22 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
       ),
+      // 🐛 كان `FilledButton` بنصٍّ من `AppType.button()` بلا لون — ولونه
+      // الافتراضيّ `textHi` يغلب لون الزرّ، فظهر «حفظ» أسود على الأخضر.
+      // الآن زرّ النظام نفسه (`SheetFooterBar`): brand/onBrand حين يعمل،
+      // وsurfaceDisabled/textHint حين لا تغيير — كبقيّة الشاشات.
       bottomNavigationBar: _loading || !_canEdit
           ? null
-          : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.sm),
-                child: SizedBox(
-                  height: H.button,
-                  child: FilledButton.icon(
-                    onPressed: _saving || !_dirty ? null : _save,
-                    icon: _saving
-                        ? SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppColors.onBrand,
-                            ),
-                          )
-                        : const Icon(LucideIcons.check, size: 18),
-                    label: Text('حفظ', style: AppType.button()),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.brand,
-                      foregroundColor: AppColors.onBrand,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(R.button),
-                      ),
-                    ),
-                  ),
+          : ColoredBox(
+              color: AppColors.surface,
+              child: SafeArea(
+                top: false,
+                child: SheetFooterBar(
+                  label: 'حفظ',
+                  icon: LucideIcons.check,
+                  busy: _saving,
+                  enabled: _dirty,
+                  onPressed: _save,
                 ),
               ),
             ),
