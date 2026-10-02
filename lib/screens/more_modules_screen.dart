@@ -14,6 +14,7 @@ import 'subscriber_prices/subscriber_prices_screen.dart';
 import 'message_logs/message_logs_screen.dart';
 import 'employees/employees_screen.dart';
 import 'expenses/expenses_screen.dart';
+import 'settlements/settlements_screen.dart';
 import 'managers/managers_screen.dart';
 import 'packages/packages_screen.dart';
 import 'portal_settings/portal_settings_screen.dart';
@@ -71,6 +72,20 @@ class MoreModulesScreen extends StatelessWidget {
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const ExpensesScreen(),
+                ),
+              ),
+            ),
+          // 2026-10-02: «تسوية الحساب» — صندوق المدير بجانب الصرفيات، فهي
+          // إدارةٌ تُنشئ سندات لا تقريرٌ يُقرأ فقط (كالصرفيات تماماً).
+          if (Perms.has('settlements.view'))
+            _ModuleCard(
+              icon: LucideIcons.handCoins,
+              tone: AppTone.brand,
+              title: 'more.settlements'.tr(),
+              subtitle: 'more.settlements_hint'.tr(),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const SettlementsScreen(),
                 ),
               ),
             ),

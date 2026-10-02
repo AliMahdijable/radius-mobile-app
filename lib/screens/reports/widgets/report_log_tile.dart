@@ -394,6 +394,17 @@ _ActionMeta _actionMeta(String at, String desc) {
       return _ActionMeta('تعديل صرفية', LucideIcons.receipt, AppColors.error);
     case 'EXPENSE_DELETE':
       return _ActionMeta('حذف صرفية', LucideIcons.receipt, AppColors.error);
+    // 2026-10-02: «تسوية الحساب» وتدقيق عرض بيانات دخول الأجهزة.
+    case 'ACCOUNT_SETTLE':
+      return _ActionMeta(
+          'تسوية حساب', LucideIcons.handCoins, AppColors.brandAccent);
+    case 'ACCOUNT_SETTLE_VOID':
+      return _ActionMeta('إلغاء تسوية', LucideIcons.rotateCcw, AppColors.error);
+    case 'ACCOUNT_OPEN':
+      return _ActionMeta('بداية الحساب', LucideIcons.play, AppColors.brandAccent);
+    case 'DEVICE_CREDENTIALS_VIEW':
+      return _ActionMeta(
+          'عرض بيانات دخول جهاز', LucideIcons.keyRound, AppColors.textMid);
     case 'MANAGER_ADD':
       return _ActionMeta(
           'إضافة مدير', LucideIcons.userPlus, AppColors.brandAccent);

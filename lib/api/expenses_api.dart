@@ -12,6 +12,7 @@ class ExpenseRow {
     required this.expenseDate,
     this.note,
     this.actingEmployeeUsername,
+    this.settlementNumber,
   });
   final int id;
   final num amount;
@@ -23,6 +24,12 @@ class ExpenseRow {
 
   /// Set when an employee created the row instead of the admin.
   final String? actingEmployeeUsername;
+
+  /// رقم التسوية التي أقفلت الصرفية (`null` = مفتوحة). المقفلة لا تُعدَّل
+  /// ولا تُحذف — الخادم يرفضها بـ409 أيضاً (server/accountSettlements.js).
+  final int? settlementNumber;
+
+  bool get isLocked => settlementNumber != null;
 
   static ExpenseRow? fromJson(Map<String, dynamic> j) {
     final id = j['id'];
@@ -46,6 +53,7 @@ class ExpenseRow {
       actingEmployeeUsername:
           (j['acting_employee_full_name'] ?? j['acting_employee_username'])
               ?.toString(),
+      settlementNumber: int.tryParse(j['settlement_number']?.toString() ?? ''),
     );
   }
 }

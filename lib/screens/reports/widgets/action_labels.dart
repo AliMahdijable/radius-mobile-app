@@ -44,6 +44,14 @@ String arabicActionLabel(String actionType, [String description = '']) {
       return 'تعديل صرفية';
     case 'EXPENSE_DELETE':
       return 'حذف صرفية';
+    case 'ACCOUNT_SETTLE':
+      return 'تسوية حساب';
+    case 'ACCOUNT_SETTLE_VOID':
+      return 'إلغاء تسوية';
+    case 'ACCOUNT_OPEN':
+      return 'بداية الحساب';
+    case 'DEVICE_CREDENTIALS_VIEW':
+      return 'عرض بيانات دخول جهاز';
     case 'MANAGER_ADD':
       return 'إضافة مدير';
     case 'MANAGER_EDIT':

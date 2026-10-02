@@ -5,6 +5,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/expenses_api.dart';
 import '../../core/util/format.dart';
+import '../../core/widgets/design_sheet.dart';
+import '../../core/widgets/sheet_scaffold.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -86,6 +88,14 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   }
 
   Future<void> _openEdit(ExpenseRow row) async {
+    if (row.isLocked) {
+      showSheetSnack(
+        context,
+        'exp.locked'.tr(namedArgs: {'n': '${row.settlementNumber}'}),
+        isError: true,
+      );
+      return;
+    }
     final changed = await showEditExpenseSheet(context, row);
     if (changed == true) _load();
   }
@@ -430,15 +440,28 @@ class _ExpenseTile extends StatelessWidget {
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
-              IconButton(
-                icon:
-                    Icon(LucideIcons.trash2, size: 15, color: AppColors.error),
-                onPressed: onDelete,
-                tooltip: 'common.delete'.tr(),
-                splashRadius: 18,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              ),
+              // صرفيةٌ داخل تسوية: مقفلة — شارة رقمها بدل زرّ الحذف.
+              if (row.isLocked)
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(start: Sp.x6, end: Sp.sm),
+                  child: ToneChip(
+                    label: 'exp.locked_chip'
+                        .tr(namedArgs: {'n': '${row.settlementNumber}'}),
+                    icon: LucideIcons.lock,
+                    dense: true,
+                  ),
+                )
+              else
+                IconButton(
+                  icon: Icon(LucideIcons.trash2,
+                      size: 15, color: AppColors.error),
+                  onPressed: onDelete,
+                  tooltip: 'common.delete'.tr(),
+                  splashRadius: 18,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                ),
             ],
           ),
         ),
