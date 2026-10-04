@@ -121,6 +121,35 @@ class PermissionsService {
   /// يخصّ هذا الـadmin/employee — لا نريد بقايا تظهر للحساب الجاي.
   static Future<void> clear() => _clearEmployee();
 
+  /// منفذٌ للاختبار وحده: يضبط الحالة في الذاكرة بلا تخزينٍ آمن.
+  ///
+  /// ⚠️ **بلا هذا لا اختبارَ يكشف انحدار الحجب.** الخزنة الآمنة لا
+  /// تعمل في `flutter test`، وكلّ الحرّاس كانت على **نصّ المصدر** —
+  /// تُمسك حذف السطر ولا تُمسك منطقاً يكذب. (مراجعة الصلاحيّات
+  /// ٢٠٢٦-١٠-٠٤)
+  ///
+  /// ولاحظ `_loaded = true`: قبل التحميل تُرجع `has` قيمة `true` لكلّ
+  /// مفتاح (سطر 130)، فاختبارٌ ينسى ضبطه يرى كلّ الصلاحيّات ويمرّ كاذباً.
+  @visibleForTesting
+  static void debugSet({
+    required bool isEmployee,
+    Map<String, bool> permissions = const {},
+  }) {
+    _loaded = true;
+    _isEmployee = isEmployee;
+    _cached = isEmployee ? Map<String, bool>.from(permissions) : null;
+    _version.value = _version.value + 1;
+  }
+
+  /// يُعيد الحالة إلى «لم تُحمَّل» — لتنظيف الاختبارات بين الحالات.
+  @visibleForTesting
+  static void debugReset() {
+    _loaded = false;
+    _isEmployee = false;
+    _cached = null;
+    _version.value = _version.value + 1;
+  }
+
   /// الفحص الرئيسي. مفتاح واحد:
   ///   • الـadmin (is_employee = false) → دائماً true.
   ///   • الـemployee → true إذا الـmap عنده هذا الـkey = true.
