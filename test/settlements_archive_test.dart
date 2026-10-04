@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/archive_info.dart';
@@ -104,11 +105,67 @@ void main() {
     test('التوقيت يُقرأ UTC لا محلّيّاً', () {
       // 🐛 `DateTime.tryParse` العارية تُقدّم ثلاث ساعات على توقيتات
       // جدولنا — بلاغ ٢٠٢٦-٠٩-٠٤ المثبَّت في رأس `server_time.dart`.
-      final a = ArchiveInfo.fromJson(jsonDecode(
-          '{"hidden":true,"included":false,"settlements":1,'
-          '"last_cut_at":"2026-10-03T18:27:50.000Z"}'))!;
+      final a = ArchiveInfo.fromJson(
+          jsonDecode('{"hidden":true,"included":false,"settlements":1,'
+              '"last_cut_at":"2026-10-03T18:27:50.000Z"}'))!;
       expect(a.lastCutAt!.toUtc().hour, 18);
       expect(a.lastCutAt!.toUtc().minute, 27);
+    });
+  });
+
+  group('الرفض يصل على المسار الحيّ لا في DioException', () {
+    // 🐛 `validateStatus: s < 500` في `api_client.dart` يجعل الـ409
+    // **نجاحاً** في نظر Dio. فكان `settle()` يكتب `code: null` حرفيّاً
+    // على مسار الردّ، ويقرأ الرمز في فرع `on DioException` الذي لا
+    // يُدخَل إلّا على 5xx — فمعالجة `STALE` و`HEAD_CHANGED` في
+    // `settle_sheet.dart` شيفرةٌ ميّتة، والعقد §٣ يَعِد بها.
+    //
+    // ولأنّ العطل **غير مرئيّ** (يمرّ `analyze` ولا يرمي شيئاً)، الحارس
+    // على نصّ المصدر: لا سبيل إلى اختبار 409 بلا حقن Dio.
+    final api = File('lib/api/settlements_api.dart').readAsStringSync();
+
+    test('🚨 settle لا تُصفّر code على مسار الردّ', () {
+      // النافذة: من توقيع `settle` إلى سطر سجلّ الاستثناء. وما بعدها
+      // فرع 5xx، وما قبلها دوالٌّ أخرى تُرجع `code: null` بحقٍّ عند
+      // النجاح — فلا يصحّ فحص الملفّ كلّه.
+      final from = api.indexOf('})> settle({');
+      final to = api.indexOf("_log('settlements (POST)'");
+      expect(from, greaterThan(0), reason: 'تغيّر توقيع settle');
+      expect(to, greaterThan(from), reason: 'تغيّر اسم السجلّ');
+      // ⚠️ تُستبعَد التعليقات: تعليقُ الإصلاح نفسه يذكر العبارة.
+      final code = api
+          .substring(from, to)
+          .split('\n')
+          .where((l) => !l.trimLeft().startsWith('//'))
+          .join('\n');
+      expect(code.contains('code: null'), isFalse,
+          reason: 'عاد التصفير: الرفض 409 يصل ردّاً لا رميةً');
+    });
+
+    test('وتقرأ current من الجسم كي يُحدَّث الشيت', () {
+      expect(api.contains("CurrentAccount.fromJson(body['current'])"), isTrue);
+    });
+
+    test('والشيت ما زال يستهلك الرمزين', () {
+      final sheet = File('lib/screens/settlements/sheets/settle_sheet.dart')
+          .readAsStringSync();
+      expect(sheet.contains("'STALE'"), isTrue);
+      expect(sheet.contains("'HEAD_CHANGED'"), isTrue);
+    });
+  });
+
+  group('حبّة شريط الأرشيف محروسة', () {
+    // §٩-٢: موظّفٌ بلا `settlements.view` لا يرى الشاشة. والصرفيات
+    // والتقرير الماليّ صلاحيّتهما غير صلاحيّة التسوية، فالحبّة فيهما
+    // كانت طريقاً جانبيّاً إلى شاشةٍ أُخفيت بقصد.
+    test('🚨 لا دفعَ لـSettlementsScreen بلا فحص الصلاحيّة', () {
+      final bar = File('lib/screens/settlements/widgets/archive_bar.dart')
+          .readAsStringSync();
+      final push = bar.indexOf('SettlementsScreen');
+      expect(push, greaterThan(0));
+      final guard = bar.indexOf("Perms.has('settlements.view')");
+      expect(guard, greaterThan(0), reason: 'الحارس غائب');
+      expect(guard, lessThan(push), reason: 'الحارس بعد الدفع لا قبله');
     });
   });
 }

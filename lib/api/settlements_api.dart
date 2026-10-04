@@ -576,15 +576,37 @@ class SettlementsApi {
         },
       );
       final body = r.data ?? const {};
+      // ⚠️ **الرفض يصل هنا لا في `on DioException`.**
+      //
+      // 🐛 `validateStatus: s < 500` في `api_client.dart:66` يجعل الـ409
+      // **نجاحاً** في نظر Dio، فالفرع أدناه لا يُدخَل إلّا على 5xx أو
+      // عطل نقل. وكان هذا المسار يكتب `code: null` حرفيّاً — فمعالجة
+      // `STALE` و`HEAD_CHANGED` في `settle_sheet.dart` شيفرةٌ ميّتة،
+      // والشيت يبقى على أرقامٍ وحدٍّ بائتين فتُرفض كلّ ضغطةٍ تالية
+      // بالرفض نفسه. (والعقد §٣ يقول: «الجسم فيه `current` جديد:
+      // حدّث الشيت به واطلب تأكيداً جديداً».)
+      //
+      // و`current()` و`previewStart()` في هذا الملفّ تقرآن الرمز من
+      // الجسم على المسار الحيّ — `settle()` وحدها شذّت.
+      if (body['success'] != true) {
+        return (
+          ok: false,
+          settlement: null,
+          message: body['message']?.toString() ?? 'تعذّرت التسوية',
+          code: body['code']?.toString(),
+          current: CurrentAccount.fromJson(body['current']),
+        );
+      }
       final s = SettlementRecord.fromJson(body['data']);
       return (
-        ok: body['success'] == true && s != null,
+        ok: s != null,
         settlement: s,
         message: body['message']?.toString(),
-        code: null,
+        code: body['code']?.toString(),
         current: null,
       );
     } on DioException catch (e) {
+      // احتياطٌ لـ5xx وأعطال النقل وحدها — انظر أعلاه.
       _log('settlements (POST)', e);
       final b = _map(e.response?.data);
       return (

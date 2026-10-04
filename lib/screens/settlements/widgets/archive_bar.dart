@@ -7,6 +7,7 @@ import '../../../core/util/bidi.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
+import '../../../services/permissions_service.dart';
 import '../../../theme/typography.dart';
 import '../settle_widgets.dart';
 import '../settlements_screen.dart';
@@ -105,7 +106,14 @@ class ArchiveBar extends StatelessWidget {
                 ),
                 // ليس مدخلاً ثانياً للشاشة بل سياقٌ يشرح الإخفاء، كما
                 // في الويب. المدخل يبقى واحداً في «المزيد» (§٧).
-                ToneChip(
+                //
+                // ⚠️ **ويُحرَس بصلاحيّته.** الصرفيات والتقرير الماليّ
+                // صلاحيّتهما غير صلاحيّة التسوية، فموظّفٌ يملك
+                // `reports.expenses` وحدها كان يصل من هنا إلى شاشةٍ
+                // أُخفيت عنه في «المزيد» بقصد. الخادم يردّ 403 فلا
+                // تتسرّب بيانات، لكنّ §٩-٢ ينصّ على ألّا يراها أصلاً.
+                if (Perms.has('settlements.view'))
+                  ToneChip(
                   label: 'archive.open_settlements'.tr(),
                   tone: AppTone.neutral,
                   icon: LucideIcons.arrowLeft,
