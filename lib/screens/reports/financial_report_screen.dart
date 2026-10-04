@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/reports_api.dart';
+import '../settlements/widgets/archive_bar.dart';
 import '../../core/util/format.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -39,6 +40,10 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   /// فلاتر متقدّمة (مدير الحركة / مدير المستخدم / الموظف).
   ReportFilters _filters = const ReportFilters();
 
+  /// هل نطلب ما غطّته التسويات؟ الخادم يُخفيه افتراضيّاً من الأرقام
+  /// والسلسلة وآخر الحركات والصرفيات معاً (§٤).
+  bool _withArchive = false;
+
   // فلتر النوع القديم (chips) استُبدل بـReportFiltersPanel multi-select
   // في actionTypes. المنطق: _filterLogs يفلتر بحسب _filters.actionTypes.
 
@@ -66,6 +71,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
       // 2000 حد أعلى مطمئن للـmerge بين backend KPIs والمُحسَبة client-side
       // عند تفعيل فلتر. مغلق على 2000 لتقليل حجم الاستجابة.
       recentLimit: 2000,
+      includeArchived: _withArchive,
     );
     if (!mounted) return;
     setState(() {
@@ -102,6 +108,15 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
               children: [
+                ArchiveBar(
+                  archive: _data?.archive,
+                  includeArchived: _withArchive,
+                  onChanged: (v) {
+                    setState(() => _withArchive = v);
+                    _load();
+                  },
+                  padding: const EdgeInsetsDirectional.only(bottom: Sp.sm),
+                ),
                 DateRangeChipBar(
                   value: _range,
                   onChanged: (r) {

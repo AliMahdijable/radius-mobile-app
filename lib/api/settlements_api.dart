@@ -260,6 +260,63 @@ class CurrentAccount {
   }
 }
 
+/// معاينة البداية — `GET /api/v2/settlements/preview-start`.
+///
+/// قراءةٌ فقط: ترى ما سيكون في الصندوق لو بدأ الحساب من هذا التاريخ،
+/// بلا إنشاء بداية.
+///
+/// ⚠️ [expected] هنا **بلا** الرصيد الافتتاحيّ، لأنّ الرصيد لم يُحفَظ
+/// بعدُ — يكتبه المستخدم في الحقل. فالمعروض له `expected + opening`،
+/// ويتحرّك مع الحقل بلا طلبٍ جديد. (`docs/settlements-prompt.md` §٣)
+class StartPreview {
+  const StartPreview({
+    required this.start,
+    required this.startAt,
+    required this.cashActivations,
+    required this.debtPayments,
+    required this.cashIn,
+    required this.expenses,
+    required this.newDebts,
+    required this.expected,
+    required this.collectors,
+  });
+
+  /// ما أرسلناه كما ردّه الخادم: `now` أو `YYYY-MM-DD`. تُقرأ منه
+  /// التسمية المعروضة، لا من حالة الشاشة — فالردّ المتأخّر لا يُسمّى
+  /// باسم اختيارٍ أحدث.
+  final String start;
+  final DateTime? startAt;
+  final MoneyCount cashActivations;
+  final MoneyCount debtPayments;
+  final num cashIn;
+  final MoneyCount expenses;
+  final MoneyCount newDebts;
+
+  /// بلا الرصيد الافتتاحيّ — انظر تعليق الصنف.
+  final num expected;
+  final List<SettleCollector> collectors;
+
+  int get moveCount =>
+      cashActivations.count + debtPayments.count + expenses.count;
+
+  static StartPreview? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final j = Map<String, dynamic>.from(raw);
+    final t = _map(j['totals']);
+    return StartPreview(
+      start: j['start']?.toString() ?? '',
+      startAt: parseServerUtc(_str(j['start_at'])),
+      cashActivations: MoneyCount.fromJson(t['cash_activations']),
+      debtPayments: MoneyCount.fromJson(t['debt_payments']),
+      cashIn: _num(t['cash_in']),
+      expenses: MoneyCount.fromJson(t['expenses']),
+      newDebts: MoneyCount.fromJson(t['new_debts']),
+      expected: _num(t['expected_amount']),
+      collectors: _collectors(j['collectors']),
+    );
+  }
+}
+
 /// حركةٌ في الصندوق: نقدٌ داخل (تفعيل نقديّ · تسديد دين) أو صرفية.
 class BoxMovement {
   const BoxMovement({
@@ -353,6 +410,44 @@ class SettlementsApi {
     } catch (e) {
       _log('settlements/current', e);
       return (data: null, message: 'تعذّر حساب الصندوق', code: null);
+    }
+  }
+
+  /// GET /api/v2/settlements/preview-start?start=now|YYYY-MM-DD
+  ///
+  /// `settlements.view` تكفي، ولا تكتب شيئاً. أخطاؤها المتوقّعة
+  /// `BAD_START` (تاريخٌ قادم أو قبل 2025-01-01) و`ALREADY_STARTED`،
+  /// ورسالتها عربيّةٌ جاهزة للعرض.
+  static Future<({StartPreview? data, String? message, String? code})>
+      previewStart(String start) async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/v2/settlements/preview-start',
+        queryParameters: {'start': start},
+      );
+      final body = r.data ?? const {};
+      if (body['success'] != true) {
+        return (
+          data: null,
+          message: body['message']?.toString(),
+          code: body['code']?.toString(),
+        );
+      }
+      return (
+        data: StartPreview.fromJson(body['data']),
+        message: null,
+        code: null,
+      );
+    } on DioException catch (e) {
+      _log('settlements/preview-start', e);
+      return (
+        data: null,
+        message: _message(e, 'تعذّر حساب المعاينة'),
+        code: _code(e),
+      );
+    } catch (e) {
+      _log('settlements/preview-start', e);
+      return (data: null, message: 'تعذّر حساب المعاينة', code: null);
     }
   }
 

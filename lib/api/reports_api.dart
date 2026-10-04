@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import 'api_client.dart';
+import 'archive_info.dart';
 
 /// ============================================================
 /// Reports API — موحّد لكل التقارير الـ8 في v2 web:
@@ -157,9 +158,17 @@ class FinanceLog {
 }
 
 class FinanceReport {
-  const FinanceReport({required this.kpis, required this.recentLogs});
+  const FinanceReport({
+    required this.kpis,
+    required this.recentLogs,
+    this.archive,
+  });
   final FinanceKPIs kpis;
   final List<FinanceLog> recentLogs;
+
+  /// وصف ما أخفته التسويات عن هذا التقرير — `data.archive` لا الجذر.
+  /// `null` على خادمٍ قديم، وصفرُ تسوياتٍ لا يُعرض (§٤).
+  final ArchiveInfo? archive;
 }
 
 // ─────────── Activities (Activations + ActivityLog) ───────────
@@ -469,10 +478,14 @@ class ReportsApi {
     String? actionManagerId,
     String? userManager,
     int? employeeId,
+    bool includeArchived = false,
   }) async {
     try {
       final qp = <String, String>{
         'limit_logs': '$recentLimit',
+        // ما غطّته تسويةٌ فعّالة مخفيٌّ افتراضيّاً من الخادم: الأرقام
+        // والسلسلة وآخر الحركات والصرفيات معاً (§٤).
+        if (includeArchived) 'include_archived': '1',
         if (from != null) 'date_from': _dateStart(from),
         if (to != null) 'date_to': _dateEnd(to),
         // priority: actionManagerId (single) > userIds (list)
@@ -510,7 +523,11 @@ class ReportsApi {
           : const <FinanceLog>[];
       return (
         ok: true,
-        data: FinanceReport(kpis: kpis, recentLogs: logs),
+        data: FinanceReport(
+          kpis: kpis,
+          recentLogs: logs,
+          archive: ArchiveInfo.fromJson(data['archive']),
+        ),
         error: null,
       );
     } on DioException catch (e) {

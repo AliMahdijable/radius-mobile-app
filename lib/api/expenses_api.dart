@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import 'api_client.dart';
+import 'archive_info.dart';
 
 /// One row from /api/admin/expenses. Backend returns ISO dates; we
 /// parse to DateTime so the UI can sort and format consistently.
@@ -67,10 +68,17 @@ class ExpensesApi {
   /// Optional `from`/`to` ISO date strings (YYYY-MM-DD) filter the
   /// window. Returns the rows AND the SUM(amount) for the window so
   /// the screen can show a running total without a separate request.
-  static Future<({List<ExpenseRow> rows, num total})> list({
+  ///
+  /// ما غطّته تسويةٌ فعّالة مخفيٌّ **افتراضيّاً** من الخادم،
+  /// و[includeArchived] تُرجعه. ووصف الأرشيف في `archive` على **جذر**
+  /// الجسم بجوار `expenses` و`total`، لا تحت `data`
+  /// (`docs/settlements-prompt.md` §٤).
+  static Future<({List<ExpenseRow> rows, num total, ArchiveInfo? archive})>
+      list({
     String? from,
     String? to,
     int limit = 500,
+    bool includeArchived = false,
   }) async {
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
@@ -79,14 +87,15 @@ class ExpensesApi {
           if (from != null && from.isNotEmpty) 'from': from,
           if (to != null && to.isNotEmpty) 'to': to,
           'limit': limit,
+          if (includeArchived) 'include_archived': 1,
         },
       );
       final body = r.data ?? const {};
       if (body['success'] != true) {
-        return (rows: const <ExpenseRow>[], total: 0);
+        return (rows: const <ExpenseRow>[], total: 0, archive: null);
       }
       final list = body['expenses'];
-      if (list is! List) return (rows: const <ExpenseRow>[], total: 0);
+      if (list is! List) return (rows: const <ExpenseRow>[], total: 0, archive: null);
       final rows = list
           .whereType<Map>()
           .map((m) => ExpenseRow.fromJson(Map<String, dynamic>.from(m)))
@@ -96,13 +105,17 @@ class ExpensesApi {
       final total = rawTotal is num
           ? rawTotal
           : num.tryParse(rawTotal?.toString() ?? '') ?? 0;
-      return (rows: rows, total: total);
+      return (
+        rows: rows,
+        total: total,
+        archive: ArchiveInfo.fromJson(body['archive']),
+      );
     } on DioException catch (e) {
       _log('admin/expenses (GET)', e);
-      return (rows: const <ExpenseRow>[], total: 0);
+      return (rows: const <ExpenseRow>[], total: 0, archive: null);
     } catch (e) {
       _log('admin/expenses (GET)', e);
-      return (rows: const <ExpenseRow>[], total: 0);
+      return (rows: const <ExpenseRow>[], total: 0, archive: null);
     }
   }
 

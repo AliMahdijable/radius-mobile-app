@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 
 import '../services/auth_storage.dart';
 import 'api_client.dart';
+import 'archive_info.dart';
 import 'subscribers_api.dart';
 import 'whatsapp_api.dart';
 
@@ -128,8 +129,21 @@ class RevenuePoint {
 }
 
 class RevenueResult {
-  const RevenueResult({required this.amount, this.series = const []});
+  const RevenueResult({
+    required this.amount,
+    this.series = const [],
+    this.archive,
+  });
   final int amount;
+
+  /// ⚠️ **خارج `toJson`/`fromJson` عمداً.**
+  ///
+  /// الرقم المعروض قد يكون «ما بعد التسوية #N»، والمستخدم يحتاج أن
+  /// يعرف ذلك. لكنّ الحقل **لا يُخزَّن**: `dashboard_cache` يحفظ
+  /// الرقم والسلسلة، ووصف الأرشيف يشيخ في ثوانٍ — فيُعاد قراءته مع
+  /// كلّ جلبة. (وسبعة اختباراتٍ في `revenue_series_test` تحرس شكل
+  /// التخزين.)
+  final ArchiveInfo? archive;
 
   /// سلسلة يوميّة للمدى نفسه. مجموعها = `amount` بالضبط: الخادم يجمع
   /// الدلاء الأربعة ذاتها في الاثنين (أُصلح 2026-08-30 — كان يجمع
@@ -306,7 +320,12 @@ class DashboardApi {
       // السلسلة اختياريّة: غيابها لا يمنع عرض الرقم — الخادم القديم
       // (قبل إصلاح 2026-08-30) يُرجعها صفريّة، والأقدم لا يُرجعها.
       final series = parseRevenueSeries((body['data'] as Map?)?['timeseries']);
-      return RevenueResult(amount: amount, series: series);
+      return RevenueResult(
+        amount: amount,
+        series: series,
+        // `data.archive` لا الجذر — انظر `ArchiveInfo`.
+        archive: ArchiveInfo.fromJson((body['data'] as Map?)?['archive']),
+      );
     } on DioException catch (e) {
       _logErr('reports/finance(${period.name}) from=$from to=$to', e);
       return null;

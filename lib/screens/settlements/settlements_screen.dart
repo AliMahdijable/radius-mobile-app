@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/settlements_api.dart';
 import '../../core/util/amount_input.dart';
+import '../../core/util/bidi.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/sheet_scaffold.dart';
@@ -46,6 +47,20 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
   final _openingCtrl = TextEditingController();
   int _opening = 0;
   bool _starting = false;
+
+  // ── معاينة البداية ──────────────────────────────────────────────
+  //
+  // 🐛 «التصميم يدوخ… ما أعرف شنو أسوّي»: كان المدير يختار تاريخاً ولا
+  // يرى أثره إلّا بعد البدء، فيلغي ويعيد حتّى يفهم. فيرى الآن ما سيكون
+  // في الصندوق قبل أن يبدأ. (`docs/settlements-prompt.md` §١)
+  StartPreview? _preview;
+  bool _previewLoading = false;
+  String? _previewError;
+
+  /// عدّاد الطلبات: من عاد بغير آخر رقمٍ فردٌّ متأخّرٌ يخصّ اختياراً
+  /// سابقاً، فيُهمَل. «بداية الشهر» أثقل من «الآن»، وبلا العدّاد تكتب
+  /// أرقامُ الأوّل نفسها تحت تسمية الثاني.
+  int _previewGen = 0;
 
   @override
   void initState() {
@@ -113,6 +128,40 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
       _movesLoading = false;
     });
   }
+
+  /// معاينة البداية — طلبٌ لكلّ قيمةٍ جديدة. النتيجة السابقة تبقى
+  /// معروضةً **باهتةً** حتّى يصل الردّ، فلا يرتجف الصندوق بين اختيارين.
+  Future<void> _loadPreview(String start) async {
+    if (start.isEmpty) {
+      // «تاريخ آخر» بلا تاريخ: لا شيء يُعرض، والطلب المعلّق يُبطَل برفع
+      // العدّاد.
+      _previewGen++;
+      if (!mounted) return;
+      setState(() {
+        _preview = null;
+        _previewError = null;
+        _previewLoading = false;
+      });
+      return;
+    }
+    final gen = ++_previewGen;
+    setState(() {
+      _previewLoading = true;
+      _previewError = null;
+    });
+    final r = await SettlementsApi.previewStart(start);
+    if (!mounted || gen != _previewGen) return;
+    setState(() {
+      _previewLoading = false;
+      // ⚠️ عند الفشل نمحو السابق ولا نُبقيه تحت تاريخٍ جديد: الإبهات
+      // وحده لا يقول «هذه أرقام تاريخٍ آخر».
+      _preview = r.data;
+      _previewError = r.data == null ? r.message : null;
+    });
+  }
+
+  /// يُستدعى من كلّ ما يغيّر قيمة البداية.
+  void _startChanged(CurrentAccount cur) => _loadPreview(_startValue(cur));
 
   String _ymd(DateTime d) {
     String two(int n) => n.toString().padLeft(2, '0');
@@ -227,7 +276,9 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
     final Widget bar;
     if (!cur.started) {
       bar = SheetFooterBar(
-        label: 'settle.start_button'.tr(),
+        label: _startMode == 2
+            ? 'settle.start_button_now'.tr()
+            : 'settle.start_button_date'.tr(),
         icon: LucideIcons.play,
         busy: _starting,
         onPressed: _start,
@@ -405,6 +456,11 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
                       style: AppType.body(color: AppColors.textMid)
                           .copyWith(height: 1.6),
                     ),
+                    const SizedBox(height: Sp.sm),
+                    for (var i = 1; i <= 3; i++) ...[
+                      if (i > 1) const SizedBox(height: Sp.xs),
+                      _StepLine(n: i, text: 'settle.start_step$i'.tr()),
+                    ],
                   ],
                 ),
               ),
@@ -424,7 +480,10 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
                     'settle.start_now'.tr(),
                   ],
                   selectedIndex: _startMode < 3 ? _startMode : -1,
-                  onSelect: (i) => setState(() => _startMode = i),
+                  onSelect: (i) {
+                    setState(() => _startMode = i);
+                    _startChanged(cur);
+                  },
                 ),
                 const SizedBox(height: Sp.sm),
                 // الشريحة بعرض نصّها لا بعرض العمود الممدود.
@@ -440,12 +499,16 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
                     onTap: () async {
                       setState(() => _startMode = 3);
                       await _pickStartDate();
+                      if (!mounted) return;
+                      _startChanged(cur);
                     },
                   ),
                 ),
               ],
             ),
           ),
+          const SizedBox(height: Sp.lg),
+          _previewBox(),
           const SizedBox(height: Sp.lg),
           SheetSection(
             label: 'settle.opening_label'.tr(),
@@ -461,6 +524,131 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  /// ما سيكون في الصندوق لو بدأ الحساب من القيمة المختارة الآن.
+  ///
+  /// ⚠️ **الرصيد الافتتاحيّ يُجمَع هنا لا في الخادم.** `expected` من
+  /// `preview-start` **بلا** الرصيد، لأنّه لم يُحفَظ بعدُ — يكتبه
+  /// المستخدم في الحقل أسفل هذا الصندوق. فالمجموع يتحرّك مع الحقل بلا
+  /// طلبٍ جديد، ولا يُجمَع مرّتين. (`docs/settlements-prompt.md` §٣)
+  Widget _previewBox() {
+    final p = _preview;
+    final err = _previewError;
+
+    final Widget body;
+    if (err != null) {
+      body = Text(err,
+          style: AppType.micro(color: AppTone.danger.fill), maxLines: 3);
+    } else if (p == null) {
+      body = Text(
+        _previewLoading ? 'settle.preview_loading'.tr() : 'settle.preview_pick'.tr(),
+        style: AppType.micro(color: AppColors.textLow),
+        maxLines: 2,
+      );
+    } else if (p.moveCount == 0 && _opening == 0) {
+      body = Text('settle.preview_empty'.tr(),
+          style: AppType.micro(color: AppColors.textLow), maxLines: 3);
+    } else {
+      final total = p.expected + _opening;
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'settle.preview_title'.tr(namedArgs: {'from': iso(p.start)}),
+            style: AppType.micro(color: AppColors.textLow),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: Sp.xs),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: Text(
+                settleMoney(total),
+                style: AppType.cardTitleBold(
+                  color: total < 0 ? AppTone.danger.fill : AppColors.textHi,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: Sp.sm),
+          if (p.cashActivations.sum != 0)
+            _Line(
+              label: 'settle.cash_activations'.tr(),
+              value: '+${formatIQD(p.cashActivations.sum)}',
+            ),
+          if (p.debtPayments.sum != 0)
+            _Line(
+              label: 'settle.debt_payments'.tr(),
+              value: '+${formatIQD(p.debtPayments.sum)}',
+            ),
+          if (p.expenses.sum != 0)
+            _Line(
+              label: 'settle.expenses'.tr(),
+              value: '−${formatIQD(p.expenses.sum)}',
+            ),
+          if (_opening != 0)
+            _Line(
+              label: 'settle.opening_label'.tr(),
+              value: '+${formatIQD(_opening)}',
+            ),
+        ],
+      );
+    }
+
+    return SheetBox(
+      background: AppColors.surfaceSunken,
+      child: AnimatedOpacity(
+        // النتيجة السابقة تبقى باهتةً حتّى يصل الردّ، فلا يرتجف الصندوق.
+        opacity: _previewLoading && p != null ? 0.45 : 1,
+        duration: const Duration(milliseconds: 150),
+        child: Align(alignment: AlignmentDirectional.centerStart, child: body),
+      ),
+    );
+  }
+}
+
+/// خطوةٌ مرقّمة في شرح البداية.
+class _StepLine extends StatelessWidget {
+  const _StepLine({required this.n, required this.text});
+  final int n;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ⚠️ `shape: circle` لا `BorderRadius.circular(n)`: الرقم الخامّ
+        // يسقط في `design_scales_test`، و`H.checkbox` (٢٠) أقرب توكنٍ
+        // لدائرة رقمٍ صغيرة.
+        Container(
+          width: H.checkbox,
+          height: H.checkbox,
+          decoration: BoxDecoration(
+            color: AppTone.brand.softBg,
+            shape: BoxShape.circle,
+          ),
+          alignment: Alignment.center,
+          child: Text('$n',
+              style: AppType.micro(color: AppTone.brand.fill)),
+        ),
+        const SizedBox(width: Sp.sm),
+        // ⚠️ الدائرة `Container` فيَعُدّها حارس `flex_text_guard_test`
+        // جاراً ثابتاً، فالنصّ يحتاج `maxLines` و`ellipsis`.
+        Expanded(
+          child: Text(
+            text,
+            style: AppType.micro(color: AppColors.textMid).copyWith(height: 1.5),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }

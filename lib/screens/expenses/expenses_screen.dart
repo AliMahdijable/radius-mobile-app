@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/expenses_api.dart';
+import '../settlements/widgets/archive_bar.dart';
+import '../../api/archive_info.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/sheet_scaffold.dart';
@@ -30,6 +32,11 @@ class ExpensesScreen extends StatefulWidget {
 class _ExpensesScreenState extends State<ExpensesScreen> {
   List<ExpenseRow> _rows = const [];
   num _total = 0;
+
+  /// وصف ما أخفته التسويات، و«هل نطلبه؟». الخادم يُخفي المسوّى
+  /// افتراضيّاً، فقد تكون القائمة فارغةً وهي صحيحة — والشريط يشرحها.
+  ArchiveInfo? _archive;
+  bool _withArchive = false;
   bool _loading = true;
   // النطاق الافتراضي: أول الشهر إلى اليوم (مطابق الويب).
   late DateTime _from;
@@ -54,11 +61,13 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     final r = await ExpensesApi.list(
       from: _fmtDate(_from),
       to: _fmtDate(_to),
+      includeArchived: _withArchive,
     );
     if (!mounted) return;
     setState(() {
       _rows = r.rows;
       _total = r.total;
+      _archive = r.archive;
       _loading = false;
     });
   }
@@ -178,6 +187,14 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 to: _to,
                 accent: accent,
                 onPickRange: _pickRange,
+              ),
+              ArchiveBar(
+                archive: _archive,
+                includeArchived: _withArchive,
+                onChanged: (v) {
+                  setState(() => _withArchive = v);
+                  _load();
+                },
               ),
               if (_loading)
                 const Padding(

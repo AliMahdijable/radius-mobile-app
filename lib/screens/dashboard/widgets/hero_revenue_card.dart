@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../api/archive_info.dart';
 import '../../../api/dashboard_api.dart';
 import '../../../core/util/format.dart';
 import '../../../services/app_resumed_signal.dart';
@@ -107,12 +108,18 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
     setState(() {
       if (r != null) {
         _amounts[p] = r.amount;
+        _archives[p] = r.archive;
       } else {
         _failed.add(p);
       }
       _loading = null;
     });
   }
+
+  /// وصف الأرشيف لكلّ مدّة — لا يُخزَّن، يُعاد قراءته مع كلّ جلبة.
+  final Map<RevenuePeriod, ArchiveInfo?> _archives = {};
+
+  ArchiveInfo? get _archive => _archives[_period];
 
   bool get _periodFailed => _failed.contains(_period);
   bool get _periodLoading => _loading == _period && _amounts[_period] == null;
@@ -175,6 +182,21 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
               _PeriodTabs(current: _period, onSelect: _select),
             ],
           ),
+          // ⚠️ **سطرٌ ثانٍ لا إلحاقٌ بالعنوان.**
+          //
+          // الـ`Expanded` أعلاه يأخذ نحو ١١٠ نقطةٍ على شاشة ٣٢٠ (بعد
+          // تبويبات المدّة)، والعنوان وحده يملؤها تقريباً. فإلحاق
+          // « · بعد التسوية #N» به يُقَصّ صامتاً بالـellipsis ولا
+          // يُقرأ. والرقم هنا ناقصٌ فعلاً، فحقُّ المدير أن يعرف لماذا.
+          if (_archive?.hidden == true && _archive?.lastNumber != null) ...[
+            const SizedBox(height: Sp.xs),
+            Text(
+              'archive.after_settlement'.tr(args: ['${_archive!.lastNumber}']),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.micro(color: AppColors.textLow),
+            ),
+          ],
           const SizedBox(height: Sp.sm),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,

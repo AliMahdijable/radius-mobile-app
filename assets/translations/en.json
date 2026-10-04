@@ -1029,6 +1029,23 @@
     "wd4": "Thursday",
     "wd5": "Friday",
     "wd6": "Saturday",
-    "wd7": "Sunday"
+    "wd7": "Sunday",
+    "start_step1": "Pick the date you last took the cash, or the start of the month.",
+    "start_step2": "You'll see right below what came in and what you spent since then.",
+    "start_step3": "Tap Start, then Settle now when you take the cash — a numbered receipt is saved and the box resets.",
+    "preview_title": "From {from} until now the box would hold",
+    "preview_pick": "Pick a date to see what the box holds since that day.",
+    "preview_empty": "No activity in this period — pick an earlier date to include what came before.",
+    "preview_loading": "Calculating…",
+    "start_button_now": "Start the account from now",
+    "start_button_date": "Start the account from this date"
+  },
+  "archive": {
+    "showing_current": "Showing activity after settlement #{} · {} — settled items are archived.",
+    "showing_all": "Showing everything, including items settled in {} settlement(s).",
+    "tab_current": "Current",
+    "tab_all": "With archive",
+    "open_settlements": "Account settlement",
+    "after_settlement": "after settlement #{}"
   }
 }
