@@ -131,6 +131,19 @@ dependencies:
   flutter_local_notifications: ^19.4.2
 
   intl: any
+# ⚠️ **نسخةٌ مُقلَّمة من lucide — توفّر ٢٫٧٤ ميجابايت في كلّ تثبيت.**
+#
+# الحزمة الأصليّة تُعلن ستّ عائلاتِ خطوطٍ بأوزانٍ متغيّرة لا يستعملها
+# التطبيق (‏١٨٥ أيقونةً كلّها من العائلة الأولى)، ولا تُشذَّب لأنّها
+# عائلاتٌ مستقلّة لا أيقوناتٍ تُحلّ عبر `IconData`.
+#
+# والنسخة هنا شيفرتها **كما هي بلا تغيير** — المحذوف أصولٌ فقط. فعند
+# ترقية الحزمة: انسخها من pub ثانيةً، واحذف `assets/build_font`،
+# وأبقِ عائلة `Lucide` وحدها في `flutter.fonts`.
+dependency_overrides:
+  lucide_icons_flutter:
+    path: third_party/lucide_icons_flutter
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -199,7 +212,3 @@ flutter:
           weight: 600
         - asset: assets/fonts/IBMPlexSansArabic-700.ttf
           weight: 700
-    # Cairo يبقى مُسجَّلاً: الرجوع إليه تبديل ثابت واحد في AppType.
-    - family: Cairo
-      fonts:
-        - asset: assets/fonts/Cairo-VariableFont_slnt,wght.ttf

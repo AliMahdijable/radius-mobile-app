@@ -1,0 +1,30 @@
+name: lucide_icons_flutter
+description: A Lucide icon library package for Flutter applications. Fork of Feather Icons, open for anyone to contribute icons.
+version: 3.1.15
+homepage: https://lucide.dev
+repository: https://github.com/vqh2602/lucide-flutter-main
+
+environment:
+  sdk: ^3.0.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  # ⚠️ **نسخةٌ مُقلَّمة محلّيّاً — لا تُحدَّث من pub مباشرةً.**
+  #
+  # 🐛 الحزمة الأصليّة تُعلن سبع عائلاتِ خطوط: `Lucide` المستعملة،
+  # و`Lucide100..600` بأوزانٍ متغيّرة. والستّة الأخيرة **لا تُشذَّب**
+  # لأنّها عائلاتٌ مستقلّة لا أيقوناتٍ تُحلّ عبر `IconData` — فتُشحن
+  # كاملةً: ٢٫٧٤ ميجابايت في كلّ تثبيت، وصفرُ استعمالٍ في هذا التطبيق
+  # (فُحص: ١٨٥ أيقونةً كلّها من `LucideIcons.*`، أي العائلة الأولى).
+  #
+  # فالعائلة واحدة هنا، والشيفرة في `lib/` **كما هي بلا تغيير**.
+  #
+  # عند الترقية: انسخ الحزمة من pub، واحذف `assets/build_font`
+  # و`example` و`test` و`tool`، وأبقِ عائلة `Lucide` وحدها.
+  fonts:
+    - family: Lucide
+      fonts:
+        - asset: assets/lucide.ttf
