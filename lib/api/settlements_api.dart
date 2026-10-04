@@ -15,8 +15,9 @@ import 'api_client.dart';
 
 num _num(Object? v) => v is num ? v : num.tryParse(v?.toString() ?? '') ?? 0;
 
-int _int(Object? v) =>
-    v is int ? v : (v is num ? v.toInt() : int.tryParse(v?.toString() ?? '') ?? 0);
+int _int(Object? v) => v is int
+    ? v
+    : (v is num ? v.toInt() : int.tryParse(v?.toString() ?? '') ?? 0);
 
 int? _intOrNull(Object? v) {
   if (v == null) return null;
@@ -135,7 +136,8 @@ class SettlementRecord {
 
   bool get isOpening => kind == 'opening';
   bool get isVoided => status == 'voided';
-  int get moveCount => cashActivations.count + debtPayments.count + expenses.count;
+  int get moveCount =>
+      cashActivations.count + debtPayments.count + expenses.count;
 
   static SettlementRecord? fromJson(Object? raw) {
     final j = _map(raw);
@@ -231,7 +233,8 @@ class CurrentAccount {
   final String? today;
   final String? monthStart;
 
-  int get moveCount => cashActivations.count + debtPayments.count + expenses.count;
+  int get moveCount =>
+      cashActivations.count + debtPayments.count + expenses.count;
   bool get hasEmployees => collectors.any((c) => !c.isManager);
 
   static CurrentAccount? fromJson(Object? raw) {
@@ -403,10 +406,18 @@ class SettlementsApi {
           code: body['code']?.toString(),
         );
       }
-      return (data: CurrentAccount.fromJson(body['data']), message: null, code: null);
+      return (
+        data: CurrentAccount.fromJson(body['data']),
+        message: null,
+        code: null
+      );
     } on DioException catch (e) {
       _log('settlements/current', e);
-      return (data: null, message: _message(e, 'تعذّر حساب الصندوق'), code: _code(e));
+      return (
+        data: null,
+        message: _message(e, 'تعذّر حساب الصندوق'),
+        code: _code(e)
+      );
     } catch (e) {
       _log('settlements/current', e);
       return (data: null, message: 'تعذّر حساب الصندوق', code: null);
@@ -459,7 +470,18 @@ class SettlementsApi {
         '/api/v2/settlements/movements',
         queryParameters: {'settlement': settlement, 'limit': limit},
       );
-      final data = _map((r.data ?? const {})['data']);
+      final body = r.data ?? const {};
+      // ⚠️ **الرفض يصل ردّاً لا رميةً** — `validateStatus: s < 500`.
+      // فـ403 و409 يسقطان هنا لا في `on DioException`، ورسالة الخادم
+      // العربيّة الجاهزة تضيع إن لم تُقرأ من الجسم.
+      if (body['success'] != true) {
+        return (
+          items: const <BoxMovement>[],
+          hasMore: false,
+          message: body['message']?.toString() ?? 'تعذّر جلب الحركات',
+        );
+      }
+      final data = _map(body['data']);
       final list = data['items'];
       final items = list is List
           ? list
@@ -478,12 +500,17 @@ class SettlementsApi {
       );
     } catch (e) {
       _log('settlements/movements', e);
-      return (items: const <BoxMovement>[], hasMore: false, message: 'تعذّر جلب الحركات');
+      return (
+        items: const <BoxMovement>[],
+        hasMore: false,
+        message: 'تعذّر جلب الحركات'
+      );
     }
   }
 
   /// GET /api/v2/settlements — الأحدث أوّلاً (يشمل البداية والملغاة).
-  static Future<({List<SettlementRecord> items, int total})> list({
+  static Future<({List<SettlementRecord> items, int total, String? message})>
+      list({
     int limit = 30,
   }) async {
     try {
@@ -491,7 +518,20 @@ class SettlementsApi {
         '/api/v2/settlements',
         queryParameters: {'limit': limit},
       );
-      final data = _map((r.data ?? const {})['data']);
+      final body = r.data ?? const {};
+      // ⚠️ **الرفض يصل ردّاً لا رميةً** — `validateStatus: s < 500`.
+      // فـ403 و409 يسقطان هنا لا في `on DioException`، ورسالة الخادم
+      // العربيّة الجاهزة تضيع إن لم تُقرأ من الجسم.
+      // 🐛 وبلا ذلك تظهر «لا تسويات بعد» بجوار عدّادٍ يقول ٤٧ حركة:
+      // قائمةٌ فارغة تُقرأ «لا شيء» وهي في الحقيقة «لم نستطع القراءة».
+      if (body['success'] != true) {
+        return (
+          items: const <SettlementRecord>[],
+          total: 0,
+          message: body['message']?.toString() ?? 'تعذّر جلب السجلّ',
+        );
+      }
+      final data = _map(body['data']);
       final list = data['items'];
       final items = list is List
           ? list
@@ -499,22 +539,40 @@ class SettlementsApi {
               .whereType<SettlementRecord>()
               .toList()
           : const <SettlementRecord>[];
-      return (items: items, total: _int(data['total']));
+      return (items: items, total: _int(data['total']), message: null);
     } on DioException catch (e) {
       _log('settlements (GET)', e);
-      return (items: const <SettlementRecord>[], total: 0);
+      return (
+        items: const <SettlementRecord>[],
+        total: 0,
+        message: _message(e, 'تعذّر جلب السجلّ'),
+      );
     } catch (e) {
       _log('settlements (GET)', e);
-      return (items: const <SettlementRecord>[], total: 0);
+      return (
+        items: const <SettlementRecord>[],
+        total: 0,
+        message: 'تعذّر جلب السجلّ',
+      );
     }
   }
 
   /// GET /api/v2/settlements/:id — مع حصص المنفّذين.
   static Future<({SettlementRecord? data, String? message})> get(int id) async {
     try {
-      final r =
-          await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/settlements/$id');
-      return (data: SettlementRecord.fromJson((r.data ?? const {})['data']), message: null);
+      final r = await ApiClient.dio
+          .get<Map<String, dynamic>>('/api/v2/settlements/$id');
+      final body = r.data ?? const {};
+      // ⚠️ **الرفض يصل ردّاً لا رميةً** — `validateStatus: s < 500`.
+      // فـ403 و409 يسقطان هنا لا في `on DioException`، ورسالة الخادم
+      // العربيّة الجاهزة تضيع إن لم تُقرأ من الجسم.
+      if (body['success'] != true) {
+        return (
+          data: null,
+          message: body['message']?.toString() ?? 'تعذّر جلب التسوية',
+        );
+      }
+      return (data: SettlementRecord.fromJson(body['data']), message: null);
     } on DioException catch (e) {
       _log('settlements/:id', e);
       return (data: null, message: _message(e, 'تعذّر جلب التسوية'));
@@ -536,7 +594,10 @@ class SettlementsApi {
         data: {'start': start, 'opening_balance': openingBalance},
       );
       final body = r.data ?? const {};
-      return (ok: body['success'] == true, message: body['message']?.toString());
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString()
+      );
     } on DioException catch (e) {
       _log('settlements/open', e);
       return (ok: false, message: _message(e, 'تعذّر بدء الحساب'));
@@ -639,7 +700,10 @@ class SettlementsApi {
         data: {'reason': reason},
       );
       final body = r.data ?? const {};
-      return (ok: body['success'] == true, message: body['message']?.toString());
+      return (
+        ok: body['success'] == true,
+        message: body['message']?.toString()
+      );
     } on DioException catch (e) {
       _log('settlements/void', e);
       return (ok: false, message: _message(e, 'تعذّر الإلغاء'));

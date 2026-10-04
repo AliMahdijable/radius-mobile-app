@@ -168,4 +168,58 @@ void main() {
       expect(guard, lessThan(push), reason: 'الحارس بعد الدفع لا قبله');
     });
   });
+
+  group('الرفض لا يُقرَأ فراغاً', () {
+    // 🐛 مراجعة الصلاحيّات ٢٠٢٦-١٠-٠٤: دوالّ القراءة كانت تُرجع قائمةً
+    // فارغةً على 403، فتظهر «لا تسويات بعد» بجوار عدّادٍ يقول ٤٧ حركة.
+    // والسبب نفسه في كلّ الملفّ: `validateStatus: s < 500` يجعل الـ4xx
+    // ردّاً لا رميةً، فـ`_message(e, …)` لا يُدخَل إلّا على 5xx.
+    final api = File('lib/api/settlements_api.dart').readAsStringSync();
+    String bodyOf(String marker) {
+      final i = api.indexOf(marker);
+      expect(i, greaterThan(0), reason: 'تغيّرت العلامة: $marker');
+      return api.substring(i, i + 1400);
+    }
+
+    for (final m in const [
+      'list({',
+      'movements({String settlement',
+      '})> get(int id) async {',
+    ]) {
+      test('🚨 ${m.split('(').first} تقرأ success من الجسم', () {
+        expect(bodyOf(m).contains("body['success'] != true"), isTrue,
+            reason: 'الرفض 4xx يسقط في مسار النجاح بلا رسالة');
+      });
+    }
+
+    test('وكلّها تحمل قناة رسالة', () {
+      expect(api.contains('int total, String? message})'), isTrue,
+          reason: 'list بلا قناة رسالة — الفراغ لا يُفرَّق عن المنع');
+    });
+  });
+
+  group('تبديل الحساب محروسٌ بصلاحيّة التعديل', () {
+    // 🚨 التبديل يجلب كلمة سرّ المدير الفرعيّ ويُسجّل الدخول بها، بينما
+    // **رؤية** كلمة السرّ محكومةٌ بـ`managers.edit`. فكان الأضعف حرساً
+    // هو الأقوى أثراً — والخادم لا يمنعه: الدخول شرعيٌّ بكلمة سرٍّ صحيحة.
+    test('مدخل اللوحة يفحص managers.edit لا managers.view', () {
+      final dash = File('lib/screens/dashboard/dashboard_screen.dart')
+          .readAsStringSync();
+      final i = dash.indexOf('AccountsScreen');
+      expect(i, greaterThan(0));
+      final before = dash.substring(0, i);
+      final edit = before.lastIndexOf("Perms.has('managers.edit')");
+      final view = before.lastIndexOf("Perms.has('managers.view')");
+      expect(edit, greaterThan(0), reason: 'حارس التبديل غائب');
+      expect(edit, greaterThan(view),
+          reason: 'أقرب حارسٍ للتبديل ما زال managers.view');
+    });
+
+    test('والشاشة نفسها تفحص كذلك — لا المدخل وحده', () {
+      final acc =
+          File('lib/screens/accounts/accounts_screen.dart').readAsStringSync();
+      expect(acc.contains("!Perms.has('managers.edit')"), isTrue,
+          reason: 'مدخلٌ يُضاف غداً لا يعرف أن يفحص');
+    });
+  });
 }

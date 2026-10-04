@@ -1,4 +1,5 @@
 
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -31,7 +32,11 @@ import '../../core/util/error_text.dart';
 ///    الفرعي → يفتح MainShell جديد.
 /// 4. الأدمن الأصلي يقدر يعود بضغطة واحدة من شاشة الدخول (chip محفوظ).
 ///
-/// **صلاحيّة**: managers.view (نفس صلاحيّة رؤية القائمة).
+/// **صلاحيّة**: `managers.edit` — لا `managers.view`.
+///
+/// 🐛 ٢٠٢٦-١٠-٠٤: التبديل يجلب كلمة سرّ المدير الفرعيّ ويُسجّل الدخول
+/// بها، و**رؤية** كلمة السرّ محكومةٌ بـ`managers.edit`. فكان الأضعف
+/// حرساً هو الأقوى أثراً.
 class AccountsScreen extends StatefulWidget {
   const AccountsScreen({super.key});
 
@@ -319,6 +324,29 @@ class _AccountsScreenState extends State<AccountsScreen> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep
+    // ⚠️ حارسٌ ثانٍ في الشاشة لا في مدخلها وحده: مدخلٌ يُضاف غداً
+    // (إشعارٌ أو رابطٌ عميق) لا يعرف أن يفحص.
+    if (!Perms.has('managers.edit')) {
+      return Scaffold(
+        backgroundColor: AppColors.bg,
+        appBar: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text('accounts.title'.tr(), style: AppType.cardTitleBold()),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(Sp.xl),
+            child: Text(
+              'accounts.need_edit'.tr(),
+              textAlign: TextAlign.center,
+              style: AppType.body(color: AppColors.textMid),
+            ),
+          ),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(

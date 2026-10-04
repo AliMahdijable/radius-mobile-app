@@ -729,8 +729,19 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
           ),
           // 2026-08-26: أيقونة "الصفحات" — التبديل السريع بين حسابات
           // المدراء الفرعيّين. طلب المستخدم أن تكون جنب جرس الإشعارات
-          // للوصول السريع. محكومة بـmanagers.view.
-          if (Perms.has('managers.view')) ...[
+          // للوصول السريع.
+          //
+          // ⚠️ **`managers.edit` لا `managers.view`.**
+          //
+          // 🐛 ٢٠٢٦-١٠-٠٤، مراجعة الصلاحيّات: التبديل يجلب كلمة سرّ
+          // المدير الفرعيّ (`ManagersApi.fetchPassword`) ويُسجّل الدخول
+          // بها. و**رؤية** كلمة السرّ محكومةٌ بـ`managers.edit`
+          // (`manager_actions_sheet.dart:139`) — فكان موظّفٌ بـ`view`
+          // وحدها يُمنع من رؤيتها ويستطيع أن **يصير** ذلك المدير بكلّ
+          // صلاحيّاته. والخادم لا يمنعه: الدخول شرعيٌّ بكلمة سرٍّ صحيحة.
+          //
+          // فالتبديل أقوى من الرؤية، فلا يقلّ عنها حرساً.
+          if (Perms.has('managers.edit')) ...[
             _IconChip(
               icon: Icons.swap_horiz_rounded,
               onTap: () => Navigator.of(context).push(

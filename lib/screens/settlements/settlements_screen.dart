@@ -41,6 +41,12 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
   List<SettlementRecord> _history = const [];
   int _historyTotal = 0;
 
+  /// سبب خلوّ السجلّ أو الحركات — إن كان منعاً أو عطلاً لا فراغاً.
+  ///
+  /// ⚠️ قائمةٌ فارغة تُقرأ «لا شيء»، وهي أحياناً «لم نستطع القراءة».
+  /// فكان يظهر «لا تسويات بعد» بجوار عدّادٍ يقول ٤٧ حركة.
+  String? _historyMsg, _movesMsg;
+
   // بطاقة البداية
   int _startMode = 0; // 0 بداية الشهر · 1 بداية اليوم · 2 الآن · 3 تاريخ
   DateTime? _startDate;
@@ -88,6 +94,7 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
     }
     var moves = const <BoxMovement>[];
     var more = false;
+    String? histMsg, movMsg;
     var history = const <SettlementRecord>[];
     var total = 0;
     if (cur.started) {
@@ -101,6 +108,8 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
       more = m.hasMore;
       history = h.items;
       total = h.total;
+      histMsg = h.message;
+      movMsg = m.message;
     }
     setState(() {
       _cur = cur;
@@ -111,6 +120,8 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
       _movesMore = more;
       _history = history;
       _historyTotal = total;
+      _historyMsg = histMsg;
+      _movesMsg = movMsg;
     });
   }
 
@@ -254,7 +265,8 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
           IconButton(
             onPressed: _load,
             tooltip: 'common.refresh'.tr(),
-            icon: Icon(LucideIcons.refreshCw, size: 18, color: AppColors.textMid),
+            icon:
+                Icon(LucideIcons.refreshCw, size: 18, color: AppColors.textMid),
           ),
         ],
       ),
@@ -323,7 +335,8 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
                 : (_error ?? 'common.load_failed'.tr()),
             action: notInstalled
                 ? null
-                : TextButton(onPressed: _load, child: Text('common.retry'.tr())),
+                : TextButton(
+                    onPressed: _load, child: Text('common.retry'.tr())),
           ),
         ],
       );
@@ -336,7 +349,8 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
           if (cur.canSettle)
             _startCard(cur)
           else
-            _StateCard(icon: LucideIcons.wallet, text: 'settle.no_start_perm'.tr()),
+            _StateCard(
+                icon: LucideIcons.wallet, text: 'settle.no_start_perm'.tr()),
         ],
       );
     }
@@ -366,7 +380,12 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
             if (_moves.isEmpty && cur.openingBalance == 0)
               Padding(
                 padding: const EdgeInsets.all(Sp.lg),
-                child: Text('settle.no_movements'.tr(), style: AppType.muted()),
+                child: Text(
+                  _movesMsg ?? 'settle.no_movements'.tr(),
+                  style: _movesMsg == null
+                      ? AppType.muted()
+                      : AppType.muted(color: AppTone.danger.fill),
+                ),
               ),
             for (final m in _moves) MovementTile(m: m),
             if (_movesMore)
@@ -399,7 +418,13 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
             if (_history.isEmpty)
               Padding(
                 padding: const EdgeInsets.all(Sp.lg),
-                child: Text('settle.history_empty'.tr(), style: AppType.muted()),
+                // السبب إن وُجد، وإلّا فهو فراغٌ حقيقيّ.
+                child: Text(
+                  _historyMsg ?? 'settle.history_empty'.tr(),
+                  style: _historyMsg == null
+                      ? AppType.muted()
+                      : AppType.muted(color: AppTone.danger.fill),
+                ),
               ),
             for (final r in _history)
               _HistoryTile(record: r, onTap: () => _openDetail(r.id)),
@@ -439,7 +464,8 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
                   color: AppTone.brand.softBg,
                   borderRadius: BorderRadius.circular(R.icon),
                 ),
-                child: Icon(LucideIcons.wallet, size: 20, color: AppTone.brand.fill),
+                child: Icon(LucideIcons.wallet,
+                    size: 20, color: AppTone.brand.fill),
               ),
               const SizedBox(width: Sp.md),
               Expanded(
@@ -514,7 +540,8 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
             label: 'settle.opening_label'.tr(),
             footnote: 'settle.opening_hint'.tr(),
             child: SheetBox(
-              padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: 12),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: 12),
               child: AmountTextField(
                 controller: _openingCtrl,
                 currency: 'common.currency'.tr(),
@@ -543,7 +570,9 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
           style: AppType.micro(color: AppTone.danger.fill), maxLines: 3);
     } else if (p == null) {
       body = Text(
-        _previewLoading ? 'settle.preview_loading'.tr() : 'settle.preview_pick'.tr(),
+        _previewLoading
+            ? 'settle.preview_loading'.tr()
+            : 'settle.preview_pick'.tr(),
         style: AppType.micro(color: AppColors.textLow),
         maxLines: 2,
       );
@@ -634,8 +663,7 @@ class _StepLine extends StatelessWidget {
             shape: BoxShape.circle,
           ),
           alignment: Alignment.center,
-          child: Text('$n',
-              style: AppType.micro(color: AppTone.brand.fill)),
+          child: Text('$n', style: AppType.micro(color: AppTone.brand.fill)),
         ),
         const SizedBox(width: Sp.sm),
         // ⚠️ الدائرة `Container` فيَعُدّها حارس `flex_text_guard_test`
@@ -643,7 +671,8 @@ class _StepLine extends StatelessWidget {
         Expanded(
           child: Text(
             text,
-            style: AppType.micro(color: AppColors.textMid).copyWith(height: 1.5),
+            style:
+                AppType.micro(color: AppColors.textMid).copyWith(height: 1.5),
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
           ),
@@ -665,7 +694,8 @@ class _BoxCard extends StatelessWidget {
     final when = settleWhen(cur.periodStart, weekday: true);
     final since = (head == null || head.isOpening)
         ? 'settle.since_opening'.tr(namedArgs: {'when': when})
-        : 'settle.since_settlement'.tr(namedArgs: {'n': '${head.number}', 'when': when});
+        : 'settle.since_settlement'
+            .tr(namedArgs: {'n': '${head.number}', 'when': when});
     final negative = cur.expected < 0;
     return Container(
       clipBehavior: Clip.antiAlias,
@@ -688,7 +718,8 @@ class _BoxCard extends StatelessWidget {
                     color: AppTone.brand.softBg,
                     borderRadius: BorderRadius.circular(R.icon),
                   ),
-                  child: Icon(LucideIcons.wallet, size: 20, color: AppTone.brand.fill),
+                  child: Icon(LucideIcons.wallet,
+                      size: 20, color: AppTone.brand.fill),
                 ),
                 const SizedBox(width: Sp.md),
                 Expanded(
@@ -721,7 +752,8 @@ class _BoxCard extends StatelessWidget {
           ),
           Divider(height: 1, color: AppColors.divider),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.sm),
+            padding:
+                const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.sm),
             child: Column(
               children: [
                 if (cur.openingBalance != 0)
@@ -732,12 +764,14 @@ class _BoxCard extends StatelessWidget {
                     value: settleMoney(cur.openingBalance),
                   ),
                 _Line(
-                  label: '${'settle.cash_activations'.tr()} · ${cur.cashActivations.count}',
+                  label:
+                      '${'settle.cash_activations'.tr()} · ${cur.cashActivations.count}',
                   value: '+${formatIQD(cur.cashActivations.sum)}',
                   color: AppColors.success,
                 ),
                 _Line(
-                  label: '${'settle.debt_payments'.tr()} · ${cur.debtPayments.count}',
+                  label:
+                      '${'settle.debt_payments'.tr()} · ${cur.debtPayments.count}',
                   value: '+${formatIQD(cur.debtPayments.sum)}',
                   color: AppColors.success,
                 ),
@@ -905,7 +939,8 @@ class _HistoryTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
           decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: AppColors.divider, width: 0.5)),
+            border: Border(
+                bottom: BorderSide(color: AppColors.divider, width: 0.5)),
           ),
           child: Opacity(
             opacity: r.isVoided ? 0.6 : 1.0,
@@ -938,9 +973,11 @@ class _HistoryTile extends StatelessWidget {
                           Flexible(
                             child: Text(
                               title,
-                              style: AppType.bodyStrong(color: AppColors.textHi).copyWith(
-                                decoration:
-                                    r.isVoided ? TextDecoration.lineThrough : null,
+                              style: AppType.bodyStrong(color: AppColors.textHi)
+                                  .copyWith(
+                                decoration: r.isVoided
+                                    ? TextDecoration.lineThrough
+                                    : null,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -977,13 +1014,15 @@ class _HistoryTile extends StatelessWidget {
                     ),
                     if (!r.isOpening && r.carried != 0)
                       Text(
-                        'settle.carried_short'.tr(namedArgs: {'amt': settleMoney(r.carried)}),
+                        'settle.carried_short'
+                            .tr(namedArgs: {'amt': settleMoney(r.carried)}),
                         style: AppType.muted(),
                       ),
                   ],
                 ),
                 const SizedBox(width: Sp.xs),
-                Icon(LucideIcons.chevronLeft, size: 16, color: AppColors.textLow),
+                Icon(LucideIcons.chevronLeft,
+                    size: 16, color: AppColors.textLow),
               ],
             ),
           ),

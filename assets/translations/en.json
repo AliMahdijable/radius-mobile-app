@@ -1047,5 +1047,9 @@
     "tab_all": "With archive",
     "open_settlements": "Account settlement",
     "after_settlement": "after settlement #{}"
+  },
+  "accounts": {
+    "title": "Accounts",
+    "need_edit": "Switching accounts needs the “edit managers” permission — it uses the sub-manager’s password. Ask your administrator."
   }
 }
