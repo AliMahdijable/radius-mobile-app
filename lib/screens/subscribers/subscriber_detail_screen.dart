@@ -10,6 +10,7 @@ import '../../api/device_probe_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../api/whatsapp_api.dart';
 import '../../core/util/format.dart';
+import '../../core/util/phone.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/subscriber.dart';
 import '../../services/app_resumed_signal.dart';
@@ -226,113 +227,115 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                   await _onDataChanged(force: true);
                 },
                 child: ListView(
-                padding: const EdgeInsets.fromLTRB(
-                  Sp.lg,
-                  Sp.sm,
-                  Sp.lg,
-                  Sp.huge,
-                ),
-                children: [
-                  // الهيرو الجديد — كرت teal كبير مع 3 إحصاءات.
-                  _SubscriberHero(sub: sub, password: _subscriberPassword),
-                  // بلوك الدين مباشرةً تحت بطاقة الهويّة كما في المخطّط
-                  // (كان أسفل الصفحة بعد كارت الجهاز).
-                  // ⚠️ تظهر دائماً — حتّى عند الصفر.
-                  //
-                  // 🐛 طلب المستخدم ٢٠٢٦-٠٩-٠٢: «بدل حقّ دين على
-                  // المشترك يظهر رصيده إن كان عنده رصيد، ويصير إضافة
-                  // دين».
-                  //
-                  // وكانت تختفي عند الصفر كلّيّاً، فيبقى المدير بلا
-                  // جواب عن سؤالٍ يسأله في كلّ زيارة: «كم له وكم
-                  // عليه؟». والصفر جوابٌ لا فراغ.
-                  //
-                  // ومعها مدخل «إضافة دين» على البطاقة نفسها بدل أن
-                  // يبقى مدفوناً في «إجراءات أخرى».
-                  const SizedBox(height: Sp.md),
-                  BalanceCard(
-                    sub: sub,
-                    onRemind: sub.hasDebt &&
-                            _sendingTemplate == null &&
-                            sub.displayPhone.isNotEmpty
-                        ? () => _sendTemplate('debt_reminder')
-                        : null,
-                    // 2026-09-05: كان الشرط `balanceAmount != 0` فيفتح
-                    // «تسديد» لصاحب الرصيد الدائن أيضاً — والتسديد يجمع
-                    // على الرصيد لا يطرح منه، فمشتركٌ له ٣٠٬٠٠٠ يصير له
-                    // ٦٠٬٠٠٠. ومَن أراد استهلاك رصيدٍ دائن فبابه «إضافة
-                    // دين» وهو ظاهرٌ له أصلاً.
-                    onPay: sub.hasDebt && Perms.has('subscribers.pay_debt')
-                        ? () => showPayDebtSheet(context, sub)
-                        : null,
-                    onAddDebt: Perms.has('subscribers.add_debt')
-                        ? () => showAddDebtSheet(context, sub)
-                        : null,
+                  padding: const EdgeInsets.fromLTRB(
+                    Sp.lg,
+                    Sp.sm,
+                    Sp.lg,
+                    Sp.huge,
                   ),
-                  // صفّ الإجراءات الأربعة — المخطّط يضعه مباشرةً تحت
-                  // بلوك الدين وفوق كارت الاتصال. الباقي انتقل إلى شيت
-                  // «إجراءات أخرى» خلف بلاطة «المزيد».
-                  const SizedBox(height: Sp.md),
-                  // يُعاد بناؤه مع كلّ قراءةٍ للجهاز ومع وصول حدود المدير:
-                  // بلاطة «تنبيه» تظهر وتختفي بحسبهما.
-                  AnimatedBuilder(
-                    animation: Listenable.merge(
-                        [DeviceProbeBus.tick, ConnectionAlertSettings.current]),
-                    builder: (context, _) =>
-                        SubscriberActionTiles(actions: _quickActions()),
-                  ),
-                  const SizedBox(height: Sp.md),
-                  // كرتُ الاتّصال يقرّر ظهوره بنفسه: يظهر عند جلسةٍ
-                  // قائمة، **أو** حين يوجد IP مثبَّت وإن كان مفصولاً —
-                  // فالعنوان المثبَّت لا يزول بزوال الجلسة. وكان
-                  // بطاقةً مستقلّة فأكل مساحةً لا يستحقّها لسطرٍ واحد.
-                  _LiveSessionCard(sub: sub),
-                  // معلومات الجهاز (ONT/UBNT) — تظهر لأي مشترك غير معطَّل
-                  // ولم ينتهِ اشتراكه. الـcard يجرّب:
-                  //   1) SAS4 IP لو موجود
-                  //   2) customIp من DeviceConfig (يشتغل حتى بدون RADIUS session)
-                  //   3) placeholder "لم يُتمكّن من الوصول" + زر إعدادات
-                  // مطابق v1 (subscriber_details_screen.dart:2666-2685) —
-                  // كان v2 يشترط sub.isOnline + IP نشط، يخفي كل الكارت
-                  // للمشتركين اللي مفروض المدير يفحصهم أو يضبطهم
-                  // (بلاغ 2026-07-13).
-                  //
-                  // ⚠️ ٢٠٢٦-٠٩-٠٢: وسقط الشرطان الباقيان أيضاً.
-                  //
-                  // بلاغ المستخدم: «معلومات الاتصال مال النانو مفروض
-                  // حتّى لو معطّل تظهر». وهو محقّ، والسبب أعمق من
-                  // الراحة: **التعطيل قرارٌ في الفوترة، والنانو جهازٌ
-                  // على سطح بيت**. تعطيلُ الخدمة لا يُطفئ الجهاز ولا
-                  // يُنزله.
-                  //
-                  // ومن يُعطَّل هو بالضبط من تحتاج فحص جهازه: هل
-                  // ما زال في مكانه؟ هل نُقل إلى جارٍ؟ هل يُسحب منه
-                  // إنترنت؟ وإخفاءُ الكارت عنه يمنع السؤال الذي
-                  // يُطرح لأجله.
-                  DeviceProbeCard(
-                    ip: sub.ipAddress ?? '',
-                    username: sub.username,
-                  ),
-                  const SizedBox(height: Sp.sm),
-                  // مطلب 2026-06-12: _SubscriptionCard المنفصل أُلغي
-                  // — كل معلوماته (الباقة/السعر/الانتهاء/التابع/الهاتف)
-                  // صارت داخل _SubscriberHero. كرت الرصيد لا يزال يظهر
-                  // مستقلاً لما الـbalance != 0.
-                  //
-                  // 2026-08-29 (S4): شبكة العمليّات ذات الـ18 بلاطة
-                  // أُلغيت. المخطّط يوزّعها على ثلاث طبقات: أربع بلاطات
-                  // فوق · زرّ تجديد أساسي هنا · والباقي في شيت «المزيد».
-                  if (Perms.has('subscribers.activate')) ...[
+                  children: [
+                    // الهيرو الجديد — كرت teal كبير مع 3 إحصاءات.
+                    _SubscriberHero(sub: sub, password: _subscriberPassword),
+                    // بلوك الدين مباشرةً تحت بطاقة الهويّة كما في المخطّط
+                    // (كان أسفل الصفحة بعد كارت الجهاز).
+                    // ⚠️ تظهر دائماً — حتّى عند الصفر.
+                    //
+                    // 🐛 طلب المستخدم ٢٠٢٦-٠٩-٠٢: «بدل حقّ دين على
+                    // المشترك يظهر رصيده إن كان عنده رصيد، ويصير إضافة
+                    // دين».
+                    //
+                    // وكانت تختفي عند الصفر كلّيّاً، فيبقى المدير بلا
+                    // جواب عن سؤالٍ يسأله في كلّ زيارة: «كم له وكم
+                    // عليه؟». والصفر جوابٌ لا فراغ.
+                    //
+                    // ومعها مدخل «إضافة دين» على البطاقة نفسها بدل أن
+                    // يبقى مدفوناً في «إجراءات أخرى».
                     const SizedBox(height: Sp.md),
-                    SubscriberPrimaryAction(
-                      icon: LucideIcons.refreshCw,
-                      label: 'subscribers.renew_subscription'.tr(),
-                      busy: _isBusy,
-                      onTap: () => showActivateSheet(context, sub),
+                    BalanceCard(
+                      sub: sub,
+                      onRemind: sub.hasDebt &&
+                              _sendingTemplate == null &&
+                              sub.displayPhone.isNotEmpty
+                          ? () => _sendTemplate('debt_reminder')
+                          : null,
+                      // 2026-09-05: كان الشرط `balanceAmount != 0` فيفتح
+                      // «تسديد» لصاحب الرصيد الدائن أيضاً — والتسديد يجمع
+                      // على الرصيد لا يطرح منه، فمشتركٌ له ٣٠٬٠٠٠ يصير له
+                      // ٦٠٬٠٠٠. ومَن أراد استهلاك رصيدٍ دائن فبابه «إضافة
+                      // دين» وهو ظاهرٌ له أصلاً.
+                      onPay: sub.hasDebt && Perms.has('subscribers.pay_debt')
+                          ? () => showPayDebtSheet(context, sub)
+                          : null,
+                      onAddDebt: Perms.has('subscribers.add_debt')
+                          ? () => showAddDebtSheet(context, sub)
+                          : null,
                     ),
+                    // صفّ الإجراءات الأربعة — المخطّط يضعه مباشرةً تحت
+                    // بلوك الدين وفوق كارت الاتصال. الباقي انتقل إلى شيت
+                    // «إجراءات أخرى» خلف بلاطة «المزيد».
+                    const SizedBox(height: Sp.md),
+                    // يُعاد بناؤه مع كلّ قراءةٍ للجهاز ومع وصول حدود المدير:
+                    // بلاطة «تنبيه» تظهر وتختفي بحسبهما.
+                    AnimatedBuilder(
+                      animation: Listenable.merge([
+                        DeviceProbeBus.tick,
+                        ConnectionAlertSettings.current
+                      ]),
+                      builder: (context, _) =>
+                          SubscriberActionTiles(actions: _quickActions()),
+                    ),
+                    const SizedBox(height: Sp.md),
+                    // كرتُ الاتّصال يقرّر ظهوره بنفسه: يظهر عند جلسةٍ
+                    // قائمة، **أو** حين يوجد IP مثبَّت وإن كان مفصولاً —
+                    // فالعنوان المثبَّت لا يزول بزوال الجلسة. وكان
+                    // بطاقةً مستقلّة فأكل مساحةً لا يستحقّها لسطرٍ واحد.
+                    _LiveSessionCard(sub: sub),
+                    // معلومات الجهاز (ONT/UBNT) — تظهر لأي مشترك غير معطَّل
+                    // ولم ينتهِ اشتراكه. الـcard يجرّب:
+                    //   1) SAS4 IP لو موجود
+                    //   2) customIp من DeviceConfig (يشتغل حتى بدون RADIUS session)
+                    //   3) placeholder "لم يُتمكّن من الوصول" + زر إعدادات
+                    // مطابق v1 (subscriber_details_screen.dart:2666-2685) —
+                    // كان v2 يشترط sub.isOnline + IP نشط، يخفي كل الكارت
+                    // للمشتركين اللي مفروض المدير يفحصهم أو يضبطهم
+                    // (بلاغ 2026-07-13).
+                    //
+                    // ⚠️ ٢٠٢٦-٠٩-٠٢: وسقط الشرطان الباقيان أيضاً.
+                    //
+                    // بلاغ المستخدم: «معلومات الاتصال مال النانو مفروض
+                    // حتّى لو معطّل تظهر». وهو محقّ، والسبب أعمق من
+                    // الراحة: **التعطيل قرارٌ في الفوترة، والنانو جهازٌ
+                    // على سطح بيت**. تعطيلُ الخدمة لا يُطفئ الجهاز ولا
+                    // يُنزله.
+                    //
+                    // ومن يُعطَّل هو بالضبط من تحتاج فحص جهازه: هل
+                    // ما زال في مكانه؟ هل نُقل إلى جارٍ؟ هل يُسحب منه
+                    // إنترنت؟ وإخفاءُ الكارت عنه يمنع السؤال الذي
+                    // يُطرح لأجله.
+                    DeviceProbeCard(
+                      ip: sub.ipAddress ?? '',
+                      username: sub.username,
+                    ),
+                    const SizedBox(height: Sp.sm),
+                    // مطلب 2026-06-12: _SubscriptionCard المنفصل أُلغي
+                    // — كل معلوماته (الباقة/السعر/الانتهاء/التابع/الهاتف)
+                    // صارت داخل _SubscriberHero. كرت الرصيد لا يزال يظهر
+                    // مستقلاً لما الـbalance != 0.
+                    //
+                    // 2026-08-29 (S4): شبكة العمليّات ذات الـ18 بلاطة
+                    // أُلغيت. المخطّط يوزّعها على ثلاث طبقات: أربع بلاطات
+                    // فوق · زرّ تجديد أساسي هنا · والباقي في شيت «المزيد».
+                    if (Perms.has('subscribers.activate')) ...[
+                      const SizedBox(height: Sp.md),
+                      SubscriberPrimaryAction(
+                        icon: LucideIcons.refreshCw,
+                        label: 'subscribers.renew_subscription'.tr(),
+                        busy: _isBusy,
+                        onTap: () => showActivateSheet(context, sub),
+                      ),
+                    ],
                   ],
-                ],
-              ),
+                ),
               ),
             ),
           ],
@@ -706,7 +709,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             onTap: () => showSubscriberPriceSheet(
               context,
               idx: sub.idx!,
-              name: sub.fullName.trim().isNotEmpty ? sub.fullName : sub.username,
+              name:
+                  sub.fullName.trim().isNotEmpty ? sub.fullName : sub.username,
             ),
           ),
       ]),
@@ -744,8 +748,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           SubAction(
             icon: LucideIcons.phone,
             label: 'subscribers.call'.tr(),
-            meta: phone,
-            onTap: () => _launchUri(Uri.parse('tel:$phone')),
+            meta: localPhone(phone),
+            onTap: () => _launchUri(Uri.parse('tel:${localPhone(phone)}')),
           ),
         if (phone.isNotEmpty)
           SubAction(
@@ -827,14 +831,28 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
 
   static String _digits(String phone) => phone.replaceAll(RegExp(r'\D'), '');
 
+  /// ⚠️ **بلا `canLaunchUrl` على `tel:`** — انظر `_call`.
+  ///
+  /// الفحص يُرجع `false` على الآيفون لغياب `LSApplicationQueriesSchemes`،
+  /// فتظهر «لا يمكن فتح الرابط» والهاتف قادر. وأمّا `https:` فالفحص
+  /// عليه سليمٌ ويُبقى.
   Future<void> _launchUri(Uri uri) async {
-    final ok = await canLaunchUrl(uri);
-    if (!mounted) return;
-    if (!ok) {
-      showSheetSnack(context, 'لا يمكن فتح الرابط', isError: true);
-      return;
+    if (uri.scheme != 'tel') {
+      final ok = await canLaunchUrl(uri);
+      if (!mounted) return;
+      if (!ok) {
+        showSheetSnack(context, 'لا يمكن فتح الرابط', isError: true);
+        return;
+      }
     }
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    var opened = false;
+    try {
+      opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      opened = false;
+    }
+    if (opened || !mounted) return;
+    showSheetSnack(context, 'لا يمكن فتح الرابط', isError: true);
   }
 }
 
@@ -1525,15 +1543,24 @@ class _SubscriberHero extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.call_rounded,
-              size: 17, color: AppColors.onBrandSecondary),
+          // 🐛 كانت `Icon` صامتةً بلا `onTap`: تبدو زرّاً ولا تفعل شيئاً.
+          // (طلب المستخدم ٢٠٢٦-١٠-٠٥: «هذا الزرّ مفروض يتفعّل الاتصال»)
+          _OnBrandIcon(
+            icon: Icons.call_rounded,
+            size: 17,
+            onTap: () => _call(context, phone),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: InkWell(
-              onTap: () => _openUri(context, Uri.parse('tel:$phone')),
+              onTap: () => _call(context, phone),
               child: Text(
                 phone,
                 textDirection: ui.TextDirection.ltr,
+                // ثلاث أيقوناتٍ تجاوره الآن (الاتصال والنسخ والواتساب)،
+                // فالنصّ بلا هذين يُسحق صامتاً على شاشةٍ ضيّقة.
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: AppType.body(color: AppColors.onBrand)
                     .copyWith(fontSize: 13, fontWeight: FontWeight.w600),
               ),
@@ -1542,7 +1569,7 @@ class _SubscriberHero extends StatelessWidget {
           _OnBrandIcon(
             icon: Icons.content_copy_rounded,
             size: 16,
-            onTap: () => _copy(context, phone, 'تمّ نسخ الرقم'),
+            onTap: () => _copy(context, localPhone(phone), 'تمّ نسخ الرقم'),
           ),
           const SizedBox(width: 12),
           _OnBrandIcon(
@@ -1615,6 +1642,31 @@ class _SubscriberHero extends StatelessWidget {
       return;
     }
     await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  /// اتّصالٌ بالرقم **المحلّي** — ‏`07…` لا `9647…`.
+  ///
+  /// ⚠️ **بلا `canLaunchUrl`.**
+  ///
+  /// 🐛 `ios/Runner/Info.plist` لا يحمل `LSApplicationQueriesSchemes`،
+  /// فقد يُرجع الفحص `false` لـ`tel:` على الآيفون والهاتف قادرٌ على
+  /// الاتصال — فتظهر «لا يمكن فتح الرابط» كذباً. نُنادي الفتح مباشرةً
+  /// ونُبلّغ عن فشله هو، لا عن فشل فحصٍ سابقٍ له.
+  /// (`docs/subscriber-phone-call-prompt.md` §٢ و§٤-٧)
+  static Future<void> _call(BuildContext ctx, String phone) async {
+    final n = localPhone(phone);
+    if (n.isEmpty) return;
+    var ok = false;
+    try {
+      ok = await launchUrl(
+        Uri.parse('tel:$n'),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {
+      ok = false;
+    }
+    if (ok || !ctx.mounted) return;
+    showSheetSnack(ctx, 'لا يمكن فتح الرابط', isError: true);
   }
 
   static Future<void> _copy(
