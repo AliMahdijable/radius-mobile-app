@@ -329,7 +329,15 @@ class _PackagesScreenState extends State<PackagesScreen> {
                 ),
               if (!_loading && _packages.isNotEmpty) ...[
                 const SizedBox(height: Sp.md),
-                _fieldExplainer(),
+                _fieldExplainer(
+                  // نُظهر شرح «سعر المدير» فقط حين يُعرَض عمود الكلفة: تحريرُ
+                  // مديرٍ فرعيّ، أو وجودُ كلفةٍ فعليّة (الأصل). الساسات بلا
+                  // تسعيرٍ (jt) تكتفي بشرح «سعر البيع».
+                  showCost: (_selectedManagerId != null &&
+                          _selectedManagerId != _myManagerId) ||
+                      _priceCtrl.values.any((c) =>
+                          c.text.trim().isNotEmpty && c.text.trim() != '0'),
+                ),
               ],
             ],
           ),
@@ -386,7 +394,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
     );
   }
 
-  Widget _fieldExplainer() {
+  Widget _fieldExplainer({required bool showCost}) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -409,9 +417,11 @@ class _PackagesScreenState extends State<PackagesScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          _bullet('سعر المدير: سعر السوق المرجعي'),
-          const SizedBox(height: 4),
-          _bullet('سعر المستخدم: ما يدفعه المشترك النهائي'),
+          if (showCost) ...[
+            _bullet('سعر المدير: سعر السوق المرجعي'),
+            const SizedBox(height: 4),
+          ],
+          _bullet('سعر البيع: ما يدفعه المشترك النهائي'),
         ],
       ),
     );
@@ -666,35 +676,63 @@ class _PackageTile extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          // 2 cols — مطابق v1 web exactly
-          Row(
-            children: [
-              // سعر المدير: مقفل في عرض الـroot، قابل للتحرير في
-              // عرض مدير فرعي.
-              Expanded(
-                child: isViewingRoot
-                    ? _readOnly(
-                        label: 'سعر المدير (مقفل)',
-                        value: priceCtrl.text.isNotEmpty ? priceCtrl.text : '—',
-                      )
-                    : _priceField(
-                        label: 'سعر المدير',
-                        ctrl: priceCtrl,
-                        onChanged: onPriceChanged,
-                      ),
-              ),
-              const SizedBox(width: 8),
-              // سعر المستخدم: قابل للتحرير دائماً.
-              Expanded(
-                child: _priceField(
-                  label: 'سعر المستخدم',
-                  ctrl: userPriceCtrl,
-                  onChanged: onUserPriceChanged,
-                  highlight: true,
+          // Pro: «سعر المدير» (الكلفة) يُعرَض فقط حين تتوفّر — عند تحرير مديرٍ
+          // فرعيّ، أو حين للأصل كلفةٌ فعليّة. الساسات العراقيّة بلا تسعير
+          // (الكلفة فارغة) → نُخفي العمود الميّت ونعرض «سعر البيع» بعرضٍ كامل:
+          // أوضح وأنظف، والمدير يضع سعر بيعه مباشرةً.
+          if (!isViewingRoot)
+            // تحرير مديرٍ فرعيّ: الكلفة قابلةٌ للتحرير + سعر البيع.
+            Row(
+              children: [
+                Expanded(
+                  child: _priceField(
+                    label: 'سعر المدير',
+                    ctrl: priceCtrl,
+                    onChanged: onPriceChanged,
+                  ),
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _priceField(
+                    label: 'سعر البيع',
+                    ctrl: userPriceCtrl,
+                    onChanged: onUserPriceChanged,
+                    highlight: true,
+                  ),
+                ),
+              ],
+            )
+          else if (priceCtrl.text.trim().isNotEmpty &&
+              priceCtrl.text.trim() != '0' &&
+              priceCtrl.text.trim() != '—')
+            // الأصل بكلفةٍ فعليّة (supernet): الكلفة مقفلة + سعر البيع.
+            Row(
+              children: [
+                Expanded(
+                  child: _readOnly(
+                    label: 'سعر المدير (مقفل)',
+                    value: priceCtrl.text.trim(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _priceField(
+                    label: 'سعر البيع',
+                    ctrl: userPriceCtrl,
+                    onChanged: onUserPriceChanged,
+                    highlight: true,
+                  ),
+                ),
+              ],
+            )
+          else
+            // الساس بلا تسعير (jt وأخواتها): سعر البيع وحده، بعرضٍ كامل.
+            _priceField(
+              label: 'سعر البيع',
+              ctrl: userPriceCtrl,
+              onChanged: onUserPriceChanged,
+              highlight: true,
+            ),
         ],
       ),
     );
