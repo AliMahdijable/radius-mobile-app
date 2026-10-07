@@ -70,11 +70,19 @@ class AuthApi {
   static Future<LoginResult> login({
     required String username,
     required String password,
+    String? sasUrl,
   }) async {
     try {
+      // Pro: رابط صفحة الشركة (إن لصقه المستخدم) — الخادم يشتقّ منه الساس
+      // ويؤهّل الهويّة (jt:6836). فارغٌ = الأصل (supernet). يُرسَل فقط إن وُجد.
+      final sas = sasUrl?.trim() ?? '';
       final res = await ApiClient.dio.post<Map<String, dynamic>>(
         '/api/auth/login',
-        data: {'username': username.trim(), 'password': password},
+        data: {
+          'username': username.trim(),
+          'password': password,
+          if (sas.isNotEmpty) 'sasUrl': sas,
+        },
       );
       final body = res.data ?? const {};
 

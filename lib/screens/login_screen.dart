@@ -33,6 +33,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final _sasCtrl = TextEditingController(); // Pro: رابط صفحة شركة SAS (اختياريّ)
   final _userCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   final _userFocus = FocusNode();
@@ -45,6 +46,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
+    _sasCtrl.dispose();
     _userCtrl.dispose();
     _passCtrl.dispose();
     _userFocus.dispose();
@@ -78,7 +80,8 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     HapticFeedback.lightImpact();
     setState(() => _loading = true);
-    final result = await AuthApi.login(username: user, password: pass);
+    final result =
+        await AuthApi.login(username: user, password: pass, sasUrl: _sasCtrl.text);
     if (!mounted) return;
     setState(() => _loading = false);
 
@@ -253,6 +256,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: Sp.md),
               _FormCard(
+                sasCtrl: _sasCtrl,
                 userCtrl: _userCtrl,
                 passCtrl: _passCtrl,
                 userFocus: _userFocus,
@@ -488,6 +492,7 @@ class _BrandTitle extends StatelessWidget {
 
 class _FormCard extends StatelessWidget {
   const _FormCard({
+    required this.sasCtrl,
     required this.userCtrl,
     required this.passCtrl,
     required this.userFocus,
@@ -500,6 +505,7 @@ class _FormCard extends StatelessWidget {
     required this.onLogin,
   });
 
+  final TextEditingController sasCtrl;
   final TextEditingController userCtrl;
   final TextEditingController passCtrl;
   final FocusNode userFocus;
@@ -523,6 +529,19 @@ class _FormCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Pro: رابط صفحة شركة SAS. اختياريّ — فارغٌ = الحساب المعتاد.
+          _LabeledInput(
+            label: 'login.company'.tr(),
+            child: TextField(
+              controller: sasCtrl,
+              keyboardType: TextInputType.url,
+              autocorrect: false,
+              textInputAction: TextInputAction.next,
+              style: AppType.input(color: AppColors.textHi),
+              decoration: _decoration(hint: 'login.company_hint'.tr()),
+            ),
+          ),
+          const SizedBox(height: Sp.lg),
           _LabeledInput(
             label: 'login.username'.tr(),
             child: TextField(

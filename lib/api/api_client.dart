@@ -49,7 +49,11 @@ String? blockedMessage;
 class ApiClient {
   ApiClient._();
 
-  static const String baseUrl = 'https://rad.mysvcs.net';
+  // Pro: قابلٌ للحقن وقت البناء لتوجيه نسخة الفحص إلى خادم Pro. بلا العلم
+  // يبقى الإنتاج حرفيّاً، فبناء الإنتاج لا يتأثّر. يبقى const وعميلاً واحداً
+  // (يمرّ من no_direct_sas_test). البناء: flutter build apk --dart-define=BASE_URL=…
+  static const String baseUrl =
+      String.fromEnvironment('BASE_URL', defaultValue: 'https://rad.mysvcs.net');
 
   static final Dio dio = _buildDio(baseUrl);
 

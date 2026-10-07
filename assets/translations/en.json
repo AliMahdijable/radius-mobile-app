@@ -62,6 +62,8 @@
     "title": "Sign in",
     "welcome": "Welcome back",
     "subtitle": "Smart management for your ISP",
+    "company": "Company page link (optional)",
+    "company_hint": "https://sas.example.com",
     "username": "Username",
     "username_hint": "e.g. admin@ali300",
     "password": "Password",

@@ -62,6 +62,8 @@
     "title": "تسجيل الدخول",
     "welcome": "أهلاً بعودتك",
     "subtitle": "إدارة ذكية لمزود الإنترنت",
+    "company": "رابط صفحة الشركة (اختياريّ)",
+    "company_hint": "https://sas.example.com",
     "username": "اسم المستخدم",
     "username_hint": "مثلاً admin@ali300",
     "password": "كلمة المرور",
