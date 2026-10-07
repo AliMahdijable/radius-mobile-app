@@ -37,10 +37,18 @@ class PermissionsService {
   //   employee (flag=1) → كل شي ممنوع إلا الـكلمات الموجودة بالـmap
   static const _kEmployeePerms = 'perms.employee_map';
   static const _kIsEmployee = 'perms.is_employee';
+  // Pro: قدرات المدير المعياريّة (subscribers.delete/show_password/…) من الساس.
+  // المدير الفرعيّ فاعلٌ مقيَّد: الأزرار تُضبَط بهذه الخريطة، منفصلةً عن مسار
+  // الموظّف. دلالةٌ مختلفة: مفتاحٌ **غير موجود** في الخريطة = مسموح (ميزةٌ
+  // تطبيقيّةٌ لا يحكمها الساس)؛ موجودٌ = يُحترَم (false → يختفي الزرّ).
+  static const _kManagerRestricted = 'perms.mgr_restricted';
+  static const _kManagerCaps = 'perms.mgr_caps';
 
   // الذاكرة الجارية — نقرأ منها مباشرةً، ونحدّثها عند save/load.
   static Map<String, bool>? _cached;
   static bool _isEmployee = false;
+  static Map<String, bool>? _managerCaps;
+  static bool _managerRestricted = false;
   static bool _loaded = false;
   static final ValueNotifier<int> _version = ValueNotifier<int>(0);
 
@@ -64,6 +72,19 @@ class PermissionsService {
         if (j is Map) {
           _cached = {
             for (final e in j.entries) e.key.toString(): e.value == true,
+          };
+        }
+      }
+      // Pro: استعادة تقييد المدير كي يبقى بعد إعادة التشغيل/الدخول التلقائيّ
+      // (وإلّا رجع المدير الفرعيّ كامل الصلاحيّات عند كلّ إقلاع).
+      _managerRestricted =
+          (await _storage.read(key: _kManagerRestricted)) == '1';
+      final mraw = await _storage.read(key: _kManagerCaps);
+      if (mraw != null && mraw.isNotEmpty) {
+        final mj = jsonDecode(mraw);
+        if (mj is Map) {
+          _managerCaps = {
+            for (final e in mj.entries) e.key.toString(): e.value == true,
           };
         }
       }
@@ -117,9 +138,53 @@ class PermissionsService {
     _version.value = _version.value + 1;
   }
 
-  /// تُستدعى من فلو تسجيل الخروج (AuthStorage.clear). تمسح كل ما
-  /// يخصّ هذا الـadmin/employee — لا نريد بقايا تظهر للحساب الجاي.
-  static Future<void> clear() => _clearEmployee();
+  /// Pro: يُستدعى بعد دخول **مديرٍ** (لا موظّف) لضبط قدراته المعياريّة من
+  /// الساس. super-admin أو خريطةٌ فارغة → غير مقيَّد (كامل الصلاحيّات كما قبل).
+  /// غيره → مقيَّد: أزرار الإجراءات المعياريّة تختفي حيث القيمة false. ويمسح
+  /// حالة الموظّف لأنّ الفاعل مديرٌ لا موظّف.
+  static Future<void> setManagerCapabilities({
+    required bool isSuperAdmin,
+    required Map<String, bool> canonical,
+  }) async {
+    _isEmployee = false;
+    _cached = null;
+    if (isSuperAdmin || canonical.isEmpty) {
+      _managerRestricted = false;
+      _managerCaps = null;
+      await Future.wait([
+        _storage.delete(key: _kIsEmployee),
+        _storage.delete(key: _kEmployeePerms),
+        _storage.delete(key: _kManagerRestricted),
+        _storage.delete(key: _kManagerCaps),
+      ]);
+    } else {
+      _managerRestricted = true;
+      _managerCaps = Map<String, bool>.from(canonical);
+      await Future.wait([
+        _storage.delete(key: _kIsEmployee),
+        _storage.delete(key: _kEmployeePerms),
+        _storage.write(key: _kManagerRestricted, value: '1'),
+        _storage.write(key: _kManagerCaps, value: jsonEncode(canonical)),
+      ]);
+    }
+    _version.value = _version.value + 1;
+  }
+
+  /// تُستدعى من فلو تسجيل الخروج (AuthStorage.clear). تمسح كل ما يخصّ هذا
+  /// الفاعل (موظّف **أو** مدير) — لا نريد بقايا تظهر للحساب الجاي.
+  static Future<void> clear() async {
+    _isEmployee = false;
+    _cached = null;
+    _managerRestricted = false;
+    _managerCaps = null;
+    await Future.wait([
+      _storage.delete(key: _kIsEmployee),
+      _storage.delete(key: _kEmployeePerms),
+      _storage.delete(key: _kManagerRestricted),
+      _storage.delete(key: _kManagerCaps),
+    ]);
+    _version.value = _version.value + 1;
+  }
 
   /// منفذٌ للاختبار وحده: يضبط الحالة في الذاكرة بلا تخزينٍ آمن.
   ///
@@ -134,10 +199,15 @@ class PermissionsService {
   static void debugSet({
     required bool isEmployee,
     Map<String, bool> permissions = const {},
+    bool managerRestricted = false,
+    Map<String, bool> managerCaps = const {},
   }) {
     _loaded = true;
     _isEmployee = isEmployee;
     _cached = isEmployee ? Map<String, bool>.from(permissions) : null;
+    _managerRestricted = !isEmployee && managerRestricted;
+    _managerCaps =
+        _managerRestricted ? Map<String, bool>.from(managerCaps) : null;
     _version.value = _version.value + 1;
   }
 
@@ -147,6 +217,8 @@ class PermissionsService {
     _loaded = false;
     _isEmployee = false;
     _cached = null;
+    _managerRestricted = false;
+    _managerCaps = null;
     _version.value = _version.value + 1;
   }
 
@@ -157,28 +229,50 @@ class PermissionsService {
   /// (failover للسماح أفضل من إخفاء كل شي بدون قصد).
   static bool has(String key) {
     if (!_loaded) return true;
-    if (!_isEmployee) return true;
-    return _cached?[key] == true;
+    if (_isEmployee) return _cached?[key] == true;
+    if (_managerRestricted) {
+      final caps = _managerCaps;
+      // مفتاحٌ في خريطة الساس → احترم قيمته؛ غيره (ميزةٌ تطبيقيّة) → مسموح.
+      if (caps != null && caps.containsKey(key)) return caps[key] == true;
+      return true;
+    }
+    return true;
   }
 
   /// true إذا الـactor يملك واحدة على الأقل من المفاتيح.
   /// useful للشاشات اللي تجمع أكثر من tab/زر.
   static bool hasAny(Iterable<String> keys) {
     if (!_loaded) return true;
-    if (!_isEmployee) return true;
-    for (final k in keys) {
-      if (_cached?[k] == true) return true;
+    if (_isEmployee) {
+      for (final k in keys) {
+        if (_cached?[k] == true) return true;
+      }
+      return false;
     }
-    return false;
+    if (_managerRestricted) {
+      for (final k in keys) {
+        if (has(k)) return true;
+      }
+      return false;
+    }
+    return true;
   }
 
   /// true إذا الـactor يملك كل المفاتيح. شدّة الفحص للحالات التي
   /// تحتاج صلاحيات متعدّدة (مثلاً تعديل وحذف معاً).
   static bool hasAll(Iterable<String> keys) {
     if (!_loaded) return true;
-    if (!_isEmployee) return true;
-    for (final k in keys) {
-      if (_cached?[k] != true) return false;
+    if (_isEmployee) {
+      for (final k in keys) {
+        if (_cached?[k] != true) return false;
+      }
+      return true;
+    }
+    if (_managerRestricted) {
+      for (final k in keys) {
+        if (!has(k)) return false;
+      }
+      return true;
     }
     return true;
   }

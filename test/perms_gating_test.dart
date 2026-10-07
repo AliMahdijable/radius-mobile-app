@@ -125,4 +125,51 @@ void main() {
       expect(PermissionsService.has('أيّ مفتاحٍ كان'), isTrue);
     });
   });
+
+  // Pro: المدير الفرعيّ يُضبَط بصلاحيّات الساس المعياريّة (لا كامل الصلاحيّات).
+  // دلالةٌ مختلفةٌ عن الموظّف: مفتاحٌ خارج خريطة الساس = مسموح (ميزةٌ تطبيقيّة).
+  group('المدير الفرعيّ مقيَّدٌ بصلاحيّات الساس (Pro)', () {
+    test('يختفي الممنوع، يظهر المسموح، والمفتاح خارج الخريطة مسموح', () {
+      PermissionsService.debugSet(
+        isEmployee: false,
+        managerRestricted: true,
+        managerCaps: const {
+          'subscribers.delete': false,
+          'subscribers.show_password': true,
+          'subscribers.pay_debt': true,
+        },
+      );
+      expect(PermissionsService.has('subscribers.delete'), isFalse);
+      expect(PermissionsService.has('subscribers.show_password'), isTrue);
+      expect(PermissionsService.has('subscribers.pay_debt'), isTrue);
+      // خارج خريطة الساس (ميزةٌ تطبيقيّة لا يحكمها الساس) → مسموح افتراضاً
+      expect(PermissionsService.has('settlements.view'), isTrue);
+      expect(PermissionsService.isEmployee, isFalse);
+    });
+
+    test('hasAll/hasAny للمدير المقيَّد', () {
+      PermissionsService.debugSet(
+        isEmployee: false,
+        managerRestricted: true,
+        managerCaps: const {
+          'subscribers.delete': false,
+          'subscribers.edit': true,
+        },
+      );
+      expect(
+          PermissionsService.hasAll(
+              const ['subscribers.edit', 'subscribers.delete']),
+          isFalse);
+      expect(
+          PermissionsService.hasAny(
+              const ['subscribers.delete', 'subscribers.edit']),
+          isTrue);
+      expect(PermissionsService.hasAll(const ['x.one', 'x.two']), isTrue);
+    });
+
+    test('super-admin غير مقيَّدٍ ولو مرّت خريطة', () {
+      PermissionsService.debugSet(isEmployee: false);
+      expect(PermissionsService.has('subscribers.delete'), isTrue);
+    });
+  });
 }

@@ -22,6 +22,7 @@ class LoginSuccess extends LoginResult {
     this.canAccessManagers = false,
     this.canAccessPackages = false,
     this.isEmployee = false,
+    this.canonicalPermissions = const {},
   });
 
   final String token;
@@ -52,6 +53,12 @@ class LoginSuccess extends LoginResult {
   /// للموظف — الـempToken لا يقدر يتجدد عبر /api/auth/refresh-token
   /// (الذي يجدد SAS4 admin token للأب) بدون ما يخسر الموظف صلاحياته.
   final bool isEmployee;
+
+  /// Pro: الصلاحيّات المعياريّة للمدير من الساس (subscribers.delete،
+  /// show_password، change_profile…). تُضبَط بها أزرار الإجراءات عبر Perms —
+  /// المدير الفرعيّ فاعلٌ مقيَّد لا كامل الصلاحيّات. فارغةٌ = غير مقيَّد
+  /// (super-admin أو لم يُرسِلها الخادم). لا تخصّ الموظّف (له خريطته من /me).
+  final Map<String, bool> canonicalPermissions;
 }
 
 class LoginFailure extends LoginResult {
@@ -171,6 +178,16 @@ class AuthApi {
       // الردّ يحمل `sas4Token` أيضاً (توكن الساس للأب). نتجاهله عمداً:
       // الهاتف لا يخاطب الساس، وحفظه كان يترك سرّاً لا يقرؤه أحد —
       // انظر `_kSas4TokenLegacy` ورأس `api_client.dart`.
+      // Pro: الخريطة المعياريّة للمدير (الخادم يُرجِعها تحت user). كان يُهمَلها
+      // التطبيق فتظهر كلّ الأزرار للمدير الفرعيّ؛ نلتقطها لتضبط Perms الأزرار.
+      final canonRaw =
+          user['canonicalPermissions'] ?? body['canonicalPermissions'];
+      final Map<String, bool> canonicalPermissions = (canonRaw is Map)
+          ? {
+              for (final e in canonRaw.entries)
+                e.key.toString(): e.value == true,
+            }
+          : const <String, bool>{};
       return LoginSuccess(
         token: token,
         adminId: (user['admin_id'] ?? user['id'] ?? '').toString(),
@@ -182,6 +199,7 @@ class AuthApi {
         canAccessManagers: canAccessManagers,
         canAccessPackages: canAccessPackages,
         isEmployee: isEmployee,
+        canonicalPermissions: canonicalPermissions,
       );
     } on DioException catch (e) {
       return LoginFailure(_friendlyDioError(e));

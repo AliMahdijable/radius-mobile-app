@@ -196,6 +196,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
             :final canAccessManagers,
             :final canAccessPackages,
             :final isEmployee,
+            :final canonicalPermissions,
           ):
           // 3) امسح الجلسة الحاليّة (بدون مسح الملفّات المحفوظة).
           await SessionManager.clearAllSessionData(
@@ -228,6 +229,14 @@ class _AccountsScreenState extends State<AccountsScreen> {
             final okPerms = await PermissionsService.refreshFromBackend();
             if (!mounted) return;
             if (!okPerms) await PermissionsService.clear();
+          } else {
+            // Pro: المدير الفرعيّ المُبدَّل إليه — اضبط قدراته المعياريّة من
+            // الساس (وإلّا بقي كامل الصلاحيّات بعد مسح الجلسة).
+            await PermissionsService.setManagerCapabilities(
+              isSuperAdmin: isSuperAdmin,
+              canonical: canonicalPermissions,
+            );
+            if (!mounted) return;
           }
           // ignore: unawaited_futures
           FcmService.initAfterLogin();
@@ -269,6 +278,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
             :final canAccessManagers,
             :final canAccessPackages,
             :final isEmployee,
+            :final canonicalPermissions,
           ):
           await SessionManager.clearAllSessionData(
             unregisterFcm: false,
@@ -292,6 +302,14 @@ class _AccountsScreenState extends State<AccountsScreen> {
             final okPerms = await PermissionsService.refreshFromBackend();
             if (!mounted) return;
             if (!okPerms) await PermissionsService.clear();
+          } else {
+            // Pro: المدير الفرعيّ المُبدَّل إليه — اضبط قدراته المعياريّة من
+            // الساس (وإلّا بقي كامل الصلاحيّات بعد مسح الجلسة).
+            await PermissionsService.setManagerCapabilities(
+              isSuperAdmin: isSuperAdmin,
+              canonical: canonicalPermissions,
+            );
+            if (!mounted) return;
           }
           // ignore: unawaited_futures
           FcmService.initAfterLogin();

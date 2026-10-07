@@ -122,11 +122,13 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     AppResumedSignal.tick.addListener(_onDataChanged);
     // 2026-08-18: جلب password (non-blocking) — لعرضه في هيرو الكارت مع
     // زرّ copy.
-    // 2026-08-25: أُزيلت صلاحيّة الحجب — الباسورد يظهر لكل موظّف مصادَق
-    // (بلا اشتراط subscribers.view_credentials أو subscribers.edit).
-    // السبب: قفل التعديل كان يشلّ إمكان مساعدة المشترك في تسجيل الدخول،
-    // وهذه خدمة أساسيّة يحتاجها كل موظّف داعم.
-    _loadPassword();
+    // 2026-08-25: أُزيلت صلاحيّة الحجب (app-level) لأنّها شلّت مساعدة المشترك.
+    // Pro: أُعيدت البوّابة لكن بصلاحيّة **الساس** (subscribers.show_password):
+    // أغلب الشركات العراقيّة لا تسمح بعرض الباسورد، ومن تسمح (=true) يبقى
+    // متاحاً للدعم. لا نجلبه أصلاً إن مُنع — فلا يبقى في الذاكرة بلا داعٍ.
+    if (Perms.has('subscribers.show_password')) {
+      _loadPassword();
+    }
   }
 
   Future<void> _loadPassword() async {
@@ -1399,23 +1401,27 @@ class _SubscriberHero extends StatelessWidget {
             size: 16,
             onTap: () => _copy(context, sub.username, 'تمّ نسخ اسم المستخدم'),
           ),
-          Container(
-            width: 1,
-            height: 16,
-            margin: const EdgeInsets.symmetric(horizontal: 12),
-            color: AppColors.onBrandFill3,
-          ),
-          if (pass == null)
-            const SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(
-                strokeWidth: 1.6,
-                color: AppColors.onBrandTertiary,
-              ),
-            )
-          else
-            Expanded(flex: 2, child: _HeroPassword(password: pass)),
+          // Pro: عرض كلمة المرور مُسيَّجٌ بصلاحيّة الساس — أغلب الشركات لا
+          // تسمح به. show_password=false → يختفي الفاصل والباسورد معاً.
+          if (Perms.has('subscribers.show_password')) ...[
+            Container(
+              width: 1,
+              height: 16,
+              margin: const EdgeInsets.symmetric(horizontal: 12),
+              color: AppColors.onBrandFill3,
+            ),
+            if (pass == null)
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.6,
+                  color: AppColors.onBrandTertiary,
+                ),
+              )
+            else
+              Expanded(flex: 2, child: _HeroPassword(password: pass)),
+          ],
         ],
       ),
     );

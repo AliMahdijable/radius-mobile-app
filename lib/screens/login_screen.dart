@@ -97,6 +97,7 @@ class _LoginScreenState extends State<LoginScreen> {
           :final canAccessManagers,
           :final canAccessPackages,
           :final isEmployee,
+          :final canonicalPermissions,
         ):
         // 2026-07-14: مسح كل caches الجلسة السابقة قبل تفعيل الجديدة —
         // يحمي من رواسب admin سابق (لو 401 kick شغّل واحد ما مسح
@@ -152,9 +153,16 @@ class _LoginScreenState extends State<LoginScreen> {
             return;
           }
         } else {
-          // Admin (99% من الحالات): unrestricted افتراضياً → آمن unaware.
-          // لو الجلب فشل، الـUI يبقى مسموحاً كأدمن (سلوك صحيح).
-          unawaited(PermissionsService.refreshFromBackend());
+          // Pro: مدير (لا موظّف) — نضبط قدراته المعياريّة من الساس فوراً
+          // (متزامنٌ، بلا نداء /me): super-admin → غير مقيَّد؛ مدير فرعيّ →
+          // مقيَّدٌ بخريطته فتختفي الأزرار الممنوعة (حذف/عرض باسورد…). كان
+          // سابقاً refreshFromBackend → /me يُرجِع is_employee=false → كامل
+          // الصلاحيّات، فتظهر كلّ الأزرار (عين العطل الذي نُصلحه).
+          await PermissionsService.setManagerCapabilities(
+            isSuperAdmin: isSuperAdmin,
+            canonical: canonicalPermissions,
+          );
+          if (!mounted) return;
         }
         // نُسجّل FCM بعد إتمام الجلسة. آمنة الفشل — ما تعطّل الدخول لو
         // Firebase غير متوفّر (fire-and-forget).

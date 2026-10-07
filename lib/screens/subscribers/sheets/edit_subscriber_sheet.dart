@@ -254,6 +254,23 @@ class _EditSheetState extends State<_EditSheet> {
       Navigator.of(context).pop();
       return;
     }
+    // Pro: الشركات العراقيّة تمنع تغيير الباقة أثناء تفعيلٍ فعّال. نمنعه
+    // مسبقاً بتنبيهٍ واضح بدل نداءٍ يفشل برسالةٍ خامٍّ من الساس. نمنع فقط إذا
+    // كان التفعيل الحاليّ فعّالاً بتاريخٍ مؤكّدٍ في المستقبل (لا نمنع مشتركاً
+    // غير مفعَّلٍ أو منتهيَ التفعيل).
+    final exp = widget.sub.parsedExpiration;
+    if (diff.containsKey('profile_id') &&
+        exp != null &&
+        exp.isAfter(DateTime.now())) {
+      String two(int n) => n.toString().padLeft(2, '0');
+      final dateStr = '${exp.year}-${two(exp.month)}-${two(exp.day)}';
+      showSheetSnack(
+        context,
+        'يمكن تغيير الباقة بعد انتهاء التفعيل الحاليّ — ينتهي $dateStr',
+        isError: true,
+      );
+      return;
+    }
     setState(() => _saving = true);
     final result = await SubscribersApi.updateSubscriber(
       idx: widget.sub.idx!,
