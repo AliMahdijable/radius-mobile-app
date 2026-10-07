@@ -426,3 +426,63 @@ SAS لساسٍ محجوبٍ يأخذ `httpsAgent = SocksProxyAgent('socks5h://12
 - `server/migrations/006_sas_servers.js` — بنية جدول الساسات والتصميم.
 - `server/tokenIdentityCache.js` · `server/managerScope.js` · `server/sas4Permissions.js`.
 - `server.js:1112-1260` — `SAS4_CONFIG`، `_loadAdminIdentityFromSas4`، نقطة الدخول.
+
+---
+
+## ٨. 📌 المرجع المعتمَد — حالة التنفيذ وكيف نُكمل (٢٠٢٦-١٠-٠٧)
+
+> هذا القسم مرجعٌ مكتفٍ: اقرأه مرّةً فتعرف ما بُني وكيف يعمل وكيف تُشغّل الفحص
+> وما تبقّى — بلا إعادة استكشافٍ للكود أو الخادم. (طلب المستخدم: «خليها برومت نعتمد عليه».)
+
+### ٨-١. المعماريّة (مُثبَتةٌ طرفاً لطرف لـjt.iq)
+
+- التطبيق يكلّم **رابطاً خلفيّاً واحداً** فقط (الإنتاج rad.mysvcs.net، الفحص pro.mysvcs.net)،
+  **لا يعرف عنوان الساس إطلاقاً** (يحرسه `test/no_direct_sas_test.dart`). الخادم يقرّر الساس.
+- **الدخول:** التطبيق يرسل `{username, password, sasUrl}`. الخادم: `sasHttp.codeForUrl(sasUrl)`
+  → `sasCode` → يوجّه `/login` بـ`sasHttp` (مباشر/بروكسي تلقائيّاً) → توكن (يحمل `iss`) →
+  يؤهّل الهويّة `makeId(sasCode,id)` → `jt:6836` لغير الأصل، عارٍ للأصل.
+- **كلّ طلبٍ لاحق** يحمل التوكن فقط. الخادم يشتقّ الساس من **`iss` التوكن** (`_sasCodeFromToken`
+  → `sasHttp.codeForUrl`). آليّتان: (أ) `getAdminInfoFromToken` تمرّر sasCode، (ب) **معترض axios
+  عالميّ** يعيد كتابة رابط أيّ نداء SAS4 يحمل توكناً + يُلبسه وكيل المسار (`sasHttp.agentFor`).
+  فالـ٦٩ موضعاً تعمل لأيّ ساسٍ **بلا تعديلها**. الأصل (supernet، `iss→''`) بلا تغيير.
+- **النقل** (`server/sasHttp.js`): توجيهٌ تلقائيّ — مباشرٌ، وعند حجب Cloudflare (403+cf) يحوّل
+  للبروكسي العراقيّ ويحفظ القرار لكلّ sasCode. **`socks5`** (حلٌّ محلّيّ للاسم) لا `socks5h`
+  (DNS العراقيّ ينكسر). البروكسي: نفق systemd `sas-iq-tunnel.service` (SOCKS5 على 127.0.0.1:1080).
+- **مفاجأة وفّرت العمل:** الهويّة (`client.id`) والصلاحيّات (`permissions[]`) والنمطان A/B
+  مخدومان أصلاً؛ لا طبقة تطبيع `/auth`.
+
+### ٨-٢. الملفّات والـcommits
+
+**الخادم** (فرع `pro`، `/home/ali/MyServices-Pro`؛ الحيّ منفصلٌ في `MyServices Raduis` فرع main):
+- `server/sasHttp.js` — النقل + `codeForUrl`/`agentFor` + التوجيه التلقائيّ.
+- `server.js` — استيراد sasHttp (~س٤٤)، زرع السجلّ بعد SAS4_CONFIG (~س١١٣٢)،
+  `_loadAdminIdentityFromSas4` (sasCode)، `_sasCodeFromToken` + المعترض العالميّ (~س١٢٠٠)،
+  مسار `/api/auth/login` (يقرأ sasUrl، يؤهّل)، `/api/auth/me` (يؤهّل)، حارس `PRO_TEST_MODE` (~س٧٢٧).
+- commits: `9d2f56e` (نقل) · `8d5041e` (socks5) · `ff0edb3` (دخول+هويّة) · `795b36f` (وضع فحص) · `4eb1c8a` (معترض+/me).
+
+**التطبيق** (فرع `pro`، `/Users/mahdi/mobile-app-v2`):
+- `lib/api/api_client.dart:52` — `baseUrl = String.fromEnvironment('BASE_URL', default=الإنتاج)`.
+- `lib/api/auth_api.dart` — `login(..., sasUrl)` يُرسِله إن وُجد.
+- `lib/screens/login_screen.dart` — حقل «رابط صفحة الشركة» (`_sasCtrl`) — **مؤقّتٌ للفحص**.
+- `assets/translations/{ar,en}.json` — `login.company`. commit: `0c40e0b`.
+
+### ٨-٣. تشغيل الفحص / الاستئناف
+
+- **خادم Pro:** `cd /home/ali/MyServices-Pro && PORT=3030 PRO_TEST_MODE=true nohup node server.js > /tmp/pro_test.log 2>&1 &`
+  (الـPID في `/tmp/pro_test.pid`؛ `PRO_TEST_MODE` يعطّل مهامّ الخلفيّة؛ `initializeDatabase` idempotent على القاعدة المشتركة).
+- **الرابط العامّ:** `https://pro.mysvcs.net` → Cloudflare → **الأصل 54.38.152.203** (لا 162.19.235.103 الخروج)
+  → nginx `/etc/nginx/sites-enabled/pro-mysvcs` (مقفول على Cloudflare) → 3030. يُطوى بحذف الملفّ + reload.
+- **APK:** `flutter build apk --release --dart-define=BASE_URL=https://pro.mysvcs.net` →
+  `build/app/outputs/flutter-apk/app-release.apk` (موقّع بمفتاح الرفع، يحلّ محلّ الإنتاج، v2.2.8+153).
+- **المحاكي:** `Medium_Phone`؛ `adb uninstall com.mysvcs.rad_mysvcs` (تعارض توقيع) ثمّ `adb install`.
+- **اعتماد jt.iq:** `admin@ali122` / `ali144pq`، الشركة `https://sas.jt.iq` → `jt:6836` (مدير فرعيّ).
+- **المفتاح العامّ** `SAS_SECRET_KEY`: fallback في server.js؛ **لا يُكتب في ملفّ**، يُمرَّر عبر env. SSH: `-i ~/.ssh/mysvcs_server_ed25519 -p 222 ali@162.19.235.103`.
+- الوصول الخارجيّ للمنافذ محجوبٌ عند الموفّر عدا 443 (عبر nginx)؛ أنفاق الدخول محجوبةٌ بالسياسة.
+
+### ٨-٤. ما تبقّى — ملاحظات الفحص (كلّها تُقاد بصلاحيّات الساس)
+
+انظر ذاكرة `pro-feedback-iraqi-rules`. باختصار: (١) تغيير الباقة بعد انتهاء التفعيل فقط + تنبيه ·
+(٢) أزرار بالصلاحيّة (عرض باسورد/حذف) — تأكّد وصول `canonicalPermissions` إلى `Perms` ·
+(٣) تسعير محلّيّ (الشراء مثبّت، المدير يضع البيع) · (٤) الدخول الحقيقيّ: حساب إيميل + تجربة ١٤
+يوماً + كود تفعيل، وإزالة حقل رابط الساس من الدخول (ينتقل لما بعد دخول الإيميل).
+الخطّة: السريع (١،٢) أوّلاً، ثمّ الكبير (٤، ٣).
