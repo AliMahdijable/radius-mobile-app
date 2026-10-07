@@ -58,6 +58,13 @@
     "more": "More",
     "search": "Search"
   },
+  "pkg": {
+    "title": "Package pricing",
+    "subtitle": "Edit sale prices per package",
+    "sub_manager": "Sub-manager",
+    "save_changes": "Save changes ({n})",
+    "prices_saved": "Prices saved"
+  },
   "login": {
     "title": "Sign in",
     "welcome": "Welcome back",
