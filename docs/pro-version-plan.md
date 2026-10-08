@@ -688,6 +688,10 @@ bulk_activate) + مسحٌ اكتشافيّ لأيّ شاشةٍ مكشوفةٍ أ
 `XXXX-XXXX-XXXX`. `normalizeCode` في accounts.js صار يحذف الشرطات (بأيّ شكل) — فالعميل يكتبها بشرطات أو بدونها، بأرقامٍ عربيّة،
 بحروفٍ صغيرة: كلّها تُقبل.
 
+**الخطّ والألوان (commit `34f9096`، بطلب المستخدم «الخط لازم تلتزم بخط المشروع»):** نفس ملفّات `assets/fonts/IBMPlexSansArabic`
+للتطبيق مضمَّنةً woff2 (500/600/700، لا 400 — كالتطبيق)، بلا Google Fonts ولا خطٍّ أحاديّ؛ ألوان `lib/theme/colors.dart` بالوضعين
+وسلّم مقاسات AppType. CSP الصفحة صارت بلا fonts.googleapis/gstatic. فحص بعدها: ١٩ + ٧٦ نجح، وChrome على الرابط حمّل الخطّ.
+
 **الترويسات:** helmet العامّ لم يتغيّر؛ `/owner` وحدها تستبدل COOP (`same-origin-allow-popups`) وCSP (gstatic/apis.google.com/
 firebaseapp/securetoken). كلاودفلير يحقن سكربت كشف البوتات المضمَّن في HTML — CSP تحجبه، غير ضارّ.
 
