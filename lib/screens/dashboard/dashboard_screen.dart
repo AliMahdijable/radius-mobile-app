@@ -27,8 +27,8 @@ import '../subscribers/widgets/filter_chips_bar.dart';
 import '../settings_screen.dart';
 import 'widgets/hero_revenue_card.dart';
 import 'widgets/recent_activities.dart';
-import 'widgets/reconnect_banner.dart';
 import '../account/subscription_banner.dart';
+import '../whatsapp/whatsapp_status_screen.dart';
 import 'widgets/section_header.dart';
 import 'widgets/stats_grid.dart';
 import 'widgets/subscribers_card.dart';
@@ -226,6 +226,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// والسحب-للتحديث معفى — المستخدم طلبه صراحةً وينتظر مؤشّره.
   bool _cooling = false;
 
+  /// حبّة الواتساب في الترويسة ← شاشته (إعادة الاتصال/QR) ثمّ تحديث الحالة.
+  Future<void> _openWhatsApp() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const WhatsAppStatusScreen()),
+    );
+    if (mounted) await _refreshLive();
+  }
+
   Future<void> _refreshLive({bool silent = false}) async {
     if (silent) {
       if (_cooling) return;
@@ -419,6 +427,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 greeting: _greeting(),
                 whatsApp: _waStatus,
                 waLoaded: _waLoaded,
+                onWhatsAppTap: Perms.has('whatsapp.connect') ? _openWhatsApp : null,
+                // «تنبيه واتساب» في «نطاق العرض» يُخفي الحبّة (ونداءها) لا شريطاً.
+                showWhatsApp: _shown('wa_banner'),
                 topInset: MediaQuery.paddingOf(context).top,
                 // ⚠️ قراءةٌ مقصودة لا زائدة: `paddingOf` تبعيّة
                 // **مقصورة على الحشوة**، فالشاشة لا تُعاد بناؤها عند
@@ -439,13 +450,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 delegate: SliverChildListDelegate([
                   // أعلى كلّ شيء عمداً: انقطاع الجلسة يوقف كلّ تنبيهات
                   // المشتركين وفواتيرهم، فلا يجوز أن يُقرأ بعد الأرقام.
-                  // Pro البند ٤: تجربة/اشتراكٌ قريب الانتهاء — «تفعيل كود» و«تواصل معنا».
-                  const SubscriptionBanner(),
-                  if (_shown('wa_banner'))
-                    ReconnectBanner(
-                      status: _waStatus,
-                      onDone: _refreshLive,
-                    ),
+                  // ٢٠٢٦-١٠-٠٨ (طلب المستخدم): شريط «إعادة ربط واتساب» أُزيل من
+                  // هنا — حالته معروضة أصلاً في الترويسة تحت اسم المدير، فكان
+                  // تكراراً يأكل الشاشة. حبّة الترويسة صارت تُضغط فتفتح شاشة
+                  // الواتساب (إعادة الاتصال/QR)، وتنبيه الاشتراك حبّةٌ بجانبها.
                   if (_shown('subscribers'))
                     SubscribersCard(
                       stats: _subscribersStats,
@@ -622,6 +630,8 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
     required this.greeting,
     required this.whatsApp,
     required this.waLoaded,
+    this.onWhatsAppTap,
+    this.showWhatsApp = true,
     required this.topInset,
     required this.textScale,
   }) : isDark = AppColors.isDark;
@@ -630,6 +640,10 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
   final String greeting;
   final WhatsAppStatus? whatsApp;
   final bool waLoaded;
+
+  /// الضغط على حبّة الواتساب ← شاشته (إعادة الاتصال/QR). null بلا صلاحيّة.
+  final VoidCallback? onWhatsAppTap;
+  final bool showWhatsApp;
   final double topInset;
 
   /// سلّم خطّ النظام وقت الإنشاء (مقيَّد 0.9–1.2 في main.dart).
@@ -723,7 +737,23 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
                     heightFactor: 1 - t,
                     child: Opacity(
                       opacity: 1 - t,
-                      child: _WAStatusChip(status: whatsApp, loaded: waLoaded),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (showWhatsApp) ...[
+                            Flexible(
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: onWhatsAppTap,
+                                child: _WAStatusChip(status: whatsApp, loaded: waLoaded),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                          ],
+                          // Pro البند ٤: تنبيه الاشتراك (لا يظهر إلّا قرب الانتهاء).
+                          const SubscriptionChip(),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -798,6 +828,7 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
       old.displayName != displayName ||
       old.greeting != greeting ||
       old.waLoaded != waLoaded ||
+      old.showWhatsApp != showWhatsApp ||
       old.whatsApp?.connected != whatsApp?.connected ||
       old.whatsApp?.phone != whatsApp?.phone ||
       old.whatsApp?.needsPairing != whatsApp?.needsPairing ||

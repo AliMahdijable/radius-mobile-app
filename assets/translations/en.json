@@ -1148,6 +1148,8 @@
     "banner_ending": "{} days left on your subscription",
     "banner_ending_body": "Activate a new code before it ends so the app keeps working.",
     "banner_today": "Your subscription ends today",
-    "settings_title": "Account & subscription"
+    "settings_title": "Account & subscription",
+    "chip_days_left": "{} days left",
+    "chip_today": "Ends today"
   }
 }

@@ -46,19 +46,19 @@ class AccountStatusCache {
 /// الأيّام التي قبلها يظهر تنبيه قرب الانتهاء (قرار المستخدم).
 const int kSubscriptionWarnDays = 7;
 
-/// Pro البند ٤: شريط أعلى الصفحة الرئيسيّة — في التجربة، أو حين يبقى
-/// [kSubscriptionWarnDays] أيّام أو أقلّ على الاشتراك. فيه «تفعيل كود»
-/// و«تواصل معنا». لا يظهر في الحالة السويّة.
-class SubscriptionBanner extends StatefulWidget {
-  const SubscriptionBanner({super.key});
+/// Pro البند ٤: حبّة صغيرة في ترويسة الرئيسيّة بجانب حالة الواتساب — في
+/// التجربة، أو حين يبقى [kSubscriptionWarnDays] أيّام أو أقلّ. الضغط يفتح
+/// نافذةً صغيرة فيها «تفعيل» و«تواصل معنا». (طلب المستخدم: في الأعلى لا
+/// كارتاً يأخذ مساحة في جسم الصفحة.) لا تظهر في الحالة السويّة.
+class SubscriptionChip extends StatefulWidget {
+  const SubscriptionChip({super.key});
 
   @override
-  State<SubscriptionBanner> createState() => _SubscriptionBannerState();
+  State<SubscriptionChip> createState() => _SubscriptionChipState();
 }
 
-class _SubscriptionBannerState extends State<SubscriptionBanner> {
+class _SubscriptionChipState extends State<SubscriptionChip> {
   AccountMe? _me = AccountStatusCache.cached;
-  bool _expanded = false;
 
   @override
   void initState() {
@@ -87,6 +87,63 @@ class _SubscriptionBannerState extends State<SubscriptionBanner> {
     await _load(force: true);
   }
 
+  void _openSheet(AccountMe me, String title, bool urgent) {
+    final body = (me.subscription.isTrial ? 'account.banner_trial_body' : 'account.banner_ending_body').tr();
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surfaceSheet,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(R.sheet))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.lg, Sp.xl, Sp.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Icon(urgent ? Icons.error_outline_rounded : Icons.hourglass_top_rounded,
+                  color: urgent ? AppColors.error : AppColors.warning, size: 32),
+              const SizedBox(height: Sp.sm),
+              Text(title, textAlign: TextAlign.center, style: AppType.sheetTitle(color: AppColors.textHi)),
+              const SizedBox(height: Sp.xs),
+              Text(body, textAlign: TextAlign.center,
+                  style: AppType.body(color: AppColors.textBody).copyWith(height: 1.55)),
+              const SizedBox(height: Sp.lg),
+              Row(
+                children: [
+                  Expanded(
+                    child: _BannerButton(
+                      label: 'account.code_activate'.tr(),
+                      icon: Icons.key_rounded,
+                      filled: true,
+                      onTap: () {
+                        Navigator.of(ctx).pop();
+                        _activate(me);
+                      },
+                    ),
+                  ),
+                  if (!me.support.isEmpty) ...[
+                    const SizedBox(width: Sp.sm),
+                    Expanded(
+                      child: _BannerButton(
+                        label: 'account.contact_us'.tr(),
+                        icon: Icons.support_agent_rounded,
+                        filled: false,
+                        onTap: () {
+                          Navigator.of(ctx).pop();
+                          SupportContact.open(context, me.support);
+                        },
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
@@ -96,75 +153,28 @@ class _SubscriptionBannerState extends State<SubscriptionBanner> {
     if (!s.active || (!s.isTrial && s.daysLeft > kSubscriptionWarnDays)) return const SizedBox.shrink();
 
     final urgent = s.daysLeft <= 2;
-    final bg = urgent ? AppColors.dangerSoftBg : AppColors.warningSoftBg;
-    final fg = urgent ? AppColors.error : AppColors.warning;
     final title = s.daysLeft <= 1
         ? 'account.banner_today'.tr()
         : (s.isTrial ? 'account.banner_trial' : 'account.banner_ending').tr(args: ['${s.daysLeft}']);
-    final body = (s.isTrial ? 'account.banner_trial_body' : 'account.banner_ending_body').tr();
-
-    // مطويٌّ افتراضيّاً (طلب المستخدم: لا يأكل الشاشة) — سطرٌ واحد، والضغط يفتح الأزرار.
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Sp.md),
-      child: Material(
-        color: bg,
-        borderRadius: BorderRadius.circular(R.md),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () => setState(() => _expanded = !_expanded),
-          child: AnimatedSize(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOutCubic,
-            alignment: Alignment.topCenter,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm + 2),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Icon(urgent ? Icons.error_outline_rounded : Icons.hourglass_top_rounded, color: fg, size: 18),
-                      const SizedBox(width: Sp.sm),
-                      Expanded(
-                        child: Text(title, style: AppType.bodyBold(color: AppColors.textHi),
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
-                      ),
-                      Icon(_expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
-                          color: AppColors.textMid, size: 20),
-                    ],
-                  ),
-                  if (_expanded) ...[
-                    const SizedBox(height: Sp.xs),
-                    Text(body, style: AppType.body(color: AppColors.textBody).copyWith(height: 1.5)),
-                    const SizedBox(height: Sp.sm + 2),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _BannerButton(
-                            label: 'account.code_activate'.tr(),
-                            icon: Icons.key_rounded,
-                            filled: true,
-                            onTap: () => _activate(me),
-                          ),
-                        ),
-                        if (!me.support.isEmpty) ...[
-                          const SizedBox(width: Sp.sm),
-                          Expanded(
-                            child: _BannerButton(
-                              label: 'account.contact_us'.tr(),
-                              icon: Icons.support_agent_rounded,
-                              filled: false,
-                              onTap: () => SupportContact.open(context, me.support),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
+    final short = s.daysLeft <= 1 ? 'account.chip_today'.tr() : 'account.chip_days_left'.tr(args: ['${s.daysLeft}']);
+    final tone = urgent ? AppTone.danger : AppTone.warning;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _openSheet(me, title, urgent),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 4),
+        decoration: BoxDecoration(
+          color: tone.softBg,
+          borderRadius: BorderRadius.circular(R.pill),
+          border: Border.all(color: tone.softBorder),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.hourglass_top_rounded, size: 11, color: tone.fill),
+            const SizedBox(width: 4),
+            Text(short, maxLines: 1, style: AppType.muted(color: tone.onSoft).copyWith(fontSize: 11)),
+          ],
         ),
       ),
     );
