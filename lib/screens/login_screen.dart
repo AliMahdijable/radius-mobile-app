@@ -9,8 +9,10 @@ import 'package:local_auth/local_auth.dart';
 import '../api/account_api.dart';
 import '../widgets/sas_captcha_sheet.dart';
 import '../api/auth_api.dart';
+import '../services/account_service.dart';
 import '../services/app_version.dart';
 import '../services/auth_storage.dart';
+import '../services/company_creds_store.dart';
 import '../services/saved_profiles_store.dart';
 import '../services/sas_login_flow.dart';
 import '../theme/colors.dart';
@@ -57,6 +59,23 @@ class _LoginScreenState extends State<LoginScreen> {
   List<DirectoryCompany>? _directory;
   DirectoryCompany? _picked;
   bool _manualLink = false;
+  String? _pendingUrl; // حسابٌ محفوظ اختير قبل وصول الدليل
+
+  /// يختار الشركة من رابطها: من الدليل إن وُجدت، وإلّا «شركة أخرى» بالرابط.
+  void _selectCompanyUrl(String url) {
+    _sasCtrl.text = url;
+    if (!_pickerMode) return;
+    final dir = _directory;
+    if (dir == null) {
+      _pendingUrl = url;
+      return;
+    }
+    final host = CompanyCredsStore.hostOf(url);
+    final hit = dir.where((c) => CompanyCredsStore.hostOf(c.url) == host).firstOrNull;
+    _picked = hit;
+    _manualLink = hit == null;
+    if (hit != null) _sasCtrl.text = hit.url;
+  }
 
   Future<void> _loadDirectory() async {
     try {
@@ -65,6 +84,9 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() {
         _directory = list;
         if (list.isEmpty) _manualLink = true; // لا دليل ← الحقل اليدويّ مباشرةً
+        final pending = _pendingUrl;
+        _pendingUrl = null;
+        if (pending != null) _selectCompanyUrl(pending);
       });
     } catch (_) {
       if (mounted) setState(() { _directory = const []; _manualLink = true; });
@@ -103,6 +125,8 @@ class _LoginScreenState extends State<LoginScreen> {
     _sasCtrl.text = widget.initialSasUrl ?? '';
     _userCtrl.text = widget.initialUsername ?? '';
     if (_pickerMode) _loadDirectory();
+    // توكن الحساب يُجدَّد الآن بينما يكتب المستخدم — لا عند الضغط على «دخول».
+    AccountService.idToken();
     if (_userCtrl.text.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _passFocus.requestFocus();
@@ -185,7 +209,12 @@ class _LoginScreenState extends State<LoginScreen> {
       case final LoginFailure f:
         if (f.isCancelled) return; // أغلق نافذة رمز الصورة — لا رسالة
         HapticFeedback.heavyImpact();
-        _showSnack(f.message, error: true);
+        // رفضٌ من الساس: نذكّر بالشركة المختارة — أكثر سببٍ له يوزر شركةٍ على ساس أخرى.
+        final company = _picked?.name;
+        _showSnack(
+          f.rejected && company != null ? '${f.message}\n${'login.check_company'.tr(args: [company])}' : f.message,
+          error: true,
+        );
         // بوّابة الحساب (اشتراكٌ منتهٍ/حسابٌ معطّل/بلا حساب): البوّابة تقرّر.
         if (f.isAccountGate) {
           Navigator.of(context).pushAndRemoveUntil(
@@ -276,10 +305,13 @@ class _LoginScreenState extends State<LoginScreen> {
                   try {
                     final plain =
                         await SavedProfilesStore.decrypt(p.encryptedPassword);
+                    // Pro: وشركته معه — كان يملأ اليوزر وتبقى الشركة المختارة سابقاً.
+                    final url = await CompanyCredsStore.sasUrlFor(p.username);
                     if (!mounted) return;
                     setState(() {
                       _userCtrl.text = p.username;
                       _passCtrl.text = plain;
+                      if (url != null) _selectCompanyUrl(url);
                     });
                     _passFocus.requestFocus();
                   } catch (_) {

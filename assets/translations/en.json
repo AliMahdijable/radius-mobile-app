@@ -108,7 +108,8 @@
     "captcha_body": "This SAS asks for the code shown in the image",
     "captcha_hint": "Type the code as shown",
     "captcha_empty": "Type the code shown in the image",
-    "captcha_refresh": "Another image"
+    "captcha_refresh": "Another image",
+    "check_company": "Selected company “{}” — make sure the account belongs to it"
   },
   "settings": {
     "title": "Settings",

@@ -22,10 +22,10 @@ class CompanyCredsStore {
   static const _kList = 'companies.creds';
 
   static String _key(String sasUrl, String username) =>
-      '${_host(sasUrl)}|${username.trim().toLowerCase()}';
+      '${hostOf(sasUrl)}|${username.trim().toLowerCase()}';
 
   /// مضيف الرابط بلا www. — «sas.jt.iq» و«https://sas.jt.iq/admin» شركةٌ واحدة.
-  static String _host(String sasUrl) {
+  static String hostOf(String sasUrl) {
     final s = sasUrl.trim();
     if (s.isEmpty) return '';
     final uri = Uri.tryParse(s.contains('://') ? s : 'https://$s');
@@ -54,6 +54,7 @@ class CompanyCredsStore {
       'url': sasUrl.trim(),
       'u': username.trim(),
       'p': password,
+      't': DateTime.now().millisecondsSinceEpoch,
     };
     await _storage.write(key: _kList, value: jsonEncode(all));
   }
@@ -65,6 +66,25 @@ class CompanyCredsStore {
       return e['p'] as String;
     }
     return null;
+  }
+
+  /// رابط آخر شركةٍ دخلها هذا اليوزر بنجاح، أو null — «الحسابات المحفوظة» في
+  /// شاشة الدخول تختار به الشركة مع اليوزر (وإلّا بقيت الشركة المختارة سابقاً
+  /// فيرفض ساسُها يوزرَ شركةٍ أخرى «كلمة مرور خاطئة»).
+  static Future<String?> sasUrlFor(String username) async {
+    final u = username.trim().toLowerCase();
+    String? best;
+    var bestT = -1;
+    for (final e in (await _readAll()).values) {
+      if (e is! Map || e['u']?.toString().trim().toLowerCase() != u) continue;
+      final url = e['url']?.toString() ?? '';
+      final t = e['t'] is int ? e['t'] as int : 0;
+      if (url.isNotEmpty && t > bestT) {
+        best = url;
+        bestT = t;
+      }
+    }
+    return best;
   }
 
   static Future<void> remove(String sasUrl, String username) async {

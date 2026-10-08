@@ -44,7 +44,9 @@ class AccountService {
     final u = currentUser;
     if (u == null) return null;
     try {
-      return await u.getIdToken(force);
+      // بلا سقف كان زرّ الدخول يدور بلا نهاية إن تعثّر تجديد التوكن عند جوجل
+      // (توكنٌ عمره ساعة ← تجديدٌ بالشبكة). شاشة الدخول تُسخّنه مسبقاً.
+      return await u.getIdToken(force).timeout(const Duration(seconds: 12));
     } catch (e) {
       if (kDebugMode) debugPrint('🔴 account idToken: $e');
       return null;

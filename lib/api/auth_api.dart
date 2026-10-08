@@ -65,8 +65,11 @@ class LoginSuccess extends LoginResult {
 }
 
 class LoginFailure extends LoginResult {
-  const LoginFailure(this.message, {this.code, this.captcha});
+  const LoginFailure(this.message, {this.code, this.captcha, this.rejected = false});
   final String message;
+
+  /// الساس رفض اليوزر/كلمة السرّ (401 بلا رمز بوّابة) — لا شبكة ولا حساب.
+  final bool rejected;
 
   /// Pro البند ٤: رمز بوّابة الحساب من الخادم — `subscription-ended` (402)،
   /// `account-required`/`account-token-invalid` (401)، `account-disabled`/
@@ -149,6 +152,7 @@ class AuthApi {
               : 'فشل تسجيل الدخول. تأكد من اسم المستخدم وكلمة المرور.',
           code: body['error']?.toString(),
           captcha: SasCaptcha.tryParse(body['captcha']),
+          rejected: res.statusCode == 401 && body['error'] == null,
         );
       }
 
