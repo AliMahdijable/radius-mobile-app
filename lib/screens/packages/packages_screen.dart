@@ -309,19 +309,8 @@ class _PackagesScreenState extends State<PackagesScreen> {
                       _PackageTile(
                         package: p,
                         userPriceCtrl: _userPriceCtrl[p.id]!,
-                        priceCtrl: _priceCtrl[p.id]!,
-                        // مطلب 2026-06-12 (إصلاح): "viewing root" = أي
-                        // وقت الـadmin ينظر على تسعير نفسه. هذا يحصل في
-                        // حالتين: لما الـpicker null (افتراضياً) أو لما
-                        // الـadmin يختار يوزره من القائمة (=  _myManagerId).
-                        // المنطق السابق كان يقفل فقط الحالة الأولى فيتم
-                        // فتح التحرير لما المدير يختار نفسه — خطأ.
-                        isViewingRoot: _selectedManagerId == null ||
-                            _selectedManagerId == _myManagerId,
                         onUserPriceChanged: (v) => _handleEdit(
                             p.id, v, _userPriceEdits, _userPriceCtrl[p.id]!),
-                        onPriceChanged: (v) => _handleEdit(
-                            p.id, v, _priceEdits, _priceCtrl[p.id]!),
                       ),
                       const SizedBox(height: 8),
                     ],
@@ -329,15 +318,8 @@ class _PackagesScreenState extends State<PackagesScreen> {
                 ),
               if (!_loading && _packages.isNotEmpty) ...[
                 const SizedBox(height: Sp.md),
-                _fieldExplainer(
-                  // نُظهر شرح «سعر المدير» فقط حين يُعرَض عمود الكلفة: تحريرُ
-                  // مديرٍ فرعيّ، أو وجودُ كلفةٍ فعليّة (الأصل). الساسات بلا
-                  // تسعيرٍ (jt) تكتفي بشرح «سعر البيع».
-                  showCost: (_selectedManagerId != null &&
-                          _selectedManagerId != _myManagerId) ||
-                      _priceCtrl.values.any((c) =>
-                          c.text.trim().isNotEmpty && c.text.trim() != '0'),
-                ),
+                // شاشة التسعير «سعر البيع» فقط — فالشرح يكتفي ببنده.
+                _fieldExplainer(showCost: false),
               ],
             ],
           ),
@@ -611,30 +593,18 @@ class _PackagesScreenState extends State<PackagesScreen> {
   }
 }
 
-/// مطلب 2026-06-12 (مطابق v1 web screenshot): كل صف باقة عمودان
-/// فقط: سعر المدير | سعر المستخدم.
-///
-/// **منطق التحرير**:
-/// - **عرض الـroot** (popq على نفسه): سعر المدير **مقفل** (لا
-///   يوجد مدير أعلى يحدّده)، سعر المستخدم قابل للتحرير.
-/// - **عرض مدير فرعي**: كلاهما قابل للتحرير — الـadmin يحدّد
-///   سعر المدير (الكلفة على الفرعي) + سعر المستخدم (سعر بيع
-///   الفرعي للمشتركين).
+/// Pro: كلّ صفّ باقة حقلٌ واحد — «سعر البيع» (ما يدفعه المشترك). لا «سعر
+/// مدير»/كلفة على شاشة التسعير إطلاقاً (باتّفاق المستخدم)، حتى لتسعير المدير
+/// الفرعيّ. سعر الشراء (الكلفة) يظهر كـهِنت عند تفعيل المشترك لا هنا.
 class _PackageTile extends StatelessWidget {
   const _PackageTile({
     required this.package,
     required this.userPriceCtrl,
-    required this.priceCtrl,
-    required this.isViewingRoot,
     required this.onUserPriceChanged,
-    required this.onPriceChanged,
   });
   final Package package;
   final TextEditingController userPriceCtrl;
-  final TextEditingController priceCtrl;
-  final bool isViewingRoot;
   final ValueChanged<String> onUserPriceChanged;
-  final ValueChanged<String> onPriceChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -676,63 +646,15 @@ class _PackageTile extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          // Pro: «سعر المدير» (الكلفة) يُعرَض فقط حين تتوفّر — عند تحرير مديرٍ
-          // فرعيّ، أو حين للأصل كلفةٌ فعليّة. الساسات العراقيّة بلا تسعير
-          // (الكلفة فارغة) → نُخفي العمود الميّت ونعرض «سعر البيع» بعرضٍ كامل:
-          // أوضح وأنظف، والمدير يضع سعر بيعه مباشرةً.
-          if (!isViewingRoot)
-            // تحرير مديرٍ فرعيّ: الكلفة قابلةٌ للتحرير + سعر البيع.
-            Row(
-              children: [
-                Expanded(
-                  child: _priceField(
-                    label: 'سعر المدير',
-                    ctrl: priceCtrl,
-                    onChanged: onPriceChanged,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _priceField(
-                    label: 'سعر البيع',
-                    ctrl: userPriceCtrl,
-                    onChanged: onUserPriceChanged,
-                    highlight: true,
-                  ),
-                ),
-              ],
-            )
-          else if (priceCtrl.text.trim().isNotEmpty &&
-              priceCtrl.text.trim() != '0' &&
-              priceCtrl.text.trim() != '—')
-            // الأصل بكلفةٍ فعليّة (supernet): الكلفة مقفلة + سعر البيع.
-            Row(
-              children: [
-                Expanded(
-                  child: _readOnly(
-                    label: 'سعر المدير (مقفل)',
-                    value: priceCtrl.text.trim(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _priceField(
-                    label: 'سعر البيع',
-                    ctrl: userPriceCtrl,
-                    onChanged: onUserPriceChanged,
-                    highlight: true,
-                  ),
-                ),
-              ],
-            )
-          else
-            // الساس بلا تسعير (jt وأخواتها): سعر البيع وحده، بعرضٍ كامل.
-            _priceField(
-              label: 'سعر البيع',
-              ctrl: userPriceCtrl,
-              onChanged: onUserPriceChanged,
-              highlight: true,
-            ),
+          // Pro: شاشة التسعير تعرض «سعر البيع» فقط — حتى لتسعير المدير الفرعيّ
+          // (باتّفاق المستخدم: لا «سعر مدير»/كلفة على هذه الشاشة إطلاقاً). سعر
+          // الشراء (الكلفة) يظهر كـهِنت عند تفعيل المشترك لا هنا.
+          _priceField(
+            label: 'سعر البيع',
+            ctrl: userPriceCtrl,
+            onChanged: onUserPriceChanged,
+            highlight: true,
+          ),
         ],
       ),
     );
@@ -809,35 +731,4 @@ class _PackageTile extends StatelessWidget {
     );
   }
 
-  Widget _readOnly({required String label, required String value}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(right: 2, bottom: 4),
-          child: Text(
-            label,
-            style: AppType.muted(color: AppColors.textMid)
-                .copyWith(fontSize: 10.5, fontWeight: FontWeight.w600),
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 13),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: AppColors.surfaceInput,
-            borderRadius: BorderRadius.circular(R.sm),
-            border: Border.all(color: AppColors.borderSoft),
-          ),
-          child: Text(
-            value,
-            style: AppType.label(color: AppColors.textMid)
-                .copyWith(fontSize: 13, fontWeight: FontWeight.w700),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
-  }
 }
