@@ -354,6 +354,11 @@ class AuthApi {
         return 'تعذّر الاتصال بالسيرفر. تأكد من الإنترنت.';
       case DioExceptionType.badResponse:
         final code = e.response?.statusCode;
+        // ٥xx يُرمى (validateStatus < 500) لكنّ الخادم يرسل رسالةً عربيّة واضحة
+        // («لا يمكن الوصول لخادم المصادقة»…) — نعرضها بدل «HTTP 503» الخام.
+        final data = e.response?.data;
+        final serverMsg = data is Map ? (data['message'] as String?)?.trim() : null;
+        if (serverMsg != null && serverMsg.isNotEmpty) return serverMsg;
         if (code == 401) return 'اسم المستخدم أو كلمة المرور غير صحيحة.';
         if (code == 429) return 'محاولات كثيرة. انتظر دقيقة ثم أعد المحاولة.';
         return 'استجابة غير متوقعة من السيرفر (HTTP $code).';
