@@ -626,4 +626,45 @@ bulk_activate) + مسحٌ اكتشافيّ لأيّ شاشةٍ مكشوفةٍ أ
 
 **أمان supernet:** كلّ الجداول جديدة، وحارس الاشتراك على مسار البند ٤ **الجديد فقط**، ودخول الساس الحاليّ **ما يتغيّر**.
 
-**🔖 نقطة الاستئناف:** ابدأ بالمرحلة ① — جداول الخادم (`database/db.js`) + نقاط `/api/account/*` + middleware تحقّق Firebase.
+**🔖 نقطة الاستئناف:** ~~ابدأ بالمرحلة ①~~ → المرحلة ① **منشورة** — انظر §٩-٧.
+
+---
+
+## ٩-٧. البند ٤ — المرحلة ① منشورةٌ على Pro (٢٠٢٦-١٠-٠٨)
+
+**الحالة:** منشورةٌ وتعمل على `~/MyServices-Pro` (المنفذ 3030 ← pro.mysvcs.net)، commit **`b2e43fc`** على فرع `pro`
+بالخادم. الحيّ (`myservices-raduis` بـpm2) **لم يُمَسّ** — بقي يعمل بلا إعادة تشغيل.
+
+**ما نُشر (يختلف عن مسوّدة §٩-٦ بعد مراجعةٍ عدائيّة):**
+- الجداول ببادئة **`pro_`** — القاعدة `myservices_agent` مشتركة مع الحيّ (وفيها `account_settlements`):
+  `pro_accounts` · `pro_account_subscriptions` · `pro_trial_claims` · `pro_activation_codes` · `pro_account_sas_access`.
+  **لا أعمدة على `sas_servers`.** المخطّط مضافٌ أيضاً إلى `initializeDatabase` في `database/db.js`.
+- النقاط `server/accounts.js` ← `/api/account/{bootstrap,me,redeem-code,companies}`؛ التوكن من `x-account-token`
+  أوّلاً ثمّ `Bearer`؛ عطلُ Firebase/الشبكة = 503 لا 401 (كي لا يُطرد المستخدم)؛ الحساب المعطّل = 403.
+- التجربة ١٤ يوماً **لبريدٍ مؤكَّد فقط، ومرّةً لكلّ بريدٍ مطبَّع** (صغيرة، بلا `+وسم`، جيميل بلا نقاط) لا لكلّ UID.
+- الكود: يُطبَّع (أرقام عربيّة/فارسيّة، علامات اتّجاه خفيّة، شرطات بديلة)، يُضاف **بعد** نهاية التجربة، الاشتراك
+  يُفحص قبل الكود (لا «عرّافة»)، إعادة نفس الحساب لنفس الكود = نجاح، حدّ ١٠/ربع ساعة لكلّ حساب + ٢٠ لكلّ IP.
+- **حارس الاشتراك أمام دخول الساس مؤجَّلٌ للمرحلة ③** (`isSubscriptionValid` جاهزة) — دخول الساس الحاليّ لم يتغيّر.
+- نسخة الفحص (`PRO_TEST_MODE`) **لا تشغّل فحص اليتامى** — نمطه يطابق عامل الحيّ وكان قد يقتله.
+
+**الفحص:**
+
+| الفحص | النتيجة |
+|---|---|
+| migrations Pro ⊇ الحيّ (إعادة التشغيل لا تغيّر جداول supernet) | ✅ |
+| `/api/account/me` بلا توكن (محلّيّ وعبر pro.mysvcs.net) | ✅ 401 |
+| توكن تالف | ✅ 401 |
+| فحص التوكن الحقيقيّ (١٧ حالة: تجربة/تكرار بريد/أكواد/تعطيل) | ⚠️ **تُخطّي** — Firebase Authentication غير مفعّل |
+
+**⛔ العائق الوحيد:** مشروع Firebase `myservices-radius` **لم يُفعَّل فيه Authentication أصلاً**
+(`admin/v2/projects/myservices-radius/config` → 404 `CONFIGURATION_NOT_FOUND`). لا يُفعَّل عبر الـAPI لأنّ مساره
+(`identityPlatform:initializeAuth`) يرقّي المشروع إلى Identity Platform (فوترة). المطلوب من المالك في الكونسول:
+Authentication ← **Get started** ← تفعيل **Email/Password** (+ Google؛ Apple لاحقاً مع المرحلة ③).
+
+**بعد التفعيل** (أنفّذه أنا): `bash ~/band4_deploy_20261008-131151/remote.sh test` (المفتاح عبر stdin من
+`android/app/google-services.json`) — المخرج 0 = كلّه نجح. ثمّ commit توثيقٍ صغير.
+
+**التراجع:** `bash ~/band4_deploy_20261008-131151/remote.sh rollback` (النسخة الاحتياطيّة `~/band4_backup_20261008-101220`).
+الجداول تبقى (فارغة، إضافيّة، لا تضرّ).
+
+**🔖 نقطة الاستئناف:** تفعيل Authentication ← `remote.sh test` ← المرحلة ② (لوحة المالك على pro.mysvcs.net).
