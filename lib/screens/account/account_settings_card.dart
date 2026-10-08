@@ -22,6 +22,7 @@ class AccountSettingsCard extends StatefulWidget {
 
 class _AccountSettingsCardState extends State<AccountSettingsCard> {
   AccountMe? _me = AccountStatusCache.cached;
+  bool _expanded = false;
 
   @override
   void initState() {
@@ -93,53 +94,75 @@ class _AccountSettingsCardState extends State<AccountSettingsCard> {
       tone = s.isTrial || s.daysLeft <= kSubscriptionWarnDays ? AppColors.warning : AppColors.success;
     }
 
-    return Container(
-      decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(R.card)),
-      padding: const EdgeInsets.all(Sp.lg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(color: AppColors.brandSoftBg, borderRadius: BorderRadius.circular(R.md)),
-                child: Icon(Icons.verified_user_outlined, color: AppColors.brand, size: 20),
-              ),
-              const SizedBox(width: Sp.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    final short = s == null
+        ? ''
+        : !s.active
+            ? 'account.status_ended'.tr()
+            : (s.isTrial ? 'account.chip_trial' : 'account.chip_active').tr(args: ['${s.daysLeft}']);
+
+    // مطويٌّ افتراضيّاً بشكل صفوف الإعدادات نفسها؛ الضغط يفتح التفاصيل والأزرار.
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(R.md),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => setState(() => _expanded = !_expanded),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.md),
+            border: Border.all(color: AppColors.border),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.md),
+          child: AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
                   children: [
-                    Text('account.settings_title'.tr(), style: AppType.cardTitleBold(color: AppColors.textHi)),
-                    const SizedBox(height: Sp.xxs),
-                    Text(email, style: AppType.body(color: AppColors.textMid),
-                        maxLines: 1, overflow: TextOverflow.ellipsis, textDirection: TextDirection.ltr),
+                    Icon(Icons.verified_user_outlined, color: AppColors.textMid, size: 20),
+                    const SizedBox(width: Sp.md),
+                    Expanded(
+                      child: Text('account.settings_title'.tr(), style: AppType.label(color: AppColors.textHi),
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                    if (short.isNotEmpty) ...[
+                      Text(short, style: AppType.muted(color: tone).copyWith(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                      const SizedBox(width: 6),
+                    ],
+                    Icon(_expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                        color: AppColors.textLow, size: 20),
                   ],
                 ),
-              ),
-            ],
+                if (_expanded) ...[
+                  const SizedBox(height: Sp.md),
+                  Text(email, style: AppType.body(color: AppColors.textMid),
+                      maxLines: 1, overflow: TextOverflow.ellipsis, textDirection: TextDirection.ltr),
+                  const SizedBox(height: Sp.xs),
+                  Text(status, style: AppType.bodyStrong(color: tone)),
+                  const SizedBox(height: Sp.md),
+                  Wrap(
+                    spacing: Sp.sm,
+                    runSpacing: Sp.sm,
+                    children: [
+                      if (me != null)
+                        _Chip(icon: Icons.key_rounded, label: 'account.menu_code'.tr(), onTap: () => _openSubscription(me)),
+                      if (me != null && !me.support.isEmpty)
+                        _Chip(
+                          icon: Icons.support_agent_rounded,
+                          label: 'account.contact_us'.tr(),
+                          onTap: () => SupportContact.open(context, me.support),
+                        ),
+                      _Chip(icon: Icons.logout_rounded, label: 'account.sign_out'.tr(), danger: true, onTap: _signOut),
+                    ],
+                  ),
+                ],
+              ],
+            ),
           ),
-          const SizedBox(height: Sp.md),
-          Text(status, style: AppType.bodyStrong(color: tone)),
-          const SizedBox(height: Sp.md),
-          Wrap(
-            spacing: Sp.sm,
-            runSpacing: Sp.sm,
-            children: [
-              if (me != null)
-                _Chip(icon: Icons.key_rounded, label: 'account.menu_code'.tr(), onTap: () => _openSubscription(me)),
-              if (me != null && !me.support.isEmpty)
-                _Chip(
-                  icon: Icons.support_agent_rounded,
-                  label: 'account.contact_us'.tr(),
-                  onTap: () => SupportContact.open(context, me.support),
-                ),
-              _Chip(icon: Icons.logout_rounded, label: 'account.sign_out'.tr(), danger: true, onTap: _signOut),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }

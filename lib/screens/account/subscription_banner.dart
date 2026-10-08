@@ -58,6 +58,7 @@ class SubscriptionBanner extends StatefulWidget {
 
 class _SubscriptionBannerState extends State<SubscriptionBanner> {
   AccountMe? _me = AccountStatusCache.cached;
+  bool _expanded = false;
 
   @override
   void initState() {
@@ -102,56 +103,68 @@ class _SubscriptionBannerState extends State<SubscriptionBanner> {
         : (s.isTrial ? 'account.banner_trial' : 'account.banner_ending').tr(args: ['${s.daysLeft}']);
     final body = (s.isTrial ? 'account.banner_trial_body' : 'account.banner_ending_body').tr();
 
+    // مطويٌّ افتراضيّاً (طلب المستخدم: لا يأكل الشاشة) — سطرٌ واحد، والضغط يفتح الأزرار.
     return Padding(
       padding: const EdgeInsets.only(bottom: Sp.md),
-      child: Container(
-        padding: const EdgeInsets.all(Sp.lg),
-        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(R.card)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(urgent ? Icons.error_outline_rounded : Icons.hourglass_top_rounded, color: fg, size: 24),
-                const SizedBox(width: Sp.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      child: Material(
+        color: bg,
+        borderRadius: BorderRadius.circular(R.md),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm + 2),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
                     children: [
-                      Text(title, style: AppType.cardTitleBold(color: AppColors.textHi)),
-                      const SizedBox(height: Sp.xxs),
-                      Text(body, style: AppType.body(color: AppColors.textBody).copyWith(height: 1.5)),
+                      Icon(urgent ? Icons.error_outline_rounded : Icons.hourglass_top_rounded, color: fg, size: 18),
+                      const SizedBox(width: Sp.sm),
+                      Expanded(
+                        child: Text(title, style: AppType.bodyBold(color: AppColors.textHi),
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ),
+                      Icon(_expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                          color: AppColors.textMid, size: 20),
                     ],
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: Sp.md),
-            Row(
-              children: [
-                Expanded(
-                  child: _BannerButton(
-                    label: 'account.code_activate'.tr(),
-                    icon: Icons.key_rounded,
-                    filled: true,
-                    onTap: () => _activate(me),
-                  ),
-                ),
-                if (!me.support.isEmpty) ...[
-                  const SizedBox(width: Sp.sm),
-                  Expanded(
-                    child: _BannerButton(
-                      label: 'account.contact_us'.tr(),
-                      icon: Icons.support_agent_rounded,
-                      filled: false,
-                      onTap: () => SupportContact.open(context, me.support),
+                  if (_expanded) ...[
+                    const SizedBox(height: Sp.xs),
+                    Text(body, style: AppType.body(color: AppColors.textBody).copyWith(height: 1.5)),
+                    const SizedBox(height: Sp.sm + 2),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _BannerButton(
+                            label: 'account.code_activate'.tr(),
+                            icon: Icons.key_rounded,
+                            filled: true,
+                            onTap: () => _activate(me),
+                          ),
+                        ),
+                        if (!me.support.isEmpty) ...[
+                          const SizedBox(width: Sp.sm),
+                          Expanded(
+                            child: _BannerButton(
+                              label: 'account.contact_us'.tr(),
+                              icon: Icons.support_agent_rounded,
+                              filled: false,
+                              onTap: () => SupportContact.open(context, me.support),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
-                  ),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ],
+          ),
         ),
       ),
     );

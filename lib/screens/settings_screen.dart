@@ -138,8 +138,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         .copyWith(fontSize: 22)),
               ),
             _IdentityCard(name: _name),
-            const SizedBox(height: Sp.md),
-            // Pro البند ٤: الحساب والاشتراك (تاريخ الانتهاء، الكود، التواصل).
+            const SizedBox(height: Sp.sm),
+            // Pro البند ٤: الحساب والاشتراك (تاريخ الانتهاء، الكود، التواصل) — صفٌّ مطويّ.
             const AccountSettingsCard(),
             const SizedBox(height: Sp.lg),
             // مطلب 2026-06-10: شاشة الإعدادات تضم أقسام: واتساب +
