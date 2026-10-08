@@ -70,7 +70,7 @@
     "welcome": "Welcome back",
     "subtitle": "Smart management for your ISP",
     "company": "Company page link (optional)",
-    "company_hint": "https://sas.example.com",
+    "company_hint": "sas.example.com or 1.2.3.4",
     "username": "Username",
     "username_hint": "e.g. admin@ali300",
     "password": "Password",

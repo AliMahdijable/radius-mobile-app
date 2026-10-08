@@ -70,7 +70,7 @@
     "welcome": "أهلاً بعودتك",
     "subtitle": "إدارة ذكية لمزود الإنترنت",
     "company": "رابط صفحة الشركة (اختياريّ)",
-    "company_hint": "https://sas.example.com",
+    "company_hint": "sas.example.com أو 1.2.3.4",
     "username": "اسم المستخدم",
     "username_hint": "مثلاً admin@ali300",
     "password": "كلمة المرور",
