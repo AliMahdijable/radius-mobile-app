@@ -692,6 +692,9 @@ bulk_activate) + مسحٌ اكتشافيّ لأيّ شاشةٍ مكشوفةٍ أ
 للتطبيق مضمَّنةً woff2 (500/600/700، لا 400 — كالتطبيق)، بلا Google Fonts ولا خطٍّ أحاديّ؛ ألوان `lib/theme/colors.dart` بالوضعين
 وسلّم مقاسات AppType. CSP الصفحة صارت بلا fonts.googleapis/gstatic. فحص بعدها: ١٩ + ٧٦ نجح، وChrome على الرابط حمّل الخطّ.
 
+**كاش كلاودفلير (commit `c8f8ecf`):** كلاودفلير يستبدل Cache-Control الأصول بـ٣١ يوماً، فبقيت CSS القديمة عند المالك بعد النشر
+(«الخطّ ما تغيّر»). الحلّ: `/owner` (no-store) تُبنى بروابط `app.css?v=` و`app.js?v=` (بصمة sha256 للمحتوى) — كلّ نشرٍ يصل فوراً.
+
 **الترويسات:** helmet العامّ لم يتغيّر؛ `/owner` وحدها تستبدل COOP (`same-origin-allow-popups`) وCSP (gstatic/apis.google.com/
 firebaseapp/securetoken). كلاودفلير يحقن سكربت كشف البوتات المضمَّن في HTML — CSP تحجبه، غير ضارّ.
 
