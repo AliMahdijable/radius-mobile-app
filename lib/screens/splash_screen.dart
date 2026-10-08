@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import '../api/auth_api.dart';
+import '../services/account_service.dart';
 import '../services/auth_storage.dart';
 import '../services/biometric_service.dart';
 import '../services/fcm_service.dart';
@@ -15,7 +16,7 @@ import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'main_shell.dart';
-import 'login_screen.dart';
+import 'account/account_gate_screen.dart';
 
 /// First screen on launch. Decides where to route:
 ///   - Token + autoLogin enabled  → home (skipping login + perms)
@@ -68,7 +69,7 @@ class _SplashScreenState extends State<SplashScreen> {
       if (kDebugMode) debugPrint('🔴 توجيه الإقلاع: $e\n$st');
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        MaterialPageRoute(builder: (_) => const AccountGateScreen()),
       );
     }
   }
@@ -106,7 +107,9 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!mounted) return;
 
     final Widget next;
-    if (token != null && token.isNotEmpty && autoLogin) {
+    // Pro البند ٤: جلسة الساس وحدها لا تكفي — يلزم حساب إيميل جاهز (مؤكَّد).
+    // بدونه (تحديثٌ من نسخةٍ بلا طبقة الحساب، أو خروجٌ من الحساب) ← البوّابة.
+    if (token != null && token.isNotEmpty && autoLogin && AccountService.isReady) {
       // Perf 2026-08-05: unawaited بدل await — لو token منتهي،
       // api_client interceptor يعالج 401 → refresh → retry تلقائياً
       // على أوّل request في Dashboard. Splash يفتح فوراً بدل انتظار
@@ -126,7 +129,7 @@ class _SplashScreenState extends State<SplashScreen> {
         if (!mounted) return;
         if (!passed) {
           Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const LoginScreen()),
+            MaterialPageRoute(builder: (_) => const AccountGateScreen()),
           );
           return;
         }
@@ -141,13 +144,13 @@ class _SplashScreenState extends State<SplashScreen> {
       next = const MainShell();
     } else if (token != null && token.isNotEmpty && !autoLogin) {
       // User has logged in before but chose not to be remembered.
-      next = const LoginScreen();
+      next = const AccountGateScreen();
     } else if (permsShown) {
       // Returning user with no session: straight to login.
-      next = const LoginScreen();
+      next = const AccountGateScreen();
     } else {
       // First-ever launch.
-      next = const LoginScreen();
+      next = const AccountGateScreen();
     }
 
     // بلا هذا الحارس: لو غادر المستخدم الشاشة أثناء التحميل أعلاه

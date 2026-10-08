@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,13 +7,12 @@ import 'package:local_auth/local_auth.dart';
 import '../api/auth_api.dart';
 import '../services/app_version.dart';
 import '../services/auth_storage.dart';
-import '../services/fcm_service.dart';
-import '../services/permissions_service.dart';
 import '../services/saved_profiles_store.dart';
-import '../services/session_manager.dart';
+import '../services/sas_login_flow.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import 'account/account_gate_screen.dart';
 import 'main_shell.dart';
 
 /// Login — Soft Pastel + Premium. Wired to https://rad.mysvcs.net/api/auth/login.
@@ -26,7 +23,13 @@ import 'main_shell.dart';
 /// (`!semantics.parentDataDirty`). Replaced with a flat Column inside
 /// SingleChildScrollView — no Spacer, no min-height tricks.
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.initialSasUrl, this.initialUsername, this.fromCompanies = false});
+
+  /// Pro البند ٤ ③: تُفتح من «شركاتي» — لإضافة شركة، أو لدخول شركةٍ
+  /// مربوطة كلمةُ سرّها غير محفوظة (الرابط واليوزر معبّآن).
+  final String? initialSasUrl;
+  final String? initialUsername;
+  final bool fromCompanies;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -43,6 +46,18 @@ class _LoginScreenState extends State<LoginScreen> {
   // Default ON — matches v1 behavior. Users who don't want auto-login
   // on a shared device can untick before submitting.
   bool _remember = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _sasCtrl.text = widget.initialSasUrl ?? '';
+    _userCtrl.text = widget.initialUsername ?? '';
+    if (_userCtrl.text.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _passFocus.requestFocus();
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -86,93 +101,42 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _loading = false);
 
     switch (result) {
-      case LoginSuccess(
-          :final token,
-          :final adminId,
-          :final adminUsername,
-          :final displayName,
-          :final expiresAt,
-          :final requires2fa,
-          :final isSuperAdmin,
-          :final canAccessManagers,
-          :final canAccessPackages,
-          :final isEmployee,
-          :final canonicalPermissions,
-        ):
-        // 2026-07-14: مسح كل caches الجلسة السابقة قبل تفعيل الجديدة —
-        // يحمي من رواسب admin سابق (لو 401 kick شغّل واحد ما مسح
-        // الا AuthStorage + Perms). unregisterFcm=false لأن ما في
-        // token لنستعمله وقت الاستدعاء + FcmService.initAfterLogin
-        // بعد قليل يسجّل الحساب الجديد. clearAuth=false لأن saveSession
-        // فوراً بعده يكتب الجديد.
-        await SessionManager.clearAllSessionData(
-          unregisterFcm: false,
-          clearAuth: false,
-        );
-        await AuthStorage.saveSession(
-          token: token,
-          adminId: adminId,
-          adminUsername: adminUsername,
-          displayName: displayName,
-          autoLogin: _remember,
-          tokenExpiry: expiresAt,
-          isSuperAdmin: isSuperAdmin,
-          canAccessManagers: canAccessManagers,
-          canAccessPackages: canAccessPackages,
-          isEmployee: isEmployee,
-        );
-        // 2026-08-26: احفظ الحساب في profiles.* حتى يبقى بعد Logout —
-        // شاشة الدخول تعرضه كـchip + قسم "الصفحات" يستعمله لـ"العودة
-        // للحساب الأصلي" بعد التبديل لمدير فرعي. نحفظ دائماً بغضّ النظر
-        // عن _remember لأنّ لا معنى للـswitcher بلا كلمات سرّ محفوظة.
-        // الـtoggle _remember يبقى يتحكّم فقط بـautoLogin على الـSplash.
-        unawaited(SavedProfilesStore.upsert(
+      case LoginSuccess(:final requires2fa):
+        // Pro البند ٤ ③: ما بعد الدخول في مكانٍ واحد (مع «شركاتي»): مسح بقايا
+        // الجلسة السابقة ← حفظ الجلسة ورابط ساسها ← كلمة السرّ على الجهاز لهذه
+        // الشركة ← الصلاحيّات ← FCM.
+        final out = await SasLoginFlow.complete(
+          result,
           username: user,
-          plainPassword: pass,
-          displayName: displayName,
-        ).catchError((_) {}));
+          password: pass,
+          sasUrl: _sasCtrl.text.trim(),
+          remember: _remember,
+        );
         if (!mounted) return;
         HapticFeedback.mediumImpact();
-        if (requires2fa) {
+        if (requires2fa || out == SasLoginOutcome.needs2fa) {
           _showSnack('login.needs_2fa'.tr());
           // TODO[2fa-screen]: route to 2FA when that screen exists.
           return;
         }
-        // Perf 2026-XX: نجلب الصلاحيات في الخلفيّة للـadmin (default =
-        // كل شي مسموح، فما في fallout بصري لو الشبكة بطيئة). للـemployee
-        // نستنّى الجلب لأن سلوك has() للـemployee "كل شي ممنوع افتراضياً"
-        // — بدون الاستنظار سيرى قوائم فارغة لثوانٍ قبل ما تتحدّث.
-        // النتيجة: admin يدخل بـ~-300ms، employee بنفس السلوك السابق.
-        if (isEmployee) {
-          final permsOk = await PermissionsService.refreshFromBackend();
-          if (!mounted) return;
-          if (!permsOk) {
-            await PermissionsService.clear();
-            if (!mounted) return;
-            _showSnack('login.perms_fetch_failed'.tr(), error: true);
-            return;
-          }
-        } else {
-          // Pro: مدير (لا موظّف) — نضبط قدراته المعياريّة من الساس فوراً
-          // (متزامنٌ، بلا نداء /me): super-admin → غير مقيَّد؛ مدير فرعيّ →
-          // مقيَّدٌ بخريطته فتختفي الأزرار الممنوعة (حذف/عرض باسورد…). كان
-          // سابقاً refreshFromBackend → /me يُرجِع is_employee=false → كامل
-          // الصلاحيّات، فتظهر كلّ الأزرار (عين العطل الذي نُصلحه).
-          await PermissionsService.setManagerCapabilities(
-            isSuperAdmin: isSuperAdmin,
-            canonical: canonicalPermissions,
-          );
-          if (!mounted) return;
+        if (out == SasLoginOutcome.permsFailed) {
+          _showSnack('login.perms_fetch_failed'.tr(), error: true);
+          return;
         }
-        // نُسجّل FCM بعد إتمام الجلسة. آمنة الفشل — ما تعطّل الدخول لو
-        // Firebase غير متوفّر (fire-and-forget).
-        unawaited(FcmService.initAfterLogin());
-        Navigator.of(context).pushReplacement(
+        Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const MainShell()),
+          (_) => false,
         );
-      case LoginFailure(:final message):
+      case LoginFailure(:final message, :final code):
         HapticFeedback.heavyImpact();
         _showSnack(message, error: true);
+        // بوّابة الحساب (اشتراكٌ منتهٍ/حسابٌ معطّل/بلا حساب): البوّابة تقرّر.
+        if (code != null && code != 'bad-sas-url') {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const AccountGateScreen()),
+            (_) => false,
+          );
+        }
     }
   }
 
@@ -222,7 +186,15 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: Sp.huge),
+              if (widget.fromCompanies)
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: IconButton(
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    icon: Icon(Icons.arrow_back_rounded, color: AppColors.textHi),
+                  ),
+                ),
+              SizedBox(height: widget.fromCompanies ? Sp.md : Sp.huge),
               const _Logo()
                   .animate()
                   .scale(

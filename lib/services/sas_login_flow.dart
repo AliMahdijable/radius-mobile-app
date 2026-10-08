@@ -1,0 +1,69 @@
+import 'dart:async';
+
+import '../api/auth_api.dart';
+import 'auth_storage.dart';
+import 'company_creds_store.dart';
+import 'fcm_service.dart';
+import 'permissions_service.dart';
+import 'saved_profiles_store.dart';
+import 'session_manager.dart';
+
+enum SasLoginOutcome { ok, needs2fa, permsFailed }
+
+/// ما بعد دخولٍ ناجح للساس — مكانٌ واحد لشاشة الدخول و«شركاتي».
+///
+/// الترتيب ملزِم (كان مكرّراً في شاشة الدخول): مسح بقايا الجلسة السابقة ←
+/// حفظ الجلسة ← الصلاحيّات (الموظّف ينتظر جلبها، المدير من الساس فوراً) ←
+/// FCM. والنداء لا يتنقّل بين الشاشات؛ المتّصل يقرّر حسب النتيجة.
+class SasLoginFlow {
+  SasLoginFlow._();
+
+  static Future<SasLoginOutcome> complete(
+    LoginSuccess s, {
+    required String username,
+    required String password,
+    required String sasUrl,
+    required bool remember,
+  }) async {
+    await SessionManager.clearAllSessionData(unregisterFcm: false, clearAuth: false);
+    await AuthStorage.saveSession(
+      token: s.token,
+      adminId: s.adminId,
+      adminUsername: s.adminUsername,
+      displayName: s.displayName,
+      autoLogin: remember,
+      tokenExpiry: s.expiresAt,
+      isSuperAdmin: s.isSuperAdmin,
+      canAccessManagers: s.canAccessManagers,
+      canAccessPackages: s.canAccessPackages,
+      isEmployee: s.isEmployee,
+      sasUrl: sasUrl,
+    );
+    // كلمة السرّ على الجهاز فقط (قرار المستخدم): لكلّ شركة+يوزر — لدخول
+    // «شركاتي» بضغطة — وفي الحسابات المحفوظة لمبدّل المدراء الفرعيّين.
+    unawaited(CompanyCredsStore.upsert(sasUrl: sasUrl, username: username, password: password)
+        .catchError((_) {}));
+    unawaited(SavedProfilesStore.upsert(
+      username: username,
+      plainPassword: password,
+      displayName: s.displayName,
+    ).catchError((_) {}));
+
+    if (s.requires2fa) return SasLoginOutcome.needs2fa;
+
+    if (s.isEmployee) {
+      final ok = await PermissionsService.refreshFromBackend();
+      if (!ok) {
+        await PermissionsService.clear();
+        return SasLoginOutcome.permsFailed;
+      }
+    } else {
+      await PermissionsService.setManagerCapabilities(
+        isSuperAdmin: s.isSuperAdmin,
+        canonical: s.canonicalPermissions,
+      );
+    }
+    unawaited(FcmService.initAfterLogin());
+    return SasLoginOutcome.ok;
+  }
+}

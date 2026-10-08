@@ -28,6 +28,7 @@ import '../settings_screen.dart';
 import 'widgets/hero_revenue_card.dart';
 import 'widgets/recent_activities.dart';
 import 'widgets/reconnect_banner.dart';
+import '../account/subscription_banner.dart';
 import 'widgets/section_header.dart';
 import 'widgets/stats_grid.dart';
 import 'widgets/subscribers_card.dart';
@@ -438,6 +439,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 delegate: SliverChildListDelegate([
                   // أعلى كلّ شيء عمداً: انقطاع الجلسة يوقف كلّ تنبيهات
                   // المشتركين وفواتيرهم، فلا يجوز أن يُقرأ بعد الأرقام.
+                  // Pro البند ٤: تجربة/اشتراكٌ قريب الانتهاء — «تفعيل كود» و«تواصل معنا».
+                  const SubscriptionBanner(),
                   if (_shown('wa_banner'))
                     ReconnectBanner(
                       status: _waStatus,

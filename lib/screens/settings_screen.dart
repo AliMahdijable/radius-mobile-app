@@ -14,7 +14,8 @@ import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'app_permissions_screen.dart';
 import 'devices/device_defaults_screen.dart';
-import 'login_screen.dart';
+import 'account/account_gate_screen.dart';
+import 'account/account_settings_card.dart';
 import 'notifications_settings_screen.dart';
 import 'print_templates/print_templates_screen.dart';
 import 'whatsapp/connection_alerts_screen.dart';
@@ -83,7 +84,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await SavedProfilesStore.clearOriginal();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      MaterialPageRoute(builder: (_) => const AccountGateScreen()),
       (_) => false,
     );
   }
@@ -137,6 +138,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         .copyWith(fontSize: 22)),
               ),
             _IdentityCard(name: _name),
+            const SizedBox(height: Sp.md),
+            // Pro البند ٤: الحساب والاشتراك (تاريخ الانتهاء، الكود، التواصل).
+            const AccountSettingsCard(),
             const SizedBox(height: Sp.lg),
             // مطلب 2026-06-10: شاشة الإعدادات تضم أقسام: واتساب +
             // قوالبه، طباعة + قوالبها، المظهر، البصمة، الصلاحيات،

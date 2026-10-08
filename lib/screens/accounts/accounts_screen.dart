@@ -180,9 +180,12 @@ class _AccountsScreenState extends State<AccountsScreen> {
         }
       }
       // 3) اسجّل دخول بالحساب الجديد
+      // Pro البند ٤ ③: نفس ساس الجلسة الحاليّة — بدونه يذهب للأصل.
+      final sasUrl = await AuthStorage.readSasUrl();
       final res = await AuthApi.login(
         username: row.username,
         password: pw.password!,
+        sasUrl: sasUrl,
       );
       if (!mounted) return;
       switch (res) {
@@ -215,6 +218,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
             canAccessManagers: canAccessManagers,
             canAccessPackages: canAccessPackages,
             isEmployee: isEmployee,
+            sasUrl: sasUrl,
           );
           // 5) أضف الحساب الجديد للملفّات المحفوظة (حتى يظهر chip
           //    لاحقاً)، والحساب السابق موجود سلفاً لأنّه سجّل دخول من
@@ -262,9 +266,11 @@ class _AccountsScreenState extends State<AccountsScreen> {
     if (orig == null) return;
     setState(() => _returningToOriginal = true);
     try {
+      final sasUrl = await AuthStorage.readSasUrl();
       final res = await AuthApi.login(
         username: orig.username,
         password: orig.password,
+        sasUrl: sasUrl,
       );
       if (!mounted) return;
       switch (res) {
@@ -295,6 +301,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
             canAccessManagers: canAccessManagers,
             canAccessPackages: canAccessPackages,
             isEmployee: isEmployee,
+            sasUrl: sasUrl,
           );
           // نظّف مرجع الأصلي — رجعنا فعلاً.
           await SavedProfilesStore.clearOriginal();

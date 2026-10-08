@@ -19,6 +19,9 @@ class NotificationService {
 
   static bool _firebaseAvailable = false;
 
+  /// Firebase جاهز (طبقة الحساب في Pro تحتاجه قبل أيّ نداء لـFirebaseAuth).
+  static bool get firebaseReady => _firebaseAvailable;
+
   /// Called from main() AFTER Firebase.initializeApp() succeeds (or
   /// fails). Lets the rest of the service know whether to use the
   /// Firebase path or fall back.

@@ -66,5 +66,8 @@ class DefaultFirebaseOptions {
     projectId: 'myservices-radius',
     storageBucket: 'myservices-radius.firebasestorage.app',
     iosBundleId: 'com.mysvcs.radMysvcs',
+    // Pro البند ٤: عميل Google OAuth لـiOS (GoogleService-Info.plist → CLIENT_ID)
+    // — يحتاجه google_sign_in صراحةً على iOS.
+    iosClientId: '712556570451-op5ufm655ahcqklo9km49f15m16mj88n.apps.googleusercontent.com',
   );
 }

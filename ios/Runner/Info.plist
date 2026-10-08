@@ -114,5 +114,17 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<!-- Pro البند ٤: عودة نافذة دخول Google (REVERSED_CLIENT_ID) -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.712556570451-op5ufm655ahcqklo9km49f15m16mj88n</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

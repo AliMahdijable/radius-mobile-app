@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import '../services/account_service.dart';
 import '../services/auth_storage.dart';
 import 'api_client.dart';
 
@@ -62,8 +63,13 @@ class LoginSuccess extends LoginResult {
 }
 
 class LoginFailure extends LoginResult {
-  const LoginFailure(this.message);
+  const LoginFailure(this.message, {this.code});
   final String message;
+
+  /// Pro البند ٤: رمز بوّابة الحساب من الخادم — `subscription-ended` (402)،
+  /// `account-required`/`account-token-invalid` (401)، `account-disabled`/
+  /// `no-account` (403)، `bad-sas-url` (400). null لأخطاء الساس المعتادة.
+  final String? code;
 }
 
 /// نتيجة تجديد التوكن: نجاحٌ، أو رفضٌ صريح من الخادم، أو تعثّر شبكة.
@@ -83,6 +89,9 @@ class AuthApi {
       // Pro: رابط صفحة الشركة (إن لصقه المستخدم) — الخادم يشتقّ منه الساس
       // ويؤهّل الهويّة (jt:6836). فارغٌ = الأصل (supernet). يُرسَل فقط إن وُجد.
       final sas = sasUrl?.trim() ?? '';
+      // Pro البند ٤: دخول الساس يشترط حساب إيميل باشتراكٍ صالح — توكن الحساب
+      // في x-account-token (المعترض يتخطّى /api/auth/ فلا يلمسه).
+      final accountToken = await AccountService.idToken();
       final res = await ApiClient.dio.post<Map<String, dynamic>>(
         '/api/auth/login',
         data: {
@@ -90,6 +99,9 @@ class AuthApi {
           'password': password,
           if (sas.isNotEmpty) 'sasUrl': sas,
         },
+        options: Options(headers: {
+          if (accountToken != null) 'x-account-token': accountToken,
+        }),
       );
       final body = res.data ?? const {};
 
@@ -98,6 +110,7 @@ class AuthApi {
           (body['message'] as String?)?.trim().isNotEmpty == true
               ? body['message'] as String
               : 'فشل تسجيل الدخول. تأكد من اسم المستخدم وكلمة المرور.',
+          code: body['error']?.toString(),
         );
       }
 
@@ -269,9 +282,17 @@ class AuthApi {
           'Accept': 'application/json',
         },
       ));
+      // Pro البند ٤ ③: التجديد يشترط حساباً مربوطاً بهذا المدير (كان بلا
+      // أيّ تحقّق). بلا حساب = رفضٌ صريح، فيعود المستخدم لطبقة الحساب.
+      final accountToken = await AccountService.idToken();
+      if (accountToken == null) {
+        dio.close();
+        return RefreshOutcome.serverRejected;
+      }
       final res = await dio.post<Map<String, dynamic>>(
         '/api/auth/refresh-token',
         data: {'adminId': adminId},
+        options: Options(headers: {'x-account-token': accountToken}),
       );
       dio.close();
       // ٤xx = حكمٌ صريح من الخادم. (٥xx و٤٢٩ لا تصل هنا — تُرمى وتُعامَل

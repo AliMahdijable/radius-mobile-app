@@ -10,7 +10,7 @@ import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'dashboard/dashboard_screen.dart';
-import 'login_screen.dart';
+import 'account/account_gate_screen.dart';
 import 'more_modules_screen.dart';
 import 'network_devices/network_devices_screen.dart';
 import 'search/quick_search_overlay.dart';
@@ -182,7 +182,7 @@ class _MainShellState extends State<MainShell> {
       SnackBar(content: Text('common.session_expired'.tr())),
     );
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      MaterialPageRoute(builder: (_) => const AccountGateScreen()),
       (_) => false,
     );
   }
@@ -238,7 +238,7 @@ class _MainShellState extends State<MainShell> {
     Navigator.of(sheetCtx).pop();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      MaterialPageRoute(builder: (_) => const AccountGateScreen()),
       (_) => false,
     );
   }

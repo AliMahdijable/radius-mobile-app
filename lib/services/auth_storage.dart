@@ -77,6 +77,10 @@ class AuthStorage {
   // ولا تُحيِه للساس الثاني: الهاتف لا يعرف أيّ ساسٍ يخصّ هذا المدير،
   // وخادمنا وحده يعرف (انظر رأس `api_client.dart`).
   static const _kSas4TokenLegacy = 'auth.sas4_token';
+  // Pro البند ٤ ③: رابط ساس الشركة التي دخلها المستخدم. بدونه يذهب أيّ دخولٍ
+  // ثانٍ (تبديل المدير الفرعيّ، العودة للأصل) إلى الساس الأصليّ فيفشل لمدراء
+  // الشركات الأخرى (jt…). جزءٌ من الجلسة، فيُمسح معها.
+  static const _kSasUrl = 'auth.sas_url';
 
   static Future<void> saveSession({
     required String token,
@@ -89,7 +93,9 @@ class AuthStorage {
     bool canAccessManagers = false,
     bool canAccessPackages = false,
     bool isEmployee = false,
+    String? sasUrl,
   }) async {
+    final sas = sasUrl?.trim() ?? '';
     await Future.wait([
       _storage.write(key: _kToken, value: token),
       _storage.write(key: _kAdminId, value: adminId),
@@ -104,8 +110,15 @@ class AuthStorage {
       _storage.write(key: _kIsEmployee, value: isEmployee ? '1' : '0'),
       if (tokenExpiry != null)
         _storage.write(key: _kTokenExpiry, value: tokenExpiry),
+      if (sas.isNotEmpty)
+        _storage.write(key: _kSasUrl, value: sas)
+      else
+        _storage.delete(key: _kSasUrl),
     ]);
   }
+
+  /// رابط ساس الجلسة الحاليّة (فارغ/null = الساس الأصليّ).
+  static Future<String?> readSasUrl() => _storage.read(key: _kSasUrl);
 
   /// True إذا الـuser سجل دخول كموظف (empToken). يقرأها
   /// AuthApi.refreshToken() لترفض refresh والـinterceptor لـ
@@ -199,6 +212,7 @@ class AuthStorage {
       // (`_kSas4TokenLegacy` أعلاه). يبقى المسح لتنظيف الأجهزة التي
       // كتبته قبل الحذف — وعلى iOS نسخته في iCloud معه.
       _storage.delete(key: _kSas4TokenLegacy),
+      _storage.delete(key: _kSasUrl),
     ]);
   }
 }
