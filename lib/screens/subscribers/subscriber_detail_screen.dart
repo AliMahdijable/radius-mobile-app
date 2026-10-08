@@ -255,7 +255,12 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                     const SizedBox(height: Sp.md),
                     BalanceCard(
                       sub: sub,
-                      onRemind: sub.hasDebt &&
+                      // الصلاحيّة: إرسال قالب واتساب للمشترك مبوّبٌ بـ
+                      // `subscribers.send_whatsapp` (مطابقةً لنظيره في شيت
+                      // «المزيد»). بدونها كان زرّ التذكير يظهر لمديرٍ مُنِع
+                      // المراسلة — فجوةُ تسرّبٍ أغلقها تدقيق ٢٠٢٦-١٠-٠٨.
+                      onRemind: Perms.has('subscribers.send_whatsapp') &&
+                              sub.hasDebt &&
                               _sendingTemplate == null &&
                               sub.displayPhone.isNotEmpty
                           ? () => _sendTemplate('debt_reminder')
@@ -602,7 +607,11 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       // فصل الجلسة إجراءٌ يوميّ يُطلَب والمشترك على الهاتف — ودفنُه
       // في «المزيد ← منطقة الخطر» يكلّف نقرتين وبحثاً. وهو مشروطٌ
       // بالاتّصال: لا معنى لفصل مفصول.
-      if (sub.isOnline && sub.idx != null)
+      // الصلاحيّة: نفس قدرة الفصل الجماعيّ (`subscribers.toggle` في
+      // subscribers_screen.dart) — بدونها كان المقيَّد بـtoggle:false
+      // يُحجَب عنه الفصل الجماعيّ ويبقى فصل التفصيل = تصعيد صلاحيّة
+      // أغلقه تدقيق ٢٠٢٦-١٠-٠٨.
+      if (Perms.has('subscribers.toggle') && sub.isOnline && sub.idx != null)
         SubAction(
           icon: LucideIcons.power,
           // «فصل» لا «فصل المستخدم»: البلاطات تتقاسم العرض، وخمسٌ منها

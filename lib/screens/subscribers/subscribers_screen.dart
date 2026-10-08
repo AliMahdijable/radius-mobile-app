@@ -1347,11 +1347,16 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                     // تذكير دين — لكل مدين بغض النظر عن حالة
                                     // الاتصال. طلب 2026-07-13. مسار
                                     // /api/v2/subscribers/:idx/send-debt-reminder
-                                    onSendDebtReminder: s.hasDebt &&
-                                            !_selectionMode &&
-                                            s.idx != null
-                                        ? () => _sendDebtReminderFromList(s)
-                                        : null,
+                                    // الصلاحيّة: مبوّبٌ بـ`subscribers.send_whatsapp`
+                                    // كشقيقه onPayDebt أدناه — بدونها كان يظهر
+                                    // لمديرٍ مُنِع المراسلة (تدقيق ٢٠٢٦-١٠-٠٨).
+                                    onSendDebtReminder:
+                                        Perms.has('subscribers.send_whatsapp') &&
+                                                s.hasDebt &&
+                                                !_selectionMode &&
+                                                s.idx != null
+                                            ? () => _sendDebtReminderFromList(s)
+                                            : null,
                                     // «تسديد» داخل شريط الدين — نفس شيت
                                     // التفاصيل بلا اختصار، ومحكوم بنفس
                                     // الصلاحيّة (subscribers.pay_debt).
