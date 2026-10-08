@@ -659,7 +659,8 @@ bulk_activate) + مسحٌ اكتشافيّ لأيّ شاشةٍ مكشوفةٍ أ
 **✅ عائق Firebase Auth انحلّ:** المشروع `myservices-radius` كان بلا Authentication (`CONFIGURATION_NOT_FOUND`)؛
 فعّله المالك من الكونسول (Get started) — النوع `FIREBASE_AUTH` (لا Identity Platform، بلا فوترة). أُعيد
 `remote.sh test` ← **١٩/١٩**. لم نفعّله بالـAPI لأنّ `identityPlatform:initializeAuth` يرقّي إلى Identity Platform.
-باقٍ في الكونسول للتطبيق (المرحلة ③): تفعيل **Email/Password** و**Google** (+ بصمة SHA-1 لتطبيق أندرويد)، وApple لاحقاً.
+وفُعِّل أيضاً **Email/Password** و**Google** (مُتحقَّق بالـAPI)؛ بصمات SHA-1/256 لتطبيق أندرويد موجودة أصلاً، وملفّ
+`google-services.json` الجديد (فيه عميل OAuth) يُسحب بالـAPI مع المرحلة ③. باقٍ: Apple فقط (مع المرحلة ③).
 
 **التراجع:** `bash ~/band4_deploy_20261008-131151/remote.sh rollback` (النسخة الاحتياطيّة `~/band4_backup_20261008-101220`).
 الجداول تبقى (فارغة، إضافيّة، لا تضرّ).
