@@ -96,7 +96,19 @@
     "perms_fetch_failed": "تعذّر جلب الصلاحيات — حاول مرة أخرى",
     "password_login_first": "سجّل الدخول مرة بكلمة المرور أولاً ليتفعّل الدخول السريع.",
     "biometric_reason": "استخدم بصمتك أو Face ID للدخول",
-    "biometric_unavailable": "الجهاز لا يدعم البصمة أو لم يتم تفعيلها."
+    "biometric_unavailable": "الجهاز لا يدعم البصمة أو لم يتم تفعيلها.",
+    "company_pick": "الشركة",
+    "company_choose": "اختر شركتك",
+    "company_other": "شركة أخرى — اكتب رابطها",
+    "company_other_sub": "إن لم تجد شركتك في القائمة",
+    "company_link": "رابط صفحة الساس",
+    "company_search": "ابحث باسم الشركة",
+    "pick_company_first": "اختر شركتك أوّلاً",
+    "captcha_title": "رمز التحقّق",
+    "captcha_body": "هذا الساس يطلب كتابة الرمز الظاهر في الصورة",
+    "captcha_hint": "اكتب الرمز كما يظهر",
+    "captcha_empty": "اكتب الرمز الظاهر في الصورة",
+    "captcha_refresh": "صورة أخرى"
   },
   "settings": {
     "title": "الإعدادات",

@@ -96,7 +96,19 @@
     "perms_fetch_failed": "Failed to load permissions — try again",
     "password_login_first": "Sign in with your password once so quick sign-in can be enabled.",
     "biometric_reason": "Use biometrics or Face ID to sign in",
-    "biometric_unavailable": "This device doesn't support biometrics or they aren't enabled."
+    "biometric_unavailable": "This device doesn't support biometrics or they aren't enabled.",
+    "company_pick": "Company",
+    "company_choose": "Choose your company",
+    "company_other": "Other company — type its link",
+    "company_other_sub": "If your company isn’t listed",
+    "company_link": "SAS page link",
+    "company_search": "Search companies",
+    "pick_company_first": "Choose your company first",
+    "captcha_title": "Verification code",
+    "captcha_body": "This SAS asks for the code shown in the image",
+    "captcha_hint": "Type the code as shown",
+    "captcha_empty": "Type the code shown in the image",
+    "captcha_refresh": "Another image"
   },
   "settings": {
     "title": "Settings",

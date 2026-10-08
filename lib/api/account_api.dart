@@ -112,6 +112,16 @@ class AccountApi {
         : const [];
   }
 
+  /// دليل الشركات المعروفة (يضبطه المالك) — «إضافة شركة» تختار منه.
+  static Future<List<DirectoryCompany>> sasDirectory() async {
+    final res = await _send('GET', '/api/account/sas-directory');
+    if (res.statusCode != 200) throw _fail(res);
+    final list = res.data?['companies'];
+    return list is List
+        ? list.whereType<Map<String, dynamic>>().map(DirectoryCompany.fromJson).where((c) => c.url.isNotEmpty).toList()
+        : const [];
+  }
+
   static Future<void> removeCompany(LinkedCompany c) async {
     final res = await _send('POST', '/api/account/companies/remove',
         data: {'sasCode': c.sasCode, 'username': c.username});
@@ -250,5 +260,20 @@ class LinkedCompany {
         lastLoginAt: j['lastLoginAt'] == null
             ? null
             : DateTime.tryParse(j['lastLoginAt'].toString())?.toLocal(),
+      );
+}
+
+class DirectoryCompany {
+  const DirectoryCompany({required this.code, required this.name, required this.url});
+  final String code;
+  final String name;
+  final String url;
+
+  String get host => Uri.tryParse(url)?.host ?? url;
+
+  factory DirectoryCompany.fromJson(Map<String, dynamic> j) => DirectoryCompany(
+        code: (j['code'] ?? '').toString(),
+        name: (j['name'] ?? '').toString(),
+        url: (j['url'] ?? '').toString(),
       );
 }

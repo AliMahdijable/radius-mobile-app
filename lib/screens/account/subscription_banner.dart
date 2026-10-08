@@ -92,6 +92,7 @@ class _SubscriptionChipState extends State<SubscriptionChip> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.surfaceSheet,
+      barrierColor: AppColors.scrim,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(R.sheet))),
       builder: (ctx) => SafeArea(
         child: Padding(

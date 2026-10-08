@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/account_api.dart';
+import 'package:rad_mysvcs/api/auth_api.dart';
 
 // Pro البند ٤: نماذج ردود /api/account/* — الشكل كما يرسله الخادم (accounts.js).
 void main() {
@@ -74,6 +75,35 @@ void main() {
     expect(c.label, 'otto');
     expect(c.role, 'admin');
     expect(c.sasUrl, isNull);
+  });
+
+  group('كابتشا دخول الساس', () {
+    test('SasCaptcha: معرّف + صورة base64', () {
+      final c = SasCaptcha.tryParse({'id': '3f2a-…', 'image': '/9j/4AAQ'});
+      expect(c, isNotNull);
+      expect(c!.id, '3f2a-…');
+      expect(c.image.take(3).toList(), [0xFF, 0xD8, 0xFF]); // JPEG
+    });
+
+    test('SasCaptcha: ناقصٌ أو معطوب ← null', () {
+      expect(SasCaptcha.tryParse(null), isNull);
+      expect(SasCaptcha.tryParse({'id': 'x'}), isNull);
+      expect(SasCaptcha.tryParse({'id': 'x', 'image': '%%%'}), isNull);
+    });
+
+    test('رموز الكابتشا والرابط ليست بوّابة الحساب', () {
+      final cap = SasCaptcha.tryParse({'id': 'x', 'image': '/9j/4AAQ'});
+      final need = LoginFailure('اكتب الرمز', code: 'captcha-required', captcha: cap);
+      expect(need.needsCaptcha, isTrue);
+      expect(need.isAccountGate, isFalse);
+      expect(const LoginFailure('', code: 'captcha-cancelled').isCancelled, isTrue);
+      expect(const LoginFailure('', code: 'captcha-cancelled').isAccountGate, isFalse);
+      expect(const LoginFailure('x', code: 'bad-sas-url').isAccountGate, isFalse);
+      expect(const LoginFailure('x').isAccountGate, isFalse);
+      expect(const LoginFailure('x', code: 'subscription-ended').isAccountGate, isTrue);
+      // captcha-required بلا صورةٍ صالحة لا يفتح النافذة
+      expect(const LoginFailure('x', code: 'captcha-required').needsCaptcha, isFalse);
+    });
   });
 
   test('AccountApiException: الشبكة تُعرف', () {

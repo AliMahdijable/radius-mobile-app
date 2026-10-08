@@ -1,9 +1,13 @@
+import 'dart:ui' as ui;
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:local_auth/local_auth.dart';
 
+import '../api/account_api.dart';
+import '../widgets/sas_captcha_sheet.dart';
 import '../api/auth_api.dart';
 import '../services/app_version.dart';
 import '../services/auth_storage.dart';
@@ -47,11 +51,58 @@ class _LoginScreenState extends State<LoginScreen> {
   // on a shared device can untick before submitting.
   bool _remember = true;
 
+  // Pro البند ٤ ③: «إضافة شركة» ← اختيار من دليل الشركات (يضبطه المالك)، وفي
+  // الآخر «شركة أخرى» برابطٍ يدويّ. دخول شركةٍ مربوطة (رابطها معروف) يبقى حقلاً.
+  bool get _pickerMode => widget.fromCompanies && (widget.initialSasUrl ?? '').isEmpty;
+  List<DirectoryCompany>? _directory;
+  DirectoryCompany? _picked;
+  bool _manualLink = false;
+
+  Future<void> _loadDirectory() async {
+    try {
+      final list = await AccountApi.sasDirectory();
+      if (!mounted) return;
+      setState(() {
+        _directory = list;
+        if (list.isEmpty) _manualLink = true; // لا دليل ← الحقل اليدويّ مباشرةً
+      });
+    } catch (_) {
+      if (mounted) setState(() { _directory = const []; _manualLink = true; });
+    }
+  }
+
+  Future<void> _openPicker() async {
+    HapticFeedback.selectionClick();
+    final items = _directory ?? const <DirectoryCompany>[];
+    final choice = await showModalBottomSheet<Object>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surfaceSheet,
+      barrierColor: AppColors.scrim,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(R.sheet))),
+      builder: (ctx) => _CompanyPickerSheet(items: items, selected: _picked),
+    );
+    if (!mounted || choice == null) return;
+    setState(() {
+      if (choice is DirectoryCompany) {
+        _picked = choice;
+        _manualLink = false;
+        _sasCtrl.text = choice.url;
+      } else {
+        _picked = null;
+        _manualLink = true;
+        _sasCtrl.clear();
+      }
+    });
+    if (_userCtrl.text.isEmpty) _userFocus.requestFocus();
+  }
+
   @override
   void initState() {
     super.initState();
     _sasCtrl.text = widget.initialSasUrl ?? '';
     _userCtrl.text = widget.initialUsername ?? '';
+    if (_pickerMode) _loadDirectory();
     if (_userCtrl.text.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _passFocus.requestFocus();
@@ -89,14 +140,18 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _onLogin() async {
     final user = _userCtrl.text.trim();
     final pass = _passCtrl.text;
+    if (_pickerMode && _picked == null && _sasCtrl.text.trim().isEmpty) {
+      _showSnack('login.pick_company_first'.tr(), error: true);
+      return;
+    }
     if (user.isEmpty || pass.isEmpty) {
       _showSnack('login.enter_credentials'.tr(), error: true);
       return;
     }
     HapticFeedback.lightImpact();
     setState(() => _loading = true);
-    final result =
-        await AuthApi.login(username: user, password: pass, sasUrl: _sasCtrl.text);
+    // ساسٌ يطلب رمز صورة (الحياة عمارة…) ← نافذة الرمز ثمّ الدخول بها.
+    final result = await SasCaptchaLogin.login(context, username: user, password: pass, sasUrl: _sasCtrl.text);
     if (!mounted) return;
     setState(() => _loading = false);
 
@@ -127,11 +182,12 @@ class _LoginScreenState extends State<LoginScreen> {
           MaterialPageRoute(builder: (_) => const MainShell()),
           (_) => false,
         );
-      case LoginFailure(:final message, :final code):
+      case final LoginFailure f:
+        if (f.isCancelled) return; // أغلق نافذة رمز الصورة — لا رسالة
         HapticFeedback.heavyImpact();
-        _showSnack(message, error: true);
+        _showSnack(f.message, error: true);
         // بوّابة الحساب (اشتراكٌ منتهٍ/حسابٌ معطّل/بلا حساب): البوّابة تقرّر.
-        if (code != null && code != 'bad-sas-url') {
+        if (f.isAccountGate) {
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(builder: (_) => const AccountGateScreen()),
             (_) => false,
@@ -236,6 +292,15 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: Sp.md),
               _FormCard(
+                companyField: _pickerMode
+                    ? _CompanyField(
+                        loading: _directory == null,
+                        picked: _picked,
+                        manual: _manualLink,
+                        sasCtrl: _sasCtrl,
+                        onTap: _directory == null ? null : _openPicker,
+                      )
+                    : null,
                 sasCtrl: _sasCtrl,
                 userCtrl: _userCtrl,
                 passCtrl: _passCtrl,
@@ -472,6 +537,7 @@ class _BrandTitle extends StatelessWidget {
 
 class _FormCard extends StatelessWidget {
   const _FormCard({
+    this.companyField,
     required this.sasCtrl,
     required this.userCtrl,
     required this.passCtrl,
@@ -485,6 +551,8 @@ class _FormCard extends StatelessWidget {
     required this.onLogin,
   });
 
+  /// Pro: حقل الشركة البديل (اختيارٌ من الدليل) — null = حقل الرابط المعتاد.
+  final Widget? companyField;
   final TextEditingController sasCtrl;
   final TextEditingController userCtrl;
   final TextEditingController passCtrl;
@@ -510,7 +578,7 @@ class _FormCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Pro: رابط صفحة شركة SAS. اختياريّ — فارغٌ = الحساب المعتاد.
-          _LabeledInput(
+          if (companyField != null) companyField! else _LabeledInput(
             label: 'login.company'.tr(),
             child: TextField(
               controller: sasCtrl,
@@ -760,6 +828,226 @@ class _Footer extends StatelessWidget {
       child: Text(
         '${AppVersion.shortVersion}  •  ${'login.footer_copyright'.tr()}',
         style: AppType.muted(color: AppColors.textLow),
+      ),
+    );
+  }
+}
+
+/// Pro البند ٤ ③: حقل «الشركة» — يفتح الدليل؛ و«شركة أخرى» يُظهر حقل الرابط.
+class _CompanyField extends StatelessWidget {
+  const _CompanyField({
+    required this.loading,
+    required this.picked,
+    required this.manual,
+    required this.sasCtrl,
+    required this.onTap,
+  });
+  final bool loading;
+  final DirectoryCompany? picked;
+  final bool manual;
+  final TextEditingController sasCtrl;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final label = picked?.name ?? (manual ? 'login.company_other'.tr() : 'login.company_choose'.tr());
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _LabeledInput(
+          label: 'login.company_pick'.tr(),
+          child: Material(
+            color: AppColors.surfaceInput,
+            borderRadius: BorderRadius.circular(R.md),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(R.md),
+              onTap: onTap,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.md + 2),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(R.md),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.apartment_rounded, size: 20, color: picked != null ? AppColors.brand : AppColors.textLow),
+                    const SizedBox(width: Sp.sm),
+                    Expanded(
+                      child: Text(label,
+                          style: AppType.input(color: picked != null || manual ? AppColors.textHi : AppColors.textLow),
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                    if (loading)
+                      SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brand))
+                    else
+                      Icon(Icons.expand_more_rounded, color: AppColors.textMid),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (manual) ...[
+          const SizedBox(height: Sp.lg),
+          _LabeledInput(
+            label: 'login.company_link'.tr(),
+            child: TextField(
+              controller: sasCtrl,
+              autofocus: true,
+              keyboardType: TextInputType.url,
+              autocorrect: false,
+              textInputAction: TextInputAction.next,
+              textDirection: ui.TextDirection.ltr,
+              style: AppType.input(color: AppColors.textHi),
+              decoration: InputDecoration(
+                hintText: 'login.company_hint'.tr(),
+                hintStyle: AppType.input(color: AppColors.textLow),
+                filled: true,
+                fillColor: AppColors.surfaceInput,
+                contentPadding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.md),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(R.md), borderSide: BorderSide(color: AppColors.border)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(R.md), borderSide: BorderSide(color: AppColors.border)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(R.md), borderSide: BorderSide(color: AppColors.brand, width: 1.5)),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// قائمة الشركات (مع بحثٍ حين تكثر) + «شركة أخرى — اكتب رابطها» في الآخر.
+class _CompanyPickerSheet extends StatefulWidget {
+  const _CompanyPickerSheet({required this.items, required this.selected});
+  final List<DirectoryCompany> items;
+  final DirectoryCompany? selected;
+
+  @override
+  State<_CompanyPickerSheet> createState() => _CompanyPickerSheetState();
+}
+
+class _CompanyPickerSheetState extends State<_CompanyPickerSheet> {
+  String _q = '';
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final q = _q.trim().toLowerCase();
+    final items = q.isEmpty
+        ? widget.items
+        : widget.items.where((c) => c.name.toLowerCase().contains(q) || c.host.toLowerCase().contains(q)).toList();
+    final maxH = MediaQuery.sizeOf(context).height * 0.75;
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxH),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.md + MediaQuery.viewInsetsOf(context).bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 42, height: 4,
+                  decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(R.pill)),
+                ),
+              ),
+              const SizedBox(height: Sp.md),
+              Text('login.company_choose'.tr(), textAlign: TextAlign.center, style: AppType.sheetTitle(color: AppColors.textHi)),
+              if (widget.items.length > 6) ...[
+                const SizedBox(height: Sp.md),
+                TextField(
+                  onChanged: (v) => setState(() => _q = v),
+                  style: AppType.input(color: AppColors.textHi),
+                  decoration: InputDecoration(
+                    hintText: 'login.company_search'.tr(),
+                    prefixIcon: Icon(Icons.search_rounded, color: AppColors.textLow),
+                    filled: true,
+                    fillColor: AppColors.surfaceInput,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(R.md), borderSide: BorderSide(color: AppColors.border)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(R.md), borderSide: BorderSide(color: AppColors.border)),
+                  ),
+                ),
+              ],
+              const SizedBox(height: Sp.md),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final c in items)
+                      _PickerRow(
+                        icon: Icons.apartment_rounded,
+                        title: c.name,
+                        subtitle: c.host,
+                        selected: widget.selected?.code == c.code,
+                        onTap: () => Navigator.of(context).pop(c),
+                      ),
+                    const SizedBox(height: Sp.xs),
+                    _PickerRow(
+                      icon: Icons.link_rounded,
+                      title: 'login.company_other'.tr(),
+                      subtitle: 'login.company_other_sub'.tr(),
+                      selected: false,
+                      onTap: () => Navigator.of(context).pop('manual'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PickerRow extends StatelessWidget {
+  const _PickerRow({required this.icon, required this.title, required this.subtitle, required this.selected, required this.onTap});
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Sp.sm),
+      child: Material(
+        color: selected ? AppColors.brandSoftBg : AppColors.surface,
+        borderRadius: BorderRadius.circular(R.md),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(R.md),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.md),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(R.md),
+              border: Border.all(color: selected ? AppColors.brandSoftBorder : AppColors.border),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, color: AppColors.brand, size: 22),
+                const SizedBox(width: Sp.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: AppType.rowLabelBold(color: AppColors.textHi)),
+                      const SizedBox(height: 2),
+                      Text(subtitle, style: AppType.muted(color: AppColors.textMid),
+                          maxLines: 1, overflow: TextOverflow.ellipsis, textDirection: ui.TextDirection.ltr),
+                    ],
+                  ),
+                ),
+                if (selected) Icon(Icons.check_circle_rounded, color: AppColors.brand, size: 20),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

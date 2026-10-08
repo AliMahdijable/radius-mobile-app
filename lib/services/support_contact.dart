@@ -30,6 +30,7 @@ class SupportContact {
       final pick = await showModalBottomSheet<Uri>(
         context: context,
         backgroundColor: AppColors.surfaceSheet,
+        barrierColor: AppColors.scrim,
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(R.sheet))),
         builder: (ctx) => SafeArea(
           child: Padding(

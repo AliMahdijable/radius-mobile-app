@@ -15,6 +15,7 @@ import '../main_shell.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../core/util/error_text.dart';
+import '../../widgets/sas_captcha_sheet.dart';
 
 /// شاشة "الصفحات" — التبديل السريع بين حسابات المدراء الفرعيّين
 /// (2026-08-26). طلب المستخدم:
@@ -182,7 +183,9 @@ class _AccountsScreenState extends State<AccountsScreen> {
       // 3) اسجّل دخول بالحساب الجديد
       // Pro البند ٤ ③: نفس ساس الجلسة الحاليّة — بدونه يذهب للأصل.
       final sasUrl = await AuthStorage.readSasUrl();
-      final res = await AuthApi.login(
+      if (!mounted) return;
+      final res = await SasCaptchaLogin.login(
+        context,
         username: row.username,
         password: pw.password!,
         sasUrl: sasUrl,
@@ -250,7 +253,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
             (route) => false,
           );
         case LoginFailure(:final message):
-          _snack(message, error: true);
+          if (message.isNotEmpty) _snack(message, error: true); // فارغة = أُغلقت نافذة رمز الصورة
       }
     } catch (e) {
       if (mounted) _snack('فشل التبديل: $e', error: true);
@@ -267,7 +270,9 @@ class _AccountsScreenState extends State<AccountsScreen> {
     setState(() => _returningToOriginal = true);
     try {
       final sasUrl = await AuthStorage.readSasUrl();
-      final res = await AuthApi.login(
+      if (!mounted) return;
+      final res = await SasCaptchaLogin.login(
+        context,
         username: orig.username,
         password: orig.password,
         sasUrl: sasUrl,
@@ -326,7 +331,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
             (route) => false,
           );
         case LoginFailure(:final message):
-          _snack(message, error: true);
+          if (message.isNotEmpty) _snack(message, error: true); // فارغة = أُغلقت نافذة رمز الصورة
       }
     } catch (e) {
       if (mounted) _snack('فشلت العودة: $e', error: true);

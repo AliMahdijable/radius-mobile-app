@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
@@ -63,13 +65,44 @@ class LoginSuccess extends LoginResult {
 }
 
 class LoginFailure extends LoginResult {
-  const LoginFailure(this.message, {this.code});
+  const LoginFailure(this.message, {this.code, this.captcha});
   final String message;
 
   /// Pro البند ٤: رمز بوّابة الحساب من الخادم — `subscription-ended` (402)،
   /// `account-required`/`account-token-invalid` (401)، `account-disabled`/
   /// `no-account` (403)، `bad-sas-url` (400). null لأخطاء الساس المعتادة.
+  /// و`captcha-required`: الساس يطلب رمز صورة ([captcha])، و`captcha-cancelled`:
+  /// أغلق المستخدم نافذة الرمز (لا رسالة).
   final String? code;
+
+  /// صورة الرمز حين يطلبها الساس (الحياة عمارة…).
+  final SasCaptcha? captcha;
+
+  static const _notGate = {'bad-sas-url', 'captcha-required', 'captcha-cancelled'};
+
+  /// رمزٌ من بوّابة الحساب (انتهى الاشتراك/الحساب معطّل…) ← البوّابة تقرّر.
+  bool get isAccountGate => code != null && !_notGate.contains(code);
+  bool get needsCaptcha => code == 'captcha-required' && captcha != null;
+  bool get isCancelled => code == 'captcha-cancelled';
+}
+
+/// Pro: رمز صورةٍ يطلبه الساس عند الدخول — المعرّف يعود مع الرمز المكتوب.
+class SasCaptcha {
+  const SasCaptcha({required this.id, required this.image});
+  final String id;
+  final Uint8List image;
+
+  static SasCaptcha? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final id = raw['id']?.toString() ?? '';
+    final img = raw['image']?.toString() ?? '';
+    if (id.isEmpty || img.isEmpty) return null;
+    try {
+      return SasCaptcha(id: id, image: base64Decode(img));
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 /// نتيجة تجديد التوكن: نجاحٌ، أو رفضٌ صريح من الخادم، أو تعثّر شبكة.
@@ -84,6 +117,8 @@ class AuthApi {
     required String username,
     required String password,
     String? sasUrl,
+    String? captchaId,
+    String? captchaText,
   }) async {
     try {
       // Pro: رابط صفحة الشركة (إن لصقه المستخدم) — الخادم يشتقّ منه الساس
@@ -98,6 +133,8 @@ class AuthApi {
           'username': username.trim(),
           'password': password,
           if (sas.isNotEmpty) 'sasUrl': sas,
+          if (captchaId != null) 'captchaId': captchaId,
+          if (captchaText != null) 'captchaText': captchaText,
         },
         options: Options(headers: {
           if (accountToken != null) 'x-account-token': accountToken,
@@ -111,6 +148,7 @@ class AuthApi {
               ? body['message'] as String
               : 'فشل تسجيل الدخول. تأكد من اسم المستخدم وكلمة المرور.',
           code: body['error']?.toString(),
+          captcha: SasCaptcha.tryParse(body['captcha']),
         );
       }
 

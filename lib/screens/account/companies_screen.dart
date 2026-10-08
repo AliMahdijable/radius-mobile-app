@@ -11,6 +11,7 @@ import '../../services/sas_login_flow.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../widgets/sas_captcha_sheet.dart';
 import '../login_screen.dart';
 import '../main_shell.dart';
 import 'account_gate_screen.dart';
@@ -66,7 +67,7 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
       return;
     }
     setState(() => _opening = _keyOf(c));
-    final res = await AuthApi.login(username: c.username, password: pass, sasUrl: url);
+    final res = await SasCaptchaLogin.login(context, username: c.username, password: pass, sasUrl: url);
     if (!mounted) return;
     switch (res) {
       case LoginSuccess():
@@ -83,19 +84,19 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
               (out == SasLoginOutcome.needs2fa ? 'login.needs_2fa' : 'login.perms_fetch_failed').tr(),
               error: out != SasLoginOutcome.needs2fa);
         }
-      case LoginFailure(:final message, :final code):
+      case final LoginFailure f:
         setState(() => _opening = null);
-        if (_handleGateCode(code)) return;
+        if (f.isCancelled || _handleGate(f)) return;
         HapticFeedback.heavyImpact();
-        showAccountSnack(context, message, error: true);
+        showAccountSnack(context, f.message, error: true);
         // كلمة سرٍّ تغيّرت في الساس: نفتح النموذج ليكتبها من جديد.
-        if (code == null) await _addOrLogin(sasUrl: url, username: c.username);
+        if (f.code == null) await _addOrLogin(sasUrl: url, username: c.username);
     }
   }
 
   /// رموز بوّابة الحساب من الخادم: انتهى الاشتراك/الحساب معطّل… ← البوّابة تقرّر.
-  bool _handleGateCode(String? code) {
-    if (code == null || code == 'bad-sas-url') return false;
+  bool _handleGate(LoginFailure f) {
+    if (!f.isAccountGate) return false;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const AccountGateScreen()),
       (_) => false,
