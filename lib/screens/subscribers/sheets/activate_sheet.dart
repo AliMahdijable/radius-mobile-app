@@ -168,6 +168,9 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   bool get _needsRepricing => _data?['needs_repricing'] == true;
   num get _basePrice => _readNum('base_price');
   num get _effectivePrice => _readNum('price_after_discount');
+  // Pro: سعر الشراء (كلفة المدير من الشركة) — يُعرَض كـهِنت ليعرف المدير هامشه.
+  // في الساسات العراقيّة سعر البيع محلّيٌّ والشراء مثبّتٌ من الشركة.
+  num get _managerCost => _readNum('manager_cost');
   num get _currentBalance => _readNum('current_balance');
   num get _managerBalance => _readNum('manager_balance');
   num get _rewardPoints => _readNum('reward_points');
@@ -355,6 +358,13 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       const SizedBox(height: 14),
       SheetRowsGroup(
         rows: [
+          // Pro: سعر الشراء (كلفة المدير من الشركة) كـهِنت — ليعرف المدير هامشه.
+          if (_managerCost > 0)
+            SheetRowData(
+              label: 'subscribers.purchase_price'.tr(),
+              value: '${formatIQD(_managerCost.round())} $cur',
+              valueColor: AppColors.textMid,
+            ),
           if (_isFixedPrice)
             SheetRowData(
               label: 'sp.fixed_price'.tr(),
