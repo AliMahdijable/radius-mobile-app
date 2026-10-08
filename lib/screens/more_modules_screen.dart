@@ -3,11 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../api/cards_api.dart';
+import '../core/util/format.dart';
 import '../services/permissions_service.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'broadcast/broadcast_screen.dart';
+import 'cards/cards_screen.dart';
 import 'telegram/telegram_screen.dart';
 import 'discounts/discounts_screen.dart';
 import 'subscriber_prices/subscriber_prices_screen.dart';
@@ -37,9 +40,12 @@ class MoreModulesScreen extends StatelessWidget {
     // مطلب 2026-06-11: الكروت تختفي حسب صلاحيات الموظف الحالي.
     // لو ما عنده ولا صلاحية يظهر empty state بدل قائمة فارغة بدون
     // سياق. الـadmin (مو موظف) يشوف كل الكروت دائماً.
-    return ValueListenableBuilder<int>(
-      valueListenable: PermissionsService.changes,
-      builder: (context, _, __) {
+    // §١٢: وشارة الكارتات أيضاً — «الكارتات» تظهر وتختفي معها بلا إعادة فتح.
+    return ListenableBuilder(
+      listenable:
+          Listenable.merge([PermissionsService.changes, CardsState.badge]),
+      builder: (context, _) {
+        final stock = CardsState.badge.value;
         final cards = <Widget>[
           // مطلب 2026-08-12: التقارير صارت أوّل عنصر (نُقلت من tab رئيسي
           // لأن أجهزة الشبكة أكثر استعمالاً يومياً للـWISP).
@@ -87,6 +93,27 @@ class MoreModulesScreen extends StatelessWidget {
                 MaterialPageRoute(
                   builder: (_) => const SettlementsScreen(),
                 ),
+              ),
+            ),
+          // §١٢ «الكارتات» — مخزون كارتات التعبئة، بجانب المال لأنّه مالٌ
+          // مدفوعٌ سلفاً. ⚠️ لا مفتاح صلاحيّة في التطبيق: صلاحيّات الساس
+          // (`prm_users_activate_card` · `prm_cards_*`) لا تصل الموبايل،
+          // فالخادم يقول `enabled` في admin-widgets والبطاقة تتبعه. ومجهولة
+          // الشارة (لم يردّ أحد بعد) لا تُظهرها — لا قسم يقول «لا كارتات»
+          // لمن لا يعمل بها أصلاً.
+          // والموظّف يراه بصلاحيّة التفعيل/التمديد وحدها (مثل نافذة التفعيل).
+          if ((stock?.enabled ?? false) &&
+              Perms.hasAny(['subscribers.activate', 'subscribers.extend']))
+            _ModuleCard(
+              icon: LucideIcons.tickets,
+              tone: AppTone.brand,
+              title: 'cards.title'.tr(),
+              subtitle: stock!.remaining == null
+                  ? 'cards.module_hint'.tr()
+                  : 'cards.module_hint_n'
+                      .tr(namedArgs: {'n': formatIQD(stock.remaining!)}),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const CardsScreen()),
               ),
             ),
           // 2026-08-26: تلغرام — إعداد بوت + ربط مشتركين + بث. منقول

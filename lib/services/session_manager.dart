@@ -3,6 +3,7 @@ import 'notification_router.dart';
 
 import 'package:flutter/foundation.dart';
 
+import '../api/cards_api.dart';
 import '../api/device_config_api.dart';
 import '../api/device_probe_api.dart';
 import '../api/subscribers_api.dart';
@@ -55,6 +56,8 @@ class SessionManager {
     _guardSync('DeviceConfigApi.clearAllCaches',
         () => DeviceConfigApi.clearAllCaches());
     _guardSync('AlertsService.reset', () => AlertsService.reset());
+    // §١٢: عدّاد الكارتات المتبقّية — لا يرى المدير التالي مخزون سابقه.
+    _guardSync('CardsState.reset', () => CardsState.reset());
     // 2026-08-28 (Google 2027 audit CRITICAL): WhatsApp templates cache
     // كان يسرّب بين المدراء على نفس الجهاز (10د TTL). أي إرسال آلي بعد
     // login جديد قد يستعمل قوالب المدير السابق.

@@ -7,6 +7,18 @@ import '../models/subscriber.dart';
 import '../services/auth_storage.dart';
 import '../services/subscribers_offline_cache.dart';
 import 'api_client.dart';
+import 'cards_api.dart';
+
+/// ردّ activate. `code` رمز الرفض حين يرسله الخادم (`NO_CARDS` ·
+/// `CARD_NOT_ALLOWED`)، و`card` الكارت الذي سُحب في التفعيل بالكارت.
+typedef ActivateResult = ({
+  bool ok,
+  String? message,
+  String? code,
+  WhatsAppSendInfo? wa,
+  WaPreview? waPreview,
+  ActivationCard? card,
+});
 
 /// Outcome of a backend-initiated WhatsApp send (post-activate /
 /// pay-debt / extend / add-subscriber). Surfaces in the returned
@@ -549,18 +561,18 @@ class SubscribersApi {
 
   /// Result of an activate call. ok=true on success; ok=false carries
   /// the backend's Arabic error message for the UI.
-  static Future<
-      ({
-        bool ok,
-        String? message,
-        WhatsAppSendInfo? wa,
-        WaPreview? waPreview
-      })> activate({
+  ///
+  /// §١٢ التفعيل بالكارت: [method] = 'credit' (الافتراض) أو 'card'.
+  /// ⚠️ يُرسَل `method` **للكارت وحده** — غيابه عند الخادم = رصيد، فطلب
+  /// الرصيد يبقى حرفيّاً كما كان (وخادمٌ أقدم لا يرى حقلاً جديداً).
+  /// والكارت يختاره الخادم من مخزون الوكيل؛ الـPIN لا يمرّ من هنا أبداً.
+  static Future<ActivateResult> activate({
     required String idx,
     required String paymentType, // 'cash' | 'partial-cash' | 'non-cash'
     required Map<String, dynamic> activationData,
     int? partialAmount,
     bool skipAutoWa = false,
+    String method = 'credit', // 'credit' | 'card'
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -571,30 +583,68 @@ class SubscribersApi {
           if (paymentType == 'partial-cash' && partialAmount != null)
             'partialAmount': partialAmount,
           if (skipAutoWa) 'skipAutoWa': true,
+          if (method == 'card') 'method': 'card',
         },
+        // الخادم قد ينتظر قفل كارتات الوكيل ثمّ الساس (حتى ٩٠ث للتفعيل نفسه):
+        // مهلة الثلاثين كانت تقطع طلباً يكمله الخادم بعدها، فيقول التطبيق
+        // «تعذّر» والمشترك تفعّل — وتُغري الضغطة الثانية بكارتٍ ثانٍ.
+        options: Options(receiveTimeout: const Duration(seconds: 200)),
       );
-      final body = r.data ?? const {};
-      final ok = body['success'] == true;
-      return (
-        ok: ok,
-        message: body['message']?.toString(),
-        wa: WhatsAppSendInfo.fromMap(body['wa']),
-        waPreview: WaPreview.fromMap(body['wa_preview']),
-      );
+      return activateResultFromBody(r.data ?? const {});
     } on DioException catch (e) {
       _log('activate/$idx', e);
       final body = e.response?.data;
       final msg = body is Map ? body['message']?.toString() : null;
+      // بلا ردٍّ (مهلة/انقطاع) لا نعرف إن نُفّذ: نتيجةٌ غير مؤكّدة، لا «تعذّر».
+      final noReply = e.response == null;
       return (
         ok: false,
-        message: msg ?? 'تعذّر التفعيل',
+        message: msg ?? (noReply ? null : 'تعذّر التفعيل'),
+        code: body is Map
+            ? body['code']?.toString()
+            : (noReply ? activateOutcomeUnknown : null),
         wa: null,
-        waPreview: null
+        waPreview: null,
+        card: null,
       );
     } catch (e) {
       _log('activate/$idx', e);
-      return (ok: false, message: 'تعذّر التفعيل', wa: null, waPreview: null);
+      return (
+        ok: false,
+        message: 'تعذّر التفعيل',
+        code: null,
+        wa: null,
+        waPreview: null,
+        card: null,
+      );
     }
+  }
+
+  /// نتيجة تفعيلٍ غير مؤكّدة — من الخادم (409) أو مهلةٍ بلا ردّ عندنا.
+  static const activateOutcomeUnknown = 'OUTCOME_UNKNOWN';
+
+  /// رموزٌ تعني «ربّما نُفّذ»: لا تُعاد الضغطة قبل مراجعة انتهاء المشترك.
+  static const activateUnclearCodes = {
+    activateOutcomeUnknown,
+    'NOT_CONFIRMED',
+    'APPLIED_WITH_ERRORS',
+    'IN_PROGRESS',
+  };
+
+  /// يقرأ جسم ردّ activate — والرفض يصل هنا لا في `on DioException`
+  /// (`validateStatus: s < 500`)، فـ`code` يُقرأ من الجسم: `NO_CARDS` (409)
+  /// و`CARD_NOT_ALLOWED` (403). و`card` للنجاح وحده.
+  @visibleForTesting
+  static ActivateResult activateResultFromBody(Map<String, dynamic> body) {
+    final ok = body['success'] == true;
+    return (
+      ok: ok,
+      message: body['message']?.toString(),
+      code: ok ? null : body['code']?.toString(),
+      wa: WhatsAppSendInfo.fromMap(body['wa']),
+      waPreview: WaPreview.fromMap(body['wa_preview']),
+      card: ok ? ActivationCard.fromJson(body['card']) : null,
+    );
   }
 
   /// GET /api/v2/subscribers/:idx/extension-options — the list of

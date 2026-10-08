@@ -2,7 +2,9 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../api/cards_api.dart';
 import '../../../api/dashboard_api.dart';
+import '../../../core/util/bidi.dart';
 import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -98,8 +100,52 @@ class _BalancePointsCard extends StatelessWidget {
                     ),
                   ],
                 ),
+                // §١٢: لمن يعمل بالكارتات وحده — من الشارة العامّة لا من
+                // `wallet`، فيتبع السحب من شيت التفعيل وشاشة «الكارتات» فوراً.
+                ValueListenableBuilder<CardsBadge?>(
+                  valueListenable: CardsState.badge,
+                  builder: (context, badge, _) => (badge?.enabled ?? false)
+                      ? Padding(
+                          padding: const EdgeInsets.only(top: Sp.xs),
+                          child: _CardsLine(remaining: badge!.remaining),
+                        )
+                      : const SizedBox.shrink(),
+                ),
               ],
             ),
+    );
+  }
+}
+
+/// «الكارتات N» تحت النقاط — مكتوبةٌ بنبرة سطر النقاط نفسها.
+///
+/// ⚠️ `null` = تعذّرت قراءة المخزون فتُكتب «—» لا صفراً. والصفر المقروء
+/// بلون التحذير: نفاد الكارتات يوقف التفعيل بالكارت.
+class _CardsLine extends StatelessWidget {
+  const _CardsLine({required this.remaining});
+  final int? remaining;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final n = remaining;
+    final out = n == 0;
+    return Row(
+      children: [
+        Icon(LucideIcons.ticket,
+            color: out ? AppColors.warning : AppColors.brandAccent, size: 12),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
+            'cards.dash_line'
+                .tr(namedArgs: {'n': iso(n == null ? '—' : formatIQD(n))}),
+            style: AppType.muted(color: out ? AppColors.warning : AppColors.textMid)
+                .copyWith(fontSize: 11, fontWeight: FontWeight.w500),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }

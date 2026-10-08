@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/cards_api.dart';
 import '../../api/dashboard_api.dart';
 import '../../api/view_scope_api.dart';
 import '../../services/view_scope_events.dart';
@@ -206,6 +207,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // منذ حذف النداء المباشر (2026-08-31).
       final cachedWallet = await DashboardCache.readWallet();
       if (!mounted) return;
+      // §١٢: آخر عدد كارتاتٍ معروف مع الرصيد — للوحة و«قوائم أخرى» معاً.
+      // ولا يغلب ردّاً حيّاً سبقه.
+      CardsState.seed(cachedWallet?.cards);
       setState(() {
         if (cachedWallet != null) {
           _walletLive = cachedWallet;
@@ -345,6 +349,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           DashboardCache.saveWallet(r); // persist for next cold start
         }
       });
+    } else {
+      // §١٢: شارة الكارتات تركب admin-widgets، وهو لا يُطلب والمحفظة مخفيّة —
+      // فتغيب «الكارتات» عن «قوائم أخرى» لمن يعمل بها. نداءٌ واحد للملخّص حين
+      // تُجهل الشارة وحدها؛ والمعروفة لا تكلّف شيئاً.
+      CardsState.ensureKnown();
     }
   }
 

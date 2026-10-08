@@ -3,7 +3,9 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../api/cards_api.dart';
 import '../../../api/subscribers_api.dart';
+import '../../../core/util/bidi.dart';
 import '../../../core/util/format.dart';
 import '../../../core/util/amount_input.dart';
 import '../../../core/widgets/design_sheet.dart';
@@ -35,6 +37,9 @@ import '../../../core/widgets/sheet_scaffold.dart';
 ///   5. Submit → /api/v2/subscribers/:idx/activate with the cached
 ///      activation-data echoed back (the backend rejects the call
 ///      otherwise — see server.js comment about SAS4 session locks).
+///   6. §١٢ «طريقة التفعيل»: رصيد | كارت لمن يملك صلاحيّة الكارت (الرصيد
+///      افتراضيّ). الخادم يسحب الكارت من مخزون الوكيل بنفسه؛ والشيت يعرض
+///      كم بقي لباقة المشترك ويمنع الكارت حين لا يبقى شيء.
 ///
 /// Returns true on success so callers (subscribers list, detail screen)
 /// can refresh their cached rows.
@@ -59,11 +64,32 @@ class _ActivateSheet extends StatefulWidget {
 
 enum _PayType { cash, partial, debt }
 
+/// من أين يُدفع للساس: رصيد المدير (الافتراض — قرار المستخدم) أو كارتٌ من
+/// مخزونه. محورٌ مستقلّ عن [_PayType] الذي يخصّ ما بين المشترك والوكيل.
+enum _Method { credit, card }
+
 class _ActivateSheetState extends State<_ActivateSheet> {
   Map<String, dynamic>? _data;
   bool _loading = true;
   bool _submitting = false;
   String? _loadError;
+
+  // §١٢ التفعيل بالكارت — كلّه من activation-data. وحين يغيب الحقل (خادمٌ
+  // أقدم) يبقى سلوك اليوم حرفيّاً: رصيدٌ بلا خيار.
+  ActivationMethods _methods = ActivationMethods.legacy;
+  CardStockInfo _cards = CardStockInfo.none;
+  _Method _method = _Method.credit;
+
+  /// الخادم رفض الكارت (`CARD_NOT_ALLOWED`) أو أعادت القراءة أنّه لم يعد
+  /// مسموحاً. ⚠️ لا نقلب إلى الرصيد بصمت: مصدر المال لا يتبدّل بلا نقرةٍ
+  /// من المدير — يبقى «كارت» مختاراً ومعطّلاً حتّى يختار «رصيد» بنفسه.
+  bool _cardDenied = false;
+
+  /// تفعيلٌ نتيجته غير مؤكّدة (مهلة، أو OUTCOME_UNKNOWN/NOT_CONFIRMED من الخادم):
+  /// ربّما نُفّذ — فالزرّ يُقفل حتى يراجع المدير انتهاء المشترك، ولا تُغري
+  /// ضغطةٌ ثانية بتفعيلٍ (أو كارتٍ) ثانٍ.
+  bool _outcomeUnclear = false;
+  bool _refreshingCards = false;
 
   // Default = آجل (dept/deferred). المستخدم صرّح 2026-07-11: أغلب
   // التفعيلات تكون آجلة، فنجعله الافتراضي بدل نقدي.
@@ -148,7 +174,35 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     setState(() {
       _loading = false;
       _data = data;
-      if (data == null) _loadError = 'sheets.activate_load_failed'.tr();
+      if (data == null) {
+        _loadError = 'sheets.activate_load_failed'.tr();
+      } else {
+        _methods = ActivationMethods.fromActivationData(data);
+        _cards = CardStockInfo.fromActivationData(data);
+        _cardDenied = false;
+        // الرصيد افتراضيّ؛ والكارت يُختار وحده حين يكون الطريق الوحيد.
+        _method = _methods.cardOnly ? _Method.card : _Method.credit;
+      }
+    });
+  }
+
+  /// «جرّب مجدّداً» على سطر الكارت — يعيد قراءة activation-data بلا دوّارة
+  /// ويأخذ منها المخزون وحده: بقيّة الشيت (السعر، وما اختاره المدير، وما
+  /// يُعاد إرساله للخادم) لا تتبدّل تحت يده.
+  Future<void> _refreshCards() async {
+    final idx = widget.sub.idx;
+    if (idx == null || _refreshingCards || _submitting) return;
+    setState(() => _refreshingCards = true);
+    final data = await SubscribersApi.fetchActivationData(idx);
+    if (!mounted) return;
+    setState(() {
+      _refreshingCards = false;
+      if (data != null) {
+        _cards = CardStockInfo.fromActivationData(data);
+        if (!ActivationMethods.fromActivationData(data).card) {
+          _cardDenied = true;
+        }
+      }
     });
   }
 
@@ -194,8 +248,36 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     }
   }
 
+  bool get _cardMode => _method == _Method.card;
+
+  /// اسم الباقة في جمل الكارت — ما قرأه الخادم مع المخزون أوّلاً، ثمّ باقة
+  /// المشترك.
+  String get _cardProfileName {
+    final fromStock = _cards.profileName ?? '';
+    if (fromStock.isNotEmpty) return fromStock;
+    return _profileName.isEmpty ? '—' : _profileName;
+  }
+
+  /// الكارت مختارٌ ولا يصلح الآن: لا كارت لهذه الباقة، أو رُفضت الصلاحيّة.
+  /// «تعذّرت القراءة» ليست منعاً — الخادم يعيد القراءة عند التفعيل نفسه.
+  bool get _cardBlocked =>
+      _cardMode && (_cardDenied || _cards.level == CardStockLevel.empty);
+
+  /// تسمية الزرّ — وسبب المنع عليه حين يُمنع الكارت (كشيت التمديد).
+  String get _footerLabel {
+    if (_submitting) return 'sheets.renewing'.tr();
+    if (_outcomeUnclear) return 'sheets.activate_check_first'.tr();
+    if (!_cardMode) return 'sheets.renew_now'.tr();
+    if (_cardDenied) return 'cards.not_allowed_short'.tr();
+    if (_cards.level == CardStockLevel.empty) {
+      return 'cards.no_card_short'.tr();
+    }
+    return 'cards.renew_with_card'.tr();
+  }
+
   bool get _canSubmit {
     if (_loading || _submitting || _data == null) return false;
+    if (_outcomeUnclear || _cardBlocked) return false;
     if (_pay == _PayType.partial) {
       // Partial only requires a positive amount. v1 lets the admin
       // pay MORE than the package price and the excess lands as a
@@ -208,12 +290,14 @@ class _ActivateSheetState extends State<_ActivateSheet> {
 
   Future<void> _submit() async {
     final idx = widget.sub.idx;
-    if (idx == null || _data == null) return;
+    if (idx == null || _data == null || _cardBlocked || _outcomeUnclear) return;
     final paymentType = switch (_pay) {
       _PayType.cash => 'cash',
       _PayType.partial => 'partial-cash',
       _PayType.debt => 'non-cash',
     };
+    // لقطةٌ قبل الانتظار: الردّ يُقرأ بما أُرسل لا بما صار مختاراً بعده.
+    final useCard = _cardMode;
     setState(() => _submitting = true);
     // 2026-08-26 (manual WA phase 2): وضع يدوي → backend يبني الرسالة
     // ويعيدها في wa_preview بلا إرسال، ونفتح modal بعد النجاح.
@@ -224,16 +308,39 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       activationData: _data!,
       partialAmount: _pay == _PayType.partial ? _partialAmount : null,
       skipAutoWa: manualMode,
+      method: useCard ? 'card' : 'credit',
     );
     if (!mounted) return;
-    setState(() => _submitting = false);
+    setState(() {
+      _submitting = false;
+      // رفضٌ معروف يُحدّث الشيت نفسه، فلا تتكرّر الضغطة على الرفض نفسه.
+      if (useCard && result.code == CardsApi.codeNoCards) {
+        _cards = _cards.withAvailable(0);
+      } else if (useCard && result.code == CardsApi.codeCardNotAllowed) {
+        _cardDenied = true;
+      } else if (SubscribersApi.activateUnclearCodes.contains(result.code)) {
+        _outcomeUnclear = true;
+      }
+    });
+    if (_outcomeUnclear) {
+      // ربّما تفعّل: القوائم تُحدَّث (يظهر الانتهاء الجديد إن نُفّذ)، وعدد
+      // الكارتات لم يعد مضموناً فيُعاد طلبه بدل رسم رقمٍ قد يكون كاذباً.
+      SubscriberEvents.notifyChange();
+      if (useCard) CardsState.invalidate();
+    }
     if (!result.ok) {
-      showSheetSnack(context, result.message ?? 'common.error'.tr(),
+      showSheetSnack(context, _failureText(result.code, result.message),
           isError: true);
       return;
     }
+    if (useCard) CardsState.consumeOne();
     SubscriberEvents.notifyChange();
-    showSheetSnack(context, 'sheets.renew_ok'.tr(), isError: false);
+    showSheetSnack(
+      context,
+      useCard ? _cardOkText(result.card) : 'sheets.renew_ok'.tr(),
+      isError: false,
+      duration: Duration(seconds: useCard ? 5 : 3),
+    );
     // 2026-07-13: طباعة تلقائية بعد النجاح لو الـcheckbox مُفعَّل.
     if (_printReceiptChecked) {
       final effPrice = _effectivePrice > 0 ? _effectivePrice : _userPrice;
@@ -276,6 +383,34 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     Navigator.of(context).pop(true);
   }
 
+  /// رفضا الكارت المعروفان بجملتنا (باللغتين)، وما عداهما رسالة الخادم.
+  String _failureText(String? code, String? message) => switch (code) {
+        CardsApi.codeNoCards => 'cards.err_no_cards'
+            .tr(namedArgs: {'profile': iso(_cardProfileName)}),
+        // الخادم يميّز السبب (صلاحيّة التفعيل بالكارت أم عرض الكارتات) — رسالته أولى.
+        CardsApi.codeCardNotAllowed =>
+          (message != null && message.isNotEmpty) ? message : 'cards.err_not_allowed'.tr(),
+        _ when SubscribersApi.activateUnclearCodes.contains(code) =>
+          (message != null && message.isNotEmpty) ? message : 'sheets.activate_unclear'.tr(),
+        _ => message ?? 'common.error'.tr(),
+      };
+
+  /// «تم التجديد بكارت ••4821 — باقي 2 لباقة Family».
+  /// آخر أربع خانات فقط تصل من الخادم — للتعرّف على الكارت لا أكثر.
+  String _cardOkText(ActivationCard? card) {
+    final tail = card?.serialTail;
+    final head = tail == null
+        ? 'sheets.renew_ok'.tr()
+        : 'cards.renewed_with'.tr(namedArgs: {'tail': iso('••$tail')});
+    final left = card?.remaining;
+    if (left == null) return head;
+    final leftText = 'cards.left_for'.tr(namedArgs: {
+      'n': iso('$left'),
+      'profile': iso(card?.profileName ?? _cardProfileName),
+    });
+    return '$head — $leftText';
+  }
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
@@ -288,7 +423,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         onClose: () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
-        label: _submitting ? 'sheets.renewing'.tr() : 'sheets.renew_now'.tr(),
+        label: _footerLabel,
         icon: LucideIcons.refreshCw,
         enabled: _canSubmit,
         busy: _submitting,
@@ -306,7 +441,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   }
 
   /// جسم الشيت بلغة المخطّط (2026-08-29). الترتيب: بطاقة الباقة الداكنة
-  /// → صفوف الحالة → طريقة الدفع → (المبلغ الجزئي) → بانر النتيجة.
+  /// → صفوف الحالة → (طريقة التفعيل: رصيد | كارت) → طريقة الدفع →
+  /// (المبلغ الجزئي) → بانر النتيجة.
   List<Widget> _buildBody() {
     if (_loading) {
       return [
@@ -404,6 +540,10 @@ class _ActivateSheetState extends State<_ActivateSheet> {
             ),
         ],
       ),
+      if (_methods.card) ...[
+        const SizedBox(height: 14),
+        _methodSection(),
+      ],
       const SizedBox(height: 14),
       SheetSection(
         label: 'sheets.payment_method'.tr(),
@@ -494,6 +634,138 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     const scale = [5000, 10000, 15000, 20000, 25000, 30000, 40000, 50000];
     final out = scale.where((c) => c < price).toList();
     return out.isEmpty ? [price] : out;
+  }
+
+  /// «طريقة التفعيل» — لمن يملك صلاحيّة الكارت وحده. بلاطتا «رصيد | كارت»
+  /// حين يُسمح بالاثنين (والرصيد مختار)، ومع الكارت سطر المخزون: كم بقي
+  /// لهذه الباقة، أو لماذا لا يصلح. ونوع الدفع تحته مستقلٌّ عنه تماماً.
+  Widget _methodSection() {
+    final available = _cards.available;
+    return SheetSection(
+      label: 'cards.activation_method'.tr(),
+      gap: Sp.sm,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_methods.canChoose)
+            SheetChoiceTiles(
+              labels: [
+                'cards.method_credit'.tr(),
+                available == null
+                    ? 'cards.method_card'.tr()
+                    : 'cards.method_card_n'.tr(namedArgs: {'n': '$available'}),
+              ],
+              icons: const [LucideIcons.wallet, LucideIcons.ticket],
+              selectedIndex: _cardMode ? 1 : 0,
+              enabled: !_submitting,
+              onSelect: (i) => setState(
+                  () => _method = i == 1 ? _Method.card : _Method.credit),
+            ),
+          if (_cardMode) ...[
+            if (_methods.canChoose) const SizedBox(height: Sp.sm),
+            _cardNote(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _cardNote() {
+    if (_cardDenied) {
+      return _CardNote(
+        tone: AppTone.danger,
+        icon: LucideIcons.ban,
+        text: 'cards.err_not_allowed'.tr(),
+      );
+    }
+    final profile = iso(_cardProfileName);
+    return switch (_cards.level) {
+      CardStockLevel.available => _CardNote(
+          tone: AppTone.brand,
+          icon: LucideIcons.ticket,
+          text: 'cards.auto_pick'.tr(namedArgs: {
+            'n': iso('${_cards.available}'),
+            'profile': profile,
+          }),
+        ),
+      CardStockLevel.empty => _CardNote(
+          tone: AppTone.warning,
+          icon: LucideIcons.triangleAlert,
+          text: 'cards.none_for'.tr(namedArgs: {'profile': profile}),
+        ),
+      // ليس صفراً: التفعيل مسموح، والخادم يعيد القراءة داخل التفعيل نفسه.
+      CardStockLevel.unknown => _CardNote(
+          tone: AppTone.neutral,
+          icon: LucideIcons.info,
+          text: 'cards.read_failed'.tr(),
+          onRetry: _submitting ? null : _refreshCards,
+          busy: _refreshingCards,
+        ),
+    };
+  }
+}
+
+/// سطر حال الكارت تحت «طريقة التفعيل» — بنغمةٍ من `AppTone` لا بلونٍ خاصّ.
+/// ومع [onRetry] يصير السطر كلّه زرّاً («جرّب مجدّداً») بأيقونة تحديث.
+class _CardNote extends StatelessWidget {
+  const _CardNote({
+    required this.tone,
+    required this.icon,
+    required this.text,
+    this.onRetry,
+    this.busy = false,
+  });
+
+  final AppTone tone;
+  final IconData icon;
+  final String text;
+  final VoidCallback? onRetry;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final retry = onRetry;
+    return Material(
+      color: tone.softBg,
+      borderRadius: BorderRadius.circular(R.lg),
+      child: InkWell(
+        onTap: busy ? null : retry,
+        borderRadius: BorderRadius.circular(R.lg),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.lg),
+            border: Border.all(color: tone.softBorder),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 16, color: tone.fill),
+              const SizedBox(width: Sp.sm),
+              Expanded(
+                child: Text(
+                  text,
+                  style: AppType.body(color: tone.onSoft),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (retry != null || busy) ...[
+                const SizedBox(width: Sp.sm),
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: busy
+                      ? CircularProgressIndicator(
+                          strokeWidth: 2, color: tone.fill)
+                      : Icon(LucideIcons.refreshCw, size: 16, color: tone.fill),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

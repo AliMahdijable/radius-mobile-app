@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../services/auth_storage.dart';
 import 'api_client.dart';
 import 'archive_info.dart';
+import 'cards_api.dart';
 import 'subscribers_api.dart';
 import 'whatsapp_api.dart';
 
@@ -103,14 +104,27 @@ enum RevenuePeriod { day, week, month }
 /// + reward points (SAS4 incentive system). Pulled from /api/v2/admin-widgets
 /// which wraps SAS4's wd_balance + wd_reward_points widgets.
 class WalletResult {
-  const WalletResult({required this.balance, required this.points});
+  const WalletResult({required this.balance, required this.points, this.cards});
   final num balance;
   final num points;
 
-  Map<String, dynamic> toJson() => {'balance': balance, 'points': points};
+  /// §١٢ «الكارتات المتبقّية» من الردّ نفسه — `null` = خادمٌ لا يعرفها.
+  /// تُحفظ مع الرقمين فترسمها اللوحة فور الإقلاع البارد كما ترسم الرصيد
+  /// (`CardsState.seed`).
+  ///
+  /// ⚠️ الكاش متوافقٌ في الاتّجاهين بلا رفع `v`: حمولةٌ قديمة بلا `cards`
+  /// تُقرأ `null`، ونسخةٌ أقدم من التطبيق تتجاهل المفتاح الزائد.
+  final CardsBadge? cards;
+
+  Map<String, dynamic> toJson() => {
+        'balance': balance,
+        'points': points,
+        if (cards != null) 'cards': cards!.toJson(),
+      };
   factory WalletResult.fromJson(Map<String, dynamic> j) => WalletResult(
         balance: (j['balance'] as num?) ?? 0,
         points: (j['points'] as num?) ?? 0,
+        cards: CardsBadge.fromJson(j['cards']),
       );
 }
 
@@ -396,6 +410,8 @@ class DashboardApi {
   /// widgets for us.
   static Future<WalletResult?> fetchWallet() async {
     _logStart('v2/admin-widgets');
+    // قبل أيّ انتظار: ردٌّ يصل بعد خروج صاحبه لا يُكتب في شارة الكارتات.
+    final cardsEpoch = CardsState.epoch;
     final token = await AuthStorage.readToken();
     if (token == null) {
       _logSilent('v2/admin-widgets', 'missing token', null);
@@ -410,12 +426,16 @@ class DashboardApi {
         _logSilent('v2/admin-widgets', 'success != true', body);
         return null;
       }
+      // §١٢: شارة «الكارتات المتبقّية» تركب الطلب نفسه بلا نداءٍ إضافيّ.
+      // وغياب الحقل (خادمٌ أقدم) لا يمسح ما نعرفه.
+      CardsState.applyAdminWidgets(body['cards'], epoch: cardsEpoch);
       final balance = body['balance'];
       final points = body['points'];
       return WalletResult(
         balance:
             balance is num ? balance : (num.tryParse(balance.toString()) ?? 0),
         points: points is num ? points : (num.tryParse(points.toString()) ?? 0),
+        cards: CardsBadge.fromJson(body['cards']),
       );
     } on DioException catch (e) {
       _logErr('v2/admin-widgets', e);
