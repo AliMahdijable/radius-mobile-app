@@ -1207,6 +1207,12 @@
     "shown_of": "{n} of {total}",
     "series_empty": "No cards in this series",
     "dash_line": "Cards {n}",
-    "refresh_failed": "Couldn't refresh — showing the last data received"
+    "refresh_failed": "Couldn't refresh — showing the last data received",
+    "series_search": "Search by series or package",
+    "no_match_title": "No matching series",
+    "no_match_hint": "Try another series number or package name",
+    "page_of": "Page {n} of {total}",
+    "prev": "Prev",
+    "next": "Next"
   }
 }

@@ -43,6 +43,21 @@ class _CardsScreenState extends State<CardsScreen> {
   /// طلبٌ جارٍ يُشارَك: السحب للتحديث أثناء التحميل لا يُطلق طلباً ثانياً.
   Future<void>? _inFlight;
 
+  /// السلاسل قد تكون عشرات: بحثٌ وتقسيمُ صفحاتٍ محلّيّ (الكلّ محمَّلٌ سلفاً من الملخّص).
+  static const int _perPage = 10;
+  final _seriesSearch = TextEditingController();
+  String _seriesQuery = '';
+  int _seriesPage = 0;
+
+  /// تطابق السلسلة البحثَ: رقمها أو اسم باقتها (بلا حساسيّة حالة).
+  List<CardSeries> get _filteredSeries {
+    final q = _seriesQuery.toLowerCase();
+    if (q.isEmpty) return _series;
+    return _series
+        .where((s) => s.series.toLowerCase().contains(q) || (s.profileName ?? '').toLowerCase().contains(q))
+        .toList();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -53,6 +68,15 @@ class _CardsScreenState extends State<CardsScreen> {
   void _setSummary(CardsSummary? s) {
     _summary = s;
     _series = s == null ? const [] : newestFirst(s.series);
+    // تحديثٌ قد يغيّر عدد السلاسل: نُبقي الصفحة ضمن المدى (البناء يحصرها أيضاً).
+    final pages = ((_filteredSeries.length + _perPage - 1) ~/ _perPage);
+    if (_seriesPage > 0 && _seriesPage >= pages) _seriesPage = pages > 0 ? pages - 1 : 0;
+  }
+
+  @override
+  void dispose() {
+    _seriesSearch.dispose();
+    super.dispose();
   }
 
   /// [fresh]: التحديث الصريح (السحب أو زرّ التحديث) يتخطّى كاش الخادم —
@@ -167,7 +191,11 @@ class _CardsScreenState extends State<CardsScreen> {
         ],
       );
     }
-    // السلاسل قد تكون مئات: تُبنى كسولاً، وما فوقها قائمةٌ عاديّة قصيرة.
+    // بحثٌ وتقسيمُ صفحاتٍ محلّيّ: ١٠ سلاسل/صفحة، والكلّ محمَّلٌ سلفاً.
+    final filtered = _filteredSeries;
+    final pageCount = ((filtered.length + _perPage - 1) ~/ _perPage).clamp(1, 1 << 30);
+    final page = _seriesPage.clamp(0, pageCount - 1);
+    final paged = filtered.skip(page * _perPage).take(_perPage).toList();
     return CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
@@ -191,23 +219,58 @@ class _CardsScreenState extends State<CardsScreen> {
                 const SizedBox(height: Sp.xl),
                 _SectionTitle(
                   text: 'cards.series_title'.tr(),
-                  trailing: '${_series.length}',
+                  trailing: '${filtered.length}',
                 ),
+                // بحثٌ حين تكثر السلاسل: برقم السلسلة أو اسم الباقة.
+                if (_series.length > _perPage) ...[
+                  _SeriesSearch(
+                    controller: _seriesSearch,
+                    onChanged: (v) => setState(() {
+                      _seriesQuery = v.trim();
+                      _seriesPage = 0;
+                    }),
+                  ),
+                  const SizedBox(height: Sp.sm),
+                ],
               ],
             ],
           ),
         ),
-        SliverPadding(
-          padding: EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, bottom),
-          sliver: SliverList.separated(
-            itemCount: _series.length,
-            separatorBuilder: (_, __) => const SizedBox(height: Sp.sm),
-            itemBuilder: (_, i) => _SeriesTile(
-              series: _series[i],
-              onTap: () => showSeriesCardsSheet(context, _series[i]),
+        if (_series.isNotEmpty && paged.isEmpty)
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, bottom),
+            sliver: SliverToBoxAdapter(
+              child: _StateCard(
+                icon: LucideIcons.searchX,
+                title: 'cards.no_match_title'.tr(),
+                text: 'cards.no_match_hint'.tr(),
+              ),
+            ),
+          )
+        else
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, pageCount > 1 ? Sp.md : bottom),
+            sliver: SliverList.separated(
+              itemCount: paged.length,
+              separatorBuilder: (_, __) => const SizedBox(height: Sp.sm),
+              itemBuilder: (_, i) => _SeriesTile(
+                series: paged[i],
+                onTap: () => showSeriesCardsSheet(context, paged[i]),
+              ),
             ),
           ),
-        ),
+        if (pageCount > 1)
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, bottom),
+            sliver: SliverToBoxAdapter(
+              child: _SeriesPager(
+                page: page,
+                pageCount: pageCount,
+                onPrev: page > 0 ? () => setState(() => _seriesPage = page - 1) : null,
+                onNext: page < pageCount - 1 ? () => setState(() => _seriesPage = page + 1) : null,
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -500,6 +563,109 @@ class _SectionTitle extends StatelessWidget {
           ),
           if (trailing != null) ToneChip(label: trailing!, dense: true),
         ],
+      ),
+    );
+  }
+}
+
+/// بحث السلاسل — رقم السلسلة أو اسم الباقة. يظهر حين تتجاوز السلاسل صفحةً.
+class _SeriesSearch extends StatelessWidget {
+  const _SeriesSearch({required this.controller, required this.onChanged});
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final border = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(R.md),
+      borderSide: BorderSide(color: AppColors.border),
+    );
+    return TextField(
+      controller: controller,
+      onChanged: onChanged,
+      style: AppType.input(color: AppColors.textHi),
+      textInputAction: TextInputAction.search,
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: 'cards.series_search'.tr(),
+        hintStyle: AppType.input(color: AppColors.textLow),
+        prefixIcon: Icon(LucideIcons.search, size: 18, color: AppColors.textLow),
+        suffixIcon: controller.text.isEmpty
+            ? null
+            : IconButton(
+                icon: Icon(LucideIcons.x, size: 18, color: AppColors.textMid),
+                onPressed: () {
+                  controller.clear();
+                  onChanged('');
+                },
+              ),
+        filled: true,
+        fillColor: AppColors.surfaceInput,
+        contentPadding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+        border: border,
+        enabledBorder: border,
+        focusedBorder: border.copyWith(borderSide: BorderSide(color: AppColors.brand, width: 1.5)),
+      ),
+    );
+  }
+}
+
+/// تنقّل صفحات السلاسل: ‹ السابق · صفحة x من y · التالي ›. سهمٌ معطّلٌ في الطرف.
+class _SeriesPager extends StatelessWidget {
+  const _SeriesPager({required this.page, required this.pageCount, this.onPrev, this.onNext});
+  final int page;
+  final int pageCount;
+  final VoidCallback? onPrev;
+  final VoidCallback? onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Padding(
+      padding: const EdgeInsets.only(top: Sp.sm),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          _PagerButton(icon: LucideIcons.chevronRight, label: 'cards.prev'.tr(), onTap: onPrev),
+          Text(
+            'cards.page_of'.tr(namedArgs: {'n': iso('${page + 1}'), 'total': iso('$pageCount')}),
+            style: AppType.muted(color: AppColors.textMid),
+          ),
+          _PagerButton(icon: LucideIcons.chevronLeft, label: 'cards.next'.tr(), onTap: onNext, trailing: true),
+        ],
+      ),
+    );
+  }
+}
+
+class _PagerButton extends StatelessWidget {
+  const _PagerButton({required this.icon, required this.label, required this.onTap, this.trailing = false});
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final bool trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final on = onTap != null;
+    final fg = on ? AppColors.brand : AppColors.textLow;
+    final row = <Widget>[
+      Icon(icon, size: 18, color: fg),
+      const SizedBox(width: Sp.xxs),
+      Text(label, style: AppType.pillBold(color: fg)),
+    ];
+    return Material(
+      color: on ? AppColors.brandSoftBg : AppColors.surfaceInput,
+      borderRadius: BorderRadius.circular(R.pill),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(R.pill),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+          child: Row(mainAxisSize: MainAxisSize.min, children: trailing ? row.reversed.toList() : row),
+        ),
       ),
     );
   }
