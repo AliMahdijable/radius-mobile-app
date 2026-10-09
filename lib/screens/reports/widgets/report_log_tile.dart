@@ -323,6 +323,11 @@ bool _isCash(String desc) =>
 _ActionMeta _actionMeta(String at, String desc) {
   switch (at) {
     case 'SUBSCRIBER_ACTIVATE':
+      // مُزامَنٌ من الساس (صفحة الساس أو تطبيقٌ آخر): لا نقد ولا دين عندنا —
+      // لونٌ محايد ولابلٌ بمصدره.
+      if (desc.contains('من الساس')) {
+        return _ActionMeta('تفعيل (من الساس)', LucideIcons.zap, AppColors.textMid);
+      }
       // نقدي = موجب أخضر، غير نقدي = سالب أحمر، مجهول = افتراضي.
       if (_isNonCash(desc)) {
         return _ActionMeta('تفعيل', LucideIcons.zap, AppColors.error,
