@@ -90,7 +90,10 @@ class _Row extends StatelessWidget {
     final title = fullName.isNotEmpty
         ? (username.isNotEmpty ? '$fullName ($username)' : fullName)
         : (username.isNotEmpty ? username : action);
-    final details = _actionDetails(action, descr);
+    // حركةٌ سحبتها مزامنة الساس (عُملت في صفحة الساس أو تطبيقٍ آخر): لا نقد ولا
+    // دين عندنا — اللابل يقول مصدرها، والتفصيل طريقتها («بكارت»/«بالرصيد»).
+    final fromSas = _truthy(m['from_sas']) || descr.contains('من الساس');
+    final details = fromSas ? _sasDetails(descr) : _actionDetails(action, descr);
     final amount = _readAmount(m);
     final created = m['created_at']?.toString();
     final timeLabel = _humanCreatedAt(created);
@@ -308,6 +311,15 @@ class _Row extends StatelessWidget {
       return (label: 'فصل المستخدم', detail: null);
     }
     return (label: null, detail: null);
+  }
+
+  static bool _truthy(Object? v) => v == true || v == 1 || v == '1' || v == 'true';
+
+  /// «تفعيل من الساس — بكارت (أُلغي)» ← لابل «من الساس» وتفصيل «بكارت (أُلغي)».
+  static ({String? label, String? detail}) _sasDetails(String description) {
+    final i = description.indexOf('—');
+    final rest = i >= 0 ? description.substring(i + 1).trim() : '';
+    return (label: 'تفعيل من الساس', detail: rest.isEmpty ? null : rest);
   }
 
   static int? _extractAmount(String s, RegExp re) {

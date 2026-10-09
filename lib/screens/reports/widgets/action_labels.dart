@@ -13,6 +13,8 @@ String arabicActionLabel(String actionType, [String description = '']) {
   final nonCash = description.contains('غير نقدي');
   switch (at) {
     case 'SUBSCRIBER_ACTIVATE':
+      // مُزامَنٌ من الساس (صفحة الساس أو تطبيقٌ آخر): بلا نقدٍ ولا دين عندنا.
+      if (description.contains('من الساس')) return 'تفعيل (من الساس)';
       return nonCash ? 'تفعيل (غير نقدي)' : 'تفعيل';
     case 'SUBSCRIBER_EXTEND':
       return nonCash ? 'تمديد (غير نقدي)' : 'تمديد';
