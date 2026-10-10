@@ -386,8 +386,12 @@ class _MyServicesAppState extends State<MyServicesApp>
         ),
       ),
       // الرسائل الطافية (SnackBar) — كانت تأخذ زوايا Material الحادّة.
+      // الخلفيّة `brandSurface` (#103D2E ثابت بالوضعين) لا `textHi`: الأخير
+      // يصير فاتحاً بالمود الليلي فتطلع خلفيّة بيضاء + نصّ أبيض (مختفٍ).
+      // ورتب `onBrand*` معايَرة أصلاً على `brandSurface` — فهذا اقترانها الصحيح
+      // (أبيض على أخضر غامق 12.15:1 بالوضعين).
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: AppColors.textHi,
+        backgroundColor: AppColors.brandSurface,
         contentTextStyle: AppType.body(color: AppColors.onBrand),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
