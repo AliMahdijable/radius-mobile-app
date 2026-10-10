@@ -5,6 +5,7 @@ import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 
 import '../services/auth_storage.dart';
+import '../services/device_id.dart';
 import '../services/session_manager.dart';
 import 'auth_api.dart';
 
@@ -112,6 +113,11 @@ class _AuthInterceptor extends Interceptor {
   @override
   void onRequest(
       RequestOptions options, RequestInterceptorHandler handler) async {
+    // معرّف الجهاز على كلّ طلب (حتى /api/auth/*) — الخادم يفحصه لحدّ الأجهزة
+    // (ضدّ مشاركة الحساب). gateLogin يقرأه عند الدخول وتجديد التوكن.
+    try {
+      options.headers['x-device-id'] = await DeviceId.get();
+    } catch (_) {/* لا يُفشل الطلب */}
     // /api/auth/login + /api/auth/refresh-token must NOT carry a stale
     // token — login takes none, refresh uses adminId in the body.
     final isAuthEndpoint = options.path.contains('/api/auth/');

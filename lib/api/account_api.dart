@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../services/account_service.dart';
+import '../services/device_id.dart';
 import 'api_client.dart';
 
 /// Pro البند ٤ — نقاط طبقة الحساب على الخادم: `/api/account/*`.
@@ -33,7 +34,10 @@ class AccountApi {
       return _dio.request<Map<String, dynamic>>(
         path,
         data: data,
-        options: Options(method: method, headers: {'x-account-token': token}),
+        options: Options(method: method, headers: {
+          'x-account-token': token,
+          'x-device-id': await DeviceId.get(),
+        }),
       );
     }
 
