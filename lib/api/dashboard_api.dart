@@ -257,6 +257,10 @@ class DashboardApi {
     var onlineNoPlan = 0;
     var disabled = 0;
     for (final s in list) {
+      // 2026-10-12: الحسابات المهمَلة (لم تُفعَّل قطّ) تُستثنى من كلّ
+      // عدّادات اللوحة — ليست متّصلة ولا منتهية ولا مدينة، بل بطاقات
+      // فارغة أنشأها الخادم. لها فلتر «مهمَل» في شاشة المشتركين وحده.
+      if (s.isAbandoned) continue;
       if (s.hasDebt) {
         debtCount++;
         debtTotal += s.debtAbs.round();
@@ -282,7 +286,7 @@ class DashboardApi {
       offline: offline,
       active: active,
       expired: expired,
-      totalSubs: list.length,
+      totalSubs: list.where((s) => !s.isAbandoned).length,
       onlineNoPlan: onlineNoPlan,
       disabled: disabled,
     );

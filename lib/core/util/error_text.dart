@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import '../platform/store_policy.dart';
+
 /// يحوّل أيّ خطأ إلى جملة عربيّة قصيرة تصلح للعرض.
 ///
 /// 🐛 بلاغ 2026-08-31 بصورة: شاشة الأجهزة تعرض
@@ -66,7 +68,8 @@ String humanError(Object? e, {String? fallback}) {
 String _fromStatus(int? code, Object? body) {
   if (body is Map) {
     final m = body['message'];
-    if (m is String && m.trim().isNotEmpty && _looksArabic(m)) return m.trim();
+    // آيفون: بلا «رقِّ باقتك»/«فعّل كوداً» ([StorePolicy.storeSafe]).
+    if (m is String && m.trim().isNotEmpty && _looksArabic(m)) return StorePolicy.storeSafe(m.trim());
   }
   switch (code) {
     case 400:

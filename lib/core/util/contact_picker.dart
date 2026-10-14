@@ -28,15 +28,21 @@ class ContactPicker {
       // و«ممنوح» صارت حالتين: `granted` و`limited` (‏iOS 18 يسمح بمشاركة
       // جهاتٍ بعينها). واعتبار المحدودة رفضاً يمنع مستخدماً أعطانا إذناً
       // فعليّاً من استعمال الميزة.
+      // iOS: منتقي النظام (CNContactPickerViewController) يعمل بلا إذن ويُرجع
+      // أرقام الجهة المختارة وحدها — فلا نطلب الوصول لكلّ جهات الاتصال
+      // (App Store 5.1.1(iii): تقليل البيانات). الإذن لأندرويد وحده.
+      final isIos = defaultTargetPlatform == TargetPlatform.iOS;
       bool granted = false;
-      try {
-        final st = await FlutterContacts.permissions.request(
-          PermissionType.read,
-        );
-        granted =
-            st == PermissionStatus.granted || st == PermissionStatus.limited;
-      } catch (e) {
-        if (kDebugMode) debugPrint('ContactPicker.perm: $e');
+      if (!isIos) {
+        try {
+          final st = await FlutterContacts.permissions.request(
+            PermissionType.read,
+          );
+          granted =
+              st == PermissionStatus.granted || st == PermissionStatus.limited;
+        } catch (e) {
+          if (kDebugMode) debugPrint('ContactPicker.perm: $e');
+        }
       }
 
       // 2) primary path: OS-native picker
@@ -83,7 +89,8 @@ class ContactPicker {
       }
 
       // 3) fallback: لو الـpicker فشل ومعنا الإذن — لا نُظهر شيئاً بل نُبلّغ.
-      if (!granted) {
+      // (على iOS لا إذن أصلاً، فلا نطلب من المستخدم منحه.)
+      if (!granted && !isIos) {
         return (
           phone: null,
           error: 'اسمح بالوصول لجهات الاتصال من إعدادات النظام لهذا التطبيق',

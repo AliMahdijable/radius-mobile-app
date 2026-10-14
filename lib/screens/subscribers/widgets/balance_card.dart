@@ -2,8 +2,10 @@ import 'dart:ui' as ui;
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/util/format.dart';
+import '../../../core/widgets/permission_locked.dart';
 import '../../../models/subscriber.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -39,14 +41,24 @@ class BalanceCard extends StatelessWidget {
     this.onRemind,
     this.onPay,
     this.onAddDebt,
+    this.addDebtLocked = false,
+    this.remindLocked = false,
+    this.payLocked = false,
   });
 
   final Subscriber sub;
 
-  /// null = الزرّ يختفي (لا صلاحيّة أو لا رقم هاتف أو إرسال جارٍ).
+  /// null = الزرّ يختفي (لا رقم هاتف أو إرسال جارٍ أو لا دين) — **إلّا**
+  /// إن كان مقفلاً بعلَمه أدناه.
   final VoidCallback? onRemind;
   final VoidCallback? onPay;
   final VoidCallback? onAddDebt;
+
+  /// بلاغ ٢٠٢٦-١٠-١٤: نقص المفتاح وحده لا يُخفي الزرّ — يبقى في مكانه
+  /// مقفلاً (حدٌّ محايد + قفل)، ونقرته رسالة القفل لا الشيت.
+  final bool addDebtLocked;
+  final bool remindLocked;
+  final bool payLocked;
 
   @override
   Widget build(BuildContext context) {
@@ -64,31 +76,34 @@ class BalanceCard extends StatelessWidget {
         : (isDebt ? AppColors.dangerBorderCard : AppColors.successSoftBorder);
 
     final buttons = <Widget>[
-      if (onAddDebt != null)
+      if (onAddDebt != null || addDebtLocked)
         _DebtButton(
           label: 'إضافة دين',
           icon: Icons.add_rounded,
           filled: false,
           color: AppColors.warning,
           borderColor: AppColors.warningSoftBorder,
-          onTap: onAddDebt!,
+          locked: addDebtLocked,
+          onTap: onAddDebt,
         ),
-      if (onRemind != null)
+      if (onRemind != null || remindLocked)
         _DebtButton(
           label: 'تذكير',
           icon: Icons.notifications_active_rounded,
           filled: false,
           color: AppColors.warning,
           borderColor: AppColors.warningSoftBorder,
-          onTap: onRemind!,
+          locked: remindLocked,
+          onTap: onRemind,
         ),
-      if (onPay != null)
+      if (onPay != null || payLocked)
         _DebtButton(
           label: 'تسديد',
           icon: Icons.payments_rounded,
           filled: true,
           color: isDebt ? AppColors.errorFill : AppColors.successFill,
-          onTap: onPay!,
+          locked: payLocked,
+          onTap: onPay,
         ),
     ];
 
@@ -187,51 +202,65 @@ class _DebtButton extends StatelessWidget {
     required this.color,
     required this.onTap,
     this.borderColor,
+    this.locked = false,
   });
   final String label;
   final IconData icon;
   final bool filled;
   final Color color;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final Color? borderColor;
+
+  /// مقفل: لا تعبئة، حدٌّ محايد، قفلٌ مكان الأيقونة، ونصٌّ خافت.
+  final bool locked;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: filled ? color : AppColors.surface,
+    final solid = filled && !locked;
+    final fg = locked ? LockedStyle.glyph : (solid ? AppColors.onBrand : color);
+    final button = Material(
+      color: solid ? color : AppColors.surface,
       borderRadius: BorderRadius.circular(R.md),
       child: InkWell(
-        onTap: onTap,
+        onTap: locked ? () => showNoPermission(context, action: true) : onTap,
         borderRadius: BorderRadius.circular(R.md),
         child: Container(
           height: H.chip,
           padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(R.md),
-            border: filled
+            border: solid
                 ? null
-                : Border.all(color: borderColor ?? AppColors.border),
+                : Border.all(
+                    color: locked
+                        ? AppColors.border
+                        : (borderColor ?? AppColors.border)),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 16, color: filled ? AppColors.onBrand : color),
+              Icon(locked ? LucideIcons.lock : icon, size: 16, color: fg),
               const SizedBox(width: 5),
               Flexible(
                 child: Text(
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppType.bodyStrong(
-                    color: filled ? AppColors.onBrand : color,
-                  ),
+                  style: AppType.bodyStrong(color: fg),
                 ),
               ),
             ],
           ),
         ),
       ),
+    );
+    if (!locked) return button;
+    return Semantics(
+      button: true,
+      label: 'locked.a11y'.tr(args: [label]),
+      excludeSemantics: true,
+      child: button,
     );
   }
 }

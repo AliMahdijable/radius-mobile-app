@@ -1,10 +1,15 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
+import '../api/auth_api.dart';
+import '../core/widgets/permission_locked.dart';
 import '../services/app_version.dart';
 import '../services/auth_storage.dart';
 import '../services/locale_service.dart';
 import '../services/permissions_service.dart';
+import '../services/provider_service.dart';
 import '../services/saved_profiles_store.dart';
 import '../services/session_manager.dart';
 import '../services/print_prefs.dart';
@@ -16,6 +21,9 @@ import 'app_permissions_screen.dart';
 import 'devices/device_defaults_screen.dart';
 import 'account/account_gate_screen.dart';
 import 'account/account_settings_card.dart';
+import 'account/account_widgets.dart' show openPrivacyPolicy, openSupportPage;
+import 'account/employee_login_screen.dart';
+import '../services/employee_session.dart';
 import 'notifications_settings_screen.dart';
 import 'print_templates/print_templates_screen.dart';
 import 'whatsapp/connection_alerts_screen.dart';
@@ -41,6 +49,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     AuthStorage.readDisplayName().then((n) {
       if (mounted) setState(() => _name = n ?? '');
     });
+    // الصفوف المقفلة تتبع تحديث `/me` (مُنح مفتاحٌ أو سُحب) بلا إعادة فتح.
+    PermissionsService.changes.addListener(_onPermsChanged);
+  }
+
+  @override
+  void dispose() {
+    PermissionsService.changes.removeListener(_onPermsChanged);
+    super.dispose();
+  }
+
+  void _onPermsChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _logout() async {
@@ -74,17 +94,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     if (ok != true) return;
+    // موظّف ايرث لنك: الخروج يُنهي الجلسة على الخادم أيضاً — التوكن يُلتقط
+    // هنا والنداء بعد المسح لا قبله (السبب عند [AuthApi.employeeLogout]).
+    // قراءة الخزنة قد ترمي (عطل KeyStore) — لا تمنع الخروج المحلّيّ أبداً.
+    String? empToken;
+    if (EmployeeSession.isActive) {
+      try {
+        empToken = await AuthStorage.readToken();
+      } catch (_) {/* بلا إبلاغ الخادم — الخروج المحلّيّ يتمّ */}
+    }
     // 2026-07-14: كل التنظيف عبر SessionManager الموحّد — يضمن أن
     // كل مسار للخروج (logout يدوي، 401 kick، login جديد) يستعمل نفس
     // الروتين ولا ينسى caches جديدة تُضاف لاحقاً.
     await SessionManager.clearAllSessionData();
+    // بلا انتظار: لا شيء يُنتظَر منه، والانتظار هنا يترك الواجهة بلا توكن
+    // فيطرد أوّلُ تحديثٍ للرئيسيّة الموظّفَ بـ«انتهت الجلسة».
+    if (empToken != null) unawaited(AuthApi.employeeLogout(token: empToken));
     // 2026-08-26: امسح مرجع الأصلي — Logout يدوي = "أنا أعرف شنو أعمل"،
     // فلا مبرّر يبقى مرجع للـswitcher الأصلي مخزَّن (سيرتبك أول تبديل
     // بعد login جديد). الحسابات المحفوظة العامّة تبقى كما هي.
     await SavedProfilesStore.clearOriginal();
     if (!mounted) return;
+    // موظّف ايرث لنك المباشر لا حساب له ← شاشة دخول الموظّف لا البوّابة.
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const AccountGateScreen()),
+      MaterialPageRoute(
+        builder: (_) => EmployeeSession.routeToEmployeeLogin
+            ? const EmployeeLoginScreen()
+            : const AccountGateScreen(),
+      ),
       (_) => false,
     );
   }
@@ -140,80 +177,81 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _IdentityCard(name: _name),
             const SizedBox(height: Sp.sm),
             // Pro البند ٤: الحساب والاشتراك (تاريخ الانتهاء، الكود، التواصل) — صفٌّ مطويّ.
-            const AccountSettingsCard(),
-            const SizedBox(height: Sp.lg),
+            // الموظّف المباشر بلا حسابٍ ولا اشتراك — لا صفّ له (وخروجه منه يقود لدخول الحساب).
+            if (!EmployeeSession.isActive) ...[
+              const AccountSettingsCard(),
+              const SizedBox(height: Sp.lg),
+            ],
             // مطلب 2026-06-10: شاشة الإعدادات تضم أقسام: واتساب +
             // قوالبه، طباعة + قوالبها، المظهر، البصمة، الصلاحيات،
             // الإشعارات، السكون. حالياً كل واحد stub يفتح snack
             // 'قيد التطوير' حتى نبني كل قسم على حدة.
-            // مطلب 2026-06-12: قسم الواتساب يختفي كلياً لو الموظف ما
-            // عنده ولا واحدة من whatsapp.connect/templates. كل بند
-            // محمي بمفتاحه.
-            if (Perms.hasAny(
+            // مطلب 2026-06-12 + بلاغ ٢٠٢٦-١٠-١٤: قسم الواتساب وصفوفه الأربعة
+            // تبقى بمكانها، وكلّ صفٍّ بلا مفتاحه **مقفلٌ** (قفلٌ مكان السهم،
+            // والنقر رسالةٌ لا شاشةٌ تُرفض). ويختفي القسم كلّه فقط إن لم
+            // يكن مفتاحاه ممّا يُمنح لهذا الدور ([permShown] — موظّف ايرث لنك).
+            if (permShown(
                 const ['whatsapp.connect', 'whatsapp.templates'])) ...[
               _SectionLabel('settings.whatsapp'.tr()),
-              if (Perms.has('whatsapp.connect'))
-                _Row(
-                  icon: Icons.chat_bubble_outline_rounded,
-                  label: 'settings.whatsapp_status'.tr(),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const WhatsAppStatusScreen(),
-                    ),
+              _Row(
+                icon: Icons.chat_bubble_outline_rounded,
+                label: 'settings.whatsapp_status'.tr(),
+                locked: !Perms.has('whatsapp.connect'),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const WhatsAppStatusScreen(),
                   ),
                 ),
-              if (Perms.hasAll(
-                  const ['whatsapp.connect', 'whatsapp.templates']))
-                const SizedBox(height: Sp.xs),
-              if (Perms.has('whatsapp.templates'))
-                _Row(
-                  icon: Icons.message_outlined,
-                  label: 'settings.whatsapp_templates'.tr(),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const WhatsAppTemplatesScreen(),
-                    ),
+              ),
+              const SizedBox(height: Sp.xs),
+              _Row(
+                icon: Icons.message_outlined,
+                label: 'settings.whatsapp_templates'.tr(),
+                locked: !Perms.has('whatsapp.templates'),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const WhatsAppTemplatesScreen(),
                   ),
                 ),
+              ),
               // مطلب 2026-XX: قائمة الجدولة (أوقات + أيام تبليغات)
               // منقولة من v1 — الآن متاحة تحت whatsapp.templates.
-              if (Perms.has('whatsapp.templates'))
-                const SizedBox(height: Sp.xs),
-              if (Perms.has('whatsapp.templates'))
-                _Row(
-                  icon: Icons.schedule_outlined,
-                  label: 'settings.whatsapp_schedules'.tr(),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const WhatsAppSchedulesScreen(),
-                    ),
+              const SizedBox(height: Sp.xs),
+              _Row(
+                icon: Icons.schedule_outlined,
+                label: 'settings.whatsapp_schedules'.tr(),
+                locked: !Perms.has('whatsapp.templates'),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const WhatsAppSchedulesScreen(),
                   ),
                 ),
+              ),
               // «تنبيه المشترك» بمشكلة الاتصال — تفعيله وحدوده ونصوصه.
               // كان مدخله الوحيد بطاقةً في آخر قائمة القوالب، فسأل
               // المستخدم «الميزة منين يفعّلها المدير؟». هنا مكانه بين
               // إعدادات الواتساب الأخرى.
-              if (Perms.has('whatsapp.templates'))
-                const SizedBox(height: Sp.xs),
-              if (Perms.has('whatsapp.templates'))
-                _Row(
-                  icon: Icons.notifications_active_outlined,
-                  label: 'conn_alerts.title'.tr(),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const ConnectionAlertsScreen(),
-                    ),
+              const SizedBox(height: Sp.xs),
+              _Row(
+                icon: Icons.notifications_active_outlined,
+                label: 'conn_alerts.title'.tr(),
+                locked: !Perms.has('whatsapp.templates'),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ConnectionAlertsScreen(),
                   ),
                 ),
+              ),
               const SizedBox(height: Sp.md),
             ],
             // «نطاق العرض» — تفضيل عرضٍ لا تحكّم وصول، لكنّه يغيّر ما
             // يراه كلّ موظّفي الحساب، فيُقفل بـsettings.edit كنظائره.
-            if (Perms.has('settings.edit')) ...[
+            if (permShown(const ['settings.edit'])) ...[
               const _SectionLabel('العرض'),
               _Row(
                 icon: Icons.visibility_off_outlined,
                 label: 'نطاق العرض',
+                locked: !Perms.has('settings.edit'),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => const ViewScopeScreen(),
@@ -223,11 +261,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: Sp.md),
             ],
             // اعتمادات الأجهزة = إعدادات حسّاسة، نقفلها بـsettings.edit.
-            if (Perms.has('settings.edit')) ...[
+            if (permShown(const ['settings.edit'])) ...[
               _SectionLabel('settings.devices'.tr()),
               _Row(
                 icon: Icons.router_outlined,
                 label: 'settings.device_creds'.tr(),
+                locked: !Perms.has('settings.edit'),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => const DeviceDefaultsScreen(),
@@ -249,16 +288,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () => _openPrinterFormatPicker(context),
               ),
             ),
-            const SizedBox(height: Sp.xs),
-            _Row(
-              icon: Icons.receipt_long_outlined,
-              label: 'settings.print_templates'.tr(),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const PrintTemplatesScreen(),
+            // قوالب الطباعة (الوصولات) — ايرث لنك: مخفيّة (غير مدعومة، البند ٤).
+            if (!ProviderService.isEarthlink) ...[
+              const SizedBox(height: Sp.xs),
+              _Row(
+                icon: Icons.receipt_long_outlined,
+                label: 'settings.print_templates'.tr(),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const PrintTemplatesScreen(),
+                  ),
                 ),
               ),
-            ),
+            ],
             const SizedBox(height: Sp.md),
             _SectionLabel('settings.app'.tr()),
             ValueListenableBuilder<ThemeMode>(
@@ -309,6 +351,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
               label: 'settings.version'.tr(),
               // بلا buildNumber (نُخفيه — طلب المستخدم). الـshortVersion = 'v2.0.1'
               trailing: AppVersion.shortVersion,
+            ),
+            // الدعم والخصوصيّة لكلّ مستخدمٍ (مالكاً أو موظّفاً) — App Store 1.5 و5.1.1(i).
+            const SizedBox(height: Sp.xs),
+            _Row(
+              icon: Icons.support_agent_rounded,
+              label: 'settings.help_support'.tr(),
+              onTap: () => openSupportPage(context),
+            ),
+            const SizedBox(height: Sp.xs),
+            _Row(
+              icon: Icons.privacy_tip_outlined,
+              label: 'settings.privacy_policy'.tr(),
+              onTap: () => openPrivacyPolicy(context),
             ),
             const SizedBox(height: Sp.md),
             // 2026-08-26: مسح الحسابات المحفوظة على شاشة الدخول (chips).
@@ -842,6 +897,7 @@ class _Row extends StatelessWidget {
     required this.label,
     this.trailing,
     this.onTap,
+    this.locked = false,
   });
   final IconData icon;
   final String label;
@@ -852,9 +908,14 @@ class _Row extends StatelessWidget {
   /// leaves it null so it reads as a static info card.
   final VoidCallback? onTap;
 
+  /// بلا مفتاح الصفّ: يبقى بمكانه خافتاً بقفلٍ مكان السهم، ونقره رسالة
+  /// القفل — [onTap] لا يُستدعى فلا تُفتح شاشةٌ يرفضها الخادم.
+  final bool locked;
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    if (locked) return _buildLocked(context);
     final card = Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -898,6 +959,56 @@ class _Row extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(R.md),
         child: card,
+      ),
+    );
+  }
+
+  /// الصفّ المقفل — الإطار والحشوة والمقاس كالحيّ، والألوان من
+  /// [LockedStyle]، و[PermLockIcon] مكان السهم.
+  Widget _buildLocked(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'locked.a11y'.tr(args: [label]),
+      excludeSemantics: true,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(R.md),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => showNoPermission(context),
+          borderRadius: BorderRadius.circular(R.md),
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(R.md),
+              border: Border.all(color: AppColors.border),
+            ),
+            padding: const EdgeInsets.symmetric(
+              horizontal: Sp.lg,
+              vertical: Sp.md,
+            ),
+            child: Row(
+              children: [
+                Icon(icon, color: LockedStyle.glyph, size: 20),
+                const SizedBox(width: Sp.md),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: AppType.label(color: LockedStyle.title),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                // بعرض السهم (20) لا بعرض القفل (16): يقع القفل على محور
+                // أسهم الصفوف المفتوحة تحته لا منزاحاً عنها.
+                const SizedBox(
+                  width: 20,
+                  child: Center(child: PermLockIcon()),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

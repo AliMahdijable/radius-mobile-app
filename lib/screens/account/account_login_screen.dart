@@ -1,14 +1,19 @@
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
+import 'package:firebase_auth/firebase_auth.dart' show FirebaseAuthException;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/platform/store_policy.dart';
 import '../../services/account_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'account_gate_screen.dart';
+import 'account_settings_card.dart' show confirmAndDeleteAccount;
 import 'account_widgets.dart';
+import 'apple_sign_in_button.dart';
+import 'employee_login_screen.dart';
 
 enum _Mode { signIn, signUp, verify }
 
@@ -30,6 +35,10 @@ class _AccountLoginScreenState extends State<AccountLoginScreen> {
   bool _obscure = true;
   bool _busy = false;
   bool _googleBusy = false;
+  bool _appleBusy = false;
+
+  /// أيّ دخولٍ جارٍ — يعطّل بقيّة الأزرار حتى لا يتسابق مساران.
+  bool get _anyBusy => _busy || _googleBusy || _appleBusy;
 
   @override
   void initState() {
@@ -68,9 +77,47 @@ class _AccountLoginScreenState extends State<AccountLoginScreen> {
       final u = await AccountService.signInWithGoogle();
       if (u != null) _toGate();
     } catch (e) {
-      _err(e);
+      // فشل Google لا يُعرض «كلمة سرّ خاطئة» (لا كلمة سرّ في هذا المسار): رسالة Google بالرمز
+      // الحقيقيّ — ويُكتب الرمز في السجلّ (بلا بيانات شخصيّة) فيُشخَّص التكرار من logcat.
+      final code = e is FirebaseAuthException ? e.code : e.runtimeType.toString();
+      debugPrint('account google sign-in failed: $code');
+      if (e is FirebaseAuthException &&
+          const {'user-disabled', 'network-request-failed', 'too-many-requests', 'account-exists-with-different-credential'}
+              .contains(e.code)) {
+        _err(e);
+      } else if (mounted) {
+        HapticFeedback.heavyImpact();
+        showAccountSnack(context, 'account.err_google_code'.tr(args: [code]), error: true);
+      }
     } finally {
       if (mounted) setState(() => _googleBusy = false);
+    }
+  }
+
+  /// Sign in with Apple — نفس مسار Google بعد الدخول (بوّابة الحساب ← bootstrap).
+  Future<void> _apple() async {
+    HapticFeedback.selectionClick();
+    setState(() => _appleBusy = true);
+    try {
+      final u = await AccountService.signInWithApple();
+      if (u != null) _toGate();
+    } catch (e) {
+      final code = e is FirebaseAuthException ? e.code : e.runtimeType.toString();
+      debugPrint('account apple sign-in failed: $code');
+      if (e is FirebaseAuthException &&
+          const {'user-disabled', 'network-request-failed', 'too-many-requests', 'account-exists-with-different-credential'}
+              .contains(e.code)) {
+        _err(e);
+      } else if (mounted) {
+        HapticFeedback.heavyImpact();
+        // «unknown» (ASAuthorizationError 1000) لا يفيد المستخدم — رسالةٌ بلا رمز.
+        showAccountSnack(
+            context,
+            code == 'unknown' ? 'account.err_apple'.tr() : 'account.err_apple_code'.tr(args: [code]),
+            error: true);
+      }
+    } finally {
+      if (mounted) setState(() => _appleBusy = false);
     }
   }
 
@@ -162,14 +209,54 @@ class _AccountLoginScreenState extends State<AccountLoginScreen> {
     if (_mode == _Mode.verify) return _buildVerify();
     final signUp = _mode == _Mode.signUp;
     return AccountScaffold(
+      compact: true,
       title: signUp ? 'account.signup_title'.tr() : 'account.signin_title'.tr(),
-      subtitle: 'account.signin_subtitle'.tr(),
+      subtitle: (StorePolicy.hidePurchaseFlows ? 'account.signin_subtitle_neutral' : 'account.signin_subtitle').tr(),
       children: [
-        AccountOutlineButton(
-          label: 'account.continue_google'.tr(),
-          leading: const GoogleMark(),
-          loading: _googleBusy,
-          onTap: _busy ? null : _google,
+        // طرق الدخول أيقوناتٌ في صفٍّ واحد بدل ثلاثة أزرارٍ عريضة — الشاشة كلّها تتّسع
+        // بلا تمرير على آيفون ١٣ (طلب المستخدم ٢٠٢٦-١٠-١٤). Apple بحجم Google وبروزه (4.8).
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (AccountService.appleSignInAvailable) ...[
+              SizedBox(
+                width: _methodTileWidth,
+                child: AccountMethodTile(
+                  filled: true,
+                  icon: const Icon(Icons.apple),
+                  caption: 'Apple',
+                  semanticLabel: 'account.continue_apple'.tr(),
+                  loading: _appleBusy,
+                  onTap: _busy || _googleBusy ? null : _apple,
+                ),
+              ),
+              const SizedBox(width: Sp.lg),
+            ],
+            SizedBox(
+              width: _methodTileWidth,
+              child: AccountMethodTile(
+                icon: const GoogleMark(),
+                caption: 'Google',
+                semanticLabel: 'account.continue_google'.tr(),
+                loading: _googleBusy,
+                onTap: _busy || _appleBusy ? null : _google,
+              ),
+            ),
+            // Pro: موظّف ايرث لنك — بلا حساب إيميل؛ يوزر وكلمة سرّ من مديره.
+            if (!signUp) ...[
+              const SizedBox(width: Sp.lg),
+              SizedBox(
+                width: _methodTileWidth,
+                child: AccountMethodTile(
+                  icon: const Icon(Icons.badge_outlined),
+                  caption: 'account.employee_short'.tr(),
+                  semanticLabel: 'account.employee_entry'.tr(),
+                  onTap: _anyBusy ? null : _openEmployeeLogin,
+                ),
+              ),
+            ],
+          ],
         ),
         const SizedBox(height: Sp.lg),
         Row(children: [
@@ -180,8 +267,9 @@ class _AccountLoginScreenState extends State<AccountLoginScreen> {
           ),
           Expanded(child: Divider(color: AppColors.border)),
         ]),
-        const SizedBox(height: Sp.lg),
+        const SizedBox(height: Sp.md),
         AccountCard(
+          padding: const EdgeInsets.all(Sp.lg),
           child: AutofillGroup(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -196,7 +284,7 @@ class _AccountLoginScreenState extends State<AccountLoginScreen> {
                   autofillHints: const [AutofillHints.email],
                   onSubmitted: (_) => _passFocus.requestFocus(),
                 ),
-                const SizedBox(height: Sp.lg),
+                const SizedBox(height: Sp.md),
                 AccountField(
                   label: 'account.password'.tr(),
                   controller: _passCtrl,
@@ -221,26 +309,49 @@ class _AccountLoginScreenState extends State<AccountLoginScreen> {
                 AccountPrimaryButton(
                   label: signUp ? 'account.create_account'.tr() : 'account.sign_in'.tr(),
                   loading: _busy,
-                  onTap: _googleBusy ? null : _submitEmail,
+                  onTap: _googleBusy || _appleBusy ? null : _submitEmail,
                 ),
               ],
             ),
           ),
         ),
-        const SizedBox(height: Sp.md),
-        AccountTextLink(
-          label: signUp ? 'account.have_account'.tr() : 'account.no_account'.tr(),
-          onTap: _busy
-              ? null
-              : () => setState(() {
-                    _mode = signUp ? _Mode.signIn : _Mode.signUp;
-                    _passCtrl.clear();
-                  }),
+        const SizedBox(height: Sp.xs),
+        // الذيل سطرٌ واحد: إنشاء حساب · سياسة الخصوصيّة (App Store 5.1.1(i): ظاهرةٌ قبل أيّ حساب).
+        Wrap(
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            TextButton(
+              onPressed: _anyBusy
+                  ? null
+                  : () => setState(() {
+                        _mode = signUp ? _Mode.signIn : _Mode.signUp;
+                        _passCtrl.clear();
+                      }),
+              child: Text(signUp ? 'account.signin_short'.tr() : 'account.create_short'.tr(),
+                  style: AppType.link(color: AppColors.brandAccent)),
+            ),
+            Text('·', style: AppType.muted(color: AppColors.textLow)),
+            TextButton(
+              onPressed: () => openPrivacyPolicy(context),
+              child: Text('account.privacy_policy'.tr(), style: AppType.link(color: AppColors.textMid)),
+            ),
+          ],
         ),
-        const SizedBox(height: Sp.sm),
-        Text('account.trial_note'.tr(), textAlign: TextAlign.center, style: AppType.muted(color: AppColors.textMid)),
+        // آيفون: لا جملة «تجربة مجانيّة» على شاشة الدخول — تُقرأ عرضاً تجاريّاً بلا شراءٍ
+        // داخل التطبيق (3.1.1). التجربة نفسها تعمل كما هي، والحالة تظهر بعد الدخول.
+        if (!StorePolicy.hidePurchaseFlows)
+          Text('account.trial_note'.tr(), textAlign: TextAlign.center, style: AppType.muted(color: AppColors.textMid)),
       ],
     );
+  }
+
+  /// عرض خانة طريقة الدخول — صغيرةٌ ومتوسّطة (طلب المستخدم: أيقوناتٌ أصغر).
+  static const double _methodTileWidth = 76;
+
+  void _openEmployeeLogin() {
+    HapticFeedback.selectionClick();
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EmployeeLoginScreen()));
   }
 
   Widget _buildVerify() {
@@ -272,6 +383,13 @@ class _AccountLoginScreenState extends State<AccountLoginScreen> {
         AccountOutlineButton(label: 'account.verify_resend'.tr(), onTap: _busy ? null : _resend),
         const SizedBox(height: Sp.sm),
         AccountTextLink(label: 'account.use_another'.tr(), onTap: _busy ? null : _useAnother),
+        // App Store 5.1.1(v): حسابٌ أُنشئ ولم يُؤكَّد بريده يُحذف من هنا أيضاً (الخادم يحذف مستخدم
+        // المصادقة ولو لم يُنشأ صفّ الحساب بعد).
+        AccountTextLink(
+          label: 'account.delete_account'.tr(),
+          onTap: _busy ? null : () => confirmAndDeleteAccount(context),
+          danger: true,
+        ),
       ],
     );
   }

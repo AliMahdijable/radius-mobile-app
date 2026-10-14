@@ -22,7 +22,8 @@ enum SubscriberFilter {
   expired,
   debtors,
   nearExpiry,
-  onlineNoPlan
+  onlineNoPlan,
+  neglected
 }
 
 class FilterChipsBar extends StatefulWidget {
@@ -110,6 +111,10 @@ class _FilterChipsBarState extends State<FilterChipsBar> {
         LucideIcons.creditCard, AppColors.warning),
     _ChipDef(SubscriberFilter.nearExpiry, 'subscribers.filter_near_expiry',
         LucideIcons.triangleAlert, AppColors.warning),
+    // «مهمَل» — حسابٌ لم يُفعَّل قطّ (بطاقة فارغة من الخادم). رمادي
+    // خافت لأنّه حسابٌ خامل لا حالةَ له (لا متّصل ولا منتهٍ ولا مدين).
+    _ChipDef(SubscriberFilter.neglected, 'subscribers.filter_neglected',
+        LucideIcons.ban, AppColors.textMid),
   ];
 
   @override

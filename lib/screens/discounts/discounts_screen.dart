@@ -3,14 +3,16 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/discounts_api.dart';
 import '../../api/subscribers_api.dart';
+import '../../core/util/amount_input.dart';
 import '../../core/util/format.dart';
+import '../../core/widgets/design_sheet.dart';
 import '../../models/subscriber.dart';
 import '../../services/permissions_service.dart';
+import '../../services/subscriber_events.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'sheets/existing_discounts_sheet.dart';
-import '../../core/util/amount_input.dart';
 
 /// شاشة الخصومات — مطلب 2026-06-11 (تصميم جديد):
 ///   • الـscreen الأساسية = browse + apply: قيمة الخصم + بحث + جميع
@@ -44,6 +46,8 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
   final Set<String> _selected = {};
   String _query = '';
 
+  bool get _canManage => Perms.has('discounts.manage');
+
   @override
   void initState() {
     super.initState();
@@ -68,16 +72,22 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
     final results = await Future.wait([
       SubscribersApi.loadAll(),
       DiscountsApi.list(),
+      // سعر الباقة لكلّ كارت — القائمة لا تحمله دائماً والكتالوج يملؤه
+      // (كما تفعل شاشتا المشتركين والأسعار). به يُحسب «سعر البيع الحالي».
+      SubscribersApi.loadPackages(),
     ]);
     if (!mounted) return;
     final subs = results[0] as List<Subscriber>?;
     final discounts = results[1] as List<Discount>;
+    final packages = results[2] as Map<String, PackageInfo>? ?? const {};
     final map = <String, num>{};
     for (final d in discounts) {
       map[d.subscriberUsername.toLowerCase()] = d.discountAmount;
     }
     setState(() {
-      _all = subs ?? const [];
+      _all = (subs ?? const <Subscriber>[])
+          .map((s) => s.enrichWithPackages(packages))
+          .toList();
       _existing = map;
       _loading = false;
     });
@@ -198,13 +208,22 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
       _selected.clear();
       _amountCtrl.clear();
       _amount = 0;
+      // الخصم غيّر سعر البيع للمشتركين — أسقِط كاش القائمة ونبّه الشاشات
+      // (قائمة المشتركين · الأسعار · التفاصيل) فتعرض السعر الجديد، كما
+      // يفعل شيت الخصم الفرديّ (quick_discount_sheet).
+      SubscriberEvents.notifyChange();
       _load();
     }
   }
 
   Future<void> _openExistingDiscounts() async {
     final changed = await showExistingDiscountsSheet(context);
-    if (changed == true) _load();
+    // الشيت يرجّع true لو عُدِّل/حُذف خصمٌ فيه — بثٌّ واحدٌ عند الإغلاق
+    // يجمع كلّ تعديلاته بدل بثٍّ لكلّ صفٍّ على حدة.
+    if (changed == true) {
+      SubscriberEvents.notifyChange();
+      _load();
+    }
   }
 
   Future<void> _confirmDeleteAll() async {
@@ -247,7 +266,11 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
         behavior: SnackBarBehavior.floating,
       ),
     );
-    if (r.ok) _load();
+    if (r.ok) {
+      // حذف كلّ الخصومات يُعيد أسعار البيع لأصلها — نبّه الشاشات الأخرى.
+      SubscriberEvents.notifyChange();
+      _load();
+    }
   }
 
   @override
@@ -281,7 +304,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
                   // مطلب 2026-06-11: زر "حذف الكل" يختفي إذا الموظف
                   // ما عنده discounts.manage. لو الاثنين ما متوفرة
                   // (نادر — discounts.view بس)، الـRow كله يختفي.
-                  if (Perms.has('discounts.manage'))
+                  if (_canManage)
                     Row(
                       children: [
                         Expanded(
@@ -316,8 +339,10 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
                       color: accent,
                       onTap: _openExistingDiscounts,
                     ),
-                  const SizedBox(height: Sp.md),
-                  _amountField(accent),
+                  if (_canManage) ...[
+                    const SizedBox(height: Sp.md),
+                    _amountField(accent),
+                  ],
                   const SizedBox(height: Sp.sm),
                   _searchField(),
                   const SizedBox(height: 8),
@@ -365,50 +390,26 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
           ],
         ),
       ),
-      // زر التطبيق ثابت أسفل الشاشة. يتفعّل لما يكون في amount + في
-      // مشتركون مختارون. مطلب 2026-06-11: يختفي بالكامل لو الموظف
-      // ما عنده discounts.manage (يقدر بس يشوف).
-      bottomNavigationBar: !Perms.has('discounts.manage')
+      // زرّ التطبيق ثابت أسفل الشاشة — زرّ النظام نفسه (SheetFooterBar)
+      // كشاشة الأسعار، فيتطابق الشريطان. يتفعّل مع amount + مشتركين
+      // مختارين، ويختفي كاملاً لمن لا يملك discounts.manage (يشاهد فقط).
+      bottomNavigationBar: !_canManage
           ? null
-          : SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.md),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton.icon(
-                    onPressed:
-                        (_amount > 0 && _selected.isNotEmpty && !_submitting)
-                            ? _submit
-                            : null,
-                    icon: _submitting
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppColors.onBrand,
-                            ),
-                          )
-                        : const Icon(LucideIcons.percent, size: 16),
-                    label: Text(
-                      _submitting
-                          ? 'جاري التطبيق...'
-                          : (_amount > 0 && _selected.isNotEmpty
-                              ? 'تطبيق ${_fmt(_amount)} على ${_selected.length}'
-                              : 'تطبيق الخصم'),
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w700, fontSize: 14, height: 1.3),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: accent,
-                      foregroundColor: AppColors.onBrand,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(R.md),
-                      ),
-                    ),
-                  ),
+          : ColoredBox(
+              color: AppColors.surface,
+              child: SafeArea(
+                top: false,
+                child: SheetFooterBar(
+                  label: _submitting
+                      ? 'جاري التطبيق...'
+                      : (_amount > 0 && _selected.isNotEmpty
+                          ? 'تطبيق ${_fmt(_amount)} على ${_selected.length}'
+                          : 'تطبيق الخصم'),
+                  icon: LucideIcons.percent,
+                  color: accent,
+                  busy: _submitting,
+                  enabled: _amount > 0 && _selected.isNotEmpty,
+                  onPressed: _submit,
                 ),
               ),
             ),
@@ -453,10 +454,14 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
                   '${_existing.length} خصم نشط',
                   style: AppType.title(color: AppColors.textHi)
                       .copyWith(fontSize: 17, letterSpacing: -0.3),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   'إجمالي ${formatIQD(_totalDiscount)} د.ع',
                   style: AppType.muted().copyWith(fontSize: 11),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -564,23 +569,30 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
   Widget _selectionBar(Color accent, int filteredCount) {
     return Row(
       children: [
-        _miniBtn(
-          icon: LucideIcons.listChecks,
-          label: 'اختر المرئيين',
-          onTap: filteredCount > 0 ? _selectAllVisible : null,
-          color: accent,
-        ),
+        if (_canManage) ...[
+          _miniBtn(
+            icon: LucideIcons.listChecks,
+            label: 'اختر المرئيين',
+            onTap: filteredCount > 0 ? _selectAllVisible : null,
+            color: accent,
+          ),
+          const SizedBox(width: 6),
+          _miniBtn(
+            icon: LucideIcons.eraser,
+            label: 'مسح',
+            onTap: _selected.isEmpty ? null : _clearSelection,
+            color: AppColors.textMid,
+          ),
+        ],
         const SizedBox(width: 6),
-        _miniBtn(
-          icon: LucideIcons.eraser,
-          label: 'مسح',
-          onTap: _selected.isEmpty ? null : _clearSelection,
-          color: AppColors.error,
-        ),
-        const Spacer(),
-        Text(
-          '${_selected.length} محدد · $filteredCount نتيجة',
-          style: AppType.muted().copyWith(fontSize: 11),
+        Expanded(
+          child: Text(
+            '${_selected.length} محدد · $filteredCount نتيجة',
+            style: AppType.muted().copyWith(fontSize: 11),
+            textAlign: TextAlign.end,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );
@@ -637,6 +649,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
             Text(
               _query.isEmpty ? 'لا يوجد مشتركون' : 'لا توجد نتائج لـ "$_query"',
               style: AppType.muted().copyWith(fontSize: 12.5),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -718,6 +731,9 @@ class _ActionCard extends StatelessWidget {
                   ],
                 ),
               ),
+              Icon(LucideIcons.chevronLeft,
+                  size: 16,
+                  color: disabled ? AppColors.textLow : AppColors.textMid),
             ],
           ),
         ),
@@ -749,6 +765,10 @@ class _SubscriberCard extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     final hasName =
         sub.fullName.trim().isNotEmpty && sub.fullName != sub.username;
+    // «سعر البيع الحالي» = سعر الباقة ناقص خصم هذه الشاشة (جدول المدير)،
+    // لا ينزل تحت الصفر. نمرّر خصم الشاشة نفسه الذي تعرضه الشارة ليبقيا
+    // متّسقين. null حين لا يُعرَف سعر الباقة.
+    final currentSale = sub.saleAfter(existingDiscount ?? 0);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -799,21 +819,22 @@ class _SubscriberCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-              // الـfooter: الباقة + badge الخصم الموجود.
+              // الـfooter: الباقة + «سعر البيع الحالي» (بعد الخصم) + شارة
+              // الخصم المطبّق. مطابقٌ بنيةً لصفّ شاشة الأسعار.
               Row(
                 children: [
-                  if ((sub.profileName ?? '').isNotEmpty)
-                    Expanded(
-                      child: Text(
-                        sub.profileName!,
-                        style: AppType.label(color: AppColors.success).copyWith(
-                            fontSize: 9.5, fontWeight: FontWeight.w700),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    )
-                  else
-                    const Spacer(),
+                  Expanded(
+                    child: Text(
+                      [
+                        if ((sub.profileName ?? '').isNotEmpty) sub.profileName!,
+                        if (currentSale != null) formatIQD(currentSale),
+                      ].join(' · '),
+                      style: AppType.label(color: AppColors.success).copyWith(
+                          fontSize: 9.5, fontWeight: FontWeight.w700),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                   if (existingDiscount != null && existingDiscount! > 0)
                     Container(
                       padding: const EdgeInsets.symmetric(

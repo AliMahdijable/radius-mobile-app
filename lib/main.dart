@@ -19,10 +19,12 @@ import 'services/inbox_service.dart';
 import 'services/locale_service.dart';
 import 'services/manual_wa_prefs.dart';
 import 'services/notification_service.dart';
+import 'services/active_company.dart';
 import 'services/app_version.dart';
 import 'services/badge_service.dart';
 import 'services/permissions_service.dart';
 import 'services/print_prefs.dart';
+import 'services/provider_service.dart';
 import 'services/theme_service.dart';
 import 'theme/colors.dart';
 import 'theme/spacing.dart';
@@ -57,6 +59,12 @@ void main() async {
     AppVersion.load(),
     // Permissions — يعيد تحميل الـcache من الجلسة السابقة للـgating.
     PermissionsService.init(),
+    // Provider — يستعيد مزوّد الساس (EarthLink؟) فيصحّ حجب الشاشات فوراً
+    // للدخول التلقائيّ قبل أن يردّ /api/auth/me.
+    ProviderService.init(),
+    // الشركة المفتوحة — شريطها أعلى MainShell جاهزٌ من أوّل إطار للدخول
+    // التلقائيّ (بلا قفزة تخطيط حين يصل متأخّراً).
+    ActiveCompany.init(),
     // Inbox — cache الإشعارات قبل أي رسالة FCM.
     InboxService.init(),
     // Badge — يزامن العدد على أيقونة التطبيق (iOS badge لا يتراكم للأبد).
@@ -260,7 +268,7 @@ class _MyServicesAppState extends State<MyServicesApp>
         );
 
         return MaterialApp(
-          title: 'MyServices Radius',
+          title: 'MyServices Pro',
           debugShowCheckedModeBanner: false,
           themeMode: mode,
           theme: _buildTheme(Brightness.light),
@@ -295,7 +303,7 @@ class _MyServicesAppState extends State<MyServicesApp>
                 final f = FocusManager.instance.primaryFocus;
                 if (f != null && f.hasFocus) f.unfocus();
               },
-              child: child ?? const SizedBox.shrink(),
+              child: _TabletFrame(child: child ?? const SizedBox.shrink()),
             ),
           ),
           home: const SplashScreen(),
@@ -414,5 +422,44 @@ class _MyServicesAppState extends State<MyServicesApp>
 
     AppColors.setDarkMode(wasDark);
     return theme;
+  }
+}
+
+/// الآيباد: التطبيق مصمَّمٌ للهاتف، فعلى الشاشة العريضة يُعرض في عمودٍ وسطيّ بعرضٍ
+/// مريح بدل أن تتمدّد البطاقات والصفوف على عرض الشاشة كلّه (أرقامٌ بعيدةٌ عن
+/// عناوينها وفراغاتٌ واسعة). يُضيَّق `MediaQuery` معه فيحسب كلّ ما يعتمد على العرض
+/// (الشبكات والجداول والمودلات) على عرض العمود. الهاتف (أقصر بُعدٍ < 600) لا
+/// يتغيّر ولا في الوضع الأفقيّ، ولا نافذة آيباد ضيّقة (Split View).
+class _TabletFrame extends StatelessWidget {
+  const _TabletFrame({required this.child});
+  final Widget child;
+
+  static const double _maxWidth = 720;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final mq = MediaQuery.of(context);
+    if (mq.size.shortestSide < 600 || mq.size.width <= _maxWidth) return child;
+    return ColoredBox(
+      color: AppColors.bg,
+      child: Center(
+        child: SizedBox(
+          width: _maxWidth,
+          // حدٌّ جانبيّ خفيف يجعل العمود لوحةً مقصودة: شريط العنوان وشريط التبويب
+          // الأبيضان ينتهيان عنده بدل أن يبدوا مقطوعين وسط الشاشة.
+          child: DecoratedBox(
+            position: DecorationPosition.foreground,
+            decoration: BoxDecoration(
+              border: Border.symmetric(vertical: BorderSide(color: AppColors.border)),
+            ),
+            child: MediaQuery(
+              data: mq.copyWith(size: Size(_maxWidth, mq.size.height)),
+              child: child,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

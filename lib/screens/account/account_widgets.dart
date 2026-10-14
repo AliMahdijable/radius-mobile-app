@@ -1,13 +1,43 @@
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/platform/store_policy.dart';
 import '../../services/app_version.dart';
+import '../../services/theme_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 
 /// عناصر شاشات طبقة الحساب — بنفس لغة شاشة الدخول (`login_screen.dart`):
 /// كارت سطحٍ أبيض بحواف R.xl، حقولٌ بتعبئة surfaceInput، وزرٌّ أساسيّ بارتفاع 54.
+
+/// سياسة الخصوصيّة (App Store 5.1.1(i)) — الرابط نفسه في App Store Connect.
+const String kPrivacyPolicyUrl = 'https://pro.mysvcs.net/privacy';
+
+/// صفحة الدعم (App Store 1.5) — تواصلٌ عامّ بعيداً عن سياق الاشتراك؛ نفسها رابط Support URL.
+const String kSupportUrl = 'https://pro.mysvcs.net/support';
+
+/// يفتح سياسة الخصوصيّة داخل التطبيق (SFSafariViewController / Custom Tab)،
+/// وإن تعذّر فبالمتصفّح الخارجيّ.
+Future<void> openPrivacyPolicy(BuildContext context) => _openInApp(context, kPrivacyPolicyUrl);
+
+/// يفتح صفحة الدعم بالطريقة نفسها.
+Future<void> openSupportPage(BuildContext context) => _openInApp(context, kSupportUrl);
+
+Future<void> _openInApp(BuildContext context, String url) async {
+  final uri = Uri.parse(url);
+  var ok = false;
+  try {
+    ok = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+  } catch (_) {/* نجرّب الخارجيّ */}
+  if (!ok) {
+    try {
+      ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {/* يُعرض الخطأ أدناه */}
+  }
+  if (!ok && context.mounted) showAccountSnack(context, 'account.err_network'.tr(), error: true);
+}
 
 void showAccountSnack(BuildContext context, String msg, {bool error = false}) {
   final m = ScaffoldMessenger.maybeOf(context);
@@ -24,8 +54,9 @@ void showAccountSnack(BuildContext context, String msg, {bool error = false}) {
 }
 
 /// نصٌّ قد يكون مفتاح ترجمة (`account.…`) أو رسالةً عربيّة جاهزة من الخادم.
+/// رسالة الخادم على آيفون تمرّ بـ[StorePolicy.storeSafe] (لا «فعّل كوداً»/«رقِّ باقتك»).
 String accountText(String keyOrMessage) =>
-    keyOrMessage.startsWith('account.') ? keyOrMessage.tr() : keyOrMessage;
+    keyOrMessage.startsWith('account.') ? keyOrMessage.tr() : StorePolicy.storeSafe(keyOrMessage);
 
 class AccountScaffold extends StatelessWidget {
   const AccountScaffold({
@@ -36,6 +67,8 @@ class AccountScaffold extends StatelessWidget {
     this.onBack,
     this.showLogo = true,
     this.footer = true,
+    this.onRefresh,
+    this.compact = false,
   });
 
   final String title;
@@ -45,6 +78,14 @@ class AccountScaffold extends StatelessWidget {
   final bool showLogo;
   final bool footer;
 
+  /// سحبٌ للتحديث — لقائمةٍ تتغيّر من خارج الشاشة («أجهزتي»: جهازٌ يدخل أو
+  /// يُزال من جهازٍ آخر). null = بلا سحب، كما كانت الشاشات كلّها.
+  final Future<void> Function()? onRefresh;
+
+  /// شاشة الدخول: شعارٌ أصغر ومسافاتٌ أقلّ لتتّسع الشاشة كلّها بلا تمرير على
+  /// هاتفٍ متوسّط (آيفون ١٣) — طلب المستخدم ٢٠٢٦-١٠-١٤ («بيها سكرول كلش هواي»).
+  final bool compact;
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
@@ -52,34 +93,46 @@ class AccountScaffold extends StatelessWidget {
       backgroundColor: AppColors.bg,
       resizeToAvoidBottomInset: true,
       body: SafeArea(
-        child: SingleChildScrollView(
+        child: _refreshable(SingleChildScrollView(
+          // المحتوى القصير لا يُسحب بدونها، فلا يصل السحب إلى المؤشّر.
+          physics: onRefresh == null ? null : const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.symmetric(horizontal: Sp.xxl, vertical: Sp.xl),
-          child: Column(
+          // الآيباد: عمودٌ وسطيّ بعرض نموذجٍ مريح بدل أزرارٍ ممتدّة على عرض الشاشة كلّه.
+          // الهاتف أضيق من الحدّ فلا يتغيّر فيه شيء.
+          child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 560), child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (onBack != null)
-                Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: IconButton(
-                    onPressed: onBack,
-                    icon: Icon(Icons.arrow_back_rounded, color: AppColors.textHi),
-                    tooltip: 'common.back'.tr(),
-                  ),
-                ),
+              // شريطٌ علويّ: الرجوع (إن وُجد) في بداية الاتجاه، ومبدّل
+              // المظهر في نهايته — فالمستخدم يختار فاتح/داكن/تلقائي من
+              // شاشات البداية قبل الدخول، لا من الإعدادات وحدها (كان
+              // التطبيق يبقى داكناً حتى يسجّل الدخول ويصل الإعدادات).
+              Row(
+                children: [
+                  if (onBack != null)
+                    IconButton(
+                      onPressed: onBack,
+                      icon: Icon(Icons.arrow_back_rounded, color: AppColors.textHi),
+                      tooltip: 'common.back'.tr(),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  const Spacer(),
+                  const AccountThemeToggle(),
+                ],
+              ),
               if (showLogo) ...[
-                const SizedBox(height: Sp.lg),
-                const AccountLogo(),
-                const SizedBox(height: Sp.xl),
+                SizedBox(height: compact ? Sp.xs : Sp.lg),
+                AccountLogo(size: compact ? 84 : 104),
+                SizedBox(height: compact ? Sp.md : Sp.xl),
               ],
               Text(title, textAlign: TextAlign.center, style: AppType.title(color: AppColors.textHi)),
               if (subtitle != null) ...[
                 const SizedBox(height: Sp.xs),
                 Text(subtitle!, textAlign: TextAlign.center, style: AppType.subtitle(color: AppColors.textMid)),
               ],
-              const SizedBox(height: Sp.xl),
+              SizedBox(height: compact ? Sp.lg : Sp.xl),
               ...children,
               if (footer) ...[
-                const SizedBox(height: Sp.huge),
+                SizedBox(height: compact ? Sp.lg : Sp.huge),
                 Center(
                   child: Text(
                     '${AppVersion.shortVersion}  •  ${'login.footer_copyright'.tr()}',
@@ -89,9 +142,79 @@ class AccountScaffold extends StatelessWidget {
                 const SizedBox(height: Sp.lg),
               ],
             ],
-          ),
-        ),
+          ))),
+        )),
       ),
+    );
+  }
+
+  Widget _refreshable(Widget scroll) {
+    final refresh = onRefresh;
+    if (refresh == null) return scroll;
+    return RefreshIndicator(color: AppColors.brand, onRefresh: refresh, child: scroll);
+  }
+}
+
+/// مبدّل المظهر على شاشات البداية (تلقائي/فاتح/داكن) — ثلاث حبّاتٍ
+/// صغيرة، المختارة مميّزة بلون العلامة. النقر يحفظ فوراً عبر
+/// [ThemeService.setMode] فيُعاد بناء كامل التطبيق (`main.dart`) ويتبدّل
+/// المظهر في الحال — بلا حاجةٍ لدخولٍ أو وصولٍ لشاشة الإعدادات.
+class AccountThemeToggle extends StatelessWidget {
+  const AccountThemeToggle({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: ThemeService.notifier,
+      builder: (context, mode, _) {
+        Widget seg(ThemeMode m, IconData icon) {
+          final selected = mode == m;
+          final label = ThemeService.labelFor(m);
+          return Semantics(
+            button: true,
+            selected: selected,
+            label: label,
+            child: Tooltip(
+              message: label,
+              child: Material(
+                color: selected ? AppColors.brand : Colors.transparent,
+                borderRadius: BorderRadius.circular(R.pill),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: selected ? null : () => ThemeService.setMode(m),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: Sp.md, vertical: Sp.sm),
+                    child: Icon(
+                      icon,
+                      size: 18,
+                      color: selected ? AppColors.onBrand : AppColors.textMid,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        return Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(R.pill),
+            border: Border.all(color: AppColors.border),
+          ),
+          padding: const EdgeInsets.all(3),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              seg(ThemeMode.system, Icons.brightness_auto_rounded),
+              seg(ThemeMode.light, Icons.light_mode_rounded),
+              seg(ThemeMode.dark, Icons.dark_mode_rounded),
+            ],
+          ),
+        );
+      },
     );
   }
 }

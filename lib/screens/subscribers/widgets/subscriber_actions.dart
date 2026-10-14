@@ -1,6 +1,9 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/widgets/design_sheet.dart';
+import '../../../core/widgets/permission_locked.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -18,6 +21,9 @@ import '../../../theme/typography.dart';
 /// ⚠️ لا عمليّة تُسقَط: كلّ ما كان في الشبكة القديمة موجود إمّا كبلاطة
 /// أو داخل الشيت. بوّابات `Perms` تبقى كما هي — بناء القائمة يحصل في
 /// الشاشة، وهذا الملفّ يعرض ما يُسلَّم له فقط.
+///
+/// بلاغ ٢٠٢٦-١٠-١٤: إجراءٌ بلا مفتاح لا يختفي بل يُسلَّم بـ`locked: true`،
+/// فيبقى في مكانه خافتاً بقفل، ونقرته رسالة القفل وحدها (لا شيت ولا طلب).
 
 /// عنصر إجراء واحد — يُستعمل في البلاطة وفي صفّ الشيت معاً.
 class SubAction {
@@ -28,6 +34,7 @@ class SubAction {
     this.color,
     this.meta,
     this.busy = false,
+    this.locked = false,
   });
 
   final IconData icon;
@@ -46,6 +53,10 @@ class SubAction {
 
   /// أثناء التنفيذ: يستبدل الأيقونة بمؤشّر دائري ويقفل النقر.
   final bool busy;
+
+  /// لا يملك المستخدم مفتاحه: يبقى في مكانه خافتاً بقفل، ونقرته رسالة
+  /// القفل. ⚠️ يغلب `onTap == null` — المقفل ليس معطّلاً صامتاً.
+  final bool locked;
 }
 
 /// مجموعة مسمّاة داخل شيت «إجراءات أخرى».
@@ -99,14 +110,17 @@ class _ActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final enabled = action.onTap != null && !action.busy;
+    final locked = action.locked;
+    final enabled = !locked && action.onTap != null && !action.busy;
     final color =
         enabled ? (action.color ?? AppColors.brandAccent) : AppColors.textHint;
-    return Material(
+    final tile = Material(
       color: AppColors.surface,
       borderRadius: BorderRadius.circular(R.lg),
       child: InkWell(
-        onTap: enabled ? action.onTap : null,
+        onTap: locked
+            ? () => showNoPermission(context, action: true)
+            : (enabled ? action.onTap : null),
         borderRadius: BorderRadius.circular(R.lg),
         child: Ink(
           decoration: BoxDecoration(
@@ -121,15 +135,18 @@ class _ActionTile extends StatelessWidget {
               SizedBox(
                 height: 22,
                 width: 22,
-                child: action.busy
-                    ? Padding(
-                        padding: const EdgeInsets.all(2),
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: color,
-                        ),
-                      )
-                    : Icon(action.icon, size: 22, color: color),
+                child: locked
+                    ? PermLockBadge(
+                        child: Icon(action.icon, size: 22, color: color))
+                    : action.busy
+                        ? Padding(
+                            padding: const EdgeInsets.all(2),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: color,
+                            ),
+                          )
+                        : Icon(action.icon, size: 22, color: color),
               ),
               const SizedBox(height: Sp.sm),
               Text(
@@ -146,6 +163,13 @@ class _ActionTile extends StatelessWidget {
         ),
       ),
     );
+    if (!locked) return tile;
+    return Semantics(
+      button: true,
+      label: 'locked.a11y'.tr(args: [action.label]),
+      excludeSemantics: true,
+      child: tile,
+    );
   }
 }
 
@@ -160,6 +184,7 @@ class SubscriberPrimaryAction extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.busy = false,
+    this.locked = false,
   });
 
   final IconData icon;
@@ -167,23 +192,30 @@ class SubscriberPrimaryAction extends StatelessWidget {
   final VoidCallback? onTap;
   final bool busy;
 
+  /// بلا مفتاح التفعيل: يفقد تعبئته ويحمل قفلاً، ونقرته رسالة القفل.
+  final bool locked;
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final enabled = onTap != null && !busy;
-    return SizedBox(
+    final enabled = !locked && onTap != null && !busy;
+    final button = SizedBox(
       height: H.button,
       child: Material(
         color: enabled ? AppColors.brand : AppColors.surfaceDisabled,
         borderRadius: BorderRadius.circular(R.button),
         child: InkWell(
-          onTap: enabled ? onTap : null,
+          onTap: locked
+              ? () => showNoPermission(context, action: true)
+              : (enabled ? onTap : null),
           borderRadius: BorderRadius.circular(R.button),
           child: Center(
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (busy)
+                if (locked)
+                  Icon(LucideIcons.lock, size: 20, color: AppColors.textHint)
+                else if (busy)
                   const SizedBox(
                     width: 20,
                     height: 20,
@@ -208,6 +240,13 @@ class SubscriberPrimaryAction extends StatelessWidget {
           ),
         ),
       ),
+    );
+    if (!locked) return button;
+    return Semantics(
+      button: true,
+      label: 'locked.a11y'.tr(args: [label]),
+      excludeSemantics: true,
+      child: button,
     );
   }
 }
@@ -307,11 +346,15 @@ class _ActionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final enabled = action.onTap != null && !action.busy;
+    final locked = action.locked;
+    final enabled = !locked && action.onTap != null && !action.busy;
     final color =
         enabled ? (action.color ?? AppColors.textBody) : AppColors.textHint;
-    return InkWell(
-      onTap: enabled
+    final row = InkWell(
+      // المقفل لا يغلق الشيت: الرسالة تطفو فوقه ويبقى المدير في مكانه.
+      onTap: locked
+          ? () => showNoPermission(context, action: true)
+          : enabled
           ? () {
               // نغلق الشيت أوّلاً ثمّ ننفّذ — كلّ إجراء تقريباً يفتح شيتاً
               // آخر، وتركُ هذا مفتوحاً تحته يُنتج طبقتَي scrim.
@@ -326,7 +369,7 @@ class _ActionRow extends StatelessWidget {
             SizedBox(
               width: 19,
               height: 19,
-              child: action.busy
+              child: !locked && action.busy
                   ? Padding(
                       padding: const EdgeInsets.all(1.5),
                       child: CircularProgressIndicator(
@@ -344,7 +387,7 @@ class _ActionRow extends StatelessWidget {
                     .copyWith(fontWeight: FontWeight.w500),
               ),
             ),
-            if ((action.meta ?? '').isNotEmpty) ...[
+            if (!locked && (action.meta ?? '').isNotEmpty) ...[
               const SizedBox(width: Sp.sm),
               Text(
                 action.meta!,
@@ -354,11 +397,21 @@ class _ActionRow extends StatelessWidget {
               ),
             ],
             const SizedBox(width: Sp.x6),
-            Icon(Icons.chevron_left_rounded,
-                size: 17, color: AppColors.borderStrong),
+            if (locked)
+              const PermLockIcon(size: 14)
+            else
+              Icon(Icons.chevron_left_rounded,
+                  size: 17, color: AppColors.borderStrong),
           ],
         ),
       ),
+    );
+    if (!locked) return row;
+    return Semantics(
+      button: true,
+      label: 'locked.a11y'.tr(args: [action.label]),
+      excludeSemantics: true,
+      child: row,
     );
   }
 }

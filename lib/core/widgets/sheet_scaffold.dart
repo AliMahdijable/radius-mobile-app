@@ -45,6 +45,28 @@ Future<void> showSheetSnack(
   await entry.done;
 }
 
+/// Same floating snack, but the caller supplies the root [OverlayState]
+/// directly instead of a `BuildContext`. Use this when the snack must
+/// outlive the widget that triggered it — e.g. a follow-up notice shown
+/// *after* a sheet pops, where the sheet's own context is already defunct
+/// so `Overlay.maybeOf(context)` would throw. Capture the overlay while
+/// the context is still mounted, then show on it later.
+Future<void> showSheetSnackOn(
+  OverlayState overlay,
+  String message, {
+  bool isError = false,
+  Duration duration = const Duration(seconds: 3),
+}) async {
+  if (!overlay.mounted) return;
+  final entry = _SheetSnackEntry(
+    message: message,
+    isError: isError,
+    duration: duration,
+  );
+  overlay.insert(entry.overlay);
+  await entry.done;
+}
+
 class _SheetSnackEntry {
   _SheetSnackEntry({
     required this.message,

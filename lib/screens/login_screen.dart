@@ -7,6 +7,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:local_auth/local_auth.dart';
 
 import '../api/account_api.dart';
+import '../core/platform/store_policy.dart';
+import '../core/util/bidi.dart';
 import '../widgets/sas_captcha_sheet.dart';
 import '../api/auth_api.dart';
 import '../services/account_service.dart';
@@ -19,6 +21,7 @@ import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'account/account_gate_screen.dart';
+import 'account/my_devices_screen.dart';
 import 'main_shell.dart';
 
 /// Login — Soft Pastel + Premium. Wired to https://rad.mysvcs.net/api/auth/login.
@@ -29,13 +32,35 @@ import 'main_shell.dart';
 /// (`!semantics.parentDataDirty`). Replaced with a flat Column inside
 /// SingleChildScrollView — no Spacer, no min-height tricks.
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key, this.initialSasUrl, this.initialUsername, this.fromCompanies = false});
+  const LoginScreen({
+    super.key,
+    this.initialSasUrl,
+    this.initialUsername,
+    this.initialCompanyLabel,
+    this.initialSasCode,
+    this.fromCompanies = false,
+  });
 
   /// Pro البند ٤ ③: تُفتح من «شركاتي» — لإضافة شركة، أو لدخول شركةٍ
   /// مربوطة كلمةُ سرّها غير محفوظة (الرابط واليوزر معبّآن).
   final String? initialSasUrl;
   final String? initialUsername;
+
+  /// اسم الشركة المربوطة وكودها (من «شركاتي») — يُعرض في بطاقة الشركة بدل
+  /// رابطها، ويُنسب للجلسة (شريط الشركة بعد الدخول).
+  final String? initialCompanyLabel;
+  final String? initialSasCode;
   final bool fromCompanies;
+
+  /// منفذا الاختبار وحده: مصدرا اسم الشركة (دليل الشركات، والشركات المربوطة
+  /// بالحساب). `AccountApi` يمرّ بحساب Firebase وبالشبكة، ولا يعمل أيٌّ منهما
+  /// في `flutter test`.
+  @visibleForTesting
+  static Future<List<DirectoryCompany>> Function() directorySource =
+      AccountApi.sasDirectory;
+  @visibleForTesting
+  static Future<List<LinkedCompany>> Function() linkedSource =
+      AccountApi.companies;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -54,17 +79,103 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _remember = true;
 
   // Pro البند ٤ ③: «إضافة شركة» ← اختيار من دليل الشركات (يضبطه المالك)، وفي
-  // الآخر «شركة أخرى» برابطٍ يدويّ. دخول شركةٍ مربوطة (رابطها معروف) يبقى حقلاً.
+  // الآخر «شركة أخرى» برابطٍ يدويّ. دخول شركةٍ معروفة (مربوطة) ← بطاقةٌ باسمها.
   bool get _pickerMode => widget.fromCompanies && (widget.initialSasUrl ?? '').isEmpty;
   List<DirectoryCompany>? _directory;
   DirectoryCompany? _picked;
   bool _manualLink = false;
   String? _pendingUrl; // حسابٌ محفوظ اختير قبل وصول الدليل
 
-  /// يختار الشركة من رابطها: من الدليل إن وُجدت، وإلّا «شركة أخرى» بالرابط.
-  void _selectCompanyUrl(String url) {
+  // الشركة المعروفة خارج «إضافة شركة» (مربوطةٌ من «شركاتي»، أو شركة حسابٍ
+  // محفوظ) تُعرض **باسمها** في بطاقةٍ للقراءة فقط بدل حقل الرابط؛ والرابط يبقى
+  // مخفيّاً في [_sasCtrl] فيجري الدخول كما كان. مضيفٌ فارغ ← لا شركة معروفة ← الحقل.
+  String _fixedHost = '';
+  String? _fixedName; // null ← لا اسم (بعدُ): المضيف وحده بخطٍّ خافت
+  String? _fixedCode;
+  int _nameSeq = 0; // حسمٌ يصل بعد تبديل الشركة لا يُكتب على غيرها
+
+  /// يثبّت الشركة المعروفة ويحسم اسمها بلا حجبٍ للنموذج: أفضل اسمٍ معروف
+  /// يُعرض فوراً، والأدقّ يحلّ محلّه حين يصل. الترتيب: اسمها من «شركاتي» ←
+  /// دليل الشركات (بالمضيف) ← الشركات المربوطة بالحساب ← وإلّا المضيف وحده.
+  void _fixCompany(String url) {
     _sasCtrl.text = url;
-    if (!_pickerMode) return;
+    final host = CompanyCredsStore.hostOf(url);
+    if (host.isEmpty) {
+      // رابطٌ بلا مضيف — لا شركة تُسمّى ← الحقل نفسه قابلاً للتعديل، فلا تبقى
+      // بطاقةٌ باسم شركةٍ غير التي يُرسَل رابطها.
+      _fixedName = _fixedCode = null;
+      _fixedHost = '';
+      _nameSeq++;
+      return;
+    }
+    if (host == _fixedHost) return; // الشركة نفسها: اسمها (أو حسمه الجاري) باقٍ
+    _fixedHost = host;
+    final seq = ++_nameSeq;
+    final initUrl = widget.initialSasUrl ?? '';
+    final linked = initUrl.isNotEmpty && CompanyCredsStore.hostOf(initUrl) == host;
+    final label = widget.initialCompanyLabel?.trim() ?? '';
+    _fixedName = linked ? _realName(label) : null;
+    _fixedCode = linked ? widget.initialSasCode : null;
+    if (_fixedName != null) return;
+    // اسمٌ من «شركاتي» لكنّه مضيف ← هي لا تعرف غيره، فلا تُسأل ثانيةً.
+    _resolveName(seq, host, askLinked: !(linked && label.isNotEmpty));
+  }
+
+  /// اسمٌ يصلح للعرض — لا فارغ، ولا مضيفٌ أو رابطٌ متنكّرٌ في اسم: «شركاتي»
+  /// تُرجع المضيف اسماً لشركةٍ ليست في الدليل.
+  static String? _realName(String? s) {
+    final t = s?.trim() ?? '';
+    if (t.isEmpty || t.contains('://') || _hostLike.hasMatch(t)) return null;
+    return t;
+  }
+
+  static final _hostLike = RegExp(r'^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+(:\d+)?$');
+
+  Future<void> _resolveName(int seq, String host, {required bool askLinked}) async {
+    bool stale() => !mounted || seq != _nameSeq;
+    // الاسم وحده يُحسم هنا؛ الكود المعروف (كود «شركاتي» الذي رُبط به الحساب)
+    // لا يُستبدل بكود صفٍّ آخر يشاركه المضيف — يُكمَّل فقط إن جُهل.
+    void apply(String name, String code) => setState(() {
+          _fixedName = name;
+          if (code.isNotEmpty && (_fixedCode ?? '').isEmpty) _fixedCode = code;
+        });
+    try {
+      final dir = await LoginScreen.directorySource();
+      if (stale()) return;
+      for (final c in dir) {
+        final name = c.name.trim();
+        if (name.isNotEmpty && CompanyCredsStore.hostOf(c.url) == host) {
+          apply(name, c.code);
+          return;
+        }
+      }
+    } catch (_) {
+      // لا دليل (شبكة/حساب) ← الخطوة التالية.
+    }
+    if (!askLinked || stale()) return;
+    try {
+      final linked = await LoginScreen.linkedSource();
+      if (stale()) return;
+      for (final c in linked) {
+        final name = _realName(c.label);
+        if (name != null && CompanyCredsStore.hostOf(c.sasUrl ?? '') == host) {
+          apply(name, c.sasCode);
+          return;
+        }
+      }
+    } catch (_) {
+      // يبقى المضيف — الاحتياط الأخير.
+    }
+  }
+
+  /// يختار الشركة من رابطها: من الدليل إن وُجدت، وإلّا «شركة أخرى» بالرابط.
+  /// وخارج «إضافة شركة» تُثبَّت باسمها في بطاقة الشركة ([_fixCompany]).
+  void _selectCompanyUrl(String url) {
+    if (!_pickerMode) {
+      _fixCompany(url);
+      return;
+    }
+    _sasCtrl.text = url;
     final dir = _directory;
     if (dir == null) {
       _pendingUrl = url;
@@ -79,7 +190,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _loadDirectory() async {
     try {
-      final list = await AccountApi.sasDirectory();
+      final list = await LoginScreen.directorySource();
       if (!mounted) return;
       setState(() {
         _directory = list;
@@ -124,7 +235,11 @@ class _LoginScreenState extends State<LoginScreen> {
     super.initState();
     _sasCtrl.text = widget.initialSasUrl ?? '';
     _userCtrl.text = widget.initialUsername ?? '';
-    if (_pickerMode) _loadDirectory();
+    if (_pickerMode) {
+      _loadDirectory();
+    } else if ((widget.initialSasUrl ?? '').isNotEmpty) {
+      _fixCompany(widget.initialSasUrl!); // شركةٌ معروفة ← باسمها لا برابطها
+    }
     // توكن الحساب يُجدَّد الآن بينما يكتب المستخدم — لا عند الضغط على «دخول».
     AccountService.idToken();
     if (_userCtrl.text.isNotEmpty) {
@@ -146,6 +261,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _showSnack(String msg, {bool error = false}) {
     if (!mounted) return;
+    // آيفون: رسالة الخادم بلا «فعّل كوداً»/«رقِّ باقتك» (حدّ الشركات، انتهاء الاشتراك).
+    msg = StorePolicy.storeSafe(msg);
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -159,6 +276,29 @@ class _LoginScreenState extends State<LoginScreen> {
         duration: const Duration(seconds: 3),
       ),
     );
+  }
+
+  /// الشركة المعروفة لهذا الدخول (من الدليل أو «شركاتي») — لشريط الشركة أعلى
+  /// الواجهة. لا تُنسب إلّا إن طابق الرابطُ المرسَل رابطَها: الحقل قابلٌ
+  /// للتعديل، واسمٌ خاطئ أسوأ من لا اسم (يُحسم حينها من «شركاتي»).
+  ({String? label, String? code}) _knownCompany(String sasUrl) {
+    final host = CompanyCredsStore.hostOf(sasUrl);
+    final p = _picked;
+    if (p != null && CompanyCredsStore.hostOf(p.url) == host) {
+      return (label: p.name, code: p.code);
+    }
+    // اسم بطاقة الشركة كما حُسم (من «شركاتي» أو الدليل أو الشركات المربوطة).
+    final name = _fixedName;
+    if (name != null && host.isNotEmpty && host == _fixedHost) {
+      return (label: name, code: _fixedCode);
+    }
+    final initUrl = widget.initialSasUrl ?? '';
+    if ((widget.initialCompanyLabel ?? '').isNotEmpty &&
+        initUrl.isNotEmpty &&
+        CompanyCredsStore.hostOf(initUrl) == host) {
+      return (label: widget.initialCompanyLabel, code: widget.initialSasCode);
+    }
+    return (label: null, code: null);
   }
 
   Future<void> _onLogin() async {
@@ -184,12 +324,16 @@ class _LoginScreenState extends State<LoginScreen> {
         // Pro البند ٤ ③: ما بعد الدخول في مكانٍ واحد (مع «شركاتي»): مسح بقايا
         // الجلسة السابقة ← حفظ الجلسة ورابط ساسها ← كلمة السرّ على الجهاز لهذه
         // الشركة ← الصلاحيّات ← FCM.
+        final sasUrl = _sasCtrl.text.trim();
+        final company = _knownCompany(sasUrl);
         final out = await SasLoginFlow.complete(
           result,
           username: user,
           password: pass,
-          sasUrl: _sasCtrl.text.trim(),
+          sasUrl: sasUrl,
           remember: _remember,
+          companyLabel: company.label,
+          sasCode: company.code,
         );
         if (!mounted) return;
         HapticFeedback.mediumImpact();
@@ -209,6 +353,12 @@ class _LoginScreenState extends State<LoginScreen> {
       case final LoginFailure f:
         if (f.isCancelled) return; // أغلق نافذة رمز الصورة — لا رسالة
         HapticFeedback.heavyImpact();
+        // حدّ الأجهزة — قبل البوّابة: كان رسالةً تحيل إلى «أجهزتي» غير موجودة
+        // ثمّ ارتداداً للبوّابة. الآن «أجهزتي» تحرّر مكاناً ويُعاد الدخول فوراً.
+        if (f.isDeviceLimit) {
+          if (await showDeviceLimitSheet(context, message: f.message) && mounted) await _onLogin();
+          return;
+        }
         // رفضٌ من الساس: نذكّر بالشركة المختارة — أكثر سببٍ له يوزر شركةٍ على ساس أخرى.
         final company = _picked?.name;
         _showSnack(
@@ -332,7 +482,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         sasCtrl: _sasCtrl,
                         onTap: _directory == null ? null : _openPicker,
                       )
-                    : null,
+                    : _fixedHost.isNotEmpty
+                        ? _KnownCompanyTile(name: _fixedName, host: _fixedHost)
+                        : null,
                 sasCtrl: _sasCtrl,
                 userCtrl: _userCtrl,
                 passCtrl: _passCtrl,
@@ -552,7 +704,7 @@ class _BrandTitle extends StatelessWidget {
     return Column(
       children: [
         Text(
-          'MyServices Radius',
+          'MyServices Pro',
           textAlign: TextAlign.center,
           style: AppType.title(color: AppColors.textHi),
         ),
@@ -583,7 +735,8 @@ class _FormCard extends StatelessWidget {
     required this.onLogin,
   });
 
-  /// Pro: حقل الشركة البديل (اختيارٌ من الدليل) — null = حقل الرابط المعتاد.
+  /// Pro: حقل الشركة البديل (اختيارٌ من الدليل، أو بطاقة الشركة المعروفة
+  /// باسمها) — null = حقل الرابط الاختياريّ (لا شركة معروفة).
   final Widget? companyField;
   final TextEditingController sasCtrl;
   final TextEditingController userCtrl;
@@ -946,6 +1099,103 @@ class _CompanyField extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// Pro: الشركة المعروفة لهذا الدخول — **باسمها** لا برابطها، وللقراءة فقط
+/// (الرابط مخفيٌّ في النموذج يُرسَل مع الدخول). مصدر الاسم وترتيبه في
+/// `_fixCompany`.
+///
+/// [name] null ← لا اسم معروف: يُعرض **المضيف وحده** («rapi.earthlink.iq» بلا
+/// بروتوكولٍ ولا مسار) بخطٍّ خافت. هو الاحتياط الأخير لشركةٍ ليست في الدليل ولا
+/// تعرف «شركاتي» اسمها، وهو ما يظهر لحظةَ الحسم قبل وصول الاسم — فلا يُحجب
+/// النموذج، ويحلّ الاسم محلّه بتلاشٍ حين يصل.
+class _KnownCompanyTile extends StatelessWidget {
+  const _KnownCompanyTile({required this.name, required this.host});
+  final String? name;
+  final String host;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final caption = 'login.company_pick'.tr();
+    final named = name;
+    final shown = named ?? host;
+    final rtl = Directionality.of(context) == ui.TextDirection.rtl;
+    return Semantics(
+      container: true,
+      excludeSemantics: true,
+      label: '$caption: $shown',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm + Sp.xxs),
+        decoration: BoxDecoration(
+          color: AppColors.brandSoftBg,
+          borderRadius: BorderRadius.circular(R.md),
+          border: Border.all(color: AppColors.brandSoftBorder),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: H.iconBox,
+              height: H.iconBox,
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(R.icon),
+              ),
+              child: Icon(Icons.apartment_rounded, size: 22, color: AppColors.brand),
+            ),
+            const SizedBox(width: Sp.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(caption,
+                      style: AppType.label(color: AppColors.textMid),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: Sp.xxs),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    layoutBuilder: (current, previous) => Stack(
+                      alignment: AlignmentDirectional.centerStart,
+                      children: [...previous, if (current != null) current],
+                    ),
+                    // الاسم معزولٌ اتّجاهيّاً: لاتينيٌّ أو مختلط («EarthLink») داخل
+                    // سطرٍ عربيّ لا يتفكّك ترتيبه. والمضيف لاتينيٌّ دائماً: سطرٌ
+                    // يساريّ محاذىً لبداية الواجهة، فيقع القصّ (إن طال) في آخره.
+                    child: named != null
+                        ? Text(
+                            iso(named),
+                            key: ValueKey(shown),
+                            // اتّجاه الفقرة من أوّل حرفٍ قويّ (ما يستنتجه العزل نفسه)
+                            // فتقع «…» في آخر الاسم المقصوص: اسمٌ لاتينيّ طويل في
+                            // واجهةٍ عربيّة كان يُقصّ «...Telecom & Int» كأنّ أوّله قُطع.
+                            textDirection:
+                                Bidi.startsWithRtl(named) ? ui.TextDirection.rtl : ui.TextDirection.ltr,
+                            textAlign: rtl ? TextAlign.right : TextAlign.left,
+                            style: AppType.listName(color: AppColors.textHi),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          )
+                        : Text(
+                            host,
+                            key: ValueKey(shown),
+                            textDirection: ui.TextDirection.ltr,
+                            textAlign: rtl ? TextAlign.right : TextAlign.left,
+                            // بارتفاع سطر الاسم: وصولُ الاسم بعده لا يزيح الحقول تحته.
+                            strutStyle: StrutStyle.fromTextStyle(AppType.listName(), forceStrutHeight: true),
+                            style: AppType.body(color: AppColors.textMid),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

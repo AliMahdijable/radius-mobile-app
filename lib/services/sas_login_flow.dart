@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import '../api/auth_api.dart';
+import 'active_company.dart';
 import 'auth_storage.dart';
 import 'company_creds_store.dart';
 import 'fcm_service.dart';
 import 'permissions_service.dart';
+import 'provider_service.dart';
 import 'saved_profiles_store.dart';
 import 'session_manager.dart';
 
@@ -18,12 +20,16 @@ enum SasLoginOutcome { ok, needs2fa, permsFailed }
 class SasLoginFlow {
   SasLoginFlow._();
 
+  /// [companyLabel]/[sasCode]: اسم الشركة وكودها إن عرفهما المتّصل («شركاتي»
+  /// أو الدليل) — لشريط الشركة أعلى الواجهة؛ غيابهما يُقدَّر ثمّ يُحسم.
   static Future<SasLoginOutcome> complete(
     LoginSuccess s, {
     required String username,
     required String password,
     required String sasUrl,
     required bool remember,
+    String? companyLabel,
+    String? sasCode,
   }) async {
     await SessionManager.clearAllSessionData(unregisterFcm: false, clearAuth: false);
     await AuthStorage.saveSession(
@@ -38,6 +44,17 @@ class SasLoginFlow {
       canAccessPackages: s.canAccessPackages,
       isEmployee: s.isEmployee,
       sasUrl: sasUrl,
+    );
+    // الشركة المفتوحة الآن (شريط MainShell) — تحلّ محلّ السابقة التي مسحها
+    // `clearAllSessionData` أعلاه. الموظّف تُعرض معه شركة مديره الأب.
+    await ActiveCompany.saveFromLogin(
+      sasUrl: sasUrl,
+      adminId: s.adminId,
+      loginUsername: username,
+      adminUsername: s.adminUsername,
+      isEmployee: s.isEmployee,
+      label: companyLabel,
+      sasCode: sasCode,
     );
     // كلمة السرّ على الجهاز فقط (قرار المستخدم): لكلّ شركة+يوزر — لدخول
     // «شركاتي» بضغطة — وفي الحسابات المحفوظة لمبدّل المدراء الفرعيّين.
@@ -63,6 +80,10 @@ class SasLoginFlow {
         canonical: s.canonicalPermissions,
       );
     }
+    // مزوّد الساس (EarthLink؟) — من `/api/auth/me`. غير مُنتظَر: قائمة
+    // «قوائم أخرى» تستمع لـ`ProviderService.changes` فتُحدَّث تفاعليّاً،
+    // والدخول لا ينتظر نداءً إضافيّاً.
+    unawaited(ProviderService.refreshFromBackend());
     unawaited(FcmService.initAfterLogin());
     return SasLoginOutcome.ok;
   }

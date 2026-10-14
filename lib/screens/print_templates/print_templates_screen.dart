@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/api_client.dart';
 import '../../api/print_templates_api.dart';
 import '../../services/print_service.dart';
 import '../../theme/colors.dart';
@@ -193,8 +194,9 @@ class _WebOnlyBanner extends StatelessWidget {
           const SizedBox(height: Sp.sm),
           GestureDetector(
             onTap: () async {
+              // رابط ويب الخادم نفسه (Pro ⇒ pro.mysvcs.net) لا الكلاسيك المثبَّت سابقاً.
               await Clipboard.setData(const ClipboardData(
-                  text: 'https://rad.mysvcs.net/v2/portal-settings'));
+                  text: '${ApiClient.baseUrl}/v2/portal-settings'));
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -218,7 +220,7 @@ class _WebOnlyBanner extends StatelessWidget {
                   const SizedBox(width: Sp.sm),
                   Expanded(
                     child: Text(
-                      'rad.mysvcs.net/v2',
+                      '${Uri.parse(ApiClient.baseUrl).host}/v2',
                       style: AppType.bodyBold(color: AppColors.brand),
                     ),
                   ),

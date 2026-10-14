@@ -79,8 +79,16 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
     // التطبيق بلا تخميد، فكلّ ضغطة مفتاح تُعيد البناء — وبناءُ
     // `_Results` كان يُنشئ مستقبلاً جديداً في كلّ مرّة (انظر أدناه).
     _ctrl.addListener(_onQueryChanged);
-    _initSpeech();
+    // التعرّف على الكلام يُهيَّأ عند أوّل ضغطةٍ على المايك لا هنا: التهيئة تطلب
+    // إذنَي الميكروفون والتعرّف، فكان الطلب يظهر بمجرّد فتح البحث
+    // (App Store 5.1.1 — الإذن في سياقه).
   }
+
+  /// تهيئةٌ واحدة جارية/منتهية؛ تُصفَّر بعد فشلٍ لتُعاد المحاولة.
+  Future<void>? _speechInit;
+
+  /// فشلت التهيئة (جهازٌ بلا تعرّف أو إذنٌ مرفوض) — يُخفَت الزرّ كما كان.
+  bool _speechFailed = false;
 
   /// مستقبلٌ **واحد** لعمر الطبقة.
   ///
@@ -229,8 +237,18 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
       return;
     }
     if (!_speechReady) {
-      _showSnack('التعرّف على الصوت غير متاح على هذا الجهاز');
-      return;
+      await (_speechInit ??= _initSpeech());
+      if (!mounted) return;
+      if (!_speechReady) {
+        _speechInit = null; // تُعاد المحاولة في الضغطة التالية
+        final denied = !(await _speech.hasPermission.catchError((_) => false));
+        if (!mounted) return;
+        setState(() => _speechFailed = true);
+        _showSnack(denied
+            ? 'صلاحية الميكروفون مرفوضة — فعّلها من إعدادات النظام'
+            : 'التعرّف على الصوت غير متاح على هذا الجهاز');
+        return;
+      }
     }
     // 2026-07-14: قبل، كنّا نرفض التسجيل إذا ما لقينا `ar-*` في قائمة
     // اللغات المُعلَنة. المشكلة: أجهزة Tecno/Huawei/Xiaomi تستعمل محرّك
@@ -357,7 +375,8 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
                       // Mic toggle — pulses while listening.
                       _MicButton(
                         listening: _listening,
-                        enabled: _speechReady,
+                        // مُفعَّل قبل التهيئة: الضغطة نفسها تهيّئ وتطلب الإذن.
+                        enabled: _speechReady || !_speechFailed,
                         onTap: _toggleMic,
                       ),
                     ],

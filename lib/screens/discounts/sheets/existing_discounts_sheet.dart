@@ -348,9 +348,25 @@ class _Tile extends StatelessWidget {
                   ],
                 ),
               ),
-              Text(
-                '-${formatIQD(discount.discountAmount)}',
-                style: AppType.cardTitleBold(color: AppColors.warning),
+              // «سعر البيع الحالي» بارزاً + الخصم المطبّق تحته — بموازاة
+              // صفّ «الأسعار الحاليّة» الذي يُبرز السعر النهائيّ.
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (discount.effectivePrice != null)
+                    Text(
+                      '${formatIQD(discount.effectivePrice!)} د.ع',
+                      style: AppType.bodyStrong(color: AppColors.success),
+                    ),
+                  Text(
+                    '-${formatIQD(discount.discountAmount)}',
+                    style: discount.effectivePrice != null
+                        ? AppType.muted(color: AppColors.warning)
+                            .copyWith(fontSize: 11, fontWeight: FontWeight.w700)
+                        : AppType.cardTitleBold(color: AppColors.warning),
+                  ),
+                ],
               ),
               const SizedBox(width: 6),
               IconButton(

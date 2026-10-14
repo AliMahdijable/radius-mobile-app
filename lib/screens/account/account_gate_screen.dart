@@ -8,6 +8,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'account_login_screen.dart';
+import 'account_settings_card.dart' show confirmAndDeleteAccount;
 import 'account_widgets.dart';
 import 'companies_screen.dart';
 import 'subscription_screen.dart';
@@ -104,6 +105,15 @@ class _AccountGateScreenState extends State<AccountGateScreen> {
         subtitle: 'account.disabled_body'.tr(),
         children: [
           AccountOutlineButton(label: 'account.sign_out'.tr(), onTap: _signOut),
+          // App Store 5.1.1(v): الحذف متاحٌ حتى لحسابٍ معطّل (الخادم يقبله).
+          if (AccountService.currentUser != null) ...[
+            const SizedBox(height: Sp.md),
+            AccountTextLink(
+              label: 'account.delete_account'.tr(),
+              onTap: () => confirmAndDeleteAccount(context),
+              danger: true,
+            ),
+          ],
         ],
       );
     }

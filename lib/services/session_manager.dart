@@ -2,21 +2,27 @@ import 'dart:async';
 import 'notification_router.dart';
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/cards_api.dart';
 import '../api/device_config_api.dart';
 import '../api/device_probe_api.dart';
 import '../api/subscribers_api.dart';
 import '../api/whatsapp_api.dart';
+import 'account_service.dart';
+import 'active_company.dart';
 import 'alerts_service.dart';
 import 'auth_storage.dart';
 import 'badge_service.dart';
 import 'dashboard_cache.dart';
 import 'subscribers_offline_cache.dart';
 import 'device_alerts_service.dart';
+import 'employee_session.dart';
 import 'fcm_service.dart';
 import 'inbox_service.dart';
 import 'permissions_service.dart';
+import 'provider_service.dart';
+import 'saved_profiles_store.dart';
 
 /// Central place that wipes every in-memory + persistent cache tied to
 /// a user session. Called from:
@@ -72,6 +78,16 @@ class SessionManager {
       _guardAsync('BadgeService.clear', BadgeService.clear()),
       _guardAsync('InboxService.clear', InboxService.clear()),
       _guardAsync('PermissionsService.clear', PermissionsService.clear()),
+      // مزوّد الساس (EarthLink؟) — لا يرى المدير التالي شاشات سابقه الخاصّة.
+      _guardAsync('ProviderService.clear', ProviderService.clear()),
+      // الشركة المفتوحة (شريط MainShell) — لا تبقى بعد الخروج، والدخول
+      // التالي يكتب شركته بعد هذا المسح (SasLoginFlow).
+      _guardAsync('ActiveCompany.clear', ActiveCompany.clear()),
+      // علامة «موظّف مباشر» (دخول ايرث لنك بلا حساب) — تتبع الجلسة، وتُذكَر
+      // في الذاكرة فيُوجَّه الطرد/الخروج لشاشة دخول الموظّف لا البوّابة.
+      // `clearAuth: false` = قبل دخولٍ جديد ⇒ الجلسة القادمة تحدّد الوجهة.
+      _guardAsync('EmployeeSession.clear',
+          EmployeeSession.clear(newSession: !clearAuth)),
       // 2026-08-18: device alerts + dedup map + OS notifications — كانت
       // تبقى للمدير التالي فتظهر تنبيهات أجهزة السابق.
       _guardAsync(
@@ -99,6 +115,59 @@ class SessionManager {
     // 4) Auth wipe — last so anything above that reads auth still works.
     if (clearAuth) {
       await _guardAsync('AuthStorage.clear', AuthStorage.clear());
+    }
+  }
+
+  // ───────────── الترقية من الكلاسيك (٣.٠.٠) ─────────────
+
+  /// علامة «فُحصت بقايا الكلاسيك» — في SharedPreferences لا الخزنة عمداً:
+  /// تُمسح مع حذف التطبيق (والخزنة لا تُمسح على iOS، وتُزامَن عبر iCloud)،
+  /// فتثبيتٌ جديد يفحص من جديد.
+  static const _kClassicChecked = 'pro.classic_session_checked_v3';
+
+  /// أوّل إقلاعٍ بعد التحديث من التطبيق الكلاسيكيّ (MyServices Radius ≤ ٢.٢.٨،
+  /// معرّف الحزمة نفسه): الخزنة تحمل جلسة ساسٍ أصدرها خادم الكلاسيك
+  /// (rad.mysvcs.net) بلا حساب Pro. البوّابة تتجاوزها اليوم (لا حساب جاهز)،
+  /// لكن ما إن يدخل المستخدم حسابه ويُغلق التطبيق قبل اختيار شركة حتى يفتح
+  /// الإقلاع التالي MainShell بتوكن الكلاسيك وبلا شركة نشطة. فتُمسح مرّةً واحدة.
+  ///
+  /// «بقايا كلاسيك» = توكن ساس **و** لا مستخدم Firebase **و** ليست جلسة موظّفٍ
+  /// مباشر. الكلاسيك لم يعرف Firebase Auth ولا الموظّف المباشر، ونسخة Pro لا
+  /// تستعمل جلسة ساسٍ بلا أحدهما — فلا تُمسّ جلسة Pro سليمة أبداً.
+  ///
+  /// Firebase غير جاهز ← لا يُحكم الآن (لا نميّز Pro من كلاسيك) ويُعاد الفحص
+  /// في الإقلاع التالي. لا يُلغى تسجيل FCM: توكن الساس للخادم الآخر، وتوكن
+  /// الجهاز يتجدّد مع أوّل دخول. الإعدادات (المظهر، اللغة، الطباعة) والحسابات
+  /// المحفوظة تبقى؛ يُمسح مرجع «العودة للأصل» وحده لأنّه جزءٌ من الجلسة.
+  ///
+  /// لا يرمي أبداً: أيّ فشلٍ يترك الإقلاع يمضي كما كان.
+  static Future<void> migrateClassicSessionOnce() async {
+    SharedPreferences prefs;
+    try {
+      prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_kClassicChecked) == true) return;
+    } catch (e) {
+      _log('classic.prefs', e);
+      return;
+    }
+    if (!AccountService.available) return; // يُعاد في الإقلاع التالي
+    try {
+      if (AccountService.currentUser == null) {
+        final token = await AuthStorage.readToken();
+        if (token != null && token.isNotEmpty) {
+          final direct = await EmployeeSession.restore();
+          if (!direct) {
+            if (kDebugMode) debugPrint('[SessionManager] مسح جلسة كلاسيك قديمة');
+            await clearAllSessionData(unregisterFcm: false);
+            await _guardAsync(
+                'SavedProfilesStore.clearOriginal', SavedProfilesStore.clearOriginal());
+          }
+        }
+      }
+      await prefs.setBool(_kClassicChecked, true);
+    } catch (e) {
+      // قراءة الخزنة رمت (عطل KeyStore) — بلا علامة: يُعاد الفحص لاحقاً.
+      _log('classic.migrate', e);
     }
   }
 

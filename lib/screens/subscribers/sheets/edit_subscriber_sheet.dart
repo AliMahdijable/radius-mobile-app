@@ -1,15 +1,20 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../api/earthlink_api.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/contact_picker.dart';
 import '../../../models/subscriber.dart';
+import '../../../services/active_company.dart';
 import '../../../services/auth_storage.dart';
+import '../../../services/provider_service.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../widgets/package_picker_field.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 
 /// Edit subscriber sheet — focused port of v1's _showEditSheet from
@@ -70,6 +75,15 @@ class _EditSheetState extends State<_EditSheet> {
         ? widget.sub.phone!
         : (widget.sub.mobile ?? ''),
   );
+
+  /// ايرث لنك وحدها: كلمة سرّ **حساب البوّابة** — نقطةٌ منفصلة عن كلمة سرّ
+  /// الخدمة أعلاه، تُقرأ وتُغيَّر عبر `/account-password`.
+  final TextEditingController _accountPassword = TextEditingController();
+
+  /// القيمة الأصليّة المجلوبة (أو '' حين تعذّر الجلب) — للمقارنة: لا تُرسَل
+  /// كلمة سرّ الحساب إن لم تتغيّر.
+  String? _loadedAccountPassword;
+  bool _showAccountPassword = false;
   // Set in initState — Dart forbids referencing `widget` at field-
   // initializer level for non-`late` fields, and `late int?` reads
   // awkwardly. Plain field + assignment in initState matches the
@@ -78,6 +92,17 @@ class _EditSheetState extends State<_EditSheet> {
   Map<String, PackageInfo>? _packages;
   bool _loadingPackages = true;
   bool _saving = false;
+
+  /// activation-data قالت `provider: 'earthlink'` — احتياطٌ إن لم تُعرف
+  /// الجلسة بعد من [ProviderService].
+  bool _elFromData = false;
+
+  /// جلسة ايرث لنك ⇒ حقل الباقة يفتح قائمةً ببحث (بلاغ ٢٠٢٦-١٠-١٣)؛
+  /// وغيرها يبقى على القائمة المنسدلة كما هي.
+  bool get _isEarthlink =>
+      _elFromData ||
+      ProviderService.isEarthlink ||
+      ActiveCompany.current?.sasCode == 'earthlink';
 
   /// Whether the password field is revealed (eye icon toggled on).
   /// مطلب 2026-06-10: pre-fill + eye toggle so admins can verify
@@ -120,6 +145,7 @@ class _EditSheetState extends State<_EditSheet> {
     _firstname.addListener(touch);
     _lastname.addListener(touch);
     _phone.addListener(touch);
+    _accountPassword.addListener(touch);
     _loadPackages();
     // Parse the original expiration so the picker can show it
     // alongside the 'change' control. SAS4 emits both 'YYYY-MM-DD
@@ -145,14 +171,21 @@ class _EditSheetState extends State<_EditSheet> {
     if (idx == null) return;
     final pwFuture = SubscribersApi.fetchPassword(idx);
     final dataFuture = SubscribersApi.fetchActivationData(idx);
+    // ايرث لنك: كلمة سرّ حساب البوّابة — تُجلب بالتوازي (نقطةٌ منفصلة عن
+    // كلمة سرّ الخدمة). الجلسة تُعرَف متزامنةً عبر [ProviderService].
+    final elNow = ProviderService.isEarthlink ||
+        ActiveCompany.current?.sasCode == 'earthlink';
+    final accFuture = elNow ? EarthlinkApi.fetchAccountPassword(idx) : null;
     final pw = await pwFuture;
     final data = await dataFuture;
+    final acc = accFuture == null ? null : await accFuture;
     if (!mounted) return;
     setState(() {
       if (pw != null && pw.isNotEmpty && _password.text.isEmpty) {
         _password.text = pw;
       }
       if (data != null) {
+        if (data['provider']?.toString() == 'earthlink') _elFromData = true;
         final parent = data['parent_id'];
         final pid =
             parent is int ? parent : int.tryParse(parent?.toString() ?? '');
@@ -161,6 +194,13 @@ class _EditSheetState extends State<_EditSheet> {
         if (rawExp != null && rawExp.isNotEmpty) {
           final parsed = DateTime.tryParse(rawExp.replaceFirst(' ', 'T'));
           if (parsed != null) _expiration = parsed;
+        }
+      }
+      if (elNow) {
+        // '' حين تعذّر الجلب: الحقل يبقى فارغاً ويقدر المدير ضبط قيمةٍ جديدة.
+        _loadedAccountPassword = acc ?? '';
+        if (acc != null && acc.isNotEmpty && _accountPassword.text.isEmpty) {
+          _accountPassword.text = acc;
         }
       }
     });
@@ -194,6 +234,21 @@ class _EditSheetState extends State<_EditSheet> {
     });
   }
 
+  /// باقات ايرث لنك للحقل — بترتيب القائمة المنسدلة نفسه (بالاسم)، وبالمعرّفات
+  /// الرقميّة وحدها (غيرها لم يكن قابلاً للاختيار فيها أصلاً).
+  List<PackageOption> get _elPackageOptions {
+    final pkgs = _packages;
+    if (pkgs == null) return const [];
+    final entries = pkgs.entries
+        .where((e) => int.tryParse(e.key) != null)
+        .toList()
+      ..sort((a, b) => a.value.name.compareTo(b.value.name));
+    return [
+      for (final e in entries)
+        PackageOption(id: e.key, name: e.value.name, price: e.value.price),
+    ];
+  }
+
   @override
   void dispose() {
     _username.dispose();
@@ -201,6 +256,7 @@ class _EditSheetState extends State<_EditSheet> {
     _firstname.dispose();
     _lastname.dispose();
     _phone.dispose();
+    _accountPassword.dispose();
     super.dispose();
   }
 
@@ -245,12 +301,20 @@ class _EditSheetState extends State<_EditSheet> {
     return out;
   }
 
-  bool get _hasChanges => _diff().isNotEmpty;
+  bool get _hasChanges => _diff().isNotEmpty || _accountPasswordChanged;
+
+  /// ايرث لنك: هل تغيّرت كلمة سرّ الحساب عن المجلوبة؟ الفارغة لا تُرسَل
+  /// (كحقل كلمة سرّ الخدمة تماماً).
+  bool get _accountPasswordChanged =>
+      _isEarthlink &&
+      _accountPassword.text.isNotEmpty &&
+      _accountPassword.text != (_loadedAccountPassword ?? '');
 
   Future<void> _submit() async {
     if (_saving) return;
     final diff = _diff();
-    if (diff.isEmpty) {
+    final accChanged = _accountPasswordChanged;
+    if (diff.isEmpty && !accChanged) {
       Navigator.of(context).pop();
       return;
     }
@@ -272,27 +336,46 @@ class _EditSheetState extends State<_EditSheet> {
       return;
     }
     setState(() => _saving = true);
-    final result = await SubscribersApi.updateSubscriber(
-      idx: widget.sub.idx!,
-      username: diff['username'],
-      password: diff['password'],
-      firstname: diff['firstname'],
-      lastname: diff['lastname'],
-      phone: diff['phone'],
-      profileId: diff['profile_id'],
-      parentId: diff['parent_id'],
-      expiration: diff['expiration'],
-    );
+    bool ok = true;
+    String? message;
+    // ١) حقول الخدمة (SAS4/EL) — تُرسَل فقط إن تغيّرت، كما كانت حرفيّاً.
+    if (diff.isNotEmpty) {
+      final result = await SubscribersApi.updateSubscriber(
+        idx: widget.sub.idx!,
+        username: diff['username'],
+        password: diff['password'],
+        firstname: diff['firstname'],
+        lastname: diff['lastname'],
+        phone: diff['phone'],
+        profileId: diff['profile_id'],
+        parentId: diff['parent_id'],
+        expiration: diff['expiration'],
+      );
+      ok = result.ok;
+      message = result.message;
+    }
+    // ٢) ايرث لنك: كلمة سرّ حساب البوّابة — نداءٌ مستقلّ، بعد نجاح حقول الخدمة.
+    if (ok && accChanged) {
+      final accRes = await EarthlinkApi.setAccountPassword(
+        idx: widget.sub.idx!,
+        password: _accountPassword.text,
+      );
+      ok = accRes.ok;
+      if (accRes.ok) {
+        _loadedAccountPassword = _accountPassword.text;
+      } else {
+        message = accRes.message ?? message;
+      }
+    }
     if (!mounted) return;
     setState(() => _saving = false);
-    if (result.ok) SubscriberEvents.notifyChange();
+    if (ok) SubscriberEvents.notifyChange();
     showSheetSnack(
-        context,
-        result.ok
-            ? 'تم تعديل بيانات المشترك'
-            : (result.message ?? 'تعذّر التعديل'),
-        isError: (result.ok) ? false : true);
-    if (result.ok) Navigator.of(context).pop(true);
+      context,
+      ok ? 'تم تعديل بيانات المشترك' : (message ?? 'تعذّر التعديل'),
+      isError: !ok,
+    );
+    if (ok) Navigator.of(context).pop(true);
   }
 
   @override
@@ -328,7 +411,10 @@ class _EditSheetState extends State<_EditSheet> {
             icon: LucideIcons.user,
           ),
           const SizedBox(height: Sp.md),
-          const _FieldLabel(label: 'كلمة السر'),
+          // ايرث لنك: نميّزها «كلمة سرّ الخدمة» لأنّ تحتها كلمة سرّ الحساب.
+          // SAS4: تبقى «كلمة السر» حرفيّاً.
+          _FieldLabel(
+              label: _isEarthlink ? 'el.service_password'.tr() : 'كلمة السر'),
           _Field(
             controller: _password,
             hint: '••••••••',
@@ -346,6 +432,35 @@ class _EditSheetState extends State<_EditSheet> {
               onPressed: () => setState(() => _showPassword = !_showPassword),
             ),
           ),
+          // ايرث لنك وحدها: كلمة سرّ حساب البوّابة — مستقلّةٌ عن كلمة سرّ الخدمة.
+          if (_isEarthlink) ...[
+            const SizedBox(height: Sp.md),
+            _FieldLabel(label: 'el.account_password'.tr()),
+            _Field(
+              controller: _accountPassword,
+              hint: '••••••••',
+              enabled: !_saving,
+              icon: LucideIcons.keyRound,
+              obscure: !_showAccountPassword,
+              suffix: IconButton(
+                icon: Icon(
+                  _showAccountPassword ? LucideIcons.eyeOff : LucideIcons.eye,
+                  size: 16,
+                ),
+                color: AppColors.textMid,
+                visualDensity: VisualDensity.compact,
+                tooltip: _showAccountPassword ? 'إخفاء' : 'إظهار',
+                onPressed: () =>
+                    setState(() => _showAccountPassword = !_showAccountPassword),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'el.account_password_hint'.tr(),
+              style: AppType.muted(color: AppColors.textMid)
+                  .copyWith(fontSize: 11, height: 1.4),
+            ),
+          ],
           const SizedBox(height: Sp.md),
           Row(
             children: [
@@ -408,13 +523,36 @@ class _EditSheetState extends State<_EditSheet> {
           ),
           const SizedBox(height: Sp.md),
           const _FieldLabel(label: 'الباقة'),
-          _PackagePicker(
-            packages: _packages,
-            loading: _loadingPackages,
-            selectedId: _profileId,
-            enabled: !_saving,
-            onSelect: (id) => setState(() => _profileId = id),
-          ),
+          if (_isEarthlink) ...[
+            PackagePickerField(
+              options: _elPackageOptions,
+              selectedId: _profileId?.toString(),
+              currentId: widget.sub.profileId?.toString(),
+              loading: _loadingPackages,
+              // ايرث لنك: تتغيّر الباقة للمنتهي أو لمن بقي له يومٌ فأقلّ، و«More» لا (حكم الخادم بصفّ المشترك).
+              enabled: !_saving && widget.sub.canChangePackage != false,
+              compact: true,
+              emptyText: 'تعذّر جلب الباقات',
+              onSelected: (id) {
+                final v = int.tryParse(id);
+                if (v != null) setState(() => _profileId = v);
+              },
+            ),
+            if (widget.sub.canChangePackage == false) ...[
+              const SizedBox(height: Sp.xs),
+              Text(
+                widget.sub.packageChangeNote ?? 'تتغيّر الباقة للمنتهي أو لمن بقي له يومٌ فأقلّ — هذا المشترك ما زال فعّالاً',
+                style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.4),
+              ),
+            ],
+          ] else
+            _PackagePicker(
+              packages: _packages,
+              loading: _loadingPackages,
+              selectedId: _profileId,
+              enabled: !_saving,
+              onSelect: (id) => setState(() => _profileId = id),
+            ),
           if (_canEditExpiration) ...[
             const SizedBox(height: Sp.md),
             const _FieldLabel(label: 'تاريخ الانتهاء'),

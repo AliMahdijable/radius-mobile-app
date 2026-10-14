@@ -5,12 +5,14 @@ import '../../../api/subscribers_api.dart';
 import '../../../core/util/contact_picker.dart';
 import '../../../models/subscriber.dart';
 import '../../../services/auth_storage.dart';
+import '../../../services/provider_service.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
+import 'el_add_subscriber_sheet.dart';
 
 /// Add new subscriber sheet — focused port of v1's add_subscriber_sheet
 /// (mobile-app/lib/widgets/add_subscriber_sheet.dart) into v2's design
@@ -24,15 +26,44 @@ import '../../../core/widgets/sheet_scaffold.dart';
 /// parent_id defaults to the logged-in admin's id (resolved from
 /// AuthStorage). expiration is left blank so SAS4 falls back to the
 /// package's default duration on first activation — matches v1.
-Future<bool?> showAddSubscriberSheet(BuildContext context) {
+Future<bool?> showAddSubscriberSheet(BuildContext context) async {
+  final earthlink = await _isEarthlinkSession();
+  if (!context.mounted) return null;
   return showModalBottomSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => const _AddSheet(),
+    // ايرث لنك: لا سحب للإغلاق — سحب الشيت يُغلقه بـ`Navigator.pop` مباشرةً
+    // متجاوزاً `PopScope` الذي يمنع الإغلاق أثناء الإضافة (مالٌ حقيقيّ)،
+    // فتضيع رسالة «ربّما أُضيف» وتنبيه الدين. الإغلاق بـ✕ أو الرجوع أو
+    // النقر خارجه (وكلّها تحترم `PopScope`) — كنمط `main_shell`.
+    enableDrag: !earthlink,
+    // ايرث لنك: شيتٌ مستقلّ (رصيد أونلاين/كارت/تجريبي) — مسار SAS4 كما هو.
+    builder: (_) =>
+        earthlink ? const ElAddSubscriberSheet() : const _AddSheet(),
   );
+}
+
+/// جلسة ايرث لنك؟ الحَكَم معرّف المدير المحفوظ لحظة الدخول نفسها
+/// (`earthlink:<idx>` للمالك والموظّف معاً، ولساسات SAS4 رقمٌ عارٍ للأصل أو
+/// `jt:6836` لشركةٍ أخرى): يُكتب مع كلّ دخولٍ ويُمسح مع الخروج، فلا يصف إلّا
+/// الجلسة القائمة.
+///
+/// `ProviderService.isEarthlink` احتياطٌ فقط حين يتعذّر المعرّف أو يغيب: علمٌ
+/// محفوظٌ لا يمسحه فشل `/api/auth/me`، فقد يبقى من جلسة ايرث لنك سابقة —
+/// ولا يجوز أن يفتح شيت ايرث لنك لمدير SAS4.
+Future<bool> _isEarthlinkSession() async {
+  String? adminId;
+  try {
+    adminId = await AuthStorage.readAdminId();
+  } catch (_) {
+    adminId = null; // خزنةٌ تعذّرت قراءتها ⇒ العلم المحفوظ
+  }
+  final id = adminId?.trim().toLowerCase() ?? '';
+  if (id.isNotEmpty) return id.startsWith('earthlink:');
+  return ProviderService.isEarthlink;
 }
 
 class _AddSheet extends StatefulWidget {

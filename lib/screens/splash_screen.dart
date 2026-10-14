@@ -8,8 +8,11 @@ import '../api/auth_api.dart';
 import '../services/account_service.dart';
 import '../services/auth_storage.dart';
 import '../services/biometric_service.dart';
+import '../services/employee_session.dart';
 import '../services/fcm_service.dart';
 import '../services/permissions_service.dart';
+import '../services/provider_service.dart';
+import '../services/session_manager.dart';
 import '../theme/colors.dart';
 // permissions_screen is gone — biometric guard runs inline, notification
 // permission is offered from the app-permissions settings screen.
@@ -17,6 +20,7 @@ import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'main_shell.dart';
 import 'account/account_gate_screen.dart';
+import 'account/employee_login_screen.dart';
 
 /// First screen on launch. Decides where to route:
 ///   - Token + autoLogin enabled  → home (skipping login + perms)
@@ -69,7 +73,12 @@ class _SplashScreenState extends State<SplashScreen> {
       if (kDebugMode) debugPrint('🔴 توجيه الإقلاع: $e\n$st');
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const AccountGateScreen()),
+        MaterialPageRoute(
+          builder: (_) => EmployeeSession.routeToEmployeeLogin &&
+                  (EmployeeSession.isActive || !AccountService.isReady)
+              ? const EmployeeLoginScreen()
+              : const AccountGateScreen(),
+        ),
       );
     }
   }
@@ -94,22 +103,39 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _route() async {
+    // ٣.٠.٠: أوّل إقلاعٍ بعد التحديث من الكلاسيك — جلسة ساسٍ قديمة بلا حساب
+    // Pro تُمسح مرّةً واحدة قبل قراءة الجلسة أدناه (التفصيل عند الدالّة).
+    // بسقفٍ زمنيّ: خزنةٌ متعثّرة لا تعلّق الشعار — الإقلاع يمضي بلا هجرة.
+    try {
+      await SessionManager.migrateClassicSessionOnce()
+          .timeout(const Duration(seconds: 6));
+    } catch (e) {
+      if (kDebugMode) debugPrint('🟠 هجرة الكلاسيك: $e');
+    }
+    if (!mounted) return;
+
     // Perf 2026-08-05: كانت 3 storage reads متتالية (~180ms).
     // الآن بالتوازي — نطلقها ثم نستقبل نتائجها. أنظف من Future.wait
     // مع types مختلطة (String? / bool / bool). التوفير ~120-160ms.
     final tokenFuture = AuthStorage.readToken();
     final autoLoginFuture = AuthStorage.isAutoLoginEnabled();
     final permsShownFuture = AuthStorage.hasShownPermissions();
+    final directEmployeeFuture = EmployeeSession.restore();
 
     final token = await tokenFuture;
     final autoLogin = await autoLoginFuture;
     final permsShown = await permsShownFuture;
+    final directEmployee = await directEmployeeFuture;
     if (!mounted) return;
 
     final Widget next;
+    // Pro: موظّف ايرث لنك دخل مباشرةً (يوزر + كلمة سرّ) — لا حساب إيميل له
+    // ولا اشتراك، فلا يمرّ بالبوّابة أبداً: جلسته وحدها تكفي. وتوكنه لا
+    // يُجدَّد؛ أوّل ٤٠١ يطرده إلى شاشة دخول الموظّف (MainShell).
+    final direct = directEmployee && token != null && token.isNotEmpty;
     // Pro البند ٤: جلسة الساس وحدها لا تكفي — يلزم حساب إيميل جاهز (مؤكَّد).
     // بدونه (تحديثٌ من نسخةٍ بلا طبقة الحساب، أو خروجٌ من الحساب) ← البوّابة.
-    if (token != null && token.isNotEmpty && autoLogin && AccountService.isReady) {
+    if (token != null && token.isNotEmpty && autoLogin && (direct || AccountService.isReady)) {
       // Perf 2026-08-05: unawaited بدل await — لو token منتهي،
       // api_client interceptor يعالج 401 → refresh → retry تلقائياً
       // على أوّل request في Dashboard. Splash يفتح فوراً بدل انتظار
@@ -129,7 +155,10 @@ class _SplashScreenState extends State<SplashScreen> {
         if (!mounted) return;
         if (!passed) {
           Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const AccountGateScreen()),
+            MaterialPageRoute(
+              builder: (_) =>
+                  direct ? const EmployeeLoginScreen() : const AccountGateScreen(),
+            ),
           );
           return;
         }
@@ -139,9 +168,20 @@ class _SplashScreenState extends State<SplashScreen> {
       // (الـadmin قد يكون عدّل صلاحيات الموظف من الويب بين فتح وفتح).
       // الكاش يُحدّث؛ لو فشل الجلب يبقى الكاش الأخير.
       unawaited(PermissionsService.refreshFromBackend());
+      // + مدير EarthLink: يحدّث صلاحيّاته المحفوظة من /api/auth/me (زرٌّ فعّله
+      // الخادم بعد دخوله يظهر بلا خروج). مدراء SAS4 بلا نداءٍ إضافيّ.
+      if (direct || ProviderService.isEarthlink) {
+        unawaited(ProviderService.refreshFromBackend());
+      }
       // auto-login جلسة قديمة — نُسجّل FCM (idempotent).
       unawaited(FcmService.initAfterLogin());
       next = const MainShell();
+    } else if (direct ||
+        (EmployeeSession.routeToEmployeeLogin && !AccountService.isReady)) {
+      // موظّفٌ مباشر: جلسته قائمة بلا دخولٍ تلقائيّ، أو انتهت قبل الإقلاع
+      // (خروج/طرد) ولا حساب إيميل جاهز على الجهاز ← شاشة دخوله هو، لا شاشة
+      // حسابٍ لا يملكه. ورجوعه منها يختار طريق الحساب صراحةً.
+      next = const EmployeeLoginScreen();
     } else if (token != null && token.isNotEmpty && !autoLogin) {
       // User has logged in before but chose not to be remembered.
       next = const AccountGateScreen();
@@ -209,7 +249,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 ),
             const SizedBox(height: Sp.xl),
             Text(
-              'MyServices Radius',
+              'MyServices Pro',
               style: AppType.title(color: AppColors.textHi),
             ).animate().fadeIn(
                   delay: const Duration(milliseconds: 150),

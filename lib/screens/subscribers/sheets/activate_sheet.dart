@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:ui' as ui;
+
 import 'package:easy_localization/easy_localization.dart';
 
 import 'package:flutter/material.dart';
@@ -17,6 +20,7 @@ import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../widgets/package_picker_field.dart';
 import '_print_receipt_checkbox.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 
@@ -68,6 +72,11 @@ enum _PayType { cash, partial, debt }
 /// مخزونه. محورٌ مستقلّ عن [_PayType] الذي يخصّ ما بين المشترك والوكيل.
 enum _Method { credit, card }
 
+/// ايرث لنك: طريقة الدفع للمزوّد — رصيد أونلاين (newrefilldeposit + باسورد)
+/// أو كارت مسبق الدفع (newrefillprepay + Identifier/Pin مكتوبان لا من مخزون).
+/// مستقلّة عن [_Method] (SAS4) وعن [_PayType] (ما بين المشترك والوكيل).
+enum _ElMethod { deposit, card }
+
 class _ActivateSheetState extends State<_ActivateSheet> {
   Map<String, dynamic>? _data;
   bool _loading = true;
@@ -100,6 +109,15 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   // True while the controller text is being rewritten by us (e.g. when
   // a chip is tapped). Lets the listener skip re-formatting recursion.
   bool _suppressFormat = false;
+
+  // ── ايرث لنك (البند ٤) — كلّه من provider=='earthlink' في activation-data ──
+  _ElMethod _elMethod = _ElMethod.deposit;         // الافتراض: رصيد أونلاين (كالويب)
+  String _selectedPackageId = '';                  // id الباقة المختارة من المبدّل
+  final _depositCtrl = TextEditingController();     // باسورد الإيداع (deposit)
+  final _identifierCtrl = TextEditingController();  // رقم الكارت (card)
+  final _pinCtrl = TextEditingController();         // Pin الكارت (card)
+  // RECENT_DUPLICATE (409) من خادم البرو: يُؤكَّد ويُعاد مع confirmRepeat=true.
+  bool _confirmRepeat = false;
 
   @override
   void initState() {
@@ -153,6 +171,9 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   @override
   void dispose() {
     _partialCtrl.dispose();
+    _depositCtrl.dispose();
+    _identifierCtrl.dispose();
+    _pinCtrl.dispose();
     super.dispose();
   }
 
@@ -182,6 +203,22 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         _cardDenied = false;
         // الرصيد افتراضيّ؛ والكارت يُختار وحده حين يكون الطريق الوحيد.
         _method = _methods.cardOnly ? _Method.card : _Method.credit;
+        // ايرث لنك: افتح المبدّل على الباقة الحاليّة (أو أوّل باقة)، والافتراض رصيد أونلاين.
+        if (data['provider']?.toString() == 'earthlink') {
+          final pid = data['profile_id']?.toString();
+          final pkgIds = ((data['packages'] as List?) ?? const [])
+              .whereType<Map>()
+              .map((e) => e['id']?.toString())
+              .toList();
+          // الفعّال لا تتغيّر باقته (الخادم يرفض) — الاختيار يُثبَّت على الحاليّة ولو غابت عن القائمة.
+          if (pid != null && pid.isNotEmpty && (pkgIds.contains(pid) || _elPackageLocked)) {
+            _selectedPackageId = pid;
+          } else if (pkgIds.isNotEmpty) {
+            _selectedPackageId = pkgIds.first ?? '';
+          }
+          _elMethod = _ElMethod.deposit;
+          _confirmRepeat = false;
+        }
       }
     });
   }
@@ -232,12 +269,75 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       (_data?['profile_name'] ?? widget.sub.profileName ?? '').toString();
   String? get _duration => _data?['profile_duration']?.toString();
 
+  // ───────────────────── ايرث لنك (البند ٤) ─────────────────────
+  /// مبدّل باقة + رصيد أونلاين/كارت بدل مصدر مال SAS4. يُكتشَف من provider
+  /// في ردّ activation-data (كشيت التمديد).
+  bool get _isEarthlink => _data?['provider']?.toString() == 'earthlink';
+
+  List<Map<String, dynamic>> get _elPackages =>
+      ((_data?['packages'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => e.cast<String, dynamic>())
+          .toList();
+
+  Map<String, dynamic>? get _elSelectedPkg {
+    for (final p in _elPackages) {
+      if (p['id']?.toString() == _selectedPackageId) return p;
+    }
+    return null;
+  }
+
+  num _readNumOf(Map<String, dynamic>? m, String key) {
+    final v = m?[key];
+    if (v == null) return 0;
+    if (v is num) return v;
+    return num.tryParse(v.toString().replaceAll(',', '')) ?? 0;
+  }
+
+  bool get _elIsCurrentPkg {
+    final pid = _data?['profile_id']?.toString();
+    final sel = _elSelectedPkg?['id']?.toString();
+    return sel != null && pid != null && sel == pid;
+  }
+
+  /// السعر الخام (قبل الخصم) — يُرسَل في base_price/user_price، والخادم يخصم
+  /// **مرّةً** (مضادّ للتلاعب / منع الخصم المزدوج). الحاليّة: base_price←user_price←سعر الباقة.
+  num get _elRawPrice {
+    final pkg = _elSelectedPkg;
+    if (pkg == null) return _userPrice;
+    if (_elIsCurrentPkg) {
+      if (_basePrice > 0) return _basePrice;
+      if (_userPrice > 0) return _userPrice;
+      return _readNumOf(pkg, 'price');
+    }
+    return _readNumOf(pkg, 'price');
+  }
+
+  /// السعر المعروض (بعد الخصم): الحاليّة ⇒ price_after_discount (يراعي الثابت)؛
+  /// المُغيَّرة ⇒ سعرها − الخصم (تقريبيّ؛ الخادم يحسب الدقيق).
+  num get _elChargePrice {
+    final pkg = _elSelectedPkg;
+    if (pkg == null) return _effectivePrice;
+    if (_elIsCurrentPkg) {
+      return _effectivePrice > 0 ? _effectivePrice : _elRawPrice;
+    }
+    final v = _readNumOf(pkg, 'price') - _discount;
+    return v < 0 ? 0 : v;
+  }
+
+  num get _elSelectedPkgCost => _readNumOf(_elSelectedPkg, 'cost');
+
+  /// السعر المعروض في البطاقة/البانر: ايرث لنك ⇒ elChargePrice، وإلّا منطق SAS4.
+  num get _displayPrice => _isEarthlink
+      ? _elChargePrice
+      : (_effectivePrice > 0 ? _effectivePrice : _userPrice);
+
   /// Mirrors v1's newNotes calculation:
   ///   cash    → balance unchanged
   ///   debt    → balance - price
   ///   partial → balance - price + partialAmount
   num get _balanceAfter {
-    final price = _effectivePrice > 0 ? _effectivePrice : _userPrice;
+    final price = _displayPrice;
     switch (_pay) {
       case _PayType.cash:
         return _currentBalance;
@@ -267,6 +367,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   String get _footerLabel {
     if (_submitting) return 'sheets.renewing'.tr();
     if (_outcomeUnclear) return 'sheets.activate_check_first'.tr();
+    if (_isEarthlink) return 'sheets.renew_now'.tr(); // «تفعيل/تجديد الآن» (كارت ايرث لنك لا مخزون)
     if (!_cardMode) return 'sheets.renew_now'.tr();
     if (_cardDenied) return 'cards.not_allowed_short'.tr();
     if (_cards.level == CardStockLevel.empty) {
@@ -277,7 +378,20 @@ class _ActivateSheetState extends State<_ActivateSheet> {
 
   bool get _canSubmit {
     if (_loading || _submitting || _data == null) return false;
-    if (_outcomeUnclear || _cardBlocked) return false;
+    if (_outcomeUnclear) return false;
+    if (_isEarthlink) {
+      if (_selectedPackageId.isEmpty) return false;
+      if (_elMethod == _ElMethod.deposit && _depositCtrl.text.trim().isEmpty) {
+        return false;
+      }
+      if (_elMethod == _ElMethod.card &&
+          (_identifierCtrl.text.trim().isEmpty || _pinCtrl.text.trim().isEmpty)) {
+        return false;
+      }
+      if (_pay == _PayType.partial && _partialAmount <= 0) return false;
+      return true;
+    }
+    if (_cardBlocked) return false; // SAS4 فقط
     if (_pay == _PayType.partial) {
       // Partial only requires a positive amount. v1 lets the admin
       // pay MORE than the package price and the excess lands as a
@@ -296,6 +410,102 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       _PayType.partial => 'partial-cash',
       _PayType.debt => 'non-cash',
     };
+    // ── مسار ايرث لنك (البند ٤) — فرعٌ مستقلّ لا يمسّ منطق SAS4 أدناه ──
+    if (_isEarthlink) {
+      final profileId = int.tryParse(_selectedPackageId);
+      // لقطةٌ من activation-data مع تجاوز base_price/user_price للسعر الخام للباقة
+      // المختارة — فيخصم الخادم مرّةً واحدة (منع الخصم المزدوج).
+      final elData = Map<String, dynamic>.from(_data!);
+      elData['profile_id'] = profileId;
+      elData['base_price'] = _elRawPrice;
+      elData['user_price'] = _elRawPrice;
+
+      setState(() => _submitting = true);
+      final manualMode = ManualWaPrefs.enabled.value;
+      final result = await SubscribersApi.activate(
+        idx: idx,
+        paymentType: paymentType,
+        activationData: elData,
+        partialAmount: _pay == _PayType.partial ? _partialAmount : null,
+        skipAutoWa: manualMode,
+        method: _elMethod == _ElMethod.deposit ? 'deposit' : 'card',
+        depositPassword:
+            _elMethod == _ElMethod.deposit ? _depositCtrl.text.trim() : null,
+        identifier:
+            _elMethod == _ElMethod.card ? _identifierCtrl.text.trim() : null,
+        pin: _elMethod == _ElMethod.card ? _pinCtrl.text.trim() : null,
+        profileId: profileId,
+        confirmRepeat: _confirmRepeat,
+      );
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        if (SubscribersApi.activateUnclearCodes.contains(result.code)) {
+          _outcomeUnclear = true;
+        }
+      });
+      if (_outcomeUnclear) SubscriberEvents.notifyChange();
+
+      // حارس التكرار (٩٠ث) من خادم البرو — أكّد الإعادة ثمّ أعِد الإرسال.
+      if (!result.ok && result.code == 'RECENT_DUPLICATE' && !_confirmRepeat) {
+        final again = await showConfirmSheet(
+          context,
+          title: 'تفعيل مكرّر',
+          message: result.message ??
+              'فعّلت هذا المشترك قبل لحظات — أكّد الإعادة إن أردت تفعيلاً آخر',
+          confirmLabel: 'أكّد التفعيل',
+        );
+        if (again == true) {
+          _confirmRepeat = true;
+          return _submit(); // إعادة مع confirmRepeat=true
+        }
+        return;
+      }
+      _confirmRepeat = false;
+      if (!result.ok) {
+        // مهلة/نتيجةٌ غير مؤكّدة ⇒ `_failureText` يعرض «ربّما تفعّل… راجع
+        // الانتهاء» لا «خطأ» عارياً (كشيت «مشترك جديد»)، والزرّ يبقى مقفلاً.
+        showSheetSnack(context, _failureText(result.code, result.message),
+            isError: true);
+        return;
+      }
+      SubscriberEvents.notifyChange();
+      // تنبيه «لم يُسجَّل الدين» بعد إشعار النجاح — على الطبقة العليا (تُلتقط
+      // قبل الإغلاق) فيبقى بعد إغلاق الشيت، تِلو النجاح لا فوقه (كشيت الإضافة).
+      final rootOverlay = Overlay.maybeOf(context, rootOverlay: true);
+      final okShown = showSheetSnack(context, 'sheets.renew_ok'.tr(), isError: false);
+      if (result.debtWriteFailed && rootOverlay != null) {
+        final warn = result.debtWriteMessage ??
+            'sheets.activate_debt_not_recorded'.tr();
+        unawaited(okShown.then((_) => showSheetSnackOn(rootOverlay, warn,
+            isError: true, duration: const Duration(seconds: 8))));
+      }
+      if (_printReceiptChecked) {
+        final num paidNow = switch (_pay) {
+          _PayType.cash => _elChargePrice,
+          _PayType.partial => _partialAmount,
+          _PayType.debt => 0,
+        };
+        await ReceiptService.printActivationReceipt(
+          sub: widget.sub,
+          packagePrice: _elChargePrice,
+          paidAmount: paidNow,
+          durationDays: null, // EL activation-data بلا مدّة
+        );
+      }
+      if (!mounted) return;
+      if (manualMode && result.waPreview != null) {
+        await handleWaPreviewAfterOp(
+          context: context,
+          preview: result.waPreview!,
+          opTitle: 'تأكيد التفعيل',
+          sas4Idx: widget.sub.idx,
+        );
+        if (!mounted) return;
+      }
+      Navigator.of(context).pop(true);
+      return;
+    }
     // لقطةٌ قبل الانتظار: الردّ يُقرأ بما أُرسل لا بما صار مختاراً بعده.
     final useCard = _cardMode;
     setState(() => _submitting = true);
@@ -473,27 +683,67 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         ),
       ];
     }
-    final price = _effectivePrice > 0 ? _effectivePrice : _userPrice;
+    final price = _displayPrice;
     final cur = 'common.currency'.tr();
     final after = _balanceAfter;
+    final planName = _isEarthlink
+        ? (_elSelectedPkg?['name']?.toString() ??
+            (_profileName.isEmpty ? '—' : _profileName))
+        : (_profileName.isEmpty ? '—' : _profileName);
+    // السعر الأصلي مشطوباً: ايرث لنك ⇒ elRawPrice حين يختلف عن المعروض (خصم)؛ وإلّا منطق SAS4.
+    final strike = _isEarthlink
+        ? (_elRawPrice > 0 && _elRawPrice != price
+            ? formatIQD(_elRawPrice.round())
+            : null)
+        : (_discount > 0
+            ? formatIQD(_userPrice.round())
+            : (_isFixedPrice && _basePrice > 0 && _basePrice != price
+                ? formatIQD(_basePrice.round())
+                : null));
     return [
       SheetPlanCard(
         planLabel: 'subscribers.label_package'.tr(),
-        planName: _profileName.isEmpty ? '—' : _profileName,
+        planName: planName,
         durationLabel: (_duration ?? '').isEmpty ? null : _duration,
         amountLabel: 'sheets.amount_due'.tr(),
         amount: '${formatIQD(price.round())} $cur',
         // السعر الأصلي مشطوباً بجانب النهائي — أوضح من صفَّي «السعر
         // الأصلي» و«الخصم» المنفصلين اللذين كانا في الكارت الأبيض.
-        strikethrough: _discount > 0
-            ? formatIQD(_userPrice.round())
-            : (_isFixedPrice && _basePrice > 0 && _basePrice != price
-                ? formatIQD(_basePrice.round())
-                : null),
+        strikethrough: strike,
       ),
       const SizedBox(height: 14),
       SheetRowsGroup(
-        rows: [
+        rows: _isEarthlink
+            ? [
+                // ايرث لنك: كلفة الباقة المختارة (كلفة الوكيل) + الخصم + الدين/الرصيد + رصيد الإيداع.
+                if (_elSelectedPkgCost > 0)
+                  SheetRowData(
+                    label: 'كلفة الباقة المختارة',
+                    value: '${formatIQD(_elSelectedPkgCost.round())} $cur',
+                    valueColor: AppColors.textMid,
+                  ),
+                if (_discount > 0)
+                  SheetRowData(
+                    label: 'subscribers.label_discount'.tr(),
+                    value: '-${formatIQD(_discount.round())} $cur',
+                    valueColor: AppColors.brandAccent,
+                  ),
+                SheetRowData(
+                  label: _currentBalance < 0
+                      ? 'sheets.current_debt'.tr()
+                      : 'sheets.current_credit'.tr(),
+                  value: '${formatIQD(_currentBalance.abs().round())} $cur',
+                  valueColor: _currentBalance < 0
+                      ? AppColors.error
+                      : AppColors.brandAccent,
+                  strong: true,
+                ),
+                SheetRowData(
+                  label: 'dashboard.manager_balance'.tr(),
+                  value: '${formatIQD(_managerBalance.round())} $cur',
+                ),
+              ]
+            : [
           // Pro: سعر الشراء (كلفة المدير من الشركة) كـهِنت — ليعرف المدير هامشه.
           if (_managerCost > 0)
             SheetRowData(
@@ -540,7 +790,12 @@ class _ActivateSheetState extends State<_ActivateSheet> {
             ),
         ],
       ),
-      if (_methods.card) ...[
+      if (_isEarthlink) ...[
+        const SizedBox(height: 14),
+        _elPackageSection(),
+        const SizedBox(height: 14),
+        _elMethodSection(),
+      ] else if (_methods.card) ...[
         const SizedBox(height: 14),
         _methodSection(),
       ],
@@ -665,6 +920,148 @@ class _ActivateSheetState extends State<_ActivateSheet> {
             if (_methods.canChoose) const SizedBox(height: Sp.sm),
             _cardNote(),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// مبدّل باقة ايرث لنك — حقلٌ واحد يفتح قائمة الباقات (بلاغ ٢٠٢٦-١٠-١٣:
+  /// صفوف الاختيار كانت تطيل المودل بكلّ الباقات). الترتيب والاختيار
+  /// الافتراضيّ والسعر كما كانت — العرض وحده تغيّر.
+  Widget _elPackageSection() {
+    final pkgs = _elPackages;
+    final locked = _elPackageLocked;
+    return SheetSection(
+      label: 'الباقة',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          PackagePickerField(
+            options: [
+              for (final p in pkgs)
+                PackageOption(
+                  id: p['id']?.toString() ?? '',
+                  name: p['name']?.toString() ?? '',
+                  price: _readNumOf(p, 'price'),
+                ),
+            ],
+            selectedId: _selectedPackageId,
+            currentId: _data?['profile_id']?.toString(),
+            enabled: !_submitting && !locked,
+            onSelected: (id) => setState(() => _selectedPackageId = id),
+          ),
+          if (locked) ...[
+            const SizedBox(height: Sp.xs),
+            Text(
+              _elPackageNote,
+              style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.4),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// ايرث لنك: تتغيّر الباقة للمنتهي أو لمن بقي له يومٌ فأقلّ، و«More» لا تتغيّر (قاعدة المالك = ايرث لنك).
+  /// المرجع حكم الخادم (canChangeAccount): بيانات التفعيل ← صفّ المشترك ← نافذة ٢٤ ساعة (خادمٌ أقدم).
+  bool get _elPackageLocked {
+    final flag = _data?['package_change_allowed'];
+    if (flag is bool) return !flag;
+    final rowFlag = widget.sub.canChangePackage;
+    if (rowFlag != null) return !rowFlag;
+    final exp = widget.sub.parsedExpiration;
+    return exp != null && exp.difference(DateTime.now()) > const Duration(hours: 24);
+  }
+
+  String get _elPackageNote =>
+      (_data?['package_change_note'] ?? widget.sub.packageChangeNote)?.toString() ??
+      'تتغيّر الباقة للمنتهي أو لمن بقي له يومٌ فأقلّ — هذا المشترك ما زال فعّالاً';
+
+  /// طريقة الدفع لايرث لنك: رصيد أونلاين (باسورد الإيداع) | كارت (رقم + Pin).
+  Widget _elMethodSection() {
+    final isDeposit = _elMethod == _ElMethod.deposit;
+    return SheetSection(
+      label: 'طريقة الدفع لايرث لنك',
+      gap: Sp.sm,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SheetChoiceTiles(
+            labels: const ['رصيد أونلاين', 'كارت'],
+            icons: const [LucideIcons.wallet, LucideIcons.creditCard],
+            selectedIndex: isDeposit ? 0 : 1,
+            enabled: !_submitting,
+            onSelect: (i) => setState(
+                () => _elMethod = i == 0 ? _ElMethod.deposit : _ElMethod.card),
+          ),
+          const SizedBox(height: Sp.md),
+          if (isDeposit)
+            SheetBox(
+              focused: _depositCtrl.text.isNotEmpty,
+              child: TextField(
+                controller: _depositCtrl,
+                enabled: !_submitting,
+                obscureText: true,
+                textDirection: ui.TextDirection.ltr,
+                onChanged: (_) => setState(() {}), // كي يتحدّث تفعيل الزرّ
+                style: AppType.input(),
+                decoration: InputDecoration(
+                  isDense: true,
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                  hintText: 'باسورد الإيداع',
+                  hintStyle: AppType.input(color: AppColors.textPlaceholder),
+                ),
+              ),
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: SheetBox(
+                    focused: _identifierCtrl.text.isNotEmpty,
+                    child: TextField(
+                      controller: _identifierCtrl,
+                      enabled: !_submitting,
+                      keyboardType: TextInputType.number,
+                      textDirection: ui.TextDirection.ltr,
+                      onChanged: (_) => setState(() {}),
+                      style: AppType.input(),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
+                        hintText: 'رقم الكارت',
+                        hintStyle:
+                            AppType.input(color: AppColors.textPlaceholder),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: Sp.sm),
+                Expanded(
+                  child: SheetBox(
+                    focused: _pinCtrl.text.isNotEmpty,
+                    child: TextField(
+                      controller: _pinCtrl,
+                      enabled: !_submitting,
+                      keyboardType: TextInputType.number,
+                      textDirection: ui.TextDirection.ltr,
+                      onChanged: (_) => setState(() {}),
+                      style: AppType.input(),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
+                        hintText: 'Pin',
+                        hintStyle:
+                            AppType.input(color: AppColors.textPlaceholder),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );

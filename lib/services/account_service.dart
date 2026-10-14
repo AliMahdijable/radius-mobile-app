@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../api/account_api.dart';
 import '../firebase_options.dart';
 import 'company_creds_store.dart';
 import 'notification_service.dart';
@@ -86,9 +89,188 @@ class AccountService {
     if (idToken == null) {
       throw FirebaseAuthException(code: 'missing-id-token');
     }
-    final cred = await _auth
-        .signInWithCredential(GoogleAuthProvider.credential(idToken: idToken));
-    return cred.user;
+    try {
+      final cred = await _auth
+          .signInWithCredential(GoogleAuthProvider.credential(idToken: idToken));
+      return cred.user;
+    } on FirebaseAuthException catch (e) {
+      // رمزٌ مخزَّن منتهٍ: خدمات Google تحكم صلاحيّته بساعة الجهاز، فساعةٌ متأخّرة (محاكي بعد نوم
+      // المضيف مثلاً) تعطي رمزاً انتهى فعلاً فيرفضه Firebase بـinvalid-credential. نمسح حالة
+      // الاعتماد ونطلب رمزاً جديداً مرّةً واحدة.
+      if (e.code != 'invalid-credential') rethrow;
+      await GoogleSignIn.instance.signOut();
+      final String? fresh;
+      try {
+        fresh = (await GoogleSignIn.instance.authenticate()).authentication.idToken;
+      } on GoogleSignInException catch (g) {
+        if (g.code == GoogleSignInExceptionCode.canceled ||
+            g.code == GoogleSignInExceptionCode.interrupted) {
+          return null; // ألغى المستخدم نافذة الإعادة — كإلغاء الأولى
+        }
+        rethrow;
+      }
+      if (fresh == null) rethrow;
+      final cred = await _auth
+          .signInWithCredential(GoogleAuthProvider.credential(idToken: fresh));
+      return cred.user;
+    }
+  }
+
+  // ───────────── Apple ─────────────
+
+  /// زرّ Apple يظهر على أجهزة Apple وحدها (iOS/macOS) — إرشاد App Store 4.8.
+  /// أندرويد والويب يبقيان كما هما (Google + إيميل).
+  static bool get appleSignInAvailable =>
+      !kIsWeb && (Platform.isIOS || Platform.isMacOS);
+
+  static AppleAuthProvider _appleProvider() =>
+      AppleAuthProvider()..addScope('email')..addScope('name');
+
+  /// إلغاء المستخدم لنافذة Apple (ASAuthorizationError.canceled ← `canceled`).
+  static bool _isAppleCancel(Object e) {
+    final code = e is FirebaseAuthException
+        ? e.code
+        : e is PlatformException
+            ? e.code
+            : null;
+    return code != null &&
+        const {
+          'canceled',
+          'cancelled',
+          'web-context-canceled',
+          'web-context-cancelled',
+          'user-cancelled',
+        }.contains(code.toLowerCase());
+  }
+
+  /// يفتح نافذة Apple الأصليّة (Firebase يولّد الـnonce ويتحقّق منه). يُرجع
+  /// null إن ألغى المستخدم. ما بعد الدخول هو نفسه مسار Google: الشاشة تنتقل
+  /// إلى بوّابة الحساب، وهي تستدعي `bootstrap` (إنشاء الحساب + التجربة).
+  static Future<User?> signInWithApple() async {
+    final UserCredential cred;
+    try {
+      cred = await _auth.signInWithProvider(_appleProvider());
+    } catch (e) {
+      if (_isAppleCancel(e)) return null;
+      rethrow;
+    }
+    final user = cred.user;
+    if (user != null) await _applyAppleName(user, cred);
+    return user;
+  }
+
+  /// Apple يعطي الاسم في **أوّل** دخولٍ فقط. Firebase يمرّره للخادم غالباً،
+  /// فإن بقي الملفّ بلا اسم نأخذه ممّا رجع ونكتبه. فشله لا يمنع الدخول.
+  static Future<void> _applyAppleName(User user, UserCredential cred) async {
+    try {
+      if ((user.displayName ?? '').trim().isNotEmpty) return;
+      String? name;
+      for (final p in user.providerData) {
+        if (p.providerId == 'apple.com' && (p.displayName ?? '').trim().isNotEmpty) {
+          name = p.displayName!.trim();
+          break;
+        }
+      }
+      final profile = cred.additionalUserInfo?.profile;
+      if (name == null && profile != null) {
+        final raw = profile['name'] ?? profile['fullName'] ?? profile['displayName'];
+        if (raw is String && raw.trim().isNotEmpty) {
+          name = raw.trim();
+        } else if (raw is Map) {
+          final full = [raw['firstName'], raw['lastName']]
+              .whereType<String>()
+              .map((x) => x.trim())
+              .where((x) => x.isNotEmpty)
+              .join(' ');
+          if (full.isNotEmpty) name = full;
+        }
+      }
+      if (name == null) return;
+      await user.updateDisplayName(name).timeout(const Duration(seconds: 8));
+      await user.reload().timeout(const Duration(seconds: 8));
+    } catch (e) {
+      if (kDebugMode) debugPrint('🟠 apple display name: $e');
+    }
+  }
+
+  // ───────────── حذف الحساب ─────────────
+
+  /// حذف الحساب نهائيّاً من داخل التطبيق (إرشاد App Store 5.1.1(v)).
+  ///
+  /// ١) حساب Apple: إعادة توثيقٍ بنافذة Apple للحصول على رمز التفويض ثمّ
+  ///    إبطال رموز Apple (`revokeTokenWithAuthorizationCode`) — فشله يُسجَّل
+  ///    ولا يوقف الحذف؛ أمّا إلغاء المستخدم للنافذة فيوقفه (لم يؤكّد).
+  /// ٢) `AccountApi.deleteAccount()` — الخادم يحذف الحساب وبياناته.
+  /// ٣) خروجٌ كامل كمسار [signOut] (الساس + الشركات + المحفوظات + Google + Firebase).
+  ///
+  /// يرمي [AccountDeletionException] برسالةٍ جاهزةٍ للعرض عند الفشل.
+  static Future<void> deleteCurrentAccount() async {
+    final u = currentUser;
+    if (u == null) {
+      throw AccountDeletionException('account.err_signed_out'.tr());
+    }
+
+    // ١) Apple: إبطال الرموز قبل الحذف (بعده لا مستخدم يُعاد توثيقه).
+    final isApple = u.providerData.any((p) => p.providerId == 'apple.com');
+    if (isApple && appleSignInAvailable) {
+      String? code;
+      try {
+        final cred = await u.reauthenticateWithProvider(_appleProvider());
+        code = cred.additionalUserInfo?.authorizationCode;
+      } catch (e) {
+        if (_isAppleCancel(e)) {
+          throw AccountDeletionException('account.delete_cancelled'.tr(), cancelled: true);
+        }
+        debugPrint('account delete: apple reauth failed: '
+            '${e is FirebaseAuthException ? e.code : e.runtimeType}');
+      }
+      if (code != null && code.isNotEmpty) {
+        try {
+          await _auth
+              .revokeTokenWithAuthorizationCode(code)
+              .timeout(const Duration(seconds: 15));
+        } catch (e) {
+          debugPrint('account delete: apple revoke failed: '
+              '${e is FirebaseAuthException ? e.code : e.runtimeType}');
+        }
+      }
+    }
+
+    // ٢) الخادم.
+    try {
+      await AccountApi.deleteAccount();
+    } on AccountApiException catch (e) {
+      final m = e.message;
+      throw AccountDeletionException(
+          m.startsWith('account.') ? m.tr() : (m.isNotEmpty ? m : 'account.delete_failed'.tr()));
+    } catch (e) {
+      debugPrint('account delete: server failed: ${e.runtimeType}');
+      throw AccountDeletionException('account.delete_failed'.tr());
+    }
+
+    // احتياط: إن لم يحذف الخادم مستخدم Firebase نفسه نحذفه من هنا. «غير موجود»
+    // (حذفه الخادم) أو «يتطلّب دخولاً حديثاً» لا يُفشلان الحذف — بيانات الحساب حُذفت.
+    try {
+      await u.delete().timeout(const Duration(seconds: 10));
+    } catch (_) {/* حذفه الخادم أصلاً أو تعذّر — لا يمنع الخروج */}
+
+    // Google: فكّ ربط التطبيق بالحساب (إن وُجد) قبل الخروج الكامل.
+    if (u.providerData.any((p) => p.providerId == 'google.com')) {
+      try {
+        await _initGoogle();
+        await GoogleSignIn.instance.disconnect().timeout(const Duration(seconds: 8));
+      } catch (_) {/* لا يمنع الخروج */}
+    }
+
+    // ٣) نفس مسار الخروج: يمسح كلّ ما هو محلّيّ ثمّ Google وFirebase.
+    try {
+      await signOut();
+    } catch (e) {
+      debugPrint('account delete: local sign-out failed: ${e.runtimeType}');
+      try {
+        if (available) await _auth.signOut();
+      } catch (_) {}
+    }
   }
 
   // ───────────── إيميل + كلمة سرّ ─────────────
@@ -164,4 +346,15 @@ class AccountService {
     if (e is GoogleSignInException) return 'account.err_google';
     return 'account.err_generic';
   }
+}
+
+/// فشل حذف الحساب — [message] نصٌّ جاهزٌ للعرض (مترجَم، عربيّ افتراضيّاً).
+/// [cancelled] = أغلق المستخدم نافذة Apple فلم يُحذف شيء (يُكفى بتنبيهٍ هادئ).
+class AccountDeletionException implements Exception {
+  const AccountDeletionException(this.message, {this.cancelled = false});
+  final String message;
+  final bool cancelled;
+
+  @override
+  String toString() => message;
 }

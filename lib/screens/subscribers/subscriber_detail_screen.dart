@@ -11,11 +11,13 @@ import '../../api/subscribers_api.dart';
 import '../../api/whatsapp_api.dart';
 import '../../core/util/format.dart';
 import '../../core/util/phone.dart';
+import '../../core/widgets/permission_locked.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/subscriber.dart';
 import '../../services/app_resumed_signal.dart';
 import '../../services/connection_alerts.dart';
 import '../../services/permissions_service.dart';
+import '../../services/provider_service.dart';
 import '../../services/subscriber_events.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -259,12 +261,16 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                       // `subscribers.send_whatsapp` (مطابقةً لنظيره في شيت
                       // «المزيد»). بدونها كان زرّ التذكير يظهر لمديرٍ مُنِع
                       // المراسلة — فجوةُ تسرّبٍ أغلقها تدقيق ٢٠٢٦-١٠-٠٨.
-                      onRemind: Perms.has('subscribers.send_whatsapp') &&
-                              sub.hasDebt &&
-                              _sendingTemplate == null &&
-                              sub.displayPhone.isNotEmpty
+                      //
+                      // بلاغ ٢٠٢٦-١٠-١٤: الحالة (لا دين/لا هاتف/إرسال جارٍ)
+                      // تُخفي الزرّ كما كانت؛ أمّا نقص المفتاح وحده فيُبقيه
+                      // **مقفلاً** في مكانه — لا يختفي ولا يرسل شيئاً.
+                      onRemind: _remindState &&
+                              Perms.has('subscribers.send_whatsapp')
                           ? () => _sendTemplate('debt_reminder')
                           : null,
+                      remindLocked:
+                          _remindState && _locked('subscribers.send_whatsapp'),
                       // 2026-09-05: كان الشرط `balanceAmount != 0` فيفتح
                       // «تسديد» لصاحب الرصيد الدائن أيضاً — والتسديد يجمع
                       // على الرصيد لا يطرح منه، فمشتركٌ له ٣٠٬٠٠٠ يصير له
@@ -273,9 +279,12 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                       onPay: sub.hasDebt && Perms.has('subscribers.pay_debt')
                           ? () => showPayDebtSheet(context, sub)
                           : null,
+                      payLocked:
+                          sub.hasDebt && _locked('subscribers.pay_debt'),
                       onAddDebt: Perms.has('subscribers.add_debt')
                           ? () => showAddDebtSheet(context, sub)
                           : null,
+                      addDebtLocked: _locked('subscribers.add_debt'),
                     ),
                     // صفّ الإجراءات الأربعة — المخطّط يضعه مباشرةً تحت
                     // بلوك الدين وفوق كارت الاتصال. الباقي انتقل إلى شيت
@@ -332,13 +341,19 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                     // 2026-08-29 (S4): شبكة العمليّات ذات الـ18 بلاطة
                     // أُلغيت. المخطّط يوزّعها على ثلاث طبقات: أربع بلاطات
                     // فوق · زرّ تجديد أساسي هنا · والباقي في شيت «المزيد».
-                    if (Perms.has('subscribers.activate')) ...[
+                    //
+                    // ٢٠٢٦-١٠-١٤: بلا `subscribers.activate` يبقى الزرّ مقفلاً
+                    // في مكانه (لا شيت تفعيل ولا طلب) بدل أن يختفي.
+                    if (permShown(const ['subscribers.activate'])) ...[
                       const SizedBox(height: Sp.md),
                       SubscriberPrimaryAction(
                         icon: LucideIcons.refreshCw,
                         label: 'subscribers.renew_subscription'.tr(),
                         busy: _isBusy,
-                        onTap: () => showActivateSheet(context, sub),
+                        locked: _locked('subscribers.activate'),
+                        onTap: _locked('subscribers.activate')
+                            ? null
+                            : () => showActivateSheet(context, sub),
                       ),
                     ],
                   ],
@@ -575,26 +590,55 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   //
   // الشبكة القديمة كانت تبني `List<_Op>` واحدة بـ18 عنصراً وتعرضها
   // دفعةً واحدة. المخطّط يوزّعها: أربع بلاطات + زرّ تجديد + شيت.
-  // البوّابات (`Perms.has`) نُقلت كما هي حرفيّاً — لا إجراء يظهر لمن
+  // البوّابات (`Perms.has`) نُقلت كما هي حرفيّاً — لا إجراء يُنفَّذ لمن
   // لا يملكه، ولا إجراء سقط في النقل.
+  //
+  // ── بلاغ ٢٠٢٦-١٠-١٤ (صاحب المشروع، لقطة موظّف): «القوائم تبقى بس
+  // تظهر ما عنده صلاحيّة». فالإجراء الذي ينقصه مفتاحه **يبقى في مكانه
+  // مقفلاً** (`locked: true`، ونداؤه null فلا شيت ولا طلب) بدل أن يختفي،
+  // فلا تتبدّل البلاطات والمجموعات بين موظّفٍ وآخر. ويبقى مخفيّاً:
+  //   • ما تحجبه الحالة (لا دين، غير متّصل، لا idx، لا هاتف…).
+  //   • ما لا يدعمه المزوّد (ايرث لنك) — ليس صلاحيّة.
+  //   • مفتاحٌ لا يُمنح لهذا الدور أصلاً (`permShown`) — «اطلبها من
+  //     مديرك» لما لا يملك المدير منحه وعدٌ كاذب.
+  // والمالك يملك كلّ شيء، فكلّ `locked` عنده false وشاشته كما هي.
+
+  /// لا يملكه **ويمكن أن يُمنحه** → يُعرض مقفلاً. (لا يملكه ولا يُمنح
+  /// لدوره → لا هذا ولا ذاك، فيبقى مخفيّاً.)
+  static bool _locked(String key) => !Perms.has(key) && permShown([key]);
+
+  /// يُعرض الإجراء أصلاً (حيّاً أو مقفلاً)؟
+  static bool _shows(String key) => Perms.has(key) || _locked(key);
+
+  /// حالة زرّ «تذكير بالدين» بمعزلٍ عن الصلاحيّة: دَينٌ + هاتف + لا إرسال
+  /// جارٍ. غيابها يُخفي الزرّ للجميع؛ وحضورها بلا مفتاح يُقفله.
+  bool get _remindState =>
+      sub.hasDebt && _sendingTemplate == null && sub.displayPhone.isNotEmpty;
 
   /// البلاطات الأربع: تمديد · تعديل · تعطيل/تفعيل · المزيد.
   /// «المزيد» حاضرة دائماً — هي المدخل الوحيد لباقي العمليّات.
   List<SubAction> _quickActions() {
     return <SubAction>[
-      if (Perms.has('subscribers.extend'))
+      if (_shows('subscribers.extend'))
         SubAction(
           icon: LucideIcons.calendarPlus,
           label: 'subscribers.op_extend'.tr(),
-          onTap: _isBusy ? null : () => showExtendSheet(context, sub),
+          locked: _locked('subscribers.extend'),
+          onTap: (_isBusy || _locked('subscribers.extend'))
+              ? null
+              : () => showExtendSheet(context, sub),
         ),
-      if (Perms.has('subscribers.edit'))
+      if (_shows('subscribers.edit'))
         SubAction(
           icon: LucideIcons.pencil,
           label: 'subscribers.op_edit'.tr(),
-          onTap: _isBusy ? null : () => showEditSubscriberSheet(context, sub),
+          locked: _locked('subscribers.edit'),
+          onTap: (_isBusy || _locked('subscribers.edit'))
+              ? null
+              : () => showEditSubscriberSheet(context, sub),
         ),
-      if (Perms.has('subscribers.toggle'))
+      // التسمية تتبع الحالة (`isDisabled`) حتّى وهو مقفل.
+      if (_shows('subscribers.toggle'))
         SubAction(
           icon: sub.isDisabled ? LucideIcons.circleCheck : LucideIcons.ban,
           label: sub.isDisabled
@@ -602,7 +646,10 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
               : 'subscribers.disable'.tr(),
           color: sub.isDisabled ? AppColors.success : AppColors.warningFill,
           busy: _toggling,
-          onTap: (sub.idx == null || _isBusy) ? null : _confirmToggleEnabled,
+          locked: _locked('subscribers.toggle'),
+          onTap: (sub.idx == null || _isBusy || _locked('subscribers.toggle'))
+              ? null
+              : _confirmToggleEnabled,
         ),
       // فصل الجلسة إجراءٌ يوميّ يُطلَب والمشترك على الهاتف — ودفنُه
       // في «المزيد ← منطقة الخطر» يكلّف نقرتين وبحثاً. وهو مشروطٌ
@@ -611,7 +658,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       // subscribers_screen.dart) — بدونها كان المقيَّد بـtoggle:false
       // يُحجَب عنه الفصل الجماعيّ ويبقى فصل التفصيل = تصعيد صلاحيّة
       // أغلقه تدقيق ٢٠٢٦-١٠-٠٨.
-      if (Perms.has('subscribers.toggle') && sub.isOnline && sub.idx != null)
+      // والحالة (متّصل + idx) تُخفيه للجميع؛ نقص المفتاح وحده يُقفله.
+      if (_shows('subscribers.toggle') && sub.isOnline && sub.idx != null)
         SubAction(
           icon: LucideIcons.power,
           // «فصل» لا «فصل المستخدم»: البلاطات تتقاسم العرض، وخمسٌ منها
@@ -620,7 +668,10 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           label: 'subscribers.disconnect'.tr(),
           color: AppColors.error,
           busy: _disconnecting,
-          onTap: _isBusy ? null : _confirmDisconnect,
+          locked: _locked('subscribers.toggle'),
+          onTap: (_isBusy || _locked('subscribers.toggle'))
+              ? null
+              : _confirmDisconnect,
         ),
       // «تنبيه المشترك» — **عند المشكلة وحدها**، كشريط القائمة. لا تظهر
       // لمشتركٍ سليم، ولا لمن تعذّر الوصول إلى جهازه: لا مشكلةَ معروفة
@@ -683,77 +734,112 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     final phone = sub.displayPhone;
     return <SubActionGroup>[
       SubActionGroup('subscribers.group_money'.tr(), [
-        if (Perms.has('subscribers.add_debt'))
+        if (_shows('subscribers.add_debt'))
           SubAction(
             icon: LucideIcons.plus,
             label: 'subscribers.op_add_debt'.tr(),
             color: AppColors.warningFill,
-            onTap: () => showAddDebtSheet(context, sub),
+            locked: _locked('subscribers.add_debt'),
+            onTap: _locked('subscribers.add_debt')
+                ? null
+                : () => showAddDebtSheet(context, sub),
           ),
         // 2026-08-29 وسّع الشرط إلى `balanceAmount != 0` ليصل المدخلُ
         // صاحبَ الرصيد الدائن. وكان ذلك خطأً: التسديد يجمع على الرصيد
         // (newBalance = balance + amount)، فصاحب ٣٠٬٠٠٠ دائن يخرج بـ
         // ٦٠٬٠٠٠، والشيت يسمّي رصيده «الدين الحالي» بالأحمر لأنّ
         // `debtAbs` قيمةٌ مطلقة لا دين. استهلاك الرصيد بابه «إضافة دين».
-        if (sub.hasDebt && Perms.has('subscribers.pay_debt'))
+        // المقفل بلا `meta`: المبلغ والسعر بياناتٌ مبوّبة بالمفتاح نفسه.
+        if (sub.hasDebt && _shows('subscribers.pay_debt'))
           SubAction(
             icon: LucideIcons.banknote,
             label: 'subscribers.op_pay_debt'.tr(),
             color: AppColors.brandAccent,
-            meta: formatIQD(sub.debtAbs.round()),
-            onTap: () => showPayDebtSheet(context, sub),
+            locked: _locked('subscribers.pay_debt'),
+            meta: _locked('subscribers.pay_debt')
+                ? null
+                : formatIQD(sub.debtAbs.round()),
+            onTap: _locked('subscribers.pay_debt')
+                ? null
+                : () => showPayDebtSheet(context, sub),
           ),
-        if (Perms.has('discounts.manage'))
+        if (_shows('discounts.manage'))
           SubAction(
             icon: LucideIcons.tag,
             label: 'subscribers.op_quick_discount'.tr(),
-            onTap: () => showQuickDiscountSheet(context, sub),
+            locked: _locked('discounts.manage'),
+            onTap: _locked('discounts.manage')
+                ? null
+                : () => showQuickDiscountSheet(context, sub),
           ),
         // «أسعار المشتركين» — بجانب الخصم لأنّه أخوه: الثابت يلغي الخصم.
-        if (Perms.has('subscriber_prices.manage') && sub.idx != null)
+        if (_shows('subscriber_prices.manage') && sub.idx != null)
           SubAction(
             icon: LucideIcons.banknote,
             label: 'sp.op_fixed_price'.tr(),
-            meta: sub.isFixedPrice && sub.price != null
-                ? formatIQD(sub.price!)
-                : (sub.needsRepricing ? 'sp.needs_repricing_short'.tr() : null),
-            onTap: () => showSubscriberPriceSheet(
-              context,
-              idx: sub.idx!,
-              name:
-                  sub.fullName.trim().isNotEmpty ? sub.fullName : sub.username,
-            ),
+            locked: _locked('subscriber_prices.manage'),
+            meta: _locked('subscriber_prices.manage')
+                ? null
+                : (sub.isFixedPrice && sub.price != null
+                    ? formatIQD(sub.price!)
+                    : (sub.needsRepricing
+                        ? 'sp.needs_repricing_short'.tr()
+                        : null)),
+            onTap: _locked('subscriber_prices.manage')
+                ? null
+                : () => showSubscriberPriceSheet(
+                      context,
+                      idx: sub.idx!,
+                      name: sub.fullName.trim().isNotEmpty
+                          ? sub.fullName
+                          : sub.username,
+                    ),
           ),
       ]),
       SubActionGroup('subscribers.group_contact'.tr(), [
-        if (sub.hasDebt && Perms.has('subscribers.send_whatsapp'))
+        if (sub.hasDebt && _shows('subscribers.send_whatsapp'))
           SubAction(
             icon: LucideIcons.bellRing,
             label: 'subscribers.op_debt_reminder'.tr(),
             color: AppColors.warningFill,
             busy: _sendingTemplate == 'debt_reminder',
-            onTap: () => _sendTemplate('debt_reminder'),
+            locked: _locked('subscribers.send_whatsapp'),
+            onTap: _locked('subscribers.send_whatsapp')
+                ? null
+                : () => _sendTemplate('debt_reminder'),
           ),
-        if (sub.isNearExpiry && Perms.has('subscribers.send_whatsapp'))
+        if (sub.isNearExpiry && _shows('subscribers.send_whatsapp'))
           SubAction(
             icon: LucideIcons.alarmClock,
             label: 'subscribers.op_expiry_warning'.tr(),
             color: AppColors.warningFill,
             busy: _sendingTemplate == 'expiry_warning',
-            onTap: () => _sendTemplate('expiry_warning'),
+            locked: _locked('subscribers.send_whatsapp'),
+            onTap: _locked('subscribers.send_whatsapp')
+                ? null
+                : () => _sendTemplate('expiry_warning'),
           ),
-        if (Perms.has('subscribers.send_whatsapp'))
+        if (_shows('subscribers.send_whatsapp'))
           SubAction(
             icon: LucideIcons.info,
             label: 'subscribers.op_send_info'.tr(),
             busy: _sendingTemplate == 'subscriber_info',
-            onTap: () => _sendTemplate('subscriber_info'),
+            locked: _locked('subscribers.send_whatsapp'),
+            onTap: _locked('subscribers.send_whatsapp')
+                ? null
+                : () => _sendTemplate('subscriber_info'),
           ),
-        if (Perms.has('subscribers.send_whatsapp'))
+        // رمز QR / رابط البوّابة — ايرث لنك: مخفيّ (بوّابة مشتركينا غير
+        // مهيّأةٍ لايرث لنك فالرمز يفشل، البند ٤) — المزوّد لا الصلاحيّة.
+        if (_shows('subscribers.send_whatsapp') &&
+            !ProviderService.isEarthlink)
           SubAction(
             icon: LucideIcons.qrCode,
             label: 'subscribers.op_qr_login'.tr(),
-            onTap: () => showQrLoginSheet(context, sub),
+            locked: _locked('subscribers.send_whatsapp'),
+            onTap: _locked('subscribers.send_whatsapp')
+                ? null
+                : () => showQrLoginSheet(context, sub),
           ),
         if (phone.isNotEmpty)
           SubAction(
@@ -785,56 +871,78 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           label: 'subscribers.op_consumption'.tr(),
           onTap: () => showConsumptionSheet(context, sub),
         ),
-        if (Perms.has('subscribers.view_activity'))
+        if (_shows('subscribers.view_activity'))
           SubAction(
             icon: LucideIcons.history,
             label: 'subscribers.op_movements'.tr(),
-            onTap: () => showMovementsSheet(context, sub),
+            locked: _locked('subscribers.view_activity'),
+            onTap: _locked('subscribers.view_activity')
+                ? null
+                : () => showMovementsSheet(context, sub),
           ),
-        if (Perms.has('reports.account_statement'))
+        if (_shows('reports.account_statement'))
           SubAction(
             icon: LucideIcons.fileText,
             label: 'subscribers.account_statement'.tr(),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => AccountStatementScreen(
-                  username: sub.username,
-                  // firstname/lastname غير قابلين للـnull في الموديل —
-                  // نمرّر null فقط حين يكونان فارغين معاً.
-                  displayName:
-                      sub.fullName.trim().isEmpty ? null : sub.fullName.trim(),
-                  phone: sub.phone,
-                ),
-              ),
-            ),
+            locked: _locked('reports.account_statement'),
+            onTap: _locked('reports.account_statement')
+                ? null
+                : () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => AccountStatementScreen(
+                          username: sub.username,
+                          // firstname/lastname غير قابلين للـnull في الموديل —
+                          // نمرّر null فقط حين يكونان فارغين معاً.
+                          displayName: sub.fullName.trim().isEmpty
+                              ? null
+                              : sub.fullName.trim(),
+                          phone: sub.phone,
+                        ),
+                      ),
+                    ),
           ),
         // 2026-08-26: يظهر إذا الموقع مُعيَّن (أيّ موظّف يفتحه بالخرائط)
         // أو الموظّف يملك صلاحيّة تعديله.
-        if (sub.hasLocation || Perms.has('subscribers.edit_location'))
+        // ايرث لنك: `canEditLocation()` تُرجع false، فلا يُعرَض إلّا حين
+        // يوجد موقعٌ مخزَّن — عرضٌ على الخرائط فقط بلا حفظٍ (البند ٤).
+        // ٢٠٢٦-١٠-١٤: بلا موقعٍ ولا `subscribers.edit_location` (ساس) يبقى
+        // صفّ «إضافة موقع» مقفلاً؛ وايرث لنك يبقى مخفيّاً (مزوّدٌ لا صلاحيّة).
+        if (sub.hasLocation ||
+            canEditLocation() ||
+            (!ProviderService.isEarthlink &&
+                _locked('subscribers.edit_location')))
           SubAction(
             icon: LucideIcons.mapPin,
             label: sub.hasLocation
                 ? 'subscribers.op_location'.tr()
                 : 'subscribers.op_location_add'.tr(),
-            onTap: () async {
-              if (!sub.hasLocation) {
-                await showLocationEditSheet(context, sub: sub);
-                return;
-              }
-              await showLocationSheet(context, sub: sub);
-            },
+            locked: !sub.hasLocation && !canEditLocation(),
+            onTap: !sub.hasLocation && !canEditLocation()
+                ? null
+                : () async {
+                    if (!sub.hasLocation) {
+                      await showLocationEditSheet(context, sub: sub);
+                      return;
+                    }
+                    await showLocationSheet(context, sub: sub);
+                  },
           ),
       ]),
       // «فصل المستخدم» صعد إلى البلاطات السريعة — ولا يتكرّر هنا،
       // كما لا يتكرّر التمديد والتعديل والتعطيل.
       SubActionGroup('subscribers.group_danger'.tr(), [
-        if (Perms.has('subscribers.delete'))
+        // مقفلاً بلا أحمر (اللون للخطر الحيّ وحده)؛ ولا يُمنح لموظّف ايرث
+        // لنك أصلاً، فيبقى مخفيّاً عنده (`permShown`).
+        if (_shows('subscribers.delete'))
           SubAction(
             icon: LucideIcons.trash2,
             label: 'common.delete'.tr(),
-            color: AppColors.error,
+            color: _locked('subscribers.delete') ? null : AppColors.error,
             busy: _deleting,
-            onTap: sub.idx == null ? null : _confirmDelete,
+            locked: _locked('subscribers.delete'),
+            onTap: (sub.idx == null || _locked('subscribers.delete'))
+                ? null
+                : _confirmDelete,
           ),
       ]),
     ];

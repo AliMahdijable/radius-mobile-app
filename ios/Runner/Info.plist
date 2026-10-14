@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>MyServices Radius</string>
+	<string>MyServices Pro</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -13,7 +13,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>MyServices Radius</string>
+	<string>MyServices Pro</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -22,34 +22,32 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
-	<key>NSUserNotificationsUsageDescription</key>
-	<string>تنبيهات عند قرب انتهاء اشتراك المشتركين أو انتهائه اليوم.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>يستخدم التطبيق مكتبة الصور لاختيار ومشاركة الملفات والتقارير المتعلقة بخدمة المشتركين.</string>
+	<string>لاختيار صورة تُرفقها برسالة جماعيّة إلى مشتركيك. To pick a photo to attach to a broadcast message to your subscribers.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>يستخدم التطبيق مكتبة الصور لحفظ صور رمز QR الخاص بدخول المشتركين.</string>
+	<string>لحفظ صورة رمز QR الخاصّ بدخول المشترك في الصور عند طلبك. To save a subscriber's login QR code image to your photos when you ask.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>يستخدم التطبيق الكاميرا لتصوير المستندات والمعلومات المتعلقة بالاشتراكات والأجهزة.</string>
+	<string>تُستخدم الكاميرا فقط إن اخترت التقاط صورة لإرفاقها برسالة. The camera is used only if you choose to take a photo to attach to a message.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>يستخدم التطبيق الموقع لتحديد منطقة الخدمة وموقع المشتركين على الخريطة.</string>
+	<string>لتحديد موقع المشترك على الخريطة عند إضافته أو تعديله. To set a subscriber's location on the map when you add or edit them.</string>
 	<!-- 2026-08-28: Apple validator (90683) يطلب المفتاح "always and when in use"
 	     حتى لو التطبيق لا يستعمل الموقع بالخلفيّة — لأن مكتبة geolocator تشير
 	     للـAPI. نصّه نفس الأوّل — التطبيق يطلب "when in use" فقط عملياً. -->
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>يستخدم التطبيق الموقع لتحديد منطقة الخدمة وموقع المشتركين على الخريطة.</string>
+	<string>لتحديد موقع المشترك على الخريطة عند إضافته أو تعديله. To set a subscriber's location on the map when you add or edit them.</string>
 	<!-- iOS 10 وأقدم — نفس الغرض. -->
 	<key>NSLocationAlwaysUsageDescription</key>
-	<string>يستخدم التطبيق الموقع لتحديد منطقة الخدمة وموقع المشتركين على الخريطة.</string>
+	<string>لتحديد موقع المشترك على الخريطة عند إضافته أو تعديله. To set a subscriber's location on the map when you add or edit them.</string>
 	<key>NSContactsUsageDescription</key>
-	<string>يستخدم التطبيق جهات الاتصال لإضافة أرقام المشتركين بسهولة.</string>
+	<string>لاختيار رقم هاتف مشترك من جهات الاتصال بدل كتابته. To pick a subscriber's phone number from your contacts instead of typing it.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>يستخدم التطبيق الميكروفون عند تسجيل ملاحظات صوتية والبحث الصوتي.</string>
+	<string>للبحث الصوتيّ فقط، مثل قول اسم المشترك للعثور عليه. Used only for voice search, e.g. saying a subscriber's name to find them.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>يستخدم التطبيق التعرف على الكلام للبحث الصوتي عن المشتركين.</string>
+	<string>يحوّل كلامك إلى نصّ للبحث الصوتيّ عن المشتركين. Turns your speech into text to search your subscribers.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>يستخدم التطبيق Face ID لتسجيل دخول سريع وآمن.</string>
+	<string>لتسجيل الدخول السريع بـFace ID بدل كتابة كلمة السرّ. To sign in quickly with Face ID instead of typing your password.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>يستخدم التطبيق الشبكة المحلية للوصول إلى أجهزة الراوتر وONT الخاصة بالمشتركين.</string>
+	<string>للوصول إلى أجهزة شبكتك المحلّيّة (الراوتر وأجهزة ONT) من قسم الأجهزة. To reach devices on your local network (routers, ONTs) from the Devices section.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
@@ -99,13 +97,11 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
-		<string>processing</string>
 	</array>
-	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<key>LSApplicationQueriesSchemes</key>
 	<array>
-		<string>com.mysvcs.radMysvcs.workmanager.task</string>
-		<string>be.tramckrijte.workmanager.iOSBackgroundProcessingTask</string>
-		<string>be.tramckrijte.workmanager.iOSBackgroundAppRefresh</string>
+		<string>whatsapp</string>
+		<string>tg</string>
 	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>

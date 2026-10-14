@@ -16,6 +16,13 @@ class Subscriber {
   /// تُعرَض في subscriber_detail_screen للمشتركين غير المتّصلين.
   final String? lastOnline;
   final int? remainingDays;
+
+  /// ايرث لنك: هل تتغيّر الباقة الآن (canChangeAccount من ايرث لنك عبر الخادم: منتهٍ أو بقي يومٌ فأقلّ؛
+  /// «More» لا تتغيّر أبداً). null = خادمٌ لا يرسله (SAS4/أقدم) ← لا قفل.
+  final bool? canChangePackage;
+
+  /// سبب منع تغيير الباقة كما يصوغه الخادم (يُعرض تحت حقل الباقة المقفول).
+  final String? packageChangeNote;
   final String? notes;
   final bool hasDebtFlag;
   final double? debt;
@@ -85,6 +92,12 @@ class Subscriber {
   /// السعر الطبيعي للباقة حين يسري الثابت — للعرض بجانبه.
   final num? basePackagePrice;
 
+  /// 2026-10-12: حسابٌ لم يُفعَّل قطّ — بطاقةٌ فارغة أنشأها الخادم.
+  /// backend يرسل `abandoned: true` في /api/v2/subscribers لهذه الصفوف.
+  /// يُستثنى من عدّادات الداشبورد والقائمة الافتراضيّة، وله فلتر «مهمَل»
+  /// خاصّ يعرضه وحده.
+  final bool abandonedFlag;
+
   // ⚠️ ليس `const`: الحقلان المحفوظان (`balanceAmount` · `parsedExpiration`)
   // حقلا `late final`، ولا يجتمعان مع باني ثابت. لا موضع في المشروع
   // ينشئ `const Subscriber(...)`، فالكلفة صفر.
@@ -98,6 +111,8 @@ class Subscriber {
     this.expiration,
     this.lastOnline,
     this.remainingDays,
+    this.canChangePackage,
+    this.packageChangeNote,
     this.notes,
     this.hasDebtFlag = false,
     this.debt,
@@ -124,6 +139,7 @@ class Subscriber {
     this.isFixedPrice = false,
     this.needsRepricing = false,
     this.basePackagePrice,
+    this.abandonedFlag = false,
   });
 
   /// true فقط لو الـbackend أرجع إحداثيّات صالحة (parse من prefix gps:).
@@ -144,6 +160,31 @@ class Subscriber {
 
   String get displayPhone =>
       (phone?.isNotEmpty ?? false) ? phone! : (mobile ?? '');
+
+  /// سعر بيع الباقة الأساسيّ (قبل خصم المشترك). لصاحب السعر الثابت نُعيد
+  /// السعر الطبيعيّ للباقة لا الثابت — ليُعرَض الثابت منفصلاً. `null` حين
+  /// لا يُعرَف السعر بعد (لم يُحمَّل كتالوج الباقات). يُغني عن حساب
+  /// `_originalPrice` المكرَّر في شاشتَي الأسعار والخصومات.
+  num? get packageSalePrice =>
+      isFixedPrice ? (basePackagePrice ?? price) : price;
+
+  /// سعر البيع بعد خصمٍ مقداره [discountAmount] — لا ينزل تحت الصفر.
+  /// لخصومات المدير المُدارة خارج حقل [discount] (جدول الخصومات): تمرّر
+  /// الشاشةُ مقدارَها الخاصّ فيبقى الرقم المعروض والشارة متّسقين. `null`
+  /// حين لا يُعرَف سعر الباقة. يماثل منطق `Discount.effectivePrice`.
+  num? saleAfter(num discountAmount) {
+    final base = packageSalePrice;
+    if (base == null) return null;
+    final net = base - discountAmount;
+    return net < 0 ? 0 : net;
+  }
+
+  /// «سعر البيع الحالي» الذي يدفعه المشترك فعلاً:
+  ///   • صاحب سعرٍ ثابتٍ سارٍ: الثابت نفسه ([price]) — الخادم يُلغي الخصم معه.
+  ///   • غيره: سعر الباقة ناقص خصمه ([discount])، ولا ينزل تحت الصفر.
+  /// `null` حين لا يُعرَف سعر الباقة.
+  num? get currentSalePrice =>
+      (isFixedPrice && !needsRepricing) ? price : saleAfter(discount ?? 0);
 
   /// Signed amount from notes (negative = debt, positive = credit).
   ///
@@ -228,6 +269,15 @@ class Subscriber {
   /// are counted as offline here (their own filter shows them separately).
   bool get isOffline => !isOnline && !isExpired;
 
+  /// حسابٌ مهمَل: لم يُفعَّل قطّ. نثق براية الخادم أوّلاً، ثمّ نسقط على
+  /// استدلالٍ محلّيّ (بلا باقة ولا انتهاء ولا أيّامٍ باقية) لخوادم قديمة
+  /// لا ترسل `abandoned`. يُستثنى من العدّ والقائمة وله فلترٌ خاصّ.
+  bool get isAbandoned =>
+      abandonedFlag ||
+      ((profileName == null || profileName!.trim().isEmpty) &&
+          (expiration == null || expiration!.trim().isEmpty) &&
+          remainingDays == null);
+
   factory Subscriber.fromJson(Map<String, dynamic> j) {
     int? toInt(dynamic v) {
       if (v == null) return null;
@@ -284,6 +334,8 @@ class Subscriber {
       expiration: j['expiration']?.toString(),
       lastOnline: j['last_online']?.toString(),
       remainingDays: toInt(j['remaining_days'] ?? j['daysRemaining']),
+      canChangePackage: j['can_change_package'] is bool ? j['can_change_package'] as bool : null,
+      packageChangeNote: j['package_change_note']?.toString(),
       notes: j['notes']?.toString() ?? j['comments']?.toString(),
       hasDebtFlag: toBool(j['hasDebt']),
       debt: toDouble(j['debt']),
@@ -347,6 +399,7 @@ class Subscriber {
       isFixedPrice: j['price_source'] == 'custom',
       needsRepricing: j['price_needs_repricing'] == true,
       basePackagePrice: toDouble(j['base_package_price']),
+      abandonedFlag: toBool(j['abandoned']),
     );
   }
 
@@ -375,6 +428,8 @@ class Subscriber {
       expiration: expiration,
       lastOnline: lastOnline,
       remainingDays: remainingDays,
+      canChangePackage: canChangePackage,
+      packageChangeNote: packageChangeNote,
       notes: notes,
       hasDebtFlag: hasDebtFlag,
       debt: debt,
@@ -400,6 +455,7 @@ class Subscriber {
       isFixedPrice: isFixedPrice,
       needsRepricing: needsRepricing,
       basePackagePrice: basePackagePrice,
+      abandonedFlag: abandonedFlag,
     );
   }
 
@@ -421,6 +477,8 @@ class Subscriber {
       expiration: expiration,
       lastOnline: lastOnline,
       remainingDays: remainingDays,
+      canChangePackage: canChangePackage,
+      packageChangeNote: packageChangeNote,
       notes: notes,
       hasDebtFlag: hasDebtFlag,
       debt: debt,
@@ -448,6 +506,7 @@ class Subscriber {
       isFixedPrice: isFixedPrice,
       needsRepricing: needsRepricing,
       basePackagePrice: basePackagePrice,
+      abandonedFlag: abandonedFlag,
     );
   }
 
@@ -465,6 +524,8 @@ class Subscriber {
       expiration: expiration,
       lastOnline: lastOnline,
       remainingDays: remainingDays,
+      canChangePackage: canChangePackage,
+      packageChangeNote: packageChangeNote,
       notes: notes,
       hasDebtFlag: hasDebtFlag,
       debt: debt,
@@ -491,6 +552,7 @@ class Subscriber {
       isFixedPrice: isFixedPrice,
       needsRepricing: needsRepricing,
       basePackagePrice: basePackagePrice,
+      abandonedFlag: abandonedFlag,
     );
   }
 }

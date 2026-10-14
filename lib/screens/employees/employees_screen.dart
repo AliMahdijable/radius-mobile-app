@@ -4,8 +4,11 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../widgets/reveal_password_sheet.dart';
 
 import '../../api/employees_api.dart';
+import '../../core/util/bidi.dart';
 import '../../core/util/clipboard_helper.dart';
+import '../../services/active_company.dart';
 import '../../services/permissions_service.dart';
+import '../../services/provider_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -13,6 +16,9 @@ import 'sheets/employee_editor_sheet.dart';
 
 /// شاشة الموظفين — مديرو الفرع يدخلون عبر حساب رئيسي، والموظفون
 /// الفرعيون يحصلون على صلاحيات محددة. القائمة + add/edit/delete.
+///
+/// ايرث لنك (Pro البند ٤): المالك يدير موظّفي الشركة المفتوحة الآن بنفس
+/// المسارات العامّة؛ المحرّر يُفتح بوضع ايرث لنك ([showEmployeeEditorSheet]).
 class EmployeesScreen extends StatefulWidget {
   const EmployeesScreen({super.key});
 
@@ -26,10 +32,30 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   bool _loading = true;
   String? _error;
 
+  /// المالك موزّع ايرث لنك؟ المصدر `ProviderService` (من `/api/auth/me`)،
+  /// وكود الشركة المفتوحة احتياطٌ يُعرف لحظة الدخول قبل أن يردّ ذلك النداء
+  /// (لا يُنتظر بعد الدخول) — كي لا يرى مالك ايرث لنك محرّر SAS4.
+  static bool get _isEarthlink =>
+      ProviderService.isEarthlink ||
+      ActiveCompany.current?.sasCode == 'earthlink';
+
   @override
   void initState() {
     super.initState();
+    ProviderService.changes.addListener(_onContextChanged);
+    ActiveCompany.listenable.addListener(_onContextChanged);
     _load();
+  }
+
+  @override
+  void dispose() {
+    ProviderService.changes.removeListener(_onContextChanged);
+    ActiveCompany.listenable.removeListener(_onContextChanged);
+    super.dispose();
+  }
+
+  void _onContextChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _load() async {
@@ -58,12 +84,20 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   Future<void> _openEditor({Employee? employee}) async {
     final cat = _catalog;
     if (cat == null) return;
+    // ايرث لنك: الإنشاء يُبقي الشيت مفتوحاً على لوحة بيانات الدخول، فتُحدَّث
+    // القائمة لحظة الإنشاء لا عند الإغلاق (قد يُغلق بالسحب فلا يرجع true).
+    var reloaded = false;
     final changed = await showEmployeeEditorSheet(
       context,
       catalog: cat,
       employee: employee,
+      isEarthlink: _isEarthlink,
+      onCreated: () {
+        reloaded = true;
+        _load();
+      },
     );
-    if (changed == true) _load();
+    if (changed == true && !reloaded) _load();
   }
 
   Future<void> _confirmDelete(Employee emp) async {
@@ -136,6 +170,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final accent = AppColors.brandAccent;
+    final isEl = _isEarthlink;
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -165,16 +200,22 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
               : _error != null
                   ? _errorState(_error!)
                   : _rows.isEmpty
-                      ? _emptyState()
+                      ? _emptyState(isEl: isEl)
                       : ListView(
                           padding: EdgeInsets.only(
                               bottom:
                                   MediaQuery.paddingOf(context).bottom + 96),
                           children: [
-                            _compactHero(accent),
+                            _compactHero(accent, isEl: isEl),
                             for (final e in _rows)
                               _EmployeeTile(
                                 emp: e,
+                                // ايرث لنك: ما يملكه الموظف فعلاً — مفاتيح
+                                // ايرث لنك وحدها؛ لا قيد بمدير فرعي هناك.
+                                permsCount: isEl
+                                    ? ElEmployeePerms.activeCount(e.permissions)
+                                    : e.activePermsCount,
+                                showScope: !isEl,
                                 onTap: Perms.has('employees.manage')
                                     ? () => _openEditor(employee: e)
                                     : null,
@@ -194,9 +235,13 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
 
   /// 2026-08-26 redesign: header compact بلا gradient بلا حواف ثقيلة.
   /// سطر واحد ينظم العدد الكلّي + الحالة (مفعّل/معطّل) على اليمين.
-  Widget _compactHero(Color accent) {
+  ///
+  /// ايرث لنك: وسطرٌ تحته بالشركة التي تعرض القائمة موظّفيها — الموظّف يتبع
+  /// الشركة المفتوحة الآن، فموظّفو شركاته الأخرى لا يظهرون هنا.
+  Widget _compactHero(Color accent, {bool isEl = false}) {
     final activeCount = _rows.where((e) => e.isActive).length;
     final disabledCount = _rows.length - activeCount;
+    final counts = _heroCounts(activeCount, disabledCount);
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
@@ -205,44 +250,77 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
           bottom: BorderSide(color: AppColors.border, width: 0.5),
         ),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
+      child: isEl
+          ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'عدد الموظفين',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textMid,
-                    height: 1.1,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${_rows.length}',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textHi,
-                    letterSpacing: -0.4,
-                    height: 1.1,
-                  ),
-                ),
+                counts,
+                const SizedBox(height: Sp.sm),
+                _elCompanyLine(),
               ],
-            ),
+            )
+          : counts,
+    );
+  }
+
+  /// ايرث لنك: «موظفو <الشركة> · <يوزر المالك>».
+  Widget _elCompanyLine() {
+    final w = elWorkplace(ActiveCompany.current);
+    return Row(
+      children: [
+        Icon(LucideIcons.building2, size: 12, color: AppColors.textLow),
+        const SizedBox(width: Sp.x6),
+        Expanded(
+          child: Text(
+            'موظفو ${iso(w.company)}'
+            '${w.owner.isEmpty ? '' : ' · ${iso(w.owner)}'}',
+            style: AppType.muted(color: AppColors.textMid),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget _heroCounts(int activeCount, int disabledCount) {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'عدد الموظفين',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textMid,
+                  height: 1.1,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${_rows.length}',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textHi,
+                  letterSpacing: -0.4,
+                  height: 1.1,
+                ),
+              ),
+            ],
+          ),
+        ),
+        _statBadge(
+            label: 'مفعّل', count: activeCount, color: AppColors.success),
+        if (disabledCount > 0) ...[
+          const SizedBox(width: 6),
           _statBadge(
-              label: 'مفعّل', count: activeCount, color: AppColors.success),
-          if (disabledCount > 0) ...[
-            const SizedBox(width: 6),
-            _statBadge(
-                label: 'معطّل', count: disabledCount, color: AppColors.textLow),
-          ],
+              label: 'معطّل', count: disabledCount, color: AppColors.textLow),
         ],
-      ),
+      ],
     );
   }
 
@@ -305,7 +383,9 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     );
   }
 
-  Widget _emptyState() {
+  /// ايرث لنك: الموظفون مدعومون الآن — الحالة الفارغة تقول كيف يعمل الموظف
+  /// (يتبع هذه الشركة ويدخل من «دخول موظف») بدل أن توحي بأنّ القسم لا يخصّها.
+  Widget _emptyState({bool isEl = false}) {
     return ListView(
       padding: const EdgeInsets.all(Sp.huge),
       children: [
@@ -316,12 +396,15 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
               Icon(LucideIcons.userX, size: 36, color: AppColors.textLow),
               const SizedBox(height: 10),
               Text(
-                'لا يوجد موظفون.',
+                isEl ? 'لا يوجد موظفون بعد.' : 'لا يوجد موظفون.',
                 style: AppType.label(color: AppColors.textMid),
               ),
               const SizedBox(height: 4),
               Text(
-                'اضغط "موظف جديد" لإضافة أول موظف.',
+                isEl
+                    ? 'اضغط "موظف جديد" لإضافة موظف لهذه الشركة — يدخل من '
+                        'شاشة «دخول موظف» باسم المستخدم وكلمة المرور.'
+                    : 'اضغط "موظف جديد" لإضافة أول موظف.',
                 style: AppType.muted().copyWith(fontSize: 12.5),
                 textAlign: TextAlign.center,
               ),
@@ -336,11 +419,19 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
 class _EmployeeTile extends StatelessWidget {
   const _EmployeeTile({
     required this.emp,
+    required this.permsCount,
     required this.onTap,
+    this.showScope = true,
     this.onDelete,
     this.onShowPassword,
   });
   final Employee emp;
+
+  /// عدد الصلاحيّات المعروض — ايرث لنك يعدّ مفاتيحه وحدها.
+  final int permsCount;
+
+  /// شارة «مقيَّد بـ@…» — لا قيد بمدير فرعي عند ايرث لنك.
+  final bool showScope;
 
   /// null لو الـactor ما عنده صلاحية التعديل — InkWell يصير inert
   /// (لا ripple، لا فعل) بدل ما يفتح editor فاضي.
@@ -455,13 +546,13 @@ class _EmployeeTile extends StatelessWidget {
                             size: 10, color: AppColors.brand),
                         const SizedBox(width: 3),
                         Text(
-                          '${emp.activePermsCount} صلاحية',
+                          '$permsCount صلاحية',
                           style: AppType.pillBold(color: AppColors.brand),
                         ),
                       ],
                     ),
                     // 2026-08-26: شارة قيد الـscope — الموظّف مقيَّد بمدير فرعي.
-                    if (emp.isScoped) ...[
+                    if (showScope && emp.isScoped) ...[
                       const SizedBox(height: 3),
                       Row(
                         children: [

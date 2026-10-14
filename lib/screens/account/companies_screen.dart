@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../api/account_api.dart';
 import '../../api/auth_api.dart';
+import '../../core/platform/store_policy.dart';
 import '../../services/account_service.dart';
 import '../../services/company_creds_store.dart';
 import '../../services/sas_login_flow.dart';
@@ -16,7 +17,9 @@ import '../login_screen.dart';
 import '../main_shell.dart';
 import 'account_gate_screen.dart';
 import 'account_login_screen.dart';
+import 'account_settings_card.dart' show confirmAndDeleteAccount;
 import 'account_widgets.dart';
+import 'my_devices_screen.dart';
 import 'subscription_screen.dart';
 
 /// Pro البند ٤ — الطبقة ②: «شركاتي». شركات الحساب يعرفها الخادم (كلّ دخول
@@ -63,7 +66,7 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
     final pass = await CompanyCredsStore.passwordFor(url, c.username);
     if (!mounted) return;
     if (pass == null) {
-      await _addOrLogin(sasUrl: url, username: c.username);
+      await _addOrLogin(sasUrl: url, username: c.username, company: c);
       return;
     }
     setState(() => _opening = _keyOf(c));
@@ -71,7 +74,10 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
     if (!mounted) return;
     switch (res) {
       case LoginSuccess():
-        final out = await SasLoginFlow.complete(res, username: c.username, password: pass, sasUrl: url, remember: true);
+        // اسم الشركة وكودها من «شركاتي» — يُعرضان أعلى الواجهة بعد الدخول.
+        final out = await SasLoginFlow.complete(res,
+            username: c.username, password: pass, sasUrl: url, remember: true,
+            companyLabel: c.label, sasCode: c.sasCode);
         if (!mounted) return;
         setState(() => _opening = null);
         if (out == SasLoginOutcome.ok) {
@@ -86,11 +92,19 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
         }
       case final LoginFailure f:
         setState(() => _opening = null);
-        if (f.isCancelled || _handleGate(f)) return;
+        if (f.isCancelled) return;
+        // حدّ الأجهزة — قبل البوّابة: كان رمز بوّابةٍ فيرتدّ المستخدم إلى هنا
+        // بلا كلمة، عالقاً. «أجهزتي» تحرّر مكاناً ثمّ يُعاد هذا الدخول فوراً.
+        if (f.isDeviceLimit) {
+          HapticFeedback.heavyImpact();
+          if (await showDeviceLimitSheet(context, message: f.message) && mounted) await _open(c);
+          return;
+        }
+        if (_handleGate(f)) return;
         HapticFeedback.heavyImpact();
-        showAccountSnack(context, f.message, error: true);
+        showAccountSnack(context, StorePolicy.storeSafe(f.message), error: true);
         // كلمة سرٍّ تغيّرت في الساس: نفتح النموذج ليكتبها من جديد.
-        if (f.code == null) await _addOrLogin(sasUrl: url, username: c.username);
+        if (f.code == null) await _addOrLogin(sasUrl: url, username: c.username, company: c);
     }
   }
 
@@ -104,9 +118,15 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
     return true;
   }
 
-  Future<void> _addOrLogin({String? sasUrl, String? username}) async {
+  Future<void> _addOrLogin({String? sasUrl, String? username, LinkedCompany? company}) async {
     await Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => LoginScreen(initialSasUrl: sasUrl, initialUsername: username, fromCompanies: true),
+      builder: (_) => LoginScreen(
+        initialSasUrl: sasUrl,
+        initialUsername: username,
+        initialCompanyLabel: company?.label,
+        initialSasCode: company?.sasCode,
+        fromCompanies: true,
+      ),
     ));
     if (mounted) _load(); // ربما أُضيفت شركة
   }
@@ -154,6 +174,11 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
     }
   }
 
+  /// «أجهزتي» — تعمل والحساب عند حدّ الأجهزة (بتوكن الحساب وحده).
+  Future<void> _openDevices() async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => MyDevicesScreen(me: _me)));
+  }
+
   Future<void> _signOut() async {
     final ok = await showDialog<bool>(
       context: context,
@@ -187,9 +212,26 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final sub = _me.subscription;
-    final chip = sub.isTrial
-        ? 'account.chip_trial'.tr(args: ['${sub.daysLeft}'])
-        : 'account.chip_active'.tr(args: ['${sub.daysLeft}']);
+    // آيفون: المجّانيّ الدائم «مجّاني دائم» لا «باقي 36500 يوم».
+    final neutral = StorePolicy.hidePurchaseFlows;
+    // آيفون: «فعّال حتى …» بلا «تجربة» ولا «مشترك · باقي X يوم» (3.1.1)، والمجّانيّ
+    // الدائم «مجّاني دائم» لا «باقي 36500 يوم».
+    final chip = neutral
+        ? (sub.isFreeForever
+            ? 'account.chip_free'.tr()
+            : !sub.active
+                ? 'account.status_ended_neutral'.tr()
+                : sub.endsAt == null
+                    ? 'account.status_active_neutral'.tr()
+                    : 'account.chip_active_neutral'
+                        .tr(args: [DateFormat('d MMMM y', context.locale.languageCode).format(sub.endsAt!)]))
+        : sub.isTrial
+            ? 'account.chip_trial'.tr(args: ['${sub.daysLeft}'])
+            : 'account.chip_active'.tr(args: ['${sub.daysLeft}']);
+    // آيفون: لونٌ بحسب قرب الانتهاء لا بحسب «تجربة».
+    final warnTone = neutral
+        ? (!sub.active || (!sub.isFreeForever && sub.daysLeft <= 7))
+        : sub.isTrial;
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
@@ -212,18 +254,45 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
                       ],
                     ),
                   ),
+                  // مبدّل المظهر على صفحة البداية — يبدّل فاتح/داكن/تلقائي
+                  // بلا دخولٍ لشركةٍ ولا وصولٍ للإعدادات.
+                  const AccountThemeToggle(),
+                  const SizedBox(width: Sp.xs),
                   PopupMenuButton<String>(
                     icon: Icon(Icons.more_vert_rounded, color: AppColors.textHi),
                     color: AppColors.surface,
-                    onSelected: (v) => v == 'code' ? _openSubscription() : _signOut(),
+                    onSelected: (v) => switch (v) {
+                      'code' => _openSubscription(),
+                      'devices' => _openDevices(),
+                      'delete' => confirmAndDeleteAccount(context),
+                      'privacy' => openPrivacyPolicy(context),
+                      _ => _signOut(),
+                    },
                     itemBuilder: (_) => [
+                      // آيفون: لا «كود التفعيل» (الحساب يُفعَّل من لوحة المالك)؛
+                      // حالة الحساب تُفتح من حبّة الحالة تحت العنوان.
+                      if (!StorePolicy.hidePurchaseFlows)
+                        PopupMenuItem(
+                          value: 'code',
+                          child: Text('account.menu_code'.tr(), style: AppType.body(color: AppColors.textHi)),
+                        ),
                       PopupMenuItem(
-                        value: 'code',
-                        child: Text('account.menu_code'.tr(), style: AppType.body(color: AppColors.textHi)),
+                        value: 'devices',
+                        child: Text('account.devices_title'.tr(), style: AppType.body(color: AppColors.textHi)),
                       ),
                       PopupMenuItem(
                         value: 'out',
                         child: Text('account.sign_out'.tr(), style: AppType.body(color: AppColors.error)),
+                      ),
+                      // حذف الحساب (App Store 5.1.1(v)) — هنا أيضاً: المراجِع قد لا يصل
+                      // الإعدادات بلا دخول شركة.
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Text('account.delete_account'.tr(), style: AppType.body(color: AppColors.error)),
+                      ),
+                      PopupMenuItem(
+                        value: 'privacy',
+                        child: Text('account.privacy_policy'.tr(), style: AppType.body(color: AppColors.textHi)),
                       ),
                     ],
                   ),
@@ -238,14 +307,14 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.xs + 2),
                     decoration: BoxDecoration(
-                      color: sub.isTrial ? AppColors.warningSoftBg : AppColors.successSoftBg,
+                      color: warnTone ? AppColors.warningSoftBg : AppColors.successSoftBg,
                       borderRadius: BorderRadius.circular(R.pill),
                     ),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(sub.isTrial ? Icons.hourglass_top_rounded : Icons.verified_rounded,
-                          size: 15, color: sub.isTrial ? AppColors.warning : AppColors.success),
+                      Icon(warnTone ? Icons.hourglass_top_rounded : Icons.verified_rounded,
+                          size: 15, color: warnTone ? AppColors.warning : AppColors.success),
                       const SizedBox(width: Sp.xs + 2),
-                      Text(chip, style: AppType.pillBold(color: sub.isTrial ? AppColors.warningOnSoft : AppColors.success)),
+                      Text(chip, style: AppType.pillBold(color: warnTone ? AppColors.warningOnSoft : AppColors.success)),
                     ]),
                   ),
                 ),

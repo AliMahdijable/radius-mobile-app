@@ -39,11 +39,10 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
   /// أفضل لغة عربيّة يُعلنها الجهاز فعلاً — لا 'ar' مفترضة.
   String? _arLocale;
 
-  @override
-  void initState() {
-    super.initState();
-    _init();
-  }
+  /// التهيئة تطلب إذنَي الميكروفون والتعرّف على الكلام، فتؤجَّل إلى أوّل ضغطةٍ
+  /// على الزرّ: كانت في initState فيظهر الطلب بمجرّد فتح شاشة المشتركين قبل
+  /// أيّ نيّةٍ للبحث الصوتيّ (App Store 5.1.1 — الإذن في سياقه).
+  Future<void>? _initFuture;
 
   @override
   void dispose() {
@@ -149,8 +148,16 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
       return;
     }
     if (!_ready) {
-      _snack('التعرّف على الصوت غير متاح على هذا الجهاز');
-      return;
+      await (_initFuture ??= _init());
+      if (!mounted) return;
+      if (!_ready) {
+        _initFuture = null; // تُعاد المحاولة في الضغطة التالية
+        final denied = !(await _speech.hasPermission.catchError((_) => false));
+        _snack(denied
+            ? 'صلاحية الميكروفون مرفوضة — فعّلها من إعدادات النظام'
+            : 'التعرّف على الصوت غير متاح على هذا الجهاز');
+        return;
+      }
     }
     setState(() => _listening = true);
     // 'ar' احتياطاً حين يفشل الاستكشاف: أجهزة بمحرّك خاصّ تشترط

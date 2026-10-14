@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 
 import '../../api/account_api.dart';
+import '../../core/platform/store_policy.dart';
 import '../../services/account_service.dart';
 import '../../services/dashboard_refresh_signal.dart';
 import '../../services/support_contact.dart';
@@ -50,6 +51,9 @@ const int kSubscriptionWarnDays = 7;
 /// التجربة، أو حين يبقى [kSubscriptionWarnDays] أيّام أو أقلّ. الضغط يفتح
 /// نافذةً صغيرة فيها «تفعيل» و«تواصل معنا». (طلب المستخدم: في الأعلى لا
 /// كارتاً يأخذ مساحة في جسم الصفحة.) لا تظهر في الحالة السويّة.
+///
+/// آيفون ([StorePolicy.hidePurchaseFlows]): النافذة معلومةٌ وحدها («ينتهي في …»)
+/// وزرّ إغلاق — لا «تفعيل» ولا «تواصل معنا» (الحساب يُفعَّل من لوحة المالك).
 class SubscriptionChip extends StatefulWidget {
   const SubscriptionChip({super.key});
 
@@ -88,7 +92,13 @@ class _SubscriptionChipState extends State<SubscriptionChip> {
   }
 
   void _openSheet(AccountMe me, String title, bool urgent) {
-    final body = (me.subscription.isTrial ? 'account.banner_trial_body' : 'account.banner_ending_body').tr();
+    final neutral = StorePolicy.hidePurchaseFlows;
+    final ends = me.subscription.endsAt;
+    final body = neutral
+        ? (ends == null
+            ? ''
+            : 'account.banner_ends_on_neutral'.tr(args: [DateFormat('d MMMM y', context.locale.languageCode).format(ends)]))
+        : (me.subscription.isTrial ? 'account.banner_trial_body' : 'account.banner_ending_body').tr();
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.surfaceSheet,
@@ -105,39 +115,49 @@ class _SubscriptionChipState extends State<SubscriptionChip> {
                   color: urgent ? AppColors.error : AppColors.warning, size: 32),
               const SizedBox(height: Sp.sm),
               Text(title, textAlign: TextAlign.center, style: AppType.sheetTitle(color: AppColors.textHi)),
-              const SizedBox(height: Sp.xs),
-              Text(body, textAlign: TextAlign.center,
-                  style: AppType.body(color: AppColors.textBody).copyWith(height: 1.55)),
+              if (body.isNotEmpty) ...[
+                const SizedBox(height: Sp.xs),
+                Text(body, textAlign: TextAlign.center,
+                    style: AppType.body(color: AppColors.textBody).copyWith(height: 1.55)),
+              ],
               const SizedBox(height: Sp.lg),
-              Row(
-                children: [
-                  Expanded(
-                    child: _BannerButton(
-                      label: 'account.code_activate'.tr(),
-                      icon: Icons.key_rounded,
-                      filled: true,
-                      onTap: () {
-                        Navigator.of(ctx).pop();
-                        _activate(me);
-                      },
-                    ),
-                  ),
-                  if (!me.support.isEmpty) ...[
-                    const SizedBox(width: Sp.sm),
+              if (neutral)
+                _BannerButton(
+                  label: 'common.close'.tr(),
+                  icon: Icons.check_rounded,
+                  filled: false,
+                  onTap: () => Navigator.of(ctx).pop(),
+                )
+              else
+                Row(
+                  children: [
                     Expanded(
                       child: _BannerButton(
-                        label: 'account.contact_us'.tr(),
-                        icon: Icons.support_agent_rounded,
-                        filled: false,
+                        label: 'account.code_activate'.tr(),
+                        icon: Icons.key_rounded,
+                        filled: true,
                         onTap: () {
                           Navigator.of(ctx).pop();
-                          SupportContact.open(context, me.support);
+                          _activate(me);
                         },
                       ),
                     ),
+                    if (!me.support.isEmpty) ...[
+                      const SizedBox(width: Sp.sm),
+                      Expanded(
+                        child: _BannerButton(
+                          label: 'account.contact_us'.tr(),
+                          icon: Icons.support_agent_rounded,
+                          filled: false,
+                          onTap: () {
+                            Navigator.of(ctx).pop();
+                            SupportContact.open(context, me.support);
+                          },
+                        ),
+                      ),
+                    ],
                   ],
-                ],
-              ),
+                ),
             ],
           ),
         ),
@@ -151,12 +171,22 @@ class _SubscriptionChipState extends State<SubscriptionChip> {
     final me = _me;
     if (me == null) return const SizedBox.shrink();
     final s = me.subscription;
-    if (!s.active || (!s.isTrial && s.daysLeft > kSubscriptionWarnDays)) return const SizedBox.shrink();
+    final neutral = StorePolicy.hidePurchaseFlows;
+    if (!s.active) return const SizedBox.shrink();
+    // آيفون: لا حبّة طوال «التجربة» — قرب الانتهاء وحده، وبصيغة «تفعيل الحساب»
+    // لا «اشتراك/تجربة» (3.1.1).
+    if (neutral ? s.daysLeft > kSubscriptionWarnDays : (!s.isTrial && s.daysLeft > kSubscriptionWarnDays)) {
+      return const SizedBox.shrink();
+    }
 
     final urgent = s.daysLeft <= 2;
-    final title = s.daysLeft <= 1
-        ? 'account.banner_today'.tr()
-        : (s.isTrial ? 'account.banner_trial' : 'account.banner_ending').tr(args: ['${s.daysLeft}']);
+    final title = neutral
+        ? (s.daysLeft <= 1
+            ? 'account.banner_today_neutral'.tr()
+            : 'account.banner_neutral_title'.tr(args: ['${s.daysLeft}']))
+        : s.daysLeft <= 1
+            ? 'account.banner_today'.tr()
+            : (s.isTrial ? 'account.banner_trial' : 'account.banner_ending').tr(args: ['${s.daysLeft}']);
     final short = s.daysLeft <= 1 ? 'account.chip_today'.tr() : 'account.chip_days_left'.tr(args: ['${s.daysLeft}']);
     final tone = urgent ? AppTone.danger : AppTone.warning;
     return GestureDetector(

@@ -11,6 +11,10 @@ import 'cards_api.dart';
 
 /// ردّ activate. `code` رمز الرفض حين يرسله الخادم (`NO_CARDS` ·
 /// `CARD_NOT_ALLOWED`)، و`card` الكارت الذي سُحب في التفعيل بالكارت.
+///
+/// ايرث لنك: [debtWriteFailed] = نجاحٌ ومعه `debt_write.ok == false` — تمّ
+/// التفعيل لكنّ دينه لم يُسجَّل في دفترنا؛ تنبيهٌ لا يمنع، برسالة الخادم
+/// [debtWriteMessage] إن وُجدت (كشيت «مشترك جديد»). لا يمسّ مسار SAS4.
 typedef ActivateResult = ({
   bool ok,
   String? message,
@@ -18,6 +22,8 @@ typedef ActivateResult = ({
   WhatsAppSendInfo? wa,
   WaPreview? waPreview,
   ActivationCard? card,
+  bool debtWriteFailed,
+  String? debtWriteMessage,
 });
 
 /// Outcome of a backend-initiated WhatsApp send (post-activate /
@@ -572,7 +578,13 @@ class SubscribersApi {
     required Map<String, dynamic> activationData,
     int? partialAmount,
     bool skipAutoWa = false,
-    String method = 'credit', // 'credit' | 'card'
+    String method = 'credit', // SAS4: 'credit'|'card' — ايرث لنك: 'credit'|'deposit'|'card'
+    // ── ايرث لنك (البند ٤) ──
+    String? depositPassword, // method=='deposit' (رصيد أونلاين)
+    String? identifier, // method=='card' (رقم الكارت — مكتوب لا من المخزون)
+    String? pin, // method=='card'
+    int? profileId, // باقة مختارة (مبدّل)
+    bool confirmRepeat = false, // تجاوز حارس التكرار RECENT_DUPLICATE
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -583,7 +595,16 @@ class SubscribersApi {
           if (paymentType == 'partial-cash' && partialAmount != null)
             'partialAmount': partialAmount,
           if (skipAutoWa) 'skipAutoWa': true,
-          if (method == 'card') 'method': 'card',
+          // غياب method عند الخادم = 'credit' (رصيد). يُرسَل لأيّ طريقة غير credit:
+          // يبقى سلوك SAS4 (الرصيد/الكارت) حرفيّاً، ويغطّي deposit/card لايرث لنك.
+          if (method != 'credit') 'method': method,
+          if (depositPassword != null && depositPassword.isNotEmpty)
+            'depositPassword': depositPassword,
+          if (identifier != null && identifier.isNotEmpty)
+            'identifier': identifier,
+          if (pin != null && pin.isNotEmpty) 'pin': pin,
+          if (profileId != null) 'profile_id': profileId,
+          if (confirmRepeat) 'confirmRepeat': true,
         },
         // الخادم قد ينتظر قفل كارتات الوكيل ثمّ الساس (حتى ٩٠ث للتفعيل نفسه):
         // مهلة الثلاثين كانت تقطع طلباً يكمله الخادم بعدها، فيقول التطبيق
@@ -606,6 +627,8 @@ class SubscribersApi {
         wa: null,
         waPreview: null,
         card: null,
+        debtWriteFailed: false,
+        debtWriteMessage: null,
       );
     } catch (e) {
       _log('activate/$idx', e);
@@ -616,6 +639,8 @@ class SubscribersApi {
         wa: null,
         waPreview: null,
         card: null,
+        debtWriteFailed: false,
+        debtWriteMessage: null,
       );
     }
   }
@@ -637,6 +662,11 @@ class SubscribersApi {
   @visibleForTesting
   static ActivateResult activateResultFromBody(Map<String, dynamic> body) {
     final ok = body['success'] == true;
+    // ايرث لنك: نجاحٌ وخرج المال من الوكيل لكنّ دفترنا لم يُكتب (debt_write.ok
+    // == false) — يُبلَّغ ولا يُلغي النجاح. SAS4 لا يرسل الحقل فيبقى false.
+    final dw = body['debt_write'];
+    final debt = dw is Map ? dw : null;
+    final debtFailed = ok && debt != null && debt['ok'] == false;
     return (
       ok: ok,
       message: body['message']?.toString(),
@@ -644,6 +674,8 @@ class SubscribersApi {
       wa: WhatsAppSendInfo.fromMap(body['wa']),
       waPreview: WaPreview.fromMap(body['wa_preview']),
       card: ok ? ActivationCard.fromJson(body['card']) : null,
+      debtWriteFailed: debtFailed,
+      debtWriteMessage: debtFailed ? debt['message']?.toString() : null,
     );
   }
 
@@ -677,10 +709,15 @@ class SubscribersApi {
   /// POST /api/v2/subscribers/:idx/extend — extend into a new package.
   /// Method: 'balance' (charge manager wallet) or 'points' (deduct
   /// reward points).
+  ///
+  /// [confirmRepeat]: يتجاوز حارس التكرار (409 `RECENT_DUPLICATE`) في خادم
+  /// البرو — يُرسَل فقط بعد أن يؤكّد المدير الإعادة (كالتجديد). غيابه عند
+  /// خادم SAS4 لا يغيّر شيئاً، فالتمديد العاديّ يبقى حرفيّاً كما كان.
   static Future<
       ({
         bool ok,
         String? message,
+        String? code,
         WhatsAppSendInfo? wa,
         WaPreview? waPreview
       })> extend({
@@ -688,6 +725,7 @@ class SubscribersApi {
     required String profileId,
     required String method, // 'balance' | 'points'
     bool skipAutoWa = false,
+    bool confirmRepeat = false,
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -696,6 +734,7 @@ class SubscribersApi {
           'profile_id': profileId,
           'method': method,
           if (skipAutoWa) 'skipAutoWa': true,
+          if (confirmRepeat) 'confirmRepeat': true,
         },
       );
       final body = r.data ?? const {};
@@ -703,6 +742,8 @@ class SubscribersApi {
       return (
         ok: ok,
         message: body['message']?.toString(),
+        // رمز الرفض حين يصل ردّاً (409 RECENT_DUPLICATE عبر validateStatus<500).
+        code: ok ? null : body['code']?.toString(),
         wa: WhatsAppSendInfo.fromMap(body['wa']),
         waPreview: WaPreview.fromMap(body['wa_preview']),
       );
@@ -713,12 +754,19 @@ class SubscribersApi {
       return (
         ok: false,
         message: msg ?? 'تعذّر التمديد',
+        // ورمزه حين يصل رميةً (لو تجاوز validateStatus مستقبلاً).
+        code: body is Map ? body['code']?.toString() : null,
         wa: null,
         waPreview: null
       );
     } catch (e) {
       _log('extend/$idx', e);
-      return (ok: false, message: 'تعذّر التمديد', wa: null, waPreview: null);
+      return (
+          ok: false,
+          message: 'تعذّر التمديد',
+          code: null,
+          wa: null,
+          waPreview: null);
     }
   }
 

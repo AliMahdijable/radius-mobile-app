@@ -9,7 +9,9 @@ import '../../api/cards_api.dart';
 import '../../api/dashboard_api.dart';
 import '../../api/view_scope_api.dart';
 import '../../services/view_scope_events.dart';
+import '../../core/widgets/permission_locked.dart';
 import '../../models/dashboard.dart';
+import '../../services/active_company.dart';
 import '../../services/alerts_service.dart';
 import '../../services/app_resumed_signal.dart';
 import '../../services/dashboard_refresh_signal.dart';
@@ -17,7 +19,9 @@ import '../../services/auth_storage.dart';
 import '../../services/dashboard_cache.dart';
 import '../../services/inbox_service.dart';
 import '../../services/permissions_service.dart';
+import '../../services/provider_service.dart';
 import '../../services/subscriber_events.dart';
+import '../../widgets/active_company_line.dart';
 import '../accounts/accounts_screen.dart';
 import '../notifications/inbox_screen.dart';
 import '../reports/activity_log_report_screen.dart';
@@ -90,6 +94,73 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// أهون من شاشة تبدو معطوبة عند كلّ فتح.
   bool _shown(String key) => !_sectionsLoaded || !_hiddenSections.contains(key);
 
+  // ── موظّف ايرث لنك: الأقسام تتبع صلاحيّاته ─────────────────────────
+  //
+  // 🐛 بلاغ ٢٠٢٦-١٠-١٢ (موظّف «تفعيل وتحصيل»): «الإيرادات — تعذّر الجلب»
+  // و«آخر النشاطات (تعذّر الجلب)»، ورصيد الوكيل ظاهر. اللوحة كانت تطلب
+  // مساراتٍ تردّها بوّابة الموظّفين 403 لمن لا يملك مفتاحها:
+  //   الإيرادات `reports/finance` ← reports.financial
+  //   الرصيد `admin-widgets` ← يُقنَّع (`balance:null`) بلا reports.financial
+  //   آخر النشاطات `daily-activations` ← reports.daily_activations
+  //   «عرض الكل» (سجلّ النشاط) ← reports.activity_log
+  //   المشتركون والمدينون `v2/subscribers` ← subscribers.view
+  //   حبّة الواتساب `connection-status` ← أيّ مفتاح whatsapp.*
+  //
+  // القاعدة: قسمٌ لا يملك الفاعل مفتاح بياناته **لا يُطلب** ويبقى مكانه
+  // مقفلاً (بلاغ ٢٠٢٦-١٠-١٤) — لا حالة «تعذّر» توهم بعطل، ولا نداءٌ يعرف
+  // الخادم أنّه سيرفضه.
+  //
+  // ولكلّ فاعلٍ مقيَّد لا لموظّف ايرث لنك وحده: موظّف الساس والمدير الفرعيّ
+  // المقيَّد يرون «التقارير الماليّة» مقفلةً في «قوائم أخرى» والتقارير، فلا
+  // تطلبها الرئيسيّة لتكتب «تعذّر الجلب» ورصيداً صفراً. والمالك كما كان
+  // حرفيّاً: `Perms.has` صحيحةٌ له دائماً (وقبل تحميل `/me`).
+  bool get _elEmployee => ProviderService.isEarthlink && Perms.isEmployee;
+  bool _allows(String key) => Perms.has(key);
+
+  bool get _canSubs => _allows('subscribers.view');
+  bool get _canMoney => _allows('reports.financial');
+  bool get _canActivity => _allows('reports.daily_activations');
+  bool get _canActivityLog => _allows('reports.activity_log');
+  bool get _canWa => !_elEmployee || Perms.hasAny(_waKeys);
+
+  /// مفاتيح `connection-status` في الخادم (`requireWhatsAppAdminContext`).
+  static const _waKeys = [
+    'whatsapp.connect',
+    'whatsapp.send',
+    'whatsapp.broadcast',
+    'whatsapp.templates',
+    'whatsapp.schedules',
+  ];
+
+  /// بصمة ما يُسمح به الآن.
+  ///
+  /// `/me` يُعاد جلبه بعد كلّ إقلاع فيُطلق `PermissionsService.changes` ولو
+  /// بقي كلّ شيء كما هو — فلا إعادة بناءٍ ولا جلب إلّا إن تبدّلت البصمة.
+  String _access = '';
+  String _accessSig() =>
+      '$_elEmployee$_canSubs$_canMoney$_canActivity$_canActivityLog$_canWa';
+
+  void _onAccessChanged() {
+    if (!mounted) return;
+    final sig = _accessSig();
+    if (sig == _access) return;
+    _access = sig;
+    setState(() {});
+    // ما صار مسموحاً يُجلب الآن؛ وما صار ممنوعاً لم يعد يُرسم.
+    //
+    // ⚠️ ومعفى من التبريد كالسحب-للتحديث: قسمٌ مُنح للتوّ ظاهرٌ بلا بيانات،
+    // فلو أسقط التبريدُ جلبَه (تحديثٌ صامت سبق `/me` بأقلّ من ٣ ثوانٍ) بقي
+    // دوّارةً حتّى حدثٍ لاحق لا يأتي.
+    _cooling = false;
+    _scheduleSilentRefresh();
+  }
+
+  /// سطر الشركة في الترويسة يتبع الجلسة حيّاً (حسم الاسم من «شركاتي»،
+  /// تبديل المدير الفرعيّ) — ومعه ارتفاع الترويسة.
+  void _onCompanyChanged() {
+    if (mounted) setState(() {});
+  }
+
   /// ⚠️ لا `_refreshLive` هنا: `initState` يستدعيه بعدها مباشرةً،
   /// وإضافته كانت تُنتج جولتَي جلب لكلّ فتح (بلاغ 2026-09-01: أربع
   /// موجات نداءات متتالية في السجلّ).
@@ -119,6 +190,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _access = _accessSig();
+    PermissionsService.changes.addListener(_onAccessChanged);
+    ProviderService.changes.addListener(_onAccessChanged);
+    ActiveCompany.listenable.addListener(_onCompanyChanged);
     _loadIdentity();
     // Cache-first: hydrate KPIs from SharedPreferences BEFORE the live
     // fetch fires. الـSpinner ما يظهر لو عندنا بيانات محفوظة — يظهر
@@ -189,6 +264,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     AppResumedSignal.tick.removeListener(_onAppResumed);
     widget.isActive?.removeListener(_onActiveChanged);
     ViewScopeEvents.changed.removeListener(_onScopeChanged);
+    PermissionsService.changes.removeListener(_onAccessChanged);
+    ProviderService.changes.removeListener(_onAccessChanged);
+    ActiveCompany.listenable.removeListener(_onCompanyChanged);
     super.dispose();
   }
 
@@ -202,6 +280,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// them right away so the user sees numbers instead of spinners while
   /// the network catches up. Non-fatal on failure.
   Future<void> _hydrateFromCache() async {
+    // موظّف ايرث لنك بلا reports.financial: لا رصيد يُرسم من القرص، ولا يبقى
+    // عليه رقمٌ حفظته نسخةٌ أقدم (قبل أن يقنّعه الخادم) — الكاش لا يحمل
+    // سوى المحفظة.
+    if (!_canMoney) {
+      unawaited(DashboardCache.clear().catchError((_) {}));
+      return;
+    }
     try {
       // كاش SAS4 لم يعد يُقرأ: الأرقام كلّها تُشتقّ من قائمة المشتركين
       // منذ حذف النداء المباشر (2026-08-31).
@@ -227,8 +312,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
   ///
   /// ⚠️ تبريد **لا** قفل «جلب جارٍ»: القفل الحقيقيّ يعلق أبداً إن تعلّق
   /// طلب واحد، فيُجمّد كلّ تحديث لاحق. والتبريد يُفلت وحده.
-  /// والسحب-للتحديث معفى — المستخدم طلبه صراحةً وينتظر مؤشّره.
+  /// والسحب-للتحديث معفى — المستخدم طلبه صراحةً وينتظر مؤشّره. وتبدّل
+  /// الصلاحيّات معفى كذلك (`_onAccessChanged`).
   bool _cooling = false;
+
+  /// طلبُ تحديثٍ صامتٍ وصل **أثناء** التبريد. لا يُسقَط بل يُؤجَّل فيُنفَّذ
+  /// مرّةً واحدةً حين ينتهي التبريد.
+  ///
+  /// ⚠️ بلا هذا كان التبريد يبتلع آخر تحديثٍ في سلسلةٍ من العمليّات: تفعيلٌ
+  /// تِلو تفعيلٍ بينهما ٠٫٧–٣ث (أو عمليّةٌ تِلو العودة من الخلفيّة)، أوّلها
+  /// يُحدّث ويُشعل التبريد، والأخيرة يسقط تحديثها — فتبقى الأرقام قديمةً
+  /// حتّى حدثٍ لاحقٍ قد لا يأتي. والمطلب أن تنعكس **كلّ** عمليّةٍ حسّاسة.
+  /// وتُجمَع كلّ الطلبات التي تصل أثناء التبريد في تحديثٍ واحدٍ لاحق — فلا
+  /// تعود موجات النداءات المتطابقة التي وُجد التبريد لأجلها.
+  bool _refreshQueued = false;
 
   /// حبّة الواتساب في الترويسة ← شاشته (إعادة الاتصال/QR) ثمّ تحديث الحالة.
   Future<void> _openWhatsApp() async {
@@ -240,9 +337,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _refreshLive({bool silent = false}) async {
     if (silent) {
-      if (_cooling) return;
+      // أثناء التبريد لا نُسقط الطلب بل نُعلّمه مؤجَّلاً: عمليّةٌ حسّاسةٌ
+      // وقعت فعلاً ويجب أن تنعكس ولو جاءت بعد تحديثٍ سابقٍ بلحظات.
+      if (_cooling) {
+        _refreshQueued = true;
+        return;
+      }
       _cooling = true;
-      Future.delayed(const Duration(seconds: 3), () => _cooling = false);
+      _refreshQueued = false;
+      Future.delayed(const Duration(seconds: 3), () {
+        _cooling = false;
+        // تأجّل تحديثٌ أثناء التبريد؟ نفّذه الآن — مرّةً واحدةً مهما
+        // تراكم، فيُعيد ضبط التبريد ويبقى النظام متّسقاً بلا تكرار.
+        if (_refreshQueued && mounted) {
+          _refreshQueued = false;
+          _refreshLive(silent: true);
+        }
+      });
     }
     // silent=false (initial mount + pull-to-refresh): نُسقط الـloaded
     //   flags فتظهر spinners حتى البيانات الجديدة.
@@ -270,7 +381,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // فشل (r==null) وعندنا بيانات جيّدة سابقة، ما نستبدلها بـerror state.
     // يمنع flash "فشل جلب" العابر على شبكات ضعيفة. Pull-to-refresh
     // (silent==false) يعرض الحقيقة دائماً.
-    if (_shown('wa_banner')) {
+    //
+    // ⚠️ و`_can…` بجانب `_shown` على كلّ نداء: موظّف ايرث لنك لا يُطلب له
+    // ما سيردّه الخادم 403 (انظر `_elEmployee`).
+    if (_shown('wa_banner') && _canWa) {
       DashboardApi.fetchWhatsAppStatus()
           .timeout(kMaxLoad, onTimeout: () => null)
           .catchError((_) => null)
@@ -283,7 +397,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         });
       });
     }
-    if (_shown('activities')) {
+    if (_shown('activities') && _canActivity) {
       DashboardApi.fetchDailyActivations()
           .timeout(kMaxLoad, onTimeout: () => null)
           .catchError((_) => null)
@@ -316,7 +430,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // it in parallel with the light widgets was starving them.
     // On silent refresh we still fire immediately (no cold start).
     Future.delayed(Duration.zero, () {
-      if (!mounted) return;
+      if (!mounted || !_canSubs) return;
       DashboardApi.fetchDebtors()
           .timeout(kMaxLoad, onTimeout: () => null)
           .catchError((_) => null)
@@ -334,12 +448,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
     // ⚠️ التبويب على النداء لا على العرض: الغاية إسقاط الطلب لا
     // إخفاء نتيجته. القسم المخفيّ يجب ألّا يكلّف شبكةً أصلاً.
-    if (_shown('wallet')) {
+    if (_shown('wallet') && _canMoney) {
       DashboardApi.fetchWallet()
           .timeout(kMaxLoad, onTimeout: () => null)
           .catchError((_) => null)
           .then((r) {
         if (!mounted) return;
+        // صلاحيّةٌ سُحبت والطلب في الطريق (تحديث `/me`): الخادم قنّع الرصيد
+        // (`balance:null` يصل صفراً) — فلا يُرسم رقمٌ كاذب ولا يُحفظ.
+        if (!_canMoney) return;
         if (silent && r == null && _walletLive != null) return;
         setState(() {
           _walletLive = r;
@@ -349,10 +466,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           DashboardCache.saveWallet(r); // persist for next cold start
         }
       });
-    } else {
+    } else if (_canMoney || !_elEmployee) {
       // §١٢: شارة الكارتات تركب admin-widgets، وهو لا يُطلب والمحفظة مخفيّة —
       // فتغيب «الكارتات» عن «قوائم أخرى» لمن يعمل بها. نداءٌ واحد للملخّص حين
       // تُجهل الشارة وحدها؛ والمعروفة لا تكلّف شيئاً.
+      //
+      // وموظّف ايرث لنك بلا reports.financial لا نداء له إطلاقاً: الخادم
+      // يقنّع كارتاته (`cards.remaining:null`)، والكارتات ليست ميزة ايرث لنك.
+      // أمّا فاعل الساس بلاه فرصيده مقفل وكارتاته لا: سطرها تحت القفل يحتاج
+      // الشارة، وفشل نداء الملخّص صامتٌ لا يرسم شيئاً.
       CardsState.ensureKnown();
     }
   }
@@ -436,9 +558,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 greeting: _greeting(),
                 whatsApp: _waStatus,
                 waLoaded: _waLoaded,
-                onWhatsAppTap: Perms.has('whatsapp.connect') ? _openWhatsApp : null,
+                // بلا `whatsapp.connect`: رسالة القفل لا شيء — ما دام المفتاح
+                // ممّا يُمنح لهذا الدور (موظّف ايرث لنك لا يُمنحه: null كما كان).
+                onWhatsAppTap: Perms.has('whatsapp.connect')
+                    ? _openWhatsApp
+                    : permShown(const ['whatsapp.connect'])
+                        ? () => showNoPermission(context)
+                        : null,
                 // «تنبيه واتساب» في «نطاق العرض» يُخفي الحبّة (ونداءها) لا شريطاً.
-                showWhatsApp: _shown('wa_banner'),
+                // وموظّف ايرث لنك بلا مفتاح واتساب: الخادم يرفض الفحص، فكانت
+                // تقول «غير متصل» كذباً.
+                //
+                // والموظّف (أيّ مزوّد) حين لا يصل ردّ الفحص: لا «منقطع» قد
+                // يكون رفضاً لا انقطاعاً — الحبّة تغيب. والمالك كما كان.
+                showWhatsApp: _shown('wa_banner') &&
+                    _canWa &&
+                    !(Perms.isEmployee && _waLoaded && _waLive == null),
+                // تنبيه اشتراك **الحساب** (إيميل المالك): موظّف ايرث لنك يدخل
+                // بلا حساب، فلا يملكه ولا يفعّله.
+                showSubscription: !_elEmployee,
+                // الشركة المفتوحة — سطرٌ تحت الاسم بدل شريطٍ أعلى التطبيق.
+                company: ActiveCompany.current,
                 topInset: MediaQuery.paddingOf(context).top,
                 // ⚠️ قراءةٌ مقصودة لا زائدة: `paddingOf` تبعيّة
                 // **مقصورة على الحشوة**، فالشاشة لا تُعاد بناؤها عند
@@ -463,73 +603,108 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   // هنا — حالته معروضة أصلاً في الترويسة تحت اسم المدير، فكان
                   // تكراراً يأكل الشاشة. حبّة الترويسة صارت تُضغط فتفتح شاشة
                   // الواتساب (إعادة الاتصال/QR)، وتنبيه الاشتراك حبّةٌ بجانبها.
+                  // موظّف ايرث لنك بلا مفتاح القسم: إطار البطاقة نفسه مقفلاً
+                  // (بلاغ ٢٠٢٦-١٠-١٤) — لا اختفاء يترك فراغاً، ولا نداء.
+                  // ⚠️ التفرّع على `_canSubs` **قبل** حالة التحميل: المقفل لا
+                  // يجلب، فلو بُني الحيّ لبقي على هيكله دوّارةً أبداً.
                   if (_shown('subscribers'))
-                    SubscribersCard(
-                      stats: _subscribersStats,
-                      onOpen: widget.onOpenSubscribers,
-                    )
+                    (_canSubs
+                            ? SubscribersCard(
+                                stats: _subscribersStats,
+                                onOpen: widget.onOpenSubscribers,
+                              )
+                            : LockedCard(
+                                title: 'nav.subscribers'.tr(),
+                                icon: LucideIcons.users,
+                                block: true,
+                                // ارتفاع البطاقة الحيّة (هيكلها المقيس).
+                                height: 285,
+                                radius: R.card,
+                                padding: const EdgeInsets.all(Sp.xl),
+                              ))
                         .animate()
                         .fadeIn(duration: const Duration(milliseconds: 280))
                         .slideY(begin: 0.03, end: 0),
+                  // ⚠️ الفراغ خارج الشرط كما كان: المالك الذي أخفى القسم من
+                  // «نطاق العرض» يرى المسافات نفسها حرفيّاً.
                   const SizedBox(height: Sp.md),
+                  // الرصيد يتبع reports.financial والمدينون subscribers.view —
+                  // كلٌّ نصفٌ مستقلّ، والمحجوب منهما يبقى مكانه مقفلاً.
                   if (_shown('wallet'))
                     StatsGrid(
                       wallet: _walletLoaded ? _walletLive : null,
-                    debtors: _debtorsLoaded ? _debtorsLive : null,
-                    onOpenDebtors: () => widget.onOpenSubscribers
-                        ?.call(SubscriberFilter.debtors),
-                  )
-                      .animate()
-                      .fadeIn(
-                        delay: const Duration(milliseconds: 80),
-                        duration: const Duration(milliseconds: 280),
-                      )
-                      .slideY(begin: 0.03, end: 0),
+                      debtors: _debtorsLoaded ? _debtorsLive : null,
+                      balanceLocked: !_canMoney,
+                      debtLocked: !_canSubs,
+                      cardsUnderLock: !_elEmployee,
+                      onOpenDebtors: () => widget.onOpenSubscribers
+                          ?.call(SubscriberFilter.debtors),
+                    )
+                        .animate()
+                        .fadeIn(
+                          delay: const Duration(milliseconds: 80),
+                          duration: const Duration(milliseconds: 280),
+                        )
+                        .slideY(begin: 0.03, end: 0),
                   const SizedBox(height: Sp.md),
                   // الكارت يجلب بنفسه (`reports/finance`)، فعدم بنائه
                   // يُسقط نداءه بلا تبويبٍ إضافيّ.
+                  // ⚠️ المقفل لا يبني `HeroRevenueCard` أصلاً — `initState`
+                  // فيه يُطلق النداء. ورأسه نقطةٌ لا أيقونة كالكارت الحيّ.
                   if (_shown('revenue'))
-                    const HeroRevenueCard()
-                        .animate()
-                      .fadeIn(
-                        delay: const Duration(milliseconds: 160),
-                        duration: const Duration(milliseconds: 280),
-                      )
-                      .slideY(begin: 0.03, end: 0),
-                  if (_shown('activities'))
-                    SectionHeader(
-                      label: !_activationsLoaded
-                        ? 'dashboard.recent_activity_label'.tr()
-                        : _activationsLive == null
-                            ? 'dashboard.recent_activity_fetch_failed'.tr()
-                            : 'dashboard.recent_activity_label'.tr(),
-                    trailingLabel: 'dashboard.view_all'.tr(),
-                    // مطلب المستخدم 2026-07-12: زر "عرض الكل" ينقل
-                    // لسجل النشاط الكامل. الـPermissionGate يتأكد من
-                    // reports.activity_log؛ لو الموظف بلا صلاحية يرى
-                    // شاشة رفض بدل الشاشة الفارغة.
-                    onTrailingTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const ActivityLogReportScreen(),
-                      ),
-                    ),
-                  ),
-                  if (_shown('activities'))
-                    if (!_activationsLoaded)
-                      const _ActivitiesLoading()
-                  else if (_activationsLive == null)
-                    const _ActivitiesError()
-                  else if (_activationsLive!.recent.isEmpty)
-                    const _NoActivitiesYet()
-                  else
-                    RecentActivities(items: _activationsLive!.recent)
+                    (_canMoney
+                            ? const HeroRevenueCard()
+                            : LockedCard(title: 'dashboard.revenue'.tr()))
                         .animate()
                         .fadeIn(
-                          delay: const Duration(milliseconds: 240),
+                          delay: const Duration(milliseconds: 160),
                           duration: const Duration(milliseconds: 280),
+                        )
+                        .slideY(begin: 0.03, end: 0),
+                  if (_shown('activities'))
+                    SectionHeader(
+                      // المقفل لا يُجلب فلا «تعذّر» يُكتب في عنوانه أبداً.
+                      label: !_canActivity || !_activationsLoaded
+                          ? 'dashboard.recent_activity_label'.tr()
+                          : _activationsLive == null
+                              ? 'dashboard.recent_activity_fetch_failed'.tr()
+                              : 'dashboard.recent_activity_label'.tr(),
+                      // مطلب المستخدم 2026-07-12: زر "عرض الكل" ينقل
+                      // لسجل النشاط الكامل. الـPermissionGate يتأكد من
+                      // reports.activity_log؛ لو الموظف بلا صلاحية يرى
+                      // شاشة رفض بدل الشاشة الفارغة. وموظّف ايرث لنك بلاها
+                      // يرى الزرّ مقفلاً — ما دام المفتاح ممّا يُمنح له.
+                      trailingLabel: _canActivity &&
+                              (_canActivityLog ||
+                                  permShown(const ['reports.activity_log']))
+                          ? 'dashboard.view_all'.tr()
+                          : null,
+                      trailingLocked: !_canActivityLog,
+                      onTrailingTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const ActivityLogReportScreen(),
                         ),
+                      ),
+                    ),
+                  if (_shown('activities'))
+                    if (!_canActivity)
+                      const _ActivitiesLocked()
+                    else if (!_activationsLoaded)
+                      const _ActivitiesLoading()
+                    else if (_activationsLive == null)
+                      const _ActivitiesError()
+                    else if (_activationsLive!.recent.isEmpty)
+                      const _NoActivitiesYet()
+                    else
+                      RecentActivities(items: _activationsLive!.recent)
+                          .animate()
+                          .fadeIn(
+                            delay: const Duration(milliseconds: 240),
+                            duration: const Duration(milliseconds: 280),
+                          ),
                   // ⚠️ لو أُخفي كلّ شيء لا تُترك الشاشة بيضاء: المدير
                   // لن يعرف أنّه هو من أخفاها، وسيظنّها معطوبة.
+                  // (والموظّف بلا مفاتيح لا يصل هنا: أقسامه مقفلةٌ في أماكنها.)
                   if (_sectionsLoaded && _hiddenSections.length >= 5)
                     const _AllHidden(),
                 ]),
@@ -631,6 +806,43 @@ class _NoActivitiesYet extends StatelessWidget {
   }
 }
 
+/// «آخر النشاطات» لمن لا يملك `reports.daily_activations`: إطار
+/// [_NoActivitiesYet] نفسه وفيه القفل — العنوان فوقه يكفي اسماً للقسم.
+///
+/// ⚠️ لا [_ActivitiesError] أبداً: لم يُطلب شيءٌ ليتعذّر.
+class _ActivitiesLocked extends StatelessWidget {
+  const _ActivitiesLocked();
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Semantics(
+      button: true,
+      label: 'locked.a11y'.tr(args: ['dashboard.recent_activity_label'.tr()]),
+      excludeSemantics: true,
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.lg),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => showNoPermission(context),
+          borderRadius: BorderRadius.circular(R.lg),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(
+                vertical: Sp.huge, horizontal: Sp.lg),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(R.lg),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: const LockedNotice.block(),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Pinned header. Renders the WhatsApp chip as a loading state while
 /// the connection check is in flight (no fake 'connected' fallback).
 class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
@@ -641,6 +853,8 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
     required this.waLoaded,
     this.onWhatsAppTap,
     this.showWhatsApp = true,
+    this.showSubscription = true,
+    this.company,
     required this.topInset,
     required this.textScale,
   }) : isDark = AppColors.isDark;
@@ -653,6 +867,12 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
   /// الضغط على حبّة الواتساب ← شاشته (إعادة الاتصال/QR). null بلا صلاحيّة.
   final VoidCallback? onWhatsAppTap;
   final bool showWhatsApp;
+
+  /// حبّة تنبيه اشتراك الحساب — تغيب عن موظّف ايرث لنك (لا حساب له).
+  final bool showSubscription;
+
+  /// الشركة المفتوحة — سطرٌ تحت الاسم، و`null` = لا سطر ولا ارتفاع له.
+  final ActiveCompanyInfo? company;
   final double topInset;
 
   /// سلّم خطّ النظام وقت الإنشاء (مقيَّد 0.9–1.2 في main.dart).
@@ -675,8 +895,34 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
   // ⚠️ ولا يُضرَب الـ86 كلّه في السلّم: منه 28 نقطة حشوات وحدود
   // **لا تكبر مع الخطّ**. ضربُ المجموع يحجز 103 حيث تكفي 94 عند 1.2،
   // فيعود الفراغ الميّت الذي أزاله 0afcbbe حين شُدَّ الرأس 108 → 86.
-  static const double _textHeight = 58;
-  static const double _fixedChrome = 28;
+  //
+  // ما يكبر (عند السلّم 1): التحيّة 18.1 + الاسم 22.1 + نصّ الحبّة 14.9
+  // ≈ 55 (+3 هامش). والثابت: حشوة 8+2 · فراغان 2+6 · حشوة الحبّة 4+4
+  // وحدّها 1+1 = 28.
+  static const double _baseText = 58;
+  static const double _baseChrome = 28;
+
+  // صفّ الحبّات (واتساب · تنبيه الاشتراك) يسقط بارتفاعه حين لا حبّة فيه —
+  // وإلّا بقي تحت الاسم فراغٌ بقدر حبّةٍ غائبة (موظّفٌ بلا مفتاح واتساب).
+  static const double _chipsText = 15; // 11 × 1.35
+  static const double _chipsChrome = 16; // فراغ 6 + حشوة 8 + حدّ 2
+
+  // ٢٠٢٦-١٠-١٢: سطر الشركة تحت الاسم (كان شريطاً ممتدّاً أعلى التطبيق).
+  // نصّه 12 × 1.35 = 16.2 يكبر مع الخطّ، والفراغ 2 فوقه لا يكبر.
+  static const double _companyText = 17;
+  static const double _companyGap = 2;
+
+  bool get _hasChips => showWhatsApp || showSubscription;
+  bool get _hasCompany => company != null;
+
+  double get _textHeight =>
+      _baseText -
+      (_hasChips ? 0 : _chipsText) +
+      (_hasCompany ? _companyText : 0);
+  double get _fixedChrome =>
+      _baseChrome -
+      (_hasChips ? 0 : _chipsChrome) +
+      (_hasCompany ? _companyGap : 0);
   double get _contentHeight => _textHeight * textScale + _fixedChrome;
 
   /// 2026-08-30: الترويسة كانت مثبَّتة بلا انكماش (minExtent == maxExtent)
@@ -684,9 +930,18 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
   /// والأيقونات وحدها: التحيّة وشارة واتساب معلومتان تُقرآن مرّة عند
   /// الفتح ولا حاجة لبقائهما معلّقتين فوق كلّ تمريرة.
   // والمطويّ كذلك: منه 10 نقاط حشوة ثابتة.
+  //
+  // وسطر الشركة **يبقى** في المطويّة: هويّة الجلسة كالاسم، لا خبرٌ يُقرأ
+  // مرّة — ومن يمرّر اللوحة يبقى يرى في أيّ شركةٍ هو. الاسم والسطر
+  // 22.1 + 16.2 = 38.3 ← 40، فيصير صفّ المطويّة 42 بالضبط عند السلّم 1:
+  // ارتفاع أيقونات الترويسة نفسه، فلا تنضغط كما تنضغط في المطويّة بلا شركة.
   static const double _collapsedText = 34;
+  static const double _collapsedCompanyText = 40;
   static const double _collapsedChrome = 10;
-  double get _collapsedHeight => _collapsedText * textScale + _collapsedChrome;
+  double get _collapsedHeight =>
+      (_hasCompany ? _collapsedCompanyText : _collapsedText) * textScale +
+      _collapsedChrome +
+      (_hasCompany ? _companyGap : 0);
 
   @override
   double get minExtent => _collapsedHeight + topInset;
@@ -700,6 +955,11 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
         context); // theme-dep (dark-mode) — delegate.build skipped by injector
     // نسبة الانكماش: 0 مفرودة · 1 مطويّة بالكامل.
     final t = (shrinkOffset / (maxExtent - minExtent)).clamp(0.0, 1.0);
+    // الشفافيّة تسبق الطيّ: تنطفئ التحيّة والحبّة عند منتصفه. لوحةٌ قصيرة
+    // (موظّفٌ بقسمين) لا تتمرّر حتّى آخر الطيّ فتقف الترويسة عند 0.9 مثلاً —
+    // وبالشفافيّة الخطّيّة كان يبقى رأس حروف التحيّة (نقطة «خ») وحافّة الحبّة
+    // شبحين فوق الاسم وتحت سطر الشركة.
+    final fade = (1 - 2 * t).clamp(0.0, 1.0);
     return Container(
       color: AppColors.bg,
       padding: EdgeInsets.fromLTRB(Sp.lg, topInset + Sp.sm, Sp.lg, 2),
@@ -718,7 +978,7 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
                     alignment: AlignmentDirectional.topStart,
                     heightFactor: 1 - t,
                     child: Opacity(
-                      opacity: 1 - t,
+                      opacity: fade,
                       child: Text(
                         greeting,
                         style: AppType.subtitle(color: AppColors.textMid)
@@ -739,36 +999,49 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                SizedBox(height: 6 * (1 - t)),
-                ClipRect(
-                  child: Align(
-                    alignment: AlignmentDirectional.topStart,
-                    heightFactor: 1 - t,
-                    child: Opacity(
-                      opacity: 1 - t,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (showWhatsApp) ...[
-                            Flexible(
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: onWhatsAppTap,
-                                child: _WAStatusChip(status: whatsApp, loaded: waLoaded),
+                // الشركة المفتوحة مع الاسم — خارج الطيّ عمداً (انظر
+                // `_collapsedCompanyText`). الاسم فوقه إن طابق يوزر المدير
+                // لا يُكرَّر فيه.
+                if (company != null) ...[
+                  const SizedBox(height: _companyGap),
+                  ActiveCompanyLine(info: company!, omitUsername: displayName),
+                ],
+                if (_hasChips) ...[
+                  SizedBox(height: 6 * (1 - t)),
+                  ClipRect(
+                    child: Align(
+                      alignment: AlignmentDirectional.topStart,
+                      heightFactor: 1 - t,
+                      child: Opacity(
+                        opacity: fade,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (showWhatsApp) ...[
+                              Flexible(
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: onWhatsAppTap,
+                                  child: _WAStatusChip(
+                                      status: whatsApp, loaded: waLoaded),
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 6),
+                              const SizedBox(width: 6),
+                            ],
+                            // Pro البند ٤: تنبيه الاشتراك (لا يظهر إلّا قرب الانتهاء).
+                            if (showSubscription) const SubscriptionChip(),
                           ],
-                          // Pro البند ٤: تنبيه الاشتراك (لا يظهر إلّا قرب الانتهاء).
-                          const SubscriptionChip(),
-                        ],
+                        ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
+          // فاصلٌ عن الأيقونات: سطر الشركة يبلغ حافّة العمود عند تكبير الخطّ،
+          // وبلا فاصل يلتصق اليوزر بزرّ «الصفحات».
+          const SizedBox(width: Sp.sm),
           // 2026-08-26: أيقونة "الصفحات" — التبديل السريع بين حسابات
           // المدراء الفرعيّين. طلب المستخدم أن تكون جنب جرس الإشعارات
           // للوصول السريع.
@@ -838,6 +1111,9 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
       old.greeting != greeting ||
       old.waLoaded != waLoaded ||
       old.showWhatsApp != showWhatsApp ||
+      old.showSubscription != showSubscription ||
+      // السطر **والارتفاع** يتبعان الشركة: ظهورها/اختفاؤها يغيّر الحدّين.
+      _companyKey(old.company) != _companyKey(company) ||
       old.whatsApp?.connected != whatsApp?.connected ||
       old.whatsApp?.phone != whatsApp?.phone ||
       old.whatsApp?.needsPairing != whatsApp?.needsPairing ||
@@ -849,6 +1125,11 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
       // محتواه تغيّر.
       old.topInset != topInset ||
       old.textScale != textScale;
+
+  /// ما يرسمه سطر الشركة — `ActiveCompanyInfo` بلا مساواة قيميّة.
+  static String _companyKey(ActiveCompanyInfo? c) => c == null
+      ? ''
+      : '${c.label}|${c.username}|${c.parentUsername}|${c.isEmployee}';
 }
 
 class _WAStatusChip extends StatelessWidget {
@@ -999,11 +1280,13 @@ class _AllHidden extends StatelessWidget {
           const SizedBox(height: Sp.sm),
           Text(
             'كلّ أقسام الرئيسيّة مخفيّة',
+            textAlign: TextAlign.center,
             style: AppType.label(color: AppColors.textMid),
           ),
           const SizedBox(height: 4),
           Text(
             'أعِدها من الإعدادات ← نطاق العرض',
+            textAlign: TextAlign.center,
             style: AppType.micro(color: AppColors.textLow),
           ),
         ],

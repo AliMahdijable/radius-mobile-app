@@ -15,6 +15,7 @@ import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../widgets/package_picker_field.dart';
 import '_print_receipt_checkbox.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 
@@ -58,6 +59,8 @@ class _ExtendSheetState extends State<_ExtendSheet> {
   Map<String, dynamic>? _selectedPkg;
   _Method _method = _Method.balance;
   bool _printReceiptChecked = false;
+  // RECENT_DUPLICATE (409) من خادم البرو: يُؤكَّد ويُعاد مع confirmRepeat=true.
+  bool _confirmRepeat = false;
 
   @override
   void initState() {
@@ -90,6 +93,20 @@ class _ExtendSheetState extends State<_ExtendSheet> {
         if (list.isNotEmpty) {
           _selectedPkg = (list.first as Map).cast<String, dynamic>();
         }
+        // ايرث لنك: التمديد بالنقاط فقط (لا رصيد) — افرض الطريقة مسبقاً.
+        if (data['provider']?.toString() == 'earthlink') {
+          _method = _Method.points;
+          // الفعّال لا تتغيّر باقته (الخادم يرفض) — الاختيار يُثبَّت على الحاليّة.
+          if (_elPackageLocked) {
+            final cur = data['current_profile_id']?.toString();
+            for (final p in list) {
+              if (p is Map && p['id']?.toString() == cur) {
+                _selectedPkg = p.cast<String, dynamic>();
+                break;
+              }
+            }
+          }
+        }
       }
     });
   }
@@ -105,6 +122,10 @@ class _ExtendSheetState extends State<_ExtendSheet> {
   num get _pointsBalance => _read(_data, 'reward_points_balance');
   String get _currentProfileName =>
       _data?['current_profile_name']?.toString() ?? '';
+
+  /// ايرث لنك: التمديد بالنقاط حصراً (user/extend ٢٤ ساعة لنفس الباقة) — لا رصيد
+  /// مدير ولا اختيار طريقة دفع. يُكتشَف من provider في ردّ extension-options.
+  bool get _isEarthlink => _data?['provider']?.toString() == 'earthlink';
 
   num get _selectedPrice => _read(_selectedPkg, 'price');
   num get _selectedPoints => _read(_selectedPkg, 'reward_points_required');
@@ -151,9 +172,28 @@ class _ExtendSheetState extends State<_ExtendSheet> {
       profileId: profileId,
       method: _method == _Method.points ? 'points' : 'balance',
       skipAutoWa: manualMode,
+      confirmRepeat: _confirmRepeat,
     );
     if (!mounted) return;
     setState(() => _submitting = false);
+    // حارس التكرار (كالتجديد): 409 RECENT_DUPLICATE من خادم البرو — أكّد
+    // الإعادة ثمّ أعِد الإرسال بـconfirmRepeat بدل انتظار المهلة (٩٠ث). خادم
+    // SAS4 لا يرسل هذا الرمز، فمسار التمديد العاديّ لا يُمَسّ.
+    if (!result.ok && result.code == 'RECENT_DUPLICATE' && !_confirmRepeat) {
+      final again = await showConfirmSheet(
+        context,
+        title: 'تمديد مكرّر',
+        message: result.message ??
+            'مدّدت هذا المشترك قبل لحظات — أكّد الإعادة إن أردت تمديداً آخر',
+        confirmLabel: 'أكّد التمديد',
+      );
+      if (again == true) {
+        _confirmRepeat = true;
+        return _submit(); // إعادة مع confirmRepeat=true
+      }
+      return;
+    }
+    _confirmRepeat = false;
     if (!result.ok) {
       showSheetSnack(context, result.message ?? 'common.error'.tr(),
           isError: true);
@@ -261,10 +301,11 @@ class _ExtendSheetState extends State<_ExtendSheet> {
             label: 'الباقة الحالية',
             value: _currentProfileName.isEmpty ? '—' : _currentProfileName,
           ),
-          SheetRowData(
-            label: 'dashboard.manager_balance'.tr(),
-            value: '${formatIQD(_managerBalance.round())} $cur',
-          ),
+          if (!_isEarthlink)
+            SheetRowData(
+              label: 'dashboard.manager_balance'.tr(),
+              value: '${formatIQD(_managerBalance.round())} $cur',
+            ),
           if (_pointsBalance > 0)
             SheetRowData(
               label: 'sheets.points'.tr(),
@@ -274,29 +315,37 @@ class _ExtendSheetState extends State<_ExtendSheet> {
         ],
       ),
       const SizedBox(height: 14),
-      SheetSection(
-        label: 'اختر باقة التمديد',
-        child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(R.lg),
-            border: Border.all(color: AppColors.border),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          child: Column(
-            children: [
-              for (var i = 0; i < list.length; i++) ...[
-                if (i > 0) Divider(height: 1, color: AppColors.divider),
-                _PackageRow(
-                  pkg: list[i],
-                  selected: _selectedPkg == list[i],
-                  onTap: () => setState(() => _selectedPkg = list[i]),
-                ),
+      // ايرث لنك: حقلٌ يفتح قائمة الباقات بدل الصفوف (بلاغ ٢٠٢٦-١٠-١٣) —
+      // الترتيب والاختيار الافتراضيّ (الأولى) كما هما. SAS4 بلا تغيير.
+      if (_isEarthlink)
+        SheetSection(
+          label: 'الباقة',
+          child: _elPackageField(list),
+        )
+      else
+        SheetSection(
+          label: 'اختر باقة التمديد',
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(R.lg),
+              border: Border.all(color: AppColors.border),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Column(
+              children: [
+                for (var i = 0; i < list.length; i++) ...[
+                  if (i > 0) Divider(height: 1, color: AppColors.divider),
+                  _PackageRow(
+                    pkg: list[i],
+                    selected: _selectedPkg == list[i],
+                    onTap: () => setState(() => _selectedPkg = list[i]),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
-      ),
       if (_selectedPkg != null) ...[
         const SizedBox(height: 14),
         SheetPlanCard(
@@ -309,30 +358,86 @@ class _ExtendSheetState extends State<_ExtendSheet> {
               ? '${formatIQD(_selectedPoints.round())} نقطة'
               : '${formatIQD(_selectedPrice.round())} $cur',
         ),
-        const SizedBox(height: 14),
-        SheetSection(
-          label: 'sheets.payment_method'.tr(),
-          gap: Sp.sm,
-          child: SheetChoiceTiles(
-            labels: [
-              'الرصيد',
-              _selectedPoints > 0
-                  ? 'النقاط (${formatIQD(_selectedPoints.round())})'
-                  : 'النقاط',
-            ],
-            icons: const [LucideIcons.wallet, LucideIcons.star],
-            selectedIndex: _method == _Method.balance ? 0 : 1,
-            enabled: !_submitting,
-            onSelect: (i) {
-              // الدفع بالنقاط متاح فقط حين تتطلّب الباقة نقاطاً.
-              if (i == 1 && _selectedPoints <= 0) return;
-              setState(
-                  () => _method = i == 0 ? _Method.balance : _Method.points);
-            },
+        // ايرث لنك: لا اختيار طريقة — التمديد بالنقاط حصراً (user/extend ٢٤ ساعة).
+        if (!_isEarthlink) ...[
+          const SizedBox(height: 14),
+          SheetSection(
+            label: 'sheets.payment_method'.tr(),
+            gap: Sp.sm,
+            child: SheetChoiceTiles(
+              labels: [
+                'الرصيد',
+                _selectedPoints > 0
+                    ? 'النقاط (${formatIQD(_selectedPoints.round())})'
+                    : 'النقاط',
+              ],
+              icons: const [LucideIcons.wallet, LucideIcons.star],
+              selectedIndex: _method == _Method.balance ? 0 : 1,
+              enabled: !_submitting,
+              onSelect: (i) {
+                // الدفع بالنقاط متاح فقط حين تتطلّب الباقة نقاطاً.
+                if (i == 1 && _selectedPoints <= 0) return;
+                setState(
+                    () => _method = i == 0 ? _Method.balance : _Method.points);
+              },
+            ),
           ),
-        ),
+        ],
       ],
     ];
+  }
+
+  /// حقل باقة ايرث لنك. الاختيار بالمعرّف (ما يُرسَل للخادم) لا بهويّة
+  /// الخريطة: `cast` تبني غلافاً جديداً في كلّ بناء فلا تطابق المحفوظة.
+  /// التمديد هنا بالنقاط وحدها، فالسعر الصفريّ لا يُعرض («0 د.ع» تضلّل).
+  /// ايرث لنك: تتغيّر الباقة للمنتهي أو لمن بقي له يومٌ فأقلّ، و«More» لا (حكم الخادم بصفّ المشترك، وإلّا ٢٤ ساعة).
+  bool get _elPackageLocked {
+    final rowFlag = widget.sub.canChangePackage;
+    if (rowFlag != null) return !rowFlag;
+    final exp = widget.sub.parsedExpiration;
+    return exp != null && exp.difference(DateTime.now()) > const Duration(hours: 24);
+  }
+
+  Widget _elPackageField(List<Map<String, dynamic>> list) {
+    final locked = _elPackageLocked;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _elPackagePicker(list, locked),
+        if (locked) ...[
+          const SizedBox(height: Sp.xs),
+          Text(
+            widget.sub.packageChangeNote ?? 'تتغيّر الباقة للمنتهي أو لمن بقي له يومٌ فأقلّ — هذا المشترك ما زال فعّالاً',
+            style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.4),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _elPackagePicker(List<Map<String, dynamic>> list, bool locked) {
+    return PackagePickerField(
+      options: [
+        for (final p in list)
+          PackageOption(
+            id: p['id']?.toString() ?? '',
+            name: (p['name'] ?? '').toString(),
+            price: _read(p, 'price') > 0 ? _read(p, 'price') : null,
+            points: _read(p, 'reward_points_required'),
+          ),
+      ],
+      selectedId: _selectedPkg?['id']?.toString(),
+      currentId: _data?['current_profile_id']?.toString(),
+      enabled: !_submitting && !locked,
+      onSelected: (id) {
+        for (final p in list) {
+          if ((p['id']?.toString() ?? '') == id) {
+            setState(() => _selectedPkg = p);
+            return;
+          }
+        }
+      },
+    );
   }
 
   Widget _stateBlock(IconData icon, String text,

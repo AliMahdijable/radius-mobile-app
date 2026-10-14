@@ -1,16 +1,23 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../api/api_client.dart'
     show authExpiredSignal, accessBlockedSignal, blockedMessage;
+import '../services/active_company.dart';
 import '../services/permissions_service.dart';
+import '../services/provider_service.dart';
 import '../core/widgets/design_sheet.dart';
+import '../core/widgets/permission_locked.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'dashboard/dashboard_screen.dart';
 import 'account/account_gate_screen.dart';
+import 'account/employee_login_screen.dart';
+import '../services/employee_session.dart';
 import 'more_modules_screen.dart';
 import 'network_devices/network_devices_screen.dart';
 import 'search/quick_search_overlay.dart';
@@ -153,7 +160,9 @@ class _MainShellState extends State<MainShell> {
       _tab = i;
       _visited.add(i);
     });
-    _devicesActive.value = i == _devicesTab;
+    // ايرث لنك لا تبويبَ أجهزةٍ له — فلا تُرفع رايته أبداً (ولو وافق الفهرسُ
+    // موضعَ «قوائم أخرى» في تخطيطه المختصر). لا مستمع لها عندئذٍ أصلاً.
+    _devicesActive.value = !ProviderService.isEarthlink && i == _devicesTab;
     _subsActive.value = i == _subsTab;
     _dashActive.value = i == _dashTab;
   }
@@ -176,6 +185,16 @@ class _MainShellState extends State<MainShell> {
     final v = authExpiredSignal.value;
     if (v == _authExpiredSeen || !mounted) return;
     _authExpiredSeen = v;
+    // Pro: موظّف ايرث لنك المباشر (بلا حساب) ← شاشة دخوله مع السبب
+    // (دخولٌ من جهازٍ آخر، أو انتهاء الجلسة) — لا بوّابة الحساب.
+    if (EmployeeSession.routeToEmployeeLogin) {
+      final msg = EmployeeSession.kickMessage ?? 'common.session_expired'.tr();
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => EmployeeLoginScreen(message: msg)),
+        (_) => false,
+      );
+      return;
+    }
     // 2026-06-14: signal من api_client.dart حين empToken الموظف انتهى
     // (refresh مرفوض بقصد). نمسح أي حالة محلية ونرجع لشاشة الدخول.
     ScaffoldMessenger.of(context).showSnackBar(
@@ -238,7 +257,11 @@ class _MainShellState extends State<MainShell> {
     Navigator.of(sheetCtx).pop();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const AccountGateScreen()),
+      MaterialPageRoute(
+        builder: (_) => EmployeeSession.routeToEmployeeLogin
+            ? const EmployeeLoginScreen()
+            : const AccountGateScreen(),
+      ),
       (_) => false,
     );
   }
@@ -269,6 +292,10 @@ class _MainShellState extends State<MainShell> {
     // الشاشة الأولى بُنيت والجلسة قائمة — نفّذ نقرةً محفوظة إن وُجدت.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       NotificationRouter.markReady();
+      // اسم الشركة (سطرها تحت اسم المدير في الرئيسيّة وفي رأس المشتركين)
+      // تقديرٌ (مضيف الرابط) لجلسةٍ سبقت الميزة أو لرابطٍ يدويّ ← يُحسم من
+      // «شركاتي» مرّةً، بلا انتظار.
+      unawaited(ActiveCompany.resolveLabel());
     });
     _authExpiredSeen = authExpiredSignal.value;
     authExpiredSignal.addListener(_onAuthExpired);
@@ -351,47 +378,68 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final tabs = <Widget>[
-      DashboardScreen(
-          onOpenSubscribers: _openSubscribers, isActive: _dashActive),
-      SubscribersScreen(filterCmd: _subsFilterCmd, isActive: _subsActive),
-      // مطلب 2026-08-12: أجهزة الشبكة صار tab رئيسي بدل التقارير —
-      // WISP يفتحها يوميّاً لمراقبة اللنكات/السكاتر. التقارير انتقلت
-      // لـ"قوائم أخرى" كأوّل عنصر (الاستعمال أقلّ).
-      NetworkDevicesScreen(isActive: _devicesActive),
-      // مطلب 2026-06-10: الـtab السفلي الأخير صار "قوائم أخرى" يعرض
-      // مديولات إضافية (صرفيات/مدراء/تسعير). شاشة الإعدادات الفعلية
-      // انتقلت لزر الـgear بالشريط العلوي على Home.
-      const MoreModulesScreen(),
-    ];
+    // ايرث لنك (البند ٤): لا تبويب «أجهزة الشبكة». أجهزة المشتركين محلّيّةٌ
+    // يم الوكيل، والويب/البرو لا يصلها، فالتبويب كان يعطي شاشةً لا تعمل.
+    // نستمع لـ`ProviderService.changes` لأنّ المزوّد قد يُحسَم بعد أوّل بناءٍ
+    // (مدير ايرث لنك: /api/auth/me بعد الوصول للغلاف) فيُطوى التبويب فوراً.
+    return ListenableBuilder(
+      listenable: ProviderService.changes,
+      builder: (context, _) {
+        final isEl = ProviderService.isEarthlink;
+        final tabs = <Widget>[
+          DashboardScreen(
+              onOpenSubscribers: _openSubscribers, isActive: _dashActive),
+          SubscribersScreen(filterCmd: _subsFilterCmd, isActive: _subsActive),
+          // مطلب 2026-08-12: أجهزة الشبكة صار tab رئيسي بدل التقارير —
+          // WISP يفتحها يوميّاً لمراقبة اللنكات/السكاتر. التقارير انتقلت
+          // لـ"قوائم أخرى" كأوّل عنصر (الاستعمال أقلّ). ايرث لنك: مطويّ.
+          // ايرث لنك: الخانة باقيةٌ بمكانها (شريطٌ بخمس خانات كالمالك) لكنّها مقفلة —
+          // إخفاؤها كان يخلخل توزيع الأزرار حول + (طلب المستخدم ٢٠٢٦-١٠-١٤).
+          isEl ? const _DevicesLockedTab() : NetworkDevicesScreen(isActive: _devicesActive),
+          // مطلب 2026-06-10: الـtab السفلي الأخير صار "قوائم أخرى" يعرض
+          // مديولات إضافية (صرفيات/مدراء/تسعير). شاشة الإعدادات الفعلية
+          // انتقلت لزر الـgear بالشريط العلوي على Home.
+          const MoreModulesScreen(),
+        ];
 
-    return PopScope(
-      // canPop=false lets us intercept every system back press. We
-      // call SystemNavigator.pop() ourselves when the user confirms
-      // exit (two presses within the window).
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) async {
-        if (didPop) return;
-        final shouldExit = await _onWillPop();
-        if (shouldExit) {
-          await SystemNavigator.pop();
-        }
+        return PopScope(
+          // canPop=false lets us intercept every system back press. We
+          // call SystemNavigator.pop() ourselves when the user confirms
+          // exit (two presses within the window).
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop) return;
+            final shouldExit = await _onWillPop();
+            if (shouldExit) {
+              await SystemNavigator.pop();
+            }
+          },
+          child: _buildScaffold(tabs, isEl),
+        );
       },
-      child: _buildScaffold(tabs),
     );
   }
 
-  Widget _buildScaffold(List<Widget> tabs) {
+  Widget _buildScaffold(List<Widget> tabs, bool isEl) {
     return Scaffold(
       backgroundColor: AppColors.bg,
       extendBody: true, // body draws under the floating bar
+      // ٢٠٢٦-١٠-١٢: شريط «الشركة المفتوحة» الممتدّ أعلى التبويبات أُزيل
+      // (طلب المستخدم: «ما يحتاج تاخذ مساحة من أعلى») — صار سطراً مدمجاً
+      // تحت اسم المدير في ترويسة الرئيسيّة وفي رأس المشتركين
+      // (`ActiveCompanyLine`). فالجسم مكدّسٌ ثابت لا يتبدّل أبوه أبداً،
+      // والتبويبات تأخذ حشوتها العلويّة كما كانت.
       body: Stack(
         children: [
           // كسول: غير المزار يبقى `SizedBox` فلا يُنشأ `State` له ولا
           // يُنفَّذ `initState`. وبعد الزيارة يبقى في الشجرة كما كان.
           IndexedStack(
-            index: _tab,
-            children: lazyTabChildren(tabs, _visited, _tab),
+            // المزوّد قد يُحسَم بعد أن زار المستخدم فهرساً أبعد من تخطيط
+            // ايرث لنك المختصر — الحصر يمنع تجاوز المدى قبل أن يُصحّح التبويبَ
+            // أوّلُ نقرة.
+            index: _tab.clamp(0, tabs.length - 1),
+            children:
+                lazyTabChildren(tabs, _visited, _tab.clamp(0, tabs.length - 1)),
           ),
           // Standalone search pill — 2026-07-14: أقرب ما يمكن للـnav
           // (4px فوق حافّته العلويّة). لا نقدر نضعه داخله لأن الـpill
@@ -415,6 +463,7 @@ class _MainShellState extends State<MainShell> {
         current: _tab,
         onTabTap: _setTab,
         onFabTap: _onFabTap,
+        isEl: isEl,
       ),
     );
   }
@@ -433,11 +482,15 @@ class _PillBar extends StatelessWidget {
     required this.current,
     required this.onTabTap,
     required this.onFabTap,
+    this.isEl = false,
   });
 
   final int current;
   final ValueChanged<int> onTabTap;
   final VoidCallback onFabTap;
+
+  /// ايرث لنك — خانة «الأجهزة» باقية (مقفلة)، فالفهارس واحدة للجميع.
+  final bool isEl;
 
   @override
   Widget build(BuildContext context) {
@@ -469,7 +522,8 @@ class _PillBar extends StatelessWidget {
               ),
               _FabSlot(onTap: onFabTap),
               _TabSlot(
-                // مطلب 2026-08-12: أجهزة الشبكة بدل التقارير
+                // مطلب 2026-08-12: أجهزة الشبكة بدل التقارير. ايرث لنك: الخانة
+                // نفسها تفتح شاشةً مقفلة — لا تختفي فيبقى التوزيع متناظراً.
                 icon: Icons.router_rounded,
                 label: 'nav.devices'.tr(),
                 selected: current == 2,
@@ -626,16 +680,22 @@ class _QuickAddSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    // مطلب 2026-06-12: لو الموظف ما عنده ولا صلاحية للـquick-add،
-    // empty state بدل صفحة عنوان فارغة محرجة.
-    final hasAny = Perms.hasAny(const [
-      'subscribers.add',
-      'subscribers.activate',
-      'subscribers.extend',
-      'subscribers.pay_debt',
-      'subscribers.add_debt',
-      'reports.expenses',
-    ]);
+    // بلاغ ٢٠٢٦-١٠-١٤: البند المبوّب لا يختفي — يبقى بمكانه **مقفلاً**
+    // (القفل مكان السهم، والنقر رسالةٌ لا تغلق الشيت ولا تفتح شيئاً).
+    // ويختفي فقط ما لا يُمنح لهذا الدور أصلاً ([permShown]).
+    const kAdd = ['subscribers.add'];
+    const kActivate = ['subscribers.activate'];
+    const kPay = ['subscribers.pay_debt'];
+    const kAddDebt = ['subscribers.add_debt'];
+    const kExpense = ['reports.expenses'];
+    // الحالة الفارغة لا تظهر إلّا إن لم يُعرض بندٌ واحد (ولا مقفلاً) —
+    // عمليّاً لا تُبلَغ. ⚠️ كانت `hasAny` تضمّ `extend` وليس له بند هنا،
+    // فمَن يملك التمديد وحده يرى شيتاً بعنوانٍ وفراغ.
+    final anyShown = permShown(kAdd) ||
+        permShown(kActivate) ||
+        permShown(kPay) ||
+        permShown(kAddDebt) ||
+        permShown(kExpense);
     return DesignSheet(
       header: SheetHeaderBar(
         icon: Icons.add_rounded,
@@ -647,7 +707,7 @@ class _QuickAddSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (!hasAny)
+          if (!anyShown)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: Sp.lg),
               child: Center(
@@ -659,10 +719,11 @@ class _QuickAddSheet extends StatelessWidget {
             ),
           // مطلب 2026-06-10: الترتيب = إضافة مشترك → تجديد اشتراك →
           // تسديد دين → إضافة دين → إضافة صرفية. مطلب 2026-06-11:
-          // كل بند يختفي إذا الموظف ما عنده الصلاحية المناسبة بدل
-          // ما يطلع له خطأ "غير مسموح" بعد الضغط.
-          if (Perms.has('subscribers.add'))
+          // لا خطأ "غير مسموح" بعد الضغط — والبند بلا مفتاحه يبقى
+          // مقفلاً بمكانه (٢٠٢٦-١٠-١٤) بدل أن يختفي.
+          if (permShown(kAdd))
             _QuickItem(
+              locked: !Perms.hasAny(kAdd),
               icon: Icons.person_add_rounded,
               color: AppColors.brandAccent,
               title: 'dashboard.add_subscriber'.tr(),
@@ -676,8 +737,9 @@ class _QuickAddSheet extends StatelessWidget {
           // تسميةً: التفعيل يبدأ اشتراكاً بباقة وسعر، والتمديد يزيد
           // أيّاماً على القائم. مَن يملك التمديد وحده يصل إليه من كارت
           // المشترك، وهو موضعه الطبيعي لأنّه يحتاج اشتراكاً قائماً.
-          if (Perms.has('subscribers.activate'))
+          if (permShown(kActivate))
             _QuickItem(
+              locked: !Perms.hasAny(kActivate),
               icon: Icons.bolt_rounded,
               color: AppColors.brand,
               title: 'dashboard.renew_sub'.tr(),
@@ -692,8 +754,9 @@ class _QuickAddSheet extends StatelessWidget {
                 }
               },
             ),
-          if (Perms.has('subscribers.pay_debt'))
+          if (permShown(kPay))
             _QuickItem(
+              locked: !Perms.hasAny(kPay),
               icon: Icons.payments_rounded,
               color: AppColors.success,
               title: 'dashboard.pay_debt'.tr(),
@@ -709,8 +772,9 @@ class _QuickAddSheet extends StatelessWidget {
                 }
               },
             ),
-          if (Perms.has('subscribers.add_debt'))
+          if (permShown(kAddDebt))
             _QuickItem(
+              locked: !Perms.hasAny(kAddDebt),
               icon: Icons.account_balance_wallet_rounded,
               color: AppColors.warning,
               title: 'dashboard.add_debt'.tr(),
@@ -725,8 +789,9 @@ class _QuickAddSheet extends StatelessWidget {
                 }
               },
             ),
-          if (Perms.has('reports.expenses'))
+          if (permShown(kExpense))
             _QuickItem(
+              locked: !Perms.hasAny(kExpense),
               icon: Icons.receipt_long_rounded,
               color: AppColors.brandAccent,
               title: 'dashboard.add_expense'.tr(),
@@ -746,6 +811,7 @@ class _QuickItem extends StatelessWidget {
     required this.title,
     required this.subtitle,
     this.onTap,
+    this.locked = false,
   });
 
   final IconData icon;
@@ -757,16 +823,22 @@ class _QuickItem extends StatelessWidget {
   /// still let the admin dismiss the sheet by tapping.
   final VoidCallback? onTap;
 
+  /// بلا مفتاح البند: يبقى بمكانه خافتاً بقفلٍ مكان السهم، ونقره رسالةٌ
+  /// **لا تغلق الشيت** ولا تستدعي [onTap] (فلا منتقي ولا شيت يُرفض).
+  final bool locked;
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return Material(
+    final item = Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () {
-          Navigator.of(context).pop();
-          onTap?.call();
-        },
+        onTap: locked
+            ? () => showNoPermission(context, action: true)
+            : () {
+                Navigator.of(context).pop();
+                onTap?.call();
+              },
         borderRadius: BorderRadius.circular(R.md),
         child: Padding(
           padding: const EdgeInsets.symmetric(
@@ -779,10 +851,12 @@ class _QuickItem extends StatelessWidget {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.14),
+                  color:
+                      locked ? LockedStyle.box : color.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(R.sm),
                 ),
-                child: Icon(icon, color: color, size: 22),
+                child: Icon(icon,
+                    color: locked ? LockedStyle.glyph : color, size: 22),
               ),
               const SizedBox(width: Sp.md),
               Expanded(
@@ -790,17 +864,78 @@ class _QuickItem extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(title,
-                        style: AppType.label(color: AppColors.textHi)
+                        style: AppType.label(
+                                color: locked
+                                    ? LockedStyle.title
+                                    : AppColors.textHi)
                             .copyWith(fontSize: 14)),
                     const SizedBox(height: 2),
                     Text(subtitle,
-                        style: AppType.subtitle(color: AppColors.textMid)
+                        style: AppType.subtitle(
+                                color: locked
+                                    ? LockedStyle.subtitle
+                                    : AppColors.textMid)
                             .copyWith(fontSize: 12.5)),
                   ],
                 ),
               ),
-              Icon(Icons.arrow_back_ios_new_rounded,
-                  size: 12, color: AppColors.textLow),
+              if (locked)
+                const PermLockIcon(size: 14)
+              else
+                Icon(Icons.arrow_back_ios_new_rounded,
+                    size: 12, color: AppColors.textLow),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!locked) return item;
+    return Semantics(
+      button: true,
+      label: 'locked.a11y'.tr(args: [title]),
+      excludeSemantics: true,
+      child: item,
+    );
+  }
+}
+
+/// خانة «الأجهزة» لحساب ايرث لنك: أجهزة الشبكة غير مدعومة لهذا المزوّد بعد، فلا
+/// تُبنى شاشة الأجهزة ولا تُطلب بياناتها — قفلٌ هادئ بمكان الشاشة. الموظّف يرى
+/// «لا صلاحيّة» كباقي الأقسام المقفلة، والمالك يرى أنّ القسم غير متاح لحسابه.
+class _DevicesLockedTab extends StatelessWidget {
+  const _DevicesLockedTab();
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final employee = Perms.isEmployee;
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.lg, Sp.xl, Sp.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('nav.devices'.tr(), style: AppType.title(color: AppColors.textHi)),
+              const Spacer(),
+              Center(
+                child: employee
+                    ? const LockedNotice.block()
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const PermLockIcon(size: 28),
+                          const SizedBox(height: Sp.sm),
+                          Text(
+                            'nav.devices_unavailable'.tr(),
+                            textAlign: TextAlign.center,
+                            style: AppType.label(color: AppColors.textMid),
+                          ),
+                        ],
+                      ),
+              ),
+              const Spacer(flex: 2),
             ],
           ),
         ),

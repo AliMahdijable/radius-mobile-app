@@ -1,10 +1,12 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../services/account_service.dart';
 import '../services/auth_storage.dart';
+import '../services/device_id.dart';
 import 'api_client.dart';
 
 /// Result of a login attempt. Either we got a session (token + admin
@@ -85,6 +87,12 @@ class LoginFailure extends LoginResult {
 
   /// رمزٌ من بوّابة الحساب (انتهى الاشتراك/الحساب معطّل…) ← البوّابة تقرّر.
   bool get isAccountGate => code != null && !_notGate.contains(code);
+
+  /// `device-limit` (403): جهازٌ جديد فوق حدّ أجهزة الباقة. رمز بوّابةٍ أيضاً
+  /// ([isAccountGate])، لكنّ البوّابة لا تحلّه — `/api/account/me` ينجح
+  /// فترتدّ إلى «شركاتي» بلا كلمة. يُفحص **قبله**: «أجهزتي» تحرّر مكاناً ثمّ
+  /// يُعاد الدخول نفسه (`showDeviceLimitSheet`).
+  bool get isDeviceLimit => code == 'device-limit';
   bool get needsCaptcha => code == 'captcha-required' && captcha != null;
   bool get isCancelled => code == 'captcha-cancelled';
 }
@@ -263,6 +271,188 @@ class AuthApi {
     }
   }
 
+  /// POST /api/auth/employee-login — دخول موظّف ايرث لنك بيوزره وكلمة سرّه.
+  ///
+  /// بلا حساب إيميل: لا `x-account-token` (الموظّف لا حساب له ولا اشتراك؛ يعمل
+  /// تحت اشتراك مديره). الردّ بنفس شكل [login] للموظّف (`user.role='employee'`
+  /// و`user.employee.{full_name, username, permissions}`)، فيُحلَّل مثله.
+  /// الأخطاء: 400 حقلٌ ناقص · 401 يوزر/كلمة سرّ · 403 `EMPLOYEE_DISABLED` ·
+  /// 402 `subscription-ended` (اشتراك المدير) · 429 قفلٌ مؤقّت. رسالة الخادم
+  /// العربيّة مقدَّمة، والنصوص أدناه احتياطٌ فقط.
+  static Future<LoginResult> employeeLogin({
+    required String username,
+    required String password,
+  }) async {
+    try {
+      final res = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/auth/employee-login',
+        data: {'username': username.trim(), 'password': password},
+      );
+      final body = res.data ?? const {};
+      final status = res.statusCode ?? 0;
+      final serverMsg = (body['message'] as String?)?.trim() ?? '';
+
+      if (body['success'] != true || status >= 400) {
+        final code = (body['code'] ?? body['error'])?.toString();
+        final String fallback;
+        if (code == 'EMPLOYEE_DISABLED') {
+          fallback = 'حساب الموظف معطّل — راجع المدير.';
+        } else if (code == 'subscription-ended' || status == 402) {
+          fallback = 'اشتراك المدير منتهٍ — تواصل مع مديرك.';
+        } else if (status == 429) {
+          final mins = ((body['retryAfterSec'] as num?)?.toInt() ?? 60) ~/ 60;
+          fallback = 'محاولات كثيرة. حاول بعد ${mins < 1 ? 1 : mins} دقيقة.';
+        } else if (status == 400) {
+          fallback = 'أدخل اسم المستخدم وكلمة المرور.';
+        } else {
+          fallback = 'اسم المستخدم أو كلمة المرور غير صحيحة.';
+        }
+        return LoginFailure(
+          serverMsg.isNotEmpty ? serverMsg : fallback,
+          code: code,
+          rejected: status == 401,
+        );
+      }
+
+      final user = body['user'] as Map<String, dynamic>? ?? const {};
+      final token = (body['token'] ?? '').toString();
+      if (token.isEmpty) {
+        return const LoginFailure('لم يصل رمز الجلسة من السيرفر.');
+      }
+      // جلسة هذا الباب موظّفٌ دائماً: غير ذلك يعني ردّاً غير متوقّع — ولا نحفظ
+      // توكناً بعلامة مديرٍ فيمرّ بمسار تجديد توكن الساس.
+      final isEmployee = user['role']?.toString() == 'employee';
+      if (!isEmployee) {
+        return const LoginFailure('استجابة غير متوقعة من السيرفر.');
+      }
+      final empBlock = user['employee'];
+      final Map<String, dynamic> empPerms = (empBlock is Map)
+          ? Map<String, dynamic>.from(empBlock['permissions'] as Map? ?? const {})
+          : const {};
+      bool has(String k) => empPerms[k] == true;
+      // نفس اشتقاق [login] للموظّف.
+      final canAccessManagers = has('managers.add');
+      final canAccessPackages = has('packages.view') ||
+          has('subscribers.add') ||
+          has('subscribers.edit') ||
+          has('subscribers.activate') ||
+          has('subscribers.extend');
+      final empFull =
+          (empBlock is Map ? empBlock['full_name'] : null)?.toString().trim() ?? '';
+      final empUser =
+          (empBlock is Map ? empBlock['username'] : null)?.toString().trim() ?? '';
+      final displayName =
+          empFull.isNotEmpty ? empFull : (empUser.isNotEmpty ? empUser : 'موظف');
+      return LoginSuccess(
+        token: token,
+        // معرّف الأب (`earthlink:<idx>`) ويوزره — كدخول الموظّف المعتاد.
+        adminId: (user['id'] ?? '').toString(),
+        adminUsername: (user['username'] ?? '').toString(),
+        displayName: displayName,
+        expiresAt: body['expiresAt']?.toString(),
+        canAccessManagers: canAccessManagers,
+        canAccessPackages: canAccessPackages,
+        isEmployee: true,
+      );
+    } on DioException catch (e) {
+      return LoginFailure(_friendlyDioError(e));
+    } catch (_) {
+      return const LoginFailure('حدث خطأ غير متوقع. حاول مجدداً.');
+    }
+  }
+
+  /// POST /api/auth/employee-logout — خروج موظّف ايرث لنك يُنهي جلسته على
+  /// الخادم (يرفع session_epoch) فلا يعود التوكن صالحاً حتى لو نُسخ من الجهاز.
+  /// أيّ فشلٍ يُتجاهَل: الخروج المحلّيّ يتمّ دائماً، وأقصى ما يبقى توكنٌ ينتهي
+  /// وحده أو بالدخول التالي.
+  ///
+  /// ⚠️ [token] يُلتقط **قبل** مسح الجلسة المحلّيّة، والنداء **بعده**: لو رُفع
+  /// العدّاد والتوكن ما زال مخزَّناً لردّ الخادم أيّ طلبٍ يقع أثناء المسح (كارت
+  /// الإيرادات يُبنى حين تُمسح الصلاحيّات فيجلب فوراً) بـ401 SESSION_SUPERSEDED،
+  /// فيظهر «تم الدخول بهذا الحساب من جهازٍ آخر» بعد خروجٍ طوعيّ.
+  ///
+  /// ⚠️ المعترض يتخطّى `/api/auth/*` فلا يلصق التوكن — نلصقه هنا يدويّاً.
+  static Future<void> employeeLogout({String? token}) async {
+    try {
+      token ??= await AuthStorage.readToken();
+      if (token == null || token.isEmpty) return;
+      await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/auth/employee-logout',
+        options: Options(
+          headers: {'Authorization': 'Bearer $token', 'x-auth-token': token},
+          sendTimeout: const Duration(seconds: 4),
+          receiveTimeout: const Duration(seconds: 4),
+        ),
+      );
+    } catch (e) {
+      if (!kReleaseMode) debugPrint('🟡 auth/employee-logout: $e');
+    }
+  }
+
+  /// GET /api/auth/me — مزوّد الساس للجلسة الحاليّة (`provider: 'earthlink'`
+  /// لمدراء EarthLink، وإلّا غائب). يقرؤه [ProviderService] لحجب شاشات
+  /// البند ٤ الخاصّة بـEarthLink.
+  ///
+  /// ⚠️ المعترض يتخطّى `/api/auth/*` فلا يلصق التوكن — نلصقه هنا يدويّاً.
+  /// `ok:false` على أيّ فشلٍ (شبكة/جلسة) فيُبقى آخر مزوّدٍ معروف بلا مسح.
+  static Future<
+      ({
+        bool ok,
+        String? provider,
+        bool? isEmployee,
+        bool isSuperAdmin,
+        Map<String, bool>? canonical,
+      })> fetchProvider() async {
+    const fail = (
+      ok: false,
+      provider: null,
+      isEmployee: null,
+      isSuperAdmin: false,
+      canonical: null,
+    );
+    try {
+      final token = await AuthStorage.readToken();
+      if (token == null) return fail;
+      final res = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/auth/me',
+        options: Options(headers: {
+          'Authorization': 'Bearer $token',
+          'x-auth-token': token,
+        }),
+      );
+      final body = res.data ?? const {};
+      if ((res.statusCode ?? 0) >= 400 || body['success'] == false) {
+        return fail;
+      }
+      final user = body['user'];
+      final raw =
+          (body['provider'] ?? (user is Map ? user['provider'] : null))
+              ?.toString()
+              .trim();
+      // الصلاحيّات المعياريّة الطازجة (مدير EarthLink يحفظها التطبيق وقت الدخول
+      // وحده، فمفتاحٌ يقلبه الخادم لاحقاً لا يظهر بلا خروج ودخول).
+      final canonRaw = user is Map ? user['canonicalPermissions'] : null;
+      final empRaw = user is Map ? user['isEmployee'] : null;
+      return (
+        ok: true,
+        provider: (raw == null || raw.isEmpty) ? null : raw,
+        isEmployee: empRaw is bool ? empRaw : null,
+        isSuperAdmin: user is Map && user['isSuperAdmin'] == true,
+        canonical: canonRaw is Map
+            ? {
+                for (final e in canonRaw.entries)
+                  e.key.toString(): e.value == true,
+              }
+            : null,
+      );
+    } on DioException catch (e) {
+      if (!kReleaseMode) debugPrint('🟡 auth/me provider: ${e.type}');
+      return fail;
+    } catch (_) {
+      return fail;
+    }
+  }
+
   /// POST /api/auth/refresh-token with {adminId}. The backend regenerates
   /// the SAS4 session using the parent admin's stored password (this is
   /// the same flow v1's SessionRefreshService uses). For regular admins,
@@ -331,10 +521,21 @@ class AuthApi {
         dio.close();
         return RefreshOutcome.serverRejected;
       }
+      // معرّف الجهاز ونوعه كبقيّة الطلبات (هذا Dio بلا معترض ApiClient):
+      // gateLogin يفحص حدّ الأجهزة عند التجديد، وبدونهما يُرفض كلّ تجديد
+      // لو فُعِّل PRO_DEVICE_STRICT.
+      String? deviceId;
+      try {
+        deviceId = await DeviceId.get();
+      } catch (_) {/* لا يُفشل التجديد */}
       final res = await dio.post<Map<String, dynamic>>(
         '/api/auth/refresh-token',
         data: {'adminId': adminId},
-        options: Options(headers: {'x-account-token': accountToken}),
+        options: Options(headers: {
+          'x-account-token': accountToken,
+          if (deviceId != null && deviceId.isNotEmpty) 'x-device-id': deviceId,
+          'x-device-label': Platform.isIOS ? 'ios' : 'android',
+        }),
       );
       dio.close();
       // ٤xx = حكمٌ صريح من الخادم. (٥xx و٤٢٩ لا تصل هنا — تُرمى وتُعامَل

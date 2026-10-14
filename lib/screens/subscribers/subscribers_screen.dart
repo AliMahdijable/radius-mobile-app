@@ -13,8 +13,10 @@ import '../../api/subscribers_api.dart';
 import '../../api/telegram_api.dart';
 import '../../api/whatsapp_api.dart';
 import '../../core/util/format.dart';
+import '../../core/widgets/permission_locked.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/subscriber.dart';
+import '../../services/active_company.dart';
 import '../../services/auth_storage.dart';
 import '../../services/connection_alerts.dart';
 import '../../services/permissions_service.dart';
@@ -24,6 +26,7 @@ import '../../core/widgets/voice_search_button.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../widgets/active_company_line.dart';
 import 'sheets/bulk_activate_sheet.dart';
 import 'sheets/bulk_pay_debt_sheet.dart';
 import 'sheets/pay_debt_sheet.dart';
@@ -54,6 +57,8 @@ const _defaultSortByFilter = <SubscriberFilter, (SortField, SortDirection)>{
   // "بدون نت" — الأكثر تخطّياً للانتهاء (الأقل remaining) أولاً حتى
   // الإدمن يشوف الأخطر (سحب طويل بدون اشتراك) قبل الحديث الانتهاء.
   SubscriberFilter.onlineNoPlan: (SortField.remainingDays, SortDirection.asc),
+  // «مهمَل» — بلا باقة ولا انتهاء، فالفرز الوحيد ذو المعنى هو اليوزر.
+  SubscriberFilter.neglected: (SortField.username, SortDirection.asc),
 };
 
 /// Subscribers list — v2 port of v1's screen with a modernized look.
@@ -162,13 +167,39 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     // subscriber (activate / extend / disconnect / toggle / delete /
     // bulk action). Mirrors v1's notifier pattern.
     SubscriberEvents.dataChanged.addListener(_onDataChanged);
-    _load();
+    PermissionsService.changes.addListener(_onPermsChanged);
+    _wasLocked = _locked;
+    if (!_locked) _load();
     // حدود «تنبيه المشترك» — شريط المشكلة يعمل بالافتراضيّات حتّى تصل
     // حدود المدير، ثمّ يُعاد رسمه وحده عبر `ConnectionAlertSettings.current`.
-    ConnectionAlertSettings.ensureLoaded();
+    // والمقفل لا يطلبها: لا قائمة يُرسم عليها شريط.
+    if (!_locked) ConnectionAlertSettings.ensureLoaded();
     _searchCtrl.addListener(_onSearchChanged);
     widget.isActive?.addListener(_onActiveChanged);
     _startAutoRefresh();
+  }
+
+  /// بلا `subscribers.view`: التبويب يبقى في مكانه وشاشته إطارٌ مقفل —
+  /// **بلا أيّ نداء** (بلاغ ٢٠٢٦-١٠-١٤). كان `_load` يُطلق `v2/subscribers`
+  /// فيردّه الخادم 403 وتبقى الشاشة دوّارةً بيضاء أبداً. والمالك لا يُقفل:
+  /// `Perms.has` صحيحةٌ له دائماً.
+  bool get _locked => !Perms.has('subscribers.view');
+  bool _wasLocked = false;
+
+  /// مفتاحٌ مُنح أثناء الجلسة (تحديث `/me`): يبدأ التحميل والاستطلاع الآن.
+  void _onPermsChanged() {
+    if (!mounted) return;
+    final locked = _locked;
+    if (locked == _wasLocked) return;
+    _wasLocked = locked;
+    if (locked) {
+      _autoRefreshTimer?.cancel();
+      setState(() {});
+    } else {
+      ConnectionAlertSettings.ensureLoaded();
+      _load();
+      _startAutoRefresh();
+    }
   }
 
   /// Timer صامت — يفجّر _silentRefresh كل 5 ثواني ما دام التطبيق active.
@@ -177,6 +208,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   bool get _mayRefresh => widget.isActive?.value ?? true;
 
   void _onActiveChanged() {
+    if (_locked) return;
     if (_mayRefresh) {
       _startAutoRefresh();
       // تحديث فوري عند العودة: القيم قد تكون قديمة بدقائق. ولو وصل
@@ -197,8 +229,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     _autoRefreshTimer?.cancel();
     // ⚠️ الحارس هنا لا عند الاستدعاء: ثلاثة مسارات تستدعيها
     // (initState · didChangeAppLifecycleState · _onActiveChanged)،
-    // ونسيانه في واحدة يعيد الاستنزاف كاملاً.
-    if (!_mayRefresh) return;
+    // ونسيانه في واحدة يعيد الاستنزاف كاملاً. والمقفل لا يستطلع شيئاً.
+    if (!_mayRefresh || _locked) return;
     _autoRefreshTimer = Timer.periodic(_autoRefreshInterval, (_) {
       if (!mounted || !_appActive) return;
       // نتفادى overlap مع pull-to-refresh أو _load الأولي. نستخدم
@@ -241,7 +273,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       // Timer.periodic لا يُلغى تلقائياً في pause، بس رح يتخطّى بسبب
       // _appActive check — نُعيد التأكيد بإعادة الإنشاء.
       _startAutoRefresh();
-      if (!_refreshing && !_loading) _silentRefresh();
+      if (!_refreshing && !_loading && !_locked) _silentRefresh();
     }
     super.didChangeAppLifecycleState(state);
   }
@@ -279,7 +311,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     // العودة، فيُحدَّث ما تراه قبل أن تراه.
     // مخفيّ ⇒ لا نفعل شيئاً ولا نختم. الفارق بين الختمين هو ما
     // يلتقطه أوّل مسارٍ يعود إلى الرؤية.
-    if (!_mayRefresh) return;
+    if (!_mayRefresh || _locked) return;
     _refresh();
   }
 
@@ -311,6 +343,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     _autoRefreshTimer?.cancel();
     widget.filterCmd?.removeListener(_onFilterCmd);
     SubscriberEvents.dataChanged.removeListener(_onDataChanged);
+    PermissionsService.changes.removeListener(_onPermsChanged);
     widget.isActive?.removeListener(_onActiveChanged);
     _debounce?.cancel();
     _searchCtrl.dispose();
@@ -567,7 +600,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
   // ───────── filtering / sorting (matches v1 predicates exactly) ─────────
   List<Subscriber> get _filteredAll {
-    Iterable<Subscriber> it = _managerScoped;
+    // 2026-10-12: القائمة الافتراضيّة وكلّ الفلاتر تستثني «المهمَل»
+    // (حساباتٌ لم تُفعَّل قطّ) — عدا فلتر «مهمَل» نفسه الذي يعرضها وحدها.
+    Iterable<Subscriber> it = _managerScoped.where((s) => !s.isAbandoned);
     switch (_filter) {
       case SubscriberFilter.all:
         break;
@@ -591,6 +626,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       case SubscriberFilter.onlineNoPlan:
         // "بدون نت" — متصل بالشبكة لكن اشتراكه منتهي.
         it = it.where((s) => s.isOnline && s.isExpired);
+      case SubscriberFilter.neglected:
+        // «مهمَل» وحده يعرض غير المفعّلين — فيبدأ من المصدر الكامل
+        // (القاعدة أعلاه استثنتهم) ويُبقي المهمَل فقط.
+        it = _managerScoped.where((s) => s.isAbandoned);
     }
     if (_query.isNotEmpty) {
       final q = _query.toLowerCase();
@@ -770,19 +809,24 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     // pick: 'متصل (3)' means 3 online subs UNDER that manager, not 3
     // across the whole tenant. Matches v1 behaviour.
     final src = _managerScoped;
+    // 2026-10-12: العدّادات العاديّة على القائمة المرئيّة (بلا المهمَل)
+    // حتى تطابق ما تعرضه الشاشة؛ و«مهمَل» وحده يعدّ المستثنَين. نُثبِّتها
+    // قائمةً حتى لا يُعاد ترشيح `isAbandoned` مع كلّ عدّاد.
+    final visible = src.where((s) => !s.isAbandoned).toList();
     return {
-      SubscriberFilter.all: src.length,
-      SubscriberFilter.active: src.where((s) => s.isActive).length,
+      SubscriberFilter.all: visible.length,
+      SubscriberFilter.active: visible.where((s) => s.isActive).length,
       // 2026-07-16: نفس التغيير في العدّ — مطابق لمنطق الفلتر أعلاه.
       SubscriberFilter.online:
-          src.where((s) => s.isOnline && !s.isExpired).length,
-      SubscriberFilter.offline: src.where((s) => s.isOffline).length,
-      SubscriberFilter.disabled: src.where((s) => s.isDisabled).length,
-      SubscriberFilter.expired: src.where((s) => s.isExpired).length,
-      SubscriberFilter.debtors: src.where((s) => s.hasDebt).length,
-      SubscriberFilter.nearExpiry: src.where((s) => s.isNearExpiry).length,
+          visible.where((s) => s.isOnline && !s.isExpired).length,
+      SubscriberFilter.offline: visible.where((s) => s.isOffline).length,
+      SubscriberFilter.disabled: visible.where((s) => s.isDisabled).length,
+      SubscriberFilter.expired: visible.where((s) => s.isExpired).length,
+      SubscriberFilter.debtors: visible.where((s) => s.hasDebt).length,
+      SubscriberFilter.nearExpiry: visible.where((s) => s.isNearExpiry).length,
       SubscriberFilter.onlineNoPlan:
-          src.where((s) => s.isOnline && s.isExpired).length,
+          visible.where((s) => s.isOnline && s.isExpired).length,
+      SubscriberFilter.neglected: src.where((s) => s.isAbandoned).length,
     };
   }
 
@@ -896,13 +940,14 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   }
 
   /// «تسديد» من شريط الدين في الكارت. يفتح نفس شيت التفاصيل بلا
-  /// اختصار (قاعدة: عمليّات المشترك تطابق v1 حرفيّاً)، ثمّ يبثّ
-  /// dataChanged حتى يتحدّث الصفّ والدين فوراً.
+  /// اختصار (قاعدة: عمليّات المشترك تطابق v1 حرفيّاً).
+  ///
+  /// ⚠️ لا بثّ هنا: الشيت نفسه يُطلق `SubscriberEvents.notifyChange` عند
+  /// النجاح (pay_debt_sheet.dart) فيُسقط الكاش ويتحدّث الصفّ والدين
+  /// والرئيسيّة. وكان `dataChanged.value++` هنا بثّاً ثانياً للحدث نفسه —
+  /// جلبٌ مكرّرٌ بلا داعٍ (ومرّتان لكارت الإيرادات الذي لا يُهدّئ).
   Future<void> _payDebtFromList(Subscriber s) async {
-    final ok = await showPayDebtSheet(context, s);
-    if (ok == true) {
-      SubscriberEvents.dataChanged.value++;
-    }
+    await showPayDebtSheet(context, s);
   }
 
   Future<void> _openSortSheet() async {
@@ -1126,6 +1171,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    if (_locked) return const _SubscribersLocked();
     // ⚡ تُحسب مرّةً واحدة للإطار (تدقيق أداء 2026-08-31).
     //
     // كانت `_filteredAll` تُستدعى ثلاثاً و`_counts()` ثلاثاً
@@ -1488,10 +1534,28 @@ class _ListHeader extends StatelessWidget {
                 children: [
                   Text('subscribers.title'.tr(), style: AppType.title()),
                   const SizedBox(height: 2),
-                  Text(
-                    '$total مشترك • $online متصل الآن',
-                    style: AppType.body(color: AppColors.textMid)
-                        .copyWith(fontSize: 12.5),
+                  // ٢٠٢٦-١٠-١٢: الشركة المفتوحة أوّل سطر العدد — هنا يفعّل
+                  // المدير ويمدّد، فمالك عدّة شركات يرى أيّها قبل أن يضغط.
+                  // سطرٌ واحد: إن ضاق يُبتر آخره (المتّصلون، وعددهم في شريحتهم
+                  // تحته) لا اسم الشركة. وبلا شركة يبقى السطر كما كان حرفيّاً.
+                  ValueListenableBuilder<ActiveCompanyInfo?>(
+                    valueListenable: ActiveCompany.listenable,
+                    builder: (context, company, _) {
+                      final counts = '$total مشترك • $online متصل الآن';
+                      if (company == null) {
+                        return Text(
+                          counts,
+                          style: AppType.body(color: AppColors.textMid)
+                              .copyWith(fontSize: 12.5),
+                        );
+                      }
+                      return ActiveCompanyLine(
+                        info: company,
+                        showWho: false,
+                        trailing: counts,
+                        fontSize: 12.5,
+                      );
+                    },
                   ),
                 ],
               ),
@@ -1912,31 +1976,43 @@ class _BulkActionBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    // مطلب 2026-06-12: كل زر في الـbulk bar مربوط بصلاحية. لو الموظف
-    // ما يقدر يجدّد/يسدّد/يفعّل/يحذف الزر يختفي تماماً (مو disable).
-    final canRenew =
-        Perms.hasAny(const ['subscribers.activate', 'subscribers.extend']);
+    // مطلب 2026-06-12: كل زر في الـbulk bar مربوط بصلاحية.
+    //
+    // بلاغ ٢٠٢٦-١٠-١٤ (صاحب المشروع): «القوائم تبقى بس تظهر ما عنده
+    // صلاحيّة». فالزرّ الذي ينقصه مفتاحه **يبقى مقفلاً** في مكانه (قفلٌ
+    // مكان الأيقونة، ونقرته رسالةٌ لا عمليّة) بدل أن يختفي — والبار نفسه
+    // يظهر دائماً في وضع التحديد. ويبقى مخفيّاً ما لا يُمنح لهذا الدور
+    // أصلاً (`permShown`: الحذف عند موظّف ايرث لنك)، وما تحجبه الحالة
+    // (تسديد بلا مدينين، فصل بلا متّصلين).
+    const renewKeys = ['subscribers.activate', 'subscribers.extend'];
+    final canRenew = Perms.hasAny(renewKeys);
     final canPayDebt = Perms.has('subscribers.pay_debt');
     final canToggle = Perms.has('subscribers.toggle');
     final canDelete = Perms.has('subscribers.delete');
-    // لو ما عنده أي عملية مجمّعة — البار كامل ما يحتاج يظهر.
-    if (!canRenew && !canPayDebt && !canToggle && !canDelete) {
-      return const SizedBox.shrink();
-    }
+    final showRenew = permShown(renewKeys);
+    final showToggle = permShown(const ['subscribers.toggle']);
+    final showDelete = permShown(const ['subscribers.delete']);
     // مطلب المستخدم 2026-07-12: تصميم مضغوط — صفّان بدل 4:
     //   Row1 (primary): Renew | Pay debt | Disconnect (كل ما يظهر يتقاسم العرض)
     //   Row2 (secondary): Disable | Enable | Delete
     // ارتفاع أقل بـ~40% من التصميم القديم؛ زر Renew يبقى أول+مهيمن.
-    final showPay = debtorCount > 0 && canPayDebt;
-    final showDisconnect = onlineCount > 0 && canToggle;
+    final showPay =
+        debtorCount > 0 && permShown(const ['subscribers.pay_debt']);
+    final showDisconnect = onlineCount > 0 && showToggle;
+    // لا زرّ يُعرض أصلاً (لا مفتاح يُمنح لهذا الدور) — عمليّاً لا يقع.
+    if (!showRenew && !showPay && !showDisconnect && !showToggle &&
+        !showDelete) {
+      return const SizedBox.shrink();
+    }
     final primaryChildren = <Widget>[];
-    if (canRenew) {
+    if (showRenew) {
       primaryChildren.add(Expanded(
         flex: 2,
         child: _PrimaryPill(
           icon: LucideIcons.calendarPlus,
           label: '${'subscribers.bulk_renew'.tr()} ($selectedCount)',
           color: AppColors.brand,
+          locked: !canRenew,
           onTap: onRenew,
         ),
       ));
@@ -1950,6 +2026,7 @@ class _BulkActionBar extends StatelessWidget {
           icon: LucideIcons.banknote,
           label: '${'subscribers.pay_debt'.tr()} ($debtorCount)',
           color: AppColors.success,
+          locked: !canPayDebt,
           onTap: onPayDebt!,
         ),
       ));
@@ -1963,6 +2040,7 @@ class _BulkActionBar extends StatelessWidget {
           icon: LucideIcons.power,
           label: '${'subscribers.disconnect_online'.tr()} ($onlineCount)',
           color: AppColors.error,
+          locked: !canToggle,
           onTap: onDisconnect!,
         ),
       ));
@@ -1982,13 +2060,13 @@ class _BulkActionBar extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (primaryChildren.isNotEmpty) Row(children: primaryChildren),
-            if (primaryChildren.isNotEmpty && (canToggle || canDelete))
+            if (primaryChildren.isNotEmpty && (showToggle || showDelete))
               const SizedBox(height: 6),
             // Secondary row: Disable / Enable / Delete
-            if (canToggle || canDelete)
+            if (showToggle || showDelete)
               Row(
                 children: [
-                  if (canToggle) ...[
+                  if (showToggle) ...[
                     Expanded(
                       child: _SecondaryBtn(
                         icon: LucideIcons.ban,
@@ -1997,6 +2075,7 @@ class _BulkActionBar extends StatelessWidget {
                             : 'subscribers.disable'.tr(),
                         color: AppColors.warning,
                         enabled: enabledCount > 0,
+                        locked: !canToggle,
                         onTap: onDisable,
                       ),
                     ),
@@ -2009,17 +2088,19 @@ class _BulkActionBar extends StatelessWidget {
                             : 'subscribers.enable'.tr(),
                         color: AppColors.brand,
                         enabled: disabledCount > 0,
+                        locked: !canToggle,
                         onTap: onEnable,
                       ),
                     ),
-                    if (canDelete) const SizedBox(width: 6),
+                    if (showDelete) const SizedBox(width: 6),
                   ],
-                  if (canDelete)
+                  if (showDelete)
                     Expanded(
                       child: _SecondaryBtn(
                         icon: LucideIcons.trash2,
                         label: 'subscribers.bulk_delete'.tr(),
                         color: AppColors.error,
+                        locked: !canDelete,
                         onTap: onDelete,
                       ),
                     ),
@@ -2040,28 +2121,35 @@ class _PrimaryPill extends StatelessWidget {
     required this.label,
     required this.color,
     required this.onTap,
+    this.locked = false,
   });
   final IconData icon;
   final String label;
   final Color color;
   final VoidCallback onTap;
 
+  /// لا صلاحيّة: يبقى بمقاسه ومكانه، بلا تعبئة (سطحٌ غاطس ونصٌّ خافت)
+  /// وقفلٌ مكان الأيقونة، ونقرته رسالة القفل — [onTap] لا يُستدعى.
+  final bool locked;
+
   @override
   Widget build(BuildContext context) {
-    Theme.of(context);
-    return SizedBox(
+    Theme.of(context); // theme-dep (dark-mode)
+    final pill = SizedBox(
       height: 36,
       child: FilledButton.icon(
         style: FilledButton.styleFrom(
-          backgroundColor: color,
+          backgroundColor: locked ? AppColors.surfaceSunken : color,
+          foregroundColor: locked ? LockedStyle.glyph : null,
           padding: const EdgeInsets.symmetric(horizontal: 8),
           minimumSize: const Size(0, 36),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(R.sm),
           ),
         ),
-        onPressed: onTap,
-        icon: Icon(icon, size: 14),
+        onPressed:
+            locked ? () => showNoPermission(context, action: true) : onTap,
+        icon: Icon(locked ? LucideIcons.lock : icon, size: 14),
         label: Text(
           label,
           overflow: TextOverflow.ellipsis,
@@ -2070,6 +2158,13 @@ class _PrimaryPill extends StatelessWidget {
               fontWeight: FontWeight.w700, fontSize: 12.5, height: 1.4),
         ),
       ),
+    );
+    if (!locked) return pill;
+    return Semantics(
+      button: true,
+      label: 'locked.a11y'.tr(args: [label]),
+      excludeSemantics: true,
+      child: pill,
     );
   }
 }
@@ -2081,11 +2176,16 @@ class _SecondaryBtn extends StatelessWidget {
     required this.color,
     required this.onTap,
     this.enabled = true,
+    this.locked = false,
   });
   final IconData icon;
   final String label;
   final Color color;
   final VoidCallback onTap;
+
+  /// لا صلاحيّة — يغلب [enabled]: الزرّ يبقى قابلاً للنقر لكنّ نقرته
+  /// رسالة القفل لا العمليّة، بسطحٍ غاطس وحدٍّ محايد وقفلٍ مكان الأيقونة.
+  final bool locked;
 
   /// When false the button greys out — used by the bulk bar to signal
   /// that no rows in the current selection are eligible for this
@@ -2096,6 +2196,31 @@ class _SecondaryBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    if (locked) {
+      return Semantics(
+        button: true,
+        label: 'locked.a11y'.tr(args: [label]),
+        excludeSemantics: true,
+        child: OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: LockedStyle.glyph,
+            backgroundColor: AppColors.surfaceSunken,
+            side: BorderSide(color: AppColors.border),
+            padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
+            minimumSize: const Size(0, 34),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(R.sm),
+            ),
+          ),
+          onPressed: () => showNoPermission(context, action: true),
+          icon: const Icon(LucideIcons.lock, size: 13),
+          label: Text(label,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w700, fontSize: 11.5, height: 1.35)),
+        ),
+      );
+    }
     return OutlinedButton.icon(
       style: OutlinedButton.styleFrom(
         foregroundColor: color,
@@ -2516,6 +2641,41 @@ class _OfflineBanner extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// تبويب «المشتركون» لمن لا يملك `subscribers.view`: العنوان في مكانه
+/// وتحته إطارٌ مقفل — لا بحث ولا شرائح ولا دوّارة لقائمةٍ لن تصل.
+class _SubscribersLocked extends StatelessWidget {
+  const _SubscribersLocked();
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      body: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding:
+              EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Inset.tabBar(context)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('nav.subscribers'.tr(), style: AppType.title()),
+              const SizedBox(height: Sp.lg),
+              LockedCard(
+                title: 'nav.subscribers'.tr(),
+                icon: LucideIcons.users,
+                block: true,
+                radius: R.card,
+                padding: const EdgeInsets.all(Sp.xl),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

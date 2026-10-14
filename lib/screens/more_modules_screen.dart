@@ -5,12 +5,16 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../api/cards_api.dart';
 import '../core/util/format.dart';
+import '../core/widgets/permission_locked.dart';
 import '../services/permissions_service.dart';
+import '../services/provider_service.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'broadcast/broadcast_screen.dart';
 import 'cards/cards_screen.dart';
+import 'el/required_cards_screen.dart';
+import 'el/transfer_screen.dart';
 import 'telegram/telegram_screen.dart';
 import 'discounts/discounts_screen.dart';
 import 'subscriber_prices/subscriber_prices_screen.dart';
@@ -37,30 +41,44 @@ class MoreModulesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    // مطلب 2026-06-11: الكروت تختفي حسب صلاحيات الموظف الحالي.
-    // لو ما عنده ولا صلاحية يظهر empty state بدل قائمة فارغة بدون
-    // سياق. الـadmin (مو موظف) يشوف كل الكروت دائماً.
+    // بلاغ 2026-10-14: الكروت **لا تختفي** بالصلاحيّة — تبقى بمكانها مقفلةً
+    // (خافتة + قفل مكان السهم، والنقر يقول «اطلبها من مديرك» ولا يفتح شيئاً)
+    // فتحافظ القائمة على شكلها. ويبقى مخفيّاً ما ليس صلاحيّة: ميزةٌ لا يدعمها
+    // المزوّد، أو لصاحب الحساب وحده، أو مفتاحٌ لا يُمنح لهذا الدور
+    // ([permShown] — مدراء/موظّفون عند موظّف ايرث لنك). الـadmin يرى كلّ
+    // الكروت مفتوحةً دائماً، و«لا صلاحيّات» احتياطٌ لقائمةٍ فارغة فقط.
     // §١٢: وشارة الكارتات أيضاً — «الكارتات» تظهر وتختفي معها بلا إعادة فتح.
     return ListenableBuilder(
-      listenable:
-          Listenable.merge([PermissionsService.changes, CardsState.badge]),
+      listenable: Listenable.merge([
+        PermissionsService.changes,
+        CardsState.badge,
+        ProviderService.changes,
+      ]),
       builder: (context, _) {
         final stock = CardsState.badge.value;
+        const rk = [
+          'reports.financial',
+          'reports.activations',
+          'reports.daily_activations',
+          'reports.expenses',
+          'reports.manager_debts',
+          'reports.account_statement',
+          'reports.sessions',
+          'reports.activity_log',
+        ];
+        const cardKeys = ['subscribers.activate', 'subscribers.extend'];
+        const tgKeys = ['whatsapp.broadcast', 'whatsapp.send', 'settings.edit'];
+        const logKeys = ['whatsapp.broadcast', 'whatsapp.send'];
+        const pkgKeys = ['packages.view', 'packages.edit_prices'];
+        final cardsLocked = !Perms.hasAny(cardKeys);
         final cards = <Widget>[
           // مطلب 2026-08-12: التقارير صارت أوّل عنصر (نُقلت من tab رئيسي
           // لأن أجهزة الشبكة أكثر استعمالاً يومياً للـWISP).
-          // تظهر لأي مدير عادي، وللموظّف لو عنده أي صلاحيّة reports.*
-          if (Perms.hasAny([
-            'reports.financial',
-            'reports.activations',
-            'reports.daily_activations',
-            'reports.expenses',
-            'reports.manager_debts',
-            'reports.account_statement',
-            'reports.sessions',
-            'reports.activity_log',
-          ]))
+          // مفتوحةٌ لأي مدير عادي، وللموظّف لو عنده أي صلاحيّة reports.*،
+          // وإلّا فمقفلة بمكانها.
+          if (permShown(rk))
             _ModuleCard(
+              locked: !Perms.hasAny(rk),
               icon: LucideIcons.chartLine,
               tone: AppTone.success,
               title: 'nav.reports'.tr(),
@@ -69,8 +87,9 @@ class MoreModulesScreen extends StatelessWidget {
                 MaterialPageRoute(builder: (_) => const ReportsScreen()),
               ),
             ),
-          if (Perms.has('reports.expenses'))
+          if (permShown(const ['reports.expenses']))
             _ModuleCard(
+              locked: !Perms.has('reports.expenses'),
               icon: LucideIcons.receipt,
               tone: AppTone.warning,
               title: 'more.expenses'.tr(),
@@ -83,8 +102,9 @@ class MoreModulesScreen extends StatelessWidget {
             ),
           // 2026-10-02: «تسوية الحساب» — صندوق المدير بجانب الصرفيات، فهي
           // إدارةٌ تُنشئ سندات لا تقريرٌ يُقرأ فقط (كالصرفيات تماماً).
-          if (Perms.has('settlements.view'))
+          if (permShown(const ['settlements.view']))
             _ModuleCard(
+              locked: !Perms.has('settlements.view'),
               icon: LucideIcons.handCoins,
               tone: AppTone.brand,
               title: 'more.settlements'.tr(),
@@ -101,14 +121,15 @@ class MoreModulesScreen extends StatelessWidget {
           // فالخادم يقول `enabled` في admin-widgets والبطاقة تتبعه. ومجهولة
           // الشارة (لم يردّ أحد بعد) لا تُظهرها — لا قسم يقول «لا كارتات»
           // لمن لا يعمل بها أصلاً.
-          // والموظّف يراه بصلاحيّة التفعيل/التمديد وحدها (مثل نافذة التفعيل).
-          if ((stock?.enabled ?? false) &&
-              Perms.hasAny(['subscribers.activate', 'subscribers.extend']))
+          // والموظّف يفتحه بصلاحيّة التفعيل/التمديد وحدها (مثل نافذة التفعيل)،
+          // وبدونها يراه مقفلاً بلا عدد المخزون (رقمٌ لا يملك أن يراه).
+          if ((stock?.enabled ?? false) && permShown(cardKeys))
             _ModuleCard(
+              locked: cardsLocked,
               icon: LucideIcons.tickets,
               tone: AppTone.brand,
               title: 'cards.title'.tr(),
-              subtitle: stock!.remaining == null
+              subtitle: cardsLocked || stock!.remaining == null
                   ? 'cards.module_hint'.tr()
                   : 'cards.module_hint_n'
                       .tr(namedArgs: {'n': formatIQD(stock.remaining!)}),
@@ -118,9 +139,9 @@ class MoreModulesScreen extends StatelessWidget {
             ),
           // 2026-08-26: تلغرام — إعداد بوت + ربط مشتركين + بث. منقول
           // كامل من client-v2. محكوم بنفس صلاحيّة إعدادات الواتساب.
-          if (Perms.hasAny(
-              ['whatsapp.broadcast', 'whatsapp.send', 'settings.edit']))
+          if (permShown(tgKeys))
             _ModuleCard(
+              locked: !Perms.hasAny(tgKeys),
               icon: LucideIcons.send,
               tone: AppTone.brand,
               brandGlyph: AppColors.channelTelegram, // أزرق تلغرام
@@ -134,8 +155,12 @@ class MoreModulesScreen extends StatelessWidget {
             ),
           // التبليغات (broadcast) — نُقلت من client-v2/Notifications.tsx.
           // إرسال جماعي لجميع/المدينين/المنتهين/قرب انتهاء + محرّر متغيّرات.
-          if (Perms.has('whatsapp.broadcast'))
+          // ايرث لنك: مخفيّ — بثّ «كلّ المشتركين» غير مدعوم فيعطي فشلاً
+          // (البند ٤، إزالة «الشعور بالنقص»).
+          if (!ProviderService.isEarthlink &&
+              permShown(const ['whatsapp.broadcast']))
             _ModuleCard(
+              locked: !Perms.has('whatsapp.broadcast'),
               icon: LucideIcons.bell,
               tone: AppTone.brand,
               brandGlyph: AppColors.channelWhatsApp, // أخضر واتساب
@@ -150,8 +175,9 @@ class MoreModulesScreen extends StatelessWidget {
           // حالة الرسائل — نُقلت من v1 mobile-app/message_logs_screen. تعرض
           // كل رسائل WhatsApp بأنواعها (broadcast/activation/expiry/…) مع
           // فلاتر + بحث + retry + auto-refresh للـpending.
-          if (Perms.hasAny(['whatsapp.broadcast', 'whatsapp.send']))
+          if (permShown(logKeys))
             _ModuleCard(
+              locked: !Perms.hasAny(logKeys),
               icon: LucideIcons.messageSquare,
               tone: AppTone.brand,
               title: 'more.message_logs'.tr(),
@@ -162,8 +188,11 @@ class MoreModulesScreen extends StatelessWidget {
                 ),
               ),
             ),
-          if (Perms.has('managers.view'))
+          // المدراء والموظّفون: مفتاحان لا يُمنحان لموظّف ايرث لنك أصلاً،
+          // فيبقيان مخفيّين عنده ([permShown]) ومقفلين عند غيره.
+          if (permShown(const ['managers.view']))
             _ModuleCard(
+              locked: !Perms.has('managers.view'),
               icon: LucideIcons.userCog,
               tone: AppTone.brand,
               title: 'more.managers'.tr(),
@@ -174,8 +203,9 @@ class MoreModulesScreen extends StatelessWidget {
                 ),
               ),
             ),
-          if (Perms.hasAny(['packages.view', 'packages.edit_prices']))
+          if (permShown(pkgKeys))
             _ModuleCard(
+              locked: !Perms.hasAny(pkgKeys),
               icon: LucideIcons.package,
               tone: AppTone.brand,
               title: 'more.packages'.tr(),
@@ -186,8 +216,9 @@ class MoreModulesScreen extends StatelessWidget {
                 ),
               ),
             ),
-          if (Perms.has('discounts.view'))
+          if (permShown(const ['discounts.view']))
             _ModuleCard(
+              locked: !Perms.has('discounts.view'),
               icon: LucideIcons.percent,
               tone: AppTone.success,
               title: 'more.discounts'.tr(),
@@ -200,8 +231,9 @@ class MoreModulesScreen extends StatelessWidget {
             ),
           // «أسعار المشتركين» — سعر بيعٍ ثابت لمشتركٍ بعينه، بجانب الخصومات
           // لأنّه أخوها: الثابت يلغي الخصم.
-          if (Perms.has('subscriber_prices.view'))
+          if (permShown(const ['subscriber_prices.view']))
             _ModuleCard(
+              locked: !Perms.has('subscriber_prices.view'),
               icon: LucideIcons.banknote,
               tone: AppTone.brand,
               title: 'sp.title'.tr(),
@@ -212,8 +244,9 @@ class MoreModulesScreen extends StatelessWidget {
                 ),
               ),
             ),
-          if (Perms.has('employees.view'))
+          if (permShown(const ['employees.view']))
             _ModuleCard(
+              locked: !Perms.has('employees.view'),
               icon: LucideIcons.users,
               tone: AppTone.brand,
               title: 'more.employees'.tr(),
@@ -225,8 +258,11 @@ class MoreModulesScreen extends StatelessWidget {
               ),
             ),
           // بوابة المشترك — 2026-07-13: branding + وصف الباقات (نُقلت من client-v2)
-          if (Perms.has('settings.edit'))
+          // ايرث لنك: مخفيّ — بوّابة مشتركينا غير مهيّأةٍ لايرث لنك (البند ٤).
+          if (!ProviderService.isEarthlink &&
+              permShown(const ['settings.edit']))
             _ModuleCard(
+              locked: !Perms.has('settings.edit'),
               icon: LucideIcons.smartphone,
               tone: AppTone.brand,
               title: 'portal.title'.tr(),
@@ -241,6 +277,38 @@ class MoreModulesScreen extends StatelessWidget {
           // (طلب المستخدم — إزالة من قوائم أخرى). Import يبقى للـroute
           // من dashboard.
           // 2026-08-12: الأجهزة انتقلت لـtab رئيسي (استعمالها يومي للـWISP)
+          // ── ايرث لنك (البند ٤) — تظهران لموزِّعي EarthLink وحدهم.
+          // الحجب من `ProviderService.isEarthlink` (مصدره /api/auth/me)،
+          // لا صلاحيّة ساس — فالقائمة تستمع لـ`ProviderService.changes`.
+          if (ProviderService.isEarthlink) ...[
+            // تحويل الرصيد وكشف الإيداع لصاحب الحساب وحده (الخادم يردّ الموظّف
+            // بـ403 OWNER_ONLY) — فلا تُعرض للموظّف بطاقةٌ تنتهي برفض.
+            if (!Perms.isEmployee)
+            _ModuleCard(
+              icon: LucideIcons.arrowRightLeft,
+              tone: AppTone.brand,
+              title: 'تحويل الرصيد',
+              subtitle: 'تحويل الرصيد بين الوكلاء + كشف الحساب',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ElTransferScreen()),
+              ),
+            ),
+            // «الكارتات المطلوبة» — توقّع الكارتات والرصيد (بكلفة الشركة)
+            // لمدّة؛ بلا أسعار بيع (تلك بشاشة الباقات). من «التقارير الماليّة»
+            // (المدير دائماً؛ الموظّف بالمفتاح — الخادم يفرضه).
+            if (permShown(const ['reports.financial']))
+            _ModuleCard(
+              locked: !Perms.has('reports.financial'),
+              icon: LucideIcons.clipboardList,
+              tone: AppTone.brand,
+              title: 'الكارتات المطلوبة',
+              subtitle: 'كم كارتاً ورصيداً تحتاج ليوم / ٣ أيام / أسبوع / شهر',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                    builder: (_) => const ElRequiredCardsScreen()),
+              ),
+            ),
+          ],
         ];
 
         return Scaffold(
@@ -301,6 +369,7 @@ class MoreModulesScreen extends StatelessWidget {
 
 class _ModuleCard extends StatelessWidget {
   const _ModuleCard({
+    this.locked = false,
     required this.icon,
     required this.tone,
     this.brandGlyph,
@@ -322,18 +391,24 @@ class _ModuleCard extends StatelessWidget {
   final String subtitle;
   final VoidCallback onTap;
 
+  /// بلا صلاحيّة: المقاس والمكان نفسهما، الألوان خافتة ([LockedStyle])
+  /// والقفل مكان السهم، والنقر رسالةٌ لا تنقّل ([showNoPermission]).
+  final bool locked;
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return Material(
+    final card = Material(
       color: AppColors.surface,
       borderRadius: BorderRadius.circular(R.lg),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () {
-          HapticFeedback.selectionClick();
-          onTap();
-        },
+        onTap: locked
+            ? () => showNoPermission(context)
+            : () {
+                HapticFeedback.selectionClick();
+                onTap();
+              },
         borderRadius: BorderRadius.circular(R.lg),
         child: Container(
           padding: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, Sp.md),
@@ -347,12 +422,18 @@ class _ModuleCard extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: brandGlyph == null
-                      ? tone.softBg
-                      : AppColors.surfaceSunken,
+                  color: locked
+                      ? LockedStyle.box
+                      : brandGlyph == null
+                          ? tone.softBg
+                          : AppColors.surfaceSunken,
                   borderRadius: BorderRadius.circular(R.icon),
                 ),
-                child: Icon(icon, color: brandGlyph ?? tone.fill, size: 22),
+                child: Icon(
+                  icon,
+                  color: locked ? LockedStyle.glyph : brandGlyph ?? tone.fill,
+                  size: 22,
+                ),
               ),
               const SizedBox(width: Sp.md),
               Expanded(
@@ -362,7 +443,9 @@ class _ModuleCard extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: AppType.label(color: AppColors.textHi).copyWith(
+                      style: AppType.label(
+                        color: locked ? LockedStyle.title : AppColors.textHi,
+                      ).copyWith(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
                       ),
@@ -370,17 +453,30 @@ class _ModuleCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      style: AppType.muted(color: AppColors.textMid)
-                          .copyWith(fontSize: 11.5, height: 1.4),
+                      style: AppType.muted(
+                        color:
+                            locked ? LockedStyle.subtitle : AppColors.textMid,
+                      ).copyWith(fontSize: 11.5, height: 1.4),
                     ),
                   ],
                 ),
               ),
-              Icon(LucideIcons.chevronLeft, color: AppColors.textLow, size: 18),
+              if (locked)
+                const PermLockIcon()
+              else
+                Icon(LucideIcons.chevronLeft,
+                    color: AppColors.textLow, size: 18),
             ],
           ),
         ),
       ),
+    );
+    if (!locked) return card;
+    return Semantics(
+      button: true,
+      label: 'locked.a11y'.tr(args: [title]),
+      excludeSemantics: true,
+      child: card,
     );
   }
 }

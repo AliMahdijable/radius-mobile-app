@@ -632,9 +632,6 @@ class _SubscriberCard extends StatelessWidget {
   final num? fixedPrice;
   final VoidCallback? onTap;
 
-  num? get _originalPrice =>
-      sub.isFixedPrice ? (sub.basePackagePrice ?? sub.price) : sub.price;
-
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
@@ -688,11 +685,13 @@ class _SubscriberCard extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                    // الباقة وسعرها الأصليّ — للثابت: الطبيعيّ لا الثابت.
+                    // الباقة + «سعر البيع الحالي» (ما يدفعه المشترك فعلاً):
+                    // للثابت هو الثابت، ولغيره سعر الباقة ناقص خصمه.
                     child: Text(
                       [
                         if ((sub.profileName ?? '').isNotEmpty) sub.profileName!,
-                        if (_originalPrice != null) formatIQD(_originalPrice!),
+                        if (sub.currentSalePrice != null)
+                          formatIQD(sub.currentSalePrice!),
                       ].join(' · '),
                       style: AppType.label(color: AppColors.success)
                           .copyWith(fontSize: 9.5, fontWeight: FontWeight.w700),

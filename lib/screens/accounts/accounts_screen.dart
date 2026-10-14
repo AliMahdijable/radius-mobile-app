@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/auth_api.dart';
 import '../../api/managers_api.dart';
+import '../../services/active_company.dart';
 import '../../services/auth_storage.dart';
 import '../../services/fcm_service.dart';
 import '../../services/permissions_service.dart';
@@ -14,8 +15,10 @@ import '../../theme/colors.dart';
 import '../main_shell.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../core/platform/store_policy.dart';
 import '../../core/util/error_text.dart';
 import '../../widgets/sas_captcha_sheet.dart';
+import '../account/my_devices_screen.dart';
 
 /// شاشة "الصفحات" — التبديل السريع بين حسابات المدراء الفرعيّين
 /// (2026-08-26). طلب المستخدم:
@@ -113,14 +116,15 @@ class _AccountsScreenState extends State<AccountsScreen> {
     }
   }
 
-  Future<void> _switchTo(_AccountRow row) async {
+  /// [confirmed]: إعادةٌ بعد إفراغ خانة جهاز ([showDeviceLimitSheet]) — وافق عليها المدير سلفاً.
+  Future<void> _switchTo(_AccountRow row, {bool confirmed = false}) async {
     // منع التبديل للحساب نفسه.
     if (row.username == _currentUsername) {
       _snack('أنت الآن مسجّل دخول بهذا الحساب', error: true);
       return;
     }
     // تأكيد
-    final ok = await showDialog<bool>(
+    final bool? ok = confirmed ? true : await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
@@ -204,6 +208,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
             :final isEmployee,
             :final canonicalPermissions,
           ):
+          // الشركة قبل المسح — المدير الفرعيّ في الساس نفسه فيرث اسمها.
+          final prevCompany = ActiveCompany.current;
           // 3) امسح الجلسة الحاليّة (بدون مسح الملفّات المحفوظة).
           await SessionManager.clearAllSessionData(
             unregisterFcm: false,
@@ -222,6 +228,15 @@ class _AccountsScreenState extends State<AccountsScreen> {
             canAccessPackages: canAccessPackages,
             isEmployee: isEmployee,
             sasUrl: sasUrl,
+          );
+          // شريط الشركة أعلى الواجهة: الشركة نفسها بيوزر المدير الفرعيّ.
+          await ActiveCompany.saveFromLogin(
+            sasUrl: sasUrl ?? '',
+            adminId: adminId,
+            loginUsername: row.username,
+            adminUsername: adminUsername,
+            isEmployee: isEmployee,
+            previous: prevCompany,
           );
           // 5) أضف الحساب الجديد للملفّات المحفوظة (حتى يظهر chip
           //    لاحقاً)، والحساب السابق موجود سلفاً لأنّه سجّل دخول من
@@ -252,8 +267,16 @@ class _AccountsScreenState extends State<AccountsScreen> {
             MaterialPageRoute(builder: (_) => const MainShell()),
             (route) => false,
           );
-        case LoginFailure(:final message):
-          if (message.isNotEmpty) _snack(message, error: true); // فارغة = أُغلقت نافذة رمز الصورة
+        case final LoginFailure f:
+          // حدّ الأجهزة: نافذة «إدارة أجهزتي» بدل رسالةٍ عابرة — وبعد إفراغ خانةٍ يُعاد التبديل نفسه.
+          if (f.isDeviceLimit) {
+            if (await showDeviceLimitSheet(context, message: f.message) && mounted) {
+              setState(() => _switching.remove(row.id));
+              await _switchTo(row, confirmed: true);
+            }
+            return;
+          }
+          if (f.message.isNotEmpty) _snack(f.message, error: true); // فارغة = أُغلقت نافذة رمز الصورة
       }
     } catch (e) {
       if (mounted) _snack('فشل التبديل: $e', error: true);
@@ -291,6 +314,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
             :final isEmployee,
             :final canonicalPermissions,
           ):
+          final prevCompany = ActiveCompany.current;
           await SessionManager.clearAllSessionData(
             unregisterFcm: false,
             clearAuth: false,
@@ -307,6 +331,15 @@ class _AccountsScreenState extends State<AccountsScreen> {
             canAccessPackages: canAccessPackages,
             isEmployee: isEmployee,
             sasUrl: sasUrl,
+          );
+          // شريط الشركة: الشركة نفسها بيوزر الحساب الأصليّ.
+          await ActiveCompany.saveFromLogin(
+            sasUrl: sasUrl ?? '',
+            adminId: adminId,
+            loginUsername: orig.username,
+            adminUsername: adminUsername,
+            isEmployee: isEmployee,
+            previous: prevCompany,
           );
           // نظّف مرجع الأصلي — رجعنا فعلاً.
           await SavedProfilesStore.clearOriginal();
@@ -330,8 +363,15 @@ class _AccountsScreenState extends State<AccountsScreen> {
             MaterialPageRoute(builder: (_) => const MainShell()),
             (route) => false,
           );
-        case LoginFailure(:final message):
-          if (message.isNotEmpty) _snack(message, error: true); // فارغة = أُغلقت نافذة رمز الصورة
+        case final LoginFailure f:
+          if (f.isDeviceLimit) {
+            if (await showDeviceLimitSheet(context, message: f.message) && mounted) {
+              setState(() => _returningToOriginal = false);
+              await _returnToOriginal();
+            }
+            return;
+          }
+          if (f.message.isNotEmpty) _snack(f.message, error: true); // فارغة = أُغلقت نافذة رمز الصورة
       }
     } catch (e) {
       if (mounted) _snack('فشلت العودة: $e', error: true);
@@ -342,6 +382,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
 
   void _snack(String msg, {bool error = false}) {
     if (!mounted) return;
+    msg = StorePolicy.storeSafe(msg); // آيفون: بلا «رقِّ باقتك» في رسائل الخادم
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg, style: const TextStyle(fontFamily: AppType.family)),
       backgroundColor: error ? AppColors.error : AppColors.brand,

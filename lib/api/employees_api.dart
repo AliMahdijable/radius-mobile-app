@@ -173,6 +173,157 @@ class PermissionsCatalog {
       presets: presets,
     );
   }
+
+  /// [permsByCategory] مقصوراً على المفاتيح التي يقبلها [keep] — الفئات
+  /// بترتيبها في الكتالوج، والفئة التي لا يبقى فيها شيءٌ تسقط.
+  Map<String, List<PermissionDef>> permsByCategoryWhere(
+      bool Function(String key) keep) {
+    final out = <String, List<PermissionDef>>{};
+    permsByCategory.forEach((cat, defs) {
+      final kept = defs.where((d) => keep(d.key)).toList();
+      if (kept.isNotEmpty) out[cat] = kept;
+    });
+    return out;
+  }
+}
+
+/// دورٌ جاهز لموظّف ايرث لنك — يضبط المفاتيح كلّها دفعةً ثمّ يعدّل المالك.
+class ElPermPreset {
+  const ElPermPreset({
+    required this.id,
+    required this.label,
+    required this.description,
+    required this.keys,
+  });
+
+  /// معرّفٌ ثابت للواجهة (الأيقونة) — لا يُرسَل للخادم.
+  final String id;
+  final String label;
+  final String description;
+
+  /// المفاتيح المفعّلة؛ ما سواها من مفاتيح ايرث لنك يُطفأ.
+  final Set<String> keys;
+}
+
+/// صلاحيّات موظّف ايرث لنك (Pro البند ٤).
+///
+/// الخادم يفرض على موظّفي EarthLink هذه المفاتيح **بالضبط** (جدول
+/// `routePermission` في `server/earthlink/earthlinkRoutes.js`). ما سواها
+/// من الكتالوج إمّا ميزةٌ لا وجود لها هناك (المدراء الفرعيّون، الأجهزة،
+/// الإعدادات، البثّ…) وإمّا لصاحب الحساب وحده بلا مفتاح (تحويل الرصيد
+/// وكشف الإيداع، إلغاء التسوية) — والموظّف لا يدير موظّفين أبداً.
+///
+/// فمحرّر موظّفي ايرث لنك يعرض هذه وحدها، و[outgoing] يُرسل غيرها `false`
+/// دائماً: لا يمنح المحرّر ما لا يراه المالك (مفاتيحُ افتراضيّتها `true`
+/// كـ`whatsapp.send` كانت ستُمنح خفيةً).
+class ElEmployeePerms {
+  ElEmployeePerms._();
+
+  static const keys = <String>{
+    'subscribers.view',
+    // إضافة مشترك (رصيد/كارت/تجريبي) — يحرس مسارات الإضافة الأربعة عند الخادم.
+    'subscribers.add',
+    'subscribers.activate',
+    'subscribers.extend',
+    'subscribers.toggle',
+    'subscribers.edit',
+    'subscribers.view_credentials',
+    'subscribers.add_debt',
+    'subscribers.pay_debt',
+    'subscribers.send_whatsapp',
+    'subscribers.view_activity',
+    'packages.view',
+    'packages.edit_prices',
+    'discounts.view',
+    'discounts.manage',
+    'subscriber_prices.view',
+    'subscriber_prices.manage',
+    'reports.financial',
+    'reports.activations',
+    'reports.daily_activations',
+    'reports.expenses',
+    'reports.account_statement',
+    'reports.sessions',
+    'reports.activity_log',
+    'settlements.view',
+    'settlements.create',
+  };
+
+  /// ما يشمله المفتاح عند ايرث لنك ولا تقوله تسميته في الكتالوج.
+  static const hints = <String, String>{
+    'subscribers.add':
+        'بالرصيد (بباسورد الإيداع — يُخصم من رصيد الوكيل) أو بكارت أو تجريبي',
+    'subscribers.toggle': 'يشمل قطع اتصال المشترك',
+    'reports.financial': 'يشمل رصيد الوكيل والكارتات المطلوبة',
+    'reports.expenses': 'عرض الصرفيات وإدارتها',
+  };
+
+  /// «موظّف عام» = المفاتيح كلّها، ومنها `subscribers.add` (يحوي أصلاً ما
+  /// يحرّك المال: تفعيل/تمديد/دين/تسوية). «تفعيل وتحصيل» بلا إضافة — كقالب
+  /// «كاشير» في كتالوج الخادم — و«عرض فقط» بلا أيّ عمليّة.
+  static const presets = <ElPermPreset>[
+    ElPermPreset(
+      id: 'general',
+      label: 'موظّف عام',
+      description: 'يرى ويعمل كلّ ما يُسمح به لموظّف',
+      keys: keys,
+    ),
+    ElPermPreset(
+      id: 'collect',
+      label: 'تفعيل وتحصيل',
+      description: 'تفعيل وتمديد وتسديد ديون وواتساب',
+      keys: {
+        'subscribers.view',
+        'subscribers.activate',
+        'subscribers.extend',
+        'subscribers.pay_debt',
+        'subscribers.send_whatsapp',
+        'packages.view',
+        'subscribers.view_activity',
+      },
+    ),
+    ElPermPreset(
+      id: 'view',
+      label: 'عرض فقط',
+      description: 'يشاهد المشتركين والباقات والخصومات والأسعار بلا أيّ عمليّة',
+      keys: {
+        'subscribers.view',
+        'packages.view',
+        'discounts.view',
+        'subscriber_prices.view',
+        'subscribers.view_activity',
+      },
+    ),
+  ];
+
+  /// عدد مفاتيح ايرث لنك المفعّلة — ما يملكه الموظّف فعلاً.
+  static int activeCount(Map<String, bool> perms) =>
+      keys.where((k) => perms[k] == true).length;
+
+  /// ما يُرسَل للخادم: كلّ مفاتيح الكتالوج — مفاتيح ايرث لنك من [perms]،
+  /// والباقي `false`. الاستثناء `whatsapp.send`: يتبع «إرسال واتساب»
+  /// (`subscribers.send_whatsapp`) — مسارا تذكير الدين/معلومات المشترك يرسلان
+  /// عبر `/api/whatsapp/send-message` بتوكن الموظّف، وهو يفحص `whatsapp.send`،
+  /// فبدونه يُرفض موظّفٌ مُنح المراسلة (كـbuildElPermissions في الويب).
+  static Map<String, bool> outgoing(
+      Iterable<String> catalogKeys, Map<String, bool> perms) {
+    final out = {
+      for (final k in catalogKeys) k: keys.contains(k) && perms[k] == true,
+    };
+    if (out.containsKey('whatsapp.send')) {
+      out['whatsapp.send'] = perms['subscribers.send_whatsapp'] == true;
+    }
+    return out;
+  }
+
+  /// الدور الجاهز المطابق للمفعَّل الآن تماماً، وإلّا null (مخصّص).
+  static ElPermPreset? matching(Map<String, bool> perms) {
+    final on = {for (final k in keys) if (perms[k] == true) k};
+    for (final p in presets) {
+      if (p.keys.length == on.length && on.containsAll(p.keys)) return p;
+    }
+    return null;
+  }
 }
 
 /// Identity returned by /api/v2/employees/me. Used at login time to
@@ -276,7 +427,10 @@ class EmployeesApi {
     }
   }
 
-  static Future<({bool ok, String? message, Employee? employee})> create({
+  /// [status] رمز HTTP الردّ — `409` = اسم المستخدم محجوز (الأسماء فريدةٌ
+  /// على مستوى النظام كلّه، لا عند المدير وحده).
+  static Future<({bool ok, String? message, Employee? employee, int? status})>
+      create({
     required String username,
     required String password,
     String? fullName,
@@ -312,6 +466,7 @@ class EmployeesApi {
         ok: body['success'] == true,
         message: body['message']?.toString(),
         employee: emp,
+        status: r.statusCode,
       );
     } on DioException catch (e) {
       _log('employees (POST)', e);
@@ -321,10 +476,11 @@ class EmployeesApi {
         ok: false,
         message: msg ?? 'تعذّر الإنشاء',
         employee: null,
+        status: e.response?.statusCode,
       );
     } catch (e) {
       _log('employees (POST)', e);
-      return (ok: false, message: 'تعذّر الإنشاء', employee: null);
+      return (ok: false, message: 'تعذّر الإنشاء', employee: null, status: null);
     }
   }
 

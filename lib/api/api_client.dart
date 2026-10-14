@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 
 import '../services/auth_storage.dart';
 import '../services/device_id.dart';
+import '../services/employee_session.dart';
 import '../services/session_manager.dart';
 import 'auth_api.dart';
 
@@ -50,11 +51,18 @@ String? blockedMessage;
 class ApiClient {
   ApiClient._();
 
-  // Pro: قابلٌ للحقن وقت البناء لتوجيه نسخة الفحص إلى خادم Pro. بلا العلم
-  // يبقى الإنتاج حرفيّاً، فبناء الإنتاج لا يتأثّر. يبقى const وعميلاً واحداً
-  // (يمرّ من no_direct_sas_test). البناء: flutter build apk --dart-define=BASE_URL=…
+  // Pro: هذا فرع البرو — منتَجه يخاطب خادم Pro (pro.mysvcs.net) وحده، فهو
+  // الافتراضيّ هنا. والسبب ليس تنظيماً: طبقة الحساب `/api/account/*` تعيش على
+  // خادم Pro **فقط**، وباب الحساب (AccountGateScreen) يعمل عند كلّ إقلاع ويطلب
+  // `/api/account/me`. فلو بقي الافتراضيّ `rad.mysvcs.net` (الخادم الكلاسيكيّ،
+  // لا طبقةَ حسابٍ فيه) لردّ 404 صفحةَ HTML، فيفشل فكّ الـJSON ويظهر «تعذّر
+  // الوصول إلى حسابك» — بناءٌ بلا `--dart-define` يصير معطوباً صامتاً (حدث فعلاً).
+  //
+  // يبقى قابلاً للحقن وقت البناء لأيّ خادمٍ آخر (كالكلاسيكيّ للمقارنة):
+  //   flutter build apk --dart-define=BASE_URL=https://rad.mysvcs.net
+  // ويبقى const وعميلاً واحداً (يمرّ من no_direct_sas_test).
   static const String baseUrl =
-      String.fromEnvironment('BASE_URL', defaultValue: 'https://rad.mysvcs.net');
+      String.fromEnvironment('BASE_URL', defaultValue: 'https://pro.mysvcs.net');
 
   static final Dio dio = _buildDio(baseUrl);
 
@@ -118,6 +126,8 @@ class _AuthInterceptor extends Interceptor {
     try {
       options.headers['x-device-id'] = await DeviceId.get();
     } catch (_) {/* لا يُفشل الطلب */}
+    // نوع الجهاز لوصفه في «أجهزتي» (لاتينيّ: الترويسات لا تحمل العربيّة بأمان؛ الخادم يعرّبه).
+    options.headers['x-device-label'] = Platform.isIOS ? 'ios' : 'android';
     // /api/auth/login + /api/auth/refresh-token must NOT carry a stale
     // token — login takes none, refresh uses adminId in the body.
     final isAuthEndpoint = options.path.contains('/api/auth/');
@@ -174,6 +184,7 @@ class _AuthInterceptor extends Interceptor {
     if (!isExpiredEnvelope) {
       return handler.next(response);
     }
+    _noteSuperseded(response.statusCode, data);
     final retry = await _refreshAndRetry(response.requestOptions);
     if (retry != null) {
       return handler.resolve(retry);
@@ -241,11 +252,22 @@ class _AuthInterceptor extends Interceptor {
     if (err.requestOptions.path.contains('/api/auth/')) {
       return handler.next(err);
     }
+    _noteSuperseded(err.response?.statusCode, err.response?.data);
     final retry = await _refreshAndRetry(err.requestOptions);
     if (retry != null) {
       return handler.resolve(retry);
     }
     handler.next(err);
+  }
+
+  /// Pro: `401 {code:'SESSION_SUPERSEDED'}` — الموظّف نفسه دخل من جهازٍ آخر.
+  /// يُحفظ السبب قبل مسار التجديد؛ والتجديد مرفوضٌ للموظّف فيمسح
+  /// [_refreshAndRetry] الجلسة ويُطلق [authExpiredSignal] كالمعتاد، ويعرض
+  /// MainShell السبب في شاشة دخول الموظّف.
+  static void _noteSuperseded(int? status, Object? data) {
+    if (status == 401 && data is Map && data['code'] == 'SESSION_SUPERSEDED') {
+      EmployeeSession.noteSuperseded(data['message']?.toString());
+    }
   }
 
   /// Coordinates a single refresh + retries the failed request with the

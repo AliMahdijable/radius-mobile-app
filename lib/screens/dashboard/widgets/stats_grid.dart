@@ -6,6 +6,7 @@ import '../../../api/cards_api.dart';
 import '../../../api/dashboard_api.dart';
 import '../../../core/util/bidi.dart';
 import '../../../core/util/format.dart';
+import '../../../core/widgets/permission_locked.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -29,6 +30,9 @@ class StatsGrid extends StatelessWidget {
     required this.wallet,
     required this.debtors,
     this.onOpenDebtors,
+    this.balanceLocked = false,
+    this.debtLocked = false,
+    this.cardsUnderLock = false,
   });
 
   final WalletResult? wallet;
@@ -39,18 +43,46 @@ class StatsGrid extends StatelessWidget {
   /// it isn't a list view target.
   final VoidCallback? onOpenDebtors;
 
+  /// نصفا الشبكة مستقلّان لموظّف ايرث لنك: الرصيد يتبع `reports.financial`
+  /// (الخادم يقنّعه بدونه: `balance:null`) والمدينون `subscribers.view`.
+  ///
+  /// ⚠️ النصف المحجوب **يبقى في مكانه مقفلاً** ([LockedCard]) — بلاغ
+  /// ٢٠٢٦-١٠-١٤: الاختفاء كان يترك فراغاً يبدو عطلاً. لا «0» ولا دوّارة
+  /// لرقمٍ لن يصل، والمقفل لا يفتح قائمة المدينين.
+  final bool balanceLocked;
+  final bool debtLocked;
+
+  /// «الكارتات N» تحت الرصيد المقفل — لفاعل الساس المقيَّد وحده؛ موظّف
+  /// ايرث لنك لا كارتات له ولو بقيت شارةٌ من جلسةٍ سابقة.
+  final bool cardsUnderLock;
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    // الحدّ والحشوة ونصف القطر الافتراضيّة في [LockedCard] هي `_ShellCard`
+    // نفسها (R.lg · Sp.md)، فالنصف المقفل يساوي جاره الحيّ.
+    //
+    // والرصيد المقفل يُبقي «الكارتات N» تحته: عند فاعل الساس المقيَّد
+    // (بلا reports.financial) الرصيد محجوبٌ والكارتات لا — يعمل بها يوميّاً.
+    // وعند موظّف ايرث لنك لا سطر ([cardsUnderLock] = false).
+    final balance = balanceLocked
+        ? LockedCard(
+            title: 'dashboard.balance'.tr(),
+            icon: LucideIcons.wallet,
+            footer: cardsUnderLock ? const _CardsBadgeLine() : null,
+          )
+        : _BalancePointsCard(wallet: wallet);
+    final debt = debtLocked
+        ? LockedCard(
+            title: 'dashboard.debtors'.tr(), icon: LucideIcons.creditCard)
+        : _DebtCard(debtors: debtors, onTap: onOpenDebtors);
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(child: _BalancePointsCard(wallet: wallet)),
+          Expanded(child: balance),
           const SizedBox(width: Sp.md),
-          Expanded(
-            child: _DebtCard(debtors: debtors, onTap: onOpenDebtors),
-          ),
+          Expanded(child: debt),
         ],
       ),
     );
@@ -102,17 +134,28 @@ class _BalancePointsCard extends StatelessWidget {
                 ),
                 // §١٢: لمن يعمل بالكارتات وحده — من الشارة العامّة لا من
                 // `wallet`، فيتبع السحب من شيت التفعيل وشاشة «الكارتات» فوراً.
-                ValueListenableBuilder<CardsBadge?>(
-                  valueListenable: CardsState.badge,
-                  builder: (context, badge, _) => (badge?.enabled ?? false)
-                      ? Padding(
-                          padding: const EdgeInsets.only(top: Sp.xs),
-                          child: _CardsLine(remaining: badge!.remaining),
-                        )
-                      : const SizedBox.shrink(),
-                ),
+                const _CardsBadgeLine(),
               ],
             ),
+    );
+  }
+}
+
+/// سطر الكارتات من الشارة العامّة — يظهر لمن يعمل بالكارتات وحده.
+class _CardsBadgeLine extends StatelessWidget {
+  const _CardsBadgeLine();
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return ValueListenableBuilder<CardsBadge?>(
+      valueListenable: CardsState.badge,
+      builder: (context, badge, _) => (badge?.enabled ?? false)
+          ? Padding(
+              padding: const EdgeInsets.only(top: Sp.xs),
+              child: _CardsLine(remaining: badge!.remaining),
+            )
+          : const SizedBox.shrink(),
     );
   }
 }

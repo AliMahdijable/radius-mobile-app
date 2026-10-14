@@ -83,6 +83,8 @@ void main() {
           'بطاقة QR — نفس السبب',
       'lib/screens/network_devices/widgets/brand_badge.dart':
           'شعارات المصنّعين — الأبيض جزء من هويّة الشعار',
+      'lib/screens/account/apple_sign_in_button.dart':
+          'زرّ Sign in with Apple — إرشادات Apple تفرض الأسود/الأبيض حرفيّاً',
     };
     final bad = RegExp(r'(?<![A-Za-z])Colors\.(white|black)(?![A-Za-z0-9])');
     final offenders = <String>[];
