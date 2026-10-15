@@ -39,7 +39,7 @@ Future<void> _openInApp(BuildContext context, String url) async {
   if (!ok && context.mounted) showAccountSnack(context, 'account.err_network'.tr(), error: true);
 }
 
-void showAccountSnack(BuildContext context, String msg, {bool error = false}) {
+void showAccountSnack(BuildContext context, String msg, {bool error = false, Duration? duration}) {
   final m = ScaffoldMessenger.maybeOf(context);
   if (m == null) return;
   m.hideCurrentSnackBar();
@@ -49,7 +49,7 @@ void showAccountSnack(BuildContext context, String msg, {bool error = false}) {
     behavior: SnackBarBehavior.floating,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.md)),
     margin: const EdgeInsets.all(Sp.lg),
-    duration: const Duration(seconds: 4),
+    duration: duration ?? const Duration(seconds: 4),
   ));
 }
 

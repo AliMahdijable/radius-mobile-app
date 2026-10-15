@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'dart:ui' as ui;
 
 import 'package:easy_localization/easy_localization.dart';
@@ -259,7 +260,7 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _showSnack(String msg, {bool error = false}) {
+  void _showSnack(String msg, {bool error = false, Duration? duration}) {
     if (!mounted) return;
     // آيفون: رسالة الخادم بلا «فعّل كوداً»/«رقِّ باقتك» (حدّ الشركات، انتهاء الاشتراك).
     msg = StorePolicy.storeSafe(msg);
@@ -273,7 +274,7 @@ class _LoginScreenState extends State<LoginScreen> {
           borderRadius: BorderRadius.circular(R.md),
         ),
         margin: const EdgeInsets.all(Sp.lg),
-        duration: const Duration(seconds: 3),
+        duration: duration ?? const Duration(seconds: 3),
       ),
     );
   }
@@ -314,64 +315,77 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     HapticFeedback.lightImpact();
     setState(() => _loading = true);
-    // ساسٌ يطلب رمز صورة (الحياة عمارة…) ← نافذة الرمز ثمّ الدخول بها.
-    final result = await SasCaptchaLogin.login(context, username: user, password: pass, sasUrl: _sasCtrl.text);
-    if (!mounted) return;
-    setState(() => _loading = false);
+    // الدوّارة باقيةٌ حتى يكتمل **الحفظ** لا الطلب وحده — كانت تتوقّف بعد ردّ الخادم فيبدو الزرّ بلا جوابٍ
+    // أثناء الحفظ (أو بعد فشله الصامت)، فيضغطه المدير مراراً (بلاغ ٢٠٢٦-١٠-١٥).
+    try {
+      // ساسٌ يطلب رمز صورة (الحياة عمارة…) ← نافذة الرمز ثمّ الدخول بها.
+      final result = await SasCaptchaLogin.login(context, username: user, password: pass, sasUrl: _sasCtrl.text);
+      if (!mounted) return;
 
-    switch (result) {
-      case LoginSuccess(:final requires2fa):
-        // Pro البند ٤ ③: ما بعد الدخول في مكانٍ واحد (مع «شركاتي»): مسح بقايا
-        // الجلسة السابقة ← حفظ الجلسة ورابط ساسها ← كلمة السرّ على الجهاز لهذه
-        // الشركة ← الصلاحيّات ← FCM.
-        final sasUrl = _sasCtrl.text.trim();
-        final company = _knownCompany(sasUrl);
-        final out = await SasLoginFlow.complete(
-          result,
-          username: user,
-          password: pass,
-          sasUrl: sasUrl,
-          remember: _remember,
-          companyLabel: company.label,
-          sasCode: company.code,
-        );
-        if (!mounted) return;
-        HapticFeedback.mediumImpact();
-        if (requires2fa || out == SasLoginOutcome.needs2fa) {
-          _showSnack('login.needs_2fa'.tr());
-          // TODO[2fa-screen]: route to 2FA when that screen exists.
-          return;
-        }
-        if (out == SasLoginOutcome.permsFailed) {
-          _showSnack('login.perms_fetch_failed'.tr(), error: true);
-          return;
-        }
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const MainShell()),
-          (_) => false,
-        );
-      case final LoginFailure f:
-        if (f.isCancelled) return; // أغلق نافذة رمز الصورة — لا رسالة
-        HapticFeedback.heavyImpact();
-        // حدّ الأجهزة — قبل البوّابة: كان رسالةً تحيل إلى «أجهزتي» غير موجودة
-        // ثمّ ارتداداً للبوّابة. الآن «أجهزتي» تحرّر مكاناً ويُعاد الدخول فوراً.
-        if (f.isDeviceLimit) {
-          if (await showDeviceLimitSheet(context, message: f.message) && mounted) await _onLogin();
-          return;
-        }
-        // رفضٌ من الساس: نذكّر بالشركة المختارة — أكثر سببٍ له يوزر شركةٍ على ساس أخرى.
-        final company = _picked?.name;
-        _showSnack(
-          f.rejected && company != null ? '${f.message}\n${'login.check_company'.tr(args: [company])}' : f.message,
-          error: true,
-        );
-        // بوّابة الحساب (اشتراكٌ منتهٍ/حسابٌ معطّل/بلا حساب): البوّابة تقرّر.
-        if (f.isAccountGate) {
+      switch (result) {
+        case LoginSuccess(:final requires2fa):
+          // Pro البند ٤ ③: ما بعد الدخول في مكانٍ واحد (مع «شركاتي»): مسح بقايا
+          // الجلسة السابقة ← حفظ الجلسة ورابط ساسها ← كلمة السرّ على الجهاز لهذه
+          // الشركة ← الصلاحيّات ← FCM.
+          final sasUrl = _sasCtrl.text.trim();
+          final company = _knownCompany(sasUrl);
+          final out = await SasLoginFlow.completeSafely(
+            result,
+            username: user,
+            password: pass,
+            sasUrl: sasUrl,
+            remember: _remember,
+            companyLabel: company.label,
+            sasCode: company.code,
+          );
+          if (!mounted) return;
+          HapticFeedback.mediumImpact();
+          if (requires2fa || out == SasLoginOutcome.needs2fa) {
+            _showSnack('login.needs_2fa'.tr());
+            // TODO[2fa-screen]: route to 2FA when that screen exists.
+            return;
+          }
+          if (out == SasLoginOutcome.permsFailed) {
+            _showSnack('login.perms_fetch_failed'.tr(), error: true);
+            return;
+          }
+          if (out == SasLoginOutcome.storageFailed) {
+            _showSnack(
+              (Platform.isAndroid ? 'login.save_failed_android' : 'login.save_failed').tr(),
+              error: true,
+              duration: const Duration(seconds: 9),
+            );
+            return;
+          }
           Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const AccountGateScreen()),
+            MaterialPageRoute(builder: (_) => const MainShell()),
             (_) => false,
           );
-        }
+        case final LoginFailure f:
+          if (f.isCancelled) return; // أغلق نافذة رمز الصورة — لا رسالة
+          HapticFeedback.heavyImpact();
+          // حدّ الأجهزة — قبل البوّابة: كان رسالةً تحيل إلى «أجهزتي» غير موجودة
+          // ثمّ ارتداداً للبوّابة. الآن «أجهزتي» تحرّر مكاناً ويُعاد الدخول فوراً.
+          if (f.isDeviceLimit) {
+            if (await showDeviceLimitSheet(context, message: f.message) && mounted) await _onLogin();
+            return;
+          }
+          // رفضٌ من الساس: نذكّر بالشركة المختارة — أكثر سببٍ له يوزر شركةٍ على ساس أخرى.
+          final company = _picked?.name;
+          _showSnack(
+            f.rejected && company != null ? '${f.message}\n${'login.check_company'.tr(args: [company])}' : f.message,
+            error: true,
+          );
+          // بوّابة الحساب (اشتراكٌ منتهٍ/حسابٌ معطّل/بلا حساب): البوّابة تقرّر.
+          if (f.isAccountGate) {
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const AccountGateScreen()),
+              (_) => false,
+            );
+          }
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 

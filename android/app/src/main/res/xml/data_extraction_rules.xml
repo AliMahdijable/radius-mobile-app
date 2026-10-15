@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- أندرويد ١٢+: الخزنة المشفّرة (flutter_secure_storage) لا تُنسخ سحابيّاً ولا تنتقل لجهازٍ جديد —
+     مفتاح KeyStore الذي شفّرها لا يُنسخ أبداً، فنسختها المستعادة لا تُفكّ وتُعطّل كلّ دخول
+     (بلاغ ٢٠٢٦-١٠-١٥؛ lib/services/secure_storage_health.dart). -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="FlutterSecureStorage.xml"/>
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="FlutterSecureStorage.xml"/>
+    </device-transfer>
+</data-extraction-rules>

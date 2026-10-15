@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/platform/store_policy.dart';
+import '../../core/util/email_shape.dart';
 import '../../services/account_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -124,6 +125,10 @@ class _AccountLoginScreenState extends State<AccountLoginScreen> {
   Future<void> _submitEmail() async {
     final email = _emailCtrl.text.trim();
     final pass = _passCtrl.text;
+    if (looksLikeSasUsername(email)) {
+      showAccountSnack(context, 'account.err_sas_username'.tr(), error: true, duration: const Duration(seconds: 9));
+      return;
+    }
     if (email.isEmpty || !email.contains('@')) {
       showAccountSnack(context, 'account.err_invalid_email'.tr(), error: true);
       return;
@@ -158,6 +163,10 @@ class _AccountLoginScreenState extends State<AccountLoginScreen> {
 
   Future<void> _forgot() async {
     final email = _emailCtrl.text.trim();
+    if (looksLikeSasUsername(email)) {
+      showAccountSnack(context, 'account.err_sas_username'.tr(), error: true, duration: const Duration(seconds: 9));
+      return;
+    }
     if (email.isEmpty || !email.contains('@')) {
       showAccountSnack(context, 'account.forgot_need_email'.tr(), error: true);
       return;

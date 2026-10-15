@@ -132,7 +132,13 @@ class _AuthInterceptor extends Interceptor {
     // token — login takes none, refresh uses adminId in the body.
     final isAuthEndpoint = options.path.contains('/api/auth/');
     if (!isAuthEndpoint) {
-      final token = await AuthStorage.readToken();
+      // خزنةٌ لا تُفكّ ترمي هنا فيسقط كلّ طلبٍ بلا ردّ — بلا توكن يردّ الخادم 401 فيُعالَج كالمعتاد.
+      String? token;
+      try {
+        token = await AuthStorage.readToken();
+      } catch (_) {
+        token = null;
+      }
       if (token != null) {
         // v1 sends BOTH headers — Authorization (modern) and x-auth-token
         // (legacy backend routes still read it). Match exactly.

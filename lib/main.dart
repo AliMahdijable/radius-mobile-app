@@ -25,6 +25,7 @@ import 'services/badge_service.dart';
 import 'services/permissions_service.dart';
 import 'services/print_prefs.dart';
 import 'services/provider_service.dart';
+import 'services/secure_storage_health.dart';
 import 'services/theme_service.dart';
 import 'theme/colors.dart';
 import 'theme/spacing.dart';
@@ -40,6 +41,11 @@ void main() async {
   // هذي الوحيدة اللي تبقى منفصلة لأن runApp يعتمد على EasyLocalization
   // ككلمة widget أعلى الشجرة — لازم تكون جاهزة قبل ما ننشئه.
   await EasyLocalization.ensureInitialized();
+
+  // خزنة أندرويد التي لا تُفكّ (نسخة احتياطيّة مستعادة بلا مفتاحها) تُعالَج **قبل** أن تقرأ منها الخدمات
+  // أدناه — وإلّا رمت كلّها وعلِق كلّ دخول (بلاغ ٢٠٢٦-١٠-١٥). فحصٌ صغير لا يرمي؛ السليمة لا يُمسّ فيها شيء.
+  await SecureStorageHealth.healIfBroken()
+      .timeout(const Duration(seconds: 8), onTimeout: () => false);
 
   // Perf 2026-08-05: كل الـinits التالية مستقلّة عن بعضها — نشغّلها
   // بالتوازي عبر Future.wait. كانت متتالية (~570-1290ms شاشة سوداء
@@ -95,6 +101,10 @@ void main() async {
       };
       // Debug mode: نعطّل الإرسال حتى لا نضيف noise أثناء التطوير
       FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(!kDebugMode);
+      if (SecureStorageHealth.healedThisRun) {
+        FirebaseCrashlytics.instance.recordError('secure storage reset at startup', StackTrace.current,
+            reason: 'SecureStorageHealth', fatal: false);
+      }
     }).catchError((e) {
       if (kDebugMode) debugPrint('Firebase init failed: $e');
       NotificationService.markFirebaseReady(false);

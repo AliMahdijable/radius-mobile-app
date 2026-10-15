@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -75,7 +77,7 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
     switch (res) {
       case LoginSuccess():
         // اسم الشركة وكودها من «شركاتي» — يُعرضان أعلى الواجهة بعد الدخول.
-        final out = await SasLoginFlow.complete(res,
+        final out = await SasLoginFlow.completeSafely(res,
             username: c.username, password: pass, sasUrl: url, remember: true,
             companyLabel: c.label, sasCode: c.sasCode);
         if (!mounted) return;
@@ -85,6 +87,10 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
             MaterialPageRoute(builder: (_) => const MainShell()),
             (_) => false,
           );
+        } else if (out == SasLoginOutcome.storageFailed) {
+          showAccountSnack(context,
+              (Platform.isAndroid ? 'login.save_failed_android' : 'login.save_failed').tr(),
+              error: true, duration: const Duration(seconds: 9));
         } else {
           showAccountSnack(context,
               (out == SasLoginOutcome.needs2fa ? 'login.needs_2fa' : 'login.perms_fetch_failed').tr(),
