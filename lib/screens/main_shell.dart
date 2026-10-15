@@ -153,6 +153,11 @@ class _MainShellState extends State<MainShell> {
   /// عمليّةٌ على مشترك.
   final ValueNotifier<bool> _dashActive = ValueNotifier<bool>(true);
 
+  /// تبويب الأجهزة مقفلٌ للموظّف الذي لا يملك `devices.view` (مسار القائمة عند
+  /// الخادم يشترطها) — «لا صلاحيّة» بمكانه كباقي الأقسام، لا «فشل التحميل».
+  /// المدير (ساس4 وايرث لنك) يملكها دائماً.
+  bool get _devicesLocked => Perms.isEmployee && !Perms.has('devices.view');
+
   /// المدخل الوحيد لتبديل التبويب — يُسجّل الزيارة ويُحدّث الراية.
   /// أيّ مسار يكتب `_tab` مباشرةً يُفلت من الاثنين.
   void _setTab(int i) {
@@ -160,9 +165,8 @@ class _MainShellState extends State<MainShell> {
       _tab = i;
       _visited.add(i);
     });
-    // ايرث لنك لا تبويبَ أجهزةٍ له — فلا تُرفع رايته أبداً (ولو وافق الفهرسُ
-    // موضعَ «قوائم أخرى» في تخطيطه المختصر). لا مستمع لها عندئذٍ أصلاً.
-    _devicesActive.value = !ProviderService.isEarthlink && i == _devicesTab;
+    // موظّفٌ بلا «عرض الأجهزة» يرى خانةً مقفلة لا شاشة الأجهزة — فلا تُرفع رايتها.
+    _devicesActive.value = !_devicesLocked && i == _devicesTab;
     _subsActive.value = i == _subsTab;
     _dashActive.value = i == _dashTab;
   }
@@ -378,24 +382,21 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    // ايرث لنك (البند ٤): لا تبويب «أجهزة الشبكة». أجهزة المشتركين محلّيّةٌ
-    // يم الوكيل، والويب/البرو لا يصلها، فالتبويب كان يعطي شاشةً لا تعمل.
-    // نستمع لـ`ProviderService.changes` لأنّ المزوّد قد يُحسَم بعد أوّل بناءٍ
-    // (مدير ايرث لنك: /api/auth/me بعد الوصول للغلاف) فيُطوى التبويب فوراً.
+    // أجهزة الشبكة لكلّ مزوّد (ساس4 وايرث لنك): القائمة عند الخادم بمعرّف المدير، والفحص من
+    // الهاتف نفسه — لا ساس ولا وكيل. نستمع لـ`Perms.changes` لأنّ صلاحيّات الموظّف قد
+    // تُحمَّل بعد أوّل بناء، ولـ`ProviderService.changes` لبقيّة الغلاف.
     return ListenableBuilder(
-      listenable: ProviderService.changes,
+      listenable: Listenable.merge([ProviderService.changes, Perms.changes]),
       builder: (context, _) {
-        final isEl = ProviderService.isEarthlink;
         final tabs = <Widget>[
           DashboardScreen(
               onOpenSubscribers: _openSubscribers, isActive: _dashActive),
           SubscribersScreen(filterCmd: _subsFilterCmd, isActive: _subsActive),
           // مطلب 2026-08-12: أجهزة الشبكة صار tab رئيسي بدل التقارير —
           // WISP يفتحها يوميّاً لمراقبة اللنكات/السكاتر. التقارير انتقلت
-          // لـ"قوائم أخرى" كأوّل عنصر (الاستعمال أقلّ). ايرث لنك: مطويّ.
-          // ايرث لنك: الخانة باقيةٌ بمكانها (شريطٌ بخمس خانات كالمالك) لكنّها مقفلة —
-          // إخفاؤها كان يخلخل توزيع الأزرار حول + (طلب المستخدم ٢٠٢٦-١٠-١٤).
-          isEl ? const _DevicesLockedTab() : NetworkDevicesScreen(isActive: _devicesActive),
+          // لـ"قوائم أخرى" كأوّل عنصر (الاستعمال أقلّ). موظّفٌ بلا صلاحيّة: الخانة باقيةٌ
+          // بمكانها مقفلة (إخفاؤها يخلخل توزيع الأزرار حول +).
+          _devicesLocked ? const _DevicesLockedTab() : NetworkDevicesScreen(isActive: _devicesActive),
           // مطلب 2026-06-10: الـtab السفلي الأخير صار "قوائم أخرى" يعرض
           // مديولات إضافية (صرفيات/مدراء/تسعير). شاشة الإعدادات الفعلية
           // انتقلت لزر الـgear بالشريط العلوي على Home.
@@ -414,13 +415,13 @@ class _MainShellState extends State<MainShell> {
               await SystemNavigator.pop();
             }
           },
-          child: _buildScaffold(tabs, isEl),
+          child: _buildScaffold(tabs),
         );
       },
     );
   }
 
-  Widget _buildScaffold(List<Widget> tabs, bool isEl) {
+  Widget _buildScaffold(List<Widget> tabs) {
     return Scaffold(
       backgroundColor: AppColors.bg,
       extendBody: true, // body draws under the floating bar
@@ -463,7 +464,6 @@ class _MainShellState extends State<MainShell> {
         current: _tab,
         onTabTap: _setTab,
         onFabTap: _onFabTap,
-        isEl: isEl,
       ),
     );
   }
@@ -482,15 +482,11 @@ class _PillBar extends StatelessWidget {
     required this.current,
     required this.onTabTap,
     required this.onFabTap,
-    this.isEl = false,
   });
 
   final int current;
   final ValueChanged<int> onTabTap;
   final VoidCallback onFabTap;
-
-  /// ايرث لنك — خانة «الأجهزة» باقية (مقفلة)، فالفهارس واحدة للجميع.
-  final bool isEl;
 
   @override
   Widget build(BuildContext context) {
@@ -522,8 +518,8 @@ class _PillBar extends StatelessWidget {
               ),
               _FabSlot(onTap: onFabTap),
               _TabSlot(
-                // مطلب 2026-08-12: أجهزة الشبكة بدل التقارير. ايرث لنك: الخانة
-                // نفسها تفتح شاشةً مقفلة — لا تختفي فيبقى التوزيع متناظراً.
+                // مطلب 2026-08-12: أجهزة الشبكة بدل التقارير. موظّفٌ بلا صلاحيّة:
+                // الخانة نفسها تفتح شاشةً مقفلة — لا تختفي فيبقى التوزيع متناظراً.
                 icon: Icons.router_rounded,
                 label: 'nav.devices'.tr(),
                 selected: current == 2,
@@ -899,16 +895,14 @@ class _QuickItem extends StatelessWidget {
   }
 }
 
-/// خانة «الأجهزة» لحساب ايرث لنك: أجهزة الشبكة غير مدعومة لهذا المزوّد بعد، فلا
-/// تُبنى شاشة الأجهزة ولا تُطلب بياناتها — قفلٌ هادئ بمكان الشاشة. الموظّف يرى
-/// «لا صلاحيّة» كباقي الأقسام المقفلة، والمالك يرى أنّ القسم غير متاح لحسابه.
+/// خانة «الأجهزة» لموظّفٍ لا يملك «عرض الأجهزة»: لا تُبنى شاشة الأجهزة ولا تُطلب
+/// بياناتها — «لا صلاحيّة» بمكانها كباقي الأقسام المقفلة.
 class _DevicesLockedTab extends StatelessWidget {
   const _DevicesLockedTab();
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final employee = Perms.isEmployee;
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
@@ -919,22 +913,7 @@ class _DevicesLockedTab extends StatelessWidget {
             children: [
               Text('nav.devices'.tr(), style: AppType.title(color: AppColors.textHi)),
               const Spacer(),
-              Center(
-                child: employee
-                    ? const LockedNotice.block()
-                    : Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const PermLockIcon(size: 28),
-                          const SizedBox(height: Sp.sm),
-                          Text(
-                            'nav.devices_unavailable'.tr(),
-                            textAlign: TextAlign.center,
-                            style: AppType.label(color: AppColors.textMid),
-                          ),
-                        ],
-                      ),
-              ),
+              const Center(child: LockedNotice.block()),
               const Spacer(flex: 2),
             ],
           ),
