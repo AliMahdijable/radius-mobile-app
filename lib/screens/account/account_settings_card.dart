@@ -115,6 +115,10 @@ class _AccountSettingsCardState extends State<AccountSettingsCard> {
       tone = !s.isFreeForever && s.daysLeft <= kSubscriptionWarnDays
           ? AppColors.warning
           : AppColors.success;
+    } else if (s.isFreeForever) {
+      // أندرويد أيضاً: «مجّاني دائم» لا «مشترك · باقي 36500 يوم · حتى —».
+      status = 'account.chip_free'.tr();
+      tone = AppColors.success;
     } else {
       status =
           '${(s.isTrial ? 'account.chip_trial' : 'account.chip_active').tr(args: [
@@ -136,8 +140,10 @@ class _AccountSettingsCardState extends State<AccountSettingsCard> {
                     : 'account.status_active_neutral'.tr())
             : !s.active
                 ? 'account.status_ended'.tr()
-                : (s.isTrial ? 'account.chip_trial' : 'account.chip_active')
-                    .tr(args: ['${s.daysLeft}']);
+                : s.isFreeForever
+                    ? 'account.chip_free'.tr()
+                    : (s.isTrial ? 'account.chip_trial' : 'account.chip_active')
+                        .tr(args: ['${s.daysLeft}']);
 
     // مطويٌّ افتراضيّاً بشكل صفوف الإعدادات نفسها؛ الضغط يفتح التفاصيل والأزرار.
     return Material(

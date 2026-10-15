@@ -111,11 +111,47 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
   /// رموز بوّابة الحساب من الخادم: انتهى الاشتراك/الحساب معطّل… ← البوّابة تقرّر.
   bool _handleGate(LoginFailure f) {
     if (!f.isAccountGate) return false;
+    // حسابٌ مجّانيّ دائم (إعفاء سوبرنت) يفتح شركةً أخرى فيرفضها الخادم باشتراكٍ منتهٍ: الإعفاء يخصّ
+    // سوبرنت وحدها. البوّابة تقرأ الحساب فعّالاً فكانت تعيده إلى هنا بلا كلمة — نبقى ونقول السبب.
+    if (f.code == 'subscription-ended' && _me.subscription.isFreeForever) {
+      HapticFeedback.heavyImpact();
+      _showCompanyNeedsPlan();
+      return true;
+    }
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const AccountGateScreen()),
       (_) => false,
     );
     return true;
+  }
+
+  /// الشركة المرفوضة لحسابٍ مجّانيّ لسوبرنت وحدها. آيفون: سطرٌ محايد بلا دعوةٍ لتفعيلٍ (3.1.1)؛
+  /// أندرويد: السبب + «تفعيل كود» إلى شاشة الاشتراك.
+  Future<void> _showCompanyNeedsPlan() async {
+    if (StorePolicy.hidePurchaseFlows) {
+      showAccountSnack(context, 'account.company_not_active_neutral'.tr(), error: true);
+      return;
+    }
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text('account.company_needs_plan_title'.tr(), style: AppType.sheetTitle(color: AppColors.textHi)),
+        content: Text('account.company_needs_plan_body'.tr(),
+            style: AppType.subtitle(color: AppColors.textMid).copyWith(height: 1.55)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('common.close'.tr(), style: AppType.button(color: AppColors.textMid)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('account.company_needs_plan_action'.tr(), style: AppType.button(color: AppColors.brand)),
+          ),
+        ],
+      ),
+    );
+    if (go == true && mounted) await _openSubscription();
   }
 
   Future<void> _addOrLogin({String? sasUrl, String? username, LinkedCompany? company}) async {
@@ -225,9 +261,12 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
                     ? 'account.status_active_neutral'.tr()
                     : 'account.chip_active_neutral'
                         .tr(args: [DateFormat('d MMMM y', context.locale.languageCode).format(sub.endsAt!)]))
-        : sub.isTrial
-            ? 'account.chip_trial'.tr(args: ['${sub.daysLeft}'])
-            : 'account.chip_active'.tr(args: ['${sub.daysLeft}']);
+        // أندرويد أيضاً: المجّانيّ الدائم «مجّاني دائم» لا «مشترك · باقي 36500 يوم».
+        : sub.isFreeForever
+            ? 'account.chip_free'.tr()
+            : sub.isTrial
+                ? 'account.chip_trial'.tr(args: ['${sub.daysLeft}'])
+                : 'account.chip_active'.tr(args: ['${sub.daysLeft}']);
     // آيفون: لونٌ بحسب قرب الانتهاء لا بحسب «تجربة».
     final warnTone = neutral
         ? (!sub.active || (!sub.isFreeForever && sub.daysLeft <= 7))

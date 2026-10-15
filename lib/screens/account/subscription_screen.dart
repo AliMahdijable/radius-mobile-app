@@ -133,7 +133,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   }
 
   ({String title, String body, IconData icon, Color color, Color bg}) _status() {
-    if (_neutral && _sub.isFreeForever) {
+    // المجّانيّ الدائم (ومنه إعفاء سوبرنت) بلا تاريخ انتهاء — على كلّ المنصّات: أندرويد كان
+    // يقع في «مشترك» بتاريخٍ فارغ.
+    if (_sub.isFreeForever) {
       return (
         title: 'account.status_free'.tr(),
         body: 'account.status_free_body'.tr(),
