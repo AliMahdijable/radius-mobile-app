@@ -267,6 +267,26 @@ deviceDetails{username, serial(ONT), fdt{id,displayValue}, fat{portNumber,id,dis
 
 ---
 
+## ٩) حقائق التشغيل الحيّ — **مؤكَّدة من خادم Pro** (٢٠٢٦-١٠-١٥)
+
+> من جلسة المقاول التي أنشأها المستخدم بنفسه بدخوله ويب Pro، **قراءةً فقط**. تُلزم أيّ عميل (الخادم الآن، والتطبيق لاحقاً).
+
+| الموضوع | الحقيقة | الأثر علينا |
+|---|---|---|
+| **حدّ الصفحة** | `pageSize > 100` ⇒ **403 بصفحة HTML** من جدار البوّابة (لا JSON). ≤100 يعمل | سبب «كلّ القيم صفر» في أوّل دخول (كنّا نطلب 200/500). السقف 100 ثابتٌ في المحوّل |
+| **الكثافة** | دفعةٌ متقاربة ⇒ **302** مؤقّت بدل الردّ (رُصد مرّتين: ~٢٠ طلباً متوازياً مع أخطاء 400، ثمّ ~٧٠ طلب statistics بتوازٍ ٢ خلال دقيقتين)، يزول بعد دقائق | 3xx/غير JSON خطأٌ صريح (لا قائمة فارغة)؛ لا إعادة محاولة إلّا للشبكة/5xx؛ الأعمال الخلفيّة عملٌ واحد في كلّ لحظة لكلّ الخادم |
+| **زمن subscriptions** | ≈ ١ث للنداء + ≈ ٤٥مث لكلّ صفّ (100 ⇒ ٥٫٣ث؛ ٥×٢٥ متوازية ⇒ ≈٢٫٢ث) | مسبارٌ بصفّ واحد للإجماليّ ثمّ صفحاتٌ صغيرة متوازية |
+| **زمن transactions/revenue** | ٥–١٢ث للنداء مهما صغر (٣٠ يوماً = ٣٤٠ حركة ≈ ٢٠–٤٠ث) | رسم اللوحة اليوميّ بالخلفيّة فقط |
+| **statistics** | `transactions/revenue/statistics` ≈ ٢ث؛ مجموعها = مجموع `transactionAmount` لقائمة الحركات **بنفس فلتر `createdAt`** بالضبط. **لكنّها غير جمعيّة عبر الأيّام:** مجموع statistics الأيّام الثلاثين ٤٬٠٢٠٬٠٠٠ مقابل statistics النافذة نفسها ٤٬١٥٩٬٣٣٣ (ليس فرق ميلّي‌ثانية: نهاية اليوم ‎.000 و‎.999 متطابقتان) | المجموع من statistics النافذة، ونقطة كلّ يومٍ بالرسم من statistics ذلك اليوم — كلٌّ رقم البوّابة لفلتره، لا يُشتقّ أحدهما من الآخر. **تنبيه:** الحركة تحمل `occuredAt` (وقت الدفع) وقد يقع خارج نافذة `createdAt` |
+| **الهواتف** | `customers` و`customers/summary` يُرجعان الهاتف **null** للمقاول؛ `customers/{id}` وحده يحمل `primaryContact.mobile` | نداءٌ لكلّ زبون بالخلفيّة + كاش ١٢ ساعة |
+| **الجلسات** | `sessions?status=0` = متّصل (= `totalOnline` في الملخّص)، `status=1` = غير متّصل؛ `sessions/statuses` غير موجود (404) | — |
+| **الترتيب** | `subscriptions` يقبل `sortCriteria.property=expires`؛ `username` و`self.id` ⇒ 400 | `expires` غير فريد: نُنبّه إن لم يطابق العدد المجمَّع الإجماليّ |
+| **الترويسات** | البوّابة ترسل `x-client-app` و`x-user-role: 0` (= `roles[].id` لـ`UserRoles`/Contractor) في كلّ طلب، لكنّها **غير لازمة** للقراءة (200 بدونها) | لا نرسلها |
+| **التوكن المنتهي/الغائب** | 401 بجسمٍ فارغ (لا تحويل) | التجديد عند 401 كما هو |
+| **العمليّات** (`allowed-actions`) | `SubscriptionAction` 0–20: Purchase · ScheduledChange · ImmediateChange · ChangeTrial · ScheduledExtend · ImmediateExtend · ExtendQuota · ExtendGraceDaysFree · ExtendGraceDaysPurchased · Renew · AutoRenew · Suspend · Resume · Disconnect · Transfer · Create · SosActivation · ManageDeviceDetails · PurchaseTodVoucher · CustomerWalletTopUp · PartnerWalletTopUp. أسباب الرفض: HasNoPermission · NoSuspendedSubscription · NotQuotaBasedSubscription · NotTrailSubscription | أسماؤها العربيّة في `client-v2/src/components/ftth/ftth.ts` |
+
+---
+
 ## ملحق أ) المخطّطات الكاملة (من HAR — أسماء حقول وأنواع فقط، بلا بيانات)
 
 > مُكثَّف: حُذف `.entityType` و`.description` من كائنات المرجع (كلّها تحمل `{id,displayValue,entityType,description}`). `[]`=مصفوفة، `null`=ظهر فارغاً في العيّنة.
