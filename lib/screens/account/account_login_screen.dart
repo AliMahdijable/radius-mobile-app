@@ -38,6 +38,10 @@ class _AccountLoginScreenState extends State<AccountLoginScreen> {
   bool _googleBusy = false;
   bool _appleBusy = false;
 
+  /// أندرويد: رجعت نافذة Google بلا دخول (أُلغيت) ⇒ يظهر «ادخل عبر المتصفّح» تحت الأيقونات.
+  /// بلاغ ٢٠٢٦-١٠-١٦: على أجهزةٍ (تكنو/هونر…) يختفي اختيار الحساب بعد النقر بلا دخول.
+  bool _googleWebOffer = false;
+
   /// أيّ دخولٍ جارٍ — يعطّل بقيّة الأزرار حتى لا يتسابق مساران.
   bool get _anyBusy => _busy || _googleBusy || _appleBusy;
 
@@ -76,7 +80,11 @@ class _AccountLoginScreenState extends State<AccountLoginScreen> {
     setState(() => _googleBusy = true);
     try {
       final u = await AccountService.signInWithGoogle();
-      if (u != null) _toGate();
+      if (u != null) {
+        _toGate();
+      } else if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android && mounted) {
+        setState(() => _googleWebOffer = true);
+      }
     } catch (e) {
       // فشل Google لا يُعرض «كلمة سرّ خاطئة» (لا كلمة سرّ في هذا المسار): رسالة Google بالرمز
       // الحقيقيّ — ويُكتب الرمز في السجلّ (بلا بيانات شخصيّة) فيُشخَّص التكرار من logcat.
@@ -89,6 +97,29 @@ class _AccountLoginScreenState extends State<AccountLoginScreen> {
       } else if (mounted) {
         HapticFeedback.heavyImpact();
         showAccountSnack(context, 'account.err_google_code'.tr(args: [code]), error: true);
+      }
+    } finally {
+      if (mounted) setState(() => _googleBusy = false);
+    }
+  }
+
+  /// Google عبر المتصفّح — لا يمرّ بـCredential Manager (AccountService.signInWithGoogleWeb).
+  Future<void> _googleWeb() async {
+    HapticFeedback.selectionClick();
+    setState(() => _googleBusy = true);
+    try {
+      final u = await AccountService.signInWithGoogleWeb();
+      if (u != null) _toGate();
+    } catch (e) {
+      final code = e is FirebaseAuthException ? e.code : e.runtimeType.toString();
+      debugPrint('account google web sign-in failed: $code');
+      if (e is FirebaseAuthException &&
+          const {'user-disabled', 'network-request-failed', 'too-many-requests', 'account-exists-with-different-credential'}
+              .contains(e.code)) {
+        _err(e);
+      } else if (mounted) {
+        HapticFeedback.heavyImpact();
+        showAccountSnack(context, 'account.err_google_web_code'.tr(args: [code]), error: true);
       }
     } finally {
       if (mounted) setState(() => _googleBusy = false);
@@ -267,6 +298,32 @@ class _AccountLoginScreenState extends State<AccountLoginScreen> {
             ],
           ],
         ),
+        // بعد نافذة Google رجعت بلا دخول (أندرويد) — بديل المتصفّح، سطرٌ واحد لا شريطٌ دائم.
+        if (_googleWebOffer) ...[
+          const SizedBox(height: Sp.sm),
+          Center(
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: Sp.xs,
+              children: [
+                Text('account.google_web_offer'.tr(),
+                    style: AppType.muted(color: AppColors.textMid)),
+                TextButton(
+                  onPressed: _anyBusy ? null : _googleWeb,
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.brand,
+                    visualDensity: VisualDensity.compact,
+                    minimumSize: const Size(48, 40),
+                  ),
+                  child: Text('account.google_web_action'.tr(),
+                      style: AppType.label(color: AppColors.brand)
+                          .copyWith(fontWeight: FontWeight.w700)),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: Sp.lg),
         Row(children: [
           Expanded(child: Divider(color: AppColors.border)),

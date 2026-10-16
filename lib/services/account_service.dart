@@ -9,6 +9,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import '../api/account_api.dart';
 import '../firebase_options.dart';
+import 'client_diag.dart';
 import 'company_creds_store.dart';
 import 'notification_service.dart';
 import 'saved_profiles_store.dart';
@@ -72,18 +73,47 @@ class AccountService {
     _googleReady = true;
   }
 
-  /// يفتح نافذة Google. يُرجع null إن ألغى المستخدم.
+  /// قرار ما بعد رفض نافذة Google الأصليّة (Credential Manager بأندرويد).
+  ///
+  /// 🐛 بلاغ ٢٠٢٦-١٠-١٦: على أجهزةٍ بعينها (تكنو/هونر…) يظهر اختيار الحساب ثمّ يُرجع
+  /// Credential Manager «إلغاء» بعد النقر — لا رسالة ولا دخول. البصمة سليمة (زبائن
+  /// دخلوا بـGoogle من أندرويد المتجر)، فالعطل بمسار الجهاز نفسه:
+  /// • إلغاء/مقاطعة ⇒ [GoogleFailAction.cancel]: صامتٌ كما كان (قد يكون إلغاءً حقيقيّاً)،
+  ///   والشاشة تعرض بعده «ادخل عبر المتصفّح».
+  /// • عطلٌ آخر بأندرويد (إعداد المزوّد/غير مدعوم/مجهول) ⇒ [GoogleFailAction.browser]:
+  ///   مسار المتصفّح تلقائيّاً — لا يمرّ بـCredential Manager أصلاً.
+  /// • iOS: الرمي كما كان (يعمل — ٣٣ دخولاً بـGoogle من الآيفون بعشرة أيّام).
+  @visibleForTesting
+  static GoogleFailAction googleFailAction(GoogleSignInExceptionCode code,
+      {required bool android}) {
+    if (code == GoogleSignInExceptionCode.canceled ||
+        code == GoogleSignInExceptionCode.interrupted) {
+      return GoogleFailAction.cancel;
+    }
+    return android ? GoogleFailAction.browser : GoogleFailAction.rethrowError;
+  }
+
+  /// يفتح نافذة Google. يُرجع null إن ألغى المستخدم (أو أُلغيت على جهازٍ معطوب —
+  /// الشاشة تعرض بعدها «عبر المتصفّح» بأندرويد).
   static Future<User?> signInWithGoogle() async {
     await _initGoogle();
     final GoogleSignInAccount account;
     try {
       account = await GoogleSignIn.instance.authenticate();
     } on GoogleSignInException catch (e) {
-      if (e.code == GoogleSignInExceptionCode.canceled ||
-          e.code == GoogleSignInExceptionCode.interrupted) {
-        return null;
+      final android = !kIsWeb && Platform.isAndroid;
+      // نصّ Credential Manager الحقيقيّ ونوع الجهاز — يصلان الخادم بلا هويّة (ClientDiag).
+      if (android) {
+        ClientDiag.report('google_signin', code: e.code.name, message: e.description);
       }
-      rethrow;
+      switch (googleFailAction(e.code, android: android)) {
+        case GoogleFailAction.cancel:
+          return null;
+        case GoogleFailAction.browser:
+          return signInWithGoogleWeb();
+        case GoogleFailAction.rethrowError:
+          rethrow;
+      }
     }
     final idToken = account.authentication.idToken;
     if (idToken == null) {
@@ -116,6 +146,26 @@ class AccountService {
     }
   }
 
+  /// Google عبر المتصفّح (Firebase يفتح Custom Tab لصفحة Google ثمّ يعود) — بديلٌ لا يمرّ
+  /// بـCredential Manager، فيعمل على أجهزةٍ يُلغى فيها المسار الأصليّ صامتاً. يُرجع null إن
+  /// أغلق المستخدم النافذة.
+  static Future<User?> signInWithGoogleWeb() async {
+    try {
+      final provider = GoogleAuthProvider()
+        ..setCustomParameters({'prompt': 'select_account'});
+      final cred = await _auth.signInWithProvider(provider);
+      return cred.user;
+    } catch (e) {
+      if (_isProviderCancel(e)) return null;
+      ClientDiag.report(
+        'google_signin_web',
+        code: e is FirebaseAuthException ? e.code : e.runtimeType.toString(),
+        message: e is FirebaseAuthException ? e.message : null,
+      );
+      rethrow;
+    }
+  }
+
   // ───────────── Apple ─────────────
 
   /// زرّ Apple يظهر على أجهزة Apple وحدها (iOS/macOS) — إرشاد App Store 4.8.
@@ -126,8 +176,9 @@ class AccountService {
   static AppleAuthProvider _appleProvider() =>
       AppleAuthProvider()..addScope('email')..addScope('name');
 
-  /// إلغاء المستخدم لنافذة Apple (ASAuthorizationError.canceled ← `canceled`).
-  static bool _isAppleCancel(Object e) {
+  /// إلغاء المستخدم لنافذة Apple (ASAuthorizationError.canceled ← `canceled`) أو لنافذة
+  /// المتصفّح (Google عبر المتصفّح ← `web-context-canceled`).
+  static bool _isProviderCancel(Object e) {
     final code = e is FirebaseAuthException
         ? e.code
         : e is PlatformException
@@ -151,7 +202,7 @@ class AccountService {
     try {
       cred = await _auth.signInWithProvider(_appleProvider());
     } catch (e) {
-      if (_isAppleCancel(e)) return null;
+      if (_isProviderCancel(e)) return null;
       rethrow;
     }
     final user = cred.user;
@@ -218,7 +269,7 @@ class AccountService {
         final cred = await u.reauthenticateWithProvider(_appleProvider());
         code = cred.additionalUserInfo?.authorizationCode;
       } catch (e) {
-        if (_isAppleCancel(e)) {
+        if (_isProviderCancel(e)) {
           throw AccountDeletionException('account.delete_cancelled'.tr(), cancelled: true);
         }
         debugPrint('account delete: apple reauth failed: '
@@ -358,3 +409,6 @@ class AccountDeletionException implements Exception {
   @override
   String toString() => message;
 }
+
+/// ما يُفعل بعد رفض نافذة Google الأصليّة — [AccountService.googleFailAction].
+enum GoogleFailAction { cancel, browser, rethrowError }

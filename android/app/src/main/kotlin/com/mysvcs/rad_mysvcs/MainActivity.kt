@@ -53,6 +53,34 @@ class MainActivity : FlutterFragmentActivity() {
                     }
                 }
 
+                // نوع الجهاز لتشخيصٍ بلا هويّة (ClientDiag) — إلغاء Credential Manager الصامت بعد
+                // اختيار حساب Google على أجهزةٍ بعينها (بلاغ ٢٠٢٦-١٠-١٦: تكنو/هونر…).
+                "getDeviceInfo" -> {
+                    val gms = try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            packageManager.getPackageInfo(
+                                "com.google.android.gms",
+                                PackageManager.PackageInfoFlags.of(0)
+                            ).versionName
+                        } else {
+                            @Suppress("DEPRECATION")
+                            packageManager.getPackageInfo("com.google.android.gms", 0).versionName
+                        }
+                    } catch (_: Exception) {
+                        null
+                    }
+                    result.success(
+                        mapOf(
+                            "manufacturer" to Build.MANUFACTURER,
+                            "brand" to Build.BRAND,
+                            "model" to Build.MODEL,
+                            "sdk" to Build.VERSION.SDK_INT.toString(),
+                            "release" to Build.VERSION.RELEASE,
+                            "gms" to gms,
+                        )
+                    )
+                }
+
                 else -> result.notImplemented()
             }
         }
