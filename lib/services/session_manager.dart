@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../api/cards_api.dart';
 import '../api/device_config_api.dart';
 import '../api/device_probe_api.dart';
+import '../api/el_deposit_password.dart';
 import '../api/subscribers_api.dart';
 import '../api/whatsapp_api.dart';
 import 'account_service.dart';
@@ -23,6 +24,7 @@ import 'inbox_service.dart';
 import 'permissions_service.dart';
 import 'provider_service.dart';
 import 'saved_profiles_store.dart';
+import 'subscriber_usage_store.dart';
 
 /// Central place that wipes every in-memory + persistent cache tied to
 /// a user session. Called from:
@@ -68,6 +70,10 @@ class SessionManager {
     // كان يسرّب بين المدراء على نفس الجهاز (10د TTL). أي إرسال آلي بعد
     // login جديد قد يستعمل قوالب المدير السابق.
     _guardSync('WhatsAppApi.clearCaches', () => WhatsAppApi.clearCaches());
+    // باسورد إيداع ايرث لنك المحفوظ (حالته لا نصّه) — لا يرى المدير التالي حالة سابقه.
+    _guardSync('ElDepositPassword.reset', () => ElDepositPassword.reset());
+    // استهلاك المشتركين (القائمة) — أرقام حساب المدير السابق.
+    _guardSync('SubscriberUsageStore.reset', () => SubscriberUsageStore.reset());
 
     // 2) Async persistent stores — PARALLEL via Future.wait.
     //    Previously sequential: each waited on the last (~40ms × 4).

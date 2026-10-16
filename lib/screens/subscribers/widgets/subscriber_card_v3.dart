@@ -7,6 +7,7 @@ import '../../../core/util/format.dart';
 import '../../../models/device_health.dart';
 import '../../../models/subscriber.dart';
 import '../../../services/connection_alerts.dart';
+import '../../../services/subscriber_usage_store.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -55,6 +56,7 @@ class SubscriberCardV3 extends StatelessWidget {
     this.onOpenLocation,
     this.onAlertConnection,
     this.hasTelegram = false,
+    this.showUsage = false,
   });
 
   final Subscriber sub;
@@ -82,6 +84,10 @@ class SubscriberCardV3 extends StatelessWidget {
   /// (صلاحيّات · وضع التحديد · لا رقم هاتف). والشريط نفسه يظهر **فقط**
   /// حين يكشف آخر فحصٍ مشكلة — قرار المستخدم ٢٠٢٦-١٠-٠١.
   final VoidCallback? onAlertConnection;
+
+  /// «عرض الاستهلاك» مفعّل (شيت الترتيب) — سطر «اليوم · الشهر» تحت الانتهاء،
+  /// يُجلب حين يُبنى الكارت (الصفوف الظاهرة وحدها).
+  final bool showUsage;
 
   @override
   Widget build(BuildContext context) {
@@ -117,6 +123,10 @@ class SubscriberCardV3 extends StatelessWidget {
                 // بدل 11 — تفصيلة تشدّ الصفّين معاً بصريّاً.
                 const SizedBox(height: 8),
                 _expiryRow(),
+                if (showUsage && sub.idx != null) ...[
+                  const SizedBox(height: 7),
+                  _UsageRow(idx: sub.idx.toString()),
+                ],
                 if (debt > 0) ...[
                   const SizedBox(height: 11),
                   _debtBar(debt),
@@ -959,4 +969,79 @@ class _SessionVisual {
   final String text;
   final IconData icon;
   final Color color;
+}
+
+/// «اليوم 5.6 GB · الشهر 248 GB» — من [SubscriberUsageStore] (دفعاتٌ للصفوف
+/// المبنيّة على الشاشة).
+class _UsageRow extends StatefulWidget {
+  const _UsageRow({required this.idx});
+  final String idx;
+
+  @override
+  State<_UsageRow> createState() => _UsageRowState();
+}
+
+class _UsageRowState extends State<_UsageRow> {
+  @override
+  void initState() {
+    super.initState();
+    SubscriberUsageStore.want(widget.idx);
+  }
+
+  @override
+  void didUpdateWidget(covariant _UsageRow old) {
+    super.didUpdateWidget(old);
+    if (old.idx != widget.idx) SubscriberUsageStore.want(widget.idx);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<int>(
+      valueListenable: SubscriberUsageStore.version,
+      builder: (context, _, __) {
+        final e = SubscriberUsageStore.get(widget.idx);
+        // لم يصل بعد (أو فُرّغ بتبديل الحساب) — يُطلب؛ الطلب مؤجَّلٌ لا يبني شيئاً الآن.
+        if (e == null) SubscriberUsageStore.want(widget.idx);
+        final label = AppType.body(color: AppColors.textLabel)
+            .copyWith(fontSize: 12.5);
+        final value = AppType.body()
+            .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600);
+        return Row(
+          children: [
+            Icon(Icons.data_usage_rounded, size: 15, color: AppColors.textHint),
+            const SizedBox(width: 6),
+            if (e == null)
+              Container(
+                width: 132,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceInput,
+                  borderRadius: BorderRadius.circular(R.sm),
+                ),
+              )
+            else if (e.v == null)
+              Text('الاستهلاك —', style: label)
+            else
+              Flexible(
+                child: Text.rich(
+                  TextSpan(children: [
+                    TextSpan(text: 'اليوم ', style: label),
+                    TextSpan(
+                        text: '\u2066${formatUsageBytes(e.v!.today)}\u2069',
+                        style: value),
+                    TextSpan(text: '  ·  ', style: label),
+                    TextSpan(text: 'الشهر ', style: label),
+                    TextSpan(
+                        text: '\u2066${formatUsageBytes(e.v!.month)}\u2069',
+                        style: value),
+                  ]),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
 }

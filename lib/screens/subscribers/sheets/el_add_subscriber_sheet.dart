@@ -17,6 +17,7 @@ import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../widgets/el_deposit_password_field.dart';
 import '../../../widgets/package_picker_field.dart';
 
 /// «مشترك جديد» لجلسات ايرث لنك — يفتحه `showAddSubscriberSheet` بدل شيت
@@ -61,7 +62,8 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
   final _phone = TextEditingController();
   final _username = TextEditingController();
   final _password = TextEditingController();
-  final _depositCtrl = TextEditingController(); // باسورد الإيداع (كشيت التفعيل: لا يُحفظ)
+  // باسورد الإيداع: المحفوظ على الخادم («محفوظ · تغيير») أو يُكتب (+ «احفظه» للمالك).
+  final _deposit = ElDepositPasswordController();
   final _identifierCtrl = TextEditingController(); // رقم الكارت
   final _pinCtrl = TextEditingController(); // Pin الكارت
   final _partialCtrl = TextEditingController();
@@ -98,19 +100,25 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
   void initState() {
     super.initState();
     _load();
+    _deposit.addListener(_onDepositChanged);
+  }
+
+  void _onDepositChanged() {
+    if (mounted) setState(() {}); // كي يتحدّث تفعيل الزرّ
   }
 
   @override
   void dispose() {
     _userTimer?.cancel();
     _cardTimer?.cancel();
+    _deposit.removeListener(_onDepositChanged);
+    _deposit.dispose();
     for (final c in [
       _firstname,
       _lastname,
       _phone,
       _username,
       _password,
-      _depositCtrl,
       _identifierCtrl,
       _pinCtrl,
       _partialCtrl,
@@ -217,9 +225,7 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
     if (_userState == _Check.checking || _userState == _Check.bad) return false;
     switch (_method) {
       case _Method.deposit:
-        if (_packageId.isEmpty || _depositCtrl.text.trim().isEmpty) {
-          return false;
-        }
+        if (_packageId.isEmpty || !_deposit.ready) return false;
       case _Method.test:
         if (_packageId.isEmpty) return false;
       case _Method.card:
@@ -362,8 +368,11 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
       lastname: _lastname.text.trim(),
       phone: _phone.text.trim(),
       profileId: profileId,
+      // null مع المحفوظ — الخادم يضيفه بنفسه.
       depositPassword:
-          method == _Method.deposit ? _depositCtrl.text.trim() : null,
+          method == _Method.deposit ? _deposit.passwordToSend : null,
+      rememberDepositPassword:
+          method == _Method.deposit && _deposit.rememberToSend,
       cardIdentifier:
           method == _Method.card ? _identifierCtrl.text.trim() : null,
       cardPin: method == _Method.card ? _pinCtrl.text.trim() : null,
@@ -636,14 +645,10 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
         const SizedBox(height: 14),
         SheetSection(
           label: 'sheets.el_add.deposit_password'.tr(),
-          child: _textBox(
-            ctrl: _depositCtrl,
+          child: ElDepositPasswordField(
+            controller: _deposit,
+            enabled: enabled,
             hint: 'sheets.el_add.deposit_password_hint'.tr(),
-            icon: LucideIcons.keyRound,
-            ltr: true,
-            obscure: true,
-            plain: true,
-            action: TextInputAction.done,
           ),
         ),
       ],

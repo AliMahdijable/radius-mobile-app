@@ -4,11 +4,13 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/dashboard_api.dart';
 import '../../api/earthlink_api.dart';
+import '../../api/el_deposit_password.dart';
 import '../../core/util/amount_input.dart';
 import '../../core/util/format.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../widgets/el_deposit_password_field.dart';
 
 /// ايرث لنك — تحويل الرصيد + كشف الحساب (البند ٤، EarthLink وحدهم).
 ///
@@ -39,14 +41,13 @@ class _ElTransferScreenState extends State<ElTransferScreen> {
 
   // ── التحويل ──
   final TextEditingController _amountCtrl = TextEditingController();
-  final TextEditingController _txPassCtrl = TextEditingController();
+  // كلمة سرّ الإيداع: المحفوظة على الخادم («محفوظ · تغيير») أو تُكتب.
+  final _txDeposit = ElDepositPasswordController();
   int _amount = 0;
-  bool _txObscure = true;
   bool _transferring = false;
 
   // ── كشف الحساب ──
-  final TextEditingController _stPassCtrl = TextEditingController();
-  bool _stObscure = true;
+  final _stDeposit = ElDepositPasswordController();
   bool _stLoading = false;
   List<ElStatementEntry>? _statement;
   String? _stError;
@@ -54,14 +55,28 @@ class _ElTransferScreenState extends State<ElTransferScreen> {
   @override
   void initState() {
     super.initState();
+    _txDeposit.addListener(_onDepositChanged);
+    _stDeposit.addListener(_onDepositChanged);
     _loadAll();
+    // محفوظة ⇒ كشف الحساب يُجلب فوراً بلا إدخال.
+    ElDepositPassword.load().then((st) {
+      if (mounted && st.saved && _statement == null && !_stLoading) {
+        _loadStatement(quiet: true);
+      }
+    });
+  }
+
+  void _onDepositChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     _amountCtrl.dispose();
-    _txPassCtrl.dispose();
-    _stPassCtrl.dispose();
+    _txDeposit.removeListener(_onDepositChanged);
+    _stDeposit.removeListener(_onDepositChanged);
+    _txDeposit.dispose();
+    _stDeposit.dispose();
     super.dispose();
   }
 
@@ -99,7 +114,7 @@ class _ElTransferScreenState extends State<ElTransferScreen> {
       !_transferring &&
       _target != null &&
       _amount >= _minTransfer &&
-      _txPassCtrl.text.trim().isNotEmpty;
+      _txDeposit.ready;
 
   Future<void> _pickTarget() async {
     if (_targets.isEmpty) return;
@@ -123,7 +138,9 @@ class _ElTransferScreenState extends State<ElTransferScreen> {
     final r = await EarthlinkApi.transfer(
       amount: _amount,
       targetAffiliateIndex: _target!.affiliateIndex,
-      depositPassword: _txPassCtrl.text.trim(),
+      // null مع المحفوظة — الخادم يضيفها بنفسه.
+      depositPassword: _txDeposit.passwordToSend,
+      rememberDepositPassword: _txDeposit.rememberToSend,
     );
     if (!mounted) return;
     setState(() => _transferring = false);
@@ -143,19 +160,23 @@ class _ElTransferScreenState extends State<ElTransferScreen> {
     }
   }
 
-  Future<void> _loadStatement() async {
-    final pass = _stPassCtrl.text.trim();
-    if (pass.isEmpty) {
+  Future<void> _loadStatement({bool quiet = false}) async {
+    if (!_stDeposit.ready) {
       _snack('أدخل كلمة سرّ الإيداع أوّلاً', error: true);
       return;
     }
-    FocusScope.of(context).unfocus();
-    HapticFeedback.selectionClick();
+    if (!quiet) {
+      FocusScope.of(context).unfocus();
+      HapticFeedback.selectionClick();
+    }
     setState(() {
       _stLoading = true;
       _stError = null;
     });
-    final r = await EarthlinkApi.accountStatement(depositPassword: pass);
+    final r = await EarthlinkApi.accountStatement(
+      depositPassword: _stDeposit.passwordToSend,
+      rememberDepositPassword: _stDeposit.rememberToSend,
+    );
     if (!mounted) return;
     setState(() {
       _stLoading = false;
@@ -321,11 +342,10 @@ class _ElTransferScreenState extends State<ElTransferScreen> {
         const SizedBox(height: Sp.md),
         _label('كلمة سرّ الإيداع'),
         const SizedBox(height: Sp.sm),
-        _passwordField(
-          controller: _txPassCtrl,
-          obscure: _txObscure,
-          onToggle: () => setState(() => _txObscure = !_txObscure),
-          onChanged: (_) => setState(() {}),
+        ElDepositPasswordField(
+          controller: _txDeposit,
+          enabled: !_transferring,
+          hint: '••••••',
         ),
         const SizedBox(height: Sp.lg),
         _primaryButton(
@@ -396,11 +416,11 @@ class _ElTransferScreenState extends State<ElTransferScreen> {
       children: [
         _label('كلمة سرّ الإيداع'),
         const SizedBox(height: Sp.sm),
-        _passwordField(
-          controller: _stPassCtrl,
-          obscure: _stObscure,
-          onToggle: () => setState(() => _stObscure = !_stObscure),
-          onSubmitted: (_) => _loadStatement(),
+        ElDepositPasswordField(
+          controller: _stDeposit,
+          enabled: !_stLoading,
+          hint: '••••••',
+          onSubmitted: _loadStatement,
         ),
         const SizedBox(height: Sp.md),
         _primaryButton(
@@ -442,50 +462,6 @@ class _ElTransferScreenState extends State<ElTransferScreen> {
         padding: const EdgeInsets.only(right: 2),
         child: Text(text, style: AppType.label(color: AppColors.textMid)),
       );
-
-  Widget _passwordField({
-    required TextEditingController controller,
-    required bool obscure,
-    required VoidCallback onToggle,
-    ValueChanged<String>? onChanged,
-    ValueChanged<String>? onSubmitted,
-  }) {
-    return TextField(
-      controller: controller,
-      obscureText: obscure,
-      onChanged: onChanged,
-      onSubmitted: onSubmitted,
-      textInputAction: TextInputAction.done,
-      style: AppType.input(color: AppColors.textHi),
-      decoration: InputDecoration(
-        hintText: '••••••',
-        hintStyle: AppType.input(color: AppColors.textLow),
-        filled: true,
-        fillColor: AppColors.surfaceInput,
-        prefixIcon: Icon(LucideIcons.lock, size: 18, color: AppColors.textMid),
-        suffixIcon: IconButton(
-          splashRadius: 18,
-          icon: Icon(obscure ? LucideIcons.eye : LucideIcons.eyeOff,
-              size: 18, color: AppColors.textMid),
-          onPressed: onToggle,
-        ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.md),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(R.md),
-          borderSide: BorderSide(color: AppColors.border),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(R.md),
-          borderSide: BorderSide(color: AppColors.border),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(R.md),
-          borderSide: BorderSide(color: AppColors.brand, width: BW.selected),
-        ),
-      ),
-    );
-  }
 
   Widget _primaryButton({
     required String label,

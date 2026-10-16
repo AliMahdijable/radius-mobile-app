@@ -20,6 +20,7 @@ import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../widgets/el_deposit_password_field.dart';
 import '../../../widgets/package_picker_field.dart';
 import '_print_receipt_checkbox.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
@@ -113,7 +114,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   // ── ايرث لنك (البند ٤) — كلّه من provider=='earthlink' في activation-data ──
   _ElMethod _elMethod = _ElMethod.deposit;         // الافتراض: رصيد أونلاين (كالويب)
   String _selectedPackageId = '';                  // id الباقة المختارة من المبدّل
-  final _depositCtrl = TextEditingController();     // باسورد الإيداع (deposit)
+  // باسورد الإيداع (deposit): المحفوظ على الخادم («محفوظ · تغيير») أو يُكتب.
+  final _deposit = ElDepositPasswordController();
   final _identifierCtrl = TextEditingController();  // رقم الكارت (card)
   final _pinCtrl = TextEditingController();         // Pin الكارت (card)
   // RECENT_DUPLICATE (409) من خادم البرو: يُؤكَّد ويُعاد مع confirmRepeat=true.
@@ -124,6 +126,11 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     super.initState();
     _load();
     _partialCtrl.addListener(_onPartialChanged);
+    _deposit.addListener(_onDepositChanged);
+  }
+
+  void _onDepositChanged() {
+    if (mounted) setState(() {}); // كي يتحدّث تفعيل الزرّ
   }
 
   void _onPartialChanged() {
@@ -171,7 +178,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   @override
   void dispose() {
     _partialCtrl.dispose();
-    _depositCtrl.dispose();
+    _deposit.removeListener(_onDepositChanged);
+    _deposit.dispose();
     _identifierCtrl.dispose();
     _pinCtrl.dispose();
     super.dispose();
@@ -381,9 +389,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     if (_outcomeUnclear) return false;
     if (_isEarthlink) {
       if (_selectedPackageId.isEmpty) return false;
-      if (_elMethod == _ElMethod.deposit && _depositCtrl.text.trim().isEmpty) {
-        return false;
-      }
+      if (_elMethod == _ElMethod.deposit && !_deposit.ready) return false;
       if (_elMethod == _ElMethod.card &&
           (_identifierCtrl.text.trim().isEmpty || _pinCtrl.text.trim().isEmpty)) {
         return false;
@@ -429,8 +435,11 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         partialAmount: _pay == _PayType.partial ? _partialAmount : null,
         skipAutoWa: manualMode,
         method: _elMethod == _ElMethod.deposit ? 'deposit' : 'card',
+        // null مع المحفوظ — الخادم يضيفه بنفسه.
         depositPassword:
-            _elMethod == _ElMethod.deposit ? _depositCtrl.text.trim() : null,
+            _elMethod == _ElMethod.deposit ? _deposit.passwordToSend : null,
+        rememberDepositPassword:
+            _elMethod == _ElMethod.deposit && _deposit.rememberToSend,
         identifier:
             _elMethod == _ElMethod.card ? _identifierCtrl.text.trim() : null,
         pin: _elMethod == _ElMethod.card ? _pinCtrl.text.trim() : null,
@@ -996,24 +1005,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
           ),
           const SizedBox(height: Sp.md),
           if (isDeposit)
-            SheetBox(
-              focused: _depositCtrl.text.isNotEmpty,
-              child: TextField(
-                controller: _depositCtrl,
-                enabled: !_submitting,
-                obscureText: true,
-                textDirection: ui.TextDirection.ltr,
-                onChanged: (_) => setState(() {}), // كي يتحدّث تفعيل الزرّ
-                style: AppType.input(),
-                decoration: InputDecoration(
-                  isDense: true,
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.zero,
-                  hintText: 'باسورد الإيداع',
-                  hintStyle: AppType.input(color: AppColors.textPlaceholder),
-                ),
-              ),
-            )
+            ElDepositPasswordField(controller: _deposit, enabled: !_submitting)
           else
             Row(
               children: [

@@ -4,6 +4,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import '../api/auth_api.dart';
+import '../api/el_deposit_password.dart';
 import '../core/widgets/permission_locked.dart';
 import '../services/app_version.dart';
 import '../services/auth_storage.dart';
@@ -19,6 +20,7 @@ import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'app_permissions_screen.dart';
 import 'devices/device_defaults_screen.dart';
+import 'el/deposit_password_sheet.dart';
 import 'account/account_gate_screen.dart';
 import 'account/account_settings_card.dart';
 import 'account/account_widgets.dart' show openPrivacyPolicy, openSupportPage;
@@ -51,7 +53,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     // الصفوف المقفلة تتبع تحديث `/me` (مُنح مفتاحٌ أو سُحب) بلا إعادة فتح.
     PermissionsService.changes.addListener(_onPermsChanged);
+    // حالة باسورد إيداع ايرث لنك المحفوظ (صفّ صاحب الحساب أدناه).
+    if (_elOwner) ElDepositPassword.load();
   }
+
+  /// صاحب حساب ايرث لنك (لا موظّف) — يحفظ باسورد الإيداع ويغيّره ويمسحه.
+  bool get _elOwner => ProviderService.isEarthlink && !EmployeeSession.isActive;
 
   @override
   void dispose() {
@@ -240,6 +247,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   MaterialPageRoute(
                     builder: (_) => const ConnectionAlertsScreen(),
                   ),
+                ),
+              ),
+              const SizedBox(height: Sp.md),
+            ],
+            // ايرث لنك: باسورد الإيداع محفوظاً مشفّراً — فلا يُطلب في كلّ تفعيل
+            // (طلب المستخدم ١٦ أكتوبر). صاحب الحساب وحده؛ موظّفوه يفعّلون به
+            // دون أن يروه.
+            if (_elOwner) ...[
+              const _SectionLabel('ايرث لنك'),
+              ValueListenableBuilder<ElDepositStatus?>(
+                valueListenable: ElDepositPassword.status,
+                builder: (_, st, __) => _Row(
+                  icon: Icons.key_outlined,
+                  label: 'باسورد الإيداع',
+                  trailing: st == null
+                      ? null
+                      : (st.saved ? 'محفوظ' : 'غير محفوظ'),
+                  onTap: () => showElDepositPasswordSheet(context),
                 ),
               ),
               const SizedBox(height: Sp.md),

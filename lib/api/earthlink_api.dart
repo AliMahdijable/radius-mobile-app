@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import 'api_client.dart';
+import 'el_deposit_password.dart';
 
 /// ايرث لنك — نقاط البند ٤ المخصّصة لموزِّعي EarthLink وحدهم
 /// (`/api/v2/el/*`). محوّلٌ موازٍ على خادم Pro يتفرّع على `kind='earthlink'`
@@ -559,7 +560,8 @@ class EarthlinkApi {
     required String phone,
     String? lastname,
     Object? profileId,
-    String? depositPassword,
+    String? depositPassword, // null ⇒ المحفوظ بالخادم
+    bool rememberDepositPassword = false, // «احفظه» — صاحب الحساب وحده
     String? cardIdentifier,
     String? cardPin,
     String? paymentType,
@@ -578,6 +580,10 @@ class EarthlinkApi {
           if (profileId != null) 'profile_id': profileId,
           if (method == 'deposit' && depositPassword != null)
             'deposit_password': depositPassword,
+          if (method == 'deposit' &&
+              depositPassword != null &&
+              rememberDepositPassword)
+            'rememberDepositPassword': true,
           if (method == 'card' && cardIdentifier != null)
             'card_identifier': cardIdentifier,
           if (method == 'card' && cardPin != null) 'card_pin': cardPin,
@@ -589,9 +595,11 @@ class EarthlinkApi {
         // كانت ستقطع طلباً يكمله الخادم بعدها فيقول التطبيق «تعذّر» والمشترك أُنشئ.
         options: Options(receiveTimeout: const Duration(seconds: 200)),
       );
+      if (method == 'deposit') ElDepositPassword.observe(r.data);
       return createResultFromBody(r.data ?? const {});
     } on DioException catch (e) {
       _log('subscribers (POST el)', e);
+      if (method == 'deposit') ElDepositPassword.observe(e.response?.data);
       return createResultFromError(e);
     } catch (e) {
       _log('subscribers (POST el)', e);
@@ -709,11 +717,13 @@ class EarthlinkApi {
     }
   }
 
-  /// POST /api/v2/el/transfer — تحويل مبلغٍ لموزّعٍ آخر بكلمة سرّ الإيداع.
+  /// POST /api/v2/el/transfer — تحويل مبلغٍ لموزّعٍ آخر بكلمة سرّ الإيداع
+  /// ([depositPassword] null ⇒ المحفوظ بالخادم).
   static Future<({bool ok, String? message})> transfer({
     required num amount,
     required int targetAffiliateIndex,
-    required String depositPassword,
+    String? depositPassword,
+    bool rememberDepositPassword = false,
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -721,16 +731,23 @@ class EarthlinkApi {
         data: {
           'amount': amount,
           'targetAffiliateIndex': targetAffiliateIndex,
-          'depositPassword': depositPassword,
+          if (depositPassword != null && depositPassword.isNotEmpty)
+            'depositPassword': depositPassword,
+          if (rememberDepositPassword &&
+              depositPassword != null &&
+              depositPassword.isNotEmpty)
+            'rememberDepositPassword': true,
         },
       );
       final body = r.data ?? const {};
+      ElDepositPassword.observe(body);
       return (
         ok: body['success'] == true,
         message: _str(body['message']),
       );
     } on DioException catch (e) {
       _log('el/transfer', e);
+      ElDepositPassword.observe(e.response?.data);
       return (ok: false, message: _message(e, 'تعذّر إتمام التحويل'));
     } catch (e) {
       _log('el/transfer', e);
@@ -743,7 +760,8 @@ class EarthlinkApi {
   /// الخادم/الوسطاء نصّاً صريحاً.
   static Future<({List<ElStatementEntry> items, int total, String? message})>
       accountStatement({
-    required String depositPassword,
+    String? depositPassword, // null ⇒ المحفوظ بالخادم
+    bool rememberDepositPassword = false,
     int startIndex = 0,
     int rowCount = 50,
   }) async {
@@ -751,12 +769,18 @@ class EarthlinkApi {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
         '/api/v2/el/account-statement',
         data: {
-          'depositPassword': depositPassword,
+          if (depositPassword != null && depositPassword.isNotEmpty)
+            'depositPassword': depositPassword,
+          if (rememberDepositPassword &&
+              depositPassword != null &&
+              depositPassword.isNotEmpty)
+            'rememberDepositPassword': true,
           'startIndex': startIndex,
           'rowCount': rowCount,
         },
       );
       final body = r.data ?? const {};
+      ElDepositPassword.observe(body);
       if (body['success'] != true) {
         return (
           items: const <ElStatementEntry>[],
@@ -768,6 +792,7 @@ class EarthlinkApi {
       return (items: items, total: _intOrNull(body['total']) ?? items.length, message: null);
     } on DioException catch (e) {
       _log('el/account-statement', e);
+      ElDepositPassword.observe(e.response?.data);
       return (
         items: const <ElStatementEntry>[],
         total: 0,

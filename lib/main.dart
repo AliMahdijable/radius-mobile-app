@@ -18,6 +18,7 @@ import 'services/notification_router.dart';
 import 'services/inbox_service.dart';
 import 'services/locale_service.dart';
 import 'services/manual_wa_prefs.dart';
+import 'services/subscriber_usage_store.dart';
 import 'services/notification_service.dart';
 import 'services/active_company.dart';
 import 'services/app_version.dart';
@@ -84,6 +85,7 @@ void main() async {
     // الفرديّة تفتح واتساب المدير أو تمرّ عبر جلسة السيرفر. لازم يُقرأ
     // قبل الشاشات حتى الـchip يعرض الوضع الصحيح من اللحظة الأولى.
     ManualWaPrefs.init(),
+    UsagePrefs.init(),
     // Firebase — options baked في firebase_options.dart. Wrapped catchError
     // حتى TestFlight ما يصير white-screen لو plist مو registered.
     // 2026-08-05: أضفنا Crashlytics wiring داخل نفس الـchain — يبدأ

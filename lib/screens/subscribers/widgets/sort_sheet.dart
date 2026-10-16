@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/widgets/design_sheet.dart';
+import '../../../services/subscriber_usage_store.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -158,6 +159,15 @@ class _SortSheetState extends State<_SortSheet> {
                 ),
             ],
           ),
+          const SizedBox(height: Sp.lg),
+          // «عرض الاستهلاك» — يسري فوراً (لا ينتظر «تطبيق»)، ويُحفظ للجهاز.
+          ValueListenableBuilder<bool>(
+            valueListenable: UsagePrefs.enabled,
+            builder: (_, on, __) => _UsageToggle(
+              on: on,
+              onChanged: UsagePrefs.setEnabled,
+            ),
+          ),
         ],
       ),
     );
@@ -247,6 +257,55 @@ class _FieldChip extends StatelessWidget {
                   fontSize: 12.5, // Card title tier
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
                 )),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _UsageToggle extends StatelessWidget {
+  const _UsageToggle({required this.on, required this.onChanged});
+  final bool on;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return InkWell(
+      onTap: () => onChanged(!on),
+      borderRadius: BorderRadius.circular(R.md),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+        decoration: BoxDecoration(
+          color: on ? AppColors.brandSoftBg : AppColors.surfaceInput,
+          borderRadius: BorderRadius.circular(R.md),
+          border: Border.all(color: on ? AppColors.brand : AppColors.border),
+        ),
+        child: Row(
+          children: [
+            Icon(LucideIcons.chartColumn,
+                size: 16, color: on ? AppColors.brand : AppColors.textMid),
+            const SizedBox(width: Sp.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('عرض الاستهلاك',
+                      style: AppType.label(color: AppColors.textHi)
+                          .copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text('اليوم والشهر تحت كلّ مشترك',
+                      style: AppType.micro(color: AppColors.textMid)),
+                ],
+              ),
+            ),
+            Switch.adaptive(
+              value: on,
+              onChanged: onChanged,
+              activeTrackColor: AppColors.brand,
+            ),
           ],
         ),
       ),

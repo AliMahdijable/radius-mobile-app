@@ -21,6 +21,7 @@ import '../../services/auth_storage.dart';
 import '../../services/connection_alerts.dart';
 import '../../services/permissions_service.dart';
 import '../../services/subscriber_events.dart';
+import '../../services/subscriber_usage_store.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/voice_search_button.dart';
 import '../../theme/colors.dart';
@@ -176,7 +177,13 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     if (!_locked) ConnectionAlertSettings.ensureLoaded();
     _searchCtrl.addListener(_onSearchChanged);
     widget.isActive?.addListener(_onActiveChanged);
+    // «عرض الاستهلاك» (شيت الترتيب) — يُعاد رسم الكارتات بسطرها أو بدونه.
+    UsagePrefs.enabled.addListener(_onUsagePref);
     _startAutoRefresh();
+  }
+
+  void _onUsagePref() {
+    if (mounted) setState(() {});
   }
 
   /// بلا `subscribers.view`: التبويب يبقى في مكانه وشاشته إطارٌ مقفل —
@@ -345,6 +352,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     SubscriberEvents.dataChanged.removeListener(_onDataChanged);
     PermissionsService.changes.removeListener(_onPermsChanged);
     widget.isActive?.removeListener(_onActiveChanged);
+    UsagePrefs.enabled.removeListener(_onUsagePref);
     _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
@@ -1382,6 +1390,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                     hasTelegram: s.idx != null &&
                                         _telegramBoundIdx
                                             .contains(s.idx.toString()),
+                                    showUsage: UsagePrefs.enabled.value,
                                     onTap: () {
                                       if (_selectionMode) {
                                         _toggleSelect(s);

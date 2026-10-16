@@ -7,6 +7,7 @@ import '../models/subscriber.dart';
 import '../services/auth_storage.dart';
 import '../services/subscribers_offline_cache.dart';
 import 'api_client.dart';
+import 'el_deposit_password.dart';
 import 'cards_api.dart';
 
 /// ردّ activate. `code` رمز الرفض حين يرسله الخادم (`NO_CARDS` ·
@@ -580,7 +581,8 @@ class SubscribersApi {
     bool skipAutoWa = false,
     String method = 'credit', // SAS4: 'credit'|'card' — ايرث لنك: 'credit'|'deposit'|'card'
     // ── ايرث لنك (البند ٤) ──
-    String? depositPassword, // method=='deposit' (رصيد أونلاين)
+    String? depositPassword, // method=='deposit' (رصيد أونلاين) — null ⇒ المحفوظ بالخادم
+    bool rememberDepositPassword = false, // «احفظه» — صاحب الحساب وحده (الخادم يتحقّق)
     String? identifier, // method=='card' (رقم الكارت — مكتوب لا من المخزون)
     String? pin, // method=='card'
     int? profileId, // باقة مختارة (مبدّل)
@@ -600,6 +602,10 @@ class SubscribersApi {
           if (method != 'credit') 'method': method,
           if (depositPassword != null && depositPassword.isNotEmpty)
             'depositPassword': depositPassword,
+          if (rememberDepositPassword &&
+              depositPassword != null &&
+              depositPassword.isNotEmpty)
+            'rememberDepositPassword': true,
           if (identifier != null && identifier.isNotEmpty)
             'identifier': identifier,
           if (pin != null && pin.isNotEmpty) 'pin': pin,
@@ -611,10 +617,13 @@ class SubscribersApi {
         // «تعذّر» والمشترك تفعّل — وتُغري الضغطة الثانية بكارتٍ ثانٍ.
         options: Options(receiveTimeout: const Duration(seconds: 200)),
       );
+      // باسورد الإيداع حُفظ الآن، أو المحفوظ رفضته ايرث لنك فمُسح (saved_cleared).
+      if (method == 'deposit') ElDepositPassword.observe(r.data);
       return activateResultFromBody(r.data ?? const {});
     } on DioException catch (e) {
       _log('activate/$idx', e);
       final body = e.response?.data;
+      if (method == 'deposit') ElDepositPassword.observe(body);
       final msg = body is Map ? body['message']?.toString() : null;
       // بلا ردٍّ (مهلة/انقطاع) لا نعرف إن نُفّذ: نتيجةٌ غير مؤكّدة، لا «تعذّر».
       final noReply = e.response == null;
