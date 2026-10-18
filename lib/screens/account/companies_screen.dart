@@ -92,12 +92,12 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
               (Platform.isAndroid ? 'login.save_failed_android' : 'login.save_failed').tr(),
               error: true, duration: const Duration(seconds: 9));
         } else {
-          showAccountSnack(context,
-              (out == SasLoginOutcome.needs2fa ? 'login.needs_2fa' : 'login.perms_fetch_failed').tr(),
-              error: out != SasLoginOutcome.needs2fa);
+          showAccountSnack(context, 'login.perms_fetch_failed'.tr(), error: true);
         }
       case final LoginFailure f:
         setState(() => _opening = null);
+        // أغلق نافذة رمز الصورة أو كود التحقّق بخطوتين — لا رسالة ولا نموذج.
+        // (كان ردّ «أدخل كود 2FA» بلا رمز خطأٍ فيُعاد نموذج كلمة السرّ أدناه في حلقة.)
         if (f.isCancelled) return;
         // حدّ الأجهزة — قبل البوّابة: كان رمز بوّابةٍ فيرتدّ المستخدم إلى هنا
         // بلا كلمة، عالقاً. «أجهزتي» تحرّر مكاناً ثمّ يُعاد هذا الدخول فوراً.

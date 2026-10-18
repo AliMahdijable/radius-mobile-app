@@ -16,7 +16,10 @@ import 'session_manager.dart';
 
 /// [storageFailed]: الدخول نجح في الخادم وتعذّر حفظه على الجهاز (خزنةٌ لا تُفكّ، أو خطوةٌ علِقت) —
 /// يُعرض للمستخدم بدل الصمت. انظر [SasLoginFlow.completeSafely].
-enum SasLoginOutcome { ok, needs2fa, permsFailed, storageFailed }
+///
+/// ولا نتيجة «يحتاج تحقّقاً بخطوتين» هنا: كود التحقّق يُكتب **قبل** أن تصير الجلسة [LoginSuccess]
+/// (نافذة الكود في `SasCaptchaLogin`)، فما يصل هنا جلسةٌ كاملة دائماً.
+enum SasLoginOutcome { ok, permsFailed, storageFailed }
 
 /// ما بعد دخولٍ ناجح للساس — مكانٌ واحد لشاشة الدخول و«شركاتي».
 ///
@@ -117,8 +120,6 @@ class SasLoginFlow {
       plainPassword: password,
       displayName: s.displayName,
     ).catchError((_) {}));
-
-    if (s.requires2fa) return SasLoginOutcome.needs2fa;
 
     if (s.isEmployee) {
       final ok = await PermissionsService.refreshFromBackend();

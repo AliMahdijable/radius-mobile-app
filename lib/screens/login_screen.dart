@@ -318,12 +318,13 @@ class _LoginScreenState extends State<LoginScreen> {
     // الدوّارة باقيةٌ حتى يكتمل **الحفظ** لا الطلب وحده — كانت تتوقّف بعد ردّ الخادم فيبدو الزرّ بلا جوابٍ
     // أثناء الحفظ (أو بعد فشله الصامت)، فيضغطه المدير مراراً (بلاغ ٢٠٢٦-١٠-١٥).
     try {
-      // ساسٌ يطلب رمز صورة (الحياة عمارة…) ← نافذة الرمز ثمّ الدخول بها.
+      // ساسٌ يطلب رمز صورة (الحياة عمارة…) ← نافذة الرمز ثمّ الدخول بها. ومالكٌ فعّل التحقّق
+      // بخطوتين ← نافذة الكود؛ فما يصل هنا جلسةٌ كاملة أو فشل.
       final result = await SasCaptchaLogin.login(context, username: user, password: pass, sasUrl: _sasCtrl.text);
       if (!mounted) return;
 
       switch (result) {
-        case LoginSuccess(:final requires2fa):
+        case LoginSuccess():
           // Pro البند ٤ ③: ما بعد الدخول في مكانٍ واحد (مع «شركاتي»): مسح بقايا
           // الجلسة السابقة ← حفظ الجلسة ورابط ساسها ← كلمة السرّ على الجهاز لهذه
           // الشركة ← الصلاحيّات ← FCM.
@@ -340,11 +341,6 @@ class _LoginScreenState extends State<LoginScreen> {
           );
           if (!mounted) return;
           HapticFeedback.mediumImpact();
-          if (requires2fa || out == SasLoginOutcome.needs2fa) {
-            _showSnack('login.needs_2fa'.tr());
-            // TODO[2fa-screen]: route to 2FA when that screen exists.
-            return;
-          }
           if (out == SasLoginOutcome.permsFailed) {
             _showSnack('login.perms_fetch_failed'.tr(), error: true);
             return;
@@ -362,7 +358,7 @@ class _LoginScreenState extends State<LoginScreen> {
             (_) => false,
           );
         case final LoginFailure f:
-          if (f.isCancelled) return; // أغلق نافذة رمز الصورة — لا رسالة
+          if (f.isCancelled) return; // أغلق نافذة رمز الصورة أو كود التحقّق — لا رسالة
           HapticFeedback.heavyImpact();
           // حدّ الأجهزة — قبل البوّابة: كان رسالةً تحيل إلى «أجهزتي» غير موجودة
           // ثمّ ارتداداً للبوّابة. الآن «أجهزتي» تحرّر مكاناً ويُعاد الدخول فوراً.

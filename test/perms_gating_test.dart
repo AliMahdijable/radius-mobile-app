@@ -1,6 +1,10 @@
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/archive_info.dart';
 import 'package:rad_mysvcs/api/cards_api.dart';
 import 'package:rad_mysvcs/core/widgets/design_sheet.dart';
@@ -217,8 +221,9 @@ void main() {
       await showScreen(t, const MoreModulesScreen());
       // كلّ بطاقات المدير الـ12 حاضرة (ساس: كلّ مفتاحٍ يُمنح)…
       expect(moduleCards, findsNWidgets(12));
-      // …مفتوحٌ منها «التقارير» (expenses مفتاح تقرير) و«الصرفيات» وحدهما.
-      expect(find.byType(PermLockIcon), findsNWidgets(12 - 2));
+      // …مفتوحٌ منها «التقارير» (expenses مفتاح تقرير) و«الصرفيات»، و«بوابة
+      // المشترك» لكلّ موظّف (رمز الوكيل — ١٨ أكتوبر).
+      expect(find.byType(PermLockIcon), findsNWidgets(12 - 3));
       // ولا «لا صلاحيّات» فارغة.
       expect(find.text('more.empty_perms'), findsNothing);
     });
@@ -226,7 +231,8 @@ void main() {
     testWidgets('🚨 النقر على بطاقةٍ مقفلة لا يفتح شاشة', (t) async {
       PermissionsService.debugSet(isEmployee: true);
       final pushed = await showScreen(t, const MoreModulesScreen());
-      expect(find.byType(PermLockIcon), findsNWidgets(12));
+      // كلّها مقفلة إلّا «بوابة المشترك» (رمز الوكيل لكلّ موظّف).
+      expect(find.byType(PermLockIcon), findsNWidgets(11));
       await t.tap(moduleCards.first);
       await t.pump();
       expect(pushed, isEmpty, reason: 'المقفل لا يتنقّل ولا يطلب شيئاً');
@@ -266,13 +272,183 @@ void main() {
       await showScreen(t, const MoreModulesScreen());
       expect(find.byIcon(LucideIcons.userCog), findsNothing); // المدراء
       expect(find.byIcon(LucideIcons.users), findsNothing); // الموظّفون
-      // وتحويل الرصيد لصاحب الحساب، والتبليغات والبوّابة غير مدعومتين.
+      // وتحويل الرصيد لصاحب الحساب، والتبليغات (البثّ لا يُمنح له).
       expect(find.byIcon(LucideIcons.arrowRightLeft), findsNothing);
       expect(find.byIcon(LucideIcons.bell), findsNothing);
-      expect(find.byIcon(LucideIcons.smartphone), findsNothing);
-      // والباقي (9) مقفلٌ كلّه بمكانه.
+      // وتلغرام لصاحب الحساب كالويب (لا مفتاح صريح له — الدفعة ① ١٨ أكتوبر).
+      expect(find.byIcon(LucideIcons.send), findsNothing);
+      // و«بوابة المشترك» مفتوحةٌ له (رمز الوكيل — وسيط البوّابة ١٨ أكتوبر)…
+      final portal = find.ancestor(
+          of: find.byIcon(LucideIcons.smartphone), matching: moduleCards);
+      expect(portal, findsOneWidget);
+      expect(find.descendant(of: portal, matching: find.byType(PermLockIcon)),
+          findsNothing);
+      // …والباقي (8) مقفلٌ كلّه بمكانه.
       expect(moduleCards, findsNWidgets(9));
-      expect(find.byType(PermLockIcon), findsNWidgets(9));
+      expect(find.byType(PermLockIcon), findsNWidgets(8));
+    });
+
+    // تدقيق ١٨ أكتوبر: تلغرام كان يظهر لموظّف ايرث لنك بـ`whatsapp.send` الضمنيّ
+    // (تابعٌ لـ«إرسال واتساب») ويفتح إعداد البوت، والويب يخفيه (ownerOnly).
+    // القاعدة الواحدة: لصاحب الحساب ما لم يوجد مفتاحٌ صريح.
+    testWidgets('🚨 موظّف ايرث لنك بـ«إرسال واتساب»: لا تلغرام (لصاحب الحساب)',
+        (t) async {
+      ProviderService.debugSet('earthlink');
+      PermissionsService.debugSet(isEmployee: true, permissions: const {
+        'subscribers.send_whatsapp': true,
+        'whatsapp.send': true,
+      });
+      await showScreen(t, const MoreModulesScreen());
+      expect(find.byIcon(LucideIcons.send), findsNothing);
+      // «حالة الرسائل» تبقى له — رسائله هو.
+      expect(find.byIcon(LucideIcons.messageSquare), findsOneWidget);
+    });
+
+    testWidgets('موظّف ساس: تلغرام بمكانه (مقفلاً بلا مفاتيحه) كما كان',
+        (t) async {
+      PermissionsService.debugSet(isEmployee: true);
+      await showScreen(t, const MoreModulesScreen());
+      final tile = find.ancestor(
+          of: find.byIcon(LucideIcons.send), matching: moduleCards);
+      expect(tile, findsOneWidget);
+      expect(find.descendant(of: tile, matching: find.byType(PermLockIcon)),
+          findsOneWidget);
+    });
+
+    // الدفعة ①: «التبليغات» لايرث لنك كباقي الشركات — كانت مخفيّة (١٤ أكتوبر).
+    testWidgets('🚨 مالك ايرث لنك: «التبليغات» بمكانها مفتوحةً حين يمنحها الخادم',
+        (t) async {
+      ProviderService.debugSet('earthlink');
+      PermissionsService.debugSet(
+        isEmployee: false,
+        managerRestricted: true,
+        managerCaps: const {'whatsapp.broadcast': true},
+      );
+      await showScreen(t, const MoreModulesScreen());
+      final tile =
+          find.ancestor(of: find.byIcon(LucideIcons.bell), matching: moduleCards);
+      expect(tile, findsOneWidget, reason: 'لا مخفيّة');
+      expect(find.descendant(of: tile, matching: find.byType(PermLockIcon)),
+          findsNothing, reason: 'مفتوحة — لا قفل');
+      expect(
+          find.descendant(of: tile, matching: find.text('more.broadcast_hint')),
+          findsOneWidget);
+    });
+
+    testWidgets('مالك ايرث لنك وخادمٌ لم يمنح البثّ بعد: بمكانها مقفلة',
+        (t) async {
+      ProviderService.debugSet('earthlink');
+      PermissionsService.debugSet(
+        isEmployee: false,
+        managerRestricted: true,
+        managerCaps: const {'whatsapp.broadcast': false},
+      );
+      await showScreen(t, const MoreModulesScreen());
+      final tile =
+          find.ancestor(of: find.byIcon(LucideIcons.bell), matching: moduleCards);
+      expect(tile, findsOneWidget);
+      expect(find.descendant(of: tile, matching: find.byType(PermLockIcon)),
+          findsOneWidget);
+    });
+
+    // تدقيق البوّابة ٢٠٢٦-١٠-١٧ §2.7: لا بوّابة مشتركين لـFTTH، فإعدادات
+    // «بوابة المشترك» تُحفظ ولا يقرؤها أحد. البطاقة تبقى بمكانها مقفلةً
+    // **بالسبب** — لا مخفيّة، ولا «اطلبها من مديرك». (وايرث لنك كانت مثلها
+    // حتى وسيط البوّابة ١٨ أكتوبر — الحالة التالية.)
+    testWidgets(
+        '🚨 مالك ftth: «بوابة المشترك» بمكانها «غير متوفّرة لشركتك بعد»',
+        (t) async {
+      ProviderService.debugSet('ftth');
+      PermissionsService.debugSet(isEmployee: false);
+      final pushed = await showScreen(t, const MoreModulesScreen());
+      final tile = find.ancestor(
+          of: find.byIcon(LucideIcons.smartphone), matching: moduleCards);
+      expect(tile, findsOneWidget, reason: 'بمكانها لا مخفيّة');
+      expect(find.descendant(of: tile, matching: find.byType(PermLockIcon)),
+          findsOneWidget);
+      expect(
+          find.descendant(
+              of: tile, matching: find.text('portal.unavailable_company')),
+          findsOneWidget,
+          reason: 'السبب مكان الوصف');
+      // المالك يملك كلّ شيء — لا قفل غيرها.
+      expect(find.byType(PermLockIcon), findsOneWidget);
+
+      await t.tap(tile);
+      await t.pump();
+      expect(pushed, isEmpty, reason: 'لا شاشة تحفظ ما لا يُقرأ');
+      // الإشعار يقول السبب (البطاقة + الإشعار) لا «اطلبها من مديرك».
+      expect(find.text('portal.unavailable_company'), findsNWidgets(2));
+      expect(find.text('locked.toast'), findsNothing);
+      await t.pump(const Duration(seconds: 3)); // مؤقّت رسالة القفل
+    });
+
+    // وسيط البوّابة (١٨ أكتوبر، الخادم fdcc2d7): البوّابة موحّدة لكلّ
+    // المزوّدين — مشتركو ايرث لنك يدخلون برمز وكيلهم. فالبطاقة مفتوحة.
+    testWidgets('🚨 مالك ايرث لنك: «بوابة المشترك» مفتوحةٌ وتفتح الشاشة',
+        (t) async {
+      _offline();
+      ProviderService.debugSet('earthlink');
+      PermissionsService.debugSet(isEmployee: false);
+      final pushed = await showScreen(t, const MoreModulesScreen());
+      final tile = find.ancestor(
+          of: find.byIcon(LucideIcons.smartphone), matching: moduleCards);
+      expect(tile, findsOneWidget);
+      expect(find.descendant(of: tile, matching: find.byType(PermLockIcon)),
+          findsNothing);
+      expect(find.text('portal.unavailable_company'), findsNothing);
+      expect(
+          find.descendant(of: tile, matching: find.text('portal.subtitle_more')),
+          findsOneWidget);
+      await t.tap(tile);
+      await t.pump();
+      expect(pushed, hasLength(1), reason: 'تُفتح «بوابة المشترك»');
+      await t.pump(const Duration(seconds: 1)); // ردود الخادم الوهميّ
+    });
+
+    // رمز الوكيل يحتاجه كلّ موظّف ليعطيه للمشترك، والخادم يعطيه بلا
+    // صلاحيّة — فالبطاقة مفتوحة، والتخصيص داخلها مقفلٌ بـsettings.edit.
+    testWidgets('موظّف ساس بلا settings.edit: البوّابة مفتوحة (رمز الوكيل)',
+        (t) async {
+      _offline();
+      PermissionsService.debugSet(isEmployee: true);
+      final pushed = await showScreen(t, const MoreModulesScreen());
+      final tile = find.ancestor(
+          of: find.byIcon(LucideIcons.smartphone), matching: moduleCards);
+      expect(find.descendant(of: tile, matching: find.byType(PermLockIcon)),
+          findsNothing);
+      expect(find.descendant(of: tile, matching: find.text('portal.subtitle_more')),
+          findsOneWidget);
+      expect(find.text('portal.unavailable_company'), findsNothing);
+      await t.tap(tile);
+      await t.pump();
+      expect(pushed, hasLength(1));
+      await t.pump(const Duration(seconds: 1)); // ردود الخادم الوهميّ
+    });
+  });
+
+  group('للشركة بوّابة مشتركين؟', () {
+    tearDown(() => ProviderService.debugSet(null));
+
+    test('SAS4 وايرث لنك نعم (وسيط البوّابة) · FTTH لا', () {
+      // SAS4 (ومنه ساس `ftth` فايبر الجزيرة) بلا provider في `/api/auth/me`.
+      ProviderService.debugSet(null);
+      expect(ProviderService.hasSubscriberPortal, isTrue);
+      ProviderService.debugSet('earthlink');
+      expect(ProviderService.hasSubscriberPortal, isTrue);
+      ProviderService.debugSet('ftth');
+      expect(ProviderService.isFtth, isTrue);
+      expect(ProviderService.hasSubscriberPortal, isFalse);
+    });
+
+    test('رمز QR/رابط المعلومات: SAS4 وحده بعد', () {
+      // بطاقة `/api/user-info` لا تقرأ ايرث لنك، وQR ايرث لنك لتطبيق 2.0.7.
+      ProviderService.debugSet(null);
+      expect(ProviderService.hasPortalQrCard, isTrue);
+      ProviderService.debugSet('earthlink');
+      expect(ProviderService.hasPortalQrCard, isFalse);
+      ProviderService.debugSet('ftth');
+      expect(ProviderService.hasPortalQrCard, isFalse);
     });
   });
 
@@ -333,4 +509,27 @@ class _PushSpy extends NavigatorObserver {
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) =>
       pushed.add(route);
+}
+
+/// بلا شبكة: الشاشة التي يفتحها النقر تسأل خادمها فتأخذ ٤٠٤ فوراً — لا
+/// نداء حقيقيّ ولا مؤقّتٌ معلَّق بعد نهاية الاختبار.
+class _Offline implements HttpClientAdapter {
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async =>
+      ResponseBody.fromString('{"success":false}', 404, headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      });
+
+  @override
+  void close({bool force = false}) {}
+}
+
+/// ما تحتاجه شاشةٌ تُفتح بالنقر: خزنةٌ وهميّة وخادمٌ بلا شبكة.
+void _offline() {
+  FlutterSecureStorage.setMockInitialValues({});
+  ApiClient.dio.httpClientAdapter = _Offline();
 }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/util/format.dart';
+import '../../../core/widgets/copyable.dart';
 import '../../../core/widgets/permission_locked.dart';
 import '../../../models/subscriber.dart';
 import '../../../theme/colors.dart';
@@ -74,6 +75,13 @@ class BalanceCard extends StatelessWidget {
     final borderCol = isZero
         ? AppColors.border
         : (isDebt ? AppColors.dangerBorderCard : AppColors.successSoftBorder);
+    final label = isZero
+        ? 'الرصيد'
+        : (isDebt
+            ? 'subscribers.label_debt_on_sub'.tr()
+            : 'subscribers.label_balance_credit'.tr());
+    final amount =
+        isZero ? 'لا دين ولا رصيد' : '${formatIQD(sub.debtAbs.round())} د.ع';
 
     final buttons = <Widget>[
       if (onAddDebt != null || addDebtLocked)
@@ -139,34 +147,36 @@ class BalanceCard extends StatelessWidget {
               ),
               const SizedBox(width: 11),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      isZero
-                          ? 'الرصيد'
-                          : (isDebt
-                              ? 'subscribers.label_debt_on_sub'.tr()
-                              : 'subscribers.label_balance_credit'.tr()),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppType.body(color: AppColors.textLabel),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      isZero
-                          ? 'لا دين ولا رصيد'
-                          : '${formatIQD(sub.debtAbs.round())} د.ع',
-                      textDirection:
-                          isZero ? ui.TextDirection.rtl : ui.TextDirection.ltr,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: isZero
-                          ? AppType.bodyStrong(color: accent)
-                          : AppType.statValue(color: accent),
-                    ),
-                  ],
+                // المبلغ يُنسخ كما يُرى بالضغط المطوّل — والتسمية معه هدفٌ
+                // واحد، فلا يُطلب من المدير أن يصيب الرقم بإصبعه.
+                child: Copyable(
+                  label: label,
+                  noun: isDebt ? 'الدين' : 'الرصيد',
+                  value: amount,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppType.body(color: AppColors.textLabel),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        amount,
+                        textDirection: isZero
+                            ? ui.TextDirection.rtl
+                            : ui.TextDirection.ltr,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: isZero
+                            ? AppType.bodyStrong(color: accent)
+                            : AppType.statValue(color: accent),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],

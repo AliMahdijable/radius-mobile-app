@@ -222,6 +222,10 @@ class ElEmployeePerms {
 
   static const keys = <String>{
     ..._operations,
+    // استيراد الديون بالجملة من ملف (الموقع — POST /v2/debts/bulk-import، دفترنا
+    // لايرث لنك، المجموعة ② ١٨ أكتوبر): يستبدل ديون مشتركين كثيرين بملفٍّ واحد،
+    // فيُمنح فرادى لا ضمن «موظّف عام» — كالويب (`EL_SINGLE_KEYS`).
+    'debts.import',
     // أجهزة الشبكة (OLT/مايكروتك…) — أجهزة الموزّع نفسه، لا علاقة لها بالمزوّد.
     'devices.view',
     'devices.monitor',
@@ -243,6 +247,8 @@ class ElEmployeePerms {
     'subscribers.pay_debt',
     'subscribers.send_whatsapp',
     'subscribers.view_activity',
+    // موقع المشترك (GPS) — مخزنه لايرث لنك جدولٌ محلّيّ على خادمنا (١٨ أكتوبر).
+    'subscribers.edit_location',
     'packages.view',
     'packages.edit_prices',
     'discounts.view',
@@ -267,6 +273,17 @@ class ElEmployeePerms {
     'subscribers.toggle': 'يشمل قطع اتصال المشترك',
     'reports.financial': 'يشمل رصيد الوكيل والكارتات المطلوبة',
     'reports.expenses': 'عرض الصرفيات وإدارتها',
+    'subscribers.edit_location': 'موقع المشترك على الخريطة',
+    'debts.import':
+        'استيراد ديون المشتركين بالجملة من ملف Excel (إضافةً أو استبدالاً) — من الموقع، ويُمنح فرادى',
+    // بيانات دخول أجهزة المشتركين (الافتراضيّة وجهاز كلّ مشترك) تصل بالعرض
+    // والمراقبة أيضاً — يحتاجها فحص الجهاز (`device_probe_api`). تُقال صراحةً
+    // فلا يمنح المالك «العرض» ظنّاً أنّه لا يكشف كلمة سرّ (كـ`EL_KEY_HINTS` في
+    // الويب، تدقيق ١٨ أكتوبر).
+    'devices.view':
+        'أجهزة شبكتك (OLT/مايكروتك…) — ويشمل بيانات دخول أجهزة المشتركين (الراوترات) لفحصها',
+    'devices.monitor': 'يشمل بيانات دخول أجهزة المشتركين (الراوترات) لفحصها',
+    'devices.manage': 'تعديل الأجهزة وإعادة تشغيلها وبيانات دخول أجهزة الشبكة',
   };
 
   /// «موظّف عام» = مفاتيح العمليّات كلّها، ومنها `subscribers.add` (يحوي أصلاً ما

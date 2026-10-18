@@ -8,13 +8,23 @@ import '../api/auth_api.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import 'two_factor_sheet.dart';
 
-/// Pro: دخول الساس مع رمز الصورة — مكانٌ واحد لشاشة الدخول و«شركاتي» ومبدّل
-/// المدراء. بعض الساسات (الحياة عمارة…) تشترط رمز صورةٍ عند الدخول وبدونه
-/// ترفض حتى المعلومات الصحيحة: يحاول الدخول، وإن طلب الساس الرمز تُعرض الصورة
-/// ويُعاد الدخول بها حتى ينجح أو يغلق المستخدم النافذة (`captcha-cancelled`).
+/// Pro: دخول الساس مع رمز الصورة **والتحقّق بخطوتين** — مكانٌ واحد لشاشة
+/// الدخول و«شركاتي» ومبدّل المدراء. بعض الساسات (الحياة عمارة…) تشترط رمز
+/// صورةٍ عند الدخول وبدونه ترفض حتى المعلومات الصحيحة: يحاول الدخول، وإن طلب
+/// الساس الرمز تُعرض الصورة ويُعاد الدخول بها حتى ينجح أو يغلق المستخدم
+/// النافذة (`captcha-cancelled`).
+///
+/// ومالكٌ (ساس أو ايرث لنك) فعّل التحقّق بخطوتين من الويب: كلمة السرّ تُقبل
+/// والجلسة تُعلَّق حتى الكود ← نافذة الكود ([showTwoFactorSheet]) — أو
+/// `2fa-cancelled` إن أُغلقت. فما يُرجَع للشاشة جلسةٌ كاملة أو فشلٌ يُعرض.
 class SasCaptchaLogin {
   SasCaptchaLogin._();
+
+  /// تحدّياتٌ متتالية أقصاها: رمز صورة ← كود ← (انتهت المهلة فأُعيد الدخول
+  /// وطلب الساس رمزاً جديداً) رمز ← كود. حدٌّ يمنع حلقةً لا تنتهي.
+  static const _maxChallenges = 4;
 
   static Future<LoginResult> login(
     BuildContext context, {
@@ -22,17 +32,34 @@ class SasCaptchaLogin {
     required String password,
     String? sasUrl,
   }) async {
-    final first = await AuthApi.login(username: username, password: password, sasUrl: sasUrl);
-    if (first is! LoginFailure || !first.needsCaptcha || !context.mounted) return first;
-    final r = await showModalBottomSheet<LoginResult>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surfaceSheet,
-      barrierColor: AppColors.scrim,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(R.sheet))),
-      builder: (_) => _CaptchaSheet(first: first.captcha!, username: username, password: password, sasUrl: sasUrl),
-    );
-    return r ?? const LoginFailure('', code: 'captcha-cancelled');
+    var r = await AuthApi.login(username: username, password: password, sasUrl: sasUrl);
+    for (var i = 0; i < _maxChallenges; i++) {
+      if (r is! LoginFailure || !context.mounted) return r;
+      if (r.needsCaptcha) {
+        final first = r.captcha!;
+        r = await showModalBottomSheet<LoginResult>(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: AppColors.surfaceSheet,
+              barrierColor: AppColors.scrim,
+              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(R.sheet))),
+              builder: (_) => _CaptchaSheet(first: first, username: username, password: password, sasUrl: sasUrl),
+            ) ??
+            const LoginFailure('', code: 'captcha-cancelled');
+      } else if (r.needs2fa) {
+        r = await showTwoFactorSheet(
+              context,
+              challenge: r.twoFactor!,
+              username: username,
+              password: password,
+              sasUrl: sasUrl,
+            ) ??
+            const LoginFailure('', code: '2fa-cancelled');
+      } else {
+        return r;
+      }
+    }
+    return r;
   }
 }
 
@@ -109,6 +136,8 @@ class _CaptchaSheetState extends State<_CaptchaSheet> {
           _error = null;
           _ctrl.clear();
         });
+      case final LoginFailure f when f.needs2fa:
+        Navigator.of(context).pop(f); // دخلَ بلا رمز والمالك يطلب الكود ← نافذة الكود
       case final LoginFailure f when !f.isAccountGate:
         setState(() {
           _refreshing = false;

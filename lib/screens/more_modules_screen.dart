@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../api/cards_api.dart';
+import '../api/el_card_order_gate.dart';
+import '../api/self_deposit_api.dart';
 import '../core/util/format.dart';
 import '../core/widgets/permission_locked.dart';
 import '../services/permissions_service.dart';
@@ -13,6 +17,7 @@ import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'broadcast/broadcast_screen.dart';
 import 'cards/cards_screen.dart';
+import 'el/card_order_screen.dart';
 import 'el/required_cards_screen.dart';
 import 'el/transfer_screen.dart';
 import 'telegram/telegram_screen.dart';
@@ -26,6 +31,7 @@ import 'managers/managers_screen.dart';
 import 'packages/packages_screen.dart';
 import 'portal_settings/portal_settings_screen.dart';
 import 'reports_screen.dart';
+import 'topup/topup_screen.dart';
 
 /// Other modules — مطلب 2026-06-10: الـtab السفلي السابق "الضبط"
 /// انتقل لاسم "قوائم أخرى" ويعرض المديولات الإضافية (الصرفيات،
@@ -53,8 +59,17 @@ class MoreModulesScreen extends StatelessWidget {
         PermissionsService.changes,
         CardsState.badge,
         ProviderService.changes,
+        // «شحن رصيد الصفحة» — الاستماع نفسه يطلب حالتها إن كانت قديمة.
+        SelfDepositState.gate,
+        // «طلب الكارتات» (ايرث لنك) — مفتاح الخادم، يُسأل كذلك عند الاستماع.
+        ElCardOrderGate.open,
       ]),
       builder: (context, _) {
+        // والمزوّد قد يُعرف بعد أوّل استماع (`/api/auth/me`) — فيُسأل هنا أيضاً؛
+        // السؤال لصاحب حساب ايرث لنك وحده، ومرّةً كلّ بضع دقائق على الأكثر.
+        scheduleMicrotask(() {
+          ElCardOrderGate.ensureFresh();
+        });
         final stock = CardsState.badge.value;
         const rk = [
           'reports.financial',
@@ -68,6 +83,14 @@ class MoreModulesScreen extends StatelessWidget {
         ];
         const cardKeys = ['subscribers.activate', 'subscribers.extend'];
         const tgKeys = ['whatsapp.broadcast', 'whatsapp.send', 'settings.edit'];
+        // موظّف ايرث لنك: تلغرام (البوت والربط والبثّ) لصاحب الحساب ما لم
+        // يوجد مفتاحٌ صريح — كالويب (`/telegram` ownerOnly). `whatsapp.send`
+        // عنده ضمنيٌّ يتبع «إرسال واتساب» ([ElEmployeePerms.outgoing]) لا
+        // مفتاحٌ صريح، فلا يفتحه؛ والباقيان لا يُمنحان له اليوم ⇒ مخفيّ
+        // ([permShown]). يظهر وحده لو صار أحدهما ممّا يُمنح.
+        final tgGate = ProviderService.isEarthlink && Perms.isEmployee
+            ? const ['whatsapp.broadcast', 'settings.edit']
+            : tgKeys;
         const logKeys = ['whatsapp.broadcast', 'whatsapp.send'];
         const pkgKeys = ['packages.view', 'packages.edit_prices'];
         final cardsLocked = !Perms.hasAny(cardKeys);
@@ -115,6 +138,27 @@ class MoreModulesScreen extends StatelessWidget {
                 ),
               ),
             ),
+          // ١٨ أكتوبر: «شحن رصيد الصفحة» — الإيداع الذاتيّ في الساس (زين كاش
+          // وكارتات التعبئة). يظهر حين يقول الخادم إنّ الميزة مفتوحة لهذا
+          // الحساب (مفتاحٌ مطفأ افتراضيّاً) — فلا يتغيّر شيءٌ لمن لم تُفتح له.
+          // وما لا يُتاح يبقى بمكانه مقفلاً **بسببه** لا بـ«اطلبها من مديرك»:
+          // الموظّف (لصاحب الحساب وحده)، ايرث لنك والمشروع الوطنيّ (المزوّد
+          // بلا شحن)، صفحةٌ بلا «ايداع مالي» في الساس، أو شركةٌ بلا وسائل دفع.
+          if (SelfDepositState.visible)
+            _ModuleCard(
+              unavailable: topupCardLock(SelfDepositState.gate.value!),
+              icon: LucideIcons.banknoteArrowUp,
+              tone: AppTone.success,
+              title: 'شحن رصيد الصفحة',
+              // «متوقّفٌ مؤقّتاً»: البطاقة مفتوحة لسجلّ العمليّات و«تحقّق» وحدهما.
+              subtitle: SelfDepositState.gate.value!.block ==
+                      SelfDepositBlock.paused
+                  ? 'متوقّف مؤقّتاً — تابِع عمليّاتك التي لم تُحسم'
+                  : 'زين كاش أو كارت تعبئة — يُضاف لرصيد صفحتك بالساس',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const TopupScreen()),
+              ),
+            ),
           // §١٢ «الكارتات» — مخزون كارتات التعبئة، بجانب المال لأنّه مالٌ
           // مدفوعٌ سلفاً. ⚠️ لا مفتاح صلاحيّة في التطبيق: صلاحيّات الساس
           // (`prm_users_activate_card` · `prm_cards_*`) لا تصل الموبايل،
@@ -129,9 +173,15 @@ class MoreModulesScreen extends StatelessWidget {
               icon: LucideIcons.tickets,
               tone: AppTone.brand,
               title: 'cards.title'.tr(),
+              // ايرث لنك بلا سلاسل: مخزونها بالباقة وحدها.
               subtitle: cardsLocked || stock!.remaining == null
-                  ? 'cards.module_hint'.tr()
-                  : 'cards.module_hint_n'
+                  ? (ProviderService.isEarthlink
+                          ? 'cards.module_hint_pkg'
+                          : 'cards.module_hint')
+                      .tr()
+                  : (ProviderService.isEarthlink
+                          ? 'cards.module_hint_pkg_n'
+                          : 'cards.module_hint_n')
                       .tr(namedArgs: {'n': formatIQD(stock.remaining!)}),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const CardsScreen()),
@@ -139,9 +189,9 @@ class MoreModulesScreen extends StatelessWidget {
             ),
           // 2026-08-26: تلغرام — إعداد بوت + ربط مشتركين + بث. منقول
           // كامل من client-v2. محكوم بنفس صلاحيّة إعدادات الواتساب.
-          if (permShown(tgKeys))
+          if (permShown(tgGate))
             _ModuleCard(
-              locked: !Perms.hasAny(tgKeys),
+              locked: !Perms.hasAny(tgGate),
               icon: LucideIcons.send,
               tone: AppTone.brand,
               brandGlyph: AppColors.channelTelegram, // أزرق تلغرام
@@ -155,10 +205,10 @@ class MoreModulesScreen extends StatelessWidget {
             ),
           // التبليغات (broadcast) — نُقلت من client-v2/Notifications.tsx.
           // إرسال جماعي لجميع/المدينين/المنتهين/قرب انتهاء + محرّر متغيّرات.
-          // ايرث لنك: مخفيّ — بثّ «كلّ المشتركين» غير مدعوم فيعطي فشلاً
-          // (البند ٤، إزالة «الشعور بالنقص»).
-          if (!ProviderService.isEarthlink &&
-              permShown(const ['whatsapp.broadcast']))
+          // لكلّ الشركات: مستلمو ايرث لنك من مصدر مشتركيها على الخادم (كلّ
+          // الصفحات)، والقفل من `whatsapp.broadcast` في خريطة الخادم كغيره.
+          // وموظّف ايرث لنك لا يراها ([permShown]: البثّ لا يُمنح له).
+          if (permShown(const ['whatsapp.broadcast']))
             _ModuleCard(
               locked: !Perms.has('whatsapp.broadcast'),
               icon: LucideIcons.bell,
@@ -258,21 +308,26 @@ class MoreModulesScreen extends StatelessWidget {
               ),
             ),
           // بوابة المشترك — 2026-07-13: branding + وصف الباقات (نُقلت من client-v2)
-          // ايرث لنك: مخفيّ — بوّابة مشتركينا غير مهيّأةٍ لايرث لنك (البند ٤).
-          if (!ProviderService.isEarthlink &&
-              permShown(const ['settings.edit']))
-            _ModuleCard(
-              locked: !Perms.has('settings.edit'),
-              icon: LucideIcons.smartphone,
-              tone: AppTone.brand,
-              title: 'portal.title'.tr(),
-              subtitle: 'portal.subtitle_more'.tr(),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const PortalSettingsScreen(),
-                ),
+          // ١٨ أكتوبر (وسيط البوّابة): + «رمز الوكيل» الذي يدخل به المشترك
+          // تطبيق MyServices. البطاقة **مفتوحةٌ لكلّ فاعل**: الرمز يحتاجه
+          // الموظّف أيضاً (والخادم يعطيه بلا صلاحيّة — رمز مديره)، والتخصيص
+          // داخلها بـ`settings.edit` مقفلٌ بمكانه. ولكلّ المزوّدين — ايرث لنك
+          // صارت تُخدَم؛ وFTTH وحده بمكانه مقفلاً بالسبب («غير متوفّرة لشركتك
+          // بعد») لا مخفيّاً (تدقيق البوّابة ٢٠٢٦-١٠-١٧ §2.7).
+          _ModuleCard(
+            unavailable: ProviderService.hasSubscriberPortal
+                ? null
+                : 'portal.unavailable_company'.tr(),
+            icon: LucideIcons.smartphone,
+            tone: AppTone.brand,
+            title: 'portal.title'.tr(),
+            subtitle: 'portal.subtitle_more'.tr(),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const PortalSettingsScreen(),
               ),
             ),
+          ),
           // 2026-08-26: 'الصفحات' لها زر مخصّص جنب جرس الإشعارات فقط
           // (طلب المستخدم — إزالة من قوائم أخرى). Import يبقى للـroute
           // من dashboard.
@@ -293,6 +348,22 @@ class MoreModulesScreen extends StatelessWidget {
                 MaterialPageRoute(builder: (_) => const ElTransferScreen()),
               ),
             ),
+            // «طلب الكارتات» — دفعة كارتات تعبئة من ايرث لنك نفسها يُخصم ثمنها
+            // من رصيد الإيداع: لصاحب الحساب وحده كالتحويل (الخادم يردّ الموظّف
+            // بـ403 OWNER_ONLY)، بتأكيدٍ بالكلفة وحارس تكرار داخل الشاشة.
+            // ويتبع مفتاح الخادم ([ElCardOrderGate]): موقوفٌ أو لم يُعرف ⇒ لا
+            // بطاقة (كـ«شحن رصيد الصفحة») — لا نموذج يُملأ ثمّ يُرفض بـ«موقوف».
+            if (ElCardOrderGate.visible)
+              _ModuleCard(
+                icon: LucideIcons.shoppingCart,
+                tone: AppTone.brand,
+                title: 'طلب الكارتات',
+                subtitle: 'اطلب كارتات تعبئة من ايرث لنك — يُخصم من رصيد الإيداع',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                      builder: (_) => const ElCardOrderScreen()),
+                ),
+              ),
             // «الكارتات المطلوبة» — توقّع الكارتات والرصيد (بكلفة الشركة)
             // لمدّة؛ بلا أسعار بيع (تلك بشاشة الباقات). من «التقارير الماليّة»
             // (المدير دائماً؛ الموظّف بالمفتاح — الخادم يفرضه).
@@ -370,6 +441,7 @@ class MoreModulesScreen extends StatelessWidget {
 class _ModuleCard extends StatelessWidget {
   const _ModuleCard({
     this.locked = false,
+    this.unavailable,
     required this.icon,
     required this.tone,
     this.brandGlyph,
@@ -395,16 +467,22 @@ class _ModuleCard extends StatelessWidget {
   /// والقفل مكان السهم، والنقر رسالةٌ لا تنقّل ([showNoPermission]).
   final bool locked;
 
+  /// ميزةٌ لا تملكها الشركة بعد (لا صلاحيّةٌ ناقصة): الشكل المقفل نفسه،
+  /// والسبب مكان الوصف وفي رسالة النقر بدل «اطلبها من مديرك». يتقدّم على
+  /// [locked] — فلا صلاحيّة تفتح ما لا وجود له.
+  final String? unavailable;
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    final locked = this.locked || unavailable != null;
     final card = Material(
       color: AppColors.surface,
       borderRadius: BorderRadius.circular(R.lg),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: locked
-            ? () => showNoPermission(context)
+            ? () => showNoPermission(context, message: unavailable)
             : () {
                 HapticFeedback.selectionClick();
                 onTap();
@@ -452,7 +530,7 @@ class _ModuleCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      subtitle,
+                      unavailable ?? subtitle,
                       style: AppType.muted(
                         color:
                             locked ? LockedStyle.subtitle : AppColors.textMid,
@@ -474,7 +552,9 @@ class _ModuleCard extends StatelessWidget {
     if (!locked) return card;
     return Semantics(
       button: true,
-      label: 'locked.a11y'.tr(args: [title]),
+      label: unavailable == null
+          ? 'locked.a11y'.tr(args: [title])
+          : '$title — $unavailable',
       excludeSemantics: true,
       child: card,
     );

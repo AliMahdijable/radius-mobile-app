@@ -6,12 +6,37 @@ import '../../../api/device_probe_api.dart';
 import '../../../core/util/format.dart';
 import '../../../models/device_health.dart';
 import '../../../models/subscriber.dart';
+import '../../../services/active_company.dart';
 import '../../../services/connection_alerts.dart';
+import '../../../services/provider_service.dart';
 import '../../../services/subscriber_usage_store.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import 'device_chip_micro.dart' show DeviceProbeBus;
+
+/// فعل شريط «آخر حركة ماليّة» الأخضر — ما قبل «قبل 5 د».
+///
+/// ايرث لنك: الحركة قد تكون **تفعيلاً نقديّاً** لا تسديداً. الخادم يُرجع في
+/// `last-financial-movements` تفعيلاتها النقديّة والجزئيّة (الدفعة ① ١٨ أكتوبر)
+/// ويسم كلّ صفٍّ `movement_label`: «تفعيل نقدي» · «تفعيل نقدي جزئي» · «تسديد
+/// دين». فكان مشتركٌ فُعِّل نقداً قبل دقيقة يقرأ «تسديد دين قبل 1 د».
+///
+/// الساس كما كان («تسديد دين» دائماً): الوسم نفسه يصله والعطل نفسه قديمٌ فيه،
+/// وتوحيده قرارٌ خارج الدفعة التي لا تغيّر سلوك الساس.
+@visibleForTesting
+String lastMovementVerb(Map<String, dynamic> p, {required bool earthlink}) {
+  const debtPay = 'تسديد دين';
+  if (!earthlink) return debtPay;
+  final label = p['movement_label']?.toString().trim() ?? '';
+  if (label.isNotEmpty) return label;
+  // خادمٌ أقدم بلا وسم: من نوع الحركة نفسه.
+  if (p['action_type']?.toString() == 'SUBSCRIBER_ACTIVATE') {
+    final partial = (p['payment_type']?.toString() ?? '').contains('جزئي');
+    return partial ? 'تفعيل نقدي جزئي' : 'تفعيل نقدي';
+  }
+  return debtPay;
+}
 
 /// كارت المشترك — الشريحة 2 من إعادة التصميم (مخطّط HTML، 2026-08-29).
 ///
@@ -123,6 +148,10 @@ class SubscriberCardV3 extends StatelessWidget {
                 // بدل 11 — تفصيلة تشدّ الصفّين معاً بصريّاً.
                 const SizedBox(height: 8),
                 _expiryRow(),
+                if (_shownMac != null) ...[
+                  const SizedBox(height: 6),
+                  _lastMacRow(_shownMac!),
+                ],
                 if (showUsage && sub.idx != null) ...[
                   const SizedBox(height: 7),
                   _UsageRow(idx: sub.idx.toString()),
@@ -411,6 +440,41 @@ class SubscriberCardV3 extends StatelessWidget {
     );
   }
 
+  /// آخر MAC للمشترك **غير المتّصل** — آخر جهازٍ اتّصل به (كشارة الويب)،
+  /// من صفّ القائمة ([Subscriber.lastMac]). المتّصل لا يُعرض له: جلسته الحيّة
+  /// تقول جهازه.
+  String? get _shownMac {
+    if (sub.isOnline) return null;
+    final m = sub.lastMac?.trim() ?? '';
+    return m.isEmpty ? null : m;
+  }
+
+  /// «آخر جهاز  68:FF:7B:8A:CD:11» — بنبرة صفّ الانتهاء فوقه.
+  Widget _lastMacRow(String mac) {
+    return Row(
+      children: [
+        Icon(Icons.memory_rounded, size: 15, color: AppColors.textHint),
+        const SizedBox(width: 6),
+        Text(
+          'آخر جهاز',
+          style: AppType.body(color: AppColors.textLabel)
+              .copyWith(fontSize: 12.5),
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            mac,
+            textDirection: TextDirection.ltr,
+            style: AppType.body(color: AppColors.textMid)
+                .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
   // ─────────────────── الصفّ 4 ───────────────────
 
   Widget _debtBar(double debt) {
@@ -673,8 +737,13 @@ class SubscriberCardV3 extends StatelessWidget {
   String? _lastPayText() {
     final p = lastPayment;
     if (p == null) return null;
+    final el = ProviderService.isEarthlink ||
+        ActiveCompany.current?.sasCode == 'earthlink';
+    final verb = lastMovementVerb(p, earthlink: el);
+    // بلا وقتٍ يُقرأ: الساس «آخر تسديد» كما كان، وايرث لنك فعلُ حركته وحده.
+    final undated = el ? verb : 'آخر تسديد';
     final raw = (p['date'] ?? p['created_at'] ?? p['payment_date'])?.toString();
-    if (raw == null || raw.isEmpty) return 'آخر تسديد';
+    if (raw == null || raw.isEmpty) return undated;
     // 🐛 هذا بالضبط ما بلّغ عنه المستخدم ٢٠٢٦-٠٩-٠٤: «تسديد دين منذ:
     // يقرأ ٣ ساعات حتّى لو هسّة سدّدته».
     //
@@ -682,10 +751,10 @@ class SubscriberCardV3 extends StatelessWidget {
     // → `db.getLastSubscriberFinancialMovements` → `activity_logs.created_at`
     // — جدولُنا، وقيمُه UTC. فقراءتُه محلّيّاً تُقدّم العدّاد ثلاث ساعات.
     final t = parseServerUtc(raw);
-    if (t == null) return 'آخر تسديد';
+    if (t == null) return undated;
     final mins = DateTime.now().difference(t).inMinutes;
-    if (mins < 0) return 'آخر تسديد';
-    return 'تسديد دين ${humanMinutesAgo(mins)}';
+    if (mins < 0) return undated;
+    return '$verb ${humanMinutesAgo(mins)}';
   }
 
   double? _lastPayAmount() {

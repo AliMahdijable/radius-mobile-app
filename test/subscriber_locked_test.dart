@@ -193,21 +193,34 @@ void main() {
         await t.pump(const Duration(seconds: 3));
         expect(find.text('إجراءات أخرى'), findsOneWidget);
         expect(server.requests.length, mid);
-        // الحذف (آخر الشيت): لا يُمنح لموظّف ايرث لنك أصلاً → مخفيّ لا
-        // مقفل؛ وعند موظّف الساس يبقى صفّاً مقفلاً. نمرّر إلى نهاية الشيت
-        // أوّلاً، فالقائمة كسولةٌ لا تبني ما تحت الطيّ.
+        // الحذف (آخر الشيت) صفٌّ مقفلٌ بمكانه في الحالين: عند موظّف الساس
+        // بالصلاحيّة، وعند ايرث لنك **بسبب المزوّد** («ايرث لنك لا تسمح
+        // بحذف المشترك» — قرار المستخدم ١٨ أكتوبر: مقفلٌ لا مخفيّ). نمرّر إلى
+        // نهاية الشيت أوّلاً، فالقائمة كسولةٌ لا تبني ما تحت الطيّ.
         await t.drag(
             find.descendant(
                 of: find.byType(BottomSheet),
                 matching: find.byType(Scrollable)).first,
             const Offset(0, -2000));
         await t.pump(const Duration(milliseconds: 500));
-        expect(
-          find.descendant(
-              of: find.byType(BottomSheet),
-              matching: find.text('common.delete'.tr())),
-          el ? findsNothing : findsOneWidget,
-        );
+        final del = find.descendant(
+            of: find.byType(BottomSheet),
+            matching: find.text('common.delete'.tr()));
+        expect(del, findsOneWidget);
+        final atDelete = server.requests.length;
+        await t.tap(del, warnIfMissed: false);
+        await t.pump();
+        if (el) {
+          // السبب مكان «اطلبها من مديرك»: لا صلاحيّة تفتح ما لا يسمح به المزوّد.
+          expect(find.text('subscribers.delete_el_unavailable'.tr()),
+              findsOneWidget);
+        } else {
+          expect(find.text('locked.toast_action'.tr()), findsWidgets);
+          expect(find.text('subscribers.delete_el_unavailable'.tr()),
+              findsNothing);
+        }
+        expect(server.requests.length, atDelete, reason: 'لا حذف يُطلب');
+        await t.pump(const Duration(seconds: 3));
         await close(t);
       });
     }

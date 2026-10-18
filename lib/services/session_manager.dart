@@ -7,7 +7,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../api/cards_api.dart';
 import '../api/device_config_api.dart';
 import '../api/device_probe_api.dart';
+import '../api/el_card_order_gate.dart';
 import '../api/el_deposit_password.dart';
+import '../api/self_deposit_api.dart';
 import '../api/subscribers_api.dart';
 import '../api/whatsapp_api.dart';
 import 'account_service.dart';
@@ -72,8 +74,14 @@ class SessionManager {
     _guardSync('WhatsAppApi.clearCaches', () => WhatsAppApi.clearCaches());
     // باسورد إيداع ايرث لنك المحفوظ (حالته لا نصّه) — لا يرى المدير التالي حالة سابقه.
     _guardSync('ElDepositPassword.reset', () => ElDepositPassword.reset());
+    // «طلب الكارتات» (مفتاح الخادم) — حال حساب ايرث لنك السابق لا يُعرض للتالي.
+    _guardSync('ElCardOrderGate.reset', () => ElCardOrderGate.reset());
     // استهلاك المشتركين (القائمة) — أرقام حساب المدير السابق.
     _guardSync('SubscriberUsageStore.reset', () => SubscriberUsageStore.reset());
+    // «شحن رصيد الصفحة» — وسائل الدفع ورصيد صفحة المدير السابق. (عمليّات زين
+    // كاش المعلّقة **لا** تُمسح هنا: خروجٌ وسط الدفع لا يمحو ماله —
+    // SelfDepositPendingStore يحفظها لصاحبها وحده.)
+    _guardSync('SelfDepositState.reset', () => SelfDepositState.reset());
 
     // 2) Async persistent stores — PARALLEL via Future.wait.
     //    Previously sequential: each waited on the last (~40ms × 4).

@@ -9,6 +9,7 @@ import '../services/auth_storage.dart';
 import '../services/manual_wa_sender.dart';
 import '../widgets/manual_wa_chip.dart';
 import 'api_client.dart';
+import 'portal_settings_api.dart';
 
 /// A WhatsApp template row as the backend returns from
 /// /api/whatsapp/templates/:adminId. We only need a tiny subset of
@@ -1063,7 +1064,10 @@ class WhatsAppApi {
         message: 'قالب "$arabic" مُعطَّل — فعّله من إعدادات الواتساب',
       );
     }
-    final rendered = _renderTemplate(active.first.messageContent, sub);
+    // {agent_code}: يُملأ هنا لا في الخادم وحده — اليدويّ يخرج من واتساب المدير
+    // مباشرةً، والمعاينة تُري ما سيصل حرفيّاً (وسيط البوّابة §10).
+    final rendered = await PortalSettingsApi.fillAgentCode(
+        _renderTemplate(active.first.messageContent, sub));
 
     if (!context.mounted) {
       return const WhatsSendResult(

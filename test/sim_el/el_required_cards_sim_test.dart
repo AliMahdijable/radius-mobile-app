@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rad_mysvcs/api/el_card_order_gate.dart';
 import 'package:rad_mysvcs/screens/el/required_cards_screen.dart';
 import 'package:rad_mysvcs/services/provider_service.dart';
 
@@ -59,6 +60,12 @@ void main() {
   setUp(() async {
     server = await simSetUp();
     ProviderService.debugSet('earthlink');
+    // «طلب الكارتات» مفتوحٌ بالخادم (السلّة الفارغة تُرفض بعد فحص المفتاح) —
+    // فزرّ «اطلب هذه الكارتات» في اللقطات؛ وحاله موقوفاً في
+    // test/el_card_order_gate_test.dart.
+    ElCardOrderGate.reset();
+    server.reply('POST', '/api/v2/el/card-order/quote', 400,
+        {'success': false, 'message': 'حدّد الباقة والعدد'});
     server.on('GET', _path, (o) {
       final days = int.parse('${o.queryParameters['days']}');
       final scale = switch (days) { 1 => 1, 3 => 3, 7 => 7, _ => 137 };

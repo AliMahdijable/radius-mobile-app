@@ -7,6 +7,7 @@ import '../models/subscriber.dart';
 import '../services/auth_storage.dart';
 import '../services/subscribers_offline_cache.dart';
 import 'api_client.dart';
+import 'bulk_activate_api.dart';
 import 'el_deposit_password.dart';
 import 'cards_api.dart';
 
@@ -25,6 +26,36 @@ typedef ActivateResult = ({
   ActivationCard? card,
   bool debtWriteFailed,
   String? debtWriteMessage,
+});
+
+/// [ActivateResult] ومعه ما يحكم به التجديد الجماعيّ على الصفّ والدفعة
+/// (`SubscribersApi.activateDetailed`): [status] حالة HTTP (`null` بلا ردّ)،
+/// و[sas4Code] رمز الساس الخام كما أرسله الخادم، و[noReply] = لم يعد ردٌّ
+/// أصلاً (مهلة/انقطاع) — نتيجةٌ لا تُعرف، لا «فشل»، و[lastUncertain] =
+/// حارس التكرار (`RECENT_DUPLICATE`) يقول إنّ المحاولة السابقة عليه لم يُعرف
+/// إن نُفّذت (`last.uncertain`) — فلا يُعرض «لم يُنفَّذ» كأنّه آمنٌ للإعادة.
+typedef ActivateOutcome = ({
+  ActivateResult result,
+  int? status,
+  String? sas4Code,
+  bool noReply,
+  bool lastUncertain,
+});
+
+/// `last.uncertain` في ردّ حارس التكرار.
+bool _lastUncertain(Object? body) {
+  if (body is! Map) return false;
+  final last = body['last'];
+  return last is Map && last['uncertain'] == true;
+}
+
+/// ردّ activation-data بحالته: [data] `null` = لم تُجلب، و[status]/[code]/
+/// [message] سبب ذلك كما قاله الخادم (`SubscribersApi.fetchActivationDataDetailed`).
+typedef ActivationDataFetch = ({
+  Map<String, dynamic>? data,
+  int? status,
+  String? code,
+  String? message,
 });
 
 /// Outcome of a backend-initiated WhatsApp send (post-activate /
@@ -460,6 +491,8 @@ class SubscribersApi {
     // 2026-08-28 (Google 2027 audit HIGH): _packagesCache كان يبقى لـ5د
     // بعد logout — invalidatePackagesCache موجودة لكن غير مستدعاة.
     invalidatePackagesCache();
+    // حكم التجديد الجماعيّ (صلاحيّات ساس هذا المدير) يخصّ هذه الجلسة وحدها.
+    BulkActivateApi.reset();
   }
 
   /// Forces the next `loadAll` to re-fetch from the backend instead
@@ -544,7 +577,13 @@ class SubscribersApi {
   /// The whole map is cached on the screen side and re-sent on activate
   /// (the backend enforces this — see /activate endpoint comment about
   /// SAS4 session lock).
-  static Future<Map<String, dynamic>?> fetchActivationData(String idx) async {
+  static Future<Map<String, dynamic>?> fetchActivationData(String idx) async =>
+      (await fetchActivationDataDetailed(idx)).data;
+
+  /// [fetchActivationData] ومعه حالة الردّ ورسالته — للتجديد الجماعيّ: جلبٌ
+  /// يُرفض بـ401/403 لن ينجح لغيره من الصفوف، فيقف الجلب بدل مئات النداءات.
+  static Future<ActivationDataFetch> fetchActivationDataDetailed(
+      String idx) async {
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/v2/subscribers/$idx/activation-data',
@@ -554,15 +593,31 @@ class SubscribersApi {
         if (!kReleaseMode) {
           debugPrint('🟡 activation-data($idx): success!=true body=$body');
         }
-        return null;
+        return (
+          data: null,
+          status: r.statusCode,
+          code: body['code']?.toString(),
+          message: body['message']?.toString(),
+        );
       }
-      return (body['data'] as Map?)?.cast<String, dynamic>();
+      return (
+        data: (body['data'] as Map?)?.cast<String, dynamic>(),
+        status: r.statusCode,
+        code: null,
+        message: null,
+      );
     } on DioException catch (e) {
       _log('activation-data/$idx', e);
-      return null;
+      final body = e.response?.data;
+      return (
+        data: null,
+        status: e.response?.statusCode,
+        code: body is Map ? body['code']?.toString() : null,
+        message: body is Map ? body['message']?.toString() : null,
+      );
     } catch (e) {
       _log('activation-data/$idx', e);
-      return null;
+      return (data: null, status: null, code: null, message: null);
     }
   }
 
@@ -587,6 +642,46 @@ class SubscribersApi {
     String? pin, // method=='card'
     int? profileId, // باقة مختارة (مبدّل)
     bool confirmRepeat = false, // تجاوز حارس التكرار RECENT_DUPLICATE
+  }) async =>
+      (await activateDetailed(
+        idx: idx,
+        paymentType: paymentType,
+        activationData: activationData,
+        partialAmount: partialAmount,
+        skipAutoWa: skipAutoWa,
+        method: method,
+        depositPassword: depositPassword,
+        rememberDepositPassword: rememberDepositPassword,
+        identifier: identifier,
+        pin: pin,
+        profileId: profileId,
+        confirmRepeat: confirmRepeat,
+      ))
+          .result;
+
+  /// [activate] نفسه ومعه ما يحتاجه التجديد الجماعيّ ليحكم «أُكمل أم أقف»:
+  /// حالة HTTP، ورمز الساس الخام (`rsp_insufficient_balance`…)، وهل عاد ردٌّ
+  /// أصلاً. [ActivateOutcome.result] هو ما يعيده [activate] حرفيّاً.
+  ///
+  /// [bulk] (التجديد الجماعيّ وحده) = `bulk: true` في الجسم: الخادم يرفض
+  /// قبل أن يلمس الساس ما لا يمكن أن ينجح في دفعة — 409
+  /// `BULK_ACTIVATE_UNSUPPORTED` (حسابٌ في الساس بلا تفعيلٍ من الرصيد، ايرث
+  /// لنك)، ويقول جلسة الساس المنتهية 409 `SAS_SESSION_EXPIRED` لا 401. خادمٌ
+  /// أقدم يتجاهلها، والتفعيل المفرد لا يرسلها فيبقى طلبه حرفيّاً كما كان.
+  static Future<ActivateOutcome> activateDetailed({
+    required String idx,
+    required String paymentType,
+    required Map<String, dynamic> activationData,
+    int? partialAmount,
+    bool skipAutoWa = false,
+    String method = 'credit',
+    String? depositPassword,
+    bool rememberDepositPassword = false,
+    String? identifier,
+    String? pin,
+    int? profileId,
+    bool confirmRepeat = false,
+    bool bulk = false,
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -611,6 +706,7 @@ class SubscribersApi {
           if (pin != null && pin.isNotEmpty) 'pin': pin,
           if (profileId != null) 'profile_id': profileId,
           if (confirmRepeat) 'confirmRepeat': true,
+          if (bulk) 'bulk': true,
         },
         // الخادم قد ينتظر قفل كارتات الوكيل ثمّ الساس (حتى ٩٠ث للتفعيل نفسه):
         // مهلة الثلاثين كانت تقطع طلباً يكمله الخادم بعدها، فيقول التطبيق
@@ -619,7 +715,14 @@ class SubscribersApi {
       );
       // باسورد الإيداع حُفظ الآن، أو المحفوظ رفضته ايرث لنك فمُسح (saved_cleared).
       if (method == 'deposit') ElDepositPassword.observe(r.data);
-      return activateResultFromBody(r.data ?? const {});
+      final body = r.data ?? const <String, dynamic>{};
+      return (
+        result: activateResultFromBody(body),
+        status: r.statusCode,
+        sas4Code: body['sas4_code']?.toString(),
+        noReply: false,
+        lastUncertain: _lastUncertain(body),
+      );
     } on DioException catch (e) {
       _log('activate/$idx', e);
       final body = e.response?.data;
@@ -628,28 +731,40 @@ class SubscribersApi {
       // بلا ردٍّ (مهلة/انقطاع) لا نعرف إن نُفّذ: نتيجةٌ غير مؤكّدة، لا «تعذّر».
       final noReply = e.response == null;
       return (
-        ok: false,
-        message: msg ?? (noReply ? null : 'تعذّر التفعيل'),
-        code: body is Map
-            ? body['code']?.toString()
-            : (noReply ? activateOutcomeUnknown : null),
-        wa: null,
-        waPreview: null,
-        card: null,
-        debtWriteFailed: false,
-        debtWriteMessage: null,
+        result: (
+          ok: false,
+          message: msg ?? (noReply ? null : 'تعذّر التفعيل'),
+          code: body is Map
+              ? body['code']?.toString()
+              : (noReply ? activateOutcomeUnknown : null),
+          wa: null,
+          waPreview: null,
+          card: null,
+          debtWriteFailed: false,
+          debtWriteMessage: null,
+        ),
+        status: e.response?.statusCode,
+        sas4Code: body is Map ? body['sas4_code']?.toString() : null,
+        noReply: noReply,
+        lastUncertain: _lastUncertain(body),
       );
     } catch (e) {
       _log('activate/$idx', e);
       return (
-        ok: false,
-        message: 'تعذّر التفعيل',
-        code: null,
-        wa: null,
-        waPreview: null,
-        card: null,
-        debtWriteFailed: false,
-        debtWriteMessage: null,
+        result: (
+          ok: false,
+          message: 'تعذّر التفعيل',
+          code: null,
+          wa: null,
+          waPreview: null,
+          card: null,
+          debtWriteFailed: false,
+          debtWriteMessage: null,
+        ),
+        status: null,
+        sas4Code: null,
+        noReply: false,
+        lastUncertain: false,
       );
     }
   }
@@ -1043,7 +1158,28 @@ class SubscribersApi {
   /// touches what actually changed (rename, package change, name,
   /// phone, password). Returns a structured result so the caller
   /// can show the backend's specific rejection message.
-  static Future<({bool ok, String? message})> updateSubscriber({
+  ///
+  /// [changeType] — متى تتغيّر الباقة في SAS4 (خيار الساس نفسه، ١٨ أكتوبر):
+  /// `'immediate'` «حالاً» أو `'schedule'` «عند انتهاء الاشتراك». يُرسَل مع
+  /// [profileId] وحده؛ غيابه عند الخادم = immediate (سلوك التطبيقات القديمة).
+  /// ولا يُرسَل لايرث لنك (قاعدتها canChangeAccount).
+  ///
+  /// [code] رمز الرفض من الخادم إن أرسله — `PACKAGE_CHANGE_ACTIVE_FORBIDDEN`
+  /// (صلاحيّة الساس لا تسمح بتغيير باقة الفعّال) · `PACKAGE_CHANGE_FORBIDDEN`
+  /// (ولا باقة أيّ مشترك) · `PACKAGE_CHANGE_REJECTED` · `PENDING_CANCEL_FAILED`
+  /// (مجدولٌ سابق تعذّر إلغاؤه) · `PACKAGE_CHANGE_UNCONFIRMED` (لا ردّ حاسم من الساس —
+  /// تأكّد قبل الإعادة) · `SCHEDULE_WITH_DATE_EDIT`؛ وقد يكون تغيير الاسم قبلها قد حُفظ
+  /// (الرسالة تقوله). و[pendingCancelled] = الخادم ألغى المجدول السابق قبل أن يُرفض الجديد
+  /// (فلم يعد عند الساس — يزول سطر «مجدول»).
+  /// و[data] جسم النجاح — `change_type` (ما نُفِّذ فعلاً) و`expiration_kept`.
+  static Future<
+      ({
+        bool ok,
+        String? message,
+        String? code,
+        Map<String, dynamic>? data,
+        bool pendingCancelled,
+      })> updateSubscriber({
     required String idx,
     String? username,
     String? password,
@@ -1051,6 +1187,7 @@ class SubscribersApi {
     String? lastname,
     String? phone,
     int? profileId,
+    String? changeType,
     int? parentId,
     String? expiration,
   }) async {
@@ -1062,7 +1199,12 @@ class SubscribersApi {
     if (firstname != null) body['firstname'] = firstname;
     if (lastname != null) body['lastname'] = lastname;
     if (phone != null) body['phone'] = phone;
-    if (profileId != null) body['profile_id'] = profileId;
+    if (profileId != null) {
+      body['profile_id'] = profileId;
+      if (changeType != null && changeType.isNotEmpty) {
+        body['change_type'] = changeType;
+      }
+    }
     // parent_id + expiration — super-admin only on the client side
     // (UI gated by AuthStorage.readIsSuperAdmin). Backend doesn't
     // care; if a non-super tries to send them and SAS4 rejects, the
@@ -1072,7 +1214,13 @@ class SubscribersApi {
       body['expiration'] = expiration;
     }
     if (body.isEmpty) {
-      return (ok: true, message: 'لا توجد تغييرات');
+      return (
+        ok: true,
+        message: 'لا توجد تغييرات',
+        code: null,
+        data: null,
+        pendingCancelled: false,
+      );
     }
     try {
       final r = await ApiClient.dio.put<Map<String, dynamic>>(
@@ -1081,15 +1229,68 @@ class SubscribersApi {
       );
       final data = r.data ?? const {};
       final ok = data['success'] == true;
-      return (ok: ok, message: data['message']?.toString());
+      final payload = data['data'];
+      return (
+        ok: ok,
+        message: data['message']?.toString(),
+        code: data['code']?.toString(),
+        data: payload is Map ? payload.cast<String, dynamic>() : null,
+        pendingCancelled: data['pending_cancelled'] == true,
+      );
     } on DioException catch (e) {
       _log('v2/subscribers/$idx (PUT)', e);
       final body = e.response?.data;
       final msg = body is Map ? body['message']?.toString() : null;
-      return (ok: false, message: msg ?? 'تعذّر التعديل');
+      final code = body is Map ? body['code']?.toString() : null;
+      return (
+        ok: false,
+        message: msg ?? 'تعذّر التعديل',
+        code: code,
+        data: null,
+        pendingCancelled: body is Map && body['pending_cancelled'] == true,
+      );
     } catch (e) {
       _log('v2/subscribers/$idx (PUT)', e);
-      return (ok: false, message: 'تعذّر التعديل');
+      return (
+        ok: false,
+        message: 'تعذّر التعديل',
+        code: null,
+        data: null,
+        pendingCancelled: false,
+      );
+    }
+  }
+
+  /// POST /api/v2/subscribers/:idx/cancel-profile-change — يلغي تغيير باقةٍ
+  /// **مجدولاً** («عند انتهاء الاشتراك») كزرّ «Cancel» في لوحة الساس نفسها
+  /// (`user/cancelProfileChange`). بلا مال، ولا يمسّ الباقة الحاليّة ولا التاريخ.
+  /// الصلاحيّة عند الخادم `subscribers.edit` كالتعديل. و[cancelled] = false حين
+  /// لم يكن عند الساس مجدولٌ أصلاً (نجاحٌ بلا شيء) — null إن لم يقله الخادم.
+  static Future<({bool ok, String? message, bool? cancelled})>
+      cancelProfileChange(String idx) async {
+    const fallback = 'تعذّر إلغاء تغيير الباقة المجدول';
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/subscribers/$idx/cancel-profile-change',
+        data: const <String, dynamic>{},
+      );
+      final data = r.data ?? const {};
+      final ok = data['success'] == true;
+      final payload = data['data'];
+      final cancelled = payload is Map ? payload['cancelled'] : null;
+      return (
+        ok: ok,
+        message: data['message']?.toString() ?? (ok ? null : fallback),
+        cancelled: cancelled is bool ? cancelled : null,
+      );
+    } on DioException catch (e) {
+      _log('v2/subscribers/$idx/cancel-profile-change', e);
+      final body = e.response?.data;
+      final msg = body is Map ? body['message']?.toString() : null;
+      return (ok: false, message: msg ?? fallback, cancelled: null);
+    } catch (e) {
+      _log('v2/subscribers/$idx/cancel-profile-change', e);
+      return (ok: false, message: fallback, cancelled: null);
     }
   }
 

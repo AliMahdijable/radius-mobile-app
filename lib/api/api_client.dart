@@ -66,6 +66,16 @@ class ApiClient {
 
   static final Dio dio = _buildDio(baseUrl);
 
+  /// تجديد الجلسة بالمسار نفسه الذي يسلكه المعترض عند 401 — نداءٌ واحدٌ
+  /// مشترك مع أيّ تجديدٍ جارٍ — لكن **بلا** مسحٍ للجلسة ولا طردٍ عند الرفض:
+  /// المستدعي يقرّر. التجديد الجماعيّ يأخذ جلسة الساس المنتهية 409
+  /// `SAS_SESSION_EXPIRED` لا 401 (فلا يطرد الويب في منتصف الدفعة)، فلا يجدّد
+  /// المعترض وحده — يجدّد هذا ويعيد الصفّ مرّةً، والطرد (إن ماتت الجلسة
+  /// حقّاً) يأتي مع أوّل 401 بعد إغلاق الورقة. الموظّف لا يُجدَّد
+  /// (`serverRejected` بلا نداء — انظر [AuthApi.refreshTokenDetailed]).
+  static Future<RefreshOutcome> refreshSession() =>
+      _AuthInterceptor.sharedRefresh();
+
   static Dio _buildDio(String url) {
     final d = Dio(BaseOptions(
       baseUrl: url,
@@ -266,14 +276,25 @@ class _AuthInterceptor extends Interceptor {
     handler.next(err);
   }
 
-  /// Pro: `401 {code:'SESSION_SUPERSEDED'}` — الموظّف نفسه دخل من جهازٍ آخر.
-  /// يُحفظ السبب قبل مسار التجديد؛ والتجديد مرفوضٌ للموظّف فيمسح
+  /// Pro: `401 {code}` — جلسة موظّفٍ أنهاها الخادم، ولكلّ رمزٍ سببه:
+  /// `SESSION_SUPERSEDED` (دخل من جهازٍ آخر)، `EMPLOYEE_DISABLED` (عطّله
+  /// المدير)، `EMPLOYEE_SESSION_REVOKED` (حُذف أو تغيّر مديره/نطاقه) — الخادم
+  /// يطرده فوراً منذ 05d47d3 لا بعد ٢٤ ساعة. يُحفظ السبب (نصّ الخادم، وإلّا
+  /// نصّ الرمز) قبل مسار التجديد؛ والتجديد مرفوضٌ للموظّف فيمسح
   /// [_refreshAndRetry] الجلسة ويُطلق [authExpiredSignal] كالمعتاد، ويعرض
-  /// MainShell السبب في شاشة دخول الموظّف.
+  /// MainShell السبب لا «انتهت الجلسة».
+  static const _employeeEndedText = {
+    'SESSION_SUPERSEDED': EmployeeSession.supersededMessage,
+    'EMPLOYEE_DISABLED': 'حساب الموظف معطّل — راجع المدير',
+    'EMPLOYEE_SESSION_REVOKED': 'انتهت جلسة الموظف — سجّل الدخول من جديد',
+  };
+
   static void _noteSuperseded(int? status, Object? data) {
-    if (status == 401 && data is Map && data['code'] == 'SESSION_SUPERSEDED') {
-      EmployeeSession.noteSuperseded(data['message']?.toString());
-    }
+    if (status != 401 || data is! Map) return;
+    final fallback = _employeeEndedText[data['code']];
+    if (fallback == null) return;
+    EmployeeSession.noteSuperseded(data['message']?.toString(),
+        fallback: fallback);
   }
 
   /// Coordinates a single refresh + retries the failed request with the
@@ -364,7 +385,11 @@ class _AuthInterceptor extends Interceptor {
     return retried;
   }
 
-  Future<RefreshOutcome> _runRefresh() async {
+  Future<RefreshOutcome> _runRefresh() => sharedRefresh();
+
+  /// التجديد المشترك — للمعترض و[ApiClient.refreshSession] معاً، فموجة 401
+  /// وصفٌّ جماعيٌّ انتهت جلسته في اللحظة نفسها يتقاسمان نداءً واحداً.
+  static Future<RefreshOutcome> sharedRefresh() async {
     final inFlight = _refreshing;
     if (inFlight != null) return inFlight;
     final f = AuthApi.refreshTokenDetailed();

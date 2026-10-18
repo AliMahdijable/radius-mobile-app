@@ -28,21 +28,27 @@ import '../../theme/spacing.dart';
 ///
 /// with:
 ///   showSheetSnack(context, msg, isError: true);
+///
+/// [tag] — إشعارٌ واحدٌ حيّ لكلّ وسم: الجديد يُزيل سابقه بدل أن يتراكم
+/// فوقه. للأفعال التي تتكرّر بسرعة (النسخ: عشر معلوماتٍ تُنسخ تباعاً
+/// كانت ستُكدّس عشرة إشعاراتٍ في المكان نفسه، وظلالها تتراكب). بلا وسم
+/// يبقى السلوك القديم كما هو.
 Future<void> showSheetSnack(
   BuildContext context,
   String message, {
   bool isError = false,
   Duration duration = const Duration(seconds: 3),
+  Object? tag,
 }) async {
   final overlay = Overlay.maybeOf(context, rootOverlay: true);
   if (overlay == null) return;
-  final entry = _SheetSnackEntry(
-    message: message,
+  await showSheetSnackOn(
+    overlay,
+    message,
     isError: isError,
     duration: duration,
+    tag: tag,
   );
-  overlay.insert(entry.overlay);
-  await entry.done;
 }
 
 /// Same floating snack, but the caller supplies the root [OverlayState]
@@ -56,16 +62,23 @@ Future<void> showSheetSnackOn(
   String message, {
   bool isError = false,
   Duration duration = const Duration(seconds: 3),
+  Object? tag,
 }) async {
   if (!overlay.mounted) return;
+  if (tag != null) _liveByTag.remove(tag)?._dismiss();
   final entry = _SheetSnackEntry(
     message: message,
     isError: isError,
     duration: duration,
   );
-  overlay.insert(entry.overlay);
+  if (tag != null) _liveByTag[tag] = entry;
+  entry._insertInto(overlay);
   await entry.done;
+  if (tag != null && identical(_liveByTag[tag], entry)) _liveByTag.remove(tag);
 }
+
+/// الإشعار الحيّ لكلّ وسم — انظر `tag` في [showSheetSnack].
+final _liveByTag = <Object, _SheetSnackEntry>{};
 
 class _SheetSnackEntry {
   _SheetSnackEntry({
@@ -85,18 +98,36 @@ class _SheetSnackEntry {
   final Completer<void> _completer = Completer<void>();
   Future<void> get done => _completer.future;
 
+  /// في الطبقة الآن — يُضبط عند الإدراج ويُمحى عند الإزالة.
+  bool _inserted = false;
+
+  void _insertInto(OverlayState state) {
+    state.insert(overlay);
+    _inserted = true;
+  }
+
   void _dismiss() {
     _timer.cancel();
-    if (overlay.mounted) overlay.remove();
+    // ⚠️ «مُدرَج» لا `overlay.mounted`: إشعارٌ أُدرج ولم يُبنَ بعد (وسمٌ
+    // يُزيل سابقه في الإطار نفسه) ليس mounted لكنّه في الطبقة — وفحصُ
+    // mounted كان يتركه مرسوماً تحت خلفه إلى أن ينقضي مؤقّته.
+    if (_inserted) {
+      _inserted = false;
+      overlay.remove();
+    }
     if (!_completer.isCompleted) _completer.complete();
   }
 
   Widget _build(BuildContext context) {
-    final safeBottom = MediaQuery.of(context).padding.bottom;
+    final mq = MediaQuery.of(context);
+    // ⚠️ فوق لوحة المفاتيح لا تحتها: الطبقة الجذريّة تمتدّ تحت اللوحة،
+    // فإشعارٌ على بُعد ٢٤ من القاع وحده يُرسَم خلفها ولا يُرى — وهو
+    // بالضبط حين يكتب المدير في شيتٍ ويُخطئ («أدخل المبلغ»). واللوحة
+    // مغلقةً `viewInsets` صفر فلا يتغيّر شيء.
     return Positioned(
       left: 16,
       right: 16,
-      bottom: safeBottom + 24,
+      bottom: mq.padding.bottom + mq.viewInsets.bottom + 24,
       child: SafeArea(
         top: false,
         child: Material(

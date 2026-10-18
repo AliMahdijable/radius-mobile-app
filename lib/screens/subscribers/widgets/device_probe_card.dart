@@ -10,6 +10,7 @@ import '../../../api/ubnt_api.dart';
 import '../../../core/net/huawei_ont_service.dart';
 import '../../../services/subscriber_refresh_signal.dart';
 import '../../../core/util/clipboard_helper.dart';
+import '../../../core/widgets/copyable.dart';
 import '../../../services/permissions_service.dart';
 import '../../../models/device_health.dart';
 import '../sheets/device_config_sheet.dart';
@@ -48,9 +49,32 @@ class DeviceProbeCard extends StatefulWidget {
   final String ip;
   final String username;
 
+  /// ما يرسمه الكارت ذو المفتاح [key] الآن — القراءة المعروضة ووقتها
+  /// وملاحظة المدير — لـ«نسخ كلّ المعلومات». `null` حين لا يكون مركَّباً
+  /// (خارج الشاشة): عندها يرسم حين يُركَّب ما في مخزن الفحص.
+  ///
+  /// 🐛 لماذا لا يكفي المخزن ([DeviceProbeApi.peek]): الكارت يُبقي آخر
+  /// قراءةٍ ناجحة معروضةً إن فشل فحصٌ صامتٌ بعدها (نبضة الإشارة كلّ عشر
+  /// ثوانٍ، أو سقف الخمس عشرة ثانية على رابطٍ ضعيف)، والمخزن يحفظ ذلك
+  /// الفشل `null` — فكان النسخ يُسقط قراءاتٍ ظاهرةً على الشاشة. وملاحظته
+  /// هي التي رسمها من آخر جلبٍ له، لا ما بقي في مخزن الإعداد.
+  static DeviceCardShown? shownBy(GlobalKey key) {
+    final s = key.currentState;
+    if (s is! _DeviceProbeCardState || !s.mounted) return null;
+    return (snap: s._snap, at: s._lastAt, notes: s._notes);
+  }
+
   @override
   State<DeviceProbeCard> createState() => _DeviceProbeCardState();
 }
+
+/// ما يرسمه كارت الجهاز: [snap] القراءة المعروضة (`null` = لا قراءة: جارٍ
+/// الفحص أو «غير متاح»)، و[at] وقتها، و[notes] ملاحظة المدير على الجهاز.
+typedef DeviceCardShown = ({
+  DeviceHealthSnapshot? snap,
+  DateTime? at,
+  String? notes,
+});
 
 class _DeviceProbeCardState extends State<DeviceProbeCard>
     with WidgetsBindingObserver {
@@ -478,25 +502,29 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           // مخفي إذا فاضي حتى لا يضيف ارتفاع ع الكرت بدون فائدة.
           if ((_notes ?? '').isNotEmpty) ...[
             const SizedBox(height: Sp.md),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: Sp.md, vertical: Sp.sm),
-              decoration: BoxDecoration(
-                color: AppColors.warningSoftBg,
-                borderRadius: BorderRadius.circular(R.icon),
-                border: Border.all(color: AppColors.warningSoftBorder),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(LucideIcons.fileText,
-                      size: 13, color: AppColors.warningFill),
-                  const SizedBox(width: Sp.x6),
-                  Expanded(
-                    child: Text(_notes!,
-                        style: AppType.body(color: AppColors.warningOnSoft)),
-                  ),
-                ],
+            Copyable.field(
+              deviceNoteField(_notes!),
+              radius: R.icon,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: Sp.md, vertical: Sp.sm),
+                decoration: BoxDecoration(
+                  color: AppColors.warningSoftBg,
+                  borderRadius: BorderRadius.circular(R.icon),
+                  border: Border.all(color: AppColors.warningSoftBorder),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(LucideIcons.fileText,
+                        size: 13, color: AppColors.warningFill),
+                    const SizedBox(width: Sp.x6),
+                    Expanded(
+                      child: Text(_notes!,
+                          style: AppType.body(color: AppColors.warningOnSoft)),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -717,8 +745,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
             Expanded(
               child: _MetricTile(
                 icon: LucideIcons.arrowDown,
-                label: 'RX Power',
-                value: '${o.rxPower} dBm',
+                field: _ontRx(o),
                 color: o.rxOk ? AppColors.brandAccent : AppColors.error,
               ),
             ),
@@ -726,8 +753,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
             Expanded(
               child: _MetricTile(
                 icon: LucideIcons.arrowUp,
-                label: 'TX Power',
-                value: '${o.txPower} dBm',
+                field: _ontTx(o),
                 color: o.txOk ? AppColors.textHi : AppColors.error,
               ),
             ),
@@ -739,8 +765,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
             Expanded(
               child: _MetricTile(
                 icon: LucideIcons.zap,
-                label: 'الفولتية',
-                value: '${o.voltage} mV',
+                field: _ontVoltage(o),
                 color: o.voltageOk ? AppColors.textHi : AppColors.warningFill,
               ),
             ),
@@ -748,18 +773,15 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
             Expanded(
               child: _MetricTile(
                 icon: LucideIcons.thermometer,
-                label: 'الحرارة',
-                value: '${o.temperature} °C',
+                field: _ontTemp(o),
                 color: o.tempOk ? AppColors.textHi : AppColors.warningFill,
               ),
             ),
           ],
         ),
         const SizedBox(height: 14),
-        const _DetailRow(
-            label: 'نوع الجهاز', value: 'Huawei ONT', strong: true),
-        if (o.sendStatus.trim().isNotEmpty && o.sendStatus.trim() != '--')
-          _DetailRow(label: 'حالة الليف', value: o.sendStatus),
+        const _DetailRow(field: _ontKind, strong: true),
+        if (_ontHasFiber(o)) _DetailRow(field: _ontFiber(o)),
       ],
     );
   }
@@ -792,22 +814,19 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     final short = <Widget>[
       if (u.signalDbm != null)
         _MetricTile(
-          label: 'الإشارة',
-          value: '${u.signalDbm} dBm',
+          field: _ubntSignal(u),
           color: _healthColor(u.signalHealth),
         ),
       if (u.ccqPercent != null)
         _MetricTile(
-          label: 'CCQ',
-          value: '${u.ccqPercent}%',
+          field: _ubntCcq(u),
           color: _healthColor(u.ccqHealth),
         ),
       // SNR يبقى في الصفّ: قصيرٌ ثابت («28 dB») ولا يظهر إلّا حين لا
       // يُصدّر الإصدار عدّادات بايت، فلا يزاحم الترافيك أبداً.
       if (_snap?.kind != DeviceKind.ubiquiti && u.snrDb != null)
         _MetricTile(
-          label: 'SNR',
-          value: '${u.snrDb} dB',
+          field: CopyField('SNR', '${u.snrDb} dB'),
           color: AppColors.textHi,
         ),
     ];
@@ -817,10 +836,12 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     // يوميّاً — «هل المشترك يسحب فعلاً؟».
     final Widget? wide = _snap?.kind == DeviceKind.ubiquiti
         ? _MetricTile(
-            label: 'الترافيك',
-            value: _rxBps == null
-                ? '—'
-                : '↓${_fmtBps(_rxBps!)} ↑${_fmtBps(_txBps ?? 0)}',
+            field: CopyField(
+              'الترافيك',
+              _rxBps == null
+                  ? '—'
+                  : '↓${_fmtBps(_rxBps!)} ↑${_fmtBps(_txBps ?? 0)}',
+            ),
             color: _rxBps == null ? AppColors.textLow : AppColors.brandAccent,
           )
         : null;
@@ -845,17 +866,12 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           wide, // العرض الكامل — بلا Expanded وبلا جار
         ],
         if (short.isNotEmpty || wide != null) const SizedBox(height: 14),
-        _DetailRow(
-          label: 'نوع الجهاز',
-          value: u.hostname.isEmpty ? 'Ubiquiti' : '${u.hostname} (UBNT)',
-          strong: true,
-        ),
+        _DetailRow(field: _ubntKind(u), strong: true),
         if (u.firmware.isNotEmpty)
-          _DetailRow(label: 'الإصدار', value: u.firmware, small: true),
+          _DetailRow(field: _ubntFirmware(u), small: true),
         if (u.ssid.isNotEmpty)
           _DetailRow(
-            label: 'SSID',
-            value: u.ssid,
+            field: _ubntSsid(u),
             small: true,
             // اسم السكتور يُنسَخ كثيراً (بحثٌ عنه في اللوحة، إرسالٌ
             // لفنّيّ) — ونسخه يدويّاً من شاشةٍ لا تُحدَّد نصوصها متعذّر.
@@ -865,24 +881,16 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
             ),
           ),
         if ((u.uptimeSeconds ?? 0) > 0)
-          _DetailRow(
-            label: 'مدّة التشغيل',
-            value: _uptime(u.uptimeSeconds!),
-            rtlValue: true,
-          ),
+          _DetailRow(field: _ubntUptime(u), rtlValue: true),
         // 🐛 كانتا صفّاً واحداً بتسمية «الإرسال / الاستقبال» (7.24em —
         // أطول تسمية في الكارت) فتُقصّ سرعة الاستقبال على 360dp،
         // فقُسِّمتا صفّين. والآن تعودان صفّاً واحداً **بتسمية لاتينيّة
         // قصيرة** «TX / RX» (‏≈2.6em، أقصر من «الإرسال» وحدها) ووحدةٍ
         // واحدة في آخر القيمة بدل تكرارها مرّتين — فالسبب الذي فرض
         // القسمة زال، لا أُهمل.
-        if ((u.txRateKbps ?? 0) > 0 || (u.rxRateKbps ?? 0) > 0)
-          _DetailRow(
-            label: 'TX / RX',
-            value: _ratePair(u.txRateKbps, u.rxRateKbps),
-          ),
+        if (_ubntHasRates(u)) _DetailRow(field: _ubntRates(u)),
         if (u.peerMac != null && u.peerMac!.isNotEmpty)
-          _DetailRow(label: 'Peer MAC', value: u.peerMac!, small: true),
+          _DetailRow(field: _ubntPeerMac(u), small: true),
         // مطلب 2026-06-11: عرض كل المنافذ (لا فقط primary) — كل
         // eth interface بحبّة منفصلة مع plugged/speed.
         if (u.lanPorts.isNotEmpty) _lanPortsRow(u.lanPorts),
@@ -893,22 +901,27 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   /// صفّ المنافذ — تسمية يمين وحبّات المنافذ يسار، كما في المخطّط
   /// («ETH0 · 100M» بلون البراند و«ETH1 · مفصول» رماديّة).
   Widget _lanPortsRow(List<LanPort> ports) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: Sp.xs),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('المنافذ', style: AppType.body(color: AppColors.textLabel)),
-          const SizedBox(width: Sp.md),
-          Expanded(
-            child: Wrap(
-              alignment: WrapAlignment.end,
-              spacing: Sp.x6,
-              runSpacing: Sp.x6,
-              children: [for (final p in ports) _lanChip(p)],
+    final field = _lanPortsField(ports);
+    return Copyable.field(
+      field,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: Sp.xs),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(field.label,
+                style: AppType.body(color: AppColors.textLabel)),
+            const SizedBox(width: Sp.md),
+            Expanded(
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                spacing: Sp.x6,
+                runSpacing: Sp.x6,
+                children: [for (final p in ports) _lanChip(p)],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -932,7 +945,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         borderRadius: BorderRadius.circular(R.sm),
       ),
       child: Text(
-        '${p.label} · ${unplugged ? 'مفصول' : speed}',
+        _lanPortText(p),
         textDirection: speedUnknown ? TextDirection.rtl : TextDirection.ltr,
         style: AppType.pillLabel(color: fg).copyWith(letterSpacing: 0),
       ),
@@ -1078,20 +1091,30 @@ class _HeaderIcon extends StatelessWidget {
 }
 
 /// البلاطة الغاطسة للقياس — تسمية 10.5 فوق قيمة 14/w700 ملوّنة دلاليّاً.
+/// تسميتها وقيمتها من [field] الذي يُنسخ بالضغط المطوّل — ما يُرى يُنسخ.
 class _MetricTile extends StatelessWidget {
   const _MetricTile({
-    required this.label,
-    required this.value,
+    required this.field,
     required this.color,
     this.icon,
   });
-  final String label;
-  final String value;
+  final CopyField field;
   final Color color;
   final IconData? icon;
 
+  String get label => field.label;
+  String get value => field.value;
+
   @override
   Widget build(BuildContext context) {
+    return Copyable.field(
+      field,
+      radius: R.icon,
+      child: _tile(),
+    );
+  }
+
+  Widget _tile() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
       decoration: BoxDecoration(
@@ -1131,18 +1154,20 @@ class _MetricTile extends StatelessWidget {
   }
 }
 
-/// صفّ تفصيل — تسمية خافتة يمين وقيمة `ltr` يسار.
+/// صفّ تفصيل — تسمية خافتة يمين وقيمة `ltr` يسار. الصفّ كلّه يُنسخ
+/// بالضغط المطوّل ([field]).
 class _DetailRow extends StatelessWidget {
   const _DetailRow({
-    required this.label,
-    required this.value,
+    required this.field,
     this.strong = false,
     this.small = false,
     this.trailing,
     this.rtlValue = false,
   });
-  final String label;
-  final String value;
+  final CopyField field;
+
+  String get label => field.label;
+  String get value => field.value;
 
   /// ودجة تُلصق بعد القيمة (زرّ نسخ مثلاً). تأخذ مقاسها الطبيعيّ
   /// فقط، فلا تُزاحم القيمة على العرض.
@@ -1165,6 +1190,10 @@ class _DetailRow extends StatelessWidget {
         : AppType.body(
             color: strong ? AppColors.textHi : AppColors.textBody,
           );
+    return Copyable.field(field, child: _row(style));
+  }
+
+  Widget _row(TextStyle style) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Sp.xs),
       child: Row(
@@ -1271,4 +1300,116 @@ String _fmtBps(int bps) {
   if (bps < 1000000) return '${(bps / 1000).toStringAsFixed(0)}K';
   if (bps < 1000000000) return '${(bps / 1000000).toStringAsFixed(1)}M';
   return '${(bps / 1000000000).toStringAsFixed(1)}G';
+}
+
+// ─────────────────── القراءات كما تُنسخ ───────────────────
+//
+// كلّ قراءةٍ في الكارت `CopyField` واحد: منه ترسم البلاطة أو الصفّ
+// تسميتها وقيمتها، ومنه يُنسخ بالضغط المطوّل، ومنه يبني «نسخ كلّ
+// المعلومات» في صفحة المشترك سطوره — فلا تختلف تسميةٌ ولا وحدة.
+
+CopyField _ontRx(OntOpticalInfo o) => CopyField('RX Power', '${o.rxPower} dBm');
+
+CopyField _ontTx(OntOpticalInfo o) => CopyField('TX Power', '${o.txPower} dBm');
+
+CopyField _ontVoltage(OntOpticalInfo o) =>
+    CopyField('الفولتية', '${o.voltage} mV');
+
+CopyField _ontTemp(OntOpticalInfo o) =>
+    CopyField('الحرارة', '${o.temperature} °C');
+
+const _ontKind = CopyField('نوع الجهاز', 'Huawei ONT');
+
+/// «--» يرسله الـONT حين لا حالة — ليست قيمة.
+bool _ontHasFiber(OntOpticalInfo o) =>
+    o.sendStatus.trim().isNotEmpty && o.sendStatus.trim() != '--';
+
+CopyField _ontFiber(OntOpticalInfo o) => CopyField('حالة الليف', o.sendStatus);
+
+CopyField _ubntSignal(UbiquitiStatus u) =>
+    CopyField('الإشارة', '${u.signalDbm} dBm');
+
+CopyField _ubntCcq(UbiquitiStatus u) => CopyField('CCQ', '${u.ccqPercent}%');
+
+CopyField _ubntKind(UbiquitiStatus u) => CopyField(
+      'نوع الجهاز',
+      u.hostname.isEmpty ? 'Ubiquiti' : '${u.hostname} (UBNT)',
+    );
+
+CopyField _ubntFirmware(UbiquitiStatus u) => CopyField('الإصدار', u.firmware);
+
+CopyField _ubntSsid(UbiquitiStatus u) => CopyField('SSID', u.ssid);
+
+CopyField _ubntUptime(UbiquitiStatus u) => CopyField(
+      'مدّة التشغيل',
+      _DeviceProbeCardState._uptime(u.uptimeSeconds ?? 0),
+    );
+
+bool _ubntHasRates(UbiquitiStatus u) =>
+    (u.txRateKbps ?? 0) > 0 || (u.rxRateKbps ?? 0) > 0;
+
+CopyField _ubntRates(UbiquitiStatus u) => CopyField(
+      'TX / RX',
+      _DeviceProbeCardState._ratePair(u.txRateKbps, u.rxRateKbps),
+    );
+
+CopyField _ubntPeerMac(UbiquitiStatus u) =>
+    CopyField('Peer MAC', u.peerMac ?? '');
+
+/// «ETH0 · 100 Mbps» — نصّ حبّة المنفذ كما تُرسم.
+String _lanPortText(LanPort p) =>
+    '${p.label} · ${p.plugged ? p.displaySpeed : 'مفصول'}';
+
+CopyField _lanPortsField(List<LanPort> ports) => CopyField(
+      'المنافذ',
+      ports.map(_lanPortText).join('، '),
+      noun: 'حالة المنافذ',
+    );
+
+/// ملاحظة المدير على جهاز المشترك (إعداد الجهاز) — سطر الكارت الكهرمانيّ.
+CopyField deviceNoteField(String notes) =>
+    CopyField('ملاحظة الجهاز', notes.trim(), noun: 'الملاحظة');
+
+/// قراءات الجهاز بتسميات الكارت ووحداته — نوع الجهاز أوّلاً ثمّ قراءاته —
+/// لـ«نسخ كلّ المعلومات».
+///
+/// ⚠️ بلا الترافيك اللحظيّ: معدّلُ ثانيةٍ يكذب في رسالةٍ تُقرأ بعد دقيقة.
+/// (بلاطته تُنسخ وحدها بالضغط المطوّل لمن أراد اللحظة نفسها.)
+///
+/// و[at] وقت القراءة يُذكر معها — قراءةٌ عمرها ساعة لا تُرسَل كأنّها الآن.
+List<CopyField> deviceCopyFields(DeviceHealthSnapshot snap, {DateTime? at}) {
+  final fields = <CopyField>[];
+  final ont = snap.ont;
+  final u = snap.ubnt;
+  if (snap.kind == DeviceKind.ont && ont != null) {
+    fields.addAll([
+      _ontKind,
+      _ontRx(ont),
+      _ontTx(ont),
+      _ontVoltage(ont),
+      _ontTemp(ont),
+      if (_ontHasFiber(ont)) _ontFiber(ont),
+    ]);
+  } else if (snap.kind == DeviceKind.ubiquiti && u != null) {
+    fields.addAll([
+      _ubntKind(u),
+      if (u.signalDbm != null) _ubntSignal(u),
+      if (u.ccqPercent != null) _ubntCcq(u),
+      if (u.firmware.isNotEmpty) _ubntFirmware(u),
+      if (u.ssid.isNotEmpty) _ubntSsid(u),
+      if ((u.uptimeSeconds ?? 0) > 0) _ubntUptime(u),
+      if (_ubntHasRates(u)) _ubntRates(u),
+      if (u.peerMac != null && u.peerMac!.isNotEmpty) _ubntPeerMac(u),
+      if (u.lanPorts.isNotEmpty) _lanPortsField(u.lanPorts),
+    ]);
+  }
+  if (fields.isNotEmpty && at != null) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    fields.add(CopyField(
+      'وقت قراءة الجهاز',
+      '${at.year}/${two(at.month)}/${two(at.day)} '
+          '${two(at.hour)}:${two(at.minute)}',
+    ));
+  }
+  return fields;
 }

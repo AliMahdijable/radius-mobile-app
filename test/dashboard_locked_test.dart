@@ -45,7 +45,8 @@ void main() {
     // الرصيد + الإيرادات بطاقتان مقفلتان، والنشاطات إطارها المقفل.
     expect(find.byType(LockedCard), findsNWidgets(2));
     expect(activitiesLocked, findsOneWidget);
-    // لا «الكارتات» تحت رصيده المقفل — ليست ميزة ايرث لنك.
+    // لا «الكارتات» تحت رصيده المقفل: بلا تفعيلٍ ولا تمديد لا يملك المخزون
+    // (الخادم يردّه 403) — فلا نداء ملخّصٍ أصلاً (أدناه).
     expect(find.textContaining('340'), findsNothing);
     expect(
         find.byType(LockedCard).evaluate().length +
@@ -58,6 +59,8 @@ void main() {
     expect(paths.contains('/api/reports/finance'), isFalse);
     expect(paths.contains('/api/activities/daily-activations'), isFalse);
     expect(paths.contains('/api/v2/admin-widgets'), isFalse);
+    expect(paths.contains('/api/v2/cards/summary'), isFalse,
+        reason: 'المخزون بصلاحيّة التفعيل/التمديد وحدها:\n$paths');
     expect(paths.contains('→ 403'), isFalse,
         reason: 'نداءٌ يعرف الخادم أنّه سيرفضه:\n$paths');
 

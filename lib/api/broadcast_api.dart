@@ -376,6 +376,8 @@ class BroadcastVariables {
     (token: '{subscriber_name}', label: 'اسم المشترك'),
     (token: '{firstname}', label: 'الاسم الأول'),
     (token: '{username}', label: 'اسم المستخدم'),
+    // رمز وكيل المُرسِل — الخادم يملؤه مرّةً للبثّ كلّه (وسيط البوّابة §10).
+    (token: '{agent_code}', label: 'رمز الوكيل'),
     (token: '{package_name}', label: 'الباقة'),
     (token: '{expiry_date}', label: 'تاريخ الانتهاء'),
     (token: '{days_remaining}', label: 'الأيام المتبقّية'),

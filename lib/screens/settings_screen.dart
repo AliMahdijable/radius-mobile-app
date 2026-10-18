@@ -261,9 +261,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 builder: (_, st, __) => _Row(
                   icon: Icons.key_outlined,
                   label: 'باسورد الإيداع',
-                  trailing: st == null
-                      ? null
-                      : (st.saved ? 'محفوظ' : 'غير محفوظ'),
+                  trailing:
+                      st == null ? null : (st.saved ? 'محفوظ' : 'غير محفوظ'),
                   onTap: () => showElDepositPasswordSheet(context),
                 ),
               ),
@@ -313,19 +312,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () => _openPrinterFormatPicker(context),
               ),
             ),
-            // قوالب الطباعة (الوصولات) — ايرث لنك: مخفيّة (غير مدعومة، البند ٤).
-            if (!ProviderService.isEarthlink) ...[
-              const SizedBox(height: Sp.xs),
-              _Row(
-                icon: Icons.receipt_long_outlined,
-                label: 'settings.print_templates'.tr(),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const PrintTemplatesScreen(),
-                  ),
+            // قوالب الطباعة (الوصولات) — لكلّ الشركات. كانت مخفيّةً لايرث لنك
+            // (١٤ أكتوبر) لأنّ بوّابة الخادم ابتلعت `/api/print-templates`؛
+            // المعالج قاعدتنا وحدها فمُرِّر (تدقيق ١٨ أكتوبر، الدفعة ①).
+            const SizedBox(height: Sp.xs),
+            _Row(
+              icon: Icons.receipt_long_outlined,
+              label: 'settings.print_templates'.tr(),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const PrintTemplatesScreen(),
                 ),
               ),
-            ],
+            ),
             const SizedBox(height: Sp.md),
             _SectionLabel('settings.app'.tr()),
             ValueListenableBuilder<ThemeMode>(
@@ -360,15 +359,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(height: Sp.xs),
-            _Row(
-              icon: Icons.notifications_none_rounded,
-              label: 'settings.notifications'.tr(),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const NotificationsSettingsScreen(),
+            // موظّف ايرث لنك: الخادم يرفض حفظ التفضيلات بلا settings.edit، وهو مفتاحٌ
+            // لا يُمنح لدوره — فالصفّ مخفيّ له ([permShown])، بدل «لا تملك صلاحية»
+            // حمراء عند كلّ مفتاح. المالك وموظّف الساس كما كانا.
+            if (permShown(const ['settings.edit']))
+              _Row(
+                icon: Icons.notifications_none_rounded,
+                label: 'settings.notifications'.tr(),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const NotificationsSettingsScreen(),
+                  ),
                 ),
               ),
-            ),
             const SizedBox(height: Sp.md),
             _SectionLabel('settings.about'.tr()),
             _Row(

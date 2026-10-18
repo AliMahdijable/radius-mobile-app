@@ -121,6 +121,21 @@ class MikrotikApi {
         }
       }
 
+      // أعضاء البريدجات — للّوحة المفصّلة وحدها (قسم البريدجات): جدولٌ صغير بطلبٍ واحد،
+      // ولا يُطلب إلّا إن وُجد بريدج، ولا في الوضع الخفيف (بطاقات القائمة لا تعرض الأعضاء).
+      final bridgePorts = <String, List<String>>{};
+      if (!vitalsOnly && interfaceRows.any((r) => r['type'] == 'bridge')) {
+        try {
+          final rows = await client.query([
+            '/interface/bridge/port/print',
+            '=.proplist=interface,bridge,disabled',
+          ]);
+          bridgePorts.addAll(parseBridgePorts(rows));
+        } catch (_) {
+          // صلاحيّة ناقصة أو إصدارٌ قديم — يبقى القسم بلا أعضاء، والترافيك يُعرض كما هو.
+        }
+      }
+
       if (resourceRows.isEmpty) {
         throw MikrotikBinaryException(
             'لم يرجع الراوتر معلومات system/resource');
@@ -239,6 +254,7 @@ class MikrotikApi {
         pppActiveCount: pppRows.length,
         wirelessInterfaces: const [], // Tier 2 يملؤها
         wirelessClients: const [],
+        bridgePorts: bridgePorts,
       );
 
       // ⚡ يُطلق callback الآن — UI يعرض CPU/RAM/interfaces فوراً
@@ -553,6 +569,20 @@ class MikrotikApi {
     return 'خطأ اتصال: $msg';
   }
 
+  /// صفوف /interface/bridge/port ← اسم البريدج: منافذه (بلا المعطّلة)، بترتيبها في الراوتر.
+  static Map<String, List<String>> parseBridgePorts(
+      List<Map<String, String>> rows) {
+    final out = <String, List<String>>{};
+    for (final r in rows) {
+      final br = (r['bridge'] ?? '').trim();
+      final port = (r['interface'] ?? '').trim();
+      if (br.isEmpty || port.isEmpty) continue;
+      if ((r['disabled'] ?? '').toLowerCase() == 'true') continue;
+      (out[br] ??= <String>[]).add(port);
+    }
+    return out;
+  }
+
   static int _asInt(dynamic v) {
     if (v == null) return 0;
     if (v is int) return v;
@@ -734,6 +764,10 @@ class MikrotikStats {
   final List<MikrotikWireless> wirelessInterfaces;
   final List<MikrotikWirelessClient> wirelessClients;
 
+  /// أعضاء كلّ بريدج: اسم البريدج ← منافذه (من /interface/bridge/port). فارغٌ إن لا بريدج،
+  /// أو في الوضع الخفيف (vitalsOnly) حيث لا تُعرض المنافذ.
+  final Map<String, List<String>> bridgePorts;
+
   const MikrotikStats({
     required this.cpuLoad,
     required this.memUsedPercent,
@@ -754,9 +788,18 @@ class MikrotikStats {
     required this.pppActiveCount,
     this.wirelessInterfaces = const [],
     this.wirelessClients = const [],
+    this.bridgePorts = const {},
   });
 
   bool get hasWireless => wirelessInterfaces.isNotEmpty;
+
+  /// البريدج الذي ينتمي له المنفذ (أو null).
+  String? bridgeOf(String port) {
+    for (final e in bridgePorts.entries) {
+      if (e.value.contains(port)) return e.key;
+    }
+    return null;
+  }
 
   /// 2026-08-20: هل هذا الجهاز AP (بمعنى يخدم عملاء)؟
   /// نستعمل هذا لعرض قسم "العملاء" حتى لو الحالة صفر (بدل ما نخفيه كلياً).
@@ -794,6 +837,7 @@ class MikrotikStats {
         pppActiveCount: pppActiveCount ?? this.pppActiveCount,
         wirelessInterfaces: wirelessInterfaces ?? this.wirelessInterfaces,
         wirelessClients: wirelessClients ?? this.wirelessClients,
+        bridgePorts: bridgePorts,
       );
   int get downInterfacesCount =>
       interfaces.where((i) => !i.running && !i.disabled).length;

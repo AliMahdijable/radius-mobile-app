@@ -42,6 +42,23 @@ class ProviderService {
   /// الساس الحاليّ EarthLink؟ المصدر الوحيد لحجب شاشات البند ٤ الخاصّة به.
   static bool get isEarthlink => _provider == 'earthlink';
 
+  /// المشروع الوطنيّ (FTTH، admin.ftth.iq) — `provider:'ftth'` من `/api/auth/me`.
+  /// ⚠️ الكلمة الحرفيّة في الردّ لا بادئة المعرّف: رمز شركته `ftth-iq`، أمّا
+  /// `ftth` في دليل الشركات فساس SAS4 حقيقيّ (فايبر الجزيرة) ومدراؤه بلا provider.
+  static bool get isFtth => _provider == 'ftth';
+
+  /// للشركة بوّابة مشتركين (تطبيق MyServices)؟ وسيط البوّابة (١٨ أكتوبر،
+  /// الخادم fdcc2d7) يخدم شركات SAS4 كلّها **وايرث لنك** برمز الوكيل وQR؛
+  /// وFTTH وحده بلا بوّابة بعد (الخادم لا يصدر له رمز وكيل) — فإعداداتها
+  /// تُحفظ ولا يقرؤها أحد (تدقيق البوّابة ٢٠٢٦-١٠-١٧ §2.7).
+  static bool get hasSubscriberPortal => !isFtth;
+
+  /// رمز QR/رابط «معلومات المشترك» من نافذة المشترك؟ SAS4 وحده بعد: بطاقة
+  /// الرابط (`/api/user-info/<رمز>`) لا تقرأ ايرث لنك (الخادم يردّ رمزه «غير
+  /// صالح»)، وتطبيق المشترك المنشور (2.0.3) يدخل بها. والدخول بـQR لايرث لنك
+  /// يعمل من تطبيق 2.0.7 وحده (`/api/portal/qr-login`) — فيُفتح هنا معه.
+  static bool get hasPortalQrCard => !isEarthlink && !isFtth;
+
   /// يُستعاد المزوّد المحفوظ للذاكرة — مرّةً عند الإقلاع (`main`/Splash).
   static Future<void> init() async {
     if (_loaded) return;

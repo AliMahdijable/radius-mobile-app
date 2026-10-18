@@ -35,6 +35,7 @@ class SubAction {
     this.meta,
     this.busy = false,
     this.locked = false,
+    this.unavailable,
   });
 
   final IconData icon;
@@ -43,6 +44,14 @@ class SubAction {
   /// `null` → الصفّ يظهر معطّلاً (رماديّ، لا يستجيب). نستعمله حين
   /// تنقص `sub.idx` بدل إخفاء الإجراء تماماً — الاختفاء يربك المدير.
   final VoidCallback? onTap;
+
+  /// عمليّةٌ يمنعها مزوّد الساس نفسه (لا صلاحيّةٌ ناقصة) — حذف مشترك ايرث
+  /// لنك: الشكل المقفل نفسه، ونقرته هذا السبب مكان «اطلبها من مديرك».
+  /// يتقدّم على [locked]: لا صلاحيّة تفتح ما لا يسمح به المزوّد.
+  final String? unavailable;
+
+  /// مقفلٌ بأيّ سبب — صلاحيّةً ([locked]) أو مزوّداً ([unavailable]).
+  bool get isLocked => locked || unavailable != null;
 
   /// لون الأيقونة والنصّ. الافتراضي `brandAccent` للإجراءات العاديّة؛
   /// مرّرْ `AppColors.error` لمجموعة الخطر و`warningFill` للتعطيل.
@@ -110,7 +119,7 @@ class _ActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final locked = action.locked;
+    final locked = action.isLocked;
     final enabled = !locked && action.onTap != null && !action.busy;
     final color =
         enabled ? (action.color ?? AppColors.brandAccent) : AppColors.textHint;
@@ -119,7 +128,8 @@ class _ActionTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(R.lg),
       child: InkWell(
         onTap: locked
-            ? () => showNoPermission(context, action: true)
+            ? () => showNoPermission(context,
+                action: true, message: action.unavailable)
             : (enabled ? action.onTap : null),
         borderRadius: BorderRadius.circular(R.lg),
         child: Ink(
@@ -166,12 +176,18 @@ class _ActionTile extends StatelessWidget {
     if (!locked) return tile;
     return Semantics(
       button: true,
-      label: 'locked.a11y'.tr(args: [action.label]),
+      label: _lockedLabel(action),
       excludeSemantics: true,
       child: tile,
     );
   }
 }
+
+/// اسم الإجراء المقفل لقارئ الشاشة: «حذف — مقفل»، أو بسبب المزوّد
+/// «حذف — ايرث لنك لا تسمح بحذف المشترك».
+String _lockedLabel(SubAction a) => a.unavailable == null
+    ? 'locked.a11y'.tr(args: [a.label])
+    : '${a.label} — ${a.unavailable}';
 
 /// ═══════════════ زرّ الإجراء الأساسي أسفل الصفحة ═══════════════
 ///
@@ -346,14 +362,15 @@ class _ActionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final locked = action.locked;
+    final locked = action.isLocked;
     final enabled = !locked && action.onTap != null && !action.busy;
     final color =
         enabled ? (action.color ?? AppColors.textBody) : AppColors.textHint;
     final row = InkWell(
       // المقفل لا يغلق الشيت: الرسالة تطفو فوقه ويبقى المدير في مكانه.
       onTap: locked
-          ? () => showNoPermission(context, action: true)
+          ? () => showNoPermission(context,
+              action: true, message: action.unavailable)
           : enabled
           ? () {
               // نغلق الشيت أوّلاً ثمّ ننفّذ — كلّ إجراء تقريباً يفتح شيتاً
@@ -409,7 +426,7 @@ class _ActionRow extends StatelessWidget {
     if (!locked) return row;
     return Semantics(
       button: true,
-      label: 'locked.a11y'.tr(args: [action.label]),
+      label: _lockedLabel(action),
       excludeSemantics: true,
       child: row,
     );

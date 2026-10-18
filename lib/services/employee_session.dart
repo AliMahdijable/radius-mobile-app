@@ -113,10 +113,13 @@ class EmployeeSession {
     }
   }
 
-  /// من المعترض عند `401 {code:'SESSION_SUPERSEDED'}` — قبل المسح والإشارة.
-  static void noteSuperseded(String? serverMessage) {
+  /// من المعترض عند `401 {code}` لجلسة موظّفٍ أنهاها الخادم (جهازٌ آخر،
+  /// تعطيل، حذف) — قبل المسح والإشارة. [fallback] نصّ الرمز إن لم يُرسل
+  /// الخادم رسالة.
+  static void noteSuperseded(String? serverMessage,
+      {String fallback = supersededMessage}) {
     final m = serverMessage?.trim() ?? '';
-    _kickMessage = m.isNotEmpty ? m : supersededMessage;
+    _kickMessage = m.isNotEmpty ? m : fallback;
   }
 
   /// سبب الطرد — يُقرأ **ولا يُستهلك**: موجة ٤٠١ متزامنة تُطلق إشارة الطرد

@@ -166,10 +166,13 @@ class _AddSheetState extends State<_AddSheet> {
     // Permission-aware parent: if the admin can pick parent AND
     // chose one in the dropdown, use it; otherwise fall back to
     // their own admin id (default for sub-managers without the
-    // canAccessManagers permission).
+    // canAccessManagers permission). A remote-SAS session stores its
+    // id qualified («next-gen:175») — the SAS wants the number after
+    // the last colon (int.tryParse on the whole id was null ⇒ every
+    // remote sub-manager got «تعذّر تحديد المدير الأصلي»).
     final parentId = _canPickParent && _parentId != null
         ? _parentId
-        : int.tryParse(adminId ?? '');
+        : int.tryParse((adminId ?? '').split(':').last);
     if (parentId == null) {
       if (!mounted) return;
       showSheetSnack(context, 'تعذّر تحديد المدير الأصلي — أعد تسجيل الدخول',

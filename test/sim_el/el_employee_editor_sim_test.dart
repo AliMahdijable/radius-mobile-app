@@ -16,8 +16,9 @@ const _addLabel = 'إضافة مشترك';
 const _addHint =
     'بالرصيد (بباسورد الإيداع — يُخصم من رصيد الوكيل) أو بكارت أو تجريبي';
 
-/// كتالوج الخادم: مفاتيح ايرث لنك ومعها ما لا يخصّها (مدراء، أجهزة، إعدادات،
-/// واتساب عامّ) — يجب ألّا يظهر هذا الأخير في محرّر ايرث لنك.
+/// كتالوج الخادم: مفاتيح ايرث لنك ومعها ما لا يخصّها (مدراء، إعدادات، واتساب
+/// عامّ) — يجب ألّا يظهر هذا الأخير في محرّر ايرث لنك. والأجهزة (`devices.*`)
+/// ممّا يُمنح لموظّفيها منذ 3.0.0+157 (يحرسها `el_parity_batch1_test.dart`).
 final _catalog = PermissionsCatalog.fromJson({
   'permissions': {
     'subscribers.view': {'label': 'عرض المشتركين', 'category': 'subscribers'},
@@ -49,7 +50,7 @@ final _catalog = PermissionsCatalog.fromJson({
     'reports.activity_log': {'label': 'سجلّ النشاط', 'category': 'reports'},
     'settlements.view': {'label': 'عرض التسويات', 'category': 'settlements'},
     'settlements.create': {'label': 'إنشاء تسوية', 'category': 'settlements'},
-    // ليست لموظّفي ايرث لنك:
+    // ليست لموظّفي ايرث لنك (عدا الأجهزة — تُمنح، وفئتها أسفل التبويب):
     'managers.view': {'label': 'عرض المدراء الفرعيّين', 'category': 'managers'},
     'devices.view': {'label': 'عرض الأجهزة', 'category': 'devices'},
     'settings.manage': {'label': 'إدارة الإعدادات', 'category': 'settings'},
@@ -178,10 +179,10 @@ void main() {
     expect(find.text(_addLabel), findsOneWidget);
     expect(find.text(_addHint), findsOneWidget);
     expect(find.text('subscribers.add'), findsOneWidget);
-    // ما ليس لموظّفي ايرث لنك لا يُعرض.
+    // ما ليس لموظّفي ايرث لنك لا يُعرض. (و«عرض الأجهزة» ليس منها: يُمنح،
+    // وكان هنا خطأً يمرّ لأنّ صفّه أسفل القائمة الكسولة فلا يُبنى.)
     for (final hidden in [
       'عرض المدراء الفرعيّين',
-      'عرض الأجهزة',
       'إدارة الإعدادات',
       'إرسال رسائل واتساب عامّة',
     ]) {
@@ -204,7 +205,8 @@ void main() {
     await t.tap(find.text('موظّف عام'));
     await t.pumpAndSettle();
     expect(find.text('يرى ويعمل كلّ ما يُسمح به لموظّف'), findsOneWidget);
-    expect(find.textContaining('الصلاحيات (26)'), findsOneWidget);
+    // ٢٧ = عمليّات ايرث لنك كلّها (+ موقع المشترك، المجموعة ② ١٨ أكتوبر).
+    expect(find.textContaining('الصلاحيات (27)'), findsOneWidget);
     await reveal(t, find.text(_addHint));
     expect(addSwitch(t).value, isTrue, reason: 'العامّ يشمل الإضافة');
     await simCheck(t, v, _screen, 'preset_general', allow: [_permKey]);

@@ -3,6 +3,25 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+/// ترويسة الوصل وتذييله من مصمّم الويب (`receipt_settings`) — يمرّرها
+/// [ReceiptService] لحساب ايرث لنك. **`null` = الوصل كما كان حرفيّاً** (الساس).
+///
+/// [footer]: `null` ← سطر الشكر المعتاد · فارغٌ ← بلا تذييل (أخفاه المالك) ·
+/// غيره ← نصّ المالك.
+@immutable
+class ReceiptBranding {
+  const ReceiptBranding({this.address, this.phone, this.footer, this.logo});
+  final String? address;
+  final String? phone;
+  final String? footer;
+
+  /// PNG/JPEG — ويُسقَط وحده إن تعذّر رسمه (لا يُسقط الطباعة).
+  final Uint8List? logo;
+
+  ReceiptBranding withoutLogo() =>
+      ReceiptBranding(address: address, phone: phone, footer: footer);
+}
+
 /// خدمة طباعة الوصولات — تستعمل نظام الطباعة الأصلي للـOS
 /// (Android Print Framework + iOS AirPrint). النظام:
 ///   • يكتشف طابعات الشبكة تلقائياً (WiFi/AirPrint/mDNS)
@@ -58,17 +77,34 @@ class PrintService {
     required String title,
     String documentName = 'Receipt',
     String? companyName,
+    ReceiptBranding? branding,
   }) async {
     try {
       return await Printing.layoutPdf(
         name: documentName,
         format: format,
-        onLayout: (fmt) async => _buildPdf(
-          data: data,
-          format: fmt,
-          title: title,
-          companyName: companyName,
-        ),
+        onLayout: (fmt) async {
+          try {
+            return await _buildPdf(
+              data: data,
+              format: fmt,
+              title: title,
+              companyName: companyName,
+              branding: branding,
+            );
+          } catch (e) {
+            // شعارٌ لا يُرسم (صورةٌ تالفة رغم ترويستها) لا يُسقط الوصل كلّه.
+            if (branding?.logo == null) rethrow;
+            if (kDebugMode) debugPrint('[PrintService] logo dropped: $e');
+            return _buildPdf(
+              data: data,
+              format: fmt,
+              title: title,
+              companyName: companyName,
+              branding: branding!.withoutLogo(),
+            );
+          }
+        },
       );
     } catch (e) {
       if (kDebugMode) debugPrint('[PrintService] printReceipt failed: $e');
@@ -136,6 +172,7 @@ class PrintService {
     required PdfPageFormat format,
     required String title,
     String? companyName,
+    ReceiptBranding? branding,
   }) async {
     // 2026-08-30: IBM Plex Sans Arabic بدل Cairo — الوصل المطبوع يخرج
     // بخطّ الشاشة نفسه. PdfGoogleFonts يجيبه من CDN ويكاش؛ لو الجهاز
@@ -156,6 +193,16 @@ class PrintService {
 
     final doc = pw.Document(theme: theme);
     final isPos = format.width <= PdfPageFormat.roll80.width + 5;
+    // ترويسة الصورة تُقرأ هنا (نوعٌ مجهول يرمي فوراً ← بلا شعار).
+    pw.MemoryImage? logo;
+    final logoBytes = branding?.logo;
+    if (logoBytes != null) {
+      try {
+        logo = pw.MemoryImage(logoBytes);
+      } catch (e) {
+        if (kDebugMode) debugPrint('[PrintService] logo skipped: $e');
+      }
+    }
 
     doc.addPage(
       pw.Page(
@@ -166,23 +213,52 @@ class PrintService {
         textDirection: pw.TextDirection.rtl,
         build: (context) => isPos
             ? _buildPosLayout(
-                data: data, title: title, companyName: companyName)
+                data: data,
+                title: title,
+                companyName: companyName,
+                branding: branding,
+                logo: logo)
             : _buildA4Layout(
-                data: data, title: title, companyName: companyName),
+                data: data,
+                title: title,
+                companyName: companyName,
+                branding: branding,
+                logo: logo),
       ),
     );
     return doc.save();
+  }
+
+  /// سطور ما تحت اسم المحلّ (العنوان · الهاتف) — فارغةٌ بلا ترويسة.
+  static List<String> _shopLines(ReceiptBranding? b) => [
+        for (final v in [b?.address, b?.phone])
+          if (v != null && v.trim().isNotEmpty) v.trim(),
+      ];
+
+  /// سطر الشكر أو نصّ المالك، و`null` إن أخفى التذييل.
+  static String? _footerText(ReceiptBranding? b, String fallback) {
+    final f = b?.footer;
+    if (f == null) return fallback;
+    final t = f.trim();
+    return t.isEmpty ? null : t;
   }
 
   static pw.Widget _buildPosLayout({
     required Map<String, String> data,
     required String title,
     String? companyName,
+    ReceiptBranding? branding,
+    pw.MemoryImage? logo,
   }) {
+    final footer = _footerText(branding, 'شكراً لتعاملكم معنا');
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.stretch,
       children: [
         // Header
+        if (logo != null) ...[
+          pw.Center(child: pw.Image(logo, height: 42, fit: pw.BoxFit.contain)),
+          pw.SizedBox(height: 4),
+        ],
         if (companyName != null && companyName.trim().isNotEmpty)
           pw.Center(
             child: pw.Text(
@@ -190,6 +266,12 @@ class PrintService {
               style:
                   pw.TextStyle(fontSize: 12.5, fontWeight: pw.FontWeight.bold),
             ),
+          ),
+        for (final line in _shopLines(branding))
+          pw.Center(
+            child: pw.Text(line,
+                style: const pw.TextStyle(fontSize: 9.5),
+                textAlign: pw.TextAlign.center),
           ),
         pw.SizedBox(height: 4),
         pw.Center(
@@ -226,15 +308,19 @@ class PrintService {
         if ((data['debt_amount'] ?? '0') != '0')
           _posRow('الدين', '${data['debt_amount']} د.ع'),
         _posRow('الانتهاء', data['expiry_date']),
-        pw.SizedBox(height: 8),
-        pw.Divider(thickness: 0.5),
-        pw.SizedBox(height: 4),
-        pw.Center(
-          child: pw.Text(
-            'شكراً لتعاملكم معنا',
-            style: pw.TextStyle(fontSize: 9.5, fontStyle: pw.FontStyle.italic),
+        if (footer != null) ...[
+          pw.SizedBox(height: 8),
+          pw.Divider(thickness: 0.5),
+          pw.SizedBox(height: 4),
+          pw.Center(
+            child: pw.Text(
+              footer,
+              style:
+                  pw.TextStyle(fontSize: 9.5, fontStyle: pw.FontStyle.italic),
+              textAlign: pw.TextAlign.center,
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -266,8 +352,12 @@ class PrintService {
     required Map<String, String> data,
     required String title,
     String? companyName,
+    ReceiptBranding? branding,
+    pw.MemoryImage? logo,
   }) {
     const brand = PdfColor.fromInt(0xFF2D5F47);
+    final footer = _footerText(branding, 'شكراً لتعاملكم معنا');
+    final shopLines = _shopLines(branding);
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.stretch,
       children: [
@@ -282,6 +372,11 @@ class PrintService {
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.stretch,
             children: [
+              if (logo != null) ...[
+                pw.Center(
+                    child: pw.Image(logo, height: 64, fit: pw.BoxFit.contain)),
+                pw.SizedBox(height: 8),
+              ],
               if (companyName != null && companyName.trim().isNotEmpty)
                 pw.Text(
                   companyName,
@@ -291,6 +386,15 @@ class PrintService {
                       color: brand),
                   textAlign: pw.TextAlign.center,
                 ),
+              if (shopLines.isNotEmpty) ...[
+                pw.SizedBox(height: 4),
+                pw.Text(
+                  shopLines.join('  ·  '),
+                  style: const pw.TextStyle(
+                      fontSize: 10.5, color: PdfColors.grey700),
+                  textAlign: pw.TextAlign.center,
+                ),
+              ],
               pw.SizedBox(height: 6),
               pw.Text(
                 title,
@@ -333,14 +437,17 @@ class PrintService {
           ['تاريخ الانتهاء', data['expiry_date'] ?? '—'],
         ]),
         pw.Spacer(),
-        pw.Divider(color: brand, thickness: 0.5),
-        pw.SizedBox(height: 8),
-        pw.Center(
-          child: pw.Text(
-            'شكراً لتعاملكم معنا',
-            style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey600),
+        if (footer != null) ...[
+          pw.Divider(color: brand, thickness: 0.5),
+          pw.SizedBox(height: 8),
+          pw.Center(
+            child: pw.Text(
+              footer,
+              style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey600),
+              textAlign: pw.TextAlign.center,
+            ),
           ),
-        ),
+        ],
       ],
     );
   }

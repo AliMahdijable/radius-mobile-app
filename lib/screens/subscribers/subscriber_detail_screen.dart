@@ -2,15 +2,17 @@ import 'dart:ui' as ui;
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/device_probe_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../api/whatsapp_api.dart';
+import '../../core/util/clipboard_helper.dart';
 import '../../core/util/format.dart';
 import '../../core/util/phone.dart';
+import '../../core/util/server_time.dart';
+import '../../core/widgets/copyable.dart';
 import '../../core/widgets/permission_locked.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/subscriber.dart';
@@ -18,11 +20,13 @@ import '../../services/app_resumed_signal.dart';
 import '../../services/connection_alerts.dart';
 import '../../services/permissions_service.dart';
 import '../../services/provider_service.dart';
+import '../../services/provider_limits.dart';
 import '../../services/subscriber_events.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../reports/account_statement_screen.dart';
+import '../reports/sessions_report_screen.dart';
 import 'sheets/activate_sheet.dart';
 import 'sheets/add_debt_sheet.dart';
 import 'sheets/location_sheets.dart';
@@ -39,6 +43,7 @@ import '../../api/device_config_api.dart';
 import 'widgets/device_chip_micro.dart';
 import '../../services/subscriber_refresh_signal.dart';
 import 'widgets/device_probe_card.dart';
+import 'widgets/last_seen_card.dart';
 import 'widgets/subscriber_actions.dart';
 import 'connection_alert_flow.dart';
 
@@ -87,8 +92,21 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
 
   /// Password المشترك — يُحمَّل asynchronously من backend عند فتح الشاشة
   /// (SAS4 يحجبه في list endpoint، يرجعه فقط في /user/overview/{idx}).
-  /// null = قيد التحميل أو فشل. non-null = جاهز للعرض في _PasswordRow.
+  /// null = قيد التحميل أو فشل. non-null = جاهز للعرض في _HeroPassword.
   String? _subscriberPassword;
+
+  /// كلمة السرّ ظاهرةٌ الآن (العين مفتوحة). تعيش هنا لا في صفّها: «نسخ كلّ
+  /// المعلومات» يضمّها **حين تظهر وحدها** — من يرى النقاط لا يتوقّع أن
+  /// يلصق كلمة السرّ في محادثةٍ مع غيره.
+  bool _passwordVisible = false;
+
+  /// كارت الجهاز — منه يقرأ «نسخ كلّ المعلومات» ما يرسمه الآن
+  /// ([DeviceProbeCard.shownBy])، لا ما بقي في مخزن الفحص.
+  final _deviceCardKey = GlobalKey();
+
+  /// إعداد الجهاز الذي رُسم به كارت الاتّصال آخر مرّة (عنوانه المثبَّت).
+  /// يكتبه بانيه بلا `setState` — لا يُرسم منه شيء، يُقرأ لحظة النسخ وحدها.
+  DeviceConfig? _drawnConfig;
 
   /// Any operation (toggle / disconnect / template send / link gen)
   /// currently awaiting a server response. Drives the operations
@@ -219,6 +237,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             _SimpleAppBar(
               title: 'subscribers.detail_title'.tr(),
               onClose: () => Navigator.of(context).pop(),
+              onCopyAll: _copyAll,
             ),
             Expanded(
               child: RefreshIndicator(
@@ -239,7 +258,13 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                   ),
                   children: [
                     // الهيرو الجديد — كرت teal كبير مع 3 إحصاءات.
-                    _SubscriberHero(sub: sub, password: _subscriberPassword),
+                    _SubscriberHero(
+                      sub: sub,
+                      password: _subscriberPassword,
+                      passwordVisible: _passwordVisible,
+                      onTogglePassword: () =>
+                          setState(() => _passwordVisible = !_passwordVisible),
+                    ),
                     // بلوك الدين مباشرةً تحت بطاقة الهويّة كما في المخطّط
                     // (كان أسفل الصفحة بعد كارت الجهاز).
                     // ⚠️ تظهر دائماً — حتّى عند الصفر.
@@ -305,7 +330,10 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                     // قائمة، **أو** حين يوجد IP مثبَّت وإن كان مفصولاً —
                     // فالعنوان المثبَّت لا يزول بزوال الجلسة. وكان
                     // بطاقةً مستقلّة فأكل مساحةً لا يستحقّها لسطرٍ واحد.
-                    _LiveSessionCard(sub: sub),
+                    _LiveSessionCard(
+                      sub: sub,
+                      onDrawn: (cfg) => _drawnConfig = cfg,
+                    ),
                     // معلومات الجهاز (ONT/UBNT) — تظهر لأي مشترك غير معطَّل
                     // ولم ينتهِ اشتراكه. الـcard يجرّب:
                     //   1) SAS4 IP لو موجود
@@ -328,7 +356,12 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                     // ما زال في مكانه؟ هل نُقل إلى جارٍ؟ هل يُسحب منه
                     // إنترنت؟ وإخفاءُ الكارت عنه يمنع السؤال الذي
                     // يُطرح لأجله.
+                    //
+                    // وفوقه «آخر اتصال» لغير المتّصل: متى وآخر جهاز (MAC) —
+                    // كصفّ القائمة، لكلّ المزوّدين (المجموعة ② ١٨ أكتوبر).
+                    LastSeenCard(sub: sub),
                     DeviceProbeCard(
+                      key: _deviceCardKey,
                       ip: sub.ipAddress ?? '',
                       username: sub.username,
                     ),
@@ -363,6 +396,47 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  /// «نسخ كلّ المعلومات» — سطر «التسمية: القيمة» لكلّ ما في الكارت.
+  ///
+  /// ⚠️ بلا أيّ جلبٍ لحظة النسخ: ما في الذاكرة وحده — المشترك، وكلمة السرّ
+  /// إن جُلبت **وظهرت**، وما يرسمه كارتا الاتّصال والجهاز **الآن**. نسخٌ
+  /// ينتظر الشبكة يضيع نصفه إن أُغلقت الشاشة.
+  ///
+  /// 🐛 والمرسوم لا المخزَّن: كارت الجهاز يُبقي آخر قراءةٍ ناجحة إن فشل فحصٌ
+  /// بعدها والمخزن يحفظ الفشل، وجلبُ إعدادٍ فاشل يرسم الكارت بلا عنوانه
+  /// المثبَّت ويُبقي المخزن القديم — فكان المنسوخ يُسقط ما على الشاشة أو
+  /// يضيف ما ليس عليها. والمخزن احتياطٌ لكارتٍ لم يُركَّب بعد (خارج الشاشة):
+  /// هو ما سيرسمه حين يُركَّب.
+  Future<void> _copyAll() async {
+    final ip = sub.ipAddress?.trim() ?? '';
+    final config = _drawnConfig ?? DeviceConfigApi.peekConfig(sub.username);
+    final DeviceCardShown device;
+    if (DeviceProbeCard.shownBy(_deviceCardKey) case final shown?) {
+      device = shown;
+    } else {
+      final cached = DeviceProbeApi.peek(username: sub.username, ip: ip);
+      device = (snap: cached?.snap, at: cached?.at, notes: config?.notes);
+    }
+    final fields = subscriberCopyFields(
+      sub,
+      password: _subscriberPassword,
+      passwordVisible: _passwordVisible,
+      deviceConfig: config,
+      device: device,
+    );
+    final hasPassword = (_subscriberPassword ?? '').isNotEmpty;
+    await copyToClipboard(
+      context,
+      copyFieldsText(fields),
+      message: !hasPassword
+          ? 'copy.all_done'.tr()
+          : (_passwordVisible
+              ? 'copy.all_done_password'.tr()
+              : 'copy.all_done_password_hidden'.tr()),
+      duration: const Duration(seconds: 3),
     );
   }
 
@@ -732,6 +806,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   /// تعطيل) وما ظهر كزرّ أساسي (تجديد) لا يتكرّر هنا.
   List<SubActionGroup> _moreGroups() {
     final phone = sub.displayPhone;
+    // حذف المشترك يمنعه المزوّد (ايرث لنك) — السبب، أو `null` لشركات SAS4.
+    final deleteUnavailable = subscriberDeleteUnavailableReason();
     return <SubActionGroup>[
       SubActionGroup('subscribers.group_money'.tr(), [
         if (_shows('subscribers.add_debt'))
@@ -829,10 +905,20 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                 ? null
                 : () => _sendTemplate('subscriber_info'),
           ),
-        // رمز QR / رابط البوّابة — ايرث لنك: مخفيّ (بوّابة مشتركينا غير
-        // مهيّأةٍ لايرث لنك فالرمز يفشل، البند ٤) — المزوّد لا الصلاحيّة.
+        // «نسخ كلّ المعلومات» — أخو «إرسال المعلومات»: ذاك يرسلها بقالب،
+        // وهذا يضعها في الحافظة لتُلصق أينما شاء. بلا صلاحيّة: لا يُنسخ إلّا
+        // ما يُعرض له أصلاً (كلمة السرّ بمفتاحها وحين تظهر). وهو نفسه زرّ
+        // النسخ في رأس الشاشة؛ هنا باسمه لمن لا يعرف الأيقونة.
+        SubAction(
+          icon: LucideIcons.copy,
+          label: 'copy.all'.tr(),
+          onTap: _copyAll,
+        ),
+        // رمز QR / رابط البوّابة — ايرث لنك وFTTH: مخفيّ (بطاقة الرابط SAS4
+        // وحده، وQR ايرث لنك لتطبيق 2.0.7 وحده — [hasPortalQrCard]) — المزوّد
+        // لا الصلاحيّة.
         if (_shows('subscribers.send_whatsapp') &&
-            !ProviderService.isEarthlink)
+            ProviderService.hasPortalQrCard)
           SubAction(
             icon: LucideIcons.qrCode,
             label: 'subscribers.op_qr_login'.tr(),
@@ -880,6 +966,22 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                 ? null
                 : () => showMovementsSheet(context, sub),
           ),
+        // «سجلّ الجلسات» — تقرير الجلسات مبحوثاً باسم دخوله (كلّ الجلسات):
+        // SAS4 من UserSessions، وايرث لنك سجلّ هذا المشترك (usersession/user).
+        if (_shows('reports.sessions'))
+          SubAction(
+            icon: LucideIcons.wifi,
+            label: 'subscribers.op_sessions'.tr(),
+            locked: _locked('reports.sessions'),
+            onTap: _locked('reports.sessions')
+                ? null
+                : () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            SessionsReportScreen(initialUsername: sub.username),
+                      ),
+                    ),
+          ),
         if (_shows('reports.account_statement'))
           SubAction(
             icon: LucideIcons.fileText,
@@ -903,14 +1005,12 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           ),
         // 2026-08-26: يظهر إذا الموقع مُعيَّن (أيّ موظّف يفتحه بالخرائط)
         // أو الموظّف يملك صلاحيّة تعديله.
-        // ايرث لنك: `canEditLocation()` تُرجع false، فلا يُعرَض إلّا حين
-        // يوجد موقعٌ مخزَّن — عرضٌ على الخرائط فقط بلا حفظٍ (البند ٤).
-        // ٢٠٢٦-١٠-١٤: بلا موقعٍ ولا `subscribers.edit_location` (ساس) يبقى
-        // صفّ «إضافة موقع» مقفلاً؛ وايرث لنك يبقى مخفيّاً (مزوّدٌ لا صلاحيّة).
+        // ٢٠٢٦-١٠-١٤: بلا موقعٍ ولا `subscribers.edit_location` يبقى صفّ
+        // «إضافة موقع» مقفلاً. ١٨ أكتوبر: ولايرث لنك أيضاً — صار له مخزنٌ
+        // محلّيّ على خادمنا، فالقفل بالصلاحيّة وحدها كباقي الشركات.
         if (sub.hasLocation ||
             canEditLocation() ||
-            (!ProviderService.isEarthlink &&
-                _locked('subscribers.edit_location')))
+            _locked('subscribers.edit_location'))
           SubAction(
             icon: LucideIcons.mapPin,
             label: sub.hasLocation
@@ -931,9 +1031,19 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       // «فصل المستخدم» صعد إلى البلاطات السريعة — ولا يتكرّر هنا،
       // كما لا يتكرّر التمديد والتعديل والتعطيل.
       SubActionGroup('subscribers.group_danger'.tr(), [
-        // مقفلاً بلا أحمر (اللون للخطر الحيّ وحده)؛ ولا يُمنح لموظّف ايرث
-        // لنك أصلاً، فيبقى مخفيّاً عنده (`permShown`).
-        if (_shows('subscribers.delete'))
+        // ايرث لنك لا تسمح بحذف المشترك (قرار المستخدم ١٨ أكتوبر): الزرّ
+        // **بمكانه مقفلاً بالسبب** للمالك ولموظّفه — لا مخفيّاً، ولا «اطلبها
+        // من مديرك» (لا صلاحيّة تفتحه). بلا أحمر: اللون للخطر الحيّ وحده.
+        if (deleteUnavailable != null)
+          SubAction(
+            icon: LucideIcons.trash2,
+            label: 'common.delete'.tr(),
+            unavailable: deleteUnavailable,
+            onTap: null,
+          )
+        // شركات SAS4: مقفلاً بلا أحمر لمن لا يملك المفتاح (اللون للخطر الحيّ
+        // وحده)، ومخفيّاً لدورٍ لا يُمنحه (`permShown`).
+        else if (_shows('subscribers.delete'))
           SubAction(
             icon: LucideIcons.trash2,
             label: 'common.delete'.tr(),
@@ -975,12 +1085,124 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   }
 }
 
+/// «نسخ كلّ المعلومات» — كلّ ما في كارت المشترك، سطر «التسمية: القيمة»
+/// لكلّ معلومة، بالتسميات والصياغة نفسها التي ترسمها الكروت.
+///
+/// من الذاكرة وحدها، بلا أيّ جلب:
+///   • [password] تُضمّ حين تظهر وحدها ([passwordVisible]) — من يرى النقاط
+///     لا يتوقّع أن يلصق كلمة السرّ مع غيرها في محادثة.
+///   • [deviceConfig] الإعداد الذي رُسم به كارت الاتّصال: عنوانه المثبَّت.
+///   • [device] ما يرسمه كارت الجهاز: قراءته ووقتها وملاحظة المدير.
+///
+/// والترتيب ترتيب رسالة: المشترك والاشتراك أوّلاً، ثمّ الاتّصال والجهاز،
+/// ثمّ الموقع. وما لا قيمة له لا يظهر سطراً فارغاً.
+///
+/// ⚠️ تسميات الحقول المشتركة وصياغة المال وترتيبها هي نفسها في الموقع
+/// (`client-v2/src/lib/subscriber-info.ts`): السعر بعد الخصم، والرصيد
+/// بحالاته الثلاث، و«تابع إلى»، و«IP الجلسة». من يغيّر هنا يغيّر هناك.
+@visibleForTesting
+List<CopyField> subscriberCopyFields(
+  Subscriber sub, {
+  String? password,
+  bool passwordVisible = false,
+  DeviceConfig? deviceConfig,
+  DeviceCardShown? device,
+  DateTime? now,
+}) {
+  final last = sub.isOnline ? null : parseSasLocal(sub.lastOnline);
+  final notes = device?.notes?.trim() ?? '';
+  final snap = device?.snap;
+  return [
+    ..._SubscriberHero.copyFields(
+      sub,
+      password: password,
+      passwordVisible: passwordVisible,
+      now: now,
+    ),
+    ..._LiveSessionCard.copyFields(
+      sub,
+      pinned: _LiveSessionCard.pinnedIp(sub, deviceConfig),
+    ),
+    // وقت آخر اتّصالٍ مطلقاً لا «قبل ساعتين»: النصّ المنسوخ يُقرأ لاحقاً.
+    if (last != null)
+      CopyField('آخر اتصال', _SubscriberHero._dateTimeText(last),
+          noun: 'وقت آخر اتصال'),
+    if (snap != null) ...deviceCopyFields(snap, at: device?.at),
+    if (notes.isNotEmpty) deviceNoteField(notes),
+    if (sub.hasLocation)
+      CopyField(
+        'الموقع',
+        '${sub.latitude!.toStringAsFixed(6)},'
+            '${sub.longitude!.toStringAsFixed(6)}',
+        noun: 'الإحداثيّات',
+      ),
+    if (sub.hasManualAddressText) CopyField('العنوان', sub.addressRaw!.trim()),
+  ];
+}
+
 /// كارت «معلومات الاتصال» — كارت أبيض r20 بحدّ 1px وبلا ظلّ، رأسه
 /// أيقونة 18 بلون الـaccent + عنوان 14/w600 وحبّة «متصل منذ …» في
 /// الطرف، وجسمه ثلاث بلاطات غاطسة (#F7F8F5 / r14): تحميل · رفع · IP.
 class _LiveSessionCard extends StatelessWidget {
-  const _LiveSessionCard({required this.sub});
+  const _LiveSessionCard({required this.sub, this.onDrawn});
   final Subscriber sub;
+
+  /// يُبلَّغ في كلّ بناءٍ بالإعداد الذي رُسم به الكرت — فينسخ «نسخ كلّ
+  /// المعلومات» العنوانَ المثبَّت الذي على الشاشة. (جلبٌ فاشلٌ بعد انقضاء
+  /// مخزن الإعداد يرسم الثابت وحده ويُبقي في المخزن القديم.)
+  final ValueChanged<DeviceConfig?>? onDrawn;
+
+  /// العنوان المثبَّت: إعداد الجهاز أوّلاً، ثمّ الثابت المحجوز في الساس.
+  static String pinnedIp(Subscriber sub, DeviceConfig? config) {
+    final custom = config?.customIp?.trim() ?? '';
+    return custom.isNotEmpty ? custom : (sub.staticIp?.trim() ?? '');
+  }
+
+  /// جلسةٌ قائمة تستحقّ أرقامها — لا «متّصل» بلا أيّ أثر.
+  static bool hasSession(Subscriber sub) =>
+      sub.isOnline &&
+      ((sub.ipAddress ?? '').isNotEmpty ||
+          (sub.sessionTime ?? 0) > 0 ||
+          (sub.downloadBytes ?? 0) > 0 ||
+          (sub.uploadBytes ?? 0) > 0);
+
+  /// ما يرسمه الكرت بتسمياته — للنسخ المفرد والكلّيّ معاً.
+  static List<CopyField> copyFields(Subscriber sub, {required String pinned}) {
+    final live = hasSession(sub);
+    final ip = sub.ipAddress?.trim() ?? '';
+    final secs = live ? (sub.sessionTime ?? 0) : 0;
+    return [
+      if (secs > 0) _durationField(secs),
+      if (live) ...[
+        _downloadField(sub),
+        _uploadField(sub),
+        if (ip.isNotEmpty) _sessionIpField(ip),
+      ],
+      if (pinned.isNotEmpty) _pinnedIpField(pinned),
+    ];
+  }
+
+  static CopyField _sessionIpField(String ip) => CopyField('IP الجلسة', ip);
+
+  static CopyField _pinnedIpField(String ip) => CopyField('IP المثبَّت', ip);
+
+  static CopyField _durationField(int secs) => CopyField(
+        'subscribers.label_session_time'.tr(),
+        _formatDuration(secs),
+        noun: 'مدّة الاتصال',
+      );
+
+  static CopyField _downloadField(Subscriber sub) => CopyField(
+        'subscribers.label_download'.tr(),
+        _formatBytes(sub.downloadBytes ?? 0),
+        noun: 'التحميل',
+      );
+
+  static CopyField _uploadField(Subscriber sub) => CopyField(
+        'subscribers.label_upload'.tr(),
+        _formatBytes(sub.uploadBytes ?? 0),
+        noun: 'الرفع',
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -991,14 +1213,11 @@ class _LiveSessionCard extends StatelessWidget {
       builder: (_, __, ___) => FutureBuilder<DeviceConfig?>(
         future: DeviceConfigApi.fetchConfig(sub.username),
         builder: (context, snap) {
-          final pinned = snap.data?.customIp?.trim().isNotEmpty == true
-              ? snap.data!.customIp!.trim()
-              : (sub.staticIp?.trim() ?? '');
-          final hasSession = sub.isOnline &&
-              ((sub.ipAddress ?? '').isNotEmpty ||
-                  (sub.sessionTime ?? 0) > 0 ||
-                  (sub.downloadBytes ?? 0) > 0 ||
-                  (sub.uploadBytes ?? 0) > 0);
+          // ما يُرسم الآن بالضبط (أثناء جلبٍ جديد يبقى السابق مرسوماً).
+          // تسجيلٌ في حقلٍ لا `setState` — لا يُعاد بناء شيء.
+          onDrawn?.call(snap.data);
+          final pinned = pinnedIp(sub, snap.data);
+          final hasSession = _LiveSessionCard.hasSession(sub);
           // لا جلسةَ ولا عنوانَ مثبَّت ⇒ لا كرت. (كارتٌ فارغ يوحي
           // بقيمةٍ تعذّر جلبها، وهو أسوأ من غيابه.)
           if (!hasSession && pinned.isEmpty) return const SizedBox.shrink();
@@ -1052,38 +1271,42 @@ class _LiveSessionCard extends StatelessWidget {
                 Expanded(
                     child: Align(
                         alignment: AlignmentDirectional.centerEnd,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 11, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: AppColors.brandSoftBg,
-                            borderRadius: BorderRadius.circular(R.pill),
-                            border:
-                                Border.all(color: AppColors.brandSoftBorder),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 6,
-                                height: 6,
-                                decoration: BoxDecoration(
-                                  color: AppColors.successDot,
-                                  shape: BoxShape.circle,
+                        child: Copyable.field(
+                          _durationField(secs),
+                          radius: R.pill,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 11, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: AppColors.brandSoftBg,
+                              borderRadius: BorderRadius.circular(R.pill),
+                              border:
+                                  Border.all(color: AppColors.brandSoftBorder),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.successDot,
+                                    shape: BoxShape.circle,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 5),
-                              Flexible(
-                                child: Text(
-                                  'متصل منذ ${_formatDuration(secs)}',
-                                  style: AppType.bodyStrong(
-                                          color: AppColors.brandOnSoft)
-                                      .copyWith(fontWeight: FontWeight.w700),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                                const SizedBox(width: 5),
+                                Flexible(
+                                  child: Text(
+                                    'متصل منذ ${_formatDuration(secs)}',
+                                    style: AppType.bodyStrong(
+                                            color: AppColors.brandOnSoft)
+                                        .copyWith(fontWeight: FontWeight.w700),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ))),
             ],
@@ -1110,8 +1333,7 @@ class _LiveSessionCard extends StatelessWidget {
                 Expanded(
                   child: _SunkenTile(
                     icon: Icons.south_rounded,
-                    label: 'subscribers.label_download'.tr(),
-                    value: _formatBytes(sub.downloadBytes ?? 0),
+                    field: _downloadField(sub),
                     color: AppColors.success,
                   ),
                 ),
@@ -1119,8 +1341,7 @@ class _LiveSessionCard extends StatelessWidget {
                 Expanded(
                   child: _SunkenTile(
                     icon: Icons.north_rounded,
-                    label: 'subscribers.label_upload'.tr(),
-                    value: _formatBytes(sub.uploadBytes ?? 0),
+                    field: _uploadField(sub),
                     color: AppColors.info,
                   ),
                 ),
@@ -1148,11 +1369,11 @@ class _LiveSessionCard extends StatelessWidget {
     required String pinned,
   }) {
     final tiles = <Widget>[
+      // النقر يفتح الجهاز، والضغط المطوّل ينسخ العنوان — لا يتزاحمان.
       if (hasSession && ip.isNotEmpty)
         _SunkenTile(
           icon: Icons.open_in_new_rounded,
-          label: 'IP الجلسة',
-          value: ip,
+          field: _sessionIpField(ip),
           color: AppColors.textHi,
           shrinkValue: true,
           onTap: () => launchUrl(Uri.parse('http://$ip'),
@@ -1161,8 +1382,7 @@ class _LiveSessionCard extends StatelessWidget {
       if (pinned.isNotEmpty)
         _SunkenTile(
           icon: Icons.push_pin_rounded,
-          label: 'IP المثبَّت',
-          value: pinned,
+          field: _pinnedIpField(pinned),
           color: AppColors.info,
           shrinkValue: true,
           onTap: () => launchUrl(Uri.parse('http://$pinned'),
@@ -1219,23 +1439,25 @@ class _LiveSessionCard extends StatelessWidget {
 }
 
 /// البلاطة الغاطسة — تسمية 10.5 فوق قيمة 14/w700 ملوّنة دلاليّاً.
+/// تسميتها وقيمتها من [field] نفسه الذي يُنسخ، فالضغط المطوّل ينسخ ما يُرى.
 class _SunkenTile extends StatelessWidget {
   const _SunkenTile({
     required this.icon,
-    required this.label,
-    required this.value,
+    required this.field,
     required this.color,
     this.onTap,
     this.shrinkValue = false,
   });
   final IconData icon;
-  final String label;
-  final String value;
+  final CopyField field;
   final Color color;
   final VoidCallback? onTap;
 
   /// يُصغّر القيمة لتتّسع بدل أن تُقصّ — للأعمدة الضيّقة.
   final bool shrinkValue;
+
+  String get label => field.label;
+  String get value => field.value;
 
   @override
   Widget build(BuildContext context) {
@@ -1284,16 +1506,20 @@ class _SunkenTile extends StatelessWidget {
     // النقر فتبدو البلاطة ميّتة — والمستخدم يظنّ أنّ الأيقونة وحدها
     // هي الزرّ. الآن اللون على `Material` والـInkWell فوقه، فالموجة
     // تظهر على كامل المساحة وهي مساحة النقر نفسها.
-    return Material(
-      color: AppColors.surfaceSunken,
-      borderRadius: BorderRadius.circular(R.icon),
-      clipBehavior: Clip.antiAlias,
-      child: onTap == null
-          ? body
-          : InkWell(
-              onTap: onTap,
-              child: body,
-            ),
+    return Copyable.field(
+      field,
+      radius: R.icon,
+      child: Material(
+        color: AppColors.surfaceSunken,
+        borderRadius: BorderRadius.circular(R.icon),
+        clipBehavior: Clip.antiAlias,
+        child: onTap == null
+            ? body
+            : InkWell(
+                onTap: onTap,
+                child: body,
+              ),
+      ),
     );
   }
 }
@@ -1312,10 +1538,18 @@ class _SunkenTile extends StatelessWidget {
 ///
 /// العنوان **عامّ** («تفاصيل المشترك») لا اسم المشترك: الاسم يظهر
 /// بحجم 20/w700 في بطاقة الهويّة تحته مباشرةً، وتكراره يزاحمها.
+///
+/// والمساحة المكافئة يساراً صارت زرّ «نسخ كلّ المعلومات» بمقاس زرّ الرجوع
+/// نفسه — فيبقى العنوان متمركزاً ولا يُضاف شريطٌ ولا صفّ.
 class _SimpleAppBar extends StatelessWidget {
-  const _SimpleAppBar({required this.title, required this.onClose});
+  const _SimpleAppBar({
+    required this.title,
+    required this.onClose,
+    required this.onCopyAll,
+  });
   final String title;
   final VoidCallback onClose;
+  final VoidCallback onCopyAll;
 
   @override
   Widget build(BuildContext context) {
@@ -1325,24 +1559,7 @@ class _SimpleAppBar extends StatelessWidget {
       color: AppColors.bg,
       child: Row(
         children: [
-          Material(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(R.icon),
-            child: InkWell(
-              onTap: onClose,
-              borderRadius: BorderRadius.circular(R.icon),
-              child: Ink(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(R.icon),
-                  border: Border.all(color: AppColors.borderSoft),
-                ),
-                width: H.iconBtn,
-                height: H.iconBtn,
-                child: Icon(LucideIcons.arrowRight,
-                    size: 20, color: AppColors.textBody),
-              ),
-            ),
-          ),
+          _button(icon: LucideIcons.arrowRight, size: 20, onTap: onClose),
           Expanded(
             child: Center(
               child: Text(
@@ -1353,10 +1570,44 @@ class _SimpleAppBar extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: H.iconBtn),
+          _button(
+            icon: LucideIcons.copy,
+            size: 18,
+            onTap: onCopyAll,
+            tooltip: 'copy.all'.tr(),
+          ),
         ],
       ),
     );
+  }
+
+  /// زرّ أيقونيّ 38×38 أبيض بحدّ و r14 — زرّ الرجوع وزرّ النسخ بشكلٍ واحد.
+  Widget _button({
+    required IconData icon,
+    required double size,
+    required VoidCallback onTap,
+    String? tooltip,
+  }) {
+    final button = Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(R.icon),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(R.icon),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.icon),
+            border: Border.all(color: AppColors.borderSoft),
+          ),
+          width: H.iconBtn,
+          height: H.iconBtn,
+          child: Icon(icon, size: size, color: AppColors.textBody),
+        ),
+      ),
+    );
+    // التلميح اسمُ الأيقونة: ضغطةٌ مطوّلة تقول ما يفعله الزرّ، وقارئ
+    // الشاشة يقرؤه بدل «زرّ» مجرّد.
+    return tooltip == null ? button : Tooltip(message: tooltip, child: button);
   }
 }
 
@@ -1380,12 +1631,139 @@ class _SimpleAppBar extends StatelessWidget {
 /// خضراء، وحالة المشترك تُقرأ من **حبّة الحالة** أعلى اليسار (نقطة
 /// نعناعيّة + تسمية) ومن لون بلاطة الأيّام.
 class _SubscriberHero extends StatelessWidget {
-  const _SubscriberHero({required this.sub, this.password});
+  const _SubscriberHero({
+    required this.sub,
+    this.password,
+    required this.passwordVisible,
+    required this.onTogglePassword,
+  });
   final Subscriber sub;
 
   /// null = لم تصل بعد من الـbackend. الباسورد **بلا بوّابة صلاحيّات**
   /// (قرار 2026-08-25): هو بيانات خدمة يحتاجها الدعم لمساعدة المشترك.
   final String? password;
+
+  /// العين مفتوحة — حالتها عند الشاشة لا هنا (انظر `_passwordVisible`).
+  final bool passwordVisible;
+  final VoidCallback onTogglePassword;
+
+  // ───────── المعلومات كما تُنسخ ─────────
+  //
+  // كلّ معلومةٍ في البطاقة `CopyField` واحد: منه تُرسم تسميتها، ومنه
+  // يُنسخ بالضغط المطوّل، ومنه يُبنى «نسخ كلّ المعلومات» — فلا تختلف
+  // تسميةٌ ولا قيمةٌ بين ما يُرى وما يُلصق.
+
+  /// معلومات البطاقة بترتيب قراءتها في رسالة لا بترتيب رسمها: الاسم
+  /// وبيانات الدخول أوّلاً، ثمّ الاشتراك، ثمّ المال والحالة.
+  static List<CopyField> copyFields(
+    Subscriber sub, {
+    String? password,
+    bool passwordVisible = false,
+    DateTime? now,
+  }) {
+    final name = _nameField(sub);
+    final phone = sub.displayPhone;
+    final price = _salePriceField(sub);
+    final exp = sub.parsedExpiration;
+    final parent = sub.parentUsername?.trim() ?? '';
+    return [
+      // بلا اسمٍ يُعرض المشترك باسم مستخدمه، وتكراره سطرين لا يُفيد.
+      if (name.value.trim() != sub.username.trim()) name,
+      _usernameField(sub),
+      if (passwordVisible && (password ?? '').isNotEmpty)
+        _passwordField(password!),
+      if (phone.isNotEmpty) _phoneField(phone),
+      _packageField(sub),
+      if (price != null) price,
+      if (exp != null) _expiryField(exp),
+      _remainingField(_remaining(sub, now: now)),
+      _balanceField(sub),
+      _statusField(sub),
+      if (parent.isNotEmpty) _parentField(parent),
+    ];
+  }
+
+  static CopyField _nameField(Subscriber sub) =>
+      CopyField('الاسم', normalizeDigits(sub.fullName) ?? sub.username);
+
+  static CopyField _statusField(Subscriber sub) =>
+      CopyField('الحالة', _statusPill(sub).$1);
+
+  static CopyField _usernameField(Subscriber sub) =>
+      CopyField('اسم المستخدم', sub.username);
+
+  static CopyField _passwordField(String password) =>
+      CopyField('كلمة المرور', password);
+
+  /// الرقم **المحلّي** (‏07…) كما يُتّصل به — لا ‎9647… كما يخزّنه الساس.
+  static CopyField _phoneField(String phone) =>
+      CopyField('الهاتف', localPhone(phone), noun: 'الرقم');
+
+  static CopyField _packageField(Subscriber sub) =>
+      CopyField('الباقة', sub.profileName ?? '—', noun: 'اسم الباقة');
+
+  /// «السعر» في نسخ الكلّ — ما يدفعه المشترك فعلاً لا سعر الباقة قبل خصمه:
+  /// سعر البيع الحاليّ ([Subscriber.currentSalePrice] — الثابت إن سرى، وإلّا
+  /// سعر الباقة ناقص خصمه)، ومعه «بعد خصم …» حين ينزل به خصمه.
+  ///
+  /// 🐛 كان سعر الباقة نفسه («25,000» لمن خصمه 5,000)، والمدير يلصق النصّ
+  /// للمشترك في واتساب — فيقرأ سعراً غير الذي يدفعه، والموقع ينسخ للمشترك
+  /// نفسه «20,000 د.ع بعد خصم 5,000». الصيغة هنا هي صيغة الموقع حرفاً بحرف
+  /// (`subscriberPrice` في `client-v2/src/lib/subscriber-info.ts`).
+  ///
+  /// `null` حين لا يُعرف سعر الباقة (أو صفر) — كما يُخفيه الهيرو.
+  static CopyField? _salePriceField(Subscriber sub) {
+    final base = sub.price;
+    if (base == null || base <= 0) return null;
+    final sale = sub.currentSalePrice ?? base;
+    final discount = sub.discount ?? 0;
+    // الثابت الساري يُلغي الخصم (الخادم يرسله صفراً معه أصلاً).
+    final discounted =
+        discount > 0 && !(sub.isFixedPrice && !sub.needsRepricing);
+    return CopyField(
+      'السعر',
+      discounted
+          ? '${formatIQD(sale)} د.ع بعد خصم ${formatIQD(discount)}'
+          : '${formatIQD(sale)} د.ع',
+    );
+  }
+
+  /// الرقم الذي في تسمية بلاطة الباقة («الباقة · 25,000») — سعر الباقة قبل
+  /// خصم المشترك. ضغطُها المطوّل ينسخه هو باسمه، فلا يُسمّى «السعر» وهو
+  /// غير سعر «نسخ كلّ المعلومات» لمن عليه خصم.
+  static CopyField _packagePriceField(num price) =>
+      CopyField('سعر الباقة', '${formatIQD(price)} د.ع');
+
+  /// ⚠️ ثلاث حالات لا اثنتان: من رصيده صفر لا دين عليه، ووسمُه بـ«الدين»
+  /// يجعل الشاشة تتّهمه بما ليس فيه. والتسمية نفسها تحت رقم البلاطة.
+  static CopyField _balanceField(Subscriber sub) {
+    final debt = sub.balanceAmount;
+    return CopyField(
+      debt > 0
+          ? 'رصيد دائن'
+          : debt < 0
+              ? 'الدين'
+              : 'الرصيد',
+      debt == 0 ? 'لا دين ولا رصيد' : '${formatIQD(debt.abs())} د.ع',
+      noun: debt > 0 ? 'الرصيد الدائن' : null,
+    );
+  }
+
+  static CopyField _remainingField(_Remaining r) =>
+      CopyField('المتبقي', r.text, noun: 'المدّة المتبقية');
+
+  static CopyField _parentField(String parent) =>
+      CopyField('تابع إلى', parent, noun: 'اسم المدير');
+
+  static CopyField _expiryField(DateTime exp) =>
+      CopyField('تاريخ الانتهاء', _dateTimeText(exp));
+
+  /// ‏`2026/10/15 10:00` — صيغة التذييل نفسها.
+  static String _dateTimeText(DateTime t) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${t.year}/${two(t.month)}/${two(t.day)} '
+        '${two(t.hour)}:${two(t.minute)}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1421,7 +1799,8 @@ class _SubscriberHero extends StatelessWidget {
   // ───────── الاسم + حبّة الحالة ─────────
 
   Widget _titleRow() {
-    final st = _statusPill();
+    final st = _statusPill(sub);
+    final name = _nameField(sub);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1430,11 +1809,15 @@ class _SubscriberHero extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                normalizeDigits(sub.fullName) ?? sub.username,
-                style: AppType.heroName(),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+              Copyable.field(
+                name,
+                onBrandSurface: true,
+                child: Text(
+                  name.value,
+                  style: AppType.heroName(),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               const SizedBox(height: 2),
               Text(
@@ -1446,27 +1829,33 @@ class _SubscriberHero extends StatelessWidget {
           ),
         ),
         const SizedBox(width: Sp.sm),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-          decoration: BoxDecoration(
-            color: AppColors.onBrandFill2,
-            borderRadius: BorderRadius.circular(R.pill),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(color: st.$2, shape: BoxShape.circle),
-              ),
-              const SizedBox(width: 5),
-              Text(
-                st.$1,
-                style: AppType.body(color: AppColors.onBrand)
-                    .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
-              ),
-            ],
+        Copyable.field(
+          _statusField(sub),
+          onBrandSurface: true,
+          radius: R.pill,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppColors.onBrandFill2,
+              borderRadius: BorderRadius.circular(R.pill),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration:
+                      BoxDecoration(color: st.$2, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  st.$1,
+                  style: AppType.body(color: AppColors.onBrand)
+                      .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
           ),
         ),
       ],
@@ -1474,7 +1863,7 @@ class _SubscriberHero extends StatelessWidget {
   }
 
   /// (التسمية، لون النقطة). الحالة تُقرأ من هنا بدل تلوين البطاقة كلّها.
-  (String, Color) _statusPill() {
+  static (String, Color) _statusPill(Subscriber sub) {
     if (sub.isDisabled) return ('معطّل', AppColors.onBrandDanger);
     if (sub.isExpired) return ('منتهي', AppColors.onBrandDanger);
     if (sub.isOnline) return ('متصل', AppColors.onBrandMint);
@@ -1503,20 +1892,25 @@ class _SubscriberHero extends StatelessWidget {
           // ٣:٢ يعطي الاسم ١٠٥ وكلمة السرّ ٧٠ — يكفيان المقيس.
           Flexible(
             flex: 3,
-            child: Text(
-              sub.username,
-              textDirection: ui.TextDirection.ltr,
-              style: AppType.body(color: AppColors.onBrand)
-                  .copyWith(fontSize: 13, fontWeight: FontWeight.w600),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            child: Copyable.field(
+              _usernameField(sub),
+              onBrandSurface: true,
+              child: Text(
+                sub.username,
+                textDirection: ui.TextDirection.ltr,
+                style: AppType.body(color: AppColors.onBrand)
+                    .copyWith(fontSize: 13, fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
           const SizedBox(width: 8),
           _OnBrandIcon(
             icon: Icons.content_copy_rounded,
             size: 16,
-            onTap: () => _copy(context, sub.username, 'تمّ نسخ اسم المستخدم'),
+            onTap: () =>
+                copyToClipboard(context, sub.username, label: 'اسم المستخدم'),
           ),
           // Pro: عرض كلمة المرور مُسيَّجٌ بصلاحيّة الساس — أغلب الشركات لا
           // تسمح به. show_password=false → يختفي الفاصل والباسورد معاً.
@@ -1537,7 +1931,14 @@ class _SubscriberHero extends StatelessWidget {
                 ),
               )
             else
-              Expanded(flex: 2, child: _HeroPassword(password: pass)),
+              Expanded(
+                flex: 2,
+                child: _HeroPassword(
+                  password: pass,
+                  visible: passwordVisible,
+                  onToggle: onTogglePassword,
+                ),
+              ),
           ],
         ],
       ),
@@ -1549,6 +1950,8 @@ class _SubscriberHero extends StatelessWidget {
   Widget _statsGrid() {
     final debt = sub.balanceAmount;
     final price = sub.price;
+    final balance = _balanceField(sub);
+    final remaining = _remaining(sub);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
       decoration: BoxDecoration(
@@ -1559,20 +1962,19 @@ class _SubscriberHero extends StatelessWidget {
         children: [
           Expanded(
             child: _stat(
+              copy: balance,
               value: debt == 0 ? '—' : formatIQD(debt.abs()),
-              // ⚠️ ثلاث حالات لا اثنتان: من رصيده صفر لا دين عليه،
-              // ووسمُه بـ«الدين» يجعل الشاشة تتّهمه بما ليس فيه.
-              label: debt > 0
-                  ? 'رصيد دائن'
-                  : debt < 0
-                      ? 'الدين'
-                      : 'الرصيد',
+              label: balance.label,
               color: debt < 0 ? AppColors.onBrandDanger : AppColors.onBrand,
             ),
           ),
           _divider(),
           Expanded(
             child: _stat(
+              copy: _packageField(sub),
+              // السعر في تسمية البلاطة — فضغطها المطوّل ينسخه هو لا الباقة.
+              labelCopy:
+                  price != null && price > 0 ? _packagePriceField(price) : null,
               value: sub.profileName ?? '—',
               label: price != null && price > 0
                   ? 'الباقة · ${formatIQD(price)}'
@@ -1583,8 +1985,9 @@ class _SubscriberHero extends StatelessWidget {
           _divider(),
           Expanded(
             child: _stat(
-              value: _remaining().$1,
-              label: _remaining().$2,
+              copy: _remainingField(remaining),
+              value: remaining.big,
+              label: remaining.small,
             ),
           ),
         ],
@@ -1598,14 +2001,22 @@ class _SubscriberHero extends StatelessWidget {
         color: AppColors.onBrandFill2,
       );
 
+  /// [copy] ما ينسخه الضغط المطوّل على البلاطة، و[labelCopy] ما تنسخه
+  /// تسميتها حين تحمل معلومةً غيرها (سعر الباقة).
   Widget _stat({
+    required CopyField copy,
     required String value,
     required String label,
+    CopyField? labelCopy,
     Color? color,
     double valueSize = 17,
   }) {
     return Column(
       mainAxisSize: MainAxisSize.min,
+      // `stretch` لا التوسيط: هدفُ الضغط المطوّل عرضُ العمود كلّه لا حروف
+      // الرقم وحدها. والتوسيط باقٍ كما هو — `FittedBox` يتوسّط افتراضاً،
+      // والتسمية بـ`textAlign`.
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // ⚠️ يتقلّص ولا يُقصّ.
         //
@@ -1616,43 +2027,54 @@ class _SubscriberHero extends StatelessWidget {
         // والوزن غير المتساوي يحلّ الباقة ويكسر الرصيد. و`scaleDown`
         // يحلّ الثلاثة معاً: كلٌّ يتقلّص بقدر حاجته ويبقى مقروءاً
         // كاملاً — واسم باقةٍ ناقصٌ لا يُعرف صاحبه.
-        FittedBox(
-          fit: BoxFit.scaleDown,
+        Copyable.field(
+          copy,
+          onBrandSurface: true,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              textDirection: ui.TextDirection.ltr,
+              style: AppType.statValue(color: color ?? AppColors.onBrand)
+                  .copyWith(fontSize: valueSize),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+        const SizedBox(height: 3),
+        Copyable.field(
+          labelCopy ?? copy,
+          onBrandSurface: true,
           child: Text(
-            value,
-            textDirection: ui.TextDirection.ltr,
-            style: AppType.statValue(color: color ?? AppColors.onBrand)
-                .copyWith(fontSize: valueSize),
+            label,
+            style: AppType.muted(color: AppColors.onBrandSecondary),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
           ),
         ),
-        const SizedBox(height: 3),
-        Text(
-          label,
-          style: AppType.muted(color: AppColors.onBrandSecondary),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-        ),
       ],
     );
   }
 
-  /// (القيمة الكبيرة، التسمية). محسوبة من `parsedExpiration` — لا من
-  /// `remainingDays` (SAS4 يقرّب لأعلى فيعطي 31 لباقة 30).
-  (String, String) _remaining() {
+  /// المتبقّي: الرقم الكبير والتسمية تحته في البلاطة، ونصّه سطراً واحداً
+  /// للنسخ. محسوبٌ من `parsedExpiration` — لا من `remainingDays` (SAS4
+  /// يقرّب لأعلى فيعطي 31 لباقة 30).
+  static _Remaining _remaining(Subscriber sub, {DateTime? now}) {
     final exp = sub.parsedExpiration;
-    if (exp == null) return ('—', 'الأيام المتبقية');
-    final diff = exp.difference(DateTime.now());
-    if (diff.isNegative) return ('0', 'منتهي');
+    if (exp == null) return (big: '—', small: 'الأيام المتبقية', text: '—');
+    final diff = exp.difference(now ?? DateTime.now());
+    if (diff.isNegative) return (big: '0', small: 'منتهي', text: 'منتهي');
     final d = diff.inDays;
     final h = diff.inHours.remainder(24);
     final m = diff.inMinutes.remainder(60);
-    if (d > 0) return ('$d يوم', '$hس $mد');
-    if (h > 0) return ('$hس', '$mد');
-    return ('$mد', 'أقل من ساعة');
+    if (d > 0) {
+      return (big: '$d يوم', small: '$hس $mد', text: '$d يوم $hس $mد');
+    }
+    if (h > 0) return (big: '$hس', small: '$mد', text: '$hس $mد');
+    return (big: '$mد', small: 'أقل من ساعة', text: '$mد');
   }
 
   // ───────── الهاتف ─────────
@@ -1675,24 +2097,30 @@ class _SubscriberHero extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: InkWell(
-              onTap: () => _call(context, phone),
-              child: Text(
-                phone,
-                textDirection: ui.TextDirection.ltr,
-                // ثلاث أيقوناتٍ تجاوره الآن (الاتصال والنسخ والواتساب)،
-                // فالنصّ بلا هذين يُسحق صامتاً على شاشةٍ ضيّقة.
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppType.body(color: AppColors.onBrand)
-                    .copyWith(fontSize: 13, fontWeight: FontWeight.w600),
+            // النقر يتّصل والضغط المطوّل ينسخ — لا يتزاحمان.
+            child: Copyable.field(
+              _phoneField(phone),
+              onBrandSurface: true,
+              child: InkWell(
+                onTap: () => _call(context, phone),
+                child: Text(
+                  phone,
+                  textDirection: ui.TextDirection.ltr,
+                  // ثلاث أيقوناتٍ تجاوره الآن (الاتصال والنسخ والواتساب)،
+                  // فالنصّ بلا هذين يُسحق صامتاً على شاشةٍ ضيّقة.
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.body(color: AppColors.onBrand)
+                      .copyWith(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
           ),
           _OnBrandIcon(
             icon: Icons.content_copy_rounded,
             size: 16,
-            onTap: () => _copy(context, localPhone(phone), 'تمّ نسخ الرقم'),
+            onTap: () =>
+                copyToClipboard(context, localPhone(phone), label: 'الرقم'),
           ),
           const SizedBox(width: 12),
           _OnBrandIcon(
@@ -1713,9 +2141,8 @@ class _SubscriberHero extends StatelessWidget {
   // ───────── التذييل ─────────
 
   Widget _footer() {
-    final parent = sub.parentUsername;
+    final parent = sub.parentUsername?.trim();
     final exp = sub.parsedExpiration;
-    String two(int n) => n.toString().padLeft(2, '0');
     return Row(
       children: [
         // ⚠️ `Flexible` و`Spacer` شقيقان بنفس الـflex الافتراضيّ (1)،
@@ -1735,24 +2162,31 @@ class _SubscriberHero extends StatelessWidget {
               size: 15, color: AppColors.onBrandSecondary),
           const SizedBox(width: 6),
           Expanded(
-            child: Text(
-              'تابع إلى $parent',
-              style: AppType.muted(color: AppColors.onBrandSecondary)
-                  .copyWith(fontSize: 11.5),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            child: Copyable.field(
+              _parentField(parent),
+              onBrandSurface: true,
+              child: Text(
+                'تابع إلى $parent',
+                style: AppType.muted(color: AppColors.onBrandSecondary)
+                    .copyWith(fontSize: 11.5),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
           const SizedBox(width: Sp.sm),
         ] else
           const Spacer(),
         if (exp != null)
-          Text(
-            '${exp.year}/${two(exp.month)}/${two(exp.day)} '
-            '${two(exp.hour)}:${two(exp.minute)}',
-            textDirection: ui.TextDirection.ltr,
-            style: AppType.muted(color: AppColors.onBrandSecondary)
-                .copyWith(fontSize: 11.5),
+          Copyable.field(
+            _expiryField(exp),
+            onBrandSurface: true,
+            child: Text(
+              _dateTimeText(exp),
+              textDirection: ui.TextDirection.ltr,
+              style: AppType.muted(color: AppColors.onBrandSecondary)
+                  .copyWith(fontSize: 11.5),
+            ),
           ),
       ],
     );
@@ -1791,14 +2225,10 @@ class _SubscriberHero extends StatelessWidget {
     if (ok || !ctx.mounted) return;
     showSheetSnack(ctx, 'لا يمكن فتح الرابط', isError: true);
   }
-
-  static Future<void> _copy(
-      BuildContext context, String value, String msg) async {
-    await Clipboard.setData(ClipboardData(text: value));
-    if (!context.mounted) return;
-    showSheetSnack(context, msg, duration: const Duration(seconds: 2));
-  }
 }
+
+/// المتبقّي بأجزائه: [big] رقم البلاطة، [small] تسميتها، [text] سطره.
+typedef _Remaining = ({String big, String small, String text});
 
 /// أيقونة تفاعليّة فوق البطاقة الداكنة — بلا خلفيّة، بلون أبيض شفّاف
 /// كما في المخطّط (لا كبسولة دائريّة كالنسخة السابقة).
@@ -1826,216 +2256,58 @@ class _OnBrandIcon extends StatelessWidget {
 
 /// نقاط كلمة السرّ + عين الإظهار + النسخ. النسخ يعمل والباس مخفي.
 /// `letterSpacing: 2.7` مطلوب وإلّا التصقت النقاط (المخطّط: 0.2em).
-class _HeroPassword extends StatefulWidget {
-  const _HeroPassword({required this.password});
+///
+/// الإظهار عند الشاشة ([visible] + [onToggle]) لا هنا: «نسخ كلّ المعلومات»
+/// يضمّ كلمة السرّ حين تظهر وحدها، فيحتاج أن يعرف حالها.
+class _HeroPassword extends StatelessWidget {
+  const _HeroPassword({
+    required this.password,
+    required this.visible,
+    required this.onToggle,
+  });
   final String password;
-
-  @override
-  State<_HeroPassword> createState() => _HeroPasswordState();
-}
-
-class _HeroPasswordState extends State<_HeroPassword> {
-  bool _visible = false;
+  final bool visible;
+  final VoidCallback onToggle;
 
   @override
   Widget build(BuildContext context) {
-    final shown =
-        _visible ? widget.password : '•' * widget.password.length.clamp(4, 12);
+    final shown = visible ? password : '•' * password.length.clamp(4, 12);
     return Row(
       children: [
         Flexible(
-          child: Text(
-            shown,
-            textDirection: ui.TextDirection.ltr,
-            style: _visible
-                ? AppType.body(color: AppColors.onBrandStrong)
-                    .copyWith(fontSize: 13, fontWeight: FontWeight.w600)
-                : AppType.password(color: AppColors.onBrandStrong),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          // الضغط المطوّل كأيقونة النسخ: ينسخها مخفيّةً أيضاً — من يملك
+          // مفتاح عرضها يملك نسخها، والإشعار لا يكشفها.
+          child: Copyable.field(
+            _SubscriberHero._passwordField(password),
+            onBrandSurface: true,
+            child: Text(
+              shown,
+              textDirection: ui.TextDirection.ltr,
+              style: visible
+                  ? AppType.body(color: AppColors.onBrandStrong)
+                      .copyWith(fontSize: 13, fontWeight: FontWeight.w600)
+                  : AppType.password(color: AppColors.onBrandStrong),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ),
         const SizedBox(width: 8),
         _OnBrandIcon(
-          icon: _visible
+          icon: visible
               ? Icons.visibility_off_rounded
               : Icons.visibility_rounded,
           size: 17,
-          onTap: () => setState(() => _visible = !_visible),
+          onTap: onToggle,
         ),
         const SizedBox(width: 10),
         _OnBrandIcon(
           icon: Icons.content_copy_rounded,
           size: 17,
-          onTap: () async {
-            await Clipboard.setData(ClipboardData(text: widget.password));
-            if (!context.mounted) return;
-            showSheetSnack(context, 'تمّ نسخ كلمة المرور',
-                duration: const Duration(seconds: 2));
-          },
+          onTap: () =>
+              copyToClipboard(context, password, label: 'كلمة المرور'),
         ),
       ],
-    );
-  }
-}
-
-class _CopyChip extends StatefulWidget {
-  const _CopyChip({required this.value, required this.context});
-  final String value;
-  // ignore: avoid_field_initializers_in_const_classes
-  final BuildContext context;
-
-  @override
-  State<_CopyChip> createState() => _CopyChipState();
-}
-
-class _CopyChipState extends State<_CopyChip> {
-  bool _copied = false;
-
-  Future<void> _copy() async {
-    await Clipboard.setData(ClipboardData(text: widget.value));
-    if (!mounted) return;
-    setState(() => _copied = true);
-    // `widget.context` سياق ويدجت أخرى: `mounted` أعلاه يخصّ هذه
-    // الحالة لا تلك، فقد تكون تلك ماتت وهذه حيّة.
-    if (!widget.context.mounted) return;
-    showSheetSnack(
-      widget.context,
-      'تم نسخ ${widget.value}',
-      duration: const Duration(seconds: 2),
-    );
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) setState(() => _copied = false);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Material(
-      color: Colors.transparent,
-      child: InkResponse(
-        onTap: _copy,
-        radius: 16,
-        child: Container(
-          width: 28,
-          height: 28,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: AppColors.onBrand.withValues(alpha: 0.15),
-            shape: BoxShape.circle,
-            border: Border.all(
-                color: AppColors.onBrand.withValues(alpha: 0.3), width: 1),
-          ),
-          child: Icon(
-            _copied ? LucideIcons.check : LucideIcons.copy,
-            size: 12,
-            color: AppColors.onBrand,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// صفّ الباسورد في الهيرو — عين إظهار/إخفاء + زرّ copy.
-/// النسخ يعمل حتى والباس مخفي بالنجوم. أُضيف 2026-08-18 لتوفير
-/// نسخ سريع دون فتح شاشة التعديل.
-class _PasswordRow extends StatefulWidget {
-  const _PasswordRow({required this.password});
-  final String password;
-
-  @override
-  State<_PasswordRow> createState() => _PasswordRowState();
-}
-
-class _PasswordRowState extends State<_PasswordRow> {
-  bool _visible = false;
-  bool _copied = false;
-
-  Future<void> _copy() async {
-    await Clipboard.setData(ClipboardData(text: widget.password));
-    if (!mounted) return;
-    setState(() => _copied = true);
-    showSheetSnack(
-      context,
-      'تمّ نسخ كلمة المرور',
-      duration: const Duration(seconds: 2),
-    );
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) setState(() => _copied = false);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep
-    final display =
-        _visible ? widget.password : '•' * widget.password.length.clamp(4, 12);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(LucideIcons.lock,
-            size: 11, color: AppColors.onBrand.withValues(alpha: 0.7)),
-        const SizedBox(width: 4),
-        Flexible(
-          child: Text(
-            display,
-            style: TextStyle(
-              color: AppColors.onBrand.withValues(alpha: 0.85),
-              fontSize: 13,
-              height: 1.35,
-              fontWeight: FontWeight.w600,
-              letterSpacing: _visible ? 0 : 2,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        const SizedBox(width: 6),
-        _MiniHeroIconButton(
-          icon: _visible ? LucideIcons.eyeOff : LucideIcons.eye,
-          onTap: () => setState(() => _visible = !_visible),
-        ),
-        const SizedBox(width: 4),
-        _MiniHeroIconButton(
-          icon: _copied ? LucideIcons.check : LucideIcons.copy,
-          onTap: _copy,
-        ),
-      ],
-    );
-  }
-}
-
-/// زرّ أيقونة صغير دائري بخلفيّة أبيض شفّاف — يُستعمل في هيرو
-/// الكارت للعين والنسخ. حجم 24 (أصغر من _CopyChip=28 لأنّه بجنب
-/// حقل نص محدود).
-class _MiniHeroIconButton extends StatelessWidget {
-  const _MiniHeroIconButton({required this.icon, required this.onTap});
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkResponse(
-        onTap: onTap,
-        radius: 14,
-        child: Container(
-          width: 24,
-          height: 24,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: AppColors.onBrand.withValues(alpha: 0.15),
-            shape: BoxShape.circle,
-            border: Border.all(
-                color: AppColors.onBrand.withValues(alpha: 0.3), width: 1),
-          ),
-          child: Icon(icon, size: 11, color: AppColors.onBrand),
-        ),
-      ),
     );
   }
 }

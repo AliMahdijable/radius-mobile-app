@@ -1,7 +1,7 @@
 name: rad_mysvcs
 description: "MyServices Radius — Login (v2 in progress)"
 publish_to: 'none'
-version: 3.0.2+161
+version: 3.0.3+162
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -133,6 +133,14 @@ dependencies:
   intl: any
   firebase_auth: ^6.7.0
   google_sign_in: ^7.2.0
+
+  # «شحن رصيد الصفحة» بزين كاش (١٨ أكتوبر): صفحة الدفع تُفتح **داخل
+  # التطبيق** لا في متصفّح خارجيّ ولا Custom Tabs — لأنّ زين كاش يرجع إلى
+  # رابط الساس (`#/zaincash/process?token=…`) والرصيد لا يُضاف إلّا إذا
+  # وصل هذا التوكن لخادمنا. المتصفّح الخارجيّ لا نلتقط رجوعه، فقد يُخصم
+  # المال بلا رصيد. الـWebView يلتقط الرجوع ويسلّمه للخادم. يحتاج نشر
+  # متجرين (إضافة native) — انظر lib/screens/topup/topup_pay_page.dart.
+  webview_flutter: ^4.14.1
 # ⚠️ **نسخةٌ مُقلَّمة من lucide — توفّر ٢٫٧٤ ميجابايت في كلّ تثبيت.**
 #
 # الحزمة الأصليّة تُعلن ستّ عائلاتِ خطوطٍ بأوزانٍ متغيّرة لا يستعملها

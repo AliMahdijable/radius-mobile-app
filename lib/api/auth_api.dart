@@ -22,7 +22,6 @@ class LoginSuccess extends LoginResult {
     required this.adminUsername,
     required this.displayName,
     this.expiresAt,
-    this.requires2fa = false,
     this.isSuperAdmin = false,
     this.canAccessManagers = false,
     this.canAccessPackages = false,
@@ -38,7 +37,6 @@ class LoginSuccess extends LoginResult {
   /// ISO8601 string of when the token expires. Stored as-is in
   /// AuthStorage so the interceptor can do proactive refresh.
   final String? expiresAt;
-  final bool requires2fa;
 
   /// True when the SAS4 user permissions resolve to super-admin.
   final bool isSuperAdmin;
@@ -67,7 +65,13 @@ class LoginSuccess extends LoginResult {
 }
 
 class LoginFailure extends LoginResult {
-  const LoginFailure(this.message, {this.code, this.captcha, this.rejected = false});
+  const LoginFailure(
+    this.message, {
+    this.code,
+    this.captcha,
+    this.twoFactor,
+    this.rejected = false,
+  });
   final String message;
 
   /// الساس رفض اليوزر/كلمة السرّ (401 بلا رمز بوّابة) — لا شبكة ولا حساب.
@@ -78,12 +82,28 @@ class LoginFailure extends LoginResult {
   /// `no-account` (403)، `bad-sas-url` (400). null لأخطاء الساس المعتادة.
   /// و`captcha-required`: الساس يطلب رمز صورة ([captcha])، و`captcha-cancelled`:
   /// أغلق المستخدم نافذة الرمز (لا رسالة).
+  ///
+  /// ورموز التحقّق بخطوتين (لا يرسلها الخادم — يضعها [AuthApi]):
+  /// `2fa-required` كلمة السرّ صحيحة والمالك فعّل التحقّق ([twoFactor]) ·
+  /// `2fa-invalid` كودٌ خاطئ والجلسة المعلَّقة باقية · `2fa-expired` انتهت
+  /// مهلتها (أو لم تعد) فيلزم دخولٌ جديد · `2fa-cancelled` أغلق نافذة الكود.
   final String? code;
 
   /// صورة الرمز حين يطلبها الساس (الحياة عمارة…).
   final SasCaptcha? captcha;
 
-  static const _notGate = {'bad-sas-url', 'captcha-required', 'captcha-cancelled'};
+  /// الجلسة المعلَّقة حتى الكود حين فعّل المالك التحقّق بخطوتين.
+  final TwoFactorChallenge? twoFactor;
+
+  static const _notGate = {
+    'bad-sas-url',
+    'captcha-required',
+    'captcha-cancelled',
+    '2fa-required',
+    '2fa-invalid',
+    '2fa-expired',
+    '2fa-cancelled',
+  };
 
   /// رمزٌ من بوّابة الحساب (انتهى الاشتراك/الحساب معطّل…) ← البوّابة تقرّر.
   bool get isAccountGate => code != null && !_notGate.contains(code);
@@ -94,7 +114,39 @@ class LoginFailure extends LoginResult {
   /// يُعاد الدخول نفسه (`showDeviceLimitSheet`).
   bool get isDeviceLimit => code == 'device-limit';
   bool get needsCaptcha => code == 'captcha-required' && captcha != null;
-  bool get isCancelled => code == 'captcha-cancelled';
+  bool get needs2fa => code == '2fa-required' && twoFactor != null;
+
+  /// أغلق المستخدم نافذة رمز الصورة أو نافذة كود التحقّق — لا رسالة.
+  bool get isCancelled =>
+      code == 'captcha-cancelled' || code == '2fa-cancelled';
+}
+
+/// Pro: التحقّق بخطوتين عند الدخول — مالكٌ (ساس أو ايرث لنك) فعّله من الويب.
+///
+/// كلمة السرّ صحيحة، والخادم لا يعطي الجلسة بعد: يعلّقها [expiresIn] ثانية
+/// (١٢٠) ويردّ `{success:false, requires2fa:true, tempId, expiresIn}` — ثمّ
+/// `POST /api/auth/2fa/verify {tempId, code}` بكود تطبيق المصادقة يعطيها
+/// ([AuthApi.verify2fa]). الشكل نفسه لمالك الساس وفرع ايرث لنك.
+class TwoFactorChallenge {
+  const TwoFactorChallenge({required this.tempId, this.expiresIn = 120});
+
+  final String tempId;
+
+  /// ثواني صلاحية [tempId] كما قالها الخادم.
+  final int expiresIn;
+
+  /// من ردّ الدخول: `null` ما لم يكن تحدّياً صالحاً (`requires2fa` + `tempId`).
+  static TwoFactorChallenge? tryParse(Map<String, dynamic> body) {
+    if (body['requires2fa'] != true) return null;
+    final id = body['tempId']?.toString().trim() ?? '';
+    if (id.isEmpty) return null;
+    final raw = body['expiresIn'];
+    final secs = raw is num ? raw.toInt() : int.tryParse('${raw ?? ''}');
+    return TwoFactorChallenge(
+      tempId: id,
+      expiresIn: secs == null || secs <= 0 ? 120 : secs,
+    );
+  }
 }
 
 /// Pro: رمز صورةٍ يطلبه الساس عند الدخول — المعرّف يعود مع الرمز المكتوب.
@@ -153,6 +205,20 @@ class AuthApi {
       );
       final body = res.data ?? const {};
 
+      // التحقّق بخطوتين: كلمة السرّ صحيحة والجلسة معلَّقة حتى الكود (ردّ ٢٠٠
+      // بـsuccess:false) — ليس فشلاً يُعرض، بل تحدٍّ تكمله نافذة الكود
+      // (`SasCaptchaLogin`). كان يسقط في الفشل أدناه فيُعرض «أدخل كود 2FA…»
+      // خطأً ولا مكان لكتابته (و«شركاتي» تعيد نموذج كلمة السرّ في حلقة).
+      final challenge = TwoFactorChallenge.tryParse(body);
+      if (challenge != null) {
+        final msg = (body['message'] as String?)?.trim() ?? '';
+        return LoginFailure(
+          msg.isNotEmpty ? msg : 'أدخل كود التحقّق من تطبيق المصادقة.',
+          code: '2fa-required',
+          twoFactor: challenge,
+        );
+      }
+
       if (body['success'] != true) {
         return LoginFailure(
           (body['message'] as String?)?.trim().isNotEmpty == true
@@ -164,6 +230,69 @@ class AuthApi {
         );
       }
 
+      return _sessionFromBody(body);
+    } on DioException catch (e) {
+      return LoginFailure(_friendlyDioError(e));
+    } catch (_) {
+      return const LoginFailure('حدث خطأ غير متوقع. حاول مجدداً.');
+    }
+  }
+
+  /// POST /api/auth/2fa/verify `{tempId, code}` — يكمل دخولاً علّقه الخادم عند
+  /// الكود ([TwoFactorChallenge]). مسار الويب نفسه (Login.tsx `submitTwoFactor`).
+  ///
+  /// الردّ الناجح بشكل ردّ الدخول (`token` · `expiresAt` · `user` بصلاحيّاته
+  /// المعياريّة) لمالك الساس ولمالك ايرث لنك، فيُحلَّل بـ[_sessionFromBody] نفسه.
+  /// والفشل كما يردّه المعالج:
+  /// - ٤٠١ «الكود غير صحيح»: الجلسة المعلَّقة **باقية** (لا يمسحها) ⇒
+  ///   `2fa-invalid` — يُكتب كودٌ آخر بالمعرّف نفسه.
+  /// - ٤٠١ «انتهت صلاحية الجلسة المؤقّتة» أو ٤٠٠ (ناقص/التحقّق عُطِّل — مُسحت)
+  ///   ⇒ `2fa-expired` — لا يصلح إلّا دخولٌ جديد.
+  /// - شبكة/٥xx/٤٢٩ ⇒ بلا رمز: عابرٌ، والجلسة المعلَّقة قد تكون باقية.
+  ///
+  /// ⚠️ المعترض يتخطّى `/api/auth/*` فلا يلصق توكناً (ولا توكن بعد) — وهو المقصود.
+  static Future<LoginResult> verify2fa({
+    required String tempId,
+    required String code,
+  }) async {
+    try {
+      final res = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/auth/2fa/verify',
+        data: {'tempId': tempId, 'code': code},
+      );
+      final body = res.data ?? const {};
+      if (body['success'] == true) return _sessionFromBody(body);
+      final status = res.statusCode ?? 0;
+      final msg = (body['message'] as String?)?.trim() ?? '';
+      if (status == 429) {
+        return LoginFailure(msg.isNotEmpty
+            ? msg
+            : 'محاولات كثيرة. انتظر دقيقة ثم أعد المحاولة.');
+      }
+      // ٤٠١ واحدٌ لحالتين: الكود الخاطئ يُبقي الجلسة، وانتهاؤها لا — ونصّ الخادم
+      // وحده يفرّقهما. والعدّاد المحلّيّ في النافذة يحسم الانتهاء على أيّ حال.
+      final expired = status == 400 ||
+          status == 403 ||
+          status == 404 ||
+          msg.contains('انتهت');
+      return LoginFailure(
+        msg.isNotEmpty
+            ? msg
+            : (expired
+                ? 'انتهت صلاحية الجلسة المؤقّتة — أعد تسجيل الدخول'
+                : 'الكود غير صحيح'),
+        code: expired ? '2fa-expired' : '2fa-invalid',
+      );
+    } on DioException catch (e) {
+      return LoginFailure(_friendlyDioError(e));
+    } catch (_) {
+      return const LoginFailure('حدث خطأ غير متوقع. حاول مجدداً.');
+    }
+  }
+
+  /// ردّ جلسةٍ ناجح (`/api/auth/login` أو `/api/auth/2fa/verify`) ← [LoginSuccess].
+  static LoginResult _sessionFromBody(Map<String, dynamic> body) {
+    try {
       final user = body['user'] as Map<String, dynamic>? ?? body;
       final token =
           (body['token'] ?? body['accessToken'] ?? user['token'] ?? '')
@@ -257,16 +386,14 @@ class AuthApi {
         adminUsername: (user['username'] ?? '').toString(),
         displayName: displayName,
         expiresAt: body['expiresAt']?.toString(),
-        requires2fa: body['requires2fa'] == true,
         isSuperAdmin: isSuperAdmin,
         canAccessManagers: canAccessManagers,
         canAccessPackages: canAccessPackages,
         isEmployee: isEmployee,
         canonicalPermissions: canonicalPermissions,
       );
-    } on DioException catch (e) {
-      return LoginFailure(_friendlyDioError(e));
     } catch (_) {
+      // ردٌّ بشكلٍ غير متوقّع — كما كان يُلتقط داخل [login].
       return const LoginFailure('حدث خطأ غير متوقع. حاول مجدداً.');
     }
   }

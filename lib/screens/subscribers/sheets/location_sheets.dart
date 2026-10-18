@@ -8,7 +8,6 @@ import '../../../api/subscribers_api.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../models/subscriber.dart';
 import '../../../services/permissions_service.dart';
-import '../../../services/provider_service.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
@@ -603,8 +602,8 @@ class _EditSheetState extends State<_EditSheet> {
 
 /// Utility: check لو المدير/الموظّف يقدر يعدّل الموقع.
 ///
-/// ايرث لنك (البند ٤): حفظ الموقع غير مدعوم — نُبقي **العرض** على الخرائط
-/// (chooser) ونُخفي الحفظ/التعديل بإرجاع false هنا. فلا «إضافة موقع» تظهر،
-/// ولا صفّ «تعديل الموقع» داخل chooser العرض.
-bool canEditLocation() =>
-    Perms.has('subscribers.edit_location') && !ProviderService.isEarthlink;
+/// لكلّ المزوّدين: SAS4 يحفظه في حقل `address` لديه، وايرث لنك في جدولٍ محلّيّ
+/// على خادمنا (لا يُكتب شيءٌ عند ايرث لنك) — والمسار نفسه
+/// `PATCH /api/v2/subscribers/:idx/location`. (كان مقفلاً لايرث لنك حتى
+/// ١٨ أكتوبر: لم يكن له مخزن.)
+bool canEditLocation() => Perms.has('subscribers.edit_location');

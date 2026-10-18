@@ -2,10 +2,13 @@ import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart' as intl;
 
 import '../api/print_templates_api.dart';
+import '../api/receipt_settings_api.dart';
 import '../models/subscriber.dart';
 import '../services/auth_storage.dart';
+import 'active_company.dart';
 import 'print_prefs.dart';
 import 'print_service.dart';
+import 'provider_service.dart';
 
 /// خدمة طباعة الوصولات — تجمع (بيانات المشترك + عملية التفعيل/التسديد)
 /// مع القالب المحفوظ من الويب وتفتح system print dialog.
@@ -74,6 +77,9 @@ class ReceiptService {
   /// 3. لو convertHtml فشل (WebView crash) أو لا قالب: نلجأ لـPDF مبني
   ///    مباشرة بـpw widgets (يعمل على كل جهاز).
   ///
+  /// ايرث لنك قبل هذا كلّه: PDF المبنيّ بترويسة مصمّم الويب وتذييله
+  /// ([usesWebReceiptSettings] · [brandingFor]).
+  ///
   /// اسم الشركة يُقرأ من AuthStorage (المدير حفظه عند login).
   static Future<bool> _emitReceipt({
     required Map<String, String> data,
@@ -84,6 +90,22 @@ class ReceiptService {
       final type = PrintPrefs.currentTemplateType; // 'a4' | 'pos'
       final companyName = await AuthStorage.readDisplayName();
       final format = PrintService.formatForType(type);
+
+      // ايرث لنك: وصلها من مصمّم الويب (`receipt_settings`) — لا قوالب
+      // `print_templates` لها أصلاً (حسابٌ جديد في Pro لا يكتبها أيّ عميل).
+      // تعذّر الجلب ⇒ الوصل نفسه باسم الحساب كما كان.
+      if (usesWebReceiptSettings) {
+        final b = brandingFor(await ReceiptSettingsApi.fetch(),
+            displayName: companyName);
+        return await PrintService.printReceipt(
+          data: data,
+          format: format,
+          title: title,
+          documentName: documentName,
+          companyName: b.companyName,
+          branding: b.branding,
+        );
+      }
 
       // Step 1: جيب قالب المدير المحفوظ (لو موجود + فعّال).
       final template = await PrintTemplatesApi.byType(type);
@@ -116,6 +138,34 @@ class ReceiptService {
       if (kDebugMode) debugPrint('[ReceiptService] error: $e');
       return false;
     }
+  }
+
+  /// الجلسة تطبع بإعدادات وصل الويب؟ ايرث لنك وحدها اليوم — والساس على
+  /// قوالبه (`print_templates`) كما كان، لا يُغيَّر في هذه الدفعة.
+  static bool get usesWebReceiptSettings =>
+      ProviderService.isEarthlink ||
+      ActiveCompany.current?.sasCode == 'earthlink';
+
+  /// اسم الترويسة والترويسة من [s] كما يرسمها مصمّم الويب: اسم المحلّ (وإلّا
+  /// اسم الحساب)، والعنوان والهاتف إن أظهر «بيانات المحلّ»، والشعار إن أظهره،
+  /// والتذييل نصّه أو سطر الشكر — أو لا شيء إن أخفاه. `s == null` ⇒ الوصل كما
+  /// كان (اسم الحساب وحده). تستعمله الطباعة ومعاينة «قوالب الطباعة».
+  static ({String? companyName, ReceiptBranding? branding}) brandingFor(
+    ReceiptSettings? s, {
+    String? displayName,
+  }) {
+    final fallback = displayName?.trim() ?? '';
+    final account = fallback.isEmpty ? null : fallback;
+    if (s == null) return (companyName: account, branding: null);
+    return (
+      companyName: s.shopName ?? account,
+      branding: ReceiptBranding(
+        address: s.showShopInfo ? s.shopAddress : null,
+        phone: s.showShopInfo ? s.shopPhone : null,
+        footer: s.showFooter ? s.footerText : '',
+        logo: s.showLogo ? s.logo : null,
+      ),
+    );
   }
 
   static Map<String, String> _buildActivationData({

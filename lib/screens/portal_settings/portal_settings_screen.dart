@@ -4,14 +4,26 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/portal_settings_api.dart';
 import '../../core/widgets/design_sheet.dart';
+import '../../core/widgets/permission_locked.dart';
+import '../../services/permissions_service.dart';
+import '../../services/provider_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'widgets/agent_code_tab.dart';
+import 'widgets/link_image_preview.dart';
 
 /// شاشة "بوابة المشترك" — مطابقة PortalSettings.tsx في client-v2.
 /// tabs:
+///   • رمز الوكيل (الرمز + نسخ/مشاركة/تغيير + مفتاح البوّابة + آخر دخول)
+///     — أوّلاً: هو ما يحتاجه المشترك ليدخل تطبيق MyServices 2.0.7.
 ///   • معلومات الشركة (branding: اسم، شعار، تواصل، نبذة)
 ///   • وصف الباقات (list of packages مع override للاسم/الوصف/الصورة/الترتيب/إخفاء)
+///
+/// ١٨ أكتوبر (وسيط البوّابة): الشاشة لكلّ فاعل ولكلّ المزوّدين — الرمز يحتاجه
+/// الموظّف أيضاً. والتبويبان الأخيران بـ`settings.edit`: مقفلان بمكانهما لموظّفٍ
+/// يمكن أن يُمنحه، ومخفيّان عن موظّف ايرث لنك (لا يُمنح له — [permShown])،
+/// فيبقى له تبويب الرمز وحده بلا شريط تبويبات.
 class PortalSettingsScreen extends StatefulWidget {
   const PortalSettingsScreen({super.key});
 
@@ -21,22 +33,28 @@ class PortalSettingsScreen extends StatefulWidget {
 
 class _PortalSettingsScreenState extends State<PortalSettingsScreen>
     with SingleTickerProviderStateMixin {
-  late final TabController _tab;
+  TabController? _tab;
+
+  /// تبويبا التخصيص ظاهران (مفتوحَين أو مقفلَين)؟ — يُقرأ مرّةً عند الفتح.
+  late final bool _showCustomize = permShown(const ['settings.edit']);
+  late final bool _canCustomize = Perms.has('settings.edit');
 
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 2, vsync: this);
+    if (_showCustomize) _tab = TabController(length: 3, vsync: this);
   }
 
   @override
   void dispose() {
-    _tab.dispose();
+    _tab?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final tab = _tab;
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
@@ -48,23 +66,109 @@ class _PortalSettingsScreenState extends State<PortalSettingsScreen>
           style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
         ),
         iconTheme: IconThemeData(color: AppColors.textHi),
-        bottom: TabBar(
-          controller: _tab,
-          indicatorColor: AppColors.brand,
-          labelColor: AppColors.brand,
-          unselectedLabelColor: AppColors.textMid,
-          labelStyle: AppType.button().copyWith(fontSize: 13),
-          tabs: [
-            Tab(text: 'portal.tab_info'.tr()),
-            Tab(text: 'portal.tab_packages'.tr()),
-          ],
-        ),
+        bottom: tab == null
+            ? null
+            : TabBar(
+                controller: tab,
+                indicatorColor: AppColors.brand,
+                labelColor: AppColors.brand,
+                unselectedLabelColor: AppColors.textMid,
+                labelStyle: AppType.button().copyWith(fontSize: 13),
+                // ٣٢٠: ثلاث تسمياتٍ بعرضٍ متساوٍ لا تُقصّ («معلومات الشركة»
+                // أطولها) — والحشوة الافتراضيّة ١٦ تأكل منها.
+                labelPadding: const EdgeInsets.symmetric(horizontal: Sp.sm),
+                tabs: [
+                  Tab(text: 'portal.tab_agent'.tr()),
+                  Tab(text: 'portal.tab_info'.tr()),
+                  Tab(text: 'portal.tab_packages'.tr()),
+                ],
+              ),
       ),
-      body: TabBarView(
-        controller: _tab,
-        children: const [
-          _InfoTab(),
-          _PackagesTab(),
+      body: tab == null
+          ? const AgentCodeTab()
+          : TabBarView(
+              controller: tab,
+              children: [
+                const AgentCodeTab(),
+                if (_canCustomize) const _InfoTab() else const _LockedTab(),
+                if (_canCustomize)
+                  const _PackagesTab()
+                else
+                  const _LockedTab(),
+              ],
+            ),
+    );
+  }
+}
+
+/// تبويبٌ لا يملك الموظّف مفتاحه (`settings.edit`): بمكانه بقفلٍ هادئ — لا
+/// طلب شبكة ولا «تعذّر الجلب» (الخادم لا يُسأل عمّا لا يُعرض).
+class _LockedTab extends StatelessWidget {
+  const _LockedTab();
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(Sp.xxl),
+        child: LockedNotice.block(),
+      ),
+    );
+  }
+}
+
+/// قسمٌ لا يخدمه الخادم لشركتك بعد ([PortalLoad.unsupported]) أو تعذّر
+/// تحميله ([PortalLoad.failed] — بزرّ «إعادة المحاولة»). يُسحب للتحديث.
+class _TabNotice extends StatelessWidget {
+  const _TabNotice({required this.state, required this.onRetry, this.what});
+  final PortalLoad state;
+  final Future<void> Function() onRetry;
+
+  /// نصّ «غير متوفّر لشركتك بعد» الخاصّ بالقسم.
+  final String? what;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final failed = state == PortalLoad.failed;
+    return RefreshIndicator(
+      onRefresh: onRetry,
+      color: AppColors.brand,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(Sp.lg),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(Sp.xxl),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(R.lg),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              children: [
+                Icon(failed ? LucideIcons.circleAlert : LucideIcons.info,
+                    size: 32, color: AppColors.textLow),
+                const SizedBox(height: Sp.md),
+                Text(
+                  failed
+                      ? 'portal.load_failed'.tr()
+                      : (what ?? 'portal.unavailable_company'.tr()),
+                  textAlign: TextAlign.center,
+                  style: AppType.body(color: AppColors.textMid)
+                      .copyWith(height: 1.6),
+                ),
+                if (failed) ...[
+                  const SizedBox(height: Sp.sm),
+                  TextButton(
+                    onPressed: onRetry,
+                    child: Text('common.retry'.tr()),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -84,6 +188,10 @@ class _InfoTabState extends State<_InfoTab> {
   bool _loading = true;
   bool _saving = false;
   bool _dirty = false;
+
+  /// ⚠️ لا نموذج إلّا بعد [PortalLoad.ok]: نموذجٌ فارغ بعد إخفاقٍ يرسل عند
+  /// الحفظ الحقول كلّها null فيمسح ما خزّنه المدير.
+  PortalLoad _state = PortalLoad.ok;
 
   final _displayName = TextEditingController();
   final _logoUrl = TextEditingController();
@@ -115,21 +223,37 @@ class _InfoTabState extends State<_InfoTab> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final b = await PortalSettingsApi.getBranding();
+    final r = await PortalSettingsApi.loadBranding();
     if (!mounted) return;
     setState(() {
-      _displayName.text = b.displayName ?? '';
-      _logoUrl.text = b.logoUrl ?? '';
-      _about.text = b.aboutText ?? '';
-      _supportPhone.text = b.supportPhone ?? '';
-      _whatsappNumber.text = b.whatsappNumber ?? '';
-      _facebookUrl.text = b.facebookUrl ?? '';
-      _instagramUrl.text = b.instagramUrl ?? '';
-      _telegramUrl.text = b.telegramUrl ?? '';
+      _state = r.state;
+      if (r.state == PortalLoad.ok) _fill(r.branding);
       _loading = false;
       _dirty = false;
     });
   }
+
+  void _fill(Branding b) {
+    _displayName.text = b.displayName ?? '';
+    _logoUrl.text = b.logoUrl ?? '';
+    _about.text = b.aboutText ?? '';
+    _supportPhone.text = b.supportPhone ?? '';
+    _whatsappNumber.text = b.whatsappNumber ?? '';
+    _facebookUrl.text = b.facebookUrl ?? '';
+    _instagramUrl.text = b.instagramUrl ?? '';
+    _telegramUrl.text = b.telegramUrl ?? '';
+  }
+
+  Branding _form() => Branding(
+        displayName: _nullIfEmpty(_displayName.text),
+        logoUrl: _nullIfEmpty(_logoUrl.text),
+        aboutText: _nullIfEmpty(_about.text),
+        supportPhone: _nullIfEmpty(_supportPhone.text),
+        whatsappNumber: _nullIfEmpty(_whatsappNumber.text),
+        facebookUrl: _nullIfEmpty(_facebookUrl.text),
+        instagramUrl: _nullIfEmpty(_instagramUrl.text),
+        telegramUrl: _nullIfEmpty(_telegramUrl.text),
+      );
 
   void _mark() {
     if (!_dirty) setState(() => _dirty = true);
@@ -138,29 +262,29 @@ class _InfoTabState extends State<_InfoTab> {
   Future<void> _save() async {
     if (_saving) return;
     setState(() => _saving = true);
-    final b = Branding(
-      displayName: _nullIfEmpty(_displayName.text),
-      logoUrl: _nullIfEmpty(_logoUrl.text),
-      aboutText: _nullIfEmpty(_about.text),
-      supportPhone: _nullIfEmpty(_supportPhone.text),
-      whatsappNumber: _nullIfEmpty(_whatsappNumber.text),
-      facebookUrl: _nullIfEmpty(_facebookUrl.text),
-      instagramUrl: _nullIfEmpty(_instagramUrl.text),
-      telegramUrl: _nullIfEmpty(_telegramUrl.text),
-    );
-    final ok = await PortalSettingsApi.saveBranding(b);
+    final b = _form();
+    final r = await PortalSettingsApi.saveBranding(b);
     if (!mounted) return;
     setState(() {
       _saving = false;
-      if (ok) {
+      // ما كُتب **أثناء** الحفظ لم يُرسَل: يبقى الزرّ، ولا يُكتب فوقه.
+      if (r.ok && _same(_form(), b)) {
         _dirty = false;
+        // ما خزّنه الخادم فعلاً (قد يطبّع الصورة أو الرقم) — فتعرض الحقول
+        // والمعاينة ما سيراه المشترك.
+        final saved = r.saved;
+        if (saved != null) _fill(saved);
       }
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(ok ? 'portal.saved'.tr() : 'portal.save_failed'.tr()),
-        backgroundColor: ok ? AppColors.brand : AppColors.error,
+        // رفض الخادم بسببه («رابط صفحة لا صورة») — أدقّ من «فشل الحفظ».
+        content: Text(r.ok
+            ? 'portal.saved'.tr()
+            : (r.message ?? 'portal.save_failed'.tr())),
+        backgroundColor: r.ok ? AppColors.brand : AppColors.error,
         behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: r.message == null ? 4 : 6),
       ),
     );
   }
@@ -170,15 +294,26 @@ class _InfoTabState extends State<_InfoTab> {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
+    if (_state != PortalLoad.ok) {
+      return _TabNotice(
+        state: _state,
+        onRetry: _load,
+        what: 'portal.unsupported_info'.tr(),
+      );
+    }
     return Stack(
       children: [
         ListView(
           padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.huge + 64),
           children: [
-            // preview
-            _PreviewCard(
-              logoUrl: _logoUrl.text.trim(),
-              displayName: _displayName.text.trim(),
+            // preview — يتبع الحقلين مع كلّ حرف (كان يُرسم مرّةً عند أوّل
+            // تعديل فقط، لأنّ `_mark` لا يعيد البناء بعدها).
+            ListenableBuilder(
+              listenable: Listenable.merge([_logoUrl, _displayName]),
+              builder: (_, __) => _PreviewCard(
+                logoUrl: _logoUrl.text.trim(),
+                displayName: _displayName.text.trim(),
+              ),
             ),
             const SizedBox(height: Sp.lg),
 
@@ -310,58 +445,122 @@ class _PreviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(Sp.md),
-      decoration: BoxDecoration(
-        color: AppColors.brandSoftBg,
-        border: Border.all(color: AppColors.brandSoftBorder),
-        borderRadius: BorderRadius.circular(R.md),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              border: Border.all(color: AppColors.brandSoftBorder),
-              borderRadius: BorderRadius.circular(R.sm),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: logoUrl.isEmpty
-                ? Icon(LucideIcons.image, size: 20, color: AppColors.textMid)
-                : Image.network(
-                    logoUrl,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => Icon(LucideIcons.image,
-                        size: 20, color: AppColors.textMid),
-                  ),
+    return LinkImagePreview(
+      url: logoUrl,
+      size: 48,
+      builder: (context, image, state) {
+        // رابطٌ ليس صورة (صفحة مشاركة · رابطٌ ميّت) يقولها صراحةً — كانت
+        // أيقونة الحقل الفارغ نفسها، فلا يعرف المدير أنّ شعاره لن يظهر.
+        final broken = state == LinkImageState.broken;
+        return Container(
+          padding: const EdgeInsets.all(Sp.md),
+          decoration: BoxDecoration(
+            color: AppColors.brandSoftBg,
+            border: Border.all(color: AppColors.brandSoftBorder),
+            borderRadius: BorderRadius.circular(R.md),
           ),
-          const SizedBox(width: Sp.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  displayName.isEmpty
-                      ? 'portal.preview_empty'.tr()
-                      : displayName,
-                  style: AppType.title(color: AppColors.textHi)
-                      .copyWith(fontSize: 14),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  border: Border.all(
+                      color: broken
+                          ? AppColors.dangerSoftBorder
+                          : AppColors.brandSoftBorder),
+                  borderRadius: BorderRadius.circular(R.sm),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  'portal.preview_sub'.tr(),
-                  style: AppType.subtitle(color: AppColors.textMid)
-                      .copyWith(fontSize: 10.5),
+                clipBehavior: Clip.antiAlias,
+                child: image ??
+                    Icon(broken ? LucideIcons.imageOff : LucideIcons.image,
+                        size: 20,
+                        color: broken ? AppColors.error : AppColors.textMid),
+              ),
+              const SizedBox(width: Sp.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      displayName.isEmpty
+                          ? 'portal.preview_empty'.tr()
+                          : displayName,
+                      style: AppType.title(color: AppColors.textHi)
+                          .copyWith(fontSize: 14),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      broken
+                          ? 'portal.not_image'.tr()
+                          : 'portal.preview_sub'.tr(),
+                      style: AppType.subtitle(
+                              color:
+                                  broken ? AppColors.error : AppColors.textMid)
+                          .copyWith(fontSize: 10.5),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// معاينة صورة الباقة تحت حقلها — لا شيء للحقل الفارغ، والصورة حين تُحمَّل،
+/// و«الرابط ليس صورة» حين لا تكون.
+class _PackageImagePreview extends StatelessWidget {
+  const _PackageImagePreview({required this.url});
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    return LinkImagePreview(
+      url: url,
+      size: 44,
+      fit: BoxFit.cover,
+      builder: (context, image, state) {
+        if (state == LinkImageState.none) return const SizedBox.shrink();
+        final broken = state == LinkImageState.broken;
+        return Padding(
+          padding: const EdgeInsets.only(top: Sp.sm),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: broken ? AppColors.dangerSoftBg : AppColors.brandSoftBg,
+                  borderRadius: BorderRadius.circular(R.sm),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: image ??
+                    Icon(broken ? LucideIcons.imageOff : LucideIcons.image,
+                        size: 18,
+                        color: broken ? AppColors.error : AppColors.textLow),
+              ),
+              if (broken) ...[
+                const SizedBox(width: Sp.sm),
+                Expanded(
+                  child: Text(
+                    'portal.not_image'.tr(),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.subtitle(color: AppColors.error)
+                        .copyWith(fontSize: 11.5),
+                  ),
                 ),
               ],
-            ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -379,6 +578,9 @@ class _PackagesTabState extends State<_PackagesTab> {
   List<PortalPackage> _packages = const [];
   bool _loading = true;
 
+  /// «لا توجد باقات» لقائمةٍ وصلت فارغةً فقط — لا لشبكةٍ انقطعت.
+  PortalLoad _state = PortalLoad.ok;
+
   @override
   void initState() {
     super.initState();
@@ -387,10 +589,11 @@ class _PackagesTabState extends State<_PackagesTab> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final list = await PortalSettingsApi.getPackages();
+    final r = await PortalSettingsApi.loadPackages();
     if (!mounted) return;
     setState(() {
-      _packages = list;
+      _state = r.state;
+      _packages = r.packages;
       _loading = false;
     });
   }
@@ -420,10 +623,10 @@ class _PackagesTabState extends State<_PackagesTab> {
               x.profileId == p.profileId ? x.copyWith(isHidden: next) : x)
           .toList();
     });
-    final ok =
+    final r =
         await PortalSettingsApi.updatePackage(p.profileId, isHidden: next);
     if (!mounted) return;
-    if (!ok) {
+    if (!r.ok) {
       // rollback
       setState(() {
         _packages = _packages
@@ -434,7 +637,7 @@ class _PackagesTabState extends State<_PackagesTab> {
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('portal.save_failed'.tr()),
+          content: Text(r.message ?? 'portal.save_failed'.tr()),
           backgroundColor: AppColors.errorFill,
           behavior: SnackBarBehavior.floating,
         ),
@@ -446,6 +649,13 @@ class _PackagesTabState extends State<_PackagesTab> {
   Widget build(BuildContext context) {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
+    }
+    if (_state != PortalLoad.ok) {
+      return _TabNotice(
+        state: _state,
+        onRetry: _load,
+        what: 'portal.unsupported_packages'.tr(),
+      );
     }
     if (_packages.isEmpty) {
       return _empty();
@@ -469,22 +679,44 @@ class _PackagesTabState extends State<_PackagesTab> {
     );
   }
 
+  /// قائمةٌ وصلت فارغة — وقد تكون تعذّراً عند المزوّد: الخادم يردّ `[]` لا
+  /// خطأً (قائمة ايرث لنك من الوسيط عند أيّ إخفاق، و`_fetchAdminPackages`
+  /// لساس). فيُسحب للتحديث أو «إعادة المحاولة» بمكانه، لا مغادرة الشاشة.
   Widget _empty() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(Sp.xxl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(LucideIcons.package,
-                size: 48, color: AppColors.textMid.withValues(alpha: 0.5)),
-            const SizedBox(height: Sp.md),
-            Text(
-              'portal.packages_empty'.tr(),
-              textAlign: TextAlign.center,
-              style: AppType.subtitle(color: AppColors.textMid),
+    return RefreshIndicator(
+      onRefresh: _load,
+      color: AppColors.brand,
+      child: LayoutBuilder(
+        builder: (context, box) => SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: box.maxHeight),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(Sp.xxl),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(LucideIcons.package,
+                        size: 48,
+                        color: AppColors.textMid.withValues(alpha: 0.5)),
+                    const SizedBox(height: Sp.md),
+                    Text(
+                      'portal.packages_empty'
+                          .tr(namedArgs: {'source': _source()}),
+                      textAlign: TextAlign.center,
+                      style: AppType.subtitle(color: AppColors.textMid),
+                    ),
+                    const SizedBox(height: Sp.sm),
+                    TextButton(
+                      onPressed: _load,
+                      child: Text('common.retry'.tr()),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -532,8 +764,10 @@ class _PackageRow extends StatelessWidget {
                     ? Image.network(
                         pkg.imageUrl!,
                         fit: BoxFit.cover,
+                        // صورةٌ لا تُحمَّل (صفحة مشاركة · رابطٌ ميّت) تُرى
+                        // من القائمة نفسها لا بعد فتح الباقة.
                         errorBuilder: (_, __, ___) =>
-                            Icon(LucideIcons.image, color: AppColors.brand),
+                            Icon(LucideIcons.imageOff, color: AppColors.error),
                       )
                     : Icon(LucideIcons.package, color: AppColors.brand),
               ),
@@ -668,7 +902,7 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
   Future<void> _save() async {
     if (_saving) return;
     setState(() => _saving = true);
-    final ok = await PortalSettingsApi.updatePackage(
+    final r = await PortalSettingsApi.updatePackage(
       widget.pkg.profileId,
       displayName: _nullIfEmpty(_displayName.text),
       description: _nullIfEmpty(_description.text),
@@ -678,7 +912,7 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
     );
     if (!mounted) return;
     setState(() => _saving = false);
-    if (ok) {
+    if (r.ok) {
       Navigator.of(context).pop(widget.pkg.copyWith(
         displayName: _nullIfEmpty(_displayName.text),
         description: _nullIfEmpty(_description.text),
@@ -689,9 +923,11 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('portal.save_failed'.tr()),
+          // رفض الخادم بسببه («رابط صفحة لا صورة») — أدقّ من «فشل الحفظ».
+          content: Text(r.message ?? 'portal.save_failed'.tr()),
           backgroundColor: AppColors.errorFill,
           behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: r.message == null ? 4 : 6),
         ),
       );
     }
@@ -705,7 +941,7 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
         title: Text('portal.reset_title'.tr(),
             style:
                 AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
-        content: Text('portal.reset_body'.tr(),
+        content: Text('portal.reset_body'.tr(namedArgs: {'source': _source()}),
             style: AppType.subtitle(color: AppColors.textMid)),
         actions: [
           TextButton(
@@ -775,7 +1011,8 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
                     hint: widget.pkg.sasName,
                     controller: _displayName,
                     maxLength: 200,
-                    helperText: 'portal.pkg_display_name_hint'.tr(),
+                    helperText: 'portal.pkg_display_name_hint'
+                        .tr(namedArgs: {'source': _source()}),
                   ),
                   const SizedBox(height: Sp.md),
                   _labeledField(
@@ -792,6 +1029,13 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
                     controller: _imageUrl,
                     maxLength: 500,
                     keyboardType: TextInputType.url,
+                    helperText: 'portal.image_link_hint'.tr(),
+                  ),
+                  // معاينةٌ حيّة مع الكتابة — لم يكن للصورة معاينةٌ أصلاً.
+                  ListenableBuilder(
+                    listenable: _imageUrl,
+                    builder: (_, __) =>
+                        _PackageImagePreview(url: _imageUrl.text.trim()),
                   ),
                   const SizedBox(height: Sp.md),
                   Row(
@@ -822,16 +1066,22 @@ class _PackageEditorSheetState extends State<_PackageEditorSheet> {
                       ),
                     ],
                   ),
-                  SwitchListTile(
-                    value: _hidden,
-                    onChanged: (v) => setState(() => _hidden = v),
-                    title: Text('portal.pkg_hidden'.tr(),
-                        style: AppType.subtitle(color: AppColors.textHi)),
-                    subtitle: Text('portal.pkg_hidden_hint'.tr(),
-                        style: AppType.subtitle(color: AppColors.textMid)
-                            .copyWith(fontSize: 10.5)),
-                    activeThumbColor: AppColors.brand,
-                    contentPadding: EdgeInsets.zero,
+                  // Material شفّاف ليجد ListTile سطحه — وإلّا «ListTile
+                  // background color or ink splashes may be invisible» داخل
+                  // سطح DesignSheet الملوّن (كمحرّر الموظّف). لا تغيير في المظهر.
+                  Material(
+                    type: MaterialType.transparency,
+                    child: SwitchListTile(
+                      value: _hidden,
+                      onChanged: (v) => setState(() => _hidden = v),
+                      title: Text('portal.pkg_hidden'.tr(),
+                          style: AppType.subtitle(color: AppColors.textHi)),
+                      subtitle: Text('portal.pkg_hidden_hint'.tr(),
+                          style: AppType.subtitle(color: AppColors.textMid)
+                              .copyWith(fontSize: 10.5)),
+                      activeThumbColor: AppColors.brand,
+                      contentPadding: EdgeInsets.zero,
+                    ),
                   ),
                 ],
               ),
@@ -921,3 +1171,20 @@ String? _nullIfEmpty(String s) {
   final t = s.trim();
   return t.isEmpty ? null : t;
 }
+
+/// مصدر الباقات وأسمائها الأصليّة كما يقوله المالك — «ايرث لنك» لحسابها
+/// (قائمتها من الوسيط)، و«SAS» لغيرها. كان النصّ «SAS» للجميع.
+String _source() => (ProviderService.isEarthlink
+        ? 'portal.source_earthlink'
+        : 'portal.source_sas')
+    .tr();
+
+bool _same(Branding a, Branding b) =>
+    a.displayName == b.displayName &&
+    a.logoUrl == b.logoUrl &&
+    a.aboutText == b.aboutText &&
+    a.supportPhone == b.supportPhone &&
+    a.whatsappNumber == b.whatsappNumber &&
+    a.facebookUrl == b.facebookUrl &&
+    a.instagramUrl == b.instagramUrl &&
+    a.telegramUrl == b.telegramUrl;

@@ -15,6 +15,11 @@ class Subscriber {
   /// في /api/v2/subscribers (server.js:9006). فارغة = SAS4 ما زوّدها.
   /// تُعرَض في subscriber_detail_screen للمشتركين غير المتّصلين.
   final String? lastOnline;
+
+  /// آخر MAC اتّصل به المشترك — ما يعرضه كرت «غير متّصل» ليعرف المدير آخر
+  /// جهاز (كالويب). ايرث لنك يرسله في صفّ القائمة (`callerID` عندها)؛ ومفاتيحه
+  /// البديلة تُقرأ احتياطاً. SAS4 لا يرسله في القائمة ⇒ `null` كما كان.
+  final String? lastMac;
   final int? remainingDays;
 
   /// ايرث لنك: هل تتغيّر الباقة الآن (canChangeAccount من ايرث لنك عبر الخادم: منتهٍ أو بقي يومٌ فأقلّ؛
@@ -110,6 +115,7 @@ class Subscriber {
     this.mobile,
     this.expiration,
     this.lastOnline,
+    this.lastMac,
     this.remainingDays,
     this.canChangePackage,
     this.packageChangeNote,
@@ -333,6 +339,10 @@ class Subscriber {
       mobile: j['mobile']?.toString(),
       expiration: j['expiration']?.toString(),
       lastOnline: j['last_online']?.toString(),
+      lastMac: blankToNull(j['last_mac']?.toString()) ??
+          blankToNull(j['mac']?.toString()) ??
+          blankToNull(j['caller_id']?.toString()) ??
+          blankToNull(j['callingstationid']?.toString()),
       remainingDays: toInt(j['remaining_days'] ?? j['daysRemaining']),
       canChangePackage: j['can_change_package'] is bool ? j['can_change_package'] as bool : null,
       packageChangeNote: j['package_change_note']?.toString(),
@@ -427,6 +437,7 @@ class Subscriber {
       mobile: mobile,
       expiration: expiration,
       lastOnline: lastOnline,
+      lastMac: lastMac,
       remainingDays: remainingDays,
       canChangePackage: canChangePackage,
       packageChangeNote: packageChangeNote,
@@ -476,6 +487,7 @@ class Subscriber {
       mobile: mobile,
       expiration: expiration,
       lastOnline: lastOnline,
+      lastMac: lastMac,
       remainingDays: remainingDays,
       canChangePackage: canChangePackage,
       packageChangeNote: packageChangeNote,
@@ -523,6 +535,7 @@ class Subscriber {
       mobile: mobile,
       expiration: expiration,
       lastOnline: lastOnline,
+      lastMac: lastMac,
       remainingDays: remainingDays,
       canChangePackage: canChangePackage,
       packageChangeNote: packageChangeNote,

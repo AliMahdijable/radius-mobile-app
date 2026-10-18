@@ -186,11 +186,15 @@ class _CardsScreenState extends State<CardsScreen> {
           _StateCard(
             icon: LucideIcons.ticket,
             title: 'cards.none_title'.tr(),
-            text: 'cards.none_hint'.tr(),
+            // ايرث لنك لا تعرض المخزون لهذا الحساب: سببها لا «الساس».
+            text: s.unsupportedMessage ?? 'cards.none_hint'.tr(),
           ),
         ],
       );
     }
+    // ايرث لنك: السلاسل هي الباقات نفسها — قائمةٌ واحدة «حسب الباقة» تُفتح
+    // منها الكروت، بلا قسم باقاتٍ مكرَّر فوقها.
+    final byPackage = s.seriesArePackages;
     // بحثٌ وتقسيمُ صفحاتٍ محلّيّ: ١٠ سلاسل/صفحة، والكلّ محمَّلٌ سلفاً.
     final filtered = _filteredSeries;
     final pageCount = ((filtered.length + _perPage - 1) ~/ _perPage).clamp(1, 1 << 30);
@@ -203,8 +207,17 @@ class _CardsScreenState extends State<CardsScreen> {
           padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, 0),
           sliver: SliverList.list(
             children: [
-              _TotalCard(remaining: s.totals.remaining, totals: s.totals),
-              if (s.profiles.isNotEmpty) ...[
+              _TotalCard(
+                remaining: s.totals.remaining,
+                totals: s.totals,
+                byPackage: byPackage,
+              ),
+              // ايرث لنك: قراءةٌ لم تكتمل (سقف الكروت/المهلة) تُقال — كالويب.
+              if (s.partial) ...[
+                const SizedBox(height: Sp.md),
+                _PartialNote(qty: s.totals.qty),
+              ],
+              if (s.profiles.isNotEmpty && !byPackage) ...[
                 const SizedBox(height: Sp.xl),
                 _SectionTitle(
                   text: 'cards.by_package'.tr(),
@@ -218,13 +231,16 @@ class _CardsScreenState extends State<CardsScreen> {
               if (_series.isNotEmpty) ...[
                 const SizedBox(height: Sp.xl),
                 _SectionTitle(
-                  text: 'cards.series_title'.tr(),
+                  text: byPackage
+                      ? 'cards.by_package'.tr()
+                      : 'cards.series_title'.tr(),
                   trailing: '${filtered.length}',
                 ),
                 // بحثٌ حين تكثر السلاسل: برقم السلسلة أو اسم الباقة.
                 if (_series.length > _perPage) ...[
                   _SeriesSearch(
                     controller: _seriesSearch,
+                    byPackage: byPackage,
                     onChanged: (v) => setState(() {
                       _seriesQuery = v.trim();
                       _seriesPage = 0;
@@ -243,7 +259,9 @@ class _CardsScreenState extends State<CardsScreen> {
               child: _StateCard(
                 icon: LucideIcons.searchX,
                 title: 'cards.no_match_title'.tr(),
-                text: 'cards.no_match_hint'.tr(),
+                text: (_summary?.seriesArePackages ?? false)
+                    ? 'cards.package_no_match'.tr()
+                    : 'cards.no_match_hint'.tr(),
               ),
             ),
           )
@@ -281,9 +299,16 @@ class _CardsScreenState extends State<CardsScreen> {
 /// [totals] `null` أثناء التحميل: سطر التفصيل هيكل. و[remaining] `null` حين
 /// لا تُعرف الشارة بعد: العدد هيكلٌ أيضاً — لا صفرٌ مخترَع.
 class _TotalCard extends StatelessWidget {
-  const _TotalCard({required this.remaining, required this.totals});
+  const _TotalCard({
+    required this.remaining,
+    required this.totals,
+    this.byPackage = false,
+  });
   final int? remaining;
   final CardsTotals? totals;
+
+  /// ايرث لنك: «السلاسل» باقات — العدد يُقال «باقة» لا «سلسلة».
+  final bool byPackage;
 
   @override
   Widget build(BuildContext context) {
@@ -337,7 +362,8 @@ class _TotalCard extends StatelessWidget {
                   )
                 else
                   Text(
-                    'cards.totals_line'.tr(namedArgs: {
+                    (byPackage ? 'cards.totals_line_pkg' : 'cards.totals_line')
+                        .tr(namedArgs: {
                       'used': iso(formatIQD(t.used)),
                       'qty': iso(formatIQD(t.qty)),
                       'series': iso(formatIQD(t.series)),
@@ -508,18 +534,24 @@ class _SeriesTile extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        s.series,
-                        textDirection: TextDirection.ltr,
+                        seriesTitle(s),
+                        // رقم السلسلة لاتينيٌّ ثابت الاتّجاه؛ واسم الباقة (ايرث
+                        // لنك) يأخذ اتّجاهه الطبيعيّ.
+                        textDirection:
+                            isPackageSeries(s) ? null : TextDirection.ltr,
                         style: AppType.bodyBold(color: AppColors.textHi),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: Sp.xxs),
                       Text(
-                        isoJoin([
-                          seriesProfile(s),
-                          if (validity != null) validity,
-                        ], ' · '),
+                        isPackageSeries(s)
+                            ? 'cards.per_card'
+                                .tr(namedArgs: {'value': cardsMoney(s.value)})
+                            : isoJoin([
+                                seriesProfile(s),
+                                if (validity != null) validity,
+                              ], ' · '),
                         style: AppType.muted(),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -570,9 +602,14 @@ class _SectionTitle extends StatelessWidget {
 
 /// بحث السلاسل — رقم السلسلة أو اسم الباقة. يظهر حين تتجاوز السلاسل صفحةً.
 class _SeriesSearch extends StatelessWidget {
-  const _SeriesSearch({required this.controller, required this.onChanged});
+  const _SeriesSearch({
+    required this.controller,
+    required this.onChanged,
+    this.byPackage = false,
+  });
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
+  final bool byPackage;
 
   @override
   Widget build(BuildContext context) {
@@ -588,7 +625,8 @@ class _SeriesSearch extends StatelessWidget {
       textInputAction: TextInputAction.search,
       decoration: InputDecoration(
         isDense: true,
-        hintText: 'cards.series_search'.tr(),
+        hintText: (byPackage ? 'cards.package_search' : 'cards.series_search')
+            .tr(),
         hintStyle: AppType.input(color: AppColors.textLow),
         prefixIcon: Icon(LucideIcons.search, size: 18, color: AppColors.textLow),
         suffixIcon: controller.text.isEmpty
@@ -672,6 +710,44 @@ class _PagerButton extends StatelessWidget {
 }
 
 /// حالة الشاشة كلّها — عطلٌ بزرّ إعادة، أو حسابٌ بلا كارتات.
+/// «المخزون أكبر ممّا قُرئ» — خافتٌ بنغمة المعلومة: الأرقام فوقه صحيحةٌ لما
+/// قُرئ، لا خطأ.
+class _PartialNote extends StatelessWidget {
+  const _PartialNote({required this.qty});
+  final int qty;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    const tone = AppTone.info;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+      decoration: BoxDecoration(
+        color: tone.softBg,
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(color: tone.softBorder),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(LucideIcons.info, size: 15, color: tone.fill),
+          ),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: Text(
+              'cards.partial_note'
+                  .tr(namedArgs: {'qty': iso(formatIQD(qty))}),
+              style: AppType.body(color: tone.onSoft).copyWith(height: 1.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _StateCard extends StatelessWidget {
   const _StateCard({
     required this.icon,

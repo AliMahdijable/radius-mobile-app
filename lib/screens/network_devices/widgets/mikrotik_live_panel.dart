@@ -21,8 +21,10 @@ import '../../../core/util/error_text.dart';
 /// - Auto-start عند فتح الصفحة (لا يحتاج المستخدم يضغط "بدء")
 /// - CPU / RAM / أعلى interface throughput
 /// - رسم بياني للـtraffic الإجمالي (RX + TX) آخر ~15 دقيقة
-/// - قائمة interfaces من نوع ether/sfp فقط (بدون pppoe/bridge/vlan)
+/// - قسم البريدجات (إن وُجدت): ترافيك كلّ بريدج ومنافذه، الأعلى أوّلاً
+/// - قائمة interfaces من نوع ether/sfp (بدون pppoe/vlan)، وكلّ منفذٍ عضوٍ يحمل اسم بريدجه
 /// - كل ether يظهر مع سرعة RX/TX حاليّة
+/// - «الأعلى» (البطاقتان والرسم) من البريدجات والإيثر معاً — البريدج يجمع منافذه فيتصدّر غالباً
 class MikrotikLivePanel extends StatefulWidget {
   final NetworkDevice device;
   const MikrotikLivePanel({super.key, required this.device});
@@ -215,10 +217,10 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
 
       // نحسب **أعلى interface** بدل المجموع — عشان الكراف يُطابق كروت
       // "أعلى iface ↓" و "أعلى iface ↑" اللي فوق (طلب المستخدم 2026-08-14).
-      // كل سامبل يحمل max rx + max tx عند تلك اللحظة (من أي ether/sfp).
+      // كل سامبل يحمل max rx + max tx عند تلك اللحظة (من أي ether/sfp أو بريدج).
       int maxRxSampleBps = 0, maxTxSampleBps = 0;
       for (final iface in stats.interfaces) {
-        if (!_isEther(iface)) continue;
+        if (!_isHeadline(iface)) continue;
         final rate = _rates[iface.name];
         if (rate != null) {
           if (rate.rxBps > maxRxSampleBps) maxRxSampleBps = rate.rxBps;
@@ -263,11 +265,26 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
 
   bool _isEther(MikrotikInterface i) => i.type == 'ether' || i.type == 'sfp';
 
+  bool _isBridge(MikrotikInterface i) => i.type == 'bridge' && !i.disabled;
+
+  /// مصدر «الأعلى» (البطاقتان والرسم): البريدجات ثمّ الإيثر. البريدج مجموعة منافذ فترافيكه الأعلى
+  /// غالباً — وعند التساوي يتقدّم (طلب المستخدم ١٨ أكتوبر: «الترافيك الأعلى أولويّة إن وُجد بريدج»).
+  bool _isHeadline(MikrotikInterface i) => _isBridge(i) || _isEther(i);
+
+  List<MikrotikInterface> _headlinePool() => [
+        ...(_stats?.interfaces ?? []).where(_isBridge),
+        ...(_stats?.interfaces ?? []).where(_isEther),
+      ];
+
+  int _trafficOf(MikrotikInterface i) {
+    final r = _rates[i.name];
+    return r == null ? 0 : r.rxBps + r.txBps;
+  }
+
   /// أعلى interface بالـRX (download) — منفصل عن الـTX
   ({String name, int bps})? _maxRxIface() {
-    final ethers = (_stats?.interfaces ?? []).where(_isEther).toList();
     ({String name, int bps})? best;
-    for (final i in ethers) {
+    for (final i in _headlinePool()) {
       final r = _rates[i.name];
       if (r == null) continue;
       if (best == null || r.rxBps > best.bps) {
@@ -279,9 +296,8 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
 
   /// أعلى interface بالـTX (upload) — منفصل عن الـRX
   ({String name, int bps})? _maxTxIface() {
-    final ethers = (_stats?.interfaces ?? []).where(_isEther).toList();
     ({String name, int bps})? best;
-    for (final i in ethers) {
+    for (final i in _headlinePool()) {
       final r = _rates[i.name];
       if (r == null) continue;
       if (best == null || r.txBps > best.bps) {
@@ -348,7 +364,23 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   List<Widget> _buildExpandables() {
     final s = _stats!;
     final ethers = s.interfaces.where(_isEther).toList();
+    // البريدجات: الأعلى ترافيكاً أوّلاً (طلب المستخدم ١٨ أكتوبر).
+    final bridges = s.interfaces.where(_isBridge).toList()
+      ..sort((a, b) => _trafficOf(b).compareTo(_trafficOf(a)));
     return [
+      if (bridges.isNotEmpty) ...[
+        const SizedBox(height: Sp.md),
+        ExpandableSection(
+          key: PageStorageKey('mikrotik-${widget.device.id}-bridge'),
+          initiallyExpanded: true,
+          header: Row(children: [
+            Icon(LucideIcons.layers, size: 14, color: AppColors.brand),
+            const SizedBox(width: 6),
+            Text('Bridges (${bridges.length})', style: AppType.bodyBold()),
+          ]),
+          content: RepaintBoundary(child: _bridgesContent(bridges, s)),
+        ),
+      ],
       // 2026-08-18: PageStorageKey يحفظ expanded عبر rebuilds
       if (ethers.isNotEmpty) ...[
         const SizedBox(height: Sp.md),
@@ -412,8 +444,59 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       final r = _rates[iface.name];
       if (r != null) maxRate = math.max(maxRate, math.max(r.rxBps, r.txBps));
     }
+    final s = _stats;
     return Column(children: [
-      for (final iface in ethers) _interfaceRow(iface, maxRate),
+      for (final iface in ethers)
+        _interfaceRow(iface, maxRate, bridgeTag: s?.bridgeOf(iface.name)),
+    ]);
+  }
+
+  /// كلّ بريدج: ترافيكه + منافذه (ملوّنةً بحالتها). الشريط نسبيّ لأعلى بريدج.
+  Widget _bridgesContent(List<MikrotikInterface> bridges, MikrotikStats s) {
+    int maxRate = 0;
+    for (final b in bridges) {
+      final r = _rates[b.name];
+      if (r != null) maxRate = math.max(maxRate, math.max(r.rxBps, r.txBps));
+    }
+    final byName = {for (final i in s.interfaces) i.name: i};
+    return Column(children: [
+      for (final b in bridges)
+        _interfaceRow(b, maxRate,
+            members: [
+              for (final p in s.bridgePorts[b.name] ?? const <String>[])
+                (name: p, iface: byName[p]),
+            ]),
+    ]);
+  }
+
+  Widget _memberChips(List<({String name, MikrotikInterface? iface})> members) {
+    return Wrap(spacing: 4, runSpacing: 4, children: [
+      for (final m in members)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(R.pill),
+            border: Border.all(color: AppColors.borderSoft),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              width: 5,
+              height: 5,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: m.iface == null || m.iface!.disabled
+                    ? AppColors.textLow
+                    : (m.iface!.running ? AppColors.success : AppColors.error),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(m.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppType.micro(color: AppColors.textMid)),
+          ]),
+        ),
     ]);
   }
 
@@ -1041,7 +1124,12 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   // ══════════════════════════════════════════════════════════════
   // Interfaces section — فقط ether + sfp، مع RX/TX rates
   // ══════════════════════════════════════════════════════════════
-Widget _interfaceRow(MikrotikInterface iface, int maxRate) {
+Widget _interfaceRow(
+    MikrotikInterface iface,
+    int maxRate, {
+    String? bridgeTag,
+    List<({String name, MikrotikInterface? iface})>? members,
+  }) {
     final rate = _rates[iface.name];
     final color = iface.disabled
         ? AppColors.textLow
@@ -1086,6 +1174,24 @@ Widget _interfaceRow(MikrotikInterface iface, int maxRate) {
               ),
             ),
           ],
+          if (bridgeTag != null) ...[
+            const SizedBox(width: 6),
+            Flexible(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: AppColors.brandSoftBg,
+                  borderRadius: BorderRadius.circular(R.pill),
+                ),
+                child: Text(
+                  bridgeTag,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.daysWordBold(color: AppColors.brand),
+                ),
+              ),
+            ),
+          ],
           const Spacer(),
           if (rate != null) ...[
             Icon(LucideIcons.arrowDown, size: 9, color: AppColors.success),
@@ -1109,6 +1215,14 @@ Widget _interfaceRow(MikrotikInterface iface, int maxRate) {
             Expanded(
                 child: _miniBar((rate.rxBps + rate.txBps) / maxRate, color)),
           ]),
+        ],
+        // منافذ البريدج (إن عُرفت)
+        if (members != null && members.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: _memberChips(members),
+          ),
         ],
       ]),
     );

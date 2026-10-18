@@ -17,6 +17,9 @@ const Map<String, String> _kVariableLabels = {
   '{firstname}': 'الاسم الأول',
   '{subscriber_name}': 'اسم المشترك',
   '{username}': 'اسم المستخدم',
+  // وسيط البوّابة §10: الخادم يملؤه برمز وكيل المُرسِل في كلّ قالب — يدخل به
+  // المشترك تطبيق MyServices مع يوزره (يُعرض في «بوابة المشترك»).
+  '{agent_code}': 'رمز الوكيل',
   '{phone}': 'رقم الهاتف',
   '{package_name}': 'اسم الباقة',
   '{package_price}': 'سعر الباقة',
@@ -67,6 +70,7 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
     '{firstname}',
     '{subscriber_name}',
     '{username}',
+    '{agent_code}',
     '{phone}',
     '{package_name}',
     '{package_price}',

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/bulk_activate_api.dart';
 import '../../api/device_probe_api.dart';
 import '../../models/device_health.dart';
 import '../../api/subscribers_api.dart';
@@ -20,6 +21,7 @@ import '../../services/active_company.dart';
 import '../../services/auth_storage.dart';
 import '../../services/connection_alerts.dart';
 import '../../services/permissions_service.dart';
+import '../../services/provider_service.dart';
 import '../../services/subscriber_events.dart';
 import '../../services/subscriber_usage_store.dart';
 import '../../core/widgets/design_sheet.dart';
@@ -28,6 +30,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/active_company_line.dart';
+import '../../services/provider_limits.dart';
 import 'sheets/bulk_activate_sheet.dart';
 import 'sheets/bulk_pay_debt_sheet.dart';
 import 'sheets/pay_debt_sheet.dart';
@@ -843,6 +846,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     final id = s.idx;
     if (id == null) return;
     HapticFeedback.selectionClick();
+    final wasSelecting = _selectionMode;
     setState(() {
       if (_selected.contains(id)) {
         _selected.remove(id);
@@ -852,16 +856,33 @@ class _SubscribersScreenState extends State<SubscribersScreen>
         _selectionMode = true;
       }
     });
+    if (!wasSelecting && _selectionMode) _warmBulkCapability();
   }
 
   void _enterSelectionWith(Subscriber s) {
     final id = s.idx;
     if (id == null) return;
     HapticFeedback.selectionClick();
+    final wasSelecting = _selectionMode;
     setState(() {
       _selectionMode = true;
       _selected.add(id);
     });
+    if (!wasSelecting) _warmBulkCapability();
+  }
+
+  /// حكم الخادم على التجديد الجماعيّ لهذا المدير — يُسأل لحظة دخول وضع
+  /// التحديد (من الكاش إن كان طازجاً)، فيظهر «تجديد» مقفلاً بسببه قبل أن
+  /// يُضغط. ايرث لنك مقفلٌ بلا سؤال، ومن لا يملك التفعيل مقفلٌ بصلاحيّته.
+  void _warmBulkCapability() {
+    if (ProviderService.isEarthlink ||
+        ActiveCompany.current?.sasCode == 'earthlink') {
+      return;
+    }
+    if (!Perms.hasAny(const ['subscribers.activate', 'subscribers.extend'])) {
+      return;
+    }
+    unawaited(BulkActivateApi.capability());
   }
 
   void _exitSelection() {
@@ -1068,9 +1089,23 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   Future<void> _openBulkActivate() async {
     final selected = _filteredSubscribersForBulk();
     if (selected.isEmpty) return;
-    await showBulkActivateSheet(context, subs: selected);
+    final keep = await showBulkActivateSheet(context, subs: selected);
     if (!mounted) return;
-    _exitSelection();
+    // لم تُفتح أصلاً (حكم الخادم بالمنع): التحديد كما هو.
+    if (keep == null) return;
+    // كالويب: يبقى محدّداً من لم يُفعَّل ويجوز إرساله ثانيةً (رُفض، لم يُنفَّذ،
+    // لم تُجلب بياناته، أو خارج حدّ الدفعة) — ليُكمَل بعد معالجة السبب، لا
+    // ليُعاد تحديده باليد. ولا أحد ⇒ خروجٌ من التحديد.
+    if (keep.isEmpty) {
+      _exitSelection();
+      return;
+    }
+    setState(() {
+      _selected
+        ..clear()
+        ..addAll(keep);
+      _selectionMode = true;
+    });
   }
 
   Future<void> _bulk(_BulkAction action) async {
@@ -1139,8 +1174,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       tone: destructive ? AppTone.danger : AppTone.brand,
       title: 'subscribers.confirm_bulk_action'
           .tr(namedArgs: {'label': action.label, 'count': '$count'}),
-      subtitle: 'subscribers.selected_count'
-          .tr(namedArgs: {'count': '$count'}, args: ['$count']),
+      subtitle: 'subscribers.bulk_selected'.tr(namedArgs: {'count': '$count'}),
       message: destructive
           ? 'subscribers.confirm_bulk_delete'.tr(namedArgs: {'count': '$count'})
           : 'subscribers.confirm_bulk_generic'
@@ -1455,19 +1489,25 @@ class _SubscribersScreenState extends State<SubscribersScreen>
         ),
       ),
       // Selection bottom action bar
+      // حكم الخادم على التجديد الجماعيّ يصل بعد دخول التحديد — الشريط يُعاد
+      // رسمه به (يُقفل «تجديد» بسببه إن مُنع) بلا إعادة بناء الشاشة كلّها.
       bottomNavigationBar: _selectionMode
-          ? _BulkActionBar(
-              selectedCount: _selected.length,
-              debtorCount: _selectedDebtorCount,
-              enabledCount: _enabledInSelection,
-              disabledCount: _disabledInSelection,
-              onlineCount: _onlineInSelection,
-              onRenew: _openBulkActivate,
-              onPayDebt: _selectedDebtorCount > 0 ? _openBulkPayDebt : null,
-              onDisconnect: _onlineInSelection > 0 ? _openBulkDisconnect : null,
-              onDisable: () => _bulk(_BulkAction.disable),
-              onEnable: () => _bulk(_BulkAction.enable),
-              onDelete: () => _bulk(_BulkAction.delete),
+          ? ValueListenableBuilder<BulkActivateCapability?>(
+              valueListenable: BulkActivateApi.listenable,
+              builder: (_, __, ___) => _BulkActionBar(
+                selectedCount: _selected.length,
+                debtorCount: _selectedDebtorCount,
+                enabledCount: _enabledInSelection,
+                disabledCount: _disabledInSelection,
+                onlineCount: _onlineInSelection,
+                onRenew: _openBulkActivate,
+                onPayDebt: _selectedDebtorCount > 0 ? _openBulkPayDebt : null,
+                onDisconnect:
+                    _onlineInSelection > 0 ? _openBulkDisconnect : null,
+                onDisable: () => _bulk(_BulkAction.disable),
+                onEnable: () => _bulk(_BulkAction.enable),
+                onDelete: () => _bulk(_BulkAction.delete),
+              ),
             )
           : null,
     );
@@ -1995,12 +2035,20 @@ class _BulkActionBar extends StatelessWidget {
     // (تسديد بلا مدينين، فصل بلا متّصلين).
     const renewKeys = ['subscribers.activate', 'subscribers.extend'];
     final canRenew = Perms.hasAny(renewKeys);
+    // ايرث لنك (طريقة التفعيل لكلّ مشترك)، أو حكم الخادم أنّ حساب الساس لا
+    // يجدّد دفعةً من الرصيد (كارت فقط، بلا صلاحيّة التفعيل): الزرّ بمكانه
+    // مقفلٌ بالسبب، فوق أيّ صلاحيّة ([bulkActivateUnavailableReason]).
+    final renewUnavailable = bulkActivateUnavailableReason();
     final canPayDebt = Perms.has('subscribers.pay_debt');
     final canToggle = Perms.has('subscribers.toggle');
     final canDelete = Perms.has('subscribers.delete');
+    // ايرث لنك لا تسمح بحذف المشترك: الزرّ بمكانه مقفلٌ بالسبب للمالك
+    // ولموظّفه ([subscriberDeleteUnavailableReason]) — لا مخفيّ.
+    final deleteUnavailable = subscriberDeleteUnavailableReason();
     final showRenew = permShown(renewKeys);
     final showToggle = permShown(const ['subscribers.toggle']);
-    final showDelete = permShown(const ['subscribers.delete']);
+    final showDelete =
+        deleteUnavailable != null || permShown(const ['subscribers.delete']);
     // مطلب المستخدم 2026-07-12: تصميم مضغوط — صفّان بدل 4:
     //   Row1 (primary): Renew | Pay debt | Disconnect (كل ما يظهر يتقاسم العرض)
     //   Row2 (secondary): Disable | Enable | Delete
@@ -2022,6 +2070,10 @@ class _BulkActionBar extends StatelessWidget {
           label: '${'subscribers.bulk_renew'.tr()} ($selectedCount)',
           color: AppColors.brand,
           locked: !canRenew,
+          unavailable: renewUnavailable,
+          // قفلٌ بحكم الخادم قد يكون أقدم من منح الصلاحيّة في الساس: الضغط
+          // يعيد السؤال في الخلفيّة فينفتح الزرّ به (ايرث لنك لا تسأل).
+          onUnavailableTap: BulkActivateApi.recheckIfLocked,
           onTap: onRenew,
         ),
       ));
@@ -2110,6 +2162,7 @@ class _BulkActionBar extends StatelessWidget {
                         label: 'subscribers.bulk_delete'.tr(),
                         color: AppColors.error,
                         locked: !canDelete,
+                        unavailable: deleteUnavailable,
                         onTap: onDelete,
                       ),
                     ),
@@ -2131,6 +2184,8 @@ class _PrimaryPill extends StatelessWidget {
     required this.color,
     required this.onTap,
     this.locked = false,
+    this.unavailable,
+    this.onUnavailableTap,
   });
   final IconData icon;
   final String label;
@@ -2141,9 +2196,17 @@ class _PrimaryPill extends StatelessWidget {
   /// وقفلٌ مكان الأيقونة، ونقرته رسالة القفل — [onTap] لا يُستدعى.
   final bool locked;
 
+  /// عمليّةٌ لا يدعمها المزوّد (لا صلاحيّةٌ ناقصة): الشكل المقفل نفسه،
+  /// ونقرته هذا السبب مكان «اطلبها من مديرك». يتقدّم على [locked].
+  final String? unavailable;
+
+  /// يُستدعى بعد عرض سبب [unavailable] — لإعادة سؤال حكمٍ قد يكون قديماً.
+  final VoidCallback? onUnavailableTap;
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    final locked = this.locked || unavailable != null;
     final pill = SizedBox(
       height: 36,
       child: FilledButton.icon(
@@ -2156,8 +2219,12 @@ class _PrimaryPill extends StatelessWidget {
             borderRadius: BorderRadius.circular(R.sm),
           ),
         ),
-        onPressed:
-            locked ? () => showNoPermission(context, action: true) : onTap,
+        onPressed: locked
+            ? () {
+                showNoPermission(context, action: true, message: unavailable);
+                if (unavailable != null) onUnavailableTap?.call();
+              }
+            : onTap,
         icon: Icon(locked ? LucideIcons.lock : icon, size: 14),
         label: Text(
           label,
@@ -2171,7 +2238,9 @@ class _PrimaryPill extends StatelessWidget {
     if (!locked) return pill;
     return Semantics(
       button: true,
-      label: 'locked.a11y'.tr(args: [label]),
+      label: unavailable == null
+          ? 'locked.a11y'.tr(args: [label])
+          : '$label — $unavailable',
       excludeSemantics: true,
       child: pill,
     );
@@ -2186,6 +2255,7 @@ class _SecondaryBtn extends StatelessWidget {
     required this.onTap,
     this.enabled = true,
     this.locked = false,
+    this.unavailable,
   });
   final IconData icon;
   final String label;
@@ -2196,6 +2266,10 @@ class _SecondaryBtn extends StatelessWidget {
   /// رسالة القفل لا العمليّة، بسطحٍ غاطس وحدٍّ محايد وقفلٍ مكان الأيقونة.
   final bool locked;
 
+  /// عمليّةٌ يمنعها المزوّد (حذف مشترك ايرث لنك): الشكل المقفل نفسه، ونقرته
+  /// هذا السبب مكان «اطلبها من مديرك». يتقدّم على [locked].
+  final String? unavailable;
+
   /// When false the button greys out — used by the bulk bar to signal
   /// that no rows in the current selection are eligible for this
   /// action (e.g. all rows already disabled → 'تعطيل' has nothing
@@ -2205,10 +2279,12 @@ class _SecondaryBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    if (locked) {
+    if (locked || unavailable != null) {
       return Semantics(
         button: true,
-        label: 'locked.a11y'.tr(args: [label]),
+        label: unavailable == null
+            ? 'locked.a11y'.tr(args: [label])
+            : '$label — $unavailable',
         excludeSemantics: true,
         child: OutlinedButton.icon(
           style: OutlinedButton.styleFrom(
@@ -2221,7 +2297,8 @@ class _SecondaryBtn extends StatelessWidget {
               borderRadius: BorderRadius.circular(R.sm),
             ),
           ),
-          onPressed: () => showNoPermission(context, action: true),
+          onPressed: () => showNoPermission(context,
+              action: true, message: unavailable),
           icon: const Icon(LucideIcons.lock, size: 13),
           label: Text(label,
               overflow: TextOverflow.ellipsis,

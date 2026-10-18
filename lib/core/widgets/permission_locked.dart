@@ -29,7 +29,9 @@ import '../../theme/typography.dart';
 ///    `locked:` عنده false وشاشته كما هي حرفيّاً.
 /// 5. ما ليس صلاحيّةً يبقى **مخفيّاً**: ميزةٌ لا يدعمها المزوّد (ايرث لنك)،
 ///    أو عنصرٌ لصاحب الحساب وحده، أو مفتاحٌ لا يُمنح لهذا الدور
-///    ([permShown])، أو قسمٌ أخفاه المدير من «نطاق العرض».
+///    ([permShown])، أو قسمٌ أخفاه المدير من «نطاق العرض». والاستثناء قسمٌ
+///    آتٍ لشركته: يبقى بمكانه مقفلاً بسببه لا بالصلاحيّة ([showNoPermission]
+///    بـ`message`) — بوّابة المشترك لـFTTH (ولايرث لنك حتى ١٨ أكتوبر).
 ///
 /// ⚠️ في الاختبار: [showNoPermission] يضع مؤقّتاً للإخفاء، فبعد النقر على
 /// عنصرٍ مقفل `await t.pump(const Duration(seconds: 3))` قبل نهاية الاختبار.
@@ -76,13 +78,19 @@ abstract final class LockedStyle {
 /// ولونه `brandSurface` كشريط التطبيق العامّ: ليس خطأً (لا أحمر) ولا نجاحاً.
 ///
 /// [action] = إجراءٌ (زرّ/عمليّة) لا قسم — يغيّر الكلمة وحدها.
-void showNoPermission(BuildContext context, {bool action = false}) {
+/// [message] = سببٌ غير الصلاحيّة (ميزةٌ لا تملكها الشركة بعد) مكان «اطلبها
+/// من مديرك» — فلا يُوعَد أحدٌ بصلاحيّةٍ لا يملك مديره منحها.
+void showNoPermission(
+  BuildContext context, {
+  bool action = false,
+  String? message,
+}) {
   HapticFeedback.selectionClick();
   final overlay = Overlay.maybeOf(context, rootOverlay: true);
   if (overlay == null) return;
   _LockedToast.show(
     overlay,
-    (action ? 'locked.toast_action' : 'locked.toast').tr(),
+    message ?? (action ? 'locked.toast_action' : 'locked.toast').tr(),
   );
 }
 

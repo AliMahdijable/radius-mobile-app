@@ -120,11 +120,16 @@ class _SeriesCardsSheetState extends State<_SeriesCardsSheet> {
     return DesignSheet(
       header: SheetHeaderBar(
         icon: LucideIcons.ticket,
-        title: 'cards.series_n'.tr(namedArgs: {'series': iso(s.series)}),
-        subtitle: isoJoin([
-          seriesProfile(s),
-          'cards.per_card'.tr(namedArgs: {'value': cardsMoney(s.value)}),
-        ], ' · '),
+        // ايرث لنك: «السلسلة» باقة — عنوانها اسم الباقة لا رمزها الداخليّ.
+        title: isPackageSeries(s)
+            ? 'cards.package_n'.tr(namedArgs: {'name': seriesProfile(s)})
+            : 'cards.series_n'.tr(namedArgs: {'series': iso(s.series)}),
+        subtitle: isPackageSeries(s)
+            ? 'cards.per_card'.tr(namedArgs: {'value': cardsMoney(s.value)})
+            : isoJoin([
+                seriesProfile(s),
+                'cards.per_card'.tr(namedArgs: {'value': cardsMoney(s.value)}),
+              ], ' · '),
         onClose: () => Navigator.of(context).pop(),
       ),
       scrollable: false,
@@ -180,7 +185,13 @@ class _SeriesCardsSheetState extends State<_SeriesCardsSheet> {
       );
     }
     if (_cards.isEmpty) {
-      return _Message(icon: LucideIcons.inbox, text: 'cards.series_empty'.tr());
+      return _Message(
+        icon: LucideIcons.inbox,
+        text: (isPackageSeries(_series)
+                ? 'cards.package_empty'
+                : 'cards.series_empty')
+            .tr(),
+      );
     }
     return ListView.builder(
       padding: EdgeInsets.only(bottom: Sp.lg + MediaQuery.paddingOf(context).bottom),

@@ -1,9 +1,10 @@
-import 'package:easy_localization/easy_localization.dart';
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/reports_api.dart';
+import '../../core/util/server_time.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -14,8 +15,14 @@ import 'widgets/report_permission_gate.dart';
 
 /// تقرير الجلسات — الـonline حالياً + history.
 /// Toggle بين "متصلون الآن" و "كل الجلسات (أحدث 200)".
+///
+/// [initialUsername] = «سجلّ الجلسات» من نافذة مشترك: يفتح على «الكلّ» مبحوثاً
+/// باسم دخوله كاملاً — SAS4 يفلتر UserSessions به، وايرث لنك تعطي سجلّ ذلك
+/// المشترك من `usersession/user` (آخر ٣٠ يوماً — مؤكَّد حيّاً).
 class SessionsReportScreen extends StatefulWidget {
-  const SessionsReportScreen({super.key});
+  const SessionsReportScreen({super.key, this.initialUsername});
+
+  final String? initialUsername;
 
   @override
   State<SessionsReportScreen> createState() => _SessionsReportScreenState();
@@ -26,6 +33,10 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
   List<SessionRow> _rows = const [];
   bool _loading = true;
   String? _error;
+
+  /// سجلّ الجلسات المنتهية غير متاح لهذه الشركة (علم الخادم) — يُعرض
+  /// تنبيهاً فوق «الكلّ» فلا يُظنّ أنّ المشتركين لم يتّصلوا قطّ.
+  String? _historyNote;
   int _visibleCount = kReportPageStep;
   final _searchCtrl = TextEditingController();
   String _searchField = 'username'; // username / ip / mac
@@ -43,6 +54,13 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
   @override
   void initState() {
     super.initState();
+    final u = widget.initialUsername?.trim() ?? '';
+    if (u.isNotEmpty) {
+      _onlineOnly = false;
+      _searchField = 'username';
+      _searchValue = u;
+      _searchCtrl.text = u;
+    }
     _load();
   }
 
@@ -69,6 +87,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
       _loading = false;
       _rows = r.rows;
       _error = r.ok ? null : (r.error ?? 'common.load_failed'.tr());
+      _historyNote = r.ok ? r.note : null;
       _visibleCount = kReportPageStep;
     });
   }
@@ -227,6 +246,10 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                         });
                       },
                     ),
+                    if (!_onlineOnly && _historyNote != null) ...[
+                      const SizedBox(height: Sp.sm),
+                      _HistoryNote(text: _historyNote!),
+                    ],
                     const SizedBox(height: Sp.sm),
                     Row(
                       children: [
@@ -386,6 +409,25 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                     ],
                   ),
                 ],
+                if (sessionSpanText(s) case final span?) ...[
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Icon(LucideIcons.clock,
+                          size: 10, color: AppColors.textLow),
+                      const SizedBox(width: 3),
+                      Flexible(
+                        child: Text(
+                          span,
+                          textDirection: TextDirection.ltr,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppType.muted().copyWith(fontSize: 10.5),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 if (s.bytesIn > 0 || s.bytesOut > 0) ...[
                   const SizedBox(height: 2),
                   Row(
@@ -464,6 +506,73 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
           ),
         ],
       );
+}
+
+/// متى كانت الجلسة **المنتهية**: «2026/10/17 21:05 → 10/18 02:40» (ونهايةٌ في
+/// اليوم نفسه بساعتها وحدها: «… 08:00 → 13:30») — مختصرةٌ فتتّسع على ٣٢٠،
+/// والتاريخ الكامل في التصدير. والحيّة بلا سطر (حالتها «متصل»). توقيت
+/// الساس/ايرث لنك عارٍ بتوقيت بغداد فيُقرأ محلّيّاً ([parseSasLocal])، والصفريّ
+/// «0000-…» غيابٌ لا تاريخ.
+@visibleForTesting
+String? sessionSpanText(SessionRow s) {
+  if (s.isOnline) return null;
+  DateTime? at(String? raw) {
+    final v = raw?.trim() ?? '';
+    if (v.isEmpty || v.startsWith('0000')) return null;
+    return parseSasLocal(v);
+  }
+
+  String two(int n) => n.toString().padLeft(2, '0');
+  String hm(DateTime t) => '${two(t.hour)}:${two(t.minute)}';
+  String full(DateTime t) => '${t.year}/${two(t.month)}/${two(t.day)} ${hm(t)}';
+
+  final start = at(s.startedAt);
+  final end = at(s.endedAt);
+  if (start == null && end == null) return null;
+  if (start == null) return full(end!);
+  if (end == null) return full(start);
+  final sameDay = start.year == end.year &&
+      start.month == end.month &&
+      start.day == end.day;
+  final tail = sameDay ? hm(end) : '${two(end.month)}/${two(end.day)} ${hm(end)}';
+  return '${full(start)} → $tail';
+}
+
+/// تنبيه «الجلسات المنتهية غير متاحة» — خافتٌ بنغمة المعلومة لا الخطأ.
+class _HistoryNote extends StatelessWidget {
+  const _HistoryNote({required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    const tone = AppTone.info;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+      decoration: BoxDecoration(
+        color: tone.softBg,
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(color: tone.softBorder),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Icon(LucideIcons.info, size: 15, color: tone.fill),
+          ),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: Text(
+              text,
+              style: AppType.muted(color: tone.onSoft)
+                  .copyWith(fontSize: 11.5, height: 1.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// منتقي حقل البحث في الجلسات (username / IP / MAC).

@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import '../../api/device_probe_api.dart';
+import '../../api/portal_settings_api.dart';
 import '../../api/whatsapp_api.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/device_health.dart';
@@ -88,7 +89,10 @@ Future<void> showConnectionAlertFlow(
     lines: lines,
     problems: problems,
   );
-  final message = WhatsAppApi.renderForSubscriber(body, sub);
+  // {agent_code} يُملأ هنا: اليدويّ لا يمرّ بالخادم الذي يملؤه (وسيط البوّابة §10).
+  final message = await PortalSettingsApi.fillAgentCode(
+      WhatsAppApi.renderForSubscriber(body, sub));
+  if (!context.mounted) return;
 
   // ── ٤. المعاينة ──────────────────────────────────────────────
   // العنوان يحمل السبب الدقيق («LAN غير مربوط» لا «خلل الكيبل») —

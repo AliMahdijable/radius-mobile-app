@@ -24,6 +24,8 @@ class ReportLogTile extends StatelessWidget {
     this.targetName,
     required this.createdAt,
     this.balanceAfter,
+    this.costLine,
+    this.costLineWarn = false,
   });
 
   final String actionType;
@@ -49,6 +51,12 @@ class ReportLogTile extends StatelessWidget {
   /// ⚠️ و`null` ليس صفراً: حركةٌ لا تمسّ الرصيد، أو سجلٌّ قديم بلا
   /// القيمة. يُخفى السطر حينها بدل أن يُعرض «الدين: 0» — وهو رقمٌ يكذب.
   final num? balanceAfter;
+
+  /// سطر كلفة الباقة — التقرير الماليّ وحده، لمالك الحساب (٢٠٢٦-١٠-١٨). نصٌّ
+  /// جاهز من المستدعي؛ `null` = لا سطر، فالشاشات الأخرى كما كانت.
+  /// [costLineWarn]: كلفةٌ لم تُسجَّل بعد — بلون التنبيه.
+  final String? costLine;
+  final bool costLineWarn;
 
   @override
   Widget build(BuildContext context) {
@@ -231,6 +239,35 @@ class ReportLogTile extends StatelessWidget {
                                 : (balanceAfter! > 0
                                     ? AppColors.success
                                     : AppColors.textMid),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                // ── كلفة الباقة (للمالك، التقرير الماليّ) — نمط سطر الدين ──
+                if (costLine != null) ...[
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Icon(
+                        LucideIcons.package,
+                        size: 10,
+                        color:
+                            costLineWarn ? AppColors.warning : AppColors.textMid,
+                      ),
+                      const SizedBox(width: 3),
+                      Flexible(
+                        child: Text(
+                          costLine!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppType.muted().copyWith(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: costLineWarn
+                                ? AppColors.warning
+                                : AppColors.textMid,
                           ),
                         ),
                       ),

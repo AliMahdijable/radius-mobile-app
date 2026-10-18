@@ -3,12 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/earthlink_api.dart';
+import '../../api/el_card_order_gate.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/skeleton.dart';
+import 'card_order_screen.dart';
 
 /// ايرث لنك — «الكارتات المطلوبة» (البند ٤، EarthLink وحدهم).
 ///
@@ -48,7 +50,19 @@ class _ElRequiredCardsScreenState extends State<ElRequiredCardsScreen> {
   @override
   void initState() {
     super.initState();
+    // زرّ «اطلب هذه الكارتات» يتبع مفتاح الخادم — الاستماع يسأل عنه مع الجلب.
+    ElCardOrderGate.open.addListener(_onOrderGate);
     _load();
+  }
+
+  @override
+  void dispose() {
+    ElCardOrderGate.open.removeListener(_onOrderGate);
+    super.dispose();
+  }
+
+  void _onOrderGate() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _load() async {
@@ -187,6 +201,14 @@ class _ElRequiredCardsScreenState extends State<ElRequiredCardsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         _summary(items),
+                        // «اطلبها» — صاحب الحساب وحده (طلب الكارتات من رصيد
+                        // الإيداع ADMIN_ONLY عند الخادم)، حين يلزم شيء، والطلب
+                        // مفتوحٌ على الخادم ([ElCardOrderGate]: موقوفٌ ⇒ لا زرّ).
+                        if (ElCardOrderGate.visible &&
+                            items.any((c) => c.needed > 0)) ...[
+                          const SizedBox(height: Sp.md),
+                          _orderButton(items),
+                        ],
                         const SizedBox(height: Sp.lg),
                         if (items.isEmpty) _emptyState() else _list(items),
                       ],
@@ -205,6 +227,8 @@ class _ElRequiredCardsScreenState extends State<ElRequiredCardsScreen> {
   Widget _summary(List<ElNeededCard> items) {
     final totalNeeded = items.fold<int>(0, (s, c) => s + c.needed);
     final totalBalance = items.fold<num>(0, (s, c) => s + c.balanceNeeded);
+    // بسعر الكارت لدى ايرث لنك (ما يحسب به «طلب الكارتات») حين يصل من الخادم.
+    final byCardPrice = items.any((c) => c.cardPrice != null);
     return Container(
       padding: const EdgeInsets.all(Sp.lg),
       decoration: BoxDecoration(
@@ -235,7 +259,9 @@ class _ElRequiredCardsScreenState extends State<ElRequiredCardsScreen> {
                   flex: 3,
                   child: _stat(
                     icon: LucideIcons.wallet,
-                    label: 'الرصيد المطلوب (بكلفة الشركة)',
+                    label: byCardPrice
+                        ? 'الرصيد المطلوب (بسعر الكارت)'
+                        : 'الرصيد المطلوب (بكلفة الشركة)',
                     value: formatIQD(totalBalance),
                     unit: 'د.ع',
                   ),
@@ -245,7 +271,10 @@ class _ElRequiredCardsScreenState extends State<ElRequiredCardsScreen> {
           ),
           const SizedBox(height: Sp.md),
           Text(
-            '${_periodText[_index]} — المبلغ اللازم تعبئته لشراء الكارتات المطلوبة',
+            byCardPrice
+                ? '${_periodText[_index]} — المبلغ اللازم تعبئته لشراء الكارتات '
+                    'المطلوبة، بسعر ايرث لنك للكارت (وبه يُحسب «طلب الكارتات»)'
+                : '${_periodText[_index]} — المبلغ اللازم تعبئته لشراء الكارتات المطلوبة',
             style: AppType.muted(color: AppColors.onBrandSecondary),
           ),
         ],
@@ -302,6 +331,40 @@ class _ElRequiredCardsScreenState extends State<ElRequiredCardsScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  /// يفتح «طلب الكارتات» بأعداد المطلوب لهذه المدّة — والتأكيد بالكلفة هناك.
+  Widget _orderButton(List<ElNeededCard> items) {
+    return SizedBox(
+      height: H.button,
+      child: OutlinedButton.icon(
+        onPressed: () {
+          HapticFeedback.selectionClick();
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => ElCardOrderScreen(
+                days: _currentDays,
+                initialCounts: {
+                  for (final c in items)
+                    if (c.needed > 0) c.profileId: c.needed,
+                },
+              ),
+            ),
+          );
+        },
+        icon: Icon(LucideIcons.shoppingCart, size: 18, color: AppColors.brand),
+        label: Text('اطلب هذه الكارتات من ايرث لنك',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.button(color: AppColors.brand)),
+        style: OutlinedButton.styleFrom(
+          backgroundColor: AppColors.surface,
+          side: BorderSide(color: AppColors.brandSoftBorder),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(R.button)),
+        ),
+      ),
     );
   }
 
@@ -503,8 +566,17 @@ class _NeededRow extends StatelessWidget {
                           .copyWith(fontSize: 13.5),
                     ),
                     const SizedBox(height: 2),
-                    Text('كلفة الكارت ${formatIQD(card.cost)} د.ع',
-                        style: AppType.muted(color: AppColors.textLow)),
+                    // سعر الكارت (ما يُدفع بطلب الكارتات)، وكلفة التفعيل من الرصيد
+                    // حين تختلف عنه — وإلّا الكلفة وحدها (خادمٌ لا يرسل السعر).
+                    if (card.cardPrice != null) ...[
+                      Text('سعر الكارت ${formatIQD(card.cardPrice!)} د.ع',
+                          style: AppType.muted(color: AppColors.textLow)),
+                      if (card.cost > 0 && card.cost != card.cardPrice)
+                        Text('التفعيل من الرصيد ${formatIQD(card.cost)} د.ع',
+                            style: AppType.muted(color: AppColors.textLow)),
+                    ] else
+                      Text('كلفة الكارت ${formatIQD(card.cost)} د.ع',
+                          style: AppType.muted(color: AppColors.textLow)),
                   ],
                 ),
               ),

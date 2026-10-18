@@ -422,6 +422,9 @@ class CardsSummary {
     required this.profiles,
     required this.series,
     this.updatedAt,
+    this.source,
+    this.unsupportedMessage,
+    this.partial = false,
   });
 
   /// `false` = لا صلاحيّة كارت أو لا سلاسل له إطلاقاً (والمصفوفتان فارغتان).
@@ -433,12 +436,32 @@ class CardsSummary {
   /// متى قرأ الخادم الساس — من قاعدتنا (موسومٌ بـZ).
   final DateTime? updatedAt;
 
+  /// مصدر المخزون: `earthlink` لموزّعي ايرث لنك (prepaycard/all — المجموعة ②
+  /// ١٨ أكتوبر)، و`null` لـSAS4 (لا يرسله).
+  final String? source;
+
+  /// ايرث لنك لا تعرض مخزون الكروت لهذا الحساب (`unsupported:true` من الخادم)
+  /// — نصّه العربيّ يُعرض مكان «هذا الحساب ما يستعمل كارتات».
+  final String? unsupportedMessage;
+
+  /// ايرث لنك: المخزون أكبر ممّا قرأه الخادم (سقف الكروت أو مهلة القراءة) —
+  /// الأرقام لأوّل [CardsTotals.qty] كارت، فيُقال ذلك لا يُعرض جزءٌ كأنّه الكلّ.
+  final bool partial;
+
+  /// «السلسلة» عند ايرث لنك هي **الباقة** (ايرث لنك لا تُصدر سلاسل): قائمة
+  /// الباقات والسلاسل واحدة، فتُعرض مرّةً باسم الباقة لا برمزها.
+  bool get seriesArePackages => source == 'earthlink';
+
   static CardsSummary fromJson(Map<String, dynamic> body) => CardsSummary(
         enabled: _bool(body['enabled']),
         totals: CardsTotals.fromJson(body['totals']),
         profiles: _rows(body['profiles'], CardProfileStock.fromJson),
         series: _rows(body['series'], CardSeries.fromJson),
         updatedAt: parseServerUtc(_str(body['updated_at'])),
+        source: _str(body['source']),
+        unsupportedMessage:
+            _bool(body['unsupported']) ? _str(body['message']) : null,
+        partial: _bool(body['partial']),
       );
 }
 
@@ -453,9 +476,12 @@ class CardsBadge {
   /// مجموع غير المستعمل في كلّ السلاسل. `null` = تعذّرت القراءة.
   final int? remaining;
 
-  /// `cards` في /api/v2/admin-widgets. `null` = خادمٌ لا يعرف الحقل.
+  /// `cards` في /api/v2/admin-widgets. `null` = خادمٌ لا يعرف الحقل، **أو** حالةٌ
+  /// لم تُعرف بعد (`enabled` غائب: أوّل قراءةٍ لمخزون ايرث لنك لم تكتمل خلال
+  /// ثانيتها) — فلا تُقرأ «غير متاح» ويُخفى قسم «الكارتات»؛ يبقى ما نعرفه
+  /// (و[CardsState.ensureKnown] يسأل الملخّص). الساس يرسل `enabled` دائماً.
   static CardsBadge? fromJson(Object? raw) {
-    if (raw is! Map) return null;
+    if (raw is! Map || raw['enabled'] == null) return null;
     return CardsBadge(
       enabled: _bool(raw['enabled']),
       remaining: _countOrNull(raw['remaining']),

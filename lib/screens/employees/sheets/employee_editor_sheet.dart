@@ -746,7 +746,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
           Expanded(
             child: Text(
               'تبقى لك وحدك ولا تُمنح لموظّف: تحويل الرصيد وكشف الإيداع، '
-              'إلغاء التسوية، وإدارة الموظفين.',
+              'طلب الكارتات، إلغاء التسوية، وإدارة الموظفين.',
               style: AppType.body(color: AppColors.textMid),
             ),
           ),

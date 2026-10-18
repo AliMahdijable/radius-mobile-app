@@ -201,8 +201,12 @@ class _MainShellState extends State<MainShell> {
     }
     // 2026-06-14: signal من api_client.dart حين empToken الموظف انتهى
     // (refresh مرفوض بقصد). نمسح أي حالة محلية ونرجع لشاشة الدخول.
+    // وسبب الخادم إن قاله (موظّف ساس عُطّل أو حُذف — 401 `EMPLOYEE_DISABLED`
+    // / `EMPLOYEE_SESSION_REVOKED`) بدل «انتهت الجلسة».
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('common.session_expired'.tr())),
+      SnackBar(
+          content: Text(
+              EmployeeSession.kickMessage ?? 'common.session_expired'.tr())),
     );
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const AccountGateScreen()),

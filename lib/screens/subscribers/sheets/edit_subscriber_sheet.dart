@@ -1,13 +1,18 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/earthlink_api.dart';
 import '../../../api/subscribers_api.dart';
+import '../../../core/util/bidi.dart';
 import '../../../core/util/contact_picker.dart';
+import '../../../models/package_change.dart';
 import '../../../models/subscriber.dart';
 import '../../../services/active_company.dart';
 import '../../../services/auth_storage.dart';
+import '../../../services/permissions_service.dart';
 import '../../../services/provider_service.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../core/widgets/design_sheet.dart';
@@ -16,6 +21,81 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../widgets/package_picker_field.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
+
+/// متى تتغيّر باقة مشتركٍ **فعّال** في SAS4 — خيار الساس نفسه (`user/changeProfile`
+/// بـ`change_type`)، بقرار المالك ١٨ أكتوبر. غير الفعّال «حالاً» وحدها كالساس.
+enum PackageChangeTiming {
+  /// «حالاً»: الساس يلغي الاشتراك الحاليّ — يصفّر تاريخ الانتهاء إلى لحظة التغيير
+  /// (مُثبَتٌ حيّاً على سوبرنت) فيُعتبر المشترك منتهياً. إلّا سوبرنت: الخادم يعيد التاريخ
+  /// الأصليّ لمن يملك تعديله (`immediate_keeps_date` في activation-data) كما كان الكلاسيك.
+  immediate,
+
+  /// «عند انتهاء الاشتراك»: يكمل الاشتراك الحاليّ، والباقة تتغيّر في موعد انتهائه
+  /// (تُلغى من الشيت نفسه قبل موعدها).
+  schedule;
+
+  /// القيمة كما يقرؤها الخادم (`change_type`).
+  String get wire => this == immediate ? 'immediate' : 'schedule';
+}
+
+/// هل يُمنع تغيير الباقة الآن؟ — القاعدة **السابقة**، وتبقى لحالتين:
+///
+/// • ايرث لنك على قاعدتها (canChangeAccount): تتغيّر للمنتهي ولمن بقي له يومٌ فأقلّ، و«More»
+///   لا. الحَكَم [earthlinkAllows] (`can_change_package` بصفّ المشترك — حكم الخادم)، وبلاه
+///   (خادمٌ أقدم) نافذة اليوم الأخير ٢٤ ساعة — كورقتي التفعيل والتمديد. والتاريخ لا يُرسَل لها.
+/// • SAS4 أمام خادمٍ **لا يعرف** «حالاً / عند انتهاء الاشتراك» (activation-data بلا حقوله):
+///   يُمنع أثناء التفعيل ما لم يُرسَل التاريخ الأصليّ مع الطلب ليعيده الخادم ([keepsDate])،
+///   فالساس يصفّر تاريخ الانتهاء عند تغيير باقة الفعّال — وبلاه يُقطع اشتراكه.
+///
+/// والخادم الذي يعرفهما يسلك [offersPackageChangeTiming] بدلها.
+bool packageChangeBlocked({
+  required bool changesPackage,
+  required DateTime? activeUntil,
+  required bool keepsDate,
+  required bool isEarthlink,
+  bool? earthlinkAllows,
+  DateTime? now,
+}) {
+  if (!changesPackage) return false;
+  final at = now ?? DateTime.now();
+  if (isEarthlink) {
+    if (earthlinkAllows != null) return !earthlinkAllows;
+    return activeUntil != null &&
+        activeUntil.difference(at) > const Duration(hours: 24);
+  }
+  if (activeUntil == null || !activeUntil.isAfter(at)) return false;
+  return !keepsDate;
+}
+
+/// يُعرض اختيار «حالاً / عند انتهاء الاشتراك»؟ SAS4 (لا ايرث لنك) لمشتركٍ فعّال تتغيّر
+/// باقته، والخادم يعرف `change_type` ([timingSupported]): خادمٌ أقدم يتجاهله فتصير «عند
+/// انتهاء الاشتراك» تغييراً فوريّاً يقطع الاشتراك — فلا يُعرض له.
+bool offersPackageChangeTiming({
+  required bool changesPackage,
+  required bool active,
+  required bool isEarthlink,
+  required bool timingSupported,
+}) =>
+    changesPackage && active && !isEarthlink && timingSupported;
+
+/// هل يُرسَل تاريخ الانتهاء مع طلب التعديل؟ (لمن يملكه — [canEditExpiration])
+///
+/// • ما عدّله المدير بيده: دائماً.
+/// • الأصليّ غير المعدَّل: مع تغيير الباقة أمام **خادمٍ أقدم** وحده ([legacyServer]) — يعيده
+///   بعد أن يصفّره الساس (الكلاسيك)، وهو ما تسمح به القاعدة السابقة ([packageChangeBlocked]
+///   بـkeepsDate). والخادم الذي يعرف «حالاً / عند انتهاء الاشتراك» لا يحتاجه (كالويب): يُبقي
+///   تاريخ سوبرنت مع «حالاً» بنفسه، والجدولة لا تمسّ التاريخ، وخارج سوبرنت يلغي الساس الاشتراك
+///   كما يقول التنبيه. وإرسال الأصليّ بلا داعٍ قد يُرجع تاريخاً مُدِّد بعد فتح الشيت.
+bool sendsExpiration({
+  required bool canEditExpiration,
+  required bool hasExpiration,
+  required bool expirationEdited,
+  required bool changesPackage,
+  required bool legacyServer,
+}) {
+  if (!canEditExpiration || !hasExpiration) return false;
+  return expirationEdited || (legacyServer && changesPackage);
+}
 
 /// Edit subscriber sheet — focused port of v1's _showEditSheet from
 /// mobile-app/lib/screens/subscribers/subscriber_details_screen.dart.
@@ -123,6 +203,50 @@ class _EditSheetState extends State<_EditSheet> {
   /// matches SAS4: 'YYYY-MM-DD HH:mm:ss'.
   DateTime? _expiration;
 
+  /// تاريخ الانتهاء كما قرأه الشيت من الساس (activation-data، وقبلها صفّ القائمة) —
+  /// مرجع «فعّال؟» و«هل عدّل المدير التاريخ؟». [_expiration] قيمة المنتقي.
+  DateTime? _loadedExpiration;
+
+  /// لمس المدير منتقي التاريخ — فلا تدهس activation-data اختياره حين تصل بعده.
+  bool _expirationTouched = false;
+
+  // ── تغيير الباقة «حالاً / عند انتهاء الاشتراك» (SAS4، قرار المالك ١٨ أكتوبر) ──
+
+  /// اختيار المدير — null = لم يختر بعد فتسري «عند انتهاء الاشتراك» (افتراض الساس والويب:
+  /// لا يلغي شيئاً ولا يغيّر شيئاً الآن).
+  PackageChangeTiming? _timingPick;
+
+  /// حال الباقة من activation-data: فعّال؟ مجدولٌ ينتظر؟ صلاحيّة تغيير باقة الفعّال؟
+  /// «حالاً» يُبقي التاريخ؟ — وخادمٌ أقدم لا يرسلها (`supported: false`).
+  PackageChangeInfo _pc = const PackageChangeInfo();
+
+  /// وصل ردّ activation-data (نجح أو فشل) — قبله لا يُرسَل تغيير باقة: حال الاشتراك من
+  /// الساس لم يُعرف بعد (صفّ القائمة قد يكون قديماً).
+  bool _detailsLoaded = false;
+
+  /// activation-data تعذّرت (شبكة/ساس) — لا «خادمٌ أقدم»: تغيير باقة SAS4 يتوقّف مع
+  /// «أعد المحاولة» بدل القاعدة السابقة بنسخة القائمة (كانت تُرسل تاريخ الصفّ القديم).
+  bool _detailsFailed = false;
+  bool _cancellingScheduled = false;
+
+  /// الباقة الآن — من الساس (activation-data) لـSAS4، وإلّا صفّ القائمة. مرجع «تغيّرت؟».
+  int? _originalProfileId;
+
+  /// اختار المدير باقةً بيده — فلا تدهسها activation-data حين تصل (والحقل معطّلٌ قبلها
+  /// لـSAS4 أصلاً).
+  bool _pkgPicked = false;
+
+  /// رفض الساس تغيير الباقة لهذا المدير — `PACKAGE_CHANGE_ACTIVE_FORBIDDEN` (للفعّال) أو
+  /// `PACKAGE_CHANGE_FORBIDDEN` (لأيّ مشترك): يُقفل الحقل بسببه، كما لو عرفناه مسبقاً.
+  bool _activeChangeRefused = false;
+  bool _changeRefused = false;
+
+  /// ايرث لنك: لا تاريخ انتهاء يُضبط (التفعيل وحده يحكمه) ولا مدراء فرعيّون —
+  /// الخادم يتجاهل الحقلين («لم يتغيّر شيء») فلا يُعرضان ولا يُرسلان أبداً،
+  /// للمالك ولموظّفه (الموظّف بـ`packages.view` كان يرى منتقي التاريخ).
+  bool get _showExpiration => _canEditExpiration && !_isEarthlink;
+  bool get _showParent => _canPickParent && !_isEarthlink;
+
   /// Edited parent (تابع إلى) — null means 'keep original'.
   int? _parentId;
   List<({int id, String username, String firstname, String lastname})>?
@@ -133,6 +257,7 @@ class _EditSheetState extends State<_EditSheet> {
   void initState() {
     super.initState();
     _profileId = widget.sub.profileId;
+    _originalProfileId = widget.sub.profileId;
     // Listen on every text controller so the 'حفظ التغييرات' button
     // re-evaluates _hasChanges on each keystroke — without these the
     // button was stuck disabled because nothing triggered a rebuild
@@ -155,6 +280,7 @@ class _EditSheetState extends State<_EditSheet> {
     if (exp != null && exp.isNotEmpty) {
       _expiration = DateTime.tryParse(exp.replaceFirst(' ', 'T'));
     }
+    _loadedExpiration = _expiration ?? widget.sub.parsedExpiration;
     _loadDetails(); // pre-fill password + parent_id from SAS4
     _resolveSuperAdmin();
   }
@@ -190,12 +316,10 @@ class _EditSheetState extends State<_EditSheet> {
         final pid =
             parent is int ? parent : int.tryParse(parent?.toString() ?? '');
         if (pid != null) _parentId = pid;
-        final rawExp = data['expiration']?.toString().trim();
-        if (rawExp != null && rawExp.isNotEmpty) {
-          final parsed = DateTime.tryParse(rawExp.replaceFirst(' ', 'T'));
-          if (parsed != null) _expiration = parsed;
-        }
+        _applyPackageState(data);
       }
+      _detailsLoaded = true;
+      _detailsFailed = data == null;
       if (elNow) {
         // '' حين تعذّر الجلب: الحقل يبقى فارغاً ويقدر المدير ضبط قيمةٍ جديدة.
         _loadedAccountPassword = acc ?? '';
@@ -206,16 +330,73 @@ class _EditSheetState extends State<_EditSheet> {
     });
   }
 
+  /// حال الباقة من activation-data (التحميل الأوّل، و«أعد المحاولة»، وبعد ردٍّ غير حاسم) —
+  /// يُنادى داخل setState:
+  ///   • تاريخ الساس مرجعاً، والمنتقي لا يُدهس إن لمسه المدير.
+  ///   • [_pc] (لا ايرث لنك — قاعدتها canChangeAccount).
+  ///   • SAS4: الباقة الآن من الساس أصلاً (صفّ القائمة قد يكون أقدم)، وقفلٌ وصل (صلاحيّة
+  ///     الساس) يعيد الباقة لأصلها ويُسقط «متى؟» — فلا شيتٌ عالقٌ على باقةٍ لا تُحفظ ولا تُرجَع.
+  void _applyPackageState(Map<String, dynamic> data) {
+    final rawExp = data['expiration']?.toString().trim();
+    if (rawExp != null && rawExp.isNotEmpty) {
+      final parsed = DateTime.tryParse(rawExp.replaceFirst(' ', 'T'));
+      if (parsed != null) {
+        // الأحدث من الساس مرجعاً؛ والمنتقي لا يُدهس إن لمسه المدير قبل وصوله.
+        _loadedExpiration = parsed;
+        if (!_expirationTouched) _expiration = parsed;
+      }
+    }
+    if (_isEarthlink) return;
+    _pc = PackageChangeInfo.fromActivationData(data);
+    if (!_sasRules) return;
+    final current = _pc.profileId;
+    if (current != null) _originalProfileId = current;
+    if (!_pkgPicked || _packageLocked) {
+      _profileId = _originalProfileId;
+      _pkgPicked = false;
+      _timingPick = null;
+    }
+  }
+
+  /// يعيد قراءة حال الباقة وحده (activation-data) — «أعد المحاولة» بعد تعذّرها، أو بعد ردٍّ
+  /// غير حاسم من الساس (PACKAGE_CHANGE_UNCONFIRMED) ليعرض الحقل ما عند الساس فعلاً. الحقل
+  /// معطّلٌ أثناءها («لحظةً…»)، وبقيّة الحقول كما عدّلها المدير.
+  Future<void> _reloadPackageState() async {
+    final idx = widget.sub.idx;
+    if (idx == null || !mounted) return;
+    setState(() {
+      _detailsLoaded = false;
+      _detailsFailed = false;
+    });
+    final data = await SubscribersApi.fetchActivationData(idx);
+    if (!mounted) return;
+    setState(() {
+      if (data != null) {
+        if (data['provider']?.toString() == 'earthlink') _elFromData = true;
+        if (_parentId == null) {
+          final parent = data['parent_id'];
+          _parentId =
+              parent is int ? parent : int.tryParse(parent?.toString() ?? '');
+        }
+        _applyPackageState(data);
+      }
+      _detailsLoaded = true;
+      _detailsFailed = data == null;
+    });
+  }
+
   Future<void> _resolveSuperAdmin() async {
     final canManagers = await AuthStorage.readCanAccessManagers();
     final canPackages = await AuthStorage.readCanAccessPackages();
     if (!mounted) return;
+    // ايرث لنك: لا قائمة مدراء تُجلب لمنتقٍ لا يُعرض ([_showParent]).
+    final loadManagers = canManagers && !_isEarthlink;
     setState(() {
       _canPickParent = canManagers;
       _canEditExpiration = canManagers || canPackages;
-      _loadingManagers = canManagers;
+      _loadingManagers = loadManagers;
     });
-    if (canManagers) {
+    if (loadManagers) {
       final list = await SubscribersApi.loadManagers();
       if (!mounted) return;
       setState(() {
@@ -260,6 +441,150 @@ class _EditSheetState extends State<_EditSheet> {
     super.dispose();
   }
 
+  // ═══════════ تغيير الباقة: «حالاً» أو «عند انتهاء الاشتراك» (SAS4) ═══════════
+  //
+  // قرار المالك ١٨ أكتوبر: لمشتركٍ **فعّال** في أيّ ساس SAS4 (لا ايرث لنك — قاعدتها
+  // canChangeAccount) يختار المدير متى تتغيّر الباقة، كلوحة الساس نفسها:
+  //   • «حالاً» — الساس يلغي الاشتراك الحاليّ فيُعتبر المشترك منتهياً؛ إلّا سوبرنت: الخادم
+  //     يعيد التاريخ الأصليّ لمن يملك تعديله (كالكلاسيك).
+  //   • «عند انتهاء الاشتراك» — تُجدوَل، وتُعرض «مجدول: … عند …» بزرّ إلغاء.
+  // غير الفعّال «حالاً» وحدها بلا سؤال. وتغيير باقة الفعّال يحتاج صلاحيّة الساس
+  // `prm_users_change_profile_active` — بلاها يُقفل الحقل بسببه بدل رفضٍ بعد الحفظ.
+  // وتغييرٌ جديد فوق مجدولٍ ينتظر: الخادم يلغي المجدول أوّلاً، فآخر اختيارٍ هو ما يسري.
+
+  /// تتغيّر الباقة في هذا التعديل؟ (عن الباقة الآن في الساس، لا عن صفّ القائمة)
+  bool get _changesPackage =>
+      _profileId != null && _profileId != _originalProfileId;
+
+  /// SAS4 بلا حال اشتراكٍ واصل من الساس (يُقرأ، أو تعذّر): حقل الباقة معطّلٌ والسبب تحته —
+  /// لا تغيير باقةٍ على صفٍّ قد يكون قديماً، ولا على خادمٍ مجهول.
+  bool get _pkgWaiting => _sasRules && (!_detailsLoaded || _detailsFailed);
+
+  static const _detailsFailedNote =
+      'تعذّر قراءة حال اشتراك المشترك، فتغيير الباقة متوقّفٌ الآن (بقيّة الحقول تُحفظ)';
+
+  /// تاريخ الانتهاء الأصليّ — للعرض ولتقدير «فعّال؟» (لا قيمة المنتقي المعدَّلة).
+  DateTime? get _activeUntil => _loadedExpiration ?? widget.sub.parsedExpiration;
+
+  /// فعّالٌ الآن؟ بمعيار الساس إن أرسله الخادم، وإلّا بالتاريخ.
+  bool get _isActiveNow {
+    final until = _activeUntil;
+    return _pc.active ?? (until != null && until.isAfter(DateTime.now()));
+  }
+
+  /// القاعدة الجديدة لـSAS4 وحده: لا ايرث لنك، ولا FTTH (قراءةٌ فقط عنده).
+  bool get _sasRules => !_isEarthlink && !ProviderService.isFtth;
+
+  /// الخادم يعرف «حالاً / عند انتهاء الاشتراك» (activation-data بحقوله).
+  bool get _timingSupported => _sasRules && _pc.supported;
+
+  /// يملك تغيير باقة الفعّال؟ حكم الساس من الخادم أوّلاً (للموظّف: صلاحيّة مديره). وإن لم
+  /// يُعرف: المدير بقدراته المعياريّة (الغائب = مسموح)، والموظّف لا مفتاح له بها فيحكم
+  /// الساس عند الحفظ (`PACKAGE_CHANGE_ACTIVE_FORBIDDEN`).
+  bool get _activeChangeAllowed {
+    if (_activeChangeRefused) return false;
+    final srv = _pc.canChangeActive;
+    if (srv != null) return srv;
+    return PermissionsService.isEmployee ||
+        Perms.has('subscribers.change_profile_active');
+  }
+
+  /// الحقل مقفل: فعّالٌ والمدير لا يملك تغيير باقته — رفضه الساس للتوّ، أو قالها الخادم
+  /// الجديد مسبقاً (الأقدم لا يعرفها ويمنع «حالاً» بلا تاريخٍ بقاعدته [packageChangeBlocked]).
+  bool get _activeLocked {
+    if (!_sasRules || !_isActiveNow) return false;
+    if (_activeChangeRefused) return true;
+    return _timingSupported && !_activeChangeAllowed;
+  }
+
+  /// يملك تغيير باقة أيّ مشترك (`prm_users_change_profile`)؟ حكم الخادم إن أرسله، وإلّا
+  /// قدرات المدير المعياريّة (`subscribers.change_profile` — الغائب = مسموح)، والموظّف يحكم
+  /// له الساس عند الحفظ (`PACKAGE_CHANGE_FORBIDDEN`).
+  bool get _changeAllowed {
+    final srv = _pc.canChangeProfile;
+    if (srv != null) return srv;
+    return PermissionsService.isEmployee ||
+        Perms.has('subscribers.change_profile');
+  }
+
+  /// الحقل مقفل: لا يملك تغيير باقة أيّ مشترك — رفضه الساس للتوّ، أو عُرف مسبقاً أمام
+  /// الخادم الجديد (الأقدم يبقى كما كان).
+  bool get _changeLocked =>
+      _changeRefused || (_timingSupported && !_changeAllowed);
+
+  bool get _packageLocked => _changeLocked || _activeLocked;
+
+  /// تغييرٌ مجدول ينتظر عند الساس.
+  ScheduledPackageChange? get _scheduled =>
+      _timingSupported ? _pc.scheduled : null;
+
+  bool get _offersTiming => offersPackageChangeTiming(
+        changesPackage: _changesPackage,
+        active: _isActiveNow,
+        isEarthlink: !_sasRules,
+        timingSupported: _timingSupported,
+      );
+
+  /// عدّل المدير التاريخ بيده (لا مجرّد إعادة إرسال الأصليّ)؟
+  bool get _expirationEdited =>
+      _expirationTouched &&
+      _expiration != null &&
+      _expiration != _loadedExpiration;
+
+  /// «حالاً» يُبقي التاريخ؟ حكم الخادم (سوبرنت لمن يملك تعديله)، أو تاريخٌ عدّله المدير.
+  bool get _immediateKeepsDate =>
+      _pc.immediateKeepsDate == true ||
+      (_showExpiration && _expirationEdited);
+
+  PackageChangeTiming get _timing =>
+      _timingPick ?? PackageChangeTiming.schedule;
+
+  /// خادمٌ أقدم لا يعرف «متى؟» — activation-data **وصلت** بلا حقولها. تعذّرُها ليس خادماً
+  /// أقدم ([_detailsFailed] ⇒ [_pkgWaiting]): كان يسلك القاعدة السابقة فيرسل تاريخ الصفّ.
+  bool get _legacyServer =>
+      _sasRules && _detailsLoaded && !_detailsFailed && !_pc.supported;
+
+  bool get _sendsExpiration => sendsExpiration(
+        canEditExpiration: _showExpiration,
+        hasExpiration: _expiration != null,
+        expirationEdited: _expirationEdited,
+        changesPackage: _changesPackage,
+        legacyServer: _legacyServer,
+      );
+
+  /// جدولةٌ مع تعديل التاريخ في الطلب نفسه: الساس يجدول على تاريخ الانتهاء **الحاليّ**
+  /// والجديد يُكتب بعده، فيفترقان — يُحفظ التاريخ وحده أوّلاً.
+  bool get _scheduleWithDateEdit =>
+      _offersTiming &&
+      _timing == PackageChangeTiming.schedule &&
+      _expirationEdited;
+
+  static const _scheduleDateEditNote =
+      'لتغيير الباقة «عند انتهاء الاشتراك» احفظ تعديل التاريخ وحده أوّلاً، '
+      'أو اختر «حالاً»';
+
+  static String _day(DateTime? d) {
+    if (d == null) return '';
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${d.year}-${two(d.month)}-${two(d.day)}';
+  }
+
+  String? _packageName(int? id) =>
+      id == null ? null : _packages?[id.toString()]?.name;
+
+  String get _scheduledName {
+    final s = _scheduled;
+    if (s == null) return '';
+    if (s.profileName.isNotEmpty) return s.profileName;
+    return _packageName(s.profileId) ?? 'باقة أخرى';
+  }
+
+  /// « (ينتهي <التاريخ>)» — ذيلٌ للرسائل، فارغٌ بلا تاريخ.
+  String get _endsTail {
+    final d = _day(_activeUntil);
+    return d.isEmpty ? '' : ' (ينتهي ${iso(d)})';
+  }
+
   Map<String, dynamic> _diff() {
     final original = widget.sub;
     final out = <String, dynamic>{};
@@ -281,18 +606,22 @@ class _EditSheetState extends State<_EditSheet> {
         ? original.phone!
         : (original.mobile ?? '');
     if (ph != originalPh) out['phone'] = ph;
-    if (_profileId != original.profileId && _profileId != null) {
+    // مقفلةٌ أو حالها لم يصل ⇒ لا تُرسَل الباقة (وبقيّة الحقول تُحفظ).
+    if (_changesPackage && !_packageLocked && !_pkgWaiting) {
       out['profile_id'] = _profileId;
+      // «متى؟» للفعّال وحده؛ غيره «حالاً» افتراض الخادم (كالتطبيقات القديمة).
+      if (_offersTiming) out['change_type'] = _timing.wire;
     }
     // Super-admin fields. Only diff when the picker has actually
     // moved away from the original — empty/no-pick → not in the body.
     // Permission-gated diffs: only include parent_id when the user
     // can actually pick it, same for expiration. Sending them when
     // the field isn't visible would be a silent bug.
-    if (_canPickParent && _parentId != null) {
+    if (_showParent && _parentId != null) {
       out['parent_id'] = _parentId;
     }
-    if (_canEditExpiration && _expiration != null) {
+    // التاريخ: ما عدّله المدير، أو الأصليّ مع الباقة أمام خادمٍ أقدم (الكلاسيك) — [sendsExpiration].
+    if (_sendsExpiration) {
       final d = _expiration!;
       String two(int n) => n.toString().padLeft(2, '0');
       out['expiration'] =
@@ -310,6 +639,67 @@ class _EditSheetState extends State<_EditSheet> {
       _accountPassword.text.isNotEmpty &&
       _accountPassword.text != (_loadedAccountPassword ?? '');
 
+  /// سببٌ يمنع إرسال تغيير الباقة الآن (أو null). الحقل نفسه مقفلٌ في بعضها — هذا لما
+  /// سبق القفل (اختارها قبل وصول activation-data)، ولقاعدة ايرث لنك والخادم الأقدم.
+  String? _packageBlockReason(Map<String, dynamic> diff) {
+    if (!diff.containsKey('profile_id')) return null;
+    final until = _activeUntil;
+    // ايرث لنك على قاعدتها، وSAS4 أمام خادمٍ لا يعرف «متى؟» على القاعدة السابقة.
+    if (_isEarthlink || _legacyServer) {
+      if (!packageChangeBlocked(
+        changesPackage: true,
+        activeUntil: until,
+        keepsDate: diff.containsKey('expiration'),
+        isEarthlink: _isEarthlink,
+        earthlinkAllows: widget.sub.canChangePackage,
+      )) {
+        return null;
+      }
+      final d = _day(until);
+      return _isEarthlink
+          ? (widget.sub.packageChangeNote ??
+              'تتغيّر الباقة للمنتهي أو لمن بقي له يومٌ فأقلّ'
+                  '${d.isEmpty ? '' : ' — ينتهي $d'}')
+          : 'يمكن تغيير الباقة بعد انتهاء التفعيل الحاليّ — ينتهي $d';
+    }
+    if (!_sasRules) return null;
+    // قبل ردّ activation-data لا يُعرف حال الاشتراك من الساس (صفّ القائمة قد يكون قديماً:
+    // «منتهٍ» جدّده أحدٌ للتوّ) — لحظاتٌ عادةً: يُجلب مع فتح الشيت كالباقات.
+    if (!_detailsLoaded) {
+      return 'لحظةً — يُقرأ حال اشتراك المشترك';
+    }
+    if (_detailsFailed) return _detailsFailedNote;
+    if (_changeLocked) {
+      return 'صلاحيّتك في الساس لا تسمح بتغيير باقة المشترك';
+    }
+    if (_activeLocked) {
+      return 'المشترك فعّال، وصلاحيّتك في الساس لا تسمح بتغيير باقته قبل '
+          'انتهاء اشتراكه$_endsTail';
+    }
+    if (_scheduleWithDateEdit) {
+      return _scheduleDateEditNote;
+    }
+    return null;
+  }
+
+  /// «حالاً» يلغي اشتراك الفعّال (لا تاريخ يبقى) — تأكيدٌ قبل ما لا رجعة فيه.
+  Future<bool> _confirmImmediateCancels() async {
+    final name = _packageName(_profileId);
+    final ok = await showConfirmSheet(
+      context,
+      title: 'تغيير الباقة الآن؟',
+      message: 'سيُعتبر المشترك منتهياً: تغيير الباقة'
+          '${name == null ? '' : ' إلى ${iso(name)}'} الآن يلغي اشتراكه الحاليّ'
+          '$_endsTail، ويحتاج تفعيلاً جديداً.\n'
+          'ولإبقاء اشتراكه حتى نهايته اختر «عند انتهاء الاشتراك».',
+      confirmLabel: 'غيّرها الآن',
+      cancelLabel: 'تراجع',
+      icon: LucideIcons.triangleAlert,
+      tone: AppTone.warning,
+    );
+    return ok == true;
+  }
+
   Future<void> _submit() async {
     if (_saving) return;
     final diff = _diff();
@@ -318,26 +708,23 @@ class _EditSheetState extends State<_EditSheet> {
       Navigator.of(context).pop();
       return;
     }
-    // Pro: الشركات العراقيّة تمنع تغيير الباقة أثناء تفعيلٍ فعّال. نمنعه
-    // مسبقاً بتنبيهٍ واضح بدل نداءٍ يفشل برسالةٍ خامٍّ من الساس. نمنع فقط إذا
-    // كان التفعيل الحاليّ فعّالاً بتاريخٍ مؤكّدٍ في المستقبل (لا نمنع مشتركاً
-    // غير مفعَّلٍ أو منتهيَ التفعيل).
-    final exp = widget.sub.parsedExpiration;
-    if (diff.containsKey('profile_id') &&
-        exp != null &&
-        exp.isAfter(DateTime.now())) {
-      String two(int n) => n.toString().padLeft(2, '0');
-      final dateStr = '${exp.year}-${two(exp.month)}-${two(exp.day)}';
-      showSheetSnack(
-        context,
-        'يمكن تغيير الباقة بعد انتهاء التفعيل الحاليّ — ينتهي $dateStr',
-        isError: true,
-      );
+    // تغيير الباقة: ايرث لنك على قاعدتها (canChangeAccount بصفّ المشترك — الخادم يرفض ما
+    // سواها)، وSAS4 بالقاعدة الجديدة أعلاه. لا منع لغير المفعَّل أو المنتهي.
+    final block = _packageBlockReason(diff);
+    if (block != null) {
+      showSheetSnack(context, block, isError: true);
       return;
+    }
+    final timed = diff['change_type'] as String?;
+    if (timed == PackageChangeTiming.immediate.wire && !_immediateKeepsDate) {
+      if (!await _confirmImmediateCancels() || !mounted) return;
     }
     setState(() => _saving = true);
     bool ok = true;
     String? message;
+    String? code;
+    Map<String, dynamic>? data;
+    bool pendingCancelled = false;
     // ١) حقول الخدمة (SAS4/EL) — تُرسَل فقط إن تغيّرت، كما كانت حرفيّاً.
     if (diff.isNotEmpty) {
       final result = await SubscribersApi.updateSubscriber(
@@ -348,11 +735,15 @@ class _EditSheetState extends State<_EditSheet> {
         lastname: diff['lastname'],
         phone: diff['phone'],
         profileId: diff['profile_id'],
+        changeType: timed,
         parentId: diff['parent_id'],
         expiration: diff['expiration'],
       );
       ok = result.ok;
       message = result.message;
+      code = result.code;
+      data = result.data;
+      pendingCancelled = result.pendingCancelled;
     }
     // ٢) ايرث لنك: كلمة سرّ حساب البوّابة — نداءٌ مستقلّ، بعد نجاح حقول الخدمة.
     if (ok && accChanged) {
@@ -368,19 +759,155 @@ class _EditSheetState extends State<_EditSheet> {
       }
     }
     if (!mounted) return;
-    setState(() => _saving = false);
-    if (ok) SubscriberEvents.notifyChange();
+    final packageRefused = code != null &&
+        (code.startsWith('PACKAGE_CHANGE_') || code == 'PENDING_CANCEL_FAILED');
+    setState(() {
+      _saving = false;
+      // ألغى الخادم المجدول السابق ثمّ رُفض الجديد ⇒ لم يعد عند الساس: يزول سطر «مجدول».
+      if (pendingCancelled) _pc = _pc.withoutScheduled();
+      // الساس قال كلمته في الصلاحيّة ← يُقفل الحقل بسببه، وتعود الباقة لأصلها فلا يُعاد
+      // الطلب نفسه.
+      if (code == 'PACKAGE_CHANGE_ACTIVE_FORBIDDEN' ||
+          code == 'PACKAGE_CHANGE_FORBIDDEN') {
+        if (code == 'PACKAGE_CHANGE_FORBIDDEN') {
+          _changeRefused = true;
+        } else {
+          _activeChangeRefused = true;
+        }
+        _profileId = _originalProfileId;
+        _pkgPicked = false;
+        _timingPick = null;
+      }
+      // لا ردّ حاسم من الساس ولا أثر: لا تُعاد المحاولة على العمى — تعود الباقة لأصلها
+      // ويُقرأ الحال من جديد أدناه، فيعرض الحقل ما عند الساس فعلاً.
+      if (code == 'PACKAGE_CHANGE_UNCONFIRMED') {
+        _profileId = _originalProfileId;
+        _pkgPicked = false;
+        _timingPick = null;
+      }
+    });
+    if (code == 'PACKAGE_CHANGE_UNCONFIRMED') unawaited(_reloadPackageState());
+    // نجاحٌ، أو رفضٌ للباقة قد سبقه حفظُ غيرها (الرسالة تقول «تغيّر اسم المستخدم…») ← تُحدَّث.
+    if (ok || packageRefused) SubscriberEvents.notifyChange();
     showSheetSnack(
       context,
-      ok ? 'تم تعديل بيانات المشترك' : (message ?? 'تعذّر التعديل'),
+      ok ? _savedMessage(diff, data) : (message ?? 'تعذّر التعديل'),
       isError: !ok,
     );
     if (ok) Navigator.of(context).pop(true);
   }
 
+  /// رسالة النجاح — بما نفّذه الخادم فعلاً (`change_type`)، لا بما طُلب: غير الفعّال عند
+  /// الساس يتغيّر «حالاً» ولو طُلبت الجدولة. و`expiration_kept: false` = صار منتهياً.
+  String _savedMessage(Map<String, dynamic> diff, Map<String, dynamic>? data) {
+    if (!diff.containsKey('profile_id')) return 'تم تعديل بيانات المشترك';
+    final executed =
+        data?['change_type']?.toString() ?? diff['change_type']?.toString();
+    final name = _packageName(diff['profile_id'] as int?);
+    final named = name == null ? '' : ' ${iso(name)}';
+    if (executed == PackageChangeTiming.schedule.wire) {
+      // الموعد كما سجّله الساس (`updated.profile_change`)، وإلّا تاريخ الانتهاء المعروف.
+      final updated = data?['updated'];
+      final due = updated is Map
+          ? ScheduledPackageChange.tryParse(updated['profile_change'])?.dueDay
+          : null;
+      final tail = (due == null || due.isEmpty) ? _endsTail : ' (${iso(due)})';
+      return 'جُدولت الباقة$named — تتغيّر عند انتهاء الاشتراك$tail';
+    }
+    final kept = data?['expiration_kept'];
+    if (kept == false) {
+      return 'تغيّرت الباقة$named — والمشترك منتهٍ الآن، يحتاج تفعيلاً جديداً';
+    }
+    if (kept == true) {
+      return 'تغيّرت الباقة$named — وبقي تاريخ الانتهاء كما هو';
+    }
+    return 'تم تعديل بيانات المشترك';
+  }
+
+  /// يلغي التغيير المجدول (بتأكيد) — كزرّ «Cancel» في لوحة الساس. بلا مال، والباقة
+  /// الحاليّة والتاريخ كما هما. الشيت يبقى مفتوحاً: قد يريد المدير باقةً أخرى الآن.
+  Future<void> _cancelScheduled() async {
+    final idx = widget.sub.idx;
+    if (_scheduled == null || idx == null || _cancellingScheduled) return;
+    final ok = await showConfirmSheet(
+      context,
+      title: 'إلغاء تغيير الباقة المجدول',
+      message: 'تبقى باقته الحاليّة بعد انتهاء اشتراكه، ولا تتغيّر إلى '
+          '${iso(_scheduledName)}.',
+      confirmLabel: 'إلغاء الجدولة',
+      cancelLabel: 'تراجع',
+      icon: LucideIcons.calendarX,
+      tone: AppTone.warning,
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _cancellingScheduled = true);
+    final r = await SubscribersApi.cancelProfileChange(idx);
+    if (!mounted) return;
+    setState(() {
+      _cancellingScheduled = false;
+      if (r.ok) _pc = _pc.withoutScheduled();
+    });
+    if (r.ok) SubscriberEvents.notifyChange();
+    showSheetSnack(
+      context,
+      !r.ok
+          ? (r.message ?? 'تعذّر إلغاء تغيير الباقة المجدول')
+          // لا مجدول عند الساس الآن (ضغطةٌ مكرّرة أو شيتٌ قديم) — لا خطأ، والإطار يزول.
+          : (r.cancelled == false
+              ? 'لا يوجد تغيير باقة مجدول لهذا المشترك'
+              : 'أُلغي تغيير الباقة المجدول'),
+      isError: !r.ok,
+    );
+  }
+
+  /// ما يُقال تحت اختيار «متى؟» — يتبع الاختيار وما سيجري فعلاً.
+  ({String text, AppTone tone, IconData icon}) get _timingHint {
+    final ends = _day(_activeUntil);
+    final name = _packageName(_profileId);
+    if (_timing == PackageChangeTiming.schedule) {
+      if (_scheduleWithDateEdit) {
+        return (
+          text: _scheduleDateEditNote,
+          tone: AppTone.warning,
+          icon: LucideIcons.triangleAlert,
+        );
+      }
+      return (
+        text: 'يكمل المشترك اشتراكه الحاليّ، وتتغيّر الباقة'
+            '${name == null ? '' : ' إلى ${iso(name)}'} عند انتهائه'
+            '${ends.isEmpty ? '' : ' (${iso(ends)})'}',
+        tone: AppTone.info,
+        icon: LucideIcons.calendarClock,
+      );
+    }
+    if (_showExpiration && _expirationEdited) {
+      return (
+        text: 'تتغيّر الباقة الآن، ويصير تاريخ الانتهاء '
+            '${iso(_day(_expiration))}',
+        tone: AppTone.info,
+        icon: LucideIcons.calendarCheck,
+      );
+    }
+    if (_pc.immediateKeepsDate == true) {
+      return (
+        text: 'تتغيّر الباقة الآن، ويبقى تاريخ الانتهاء كما هو'
+            '${ends.isEmpty ? '' : ' (${iso(ends)})'}',
+        tone: AppTone.info,
+        icon: LucideIcons.calendarCheck,
+      );
+    }
+    return (
+      text: 'سيُعتبر المشترك منتهياً: تغيير الباقة الآن يلغي اشتراكه الحاليّ'
+          '$_endsTail، ويحتاج تفعيلاً جديداً',
+      tone: AppTone.warning,
+      icon: LucideIcons.triangleAlert,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    final timingHint = _offersTiming ? _timingHint : null;
     // حشوة لوحة المفاتيح صارت داخل DesignSheet.
     return DesignSheet(
       header: SheetHeaderBar(
@@ -545,24 +1072,113 @@ class _EditSheetState extends State<_EditSheet> {
                 style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.4),
               ),
             ],
-          ] else
+          ] else ...[
             _PackagePicker(
               packages: _packages,
               loading: _loadingPackages,
               selectedId: _profileId,
-              enabled: !_saving,
-              onSelect: (id) => setState(() => _profileId = id),
+              // مقفلٌ بسببه تحته: صلاحيّة الساس لا تسمح (لهذا الفعّال، أو لأيّ مشترك).
+              // ومعطّلٌ حتى يصل حال الاشتراك من الساس (أو بعد تعذّره). والمجدول لا يقفله:
+              // الخادم يلغيه قبل التغيير الجديد.
+              enabled: !_saving && !_packageLocked && !_pkgWaiting,
+              locked: _packageLocked,
+              onSelect: (id) => setState(() {
+                _profileId = id;
+                _pkgPicked = true;
+              }),
             ),
-          if (_canEditExpiration) ...[
+            if (_pkgWaiting && !_packageLocked) ...[
+              const SizedBox(height: Sp.sm),
+              if (!_detailsLoaded)
+                const _PackageNote(
+                  icon: LucideIcons.loaderCircle,
+                  tone: AppTone.neutral,
+                  busy: true,
+                  text: 'لحظةً — يُقرأ حال اشتراك المشترك قبل تغيير الباقة',
+                )
+              else
+                _PackageStateRetry(
+                  text: _detailsFailedNote,
+                  enabled: !_saving,
+                  onRetry: _reloadPackageState,
+                ),
+            ],
+            if (_scheduled != null) ...[
+              const SizedBox(height: Sp.sm),
+              _ScheduledChangeBanner(
+                packageName: _scheduledName,
+                dueDay: _scheduled!.dueDay,
+                busy: _cancellingScheduled,
+                enabled: !_saving,
+                onCancel: _cancelScheduled,
+              ),
+            ],
+            if (_changeLocked) ...[
+              const SizedBox(height: Sp.sm),
+              const _PackageNote(
+                icon: LucideIcons.lock,
+                tone: AppTone.neutral,
+                text: 'صلاحيّتك في الساس لا تسمح بتغيير باقة المشترك',
+              ),
+            ] else if (_activeLocked) ...[
+              const SizedBox(height: Sp.sm),
+              _PackageNote(
+                icon: LucideIcons.lock,
+                tone: AppTone.neutral,
+                text: 'المشترك فعّال، وصلاحيّتك في الساس لا تسمح بتغيير '
+                    'باقته قبل انتهاء اشتراكه$_endsTail',
+              ),
+            ] else if (timingHint != null) ...[
+              const SizedBox(height: Sp.md),
+              const _FieldLabel(label: 'متى تتغيّر الباقة؟'),
+              _TimingChoice(
+                value: _timing,
+                enabled: !_saving,
+                onSelect: (t) => setState(() => _timingPick = t),
+              ),
+              const SizedBox(height: Sp.sm),
+              _PackageNote(
+                icon: timingHint.icon,
+                tone: timingHint.tone,
+                text: timingHint.text,
+              ),
+            ],
+            // غير الفعّال: «حالاً» وحدها — يُقال بلا سؤال (كالويب).
+            if (_sasRules &&
+                _changesPackage &&
+                !_isActiveNow &&
+                !_packageLocked) ...[
+              const SizedBox(height: Sp.sm),
+              const _PackageNote(
+                icon: LucideIcons.info,
+                tone: AppTone.neutral,
+                text: 'المشترك غير فعّال — تتغيّر الباقة حالاً',
+              ),
+            ],
+            // تغييرٌ جديد فوق مجدولٍ ينتظر: الخادم يلغي المجدول أوّلاً — يُقال صراحةً.
+            if (_scheduled != null && _changesPackage && !_packageLocked) ...[
+              const SizedBox(height: Sp.sm),
+              _PackageNote(
+                icon: LucideIcons.info,
+                tone: AppTone.neutral,
+                text: 'سيُلغى التغيير المجدول إلى ${iso(_scheduledName)}، '
+                    'ويسري اختيارك الجديد',
+              ),
+            ],
+          ],
+          if (_showExpiration) ...[
             const SizedBox(height: Sp.md),
             const _FieldLabel(label: 'تاريخ الانتهاء'),
             _ExpirationPicker(
               value: _expiration,
               enabled: !_saving,
-              onPick: (d) => setState(() => _expiration = d),
+              onPick: (d) => setState(() {
+                _expiration = d;
+                _expirationTouched = true;
+              }),
             ),
           ],
-          if (_canPickParent) ...[
+          if (_showParent) ...[
             const SizedBox(height: Sp.md),
             const _FieldLabel(label: 'تابع إلى (المدير)'),
             _ManagerPicker(
@@ -655,12 +1271,16 @@ class _PackagePicker extends StatelessWidget {
     required this.selectedId,
     required this.enabled,
     required this.onSelect,
+    this.locked = false,
   });
   final Map<String, PackageInfo>? packages;
   final bool loading;
   final int? selectedId;
   final bool enabled;
   final ValueChanged<int> onSelect;
+
+  /// مقفلٌ بصلاحيّة (لا انشغال حفظ): قفلٌ مكان السهم وخلفيّةٌ خافتة — والسبب تحته.
+  final bool locked;
 
   @override
   Widget build(BuildContext context) {
@@ -702,7 +1322,7 @@ class _PackagePicker extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: locked ? AppColors.surfaceDisabled : AppColors.surface,
         borderRadius: BorderRadius.circular(R.sm),
         border: Border.all(color: AppColors.border),
       ),
@@ -714,8 +1334,8 @@ class _PackagePicker extends StatelessWidget {
             style: AppType.input(color: AppColors.textLow),
           ),
           isExpanded: true,
-          icon:
-              Icon(LucideIcons.chevronDown, size: 16, color: AppColors.textMid),
+          icon: Icon(locked ? LucideIcons.lock : LucideIcons.chevronDown,
+              size: locked ? 14 : 16, color: AppColors.textMid),
           onChanged: enabled
               ? (v) {
                   if (v != null) onSelect(v);
@@ -985,6 +1605,298 @@ class _ManagerItemLabel extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// «متى تتغيّر الباقة؟» — «حالاً» / «عند انتهاء الاشتراك» كلوحة الساس. خيارٌ واحد
+/// دائماً (لا فراغ): الافتراضيّ «عند انتهاء الاشتراك»، وأوّلاً كالويب. النصّ يلتفّ سطرين بدل
+/// أن يُقصّ على شاشة ٣٢٠ أو بخطٍّ مكبَّر.
+class _TimingChoice extends StatelessWidget {
+  const _TimingChoice({
+    required this.value,
+    required this.enabled,
+    required this.onSelect,
+  });
+
+  final PackageChangeTiming value;
+  final bool enabled;
+  final ValueChanged<PackageChangeTiming> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    Widget option(PackageChangeTiming t, String label, IconData icon) {
+      final on = t == value;
+      final fg = on ? AppColors.brand : AppColors.textBody;
+      return Expanded(
+        child: Semantics(
+          key: ValueKey('pkg-timing-${t.wire}'),
+          button: true,
+          selected: on,
+          inMutuallyExclusiveGroup: true,
+          child: Material(
+            color: on ? AppColors.brandSoftBg : AppColors.surface,
+            borderRadius: BorderRadius.circular(R.sm),
+            child: InkWell(
+              onTap: enabled ? () => onSelect(t) : null,
+              borderRadius: BorderRadius.circular(R.sm),
+              child: Ink(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(R.sm),
+                  border: Border.all(
+                    color: on ? AppColors.brand : AppColors.border,
+                    width: on ? BW.selected : BW.normal,
+                  ),
+                ),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 44),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: Sp.sm, vertical: Sp.x6),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(icon, size: 15, color: fg),
+                        const SizedBox(width: Sp.x6),
+                        Flexible(
+                          child: Text(
+                            label,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppType.bodyStrong(color: fg).copyWith(
+                              fontWeight:
+                                  on ? FontWeight.w700 : FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          option(PackageChangeTiming.schedule, 'عند انتهاء الاشتراك',
+              LucideIcons.calendarClock),
+          const SizedBox(width: Sp.sm),
+          option(PackageChangeTiming.immediate, 'حالاً', LucideIcons.zap),
+        ],
+      ),
+    );
+  }
+}
+
+/// سطر توضيحٍ بنغمة (تنبيه/معلومة/قفل) تحت حقل الباقة. [busy] = دائرة انتظارٍ مكان الأيقونة.
+class _PackageNote extends StatelessWidget {
+  const _PackageNote({
+    required this.icon,
+    required this.tone,
+    required this.text,
+    this.busy = false,
+  });
+
+  final IconData icon;
+  final AppTone tone;
+  final String text;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final fg = tone == AppTone.neutral ? AppColors.textMid : tone.onSoft;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: Sp.sm),
+      decoration: BoxDecoration(
+        color: tone.softBg,
+        borderRadius: BorderRadius.circular(R.sm),
+        border: Border.all(
+            color: tone == AppTone.neutral ? AppColors.border : tone.softBorder),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: busy
+                ? SizedBox(
+                    width: 15,
+                    height: 15,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: fg),
+                  )
+                : Icon(icon, size: 15, color: fg),
+          ),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: Text(
+              text,
+              style: AppType.body(color: fg).copyWith(height: 1.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// حال الاشتراك تعذّرت قراءته: السبب بنغمة تنبيه، و«أعد المحاولة» على سطرٍ مستقلّ (لا يزاحم
+/// النصّ على ٣٢٠ — كإطار «مجدول»). ليست لصلاحيّةٍ ناقصة (تلك قفلٌ بسببه، لا «تعذّر»).
+class _PackageStateRetry extends StatelessWidget {
+  const _PackageStateRetry({
+    required this.text,
+    required this.enabled,
+    required this.onRetry,
+  });
+
+  final String text;
+  final bool enabled;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    const tone = AppTone.warning;
+    return Container(
+      padding: const EdgeInsetsDirectional.fromSTEB(10, Sp.sm, Sp.x6, Sp.xxs),
+      decoration: BoxDecoration(
+        color: tone.softBg,
+        borderRadius: BorderRadius.circular(R.sm),
+        border: Border.all(color: tone.softBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: Icon(LucideIcons.triangleAlert,
+                    size: 15, color: tone.onSoft),
+              ),
+              const SizedBox(width: Sp.sm),
+              Expanded(
+                child: Text(
+                  text,
+                  style: AppType.body(color: tone.onSoft).copyWith(height: 1.5),
+                ),
+              ),
+            ],
+          ),
+          Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: TextButton.icon(
+              key: const ValueKey('pkg-state-retry'),
+              onPressed: enabled ? onRetry : null,
+              style: TextButton.styleFrom(
+                foregroundColor: tone.onSoft,
+                minimumSize: const Size(0, 36),
+                padding: const EdgeInsets.symmetric(horizontal: Sp.sm),
+                visualDensity: VisualDensity.compact,
+                textStyle: AppType.bodyStrong(),
+              ),
+              icon: const Icon(LucideIcons.refreshCw, size: 15),
+              label: const Text('أعد المحاولة'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// «مجدول: <الباقة> عند <الموعد>» بزرّ إلغاء — كتنبيه لوحة الساس «Profile is scheduled
+/// to be changed on … to … · Cancel Profile Change».
+class _ScheduledChangeBanner extends StatelessWidget {
+  const _ScheduledChangeBanner({
+    required this.packageName,
+    required this.dueDay,
+    required this.busy,
+    required this.enabled,
+    required this.onCancel,
+  });
+
+  final String packageName;
+  final String dueDay;
+  final bool busy;
+  final bool enabled;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    const tone = AppTone.info;
+    final when = dueDay.isEmpty ? ' عند انتهاء الاشتراك' : ' عند ${iso(dueDay)}';
+    return Container(
+      padding: const EdgeInsetsDirectional.fromSTEB(10, Sp.sm, Sp.x6, Sp.xxs),
+      decoration: BoxDecoration(
+        color: tone.softBg,
+        borderRadius: BorderRadius.circular(R.sm),
+        border: Border.all(color: tone.softBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // النصّ يلتفّ بجانب أيقونةٍ ضيّقة وحدها — اسم الباقة قد يطول والموعد لا يُقصّ؛
+          // وزرّ الإلغاء على سطرٍ مستقلّ فلا يزاحمه (حارس flex_text_guard).
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: Icon(LucideIcons.calendarClock,
+                    size: 16, color: tone.onSoft),
+              ),
+              const SizedBox(width: Sp.sm),
+              Expanded(
+                child: Text(
+                  'مجدول: ${iso(packageName)}$when',
+                  style: AppType.bodyStrong(color: tone.onSoft),
+                ),
+              ),
+            ],
+          ),
+          Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: busy
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: Sp.lg, vertical: 10),
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.error,
+                      ),
+                    ),
+                  )
+                : TextButton.icon(
+                    onPressed: enabled ? onCancel : null,
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.error,
+                      minimumSize: const Size(0, 36),
+                      padding: const EdgeInsets.symmetric(horizontal: Sp.sm),
+                      visualDensity: VisualDensity.compact,
+                      textStyle: AppType.bodyStrong(),
+                    ),
+                    icon: const Icon(LucideIcons.x, size: 15),
+                    label: const Text('إلغاء الجدولة'),
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }

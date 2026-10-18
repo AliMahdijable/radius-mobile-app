@@ -3,9 +3,23 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../api/notifications_api.dart';
+import '../services/active_company.dart';
+import '../services/provider_service.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+
+/// تنبيه «دين على مدير فرعي» لهذه الجلسة؟ شركات SAS4 نعم؛ ايرث لنك والمشروع
+/// الوطنيّ (FTTH) لا مدراء فرعيّين لهما ولا ديون مدراء، فلا يقع أبداً.
+@visibleForTesting
+bool showManagerDebtToggle() {
+  // والشركة المفتوحة احتياطاً قبل أن يصل `/api/auth/me` بالمزوّد.
+  final code = ActiveCompany.current?.sasCode;
+  return !ProviderService.isEarthlink &&
+      !ProviderService.isFtth &&
+      code != 'earthlink' &&
+      code != 'ftth-iq';
+}
 
 /// شاشة "الإشعارات" — تجمع 3 toggles لإشعارات FCM + أوقات السكون
 /// (DND). كل تغيير يُحفظ تلقائياً بـPUT مع snackbar.
@@ -131,14 +145,18 @@ class _NotificationsSettingsScreenState
                   onChanged: (v) =>
                       _patch((x) => x.copyWith(pushExpiredToday: v)),
                 ),
-                _Toggle(
-                  icon: LucideIcons.creditCard,
-                  label: 'notifs.mgr_debt_label'.tr(),
-                  sub: 'notifs.mgr_debt_hint'.tr(),
-                  value: p.pushManagerDebt,
-                  onChanged: (v) =>
-                      _patch((x) => x.copyWith(pushManagerDebt: v)),
-                ),
+                // «دين على مدير فرعي»: ايرث لنك والمشروع الوطنيّ بلا مدراء
+                // فرعيّين ولا ديون مدراء — تنبيهٌ لا يقع أبداً، فلا يُعرض (ما لا
+                // يدعمه المزوّد يُخفى). قيمته المحفوظة تبقى كما هي في الحفظ.
+                if (showManagerDebtToggle())
+                  _Toggle(
+                    icon: LucideIcons.creditCard,
+                    label: 'notifs.mgr_debt_label'.tr(),
+                    sub: 'notifs.mgr_debt_hint'.tr(),
+                    value: p.pushManagerDebt,
+                    onChanged: (v) =>
+                        _patch((x) => x.copyWith(pushManagerDebt: v)),
+                  ),
                 const SizedBox(height: Sp.md),
                 _SectionLabel('notifs.dnd_section'.tr()),
                 _Toggle(

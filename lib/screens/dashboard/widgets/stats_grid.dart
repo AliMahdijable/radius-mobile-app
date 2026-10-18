@@ -32,7 +32,6 @@ class StatsGrid extends StatelessWidget {
     this.onOpenDebtors,
     this.balanceLocked = false,
     this.debtLocked = false,
-    this.cardsUnderLock = false,
   });
 
   final WalletResult? wallet;
@@ -52,24 +51,22 @@ class StatsGrid extends StatelessWidget {
   final bool balanceLocked;
   final bool debtLocked;
 
-  /// «الكارتات N» تحت الرصيد المقفل — لفاعل الساس المقيَّد وحده؛ موظّف
-  /// ايرث لنك لا كارتات له ولو بقيت شارةٌ من جلسةٍ سابقة.
-  final bool cardsUnderLock;
-
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     // الحدّ والحشوة ونصف القطر الافتراضيّة في [LockedCard] هي `_ShellCard`
     // نفسها (R.lg · Sp.md)، فالنصف المقفل يساوي جاره الحيّ.
     //
-    // والرصيد المقفل يُبقي «الكارتات N» تحته: عند فاعل الساس المقيَّد
-    // (بلا reports.financial) الرصيد محجوبٌ والكارتات لا — يعمل بها يوميّاً.
-    // وعند موظّف ايرث لنك لا سطر ([cardsUnderLock] = false).
+    // والرصيد المقفل يُبقي «الكارتات N» تحته: عند الفاعل المقيَّد (بلا
+    // reports.financial) الرصيد محجوبٌ والكارتات لا — يعمل بها يوميّاً. ولكلّ
+    // المزوّدين منذ صار لايرث لنك مخزون كروت (المجموعة ② ١٨ أكتوبر)؛ والسطر
+    // لا يُرسم إلّا بشارةٍ مفعّلة ([_CardsBadgeLine]) — لا «الكارتات —» لمن لا
+    // كارتات له.
     final balance = balanceLocked
         ? LockedCard(
             title: 'dashboard.balance'.tr(),
             icon: LucideIcons.wallet,
-            footer: cardsUnderLock ? const _CardsBadgeLine() : null,
+            footer: const _CardsBadgeLine(),
           )
         : _BalancePointsCard(wallet: wallet);
     final debt = debtLocked

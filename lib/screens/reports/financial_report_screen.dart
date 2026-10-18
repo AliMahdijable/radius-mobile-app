@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../api/reports_api.dart';
 import '../settlements/widgets/archive_bar.dart';
 import '../../core/util/format.dart';
+import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -18,7 +19,8 @@ import 'widgets/report_permission_gate.dart';
 import 'widgets/scope_helper.dart';
 
 /// التقرير المالي — نسخة موبايل من client-v2/Financial.tsx:
-///  • هيرو إجمالي الإيراد + صافي بعد المصاريف
+///  • هيرو إجمالي الإيراد + صافي بعد المصاريف — ولمالك حسابٍ على ساسٍ بعيد
+///    أو ايرث لنك: بعد كلفة الباقات أيضاً (سوبرنت والموظّف بلا تغيير)
 ///  • شريط فلتر فترة (سريع: اليوم/أمس/هذا الشهر + custom)
 ///  • KPI cards: نقدي / تسديد / استقطاع / غير نقدي / مصاريف / تفعيلات / تمديدات
 ///  • قائمة آخر النشاطات المالية (مع تمييز سالب/موجب)
@@ -72,6 +74,12 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
       // عند تفعيل فلتر. مغلق على 2000 لتقليل حجم الاستجابة.
       recentLimit: 2000,
       includeArchived: _withArchive,
+      // كلفة الباقات وصافي الربح بعدها (قرار ٢٠٢٦-١٠-١٨): لمالك الحساب وحده،
+      // ولساسٍ بعيد أو ايرث لنك لا سوبرنت. الخادم لا يرسلها لغيرهما أصلاً؛
+      // وهذا حاجزٌ ثانٍ لو أرسلها — فشاشة الموظّف وسوبرنت كما كانت حرفيّاً.
+      withPackageCost: !Perms.isEmployee &&
+          isCostBearingAdminId(
+              (_scopeIds?.isNotEmpty ?? false) ? _scopeIds!.first : null),
     );
     if (!mounted) return;
     setState(() {
@@ -151,18 +159,31 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                     final hasTypeFilter = _filters.actionTypes != null &&
                         _filters.actionTypes!.isNotEmpty;
                     final filtered = _filterLogs(_data!.recentLogs);
-                    final effectiveKpis =
-                        hasTypeFilter ? _kpisFromLogs(filtered) : _data!.kpis;
+                    // الكلفة تحت فلتر النوع من كلفة كلّ سطر — كبقيّة أرقامه.
+                    final filterCost = hasTypeFilter
+                        ? PackageCostKpis.forFilteredLogs(
+                            period: _data!.kpis.packageCost,
+                            allLogs: _data!.recentLogs,
+                            filtered: filtered,
+                          )
+                        : null;
+                    final effectiveKpis = hasTypeFilter
+                        ? _kpisFromLogs(filtered,
+                            packageCost: filterCost?.cost)
+                        : _data!.kpis;
                     return Column(
                       children: [
-                        _hero(effectiveKpis),
+                        _hero(effectiveKpis,
+                            costNeedsAllTypes:
+                                filterCost?.unavailable ?? false),
                         const SizedBox(height: Sp.md),
                         _kpiGrid(effectiveKpis),
                         const SizedBox(height: Sp.lg),
                       ],
                     );
                   }),
-                  _recentLogs(_data!.recentLogs),
+                  _recentLogs(_data!.recentLogs,
+                      showCost: _data!.kpis.packageCost != null),
                 ],
               ],
             ),
@@ -197,8 +218,18 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   /// تصميم موحّد مع بقية بطاقات KPI (surface + border خفيف)، والاعتماد
   /// على اللون فقط في القيم الرقمية والأيقونات (تعليق مستخدم 2026-07-10:
   /// الـgradient كان نشازاً).
-  Widget _hero(FinanceKPIs k) {
+  ///
+  /// كلفة الباقات (٢٠٢٦-١٠-١٨) — حين يرسلها الخادم للمالك فقط: تحت صافي
+  /// النقد (كما كان) قسمٌ ثانٍ: «كلفة الباقات» ثمّ «صافي الربح بعد كلفة
+  /// الباقات» = المبيعات − المصاريف − الكلفة، وصيغته تحته. على أساس المبيعات
+  /// لا النقد (انظر [FinanceKPIs.profitAfterCost]). بلاها (سوبرنت، الموظّف)
+  /// الهيرو كما كان حرفيّاً.
+  /// [costNeedsAllTypes]: فلتر النوع لا يستطيع حساب الكلفة من السطور (لا كلفة
+  /// لكلّ سطر، أو السطور مقطوعة عند سقف الخادم)، فيُقال ذلك بدل رقمٍ كاذب.
+  Widget _hero(FinanceKPIs k, {bool costNeedsAllTypes = false}) {
     final brand = AppColors.brand;
+    final cost = k.packageCost;
+    final profit = k.profitAfterCost;
     return Container(
       padding: const EdgeInsets.all(Sp.lg),
       decoration: BoxDecoration(
@@ -263,7 +294,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
             ],
           ),
           const SizedBox(height: Sp.sm),
-          // صف الصافي — يعرض netCash بشكل بارز مع رمزه ولونه المناسب.
+          // صف الصافي — يعرض netCash بشكل بارز مع رمزه ولونه.
           _heroMini(
             icon: k.netCash < 0
                 ? LucideIcons.trendingDown
@@ -273,6 +304,82 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                 ? '-${formatIQD(k.netCash)}'
                 : formatIQD(k.netCash),
             color: k.netCash < 0 ? AppColors.error : brand,
+          ),
+          if (cost != null && profit != null) ...[
+            const SizedBox(height: Sp.sm),
+            Container(height: 1, color: AppColors.border),
+            const SizedBox(height: Sp.sm),
+            // ما دفعه الوكيل للساس/ايرث لنك عن تفعيلات الفترة وتمديداتها.
+            // صفرٌ معروف «0» لا «-0».
+            _heroMini(
+              icon: LucideIcons.package,
+              label: 'reports.package_cost'.tr(),
+              value: cost.sum > 0 ? '-${formatIQD(cost.sum)}' : formatIQD(0),
+              color: AppColors.error,
+            ),
+            const SizedBox(height: Sp.sm),
+            // صافي الربح بعد كلفة الباقات = المبيعات − المصاريف − الكلفة.
+            _heroMini(
+              icon: profit < 0
+                  ? LucideIcons.trendingDown
+                  : LucideIcons.trendingUp,
+              label: 'reports.kpi_net_after_cost'.tr(),
+              value: profit < 0 ? '-${formatIQD(profit)}' : formatIQD(profit),
+              color: profit < 0 ? AppColors.error : brand,
+            ),
+            _heroNote(
+              'reports.profit_after_cost_formula'.tr(namedArgs: {
+                'sales': formatIQD(k.salesSum),
+                'expenses': formatIQD(k.expensesSum),
+                'cost': formatIQD(cost.sum),
+              }),
+              warn: false,
+            ),
+            if (cost.missingRows > 0)
+              _heroNote(
+                'reports.package_cost_missing'.tr(namedArgs: {
+                  'missing': '${cost.missingRows}',
+                  'rows': '${cost.rows}',
+                }),
+              ),
+            if (cost.hasEstimates)
+              _heroNote(
+                cost.estimatedRows > 0
+                    ? 'reports.package_cost_estimated'
+                        .tr(namedArgs: {'count': '${cost.estimatedRows}'})
+                    : 'reports.package_cost_estimated_some'.tr(),
+              ),
+          ],
+          if (cost == null && costNeedsAllTypes)
+            _heroNote('reports.package_cost_needs_all_types'.tr()),
+        ],
+      ),
+    );
+  }
+
+  /// سطرٌ صغير تحت الصافي — يلتفّ على سطرين عمداً، فلا maxLines. [warn]:
+  /// تنبيهٌ (أيقونة معلومات بلون التنبيه) أو شرحٌ محايد (الصيغة).
+  Widget _heroNote(String text, {bool warn = true}) {
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(top: Sp.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsetsDirectional.only(top: 1),
+            child: Icon(
+              warn ? LucideIcons.info : LucideIcons.calculator,
+              size: 13,
+              color: warn ? AppColors.warning : AppColors.textMid,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              text,
+              style: AppType.muted(color: AppColors.textMid)
+                  .copyWith(fontSize: 10.5, height: 1.5),
+            ),
           ),
         ],
       ),
@@ -457,9 +564,14 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   /// نحسب KPIs من قائمة FinanceLog — يُستدعى عند تفعيل فلتر لعرض
   /// قيم مطابقة للفلتر بدلاً من فترة كاملة. عند "الكل" نستعمل قيم
   /// backend مباشرةً (أدقّ لأنها من الاستعلام الكامل بلا حد).
-  FinanceKPIs _kpisFromLogs(List<FinanceLog> logs) {
+  /// [packageCost] كلفة السطور نفسها ([PackageCostKpis.forFilteredLogs]).
+  FinanceKPIs _kpisFromLogs(
+    List<FinanceLog> logs, {
+    PackageCostKpis? packageCost,
+  }) {
     num activateCash = 0,
         activateNonCash = 0,
+        partialUnpaid = 0,
         debtPay = 0,
         balanceDeduct = 0,
         balanceAdd = 0,
@@ -477,6 +589,9 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
           activateNonCash += l.amount;
         } else if (isCash) {
           activateCash += l.amount;
+          // غير المدفوع من «نقدي جزئي» — يدخل المبيعات (صافي الربح بعد الكلفة)
+          // كما يضمّه الخادم إلى «الديون الجديدة».
+          partialUnpaid += l.partialUnpaid;
         }
       } else if (at == 'SUBSCRIBER_EXTEND') {
         extendCount++;
@@ -501,10 +616,14 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
       expensesCount: expensesCount,
       activationsCount: activationsCount,
       extendCount: extendCount,
+      packageCost: packageCost,
+      partialUnpaidFromLogs: partialUnpaid,
     );
   }
 
-  Widget _recentLogs(List<FinanceLog> logs) {
+  /// [showCost]: الخادم أرسل كلفة الباقات للمالك — سطر الكلفة تحت كلّ عمليّة
+  /// بيع وعمودٌ في التصدير. بلاها القائمة والملفّ كما كانا.
+  Widget _recentLogs(List<FinanceLog> logs, {bool showCost = false}) {
     if (logs.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: Sp.xl),
@@ -536,6 +655,8 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               l.userFullName ?? l.targetName ?? l.userUsername ?? '',
               l.userUsername ?? '',
               l.amount == 0 ? '' : l.amount.toString(),
+              if (showCost)
+                l.packageCost == null ? '' : _plainNumber(l.packageCost!),
               l.createdAt,
               (l.actionDescription ?? '').replaceAll('\n', ' '),
               arabicActionLabel(l.actionType, l.actionDescription ?? ''),
@@ -577,6 +698,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                 'reports.col_subscriber'.tr(),
                 'reports.col_username'.tr(),
                 'reports.col_amount'.tr(),
+                if (showCost) 'reports.col_package_cost'.tr(),
                 'reports.col_date'.tr(),
                 'reports.col_description'.tr(),
                 'reports.col_type'.tr(),
@@ -584,7 +706,9 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               ],
               // مطلب 2026-07-12: الاسم/الوصف يأخذون مساحة أوسع، النوع
               // والمنفّذ أضيق (خصوصاً بعد الترجمة العربية).
-              columnWeights: const [2.2, 1.4, 1.2, 1.4, 2.6, 1.1, 1.3],
+              columnWeights: showCost
+                  ? const [2.2, 1.4, 1.2, 1.2, 1.4, 2.6, 1.1, 1.3]
+                  : const [2.2, 1.4, 1.2, 1.4, 2.6, 1.1, 1.3],
               rows: exportRows,
             ),
           ],
@@ -603,6 +727,8 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
             targetName: l.targetName ?? l.userUsername,
             createdAt: l.createdAt,
 balanceAfter: l.balanceAfter,
+            costLine: showCost ? _costLine(l) : null,
+            costLineWarn: showCost && l.packageCostUnknown,
           ),
           const SizedBox(height: 4),
         ],
@@ -620,6 +746,25 @@ balanceAfter: l.balanceAfter,
     String p(int v) => v.toString().padLeft(2, '0');
     return '${d.year}-${p(d.month)}-${p(d.day)}';
   }
+
+  /// سطر كلفة الباقة تحت الحركة — `null` لما لا كلفة له (تسديد، صرفية،
+  /// المُزامَن من الساس، أو سطرٌ لم يرسل الخادم كلفته).
+  static String? _costLine(FinanceLog l) {
+    final c = l.packageCost;
+    if (c != null) {
+      final line = 'reports.log_package_cost'
+          .tr(namedArgs: {'amount': formatIQD(c)});
+      return l.packageCostEstimated
+          ? '$line · ${'reports.package_cost_estimated_tag'.tr()}'
+          : line;
+    }
+    if (l.packageCostUnknown) return 'reports.log_package_cost_unknown'.tr();
+    return null;
+  }
+
+  /// رقمٌ للتصدير بلا «.0» الزائدة (DECIMAL يصل من الخادم نصّاً كـ"20000.00").
+  static String _plainNumber(num v) =>
+      v == v.roundToDouble() ? v.round().toString() : v.toString();
 }
 
 class _KpiItem {

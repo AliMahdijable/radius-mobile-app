@@ -22,8 +22,39 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 
+/// اسم تطبيق المشترك كما يراه على هاتفه في المتجرين: «MyServices» (كان «MySub»،
+/// وأبل طلبت ترك الاسم القديم) — كـ`SubscriberApp.name` في تبويب «رمز الوكيل».
+const _portalApp = 'MyServices';
+
+/// زرّ الدخول بالرمز في شاشة دخول ذلك التطبيق (2.0.7) بنصّه حرفيّاً — كان
+/// «تسجيل الدخول بواسطة QR» في نسخته القديمة (باسم MySub).
+const _portalQrButton = 'الدخول برمز QR من وكيلك';
+
+/// نصّ «حفظ / مشاركة» — يرافق صورة الرمز.
+///
+/// 🐛 تدقيق البوّابة ٢٠٢٦-١٠-١٧ (§2.3): الرمز والرابط يفتحان في المتصفّح
+/// (كاميرا الهاتف، نقرة الرابط) **بطاقة معلومات** من الساس وحدها لا البوّابة،
+/// والنصّ كان يقول «رمز QR لتسجيل دخولك» — فيُمسح بالكاميرا ويُظنّ أنّ البوّابة
+/// لا تعكس تعديلات المدير. الدخول من ماسح التطبيق وحده.
+String qrShareText({required String greet, required String link}) =>
+    'مرحباً $greet 👋\n\n'
+    'للدخول إلى تطبيق $_portalApp: افتح التطبيق واختر «$_portalQrButton»'
+    '، ثمّ امسح هذا الرمز أو ارفع صورته من المعرض.\n\n'
+    'ومعلومات اشتراكك على الرابط:\n$link\n\n'
+    'الرمز صالح لمدة 30 يوم.';
+
+/// نصّ «إرسال بواتساب» — رابطٌ بلا صورة، فلا يقول «هذا رمز دخولك».
+String qrWhatsAppText({required String greet, required String link}) =>
+    'مرحباً $greet 👋\n\n'
+    'معلومات اشتراكك على الرابط:\n$link\n\n'
+    'وللدخول إلى تطبيق $_portalApp امسح رمز QR من داخل التطبيق '
+    '(«$_portalQrButton») لا بكاميرا الهاتف.\n\n'
+    'الرابط صالح لمدة 30 يوم. لو انتهى، اطلب واحد جديد من الأدمن.\n\n'
+    'شكراً 🙏';
+
 /// Bottom sheet لتوليد رمز QR دخول المشترك (30 يوم). المشترك يمسحه
-/// من تطبيق البورتال فيسجّل دخول تلقائياً بلا كتابة username/password.
+/// من **داخل** تطبيق MyServices فيسجّل دخول تلقائياً بلا كتابة username/password
+/// (كاميرا الهاتف تفتح بطاقة المعلومات وحدها).
 Future<void> showQrLoginSheet(BuildContext context, Subscriber sub) {
   return showModalBottomSheet(
     context: context,
@@ -143,8 +174,7 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
       // ignore: deprecated_member_use
       await Share.shareXFiles(
         [XFile(file.path)],
-        text:
-            'مرحباً $greet 👋\n\nهذا رمز QR لتسجيل دخولك في تطبيق بوابة المشترك:\n\n${_linkUrl!}\n\nالرمز صالح لمدة 30 يوم.',
+        text: qrShareText(greet: greet, link: _linkUrl!),
         sharePositionOrigin: origin,
       );
     } catch (e) {
@@ -168,11 +198,7 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
       final greet = widget.sub.fullName.trim().isNotEmpty
           ? widget.sub.fullName.trim()
           : widget.sub.username;
-      final message = 'مرحباً $greet 👋\n\n'
-          'هذا رمز QR لتسجيل دخولك في تطبيق بوابة المشترك:\n\n'
-          '${_linkUrl!}\n\n'
-          'الرمز صالح لمدة 30 يوم. لو انتهى، اطلب واحد جديد من الأدمن.\n\n'
-          'شكراً 🙏';
+      final message = qrWhatsAppText(greet: greet, link: _linkUrl!);
       // 2026-08-26: preview sheet مع chip auto/manual لهذه العمليّة أيضاً.
       if (!mounted) return;
       final choice = await showManualWaPreviewSheet(
@@ -354,6 +380,17 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
               ),
             ],
           ),
+        ),
+        const SizedBox(height: Sp.sm),
+        // أين يُمسح: من يفحص بكاميرا هاتفه يرى بطاقة معلومات من الساس لا
+        // البوّابة، فيظنّ تعديلاته لا تظهر (تدقيق البوّابة ٢٠٢٦-١٠-١٧ §2.3).
+        Text(
+          'qr_login.scan_in_app'.tr(),
+          textAlign: TextAlign.center,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+          style: AppType.muted(color: AppColors.textMid)
+              .copyWith(fontSize: 11.5, height: 1.5),
         ),
         const SizedBox(height: Sp.md),
         // Link preview

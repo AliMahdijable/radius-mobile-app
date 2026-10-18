@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/util/server_time.dart';
 import 'api_client.dart';
 
 /// Branding — كيف تبدو بوابة المشترك (اسم شركة/شعار/تواصل).
@@ -147,69 +148,230 @@ class PortalPackage {
   }
 }
 
-/// Portal settings API — branding + packages customization.
+/// حال قسمٍ من إعدادات البوّابة عند فتحه.
+enum PortalLoad {
+  /// وصل القسم ببياناته.
+  ok,
+
+  /// الخادم ردّ نجاحاً **بلا** القسم: جلسة ايرث لنك تأخذ ردّاً آمناً فارغاً
+  /// (`{success, data:null, items:[]}`) لكلّ مسارٍ لا يمرّره خادمنا لها —
+  /// ومنها `/api/v2/admin/branding` و`portal-packages` اليوم، وحفظهما 503.
+  /// فلا نموذج يُملأ ويفشل حفظه؛ ومتى مرّرها الخادم صار القسم [ok] وحده.
+  unsupported,
+
+  /// شبكة أو خادم. ⚠️ لا نموذج فارغاً هنا: حفظه يرسل الحقول كلّها null
+  /// فيمسح ما خزّنه المدير — بل «إعادة المحاولة».
+  failed,
+}
+
+/// «رمز الوكيل» ومفتاح البوّابة — `GET /api/v2/portal/settings`.
+///
+/// الرمز ستّة أرقام لكلّ حساب وكيل (المالك؛ والموظّف يرى رمز مديره)، يكتبه
+/// المشترك في تطبيق MyServices مع يوزره وكلمة مروره. يُنشئه الخادم عند أوّل
+/// عرض، و`null` = لا رمز لحسابك (شركةٌ لا تخدمها البوّابة بعد، أو جداول
+/// البوّابة غير مهيّأة) — حالةٌ هادئة لا خطأ.
+class PortalAccess {
+  const PortalAccess({required this.enabled, this.agentCode});
+
+  /// بوّابة مشتركي هذا الوكيل مفتوحة؟ مفتوحةٌ افتراضاً (لا صفّ = مفتوحة).
+  final bool enabled;
+  final String? agentCode;
+
+  static PortalAccess fromJson(Map<String, dynamic> j) => PortalAccess(
+        enabled: !(j['enabled'] == false || j['enabled'] == 0),
+        agentCode: parseAgentCode(j['agent_code']),
+      );
+
+  PortalAccess copyWith({bool? enabled, Object? agentCode = _sentinel}) =>
+      PortalAccess(
+        enabled: enabled ?? this.enabled,
+        agentCode: identical(agentCode, _sentinel)
+            ? this.agentCode
+            : agentCode as String?,
+      );
+}
+
+/// متغيّر القوالب الذي يُستبدل برمز وكيل المُرسِل — الخادم يملؤه في كلّ قالب
+/// واتساب/تلغرام يمرّ به، والتطبيق فيما يركّبه ويرسله بنفسه
+/// ([PortalSettingsApi.fillAgentCode]).
+const kAgentCodeVariable = '{agent_code}';
+
+/// رمز وكيلٍ صالح (ستّة أرقام بالضبط، نصّاً فلا تسقط الأصفار البادئة) — وإلّا
+/// `null`، فلا يُعرض للمدير ولا يُشارَك رمزٌ لا يقبله الخادم.
+String? parseAgentCode(dynamic raw) {
+  final s = raw?.toString().trim() ?? '';
+  return RegExp(r'^\d{6}$').hasMatch(s) ? s : null;
+}
+
+/// كيف حاول المشترك الدخول (`via` في السجلّ).
+enum PortalLoginVia {
+  /// يوزر وكلمة مرور — تحقّق خادمنا (`pw`) أو دخولٌ مباشر على الساس (`sas`).
+  password,
+
+  /// رمز QR من الوكيل.
+  qr,
+
+  /// لا طريقة: رُفض قبل التحقّق (بوّابةٌ موقوفة مثلاً).
+  unknown,
+}
+
+/// نتيجة المحاولة (`result` في السجلّ).
+enum PortalLoginResult {
+  ok,
+  badPassword,
+
+  /// تعذّر التحقّق من كلمة المرور عند الوكيل (صلاحيّة رؤيتها مقفلة بالساس).
+  unverifiable,
+
+  /// البوّابة موقوفة من الوكيل.
+  disabled,
+
+  /// الخدمة غير متاحة لحساب الوكيل (اشتراكٌ منتهٍ/محظور).
+  unavailable,
+
+  /// قيمةٌ لا يعرفها هذا الإصدار — تُعرض «محاولة» لا نصّاً خاماً.
+  other,
+}
+
+/// صفٌّ من «آخر دخول المشتركين» — `GET /api/v2/portal/logins` (بلا كلمات
+/// مرور ولا توكنات؛ والخادم يحفظ ٩٠ يوماً).
+class PortalLogin {
+  const PortalLogin({
+    this.at,
+    this.username,
+    this.via = PortalLoginVia.unknown,
+    this.result = PortalLoginResult.other,
+  });
+
+  /// بتوقيت الجهاز — `at` من قاعدتنا موسومٌ بـZ ([parseServerUtc]).
+  final DateTime? at;
+
+  /// اليوزر كما كتبه المشترك (بأحرفٍ صغيرة).
+  final String? username;
+  final PortalLoginVia via;
+  final PortalLoginResult result;
+
+  static PortalLogin fromJson(Map<String, dynamic> j) => PortalLogin(
+        at: parseServerUtc(j['at']?.toString()),
+        username: _s(j['username_lc']),
+        via: switch (j['via']?.toString()) {
+          'pw' || 'sas' => PortalLoginVia.password,
+          'qr' => PortalLoginVia.qr,
+          _ => PortalLoginVia.unknown,
+        },
+        result: switch (j['result']?.toString()) {
+          'ok' => PortalLoginResult.ok,
+          'bad_password' => PortalLoginResult.badPassword,
+          'pw_unverifiable' => PortalLoginResult.unverifiable,
+          'portal_disabled' => PortalLoginResult.disabled,
+          'portal_unavailable' => PortalLoginResult.unavailable,
+          _ => PortalLoginResult.other,
+        },
+      );
+}
+
+/// Portal settings API — branding + packages customization + «رمز الوكيل».
 class PortalSettingsApi {
   PortalSettingsApi._();
 
-  static Future<Branding> getBranding() async {
+  /// [PortalLoad.unsupported] لردٍّ ناجحٍ بلا `branding` (جلسة ايرث لنك —
+  /// انظر [PortalLoad])، و[PortalLoad.failed] لما سواه من الإخفاق.
+  static Future<({PortalLoad state, Branding branding})> loadBranding() async {
     try {
       final r = await ApiClient.dio
           .get<Map<String, dynamic>>('/api/v2/admin/branding');
       final body = r.data ?? const {};
       final b = body['branding'];
-      if (b is Map) {
-        return Branding.fromJson(Map<String, dynamic>.from(b));
+      if (r.statusCode == 200 && b is Map) {
+        return (
+          state: PortalLoad.ok,
+          branding: Branding.fromJson(Map<String, dynamic>.from(b)),
+        );
       }
-      return Branding.empty;
+      final unsupported = r.statusCode == 200 &&
+          body['success'] == true &&
+          !body.containsKey('branding');
+      return (
+        state: unsupported ? PortalLoad.unsupported : PortalLoad.failed,
+        branding: Branding.empty,
+      );
     } on DioException catch (e) {
       _log('branding (GET)', e);
-      return Branding.empty;
+      return (state: PortalLoad.failed, branding: Branding.empty);
     } catch (e) {
       _log('branding (GET)', e);
-      return Branding.empty;
+      return (state: PortalLoad.failed, branding: Branding.empty);
     }
   }
 
-  static Future<bool> saveBranding(Branding b) async {
+  /// [saved] ما خزّنه الخادم فعلاً (قد يطبّعه: صورة صفحة المشاركة، رقم 07…)،
+  /// و[message] سبب الرفض العربيّ (رابط صفحةٍ لا صورة مثلاً) — وإلّا null.
+  static Future<({bool ok, String? message, Branding? saved})> saveBranding(
+      Branding b) async {
     try {
       final r = await ApiClient.dio.put<Map<String, dynamic>>(
         '/api/v2/admin/branding',
         data: b.toJson(),
       );
-      return r.statusCode == 200 && r.data?['success'] == true;
+      if (r.statusCode == 200 && r.data?['success'] == true) {
+        final row = r.data?['branding'];
+        return (
+          ok: true,
+          message: null,
+          saved: row is Map
+              ? Branding.fromJson(Map<String, dynamic>.from(row))
+              : null,
+        );
+      }
+      return (ok: false, message: _refusal(r), saved: null);
     } on DioException catch (e) {
       _log('branding (PUT)', e);
-      return false;
+      return (ok: false, message: null, saved: null);
     } catch (e) {
       _log('branding (PUT)', e);
-      return false;
+      return (ok: false, message: null, saved: null);
     }
   }
 
-  static Future<List<PortalPackage>> getPackages() async {
+  /// كـ[loadBranding]: `unsupported` لردٍّ ناجحٍ بلا `packages`، و`failed`
+  /// للإخفاق — فلا تقول الشاشة «لا توجد باقات» لشبكةٍ انقطعت.
+  static Future<({PortalLoad state, List<PortalPackage> packages})>
+      loadPackages() async {
     try {
       final r = await ApiClient.dio
           .get<Map<String, dynamic>>('/api/v2/admin/portal-packages');
       final body = r.data ?? const {};
       final list = body['packages'];
-      if (list is! List) return const [];
-      return list
-          .whereType<Map>()
-          .map((m) => PortalPackage.fromJson(Map<String, dynamic>.from(m)))
-          .whereType<PortalPackage>()
-          .toList();
+      if (r.statusCode == 200 && list is List) {
+        return (
+          state: PortalLoad.ok,
+          packages: list
+              .whereType<Map>()
+              .map((m) => PortalPackage.fromJson(Map<String, dynamic>.from(m)))
+              .whereType<PortalPackage>()
+              .toList(),
+        );
+      }
+      final unsupported = r.statusCode == 200 &&
+          body['success'] == true &&
+          !body.containsKey('packages');
+      return (
+        state: unsupported ? PortalLoad.unsupported : PortalLoad.failed,
+        packages: const <PortalPackage>[],
+      );
     } on DioException catch (e) {
       _log('portal-packages (GET)', e);
-      return const [];
+      return (state: PortalLoad.failed, packages: const <PortalPackage>[]);
     } catch (e) {
       _log('portal-packages (GET)', e);
-      return const [];
+      return (state: PortalLoad.failed, packages: const <PortalPackage>[]);
     }
   }
 
   /// PUT عام — يقبل حقول جزئية (displayName, description, imageUrl,
   /// displayOrder, isHidden). null = مسح القيمة على السيرفر.
-  static Future<bool> updatePackage(
+  /// [message] سبب الرفض العربيّ من الخادم (رابط صفحةٍ لا صورة) — وإلّا null.
+  static Future<({bool ok, String? message})> updatePackage(
     int profileId, {
     Object? displayName = _sentinel,
     Object? description = _sentinel,
@@ -228,13 +390,16 @@ class PortalSettingsApi {
         '/api/v2/admin/portal-packages/$profileId',
         data: body,
       );
-      return r.statusCode == 200 && r.data?['success'] == true;
+      if (r.statusCode == 200 && r.data?['success'] == true) {
+        return (ok: true, message: null);
+      }
+      return (ok: false, message: _refusal(r));
     } on DioException catch (e) {
       _log('portal-packages (PUT $profileId)', e);
-      return false;
+      return (ok: false, message: null);
     } catch (e) {
       _log('portal-packages (PUT $profileId)', e);
-      return false;
+      return (ok: false, message: null);
     }
   }
 
@@ -253,6 +418,141 @@ class PortalSettingsApi {
       return false;
     }
   }
+
+  // ─── «رمز الوكيل» ومفتاح البوّابة وسجلّ الدخول (وسيط البوّابة §6/§10) ───
+  // كلّها للمزوّدين جميعاً: جلسات ايرث لنك تمرّ إلى المعالجات نفسها
+  // (`v2/portal/` في elPassthrough.js)، والموظّف يُخدَم باسم مديره.
+
+  /// يملأ [kAgentCodeVariable] في نصٍّ ركّبه التطبيق من قالب — قبل معاينته
+  /// وقبل الإرسال **اليدويّ** (من واتساب المدير نفسه، فلا يمرّ بخادمنا الذي
+  /// يملؤه في التلقائيّ؛ وكان يصل المشترك «{agent_code}» حرفيّاً).
+  ///
+  /// نصٌّ بلا المتغيّر يعود كما هو بلا نداء. ورمزٌ تعذّر جلبه يُبقي المتغيّر:
+  /// يُرى في المعاينة، والخادم يملؤه إن أُرسل تلقائيّاً. أمّا حسابٌ ردّ الخادم
+  /// أنّه **بلا رمز** (`agent_code: null`) فيُفرَّغ المتغيّر — كما يفعل الخادم
+  /// نفسه في التلقائيّ (`templateHelper.applyAgentCode`)، فلا يصل المشترك
+  /// «{agent_code}» حرفيّاً من اليدويّ.
+  static Future<String> fillAgentCode(String text) async {
+    if (!text.contains(kAgentCodeVariable)) return text;
+    final access = await getAccess();
+    if (access == null) return text;
+    return text.replaceAll(kAgentCodeVariable, access.agentCode ?? '');
+  }
+
+  /// الإعدادات ورمز الوكيل — بلا صلاحيّة (المالك والموظّف). `null` = تعذّر.
+  static Future<PortalAccess?> getAccess() async {
+    try {
+      final r = await ApiClient.dio
+          .get<Map<String, dynamic>>('/api/v2/portal/settings');
+      final body = r.data;
+      if (r.statusCode == 200 && body != null && body['success'] == true) {
+        return PortalAccess.fromJson(body);
+      }
+      return null;
+    } on DioException catch (e) {
+      _log('portal settings (GET)', e);
+      return null;
+    } catch (e) {
+      _log('portal settings (GET)', e);
+      return null;
+    }
+  }
+
+  /// يفتح بوّابة مشتركي الوكيل كلّها أو يوقفها. الخادم: المالك دائماً،
+  /// والموظّف بـ`settings.edit`.
+  ///
+  /// [denied] = ٤٠٣ (صلاحيّةٌ سُحبت بعد فتح الشاشة) — فتقول الشاشة «لا
+  /// صلاحيّة» لا رسالة الخادم «لا تملك صلاحية: settings.edit» بمفتاحها الخام.
+  /// [enabled] ما خزّنه الخادم فعلاً عند النجاح.
+  static Future<({bool ok, bool? enabled, bool denied, String? message})>
+      setPortalEnabled(bool enabled) async {
+    try {
+      final r = await ApiClient.dio.put<Map<String, dynamic>>(
+        '/api/v2/portal/settings',
+        data: {'enabled': enabled},
+      );
+      final body = r.data;
+      if (r.statusCode == 200 && body?['success'] == true) {
+        final saved = body?['enabled'];
+        return (
+          ok: true,
+          enabled: saved is bool ? saved : enabled,
+          denied: false,
+          message: null,
+        );
+      }
+      if (r.statusCode == 403) {
+        return (ok: false, enabled: null, denied: true, message: null);
+      }
+      return (ok: false, enabled: null, denied: false, message: _refusal(r));
+    } on DioException catch (e) {
+      _log('portal settings (PUT)', e);
+      return (ok: false, enabled: null, denied: false, message: null);
+    } catch (e) {
+      _log('portal settings (PUT)', e);
+      return (ok: false, enabled: null, denied: false, message: null);
+    }
+  }
+
+  /// رمزٌ جديد فوراً، والقديم يتوقّف الآن — لصاحب الحساب وحده (الموظّف
+  /// ٤٠٣ `OWNER_ONLY` ولو بكلّ الصلاحيّات). [code] الجديد عند النجاح،
+  /// و[message] سبب الرفض العربيّ («لصاحب الحساب فقط»، «غير متاح بعد»).
+  static Future<({String? code, bool ownerOnly, String? message})>
+      rotateAgentCode() async {
+    try {
+      final r = await ApiClient.dio
+          .post<Map<String, dynamic>>('/api/v2/portal/agent-code/rotate');
+      final body = r.data;
+      final code = parseAgentCode(body?['agent_code']);
+      if (r.statusCode == 200 && body?['success'] == true && code != null) {
+        return (code: code, ownerOnly: false, message: null);
+      }
+      return (
+        code: null,
+        ownerOnly: r.statusCode == 403 && body?['code'] == 'OWNER_ONLY',
+        message: _refusal(r),
+      );
+    } on DioException catch (e) {
+      _log('agent-code rotate', e);
+      return (code: null, ownerOnly: false, message: null);
+    } catch (e) {
+      _log('agent-code rotate', e);
+      return (code: null, ownerOnly: false, message: null);
+    }
+  }
+
+  /// آخر محاولات دخول مشتركي الوكيل، الأحدث أوّلاً. الخادم يطلب
+  /// `subscribers.view` من الموظّف — فالشاشة لا تسأل بدونها ([denied] احتياطٌ
+  /// لصلاحيّةٍ سُحبت). [rows] `null` = تعذّر الجلب.
+  static Future<({List<PortalLogin>? rows, bool denied})> getLogins({
+    int limit = 20,
+  }) async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/v2/portal/logins',
+        queryParameters: {'limit': limit},
+      );
+      final body = r.data;
+      if (r.statusCode == 403) return (rows: null, denied: true);
+      final data = body?['data'];
+      if (r.statusCode == 200 && body?['success'] == true && data is List) {
+        return (
+          rows: data
+              .whereType<Map>()
+              .map((m) => PortalLogin.fromJson(Map<String, dynamic>.from(m)))
+              .toList(),
+          denied: false,
+        );
+      }
+      return (rows: null, denied: false);
+    } on DioException catch (e) {
+      _log('portal logins (GET)', e);
+      return (rows: null, denied: false);
+    } catch (e) {
+      _log('portal logins (GET)', e);
+      return (rows: null, denied: false);
+    }
+  }
 }
 
 // ─── helpers ──────────────────────────
@@ -260,6 +560,17 @@ String? _s(dynamic v) {
   if (v == null) return null;
   final s = v.toString().trim();
   return s.isEmpty ? null : s;
+}
+
+/// رسالة الرفض من ردٍّ ٤xx (الـ٥xx يرمي — `validateStatus`) — كرفض رابط
+/// صفحةٍ لا صورة: «هذا رابط صفحة لا صورة — افتح الصورة واختر نسخ رابط
+/// الصورة المباشر». العربيّة وحدها تُعرض (غيرها قد يكون أثراً تقنيّاً)،
+/// وإلّا null فتقول الشاشة «فشل الحفظ» كما كانت.
+String? _refusal(Response<Map<String, dynamic>> r) {
+  final m = r.data?['message'];
+  if (m is! String) return null;
+  final t = m.trim();
+  return t.isNotEmpty && RegExp(r'[؀-ۿ]').hasMatch(t) ? t : null;
 }
 
 void _log(String tag, Object e) {

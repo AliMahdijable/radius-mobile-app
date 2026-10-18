@@ -27,6 +27,38 @@ class BroadcastScreen extends StatefulWidget {
 
 enum _Filter { all, debtors, expired, expiring }
 
+/// جمهور «قرب الانتهاء» في التبليغات — **قاعدة الخادم والويب نفسها**، لا
+/// [Subscriber.isNearExpiry] (ذاك يلوّن البطاقات: من الآن إلى ما دون أربعة أيّام).
+///
+/// الخادم يفلتر `type:'expiring'` بنفسه (إصلاح ١٨ أكتوبر — كان يعامله «عامّاً»
+/// فيذهب المكتوب لكلّ المشتركين، والفارغ لا يذهب لأحد؛ والفارغ الآن قالب
+/// `expiry_warning`): **لم ينتهِ بعد** (الانتهاء بعد الآن بساعة بغداد) وينتهي قبل
+/// منتصف ليل **بغداد** اليوم + ثلاثة أيّام (شاملاً)، وبلا تاريخٍ مقروء الأيّامُ الباقية
+/// 1..3 — مطابقٌ حرفيّاً لـ`broadcastAudience.isExpiringSoon`
+/// وعدّاد `Notifications.tsx`. والنطاق «عام» لا يرسل أسماءً (الخادم يختار، فيبقى
+/// نطاق الإرسال وحماية التكرار اليوميّ)، فعدّاد الشاشة وحوار التأكيد يَعُدّان
+/// بالقاعدة نفسها وإلّا وعدا بعددٍ ويُرسَل لغيره. و«محدّد» يرسل الأسماء فتُرسَل كما
+/// هي (لا يعيد الخادم فلترتها) — فالقائمة المعروضة للاختيار بالقاعدة نفسها أيضاً.
+///
+/// منتصف ليل بغداد (UTC+3 ثابتة، بلا توقيتٍ صيفيّ) لا منتصف ليل الجهاز، وتاريخ
+/// الساس يُقرأ بساعته الجدرانيّة كما هو ([Subscriber.parsedExpiration]).
+@visibleForTesting
+bool broadcastExpiring(Subscriber s, {DateTime? now}) {
+  final b = (now ?? DateTime.now()).toUtc().add(const Duration(hours: 3));
+  // ساعة بغداد الجداريّة — تاريخ الساس يُقرأ بها ([Subscriber.parsedExpiration]).
+  final nowWall =
+      DateTime(b.year, b.month, b.day, b.hour, b.minute, b.second);
+  final today = DateTime(b.year, b.month, b.day);
+  final exp = s.parsedExpiration;
+  if (exp != null) {
+    // من انتهى صباح اليوم لا يُبلَّغ «ستنتهي بعد…» (الخادم يستثنيه أيضاً).
+    return exp.isAfter(nowWall) &&
+        !exp.isAfter(today.add(const Duration(days: 3)));
+  }
+  final d = s.remainingDays;
+  return d != null && d >= 1 && d <= 3;
+}
+
 enum _Scope { all, specific }
 
 class _BroadcastScreenState extends State<BroadcastScreen> {
@@ -124,7 +156,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       case _Filter.expired:
         return _withPhone.where((s) => s.isExpired).toList();
       case _Filter.expiring:
-        return _withPhone.where((s) => s.isNearExpiry).toList();
+        final now = DateTime.now();
+        return _withPhone.where((s) => broadcastExpiring(s, now: now)).toList();
     }
   }
 
@@ -159,13 +192,14 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     int debtors = 0;
     int expired = 0;
     int expiring = 0;
+    final now = DateTime.now();
     for (final s in _withPhone) {
       final hasDebt = s.hasDebtFlag ||
           (s.debt ?? 0) > 0 ||
           (double.tryParse((s.notes ?? '0').replaceAll(',', '')) ?? 0) < 0;
       if (hasDebt) debtors++;
       if (s.isExpired) expired++;
-      if (s.isNearExpiry) expiring++;
+      if (broadcastExpiring(s, now: now)) expiring++;
     }
     return {
       _Filter.all: _withPhone.length,

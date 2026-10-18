@@ -466,15 +466,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
           DashboardCache.saveWallet(r); // persist for next cold start
         }
       });
-    } else if (_canMoney || !_elEmployee) {
+    } else if (!Perms.isEmployee ||
+        Perms.hasAny(const ['subscribers.activate', 'subscribers.extend'])) {
       // §١٢: شارة الكارتات تركب admin-widgets، وهو لا يُطلب والمحفظة مخفيّة —
       // فتغيب «الكارتات» عن «قوائم أخرى» لمن يعمل بها. نداءٌ واحد للملخّص حين
       // تُجهل الشارة وحدها؛ والمعروفة لا تكلّف شيئاً.
       //
-      // وموظّف ايرث لنك بلا reports.financial لا نداء له إطلاقاً: الخادم
-      // يقنّع كارتاته (`cards.remaining:null`)، والكارتات ليست ميزة ايرث لنك.
-      // أمّا فاعل الساس بلاه فرصيده مقفل وكارتاته لا: سطرها تحت القفل يحتاج
-      // الشارة، وفشل نداء الملخّص صامتٌ لا يرسم شيئاً.
+      // ولكلّ المزوّدين: مخزون كروت ايرث لنك صار يُخدَم (prepaycard/all —
+      // المجموعة ② ١٨ أكتوبر) بالمفاتيح نفسها، فموظّفها بلا reports.financial
+      // كموظّف الساس: رصيده مقفل وكارتاته لا. والموظّف بلا تفعيلٍ ولا تمديد لا
+      // نداء له: الخادمان يردّانه 403 (`requireAnyPermission` بالساس،
+      // `_EMP_ROUTE_PERMS` بايرث لنك) — نداءٌ نعرف أنّه سيُرفض.
       CardsState.ensureKnown();
     }
   }
@@ -636,7 +638,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       debtors: _debtorsLoaded ? _debtorsLive : null,
                       balanceLocked: !_canMoney,
                       debtLocked: !_canSubs,
-                      cardsUnderLock: !_elEmployee,
                       onOpenDebtors: () => widget.onOpenSubscribers
                           ?.call(SubscriberFilter.debtors),
                     )

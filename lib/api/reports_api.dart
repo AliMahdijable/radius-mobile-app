@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/util/bidi.dart';
 import 'api_client.dart';
 import 'archive_info.dart';
 
@@ -22,6 +23,126 @@ import 'archive_info.dart';
 
 // ─────────── Financial ───────────
 
+/// حسابٌ تُطرح من صافيه كلفة الباقات: معرّفٌ مؤهَّل `<code>:<id>` (شركات SAS4
+/// البعيدة وايرث لنك) — لا العاري (سوبرنت، الساس الأصليّ) ولا المشروع
+/// الوطنيّ `ftth-iq:` (خارج النطاق). و`ftth:` ساس SAS4 حقيقيّ فيُشمَل.
+/// مطابقٌ لـ`packageCosts.isCostBearingAdminId` في الخادم.
+bool isCostBearingAdminId(String? adminId) {
+  final s = (adminId ?? '').trim().toLowerCase();
+  final i = s.indexOf(':');
+  return i > 0 && s.substring(0, i) != 'ftth-iq';
+}
+
+/// كلفة الباقات — ما يدفعه الوكيل للساس (أو لايرث لنك) عن كلّ تفعيلٍ وتمديد.
+///
+/// قرار المالك ٢٠٢٦-١٠-١٨: «صافي الربح» يطرحها لكلّ الساسات البعيدة
+/// ولايرث لنك، وسوبرنت (الساس الأصليّ) وحدها مستثناة.
+///
+/// ⚠️ الخادم وحده يحسبها ويقرّر من يراها: يرسل حقولها في `kpis` لمالك
+/// الحساب حين يكون التقرير جاهزاً، ولا يرسلها لسوبرنت ولا للموظّف. فغيابها
+/// يعني «لا كلفة تُعرض» — **لا** «الكلفة صفر»، ولا يُخترع منها شيءٌ هنا.
+@immutable
+class PackageCostKpis {
+  const PackageCostKpis({
+    required this.sum,
+    this.rows = 0,
+    this.knownRows = 0,
+    this.estimatedRows = 0,
+    bool hasEstimates = false,
+  }) : _hasEstimates = hasEstimates;
+
+  /// مجموع الكلفة المسجّلة (د.ع).
+  final num sum;
+
+  /// عمليّات البيع في الفترة: تفعيلٌ وتمديد، بلا ما زامنّاه من الساس.
+  final int rows;
+
+  /// منها ما سُجّلت كلفته.
+  final int knownRows;
+
+  /// منها كلفةٌ تقديريّة لم تؤكّدها الشركة بعد.
+  final int estimatedRows;
+
+  final bool _hasEstimates;
+
+  /// عمليّاتٌ بلا كلفةٍ مسجّلة — المجموع ينقصها، فالصافي الحقيقيّ أقلّ.
+  int get missingRows => rows > knownRows ? rows - knownRows : 0;
+
+  bool get hasEstimates => _hasEstimates || estimatedRows > 0;
+
+  /// كلفة حركاتٍ بعينها من كلفة كلّ سطرٍ كما أرسلها الخادم — يحتاجها فلتر
+  /// النوع، فأرقامه تُحسب من السطور لا من الخادم.
+  static PackageCostKpis fromLogs(Iterable<FinanceLog> logs) {
+    num sum = 0;
+    var rows = 0, known = 0, estimated = 0;
+    for (final l in logs) {
+      if (!l.isSale || l.fromSas) continue;
+      rows++;
+      final c = l.packageCost;
+      if (c == null) continue;
+      known++;
+      sum += c;
+      if (l.packageCostSource == 'estimate') estimated++;
+    }
+    return PackageCostKpis(
+      sum: sum,
+      rows: rows,
+      knownRows: known,
+      estimatedRows: estimated,
+    );
+  }
+
+  /// سقف الخادم لسطور الحركات في `recentLogs` (FinanceReportController و
+  /// financeSummary لايرث لنك: `Math.min(limit_logs, 1000)`) — الصرفيات تُلحق
+  /// فوقه. بلوغه يعني أنّ السطور مقطوعة: مجموعٌ منها لا يمثّل الفترة.
+  static const recentLogsServerCap = 1000;
+
+  /// الكلفة تحت فلتر النوع.
+  ///
+  /// [period] كلفة الفترة من الخادم (`null` = لا كلفة تُعرض أصلاً)،
+  /// و[allLogs] السطور كلّها، و[filtered] ما بقي بعد الفلتر.
+  ///
+  /// `unavailable` = لا يصحّ جمعها من السطور، فالشاشة تقول «أزل الفلتر» بدل
+  /// رقمٍ كاذب: (أ) للفترة كلفةٌ مسجّلة لكنّ ولا سطراً يحمل حقلها (خادمٌ لا
+  /// يرسلها لكلّ سطر)، أو (ب) السطور بلغت سقف الخادم فهي مقطوعة — المجموع منها
+  /// جزئيّ بلا علامة (مراجعة ١٨ أكتوبر).
+  static ({PackageCostKpis? cost, bool unavailable}) forFilteredLogs({
+    required PackageCostKpis? period,
+    required List<FinanceLog> allLogs,
+    required Iterable<FinanceLog> filtered,
+  }) {
+    if (period == null) return (cost: null, unavailable: false);
+    final perRow = period.knownRows == 0 ||
+        allLogs.any((l) => l.packageCostSent || l.packageCost != null);
+    if (!perRow) return (cost: null, unavailable: true);
+    final activityRows =
+        allLogs.where((l) => l.actionType.toUpperCase().trim() != 'ADMIN_EXPENSE').length;
+    if (activityRows >= recentLogsServerCap) return (cost: null, unavailable: true);
+    return (cost: fromLogs(filtered), unavailable: false);
+  }
+
+  /// من `data.kpis` — `null` حين لا يرسل الخادم الكلفة، أو يرسلها برقمٍ لا
+  /// يُصدَّق (سالب أو غير رقم): رقمٌ مكسور لا يُطرح من صافي المالك.
+  static PackageCostKpis? fromKpis(Map<String, dynamic> j) {
+    final raw = j['package_cost_sum'];
+    if (raw == null) return null;
+    final sum = raw is num ? raw : num.tryParse(raw.toString().trim());
+    if (sum == null || !sum.isFinite || sum < 0) return null;
+    int count(Object? v) {
+      final n = v is num ? v : num.tryParse(v?.toString().trim() ?? '');
+      return (n == null || !n.isFinite || n < 0) ? 0 : n.toInt();
+    }
+
+    return PackageCostKpis(
+      sum: sum,
+      rows: count(j['cost_rows']),
+      knownRows: count(j['cost_known_rows']),
+      estimatedRows: count(j['cost_estimated_rows']),
+      hasEstimates: j['cost_has_estimates'] == true,
+    );
+  }
+}
+
 class FinanceKPIs {
   const FinanceKPIs({
     this.paymentsSum = 0,
@@ -35,6 +156,8 @@ class FinanceKPIs {
     this.managerDebtsOutstanding = 0,
     this.activationsCount = 0,
     this.extendCount = 0,
+    this.packageCost,
+    this.partialUnpaidFromLogs = 0,
   });
   final num paymentsSum;
   final num debtPaySum;
@@ -47,6 +170,14 @@ class FinanceKPIs {
   final num managerDebtsOutstanding;
   final int activationsCount;
   final int extendCount;
+
+  /// كلفة الباقات للمالك — `null` = لا تُعرض: سوبرنت، أو موظّف، أو خادمٌ
+  /// أقدم، أو التقرير مطفأ من الإعدادات. انظر [PackageCostKpis].
+  final PackageCostKpis? packageCost;
+
+  /// غير المدفوع من «نقدي جزئي» محسوباً من السطور (فلتر النوع وحده). أرقام
+  /// الخادم تضمّه أصلاً في `activate_non_cash_sum`، فيبقى صفراً لها.
+  final num partialUnpaidFromLogs;
 
   static num _n(dynamic v) =>
       v is num ? v : num.tryParse(v?.toString() ?? '') ?? 0;
@@ -67,7 +198,27 @@ class FinanceKPIs {
   /// (subsidy فعلي)، فتُطرَح من الصافي مثل المصاريف.
   num get netCash => totalCashRevenue - expensesSum - balanceAddSum;
 
-  static FinanceKPIs fromJson(Map<String, dynamic> j) {
+  /// المبيعات: نقد التفعيلات + «الديون الجديدة» منها (غير النقديّ + غير
+  /// المدفوع من الجزئيّ). أساس صافي الربح بعد الكلفة — كـ`sales_sum` الخادم.
+  num get salesSum => activateCashSum + activateNonCashSum + partialUnpaidFromLogs;
+
+  /// صافي الربح بعد كلفة الباقات — **على أساس المبيعات**: المبيعات − المصاريف
+  /// − الكلفة المعروفة. `null` بلا كلفة (سوبرنت، الموظّف) فلا يُعرض شيء.
+  ///
+  /// صيغة الويب نفسها و`profit_after_cost` الخادم (والشاشة تحسبه هنا كي يصحّ
+  /// تحت فلتر النوع أيضاً). ⚠️ لا من [netCash]: النقد فيه تسديد ديونٍ قديمة
+  /// ويغيب عنه البيع بالدين، وكلفة البيع بالدين تُدفع للشركة يوم البيع — فطرحها
+  /// من النقد كان يُظهر خسارةً لمالكٍ رابح (مراجعة ١٨ أكتوبر: ٩ من ١٦ مالكاً).
+  /// [netCash] يبقى سطره كما كان (وفيه طرح إضافة الدين اليدوي بطلب المالك).
+  num? get profitAfterCost =>
+      packageCost == null ? null : salesSum - expensesSum - packageCost!.sum;
+
+  /// [includePackageCost] قرار المستدعي بحسب من يشاهد — المالك وحده. الافتراض
+  /// `false`: مستدعٍ لا يعرف المشاهد لا يكشف الكلفة لموظّف.
+  static FinanceKPIs fromJson(
+    Map<String, dynamic> j, {
+    bool includePackageCost = false,
+  }) {
     return FinanceKPIs(
       paymentsSum: _n(j['payments_sum']),
       debtPaySum: _n(j['debt_pay_sum']),
@@ -80,6 +231,7 @@ class FinanceKPIs {
       managerDebtsOutstanding: _n(j['manager_debts_outstanding']),
       activationsCount: _i(j['activations_count']),
       extendCount: _i(j['extend_count']),
+      packageCost: includePackageCost ? PackageCostKpis.fromKpis(j) : null,
     );
   }
 }
@@ -100,6 +252,11 @@ class FinanceLog {
     this.targetName,
     required this.createdAt,
     this.balanceAfter,
+    this.fromSas = false,
+    this.packageCost,
+    this.packageCostSource,
+    this.packageCostSent = false,
+    this.partialUnpaid = 0,
   });
   final int id;
   final String actionType;
@@ -109,6 +266,39 @@ class FinanceLog {
   final String? actingEmployeeFullName;
   final String? actingEmployeeUsername;
   final String? userUsername;
+
+  /// سطرٌ زامنّاه من الساس (`request_method='SYNC'`، الخادم: `from_sas`) — لا
+  /// مال فيه، فلا يُعدّ عمليّة بيعٍ لها كلفة.
+  final bool fromSas;
+
+  /// كلفة باقة هذه الحركة — للمالك وحده، وحين يرسلها الخادم. `null` = غير
+  /// مسجّلة أو غير مُرسَلة، لا صفر.
+  final num? packageCost;
+
+  /// مصدر الكلفة كما يسمّيه الخادم (`estimate` = تقديريّة لم تتأكّد بعد).
+  final String? packageCostSource;
+
+  /// الخادم أرسل حقل `package_cost` لهذا السطر (ولو `null` = غير معروفة بعد).
+  /// غيابه لا يُفسَّر: خادمٌ قد لا يرسل إلّا المعروف.
+  final bool packageCostSent;
+
+  bool get packageCostEstimated => packageCostSource == 'estimate';
+
+  /// غير المدفوع من «نقدي جزئي» لهذا السطر (`partial_unpaid` الخادم، بشرط
+  /// النقديّ نفسه الذي يجمعه في «الديون الجديدة») — صفرٌ لغيره.
+  final num partialUnpaid;
+
+  /// عمليّة بيعٍ أرسل الخادم كلفتها `null` صراحةً — لم تُسجَّل بعد.
+  bool get packageCostUnknown =>
+      packageCostSent && packageCost == null && isSale && !fromSas;
+
+  /// تفعيلٌ أو تمديد — ما يُحسب له سعر باقة (تعريف `activationLike` في الخادم).
+  bool get isSale {
+    final at = actionType.toUpperCase().trim();
+    return at == 'SUBSCRIBER_ACTIVATE' ||
+        at == 'SUBSCRIBER_EXTEND' ||
+        (at == 'SUBSCRIBER_ADD' && (actionDescription ?? '').contains('تفعيل'));
+  }
 
   /// الاسم الأول (عربي) للمشترك — backend يحقنه في enrichment
   /// (fetchUserDirectory في FinanceReportController.js).
@@ -127,7 +317,11 @@ class FinanceLog {
     return full.isEmpty ? null : full;
   }
 
-  static FinanceLog? fromJson(Map<String, dynamic> j) {
+  /// [includePackageCost] كما في [FinanceKPIs.fromJson]: الكلفة للمالك وحده.
+  static FinanceLog? fromJson(
+    Map<String, dynamic> j, {
+    bool includePackageCost = false,
+  }) {
     // backend `/api/reports/finance` يحقن صفوف صناعية بمعرّفات نصّية
     // (id: "expense_5"، "mdebt_12"). لا نرفضها — نصنع hash id من الـstring.
     // ملاحظة: كنّا نرفضها بـint.tryParse فتختفي الصرفيات من قائمة "آخر
@@ -153,7 +347,25 @@ class FinanceLog {
       createdAt: ts,
       balanceAfter:
           j['balance_after'] == null ? null : FinanceKPIs._n(j['balance_after']),
+      fromSas: _truthy(j['from_sas']),
+      packageCost: includePackageCost ? _cost(j['package_cost']) : null,
+      packageCostSource: includePackageCost
+          ? j['package_cost_source']?.toString()
+          : null,
+      packageCostSent: includePackageCost && j.containsKey('package_cost'),
+      partialUnpaid: FinanceKPIs._n(j['partial_unpaid']),
     );
+  }
+
+  /// MySQL يُرجع `(… <=> 'SYNC')` رقماً (1/0) لا قيمةً منطقيّة.
+  static bool _truthy(Object? v) =>
+      v == true || v == 1 || v == '1' || v == 'true';
+
+  /// كلفةٌ صالحة أو `null` — السالب وغير الرقم لا يُجمعان.
+  static num? _cost(Object? v) {
+    if (v == null) return null;
+    final n = v is num ? v : num.tryParse(v.toString().trim());
+    return (n == null || !n.isFinite || n < 0) ? null : n;
   }
 }
 
@@ -470,6 +682,8 @@ class ReportsApi {
   /// actionManagerId يحل محل userIds إذا حُدّد (فلتر بمدير معيّن).
   /// userManager — filter بمدير المشترك المستهدَف (username).
   /// employeeId — فلتر بموظف مُنفِّذ.
+  /// withPackageCost — يقرأ كلفة الباقات إن أرسلها الخادم. يمرّره المستدعي
+  /// لمالك الحساب وحده؛ للموظّف تُسقَط الحقول هنا ولو وصلت.
   static Future<({bool ok, FinanceReport? data, String? error})> finance({
     DateTime? from,
     DateTime? to,
@@ -479,6 +693,7 @@ class ReportsApi {
     String? userManager,
     int? employeeId,
     bool includeArchived = false,
+    bool withPackageCost = false,
   }) async {
     try {
       final qp = <String, String>{
@@ -512,12 +727,18 @@ class ReportsApi {
       final kpisRaw = data['kpis'];
       final logsRaw = data['recentLogs'];
       final kpis = kpisRaw is Map
-          ? FinanceKPIs.fromJson(Map<String, dynamic>.from(kpisRaw))
+          ? FinanceKPIs.fromJson(
+              Map<String, dynamic>.from(kpisRaw),
+              includePackageCost: withPackageCost,
+            )
           : const FinanceKPIs();
       final logs = (logsRaw is List)
           ? logsRaw
               .whereType<Map>()
-              .map((m) => FinanceLog.fromJson(Map<String, dynamic>.from(m)))
+              .map((m) => FinanceLog.fromJson(
+                    Map<String, dynamic>.from(m),
+                    includePackageCost: withPackageCost,
+                  ))
               .whereType<FinanceLog>()
               .toList()
           : const <FinanceLog>[];
@@ -731,7 +952,12 @@ class ReportsApi {
 
   /// الجلسات الحالية + التاريخية (filter بـonlineOnly).
   /// search: filter عام (SAS4 يفهمه). أو تعطي username/ip/mac منفردين.
-  static Future<({bool ok, List<SessionRow> rows, String? error})> sessions({
+  ///
+  /// [note] = ملاحظة مصدر الجلسات المنتهية ([sessionsHistoryNote]) — ايرث لنك
+  /// وحدها: `usersession/completed` من العقد المفكَّك (خلف فحص قدرة عند
+  /// الخادم)، وسجلّ مشتركٍ بعينه من `usersession/user` (مؤكَّد حيّاً).
+  static Future<({bool ok, List<SessionRow> rows, String? error, String? note})>
+      sessions({
     bool onlineOnly = false,
     DateTime? from,
     DateTime? to,
@@ -763,11 +989,13 @@ class ReportsApi {
           ok: false,
           rows: const <SessionRow>[],
           error: body['message']?.toString(),
+          note: null,
         );
       }
+      final note = onlineOnly ? null : sessionsHistoryNote(body);
       final list = body['data'];
       if (list is! List) {
-        return (ok: true, rows: const <SessionRow>[], error: null);
+        return (ok: true, rows: const <SessionRow>[], error: null, note: note);
       }
       return (
         ok: true,
@@ -777,14 +1005,76 @@ class ReportsApi {
             .whereType<SessionRow>()
             .toList(),
         error: null,
+        note: note,
       );
     } on DioException catch (e) {
       _log('sessions', e);
-      return (ok: false, rows: const <SessionRow>[], error: _friendly(e));
+      return (
+        ok: false,
+        rows: const <SessionRow>[],
+        error: _friendly(e),
+        note: null,
+      );
     } catch (e) {
       _log('sessions', e);
-      return (ok: false, rows: const <SessionRow>[], error: 'تعذّر التحميل');
+      return (
+        ok: false,
+        rows: const <SessionRow>[],
+        error: 'تعذّر التحميل',
+        note: null,
+      );
     }
+  }
+
+  /// ملاحظة مصدر الجلسات المنتهية من ردّ `/api/v2/sessions` — ايرث لنك وحدها
+  /// ترسل `ended:{supported, source, window, partial, range}` (المجموعة ②
+  /// ١٨ أكتوبر)؛ SAS4 لا يرسله ⇒ `null` كما كان. نصوص الويب نفسها.
+  ///   • `supported:false` — ايرث لنك لا تعطي سجلّ الجلسات المنتهية لهذا الحساب.
+  ///   • `supported:null` — تعذّر جلبها هذه المرّة.
+  ///   • `source:'subscriber'` — سجلّ مشتركٍ بعينه (البحث باسمه كاملاً) بمداه.
+  ///   • `source:'completed'` + `partial` — آخر N جلسة فقط.
+  @visibleForTesting
+  static String? sessionsHistoryNote(Map<String, dynamic> body) {
+    final e = body['ended'];
+    if (e is! Map) {
+      // خادمٌ يرسل علم القدرة وحده (`history_available:false` + نصّه) بلا
+      // تفصيل `ended`: نصّه إن وُجد، وإلّا «الحيّة فقط».
+      if (body['history_available'] != false) return null;
+      final note = body['history_note']?.toString().trim() ?? '';
+      return note.isNotEmpty
+          ? note
+          : 'ايرث لنك لا تعطي سجلّ الجلسات المنتهية لحسابك — تظهر الجلسات '
+              'الحيّة فقط.';
+    }
+    if (e.containsKey('supported') && e['supported'] == false) {
+      return 'ايرث لنك لا تعطي سجلّ الجلسات المنتهية لحسابك — تظهر الجلسات '
+          'الحيّة فقط. لسجلّ مشتركٍ بعينه ابحث باسم دخوله كاملاً.';
+    }
+    if (e['supported'] == null) {
+      return 'تعذّر جلب الجلسات المنتهية من ايرث لنك هذه المرّة — المعروض '
+          'الجلسات الحيّة.';
+    }
+    final range = e['range'];
+    if (e['source'] == 'subscriber' && range is Map) {
+      // «2026/09/19» معزولاً: الشرطة تُكسر عندها الأسطر وتنقلب في نصٍّ عربيّ.
+      String day(Object? v) =>
+          iso((v?.toString().trim() ?? '').replaceAll('-', '/'));
+      final from = day(range['startDate']);
+      final to = day(range['endDate']);
+      if (from.isNotEmpty && to.isNotEmpty) {
+        return 'سجلّ هذا المشترك من $from إلى $to.';
+      }
+    }
+    if (e['source'] == 'completed' && e['partial'] == true) {
+      final w = e['window'];
+      final n = w is num ? w.toInt() : int.tryParse('$w');
+      return n == null || n <= 0
+          ? 'آخر الجلسات المنتهية لدى ايرث لنك فقط — لسجلّ مشتركٍ بعينه ابحث '
+              'باسم دخوله كاملاً.'
+          : 'آخر $n جلسة منتهية لدى ايرث لنك — لسجلّ مشتركٍ بعينه ابحث باسم '
+              'دخوله كاملاً.';
+    }
+    return null;
   }
 
   /// كشف حساب مشترك — يجلب حركاته المالية في الفترة + summary.

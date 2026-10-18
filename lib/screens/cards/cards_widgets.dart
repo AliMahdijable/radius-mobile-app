@@ -35,6 +35,14 @@ String cardsDay(DateTime? d) =>
 String seriesProfile(CardSeries s) =>
     s.profileName ?? (s.profileId == null ? '—' : '#${s.profileId}');
 
+/// «سلسلةٌ» هي باقةٌ في الحقيقة — ايرث لنك لا تُصدر سلاسل، فالخادم يجمع كروتها
+/// بالباقة برمزٍ داخليّ `el-<رقم الباقة>` لا يُعرض للمدير.
+bool isPackageSeries(CardSeries s) => s.series.startsWith('el-');
+
+/// عنوان السلسلة كما يقرؤه المدير: رقمها (SAS4)، أو اسم باقتها (ايرث لنك).
+String seriesTitle(CardSeries s) =>
+    isPackageSeries(s) ? seriesProfile(s) : s.series;
+
 /// «حتى 2027-09-01» أو «انتهت …» — و`null` لسلسلةٍ بلا تاريخ انتهاء.
 String? seriesValidity(CardSeries s) {
   final raw = s.expiration;

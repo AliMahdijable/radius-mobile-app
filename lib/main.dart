@@ -27,6 +27,7 @@ import 'services/permissions_service.dart';
 import 'services/print_prefs.dart';
 import 'services/provider_service.dart';
 import 'services/secure_storage_health.dart';
+import 'services/self_deposit_sync.dart';
 import 'services/theme_service.dart';
 import 'theme/colors.dart';
 import 'theme/spacing.dart';
@@ -191,6 +192,9 @@ class _MyServicesAppState extends State<MyServicesApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // «شحن رصيد الصفحة»: رابط رجوع زين كاش التُقط ولم يصل الخادم (انقطاع/إغلاق
+    // التطبيق) يُسلَّم عند الإقلاع والعودة للواجهة — لا ينتظر فتح شاشة الشحن.
+    SelfDepositSync.start();
     // اربط الـFCM foreground handler بـBanner. نستعمل الـnavigator key
     // للـcontext لأن الـcallback يشتغل خارج شجرة الـwidgets.
     FcmService.onForegroundNotification = (n) {
