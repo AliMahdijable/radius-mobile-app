@@ -2042,13 +2042,12 @@ class _BulkActionBar extends StatelessWidget {
     final canPayDebt = Perms.has('subscribers.pay_debt');
     final canToggle = Perms.has('subscribers.toggle');
     final canDelete = Perms.has('subscribers.delete');
-    // ايرث لنك لا تسمح بحذف المشترك: الزرّ بمكانه مقفلٌ بالسبب للمالك
-    // ولموظّفه ([subscriberDeleteUnavailableReason]) — لا مخفيّ.
-    final deleteUnavailable = subscriberDeleteUnavailableReason();
     final showRenew = permShown(renewKeys);
     final showToggle = permShown(const ['subscribers.toggle']);
+    // ايرث لنك لا تسمح بحذف المشترك (قرار المالك ١٩ أكتوبر): لا «حذف» جماعيّ
+    // لمشتركيها أصلاً ([subscriberDeleteHidden]) — لا مقفلاً ولا بالصلاحيّة.
     final showDelete =
-        deleteUnavailable != null || permShown(const ['subscribers.delete']);
+        !subscriberDeleteHidden() && permShown(const ['subscribers.delete']);
     // مطلب المستخدم 2026-07-12: تصميم مضغوط — صفّان بدل 4:
     //   Row1 (primary): Renew | Pay debt | Disconnect (كل ما يظهر يتقاسم العرض)
     //   Row2 (secondary): Disable | Enable | Delete
@@ -2162,7 +2161,6 @@ class _BulkActionBar extends StatelessWidget {
                         label: 'subscribers.bulk_delete'.tr(),
                         color: AppColors.error,
                         locked: !canDelete,
-                        unavailable: deleteUnavailable,
                         onTap: onDelete,
                       ),
                     ),
@@ -2255,7 +2253,6 @@ class _SecondaryBtn extends StatelessWidget {
     required this.onTap,
     this.enabled = true,
     this.locked = false,
-    this.unavailable,
   });
   final IconData icon;
   final String label;
@@ -2264,11 +2261,8 @@ class _SecondaryBtn extends StatelessWidget {
 
   /// لا صلاحيّة — يغلب [enabled]: الزرّ يبقى قابلاً للنقر لكنّ نقرته
   /// رسالة القفل لا العمليّة، بسطحٍ غاطس وحدٍّ محايد وقفلٍ مكان الأيقونة.
+  /// (حذف مشترك ايرث لنك لا يُعرض أصلاً — `subscriberDeleteHidden`.)
   final bool locked;
-
-  /// عمليّةٌ يمنعها المزوّد (حذف مشترك ايرث لنك): الشكل المقفل نفسه، ونقرته
-  /// هذا السبب مكان «اطلبها من مديرك». يتقدّم على [locked].
-  final String? unavailable;
 
   /// When false the button greys out — used by the bulk bar to signal
   /// that no rows in the current selection are eligible for this
@@ -2279,12 +2273,10 @@ class _SecondaryBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    if (locked || unavailable != null) {
+    if (locked) {
       return Semantics(
         button: true,
-        label: unavailable == null
-            ? 'locked.a11y'.tr(args: [label])
-            : '$label — $unavailable',
+        label: 'locked.a11y'.tr(args: [label]),
         excludeSemantics: true,
         child: OutlinedButton.icon(
           style: OutlinedButton.styleFrom(
@@ -2297,8 +2289,7 @@ class _SecondaryBtn extends StatelessWidget {
               borderRadius: BorderRadius.circular(R.sm),
             ),
           ),
-          onPressed: () => showNoPermission(context,
-              action: true, message: unavailable),
+          onPressed: () => showNoPermission(context, action: true),
           icon: const Icon(LucideIcons.lock, size: 13),
           label: Text(label,
               overflow: TextOverflow.ellipsis,

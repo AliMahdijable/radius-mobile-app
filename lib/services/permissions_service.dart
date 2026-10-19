@@ -44,6 +44,20 @@ class PermissionsService {
   static const _kManagerRestricted = 'perms.mgr_restricted';
   static const _kManagerCaps = 'perms.mgr_caps';
 
+  /// مفاتيح أخرجها الخادم من خريطة قدرات الساس (١٨ أكتوبر، 1ac4fb2) فلا تُقرأ
+  /// من خريطة **المدير** أبداً — ولو حملتها خريطةٌ محفوظة قبل ذلك أو ردُّ خادمٍ قديم:
+  ///  • `reports.financial` — التقرير الماليّ والإيرادات من بياناتنا، والرصيد رصيد
+  ///    المدير نفسه؛ لا وحدة الفوترة في الساس (prm_billing). مديرٌ فرعيّ بلاها
+  ///    (admin@hhnn على next-gen) رأى رصيده وإيراداته «لا صلاحيّة».
+  ///  • `self.2fa` — المصادقة الثنائيّة منّا لا من الساس.
+  /// غياب المفتاح عند المدير = مسموح. والموظّف لا يُمَسّ: خريطته من عندنا.
+  static const retiredManagerKeys = {'reports.financial', 'self.2fa'};
+
+  static Map<String, bool> _dropRetired(Map<String, bool> caps) => {
+        for (final e in caps.entries)
+          if (!retiredManagerKeys.contains(e.key)) e.key: e.value,
+      };
+
   // الذاكرة الجارية — نقرأ منها مباشرةً، ونحدّثها عند save/load.
   static Map<String, bool>? _cached;
   static bool _isEmployee = false;
@@ -83,9 +97,10 @@ class PermissionsService {
       if (mraw != null && mraw.isNotEmpty) {
         final mj = jsonDecode(mraw);
         if (mj is Map) {
-          _managerCaps = {
+          // خريطةٌ حُفظت قبل أن يُخرج الخادم المفاتيح المتقاعدة تحملها false.
+          _managerCaps = _dropRetired({
             for (final e in mj.entries) e.key.toString(): e.value == true,
-          };
+          });
         }
       }
     } catch (e) {
@@ -148,7 +163,9 @@ class PermissionsService {
   }) async {
     _isEmployee = false;
     _cached = null;
-    if (isSuperAdmin || canonical.isEmpty) {
+    // [retiredManagerKeys] لا تُحفظ ولا تُقرأ — فخريطةٌ لم يبقَ فيها غيرها فارغة.
+    final caps = _dropRetired(canonical);
+    if (isSuperAdmin || caps.isEmpty) {
       _managerRestricted = false;
       _managerCaps = null;
       await Future.wait([
@@ -159,12 +176,12 @@ class PermissionsService {
       ]);
     } else {
       _managerRestricted = true;
-      _managerCaps = Map<String, bool>.from(canonical);
+      _managerCaps = caps;
       await Future.wait([
         _storage.delete(key: _kIsEmployee),
         _storage.delete(key: _kEmployeePerms),
         _storage.write(key: _kManagerRestricted, value: '1'),
-        _storage.write(key: _kManagerCaps, value: jsonEncode(canonical)),
+        _storage.write(key: _kManagerCaps, value: jsonEncode(caps)),
       ]);
     }
     _version.value = _version.value + 1;
@@ -195,6 +212,9 @@ class PermissionsService {
   ///
   /// ولاحظ `_loaded = true`: قبل التحميل تُرجع `has` قيمة `true` لكلّ
   /// مفتاح (سطر 130)، فاختبارٌ ينسى ضبطه يرى كلّ الصلاحيّات ويمرّ كاذباً.
+  ///
+  /// والخريطة تُضبط كما هي، بلا إسقاط [retiredManagerKeys]: الاختبار يضبط ما
+  /// يشاء ليفحص آليّة القفل نفسها؛ الإسقاط في [init] و[setManagerCapabilities].
   @visibleForTesting
   static void debugSet({
     required bool isEmployee,

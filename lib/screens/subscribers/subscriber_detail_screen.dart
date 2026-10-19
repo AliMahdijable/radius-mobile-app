@@ -806,8 +806,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   /// تعطيل) وما ظهر كزرّ أساسي (تجديد) لا يتكرّر هنا.
   List<SubActionGroup> _moreGroups() {
     final phone = sub.displayPhone;
-    // حذف المشترك يمنعه المزوّد (ايرث لنك) — السبب، أو `null` لشركات SAS4.
-    final deleteUnavailable = subscriberDeleteUnavailableReason();
+    // ايرث لنك لا تسمح بحذف المشترك ⇒ لا «حذف» أصلاً ([subscriberDeleteHidden]).
+    final deleteHidden = subscriberDeleteHidden();
     return <SubActionGroup>[
       SubActionGroup('subscribers.group_money'.tr(), [
         if (_shows('subscribers.add_debt'))
@@ -1031,19 +1031,11 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       // «فصل المستخدم» صعد إلى البلاطات السريعة — ولا يتكرّر هنا،
       // كما لا يتكرّر التمديد والتعديل والتعطيل.
       SubActionGroup('subscribers.group_danger'.tr(), [
-        // ايرث لنك لا تسمح بحذف المشترك (قرار المستخدم ١٨ أكتوبر): الزرّ
-        // **بمكانه مقفلاً بالسبب** للمالك ولموظّفه — لا مخفيّاً، ولا «اطلبها
-        // من مديرك» (لا صلاحيّة تفتحه). بلا أحمر: اللون للخطر الحيّ وحده.
-        if (deleteUnavailable != null)
-          SubAction(
-            icon: LucideIcons.trash2,
-            label: 'common.delete'.tr(),
-            unavailable: deleteUnavailable,
-            onTap: null,
-          )
-        // شركات SAS4: مقفلاً بلا أحمر لمن لا يملك المفتاح (اللون للخطر الحيّ
-        // وحده)، ومخفيّاً لدورٍ لا يُمنحه (`permShown`).
-        else if (_shows('subscribers.delete'))
+        // ايرث لنك لا تسمح بحذف المشترك (قرار المالك ١٩ أكتوبر): لا «حذف»
+        // لمشتركيها أصلاً — فالمجموعة تفرغ ولا تُعرض. شركات SAS4 وFTTH: مقفلاً
+        // بلا أحمر لمن لا يملك المفتاح (اللون للخطر الحيّ وحده)، ومخفيّاً لدورٍ
+        // لا يُمنحه (`permShown`).
+        if (!deleteHidden && _shows('subscribers.delete'))
           SubAction(
             icon: LucideIcons.trash2,
             label: 'common.delete'.tr(),

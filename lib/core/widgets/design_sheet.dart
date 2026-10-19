@@ -1118,7 +1118,7 @@ Future<bool?> showConfirmSheet(
         onPressed: () => Navigator.of(ctx).pop(true),
         // زرّ الإلغاء يسبق المؤكِّد ويأخذ عرضه من نصّه — الترتيب في
         // RTL يضعه يمين المدمِّر، وهو الموضع الذي تقع عليه الإبهام أوّلاً.
-        leading: _ConfirmCancelButton(
+        leading: SheetSecondaryButton(
           label: cancelLabel ?? 'common.cancel'.tr(),
           onTap: () => Navigator.of(ctx).pop(false),
         ),
@@ -1132,8 +1132,12 @@ Future<bool?> showConfirmSheet(
   );
 }
 
-class _ConfirmCancelButton extends StatelessWidget {
-  const _ConfirmCancelButton({required this.label, required this.onTap});
+/// الزرّ الثانويّ بجانب زرّ [SheetFooterBar] الأساسيّ (`leading`) — أبيض بحدٍّ
+/// خافت وعرضه من نصّه: «إلغاء» في [showConfirmSheet]، و«مو هسه» في موافقة
+/// المساعد الذكيّ.
+class SheetSecondaryButton extends StatelessWidget {
+  const SheetSecondaryButton(
+      {super.key, required this.label, required this.onTap});
   final String label;
   final VoidCallback onTap;
 
@@ -1210,12 +1214,16 @@ class ToneChip extends StatelessWidget {
             Icon(icon, size: dense ? 11 : 13, color: tone.fill),
             const SizedBox(width: Sp.xs),
           ],
-          Text(
-            label,
-            style: AppType.pillLabel(color: tone.onSoft)
-                .copyWith(letterSpacing: 0),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          // مرنٌ رخو: بمكانه حين يتّسع، ويُختصر «…» حين يضيق (ميزةٌ ذات صلة
+          // من المساعد حتى ٤٠ حرفاً بعرض ٣٢٠ أو بخطٍّ مكبَّر) — بدل الفيضان.
+          Flexible(
+            child: Text(
+              label,
+              style: AppType.pillLabel(color: tone.onSoft)
+                  .copyWith(letterSpacing: 0),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),

@@ -22,10 +22,13 @@ void main() {
   late _MeServer server;
 
   /// ردّ `/me` لمالك ايرث لنك: قدراتٌ معياريّة مقيَّدة (الحذف ممنوع).
+  /// و`id` هويّته كما يكتبها الخادم (`authMe` في earthlinkRoutes: `id: adminId`)
+  /// — القدرات تُطبَّق لجلسةٍ معرّفها المحفوظ هو نفسه وحدها.
   const elOwner = {
     'success': true,
     'provider': 'earthlink',
     'user': {
+      'id': 'earthlink:7',
       'provider': 'earthlink',
       'isEmployee': false,
       'isSuperAdmin': false,
@@ -164,7 +167,8 @@ void main() {
       expect(await vault.read(key: 'perms.mgr_restricted'), '1');
     });
 
-    test('مدير ساس: النجاح يضبط المزوّد null ولا يمسّ القدرات', () async {
+    test('مدير ساس سوبر (ردٌّ بلا خريطة): المزوّد null والقدرات كما هي',
+        () async {
       await login('sas', '42', superAdmin: true);
       await ProviderService.setProvider('earthlink');
       server.replies['sas'] = sasSuper;
@@ -186,9 +190,9 @@ void main() {
     });
   });
 
-  test('القدرات لمعرّف مالك ايرث لنك وحده (`earthlink:`)', () async {
-    // ردٌّ يقول earthlink لجلسةٍ معرّفها المحفوظ ليس لمالك ايرث لنك:
-    // المزوّد يُضبط (دلالته كما كانت)، والقدرات لا تُمَسّ.
+  test('القدرات لصاحب الهويّة وحده (ردّ earthlink:7 لجلسة 42)', () async {
+    // ردٌّ هويّته earthlink:7 لجلسةٍ معرّفها المحفوظ 42: المزوّد يُضبط (دلالته
+    // كما كانت)، والقدرات لا تُمَسّ.
     await login('el', '42');
     server.replies['el'] = elOwner;
     await ProviderService.refreshFromBackend();

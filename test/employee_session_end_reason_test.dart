@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
-import 'package:rad_mysvcs/api/el_card_order_gate.dart';
+import 'package:rad_mysvcs/api/el_deposit_password.dart';
 import 'package:rad_mysvcs/services/employee_session.dart';
 
 import 'sim_el/sim_harness.dart';
@@ -75,9 +75,11 @@ void main() {
     expect(EmployeeSession.kickMessage, isNull);
   });
 
-  test('الطرد يمسح حال «طلب الكارتات» مع بقيّة الجلسة', () async {
-    ElCardOrderGate.debugSet(true);
+  // («طلب الكارتات» وبابه أُلغيا ١٩ أكتوبر — كان هذا الاختبار عليه.)
+  test('الطرد يمسح حال حساب ايرث لنك (باسورد الإيداع) مع بقيّة الجلسة', () async {
+    ElDepositPassword.status.value =
+        const ElDepositStatus(saved: true, canManage: true);
     await kick({'success': false, 'code': 'EMPLOYEE_DISABLED'});
-    expect(ElCardOrderGate.open.value, isNull);
+    expect(ElDepositPassword.status.value, isNull);
   });
 }

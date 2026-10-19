@@ -49,9 +49,34 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   // فلتر النوع القديم (chips) استُبدل بـReportFiltersPanel multi-select
   // في actionTypes. المنطق: _filterLogs يفلتر بحسب _filters.actionTypes.
 
+  /// مفتاح الشاشة — نفسه لحارسها ([ReportPermissionGate]) ولطلبها الأوّل.
+  static const _perm = 'reports.financial';
+
+  /// طُلب التقرير بعد؟ الحالة تُبنى ولو أقفل الحارس الشاشة، فكان الطلب يخرج
+  /// ويرتدّ ٤٠٣ خلف «لا صلاحيّة». وصلاحيّةٌ تصل والشاشة مفتوحة (تحديث القدرات
+  /// بعد الإقلاع) تفتحها — فتطلبه حينها، لا دوّارةً بلا طلب.
+  bool _requested = false;
+
   @override
   void initState() {
     super.initState();
+    PermissionsService.changes.addListener(_onPermsChanged);
+    _loadIfAllowed();
+  }
+
+  @override
+  void dispose() {
+    PermissionsService.changes.removeListener(_onPermsChanged);
+    super.dispose();
+  }
+
+  void _onPermsChanged() {
+    if (mounted && !_requested) _loadIfAllowed();
+  }
+
+  void _loadIfAllowed() {
+    if (!Perms.has(_perm)) return;
+    _requested = true;
     _load();
   }
 
@@ -94,7 +119,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return ReportPermissionGate(
-      permission: 'reports.financial',
+      permission: _perm,
       title: 'reports.financial'.tr(),
       child: Scaffold(
         backgroundColor: AppColors.bg,

@@ -31,8 +31,12 @@ class Employee {
 
   bool get isScoped => scopeAdminId != null && scopeAdminId!.isNotEmpty;
 
-  /// Convenience for the list tile — drop unused / always-false.
-  int get activePermsCount => permissions.values.where((v) => v).length;
+  /// Convenience for the list tile — drop unused / always-false. بلا «المساعد
+  /// الذكي» ([ElEmployeePerms.assistantKey]): ليس عمليّة، والخادم يرسله `true`
+  /// افتراضيّاً حتى والمساعد مطفأ (والمحرّر يخفيه) — كعدّ ايرث لنك نفسه.
+  int get activePermsCount => permissions.entries
+      .where((e) => e.value && e.key != ElEmployeePerms.assistantKey)
+      .length;
 
   static Employee? fromJson(Map<String, dynamic> j) {
     final id = int.tryParse(j['id']?.toString() ?? '') ?? 0;
@@ -174,6 +178,41 @@ class PermissionsCatalog {
     );
   }
 
+  /// الكتالوج بلا [keys] (المحرّر لا يعرضها ولا يرسلها، فيُبقي الخادم قيمتها
+  /// المحفوظة — `employees.sanitizePermissions`). للمساعد الذكيّ: مفتاحه لا
+  /// يظهر قبل أن يقول الخادم إنّ المساعد مفعّل ([ElEmployeePerms.assistantKey]).
+  PermissionsCatalog without(Set<String> keys) {
+    if (!keys.any(permissions.containsKey) &&
+        !keys.any(defaults.containsKey)) {
+      return this;
+    }
+    bool keep(String k) => !keys.contains(k);
+    return PermissionsCatalog(
+      permissions: {
+        for (final e in permissions.entries)
+          if (keep(e.key)) e.key: e.value,
+      },
+      categories: categories,
+      permsByCategory: permsByCategoryWhere(keep),
+      defaults: {
+        for (final e in defaults.entries)
+          if (keep(e.key)) e.key: e.value,
+      },
+      presets: {
+        for (final e in presets.entries)
+          e.key: PermPreset(
+            key: e.value.key,
+            label: e.value.label,
+            description: e.value.description,
+            permissions: {
+              for (final p in e.value.permissions.entries)
+                if (keep(p.key)) p.key: p.value,
+            },
+          ),
+      },
+    );
+  }
+
   /// [permsByCategory] مقصوراً على المفاتيح التي يقبلها [keep] — الفئات
   /// بترتيبها في الكتالوج، والفئة التي لا يبقى فيها شيءٌ تسقط.
   Map<String, List<PermissionDef>> permsByCategoryWhere(
@@ -264,7 +303,16 @@ class ElEmployeePerms {
     'reports.activity_log',
     'settlements.view',
     'settlements.create',
+    assistantKey,
   };
+
+  /// المساعد الذكيّ («اشرحلي» و«كيف أسوّي؟») — أجوبةٌ بلا أيّ عمليّة، من حصّة
+  /// صاحب الحساب اليوميّة. مفتوحٌ افتراضيّاً عند الخادم، فيحمله كلّ دورٍ جاهز
+  /// (تطبيق «عرض فقط» لا يطفئه)، ولا يُعدّ في عدد الصلاحيّات ولا في مطابقة
+  /// الدور ([activeCount] · [matching]): ليس عمليّةً، وخادمٌ أقدم بلا المفتاح
+  /// لا يجعل كلّ موظّفٍ «مخصّصاً». وفي القائمة نفسها ليُرسَل كما اختاره المالك
+  /// — ما خارجها يُرسَل `false` فيُطفئ المساعد عن الموظّف بصمت ([outgoing]).
+  static const assistantKey = 'assistant.use';
 
   /// ما يشمله المفتاح عند ايرث لنك ولا تقوله تسميته في الكتالوج.
   static const hints = <String, String>{
@@ -284,6 +332,7 @@ class ElEmployeePerms {
         'أجهزة شبكتك (OLT/مايكروتك…) — ويشمل بيانات دخول أجهزة المشتركين (الراوترات) لفحصها',
     'devices.monitor': 'يشمل بيانات دخول أجهزة المشتركين (الراوترات) لفحصها',
     'devices.manage': 'تعديل الأجهزة وإعادة تشغيلها وبيانات دخول أجهزة الشبكة',
+    assistantKey: 'يشرح الأخطاء ويجاوب «كيف أسوّي؟» — بلا أيّ عمليّة، ومن حصّة حسابك اليوميّة',
   };
 
   /// «موظّف عام» = مفاتيح العمليّات كلّها، ومنها `subscribers.add` (يحوي أصلاً ما
@@ -308,6 +357,7 @@ class ElEmployeePerms {
         'subscribers.send_whatsapp',
         'packages.view',
         'subscribers.view_activity',
+        assistantKey,
       },
     ),
     ElPermPreset(
@@ -320,13 +370,15 @@ class ElEmployeePerms {
         'discounts.view',
         'subscriber_prices.view',
         'subscribers.view_activity',
+        assistantKey,
       },
     ),
   ];
 
-  /// عدد مفاتيح ايرث لنك المفعّلة — ما يملكه الموظّف فعلاً.
+  /// عدد مفاتيح ايرث لنك المفعّلة — ما يملكه الموظّف فعلاً (بلا المساعد:
+  /// ليس عمليّة — [assistantKey]).
   static int activeCount(Map<String, bool> perms) =>
-      keys.where((k) => perms[k] == true).length;
+      keys.where((k) => k != assistantKey && perms[k] == true).length;
 
   /// ما يُرسَل للخادم: كلّ مفاتيح الكتالوج — مفاتيح ايرث لنك من [perms]،
   /// والباقي `false`. الاستثناء `whatsapp.send`: يتبع «إرسال واتساب»
@@ -346,9 +398,13 @@ class ElEmployeePerms {
 
   /// الدور الجاهز المطابق للمفعَّل الآن تماماً، وإلّا null (مخصّص).
   static ElPermPreset? matching(Map<String, bool> perms) {
-    final on = {for (final k in keys) if (perms[k] == true) k};
+    final on = {
+      for (final k in keys)
+        if (k != assistantKey && perms[k] == true) k,
+    };
     for (final p in presets) {
-      if (p.keys.length == on.length && on.containsAll(p.keys)) return p;
+      final want = p.keys.where((k) => k != assistantKey).toSet();
+      if (want.length == on.length && on.containsAll(want)) return p;
     }
     return null;
   }

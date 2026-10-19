@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -6,7 +8,9 @@ import '../../widgets/reveal_password_sheet.dart';
 import '../../api/employees_api.dart';
 import '../../core/util/bidi.dart';
 import '../../core/util/clipboard_helper.dart';
+import '../../core/widgets/explain_action.dart';
 import '../../services/active_company.dart';
+import '../../services/ai_assistant_state.dart';
 import '../../services/permissions_service.dart';
 import '../../services/provider_service.dart';
 import '../../theme/colors.dart';
@@ -63,6 +67,8 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       _loading = true;
       _error = null;
     });
+    // حالة المساعد (مفتاحه بالمحرّر) — بالخلفيّة، بلا انتظار ولا خطأ يظهر.
+    unawaited(AiAssistantState.ensureFresh());
     // الـcatalog مهم للـeditor؛ نحمّله مع القائمة. لو الـcatalog فشل
     // الـeditor ما يفتح (يحتاج presets لرسم الـUI).
     final results = await Future.wait([
@@ -82,8 +88,14 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   }
 
   Future<void> _openEditor({Employee? employee}) async {
-    final cat = _catalog;
-    if (cat == null) return;
+    final full = _catalog;
+    if (full == null) return;
+    // المساعد الذكي: مفتاحه لا يظهر بالمحرّر قبل أن يقول الخادم إنّه مفعّلٌ
+    // لهذا الحساب (مخفيٌّ لا مقفل — الميزة نفسها مخفيّة)، ولا يُرسَل فيُبقي
+    // الخادم قيمة الموظّف المحفوظة.
+    final cat = AiAssistantState.status?.enabled == true
+        ? full
+        : full.without(const {ElEmployeePerms.assistantKey});
     // ايرث لنك: الإنشاء يُبقي الشيت مفتوحاً على لوحة بيانات الدخول، فتُحدَّث
     // القائمة لحظة الإنشاء لا عند الإغلاق (قد يُغلق بالسحب فلا يرجع true).
     var reloaded = false;
@@ -131,10 +143,11 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     final r = await EmployeesApi.delete(emp.id);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(r.ok ? 'تم حذف الموظف' : (r.message ?? 'تعذّر الحذف')),
+      explainableSnackBar(
+        context,
+        r.ok ? 'تم حذف الموظف' : (r.message ?? 'تعذّر الحذف'),
+        error: !r.ok,
         backgroundColor: r.ok ? AppColors.brand : AppColors.error,
-        behavior: SnackBarBehavior.floating,
       ),
     );
     if (r.ok) _load();
@@ -150,10 +163,11 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     final res = await EmployeesApi.fetchPassword(emp.id);
     if (!mounted) return;
     if (res.password == null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(res.message ?? 'تعذّر جلب كلمة السر'),
+      ScaffoldMessenger.of(context).showSnackBar(explainableSnackBar(
+        context,
+        res.message ?? 'تعذّر جلب كلمة السر',
+        error: true,
         backgroundColor: AppColors.errorFill,
-        behavior: SnackBarBehavior.floating,
       ));
       return;
     }

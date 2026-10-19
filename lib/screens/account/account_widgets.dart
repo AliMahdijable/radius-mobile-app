@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/platform/store_policy.dart';
+import '../../core/widgets/explain_action.dart';
+import '../../services/ai_assistant_state.dart';
 import '../../services/app_version.dart';
 import '../../services/theme_service.dart';
 import '../../theme/colors.dart';
@@ -39,17 +41,35 @@ Future<void> _openInApp(BuildContext context, String url) async {
   if (!ok && context.mounted) showAccountSnack(context, 'account.err_network'.tr(), error: true);
 }
 
-void showAccountSnack(BuildContext context, String msg, {bool error = false, Duration? duration}) {
+/// [explain] — «اشرحلي» على خطأ الخادم (صريحاً، وإلّا يُستنتج من الردّ المرفوض
+/// الذي يعرضه الشريط). لا يظهر إلّا إن قال الخادم إنّ المساعد مفتوح — وإلّا
+/// فالشريط كما كان حرفيّاً.
+void showAccountSnack(
+  BuildContext context,
+  String msg, {
+  bool error = false,
+  Duration? duration,
+  ExplainRequest? explain,
+}) {
   final m = ScaffoldMessenger.maybeOf(context);
   if (m == null) return;
+  final ask = error ? (explain ?? AiAssistantState.explainFor(msg)) : null;
   m.hideCurrentSnackBar();
   m.showSnackBar(SnackBar(
-    content: Text(msg, style: AppType.button(color: AppColors.onBrand)),
+    content: ExplainSnackContent(
+      message: msg,
+      style: AppType.button(color: AppColors.onBrand),
+      request: ask,
+      onExplain: () {
+        m.hideCurrentSnackBar();
+        if (ask != null && context.mounted) openExplain(context, ask);
+      },
+    ),
     backgroundColor: error ? AppColors.error : AppColors.brand,
     behavior: SnackBarBehavior.floating,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.md)),
     margin: const EdgeInsets.all(Sp.lg),
-    duration: duration ?? const Duration(seconds: 4),
+    duration: explainSnackDuration(duration ?? const Duration(seconds: 4), ask),
   ));
 }
 

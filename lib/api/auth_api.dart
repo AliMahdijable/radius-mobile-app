@@ -520,12 +520,17 @@ class AuthApi {
   /// لمدراء EarthLink، وإلّا غائب). يقرؤه [ProviderService] لحجب شاشات
   /// البند ٤ الخاصّة بـEarthLink.
   ///
+  /// و[userId] هويّة الردّ (`user.id`) كما يكتبها الخادم في ردّ الدخول نفسه:
+  /// `42` للساس الأصل، `next-gen:175` للبعيد، `earthlink:<idx>`… — يُقارَن
+  /// بالمعرّف المحفوظ قبل أن تُطبَّق قدراتٌ من الردّ ([ProviderService]).
+  ///
   /// ⚠️ المعترض يتخطّى `/api/auth/*` فلا يلصق التوكن — نلصقه هنا يدويّاً.
   /// `ok:false` على أيّ فشلٍ (شبكة/جلسة) فيُبقى آخر مزوّدٍ معروف بلا مسح.
   static Future<
       ({
         bool ok,
         String? provider,
+        String? userId,
         bool? isEmployee,
         bool isSuperAdmin,
         Map<String, bool>? canonical,
@@ -533,6 +538,7 @@ class AuthApi {
     const fail = (
       ok: false,
       provider: null,
+      userId: null,
       isEmployee: null,
       isSuperAdmin: false,
       canonical: null,
@@ -556,13 +562,15 @@ class AuthApi {
           (body['provider'] ?? (user is Map ? user['provider'] : null))
               ?.toString()
               .trim();
-      // الصلاحيّات المعياريّة الطازجة (مدير EarthLink يحفظها التطبيق وقت الدخول
-      // وحده، فمفتاحٌ يقلبه الخادم لاحقاً لا يظهر بلا خروج ودخول).
+      // الصلاحيّات المعياريّة الطازجة (المدير يحفظها التطبيق وقت الدخول وحده،
+      // فمفتاحٌ يقلبه الخادم أو الساس لاحقاً لا يظهر بلا خروج ودخول).
       final canonRaw = user is Map ? user['canonicalPermissions'] : null;
       final empRaw = user is Map ? user['isEmployee'] : null;
+      final idRaw = user is Map ? user['id']?.toString().trim() : null;
       return (
         ok: true,
         provider: (raw == null || raw.isEmpty) ? null : raw,
+        userId: (idRaw == null || idRaw.isEmpty) ? null : idRaw,
         isEmployee: empRaw is bool ? empRaw : null,
         isSuperAdmin: user is Map && user['isSuperAdmin'] == true,
         canonical: canonRaw is Map

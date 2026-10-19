@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rad_mysvcs/api/el_card_order_gate.dart';
 import 'package:rad_mysvcs/screens/el/required_cards_screen.dart';
 import 'package:rad_mysvcs/services/provider_service.dart';
 
@@ -60,12 +59,8 @@ void main() {
   setUp(() async {
     server = await simSetUp();
     ProviderService.debugSet('earthlink');
-    // «طلب الكارتات» مفتوحٌ بالخادم (السلّة الفارغة تُرفض بعد فحص المفتاح) —
-    // فزرّ «اطلب هذه الكارتات» في اللقطات؛ وحاله موقوفاً في
-    // test/el_card_order_gate_test.dart.
-    ElCardOrderGate.reset();
-    server.reply('POST', '/api/v2/el/card-order/quote', 400,
-        {'success': false, 'message': 'حدّد الباقة والعدد'});
+    // «طلب الكارتات» أُلغي (١٩ أكتوبر): الشاشة توقّعٌ للعرض فقط — لا زرّ طلب
+    // ولا سؤال عن مفتاح الطلب (حالة «day» تتحقّق من ذلك).
     server.on('GET', _path, (o) {
       final days = int.parse('${o.queryParameters['days']}');
       final scale = switch (days) { 1 => 1, 3 => 3, 7 => 7, _ => 137 };
@@ -110,6 +105,11 @@ void main() {
     // المطلوب ٣٠ = ١٨+٤+٨، والرصيد = ١٨×٢٠٬٠٠٠ + ٤×٩٣٬٠٠٠ + ٨×٣٤٬٠٠٠.
     expect(find.text('30'), findsWidgets, reason: 'الملخّص (+ مستهلَك Economy)');
     expect(find.text('1,004,000'), findsOneWidget);
+    // «طلب الكارتات» أُلغي: لا زرّ طلب ولا أيّ نداءٍ لمسارات الطلب.
+    expect(find.text('اطلب هذه الكارتات من ايرث لنك'), findsNothing);
+    expect(
+        server.requests.where((r) => r.path.contains('/el/card-order')),
+        isEmpty);
     await simCheck(t, v, _screen, 'day');
     await reveal(t, find.text('Business Pro 100M'));
     await simCheck(t, v, _screen, 'day_rows');

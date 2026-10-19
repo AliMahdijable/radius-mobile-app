@@ -1,8 +1,14 @@
 import 'dart:async';
 
+// `hide TextDirection`: الحزمة تصدّر نوع intl الذي يحجب نوع dart:ui.
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
+import '../../api/ai_api.dart';
+import '../../services/ai_assistant_state.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
+import '../../theme/typography.dart';
+import 'explain_action.dart';
 
 /// Overlay-based helper to show a floating snack from **inside** a modal
 /// bottom sheet without breaking the sheet's own layout.
@@ -33,12 +39,20 @@ import '../../theme/spacing.dart';
 /// فوقه. للأفعال التي تتكرّر بسرعة (النسخ: عشر معلوماتٍ تُنسخ تباعاً
 /// كانت ستُكدّس عشرة إشعاراتٍ في المكان نفسه، وظلالها تتراكب). بلا وسم
 /// يبقى السلوك القديم كما هو.
+///
+/// [explain] — «اشرحلي» (المساعد الذكيّ) على إشعار **الخطأ**: الطلب صريحاً،
+/// وبدونه يُستنتج من ردّ الخادم المرفوض الذي يعرضه الإشعار
+/// ([AiAssistantState.explainFor] — بالنصّ، أو بعمليّةٍ رُفضت للتوّ). الزرّ لا
+/// يظهر إلّا إن قال الخادم إنّ المساعد مفتوح، ومعه تطول المدّة إلى ٦ث؛ وإلّا
+/// فالإشعار كما كان حرفيّاً. [autoExplain] `false` يمنع الاستنتاج.
 Future<void> showSheetSnack(
   BuildContext context,
   String message, {
   bool isError = false,
   Duration duration = const Duration(seconds: 3),
   Object? tag,
+  ExplainRequest? explain,
+  bool autoExplain = true,
 }) async {
   final overlay = Overlay.maybeOf(context, rootOverlay: true);
   if (overlay == null) return;
@@ -48,6 +62,8 @@ Future<void> showSheetSnack(
     isError: isError,
     duration: duration,
     tag: tag,
+    explain: explain,
+    autoExplain: autoExplain,
   );
 }
 
@@ -63,6 +79,8 @@ Future<void> showSheetSnackOn(
   bool isError = false,
   Duration duration = const Duration(seconds: 3),
   Object? tag,
+  ExplainRequest? explain,
+  bool autoExplain = true,
 }) async {
   if (!overlay.mounted) return;
   if (tag != null) _liveByTag.remove(tag)?._dismiss();
@@ -70,6 +88,10 @@ Future<void> showSheetSnackOn(
     message: message,
     isError: isError,
     duration: duration,
+    overlayState: overlay,
+    explain: isError
+        ? (explain ?? (autoExplain ? AiAssistantState.explainFor(message) : null))
+        : null,
   );
   if (tag != null) _liveByTag[tag] = entry;
   entry._insertInto(overlay);
@@ -85,16 +107,29 @@ class _SheetSnackEntry {
     required this.message,
     required this.isError,
     required this.duration,
+    required this.overlayState,
+    this.explain,
   }) {
     overlay = OverlayEntry(builder: _build);
     _timer = Timer(duration, _dismiss);
+    _shownAt = DateTime.now();
   }
 
   final String message;
   final bool isError;
   final Duration duration;
+
+  /// الطبقة التي أُدرج فيها — منها تُفتح نافذة «اشرحلي» بعد زوال الإشعار.
+  final OverlayState overlayState;
+
+  /// خطأ الخادم الذي يعرضه الإشعار — لـ«اشرحلي». `null` = لا زرّ أبداً.
+  final ExplainRequest? explain;
   late final OverlayEntry overlay;
-  late final Timer _timer;
+  late Timer _timer;
+  late final DateTime _shownAt;
+
+  /// المدّة مُدّت مرّةً حين ظهر الزرّ ([kExplainSnackDuration]).
+  bool _extended = false;
   final Completer<void> _completer = Completer<void>();
   Future<void> get done => _completer.future;
 
@@ -104,6 +139,25 @@ class _SheetSnackEntry {
   void _insertInto(OverlayState state) {
     state.insert(overlay);
     _inserted = true;
+  }
+
+  /// ظهر «اشرحلي» (الحالة قد تصل بعد الإشعار بلحظة) ⇒ لا يزول قبل ٦ث من
+  /// ظهوره، ليُقرأ الخطأ ويُضغط الزرّ.
+  void _extendForExplain() {
+    if (_extended || !_inserted || duration >= kExplainSnackDuration) return;
+    _extended = true;
+    final left = kExplainSnackDuration - DateTime.now().difference(_shownAt);
+    if (left <= Duration.zero) return;
+    _timer.cancel();
+    _timer = Timer(left, _dismiss);
+  }
+
+  void _openExplain() {
+    final req = explain;
+    final ov = overlayState;
+    _dismiss();
+    if (req == null || !ov.mounted) return;
+    openExplain(ov.context, req);
   }
 
   void _dismiss() {
@@ -137,33 +191,132 @@ class _SheetSnackEntry {
           child: InkWell(
             borderRadius: BorderRadius.circular(R.sm),
             onTap: _dismiss,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  Icon(
-                    isError ? Icons.error_outline : Icons.check_circle_outline,
-                    color: AppColors.onBrand,
-                    size: 20,
+            child: explain == null
+                ? _plain()
+                // «اشرحلي» يتبع حالة المساعد: الاستماع يطلبها إن كانت قديمة،
+                // والزرّ يظهر متى قال الخادم إنّه مفتوح — وإلّا الإشعار كما كان.
+                : ValueListenableBuilder<AiStatus?>(
+                    valueListenable: AiAssistantState.gate,
+                    builder: (context, s, _) {
+                      if (!(s?.canExplain ?? false)) return _plain();
+                      WidgetsBinding.instance
+                          .addPostFrameCallback((_) => _extendForExplain());
+                      return _withExplain(context);
+                    },
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      message,
-                      style: const TextStyle(
-                        color: AppColors.onBrand,
-                        fontSize: 13, height: 1.35,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      textDirection: TextDirection.rtl,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
         ),
       ),
     );
+  }
+
+  static const _textStyle = TextStyle(
+    color: AppColors.onBrand,
+    fontSize: 13, height: 1.35,
+    fontWeight: FontWeight.w600,
+  );
+
+  Widget get _icon => Icon(
+        isError ? Icons.error_outline : Icons.check_circle_outline,
+        color: AppColors.onBrand,
+        size: 20,
+      );
+
+  Widget _plain() => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            _icon,
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: _textStyle,
+                textDirection: TextDirection.rtl,
+              ),
+            ),
+          ],
+        ),
+      );
+
+  /// النصّ و«اشرحلي» في سطرٍ واحد إن وسعهما سطران، وإلّا الزرّ تحت النصّ —
+  /// فلا تُقصّ رسالة الخطأ لتتّسع للزرّ (٣٢٠ نقطة).
+  Widget _withExplain(BuildContext context) {
+    return LayoutBuilder(builder: (context, c) {
+      final scaler = MediaQuery.textScalerOf(context);
+      final label = TextPainter(
+        text: TextSpan(text: 'ai.explain'.tr(), style: AppType.bodyBold()),
+        textDirection: TextDirection.rtl,
+        textScaler: scaler,
+        maxLines: 1,
+      )..layout();
+      // الحبّة: حشوة ١٢×٢ + أيقونة ١٤ + فراغ ٤ + حدّ.
+      final pill = label.width + Sp.md * 2 + 14 + Sp.xs + 2;
+      label.dispose();
+      final inlineWidth = c.maxWidth - 16 - Sp.sm - 20 - 10 - Sp.sm - pill;
+      var fits = inlineWidth >= 96;
+      if (fits) {
+        // القياس بالنمط الفعليّ (خطّ التطبيق من الثيم) لا بالخطّ الافتراضيّ.
+        final text = TextPainter(
+          text: TextSpan(
+            text: message,
+            style: DefaultTextStyle.of(context).style.merge(_textStyle),
+          ),
+          textDirection: TextDirection.rtl,
+          textScaler: scaler,
+          maxLines: 2,
+        )..layout(maxWidth: inlineWidth);
+        fits = !text.didExceedMaxLines;
+        text.dispose();
+      }
+      if (fits) {
+        return Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(16, Sp.xs, Sp.sm, Sp.xs),
+          child: Row(
+            children: [
+              _icon,
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  message,
+                  style: _textStyle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textDirection: TextDirection.rtl,
+                ),
+              ),
+              const SizedBox(width: Sp.sm),
+              ExplainPill(onTap: _openExplain),
+            ],
+          ),
+        );
+      }
+      return Padding(
+        padding: const EdgeInsetsDirectional.fromSTEB(16, 12, Sp.sm, Sp.xxs),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                _icon,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    message,
+                    style: _textStyle,
+                    textDirection: TextDirection.rtl,
+                  ),
+                ),
+              ],
+            ),
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: ExplainPill(onTap: _openExplain),
+            ),
+          ],
+        ),
+      );
+    });
   }
 }

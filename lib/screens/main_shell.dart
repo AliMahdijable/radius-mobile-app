@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../api/api_client.dart'
     show authExpiredSignal, accessBlockedSignal, blockedMessage;
 import '../services/active_company.dart';
+import '../services/ai_assistant_state.dart';
 import '../services/permissions_service.dart';
 import '../services/provider_service.dart';
 import '../core/widgets/design_sheet.dart';
@@ -304,6 +305,10 @@ class _MainShellState extends State<MainShell> {
       // تقديرٌ (مضيف الرابط) لجلسةٍ سبقت الميزة أو لرابطٍ يدويّ ← يُحسم من
       // «شركاتي» مرّةً، بلا انتظار.
       unawaited(ActiveCompany.resolveLabel());
+      // حال المساعد الذكيّ أوّل الجلسة (مطفأً يردّ الخادم فوراً) — فبطاقة
+      // «كيف أسوّي؟» لا تُدرج متأخّرةً فوق «التقارير» فتزيح البطاقات تحت
+      // الإصبع، و«اشرحلي» حاضرٌ مع أوّل إشعار خطأ.
+      unawaited(AiAssistantState.ensureFresh());
     });
     _authExpiredSeen = authExpiredSignal.value;
     authExpiredSignal.addListener(_onAuthExpired);

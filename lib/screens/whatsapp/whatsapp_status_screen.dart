@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/whatsapp_api.dart';
+import '../../core/widgets/explain_action.dart';
 import '../../services/manual_wa_prefs.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -157,10 +158,11 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
       if (!ss.ok || ss.code == null) {
         setState(() => _busy = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(ss.message ?? 'common.error'.tr()),
+          explainableSnackBar(
+            context,
+            ss.message ?? 'common.error'.tr(),
+            error: true,
             backgroundColor: AppColors.errorFill,
-            behavior: SnackBarBehavior.floating,
           ),
         );
         return;
@@ -208,10 +210,11 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
     if (!ss.ok) {
       setState(() => _busy = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(ss.message ?? 'common.error'.tr()),
+        explainableSnackBar(
+          context,
+          ss.message ?? 'common.error'.tr(),
+          error: true,
           backgroundColor: AppColors.errorFill,
-          behavior: SnackBarBehavior.floating,
         ),
       );
       return;

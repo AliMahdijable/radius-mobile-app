@@ -88,7 +88,11 @@ class _SplashScreenState extends State<SplashScreen> {
   /// الآن unawaited: splash يمشي فوراً؛ لو token منتهي، api_client
   /// interceptor يعمل refresh + retry تلقائياً على أوّل request في
   /// Dashboard (لا فرق في السلوك النهائي، سرعة ملموسة أفضل).
-  void _refreshIfExpiredInBackground() {
+  ///
+  /// والـFuture المُرجَع يكتمل حين يصير التوكن صالحاً (أو تنتهي المحاولة):
+  /// `/api/auth/me` يتخطّاه المعترض، فلا يُسأل قبله ([ProviderService.refreshOnColdStart]).
+  /// الإقلاع نفسه لا ينتظره.
+  Future<void> _refreshIfExpiredInBackground() {
     Future<void> run() async {
       final expiryStr = await AuthStorage.readTokenExpiry();
       final expiry = expiryStr == null ? null : DateTime.tryParse(expiryStr);
@@ -99,7 +103,7 @@ class _SplashScreenState extends State<SplashScreen> {
       await AuthApi.refreshToken();
     }
 
-    unawaited(run());
+    return run();
   }
 
   Future<void> _route() async {
@@ -140,7 +144,7 @@ class _SplashScreenState extends State<SplashScreen> {
       // api_client interceptor يعالج 401 → refresh → retry تلقائياً
       // على أوّل request في Dashboard. Splash يفتح فوراً بدل انتظار
       // 20 ثانية لـSAS4 لو الشبكة بطيئة.
-      _refreshIfExpiredInBackground();
+      final tokenReady = _refreshIfExpiredInBackground();
 
       // Perf 2026-08-05: Fast-path — لو bio مو مفعّل أصلاً، نتجنّب
       // كل platform channels (canAuthenticate + isDeviceSupported).
@@ -168,11 +172,11 @@ class _SplashScreenState extends State<SplashScreen> {
       // (الـadmin قد يكون عدّل صلاحيات الموظف من الويب بين فتح وفتح).
       // الكاش يُحدّث؛ لو فشل الجلب يبقى الكاش الأخير.
       unawaited(PermissionsService.refreshFromBackend());
-      // + مدير EarthLink: يحدّث صلاحيّاته المحفوظة من /api/auth/me (زرٌّ فعّله
-      // الخادم بعد دخوله يظهر بلا خروج). مدراء SAS4 بلا نداءٍ إضافيّ.
-      if (direct || ProviderService.isEarthlink) {
-        unawaited(ProviderService.refreshFromBackend());
-      }
+      // + المزوّد وقدرات **كلّ** مدير (SAS4 الأصل والبعيد، ايرث لنك، FTTH) من
+      // /api/auth/me — كانت لايرث لنك وحده، فمفتاحٌ أخرجه الخادم من خريطة الساس
+      // (reports.financial، ١٨ أكتوبر) بقي يقفل رصيد المدير الفرعيّ حتى يخرج
+      // ويدخل. والموظّف يُسأل أيضاً (مزوّده)، وقدراته لا تُمَسّ (الشروط هناك).
+      unawaited(ProviderService.refreshOnColdStart(tokenReady));
       // auto-login جلسة قديمة — نُسجّل FCM (idempotent).
       unawaited(FcmService.initAfterLogin());
       next = const MainShell();

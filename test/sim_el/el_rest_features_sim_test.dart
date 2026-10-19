@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/cards_api.dart';
-import 'package:rad_mysvcs/api/el_card_order_gate.dart';
 import 'package:rad_mysvcs/api/subscribers_api.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/cards/cards_screen.dart';
@@ -21,17 +20,17 @@ import 'sim_harness.dart';
 /// محاكاة «باقي ميزات ايرث لنك» في قائمة المشتركين وشاشة المشترك:
 ///   • آخر جهاز (MAC) على كرت **غير المتّصل** — من صفّ القائمة (`last_mac`،
 ///     callerID عند ايرث لنك) — ولا يُعرض للمتّصل.
-///   • الحذف: ايرث لنك لا تسمح به ⇒ زرّ الحذف الجماعيّ وصفّ «حذف» بمكانهما
-///     **مقفلَين بالسبب** (لا مخفيَّين، ولا «اطلبها من مديرك») — ولا طلب حذف.
+///   • الحذف: ايرث لنك لا تسمح به ⇒ لا زرّ حذفٍ جماعيّ ولا صفّ «حذف» أصلاً
+///     (قرار المالك ١٩ أكتوبر: مخفيٌّ لا مقفل) — ولا طلب حذف.
 ///   • «آخر اتصال» في كارت المشترك غير المتّصل: الوقت وآخر جهاز (MAC).
 ///   • الموقع: «إضافة موقع» مفتوحٌ لمالك ايرث لنك (مخزنٌ محلّيّ على خادمنا).
 ///   • الجلسات: ملاحظة مصدر المنتهية (`ended` من الخادم) ومدّة كلّ جلسةٍ منتهية،
 ///     و«سجلّ الجلسات» لمشتركٍ بعينه (البحث باسمه كاملاً).
 ///   • الكارتات: مخزون ايرث لنك بالباقة (السلسلة = الباقة) — بأسمائها لا برموزها.
-///   • «الكارتات المطلوبة»: الرصيد المطلوب بسعر الكارت (ما يحسب به «طلب
-///     الكارتات»)، وكلفة التفعيل من الرصيد بجانبه حين تختلف.
+///   • «الكارتات المطلوبة»: الرصيد المطلوب بسعر الكارت (ما تُشترى به
+///     الكارتات)، وكلفة التفعيل من الرصيد بجانبه حين تختلف — بلا زرّ طلب
+///     («طلب الكارتات» أُلغي ١٩ أكتوبر).
 const _screen = 'el_rest';
-const _reason = 'ايرث لنك لا تسمح بحذف المشترك';
 
 Map<String, Object?> _row(
   int idx,
@@ -154,22 +153,19 @@ void main() {
     await close(t);
   });
 
-  simCase(_screen, 'bulk_delete_locked', (t, v) async {
+  simCase(_screen, 'bulk_no_delete', (t, v) async {
     await openList(t, v);
     await t.longPress(simText('زينب كاظم').first);
     await t.pumpAndSettle();
-    final del = find.text('حذف');
-    expect(del, findsOneWidget, reason: 'بمكانه — لا مخفيّ');
-    await simCheck(t, v, _screen, 'bulk_delete_locked');
-    await t.tap(del);
-    await t.pump();
-    expect(find.text(_reason), findsOneWidget);
-    await t.pump(const Duration(seconds: 3));
+    // شريط التحديد ظهر (التعطيل بمكانه) — بلا «حذف»: ايرث لنك لا تسمح به.
+    expect(find.textContaining('تعطيل'), findsWidgets);
+    expect(find.text('حذف'), findsNothing, reason: 'مخفيٌّ لايرث لنك');
+    await simCheck(t, v, _screen, 'bulk_no_delete');
     expect(deletes(), isEmpty);
     await close(t);
   });
 
-  simCase(_screen, 'detail_delete_locked_location_open', (t, v) async {
+  simCase(_screen, 'detail_no_delete_location_open', (t, v) async {
     final sub = Subscriber.fromJson(Map<String, dynamic>.from(_rows()[1]));
     await pumpSim(t, v,
         home: (_) => SubscriberDetailScreen(sub: sub), settle: false);
@@ -186,15 +182,13 @@ void main() {
     await t.drag(sheetList, const Offset(0, -2000));
     await t.pump(const Duration(milliseconds: 500));
     expect(find.text('إضافة موقع'), findsOneWidget);
-    final del = find.descendant(
-        of: find.byType(BottomSheet), matching: find.text('حذف'));
-    expect(del, findsOneWidget);
+    // لا «حذف» ولا مجموعته لايرث لنك (مخفيٌّ لا مقفل — ١٩ أكتوبر).
+    expect(
+        find.descendant(
+            of: find.byType(BottomSheet), matching: find.text('حذف')),
+        findsNothing);
+    expect(find.text('إجراءات حسّاسة'), findsNothing, reason: 'مجموعةٌ فارغة لا تُعرض');
     await simCheck(t, v, _screen, 'detail_more_sheet');
-    await t.tap(del, warnIfMissed: false);
-    await t.pump();
-    expect(find.text(_reason), findsOneWidget);
-    expect(find.text('إجراءات أخرى'), findsOneWidget, reason: 'الشيت باقٍ');
-    await t.pump(const Duration(seconds: 3));
     expect(deletes(), isEmpty);
     await close(t);
   });
@@ -426,9 +420,8 @@ void main() {
   });
 
   simCase(_screen, 'required_cards_card_price', (t, v) async {
-    // سعر الكارت (card_price — prices/forreseller) للرصيد المطلوب، بالسعر نفسه الذي
-    // يحسب به «طلب الكارتات»؛ وكلفة التفعيل (cost) سطرٌ ثانٍ حين تختلف. باقةٌ بلا
-    // سعر (null) ⇒ كلفتها وحدها كما كان.
+    // سعر الكارت (card_price — prices/forreseller) للرصيد المطلوب؛ وكلفة التفعيل
+    // (cost) سطرٌ ثانٍ حين تختلف. باقةٌ بلا سعر (null) ⇒ كلفتها وحدها كما كان.
     server.on('GET', '/api/v2/el/prepaid-needed', (o) => const SimReply(200, {
           'success': true,
           'days': 1,
@@ -437,10 +430,6 @@ void main() {
             {'profile_id': 9, 'name': 'Plus', 'cost': 34000, 'card_price': null, 'available': 1, 'used': 9, 'needed': 8, 'image': null},
           ],
         }));
-    // «طلب الكارتات» مفتوحٌ بالخادم ⇒ زرّ «اطلب هذه الكارتات» في اللقطة.
-    ElCardOrderGate.reset();
-    server.reply('POST', '/api/v2/el/card-order/quote', 400,
-        {'success': false, 'message': 'حدّد الباقة والعدد'});
     await pumpSim(t, v, home: (_) => const ElRequiredCardsScreen());
     expect(find.text('الرصيد المطلوب (بسعر الكارت)'), findsOneWidget);
     // ١٨ × ٢٢٬٠٠٠ + ٨ × ٣٤٬٠٠٠ = ٦٦٨٬٠٠٠
@@ -449,6 +438,8 @@ void main() {
     expect(find.text('التفعيل من الرصيد 20,000 د.ع'), findsOneWidget);
     expect(find.text('كلفة الكارت 34,000 د.ع'), findsOneWidget);
     expect(find.text('396,000 د.ع'), findsOneWidget, reason: 'رصيد Economy بسعر الكارت');
+    // «طلب الكارتات» أُلغي: لا زرّ طلب.
+    expect(find.text('اطلب هذه الكارتات من ايرث لنك'), findsNothing);
     await simCheck(t, v, _screen, 'required_cards_card_price');
   });
 }

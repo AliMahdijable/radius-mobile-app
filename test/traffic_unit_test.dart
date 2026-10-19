@@ -7,9 +7,10 @@ import 'package:rad_mysvcs/screens/subscribers/sheets/consumption_sheet.dart';
 /// كيغا ميغا كيلو بايت تيرا؟». كنتُ أقصّ الوحدة لتوفير عرض العمود،
 /// فصار الرقم بلا معنى: «23» قد تكون 23 كيلو أو 23 تيرا.
 void main() {
-  const gb = 1000 * 1000 * 1000;
-  const mb = 1000 * 1000;
-  const kb = 1000;
+  // بوحدات 1024 كتفاصيل المشترك والويب وتطبيق المشترك.
+  const gb = 1024 * 1024 * 1024;
+  const mb = 1024 * 1024;
+  const kb = 1024;
 
   test('الوحدة تُشتقّ من أعلى عمود', () {
     expect(unitForTest(20 * gb).name, 'GB');
@@ -28,7 +29,7 @@ void main() {
     // برقمين بوحدتين مختلفتين، رغم أنّ العمودين نفسيهما يُقارَنان.
     final u = unitForTest(20 * gb);
     expect(scaledForTest(20 * gb, u.div), '20');
-    expect(scaledForTest(500 * mb, u.div), '0.50');
+    expect(scaledForTest(512 * mb, u.div), '0.50');
     // الاثنان بالغيغا: 20 مقابل 0.50 — نسبةٌ تُقرأ بالنظر.
   });
 
@@ -48,7 +49,7 @@ void main() {
     // ⚠️ الفاصلة غيّرت الحساب: «1,200GB» ثمانية محارف لا سبعة. العمود
     // وُسّع من 46 إلى 58 لأجلها، وهذا الحكم يحرس الاثنين معاً — من
     // يضيّق العمود أو يُطيل التنسيق يصطدم به.
-    const u = (div: 1000 * 1000, name: 'MB');
+    const u = (div: 1024 * 1024, name: 'MB');
     // أسوأ حالة واقعيّة: 4 خانات + فاصلة + وحدة.
     final longest = scaledForTest(1200 * u.div, u.div) + u.name;
     expect(longest, '1,200MB');
@@ -81,7 +82,7 @@ void main() {
   });
 
   test('عمود كبير يحمل فاصلة', () {
-    const mb = 1000 * 1000;
+    const mb = 1024 * 1024;
     // 1200 ميغا بوحدة MB → «1,200»
     expect(scaledForTest(1200 * mb, mb), '1,200');
   });

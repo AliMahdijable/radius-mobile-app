@@ -274,9 +274,14 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
     });
     // ايرث لنك: المحرّر يعرض مفاتيح موظّفي ايرث لنك وحدها، فما سواها يُرسَل
     // false دائماً — لا يُمنح ما لم يره المالك.
+    // غير ايرث لنك: مفاتيح الكتالوج المعروض وحدها — مفتاحٌ مخفيّ عنه (المساعد
+    // الذكي قبل تفعيله) لا يُرسَل، فيُبقي الخادم قيمته المحفوظة.
     final perms = _el
         ? ElEmployeePerms.outgoing(widget.catalog.permissions.keys, _perms)
-        : _perms;
+        : {
+            for (final e in _perms.entries)
+              if (widget.catalog.permissions.containsKey(e.key)) e.key: e.value,
+          };
     // مطلب 2026-06-11: الـrecords في Dart لا تُكسر cast عبر dynamic،
     // فنحلّ كل فرع بنفسه ونستخرج ok/message محلياً.
     bool ok;
@@ -361,9 +366,12 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
     Theme.of(context); // theme-dep (dark-mode)
     final created = _created;
     if (created != null) return _elCreatedSheet(created);
+    // بلا «المساعد الذكي» في الحالين — كبلاطة القائمة ([Employee.activePermsCount]).
     final activeCount = _el
         ? ElEmployeePerms.activeCount(_perms)
-        : _perms.values.where((v) => v).length;
+        : _perms.entries
+            .where((e) => e.value && e.key != ElEmployeePerms.assistantKey)
+            .length;
     return DesignSheet(
       header: SheetHeaderBar(
         icon: _isEdit ? LucideIcons.userCog : LucideIcons.userPlus,
@@ -746,7 +754,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
           Expanded(
             child: Text(
               'تبقى لك وحدك ولا تُمنح لموظّف: تحويل الرصيد وكشف الإيداع، '
-              'طلب الكارتات، إلغاء التسوية، وإدارة الموظفين.',
+              'إلغاء التسوية، وإدارة الموظفين.',
               style: AppType.body(color: AppColors.textMid),
             ),
           ),

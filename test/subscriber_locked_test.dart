@@ -193,10 +193,10 @@ void main() {
         await t.pump(const Duration(seconds: 3));
         expect(find.text('إجراءات أخرى'), findsOneWidget);
         expect(server.requests.length, mid);
-        // الحذف (آخر الشيت) صفٌّ مقفلٌ بمكانه في الحالين: عند موظّف الساس
-        // بالصلاحيّة، وعند ايرث لنك **بسبب المزوّد** («ايرث لنك لا تسمح
-        // بحذف المشترك» — قرار المستخدم ١٨ أكتوبر: مقفلٌ لا مخفيّ). نمرّر إلى
-        // نهاية الشيت أوّلاً، فالقائمة كسولةٌ لا تبني ما تحت الطيّ.
+        // الحذف (آخر الشيت): عند موظّف الساس صفٌّ مقفلٌ بمكانه بالصلاحيّة؛
+        // وعند ايرث لنك **لا يظهر أصلاً** (قرار المالك ١٩ أكتوبر: ايرث لنك لا
+        // تسمح بحذف المشترك ⇒ مخفيٌّ لا مقفل). نمرّر إلى نهاية الشيت أوّلاً،
+        // فالقائمة كسولةٌ لا تبني ما تحت الطيّ.
         await t.drag(
             find.descendant(
                 of: find.byType(BottomSheet),
@@ -206,18 +206,16 @@ void main() {
         final del = find.descendant(
             of: find.byType(BottomSheet),
             matching: find.text('common.delete'.tr()));
-        expect(del, findsOneWidget);
         final atDelete = server.requests.length;
-        await t.tap(del, warnIfMissed: false);
-        await t.pump();
         if (el) {
-          // السبب مكان «اطلبها من مديرك»: لا صلاحيّة تفتح ما لا يسمح به المزوّد.
-          expect(find.text('subscribers.delete_el_unavailable'.tr()),
-              findsOneWidget);
+          expect(del, findsNothing, reason: 'ايرث لنك: لا «حذف» أصلاً');
+          expect(find.text('subscribers.group_danger'.tr()), findsNothing,
+              reason: 'مجموعةٌ فارغة لا تُعرض');
         } else {
+          expect(del, findsOneWidget);
+          await t.tap(del, warnIfMissed: false);
+          await t.pump();
           expect(find.text('locked.toast_action'.tr()), findsWidgets);
-          expect(find.text('subscribers.delete_el_unavailable'.tr()),
-              findsNothing);
         }
         expect(server.requests.length, atDelete, reason: 'لا حذف يُطلب');
         await t.pump(const Duration(seconds: 3));

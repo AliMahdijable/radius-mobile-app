@@ -6,6 +6,7 @@ import '../core/util/server_time.dart';
 import '../services/account_service.dart';
 import '../services/device_id.dart';
 import 'api_client.dart';
+import 'api_error_tap.dart';
 
 /// Pro البند ٤ — نقاط طبقة الحساب على الخادم: `/api/account/*`.
 ///
@@ -25,7 +26,10 @@ class AccountApi {
   ))
     // آيفون: رسائل الخادم الداعية للشراء («فعّل كوداً»، «رقِّ باقتك») تُنقّى
     // قبل أن تصل أيّ شاشة (App Store 3.1.1). غير آيفون: لا يلمس شيئاً.
-    ..interceptors.add(StoreSafeMessagesInterceptor());
+    ..interceptors.add(StoreSafeMessagesInterceptor())
+    // «اشرحلي» في شاشات الحساب («شركاتي»): رمز الرفض ورسالته في الذاكرة —
+    // بعد التنقية فيطابق ما يُعرض على آيفون.
+    ..interceptors.add(ApiErrorTap());
 
   /// منفذا الاختبار وحده (كمنفذَي `LoginScreen`): العميل — يُستبدل محوّله
   /// بخادمٍ وهميّ كما يُستبدل محوّل `ApiClient.dio` — ومصدر توكن الحساب،

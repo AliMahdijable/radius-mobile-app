@@ -7,6 +7,7 @@ import '../../api/packages_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../services/auth_storage.dart';
 import '../../services/permissions_service.dart';
+import '../../services/provider_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -36,6 +37,11 @@ class _PackagesScreenState extends State<PackagesScreen> {
   bool _loading = true;
   bool _saving = false;
   int? _myManagerId;
+
+  /// المعرّف المحفوظ مؤهَّلٌ بساسه (`next-gen:175` لساسٍ بعيد، `earthlink:<idx>`)
+  /// — والأصل (سوبرنت) عارٍ (`42`). المؤهَّل يُقرأ «تسعيري الخاص» من
+  /// `/api/v2/price-list/<رقمه>` لا `/api/v2/packages` (انظر [_load]).
+  bool _myIdQualified = false;
   String _myDisplayName = '…';
 
   /// مطلب 2026-06-12: السوبر/المدير الفرعي يقدر يعدّل تسعير
@@ -64,9 +70,15 @@ class _PackagesScreenState extends State<PackagesScreen> {
   }
 
   Future<void> _bootstrap() async {
-    final idStr = await AuthStorage.readAdminId();
-    final id = int.tryParse(idStr ?? '');
-    if (id != null) _myManagerId = id;
+    // 🐛 ١٨ أكتوبر: `int.tryParse('next-gen:175')` = null — فمديرٌ على ساسٍ
+    // بعيد (أو ايرث لنك) بلا مدراء فرعيّين كان «تسعيري الخاص» عنده فارغاً،
+    // والحفظ يرجع بصمت (لا معرّف). الرقم بعد آخر «:».
+    final idStr = (await AuthStorage.readAdminId())?.trim() ?? '';
+    final id = int.tryParse(idStr.split(':').last);
+    if (id != null) {
+      _myManagerId = id;
+      _myIdQualified = idStr.contains(':');
+    }
     // اسم المدير الحالي — username فقط (admin@xxx) مطابق طلب 2026-06-12.
     final username = await AuthStorage.readAdminUsername();
     final displayName = await AuthStorage.readDisplayName();
@@ -98,11 +110,21 @@ class _PackagesScreenState extends State<PackagesScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    // عرض تسعير مدير محدّد لما الـpicker مختار،
-    // وإلا عرض تسعير الـadmin الحالي.
+    // عرض تسعير مدير محدّد لما الـpicker مختار، وإلا عرض تسعير الـadmin الحالي.
+    //
+    // «تسعيري الخاص» لمعرّفٍ مؤهَّل من `/api/v2/price-list/<رقمه>`: الخادم
+    // يؤهّله بساس التوكن ويقرأ سعر البيع المحلّيّ (`user_price`) — وهو ما يحفظه
+    // [_save] إلى المالك نفسه. أمّا `/api/v2/packages` فقائمة الإضافة/التفعيل:
+    // بلا `user_price`، فيبدو الحقل فارغاً ويُحفظ صفراً لما لم يُلمس.
+    // ايرث لنك يخدم المسارين بالعقد نفسه (يفرض المالك من الجلسة). وFTTH بلا
+    // price-list (يردّ قائمةً فارغة) وتسعيره للعرض فقط ← يبقى على packages.
+    final selfById =
+        _myIdQualified && _myManagerId != null && !ProviderService.isFtth;
     final pkgs = _selectedManagerId != null
         ? await PackagesApi.listForManager(_selectedManagerId!)
-        : await PackagesApi.list();
+        : selfById
+            ? await PackagesApi.listForManager(_myManagerId!)
+            : await PackagesApi.list();
     if (!mounted) return;
     setState(() {
       _packages = pkgs;
@@ -485,11 +507,13 @@ class _PackagesScreenState extends State<PackagesScreen> {
                         ],
                       ),
                     ),
+                    // صفّ «تسعيري الخاص» باسم المدير نفسه — كان يعرض اسم
+                    // المختار، فيظهر الفرعيّ المختار مرّتين ولا صفّ لصاحب الحساب.
                     ListTile(
                       leading: Icon(LucideIcons.user, color: accent),
-                      title: Text(_selectedManagerLabel == '…'
+                      title: Text(_myDisplayName == '…'
                           ? 'تسعيري الخاص'
-                          : _selectedManagerLabel),
+                          : _myDisplayName),
                       onTap: () => Navigator.of(context).pop(-1),
                       trailing: _selectedManagerId == null
                           ? Icon(LucideIcons.check, color: accent)

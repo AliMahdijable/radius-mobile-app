@@ -8,12 +8,14 @@ import 'package:share_plus/share_plus.dart';
 import '../../../api/portal_settings_api.dart';
 import '../../../core/util/bidi.dart';
 import '../../../core/util/server_time.dart';
+import '../../../core/widgets/explain_action.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../core/widgets/permission_locked.dart';
 import '../../../services/permissions_service.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import 'portal_switch_tile.dart';
 
 /// تطبيق المشترك كما يجده في المتجر — المصدر الوحيد لنصّ «مشاركة».
 abstract final class SubscriberApp {
@@ -67,12 +69,15 @@ String portalLoginWhen(DateTime? at, {DateTime? now}) {
 ///   و«تغيير الرمز» لصاحب الحساب وحده (الخادم يردّ الموظّف ٤٠٣ OWNER_ONLY).
 /// • تلميح المتغيّر [kAgentCodeVariable] لرسائل الواتساب.
 /// • مفتاح «تفعيل بوابة مشتركيّ» (مفتوحةٌ افتراضاً) — `settings.edit`.
+/// • «ما يراه مشتركوك»: مفتاحا «حالة الاتصال» و«الاستهلاك» (ظاهران
+///   افتراضاً، §11) — `settings.edit`. كلّ نقرةٍ تُحفظ فوراً وترجع عند الرفض،
+///   ولا يظهران لخادمٍ لا يرسل `sections`.
 /// • «آخر دخول المشتركين» (آخر ٢٠) — `subscribers.view`.
 ///
 /// ── الموظّف (المقفل لا المخفيّ) ─────────────────────────────────────
 /// يرى الرمز وينسخه ويشاركه (الخادم يعطيه بلا صلاحيّة: رمز مديره)، ولا يرى
-/// «تغيير الرمز» (لصاحب الحساب وحده ⇒ مخفيّ). والمفتاح والسجلّ بمكانهما
-/// مقفلَين بلا صلاحيّتهما — ولا يُطلب السجلّ أصلاً. موظّف ايرث لنك لا يُمنح
+/// «تغيير الرمز» (لصاحب الحساب وحده ⇒ مخفيّ). والمفاتيح والسجلّ بمكانها
+/// مقفلةً بلا صلاحيّتها — ولا يُطلب السجلّ أصلاً. موظّف ايرث لنك لا يُمنح
 /// `settings.edit` أبداً، فيقول قفله «لصاحب الحساب» لا «اطلبها من مديرك».
 class AgentCodeTab extends StatefulWidget {
   const AgentCodeTab({super.key});
@@ -117,6 +122,20 @@ class _AgentCodeTabState extends State<AgentCodeTab> {
   /// ما لا يقدر عليه (وموظّف ايرث لنك لا يُمنح القوالب أصلاً).
   late final bool _showVarHint = _isOwner || Perms.has('whatsapp.templates');
 
+  /// قيمةٌ معروضة لقسمٍ لم يؤكّدها الخادم بعد (حفظها جارٍ أو بالدور) — فوق
+  /// ما أكّده ([PortalAccess.sections])، وتسقط بالردّ: نجاحاً تصير المؤكَّدة،
+  /// ورفضاً يرجع المفتاح كما كان.
+  final _pendingSections = <PortalSection, bool>{};
+
+  /// حفظ الأقسام بالدور، وكلّ طلبٍ يحمل قسمه وحده (`{sections:{key}}`) — فلا
+  /// يحمل قيمةً متفائلةً لقسمٍ آخر، ولا يكتب فوق ما غيّره الويب أو جهازٌ آخر؛
+  /// والمؤكَّد بعده ما ردّه الخادم كاملاً.
+  Future<void> _sectionsQueue = Future<void>.value();
+
+  /// يرتفع مع كلّ حفظٍ ناجحٍ للأقسام — فجلبٌ بدأ قبله (سحبٌ للتحديث) ووصل
+  /// بعده لا يعيد المفتاح لقيمته القديمة.
+  int _sectionsSaves = 0;
+
   @override
   void initState() {
     super.initState();
@@ -136,11 +155,17 @@ class _AgentCodeTabState extends State<AgentCodeTab> {
   }
 
   Future<void> _loadAccess() async {
+    final saves = _sectionsSaves;
     final a = await PortalSettingsApi.getAccess();
     if (!mounted) return;
     setState(() {
       // سحبٌ للتحديث فشل: يبقى آخر ما عُرف بدل أن تختفي البطاقة.
-      if (a != null || _access == null) _access = a;
+      if (a != null || _access == null) {
+        // وأقسامٌ حُفظت أثناء الجلب أحدث ممّا جاء به.
+        _access = a != null && saves != _sectionsSaves
+            ? a.copyWith(sections: _access?.sections ?? a.sections)
+            : a;
+      }
       _loading = false;
     });
   }
@@ -251,6 +276,54 @@ class _AgentCodeTabState extends State<AgentCodeTab> {
     }
   }
 
+  /// إظهار قسمٍ أو إخفاؤه — بلا سؤال (لا يغلق شيئاً على أحد)، ويُحفظ فوراً:
+  /// المفتاح ينقلب الآن، والحفظ بالدور خلف ما سبقه ([_sectionsQueue]).
+  void _setSection(PortalSection s, bool next) {
+    final cur = _access?.sections;
+    if (cur == null || _pendingSections.containsKey(s) || cur.of(s) == next) {
+      return;
+    }
+    setState(() => _pendingSections[s] = next); // متفائل — ويرجع عند الرفض
+    _sectionsQueue = _sectionsQueue
+        .then((_) => _saveSection(s, next))
+        .catchError((Object e) {
+      if (kDebugMode) debugPrint('[AgentCodeTab] section save: $e');
+    });
+  }
+
+  Future<void> _saveSection(PortalSection s, bool next) async {
+    if (!mounted) return;
+    final base = _access?.sections;
+    if (base == null) {
+      setState(() => _pendingSections.remove(s));
+      return;
+    }
+    final r = await PortalSettingsApi.setPortalSections(s, next, current: base);
+    if (!mounted) return;
+    setState(() {
+      _pendingSections.remove(s);
+      if (r.ok) {
+        _sectionsSaves++;
+        // ما ردّه الخادم كاملاً (ومنه ما غيّره غيرك)؛ وبلا أقسامٍ في ردّه
+        // المنقورُ وحده فوق آخر ما عُرف.
+        final known = _access?.sections ?? base;
+        _access =
+            _access?.copyWith(sections: r.sections ?? known.withValue(s, next));
+      }
+    });
+    if (r.denied) {
+      showNoPermission(context, action: true);
+    } else if (!r.ok) {
+      _snack(r.message ?? 'portal.switch_failed'.tr(), error: true);
+    }
+  }
+
+  /// قفل مفاتيح البوّابة: «اطلبها من مديرك» لما يُمنح، وإلّا (موظّف ايرث
+  /// لنك) [ownerOnly] — لا وعدَ بصلاحيّةٍ لا يملك مديره منحها.
+  void _lockedTap(String ownerOnly) => permShown(const ['settings.edit'])
+      ? showNoPermission(context, action: true)
+      : showNoPermission(context, message: ownerOnly);
+
   /// تأكيدٌ بنغمة التحذير (لا الحذف: لا رجعة لكن لا شيء يُمحى). `false`
   /// لورقةٍ مفتوحةٍ أصلاً أو لإلغاء.
   Future<bool> _confirm({
@@ -276,13 +349,16 @@ class _AgentCodeTabState extends State<AgentCodeTab> {
     }
   }
 
+  /// «اشرحلي» على خطأ الخادم كباقي إشعارات الإصدار — والمساعد مطفأً فالشريط
+  /// كما كان حرفيّاً ([explainableSnackBar]).
   void _snack(String message, {bool error = false}) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-        content: Text(message),
+      ..showSnackBar(explainableSnackBar(
+        context,
+        message,
+        error: error,
         backgroundColor: error ? AppColors.errorFill : AppColors.brand,
-        behavior: SnackBarBehavior.floating,
       ));
   }
 
@@ -327,11 +403,29 @@ class _AgentCodeTabState extends State<AgentCodeTab> {
               busy: _savingSwitch,
               locked: !_canToggle,
               onChanged: _setEnabled,
-              onLockedTap: () => permShown(const ['settings.edit'])
-                  ? showNoPermission(context, action: true)
-                  : showNoPermission(context,
-                      message: 'portal.switch_owner_only'.tr()),
+              onLockedTap: () => _lockedTap('portal.switch_owner_only'.tr()),
             ),
+          ],
+          if (a?.sections case final sections?) ...[
+            const SizedBox(height: Sp.xl),
+            _SectionLabel(
+              text: 'portal.sections_title'.tr(),
+              icon: LucideIcons.eye,
+            ),
+            const SizedBox(height: Sp.sm),
+            for (final s in _SectionSwitchRow.shown) ...[
+              if (s != _SectionSwitchRow.shown.first)
+                const SizedBox(height: Sp.sm),
+              _SectionSwitchRow(
+                section: s,
+                value: _pendingSections[s] ?? sections.of(s),
+                busy: _pendingSections.containsKey(s),
+                locked: !_canToggle,
+                onChanged: (v) => _setSection(s, v),
+                onLockedTap: () =>
+                    _lockedTap('portal.sections_owner_only'.tr()),
+              ),
+            ],
           ],
           const SizedBox(height: Sp.xl),
           if (!_canSeeLogins || _loginsDenied)
@@ -796,8 +890,8 @@ class _VariableHint extends StatelessWidget {
                             Text(
                               kAgentCodeVariable,
                               textDirection: TextDirection.ltr,
-                              style: AppType.bodyStrong(
-                                  color: AppColors.textHi),
+                              style:
+                                  AppType.bodyStrong(color: AppColors.textHi),
                             ),
                             const SizedBox(width: Sp.xs),
                             Icon(LucideIcons.copy,
@@ -809,8 +903,8 @@ class _VariableHint extends StatelessWidget {
                   ),
                 ),
               ]),
-              style: AppType.body(color: AppColors.textBody)
-                  .copyWith(height: 1.7),
+              style:
+                  AppType.body(color: AppColors.textBody).copyWith(height: 1.7),
             ),
           ),
         ],
@@ -823,9 +917,9 @@ class _VariableHint extends StatelessWidget {
 // مفتاح البوّابة
 // ═════════════════════════════════════════════
 
-/// «تفعيل بوابة مشتركيّ» — بشكل [SheetSwitchRow] داخل إطاره، ومقفلاً لمن لا
-/// يملك `settings.edit`: الحالة حبّةً (مفعّلة/موقوفة) والقفل مكان المفتاح —
-/// فيعرف الموظّف أنّ البوّابة تعمل ولا يقدر يبدّلها.
+/// «تفعيل بوابة مشتركيّ» — [PortalSwitchTile]: مقفلاً لمن لا يملك
+/// `settings.edit` الحالة حبّةً (مفعّلة/موقوفة) والقفل مكان المفتاح — فيعرف
+/// الموظّف أنّ البوّابة تعمل ولا يقدر يبدّلها.
 class _PortalSwitchRow extends StatelessWidget {
   const _PortalSwitchRow({
     required this.value,
@@ -844,104 +938,75 @@ class _PortalSwitchRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final title = 'portal.switch_title'.tr();
-    final row = Container(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: locked
-                  ? LockedStyle.box
-                  : (value ? AppTone.success.softBg : AppTone.warning.softBg),
-              borderRadius: BorderRadius.circular(R.sm),
-            ),
-            child: Icon(
-              value ? LucideIcons.power : LucideIcons.powerOff,
-              size: 18,
-              color: locked
-                  ? LockedStyle.glyph
-                  : (value ? AppTone.success.fill : AppTone.warning.fill),
-            ),
-          ),
-          const SizedBox(width: Sp.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.rowValue(
-                      color: locked ? LockedStyle.title : AppColors.textHi),
-                ),
-                const SizedBox(height: Sp.xxs),
-                Text(
-                  (value ? 'portal.switch_on_hint' : 'portal.switch_off_hint')
-                      .tr(),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.muted(
-                      color:
-                          locked ? LockedStyle.subtitle : AppColors.textMid),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: Sp.sm),
-          if (locked) ...[
-            ToneChip(
-              label: (value ? 'portal.state_on' : 'portal.state_off').tr(),
-              tone: value ? AppTone.success : AppTone.warning,
-              dense: true,
-            ),
-            const SizedBox(width: Sp.x6),
-            const PermLockIcon(),
-          ] else if (busy)
-            const SizedBox(
-              width: 52,
-              height: 32,
-              child: Center(
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            )
-          else
-            Switch(
-              value: value,
-              onChanged: onChanged,
-              activeThumbColor: AppColors.onBrand,
-              activeTrackColor: AppColors.brand,
-            ),
-        ],
-      ),
+    return PortalSwitchTile(
+      title: 'portal.switch_title'.tr(),
+      hint: (value ? 'portal.switch_on_hint' : 'portal.switch_off_hint').tr(),
+      icon: value ? LucideIcons.power : LucideIcons.powerOff,
+      tone: value ? AppTone.success : AppTone.warning,
+      stateLabel: (value ? 'portal.state_on' : 'portal.state_off').tr(),
+      value: value,
+      busy: busy,
+      locked: locked,
+      onChanged: onChanged,
+      onLockedTap: onLockedTap,
     );
-    // المفتاح وتسميته عنصرٌ واحد لقارئ الشاشة (كـSwitchListTile).
-    if (!locked) return MergeSemantics(child: row);
-    return Semantics(
-      button: true,
-      label: 'locked.a11y'.tr(args: [title]),
-      excludeSemantics: true,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onLockedTap,
-          borderRadius: BorderRadius.circular(R.lg),
-          child: row,
-        ),
-      ),
+  }
+}
+
+/// مفتاح قسمٍ من تطبيق المشترك (§11) بشكل مفتاح البوّابة نفسه: أيقونة القسم
+/// خضراء وهو ظاهر، وعينٌ مغمضة رماديّة وهو مخفي (اختيارٌ لا تحذير).
+class _SectionSwitchRow extends StatelessWidget {
+  const _SectionSwitchRow({
+    required this.section,
+    required this.value,
+    required this.busy,
+    required this.locked,
+    required this.onChanged,
+    required this.onLockedTap,
+  });
+
+  /// الأقسام التي لها مفتاحٌ هنا، بترتيبها ونصوصها (مفاتيح ترجمة) — والجهاز
+  /// لا مفتاح له بعد ([PortalSection.device]).
+  static const _copy =
+      <PortalSection, ({String title, String hint, IconData icon})>{
+    PortalSection.connection: (
+      title: 'portal.section_connection',
+      hint: 'portal.section_connection_on',
+      icon: LucideIcons.wifi,
+    ),
+    PortalSection.usage: (
+      title: 'portal.section_usage',
+      hint: 'portal.section_usage_on',
+      icon: LucideIcons.activity,
+    ),
+  };
+
+  static Iterable<PortalSection> get shown => _copy.keys;
+
+  final PortalSection section;
+  final bool value;
+  final bool busy;
+  final bool locked;
+  final ValueChanged<bool> onChanged;
+  final VoidCallback onLockedTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final copy = _copy[section];
+    if (copy == null) return const SizedBox.shrink();
+    return PortalSwitchTile(
+      title: copy.title.tr(),
+      hint: (value ? copy.hint : 'portal.section_off_hint').tr(),
+      icon: value ? copy.icon : LucideIcons.eyeOff,
+      tone: value ? AppTone.success : AppTone.neutral,
+      stateLabel:
+          (value ? 'portal.section_shown' : 'portal.section_hidden').tr(),
+      value: value,
+      busy: busy,
+      locked: locked,
+      onChanged: onChanged,
+      onLockedTap: onLockedTap,
     );
   }
 }
@@ -1155,8 +1220,8 @@ class _SectionLabel extends StatelessWidget {
             text,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: AppType.title(color: AppColors.textHi)
-                .copyWith(fontSize: 12.5),
+            style:
+                AppType.title(color: AppColors.textHi).copyWith(fontSize: 12.5),
           ),
         ),
       ],

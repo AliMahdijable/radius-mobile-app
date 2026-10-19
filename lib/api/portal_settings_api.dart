@@ -164,6 +164,81 @@ enum PortalLoad {
   failed,
 }
 
+/// قسمٌ من تطبيق المشترك يختار الوكيل إظهاره لمشتركيه — مفاتيح `sections`
+/// في `GET/PUT /api/v2/portal/settings` (وسيط البوّابة §11).
+enum PortalSection {
+  /// «حالة الاتصال»: متصلٌ أو لا، ومنذ متى، وجلسته، وآخر اتصال.
+  connection('connection'),
+
+  /// «الاستهلاك»: التحميل والرفع باليوم والشهر.
+  usage('usage'),
+
+  /// قراءات جهاز المشترك — مطفأٌ افتراضاً ولا يقرؤه تطبيق المشترك بعد، فلا
+  /// مفتاح له في الشاشة: يُحمَل كما وصل ويُعاد كما هو مع كلّ حفظ.
+  device('device');
+
+  const PortalSection(this.key);
+
+  /// اسمه في JSON.
+  final String key;
+}
+
+/// ما يظهر لمشتركي الوكيل في تطبيقهم. الافتراض (لا صفّ، أو مفتاحٌ ناقص):
+/// «حالة الاتصال» و«الاستهلاك» ظاهران، والجهاز مطفأ.
+@immutable
+class PortalSections {
+  const PortalSections({
+    this.connection = true,
+    this.usage = true,
+    this.device = false,
+  });
+
+  final bool connection;
+  final bool usage;
+  final bool device;
+
+  bool of(PortalSection s) => switch (s) {
+        PortalSection.connection => connection,
+        PortalSection.usage => usage,
+        PortalSection.device => device,
+      };
+
+  PortalSections withValue(PortalSection s, bool value) => PortalSections(
+        connection: s == PortalSection.connection ? value : connection,
+        usage: s == PortalSection.usage ? value : usage,
+        device: s == PortalSection.device ? value : device,
+      );
+
+  /// مفتاحٌ غائبٌ أو غير مفهوم يأخذ قيمته من [fallback]: الافتراض عند
+  /// القراءة، وما أُرسل عند ردّ الحفظ — فلا يقلب ردٌّ جزئيّ قسماً لم يُلمس.
+  static PortalSections fromJson(
+    Map<String, dynamic> j, {
+    PortalSections fallback = const PortalSections(),
+  }) =>
+      PortalSections(
+        connection: _flag(j[PortalSection.connection.key], fallback.connection),
+        usage: _flag(j[PortalSection.usage.key], fallback.usage),
+        device: _flag(j[PortalSection.device.key], fallback.device),
+      );
+
+  Map<String, bool> toJson() => {
+        for (final s in PortalSection.values) s.key: of(s),
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      other is PortalSections &&
+      other.connection == connection &&
+      other.usage == usage &&
+      other.device == device;
+
+  @override
+  int get hashCode => Object.hash(connection, usage, device);
+
+  @override
+  String toString() => 'PortalSections(${toJson()})';
+}
+
 /// «رمز الوكيل» ومفتاح البوّابة — `GET /api/v2/portal/settings`.
 ///
 /// الرمز ستّة أرقام لكلّ حساب وكيل (المالك؛ والموظّف يرى رمز مديره)، يكتبه
@@ -171,23 +246,40 @@ enum PortalLoad {
 /// عرض، و`null` = لا رمز لحسابك (شركةٌ لا تخدمها البوّابة بعد، أو جداول
 /// البوّابة غير مهيّأة) — حالةٌ هادئة لا خطأ.
 class PortalAccess {
-  const PortalAccess({required this.enabled, this.agentCode});
+  const PortalAccess({required this.enabled, this.agentCode, this.sections});
 
   /// بوّابة مشتركي هذا الوكيل مفتوحة؟ مفتوحةٌ افتراضاً (لا صفّ = مفتوحة).
   final bool enabled;
   final String? agentCode;
 
-  static PortalAccess fromJson(Map<String, dynamic> j) => PortalAccess(
-        enabled: !(j['enabled'] == false || j['enabled'] == 0),
-        agentCode: parseAgentCode(j['agent_code']),
-      );
+  /// ما يظهر لمشتركيه (§11). `null` = خادمٌ لا يُرسل الأقسام — فلا مفاتيح
+  /// لها في الشاشة (حفظٌ لا يقرؤه أحد).
+  final PortalSections? sections;
 
-  PortalAccess copyWith({bool? enabled, Object? agentCode = _sentinel}) =>
+  static PortalAccess fromJson(Map<String, dynamic> j) {
+    final sections = j['sections'];
+    return PortalAccess(
+      enabled: !(j['enabled'] == false || j['enabled'] == 0),
+      agentCode: parseAgentCode(j['agent_code']),
+      sections: sections is Map
+          ? PortalSections.fromJson(Map<String, dynamic>.from(sections))
+          : null,
+    );
+  }
+
+  PortalAccess copyWith({
+    bool? enabled,
+    Object? agentCode = _sentinel,
+    Object? sections = _sentinel,
+  }) =>
       PortalAccess(
         enabled: enabled ?? this.enabled,
         agentCode: identical(agentCode, _sentinel)
             ? this.agentCode
             : agentCode as String?,
+        sections: identical(sections, _sentinel)
+            ? this.sections
+            : sections as PortalSections?,
       );
 }
 
@@ -494,6 +586,53 @@ class PortalSettingsApi {
     }
   }
 
+  /// يُظهر قسماً من تطبيق المشترك أو يخفيه (§11): يُرسل [section] **وحده**
+  /// `{sections:{key: value}}` — الخادم يحفظ كلّ قسمٍ على حدة ويردّ الأقسام
+  /// كاملةً كما حُفظت. فلا يُكتب فوق ما غيّره الويب أو جهازٌ آخر بعد فتح
+  /// الشاشة (كان إرسال الثلاثة من نسخةٍ قديمة يُعيد قسماً أخفاه غيرك).
+  /// والصلاحيّة كالمفتاح: المالك دائماً، والموظّف بـ`settings.edit`.
+  ///
+  /// [sections] ما خزّنه الخادم عند النجاح — مفتاحٌ ناقصٌ فيه من [current]
+  /// مع القيمة المرسَلة — و`null` لردٍّ بلا أقسام (يبني المُستدعي على ما
+  /// عنده)، و[denied] ٤٠٣، و[message] سبب الرفض العربيّ — كـ[setPortalEnabled].
+  static Future<
+          ({bool ok, PortalSections? sections, bool denied, String? message})>
+      setPortalSections(PortalSection section, bool value,
+          {PortalSections? current}) async {
+    try {
+      final r = await ApiClient.dio.put<Map<String, dynamic>>(
+        '/api/v2/portal/settings',
+        data: {
+          'sections': {section.key: value},
+        },
+      );
+      final body = r.data;
+      if (r.statusCode == 200 && body?['success'] == true) {
+        final saved = body?['sections'];
+        return (
+          ok: true,
+          sections: saved is Map
+              ? PortalSections.fromJson(Map<String, dynamic>.from(saved),
+                  fallback: (current ?? const PortalSections())
+                      .withValue(section, value))
+              : null,
+          denied: false,
+          message: null,
+        );
+      }
+      if (r.statusCode == 403) {
+        return (ok: false, sections: null, denied: true, message: null);
+      }
+      return (ok: false, sections: null, denied: false, message: _refusal(r));
+    } on DioException catch (e) {
+      _log('portal sections (PUT)', e);
+      return (ok: false, sections: null, denied: false, message: null);
+    } catch (e) {
+      _log('portal sections (PUT)', e);
+      return (ok: false, sections: null, denied: false, message: null);
+    }
+  }
+
   /// رمزٌ جديد فوراً، والقديم يتوقّف الآن — لصاحب الحساب وحده (الموظّف
   /// ٤٠٣ `OWNER_ONLY` ولو بكلّ الصلاحيّات). [code] الجديد عند النجاح،
   /// و[message] سبب الرفض العربيّ («لصاحب الحساب فقط»، «غير متاح بعد»).
@@ -560,6 +699,22 @@ String? _s(dynamic v) {
   if (v == null) return null;
   final s = v.toString().trim();
   return s.isEmpty ? null : s;
+}
+
+/// مفتاح قسمٍ كما يرسله الخادم: `true/false`، أو `1/0` (عمود TINYINT)، أو
+/// نصّهما — وإلّا [fallback].
+bool _flag(dynamic v, bool fallback) {
+  if (v is bool) return v;
+  if (v is num) return v != 0;
+  if (v is String) {
+    switch (v.trim().toLowerCase()) {
+      case 'true' || '1':
+        return true;
+      case 'false' || '0':
+        return false;
+    }
+  }
+  return fallback;
 }
 
 /// رسالة الرفض من ردٍّ ٤xx (الـ٥xx يرمي — `validateStatus`) — كرفض رابط

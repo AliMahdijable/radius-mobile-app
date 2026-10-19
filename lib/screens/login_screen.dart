@@ -10,6 +10,8 @@ import 'package:local_auth/local_auth.dart';
 import '../api/account_api.dart';
 import '../core/platform/store_policy.dart';
 import '../core/util/bidi.dart';
+import '../core/widgets/explain_action.dart';
+import '../services/ai_assistant_state.dart';
 import '../widgets/sas_captcha_sheet.dart';
 import '../api/auth_api.dart';
 import '../services/account_service.dart';
@@ -264,17 +266,29 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
     // آيفون: رسالة الخادم بلا «فعّل كوداً»/«رقِّ باقتك» (حدّ الشركات، انتهاء الاشتراك).
     msg = StorePolicy.storeSafe(msg);
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
+    // «اشرحلي» على رفض الخادم (حدّ الشركات/الأجهزة، الاشتراك، رمز الصورة…) —
+    // يظهر حين يقول الخادم إنّ المساعد مفتوح، بتوكن الحساب (لا جلسة شركة بعد).
+    final ask = error ? AiAssistantState.explainFor(msg) : null;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
       SnackBar(
-        content: Text(msg, style: AppType.button(color: AppColors.onBrand)),
+        content: ExplainSnackContent(
+          message: msg,
+          style: AppType.button(color: AppColors.onBrand),
+          request: ask,
+          onExplain: () {
+            messenger.hideCurrentSnackBar();
+            if (ask != null && mounted) openExplain(context, ask);
+          },
+        ),
         backgroundColor: error ? AppColors.error : AppColors.brand,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(R.md),
         ),
         margin: const EdgeInsets.all(Sp.lg),
-        duration: duration ?? const Duration(seconds: 3),
+        duration: explainSnackDuration(duration ?? const Duration(seconds: 3), ask),
       ),
     );
   }

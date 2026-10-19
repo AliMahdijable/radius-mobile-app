@@ -94,11 +94,19 @@ class ProviderService {
     if (!r.ok) return;
     final now = await _currentSession();
     if (generation != _generation || now == null || now != asked) return;
-    // مدير EarthLink (لا موظّف): صلاحيّاته محفوظةٌ من لحظة الدخول، فزرٌّ يُفعّله
-    // الخادم لاحقاً (مثل «إضافة مشترك») لا يظهر بلا خروج ودخول. نحدّثها من
-    // `/api/auth/me` — بشرطٍ صريح: ردٌّ يقول isEmployee=false، وجلسةٌ ليست
-    // موظّفاً محلّيّاً، ومعرّفها المحفوظ الآن معرّف مالك ايرث لنك. مدراء SAS4
-    // لا يُمَسّون (provider ليس earthlink، ومعرّفهم بلا البادئة).
+    // قدرات **المدير** (لا الموظّف) محفوظةٌ من لحظة الدخول، فما يغيّره الخادم أو
+    // الساس بعده لا يظهر بلا خروج ودخول: زرٌّ فعّله الخادم لايرث لنك («إضافة
+    // مشترك»)، أو مفتاحٌ أخرجه من خريطة الساس (`reports.financial`، ١٨ أكتوبر —
+    // كان يقفل رصيد مديرٍ فرعيّ وإيراداته). نحدّثها من `/api/auth/me` لكلّ مدير:
+    // SAS4 الأصل والبعيد وايرث لنك وFTTH — بشروطٍ صريحة كلّها:
+    //  • الردّ يقول isEmployee=false، والجلسة ليست موظّفاً محلّيّاً؛
+    //  • هويّة الردّ (`user.id`) = المعرّف المحفوظ للجلسة حرفيّاً (`42` للأصل،
+    //    `next-gen:175` للبعيد، `earthlink:<idx>`) — ردٌّ بلا هويّة أو عن غيرها
+    //    لا يُكتب على هذه الجلسة؛
+    //  • خريطةٌ فيها مسموحٌ واحدٌ على الأقلّ: خريطةٌ كلّها false (ساسٌ ردّ `/auth`
+    //    بلا قائمة صلاحيّات) غيابُ معلومةٍ لا معلومة، ولا يُقفل بها كلّ شيء —
+    //    قوائم الساس لا تُصدَّق لإضافة أقفال.
+    // ما لا يستوفيها كالفشل: آخر قدراتٍ معروفة تبقى.
     //
     // ⚠️ لا `await` بين الفحص أعلاه والكتابتين: كلتاهما تبدأ في الخطوة نفسها
     // وتضبط الذاكرة قبل أوّل انتظارٍ فيها، فلا تتسلّل جلسةٌ جديدة بين القرار
@@ -106,17 +114,31 @@ class ProviderService {
     final canon = r.canonical;
     await Future.wait<void>([
       _set(r.provider),
-      if (r.provider == 'earthlink' &&
-          r.isEmployee == false &&
+      if (r.isEmployee == false &&
           !PermissionsService.isEmployee &&
-          (now.adminId?.startsWith('earthlink:') ?? false) &&
+          r.userId != null &&
+          r.userId == now.adminId &&
           canon != null &&
-          canon.isNotEmpty)
+          canon.values.any((allowed) => allowed))
         PermissionsService.setManagerCapabilities(
           isSuperAdmin: r.isSuperAdmin,
           canonical: canon,
         ),
     ]);
+  }
+
+  /// الإقلاع بجلسةٍ محفوظة (`SplashScreen`، دخولٌ تلقائيّ): [refreshFromBackend]
+  /// لكلّ جلسة — مديراً بأيّ مزوّد، أو موظّفاً — بعد [tokenReady] (تجديد التوكن
+  /// إن قارب الانتهاء). `/api/auth/*` يتخطّاه معترض التجديد، فتوكنٌ انتهى قبل
+  /// الإقلاع يُرفض بلا إعادة — وتحديث القدرات يضيع حتى الإقلاع التالي.
+  /// والتعثّر في التجديد لا يمنع السؤال: يُسأل بما في الخزنة.
+  static Future<void> refreshOnColdStart(Future<void> tokenReady) async {
+    try {
+      await tokenReady;
+    } catch (e) {
+      if (kDebugMode) debugPrint('ProviderService.refreshOnColdStart: $e');
+    }
+    await refreshFromBackend();
   }
 
   /// الجلسة كما في الخزنة الآن: توكنها ومعرّف مديرها. `null` بلا جلسة أو إن

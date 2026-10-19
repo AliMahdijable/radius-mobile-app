@@ -7,6 +7,7 @@ import '../../api/earthlink_api.dart';
 import '../../api/el_deposit_password.dart';
 import '../../core/util/amount_input.dart';
 import '../../core/util/format.dart';
+import '../../core/widgets/explain_action.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -186,15 +187,20 @@ class _ElTransferScreenState extends State<ElTransferScreen> {
     if (r.message != null) _snack(r.message!, error: true);
   }
 
+  /// الخطأ يحمل «اشرحلي» حين يكون رفضاً من الخادم والمساعد مفعّل
+  /// ([explainableSnackBar]) — وإلّا الشريط كما كان.
   void _snack(String msg, {bool error = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg, style: AppType.button(color: AppColors.onBrand)),
+      explainableSnackBar(
+        context,
+        msg,
+        error: error,
+        style: AppType.button(color: AppColors.onBrand),
         backgroundColor: error ? AppColors.errorFill : AppColors.brand,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.md)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.md)),
         margin: const EdgeInsets.all(Sp.lg),
       ),
     );

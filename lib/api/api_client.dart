@@ -8,6 +8,7 @@ import '../services/auth_storage.dart';
 import '../services/device_id.dart';
 import '../services/employee_session.dart';
 import '../services/session_manager.dart';
+import 'api_error_tap.dart';
 import 'auth_api.dart';
 
 /// تنبيه عام لِلوصول 401 + فشل refresh — تستمع له الـMainShell/Splash
@@ -107,6 +108,9 @@ class ApiClient {
         ..maxConnectionsPerHost = 8,
     );
     d.interceptors.add(_AuthInterceptor(d));
+    // «اشرحلي» (المساعد الذكيّ): آخر ردودٍ مرفوضة في الذاكرة — الرمز والرسالة
+    // والمسار، بلا أيّ قيمةٍ من جسم الطلب. بعد معترض الجلسة: يرى الردّ النهائيّ.
+    d.interceptors.add(ApiErrorTap());
     return d;
   }
 }

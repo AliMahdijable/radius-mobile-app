@@ -40,10 +40,13 @@ Future<void> showConsumptionSheet(BuildContext context, Subscriber sub) {
 /// «500M» و«20G» رقمان لا يُقارَنان بالنظر رغم أنّ العمودين يُقارَنان.
 ///
 /// فالوحدة واحدة للرسم كلّه، تُشتقّ من الأعلى وتُعلَن مرّة فوقه.
+///
+/// الوحدات بـ1024 كبقيّة التطبيق والويب (تفاصيل المشترك، قائمة الاستهلاك،
+/// تقرير الجلسات) وتطبيق MyServices للمشترك — فيرى الوكيل ومشتركه الرقم نفسه.
 ({int div, String name}) _unitFor(int peak) {
-  const gb = 1000 * 1000 * 1000;
-  const mb = 1000 * 1000;
-  const kb = 1000;
+  const gb = 1024 * 1024 * 1024;
+  const mb = 1024 * 1024;
+  const kb = 1024;
   if (peak >= gb) return (div: gb, name: 'GB');
   if (peak >= mb) return (div: mb, name: 'MB');
   if (peak >= kb) return (div: kb, name: 'KB');
@@ -82,9 +85,9 @@ String groupForTest(String n) => _group(n);
 
 String fmtBytes(int b) {
   if (b <= 0) return '0';
-  const gb = 1000 * 1000 * 1000;
-  const mb = 1000 * 1000;
-  const kb = 1000;
+  const gb = 1024 * 1024 * 1024;
+  const mb = 1024 * 1024;
+  const kb = 1024;
   if (b >= gb) {
     return '${_group((b / gb).toStringAsFixed(b >= 10 * gb ? 0 : 1))} GB';
   }

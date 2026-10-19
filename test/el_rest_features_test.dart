@@ -4,13 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:rad_mysvcs/api/cards_api.dart';
 import 'package:rad_mysvcs/api/earthlink_api.dart';
-import 'package:rad_mysvcs/api/el_card_order_gate.dart';
 import 'package:rad_mysvcs/api/employees_api.dart';
 import 'package:rad_mysvcs/api/reports_api.dart';
 import 'package:rad_mysvcs/core/widgets/permission_locked.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/dashboard/widgets/stats_grid.dart';
-import 'package:rad_mysvcs/screens/el/card_order_screen.dart';
 import 'package:rad_mysvcs/screens/el/required_cards_screen.dart';
 import 'package:rad_mysvcs/screens/more_modules_screen.dart';
 import 'package:rad_mysvcs/screens/reports/sessions_report_screen.dart';
@@ -24,8 +22,8 @@ import 'package:rad_mysvcs/theme/colors.dart';
 import 'sim_el/sim_harness.dart';
 
 /// «باقي ميزات ايرث لنك» (البند ٦، ١٨ أكتوبر) — ما لا يحتاج رسماً كاملاً:
-/// المحلّلات المتسامحة، وتصنيف نتيجة طلب الكارتات (مالٌ حقيقيّ)، وأبواب
-/// الدخول (لصاحب الحساب وحده)، وما يمنعه المزوّد لا الصلاحيّة.
+/// المحلّلات المتسامحة، وما يمنعه المزوّد لا الصلاحيّة. و(١٩ أكتوبر) «طلب
+/// الكارتات» أُلغي نهائيّاً والحذف مخفيٌّ لايرث لنك: لا بطاقة ولا زرّ لهما.
 void main() {
   tearDown(() {
     ProviderService.debugSet(null);
@@ -328,96 +326,9 @@ void main() {
     });
   });
 
-  // ═══════════════════════ طلب الكارتات ═══════════════════════
-  group('طلب الكارتات — النموذج والتصنيف', () {
-    test('السجلّ متسامح: أسماءٌ بديلة، وحالات ايرث لنك بالعربيّة', () {
-      final o = ElCardOrder.fromJson({
-        'batchNo': 77,
-        'status': 'Approved',
-        'createdAt': '18/10/2026 02:05 PM',
-        'cards': [
-          {'name': 'Economy', 'amount': 10, 'price': 20000, 'approvedCards': [1, 2, 3]},
-          {'account_name': 'Plus', 'count': '2'},
-        ],
-      })!;
-      expect(o.batchNo, 77);
-      expect(o.totalCards, 12);
-      expect(o.totalApproved, 3);
-      expect(o.lines[1].name, 'Plus');
-      expect(elCardOrderStatusLabel(o).$1, 'معتمد');
-      expect(elOrderDate(o.createdAt), '2026/10/18 · 14:05');
-
-      String label(String? s) => elCardOrderStatusLabel(ElCardOrder(
-          batchNo: 1,
-          statusRaw: s,
-          createdAt: null,
-          canCancel: false,
-          lines: const [])).$1;
-      expect(label('Pending'), 'قيد المراجعة');
-      expect(label('InReview'), 'قيد المراجعة');
-      expect(label('Rejected'), 'مرفوض');
-      expect(label('Canceled'), 'ملغى');
-      expect(label(null), '—');
-      expect(label('Weird'), 'Weird', reason: 'المجهول كما هو لا تخميناً');
-      expect(ElCardOrder.fromJson(const {}), isNull);
-    });
-
-    test('التاريخ: صيغ ايرث لنك وISO، وغيرها كما هو', () {
-      expect(elOrderDate('01/10/2026 11:00 AM'), '2026/10/01 · 11:00');
-      expect(elOrderDate('01/10/2026 12:30 AM'), '2026/10/01 · 00:30');
-      expect(elOrderDate('01/10/2026'), '2026/10/01');
-      expect(elOrderDate('2026-10-11T09:30:00'), '2026/10/11 · 09:30');
-      expect(elOrderDate('أمس'), 'أمس');
-      expect(elOrderDate('  '), isNull);
-    });
-
-    test('التوقيع: الترتيب لا يغيّره، والصفر لا يدخله', () {
-      expect(
-        elCardOrderSignature(const [
-          (profileId: 12, count: 4),
-          (profileId: 7, count: 18),
-          (profileId: 13, count: 0),
-        ]),
-        elCardOrderSignature(const [
-          (profileId: 7, count: 18),
-          (profileId: 12, count: 4),
-        ]),
-      );
-      expect(
-          elCardOrderSignature(const [(profileId: 7, count: 18)]),
-          isNot(elCardOrderSignature(const [(profileId: 7, count: 17)])));
-    });
-
-    test('ردٌّ وصل: النجاح، والرفض الصريح، و«ربّما أُرسل» برمزه', () {
-      final ok = EarthlinkApi.cardOrderResultFromBody(
-          {'success': true, 'message': 'تم إرسال طلب الكروت'});
-      expect(ok.ok, isTrue);
-      expect(ok.unclear, isFalse);
-      final dup = EarthlinkApi.cardOrderResultFromBody({
-        'success': false,
-        'code': 'RECENT_DUPLICATE',
-        'message': 'أُرسل هذا الطلب قبل لحظات'
-      });
-      expect(dup.ok, isFalse);
-      expect(dup.unclear, isFalse);
-      expect(dup.message, 'أُرسل هذا الطلب قبل لحظات');
-      final maybe = EarthlinkApi.cardOrderResultFromBody(
-          {'success': false, 'code': 'ORDER_UNCONFIRMED'});
-      expect(maybe.unclear, isTrue);
-      // طلبٌ **سابق** ربّما وصل (هذا لم يُرسَل): رمزاه يصلان كما هما، لا «ربّما أُرسل
-      // هذا» — والشاشة تُبقي التنبيه وتطلب إقراراً بمفتاحٍ جديد.
-      for (final code in const ['ORDER_UNRESOLVED', 'ORDER_MAYBE_PLACED']) {
-        final r = EarthlinkApi.cardOrderResultFromBody(
-            {'success': false, 'code': code, 'message': 'ربما وصلت'});
-        expect(r.ok, isFalse, reason: code);
-        expect(r.unclear, isFalse, reason: code);
-        expect(r.code, code);
-      }
-      expect(EarthlinkApi.codeOrderUnresolved, 'ORDER_UNRESOLVED');
-      expect(EarthlinkApi.codeOrderMaybePlaced, 'ORDER_MAYBE_PLACED');
-    });
-
-    test('«الكارتات المطلوبة»: سعر الكارت (ما يحسب به الطلب) للرصيد المطلوب، والكلفة احتياطاً', () {
+  // ═══════════════════════ الكارتات المطلوبة ═══════════════════════
+  group('«الكارتات المطلوبة» — النموذج', () {
+    test('«الكارتات المطلوبة»: سعر الكارت (ما تُشترى به) للرصيد المطلوب، والكلفة احتياطاً', () {
       final withPrice = ElNeededCard.fromJson(const {
         'profile_id': 7,
         'name': 'Economy',
@@ -464,11 +375,13 @@ void main() {
 
   // ═══════════════════════ ما يمنعه المزوّد ═══════════════════════
   group('الحذف والموقع', () {
-    test('الحذف: سببٌ لجلسة ايرث لنك، ولا شيء لـSAS4', () {
+    test('الحذف: مخفيٌّ لجلسة ايرث لنك (قرار المالك ١٩ أكتوبر)، وكما كان لـSAS4 وFTTH', () {
       ProviderService.debugSet('earthlink');
-      expect(subscriberDeleteUnavailableReason(), isNotNull);
+      expect(subscriberDeleteHidden(), isTrue);
       ProviderService.debugSet(null);
-      expect(subscriberDeleteUnavailableReason(), isNull);
+      expect(subscriberDeleteHidden(), isFalse);
+      ProviderService.debugSet('ftth');
+      expect(subscriberDeleteHidden(), isFalse);
     });
 
     test('الموقع لايرث لنك كالساس: بالصلاحيّة وحدها', () {
@@ -488,12 +401,10 @@ void main() {
     });
   });
 
-  // ═══════════════════════ أبواب «طلب الكارتات» ═══════════════════════
-  group('«طلب الكارتات» لصاحب الحساب وحده', () {
-    // ومفتاح الخادم (`el_card_order`) يحكم فوقها — تفصيله في
-    // el_card_order_gate_test؛ هنا الحال معروفة سلفاً.
-    tearDown(ElCardOrderGate.reset);
-
+  // ═══════════════════════ «طلب الكارتات» أُلغي ═══════════════════════
+  // قرار المالك ١٩ أكتوبر: لا بطاقة في «قوائم أخرى» ولا زرّ في «الكارتات
+  // المطلوبة» — لأحدٍ (مالكاً أو موظّفاً) — ولا نداء لمسارات الطلب أصلاً.
+  group('«طلب الكارتات» أُلغي — لا مدخل له', () {
     Finder byTypeName(String name) =>
         find.byWidgetPredicate((w) => w.runtimeType.toString() == name);
 
@@ -512,41 +423,30 @@ void main() {
         of: find.byIcon(LucideIcons.shoppingCart),
         matching: byTypeName('_ModuleCard'));
 
-    testWidgets('مالك ايرث لنك والطلب مفتوحٌ بالخادم: البطاقة مفتوحة', (t) async {
+    testWidgets('مالك ايرث لنك: لا بطاقة «طلب الكارتات» — والتحويل باقٍ', (t) async {
       ProviderService.debugSet('earthlink');
       PermissionsService.debugSet(isEmployee: false);
-      ElCardOrderGate.debugSet(true);
-      await showMore(t);
-      expect(orderCard(), findsOneWidget);
-      expect(find.descendant(of: orderCard(), matching: find.byType(PermLockIcon)),
-          findsNothing);
-      expect(find.text('طلب الكارتات'), findsOneWidget);
-    });
-
-    testWidgets('مالك ايرث لنك والطلب موقوفٌ بالخادم: لا بطاقة', (t) async {
-      ProviderService.debugSet('earthlink');
-      PermissionsService.debugSet(isEmployee: false);
-      ElCardOrderGate.debugSet(false);
       await showMore(t);
       expect(orderCard(), findsNothing);
+      expect(find.text('طلب الكارتات'), findsNothing);
+      expect(find.text('تحويل الرصيد'), findsOneWidget);
+      expect(find.text('الكارتات المطلوبة'), findsOneWidget);
     });
 
-    testWidgets('موظّف ايرث لنك: لا بطاقة (مال صاحب الحساب)', (t) async {
+    testWidgets('موظّف ايرث لنك وشركات SAS4: لا بطاقة', (t) async {
       ProviderService.debugSet('earthlink');
       PermissionsService.debugSet(
           isEmployee: true, permissions: const {'reports.financial': true});
       await showMore(t);
       expect(orderCard(), findsNothing);
-    });
-
-    testWidgets('شركات SAS4: لا بطاقة', (t) async {
+      ProviderService.debugSet(null);
       PermissionsService.debugSet(isEmployee: false);
       await showMore(t);
       expect(orderCard(), findsNothing);
     });
   });
 
-  group('«اطلب هذه الكارتات» من «الكارتات المطلوبة»', () {
+  group('«الكارتات المطلوبة» توقّعٌ للعرض فقط', () {
     late SimServer server;
     setUpAll(simSetUpAll);
     setUp(() async {
@@ -562,32 +462,24 @@ void main() {
     });
 
     const v = SimVariant(390, dark: false);
-    const label = 'اطلب هذه الكارتات من ايرث لنك';
 
-    testWidgets('المالك: الزرّ يفتح الطلب بأعداد المطلوب', (t) async {
+    testWidgets('المالك: لا زرّ «اطلب هذه الكارتات» ولا نداء لمسارات الطلب', (t) async {
       PermissionsService.debugSet(isEmployee: false);
-      // مفتاح الخادم مفتوح: السلّة الفارغة تُرفض بعد فحصه.
-      ElCardOrderGate.reset();
-      server.reply('POST', '/api/v2/el/card-order/quote', 400,
-          {'success': false, 'message': 'حدّد الباقة والعدد'});
       await pumpSim(t, v, home: (_) => const ElRequiredCardsScreen());
-      expect(find.text(label), findsOneWidget);
-      await t.tap(find.text(label));
-      await t.pumpAndSettle();
-      final screen = t.widget<ElCardOrderScreen>(find.byType(ElCardOrderScreen));
-      expect(screen.days, 1, reason: 'مدّة الشاشة (يوم)');
-      expect(screen.initialCounts, {7: 8}, reason: 'المطلوب > ٠ وحده');
-      // والطلب نفسه لم يُرسَل — التأكيد هناك.
-      expect(server.calls('POST', '/api/v2/el/card-order'), isEmpty);
+      expect(find.text('Economy'), findsOneWidget);
+      expect(find.text('اطلب هذه الكارتات من ايرث لنك'), findsNothing);
+      expect(find.byIcon(LucideIcons.shoppingCart), findsNothing);
+      expect(server.requests.where((r) => r.path.contains('/el/card-order')),
+          isEmpty);
       AppColors.setDarkMode(false);
     });
 
-    testWidgets('الموظّف: لا زرّ', (t) async {
+    testWidgets('الموظّف: كذلك', (t) async {
       PermissionsService.debugSet(
           isEmployee: true, permissions: const {'reports.financial': true});
       await pumpSim(t, v, home: (_) => const ElRequiredCardsScreen());
       expect(find.text('Economy'), findsOneWidget);
-      expect(find.text(label), findsNothing);
+      expect(find.text('اطلب هذه الكارتات من ايرث لنك'), findsNothing);
     });
   });
 }

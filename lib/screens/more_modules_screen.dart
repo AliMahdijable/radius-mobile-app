@@ -6,10 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../api/cards_api.dart';
-import '../api/el_card_order_gate.dart';
 import '../api/self_deposit_api.dart';
 import '../core/util/format.dart';
 import '../core/widgets/permission_locked.dart';
+import '../services/ai_assistant_state.dart';
+import '../services/app_resumed_signal.dart';
 import '../services/permissions_service.dart';
 import '../services/provider_service.dart';
 import '../theme/colors.dart';
@@ -17,7 +18,6 @@ import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'broadcast/broadcast_screen.dart';
 import 'cards/cards_screen.dart';
-import 'el/card_order_screen.dart';
 import 'el/required_cards_screen.dart';
 import 'el/transfer_screen.dart';
 import 'telegram/telegram_screen.dart';
@@ -30,6 +30,7 @@ import 'settlements/settlements_screen.dart';
 import 'managers/managers_screen.dart';
 import 'packages/packages_screen.dart';
 import 'portal_settings/portal_settings_screen.dart';
+import 'assistant/assistant_sheet.dart';
 import 'reports_screen.dart';
 import 'topup/topup_screen.dart';
 
@@ -61,15 +62,16 @@ class MoreModulesScreen extends StatelessWidget {
         ProviderService.changes,
         // «شحن رصيد الصفحة» — الاستماع نفسه يطلب حالتها إن كانت قديمة.
         SelfDepositState.gate,
-        // «طلب الكارتات» (ايرث لنك) — مفتاح الخادم، يُسأل كذلك عند الاستماع.
-        ElCardOrderGate.open,
+        // «كيف أسوّي؟» (المساعد الذكيّ) — مطفأٌ افتراضيّاً، يُسأل عند الاستماع.
+        AiAssistantState.gate,
+        // العودة للتطبيق ⇒ يُسأل ثانيةً (بمهلته) — فتشغيله من الخادم يظهر.
+        AppResumedSignal.tick,
       ]),
       builder: (context, _) {
-        // والمزوّد قد يُعرف بعد أوّل استماع (`/api/auth/me`) — فيُسأل هنا أيضاً؛
-        // السؤال لصاحب حساب ايرث لنك وحده، ومرّةً كلّ بضع دقائق على الأكثر.
-        scheduleMicrotask(() {
-          ElCardOrderGate.ensureFresh();
-        });
+        // «كيف أسوّي؟»: الشاشة تبقى حيّةً طول الجلسة (IndexedStack) فالاستماع
+        // يسأل مرّةً وحدها — وأوّل سؤالٍ فشل، أو شُغّل المساعد بعده، يُعرف هنا
+        // (مهلة ٥ دقائق وتبريد ٣٠ث بعد الفشل: طلبٌ واحد على الأكثر).
+        scheduleMicrotask(AiAssistantState.ensureFresh);
         final stock = CardsState.badge.value;
         const rk = [
           'reports.financial',
@@ -95,6 +97,19 @@ class MoreModulesScreen extends StatelessWidget {
         const pkgKeys = ['packages.view', 'packages.edit_prices'];
         final cardsLocked = !Perms.hasAny(cardKeys);
         final cards = <Widget>[
+          // ١٨ أكتوبر: «كيف أسوّي؟» — المساعد الذكيّ (يشرح ويرشد، بلا أيّ
+          // عمليّة). أوّل البطاقات حين يقول الخادم إنّه مفتوحٌ لهذا الحساب
+          // (مطفأٌ افتراضيّاً ⇒ لا بطاقة ولا قفل). وموظّفٌ بلا «المساعد الذكي»
+          // يراها بمكانها مقفلةً — والنقر رسالةٌ بلا أيّ طلب.
+          if (AiAssistantState.visible)
+            _ModuleCard(
+              locked: AiAssistantState.askLocked,
+              icon: LucideIcons.sparkles,
+              tone: AppTone.brand,
+              title: 'ai.ask_entry'.tr(),
+              subtitle: 'ai.ask_hint_card'.tr(),
+              onTap: () => AssistantSheet.showAsk(context),
+            ),
           // مطلب 2026-08-12: التقارير صارت أوّل عنصر (نُقلت من tab رئيسي
           // لأن أجهزة الشبكة أكثر استعمالاً يومياً للـWISP).
           // مفتوحةٌ لأي مدير عادي، وللموظّف لو عنده أي صلاحيّة reports.*،
@@ -348,22 +363,8 @@ class MoreModulesScreen extends StatelessWidget {
                 MaterialPageRoute(builder: (_) => const ElTransferScreen()),
               ),
             ),
-            // «طلب الكارتات» — دفعة كارتات تعبئة من ايرث لنك نفسها يُخصم ثمنها
-            // من رصيد الإيداع: لصاحب الحساب وحده كالتحويل (الخادم يردّ الموظّف
-            // بـ403 OWNER_ONLY)، بتأكيدٍ بالكلفة وحارس تكرار داخل الشاشة.
-            // ويتبع مفتاح الخادم ([ElCardOrderGate]): موقوفٌ أو لم يُعرف ⇒ لا
-            // بطاقة (كـ«شحن رصيد الصفحة») — لا نموذج يُملأ ثمّ يُرفض بـ«موقوف».
-            if (ElCardOrderGate.visible)
-              _ModuleCard(
-                icon: LucideIcons.shoppingCart,
-                tone: AppTone.brand,
-                title: 'طلب الكارتات',
-                subtitle: 'اطلب كارتات تعبئة من ايرث لنك — يُخصم من رصيد الإيداع',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                      builder: (_) => const ElCardOrderScreen()),
-                ),
-              ),
+            // «طلب الكارتات» من ايرث لنك أُلغي نهائيّاً (قرار المالك ١٩ أكتوبر):
+            // لا بطاقة ولا شاشة — والخادم يردّ مساراته «طلب الكروت غير متاح».
             // «الكارتات المطلوبة» — توقّع الكارتات والرصيد (بكلفة الشركة)
             // لمدّة؛ بلا أسعار بيع (تلك بشاشة الباقات). من «التقارير الماليّة»
             // (المدير دائماً؛ الموظّف بالمفتاح — الخادم يفرضه).
