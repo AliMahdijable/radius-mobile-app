@@ -46,6 +46,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
 
   bool _onlineOnly = false;
   String _query = '';
+  final _onuScroll = ScrollController();
 
   /// اللقطة السابقة ولحظتُها — منهما يُحسب المعدّل.
   ///
@@ -153,6 +154,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
+    _onuScroll.dispose();
     _gen++;
     super.dispose();
   }
@@ -636,7 +638,8 @@ class _VsolLivePanelState extends State<VsolLivePanel>
       );
 
   List<Widget> _sections(VsolOltStats s) {
-    final shown = s.onus.where(_match).toList();
+    // Keep each subscriber's position in PON/ONU order when filtering.
+    final shown = s.onus.indexed.where((entry) => _match(entry.$2)).toList();
     return [
       if (s.ponPorts.isNotEmpty) ...[
         const SizedBox(height: Sp.md),
@@ -724,7 +727,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
         ]),
       );
 
-  Widget _onuContent(List<VsolOnu> shown) => Column(
+  Widget _onuContent(List<(int, VsolOnu)> shown) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [
@@ -745,7 +748,10 @@ class _VsolLivePanelState extends State<VsolLivePanel>
                       borderSide: BorderSide(color: AppColors.border),
                     ),
                   ),
-                  onChanged: (v) => setState(() => _query = v),
+                  onChanged: (v) {
+                    if (_onuScroll.hasClients) _onuScroll.jumpTo(0);
+                    setState(() => _query = v);
+                  },
                 ),
               ),
             ),
@@ -753,7 +759,10 @@ class _VsolLivePanelState extends State<VsolLivePanel>
             FilterChip(
               label: Text('المتّصلون', style: AppType.micro()),
               selected: _onlineOnly,
-              onSelected: (v) => setState(() => _onlineOnly = v),
+              onSelected: (v) {
+                if (_onuScroll.hasClients) _onuScroll.jumpTo(0);
+                setState(() => _onlineOnly = v);
+              },
               visualDensity: VisualDensity.compact,
             ),
           ]),
@@ -765,11 +774,38 @@ class _VsolLivePanelState extends State<VsolLivePanel>
                   style: AppType.micro(color: AppColors.textLow)),
             )
           else
-            for (final o in shown) _onuRow(o),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight:
+                    (MediaQuery.sizeOf(context).height * 0.52).clamp(240, 420),
+              ),
+              child: Scrollbar(
+                controller: _onuScroll,
+                thumbVisibility: true,
+                child: ListView.builder(
+                  key: PageStorageKey('vsol-${widget.device.id}-onu-list'),
+                  controller: _onuScroll,
+                  primary: false,
+                  shrinkWrap: true,
+                  padding: const EdgeInsetsDirectional.only(end: 10),
+                  itemCount: shown.length,
+                  findChildIndexCallback: (key) {
+                    final index = shown
+                        .indexWhere((entry) => ValueKey(entry.$2.label) == key);
+                    return index < 0 ? null : index;
+                  },
+                  itemBuilder: (context, index) {
+                    final (position, onu) = shown[index];
+                    return _onuRow(onu, position + 1);
+                  },
+                ),
+              ),
+            ),
         ],
       );
 
-  Widget _onuRow(VsolOnu o) => Container(
+  Widget _onuRow(VsolOnu o, int number) => Container(
+        key: ValueKey(o.label),
         margin: const EdgeInsets.only(bottom: 6),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
@@ -787,6 +823,19 @@ class _VsolLivePanelState extends State<VsolLivePanel>
                 color: o.online ? AppColors.success : AppColors.textLow,
                 borderRadius: BorderRadius.circular(R.sm),
               ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                color: AppColors.brandSoftBg,
+                borderRadius: BorderRadius.circular(R.sm),
+              ),
+              child: Text('$number',
+                  semanticsLabel: 'المشترك $number',
+                  style: AppType.microBold(color: AppColors.brand)),
             ),
             const SizedBox(width: 8),
             Expanded(
