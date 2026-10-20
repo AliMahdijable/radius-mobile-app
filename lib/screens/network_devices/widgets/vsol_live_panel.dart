@@ -839,26 +839,34 @@ class _VsolLivePanelState extends State<VsolLivePanel>
         ),
       );
     }
-    return ExpansionTile(
-      key: PageStorageKey('vsol-${widget.device.id}-${o.label}-macs'),
-      tilePadding: EdgeInsets.zero,
-      childrenPadding: const EdgeInsets.only(bottom: 6),
-      dense: true,
-      visualDensity: VisualDensity.compact,
-      iconColor: AppColors.textLow,
-      collapsedIconColor: AppColors.textLow,
-      title: Text('MACs المتعلّمة (${o.learnedMacs.length})',
-          style: AppType.micro(color: AppColors.textMid)),
-      subtitle: Text('أجهزة خلف الـONU · ${_clock(o.learnedMacsReadAt!)}',
-          style: AppType.micro(color: AppColors.textLow)),
-      children: [
-        for (final mac in o.learnedMacs)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: SelectableText(mac,
-                textDirection: TextDirection.ltr, style: AppType.micro()),
-          ),
-      ],
+    return Material(
+      type: MaterialType.transparency,
+      child: ExpansionTile(
+        key: PageStorageKey('vsol-${widget.device.id}-${o.label}-macs'),
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(bottom: 6),
+        dense: true,
+        visualDensity: VisualDensity.compact,
+        iconColor: AppColors.textLow,
+        collapsedIconColor: AppColors.textLow,
+        title: Text('MACs المتعلّمة (${o.learnedMacs.length})',
+            style: AppType.micro(color: AppColors.textMid)),
+        subtitle: Text('أجهزة خلف الـONU · ${_clock(o.learnedMacsReadAt!)}',
+            style: AppType.micro(color: AppColors.textLow)),
+        children: [
+          for (final mac in o.learnedMacs)
+            Align(
+              alignment: Alignment.centerLeft,
+              // ExpansionTile stores a bool in PageStorage. Each selectable
+              // line has a scroll position and must use a separate storage key.
+              child: SelectableText(mac,
+                  key: PageStorageKey(
+                      'vsol-${widget.device.id}-${o.label}-$mac'),
+                  textDirection: TextDirection.ltr,
+                  style: AppType.micro()),
+            ),
+        ],
+      ),
     );
   }
 
