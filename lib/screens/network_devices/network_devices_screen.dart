@@ -30,6 +30,8 @@ import '../../theme/typography.dart';
 import 'detected_model.dart';
 import 'model_detector.dart';
 import '../../core/util/error_text.dart';
+import '../../core/util/fit_hint.dart';
+import '../top_actions.dart';
 
 /// قائمة أجهزة الشبكة. راجع project_devices_monitoring_plan.
 ///
@@ -720,210 +722,86 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
         child: _buildSelectionScaffold(),
       );
     }
+    // ٢٠ أكتوبر (طلب المالك): لا AppBar — رأس التبويب الموحّد كباقي التبويبات:
+    // «الأجهزة» يميناً، وأزرار الأعلى المشتركة (المساعد · الجرس · الترس)
+    // يساراً بمكانها من كلّ تبويب ([TabHeader]).
+    //
+    // وأدوات القائمة التي كان الشريط يحملها (تنبيهات الأجهزة · التحديث ·
+    // المزيد · الإضافة) نزلت جنب البحث في سطرٍ **مثبَّت** ([_toolsBar]): تبقى
+    // ظاهرةً مع التمرير كما كانت، والعنوان وحده يمرّ مع القائمة — فالمساحة
+    // الثابتة أعلى الشاشة كما كانت تقريباً (سطرٌ مكان الشريط).
+    //
+    // ⚠️ والسطر نفسه يظهر أثناء التحميل والخطأ (بلا تمرير): «تحديث» هو طريق
+    // إعادة المحاولة الوحيد بعد فشل التحميل، و«+» يضيف أوّل جهاز.
+    const header = Padding(
+      padding: EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, 0),
+      child: TabHeader(title: 'الأجهزة'),
+    );
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        title: const Text('الأجهزة'),
-        backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.textHi,
-        elevation: 0,
-        actions: [
-          // Bell icon مع badge — long-press = اختبار إشعار تجريبي
-          ValueListenableBuilder<int>(
-            valueListenable: DeviceAlertsService.instance.unreadCount,
-            builder: (context, count, _) {
-              return Stack(clipBehavior: Clip.none, children: [
-                GestureDetector(
-                  onLongPress: _testAlert,
-                  child: IconButton(
-                    icon: Icon(
-                      count > 0 ? LucideIcons.bellDot : LucideIcons.bell,
-                      size: 20,
-                      color: count > 0 ? AppColors.error : AppColors.textMid,
-                    ),
-                    onPressed: _openAlerts,
-                    tooltip: 'التنبيهات (اضغط مطوّلاً للاختبار)',
+      body: SafeArea(
+        bottom: false,
+        child: _loading || _error != null
+            ? Column(
+                children: [
+                  header,
+                  _toolsBar(),
+                  Expanded(
+                    child: _loading
+                        ? const SkeletonDeviceList()
+                        : Center(
+                            child: Text(_error!,
+                                style: TextStyle(color: AppColors.textMid))),
                   ),
-                ),
-                if (count > 0)
-                  Positioned(
-                    right: 4,
-                    top: 6,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 5, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: AppColors.error,
-                        borderRadius: BorderRadius.circular(R.sm),
-                        border:
-                            Border.all(color: AppColors.surface, width: 1.5),
-                      ),
-                      constraints:
-                          const BoxConstraints(minWidth: 16, minHeight: 16),
-                      child: Text(
-                        count > 99 ? '99+' : '$count',
-                        style: AppType.daysWordBold(color: AppColors.onBrand),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-              ]);
-            },
-          ),
-          // زر تحديث — يظهر animation دوران أثناء الـprobe
-          _probing
-              ? Container(
-                  padding: const EdgeInsets.all(10),
-                  width: 40,
-                  height: 40,
-                  child: const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2)),
-                )
-              : IconButton(
-                  icon: const Icon(LucideIcons.refreshCw, size: 20),
-                  onPressed: _refresh,
-                  tooltip: 'تحديث فوري',
-                ),
-          // ── ما تبقّى في قائمةٍ منسدلة ──────────────────────────────
-          //
-          // ⚠️ كانت سبعة أزرارٍ في الشريط، وكلّ `IconButton` عرضه ٤٨
-          // نقطة بحكم `kMinInteractiveDimension`. أي ٣٣٦ نقطة للأزرار
-          // وحدها على شاشةٍ عرضها ٣٩٠ — فلم يبقَ للعنوان شيء، وظهر
-          // «الأجهزة» مقصوصاً إلى «الأ…».
-          //
-          // والبقاء في الشريط حقٌّ يُكتسب: الإضافة والتحديث يُستعملان
-          // في كلّ زيارة، والجرس يحمل **عدداً** لا يُرى داخل قائمة
-          // مطويّة. وما عداها يُفتح مرّةً كلّ حين — وضغطةٌ زائدة ثمنٌ
-          // أرخص من عنوانٍ مقصوص.
-          //
-          // ⚠️ والدوّارات لا تدخل القائمة: `_detecting` تحتاج أن تُرى
-          // وهي تعمل، فتبقى في الشريط بديلاً عن العنصر نفسه.
-          if (_detecting)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2)),
-            )
-          else
-            PopupMenuButton<String>(
-              tooltip: 'المزيد',
-              icon: const Icon(LucideIcons.ellipsisVertical, size: 20),
-              onSelected: (v) {
-                switch (v) {
-                  case 'wall':
-                    _openWall();
-                  case 'sort':
-                    _pickSort();
-                  case 'regions':
-                    _openRegions();
-                  case 'scan':
-                    _openBulkScan();
-                  case 'detect':
-                    _detectModels();
-                }
-              },
-              itemBuilder: (_) => [
-                _menuItem('wall', LucideIcons.layoutGrid, 'نظرة عامّة'),
-                // الترتيب الحاليّ في التسمية — القائمة المطويّة تُخفي
-                // الأيقونة التي كانت تدلّ عليه.
-                _menuItem('sort', _sortField.icon, 'الترتيب · ${_sortField.label}'),
-                if (Perms.has('devices.manage'))
-                  _menuItem('regions', LucideIcons.mapPin, 'إدارة المناطق'),
-                if (Perms.has('devices.manage'))
-                  _menuItem('scan', LucideIcons.radar, 'اكتشاف أجهزة الشبكة'),
-                // كشف الطُرُز — لا يظهر إلّا حين يوجد جهاز يحتاجه، ولا
-                // يُشغَّل تلقائيّاً لأنّه يفتح جلسة مصادَقة على كلّ
-                // جهاز، وذلك قرار المستخدم لا سلوك خفيّ.
-                if (_all.any(DetectedModel.needsDetection))
-                  _menuItem('detect', LucideIcons.scanSearch, 'كشف طُرُز الأجهزة'),
-              ],
-            ),
-          // زر "+" إضافة جهاز — manage tier فقط
-          if (Perms.has('devices.manage'))
-            Padding(
-              // ⚠️ `EdgeInsetsDirectional` لا `EdgeInsets`: الثانية
-              //    فيزيائيّة، فـ`left: 4` كانت تعني أربع نقاطٍ من
-              //    الحافّة **اليسرى** — وهي في العربيّة حافّة الشاشة
-              //    التي ينتهي عندها شريط الإجراءات. فبدا الزرّ ملتصقاً
-              //    بالحرف. و`start/end` تتبعان اتّجاه القراءة فتصحّ في
-              //    اللغتين معاً.
-              //
-              // و`Sp.md` لا رقماً اعتباطيّاً: هي حافّة شريط البحث
-              // تحته (`EdgeInsets.fromLTRB(Sp.md, …)`). فيُحاذي الزرّ
-              // حافّة المحتوى، ويُقرأ الفراغ متعمَّداً لا منسيّاً.
-              padding: const EdgeInsetsDirectional.only(start: Sp.sm, end: Sp.md),
-              child: Material(
-                color: AppColors.brand,
-                shape: const CircleBorder(),
-                child: InkWell(
-                  onTap: () => _openForm(),
-                  customBorder: const CircleBorder(),
-                  child: const SizedBox(
-                    width: 36,
-                    height: 36,
-                    child: Icon(LucideIcons.plus,
-                        size: 18, color: AppColors.onBrand),
-                  ),
+                ],
+              )
+            : RefreshIndicator(
+                onRefresh: _refresh,
+                child: CustomScrollView(
+                  slivers: [
+                    const SliverToBoxAdapter(child: header),
+                    // البحث والأدوات — مثبَّتان أعلى القائمة (مكان الشريط).
+                    PinnedHeaderSliver(child: _toolsBar()),
+                    // Summary row: total + online + offline
+                    SliverToBoxAdapter(child: _summaryRow()),
+                    // Type filters (chips الحالة أُزيلت — تدمج بكارتات الملخّص)
+                    SliverToBoxAdapter(child: _typeFilterRow()),
+                    SliverToBoxAdapter(child: _regionFilterRow()),
+                    const SliverToBoxAdapter(child: SizedBox(height: 8)),
+                    // List
+                    devices.isEmpty
+                        ? SliverFillRemaining(
+                            hasScrollBody: false,
+                            child: _EmptyDevices(
+                              hasActiveFilter: _all.isNotEmpty &&
+                                  (_typeFilter != null ||
+                                      _statusFilter != null ||
+                                      _regionFilter != null ||
+                                      _search.isNotEmpty),
+                              onClearFilter: () => setState(() {
+                                _typeFilter = null;
+                                _statusFilter = null;
+                                _regionFilter = null;
+                                _search = '';
+                                _searchCtrl.clear();
+                              }),
+                            ),
+                          )
+                        : SliverPadding(
+                            padding: EdgeInsets.fromLTRB(
+                                Sp.md, 0, Sp.md, Inset.tabBar(context)),
+                            sliver: SliverList.separated(
+                              itemCount: devices.length,
+                              itemBuilder: (_, i) =>
+                                  _deviceCard(devices[i]),
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 8),
+                            ),
+                          ),
+                  ],
                 ),
               ),
-            ),
-        ],
       ),
-      body: _loading
-          ? const SkeletonDeviceList()
-          : _error != null
-              ? Center(
-                  child:
-                      Text(_error!, style: TextStyle(color: AppColors.textMid)))
-              : RefreshIndicator(
-                  onRefresh: _refresh,
-                  child: CustomScrollView(
-                    slivers: [
-                      // Search bar (sticky-ish أعلى)
-                      SliverToBoxAdapter(child: _searchBar()),
-                      // Summary row: total + online + offline
-                      SliverToBoxAdapter(child: _summaryRow()),
-                      // Type filters (chips الحالة أُزيلت — تدمج بكارتات الملخّص)
-                      SliverToBoxAdapter(child: _typeFilterRow()),
-                      SliverToBoxAdapter(child: _regionFilterRow()),
-                      const SliverToBoxAdapter(child: SizedBox(height: 8)),
-                      // List
-                      devices.isEmpty
-                          ? SliverFillRemaining(
-                              hasScrollBody: false,
-                              child: _EmptyDevices(
-                                hasActiveFilter: _all.isNotEmpty &&
-                                    (_typeFilter != null ||
-                                        _statusFilter != null ||
-                                        _regionFilter != null ||
-                                        _search.isNotEmpty),
-                                onClearFilter: () => setState(() {
-                                  _typeFilter = null;
-                                  _statusFilter = null;
-                                  _regionFilter = null;
-                                  _search = '';
-                                  _searchCtrl.clear();
-                                }),
-                              ),
-                            )
-                          : SliverPadding(
-                              padding: EdgeInsets.fromLTRB(
-                                  Sp.md, 0, Sp.md, Inset.tabBar(context)),
-                              sliver: SliverList.separated(
-                                itemCount: devices.length,
-                                itemBuilder: (_, i) =>
-                                    _deviceCard(devices[i]),
-                                separatorBuilder: (_, __) =>
-                                    const SizedBox(height: 8),
-                              ),
-                            ),
-                    ],
-                  ),
-                ),
     );
   }
 
@@ -1203,10 +1081,127 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     );
   }
 
+  /// البحث بعرض الشاشة — لوضع التحديد (رأسه شريط العدد والإجراءات).
   Widget _searchBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, 0),
-      child: TextField(
+      child: _searchField(),
+    );
+  }
+
+  /// سطر البحث وأدوات القائمة — كانت الأدوات في الشريط العلويّ حتى ٢٠ أكتوبر،
+  /// ثمّ صار رأس التبويب الموحّد ([TabHeader]) فنزلت جنب البحث، والسطر مثبَّتٌ
+  /// أعلى القائمة فتبقى ظاهرةً مع التمرير كما كانت.
+  ///
+  /// ⚠️ كانت سبعة أزرارٍ في الشريط فقُصّ العنوان إلى «الأ…»؛ والبقاء ظاهراً حقٌّ
+  /// يُكتسب: الإضافة والتحديث يُستعملان في كلّ زيارة، والتنبيهات تحمل **عدداً**
+  /// لا يُرى داخل قائمة مطويّة. وما عداها يُفتح مرّةً كلّ حين فمكانه «المزيد».
+  /// والدوّارات لا تدخل القائمة: الفحص والكشف يُريان وهما يعملان، مكان زرّيهما.
+  Widget _toolsBar() {
+    // الأدوات بمقاس أزرار الأعلى وفراغها، وطرفها على حشوة الرأس (‎16) — فكلّ
+    // أداةٍ تحت نظيرها فوقها، والبحث على حافّة المحتوى تحته (‎12).
+    final gap = TopActionChip.gapOf(context);
+    return ColoredBox(
+      color: AppColors.bg,
+      child: Padding(
+        padding:
+            const EdgeInsetsDirectional.fromSTEB(Sp.md, Sp.md, Sp.lg, Sp.xs),
+        child: Row(
+          children: [
+            Expanded(child: _searchField()),
+            const SizedBox(width: Sp.sm),
+            // تنبيهات الأجهزة (فصلٌ/عودة) بعددها — والضغط المطوّل إشعارٌ
+            // تجريبيّ. صفّارةٌ لا جرس: جرس الإشعارات في أزرار الأعلى فوقها
+            // مباشرةً، وجرسان في شاشةٍ واحدة لا يُعرف أيّهما لأيّ شيء.
+            ValueListenableBuilder<int>(
+              valueListenable: DeviceAlertsService.instance.unreadCount,
+              builder: (context, count, _) => _ToolButton(
+                tooltip: 'تنبيهات الأجهزة (اضغط مطوّلاً للاختبار)',
+                onTap: _openAlerts,
+                onLongPress: _testAlert,
+                badge: count,
+                child: Icon(
+                  LucideIcons.siren,
+                  size: 20,
+                  color: count > 0 ? AppColors.error : AppColors.textBody,
+                ),
+              ),
+            ),
+            SizedBox(width: gap),
+            // تحديث فوري — دوّارةٌ مكانه أثناء الفحص.
+            _ToolButton(
+              tooltip: 'تحديث فوري',
+              busy: _probing,
+              onTap: _refresh,
+              child:
+                  Icon(LucideIcons.refreshCw, size: 20, color: AppColors.textBody),
+            ),
+            SizedBox(width: gap),
+            // ── ما تبقّى في قائمةٍ منسدلة — ودوّارة الكشف مكانها وهو يعمل ──
+            _ToolButton(
+              busy: _detecting,
+              wrap: (content) => PopupMenuButton<String>(
+                tooltip: 'المزيد',
+                borderRadius: BorderRadius.circular(R.icon),
+                onSelected: (v) {
+                  switch (v) {
+                    case 'wall':
+                      _openWall();
+                    case 'sort':
+                      _pickSort();
+                    case 'regions':
+                      _openRegions();
+                    case 'scan':
+                      _openBulkScan();
+                    case 'detect':
+                      _detectModels();
+                  }
+                },
+                itemBuilder: (_) => [
+                  _menuItem('wall', LucideIcons.layoutGrid, 'نظرة عامّة'),
+                  // الترتيب الحاليّ في التسمية — القائمة المطويّة تُخفي
+                  // الأيقونة التي كانت تدلّ عليه.
+                  _menuItem(
+                      'sort', _sortField.icon, 'الترتيب · ${_sortField.label}'),
+                  if (Perms.has('devices.manage'))
+                    _menuItem('regions', LucideIcons.mapPin, 'إدارة المناطق'),
+                  if (Perms.has('devices.manage'))
+                    _menuItem(
+                        'scan', LucideIcons.radar, 'اكتشاف أجهزة الشبكة'),
+                  // كشف الطُرُز — لا يظهر إلّا حين يوجد جهاز يحتاجه، ولا
+                  // يُشغَّل تلقائيّاً لأنّه يفتح جلسة مصادَقة على كلّ
+                  // جهاز، وذلك قرار المستخدم لا سلوك خفيّ.
+                  if (_all.any(DetectedModel.needsDetection))
+                    _menuItem('detect', LucideIcons.scanSearch,
+                        'كشف طُرُز الأجهزة'),
+                ],
+                child: content,
+              ),
+              child: Icon(LucideIcons.ellipsisVertical,
+                  size: 20, color: AppColors.textBody),
+            ),
+            // إضافة جهاز — لمن يملك الإدارة وحده.
+            if (Perms.has('devices.manage')) ...[
+              SizedBox(width: gap),
+              _ToolButton(
+                filled: true,
+                tooltip: 'إضافة جهاز',
+                onTap: () => _openForm(),
+                child: const Icon(LucideIcons.plus,
+                    size: 18, color: AppColors.onBrand),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// حقل البحث وحده — في سطر الأدوات ([_toolsBar]) وفي وضع التحديد.
+  Widget _searchField() {
+    final hintStyle = AppType.subtitle(color: AppColors.textLow);
+    return LayoutBuilder(
+      builder: (context, c) => TextField(
         controller: _searchCtrl,
         // 2026-08-18: debounce 250ms — للـ500+ جهاز، كل keystroke بدون
         // debounce = filter+sort ثقيل على main thread (jank محسوس).
@@ -1218,8 +1213,23 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
         },
         style: const TextStyle(fontSize: 14, height: 1.3),
         decoration: InputDecoration(
-          hintText: 'ابحث باسم أو IP أو MAC أو موقع…',
-          hintStyle: AppType.subtitle(color: AppColors.textLow),
+          // الحقل يتشارك سطره مع الأدوات: أطول تلميحٍ يُقرأ كاملاً بدل بترٍ
+          // بـ«…». خارج النصّ كما يحسبه `InputDecorator` (M3 بحدٍّ محيط):
+          // مربّع أيقونة البحث ‎48 وفراغها ‎4، ثمّ الحشوة الختاميّة ‎14 وفراغ
+          // الحدّ ‎4.
+          hintText: fittingHint(
+            context,
+            maxWidth: c.maxWidth - 48 - 4 - 14 - 4,
+            style: hintStyle,
+            candidates: const [
+              'ابحث باسم أو IP أو MAC أو موقع…',
+              'ابحث باسم أو IP أو MAC…',
+              'ابحث باسم أو IP…',
+              'اسم أو IP…',
+              'بحث',
+            ],
+          ),
+          hintStyle: hintStyle,
           prefixIcon:
               Icon(LucideIcons.search, size: 18, color: AppColors.textMid),
           suffixIcon: _search.isEmpty
@@ -1599,6 +1609,104 @@ class _PendingTransition {
     required this.oldStatus,
     required this.newStatus,
   });
+}
+
+/// زرّ أداةٍ جنب البحث — شكل أزرار رأس المشتركين نفسه (سطحٌ بحدٍّ خفيف ونصف
+/// قطر 14)، بمقاس أزرار الأعلى فوقه ([TopActionChip.sizeOf]: ‎42، و‎38 على
+/// الشاشات الضيّقة). و[filled] بتعبئة البراند (الإضافة).
+class _ToolButton extends StatelessWidget {
+  const _ToolButton({
+    required this.child,
+    this.onTap,
+    this.onLongPress,
+    this.tooltip,
+    this.badge = 0,
+    this.busy = false,
+    this.filled = false,
+    this.wrap,
+  });
+
+  final Widget child;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final String? tooltip;
+
+  /// عددٌ أحمر على الركن — يُخفى عند الصفر.
+  final int badge;
+
+  /// دوّارةٌ مكان الأيقونة والنقر مقفل (فحصٌ أو كشفٌ جارٍ).
+  final bool busy;
+  final bool filled;
+
+  /// يلفّ المحتوى بلاقط نقرٍ غير `InkWell` (قائمة «المزيد» المنسدلة).
+  final Widget Function(Widget content)? wrap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final radius = BorderRadius.circular(R.icon);
+    final side = TopActionChip.sizeOf(context);
+    final content = Container(
+      width: side,
+      height: side,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        border: filled ? null : Border.all(color: AppColors.borderSoft),
+      ),
+      child: busy
+          ? SizedBox(
+              width: 17,
+              height: 17,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.brandAccent,
+              ),
+            )
+          : child,
+    );
+    Widget button = Material(
+      color: filled ? AppColors.brand : AppColors.surface,
+      borderRadius: radius,
+      child: wrap != null && !busy
+          ? wrap!(content)
+          : InkWell(
+              borderRadius: radius,
+              onTap: busy ? null : onTap,
+              onLongPress: busy ? null : onLongPress,
+              child: content,
+            ),
+    );
+    if (tooltip != null) button = Tooltip(message: tooltip!, child: button);
+    if (badge <= 0) return button;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        button,
+        Positioned(
+          top: -4,
+          left: -4,
+          child: IgnorePointer(
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+              padding: const EdgeInsets.symmetric(horizontal: 5),
+              decoration: BoxDecoration(
+                color: AppColors.errorFill,
+                borderRadius: BorderRadius.circular(R.pill),
+                border: Border.all(color: AppColors.bg, width: 2),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                badge > 99 ? '99+' : '$badge',
+                style: AppType.muted(color: AppColors.onBrand)
+                    .copyWith(fontSize: 10.5, height: 1),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 /// Empty state — يظهر لو ما في أجهزة أصلاً أو ما في نتائج للفلتر.

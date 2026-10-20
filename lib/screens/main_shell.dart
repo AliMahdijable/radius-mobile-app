@@ -32,6 +32,7 @@ import 'managers/managers_screen.dart';
 import '../services/notification_router.dart';
 import 'subscribers/subscribers_screen.dart';
 import 'subscribers/widgets/filter_chips_bar.dart';
+import 'top_actions.dart';
 
 /// Round 10 redesign — floating pill bar with a brand-green indicator
 /// that slides between tabs. The bar is a single cohesive surface
@@ -307,7 +308,8 @@ class _MainShellState extends State<MainShell> {
       unawaited(ActiveCompany.resolveLabel());
       // حال المساعد الذكيّ أوّل الجلسة (مطفأً يردّ الخادم فوراً) — فبطاقة
       // «كيف أسوّي؟» لا تُدرج متأخّرةً فوق «التقارير» فتزيح البطاقات تحت
-      // الإصبع، و«اشرحلي» حاضرٌ مع أوّل إشعار خطأ.
+      // الإصبع، وزرّه في أزرار الأعلى (جنب الجرس) يظهر مع أوّل إطار،
+      // و«اشرحلي» حاضرٌ مع أوّل إشعار خطأ.
       unawaited(AiAssistantState.ensureFresh());
     });
     _authExpiredSeen = authExpiredSignal.value;
@@ -916,11 +918,14 @@ class _DevicesLockedTab extends StatelessWidget {
       backgroundColor: AppColors.bg,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.lg, Sp.xl, Sp.lg),
+          // حشوة رأس الرئيسيّة نفسها: أزرار الأعلى في موضعها من كلّ تبويب.
+          padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.lg),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('nav.devices'.tr(), style: AppType.title(color: AppColors.textHi)),
+              // أزرار الأعلى بمكانها ولو قُفل القسم — الإعدادات والإشعارات
+              // والمساعد ليست من صلاحيّة الأجهزة.
+              TabHeader(title: 'nav.devices'.tr()),
               const Spacer(),
               const Center(child: LockedNotice.block()),
               const Spacer(flex: 2),

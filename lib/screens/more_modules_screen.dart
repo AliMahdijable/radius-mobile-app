@@ -32,12 +32,14 @@ import 'packages/packages_screen.dart';
 import 'portal_settings/portal_settings_screen.dart';
 import 'assistant/assistant_sheet.dart';
 import 'reports_screen.dart';
+import 'top_actions.dart';
 import 'topup/topup_screen.dart';
 
 /// Other modules — مطلب 2026-06-10: الـtab السفلي السابق "الضبط"
 /// انتقل لاسم "قوائم أخرى" ويعرض المديولات الإضافية (الصرفيات،
 /// المدراء، تسعير الباقات، إلخ). شاشة الإعدادات الفعلية انتقلت
-/// لزر الـgear في الشريط العلوي على Home.
+/// لزر الـgear في الشريط العلوي على Home — ومنذ ٢٠ أكتوبر في أزرار الأعلى
+/// المشتركة بكلّ التبويبات، وهذه منها ([TabHeader]).
 ///
 /// كل بطاقة هنا stub حالياً (snack 'قيد التطوير') حتى نبني كل
 /// مديول واحد واحد. الفكرة: المدير يفتح هذا الـtab فيشوف فهرس
@@ -387,20 +389,18 @@ class MoreModulesScreen extends StatelessWidget {
           backgroundColor: AppColors.bg,
           body: SafeArea(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.huge),
+              // ‎8 تحت الشقّ: أزرار الأعلى في موضعها من الرئيسيّة نفسه.
+              padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.huge),
               children: [
-                Text(
-                  'more.title'.tr(),
-                  style: AppType.title(color: AppColors.textHi).copyWith(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.5,
+                // ٢٠ أكتوبر: رأس التبويب الموحّد — العنوان والوصف يميناً، وأزرار
+                // الأعلى المشتركة (المساعد · الجرس · الترس) يساراً. وبطاقة «كيف
+                // أسوّي؟» تحته باقيةٌ كما هي.
+                TabHeader(
+                  title: 'more.title'.tr(),
+                  subtitle: Text(
+                    'more.subtitle'.tr(),
+                    style: AppType.subtitle(color: AppColors.textMid),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'more.subtitle'.tr(),
-                  style: AppType.subtitle(color: AppColors.textMid),
                 ),
                 const SizedBox(height: Sp.lg),
                 if (cards.isEmpty)

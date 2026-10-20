@@ -13,6 +13,7 @@ import '../../models/device_health.dart';
 import '../../api/subscribers_api.dart';
 import '../../api/telegram_api.dart';
 import '../../api/whatsapp_api.dart';
+import '../../core/util/fit_hint.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/permission_locked.dart';
 import '../../core/widgets/sheet_scaffold.dart';
@@ -31,6 +32,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/active_company_line.dart';
 import '../../services/provider_limits.dart';
+import '../top_actions.dart';
 import 'sheets/bulk_activate_sheet.dart';
 import 'sheets/bulk_pay_debt_sheet.dart';
 import 'sheets/pay_debt_sheet.dart';
@@ -1252,9 +1254,22 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                 color: AppColors.brand,
                 onRefresh: _refresh,
                 child: _loading
-                    ? Center(
-                        child:
-                            CircularProgressIndicator(color: AppColors.brand))
+                    // أوّل تحميل: العنوان وأزرار الأعلى بمكانها فوق الدوّارة —
+                    // لا تختفي الإعدادات والإشعارات والمساعد حتّى تصل القائمة.
+                    ? Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(
+                                Sp.lg, Sp.sm, Sp.lg, 0),
+                            child: TabHeader(title: 'subscribers.title'.tr()),
+                          ),
+                          Expanded(
+                            child: Center(
+                                child: CircularProgressIndicator(
+                                    color: AppColors.brand)),
+                          ),
+                        ],
+                      )
                     : CustomScrollView(
                         controller: _scrollCtrl,
                         // بلا هذا لا يعمل السحب للتحديث حين يفرغ الفلتر:
@@ -1268,8 +1283,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                             child: Column(
                               children: [
                                 Padding(
+                                  // ‎8 تحت الشقّ (لا ‎12): أزرار الأعلى في
+                                  // موضعها من الرئيسيّة نفسه حرفيّاً.
                                   padding: const EdgeInsets.fromLTRB(
-                                      Sp.lg, Sp.md, Sp.lg, Sp.sm),
+                                      Sp.lg, Sp.sm, Sp.lg, Sp.sm),
                                   child: _selectionMode
                                       ? _SelectionHeader(
                                           count: _selected.length,
@@ -1571,44 +1588,102 @@ class _ListHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    final hintStyle =
+        AppType.subtitle(color: AppColors.textLow).copyWith(fontSize: 14);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // ٢٠ أكتوبر: رأس التبويب الموحّد — العنوان وسطر الشركة والعدد يميناً،
+        // وأزرار الأعلى المشتركة (المساعد · الجرس · الترس) يساراً بمكانها في
+        // كلّ تبويب ([TabHeader]). أزرار القائمة (الرادار · الفرز · التصفية)
+        // نزلت سطراً جنب البحث — كشريط البحث المطويّ تحت الشرائح.
+        TabHeader(
+          title: 'subscribers.title'.tr(),
+          // ٢٠٢٦-١٠-١٢: الشركة المفتوحة أوّل سطر العدد — هنا يفعّل
+          // المدير ويمدّد، فمالك عدّة شركات يرى أيّها قبل أن يضغط.
+          // سطرٌ واحد: إن ضاق يُبتر آخره (المتّصلون، وعددهم في شريحتهم
+          // تحته) لا اسم الشركة. وبلا شركة يبقى السطر كما كان حرفيّاً.
+          subtitle: ValueListenableBuilder<ActiveCompanyInfo?>(
+            valueListenable: ActiveCompany.listenable,
+            builder: (context, company, _) {
+              final counts = '$total مشترك • $online متصل الآن';
+              if (company == null) {
+                return Text(
+                  counts,
+                  style: AppType.body(color: AppColors.textMid)
+                      .copyWith(fontSize: 12.5),
+                );
+              }
+              return ActiveCompanyLine(
+                info: company,
+                showWho: false,
+                trailing: counts,
+                fontSize: 12.5,
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: Sp.lg),
         Row(
           children: [
+            // حقل البحث — 46 ارتفاعاً، r16، حدّ خفيف. المخطّط يرسمه نصّاً
+            // ساكناً بلا زرّ مسح؛ أبقينا زرّ المسح لأنّه سلوك قائم.
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('subscribers.title'.tr(), style: AppType.title()),
-                  const SizedBox(height: 2),
-                  // ٢٠٢٦-١٠-١٢: الشركة المفتوحة أوّل سطر العدد — هنا يفعّل
-                  // المدير ويمدّد، فمالك عدّة شركات يرى أيّها قبل أن يضغط.
-                  // سطرٌ واحد: إن ضاق يُبتر آخره (المتّصلون، وعددهم في شريحتهم
-                  // تحته) لا اسم الشركة. وبلا شركة يبقى السطر كما كان حرفيّاً.
-                  ValueListenableBuilder<ActiveCompanyInfo?>(
-                    valueListenable: ActiveCompany.listenable,
-                    builder: (context, company, _) {
-                      final counts = '$total مشترك • $online متصل الآن';
-                      if (company == null) {
-                        return Text(
-                          counts,
-                          style: AppType.body(color: AppColors.textMid)
-                              .copyWith(fontSize: 12.5),
-                        );
-                      }
-                      return ActiveCompanyLine(
-                        info: company,
-                        showWho: false,
-                        trailing: counts,
-                        fontSize: 12.5,
-                      );
-                    },
-                  ),
-                ],
+              child: Container(
+                height: H.search,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(R.lg),
+                  border: Border.all(color: AppColors.borderSoft),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.search_rounded,
+                        size: 20, color: AppColors.textLow),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      // الحقل يتشارك سطره مع الأزرار: أطول تلميحٍ يُقرأ كاملاً
+                      // (بالهاتف ← بالاسم واليوزر ← «بحث») بدل بترٍ بـ«…».
+                      child: LayoutBuilder(
+                        builder: (context, c) => TextField(
+                          controller: controller,
+                          style: AppType.input(),
+                          decoration: InputDecoration(
+                            hintText: fittingHint(
+                              context,
+                              maxWidth: c.maxWidth,
+                              style: hintStyle,
+                              candidates: [
+                                'subscribers.search_hint_full'.tr(),
+                                'subscribers.search_hint'.tr(),
+                                'common.search'.tr(),
+                              ],
+                            ),
+                            hintStyle: hintStyle,
+                            border: InputBorder.none,
+                            isCollapsed: true,
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (controller.text.isNotEmpty)
+                      InkResponse(
+                        radius: 18,
+                        onTap: controller.clear,
+                        child: Icon(Icons.close_rounded,
+                            size: 18, color: AppColors.textLow),
+                      )
+                    else
+                      // الإملاء الصوتي في مكان زرّ المسح: أحدهما فقط ذو معنى
+                      // في كل لحظة — الحقل فارغ فيُملى، أو فيه نصّ فيُمسح.
+                      VoiceSearchButton(controller: controller),
+                  ],
+                ),
               ),
             ),
+            const SizedBox(width: Sp.sm),
+            // الأزرار بمقاس أزرار الأعلى وفراغها: كلّ زرٍّ تحت نظيره فوقه.
             // رادار لا «تحديث»: الزرّ يفحص أجهزة المشتركين
             // (RX/إشارة/CCQ/LAN) ولا يعيد تحميل القائمة — كان يُقرأ
             // كـreload. طلب المستخدم 2026-08-29.
@@ -1618,64 +1693,25 @@ class _ListHeader extends StatelessWidget {
               busy: probing,
               onTap: onScanDevices ?? () {},
               tooltip: 'subscribers.probe_devices'.tr(),
+              size: TopActionChip.sizeOf(context),
             ),
-            const SizedBox(width: Sp.sm),
+            SizedBox(width: TopActionChip.gapOf(context)),
             _HeaderIconButton(
               icon: Icons.swap_vert_rounded,
               active: sortActive,
               onTap: onSort,
+              size: TopActionChip.sizeOf(context),
             ),
             if (onFilter != null) ...[
-              const SizedBox(width: Sp.sm),
+              SizedBox(width: TopActionChip.gapOf(context)),
               _HeaderIconButton(
                 icon: Icons.tune_rounded,
                 active: filterActive,
                 onTap: onFilter!,
+                size: TopActionChip.sizeOf(context),
               ),
             ],
           ],
-        ),
-        const SizedBox(height: Sp.lg),
-        // حقل البحث — 46 ارتفاعاً، r16، حدّ خفيف. المخطّط يرسمه نصّاً
-        // ساكناً بلا زرّ مسح؛ أبقينا زرّ المسح لأنّه سلوك قائم.
-        Container(
-          height: H.search,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(R.lg),
-            border: Border.all(color: AppColors.borderSoft),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.search_rounded, size: 20, color: AppColors.textLow),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextField(
-                  controller: controller,
-                  style: AppType.input(),
-                  decoration: InputDecoration(
-                    hintText: 'subscribers.search_hint_full'.tr(),
-                    hintStyle: AppType.subtitle(color: AppColors.textLow)
-                        .copyWith(fontSize: 14),
-                    border: InputBorder.none,
-                    isCollapsed: true,
-                  ),
-                ),
-              ),
-              if (controller.text.isNotEmpty)
-                InkResponse(
-                  radius: 18,
-                  onTap: controller.clear,
-                  child: Icon(Icons.close_rounded,
-                      size: 18, color: AppColors.textLow),
-                )
-              else
-                // الإملاء الصوتي في مكان زرّ المسح: أحدهما فقط ذو معنى
-                // في كل لحظة — الحقل فارغ فيُملى، أو فيه نصّ فيُمسح.
-                VoiceSearchButton(controller: controller),
-            ],
-          ),
         ),
       ],
     );
@@ -1691,6 +1727,7 @@ class _HeaderIconButton extends StatelessWidget {
     required this.onTap,
     this.busy = false,
     this.tooltip,
+    this.size = H.iconBtn,
   });
   final IconData icon;
   final bool active;
@@ -1699,6 +1736,10 @@ class _HeaderIconButton extends StatelessWidget {
   /// يستبدل الأيقونة بدوّارة ويقفل النقر — زرّ فحص الأجهزة أثناء الموجة.
   final bool busy;
   final String? tooltip;
+
+  /// الضلع — ‎38 افتراضاً، وفي سطر البحث بمقاس أزرار الأعلى فوقه
+  /// ([TopActionChip.sizeOf]) فتصطفّ الأعمدة.
+  final double size;
 
   @override
   Widget build(BuildContext context) {
@@ -1717,8 +1758,8 @@ class _HeaderIconButton extends StatelessWidget {
             onTap: busy ? null : onTap,
             borderRadius: BorderRadius.circular(R.icon),
             child: Container(
-              width: H.iconBtn,
-              height: H.iconBtn,
+              width: size,
+              height: size,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(R.icon),
@@ -2737,11 +2778,13 @@ class _SubscribersLocked extends StatelessWidget {
         bottom: false,
         child: Padding(
           padding:
-              EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Inset.tabBar(context)),
+              EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Inset.tabBar(context)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('nav.subscribers'.tr(), style: AppType.title()),
+              // أزرار الأعلى بمكانها ولو قُفلت القائمة — الإعدادات والإشعارات
+              // ليست من صلاحيّة المشتركين.
+              TabHeader(title: 'nav.subscribers'.tr()),
               const SizedBox(height: Sp.lg),
               LockedCard(
                 title: 'nav.subscribers'.tr(),

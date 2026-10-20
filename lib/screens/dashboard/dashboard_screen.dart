@@ -17,19 +17,17 @@ import '../../services/app_resumed_signal.dart';
 import '../../services/dashboard_refresh_signal.dart';
 import '../../services/auth_storage.dart';
 import '../../services/dashboard_cache.dart';
-import '../../services/inbox_service.dart';
 import '../../services/permissions_service.dart';
 import '../../services/provider_service.dart';
 import '../../services/subscriber_events.dart';
 import '../../widgets/active_company_line.dart';
 import '../accounts/accounts_screen.dart';
-import '../notifications/inbox_screen.dart';
 import '../reports/activity_log_report_screen.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../subscribers/widgets/filter_chips_bar.dart';
-import '../settings_screen.dart';
+import '../top_actions.dart';
 import 'widgets/hero_revenue_card.dart';
 import 'widgets/recent_activities.dart';
 import '../account/subscription_banner.dart';
@@ -1045,7 +1043,8 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
           const SizedBox(width: Sp.sm),
           // 2026-08-26: أيقونة "الصفحات" — التبديل السريع بين حسابات
           // المدراء الفرعيّين. طلب المستخدم أن تكون جنب جرس الإشعارات
-          // للوصول السريع.
+          // للوصول السريع. (للرئيسيّة وحدها — خارج أزرار الأعلى المشتركة،
+          // وبمقاسها نفسه.)
           //
           // ⚠️ **`managers.edit` لا `managers.view`.**
           //
@@ -1058,49 +1057,22 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
           //
           // فالتبديل أقوى من الرؤية، فلا يقلّ عنها حرساً.
           if (Perms.has('managers.edit')) ...[
-            _IconChip(
+            TopActionChip(
               icon: Icons.swap_horiz_rounded,
+              label: 'accounts.title'.tr(),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const AccountsScreen(),
                 ),
               ),
             ),
-            const SizedBox(width: Sp.sm),
+            SizedBox(width: TopActionChip.gapOf(context)),
           ],
-          // Bell badge: FCM unread + مشتركين في خطر (near-expiry+expired-today).
-          // نُدمج المصدرين حتى المستخدم يشوف رقم واحد يعبّر عن "شي يحتاج
-          // انتباه". AlertsService.count يتحدّث تلقائياً من InboxScreen
-          // بعد كل refresh.
-          ValueListenableBuilder<int>(
-            valueListenable: InboxService.changes,
-            builder: (context, _, __) => ValueListenableBuilder<int>(
-              valueListenable: AlertsService.count,
-              builder: (context, alerts, __) => _IconChip(
-                icon: Icons.notifications_none_rounded,
-                badge: InboxService.unreadCount + alerts,
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const InboxScreen(),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: Sp.sm),
-          _IconChip(
-            icon: Icons.settings_outlined,
-            // مطلب 2026-06-10: زر الإعدادات بالشريط العلوي يفتح
-            // شاشة الإعدادات (الحساب / المظهر / واتساب / الطباعة /
-            // الصلاحيات / السكون). الزر السفلي السابق "الضبط" انتقل
-            // لاسم "قوائم اخرى" ويعرض المديولات الإضافية.
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const SettingsScreen(),
-                fullscreenDialog: true,
-              ),
-            ),
-          ),
+          // ٢٠ أكتوبر: المساعد الذكيّ · الجرس · الترس — أزرار الأعلى
+          // المشتركة بين التبويبات الأربعة ([TopActions]). الجرس بشارته كما
+          // كان (غير المقروء + المشتركون في خطر)، والترس يفتح الإعدادات
+          // (مطلب 2026-06-10)، والمساعد جنب الجرس حين يفتحه الخادم.
+          const TopActions(),
         ],
       ),
     );
@@ -1208,60 +1180,6 @@ class _WAStatusChip extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _IconChip extends StatelessWidget {
-  const _IconChip({required this.icon, this.badge = 0, required this.onTap});
-  final IconData icon;
-  final int badge;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        SizedBox(
-          width: 42,
-          height: 42,
-          child: Material(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(R.md),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: onTap,
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(R.md),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Icon(icon, color: AppColors.textHi, size: 20),
-              ),
-            ),
-          ),
-        ),
-        if (badge > 0)
-          Positioned(
-            top: -4,
-            left: -4,
-            child: Container(
-              constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-              padding: const EdgeInsets.symmetric(horizontal: 5),
-              decoration: BoxDecoration(
-                color: AppColors.errorFill,
-                borderRadius: BorderRadius.circular(R.pill),
-                border: Border.all(color: AppColors.bg, width: 2),
-              ),
-              alignment: Alignment.center,
-              child: Text('$badge',
-                  style: AppType.muted(color: AppColors.onBrand)
-                      .copyWith(fontSize: 10.5, height: 1)),
-            ),
-          ),
-      ],
     );
   }
 }
