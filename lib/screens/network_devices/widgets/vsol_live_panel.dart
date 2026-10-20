@@ -287,7 +287,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
       final ref = wantAll ? _prevAll : _prevHot;
       final refAt = wantAll ? _prevAllAt : _prevHotAt;
       final rates = Map<String, VsolTraffic>.from(_rates);
-      if (ref != null && refAt != null && ref.hasCounters) {
+      if (ref != null && refAt != null && ref.hasCounters && s.hasCounters) {
         final fresh = VsolTraffic.between(ref, s, at.difference(refAt));
         if (wantAll) {
           rates.addAll(fresh);
