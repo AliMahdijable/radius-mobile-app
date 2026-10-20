@@ -65,6 +65,24 @@ class SnmpV2c {
     return _parseResponse(response, expectedRequestId: requestId);
   }
 
+  /// Read related columns in the same response. Important for indexed tables
+  /// whose rows can move between separate walks (for example a live MAC table).
+  Future<List<Varbind>> getBulkColumns(
+    List<String> cursors, {
+    int maxRepetitions = 25,
+  }) async {
+    if (cursors.isEmpty) return const [];
+    final requestId = _nextRequestId();
+    final response = await _send(_buildRequest(
+      pduType: _pduGetBulkRequest,
+      requestId: requestId,
+      oids: cursors,
+      errorStatus: 0,
+      errorIndex: maxRepetitions,
+    ));
+    return _parseResponse(response, expectedRequestId: requestId);
+  }
+
   /// Walk — يجلب كل الـOIDs تحت baseOid عبر GETBULK متكرّر.
   /// يتوقّف لمّا OID المرجع يخرج من subtree الـbaseOid.
   Future<List<Varbind>> walk(
