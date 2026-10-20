@@ -1,4 +1,3 @@
-import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
@@ -9,7 +8,6 @@ import '../api/cards_api.dart';
 import '../api/self_deposit_api.dart';
 import '../core/util/format.dart';
 import '../core/widgets/permission_locked.dart';
-import '../services/ai_assistant_state.dart';
 import '../services/app_resumed_signal.dart';
 import '../services/permissions_service.dart';
 import '../services/provider_service.dart';
@@ -30,7 +28,6 @@ import 'settlements/settlements_screen.dart';
 import 'managers/managers_screen.dart';
 import 'packages/packages_screen.dart';
 import 'portal_settings/portal_settings_screen.dart';
-import 'assistant/assistant_sheet.dart';
 import 'reports_screen.dart';
 import 'top_actions.dart';
 import 'topup/topup_screen.dart';
@@ -64,16 +61,10 @@ class MoreModulesScreen extends StatelessWidget {
         ProviderService.changes,
         // «شحن رصيد الصفحة» — الاستماع نفسه يطلب حالتها إن كانت قديمة.
         SelfDepositState.gate,
-        // «كيف أسوّي؟» (المساعد الذكيّ) — مطفأٌ افتراضيّاً، يُسأل عند الاستماع.
-        AiAssistantState.gate,
         // العودة للتطبيق ⇒ يُسأل ثانيةً (بمهلته) — فتشغيله من الخادم يظهر.
         AppResumedSignal.tick,
       ]),
       builder: (context, _) {
-        // «كيف أسوّي؟»: الشاشة تبقى حيّةً طول الجلسة (IndexedStack) فالاستماع
-        // يسأل مرّةً وحدها — وأوّل سؤالٍ فشل، أو شُغّل المساعد بعده، يُعرف هنا
-        // (مهلة ٥ دقائق وتبريد ٣٠ث بعد الفشل: طلبٌ واحد على الأكثر).
-        scheduleMicrotask(AiAssistantState.ensureFresh);
         final stock = CardsState.badge.value;
         const rk = [
           'reports.financial',
@@ -99,19 +90,7 @@ class MoreModulesScreen extends StatelessWidget {
         const pkgKeys = ['packages.view', 'packages.edit_prices'];
         final cardsLocked = !Perms.hasAny(cardKeys);
         final cards = <Widget>[
-          // ١٨ أكتوبر: «كيف أسوّي؟» — المساعد الذكيّ (يشرح ويرشد، بلا أيّ
-          // عمليّة). أوّل البطاقات حين يقول الخادم إنّه مفتوحٌ لهذا الحساب
-          // (مطفأٌ افتراضيّاً ⇒ لا بطاقة ولا قفل). وموظّفٌ بلا «المساعد الذكي»
-          // يراها بمكانها مقفلةً — والنقر رسالةٌ بلا أيّ طلب.
-          if (AiAssistantState.visible)
-            _ModuleCard(
-              locked: AiAssistantState.askLocked,
-              icon: LucideIcons.sparkles,
-              tone: AppTone.brand,
-              title: 'ai.ask_entry'.tr(),
-              subtitle: 'ai.ask_hint_card'.tr(),
-              onTap: () => AssistantSheet.showAsk(context),
-            ),
+          // «كيف أسوّي؟» صار زرّاً في الأعلى بكلّ التبويبات (TopActions) — لا بطاقة هنا (المالك ٢٠ أكتوبر).
           // مطلب 2026-08-12: التقارير صارت أوّل عنصر (نُقلت من tab رئيسي
           // لأن أجهزة الشبكة أكثر استعمالاً يومياً للـWISP).
           // مفتوحةٌ لأي مدير عادي، وللموظّف لو عنده أي صلاحيّة reports.*،

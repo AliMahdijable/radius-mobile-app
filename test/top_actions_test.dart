@@ -455,8 +455,8 @@ void main() {
         expect(find.byIcon(Icons.swap_horiz_rounded), findsNothing,
             reason: '«الصفحات» للرئيسيّة وحدها');
       }
-      // «قوائم أخرى»: البطاقة باقية مع الزرّ.
-      expect(find.text('كيف أسوّي؟'), findsOneWidget);
+      // «قوائم أخرى»: لا بطاقة «كيف أسوّي؟» — المساعد زرّ الأعلى وحده (المالك ٢٠ أكتوبر).
+      expect(find.text('كيف أسوّي؟'), findsNothing);
       // أربعة تبويبات لا تعني أربعة طلبات (مهلة الحال ٥ دقائق).
       expect(server.statusCalls, 1);
       expect(server.aiCalls, isEmpty);
