@@ -22,8 +22,9 @@ class _NoLocalNotifications extends FlutterLocalNotificationsPlatform {}
 
 /// أزرار الأعلى (٢٠ أكتوبر، طلب المالك) — التبويبات الأربعة كما يراها المدير:
 /// المساعد الذكيّ جنب الجرس، والجرس والترس بمكانهما نفسه في الرئيسيّة
-/// والمشتركين والأجهزة و«قوائم أخرى». بعرضَي ٣٢٠ و٣٩٠ وبالوضعين، أمام خادمٍ
-/// وهميّ (خادم لقطات الصلاحيّات + حال المساعد).
+/// والمشتركين والأجهزة و«قوائم أخرى». بالعروض ٣٢٠ و٣٦٠ و٣٩٠ و٤١٤ وبالوضعين،
+/// أمام خادمٍ وهميّ (خادم لقطات الصلاحيّات + حال المساعد). ٣٦٠ أوّل عرضٍ بالمقاس
+/// الكامل (٤٢)، و٤١٤ أعرض هاتف.
 ///
 /// اللقطات في `shots/top_actions/`. التحيّة في الرئيسيّة («صباح الخير»…) تتبع
 /// ساعة التشغيل، وتواريخ قائمة المشتركين تتبع اليوم — والباقي ثابت: شارة الجرس
@@ -33,8 +34,12 @@ const _screen = 'top_actions';
 const _variants = <SimVariant>[
   SimVariant(320, dark: false),
   SimVariant(320, dark: true),
+  SimVariant(360, dark: false),
+  SimVariant(360, dark: true),
   SimVariant(390, dark: false),
   SimVariant(390, dark: true),
+  SimVariant(414, dark: false),
+  SimVariant(414, dark: true),
 ];
 
 void _case(

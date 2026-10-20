@@ -1654,6 +1654,7 @@ class _ListHeader extends StatelessWidget {
                               context,
                               maxWidth: c.maxWidth,
                               style: hintStyle,
+                              fieldStyle: AppType.input(),
                               candidates: [
                                 'subscribers.search_hint_full'.tr(),
                                 'subscribers.search_hint'.tr(),

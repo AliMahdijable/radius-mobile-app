@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -11,6 +12,7 @@ import 'package:rad_mysvcs/models/app_notification.dart';
 import 'package:rad_mysvcs/screens/assistant/assistant_consent_sheet.dart';
 import 'package:rad_mysvcs/screens/assistant/assistant_sheet.dart';
 import 'package:rad_mysvcs/screens/main_shell.dart';
+import 'package:rad_mysvcs/screens/network_devices/network_devices_screen.dart';
 import 'package:rad_mysvcs/screens/notifications/inbox_screen.dart';
 import 'package:rad_mysvcs/screens/settings_screen.dart';
 import 'package:rad_mysvcs/screens/subscribers/subscribers_screen.dart';
@@ -283,6 +285,50 @@ void main() {
       await finish(t);
     });
 
+    // ⚠️ `Semantics(excludeSemantics: true)` يُسقط نقرة الـInkWell تحته: زرٌّ
+    // مسمّى بلا نقرة لا يفعّله TalkBack (كان الجرس والترس القديمان يُفعَّلان).
+    testWidgets('قارئ الشاشة: الأزرار الثلاثة مسمّاةٌ ولها نقرة', (t) async {
+      final semantics = t.ensureSemantics();
+      await setUpActor(s1bSasOwner, aiStatusOn);
+      await pumpHeader(t);
+      for (final (f, name) in [
+        (assistant, 'المساعد الذكي'),
+        (bell, 'الإشعارات'),
+        (gear, 'الإعدادات'),
+      ]) {
+        final data = t.getSemantics(f).getSemanticsData();
+        expect(data.label, name);
+        expect(data.flagsCollection.isButton, isTrue, reason: name);
+        expect(data.hasAction(SemanticsAction.tap), isTrue, reason: name);
+      }
+      // نقرة قارئ الشاشة تفتح الإعدادات كالإصبع.
+      t.semantics.tap(find.semantics.byLabel('الإعدادات'));
+      await t.pump();
+      await t.pump(const Duration(seconds: 1));
+      expect(find.byType(SettingsScreen), findsOneWidget);
+      semantics.dispose();
+      await finish(t);
+    });
+
+    testWidgets('قارئ الشاشة: المساعد المقفل «— مقفل» ونقرته رسالةٌ بلا طلب',
+        (t) async {
+      final semantics = t.ensureSemantics();
+      await setUpActor(sasEmployee, aiStatusLocked);
+      await pumpHeader(t);
+      final data = t.getSemantics(assistant).getSemanticsData();
+      expect(data.label, 'المساعد الذكي — مقفل');
+      expect(data.hasAction(SemanticsAction.tap), isTrue);
+      final before = server.requests.length;
+      t.semantics.tap(find.semantics.byLabel('المساعد الذكي — مقفل'));
+      await t.pump();
+      expect(find.textContaining('اطلبها من مديرك'), findsOneWidget);
+      expect(find.byType(AssistantConsentSheet), findsNothing);
+      expect(server.requests.length, before, reason: 'المقفل لا يجلب');
+      await t.pump(const Duration(seconds: 3)); // مؤقّت رسالة القفل
+      semantics.dispose();
+      await finish(t);
+    });
+
     testWidgets('شاشةٌ ضيّقة (٣٢٠) ⇒ المربّعات ٣٨ والفراغ ٦، وإلّا ٤٢ و٨',
         (t) async {
       await setUpActor(s1bSasOwner, aiStatusOn);
@@ -323,6 +369,51 @@ void main() {
     expect([t.getRect(assistant), t.getRect(bell), t.getRect(gear)], loading,
         reason: 'الموضع نفسه قبل وصول القائمة وبعده');
     await finish(t);
+  });
+
+  // البحث صار يتشارك سطره مع الأزرار فيُختار أطول تلميحٍ يتّسع ([fittingHint]).
+  // ⚠️ كان يُقاس بلا تباعد الحروف الموروث من bodyLarge (‎0.5) فيُختار ما «يتّسع»
+  // ثمّ يُبتر: «اسم أو I…» في الأجهزة على ‎360.
+  group('تلميح البحث يُقرأ كاملاً بكلّ عرضٍ وسلّم خطّ', () {
+    for (final screen in ['subscribers', 'devices']) {
+      testWidgets(screen, (t) async {
+        addTearDown(t.platformDispatcher.clearTextScaleFactorTestValue);
+        for (final w in [320.0, 340.0, 360.0, 375.0, 390.0, 414.0]) {
+          for (final scale in [1.0, 1.2]) {
+            t.platformDispatcher.textScaleFactorTestValue = scale;
+            await setUpActor(s1bSasOwner, aiStatusOn);
+            await pumpSim(t, SimVariant(w, dark: false),
+                settle: false,
+                home: (_) => screen == 'devices'
+                    ? NetworkDevicesScreen(isActive: ValueNotifier<bool>(true))
+                    : SubscribersScreen(isActive: ValueNotifier<bool>(true)));
+            for (var i = 0; i < 20; i++) {
+              await t.pump(const Duration(milliseconds: 100));
+            }
+            expect(t.takeException(), isNull, reason: '$screen @$w×$scale');
+            final hints = [
+              for (final e in find
+                  .descendant(
+                      of: find.byType(TextField).first,
+                      matching: find.byType(RichText))
+                  .evaluate())
+                if ((e.renderObject! as RenderParagraph)
+                        .text
+                        .toPlainText()
+                        .runes
+                        .length >
+                    1) // لا رمز أيقونة البحث
+                  e.renderObject! as RenderParagraph,
+            ];
+            expect(hints, hasLength(1), reason: '$screen @$w×$scale');
+            expect(hints.single.didExceedMaxLines, isFalse,
+                reason: '$screen @$w×$scale: '
+                    '«${hints.single.text.toPlainText()}» مبتور');
+            await finish(t);
+          }
+        }
+      });
+    }
   });
 
   group('التبويبات الأربعة: الأزرار نفسها بالموضع نفسه', () {

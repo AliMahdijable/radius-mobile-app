@@ -1200,6 +1200,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// حقل البحث وحده — في سطر الأدوات ([_toolsBar]) وفي وضع التحديد.
   Widget _searchField() {
     final hintStyle = AppType.subtitle(color: AppColors.textLow);
+    const fieldStyle = TextStyle(fontSize: 14, height: 1.3);
     return LayoutBuilder(
       builder: (context, c) => TextField(
         controller: _searchCtrl,
@@ -1211,7 +1212,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
             if (mounted) setState(() => _search = v);
           });
         },
-        style: const TextStyle(fontSize: 14, height: 1.3),
+        style: fieldStyle,
         decoration: InputDecoration(
           // الحقل يتشارك سطره مع الأدوات: أطول تلميحٍ يُقرأ كاملاً بدل بترٍ
           // بـ«…». خارج النصّ كما يحسبه `InputDecorator` (M3 بحدٍّ محيط):
@@ -1221,11 +1222,15 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
             context,
             maxWidth: c.maxWidth - 48 - 4 - 14 - 4,
             style: hintStyle,
+            fieldStyle: fieldStyle,
             candidates: const [
               'ابحث باسم أو IP أو MAC أو موقع…',
               'ابحث باسم أو IP أو MAC…',
               'ابحث باسم أو IP…',
               'اسم أو IP…',
+              // ‎360 (أشيع عرض): «اسم أو IP…» يزيد نقطةً عن مكانه — فبلا النقاط
+              // قبل أن ننزل إلى «بحث».
+              'اسم أو IP',
               'بحث',
             ],
           ),

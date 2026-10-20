@@ -167,6 +167,7 @@ class TopActionChip extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final side = sizeOf(context);
+    final VoidCallback tap = locked ? () => showNoPermission(context) : onTap;
     Widget chip = SizedBox(
       width: side,
       height: side,
@@ -175,7 +176,7 @@ class TopActionChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(R.md),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: locked ? () => showNoPermission(context) : onTap,
+          onTap: tap,
           child: Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(R.md),
@@ -199,6 +200,9 @@ class TopActionChip extends StatelessWidget {
           : count > 0
               ? '$label ($count)'
               : label,
+      // الأبناء مستبعدون (اسمٌ واحد بدل الأيقونة والتلميح) — فالنقر يُعلَن هنا،
+      // وإلّا كان الزرّ مسمّىً بلا نقرة فلا يفعّله TalkBack (كـ«اشرحلي»).
+      onTap: tap,
       excludeSemantics: true,
       child: Tooltip(
         message: label,

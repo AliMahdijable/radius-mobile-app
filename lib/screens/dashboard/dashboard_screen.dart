@@ -1137,6 +1137,31 @@ class _WAStatusChip extends StatelessWidget {
       tone = AppTone.danger;
       label = 'dashboard.wa_disconnected'.tr();
     }
+    final Widget dot = !loaded
+        ? SizedBox(
+            width: 10,
+            height: 10,
+            child:
+                CircularProgressIndicator(strokeWidth: 1.4, color: tone.fill),
+          )
+        : Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(color: tone.fill, shape: BoxShape.circle),
+          );
+    // أدنى عرضٍ للحبّة: حشوة ‎8+8 وحدّ ‎1+1 والنقطة (أو الدوّارة) وفراغها ‎6.
+    final minPill = Sp.sm * 2 + 2 + (loaded ? 7 : 10) + 6;
+    return LayoutBuilder(builder: (context, c) {
+      // ٢٠ أكتوبر: على شاشةٍ أضيق من ‎360 صار جنب الاسم أربعة مربّعات
+      // («الصفحات» + المساعد + الجرس + الترس)، فإن ظهرت حبّة الاشتراك بجانب هذه
+      // لم يبقَ لها أدنى عرضها ففاضت فوق جارتها. فتبقى نقطة الحال وحدها
+      // بلونها، واسمها لقارئ الشاشة، والنقر يفتح الواتساب كما كان.
+      if (c.maxWidth < minPill) return Semantics(label: label, child: dot);
+      return _pill(tone, label, dot);
+    });
+  }
+
+  Widget _pill(AppTone tone, String label, Widget dot) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 4),
       decoration: BoxDecoration(
@@ -1147,20 +1172,7 @@ class _WAStatusChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (!loaded)
-            SizedBox(
-              width: 10,
-              height: 10,
-              child:
-                  CircularProgressIndicator(strokeWidth: 1.4, color: tone.fill),
-            )
-          else
-            Container(
-              width: 7,
-              height: 7,
-              decoration:
-                  BoxDecoration(color: tone.fill, shape: BoxShape.circle),
-            ),
+          dot,
           const SizedBox(width: 6),
           // 🐛 كان نصّاً عارياً بلا `maxLines` ولا `overflow`، وهو ابن
           // `Row` بلا flex — فيُقصّ قصّاً صلباً (`clip`) بلا «…» حين
