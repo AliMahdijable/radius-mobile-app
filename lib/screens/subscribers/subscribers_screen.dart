@@ -168,6 +168,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   // من الخادم، والعدّادات من summary.app بتعريفات هذه الشاشة نفسها. «مديون» من notes الساس (سوبرنت)؛ شركةٌ دينها على
   // دفترنا: نصٌّ يقول لماذا (TAB_UNSUPPORTED).
   bool _big = false;
+
+  /// «متوسّط» (BigSubscribersApi.progressiveMin–threshold) قبل وصول القائمة الكاملة: الصفحات بطريقة الكبير بلا ملخّص (لا
+  /// يزاحم القائمة على ساسٍ بطيء) والشرائح «…»؛ حين تصل القائمة يعود كلّ شيءٍ كما كان (_big = false).
+  bool _progressive = false;
   bool _bigDebtorsUnsupported = false;
   List<ManagerLite>? _bigManagers;
   int? _bigParentId;
@@ -213,7 +217,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   Future<void> _bigReload({bool fresh = false}) async {
     final gen = ++_bigGen;
     final tab = _bigTab(_filter);
-    final countsF = BigSubscribersApi.summary(parentId: _bigParentId, profileId: _bigProfileId, fresh: fresh);
+    final countsF = _progressive
+        ? Future<BigCounts?>.value(null)
+        : BigSubscribersApi.summary(parentId: _bigParentId, profileId: _bigProfileId, fresh: fresh);
     try {
       final p = await BigSubscribersApi.page(
           page: 1, size: _kBigPageSize, tab: tab, query: _query, sort: _bigSort, dir: _bigDir,
@@ -306,6 +312,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
   /// عدّادات الشرائح للحساب الكبير — «مديون» غير معروف -1 ⇒ «—» (لا صفر)، وجارٍ حسابه -2 ⇒ «…».
   Map<SubscriberFilter, int> _bigCountsMap() {
+    // المتوسّط قبل القائمة: العدّادات منها حين تصل (لا أرقامٌ تتبدّل)
+    if (_progressive) return {for (final f in SubscriberFilter.values) f: -2};
     final c = _bigCounts;
     if (c == null) return const {SubscriberFilter.debtors: -1};
     return {
@@ -423,6 +431,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
   Future<void> _silentRefresh() async {
     if (_big) {
+      // المتوسّط: القائمة الكاملة في الطريق — هي التحديث
+      if (_progressive) return;
       // الكبير: لا قائمة كاملة ولا قائمة متصلين (عشرات الآلاف) كلّ ٥ ثوانٍ — العدّادات وحدها كلّ دقيقة. الصفوف تتحدّث
       // بالسحب أو بعد كلّ عمليّة (SubscriberEvents) — لا قفزة إلى الصفحة الأولى تحت إصبع من مرّر.
       if (++_bigTick % 12 != 0) return;
@@ -555,7 +565,39 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       unawaited(_loadBigSideData());
       return;
     }
+
+    // ── المتوسّط (١٬٠٠٠–٥٬٠٠٠): الصفحة الأولى فوراً، والقائمة الكاملة تكمل في الخلفيّة ثمّ يعود كلّ شيءٍ كما كان ──
+    // قائمةٌ طازجة في الذاكرة (الرئيسيّة جلبتها للتوّ) تُعرض فوراً بلا مرحلةٍ وسطى.
+    if (BigSubscribersApi.knownProgressive && !SubscribersApi.hasFreshList) {
+      final fullF = SubscribersApi.loadAll(); // تبدأ الآن — مخزَّنة ومشتركة مع الرئيسيّة
+      _big = true;
+      _progressive = true;
+      await _bigReload();
+      if (!mounted) return;
+      setState(() => _loading = false);
+      unawaited(_loadBigSideData());
+      final full = await fullF;
+      if (!mounted || !_progressive) return;
+      if (full == null || full.isEmpty) {
+        // القائمة الكاملة تعذّرت: تبقى الصفحات كالحساب الكبير — مع عدّاداتها من الملخّص
+        setState(() => _progressive = false);
+        unawaited(_bigReload());
+        return;
+      }
+      setState(() {
+        _big = false;
+        _progressive = false;
+        _all = full;
+      });
+      await _fetchAndMerge();
+      if (!mounted) return;
+      _markDataSeen();
+      setState(() => _loading = false);
+      _runProbeWave();
+      return;
+    }
     _big = false;
+    _progressive = false;
 
     // ── اعرض القائمة فور وصولها، ولا تنتظر الإثراء ──
     //

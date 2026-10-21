@@ -17,6 +17,7 @@ import 'package:rad_mysvcs/screens/subscriber_prices/subscriber_prices_screen.da
 import 'package:rad_mysvcs/screens/notifications/inbox_screen.dart';
 import 'package:rad_mysvcs/screens/subscribers/sheets/subscriber_picker_sheet.dart';
 import 'package:rad_mysvcs/services/alerts_service.dart';
+import 'package:rad_mysvcs/services/subscribers_offline_cache.dart';
 import 'package:rad_mysvcs/screens/subscribers/subscribers_screen.dart';
 import 'package:rad_mysvcs/screens/subscribers/widgets/filter_chips_bar.dart';
 
@@ -182,6 +183,62 @@ class _BigServer implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
+/// حسابٌ «متوسّط» (١٬٢٠٠): الصفحات من الخادم فوراً، والقائمة الكاملة تتأخّر [fullDelay] — لإثبات العرض التدريجيّ.
+class _MediumServer implements HttpClientAdapter {
+  _MediumServer(this.inner, {this.fullDelay = const Duration(seconds: 3), this.fullFails = false});
+  final HttpClientAdapter inner;
+  final int total = 1200;
+
+  /// صفوف القائمة الكاملة — أقلّ من [total] عمداً: جسمٌ فوق ٥٠ك يفكّه dio في isolate (وقتٌ حقيقيّ لا يتقدّم بـpump)،
+  /// والعدّاد بعد وصولها يُثبت أنّه من القائمة لا من الخادم.
+  final int fullRows = 120;
+  final Duration fullDelay;
+  final bool fullFails;
+  final requests = <RequestOptions>[];
+  int get summaryCalls => requests.where((r) => r.path == '/api/v2/subscribers-summary').length;
+  bool get askedFullList => requests.any((r) => r.method == 'GET' && r.path == '/api/v2/subscribers' && r.queryParameters['page'] == null);
+  List<Map<String, dynamic>> get pageQueries => [
+        for (final r in requests)
+          if (r.path == '/api/v2/subscribers' && r.queryParameters['page'] != null) Map<String, dynamic>.from(r.queryParameters),
+      ];
+
+  static ResponseBody _json(int status, Object body) => ResponseBody.fromString(jsonEncode(body), status, headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      });
+
+  @override
+  Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
+    requests.add(o);
+    if (o.method == 'GET' && o.path == '/api/v2/subscribers') {
+      if (o.queryParameters['page'] == null) {
+        await Future<void>.delayed(fullDelay);
+        if (fullFails) return _json(503, {'success': false, 'message': 'SAS timeout'});
+        return _json(200, {'success': true, 'data': [for (var i = 1; i <= fullRows; i++) _bigRow(i, 'all')]});
+      }
+      final page = int.parse('${o.queryParameters['page']}');
+      final size = int.parse('${o.queryParameters['size'] ?? 50}');
+      final start = (page - 1) * size;
+      final n = math.max(0, math.min(size, total - start));
+      return _json(200, {
+        'success': true,
+        'data': [for (var k = 0; k < n; k++) _bigRow(start + k + 1, 'all')],
+        'total': total,
+        'paged': true,
+        'page': page,
+        'size': size,
+        'last_page': math.max(1, (total / size).ceil()),
+      });
+    }
+    if (o.method == 'GET' && o.path == '/api/v2/subscribers-summary') {
+      return _json(200, {'success': true, 'summary': {'all': total, 'debtors': null, 'app': {'all': total, 'active': total, 'expired': 0, 'online': total, 'offline': 0, 'disabled': 0, 'nearExpiry': 0, 'onlineNoPlan': 0, 'neglected': 0}}});
+    }
+    return inner.fetch(o, requestStream, cancelFuture);
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
 void main() {
   setUpAll(visualSetUpAll);
 
@@ -242,6 +299,47 @@ void main() {
       await settle(t, seconds: 2);
       expect(server.pageQueries.any((m) => '${m['page']}' == '2'), isTrue);
       expect(server.askedFullList, isFalse);
+      await drain(t);
+    });
+
+    testWidgets('متوسّط (١٬٢٠٠): الصفحة الأولى فوراً والشرائح «…»، ثمّ القائمة الكاملة بعدّاداتها — بلا ملخّص', (t) async {
+      final inner = await visualSetUp(s1bSasOwner);
+      final srv = _MediumServer(inner);
+      ApiClient.dio.httpClientAdapter = srv;
+      BigSubscribersApi.reset();
+      SubscribersApi.clearAllCaches();
+      cmd = ValueNotifier<SubscriberFilter?>(SubscriberFilter.all);
+      await pumpVisual(t, phone, home: (_) => SubscribersScreen(filterCmd: cmd));
+      await settle(t, seconds: 1);
+      expect(find.text('big000001'), findsWidgets, reason: 'الصفحة الأولى من الخادم قبل القائمة الكاملة');
+      expect(srv.askedFullList, isTrue, reason: 'القائمة الكاملة تبدأ معها في الخلفيّة');
+      expect(srv.pageQueries.any((m) => '${m['size']}' == '50'), isTrue);
+      expect(find.text('…'), findsWidgets, reason: 'العدّادات من القائمة حين تصل — لا أرقامٌ تتبدّل');
+      expect(srv.summaryCalls, 0, reason: 'لا ملخّص يزاحم القائمة على ساسٍ بطيء');
+      await settle(t, seconds: 4);
+      expect(find.text('120'), findsWidgets, reason: 'عدّاد «الكل» من القائمة الكاملة (لا من الخادم)');
+      expect(find.text('…'), findsNothing);
+      expect(srv.summaryCalls, 0);
+      await drain(t);
+    });
+
+    testWidgets('متوسّط والقائمة الكاملة تعذّرت ⇒ تبقى الصفحات بعدّادات الملخّص (لا شاشة فارغة)', (t) async {
+      final inner = await visualSetUp(s1bSasOwner);
+      final srv = _MediumServer(inner, fullDelay: const Duration(milliseconds: 500), fullFails: true);
+      ApiClient.dio.httpClientAdapter = srv;
+      BigSubscribersApi.reset();
+      SubscribersApi.clearAllCaches();
+      // بلا نسخة قرصٍ من اختبارٍ سابق (القائمة الفاشلة تعود إليها كما كانت)
+      await t.runAsync(SubscribersOfflineCache.clear);
+      cmd = ValueNotifier<SubscriberFilter?>(SubscriberFilter.all);
+      await pumpVisual(t, phone, home: (_) => SubscribersScreen(filterCmd: cmd));
+      await settle(t, seconds: 3); // الطلب وإعادته (بوّابة عابرة) ثمّ الفشل
+      // ثمّ نسخة القرص (قراءة ملفٍّ حقيقيّة لا تتقدّم بـpump) — فارغةٌ هنا
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 500)));
+      await settle(t, seconds: 2);
+      expect(find.text('big000001'), findsWidgets);
+      expect(srv.summaryCalls, greaterThan(0), reason: 'بلا قائمة: العدّادات من الملخّص كالكبير');
+      expect(find.text('1200'), findsWidgets);
       await drain(t);
     });
 

@@ -198,6 +198,8 @@ class _SubsListCache {
   static DateTime? _at;
   static Future<List<Subscriber>?>? _inFlight;
 
+  static bool get isFresh => _list != null && _at != null && DateTime.now().difference(_at!) < _ttl;
+
   static Future<List<Subscriber>?> get() {
     final now = DateTime.now();
     // ⚠️ `_at != null` يُقصي نسخة القرص من هذا الاختصار عمداً — فهي
@@ -456,6 +458,9 @@ class SubscribersApi {
   /// so Dashboard and SubscribersScreen don't double-fetch on app
   /// open. Use [refreshAll] for pull-to-refresh.
   static Future<List<Subscriber>?> loadAll() => _SubsListCache.get();
+
+  /// في الذاكرة قائمةٌ طازجة (≤ ٤٥ث من الشبكة) — loadAll تعيدها فوراً بلا طلب.
+  static bool get hasFreshList => _SubsListCache.isFresh;
 
   /// نفس `loadAll` لكن يدمج بيانات الجلسة المباشرة (IP + DL/UL + الجهاز)
   /// من `/api/v2/online-users`. الاستدعاءان يعملان بالتوازي.

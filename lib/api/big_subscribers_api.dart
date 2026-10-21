@@ -31,6 +31,18 @@ class BigSubscribersApi {
   /// آخر ما عُرف: الحساب كبير (≥ [threshold]). لا يسأل الشبكة.
   static bool get knownBig => (_probeTotal ?? 0) > 0;
 
+  /// من هذا العدد (ودون [threshold]) — «متوسّط»: الصفحة الأولى من الساس تُعرض فوراً والقائمة الكاملة تكمل في الخلفيّة،
+  /// وحين تصل يعود كلّ شيءٍ كما كان (٢١ أكتوبر، المالك: «سوّي الهم سرعة وما يتأثر شي» — ساساتٌ بعيدة تجيب ١٬١٥٤ مشتركاً
+  /// بـ٣٫٥ث و٢٬٥٣٢ بـ٨٫٥ث مهما شُكّلت الصفحات: حدّها الساس نفسه).
+  static const int progressiveMin = 1000;
+
+  /// مجموع مشتركي الحساب من آخر سؤال (أيّاً كان حجمه) — ٠ قبل السؤال أو لحسابٍ لا يرقّم (ايرث لنك/FTTH).
+  static int _probeSize = 0;
+  static int get knownSize => _probeSize;
+
+  /// آخر ما عُرف: الحساب «متوسّط» (≥ [progressiveMin] و < [threshold]). لا يسأل الشبكة.
+  static bool get knownProgressive => _probeSize >= progressiveMin && _probeSize < threshold;
+
   /// عدد مشتركي الحساب إن كان كبيراً، وإلّا ٠. صفٌّ واحد من الساس (`?page=1&size=1`) — بلا القائمة الكاملة.
   /// ردٌّ بلا `paged` (ايرث لنك/FTTH، أو خادمٌ أقدم) أو فشلٌ = ليس كبيراً ⇒ المسار المعتاد كما كان. لا يرمي.
   static Future<int> probe() async {
@@ -60,7 +72,9 @@ class BigSubscribersApi {
       );
       final b = r.data ?? const {};
       final total = b['total'] is num ? (b['total'] as num).toInt() : int.tryParse('${b['total']}') ?? 0;
-      final big = b['success'] == true && b['paged'] == true && total >= threshold ? total : 0;
+      final paged = b['success'] == true && b['paged'] == true;
+      final big = paged && total >= threshold ? total : 0;
+      _probeSize = paged ? total : 0;
       _probeTotal = big;
       _probeAt = DateTime.now();
       _probeToken = token;
@@ -220,6 +234,7 @@ class BigSubscribersApi {
   /// من `SessionManager` — لا يرث الحساب التالي حكم سابقه.
   static void reset() {
     _probeTotal = null;
+    _probeSize = 0;
     _probeAt = null;
     _probeToken = null;
     _probeInFlight = null;
@@ -230,6 +245,7 @@ class BigSubscribersApi {
   @visibleForTesting
   static void debugSetBig(int total) {
     _probeTotal = total;
+    _probeSize = total;
     _probeAt = DateTime.now();
   }
 }
