@@ -397,6 +397,7 @@
     "wa_checking": "Checking…",
     "wa_connected": "WhatsApp connected",
     "wa_disconnected": "WhatsApp disconnected",
+    "debts_big_list": "Large lists: see the debts report",
     "subscriber_singular": "subscriber",
     "fetch_failed_swipe": "Failed — swipe to refresh",
     "period_daily": "Daily",
@@ -409,6 +410,7 @@
     "reports": "Reports"
   },
   "subscribers": {
+    "big_debtors_unavailable": "“Debtors” is not available yet for very large lists: the debt lives in the SAS notes, which the SAS cannot filter. Search the subscriber by name or username, or open the debts report.",
     "title": "Subscribers",
     "search_hint": "Search by name or username...",
     "filter_all": "All",

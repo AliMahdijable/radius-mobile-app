@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/device_probe_api.dart';
+import '../../api/big_subscribers_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../api/whatsapp_api.dart';
 import '../../core/util/clipboard_helper.dart';
@@ -184,10 +185,17 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       // فتتحدّث الباقة والانتهاء والدين، وتبقى مدّة الجلسة والتحميل
       // والرفع مجمَّدةً على ما كانت لحظة فتح الشاشة. وهي بالضبط
       // الأرقام التي يسحب المدير ليراها.
-      list = await (force
-              ? SubscribersApi.loadAllWithOnline()
-              : SubscribersApi.loadAll())
-          .timeout(const Duration(seconds: 20));
+      // الحساب الكبير: صفّه وحده من الساس بيوزره — لا قائمة كاملة.
+      if (await BigSubscribersApi.probe() > 0) {
+        final one = await BigSubscribersApi.findOne(idx: sub.idx, username: sub.username)
+            .timeout(const Duration(seconds: 20));
+        list = one == null ? null : [one];
+      } else {
+        list = await (force
+                ? SubscribersApi.loadAllWithOnline()
+                : SubscribersApi.loadAll())
+            .timeout(const Duration(seconds: 20));
+      }
     } catch (_) {
       list = null;
     }

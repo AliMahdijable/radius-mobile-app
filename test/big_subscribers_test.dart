@@ -1,0 +1,267 @@
+import 'dart:convert';
+import 'dart:math' as math;
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:rad_mysvcs/api/api_client.dart';
+import 'package:rad_mysvcs/api/big_subscribers_api.dart';
+import 'package:rad_mysvcs/api/dashboard_api.dart';
+import 'package:rad_mysvcs/api/subscribers_api.dart';
+import 'package:rad_mysvcs/screens/subscribers/sheets/subscriber_picker_sheet.dart';
+import 'package:rad_mysvcs/screens/subscribers/subscribers_screen.dart';
+import 'package:rad_mysvcs/screens/subscribers/widgets/filter_chips_bar.dart';
+
+import 'visual_perm/visual_perm_harness.dart';
+
+/// الحسابات الكبيرة (٢١ أكتوبر، طلب المالك: admin@full ٨٩٬١٧٧ مشتركاً — القائمة الكاملة ٩٦ث وتنقطع): ≥ ٥٠٠٠ مشترك ⇒ لا قائمة
+/// كاملة ولا قائمة متصلين؛ الصفحة والتبويب والبحث من الخادم والعدّادات من summary.app بتعريفات هذا التطبيق. الخادم وهميّ.
+const _bigTotals = {
+  'all': 89177,
+  'active_all': 66865,
+  'expired_all': 22312,
+  'online_all': 52000,
+  'offline': 14865,
+  'disabled': 745,
+  'near_expiry': 9012,
+  'online_no_plan': 1170,
+  'neglected': 0,
+};
+const _app = {
+  'all': 89177,
+  'active': 66865,
+  'expired': 22312,
+  'online': 52000,
+  'offline': 14865,
+  'disabled': 745,
+  'nearExpiry': 9012,
+  'onlineNoPlan': 1170,
+  'debtors': null,
+  'neglected': 0,
+};
+
+String _two(int n) => n.toString().padLeft(2, '0');
+
+Map<String, Object?> _bigRow(int i, String tab) {
+  final days = tab == 'near_expiry' ? i % 3 + 1 : tab.startsWith('expired') ? -(1 + i % 20) : 5 + i % 40;
+  final exp = DateTime.now().add(Duration(days: days, hours: 2));
+  return {
+    'idx': '${100000 + i}',
+    'username': 'big${i.toString().padLeft(6, '0')}',
+    'firstname': 'مشترك',
+    'lastname': '$i',
+    'phone': '0770${2000000 + i}',
+    'profile_name': 'Gold',
+    'profile_id': 7,
+    'expiration': '${exp.year}-${_two(exp.month)}-${_two(exp.day)} ${_two(exp.hour)}:00:00',
+    'remaining_days': days,
+    'online_status': tab == 'offline' ? 0 : 1,
+    'enabled': tab == 'disabled' ? 0 : 1,
+  };
+}
+
+/// خادمٌ فوق خادم لقطات الصلاحيّات: يجيب الصفحات والملخّص، ويسجّل كلّ طلب (لإثبات أنّ القائمة الكاملة لا تُطلب).
+class _BigServer implements HttpClientAdapter {
+  _BigServer(this.inner, {this.total = 89177});
+  final HttpClientAdapter inner;
+  final int total;
+  final requests = <RequestOptions>[];
+
+  bool get askedFullList => requests.any((r) => r.method == 'GET' && r.path == '/api/v2/subscribers' && r.queryParameters['page'] == null);
+  bool get askedOnline => requests.any((r) => r.path == '/api/v2/online-users');
+  List<Map<String, dynamic>> get pageQueries => [
+        for (final r in requests)
+          if (r.path == '/api/v2/subscribers' && r.queryParameters['page'] != null) Map<String, dynamic>.from(r.queryParameters),
+      ];
+
+  static ResponseBody _json(int status, Object body) => ResponseBody.fromString(jsonEncode(body), status, headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      });
+
+  @override
+  Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
+    requests.add(o);
+    if (o.method == 'GET' && o.path == '/api/v2/subscribers' && o.queryParameters['page'] != null) {
+      final page = int.parse('${o.queryParameters['page']}');
+      final size = int.parse('${o.queryParameters['size'] ?? 50}');
+      final tab = '${o.queryParameters['tab'] ?? 'all'}';
+      if (total < BigSubscribersApi.threshold) {
+        return _json(200, {'success': true, 'data': const [], 'total': total, 'paged': true, 'page': page, 'size': size, 'last_page': 1});
+      }
+      if (tab == 'debtors') {
+        return _json(409, {'success': false, 'code': 'TAB_UNSUPPORTED', 'message': '«مديون» غير متاح بالصفحة للقوائم الكبيرة'});
+      }
+      final base = _bigTotals[tab] ?? 0;
+      final eff = o.queryParameters['q'] != null ? math.min(base, 7) : base;
+      final start = (page - 1) * size;
+      final n = math.max(0, math.min(size, eff - start));
+      return _json(200, {
+        'success': true,
+        'data': [for (var k = 0; k < n; k++) _bigRow(start + k + 1, tab)],
+        'total': eff,
+        'paged': true,
+        'page': page,
+        'size': size,
+        'last_page': math.max(1, (eff / size).ceil()),
+      });
+    }
+    if (o.method == 'GET' && o.path == '/api/v2/subscribers-summary') {
+      return _json(200, {'success': true, 'summary': {'all': 89177, 'debtors': null, 'app': _app}});
+    }
+    return inner.fetch(o, requestStream, cancelFuture);
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+void main() {
+  setUpAll(visualSetUpAll);
+
+  late _BigServer server;
+  late ValueNotifier<SubscriberFilter?> cmd;
+
+  Future<void> open(WidgetTester t, {int total = 89177}) async {
+    final inner = await visualSetUp(s1bSasOwner);
+    server = _BigServer(inner, total: total);
+    ApiClient.dio.httpClientAdapter = server;
+    BigSubscribersApi.reset();
+    SubscribersApi.clearAllCaches();
+    cmd = ValueNotifier<SubscriberFilter?>(SubscriberFilter.all);
+    await pumpVisual(t, phone, home: (_) => SubscribersScreen(filterCmd: cmd));
+    await settle(t, seconds: 2);
+  }
+
+  Future<void> drain(WidgetTester t) async {
+    await t.pumpWidget(const SizedBox());
+    await t.pump(const Duration(seconds: 6));
+    await visualTearDown();
+    BigSubscribersApi.reset();
+    SubscribersApi.clearAllCaches();
+  }
+
+  group('شاشة المشتركين — حسابٌ كبير (٨٩٬١٧٧)', () {
+    testWidgets('الصفحة الأولى من الخادم، والعدّادات من الملخّص، بلا قائمةٍ كاملة ولا قائمة متصلين', (t) async {
+      await open(t);
+      expect(find.text('big000001'), findsWidgets);
+      expect(server.askedFullList, isFalse, reason: 'الحساب الكبير لا يطلب القائمة الكاملة');
+      expect(server.askedOnline, isFalse, reason: 'ولا قائمة المتصلين الكاملة');
+      expect(find.text('89177'), findsWidgets, reason: 'عدّاد «الكل» من الملخّص');
+      final q = server.pageQueries.where((m) => '${m['size']}' == '50').toList();
+      expect(q, isNotEmpty);
+      expect(q.first['tab'], 'all');
+      await drain(t);
+    });
+
+    testWidgets('التبويب والبحث وتحميل المزيد تُسأل من الخادم', (t) async {
+      await open(t);
+      // «قارب» = near_expiry (تعريف التطبيق: أقلّ من ٤ أيّام) — بأمر التبويب كما ترسله الرئيسيّة
+      cmd.value = SubscriberFilter.nearExpiry;
+      await settle(t, seconds: 2);
+      expect(server.pageQueries.any((m) => m['tab'] == 'near_expiry'), isTrue);
+      // البحث بعد توقّف الكتابة
+      await t.enterText(find.byType(TextField).first, 'big0001');
+      await settle(t, seconds: 2);
+      expect(server.pageQueries.any((m) => m['q'] == 'big0001'), isTrue);
+      // العودة لـ«الكل» بلا بحث ثمّ «تحميل المزيد» ⇒ الصفحة ٢
+      await t.enterText(find.byType(TextField).first, '');
+      await settle(t, seconds: 2);
+      cmd.value = SubscriberFilter.all;
+      await settle(t, seconds: 2);
+      final more = find.text('تحميل المزيد');
+      await t.scrollUntilVisible(more, 800,
+          scrollable: find.byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.down).first);
+      await t.tap(more);
+      await settle(t, seconds: 2);
+      expect(server.pageQueries.any((m) => '${m['page']}' == '2'), isTrue);
+      expect(server.askedFullList, isFalse);
+      await drain(t);
+    });
+
+    testWidgets('«مدين» ⇒ نصٌّ يقول لماذا، بلا طلب قائمة', (t) async {
+      await open(t);
+      final before = server.pageQueries.length;
+      cmd.value = SubscriberFilter.debtors;
+      await settle(t, seconds: 2);
+      expect(server.pageQueries.where((m) => m['tab'] == 'debtors'), isEmpty);
+      expect(server.pageQueries.length, before, reason: 'لا صفحة لـ«مدين»');
+      expect(find.textContaining('غير متاح بعد للقوائم الكبيرة'), findsOneWidget);
+      // الشريط ينزلق إلى الشريحة المختارة ⇒ عدّادها ظاهر: «—» لا صفر
+      expect(find.descendant(of: find.byType(FilterChipsBar), matching: find.text('—')), findsOneWidget);
+      await drain(t);
+    });
+
+    testWidgets('حسابٌ صغير (١٬٢٠٠) ⇒ القائمة الكاملة كما كانت', (t) async {
+      await open(t, total: 1200);
+      expect(server.askedFullList, isTrue);
+      await drain(t);
+    });
+  });
+
+  group('نافذة «اختر مشتركاً» (الإضافة السريعة) — حسابٌ كبير', () {
+    Future<void> openPicker(WidgetTester t, {bool debtorsOnly = false}) async {
+      final inner = await visualSetUp(s1bSasOwner);
+      server = _BigServer(inner);
+      ApiClient.dio.httpClientAdapter = server;
+      BigSubscribersApi.reset();
+      SubscribersApi.clearAllCaches();
+      await pumpVisual(t, phone,
+          home: (_) => Builder(
+                builder: (ctx) => Center(
+                  child: TextButton(
+                    onPressed: () => showSubscriberPickerSheet(ctx, title: 'تفعيل', debtorsOnly: debtorsOnly),
+                    child: const Text('افتح'),
+                  ),
+                ),
+              ));
+      await settle(t, seconds: 1); // الترجمة تُحمَّل قبل أوّل بناء
+      await t.tap(find.text('افتح'));
+      await settle(t, seconds: 2);
+    }
+
+    testWidgets('الأوائل ثمّ البحث من الساس، بلا قائمةٍ كاملة', (t) async {
+      await openPicker(t);
+      expect(find.text('(big000001)'), findsOneWidget);
+      await t.enterText(find.byType(TextField).first, 'big0001');
+      await settle(t, seconds: 2);
+      expect(server.pageQueries.any((m) => m['q'] == 'big0001'), isTrue);
+      expect(server.askedFullList, isFalse);
+      await drain(t);
+    });
+
+    testWidgets('«عليه دين» تنتظر البحث وتقول لماذا، ثمّ ترشّح النتائج', (t) async {
+      await openPicker(t, debtorsOnly: true);
+      expect(find.textContaining('قائمة المدينين غير متاحة بعد'), findsOneWidget);
+      expect(server.pageQueries.where((m) => '${m['size']}' == '50'), isEmpty, reason: 'لا صفحة قبل البحث');
+      await t.enterText(find.byType(TextField).first, 'big0001');
+      await settle(t, seconds: 2);
+      expect(server.pageQueries.any((m) => m['q'] == 'big0001'), isTrue);
+      // صفوف الخادم الوهميّ بلا دين ⇒ لا مدين يطابق
+      expect(find.text('لا يوجد مدين يطابق البحث'), findsOneWidget);
+      expect(server.askedFullList, isFalse);
+      await drain(t);
+    });
+  });
+
+  group('الرئيسية — عدّادات الحساب الكبير', () {
+    testWidgets('fetchDebtors من summary.app، والدين غير معروف (لا صفر)', (t) async {
+      final inner = await visualSetUp(s1bSasOwner);
+      server = _BigServer(inner);
+      ApiClient.dio.httpClientAdapter = server;
+      BigSubscribersApi.reset();
+      SubscribersApi.clearAllCaches();
+      final r = await t.runAsync(DashboardApi.fetchDebtors);
+      expect(r, isNotNull);
+      expect(r!.debtsUnknown, isTrue);
+      expect(r.totalSubs, 89177);
+      expect(r.active, 66865);
+      expect(r.expired, 22312);
+      expect(r.nearExpiry, 9012);
+      expect(r.disabled, 745);
+      expect(server.askedFullList, isFalse);
+      await visualTearDown();
+      BigSubscribersApi.reset();
+    });
+  });
+}

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../api/big_subscribers_api.dart';
 import '../api/subscribers_api.dart';
 import '../models/app_notification.dart';
 import '../models/subscriber.dart';
@@ -111,6 +112,10 @@ class NotificationRouter {
   }
 
   static Future<Subscriber?> findSubscriber(String usernameOrId) async {
+    // الحساب الكبير: بحثٌ في الساس بدل القائمة الكاملة.
+    if (await BigSubscribersApi.probe() > 0) {
+      return BigSubscribersApi.findOne(idx: usernameOrId, username: usernameOrId);
+    }
     final list = await SubscribersApi.loadAllWithOnline();
     if (list == null) return null;
     final needle = usernameOrId.toLowerCase();

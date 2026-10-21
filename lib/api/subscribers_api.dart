@@ -7,6 +7,7 @@ import '../models/subscriber.dart';
 import '../services/auth_storage.dart';
 import '../services/subscribers_offline_cache.dart';
 import 'api_client.dart';
+import 'big_subscribers_api.dart';
 import 'bulk_activate_api.dart';
 import 'el_deposit_password.dart';
 import 'cards_api.dart';
@@ -220,6 +221,10 @@ class _SubsListCache {
 
   static Future<List<Subscriber>?> _fetch() async {
     try {
+      // الحسابات الكبيرة (≥ ٥٠٠٠، BigSubscribersApi): لا قائمة كاملة أصلاً — ٨٩ ألفاً ≈ ٩٦ث تتجاوز المهلة، وكانت تُعاد مع
+      // كلّ نبضة. شاشة المشتركين والرئيسية والبحث تجلب بالصفحة والملخّص؛ وما سواها يرى «تعذّر» بدل انتظارٍ بلا نهاية أو
+      // نسخة قرصٍ قديمة. صفٌّ واحد يحسم (مخزَّنٌ ١٠ دقائق).
+      if (await BigSubscribersApi.probe() > 0) return null;
       final result = await SubscribersApi._loadAllRaw();
       if (result != null) {
         _list = result;
@@ -356,6 +361,8 @@ class SubscribersApi {
   static Future<Map<String, OnlineSessionInfo>?> loadOnline() async {
     final token = await AuthStorage.readToken();
     if (token == null) return null;
+    // الحساب الكبير: لا قائمة متصلين كاملة (عشرات الآلاف ⇒ دقائق) — حالة الاتّصال من صفّ المشترك نفسه.
+    if (await BigSubscribersApi.probe() > 0) return null;
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/v2/online-users',
@@ -493,6 +500,8 @@ class SubscribersApi {
     invalidatePackagesCache();
     // حكم التجديد الجماعيّ (صلاحيّات ساس هذا المدير) يخصّ هذه الجلسة وحدها.
     BulkActivateApi.reset();
+    // «الحساب كبير؟» يخصّ هذه الجلسة وحدها.
+    BigSubscribersApi.reset();
   }
 
   /// Forces the next `loadAll` to re-fetch from the backend instead

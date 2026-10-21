@@ -212,10 +212,21 @@ class _DebtCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                _HeroAmount(
-                  amount: debtors!.total,
-                  color: _accent,
-                ),
+                // الحساب الكبير: الدين غير معروف هنا (notes الساس) — «—» لا «٠ IQD».
+                if (debtors!.debtsUnknown)
+                  Text(
+                    '—',
+                    style: AppType.title(color: _accent).copyWith(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      height: 1.1,
+                    ),
+                  )
+                else
+                  _HeroAmount(
+                    amount: debtors!.total,
+                    color: _accent,
+                  ),
                 const SizedBox(height: 7),
                 Row(
                   children: [
@@ -226,7 +237,9 @@ class _DebtCard extends StatelessWidget {
                     // `loose` فلا فرق بصريّ حيث يتّسع أصلاً.
                     Flexible(
                       child: Text(
-                        '${debtors!.count} ${'dashboard.subscriber_singular'.tr()}',
+                        debtors!.debtsUnknown
+                            ? 'dashboard.debts_big_list'.tr()
+                            : '${debtors!.count} ${'dashboard.subscriber_singular'.tr()}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: AppType.muted(color: AppColors.textMid)
