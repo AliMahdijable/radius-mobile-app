@@ -81,6 +81,7 @@ class BigSubscribersApi {
     String? sort,
     String dir = 'asc',
     int? parentId,
+    int? profileId,
   }) async {
     final token = await AuthStorage.readToken();
     if (token == null || token.isEmpty) throw const BigListException('انتهت الجلسة — سجّل الدخول من جديد');
@@ -95,6 +96,7 @@ class BigSubscribersApi {
           if (sort != null) 'sort': sort,
           'dir': dir,
           if (parentId != null && parentId > 0) 'parent_id': parentId,
+          if (profileId != null && profileId > 0) 'profile_id': profileId,
         },
         options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
@@ -150,15 +152,15 @@ class BigSubscribersApi {
 
   /// عدّادات الساس بتعريفات هذا التطبيق (summary.app) — لفلتر مديرٍ إن مُرّر. `null` عند الفشل — لا أصفار مزعومة.
   /// [fresh] يتخطّى ذاكرة الـ٢٠ثانية (السحب للتحديث، وبعد عمليّة).
-  static Future<BigCounts?> summary({int? parentId, bool fresh = false}) async {
+  static Future<BigCounts?> summary({int? parentId, int? profileId, bool fresh = false}) async {
     final token = await AuthStorage.readToken();
     if (token == null || token.isEmpty) return null;
-    final key = '${token.hashCode}|${parentId ?? -1}';
+    final key = '${token.hashCode}|${parentId ?? -1}|${profileId ?? -1}';
     final hit = _summaryCache[key];
     if (!fresh && hit != null && DateTime.now().difference(hit.at) < _summaryTtl) return hit.value;
     final running = _summaryInFlight[key];
     if (running != null) return running;
-    final f = _summary(token, parentId);
+    final f = _summary(token, parentId, profileId);
     _summaryInFlight[key] = f;
     try {
       final v = await f;
@@ -169,11 +171,15 @@ class BigSubscribersApi {
     }
   }
 
-  static Future<BigCounts?> _summary(String token, int? parentId) async {
+  static Future<BigCounts?> _summary(String token, int? parentId, int? profileId) async {
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/v2/subscribers-summary',
-        queryParameters: {'for': 'app', if (parentId != null && parentId > 0) 'parent_id': parentId},
+        queryParameters: {
+          'for': 'app',
+          if (parentId != null && parentId > 0) 'parent_id': parentId,
+          if (profileId != null && profileId > 0) 'profile_id': profileId,
+        },
         options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
       final b = r.data ?? const {};
@@ -183,6 +189,31 @@ class BigSubscribersApi {
     } catch (e) {
       if (kDebugMode) debugPrint('🟡 big summary: $e');
       return null;
+    }
+  }
+
+  /// مشتركون بأعيانهم للشاشات التي تعرض قوائمنا نحن (الخصومات القائمة، ارتباطات تلغرام) في الحساب الكبير —
+  /// `POST /api/v2/subscribers/lookup` (≤ ١٠٠ لكلٍّ من اليوزرات والمعرّفات، من ساس المتّصل). فارغةٌ عند الفشل:
+  /// الشاشة تعرض اليوزر/المعرّف كما كانت.
+  static Future<List<Subscriber>> lookup({List<String> usernames = const [], List<String> idxs = const []}) async {
+    final token = await AuthStorage.readToken();
+    if (token == null || token.isEmpty) return const [];
+    if (usernames.isEmpty && idxs.isEmpty) return const [];
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/subscribers/lookup',
+        data: {'usernames': usernames.take(100).toList(), 'idxs': idxs.take(100).toList()},
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+      final b = r.data ?? const {};
+      if (b['success'] != true) return const [];
+      return ((b['data'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((m) => Subscriber.fromJson(Map<String, dynamic>.from(m)))
+          .toList();
+    } catch (e) {
+      if (kDebugMode) debugPrint('🟡 big lookup: $e');
+      return const [];
     }
   }
 

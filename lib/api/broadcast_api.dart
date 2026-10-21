@@ -223,7 +223,8 @@ class BroadcastApi {
         ok: true,
         queued: queued == null ? null : _toInt(queued),
         excludedHighRisk: excluded == null ? null : _toInt(excluded),
-        message: null,
+        // الحساب الكبير «عام»: الخادم بدأ التجهيز في الخلفيّة (pending) — رسالته تُعرض كما هي، والنتيجة بإشعار
+        message: data['pending'] == true ? data['message']?.toString() : null,
       );
     } on DioException catch (e) {
       _log('broadcast', e);

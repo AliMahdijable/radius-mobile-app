@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../api/big_subscribers_api.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../api/telegram_api.dart';
 import '../../../models/subscriber.dart';
@@ -58,13 +59,19 @@ class _BindingsSheetState extends State<_BindingsSheet> {
   Future<void> _load() async {
     if (!mounted) return;
     setState(() => _loading = true);
+    // الحساب الكبير (≥ ٥٠٠٠): أصحاب الارتباطات بأعيانهم من الساس (≤ ١٠٠) — لا القائمة الكاملة
+    final big = await BigSubscribersApi.probe() > 0;
     final results = await Future.wait([
       TelegramApi.listBindings(widget.adminId),
-      SubscribersApi.loadAll(),
+      big ? Future<List<Subscriber>?>.value(null) : SubscribersApi.loadAll(),
     ]);
     if (!mounted) return;
     final bindings = results[0] as List<TelegramBinding>;
-    final subs = (results[1] as List<Subscriber>?) ?? const [];
+    var subs = (results[1] as List<Subscriber>?) ?? const <Subscriber>[];
+    if (big && bindings.isNotEmpty) {
+      subs = await BigSubscribersApi.lookup(idxs: [for (final b in bindings) b.sas4Idx]);
+      if (!mounted) return;
+    }
     final map = <String, Subscriber>{};
     for (final s in subs) {
       if (s.idx != null) map[s.idx!] = s;

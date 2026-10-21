@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/discounts_api.dart';
+import '../../../api/big_subscribers_api.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../core/widgets/design_sheet.dart';
@@ -88,7 +89,11 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
   /// فشل لأي سبب، الـlist يبقى عاملاً (يظهر username فقط).
   Future<void> _loadFullNames() async {
     try {
-      final subs = await SubscribersApi.loadAll();
+      // الحساب الكبير (≥ ٥٠٠٠): أصحاب الخصومات بأعيانهم من الساس (≤ ١٠٠) — لا القائمة الكاملة
+      final big = await BigSubscribersApi.probe() > 0;
+      final subs = big
+          ? await BigSubscribersApi.lookup(usernames: [for (final d in _rows) d.subscriberUsername])
+          : await SubscribersApi.loadAll();
       if (!mounted || subs == null) return;
       final map = <String, String>{};
       for (final s in subs) {

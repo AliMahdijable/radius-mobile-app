@@ -268,11 +268,14 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
 
   bool get _messageOptional => _intent.messageOptional;
 
+  /// الحساب الكبير «عام»: الفئة كلّها يجمعها الخادم في الخلفيّة — لا قائمة هنا يُحسب منها.
+  bool get _bigAll => _big && _scope == _Scope.all;
+
   bool get _canSend =>
       !_sending &&
       // الفحص لحظةٌ واحدة، لكنّ نقرةً ثانيةً فيها تفتح حوارين.
       !_checkingRisk &&
-      _targets.isNotEmpty &&
+      (_bigAll || _targets.isNotEmpty) &&
       // مع وجود صورة، الرسالة النصّية اختياريّة (تصبح caption).
       (_messageOptional ||
           _msg.text.trim().isNotEmpty ||
@@ -345,6 +348,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   }
 
   Future<void> _send() async {
+    if (_bigAll) return _sendBigAll();
     final targets = _targets;
     if (targets.isEmpty) return;
 
@@ -393,6 +397,47 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       setState(() {
         _msg.clear();
         _selected.clear();
+        _imageBytes = null;
+        _imageName = null;
+      });
+    } else {
+      _snack(r.message ?? 'فشل الإرسال', isError: true);
+    }
+  }
+
+  /// الحساب الكبير «عام»: تأكيدٌ بعدد الفئة من الساس، ثمّ يردّ الخادم فوراً «بدأ التجهيز» ويصل إشعارٌ بالنتيجة.
+  Future<void> _sendBigAll() async {
+    // الخادم يجمع الفئة كلّها — فلتر المدير لا يصله، فلا يُرسَل لأوسع ممّا اختاره المدير
+    if (_managerFilter.isNotEmpty) {
+      _snack('فلتر المدير لا يُطبَّق على «عام» في الحساب الكبير — ألغِه أو استعمل «محدّد»', isError: true);
+      return;
+    }
+    final n = _counts[_filter] ?? -1;
+    final ok = await _confirmDialog(
+      'إرسال لفئةٍ كاملة',
+      '${n < 0 ? 'إرسال لكلّ مشتركي الفئة' : 'إرسال لنحو $n مشترك في الفئة'} (من له رقم هاتف)؟ '
+      'يجهّزها الخادم خلال دقائق ويصلك إشعارٌ بالنتيجة.',
+      confirmLabel: 'إرسال',
+      confirmColor: AppColors.brand,
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _sending = true);
+    final r = await BroadcastApi.broadcast(
+      intent: _intent,
+      message: _msg.text.trim(),
+      targetUsernames: null,
+      imageBytes: _imageBytes,
+      imageMime: 'image/jpeg',
+      imageFilename: _imageName ?? 'broadcast.jpg',
+      forceChannel: _forceChannel == 'auto' ? null : _forceChannel,
+      includeHighRisk: false,
+    );
+    if (!mounted) return;
+    setState(() => _sending = false);
+    if (r.ok) {
+      _snack(r.message ?? 'بدأ تجهيز التبليغ — يصلك إشعارٌ بالنتيجة', isError: false);
+      setState(() {
+        _msg.clear();
         _imageBytes = null;
         _imageName = null;
       });
@@ -791,8 +836,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'حسابك كبير ($_bigTotal مشترك): ابحث واختر المشتركين — حتى $_kBigMaxTargets في المرّة. '
-              'الإرسال لفئةٍ كاملة غير متاح بعد، والتذكيرات التلقائيّة بقرب الانتهاء والديون تعمل لكلّ المشتركين.',
+              'حسابك كبير ($_bigTotal مشترك): «عام» يرسل للفئة كلّها — يجهّزها الخادم في الخلفيّة ويصلك إشعارٌ بالنتيجة. '
+              '«محدّد»: ابحث واختر حتى $_kBigMaxTargets مشترك في المرّة.',
               style: AppType.body(color: AppColors.textBody).copyWith(fontSize: 12.5, height: 1.5),
             ),
           ),
@@ -1027,8 +1072,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
               _Scope.all,
               icon: LucideIcons.layers,
               title: 'عام',
-              subtitle: _big ? 'غير متاح للحسابات الكبيرة' : 'للكل (${_candidates.length})',
-              enabled: !_big,
+              subtitle: _big ? 'كلّ الفئة — يُجهَّز في الخلفيّة' : 'للكل (${_candidates.length})',
             ),
           ),
           const SizedBox(width: 8),
@@ -1460,7 +1504,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                     style: AppType.muted().copyWith(fontSize: 10.5),
                   ),
                   Text(
-                    '${_targets.length} مشترك',
+                    _bigAll
+                        ? '${(_counts[_filter] ?? -1) < 0 ? '—' : _counts[_filter]} مشترك'
+                        : '${_targets.length} مشترك',
                     style: AppType.title(color: AppColors.brand)
                         .copyWith(fontSize: 14),
                   ),
