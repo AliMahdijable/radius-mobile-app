@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/discounts_api.dart';
+import '../../api/big_subscribers_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../core/util/amount_input.dart';
 import '../../core/util/format.dart';
@@ -46,6 +47,11 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
   final Set<String> _selected = {};
   String _query = '';
 
+  /// الحساب الكبير (≥ ٥٠٠٠): المشتركون من بحث الساس (١٠٠ لكلّ بحث) بدل القائمة الكاملة — والاختيار يبقى عبر البحوث.
+  bool _big = false;
+  final _bigSearch = BigSearch();
+  Map<String, PackageInfo> _packages = const {};
+
   bool get _canManage => Perms.has('discounts.manage');
 
   @override
@@ -56,12 +62,19 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
       final q = _searchCtrl.text.trim();
       if (q == _query) return;
       setState(() => _query = q);
+      if (_big) _bigSearch.search(q, onRows: _setBigRows);
     });
     _load();
   }
 
+  void _setBigRows(List<Subscriber> rows) {
+    if (!mounted) return;
+    setState(() => _all = rows.map((s) => s.enrichWithPackages(_packages)).toList());
+  }
+
   @override
   void dispose() {
+    _bigSearch.dispose();
     _amountCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
@@ -84,13 +97,17 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
     for (final d in discounts) {
       map[d.subscriberUsername.toLowerCase()] = d.discountAmount;
     }
+    _big = subs == null && await BigSubscribersApi.probe() > 0;
+    if (!mounted) return;
     setState(() {
+      _packages = packages;
       _all = (subs ?? const <Subscriber>[])
           .map((s) => s.enrichWithPackages(packages))
           .toList();
       _existing = map;
       _loading = false;
     });
+    if (_big) _bigSearch.search(_query, onRows: _setBigRows, now: true);
   }
 
   void _onAmount() {
@@ -133,7 +150,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
   }
 
   List<Subscriber> get _filtered {
-    if (_query.isEmpty) return _all;
+    if (_big || _query.isEmpty) return _all; // الكبير: الساس بحث
     final q = _query.toLowerCase();
     return _all.where((s) {
       return s.username.toLowerCase().contains(q) ||

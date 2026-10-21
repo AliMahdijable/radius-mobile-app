@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../../api/big_subscribers_api.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../api/telegram_api.dart';
 import '../../../core/util/clipboard_helper.dart';
@@ -52,6 +55,14 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
   /// الـQR على شاشته، المشترك يمسحه بجواله.
   bool _showQr = false;
 
+  /// الحساب الكبير (≥ ٥٠٠٠): البحث في الساس بعد توقّف الكتابة بدل القائمة الكاملة. جيلٌ لكلّ طلب.
+  bool _big = false;
+  int _bigTotal = 0;
+  List<Subscriber> _bigMatches = const [];
+  bool _bigSearching = false;
+  int _bigGen = 0;
+  Timer? _bigDebounce;
+
   @override
   void initState() {
     super.initState();
@@ -60,12 +71,23 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
 
   @override
   void dispose() {
+    _bigDebounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _loadSubs() async {
     setState(() => _loading = true);
+    final big = await BigSubscribersApi.probe();
+    if (!mounted) return;
+    if (big > 0) {
+      setState(() {
+        _big = true;
+        _bigTotal = big;
+        _loading = false;
+      });
+      return;
+    }
     final subs = await SubscribersApi.loadAll();
     if (!mounted) return;
     setState(() {
@@ -74,9 +96,38 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
     });
   }
 
+  void _bigSearchSoon() {
+    _bigDebounce?.cancel();
+    _bigDebounce = Timer(const Duration(milliseconds: 350), () async {
+      final q = _searchCtrl.text.trim();
+      final gen = ++_bigGen;
+      if (q.isEmpty) {
+        if (mounted) setState(() => _bigMatches = const []);
+        return;
+      }
+      setState(() => _bigSearching = true);
+      try {
+        final p = await BigSubscribersApi.page(page: 1, size: 12, tab: 'all', query: q);
+        if (!mounted || gen != _bigGen) return;
+        setState(() {
+          _bigMatches = p.rows;
+          _bigSearching = false;
+        });
+      } on BigListException catch (e) {
+        if (!mounted || gen != _bigGen) return;
+        setState(() {
+          _bigMatches = const [];
+          _bigSearching = false;
+          _err = e.message;
+        });
+      }
+    });
+  }
+
   List<Subscriber> get _matches {
     final q = _searchCtrl.text.trim().toLowerCase();
     if (q.isEmpty) return const [];
+    if (_big) return [for (final s in _bigMatches) if (s.idx != null) s];
     final out = <Subscriber>[];
     for (final s in _allSubs) {
       if (s.idx == null) continue;
@@ -179,6 +230,7 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
                 } else {
                   setState(() {});
                 }
+                if (_big) _bigSearchSoon();
               },
             ),
           ),
@@ -201,11 +253,14 @@ class _GeneratorSheetState extends State<_GeneratorSheet> {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text('ابدأ الكتابة للبحث بين ${_allSubs.length} مشترك',
+          child: Text('ابدأ الكتابة للبحث بين ${_big ? _bigTotal : _allSubs.length} مشترك',
               style: AppType.body(color: AppColors.textLow),
               textAlign: TextAlign.center),
         ),
       );
+    }
+    if (matches.isEmpty && _big && _bigSearching) {
+      return const Center(child: CircularProgressIndicator());
     }
     if (matches.isEmpty) {
       return Center(

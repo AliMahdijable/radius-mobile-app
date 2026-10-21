@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/subscriber_prices_api.dart';
+import '../../api/big_subscribers_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../core/util/amount_input.dart';
 import '../../core/util/format.dart';
@@ -52,16 +53,30 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
     _amountCtrl.addListener(_onAmount);
     _searchCtrl.addListener(() {
       final q = _searchCtrl.text.trim();
-      if (q != _query) setState(() => _query = q);
+      if (q != _query) {
+        setState(() => _query = q);
+        if (_big) _bigSearch.search(q, onRows: _setBigRows);
+      }
     });
     _load();
   }
 
   @override
   void dispose() {
+    _bigSearch.dispose();
     _amountCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  /// الحساب الكبير (≥ ٥٠٠٠): المشتركون من بحث الساس (١٠٠ لكلّ بحث) بدل القائمة الكاملة — والاختيار يبقى عبر البحوث.
+  bool _big = false;
+  final _bigSearch = BigSearch();
+  Map<String, PackageInfo> _packages = const {};
+
+  void _setBigRows(List<Subscriber> rows) {
+    if (!mounted) return;
+    setState(() => _all = rows.where((s) => s.idx != null).map((s) => s.enrichWithPackages(_packages)).toList());
   }
 
   Future<void> _load() async {
@@ -77,7 +92,11 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
     final subs = results[0] as List<Subscriber>?;
     final prices = results[1] as List<SubscriberPrice>?;
     final packages = results[2] as Map<String, PackageInfo>? ?? const {};
+    _big = subs == null && await BigSubscribersApi.probe() > 0;
+    if (!mounted) return;
+    if (_big) _bigSearch.search(_query, onRows: _setBigRows, now: true);
     setState(() {
+      _packages = packages;
       _all = (subs ?? const <Subscriber>[])
           .where((s) => s.idx != null)
           .map((s) => s.enrichWithPackages(packages))
@@ -117,7 +136,7 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
   }
 
   List<Subscriber> get _filtered {
-    if (_query.isEmpty) return _all;
+    if (_big || _query.isEmpty) return _all; // الكبير: الساس بحث
     final q = _query.toLowerCase();
     return _all
         .where((s) =>

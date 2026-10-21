@@ -212,10 +212,10 @@ class _DebtCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // الحساب الكبير: الدين غير معروف هنا (notes الساس) — «—» لا «٠ IQD».
+                // الحساب الكبير: الدين غير معروف بعد — «…» جارٍ عدّه، و«—» غير متاح؛ لا «٠ IQD».
                 if (debtors!.debtsUnknown)
                   Text(
-                    '—',
+                    debtors!.debtsPending ? '…' : '—',
                     style: AppType.title(color: _accent).copyWith(
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
@@ -238,7 +238,7 @@ class _DebtCard extends StatelessWidget {
                     Flexible(
                       child: Text(
                         debtors!.debtsUnknown
-                            ? 'dashboard.debts_big_list'.tr()
+                            ? (debtors!.debtsPending ? 'dashboard.debts_counting' : 'dashboard.debts_big_list').tr()
                             : '${debtors!.count} ${'dashboard.subscriber_singular'.tr()}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

@@ -73,13 +73,15 @@ class DebtorsResult {
     required this.onlineNoPlan,
     required this.disabled,
     this.debtsUnknown = false,
+    this.debtsPending = false,
   });
   final int count;
   final int total;
 
-  /// الحسابات الكبيرة (BigSubscribersApi): العدّادات من الساس، والدين في notes الساس ولا يُفلتر هناك — «—» لا صفر
-  /// ([count]/[total] صفرٌ لا يُعرض).
+  /// الحسابات الكبيرة (BigSubscribersApi): العدّادات من الساس، والدين من notes حين يكتمل عدّه في الخادم — وإلّا «—» لا
+  /// صفر ([count]/[total] صفرٌ لا يُعرض): شركةٌ دينها على دفترنا، أو [debtsPending] (جارٍ عدّه أوّل مرّة).
   final bool debtsUnknown;
+  final bool debtsPending;
 
   /// Subscribers whose remaining days fall in [0, 3] — soon-to-expire.
   final int nearExpiry;
@@ -249,9 +251,10 @@ class DashboardApi {
     if (await BigSubscribersApi.probe() > 0) {
       final c = await BigSubscribersApi.summary();
       if (c == null) return null;
+      final known = c.debtors != null && c.totalDebt != null;
       return DebtorsResult(
-        count: 0,
-        total: 0,
+        count: c.debtors ?? 0,
+        total: (c.totalDebt ?? 0).round(),
         nearExpiry: c.nearExpiry,
         online: c.online,
         offline: c.offline,
@@ -260,7 +263,8 @@ class DashboardApi {
         totalSubs: c.all,
         onlineNoPlan: c.onlineNoPlan,
         disabled: c.disabled,
-        debtsUnknown: true,
+        debtsUnknown: !known,
+        debtsPending: !known && c.debtorsPending,
       );
     }
     // Goes through SubscribersApi's process-wide cache so the dashboard
