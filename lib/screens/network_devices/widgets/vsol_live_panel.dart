@@ -905,7 +905,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
         children: [
           for (final mac in o.learnedMacs)
             Align(
-              alignment: Alignment.centerLeft,
+              alignment: AlignmentDirectional.centerStart,
               // ExpansionTile stores a bool in PageStorage. Each selectable
               // line has a scroll position and must use a separate storage key.
               child: SelectableText(mac,
