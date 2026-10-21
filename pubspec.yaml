@@ -202,6 +202,8 @@ flutter:
     # device_image_olt_catalog.dart
     - assets/devices-images/vsol/
     - assets/devices-images/olt/
+    # أولتيات BDCOM — يدويّة بمصدرها. device_image_bdcom_catalog.dart
+    - assets/devices-images/bdcom/
     - assets/images/
     - assets/translations/
 

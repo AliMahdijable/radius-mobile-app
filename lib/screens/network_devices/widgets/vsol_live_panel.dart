@@ -3,7 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../api/bdcom_epon.dart';
+import '../../../api/bridge_fdb.dart';
 import '../../../api/network_devices_api.dart';
+import '../../../api/olt_profile.dart';
 import '../../../api/vsol_olt_api.dart';
 import '../../../api/snmp_client.dart';
 import '../../../api/vsol_gpon_details.dart';
@@ -14,7 +17,12 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import 'expandable_section.dart';
 
-/// لوحة مراقبة حيّة لـ**OLT من VSOL** عبر SNMP.
+/// لوحة مراقبة حيّة لـ**OLT** ‏(VSOL وBDCOM EPON) عبر SNMP.
+///
+/// المصنّع من [OltProfile]: السجلّ أوّلاً ثمّ الهويّة الحيّة. ولكلٍّ جداوله:
+/// VSOL GPON جدول ماكاته (`37950`)، وBDCOM ماك الـONU وقراءات الضوء والمعالج
+/// من جداوله، وأجهزة المشترك خلف الـONU من جدول الجسر — كلّها في الخلفيّة
+/// على إيقاعٍ بطيء، لا في كلّ نبضة.
 ///
 /// بنيتها من بنية اللوحات الأخرى: رأسٌ حيّ، ثمّ شريط الجهاز، ثمّ كروت
 /// المقاييس، ثمّ أقسامٌ قابلة للطيّ. المستخدم ينتقل بين جهازٍ وآخر في
@@ -43,6 +51,14 @@ class _VsolLivePanelState extends State<VsolLivePanel>
   VsolGponSnapshot? _gponDetails;
   DateTime? _gponDetailsAt;
   bool _gponDetailsLoading = false;
+
+  /// المصنّع: من السجلّ قبل أيّ قراءة، ثمّ من هويّة الجهاز الحيّة.
+  late OltProfile _profile = OltProfile.fromDevice(widget.device);
+
+  /// تفاصيل EPON البطيئة (ماك الـONU والضوء والمعالج لـBDCOM، وأجهزة
+  /// المشترك من جدول الجسر) — تُدمج فوق كلّ لقطةٍ جديدة.
+  OltEponDetails _epon = const OltEponDetails();
+  bool _eponLoading = false;
 
   bool _onlineOnly = false;
   String _query = '';
@@ -136,6 +152,8 @@ class _VsolLivePanelState extends State<VsolLivePanel>
     // (طلب المستخدم ٢٠٢٦-١٠-٠١: «أهمّ شي عندي سرعة الاستجابة وعرض
     // البيانات وتحديثها… وهلشي بجميع الأجهزة»)
     _stats = DeviceStatsCache.instance.seedFor<VsolOltStats>(widget.device.id);
+    // والمصنّع من البذرة إن عرفته هويّةٌ حيّة سابقة — فلا تنتظر جداوله القراءة الأولى.
+    if (_stats?.profile.identified ?? false) _profile = _stats!.profile;
     // وعمرُها معها: رقمٌ عمره دقيقةٌ تحت شارة «مباشر» كذبة.
     final age = DeviceStatsCache.instance.ageOf(widget.device.id);
     if (_stats != null && age != null) {
@@ -240,6 +258,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
               // العدّادات من الطبقتين الخفيفتين — أرخص وأحدث.
               withCounters: structureOnly,
               withGponDetails: false,
+              profile: _profile,
               onPartialReady: (partial) {
                 if (!mounted || gen != _gen) return;
                 // ⚡ المسحة تبعث لقطتين: الهويّة (اسمٌ ورفع، صفر واجهات)
@@ -254,8 +273,9 @@ class _VsolLivePanelState extends State<VsolLivePanel>
                 // والقاعدة الصحيحة: **لا نُفقر المعروض**. نقبل الأغنى
                 // أيّاً كان ترتيبها — وهذا أيضاً يمنع لقطة الهويّة في
                 // مسحةٍ دوريّةٍ لاحقة من محو لوحةٍ مكتملة.
+                if (partial.profile.identified) _profile = partial.profile;
                 if (!VsolOltStats.richer(_stats, partial)) return;
-                setState(() => _stats = _withGponDetails(partial));
+                setState(() => _stats = _withDetails(partial));
                 // ⚠️ ولا نتّخذها عيّنةً أولى للمعدّل.
                 //
                 // 🐛 جرّبتُ ذلك فأعطى `0.0 Mbps`: اللقطة والنتيجة
@@ -279,7 +299,8 @@ class _VsolLivePanelState extends State<VsolLivePanel>
                   previous: base,
                 );
       if (!mounted || gen != _gen) return;
-      s = _withGponDetails(s);
+      if (s.profile.identified) _profile = s.profile;
+      s = _withDetails(s);
       final cost = clock.elapsed;
       final at = DateTime.now();
       // كلّ طبقةٍ تُقارَن بلقطتها، والنتيجة تُدمَج فوق السابقة: فصفوف
@@ -356,6 +377,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
         _interval = paced > _minInterval ? paced : _minInterval;
       });
       unawaited(_refreshGponDetails(community));
+      unawaited(_refreshEponDetails(community));
     } on VsolException catch (e) {
       if (!mounted || gen != _gen) return;
       setState(() {
@@ -371,17 +393,20 @@ class _VsolLivePanelState extends State<VsolLivePanel>
     }
   }
 
-  VsolOltStats _withGponDetails(VsolOltStats stats) {
+  VsolOltStats _withDetails(VsolOltStats stats) {
     final details = _gponDetails;
     final at = _gponDetailsAt;
-    return details == null || at == null
+    final g = details == null || at == null
         ? stats
         : stats.withGponDetails(details, at);
+    return g.withEponDetails(_epon);
   }
 
   Future<void> _refreshGponDetails(String community) async {
+    // ⚠️ جدول VSOL ‏(`37950`) لـVSOL وحدها — لا يُسأل عنه BDCOM GPON.
     if (_gponDetailsLoading ||
         !_foreground ||
+        !_profile.readsVsolTables ||
         !(_stats?.onus.any((o) => o.technology == VsolPonTechnology.gpon) ??
             false)) {
       return;
@@ -405,7 +430,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
         // Counter polling may have finished while the MAC table was loading.
         // Enrich the latest sample, never restore the one we started with.
         if (_stats != null) {
-          _stats = _withGponDetails(_stats!);
+          _stats = _withDetails(_stats!);
           DeviceStatsCache.instance.putRaw(d.id, _stats!);
         }
       });
@@ -414,8 +439,113 @@ class _VsolLivePanelState extends State<VsolLivePanel>
     }
   }
 
+  // ── EPON: كلّ قارئٍ على إيقاعه ────────────────────────────────────
+  //
+  // ⚡ لا شيء منها في النبضة: ماك الـONU لا يتغيّر إلّا باستبدال الوحدة
+  // (كلّ ٥ دقائق أو حين تظهر ONU جديدة)، والضوء كلّ دقيقة للمتّصلين،
+  // والمعالج كلّ ٣٠ث، وجدول الجسر كلّ ٥ دقائق (دقيقةٌ إن جاء ناقصاً).
+  static const _macsEvery = Duration(minutes: 5);
+  static const _readingsEvery = Duration(seconds: 60);
+  static const _chassisEvery = Duration(seconds: 30);
+  static const _fdbEvery = Duration(minutes: 5);
+  static const _fdbRetry = Duration(seconds: 60);
+
+  /// جهازٌ لا يكشف جدول الجسر: لا نُعيد السؤال قبل نصف ساعة.
+  static const _fdbUnsupportedRetry = Duration(minutes: 30);
+
+  bool _due(DateTime? at, Duration every) =>
+      at == null || DateTime.now().difference(at) >= every;
+
+  Future<void> _refreshEponDetails(String community) async {
+    final st = _stats;
+    if (_eponLoading || !_foreground || st == null) return;
+    final epon = [
+      for (final o in st.onus)
+        if (o.technology == VsolPonTechnology.epon) o,
+    ];
+    final bdcom = _profile.readsBdcomEponTables;
+    // جدول الجسر قياسيّ: BDCOM (مثبت) وVSOL EPON (ما يربطه الجدول بـONU
+    // بعينها وحده — وإلّا فلا شيء).
+    if (epon.isEmpty || _profile.vendor == OltVendor.unknown) return;
+    final known = {for (final o in epon) o.ifIndex};
+    final newOnus = bdcom && known.any((i) => !_epon.onuMacs.containsKey(i)) &&
+        _due(_epon.macsAt, const Duration(seconds: 45));
+    final wantMacs = bdcom && (newOnus || _due(_epon.macsAt, _macsEvery));
+    final wantReadings = bdcom && _due(_epon.readingsAt, _readingsEvery);
+    final wantChassis = bdcom && _due(_epon.chassisAt, _chassisEvery);
+    final fdbEvery = !_epon.fdb.supported && _epon.fdbAt != null
+        ? _fdbUnsupportedRetry
+        : (_epon.fdb.complete ? _fdbEvery : _fdbRetry);
+    var wantFdb = _due(_epon.fdbAt, fdbEvery);
+    if (!wantMacs && !wantReadings && !wantChassis && !wantFdb) return;
+    // ⚡ **قارئٌ ثقيلٌ واحدٌ في كلّ دورة** (والمعالج الرخيص معه): وكيل SNMP
+    // يعالج ~١٠٠ قيمةً في الثانية، فثلاثة قرّاءٍ معاً يُبطئون نبضة الترفك
+    // التي يراها المشغّل. والدورة تتكرّر بعد كلّ نبضة (~٣ث)، فيلحق الباقي.
+    // الترتيب: ماك الـONU، ثمّ الضوء، ثمّ أجهزة المشترك.
+    var wantReadingsNow = wantReadings;
+    if (wantMacs) {
+      wantReadingsNow = false;
+      wantFdb = false;
+    } else if (wantReadingsNow) {
+      wantFdb = false;
+    }
+
+    setState(() => _eponLoading = true);
+    final d = widget.device;
+    final snmp = SnmpV2c(host: d.ip, port: d.apiPort ?? 161, community: community);
+    bool cancelled() => !mounted || !_foreground;
+    try {
+      var next = _epon;
+      if (wantChassis) {
+        final c = await BdcomEpon.chassis(snmp);
+        next = next.copyWith(chassis: c, chassisAt: DateTime.now());
+      }
+      if (wantMacs && !cancelled()) {
+        final macs = await BdcomEpon.onuMacs(snmp, known, isCancelled: cancelled);
+        final online = [for (final o in epon) if (o.online) o.ifIndex];
+        final ids = await BdcomEpon.identities(snmp, online, isCancelled: cancelled);
+        // لا نمسح ما عرفناه بفراغ: دفعةٌ لم تُجب لا تمحو ماكاً قرأناه قبل دقائق.
+        next = next.copyWith(
+          onuMacs: {...next.onuMacs, ...macs},
+          identities: {...next.identities, ...ids},
+          macsAt: DateTime.now(),
+        );
+      }
+      if (wantReadingsNow && !cancelled()) {
+        final online = [for (final o in epon) if (o.online) o.ifIndex];
+        final r = await BdcomEpon.readings(snmp, online, isCancelled: cancelled);
+        next = next.copyWith(readings: r, readingsAt: DateTime.now());
+      }
+      if (wantFdb && !cancelled()) {
+        final f = await BridgeFdb.fetch(snmp, targets: known, isCancelled: cancelled);
+        // مسحٌ ناقص لا يمحو آخر لقطةٍ كاملة: نُبقي الكاملة ونعيد بعد دقيقة.
+        final keep = !f.complete && _epon.fdb.complete && f.supported;
+        next = keep
+            ? next.copyWith(fdbAt: _epon.fdbAt)
+            : next.copyWith(fdb: f, fdbAt: DateTime.now());
+      }
+      if (!mounted) return;
+      setState(() {
+        _epon = next;
+        if (_stats != null) {
+          _stats = _withDetails(_stats!);
+          DeviceStatsCache.instance.putRaw(d.id, _stats!);
+        }
+      });
+    } catch (_) {
+      // تفاصيل اختياريّة — اللوحة الأساسيّة تبقى صحيحة بدونها.
+    } finally {
+      if (mounted) setState(() => _eponLoading = false);
+    }
+  }
+
   void _refreshManually() {
     _gponDetailsAt = null;
+    _epon = OltEponDetails(
+      onuMacs: _epon.onuMacs,
+      identities: _epon.identities,
+      fdb: _epon.fdb,
+    );
     _sinceFull = _fullEvery;
     _fetch();
   }
@@ -462,6 +592,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
           if (s != null) ...[
             RepaintBoundary(child: _banner(s)),
             RepaintBoundary(child: _metrics(s)),
+            if (s.chassis != null && !s.chassis!.isEmpty) _chassis(s.chassis!),
             const SizedBox(height: Sp.md),
           ],
         ]),
@@ -579,7 +710,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
                     color: AppColors.textHi),
                 overflow: TextOverflow.ellipsis,
               ),
-              Text(s.sysDescr ?? 'VSOL OLT',
+              Text(s.sysDescr ?? _profile.label,
                   style: AppType.micro(color: AppColors.textMid),
                   overflow: TextOverflow.ellipsis),
             ]),
@@ -637,6 +768,36 @@ class _VsolLivePanelState extends State<VsolLivePanel>
         ),
       );
 
+  /// المعالج والحرارة والذاكرة (BDCOM) — ما قُرئ وحده. والذاكرة إجماليٌّ
+  /// لا نسبة: used/free غير متوفّرين على هذه البرمجيّة.
+  Widget _chassis(BdcomChassis c) {
+    Widget chip(IconData icon, String text) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceSunken,
+            borderRadius: BorderRadius.circular(R.sm),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 12, color: AppColors.textMid),
+            const SizedBox(width: 4),
+            Directionality(
+              textDirection: TextDirection.ltr,
+              child: Text(text, style: AppType.microBold(color: AppColors.textHi)),
+            ),
+          ]),
+        );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Sp.md, 8, Sp.md, 0),
+      child: Wrap(spacing: 6, runSpacing: 6, children: [
+        if (c.cpuPct != null) chip(LucideIcons.cpu, 'CPU ${c.cpuPct}%'),
+        if (c.boxTempC != null) chip(LucideIcons.thermometer, '${c.boxTempC}°C'),
+        if (c.ramBytes != null)
+          chip(LucideIcons.memoryStick, 'RAM ${(c.ramBytes! / (1024 * 1024)).round()} MB'),
+      ]),
+    );
+  }
+
   List<Widget> _sections(VsolOltStats s) {
     // Keep each subscriber's position in PON/ONU order when filtering.
     final shown = s.onus.indexed.where((entry) => _match(entry.$2)).toList();
@@ -684,6 +845,28 @@ class _VsolLivePanelState extends State<VsolLivePanel>
           content: Column(children: [for (final u in s.uplinks) _upRow(u)]),
         ),
       ],
+      // مواصفات الطراز من صفحة المصنّع — منفصلةٌ عن قراءات الجهاز عمداً.
+      if (_profile.catalogSpecs != null) ...[
+        const SizedBox(height: Sp.md),
+        ExpandableSection(
+          key: PageStorageKey('vsol-${widget.device.id}-specs'),
+          header: Row(children: [
+            Icon(LucideIcons.info, size: 14, color: AppColors.brand),
+            const SizedBox(width: 6),
+            Text('مواصفات الطراز ${_profile.model ?? ''}', style: AppType.bodyBold()),
+          ]),
+          content: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            for (final line in _profile.catalogSpecs!)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text('• $line', style: AppType.micro(color: AppColors.textMid)),
+              ),
+            const SizedBox(height: 2),
+            Text('من صفحة المصنّع — ليست قراءةً من الجهاز',
+                style: AppType.micro(color: AppColors.textLow)),
+          ]),
+        ),
+      ],
     ];
   }
 
@@ -692,7 +875,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
     final q = _query.trim().toLowerCase();
     if (q.isEmpty) return true;
     return '${o.label} ${o.name ?? ''} ${o.serial ?? ''} '
-            '${o.mac ?? ''} ${o.learnedMacs.join(' ')}'
+            '${o.mac ?? ''} ${o.vendor ?? ''} ${o.learnedMacs.join(' ')}'
         .toLowerCase()
         .contains(q);
   }
@@ -850,40 +1033,97 @@ class _VsolLivePanelState extends State<VsolLivePanel>
                           textAlign: TextAlign.left,
                           style: AppType.rowLabelBold()),
                     ),
-                    // العنوان للمتّصل وحده — انظر `VsolOnu.mac`.
-                    Directionality(
-                      textDirection: TextDirection.ltr,
-                      child: Text(
-                        o.mac != null
-                            ? 'MAC ${o.mac}'
-                            : (o.serial != null
-                                ? 'SN ${o.serial}'
-                                : (o.online ? '—' : 'غير متّصل')),
-                        textAlign: TextAlign.left,
-                        style: AppType.micro(color: AppColors.textLow),
+                    // ماك **وحدة الـONU** — لا ماك جهاز المشترك (تلك تحته
+                    // في «أجهزة خلف الـONU»). انظر `VsolOnu.mac`.
+                    // العنوان العربيّ والقيمة اللاتينيّة كلٌّ في عنصره: في سطرٍ
+                    // واحدٍ مختلط الاتّجاه كان يُقرأ «…01الـ MAC».
+                    if (o.mac != null)
+                      Row(children: [
+                        Text('ماك الـONU',
+                            style: AppType.micro(color: AppColors.textLow)),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Directionality(
+                            textDirection: TextDirection.ltr,
+                            child: Text(o.mac!,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppType.micro(color: AppColors.textMid)),
+                          ),
+                        ),
+                      ])
+                    else
+                      Directionality(
+                        textDirection: TextDirection.ltr,
+                        child: Text(
+                          o.serial != null
+                              ? 'SN ${o.serial}'
+                              : (o.online ? '—' : 'غير متّصل'),
+                          textAlign: TextAlign.left,
+                          style: AppType.micro(color: AppColors.textLow),
+                        ),
                       ),
-                    ),
+                    if (o.online && o.reading != null) _opticsLine(o),
                   ]),
             ),
             if (o.online) _flow(o.label),
           ]),
-          if (o.technology == VsolPonTechnology.gpon && o.online)
-            _learnedMacs(o),
+          if (o.online && _showsLearned(o)) _learnedMacs(o),
         ]),
       );
 
+  /// هل لهذه الـONU قائمة «أجهزة خلف الـONU»؟ GPON من جدول VSOL، وEPON
+  /// من جدول الجسر (حين يُقرأ لهذا المصنّع).
+  bool _showsLearned(VsolOnu o) =>
+      o.technology == VsolPonTechnology.gpon ||
+      (_profile.vendor != OltVendor.unknown &&
+          (o.learnedMacsReadAt != null || _eponLoading));
+
+  /// «الضوء ‎-13.5 dBm · 46°C · 3.32V · HWTC» — قراءة الـONU عند لحظتها.
+  Widget _opticsLine(VsolOnu o) {
+    final r = o.reading!;
+    final parts = <String>[
+      if (r.rxDbm != null) 'RX ${r.rxDbm!.toStringAsFixed(1)} dBm',
+      if (r.txDbm != null) 'TX ${r.txDbm!.toStringAsFixed(1)} dBm',
+      if (r.tempC != null) '${r.tempC!.round()}°C',
+      if (r.voltV != null) '${r.voltV!.toStringAsFixed(2)}V',
+      if (o.vendor != null) o.vendor!,
+    ];
+    if (parts.isEmpty) return const SizedBox.shrink();
+    final rx = r.rxDbm;
+    // سلّم الضوء عند الـONU: أضعف من ‎-27 dBm حدّ الانقطاع، ‎-24 تحذير.
+    final tone = rx == null
+        ? AppColors.textLow
+        : (rx < -27 ? AppColors.error : (rx < -24 ? AppColors.warning : AppColors.textMid));
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: Text(parts.join(' · '),
+            textAlign: TextAlign.left,
+            style: AppType.micro(color: tone)),
+      ),
+    );
+  }
+
   Widget _learnedMacs(VsolOnu o) {
-    if (!o.learnedMacsComplete || o.learnedMacs.isEmpty) {
+    final epon = o.technology == VsolPonTechnology.epon;
+    final loading = epon ? _eponLoading : _gponDetailsLoading;
+    // EPON: جهازٌ لا يكشف جدول الجسر — «غير متوفّر» لا «لا أجهزة».
+    final unsupported = epon && _epon.fdbAt != null && !_epon.fdb.supported;
+    // قائمةٌ قرأناها لهذه الـONU تُعرض ولو جاء المسح التالي ناقصاً.
+    if (unsupported || o.learnedMacs.isEmpty || (!epon && !o.learnedMacsComplete)) {
       return Padding(
         padding: const EdgeInsets.only(top: 6),
         child: Text(
-          o.learnedMacsReadAt == null
-              ? (_gponDetailsLoading
-                  ? 'جاري قراءة الماكات…'
-                  : 'الماكات لم تُقرأ بعد')
-              : (!o.learnedMacsComplete
-                  ? 'تعذّرت قراءة جدول الماكات كاملاً'
-                  : 'لا توجد MACs متعلّمة حالياً'),
+          unsupported
+              ? 'أجهزة خلف الـONU: هذا الجهاز لا يكشف جدولها'
+              : o.learnedMacsReadAt == null
+                  ? (loading
+                      ? 'جاري قراءة أجهزة خلف الـONU…'
+                      : 'أجهزة خلف الـONU لم تُقرأ بعد')
+                  : (!o.learnedMacsComplete
+                      ? 'تعذّرت قراءة جدول الأجهزة كاملاً'
+                      : 'لا أجهزة متعلَّمة خلف الـONU الآن'),
           style: AppType.micro(color: AppColors.textLow),
         ),
       );
@@ -898,9 +1138,13 @@ class _VsolLivePanelState extends State<VsolLivePanel>
         visualDensity: VisualDensity.compact,
         iconColor: AppColors.textLow,
         collapsedIconColor: AppColors.textLow,
-        title: Text('MACs المتعلّمة (${o.learnedMacs.length})',
+        // ⚠️ RLM ‏(U+200F) قبل القوس: بعد «ONU» اللاتينيّة يُرسم العدد في
+        // الجهة الأخرى («الـ(2) ONU») لولاها.
+        title: Text('أجهزة خلف الـONU\u200F (${o.learnedMacs.length})',
             style: AppType.micro(color: AppColors.textMid)),
-        subtitle: Text('أجهزة خلف الـONU · ${_clock(o.learnedMacsReadAt!)}',
+        subtitle: Text(
+            'ماكات أجهزة المشترك · آخر قراءة ${_clock(o.learnedMacsReadAt!)}'
+            '${o.learnedMacsComplete ? '' : ' · ناقصة'}',
             style: AppType.micro(color: AppColors.textLow)),
         children: [
           for (final mac in o.learnedMacs)

@@ -119,9 +119,13 @@ void main() {
     });
 
     test('علامة غير مدعومة', () {
-      expect(DeviceVitals.skipReason(dev(brand: 'cisco')),
-          'لا مقاييس لهذه العلامة');
-      expect(DeviceVitals.skipReason(dev(brand: 'other')), isNotNull);
+      expect(DeviceVitals.skipReason(dev(brand: 'other')), 'لا مقاييس لهذه العلامة');
+    });
+
+    // ٢٢ أكتوبر (المالك: «بالنظرة العامة … وكذلك السسكو والروجي»): لسسكو
+    // ملخّصها الآن — وشرطها بروتوكول لوحتها (SSH/Telnet)، لا امتناعٌ بالعلامة.
+    test('سسكو مدعومة وبروتوكول لوحتها شرط', () {
+      expect(DeviceVitals.skipReason(dev(brand: 'cisco')), 'اختر SSH أو Telnet');
     });
 
     test('الصالح لا يُمتنع عنه', () {

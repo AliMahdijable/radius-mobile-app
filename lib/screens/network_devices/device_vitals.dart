@@ -1,10 +1,16 @@
 import 'package:flutter/widgets.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/bdcom_epon.dart';
+import '../../api/cisco_api.dart';
 import '../../api/mikrotik_api.dart';
 import '../../api/mimosa_api.dart';
 import '../../api/network_devices_api.dart';
+import '../../api/olt_profile.dart';
+import '../../api/ruijie_api.dart';
+import '../../api/snmp_client.dart';
 import '../../api/ubnt_api.dart';
+import '../../api/vsol_olt_api.dart';
 import '../../models/network_device.dart';
 import '../../services/device_stats_cache.dart';
 import '../../theme/colors.dart';
@@ -209,8 +215,24 @@ class DeviceVitals {
   static const freshFor = Duration(seconds: 20);
 
   /// هل تصلح هذه العلامة لجلسة عميقة أصلاً؟
-  static bool supports(String brand) =>
-      const {'mikrotik', 'ubnt', 'mimosa'}.contains(brand.toLowerCase());
+  ///
+  /// ٢٢ أكتوبر (المالك: «بالنظرة العامة الأولتي ما يعرض ملخّص مثل المايكروتك
+  /// وUBNT، وكذلك السسكو والروجي»): صارت للأولتيات (VSOL وBDCOM) وسسكو
+  /// وروجي خاناتها الثلاث — وحمولتها تبذر لوحتها المفردة فتُفتح بأرقامها
+  /// فوراً كميكروتك.
+  ///
+  /// والأولت لا يُعرَف بعلامته وحدها (سجلّاتٌ قديمة `other`/`vsol`، وسويتش
+  /// BDCOM يحمل علامة `bdcom` نفسها) — فيحكمه [OltProfile] في [skipReason].
+  static bool supports(String brand) => const {
+        'mikrotik',
+        'ubnt',
+        'mimosa',
+        'cisco',
+        'ruijie',
+      }.contains(brand.toLowerCase());
+
+  /// أولت: بالعلامة، أو سجلٌّ قديمٌ طرازه يقول VSOL/BDCOM (‏`OltProfile`).
+  static bool _isOlt(NetworkDevice d) => OltProfile.fromDevice(d).opensOltPanel;
 
   /// سبب امتناعنا عن الجلب — أو `null` إن كان الجهاز صالحاً.
   ///
@@ -221,7 +243,13 @@ class DeviceVitals {
     // وهذا جهازٌ لا يردّ فحسب. وبقيّة التطبيق تستعمل الأولى.
     if (d.lastStatus == 'offline') return 'غير متّصل';
     if (!d.hasCredentials) return 'بلا بيانات دخول';
-    if (!supports(d.brand)) return 'لا مقاييس لهذه العلامة';
+    final olt = _isOlt(d);
+    if (!supports(d.brand) && !olt) return 'لا مقاييس لهذه العلامة';
+    // كلوحاتها المفردة: الأولت وروجي بـSNMP، وسسكو بـSSH/Telnet.
+    if ((olt || d.brand == 'ruijie') && d.protocol != 'snmp') return 'اختر SNMP';
+    if (d.brand == 'cisco' && !{'ssh', 'telnet'}.contains(d.protocol)) {
+      return 'اختر SSH أو Telnet';
+    }
     return null;
   }
 
@@ -240,6 +268,7 @@ class DeviceVitals {
   static Future<ProbeResult> fetch(NetworkDevice d,
       {CounterSample? prev, bool detailed = false}) async {
     final creds = await NetworkDevicesApi.getCredentials(d.id);
+    if (_isOlt(d)) return _olt(d, creds);
     switch (d.brand.toLowerCase()) {
       case 'mikrotik':
         return _mikrotik(d, creds, prev, detailed);
@@ -247,6 +276,10 @@ class DeviceVitals {
         return _ubnt(d, creds, prev);
       case 'mimosa':
         return _mimosa(d, creds);
+      case 'cisco':
+        return _cisco(d, creds, detailed);
+      case 'ruijie':
+        return _ruijie(d, creds, prev);
       default:
         throw StateError('علامة غير مدعومة: ${d.brand}');
     }
@@ -583,6 +616,232 @@ class DeviceVitals {
       raw: s,
     );
   }
+}
+
+/// أولت (VSOL أو BDCOM): مسحة البنية وحدها — الأسماء والحالة، بلا عدّادات
+/// ولا عناوين (~١ث على ١٠٠ واجهة) — ومعالج BDCOM بحزمةٍ ثانية.
+///
+/// ⚡ والحمولة لقطة أولت كاملة البنية: تُحفظ في المخزن فتُفتح اللوحة
+/// المفردة بالمشتركين ومنافذ PON فوراً، كما تُفتح لوحة ميكروتك بحمولة جدارها.
+Future<ProbeResult> _olt(NetworkDevice d, Map<String, dynamic> creds) async {
+  final community = (creds['community'] ?? creds['pass'] ?? '').toString().trim();
+  if (community.isEmpty) throw StateError('أدخل الـcommunity');
+  final port = d.apiPort ?? 161;
+  var s = await VsolOltApi.fetchStats(
+    host: d.ip,
+    port: port,
+    community: community,
+    structureOnly: true,
+    withCounters: false,
+    withGponDetails: false,
+    profile: OltProfile.fromDevice(d),
+  );
+  if (s.profile.readsBdcomEponTables) {
+    final c = await BdcomEpon.chassis(
+        SnmpV2c(host: d.ip, port: port, community: community));
+    if (!c.isEmpty) s = s.copyWith(chassis: c);
+  }
+  final cpu = s.chassis?.cpuPct;
+  final pct = s.onusTotal == 0 ? null : s.onusOnline * 100 / s.onusTotal;
+  return ProbeResult(
+    vitals: [
+      Vital(
+        label: 'المشتركون',
+        value: '${s.onusOnline}',
+        unit: '/${s.onusTotal}',
+        icon: LucideIcons.users,
+        tone: pct == null ? AppTone.neutral : Grade.percentHigherBetter(pct),
+      ),
+      Vital(
+        label: 'منافذ PON',
+        value: '${s.ponUp}',
+        unit: '/${s.ponPorts.length}',
+        icon: LucideIcons.splitSquareVertical,
+        tone: s.ponPorts.isEmpty
+            ? AppTone.neutral
+            : Grade.percentHigherBetter(s.ponUp * 100 / s.ponPorts.length),
+      ),
+      // BDCOM: المعالج. وVSOL بلا مجسّ معالجٍ في SNMP — مدّة التشغيل.
+      if (cpu != null)
+        Vital(
+          label: 'المعالج',
+          value: '$cpu',
+          unit: '٪',
+          icon: LucideIcons.cpu,
+          tone: Grade.percentLowerBetter(cpu),
+        )
+      else if (s.uptime != null)
+        Vital(
+          label: 'التشغيل',
+          value: DeviceVitals.fmtUptime(s.uptime!.inSeconds),
+          icon: LucideIcons.clock,
+          tone: AppTone.neutral,
+        )
+      else
+        Vital.empty.withIcon(LucideIcons.cpu),
+    ],
+    detail: DeviceDetail(
+      uptime: s.uptime == null ? null : DeviceVitals.fmtUptime(s.uptime!.inSeconds),
+      model: s.profile.model,
+      ports: [
+        for (final u in s.uplinks) PortTraffic(name: u.name, up: u.up),
+      ],
+      extras: [
+        for (final p in s.ponPorts) (k: p.label, v: '${p.onuOnline}/${p.onuTotal}'),
+        if (s.chassis?.boxTempC != null) (k: 'الحرارة', v: '${s.chassis!.boxTempC}°C'),
+        // الإجماليّ وحده — لا نسبة استخدام (used/free غير متوفّرين).
+        if (s.chassis?.ramBytes != null)
+          (k: 'الذاكرة', v: '${(s.chassis!.ramBytes! / (1024 * 1024)).round()} MB'),
+      ],
+    ),
+    counters: const {},
+    raw: s.isEmpty ? null : s,
+  );
+}
+
+/// سسكو: جلسة CLI بلا `show interfaces` (≈٤٠ كيلوبايت) — المعالج والذاكرة
+/// وحالة المنافذ. والتفصيل الكامل (العدّادات) للبطاقة المفتوحة وحدها.
+Future<ProbeResult> _cisco(NetworkDevice d, Map<String, dynamic> creds, bool detailed) async {
+  final user = (creds['user'] ?? '').toString();
+  final pass = (creds['pass'] ?? '').toString();
+  if (user.isEmpty) throw StateError('بيانات دخول ناقصة');
+  final s = await CiscoApi.fetchStats(
+    host: d.ip,
+    user: user,
+    pass: pass,
+    port: d.apiPort ?? d.port,
+    protocol: d.protocol ?? 'ssh',
+    includeCounters: detailed,
+  );
+  final mem = s.memPercent;
+  return ProbeResult(
+    vitals: [
+      s.cpuPercent == null
+          ? Vital.empty.withIcon(LucideIcons.cpu)
+          : Vital(
+              label: 'المعالج',
+              value: s.cpuPercent!.round().toString(),
+              unit: '٪',
+              icon: LucideIcons.cpu,
+              tone: Grade.percentLowerBetter(s.cpuPercent),
+            ),
+      mem == null
+          ? Vital.empty.withIcon(LucideIcons.memoryStick)
+          : Vital(
+              label: 'الذاكرة',
+              value: mem.round().toString(),
+              unit: '٪',
+              icon: LucideIcons.memoryStick,
+              tone: Grade.percentLowerBetter(mem),
+            ),
+      s.portsTotal == 0
+          ? Vital.empty.withIcon(LucideIcons.network)
+          : Vital(
+              label: 'المنافذ',
+              value: '${s.portsUp}',
+              unit: '/${s.portsTotal}',
+              icon: LucideIcons.network,
+              tone: AppTone.neutral,
+            ),
+    ],
+    detail: DeviceDetail(
+      uptime: s.uptime == null ? null : DeviceVitals.fmtUptime(s.uptime!.inSeconds),
+      firmware: s.iosVersion,
+      model: s.model,
+      ports: [
+        for (final i in s.physicalPorts)
+          PortTraffic(
+            name: i.shortName ?? i.name,
+            up: i.up,
+            linkSpeed: i.speedMbps == null ? null : '${i.speedMbps}M',
+          ),
+      ],
+      extras: [
+        if (s.serial != null) (k: 'التسلسل', v: s.serial!),
+      ],
+    ),
+    counters: const {},
+    raw: s,
+  );
+}
+
+/// روجي/ريي (SNMP): المعالج والذاكرة، والوصلة اللاسلكيّة (الإشارة) لجسرٍ،
+/// أو المنافذ لسويتش/راوتر. والمرور من فارق العدّادات بين جلستين.
+Future<ProbeResult> _ruijie(NetworkDevice d, Map<String, dynamic> creds, CounterSample? prev) async {
+  final community = (creds['community'] ?? creds['pass'] ?? '').toString().trim();
+  if (community.isEmpty) throw StateError('أدخل الـcommunity');
+  final s = await RuijieApi.fetchStats(
+    host: d.ip,
+    port: d.apiPort ?? 161,
+    community: community,
+  );
+  final counters = <String, ({int rx, int tx})>{};
+  final ports = <PortTraffic>[];
+  for (final i in s.ifaces) {
+    counters[i.name] = (rx: i.rxBytes, tx: i.txBytes);
+    final r = DeviceVitals._rate(i.name, i.rxBytes, i.txBytes, prev);
+    ports.add(PortTraffic(
+      name: i.name,
+      up: i.operUp,
+      rxBps: r.rx,
+      txBps: r.tx,
+      linkSpeed: i.speedMbps > 0 ? '${i.speedMbps}M' : null,
+    ));
+  }
+  final link = s.link;
+  final up = s.ifaces.where((i) => i.operUp).length;
+  return ProbeResult(
+    vitals: [
+      s.cpuPercent == null
+          ? Vital.empty.withIcon(LucideIcons.cpu)
+          : Vital(
+              label: 'المعالج',
+              value: s.cpuPercent!.round().toString(),
+              unit: '٪',
+              icon: LucideIcons.cpu,
+              tone: Grade.percentLowerBetter(s.cpuPercent),
+            ),
+      s.memPercent == null
+          ? Vital.empty.withIcon(LucideIcons.memoryStick)
+          : Vital(
+              label: 'الذاكرة',
+              value: s.memPercent!.round().toString(),
+              unit: '٪',
+              icon: LucideIcons.memoryStick,
+              tone: Grade.percentLowerBetter(s.memPercent),
+            ),
+      if (link != null && link.signalDbm != null)
+        Vital(
+          label: 'الإشارة',
+          value: '${link.signalDbm}',
+          unit: 'dBm',
+          icon: LucideIcons.signal,
+          tone: Grade.signal(link.signalDbm),
+        )
+      else if (s.ifaces.isNotEmpty)
+        Vital(
+          label: 'المنافذ',
+          value: '$up',
+          unit: '/${s.ifaces.length}',
+          icon: LucideIcons.network,
+          tone: AppTone.neutral,
+        )
+      else
+        Vital.empty.withIcon(LucideIcons.network),
+    ],
+    detail: DeviceDetail(
+      uptime: s.uptime == null ? null : DeviceVitals.fmtUptime(s.uptime!.inSeconds),
+      model: s.sysName,
+      ports: ports,
+      link: [
+        if (link?.ssid != null) (k: 'الوصلة', v: link!.ssid!),
+        if (link?.snrDb != null) (k: 'SNR', v: '${link!.snrDb} dB'),
+        if (link?.distanceM != null) (k: 'المسافة', v: '${link!.distanceM} m'),
+      ],
+    ),
+    counters: counters,
+    raw: s,
+  );
 }
 
 extension on Vital {

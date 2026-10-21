@@ -654,6 +654,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
         'mimosa' => AppColors.brandAccent,
         'ruijie' => AppColors.brandAccent,
         'vsol' => AppColors.brandAccent,
+        'bdcom' => AppColors.brandAccent,
         _ => AppColors.textMid,
       };
 
@@ -663,6 +664,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
         'mimosa' => LucideIcons.radioTower,
         'ruijie' => LucideIcons.wifi,
         'vsol' => LucideIcons.server,
+        'bdcom' => LucideIcons.server,
         _ => LucideIcons.circuitBoard,
       };
 

@@ -170,6 +170,10 @@ class NetworkDeviceLabels {
     // ويُعرَف بطرازه — وتلك الأجهزة القديمة ما زالت تُلتقط بالطراز في
     // `_isVsolOlt`، فلا يلزم تعديلها.
     'vsol': 'VSOL (OLT)',
+    // ٢١ أكتوبر: الخادم يقبل `bdcom` (b43dad4 + هجرة ENUM). أولتيات BDCOM
+    // المسجّلة قبلها `vsol`/`other` وطرازها يقول BDCOM تُعرَف بـ`OltProfile`
+    // ولا تُهجَّر بصمت.
+    'bdcom': 'BDCOM (OLT)',
     'other': 'آخر',
   };
 

@@ -197,9 +197,9 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
   void _onBrandChanged(String v) {
     setState(() {
       _brand = v;
-      // OLT من VSOL لا يُراقَب إلّا بـSNMP — نختاره بدل أن نتركه للمشغّل
-      // يكتشفه من لوحةٍ فارغة. ولا نمسّ بروتوكولاً اختاره هو.
-      if (v == 'vsol' && _protocol == null) {
+      // OLT من VSOL أو BDCOM لا يُراقَب إلّا بـSNMP — نختاره بدل أن نتركه
+      // للمشغّل يكتشفه من لوحةٍ فارغة. ولا نمسّ بروتوكولاً اختاره هو.
+      if ((v == 'vsol' || v == 'bdcom') && _protocol == null) {
         _protocol = 'snmp';
         _apiPortCtrl.text =
             NetworkDeviceLabels.portForBrandProtocol(v, 'snmp').toString();
@@ -469,13 +469,23 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
             selected: _snmpVersion == 'v2c',
             onSelected: (_) => setState(() => _snmpVersion = 'v2c'),
           ),
-          const SizedBox(width: 6),
-          ChoiceChip(
-            label: const Text('v3', style: TextStyle(fontSize: 11, height: 1.35)),
-            selected: _snmpVersion == 'v3',
-            onSelected: (_) => setState(() => _snmpVersion = 'v3'),
-          ),
+          // ⚠️ v3 لا يُعرض خياراً جديداً: القارئ v2c وحده (بلا مستخدمٍ ولا
+          // مصادقةٍ ولا تشفير) — فاختياره كان دعماً وهميّاً. سجلٌّ قديمٌ
+          // محفوظٌ v3 يبقى كما هو ويُقال له ذلك صراحةً؛ لا تبديل صامت.
+          if (_snmpVersion == 'v3') ...[
+            const SizedBox(width: 6),
+            ChoiceChip(
+              label: const Text('v3', style: TextStyle(fontSize: 11, height: 1.35)),
+              selected: true,
+              onSelected: (_) {},
+            ),
+          ],
         ]),
+        if (_snmpVersion == 'v3') ...[
+          const SizedBox(height: 6),
+          Text('SNMP v3 غير مدعوم بعد — التطبيق يقرأ بـv2c والـcommunity. اختر v2c.',
+              style: TextStyle(fontSize: 11.5, height: 1.4, color: AppColors.warning)),
+        ],
         const SizedBox(height: 10),
         _textField(_communityCtrl, 'Community string',
             hint: 'public', icon: LucideIcons.key),

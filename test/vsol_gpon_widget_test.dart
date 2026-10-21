@@ -59,7 +59,7 @@ void main() {
                         lastStatus: 'online',
                         createdAt: DateTime.utc(2026)))))));
     await tester.pump();
-    final expansion = find.text('MACs المتعلّمة (2)');
+    final expansion = find.text('أجهزة خلف الـONU\u200F (2)');
     await tester.ensureVisible(expansion);
     await tester.tap(expansion);
     await tester.pumpAndSettle();

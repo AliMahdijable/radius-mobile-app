@@ -28,6 +28,7 @@ import 'widgets/ubnt_live_panel.dart';
 import '../../api/network_devices_api.dart';
 import '../../theme/typography.dart';
 import 'sheets/device_image_picker.dart';
+import '../../api/olt_profile.dart';
 
 /// شاشة تفاصيل جهاز — تصميم متقدّم:
 /// - Hero card بـpulse للـonline + brand icon + stats
@@ -510,7 +511,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
               else
                 _vsolHint(),
             ],
-          ] else if ({'mikrotik', 'ubnt', 'mimosa', 'ruijie', 'cisco', 'vsol'}
+          ] else if ({'mikrotik', 'ubnt', 'mimosa', 'ruijie', 'cisco', 'vsol', 'bdcom'}
                   .contains(_d.brand) ||
               _isVsolOlt(_d)) ...[
             const SizedBox(height: Sp.md),
@@ -938,11 +939,10 @@ bool _isEdgeSwitch(NetworkDevice d) {
 ///
 /// والمطابقة ضيّقةٌ عمداً: «olt» وحدها تلتقط أسماءً كثيرةً لا تخصّنا،
 /// فنشترط اسم المصنّع أو رمز السلسلة.
-bool _isVsolOlt(NetworkDevice d) {
-  if (d.brand == 'vsol') return true;
-  final c = '${d.model ?? ''} ${d.name}'.toLowerCase();
-  return c.contains('vsol') || RegExp(r'v1600|v16\d\d').hasMatch(c);
-}
+///
+/// ٢٢ أكتوبر: صارت اللوحة لأولتيات BDCOM EPON كذلك — والحكم لـ[OltProfile]
+/// (العلامة، أو طرازٌ يقول BDCOM على سجلٍّ قديم، لا سويتش BDCOM).
+bool _isVsolOlt(NetworkDevice d) => OltProfile.fromDevice(d).opensOltPanel;
 
 bool _isAirFiber60(NetworkDevice d) {
   final combined = '${d.model ?? ''} ${d.name}'.toLowerCase();
@@ -1173,11 +1173,11 @@ extension _RuijieHint on _NetworkDeviceDetailsScreenState {
   /// المشغّل يقف أمام جهازٍ لا يعرف قوائمه، وإرشادٌ عامٌّ يُبقيه واقفاً.
   Widget _vsolHint() {
     final needsSnmp = _d.protocol != 'snmp';
+    final bdcom = OltProfile.fromDevice(_d).vendor == OltVendor.bdcom;
     final msg = needsSnmp
         ? 'اختر بروتوكول SNMP وأدخل الـcommunity.\n'
-            'VSOL V1600D: الافتراضيّة عادةً "public" للقراءة، وتُضبط من '
-            'واجهة الجهاز أو بالأمر snmp-server community.'
-        : 'أدخل الـcommunity string. الافتراضيّة على V1600D عادةً "public".';
+            '${bdcom ? 'BDCOM: تُضبط بالأمر snmp-server community <الاسم> ro من الـCLI.' : 'VSOL V1600D: الافتراضيّة عادةً "public" للقراءة، وتُضبط من واجهة الجهاز أو بالأمر snmp-server community.'}'
+        : 'أدخل الـcommunity string.${bdcom ? '' : ' الافتراضيّة على V1600D عادةً "public".'}';
     return Container(
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(

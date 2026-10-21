@@ -5,6 +5,7 @@ import '../../api/cisco_api.dart';
 import '../../api/edgeswitch_api.dart';
 import '../../api/network_devices_api.dart';
 import '../../api/ubnt_api.dart';
+import '../../api/olt_profile.dart';
 import '../../api/snmp_client.dart';
 import '../../models/network_device.dart';
 import 'detected_model.dart';
@@ -52,7 +53,7 @@ class ModelDetector {
       if (!DetectedModel.needsDetection(d)) return false;
       if (d.lastStatus != 'online') return false;
       final b = d.brand.toLowerCase();
-      if (const ['mikrotik', 'ubnt', 'mimosa', 'roji', 'ruijie', 'cisco', 'vsol']
+      if (const ['mikrotik', 'ubnt', 'mimosa', 'roji', 'ruijie', 'cisco', 'vsol', 'bdcom']
           .contains(b)) {
         return true;
       }
@@ -243,6 +244,11 @@ class ModelDetector {
   /// بدل تخمين، فالطراز الخطأ يُظهر صورة خطأ.
   static String? _modelFromSysDescr(String? s) {
     if (s == null || s.trim().isEmpty) return null;
+    // BDCOM: «BDCOM(tm) P3600-04 Software…» ← «BDCOM P3600-04» — اسم المصنّع
+    // يبقى مع الطراز: سجلٌّ قديم علامته `vsol` يُعرَف به (`OltProfile`)، ولو
+    // كُتب الرمز وحده لعاد يُعامَل VSOL وفقد صورته.
+    final bd = OltProfile.bdcomModelFrom(s);
+    if (bd != null && OltProfile.hasBdcomIdentity(s)) return 'BDCOM $bd';
     for (final w in s.split(RegExp(r'[\s,;()]+'))) {
       final t = w.trim();
       if (t.length < 2 || t.length > 24) continue;

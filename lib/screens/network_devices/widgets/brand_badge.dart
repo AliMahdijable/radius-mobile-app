@@ -36,6 +36,7 @@ class BrandBadge extends StatelessWidget {
     'cisco': (color: Color(0xFF049FD9), accent: Color(0xFF00BCEB)),
     'ruijie': (color: Color(0xFF5B4CDB), accent: Color(0xFF7B6EE8)),
     'vsol': (color: Color(0xFF0F766E), accent: Color(0xFF14B8A6)),
+    'bdcom': (color: Color(0xFF0B5CAB), accent: Color(0xFF2F80D1)),
     'other': (color: Color(0xFF4B5563), accent: Color(0xFF6B7280)),
   };
 
@@ -100,6 +101,9 @@ class _BrandGlyphPainter extends CustomPainter {
         break;
       case 'vsol':
         _paintLetter(canvas, size, 'V');
+        break;
+      case 'bdcom':
+        _paintLetter(canvas, size, 'B');
         break;
       default:
         _paintOther(canvas, size);

@@ -57,7 +57,9 @@ class _PickerSheetState extends State<_PickerSheet> {
     // جهاز ubnt ولو يدويّاً — نفس الخطأ الذي تمنعه المطابقة التلقائيّة.
     final all = DeviceImage.allAssets.where((f) {
       final board = DeviceImage.boardNameOf(f);
-      if (DeviceImage.assetFor(board, brand: widget.brand) == null) return false;
+      // ⚠️ ذهابٌ وإياب: الاسم المكتوب يجب أن يُعيد **الصورة نفسها** — لا
+      // صورةً غيرها (مرادفٌ أو احتواءٌ أطول) ولا شيء.
+      if (DeviceImage.assetFor(board, brand: widget.brand) != f) return false;
       return q.isEmpty || f.toLowerCase().contains(q);
     }).toList();
 

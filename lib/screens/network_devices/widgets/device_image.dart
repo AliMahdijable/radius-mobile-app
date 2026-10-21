@@ -1,8 +1,10 @@
+import 'device_image_bdcom_catalog.dart';
 import 'device_image_olt_catalog.dart';
 import 'device_image_ruijie_catalog.dart';
 import 'device_image_ubnt_catalog.dart';
 import 'package:flutter/material.dart';
 
+import '../../../api/olt_profile.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import 'brand_badge.dart';
@@ -193,8 +195,54 @@ class DeviceImage extends StatelessWidget {
     return null;
   }
 
+  /// رمز طراز BDCOM كلمةً كاملة: ‏`G?P` وأربعة أرقام، ثمّ أجزاءٌ يحمل كلٌّ
+  /// منها رقماً، بفاصلٍ (شرطة/مسافة/شرطة سفليّة) يُوحَّد شرطة. فـ«BDCOM
+  /// P3600-04 router» ← `P3600-04`، و`GP3600-04D` يبقى `GP3600-04D` (لا
+  /// يُلتقط `P3600-04` من داخله)، و`P3600-08E` لا يصير `P3600-08`.
+  static final _bdcomBase = RegExp(r'G?P\d{4}');
+  static final _bdcomPart = RegExp(r'^[-_ ]([A-Z0-9]*\d[A-Z0-9]*)');
+
+  static List<String> bdcomTokens(String model) {
+    final m = model.toUpperCase();
+    final out = <String>[];
+    for (final hit in _bdcomBase.allMatches(m)) {
+      final start = hit.start;
+      if (start > 0 && RegExp(r'[A-Z0-9]').hasMatch(m[start - 1])) continue;
+      var end = hit.end;
+      if (end < m.length && RegExp(r'[A-Z0-9]').hasMatch(m[end])) continue;
+      final buf = StringBuffer(hit.group(0)!);
+      while (true) {
+        final p = _bdcomPart.firstMatch(m.substring(end));
+        if (p == null) break;
+        buf.write('-${p.group(1)}');
+        end += p.group(0)!.length;
+        if (end < m.length && RegExp(r'[A-Z0-9]').hasMatch(m[end])) break;
+      }
+      out.add(buf.toString());
+    }
+    return out;
+  }
+
+  /// صورة أولت BDCOM — لسجلٍّ مصنّعه BDCOM وحده (العلامة، أو سجلٌّ قديمٌ
+  /// علامته vsol/other وطرازه يقول BDCOM)، وبمطابقةٍ تامّةٍ للرمز. لا صورة
+  /// BDCOM لأيّ VSOL لمجرّد تشابه النصّ.
+  static String? bdcomAssetFor(String? model, {String? brand}) {
+    if (model == null || model.trim().isEmpty) return null;
+    final b = (brand == null || brand.trim().isEmpty) ? 'other' : brand;
+    if (OltProfile.fromRecord(brand: b, model: model).vendor != OltVendor.bdcom) {
+      return null;
+    }
+    for (final t in bdcomTokens(model)) {
+      final f = kBdcomCatalog[t];
+      if (f != null) return f;
+    }
+    return null;
+  }
+
   static String? assetFor(String? model, {String? brand}) {
     if (model == null) return null;
+    final bd = bdcomAssetFor(model, brand: brand);
+    if (bd != null) return bd;
     if (brand == null || brand.isEmpty || brand.toLowerCase() == 'cisco') {
       final cisco = _ciscoFamily(model);
       if (cisco != null) return cisco;
@@ -323,6 +371,9 @@ class DeviceImage extends StatelessWidget {
     // وهذا لا يفتح الباب الذي أُغلق على ميكروتك: مفاتيح الأولتيات
     // رموزٌ لا تشبه شيئاً آخر (`V1600D8` · `FD1608S-B1` · `AN6000-17`)
     // فلا تُلتقط صدفةً على سويتشٍ أو سكتور.
+    // صور BDCOM لا تمرّ من هنا: مطابقتها تامّةٌ وبوّابتها المصنّع
+    // (`bdcomAssetFor`) — لا احتواءٌ ولا علامةٌ وحدها.
+    if (file.startsWith('bdcom/')) return null;
     if (file.startsWith('vsol/')) {
       return (b == 'vsol' || b == 'other') ? file : null;
     }
@@ -343,16 +394,29 @@ class DeviceImage extends StatelessWidget {
   }
 
   /// كلّ الصور المتاحة، مرتّبة أبجديّاً — للمنتقي اليدوي.
+  ///
+  /// ⚠️ الكتالوجات كلّها لا المنسَّقة يدويّاً وحدها (كانت صور الأولتيات وروجي
+  /// وUbiquiti المولَّدة غائبةً عن المنتقي)، وكلّ مسارٍ مرّةً واحدة — لا
+  /// تتكرّر الصورة بعدد مرادفاتها.
   static List<String> get allAssets {
-    final v = _byKey.values.toList()..sort();
+    final v = <String>{
+      ..._byKey.values,
+      ...kUbntCatalog.values,
+      ...kRuijieCatalog.values,
+      ...kOltCatalog.values,
+      ...kBdcomCatalog.values,
+    }.toList()
+      ..sort();
     return v;
   }
 
-  /// اسم اللوحة (بلا امتداد) الذي يُطابق ملفّاً — يُكتب في `model` عند
-  /// الاختيار اليدوي، فيصير الجهاز مُطابَقاً للأبد بالمسار العادي.
+  /// اسم اللوحة (بلا مجلّدٍ ولا امتداد) الذي يُطابق ملفّاً — يُكتب في
+  /// `model` عند الاختيار اليدوي، فيصير الجهاز مُطابَقاً للأبد بالمسار العادي.
+  /// (`bdcom/P3600-04.webp` ← `P3600-04` — كان اسم المجلّد يُكتب في الطراز.)
   static String boardNameOf(String file) {
-    final i = file.lastIndexOf('.');
-    return i > 0 ? file.substring(0, i) : file;
+    final base = file.substring(file.lastIndexOf('/') + 1);
+    final i = base.lastIndexOf('.');
+    return i > 0 ? base.substring(0, i) : base;
   }
 
   /// مفتاح مُطبَّع ← اسم الملفّ. مرتّب تنازليّاً بطول المفتاح.

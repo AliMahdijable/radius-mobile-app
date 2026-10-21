@@ -1,5 +1,8 @@
 import 'package:flutter/foundation.dart';
 
+import 'bdcom_epon.dart';
+import 'bridge_fdb.dart';
+import 'olt_profile.dart';
 import 'snmp_client.dart';
 import 'vsol_gpon_details.dart';
 
@@ -27,10 +30,17 @@ import 'vsol_gpon_details.dart';
 /// وحده. وفحصتُ `ENTITY-SENSOR` و`ENTITY-MIB` و`OPTIF` فكلّها غائبة.
 /// فمن أراد القدرة الضوئيّة فطريقه Telnet لا غير — وتلك مرحلةٌ ثانية
 /// تُستدعى عند فتح ONU بعينه لا في النبضة الدوريّة.
+///
+/// **ويقرأ BDCOM EPON كذلك (٢٢ أكتوبر).** IF-MIB واحدٌ واللوحة واحدة،
+/// أمّا جداول المصنّع فيحكمها [OltProfile]: الهويّة الحيّة (‏`sysObjectID`
+/// و`sysDescr`) تغلب العلامة المخزَّنة — جهاز المالك مسجّلٌ `vsol` وهو
+/// BDCOM P3600-04. وعلى BDCOM لا يُقرأ `ifPhysAddress` أصلاً: عنوان واجهةٍ
+/// مشترك، وماك الـONU من جدول المصنّع ([BdcomEpon]).
 class VsolOltApi {
   VsolOltApi._();
 
   static const String _oidSysDescr = '1.3.6.1.2.1.1.1.0';
+  static const String _oidSysObjectId = '1.3.6.1.2.1.1.2.0';
   static const String _oidSysName = '1.3.6.1.2.1.1.5.0';
   static const String _oidSysUpTime = '1.3.6.1.2.1.1.3.0';
 
@@ -78,6 +88,7 @@ class VsolOltApi {
     bool structureOnly = false,
     bool withCounters = true,
     bool withGponDetails = true,
+    OltProfile profile = OltProfile.vsolDefault,
     void Function(VsolOltStats partial)? onPartialReady,
   }) async {
     final snmp = SnmpV2c(
@@ -87,32 +98,38 @@ class VsolOltApi {
       timeout: timeout,
     );
 
-    String? descr, name;
+    String? descr, name, objectId;
     Duration? uptime;
     try {
-      for (final vb
-          in await snmp.get([_oidSysDescr, _oidSysName, _oidSysUpTime])) {
+      for (final vb in await snmp
+          .get([_oidSysDescr, _oidSysObjectId, _oidSysName, _oidSysUpTime])) {
+        if (vb.isAbsent) continue;
         if (vb.oid == _oidSysDescr) descr = vb.asString;
+        if (vb.oid == _oidSysObjectId) objectId = vb.asString;
         if (vb.oid == _oidSysName) name = vb.asString;
         if (vb.oid == _oidSysUpTime) {
           final t = vb.asInt;
           if (t > 0) uptime = Duration(milliseconds: t * 10);
         }
       }
-      // ⚡ الهويّة أوّلاً: اللوحة تعرض الطراز ومدّة التشغيل بلا انتظار
-      // مسح الواجهات، وهو الجزء الثقيل (‏٣٨ واجهة × ستّة أعمدة).
-      onPartialReady?.call(VsolOltStats(
-        sysDescr: descr,
-        sysName: name,
-        uptime: uptime,
-      ));
     } on SnmpException catch (e) {
+      // ⚠️ الـcommunity كلمة سرّ القراءة — لا تُكتب في رسالةٍ تظهر للمستخدم.
       throw VsolException('تعذّر الاتّصال بالـOLT عبر SNMP: $e\n'
           'تحقّق:\n'
-          '• الـcommunity "$community" صحيحة\n'
+          '• الـcommunity المحفوظة صحيحة\n'
           '• المنفذ $port مفتوح (UDP)\n'
           '• SNMP مفعّل على الجهاز');
     }
+    // الهويّة الحيّة تحكم جداول المصنّع — السجلّ تلميحٌ لما قبلها.
+    final live = OltProfile.resolve(profile, sysObjectId: objectId, sysDescr: descr);
+    // ⚡ الهويّة أوّلاً: اللوحة تعرض الطراز ومدّة التشغيل بلا انتظار
+    // مسح الواجهات، وهو الجزء الثقيل (‏٣٨ واجهة × ستّة أعمدة).
+    onPartialReady?.call(VsolOltStats(
+      sysDescr: descr,
+      sysName: name,
+      uptime: uptime,
+      profile: live,
+    ));
 
     // ⚡ **مرحلتان لا واحدة.** الأسماء والحالة تصل في ~١٠ ثوانٍ،
     // والعدّادات تأخذ ١٥ أخرى. وعدد المشتركين ومنافذ PON لا يحتاج
@@ -123,8 +140,10 @@ class VsolOltApi {
     // ١٥ ثانية تقريباً»)
     final scan = await _readIfTable(snmp,
         structureOnly: structureOnly,
-        withCounters: withCounters, onNames: (rows) {
-      final early = VsolParse.build(rows);
+        withCounters: withCounters,
+        // BDCOM: عنوان الواجهة مشتركٌ بين المشتركين — عمودٌ مدفوعٌ بلا فائدة.
+        readInterfaceMac: live.readsInterfaceMac, onNames: (rows) {
+      final early = VsolParse.build(rows, profile: live);
       onPartialReady?.call(VsolOltStats(
         sysDescr: descr,
         sysName: name,
@@ -132,12 +151,16 @@ class VsolOltApi {
         uplinks: early.uplinks,
         ponPorts: early.ponPorts,
         onus: early.onus,
+        profile: live,
       ));
     });
-    final parsed = VsolParse.build(scan.rows);
+    final parsed = VsolParse.build(scan.rows, profile: live);
     var onus = parsed.onus;
+    // ⚠️ جدول VSOL ‏(`37950`) لـVSOL وحدها: سؤال BDCOM عنه مهلةٌ في أحسن
+    // الأحوال، وفي أسوئها أعمدة مصنّعٍ آخر تُعرض أمام مشتركٍ ماكاتُ غيره.
     if (withGponDetails &&
         !structureOnly &&
+        live.readsVsolTables &&
         onus.any((o) => o.technology == VsolPonTechnology.gpon)) {
       final details = await VsolGponDetails.fetch(snmp);
       final readAt = DateTime.now();
@@ -182,6 +205,7 @@ class VsolOltApi {
       narrowCounters: scan.narrowCounters,
       rxAt: scan.rxAt,
       txAt: scan.txAt,
+      profile: live,
     );
   }
 
@@ -245,10 +269,7 @@ class VsolOltApi {
     final txAt = DateTime.now();
     if (rx.isEmpty && tx.isEmpty) return previous;
 
-    return VsolOltStats(
-      sysDescr: previous.sysDescr,
-      sysName: previous.sysName,
-      uptime: previous.uptime,
+    return previous.copyWith(
       narrowCounters: previous.narrowCounters || _narrowHosts.contains(host),
       rxAt: rxAt,
       txAt: txAt,
@@ -341,14 +362,10 @@ class VsolOltApi {
     final txAt = DateTime.now();
     if (rx.isEmpty && tx.isEmpty) return previous;
 
-    return VsolOltStats(
-      sysDescr: previous.sysDescr,
-      sysName: previous.sysName,
-      uptime: previous.uptime,
+    return previous.copyWith(
       narrowCounters: previous.narrowCounters || _narrowHosts.contains(host),
       rxAt: rxAt,
       txAt: txAt,
-      onus: previous.onus,
       uplinks: [
         for (final u in previous.uplinks)
           u.withBytes(rx[u.index] ?? u.rxBytes, tx[u.index] ?? u.txBytes)
@@ -376,6 +393,7 @@ class VsolOltApi {
     void Function(List<VsolIfRow> rows)? onNames,
     bool structureOnly = false,
     bool withCounters = true,
+    bool readInterfaceMac = true,
   }) async {
     Future<List<Varbind>> safeWalk(String base) async {
       try {
@@ -565,7 +583,9 @@ class VsolOltApi {
       ]);
     }
 
-    final phys = await column(_oidIfPhys);
+    final phys = readInterfaceMac
+        ? await column(_oidIfPhys)
+        : const <int, Varbind>{};
     final speed = await column(_oidIfHighSpeed);
 
     final out = <VsolIfRow>[];
@@ -661,15 +681,26 @@ class VsolParse {
   /// يسقط المشتركون كلّهم بصمت.
   static final RegExp _reOnuAlt =
       RegExp(r'^(E|G)PON(\d)(\d+)ONU(\d+)(?:\s+(.+))?$', caseSensitive: false);
-  static final RegExp _reUplink =
-      RegExp(r'^(?:GE|XGE|TE)(\d+)/(\d+)$', caseSensitive: false);
+  /// منافذ الصعود: ‏`GE0/1` · `XGE0/1` · `TE0/1` ‏(VSOL)، و`GigaEthernet0/1`
+  /// · `TGigaEthernet0/1` ‏(BDCOM — كانت تسقط الثمانية كلّها). مطابقةٌ تامّة
+  /// للاسم: لا VLAN ولا loopback ولا `EPON0/1:1`.
+  static final RegExp _reUplink = RegExp(
+      r'^(?:GE|XGE|TE|10GE|GigaEthernet|TGigaEthernet|TenGigabitEthernet|GigabitEthernet|XGigaEthernet)(\d+)/(\d+)$',
+      caseSensitive: false);
 
   static ({
     List<VsolUplink> uplinks,
     List<VsolPonPort> ponPorts,
     List<VsolOnu> onus,
     int onusOnline,
-  }) build(List<VsolIfRow> rows) {
+  }) build(List<VsolIfRow> rows, {OltProfile profile = OltProfile.vsolDefault}) {
+    // ماك الـONU من IF-MIB حيث ثبت أنّه ماكها: VSOL EPON للمتّصل (طوبق بـ
+    // `show onu baisc-info all` على V1600D). لا على BDCOM (عنوان واجهةٍ
+    // مشترك — ماكها من جدول المصنّع)، ولا على GPON (لم يُثبت؛ هويّتها SN).
+    String? onuMacOf(VsolIfRow r, VsolPonTechnology t) =>
+        (!profile.readsInterfaceMac || t == VsolPonTechnology.gpon || !r.up)
+            ? null
+            : r.mac;
     final uplinks = <VsolUplink>[];
     final pons = <String, VsolPonPort>{};
     final onus = <VsolOnu>[];
@@ -677,15 +708,16 @@ class VsolParse {
     for (final r in rows) {
       final alt = _reOnuAlt.firstMatch(r.name.trim());
       if (alt != null) {
+        final t = VsolPonTechnology.fromPrefix(alt.group(1)!);
         onus.add(VsolOnu(
           ifIndex: r.index,
-          technology: VsolPonTechnology.fromPrefix(alt.group(1)!),
+          technology: t,
           slot: int.parse(alt.group(2)!),
           ponPort: int.parse(alt.group(3)!),
           onuId: int.parse(alt.group(4)!),
           name: alt.group(5)?.trim(),
           online: r.up,
-          mac: r.up ? r.mac : null,
+          mac: onuMacOf(r, t),
           speedMbps: r.speedMbps,
           rxBytes: r.rxBytes,
           txBytes: r.txBytes,
@@ -727,7 +759,7 @@ class VsolParse {
             // المتّصل. وعرضُ عنوان مشتركٍ أمام اسم مشتركٍ آخر أسوأ من
             // ألّا نعرض شيئاً: المشغّل يُطابقه بنظام الفوترة ويبني
             // عليه قراراً.
-            mac: r.up ? r.mac : null,
+            mac: onuMacOf(r, technology),
             speedMbps: r.speedMbps,
             rxBytes: r.rxBytes,
             txBytes: r.txBytes,
@@ -883,40 +915,77 @@ class VsolOnu {
     this.learnedMacs = const [],
     this.learnedMacsReadAt,
     this.learnedMacsComplete = false,
+    this.reading,
+    this.readingAt,
+    this.vendor,
+    this.module,
   });
 
   final int ifIndex, slot, ponPort, onuId;
   final bool online;
+
+  /// **ماك وحدة الـONU نفسها** — لا ماك جهاز المشترك. من مصدرٍ ثبت لكلّ
+  /// مصنّع: VSOL EPON ‏`ifPhysAddress` للمتّصل، وBDCOM جدول المصنّع
+  /// (`onuMacAddr`). و`null` حيث لا مصدر مثبت (GPON: هويّتها [serial]).
   final String? mac;
   final VsolPonTechnology technology;
   final String? name, serial;
 
-  /// Forwarding addresses learned behind this ONU, not its own hardware MAC.
+  /// **أجهزة المشترك خلف الـONU** (جدول الجسر/جدول المصنّع) — لا ماكها هي.
   final List<String> learnedMacs;
   final DateTime? learnedMacsReadAt;
   final bool learnedMacsComplete;
   final int speedMbps, rxBytes, txBytes;
 
+  /// قراءات الضوء (BDCOM): القدرة والحرارة والجهد، ولحظتها — قراءةٌ
+  /// قديمة لا تُعرض كأنّها حيّة.
+  final BdcomOnuReading? reading;
+  final DateTime? readingAt;
+
+  /// صانع الوحدة (`HWTC`) ورمزها (`145C`) — من جدول المصنّع.
+  final String? vendor, module;
+
   /// كما يكتبه المشغّل ويقرؤه في الـCLI: `EPON0/3:2`.
   String get label => '${technology.prefix}$slot/$ponPort:$onuId';
 
-  VsolOnu withBytes(int rx, int tx) => VsolOnu(
+  VsolOnu copyWith({
+    bool? online,
+    String? mac,
+    bool clearMac = false,
+    String? serial,
+    List<String>? learnedMacs,
+    DateTime? learnedMacsReadAt,
+    bool? learnedMacsComplete,
+    int? rxBytes,
+    int? txBytes,
+    BdcomOnuReading? reading,
+    DateTime? readingAt,
+    String? vendor,
+    String? module,
+  }) =>
+      VsolOnu(
         ifIndex: ifIndex,
         technology: technology,
         slot: slot,
         ponPort: ponPort,
         onuId: onuId,
-        online: online,
-        mac: mac,
+        online: online ?? this.online,
+        mac: clearMac ? null : (mac ?? this.mac),
         name: name,
-        serial: serial,
-        learnedMacs: learnedMacs,
-        learnedMacsReadAt: learnedMacsReadAt,
-        learnedMacsComplete: learnedMacsComplete,
+        serial: serial ?? this.serial,
+        learnedMacs: learnedMacs ?? this.learnedMacs,
+        learnedMacsReadAt: learnedMacsReadAt ?? this.learnedMacsReadAt,
+        learnedMacsComplete: learnedMacsComplete ?? this.learnedMacsComplete,
         speedMbps: speedMbps,
-        rxBytes: rx,
-        txBytes: tx,
+        rxBytes: rxBytes ?? this.rxBytes,
+        txBytes: txBytes ?? this.txBytes,
+        reading: reading ?? this.reading,
+        readingAt: readingAt ?? this.readingAt,
+        vendor: vendor ?? this.vendor,
+        module: module ?? this.module,
       );
+
+  VsolOnu withBytes(int rx, int tx) => copyWith(rxBytes: rx, txBytes: tx);
 
   VsolOnu withGponDetails(VsolGponSnapshot details, DateTime readAt) {
     if (technology != VsolPonTechnology.gpon || slot != 0) return this;
@@ -938,8 +1007,102 @@ class VsolOnu {
       speedMbps: speedMbps,
       rxBytes: rxBytes,
       txBytes: txBytes,
+      reading: reading,
+      readingAt: readingAt,
+      vendor: vendor,
+      module: module,
     );
   }
+
+  /// تفاصيل EPON من القرّاء البطيئة: ماك الـONU (BDCOM)، وأجهزة المشترك
+  /// خلفها (جدول الجسر)، وقراءات الضوء. ما لم يُقرأ يبقى كما هو.
+  ///
+  /// ⚠️ أجهزة المفصول لا تُعرض: الجدول يشيخ، وعنوانٌ تعلّمه الجهاز قبل
+  /// الفصل يبدو حيّاً وهو ليس كذلك. وقراءة الضوء كذلك للمتّصل وحده.
+  VsolOnu withEponDetails(OltEponDetails d) {
+    if (technology != VsolPonTechnology.epon) return this;
+    final id = d.identities[ifIndex];
+    return VsolOnu(
+      ifIndex: ifIndex,
+      slot: slot,
+      ponPort: ponPort,
+      onuId: onuId,
+      online: online,
+      mac: d.onuMacs[ifIndex] ?? mac,
+      technology: technology,
+      name: name,
+      serial: serial,
+      learnedMacs: d.fdbAt == null
+          ? learnedMacs
+          : (online ? (d.fdb.macsByIfIndex[ifIndex] ?? const []) : const []),
+      learnedMacsReadAt: d.fdbAt ?? learnedMacsReadAt,
+      learnedMacsComplete: d.fdbAt == null ? learnedMacsComplete : d.fdb.complete,
+      speedMbps: speedMbps,
+      rxBytes: rxBytes,
+      txBytes: txBytes,
+      reading: online ? (d.readings[ifIndex] ?? (d.readingsAt == null ? reading : null)) : null,
+      readingAt: online ? (d.readingsAt ?? readingAt) : null,
+      vendor: id?.vendor ?? vendor,
+      module: id?.module ?? module,
+    );
+  }
+}
+
+/// تفاصيل EPON البطيئة لكلّ الـONU — تُقرأ في الخلفيّة وتُدمج فوق أحدث
+/// لقطة ([VsolOnu.withEponDetails]). كلّ جزءٍ بلحظته؛ `null` = لم يُقرأ.
+@immutable
+class OltEponDetails {
+  const OltEponDetails({
+    this.onuMacs = const {},
+    this.identities = const {},
+    this.macsAt,
+    this.readings = const {},
+    this.readingsAt,
+    this.fdb = FdbSnapshot.unsupported,
+    this.fdbAt,
+    this.chassis,
+    this.chassisAt,
+  });
+
+  /// ماك الـONU لكلّ فهرس (BDCOM).
+  final Map<int, String> onuMacs;
+  final Map<int, BdcomOnuReading> identities;
+  final DateTime? macsAt;
+
+  /// قراءات الضوء للمتّصلين (BDCOM).
+  final Map<int, BdcomOnuReading> readings;
+  final DateTime? readingsAt;
+
+  /// أجهزة المشترك من جدول الجسر.
+  final FdbSnapshot fdb;
+  final DateTime? fdbAt;
+
+  /// المعالج والحرارة والذاكرة (BDCOM).
+  final BdcomChassis? chassis;
+  final DateTime? chassisAt;
+
+  OltEponDetails copyWith({
+    Map<int, String>? onuMacs,
+    Map<int, BdcomOnuReading>? identities,
+    DateTime? macsAt,
+    Map<int, BdcomOnuReading>? readings,
+    DateTime? readingsAt,
+    FdbSnapshot? fdb,
+    DateTime? fdbAt,
+    BdcomChassis? chassis,
+    DateTime? chassisAt,
+  }) =>
+      OltEponDetails(
+        onuMacs: onuMacs ?? this.onuMacs,
+        identities: identities ?? this.identities,
+        macsAt: macsAt ?? this.macsAt,
+        readings: readings ?? this.readings,
+        readingsAt: readingsAt ?? this.readingsAt,
+        fdb: fdb ?? this.fdb,
+        fdbAt: fdbAt ?? this.fdbAt,
+        chassis: chassis ?? this.chassis,
+        chassisAt: chassisAt ?? this.chassisAt,
+      );
 }
 
 @immutable
@@ -954,10 +1117,18 @@ class VsolOltStats {
     this.narrowCounters = false,
     this.rxAt,
     this.txAt,
+    this.profile = OltProfile.unknown,
+    this.chassis,
   });
 
   final String? sysDescr, sysName;
   final Duration? uptime;
+
+  /// المصنّع بعد الهويّة الحيّة — يحكم جداول المصنّع والعناوين المعروضة.
+  final OltProfile profile;
+
+  /// المعالج والحرارة والذاكرة (BDCOM) — `null` حيث لم تُقرأ.
+  final BdcomChassis? chassis;
 
   /// هل العدّادات ٣٢ بت (تلتفّ عند ٤٫٢٩ جيجابايت)؟
   ///
@@ -992,18 +1163,38 @@ class VsolOltStats {
   final List<VsolPonPort> ponPorts;
   final List<VsolOnu> onus;
 
-  /// Merge slow identity reads into the newest traffic sample.
-  VsolOltStats withGponDetails(VsolGponSnapshot details, DateTime readAt) =>
+  VsolOltStats copyWith({
+    List<VsolUplink>? uplinks,
+    List<VsolPonPort>? ponPorts,
+    List<VsolOnu>? onus,
+    bool? narrowCounters,
+    DateTime? rxAt,
+    DateTime? txAt,
+    OltProfile? profile,
+    BdcomChassis? chassis,
+  }) =>
       VsolOltStats(
         sysDescr: sysDescr,
         sysName: sysName,
         uptime: uptime,
-        uplinks: uplinks,
-        ponPorts: ponPorts,
-        onus: [for (final o in onus) o.withGponDetails(details, readAt)],
-        narrowCounters: narrowCounters,
-        rxAt: rxAt,
-        txAt: txAt,
+        uplinks: uplinks ?? this.uplinks,
+        ponPorts: ponPorts ?? this.ponPorts,
+        onus: onus ?? this.onus,
+        narrowCounters: narrowCounters ?? this.narrowCounters,
+        rxAt: rxAt ?? this.rxAt,
+        txAt: txAt ?? this.txAt,
+        profile: profile ?? this.profile,
+        chassis: chassis ?? this.chassis,
+      );
+
+  /// Merge slow identity reads into the newest traffic sample.
+  VsolOltStats withGponDetails(VsolGponSnapshot details, DateTime readAt) =>
+      copyWith(onus: [for (final o in onus) o.withGponDetails(details, readAt)]);
+
+  /// تفاصيل EPON البطيئة فوق أحدث لقطة — ولا تُمسح قراءةٌ موثوقة بفراغ.
+  VsolOltStats withEponDetails(OltEponDetails d) => copyWith(
+        onus: [for (final o in onus) o.withEponDetails(d)],
+        chassis: d.chassis,
       );
 
   int get onusOnline => onus.where((o) => o.online).length;
