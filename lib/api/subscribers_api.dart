@@ -423,9 +423,11 @@ class SubscribersApi {
   /// GET /api/subscribers/last-financial-movements/{adminId} — recent
   /// payment per subscriber. Same endpoint v1 hits; falls back to
   /// last-payments if the modern one isn't available.
-  static Future<Map<String, Map<String, dynamic>>?> loadLastPayments() async {
+  /// [adminIdOverride]: «كل الشركات» — آخر دفعات شركةٍ أخرى بمعرّف مديرها، والطلب موجَّهٌ إليها (CompanyRoute) على المسار
+  /// المسموح بالتوجيه وحده (last-payments؛ last-financial-movements خارج جدول الخادم).
+  static Future<Map<String, Map<String, dynamic>>?> loadLastPayments({String? adminIdOverride}) async {
     final token = await AuthStorage.readToken();
-    final adminId = await AuthStorage.readAdminId();
+    final adminId = adminIdOverride ?? await AuthStorage.readAdminId();
     if (token == null || adminId == null) return null;
     Future<Map<String, Map<String, dynamic>>?> tryUrl(String url) async {
       try {
@@ -452,6 +454,9 @@ class SubscribersApi {
       }
     }
 
+    if (adminIdOverride != null) {
+      return tryUrl('/api/subscribers/last-payments/$adminId');
+    }
     final modern =
         await tryUrl('/api/subscribers/last-financial-movements/$adminId');
     if (modern != null) return modern;

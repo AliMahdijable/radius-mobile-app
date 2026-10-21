@@ -158,6 +158,7 @@ class FinanceKPIs {
     this.extendCount = 0,
     this.packageCost,
     this.partialUnpaidFromLogs = 0,
+    this.profitAfterCostOverride,
   });
   final num paymentsSum;
   final num debtPaySum;
@@ -211,7 +212,12 @@ class FinanceKPIs {
   /// من النقد كان يُظهر خسارةً لمالكٍ رابح (مراجعة ١٨ أكتوبر: ٩ من ١٦ مالكاً).
   /// [netCash] يبقى سطره كما كان (وفيه طرح إضافة الدين اليدوي بطلب المالك).
   num? get profitAfterCost =>
-      packageCost == null ? null : salesSum - expensesSum - packageCost!.sum;
+      profitAfterCostOverride ??
+      (packageCost == null ? null : salesSum - expensesSum - packageCost!.sum);
+
+  /// «كل الشركات»: مجموع صافي كلّ شركةٍ بقاعدتها (من بلا كلفةٍ — سوبرنت — صافيه
+  /// النقديّ) — لا صيغةٌ واحدة على المجموع (قاعدة الويب sumFigures). null خارجه.
+  final num? profitAfterCostOverride;
 
   /// [includePackageCost] قرار المستدعي بحسب من يشاهد — المالك وحده. الافتراض
   /// `false`: مستدعٍ لا يعرف المشاهد لا يكشف الكلفة لموظّف.
@@ -374,6 +380,8 @@ class FinanceReport {
     required this.kpis,
     required this.recentLogs,
     this.archive,
+    this.unavailable = false,
+    this.unavailableParts = const [],
   });
   final FinanceKPIs kpis;
   final List<FinanceLog> recentLogs;
@@ -381,6 +389,25 @@ class FinanceReport {
   /// وصف ما أخفته التسويات عن هذا التقرير — `data.archive` لا الجذر.
   /// `null` على خادمٍ قديم، وصفرُ تسوياتٍ لا يُعرض (§٤).
   final ArchiveInfo? archive;
+
+  /// الخادم قال إنّ التقرير كلّه تعذّر (ملخّص ايرث لنك: جسمٌ أصفار ليست جواباً).
+  final bool unavailable;
+
+  /// أجزاءٌ تعذّرت فاستُبدلت بصفر: `expenses` · `activations` · `manager_debts` ·
+  /// `package_cost` (أرقامٌ لا تُجمع) · `recent_logs` (السجلّ ناقص، والأرقام سليمة).
+  final List<String> unavailableParts;
+
+  /// أرقامه مجهولة (لا تُجمع في «كل الشركات»، والشركة تُسمّى): التقرير كلّه، أو
+  /// جزءُ مال — وجزءٌ باسمٍ لا نعرفه احتياطاً. `recent_logs` وحده عرضٌ. null: سليمة.
+  /// منقولةٌ من الويب (financial-figures.ts financeMoneyGap).
+  String? get moneyGap {
+    if (unavailable) return 'reply';
+    final parts = unavailableParts.where((p) => p != 'recent_logs').toList();
+    if (parts.isEmpty) return null;
+    if (parts.contains('activations')) return 'activations';
+    if (parts.contains('expenses')) return 'expenses';
+    return 'other';
+  }
 }
 
 // ─────────── Activities (Activations + ActivityLog) ───────────
@@ -742,12 +769,20 @@ class ReportsApi {
               .whereType<FinanceLog>()
               .toList()
           : const <FinanceLog>[];
+      // علما التعذّر (٢١ أكتوبر، 2621ef0/84a295f): في الجسم أو داخل data — بلا تكرار.
+      final parts = <String>{
+        for (final src in [body['unavailable_parts'], data['unavailable_parts']])
+          if (src is List)
+            for (final x in src) '$x',
+      };
       return (
         ok: true,
         data: FinanceReport(
           kpis: kpis,
           recentLogs: logs,
           archive: ArchiveInfo.fromJson(data['archive']),
+          unavailable: body['unavailable'] == true || data['unavailable'] == true,
+          unavailableParts: parts.toList(),
         ),
         error: null,
       );

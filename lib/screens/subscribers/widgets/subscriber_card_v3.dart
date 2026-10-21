@@ -155,7 +155,7 @@ class SubscriberCardV3 extends StatelessWidget {
                 ],
                 if (showUsage && sub.idx != null) ...[
                   const SizedBox(height: 7),
-                  _UsageRow(idx: sub.idx.toString()),
+                  _UsageRow(idx: sub.idx.toString(), company: sub.companyKey),
                 ],
                 if (debt > 0) ...[
                   const SizedBox(height: 11),
@@ -1049,8 +1049,11 @@ class _SessionVisual {
 /// «اليوم 5.6 GB · الشهر 248 GB» — من [SubscriberUsageStore] (دفعاتٌ للصفوف
 /// المبنيّة على الشاشة).
 class _UsageRow extends StatefulWidget {
-  const _UsageRow({required this.idx});
+  const _UsageRow({required this.idx, this.company});
   final String idx;
+
+  /// «كل الشركات»: شركة الصفّ — استهلاكه يُسأل منها لا من الشركة المفتوحة.
+  final String? company;
 
   @override
   State<_UsageRow> createState() => _UsageRowState();
@@ -1060,13 +1063,15 @@ class _UsageRowState extends State<_UsageRow> {
   @override
   void initState() {
     super.initState();
-    SubscriberUsageStore.want(widget.idx);
+    SubscriberUsageStore.want(widget.idx, company: widget.company);
   }
 
   @override
   void didUpdateWidget(covariant _UsageRow old) {
     super.didUpdateWidget(old);
-    if (old.idx != widget.idx) SubscriberUsageStore.want(widget.idx);
+    if (old.idx != widget.idx || old.company != widget.company) {
+      SubscriberUsageStore.want(widget.idx, company: widget.company);
+    }
   }
 
   @override
@@ -1074,9 +1079,9 @@ class _UsageRowState extends State<_UsageRow> {
     return ValueListenableBuilder<int>(
       valueListenable: SubscriberUsageStore.version,
       builder: (context, _, __) {
-        final e = SubscriberUsageStore.get(widget.idx);
+        final e = SubscriberUsageStore.get(widget.idx, company: widget.company);
         // لم يصل بعد (أو فُرّغ بتبديل الحساب) — يُطلب؛ الطلب مؤجَّلٌ لا يبني شيئاً الآن.
-        if (e == null) SubscriberUsageStore.want(widget.idx);
+        if (e == null) SubscriberUsageStore.want(widget.idx, company: widget.company);
         final label = AppType.body(color: AppColors.textLabel)
             .copyWith(fontSize: 12.5);
         final value = AppType.body()

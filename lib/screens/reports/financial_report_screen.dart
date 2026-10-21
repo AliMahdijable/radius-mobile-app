@@ -2,13 +2,17 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/merged_finance_api.dart';
 import '../../api/reports_api.dart';
 import '../settlements/widgets/archive_bar.dart';
 import '../../core/util/format.dart';
+import '../../services/merged_mode.dart';
 import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../widgets/company_tag.dart';
+import '../../widgets/merged_company_strip.dart';
 import 'widgets/action_labels.dart';
 import 'widgets/date_range_chip.dart';
 import 'widgets/report_export.dart';
@@ -57,17 +61,44 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   /// بعد الإقلاع) تفتحها — فتطلبه حينها، لا دوّارةً بلا طلب.
   bool _requested = false;
 
+  // ── «كل الشركات» (٢١ أكتوبر، المالك: «حتى التقارير المالية»): تقريرٌ لكلّ شركة موجَّهاً ثمّ المجموع
+  // (MergedFinanceApi)، وتفصيلٌ لكلّ شركة، والحركات معاً بشارة شركتها. شركةٌ مختارة في الشريط ⇒ تقريرها وحده كأنّها
+  // مفتوحة. فلاتر المدير والموظّف للشركة المفتوحة وحدها (قوائمها منها) فتُخفى هنا، ونوع الحركة يبقى.
+  MergedFinanceResult? _mergedRes;
+  ({DateTime from, DateTime to, bool archive})? _mergedParams;
+  bool get _mergedOn => MergedMode.active.value;
+
   @override
   void initState() {
     super.initState();
     PermissionsService.changes.addListener(_onPermsChanged);
+    MergedMode.active.addListener(_onMergedChanged);
+    MergedMode.focus.addListener(_onMergedFocus);
     _loadIfAllowed();
   }
 
   @override
   void dispose() {
     PermissionsService.changes.removeListener(_onPermsChanged);
+    MergedMode.active.removeListener(_onMergedChanged);
+    MergedMode.focus.removeListener(_onMergedFocus);
     super.dispose();
+  }
+
+  void _onMergedChanged() {
+    if (!mounted) return;
+    setState(() {
+      _mergedRes = null;
+      _mergedParams = null;
+      _data = null;
+      // مدير الحركة/المستخدم والموظّف من قوائم الشركة المفتوحة — لا تنتقل بين الوضعين
+      _filters = ReportFilters(actionTypes: _filters.actionTypes);
+    });
+    if (_requested) _load();
+  }
+
+  void _onMergedFocus() {
+    if (mounted && _mergedOn && _requested) _load();
   }
 
   void _onPermsChanged() {
@@ -81,6 +112,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   }
 
   Future<void> _load() async {
+    if (_mergedOn) return _loadMerged();
     setState(() {
       _loading = true;
       _error = null;
@@ -106,13 +138,95 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
           isCostBearingAdminId(
               (_scopeIds?.isNotEmpty ?? false) ? _scopeIds!.first : null),
     );
-    if (!mounted) return;
+    if (!mounted || _mergedOn) return;
     setState(() {
       _loading = false;
       _data = r.data;
       _error = r.ok ? null : (r.error ?? 'common.load_failed'.tr());
       _visibleCount = kReportPageStep;
     });
+  }
+
+  /// «كل الشركات»: المجموع، أو الشركة المختارة وحدها — من المجموع المحفوظ للمدّة نفسها بلا طلب، وإلّا موجَّهاً إليها.
+  Future<void> _loadMerged() async {
+    final f = MergedMode.focused;
+    final params = (from: _range.from, to: _range.to, archive: _withArchive);
+    final kept = _mergedParams == params ? _mergedRes : null;
+    if (f != null && kept?.partOf(f.key)?.report != null) {
+      setState(() {
+        _loading = false;
+        _data = kept!.partOf(f.key)!.report;
+        _error = null;
+        _visibleCount = kReportPageStep;
+      });
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    if (f != null) {
+      final r = await MergedFinanceApi.one(f, from: _range.from, to: _range.to, includeArchived: _withArchive);
+      if (!mounted || !_mergedOn || MergedMode.focused?.key != f.key) return;
+      setState(() {
+        _loading = false;
+        _data = r.data;
+        _error = r.ok ? null : (r.error ?? 'common.load_failed'.tr());
+        _visibleCount = kReportPageStep;
+      });
+      return;
+    }
+    final res = await MergedFinanceApi.load(from: _range.from, to: _range.to, includeArchived: _withArchive);
+    if (!mounted || !_mergedOn || MergedMode.focused != null) return;
+    setState(() {
+      _loading = false;
+      _mergedRes = res;
+      _mergedParams = params;
+      _data = res.report;
+      _error = res.report == null ? 'merged.finance_none'.tr(args: [res.excluded.join('، ')]) : null;
+      _visibleCount = kReportPageStep;
+    });
+  }
+
+  /// «كل الشركات» (الكلّ) — المجموع المعروض الآن (null: الشركة المختارة أو الوضع العاديّ).
+  MergedFinanceResult? get _mergedAll => _mergedOn && MergedMode.focused == null ? _mergedRes : null;
+
+  /// سطر الشريط: من خرج من المجموع ولماذا، أو ما ينقص تقرير الشركة المختارة.
+  String? _mergedNote() {
+    final f = MergedMode.focused;
+    if (f != null) {
+      final d = _data;
+      final why = d == null ? null : MergedFinanceApi.gapReason(f, d);
+      return why == null ? null : 'merged.finance_gap'.tr(args: [why]);
+    }
+    final m = _mergedRes;
+    if (m == null) return null;
+    final lines = <String>[
+      if (m.excluded.isNotEmpty) 'merged.not_in_sum'.tr(args: [m.excluded.join('، ')]),
+      if (m.logsPartial.isNotEmpty) 'merged.finance_logs_partial'.tr(args: [m.logsPartial.join('، ')]),
+    ];
+    return lines.isEmpty ? null : lines.join('\n');
+  }
+
+  /// فلتر النوع في «الكل»: أرقام كلّ شركةٍ من سطورها (وكلفتها من سطورها) ثمّ المجموع — لا سطور شركةٍ بكلفة أخرى.
+  ({FinanceKPIs kpis, bool costUnavailable}) _mergedTypeKpis(MergedFinanceResult m, List<FinanceLog> filtered) {
+    final parts = <FinanceKPIs>[];
+    var unavailable = false;
+    for (final p in m.included) {
+      final key = p.company.key;
+      final mine = [
+        for (final l in filtered)
+          if (m.logCompany[l] == key) l,
+      ];
+      final cost = PackageCostKpis.forFilteredLogs(
+        period: p.report!.kpis.packageCost,
+        allLogs: p.report!.recentLogs,
+        filtered: mine,
+      );
+      unavailable = unavailable || cost.unavailable;
+      parts.add(_kpisFromLogs(mine, packageCost: cost.cost));
+    }
+    return (kpis: MergedFinanceApi.sumKpis(parts), costUnavailable: unavailable);
   }
 
   @override
@@ -141,6 +255,10 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
               children: [
+                if (_mergedOn) ...[
+                  MergedCompanyStrip(note: _mergedNote()),
+                  const SizedBox(height: Sp.md),
+                ],
                 ArchiveBar(
                   archive: _data?.archive,
                   includeArchived: _withArchive,
@@ -159,8 +277,13 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                 ),
                 const SizedBox(height: Sp.sm),
                 ReportFiltersPanel(
+                  // «كل الشركات»: قوائم المدراء والموظّفين للشركة المفتوحة وحدها — تُخفى
+                  key: ValueKey(_mergedOn),
                   value: _filters,
                   actionTypeOptions: kFinancialActionTypes,
+                  includeActionManager: !_mergedOn,
+                  includeUserManager: !_mergedOn,
+                  includeEmployee: !_mergedOn,
                   onChanged: (v) {
                     setState(() {
                       _filters = v;
@@ -184,26 +307,38 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                     final hasTypeFilter = _filters.actionTypes != null &&
                         _filters.actionTypes!.isNotEmpty;
                     final filtered = _filterLogs(_data!.recentLogs);
+                    final all = _mergedAll;
+                    // «كل الشركات»: تحت فلتر النوع كلّ شركةٍ من سطورها ثمّ المجموع
+                    final mergedTyped = hasTypeFilter && all != null
+                        ? _mergedTypeKpis(all, filtered)
+                        : null;
                     // الكلفة تحت فلتر النوع من كلفة كلّ سطر — كبقيّة أرقامه.
-                    final filterCost = hasTypeFilter
+                    final filterCost = hasTypeFilter && mergedTyped == null
                         ? PackageCostKpis.forFilteredLogs(
                             period: _data!.kpis.packageCost,
                             allLogs: _data!.recentLogs,
                             filtered: filtered,
                           )
                         : null;
-                    final effectiveKpis = hasTypeFilter
-                        ? _kpisFromLogs(filtered,
-                            packageCost: filterCost?.cost)
-                        : _data!.kpis;
+                    final effectiveKpis = mergedTyped?.kpis ??
+                        (hasTypeFilter
+                            ? _kpisFromLogs(filtered,
+                                packageCost: filterCost?.cost)
+                            : _data!.kpis);
                     return Column(
                       children: [
                         _hero(effectiveKpis,
-                            costNeedsAllTypes:
-                                filterCost?.unavailable ?? false),
+                            costNeedsAllTypes: mergedTyped?.costUnavailable ??
+                                filterCost?.unavailable ??
+                                false,
+                            mergedRule: all?.mixedProfitRules ?? false),
                         const SizedBox(height: Sp.md),
                         _kpiGrid(effectiveKpis),
                         const SizedBox(height: Sp.lg),
+                        if (all != null && all.parts.length > 1) ...[
+                          _mergedBreakdown(all),
+                          const SizedBox(height: Sp.lg),
+                        ],
                       ],
                     );
                   }),
@@ -251,7 +386,8 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   /// الهيرو كما كان حرفيّاً.
   /// [costNeedsAllTypes]: فلتر النوع لا يستطيع حساب الكلفة من السطور (لا كلفة
   /// لكلّ سطر، أو السطور مقطوعة عند سقف الخادم)، فيُقال ذلك بدل رقمٍ كاذب.
-  Widget _hero(FinanceKPIs k, {bool costNeedsAllTypes = false}) {
+  Widget _hero(FinanceKPIs k,
+      {bool costNeedsAllTypes = false, bool mergedRule = false}) {
     final brand = AppColors.brand;
     final cost = k.packageCost;
     final profit = k.profitAfterCost;
@@ -352,14 +488,18 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               value: profit < 0 ? '-${formatIQD(profit)}' : formatIQD(profit),
               color: profit < 0 ? AppColors.error : brand,
             ),
-            _heroNote(
-              'reports.profit_after_cost_formula'.tr(namedArgs: {
-                'sales': formatIQD(k.salesSum),
-                'expenses': formatIQD(k.expensesSum),
-                'cost': formatIQD(cost.sum),
-              }),
-              warn: false,
-            ),
+            // «كل الشركات» بقاعدتين: الصيغة الواحدة لا تصحّ على المجموع — كلّ شركةٍ بقاعدتها
+            if (mergedRule)
+              _heroNote('merged.finance_profit_rule'.tr(), warn: false)
+            else
+              _heroNote(
+                'reports.profit_after_cost_formula'.tr(namedArgs: {
+                  'sales': formatIQD(k.salesSum),
+                  'expenses': formatIQD(k.expensesSum),
+                  'cost': formatIQD(cost.sum),
+                }),
+                warn: false,
+              ),
             if (cost.missingRows > 0)
               _heroNote(
                 'reports.package_cost_missing'.tr(namedArgs: {
@@ -448,6 +588,67 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  /// «كل الشركات»: سطرٌ لكلّ شركة — نقدها المستلم وصافيها، أو سبب خروجها من المجموع. الضغط يعرضها وحدها.
+  Widget _mergedBreakdown(MergedFinanceResult m) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.lg),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(Sp.md, Sp.md, Sp.md, Sp.xs),
+            child: Text('merged.finance_by_company'.tr(),
+                style: AppType.label(color: AppColors.textHi)
+                    .copyWith(fontSize: 13, fontWeight: FontWeight.w700)),
+          ),
+          for (final p in m.parts)
+            InkWell(
+              onTap: () => MergedMode.focus.value = p.company.key,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 10),
+                child: Row(
+                  children: [
+                    Expanded(child: CompanyTag(companyKey: p.company.key, fontSize: 12.5)),
+                    const SizedBox(width: Sp.sm),
+                    if (p.included) ...[
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            '${formatIQD(p.report!.kpis.totalCashRevenue)} ${'common.currency'.tr()}',
+                            style: AppType.rowLabelBold(color: AppColors.textHi),
+                          ),
+                          Text(
+                            '${'reports.kpi_net'.tr()}: ${p.report!.kpis.netCash < 0 ? '-' : ''}${formatIQD(p.report!.kpis.netCash)}',
+                            style: AppType.muted(color: p.report!.kpis.netCash < 0 ? AppColors.error : AppColors.textMid)
+                                .copyWith(fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ] else
+                      Flexible(
+                        child: Text(
+                          p.reason ?? 'common.load_failed'.tr(),
+                          textAlign: TextAlign.end,
+                          style: AppType.muted(color: AppColors.warning).copyWith(fontSize: 11.5),
+                        ),
+                      ),
+                    const SizedBox(width: 4),
+                    Icon(Icons.chevron_left_rounded, size: 18, color: AppColors.textLow),
+                  ],
+                ),
+              ),
+            ),
+          const SizedBox(height: Sp.xs),
+        ],
+      ),
     );
   }
 
@@ -675,8 +876,12 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     // ويجمع firstname+lastname؛ نضيف عمود username منفصل لتسهيل الفرز
     // والبحث في الشيت. النوع يُترجَم لعربي (arabicActionLabel) بدل
     // SUBSCRIBER_ACTIVATE الإنجليزي.
+    final all = _mergedAll;
+    String coName(FinanceLog l) =>
+        MergedMode.companyOf(all?.logCompany[l])?.name ?? '';
     final exportRows = filtered
         .map((l) => [
+              if (all != null) coName(l),
               l.userFullName ?? l.targetName ?? l.userUsername ?? '',
               l.userUsername ?? '',
               l.amount == 0 ? '' : l.amount.toString(),
@@ -720,6 +925,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               subtitle: '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
               fileNameBase: 'financial',
               columns: [
+                if (all != null) 'merged.col_company'.tr(),
                 'reports.col_subscriber'.tr(),
                 'reports.col_username'.tr(),
                 'reports.col_amount'.tr(),
@@ -731,15 +937,23 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               ],
               // مطلب 2026-07-12: الاسم/الوصف يأخذون مساحة أوسع، النوع
               // والمنفّذ أضيق (خصوصاً بعد الترجمة العربية).
-              columnWeights: showCost
-                  ? const [2.2, 1.4, 1.2, 1.2, 1.4, 2.6, 1.1, 1.3]
-                  : const [2.2, 1.4, 1.2, 1.4, 2.6, 1.1, 1.3],
+              columnWeights: [
+                if (all != null) 1.4,
+                ...(showCost
+                    ? const [2.2, 1.4, 1.2, 1.2, 1.4, 2.6, 1.1, 1.3]
+                    : const [2.2, 1.4, 1.2, 1.4, 2.6, 1.1, 1.3]),
+              ],
               rows: exportRows,
             ),
           ],
         ),
         const SizedBox(height: Sp.sm),
         for (final l in pageRows) ...[
+          if (all != null && all.logCompany[l] != null)
+            Padding(
+              padding: const EdgeInsetsDirectional.only(start: 4, bottom: 2),
+              child: CompanyTag(companyKey: all.logCompany[l]!, fontSize: 11),
+            ),
           ReportLogTile(
             actionType: l.actionType,
             description: l.actionDescription ?? '',

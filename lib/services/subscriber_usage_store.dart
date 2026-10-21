@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../api/api_client.dart';
+import '../api/company_route.dart';
 
 /// استهلاك مشتركٍ واحد (بايت) — `today` null لشهرٍ مضى.
 @immutable
@@ -48,6 +49,10 @@ class UsagePrefs {
 /// يطلب مشتركه ([want])، فتُجمَع الطلبات المتقاربة بدفعاتٍ ≤٤٠ من
 /// `/api/v2/subscribers-usage` (الخادم: SAS4 من تقرير user/traffic، وايرث لنك
 /// من الجلسات موزَّعةً على مدّتها). كاشٌ ٥ دقائق (الخادم يكاش ١٠).
+///
+/// «كل الشركات»: صفٌّ مدموج يحمل شركته ([company] = Subscriber.companyKey) —
+/// مفتاحه «الشركة|idx» (رقمان من ساسين قد يلتقيان)، ودفعته لشركته وحدها
+/// موجَّهةً إليها. كان يُسأل عنه الشركة المفتوحة فيرجع فارغاً.
 class SubscriberUsageStore {
   SubscriberUsageStore._();
 
@@ -65,20 +70,29 @@ class SubscriberUsageStore {
   /// يرتفع مع كلّ دفعةٍ وصلت — كارتات القائمة تستمع له.
   static final ValueNotifier<int> version = ValueNotifier<int>(0);
 
+  static String _key(String idx, String? company) =>
+      company == null ? idx : '$company|$idx';
+
+  static String? _companyOf(String key) {
+    final i = key.indexOf('|');
+    return i < 0 ? null : key.substring(0, i);
+  }
+
   /// `null` = لم يصل بعد · قيمة `v` null = تعذّر.
-  static ({SubscriberUsage? v})? get(String idx) {
-    final e = _cache[idx];
+  static ({SubscriberUsage? v})? get(String idx, {String? company}) {
+    final e = _cache[_key(idx, company)];
     return e == null ? null : (v: e.v);
   }
 
-  static void want(String idx) {
-    if (idx.isEmpty || _busy.contains(idx) || _queue.contains(idx)) return;
-    final e = _cache[idx];
+  static void want(String idx, {String? company}) {
+    final k = _key(idx, company);
+    if (idx.isEmpty || _busy.contains(k) || _queue.contains(k)) return;
+    final e = _cache[k];
     if (e != null &&
         DateTime.now().difference(e.at) < (e.v != null ? _ttl : _failTtl)) {
       return;
     }
-    _queue.add(idx);
+    _queue.add(k);
     _timer ??= Timer(const Duration(milliseconds: 150), () {
       _timer = null;
       _pump();
@@ -91,15 +105,25 @@ class SubscriberUsageStore {
     try {
       while (_queue.isNotEmpty && UsagePrefs.enabled.value) {
         final gen = _gen;
-        final batch = _queue.take(_batch).toList();
+        // دفعةٌ لشركةٍ واحدة (الشركة المفتوحة، أو شركة صفٍّ مدموج)
+        final company = _companyOf(_queue.first);
+        final batch =
+            _queue.where((k) => _companyOf(k) == company).take(_batch).toList();
         _queue.removeAll(batch);
         _busy.addAll(batch);
+        final ids = [
+          for (final k in batch)
+            company == null ? k : k.substring(company.length + 1),
+        ];
         Map<String, dynamic> data = const {};
         var ok = false;
         try {
-          final r = await ApiClient.dio.get<Map<String, dynamic>>(
-            '/api/v2/subscribers-usage',
-            queryParameters: {'ids': batch.join(',')},
+          final r = await CompanyRoute.run(
+            company,
+            () => ApiClient.dio.get<Map<String, dynamic>>(
+              '/api/v2/subscribers-usage',
+              queryParameters: {'ids': ids.join(',')},
+            ),
           );
           final body = r.data ?? const {};
           ok = body['success'] == true;
@@ -111,9 +135,9 @@ class SubscriberUsageStore {
         _busy.removeAll(batch);
         if (gen != _gen) continue; // حسابٌ آخر الآن
         final now = DateTime.now();
-        for (final id in batch) {
-          final u = data[id];
-          _cache[id] = (
+        for (var i = 0; i < batch.length; i++) {
+          final u = data[ids[i]];
+          _cache[batch[i]] = (
             at: now,
             v: ok && u is Map
                 ? SubscriberUsage(today: _int(u['today']), month: _int(u['month']))

@@ -28,6 +28,20 @@ class MergedMode {
   /// آخر ردّ الشركات (null = لم يُعرف بعد).
   static final ValueNotifier<MergedCompaniesData?> data = ValueNotifier<MergedCompaniesData?>(null);
 
+  /// الشركة المختارة داخل الوضع (null = كلّ الشركات) — مشتركةٌ بين الرئيسية والمشتركين والتقرير الماليّ كشريط الويب
+  /// (client-v2 CompanyStrip ← setScope): شركةٌ مختارة تُعرض وحدها كأنّها مفتوحة، والكلّ مدموجٌ بلا تكرار.
+  static final ValueNotifier<String?> focus = ValueNotifier<String?>(null);
+
+  /// الشركة المختارة ما دامت صالحة — وإلّا null (الكلّ).
+  static MergedCompany? get focused {
+    final k = focus.value;
+    if (k == null) return null;
+    for (final c in usable) {
+      if (c.key == k) return c;
+    }
+    return null;
+  }
+
   static const freshFor = Duration(seconds: 60);
 
   @visibleForTesting
@@ -98,6 +112,7 @@ class MergedMode {
 
   /// يخرج إلى الشركة المفتوحة (لا يمسح شيئاً).
   static Future<void> exit() async {
+    focus.value = null;
     active.value = false;
     MergedSubscribers.reset();
     await _persist(false);
@@ -137,6 +152,7 @@ class MergedMode {
     _inFlight = null;
     _at = null;
     data.value = null;
+    focus.value = null;
     active.value = false;
     CompanyRefs.reset();
     MergedSubscribers.reset();
@@ -175,6 +191,34 @@ class MergedListResult {
   List<MergedCompanyList> get failed => parts.where((p) => p.rows == null && p.bigTotal == null).toList();
   List<MergedCompanyList> get big => parts.where((p) => p.bigTotal != null).toList();
   List<MergedCompanyList> get partial => parts.where((p) => p.partial).toList();
+
+  MergedCompanyList? partOf(String key) {
+    for (final p in parts) {
+      if (p.company.key == key) return p;
+    }
+    return null;
+  }
+
+  /// صفوف العرض: الكلّ مدموجاً بلا تكرار، أو قائمة الشركة المختارة كما وصلت (كأنّها مفتوحة وحدها — عددها عددها هناك).
+  List<Subscriber> rowsFor(String? key) => key == null ? rows : (partOf(key)?.rows ?? const <Subscriber>[]);
+
+  /// مشتركو شركةٍ بلا «المهمَل» (عدّاد الرئيسية والقائمة نفسه) — null: قائمتها لم تُجلب (كبيرة أو تعذّرت).
+  int? countOf(String key) => partOf(key)?.rows?.where((s) => !s.isAbandoned).length;
+
+  /// مشتركو «الكل» بلا «المهمَل».
+  int get total => rows.where((s) => !s.isAbandoned).length;
+
+  /// من تراه صفحتان مربوطتان (المدير الفرعيّ وأمّه) يُعدّ في «الكل» مرّةً: مجموع القوائم − المدموج. ربطان للمدير نفسه
+  /// قائمةٌ واحدة لا تُعدّ هنا.
+  int get folded {
+    final same = sameManagerOf([for (final p in parts) p.company]);
+    var sum = 0;
+    for (final p in parts) {
+      if (p.rows != null && !same.containsKey(p.company.key)) sum += p.rows!.where((s) => !s.isAbandoned).length;
+    }
+    final d = sum - total;
+    return d > 0 ? d : 0;
+  }
 }
 
 /// قوائم الشركات ودمجها. كلّ قائمةٍ تُطلب موجّهةً لشركتها (الطلب نفسه للوضع العاديّ: GET /api/v2/subscribers)، وتُخبّأ ٤٥ث

@@ -13,6 +13,7 @@ import '../../models/device_health.dart';
 import '../../api/subscribers_api.dart';
 import '../../api/big_subscribers_api.dart';
 import '../../api/managers_api.dart';
+import '../../api/company_route.dart';
 import '../../api/telegram_api.dart';
 import '../../api/whatsapp_api.dart';
 import '../../core/util/fit_hint.dart';
@@ -20,7 +21,9 @@ import '../../core/util/format.dart';
 import '../../core/widgets/permission_locked.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/subscriber.dart';
+import '../../models/merged_company.dart';
 import '../../services/merged_mode.dart';
+import '../../widgets/merged_company_strip.dart';
 import '../../services/active_company.dart';
 import '../../services/auth_storage.dart';
 import '../../services/connection_alerts.dart';
@@ -193,6 +196,12 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   // (Subscriber.companyKey)، والفلاتر والعدّادات والبحث كالوضع العاديّ على الصفوف المدموجة. التحديد الجماعيّ للشركة وحدها.
   MergedListResult? _merged;
   int _mergedTick = 0;
+
+  /// «كل الشركات»: آخر الدفعات وارتباطات تلغرام لكلّ شركة — موجَّهةً بمعرّف مديرها، لا من الشركة المفتوحة (يوزرٌ أو idx
+  /// يتكرّر بين شركتين فيُلصق بصفٍّ ما ليس له). تُجلب مع القائمة وكلّ ٥ دقائق على الأكثر.
+  final Map<String, Map<String, Map<String, dynamic>>> _mergedPayments = {};
+  final Map<String, Set<String>> _mergedTelegram = {};
+  DateTime? _mergedSideAt;
   bool get _mergedOn => MergedMode.active.value;
   static const int _kBigPageSize = 50;
 
@@ -350,6 +359,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     // bulk action). Mirrors v1's notifier pattern.
     SubscriberEvents.dataChanged.addListener(_onDataChanged);
     MergedMode.active.addListener(_onMergedModeChanged);
+    MergedMode.focus.addListener(_onMergedFocus);
     PermissionsService.changes.addListener(_onPermsChanged);
     _wasLocked = _locked;
     if (!_locked) _load();
@@ -556,6 +566,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     widget.filterCmd?.removeListener(_onFilterCmd);
     SubscriberEvents.dataChanged.removeListener(_onDataChanged);
     MergedMode.active.removeListener(_onMergedModeChanged);
+    MergedMode.focus.removeListener(_onMergedFocus);
     PermissionsService.changes.removeListener(_onPermsChanged);
     widget.isActive?.removeListener(_onActiveChanged);
     UsagePrefs.enabled.removeListener(_onUsagePref);
@@ -570,6 +581,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     setState(() {
       _all = const [];
       _merged = null;
+      _mergedPayments.clear();
+      _mergedTelegram.clear();
+      _mergedSideAt = null;
       _big = false;
       _progressive = false;
       _selectionMode = false;
@@ -587,18 +601,72 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       _big = false;
       _progressive = false;
       _merged = r;
-      _all = r.rows;
+      _all = r.rowsFor(MergedMode.focused?.key);
       _loading = false;
+    });
+    final at = _mergedSideAt;
+    if (fresh || at == null || DateTime.now().difference(at) > const Duration(minutes: 5)) {
+      _mergedSideAt = DateTime.now();
+      unawaited(_loadMergedSide(r));
+    }
+  }
+
+  Future<void> _loadMergedSide(MergedListResult r) async {
+    final cs = [
+      for (final p in r.parts)
+        if (p.rows != null) p.company,
+    ];
+    await Future.wait([
+      for (final c in cs) ...[
+        CompanyRoute.run(c.key, () => SubscribersApi.loadLastPayments(adminIdOverride: c.adminId))
+            .then((m) {
+          if (m != null) _mergedPayments[c.key] = m;
+        }).catchError((_) {}),
+        CompanyRoute.run(c.key, () => TelegramApi.listBindings(c.adminId)).then((b) {
+          _mergedTelegram[c.key] = {for (final x in b) x.sas4Idx};
+        }).catchError((_) {}),
+      ],
+    ]);
+    if (mounted && _mergedOn) setState(() {});
+  }
+
+  /// شركةٌ اختيرت في الشريط (أو «الكل»): صفوفها وحدها كأنّها مفتوحة — من المحفوظ، بلا طلب.
+  void _onMergedFocus() {
+    final r = _merged;
+    if (!mounted || !_mergedOn || r == null) return;
+    setState(() {
+      _all = r.rowsFor(MergedMode.focused?.key);
+      _visibleCount = _kPageStep;
+      _selectionMode = false;
+      _selected.clear();
     });
   }
 
-  /// ما لا يظهر في «كل الشركات» ولماذا — سطرٌ واحد يسمّي كلّ شركة (لا أصفارٌ صامتة).
+  /// حال شركةٍ صالحة على الشريط لا تُختار: كبيرة (تُفتح وحدها) أو تعذّرت قائمتها.
+  String? _mergedProblem(MergedCompany c) {
+    final p = _merged?.partOf(c.key);
+    if (p == null) return null;
+    if (p.bigTotal != null) return 'merged.chip_big'.tr();
+    if (p.rows == null) return 'merged.chip_failed'.tr();
+    return null;
+  }
+
+  /// ما لا يظهر في «كل الشركات» ولماذا — سطرٌ واحد يسمّي كلّ شركة (لا أصفارٌ صامتة). شركةٌ مختارة: ما يخصّها وحده.
   String? _mergedNoticeText(MergedListResult r) {
+    final f = MergedMode.focused;
+    if (f != null) {
+      final p = r.partOf(f.key);
+      if (p == null) return null;
+      if (p.bigTotal != null) return 'merged.big'.tr(args: [f.name, formatIQD(p.bigTotal!)]);
+      if (p.rows == null) return p.error ?? 'merged.failed'.tr(args: [f.name]);
+      return p.partial ? 'merged.partial'.tr(args: [f.name]) : null;
+    }
     final parts = <String>[
-      for (final b in r.big) 'merged.big'.tr(args: [b.company.name, '${b.bigTotal}']),
+      for (final b in r.big) 'merged.big'.tr(args: [b.company.name, formatIQD(b.bigTotal!)]),
       for (final f in r.failed) f.error ?? 'merged.failed'.tr(args: [f.company.name]),
       for (final p in r.partial) 'merged.partial'.tr(args: [p.company.name]),
       if (r.missing.isNotEmpty) 'merged.missing'.tr(args: [r.missing.map((c) => c.name).join('، ')]),
+      if (r.folded > 0) 'merged.folded'.tr(args: [formatIQD(r.folded)]),
     ];
     return parts.isEmpty ? null : parts.join('\n');
   }
@@ -1692,6 +1760,16 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                                   _runProbeWave(force: true),
                                         ),
                                 ),
+                                // «كل الشركات»: الشركات بعدد كلٍّ منها — اضغط شركة لعرض مشتركيها وحدها
+                                if (_mergedOn && !_selectionMode && _merged != null)
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.sm),
+                                    child: MergedCompanyStrip(
+                                      countOf: (c) => _merged?.countOf(c.key),
+                                      total: _merged?.total,
+                                      problemOf: _mergedProblem,
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
@@ -1837,12 +1915,17 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                     // بلا مفتاح ثابت يعيد Flutter استعمال
                                     // الـElement لمشترك آخر بعد كل موجة فحص
                                     // أجهزة فتنتقل حالة الصفّ للجار.
-                                    key: ValueKey(s.idx ?? s.username),
+                                    // «كل الشركات»: idx واحد في ساسين ⇒ صفّان؛ الشركة جزء المفتاح.
+                                    key: ValueKey('${s.companyKey ?? ''}|${s.idx ?? s.username}'),
                                     sub: s,
                                     selected: isSelected,
-                                    lastPayment: _lastPayments[s.username],
+                                    lastPayment: s.companyKey == null
+                                        ? _lastPayments[s.username]
+                                        : _mergedPayments[s.companyKey]?[s.username],
                                     hasTelegram: s.idx != null &&
-                                        _telegramBoundIdx
+                                        (s.companyKey == null
+                                                ? _telegramBoundIdx
+                                                : (_mergedTelegram[s.companyKey] ?? const <String>{}))
                                             .contains(s.idx.toString()),
                                     showUsage: UsagePrefs.enabled.value,
                                     onTap: () {
@@ -2010,7 +2093,9 @@ class _ListHeader extends StatelessWidget {
             valueListenable: MergedMode.active,
             builder: (context, merged, child) => merged
                 ? Text(
-                    '${'merged.header'.tr()} · ${'merged.header_sub'.tr(args: ['${MergedMode.usable.length}'])} • $total مشترك',
+                    MergedMode.focused == null
+                        ? '${'merged.header'.tr()} · ${'merged.header_sub'.tr(args: ['${MergedMode.usable.length}'])} • $total مشترك'
+                        : '«${MergedMode.focused!.name}» • $total مشترك',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: AppType.body(color: AppColors.brand).copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),

@@ -11,9 +11,13 @@ import 'package:rad_mysvcs/api/merged_dashboard_api.dart';
 import 'package:rad_mysvcs/api/subscribers_api.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/account/company_switch_sheet.dart';
+import 'package:rad_mysvcs/screens/dashboard/dashboard_screen.dart';
+import 'package:rad_mysvcs/screens/dashboard/widgets/subscribers_card.dart';
+import 'package:rad_mysvcs/screens/reports/financial_report_screen.dart';
 import 'package:rad_mysvcs/screens/subscribers/subscribers_screen.dart';
 import 'package:rad_mysvcs/screens/subscribers/widgets/filter_chips_bar.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
+import 'package:rad_mysvcs/widgets/merged_company_strip.dart';
 
 import 'visual_perm/visual_perm_harness.dart';
 
@@ -67,6 +71,18 @@ class _Srv implements HttpClientAdapter {
     if (o.method == 'GET' && RegExp(r'^/api/v2/subscribers/\d+$').hasMatch(path)) {
       return _json(200, {'success': true, 'data': {'idx': path.split('/').last}},
           headers: {...h, 'x-company-ref': ['r_${'R' * 22}']});
+    }
+    if (o.method == 'GET' && path == '/api/reports/finance') {
+      final cash = key == _kA ? 10000 : (key == _kB ? 20000 : 7000);
+      return _json(200, {
+        'success': true,
+        'data': {
+          'kpis': {'activate_cash_sum': cash, 'debt_pay_sum': key == _kA ? 5000 : 0},
+          'recentLogs': [
+            {'id': 1, 'action_type': 'DEBT_PAY', 'amount': 1000, 'created_at': key == _kA ? '2026-10-21 12:00:00' : '2026-10-21 11:00:00', 'user_username': 'u$key'},
+          ],
+        },
+      }, headers: h);
     }
     if (o.method == 'GET' && path == '/api/v2/admin-widgets') {
       return _json(200, {'success': true, 'balance': key == _kA ? 100000 : 50000, 'points': 0}, headers: h);
@@ -134,7 +150,7 @@ void main() {
     expect(find.textContaining('كل الشركات · 3 شركات • 4 مشترك'), findsOneWidget,
         reason: 'idx 1 في ساسين مختلفين ⇒ صفّان، والكبيرة خارجها');
     expect(find.textContaining('«شركة كبيرة» كبيرة'), findsOneWidget, reason: 'الكبيرة تُفتح منفردة');
-    expect(find.textContaining('شركة تحتاج دخول'), findsOneWidget);
+    expect(find.textContaining('شركة تحتاج دخول'), findsWidgets, reason: 'على شارتها وفي سطر «لا تظهر هنا»');
     final full = srv.routed.where((o) => o.uri.path == '/api/v2/subscribers' && o.queryParameters['page'] == null);
     expect(full.map((o) => o.headers['x-company-key']).toSet(), {_kA, _kB}, reason: 'الكبيرة لا تُجلب كاملة');
     await down(t);
@@ -171,6 +187,65 @@ void main() {
     expect(d.totalSubs, 4, reason: 'idx 1 في ساسين مختلفين ⇒ صفّان');
     expect(d.count, 2);
     expect(d.total, 7500);
+    await down(t);
+  });
+
+  Finder chip(String name) => find.descendant(of: find.byType(MergedCompanyStrip), matching: find.text(name));
+
+  testWidgets('شريط الشركات بالمشتركين: عدد كلٍّ منها، والضغط يعرض الشركة وحدها، و«الكل» يعيد المدموج', (t) async {
+    await up();
+    await t.runAsync(() => MergedMode.enter());
+    final cmd = ValueNotifier<SubscriberFilter?>(SubscriberFilter.all);
+    await pumpVisual(t, phone, home: (_) => SubscribersScreen(filterCmd: cmd));
+    await settle(t, seconds: 3);
+    expect(chip('الكل'), findsOneWidget);
+    expect(chip('شركة ألف'), findsOneWidget);
+    expect(find.descendant(of: find.byType(MergedCompanyStrip), matching: find.text('4')), findsOneWidget, reason: '«الكل» 4');
+    await t.tap(chip('شركة باء'));
+    await settle(t, seconds: 1);
+    expect(MergedMode.focus.value, _kB);
+    expect(find.textContaining('«شركة باء» • 2 مشترك'), findsOneWidget);
+    expect(find.textContaining('تعرض «شركة باء» وحدها'), findsOneWidget);
+    await t.tap(chip('الكل'));
+    await settle(t, seconds: 1);
+    expect(MergedMode.focus.value, isNull);
+    expect(find.textContaining('كل الشركات · 3 شركات • 4 مشترك'), findsOneWidget);
+    await t.tap(chip('شركة كبيرة'));
+    await settle(t, seconds: 1);
+    expect(MergedMode.focus.value, isNull, reason: 'الكبيرة لا تُختار — تقول سببها');
+    await down(t);
+  });
+
+  testWidgets('الرئيسية: الشريط بدل زرّ «العودة» الكبير، والشركة المختارة تغيّر عدد المشتركين', (t) async {
+    await up();
+    await t.runAsync(() => MergedMode.enter());
+    await pumpVisual(t, phone, home: (_) => const DashboardScreen());
+    await settle(t, seconds: 3);
+    expect(find.byType(MergedCompanyStrip), findsOneWidget);
+    expect(find.text('العودة للشركة المفتوحة'), findsNothing);
+    expect(find.descendant(of: find.byType(SubscribersCard), matching: find.text('4')), findsWidgets);
+    await t.tap(chip('شركة باء'));
+    await settle(t, seconds: 1);
+    expect(find.descendant(of: find.byType(SubscribersCard), matching: find.text('2')), findsWidgets);
+    await down(t);
+  });
+
+  testWidgets('التقرير الماليّ: تقريرٌ لكلّ شركة بمديرها ثمّ المجموع وتفصيلٌ لكلّ شركة، والشركة المختارة بلا طلبٍ جديد', (t) async {
+    await up();
+    await t.runAsync(() => MergedMode.enter());
+    await pumpVisual(t, phone, home: (_) => const FinancialReportScreen());
+    await settle(t, seconds: 3);
+    final fin = srv.routed.where((o) => o.uri.path == '/api/reports/finance').toList();
+    expect({for (final o in fin) o.headers['x-company-key']: o.queryParameters['user_ids']},
+        {_kA: '11', _kB: 'jt:22', _kC: '33'}, reason: 'كلّ شركةٍ بمديرها وحده — كطلب الشاشة العاديّة لشركتها');
+    expect(find.textContaining('42,000'), findsWidgets, reason: '10000+5000 + 20000 + 7000');
+    expect(find.text('حسب الشركة'), findsOneWidget);
+    final before = fin.length;
+    await t.tap(chip('شركة باء'));
+    await settle(t, seconds: 1);
+    expect(srv.routed.where((o) => o.uri.path == '/api/reports/finance').length, before, reason: 'تقريرها في المجموع المحفوظ');
+    expect(find.textContaining('20,000'), findsWidgets);
+    expect(find.text('حسب الشركة'), findsNothing);
     await down(t);
   });
 }

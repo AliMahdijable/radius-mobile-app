@@ -10,13 +10,28 @@ import 'dashboard_api.dart';
 
 /// رقمٌ مجموعٌ من شركات «كل الشركات» ومن لم يدخله ولماذا (لا صفرٌ صامت لشركةٍ تعذّرت — قاعدة الويب §4).
 class MergedSum<T> {
-  const MergedSum(this.value, this.excluded);
+  const MergedSum(this.value, this.excluded, {this.byKey = const {}, this.reasons = const {}});
 
   /// null: لم تدخل شركةٌ واحدة.
   final T? value;
 
   /// «الاسم: السبب» لكلّ شركةٍ خارج المجموع.
   final List<String> excluded;
+
+  /// قيمة كلّ شركةٍ دخلت المجموع (بمفتاحها) — الشركة المختارة في الشريط تُعرض بها وحدها.
+  final Map<String, T> byKey;
+
+  /// سبب غياب كلّ شركةٍ خارج المجموع (بمفتاحها، بلا اسمها).
+  final Map<String, String> reasons;
+
+  /// شركةٌ واحدة من المجموع: قيمتها وحدها، أو سبب غيابها. ربطٌ ثانٍ للمدير نفسه يُقرأ من أصله (قائمتهما واحدة).
+  MergedSum<T> only(MergedCompany c) {
+    final k = MergedDashboardApi.canonicalKey(c.key);
+    final v = byKey[k];
+    if (v != null) return MergedSum<T>(v, const []);
+    final why = reasons[k];
+    return MergedSum<T>(null, [if (why != null) '${c.name}: $why']);
+  }
 }
 
 /// الرئيسية في «كل الشركات» (٢١ أكتوبر): كلّ رقمٍ = نداءٌ موجَّهٌ لكلّ شركةٍ على المعالج الحقيقيّ نفسه ثمّ الجمع بقواعد الويب
@@ -31,6 +46,9 @@ class MergedDashboardApi {
     final dup = sameManagerOf(usable);
     return usable.where((c) => !dup.containsKey(c.key)).toList();
   }
+
+  /// ربطٌ ثانٍ للمدير نفسه ⇒ مفتاح أصله (أرقامه تُقرأ مرّةً تحت الأصل)؛ وإلّا المفتاح نفسه.
+  static String canonicalKey(String key) => sameManagerOf(MergedMode.usable)[key]?.key ?? key;
 
   static bool _iqd(MergedCompany c) => c.currency == 'IQD';
 
@@ -52,24 +70,35 @@ class MergedDashboardApi {
     num points = 0;
     var any = false;
     final excluded = <String>[];
+    final byKey = <String, WalletResult>{};
+    final reasons = <String, String>{};
+    void skip(MergedCompany c, String why) {
+      excluded.add('${c.name}: $why');
+      reasons[c.key] = why;
+    }
+
     for (var i = 0; i < cs.length; i++) {
       final c = cs[i];
       final b = res[i];
       if (b == null || b['success'] == false || b['balance_unavailable'] == true) {
-        excluded.add('${c.name}: تعذّرت قراءة الرصيد');
+        skip(c, 'تعذّرت قراءة الرصيد');
         continue;
       }
       final p = b['points'];
-      points += p is num ? p : (num.tryParse('${p ?? 0}') ?? 0);
+      final pts = p is num ? p : (num.tryParse('${p ?? 0}') ?? 0);
+      points += pts;
       if (!_iqd(c)) {
-        excluded.add('${c.name}: ${c.currency ?? 'عملةٌ غير معروفة'}');
+        skip(c, c.currency ?? 'عملةٌ غير معروفة');
         continue;
       }
       final v = b['balance'];
-      balance += v is num ? v : (num.tryParse('${v ?? 0}') ?? 0);
+      final bal = v is num ? v : (num.tryParse('${v ?? 0}') ?? 0);
+      balance += bal;
+      byKey[c.key] = WalletResult(balance: bal, points: pts);
       any = true;
     }
-    return MergedSum(any ? WalletResult(balance: balance, points: points) : null, excluded);
+    return MergedSum(any ? WalletResult(balance: balance, points: points) : null, excluded,
+        byKey: byKey, reasons: reasons);
   }
 
   /// الإيراد للمدّة: مجموع الشركات بالدينار، والسلسلة اليوميّة مجموعةً بالتاريخ.
@@ -80,26 +109,28 @@ class MergedDashboardApi {
     var any = false;
     final byDay = <DateTime, int>{};
     final excluded = <String>[];
+    final byKey = <String, RevenueResult>{};
+    final reasons = <String, String>{};
     for (var i = 0; i < cs.length; i++) {
       final c = cs[i];
       final r = res[i];
-      if (r == null) {
-        excluded.add('${c.name}: تعذّر جلب الإيراد');
+      final why = r == null ? 'تعذّر جلب الإيراد' : (!_iqd(c) ? (c.currency ?? 'عملةٌ غير معروفة') : null);
+      if (why != null) {
+        excluded.add('${c.name}: $why');
+        reasons[c.key] = why;
         continue;
       }
-      if (!_iqd(c)) {
-        excluded.add('${c.name}: ${c.currency ?? 'عملةٌ غير معروفة'}');
-        continue;
-      }
-      amount += r.amount;
+      amount += r!.amount;
       for (final p in r.series) {
         byDay[p.date] = (byDay[p.date] ?? 0) + p.amount;
       }
+      byKey[c.key] = r;
       any = true;
     }
     final series = [for (final e in byDay.entries) RevenuePoint(date: e.key, amount: e.value)]
       ..sort((a, b) => a.date.compareTo(b.date));
-    return MergedSum(any ? RevenueResult(amount: amount, series: series) : null, excluded);
+    return MergedSum(any ? RevenueResult(amount: amount, series: series) : null, excluded,
+        byKey: byKey, reasons: reasons);
   }
 
   /// تفعيلات اليوم وتمديداته — مجموع العدد، وآخر العمليّات من كلّ الشركات (الأحدث أوّلاً).
@@ -111,15 +142,19 @@ class MergedDashboardApi {
     var any = false;
     final recent = <Map<String, dynamic>>[];
     final excluded = <String>[];
+    final byKey = <String, DailyActivationsResult>{};
+    final reasons = <String, String>{};
     for (var i = 0; i < cs.length; i++) {
       final r = res[i];
       if (r == null) {
         excluded.add('${cs[i].name}: تعذّر جلب تفعيلات اليوم');
+        reasons[cs[i].key] = 'تعذّر جلب تفعيلات اليوم';
         continue;
       }
       act += r.activations;
       ext += r.extensions;
       recent.addAll(r.recent);
+      byKey[cs[i].key] = r;
       any = true;
     }
     String at(Map<String, dynamic> m) => '${m['created_at'] ?? m['time'] ?? ''}';
@@ -127,6 +162,8 @@ class MergedDashboardApi {
     return MergedSum(
       any ? DailyActivationsResult(activations: act, extensions: ext, recent: recent.take(20).toList()) : null,
       excluded,
+      byKey: byKey,
+      reasons: reasons,
     );
   }
 

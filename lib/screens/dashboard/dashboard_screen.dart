@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../core/util/format.dart';
+import '../../models/merged_company.dart';
 import '../../services/merged_mode.dart';
+import '../../widgets/merged_company_strip.dart';
 import '../../api/merged_dashboard_api.dart';
 import '../../api/cards_api.dart';
 import '../../api/dashboard_api.dart';
@@ -74,7 +77,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   WalletResult? _walletLive;
 
   // «كل الشركات»: ما لم يدخل مجاميع الرئيسية ولماذا (القائمة، الرصيد، تفعيلات اليوم) — لا صفرٌ صامت.
+  // المجاميع محفوظةٌ كما وصلت، والمعروض منها الكلّ أو الشركة المختارة في الشريط (_applyMerged) — بلا طلبٍ عند الاختيار.
   MergedListResult? _mergedList;
+  MergedSum<WalletResult>? _mergedWallet;
+  MergedSum<DailyActivationsResult>? _mergedDaily;
   List<String> _mergedWalletExcluded = const [];
   List<String> _mergedDailyExcluded = const [];
 
@@ -204,6 +210,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ProviderService.changes.addListener(_onAccessChanged);
     ActiveCompany.listenable.addListener(_onCompanyChanged);
     MergedMode.active.addListener(_onMergedChanged);
+    MergedMode.focus.addListener(_onMergedFocus);
     _loadIdentity();
     // «تبديل الشركة» في الترويسة: شركات الحساب مرّةً للجلسة (مالكٌ وحده).
     unawaited(LinkedCompanies.ensureFresh());
@@ -282,6 +289,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ProviderService.changes.removeListener(_onAccessChanged);
     ActiveCompany.listenable.removeListener(_onCompanyChanged);
     MergedMode.active.removeListener(_onMergedChanged);
+    MergedMode.focus.removeListener(_onMergedFocus);
     super.dispose();
   }
 
@@ -293,15 +301,49 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _walletLive = null;
       _activationsLive = null;
       _mergedList = null;
+      _mergedWallet = null;
+      _mergedDaily = null;
       _mergedWalletExcluded = const [];
       _mergedDailyExcluded = const [];
     });
     _refreshLive();
   }
 
+  /// شركةٌ اختيرت في الشريط (أو «الكل»): الأرقام من المحفوظ — بلا طلب.
+  void _onMergedFocus() {
+    if (!mounted || !MergedMode.active.value) return;
+    setState(_applyMerged);
+  }
+
+  /// المعروض من المجاميع المحفوظة: الكلّ، أو الشركة المختارة وحدها (قائمتها كما وصلت، ورصيدها وتفعيلاتها من المجموع).
+  void _applyMerged() {
+    final f = MergedMode.focused;
+    final r = _mergedList;
+    if (r != null) {
+      // شركةٌ مختارة بلا قائمة (كبيرة، أو تعذّرت): لا أصفار — البطاقة بلا رقم والسبب في سطر الشريط
+      final noList = f != null && r.partOf(f.key)?.rows == null;
+      _debtorsLive = noList ? null : MergedDashboardApi.debtorsFrom(r.rowsFor(f?.key));
+      _debtorsLoaded = true;
+    }
+    final w = _mergedWallet;
+    if (w != null) {
+      final v = f == null ? w : w.only(f);
+      _walletLive = v.value;
+      _mergedWalletExcluded = v.excluded;
+      _walletLoaded = true;
+    }
+    final d = _mergedDaily;
+    if (d != null) {
+      final v = f == null ? d : d.only(f);
+      _activationsLive = v.value;
+      _mergedDailyExcluded = v.excluded;
+      _activationsLoaded = true;
+    }
+  }
+
   /// «كل الشركات»: المشتركون والديون من الصفوف المدموجة، والرصيد وتفعيلات اليوم مجموعةً بالدينار — ولا شيء يُحفظ في
-  /// مخبأ الإقلاع (هو للشركة المفتوحة).
-  void _refreshMerged({required bool silent}) {
+  /// مخبأ الإقلاع (هو للشركة المفتوحة). [fresh]: سحبٌ يدويّ يتخطّى مخبأ قوائم الشركات (٤٥ث).
+  Future<void> _refreshMerged({required bool silent, bool fresh = false}) async {
     if (!silent) {
       setState(() {
         _activationsLoaded = false;
@@ -309,52 +351,73 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _walletLoaded = false;
       });
     }
+    final jobs = <Future<void>>[];
     if (_canSubs) {
-      MergedSubscribers.load().then((r) {
+      jobs.add(MergedSubscribers.load(fresh: fresh).then((r) {
         if (!mounted || !MergedMode.active.value) return;
         setState(() {
           _mergedList = r;
-          _debtorsLive = MergedDashboardApi.debtorsFrom(r.rows);
-          _debtorsLoaded = true;
+          _applyMerged();
         });
-      });
+      }));
     }
     if (_shown('activities') && _canActivity) {
-      MergedDashboardApi.daily().then((m) {
+      jobs.add(MergedDashboardApi.daily().then((m) {
         if (!mounted || !MergedMode.active.value) return;
         setState(() {
-          _activationsLive = m.value;
-          _activationsLoaded = true;
-          _mergedDailyExcluded = m.excluded;
+          _mergedDaily = m;
+          _applyMerged();
         });
-      });
+      }));
     }
     if (_shown('wallet') && _canMoney) {
-      MergedDashboardApi.wallet().then((m) {
+      jobs.add(MergedDashboardApi.wallet().then((m) {
         if (!mounted || !MergedMode.active.value) return;
         setState(() {
-          _walletLive = m.value;
-          _walletLoaded = true;
-          _mergedWalletExcluded = m.excluded;
+          _mergedWallet = m;
+          _applyMerged();
         });
-      });
+      }));
     }
+    await Future.wait(jobs.map((j) => j.catchError((_) {})));
   }
 
-  /// سطر «كل الشركات» أعلى الرئيسيّة: عدد الشركات، ومن لم يدخل المجاميع ولماذا، والعودة للشركة المفتوحة.
+  /// سطر «كل الشركات» تحت الشريط: من لم يدخل الأرقام ولماذا — للكلّ، أو للشركة المختارة وحدها.
   String? _mergedNote() {
     final r = _mergedList;
+    final f = MergedMode.focused;
     final parts = <String>[
-      if (r != null) ...[
-        for (final b in r.big) 'merged.big'.tr(args: [b.company.name, '${b.bigTotal}']),
-        for (final f in r.failed) f.error ?? 'merged.failed'.tr(args: [f.company.name]),
+      if (r != null && f == null) ...[
+        for (final b in r.big) 'merged.big'.tr(args: [b.company.name, formatIQD(b.bigTotal!)]),
+        for (final x in r.failed) x.error ?? 'merged.failed'.tr(args: [x.company.name]),
         for (final p in r.partial) 'merged.partial'.tr(args: [p.company.name]),
         if (r.missing.isNotEmpty) 'merged.missing'.tr(args: [r.missing.map((c) => c.name).join('، ')]),
+        if (r.folded > 0) 'merged.folded'.tr(args: [formatIQD(r.folded)]),
       ],
+      if (r != null && f != null) ..._focusListNote(r, f),
       ..._mergedWalletExcluded,
       ..._mergedDailyExcluded,
     ];
     return parts.isEmpty ? null : parts.join('\n');
+  }
+
+  /// ما يخصّ قائمة الشركة المختارة: كبيرة، أو تعذّرت، أو ناقصة.
+  List<String> _focusListNote(MergedListResult r, MergedCompany f) {
+    final p = r.partOf(f.key);
+    if (p == null) return const [];
+    if (p.bigTotal != null) return ['merged.big'.tr(args: [f.name, formatIQD(p.bigTotal!)])];
+    if (p.rows == null) return [p.error ?? 'merged.failed'.tr(args: [f.name])];
+    if (p.partial) return ['merged.partial'.tr(args: [f.name])];
+    return const [];
+  }
+
+  /// حال شركةٍ صالحة على الشريط لا تُختار: كبيرة (تُفتح وحدها) أو تعذّرت قائمتها.
+  String? _mergedProblem(MergedCompany c) {
+    final p = _mergedList?.partOf(c.key);
+    if (p == null) return null;
+    if (p.bigTotal != null) return 'merged.chip_big'.tr();
+    if (p.rows == null) return 'merged.chip_failed'.tr();
+    return null;
   }
 
   Future<void> _loadIdentity() async {
@@ -422,7 +485,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (mounted) await _refreshLive();
   }
 
-  Future<void> _refreshLive({bool silent = false}) async {
+  Future<void> _refreshLive({bool silent = false, bool fresh = false}) async {
     if (silent) {
       // أثناء التبريد لا نُسقط الطلب بل نُعلّمه مؤجَّلاً: عمليّةٌ حسّاسةٌ
       // وقعت فعلاً ويجب أن تنعكس ولو جاءت بعد تحديثٍ سابقٍ بلحظات.
@@ -447,7 +510,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // silent=true (event-driven refresh): نبقي القيم القديمة معروضة
     //   حتى الـAPI يرد بالـlatest، يجنّب وميض 0 → القيمة الجديدة.
     if (MergedMode.active.value) {
-      _refreshMerged(silent: silent);
+      await _refreshMerged(silent: silent, fresh: fresh);
       return;
     }
     if (!silent) {
@@ -480,7 +543,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           .timeout(kMaxLoad, onTimeout: () => null)
           .catchError((_) => null)
           .then((r) {
-        if (!mounted) return;
+        if (!mounted || MergedMode.active.value) return;
         if (silent && r == null && _waLive != null) return;
         setState(() {
           _waLive = r;
@@ -493,7 +556,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           .timeout(kMaxLoad, onTimeout: () => null)
           .catchError((_) => null)
           .then((r) {
-        if (!mounted) return;
+        // ردٌّ للشركة المفتوحة وصل بعد دخول «كل الشركات»: لا يكتب فوق المجموع («يظهر مال شركه وحده»)
+        if (!mounted || MergedMode.active.value) return;
         if (silent && r == null && _activationsLive != null) return;
         setState(() {
           _activationsLive = r;
@@ -526,7 +590,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           .timeout(kMaxLoad, onTimeout: () => null)
           .catchError((_) => null)
           .then((r) {
-        if (!mounted) return;
+        if (!mounted || MergedMode.active.value) return;
         if (silent && r == null && _debtorsLive != null) return;
         setState(() {
           _debtorsLive = r;
@@ -552,7 +616,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           .timeout(kMaxLoad, onTimeout: () => null)
           .catchError((_) => null)
           .then((r) {
-        if (!mounted) return;
+        if (!mounted || MergedMode.active.value) return;
         // صلاحيّةٌ سُحبت والطلب في الطريق (تحديث `/me`): الخادم قنّع الرصيد
         // (`balance:null` يصل صفراً) — فلا يُرسم رقمٌ كاذب ولا يُحفظ.
         if (!_canMoney) return;
@@ -648,7 +712,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // `onRefresh` ينادي دوالّ اللوحة، ولا سبيل له إلى حالة ودجةٍ
           // ابنة تملك جلبها.
           DashboardRefreshSignal.bump();
-          await Future.wait([_loadIdentity(), _refreshLive()]);
+          await Future.wait([_loadIdentity(), _refreshLive(fresh: true)]);
         },
         child: CustomScrollView(
           slivers: [
@@ -702,7 +766,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 delegate: SliverChildListDelegate([
                   // «كل الشركات»: الأرقام تحته لشركات الحساب معاً — ومن لم يدخلها ولماذا
                   if (MergedMode.active.value) ...[
-                    _MergedBanner(note: _mergedNote(), onExit: MergedMode.exit),
+                    MergedCompanyStrip(
+                      countOf: (c) => _mergedList?.countOf(c.key),
+                      total: _mergedList?.total,
+                      problemOf: _mergedProblem,
+                      note: _mergedNote(),
+                      onExit: MergedMode.exit,
+                    ),
                     const SizedBox(height: Sp.md),
                   ],
                   // أعلى كلّ شيء عمداً: انقطاع الجلسة يوقف كلّ تنبيهات
@@ -1391,56 +1461,6 @@ class _AllHidden extends StatelessWidget {
             'أعِدها من الإعدادات ← نطاق العرض',
             textAlign: TextAlign.center,
             style: AppType.micro(color: AppColors.textLow),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-
-/// شريط «كل الشركات» أعلى الرئيسيّة.
-class _MergedBanner extends StatelessWidget {
-  const _MergedBanner({required this.note, required this.onExit});
-
-  final String? note;
-  final Future<void> Function() onExit;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      padding: const EdgeInsets.all(Sp.md),
-      decoration: BoxDecoration(
-        color: AppColors.brandSoftBg,
-        borderRadius: BorderRadius.circular(R.md),
-        border: Border.all(color: AppColors.brandSoftBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.layers_rounded, size: 18, color: AppColors.brand),
-              const SizedBox(width: Sp.sm),
-              Expanded(
-                child: Text(
-                  '${'merged.header'.tr()} · ${'merged.header_sub'.tr(args: ['${MergedMode.usable.length}'])}',
-                  style: AppType.bodyStrong(color: AppColors.brand),
-                ),
-              ),
-            ],
-          ),
-          if (note != null) ...[
-            const SizedBox(height: 6),
-            Text(note!, style: AppType.body(color: AppColors.textBody).copyWith(fontSize: 12.5, height: 1.5)),
-          ],
-          Align(
-            alignment: AlignmentDirectional.centerEnd,
-            child: TextButton(
-              onPressed: () => onExit(),
-              child: Text('merged.exit'.tr(), style: AppType.button(color: AppColors.brand)),
-            ),
           ),
         ],
       ),

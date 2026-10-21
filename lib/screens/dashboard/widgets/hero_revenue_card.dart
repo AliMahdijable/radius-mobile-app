@@ -67,6 +67,8 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
     DashboardRefreshSignal.tick.addListener(_onDataChanged);
     // دخول «كل الشركات» أو الخروج منه: الأرقام من جديد (لا يبقى رقم الوضع السابق)
     MergedMode.active.addListener(_onMergedChanged);
+    // شركةٌ مختارة في الشريط: رقمها وحده من المجموع المحفوظ — بلا طلب
+    MergedMode.focus.addListener(_onFocusChanged);
   }
 
   void _onMergedChanged() {
@@ -76,8 +78,36 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
       _archives.clear();
       _failed.clear();
       _mergedExcluded.clear();
+      _mergedSums.clear();
     });
     _refresh(_period);
+  }
+
+  void _onFocusChanged() {
+    if (!mounted || !MergedMode.active.value) return;
+    setState(() {
+      for (final e in _mergedSums.entries) {
+        _showMerged(e.key, e.value);
+      }
+    });
+  }
+
+  /// «كل الشركات»: مجموع المدّة أو الشركة المختارة منه.
+  final Map<RevenuePeriod, MergedSum<RevenueResult>> _mergedSums = {};
+
+  void _showMerged(RevenuePeriod p, MergedSum<RevenueResult> sum) {
+    final f = MergedMode.focused;
+    final m = f == null ? sum : sum.only(f);
+    _mergedExcluded[p] = m.excluded;
+    final r = m.value;
+    if (r != null) {
+      _amounts[p] = r.amount;
+      _archives[p] = r.archive;
+      _failed.remove(p);
+    } else {
+      _amounts[p] = null;
+      _failed.add(p);
+    }
   }
 
   void _onDataChanged() {
@@ -91,6 +121,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
       _amounts[RevenuePeriod.week] = null;
       _amounts[RevenuePeriod.month] = null;
       _failed.clear();
+      _mergedSums.clear();
     });
     _refresh(_period);
   }
@@ -101,6 +132,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
     AppResumedSignal.tick.removeListener(_onDataChanged);
     DashboardRefreshSignal.tick.removeListener(_onDataChanged);
     MergedMode.active.removeListener(_onMergedChanged);
+    MergedMode.focus.removeListener(_onFocusChanged);
     super.dispose();
   }
 
@@ -114,13 +146,12 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
     // بلوب. المدير رفع screenshot 2026-07-22 يوضّح spinner ثابت في
     // كارت البطل بسبب /api/reports/finance بطيء.
     RevenueResult? r;
-    List<String> excluded = const [];
+    final merged = MergedMode.active.value;
+    MergedSum<RevenueResult>? sum;
     try {
-      if (MergedMode.active.value) {
+      if (merged) {
         // «كل الشركات»: مجموع الشركات بالدينار، ومن لم يدخله يُسمّى تحت الرقم
-        final m = await MergedDashboardApi.revenue(p).timeout(const Duration(seconds: 30));
-        r = m.value;
-        excluded = m.excluded;
+        sum = await MergedDashboardApi.revenue(p).timeout(const Duration(seconds: 30));
       } else {
         r = await DashboardApi.fetchRevenue(p)
             .timeout(const Duration(seconds: 20));
@@ -129,8 +160,25 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
       r = null;
     }
     if (!mounted) return;
+    // الوضع تبدّل والطلب في الطريق: لا يُرسم رقم وضعٍ تحت عنوان الآخر
+    if (merged != MergedMode.active.value) return;
+    if (merged) {
+      setState(() {
+        _loading = null;
+        if (sum == null) {
+          _mergedSums.remove(p);
+          _mergedExcluded[p] = const [];
+          _amounts[p] = null;
+          _failed.add(p);
+        } else {
+          _mergedSums[p] = sum;
+          _showMerged(p, sum);
+        }
+      });
+      return;
+    }
     setState(() {
-      _mergedExcluded[p] = excluded;
+      _mergedExcluded[p] = const [];
       if (r != null) {
         _amounts[p] = r.amount;
         _archives[p] = r.archive;

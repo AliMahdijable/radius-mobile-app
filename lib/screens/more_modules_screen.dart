@@ -31,6 +31,7 @@ import 'portal_settings/portal_settings_screen.dart';
 import 'reports_screen.dart';
 import 'top_actions.dart';
 import 'topup/topup_screen.dart';
+import '../widgets/merged_company_strip.dart';
 
 /// Other modules — مطلب 2026-06-10: الـtab السفلي السابق "الضبط"
 /// انتقل لاسم "قوائم أخرى" ويعرض المديولات الإضافية (الصرفيات،
@@ -381,6 +382,8 @@ class MoreModulesScreen extends StatelessWidget {
                     style: AppType.subtitle(color: AppColors.textMid),
                   ),
                 ),
+                // «كل الشركات»: هذه الأقسام للشركة المفتوحة وحدها — تُسمّى
+                const MergedOpenCompanyNote(padding: EdgeInsets.only(top: Sp.md)),
                 const SizedBox(height: Sp.lg),
                 if (cards.isEmpty)
                   Padding(

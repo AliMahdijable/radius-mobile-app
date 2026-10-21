@@ -16,6 +16,7 @@ import 'all_managers_debts_screen.dart';
 import 'daily_activations_report_screen.dart';
 import 'financial_report_screen.dart';
 import 'sessions_report_screen.dart';
+import '../../widgets/merged_company_strip.dart';
 
 /// شاشة hub للتقارير — 7 كروت تنقل لكل تقرير منفصل.
 /// تستبدل reports_screen.dart placeholder "تأتي قريباً".
@@ -182,6 +183,11 @@ class ReportsHubScreen extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.huge),
               children: [
+                // «كل الشركات»: الماليّ لكل الشركات، والبقيّة للشركة المفتوحة — تُسمّى
+                const MergedOpenCompanyNote(
+                  textKey: 'merged.reports_note',
+                  padding: EdgeInsets.only(bottom: Sp.md),
+                ),
                 if (tiles.isEmpty)
                   _emptyState()
                 else
