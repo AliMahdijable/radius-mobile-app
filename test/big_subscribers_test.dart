@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/big_subscribers_api.dart';
 import 'package:rad_mysvcs/api/dashboard_api.dart';
@@ -91,6 +92,10 @@ class _BigServer implements HttpClientAdapter {
 
   bool get askedFullList => requests.any((r) => r.method == 'GET' && r.path == '/api/v2/subscribers' && r.queryParameters['page'] == null);
   bool get askedOnline => requests.any((r) => r.path == '/api/v2/online-users');
+  List<Map<String, dynamic>> bodiesOf(String path) => [
+        for (final r in requests)
+          if (r.method == 'POST' && r.path == path) Map<String, dynamic>.from(r.data as Map),
+      ];
   List<Map<String, dynamic>> get pageQueries => [
         for (final r in requests)
           if (r.path == '/api/v2/subscribers' && r.queryParameters['page'] != null) Map<String, dynamic>.from(r.queryParameters),
@@ -137,6 +142,30 @@ class _BigServer implements HttpClientAdapter {
         app['debtorsPending'] = true;
       }
       return _json(200, {'success': true, 'summary': {'all': 89177, 'debtors': null, 'app': app}});
+    }
+    if (o.method == 'GET' && o.path == '/api/v2/packages') {
+      return _json(200, {'success': true, 'data': [
+        {'id': 7, 'name': 'Gold'},
+        {'id': 9, 'name': 'Silver'},
+      ]});
+    }
+    if (o.method == 'POST' && o.path == '/api/v2/subscribers/lookup') {
+      final b = Map<String, dynamic>.from(o.data as Map);
+      String user(int i) => 'big${i.toString().padLeft(6, '0')}';
+      return _json(200, {'success': true, 'data': [
+        for (final u in (b['usernames'] as List? ?? const []))
+          {'idx': '${100000 + int.parse('$u'.substring(3))}', 'username': '$u', 'firstname': 'اسم', 'lastname': '$u'.substring(3)},
+        for (final i in (b['idxs'] as List? ?? const []))
+          {'idx': '$i', 'username': user(int.parse('$i') - 100000), 'firstname': 'اسم', 'lastname': '$i'},
+      ]});
+    }
+    if (o.method == 'POST' && o.path == '/api/whatsapp/broadcast') {
+      return _json(200, {
+        'success': true,
+        'pending': true,
+        'total': 89177,
+        'message': 'بدأ تجهيز التبليغ لحسابٍ كبير (89,177 مشترك) — قد يأخذ بضع دقائق، ويصلك إشعارٌ بالنتيجة',
+      });
     }
     if (o.method == 'GET' && o.path == '/api/v2/managers') {
       return _json(200, {'success': true, 'data': [
@@ -349,15 +378,80 @@ void main() {
       await drain(t);
     });
 
-    testWidgets('الإرسال الجماعي: «عام» مقفل بسببه، والمحدَّدون من بحث الساس', (t) async {
+    testWidgets('الإرسال الجماعي: «عام» يرسل الفئة كلّها بلا قائمةٍ من الهاتف — الخادم يجهّزها ويردّ فوراً', (t) async {
       final srv = await setUpServer();
       server = srv;
       await pumpVisual(t, phone, home: (_) => const BroadcastScreen());
       await settle(t, seconds: 3);
       expect(find.textContaining('حسابك كبير'), findsOneWidget);
-      expect(find.text('غير متاح للحسابات الكبيرة'), findsOneWidget);
-      expect(srv.pageQueries.any((m) => m['tab'] == 'all'), isTrue);
+      expect(find.text('كلّ الفئة — يُجهَّز في الخلفيّة'), findsOneWidget);
+      expect(srv.pageQueries.any((m) => m['tab'] == 'all'), isTrue, reason: '«محدّد» افتراضيّاً: بحث الساس');
+      await t.tap(find.text('عام'));
+      await settle(t);
+      expect(find.text('89177 مشترك'), findsOneWidget, reason: 'العدد من ملخّص الساس لا من القائمة');
+      await t.enterText(find.byType(TextField).last, 'تبليغ تجربة');
+      await settle(t);
+      expect(find.text('إرسال للكل'), findsOneWidget);
+      await t.tap(find.widgetWithText(ElevatedButton, 'إرسال'));
+      await settle(t);
+      expect(find.textContaining('إرسال لنحو 89177 مشترك'), findsOneWidget);
+      await t.tap(find.descendant(of: find.byType(AlertDialog), matching: find.text('إرسال')));
+      await settle(t, seconds: 2);
+      final sent = srv.bodiesOf('/api/whatsapp/broadcast');
+      expect(sent, hasLength(1));
+      expect(sent.single.containsKey('targetUsernames'), isFalse, reason: 'الخادم يجمع الفئة بنفسه');
+      expect(sent.single['type'], 'general');
+      expect(sent.single['message'], 'تبليغ تجربة');
+      expect(find.textContaining('بدأ تجهيز التبليغ'), findsOneWidget, reason: 'ردّ الخادم كما هو');
       expect(srv.askedFullList, isFalse);
+      await drain(t);
+    });
+
+    testWidgets('lookup: أسماء أصحاب الخصومات/ارتباطات تلغرام بأعيانهم — POST بلا قائمةٍ كاملة', (t) async {
+      final srv = await setUpServer();
+      final rows = await t.runAsync(() => BigSubscribersApi.lookup(usernames: ['big000003'], idxs: ['100005']));
+      expect(rows, hasLength(2));
+      expect(rows!.first.username, 'big000003');
+      expect(rows.first.firstname, 'اسم');
+      expect(rows.last.idx, '100005');
+      final b = srv.bodiesOf('/api/v2/subscribers/lookup').single;
+      expect(b['usernames'], ['big000003']);
+      expect(b['idxs'], ['100005']);
+      final none = await t.runAsync(() => BigSubscribersApi.lookup());
+      expect(none, isEmpty, reason: 'لا طلب بلا أسماء');
+      expect(srv.bodiesOf('/api/v2/subscribers/lookup'), hasLength(1));
+      expect(srv.askedFullList, isFalse);
+      await visualTearDown();
+      BigSubscribersApi.reset();
+    });
+
+    testWidgets('فلتر الباقة يُمرَّر للساس profile_id في الصفحة والملخّص', (t) async {
+      final srv = await setUpServer();
+      await t.runAsync(() async {
+        await BigSubscribersApi.page(page: 1, tab: 'all', profileId: 7);
+        await BigSubscribersApi.summary(profileId: 7);
+      });
+      expect(srv.pageQueries.any((m) => '${m['profile_id']}' == '7'), isTrue);
+      expect(srv.requests.any((r) => r.path == '/api/v2/subscribers-summary' && '${r.queryParameters['profile_id']}' == '7'), isTrue);
+      await visualTearDown();
+      BigSubscribersApi.reset();
+    });
+
+    testWidgets('شاشة المشتركين: «الباقة» في نافذة التصفية من كتالوج الباقات، واختيارها يسأل الساس profile_id', (t) async {
+      await open(t);
+      final btn = find.byIcon(Icons.tune_rounded).evaluate().isNotEmpty
+          ? find.byIcon(Icons.tune_rounded)
+          : find.byIcon(LucideIcons.slidersHorizontal);
+      await t.tap(btn.first);
+      await settle(t);
+      expect(find.text('الباقة'), findsOneWidget);
+      await t.tap(find.text('Silver'));
+      await settle(t);
+      await t.tap(find.text('تطبيق'));
+      await settle(t, seconds: 2);
+      expect(server.pageQueries.any((m) => '${m['profile_id']}' == '9'), isTrue);
+      expect(server.requests.any((r) => r.path == '/api/v2/subscribers-summary' && '${r.queryParameters['profile_id']}' == '9'), isTrue);
+      expect(server.askedFullList, isFalse);
       await drain(t);
     });
 

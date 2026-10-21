@@ -171,6 +171,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   bool _bigDebtorsUnsupported = false;
   List<ManagerLite>? _bigManagers;
   int? _bigParentId;
+  // فلتر الباقة للكبير: المعرّف من كتالوج الباقات (المفتاح = profile_id) — الساس يفلتر به
+  Map<String, PackageInfo>? _bigPackages;
+  int? _bigProfileId;
   List<Subscriber> _bigRows = const [];
   int _bigTotal = 0;
   int _bigLastPage = 1;
@@ -210,10 +213,11 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   Future<void> _bigReload({bool fresh = false}) async {
     final gen = ++_bigGen;
     final tab = _bigTab(_filter);
-    final countsF = BigSubscribersApi.summary(parentId: _bigParentId, fresh: fresh);
+    final countsF = BigSubscribersApi.summary(parentId: _bigParentId, profileId: _bigProfileId, fresh: fresh);
     try {
       final p = await BigSubscribersApi.page(
-          page: 1, size: _kBigPageSize, tab: tab, query: _query, sort: _bigSort, dir: _bigDir, parentId: _bigParentId);
+          page: 1, size: _kBigPageSize, tab: tab, query: _query, sort: _bigSort, dir: _bigDir,
+          parentId: _bigParentId, profileId: _bigProfileId);
       final c = await countsF;
       if (!mounted || gen != _bigGen) return;
       setState(() {
@@ -251,6 +255,14 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     if (c != null && c.debtorsPending) _bigTick = 9;
   }
 
+  int? _bigPackageId(String? name) {
+    if (name == null) return null;
+    for (final e in (_bigPackages ?? const <String, PackageInfo>{}).entries) {
+      if (e.value.name == name) return int.tryParse(e.key);
+    }
+    return null;
+  }
+
   int? _bigManagerId(String? username) {
     if (username == null) return null;
     for (final m in _bigManagers ?? const <ManagerLite>[]) {
@@ -272,7 +284,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
           query: _query,
           sort: _bigSort,
           dir: _bigDir,
-          parentId: _bigParentId);
+          parentId: _bigParentId,
+          profileId: _bigProfileId);
       if (!mounted || gen != _bigGen) return;
       final seen = _bigRows.map((s) => s.idx ?? s.username).toSet();
       setState(() {
@@ -413,7 +426,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       // الكبير: لا قائمة كاملة ولا قائمة متصلين (عشرات الآلاف) كلّ ٥ ثوانٍ — العدّادات وحدها كلّ دقيقة. الصفوف تتحدّث
       // بالسحب أو بعد كلّ عمليّة (SubscriberEvents) — لا قفزة إلى الصفحة الأولى تحت إصبع من مرّر.
       if (++_bigTick % 12 != 0) return;
-      final c = await BigSubscribersApi.summary(parentId: _bigParentId);
+      final c = await BigSubscribersApi.summary(parentId: _bigParentId, profileId: _bigProfileId);
       if (!mounted || c == null) return;
       setState(() {
         _bigCounts = c;
@@ -693,12 +706,15 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       if (adminId != null) TelegramApi.listBindings(adminId) else Future.value(const <TelegramBinding>[]),
       // فلتر المدير: المدراء من الساس (المعرّف لفلتر الساس parent_id) — لا من القائمة الكاملة
       ManagersApi.lite(),
+      // فلتر الباقة: كتالوج الباقات (المعرّف لفلتر الساس profile_id)
+      SubscribersApi.loadPackages(),
     ]);
     if (!mounted) return;
     setState(() {
       _lastPayments = (results[0] as Map<String, Map<String, dynamic>>?) ?? _lastPayments;
       _telegramBoundIdx = ((results[1] as List<TelegramBinding>?) ?? const []).map((b) => b.sas4Idx).toSet();
       _bigManagers = results[2] as List<ManagerLite>?;
+      _bigPackages = results[3] as Map<String, PackageInfo>?;
     });
   }
 
@@ -813,11 +829,32 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     return list;
   }
 
+  /// فلتر الباقة (٢١ أكتوبر، كالويب): اسم الباقة — يُرشّح القائمة والعدّادات معاً كفلتر المدير. الكبير: معرّفها للساس.
+  String? _packageFilter;
+
+  /// أسماء الباقات المتاحة للفلتر: من القائمة المحمَّلة، والكبير من كتالوج الباقات (الصفحة لا تكفي لمعرفتها).
+  List<String> get _availablePackages {
+    if (_big) {
+      final names = [for (final p in (_bigPackages ?? const <String, PackageInfo>{}).values) p.name]..sort();
+      return names;
+    }
+    final set = <String>{};
+    for (final s in _all) {
+      final p = s.profileName;
+      if (p != null && p.isNotEmpty) set.add(p);
+    }
+    return set.toList()..sort();
+  }
+
   /// Pre-filter source — apply the manager filter first so chip counts
   /// AND the main filter pipeline both work off the same subset.
   List<Subscriber> get _managerScoped {
-    if (_managerFilter == null) return _all;
-    return _all.where((s) => s.parentUsername == _managerFilter).toList();
+    if (_managerFilter == null && _packageFilter == null) return _all;
+    return _all
+        .where((s) =>
+            (_managerFilter == null || s.parentUsername == _managerFilter) &&
+            (_packageFilter == null || s.profileName == _packageFilter))
+        .toList();
   }
 
   // ───────── filtering / sorting (matches v1 predicates exactly) ─────────
@@ -1212,7 +1249,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   /// عنوان 16/w700 مع «إعادة تعيين» في الطرف، شرائح، ثمّ زرّ «تطبيق».
   /// يستبدل صفّ `_ManagerFilterBar` المسطّح الذي كان تحت البحث.
   Future<void> _openManagerFilterSheet() async {
-    final picked = await showModalBottomSheet<Object?>(
+    final picked = await showModalBottomSheet<({String? manager, String? package})>(
       barrierColor: AppColors.scrim,
       context: context,
       backgroundColor: Colors.transparent,
@@ -1223,15 +1260,20 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       builder: (ctx) => _ManagerFilterSheet(
         current: _managerFilter,
         managers: _availableManagers,
+        currentPackage: _packageFilter,
+        packages: _availablePackages,
       ),
     );
     if (picked == null) return; // أُغلق بلا «تطبيق»
     setState(() {
-      _managerFilter = normalizeManagerFilter(picked);
+      _managerFilter = normalizeManagerFilter(picked.manager);
+      _packageFilter = normalizeManagerFilter(picked.package);
       _visibleCount = _kPageStep;
       if (_big) {
         _bigParentId = _bigManagerId(_managerFilter);
         if (_bigParentId == null) _managerFilter = null; // مديرٌ لا معرّف له في الساس: لا فلتر وهميّ
+        _bigProfileId = _bigPackageId(_packageFilter);
+        if (_bigProfileId == null) _packageFilter = null;
       }
     });
     if (_big) _bigReload();
@@ -1446,6 +1488,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     final filtered = _big ? _bigRows : _filteredAll;
     final counts = _big ? _bigCountsMap() : _counts();
     final managers = _availableManagers;
+    final packages = _availablePackages;
     final page = _big ? _bigRows : filtered.take(_visibleCount).toList();
     final remaining = _big
         ? (_bigTotal > _bigRows.length ? _bigTotal - _bigRows.length : 0)
@@ -1524,10 +1567,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                           sortActive: _sortField !=
                                                   SortField.remainingDays ||
                                               _sortDir != SortDirection.desc,
-                                          filterActive: _managerFilter != null,
+                                          filterActive: _managerFilter != null || _packageFilter != null,
                                           sortLabel: _sortLabel(),
                                           onSort: _openSortSheet,
-                                          onFilter: managers.isEmpty
+                                          onFilter: managers.isEmpty && packages.isEmpty
                                               ? null
                                               : _openManagerFilterSheet,
                                           // 2026-08-29: زرّ فحص الأجهزة انتقل من شريط شرائح
@@ -1548,8 +1591,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                               compact: _compactHeader,
                               compactChild: _CompactSearchBar(
                                 controller: _searchCtrl,
-                                filterActive: _managerFilter != null,
-                                onFilter: managers.isEmpty
+                                filterActive: _managerFilter != null || _packageFilter != null,
+                                onFilter: managers.isEmpty && packages.isEmpty
                                     ? null
                                     : _openManagerFilterSheet,
                                 onBackToTop: () => _scrollCtrl.animateTo(
@@ -2135,9 +2178,18 @@ String? normalizeManagerFilter(Object? picked) {
 /// تعيين، شرائح، زرّ تطبيق). يرجع `String` = مدير مختار، أو
 /// `''` = الكل، أو `null` إن أُغلق بلا تطبيق.
 class _ManagerFilterSheet extends StatefulWidget {
-  const _ManagerFilterSheet({required this.current, required this.managers});
+  const _ManagerFilterSheet({
+    required this.current,
+    required this.managers,
+    this.currentPackage,
+    this.packages = const [],
+  });
   final String? current;
   final List<String> managers;
+
+  /// فلتر الباقة (٢١ أكتوبر، كالويب) — يرجع مع المدير ({manager, package}).
+  final String? currentPackage;
+  final List<String> packages;
 
   @override
   State<_ManagerFilterSheet> createState() => _ManagerFilterSheetState();
@@ -2145,6 +2197,7 @@ class _ManagerFilterSheet extends StatefulWidget {
 
 class _ManagerFilterSheetState extends State<_ManagerFilterSheet> {
   late String? _picked = widget.current;
+  late String? _pickedPkg = widget.currentPackage;
 
   @override
   Widget build(BuildContext context) {
@@ -2159,35 +2212,53 @@ class _ManagerFilterSheetState extends State<_ManagerFilterSheet> {
       footer: SheetFooterBar(
         label: 'تطبيق',
         icon: Icons.check_rounded,
-        onPressed: () => Navigator.pop(context, _picked ?? ''),
+        onPressed: () => Navigator.pop(context, (manager: _picked ?? '', package: _pickedPkg ?? '')),
         leading: _ResetFilterButton(
-          onTap: () => setState(() => _picked = null),
+          onTap: () => setState(() {
+            _picked = null;
+            _pickedPkg = null;
+          }),
         ),
       ),
       body: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: Sp.lg),
-          Text('المدير الفرعي', style: AppType.pillLabel()),
-          const SizedBox(height: Sp.sm),
-          Wrap(
-            spacing: Sp.sm,
-            runSpacing: Sp.sm,
-            children: [
-              _chip(label: 'الكل', value: null),
-              for (final m in widget.managers) _chip(label: m, value: m),
-            ],
-          ),
+          if (widget.managers.isNotEmpty) ...[
+            const SizedBox(height: Sp.lg),
+            Text('المدير الفرعي', style: AppType.pillLabel()),
+            const SizedBox(height: Sp.sm),
+            Wrap(
+              spacing: Sp.sm,
+              runSpacing: Sp.sm,
+              children: [
+                _chip(label: 'الكل', value: null),
+                for (final m in widget.managers) _chip(label: m, value: m),
+              ],
+            ),
+          ],
+          if (widget.packages.isNotEmpty) ...[
+            const SizedBox(height: Sp.lg),
+            Text('الباقة', style: AppType.pillLabel()),
+            const SizedBox(height: Sp.sm),
+            Wrap(
+              spacing: Sp.sm,
+              runSpacing: Sp.sm,
+              children: [
+                _chip(label: 'الكل', value: null, pkg: true),
+                for (final p in widget.packages) _chip(label: p, value: p, pkg: true),
+              ],
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _chip({required String label, required String? value}) {
-    final on = _picked == value;
+  Widget _chip({required String label, required String? value, bool pkg = false}) {
+    final on = (pkg ? _pickedPkg : _picked) == value;
     return InkWell(
-      onTap: () => setState(() => _picked = value),
+      onTap: () => setState(() => pkg ? _pickedPkg = value : _picked = value),
       borderRadius: BorderRadius.circular(R.chip),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
