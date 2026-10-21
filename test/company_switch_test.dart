@@ -22,6 +22,7 @@ import 'package:rad_mysvcs/widgets/active_company_line.dart';
 
 import 'support/ai_status_overlay.dart';
 import 'visual_perm/visual_perm_harness.dart';
+import 'package:rad_mysvcs/screens/top_actions.dart';
 
 /// «تبديل الشركة» داخل التطبيق (طلب المالك ٢١ أكتوبر): مربّعٌ جنب «الصفحات»
 /// في ترويسة الرئيسيّة — أو الاسم وسطر الشركة زرّه حين لا يتّسع العرض — يفتح
@@ -172,7 +173,7 @@ void main() {
   group('الترويسة والورقة', () {
     setUpAll(visualSetUpAll);
 
-    final square = find.byKey(const ValueKey('dashboard-company-switch'));
+    final square = find.byKey(const ValueKey('top-actions-company-switch'));
     const longName = 'جي تي نت للاتصالات وخدمات الإنترنت — فرع الكرادة الشرقية';
     final linked = [
       co('supernet', supernetUrl, 'mahdi', label: 'سوبرنت'),
@@ -276,6 +277,32 @@ void main() {
       expect(find.text('تبديل الشركة'), findsWidgets);
       await finish(t);
     });
+
+    // ٢٢ أكتوبر (المالك: «زرّ التبديل بين الأدمنية والصفحات مو موجود بكلّ صفحات
+    // التطبيق»): رأس كلّ تبويب ([TabHeader]) يحمل «الشركات» و«الصفحات» كالرئيسيّة.
+    for (final w in [320.0, 360.0, 430.0]) {
+      testWidgets('رأس التبويب على $w: «الشركات» و«الصفحات» والعنوان كاملاً', (t) async {
+        await setUpOwner(s1bSasOwner, ai: aiStatusOn);
+        await pumpVisual(t, VisualDevice('', Size(w, 932), 3),
+            home: (_) => Scaffold(
+                  body: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                      child: TabHeader(title: 'المشتركون', subtitle: const Text('سطر')),
+                    ),
+                  ),
+                ));
+        await settle(t);
+        expect(t.takeException(), isNull, reason: 'لا فيضان على $w');
+        expect(square, findsOneWidget);
+        expect(find.byTooltip('الصفحات'), findsOneWidget);
+        expect(find.text('المشتركون'), findsOneWidget, reason: 'يصغر ولا يُبتر');
+        await t.tap(square);
+        await settle(t, seconds: 2);
+        expect(find.text('تبديل الشركة'), findsWidgets);
+        await finish(t);
+      });
+    }
 
     testWidgets('شركةٌ واحدة ⇒ لا زرّ ولا سهم', (t) async {
       await setUpOwner(s1bSasOwner, companies: [linked.first]);

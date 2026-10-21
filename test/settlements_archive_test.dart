@@ -202,10 +202,10 @@ void main() {
     // 🚨 التبديل يجلب كلمة سرّ المدير الفرعيّ ويُسجّل الدخول بها، بينما
     // **رؤية** كلمة السرّ محكومةٌ بـ`managers.edit`. فكان الأضعف حرساً
     // هو الأقوى أثراً — والخادم لا يمنعه: الدخول شرعيٌّ بكلمة سرٍّ صحيحة.
+    // ٢٢ أكتوبر: المدخل انتقل من الرئيسيّة إلى أزرار الأعلى المشتركة (كلّ التبويبات).
     test('مدخل اللوحة يفحص managers.edit لا managers.view', () {
-      final dash = File('lib/screens/dashboard/dashboard_screen.dart')
-          .readAsStringSync();
-      final i = dash.indexOf('AccountsScreen');
+      final dash = File('lib/screens/top_actions.dart').readAsStringSync();
+      final i = dash.indexOf('AccountsScreen()');
       expect(i, greaterThan(0));
       final before = dash.substring(0, i);
       final edit = before.lastIndexOf("Perms.has('managers.edit')");

@@ -443,17 +443,21 @@ void main() {
       await settleShell(t);
       expect(t.takeException(), isNull);
       final home = await rects(t);
-      // «الصفحات» في الرئيسيّة وحدها، يمين المساعد.
-      expect(find.byIcon(Icons.swap_horiz_rounded), findsOneWidget);
-      expect(t.getRect(find.byIcon(Icons.swap_horiz_rounded)).left,
-          greaterThan(home[0].right));
+      // «الصفحات» يمين المساعد — في الرئيسيّة وفي كلّ تبويب (المالك ٢٢ أكتوبر:
+      // «زرّ التبديل بين الأدمنية والصفحات مو موجود بكلّ صفحات التطبيق»).
+      final pages = find.byIcon(Icons.swap_horiz_rounded);
+      expect(pages, findsOneWidget);
+      final homePages = t.getRect(pages);
+      expect(homePages.left, greaterThan(home[0].right));
 
       for (final tab in ['nav.subscribers', 'nav.devices', 'nav.more']) {
         await openTab(t, tab);
         expect(t.takeException(), isNull, reason: tab);
         expect(await rects(t), home, reason: '$tab: الموضع نفسه حرفيّاً');
-        expect(find.byIcon(Icons.swap_horiz_rounded), findsNothing,
-            reason: '«الصفحات» للرئيسيّة وحدها');
+        expect(find.byIcon(Icons.swap_horiz_rounded), findsOneWidget,
+            reason: '$tab: «الصفحات» بكلّ تبويب');
+        expect(t.getRect(find.byIcon(Icons.swap_horiz_rounded)), homePages,
+            reason: '$tab: «الصفحات» بالموضع نفسه');
       }
       // «قوائم أخرى»: لا بطاقة «كيف أسوّي؟» — المساعد زرّ الأعلى وحده (المالك ٢٠ أكتوبر).
       expect(find.text('كيف أسوّي؟'), findsNothing);

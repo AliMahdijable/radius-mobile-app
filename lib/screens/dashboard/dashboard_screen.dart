@@ -29,7 +29,6 @@ import '../../services/provider_service.dart';
 import '../../services/subscriber_events.dart';
 import '../../widgets/active_company_line.dart';
 import '../account/company_switch_sheet.dart';
-import '../accounts/accounts_screen.dart';
 import '../reports/activity_log_report_screen.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -1271,50 +1270,11 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
         // فاصلٌ عن الأيقونات: سطر الشركة يبلغ حافّة العمود عند تكبير الخطّ،
         // وبلا فاصل يلتصق اليوزر بزرّ «الصفحات».
         const SizedBox(width: Sp.sm),
-        // ٢١ أكتوبر: «تبديل الشركة» — جنب «الصفحات» من جهة الاسم، فيبقى
-        // «الصفحات» بمكانه. الصفحات = مدراء هذه الشركة، والشركات = صفحات
-        // الحساب (company_switch_sheet.dart).
-        if (companySquare) ...[
-          TopActionChip(
-            key: const ValueKey('dashboard-company-switch'),
-            icon: Icons.apartment_rounded,
-            label: 'company_switch.title'.tr(),
-            onTap: onSwitchCompany!,
-          ),
-          SizedBox(width: TopActionChip.gapOf(context)),
-        ],
-        // 2026-08-26: أيقونة "الصفحات" — التبديل السريع بين حسابات
-        // المدراء الفرعيّين. طلب المستخدم أن تكون جنب جرس الإشعارات
-        // للوصول السريع. (للرئيسيّة وحدها — خارج أزرار الأعلى المشتركة،
-        // وبمقاسها نفسه.)
-        //
-        // ⚠️ **`managers.edit` لا `managers.view`.**
-        //
-        // 🐛 ٢٠٢٦-١٠-٠٤، مراجعة الصلاحيّات: التبديل يجلب كلمة سرّ
-        // المدير الفرعيّ (`ManagersApi.fetchPassword`) ويُسجّل الدخول
-        // بها. و**رؤية** كلمة السرّ محكومةٌ بـ`managers.edit`
-        // (`manager_actions_sheet.dart:139`) — فكان موظّفٌ بـ`view`
-        // وحدها يُمنع من رؤيتها ويستطيع أن **يصير** ذلك المدير بكلّ
-        // صلاحيّاته. والخادم لا يمنعه: الدخول شرعيٌّ بكلمة سرٍّ صحيحة.
-        //
-        // فالتبديل أقوى من الرؤية، فلا يقلّ عنها حرساً.
-        if (Perms.has('managers.edit')) ...[
-          TopActionChip(
-            icon: Icons.swap_horiz_rounded,
-            label: 'accounts.title'.tr(),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const AccountsScreen(),
-              ),
-            ),
-          ),
-          SizedBox(width: TopActionChip.gapOf(context)),
-        ],
-        // ٢٠ أكتوبر: المساعد الذكيّ · الجرس · الترس — أزرار الأعلى
-        // المشتركة بين التبويبات الأربعة ([TopActions]). الجرس بشارته كما
-        // كان (غير المقروء + المشتركون في خطر)، والترس يفتح الإعدادات
-        // (مطلب 2026-06-10)، والمساعد جنب الجرس حين يفتحه الخادم.
-        const TopActions(),
+        // «تبديل الشركة» و«الصفحات» ثمّ المساعد · الجرس · الترس — أزرار الأعلى
+        // المشتركة بين التبويبات كلّها ([TopActions]، طلب المالك ٢٢ أكتوبر).
+        // الرئيسيّة وحدها تُسقط مربّع الشركة حين لا يتّسع لاسم المدير، فيصير
+        // سطر الشركة تحت الاسم هو الزرّ (`lineSwitch`).
+        TopActions(switchers: true, companySquare: companySquare),
       ],
     );
   }

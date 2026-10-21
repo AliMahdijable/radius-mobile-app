@@ -9,9 +9,13 @@ import '../services/ai_assistant_state.dart';
 import '../services/alerts_service.dart';
 import '../services/app_resumed_signal.dart';
 import '../services/inbox_service.dart';
+import '../services/linked_companies.dart';
+import '../services/permissions_service.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import 'account/company_switch_sheet.dart';
+import 'accounts/accounts_screen.dart';
 import 'assistant/assistant_sheet.dart';
 import 'notifications/inbox_screen.dart';
 import 'settings_screen.dart';
@@ -34,8 +38,20 @@ import 'settings_screen.dart';
 /// • وإلّا يفتح ورقة «كيف أسوّي؟» نفسها، والموافقة أوّلاً
 ///   ([AssistantSheet.showAsk]).
 /// والبطاقة في «قوائم أخرى» باقيةٌ كما هي. ولا شيء هنا يبيع أو يجدّد (آيفون).
+///
+/// ٢٢ أكتوبر (المالك: «زرّ التبديل بين الأدمنية والتبديل بين الصفحات مو موجود
+/// بكلّ صفحات التطبيق»): مع [switchers] يسبقها **«تبديل الشركة»** (صفحات الحساب
+/// المربوطة — للمالك بشركتين فأكثر) و**«الصفحات»** (المدراء الفرعيّون داخل
+/// الشركة المفتوحة — بصلاحيّة `managers.edit`)، كما في الرئيسيّة حرفاً.
 class TopActions extends StatelessWidget {
-  const TopActions({super.key});
+  const TopActions({super.key, this.switchers = false, this.companySquare = true});
+
+  /// «تبديل الشركة» و«الصفحات» قبل المساعد.
+  final bool switchers;
+
+  /// مربّع «تبديل الشركة» نفسه — الرئيسيّة تُسقطه حين لا يتّسع لاسم المدير
+  /// فيصير سطر الشركة تحت الاسم هو الزرّ.
+  final bool companySquare;
 
   @override
   Widget build(BuildContext context) {
@@ -47,15 +63,43 @@ class TopActions extends StatelessWidget {
         AiAssistantState.gate,
         // العودة للتطبيق ⇒ يُسأل ثانيةً (بمهلته) — فتشغيله من الخادم يظهر.
         AppResumedSignal.tick,
+        // شركات الحساب (تصل بعد الفتح) وصلاحيّة «الصفحات» (تُحمَّل بعد الإقلاع).
+        LinkedCompanies.items,
+        PermissionsService.changes,
       ]),
       builder: (context, _) {
         // كبطاقة «قوائم أخرى» تماماً: كلّ بناءٍ يسأل إن كانت الحال قديمة —
         // مهلة ٥ دقائق وتبريد ٣٠ث بعد الفشل وطلبٌ واحدٌ جارٍ على الأكثر،
         // فأربعة تبويباتٍ لا تعني أربعة طلبات.
         scheduleMicrotask(AiAssistantState.ensureFresh);
+        // وشركات الحساب كذلك: مرّةً لمهلتها، وللمالك وحده (لا طلب لموظّف).
+        if (switchers) scheduleMicrotask(LinkedCompanies.ensureFresh);
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // «الشركات» جنب «الصفحات» من جهة الاسم، فيبقى «الصفحات» بمكانه.
+            if (switchers && companySquare && LinkedCompanies.switcherVisible) ...[
+              TopActionChip(
+                key: const ValueKey('top-actions-company-switch'),
+                icon: Icons.apartment_rounded,
+                label: 'company_switch.title'.tr(),
+                onTap: () => showCompanySwitchSheet(context),
+              ),
+              SizedBox(width: gap),
+            ],
+            // ⚠️ `managers.edit` لا `managers.view`: التبديل يستعمل كلمة سرّ
+            // المدير الفرعيّ — فهو أقوى من رؤيتها ولا يقلّ عنها حرساً.
+            if (switchers && Perms.has('managers.edit')) ...[
+              TopActionChip(
+                key: const ValueKey('top-actions-accounts'),
+                icon: Icons.swap_horiz_rounded,
+                label: 'accounts.title'.tr(),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const AccountsScreen()),
+                ),
+              ),
+              SizedBox(width: gap),
+            ],
             if (AiAssistantState.visible) ...[
               TopActionChip(
                 key: const ValueKey('top-actions-assistant'),
@@ -270,11 +314,17 @@ class TabHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.title(),
+                // ⚠️ يصغر ولا يُبتر: مع «الشركات» و«الصفحات» خمسة مربّعات، وعلى
+                // شاشة ٣٦٠ لا يبقى للعنوان إلّا ~٧٨ نقطة — «المشتركو…» أسوأ من
+                // عنوانٍ أصغر قليلاً.
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    style: AppType.title(),
+                  ),
                 ),
                 if (subtitle != null) ...[
                   const SizedBox(height: 2),
@@ -285,7 +335,7 @@ class TabHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(width: Sp.sm),
-        const TopActions(),
+        const TopActions(switchers: true),
       ],
     );
   }
