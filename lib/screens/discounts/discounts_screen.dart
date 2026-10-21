@@ -72,6 +72,29 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
     setState(() => _all = rows.map((s) => s.enrichWithPackages(_packages)).toList());
   }
 
+  /// الحساب الكبير: الصفحة التالية من الساس حين يقترب التمرير من الآخر — تُلحق بلا تكرار.
+  Future<void> _bigMore() async {
+    if (!_big || !_bigSearch.hasMore || _bigSearch.loadingMore) return;
+    final f = _bigSearch.more();
+    setState(() {}); // «جارٍ تحميل المزيد…»
+    final rows = await f;
+    if (!mounted) return;
+    setState(() {
+      if (rows == null || rows.isEmpty) return;
+      final seen = {for (final s in _all) s.username.toLowerCase()};
+      _all = [
+        ..._all,
+        for (final s in rows)
+          if (seen.add(s.username.toLowerCase())) s.enrichWithPackages(_packages),
+      ];
+    });
+  }
+
+  bool _onGridScroll(ScrollNotification n) {
+    if (_big && n.metrics.extentAfter < 600) _bigMore();
+    return false;
+  }
+
   @override
   void dispose() {
     _bigSearch.dispose();
@@ -376,6 +399,8 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
                       : RefreshIndicator(
                           onRefresh: _load,
                           color: accent,
+                          child: NotificationListener<ScrollNotification>(
+                          onNotification: _onGridScroll,
                           child: GridView.builder(
                             padding:
                                 const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, 90),
@@ -401,6 +426,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
                                 onTap: () => _toggle(s.username),
                               );
                             },
+                          ),
                           ),
                         ),
             ),
@@ -604,7 +630,10 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
         const SizedBox(width: 6),
         Expanded(
           child: Text(
-            '${_selected.length} محدد · $filteredCount نتيجة',
+            // الكبير: المعروض من مجموع الساس (لا «١٠٠ نتيجة» كأنّها كلّ المشتركين)، والباقي بالتمرير أو البحث
+            _big && _bigSearch.total > filteredCount
+                ? '${_selected.length} محدد · $filteredCount من ${_bigSearch.total}${_bigSearch.loadingMore ? ' · جارٍ تحميل المزيد…' : ''}'
+                : '${_selected.length} محدد · $filteredCount نتيجة',
             style: AppType.muted().copyWith(fontSize: 11),
             textAlign: TextAlign.end,
             maxLines: 1,

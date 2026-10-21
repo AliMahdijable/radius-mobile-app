@@ -1153,6 +1153,8 @@
     "clear": "Clear",
     "remove_price": "Remove price",
     "selection_count": "{} selected · {} results",
+    "selection_count_big": "{} selected · {} of {}",
+    "loading_more": "loading more…",
     "apply": "Apply price",
     "applying": "Applying…",
     "apply_n": "Apply {} to {}",

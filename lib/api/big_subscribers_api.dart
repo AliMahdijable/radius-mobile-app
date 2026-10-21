@@ -243,14 +243,33 @@ class BigSearch {
   Timer? _timer;
   int _gen = 0;
 
+  /// آخر بحثٍ اكتمل — لـ«تحميل المزيد» ([more]) وسطر «يُعرض N من المجموع» (٢١ أكتوبر، المالك: «الخصومات والسعر الثابت
+  /// يظهر بـ١٠٠ مشترك»). بحثٌ جديد يصفّر الصفحة فلا تُلحق صفحة بحثٍ سابق.
+  String _q = '';
+  int _page = 0;
+  int _lastPage = 0;
+  bool _loadingMore = false;
+
+  /// مجموع نتائج آخر بحث (كلّ المشتركين بلا بحث) — ٠ قبل أوّل نتيجة.
+  int total = 0;
+  bool get hasMore => _page > 0 && _page < _lastPage;
+  bool get loadingMore => _loadingMore;
+
   void search(String q, {required void Function(List<Subscriber> rows) onRows, void Function(String message)? onError, bool now = false}) {
     _timer?.cancel();
     final gen = ++_gen;
+    _page = 0;
+    _lastPage = 0;
     Future<void> run() async {
       try {
         final t = q.trim();
         final p = await BigSubscribersApi.page(page: 1, size: size, tab: 'all', query: t.isEmpty ? null : t);
-        if (gen == _gen) onRows(p.rows);
+        if (gen != _gen) return;
+        _q = t;
+        _page = 1;
+        _lastPage = p.lastPage;
+        total = p.total;
+        onRows(p.rows);
       } on BigListException catch (e) {
         if (gen == _gen) onError?.call(e.message);
       }
@@ -260,6 +279,26 @@ class BigSearch {
       unawaited(run());
     } else {
       _timer = Timer(delay, run);
+    }
+  }
+
+  /// الصفحة التالية لآخر بحثٍ اكتمل — صفوفها وحدها (المستدعي يلحقها بقائمته)، أو null: لا مزيد، أو جارٍ، أو بدأ بحثٌ
+  /// أحدث، أو فشل.
+  Future<List<Subscriber>?> more() async {
+    if (!hasMore || _loadingMore) return null;
+    final gen = _gen;
+    _loadingMore = true;
+    try {
+      final p = await BigSubscribersApi.page(page: _page + 1, size: size, tab: 'all', query: _q.isEmpty ? null : _q);
+      if (gen != _gen) return null;
+      _page += 1;
+      _lastPage = p.lastPage;
+      total = p.total;
+      return p.rows;
+    } on BigListException {
+      return null;
+    } finally {
+      _loadingMore = false;
     }
   }
 

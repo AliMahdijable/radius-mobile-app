@@ -1153,6 +1153,8 @@
     "clear": "مسح",
     "remove_price": "إلغاء السعر",
     "selection_count": "{} محدّد · {} نتيجة",
+    "selection_count_big": "{} محدّد · {} من {}",
+    "loading_more": "جارٍ تحميل المزيد…",
     "apply": "تطبيق السعر",
     "applying": "جارٍ التطبيق…",
     "apply_n": "تطبيق {} على {}",

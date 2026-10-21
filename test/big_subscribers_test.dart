@@ -10,8 +10,10 @@ import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/big_subscribers_api.dart';
 import 'package:rad_mysvcs/api/dashboard_api.dart';
 import 'package:rad_mysvcs/api/subscribers_api.dart';
+import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/broadcast/broadcast_screen.dart';
 import 'package:rad_mysvcs/screens/discounts/discounts_screen.dart';
+import 'package:rad_mysvcs/screens/subscriber_prices/subscriber_prices_screen.dart';
 import 'package:rad_mysvcs/screens/notifications/inbox_screen.dart';
 import 'package:rad_mysvcs/screens/subscribers/sheets/subscriber_picker_sheet.dart';
 import 'package:rad_mysvcs/services/alerts_service.dart';
@@ -466,6 +468,66 @@ void main() {
       expect(srv.pageQueries.any((m) => m['q'] == 'big0002'), isTrue);
       expect(srv.askedFullList, isFalse);
       await drain(t);
+    });
+
+    testWidgets('الخصومات: «N من المجموع» لا «١٠٠ نتيجة»، والتمرير للآخر يجلب الصفحة التالية من الساس', (t) async {
+      final srv = await setUpServer();
+      server = srv;
+      await pumpVisual(t, phone, home: (_) => const DiscountsScreen());
+      await settle(t, seconds: 3);
+      expect(find.textContaining('100 من 89177'), findsOneWidget, reason: 'المعروض من مجموع الساس');
+      final grid = find.byType(GridView);
+      for (var i = 0; i < 12 && !srv.pageQueries.any((m) => '${m['page']}' == '2'); i++) {
+        await t.drag(grid, const Offset(0, -1500));
+        await t.pump(const Duration(milliseconds: 300));
+      }
+      await settle(t, seconds: 2);
+      expect(srv.pageQueries.any((m) => '${m['page']}' == '2' && '${m['size']}' == '100' && m['tab'] == 'all'), isTrue);
+      expect(find.textContaining('200 من 89177'), findsOneWidget, reason: 'الصفحة الثانية أُلحقت');
+      expect(srv.askedFullList, isFalse);
+      await drain(t);
+    });
+
+    testWidgets('السعر الثابت: «N من المجموع»، والتمرير للآخر يجلب الصفحة التالية', (t) async {
+      final srv = await setUpServer();
+      server = srv;
+      await pumpVisual(t, phone, home: (_) => const SubscriberPricesScreen());
+      await settle(t, seconds: 3);
+      expect(find.textContaining('100 من 89177'), findsOneWidget);
+      final grid = find.byType(GridView);
+      for (var i = 0; i < 12 && !srv.pageQueries.any((m) => '${m['page']}' == '2'); i++) {
+        await t.drag(grid, const Offset(0, -1500));
+        await t.pump(const Duration(milliseconds: 300));
+      }
+      await settle(t, seconds: 2);
+      expect(srv.pageQueries.any((m) => '${m['page']}' == '2' && '${m['size']}' == '100'), isTrue);
+      expect(find.textContaining('200 من 89177'), findsOneWidget);
+      expect(srv.askedFullList, isFalse);
+      await drain(t);
+    });
+
+    testWidgets('BigSearch.more: الصفحة التالية لآخر بحث، وبحثٌ جديد يصفّرها', (t) async {
+      final srv = await setUpServer();
+      final b = BigSearch();
+      List<Subscriber>? first;
+      await t.runAsync(() async {
+        b.search('', onRows: (r) => first = r, now: true);
+        for (var i = 0; i < 50 && first == null; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+      });
+      expect(first, hasLength(100));
+      expect(b.total, 89177);
+      expect(b.hasMore, isTrue);
+      final more = await t.runAsync(b.more);
+      expect(more, hasLength(100));
+      expect(more!.first.username, 'big000101');
+      expect('${srv.pageQueries.last['page']}', '2');
+      b.search('x', onRows: (_) {});
+      expect(b.hasMore, isFalse, reason: 'بحثٌ جديد قيد الانتظار لا يُلحق صفحة سابقه');
+      b.dispose();
+      await visualTearDown();
+      BigSubscribersApi.reset();
     });
 
     testWidgets('الملخّص يُطلب مرّةً لكلّ ٢٠ثانية من الجهات الثلاث، وfresh يتخطّاه', (t) async {

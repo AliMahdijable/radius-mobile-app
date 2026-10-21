@@ -79,6 +79,29 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
     setState(() => _all = rows.where((s) => s.idx != null).map((s) => s.enrichWithPackages(_packages)).toList());
   }
 
+  /// الحساب الكبير: الصفحة التالية من الساس حين يقترب التمرير من الآخر — تُلحق بلا تكرار.
+  Future<void> _bigMore() async {
+    if (!_big || !_bigSearch.hasMore || _bigSearch.loadingMore) return;
+    final f = _bigSearch.more();
+    setState(() {}); // «جارٍ تحميل المزيد…»
+    final rows = await f;
+    if (!mounted) return;
+    setState(() {
+      if (rows == null || rows.isEmpty) return;
+      final seen = {for (final s in _all) s.idx};
+      _all = [
+        ..._all,
+        for (final s in rows)
+          if (s.idx != null && seen.add(s.idx)) s.enrichWithPackages(_packages),
+      ];
+    });
+  }
+
+  bool _onGridScroll(ScrollNotification n) {
+    if (_big && n.metrics.extentAfter < 600) _bigMore();
+    return false;
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
     final results = await Future.wait([
@@ -286,6 +309,8 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
                       : RefreshIndicator(
                           onRefresh: _load,
                           color: accent,
+                          child: NotificationListener<ScrollNotification>(
+                          onNotification: _onGridScroll,
                           child: GridView.builder(
                             padding:
                                 const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, 90),
@@ -307,6 +332,7 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
                                 onTap: _canManage ? () => _toggle(s.idx!) : null,
                               );
                             },
+                          ),
                           ),
                         ),
             ),
@@ -486,8 +512,12 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
         const SizedBox(width: 6),
         Expanded(
           child: Text(
-            'sp.selection_count'
-                .tr(args: ['${_selected.length}', '$filteredCount']),
+            // الكبير: المعروض من مجموع الساس (لا «١٠٠ نتيجة» كأنّها كلّ المشتركين)، والباقي بالتمرير أو البحث
+            _big && _bigSearch.total > filteredCount
+                ? 'sp.selection_count_big'.tr(args: ['${_selected.length}', '$filteredCount', '${_bigSearch.total}']) +
+                    (_bigSearch.loadingMore ? ' · ${'sp.loading_more'.tr()}' : '')
+                : 'sp.selection_count'
+                    .tr(args: ['${_selected.length}', '$filteredCount']),
             style: AppType.muted().copyWith(fontSize: 11),
             textAlign: TextAlign.end,
             maxLines: 1,
