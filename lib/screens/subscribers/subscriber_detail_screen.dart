@@ -379,6 +379,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                       key: _deviceCardKey,
                       ip: sub.ipAddress ?? '',
                       username: sub.username,
+                      company: sub.companyKey,
                     ),
                     const SizedBox(height: Sp.sm),
                     // مطلب 2026-06-12: _SubscriptionCard المنفصل أُلغي
@@ -427,12 +428,14 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   /// هو ما سيرسمه حين يُركَّب.
   Future<void> _copyAll() async {
     final ip = sub.ipAddress?.trim() ?? '';
-    final config = _drawnConfig ?? DeviceConfigApi.peekConfig(sub.username);
+    final config = _drawnConfig ??
+        DeviceConfigApi.peekConfig(sub.username, company: sub.companyKey);
     final DeviceCardShown device;
     if (DeviceProbeCard.shownBy(_deviceCardKey) case final shown?) {
       device = shown;
     } else {
-      final cached = DeviceProbeApi.peek(username: sub.username, ip: ip);
+      final cached = DeviceProbeApi.peek(
+          username: sub.username, ip: ip, company: sub.companyKey);
       device = (snap: cached?.snap, at: cached?.at, notes: config?.notes);
     }
     final fields = subscriberCopyFields(
@@ -804,6 +807,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     if (!Perms.has('whatsapp.send') || sub.displayPhone.isEmpty) {
       return const [];
     }
+    // «كل الشركات»: التنبيه (قوالب الشركة وإرسالها) للشركة وحدها — لا بلاطة تنتهي برفض. القراءة نفسها على كارت الجهاز.
+    if (sub.companyKey != null) return const [];
     final settings = ConnectionAlertSettings.current.value;
     if (!settings.enabled) return const [];
     final ip = sub.ipAddress?.trim() ?? '';
@@ -1226,7 +1231,8 @@ class _LiveSessionCard extends StatelessWidget {
     return ValueListenableBuilder<int>(
       valueListenable: DeviceProbeBus.tick,
       builder: (_, __, ___) => FutureBuilder<DeviceConfig?>(
-        future: DeviceConfigApi.fetchConfig(sub.username),
+        future: DeviceConfigApi.fetchConfig(sub.username,
+            company: sub.companyKey),
         builder: (context, snap) {
           // ما يُرسم الآن بالضبط (أثناء جلبٍ جديد يبقى السابق مرسوماً).
           // تسجيلٌ في حقلٍ لا `setState` — لا يُعاد بناء شيء.

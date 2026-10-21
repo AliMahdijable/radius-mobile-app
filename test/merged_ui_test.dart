@@ -153,6 +153,10 @@ void main() {
     expect(find.textContaining('شركة تحتاج دخول'), findsWidgets, reason: 'على شارتها وفي سطر «لا تظهر هنا»');
     final full = srv.routed.where((o) => o.uri.path == '/api/v2/subscribers' && o.queryParameters['page'] == null);
     expect(full.map((o) => o.headers['x-company-key']).toSet(), {_kA, _kB}, reason: 'الكبيرة لا تُجلب كاملة');
+    // حالة الاتصال بالكارت (٢٢ أكتوبر): موجة الفحص تجري في «كل الشركات» — إعداد أجهزة كلّ شركةٍ منها هي
+    final batches = srv.routed.where((o) => o.uri.path == '/api/v2/subscribers/device-batch');
+    expect(batches.map((o) => o.headers['x-company-key']).toSet(), {_kA, _kB},
+        reason: 'دفعة إعداداتٍ لكلّ شركةٍ في القائمة');
     await down(t);
   });
 

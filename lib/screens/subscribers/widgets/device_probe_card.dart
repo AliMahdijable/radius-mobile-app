@@ -11,6 +11,8 @@ import '../../../core/net/huawei_ont_service.dart';
 import '../../../services/subscriber_refresh_signal.dart';
 import '../../../core/util/clipboard_helper.dart';
 import '../../../core/widgets/copyable.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
+import '../../../services/merged_mode.dart';
 import '../../../services/permissions_service.dart';
 import '../../../models/device_health.dart';
 import '../sheets/device_config_sheet.dart';
@@ -41,6 +43,7 @@ class DeviceProbeCard extends StatefulWidget {
     super.key,
     this.ip = '',
     required this.username,
+    this.company,
   });
 
   /// IP من SAS4 (framedipaddress). قد يكون فارغاً — الـprobe() داخلياً
@@ -48,6 +51,10 @@ class DeviceProbeCard extends StatefulWidget {
   /// نشط يحصلون على فحص لو المدير خزّن customIp في إعدادات الجهاز.
   final String ip;
   final String username;
+
+  /// شركة الصفّ في «كل الشركات» (null في الوضع العاديّ): إعداد الجهاز وافتراضات المدير من شركته، والفحص من الهاتف كما هو.
+  /// حفظ إعداد الجهاز للشركة وحدها (خارج جدول التوجيه).
+  final String? company;
 
   /// ما يرسمه الكارت ذو المفتاح [key] الآن — القراءة المعروضة ووقتها
   /// وملاحظة المدير — لـ«نسخ كلّ المعلومات». `null` حين لا يكون مركَّباً
@@ -145,6 +152,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     final hit = DeviceProbeApi.peek(
       username: widget.username,
       ip: widget.ip.trim(),
+      company: widget.company,
     );
     if (hit != null) {
       _snap = hit.snap;
@@ -253,6 +261,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         final creds = await DeviceProbeApi.resolveUbntCreds(
           fallbackIp: widget.ip,
           subscriberUsername: widget.username,
+          company: widget.company,
         );
         if (creds == null) return;
         _session = await UbntTrafficSession.open(
@@ -307,7 +316,8 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   }
 
   Future<void> _loadNotesOnly() async {
-    final cfg = await DeviceConfigApi.fetchConfig(widget.username);
+    final cfg = await DeviceConfigApi.fetchConfig(widget.username,
+        company: widget.company);
     if (!mounted) return;
     setState(() => _notes = cfg?.notes?.trim());
   }
@@ -332,6 +342,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       fallbackIp: widget.ip,
       subscriberUsername: widget.username,
       force: force,
+      company: widget.company,
     );
     if (!mounted || snap == null) return;
     setState(() {
@@ -362,8 +373,9 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         fallbackIp: widget.ip,
         subscriberUsername: widget.username,
         force: force,
+        company: widget.company,
       ),
-      DeviceConfigApi.fetchConfig(widget.username),
+      DeviceConfigApi.fetchConfig(widget.username, company: widget.company),
     ]);
     if (!mounted) return;
     final snap = results[0] as DeviceHealthSnapshot?;
@@ -424,10 +436,12 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           ? await DeviceProbeApi.resolveOntCreds(
               fallbackIp: widget.ip,
               subscriberUsername: widget.username,
+              company: widget.company,
             )
           : await DeviceProbeApi.resolveUbntCreds(
               fallbackIp: widget.ip,
               subscriberUsername: widget.username,
+              company: widget.company,
             );
       if (creds == null) {
         throw Exception('لا بيانات دخول للجهاز — اضبطها من زرّ الإعدادات');
@@ -469,6 +483,12 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   }
 
   Future<void> _openConfig() async {
+    // «كل الشركات»: الحفظ (PUT/DELETE) خارج جدول التوجيه — كان سيُحفظ تحت الشركة المفتوحة لا شركة المشترك.
+    final blocked = MergedOps.unsupportedAt(widget.company);
+    if (blocked != null) {
+      showSheetSnack(context, blocked, isError: true);
+      return;
+    }
     final changed = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,

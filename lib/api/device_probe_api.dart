@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/net/huawei_ont_service.dart';
 import '../core/net/ubiquiti_service.dart';
 import '../models/device_health.dart';
+import 'company_route.dart';
 import 'device_config_api.dart';
 
 /// Device probe API — 3-tier credential fallback (per-sub → admin → library)
@@ -24,6 +25,10 @@ import 'device_config_api.dart';
 ///
 /// Waves تدعم priority queue: الـpriorityUsernames تُفحص أوّلاً، الباقي
 /// يلحق. يُستعمل مع viewport-visible subs في list view.
+///
+/// «كل الشركات» (٢٢ أكتوبر): كلّ نداءٍ يأخذ `company` (مفتاح شركة الصفّ، null في الوضع العاديّ). الفحص نفسه من الهاتف
+/// إلى الجهاز كما هو؛ إعداد المشترك وافتراضات المدير من شركته (موجَّهة)، وكلّ مفاتيح الكاش بها
+/// ([DeviceConfigApi.scoped]) — والوضع العاديّ بمفاتيحه القديمة حرفاً.
 class DeviceProbeApi {
   static final _snapCache = <String, _Cached>{};
   static final _snapByUser = <String, _Cached>{};
@@ -34,6 +39,12 @@ class DeviceProbeApi {
   /// متوازيين لجهاز واحد حين تتزامن موجة القائمة مع فتح كارت.
   static final _inFlight = <String, Future<DeviceHealthSnapshot?>>{};
   static Future<AdminDeviceDefaults>? _adminFetch;
+
+  /// افتراضات كلّ شركةٍ من «كل الشركات» — النجاح يُحفظ للجلسة كالوضع العاديّ، والفشل لا (يُعاد بعد قاطع الدقيقة).
+  static final _adminFetchBy = <String, Future<AdminDeviceDefaults?>>{};
+
+  static String _k(String? company, String s) =>
+      DeviceConfigApi.scoped(company, s);
 
   static const _ttl = Duration(minutes: 5);
   // يطابق v1: 15s cap على probe واحد.
@@ -120,6 +131,7 @@ class DeviceProbeApi {
     _kindByIp.clear();
     _deadCache.clear();
     _adminFetch = null;
+    _adminFetchBy.clear();
     _persistDebounce?.cancel();
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -132,10 +144,12 @@ class DeviceProbeApi {
   /// * [fallbackIp] — SAS4 IP لو موجود.
   /// * [subscriberUsername] — يُستعمل لجلب DeviceConfig (customIp override).
   /// * [force=true] — يتخطّى snapshot + dead caches (زر تحديث يدوي).
+  /// * [company] — صفٌّ من «كل الشركات»: إعداده وافتراضاته من شركته، وكاشه بها.
   static Future<DeviceHealthSnapshot?> probe({
     required String fallbackIp,
     String? subscriberUsername,
     bool force = false,
+    String? company,
   }) async {
     final ip = fallbackIp.trim();
 
@@ -149,8 +163,11 @@ class DeviceProbeApi {
     // الكاش بالـusername وحده آمن للاختصار المبكّر: الكاش بالـIP
     // مفهرس بالـIP **الفعّال** بعد تطبيق customIp، فقراءته بـfallbackIp
     // قد تُرجع نتيجة جهاز آخر لمشترك له تجاوز عنوان.
-    if (!force && subscriberUsername != null && subscriberUsername.isNotEmpty) {
-      final byUser = _snapByUser[subscriberUsername];
+    final userKey = subscriberUsername == null || subscriberUsername.isEmpty
+        ? null
+        : _k(company, subscriberUsername);
+    if (!force && userKey != null) {
+      final byUser = _snapByUser[userKey];
       if (byUser != null && DateTime.now().difference(byUser.at) < _ttl) {
         return byUser.snap;
       }
@@ -160,15 +177,17 @@ class DeviceProbeApi {
     String effectiveIp = ip;
 
     if (subscriberUsername != null && subscriberUsername.isNotEmpty) {
-      cfg = await DeviceConfigApi.fetchConfig(subscriberUsername);
+      cfg = await DeviceConfigApi.fetchConfig(subscriberUsername,
+          company: company);
       final custom = cfg?.customIp?.trim();
       if (custom != null && custom.isNotEmpty) effectiveIp = custom;
     }
     if (effectiveIp.isEmpty) return null;
+    final ipKey = _k(company, effectiveIp);
 
     // Dead-IP short-circuit — إلا لو force. الـUI zاليدوي يتخطّى هذا.
     if (!force) {
-      final deadAt = _deadCache[effectiveIp];
+      final deadAt = _deadCache[ipKey];
       if (deadAt != null && DateTime.now().difference(deadAt) < _deadTtl) {
         return null;
       }
@@ -176,11 +195,11 @@ class DeviceProbeApi {
 
     // Snapshot cache
     if (!force) {
-      final cached = _snapCache[effectiveIp];
+      final cached = _snapCache[ipKey];
       if (cached != null && DateTime.now().difference(cached.at) < _ttl) {
         // كمان نُثبّت _snapByUser لو مو موجود (hydrate case).
-        if (subscriberUsername != null && subscriberUsername.isNotEmpty) {
-          _snapByUser[subscriberUsername] ??= cached;
+        if (userKey != null) {
+          _snapByUser[userKey] ??= cached;
         }
         return cached.snap;
       }
@@ -191,43 +210,46 @@ class DeviceProbeApi {
     // بدونه: موجة القائمة تفحص جهازاً، وفي أثنائها يفتح المستخدم كارته
     // — فينطلق فحص ثانٍ متوازٍ لنفس العنوان لأنّ الكاش لا يمتلئ إلّا
     // بعد انتهاء الأوّل. جهاز واحد، فحصان، وضِعف الاستهلاك.
-    final pending = _inFlight[effectiveIp];
+    final pending = _inFlight[ipKey];
     if (pending != null) return pending;
 
-    final future = _probeAndStore(effectiveIp, cfg, subscriberUsername);
-    _inFlight[effectiveIp] = future;
+    final future = _probeAndStore(effectiveIp, cfg, userKey, company);
+    _inFlight[ipKey] = future;
     try {
       return await future;
     } finally {
-      _inFlight.remove(effectiveIp);
+      _inFlight.remove(ipKey);
     }
   }
 
   /// الفحص الفعلي + تخزين النتيجة. مفصولة عن `probe` ليتمكّن
   /// `_inFlight` من مشاركة المستقبَل الواحد بين كلّ الطالبين.
+  /// [userKey] مفتاح المشترك في الكاش (بشركته)، والعنوان نفسه يُفحص كما هو.
   static Future<DeviceHealthSnapshot?> _probeAndStore(
     String effectiveIp,
     DeviceConfig? cfg,
-    String? subscriberUsername,
+    String? userKey,
+    String? company,
   ) async {
-    final defaults = await _loadAdminDefaults();
-    final snap = await _runProbe(effectiveIp, cfg, defaults)
+    final ipKey = _k(company, effectiveIp);
+    final defaults = await _loadAdminDefaults(company);
+    final snap = await _runProbe(effectiveIp, cfg, defaults, ipKey)
         .timeout(_probeCap, onTimeout: () => null);
     final now = DateTime.now();
     final entry = _Cached(snap, now);
-    _snapCache[effectiveIp] = entry;
-    if (subscriberUsername != null && subscriberUsername.isNotEmpty) {
-      _snapByUser[subscriberUsername] = entry;
+    _snapCache[ipKey] = entry;
+    if (userKey != null) {
+      _snapByUser[userKey] = entry;
     }
     if (snap != null) {
-      _kindByIp[effectiveIp] = snap.kind;
-      _deadCache.remove(effectiveIp); // نجاح → ما هو ميت
+      _kindByIp[ipKey] = snap.kind;
+      _deadCache.remove(ipKey); // نجاح → ما هو ميت
     } else {
       // فشل — نضيف لـdead cache حتى نوفّر محاولات متكرّرة قريبة.
-      _deadCache[effectiveIp] = now;
+      _deadCache[ipKey] = now;
       // Kind cache قد يكون قديم ونحن جربنا الـkind المخزّن وفشل — نمسحه
       // حتى المحاولة القادمة تفجّر parallel وتلقّط لو الجهاز اتبدّل.
-      _kindByIp.remove(effectiveIp);
+      _kindByIp.remove(ipKey);
     }
     _schedulePersist();
     return snap;
@@ -235,8 +257,8 @@ class DeviceProbeApi {
 
   /// Drop one IP's cached snapshot — call after editing per-sub
   /// config so the next render re-probes with new credentials.
-  static void invalidateIp(String ip) {
-    final k = ip.trim();
+  static void invalidateIp(String ip, {String? company}) {
+    final k = _k(company, ip.trim());
     _snapCache.remove(k);
     _kindByIp.remove(k);
     _deadCache.remove(k);
@@ -244,17 +266,18 @@ class DeviceProbeApi {
   }
 
   /// Read-only peek بالـIP.
-  static DeviceHealthSnapshot? cached(String ip) {
-    final c = _snapCache[ip.trim()];
+  static DeviceHealthSnapshot? cached(String ip, {String? company}) {
+    final c = _snapCache[_k(company, ip.trim())];
     if (c == null) return null;
     if (DateTime.now().difference(c.at) >= _ttl) return null;
     return c.snap;
   }
 
   /// Read-only peek بالـusername.
-  static DeviceHealthSnapshot? cachedForUser(String username) {
+  static DeviceHealthSnapshot? cachedForUser(String username,
+      {String? company}) {
     if (username.isEmpty) return null;
-    final c = _snapByUser[username];
+    final c = _snapByUser[_k(company, username)];
     if (c == null) return null;
     if (DateTime.now().difference(c.at) >= _ttl) return null;
     return c.snap;
@@ -270,11 +293,14 @@ class DeviceProbeApi {
   static ({DeviceHealthSnapshot? snap, bool stale, DateTime at})? peek({
     String? username,
     String? ip,
+    String? company,
   }) {
     _Cached? c;
-    if (username != null && username.isNotEmpty) c = _snapByUser[username];
+    if (username != null && username.isNotEmpty) {
+      c = _snapByUser[_k(company, username)];
+    }
     if (c == null && ip != null && ip.trim().isNotEmpty) {
-      c = _snapCache[ip.trim()];
+      c = _snapCache[_k(company, ip.trim())];
     }
     if (c == null) return null;
     return (
@@ -293,8 +319,9 @@ class DeviceProbeApi {
   ///   لسبب الرقم.
   /// * [onProgress] — يُنادى بعد **كلّ هدف** لا بعد كلّ دفعة. فليكن
   ///   رخيصاً؛ لا `setState` على شاشةٍ كاملة فيه.
+  /// * `company` في الهدف — شركة الصفّ في «كل الشركات» (null في الوضع العاديّ): دفعة إعدادات لكلّ شركة، وحوضٌ واحد للكلّ.
   static Future<void> warmProbe(
-    List<({String username, String ip})> targets, {
+    List<ProbeTarget> targets, {
     Set<String>? priorityUsernames,
     int concurrency = _defaultWorkers,
     void Function(int done, int total)? onProgress,
@@ -305,10 +332,10 @@ class DeviceProbeApi {
       return;
     }
     // Priority ordering — الـpriority أوّلاً، الباقي بعده.
-    List<({String username, String ip})> ordered;
+    List<ProbeTarget> ordered;
     if (priorityUsernames != null && priorityUsernames.isNotEmpty) {
-      final priority = <({String username, String ip})>[];
-      final rest = <({String username, String ip})>[];
+      final priority = <ProbeTarget>[];
+      final rest = <ProbeTarget>[];
       for (final t in targets) {
         if (priorityUsernames.contains(t.username)) {
           priority.add(t);
@@ -323,11 +350,25 @@ class DeviceProbeApi {
 
     // Prime DeviceConfig cache بـbatch endpoint (لو الـbackend يدعمه).
     // يمنع 500 fetch منفصلة عند أوّل wave.
-    var configsAuthoritative = false;
-    try {
-      final usernames = ordered.map((t) => t.username).toList();
-      configsAuthoritative = await DeviceConfigApi.warmBatch(usernames);
-    } catch (_) {}
+    //
+    // «كل الشركات»: دفعةٌ لكلّ شركة (موجَّهةٌ لها)، والكاش مرجعٌ لشركةٍ نجحت دفعتها وحدها.
+    final byCompany = <String?, List<String>>{};
+    for (final t in ordered) {
+      (byCompany[t.company] ??= <String>[]).add(t.username);
+    }
+    final authoritative = <String?, bool>{};
+    await Future.wait(byCompany.entries.map((e) async {
+      try {
+        authoritative[e.key] =
+            await DeviceConfigApi.warmBatch(e.value, company: e.key);
+      } catch (_) {
+        authoritative[e.key] = false;
+      }
+    }));
+    // شركةٌ تعذّرت دفعتها وقاطعها مفتوح: ما لا عنوان له لا يُعرف عنوانه المحفوظ الآن ولا يُسأل عنه (طلبٌ موجَّه لكلّ مشترك
+    // يُنفق ميزانيّة الحساب) ⇒ يُترك لموجةٍ بعد القاطع؛ وما له عنوانٌ يُفحص بلا أيّ طلب.
+    final configsAuthoritative = authoritative.values.any((ok) => ok) ||
+        authoritative.keys.any(DeviceConfigApi.routedDown);
 
     // ── إسقاط ما لا عنوان له أصلاً ────────────────────────────────
     //
@@ -351,7 +392,11 @@ class DeviceProbeApi {
       final before = ordered.length;
       ordered = ordered.where((t) {
         if (t.ip.trim().isNotEmpty) return true; // عنوان من الراديوس
-        final cfg = DeviceConfigApi.peekConfig(t.username);
+        if (authoritative[t.company] != true) {
+          // لم نعرف ⇒ نفحص — إلّا شركةً قاطعها مفتوح (لا عنوان ولا طريق لمعرفته الآن)
+          return !DeviceConfigApi.routedDown(t.company);
+        }
+        final cfg = DeviceConfigApi.peekConfig(t.username, company: t.company);
         return (cfg?.customIp?.trim().isNotEmpty ?? false); // أو محفوظ
       }).toList();
       // ⚠️ `onProgress(0,0)` لا مجرّد `return`: المستدعي يُطفئ دوّارة
@@ -416,7 +461,10 @@ class DeviceProbeApi {
         if (i >= ordered.length) return;
         final t = ordered[i];
         try {
-          await probe(fallbackIp: t.ip, subscriberUsername: t.username);
+          await probe(
+              fallbackIp: t.ip,
+              subscriberUsername: t.username,
+              company: t.company);
         } catch (_) {}
         done++;
         // ⚠️ يُنادى الآن **لكلّ هدف** لا لكلّ دفعة. وهذا آمنٌ لأنّ
@@ -433,6 +481,7 @@ class DeviceProbeApi {
 
   static void invalidateAdminDefaults() {
     _adminFetch = null;
+    _adminFetchBy.clear();
     _snapCache.clear();
     _snapByUser.clear();
     _kindByIp.clear();
@@ -440,14 +489,25 @@ class DeviceProbeApi {
     _schedulePersist();
   }
 
-  static Future<AdminDeviceDefaults> _loadAdminDefaults() {
-    return _adminFetch ??= AdminDeviceDefaultsApi.fetch();
+  static Future<AdminDeviceDefaults> _loadAdminDefaults([String? company]) async {
+    if (company == null) return _adminFetch ??= AdminDeviceDefaultsApi.fetch();
+    if (DeviceConfigApi.routedDown(company)) return AdminDeviceDefaults.empty;
+    final f = _adminFetchBy[company] ??=
+        CompanyRoute.run(company, AdminDeviceDefaultsApi.tryFetch);
+    final d = await f;
+    if (d != null) return d;
+    // تعذّرت ⇒ لا تُحفظ للجلسة (جلسة الشركة قد تعود)، وقاطع الدقيقة يمنع إعادتها مع كلّ هدف.
+    if (identical(_adminFetchBy[company], f)) _adminFetchBy.remove(company);
+    DeviceConfigApi.noteRoutedFailure(company);
+    return AdminDeviceDefaults.empty;
   }
 
+  /// [kindKey] مفتاح العنوان في كاش النوع (بشركته في «كل الشركات»)، و[ip] نفسه يُفحص.
   static Future<DeviceHealthSnapshot?> _runProbe(
     String ip,
     DeviceConfig? cfg,
     AdminDeviceDefaults defaults,
+    String kindKey,
   ) async {
     if (ip.isEmpty) return null;
 
@@ -483,7 +543,7 @@ class DeviceProbeApi {
     // نفجّر النوع الصحيح فقط. توفير ~5s متوسط. مطلب المستخدم 2026-07-12.
     // احتياط: لو الـkind المخزّن فشل، نمسحه (فوق) والمحاولة القادمة
     // ترجع parallel لتتلاقط تغيير الجهاز.
-    final knownKind = _kindByIp[ip];
+    final knownKind = _kindByIp[kindKey];
     if (knownKind == DeviceKind.ont) {
       return _probeOnt(ip, ontUser, ontPass);
     }
@@ -520,17 +580,19 @@ class DeviceProbeApi {
   static Future<({String ip, String user, String pass})?> resolveUbntCreds({
     required String fallbackIp,
     String? subscriberUsername,
+    String? company,
   }) async {
     final ip = fallbackIp.trim();
     DeviceConfig? cfg;
     String effectiveIp = ip;
     if (subscriberUsername != null && subscriberUsername.isNotEmpty) {
-      cfg = await DeviceConfigApi.fetchConfig(subscriberUsername);
+      cfg = await DeviceConfigApi.fetchConfig(subscriberUsername,
+          company: company);
       final custom = cfg?.customIp?.trim();
       if (custom != null && custom.isNotEmpty) effectiveIp = custom;
     }
     if (effectiveIp.isEmpty) return null;
-    final defaults = await _loadAdminDefaults();
+    final defaults = await _loadAdminDefaults(company);
     final overrides = (cfg?.username?.isNotEmpty ?? false) ||
         (cfg?.password?.isNotEmpty ?? false);
     final user = overrides && (cfg?.username?.isNotEmpty ?? false)
@@ -552,17 +614,19 @@ class DeviceProbeApi {
   static Future<({String ip, String user, String pass})?> resolveOntCreds({
     required String fallbackIp,
     String? subscriberUsername,
+    String? company,
   }) async {
     final ip = fallbackIp.trim();
     DeviceConfig? cfg;
     String effectiveIp = ip;
     if (subscriberUsername != null && subscriberUsername.isNotEmpty) {
-      cfg = await DeviceConfigApi.fetchConfig(subscriberUsername);
+      cfg = await DeviceConfigApi.fetchConfig(subscriberUsername,
+          company: company);
       final custom = cfg?.customIp?.trim();
       if (custom != null && custom.isNotEmpty) effectiveIp = custom;
     }
     if (effectiveIp.isEmpty) return null;
-    final defaults = await _loadAdminDefaults();
+    final defaults = await _loadAdminDefaults(company);
     final overrides = (cfg?.username?.isNotEmpty ?? false) ||
         (cfg?.password?.isNotEmpty ?? false);
     final user = overrides && (cfg?.username?.isNotEmpty ?? false)
@@ -639,6 +703,9 @@ class DeviceProbeApi {
     }
   }
 }
+
+/// هدفٌ في موجة الفحص: المشترك وعنوانه من الراديوس، و[company] شركة صفّه في «كل الشركات» (null في الوضع العاديّ).
+typedef ProbeTarget = ({String username, String ip, String? company});
 
 class _Cached {
   const _Cached(this.snap, this.at);

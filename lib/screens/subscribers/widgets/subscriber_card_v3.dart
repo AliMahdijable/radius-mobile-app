@@ -809,8 +809,11 @@ class _NetworkMetrics extends StatelessWidget {
       valueListenable: DeviceProbeBus.tick,
       builder: (_, __, ___) {
         final ip = sub.ipAddress?.trim() ?? '';
-        final snap = DeviceProbeApi.cachedForUser(sub.username) ??
-            (ip.isEmpty ? null : DeviceProbeApi.cached(ip));
+        final snap = DeviceProbeApi.cachedForUser(sub.username,
+                company: sub.companyKey) ??
+            (ip.isEmpty
+                ? null
+                : DeviceProbeApi.cached(ip, company: sub.companyKey));
         if (snap == null) return const SizedBox.shrink();
 
         final items = <Widget>[];
@@ -903,8 +906,11 @@ class _ConnectionIssueBar extends StatelessWidget {
         // متوقّفة حتّى يفعّلها المدير.
         if (!settings.enabled) return const SizedBox.shrink();
         final ip = sub.ipAddress?.trim() ?? '';
-        final snap = DeviceProbeApi.cachedForUser(sub.username) ??
-            (ip.isEmpty ? null : DeviceProbeApi.cached(ip));
+        final snap = DeviceProbeApi.cachedForUser(sub.username,
+                company: sub.companyKey) ??
+            (ip.isEmpty
+                ? null
+                : DeviceProbeApi.cached(ip, company: sub.companyKey));
         if (snap == null) return const SizedBox.shrink();
         final problems = ConnectionAlerts.detect(snap, settings);
         if (problems.isEmpty) return const SizedBox.shrink();

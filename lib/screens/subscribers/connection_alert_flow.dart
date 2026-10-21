@@ -9,6 +9,7 @@ import '../../models/device_health.dart';
 import '../../models/subscriber.dart';
 import '../../services/connection_alerts.dart';
 import '../../services/manual_wa_sender.dart';
+import '../../services/merged_mode.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -29,6 +30,13 @@ import 'widgets/device_chip_micro.dart';
 ///    «تلقائي»: بوت تلغرام إن كان المشترك مربوطاً، وإلّا واتساب.
 Future<void> showConnectionAlertFlow(
     BuildContext context, Subscriber sub) async {
+  // «كل الشركات»: القوالب والإرسال (send-message) خارج جدول التوجيه — كانت الرسالة ستخرج من واتساب الشركة المفتوحة
+  // وبقوالبها لا من شركة المشترك. حالة الاتصال نفسها تظهر على الكارت؛ التنبيه من الشركة وحدها.
+  final blocked = MergedOps.unsupported(sub);
+  if (blocked != null) {
+    showSheetSnack(context, blocked, isError: true);
+    return;
+  }
   final phone = sub.displayPhone;
   if (phone.isEmpty) {
     showSheetSnack(context, 'conn_alerts.no_phone'.tr(), isError: true);

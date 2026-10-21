@@ -1,4 +1,5 @@
 import 'api_client.dart';
+import 'company_route.dart';
 import '../models/device_health.dart';
 
 /// Per-subscriber CPE credentials override. When non-null fields are
@@ -89,25 +90,58 @@ class DeviceConfigApi {
   static final _cache = <String, _CachedConfig>{};
   static const _cacheTtl = Duration(minutes: 5);
 
+  /// مفتاح كاشٍ لـ[s] (يوزر أو عنوان): [s] وحده في الوضع العاديّ كما كان حرفاً، و`<الشركة>|s` لصفٍّ من «كل الشركات» —
+  /// اليوزر والعنوان فريدان داخل الساس الواحد وحده، فلا يلبس إعدادُ مشتركٍ أو قراءةُ جهازه مشتركاً بالاسم نفسه في شركةٍ أخرى.
+  static String scoped(String? company, String s) =>
+      company == null || company.isEmpty ? s : '$company|$s';
+
+  /// «كل الشركات»: قراءةٌ موجَّهة فشلت لشركةٍ ⇒ لا نداء آخر لإعدادات أجهزتها دقيقةً. ميزانيّة الحساب للنداءات الموجَّهة
+  /// (٦٠٠ لكلّ ١٠ دقائق، ٦ معاً) تتقاسمها القوائم والعمليّات، وموجة فحصٍ على شركةٍ تعذّرت كانت ستنفقها كلّها بطلبٍ لكلّ
+  /// مشترك. الوضع العاديّ بلا قاطع كما كان.
+  static final _routedDownAt = <String, DateTime>{};
+  static const _routedRetry = Duration(minutes: 1);
+
+  static bool routedDown(String? company) {
+    if (company == null) return false;
+    final at = _routedDownAt[company];
+    return at != null && DateTime.now().difference(at) < _routedRetry;
+  }
+
+  static void noteRoutedFailure(String? company) {
+    if (company != null) _routedDownAt[company] = DateTime.now();
+  }
+
   /// GET /api/subscribers/:username/device — per-subscriber override.
   /// Returns an empty DeviceConfig when the subscriber has none pinned.
   /// Returns null on hard errors (network/auth) so the caller can
   /// degrade gracefully.
   ///
   /// يستفيد من كاش 5 دقائق للـwaves المتكرّرة (silent refresh).
-  static Future<DeviceConfig?> fetchConfig(String username) async {
-    final key = username.trim();
-    if (key.isEmpty) return const DeviceConfig();
+  /// [company]: صفٌّ من «كل الشركات» — يُقرأ إعداده من شركته (موجَّهاً) لا من الشركة المفتوحة.
+  static Future<DeviceConfig?> fetchConfig(String username,
+      {String? company}) async {
+    if (username.trim().isEmpty) return const DeviceConfig();
+    final key = scoped(company, username.trim());
     final now = DateTime.now();
     final cached = _cache[key];
     if (cached != null && now.difference(cached.at) < _cacheTtl) {
       return cached.cfg;
     }
+    if (routedDown(company)) return const DeviceConfig();
     try {
-      final r = await ApiClient.dio.get<Map<String, dynamic>>(
-        '/api/subscribers/$username/device',
+      final r = await CompanyRoute.run(
+        company,
+        () => ApiClient.dio.get<Map<String, dynamic>>(
+          '/api/subscribers/$username/device',
+        ),
       );
       final body = r.data ?? const {};
+      // «كل الشركات»: رفضٌ موجَّه (409 COMPANY_*، 429 الضغط — والعميل يعدّ ما دون 500 نجاحاً) ليس «لا إعداد»: لا يُحفظ
+      // ويفتح القاطع. الوضع العاديّ كما كان (الرفض يُحفظ فارغاً خمس دقائق).
+      if (company != null && body['success'] != true) {
+        noteRoutedFailure(company);
+        return const DeviceConfig();
+      }
       DeviceConfig cfg = const DeviceConfig();
       if (body['success'] == true) {
         final dev = body['device'];
@@ -118,19 +152,21 @@ class DeviceConfigApi {
       _cache[key] = _CachedConfig(cfg, now);
       return cfg;
     } catch (_) {
+      noteRoutedFailure(company);
       return const DeviceConfig();
     }
   }
 
   /// يُستدعى بعد saveConfig/resetConfig حتى الـprobe التالي يستعمل
   /// الاعتمادات الجديدة بدلاً من الكاش القديم.
-  static void invalidateCache(String username) {
-    _cache.remove(username.trim());
+  static void invalidateCache(String username, {String? company}) {
+    _cache.remove(scoped(company, username.trim()));
   }
 
   /// يُستدعى عند logout حتى admin جديد لا يقرأ رواسب config للأدمن السابق.
   static void clearAllCaches() {
     _cache.clear();
+    _routedDownAt.clear();
   }
 
   /// مطلب المستخدم 2026-07-12: batch prime قبل probe wave. يجلب configs
@@ -143,10 +179,9 @@ class DeviceConfigApi {
   /// تُرجع `null` حين لا يكون هذا المستخدم في الكاش أو شاخ سجلّه، و
   /// `DeviceConfig()` فارغاً حين يكون مفحوصاً ولا إعداد له. والفرق
   /// بينهما جوهريّ لمن يبني عليه قراراً: «لا أعرف» ليست «لا يوجد».
-  static DeviceConfig? peekConfig(String username) {
-    final key = username.trim();
-    if (key.isEmpty) return null;
-    final c = _cache[key];
+  static DeviceConfig? peekConfig(String username, {String? company}) {
+    if (username.trim().isEmpty) return null;
+    final c = _cache[scoped(company, username.trim())];
     if (c == null) return null;
     if (DateTime.now().difference(c.at) >= _cacheTtl) return null;
     return c.cfg;
@@ -159,30 +194,40 @@ class DeviceConfigApi {
   /// بين «سألنا فلم نجد» و«لم نسأل أصلاً». وكانت الدالّة تبتلع كلّ
   /// فشلٍ صامتةً وتُرجع `void`، فيبدو الفشل نجاحاً — ومن يُرشّح عندها
   /// يُسقط كلّ من له إعدادٌ محفوظ.
-  static Future<bool> warmBatch(List<String> usernames) async {
+  ///
+  /// [company]: صفوف شركةٍ واحدة من «كل الشركات» — الدفعة موجَّهةٌ لها ومفاتيح كاشها بها.
+  static Future<bool> warmBatch(List<String> usernames,
+      {String? company}) async {
     if (usernames.isEmpty) return true;
     final now = DateTime.now();
     final needed = <String>[];
     for (final u in usernames) {
       final key = u.trim();
       if (key.isEmpty) continue;
-      final cached = _cache[key];
+      final cached = _cache[scoped(company, key)];
       if (cached != null && now.difference(cached.at) < _cacheTtl) continue;
       needed.add(key);
     }
     if (needed.isEmpty) return true; // الكاش يغطّيهم سلفاً
+    if (routedDown(company)) return false;
     try {
       // نُقسّم لدفعات صغيرة (100/دفعة) لتفادي URL/body ضخم.
       for (var i = 0; i < needed.length; i += 100) {
         final chunk = needed.skip(i).take(100).toList();
-        final r = await ApiClient.dio.post<Map<String, dynamic>>(
-          '/api/v2/subscribers/device-batch',
-          data: {'usernames': chunk},
+        final r = await CompanyRoute.run(
+          company,
+          () => ApiClient.dio.post<Map<String, dynamic>>(
+            '/api/v2/subscribers/device-batch',
+            data: {'usernames': chunk},
+          ),
         );
         final body = r.data ?? const {};
-        if (body['success'] != true) return false; // backend لا يدعم أو رفض
         final configs = body['configs'];
-        if (configs is! Map) return false;
+        if (body['success'] != true || configs is! Map) {
+          // backend لا يدعم أو رفض — وفي «كل الشركات» يفتح القاطع (رفضٌ موجَّه بلا استثناء)
+          noteRoutedFailure(company);
+          return false;
+        }
         for (final entry in configs.entries) {
           final key = entry.key.toString();
           final val = entry.value;
@@ -190,14 +235,15 @@ class DeviceConfigApi {
           if (val is Map) {
             cfg = DeviceConfig.fromJson(Map<String, dynamic>.from(val));
           }
-          _cache[key] = _CachedConfig(cfg, now);
+          _cache[scoped(company, key)] = _CachedConfig(cfg, now);
         }
         // usernames اللي لم يرجعوا في الـconfigs = ما عندهم override.
         // نُخزّن DeviceConfig() فارغ لهم حتى ما نعيد fetch لاحقاً.
         final returned = (configs).keys.map((k) => k.toString()).toSet();
         for (final u in chunk) {
           if (!returned.contains(u)) {
-            _cache[u] = _CachedConfig(const DeviceConfig(), now);
+            _cache[scoped(company, u)] =
+                _CachedConfig(const DeviceConfig(), now);
           }
         }
       }
@@ -205,6 +251,7 @@ class DeviceConfigApi {
     } catch (_) {
       // Backend endpoint غير موجود أو خطأ شبكة — تجاهل، الـfetchConfig
       // الفردي يبقى الطريق الاحتياطي. لكنّ الكاش **ليس مرجعاً** الآن.
+      noteRoutedFailure(company);
       return false;
     }
   }
@@ -250,18 +297,23 @@ class AdminDeviceDefaultsApi {
   /// One fetch per session at most — but we don't cache here; the
   /// DeviceProbeApi memoizes the resolved credentials inline since it
   /// already runs serially per IP.
-  static Future<AdminDeviceDefaults> fetch() async {
+  static Future<AdminDeviceDefaults> fetch() async =>
+      await tryFetch() ?? AdminDeviceDefaults.empty;
+
+  /// [fetch] بلا ابتلاع الفشل: `null` حين تعذّرت القراءة (شبكة/رفض)، و`empty` حين لا افتراضات محفوظة. والفرق لمن يحفظ
+  /// النتيجة: «لا يوجد» يُحفظ للجلسة، و«لم نعرف» لا يُحفظ («كل الشركات»: جلسة الشركة قد تعود بعد دقيقة).
+  static Future<AdminDeviceDefaults?> tryFetch() async {
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/admin/device-defaults',
       );
       final body = r.data ?? const {};
-      if (body['success'] != true) return AdminDeviceDefaults.empty;
+      if (body['success'] != true) return null;
       final d = body['defaults'];
       if (d is! Map) return AdminDeviceDefaults.empty;
       return AdminDeviceDefaults.fromJson(Map<String, dynamic>.from(d));
     } catch (_) {
-      return AdminDeviceDefaults.empty;
+      return null;
     }
   }
 

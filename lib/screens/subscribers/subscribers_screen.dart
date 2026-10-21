@@ -604,6 +604,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       _all = r.rowsFor(MergedMode.focused?.key);
       _loading = false;
     });
+    // حالة الاتصال بالكارت (الإشارة، الـONU، النانو) لصفوف كلّ الشركات — الجديد وحده كلّ دقيقة، وموجةٌ جارية لا تُقطع.
+    if (!_probing) _runProbeWave();
     final at = _mergedSideAt;
     if (fresh || at == null || DateTime.now().difference(at) > const Duration(minutes: 5)) {
       _mergedSideAt = DateTime.now();
@@ -640,6 +642,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       _selectionMode = false;
       _selected.clear();
     });
+    // صفوف الشركة المختارة أوّلاً (المفحوص منها يُتخطّى)
+    _runProbeWave();
   }
 
   /// حال شركةٍ صالحة على الشريط لا تُختار: كبيرة (تُفتح وحدها) أو تعذّرت قائمتها.
@@ -782,9 +786,14 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     // تكلفة: ~1 GET /api/subscribers/:username/device لكل مشترك ما
     // له IP، يُنفَّذ merci وiplevel cache 5د بعد أول wave.
     // الكبير: الصفوف المحمَّلة وحدها (لا ٨٩ ألف فحص).
+    // «كل الشركات»: كلّ صفٍّ بشركته — إعداد جهازه وافتراضاتها من شركته (٢٢ أكتوبر).
     var targets = (_big ? _bigRows : _all)
         .where((s) => s.username.isNotEmpty)
-        .map((s) => (username: s.username, ip: (s.ipAddress ?? '').trim()))
+        .map<ProbeTarget>((s) => (
+              username: s.username,
+              ip: (s.ipAddress ?? '').trim(),
+              company: s.companyKey,
+            ))
         .toList();
 
     // ⚠️ استثنِ ما هو مفحوص وطازج — إلّا حين يطلب المستخدم فحصاً صريحاً.
@@ -796,7 +805,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     if (!force) {
       targets = targets
           .where((t) =>
-              DeviceProbeApi.peek(username: t.username, ip: t.ip) == null)
+              DeviceProbeApi.peek(
+                  username: t.username, ip: t.ip, company: t.company) ==
+              null)
           .toList();
     }
 
@@ -810,7 +821,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       // الـadmin يطلب تحديث صريح — نسقط الـcache كاملاً لكل المشتركين
       // المستهدفين بالـwave فالـwarmProbe يصير لهن جلسة probe جديدة.
       for (final t in targets) {
-        DeviceProbeApi.invalidateIp(t.ip);
+        DeviceProbeApi.invalidateIp(t.ip, company: t.company);
       }
       DeviceProbeBus.bump();
     }
@@ -1101,8 +1112,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
         for (final s in list)
           s: _deviceSortKey(
             _sortField,
-            DeviceProbeApi.cachedForUser(s.username) ??
-                DeviceProbeApi.cached(s.ipAddress ?? ''),
+            DeviceProbeApi.cachedForUser(s.username, company: s.companyKey) ??
+                DeviceProbeApi.cached(s.ipAddress ?? '', company: s.companyKey),
           ),
       };
       list.sort((a, b) {
@@ -1968,7 +1979,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                     // إلّا حين يكشف آخر فحصٍ مشكلة. والإرسال
                                     // محكومٌ بصلاحيّة «إرسال رسالة لمشترك»
                                     // التي يفحصها الخادم على send-message.
+                                    // «كل الشركات»: الإرسال للشركة وحدها ⇒ لا شريط ينتهي برفض؛
+                                    // قراءة الجهاز نفسها تبقى على البطاقة.
                                     onAlertConnection: !_selectionMode &&
+                                            s.companyKey == null &&
                                             Perms.has('whatsapp.send') &&
                                             s.displayPhone.isNotEmpty
                                         ? () => showConnectionAlertFlow(
