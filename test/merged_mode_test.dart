@@ -58,6 +58,9 @@ class _RouteServer implements HttpClientAdapter {
   final Map<String, Object> lists = {};
   final Map<String, int> totals = {};
 
+  /// جلسات online-users لكلّ شركة.
+  final Map<String, List<Map<String, Object>>> sessions = {};
+
   @override
   Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
     final key = o.headers['x-company-key'] as String?;
@@ -87,6 +90,9 @@ class _RouteServer implements HttpClientAdapter {
         'success': true,
         'data': {for (final id in ids) id: {'today': key == _kB ? 222 : 111, 'month': 1000}},
       }, headers: h);
+    }
+    if (o.method == 'GET' && path == '/api/v2/online-users') {
+      return _json(200, {'success': true, 'data': sessions[key] ?? const []}, headers: h);
     }
     if (o.method == 'GET' && path.endsWith('/activation-data')) {
       return _json(200, {'success': true, 'data': {}}, headers: {...h, 'x-company-ref': ['r_AAAAAAAAAAAAAAAAAAAAAA']});
@@ -270,6 +276,53 @@ void main() {
       expect(r.failed.single.error, contains('تعذّر'));
       final fulls = srv.requests.where((o) => o.uri.path == '/api/v2/subscribers' && o.queryParameters['page'] == null);
       expect(fulls.map((o) => o.headers['x-company-key']).toSet(), {_kA, _kB}, reason: 'الكبيرة: صفٌّ واحد لا القائمة');
+      MergedMode.reset();
+      await down();
+    });
+
+    testWidgets('جلسات كلّ شركة (٢٢ أكتوبر): عنوان الجلسة من online-users شركته موجَّهاً، واليوزر نفسه في شركتين لا يلتبس، والقائمة التالية لا تُسقطه',
+        (t) async {
+      await up();
+      MergedMode.fetchRaw = () async => {
+            'routing': true,
+            'writes': true,
+            'companies': [
+              {'key': _kA, 'code': 'supernet', 'username': 'admin@a', 'name': 'A', 'status': 'ok', 'admin_id': '1', 'ns': 'nA'},
+              {'key': _kB, 'code': 'jt', 'username': 'admin@b', 'name': 'B', 'status': 'ok', 'admin_id': 'jt:2', 'ns': 'nB'},
+            ],
+          };
+      srv.lists[_kA] = [
+        {'idx': 1, 'username': 'same', 'firstname': 'x', 'lastname': 'y', 'parent_username': 'admin@a'},
+        {'idx': 2, 'username': 'off', 'firstname': 'x', 'lastname': 'y', 'parent_username': 'admin@a'},
+      ];
+      srv.lists[_kB] = [
+        {'idx': 1, 'username': 'same', 'firstname': 'x', 'lastname': 'y', 'parent_username': 'admin@b'},
+      ];
+      srv.sessions[_kA] = [
+        {'username': 'SAME ', 'ip': '10.1.0.5', 'session_time': 60},
+      ];
+      srv.sessions[_kB] = [
+        {'username': 'same', 'ip': '10.2.0.5', 'session_time': 120},
+      ];
+      final r = await t.runAsync(() => MergedSubscribers.load(fresh: true));
+      expect(r!.rows.every((s) => (s.ipAddress ?? '').isEmpty), isTrue,
+          reason: 'القائمة وحدها بلا عنوان جلسة — لذلك ما كانت الأجهزة تُفحص في «كل الشركات»');
+      final w = await t.runAsync(() => MergedSubscribers.withSessions(r, fresh: true));
+      String? ipOf(MergedListResult x, String key, String u) =>
+          x.rows.firstWhere((s) => s.companyKey == key && s.username == u).ipAddress;
+      expect(ipOf(w!, _kA, 'same'), '10.1.0.5');
+      expect(ipOf(w, _kB, 'same'), '10.2.0.5', reason: 'اليوزر نفسه في شركةٍ أخرى بجلسته هو');
+      expect(ipOf(w, _kA, 'off'), isNull, reason: 'بلا جلسة يبقى كما هو (لا يُنزل ولا يُخترع له عنوان)');
+      expect(w.rows.firstWhere((s) => s.companyKey == _kB).sessionTime, 120);
+      final online = srv.requests.where((o) => o.uri.path == '/api/v2/online-users').toList();
+      expect(online.map((o) => o.headers['x-company-key']).toSet(), {_kA, _kB});
+      expect(online.every((o) => o.headers['Authorization'] == null), isTrue, reason: 'توكن المفتوحة لا يخرج');
+      expect(MergedSubscribers.last.value, same(w), reason: 'الرئيسية تقرأ المُثرى');
+      // التحديث التالي من المخبأ يحمل العنوان فوراً (لا وميض)، وقائمة شركةٍ تُجلب وحدها بعد عمليّة كذلك
+      final again = await t.runAsync(() => MergedSubscribers.load());
+      expect(ipOf(again!, _kB, 'same'), '10.2.0.5');
+      final one = await t.runAsync(() => MergedSubscribers.fetchCompany(MergedMode.companyOf(_kA)!, fresh: true));
+      expect(one!.rows!.firstWhere((s) => s.username == 'same').ipAddress, '10.1.0.5');
       MergedMode.reset();
       await down();
     });

@@ -197,6 +197,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   MergedListResult? _merged;
   int _mergedTick = 0;
 
+  /// تحميلٌ أحدث يغلب ردّ تحميلٍ أقدم (القائمة ثمّ جلساتها ردّان منفصلان).
+  int _mergedGen = 0;
+
   /// «كل الشركات»: آخر الدفعات وارتباطات تلغرام لكلّ شركة — موجَّهةً بمعرّف مديرها، لا من الشركة المفتوحة (يوزرٌ أو idx
   /// يتكرّر بين شركتين فيُلصق بصفٍّ ما ليس له). تُجلب مع القائمة وكلّ ٥ دقائق على الأكثر.
   final Map<String, Map<String, Map<String, dynamic>>> _mergedPayments = {};
@@ -594,8 +597,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
   /// «كل الشركات»: قوائم الشركات (مخبّأةٌ ٤٥ث لكلّ شركة، و[fresh] يتخطّاها) ثمّ الدمج.
   Future<void> _loadMerged({bool fresh = false}) async {
+    final gen = ++_mergedGen;
     final r = await MergedSubscribers.load(fresh: fresh);
-    if (!mounted || !_mergedOn) return;
+    if (!mounted || !_mergedOn || gen != _mergedGen) return;
     _markDataSeen();
     setState(() {
       _big = false;
@@ -604,13 +608,23 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       _all = r.rowsFor(MergedMode.focused?.key);
       _loading = false;
     });
-    // حالة الاتصال بالكارت (الإشارة، الـONU، النانو) لصفوف كلّ الشركات — الجديد وحده كلّ دقيقة، وموجةٌ جارية لا تُقطع.
-    if (!_probing) _runProbeWave();
     final at = _mergedSideAt;
     if (fresh || at == null || DateTime.now().difference(at) > const Duration(minutes: 5)) {
       _mergedSideAt = DateTime.now();
       unawaited(_loadMergedSide(r));
     }
+    // جلسات كلّ شركة بعد القائمة — كـ_fetchAndMerge في الوضع العاديّ: عنوان الجلسة ومدّتها والتحميل. عليها تقوم حالة
+    // الاتصال بالكارت (الإشارة، الـONU، النانو): صفٌّ بلا عنوانٍ ولا عنوانٍ مثبَّت لا يُفحص.
+    final withSessions = await MergedSubscribers.withSessions(r, fresh: fresh);
+    if (!mounted || !_mergedOn || gen != _mergedGen) return;
+    if (!identical(withSessions, r)) {
+      setState(() {
+        _merged = withSessions;
+        _all = withSessions.rowsFor(MergedMode.focused?.key);
+      });
+    }
+    // الجديد وحده كلّ دقيقة، وموجةٌ جارية لا تُقطع.
+    if (!_probing) _runProbeWave();
   }
 
   Future<void> _loadMergedSide(MergedListResult r) async {

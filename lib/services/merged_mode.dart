@@ -8,6 +8,7 @@ import '../api/account_api.dart';
 import '../api/api_client.dart';
 import '../api/big_subscribers_api.dart';
 import '../api/company_route.dart';
+import '../api/subscribers_api.dart';
 import '../models/merged_company.dart';
 import '../models/subscriber.dart';
 import 'account_service.dart';
@@ -235,6 +236,14 @@ class MergedSubscribers {
   static final Map<String, Future<MergedCompanyList>> _inFlight = {};
   static int _generation = 0;
 
+  /// جلسات كلّ شركة (عنوان الجلسة ومدّتها والتحميل والجهاز) بمفتاح اليوزر بحروفٍ صغيرة — ٤٥ث كالقوائم. عليها تقوم حالة
+  /// الاتصال بالكارت (٢٢ أكتوبر): قائمة المشتركين بلا عنوان جلسة، والوضع العاديّ يأخذه من online-users (_fetchAndMerge).
+  static final Map<String, ({DateTime at, Map<String, OnlineSessionInfo> value})> _online = {};
+  static final Map<String, Future<Map<String, OnlineSessionInfo>?>> _onlineFlight = {};
+
+  /// جلساتٌ أقدم من هذا لا تُلصق بقائمةٍ جديدة (تجعل المشترك «متصلاً») — الإثراء التالي يجلب الطازجة.
+  static const _sessionsReuse = Duration(minutes: 2);
+
   /// آخر دمجٍ (للشاشات التي تقرأ بلا طلب: الرئيسية بعد المشتركين).
   static final ValueNotifier<MergedListResult?> last = ValueNotifier<MergedListResult?>(null);
 
@@ -245,6 +254,8 @@ class MergedSubscribers {
     _generation++;
     _cache.clear();
     _inFlight.clear();
+    _online.clear();
+    _onlineFlight.clear();
     last.value = null;
   }
 
@@ -267,8 +278,11 @@ class MergedSubscribers {
     if (running != null) return running;
     final gen = _generation;
     final f = CompanyRoute.run(c.key, () => _fetch(c)).then((v) {
-      if (gen == _generation && v.rows != null) _cache[c.key] = (at: DateTime.now(), value: v);
-      return v;
+      // آخر جلساتٍ طازجة لشركتها تُلصق فوراً — قائمةٌ جديدة (بعد عمليّة، أو تحديث) لا تُسقط عناوين الجلسات حتى الإثراء التالي
+      final s = _online[c.key];
+      final out = s != null && DateTime.now().difference(s.at) < _sessionsReuse ? _applySessions(v, s.value) : v;
+      if (gen == _generation && out.rows != null) _cache[c.key] = (at: DateTime.now(), value: out);
+      return out;
     }).whenComplete(() {
       // كتلةٌ لا سهم: remove يعيد المستقبل نفسه، وwhenComplete ينتظر ما يُعاد — فينتظر نفسه أبداً
       _inFlight.remove(c.key);
@@ -276,6 +290,100 @@ class MergedSubscribers {
     _inFlight[c.key] = f;
     return f;
   }
+
+  /// جلسات شركة [c] موجَّهةً لها (GET /api/v2/online-users — مسار الوضع العاديّ نفسه، ثقيلٌ بالخادم). null: تعذّرت.
+  static Future<Map<String, OnlineSessionInfo>?> fetchOnline(MergedCompany c, {bool fresh = false}) {
+    final hit = _online[c.key];
+    if (!fresh && hit != null && DateTime.now().difference(hit.at) < ttl) return Future.value(hit.value);
+    final running = _onlineFlight[c.key];
+    if (running != null) return running;
+    final gen = _generation;
+    final f = CompanyRoute.run(c.key, () => ApiClient.dio.get<Map<String, dynamic>>('/api/v2/online-users'))
+        .then<Map<String, OnlineSessionInfo>?>((r) {
+      final b = r.data ?? const {};
+      if (b['success'] != true) return null;
+      final m = SubscribersApi.onlineFromRows((b['data'] as List?) ?? const []);
+      if (gen == _generation) _online[c.key] = (at: DateTime.now(), value: m);
+      return m;
+    }).catchError((Object _) => null).whenComplete(() {
+      // كتلةٌ لا سهم (انظر fetchCompany)
+      _onlineFlight.remove(c.key);
+    });
+    _onlineFlight[c.key] = f;
+    return f;
+  }
+
+  /// [s] بجلسته إن وُجدت — كالوضع العاديّ حرفاً (_fetchAndMerge): الجلسة تُثري الصفّ (العنوان، المدّة، التحميل، الجهاز)
+  /// وتجعله متصلاً، وغيابها لا يُنزله.
+  static Subscriber withSession(Subscriber s, Map<String, OnlineSessionInfo> online) {
+    final x = online[s.username.trim().toLowerCase()];
+    if (x == null) return s;
+    return s.copyWithOnline(
+      online: true,
+      ip: x.ip,
+      session: x.sessionTime,
+      dl: x.downloadBytes,
+      ul: x.uploadBytes,
+      device: x.device,
+    );
+  }
+
+  static MergedCompanyList _applySessions(MergedCompanyList l, Map<String, OnlineSessionInfo> online) => l.rows == null
+      ? l
+      : MergedCompanyList(
+          company: l.company,
+          rows: [for (final s in l.rows!) withSession(s, online)],
+          partial: l.partial,
+          error: l.error,
+          bigTotal: l.bigTotal,
+        );
+
+  /// آخر جلساتٍ معروفة لشركة (بلا طلب) — لصفٍّ يُعاد جلبه وحده بعد عمليّة.
+  static Map<String, OnlineSessionInfo>? sessionsOf(String? key) => key == null ? null : _online[key]?.value;
+
+  /// [r] بجلسات شركاتها — كالوضع العاديّ: القائمة تُعرض أوّلاً ثمّ تُثرى (شركتان معاً على الأكثر — خانتا الحساب الثقيلتان).
+  /// المتعذّرة تبقى كما هي، والمُثرى يحلّ مكان الأصل في المخبأ (بوقته) فلا تومض الجلسات مع التحديث التالي.
+  static Future<MergedListResult> withSessions(MergedListResult r, {bool fresh = false}) async {
+    final gen = _generation;
+    final todo = [
+      for (final p in r.parts)
+        if (p.rows != null) p,
+    ];
+    if (todo.isEmpty) return r;
+    final sessions = <String, Map<String, OnlineSessionInfo>>{};
+    var next = 0;
+    Future<void> worker() async {
+      while (next < todo.length) {
+        final p = todo[next++];
+        final m = await fetchOnline(p.company, fresh: fresh);
+        if (m != null) sessions[p.company.key] = m;
+      }
+    }
+
+    await Future.wait([for (var w = 0; w < concurrency && w < todo.length; w++) worker()]);
+    if (sessions.isEmpty || gen != _generation) return r;
+    final parts = [
+      for (final p in r.parts)
+        if (sessions[p.company.key] case final m?) _applySessions(p, m) else p,
+    ];
+    for (var i = 0; i < parts.length; i++) {
+      final k = r.parts[i].company.key;
+      final hit = _cache[k];
+      if (hit != null && identical(hit.value, r.parts[i])) _cache[k] = (at: hit.at, value: parts[i]);
+    }
+    final out = _combine(parts, r.missing);
+    if (gen == _generation) last.value = out;
+    return out;
+  }
+
+  static MergedListResult _combine(List<MergedCompanyList> parts, List<MergedCompany> missing) => MergedListResult(
+        rows: mergeRows([
+          for (final p in parts)
+            if (p.rows != null) MergePart(company: p.company, rows: p.rows!, partial: p.partial),
+        ]),
+        parts: parts,
+        missing: missing,
+      );
 
   static Future<MergedCompanyList> _fetch(MergedCompany c) async {
     try {
@@ -326,11 +434,7 @@ class MergedSubscribers {
 
     await Future.wait([for (var w = 0; w < concurrency && w < usable.length; w++) worker()]);
     final parts = results.whereType<MergedCompanyList>().toList();
-    final rows = mergeRows([
-      for (final p in parts)
-        if (p.rows != null) MergePart(company: p.company, rows: p.rows!, partial: p.partial),
-    ]);
-    final out = MergedListResult(rows: rows, parts: parts, missing: missing);
+    final out = _combine(parts, missing);
     if (gen == _generation) last.value = out;
     return out;
   }

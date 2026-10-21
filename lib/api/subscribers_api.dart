@@ -381,36 +381,9 @@ class SubscribersApi {
         }
         return null;
       }
-      final rows = (body['data'] as List?) ?? const [];
       // 2026-08-09: diagnostic log كان ينفجر مع polling 5s (spam مزعج).
       // معطّل الآن — لو حبيت تشخّص DL/UL، أعِد تفعيله مؤقّتاً.
-      final out = <String, OnlineSessionInfo>{};
-      int? toInt(dynamic v) {
-        if (v == null) return null;
-        if (v is int) return v;
-        if (v is num) return v.toInt();
-        return int.tryParse(v.toString());
-      }
-
-      for (final row in rows) {
-        if (row is! Map) continue;
-        // .trim() — defense-in-depth: لو SAS4 رجّع username بمسافة زائدة
-        // ولم يُنقَ في backend، الـmap يستعمل مفتاح مطابق للـsubscribers list
-        // (اللي كذلك يُطبَّق عليه .trim() في backend الآن). حادثة ame@rezz
-        // 2026-07-13 — كان "ame@rezz " مع مسافة يمنع merge كل معلومات
-        // الاتصال حتى للـsubscriber online.
-        final u = row['username']?.toString().trim().toLowerCase();
-        if (u == null || u.isEmpty) continue;
-        out[u] = OnlineSessionInfo(
-          ip: row['ip']?.toString(),
-          mac: row['mac']?.toString(),
-          sessionTime: toInt(row['session_time']),
-          downloadBytes: toInt(row['download_bytes']),
-          uploadBytes: toInt(row['upload_bytes']),
-          device: row['device']?.toString(),
-        );
-      }
-      return out;
+      return onlineFromRows((body['data'] as List?) ?? const []);
     } on DioException catch (e) {
       _log('v2/online-users', e);
       return null;
@@ -418,6 +391,38 @@ class SubscribersApi {
       _log('v2/online-users', e);
       return null;
     }
+  }
+
+  /// صفوف `/api/v2/online-users` ⇒ جلسةٌ لكلّ يوزر (بحروفٍ صغيرة). مشتركةٌ بين [loadOnline] و«كل الشركات» (جلسات كلّ
+  /// شركةٍ موجَّهةً لها — MergedSubscribers.fetchOnline) فلا يفترق التحليل بين الوضعين.
+  static Map<String, OnlineSessionInfo> onlineFromRows(List rows) {
+    final out = <String, OnlineSessionInfo>{};
+    int? toInt(dynamic v) {
+      if (v == null) return null;
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      return int.tryParse(v.toString());
+    }
+
+    for (final row in rows) {
+      if (row is! Map) continue;
+      // .trim() — defense-in-depth: لو SAS4 رجّع username بمسافة زائدة
+      // ولم يُنقَ في backend، الـmap يستعمل مفتاح مطابق للـsubscribers list
+      // (اللي كذلك يُطبَّق عليه .trim() في backend الآن). حادثة ame@rezz
+      // 2026-07-13 — كان "ame@rezz " مع مسافة يمنع merge كل معلومات
+      // الاتصال حتى للـsubscriber online.
+      final u = row['username']?.toString().trim().toLowerCase();
+      if (u == null || u.isEmpty) continue;
+      out[u] = OnlineSessionInfo(
+        ip: row['ip']?.toString(),
+        mac: row['mac']?.toString(),
+        sessionTime: toInt(row['session_time']),
+        downloadBytes: toInt(row['download_bytes']),
+        uploadBytes: toInt(row['upload_bytes']),
+        device: row['device']?.toString(),
+      );
+    }
+    return out;
   }
 
   /// GET /api/subscribers/last-financial-movements/{adminId} — recent
