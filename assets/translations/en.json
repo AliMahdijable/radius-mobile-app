@@ -1314,6 +1314,14 @@
     "title": "Accounts",
     "need_edit": "Switching accounts needs the “edit managers” permission — it uses the sub-manager’s password. Ask your administrator."
   },
+  "company_switch": {
+    "title": "Switch company",
+    "subtitle": "Your account’s companies",
+    "current": "Open now",
+    "inside_as": "Open now as {} — tap for its page",
+    "opening": "Opening {}…",
+    "load_failed": "Couldn’t load your companies — check the connection and try again."
+  },
   "account": {
     "signin_title": "Sign in",
     "signup_title": "Create account",

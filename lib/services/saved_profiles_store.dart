@@ -3,6 +3,8 @@ import 'dart:math';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'company_creds_store.dart';
+
 /// حساب مدير محفوظ للـquick-login (chip بشاشة الدخول).
 class SavedProfile {
   final String username;
@@ -185,10 +187,12 @@ class SavedProfilesStore {
   // ─── Original admin (return-to-main after account switch) ──────
 
   /// خزّن هوّية الحساب الأصلي — يُستدعى قبل التبديل لحساب مدير فرعي.
-  /// [origin] يوضّح من أي شاشة (accounts | manual) — للـtelemetry فقط.
+  /// [sasUrl]: ساس الجلسة التي بدأ منها التبديل — المرجع يخصّ شركته وحدها
+  /// ([originalFor]). [origin] يوضّح من أي شاشة (accounts | manual) — للـtelemetry فقط.
   static Future<void> setOriginal({
     required String username,
     required String plainPassword,
+    required String sasUrl,
     String displayName = '',
     String origin = 'accounts',
   }) async {
@@ -197,6 +201,7 @@ class SavedProfilesStore {
       'u': username,
       'p': encrypted,
       'n': displayName.isEmpty ? username : displayName,
+      's': sasUrl.trim(),
       'o': origin,
       't': DateTime.now().toIso8601String(),
     };
@@ -204,7 +209,8 @@ class SavedProfilesStore {
   }
 
   /// اقرأ الحساب الأصلي — null إن ما فيه. الـpassword decrypted جاهز.
-  static Future<({String username, String password, String displayName})?>
+  /// `sasUrl` null = مرجعٌ كتبه إصدارٌ قبل 3.0.6 بلا ساسه.
+  static Future<({String username, String password, String displayName, String? sasUrl})?>
       readOriginal() async {
     try {
       final raw = await _storage.read(key: _kOriginal);
@@ -219,10 +225,43 @@ class SavedProfilesStore {
         username: u,
         password: plain,
         displayName: (m['n'] ?? u).toString(),
+        sasUrl: m['s']?.toString(),
       );
     } catch (_) {
       return null;
     }
+  }
+
+  /// مرجع «العودة للأصل» **إن خصّ شركة الجلسة** ([sasUrl]) — وإلّا يُمسح.
+  ///
+  /// يوزر المدير وكلمة سرّه لا يعنيان شيئاً خارج ساسه. كان المرجع بلا ساس،
+  /// فمن بدّل لمديرٍ فرعيٍّ في شركة ثمّ فتح شركةً أخرى (من «شركاتي» أو ورقة
+  /// «تبديل الشركة») يرى في «الصفحات» «العودة لـ<مدير الأولى>» — ونقرتها
+  /// تدخل ساس الثانية بيوزر الأولى.
+  ///
+  /// مرجعٌ قديم بلا ساس (قبل 3.0.6): يُقبل إن طابقت كلمة سرّه المحفوظة لهذا
+  /// الساس واليوزر ([CompanyCredsStore]، يُكتب عند كلّ دخول) — أي أنّه من هذه
+  /// الشركة — ويُختم بساسها؛ وإلّا يُمسح.
+  static Future<({String username, String password, String displayName})?>
+      originalFor(String sasUrl) async {
+    final o = await readOriginal();
+    if (o == null) return null;
+    final here = CompanyCredsStore.hostOf(sasUrl);
+    final mine = o.sasUrl != null
+        ? CompanyCredsStore.hostOf(o.sasUrl!) == here
+        : await CompanyCredsStore.passwordFor(sasUrl, o.username) == o.password;
+    if (!mine) {
+      await clearOriginal();
+      return null;
+    }
+    if (o.sasUrl == null) {
+      await setOriginal(
+          username: o.username,
+          plainPassword: o.password,
+          displayName: o.displayName,
+          sasUrl: sasUrl);
+    }
+    return (username: o.username, password: o.password, displayName: o.displayName);
   }
 
   /// امسح مرجع الحساب الأصلي — يُستدعى بعد العودة أو عند Logout يدوي.

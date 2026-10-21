@@ -23,6 +23,7 @@ import 'device_alerts_service.dart';
 import 'employee_session.dart';
 import 'fcm_service.dart';
 import 'inbox_service.dart';
+import 'linked_companies.dart';
 import 'permissions_service.dart';
 import 'provider_service.dart';
 import 'saved_profiles_store.dart';
@@ -83,6 +84,9 @@ class SessionManager {
     // المساعد الذكيّ — حالته (الحصّة، القفل) وآخر أخطاء الخادم المحفوظة
     // لـ«اشرحلي»: لا يرى المدير التالي حال سابقه ولا يُشرح له خطؤه.
     _guardSync('AiAssistantState.reset', () => AiAssistantState.reset());
+    // شركات الحساب (زرّ «تبديل الشركة» في الرئيسيّة) — لا يرى الحساب التالي
+    // شركات سابقه، والجلسة الجديدة تسأل من جديد.
+    _guardSync('LinkedCompanies.reset', () => LinkedCompanies.reset());
 
     // 2) Async persistent stores — PARALLEL via Future.wait.
     //    Previously sequential: each waited on the last (~40ms × 4).
