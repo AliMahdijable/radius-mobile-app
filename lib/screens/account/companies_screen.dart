@@ -1,26 +1,20 @@
-import 'dart:io' show Platform;
-
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../api/account_api.dart';
-import '../../api/auth_api.dart';
 import '../../core/platform/store_policy.dart';
 import '../../services/account_service.dart';
 import '../../services/company_creds_store.dart';
-import '../../services/sas_login_flow.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
-import '../../widgets/sas_captcha_sheet.dart';
 import '../login_screen.dart';
-import '../main_shell.dart';
-import 'account_gate_screen.dart';
 import 'account_login_screen.dart';
 import 'account_settings_card.dart' show confirmAndDeleteAccount;
 import 'account_widgets.dart';
+import 'company_open_flow.dart';
 import 'my_devices_screen.dart';
 import 'subscription_screen.dart';
 
@@ -61,103 +55,26 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
 
   String _keyOf(LinkedCompany c) => '${c.sasCode}|${c.username}';
 
+  /// دخول الشركة — المسار المشترك مع ورقة «تبديل الشركة» ([CompanyOpenFlow]).
   Future<void> _open(LinkedCompany c) async {
     if (_opening != null) return;
-    HapticFeedback.selectionClick();
-    final url = c.sasUrl ?? '';
-    final pass = await CompanyCredsStore.passwordFor(url, c.username);
-    if (!mounted) return;
-    if (pass == null) {
-      await _addOrLogin(sasUrl: url, username: c.username, company: c);
-      return;
-    }
-    setState(() => _opening = _keyOf(c));
-    final res = await SasCaptchaLogin.login(context, username: c.username, password: pass, sasUrl: url);
-    if (!mounted) return;
-    switch (res) {
-      case LoginSuccess():
-        // اسم الشركة وكودها من «شركاتي» — يُعرضان أعلى الواجهة بعد الدخول.
-        final out = await SasLoginFlow.completeSafely(res,
-            username: c.username, password: pass, sasUrl: url, remember: true,
-            companyLabel: c.label, sasCode: c.sasCode);
-        if (!mounted) return;
-        setState(() => _opening = null);
-        if (out == SasLoginOutcome.ok) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const MainShell()),
-            (_) => false,
-          );
-        } else if (out == SasLoginOutcome.storageFailed) {
-          showAccountSnack(context,
-              (Platform.isAndroid ? 'login.save_failed_android' : 'login.save_failed').tr(),
-              error: true, duration: const Duration(seconds: 9));
-        } else {
-          showAccountSnack(context, 'login.perms_fetch_failed'.tr(), error: true);
-        }
-      case final LoginFailure f:
-        setState(() => _opening = null);
-        // أغلق نافذة رمز الصورة أو كود التحقّق بخطوتين — لا رسالة ولا نموذج.
-        // (كان ردّ «أدخل كود 2FA» بلا رمز خطأٍ فيُعاد نموذج كلمة السرّ أدناه في حلقة.)
-        if (f.isCancelled) return;
-        // حدّ الأجهزة — قبل البوّابة: كان رمز بوّابةٍ فيرتدّ المستخدم إلى هنا
-        // بلا كلمة، عالقاً. «أجهزتي» تحرّر مكاناً ثمّ يُعاد هذا الدخول فوراً.
-        if (f.isDeviceLimit) {
-          HapticFeedback.heavyImpact();
-          if (await showDeviceLimitSheet(context, message: f.message) && mounted) await _open(c);
-          return;
-        }
-        if (_handleGate(f)) return;
-        HapticFeedback.heavyImpact();
-        showAccountSnack(context, StorePolicy.storeSafe(f.message), error: true);
-        // كلمة سرٍّ تغيّرت في الساس: نفتح النموذج ليكتبها من جديد.
-        if (f.code == null) await _addOrLogin(sasUrl: url, username: c.username, company: c);
-    }
-  }
-
-  /// رموز بوّابة الحساب من الخادم: انتهى الاشتراك/الحساب معطّل… ← البوّابة تقرّر.
-  bool _handleGate(LoginFailure f) {
-    if (!f.isAccountGate) return false;
-    // حسابٌ مجّانيّ دائم (إعفاء سوبرنت) يفتح شركةً أخرى فيرفضها الخادم باشتراكٍ منتهٍ: الإعفاء يخصّ
-    // سوبرنت وحدها. البوّابة تقرأ الحساب فعّالاً فكانت تعيده إلى هنا بلا كلمة — نبقى ونقول السبب.
-    if (f.code == 'subscription-ended' && _me.subscription.isFreeForever) {
-      HapticFeedback.heavyImpact();
-      _showCompanyNeedsPlan();
-      return true;
-    }
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const AccountGateScreen()),
-      (_) => false,
-    );
-    return true;
-  }
-
-  /// الشركة المرفوضة لحسابٍ مجّانيّ لسوبرنت وحدها. آيفون: سطرٌ محايد بلا دعوةٍ لتفعيلٍ (3.1.1)؛
-  /// أندرويد: السبب + «تفعيل كود» إلى شاشة الاشتراك.
-  Future<void> _showCompanyNeedsPlan() async {
-    if (StorePolicy.hidePurchaseFlows) {
-      showAccountSnack(context, 'account.company_not_active_neutral'.tr(), error: true);
-      return;
-    }
-    final go = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: Text('account.company_needs_plan_title'.tr(), style: AppType.sheetTitle(color: AppColors.textHi)),
-        content: Text('account.company_needs_plan_body'.tr(),
-            style: AppType.subtitle(color: AppColors.textMid).copyWith(height: 1.55)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text('common.close'.tr(), style: AppType.button(color: AppColors.textMid)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('account.company_needs_plan_action'.tr(), style: AppType.button(color: AppColors.brand)),
-          ),
-        ],
+    await CompanyOpenFlow.open(
+      context,
+      c,
+      CompanyOpenHost(
+        setBusy: (busy) {
+          if (mounted) setState(() => _opening = busy ? _keyOf(c) : null);
+        },
+        showError: (msg, {duration}) {
+          if (mounted) showAccountSnack(context, msg, error: true, duration: duration);
+        },
+        accountMe: () async => _me,
+        openSubscription: _openSubscription,
+        afterLoginForm: () async {
+          if (mounted) _load(); // ربما أُضيفت شركة
+        },
       ),
     );
-    if (go == true && mounted) await _openSubscription();
   }
 
   Future<void> _addOrLogin({String? sasUrl, String? username, LinkedCompany? company}) async {

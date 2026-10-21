@@ -7,6 +7,7 @@ import '../../api/auth_api.dart';
 import '../../api/managers_api.dart';
 import '../../services/active_company.dart';
 import '../../services/auth_storage.dart';
+import '../../services/company_creds_store.dart';
 import '../../services/fcm_service.dart';
 import '../../services/permissions_service.dart';
 import '../../services/saved_profiles_store.dart';
@@ -76,7 +77,10 @@ class _AccountsScreenState extends State<AccountsScreen> {
     // الحساب الأصلي (لو الأدمن انتقل من super-admin لفرعي، نخزّن هوّيته
     // للعودة السريعة). null لو ما فيه انتقال جارٍ. أيضاً null لو الحاليّ
     // نفسه هو الأصلي (رجعنا بالفعل).
-    final orig = await SavedProfilesStore.readOriginal();
+    // ٣.٠.٦: ومن شركة الجلسة وحدها — بعد «تبديل الشركة» لا يظهر هنا مدير
+    // الشركة السابقة ([SavedProfilesStore.originalFor]).
+    final orig =
+        await SavedProfilesStore.originalFor(await AuthStorage.readSasUrl() ?? '');
     if (orig != null && orig.username != _currentUsername) {
       _original = orig;
     } else {
@@ -162,32 +166,40 @@ class _AccountsScreenState extends State<AccountsScreen> {
         _snack(pw.message ?? 'تعذّر جلب كلمة السر', error: true);
         return;
       }
+      // Pro البند ٤ ③: نفس ساس الجلسة الحاليّة — بدونه يذهب للأصل.
+      final sasUrl = await AuthStorage.readSasUrl();
+      if (!mounted) return;
       // 2) قبل ما نبدّل — احفظ الحساب الحاليّ كـ"الأصلي" حتى نقدر نرجع.
-      //    نأخذ كلمة سرّه من SavedProfilesStore (كل login يخزّنه هناك).
-      //    لو غير موجود لسبب ما، نتخطّى — الأدمن ما راح يشوف زر رجوع
-      //    لكن العمل يكمل عادي.
+      //    كلمة سرّه من كلمات هذه الشركة (CompanyCredsStore: ساس+يوزر، تُكتب
+      //    مع كلّ دخول)، وإلّا من الحسابات المحفوظة — مفتاحها اليوزر وحده، فقد
+      //    يحمل يوزرٌ بالاسم نفسه كلمة سرّ شركةٍ أخرى. لو غير موجود لسبب ما،
+      //    نتخطّى — الأدمن ما راح يشوف زر رجوع لكن العمل يكمل عادي.
       if (_currentUsername != null && _original == null) {
-        final saved = await SavedProfilesStore.list();
-        final me =
-            saved.where((p) => p.username == _currentUsername).firstOrNull;
-        if (me != null) {
-          try {
-            final plain =
-                await SavedProfilesStore.decrypt(me.encryptedPassword);
+        try {
+          var plain =
+              await CompanyCredsStore.passwordFor(sasUrl ?? '', _currentUsername!);
+          if (plain == null) {
+            final saved = await SavedProfilesStore.list();
+            final me =
+                saved.where((p) => p.username == _currentUsername).firstOrNull;
+            if (me != null) {
+              plain = await SavedProfilesStore.decrypt(me.encryptedPassword);
+            }
+          }
+          if (plain != null) {
             final displayName =
                 await AuthStorage.readDisplayName() ?? _currentUsername!;
             await SavedProfilesStore.setOriginal(
               username: _currentUsername!,
               plainPassword: plain,
               displayName: displayName,
+              sasUrl: sasUrl ?? '',
             );
-          } catch (_) {/* best-effort */}
-        }
+          }
+        } catch (_) {/* best-effort */}
       }
-      // 3) اسجّل دخول بالحساب الجديد
-      // Pro البند ٤ ③: نفس ساس الجلسة الحاليّة — بدونه يذهب للأصل.
-      final sasUrl = await AuthStorage.readSasUrl();
       if (!mounted) return;
+      // 3) اسجّل دخول بالحساب الجديد
       final res = await SasCaptchaLogin.login(
         context,
         username: row.username,

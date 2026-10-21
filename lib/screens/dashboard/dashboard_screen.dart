@@ -12,15 +12,18 @@ import '../../services/view_scope_events.dart';
 import '../../core/widgets/permission_locked.dart';
 import '../../models/dashboard.dart';
 import '../../services/active_company.dart';
+import '../../services/ai_assistant_state.dart';
 import '../../services/alerts_service.dart';
 import '../../services/app_resumed_signal.dart';
 import '../../services/dashboard_refresh_signal.dart';
 import '../../services/auth_storage.dart';
 import '../../services/dashboard_cache.dart';
+import '../../services/linked_companies.dart';
 import '../../services/permissions_service.dart';
 import '../../services/provider_service.dart';
 import '../../services/subscriber_events.dart';
 import '../../widgets/active_company_line.dart';
+import '../account/company_switch_sheet.dart';
 import '../accounts/accounts_screen.dart';
 import '../reports/activity_log_report_screen.dart';
 import '../../theme/colors.dart';
@@ -193,6 +196,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ProviderService.changes.addListener(_onAccessChanged);
     ActiveCompany.listenable.addListener(_onCompanyChanged);
     _loadIdentity();
+    // «تبديل الشركة» في الترويسة: شركات الحساب مرّةً للجلسة (مالكٌ وحده).
+    unawaited(LinkedCompanies.ensureFresh());
     // Cache-first: hydrate KPIs from SharedPreferences BEFORE the live
     // fetch fires. الـSpinner ما يظهر لو عندنا بيانات محفوظة — يظهر
     // فقط أوّل مرّة أو بعد logout. الـlive fetch يشتغل بالتوازي ويحدّث
@@ -239,6 +244,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _onAppResumed() {
     if (!mounted) return;
     _scheduleSilentRefresh();
+    // شركةٌ رُبطت/أُزيلت من الويب — بعد ١٠ دقائق من آخر سؤال.
+    unawaited(LinkedCompanies.ensureFresh());
   }
 
   void _scheduleSilentRefresh() {
@@ -579,6 +586,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 showSubscription: !_elEmployee,
                 // الشركة المفتوحة — سطرٌ تحت الاسم بدل شريطٍ أعلى التطبيق.
                 company: ActiveCompany.current,
+                // «تبديل الشركة» — يظهر لمالكٍ بشركتين فأكثر ([LinkedCompanies]).
+                onSwitchCompany: () => showCompanySwitchSheet(context),
                 topInset: MediaQuery.paddingOf(context).top,
                 // ⚠️ قراءةٌ مقصودة لا زائدة: `paddingOf` تبعيّة
                 // **مقصورة على الحشوة**، فالشاشة لا تُعاد بناؤها عند
@@ -854,6 +863,7 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
     this.showWhatsApp = true,
     this.showSubscription = true,
     this.company,
+    this.onSwitchCompany,
     required this.topInset,
     required this.textScale,
   }) : isDark = AppColors.isDark;
@@ -872,6 +882,10 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
 
   /// الشركة المفتوحة — سطرٌ تحت الاسم، و`null` = لا سطر ولا ارتفاع له.
   final ActiveCompanyInfo? company;
+
+  /// ورقة «تبديل الشركة». يظهر زرّها حين [LinkedCompanies.switcherVisible]:
+  /// مربّعٌ بجانب «الصفحات» إن اتّسع الرأس، وإلّا الاسم وسطر الشركة زرّه.
+  final VoidCallback? onSwitchCompany;
   final double topInset;
 
   /// سلّم خطّ النظام وقت الإنشاء (مقيَّد 0.9–1.2 في main.dart).
@@ -962,119 +976,177 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
     return Container(
       color: AppColors.bg,
       padding: EdgeInsets.fromLTRB(Sp.lg, topInset + Sp.sm, Sp.lg, 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ⚠️ `ClipRect` حول `Align` ضروريّ: `heightFactor` يقصّ
-                // الارتفاع المحجوز لكنّه لا يمنع الرسم خارجه، فبدون
-                // القصّ يطفو النصّ على ما تحته أثناء الطيّ.
+      // «تبديل الشركة» يتبع شركات الحساب (تصل بعد الفتح) وظهور المساعد (مربّعٌ
+      // يأخذ من عرض الاسم): يُعاد بناء الصفّ وحده حين تتغيّر إحداهما.
+      child: ListenableBuilder(
+        listenable:
+            Listenable.merge([LinkedCompanies.items, AiAssistantState.gate]),
+        builder: (context, _) => _row(context, t, fade),
+      ),
+    );
+  }
+
+  Widget _row(BuildContext context, double t, double fade) {
+    final managers = Perms.has('managers.edit');
+    final switcher = onSwitchCompany != null && LinkedCompanies.switcherVisible;
+    // ٢١ أكتوبر: مربّع «الشركات» جنب «الصفحات» (طلب المالك) — إن بقي للاسم
+    // عرضه. شاشةٌ أضيق (٣٧٥ فما دون بالمساعد) ⇒ الاسم وسطر الشركة هما الزرّ.
+    // بلا سطر شركة (لم تُعرف بعد) ⇒ المربّع على كلّ حال، فلا يغيب الزرّ.
+    final companySquare = switcher &&
+        (company == null ||
+            CompanySwitch.fitsSquare(
+              width: MediaQuery.sizeOf(context).width,
+              textScale: textScale,
+              // الشركات + الجرس + الترس، و«الصفحات» والمساعد إن ظهرا.
+              squares:
+                  3 + (managers ? 1 : 0) + (AiAssistantState.visible ? 1 : 0),
+              side: TopActionChip.sizeOf(context),
+              gap: TopActionChip.gapOf(context),
+            ));
+    final lineSwitch = switcher && !companySquare;
+    final name = Text(
+      displayName.isEmpty ? 'dashboard.hello'.tr() : displayName,
+      style: AppType.title(color: AppColors.textHi).copyWith(
+        fontSize: 17,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.3,
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ⚠️ `ClipRect` حول `Align` ضروريّ: `heightFactor` يقصّ
+              // الارتفاع المحجوز لكنّه لا يمنع الرسم خارجه، فبدون
+              // القصّ يطفو النصّ على ما تحته أثناء الطيّ.
+              ClipRect(
+                child: Align(
+                  alignment: AlignmentDirectional.topStart,
+                  heightFactor: 1 - t,
+                  child: Opacity(
+                    opacity: fade,
+                    child: Text(
+                      greeting,
+                      style: AppType.subtitle(color: AppColors.textMid)
+                          .copyWith(
+                              fontSize: 12.5, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(height: 2 * (1 - t)),
+              // الشركة المفتوحة مع الاسم — خارج الطيّ عمداً (انظر
+              // `_collapsedCompanyText`). الاسم فوقه إن طابق يوزر المدير
+              // لا يُكرَّر فيه. وحين لا مربّع لـ«تبديل الشركة»: الاسم والسطر
+              // زرٌّ واحد له، وبعد السطر سهم ⌄ (الارتفاع نفسه).
+              if (lineSwitch && company != null)
+                CompanySwitchTap(
+                  label: company!.label,
+                  onTap: onSwitchCompany!,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      name,
+                      const SizedBox(height: _companyGap),
+                      CompanySwitchLine(
+                          info: company!, omitUsername: displayName),
+                    ],
+                  ),
+                )
+              else ...[
+                name,
+                if (company != null) ...[
+                  const SizedBox(height: _companyGap),
+                  ActiveCompanyLine(info: company!, omitUsername: displayName),
+                ],
+              ],
+              if (_hasChips) ...[
+                SizedBox(height: 6 * (1 - t)),
                 ClipRect(
                   child: Align(
                     alignment: AlignmentDirectional.topStart,
                     heightFactor: 1 - t,
                     child: Opacity(
                       opacity: fade,
-                      child: Text(
-                        greeting,
-                        style: AppType.subtitle(color: AppColors.textMid)
-                            .copyWith(
-                                fontSize: 12.5, fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                  ),
-                ),
-                SizedBox(height: 2 * (1 - t)),
-                Text(
-                  displayName.isEmpty ? 'dashboard.hello'.tr() : displayName,
-                  style: AppType.title(color: AppColors.textHi).copyWith(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.3,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                // الشركة المفتوحة مع الاسم — خارج الطيّ عمداً (انظر
-                // `_collapsedCompanyText`). الاسم فوقه إن طابق يوزر المدير
-                // لا يُكرَّر فيه.
-                if (company != null) ...[
-                  const SizedBox(height: _companyGap),
-                  ActiveCompanyLine(info: company!, omitUsername: displayName),
-                ],
-                if (_hasChips) ...[
-                  SizedBox(height: 6 * (1 - t)),
-                  ClipRect(
-                    child: Align(
-                      alignment: AlignmentDirectional.topStart,
-                      heightFactor: 1 - t,
-                      child: Opacity(
-                        opacity: fade,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (showWhatsApp) ...[
-                              Flexible(
-                                child: GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: onWhatsAppTap,
-                                  child: _WAStatusChip(
-                                      status: whatsApp, loaded: waLoaded),
-                                ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (showWhatsApp) ...[
+                            Flexible(
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: onWhatsAppTap,
+                                child: _WAStatusChip(
+                                    status: whatsApp, loaded: waLoaded),
                               ),
-                              const SizedBox(width: 6),
-                            ],
-                            // Pro البند ٤: تنبيه الاشتراك (لا يظهر إلّا قرب الانتهاء).
-                            if (showSubscription) const SubscriptionChip(),
+                            ),
+                            const SizedBox(width: 6),
                           ],
-                        ),
+                          // Pro البند ٤: تنبيه الاشتراك (لا يظهر إلّا قرب الانتهاء).
+                          if (showSubscription) const SubscriptionChip(),
+                        ],
                       ),
                     ),
                   ),
-                ],
-              ],
-            ),
-          ),
-          // فاصلٌ عن الأيقونات: سطر الشركة يبلغ حافّة العمود عند تكبير الخطّ،
-          // وبلا فاصل يلتصق اليوزر بزرّ «الصفحات».
-          const SizedBox(width: Sp.sm),
-          // 2026-08-26: أيقونة "الصفحات" — التبديل السريع بين حسابات
-          // المدراء الفرعيّين. طلب المستخدم أن تكون جنب جرس الإشعارات
-          // للوصول السريع. (للرئيسيّة وحدها — خارج أزرار الأعلى المشتركة،
-          // وبمقاسها نفسه.)
-          //
-          // ⚠️ **`managers.edit` لا `managers.view`.**
-          //
-          // 🐛 ٢٠٢٦-١٠-٠٤، مراجعة الصلاحيّات: التبديل يجلب كلمة سرّ
-          // المدير الفرعيّ (`ManagersApi.fetchPassword`) ويُسجّل الدخول
-          // بها. و**رؤية** كلمة السرّ محكومةٌ بـ`managers.edit`
-          // (`manager_actions_sheet.dart:139`) — فكان موظّفٌ بـ`view`
-          // وحدها يُمنع من رؤيتها ويستطيع أن **يصير** ذلك المدير بكلّ
-          // صلاحيّاته. والخادم لا يمنعه: الدخول شرعيٌّ بكلمة سرٍّ صحيحة.
-          //
-          // فالتبديل أقوى من الرؤية، فلا يقلّ عنها حرساً.
-          if (Perms.has('managers.edit')) ...[
-            TopActionChip(
-              icon: Icons.swap_horiz_rounded,
-              label: 'accounts.title'.tr(),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const AccountsScreen(),
                 ),
+              ],
+            ],
+          ),
+        ),
+        // فاصلٌ عن الأيقونات: سطر الشركة يبلغ حافّة العمود عند تكبير الخطّ،
+        // وبلا فاصل يلتصق اليوزر بزرّ «الصفحات».
+        const SizedBox(width: Sp.sm),
+        // ٢١ أكتوبر: «تبديل الشركة» — جنب «الصفحات» من جهة الاسم، فيبقى
+        // «الصفحات» بمكانه. الصفحات = مدراء هذه الشركة، والشركات = صفحات
+        // الحساب (company_switch_sheet.dart).
+        if (companySquare) ...[
+          TopActionChip(
+            key: const ValueKey('dashboard-company-switch'),
+            icon: Icons.apartment_rounded,
+            label: 'company_switch.title'.tr(),
+            onTap: onSwitchCompany!,
+          ),
+          SizedBox(width: TopActionChip.gapOf(context)),
+        ],
+        // 2026-08-26: أيقونة "الصفحات" — التبديل السريع بين حسابات
+        // المدراء الفرعيّين. طلب المستخدم أن تكون جنب جرس الإشعارات
+        // للوصول السريع. (للرئيسيّة وحدها — خارج أزرار الأعلى المشتركة،
+        // وبمقاسها نفسه.)
+        //
+        // ⚠️ **`managers.edit` لا `managers.view`.**
+        //
+        // 🐛 ٢٠٢٦-١٠-٠٤، مراجعة الصلاحيّات: التبديل يجلب كلمة سرّ
+        // المدير الفرعيّ (`ManagersApi.fetchPassword`) ويُسجّل الدخول
+        // بها. و**رؤية** كلمة السرّ محكومةٌ بـ`managers.edit`
+        // (`manager_actions_sheet.dart:139`) — فكان موظّفٌ بـ`view`
+        // وحدها يُمنع من رؤيتها ويستطيع أن **يصير** ذلك المدير بكلّ
+        // صلاحيّاته. والخادم لا يمنعه: الدخول شرعيٌّ بكلمة سرٍّ صحيحة.
+        //
+        // فالتبديل أقوى من الرؤية، فلا يقلّ عنها حرساً.
+        if (Perms.has('managers.edit')) ...[
+          TopActionChip(
+            icon: Icons.swap_horiz_rounded,
+            label: 'accounts.title'.tr(),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const AccountsScreen(),
               ),
             ),
-            SizedBox(width: TopActionChip.gapOf(context)),
-          ],
-          // ٢٠ أكتوبر: المساعد الذكيّ · الجرس · الترس — أزرار الأعلى
-          // المشتركة بين التبويبات الأربعة ([TopActions]). الجرس بشارته كما
-          // كان (غير المقروء + المشتركون في خطر)، والترس يفتح الإعدادات
-          // (مطلب 2026-06-10)، والمساعد جنب الجرس حين يفتحه الخادم.
-          const TopActions(),
+          ),
+          SizedBox(width: TopActionChip.gapOf(context)),
         ],
-      ),
+        // ٢٠ أكتوبر: المساعد الذكيّ · الجرس · الترس — أزرار الأعلى
+        // المشتركة بين التبويبات الأربعة ([TopActions]). الجرس بشارته كما
+        // كان (غير المقروء + المشتركون في خطر)، والترس يفتح الإعدادات
+        // (مطلب 2026-06-10)، والمساعد جنب الجرس حين يفتحه الخادم.
+        const TopActions(),
+      ],
     );
   }
 
@@ -1085,6 +1157,7 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
       old.waLoaded != waLoaded ||
       old.showWhatsApp != showWhatsApp ||
       old.showSubscription != showSubscription ||
+      (old.onSwitchCompany == null) != (onSwitchCompany == null) ||
       // السطر **والارتفاع** يتبعان الشركة: ظهورها/اختفاؤها يغيّر الحدّين.
       _companyKey(old.company) != _companyKey(company) ||
       old.whatsApp?.connected != whatsApp?.connected ||
