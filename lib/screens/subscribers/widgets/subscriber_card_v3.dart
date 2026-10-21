@@ -13,6 +13,7 @@ import '../../../services/subscriber_usage_store.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../widgets/company_tag.dart';
 import 'device_chip_micro.dart' show DeviceProbeBus;
 
 /// فعل شريط «آخر حركة ماليّة» الأخضر — ما قبل «قبل 5 د».
@@ -244,6 +245,11 @@ class SubscriberCardV3 extends StatelessWidget {
                   ),
                 ],
               ),
+              // «كل الشركات»: شركة الصفّ (منها يُنفَّذ كلّ ما يخصّه)
+              if (sub.companyKey != null) ...[
+                const SizedBox(height: 4),
+                CompanyTag(companyKey: sub.companyKey!),
+              ],
             ],
           ),
         ),

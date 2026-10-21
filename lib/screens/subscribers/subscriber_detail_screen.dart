@@ -17,6 +17,7 @@ import '../../core/widgets/copyable.dart';
 import '../../core/widgets/permission_locked.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/subscriber.dart';
+import '../../services/merged_mode.dart';
 import '../../services/app_resumed_signal.dart';
 import '../../services/connection_alerts.dart';
 import '../../services/permissions_service.dart';
@@ -150,12 +151,14 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     if (Perms.has('subscribers.show_password')) {
       _loadPassword();
     }
+    // «كل الشركات»: هويّته من ساس شركته أوّل الفتح — يسكّ عليها الخادم مرجع النافذة الذي تطلبه كلّ كتابة
+    if (sub.companyKey != null) MergedOps.ensureSubject(sub);
   }
 
   Future<void> _loadPassword() async {
     final idx = sub.idx;
     if (idx == null) return;
-    final pass = await SubscribersApi.fetchPassword(idx.toString());
+    final pass = await MergedOps.run(sub, () => SubscribersApi.fetchPassword(idx.toString()));
     if (!mounted || pass == null || pass.isEmpty) return;
     setState(() => _subscriberPassword = pass);
   }
@@ -186,7 +189,11 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       // والرفع مجمَّدةً على ما كانت لحظة فتح الشاشة. وهي بالضبط
       // الأرقام التي يسحب المدير ليراها.
       // الحساب الكبير: صفّه وحده من الساس بيوزره — لا قائمة كاملة.
-      if (await BigSubscribersApi.probe() > 0) {
+      // «كل الشركات»: صفّه من قائمة شركته الطازجة (لا قائمة الشركة المفتوحة)
+      if (sub.companyKey != null) {
+        final one = await MergedOps.refetch(sub).timeout(const Duration(seconds: 30));
+        list = one == null ? null : [one];
+      } else if (await BigSubscribersApi.probe() > 0) {
         final one = await BigSubscribersApi.findOne(idx: sub.idx, username: sub.username)
             .timeout(const Duration(seconds: 20));
         list = one == null ? null : [one];
@@ -483,7 +490,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     final id = sub.idx;
     if (id == null) return;
     setState(() => _disconnecting = true);
-    final result = await SubscribersApi.disconnect(id);
+    final result = await MergedOps.write(sub, () => SubscribersApi.disconnect(id));
     final success = result.ok;
     if (!mounted) return;
     setState(() {
@@ -588,7 +595,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     final idx = sub.idx;
     if (idx == null) return;
     setState(() => _deleting = true);
-    final result = await SubscribersApi.delete(idx);
+    final result = await MergedOps.write(sub, () => SubscribersApi.delete(idx));
     if (!mounted) return;
     setState(() => _deleting = false);
     if (result.ok) {
@@ -608,6 +615,12 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
 
   Future<void> _sendTemplate(String templateType) async {
     if (_sendingTemplate != null) return; // single flight per screen
+    // قوالب واتساب (المعاينة ثمّ الإرسال) خارج جدول التوجيه — في «كل الشركات» للشركة وحدها
+    final blocked = MergedOps.unsupported(sub);
+    if (blocked != null) {
+      showSheetSnack(context, blocked, isError: true);
+      return;
+    }
     setState(() => _sendingTemplate = templateType);
     // 2026-08-26: sendTemplateWithPreview يعرض preview + chip قبل الإرسال.
     // يقرأ ManualWaPrefs الافتراضي ويسمح للمدير بتبديل الوضع لهذه العمليّة.
@@ -641,7 +654,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     final id = sub.idx;
     if (id == null) return;
     setState(() => _toggling = true);
-    final success = await SubscribersApi.toggle(id, enable: wantEnable);
+    final success = await MergedOps.write(sub, () => SubscribersApi.toggle(id, enable: wantEnable));
     if (!mounted) return;
     // The backend disconnects any live session on disable (matches v1 —
     // see /api/v2/subscribers/:idx/toggle-enabled in server.js). Reflect
@@ -877,6 +890,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                       name: sub.fullName.trim().isNotEmpty
                           ? sub.fullName
                           : sub.username,
+                      companyKey: sub.companyKey,
                     ),
           ),
       ]),
@@ -926,7 +940,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
         // وحده، وQR ايرث لنك لتطبيق 2.0.7 وحده — [hasPortalQrCard]) — المزوّد
         // لا الصلاحيّة.
         if (_shows('subscribers.send_whatsapp') &&
-            ProviderService.hasPortalQrCard)
+            // «كل الشركات»: مزوّد شركة المشترك (بطاقة الرابط لساسٍ SAS4 وحده)
+            (MergedOps.isEarthlink(sub) == null ? ProviderService.hasPortalQrCard : MergedOps.isEarthlink(sub) == false))
           SubAction(
             icon: LucideIcons.qrCode,
             label: 'subscribers.op_qr_login'.tr(),

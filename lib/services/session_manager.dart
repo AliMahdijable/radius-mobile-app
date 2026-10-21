@@ -24,6 +24,7 @@ import 'employee_session.dart';
 import 'fcm_service.dart';
 import 'inbox_service.dart';
 import 'linked_companies.dart';
+import 'merged_mode.dart';
 import 'permissions_service.dart';
 import 'provider_service.dart';
 import 'saved_profiles_store.dart';
@@ -87,6 +88,8 @@ class SessionManager {
     // شركات الحساب (زرّ «تبديل الشركة» في الرئيسيّة) — لا يرى الحساب التالي
     // شركات سابقه، والجلسة الجديدة تسأل من جديد.
     _guardSync('LinkedCompanies.reset', () => LinkedCompanies.reset());
+    // «كل الشركات»: لا يرث أحدٌ وضع سابقه ولا مراجعه ولا قوائم شركاته.
+    _guardSync('MergedMode.reset', () => MergedMode.reset());
 
     // 2) Async persistent stores — PARALLEL via Future.wait.
     //    Previously sequential: each waited on the last (~40ms × 4).

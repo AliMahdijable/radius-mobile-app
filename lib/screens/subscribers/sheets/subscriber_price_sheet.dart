@@ -8,6 +8,8 @@ import '../../../core/util/amount_input.dart';
 import '../../../core/util/format.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
+import '../../../api/company_route.dart';
+import '../../../services/merged_mode.dart';
 import '../../../services/permissions_service.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
@@ -26,6 +28,7 @@ Future<bool?> showSubscriberPriceSheet(
   BuildContext context, {
   required String idx,
   required String name,
+  String? companyKey,
 }) {
   return showModalBottomSheet<bool>(
     context: context,
@@ -33,14 +36,17 @@ Future<bool?> showSubscriberPriceSheet(
     barrierColor: AppColors.scrim,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _SubscriberPriceSheet(idx: idx, name: name),
+    builder: (_) => _SubscriberPriceSheet(idx: idx, name: name, companyKey: companyKey),
   );
 }
 
 class _SubscriberPriceSheet extends StatefulWidget {
-  const _SubscriberPriceSheet({required this.idx, required this.name});
+  const _SubscriberPriceSheet({required this.idx, required this.name, this.companyKey});
   final String idx;
   final String name;
+
+  /// «كل الشركات»: شركة المشترك — النداءات كلّها موجَّهةٌ لها.
+  final String? companyKey;
 
   @override
   State<_SubscriberPriceSheet> createState() => _SubscriberPriceSheetState();
@@ -76,7 +82,7 @@ class _SubscriberPriceSheetState extends State<_SubscriberPriceSheet> {
   }
 
   Future<void> _load() async {
-    final data = await SubscribersApi.fetchActivationData(widget.idx);
+    final data = await CompanyRoute.run(widget.companyKey, () => SubscribersApi.fetchActivationData(widget.idx));
     if (!mounted) return;
     if (data == null) {
       setState(() {
@@ -132,7 +138,7 @@ class _SubscriberPriceSheetState extends State<_SubscriberPriceSheet> {
 
   Future<void> _save() async {
     setState(() => _submitting = true);
-    final r = await SubscriberPricesApi.set(widget.idx, _amount);
+    final r = await MergedOps.writeAt(widget.companyKey, widget.idx, () => SubscriberPricesApi.set(widget.idx, _amount));
     if (!mounted) return;
     setState(() => _submitting = false);
     if (r.ok) SubscriberEvents.notifyChange();
@@ -167,7 +173,7 @@ class _SubscriberPriceSheetState extends State<_SubscriberPriceSheet> {
     );
     if (ok != true || !mounted) return;
     setState(() => _submitting = true);
-    final r = await SubscriberPricesApi.remove(widget.idx);
+    final r = await MergedOps.writeAt(widget.companyKey, widget.idx, () => SubscriberPricesApi.remove(widget.idx));
     if (!mounted) return;
     setState(() => _submitting = false);
     if (r.ok) SubscriberEvents.notifyChange();

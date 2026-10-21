@@ -10,6 +10,7 @@ import '../../../core/util/bidi.dart';
 import '../../../core/util/contact_picker.dart';
 import '../../../models/package_change.dart';
 import '../../../models/subscriber.dart';
+import '../../../services/merged_mode.dart';
 import '../../../services/active_company.dart';
 import '../../../services/auth_storage.dart';
 import '../../../services/permissions_service.dart';
@@ -181,8 +182,9 @@ class _EditSheetState extends State<_EditSheet> {
   /// وغيرها يبقى على القائمة المنسدلة كما هي.
   bool get _isEarthlink =>
       _elFromData ||
-      ProviderService.isEarthlink ||
-      ActiveCompany.current?.sasCode == 'earthlink';
+      // «كل الشركات»: مزوّد شركة المشترك لا الشركة المفتوحة
+      (MergedOps.isEarthlink(widget.sub) ??
+          (ProviderService.isEarthlink || ActiveCompany.current?.sasCode == 'earthlink'));
 
   /// Whether the password field is revealed (eye icon toggled on).
   /// مطلب 2026-06-10: pre-fill + eye toggle so admins can verify
@@ -295,13 +297,13 @@ class _EditSheetState extends State<_EditSheet> {
   Future<void> _loadDetails() async {
     final idx = widget.sub.idx;
     if (idx == null) return;
-    final pwFuture = SubscribersApi.fetchPassword(idx);
-    final dataFuture = SubscribersApi.fetchActivationData(idx);
+    final pwFuture = MergedOps.run(widget.sub, () => SubscribersApi.fetchPassword(idx));
+    final dataFuture = MergedOps.run(widget.sub, () => SubscribersApi.fetchActivationData(idx));
     // ايرث لنك: كلمة سرّ حساب البوّابة — تُجلب بالتوازي (نقطةٌ منفصلة عن
     // كلمة سرّ الخدمة). الجلسة تُعرَف متزامنةً عبر [ProviderService].
-    final elNow = ProviderService.isEarthlink ||
-        ActiveCompany.current?.sasCode == 'earthlink';
-    final accFuture = elNow ? EarthlinkApi.fetchAccountPassword(idx) : null;
+    final elNow = MergedOps.isEarthlink(widget.sub) ??
+        (ProviderService.isEarthlink || ActiveCompany.current?.sasCode == 'earthlink');
+    final accFuture = elNow ? MergedOps.run(widget.sub, () => EarthlinkApi.fetchAccountPassword(idx)) : null;
     final pw = await pwFuture;
     final data = await dataFuture;
     final acc = accFuture == null ? null : await accFuture;
@@ -368,7 +370,7 @@ class _EditSheetState extends State<_EditSheet> {
       _detailsLoaded = false;
       _detailsFailed = false;
     });
-    final data = await SubscribersApi.fetchActivationData(idx);
+    final data = await MergedOps.run(widget.sub, () => SubscribersApi.fetchActivationData(idx));
     if (!mounted) return;
     setState(() {
       if (data != null) {
@@ -397,7 +399,7 @@ class _EditSheetState extends State<_EditSheet> {
       _loadingManagers = loadManagers;
     });
     if (loadManagers) {
-      final list = await SubscribersApi.loadManagers();
+      final list = await MergedOps.run(widget.sub, () => SubscribersApi.loadManagers());
       if (!mounted) return;
       setState(() {
         _managers = list;
@@ -407,7 +409,7 @@ class _EditSheetState extends State<_EditSheet> {
   }
 
   Future<void> _loadPackages() async {
-    final pkgs = await SubscribersApi.loadPackages();
+    final pkgs = await MergedOps.run(widget.sub, () => SubscribersApi.loadPackages());
     if (!mounted) return;
     setState(() {
       _packages = pkgs;
@@ -727,7 +729,7 @@ class _EditSheetState extends State<_EditSheet> {
     bool pendingCancelled = false;
     // ١) حقول الخدمة (SAS4/EL) — تُرسَل فقط إن تغيّرت، كما كانت حرفيّاً.
     if (diff.isNotEmpty) {
-      final result = await SubscribersApi.updateSubscriber(
+      final result = await MergedOps.write(widget.sub, () => SubscribersApi.updateSubscriber(
         idx: widget.sub.idx!,
         username: diff['username'],
         password: diff['password'],
@@ -738,7 +740,7 @@ class _EditSheetState extends State<_EditSheet> {
         changeType: timed,
         parentId: diff['parent_id'],
         expiration: diff['expiration'],
-      );
+      ));
       ok = result.ok;
       message = result.message;
       code = result.code;
@@ -747,10 +749,10 @@ class _EditSheetState extends State<_EditSheet> {
     }
     // ٢) ايرث لنك: كلمة سرّ حساب البوّابة — نداءٌ مستقلّ، بعد نجاح حقول الخدمة.
     if (ok && accChanged) {
-      final accRes = await EarthlinkApi.setAccountPassword(
+      final accRes = await MergedOps.write(widget.sub, () => EarthlinkApi.setAccountPassword(
         idx: widget.sub.idx!,
         password: _accountPassword.text,
-      );
+      ));
       ok = accRes.ok;
       if (accRes.ok) {
         _loadedAccountPassword = _accountPassword.text;
@@ -841,7 +843,7 @@ class _EditSheetState extends State<_EditSheet> {
     );
     if (ok != true || !mounted) return;
     setState(() => _cancellingScheduled = true);
-    final r = await SubscribersApi.cancelProfileChange(idx);
+    final r = await MergedOps.write(widget.sub, () => SubscribersApi.cancelProfileChange(idx));
     if (!mounted) return;
     setState(() {
       _cancellingScheduled = false;

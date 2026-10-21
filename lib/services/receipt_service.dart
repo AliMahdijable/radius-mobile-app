@@ -1,12 +1,15 @@
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart' as intl;
 
+import '../api/company_route.dart';
 import '../api/print_templates_api.dart';
 import '../api/receipt_settings_api.dart';
+import '../models/merged_company.dart';
 import '../models/subscriber.dart';
 import '../services/auth_storage.dart';
 import 'active_company.dart';
 import 'print_prefs.dart';
+import 'merged_mode.dart';
 import 'print_service.dart';
 import 'provider_service.dart';
 
@@ -44,6 +47,7 @@ class ReceiptService {
       data: data,
       title: 'فاتورة تفعيل',
       documentName: 'Activation-${sub.username}',
+      companyKey: sub.companyKey,
     );
   }
 
@@ -65,6 +69,7 @@ class ReceiptService {
       data: data,
       title: 'وصل تسديد دين',
       documentName: 'DebtPayment-${sub.username}',
+      companyKey: sub.companyKey,
     );
   }
 
@@ -85,17 +90,21 @@ class ReceiptService {
     required Map<String, String> data,
     required String title,
     required String documentName,
+    String? companyKey,
   }) async {
     try {
       final type = PrintPrefs.currentTemplateType; // 'a4' | 'pos'
-      final companyName = await AuthStorage.readDisplayName();
+      // «كل الشركات»: الوصل باسم شركة المشترك لا الشركة المفتوحة
+      final merged = MergedMode.companyOf(companyKey);
+      final companyName = merged?.name ?? await AuthStorage.readDisplayName();
       final format = PrintService.formatForType(type);
 
       // ايرث لنك: وصلها من مصمّم الويب (`receipt_settings`) — لا قوالب
       // `print_templates` لها أصلاً (حسابٌ جديد في Pro لا يكتبها أيّ عميل).
       // تعذّر الجلب ⇒ الوصل نفسه باسم الحساب كما كان.
-      if (usesWebReceiptSettings) {
-        final b = brandingFor(await ReceiptSettingsApi.fetch(),
+      // «كل الشركات»: مزوّد شركة المشترك يحسم قالب الوصل
+      if (merged != null ? merged.provider == MergedProvider.earthlink : usesWebReceiptSettings) {
+        final b = brandingFor(await CompanyRoute.run(companyKey, ReceiptSettingsApi.fetch),
             displayName: companyName);
         return await PrintService.printReceipt(
           data: data,

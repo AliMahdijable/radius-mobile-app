@@ -8,8 +8,10 @@ import '../services/auth_storage.dart';
 import '../services/device_id.dart';
 import '../services/employee_session.dart';
 import '../services/session_manager.dart';
+import 'account_api.dart';
 import 'api_error_tap.dart';
 import 'auth_api.dart';
+import 'company_route.dart';
 
 /// تنبيه عام لِلوصول 401 + فشل refresh — تستمع له الـMainShell/Splash
 /// لتدفع المستخدم لـLoginScreen. القيمة عداد بسيط (bump على كل
@@ -142,6 +144,28 @@ class _AuthInterceptor extends Interceptor {
     } catch (_) {/* لا يُفشل الطلب */}
     // نوع الجهاز لوصفه في «أجهزتي» (لاتينيّ: الترويسات لا تحمل العربيّة بأمان؛ الخادم يعرّبه).
     options.headers['x-device-label'] = Platform.isIOS ? 'ios' : 'android';
+    // «كل الشركات»: نداءٌ لشركةٍ من شركات الحساب — توكن الحساب وحده + مفتاحها (lib/api/company_route.dart). لا Bearer الشركة
+    // المفتوحة: الخادم يرفض الهويّتين معاً (COMPANY_ROUTE_CONFLICT)، ولا يصل الهاتفَ توكنُ الشركة أبداً.
+    final routeKey = CompanyRoute.keyFor(options);
+    if (routeKey != null) {
+      options.headers.remove('Authorization');
+      options.headers.remove('x-auth-token');
+      String? acct;
+      try {
+        acct = await AccountApi.accountToken(force: options.extra['_acctForce'] == true);
+      } catch (_) {
+        acct = null;
+      }
+      if (acct != null) options.headers['x-account-token'] = acct;
+      options.headers['x-company-key'] = routeKey;
+      final need = CompanyRefs.requireOf(options.method, options.uri.path);
+      if (need != null) {
+        final ref = CompanyRefs.lookup(routeKey, need.idx, need.kind);
+        if (ref != null) options.headers['x-company-ref'] = ref;
+      }
+      options.extra['_routed'] = routeKey;
+      return handler.next(options);
+    }
     // /api/auth/login + /api/auth/refresh-token must NOT carry a stale
     // token — login takes none, refresh uses adminId in the body.
     final isAuthEndpoint = options.path.contains('/api/auth/');
@@ -166,6 +190,10 @@ class _AuthInterceptor extends Interceptor {
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) async {
     final data = response.data;
+
+    // «كل الشركات»: ردٌّ موجَّه لا يمرّ بمسارات جلسة الشركة المفتوحة (لا تجديد ولا مسح ولا طرد بسببه).
+    final routed = response.requestOptions.extra['_routed'];
+    if (routed is String) return _onRoutedResponse(routed, response, handler);
 
     // 403 مع {blocked:true} → المدير محظور من super-admin. نمسح الجلسة
     // ونبعث إشارة للـUI ليطرده لـLoginScreen مع عرض السبب. نضع
@@ -209,6 +237,43 @@ class _AuthInterceptor extends Interceptor {
     if (retry != null) {
       return handler.resolve(retry);
     }
+    handler.next(response);
+  }
+
+  /// ردٌّ موجَّه: توكن الحساب انتهى ⇒ تجديده وإعادةٌ واحدة؛ بلا صدى المفتاح ⇒ لا يُقبل (409 بنصٍّ عربيّ)؛ وإلّا يُحفظ المرجع
+  /// إن سُكّ، ويُسقط عرض السعر بعد نجاح تفعيلٍ/تمديد، ويمرّ الردّ كما هو (رفض الخادم يحمل رسالته العربيّة في message).
+  Future<void> _onRoutedResponse(String key, Response response, ResponseInterceptorHandler handler) async {
+    final o = response.requestOptions;
+    final data = response.data;
+    if (response.statusCode == 401 &&
+        data is Map &&
+        (data['error'] == 'account-token-expired' || data['error'] == 'invalid-account-token') &&
+        o.extra['_acctForce'] != true) {
+      o.extra['_acctForce'] = true;
+      try {
+        return handler.resolve(await _dio.fetch<dynamic>(o));
+      } catch (_) {
+        return handler.next(response);
+      }
+    }
+    final echo = response.headers.value('x-company-key');
+    // رفضٌ من حرّاس التوجيه نفسه (COMPANY_*) يمرّ برسالته — لا بيانات فيه تُنسب لشركةٍ خطأ
+    final routeRejection = data is Map && CompanyRouteCodes.isRouteCode(data['code']) && data['success'] == false;
+    if (echo != key && !routeRejection) {
+      return handler.resolve(Response(
+        requestOptions: o,
+        statusCode: 409,
+        data: const {
+          'success': false,
+          'code': CompanyRouteCodes.echo,
+          'message': 'تعذّر التأكّد من الشركة — أعد المحاولة',
+        },
+      ));
+    }
+    CompanyRefs.capture(key, o.method, o.uri.path, response.headers);
+    if (o.method.toUpperCase() != 'GET') CompanyRoute.onWrite?.call(key);
+    final ok = (response.statusCode ?? 0) < 300 && !(data is Map && data['success'] == false);
+    if (ok) CompanyRefs.consume(key, o.method, o.uri.path);
     handler.next(response);
   }
 
@@ -267,6 +332,10 @@ class _AuthInterceptor extends Interceptor {
     }
 
     if (err.response?.statusCode != 401) {
+      return handler.next(err);
+    }
+    // الموجَّه لا يلمس جلسة الشركة المفتوحة (لا تجديد ولا مسح)
+    if (err.requestOptions.extra['_routed'] is String) {
       return handler.next(err);
     }
     if (err.requestOptions.path.contains('/api/auth/')) {

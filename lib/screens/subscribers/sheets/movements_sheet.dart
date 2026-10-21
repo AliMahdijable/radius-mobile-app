@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../services/merged_mode.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../models/subscriber.dart';
@@ -56,6 +57,15 @@ class _MovementsSheetState extends State<_MovementsSheet> {
   }
 
   Future<void> _load() async {
+    // سجلّ الحركات خارج جدول التوجيه — في «كل الشركات» للشركة وحدها
+    final blocked = MergedOps.unsupported(widget.sub);
+    if (blocked != null) {
+      setState(() {
+        _loading = false;
+        _error = blocked;
+      });
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;

@@ -14,6 +14,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../api/whatsapp_api.dart';
 import '../../../models/subscriber.dart';
+import '../../../services/merged_mode.dart';
 import '../../../services/manual_wa_sender.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
@@ -101,7 +102,7 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
       });
       return;
     }
-    final r = await SubscribersApi.generatePortalQrToken(idx: idx);
+    final r = await MergedOps.write(widget.sub, () => SubscribersApi.generatePortalQrToken(idx: idx));
     if (!mounted) return;
     setState(() {
       _loading = false;
@@ -225,6 +226,12 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
         return;
       }
 
+      // رسائل واتساب المباشرة خارج جدول التوجيه — في «كل الشركات» للشركة وحدها
+      final blocked = MergedOps.unsupported(widget.sub);
+      if (blocked != null) {
+        _snack(blocked, isError: true);
+        return;
+      }
       final result = await WhatsAppApi.sendMessage(
         to: phone,
         message: message,

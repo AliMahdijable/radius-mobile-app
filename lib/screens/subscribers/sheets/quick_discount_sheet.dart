@@ -7,6 +7,7 @@ import '../../../core/util/format.dart';
 import '../../../core/util/amount_input.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../models/subscriber.dart';
+import '../../../services/merged_mode.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -84,7 +85,7 @@ class _QuickDiscountSheetState extends State<_QuickDiscountSheet> {
 
     final idx = widget.sub.idx;
     if (idx != null) {
-      final data = await SubscribersApi.fetchActivationData(idx);
+      final data = await MergedOps.run(widget.sub, () => SubscribersApi.fetchActivationData(idx));
       if (data != null) {
         num readNum(String key) {
           final v = data[key];
@@ -183,10 +184,10 @@ class _QuickDiscountSheetState extends State<_QuickDiscountSheet> {
     final idx = widget.sub.idx;
     if (idx == null) return;
     setState(() => _submitting = true);
-    final result = await SubscribersApi.setDiscount(
+    final result = await MergedOps.write(widget.sub, () => SubscribersApi.setDiscount(
       idx: idx,
       amount: _amount.toDouble(),
-    );
+    ));
     if (!mounted) return;
     setState(() => _submitting = false);
     if (result.ok) SubscriberEvents.notifyChange();

@@ -39,6 +39,9 @@ class AccountApi {
   @visibleForTesting
   static Future<String?> Function({bool force}) tokenSource = AccountService.idToken;
 
+  /// توكن الحساب (Firebase) — لنداءات «كل الشركات» الموجَّهة على ApiClient (x-account-token)، من منفذ الاختبار نفسه.
+  static Future<String?> accountToken({bool force = false}) => tokenSource(force: force);
+
   static Future<Response<Map<String, dynamic>>> _send(
     String method,
     String path, {
@@ -135,6 +138,18 @@ class AccountApi {
     return list is List
         ? list.whereType<Map<String, dynamic>>().map(LinkedCompany.fromJson).toList()
         : const [];
+  }
+
+  /// «كل الشركات»: شركات الحساب وحال كلٍّ منها (`GET /api/account/merged/companies` — لا قائمة مشتركين ولا توكن). الجسم كما
+  /// وصل، أو `null`: التوجيه مطفأٌ لهذا الحساب (409 COMPANY_ROUTE_DISABLED) أو تعذّر — فلا وضع «كل الشركات».
+  static Future<Map<String, dynamic>?> mergedCompaniesRaw() async {
+    try {
+      final res = await _send('GET', '/api/account/merged/companies');
+      if (res.statusCode != 200) return null;
+      return res.data;
+    } on AccountApiException {
+      return null;
+    }
   }
 
   /// دليل الشركات المعروفة (يضبطه المالك) — «إضافة شركة» تختار منه.

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../api/api_client.dart'
     show authExpiredSignal, accessBlockedSignal, blockedMessage;
+import '../services/merged_mode.dart';
 import '../services/active_company.dart';
 import '../services/ai_assistant_state.dart';
 import '../services/permissions_service.dart';
@@ -311,6 +312,8 @@ class _MainShellState extends State<MainShell> {
       // الإصبع، وزرّه في أزرار الأعلى (جنب الجرس) يظهر مع أوّل إطار،
       // و«اشرحلي» حاضرٌ مع أوّل إشعار خطأ.
       unawaited(AiAssistantState.ensureFresh());
+      // «كل الشركات»: يعود الوضع إن كان مفعّلاً لهذا الحساب وما زال متاحاً.
+      unawaited(MergedMode.restore());
     });
     _authExpiredSeen = authExpiredSignal.value;
     authExpiredSignal.addListener(_onAuthExpired);

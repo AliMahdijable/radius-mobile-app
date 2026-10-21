@@ -7,6 +7,7 @@ import '../models/subscriber.dart';
 import '../services/auth_storage.dart';
 import '../services/subscribers_offline_cache.dart';
 import 'api_client.dart';
+import 'company_route.dart';
 import 'big_subscribers_api.dart';
 import 'bulk_activate_api.dart';
 import 'el_deposit_password.dart';
@@ -286,13 +287,14 @@ class SubscribersApi {
   // 2026-08-09: cache 5 دقائق للـpackages — كانت تُطلب كل 5s مع _silentRefresh
   // في subscribers_screen مما سبّب ضغط على السيرفر (Cloudflare 502 أحياناً).
   // الباقات نادراً ما تتغيّر — cache تُبطَل تلقائيّاً بعد 5د أو عند invalidate().
-  static Map<String, PackageInfo>? _packagesCache;
-  static DateTime? _packagesCacheTime;
+  // «كل الشركات»: الكتالوج لكلّ شركة ('' = الشركة المفتوحة، وإلّا مفتاح الطلب الموجَّه) — باقات شركةٍ لا تُعرض لأخرى.
+  static final Map<String, Map<String, PackageInfo>> _packagesCache = {};
+  static final Map<String, DateTime> _packagesCacheTime = {};
   static const _packagesCacheTtl = Duration(minutes: 5);
 
   static void invalidatePackagesCache() {
-    _packagesCache = null;
-    _packagesCacheTime = null;
+    _packagesCache.clear();
+    _packagesCacheTime.clear();
   }
 
   /// GET /api/v2/packages — fetches the package catalogue (id → name
@@ -301,11 +303,13 @@ class SubscribersApi {
   /// loadPackages + _enrichWithPackage flow + priceList enrichment.
   static Future<Map<String, PackageInfo>?> loadPackages() async {
     // اقرأ من الـcache لو حديث
-    final ct = _packagesCacheTime;
-    if (_packagesCache != null &&
+    final ck = CompanyRoute.currentKey ?? '';
+    final ct = _packagesCacheTime[ck];
+    final hit = _packagesCache[ck];
+    if (hit != null &&
         ct != null &&
         DateTime.now().difference(ct) < _packagesCacheTtl) {
-      return _packagesCache;
+      return hit;
     }
     final token = await AuthStorage.readToken();
     if (token == null) return null;
@@ -341,8 +345,8 @@ class SubscribersApi {
         }
         out[id] = PackageInfo(name: name, price: price);
       }
-      _packagesCache = out;
-      _packagesCacheTime = DateTime.now();
+      _packagesCache[ck] = out;
+      _packagesCacheTime[ck] = DateTime.now();
       if (!kReleaseMode) {
         debugPrint('🟢 v2/packages: ${out.length} loaded (cached 5m)');
       }

@@ -13,6 +13,7 @@ import '../../../core/util/format.dart';
 import '../../../core/util/amount_input.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../models/subscriber.dart';
+import '../../../services/merged_mode.dart';
 import '../../../services/manual_wa_prefs.dart';
 import '../../../services/manual_wa_sender.dart';
 import '../../../services/receipt_service.dart';
@@ -198,7 +199,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       _loading = true;
       _loadError = null;
     });
-    final data = await SubscribersApi.fetchActivationData(idx);
+    final data = await MergedOps.run(widget.sub, () => SubscribersApi.fetchActivationData(idx));
     if (!mounted) return;
     setState(() {
       _loading = false;
@@ -238,7 +239,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     final idx = widget.sub.idx;
     if (idx == null || _refreshingCards || _submitting) return;
     setState(() => _refreshingCards = true);
-    final data = await SubscribersApi.fetchActivationData(idx);
+    final data = await MergedOps.run(widget.sub, () => SubscribersApi.fetchActivationData(idx));
     if (!mounted) return;
     setState(() {
       _refreshingCards = false;
@@ -428,7 +429,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
 
       setState(() => _submitting = true);
       final manualMode = ManualWaPrefs.enabled.value;
-      final result = await SubscribersApi.activate(
+      final result = await MergedOps.run(widget.sub, () => SubscribersApi.activate(
         idx: idx,
         paymentType: paymentType,
         activationData: elData,
@@ -445,7 +446,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         pin: _elMethod == _ElMethod.card ? _pinCtrl.text.trim() : null,
         profileId: profileId,
         confirmRepeat: _confirmRepeat,
-      );
+      ));
       if (!mounted) return;
       setState(() {
         _submitting = false;
@@ -521,14 +522,14 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     // 2026-08-26 (manual WA phase 2): وضع يدوي → backend يبني الرسالة
     // ويعيدها في wa_preview بلا إرسال، ونفتح modal بعد النجاح.
     final manualMode = ManualWaPrefs.enabled.value;
-    final result = await SubscribersApi.activate(
+    final result = await MergedOps.run(widget.sub, () => SubscribersApi.activate(
       idx: idx,
       paymentType: paymentType,
       activationData: _data!,
       partialAmount: _pay == _PayType.partial ? _partialAmount : null,
       skipAutoWa: manualMode,
       method: useCard ? 'card' : 'credit',
-    );
+    ));
     if (!mounted) return;
     setState(() {
       _submitting = false;

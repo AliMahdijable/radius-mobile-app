@@ -20,6 +20,7 @@ import '../../core/util/format.dart';
 import '../../core/widgets/permission_locked.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/subscriber.dart';
+import '../../services/merged_mode.dart';
 import '../../services/active_company.dart';
 import '../../services/auth_storage.dart';
 import '../../services/connection_alerts.dart';
@@ -187,6 +188,12 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   BigCounts? _bigCounts;
   int _bigGen = 0;
   int _bigTick = 0;
+
+  // ── «كل الشركات» (MergedMode، ٢١ أكتوبر): قوائم شركات الحساب مدموجةً (MergedSubscribers) — كلّ صفٍّ بشركته
+  // (Subscriber.companyKey)، والفلاتر والعدّادات والبحث كالوضع العاديّ على الصفوف المدموجة. التحديد الجماعيّ للشركة وحدها.
+  MergedListResult? _merged;
+  int _mergedTick = 0;
+  bool get _mergedOn => MergedMode.active.value;
   static const int _kBigPageSize = 50;
 
   String _bigTab(SubscriberFilter f) => switch (f) {
@@ -342,6 +349,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     // subscriber (activate / extend / disconnect / toggle / delete /
     // bulk action). Mirrors v1's notifier pattern.
     SubscriberEvents.dataChanged.addListener(_onDataChanged);
+    MergedMode.active.addListener(_onMergedModeChanged);
     PermissionsService.changes.addListener(_onPermsChanged);
     _wasLocked = _locked;
     if (!_locked) _load();
@@ -430,6 +438,12 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   }
 
   Future<void> _silentRefresh() async {
+    // «كل الشركات»: قوائم الشركات كلّ دقيقة (لا كلّ ٥ ثوانٍ — نداءٌ ثقيل لكلّ شركة)
+    if (_mergedOn) {
+      if (++_mergedTick % 12 != 0) return;
+      await _loadMerged();
+      return;
+    }
     if (_big) {
       // المتوسّط: القائمة الكاملة في الطريق — هي التحديث
       if (_progressive) return;
@@ -541,6 +555,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     _autoRefreshTimer?.cancel();
     widget.filterCmd?.removeListener(_onFilterCmd);
     SubscriberEvents.dataChanged.removeListener(_onDataChanged);
+    MergedMode.active.removeListener(_onMergedModeChanged);
     PermissionsService.changes.removeListener(_onPermsChanged);
     widget.isActive?.removeListener(_onActiveChanged);
     UsagePrefs.enabled.removeListener(_onUsagePref);
@@ -549,8 +564,52 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     super.dispose();
   }
 
+  /// دخول «كل الشركات» أو الخروج منه: القائمة من جديد (لا يُعرض خليطٌ من الوضعين).
+  void _onMergedModeChanged() {
+    if (!mounted) return;
+    setState(() {
+      _all = const [];
+      _merged = null;
+      _big = false;
+      _progressive = false;
+      _selectionMode = false;
+      _selected.clear();
+    });
+    _load();
+  }
+
+  /// «كل الشركات»: قوائم الشركات (مخبّأةٌ ٤٥ث لكلّ شركة، و[fresh] يتخطّاها) ثمّ الدمج.
+  Future<void> _loadMerged({bool fresh = false}) async {
+    final r = await MergedSubscribers.load(fresh: fresh);
+    if (!mounted || !_mergedOn) return;
+    _markDataSeen();
+    setState(() {
+      _big = false;
+      _progressive = false;
+      _merged = r;
+      _all = r.rows;
+      _loading = false;
+    });
+  }
+
+  /// ما لا يظهر في «كل الشركات» ولماذا — سطرٌ واحد يسمّي كلّ شركة (لا أصفارٌ صامتة).
+  String? _mergedNoticeText(MergedListResult r) {
+    final parts = <String>[
+      for (final b in r.big) 'merged.big'.tr(args: [b.company.name, '${b.bigTotal}']),
+      for (final f in r.failed) f.error ?? 'merged.failed'.tr(args: [f.company.name]),
+      for (final p in r.partial) 'merged.partial'.tr(args: [p.company.name]),
+      if (r.missing.isNotEmpty) 'merged.missing'.tr(args: [r.missing.map((c) => c.name).join('، ')]),
+    ];
+    return parts.isEmpty ? null : parts.join('\n');
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
+
+    if (_mergedOn) {
+      await _loadMerged();
+      return;
+    }
 
     // الحسابات الكبيرة: صفٌّ واحد يحسم قبل القائمة الكاملة — التي لا تُطلب للكبير أصلاً.
     final bigTotal = await BigSubscribersApi.probe();
@@ -760,7 +819,15 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     });
   }
 
-  Future<void> _refresh() async {
+  /// [pull]: سحبٌ يدويّ — «كل الشركات» يتخطّى مخبأ كلّ الشركات؛ وبعد عمليّةٍ تُجلب شركتها وحدها (أُسقطت قائمتها بعد الكتابة).
+  Future<void> _refresh({bool pull = false}) async {
+    if (_mergedOn) {
+      setState(() => _refreshing = true);
+      await _loadMerged(fresh: pull);
+      if (!mounted) return;
+      setState(() => _refreshing = false);
+      return;
+    }
     if (_big) {
       setState(() => _refreshing = true);
       await _bigReload(fresh: true);
@@ -1134,7 +1201,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   // ───────── selection ─────────
   void _toggleSelect(Subscriber s) {
     final id = s.idx;
-    if (id == null) return;
+    if (id == null || _mergedOn) return;
     HapticFeedback.selectionClick();
     final wasSelecting = _selectionMode;
     setState(() {
@@ -1151,7 +1218,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
   void _enterSelectionWith(Subscriber s) {
     final id = s.idx;
-    if (id == null) return;
+    // «كل الشركات»: العمليّات الجماعيّة للشركة وحدها (مساراتها لا تُوجَّه)
+    if (id == null || _mergedOn) return;
     HapticFeedback.selectionClick();
     final wasSelecting = _selectionMode;
     setState(() {
@@ -1555,7 +1623,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
             Expanded(
               child: RefreshIndicator(
                 color: AppColors.brand,
-                onRefresh: _refresh,
+                onRefresh: () => _refresh(pull: true),
                 child: _loading
                     // أوّل تحميل: العنوان وأزرار الأعلى بمكانها فوق الدوّارة —
                     // لا تختفي الإعدادات والإشعارات والمساعد حتّى تصل القائمة.
@@ -1705,6 +1773,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                   _BigNotice(text: 'subscribers.big_debtors_unavailable'.tr()),
                                 if (_big && _bigError != null)
                                   _BigNotice(text: _bigError!, onRetry: _bigReload),
+                                if (_mergedOn && _merged != null && _mergedNoticeText(_merged!) != null)
+                                  _BigNotice(text: _mergedNoticeText(_merged!)!, onRetry: _refresh),
                                 // 2026-09-14: عدّاد «يفحص الأجهزة n/N» حُذف بطلب صاحب
                                 // المشروع — الدوّارة داخل زرّ فحص الأجهزة تكفي للدلالة
                                 // على أنّ موجةً تعمل، وصفٌّ إضافيّ فوق القائمة يزاحم
@@ -1789,7 +1859,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                     // الصلاحيّة: مبوّبٌ بـ`subscribers.send_whatsapp`
                                     // كشقيقه onPayDebt أدناه — بدونها كان يظهر
                                     // لمديرٍ مُنِع المراسلة (تدقيق ٢٠٢٦-١٠-٠٨).
-                                    onSendDebtReminder:
+                                    onSendDebtReminder: !_mergedOn &&
                                         Perms.has('subscribers.send_whatsapp') &&
                                                 s.hasDebt &&
                                                 !_selectionMode &&
@@ -1936,7 +2006,17 @@ class _ListHeader extends StatelessWidget {
           // المدير ويمدّد، فمالك عدّة شركات يرى أيّها قبل أن يضغط.
           // سطرٌ واحد: إن ضاق يُبتر آخره (المتّصلون، وعددهم في شريحتهم
           // تحته) لا اسم الشركة. وبلا شركة يبقى السطر كما كان حرفيّاً.
-          subtitle: ValueListenableBuilder<ActiveCompanyInfo?>(
+          subtitle: ValueListenableBuilder<bool>(
+            valueListenable: MergedMode.active,
+            builder: (context, merged, child) => merged
+                ? Text(
+                    '${'merged.header'.tr()} · ${'merged.header_sub'.tr(args: ['${MergedMode.usable.length}'])} • $total مشترك',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.body(color: AppColors.brand).copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
+                  )
+                : child!,
+            child: ValueListenableBuilder<ActiveCompanyInfo?>(
             valueListenable: ActiveCompany.listenable,
             builder: (context, company, _) {
               final counts = '$total مشترك • $online متصل الآن';
@@ -1954,6 +2034,7 @@ class _ListHeader extends StatelessWidget {
                 fontSize: 12.5,
               );
             },
+          ),
           ),
         ),
         const SizedBox(height: Sp.lg),

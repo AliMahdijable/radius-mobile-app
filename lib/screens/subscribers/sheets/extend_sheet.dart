@@ -8,6 +8,7 @@ import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../models/subscriber.dart';
+import '../../../services/merged_mode.dart';
 import '../../../services/manual_wa_prefs.dart';
 import '../../../services/manual_wa_sender.dart';
 import '../../../services/receipt_service.dart';
@@ -81,7 +82,7 @@ class _ExtendSheetState extends State<_ExtendSheet> {
       _loading = true;
       _loadError = null;
     });
-    final data = await SubscribersApi.fetchExtensionOptions(idx);
+    final data = await MergedOps.run(widget.sub, () => SubscribersApi.fetchExtensionOptions(idx));
     if (!mounted) return;
     setState(() {
       _loading = false;
@@ -167,13 +168,13 @@ class _ExtendSheetState extends State<_ExtendSheet> {
     // 2026-08-26 (manual WA phase 2): وضع يدوي → backend يعيد wa_preview
     // بلا إرسال، ونفتح modal بعد النجاح.
     final manualMode = ManualWaPrefs.enabled.value;
-    final result = await SubscribersApi.extend(
+    final result = await MergedOps.run(widget.sub, () => SubscribersApi.extend(
       idx: idx,
       profileId: profileId,
       method: _method == _Method.points ? 'points' : 'balance',
       skipAutoWa: manualMode,
       confirmRepeat: _confirmRepeat,
-    );
+    ));
     if (!mounted) return;
     setState(() => _submitting = false);
     // حارس التكرار (كالتجديد): 409 RECENT_DUPLICATE من خادم البرو — أكّد

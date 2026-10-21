@@ -189,10 +189,10 @@ class DashboardApi {
   /// GET /api/activities/daily-activations?admin_id=X
   /// Backend aggregates today's activation + extension counts and the
   /// last N recent activity rows. Same endpoint v1 uses.
-  static Future<DailyActivationsResult?> fetchDailyActivations() async {
+  static Future<DailyActivationsResult?> fetchDailyActivations({String? adminIdOverride}) async {
     _logStart('daily-activations');
     final token = await AuthStorage.readToken();
-    final adminId = await AuthStorage.readAdminId();
+    final adminId = adminIdOverride ?? await AuthStorage.readAdminId();
     if (token == null || adminId == null) {
       _logSilent(
           'daily-activations',
@@ -328,10 +328,11 @@ class DashboardApi {
   ///   day   → today 00:00:00 → 23:59:59
   ///   week  → 7 days ago → now
   ///   month → 30 days ago → now
-  static Future<RevenueResult?> fetchRevenue(RevenuePeriod period) async {
+  /// [adminIdOverride]: «كل الشركات» — معرّف مدير الشركة الموجَّه إليها النداء (لا الشركة المفتوحة).
+  static Future<RevenueResult?> fetchRevenue(RevenuePeriod period, {String? adminIdOverride}) async {
     _logStart('reports/finance(${period.name})');
     final token = await AuthStorage.readToken();
-    final adminId = await AuthStorage.readAdminId();
+    final adminId = adminIdOverride ?? await AuthStorage.readAdminId();
     if (token == null) {
       _logSilent('reports/finance', 'missing token', null);
       return null;

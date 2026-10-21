@@ -1321,6 +1321,23 @@
     "title": "Accounts",
     "need_edit": "Switching accounts needs the “edit managers” permission — it uses the sub-manager’s password. Ask your administrator."
   },
+  "merged": {
+    "all_title": "All companies",
+    "all_sub": "{} companies together — subscribers and home, actions in place",
+    "all_active": "On now — tap to return to the open company",
+    "entering": "Gathering your companies…",
+    "unavailable": "“All companies” is unavailable now — open the company alone",
+    "header": "All companies",
+    "header_sub": "{} companies",
+    "others_note": "These sections are for the open company: {}",
+    "missing": "Not shown here: {}",
+    "big": "“{}” is large ({} subscribers) — open it alone",
+    "failed": "Couldn't load “{}” now",
+    "partial": "“{}” list is incomplete from its provider",
+    "exit": "Back to the open company",
+    "loading": "Gathering your companies' subscribers…",
+    "not_in_sum": "Not in the total: {}"
+  },
   "company_switch": {
     "title": "Switch company",
     "subtitle": "Your account’s companies",

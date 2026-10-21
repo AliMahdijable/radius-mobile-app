@@ -7,6 +7,7 @@ import '../../core/widgets/design_sheet.dart';
 import '../../services/active_company.dart';
 import '../../services/company_creds_store.dart';
 import '../../services/linked_companies.dart';
+import '../../services/merged_mode.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -122,6 +123,9 @@ class _CompanySwitchSheetState extends State<CompanySwitchSheet> {
   String? _error;
   bool _loadFailed = false;
 
+  /// «كل الشركات»: جارٍ الدخول.
+  bool _entering = false;
+
   static String _keyOf(LinkedCompany c) =>
       '${c.sasCode}|${c.sasUrl ?? ''}|${c.username}';
 
@@ -129,6 +133,30 @@ class _CompanySwitchSheetState extends State<CompanySwitchSheet> {
   void initState() {
     super.initState();
     _refresh();
+    // «كل الشركات» يظهر حين يفتحه الخادم لهذا الحساب ولشركتين صالحتين فأكثر — لا ينتظر قائمة «شركاتي».
+    MergedMode.load();
+  }
+
+  /// «كل الشركات»: دخولٌ بلا تسجيل (الجلسة المفتوحة كما هي)، أو العودة منه.
+  Future<void> _toggleAll() async {
+    if (_entering || _busyKey != null) return;
+    if (MergedMode.active.value) {
+      await MergedMode.exit();
+      if (mounted) Navigator.of(context).maybePop();
+      return;
+    }
+    setState(() {
+      _entering = true;
+      _error = null;
+    });
+    final ok = await MergedMode.enter();
+    if (!mounted) return;
+    setState(() => _entering = false);
+    if (!ok) {
+      setState(() => _error = 'merged.unavailable'.tr());
+      return;
+    }
+    Navigator.of(context).maybePop();
   }
 
   /// القائمة المعروفة تُرسم فوراً، ويُسأل الخادم من جديد (شركةٌ أُضيفت أو
@@ -221,6 +249,22 @@ class _CompanySwitchSheetState extends State<CompanySwitchSheet> {
               _ErrorBanner(text: _error!),
               const SizedBox(height: Sp.md),
             ],
+            ValueListenableBuilder(
+              valueListenable: MergedMode.data,
+              builder: (context, _, __) => MergedMode.eligible
+                  ? Padding(
+                      padding: const EdgeInsets.only(bottom: Sp.md),
+                      child: ValueListenableBuilder<bool>(
+                        valueListenable: MergedMode.active,
+                        builder: (context, on, _) => _AllCompaniesRow(
+                          active: on,
+                          busy: _entering,
+                          onTap: _toggleAll,
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
             ..._rows(items),
           ],
         ),
@@ -270,6 +314,89 @@ class _CompanySwitchSheetState extends State<CompanySwitchSheet> {
         ),
       ],
     ];
+  }
+}
+
+/// «كل الشركات» أعلى الورقة: نقاط الشركات الصالحة بألوانها، والحال (مفعّل ⇒ العودة للشركة المفتوحة).
+class _AllCompaniesRow extends StatelessWidget {
+  const _AllCompaniesRow({required this.active, required this.busy, required this.onTap});
+
+  final bool active;
+  final bool busy;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final usable = MergedMode.usable;
+    return Material(
+      color: active ? AppColors.brandSoftBg : AppColors.surface,
+      borderRadius: BorderRadius.circular(R.md),
+      child: InkWell(
+        onTap: busy ? null : onTap,
+        borderRadius: BorderRadius.circular(R.md),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.md),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.md),
+            border: Border.all(color: active ? AppColors.brand : AppColors.border, width: active ? 1.5 : 1),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(color: AppColors.brandSoftBg, borderRadius: BorderRadius.circular(R.sm)),
+                child: Icon(Icons.layers_rounded, size: 22, color: AppColors.brand),
+              ),
+              const SizedBox(width: Sp.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('merged.all_title'.tr(), style: AppType.bodyStrong(color: AppColors.textHi)),
+                    const SizedBox(height: 3),
+                    Text(
+                      busy
+                          ? 'merged.entering'.tr()
+                          : active
+                              ? 'merged.all_active'.tr()
+                              : 'merged.all_sub'.tr(args: ['${usable.length}']),
+                      style: AppType.muted().copyWith(fontSize: 12.5, height: 1.45),
+                    ),
+                    if (usable.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: [
+                          for (final c in usable)
+                            Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(color: AppColors.company(c.colorIndex), shape: BoxShape.circle),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: Sp.sm),
+              if (busy)
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(color: AppColors.brand, strokeWidth: 2.2),
+                )
+              else
+                Icon(active ? Icons.check_circle_rounded : Icons.chevron_left_rounded,
+                    color: active ? AppColors.brand : AppColors.textMid),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

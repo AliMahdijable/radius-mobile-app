@@ -8,6 +8,7 @@ import '../../../core/util/amount_input.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../models/subscriber.dart';
+import '../../../services/merged_mode.dart';
 import '../../../services/manual_wa_prefs.dart';
 import '../../../services/manual_wa_sender.dart';
 import '../../../services/receipt_service.dart';
@@ -176,7 +177,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     // ما يرسل WA تلقائياً — يرجع wa_preview بالنصّ الجاهز، ونفتح modal بعد
     // النجاح ليختار المدير: إرسال يدوي من واتسابه أو تلقائي من السيرفر.
     final manualMode = ManualWaPrefs.enabled.value;
-    final result = await SubscribersApi.payDebt(
+    final result = await MergedOps.write(widget.sub, () => SubscribersApi.payDebt(
       idx: idx,
       // ⚠️ حين يكون «كامل الدين» مفعّلاً نرسل **العلَم لا الرقم**:
       //    رقمُنا مأخوذٌ من كائنٍ قد يكون قديماً، والخادم يقرأ الدين
@@ -185,7 +186,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
       amount: _effectiveAmount,
       comment: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
       skipAutoWa: manualMode,
-    );
+    ));
     if (!mounted) return;
     setState(() => _submitting = false);
     if (!result.ok) {

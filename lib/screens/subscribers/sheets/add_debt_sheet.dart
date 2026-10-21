@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../models/subscriber.dart';
+import '../../../services/merged_mode.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -154,12 +155,12 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
     final idx = widget.sub.idx;
     if (idx == null) return;
     setState(() => _submitting = true);
-    final result = await SubscribersApi.addDebt(
+    final result = await MergedOps.write(widget.sub, () => SubscribersApi.addDebt(
       idx: idx,
       amount: _amount.toDouble(),
       comment:
           _commentCtrl.text.trim().isEmpty ? null : _commentCtrl.text.trim(),
-    );
+    ));
     if (!mounted) return;
     setState(() => _submitting = false);
     if (result.ok) SubscriberEvents.notifyChange();

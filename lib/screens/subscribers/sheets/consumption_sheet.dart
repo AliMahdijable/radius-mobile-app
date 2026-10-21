@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../services/merged_mode.dart';
 import '../../../api/traffic_api.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../models/subscriber.dart';
@@ -124,6 +125,15 @@ class _ConsumptionSheetState extends State<_ConsumptionSheet> {
       setState(() {
         _loading = false;
         _error = 'لا معرّف لهذا المشترك';
+      });
+      return;
+    }
+    // مسار الاستهلاك خارج جدول التوجيه — في «كل الشركات» كان سيقرأ الشركة المفتوحة لا شركة المشترك
+    final blocked = MergedOps.unsupported(widget.sub);
+    if (blocked != null) {
+      setState(() {
+        _loading = false;
+        _error = blocked;
       });
       return;
     }

@@ -45,6 +45,22 @@ class AppColors {
 
   static bool get isDark => _isDark;
 
+  // ── «كل الشركات»: لون الشركة بترتيبها في الحساب (color_index) — كالويب ولوحة حسابي حرفاً (server/accountOverview.js
+  // PALETTE/PALETTE_DARK، client-v2 lib/account-board.ts)، فالشركة نفسها بلونها نفسه على الهاتف والويب.
+  static const List<Color> _companyLight = [
+    Color(0xFF2A78D6), Color(0xFFEB6834), Color(0xFF1BAF7A), Color(0xFFEDA100),
+    Color(0xFFE87BA4), Color(0xFF008300), Color(0xFF6250D6), Color(0xFFE34948),
+  ];
+  static const List<Color> _companyDark = [
+    Color(0xFF3987E5), Color(0xFFD95926), Color(0xFF199E70), Color(0xFFC98500),
+    Color(0xFFD55181), Color(0xFF008300), Color(0xFF9085E9), Color(0xFFE66767),
+  ];
+
+  static Color company(int colorIndex) {
+    final pal = _isDark ? _companyDark : _companyLight;
+    return pal[(colorIndex < 0 ? 0 : colorIndex) % pal.length];
+  }
+
   // ══════════════════ البراند ══════════════════
   // fill الداكن يذوب في الخلفيّة الداكنة (1.41:1) فيُرفع في dark إلى
   // #1E7A5B — أبيض عليه 5.26:1 وفصله عن السطح 3.26:1.

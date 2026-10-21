@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../services/auth_storage.dart';
 import 'api_client.dart';
+import 'company_route.dart';
 
 /// إعدادات الوصل كما يحفظها **مصمّم الويب** («قوالب الطباعة» في `/v2` ←
 /// جدول `receipt_settings` بـ`POST /api/v2/receipt-settings`).
@@ -106,7 +107,8 @@ class ReceiptSettingsApi {
 
   /// `null` على أيّ فشل (شبكة/صلاحيّة/خادمٌ أقدم) — والطباعة تمضي بلاها.
   static Future<ReceiptSettings?> fetch({bool force = false}) async {
-    final adminId = await AuthStorage.readAdminId();
+    // «كل الشركات»: إعدادات وصل شركة الطلب الموجَّه (مخبّأةٌ بمفتاحها) لا الشركة المفتوحة
+    final adminId = CompanyRoute.currentKey ?? await AuthStorage.readAdminId();
     if (adminId == null || adminId.isEmpty) return null;
     final c = _cache;
     if (!force &&

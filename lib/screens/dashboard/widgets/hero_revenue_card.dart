@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../services/merged_mode.dart';
+import '../../../api/merged_dashboard_api.dart';
 import '../../../api/archive_info.dart';
 import '../../../api/dashboard_api.dart';
 import '../../../core/util/format.dart';
@@ -63,6 +65,19 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
     // على «تعذّر الجلب — اسحب للتحديث» مهما سحب. بلاغٌ حقيقيّ
     // (٢٠٢٦-٠٩-١٤): «من يرجع النت يكول اسحب للتحديث، اسحب ومايحدث».
     DashboardRefreshSignal.tick.addListener(_onDataChanged);
+    // دخول «كل الشركات» أو الخروج منه: الأرقام من جديد (لا يبقى رقم الوضع السابق)
+    MergedMode.active.addListener(_onMergedChanged);
+  }
+
+  void _onMergedChanged() {
+    if (!mounted) return;
+    setState(() {
+      _amounts.clear();
+      _archives.clear();
+      _failed.clear();
+      _mergedExcluded.clear();
+    });
+    _refresh(_period);
   }
 
   void _onDataChanged() {
@@ -85,6 +100,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
     SubscriberEvents.dataChanged.removeListener(_onDataChanged);
     AppResumedSignal.tick.removeListener(_onDataChanged);
     DashboardRefreshSignal.tick.removeListener(_onDataChanged);
+    MergedMode.active.removeListener(_onMergedChanged);
     super.dispose();
   }
 
@@ -98,14 +114,23 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
     // بلوب. المدير رفع screenshot 2026-07-22 يوضّح spinner ثابت في
     // كارت البطل بسبب /api/reports/finance بطيء.
     RevenueResult? r;
+    List<String> excluded = const [];
     try {
-      r = await DashboardApi.fetchRevenue(p)
-          .timeout(const Duration(seconds: 20));
+      if (MergedMode.active.value) {
+        // «كل الشركات»: مجموع الشركات بالدينار، ومن لم يدخله يُسمّى تحت الرقم
+        final m = await MergedDashboardApi.revenue(p).timeout(const Duration(seconds: 30));
+        r = m.value;
+        excluded = m.excluded;
+      } else {
+        r = await DashboardApi.fetchRevenue(p)
+            .timeout(const Duration(seconds: 20));
+      }
     } catch (_) {
       r = null;
     }
     if (!mounted) return;
     setState(() {
+      _mergedExcluded[p] = excluded;
       if (r != null) {
         _amounts[p] = r.amount;
         _archives[p] = r.archive;
@@ -118,6 +143,9 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
 
   /// وصف الأرشيف لكلّ مدّة — لا يُخزَّن، يُعاد قراءته مع كلّ جلبة.
   final Map<RevenuePeriod, ArchiveInfo?> _archives = {};
+
+  /// «كل الشركات»: شركاتٌ خارج المجموع لكلّ مدّة («الاسم: السبب»).
+  final Map<RevenuePeriod, List<String>> _mergedExcluded = {};
 
   ArchiveInfo? get _archive => _archives[_period];
 
@@ -245,6 +273,14 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
               ],
             ],
           ),
+          // «كل الشركات»: من لم يدخل المجموع ولماذا — لا رقمٌ يبدو كاملاً وهو ناقص
+          if ((_mergedExcluded[_period] ?? const <String>[]).isNotEmpty) ...[
+            const SizedBox(height: Sp.xs),
+            Text(
+              'merged.not_in_sum'.tr(args: [_mergedExcluded[_period]!.join('، ')]),
+              style: AppType.micro(color: AppColors.textLow).copyWith(height: 1.45),
+            ),
+          ],
         ],
       ),
     );

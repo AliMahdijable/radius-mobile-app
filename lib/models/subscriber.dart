@@ -103,6 +103,10 @@ class Subscriber {
   /// خاصّ يعرضه وحده.
   final bool abandonedFlag;
 
+  /// «كل الشركات»: مفتاح الشركة التي يُعرض تحتها الصفّ ويُنفَّذ منها (x-company-key) — null في الوضع العاديّ.
+  /// كلّ نداءٍ يخصّ هذا المشترك يُغلَّف بـ`CompanyRoute.run(companyKey, …)`.
+  final String? companyKey;
+
   // ⚠️ ليس `const`: الحقلان المحفوظان (`balanceAmount` · `parsedExpiration`)
   // حقلا `late final`، ولا يجتمعان مع باني ثابت. لا موضع في المشروع
   // ينشئ `const Subscriber(...)`، فالكلفة صفر.
@@ -146,6 +150,7 @@ class Subscriber {
     this.needsRepricing = false,
     this.basePackagePrice,
     this.abandonedFlag = false,
+    this.companyKey,
   });
 
   /// true فقط لو الـbackend أرجع إحداثيّات صالحة (parse من prefix gps:).
@@ -419,6 +424,52 @@ class Subscriber {
   /// match. We always re-apply the price even if profileName is set,
   /// because the price comes from priceList (sub-reseller info) which
   /// isn't part of the with-phones row.
+  /// الصفّ نفسه مربوطاً بشركته («كل الشركات»).
+  Subscriber withCompany(String? key) => key == companyKey
+      ? this
+      : Subscriber(
+          idx: idx,
+          username: username,
+          firstname: firstname,
+          lastname: lastname,
+          phone: phone,
+          mobile: mobile,
+          expiration: expiration,
+          lastOnline: lastOnline,
+          lastMac: lastMac,
+          remainingDays: remainingDays,
+          canChangePackage: canChangePackage,
+          packageChangeNote: packageChangeNote,
+          notes: notes,
+          hasDebtFlag: hasDebtFlag,
+          debt: debt,
+          profileName: profileName,
+          profileId: profileId,
+          parentUsername: parentUsername,
+          password: password,
+          isEnabled: isEnabled,
+          isOnlineFlag: isOnlineFlag,
+          ipAddress: ipAddress,
+          staticIp: staticIp,
+          sessionTime: sessionTime,
+          downloadBytes: downloadBytes,
+          uploadBytes: uploadBytes,
+          deviceVendor: deviceVendor,
+          discount: discount,
+          price: price,
+          dailyTrafficTotal: dailyTrafficTotal,
+          dailyUpload: dailyUpload,
+          dailyDownload: dailyDownload,
+          latitude: latitude,
+          longitude: longitude,
+          addressRaw: addressRaw,
+          isFixedPrice: isFixedPrice,
+          needsRepricing: needsRepricing,
+          basePackagePrice: basePackagePrice,
+          abandonedFlag: abandonedFlag,
+          companyKey: key,
+        );
+
   Subscriber enrichWithPackages(Map<String, PackageInfo> packagesById) {
     if (profileId == null) return this;
     final found = packagesById[profileId.toString()];
@@ -467,6 +518,7 @@ class Subscriber {
       needsRepricing: needsRepricing,
       basePackagePrice: basePackagePrice,
       abandonedFlag: abandonedFlag,
+      companyKey: companyKey,
     );
   }
 
@@ -519,6 +571,7 @@ class Subscriber {
       needsRepricing: needsRepricing,
       basePackagePrice: basePackagePrice,
       abandonedFlag: abandonedFlag,
+      companyKey: companyKey,
     );
   }
 
@@ -566,6 +619,7 @@ class Subscriber {
       needsRepricing: needsRepricing,
       basePackagePrice: basePackagePrice,
       abandonedFlag: abandonedFlag,
+      companyKey: companyKey,
     );
   }
 }

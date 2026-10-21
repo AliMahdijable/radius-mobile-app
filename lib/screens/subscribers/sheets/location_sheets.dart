@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../models/subscriber.dart';
+import '../../../services/merged_mode.dart';
 import '../../../services/permissions_service.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../core/widgets/design_sheet.dart';
@@ -297,7 +298,7 @@ class _EditSheetState extends State<_EditSheet> {
     final idx = widget.sub.idx;
     if (idx == null || _lat == null || _lng == null) return;
     setState(() => _saving = true);
-    final r = await SubscribersApi.setLocation(idx, lat: _lat, lng: _lng);
+    final r = await MergedOps.write(widget.sub, () => SubscribersApi.setLocation(idx, lat: _lat, lng: _lng));
     if (!mounted) return;
     setState(() => _saving = false);
     if (r.ok) {
@@ -343,7 +344,7 @@ class _EditSheetState extends State<_EditSheet> {
     );
     if (ok != true) return;
     setState(() => _saving = true);
-    final r = await SubscribersApi.setLocation(idx, clear: true);
+    final r = await MergedOps.write(widget.sub, () => SubscribersApi.setLocation(idx, clear: true));
     if (!mounted) return;
     setState(() => _saving = false);
     if (r.ok) {
