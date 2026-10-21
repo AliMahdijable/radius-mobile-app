@@ -211,7 +211,8 @@ class _Chip extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Text(
-                '$count',
+                // -1 = غير معروف (الحساب الكبير: «مديون») ⇒ «—» لا صفر.
+                count < 0 ? '—' : '$count',
                 textDirection: ui.TextDirection.ltr,
                 style: AppType.body(
                   color: selected

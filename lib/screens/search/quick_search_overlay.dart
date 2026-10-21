@@ -7,6 +7,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
+import '../../api/big_subscribers_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../core/util/format.dart';
 import '../../models/subscriber.dart';
@@ -99,6 +100,9 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
   /// الكتابة السريعة كانت تُظهر دوّارةً لا نتائج.
   late final Future<List<Subscriber>?> _subsFuture =
       SubscribersApi.loadAllWithOnline();
+
+  /// الحساب الكبير (≥ ٥٠٠٠): البحث في الساس نفسه (اليوزر/الاسم/الهاتف) بدل القائمة الكاملة — ولا يُلمس [_subsFuture].
+  late final Future<int> _bigProbe = BigSubscribersApi.probe();
 
   Timer? _queryDebounce;
 
@@ -419,7 +423,21 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
                             ),
                           )
                         else
-                          _Results(query: _q, future: _subsFuture),
+                          FutureBuilder<int>(
+                            future: _bigProbe,
+                            builder: (_, snap) {
+                              if (snap.connectionState == ConnectionState.waiting) {
+                                return _q.trim().isEmpty
+                                    ? const _EmptyHints()
+                                    : Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: Sp.huge),
+                                        child: Center(child: CircularProgressIndicator(color: AppColors.brand)),
+                                      );
+                              }
+                              if ((snap.data ?? 0) > 0) return _BigResults(query: _q);
+                              return _Results(query: _q, future: _subsFuture);
+                            },
+                          ),
                       ],
                     ),
                   ),
@@ -746,6 +764,132 @@ class _ResultsState extends State<_Results> {
       }
     }
     return score;
+  }
+}
+
+/// نتائج البحث للحساب الكبير — من الساس بعد توقّف الكتابة، ٢٠ أوّلاً ثمّ المزيد. جيلٌ لكلّ طلب: نتيجة استعلامٍ قديم لا تُكتب.
+class _BigResults extends StatefulWidget {
+  const _BigResults({required this.query});
+  final String query;
+
+  @override
+  State<_BigResults> createState() => _BigResultsState();
+}
+
+class _BigResultsState extends State<_BigResults> {
+  int _gen = 0;
+  bool _loading = false;
+  String? _error;
+  BigPage? _page;
+  int _size = 20;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  @override
+  void didUpdateWidget(_BigResults old) {
+    super.didUpdateWidget(old);
+    if (old.query != widget.query) {
+      _size = 20;
+      _fetch();
+    }
+  }
+
+  Future<void> _fetch() async {
+    final q = widget.query.trim();
+    final gen = ++_gen;
+    if (q.isEmpty) {
+      setState(() {
+        _page = null;
+        _error = null;
+        _loading = false;
+      });
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final p = await BigSubscribersApi.page(page: 1, size: _size, tab: 'all', query: q);
+      if (!mounted || gen != _gen) return;
+      setState(() {
+        _page = p;
+        _loading = false;
+      });
+    } on BigListException catch (e) {
+      if (!mounted || gen != _gen) return;
+      setState(() {
+        _error = e.message;
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final trimmed = widget.query.trim();
+    if (trimmed.isEmpty) return const _EmptyHints();
+    final p = _page;
+    if (p == null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: Sp.huge),
+        child: Center(
+          child: _error != null
+              ? Text(_error!, style: AppType.subtitle(color: AppColors.error), textAlign: TextAlign.center)
+              : CircularProgressIndicator(color: AppColors.brand),
+        ),
+      );
+    }
+    if (p.rows.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: Sp.huge, horizontal: Sp.lg),
+        child: Center(
+          child: Text('لا يوجد مشترك يطابق "$trimmed"',
+              style: AppType.subtitle(color: AppColors.textMid), textAlign: TextAlign.center),
+        ),
+      );
+    }
+    final hasMore = p.total > p.rows.length && _size < 100;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Sp.sm, Sp.xs, Sp.sm, Sp.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Sp.sm, Sp.sm, Sp.sm, 4),
+            child: Text(
+              p.total > p.rows.length ? 'أول ${p.rows.length} من ${p.total} نتيجة' : '${p.total} نتيجة',
+              style: AppType.muted(color: AppColors.textLow).copyWith(fontSize: 10.5, letterSpacing: 0.4),
+            ),
+          ),
+          for (final s in p.rows) _ResultRow(sub: s),
+          if (hasMore)
+            InkWell(
+              onTap: _loading
+                  ? null
+                  : () {
+                      HapticFeedback.selectionClick();
+                      _size = (_size + 30).clamp(20, 100);
+                      _fetch();
+                    },
+              borderRadius: BorderRadius.circular(R.sm),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Center(
+                  child: _loading
+                      ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brand))
+                      : Text('عرض نتائج أخرى', style: AppType.bodyStrong(color: AppColors.brand)),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 

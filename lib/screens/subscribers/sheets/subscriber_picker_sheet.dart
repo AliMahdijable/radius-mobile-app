@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../api/big_subscribers_api.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../models/subscriber.dart';
@@ -50,11 +53,26 @@ class _PickerSheetState extends State<_PickerSheet> {
   bool _loading = true;
   String _query = '';
 
+  /// الحساب الكبير (≥ ٥٠٠٠): لا قائمة كاملة — صفحةٌ من الساس بالبحث بعد توقّف الكتابة (كالبحث السريع)،
+  /// و«عليه دين» يُرشَّح من نتائج البحث (الساس لا يفلتر الدين). جيلٌ لكلّ طلب فلا يُكتب جوابٌ قديم.
+  bool _big = false;
+  List<Subscriber>? _bigRows;
+  String? _bigError;
+  bool _bigLoading = false;
+  int _bigGen = 0;
+  Timer? _bigDebounce;
+
   @override
   void initState() {
     super.initState();
     _searchCtrl.addListener(() {
-      if (mounted) setState(() => _query = _searchCtrl.text);
+      if (!mounted) return;
+      final changed = _searchCtrl.text != _query;
+      setState(() => _query = _searchCtrl.text);
+      if (_big && changed) {
+        _bigDebounce?.cancel();
+        _bigDebounce = Timer(const Duration(milliseconds: 350), _bigSearch);
+      }
     });
     _load();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -64,12 +82,22 @@ class _PickerSheetState extends State<_PickerSheet> {
 
   @override
   void dispose() {
+    _bigDebounce?.cancel();
     _searchCtrl.dispose();
     _focusNode.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
+    if (await BigSubscribersApi.probe() > 0) {
+      if (!mounted) return;
+      setState(() {
+        _big = true;
+        _loading = false;
+      });
+      unawaited(_bigSearch());
+      return;
+    }
     final list = await SubscribersApi.loadAll();
     if (!mounted) return;
     setState(() {
@@ -78,7 +106,43 @@ class _PickerSheetState extends State<_PickerSheet> {
     });
   }
 
+  Future<void> _bigSearch() async {
+    final gen = ++_bigGen;
+    final q = _query.trim();
+    if (widget.debtorsOnly && q.isEmpty) {
+      // أوّل خمسين من ٨٩ ألفاً لا تقول من عليه دين — ننتظر البحث
+      setState(() {
+        _bigRows = null;
+        _bigError = null;
+        _bigLoading = false;
+      });
+      return;
+    }
+    setState(() {
+      _bigLoading = true;
+      _bigError = null;
+    });
+    try {
+      final p = await BigSubscribersApi.page(page: 1, size: 50, tab: 'all', query: q.isEmpty ? null : q);
+      if (!mounted || gen != _bigGen) return;
+      setState(() {
+        _bigRows = p.rows;
+        _bigLoading = false;
+      });
+    } on BigListException catch (e) {
+      if (!mounted || gen != _bigGen) return;
+      setState(() {
+        _bigError = e.message;
+        _bigLoading = false;
+      });
+    }
+  }
+
   List<Subscriber> get _filtered {
+    if (_big) {
+      final rows = _bigRows ?? const <Subscriber>[];
+      return widget.debtorsOnly ? rows.where((s) => s.hasDebt).toList() : rows;
+    }
     final list = _all ?? const [];
     Iterable<Subscriber> it = list;
     if (widget.debtorsOnly) it = it.where((s) => s.hasDebt);
@@ -164,7 +228,38 @@ class _PickerSheetState extends State<_PickerSheet> {
         child: CircularProgressIndicator(color: AppColors.brand),
       );
     }
-    if (_all == null) {
+    if (_big && _bigRows == null) {
+      if (_bigError == null && (_bigLoading || !widget.debtorsOnly || _query.trim().isNotEmpty)) {
+        return Center(child: CircularProgressIndicator(color: AppColors.brand));
+      }
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(Sp.lg),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(_bigError == null ? LucideIcons.search : LucideIcons.circleAlert,
+                  size: 32, color: _bigError == null ? AppColors.textLow : AppColors.error),
+              const SizedBox(height: Sp.sm),
+              Text(
+                _bigError ?? 'اكتب اسم المشترك أو يوزره أو هاتفه — قائمة المدينين غير متاحة بعد للحسابات الكبيرة',
+                style: AppType.subtitle(color: _bigError == null ? AppColors.textMid : AppColors.error),
+                textAlign: TextAlign.center,
+              ),
+              if (_bigError != null) ...[
+                const SizedBox(height: Sp.sm),
+                OutlinedButton.icon(
+                  onPressed: _bigSearch,
+                  icon: const Icon(LucideIcons.refreshCw, size: 14),
+                  label: const Text('إعادة المحاولة'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+    if (!_big && _all == null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -201,7 +296,9 @@ class _PickerSheetState extends State<_PickerSheet> {
               Text(
                 widget.debtorsOnly && _query.trim().isEmpty
                     ? 'لا يوجد مشترك عليه دين'
-                    : 'لا توجد نتائج',
+                    : widget.debtorsOnly && _big
+                        ? 'لا يوجد مدين يطابق البحث'
+                        : 'لا توجد نتائج',
                 style: AppType.subtitle(color: AppColors.textMid),
                 textAlign: TextAlign.center,
               ),

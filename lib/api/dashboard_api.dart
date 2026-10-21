@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import 'big_subscribers_api.dart';
 import '../services/auth_storage.dart';
 import 'api_client.dart';
 import 'archive_info.dart';
@@ -71,9 +72,14 @@ class DebtorsResult {
     required this.totalSubs,
     required this.onlineNoPlan,
     required this.disabled,
+    this.debtsUnknown = false,
   });
   final int count;
   final int total;
+
+  /// الحسابات الكبيرة (BigSubscribersApi): العدّادات من الساس، والدين في notes الساس ولا يُفلتر هناك — «—» لا صفر
+  /// ([count]/[total] صفرٌ لا يُعرض).
+  final bool debtsUnknown;
 
   /// Subscribers whose remaining days fall in [0, 3] — soon-to-expire.
   final int nearExpiry;
@@ -239,6 +245,24 @@ class DashboardApi {
   /// Replaces v1's two-pass approach with one network call + one loop.
   static Future<DebtorsResult?> fetchDebtors() async {
     _logStart('subscribers/with-phones (debtors)');
+    // الحسابات الكبيرة (≥ ٥٠٠٠): عدّادات الساس نفسها بتعريفات هذا التطبيق (summary.app) — لا قائمة كاملة (٨٩ ألفاً ≈ ٩٦ث).
+    if (await BigSubscribersApi.probe() > 0) {
+      final c = await BigSubscribersApi.summary();
+      if (c == null) return null;
+      return DebtorsResult(
+        count: 0,
+        total: 0,
+        nearExpiry: c.nearExpiry,
+        online: c.online,
+        offline: c.offline,
+        active: c.active,
+        expired: c.expired,
+        totalSubs: c.all,
+        onlineNoPlan: c.onlineNoPlan,
+        disabled: c.disabled,
+        debtsUnknown: true,
+      );
+    }
     // Goes through SubscribersApi's process-wide cache so the dashboard
     // and the subscribers tab share ONE fetch on app open instead of
     // double-fetching the same heavy endpoint.

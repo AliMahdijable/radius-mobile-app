@@ -11,6 +11,7 @@ import '../../api/bulk_activate_api.dart';
 import '../../api/device_probe_api.dart';
 import '../../models/device_health.dart';
 import '../../api/subscribers_api.dart';
+import '../../api/big_subscribers_api.dart';
 import '../../api/telegram_api.dart';
 import '../../api/whatsapp_api.dart';
 import '../../core/util/fit_hint.dart';
@@ -161,6 +162,132 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
   static const int _kPageStep = 25;
 
+  // ── الحسابات الكبيرة (BigSubscribersApi، ٢١ أكتوبر) ──
+  // ≥ ٥٠٠٠ مشترك: لا قائمة كاملة (٨٩ ألفاً ≈ ٩٦ث كانت تُعاد كلّ ٥ ثوانٍ). الصفحة والتبويب والبحث والترتيب من الخادم،
+  // والعدّادات من summary.app بتعريفات هذه الشاشة نفسها. «مديون» غير متاح هنا بعد (الدين في notes الساس).
+  bool _big = false;
+  List<Subscriber> _bigRows = const [];
+  int _bigTotal = 0;
+  int _bigLastPage = 1;
+  int _bigPageLoaded = 0;
+  bool _bigLoadingMore = false;
+  String? _bigError;
+  BigCounts? _bigCounts;
+  int _bigGen = 0;
+  int _bigTick = 0;
+  static const int _kBigPageSize = 50;
+
+  String _bigTab(SubscriberFilter f) => switch (f) {
+        SubscriberFilter.all => 'all',
+        SubscriberFilter.active => 'active_all',
+        SubscriberFilter.online => 'online_all',
+        SubscriberFilter.offline => 'offline',
+        SubscriberFilter.disabled => 'disabled',
+        SubscriberFilter.expired => 'expired_all',
+        SubscriberFilter.debtors => 'debtors',
+        SubscriberFilter.nearExpiry => 'near_expiry',
+        SubscriberFilter.onlineNoPlan => 'online_no_plan',
+        SubscriberFilter.neglected => 'neglected',
+      };
+
+  /// ما يرتّب به الساس: الباقي والانتهاء بالانتهاء (الترتيب نفسه)، واليوزر والاسم كما هما؛ وغيرها ⇒ اليوزر.
+  String? get _bigSort => switch (_sortField) {
+        SortField.remainingDays || SortField.expiration => 'expiration',
+        SortField.username => 'username',
+        SortField.firstname => 'firstname',
+        _ => null,
+      };
+
+  String get _bigDir => _sortDir == SortDirection.asc ? 'asc' : 'desc';
+
+  /// الصفحة الأولى للتبويب الحاليّ + العدّادات. جيلٌ لكلّ طلب: ردٌّ وصل بعد تغيير التبويب/البحث لا يُكتب.
+  Future<void> _bigReload() async {
+    final gen = ++_bigGen;
+    final tab = _bigTab(_filter);
+    final countsF = BigSubscribersApi.summary();
+    if (tab == 'debtors') {
+      final c = await countsF;
+      if (!mounted || gen != _bigGen) return;
+      setState(() {
+        _bigRows = const [];
+        _bigTotal = 0;
+        _bigLastPage = 1;
+        _bigPageLoaded = 0;
+        _bigError = null;
+        _bigCounts = c ?? _bigCounts;
+      });
+      return;
+    }
+    try {
+      final p = await BigSubscribersApi.page(
+          page: 1, size: _kBigPageSize, tab: tab, query: _query, sort: _bigSort, dir: _bigDir);
+      final c = await countsF;
+      if (!mounted || gen != _bigGen) return;
+      setState(() {
+        _bigRows = p.rows;
+        _bigTotal = p.total;
+        _bigLastPage = p.lastPage;
+        _bigPageLoaded = 1;
+        _bigLoadingMore = false;
+        _bigError = null;
+        _bigCounts = c ?? _bigCounts;
+      });
+      _runProbeWave();
+    } on BigListException catch (e) {
+      if (!mounted || gen != _bigGen) return;
+      setState(() => _bigError = e.message);
+    }
+  }
+
+  /// «تحميل المزيد» = الصفحة التالية من الخادم (بلا تكرار صفٍّ ظهر).
+  Future<void> _loadBigMore() async {
+    if (_bigLoadingMore || _bigPageLoaded >= _bigLastPage) return;
+    final gen = _bigGen;
+    setState(() => _bigLoadingMore = true);
+    try {
+      final p = await BigSubscribersApi.page(
+          page: _bigPageLoaded + 1,
+          size: _kBigPageSize,
+          tab: _bigTab(_filter),
+          query: _query,
+          sort: _bigSort,
+          dir: _bigDir);
+      if (!mounted || gen != _bigGen) return;
+      final seen = _bigRows.map((s) => s.idx ?? s.username).toSet();
+      setState(() {
+        _bigRows = [..._bigRows, ...p.rows.where((s) => !seen.contains(s.idx ?? s.username))];
+        _bigTotal = p.total;
+        _bigLastPage = p.lastPage;
+        _bigPageLoaded += 1;
+        _bigLoadingMore = false;
+      });
+    } on BigListException catch (e) {
+      if (!mounted || gen != _bigGen) return;
+      setState(() {
+        _bigLoadingMore = false;
+        _bigError = e.message;
+      });
+    }
+  }
+
+  /// عدّادات الشرائح للحساب الكبير — «مديون» -1 ⇒ «—» (لا صفر).
+  Map<SubscriberFilter, int> _bigCountsMap() {
+    final c = _bigCounts;
+    if (c == null) return const {SubscriberFilter.debtors: -1};
+    return {
+      SubscriberFilter.all: c.all,
+      SubscriberFilter.active: c.active,
+      SubscriberFilter.online: c.online,
+      SubscriberFilter.offline: c.offline,
+      SubscriberFilter.disabled: c.disabled,
+      SubscriberFilter.expired: c.expired,
+      SubscriberFilter.debtors: -1,
+      SubscriberFilter.nearExpiry: c.nearExpiry,
+      SubscriberFilter.onlineNoPlan: c.onlineNoPlan,
+      SubscriberFilter.neglected: 0,
+    };
+  }
+
   @override
   void initState() {
     super.initState();
@@ -261,6 +388,14 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   }
 
   Future<void> _silentRefresh() async {
+    if (_big) {
+      // الكبير: لا قائمة كاملة ولا قائمة متصلين (عشرات الآلاف) كلّ ٥ ثوانٍ — العدّادات وحدها كلّ دقيقة. الصفوف تتحدّث
+      // بالسحب أو بعد كلّ عمليّة (SubscriberEvents) — لا قفزة إلى الصفحة الأولى تحت إصبع من مرّر.
+      if (++_bigTick % 12 != 0) return;
+      final c = await BigSubscribersApi.summary();
+      if (mounted && c != null) setState(() => _bigCounts = c);
+      return;
+    }
     // لا نُفعّل _refreshing حتى ما تظهر أي مؤشرات UI — تحديث خفي بالكامل.
     // _fetchAndMerge يستفيد من cache الـ45 ثانية على قائمة المشتركين لكن
     // يجيب online status حديث في كل مرة (loadOnline لا يُخزَّن).
@@ -339,6 +474,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       _applyDefaultSortFor(next);
       _visibleCount = _kPageStep;
     });
+    if (_big) _bigReload();
   }
 
   void _applyDefaultSortFor(SubscriberFilter f) {
@@ -365,6 +501,21 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
   Future<void> _load() async {
     setState(() => _loading = true);
+
+    // الحسابات الكبيرة: صفٌّ واحد يحسم قبل القائمة الكاملة — التي لا تُطلب للكبير أصلاً.
+    final bigTotal = await BigSubscribersApi.probe();
+    if (!mounted) return;
+    if (bigTotal > 0) {
+      _big = true;
+      await _bigReload();
+      if (!mounted) return;
+      _markDataSeen();
+      setState(() => _loading = false);
+      // آخر الدفعات وارتباطات تلغرام (قاعدتنا، لا الساس) — مرّةً، بلا انتظار.
+      unawaited(_loadBigSideData());
+      return;
+    }
+    _big = false;
 
     // ── اعرض القائمة فور وصولها، ولا تنتظر الإثراء ──
     //
@@ -421,7 +572,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     //
     // تكلفة: ~1 GET /api/subscribers/:username/device لكل مشترك ما
     // له IP، يُنفَّذ merci وiplevel cache 5د بعد أول wave.
-    var targets = _all
+    // الكبير: الصفوف المحمَّلة وحدها (لا ٨٩ ألف فحص).
+    var targets = (_big ? _bigRows : _all)
         .where((s) => s.username.isNotEmpty)
         .map((s) => (username: s.username, ip: (s.ipAddress ?? '').trim()))
         .toList();
@@ -498,6 +650,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   /// لـwarmProbe. آمن لو الصفحة تغيّرت أثناء الـwave — الأولوية تُطبَّق
   /// على snapshot اللحظة، مو reactive.
   List<Subscriber> _visibleForCurrentPage() {
+    if (_big) return _bigRows;
     if (_all.isEmpty) return const [];
     // نستعمل _filteredAll اللي بيه الفلترة/الفرز مُطبّقة أصلاً.
     final visible = _filteredAll;
@@ -505,7 +658,29 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     return visible.take(_visibleCount).toList();
   }
 
+  /// الكبير: آخر الدفعات وارتباطات تلغرام مرّةً (قاعدتنا) — شارتا البطاقة.
+  Future<void> _loadBigSideData() async {
+    final adminId = await AuthStorage.readAdminId();
+    final results = await Future.wait([
+      SubscribersApi.loadLastPayments(),
+      if (adminId != null) TelegramApi.listBindings(adminId) else Future.value(const <TelegramBinding>[]),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _lastPayments = (results[0] as Map<String, Map<String, dynamic>>?) ?? _lastPayments;
+      _telegramBoundIdx = ((results[1] as List<TelegramBinding>?) ?? const []).map((b) => b.sas4Idx).toSet();
+    });
+  }
+
   Future<void> _refresh() async {
+    if (_big) {
+      setState(() => _refreshing = true);
+      await _bigReload();
+      if (!mounted) return;
+      _markDataSeen();
+      setState(() => _refreshing = false);
+      return;
+    }
     setState(() => _refreshing = true);
     // Bypass the process-wide cache so pull-to-refresh always returns
     // fresh server data even if the cached entry is still warm.
@@ -582,6 +757,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
         _query = _searchCtrl.text.trim();
         _visibleCount = _kPageStep;
       });
+      // الكبير: البحث على كلّ المشتركين في الساس (اليوزر/الاسم/الهاتف).
+      if (_big) _bigReload();
     });
   }
 
@@ -993,6 +1170,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
         _sortDir = r.direction;
         _visibleCount = _kPageStep;
       });
+      if (_big) _bigReload();
     }
   }
 
@@ -1227,11 +1405,14 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     // لا ذاكرة بمفتاح إبطال هنا عمداً: مفتاح خاطئ يعني قائمةً بائتة،
     // وهي عطل أسوأ من الثقل. الحساب مرّة لكلّ إطار يُبقي الصحّة
     // مضمونةً بالبناء.
-    final filtered = _filteredAll;
-    final counts = _counts();
+    // الكبير: الخادم فلتر ورتّب وبحث — الصفوف المحمَّلة كما وصلت، والباقي من مجموع التبويب كلّه.
+    final filtered = _big ? _bigRows : _filteredAll;
+    final counts = _big ? _bigCountsMap() : _counts();
     final managers = _availableManagers;
-    final page = filtered.take(_visibleCount).toList();
-    final remaining = filtered.length - page.length;
+    final page = _big ? _bigRows : filtered.take(_visibleCount).toList();
+    final remaining = _big
+        ? (_bigTotal > _bigRows.length ? _bigTotal - _bigRows.length : 0)
+        : filtered.length - page.length;
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -1348,11 +1529,14 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                     FilterChipsBar(
                                       current: _filter,
                                       counts: counts,
-                                      onSelect: (f) => setState(() {
-                                        _filter = f;
-                                        _applyDefaultSortFor(f);
-                                        _visibleCount = _kPageStep;
-                                      }),
+                                      onSelect: (f) {
+                                        setState(() {
+                                          _filter = f;
+                                          _applyDefaultSortFor(f);
+                                          _visibleCount = _kPageStep;
+                                        });
+                                        if (_big) _bigReload();
+                                      },
                                     ),
                                   ],
                                 ),
@@ -1374,8 +1558,14 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                 // ويحترم تلقائياً فلتر المدير الفرعي لأنّه يحسب من
                                 // _filteredAll الي بنفسه محكوم بـ_managerScoped.
                                 if (_filter == SubscriberFilter.debtors &&
-                                    !_selectionMode)
+                                    !_selectionMode &&
+                                    !_big)
                                   _DebtSummaryCard(subscribers: filtered),
+                                // الكبير: ما يختلف — «مديون» نصٌّ صريح بدل قائمةٍ فارغة أو صفر، وخطأ الصفحة برسالته.
+                                if (_big && _filter == SubscriberFilter.debtors)
+                                  _BigNotice(text: 'subscribers.big_debtors_unavailable'.tr()),
+                                if (_big && _bigError != null)
+                                  _BigNotice(text: _bigError!, onRetry: _bigReload),
                                 // 2026-09-14: عدّاد «يفحص الأجهزة n/N» حُذف بطلب صاحب
                                 // المشروع — الدوّارة داخل زرّ فحص الأجهزة تكفي للدلالة
                                 // على أنّ موجةً تعمل، وصفٌّ إضافيّ فوق القائمة يزاحم
@@ -1393,7 +1583,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                               ],
                             ),
                           ),
-                          if (page.isEmpty)
+                          if (page.isEmpty && _big && (_filter == SubscriberFilter.debtors || _bigError != null))
+                            const SliverToBoxAdapter(child: SizedBox.shrink())
+                          else if (page.isEmpty)
                             SliverFillRemaining(
                               hasScrollBody: false,
                               child:
@@ -1423,8 +1615,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                   if (i == page.length) {
                                     return _LoadMoreButton(
                                       remaining: remaining,
-                                      onTap: () => setState(
-                                          () => _visibleCount += _kPageStep),
+                                      onTap: _big
+                                          ? _loadBigMore
+                                          : () => setState(
+                                              () => _visibleCount += _kPageStep),
                                     );
                                   }
                                   final s = page[i];
@@ -2797,6 +2991,51 @@ class _SubscribersLocked extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// سطرٌ في رأس القائمة للحساب الكبير: «مديون» غير متاح، أو خطأ صفحةٍ بزرّ إعادة.
+class _BigNotice extends StatelessWidget {
+  const _BigNotice({required this.text, this.onRetry});
+  final String text;
+  final Future<void> Function()? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Container(
+      margin: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.sm),
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: AppColors.warningSoftBg,
+        borderRadius: BorderRadius.circular(R.md),
+      ),
+      // النصّ يلتفّ — والزرّ في سطرٍ مستقلّ تحته فلا يزاحمه (حارس flex_text_guard).
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.info_outline_rounded, size: 18, color: AppColors.warning),
+              const SizedBox(width: Sp.sm),
+              Expanded(
+                child: Text(text,
+                    style: AppType.body(color: AppColors.textBody).copyWith(height: 1.5)),
+              ),
+            ],
+          ),
+          if (onRetry != null)
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: TextButton(
+                onPressed: () => onRetry!(),
+                child: Text('common.retry'.tr(), style: AppType.button(color: AppColors.brand)),
+              ),
+            ),
+        ],
       ),
     );
   }
