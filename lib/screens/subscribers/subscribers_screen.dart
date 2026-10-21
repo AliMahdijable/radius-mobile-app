@@ -12,6 +12,7 @@ import '../../api/device_probe_api.dart';
 import '../../models/device_health.dart';
 import '../../api/subscribers_api.dart';
 import '../../api/big_subscribers_api.dart';
+import '../../api/managers_api.dart';
 import '../../api/telegram_api.dart';
 import '../../api/whatsapp_api.dart';
 import '../../core/util/fit_hint.dart';
@@ -163,9 +164,13 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   static const int _kPageStep = 25;
 
   // ── الحسابات الكبيرة (BigSubscribersApi، ٢١ أكتوبر) ──
-  // ≥ ٥٠٠٠ مشترك: لا قائمة كاملة (٨٩ ألفاً ≈ ٩٦ث كانت تُعاد كلّ ٥ ثوانٍ). الصفحة والتبويب والبحث والترتيب من الخادم،
-  // والعدّادات من summary.app بتعريفات هذه الشاشة نفسها. «مديون» غير متاح هنا بعد (الدين في notes الساس).
+  // ≥ ٥٠٠٠ مشترك: لا قائمة كاملة (٨٩ ألفاً ≈ ٩٦ث كانت تُعاد كلّ ٥ ثوانٍ). الصفحة والتبويب والبحث والترتيب وفلتر المدير
+  // من الخادم، والعدّادات من summary.app بتعريفات هذه الشاشة نفسها. «مديون» من notes الساس (سوبرنت)؛ شركةٌ دينها على
+  // دفترنا: نصٌّ يقول لماذا (TAB_UNSUPPORTED).
   bool _big = false;
+  bool _bigDebtorsUnsupported = false;
+  List<ManagerLite>? _bigManagers;
+  int? _bigParentId;
   List<Subscriber> _bigRows = const [];
   int _bigTotal = 0;
   int _bigLastPage = 1;
@@ -201,26 +206,14 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   String get _bigDir => _sortDir == SortDirection.asc ? 'asc' : 'desc';
 
   /// الصفحة الأولى للتبويب الحاليّ + العدّادات. جيلٌ لكلّ طلب: ردٌّ وصل بعد تغيير التبويب/البحث لا يُكتب.
-  Future<void> _bigReload() async {
+  /// [fresh]: السحب للتحديث وبعد عمليّة — العدّادات بلا ذاكرة الـ٢٠ثانية.
+  Future<void> _bigReload({bool fresh = false}) async {
     final gen = ++_bigGen;
     final tab = _bigTab(_filter);
-    final countsF = BigSubscribersApi.summary();
-    if (tab == 'debtors') {
-      final c = await countsF;
-      if (!mounted || gen != _bigGen) return;
-      setState(() {
-        _bigRows = const [];
-        _bigTotal = 0;
-        _bigLastPage = 1;
-        _bigPageLoaded = 0;
-        _bigError = null;
-        _bigCounts = c ?? _bigCounts;
-      });
-      return;
-    }
+    final countsF = BigSubscribersApi.summary(parentId: _bigParentId, fresh: fresh);
     try {
       final p = await BigSubscribersApi.page(
-          page: 1, size: _kBigPageSize, tab: tab, query: _query, sort: _bigSort, dir: _bigDir);
+          page: 1, size: _kBigPageSize, tab: tab, query: _query, sort: _bigSort, dir: _bigDir, parentId: _bigParentId);
       final c = await countsF;
       if (!mounted || gen != _bigGen) return;
       setState(() {
@@ -230,13 +223,40 @@ class _SubscribersScreenState extends State<SubscribersScreen>
         _bigPageLoaded = 1;
         _bigLoadingMore = false;
         _bigError = null;
+        _bigDebtorsUnsupported = false;
         _bigCounts = c ?? _bigCounts;
       });
+      _bigSoonIfPending(c);
       _runProbeWave();
     } on BigListException catch (e) {
+      final c = await countsF;
       if (!mounted || gen != _bigGen) return;
-      setState(() => _bigError = e.message);
+      // صفوف التبويب السابق لا تبقى تحت رسالة التبويب الجديد
+      final unsupported = e.code == 'TAB_UNSUPPORTED';
+      setState(() {
+        _bigRows = const [];
+        _bigTotal = 0;
+        _bigLastPage = 1;
+        _bigPageLoaded = 0;
+        _bigLoadingMore = false;
+        _bigDebtorsUnsupported = unsupported;
+        _bigError = unsupported ? null : e.message;
+        _bigCounts = c ?? _bigCounts;
+      });
     }
+  }
+
+  /// عدد المدينين يُحسب في الخادم أوّل مرّة (قراءة قطعتهم كلّها، دقيقةٌ أو اثنتان لـ٨٩ ألفاً) — نسأل بعد ١٥ثانية لا دقيقة.
+  void _bigSoonIfPending(BigCounts? c) {
+    if (c != null && c.debtorsPending) _bigTick = 9;
+  }
+
+  int? _bigManagerId(String? username) {
+    if (username == null) return null;
+    for (final m in _bigManagers ?? const <ManagerLite>[]) {
+      if (m.username == username) return m.id;
+    }
+    return null;
   }
 
   /// «تحميل المزيد» = الصفحة التالية من الخادم (بلا تكرار صفٍّ ظهر).
@@ -251,7 +271,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
           tab: _bigTab(_filter),
           query: _query,
           sort: _bigSort,
-          dir: _bigDir);
+          dir: _bigDir,
+          parentId: _bigParentId);
       if (!mounted || gen != _bigGen) return;
       final seen = _bigRows.map((s) => s.idx ?? s.username).toSet();
       setState(() {
@@ -270,7 +291,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     }
   }
 
-  /// عدّادات الشرائح للحساب الكبير — «مديون» -1 ⇒ «—» (لا صفر).
+  /// عدّادات الشرائح للحساب الكبير — «مديون» غير معروف -1 ⇒ «—» (لا صفر)، وجارٍ حسابه -2 ⇒ «…».
   Map<SubscriberFilter, int> _bigCountsMap() {
     final c = _bigCounts;
     if (c == null) return const {SubscriberFilter.debtors: -1};
@@ -281,7 +302,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       SubscriberFilter.offline: c.offline,
       SubscriberFilter.disabled: c.disabled,
       SubscriberFilter.expired: c.expired,
-      SubscriberFilter.debtors: -1,
+      SubscriberFilter.debtors: c.debtors ?? (c.debtorsPending ? -2 : -1),
       SubscriberFilter.nearExpiry: c.nearExpiry,
       SubscriberFilter.onlineNoPlan: c.onlineNoPlan,
       SubscriberFilter.neglected: 0,
@@ -392,8 +413,14 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       // الكبير: لا قائمة كاملة ولا قائمة متصلين (عشرات الآلاف) كلّ ٥ ثوانٍ — العدّادات وحدها كلّ دقيقة. الصفوف تتحدّث
       // بالسحب أو بعد كلّ عمليّة (SubscriberEvents) — لا قفزة إلى الصفحة الأولى تحت إصبع من مرّر.
       if (++_bigTick % 12 != 0) return;
-      final c = await BigSubscribersApi.summary();
-      if (mounted && c != null) setState(() => _bigCounts = c);
+      final c = await BigSubscribersApi.summary(parentId: _bigParentId);
+      if (!mounted || c == null) return;
+      setState(() {
+        _bigCounts = c;
+        // «مديون» بلا بحث: مجموع التبويب = العدّ الدقيق حين يكتمل (الصفحة تعطي حجم القطعة قبله)
+        if (_filter == SubscriberFilter.debtors && _query.trim().isEmpty && c.debtors != null) _bigTotal = c.debtors!;
+      });
+      _bigSoonIfPending(c);
       return;
     }
     // لا نُفعّل _refreshing حتى ما تظهر أي مؤشرات UI — تحديث خفي بالكامل.
@@ -664,18 +691,21 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     final results = await Future.wait([
       SubscribersApi.loadLastPayments(),
       if (adminId != null) TelegramApi.listBindings(adminId) else Future.value(const <TelegramBinding>[]),
+      // فلتر المدير: المدراء من الساس (المعرّف لفلتر الساس parent_id) — لا من القائمة الكاملة
+      ManagersApi.lite(),
     ]);
     if (!mounted) return;
     setState(() {
       _lastPayments = (results[0] as Map<String, Map<String, dynamic>>?) ?? _lastPayments;
       _telegramBoundIdx = ((results[1] as List<TelegramBinding>?) ?? const []).map((b) => b.sas4Idx).toSet();
+      _bigManagers = results[2] as List<ManagerLite>?;
     });
   }
 
   Future<void> _refresh() async {
     if (_big) {
       setState(() => _refreshing = true);
-      await _bigReload();
+      await _bigReload(fresh: true);
       if (!mounted) return;
       _markDataSeen();
       setState(() => _refreshing = false);
@@ -772,6 +802,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   /// Distinct parent_username values from the loaded list, sorted.
   /// Empty when no subscriber has a parent (single-tenant admins).
   List<String> get _availableManagers {
+    // الكبير: مدراء الساس (lite) — الصفوف المحمَّلة صفحةٌ واحدة لا تكفي لمعرفتهم
+    if (_big) return [for (final m in _bigManagers ?? const <ManagerLite>[]) m.username];
     final set = <String>{};
     for (final s in _all) {
       final p = s.parentUsername;
@@ -1197,7 +1229,12 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     setState(() {
       _managerFilter = normalizeManagerFilter(picked);
       _visibleCount = _kPageStep;
+      if (_big) {
+        _bigParentId = _bigManagerId(_managerFilter);
+        if (_bigParentId == null) _managerFilter = null; // مديرٌ لا معرّف له في الساس: لا فلتر وهميّ
+      }
     });
+    if (_big) _bigReload();
   }
 
   Future<void> _openBulkDisconnect() async {
@@ -1561,8 +1598,25 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                     !_selectionMode &&
                                     !_big)
                                   _DebtSummaryCard(subscribers: filtered),
-                                // الكبير: ما يختلف — «مديون» نصٌّ صريح بدل قائمةٍ فارغة أو صفر، وخطأ الصفحة برسالته.
-                                if (_big && _filter == SubscriberFilter.debtors)
+                                // الكبير: مجموع الديون من الخادم (قراءة كلّ المدينين، لا الصفحة المحمَّلة) حين يكتمل
+                                if (_big &&
+                                    _filter == SubscriberFilter.debtors &&
+                                    !_selectionMode &&
+                                    !_bigDebtorsUnsupported &&
+                                    _query.trim().isEmpty &&
+                                    _bigCounts?.debtors != null &&
+                                    _bigCounts?.totalDebt != null)
+                                  _DebtSummaryCard(
+                                      subscribers: const [],
+                                      total: _bigCounts!.totalDebt,
+                                      count: _bigCounts!.debtors),
+                                if (_big &&
+                                    _filter == SubscriberFilter.debtors &&
+                                    !_bigDebtorsUnsupported &&
+                                    (_bigCounts?.debtorsPending ?? false))
+                                  _BigNotice(text: 'subscribers.big_debtors_counting'.tr()),
+                                // الكبير: ما يختلف — «مديون» لشركةٍ دينها على دفترنا نصٌّ صريح بدل قائمةٍ فارغة، وخطأ الصفحة برسالته.
+                                if (_big && _filter == SubscriberFilter.debtors && _bigDebtorsUnsupported)
                                   _BigNotice(text: 'subscribers.big_debtors_unavailable'.tr()),
                                 if (_big && _bigError != null)
                                   _BigNotice(text: _bigError!, onRetry: _bigReload),
@@ -1583,7 +1637,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                               ],
                             ),
                           ),
-                          if (page.isEmpty && _big && (_filter == SubscriberFilter.debtors || _bigError != null))
+                          if (page.isEmpty && _big && ((_filter == SubscriberFilter.debtors && _bigDebtorsUnsupported) || _bigError != null))
                             const SliverToBoxAdapter(child: SizedBox.shrink())
                           else if (page.isEmpty)
                             SliverFillRemaining(
@@ -2614,18 +2668,25 @@ class _EmptyState extends StatelessWidget {
 /// من `_filteredAll`، هو تلقائياً محكوم بفلتر المدير الفرعي وأي بحث
 /// نصّي حالي — بلا حاجة لـproviders أو حسابات خارجيّة.
 class _DebtSummaryCard extends StatelessWidget {
-  const _DebtSummaryCard({required this.subscribers});
+  const _DebtSummaryCard({required this.subscribers, this.total, this.count});
   final List<Subscriber> subscribers;
+
+  /// الحساب الكبير: المجموع والعدد من الخادم (كلّ المدينين) بدل الصفوف المحمَّلة.
+  final double? total;
+  final int? count;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    if (subscribers.isEmpty) return const SizedBox.shrink();
-    var total = 0.0;
-    for (final s in subscribers) {
-      total += s.debtAbs;
+    final given = this.total;
+    if (subscribers.isEmpty && given == null) return const SizedBox.shrink();
+    var total = given ?? 0.0;
+    if (given == null) {
+      for (final s in subscribers) {
+        total += s.debtAbs;
+      }
     }
-    final count = subscribers.length;
+    final count = this.count ?? subscribers.length;
     return Padding(
       padding: const EdgeInsets.fromLTRB(Sp.lg, 4, Sp.lg, 0),
       child: Container(

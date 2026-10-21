@@ -398,6 +398,7 @@
     "wa_connected": "WhatsApp connected",
     "wa_disconnected": "WhatsApp disconnected",
     "debts_big_list": "Large lists: see the debts report",
+    "debts_counting": "Counting on the server…",
     "subscriber_singular": "subscriber",
     "fetch_failed_swipe": "Failed — swipe to refresh",
     "period_daily": "Daily",
@@ -410,7 +411,8 @@
     "reports": "Reports"
   },
   "subscribers": {
-    "big_debtors_unavailable": "“Debtors” is not available yet for very large lists: the debt lives in the SAS notes, which the SAS cannot filter. Search the subscriber by name or username, or open the debts report.",
+    "big_debtors_unavailable": "“Debtors” is not available yet for large lists in this company: its debts live on our server, not in the SAS. Search the subscriber by name or username, or open the debts report.",
+    "big_debtors_counting": "Counting debtors and their total on the server — shows up within a minute or two. The list below is ready.",
     "title": "Subscribers",
     "search_hint": "Search by name or username...",
     "filter_all": "All",
@@ -1068,6 +1070,7 @@
     "app_notifications": "App notifications",
     "expired_today": "Expired today",
     "near_expiry_section": "Expiring soon",
+    "show_more": "Show more",
     "empty_title": "No new notifications",
     "empty_hint": "Messages will appear here as they arrive",
     "remaining_expired": "Expired",

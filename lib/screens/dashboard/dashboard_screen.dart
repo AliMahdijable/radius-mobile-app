@@ -74,6 +74,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _waLoaded = false;
   bool _activationsLoaded = false;
   bool _debtorsLoaded = false;
+  bool _debtsRetry = false;
   bool _walletLoaded = false;
 
   /// مطلب 2026-06-12: debounce — أي حركة في صفحة ثانية بتحفّز
@@ -449,6 +450,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         // نُحدّث عدّاد الجرس (near-expiry + expired-today) من نفس القائمة
         // اللي fetchDebtors شغّلها تواً — بدون طلب شبكة إضافي.
         AlertsService.refresh();
+        // الحساب الكبير: عدّ المدينين أوّل مرّة يأخذ دقيقةً أو اثنتين في الخادم — نسأل مرّةً بعد ٢٠ثانية لا عند التحديث التالي.
+        if (r != null && r.debtsPending && !_debtsRetry) {
+          _debtsRetry = true;
+          Future.delayed(const Duration(seconds: 20), () {
+            _debtsRetry = false;
+            if (mounted) _refreshLive(silent: true);
+          });
+        }
       });
     });
     // ⚠️ التبويب على النداء لا على العرض: الغاية إسقاط الطلب لا

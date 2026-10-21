@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../api/big_subscribers_api.dart';
 import '../api/subscribers_api.dart';
 import '../models/subscriber.dart';
 
@@ -24,9 +25,23 @@ class AlertsService {
   /// يُعاد الحساب من قائمة SubscribersApi.loadAll — نستدعيه بعد كل
   /// refresh للـcache. آمن للاستدعاء المتكرر (idempotent).
   static Future<void> refresh() async {
+    // الحسابات الكبيرة (≥ ٥٠٠٠): العدّان من الساس بالتعريفين نفسيهما (summary.app) — لا قائمة كاملة.
+    if (await BigSubscribersApi.probe() > 0) {
+      final c = await BigSubscribersApi.summary();
+      final near = c?.expiring24h, today = c?.expiredToday;
+      if (near != null && today != null) setCounts(near: near, expiredToday: today);
+      return;
+    }
     final list = await SubscribersApi.loadAll();
     if (list == null) return;
     _recompute(list);
+  }
+
+  /// العدّان جاهزين (الحساب الكبير: من الخادم) — الجرس وصندوق الإشعارات على الرقم نفسه.
+  static void setCounts({required int near, required int expiredToday}) {
+    nearExpiryCount.value = near;
+    expiredTodayCount.value = expiredToday;
+    count.value = near + expiredToday;
   }
 
   /// يُستدعى من كود يمتلك القائمة فعلاً (يتفادى loadAll مرّة ثانية).

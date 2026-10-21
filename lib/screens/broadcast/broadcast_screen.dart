@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/big_subscribers_api.dart';
 import '../../api/broadcast_api.dart';
 import '../../api/send_scope_api.dart';
 import '../../api/wa_contact_risk.dart';
@@ -73,6 +74,16 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   bool _loading = true;
   bool _sending = false;
 
+  /// الحساب الكبير (≥ ٥٠٠٠): لا قائمة كاملة — المرشّحون نتائج بحث الساس، والمختارون يبقون عبر البحوث ([_bigPicked])،
+  /// والإرسال للمحدّدين وحدهم (حتى [_kBigMaxTargets] — الخادم يبحث عن كلٍّ منهم). «عام» (فئةٌ كاملة) غير متاح بعد:
+  /// الخادم يرفضه صراحةً (BIG_LIST)، والتذكيرات التلقائيّة تعمل لكلّ المشتركين.
+  bool _big = false;
+  int _bigTotal = 0;
+  BigCounts? _bigCounts;
+  final _bigSearch = BigSearch(size: 50);
+  final Map<String, Subscriber> _bigPicked = {};
+  static const int _kBigMaxTargets = 100; // = TARGET_MAX في الخادم (whatsapp/sas4Client.js)
+
   /// جارٍ سؤال الخادم عن خطر الأرقام — بين الضغط والحوار.
   bool _checkingRisk = false;
 
@@ -118,6 +129,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
 
   @override
   void dispose() {
+    _bigSearch.dispose();
     _msg.dispose();
     _search.dispose();
     _msgFocus.dispose();
@@ -126,12 +138,31 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
+    final big = await BigSubscribersApi.probe();
+    if (!mounted) return;
+    if (big > 0) {
+      final c = await BigSubscribersApi.summary();
+      if (!mounted) return;
+      setState(() {
+        _big = true;
+        _bigTotal = big;
+        _bigCounts = c;
+        _scope = _Scope.specific;
+        _loading = false;
+      });
+      _bigSearch.search(_search.text, onRows: _setBigRows, now: true);
+      return;
+    }
     final subs = await SubscribersApi.loadAll();
     if (!mounted) return;
     setState(() {
       _subs = subs ?? const [];
       _loading = false;
     });
+  }
+
+  void _setBigRows(List<Subscriber> rows) {
+    if (mounted) setState(() => _subs = rows);
   }
 
   // ─── فلاتر ─────────────────────────────────────
@@ -173,6 +204,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   }
 
   List<Subscriber> get _visibleCandidates {
+    if (_big) return _candidates; // الساس بحث
     final q = _search.text.trim().toLowerCase();
     if (q.isEmpty) return _candidates;
     return _candidates.where((s) {
@@ -184,11 +216,23 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     }).toList();
   }
 
-  List<Subscriber> get _targets => _scope == _Scope.all
-      ? _candidates
-      : _candidates.where((s) => _selected.contains(s.username)).toList();
+  List<Subscriber> get _targets => _big
+      ? (_scope == _Scope.specific ? _bigPicked.values.toList() : const [])
+      : _scope == _Scope.all
+          ? _candidates
+          : _candidates.where((s) => _selected.contains(s.username)).toList();
 
   Map<_Filter, int> get _counts {
+    // الكبير: أعداد الفئات من الساس (كلّ المشتركين، لا من لهم رقم) — والدين -1 «—» حين لا يُعرف
+    if (_big) {
+      final c = _bigCounts;
+      return {
+        _Filter.all: c?.all ?? _bigTotal,
+        _Filter.debtors: c?.debtors ?? -1,
+        _Filter.expired: c?.expired ?? -1,
+        _Filter.expiring: c?.nearExpiry ?? -1,
+      };
+    }
     int debtors = 0;
     int expired = 0;
     int expiring = 0;
@@ -241,15 +285,26 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     setState(() {
       _filter = f;
       _selected.clear();
+      _bigPicked.clear();
     });
   }
 
   void _toggleSelect(String username) {
+    if (_big && !_selected.contains(username) && _selected.length >= _kBigMaxTargets) {
+      _snack('حتى $_kBigMaxTargets مشتركاً في المرّة للحسابات الكبيرة', isError: true);
+      return;
+    }
     setState(() {
       if (_selected.contains(username)) {
         _selected.remove(username);
+        _bigPicked.remove(username);
       } else {
         _selected.add(username);
+        if (_big) {
+          for (final s in _subs) {
+            if (s.username == username) _bigPicked[username] = s;
+          }
+        }
       }
     });
   }
@@ -261,10 +316,13 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       if (allSelected) {
         for (final s in visible) {
           _selected.remove(s.username);
+          _bigPicked.remove(s.username);
         }
       } else {
         for (final s in visible) {
+          if (_big && _selected.length >= _kBigMaxTargets) break;
           _selected.add(s.username);
+          if (_big) _bigPicked[s.username] = s;
         }
       }
     });
@@ -585,6 +643,10 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                       padding: const EdgeInsets.fromLTRB(
                           Sp.lg, Sp.md, Sp.lg, Sp.huge),
                       children: [
+                        if (_big) ...[
+                          _bigNotice(),
+                          const SizedBox(height: Sp.md),
+                        ],
                         _buildFilterCard(),
                         // فلتر مدير فرعي — يظهر فقط لو المدير الرئيسي
                         // عنده مدراء تحته (matches SendScopePanel visibility).
@@ -595,7 +657,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                         const SizedBox(height: Sp.md),
                         _buildScopeCard(),
                         if (_scope == _Scope.specific &&
-                            _candidates.isNotEmpty) ...[
+                            (_candidates.isNotEmpty || _big)) ...[
                           const SizedBox(height: Sp.md),
                           _buildSelectionCard(),
                         ],
@@ -713,6 +775,32 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
 
   // ─── Sections ─────────────────────────────
 
+  /// الحساب الكبير: ما يختلف هنا ولماذا — بلا «تعذّر» ولا قائمةٍ فارغة صامتة.
+  Widget _bigNotice() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.warningSoftBg,
+        borderRadius: BorderRadius.circular(R.sm),
+        border: Border.all(color: AppColors.warningSoftBorder),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(LucideIcons.info, size: 14, color: AppColors.warning),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'حسابك كبير ($_bigTotal مشترك): ابحث واختر المشتركين — حتى $_kBigMaxTargets في المرّة. '
+              'الإرسال لفئةٍ كاملة غير متاح بعد، والتذكيرات التلقائيّة بقرب الانتهاء والديون تعمل لكلّ المشتركين.',
+              style: AppType.body(color: AppColors.textBody).copyWith(fontSize: 12.5, height: 1.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFilterCard() {
     final counts = _counts;
     return _sectionCard(
@@ -799,7 +887,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                   Icon(icon,
                       size: 14, color: active ? color : AppColors.textMid),
                   Text(
-                    count.toString(),
+                    count < 0 ? '—' : count.toString(),
                     style:
                         AppType.title(color: active ? color : AppColors.textHi)
                             .copyWith(fontSize: 13),
@@ -939,7 +1027,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
               _Scope.all,
               icon: LucideIcons.layers,
               title: 'عام',
-              subtitle: 'للكل (${_candidates.length})',
+              subtitle: _big ? 'غير متاح للحسابات الكبيرة' : 'للكل (${_candidates.length})',
+              enabled: !_big,
             ),
           ),
           const SizedBox(width: 8),
@@ -961,14 +1050,15 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   Widget _scopeChip(_Scope s,
       {required IconData icon,
       required String title,
-      required String subtitle}) {
+      required String subtitle,
+      bool enabled = true}) {
     final active = _scope == s;
     return Material(
       color: active ? AppColors.brandSoftBg : AppColors.surface,
       borderRadius: BorderRadius.circular(R.sm),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => setState(() => _scope = s),
+        onTap: enabled ? () => setState(() => _scope = s) : null,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           decoration: BoxDecoration(
@@ -1016,7 +1106,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
         visible.every((s) => _selected.contains(s.username));
     return _sectionCard(
       icon: LucideIcons.userCheck,
-      title: 'اختيار المشتركين (${_selected.length}/${_candidates.length})',
+      title: _big
+          ? 'اختيار المشتركين (${_selected.length} مختار)'
+          : 'اختيار المشتركين (${_selected.length}/${_candidates.length})',
       trailing: TextButton.icon(
         onPressed: _toggleSelectAllVisible,
         icon: Icon(
@@ -1038,7 +1130,10 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           // Search
           TextField(
             controller: _search,
-            onChanged: (_) => setState(() {}),
+            onChanged: (q) {
+              setState(() {});
+              if (_big) _bigSearch.search(q, onRows: _setBigRows);
+            },
             decoration: InputDecoration(
               hintText: 'ابحث بالاسم أو الهاتف…',
               hintStyle: AppType.muted().copyWith(fontSize: 12.5),

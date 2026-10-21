@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../services/notification_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/big_subscribers_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../models/app_notification.dart';
 import '../../models/subscriber.dart';
@@ -37,6 +38,15 @@ class _InboxScreenState extends State<InboxScreen> {
   List<Subscriber> _nearExpiry = const [];
   bool _loaded = false;
 
+  // ── الحسابات الكبيرة (≥ ٥٠٠٠): القائمتان من الساس صفحةً صفحة (expired_today / expiring_24h) بالتعريفين نفسيهما،
+  // والعنوان يحمل مجموع كلٍّ منهما لا ما حُمِّل. ──
+  static const int _kBigInboxPage = 100;
+  bool _big = false;
+  int _expiredTotal = 0, _nearTotal = 0;
+  int _expiredPage = 0, _nearPage = 0;
+  int _expiredLast = 1, _nearLast = 1;
+  bool _expiredMore = false, _nearMore = false;
+
   @override
   void initState() {
     super.initState();
@@ -44,6 +54,7 @@ class _InboxScreenState extends State<InboxScreen> {
   }
 
   Future<void> _loadLists() async {
+    if (await BigSubscribersApi.probe() > 0) return _loadBig();
     final list = await SubscribersApi.loadAllWithOnline();
     if (!mounted) return;
     if (list == null) {
@@ -84,6 +95,80 @@ class _InboxScreenState extends State<InboxScreen> {
       _nearExpiry = nearExpiry;
       _loaded = true;
     });
+  }
+
+  Future<void> _loadBig() async {
+    try {
+      final r = await Future.wait([
+        BigSubscribersApi.page(page: 1, size: _kBigInboxPage, tab: 'expired_today'),
+        BigSubscribersApi.page(page: 1, size: _kBigInboxPage, tab: 'expiring_24h'),
+      ]);
+      if (!mounted) return;
+      AlertsService.setCounts(near: r[1].total, expiredToday: r[0].total);
+      setState(() {
+        _big = true;
+        _expiredToday = r[0].rows;
+        _nearExpiry = r[1].rows;
+        _expiredTotal = r[0].total;
+        _nearTotal = r[1].total;
+        _expiredPage = _nearPage = 1;
+        _expiredLast = r[0].lastPage;
+        _nearLast = r[1].lastPage;
+        _loaded = true;
+      });
+    } on BigListException catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _big = true;
+        _loaded = true;
+      });
+    }
+  }
+
+  /// الصفحة التالية لإحدى القائمتين (بلا تكرار صفٍّ ظهر).
+  Future<void> _loadBigMore({required bool expired}) async {
+    if (expired ? _expiredMore : _nearMore) return;
+    setState(() => expired ? _expiredMore = true : _nearMore = true);
+    try {
+      final p = await BigSubscribersApi.page(
+        page: (expired ? _expiredPage : _nearPage) + 1,
+        size: _kBigInboxPage,
+        tab: expired ? 'expired_today' : 'expiring_24h',
+      );
+      if (!mounted) return;
+      setState(() {
+        final cur = expired ? _expiredToday : _nearExpiry;
+        final seen = cur.map((s) => s.idx ?? s.username).toSet();
+        final next = [...cur, ...p.rows.where((s) => !seen.contains(s.idx ?? s.username))];
+        if (expired) {
+          _expiredToday = next;
+          _expiredPage++;
+          _expiredLast = p.lastPage;
+          _expiredMore = false;
+        } else {
+          _nearExpiry = next;
+          _nearPage++;
+          _nearLast = p.lastPage;
+          _nearMore = false;
+        }
+      });
+    } on BigListException catch (_) {
+      if (!mounted) return;
+      setState(() => expired ? _expiredMore = false : _nearMore = false);
+    }
+  }
+
+  Widget _bigMoreButton({required bool expired}) {
+    final loading = expired ? _expiredMore : _nearMore;
+    return Align(
+      alignment: AlignmentDirectional.center,
+      child: TextButton(
+        onPressed: loading ? null : () => _loadBigMore(expired: expired),
+        child: loading
+            ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brand))
+            : Text('notifications.show_more'.tr(), style: AppType.bodyBold(color: AppColors.brand)),
+      ),
+    );
   }
 
   void _openSubscriber(Subscriber s) {
@@ -192,7 +277,7 @@ class _InboxScreenState extends State<InboxScreen> {
                   if (hasExpiredToday) ...[
                     _SectionHeader(
                       title: 'notifications.expired_today'.tr(),
-                      count: _expiredToday.length,
+                      count: _big ? _expiredTotal : _expiredToday.length,
                       color: AppColors.error,
                       icon: LucideIcons.circleAlert,
                     ),
@@ -206,12 +291,13 @@ class _InboxScreenState extends State<InboxScreen> {
                       ),
                       const SizedBox(height: 4),
                     ],
+                    if (_big && _expiredPage < _expiredLast) _bigMoreButton(expired: true),
                     const SizedBox(height: Sp.md),
                   ],
                   if (hasNearExpiry) ...[
                     _SectionHeader(
                       title: 'notifications.near_expiry_section'.tr(),
-                      count: _nearExpiry.length,
+                      count: _big ? _nearTotal : _nearExpiry.length,
                       color: AppColors.warning,
                       icon: LucideIcons.triangleAlert,
                     ),
@@ -225,6 +311,7 @@ class _InboxScreenState extends State<InboxScreen> {
                       ),
                       const SizedBox(height: 4),
                     ],
+                    if (_big && _nearPage < _nearLast) _bigMoreButton(expired: false),
                   ],
                   if (!_loaded && !hasApp)
                     const Padding(
