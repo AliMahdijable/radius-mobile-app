@@ -273,7 +273,7 @@ class MimosaApi {
       }
     } on SnmpException catch (e) {
       throw MimosaException(
-          'فشل جلب بيانات SNMP: $e. تحقّق: community="$community"، '
+          'فشل جلب بيانات SNMP: $e. تحقّق: الـcommunity المحفوظة، '
           'SNMP مفعّل من web UI للجهاز (Preferences → Management → SNMP)');
     }
 

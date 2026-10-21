@@ -135,7 +135,7 @@ class RuijieApi {
     } on SnmpException catch (e) {
       throw RuijieException('فشل الاتصال SNMP: $e\n'
           'تحقّق:\n'
-          '• community="$community" صحيح\n'
+          '• الـcommunity المحفوظة صحيحة\n'
           '• SNMP مُفعّل على الجهاز (Reyee: Advanced → Basics → SNMP)\n'
           '• Port $port مفتوح (default 161/UDP)');
     }

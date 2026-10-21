@@ -137,9 +137,11 @@ class SnmpV2c {
       }, cancelOnError: true);
 
       return await completer.future.timeout(timeout, onTimeout: () {
+        // ⚠️ الـcommunity كلمة سرّ القراءة — لا تُكتب في رسالةٍ تظهر
+        // للمستخدم أو تُنسخ إلى سجلّ أو لقطة شاشة.
         throw SnmpTimeoutException(
             'SNMP timeout بعد ${timeout.inSeconds}s — $host:$port. '
-            'تحقّق: community="$community"، SNMP مفعّل على الجهاز، الـport مفتوح.');
+            'تحقّق: الـcommunity المحفوظة، SNMP مفعّل على الجهاز، الـport مفتوح.');
       });
     } finally {
       // 2026-08-28 (Google 2027 audit): subscription كان يُلغى فقط في
@@ -439,6 +441,15 @@ class Varbind {
   /// `null` حين يكون الـOID غائباً — لتُميّز الشاشة «لا يدعمه الجهاز»
   /// عن «القيمة صفر».
   int? get asIntOrNull => isAbsent ? null : asInt;
+
+  /// هل الوسم عدديّ (INTEGER · Counter32 · Gauge32 · TimeTicks ·
+  /// Counter64)؟ `asInt` يُعيد صفراً لما سواه، وصفرٌ من نصٍّ ليس قراءة.
+  bool get isNumeric =>
+      rawTag == 0x02 ||
+      rawTag == 0x41 ||
+      rawTag == 0x42 ||
+      rawTag == 0x43 ||
+      rawTag == 0x46;
 
   /// القيمة كنص — يعمل مع OctetString + OID + IpAddress.
   String get asString {
