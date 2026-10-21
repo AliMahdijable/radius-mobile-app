@@ -5,6 +5,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/network_devices_api.dart';
 import '../../../api/vsol_olt_api.dart';
+import '../../../api/snmp_client.dart';
+import '../../../api/vsol_gpon_details.dart';
 import '../../../models/network_device.dart';
 import '../../../services/device_stats_cache.dart';
 import '../../../theme/colors.dart';
@@ -38,8 +40,13 @@ class _VsolLivePanelState extends State<VsolLivePanel>
   bool _foreground = true;
   int _gen = 0;
 
+  VsolGponSnapshot? _gponDetails;
+  DateTime? _gponDetailsAt;
+  bool _gponDetailsLoading = false;
+
   bool _onlineOnly = false;
   String _query = '';
+  final _onuScroll = ScrollController();
 
   /// اللقطة السابقة ولحظتُها — منهما يُحسب المعدّل.
   ///
@@ -147,6 +154,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
+    _onuScroll.dispose();
     _gen++;
     super.dispose();
   }
@@ -170,11 +178,13 @@ class _VsolLivePanelState extends State<VsolLivePanel>
     // ⚡ ما دمنا بلا معدّلٍ بعد، فالنبضة التالية **فوريّة**: المعدّل
     // يحتاج قراءةً ثانية، وكلّ انتظارٍ هنا يُضاف إلى زمن ظهور أوّل
     // رقم. والقراءة السريعة ثانيةٌ واحدة.
-    final gap = _rates.isEmpty && _stats != null ? Duration.zero : _interval;
-    // مؤقّتٌ يُعيد تسليح نفسه — لأنّ الفاصل يتغيّر بعد كلّ مسحة.
-    _timer = Timer(gap, () {
-      _fetch();
-      _arm();
+    final gap = _rates.isEmpty && _stats != null && !_loading && _error == null
+        ? Duration.zero
+        : _interval;
+    // Await the read before rearming, including while the first rate is pending.
+    _timer = Timer(gap, () async {
+      await _fetch();
+      if (mounted) _arm();
     });
   }
 
@@ -221,7 +231,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
       // ⚡ أوّل مسحةٍ **بنيةٌ فقط** (‏٦ث): أسماءٌ وحالة، بلا عدّادات
       // ولا عناوين. العدّادات تأتي من الطبقة السريعة بعدها بثانية،
       // والعناوين والسرعات في المسحة الكاملة الدوريّة.
-      final s = wantFull
+      var s = wantFull
           ? await VsolOltApi.fetchStats(
               host: d.ip,
               port: d.apiPort ?? 161,
@@ -229,6 +239,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
               structureOnly: structureOnly,
               // العدّادات من الطبقتين الخفيفتين — أرخص وأحدث.
               withCounters: structureOnly,
+              withGponDetails: false,
               onPartialReady: (partial) {
                 if (!mounted || gen != _gen) return;
                 // ⚡ المسحة تبعث لقطتين: الهويّة (اسمٌ ورفع، صفر واجهات)
@@ -244,7 +255,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
                 // أيّاً كان ترتيبها — وهذا أيضاً يمنع لقطة الهويّة في
                 // مسحةٍ دوريّةٍ لاحقة من محو لوحةٍ مكتملة.
                 if (!VsolOltStats.richer(_stats, partial)) return;
-                setState(() => _stats = partial);
+                setState(() => _stats = _withGponDetails(partial));
                 // ⚠️ ولا نتّخذها عيّنةً أولى للمعدّل.
                 //
                 // 🐛 جرّبتُ ذلك فأعطى `0.0 Mbps`: اللقطة والنتيجة
@@ -268,6 +279,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
                   previous: base,
                 );
       if (!mounted || gen != _gen) return;
+      s = _withGponDetails(s);
       final cost = clock.elapsed;
       final at = DateTime.now();
       // كلّ طبقةٍ تُقارَن بلقطتها، والنتيجة تُدمَج فوق السابقة: فصفوف
@@ -277,7 +289,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
       final ref = wantAll ? _prevAll : _prevHot;
       final refAt = wantAll ? _prevAllAt : _prevHotAt;
       final rates = Map<String, VsolTraffic>.from(_rates);
-      if (ref != null && refAt != null && ref.hasCounters) {
+      if (ref != null && refAt != null && ref.hasCounters && s.hasCounters) {
         final fresh = VsolTraffic.between(ref, s, at.difference(refAt));
         if (wantAll) {
           rates.addAll(fresh);
@@ -343,6 +355,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
         final paced = _lightCost * 1.5;
         _interval = paced > _minInterval ? paced : _minInterval;
       });
+      unawaited(_refreshGponDetails(community));
     } on VsolException catch (e) {
       if (!mounted || gen != _gen) return;
       setState(() {
@@ -356,6 +369,55 @@ class _VsolLivePanelState extends State<VsolLivePanel>
         _error = 'تعذّرت القراءة: $e';
       });
     }
+  }
+
+  VsolOltStats _withGponDetails(VsolOltStats stats) {
+    final details = _gponDetails;
+    final at = _gponDetailsAt;
+    return details == null || at == null
+        ? stats
+        : stats.withGponDetails(details, at);
+  }
+
+  Future<void> _refreshGponDetails(String community) async {
+    if (_gponDetailsLoading ||
+        !_foreground ||
+        !(_stats?.onus.any((o) => o.technology == VsolPonTechnology.gpon) ??
+            false)) {
+      return;
+    }
+    final age = _gponDetailsAt;
+    final interval = _gponDetails?.macsComplete == true
+        ? const Duration(minutes: 5)
+        : const Duration(seconds: 30);
+    if (age != null && DateTime.now().difference(age) < interval) return;
+    setState(() => _gponDetailsLoading = true);
+    final d = widget.device;
+    try {
+      final details = await VsolGponDetails.fetch(
+        SnmpV2c(host: d.ip, port: d.apiPort ?? 161, community: community),
+        isCancelled: () => !mounted || !_foreground,
+      );
+      if (!mounted) return;
+      setState(() {
+        _gponDetails = details;
+        _gponDetailsAt = DateTime.now();
+        // Counter polling may have finished while the MAC table was loading.
+        // Enrich the latest sample, never restore the one we started with.
+        if (_stats != null) {
+          _stats = _withGponDetails(_stats!);
+          DeviceStatsCache.instance.putRaw(d.id, _stats!);
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _gponDetailsLoading = false);
+    }
+  }
+
+  void _refreshManually() {
+    _gponDetailsAt = null;
+    _sinceFull = _fullEvery;
+    _fetch();
   }
 
   // ══════════════════════════════════════════════════════════
@@ -458,7 +520,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
           ),
           IconButton(
             icon: const Icon(LucideIcons.refreshCw, size: 16),
-            onPressed: _loading ? null : _fetch,
+            onPressed: _loading ? null : _refreshManually,
             tooltip: 'تحديث الآن',
             color: AppColors.brand,
             visualDensity: VisualDensity.compact,
@@ -576,7 +638,8 @@ class _VsolLivePanelState extends State<VsolLivePanel>
       );
 
   List<Widget> _sections(VsolOltStats s) {
-    final shown = s.onus.where(_match).toList();
+    // Keep each subscriber's position in PON/ONU order when filtering.
+    final shown = s.onus.indexed.where((entry) => _match(entry.$2)).toList();
     return [
       if (s.ponPorts.isNotEmpty) ...[
         const SizedBox(height: Sp.md),
@@ -628,7 +691,10 @@ class _VsolLivePanelState extends State<VsolLivePanel>
     if (_onlineOnly && !o.online) return false;
     final q = _query.trim().toLowerCase();
     if (q.isEmpty) return true;
-    return '${o.label} ${o.mac ?? ''}'.toLowerCase().contains(q);
+    return '${o.label} ${o.name ?? ''} ${o.serial ?? ''} '
+            '${o.mac ?? ''} ${o.learnedMacs.join(' ')}'
+        .toLowerCase()
+        .contains(q);
   }
 
   Widget _ponRow(VsolPonPort p) => Container(
@@ -661,7 +727,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
         ]),
       );
 
-  Widget _onuContent(List<VsolOnu> shown) => Column(
+  Widget _onuContent(List<(int, VsolOnu)> shown) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [
@@ -672,7 +738,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
                   style: AppType.micro(),
                   decoration: InputDecoration(
                     isDense: true,
-                    hintText: 'ابحث برقم المشترك أو MAC…',
+                    hintText: 'ابحث بالاسم أو ONU أو MAC أو SN…',
                     hintStyle: AppType.micro(color: AppColors.textLow),
                     prefixIcon: Icon(LucideIcons.search,
                         size: 14, color: AppColors.textLow),
@@ -682,7 +748,10 @@ class _VsolLivePanelState extends State<VsolLivePanel>
                       borderSide: BorderSide(color: AppColors.border),
                     ),
                   ),
-                  onChanged: (v) => setState(() => _query = v),
+                  onChanged: (v) {
+                    if (_onuScroll.hasClients) _onuScroll.jumpTo(0);
+                    setState(() => _query = v);
+                  },
                 ),
               ),
             ),
@@ -690,7 +759,10 @@ class _VsolLivePanelState extends State<VsolLivePanel>
             FilterChip(
               label: Text('المتّصلون', style: AppType.micro()),
               selected: _onlineOnly,
-              onSelected: (v) => setState(() => _onlineOnly = v),
+              onSelected: (v) {
+                if (_onuScroll.hasClients) _onuScroll.jumpTo(0);
+                setState(() => _onlineOnly = v);
+              },
               visualDensity: VisualDensity.compact,
             ),
           ]),
@@ -702,11 +774,38 @@ class _VsolLivePanelState extends State<VsolLivePanel>
                   style: AppType.micro(color: AppColors.textLow)),
             )
           else
-            for (final o in shown) _onuRow(o),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight:
+                    (MediaQuery.sizeOf(context).height * 0.52).clamp(240, 420),
+              ),
+              child: Scrollbar(
+                controller: _onuScroll,
+                thumbVisibility: true,
+                child: ListView.builder(
+                  key: PageStorageKey('vsol-${widget.device.id}-onu-list'),
+                  controller: _onuScroll,
+                  primary: false,
+                  shrinkWrap: true,
+                  padding: const EdgeInsetsDirectional.only(end: 10),
+                  itemCount: shown.length,
+                  findChildIndexCallback: (key) {
+                    final index = shown
+                        .indexWhere((entry) => ValueKey(entry.$2.label) == key);
+                    return index < 0 ? null : index;
+                  },
+                  itemBuilder: (context, index) {
+                    final (position, onu) = shown[index];
+                    return _onuRow(onu, position + 1);
+                  },
+                ),
+              ),
+            ),
         ],
       );
 
-  Widget _onuRow(VsolOnu o) => Container(
+  Widget _onuRow(VsolOnu o, int number) => Container(
+        key: ValueKey(o.label),
         margin: const EdgeInsets.only(bottom: 6),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
@@ -714,38 +813,111 @@ class _VsolLivePanelState extends State<VsolLivePanel>
           borderRadius: BorderRadius.circular(R.sm),
           border: Border.all(color: AppColors.border),
         ),
-        child: Row(children: [
-          Container(
-            width: 4,
-            height: 26,
-            decoration: BoxDecoration(
-              color: o.online ? AppColors.success : AppColors.textLow,
-              borderRadius: BorderRadius.circular(R.sm),
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            Container(
+              width: 4,
+              height: 26,
+              decoration: BoxDecoration(
+                color: o.online ? AppColors.success : AppColors.textLow,
+                borderRadius: BorderRadius.circular(R.sm),
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Directionality(
-                textDirection: TextDirection.ltr,
-                child: Text(o.label,
-                    textAlign: TextAlign.left, style: AppType.rowLabelBold()),
+            const SizedBox(width: 8),
+            Container(
+              constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                color: AppColors.brandSoftBg,
+                borderRadius: BorderRadius.circular(R.sm),
               ),
-              // العنوان للمتّصل وحده — انظر `VsolOnu.mac`.
-              Directionality(
-                textDirection: TextDirection.ltr,
-                child: Text(
-                  o.mac ?? (o.online ? '—' : 'غير متّصل'),
-                  textAlign: TextAlign.left,
-                  style: AppType.micro(color: AppColors.textLow),
-                ),
-              ),
-            ]),
-          ),
-          if (o.online) _flow(o.label),
+              child: Text('$number',
+                  semanticsLabel: 'المشترك $number',
+                  style: AppType.microBold(color: AppColors.brand)),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (o.name?.isNotEmpty == true)
+                      Text(o.name!, style: AppType.rowLabelBold()),
+                    Directionality(
+                      textDirection: TextDirection.ltr,
+                      child: Text(o.label,
+                          textAlign: TextAlign.left,
+                          style: AppType.rowLabelBold()),
+                    ),
+                    // العنوان للمتّصل وحده — انظر `VsolOnu.mac`.
+                    Directionality(
+                      textDirection: TextDirection.ltr,
+                      child: Text(
+                        o.mac != null
+                            ? 'MAC ${o.mac}'
+                            : (o.serial != null
+                                ? 'SN ${o.serial}'
+                                : (o.online ? '—' : 'غير متّصل')),
+                        textAlign: TextAlign.left,
+                        style: AppType.micro(color: AppColors.textLow),
+                      ),
+                    ),
+                  ]),
+            ),
+            if (o.online) _flow(o.label),
+          ]),
+          if (o.technology == VsolPonTechnology.gpon && o.online)
+            _learnedMacs(o),
         ]),
       );
+
+  Widget _learnedMacs(VsolOnu o) {
+    if (!o.learnedMacsComplete || o.learnedMacs.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Text(
+          o.learnedMacsReadAt == null
+              ? (_gponDetailsLoading
+                  ? 'جاري قراءة الماكات…'
+                  : 'الماكات لم تُقرأ بعد')
+              : (!o.learnedMacsComplete
+                  ? 'تعذّرت قراءة جدول الماكات كاملاً'
+                  : 'لا توجد MACs متعلّمة حالياً'),
+          style: AppType.micro(color: AppColors.textLow),
+        ),
+      );
+    }
+    return Material(
+      type: MaterialType.transparency,
+      child: ExpansionTile(
+        key: PageStorageKey('vsol-${widget.device.id}-${o.label}-macs'),
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(bottom: 6),
+        dense: true,
+        visualDensity: VisualDensity.compact,
+        iconColor: AppColors.textLow,
+        collapsedIconColor: AppColors.textLow,
+        title: Text('MACs المتعلّمة (${o.learnedMacs.length})',
+            style: AppType.micro(color: AppColors.textMid)),
+        subtitle: Text('أجهزة خلف الـONU · ${_clock(o.learnedMacsReadAt!)}',
+            style: AppType.micro(color: AppColors.textLow)),
+        children: [
+          for (final mac in o.learnedMacs)
+            Align(
+              alignment: Alignment.centerLeft,
+              // ExpansionTile stores a bool in PageStorage. Each selectable
+              // line has a scroll position and must use a separate storage key.
+              child: SelectableText(mac,
+                  key: PageStorageKey(
+                      'vsol-${widget.device.id}-${o.label}-$mac'),
+                  textDirection: TextDirection.ltr,
+                  style: AppType.micro()),
+            ),
+        ],
+      ),
+    );
+  }
 
   Widget _upRow(VsolUplink u) => Container(
         margin: const EdgeInsets.only(bottom: 6),

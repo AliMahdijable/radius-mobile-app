@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'snmp_client.dart';
+import 'vsol_gpon_details.dart';
 
 /// طبقة قراءةٍ لـ**OLT من VSOL** (سلسلة V1600D) عبر SNMP v2c.
 ///
@@ -76,6 +77,7 @@ class VsolOltApi {
     Duration timeout = const Duration(seconds: 5),
     bool structureOnly = false,
     bool withCounters = true,
+    bool withGponDetails = true,
     void Function(VsolOltStats partial)? onPartialReady,
   }) async {
     final snmp = SnmpV2c(
@@ -119,8 +121,9 @@ class VsolOltApi {
     //
     // (بلاغ المستخدم ٢٠٢٦-١٠-٠١: «يصير تأخير بعرض البيانات… يعني
     // ١٥ ثانية تقريباً»)
-    final scan =
-        await _readIfTable(snmp, structureOnly: structureOnly, onNames: (rows) {
+    final scan = await _readIfTable(snmp,
+        structureOnly: structureOnly,
+        withCounters: withCounters, onNames: (rows) {
       final early = VsolParse.build(rows);
       onPartialReady?.call(VsolOltStats(
         sysDescr: descr,
@@ -132,6 +135,14 @@ class VsolOltApi {
       ));
     });
     final parsed = VsolParse.build(scan.rows);
+    var onus = parsed.onus;
+    if (withGponDetails &&
+        !structureOnly &&
+        onus.any((o) => o.technology == VsolPonTechnology.gpon)) {
+      final details = await VsolGponDetails.fetch(snmp);
+      final readAt = DateTime.now();
+      onus = [for (final o in onus) o.withGponDetails(details, readAt)];
+    }
 
     // ⚠️ **مشتركون بلا منافذَ تحملهم = قراءةٌ ناقصة، لا جهازٌ غريب.**
     //
@@ -167,7 +178,7 @@ class VsolOltApi {
       uptime: uptime,
       uplinks: parsed.uplinks,
       ponPorts: parsed.ponPorts,
-      onus: parsed.onus,
+      onus: onus,
       narrowCounters: scan.narrowCounters,
       rxAt: scan.rxAt,
       txAt: scan.txAt,
@@ -238,7 +249,7 @@ class VsolOltApi {
       sysDescr: previous.sysDescr,
       sysName: previous.sysName,
       uptime: previous.uptime,
-      narrowCounters: previous.narrowCounters,
+      narrowCounters: previous.narrowCounters || _narrowHosts.contains(host),
       rxAt: rxAt,
       txAt: txAt,
       uplinks: [
@@ -597,7 +608,9 @@ class VsolOltApi {
   static String? _macOf(Varbind? vb) {
     if (vb == null || vb.isAbsent) return null;
     final b = vb.rawBytes;
-    if (b.length != 6) return null;
+    if (b.length != 6 || b.every((v) => v == 0) || b.every((v) => v == 255)) {
+      return null;
+    }
     return b.map((x) => x.toRadixString(16).padLeft(2, '0')).join(':');
   }
 }
@@ -636,8 +649,9 @@ class VsolParse {
   ///
   /// نلتقط الشرطة المائلة والنقطتين بتعبيرٍ واحد كيلا نُصنّف
   /// `EPON0/3` ONU رقم صفر — وهو ما يُفسد عدّ المشتركين.
-  static final RegExp _rePon =
-      RegExp(r'^EPON(\d+)/(\d+)(?::(\d+))?$', caseSensitive: false);
+  static final RegExp _rePon = RegExp(
+      r'^(E|G)PON(\d+)/(\d+)(?::(\d+))?(?:\s+(.+))?$',
+      caseSensitive: false);
 
   /// صيغةٌ ثانية للمشتركين: `EPON01ONU34` = خانة 0، منفذ 1، ONU 34.
   ///
@@ -646,7 +660,7 @@ class VsolParse {
   /// المشتركين: منافذ PON تُقرأ (صيغتها واحدة في الفيرمويرين) بينما
   /// يسقط المشتركون كلّهم بصمت.
   static final RegExp _reOnuAlt =
-      RegExp(r'^EPON(\d)(\d+)ONU(\d+)$', caseSensitive: false);
+      RegExp(r'^(E|G)PON(\d)(\d+)ONU(\d+)(?:\s+(.+))?$', caseSensitive: false);
   static final RegExp _reUplink =
       RegExp(r'^(?:GE|XGE|TE)(\d+)/(\d+)$', caseSensitive: false);
 
@@ -661,13 +675,15 @@ class VsolParse {
     final onus = <VsolOnu>[];
 
     for (final r in rows) {
-      final alt = _reOnuAlt.firstMatch(r.name);
+      final alt = _reOnuAlt.firstMatch(r.name.trim());
       if (alt != null) {
         onus.add(VsolOnu(
           ifIndex: r.index,
-          slot: int.parse(alt.group(1)!),
-          ponPort: int.parse(alt.group(2)!),
-          onuId: int.parse(alt.group(3)!),
+          technology: VsolPonTechnology.fromPrefix(alt.group(1)!),
+          slot: int.parse(alt.group(2)!),
+          ponPort: int.parse(alt.group(3)!),
+          onuId: int.parse(alt.group(4)!),
+          name: alt.group(5)?.trim(),
           online: r.up,
           mac: r.up ? r.mac : null,
           speedMbps: r.speedMbps,
@@ -676,15 +692,17 @@ class VsolParse {
         ));
         continue;
       }
-      final pon = _rePon.firstMatch(r.name);
+      final pon = _rePon.firstMatch(r.name.trim());
       if (pon != null) {
-        final slot = int.parse(pon.group(1)!);
-        final port = int.parse(pon.group(2)!);
-        final onuId = pon.group(3);
-        final portKey = '$slot/$port';
+        final technology = VsolPonTechnology.fromPrefix(pon.group(1)!);
+        final slot = int.parse(pon.group(2)!);
+        final port = int.parse(pon.group(3)!);
+        final onuId = pon.group(4);
+        final portKey = '${technology.name}:$slot/$port';
         if (onuId == null) {
           pons[portKey] = VsolPonPort(
             index: r.index,
+            technology: technology,
             slot: slot,
             port: port,
             up: r.up,
@@ -694,9 +712,11 @@ class VsolParse {
         } else {
           onus.add(VsolOnu(
             ifIndex: r.index,
+            technology: technology,
             slot: slot,
             ponPort: port,
             onuId: int.parse(onuId),
+            name: pon.group(5)?.trim(),
             online: r.up,
             // ⚠️ العنوان يُقرأ **للمتّصل وحده**.
             //
@@ -728,6 +748,10 @@ class VsolParse {
     }
 
     onus.sort((a, b) {
+      final t = a.technology.index.compareTo(b.technology.index);
+      if (t != 0) return t;
+      final s = a.slot.compareTo(b.slot);
+      if (s != 0) return s;
       final c = a.ponPort.compareTo(b.ponPort);
       return c != 0 ? c : a.onuId.compareTo(b.onuId);
     });
@@ -737,7 +761,10 @@ class VsolParse {
     // عدد الـONU على كلّ منفذ — يُحسب هنا لا في الواجهة، فالواجهة
     // تُعيد الرسم كثيراً والعدّ ثابتٌ ما دامت اللقطة واحدة.
     final counted = ports.map((p) {
-      final mine = onus.where((o) => o.slot == p.slot && o.ponPort == p.port);
+      final mine = onus.where((o) =>
+          o.technology == p.technology &&
+          o.slot == p.slot &&
+          o.ponPort == p.port);
       return p.withCounts(
         onuTotal: mine.length,
         onuOnline: mine.where((o) => o.online).length,
@@ -782,6 +809,15 @@ class VsolUplink {
       );
 }
 
+enum VsolPonTechnology {
+  epon,
+  gpon;
+
+  String get prefix => this == gpon ? 'GPON' : 'EPON';
+  static VsolPonTechnology fromPrefix(String prefix) =>
+      prefix.toUpperCase() == 'G' ? gpon : epon;
+}
+
 @immutable
 class VsolPonPort {
   const VsolPonPort({
@@ -793,16 +829,19 @@ class VsolPonPort {
     required this.txBytes,
     this.onuTotal = 0,
     this.onuOnline = 0,
+    this.technology = VsolPonTechnology.epon,
   });
   final int index;
   final int slot, port;
   final bool up;
   final int rxBytes, txBytes, onuTotal, onuOnline;
+  final VsolPonTechnology technology;
 
-  String get label => 'EPON$slot/$port';
+  String get label => '${technology.prefix}$slot/$port';
 
   VsolPonPort withBytes(int rx, int tx) => VsolPonPort(
         index: index,
+        technology: technology,
         slot: slot,
         port: port,
         up: up,
@@ -815,6 +854,7 @@ class VsolPonPort {
   VsolPonPort withCounts({required int onuTotal, required int onuOnline}) =>
       VsolPonPort(
         index: index,
+        technology: technology,
         slot: slot,
         port: port,
         up: up,
@@ -837,27 +877,69 @@ class VsolOnu {
     this.speedMbps = 0,
     this.rxBytes = 0,
     this.txBytes = 0,
+    this.technology = VsolPonTechnology.epon,
+    this.name,
+    this.serial,
+    this.learnedMacs = const [],
+    this.learnedMacsReadAt,
+    this.learnedMacsComplete = false,
   });
 
   final int ifIndex, slot, ponPort, onuId;
   final bool online;
   final String? mac;
+  final VsolPonTechnology technology;
+  final String? name, serial;
+
+  /// Forwarding addresses learned behind this ONU, not its own hardware MAC.
+  final List<String> learnedMacs;
+  final DateTime? learnedMacsReadAt;
+  final bool learnedMacsComplete;
   final int speedMbps, rxBytes, txBytes;
 
   /// كما يكتبه المشغّل ويقرؤه في الـCLI: `EPON0/3:2`.
-  String get label => 'EPON$slot/$ponPort:$onuId';
+  String get label => '${technology.prefix}$slot/$ponPort:$onuId';
 
   VsolOnu withBytes(int rx, int tx) => VsolOnu(
         ifIndex: ifIndex,
+        technology: technology,
         slot: slot,
         ponPort: ponPort,
         onuId: onuId,
         online: online,
         mac: mac,
+        name: name,
+        serial: serial,
+        learnedMacs: learnedMacs,
+        learnedMacsReadAt: learnedMacsReadAt,
+        learnedMacsComplete: learnedMacsComplete,
         speedMbps: speedMbps,
         rxBytes: rx,
         txBytes: tx,
       );
+
+  VsolOnu withGponDetails(VsolGponSnapshot details, DateTime readAt) {
+    if (technology != VsolPonTechnology.gpon || slot != 0) return this;
+    final key = '$ponPort/$onuId';
+    return VsolOnu(
+      ifIndex: ifIndex,
+      slot: slot,
+      ponPort: ponPort,
+      onuId: onuId,
+      online: online,
+      mac: mac,
+      technology: technology,
+      name: name,
+      serial: details.serials[key],
+      learnedMacs:
+          online ? List.unmodifiable(details.learnedMacs[key] ?? []) : const [],
+      learnedMacsReadAt: readAt,
+      learnedMacsComplete: details.macsComplete,
+      speedMbps: speedMbps,
+      rxBytes: rxBytes,
+      txBytes: txBytes,
+    );
+  }
 }
 
 @immutable
@@ -909,6 +991,20 @@ class VsolOltStats {
   final List<VsolUplink> uplinks;
   final List<VsolPonPort> ponPorts;
   final List<VsolOnu> onus;
+
+  /// Merge slow identity reads into the newest traffic sample.
+  VsolOltStats withGponDetails(VsolGponSnapshot details, DateTime readAt) =>
+      VsolOltStats(
+        sysDescr: sysDescr,
+        sysName: sysName,
+        uptime: uptime,
+        uplinks: uplinks,
+        ponPorts: ponPorts,
+        onus: [for (final o in onus) o.withGponDetails(details, readAt)],
+        narrowCounters: narrowCounters,
+        rxAt: rxAt,
+        txAt: txAt,
+      );
 
   int get onusOnline => onus.where((o) => o.online).length;
   int get onusTotal => onus.length;
@@ -1039,7 +1135,7 @@ class VsolTraffic {
     }
 
     final out = <String, VsolTraffic>{};
-    void put(String key, int rx, int tx, int speedMbps) {
+    void put(String key, int rx, int tx, int speedMbps, [int? txSpeedMbps]) {
       final b = prev[key];
       if (b == null) return;
       out[key] = VsolTraffic(
@@ -1053,13 +1149,20 @@ class VsolTraffic {
             before: b.$2,
             now: tx,
             elapsed: txSpan,
-            speedMbps: speedMbps,
+            speedMbps: txSpeedMbps ?? speedMbps,
             narrow: now.narrowCounters),
       );
     }
 
     for (final p in now.ponPorts) {
-      put(p.label, p.rxBytes, p.txBytes, eponPortMbps);
+      // GPON downstream is twice its upstream; the EPON cap would discard
+      // legitimate >1.25 Gbit/s downstream readings.
+      put(
+          p.label,
+          p.rxBytes,
+          p.txBytes,
+          p.technology == VsolPonTechnology.gpon ? 1244 : eponPortMbps,
+          p.technology == VsolPonTechnology.gpon ? 2488 : eponPortMbps);
     }
     for (final o in now.onus) {
       put(o.label, o.rxBytes, o.txBytes, o.speedMbps);
