@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'core/platform/app_platform.dart';
+import 'core/platform/desktop_layout.dart';
 import 'firebase_options.dart';
 import 'screens/notifications/in_app_notification_banner.dart';
 import 'screens/splash_screen.dart';
@@ -27,6 +28,7 @@ import 'services/app_version.dart';
 import 'services/badge_service.dart';
 import 'services/client_diag.dart';
 import 'services/desktop_account_auth.dart';
+import 'services/mac_file_secure_storage.dart';
 import 'services/permissions_service.dart';
 import 'services/print_prefs.dart';
 import 'services/provider_service.dart';
@@ -39,6 +41,8 @@ import 'theme/typography.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // نسخة الماك للتجربة: الخزنة ملفٌّ لا سلسلة المفاتيح (mac_file_secure_storage.dart) — قبل أيّ قراءة.
+  if (AppPlatform.isMacDesktop) MacFileSecureStorage.install();
 
   // easy_localization يحتاج init قبل runApp — يحمّل الـcache ويتأكّد إن
   // الـstorage جاهز حتى الـsaveLocale يشتغل من اللحظة الأولى. مطلب
@@ -354,7 +358,10 @@ class _MyServicesAppState extends State<MyServicesApp>
                 final f = FocusManager.instance.primaryFocus;
                 if (f != null && f.hasFocus) f.unfocus();
               },
-              child: _TabletFrame(child: child ?? const SizedBox.shrink()),
+              child: ValueListenableBuilder<bool>(
+                valueListenable: DesktopLayout.shellActive,
+                builder: (_, __, ___) => _TabletFrame(child: child ?? const SizedBox.shrink()),
+              ),
             ),
           ),
           home: const SplashScreen(),
@@ -492,6 +499,8 @@ class _TabletFrame extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     final mq = MediaQuery.of(context);
     if (mq.size.shortestSide < 600 || mq.size.width <= _maxWidth) return child;
+    // الحاسبة بغلافها العريض (DesktopShell): القائمة والمحتوى يأخذان النافذة كلّها.
+    if (DesktopLayout.shellActive.value) return child;
     return ColoredBox(
       color: AppColors.bg,
       child: Center(

@@ -1635,5 +1635,15 @@
     "view": "You don't have permission to view this section",
     "ask": "Ask your manager",
     "a11y": "{} — locked"
+  },
+  "desktop": {
+    "group_manage": "Management",
+    "group_finance": "Finance",
+    "group_comms": "Messaging",
+    "group_customize": "Customize",
+    "group_earthlink": "EarthLink",
+    "search_hint": "Search subscribers…",
+    "add": "Add",
+    "pick_subscriber": "Pick a subscriber to see the details here"
   }
 }

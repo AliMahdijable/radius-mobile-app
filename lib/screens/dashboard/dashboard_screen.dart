@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../core/platform/app_platform.dart';
 import '../../core/util/format.dart';
 import '../../models/merged_company.dart';
 import '../../services/merged_mode.dart';
@@ -696,6 +697,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    // الحاسبة (منطقة محتوى عريضة): المشتركون بجانب الرصيد والإيرادات بدل عمودٍ واحدٍ يتمدّد.
+    final wide = AppPlatform.isDesktop && MediaQuery.sizeOf(context).width >= 860;
+    final subscribersSection = !_shown('subscribers')
+        ? null
+        : (_canSubs
+                ? SubscribersCard(
+                    stats: _subscribersStats,
+                    onOpen: widget.onOpenSubscribers,
+                  )
+                : LockedCard(
+                    title: 'nav.subscribers'.tr(),
+                    icon: LucideIcons.users,
+                    block: true,
+                    // ارتفاع البطاقة الحيّة (هيكلها المقيس).
+                    height: 285,
+                    radius: R.card,
+                    padding: const EdgeInsets.all(Sp.xl),
+                  ))
+            .animate()
+            .fadeIn(duration: const Duration(milliseconds: 280))
+            .slideY(begin: 0.03, end: 0);
+    // الرصيد يتبع reports.financial والمدينون subscribers.view — كلٌّ نصفٌ مستقلّ، والمحجوب منهما يبقى
+    // مكانه مقفلاً.
+    final walletSection = !_shown('wallet')
+        ? null
+        : StatsGrid(
+            wallet: _walletLoaded ? _walletLive : null,
+            debtors: _debtorsLoaded ? _debtorsLive : null,
+            balanceLocked: !_canMoney,
+            debtLocked: !_canSubs,
+            onOpenDebtors: () => widget.onOpenSubscribers?.call(SubscriberFilter.debtors),
+          )
+            .animate()
+            .fadeIn(
+              delay: const Duration(milliseconds: 80),
+              duration: const Duration(milliseconds: 280),
+            )
+            .slideY(begin: 0.03, end: 0);
+    // الكارت يجلب بنفسه (`reports/finance`)، فعدم بنائه يُسقط نداءه. ⚠️ المقفل لا يبني
+    // `HeroRevenueCard` أصلاً — `initState` فيه يُطلق النداء.
+    final revenueSection = !_shown('revenue')
+        ? null
+        : (_canMoney ? const HeroRevenueCard() : LockedCard(title: 'dashboard.revenue'.tr()))
+            .animate()
+            .fadeIn(
+              delay: const Duration(milliseconds: 160),
+              duration: const Duration(milliseconds: 280),
+            )
+            .slideY(begin: 0.03, end: 0);
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: RefreshIndicator(
@@ -784,59 +834,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   // (بلاغ ٢٠٢٦-١٠-١٤) — لا اختفاء يترك فراغاً، ولا نداء.
                   // ⚠️ التفرّع على `_canSubs` **قبل** حالة التحميل: المقفل لا
                   // يجلب، فلو بُني الحيّ لبقي على هيكله دوّارةً أبداً.
-                  if (_shown('subscribers'))
-                    (_canSubs
-                            ? SubscribersCard(
-                                stats: _subscribersStats,
-                                onOpen: widget.onOpenSubscribers,
-                              )
-                            : LockedCard(
-                                title: 'nav.subscribers'.tr(),
-                                icon: LucideIcons.users,
-                                block: true,
-                                // ارتفاع البطاقة الحيّة (هيكلها المقيس).
-                                height: 285,
-                                radius: R.card,
-                                padding: const EdgeInsets.all(Sp.xl),
-                              ))
-                        .animate()
-                        .fadeIn(duration: const Duration(milliseconds: 280))
-                        .slideY(begin: 0.03, end: 0),
-                  // ⚠️ الفراغ خارج الشرط كما كان: المالك الذي أخفى القسم من
-                  // «نطاق العرض» يرى المسافات نفسها حرفيّاً.
-                  const SizedBox(height: Sp.md),
-                  // الرصيد يتبع reports.financial والمدينون subscribers.view —
-                  // كلٌّ نصفٌ مستقلّ، والمحجوب منهما يبقى مكانه مقفلاً.
-                  if (_shown('wallet'))
-                    StatsGrid(
-                      wallet: _walletLoaded ? _walletLive : null,
-                      debtors: _debtorsLoaded ? _debtorsLive : null,
-                      balanceLocked: !_canMoney,
-                      debtLocked: !_canSubs,
-                      onOpenDebtors: () => widget.onOpenSubscribers
-                          ?.call(SubscriberFilter.debtors),
-                    )
-                        .animate()
-                        .fadeIn(
-                          delay: const Duration(milliseconds: 80),
-                          duration: const Duration(milliseconds: 280),
-                        )
-                        .slideY(begin: 0.03, end: 0),
-                  const SizedBox(height: Sp.md),
-                  // الكارت يجلب بنفسه (`reports/finance`)، فعدم بنائه
-                  // يُسقط نداءه بلا تبويبٍ إضافيّ.
-                  // ⚠️ المقفل لا يبني `HeroRevenueCard` أصلاً — `initState`
-                  // فيه يُطلق النداء. ورأسه نقطةٌ لا أيقونة كالكارت الحيّ.
-                  if (_shown('revenue'))
-                    (_canMoney
-                            ? const HeroRevenueCard()
-                            : LockedCard(title: 'dashboard.revenue'.tr()))
-                        .animate()
-                        .fadeIn(
-                          delay: const Duration(milliseconds: 160),
-                          duration: const Duration(milliseconds: 280),
-                        )
-                        .slideY(begin: 0.03, end: 0),
+                  if (wide && (subscribersSection != null || walletSection != null || revenueSection != null)) ...[
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (subscribersSection != null) ...[
+                          Expanded(flex: 11, child: subscribersSection),
+                          const SizedBox(width: Sp.md),
+                        ],
+                        Expanded(
+                          flex: 9,
+                          child: Column(
+                            children: [
+                              if (walletSection != null) walletSection,
+                              if (walletSection != null && revenueSection != null)
+                                const SizedBox(height: Sp.md),
+                              if (revenueSection != null) revenueSection,
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: Sp.md),
+                  ] else ...[
+                    // أعلى كلّ شيء عمداً: انقطاع الجلسة يوقف كلّ تنبيهات المشتركين وفواتيرهم، فلا يجوز أن
+                    // يُقرأ بعد الأرقام. موظّفٌ بلا مفتاح القسم: إطار البطاقة نفسه مقفلاً — لا اختفاء يترك
+                    // فراغاً، ولا نداء.
+                    if (subscribersSection != null) subscribersSection,
+                    // ⚠️ الفراغ خارج الشرط كما كان: المالك الذي أخفى القسم من «نطاق العرض» يرى المسافات نفسها.
+                    const SizedBox(height: Sp.md),
+                    if (walletSection != null) walletSection,
+                    const SizedBox(height: Sp.md),
+                    if (revenueSection != null) revenueSection,
+                  ],
                   if (_shown('activities'))
                     SectionHeader(
                       // المقفل لا يُجلب فلا «تعذّر» يُكتب في عنوانه أبداً.

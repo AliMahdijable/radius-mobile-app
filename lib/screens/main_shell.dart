@@ -34,6 +34,8 @@ import '../services/notification_router.dart';
 import 'subscribers/subscribers_screen.dart';
 import 'subscribers/widgets/filter_chips_bar.dart';
 import 'top_actions.dart';
+import '../core/platform/desktop_layout.dart';
+import 'desktop/desktop_shell.dart';
 
 /// Round 10 redesign — floating pill bar with a brand-green indicator
 /// that slides between tabs. The bar is a single cohesive surface
@@ -163,6 +165,27 @@ class _MainShellState extends State<MainShell> {
 
   /// المدخل الوحيد لتبديل التبويب — يُسجّل الزيارة ويُحدّث الراية.
   /// أيّ مسار يكتب `_tab` مباشرةً يُفلت من الاثنين.
+  /// شاشة التبويب [i] — للغلاف العريض على الحاسبة (نفس شاشات الهاتف بحالتها).
+  Widget _buildTab(int i) {
+    switch (i) {
+      case _dashTab:
+        return DashboardScreen(onOpenSubscribers: _openSubscribers, isActive: _dashActive);
+      case _subsTab:
+        return SubscribersScreen(filterCmd: _subsFilterCmd, isActive: _subsActive);
+      default:
+        return _devicesLocked
+            ? const _DevicesLockedTab()
+            : NetworkDevicesScreen(isActive: _devicesActive);
+    }
+  }
+
+  /// الحاسبة: فُتح قسمٌ من القائمة غير التبويبات — توقف تحديثاتها الدوريّة كما لو تُركت.
+  void _leaveTabs() {
+    _devicesActive.value = false;
+    _subsActive.value = false;
+    _dashActive.value = false;
+  }
+
   void _setTab(int i) {
     setState(() {
       _tab = i;
@@ -402,6 +425,16 @@ class _MainShellState extends State<MainShell> {
     return ListenableBuilder(
       listenable: Listenable.merge([ProviderService.changes, Perms.changes]),
       builder: (context, _) {
+        // الحاسبة (نافذةٌ عريضة): قائمةٌ جانبيّة بكلّ الأقسام والمحتوى بجانبها بدل الشريط السفليّ.
+        if (DesktopLayout.wide(context)) {
+          return DesktopShell(
+            currentTab: _tab,
+            tabBuilder: _buildTab,
+            onSelectTab: _setTab,
+            onLeaveTabs: _leaveTabs,
+            onQuickAdd: _onFabTap,
+          );
+        }
         final tabs = <Widget>[
           DashboardScreen(
               onOpenSubscribers: _openSubscribers, isActive: _dashActive),

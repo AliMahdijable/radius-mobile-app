@@ -128,7 +128,8 @@ class DeviceAlertsService {
       guid: 'ce03d489-16ca-4fec-8cfc-95b07a9c437d',
     );
     await _notifications.initialize(
-      const InitializationSettings(android: androidInit, iOS: iosInit, windows: windowsInit),
+      const InitializationSettings(
+          android: androidInit, iOS: iosInit, macOS: iosInit, windows: windowsInit),
     );
 
     // Load من SharedPreferences

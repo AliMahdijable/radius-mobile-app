@@ -41,6 +41,8 @@ dependencies:
   # الذي يدعم SPM. و11 تنتظر نسخةً تالية بعد أن يكون الجميع قد مرّ
   # على 10.
   flutter_secure_storage: ^10.3.4
+  # نسخة الماك للتجربة تبدّل الخزنة بملفّ (lib/services/mac_file_secure_storage.dart)
+  flutter_secure_storage_platform_interface: ^2.1.1
 
   # HTTP
   dio: ^5.7.0

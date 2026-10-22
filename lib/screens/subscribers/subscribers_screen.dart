@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../core/platform/app_platform.dart';
 import '../../api/bulk_activate_api.dart';
 import '../../api/device_probe_api.dart';
 import '../../models/device_health.dart';
@@ -1699,7 +1700,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
     return Scaffold(
       backgroundColor: AppColors.bg,
-      body: SafeArea(
+      body: _withDetailPane(SafeArea(
         bottom: false,
         child: Column(
           children: [
@@ -2018,7 +2019,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
               ),
           ],
         ),
-      ),
+      )),
       // Selection bottom action bar
       // حكم الخادم على التجديد الجماعيّ يصل بعد دخول التحديد — الشريط يُعاد
       // رسمه به (يُقفل «تجديد» بسببه إن مُنع) بلا إعادة بناء الشاشة كلّها.
@@ -2044,7 +2045,55 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     );
   }
 
+  /// الحاسبة: تفاصيل المشترك في لوحةٍ بجانب القائمة بدل صفحةٍ تغطّيها — القائمة تبقى بعرضٍ مريح
+  /// (لا تتمدّد بطاقاتها) والتنقّل بين المشتركين نقرةٌ واحدة.
+  bool get _paneMode => AppPlatform.isDesktop && MediaQuery.sizeOf(context).width >= 1000;
+  final GlobalKey<NavigatorState> _paneNav = GlobalKey<NavigatorState>();
+  static const double _paneWidth = 440;
+
+  Widget _withDetailPane(Widget list) {
+    if (!_paneMode) return list;
+    final mq = MediaQuery.of(context);
+    return Row(
+      children: [
+        Expanded(child: list),
+        Container(
+          width: _paneWidth,
+          decoration: BoxDecoration(
+            color: AppColors.bg,
+            border: BorderDirectional(start: BorderSide(color: AppColors.border)),
+          ),
+          child: ClipRect(
+            // شاشة التفاصيل تقيس MediaQuery: عرض اللوحة لا النافذة.
+            child: MediaQuery(
+              data: mq.copyWith(size: Size(_paneWidth, mq.size.height)),
+              child: Navigator(
+                key: _paneNav,
+                onGenerateRoute: (_) =>
+                    MaterialPageRoute(builder: (_) => const _DetailPanePlaceholder()),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   void _openDetail(Subscriber s) {
+    final pane = _paneMode ? _paneNav.currentState : null;
+    if (pane != null) {
+      // ما يُغلق التفاصيل (رجوع، حذف…) يعود للوحة الفارغة لا يغلق القسم.
+      pane.pushAndRemoveUntil(
+        PageRouteBuilder<void>(
+          pageBuilder: (_, __, ___) => SubscriberDetailScreen(sub: s),
+          transitionDuration: const Duration(milliseconds: 160),
+          reverseTransitionDuration: const Duration(milliseconds: 120),
+          transitionsBuilder: (_, a, __, child) => FadeTransition(opacity: a, child: child),
+        ),
+        (r) => r.isFirst,
+      );
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => SubscriberDetailScreen(sub: s),
@@ -3404,6 +3453,44 @@ class _BigNotice extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// لوحة التفاصيل على الحاسبة قبل اختيار مشترك.
+class _DetailPanePlaceholder extends StatelessWidget {
+  const _DetailPanePlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(Sp.xl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceSunken,
+                  borderRadius: BorderRadius.circular(R.lg),
+                ),
+                child: Icon(LucideIcons.userSearch, size: 26, color: AppColors.textLow),
+              ),
+              const SizedBox(height: Sp.md),
+              Text(
+                'desktop.pick_subscriber'.tr(),
+                textAlign: TextAlign.center,
+                style: AppType.label(color: AppColors.textMid),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -1635,5 +1635,15 @@
     "view": "ليس لديك صلاحيّة لعرض هذا القسم",
     "ask": "اطلبها من مديرك",
     "a11y": "{} — مقفل"
+  },
+  "desktop": {
+    "group_manage": "الإدارة",
+    "group_finance": "المالية",
+    "group_comms": "التواصل",
+    "group_customize": "التخصيص",
+    "group_earthlink": "ايرث لنك",
+    "search_hint": "بحث عن مشترك…",
+    "add": "إضافة",
+    "pick_subscriber": "اختر مشتركاً من القائمة لعرض تفاصيله هنا"
   }
 }

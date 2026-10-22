@@ -18,14 +18,19 @@ class AppPlatform {
 
   static bool get isWindows => !kIsWeb && Platform.isWindows;
 
-  /// نسخة سطح المكتب (ويندوز اليوم).
-  static bool get isDesktop => debugIsDesktop ?? isWindows;
+  /// تطبيق ماك (نسخة سطح المكتب للتجربة على حاسبة المالك). لا تحت `flutter test`: الاختبارات تجري على
+  /// الماك نفسه، وفلاتر يعدّها أندرويد (FLUTTER_TEST) — فتبقى كما كانت.
+  static bool get isMacDesktop =>
+      !kIsWeb && Platform.isMacOS && !Platform.environment.containsKey('FLUTTER_TEST');
+
+  /// نسخة سطح المكتب: ويندوز (والماك للتجربة) — نفس المسارات.
+  static bool get isDesktop => debugIsDesktop ?? (isWindows || isMacDesktop);
 
   /// قيمة ترويسة `x-device-label`: الخادم يعرضها في «أجهزتي» ويعدّ ios/android/windows
   /// تطبيقاً لا موقعاً. غير ويندوز كما كان حرفاً (آيفون وإلّا أندرويد).
   static String get deviceLabel {
     if (!kIsWeb && Platform.isIOS) return 'ios';
-    if (isDesktop) return 'windows';
+    if (isDesktop) return isMacDesktop ? 'macos' : 'windows';
     return 'android';
   }
 }

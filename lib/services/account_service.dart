@@ -210,8 +210,11 @@ class AccountService {
 
   /// زرّ Apple يظهر على أجهزة Apple وحدها (iOS/macOS) — إرشاد App Store 4.8.
   /// أندرويد والويب يبقيان كما هما (Google + إيميل).
+  ///
+  /// سطح المكتب (ويندوز، ونسخة الماك للتجربة) بلا Apple: نافذته من Firebase وحده، والموقع (طريق المتصفّح)
+  /// بلا Apple بعد — ٥٦ حساباً بـApple يدخلون من الهاتف.
   static bool get appleSignInAvailable =>
-      !kIsWeb && (Platform.isIOS || Platform.isMacOS);
+      !kIsWeb && !AppPlatform.isDesktop && (Platform.isIOS || Platform.isMacOS);
 
   static AppleAuthProvider _appleProvider() =>
       AppleAuthProvider()..addScope('email')..addScope('name');
