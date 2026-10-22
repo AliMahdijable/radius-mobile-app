@@ -50,6 +50,7 @@ import 'widgets/filter_chips_bar.dart';
 import 'widgets/sort_sheet.dart';
 import 'sheets/location_sheets.dart';
 import 'widgets/subscriber_card_v3.dart';
+import 'widgets/subscriber_table_row.dart';
 
 /// Default sort field + direction per filter — mirrors v1's
 /// `_defaultSortByFilter`. Without this the 'قارب الانتهاء' chip
@@ -1904,7 +1905,14 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                               child:
                                   _EmptyState(filter: _filter, query: _query),
                             )
-                          else
+                          else ...[
+                            if (_paneMode)
+                              SliverPadding(
+                                padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
+                                sliver: SliverToBoxAdapter(
+                                  child: SubscriberTableHeader(columns: _tableColumns),
+                                ),
+                              ),
                             SliverPadding(
                               padding: EdgeInsets.fromLTRB(
                                 Sp.lg,
@@ -1923,7 +1931,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                 // مع padding داخلي مخفَّض + borders أخف = تركيز
                                 // بصري أعلى، صفوف أكثر مرئيّة.
                                 separatorBuilder: (_, __) =>
-                                    const SizedBox(height: 6),
+                                    SizedBox(height: _paneMode ? 0 : 6),
                                 itemBuilder: (_, i) {
                                   if (i == page.length) {
                                     return _LoadMoreButton(
@@ -1937,6 +1945,26 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                   final s = page[i];
                                   final isSelected = s.idx != null &&
                                       _selected.contains(s.idx);
+                                  // الحاسبة: صفّ جدولٍ مضغوط بدل البطاقة — أضعاف الصفوف على الشاشة.
+                                  if (_paneMode) {
+                                    return SubscriberTableRow(
+                                      key: ValueKey('t|${s.companyKey ?? ''}|${s.idx ?? s.username}'),
+                                      sub: s,
+                                      columns: _tableColumns,
+                                      open: _paneKey == _rowKey(s),
+                                      selected: isSelected,
+                                      selectionMode: _selectionMode,
+                                      onTap: () {
+                                        if (_selectionMode) {
+                                          _toggleSelect(s);
+                                        } else {
+                                          _openDetail(s);
+                                        }
+                                      },
+                                      onLongPress: () => _enterSelectionWith(s),
+                                      last: i == page.length - 1 && remaining <= 0,
+                                    );
+                                  }
                                   return SubscriberCardV3(
                                     // بلا مفتاح ثابت يعيد Flutter استعمال
                                     // الـElement لمشترك آخر بعد كل موجة فحص
@@ -2007,6 +2035,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                 },
                               ),
                             ),
+                          ],
                         ],
                       ),
               ),
@@ -2079,9 +2108,18 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     );
   }
 
+  /// صفّ المشترك المفتوح في اللوحة (يُبرز في الجدول).
+  String? _paneKey;
+  static String _rowKey(Subscriber s) => '${s.companyKey ?? ''}|${s.idx ?? s.username}';
+
+  /// أعمدة الجدول بعرض منطقة القائمة (بلا لوحة التفاصيل).
+  SubscriberTableColumns get _tableColumns => SubscriberTableColumns.forWidth(
+      MediaQuery.sizeOf(context).width - _paneWidth);
+
   void _openDetail(Subscriber s) {
     final pane = _paneMode ? _paneNav.currentState : null;
     if (pane != null) {
+      setState(() => _paneKey = _rowKey(s));
       // ما يُغلق التفاصيل (رجوع، حذف…) يعود للوحة الفارغة لا يغلق القسم.
       pane.pushAndRemoveUntil(
         PageRouteBuilder<void>(

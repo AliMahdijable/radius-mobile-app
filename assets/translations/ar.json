@@ -1644,6 +1644,14 @@
     "group_earthlink": "ايرث لنك",
     "search_hint": "بحث عن مشترك…",
     "add": "إضافة",
-    "pick_subscriber": "اختر مشتركاً من القائمة لعرض تفاصيله هنا"
+    "pick_subscriber": "اختر مشتركاً من القائمة لعرض تفاصيله هنا",
+    "active_of": "{} نشط من {}",
+    "online_of": "من {} نشط",
+    "col_name": "المشترك",
+    "col_package": "الباقة",
+    "col_expiry": "الانتهاء",
+    "col_days": "المتبقّي",
+    "col_balance": "الرصيد",
+    "debt": "دين"
   }
 }

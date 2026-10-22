@@ -36,6 +36,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../subscribers/widgets/filter_chips_bar.dart';
 import '../top_actions.dart';
+import 'widgets/desktop_overview.dart';
 import 'widgets/hero_revenue_card.dart';
 import 'widgets/recent_activities.dart';
 import '../account/subscription_banner.dart';
@@ -746,6 +747,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
               duration: const Duration(milliseconds: 280),
             )
             .slideY(begin: 0.03, end: 0);
+    final activitiesSection = !_shown('activities')
+        ? null
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+                    SectionHeader(
+                      // المقفل لا يُجلب فلا «تعذّر» يُكتب في عنوانه أبداً.
+                      label: !_canActivity || !_activationsLoaded
+                          ? 'dashboard.recent_activity_label'.tr()
+                          : _activationsLive == null
+                              ? 'dashboard.recent_activity_fetch_failed'.tr()
+                              : 'dashboard.recent_activity_label'.tr(),
+                      // مطلب المستخدم 2026-07-12: زر "عرض الكل" ينقل
+                      // لسجل النشاط الكامل. الـPermissionGate يتأكد من
+                      // reports.activity_log؛ لو الموظف بلا صلاحية يرى
+                      // شاشة رفض بدل الشاشة الفارغة. وموظّف ايرث لنك بلاها
+                      // يرى الزرّ مقفلاً — ما دام المفتاح ممّا يُمنح له.
+                      trailingLabel: _canActivity &&
+                              (_canActivityLog ||
+                                  permShown(const ['reports.activity_log']))
+                          ? 'dashboard.view_all'.tr()
+                          : null,
+                      trailingLocked: !_canActivityLog,
+                      onTrailingTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const ActivityLogReportScreen(),
+                        ),
+                      ),
+                    ),
+                    if (!_canActivity)
+                      const _ActivitiesLocked()
+                    else if (!_activationsLoaded)
+                      const _ActivitiesLoading()
+                    else if (_activationsLive == null)
+                      const _ActivitiesError()
+                    else if (_activationsLive!.recent.isEmpty)
+                      const _NoActivitiesYet()
+                    else
+                      RecentActivities(items: _activationsLive!.recent)
+                          .animate()
+                          .fadeIn(
+                            delay: const Duration(milliseconds: 240),
+                            duration: const Duration(milliseconds: 280),
+                          ),
+            ],
+          );
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: RefreshIndicator(
@@ -834,28 +881,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   // (بلاغ ٢٠٢٦-١٠-١٤) — لا اختفاء يترك فراغاً، ولا نداء.
                   // ⚠️ التفرّع على `_canSubs` **قبل** حالة التحميل: المقفل لا
                   // يجلب، فلو بُني الحيّ لبقي على هيكله دوّارةً أبداً.
-                  if (wide && (subscribersSection != null || walletSection != null || revenueSection != null)) ...[
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (subscribersSection != null) ...[
-                          Expanded(flex: 11, child: subscribersSection),
-                          const SizedBox(width: Sp.md),
-                        ],
-                        Expanded(
-                          flex: 9,
-                          child: Column(
-                            children: [
-                              if (walletSection != null) walletSection,
-                              if (walletSection != null && revenueSection != null)
-                                const SizedBox(height: Sp.md),
-                              if (revenueSection != null) revenueSection,
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                  if (wide) ...[
+                    // الحاسبة: صفّ الأرقام الرئيسيّة + شريط الحالات، ثمّ الإيرادات بجانب آخر النشاطات.
+                    if (_shown('subscribers') || _shown('wallet'))
+                      DesktopOverview(
+                        stats: _canSubs ? _subscribersStats : null,
+                        wallet: _walletLoaded ? _walletLive : null,
+                        debtors: _debtorsLoaded ? _debtorsLive : null,
+                        subsLocked: !_canSubs,
+                        balanceLocked: !_canMoney,
+                        debtLocked: !_canSubs,
+                        showSubscribers: _shown('subscribers'),
+                        showWallet: _shown('wallet'),
+                        onOpen: widget.onOpenSubscribers,
+                      ).animate().fadeIn(duration: const Duration(milliseconds: 280)),
                     const SizedBox(height: Sp.md),
+                    if (revenueSection != null || activitiesSection != null)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (revenueSection != null) Expanded(flex: 5, child: revenueSection),
+                          if (revenueSection != null && activitiesSection != null)
+                            const SizedBox(width: Sp.md),
+                          if (activitiesSection != null)
+                            Expanded(flex: 7, child: activitiesSection),
+                        ],
+                      ),
                   ] else ...[
                     // أعلى كلّ شيء عمداً: انقطاع الجلسة يوقف كلّ تنبيهات المشتركين وفواتيرهم، فلا يجوز أن
                     // يُقرأ بعد الأرقام. موظّفٌ بلا مفتاح القسم: إطار البطاقة نفسه مقفلاً — لا اختفاء يترك
@@ -867,47 +918,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SizedBox(height: Sp.md),
                     if (revenueSection != null) revenueSection,
                   ],
-                  if (_shown('activities'))
-                    SectionHeader(
-                      // المقفل لا يُجلب فلا «تعذّر» يُكتب في عنوانه أبداً.
-                      label: !_canActivity || !_activationsLoaded
-                          ? 'dashboard.recent_activity_label'.tr()
-                          : _activationsLive == null
-                              ? 'dashboard.recent_activity_fetch_failed'.tr()
-                              : 'dashboard.recent_activity_label'.tr(),
-                      // مطلب المستخدم 2026-07-12: زر "عرض الكل" ينقل
-                      // لسجل النشاط الكامل. الـPermissionGate يتأكد من
-                      // reports.activity_log؛ لو الموظف بلا صلاحية يرى
-                      // شاشة رفض بدل الشاشة الفارغة. وموظّف ايرث لنك بلاها
-                      // يرى الزرّ مقفلاً — ما دام المفتاح ممّا يُمنح له.
-                      trailingLabel: _canActivity &&
-                              (_canActivityLog ||
-                                  permShown(const ['reports.activity_log']))
-                          ? 'dashboard.view_all'.tr()
-                          : null,
-                      trailingLocked: !_canActivityLog,
-                      onTrailingTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const ActivityLogReportScreen(),
-                        ),
-                      ),
-                    ),
-                  if (_shown('activities'))
-                    if (!_canActivity)
-                      const _ActivitiesLocked()
-                    else if (!_activationsLoaded)
-                      const _ActivitiesLoading()
-                    else if (_activationsLive == null)
-                      const _ActivitiesError()
-                    else if (_activationsLive!.recent.isEmpty)
-                      const _NoActivitiesYet()
-                    else
-                      RecentActivities(items: _activationsLive!.recent)
-                          .animate()
-                          .fadeIn(
-                            delay: const Duration(milliseconds: 240),
-                            duration: const Duration(milliseconds: 280),
-                          ),
+                  if (!wide && activitiesSection != null) activitiesSection,
                   // ⚠️ لو أُخفي كلّ شيء لا تُترك الشاشة بيضاء: المدير
                   // لن يعرف أنّه هو من أخفاها، وسيظنّها معطوبة.
                   // (والموظّف بلا مفاتيح لا يصل هنا: أقسامه مقفلةٌ في أماكنها.)

@@ -1644,6 +1644,14 @@
     "group_earthlink": "EarthLink",
     "search_hint": "Search subscribers…",
     "add": "Add",
-    "pick_subscriber": "Pick a subscriber to see the details here"
+    "pick_subscriber": "Pick a subscriber to see the details here",
+    "active_of": "{} active of {}",
+    "online_of": "of {} active",
+    "col_name": "Subscriber",
+    "col_package": "Package",
+    "col_expiry": "Expires",
+    "col_days": "Left",
+    "col_balance": "Balance",
+    "debt": "Debt"
   }
 }
