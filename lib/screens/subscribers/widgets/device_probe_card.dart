@@ -860,11 +860,24 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // شبكة 2×2 كما كانت (طلب المالك ٢٢ أكتوبر: «٤ كارتات بشكل مربّعات مثل السابق»): RX/TX بلاطةٌ واحدة والترافيك مكان TX،
-        // ثمّ الفولتيّة والحرارة. RX والتحميل بلون العلامة، وTX والرفع أسود كما كانا («للتمييز»)؛ والأحمر لقيمةٍ خارج حدّها.
+        // شبكة 2×2 كما كانت (طلب المالك ٢٢ أكتوبر: «٤ كارتات بشكل مربّعات مثل السابق»): الترافيك أوّلاً («خلّي الترفك بالأوّل»)
+        // ثمّ RX/TX بلاطةٌ واحدة، وتحتهما الفولتيّة والحرارة. RX والتحميل بلون العلامة، وTX والرفع أسود كما كانا («للتمييز»)؛ والأحمر لقيمةٍ خارج حدّها.
         // القيمة تُصغَّر لتتّسع النصف (fit) لا تُقصّ — القصّ يُسقط وحدةً أو رقماً (انظر _ubntBody).
         Row(
           children: [
+            Expanded(
+              child: _MetricTile(
+                icon: LucideIcons.activity,
+                field: CopyField(
+                  'الترافيك الآن',
+                  _rxBps == null ? '—' : '↓${_fmtBps(_rxBps!)} ↑${_fmtBps(_txBps ?? 0)}',
+                ),
+                color: _rxBps == null ? AppColors.textLow : AppColors.brandAccent,
+                fit: true,
+                parts: _trafficParts(unit: false),
+              ),
+            ),
+            const SizedBox(width: Sp.sm),
             Expanded(
               child: _MetricTile(
                 icon: LucideIcons.arrowDownUp,
@@ -876,19 +889,6 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
                   (text: ' / ', color: AppColors.textLow),
                   (text: o.txPower, color: o.txOk ? AppColors.textHi : AppColors.error),
                 ],
-              ),
-            ),
-            const SizedBox(width: Sp.sm),
-            Expanded(
-              child: _MetricTile(
-                icon: LucideIcons.activity,
-                field: CopyField(
-                  'الترافيك الآن',
-                  _rxBps == null ? '—' : '↓${_fmtBps(_rxBps!)} ↑${_fmtBps(_txBps ?? 0)}',
-                ),
-                color: _rxBps == null ? AppColors.textLow : AppColors.brandAccent,
-                fit: true,
-                parts: _trafficParts(unit: false),
               ),
             ),
           ],
