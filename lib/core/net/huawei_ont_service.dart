@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
@@ -129,6 +130,87 @@ class HuaweiOntService {
       }
     }
     return null;
+  }
+
+  /// رأس صفحةٍ حتّى [until] وحده ثمّ تُقطع القراءة.
+  ///
+  /// صفحة الواي فاي تبلغ ٢ م.ب في بعض الطرازات (HG8145C: ٣٫٨ث كاملةً) وعدّاداتها في أوّل ٨ ك.ب — قراءتها كاملةً كلّ
+  /// بضع ثوانٍ تُثقل معالج الـONU الضعيف بلا داعٍ. قِيس ٢٢ أكتوبر على شبكة popq: ~٠٫٧ث لكلّ صفحة على HG8245Q2/HS8545M/HG8145C.
+  /// null: لم يظهر [until] في أوّل [maxBytes] (جلسةٌ انتهت ⇒ صفحة دخول)، أو تعذّر الطلب.
+  static Future<String?> fetchHead(
+    OntLoginResult session,
+    String path,
+    RegExp until, {
+    int maxBytes = 65536,
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    final dio = _buildDio(session.baseUrl);
+    final cancel = CancelToken();
+    try {
+      final res = await dio
+          .get<ResponseBody>(
+            path,
+            options: Options(
+              responseType: ResponseType.stream,
+              headers: {
+                'Cookie': session.sessionCookie,
+                'Referer': '${session.baseUrl}/index.asp',
+              },
+            ),
+            cancelToken: cancel,
+          )
+          .timeout(timeout);
+      final body = res.data;
+      if (body == null || res.statusCode != 200) return null;
+      final buf = BytesBuilder(copy: false);
+      await for (final chunk in body.stream.timeout(timeout)) {
+        buf.add(chunk);
+        final text = utf8.decode(buf.toBytes(), allowMalformed: true);
+        final m = until.firstMatch(text);
+        if (m != null) return text.substring(0, m.end);
+        if (buf.length >= maxBytes) return null;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    } finally {
+      // يقطع الاتّصال فلا يُكمل الجهاز إرسال بقيّة الصفحة
+      cancel.cancel();
+      dio.close(force: true);
+    }
+  }
+
+  /// خروجٌ من جلسة الويب (أفضل جهد): جلسات الـONU محدودة، وجلسة قياس الترافيك المعمَّرة لا تُترك معلّقةً بعد إغلاق الكارت.
+  static Future<void> logout(OntLoginResult session) async {
+    final dio = _buildDio(session.baseUrl);
+    final headers = {
+      'Cookie': session.sessionCookie,
+      'Referer': '${session.baseUrl}/index.asp',
+    };
+    try {
+      final tokRes = await dio
+          .post('/asp/GetRandCount.asp',
+              data: '', options: Options(headers: headers))
+          .timeout(const Duration(seconds: 5));
+      final token = RegExp(r'[0-9a-fA-F]{16,}')
+          .firstMatch((tokRes.data ?? '').toString())
+          ?.group(0);
+      if (token == null) return;
+      await dio
+          .post(
+            '/logout.cgi?RequestFile=html/logout.html',
+            data: 'x.X_HW_Token=${Uri.encodeQueryComponent(token)}',
+            options: Options(headers: {
+              ...headers,
+              'Content-Type': 'application/x-www-form-urlencoded',
+            }),
+          )
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {
+      // أفضل جهد — الجلسة تنتهي بمهلتها على الجهاز
+    } finally {
+      dio.close(force: true);
+    }
   }
 
   static Future<OntOpticalInfo?> fetchOptical(OntLoginResult session) async {

@@ -8,6 +8,7 @@ import '../../../api/device_config_api.dart';
 import '../../../api/device_probe_api.dart';
 import '../../../api/ubnt_api.dart';
 import '../../../core/net/huawei_ont_service.dart';
+import '../../../core/net/ont_traffic.dart';
 import '../../../services/subscriber_refresh_signal.dart';
 import '../../../core/util/clipboard_helper.dart';
 import '../../../core/widgets/copyable.dart';
@@ -44,6 +45,7 @@ class DeviceProbeCard extends StatefulWidget {
     this.ip = '',
     required this.username,
     this.company,
+    this.liveTraffic,
   });
 
   /// IP من SAS4 (framedipaddress). قد يكون فارغاً — الـprobe() داخلياً
@@ -55,6 +57,10 @@ class DeviceProbeCard extends StatefulWidget {
   /// شركة الصفّ في «كل الشركات» (null في الوضع العاديّ): إعداد الجهاز وافتراضات المدير من شركته، والفحص من الهاتف كما هو.
   /// حفظ إعداد الجهاز للشركة وحدها (خارج جدول التوجيه).
   final String? company;
+
+  /// ترافيك الـONU اللحظيّ يُنشر هنا لكارت «معلومات الاتصال» — المالك (٢٢ أكتوبر): «هذا سحب المشترك… تخلّيه جوّه وي
+  /// معلومات الاتصال». null ⇒ يُعرض في كارت الجهاز نفسه.
+  final ValueNotifier<LiveTraffic?>? liveTraffic;
 
   /// ما يرسمه الكارت ذو المفتاح [key] الآن — القراءة المعروضة ووقتها
   /// وملاحظة المدير — لـ«نسخ كلّ المعلومات». `null` حين لا يكون مركَّباً
@@ -127,6 +133,18 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   bool _probing = false;
   bool _rebooting = false;
   UbntTrafficSession? _session;
+
+  /// ترافيك الـONU (Huawei، ٢٢ أكتوبر): جلسة ويب معمَّرة تقرأ رأسَي صفحتي الواي فاي وLAN كلّ نبضة ([OntTrafficSession])،
+  /// والمعدّل لكلّ واجهةٍ بوقت صفحتها ([OntTrafficMeter]).
+  ///
+  /// ⚠️ للمستخدم على الـONU **جلسةٌ واحدة**: دخولٌ جديد (فحص الجهاز، هاتفٌ آخر، صفحة الجهاز من متصفّح) يطرد جلستنا —
+  /// قِيس على HS8545M. فقراءةٌ فارغة تعني «طُردنا»: نُغلق وننتظر [_ontRetry] ثمّ ندخل من جديد — لا كلّ نبضة، كي لا
+  /// يتطاردَ هاتفان على المشترك نفسه.
+  static const _ontPulse = Duration(seconds: 5);
+  static const _ontRetry = Duration(seconds: 12);
+  OntTrafficSession? _ontSession;
+  final _ontMeter = OntTrafficMeter();
+  DateTime? _ontRetryAt;
   int? _lastRx;
   int? _lastTx;
   DateTime? _lastSample;
@@ -193,6 +211,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     _signalTimer?.cancel();
     _agoTimer?.cancel();
     _session?.close();
+    _closeOntTraffic();
     super.dispose();
   }
 
@@ -214,14 +233,12 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       // يستهلك جلسة على جهاز المشترك بلا أيّ فائدة.
       _session?.close();
       _session = null;
+      // وجلسة الـONU: جلسته الوحيدة لا تبقى محجوزةً والتطبيق في الخلفيّة
+      _closeOntTraffic();
+      widget.liveTraffic?.value = null;
     }
   }
 
-  /// يبدأ الاستطلاع لأجهزة Ubiquiti وحدها.
-  ///
-  /// ONT مستثناة عمداً: عميل Huawei يكشط صفحة بصريّات بلا أيّ عدّاد
-  /// بايت، ومهلاته 15 ثانية لأنّ تلك الأجهزة بطيئة — فاستطلاعها كلّ
-  /// 3 ثوانٍ غير وارد أصلاً.
   /// إعادة فحصٍ دوريّة للإشارة — لأجهزة Ubiquiti وحدها.
   ///
   /// ONT مستثناة كما في الترافيك: عميل Huawei يكشط صفحة ومهلاته ١٥
@@ -246,9 +263,88 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     // airOS — لذلك كان الشرط السابق (`ubnt?.rxBytes != null`) يمنع
     // الاستطلاع من البدء إطلاقاً، فتبقى بلاطة SNR إلى الأبد.
     // العدّادات تأتي من SSH كما تفعل لوحة الأجهزة، وهو المسار المُثبَت.
-    if (snap == null || snap.kind != DeviceKind.ubiquiti) return;
+    //
+    // ONT (٢٢ أكتوبر): بلا عدّادٍ في صفحة البصريّات — العدّادات في صفحتي الواي فاي وLAN، تُقرأ رؤوسهما وحدها (~٠٫٧ث لكلٍّ
+    // بدل ١–٤ث كاملةً) كلّ [_ontPulse].
+    if (snap == null) return;
+    if (snap.kind == DeviceKind.ont) {
+      // بعد لحظة لا فوراً: الفحص الذي جاء بنا ما زال يحمل `_probing` حتّى يعود — والنبضة الفوريّة كانت تُتخطّى فتنتظر
+      // الدورة التالية (أوّل رقمٍ بعد ~٢٥ث من فتح الصفحة).
+      Timer(const Duration(milliseconds: 300), _pulseOntTraffic);
+      _trafficTimer = Timer.periodic(_ontPulse, (_) => _pulseOntTraffic());
+      return;
+    }
+    if (snap.kind != DeviceKind.ubiquiti) return;
     _pulseTraffic(); // نبضة فوريّة تزرع المرجع بلا انتظار 3 ثوانٍ
     _trafficTimer = Timer.periodic(_pulse, (_) => _pulseTraffic());
+  }
+
+  /// نبضة ترافيك الـONU: جلسةٌ تُفتح مرّةً (باعتمادات شركة المشترك وعنوانه المثبَّت — كالفحص حرفاً)، ثمّ قراءةٌ ومعدّل.
+  Future<void> _pulseOntTraffic() async {
+    // فحصٌ جارٍ يدخل على الجهاز نفسه — دخولنا الآن يطرده (جلسةٌ واحدة) أو يطردنا؛ ننتظر النبضة التالية
+    if (_pulsing || _probing || !mounted) return;
+    final retryAt = _ontRetryAt;
+    if (_ontSession == null && retryAt != null && DateTime.now().isBefore(retryAt)) return;
+    _pulsing = true;
+    try {
+      if (_ontSession == null) {
+        final creds = await DeviceProbeApi.resolveOntCreds(
+          fallbackIp: widget.ip,
+          subscriberUsername: widget.username,
+          company: widget.company,
+        );
+        if (creds == null || !mounted) return;
+        _ontSession = await OntTrafficSession.open(
+          ip: creds.ip,
+          user: creds.user,
+          pass: creds.pass,
+        );
+        if (_ontSession == null) {
+          _ontRetryAt = DateTime.now().add(_ontRetry);
+          return;
+        }
+        if (!mounted) {
+          _closeOntTraffic();
+          return;
+        }
+      }
+      final counters = await _ontSession?.sample();
+      if (counters == null) {
+        // طُردنا (دخولٌ آخر على الجهاز) أو انتهت الجلسة — دخولٌ جديد بعد المهلة، ولا يبقى رقمٌ قديم معروضاً كأنّه الآن
+        _closeOntTraffic();
+        _ontRetryAt = DateTime.now().add(_ontRetry);
+        if (mounted && _rxBps != null) {
+          setState(() {
+            _rxBps = null;
+            _txBps = null;
+          });
+        }
+        if (mounted) widget.liveTraffic?.value = null;
+        return;
+      }
+      final r = _ontMeter.add(counters, DateTime.now());
+      // القراءة الأولى تزرع المرجع: الثانية بعد ٣ث لا عند النبضة التالية — أوّل رقمٍ أسرع، والمدّة كافية للدقّة
+      if (r == null) Timer(const Duration(seconds: 3), _pulseOntTraffic);
+      if (r != null && mounted) {
+        setState(() {
+          _rxBps = r.downBps;
+          _txBps = r.upBps;
+        });
+        widget.liveTraffic?.value = (down: r.downBps, up: r.upBps);
+      }
+    } catch (_) {
+      _closeOntTraffic();
+      _ontRetryAt = DateTime.now().add(_ontRetry);
+    } finally {
+      _pulsing = false;
+    }
+  }
+
+  void _closeOntTraffic() {
+    final s = _ontSession;
+    _ontSession = null;
+    _ontMeter.reset();
+    if (s != null) unawaited(s.close());
   }
 
   Future<void> _pulseTraffic() async {
@@ -799,6 +895,18 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
             ),
           ],
         ),
+        // الترافيك اللحظيّ (الواي فاي وLAN معاً) مكانه «معلومات الاتصال» تحت التحميل والرفع — هنا وحده إن لم يستمع له كارتها
+        if (widget.liveTraffic == null) ...[
+          const SizedBox(height: Sp.sm),
+          _MetricTile(
+            icon: LucideIcons.activity,
+            field: CopyField(
+              'الترافيك',
+              _rxBps == null ? '—' : '↓${_fmtBps(_rxBps!)} ↑${_fmtBps(_txBps ?? 0)}',
+            ),
+            color: _rxBps == null ? AppColors.textLow : AppColors.brandAccent,
+          ),
+        ],
         const SizedBox(height: 14),
         const _DetailRow(field: _ontKind, strong: true),
         if (_ontHasFiber(o)) _DetailRow(field: _ontFiber(o)),
@@ -1313,6 +1421,12 @@ class _SkeletonBar extends StatelessWidget {
 /// الكامل (2026-08-31) صار الفارق بين «0K» و«587b» بلا أثر على التخطيط.
 @visibleForTesting
 String fmtBpsForTest(int bps) => _fmtBps(bps);
+
+/// ترافيك المشترك اللحظيّ بالبت/ث — من كارت الجهاز إلى «معلومات الاتصال».
+typedef LiveTraffic = ({int down, int up});
+
+/// «↓3.5M ↑180K» — الصيغة نفسها لبلاطة كارت الجهاز.
+String formatLiveTraffic(LiveTraffic t) => '↓${_fmtBps(t.down)} ↑${_fmtBps(t.up)}';
 
 String _fmtBps(int bps) {
   if (bps <= 0) return '0';
