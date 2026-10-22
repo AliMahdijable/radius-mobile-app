@@ -53,6 +53,11 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 add_subdirectory("runner")
 
 
+# Visual Studio 2026 (MSVC 14.5x) turns <experimental/coroutine> into a hard
+# error (STL1011); flutter_local_notifications_windows still includes it via
+# C++/WinRT. Silencing applies to every plugin added below (VS 2022 unaffected).
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
 include(flutter/generated_plugins.cmake)
