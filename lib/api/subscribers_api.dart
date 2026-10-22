@@ -1029,8 +1029,9 @@ class SubscribersApi {
     required String username,
     String? idx,
   }) async {
+    // «كل الشركات»: النداء الموجَّه بتوكن الحساب ومفتاح الشركة (المعترض يحذف Authorization) — لا يلزمه توكن جلسة مفتوحة.
     final token = await AuthStorage.readToken();
-    if (token == null) return null;
+    if (token == null && CompanyRoute.currentKey == null) return null;
     final now = DateTime.now();
     final from = DateTime(now.year - 5, now.month, now.day);
     String fmt(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
@@ -1045,7 +1046,7 @@ class SubscribersApi {
           'date_from': '${fmt(from)} 00:00:00',
           'date_to': '${fmt(now)} 23:59:59',
         },
-        options: Options(headers: {'Authorization': 'Bearer $token'}),
+        options: token == null ? null : Options(headers: {'Authorization': 'Bearer $token'}),
       );
       final body = r.data ?? const {};
       if (body['success'] != true) {

@@ -14,6 +14,7 @@ import 'package:rad_mysvcs/screens/account/company_switch_sheet.dart';
 import 'package:rad_mysvcs/screens/dashboard/dashboard_screen.dart';
 import 'package:rad_mysvcs/screens/dashboard/widgets/subscribers_card.dart';
 import 'package:rad_mysvcs/screens/reports/financial_report_screen.dart';
+import 'package:rad_mysvcs/screens/subscribers/sheets/movements_sheet.dart';
 import 'package:rad_mysvcs/screens/subscribers/subscribers_screen.dart';
 import 'package:rad_mysvcs/screens/subscribers/widgets/filter_chips_bar.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
@@ -80,6 +81,17 @@ class _Srv implements HttpClientAdapter {
           'kpis': {'activate_cash_sum': cash, 'debt_pay_sum': key == _kA ? 5000 : 0},
           'recentLogs': [
             {'id': 1, 'action_type': 'DEBT_PAY', 'amount': 1000, 'created_at': key == _kA ? '2026-10-21 12:00:00' : '2026-10-21 11:00:00', 'user_username': 'u$key'},
+          ],
+        },
+      }, headers: h);
+    }
+    if (o.method == 'GET' && path == '/api/reports/account-statement') {
+      return _json(200, {
+        'success': true,
+        'data': {
+          'transactions': [
+            {'id': 1, 'action_type': 'DEBT_PAY', 'amount': 2500, 'balance_after': -2500, 'created_at': '2026-10-21T09:00:00Z',
+              'description': 'تسديد دين ${key == _kB ? 'باء' : 'ألف'}', 'admin_name': 'admin'},
           ],
         },
       }, headers: h);
@@ -177,6 +189,24 @@ void main() {
     final plain = Subscriber(idx: '9', username: 'u9', firstname: 'x', lastname: 'y');
     await t.runAsync(() => MergedOps.write(plain, () => SubscribersApi.payDebt(idx: '9', amount: 1, skipAutoWa: true)));
     expect(srv.routed.length, before, reason: 'بلا شركة ⇒ الطلب العاديّ');
+    await down(t);
+  });
+
+  testWidgets('سجل الحركات لمشتركٍ مدموج (٢٢ أكتوبر): كشف حسابه من شركته — لا «يعمل من الشركة وحدها»', (t) async {
+    await up();
+    await t.runAsync(() => MergedMode.load(fresh: true));
+    final sub = Subscriber(idx: '9', username: 'u9', firstname: 'x', lastname: 'y', companyKey: _kB);
+    await pumpVisual(t, phone,
+        home: (_) => Builder(
+            builder: (c) => Center(child: TextButton(onPressed: () => showMovementsSheet(c, sub), child: const Text('افتح')))));
+    await settle(t, seconds: 2);
+    await t.tap(find.text('افتح'));
+    await settle(t, seconds: 2);
+    expect(find.textContaining('تسديد دين باء'), findsOneWidget, reason: 'حركات المشترك من شركته (باء)');
+    expect(find.textContaining('يعمل من الشركة وحدها'), findsNothing);
+    final st = srv.routed.where((o) => o.uri.path == '/api/reports/account-statement');
+    expect(st.map((o) => o.headers['x-company-key']).toSet(), {_kB});
+    expect(st.every((o) => !o.headers.containsKey('Authorization')), isTrue);
     await down(t);
   });
 

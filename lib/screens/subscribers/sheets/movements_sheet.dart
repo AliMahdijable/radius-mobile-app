@@ -57,22 +57,15 @@ class _MovementsSheetState extends State<_MovementsSheet> {
   }
 
   Future<void> _load() async {
-    // سجلّ الحركات خارج جدول التوجيه — في «كل الشركات» للشركة وحدها
-    final blocked = MergedOps.unsupported(widget.sub);
-    if (blocked != null) {
-      setState(() {
-        _loading = false;
-        _error = blocked;
-      });
-      return;
-    }
     setState(() {
       _loading = true;
       _error = null;
     });
-    final txs = await SubscribersApi.loadMovements(
-      username: widget.sub.username,
-      idx: widget.sub.idx,
+    // «كل الشركات»: كشف حساب المشترك لشركة صفّه موجَّهاً — الخادم يسمح بقراءته (36f4cd2، ٢٢ أكتوبر؛ كان «يعمل من الشركة
+    // وحدها»). الوضع العاديّ كما هو حرفاً (MergedOps.run بلا مفتاحٍ يشغّل النداء كما هو).
+    final txs = await MergedOps.run(
+      widget.sub,
+      () => SubscribersApi.loadMovements(username: widget.sub.username, idx: widget.sub.idx),
     );
     if (!mounted) return;
     setState(() {

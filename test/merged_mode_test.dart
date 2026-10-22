@@ -9,6 +9,7 @@ import 'package:rad_mysvcs/api/archive_info.dart';
 import 'package:rad_mysvcs/api/company_route.dart';
 import 'package:rad_mysvcs/api/merged_finance_api.dart';
 import 'package:rad_mysvcs/api/reports_api.dart';
+import 'package:rad_mysvcs/api/subscribers_api.dart';
 import 'package:rad_mysvcs/models/merged_company.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
@@ -61,6 +62,9 @@ class _RouteServer implements HttpClientAdapter {
   /// جلسات online-users لكلّ شركة.
   final Map<String, List<Map<String, Object>>> sessions = {};
 
+  /// كشف حساب المشترك (سجل الحركات) لكلّ شركة.
+  final Map<String, List<Map<String, Object>>> statement = {};
+
   @override
   Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
     final key = o.headers['x-company-key'] as String?;
@@ -93,6 +97,9 @@ class _RouteServer implements HttpClientAdapter {
     }
     if (o.method == 'GET' && path == '/api/v2/online-users') {
       return _json(200, {'success': true, 'data': sessions[key] ?? const []}, headers: h);
+    }
+    if (o.method == 'GET' && path == '/api/reports/account-statement') {
+      return _json(200, {'success': true, 'data': {'transactions': statement[key] ?? const []}}, headers: h);
     }
     if (o.method == 'GET' && path.endsWith('/activation-data')) {
       return _json(200, {'success': true, 'data': {}}, headers: {...h, 'x-company-ref': ['r_AAAAAAAAAAAAAAAAAAAAAA']});
@@ -135,6 +142,25 @@ void main() {
       // وخارجه: الطلب عاديّ (لا يصل الخادم الموجَّه)
       await t.runAsync(() => ApiClient.dio.get<dynamic>('/api/v2/admin-widgets'));
       expect(srv.requests, hasLength(1));
+      await down();
+    });
+
+    testWidgets('سجل الحركات (٢٢ أكتوبر): كشف حساب مشترك الشركة موجَّهاً — توكن الحساب ومفتاحها، لا Bearer الشركة المفتوحة', (t) async {
+      await up();
+      srv.statement[_kB] = [
+        {'id': 1, 'action_type': 'DEBT_PAY', 'amount': 10000, 'balance_after': -5000, 'created_at': '2026-10-22T03:00:00Z', 'description': 'تسديد'},
+      ];
+      final sub = _s('1520').withCompany(_kB);
+      final txs = await t.runAsync(() => MergedOps.run(sub, () => SubscribersApi.loadMovements(username: sub.username, idx: sub.idx)));
+      expect(txs, isNotNull, reason: 'كان «يعمل من الشركة وحدها» — الخادم يسمح بالقراءة (36f4cd2)');
+      expect(txs!.single['action_type'], 'DEBT_PAY');
+      final o = srv.requests.single;
+      expect(o.uri.path, '/api/reports/account-statement');
+      expect(o.headers['x-company-key'], _kB);
+      expect(o.headers['x-account-token'], 'acct-1');
+      expect(o.headers.containsKey('Authorization'), isFalse);
+      expect(o.queryParameters['username'], sub.username);
+      expect(o.queryParameters['user_id'], '1520');
       await down();
     });
 
