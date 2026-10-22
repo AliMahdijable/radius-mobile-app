@@ -1425,8 +1425,13 @@ String fmtBpsForTest(int bps) => _fmtBps(bps);
 /// ترافيك المشترك اللحظيّ بالبت/ث — من كارت الجهاز إلى «معلومات الاتصال».
 typedef LiveTraffic = ({int down, int up});
 
-/// «↓3.5M ↑180K» — الصيغة نفسها لبلاطة كارت الجهاز.
-String formatLiveTraffic(LiveTraffic t) => '↓${_fmtBps(t.down)} ↑${_fmtBps(t.up)}';
+/// «3.4 Mbps» / «37 Kbps» — معدّلٌ بوحدةٍ صريحة لبلاطات «معلومات الاتصال».
+String formatBpsUnit(int bps) {
+  if (bps < 1000) return '${bps < 0 ? 0 : bps} bps';
+  if (bps < 1000000) return '${(bps / 1000).toStringAsFixed(0)} Kbps';
+  if (bps < 1000000000) return '${(bps / 1000000).toStringAsFixed(1)} Mbps';
+  return '${(bps / 1000000000).toStringAsFixed(2)} Gbps';
+}
 
 String _fmtBps(int bps) {
   if (bps <= 0) return '0';

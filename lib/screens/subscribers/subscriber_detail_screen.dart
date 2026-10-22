@@ -1378,24 +1378,40 @@ class _LiveSessionCard extends StatelessWidget {
                 ),
               ],
             ),
-          if (hasSession && liveTraffic != null)
-            ValueListenableBuilder<LiveTraffic?>(
-              valueListenable: liveTraffic!,
-              builder: (_, t, __) => t == null
-                  ? const SizedBox.shrink()
-                  : Padding(
-                      padding: const EdgeInsets.only(top: 9),
-                      child: _SunkenTile(
-                        icon: Icons.speed_rounded,
-                        field: CopyField('الترافيك الآن', formatLiveTraffic(t)),
-                        color: AppColors.brandAccent,
-                      ),
-                    ),
-            ),
           // العنوانان صفّان كاملان لا نصفان: النصف على شاشة ٣٢٠ يترك
           // ٩٥ نقطة للنصّ و«192.168.100.254» يحتاج ١١٤ — فيُقصّ رقم
           // المضيف، وهو المميِّز الوحيد بين جهازٍ وآخر.
           ..._ipRow(hasSession: hasSession, ip: ip, pinned: pinned),
+          // الترافيك اللحظيّ في الأسفل بعد العنوان (طلب المالك: «تنزلها جوّه») — سحب المشترك الآن من جهازه
+          if (hasSession && liveTraffic != null)
+            ValueListenableBuilder<LiveTraffic?>(
+              valueListenable: liveTraffic!,
+              // نصفان كصفّ التحميل والرفع أعلاه (المالك: «وترتّب الوضعيّة»)، بوحدةٍ صريحة لا «M/K»
+              builder: (_, t, __) => t == null
+                  ? const SizedBox.shrink()
+                  : Padding(
+                      padding: const EdgeInsets.only(top: 9),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _SunkenTile(
+                              icon: Icons.speed_rounded,
+                              field: CopyField('تحميل الآن', formatBpsUnit(t.down)),
+                              color: AppColors.success,
+                            ),
+                          ),
+                          const SizedBox(width: 9),
+                          Expanded(
+                            child: _SunkenTile(
+                              icon: Icons.speed_rounded,
+                              field: CopyField('رفع الآن', formatBpsUnit(t.up)),
+                              color: AppColors.info,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
         ],
       ),
     );

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/core/net/huawei_ont_service.dart';
 import 'package:rad_mysvcs/core/net/ont_traffic.dart';
 import 'package:rad_mysvcs/models/device_health.dart';
+import 'package:rad_mysvcs/screens/subscribers/widgets/device_probe_card.dart' show formatBpsUnit;
 
 /// ترافيك الـONU اللحظيّ (٢٢ أكتوبر، المالك: «اشتغلي على جلب ترفك onu… اختبرها اكثر من مره اهم شي الدقة»).
 ///
@@ -156,6 +157,13 @@ void main() {
       expect(await HuaweiOntService.fetchHead(session, '/html/amp/wlaninfo/wlaninfo.asp', OntCounterParse.wifiEnd), isNull);
       await server.close(force: true);
     });
+  });
+
+  test('بلاطتا «معلومات الاتصال»: وحدةٌ صريحة، والصفر صفرٌ لا فراغ', () {
+    expect(formatBpsUnit(0), '0 bps');
+    expect(formatBpsUnit(37000), '37 Kbps');
+    expect(formatBpsUnit(3400000), '3.4 Mbps');
+    expect(formatBpsUnit(1250000000), '1.25 Gbps');
   });
 
   test('الوثيقة: الصيغة utf8 لا تُفسد بايتاً عربيّاً مقطوعاً بين قطعتين', () {
