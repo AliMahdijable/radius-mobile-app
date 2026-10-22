@@ -32,3 +32,18 @@ class DesktopLayout {
     return view.physicalSize.width / view.devicePixelRatio >= minWidth;
   }
 }
+
+/// منطقة محتوى غلاف الحاسبة: ما يُبنى داخلها يرسم نسخته العريضة (رأس صفحةٍ كبير، شبكة بطاقات…)
+/// فوراً من أوّل بناء — لا ينتظر [DesktopLayout.shellActive] الذي يتحدّث بعد الإطار. وما يُفتح فوق
+/// الغلاف (المكدّس الجذريّ، لوحة تفاصيل المشترك) خارجها فيبقى بشكل الهاتف.
+class DesktopScope extends InheritedWidget {
+  const DesktopScope({super.key, this.active = true, required super.child});
+
+  final bool active;
+
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<DesktopScope>()?.active ?? false;
+
+  @override
+  bool updateShouldNotify(DesktopScope old) => old.active != active;
+}

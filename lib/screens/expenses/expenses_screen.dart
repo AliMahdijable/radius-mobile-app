@@ -14,6 +14,8 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'sheets/add_expense_sheet.dart';
 import 'sheets/edit_expense_sheet.dart';
+import '../desktop/desk_widgets.dart';
+import '../../core/platform/desktop_layout.dart';
 
 /// مديول "الصرفيات" — قائمة الصرفيات + فلتر نطاق التواريخ + كرت
 /// إجمالي + add/edit/delete. منقول لـv2 من ضمن "قوائم أخرى".
@@ -153,17 +155,27 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     final accent = AppColors.brandAccent;
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          'more.expenses'.tr(),
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text(
+            'more.expenses'.tr(),
+            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+          ),
+          iconTheme: IconThemeData(color: AppColors.textHi),
         ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
+        primary: DeskPrimaryButton(
+          icon: LucideIcons.plus,
+          label: 'common.add'.tr(),
+          onTap: _openAdd,
+        ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: DesktopScope.of(context)
+          ? null
+          : FloatingActionButton.extended(
         backgroundColor: accent,
         foregroundColor: AppColors.onBrand,
         onPressed: _openAdd,
@@ -180,14 +192,16 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             children: [
               // 2026-08-26 redesign: header صف واحد كثيف — إجمالي + نطاق
               // + عدد. بلا gradient بلا حواف ثقيلة.
-              _CompactHeader(
-                total: _total,
-                count: _rows.length,
-                from: _from,
-                to: _to,
-                accent: accent,
-                onPickRange: _pickRange,
-              ),
+              DeskSection(children: [
+                _CompactHeader(
+                  total: _total,
+                  count: _rows.length,
+                  from: _from,
+                  to: _to,
+                  accent: accent,
+                  onPickRange: _pickRange,
+                ),
+              ]),
               ArchiveBar(
                 archive: _archive,
                 includeArchived: _withArchive,
@@ -207,12 +221,14 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   child: _emptyState(),
                 )
               else
-                for (final row in _rows)
-                  _ExpenseTile(
-                    row: row,
-                    onEdit: () => _openEdit(row),
-                    onDelete: () => _confirmDelete(row),
-                  ),
+                DeskSection(children: [
+                  for (final row in _rows)
+                    _ExpenseTile(
+                      row: row,
+                      onEdit: () => _openEdit(row),
+                      onDelete: () => _confirmDelete(row),
+                    ),
+                ]),
             ],
           ),
         ),

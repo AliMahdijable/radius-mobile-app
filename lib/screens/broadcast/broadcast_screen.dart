@@ -15,6 +15,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../message_logs/message_logs_screen.dart';
+import '../desktop/desk_widgets.dart';
 
 /// شاشة "التبليغات" (Broadcast) — نقل حرفي من client-v2/Notifications.tsx.
 /// يسمح للمدير بإرسال رسائل واتساب جماعيّة للمشتركين حسب فلتر (كل/مدينون/
@@ -658,23 +659,26 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        centerTitle: true,
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(LucideIcons.bell, size: 16, color: AppColors.brand),
-            const SizedBox(width: 6),
-            Text(
-              'التبليغات',
-              style:
-                  AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
-            ),
-          ],
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          centerTitle: true,
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(LucideIcons.bell, size: 16, color: AppColors.brand),
+              const SizedBox(width: 6),
+              Text(
+                'التبليغات',
+                style:
+                    AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+              ),
+            ],
+          ),
+          iconTheme: IconThemeData(color: AppColors.textHi),
         ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

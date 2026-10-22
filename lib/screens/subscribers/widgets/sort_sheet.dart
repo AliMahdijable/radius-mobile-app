@@ -59,6 +59,9 @@ const _fieldDefs = <(SortField, String, IconData)>[
   (SortField.deviceLan, 'sort.device_lan', LucideIcons.cable),
 ];
 
+/// حقول الفرز بترتيب الورقة — لقائمة الترتيب المنسدلة على الحاسبة.
+List<SortField> get sortFieldOptions => [for (final d in _fieldDefs) d.$1];
+
 /// تسمية حقل الفرز المترجَمة — يستعملها شريط النتيجة أعلى القائمة
 /// ليعرض «الأيام المتبقية» بجانب سهم الاتجاه (مطابق للمخطّط).
 String sortFieldLabel(SortField f) {

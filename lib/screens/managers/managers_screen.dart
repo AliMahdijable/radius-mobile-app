@@ -22,6 +22,8 @@ import 'sheets/telegram_link_sheet.dart';
 import '../../core/util/clipboard_helper.dart';
 import '../../services/permissions_service.dart';
 import '../../services/subscriber_events.dart';
+import '../desktop/desk_widgets.dart';
+import '../../core/platform/desktop_layout.dart';
 
 /// مديول "المدراء الفرعيون" — قائمة + بحث + add/edit/delete + عمليات
 /// رصيد (شحن/سحب/نقاط). v1 web parity.
@@ -292,17 +294,27 @@ class _ManagersScreenState extends State<ManagersScreen> {
     final filtered = _filtered;
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          'mgr.title'.tr(),
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text(
+            'mgr.title'.tr(),
+            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+          ),
+          iconTheme: IconThemeData(color: AppColors.textHi),
         ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
+        primary: Perms.has('managers.add')
+            ? DeskPrimaryButton(
+                icon: LucideIcons.userPlus,
+                label: 'mgr.new'.tr(),
+                onTap: _openAdd,
+              )
+            : null,
       ),
-      floatingActionButton: Perms.has('managers.add')
+      floatingActionButton: !DesktopScope.of(context) && Perms.has('managers.add')
           ? FloatingActionButton.extended(
               backgroundColor: accent,
               foregroundColor: AppColors.onBrand,
@@ -319,7 +331,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
             padding: EdgeInsets.only(
                 bottom: MediaQuery.paddingOf(context).bottom + 96),
             children: [
-              _compactHero(accent),
+              DeskSection(children: [_compactHero(accent)]),
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
                 child: _searchField(),
@@ -337,12 +349,14 @@ class _ManagersScreenState extends State<ManagersScreen> {
               else if (filtered.isEmpty)
                 _empty()
               else
-                for (final m in filtered)
-                  _ManagerTile(
-                    manager: m,
-                    extraDebt: _customDebtByManager[m.id] ?? 0,
-                    onTap: () => _openActions(m),
-                  ),
+                DeskSection(children: [
+                  for (final m in filtered)
+                    _ManagerTile(
+                      manager: m,
+                      extraDebt: _customDebtByManager[m.id] ?? 0,
+                      onTap: () => _openActions(m),
+                    ),
+                ]),
             ],
           ),
         ),

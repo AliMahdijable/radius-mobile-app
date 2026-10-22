@@ -8,25 +8,26 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/platform/desktop_layout.dart';
 import '../../core/widgets/permission_locked.dart';
-import '../../services/account_service.dart';
 import '../../services/active_company.dart';
+import '../../services/alerts_service.dart';
 import '../../services/permissions_service.dart';
 import '../../services/provider_service.dart';
+import '../../services/theme_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
-import '../../widgets/active_company_line.dart';
 import '../app_modules.dart';
 import '../search/quick_search_overlay.dart';
 import '../settings_screen.dart';
+import '../top_actions.dart';
+import 'desk_widgets.dart';
 
-/// غلاف الحاسبة: قائمةٌ جانبيّة بكلّ الأقسام (بترتيب الموقع) والمحتوى بجانبها — لا شريطٌ سفليّ ولا
-/// صفحاتٌ تغطّي النافذة.
+/// غلاف الحاسبة بلغة الموقع (/v2): قائمةٌ جانبيّة بمجموعاتها، وشريطٌ علويّ فيه عنوان الصفحة وشريحة
+/// الشركة والبحث (Ctrl/⌘K) وأزرار الأعلى المشتركة، والمحتوى تحته.
 ///
-/// كلّ قسمٍ له Navigator خاصّ: ما يفتحه القسم (تفاصيل مشترك، تقرير، نافذة) يبقى داخل منطقة المحتوى
-/// والقائمة ظاهرة، والرجوع للقسم يحفظ مكانك فيه. النقر على القسم المفتوح يعيده لبدايته.
-/// التبويبات الثلاثة (الرئيسيّة، المشتركون، الأجهزة) هي نفسها شاشات الهاتف بحالتها؛ «قوائم أخرى»
-/// تتوزّع على المجموعات من [buildAppModules] — نفس القفل والإخفاء.
+/// كلّ قسمٍ له Navigator خاصّ: ما يفتحه القسم يبقى في منطقة المحتوى والقائمة ظاهرة، والرجوع للقسم يحفظ
+/// مكانك فيه، والنقر على القسم المفتوح يعيده لبدايته، وEsc رجوع. التبويبات الثلاثة (الرئيسيّة، المشتركون،
+/// الأجهزة) شاشات الهاتف نفسها بحالتها، و«قوائم أخرى» تتوزّع على المجموعات من [buildAppModules].
 class DesktopShell extends StatefulWidget {
   const DesktopShell({
     super.key,
@@ -51,10 +52,11 @@ class DesktopShell extends StatefulWidget {
 }
 
 class _DesktopShellState extends State<DesktopShell> {
-  static const double _sidebarWidth = 264;
+  static const double _sidebarWidth = 272;
+  static const double _railWidth = 76;
 
   /// أعرض من هذا يتوسّط المحتوى — شاشاتٌ بُنيت للهاتف لا تتمدّد على شاشةٍ عريضة جدّاً.
-  static const double _maxContent = 1180;
+  static const double _maxContent = 1240;
 
   static const _moduleOrder = [
     'managers',
@@ -79,6 +81,9 @@ class _DesktopShellState extends State<DesktopShell> {
   final Map<String, GlobalKey<NavigatorState>> _navKeys = {};
   final List<String> _opened = [];
   final Map<String, Widget Function()> _roots = {};
+  final Map<String, String> _titles = {};
+  final Map<String, String> _subtitles = {};
+  bool _collapsed = false;
 
   static String _tabId(int i) => 'tab:${i.clamp(0, 2)}';
 
@@ -103,15 +108,24 @@ class _DesktopShellState extends State<DesktopShell> {
     if (widget.currentTab != old.currentTab && _section != id) _open(id);
   }
 
-  void _open(String id, [Widget Function()? root]) {
+  void _open(String id, [Widget Function()? root, String? title, String? subtitle]) {
     _section = id;
+    if (title != null) _titles[id] = title;
+    if (subtitle != null) _subtitles[id] = subtitle;
     if (_navKeys.containsKey(id)) return;
     _navKeys[id] = GlobalKey<NavigatorState>();
     _opened.add(id);
     if (root != null) _roots[id] = root;
   }
 
-  void _select(String id, {Widget Function()? root, bool locked = false, String? unavailable}) {
+  void _select(
+    String id, {
+    Widget Function()? root,
+    String? title,
+    String? subtitle,
+    bool locked = false,
+    String? unavailable,
+  }) {
     if (locked || unavailable != null) {
       showNoPermission(context, message: unavailable);
       return;
@@ -121,7 +135,7 @@ class _DesktopShellState extends State<DesktopShell> {
       _navKeys[id]?.currentState?.popUntil((r) => r.isFirst);
       return;
     }
-    setState(() => _open(id, root));
+    setState(() => _open(id, root, title, subtitle));
     if (id.startsWith('tab:')) {
       widget.onSelectTab(int.parse(id.substring(4)));
     } else {
@@ -139,7 +153,21 @@ class _DesktopShellState extends State<DesktopShell> {
       );
     }
     if (id == 'settings') return const SettingsScreen();
-    return _roots[id]!();
+    return DeskPageInfo(title: _titles[id], subtitle: _subtitles[id], child: _roots[id]!());
+  }
+
+  String _sectionTitle() {
+    switch (_section) {
+      case 'tab:0':
+        return 'desktop.title_dashboard'.tr();
+      case 'tab:1':
+        return 'nav.subscribers'.tr();
+      case 'tab:2':
+        return 'nav.devices'.tr();
+      case 'settings':
+        return 'settings.title'.tr();
+    }
+    return _titles[_section] ?? '';
   }
 
   @override
@@ -160,8 +188,27 @@ class _DesktopShellState extends State<DesktopShell> {
           backgroundColor: AppColors.bg,
           body: Row(
             children: [
-              SizedBox(width: _sidebarWidth, child: _sidebar(mac)),
-              Expanded(child: _content()),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                width: _collapsed ? _railWidth : _sidebarWidth,
+                child: _sidebar(),
+              ),
+              Expanded(
+                child: Column(
+                  children: [
+                    _TopBar(
+                      title: _sectionTitle(),
+                      shortcut: mac ? '⌘K' : 'Ctrl K',
+                      onSearch: () => showQuickSearch(context),
+                      openPage: (page) => _navKeys[_section]
+                          ?.currentState
+                          ?.push(MaterialPageRoute(builder: (_) => page)),
+                    ),
+                    Expanded(child: _content()),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -173,7 +220,9 @@ class _DesktopShellState extends State<DesktopShell> {
 
   Widget _content() {
     return LayoutBuilder(builder: (context, c) {
-      final width = c.maxWidth > _maxContent ? _maxContent : c.maxWidth;
+      // حشوةٌ للجانبين فوق حشوة الصفحات (١٦) ⇒ ٢٤ من حافّة المحتوى كالموقع.
+      final avail = c.maxWidth - 2 * Sp.sm;
+      final width = avail > _maxContent ? _maxContent : avail;
       final mq = MediaQuery.of(context);
       return Align(
         alignment: Alignment.topCenter,
@@ -182,16 +231,18 @@ class _DesktopShellState extends State<DesktopShell> {
           height: c.maxHeight,
           // الشاشات تقيس MediaQuery: هنا عرض منطقة المحتوى لا النافذة كلّها.
           child: MediaQuery(
-            data: mq.copyWith(size: Size(width, c.maxHeight)),
-            child: IndexedStack(
-              index: _opened.indexOf(_section),
-              children: [
-                for (final id in _opened)
-                  Navigator(
-                    key: _navKeys[id],
-                    onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => _rootOf(id)),
-                  ),
-              ],
+            data: mq.copyWith(size: Size(width, c.maxHeight), padding: EdgeInsets.zero),
+            child: DesktopScope(
+              child: IndexedStack(
+                index: _opened.indexOf(_section),
+                children: [
+                  for (final id in _opened)
+                    Navigator(
+                      key: _navKeys[id],
+                      onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => _rootOf(id)),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
@@ -201,7 +252,7 @@ class _DesktopShellState extends State<DesktopShell> {
 
   // ───────────────────────────── القائمة ─────────────────────────────
 
-  Widget _sidebar(bool mac) {
+  Widget _sidebar() {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -212,25 +263,16 @@ class _DesktopShellState extends State<DesktopShell> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _brand(),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(Sp.md, 0, Sp.md, Sp.sm),
-              child: _SearchBox(
-                shortcut: mac ? '⌘K' : 'Ctrl K',
-                onTap: () => showQuickSearch(context),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(Sp.md, 0, Sp.md, Sp.md),
-              child: _AddButton(onTap: widget.onQuickAdd),
-            ),
             Divider(height: 1, thickness: 1, color: AppColors.border),
             Expanded(
               child: ListenableBuilder(
-                listenable: appModulesListenable(),
+                listenable: Listenable.merge([appModulesListenable(), AlertsService.count]),
                 builder: (context, _) => _nav(),
               ),
             ),
-            _footer(),
+            _collapseButton(),
+            Divider(height: 1, thickness: 1, color: AppColors.border),
+            _userCard(),
           ],
         ),
       ),
@@ -238,37 +280,45 @@ class _DesktopShellState extends State<DesktopShell> {
   }
 
   Widget _brand() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Sp.md, Sp.lg, Sp.md, Sp.md),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(R.sm),
-            child: Image.asset('assets/images/app_icon.png', width: 38, height: 38),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'MyServices Pro',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.label(color: AppColors.textHi)
-                      .copyWith(fontSize: 15, fontWeight: FontWeight.w700),
-                ),
-                ValueListenableBuilder<ActiveCompanyInfo?>(
-                  valueListenable: ActiveCompany.listenable,
-                  builder: (_, info, __) => info == null
-                      ? const SizedBox.shrink()
-                      : ActiveCompanyLine(info: info, fontSize: 11.5),
-                ),
-              ],
-            ),
-          ),
-        ],
+    final logo = Container(
+      width: 40,
+      height: 40,
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Image.asset('assets/images/app_icon.png', fit: BoxFit.contain),
+    );
+    return SizedBox(
+      height: 72,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
+        child: _collapsed
+            ? Center(child: logo)
+            : Row(
+                children: [
+                  logo,
+                  const SizedBox(width: Sp.md),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('MyServices',
+                            style: AppType.label(color: AppColors.textHi)
+                                .copyWith(fontSize: 17, fontWeight: FontWeight.w700)),
+                        Text('desktop.brand_subtitle'.tr(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
       ),
     );
   }
@@ -279,17 +329,23 @@ class _DesktopShellState extends State<DesktopShell> {
     List<Widget> group(AppModuleGroup g) => [
           for (final m in modules.where((m) => m.group == g))
             _item('mod:${m.id}', m.icon, m.title,
-                root: m.page, locked: m.locked, unavailable: m.unavailable),
+                subtitle: m.subtitle,
+                root: m.page,
+                locked: m.locked,
+                unavailable: m.unavailable),
         ];
     final finance = group(AppModuleGroup.finance);
     final comms = group(AppModuleGroup.comms);
     final earthlink = group(AppModuleGroup.earthlink);
+    final attention = AlertsService.count.value;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(Sp.sm, Sp.sm, Sp.sm, Sp.md),
+      padding: const EdgeInsets.fromLTRB(Sp.sm, Sp.xs, Sp.sm, Sp.md),
       children: [
-        _item('tab:0', LucideIcons.layoutDashboard, 'nav.home'.tr()),
+        _groupTitle('nav.home'.tr()),
+        _item('tab:0', LucideIcons.layoutDashboard, 'desktop.title_dashboard'.tr()),
         _groupTitle('desktop.group_manage'.tr()),
-        _item('tab:1', LucideIcons.users, 'nav.subscribers'.tr()),
+        _item('tab:1', LucideIcons.users, 'nav.subscribers'.tr(),
+            badge: attention > 0 ? attention : null),
         _item('tab:2', LucideIcons.router, 'nav.devices'.tr()),
         ...group(AppModuleGroup.manage),
         if (finance.isNotEmpty) ...[_groupTitle('desktop.group_finance'.tr()), ...finance],
@@ -302,49 +358,221 @@ class _DesktopShellState extends State<DesktopShell> {
     );
   }
 
-  Widget _groupTitle(String text) => Padding(
-        padding: const EdgeInsetsDirectional.fromSTEB(Sp.sm, Sp.md, Sp.sm, Sp.xs),
-        child: Text(
-          text,
-          style: AppType.micro(color: AppColors.textLow)
-              .copyWith(fontWeight: FontWeight.w600, letterSpacing: 0.2),
-        ),
-      );
+  Widget _groupTitle(String text) {
+    if (_collapsed) return const SizedBox(height: Sp.md);
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(Sp.md, Sp.lg, Sp.md, Sp.xs),
+      child: Text(
+        text,
+        style: AppType.micro(color: AppColors.textLow).copyWith(fontWeight: FontWeight.w600),
+      ),
+    );
+  }
 
   Widget _item(
     String id,
     IconData icon,
     String title, {
+    String? subtitle,
     Widget Function()? root,
     bool locked = false,
     String? unavailable,
+    int? badge,
   }) {
     return _SideItem(
       icon: icon,
       title: title,
+      collapsed: _collapsed,
       selected: id == _section,
       locked: locked || unavailable != null,
-      onTap: () => _select(id, root: root, locked: locked, unavailable: unavailable),
+      badge: badge,
+      onTap: () => _select(id,
+          root: root,
+          title: title,
+          subtitle: subtitle,
+          locked: locked,
+          unavailable: unavailable),
     );
   }
 
-  Widget _footer() {
-    final email = AccountService.currentUser?.email;
-    if (email == null || email.isEmpty) return const SizedBox.shrink();
+  Widget _collapseButton() {
+    return InkWell(
+      onTap: () => setState(() => _collapsed = !_collapsed),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.sm),
+        child: Row(
+          mainAxisAlignment: _collapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
+          children: [
+            Icon(_collapsed ? LucideIcons.chevronsLeft : LucideIcons.chevronsRight,
+                size: 16, color: AppColors.textLow),
+            if (!_collapsed) ...[
+              const SizedBox(width: Sp.sm),
+              Text('desktop.collapse'.tr(),
+                  style: AppType.muted(color: AppColors.textLow).copyWith(fontSize: 12.5)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _userCard() {
+    return ValueListenableBuilder<ActiveCompanyInfo?>(
+      valueListenable: ActiveCompany.listenable,
+      builder: (context, info, _) {
+        final name = info?.username ?? '';
+        final avatar = _Avatar(name: name);
+        return InkWell(
+          onTap: () => _select('settings'),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.md),
+            child: _collapsed
+                ? Center(child: avatar)
+                : Row(
+                    children: [
+                      avatar,
+                      const SizedBox(width: Sp.sm),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textDirection: TextDirection.ltr,
+                              style: AppType.label(color: AppColors.textHi)
+                                  .copyWith(fontSize: 14, fontWeight: FontWeight.w700),
+                            ),
+                            if (info != null)
+                              Row(
+                                children: [
+                                  Icon(LucideIcons.building2,
+                                      size: 13, color: AppColors.brandAccent),
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      info.label,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppType.muted(color: AppColors.brandAccent)
+                                          .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                          ],
+                        ),
+                      ),
+                      Icon(LucideIcons.chevronDown, size: 16, color: AppColors.textLow),
+                    ],
+                  ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// الشريط العلويّ: عنوان الصفحة وشريحة الشركة يميناً، والبحث وأزرار الأعلى والوضع والصورة يساراً.
+class _TopBar extends StatelessWidget {
+  const _TopBar({
+    required this.title,
+    required this.shortcut,
+    required this.onSearch,
+    required this.openPage,
+  });
+
+  final String title;
+  final String shortcut;
+  final VoidCallback onSearch;
+  final void Function(Widget page) openPage;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
     return Container(
-      padding: const EdgeInsets.fromLTRB(Sp.md, Sp.sm, Sp.md, Sp.md),
-      decoration: BoxDecoration(border: Border(top: BorderSide(color: AppColors.border))),
+      height: 72,
+      padding: const EdgeInsets.symmetric(horizontal: Sp.xl),
+      decoration: BoxDecoration(
+        color: AppColors.bg,
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
       child: Row(
         children: [
-          Icon(LucideIcons.circleUserRound, size: 18, color: AppColors.textLow),
-          const SizedBox(width: Sp.sm),
           Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.label(color: AppColors.textHi)
+                      .copyWith(fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 4),
+                ValueListenableBuilder<ActiveCompanyInfo?>(
+                  valueListenable: ActiveCompany.listenable,
+                  builder: (_, info, __) =>
+                      info == null ? const SizedBox.shrink() : _CompanyChip(info: info),
+                ),
+              ],
+            ),
+          ),
+          _SearchBox(shortcut: shortcut, onTap: onSearch),
+          const SizedBox(width: Sp.md),
+          TopActions(switchers: true, inDesktopBar: true, openPage: openPage),
+          const SizedBox(width: Sp.sm),
+          const _ThemeToggle(),
+          const SizedBox(width: Sp.sm),
+          ValueListenableBuilder<ActiveCompanyInfo?>(
+            valueListenable: ActiveCompany.listenable,
+            builder: (_, info, __) => _Avatar(name: info?.username ?? ''),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompanyChip extends StatelessWidget {
+  const _CompanyChip({required this.info});
+
+  final ActiveCompanyInfo info;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.brandSoftBg,
+        borderRadius: BorderRadius.circular(R.pill),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(LucideIcons.building2, size: 13, color: AppColors.brandOnSoft),
+          const SizedBox(width: 5),
+          Flexible(
             child: Text(
-              email,
+              info.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.muted(color: AppColors.brandOnSoft)
+                  .copyWith(fontSize: 12.5, fontWeight: FontWeight.w700),
+            ),
+          ),
+          Text(' · ', style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5)),
+          Flexible(
+            child: Text(
+              info.username,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textDirection: TextDirection.ltr,
-              textAlign: TextAlign.start,
               style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5),
             ),
           ),
@@ -354,19 +582,105 @@ class _DesktopShellState extends State<DesktopShell> {
   }
 }
 
+class _Avatar extends StatelessWidget {
+  const _Avatar({required this.name});
+
+  final String name;
+
+  static String _initials(String n) {
+    final parts = n.split(RegExp(r'[@.\s_-]+')).where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return '•';
+    final a = parts.first.characters.first;
+    final b = parts.length > 1 ? parts[1].characters.first : '';
+    return (a + b).toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Container(
+      width: 38,
+      height: 38,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: AppColors.brandSoftBg,
+        shape: BoxShape.circle,
+        border: Border.all(color: AppColors.brandSoftBorder),
+      ),
+      child: Text(
+        _initials(name),
+        style: AppType.label(color: AppColors.brandOnSoft)
+            .copyWith(fontSize: 13, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+class _ThemeToggle extends StatelessWidget {
+  const _ThemeToggle();
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final dark = AppColors.isDark;
+    return _IconSquare(
+      icon: dark ? LucideIcons.sun : LucideIcons.moon,
+      tooltip: (dark ? 'desktop.light_mode' : 'desktop.dark_mode').tr(),
+      onTap: () => ThemeService.setMode(dark ? ThemeMode.light : ThemeMode.dark),
+    );
+  }
+}
+
+class _IconSquare extends StatelessWidget {
+  const _IconSquare({required this.icon, required this.tooltip, required this.onTap});
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.md),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(R.md),
+          child: Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(R.md),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Icon(icon, size: 19, color: AppColors.textHi),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SideItem extends StatefulWidget {
   const _SideItem({
     required this.icon,
     required this.title,
+    required this.collapsed,
     required this.selected,
     required this.locked,
     required this.onTap,
+    this.badge,
   });
 
   final IconData icon;
   final String title;
+  final bool collapsed;
   final bool selected;
   final bool locked;
+  final int? badge;
   final VoidCallback onTap;
 
   @override
@@ -387,47 +701,71 @@ class _SideItemState extends State<_SideItem> {
             ? LockedStyle.title
             : AppColors.textHi;
     final iconColor = selected
-        ? AppColors.brand
+        ? AppColors.brandAccent
         : locked
             ? LockedStyle.glyph
             : AppColors.textMid;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 1),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hover = true),
-        onExit: (_) => setState(() => _hover = false),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-            decoration: BoxDecoration(
-              color: selected
-                  ? AppColors.brandSoftBg
-                  : _hover
-                      ? AppColors.surfaceSunken
-                      : Colors.transparent,
-              borderRadius: BorderRadius.circular(R.sm),
+    final row = Row(
+      mainAxisAlignment: widget.collapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
+      children: [
+        Icon(widget.icon, size: 20, color: iconColor),
+        if (!widget.collapsed) ...[
+          const SizedBox(width: Sp.md),
+          Expanded(
+            child: Text(
+              widget.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.label(color: fg).copyWith(
+                fontSize: 15,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              ),
             ),
-            child: Row(
-              children: [
-                Icon(widget.icon, size: 18, color: iconColor),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    widget.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppType.label(color: fg).copyWith(
-                      fontSize: 13.5,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                    ),
-                  ),
-                ),
-                if (locked) Icon(LucideIcons.lock, size: 14, color: LockedStyle.glyph),
-              ],
+          ),
+          if (widget.badge != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+              decoration: BoxDecoration(
+                color: AppColors.warningSoftBg,
+                borderRadius: BorderRadius.circular(R.pill),
+              ),
+              child: Text(
+                '${widget.badge}',
+                style: AppType.micro(color: AppColors.warningOnSoft)
+                    .copyWith(fontWeight: FontWeight.w700),
+              ),
+            ),
+          if (locked) Icon(LucideIcons.lock, size: 14, color: LockedStyle.glyph),
+        ],
+      ],
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Tooltip(
+        message: widget.collapsed ? widget.title : '',
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => _hover = true),
+          onExit: (_) => setState(() => _hover = false),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: widget.onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              height: 44,
+              padding: const EdgeInsets.symmetric(horizontal: Sp.md),
+              decoration: BoxDecoration(
+                color: selected
+                    ? AppColors.brandSoftBg
+                    : _hover
+                        ? AppColors.surfaceSunken
+                        : Colors.transparent,
+                borderRadius: BorderRadius.circular(R.md),
+                border: selected
+                    ? BorderDirectional(start: BorderSide(color: AppColors.brandAccent, width: 3))
+                    : null,
+              ),
+              child: row,
             ),
           ),
         ),
@@ -445,72 +783,50 @@ class _SearchBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return Material(
-      color: AppColors.surfaceSunken,
-      borderRadius: BorderRadius.circular(R.md),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(R.md),
-        child: Container(
-          height: 40,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(R.md),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Row(
-            children: [
-              Icon(LucideIcons.search, size: 16, color: AppColors.textLow),
-              const SizedBox(width: Sp.sm),
-              Expanded(
-                child: Text(
-                  'desktop.search_hint'.tr(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.muted(color: AppColors.textLow).copyWith(fontSize: 13),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(R.sm),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Text(
-                  shortcut,
-                  textDirection: TextDirection.ltr,
-                  style: AppType.micro(color: AppColors.textMid).copyWith(fontSize: 10.5),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AddButton extends StatelessWidget {
-  const _AddButton({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
     return SizedBox(
-      height: 40,
-      child: FilledButton.icon(
-        onPressed: onTap,
-        style: FilledButton.styleFrom(
-          backgroundColor: AppColors.brand,
-          foregroundColor: AppColors.onBrand,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.md)),
-          textStyle: AppType.label().copyWith(fontWeight: FontWeight.w700, fontSize: 13.5),
+      width: 320,
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.md),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(R.md),
+          child: Container(
+            height: 42,
+            padding: const EdgeInsets.symmetric(horizontal: Sp.md),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(R.md),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              children: [
+                Icon(LucideIcons.search, size: 17, color: AppColors.textMid),
+                const SizedBox(width: Sp.sm),
+                Expanded(
+                  child: Text(
+                    'desktop.search_hint'.tr(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.muted(color: AppColors.textLow).copyWith(fontSize: 13.5),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceSunken,
+                    borderRadius: BorderRadius.circular(R.sm),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Text(
+                    shortcut,
+                    textDirection: TextDirection.ltr,
+                    style: AppType.micro(color: AppColors.textMid).copyWith(fontSize: 11),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-        icon: const Icon(LucideIcons.plus, size: 18),
-        label: Text('desktop.add'.tr()),
       ),
     );
   }

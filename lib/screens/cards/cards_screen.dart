@@ -13,6 +13,7 @@ import '../../theme/typography.dart';
 import '../../widgets/skeleton.dart';
 import 'cards_widgets.dart';
 import 'sheets/series_cards_sheet.dart';
+import '../desktop/desk_widgets.dart';
 
 /// «الكارتات» — مخزون كارتات التعبئة للوكيل (البند ٤ §١٢).
 ///
@@ -112,32 +113,35 @@ class _CardsScreenState extends State<CardsScreen> {
     Theme.of(context); // theme-dep (dark-mode)
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          'cards.title'.tr(),
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
-        ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
-        actions: [
-          IconButton(
-            onPressed: _loading ? null : _refresh,
-            tooltip: 'common.refresh'.tr(),
-            icon: _loading
-                ? SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.textMid,
-                    ),
-                  )
-                : Icon(LucideIcons.refreshCw,
-                    size: 18, color: AppColors.textMid),
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text(
+            'cards.title'.tr(),
+            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
           ),
-        ],
+          iconTheme: IconThemeData(color: AppColors.textHi),
+          actions: [
+            IconButton(
+              onPressed: _loading ? null : _refresh,
+              tooltip: 'common.refresh'.tr(),
+              icon: _loading
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.textMid,
+                      ),
+                    )
+                  : Icon(LucideIcons.refreshCw,
+                      size: 18, color: AppColors.textMid),
+            ),
+          ],
+        ),
       ),
       body: SafeArea(
         bottom: false,

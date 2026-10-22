@@ -46,6 +46,7 @@ class Sp {
 /// والباقي مضاف من المخطّط حيث لكلّ دور نصف قطر ثابت.
 class R {
   R._();
+  static const double check = 6; // مربّع التحديد ٢٠×٢٠ في جداول الحاسبة
   static const double sm = 10;
   static const double chip = 11; // شريحة المبلغ السريع / الفلتر الأفقي
   static const double md = 12;

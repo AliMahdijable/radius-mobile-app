@@ -32,7 +32,11 @@ class FilterChipsBar extends StatefulWidget {
     required this.current,
     required this.counts,
     required this.onSelect,
+    this.wrap = false,
   });
+
+  /// الحاسبة: الشرائح كلّها ظاهرة في أسطر بدل شريطٍ يُمرَّر أفقيّاً.
+  final bool wrap;
 
   final SubscriberFilter current;
   final Map<SubscriberFilter, int> counts;
@@ -120,6 +124,23 @@ class _FilterChipsBarState extends State<FilterChipsBar> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    if (widget.wrap) {
+      return Wrap(
+        spacing: Sp.sm,
+        runSpacing: Sp.sm,
+        children: [
+          for (final d in _defs)
+            _Chip(
+              label: d.label.tr(),
+              icon: d.icon,
+              color: d.color,
+              count: widget.counts[d.key] ?? 0,
+              selected: widget.current == d.key,
+              onTap: () => widget.onSelect(d.key),
+            ),
+        ],
+      );
+    }
     return SizedBox(
       height: H.chipSm,
       child: ListView.separated(

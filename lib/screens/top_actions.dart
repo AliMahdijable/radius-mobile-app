@@ -4,6 +4,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../core/platform/desktop_layout.dart';
 import '../core/widgets/permission_locked.dart';
 import '../services/ai_assistant_state.dart';
 import '../services/alerts_service.dart';
@@ -44,7 +45,13 @@ import 'settings_screen.dart';
 /// المربوطة — للمالك بشركتين فأكثر) و**«الصفحات»** (المدراء الفرعيّون داخل
 /// الشركة المفتوحة — بصلاحيّة `managers.edit`)، كما في الرئيسيّة حرفاً.
 class TopActions extends StatelessWidget {
-  const TopActions({super.key, this.switchers = false, this.companySquare = true});
+  const TopActions({
+    super.key,
+    this.switchers = false,
+    this.companySquare = true,
+    this.inDesktopBar = false,
+    this.openPage,
+  });
 
   /// «تبديل الشركة» و«الصفحات» قبل المساعد.
   final bool switchers;
@@ -52,6 +59,17 @@ class TopActions extends StatelessWidget {
   /// مربّع «تبديل الشركة» نفسه — الرئيسيّة تُسقطه حين لا يتّسع لاسم المدير
   /// فيصير سطر الشركة تحت الاسم هو الزرّ.
   final bool companySquare;
+
+  /// في شريط الحاسبة العلويّ: الترس في القائمة الجانبيّة فلا يتكرّر هنا.
+  final bool inDesktopBar;
+
+  /// يفتح الصفحة في منطقة المحتوى (غلاف الحاسبة) بدل المكدّس الجذريّ الذي يغطّي القائمة.
+  final void Function(Widget page)? openPage;
+
+  void _open(BuildContext context, Widget page) {
+    if (openPage != null) return openPage!(page);
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -78,7 +96,9 @@ class TopActions extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             // «الشركات» جنب «الصفحات» من جهة الاسم، فيبقى «الصفحات» بمكانه.
-            if (switchers && companySquare && LinkedCompanies.switcherVisible) ...[
+            if (switchers &&
+                companySquare &&
+                LinkedCompanies.switcherVisible) ...[
               TopActionChip(
                 key: const ValueKey('top-actions-company-switch'),
                 icon: Icons.apartment_rounded,
@@ -94,9 +114,7 @@ class TopActions extends StatelessWidget {
                 key: const ValueKey('top-actions-accounts'),
                 icon: Icons.swap_horiz_rounded,
                 label: 'accounts.title'.tr(),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const AccountsScreen()),
-                ),
+                onTap: () => _open(context, const AccountsScreen()),
               ),
               SizedBox(width: gap),
             ],
@@ -111,19 +129,21 @@ class TopActions extends StatelessWidget {
               ),
               SizedBox(width: gap),
             ],
-            const _NotificationsChip(),
-            SizedBox(width: gap),
-            TopActionChip(
-              key: const ValueKey('top-actions-settings'),
-              icon: Icons.settings_outlined,
-              label: 'common.settings'.tr(),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const SettingsScreen(),
-                  fullscreenDialog: true,
+            _NotificationsChip(onOpen: (page) => _open(context, page)),
+            if (!inDesktopBar) ...[
+              SizedBox(width: gap),
+              TopActionChip(
+                key: const ValueKey('top-actions-settings'),
+                icon: Icons.settings_outlined,
+                label: 'common.settings'.tr(),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const SettingsScreen(),
+                    fullscreenDialog: true,
+                  ),
                 ),
               ),
-            ),
+            ],
           ],
         );
       },
@@ -135,7 +155,9 @@ class TopActions extends StatelessWidget {
 /// في خطر (قربوا الانتهاء + انتهوا اليوم)، رقمٌ واحد لكلّ ما يحتاج انتباهاً.
 /// `AlertsService.count` يتحدّث من قائمة المشتركين ومن شاشة الإشعارات.
 class _NotificationsChip extends StatelessWidget {
-  const _NotificationsChip();
+  const _NotificationsChip({required this.onOpen});
+
+  final void Function(Widget page) onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -148,9 +170,7 @@ class _NotificationsChip extends StatelessWidget {
           icon: Icons.notifications_none_rounded,
           label: 'notifications.title'.tr(),
           badge: InboxService.unreadCount + alerts,
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const InboxScreen()),
-          ),
+          onTap: () => onOpen(const InboxScreen()),
         ),
       ),
     );
@@ -204,8 +224,7 @@ class TopActionChip extends StatelessWidget {
       _narrow(context) ? compactSize : size;
 
   /// الفراغ بين مربّعين على هذه الشاشة.
-  static double gapOf(BuildContext context) =>
-      _narrow(context) ? Sp.x6 : Sp.sm;
+  static double gapOf(BuildContext context) => _narrow(context) ? Sp.x6 : Sp.sm;
 
   @override
   Widget build(BuildContext context) {
@@ -302,6 +321,33 @@ class TabHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    // الحاسبة: الأزرار في الشريط العلويّ للغلاف، والعنوان رأس صفحةٍ كبير كالموقع.
+    return DesktopScope.of(context) ? _desktop() : _mobile(context);
+  }
+
+  Widget _desktop() {
+    return Padding(
+      padding: const EdgeInsets.only(top: Sp.md, bottom: Sp.xs),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.title().copyWith(fontSize: 28, height: 1.2),
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 4),
+            subtitle!,
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _mobile(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

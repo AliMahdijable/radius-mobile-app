@@ -13,6 +13,7 @@ import 'sheets/telegram_bindings_sheet.dart';
 import 'sheets/telegram_broadcast_sheet.dart';
 import 'sheets/telegram_bulk_links_sheet.dart';
 import 'sheets/telegram_link_generator_sheet.dart';
+import '../desktop/desk_widgets.dart';
 
 /// TelegramScreen — 2026-08-26. نقل من client-v2 web للـmobile-app-v2.
 ///
@@ -119,19 +120,22 @@ class _TelegramScreenState extends State<TelegramScreen> {
     Theme.of(context); // theme-dep
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: const Text(
-          'تلغرام',
-          style: TextStyle(
-            fontFamily: AppType.family,
-            fontSize: 16, height: 1.3,
-            fontWeight: FontWeight.w700,
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: const Text(
+            'تلغرام',
+            style: TextStyle(
+              fontFamily: AppType.family,
+              fontSize: 16, height: 1.3,
+              fontWeight: FontWeight.w700,
+            ),
           ),
+          iconTheme: IconThemeData(color: AppColors.textHi),
         ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       body: SafeArea(
         child: _loading

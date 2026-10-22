@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../core/platform/app_platform.dart';
+import '../../core/platform/desktop_layout.dart';
 import '../../api/bulk_activate_api.dart';
 import '../../api/device_probe_api.dart';
 import '../../models/device_health.dart';
@@ -40,6 +40,7 @@ import '../../theme/typography.dart';
 import '../../widgets/active_company_line.dart';
 import '../../services/provider_limits.dart';
 import '../top_actions.dart';
+import 'sheets/add_subscriber_sheet.dart';
 import 'sheets/bulk_activate_sheet.dart';
 import 'sheets/bulk_pay_debt_sheet.dart';
 import 'sheets/pay_debt_sheet.dart';
@@ -51,6 +52,7 @@ import 'widgets/sort_sheet.dart';
 import 'sheets/location_sheets.dart';
 import 'widgets/subscriber_card_v3.dart';
 import 'widgets/subscriber_table_row.dart';
+import 'widgets/subscribers_desktop_header.dart';
 
 /// Default sort field + direction per filter — mirrors v1's
 /// `_defaultSortByFilter`. Without this the 'قارب الانتهاء' chip
@@ -1358,6 +1360,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
         for (final s in selectable) {
           _selected.add(s.idx!);
         }
+        if (_selected.isNotEmpty) _selectionMode = true;
       }
     });
   }
@@ -1450,6 +1453,20 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
   String _sortLabel() => sortFieldLabel(_sortField);
 
+  /// الحاسبة: رأس العمود أو القائمة المنسدلة — الحقل نفسه يعكس الاتّجاه، وحقلٌ جديد يبدأ تنازليّاً.
+  void _setSort(SortField field, {bool toggle = true}) {
+    setState(() {
+      if (toggle && field == _sortField) {
+        _sortDir = _sortDir == SortDirection.desc ? SortDirection.asc : SortDirection.desc;
+      } else {
+        _sortField = field;
+        _sortDir = SortDirection.desc;
+      }
+      _visibleCount = _kPageStep;
+    });
+    if (_big) _bigReload();
+  }
+
   /// شيت «تصفية القائمة» — النسخة الخفيفة من المخطّط: بلا رأس مفصول،
   /// عنوان 16/w700 مع «إعادة تعيين» في الطرف، شرائح، ثمّ زرّ «تطبيق».
   /// يستبدل صفّ `_ManagerFilterBar` المسطّح الذي كان تحت البحث.
@@ -1470,9 +1487,14 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       ),
     );
     if (picked == null) return; // أُغلق بلا «تطبيق»
+    _applyFilters(picked.manager, picked.package);
+  }
+
+  /// المدير والباقة — من ورقة التصفية (الهاتف) أو القائمتين المنسدلتين (الحاسبة).
+  void _applyFilters(String? manager, String? package) {
     setState(() {
-      _managerFilter = normalizeManagerFilter(picked.manager);
-      _packageFilter = normalizeManagerFilter(picked.package);
+      _managerFilter = normalizeManagerFilter(manager);
+      _packageFilter = normalizeManagerFilter(package);
       _visibleCount = _kPageStep;
       if (_big) {
         _bigParentId = _bigManagerId(_managerFilter);
@@ -1751,8 +1773,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                 Padding(
                                   // ‎8 تحت الشقّ (لا ‎12): أزرار الأعلى في
                                   // موضعها من الرئيسيّة نفسه حرفيّاً.
-                                  padding: const EdgeInsets.fromLTRB(
-                                      Sp.lg, Sp.sm, Sp.lg, Sp.sm),
+                                  padding: _paneMode
+                                      ? EdgeInsets.fromLTRB(_hPad, Sp.xl, _hPad, Sp.lg)
+                                      : const EdgeInsets.fromLTRB(
+                                          Sp.lg, Sp.sm, Sp.lg, Sp.sm),
                                   child: _selectionMode
                                       ? _SelectionHeader(
                                           count: _selected.length,
@@ -1761,6 +1785,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                           onSelectAll: () =>
                                               _selectAllOnPage(page),
                                         )
+                                      : _paneMode
+                                      ? _desktopHeader(counts, managers, packages)
                                       : _ListHeader(
                                           controller: _searchCtrl,
                                           total:
@@ -1800,6 +1826,19 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                               ],
                             ),
                           ),
+                          if (_paneMode)
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: EdgeInsets.fromLTRB(_hPad, 0, _hPad, Sp.lg),
+                                child: FilterChipsBar(
+                                  wrap: true,
+                                  current: _filter,
+                                  counts: counts,
+                                  onSelect: _selectFilter,
+                                ),
+                              ),
+                            )
+                          else
                           SliverPersistentHeader(
                             pinned: true,
                             delegate: _ChipsBarDelegate(
@@ -1824,14 +1863,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                     FilterChipsBar(
                                       current: _filter,
                                       counts: counts,
-                                      onSelect: (f) {
-                                        setState(() {
-                                          _filter = f;
-                                          _applyDefaultSortFor(f);
-                                          _visibleCount = _kPageStep;
-                                        });
-                                        if (_big) _bigReload();
-                                      },
+                                      onSelect: _selectFilter,
                                     ),
                                   ],
                                 ),
@@ -1841,7 +1873,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                           SliverToBoxAdapter(
                             child: Column(
                               children: [
-                                if (!_selectionMode)
+                                if (!_selectionMode && !_paneMode)
                                   _ResultSortBar(
                                     count: filtered.length,
                                     sortLabel: _sortLabel(),
@@ -1908,16 +1940,29 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                           else ...[
                             if (_paneMode)
                               SliverPadding(
-                                padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
-                                sliver: SliverToBoxAdapter(
-                                  child: SubscriberTableHeader(columns: _tableColumns),
+                                padding: EdgeInsets.symmetric(horizontal: _hPad),
+                                sliver: SliverPersistentHeader(
+                                  pinned: true,
+                                  delegate: _TableHeaderDelegate(
+                                    SubscriberTableHeader(
+                                      columns: _tableColumns,
+                                      sortField: _sortField,
+                                      descending: _sortDir == SortDirection.desc,
+                                      onSort: _setSort,
+                                      allSelected: page.any((s) => s.idx != null) &&
+                                          page
+                                              .where((s) => s.idx != null)
+                                              .every((s) => _selected.contains(s.idx)),
+                                      onSelectAll: () => _selectAllOnPage(page),
+                                    ),
+                                  ),
                                 ),
                               ),
                             SliverPadding(
                               padding: EdgeInsets.fromLTRB(
-                                Sp.lg,
+                                _hPad,
                                 0,
-                                Sp.lg,
+                                _hPad,
                                 Sp.huge * 3 +
                                     MediaQuery.paddingOf(context).bottom,
                               ),
@@ -1954,14 +1999,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                       open: _paneKey == _rowKey(s),
                                       selected: isSelected,
                                       selectionMode: _selectionMode,
-                                      onTap: () {
-                                        if (_selectionMode) {
-                                          _toggleSelect(s);
-                                        } else {
-                                          _openDetail(s);
-                                        }
-                                      },
-                                      onLongPress: () => _enterSelectionWith(s),
+                                      onTap: () => _openDetail(s),
+                                      onToggleSelect: () => _toggleSelect(s),
                                       last: i == page.length - 1 && remaining <= 0,
                                     );
                                   }
@@ -2074,32 +2113,49 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     );
   }
 
-  /// الحاسبة: تفاصيل المشترك في لوحةٍ بجانب القائمة بدل صفحةٍ تغطّيها — القائمة تبقى بعرضٍ مريح
-  /// (لا تتمدّد بطاقاتها) والتنقّل بين المشتركين نقرةٌ واحدة.
-  bool get _paneMode => AppPlatform.isDesktop && MediaQuery.sizeOf(context).width >= 1000;
+  /// الحاسبة (داخل الغلاف): جدولٌ كالموقع، وتفاصيل المشترك في لوحةٍ بجانبه بدل صفحةٍ تغطّيه —
+  /// والتنقّل بين المشتركين نقرةٌ واحدة.
+  bool get _paneMode => DesktopScope.of(context) && MediaQuery.sizeOf(context).width >= 700;
   final GlobalKey<NavigatorState> _paneNav = GlobalKey<NavigatorState>();
   static const double _paneWidth = 440;
 
   Widget _withDetailPane(Widget list) {
     if (!_paneMode) return list;
     final mq = MediaQuery.of(context);
+    final open = _paneKey != null;
+    // اللوحة تظهر حين يُفتح مشترك وتُطوى حين يُغلق — الجدول بعرضه كاملاً بينهما. الـNavigator باقٍ
+    // مبنيّاً وهي مطويّة (مقصوصٌ بعرض صفر) فلا يضيع مكدّسها.
     return Row(
       children: [
         Expanded(child: list),
-        Container(
-          width: _paneWidth,
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          width: open ? _paneWidth : 0,
           decoration: BoxDecoration(
             color: AppColors.bg,
-            border: BorderDirectional(start: BorderSide(color: AppColors.border)),
+            border: open
+                ? BorderDirectional(start: BorderSide(color: AppColors.border))
+                : null,
           ),
           child: ClipRect(
-            // شاشة التفاصيل تقيس MediaQuery: عرض اللوحة لا النافذة.
-            child: MediaQuery(
-              data: mq.copyWith(size: Size(_paneWidth, mq.size.height)),
-              child: Navigator(
-                key: _paneNav,
-                onGenerateRoute: (_) =>
-                    MaterialPageRoute(builder: (_) => const _DetailPanePlaceholder()),
+            child: OverflowBox(
+              alignment: AlignmentDirectional.centerStart,
+              minWidth: _paneWidth,
+              maxWidth: _paneWidth,
+              // شاشة التفاصيل تقيس MediaQuery: عرض اللوحة لا النافذة.
+              child: MediaQuery(
+                data: mq.copyWith(size: Size(_paneWidth, mq.size.height)),
+                // اللوحة بعرض هاتف: ما يُفتح فيها بشكله المضغوط لا برأس صفحةٍ عريض.
+                child: DesktopScope(
+                  active: false,
+                  child: Navigator(
+                    key: _paneNav,
+                    observers: [_paneObserver],
+                    onGenerateRoute: (_) =>
+                        MaterialPageRoute(builder: (_) => const _DetailPanePlaceholder()),
+                  ),
+                ),
               ),
             ),
           ),
@@ -2108,13 +2164,76 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     );
   }
 
+  /// رجوعٌ من التفاصيل إلى أوّل اللوحة (زرّ الرجوع، Esc، حذف المشترك…) ⇒ تُطوى اللوحة.
+  late final _PaneObserver _paneObserver = _PaneObserver(() {
+    if (mounted && _paneKey != null) setState(() => _paneKey = null);
+  });
+
+  /// حشوة الجانبين (الغلاف يزيد عليها على الحاسبة).
+  double get _hPad => Sp.lg;
+
+  void _selectFilter(SubscriberFilter f) {
+    setState(() {
+      _filter = f;
+      _applyDefaultSortFor(f);
+      _visibleCount = _kPageStep;
+    });
+    if (_big) _bigReload();
+  }
+
+  /// رأس الحاسبة: العنوان والعدد، «مشترك جديد» والتحديث، ثمّ البحث والقوائم المنسدلة.
+  Widget _desktopHeader(
+      Map<SubscriberFilter, int> counts, List<String> managers, List<String> packages) {
+    final total = counts[SubscriberFilter.all] ?? 0;
+    final online = counts[SubscriberFilter.online] ?? 0;
+    final canAddHere = !_mergedOn;
+    return SubscribersDesktopHeader(
+      title: 'subscribers.title'.tr(),
+      subtitle: ValueListenableBuilder<bool>(
+        valueListenable: MergedMode.active,
+        builder: (context, merged, _) => Text(
+          merged
+              ? (MergedMode.focused == null
+                  ? '${'merged.header'.tr()} · ${'merged.header_sub'.tr(args: ['${MergedMode.usable.length}'])} • $total مشترك'
+                  : '«${MergedMode.focused!.name}» • $total مشترك')
+              : 'desktop.subs_count'.tr(args: ['$total', '$online']),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppType.body(color: AppColors.textMid).copyWith(fontSize: 14),
+        ),
+      ),
+      searchController: _searchCtrl,
+      managers: managers,
+      manager: _managerFilter,
+      onManager: (m) => _applyFilters(m, _packageFilter),
+      packages: packages,
+      package: _packageFilter,
+      onPackage: (p) => _applyFilters(_managerFilter, p),
+      sortField: _sortField,
+      descending: _sortDir == SortDirection.desc,
+      onSortField: (f) => _setSort(f, toggle: false),
+      onToggleDirection: () => _setSort(_sortField),
+      refreshing: _refreshing,
+      onRefresh: () => _refresh(pull: true),
+      probing: _probing,
+      onScanDevices: _probing ? null : () => _runProbeWave(force: true),
+      onAdd: canAddHere
+          ? () async {
+              final added = await showAddSubscriberSheet(context);
+              if (added == true && mounted) _refresh();
+            }
+          : null,
+      addLocked: !Perms.hasAny(const ['subscribers.add']),
+    );
+  }
+
   /// صفّ المشترك المفتوح في اللوحة (يُبرز في الجدول).
   String? _paneKey;
   static String _rowKey(Subscriber s) => '${s.companyKey ?? ''}|${s.idx ?? s.username}';
 
-  /// أعمدة الجدول بعرض منطقة القائمة (بلا لوحة التفاصيل).
+  /// أعمدة الجدول بعرض الجدول نفسه (بلا لوحة التفاصيل حين تُفتح وبلا الحشوة).
   SubscriberTableColumns get _tableColumns => SubscriberTableColumns.forWidth(
-      MediaQuery.sizeOf(context).width - _paneWidth);
+      MediaQuery.sizeOf(context).width - (_paneKey != null ? _paneWidth : 0) - 2 * _hPad);
 
   void _openDetail(Subscriber s) {
     final pane = _paneMode ? _paneNav.currentState : null;
@@ -3531,5 +3650,41 @@ class _DetailPanePlaceholder extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// رأس جدول الحاسبة ثابتٌ أعلى القائمة أثناء التمرير.
+class _TableHeaderDelegate extends SliverPersistentHeaderDelegate {
+  _TableHeaderDelegate(this.child);
+
+  final Widget child;
+
+  @override
+  double get minExtent => 48;
+
+  @override
+  double get maxExtent => 48;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) =>
+      ColoredBox(color: AppColors.bg, child: child);
+
+  @override
+  bool shouldRebuild(_TableHeaderDelegate old) => true;
+}
+
+class _PaneObserver extends NavigatorObserver {
+  _PaneObserver(this.onEmpty);
+
+  final VoidCallback onEmpty;
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (previousRoute?.isFirst ?? false) onEmpty();
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (previousRoute?.isFirst ?? false) onEmpty();
   }
 }

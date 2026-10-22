@@ -1652,6 +1652,26 @@
     "col_expiry": "Expires",
     "col_days": "Left",
     "col_balance": "Balance",
-    "debt": "Debt"
+    "debt": "Debt",
+    "title_dashboard": "Dashboard",
+    "brand_subtitle": "Subscriber management",
+    "collapse": "Collapse menu",
+    "light_mode": "Light mode",
+    "dark_mode": "Dark mode",
+    "refresh": "Refresh",
+    "new_subscriber": "New subscriber",
+    "all_managers": "All managers",
+    "all_packages": "All packages",
+    "sort_desc": "Descending",
+    "sort_asc": "Ascending",
+    "scan_devices": "Scan devices",
+    "search_subscribers": "Search by name, username or phone…",
+    "col_phone": "Phone",
+    "copy": "Copy",
+    "copied": "Copied",
+    "online": "Online",
+    "offline": "Offline",
+    "subs_count": "{} subscribers · {} online now",
+    "dashboard_subtitle": "Subscribers status and today’s activity"
   }
 }

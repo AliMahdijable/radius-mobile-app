@@ -14,6 +14,8 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'sheets/existing_discounts_sheet.dart';
+import '../desktop/desk_widgets.dart';
+import '../../core/platform/desktop_layout.dart';
 
 /// شاشة الخصومات — مطلب 2026-06-11 (تصميم جديد):
 ///   • الـscreen الأساسية = browse + apply: قيمة الخصم + بحث + جميع
@@ -320,15 +322,18 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
     final filtered = _filtered;
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          'الخصومات',
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text(
+            'الخصومات',
+            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+          ),
+          iconTheme: IconThemeData(color: AppColors.textHi),
         ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       body: SafeArea(
         bottom: false,
@@ -404,8 +409,15 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
                           child: GridView.builder(
                             padding:
                                 const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, 90),
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
+                            gridDelegate: DesktopScope.of(context)
+                                // الحاسبة: خلايا بعرضٍ أقصى وارتفاعٍ ثابت — لا بطاقاتٌ طويلة فارغة.
+                                ? const SliverGridDelegateWithMaxCrossAxisExtent(
+                                    maxCrossAxisExtent: 280,
+                                    mainAxisExtent: 96,
+                                    crossAxisSpacing: Sp.sm,
+                                    mainAxisSpacing: Sp.sm,
+                                  )
+                                : const SliverGridDelegateWithFixedCrossAxisCount(
                               // مطلب 2026-06-11: cards أصغر — 3
                               // أعمدة + childAspectRatio أعلى = خلايا
                               // قصيرة، أكثر مشتركاً مرئياً في الشاشة.
@@ -442,17 +454,20 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
               color: AppColors.surface,
               child: SafeArea(
                 top: false,
-                child: SheetFooterBar(
-                  label: _submitting
-                      ? 'جاري التطبيق...'
-                      : (_amount > 0 && _selected.isNotEmpty
-                          ? 'تطبيق ${_fmt(_amount)} على ${_selected.length}'
-                          : 'تطبيق الخصم'),
-                  icon: LucideIcons.percent,
-                  color: accent,
-                  busy: _submitting,
-                  enabled: _amount > 0 && _selected.isNotEmpty,
-                  onPressed: _submit,
+                child: deskFooter(
+                  context,
+                  SheetFooterBar(
+                    label: _submitting
+                        ? 'جاري التطبيق...'
+                        : (_amount > 0 && _selected.isNotEmpty
+                            ? 'تطبيق ${_fmt(_amount)} على ${_selected.length}'
+                            : 'تطبيق الخصم'),
+                    icon: LucideIcons.percent,
+                    color: accent,
+                    busy: _submitting,
+                    enabled: _amount > 0 && _selected.isNotEmpty,
+                    onPressed: _submit,
+                  ),
                 ),
               ),
             ),

@@ -42,6 +42,7 @@ import 'widgets/recent_activities.dart';
 import '../account/subscription_banner.dart';
 import '../whatsapp/whatsapp_status_screen.dart';
 import 'widgets/section_header.dart';
+import '../desktop/desk_widgets.dart';
 import 'widgets/stats_grid.dart';
 import 'widgets/subscribers_card.dart';
 
@@ -812,6 +813,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
         },
         child: CustomScrollView(
           slivers: [
+            // الحاسبة: رأس صفحةٍ كالموقع — الاسم والشركة وأزرار الأعلى في شريط الغلاف العلويّ.
+            if (wide)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.xl, Sp.lg, Sp.lg),
+                  child: DeskPageHeader(
+                    title: 'desktop.title_dashboard'.tr(),
+                    subtitle: DeskSubtitle(
+                        '${deskToday()} · ${'desktop.dashboard_subtitle'.tr()}'),
+                    actions: [
+                      if (_shown('wa_banner') &&
+                          _canWa &&
+                          !(Perms.isEmployee && _waLoaded && _waLive == null))
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: Perms.has('whatsapp.connect') ? _openWhatsApp : null,
+                          child: _WAStatusChip(status: _waStatus, loaded: _waLoaded),
+                        ),
+                      if (!_elEmployee) const SubscriptionChip(),
+                      DeskIconButton(
+                        icon: LucideIcons.refreshCw,
+                        tooltip: 'desktop.refresh'.tr(),
+                        onTap: () => Future.wait(
+                            [_loadIdentity(), _refreshLive(fresh: true)]),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
             SliverPersistentHeader(
               pinned: true,
               delegate: _PinnedHeaderDelegate(

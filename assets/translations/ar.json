@@ -1652,6 +1652,26 @@
     "col_expiry": "الانتهاء",
     "col_days": "المتبقّي",
     "col_balance": "الرصيد",
-    "debt": "دين"
+    "debt": "دين",
+    "title_dashboard": "لوحة التحكّم",
+    "brand_subtitle": "إدارة المشتركين",
+    "collapse": "طيّ القائمة",
+    "light_mode": "الوضع الفاتح",
+    "dark_mode": "الوضع الداكن",
+    "refresh": "تحديث",
+    "new_subscriber": "مشترك جديد",
+    "all_managers": "كل المدراء",
+    "all_packages": "كل الباقات",
+    "sort_desc": "تنازليّ",
+    "sort_asc": "تصاعديّ",
+    "scan_devices": "فحص الأجهزة",
+    "search_subscribers": "بحث بالاسم أو اسم المستخدم أو الهاتف…",
+    "col_phone": "الهاتف",
+    "copy": "نسخ",
+    "copied": "تمّ النسخ",
+    "online": "متصل",
+    "offline": "غير متصل",
+    "subs_count": "{} مشترك · {} متصل الآن",
+    "dashboard_subtitle": "ملخّص حالة المشتركين والنشاط اليومي"
   }
 }

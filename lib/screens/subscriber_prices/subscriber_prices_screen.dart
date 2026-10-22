@@ -16,6 +16,8 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../subscribers/sheets/subscriber_price_sheet.dart';
+import '../desktop/desk_widgets.dart';
+import '../../core/platform/desktop_layout.dart';
 
 /// «أسعار المشتركين» — على نمط شاشة الخصومات عمداً (طلب المستخدم: «أشبه
 /// بقسم الخصومات»): سعرٌ يُكتب، ومشتركون يُحدَّدون، وزرّ تطبيق. ومعها
@@ -263,15 +265,18 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
     final filtered = _filtered;
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          'sp.title'.tr(),
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text(
+            'sp.title'.tr(),
+            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+          ),
+          iconTheme: IconThemeData(color: AppColors.textHi),
         ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       body: SafeArea(
         bottom: false,
@@ -314,8 +319,15 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
                           child: GridView.builder(
                             padding:
                                 const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, 90),
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
+                            gridDelegate: DesktopScope.of(context)
+                                // الحاسبة: خلايا بعرضٍ أقصى وارتفاعٍ ثابت — لا بطاقاتٌ طويلة فارغة.
+                                ? const SliverGridDelegateWithMaxCrossAxisExtent(
+                                    maxCrossAxisExtent: 280,
+                                    mainAxisExtent: 96,
+                                    crossAxisSpacing: Sp.sm,
+                                    mainAxisSpacing: Sp.sm,
+                                  )
+                                : const SliverGridDelegateWithFixedCrossAxisCount(
                               crossAxisCount: 3,
                               childAspectRatio: 1.7,
                               crossAxisSpacing: 6,
@@ -347,19 +359,22 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
               color: AppColors.surface,
               child: SafeArea(
                 top: false,
-                child: SheetFooterBar(
-                  label: _submitting
-                      ? 'sp.applying'.tr()
-                      : (_amount > 0 && _selected.isNotEmpty
-                          ? 'sp.apply_n'.tr(args: [
-                              formatIQD(_amount),
-                              '${_selected.length}',
-                            ])
-                          : 'sp.apply'.tr()),
-                  icon: LucideIcons.banknote,
-                  busy: _submitting,
-                  enabled: _amount > 0 && _selected.isNotEmpty,
-                  onPressed: _apply,
+                child: deskFooter(
+                  context,
+                  SheetFooterBar(
+                    label: _submitting
+                        ? 'sp.applying'.tr()
+                        : (_amount > 0 && _selected.isNotEmpty
+                            ? 'sp.apply_n'.tr(args: [
+                                formatIQD(_amount),
+                                '${_selected.length}',
+                              ])
+                            : 'sp.apply'.tr()),
+                    icon: LucideIcons.banknote,
+                    busy: _submitting,
+                    enabled: _amount > 0 && _selected.isNotEmpty,
+                    onPressed: _apply,
+                  ),
                 ),
               ),
             ),

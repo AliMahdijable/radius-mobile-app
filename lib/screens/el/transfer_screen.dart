@@ -12,6 +12,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/el_deposit_password_field.dart';
+import '../desktop/desk_widgets.dart';
 
 /// ايرث لنك — تحويل الرصيد + كشف الحساب (البند ٤، EarthLink وحدهم).
 ///
@@ -213,21 +214,24 @@ class _ElTransferScreenState extends State<ElTransferScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: AppColors.bg,
-        appBar: AppBar(
-          backgroundColor: AppColors.surface,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          iconTheme: IconThemeData(color: AppColors.textHi),
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('تحويل الرصيد',
-                  style: AppType.title(color: AppColors.textHi)
-                      .copyWith(fontSize: 16)),
-              Text('تحويل بين الوكلاء + كشف الحساب',
-                  style: AppType.muted().copyWith(fontSize: 11)),
-            ],
+        appBar: deskPageBar(
+          context,
+          mobile: AppBar(
+            backgroundColor: AppColors.surface,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            iconTheme: IconThemeData(color: AppColors.textHi),
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('تحويل الرصيد',
+                    style: AppType.title(color: AppColors.textHi)
+                        .copyWith(fontSize: 16)),
+                Text('تحويل بين الوكلاء + كشف الحساب',
+                    style: AppType.muted().copyWith(fontSize: 11)),
+              ],
+            ),
           ),
         ),
         body: SafeArea(

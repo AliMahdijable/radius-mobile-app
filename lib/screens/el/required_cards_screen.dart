@@ -9,6 +9,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/skeleton.dart';
+import '../desktop/desk_widgets.dart';
 
 /// ايرث لنك — «الكارتات المطلوبة» (البند ٤، EarthLink وحدهم).
 ///
@@ -123,43 +124,46 @@ class _ElRequiredCardsScreenState extends State<ElRequiredCardsScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: AppColors.bg,
-        appBar: AppBar(
-          backgroundColor: AppColors.surface,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          iconTheme: IconThemeData(color: AppColors.textHi),
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('الكارتات المطلوبة',
-                  style: AppType.title(color: AppColors.textHi)
-                      .copyWith(fontSize: 16)),
-              Text('توقّع الكارتات والرصيد اللازمَين لكلّ مدّة',
-                  style: AppType.muted().copyWith(fontSize: 11)),
+        appBar: deskPageBar(
+          context,
+          mobile: AppBar(
+            backgroundColor: AppColors.surface,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            iconTheme: IconThemeData(color: AppColors.textHi),
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('الكارتات المطلوبة',
+                    style: AppType.title(color: AppColors.textHi)
+                        .copyWith(fontSize: 16)),
+                Text('توقّع الكارتات والرصيد اللازمَين لكلّ مدّة',
+                    style: AppType.muted().copyWith(fontSize: 11)),
+              ],
+            ),
+            actions: [
+              if (_loading)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
+                  child: Center(
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppColors.brandAccent),
+                    ),
+                  ),
+                )
+              else
+                IconButton(
+                  onPressed: _load,
+                  tooltip: 'تحديث',
+                  icon: Icon(LucideIcons.refreshCw,
+                      size: 18, color: AppColors.textMid),
+                ),
             ],
           ),
-          actions: [
-            if (_loading)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
-                child: Center(
-                  child: SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: AppColors.brandAccent),
-                  ),
-                ),
-              )
-            else
-              IconButton(
-                onPressed: _load,
-                tooltip: 'تحديث',
-                icon: Icon(LucideIcons.refreshCw,
-                    size: 18, color: AppColors.textMid),
-              ),
-          ],
         ),
         body: SafeArea(
           child: RefreshIndicator(
