@@ -1,0 +1,88 @@
+# نسخة ويندوز — لا تُبنى على الماك (أدوات فلاتر لويندوز تحتاج ويندوز + Visual Studio)،
+# فتُبنى هنا على خادم ويندوز عند كلّ دفعٍ لفرع app-windows.
+#
+# الناتج مكانان:
+#  - «Artifacts» في صفحة التشغيل (للتنزيل من المتصفّح).
+#  - فرع ci/windows: سجلّ البناء + الحزمة المضغوطة، يُستبدل كاملاً في كلّ تشغيل
+#    (آخر بناءٍ وحده) — يُجلب بـ git fetch عبر SSH بلا توكن.
+name: windows-build
+
+on:
+  push:
+    branches: [app-windows]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.0
+          cache: true
+
+      - name: Versions
+        run: |
+          flutter --version
+          grep -m1 '^version:' pubspec.yaml
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Build (release, x64)
+        run: |
+          set -o pipefail
+          flutter build windows --release 2>&1 | tee build.log
+
+      - name: Package
+        id: pkg
+        run: |
+          set -e
+          ver=$(grep -m1 '^version:' pubspec.yaml | awk '{print $2}' | tr '+' '_')
+          name="MyServicesPro_windows_x64_${ver}_${GITHUB_SHA::8}.zip"
+          (cd build/windows/x64/runner/Release && 7z a -tzip -mx=9 "$GITHUB_WORKSPACE/$name" . > /dev/null)
+          ls -la "$name"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pkg.outputs.name }}
+          path: ${{ steps.pkg.outputs.name }}
+          retention-days: 14
+
+      - name: Publish to ci/windows
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          mkdir -p ci_out
+          [ -f build.log ] && cp build.log ci_out/ || echo "no build log" > ci_out/build.log
+          cp MyServicesPro_windows_*.zip ci_out/ 2>/dev/null || true
+          {
+            echo "sha=${GITHUB_SHA}"
+            echo "status=${JOB_STATUS}"
+            echo "run=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } > ci_out/RESULT.txt
+          cd ci_out
+          git init -q
+          git config user.name "windows-ci"
+          git config user.email "windows-ci@users.noreply.github.com"
+          git checkout -q -b ci/windows
+          git add -A
+          git commit -qm "windows build ${GITHUB_SHA::8} — ${JOB_STATUS}"
+          git push -qf "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ci/windows
