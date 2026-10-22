@@ -111,7 +111,8 @@ void main() {
     }
     // …والكارت ما زال يرسم القراءة الناجحة.
     expect(simText('Huawei ONT'), findsOneWidget);
-    expect(simText('-21.55 dBm'), findsOneWidget);
+    // RX وTX في بلاطةٍ واحدة (طلب المالك ٢٢ أكتوبر) — والنسخ يبقى سطرين تحت
+    expect(simText('-21.55 / 2.31'), findsOneWidget);
 
     await t.tap(find.byTooltip('copy.all'.tr()));
     await t.pump();

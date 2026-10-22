@@ -106,9 +106,6 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   /// ([DeviceProbeCard.shownBy])، لا ما بقي في مخزن الفحص.
   final _deviceCardKey = GlobalKey();
 
-  /// ترافيك الـONU اللحظيّ: كارت الجهاز يقيسه و«معلومات الاتصال» ترسمه تحت التحميل والرفع.
-  final _liveTraffic = ValueNotifier<LiveTraffic?>(null);
-
   /// إعداد الجهاز الذي رُسم به كارت الاتّصال آخر مرّة (عنوانه المثبَّت).
   /// يكتبه بانيه بلا `setState` — لا يُرسم منه شيء، يُقرأ لحظة النسخ وحدها.
   DeviceConfig? _drawnConfig;
@@ -170,7 +167,6 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   void dispose() {
     SubscriberEvents.dataChanged.removeListener(_onDataChanged);
     AppResumedSignal.tick.removeListener(_onDataChanged);
-    _liveTraffic.dispose();
     super.dispose();
   }
 
@@ -352,7 +348,6 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                     _LiveSessionCard(
                       sub: sub,
                       onDrawn: (cfg) => _drawnConfig = cfg,
-                      liveTraffic: _liveTraffic,
                     ),
                     // معلومات الجهاز (ONT/UBNT) — تظهر لأي مشترك غير معطَّل
                     // ولم ينتهِ اشتراكه. الـcard يجرّب:
@@ -385,7 +380,6 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                       ip: sub.ipAddress ?? '',
                       username: sub.username,
                       company: sub.companyKey,
-                      liveTraffic: _liveTraffic,
                     ),
                     const SizedBox(height: Sp.sm),
                     // مطلب 2026-06-12: _SubscriptionCard المنفصل أُلغي
@@ -1170,12 +1164,8 @@ List<CopyField> subscriberCopyFields(
 /// أيقونة 18 بلون الـaccent + عنوان 14/w600 وحبّة «متصل منذ …» في
 /// الطرف، وجسمه ثلاث بلاطات غاطسة (#F7F8F5 / r14): تحميل · رفع · IP.
 class _LiveSessionCard extends StatelessWidget {
-  const _LiveSessionCard({required this.sub, this.onDrawn, this.liveTraffic});
+  const _LiveSessionCard({required this.sub, this.onDrawn});
   final Subscriber sub;
-
-  /// ترافيك الـONU اللحظيّ من كارت الجهاز — يُرسم تحت التحميل والرفع: «هذا سحب المشترك» (المالك، ٢٢ أكتوبر). لا يدخل
-  /// النسخ: معدّل ثانيةٍ يكذب في رسالةٍ تُقرأ بعد دقيقة.
-  final ValueNotifier<LiveTraffic?>? liveTraffic;
 
   /// يُبلَّغ في كلّ بناءٍ بالإعداد الذي رُسم به الكرت — فينسخ «نسخ كلّ
   /// المعلومات» العنوانَ المثبَّت الذي على الشاشة. (جلبٌ فاشلٌ بعد انقضاء
@@ -1382,36 +1372,6 @@ class _LiveSessionCard extends StatelessWidget {
           // ٩٥ نقطة للنصّ و«192.168.100.254» يحتاج ١١٤ — فيُقصّ رقم
           // المضيف، وهو المميِّز الوحيد بين جهازٍ وآخر.
           ..._ipRow(hasSession: hasSession, ip: ip, pinned: pinned),
-          // الترافيك اللحظيّ في الأسفل بعد العنوان (طلب المالك: «تنزلها جوّه») — سحب المشترك الآن من جهازه
-          if (hasSession && liveTraffic != null)
-            ValueListenableBuilder<LiveTraffic?>(
-              valueListenable: liveTraffic!,
-              // نصفان كصفّ التحميل والرفع أعلاه (المالك: «وترتّب الوضعيّة»)، بوحدةٍ صريحة لا «M/K»
-              builder: (_, t, __) => t == null
-                  ? const SizedBox.shrink()
-                  : Padding(
-                      padding: const EdgeInsets.only(top: 9),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: _SunkenTile(
-                              icon: Icons.speed_rounded,
-                              field: CopyField('تحميل الآن', formatBpsUnit(t.down)),
-                              color: AppColors.success,
-                            ),
-                          ),
-                          const SizedBox(width: 9),
-                          Expanded(
-                            child: _SunkenTile(
-                              icon: Icons.speed_rounded,
-                              field: CopyField('رفع الآن', formatBpsUnit(t.up)),
-                              color: AppColors.info,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-            ),
         ],
       ),
     );

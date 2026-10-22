@@ -45,7 +45,6 @@ class DeviceProbeCard extends StatefulWidget {
     this.ip = '',
     required this.username,
     this.company,
-    this.liveTraffic,
   });
 
   /// IP من SAS4 (framedipaddress). قد يكون فارغاً — الـprobe() داخلياً
@@ -57,10 +56,6 @@ class DeviceProbeCard extends StatefulWidget {
   /// شركة الصفّ في «كل الشركات» (null في الوضع العاديّ): إعداد الجهاز وافتراضات المدير من شركته، والفحص من الهاتف كما هو.
   /// حفظ إعداد الجهاز للشركة وحدها (خارج جدول التوجيه).
   final String? company;
-
-  /// ترافيك الـONU اللحظيّ يُنشر هنا لكارت «معلومات الاتصال» — المالك (٢٢ أكتوبر): «هذا سحب المشترك… تخلّيه جوّه وي
-  /// معلومات الاتصال». null ⇒ يُعرض في كارت الجهاز نفسه.
-  final ValueNotifier<LiveTraffic?>? liveTraffic;
 
   /// ما يرسمه الكارت ذو المفتاح [key] الآن — القراءة المعروضة ووقتها
   /// وملاحظة المدير — لـ«نسخ كلّ المعلومات». `null` حين لا يكون مركَّباً
@@ -235,7 +230,6 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       _session = null;
       // وجلسة الـONU: جلسته الوحيدة لا تبقى محجوزةً والتطبيق في الخلفيّة
       _closeOntTraffic();
-      widget.liveTraffic?.value = null;
     }
   }
 
@@ -319,7 +313,6 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
             _txBps = null;
           });
         }
-        if (mounted) widget.liveTraffic?.value = null;
         return;
       }
       final r = _ontMeter.add(counters, DateTime.now());
@@ -330,7 +323,6 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           _rxBps = r.downBps;
           _txBps = r.upBps;
         });
-        widget.liveTraffic?.value = (down: r.downBps, up: r.upBps);
       }
     } catch (_) {
       _closeOntTraffic();
@@ -338,6 +330,19 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     } finally {
       _pulsing = false;
     }
+  }
+
+  /// التحميل بلون العلامة والرفع أسود كما كانا («للتمييز» — المالك ٢٢ أكتوبر). null قبل أوّل معدّل («—» بلونٍ خافت).
+  List<({String text, Color color})>? _trafficParts({required bool unit}) {
+    final down = _rxBps;
+    if (down == null) return null;
+    final up = _txBps ?? 0;
+    String f(int v) => unit ? formatBpsUnit(v) : _fmtBps(v);
+    return [
+      (text: '↓${f(down)}', color: AppColors.brandAccent),
+      (text: unit ? '   ' : ' ', color: AppColors.textLow),
+      (text: '↑${f(up)}', color: AppColors.textHi),
+    ];
   }
 
   void _closeOntTraffic() {
@@ -855,22 +860,35 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // شبكة 2×2 كما في المخطّط — أربع قيم بصريّة قبل التفاصيل.
+        // شبكة 2×2 كما كانت (طلب المالك ٢٢ أكتوبر: «٤ كارتات بشكل مربّعات مثل السابق»): RX/TX بلاطةٌ واحدة والترافيك مكان TX،
+        // ثمّ الفولتيّة والحرارة. RX والتحميل بلون العلامة، وTX والرفع أسود كما كانا («للتمييز»)؛ والأحمر لقيمةٍ خارج حدّها.
+        // القيمة تُصغَّر لتتّسع النصف (fit) لا تُقصّ — القصّ يُسقط وحدةً أو رقماً (انظر _ubntBody).
         Row(
           children: [
             Expanded(
               child: _MetricTile(
-                icon: LucideIcons.arrowDown,
-                field: _ontRx(o),
-                color: o.rxOk ? AppColors.brandAccent : AppColors.error,
+                icon: LucideIcons.arrowDownUp,
+                field: _ontRxTx(o),
+                color: (o.rxOk && o.txOk) ? AppColors.brandAccent : AppColors.error,
+                fit: true,
+                parts: [
+                  (text: o.rxPower, color: o.rxOk ? AppColors.brandAccent : AppColors.error),
+                  (text: ' / ', color: AppColors.textLow),
+                  (text: o.txPower, color: o.txOk ? AppColors.textHi : AppColors.error),
+                ],
               ),
             ),
             const SizedBox(width: Sp.sm),
             Expanded(
               child: _MetricTile(
-                icon: LucideIcons.arrowUp,
-                field: _ontTx(o),
-                color: o.txOk ? AppColors.textHi : AppColors.error,
+                icon: LucideIcons.activity,
+                field: CopyField(
+                  'الترافيك الآن',
+                  _rxBps == null ? '—' : '↓${_fmtBps(_rxBps!)} ↑${_fmtBps(_txBps ?? 0)}',
+                ),
+                color: _rxBps == null ? AppColors.textLow : AppColors.brandAccent,
+                fit: true,
+                parts: _trafficParts(unit: false),
               ),
             ),
           ],
@@ -895,18 +913,6 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
             ),
           ],
         ),
-        // الترافيك اللحظيّ (الواي فاي وLAN معاً) مكانه «معلومات الاتصال» تحت التحميل والرفع — هنا وحده إن لم يستمع له كارتها
-        if (widget.liveTraffic == null) ...[
-          const SizedBox(height: Sp.sm),
-          _MetricTile(
-            icon: LucideIcons.activity,
-            field: CopyField(
-              'الترافيك',
-              _rxBps == null ? '—' : '↓${_fmtBps(_rxBps!)} ↑${_fmtBps(_txBps ?? 0)}',
-            ),
-            color: _rxBps == null ? AppColors.textLow : AppColors.brandAccent,
-          ),
-        ],
         const SizedBox(height: 14),
         const _DetailRow(field: _ontKind, strong: true),
         if (_ontHasFiber(o)) _DetailRow(field: _ontFiber(o)),
@@ -971,6 +977,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
                   : '↓${_fmtBps(_rxBps!)} ↑${_fmtBps(_txBps ?? 0)}',
             ),
             color: _rxBps == null ? AppColors.textLow : AppColors.brandAccent,
+            parts: _trafficParts(unit: false),
           )
         : null;
 
@@ -1225,10 +1232,19 @@ class _MetricTile extends StatelessWidget {
     required this.field,
     required this.color,
     this.icon,
+    this.parts,
+    this.fit = false,
   });
   final CopyField field;
   final Color color;
   final IconData? icon;
+
+  /// القيمة تُصغَّر لتتّسع (نصف بلاطة) بدل أن تُقصّ.
+  final bool fit;
+
+  /// قيمةٌ بألوان (التحميل/الرفع، RX/TX) — المالك ٢٢ أكتوبر: «خلّي الأبلود يختلف عن الداونلود للتمييز، وكذلك RX/TX».
+  /// النسخ يبقى نصّ [field].
+  final List<({String text, Color color})>? parts;
 
   String get label => field.label;
   String get value => field.value;
@@ -1241,6 +1257,14 @@ class _MetricTile extends StatelessWidget {
       child: _tile(),
     );
   }
+
+  Widget _fitted(Widget text) => fit
+      ? FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: AlignmentDirectional.centerStart,
+          child: text,
+        )
+      : text;
 
   Widget _tile() {
     return Container(
@@ -1268,14 +1292,28 @@ class _MetricTile extends StatelessWidget {
             ],
           ),
           const SizedBox(height: Sp.xxs),
-          Text(
-            value,
-            textDirection: TextDirection.ltr,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppType.cardTitle(color: color)
-                .copyWith(fontWeight: FontWeight.w700),
-          ),
+          _fitted(parts == null
+              ? Text(
+                  value,
+                  textDirection: TextDirection.ltr,
+                  maxLines: 1,
+                  overflow: fit ? TextOverflow.visible : TextOverflow.ellipsis,
+                  style: AppType.cardTitle(color: color)
+                      .copyWith(fontWeight: FontWeight.w700),
+                )
+              : Text.rich(
+                  TextSpan(children: [
+                    for (final p in parts!)
+                      TextSpan(
+                        text: p.text,
+                        style: AppType.cardTitle(color: p.color)
+                            .copyWith(fontWeight: FontWeight.w700),
+                      ),
+                  ]),
+                  textDirection: TextDirection.ltr,
+                  maxLines: 1,
+                  overflow: fit ? TextOverflow.visible : TextOverflow.ellipsis,
+                )),
         ],
       ),
     );
@@ -1422,10 +1460,7 @@ class _SkeletonBar extends StatelessWidget {
 @visibleForTesting
 String fmtBpsForTest(int bps) => _fmtBps(bps);
 
-/// ترافيك المشترك اللحظيّ بالبت/ث — من كارت الجهاز إلى «معلومات الاتصال».
-typedef LiveTraffic = ({int down, int up});
-
-/// «3.4 Mbps» / «37 Kbps» — معدّلٌ بوحدةٍ صريحة لبلاطات «معلومات الاتصال».
+/// «3.4 Mbps» / «37 Kbps» — معدّلٌ بوحدةٍ صريحة لبلاطة ترافيك الـONU.
 String formatBpsUnit(int bps) {
   if (bps < 1000) return '${bps < 0 ? 0 : bps} bps';
   if (bps < 1000000) return '${(bps / 1000).toStringAsFixed(0)} Kbps';
@@ -1450,6 +1485,8 @@ String _fmtBps(int bps) {
 CopyField _ontRx(OntOpticalInfo o) => CopyField('RX Power', '${o.rxPower} dBm');
 
 CopyField _ontTx(OntOpticalInfo o) => CopyField('TX Power', '${o.txPower} dBm');
+
+CopyField _ontRxTx(OntOpticalInfo o) => CopyField('RX / TX (dBm)', '${o.rxPower} / ${o.txPower}');
 
 CopyField _ontVoltage(OntOpticalInfo o) =>
     CopyField('الفولتية', '${o.voltage} mV');
