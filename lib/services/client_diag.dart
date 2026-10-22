@@ -36,6 +36,9 @@ class ClientDiag {
       } else if (!kIsWeb && Platform.isIOS) {
         out['brand'] = 'apple';
         out['release'] = Platform.operatingSystemVersion;
+      } else if (!kIsWeb && Platform.isWindows) {
+        out['brand'] = 'windows';
+        out['release'] = Platform.operatingSystemVersion;
       }
     } catch (_) {
       // قناةٌ غائبة (اختبار/منصّة أخرى) — يُرسل بلا نوع الجهاز.

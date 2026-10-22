@@ -8,9 +8,13 @@ import 'package:flutter/services.dart' show PlatformException;
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../api/account_api.dart';
+import '../core/platform/app_platform.dart';
 import '../firebase_options.dart';
+import 'account_user.dart';
 import 'client_diag.dart';
 import 'company_creds_store.dart';
+import 'desktop_account_auth.dart';
+import 'desktop_browser_login.dart';
 import 'notification_service.dart';
 import 'saved_profiles_store.dart';
 import 'session_manager.dart';
@@ -27,25 +31,40 @@ import 'session_manager.dart';
 class AccountService {
   AccountService._();
 
-  static bool get available => NotificationService.firebaseReady;
+  /// ويندوز: الحساب عبر [DesktopAccountAuth] (واجهة Firebase على الإنترنت) — متاحٌ دائماً.
+  static bool get available => AppPlatform.isDesktop || NotificationService.firebaseReady;
 
   static FirebaseAuth get _auth => FirebaseAuth.instance;
 
-  static User? get currentUser => available ? _auth.currentUser : null;
+  /// مستخدم Firebase على الهاتف (للعمليّات التي تحتاجه بعينه). null على ويندوز.
+  static User? get _firebaseUser =>
+      !AppPlatform.isDesktop && NotificationService.firebaseReady ? _auth.currentUser : null;
+
+  static AccountUser? get currentUser {
+    if (AppPlatform.isDesktop) return DesktopAccountAuth.currentUser;
+    final u = _firebaseUser;
+    return u == null ? null : AccountUser.fromFirebase(u);
+  }
 
   /// الحساب صالحٌ للمتابعة: موجود، وبريده مؤكَّد. (Google/Apple مؤكَّدان أصلاً.)
   static bool get isReady {
     final u = currentUser;
-    return u != null && (u.emailVerified || _isFederated(u));
+    return u != null && (u.emailVerified || u.isFederated);
   }
-
-  static bool _isFederated(User u) => u.providerData
-      .any((p) => p.providerId == 'google.com' || p.providerId == 'apple.com');
 
   /// توكن الحساب للخادم. [force] يجدّده (بعد تأكيد البريد مثلاً كي يحمل
   /// `email_verified`). null = لا حساب.
   static Future<String?> idToken({bool force = false}) async {
-    final u = currentUser;
+    if (AppPlatform.isDesktop) {
+      try {
+        return await DesktopAccountAuth.idToken(force: force)
+            .timeout(const Duration(seconds: 12));
+      } catch (e) {
+        if (kDebugMode) debugPrint('🔴 account idToken (desktop): $e');
+        return null;
+      }
+    }
+    final u = _firebaseUser;
     if (u == null) return null;
     try {
       // بلا سقف كان زرّ الدخول يدور بلا نهاية إن تعثّر تجديد التوكن عند جوجل
@@ -95,7 +114,10 @@ class AccountService {
 
   /// يفتح نافذة Google. يُرجع null إن ألغى المستخدم (أو أُلغيت على جهازٍ معطوب —
   /// الشاشة تعرض بعدها «عبر المتصفّح» بأندرويد).
-  static Future<User?> signInWithGoogle() async {
+  ///
+  /// ويندوز: لا مكتبة Google له ⇒ «الدخول عبر المتصفّح» ([DesktopBrowserLogin]).
+  static Future<AccountUser?> signInWithGoogle() async {
+    if (AppPlatform.isDesktop) return _desktopBrowserSignIn();
     await _initGoogle();
     final GoogleSignInAccount account;
     try {
@@ -122,7 +144,7 @@ class AccountService {
     try {
       final cred = await _auth
           .signInWithCredential(GoogleAuthProvider.credential(idToken: idToken));
-      return cred.user;
+      return _wrap(cred.user);
     } on FirebaseAuthException catch (e) {
       // رمزٌ مخزَّن منتهٍ: خدمات Google تحكم صلاحيّته بساعة الجهاز، فساعةٌ متأخّرة (محاكي بعد نوم
       // المضيف مثلاً) تعطي رمزاً انتهى فعلاً فيرفضه Firebase بـinvalid-credential. نمسح حالة
@@ -142,19 +164,37 @@ class AccountService {
       if (fresh == null) rethrow;
       final cred = await _auth
           .signInWithCredential(GoogleAuthProvider.credential(idToken: fresh));
-      return cred.user;
+      return _wrap(cred.user);
+    }
+  }
+
+  static AccountUser? _wrap(User? u) => u == null ? null : AccountUser.fromFirebase(u);
+
+  /// ويندوز: دخول المتصفّح الجاري — الشاشة تعرض «افتح الصفحة مرّةً أخرى» و«إلغاء».
+  static DesktopBrowserLogin? desktopLogin;
+
+  static Future<AccountUser?> _desktopBrowserSignIn() async {
+    final login = DesktopBrowserLogin();
+    desktopLogin = login;
+    try {
+      final token = await login.run();
+      if (token == null) return null;
+      return await DesktopAccountAuth.signInWithCustomToken(token);
+    } finally {
+      if (identical(desktopLogin, login)) desktopLogin = null;
     }
   }
 
   /// Google عبر المتصفّح (Firebase يفتح Custom Tab لصفحة Google ثمّ يعود) — بديلٌ لا يمرّ
   /// بـCredential Manager، فيعمل على أجهزةٍ يُلغى فيها المسار الأصليّ صامتاً. يُرجع null إن
   /// أغلق المستخدم النافذة.
-  static Future<User?> signInWithGoogleWeb() async {
+  static Future<AccountUser?> signInWithGoogleWeb() async {
+    if (AppPlatform.isDesktop) return _desktopBrowserSignIn();
     try {
       final provider = GoogleAuthProvider()
         ..setCustomParameters({'prompt': 'select_account'});
       final cred = await _auth.signInWithProvider(provider);
-      return cred.user;
+      return _wrap(cred.user);
     } catch (e) {
       if (_isProviderCancel(e)) return null;
       ClientDiag.report(
@@ -197,7 +237,7 @@ class AccountService {
   /// يفتح نافذة Apple الأصليّة (Firebase يولّد الـnonce ويتحقّق منه). يُرجع
   /// null إن ألغى المستخدم. ما بعد الدخول هو نفسه مسار Google: الشاشة تنتقل
   /// إلى بوّابة الحساب، وهي تستدعي `bootstrap` (إنشاء الحساب + التجربة).
-  static Future<User?> signInWithApple() async {
+  static Future<AccountUser?> signInWithApple() async {
     final UserCredential cred;
     try {
       cred = await _auth.signInWithProvider(_appleProvider());
@@ -207,7 +247,7 @@ class AccountService {
     }
     final user = cred.user;
     if (user != null) await _applyAppleName(user, cred);
-    return user;
+    return _wrap(_auth.currentUser ?? user);
   }
 
   /// Apple يعطي الاسم في **أوّل** دخولٍ فقط. Firebase يمرّره للخادم غالباً،
@@ -256,7 +296,8 @@ class AccountService {
   ///
   /// يرمي [AccountDeletionException] برسالةٍ جاهزةٍ للعرض عند الفشل.
   static Future<void> deleteCurrentAccount() async {
-    final u = currentUser;
+    if (AppPlatform.isDesktop) return _deleteDesktopAccount();
+    final u = _firebaseUser;
     if (u == null) {
       throw AccountDeletionException('account.err_signed_out'.tr());
     }
@@ -288,16 +329,7 @@ class AccountService {
     }
 
     // ٢) الخادم.
-    try {
-      await AccountApi.deleteAccount();
-    } on AccountApiException catch (e) {
-      final m = e.message;
-      throw AccountDeletionException(
-          m.startsWith('account.') ? m.tr() : (m.isNotEmpty ? m : 'account.delete_failed'.tr()));
-    } catch (e) {
-      debugPrint('account delete: server failed: ${e.runtimeType}');
-      throw AccountDeletionException('account.delete_failed'.tr());
-    }
+    await _deleteOnServer();
 
     // احتياط: إن لم يحذف الخادم مستخدم Firebase نفسه نحذفه من هنا. «غير موجود»
     // (حذفه الخادم) أو «يتطلّب دخولاً حديثاً» لا يُفشلان الحذف — بيانات الحساب حُذفت.
@@ -324,27 +356,57 @@ class AccountService {
     }
   }
 
-  // ───────────── إيميل + كلمة سرّ ─────────────
-
-  static Future<User?> signInWithEmail(String email, String password) async {
-    final cred = await _auth.signInWithEmailAndPassword(
-        email: email.trim(), password: password);
-    return cred.user;
+  static Future<void> _deleteOnServer() async {
+    try {
+      await AccountApi.deleteAccount();
+    } on AccountApiException catch (e) {
+      final m = e.message;
+      throw AccountDeletionException(
+          m.startsWith('account.') ? m.tr() : (m.isNotEmpty ? m : 'account.delete_failed'.tr()));
+    } catch (e) {
+      debugPrint('account delete: server failed: ${e.runtimeType}');
+      throw AccountDeletionException('account.delete_failed'.tr());
+    }
   }
 
-  static Future<User?> signUpWithEmail(String email, String password) async {
+  /// ويندوز: الخادم ثمّ مستخدم Firebase (واجهته على الإنترنت) ثمّ الخروج الكامل.
+  static Future<void> _deleteDesktopAccount() async {
+    if (DesktopAccountAuth.currentUser == null) {
+      throw AccountDeletionException('account.err_signed_out'.tr());
+    }
+    await _deleteOnServer();
+    try {
+      await DesktopAccountAuth.deleteUser().timeout(const Duration(seconds: 10));
+    } catch (_) {/* حذفه الخادم أصلاً أو تعذّر — لا يمنع الخروج */}
+    await signOut();
+  }
+
+  // ───────────── إيميل + كلمة سرّ ─────────────
+
+  static Future<AccountUser?> signInWithEmail(String email, String password) async {
+    if (AppPlatform.isDesktop) return DesktopAccountAuth.signInWithPassword(email, password);
+    final cred = await _auth.signInWithEmailAndPassword(
+        email: email.trim(), password: password);
+    return _wrap(cred.user);
+  }
+
+  static Future<AccountUser?> signUpWithEmail(String email, String password) async {
+    if (AppPlatform.isDesktop) return DesktopAccountAuth.signUp(email, password);
     final cred = await _auth.createUserWithEmailAndPassword(
         email: email.trim(), password: password);
     await cred.user?.sendEmailVerification();
-    return cred.user;
+    return _wrap(cred.user);
   }
 
-  static Future<void> resendVerification() async =>
-      currentUser?.sendEmailVerification();
+  static Future<void> resendVerification() async {
+    if (AppPlatform.isDesktop) return DesktopAccountAuth.sendVerification();
+    await _firebaseUser?.sendEmailVerification();
+  }
 
   /// يعيد قراءة الحساب من Firebase (بعد ضغط رابط التأكيد) ويجدّد التوكن.
   static Future<bool> reloadVerified() async {
-    final u = currentUser;
+    if (AppPlatform.isDesktop) return DesktopAccountAuth.reloadVerified();
+    final u = _firebaseUser;
     if (u == null) return false;
     await u.reload();
     final fresh = _auth.currentUser;
@@ -355,8 +417,9 @@ class AccountService {
     return false;
   }
 
-  static Future<void> sendPasswordReset(String email) =>
-      _auth.sendPasswordResetEmail(email: email.trim());
+  static Future<void> sendPasswordReset(String email) => AppPlatform.isDesktop
+      ? DesktopAccountAuth.sendPasswordReset(email)
+      : _auth.sendPasswordResetEmail(email: email.trim());
 
   /// خروجٌ كامل: الساس + كلمات سرّ الشركات + الحسابات المحفوظة + Firebase.
   static Future<void> signOut() async {
@@ -366,7 +429,11 @@ class AccountService {
     try {
       if (_googleReady) await GoogleSignIn.instance.signOut();
     } catch (_) {/* خروج Google لا يمنع خروج الحساب */}
-    if (available) await _auth.signOut();
+    if (AppPlatform.isDesktop) {
+      await DesktopAccountAuth.signOut();
+    } else if (available) {
+      await _auth.signOut();
+    }
   }
 
   /// رسالة عربيّة لأخطاء Firebase Auth الشائعة.
@@ -395,6 +462,9 @@ class AccountService {
       }
     }
     if (e is GoogleSignInException) return 'account.err_google';
+    if (e is DesktopLoginException) {
+      return e.message.startsWith('account.') ? e.message : 'account.err_generic';
+    }
     return 'account.err_generic';
   }
 }

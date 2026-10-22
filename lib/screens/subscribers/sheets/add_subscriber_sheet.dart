@@ -290,7 +290,7 @@ class _AddSheetState extends State<_AddSheet> {
             enabled: !_saving,
             icon: LucideIcons.phone,
             keyboardType: TextInputType.phone,
-            suffix: IconButton(
+            suffix: !ContactPicker.supported ? null : IconButton(
               icon: const Icon(LucideIcons.contact, size: 18),
               color: AppColors.brand,
               visualDensity: VisualDensity.compact,

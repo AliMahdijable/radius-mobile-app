@@ -4,9 +4,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/platform/app_platform.dart';
 import '../../core/platform/store_policy.dart';
 import '../../core/util/email_shape.dart';
 import '../../services/account_service.dart';
+import '../../services/desktop_browser_login.dart' show DesktopLoginException;
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -84,6 +86,13 @@ class _AccountLoginScreenState extends State<AccountLoginScreen> {
         _toGate();
       } else if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android && mounted) {
         setState(() => _googleWebOffer = true);
+      }
+    } on DesktopLoginException catch (e) {
+      // ويندوز: رفض الخادم رمز الدخول (انتهى/استُعمل) — رسالته كما هي.
+      if (mounted) {
+        HapticFeedback.heavyImpact();
+        showAccountSnack(context, e.message.startsWith('account.') ? e.message.tr() : e.message,
+            error: true);
       }
     } catch (e) {
       // فشل Google لا يُعرض «كلمة سرّ خاطئة» (لا كلمة سرّ في هذا المسار): رسالة Google بالرمز
@@ -319,6 +328,43 @@ class _AccountLoginScreenState extends State<AccountLoginScreen> {
                   child: Text('account.google_web_action'.tr(),
                       style: AppType.label(color: AppColors.brand)
                           .copyWith(fontWeight: FontWeight.w700)),
+                ),
+              ],
+            ),
+          ),
+        ],
+        // ويندوز: Google عبر المتصفّح — البرنامج ينتظر رجوع الدخول (حتى ٥ دقائق).
+        if (_googleBusy && AppPlatform.isDesktop) ...[
+          const SizedBox(height: Sp.sm),
+          Center(
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: Sp.xs,
+              children: [
+                Text('account.desktop_wait'.tr(),
+                    textAlign: TextAlign.center,
+                    style: AppType.muted(color: AppColors.textMid)),
+                TextButton(
+                  onPressed: () => AccountService.desktopLogin?.reopen(),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.brand,
+                    visualDensity: VisualDensity.compact,
+                    minimumSize: const Size(48, 40),
+                  ),
+                  child: Text('account.desktop_reopen'.tr(),
+                      style: AppType.label(color: AppColors.brand)
+                          .copyWith(fontWeight: FontWeight.w700)),
+                ),
+                TextButton(
+                  onPressed: () => AccountService.desktopLogin?.cancel(),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.textMid,
+                    visualDensity: VisualDensity.compact,
+                    minimumSize: const Size(48, 40),
+                  ),
+                  child: Text('account.desktop_cancel'.tr(),
+                      style: AppType.label(color: AppColors.textMid)),
                 ),
               ],
             ),

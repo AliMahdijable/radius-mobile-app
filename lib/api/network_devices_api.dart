@@ -10,6 +10,8 @@ import 'package:flutter/foundation.dart';
 import '../models/device_region.dart';
 import '../models/network_device.dart';
 import 'api_client.dart';
+import '../core/net/windows_icmp.dart';
+import '../core/platform/app_platform.dart';
 
 /// نتيجة scan واحدة — تُستهلك من bulk_scan_screen.dart.
 class ScanResult {
@@ -346,6 +348,20 @@ class NetworkDevicesApi {
     required Duration timeout,
   }) async {
     try {
+      if (AppPlatform.isWindows) {
+        // ويندوز: من النظام مباشرةً (windows_icmp.dart) — لا نافذة سوداء تومض مع كلّ فحص، ولا
+        // ردودٌ مترجمة (ويندوز العربيّ) يعجز عنها محلّل ping فيبدو الجهاز «مفصولاً».
+        final times = await WindowsIcmp.ping(ip, count: count, timeout: timeout);
+        if (times.isEmpty) {
+          return (status: 'offline', responseMs: null, packetLoss: 100.0);
+        }
+        final avg = (times.reduce((a, b) => a + b) / times.length).round();
+        return (
+          status: 'online',
+          responseMs: avg,
+          packetLoss: ((count - times.length) / count) * 100.0,
+        );
+      }
       final ping = Ping(ip, count: count, timeout: timeout.inSeconds);
       final times = <int>[];
       int received = 0;

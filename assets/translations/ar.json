@@ -1545,7 +1545,10 @@
     "settings_title_neutral": "الحساب",
     "employee_short": "موظّف",
     "create_short": "إنشاء حساب جديد",
-    "signin_short": "لديّ حساب — دخول"
+    "signin_short": "لديّ حساب — دخول",
+    "desktop_wait": "أكمل الدخول في المتصفّح الذي فُتح — يرجع البرنامج وحده بعد الدخول.",
+    "desktop_reopen": "افتح الصفحة",
+    "desktop_cancel": "إلغاء"
   },
   "cards": {
     "activation_method": "طريقة التفعيل",

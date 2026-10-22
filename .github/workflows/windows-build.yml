@@ -40,8 +40,10 @@ jobs:
           flutter --version
           grep -m1 '^version:' pubspec.yaml
 
+      # pubspec.lock مُثبَّت في هذا الفرع (git-ignored في الفرع الرئيسيّ): الحلّ الجديد جلب
+      # image-4.11.0 مرّةً فكسر البناء — نبني بنفس النسخ التي تُختبر على الماك.
       - name: Pub get
-        run: flutter pub get
+        run: flutter pub get --enforce-lockfile
 
       - name: Build (release, x64)
         run: |

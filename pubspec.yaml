@@ -61,6 +61,10 @@ dependencies:
 
   # ICMP ping — لميزة الأجهزة (network_devices) — يعمل على iOS + Android
   dart_ping: ^10.0.1
+  # ويندوز: ping من النظام (IcmpSendEcho) بدل ping.exe — lib/core/net/windows_icmp.dart
+  ffi: ^2.1.0
+  # ويندوز: «الدخول عبر المتصفّح» — بصمة سرّ PKCE (lib/services/desktop_browser_login.dart)
+  crypto: ^3.0.3
 
   # SSH client — لمراقبة UBNT airOS عبر SSH (أفضل من HTTP لكل الإصدارات 5/6/7/8)
   dartssh2: ^2.22.5

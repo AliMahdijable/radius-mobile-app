@@ -120,8 +120,15 @@ class DeviceAlertsService {
       requestBadgePermission: false,
       requestSoundPermission: false,
     );
+    // ويندوز يرمي بلا إعداداته (اسم + معرّف التطبيق + GUID ثابتٌ لا يتغيّر أبداً — به يعرف
+    // ويندوز إشعارات هذا البرنامج).
+    const windowsInit = WindowsInitializationSettings(
+      appName: 'MyServices Pro',
+      appUserModelId: 'MyServices.MyServicesPro',
+      guid: 'ce03d489-16ca-4fec-8cfc-95b07a9c437d',
+    );
     await _notifications.initialize(
-      const InitializationSettings(android: androidInit, iOS: iosInit),
+      const InitializationSettings(android: androidInit, iOS: iosInit, windows: windowsInit),
     );
 
     // Load من SharedPreferences

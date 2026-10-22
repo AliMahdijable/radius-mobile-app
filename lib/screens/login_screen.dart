@@ -26,6 +26,7 @@ import '../theme/typography.dart';
 import 'account/account_gate_screen.dart';
 import 'account/my_devices_screen.dart';
 import 'main_shell.dart';
+import '../core/platform/app_platform.dart';
 
 /// Login — Soft Pastel + Premium. Wired to https://rad.mysvcs.net/api/auth/login.
 /// Persists token on success via AuthStorage. On failure shows a snackbar.
@@ -410,8 +411,8 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final ok = await auth.authenticate(
         localizedReason: 'login.biometric_reason'.tr(),
-        options: const AuthenticationOptions(
-          biometricOnly: true,
+        options: AuthenticationOptions(
+          biometricOnly: !AppPlatform.isDesktop,
           stickyAuth: true,
         ),
       );
