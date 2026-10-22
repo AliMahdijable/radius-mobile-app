@@ -56,7 +56,15 @@ jobs:
           set -e
           ver=$(grep -m1 '^version:' pubspec.yaml | awk '{print $2}' | tr '+' '_')
           name="MyServicesPro_windows_x64_${ver}_${GITHUB_SHA::8}.zip"
-          (cd build/windows/x64/runner/Release && 7z a -tzip -mx=9 "$GITHUB_WORKSPACE/$name" . > /dev/null)
+          rel=build/windows/x64/runner/Release
+          # تشغيل مايكروسوفت (VC++) بجانب البرنامج: حاسبةٌ بلا «Visual C++ Redistributable» لا تفتحه
+          # (docs.flutter.dev — Distributing Windows apps).
+          for dll in msvcp140.dll vcruntime140.dll vcruntime140_1.dll; do
+            cp "/c/Windows/System32/$dll" "$rel/"
+          done
+          # بقايا الربط لا تلزم التشغيل (~٢٠ ميگا).
+          rm -f "$rel"/*.lib "$rel"/*.exp
+          (cd "$rel" && 7z a -tzip -mx=9 "$GITHUB_WORKSPACE/$name" . > /dev/null)
           ls -la "$name"
           echo "name=$name" >> "$GITHUB_OUTPUT"
 
