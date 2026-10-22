@@ -14,6 +14,7 @@ class Employee {
     required this.permissions,
     this.scopeAdminId,
     this.scopeAdminUsername,
+    this.deleted = false,
   });
   final int id;
   final String username;
@@ -28,6 +29,10 @@ class Employee {
   /// بيانات هذا المدير فقط (subscribers/managers/expenses/...).
   final String? scopeAdminId;
   final String? scopeAdminUsername;
+
+  /// ٢٣ أكتوبر: موظّفٌ محذوف له حركات — يأتي مع `list(withDeleted: true)` وحده
+  /// (فلاتر التقارير): حذفه يمسح صفّه وحركاته تبقى باسمه.
+  final bool deleted;
 
   bool get isScoped => scopeAdminId != null && scopeAdminId!.isNotEmpty;
 
@@ -56,6 +61,7 @@ class Employee {
       permissions: m,
       scopeAdminId: j['scope_admin_id']?.toString(),
       scopeAdminUsername: j['scope_admin_username']?.toString(),
+      deleted: j['deleted'] == true,
     );
   }
 }
@@ -449,10 +455,15 @@ class CurrentIdentity {
 class EmployeesApi {
   EmployeesApi._();
 
-  static Future<({List<Employee> rows, String? error})> list() async {
+  /// [withDeleted]: فلاتر التقارير — يُلحق الخادم المحذوفين الذين لهم حركات بعد
+  /// الحاليّين (`deleted`). شاشة الموظّفين بلاه.
+  static Future<({List<Employee> rows, String? error})> list(
+      {bool withDeleted = false}) async {
     try {
-      final r =
-          await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/employees');
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/v2/employees',
+        queryParameters: withDeleted ? const {'with_deleted': 1} : null,
+      );
       final body = r.data ?? const {};
       if (body['success'] != true) {
         return (rows: const <Employee>[], error: body['message']?.toString());

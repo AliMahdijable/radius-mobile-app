@@ -192,7 +192,8 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
   Future<void> _load() async {
     final results = await Future.wait([
       ManagersApi.lite(),
-      EmployeesApi.list(),
+      // المحذوف الذي له حركات يبقى بالقائمة بعلامته — وإلّا حركاته بلا طريق.
+      EmployeesApi.list(withDeleted: true),
       AuthStorage.readAdminId(),
     ]);
     if (!mounted) return;
@@ -279,6 +280,27 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                   }
                   return Column(children: rows);
                 }),
+                // الحركة تُنسب لمن دخل بحسابه — ما انعمل بدخول المدير لا يظهر تحت الموظّف.
+                if (widget.includeEmployee &&
+                    widget.value.employeeId != null) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Icon(LucideIcons.info,
+                            size: 13, color: AppColors.textLow),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text('filters.employee_note'.tr(),
+                            style: AppType.micro(color: AppColors.textMid)
+                                .copyWith(height: 1.5)),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
     );
@@ -576,6 +598,13 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
 
   // ────────────────────────────────────────────
   // Single-select: الموظف
+  String _employeeLabel(Employee e) {
+    final name = e.fullName ?? e.username;
+    return e.deleted
+        ? 'filters.employee_deleted'.tr(namedArgs: {'name': name})
+        : name;
+  }
+
   Widget _employeeSelect() {
     final selected = widget.value.employeeId;
     final employees = _employees ?? const [];
@@ -583,7 +612,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
     if (selected != null) {
       for (final e in employees) {
         if (e.id == selected) {
-          label = e.fullName ?? e.username;
+          label = _employeeLabel(e);
           break;
         }
       }
@@ -605,7 +634,7 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
                 for (final e in employees)
                   _dialogTile(
                     dctx,
-                    e.fullName ?? e.username,
+                    _employeeLabel(e),
                     selected == e.id,
                     () {
                       widget.onChanged(widget.value.copyWith(employeeId: e.id));

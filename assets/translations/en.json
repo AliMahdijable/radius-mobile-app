@@ -686,7 +686,9 @@
     "employee": "Employee",
     "pick_action_manager": "Pick action manager",
     "pick_user_manager": "Pick user manager",
-    "pick_employee": "Pick employee"
+    "pick_employee": "Pick employee",
+    "employee_deleted": "{name} (deleted)",
+    "employee_note": "Shows only what the employee did while signed in to their own account — actions done from the manager's login show under the manager."
   },
   "actions": {
     "activate": "Activate",

@@ -686,7 +686,9 @@
     "employee": "الموظف",
     "pick_action_manager": "اختر مدير الحركة",
     "pick_user_manager": "اختر مدير المستخدم",
-    "pick_employee": "اختر الموظف"
+    "pick_employee": "اختر الموظف",
+    "employee_deleted": "{name} (محذوف)",
+    "employee_note": "يعرض ما نفّذه الموظّف وهو داخل بحسابه فقط — ما انعمل بحساب المدير يظهر باسم المدير."
   },
   "actions": {
     "activate": "تفعيل",
