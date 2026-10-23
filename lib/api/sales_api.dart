@@ -836,13 +836,14 @@ class SalesApi {
     }
   }
 
-  /// حالات تسديد المبيعات على الدين المكتملة ([ids] — الظاهرة). تعذّرٌ ⇒ خريطةٌ فارغة («على الدين» كما كان، لا ادّعاء).
-  static Future<Map<int, SaleDebtStatus>> debtStatus(List<int> ids) async {
-    if (ids.isEmpty) return const {};
+  /// حالات تسديد المبيعات على الدين المكتملة ([ids] — الظاهرة). [partial]: بعضها لم يُقرأ (سقف المشتركين أو تعذّر) — فلا
+  /// يُجمع «الباقي» منها. تعذّر الطلب كلّه ⇒ خريطةٌ فارغة و`partial` («على الدين» كما كان، لا ادّعاء).
+  static Future<({Map<int, SaleDebtStatus> map, bool partial})> debtStatus(List<int> ids) async {
+    if (ids.isEmpty) return (map: const <int, SaleDebtStatus>{}, partial: false);
     try {
       final r = await ApiClient.dio.post<Object?>('$_base/debt-status', data: {'ids': ids.take(100).toList()}, options: _sell);
       final body = _map(r.data);
-      if (body['success'] != true) return const {};
+      if (body['success'] != true) return (map: const <int, SaleDebtStatus>{}, partial: true);
       final out = <int, SaleDebtStatus>{};
       final list = body['data'];
       if (list is List) {
@@ -851,10 +852,10 @@ class SalesApi {
           if (d != null) out[d.id] = d;
         }
       }
-      return out;
+      return (map: out, partial: body['partial'] == true);
     } catch (e) {
       _log('debt-status', e);
-      return const {};
+      return (map: const <int, SaleDebtStatus>{}, partial: true);
     }
   }
 

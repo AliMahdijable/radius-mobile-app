@@ -566,10 +566,12 @@ void main() {
     testWidgets('debtStatus: الصالح وحده، وبلا معرّفات لا طلب', (t) async {
       final server = _SalesServer(await visualSetUp(s1bSasOwner));
       ApiClient.dio.httpClientAdapter = server;
-      expect((await t.runAsync(() => SalesApi.debtStatus(const [])))!, isEmpty);
+      expect((await t.runAsync(() => SalesApi.debtStatus(const [])))!.map, isEmpty);
       expect(server.debtStatusIds, isEmpty);
-      final m = (await t.runAsync(() => SalesApi.debtStatus(const [11, 999])))!;
+      final r = (await t.runAsync(() => SalesApi.debtStatus(const [11, 999])))!;
+      final m = r.map;
       expect(m.keys, [11], reason: 'حالةٌ غير معروفة تُسقط');
+      expect(r.partial, isFalse);
       expect((m[11]!.isPartial, m[11]!.paid, m[11]!.unpaid, m[11]!.balance), (true, 20000, 15000, -15000));
       expect(server.debtStatusIds.single, [11, 999]);
     });
@@ -664,7 +666,14 @@ void main() {
       ], reason: 'النقديّ والمُلغى و«غير المؤكَّد» لا يُسأل عنها');
       expect(find.text('مسدّد جزئيّاً'), findsOneWidget);
       expect(find.text('سُدّد 20,000 د.ع · باقي 15,000 د.ع'), findsOneWidget);
-      expect(find.text('على الدين'), findsOneWidget, reason: 'عنوان المؤشّر وحده — شارة #11 صارت «مسدّد جزئيّاً»');
+      expect(find.text('على الدين'), findsNothing, reason: 'شارة #11 صارت «مسدّد جزئيّاً»، والمؤشّر «بيع بالدين»');
+      expect(find.text('بيع بالدين'), findsOneWidget);
+      // #11 وحده على الدين المكتمل وقُرئ ⇒ تحت المؤشّر ما بقي منه.
+      expect(find.text('باقي على المشتركين 15,000 د.ع'), findsOneWidget);
+      // تسديدٌ من صفحة المشترك (أو أيّ عمليّة عليه) والشاشة مفتوحة ⇒ الحالة تُقرأ من جديد.
+      SubscriberEvents.notifyChange();
+      await settle(t, seconds: 2);
+      expect(server.debtStatusIds, hasLength(2));
       expect(t.takeException(), isNull);
     });
 

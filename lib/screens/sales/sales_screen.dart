@@ -49,6 +49,12 @@ class _SalesScreenState extends State<SalesScreen> {
 
   /// حالة تسديد المبيعات على الدين الظاهرة (بعد القائمة) — بلاها «على الدين» كما كان.
   Map<int, SaleDebtStatus> _debts = const {};
+
+  /// قُرئت حالات كلّ المبيعات على الدين بالفترة (بلا سقفٍ ولا قائمةٍ مقصوصة) ⇒ يُعرض «الباقي» تحت «بيع بالدين».
+  bool _debtsComplete = false;
+
+  /// تغييرٌ صدر من هذه الشاشة نفسها ([_after]) — تحديثه بيدها، فلا يُعاد الجلب مرّتين.
+  bool _selfChange = false;
   String? _itemsError;
   String? _salesError;
   bool _loadingItems = true;
@@ -64,12 +70,20 @@ class _SalesScreenState extends State<SalesScreen> {
       _loadingItems = false;
       _loadingSales = false;
     }
+    // تسديد دين مشترك (أو أيّ عمليّة عليه) من صفحته والشاشة مفتوحة تحتها ⇒ حالة بيعه («مسدّد») تُقرأ من جديد.
+    SubscriberEvents.dataChanged.addListener(_onDataChanged);
   }
 
   @override
   void dispose() {
+    SubscriberEvents.dataChanged.removeListener(_onDataChanged);
     _search.dispose();
     super.dispose();
+  }
+
+  void _onDataChanged() {
+    if (!mounted || _selfChange || !Perms.has('sales.view')) return;
+    _loadSales();
   }
 
   /// مفعّلة؟ من ردّ القائمة نفسها (المفتاح يُقرأ بالخادم).
@@ -119,17 +133,29 @@ class _SalesScreenState extends State<SalesScreen> {
       for (final s in page.sales)
         if (s.isDebt && s.isDone && (s.idx ?? '').isNotEmpty) s.id,
     ];
-    final m = ids.isEmpty ? const <int, SaleDebtStatus>{} : await SalesApi.debtStatus(ids);
+    final r = await SalesApi.debtStatus(ids);
     if (!mounted || !identical(_sales, page)) return;
-    setState(() => _debts = m);
+    setState(() {
+      _debts = r.map;
+      _debtsComplete = !r.partial && !page.truncated && ids.every(r.map.containsKey);
+    });
   }
 
   Future<void> _refresh() => Future.wait([_loadItems(), _loadSales()]);
 
+  /// تحت «بيع بالدين»: ما بقي منه على المشتركين الآن — حين قُرئت حالات المبيعات كلّها، وإلّا «على المشتركين» كما كان.
+  String _debtSub(num sold) {
+    if (sold <= 0 || !_debtsComplete) return 'sales.kpi_debt_hint'.tr();
+    final left = _debts.values.fold<num>(0, (a, d) => a + d.unpaid);
+    return left > 0 ? 'sales.kpi_debt_left_n'.tr(namedArgs: {'amount': _money(left)}) : 'sales.kpi_debt_paid_all'.tr();
+  }
+
   Future<void> _after(Future<bool?> sheet) async {
     if (await sheet == true && mounted) {
       // دين المشترك والرئيسيّة يتغيّران بالبيع وإلغائه — كان يتحدّث القسم وحده فيبقى الباقي حتى سحب التحديث.
+      _selfChange = true;
       SubscriberEvents.notifyChange();
+      _selfChange = false;
       await _refresh();
     }
   }
@@ -303,11 +329,13 @@ class _SalesScreenState extends State<SalesScreen> {
             ),
             const SizedBox(width: Sp.sm),
             Expanded(
+              // «بيع بالدين» = ما بيع على الدين بالفترة (لا يتغيّر بالتسديد)، وتحته ما بقي منه على المشتركين الآن — كان
+              // «على الدين 40,000» يبقى بعد التسديد فيُربك (المالك ٢٣ أكتوبر: «٤٠ مافهمت هاي»).
               child: _Kpi(
                 icon: LucideIcons.handCoins,
                 label: 'sales.kpi_debt'.tr(),
                 value: _money(t.debt),
-                sub: 'sales.kpi_debt_hint'.tr(),
+                sub: _debtSub(t.debt),
                 tone: AppTone.warning,
               ),
             ),
