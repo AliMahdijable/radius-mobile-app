@@ -187,6 +187,12 @@ class MergedFinanceApi {
       packageCost: cost,
       partialUnpaidFromLogs: n((k) => k.partialUnpaidFromLogs),
       profitAfterCostOverride: cost == null ? null : n((k) => k.profitAfterCost ?? k.netCash),
+      goodsCashSum: n((k) => k.goodsCashSum),
+      goodsRevenueSum: n((k) => k.goodsRevenueSum),
+      goodsCostSum: n((k) => k.goodsCostSum),
+      goodsProfitSum: n((k) => k.goodsProfitSum),
+      goodsDebtSum: n((k) => k.goodsDebtSum),
+      goodsCount: i((k) => k.goodsCount),
     );
   }
 

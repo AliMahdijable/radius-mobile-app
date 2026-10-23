@@ -229,6 +229,12 @@ class _DetailSheetState extends State<_DetailSheet> {
               value: '+${formatIQD(s.debtPayments.sum)}',
               valueColor: AppColors.success,
             ),
+            if (s.salesCash.count > 0)
+              SheetRowData(
+                label: '${'settle.sales_cash'.tr()} · ${s.salesCash.count}',
+                value: '${s.salesCash.sum < 0 ? '−' : '+'}${formatIQD(s.salesCash.sum)}',
+                valueColor: s.salesCash.sum < 0 ? AppColors.error : AppColors.success,
+              ),
             SheetRowData(
               label: '${'settle.expenses'.tr()} · ${s.expenses.count}',
               value: '−${formatIQD(s.expenses.sum)}',

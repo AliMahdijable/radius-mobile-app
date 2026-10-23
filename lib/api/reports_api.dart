@@ -159,6 +159,12 @@ class FinanceKPIs {
     this.packageCost,
     this.partialUnpaidFromLogs = 0,
     this.profitAfterCostOverride,
+    this.goodsCashSum = 0,
+    this.goodsRevenueSum = 0,
+    this.goodsCostSum = 0,
+    this.goodsProfitSum = 0,
+    this.goodsDebtSum = 0,
+    this.goodsCount = 0,
   });
   final num paymentsSum;
   final num debtPaySum;
@@ -180,6 +186,25 @@ class FinanceKPIs {
   /// الخادم تضمّه أصلاً في `activate_non_cash_sum`، فيبقى صفراً لها.
   final num partialUnpaidFromLogs;
 
+  /// «بيع المواد» (قسم «المبيعات» — ٢٣ أكتوبر): يرسلها الخادم حين توجد مبيعاتٌ
+  /// بالفترة وحدها (وإلّا أصفار ⇒ الشاشة كما كانت حرفيّاً). [goodsCashSum] صافي
+  /// صندوقها (بيعٌ نقديّ − إرجاع)؛ والإيراد/الكلفة/الربح/الدين للمكتملة نقداً وديناً.
+  final num goodsCashSum;
+  final num goodsRevenueSum;
+  final num goodsCostSum;
+  final num goodsProfitSum;
+  final num goodsDebtSum;
+  final int goodsCount;
+
+  bool get hasGoods => goodsCount > 0 || goodsCashSum != 0;
+
+  /// إضافة الدين اليدويّة وحدها: البيع على الدين يكتب سطر «إضافة دين» بمسار الدين
+  /// نفسه — وهو ثمن مادّة لا منحةٌ للمشترك، فلا يُطرح من الصافي (كلفته تُطرح).
+  num get manualDebtAddSum {
+    final v = balanceAddSum - goodsDebtSum;
+    return v > 0 ? v : 0;
+  }
+
   static num _n(dynamic v) =>
       v is num ? v : num.tryParse(v?.toString() ?? '') ?? 0;
   static int _i(dynamic v) =>
@@ -189,7 +214,7 @@ class FinanceKPIs {
   /// **مطابق Financial.tsx** — كان mobile يفتقد `paymentsSum` (PAYMENT_ADD)
   /// وينتج فرق بين الويب والموبايل (bug 2026-08-10).
   num get totalCashRevenue =>
-      activateCashSum + paymentsSum + debtPaySum + balanceDeductSum;
+      activateCashSum + paymentsSum + debtPaySum + balanceDeductSum + goodsCashSum;
 
   /// تسديد ديون (debt collections) للعرض في KPI grid — يشمل paymentsSum أيضاً.
   num get totalDebtPayments => paymentsSum + debtPaySum + balanceDeductSum;
@@ -197,7 +222,11 @@ class FinanceKPIs {
   /// الصافي = الإيراد - المصاريف - إضافة الدين اليدوي (2026-07-10).
   /// إضافة الدين اليدوي هي مبالغ منحها المدير للمشترك بلا استلام نقد
   /// (subsidy فعلي)، فتُطرَح من الصافي مثل المصاريف.
-  num get netCash => totalCashRevenue - expensesSum - balanceAddSum;
+  ///
+  /// بيع المواد: نقدها داخلٌ في [totalCashRevenue] فتُطرح كلفة ما بيع منها (ما بيع
+  /// على الدين يدخل «النقد» حين يُسدَّد — فلا يُعدّ ربحه مرّتين)، و«إضافة الدين»
+  /// اليدويّة وحدها تُطرح ([manualDebtAddSum]).
+  num get netCash => totalCashRevenue - expensesSum - manualDebtAddSum - goodsCostSum;
 
   /// المبيعات: نقد التفعيلات + «الديون الجديدة» منها (غير النقديّ + غير
   /// المدفوع من الجزئيّ). أساس صافي الربح بعد الكلفة — كـ`sales_sum` الخادم.
@@ -211,9 +240,10 @@ class FinanceKPIs {
   /// ويغيب عنه البيع بالدين، وكلفة البيع بالدين تُدفع للشركة يوم البيع — فطرحها
   /// من النقد كان يُظهر خسارةً لمالكٍ رابح (مراجعة ١٨ أكتوبر: ٩ من ١٦ مالكاً).
   /// [netCash] يبقى سطره كما كان (وفيه طرح إضافة الدين اليدوي بطلب المالك).
+  /// + ربح المواد (البيع − كلفة المخزون، نقداً وديناً) — صفرٌ بلا مبيعات.
   num? get profitAfterCost =>
       profitAfterCostOverride ??
-      (packageCost == null ? null : salesSum - expensesSum - packageCost!.sum);
+      (packageCost == null ? null : salesSum - expensesSum - packageCost!.sum + goodsProfitSum);
 
   /// «كل الشركات»: مجموع صافي كلّ شركةٍ بقاعدتها (من بلا كلفةٍ — سوبرنت — صافيه
   /// النقديّ) — لا صيغةٌ واحدة على المجموع (قاعدة الويب sumFigures). null خارجه.
@@ -238,6 +268,12 @@ class FinanceKPIs {
       activationsCount: _i(j['activations_count']),
       extendCount: _i(j['extend_count']),
       packageCost: includePackageCost ? PackageCostKpis.fromKpis(j) : null,
+      goodsCashSum: _n(j['sales_cash_sum']),
+      goodsRevenueSum: _n(j['sales_revenue_sum']),
+      goodsCostSum: _n(j['sales_cost_sum']),
+      goodsProfitSum: _n(j['sales_profit_sum']),
+      goodsDebtSum: _n(j['sales_debt_sum']),
+      goodsCount: _i(j['sales_count']),
     );
   }
 }

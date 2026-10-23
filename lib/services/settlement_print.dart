@@ -126,6 +126,7 @@ class SettlementPrint {
         if (s.openingBalance != 0) row('رصيد مدوَّر', _money(s.openingBalance)),
         row('+ تفعيلات نقديّة (${s.cashActivations.count})', _money(s.cashActivations.sum)),
         row('+ تسديد ديون (${s.debtPayments.count})', _money(s.debtPayments.sum)),
+        if (s.salesCash.count > 0) row('+ بيع مواد (${s.salesCash.count})', _money(s.salesCash.sum)),
         row('− صرفيات (${s.expenses.count})', _money(s.expenses.sum)),
         pw.Divider(thickness: 0.8),
         row('المتوقّع في الصندوق', _money(s.expected), strong: true),

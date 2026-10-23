@@ -432,6 +432,12 @@ _ActionMeta _actionMeta(String at, String desc) {
       // EXPENSE_ADD من ExpensesApi في Activity Log. نفس المعنى، نفس التصميم.
       return _ActionMeta('صرفية', LucideIcons.receipt, AppColors.error,
           debit: true);
+    // قسم «المبيعات»: بيع موادٍّ نقداً (داخل) وإلغاؤه (إرجاع المبلغ — خارج).
+    case 'SALE':
+      return _ActionMeta('بيع مواد', LucideIcons.shoppingCart, _kPositive);
+    case 'SALE_VOID':
+      return _ActionMeta('إلغاء بيع', LucideIcons.undo2, AppColors.error,
+          debit: true);
     case 'EXPENSE_EDIT':
       return _ActionMeta('تعديل صرفية', LucideIcons.receipt, AppColors.error);
     case 'EXPENSE_DELETE':

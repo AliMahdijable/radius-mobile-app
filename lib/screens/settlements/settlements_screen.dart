@@ -614,6 +614,11 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
               label: 'settle.debt_payments'.tr(),
               value: '+${formatIQD(p.debtPayments.sum)}',
             ),
+          if (p.salesCash.sum != 0)
+            _Line(
+              label: 'settle.sales_cash'.tr(),
+              value: '${p.salesCash.sum < 0 ? '−' : '+'}${formatIQD(p.salesCash.sum)}',
+            ),
           if (p.expenses.sum != 0)
             _Line(
               label: 'settle.expenses'.tr(),
@@ -775,6 +780,13 @@ class _BoxCard extends StatelessWidget {
                   value: '+${formatIQD(cur.debtPayments.sum)}',
                   color: AppColors.success,
                 ),
+                // بيع المواد نقداً (قسم «المبيعات») — حين يوجد بالفترة.
+                if (cur.salesCash.count > 0)
+                  _Line(
+                    label: '${'settle.sales_cash'.tr()} · ${cur.salesCash.count}',
+                    value: '${cur.salesCash.sum < 0 ? '−' : '+'}${formatIQD(cur.salesCash.sum)}',
+                    color: cur.salesCash.sum < 0 ? AppColors.error : AppColors.success,
+                  ),
                 _Line(
                   label: '${'settle.expenses'.tr()} · ${cur.expenses.count}',
                   value: '−${formatIQD(cur.expenses.sum)}',

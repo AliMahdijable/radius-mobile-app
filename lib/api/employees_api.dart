@@ -275,6 +275,8 @@ class ElEmployeePerms {
     'devices.manage',
     // شطب دين مشتركٍ محذوف — يُسقطه بلا تحصيل، فيُمنح وحده (خارج «موظّف عام»).
     'deleted_debts.write_off',
+    // إلغاء بيعٍ نقديّ — يُرجع مالاً من الصندوق، فيُمنح وحده (خارج «موظّف عام»).
+    'sales.void',
   };
 
   /// المفاتيح بلا الأجهزة — «موظّف عام» يأخذها كلّها (الأجهزة تُمنح فرادى كما في
@@ -315,6 +317,11 @@ class ElEmployeePerms {
     'deleted_debts.view',
     'deleted_debts.add',
     'deleted_debts.pay',
+    // المبيعات (٢٣ أكتوبر) — مسارات قاعدتنا لايرث لنك (elPassthrough): العرض والبيع
+    // والموادّ. الكتالوج لا يعرضها حتى تُفتح للكلّ ([matching] · [offered]).
+    'sales.view',
+    'sales.sell',
+    'sales.items',
     assistantKey,
   };
 
@@ -344,6 +351,8 @@ class ElEmployeePerms {
     'devices.manage': 'تعديل الأجهزة وإعادة تشغيلها وبيانات دخول أجهزة الشبكة',
     'deleted_debts.pay': 'يدخل التقرير الماليّ محصَّلاً',
     'deleted_debts.write_off': 'يُسقط الدين بلا تحصيل',
+    'sales.sell': 'البيع على دين المشترك يحتاج «إضافة دين» أيضاً',
+    'sales.void': 'إلغاء بيعٍ نقديّ يُرجع مبلغه من الصندوق',
     assistantKey: 'يشرح الأخطاء ويجاوب «كيف أسوّي؟» — بلا أيّ عمليّة، ومن حصّة حسابك اليوميّة',
   };
 
@@ -369,6 +378,9 @@ class ElEmployeePerms {
         'subscribers.send_whatsapp',
         'packages.view',
         'subscribers.view_activity',
+        // كقالب «كاشير» بالخادم: يبيع ولا يدير الموادّ.
+        'sales.view',
+        'sales.sell',
         assistantKey,
       },
     ),
@@ -382,6 +394,7 @@ class ElEmployeePerms {
         'discounts.view',
         'subscriber_prices.view',
         'subscribers.view_activity',
+        'sales.view',
         assistantKey,
       },
     ),

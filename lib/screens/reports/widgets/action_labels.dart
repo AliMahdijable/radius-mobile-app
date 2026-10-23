@@ -42,6 +42,10 @@ String arabicActionLabel(String actionType, [String description = '']) {
     case 'EXPENSE_ADD':
     case 'ADMIN_EXPENSE':
       return 'صرفية';
+    case 'SALE':
+      return 'بيع مواد';
+    case 'SALE_VOID':
+      return 'إلغاء بيع';
     case 'EXPENSE_EDIT':
       return 'تعديل صرفية';
     case 'EXPENSE_DELETE':

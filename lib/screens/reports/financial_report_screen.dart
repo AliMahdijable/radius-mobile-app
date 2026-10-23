@@ -448,12 +448,39 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                 child: _heroMini(
                   icon: LucideIcons.plus,
                   label: 'actions.debt_add'.tr(),
-                  value: '-${formatIQD(k.balanceAddSum)}',
+                  // اليدويّة وحدها — البيع على الدين ثمن مادّة لا منحة ([FinanceKPIs.manualDebtAddSum]).
+                  value: '-${formatIQD(k.manualDebtAddSum)}',
                   color: AppColors.error,
                 ),
               ),
             ],
           ),
+          // بيع المواد (قسم «المبيعات») — حين توجد بالفترة: نقدها داخلٌ في الإيراد أعلاه،
+          // وكلفة ما بيع منها تُطرح من الصافي النقديّ.
+          if (k.hasGoods) ...[
+            const SizedBox(height: Sp.sm),
+            Row(
+              children: [
+                Expanded(
+                  child: _heroMini(
+                    icon: LucideIcons.shoppingCart,
+                    label: 'reports.goods_cash'.tr(),
+                    value: '${k.goodsCashSum < 0 ? '-' : ''}${formatIQD(k.goodsCashSum)}',
+                    color: AppColors.success,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _heroMini(
+                    icon: LucideIcons.package,
+                    label: 'reports.goods_cost'.tr(),
+                    value: '-${formatIQD(k.goodsCostSum)}',
+                    color: AppColors.error,
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: Sp.sm),
           // صف الصافي — يعرض netCash بشكل بارز مع رمزه ولونه.
           _heroMini(
@@ -493,10 +520,12 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               _heroNote('merged.finance_profit_rule'.tr(), warn: false)
             else
               _heroNote(
-                'reports.profit_after_cost_formula'.tr(namedArgs: {
+                (k.hasGoods ? 'reports.profit_after_cost_formula_goods' : 'reports.profit_after_cost_formula')
+                    .tr(namedArgs: {
                   'sales': formatIQD(k.salesSum),
                   'expenses': formatIQD(k.expensesSum),
                   'cost': formatIQD(cost.sum),
+                  'goods': '${k.goodsProfitSum < 0 ? '-' : ''}${formatIQD(k.goodsProfitSum)}',
                 }),
                 warn: false,
               ),
@@ -667,9 +696,17 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
           AppColors.error,
           LucideIcons.creditCard,
           isDebit: true),
-      _KpiItem('actions.debt_add'.tr(), formatIQD(k.balanceAddSum),
+      _KpiItem('actions.debt_add'.tr(), formatIQD(k.manualDebtAddSum),
           AppColors.error, LucideIcons.plus,
           isDebit: true),
+      // بيع المواد — حين توجد بالفترة وحدها.
+      if (k.hasGoods) ...[
+        _KpiItem('reports.goods_revenue'.tr(), formatIQD(k.goodsRevenueSum),
+            AppColors.success, LucideIcons.shoppingCart),
+        _KpiItem('reports.goods_profit'.tr(), formatIQD(k.goodsProfitSum),
+            AppColors.success, LucideIcons.trendingUp,
+            isDebit: k.goodsProfitSum < 0),
+      ],
       _KpiItem('# تفعيلات', '${k.activationsCount}', AppColors.brandAccent,
           LucideIcons.userCheck,
           isCount: true),

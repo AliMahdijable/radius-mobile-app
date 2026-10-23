@@ -191,6 +191,12 @@ class _SettleSheetState extends State<_SettleSheet> {
             value: '+${formatIQD(p.debtPayments.sum)}',
             valueColor: AppColors.success,
           ),
+          if (p.salesCash.count > 0)
+            SheetRowData(
+              label: '${'settle.sales_cash'.tr()} · ${p.salesCash.count}',
+              value: '${p.salesCash.sum < 0 ? '−' : '+'}${formatIQD(p.salesCash.sum)}',
+              valueColor: p.salesCash.sum < 0 ? AppColors.error : AppColors.success,
+            ),
           SheetRowData(
             label: '${'settle.expenses'.tr()} · ${p.expenses.count}',
             value: '−${formatIQD(p.expenses.sum)}',

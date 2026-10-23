@@ -112,16 +112,24 @@ class MovementTile extends StatelessWidget {
     final icon = switch (m.kind) {
       'cash_activation' => LucideIcons.zap,
       'expense' => LucideIcons.receipt,
+      'sale' => LucideIcons.shoppingCart,
+      'sale_void' => LucideIcons.undo2,
       _ => LucideIcons.handCoins,
     };
     final kindLabel = switch (m.kind) {
       'cash_activation' => 'settle.kind_cash_activation'.tr(),
       'expense' => 'settle.kind_expense'.tr(),
+      'sale' => 'settle.kind_sale'.tr(),
+      'sale_void' => 'settle.kind_sale_void'.tr(),
       _ => 'settle.kind_debt_payment'.tr(),
     };
+    // بيع المواد: العنوان الزبون (أو «زبون»)، وما بيع يُقرأ من الوصف بسطر التفاصيل.
+    final isSale = m.source == 'sale';
     final title = m.kind == 'expense'
         ? (m.description ?? 'settle.kind_expense'.tr())
-        : (m.subscriber ?? '—');
+        : isSale
+            ? (m.subscriber ?? 'sales.walkin'.tr())
+            : (m.subscriber ?? '—');
     final who = m.employeeId == null
         ? 'settle.manager'.tr()
         : (m.employeeName ?? m.employeeUsername ?? 'settle.employee'.tr());
@@ -158,6 +166,9 @@ class MovementTile extends StatelessWidget {
                   isoJoin([
                     kindLabel,
                     if ((m.packageName ?? '').isNotEmpty) m.packageName!,
+                    // ما بيع (الوصف بلا بادئة «بيع:»/«إلغاء بيع:»).
+                    if (isSale && (m.description ?? '').isNotEmpty)
+                      m.description!.replaceFirst(RegExp(r'^(?:إلغاء بيع|بيع):\s*'), ''),
                     who,
                     settleWhen(m.createdAt),
                   ], ' · '),

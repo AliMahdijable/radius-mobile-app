@@ -8,6 +8,7 @@ import '../api/cards_api.dart';
 import '../api/device_config_api.dart';
 import '../api/device_probe_api.dart';
 import '../api/el_deposit_password.dart';
+import '../api/sales_api.dart';
 import '../api/self_deposit_api.dart';
 import '../api/subscribers_api.dart';
 import '../api/whatsapp_api.dart';
@@ -82,6 +83,8 @@ class SessionManager {
     // كاش المعلّقة **لا** تُمسح هنا: خروجٌ وسط الدفع لا يمحو ماله —
     // SelfDepositPendingStore يحفظها لصاحبها وحده.)
     _guardSync('SelfDepositState.reset', () => SelfDepositState.reset());
+    // «المبيعات» — حالة المفتاح لحساب المدير السابق.
+    _guardSync('SalesState.reset', () => SalesState.reset());
     // المساعد الذكيّ — حالته (الحصّة، القفل) وآخر أخطاء الخادم المحفوظة
     // لـ«اشرحلي»: لا يرى المدير التالي حال سابقه ولا يُشرح له خطؤه.
     _guardSync('AiAssistantState.reset', () => AiAssistantState.reset());

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../api/cards_api.dart';
+import '../api/sales_api.dart';
 import '../api/self_deposit_api.dart';
 import '../core/util/format.dart';
 import '../core/widgets/permission_locked.dart';
@@ -29,6 +30,7 @@ import 'managers/managers_screen.dart';
 import 'packages/packages_screen.dart';
 import 'portal_settings/portal_settings_screen.dart';
 import 'reports_screen.dart';
+import 'sales/sales_screen.dart';
 import 'top_actions.dart';
 import 'topup/topup_screen.dart';
 import '../widgets/merged_company_strip.dart';
@@ -62,6 +64,8 @@ class MoreModulesScreen extends StatelessWidget {
         ProviderService.changes,
         // «شحن رصيد الصفحة» — الاستماع نفسه يطلب حالتها إن كانت قديمة.
         SelfDepositState.gate,
+        // «المبيعات» — الاستماع يطلب حالتها إن كانت قديمة (مفتاحٌ بالخادم).
+        SalesState.gate,
         // العودة للتطبيق ⇒ يُسأل ثانيةً (بمهلته) — فتشغيله من الخادم يظهر.
         AppResumedSignal.tick,
       ]),
@@ -133,6 +137,22 @@ class MoreModulesScreen extends StatelessWidget {
                 MaterialPageRoute(
                   builder: (_) => const SettlementsScreen(),
                 ),
+              ),
+            ),
+          // ٢٣ أكتوبر: «المبيعات» — موادّ الوكيل ومخزونه وبيعها نقداً أو على دين
+          // المشترك (الربح يدخل التقرير الماليّ، والنقد الصندوق). تظهر حين يقول
+          // الخادم إنّها مفتوحةٌ للحساب (مفتاحٌ مطفأ افتراضيّاً)؛ الموظّف بلا
+          // `sales.view` يراها مقفلةً بمكانها، والمقيَّد بمديرٍ فرعيّ مقفلةً بسببها.
+          if (SalesState.visible && permShown(const ['sales.view']))
+            _ModuleCard(
+              locked: !Perms.has('sales.view'),
+              unavailable: SalesState.gate.value!.scoped ? 'sales.scoped'.tr() : null,
+              icon: LucideIcons.shoppingCart,
+              tone: AppTone.success,
+              title: 'sales.title'.tr(),
+              subtitle: 'sales.module_hint'.tr(),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SalesScreen()),
               ),
             ),
           // ١٨ أكتوبر: «شحن رصيد الصفحة» — الإيداع الذاتيّ في الساس (زين كاش
