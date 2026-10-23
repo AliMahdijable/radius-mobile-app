@@ -17,6 +17,7 @@ import 'package:rad_mysvcs/screens/reports/widgets/action_labels.dart';
 import 'package:rad_mysvcs/screens/sales/sales_screen.dart';
 import 'package:rad_mysvcs/screens/settlements/settle_widgets.dart';
 import 'package:rad_mysvcs/services/sale_print.dart';
+import 'package:rad_mysvcs/services/subscriber_events.dart';
 import 'package:pdf/pdf.dart';
 
 import 'visual_perm/visual_perm_harness.dart';
@@ -88,6 +89,9 @@ class _SalesServer implements HttpClientAdapter {
         Headers.contentTypeHeader: [Headers.jsonContentType],
       });
 
+  /// طلبات «حالة التسديد» — المعرّفات المرسلة في كلٍّ منها.
+  final debtStatusIds = <List<int>>[];
+
   @override
   Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
     final get = o.method.toUpperCase() == 'GET';
@@ -98,6 +102,17 @@ class _SalesServer implements HttpClientAdapter {
       return _json(200, {
         'success': true, 'enabled': enabled, 'data': items,
         'totals': {'count': 3, 'stock_value': 300375, 'out_of_stock': 1, 'defective_items': 1, 'defective_value': 25000},
+      });
+    }
+    if (o.path == '/api/v2/sales/debt-status' && !get) {
+      final body = o.data is Map ? Map<String, dynamic>.from(o.data as Map) : <String, dynamic>{};
+      debtStatusIds.add(List<int>.from(body['ids'] as List? ?? const []));
+      return _json(200, {
+        'success': true,
+        'data': [
+          {'id': 11, 'state': 'partial', 'paid': 20000, 'unpaid': 15000, 'balance': -15000},
+          {'id': 999, 'state': 'bogus'},
+        ],
       });
     }
     if (o.path == '/api/v2/sales' && get) {
@@ -545,6 +560,21 @@ void main() {
     });
   });
 
+  group('الـAPI — حالة التسديد', () {
+    tearDown(visualTearDown);
+
+    testWidgets('debtStatus: الصالح وحده، وبلا معرّفات لا طلب', (t) async {
+      final server = _SalesServer(await visualSetUp(s1bSasOwner));
+      ApiClient.dio.httpClientAdapter = server;
+      expect((await t.runAsync(() => SalesApi.debtStatus(const [])))!, isEmpty);
+      expect(server.debtStatusIds, isEmpty);
+      final m = (await t.runAsync(() => SalesApi.debtStatus(const [11, 999])))!;
+      expect(m.keys, [11], reason: 'حالةٌ غير معروفة تُسقط');
+      expect((m[11]!.isPartial, m[11]!.paid, m[11]!.unpaid, m[11]!.balance), (true, 20000, 15000, -15000));
+      expect(server.debtStatusIds.single, [11, 999]);
+    });
+  });
+
   group('الـAPI — المخزون', () {
     tearDown(visualTearDown);
 
@@ -602,6 +632,7 @@ void main() {
       ApiClient.dio.httpClientAdapter = server;
       await pumpVisual(t, phoneTall, home: (_) => const SalesScreen());
       await settle(t, seconds: 2);
+      final changed0 = SubscriberEvents.dataChanged.value;
       // الثاني = بيع الدين #11 (الترتيب: #12 نقديّ ثمّ #11 دين).
       await t.ensureVisible(find.text('إلغاء').at(1));
       await t.tap(find.text('إلغاء').at(1));
@@ -618,6 +649,45 @@ void main() {
       final post = server.posts.lastWhere((p) => p.$1 == '/api/v2/sales/11/void');
       expect(post.$2, {'reason': 'أرجع المادّة', 'refund': 'cash', 'expected_paid': 20000});
       await settle(t, seconds: 4); // إشعار النجاح (٣ث)
+      expect(SubscriberEvents.dataChanged.value, greaterThan(changed0),
+          reason: 'دين المشترك والرئيسيّة يتحدّثان بعد العمليّة — لا القسم وحده');
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('حالة التسديد: «مسدّد جزئيّاً» وما بقي — تُسأل للمكتمل على الدين وحده', (t) async {
+      final server = _SalesServer(await visualSetUp(s1bSasOwner));
+      ApiClient.dio.httpClientAdapter = server;
+      await pumpVisual(t, phoneTall, home: (_) => const SalesScreen());
+      await settle(t, seconds: 2);
+      expect(server.debtStatusIds, [
+        [11]
+      ], reason: 'النقديّ والمُلغى و«غير المؤكَّد» لا يُسأل عنها');
+      expect(find.text('مسدّد جزئيّاً'), findsOneWidget);
+      expect(find.text('سُدّد 20,000 د.ع · باقي 15,000 د.ع'), findsOneWidget);
+      expect(find.text('على الدين'), findsOneWidget, reason: 'عنوان المؤشّر وحده — شارة #11 صارت «مسدّد جزئيّاً»');
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('«بيع مادّة» من صفحة المشترك: المشترك مختار والدفع على دينه، والبيع يُرسل به', (t) async {
+      final server = _SalesServer(await visualSetUp(s1bSasOwner));
+      ApiClient.dio.httpClientAdapter = server;
+      await pumpVisual(t, phoneTall,
+          home: (_) => Scaffold(
+                body: Builder(
+                  builder: (ctx) => Center(
+                    child: TextButton(
+                      onPressed: () => showSellToSubscriber(ctx, idx: '77', username: 'ali.k@sn', name: 'علي كريم'),
+                      child: const Text('SELL'),
+                    ),
+                  ),
+                ),
+              ));
+      await settle(t, seconds: 1);
+      await t.tap(find.text('SELL'));
+      await settle(t, seconds: 2);
+      expect(find.text('sales.sell_title'.tr()), findsWidgets);
+      expect(find.textContaining('ali.k@sn'), findsWidgets);
+      expect(find.text('sales.debt_hint'.tr()), findsOneWidget, reason: 'الدفع على دين المشترك افتراضاً');
       expect(t.takeException(), isNull);
     });
 

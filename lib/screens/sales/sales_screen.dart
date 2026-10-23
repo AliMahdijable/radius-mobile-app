@@ -14,6 +14,7 @@ import '../../core/widgets/permission_locked.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../services/permissions_service.dart';
 import '../../services/sale_print.dart';
+import '../../services/subscriber_events.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -45,6 +46,9 @@ class _SalesScreenState extends State<SalesScreen> {
 
   SaleItemsPage? _items;
   SalesPage? _sales;
+
+  /// حالة تسديد المبيعات على الدين الظاهرة (بعد القائمة) — بلاها «على الدين» كما كان.
+  Map<int, SaleDebtStatus> _debts = const {};
   String? _itemsError;
   String? _salesError;
   bool _loadingItems = true;
@@ -106,12 +110,28 @@ class _SalesScreenState extends State<SalesScreen> {
     if (r.page == null && _sales != null) {
       showSheetSnack(context, r.error ?? 'sales.load_failed'.tr(), isError: true);
     }
+    if (r.page != null) unawaited(_loadDebts(r.page!));
+  }
+
+  /// «مسدّد» للبيع على الدين (المالك ٢٣ أكتوبر: «اسدد دين كيبل بيعت … يبقى معروض اجل») — رصيد المشترك الآن، طلبٌ واحد.
+  Future<void> _loadDebts(SalesPage page) async {
+    final ids = [
+      for (final s in page.sales)
+        if (s.isDebt && s.isDone && (s.idx ?? '').isNotEmpty) s.id,
+    ];
+    final m = ids.isEmpty ? const <int, SaleDebtStatus>{} : await SalesApi.debtStatus(ids);
+    if (!mounted || !identical(_sales, page)) return;
+    setState(() => _debts = m);
   }
 
   Future<void> _refresh() => Future.wait([_loadItems(), _loadSales()]);
 
   Future<void> _after(Future<bool?> sheet) async {
-    if (await sheet == true && mounted) await _refresh();
+    if (await sheet == true && mounted) {
+      // دين المشترك والرئيسيّة يتغيّران بالبيع وإلغائه — كان يتحدّث القسم وحده فيبقى الباقي حتى سحب التحديث.
+      SubscriberEvents.notifyChange();
+      await _refresh();
+    }
   }
 
   @override
@@ -315,6 +335,7 @@ class _SalesScreenState extends State<SalesScreen> {
             if (i > 0) const SizedBox(height: Sp.sm),
             _SaleTile(
               sale: page.sales[i],
+              debt: _debts[page.sales[i].id],
               canVoid: canVoid,
               canResolve: canResolve,
               onVoid: () => _after(_showSheet(context, _VoidSheet(sale: page.sales[i]))),
@@ -688,9 +709,11 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
-({String label, AppTone tone}) _saleState(Sale s) {
+({String label, AppTone tone}) _saleState(Sale s, [SaleDebtStatus? debt]) {
   switch (s.status) {
     case 'done':
+      if (s.isDebt && debt != null && debt.isPaid) return (label: 'sales.st_paid'.tr(), tone: AppTone.success);
+      if (s.isDebt && debt != null && debt.isPartial) return (label: 'sales.st_partial'.tr(), tone: AppTone.warning);
       return s.isDebt
           ? (label: 'sales.st_debt'.tr(), tone: AppTone.info)
           : (label: 'sales.st_cash'.tr(), tone: AppTone.success);
@@ -720,8 +743,12 @@ class _SaleTile extends StatelessWidget {
     required this.canResolve,
     required this.onVoid,
     required this.onResolve,
+    this.debt,
   });
   final Sale sale;
+
+  /// حالة تسديده إن كان على الدين ومكتملاً.
+  final SaleDebtStatus? debt;
   final bool canVoid;
   final bool canResolve;
   final VoidCallback onVoid;
@@ -730,7 +757,8 @@ class _SaleTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final st = _saleState(sale);
+    final debtNow = sale.isDone && sale.isDebt ? debt : null;
+    final st = _saleState(sale, debtNow);
     final dim = sale.isVoid || sale.isFailed;
     final who = sale.employeeId == null ? 'sales.manager'.tr() : (sale.by ?? 'settle.employee'.tr());
     const dimStyle = TextDecoration.lineThrough;
@@ -781,6 +809,17 @@ class _SaleTile extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5),
           ),
+          if (debtNow != null && !debtNow.isPaid) ...[
+            const SizedBox(height: Sp.xs),
+            Text(
+              debtNow.isPartial
+                  ? 'sales.debt_partial_n'.tr(namedArgs: {'paid': _money(debtNow.paid), 'left': _money(debtNow.unpaid)})
+                  : 'sales.debt_now_n'.tr(namedArgs: {'amount': _money(debtNow.balance.abs())}),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.muted(color: debtNow.isPartial ? AppColors.warningFill : AppColors.textMid).copyWith(fontSize: 11.5),
+            ),
+          ],
           if (sale.isVoid && sale.voidReason != null) ...[
             const SizedBox(height: Sp.xs),
             Text(
@@ -1088,22 +1127,27 @@ class _SheetText extends StatelessWidget {
   }
 }
 
-/// حقل مبلغٍ صحيح بالدينار — **بلا** اختصار الآلاف: موادٌّ بـ٥٠٠ دينار للمتر حقيقيّة.
+/// حقل مبلغٍ صحيح بالدينار — باختصار الآلاف كبقيّة حقول المال (٢٥ ⇒ ٢٥,٠٠٠ عند الخروج؛ المالك ٢٣ أكتوبر: «ماتتقبل قيم
+/// الالف … يطلع رقم بدون اصفار»)، إلّا [shorthand] = false (المتر: سعره دون الألف شائع)؛ و«خلّيه 250» لمبلغٍ حقيقيّ دون الألف.
+/// بخطّ الحقول العاديّة وإطارها ([SheetBox] بأيقونة) — فيتساوى ارتفاعه مع الكمّيّة والاسم جنبه («غير متناسق بالحجم»).
 class _MoneyField extends StatelessWidget {
-  const _MoneyField({required this.controller, required this.onValue, this.enabled = true});
+  const _MoneyField({required this.controller, required this.onValue, this.enabled = true, this.shorthand = true});
   final TextEditingController controller;
   final ValueChanged<int> onValue;
   final bool enabled;
+  final bool shorthand;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return SheetBox(
-      padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: 12),
+      icon: LucideIcons.banknote,
       child: AmountTextField(
         controller: controller,
         currency: 'common.currency'.tr(),
-        shorthand: false,
+        shorthand: shorthand,
+        allowExact: true,
+        compact: true,
         enabled: enabled,
         onValue: onValue,
       ),
@@ -1128,6 +1172,42 @@ class _CartLine {
   }
 }
 
+/// «بيع مادّة» للمشترك من صفحته (المالك ٢٣ أكتوبر: «من صفحه المشتركين … الكه زر بيع ماده للمشترك»): «بيع جديد» نفسه
+/// والمشترك مختارٌ مسبقاً. الموادّ تُجلب هنا؛ بلا مادّةٍ فعّالة (أو المبيعات مطفأة) يقول ذلك ولا يفتح. بعد البيع: دين المشترك
+/// والرئيسيّة يتحدّثان ([SubscriberEvents.notifyChange]). ⇒ `true` إن سُجّل بيع.
+Future<bool> showSellToSubscriber(
+  BuildContext context, {
+  required String idx,
+  required String username,
+  String name = '',
+  String? phone,
+}) async {
+  final r = await SalesApi.items();
+  if (!context.mounted) return false;
+  final page = r.page;
+  if (page == null) {
+    showSheetSnack(context, r.error ?? 'sales.load_failed'.tr(), isError: true);
+    return false;
+  }
+  if (!page.enabled) {
+    showSheetSnack(context, 'sales.off'.tr());
+    return false;
+  }
+  if (page.active.isEmpty) {
+    showSheetSnack(context, 'sales.add_item_first'.tr());
+    return false;
+  }
+  final done = await _showSheet(
+    context,
+    _NewSaleSheet(
+      items: page.active,
+      initial: _Hit(idx: idx, username: username, name: name, phone: phone),
+    ),
+  );
+  if (done == true) SubscriberEvents.notifyChange();
+  return done == true;
+}
+
 class _Hit {
   const _Hit({required this.idx, required this.username, required this.name, this.phone});
   final String idx;
@@ -1137,8 +1217,11 @@ class _Hit {
 }
 
 class _NewSaleSheet extends StatefulWidget {
-  const _NewSaleSheet({required this.items});
+  const _NewSaleSheet({required this.items, this.initial});
   final List<SaleItem> items;
+
+  /// «بيع مادّة» من صفحة المشترك: الزبون مختارٌ مسبقاً، والدفع على دينه إن ملك «إضافة دين» (والتأكيد قبل الإرسال كما هو).
+  final _Hit? initial;
 
   @override
   State<_NewSaleSheet> createState() => _NewSaleSheetState();
@@ -1151,9 +1234,9 @@ class _NewSaleSheetState extends State<_NewSaleSheet> {
   final _note = TextEditingController();
   final _term = TextEditingController();
   String _ref = SalesApi.newClientRef();
-  bool _subscriber = false;
-  bool _debt = false;
-  _Hit? _picked;
+  late bool _subscriber = widget.initial != null;
+  late bool _debt = widget.initial != null && _canDebt;
+  late _Hit? _picked = widget.initial;
   List<_Hit> _hits = const [];
   bool _searching = false;
   Timer? _debounce;
@@ -1502,6 +1585,7 @@ class _NewSaleSheetState extends State<_NewSaleSheet> {
                 child: _MoneyField(
                   controller: l.price,
                   enabled: !_locked,
+                  shorthand: l.item.unit != 'meter',
                   onValue: (v) => setState(() {
                     l.priceValue = v;
                     _confirmDebt = false;
@@ -2313,7 +2397,7 @@ class _ItemSheetState extends State<_ItemSheet> {
           const SizedBox(height: Sp.lg),
           SheetSection(
             label: '${'sales.f_sale_price'.tr()} *',
-            child: _MoneyField(controller: _price, onValue: (v) => setState(() => _priceValue = v)),
+            child: _MoneyField(controller: _price, shorthand: _unit != 'meter', onValue: (v) => setState(() => _priceValue = v)),
           ),
           const SizedBox(height: Sp.lg),
           SheetSection(
@@ -2355,7 +2439,7 @@ class _ItemSheetState extends State<_ItemSheet> {
                   const SizedBox(width: Sp.sm),
                   Expanded(
                     flex: 3,
-                    child: _MoneyField(controller: _cost, onValue: (v) => setState(() => _costValue = v)),
+                    child: _MoneyField(controller: _cost, shorthand: _unit != 'meter', onValue: (v) => setState(() => _costValue = v)),
                   ),
                 ],
               ),
@@ -2622,7 +2706,7 @@ class _StockSheetState extends State<_StockSheet> {
             const SizedBox(height: Sp.lg),
             SheetSection(
               label: '${'sales.f_unit_cost'.tr()} *',
-              child: _MoneyField(controller: _cost, onValue: (v) => setState(() => _costValue = v)),
+              child: _MoneyField(controller: _cost, shorthand: widget.item.unit != 'meter', onValue: (v) => setState(() => _costValue = v)),
             ),
             const SizedBox(height: Sp.lg),
             _PaidFromChoice(value: _paidFrom, onChanged: (v) => setState(() => _paidFrom = v), amount: _amount),

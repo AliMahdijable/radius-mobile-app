@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:easy_localization/easy_localization.dart';
@@ -7,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/device_probe_api.dart';
 import '../../api/big_subscribers_api.dart';
+import '../../api/sales_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../api/whatsapp_api.dart';
 import '../../core/util/clipboard_helper.dart';
@@ -44,6 +46,7 @@ import 'widgets/balance_card.dart';
 import '../../api/device_config_api.dart';
 import 'widgets/device_chip_micro.dart';
 import '../../services/subscriber_refresh_signal.dart';
+import '../sales/sales_screen.dart' show showSellToSubscriber;
 import 'widgets/device_probe_card.dart';
 import 'widgets/last_seen_card.dart';
 import 'widgets/subscriber_actions.dart';
@@ -129,6 +132,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     // حدود «تنبيه المشترك» وتفعيله — الكارت قد يُفتح من البحث لا من
     // القائمة، فلا نفترض أنّ أحداً جلبها قبلنا.
     ConnectionAlertSettings.ensureLoaded();
+    // «بيع مادّة» يظهر حين تكون «المبيعات» مفعّلةً للحساب (مفتاحٌ بالخادم) — حالتها قد لم تُسأل بعد إن فُتح المشترك أوّلاً.
+    unawaited(SalesState.ensureFresh());
     // Keep the open detail screen in sync with backend state. Any
     // mutation done from the operations grid (activate / extend /
     // pay-debt / add-debt / discount / disconnect / toggle / …)
@@ -864,6 +869,24 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             onTap: _locked('subscribers.pay_debt')
                 ? null
                 : () => showPayDebtSheet(context, sub),
+          ),
+        // «بيع مادّة» (المالك ٢٣ أكتوبر: «من صفحه المشتركين … الكه زر بيع ماده للمشترك») — «بيع جديد» والمشترك مختار.
+        // حين تكون «المبيعات» مفعّلةً للحساب، وللشركة المفتوحة وحدها (مشترك شركةٍ أخرى في «كل الشركات» لا).
+        if (SalesState.visible && sub.companyKey == null && sub.idx != null && _shows('sales.sell'))
+          SubAction(
+            icon: LucideIcons.shoppingCart,
+            label: 'sales.sell_to_sub'.tr(),
+            color: AppColors.brandAccent,
+            locked: _locked('sales.sell') || SalesState.gate.value!.scoped,
+            onTap: (_locked('sales.sell') || SalesState.gate.value!.scoped)
+                ? null
+                : () => showSellToSubscriber(
+                      context,
+                      idx: sub.idx!,
+                      username: sub.username,
+                      name: sub.fullName.trim(),
+                      phone: sub.displayPhone.isEmpty ? null : sub.displayPhone,
+                    ),
           ),
         if (_shows('discounts.manage'))
           SubAction(

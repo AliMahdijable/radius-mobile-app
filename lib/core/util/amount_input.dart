@@ -73,6 +73,8 @@ class AmountTextField extends StatefulWidget {
     this.hint = '0',
     this.currency = 'د.ع',
     this.focusNode,
+    this.compact = false,
+    this.allowExact = false,
   });
 
   final TextEditingController controller;
@@ -88,6 +90,13 @@ class AmountTextField extends StatefulWidget {
   final String currency;
   final FocusNode? focusNode;
 
+  /// بخطّ الحقول العاديّة لا خطّ المبلغ الكبير — لنماذج فيها أكثر من حقل مالٍ بجانب حقولٍ أخرى (المبيعات): ارتفاعٌ واحد.
+  final bool compact;
+
+  /// مبلغٌ حقيقيّ دون الألف (كونيكتر بـ250 دينار): التلميح يحمل «خلّيه 250» فيُحفظ كما كُتب. الافتراض بلا (المبالغ دون
+  /// الألف غير موجودة في الاشتراكات والديون).
+  final bool allowExact;
+
   @override
   State<AmountTextField> createState() => _AmountTextFieldState();
 }
@@ -97,6 +106,9 @@ class _AmountTextFieldState extends State<AmountTextField> {
   bool _ownsFocus = false;
   bool _suppress = false;
   int _value = 0;
+
+  /// «خلّيه كما هو» لهذه القيمة وحدها — تغييرها يُعيد القاعدة.
+  int? _exactFor;
 
   @override
   void initState() {
@@ -143,6 +155,7 @@ class _AmountTextFieldState extends State<AmountTextField> {
   void _applyShorthand() {
     if (!widget.shorthand) return;
     if (!AmountShorthand.applies(_value)) return;
+    if (_exactFor == _value) return;
     _setValue(AmountShorthand.expand(_value));
   }
 
@@ -161,7 +174,11 @@ class _AmountTextFieldState extends State<AmountTextField> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final willExpand = widget.shorthand && AmountShorthand.applies(_value);
+    final willExpand = widget.shorthand && AmountShorthand.applies(_value) && _exactFor != _value;
+    final textStyle = widget.compact ? AppType.input() : AppType.amount();
+    final hintStyle = widget.compact
+        ? AppType.input(color: AppColors.textPlaceholder)
+        : AppType.amount(color: AppColors.textPlaceholder);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -184,13 +201,13 @@ class _AmountTextFieldState extends State<AmountTextField> {
                 ],
                 textDirection: TextDirection.ltr,
                 textAlign: TextAlign.right,
-                style: AppType.amount(),
+                style: textStyle,
                 decoration: InputDecoration(
                   isDense: true,
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.zero,
                   hintText: widget.hint,
-                  hintStyle: AppType.amount(color: AppColors.textPlaceholder),
+                  hintStyle: hintStyle,
                 ),
               ),
             ),
@@ -215,19 +232,45 @@ class _AmountTextFieldState extends State<AmountTextField> {
             ],
           ],
         ),
-        // التلميح يسبق التحويل فلا يكون مفاجأة.
+        // التلميح يسبق التحويل فلا يكون مفاجأة. و«خلّيه 250» بجانبه — أو تحته حين يضيق الحقل (نصف عرضٍ بجانب الكمّيّة).
         if (willExpand) ...[
           const SizedBox(height: Sp.x6),
-          Row(
+          Wrap(
+            spacing: Sp.sm,
+            runSpacing: Sp.xxs,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Icon(Icons.auto_awesome_rounded,
-                  size: 13, color: AppColors.brandAccent),
-              const SizedBox(width: Sp.xs),
-              Text(
-                'سيُحفظ ${AmountShorthand.format(AmountShorthand.expand(_value))}'
-                ' ${widget.currency}',
-                style: AppType.muted(color: AppColors.brandOnSoft),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.auto_awesome_rounded,
+                      size: 13, color: AppColors.brandAccent),
+                  const SizedBox(width: Sp.xs),
+                  Text(
+                    'سيُحفظ ${AmountShorthand.format(AmountShorthand.expand(_value))}'
+                    ' ${widget.currency}',
+                    style: AppType.muted(color: AppColors.brandOnSoft),
+                  ),
+                ],
               ),
+              if (widget.allowExact)
+                InkWell(
+                  key: const ValueKey('amount-keep-exact'),
+                  borderRadius: BorderRadius.circular(R.sm),
+                  // «خلّيه 250» — يبقى كما كُتب (التركيز لا يتحرّك: النقر على InkWell لا يأخذه من الحقل).
+                  onTap: () => setState(() => _exactFor = _value),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: Sp.xxs, vertical: 2),
+                    child: Text(
+                      'خلّيه ${AmountShorthand.format(_value)}',
+                      style: AppType.muted(color: AppColors.textMid).copyWith(
+                        fontWeight: FontWeight.w600,
+                        decoration: TextDecoration.underline,
+                        decorationColor: AppColors.textMid,
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ],

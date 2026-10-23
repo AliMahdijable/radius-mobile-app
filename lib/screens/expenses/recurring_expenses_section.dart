@@ -555,6 +555,7 @@ class _ModeCard extends StatelessWidget {
   }
 }
 
+/// مبلغ الثابتة — باختصار الآلاف كشيت الصرفيّة العاديّة (٢٥ ⇒ ٢٥,٠٠٠ عند الخروج، والتلميح قبله).
 class _Money extends StatelessWidget {
   const _Money({required this.controller, required this.onValue});
   final TextEditingController controller;
@@ -565,7 +566,7 @@ class _Money extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     return SheetBox(
       padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: 12),
-      child: AmountTextField(controller: controller, currency: 'common.currency'.tr(), shorthand: false, onValue: onValue),
+      child: AmountTextField(controller: controller, currency: 'common.currency'.tr(), onValue: onValue),
     );
   }
 }

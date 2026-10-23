@@ -316,6 +316,31 @@ class VoidPreview {
       );
 }
 
+/// حالة تسديد بيعٍ على الدين (`POST /api/v2/sales/debt-status`) — قاعدة الإلغاء نفسها: «مسدّد» حين لا يبقى على
+/// المشترك دينٌ يغطّيه، و«جزئيّ» حين يقلّ دينه عن مبلغ البيع (أيّ دينٍ آخر عليه يُسدَّد قبله). ما لم يُقرأ ⇒ لا حالة.
+class SaleDebtStatus {
+  const SaleDebtStatus({required this.id, required this.state, this.paid = 0, this.unpaid = 0, this.balance = 0});
+  final int id;
+
+  /// `paid` · `partial` · `open`.
+  final String state;
+  final num paid;
+  final num unpaid;
+
+  /// رصيد المشترك الآن (سالب = دين).
+  final num balance;
+
+  bool get isPaid => state == 'paid';
+  bool get isPartial => state == 'partial';
+
+  static SaleDebtStatus? fromJson(Map<String, dynamic> j) {
+    final id = _int(j['id']);
+    final st = _str(j['state']);
+    if (id == null || !const {'paid', 'partial', 'open'}.contains(st)) return null;
+    return SaleDebtStatus(id: id, state: st!, paid: _num(j['paid']), unpaid: _num(j['unpaid']), balance: _num(j['balance']));
+  }
+}
+
 class SalesTotals {
   const SalesTotals({
     this.count = 0,
@@ -808,6 +833,28 @@ class SalesApi {
         preview: null,
         error: (ours != null ? _str(ours['message']) : null) ?? humanError(e, fallback: 'تعذّرت قراءة دين المشترك'),
       );
+    }
+  }
+
+  /// حالات تسديد المبيعات على الدين المكتملة ([ids] — الظاهرة). تعذّرٌ ⇒ خريطةٌ فارغة («على الدين» كما كان، لا ادّعاء).
+  static Future<Map<int, SaleDebtStatus>> debtStatus(List<int> ids) async {
+    if (ids.isEmpty) return const {};
+    try {
+      final r = await ApiClient.dio.post<Object?>('$_base/debt-status', data: {'ids': ids.take(100).toList()}, options: _sell);
+      final body = _map(r.data);
+      if (body['success'] != true) return const {};
+      final out = <int, SaleDebtStatus>{};
+      final list = body['data'];
+      if (list is List) {
+        for (final e in list.whereType<Map>()) {
+          final d = SaleDebtStatus.fromJson(Map<String, dynamic>.from(e));
+          if (d != null) out[d.id] = d;
+        }
+      }
+      return out;
+    } catch (e) {
+      _log('debt-status', e);
+      return const {};
     }
   }
 

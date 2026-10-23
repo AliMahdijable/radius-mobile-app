@@ -1757,6 +1757,10 @@
     "truncated": "تُعرض أحدث ٣٠٠ — المجاميع للفترة كاملة",
     "st_cash": "نقداً",
     "st_debt": "على الدين",
+    "st_paid": "مسدّد",
+    "st_partial": "مسدّد جزئيّاً",
+    "debt_partial_n": "سُدّد {paid} · باقي {left}",
+    "debt_now_n": "دين المشترك الآن {amount}",
     "st_void": "مُلغى",
     "st_failed": "لم يُضَف الدين",
     "st_unknown": "غير مؤكَّد",
@@ -2012,7 +2016,8 @@
     "move_voided_loss": "وأُلغيت خسارتها",
     "move_voided_box_in_n": "{amount} رجعت للصندوق",
     "move_voided_box_out_n": "خرج {amount} من الصندوق",
-    "print_receipt": "طباعة الوصل"
+    "print_receipt": "طباعة الوصل",
+    "sell_to_sub": "بيع مادّة"
   },
   "rexp": {
     "title": "الصرفيات الثابتة",

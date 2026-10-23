@@ -34,12 +34,16 @@ void main() {
   group('AmountTextField', () {
     Future<void> pump(
         WidgetTester t, TextEditingController c, void Function(int) onValue,
-        {bool shorthand = true}) async {
+        {bool shorthand = true, bool allowExact = false, bool compact = false}) async {
       await t.pumpWidget(MaterialApp(
         home: Scaffold(
           body: Column(children: [
             AmountTextField(
-                controller: c, onValue: onValue, shorthand: shorthand),
+                controller: c,
+                onValue: onValue,
+                shorthand: shorthand,
+                allowExact: allowExact,
+                compact: compact),
             const TextField(key: Key('other')),
           ]),
         ),
@@ -84,6 +88,50 @@ void main() {
       await t.pumpAndSettle();
       expect(c.text, '30,000');
       expect(last, 30000);
+    });
+
+    testWidgets('allowExact: «خلّيه 250» يُبقي المبلغ كما كُتب (كونيكتر بـ250)', (t) async {
+      final c = TextEditingController();
+      var last = 0;
+      await pump(t, c, (v) => last = v, allowExact: true);
+      await t.enterText(find.byType(TextField).first, '250');
+      await t.pump();
+      expect(find.textContaining('سيُحفظ 250,000'), findsOneWidget);
+      await t.tap(find.text('خلّيه 250'));
+      await t.pump();
+      expect(find.textContaining('سيُحفظ'), findsNothing);
+      await t.tap(find.byKey(const Key('other')));
+      await t.pumpAndSettle();
+      expect(c.text, '250');
+      expect(last, 250);
+      // قيمةٌ أخرى ⇒ القاعدة تعود.
+      await t.enterText(find.byType(TextField).first, '30');
+      await t.pump();
+      expect(find.textContaining('سيُحفظ 30,000'), findsOneWidget);
+    });
+
+    testWidgets('allowExact بلا نقر ⇒ يُوسَّع كالعادة؛ وبلا allowExact لا «خلّيه»', (t) async {
+      final c = TextEditingController();
+      var last = 0;
+      await pump(t, c, (v) => last = v, allowExact: true);
+      await t.enterText(find.byType(TextField).first, '25');
+      await t.pump();
+      await t.tap(find.byKey(const Key('other')));
+      await t.pumpAndSettle();
+      expect((c.text, last), ('25,000', 25000));
+      final c2 = TextEditingController();
+      await pump(t, c2, (_) {});
+      await t.enterText(find.byType(TextField).first, '25');
+      await t.pump();
+      expect(find.textContaining('خلّيه'), findsNothing);
+    });
+
+    testWidgets('compact: خطّ الحقول العاديّة لا خطّ المبلغ الكبير (ارتفاعٌ واحد مع جيرانه)', (t) async {
+      final c = TextEditingController();
+      await pump(t, c, (_) {}, compact: true);
+      expect(t.widget<TextField>(find.byType(TextField).first).style?.fontSize, 13.5);
+      await pump(t, TextEditingController(), (_) {});
+      expect(t.widget<TextField>(find.byType(TextField).first).style?.fontSize, 24);
     });
 
     testWidgets('shorthand:false يعطّل القاعدة لهذا الحقل', (t) async {

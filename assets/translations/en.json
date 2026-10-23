@@ -1757,6 +1757,10 @@
     "truncated": "Showing the latest 300 — totals cover the whole period",
     "st_cash": "Cash",
     "st_debt": "On debt",
+    "st_paid": "Paid",
+    "st_partial": "Partly paid",
+    "debt_partial_n": "Paid {paid} · {left} left",
+    "debt_now_n": "Subscriber owes {amount} now",
     "st_void": "Voided",
     "st_failed": "Debt not added",
     "st_unknown": "Unconfirmed",
@@ -2012,7 +2016,8 @@
     "move_voided_loss": "its loss is undone",
     "move_voided_box_in_n": "{amount} back to the box",
     "move_voided_box_out_n": "{amount} left the box",
-    "print_receipt": "Print receipt"
+    "print_receipt": "Print receipt",
+    "sell_to_sub": "Sell an item"
   },
   "rexp": {
     "title": "Recurring expenses",
