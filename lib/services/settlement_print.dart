@@ -128,6 +128,7 @@ class SettlementPrint {
         row('+ تسديد ديون (${s.debtPayments.count})', _money(s.debtPayments.sum)),
         if (s.salesCash.count > 0) row('+ بيع مواد (${s.salesCash.count})', _money(s.salesCash.sum)),
         row('− صرفيات (${s.expenses.count})', _money(s.expenses.sum)),
+        if (s.goodsPurchases.count > 0) row('− شراء مواد (${s.goodsPurchases.count})', _money(s.goodsPurchases.sum)),
         pw.Divider(thickness: 0.8),
         row('المتوقّع في الصندوق', _money(s.expected), strong: true),
         row('المستلَم فعلاً', _money(s.received), strong: true),

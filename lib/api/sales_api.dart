@@ -370,11 +370,15 @@ class StockMove {
     this.by,
     this.employeeId,
     this.at,
+    this.paidFrom,
+    this.refMoveId,
+    this.voided = false,
+    this.voidable = false,
   });
 
   final int id;
 
-  /// `purchase` · `sale` · `return` (رجوع للمخزون) · `adjust` (جرد)
+  /// `purchase` · `sale` · `return` (رجوع للمخزون) · `adjust` (جرد) · `purchase_void` (إلغاء شراء)
   final String kind;
   final num qty;
   final num qtyAfter;
@@ -384,6 +388,14 @@ class StockMove {
   final String? by;
   final int? employeeId;
   final DateTime? at;
+
+  /// شراء: مصدر ثمنه `box` (من الصندوق) أو `outside` (من خارجه)؛ وإلغاؤه يشير إليه ([refMoveId]).
+  final String? paidFrom;
+  final int? refMoveId;
+  final bool voided;
+
+  /// آخر حركةٍ على المادّة وشراءٌ لم يُلغَ — يُلغى (الخادم يتحقّق من جديد).
+  final bool voidable;
 
   static StockMove? fromJson(Map<String, dynamic> j) {
     final id = _int(j['id']);
@@ -399,6 +411,10 @@ class StockMove {
       by: _str(j['by']),
       employeeId: _int(j['employee_id']),
       at: _date(j['at']),
+      paidFrom: _str(j['paid_from']),
+      refMoveId: _int(j['ref_move_id']),
+      voided: j['voided'] == true,
+      voidable: j['voidable'] == true,
     );
   }
 }
@@ -542,7 +558,8 @@ class SalesApi {
     }
   }
 
-  /// مادّة جديدة — ومعها مخزونٌ افتتاحيّ اختياريّ ([qty] + [unitCost] معاً).
+  /// مادّة جديدة — ومعها مخزونٌ افتتاحيّ اختياريّ ([qty] + [unitCost] معاً، و[paidFrom] إجباريٌّ معهما:
+  /// `box` دُفع ثمنه من الصندوق الآن · `outside` من خارجه أو موجودٌ سابقاً).
   static Future<({bool ok, String? message})> createItem({
     required String name,
     required int salePrice,
@@ -551,6 +568,7 @@ class SalesApi {
     String? note,
     num? qty,
     int? unitCost,
+    String? paidFrom,
   }) {
     return _write(() => ApiClient.dio.post<Object?>('$_base/items', data: {
           'name': name,
@@ -560,6 +578,7 @@ class SalesApi {
           if (note != null && note.isNotEmpty) 'note': note,
           if (qty != null) 'qty': qty,
           if (qty != null) 'unit_cost': unitCost ?? 0,
+          if (qty != null && paidFrom != null) 'paid_from': paidFrom,
         }), 'تعذّر الحفظ');
   }
 
@@ -568,14 +587,15 @@ class SalesApi {
     return _write(() => ApiClient.dio.put<Object?>('$_base/items/$id', data: patch), 'تعذّر الحفظ');
   }
 
-  /// شراء (`purchase`: كمّيّة موجبة + كلفة الوحدة) أو جرد (`adjust`: ± + سبب).
-  /// [clientRef] يمنع تكرار الحركة نفسها.
+  /// شراء (`purchase`: كمّيّة موجبة + كلفة الوحدة + [paidFrom] إجباريّ) أو جرد (`adjust`: ± + سبب).
+  /// [clientRef] يمنع تكرار الحركة نفسها (ولا ثمنها من الصندوق مرّتين).
   static Future<({bool ok, String? message, String? code, bool ambiguous})> stock(
     int id, {
     required String kind,
     required num qty,
     int? unitCost,
     String? note,
+    String? paidFrom,
     required String clientRef,
   }) async {
     try {
@@ -583,6 +603,7 @@ class SalesApi {
         'kind': kind,
         'qty': qty,
         if (kind == 'purchase') 'unit_cost': unitCost ?? 0,
+        if (kind == 'purchase' && paidFrom != null) 'paid_from': paidFrom,
         if (note != null && note.isNotEmpty) 'note': note,
         'client_ref': clientRef,
       });
@@ -596,6 +617,22 @@ class SalesApi {
         return (ok: false, message: _str(ours['message']), code: _str(ours['code']), ambiguous: false);
       }
       return (ok: false, message: humanError(e, fallback: 'تعذّر الحفظ'), code: null, ambiguous: true);
+    }
+  }
+
+  /// إلغاء شراءٍ خاطئ — آخر حركةٍ على المادّة وحدها: الكمّيّة والكلفة كما كانتا، وثمنه (إن دُفع من
+  /// الصندوق) يعود لصندوق من دفعه. [refund] المبلغ العائد للصندوق.
+  static Future<({bool ok, String? message, num refund})> voidPurchase(int itemId, int moveId, String reason) async {
+    try {
+      final r = await ApiClient.dio.post<Object?>('$_base/items/$itemId/moves/$moveId/void', data: {'reason': reason});
+      final body = _map(r.data);
+      final ok = body['success'] == true;
+      return (ok: ok, message: _str(body['message']) ?? (ok ? null : 'تعذّر إلغاء الشراء'), refund: _num(body['refund']));
+    } catch (e) {
+      _log('purchase-void', e);
+      final ours = _ourReply(e);
+      if (ours != null) return (ok: false, message: _str(ours['message']) ?? 'تعذّر إلغاء الشراء', refund: 0);
+      return (ok: false, message: humanError(e, fallback: 'تعذّر إلغاء الشراء'), refund: 0);
     }
   }
 

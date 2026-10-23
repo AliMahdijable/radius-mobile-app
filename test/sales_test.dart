@@ -10,6 +10,7 @@ import 'package:rad_mysvcs/api/merged_finance_api.dart';
 import 'package:rad_mysvcs/api/reports_api.dart';
 import 'package:rad_mysvcs/api/sales_api.dart';
 import 'package:rad_mysvcs/api/settlements_api.dart';
+import 'package:rad_mysvcs/core/widgets/design_sheet.dart';
 import 'package:rad_mysvcs/screens/more_modules_screen.dart';
 import 'package:rad_mysvcs/screens/reports/widgets/action_labels.dart';
 import 'package:rad_mysvcs/screens/sales/sales_screen.dart';
@@ -106,6 +107,27 @@ class _SalesServer implements HttpClientAdapter {
         'unresolved': 1,
       });
     }
+    if (o.path == '/api/v2/sales/items/1/moves' && get) {
+      // آخر حركةٍ شراءٌ من الصندوق (يُلغى) ثمّ بيع ثمّ شراءٌ مُلغى.
+      return _json(200, {
+        'success': true,
+        'data': [
+          {'id': 40, 'kind': 'purchase', 'qty': 10, 'unit_cost': 27000, 'qty_before': 1, 'qty_after': 11, 'cost_avg_after': 26818.18,
+            'sale_id': null, 'note': 'دفعة المورّد', 'by': null, 'employee_id': null, 'at': '2026-10-23T09:10:00Z',
+            'paid_from': 'box', 'ref_move_id': null, 'voided': false, 'voidable': true},
+          {'id': 39, 'kind': 'sale', 'qty': -3, 'unit_cost': 25000, 'qty_before': 4, 'qty_after': 1, 'cost_avg_after': 25000,
+            'sale_id': 17, 'note': null, 'by': null, 'employee_id': null, 'at': '2026-10-23T08:40:00Z',
+            'paid_from': null, 'ref_move_id': null, 'voided': false, 'voidable': false},
+          {'id': 37, 'kind': 'purchase', 'qty': 5, 'unit_cost': 99000, 'qty_before': 4, 'qty_after': 9, 'cost_avg_after': 66111.11,
+            'sale_id': null, 'note': null, 'by': null, 'employee_id': null, 'at': '2026-10-23T08:19:00Z',
+            'paid_from': 'box', 'ref_move_id': null, 'voided': true, 'voidable': false},
+        ],
+      });
+    }
+    if (o.path == '/api/v2/sales/items/1/moves/40/void' && !get) {
+      posts.add((o.path, Map<String, dynamic>.from((o.data as Map?) ?? const {})));
+      return _json(200, {'success': true, 'data': items[0], 'refund': 270000, 'paid_from': 'box'});
+    }
     if (o.path == '/api/v2/sales/11/void-preview' && get) {
       // بيع الدين #11 (35,000): رصيده الآن −15,000 ⇒ سدّد منه 20,000.
       return _json(200, {
@@ -176,6 +198,35 @@ void main() {
       expect((done.voidMode, done.voidDebt, done.resolvesVoid), (null, null, false));
       final pv = VoidPreview.fromJson(const {'payment': 'debt', 'total': 35000, 'balance': -15000, 'paid': 20000, 'needs_choice': true, 'after_credit': 20000, 'after_cash': 0});
       expect((pv.paid, pv.needsChoice, pv.afterCredit, pv.afterCash, pv.balance), (20000, true, 20000, 0, -15000));
+    });
+
+    test('شراء المخزون: مصدر الثمن والإلغاء بالحركة، و«شراء مواد» بالتسوية (المجموع والمحصِّل والعدد)', () {
+      final m = StockMove.fromJson(const {'id': 40, 'kind': 'purchase', 'qty': 10, 'unit_cost': 27000, 'qty_after': 11,
+        'paid_from': 'box', 'voided': false, 'voidable': true})!;
+      expect((m.paidFrom, m.voided, m.voidable, m.refMoveId), ('box', false, true, null));
+      final v = StockMove.fromJson(const {'id': 41, 'kind': 'purchase_void', 'qty': -10, 'qty_after': 1, 'ref_move_id': 40})!;
+      expect((v.kind, v.refMoveId, v.voidable), ('purchase_void', 40, false));
+      final cur = CurrentAccount.fromJson(const {
+        'started': true,
+        'totals': {
+          'cash_activations': {'sum': 0, 'count': 0},
+          'debt_payments': {'sum': 0, 'count': 0},
+          'sales_cash': {'sum': 35000, 'count': 1},
+          'expenses': {'sum': 0, 'count': 0},
+          'goods_purchases': {'sum': 154000, 'count': 2},
+          'cash_in': 35000,
+          'expected_amount': -119000,
+        },
+        'collectors': [
+          {'employee_id': 42, 'cash_activations': {'sum': 0, 'count': 0}, 'debt_payments': {'sum': 0, 'count': 0},
+            'sales_cash': {'sum': 35000, 'count': 1}, 'expenses': {'sum': 0, 'count': 0},
+            'goods_purchases': {'sum': 100000, 'count': 1}, 'net_amount': -65000},
+        ],
+      })!;
+      expect((cur.goodsPurchases.sum, cur.goodsPurchases.count, cur.moveCount, cur.expected), (154000, 2, 3, -119000));
+      expect((cur.collectors.single.goodsPurchases.sum, cur.collectors.single.outCount), (100000, 1));
+      final old = SettlementRecord.fromJson(const {'id': 1, 'kind': 'settlement'})!;
+      expect((old.goodsPurchases.sum, old.goodsPurchases.count), (0, 0), reason: 'تسويةٌ قبل القسم ⇒ صفر');
     });
 
     test('probe: المقيَّد بمديرٍ فرعيّ يُعلَّم، والقدرات تُقرأ', () {
@@ -450,6 +501,57 @@ void main() {
       final post = server.posts.lastWhere((p) => p.$1 == '/api/v2/sales/8/resolve-void');
       expect(post.$2, {'applied': true});
       await settle(t, seconds: 4); // إشعار النجاح (٣ث)
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('شراء: «من أين دُفع ثمنها؟» إجباريّ ثمّ «من الصندوق» يُرسل paid_from=box', (t) async {
+      final server = _SalesServer(await visualSetUp(s1bSasOwner));
+      ApiClient.dio.httpClientAdapter = server;
+      await pumpVisual(t, phoneTall, home: (_) => const SalesScreen());
+      await settle(t, seconds: 2);
+      await t.tap(find.text('الموادّ والمخزون'));
+      await settle(t, seconds: 1);
+      await t.tap(find.byTooltip('شراء / جرد').first);
+      await settle(t, seconds: 1);
+      expect(find.text('من أين دُفع ثمنها؟ *'), findsOneWidget);
+      // حقل الكمّيّة داخل الشيت (لا حقل البحث خلفه).
+      await t.enterText(find.descendant(of: find.byType(DesignSheet), matching: find.byType(TextField)).first, '10');
+      await settle(t);
+      final btn = find.text('إدخال للمخزون');
+      await t.tap(btn);
+      await settle(t);
+      expect(server.posts.where((p) => p.$1.endsWith('/stock')), isEmpty, reason: 'بلا اختيار لا يُرسل');
+      await t.tap(find.text('من الصندوق'));
+      await settle(t);
+      expect(find.textContaining('يخرج ثمنها ('), findsOneWidget);
+      await t.tap(btn);
+      await settle(t, seconds: 4);
+      final post = server.posts.lastWhere((p) => p.$1 == '/api/v2/sales/items/1/stock');
+      expect((post.$2['kind'], post.$2['qty'], post.$2['paid_from']), ('purchase', 10, 'box'));
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('حركات المادّة: شارة المصدر والمُلغى، و«إلغاء الشراء» لآخر شراء بسبب ⇒ مسار الإلغاء', (t) async {
+      final server = _SalesServer(await visualSetUp(s1bSasOwner));
+      ApiClient.dio.httpClientAdapter = server;
+      await pumpVisual(t, phoneTall, home: (_) => const SalesScreen());
+      await settle(t, seconds: 2);
+      await t.tap(find.text('الموادّ والمخزون'));
+      await settle(t, seconds: 1);
+      await t.tap(find.byTooltip('الحركات').first);
+      await settle(t, seconds: 1);
+      expect(find.text('من الصندوق'), findsNWidgets(2));
+      expect(find.text('مُلغى'), findsOneWidget);
+      expect(find.text('إلغاء الشراء'), findsOneWidget, reason: 'آخر شراءٍ وحده');
+      await t.tap(find.text('إلغاء الشراء'));
+      await settle(t);
+      expect(find.textContaining('ويرجع ثمنه (270,000 د.ع) لصندوق من دفعه'), findsOneWidget);
+      await t.enterText(find.byType(TextField).last, 'سعرٌ خاطئ');
+      await settle(t);
+      await t.tap(find.text('إلغاء الشراء').last);
+      await settle(t, seconds: 4);
+      final post = server.posts.lastWhere((p) => p.$1 == '/api/v2/sales/items/1/moves/40/void');
+      expect(post.$2, {'reason': 'سعرٌ خاطئ'});
       expect(t.takeException(), isNull);
     });
 

@@ -240,6 +240,12 @@ class _DetailSheetState extends State<_DetailSheet> {
               value: '−${formatIQD(s.expenses.sum)}',
               valueColor: AppColors.error,
             ),
+            if (s.goodsPurchases.count > 0)
+              SheetRowData(
+                label: '${'settle.goods_purchases'.tr()} · ${s.goodsPurchases.count}',
+                value: '−${formatIQD(s.goodsPurchases.sum)}',
+                valueColor: AppColors.error,
+              ),
             SheetRowData(
               label: 'settle.expected'.tr(),
               value: settleMoney(s.expected),

@@ -411,7 +411,7 @@ class _SalesScreenState extends State<SalesScreen> {
             locked: !canItems,
             onStock: () => _after(_showSheet(context, _StockSheet(item: shown[i]))),
             onEdit: () => _after(_showSheet(context, _ItemSheet(item: shown[i]))),
-            onMoves: () => _showSheet(context, _MovesSheet(item: shown[i])),
+            onMoves: () => _showSheet(context, _MovesSheet(item: shown[i], canItems: canItems, onChanged: _refresh)),
           ),
         ],
     ];
@@ -1917,7 +1917,47 @@ class _VoidSheetState extends State<_VoidSheet> {
   }
 }
 
-/// اختيارٌ واحد من اثنين (ما يصير بما سدّده المشترك عند إلغاء البيع).
+/// مصدر ثمن الشراء — إجباريّ بلا اختيارٍ مسبق (قرار المالك ٢٣ أكتوبر): من الصندوق يُنقص صندوق التسوية
+/// بثمنه، ومن خارجه لا. [amount] ثمن الكمّيّة إن عُرف.
+class _PaidFromChoice extends StatelessWidget {
+  const _PaidFromChoice({required this.value, required this.onChanged, this.amount});
+  final String? value;
+  final ValueChanged<String> onChanged;
+  final num? amount;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final a = amount;
+    return SheetSection(
+      label: '${'sales.paid_from'.tr()} *',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _ChoiceCard(
+            selected: value == 'box',
+            icon: LucideIcons.wallet,
+            title: 'sales.paid_box'.tr(),
+            subtitle: a != null && a > 0
+                ? 'sales.paid_box_sub_n'.tr(namedArgs: {'amount': _money(a)})
+                : 'sales.paid_box_sub'.tr(),
+            onTap: () => onChanged('box'),
+          ),
+          const SizedBox(height: Sp.sm),
+          _ChoiceCard(
+            selected: value == 'outside',
+            icon: LucideIcons.boxes,
+            title: 'sales.paid_outside'.tr(),
+            subtitle: 'sales.paid_outside_sub'.tr(),
+            onTap: () => onChanged('outside'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// اختيارٌ واحد من اثنين (ما يصير بما سدّده المشترك عند إلغاء البيع، ومصدر ثمن الشراء).
 class _ChoiceCard extends StatelessWidget {
   const _ChoiceCard({
     required this.selected,
@@ -2118,6 +2158,7 @@ class _ItemSheetState extends State<_ItemSheet> {
   late bool _active = widget.item?.active ?? true;
   late int _priceValue = widget.item?.salePrice.round() ?? 0;
   int _costValue = 0;
+  String? _paidFrom;
   bool _busy = false;
 
   bool get _isNew => widget.item == null;
@@ -2134,7 +2175,9 @@ class _ItemSheetState extends State<_ItemSheet> {
   }
 
   num? get _qtyValue => _qty.text.trim().isEmpty ? null : parseSaleQty(_qty.text);
-  bool get _openingOk => _qty.text.trim().isEmpty || (_qtyValue != null && _cost.text.trim().isNotEmpty);
+  // المخزون الافتتاحيّ شراءٌ أيضاً: يُسأل من أين دُفع ثمنه.
+  bool get _openingOk =>
+      _qty.text.trim().isEmpty || (_qtyValue != null && _cost.text.trim().isNotEmpty && _paidFrom != null);
   bool get _ok => !_busy && _name.text.trim().length >= 2 && _priceValue > 0 && (!_isNew || _openingOk);
 
   Future<void> _submit() async {
@@ -2151,6 +2194,7 @@ class _ItemSheetState extends State<_ItemSheet> {
         note: _note.text.trim(),
         qty: _qtyValue,
         unitCost: _qtyValue == null ? null : _costValue,
+        paidFrom: _qtyValue == null ? null : _paidFrom,
       );
     } else {
       final patch = <String, dynamic>{
@@ -2256,6 +2300,14 @@ class _ItemSheetState extends State<_ItemSheet> {
                 ],
               ),
             ),
+            if (_qtyValue != null) ...[
+              const SizedBox(height: Sp.md),
+              _PaidFromChoice(
+                value: _paidFrom,
+                onChanged: (v) => setState(() => _paidFrom = v),
+                amount: _cost.text.trim().isEmpty ? null : (_qtyValue! * _costValue).round(),
+              ),
+            ],
           ],
           const SizedBox(height: Sp.lg),
           SheetSection(
@@ -2314,9 +2366,10 @@ class _StockSheetState extends State<_StockSheet> {
   bool _adjust = false;
   bool _down = true;
   late int _costValue = widget.item.costAvg.round();
+  String? _paidFrom;
   bool _busy = false;
 
-  /// مرجع الحركة: ضغطتان أو انقطاعٌ بعد الحفظ = حركةٌ واحدة؛ يتجدّد بعد كلّ حكم.
+  /// مرجع الحركة: ضغطتان أو انقطاعٌ بعد الحفظ = حركةٌ واحدة (ولا ثمنٌ مرّتين)؛ يتجدّد بعد كلّ حكم.
   String _ref = SalesApi.newClientRef();
 
   @override
@@ -2337,10 +2390,14 @@ class _StockSheetState extends State<_StockSheet> {
     return it.qty > 0 ? (it.qty * it.costAvg + q * _costValue) / (it.qty + q) : _costValue;
   }
 
+  num? get _amount => _adjust || _q == null || _cost.text.trim().isEmpty ? null : (_q! * _costValue).round();
+
   bool get _ok =>
       !_busy &&
       _q != null &&
-      (_adjust ? _note.text.trim().length >= 2 && (_after ?? -1) >= 0 : _cost.text.trim().isNotEmpty);
+      (_adjust
+          ? _note.text.trim().length >= 2 && (_after ?? -1) >= 0
+          : _cost.text.trim().isNotEmpty && _paidFrom != null);
 
   Future<void> _submit() async {
     setState(() => _busy = true);
@@ -2350,6 +2407,7 @@ class _StockSheetState extends State<_StockSheet> {
       qty: _signed!,
       unitCost: _adjust ? null : _costValue,
       note: _note.text.trim(),
+      paidFrom: _adjust ? null : _paidFrom,
       clientRef: _ref,
     );
     if (!mounted) return;
@@ -2360,7 +2418,9 @@ class _StockSheetState extends State<_StockSheet> {
         context,
         _adjust
             ? 'sales.adjusted'.tr(namedArgs: {'name': it.name, 'qty': saleQtyText(_after!, it.unit)})
-            : 'sales.purchased'.tr(namedArgs: {'name': it.name, 'qty': saleQtyText(_q!, it.unit)}),
+            : _paidFrom == 'box' && (_amount ?? 0) > 0
+                ? 'sales.purchased_box'.tr(namedArgs: {'name': it.name, 'qty': saleQtyText(_q!, it.unit), 'amount': _money(_amount!)})
+                : 'sales.purchased'.tr(namedArgs: {'name': it.name, 'qty': saleQtyText(_q!, it.unit)}),
       );
       Navigator.of(context).pop(true);
       return;
@@ -2427,6 +2487,8 @@ class _StockSheetState extends State<_StockSheet> {
               label: '${'sales.f_unit_cost'.tr()} *',
               child: _MoneyField(controller: _cost, onValue: (v) => setState(() => _costValue = v)),
             ),
+            const SizedBox(height: Sp.lg),
+            _PaidFromChoice(value: _paidFrom, onChanged: (v) => setState(() => _paidFrom = v), amount: _amount),
           ],
           const SizedBox(height: Sp.lg),
           SheetSection(
@@ -2467,8 +2529,14 @@ class _StockSheetState extends State<_StockSheet> {
 }
 
 class _MovesSheet extends StatefulWidget {
-  const _MovesSheet({required this.item});
+  const _MovesSheet({required this.item, this.canItems = false, this.onChanged});
   final SaleItem item;
+
+  /// إلغاء الشراء الخاطئ بصلاحيّة الموادّ (والقسم مفعّل).
+  final bool canItems;
+
+  /// بعد إلغاء شراء: تُحدَّث الموادّ خلف الشيت فوراً (مهما أُغلق بعدها).
+  final Future<void> Function()? onChanged;
 
   @override
   State<_MovesSheet> createState() => _MovesSheetState();
@@ -2478,9 +2546,24 @@ class _MovesSheetState extends State<_MovesSheet> {
   List<StockMove>? _rows;
   String? _error;
 
+  /// إلغاء شراءٍ خاطئ — آخر حركةٍ على المادّة وحدها.
+  StockMove? _voiding;
+  final _reason = TextEditingController();
+  bool _busy = false;
+
   @override
   void initState() {
     super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  void _load() {
     SalesApi.moves(widget.item.id).then((r) {
       if (!mounted) return;
       setState(() {
@@ -2490,10 +2573,38 @@ class _MovesSheetState extends State<_MovesSheet> {
     });
   }
 
+  Future<void> _submitVoid() async {
+    final m = _voiding;
+    if (m == null) return;
+    setState(() => _busy = true);
+    final r = await SalesApi.voidPurchase(widget.item.id, m.id, _reason.text.trim());
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (r.ok) {
+      showSheetSnack(
+        context,
+        r.refund > 0
+            ? 'sales.purchase_voided_box'.tr(namedArgs: {'amount': _money(r.refund)})
+            : 'sales.purchase_voided'.tr(),
+      );
+      setState(() {
+        _voiding = null;
+        _reason.clear();
+        _rows = null;
+      });
+      _load();
+      widget.onChanged?.call();
+      return;
+    }
+    showSheetSnack(context, r.message ?? 'sales.not_saved'.tr(), isError: true);
+    _load();
+  }
+
   static String _kind(String k) => switch (k) {
         'purchase' => 'sales.mv_purchase'.tr(),
         'sale' => 'sales.mv_sale'.tr(),
         'return' => 'sales.mv_return'.tr(),
+        'purchase_void' => 'sales.mv_purchase_void'.tr(),
         _ => 'sales.mv_adjust'.tr(),
       };
 
@@ -2502,74 +2613,152 @@ class _MovesSheetState extends State<_MovesSheet> {
     Theme.of(context); // theme-dep (dark-mode)
     final it = widget.item;
     final rows = _rows;
-    return DesignSheet(
-      header: SheetHeaderBar(
-        icon: LucideIcons.history,
-        title: 'sales.moves_title_n'.tr(namedArgs: {'name': it.name}),
-        subtitle: 'sales.available_n'.tr(namedArgs: {'qty': saleQtyText(it.qty, it.unit)}),
-        onClose: () => Navigator.of(context).pop(),
-      ),
-      body: rows == null
-          ? (_error != null
-              ? _Notice(icon: LucideIcons.history, text: _error!)
-              : const Padding(
-                  padding: EdgeInsets.symmetric(vertical: Sp.huge),
-                  child: Center(child: CircularProgressIndicator()),
-                ))
-          : rows.isEmpty
-              ? _Notice(icon: LucideIcons.history, text: 'sales.no_moves'.tr())
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (final m in rows)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: Sp.x6),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+    final v = _voiding;
+    return PopScope(
+      canPop: !_busy,
+      child: DesignSheet(
+        header: SheetHeaderBar(
+          icon: LucideIcons.history,
+          title: 'sales.moves_title_n'.tr(namedArgs: {'name': it.name}),
+          subtitle: 'sales.available_n'.tr(namedArgs: {'qty': saleQtyText(it.qty, it.unit)}),
+          onClose: () => Navigator.of(context).pop(),
+        ),
+        footer: v == null
+            ? null
+            : SheetFooterBar(
+                label: 'sales.purchase_void_btn'.tr(),
+                icon: LucideIcons.undo2,
+                color: AppColors.error,
+                enabled: _reason.text.trim().length >= 2 && !_busy,
+                busy: _busy,
+                onPressed: _submitVoid,
+                above: Padding(
+                  padding: const EdgeInsets.only(bottom: Sp.sm),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        v.paidFrom == 'box' && v.unitCost != null
+                            ? 'sales.purchase_void_info_box'.tr(namedArgs: {
+                                'qty': _qty(v.qty),
+                                'amount': _money((v.qty * v.unitCost!).round()),
+                              })
+                            : 'sales.purchase_void_info'.tr(namedArgs: {'qty': _qty(v.qty)}),
+                        style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.6),
+                      ),
+                      const SizedBox(height: Sp.sm),
+                      _SheetText(
+                        controller: _reason,
+                        icon: LucideIcons.fileText,
+                        hint: 'sales.purchase_void_hint'.tr(),
+                        maxLength: 200,
+                        onChanged: (_) => setState(() {}),
+                      ),
+                      const SizedBox(height: Sp.xs),
+                      Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: TextButton(
+                          onPressed: _busy
+                              ? null
+                              : () => setState(() {
+                                    _voiding = null;
+                                    _reason.clear();
+                                  }),
+                          child: Text('sales.purchase_void_cancel'.tr()),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+        body: rows == null
+            ? (_error != null
+                ? _Notice(icon: LucideIcons.history, text: _error!)
+                : const Padding(
+                    padding: EdgeInsets.symmetric(vertical: Sp.huge),
+                    child: Center(child: CircularProgressIndicator()),
+                  ))
+            : rows.isEmpty
+                ? _Notice(icon: LucideIcons.history, text: 'sales.no_moves'.tr())
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final m in rows)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: Sp.x6),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Wrap(
+                                      spacing: Sp.x6,
+                                      runSpacing: Sp.xxs,
+                                      crossAxisAlignment: WrapCrossAlignment.center,
+                                      children: [
+                                        Text(
+                                          m.saleId == null ? _kind(m.kind) : '${_kind(m.kind)} #${m.saleId}',
+                                          style: AppType.label(color: m.voided ? AppColors.textLow : AppColors.textHi)
+                                              .copyWith(fontSize: 13.5, decoration: m.voided ? TextDecoration.lineThrough : null),
+                                        ),
+                                        if (m.kind == 'purchase' && m.paidFrom != null)
+                                          _Chip(
+                                            (m.paidFrom == 'box' ? 'sales.paid_box' : 'sales.paid_outside').tr(),
+                                            m.paidFrom == 'box' ? AppTone.warning : AppTone.neutral,
+                                          ),
+                                        if (m.voided) _Chip('sales.st_void'.tr(), AppTone.neutral),
+                                      ],
+                                    ),
+                                    Text(
+                                      [
+                                        if ((m.kind == 'purchase' || m.kind == 'purchase_void') && m.unitCost != null)
+                                          'sales.mv_cost_n'.tr(namedArgs: {'amount': _money(m.unitCost!)}),
+                                        if (m.note != null) m.note!,
+                                        m.employeeId == null ? 'sales.manager'.tr() : (m.by ?? 'settle.employee'.tr()),
+                                        iso(_time(m.at)),
+                                      ].join(' · '),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5),
+                                    ),
+                                    if (m.voidable && widget.canItems && v == null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: Sp.xxs),
+                                        child: TextButton.icon(
+                                          onPressed: () => setState(() => _voiding = m),
+                                          icon: Icon(LucideIcons.undo2, size: 14, color: AppColors.error),
+                                          label: Text(
+                                            'sales.purchase_void_btn'.tr(),
+                                            style: AppType.label(color: AppColors.error).copyWith(fontSize: 12.5),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: Sp.sm),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text(
-                                    m.saleId == null ? _kind(m.kind) : '${_kind(m.kind)} #${m.saleId}',
-                                    style: AppType.label(color: AppColors.textHi).copyWith(fontSize: 13.5),
+                                    '${m.qty > 0 ? '+' : '-'}${_qty(m.qty.abs())}',
+                                    textDirection: TextDirection.ltr,
+                                    style: AppType.label(color: m.qty < 0 ? AppColors.error : AppColors.success)
+                                        .copyWith(fontSize: 14, fontWeight: FontWeight.w700),
                                   ),
                                   Text(
-                                    [
-                                      if (m.kind == 'purchase' && m.unitCost != null)
-                                        'sales.mv_cost_n'.tr(namedArgs: {'amount': _money(m.unitCost!)}),
-                                      if (m.note != null) m.note!,
-                                      m.employeeId == null ? 'sales.manager'.tr() : (m.by ?? 'settle.employee'.tr()),
-                                      iso(_time(m.at)),
-                                    ].join(' · '),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5),
+                                    '← ${_qty(m.qtyAfter)}',
+                                    style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11),
                                   ),
                                 ],
                               ),
-                            ),
-                            const SizedBox(width: Sp.sm),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  '${m.qty > 0 ? '+' : '-'}${_qty(m.qty.abs())}',
-                                  textDirection: TextDirection.ltr,
-                                  style: AppType.label(color: m.qty < 0 ? AppColors.error : AppColors.success)
-                                      .copyWith(fontSize: 14, fontWeight: FontWeight.w700),
-                                ),
-                                Text(
-                                  '← ${_qty(m.qtyAfter)}',
-                                  style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11),
-                                ),
-                              ],
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                  ],
-                ),
+                    ],
+                  ),
+      ),
     );
   }
 }

@@ -1325,7 +1325,10 @@
     "start_button_date": "Start the account from this date",
     "kind_sale": "Goods sale",
     "kind_sale_void": "Sale voided",
-    "sales_cash": "Goods sales"
+    "sales_cash": "Goods sales",
+    "goods_purchases": "Goods bought",
+    "kind_purchase": "Goods purchase",
+    "kind_purchase_void": "Purchase voided"
   },
   "archive": {
     "showing_current": "Showing activity after settlement #{} · {} — settled items are archived.",
@@ -1847,7 +1850,7 @@
     "qty_after": "Quantity after",
     "avg_after": "Average cost after",
     "below_zero": "Quantity can't go below zero",
-    "purchase_info": "A purchase adds stock and updates the average cost — it isn't recorded as an expense and doesn't reduce the cash box.",
+    "purchase_info": "A purchase adds stock and updates the average cost — it isn't an expense and doesn't touch profit (its cost counts when sold); «From the cash box» takes its price out of the settlement box.",
     "adjust_info": "A count changes the quantity only (no money) and stays in the item's movements.",
     "purchase_btn": "Add to stock",
     "adjust_btn": "Save count",
@@ -1895,6 +1898,21 @@
     "resolve_void_no": "Not reduced",
     "resolve_void_no_confirm": "Confirm: not reduced",
     "resolved_void_yes": "Void of sale #{id} resolved: debt reduced — stock returned",
-    "resolved_void_no": "Void of sale #{id} resolved: not reduced — the sale stays as it was"
+    "resolved_void_no": "Void of sale #{id} resolved: not reduced — the sale stays as it was",
+    "paid_from": "Where was it paid from?",
+    "paid_box": "From the cash box",
+    "paid_box_sub": "Its price leaves your box at settlement",
+    "paid_box_sub_n": "Its price ({amount}) leaves your box at settlement",
+    "paid_outside": "From outside the box",
+    "paid_outside_sub": "Out of pocket or already in stock — the box doesn't change",
+    "purchased_box": "{qty} of «{name}» added — {amount} left the box",
+    "mv_purchase_void": "Purchase voided",
+    "purchase_void_btn": "Void purchase",
+    "purchase_void_info": "Void a purchase of {qty} — quantity and average cost go back to what they were.",
+    "purchase_void_info_box": "Void a purchase of {qty} — quantity and average cost go back, and its price ({amount}) returns to the box of whoever paid.",
+    "purchase_void_hint": "Reason — e.g. wrong price · wrong quantity",
+    "purchase_void_cancel": "Back",
+    "purchase_voided": "Purchase voided — quantity and cost restored",
+    "purchase_voided_box": "Purchase voided — quantity and {amount} returned to the box"
   }
 }

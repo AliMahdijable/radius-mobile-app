@@ -202,6 +202,12 @@ class _SettleSheetState extends State<_SettleSheet> {
             value: '−${formatIQD(p.expenses.sum)}',
             valueColor: AppColors.error,
           ),
+          if (p.goodsPurchases.count > 0)
+            SheetRowData(
+              label: '${'settle.goods_purchases'.tr()} · ${p.goodsPurchases.count}',
+              value: '−${formatIQD(p.goodsPurchases.sum)}',
+              valueColor: AppColors.error,
+            ),
           SheetRowData(
             label: 'settle.expected'.tr(),
             value: settleMoney(p.expected),

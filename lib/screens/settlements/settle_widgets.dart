@@ -66,10 +66,10 @@ class CollectorsList extends StatelessWidget {
                         ),
                         const SizedBox(height: Sp.xxs),
                         Text(
-                          collectors[i].expenses.count > 0
+                          collectors[i].outCount > 0
                               ? 'settle.collector_counts_spent'.tr(namedArgs: {
                                   'in': '${collectors[i].inCount}',
-                                  'out': '${collectors[i].expenses.count}',
+                                  'out': '${collectors[i].outCount}',
                                 })
                               : 'settle.collector_counts'.tr(
                                   namedArgs: {'in': '${collectors[i].inCount}'}),
@@ -114,6 +114,8 @@ class MovementTile extends StatelessWidget {
       'expense' => LucideIcons.receipt,
       'sale' => LucideIcons.shoppingCart,
       'sale_void' => LucideIcons.undo2,
+      'purchase' => LucideIcons.packagePlus,
+      'purchase_void' => LucideIcons.undo2,
       _ => LucideIcons.handCoins,
     };
     final kindLabel = switch (m.kind) {
@@ -121,15 +123,24 @@ class MovementTile extends StatelessWidget {
       'expense' => 'settle.kind_expense'.tr(),
       'sale' => 'settle.kind_sale'.tr(),
       'sale_void' => 'settle.kind_sale_void'.tr(),
+      'purchase' => 'settle.kind_purchase'.tr(),
+      'purchase_void' => 'settle.kind_purchase_void'.tr(),
       _ => 'settle.kind_debt_payment'.tr(),
     };
     // بيع المواد: العنوان الزبون (أو «زبون»)، وما بيع يُقرأ من الوصف بسطر التفاصيل.
+    // شراء المخزون من الصندوق: العنوان المادّة وكمّيّتها (الوصف بلا بادئته).
     final isSale = m.source == 'sale';
+    final isPurchase = m.source == 'purchase';
+    final buyTitle = isPurchase
+        ? (m.description ?? '').replaceFirst(RegExp(r'^(?:إلغاء شراء|شراء مواد):\s*'), '').trim()
+        : '';
     final title = m.kind == 'expense'
         ? (m.description ?? 'settle.kind_expense'.tr())
-        : isSale
-            ? (m.subscriber ?? 'sales.walkin'.tr())
-            : (m.subscriber ?? '—');
+        : isPurchase
+            ? (buyTitle.isEmpty ? kindLabel : iso(buyTitle))
+            : isSale
+                ? (m.subscriber ?? 'sales.walkin'.tr())
+                : (m.subscriber ?? '—');
     final who = m.employeeId == null
         ? 'settle.manager'.tr()
         : (m.employeeName ?? m.employeeUsername ?? 'settle.employee'.tr());
