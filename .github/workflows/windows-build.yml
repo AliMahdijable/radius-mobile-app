@@ -1,9 +1,10 @@
 # نسخة ويندوز — لا تُبنى على الماك (أدوات فلاتر لويندوز تحتاج ويندوز + Visual Studio)،
 # فتُبنى هنا على خادم ويندوز عند كلّ دفعٍ لفرع app-windows.
 #
-# الناتج مكانان:
+# الناتج: مثبّتٌ بملفٍّ واحد (MyServicesPro_Setup_*.exe — هو ما يُعطى للمستخدم) + الحزمة المضغوطة.
+# مكانان:
 #  - «Artifacts» في صفحة التشغيل (للتنزيل من المتصفّح).
-#  - فرع ci/windows: سجلّ البناء + الحزمة المضغوطة، يُستبدل كاملاً في كلّ تشغيل
+#  - فرع ci/windows: سجلّ البناء + المثبّت + الحزمة، يُستبدل كاملاً في كلّ تشغيل
 #    (آخر بناءٍ وحده) — يُجلب بـ git fetch عبر SSH بلا توكن.
 name: windows-build
 
@@ -68,10 +69,34 @@ jobs:
           ls -la "$name"
           echo "name=$name" >> "$GITHUB_OUTPUT"
 
+      # مثبّتٌ بملفٍّ واحد (Inno Setup) — الـzip يُشغَّل خطأً من داخله فلا يجد ملفّاته.
+      - name: Installer
+        id: setup
+        env:
+          # Git Bash يحوّل «/D…» إلى مسار — ISCC يريدها كما هي.
+          MSYS2_ARG_CONV_EXCL: '*'
+        run: |
+          set -e
+          iscc="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          if [ ! -f "$iscc" ]; then choco install innosetup -y --no-progress > /dev/null; fi
+          full=$(grep -m1 '^version:' pubspec.yaml | awk '{print $2}')
+          ver=${full%%+*}
+          build=${full##*+}
+          "$iscc" /Q "/DMyAppVersion=$ver" "/DMyAppBuild=$build" 'windows\installer\MyServicesPro.iss'
+          setup=$(ls dist/MyServicesPro_Setup_*.exe)
+          ls -la "$setup"
+          echo "path=$setup" >> "$GITHUB_OUTPUT"
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.pkg.outputs.name }}
           path: ${{ steps.pkg.outputs.name }}
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MyServicesPro_Setup
+          path: ${{ steps.setup.outputs.path }}
           retention-days: 14
 
       - name: Publish to ci/windows
@@ -83,6 +108,7 @@ jobs:
           mkdir -p ci_out
           [ -f build.log ] && cp build.log ci_out/ || echo "no build log" > ci_out/build.log
           cp MyServicesPro_windows_*.zip ci_out/ 2>/dev/null || true
+          cp dist/MyServicesPro_Setup_*.exe ci_out/ 2>/dev/null || true
           {
             echo "sha=${GITHUB_SHA}"
             echo "status=${JOB_STATUS}"
