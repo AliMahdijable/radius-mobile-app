@@ -477,17 +477,50 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
     final s = _status;
     if (s == null) return false;
     return (s.needsPairing && !s.connected) ||
+        _recentRemoteLogout ||
         s.reachoutRestricted ||
         s.messageCapping?.isWarning == true ||
         s.messageCapping?.isCapped == true;
   }
+
+  /// ٢٣ أكتوبر (بلاغ وكيل): واتساب نفسه شال الربط (أو الوكيل شاله من «الأجهزة المرتبطة») خلال آخر ٢٤ ساعة وهو غير
+  /// متصل — كان يُرى «غير متصل» وحده بلا سبب، فيعيد الربط مرّةً بعد مرّة على رقمٍ مقيَّد.
+  bool get _recentRemoteLogout {
+    final s = _status;
+    final at = s?.remoteLogoutAt;
+    if (s == null || s.connected || at == null || at <= 0) return false;
+    final age = DateTime.now().millisecondsSinceEpoch ~/ 1000 - at;
+    return age >= -300 && age <= 24 * 3600;
+  }
+
+  String _afterPairText(int seconds) => seconds < 60
+      ? 'wa.after_seconds'.tr(namedArgs: {'n': '$seconds'})
+      : 'wa.after_minutes'.tr(namedArgs: {'n': '${(seconds / 60).round()}'});
 
   Widget _safetyNotices() {
     final s = _status;
     if (s == null) return const SizedBox.shrink();
     final notices = <Widget>[];
 
-    if (s.needsPairing && !s.connected) {
+    final remoteLogout = _recentRemoteLogout;
+    if (remoteLogout) {
+      final after = s.remoteLogoutAfterPairSec;
+      notices.add(_safetyNotice(
+        color: AppColors.error,
+        icon: LucideIcons.unlink,
+        title: 'wa.remote_logout_title'.tr(),
+        // انفصل بعد دقائق من الربط ⇒ الأرجح تقييدٌ من واتساب: لا تُعِد الربط الآن.
+        body: after != null && after >= 0 && after <= 900
+            ? 'wa.remote_logout_body_fast'
+                .tr(namedArgs: {'after': _afterPairText(after)})
+            : 'wa.remote_logout_body'.tr(namedArgs: {
+                'time': _formatUnixTime(s.remoteLogoutAt) ?? '',
+              }),
+      ));
+    }
+
+    // «اربط من جديد» العامّ يُغني عنه تنبيه الانفصال أعلاه (بسببه).
+    if (s.needsPairing && !s.connected && !remoteLogout) {
       final rawStatus = (s.sessionStatus ?? '').trim();
       notices.add(_safetyNotice(
         color: AppColors.warning,

@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
+import '../core/util/error_text.dart';
 import '../core/util/format.dart';
 import '../models/subscriber.dart';
 import '../models/whatsapp_schedule.dart';
@@ -151,6 +152,8 @@ class WhatsConnectionStatus {
     this.restrictionEndsAt,
     this.restrictionEnforcementType,
     this.messageCapping,
+    this.remoteLogoutAt,
+    this.remoteLogoutAfterPairSec,
   });
   const WhatsConnectionStatus.disconnected()
       : connected = false,
@@ -164,7 +167,9 @@ class WhatsConnectionStatus {
         reachoutRestricted = false,
         restrictionEndsAt = null,
         restrictionEnforcementType = null,
-        messageCapping = null;
+        messageCapping = null,
+        remoteLogoutAt = null,
+        remoteLogoutAfterPairSec = null;
   final bool connected;
   final bool stabilizing;
   final String? phone;
@@ -177,6 +182,11 @@ class WhatsConnectionStatus {
   final int? restrictionEndsAt;
   final String? restrictionEnforcementType;
   final WhatsMessageCapping? messageCapping;
+
+  /// ٢٣ أكتوبر: انفصالٌ من جهة واتساب (الخادم يختمه: كان متّصلاً فصار FAILED بلا إيقافٍ يدويّ) — ثوانٍ يونكس،
+  /// وبُعده عن الربط بالثواني (null = لا يُعرف). يُمسح حين يعود متّصلاً.
+  final int? remoteLogoutAt;
+  final int? remoteLogoutAfterPairSec;
 
   bool get hasSendingRestriction =>
       metaRestricted || messageCapping?.isCapped == true;
@@ -254,6 +264,10 @@ class WhatsConnectionStatus {
           )),
       restrictionEnforcementType: restrictionEnforcementType,
       messageCapping: messageCapping,
+      remoteLogoutAt: _waUnixSeconds(
+          _waFirst(body, const ['remoteLogoutAt', 'remote_logout_at'])),
+      remoteLogoutAfterPairSec: _waInt(_waFirst(body,
+          const ['remoteLogoutAfterPairSec', 'remote_logout_after_pair_sec'])),
     );
   }
 }
@@ -499,12 +513,11 @@ class WhatsAppApi {
       );
     } on DioException catch (e) {
       _log('whatsapp/start-session', e);
-      final body = e.response?.data;
-      final msg = body is Map ? body['message']?.toString() : null;
-      return (ok: false, message: msg ?? 'تعذّر بدء الجلسة');
+      // رسالة الخادم العربيّة أوّلاً، وطلبٌ لم يصل/لم يُجَب ⇒ «تحقّق من الإنترنت» لا «تعذّر بدء الجلسة».
+      return (ok: false, message: humanError(e, fallback: 'تعذّر بدء الجلسة'));
     } catch (e) {
       _log('whatsapp/start-session', e);
-      return (ok: false, message: 'تعذّر بدء الجلسة');
+      return (ok: false, message: humanError(e, fallback: 'تعذّر بدء الجلسة'));
     }
   }
 
@@ -535,12 +548,12 @@ class WhatsAppApi {
       );
     } on DioException catch (e) {
       _log('whatsapp/start-session-code', e);
-      final body = e.response?.data;
-      final msg = body is Map ? body['message']?.toString() : null;
-      return (ok: false, code: null, message: msg ?? 'تعذّر إنشاء الرمز');
+      // ٢٣ أكتوبر (بلاغ وكيل): طلبٌ لم يصل للخادم كان يُعرض «تعذّر إنشاء الرمز» فيُظنّ عطلاً عندنا —
+      // الآن «تعذّر الوصول إلى الخادم — تحقّق من الإنترنت» / «انتهت مهلة الاتصال»، ورسالة الخادم العربيّة أوّلاً.
+      return (ok: false, code: null, message: humanError(e, fallback: 'تعذّر إنشاء الرمز'));
     } catch (e) {
       _log('whatsapp/start-session-code', e);
-      return (ok: false, code: null, message: 'تعذّر إنشاء الرمز');
+      return (ok: false, code: null, message: humanError(e, fallback: 'تعذّر إنشاء الرمز'));
     }
   }
 
@@ -592,7 +605,7 @@ class WhatsAppApi {
       );
     } catch (e) {
       _log('whatsapp/reconnect', e);
-      return (ok: false, message: 'فشل إعادة الاتصال');
+      return (ok: false, message: humanError(e, fallback: 'فشل إعادة الاتصال'));
     }
   }
 
