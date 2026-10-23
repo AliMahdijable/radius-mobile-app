@@ -290,6 +290,10 @@ class AuthApi {
     }
   }
 
+  /// ردّ جلسةٍ بشكل ردّ الدخول من مسارٍ آخر — «استئناف الشركة» (`POST /api/account/companies/resume`،
+  /// `AccountApi.resumeCompany`) يردّ `token` · `expiresAt` · `user` بصلاحيّاته كالدخول حرفاً.
+  static LoginResult sessionFromBody(Map<String, dynamic> body) => _sessionFromBody(body);
+
   /// ردّ جلسةٍ ناجح (`/api/auth/login` أو `/api/auth/2fa/verify`) ← [LoginSuccess].
   static LoginResult _sessionFromBody(Map<String, dynamic> body) {
     try {

@@ -68,6 +68,10 @@ class CompanyOpenHost {
 /// ⚠️ الجلسة القائمة لا تُمسّ قبل أن يقبل الخادم الدخول: المسح داخل
 /// `completeSafely` بعد ردّه. فدخولٌ مرفوض (كلمة سرٍّ تغيّرت، حدّ الأجهزة…)
 /// يُبقي المدير في شركته كما كان.
+///
+/// ٢٣ أكتوبر (المالك: تبديلٌ بلا خروجٍ ودخول): **أوّلاً «استئناف الشركة»** ([AccountApi.resumeCompany]) — جلستها
+/// المحفوظة بالخادم بلا كلمة سرٍّ ولا رمز صورة، فالتبديل لحظيّ وحتى لشركةٍ لا كلمة سرٍّ لها على هذا الجهاز. وتعذّره
+/// لأيّ سبب ⇒ الطريق أعلاه كما كان حرفاً (هو من يقول السبب إن رُفض).
 class CompanyOpenFlow {
   CompanyOpenFlow._();
 
@@ -78,7 +82,7 @@ class CompanyOpenFlow {
   static Future<SasLoginOutcome> Function(
     LoginSuccess s, {
     required String username,
-    required String password,
+    required String? password,
     required String sasUrl,
     required bool remember,
     String? companyLabel,
@@ -87,6 +91,10 @@ class CompanyOpenFlow {
 
   @visibleForTesting
   static Widget Function() shellBuilder = () => const MainShell();
+
+  /// «استئناف الشركة» من الخادم — منفذ الاختبار مثل أخويه أعلاه.
+  @visibleForTesting
+  static Future<LoginResult?> Function(LinkedCompany c) resumeSession = AccountApi.resumeCompany;
 
   /// رفضٌ يخصّ **الشركة** لا الحساب — رسالته تُعرض ويبقى المدير مكانه.
   ///
@@ -109,7 +117,18 @@ class CompanyOpenFlow {
     final url = c.sasUrl ?? '';
     final pass = await CompanyCredsStore.passwordFor(url, c.username);
     if (!context.mounted) return;
+    // الطريق السريع: جلسة الشركة من الخادم. لا نجاح ⇒ لا شيء تغيّر، ويكمل الدخول المعتاد بلا رسالةٍ إضافيّة.
+    if (!c.isEmployee) {
+      host.setBusy(true);
+      final resumed = await resumeSession(c);
+      if (!context.mounted) return;
+      if (resumed is LoginSuccess) {
+        await _enter(context, c, host, resumed, url: url, password: pass);
+        return;
+      }
+    }
     if (pass == null) {
+      host.setBusy(false);
       await openLoginForm(context, c, host);
       return;
     }
@@ -119,38 +138,7 @@ class CompanyOpenFlow {
     if (!context.mounted) return;
     switch (res) {
       case LoginSuccess():
-        host.beforeSessionSwap?.call(c);
-        // فتح شركةٍ = صفحتها المربوطة من جديد: أيّ تبديلٍ لمديرٍ فرعيٍّ سبقه
-        // انتهى، فلا «العودة لـ…» في «الصفحات» بعده (يخصّ الجلسة السابقة).
-        try {
-          await SavedProfilesStore.clearOriginal();
-        } catch (_) {/* لا يوقف الدخول — والقراءة تتحقّق من الشركة أيضاً */}
-        // اسم الشركة وكودها من «شركاتي» — يُعرضان أعلى الواجهة بعد الدخول.
-        final out = await completeSession(res,
-            username: c.username,
-            password: pass,
-            sasUrl: url,
-            remember: true,
-            companyLabel: c.label,
-            sasCode: c.sasCode);
-        if (!context.mounted) return;
-        host.setBusy(false);
-        final failed = host.sessionSwapFailed ?? host.showError;
-        if (out == SasLoginOutcome.ok) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => shellBuilder()),
-            (_) => false,
-          );
-        } else if (out == SasLoginOutcome.storageFailed) {
-          failed(
-              (Platform.isAndroid
-                      ? 'login.save_failed_android'
-                      : 'login.save_failed')
-                  .tr(),
-              duration: const Duration(seconds: 9));
-        } else {
-          failed('login.perms_fetch_failed'.tr());
-        }
+        await _enter(context, c, host, res, url: url, password: pass);
       case final LoginFailure f:
         host.setBusy(false);
         // أغلق نافذة رمز الصورة أو كود التحقّق بخطوتين — لا رسالة ولا نموذج.
@@ -176,6 +164,50 @@ class CompanyOpenFlow {
         if (f.code == null && context.mounted) {
           await openLoginForm(context, c, host);
         }
+    }
+  }
+
+  /// قُبلت الجلسة (استئنافاً أو دخولاً) ⇒ تحلّ محلّ الحاليّة ثمّ التطبيق كلّه من جديد على الشركة. [password] `null`:
+  /// استئنافٌ بلا كلمة سرٍّ على هذا الجهاز — لا يُكتب فوق المحفوظ شيء.
+  static Future<void> _enter(
+    BuildContext context,
+    LinkedCompany c,
+    CompanyOpenHost host,
+    LoginSuccess res, {
+    required String url,
+    required String? password,
+  }) async {
+    host.beforeSessionSwap?.call(c);
+    // فتح شركةٍ = صفحتها المربوطة من جديد: أيّ تبديلٍ لمديرٍ فرعيٍّ سبقه
+    // انتهى، فلا «العودة لـ…» في «الصفحات» بعده (يخصّ الجلسة السابقة).
+    try {
+      await SavedProfilesStore.clearOriginal();
+    } catch (_) {/* لا يوقف الدخول — والقراءة تتحقّق من الشركة أيضاً */}
+    // اسم الشركة وكودها من «شركاتي» — يُعرضان أعلى الواجهة بعد الدخول.
+    final out = await completeSession(res,
+        username: c.username,
+        password: password,
+        sasUrl: url,
+        remember: true,
+        companyLabel: c.label,
+        sasCode: c.sasCode);
+    if (!context.mounted) return;
+    host.setBusy(false);
+    final failed = host.sessionSwapFailed ?? host.showError;
+    if (out == SasLoginOutcome.ok) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => shellBuilder()),
+        (_) => false,
+      );
+    } else if (out == SasLoginOutcome.storageFailed) {
+      failed(
+          (Platform.isAndroid
+                  ? 'login.save_failed_android'
+                  : 'login.save_failed')
+              .tr(),
+          duration: const Duration(seconds: 9));
+    } else {
+      failed('login.perms_fetch_failed'.tr());
     }
   }
 

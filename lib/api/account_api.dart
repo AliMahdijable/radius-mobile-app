@@ -1,12 +1,14 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
+import '../core/platform/app_platform.dart';
 import '../core/platform/store_policy.dart';
 import '../core/util/server_time.dart';
 import '../services/account_service.dart';
 import '../services/device_id.dart';
 import 'api_client.dart';
 import 'api_error_tap.dart';
+import 'auth_api.dart';
 
 /// Pro البند ٤ — نقاط طبقة الحساب على الخادم: `/api/account/*`.
 ///
@@ -46,6 +48,7 @@ class AccountApi {
     String method,
     String path, {
     Object? data,
+    Map<String, String> headers = const {},
   }) async {
     Future<Response<Map<String, dynamic>>> once(bool force) async {
       final token = await tokenSource(force: force);
@@ -56,6 +59,7 @@ class AccountApi {
         path,
         data: data,
         options: Options(method: method, headers: {
+          ...headers,
           'x-account-token': token,
           'x-device-id': await DeviceId.get(),
         }),
@@ -148,6 +152,31 @@ class AccountApi {
       if (res.statusCode != 200) return null;
       return res.data;
     } on AccountApiException {
+      return null;
+    }
+  }
+
+  /// «استئناف الشركة» — دخول شركةٍ مربوطةٍ بالحساب **كمدير** بلا كلمة سرٍّ ولا رمز صورة: الخادم يسلّم جلسته المحفوظة
+  /// لها (ساسها يؤكّدها) أو يجدّدها بتجديده المحروس، وايرث لنك توكن جلستنا — بحرّاس الدخول نفسها (الاشتراك، حدّ
+  /// الأجهزة بمعرّف هذا الجهاز، الحظر، حدّ الشركات، والتحقّق بخطوتين ⇒ لا استئناف). مسار الويب نفسه منذ ١٨ أكتوبر.
+  ///
+  /// ردٌّ ناجح بشكل ردّ الدخول ⇒ [LoginSuccess]. وأيّ شيءٍ غيره ⇒ `null` بلا رسالة: المتّصل يكمل بالدخول المعتاد
+  /// (كلمة السرّ المحفوظة، أو النموذج) فيرى المدير رسالة ذلك الدخول إن رُفض — مفتاح الإيقاف (503)، ساسٌ يطلب كابتشا
+  /// وجلسته قاربت الانتهاء، كلمة سرٍّ تغيّرت، التحقّق بخطوتين، الوطنيّ للويب وحده، الشبكة…
+  ///
+  /// ⚠️ `x-device-label` لازم: به يعرف الخادم أنّ الطلب من التطبيق (الوطنيّ للويب وحده ما لم يُفتح للشريك)، ومعرّف
+  /// الجهاز من `x-device-id` كالدخول (لا كوكي لهذا العميل) — الجهاز نفسه في «أجهزتي».
+  static Future<LoginResult?> resumeCompany(LinkedCompany c) async {
+    if (c.isEmployee || c.sasCode.trim().isEmpty || c.username.trim().isEmpty) return null;
+    try {
+      final res = await _send('POST', '/api/account/companies/resume',
+          data: {'sas_code': c.sasCode, 'username': c.username},
+          headers: {'x-device-label': AppPlatform.deviceLabel});
+      final body = res.data;
+      if (res.statusCode != 200 || body == null || body['success'] != true) return null;
+      final s = AuthApi.sessionFromBody(body);
+      return s is LoginSuccess ? s : null;
+    } catch (_) {
       return null;
     }
   }

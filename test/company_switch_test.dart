@@ -205,7 +205,7 @@ void main() {
       CompanyOpenFlow.completeSession = (
         LoginSuccess res, {
         required String username,
-        required String password,
+        required String? password,
         required String sasUrl,
         required bool remember,
         String? companyLabel,
@@ -213,10 +213,12 @@ void main() {
       }) async {
         completed.add({
           'user': username,
+          'pass': password,
           'sas': sasUrl,
           'label': companyLabel,
           'code': sasCode,
           'admin': res.adminId,
+          'token': res.token,
         });
         return SasLoginOutcome.ok;
       };
@@ -354,15 +356,103 @@ void main() {
       expect(completed, [
         {
           'user': 'ali.jt',
+          'pass': 'pw-jt',
           'sas': jtUrl,
           'label': longName,
           'code': 'jt',
           'admin': 'jt:77',
+          'token': 'jt-session',
         }
       ]);
+      expect(account.resumes, hasLength(1),
+          reason: 'الاستئناف أوّلاً — والخادم الوهميّ هنا لا يعرفه (404) فيكمل الدخول المعتاد');
       expect(await SavedProfilesStore.readOriginal(), isNull,
           reason: 'لا «العودة لـ…» من الشركة السابقة');
       expect(find.text('SHELL'), findsOneWidget, reason: 'التطبيق كلّه من جديد');
+      await finish(t);
+    });
+
+    // ٢٣ أكتوبر (المالك: تبديلٌ بلا خروجٍ ودخول): جلسة الشركة من الخادم — بلا دخول ساس ولا رمز صورة، وحتى لشركةٍ
+    // لا كلمة سرٍّ لها على هذا الجهاز (لا يُفتح النموذج، ولا يُكتب فوق المحفوظ شيء).
+    testWidgets('⚡ استئناف الشركة: تفتح بلا دخول ساس ولا كلمة سرٍّ على الجهاز', (t) async {
+      await setUpOwner(s1bSasOwner);
+      account.resumeStatus = 200;
+      account.resumeReply = {
+        'success': true,
+        'token': 'jt-resumed',
+        'expiresAt': '2099-01-01T00:00:00.000Z',
+        'user': {
+          'id': 'jt:77',
+          'username': 'ali.jt',
+          'role': 'admin',
+          'permissions': ['prm_managers_create'],
+          'canonicalPermissions': {'subscribers.delete': false},
+        },
+        'resumed': true,
+        'source': 'stored',
+      };
+      await SavedProfilesStore.setOriginal(
+          username: 'mahdi', plainPassword: 'pw-main', sasUrl: supernetUrl);
+      await openDashboard(t, 430);
+      await t.tap(square);
+      await settle(t, seconds: 2);
+      await t.tap(find.text(longName));
+      await settle(t, seconds: 3);
+
+      expect(server.requests.where((r) => r.path == '/api/auth/login'), isEmpty,
+          reason: 'لا دخول ساس — الجلسة من الخادم');
+      final r = account.resumes.single;
+      expect(r.data, {'sas_code': 'jt', 'username': 'ali.jt'});
+      expect(r.headers['x-account-token'], 'account-test');
+      expect(r.headers['x-device-label'], 'android',
+          reason: 'به يعرف الخادم أنّه التطبيق (الوطنيّ للويب وحده)');
+      expect((r.headers['x-device-id'] ?? '').toString(), isNotEmpty,
+          reason: 'الجهاز نفسه في «أجهزتي»');
+      expect(completed, [
+        {
+          'user': 'ali.jt',
+          'pass': null,
+          'sas': jtUrl,
+          'label': longName,
+          'code': 'jt',
+          'admin': 'jt:77',
+          'token': 'jt-resumed',
+        }
+      ]);
+      expect(await SavedProfilesStore.readOriginal(), isNull,
+          reason: 'فتح شركةٍ يُنهي تبديل المدير الفرعيّ كالدخول');
+      expect(find.text('SHELL'), findsOneWidget);
+      await finish(t);
+    });
+
+    testWidgets('استئنافٌ مرفوض (كلمة السرّ المحفوظة بالخادم لم تعد تعمل) ⇒ الدخول المعتاد كما كان', (t) async {
+      await setUpOwner(s1bSasOwner, routes: {
+        'POST /api/auth/login': {
+          'success': true,
+          'token': 'jt-session',
+          'user': {'id': 'jt:77', 'username': 'ali.jt', 'role': 'admin'},
+        },
+      });
+      account.resumeStatus = 409;
+      account.resumeReply = {
+        'success': false,
+        'error': 'RESUME_SESSION_DEAD',
+        'message': 'كلمة مرور الساس المحفوظة لم تعد تعمل — أدخلها مرّة واحدة لتحديثها',
+      };
+      await CompanyCredsStore.upsert(
+          sasUrl: jtUrl, username: 'ali.jt', password: 'pw-jt');
+      await openDashboard(t, 430);
+      await t.tap(square);
+      await settle(t, seconds: 2);
+      await t.tap(find.text(longName));
+      await settle(t, seconds: 3);
+      expect(account.resumes, hasLength(1));
+      expect(server.requests.where((r) => r.path == '/api/auth/login'), hasLength(1));
+      expect(find.textContaining('لم تعد تعمل'), findsNothing,
+          reason: 'رفض الاستئناف لا يُعرض — الدخول المعتاد بعده هو من يتكلّم');
+      expect(completed.single['token'], 'jt-session');
+      expect(completed.single['pass'], 'pw-jt');
+      expect(find.text('SHELL'), findsOneWidget);
       await finish(t);
     });
 
@@ -395,11 +485,15 @@ void main() {
   });
 }
 
-/// `GET /api/account/companies` — شركات الحساب، ويعدّ النداءات.
+/// `GET /api/account/companies` — شركات الحساب، ويعدّ النداءات. و«استئناف الشركة»: يُسجَّل، وردّه [resumeReply]
+/// (غيابه ⇒ ٤٠٤ كخادمٍ لا يعرفه).
 class _AccountServer implements HttpClientAdapter {
   _AccountServer(this.companies);
   final List<LinkedCompany> companies;
   int calls = 0;
+  final resumes = <RequestOptions>[];
+  Map<String, dynamic>? resumeReply;
+  int resumeStatus = 200;
 
   @override
   Future<ResponseBody> fetch(
@@ -407,6 +501,15 @@ class _AccountServer implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async {
+    if (o.path == '/api/account/companies/resume') {
+      resumes.add(o);
+      final reply = resumeReply;
+      if (reply != null) {
+        return ResponseBody.fromString(jsonEncode(reply), resumeStatus, headers: {
+          Headers.contentTypeHeader: [Headers.jsonContentType]
+        });
+      }
+    }
     if (o.path == '/api/account/companies') {
       calls++;
       return ResponseBody.fromString(

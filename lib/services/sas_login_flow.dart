@@ -38,7 +38,7 @@ class SasLoginFlow {
   static Future<SasLoginOutcome> completeSafely(
     LoginSuccess s, {
     required String username,
-    required String password,
+    required String? password,
     required String sasUrl,
     required bool remember,
     String? companyLabel,
@@ -77,10 +77,12 @@ class SasLoginFlow {
 
   /// [companyLabel]/[sasCode]: اسم الشركة وكودها إن عرفهما المتّصل («شركاتي»
   /// أو الدليل) — لشريط الشركة أعلى الواجهة؛ غيابهما يُقدَّر ثمّ يُحسم.
+  ///
+  /// [password] `null`: جلسةٌ بلا كلمة سرٍّ على هذا الجهاز («استئناف الشركة» من الخادم) — لا يُكتب فوق المحفوظ شيء.
   static Future<SasLoginOutcome> complete(
     LoginSuccess s, {
     required String username,
-    required String password,
+    required String? password,
     required String sasUrl,
     required bool remember,
     String? companyLabel,
@@ -113,13 +115,15 @@ class SasLoginFlow {
     );
     // كلمة السرّ على الجهاز فقط (قرار المستخدم): لكلّ شركة+يوزر — لدخول
     // «شركاتي» بضغطة — وفي الحسابات المحفوظة لمبدّل المدراء الفرعيّين.
-    unawaited(CompanyCredsStore.upsert(sasUrl: sasUrl, username: username, password: password)
-        .catchError((_) {}));
-    unawaited(SavedProfilesStore.upsert(
-      username: username,
-      plainPassword: password,
-      displayName: s.displayName,
-    ).catchError((_) {}));
+    if (password != null && password.isNotEmpty) {
+      unawaited(CompanyCredsStore.upsert(sasUrl: sasUrl, username: username, password: password)
+          .catchError((_) {}));
+      unawaited(SavedProfilesStore.upsert(
+        username: username,
+        plainPassword: password,
+        displayName: s.displayName,
+      ).catchError((_) {}));
+    }
 
     if (s.isEmployee) {
       final ok = await PermissionsService.refreshFromBackend();
