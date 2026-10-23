@@ -461,7 +461,8 @@ class _TelegramScreenState extends State<TelegramScreen> {
     required String subtitle,
     required Color color,
   }) {
-    return Container(
+    // الحاسبة: بطاقةٌ داخل حشوة الصفحة لا شريطٌ ملتصق بالحافّتين.
+    return DeskSection(gap: 0, children: [Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -516,7 +517,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
           ),
         ],
       ),
-    );
+    )]);
   }
 
   Widget _authErrorState() {

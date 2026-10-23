@@ -18,6 +18,7 @@ import '../../theme/typography.dart';
 import '../subscribers/sheets/subscriber_price_sheet.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
+import '../desktop/desk_bulk_picker.dart';
 
 /// «أسعار المشتركين» — على نمط شاشة الخصومات عمداً (طلب المستخدم: «أشبه
 /// بقسم الخصومات»): سعرٌ يُكتب، ومشتركون يُحدَّدون، وزرّ تطبيق. ومعها
@@ -278,7 +279,9 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
           iconTheme: IconThemeData(color: AppColors.textHi),
         ),
       ),
-      body: SafeArea(
+      body: DesktopScope.of(context)
+          ? _desktopBody(filtered, accent)
+          : SafeArea(
         bottom: false,
         child: Column(
           children: [
@@ -353,7 +356,7 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
       ),
       // 🐛 كان `FilledButton` بنصٍّ لونه أبيض صراحةً — فغلب لون المعطّل
       // وصار أبيضَ على رماديّ فاتح لا يُقرأ. الآن زرّ النظام نفسه.
-      bottomNavigationBar: !_canManage
+      bottomNavigationBar: !_canManage || DesktopScope.of(context)
           ? null
           : ColoredBox(
               color: AppColors.surface,
@@ -378,6 +381,168 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
                 ),
               ),
             ),
+    );
+  }
+
+  // ============================================================
+  // الحاسبة: جدولٌ بتحديد + لوحةٌ جانبيّة للتطبيق والملخّص
+  // ============================================================
+
+  /// فلتر جدول الحاسبة: الكلّ · بسعرٍ ثابت · بلا سعر.
+  int _deskFilter = 0;
+
+  Widget _desktopBody(List<Subscriber> filtered, Color accent) {
+    final rows = switch (_deskFilter) {
+      1 => filtered.where((s) => _prices.containsKey(s.idx)).toList(),
+      2 => filtered.where((s) => !_prices.containsKey(s.idx)).toList(),
+      _ => filtered,
+    };
+    final selectable = rows.where((s) => s.idx != null).toList();
+    final allOn = selectable.isNotEmpty && selectable.every((s) => _selected.contains(s.idx));
+    final muted = AppType.muted(color: AppColors.textMid).copyWith(fontSize: 13);
+    final money = AppType.label(color: AppColors.textBody).copyWith(fontSize: 13.5, fontWeight: FontWeight.w600);
+    return DeskBulkPicker(
+      searchController: _searchCtrl,
+      searchHint: 'sp.search_hint_desk'.tr(),
+      filters: DeskSegmented<int>(
+        values: const [0, 1, 2],
+        labelOf: (v) => ['sp.filter_all'.tr(), 'sp.filter_fixed'.tr(), 'sp.filter_none'.tr()][v],
+        current: _deskFilter,
+        onChanged: (v) => setState(() => _deskFilter = v),
+      ),
+      columns: [
+        DeskPickColumn('desktop.col_name'.tr(), flex: 3),
+        DeskPickColumn('desktop.col_package'.tr(), flex: 2),
+        DeskPickColumn('sp.col_package_price'.tr(), width: 120, align: AlignmentDirectional.centerEnd),
+        DeskPickColumn('sp.col_fixed'.tr(), width: 120, align: AlignmentDirectional.center),
+        DeskPickColumn('sp.col_sale'.tr(), width: 120, align: AlignmentDirectional.centerEnd),
+      ],
+      rowCount: rows.length,
+      cellsOf: (i) {
+        final s = rows[i];
+        final fixed = _prices[s.idx]?.price;
+        final hasName = s.fullName.trim().isNotEmpty && s.fullName != s.username;
+        final base = s.packageSalePrice;
+        final sale = s.currentSalePrice;
+        return [
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(hasName ? s.fullName : s.username,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.label(color: AppColors.textHi).copyWith(fontSize: 14, fontWeight: FontWeight.w700)),
+              if (hasName)
+                Text(s.username, maxLines: 1, overflow: TextOverflow.ellipsis, style: muted),
+            ],
+          ),
+          Text(s.profileName ?? '—', maxLines: 1, overflow: TextOverflow.ellipsis, style: muted),
+          Text(base == null ? '—' : formatIQD(base), style: money),
+          s.needsRepricing
+              ? Tooltip(
+                  message: 'sp.needs_repricing_short'.tr(),
+                  child: Icon(LucideIcons.triangleAlert, size: 16, color: AppColors.warning),
+                )
+              : fixed != null
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(color: AppColors.brandSoftBg, borderRadius: BorderRadius.circular(R.sm)),
+                      child: Text(formatIQD(fixed),
+                          style: AppType.label(color: AppColors.brandOnSoft).copyWith(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                    )
+                  : Text('—', style: muted),
+          Text(sale == null ? '—' : formatIQD(sale), style: money.copyWith(fontWeight: FontWeight.w700)),
+        ];
+      },
+      selectedOf: (i) => _selected.contains(rows[i].idx),
+      onToggle: _canManage ? (i) { if (rows[i].idx != null) _toggle(rows[i].idx!); } : null,
+      allSelected: allOn,
+      onToggleAll: () => setState(() {
+        for (final s in selectable) {
+          allOn ? _selected.remove(s.idx) : _selected.add(s.idx!);
+        }
+      }),
+      footer: _big && _bigSearch.total > filtered.length
+          ? 'sp.selection_count_big'.tr(args: ['${_selected.length}', '${rows.length}', '${_bigSearch.total}']) +
+              (_bigSearch.loadingMore ? ' · ${'sp.loading_more'.tr()}' : '')
+          : 'sp.selection_count'.tr(args: ['${_selected.length}', '${rows.length}']),
+      loading: _loading,
+      empty: _emptyState(),
+      onNearEnd: _big ? _bigMore : null,
+      panel: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_canManage)
+            DeskPanelCard(
+              title: 'sp.apply'.tr(),
+              icon: LucideIcons.banknote,
+              accent: accent,
+              children: [
+                _amountField(),
+                const SizedBox(height: Sp.sm),
+                Text('sp.hero_hint'.tr(), style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5)),
+                const SizedBox(height: Sp.md),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        _selected.isEmpty
+                            ? 'sp.pick_from_table'.tr()
+                            : 'sp.selected_n'.tr(args: ['${_selected.length}']),
+                        style: AppType.body(color: _selected.isEmpty ? AppColors.textMid : AppColors.textHi)
+                            .copyWith(fontSize: 13.5, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    if (_selected.isNotEmpty)
+                      TextButton(onPressed: () => setState(_selected.clear), child: Text('sp.clear'.tr())),
+                  ],
+                ),
+                const SizedBox(height: Sp.sm),
+                DeskWideButton(
+                  label: _submitting
+                      ? 'sp.applying'.tr()
+                      : (_amount > 0 && _selected.isNotEmpty
+                          ? 'sp.apply_n'.tr(args: [formatIQD(_amount), '${_selected.length}'])
+                          : 'sp.apply'.tr()),
+                  icon: LucideIcons.banknote,
+                  color: accent,
+                  busy: _submitting,
+                  onPressed: _amount > 0 && _selected.isNotEmpty ? _apply : null,
+                ),
+                const SizedBox(height: Sp.sm),
+                DeskWideButton(
+                  label: 'sp.remove_price'.tr(),
+                  icon: LucideIcons.trash2,
+                  color: AppColors.error,
+                  outlined: true,
+                  onPressed: _selectedWithPrice == 0 || _submitting ? null : _removeSelected,
+                ),
+              ],
+            ),
+          DeskPanelCard(
+            title: 'sp.current_prices'.tr(),
+            icon: LucideIcons.list,
+            accent: accent,
+            children: [
+              DeskStat(
+                value: '${_prices.length}',
+                label: _loadFailed ? 'sp.load_failed'.tr() : 'sp.fixed_count_label'.tr(),
+              ),
+              const SizedBox(height: Sp.md),
+              DeskWideButton(
+                label: 'sp.current_prices'.tr(),
+                icon: LucideIcons.list,
+                color: accent,
+                outlined: true,
+                onPressed: _prices.isEmpty ? null : _openExisting,
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 

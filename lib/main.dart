@@ -38,6 +38,7 @@ import 'services/theme_service.dart';
 import 'theme/colors.dart';
 import 'theme/spacing.dart';
 import 'theme/typography.dart';
+import 'screens/desktop/desk_auth_frame.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -501,6 +502,10 @@ class _TabletFrame extends StatelessWidget {
     if (mq.size.shortestSide < 600 || mq.size.width <= _maxWidth) return child;
     // الحاسبة بغلافها العريض (DesktopShell): القائمة والمحتوى يأخذان النافذة كلّها.
     if (DesktopLayout.shellActive.value) return child;
+    // الحاسبة قبل الغلاف (شاشات البداية): لوحة العلامة بجانب النموذج بدل عمود هاتف.
+    if (AppPlatform.isDesktop && mq.size.width >= DesktopLayout.minWidth) {
+      return DeskAuthFrame(child: child);
+    }
     return ColoredBox(
       color: AppColors.bg,
       child: Center(

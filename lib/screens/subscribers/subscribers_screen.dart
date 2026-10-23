@@ -52,6 +52,7 @@ import 'widgets/sort_sheet.dart';
 import 'sheets/location_sheets.dart';
 import 'widgets/subscriber_card_v3.dart';
 import 'widgets/subscriber_table_row.dart';
+import 'widgets/subscriber_columns.dart';
 import 'widgets/subscribers_desktop_header.dart';
 
 /// Default sort field + direction per filter — mirrors v1's
@@ -368,6 +369,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     MergedMode.active.addListener(_onMergedModeChanged);
     MergedMode.focus.addListener(_onMergedFocus);
     PermissionsService.changes.addListener(_onPermsChanged);
+    SubscriberColumnPrefs.layout.addListener(_onColumnsChanged);
     _wasLocked = _locked;
     if (!_locked) _load();
     // حدود «تنبيه المشترك» — شريط المشكلة يعمل بالافتراضيّات حتّى تصل
@@ -575,6 +577,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     MergedMode.active.removeListener(_onMergedModeChanged);
     MergedMode.focus.removeListener(_onMergedFocus);
     PermissionsService.changes.removeListener(_onPermsChanged);
+    SubscriberColumnPrefs.layout.removeListener(_onColumnsChanged);
     widget.isActive?.removeListener(_onActiveChanged);
     UsagePrefs.enabled.removeListener(_onUsagePref);
     _debounce?.cancel();
@@ -2121,6 +2124,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
   Widget _withDetailPane(Widget list) {
     if (!_paneMode) return list;
+    // أعمدة الجدول المحفوظة على هذا الجهاز — مرّةً، والجدول يُرسم بالافتراضيّ حتى تصل.
+    SubscriberColumnPrefs.ensureLoaded();
     final mq = MediaQuery.of(context);
     final open = _paneKey != null;
     // اللوحة تظهر حين يُفتح مشترك وتُطوى حين يُغلق — الجدول بعرضه كاملاً بينهما. الـNavigator باقٍ
@@ -2168,6 +2173,11 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   late final _PaneObserver _paneObserver = _PaneObserver(() {
     if (mounted && _paneKey != null) setState(() => _paneKey = null);
   });
+
+  /// أعمدة الجدول تغيّرت (إظهار/إخفاء/ترتيب) — يُعاد رسم الجدول ورأسه.
+  void _onColumnsChanged() {
+    if (mounted) setState(() {});
+  }
 
   /// حشوة الجانبين (الغلاف يزيد عليها على الحاسبة).
   double get _hPad => Sp.lg;
@@ -2224,6 +2234,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
             }
           : null,
       addLocked: !Perms.hasAny(const ['subscribers.add']),
+      columnsDropped: _tableColumns.dropped,
     );
   }
 

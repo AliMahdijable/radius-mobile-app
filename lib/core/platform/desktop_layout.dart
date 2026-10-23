@@ -47,3 +47,14 @@ class DesktopScope extends InheritedWidget {
   @override
   bool updateShouldNotify(DesktopScope old) => old.active != active;
 }
+
+/// شاشات البداية داخل إطار الحاسبة (لوحة العلامة بجانبها): تُخفي شعارها الكبير — العلامة في اللوحة.
+class DeskAuthScope extends InheritedWidget {
+  const DeskAuthScope({super.key, required super.child});
+
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<DeskAuthScope>() != null;
+
+  @override
+  bool updateShouldNotify(DeskAuthScope old) => false;
+}

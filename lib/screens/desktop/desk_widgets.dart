@@ -164,9 +164,9 @@ PreferredSizeWidget deskPageBar(
   final canPop = ModalRoute.of(context)?.canPop ?? false;
   final rtl = Directionality.of(context) == TextDirection.rtl;
   final all = [...?(actions ?? mobile.actions), if (primary != null) primary];
-  return PreferredSize(
-    preferredSize: Size.fromHeight(sub == null ? 92 : 104),
-    child: Container(
+  // تبويبات الصفحة (بوّابة المشترك…) تبقى تحت الرأس.
+  final tabs = mobile.bottom;
+  final head = Container(
       color: AppColors.bg,
       padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.xl, Sp.lg, Sp.md),
       child: Row(
@@ -189,7 +189,23 @@ PreferredSizeWidget deskPageBar(
           ),
         ],
       ),
-    ),
+    );
+  final headHeight = sub == null ? 92.0 : 104.0;
+  return PreferredSize(
+    preferredSize: Size.fromHeight(headHeight + (tabs?.preferredSize.height ?? 0)),
+    child: tabs == null
+        ? head
+        : Column(
+            children: [
+              head,
+              Container(
+                color: AppColors.bg,
+                padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
+                alignment: AlignmentDirectional.centerStart,
+                child: tabs,
+              ),
+            ],
+          ),
   );
 }
 

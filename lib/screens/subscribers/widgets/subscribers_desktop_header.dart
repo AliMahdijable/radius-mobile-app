@@ -7,6 +7,7 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../desktop/desk_widgets.dart';
 import 'sort_sheet.dart';
+import 'subscriber_columns_menu.dart';
 
 /// رأس قائمة المشتركين على الحاسبة بلغة الموقع (/v2): العنوان الكبير وعدده يميناً و«مشترك جديد»
 /// والتحديث يساراً، ثمّ صفّ الفلاتر — البحث، المدير، الباقة، الترتيب واتّجاهه، فحص الأجهزة — كلّها
@@ -33,6 +34,7 @@ class SubscribersDesktopHeader extends StatelessWidget {
     required this.onScanDevices,
     required this.onAdd,
     required this.addLocked,
+    this.columnsDropped = 0,
   });
 
   final String title;
@@ -62,6 +64,9 @@ class SubscribersDesktopHeader extends StatelessWidget {
   final VoidCallback? onAdd;
   final bool addLocked;
 
+  /// أعمدةٌ مختارة لم يتّسع لها الجدول الآن (تُذكر في قائمة «الأعمدة»).
+  final int columnsDropped;
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
@@ -90,7 +95,7 @@ class SubscribersDesktopHeader extends StatelessWidget {
         const SizedBox(height: Sp.lg),
         // صفٌّ واحد حين يتّسع، وإلّا البحث سطرٌ والقوائم تحته بعرضه (لوحة التفاصيل مفتوحة).
         LayoutBuilder(builder: (context, c) {
-          final narrow = c.maxWidth < 860;
+          final narrow = c.maxWidth < 1080;
           Widget fit(double width, Widget child) =>
               narrow ? Expanded(child: child) : SizedBox(width: width, child: child);
           final filters = <Widget>[
@@ -146,6 +151,7 @@ class SubscribersDesktopHeader extends StatelessWidget {
               busy: probing,
               onTap: onScanDevices,
             ),
+            SubscriberColumnsButton(dropped: columnsDropped),
           ];
           List<Widget> spaced(List<Widget> items) => [
                 for (var i = 0; i < items.length; i++) ...[

@@ -10,6 +10,7 @@ import '../../services/theme_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../core/platform/desktop_layout.dart';
 
 /// عناصر شاشات طبقة الحساب — بنفس لغة شاشة الدخول (`login_screen.dart`):
 /// كارت سطحٍ أبيض بحواف R.xl، حقولٌ بتعبئة surfaceInput، وزرٌّ أساسيّ بارتفاع 54.
@@ -113,13 +114,17 @@ class AccountScaffold extends StatelessWidget {
       backgroundColor: AppColors.bg,
       resizeToAvoidBottomInset: true,
       body: SafeArea(
-        child: _refreshable(SingleChildScrollView(
+        child: LayoutBuilder(builder: (context, viewport) => _refreshable(SingleChildScrollView(
           // المحتوى القصير لا يُسحب بدونها، فلا يصل السحب إلى المؤشّر.
           physics: onRefresh == null ? null : const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.symmetric(horizontal: Sp.xxl, vertical: Sp.xl),
           // الآيباد: عمودٌ وسطيّ بعرض نموذجٍ مريح بدل أزرارٍ ممتدّة على عرض الشاشة كلّه.
-          // الهاتف أضيق من الحدّ فلا يتغيّر فيه شيء.
-          child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 560), child: Column(
+          // الهاتف أضيق من الحدّ فلا يتغيّر فيه شيء. الحاسبة: النموذج في وسط ارتفاع النافذة أيضاً.
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: DeskAuthScope.of(context) ? viewport.maxHeight - 2 * Sp.xl : 0,
+            ),
+            child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 560), child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // شريطٌ علويّ: الرجوع (إن وُجد) في بداية الاتجاه، ومبدّل
@@ -139,7 +144,8 @@ class AccountScaffold extends StatelessWidget {
                   const AccountThemeToggle(),
                 ],
               ),
-              if (showLogo) ...[
+              // الحاسبة: الشعار في لوحة العلامة بجانب النموذج.
+              if (showLogo && !DeskAuthScope.of(context)) ...[
                 SizedBox(height: compact ? Sp.xs : Sp.lg),
                 AccountLogo(size: compact ? 84 : 104),
                 SizedBox(height: compact ? Sp.md : Sp.xl),
@@ -163,7 +169,8 @@ class AccountScaffold extends StatelessWidget {
               ],
             ],
           ))),
-        )),
+          ),
+        ))),
       ),
     );
   }

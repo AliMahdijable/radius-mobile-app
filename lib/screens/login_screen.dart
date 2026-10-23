@@ -27,6 +27,7 @@ import 'account/account_gate_screen.dart';
 import 'account/my_devices_screen.dart';
 import 'main_shell.dart';
 import '../core/platform/app_platform.dart';
+import '../core/platform/desktop_layout.dart';
 
 /// Login — Soft Pastel + Premium. Wired to https://rad.mysvcs.net/api/auth/login.
 /// Persists token on success via AuthStorage. On failure shows a snackbar.
@@ -684,6 +685,8 @@ class _Logo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    // الحاسبة: الشعار في لوحة العلامة بجانب النموذج.
+    if (DeskAuthScope.of(context)) return const SizedBox.shrink();
     // Tint the logo brand-green using BlendMode.modulate via ColorFilter.
     // The logo is violet shapes on a transparent/white background.
     // We render it inside a ShaderMask that:
@@ -729,13 +732,14 @@ class _BrandTitle extends StatelessWidget {
     return Column(
       children: [
         Text(
-          'MyServices Pro',
+          // الحاسبة: الاسم في لوحة العلامة — هنا عنوان النموذج.
+          DeskAuthScope.of(context) ? 'login.welcome'.tr() : 'MyServices Pro',
           textAlign: TextAlign.center,
           style: AppType.title(color: AppColors.textHi),
         ),
         const SizedBox(height: Sp.xs),
         Text(
-          'login.subtitle'.tr(),
+          DeskAuthScope.of(context) ? 'desktop.auth_company_hint'.tr() : 'login.subtitle'.tr(),
           textAlign: TextAlign.center,
           style: AppType.subtitle(color: AppColors.textMid),
         ),

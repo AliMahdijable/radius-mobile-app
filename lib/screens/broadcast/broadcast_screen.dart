@@ -16,6 +16,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../message_logs/message_logs_screen.dart';
 import '../desktop/desk_widgets.dart';
+import '../../core/platform/desktop_layout.dart';
 
 /// شاشة "التبليغات" (Broadcast) — نقل حرفي من client-v2/Notifications.tsx.
 /// يسمح للمدير بإرسال رسائل واتساب جماعيّة للمشتركين حسب فلتر (كل/مدينون/
@@ -682,7 +683,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
+          : DesktopScope.of(context)
+              ? _desktopBody()
+              : Column(
               children: [
                 Expanded(
                   child: RefreshIndicator(
@@ -721,6 +724,51 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                 _buildActionBar(),
               ],
             ),
+    );
+  }
+
+  /// الحاسبة: عمودان — الجمهور (الفئة، المدير، النطاق، الاختيار) يميناً، والقناة والرسالة يساراً،
+  /// وشريط الإرسال تحتهما — بدل عمودٍ واحدٍ ممدود تتضخّم فيه بطاقات الفئة.
+  Widget _desktopBody() {
+    Widget col(List<Widget> children) => ListView(
+          padding: const EdgeInsets.only(bottom: Sp.lg),
+          children: [
+            for (var i = 0; i < children.length; i++) ...[
+              if (i > 0) const SizedBox(height: Sp.md),
+              children[i],
+            ],
+          ],
+        );
+    return Column(
+      children: [
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.xs, Sp.lg, 0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: col([
+                    if (_big) _bigNotice(),
+                    _buildFilterCard(),
+                    if ((_subManagers ?? const []).isNotEmpty) _buildManagerFilterCard(),
+                    _buildScopeCard(),
+                    if (_scope == _Scope.specific && (_candidates.isNotEmpty || _big))
+                      _buildSelectionCard(),
+                  ]),
+                ),
+                const SizedBox(width: Sp.lg),
+                Expanded(
+                  flex: 6,
+                  child: col([_buildChannelCard(), _buildMessageCard()]),
+                ),
+              ],
+            ),
+          ),
+        ),
+        _buildActionBar(),
+      ],
     );
   }
 
@@ -857,11 +905,15 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       title: 'الفئة',
       child: Column(
         children: [
-          GridView.count(
-            crossAxisCount: 2,
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            childAspectRatio: 2.6,
+          GridView(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              // الحاسبة: ارتفاعٌ ثابت — النسبة تضخّم البطاقة مع عرض العمود.
+              childAspectRatio: 2.6,
+              mainAxisExtent: DesktopScope.of(context) ? 76 : null,
+            ),
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             children: [
