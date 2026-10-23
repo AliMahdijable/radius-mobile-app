@@ -79,6 +79,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
   // Selection mode — long-press لتنشيطه، tap يبدّل عنصر، exit بزرّ الـclose. 2026-08-18.
   bool _selectionMode = false;
+
+  /// الحاسبة: جدولٌ (كبرامج مراقبة الشبكات) أو بطاقات — يبقى اختيار الجلسة بين الزيارات.
+  static bool _deskTableView = true;
   final Set<int> _selectedIds = <int>{};
   bool _bulkDeleting = false;
 
@@ -1119,6 +1122,16 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 ),
               ),
             ),
+            // الحاسبة: جدول ⇄ بطاقات.
+            if (DesktopScope.of(context)) ...[
+              SizedBox(width: gap),
+              _ToolButton(
+                tooltip: _deskTableView ? 'عرض بطاقات' : 'عرض جدول',
+                onTap: () => setState(() => _deskTableView = !_deskTableView),
+                child: Icon(_deskTableView ? LucideIcons.layoutGrid : LucideIcons.table2,
+                    size: 20, color: AppColors.textBody),
+              ),
+            ],
             SizedBox(width: gap),
             // تحديث فوري — دوّارةٌ مكانه أثناء الفحص.
             _ToolButton(
@@ -1401,21 +1414,357 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// الشاشة — والبطاقة نفسها في الحالتين، تُبنى عند ظهورها وحدها.
   Widget _deviceList(List<NetworkDevice> devices) {
     if (DesktopScope.of(context)) {
+      if (_deskTableView) return _deskTable(devices);
       return SliverGrid.builder(
         gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 440,
-          mainAxisExtent: 112,
+          maxCrossAxisExtent: 420,
+          mainAxisExtent: 168,
           crossAxisSpacing: Sp.md,
           mainAxisSpacing: Sp.md,
         ),
         itemCount: devices.length,
-        itemBuilder: (_, i) => _deviceCard(devices[i]),
+        itemBuilder: (_, i) => _deskDeviceCard(devices[i]),
       );
     }
     return SliverList.separated(
       itemCount: devices.length,
       itemBuilder: (_, i) => _deviceCard(devices[i]),
       separatorBuilder: (_, __) => const SizedBox(height: 8),
+    );
+  }
+
+  // ═══════════════ الحاسبة: جدول الأجهزة وبطاقاتها الكبيرة ═══════════════
+  // المالك (٢٣ أكتوبر): «الأجهزة معلوماتها زغيرة… لا موبايل ولا PC» — برامج الإدارة ومراقبة الأجهزة على
+  // الحاسبة جداول بأعمدةٍ واضحة وحالةٍ مقروءة من بعيد. الهاتف لا يتغيّر (DesktopScope وحده).
+
+  static String _statusLabel(String s) => switch (s) {
+        'online' => 'متصل',
+        'offline' => 'مفصول',
+        _ => 'غير معروف',
+      };
+
+  /// «منذ ٤ دقائق» من `status_since` (يتحرّك عند التحوّل وحده) — null لغيابه أو لوقتٍ قادم.
+  static String? _since(DateTime? since) {
+    if (since == null) return null;
+    final d = DateTime.now().difference(since);
+    if (d.isNegative) return null;
+    if (d.inMinutes < 1) return 'منذ لحظات';
+    if (d.inMinutes < 60) return 'منذ ${d.inMinutes} دقيقة';
+    if (d.inHours < 24) return 'منذ ${d.inHours} ساعة';
+    return 'منذ ${d.inDays} يوماً';
+  }
+
+  static String _clockOf(DateTime? t) => t == null
+      ? '—'
+      : '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  Widget _statusPill(NetworkDevice d, {bool big = false}) {
+    final col = _statusColor(d.lastStatus);
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: big ? 10 : 8, vertical: big ? 5 : 3),
+      decoration: BoxDecoration(
+        color: col.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(R.pill),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(width: 8, height: 8, decoration: BoxDecoration(color: col, shape: BoxShape.circle)),
+          const SizedBox(width: 6),
+          Text(
+            _statusLabel(d.lastStatus),
+            style: AppType.label(color: col).copyWith(fontSize: big ? 13.5 : 12.5, fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget? _deskRegion(NetworkDevice d) {
+    final region = d.regionId == null ? null : _regionsById[d.regionId!];
+    if (region == null) return null;
+    final color = _parseRegionColor(region.color) ?? AppColors.brand;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(R.pill),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Text(region.name, style: AppType.daysWordBold(color: color)),
+    );
+  }
+
+  /// أعمدة الجدول (المرونة نفسها للرأس والصفوف).
+  static const _deskCols = <(String, int)>[
+    ('الحالة', 15),
+    ('الجهاز', 30),
+    ('الطراز', 18),
+    ('العنوان', 15),
+    ('الموقع', 16),
+    ('الاستجابة', 10),
+    ('آخر فحص', 9),
+  ];
+
+  Widget _deskTable(List<NetworkDevice> devices) {
+    final head = Container(
+      padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSunken,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(R.lg)),
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
+      child: Row(
+        children: [
+          if (_selectionMode) const SizedBox(width: 32),
+          for (final c in _deskCols)
+            Expanded(
+              flex: c.$2,
+              child: Text(
+                c.$1,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppType.label(color: AppColors.textMid).copyWith(fontSize: 12.5, fontWeight: FontWeight.w700),
+              ),
+            ),
+          const SizedBox(width: 20),
+        ],
+      ),
+    );
+    return DecoratedSliver(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.lg),
+        border: Border.all(color: AppColors.border),
+      ),
+      sliver: SliverMainAxisGroup(
+        slivers: [
+          SliverToBoxAdapter(child: head),
+          SliverList.separated(
+            itemCount: devices.length,
+            itemBuilder: (_, i) => _deskRow(devices[i], last: i == devices.length - 1),
+            separatorBuilder: (_, __) => Divider(height: 1, thickness: 1, color: AppColors.border),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _deskRow(NetworkDevice d, {required bool last}) {
+    final selected = _selectionMode && _selectedIds.contains(d.id);
+    final canManage = Perms.has('devices.manage');
+    final online = d.lastStatus == 'online';
+    final since = _since(d.statusSince);
+    final region = _deskRegion(d);
+    final cell = AppType.label(color: AppColors.textHi).copyWith(fontSize: 13.5);
+    final sub = AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5);
+    Widget col(int flex, Widget child) => Expanded(flex: flex, child: Align(alignment: AlignmentDirectional.centerStart, child: child));
+    return Material(
+      color: selected ? AppColors.brandSoftBg : Colors.transparent,
+      borderRadius: last ? const BorderRadius.vertical(bottom: Radius.circular(R.lg)) : null,
+      child: InkWell(
+        onTap: _selectionMode ? () => _toggleSelected(d) : () => _openDetails(d),
+        onLongPress: canManage && !_selectionMode ? () => _enterSelection(d) : null,
+        borderRadius: last ? const BorderRadius.vertical(bottom: Radius.circular(R.lg)) : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: 10),
+          child: Row(
+            children: [
+              if (_selectionMode)
+                SizedBox(
+                  width: 32,
+                  child: Icon(selected ? LucideIcons.checkSquare : LucideIcons.square,
+                      size: 18, color: selected ? AppColors.brand : AppColors.textLow),
+                ),
+              col(
+                15,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _statusPill(d),
+                    if (since != null) ...[
+                      const SizedBox(height: 3),
+                      Text(since, maxLines: 1, overflow: TextOverflow.ellipsis, style: sub),
+                    ],
+                  ],
+                ),
+              ),
+              col(
+                30,
+                Row(
+                  children: [
+                    DeviceImage(brand: d.brand, model: d.model, size: 34),
+                    const SizedBox(width: Sp.sm),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(d.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: cell.copyWith(fontSize: 14, fontWeight: FontWeight.w700)),
+                          Text(NetworkDeviceLabels.typeLabel(d.type),
+                              maxLines: 1, overflow: TextOverflow.ellipsis, style: sub),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              col(
+                18,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(NetworkDeviceLabels.brandLabel(d.brand), maxLines: 1, overflow: TextOverflow.ellipsis, style: cell),
+                    if ((d.model ?? '').isNotEmpty)
+                      Text(d.model!, maxLines: 1, overflow: TextOverflow.ellipsis, style: sub),
+                  ],
+                ),
+              ),
+              col(
+                15,
+                Text(d.ip,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textDirection: TextDirection.ltr,
+                    style: cell.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+              ),
+              col(
+                16,
+                region ??
+                    Text((d.location ?? '').isEmpty ? '—' : d.location!,
+                        maxLines: 1, overflow: TextOverflow.ellipsis, style: cell.copyWith(color: AppColors.textMid)),
+              ),
+              col(
+                10,
+                Text(
+                  online && d.lastResponseMs != null ? '${d.lastResponseMs} ms' : '—',
+                  textDirection: TextDirection.ltr,
+                  style: cell.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: online ? _statusColor(d.lastStatus) : AppColors.textLow,
+                  ),
+                ),
+              ),
+              col(
+                9,
+                Text(_clockOf(d.lastProbedAt),
+                    textDirection: TextDirection.ltr, style: cell.copyWith(color: AppColors.textMid)),
+              ),
+              Icon(LucideIcons.chevronLeft, size: 16, color: AppColors.textLow),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _deskDeviceCard(NetworkDevice d) {
+    final selected = _selectionMode && _selectedIds.contains(d.id);
+    final canManage = Perms.has('devices.manage');
+    final online = d.lastStatus == 'online';
+    final statusCol = _statusColor(d.lastStatus);
+    final since = _since(d.statusSince);
+    final region = _deskRegion(d);
+    final sub = AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5);
+    Widget metric(String label, String value, {Color? color}) => Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.micro()),
+              Text(value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.label(color: color ?? AppColors.textHi).copyWith(fontSize: 14, fontWeight: FontWeight.w700)),
+            ],
+          ),
+        );
+    return Material(
+      color: selected ? AppColors.brandSoftBg : AppColors.surface,
+      borderRadius: BorderRadius.circular(R.lg),
+      child: InkWell(
+        onTap: _selectionMode ? () => _toggleSelected(d) : () => _openDetails(d),
+        onLongPress: canManage && !_selectionMode ? () => _enterSelection(d) : null,
+        borderRadius: BorderRadius.circular(R.lg),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.lg),
+            border: Border.all(color: selected ? AppColors.brand : AppColors.border, width: selected ? 1.5 : 1),
+          ),
+          padding: const EdgeInsets.all(Sp.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  if (_selectionMode) ...[
+                    Icon(selected ? LucideIcons.checkSquare : LucideIcons.square,
+                        size: 20, color: selected ? AppColors.brand : AppColors.textLow),
+                    const SizedBox(width: Sp.sm),
+                  ],
+                  DeviceImage(brand: d.brand, model: d.model, size: 48),
+                  const SizedBox(width: Sp.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(d.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppType.label(color: AppColors.textHi).copyWith(fontSize: 15, fontWeight: FontWeight.w700)),
+                        Text(
+                          [
+                            NetworkDeviceLabels.brandLabel(d.brand),
+                            if ((d.model ?? '').isNotEmpty) d.model!,
+                            NetworkDeviceLabels.typeLabel(d.type),
+                          ].join(' · '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: sub,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: Sp.sm),
+                  _statusPill(d, big: true),
+                ],
+              ),
+              const SizedBox(height: Sp.sm),
+              Row(
+                children: [
+                  Icon(LucideIcons.globe, size: 13, color: AppColors.textLow),
+                  const SizedBox(width: 4),
+                  Text(d.ip, textDirection: TextDirection.ltr, style: sub.copyWith(color: AppColors.textBody)),
+                  const SizedBox(width: Sp.md),
+                  if (region != null)
+                    Flexible(child: region)
+                  else if ((d.location ?? '').isNotEmpty) ...[
+                    Icon(LucideIcons.building2, size: 13, color: AppColors.textLow),
+                    const SizedBox(width: 4),
+                    Expanded(child: Text(d.location!, maxLines: 1, overflow: TextOverflow.ellipsis, style: sub)),
+                  ],
+                ],
+              ),
+              const Spacer(),
+              Divider(height: Sp.md, thickness: 1, color: AppColors.border),
+              Row(
+                children: [
+                  metric('الاستجابة', online && d.lastResponseMs != null ? '${d.lastResponseMs} ms' : '—',
+                      color: online ? statusCol : AppColors.textLow),
+                  metric(online ? 'متصل' : 'الحالة', since ?? '—'),
+                  metric('آخر فحص', _clockOf(d.lastProbedAt)),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
