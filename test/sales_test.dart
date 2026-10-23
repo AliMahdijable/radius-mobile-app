@@ -30,6 +30,15 @@ class _SalesServer implements HttpClientAdapter {
   bool enabled = true;
   final posts = <(String, Map<String, dynamic>)>[];
 
+  /// إلغاءٌ على الدين «غير مؤكَّد» آخر القائمة (حسمه بمسار resolve-void).
+  bool voidUnknown = false;
+
+  static Map<String, dynamic> voidUnknownSale() => {
+        ...sale(8, 'debt', 'void_unknown', username: 'zaid@sn', total: 35000, cost: 27500),
+        'void_mode': 'cash', 'void_debt': 15000, 'void_refund': 20000, 'void_balance_before': -15000,
+        'void_started_at': '2026-10-23T04:00:00Z',
+      };
+
   /// ردّ البيع القادم: (status, body) — null ⇒ نجاحٌ نقديّ.
   (int, Object)? nextSale;
 
@@ -91,9 +100,18 @@ class _SalesServer implements HttpClientAdapter {
           sale(11, 'debt', 'done', username: 'ali.k@sn', name: 'علي كريم', total: 35000, cost: 27500),
           sale(10, 'debt', 'unknown', username: 'huda@sn', total: 45000, cost: 32000),
           sale(9, 'cash', 'void', total: 25000, cost: 18000),
+          if (voidUnknown) voidUnknownSale(),
         ],
         'totals': {'count': 2, 'revenue': 90000, 'cost': 64500, 'profit': 25500, 'cash': 55000, 'debt': 35000},
         'unresolved': 1,
+      });
+    }
+    if (o.path == '/api/v2/sales/11/void-preview' && get) {
+      // بيع الدين #11 (35,000): رصيده الآن −15,000 ⇒ سدّد منه 20,000.
+      return _json(200, {
+        'success': true,
+        'data': {'payment': 'debt', 'total': 35000, 'balance': -15000, 'paid': 20000, 'needs_choice': true,
+          'after_credit': 20000, 'after_cash': 0},
       });
     }
     if (o.path.startsWith('/api/v2/sales') && !get) {
@@ -131,12 +149,12 @@ void main() {
       expect(saleQtyText(7, 'piece'), '7 قطعة');
     });
 
-    test('البيع: الحالات و«غير مؤكَّد» (المجهول، أو «جارٍ» أقدم من دقيقتين) والإلغاء للنقديّ المكتمل وحده', () {
+    test('البيع: الحالات و«غير مؤكَّد» (المجهول، أو «جارٍ» أقدم من دقيقتين) والإلغاء للمكتمل نقداً أو على الدين', () {
       final cash = Sale.fromJson(_SalesServer.sale(1, 'cash', 'done'))!;
       expect(cash.voidable, isTrue);
       expect(cash.resolvable(), isFalse);
       final debt = Sale.fromJson(_SalesServer.sale(2, 'debt', 'done', username: 'u1'))!;
-      expect(debt.voidable, isFalse, reason: 'الدين يُعدَّل من صفحة المشترك');
+      expect(debt.voidable, isTrue, reason: 'الدين يُلغى بمساره (معاينة الدين ثمّ الاختيار)');
       expect(debt.customerLabel, 'u1');
       expect(Sale.fromJson(_SalesServer.sale(3, 'debt', 'unknown', username: 'u1'))!.resolvable(), isTrue);
       final pending = Sale.fromJson(_SalesServer.sale(4, 'debt', 'pending', username: 'u1', at: '2026-10-23T04:00:00Z'))!;
@@ -144,6 +162,20 @@ void main() {
       expect(pending.resolvable(DateTime.utc(2026, 10, 23, 4, 3)), isTrue);
       expect(Sale.fromJson(_SalesServer.sale(5, 'cash', 'done'))!.customerLabel, 'زبون');
       expect(Sale.fromJson(const {'payment': 'cash'}), isNull, reason: 'بلا معرّف');
+    });
+
+    test('إلغاء البيع على الدين: الحقول، و«غير مؤكَّد» (void_unknown أو voiding أقدم من دقيقتين) بمسار الإلغاء', () {
+      final u = Sale.fromJson(_SalesServer.voidUnknownSale())!;
+      expect((u.voidMode, u.voidDebt, u.voidRefund, u.voidBalanceBefore), ('cash', 15000, 20000, -15000));
+      expect((u.resolvesVoid, u.resolvable(), u.voidable), (true, true, false));
+      final voiding = Sale.fromJson({..._SalesServer.voidUnknownSale(), 'status': 'voiding'})!;
+      expect(voiding.resolvable(DateTime.utc(2026, 10, 23, 4, 1)), isFalse, reason: 'يُلغى الآن — لا يُحسم قبل دقيقتين');
+      expect(voiding.resolvable(DateTime.utc(2026, 10, 23, 4, 3)), isTrue);
+      expect(voiding.resolvesVoid, isTrue);
+      final done = Sale.fromJson(_SalesServer.sale(2, 'debt', 'done', username: 'u1'))!;
+      expect((done.voidMode, done.voidDebt, done.resolvesVoid), (null, null, false));
+      final pv = VoidPreview.fromJson(const {'payment': 'debt', 'total': 35000, 'balance': -15000, 'paid': 20000, 'needs_choice': true, 'after_credit': 20000, 'after_cash': 0});
+      expect((pv.paid, pv.needsChoice, pv.afterCredit, pv.afterCash, pv.balance), (20000, true, 20000, 0, -15000));
     });
 
     test('probe: المقيَّد بمديرٍ فرعيّ يُعلَّم، والقدرات تُقرأ', () {
@@ -157,6 +189,8 @@ void main() {
     test('تسميات سجلّ الحركات', () {
       expect(arabicActionLabel('SALE'), 'بيع مواد');
       expect(arabicActionLabel('SALE_VOID'), 'إلغاء بيع');
+      expect(arabicActionLabel('BALANCE_ADD', 'إلغاء بيع #5 — إنقاص دين 35000 د.ع للمشترك u1'), 'إنقاص دين (إلغاء بيع)');
+      expect(arabicActionLabel('BALANCE_ADD', 'إضافة دين 35000 د.ع للمشترك u1 - بيع #5: راوتر ×1'), 'إضافة دين');
     });
   });
 
@@ -191,6 +225,33 @@ void main() {
       expect(k.totalCashRevenue, 570000 + 55000);
       expect(k.manualDebtAddSum, 20000, reason: '55,000 − 35,000 (ثمن مادّة على الدين)');
       expect(k.netCash, 625000 - 60000 - 20000 - 64500);
+    });
+
+    test('دين المبيعات الموسوم (balance_add_sales_sum): البيع وإلغاؤه يخرجان من «اليدويّة» بكلّ فترة', () {
+      // فترة البيع (أُلغي لاحقاً): البيع خرج من المكتملة (sales_debt_sum 0) وسطر دينه باقٍ موسوماً ⇒ لا «يدويّ».
+      var k = FinanceKPIs.fromJson(const {'balance_add_sum': 55000, 'balance_add_sales_sum': 35000, 'sales_debt_sum': 0});
+      expect(k.manualDebtAddSum, 20000);
+      // فترة الإلغاء: إنقاصه −35,000 موسوماً ويدويٌّ 20,000 ⇒ اليدويّ 20,000 لا صفر.
+      k = FinanceKPIs.fromJson(const {'balance_add_sum': -15000, 'balance_add_sales_sum': -35000});
+      expect(k.manualDebtAddSum, 20000);
+      // إرجاع جزءٍ نقداً بالفترة نفسها: البيع 35,000 وإنقاصه 15,000 ⇒ الموسوم 20,000 والدين الجديد كلّه منه.
+      k = FinanceKPIs.fromJson(const {'balance_add_sum': 20000, 'balance_add_sales_sum': 20000, 'sales_debt_sum': 0});
+      expect(k.manualDebtAddSum, 0);
+      // خادمٌ أقدم بلا الحقل ⇒ sales_debt_sum كما كان.
+      k = FinanceKPIs.fromJson(const {'balance_add_sum': 55000, 'sales_debt_sum': 35000});
+      expect((k.balanceAddSalesSum, k.manualDebtAddSum), (null, 20000));
+      // «كل الشركات»: شركةٌ بلا الحقل تُحسب بدين مبيعاتها المكتملة.
+      final s = MergedFinanceApi.sumKpis(const [
+        FinanceKPIs(balanceAddSum: 55000, balanceAddSalesSum: 35000),
+        FinanceKPIs(balanceAddSum: 10000, goodsDebtSum: 4000),
+      ]);
+      expect((s.balanceAddSalesSum, s.manualDebtAddSum), (39000, 26000));
+      expect(MergedFinanceApi.sumKpis(const [FinanceKPIs(balanceAddSum: 1000)]).balanceAddSalesSum, isNull);
+      // من السطور (فلتر النوع): سطر الدين الموسوم بوصفه.
+      FinanceLog l(String d, num a) => FinanceLog.fromJson({'id': 1, 'action_type': 'BALANCE_ADD', 'action_description': d, 'amount': a, 'created_at': '2026-10-23T04:00:00Z'})!;
+      expect(l('إضافة دين 35000 د.ع للمشترك u1 - بيع #5: راوتر ×1', 35000).isSaleDebtLine, isTrue);
+      expect(l('إلغاء بيع #5 — إنقاص دين 35000 د.ع للمشترك u1', -35000).isSaleDebtLine, isTrue);
+      expect(l('إضافة دين 2000 د.ع للمشترك u1', 2000).isSaleDebtLine, isFalse);
     });
 
     test('بعد كلفة الباقات: + ربح المواد', () {
@@ -332,10 +393,10 @@ void main() {
       await settle(t, seconds: 2);
       expect(t.takeException(), isNull);
       expect(find.text('90,000 د.ع'), findsWidgets);
-      expect(find.textContaining('لم يُحسم'), findsOneWidget);
+      expect(find.textContaining('لم تُحسم'), findsOneWidget);
       expect(find.text('غير مؤكَّد'), findsOneWidget);
       expect(find.text('احسم'), findsOneWidget);
-      expect(find.text('إلغاء'), findsOneWidget, reason: 'النقديّ المكتمل وحده');
+      expect(find.text('إلغاء'), findsNWidgets(2), reason: 'المكتمل نقداً وعلى الدين');
       expect(find.text('مُلغى'), findsOneWidget);
 
       await t.tap(find.text('الموادّ والمخزون'));
@@ -343,6 +404,52 @@ void main() {
       expect(find.textContaining('305.5 متر'), findsOneWidget);
       expect(find.textContaining('0 قطعة'), findsOneWidget);
       expect(find.text('300,375 د.ع'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('إلغاء بيعٍ على الدين: معاينة الدين ثمّ «تُرجَع نقداً» يُرسل refund وexpected_paid', (t) async {
+      final server = _SalesServer(await visualSetUp(s1bSasOwner));
+      ApiClient.dio.httpClientAdapter = server;
+      await pumpVisual(t, phoneTall, home: (_) => const SalesScreen());
+      await settle(t, seconds: 2);
+      // الثاني = بيع الدين #11 (الترتيب: #12 نقديّ ثمّ #11 دين).
+      await t.ensureVisible(find.text('إلغاء').at(1));
+      await t.tap(find.text('إلغاء').at(1));
+      await settle(t, seconds: 2);
+      expect(find.textContaining('سدّد المشترك 20,000 د.ع'), findsOneWidget);
+      expect(find.text('تبقى رصيداً له للاشتراك الجاي'), findsOneWidget);
+      expect(find.text('دين 15,000 د.ع'), findsOneWidget);
+      await t.tap(find.textContaining('تُرجَع له'));
+      await settle(t);
+      await t.enterText(find.byType(TextField).last, 'أرجع المادّة');
+      await settle(t);
+      await t.tap(find.text('إلغاء البيع وإرجاع 20,000 د.ع نقداً'));
+      await settle(t, seconds: 2);
+      final post = server.posts.lastWhere((p) => p.$1 == '/api/v2/sales/11/void');
+      expect(post.$2, {'reason': 'أرجع المادّة', 'refund': 'cash', 'expected_paid': 20000});
+      await settle(t, seconds: 4); // إشعار النجاح (٣ث)
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('إلغاءٌ «غير مؤكَّد»: «احسم» يفتح حسم الإلغاء ويُرسل لـresolve-void', (t) async {
+      final server = _SalesServer(await visualSetUp(s1bSasOwner))..voidUnknown = true;
+      ApiClient.dio.httpClientAdapter = server;
+      await pumpVisual(t, phoneTall, home: (_) => const SalesScreen());
+      await settle(t, seconds: 2);
+      expect(find.text('إلغاءٌ غير مؤكَّد'), findsOneWidget);
+      await t.ensureVisible(find.text('احسم').last);
+      await t.tap(find.text('احسم').last);
+      await settle(t, seconds: 1);
+      expect(find.text('حسم إلغاء البيع #8'), findsOneWidget);
+      expect(find.textContaining('صار رصيده صفر'), findsOneWidget);
+      expect(find.textContaining('إرجاع 20,000 د.ع نقداً'), findsOneWidget);
+      await t.tap(find.text('نُقص الدين'));
+      await settle(t);
+      await t.tap(find.text('تأكيد: نُقص'));
+      await settle(t, seconds: 1);
+      final post = server.posts.lastWhere((p) => p.$1 == '/api/v2/sales/8/resolve-void');
+      expect(post.$2, {'applied': true});
+      await settle(t, seconds: 4); // إشعار النجاح (٣ث)
       expect(t.takeException(), isNull);
     });
 

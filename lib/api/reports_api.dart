@@ -165,6 +165,7 @@ class FinanceKPIs {
     this.goodsProfitSum = 0,
     this.goodsDebtSum = 0,
     this.goodsCount = 0,
+    this.balanceAddSalesSum,
   });
   final num paymentsSum;
   final num debtPaySum;
@@ -196,12 +197,18 @@ class FinanceKPIs {
   final num goodsDebtSum;
   final int goodsCount;
 
+  /// جزء [balanceAddSum] الذي من قسم المبيعات: دين البيع (+) وإنقاصه عند إلغائه (−)
+  /// — يحسبه الخادم من أسطر الدين الموسومة بالبيع نفسها (`balance_add_sales_sum`)
+  /// فيصحّ لكلّ فترة ولو أُلغي البيع بعدها. `null` = خادمٌ أقدم ⇒ [goodsDebtSum].
+  final num? balanceAddSalesSum;
+
   bool get hasGoods => goodsCount > 0 || goodsCashSum != 0;
 
   /// إضافة الدين اليدويّة وحدها: البيع على الدين يكتب سطر «إضافة دين» بمسار الدين
-  /// نفسه — وهو ثمن مادّة لا منحةٌ للمشترك، فلا يُطرح من الصافي (كلفته تُطرح).
+  /// نفسه — وهو ثمن مادّة لا منحةٌ للمشترك، فلا يُطرح من الصافي (كلفته تُطرح)؛
+  /// وإلغاؤه يكتب السطر نفسه بالسالب — فيُخرَجان معاً ([balanceAddSalesSum]).
   num get manualDebtAddSum {
-    final v = balanceAddSum - goodsDebtSum;
+    final v = balanceAddSum - (balanceAddSalesSum ?? goodsDebtSum);
     return v > 0 ? v : 0;
   }
 
@@ -274,6 +281,7 @@ class FinanceKPIs {
       goodsProfitSum: _n(j['sales_profit_sum']),
       goodsDebtSum: _n(j['sales_debt_sum']),
       goodsCount: _i(j['sales_count']),
+      balanceAddSalesSum: j.containsKey('balance_add_sales_sum') ? _n(j['balance_add_sales_sum']) : null,
     );
   }
 }
@@ -333,6 +341,15 @@ class FinanceLog {
   /// عمليّة بيعٍ أرسل الخادم كلفتها `null` صراحةً — لم تُسجَّل بعد.
   bool get packageCostUnknown =>
       packageCostSent && packageCost == null && isSale && !fromSas;
+
+  /// سطر دينٍ من قسم المبيعات — دين البيع أو إنقاصه عند إلغائه — بوصفه الذي يكتبه
+  /// مسار الدين («… - بيع #N: …» · «إلغاء بيع #N — إنقاص دين …»). لحساب KPIs من
+  /// السطور (فلتر النوع) وحده؛ أرقام الخادم الكاملة تأتي بـ`balance_add_sales_sum`.
+  bool get isSaleDebtLine {
+    if (actionType.toUpperCase().trim() != 'BALANCE_ADD') return false;
+    final d = actionDescription ?? '';
+    return d.startsWith('إلغاء بيع #') || d.contains('- بيع #');
+  }
 
   /// تفعيلٌ أو تمديد — ما يُحسب له سعر باقة (تعريف `activationLike` في الخادم).
   bool get isSale {

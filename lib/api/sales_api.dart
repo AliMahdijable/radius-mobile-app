@@ -166,6 +166,11 @@ class Sale {
     this.employeeId,
     this.createdAt,
     this.voidReason,
+    this.voidMode,
+    this.voidDebt,
+    this.voidRefund,
+    this.voidBalanceBefore,
+    this.voidStartedAt,
   });
 
   final int id;
@@ -173,7 +178,8 @@ class Sale {
   /// `cash` · `debt`
   final String payment;
 
-  /// `pending` · `done` · `failed` · `unknown` · `void`
+  /// `pending` · `done` · `failed` · `unknown` · `void` · `voiding` (إلغاءٌ على الدين
+  /// محجوزٌ قبل إنقاص الدين) · `void_unknown` (لم يتأكّد إنقاصه — يحسمه الوكيل)
   final String status;
   final num total;
   final num cost;
@@ -190,6 +196,15 @@ class Sale {
   final int? employeeId;
   final DateTime? createdAt;
   final String? voidReason;
+
+  /// إلغاء البيع على الدين: `none` (لم يُسدَّد منه شيء) · `credit` (ما سدّده بقي
+  /// رصيداً له) · `cash` (أُرجع له نقداً)، وإنقاص الدين، والنقد المُرجَع، ورصيده
+  /// قبله (حسم «غير مؤكَّد» يعرض المتوقَّع بعده).
+  final String? voidMode;
+  final num? voidDebt;
+  final num? voidRefund;
+  final num? voidBalanceBefore;
+  final DateTime? voidStartedAt;
   final List<SaleLine> lines;
 
   bool get isDebt => payment == 'debt';
@@ -197,16 +212,20 @@ class Sale {
   bool get isVoid => status == 'void';
   bool get isFailed => status == 'failed';
 
-  /// إلغاءٌ من القسم: النقديّ المكتمل وحده (الدين يُعدَّل من صفحة المشترك).
-  bool get voidable => !isDebt && isDone;
+  /// إلغاءٌ من القسم: المكتمل نقداً أو على الدين (الدين بمساره: معاينة دين
+  /// المشترك ثمّ اختيار ما سدّده منه).
+  bool get voidable => isDone;
+
+  /// الحسم يخصّ الإلغاء (`resolve-void`) لا البيع.
+  bool get resolvesVoid => status == 'void_unknown' || status == 'voiding';
 
   /// «غير مؤكَّد»: نتيجة الدين مجهولة، أو «جارٍ» أقدم من دقيقتين (انقطع الخادم
-  /// بين البيع ونتيجة الدين) — يُحسم بعد فحص دين المشترك.
+  /// بين البيع ونتيجة الدين) — يُحسم بعد فحص دين المشترك. الإلغاء على الدين مثله.
   bool resolvable([DateTime? now]) {
-    if (status == 'unknown') return true;
-    if (status != 'pending') return false;
-    final at = createdAt;
-    return at != null && (now ?? DateTime.now()).difference(at) > const Duration(minutes: 2);
+    final n = now ?? DateTime.now();
+    if (status == 'unknown' || status == 'void_unknown') return true;
+    final at = status == 'pending' ? createdAt : status == 'voiding' ? voidStartedAt : null;
+    return at != null && n.difference(at) > const Duration(minutes: 2);
   }
 
   String get customerLabel {
@@ -236,11 +255,47 @@ class Sale {
       employeeId: _int(j['employee_id']),
       createdAt: _date(j['created_at']),
       voidReason: _str(j['void_reason']),
+      voidMode: _str(j['void_mode']),
+      voidDebt: j['void_debt'] == null ? null : _num(j['void_debt']),
+      voidRefund: j['void_refund'] == null ? null : _num(j['void_refund']),
+      voidBalanceBefore: j['void_balance_before'] == null ? null : _num(j['void_balance_before']),
+      voidStartedAt: _date(j['void_started_at']),
       lines: raw is List
           ? raw.whereType<Map>().map((m) => SaleLine.fromJson(Map<String, dynamic>.from(m))).toList()
           : const <SaleLine>[],
     );
   }
+}
+
+/// قبل إلغاء بيعٍ على الدين: رصيد المشترك الآن (سالب = دين) وما سُدّد من البيع
+/// ونتيجة كلّ اختيار — `GET /api/v2/sales/:id/void-preview`.
+class VoidPreview {
+  const VoidPreview({
+    required this.payment,
+    required this.total,
+    this.balance = 0,
+    this.paid = 0,
+    this.needsChoice = false,
+    this.afterCredit = 0,
+    this.afterCash = 0,
+  });
+  final String payment;
+  final num total;
+  final num balance;
+  final num paid;
+  final bool needsChoice;
+  final num afterCredit;
+  final num afterCash;
+
+  static VoidPreview fromJson(Map<String, dynamic> j) => VoidPreview(
+        payment: _str(j['payment']) ?? 'debt',
+        total: _num(j['total']),
+        balance: _num(j['balance']),
+        paid: _num(j['paid']),
+        needsChoice: j['needs_choice'] == true,
+        afterCredit: _num(j['after_credit']),
+        afterCash: _num(j['after_cash']),
+      );
 }
 
 class SalesTotals {
@@ -631,14 +686,65 @@ class SalesApi {
     }
   }
 
-  /// إلغاء بيعٍ نقديّ ([reason] إجباريّ): ترجع الكمّيّة ويُسجَّل إرجاع المبلغ.
-  static Future<({bool ok, String? message})> voidSale(int id, String reason) {
-    return _write(() => ApiClient.dio.post<Object?>('$_base/$id/void', data: {'reason': reason}), 'تعذّر الإلغاء');
+  /// الإلغاء على الدين يقرأ دين المشترك ثمّ يُنقصه بمسار الدين (نداءان حتّى ٤٥ث لكلٍّ).
+  static Options get _void => Options(receiveTimeout: const Duration(seconds: 100));
+
+  /// قبل إلغاء بيعٍ على الدين: رصيد المشترك وما سُدّد من البيع — بمسار الدين نفسه
+  /// (بصلاحيّته)، بلا كتابة.
+  static Future<({VoidPreview? preview, String? error})> voidPreview(int id) async {
+    try {
+      final r = await ApiClient.dio.get<Object?>('$_base/$id/void-preview', options: _sell);
+      final body = _map(r.data);
+      if (body['success'] != true) {
+        return (preview: null, error: _str(body['message']) ?? 'تعذّرت قراءة دين المشترك');
+      }
+      return (preview: VoidPreview.fromJson(_map(body['data'])), error: null);
+    } catch (e) {
+      _log('void-preview', e);
+      final ours = _ourReply(e);
+      return (
+        preview: null,
+        error: (ours != null ? _str(ours['message']) : null) ?? humanError(e, fallback: 'تعذّرت قراءة دين المشترك'),
+      );
+    }
+  }
+
+  /// إلغاء بيع ([reason] إجباريّ). النقديّ: ترجع الكمّيّة ويُسجَّل إرجاع المبلغ.
+  /// على الدين: [refund] `credit`/`cash` حين سُدّد منه جزء، و[expectedPaid] ما
+  /// عُرض على الوكيل. الرموز: `SALE_PAID_PART`/`PAID_CHANGED`/`BALANCE_CHANGED`
+  /// (أعد المعاينة) · `OUTCOME_UNKNOWN` (محجوزٌ «غير مؤكَّد» يُحسم من القائمة) ·
+  /// `AMBIGUOUS` (لم يصل حكم الخادم — حدّث القائمة، لا إعادة عمياء).
+  static Future<({bool ok, String? message, String? code})> voidSale(
+    int id,
+    String reason, {
+    String? refund,
+    num? expectedPaid,
+  }) async {
+    try {
+      final r = await ApiClient.dio.post<Object?>('$_base/$id/void', options: _void, data: {
+        'reason': reason,
+        if (refund != null) 'refund': refund,
+        if (expectedPaid != null) 'expected_paid': expectedPaid,
+      });
+      final body = _map(r.data);
+      final ok = body['success'] == true;
+      return (ok: ok, message: _str(body['message']) ?? (ok ? null : 'تعذّر الإلغاء'), code: ok ? null : _str(body['code']));
+    } catch (e) {
+      _log('void', e);
+      final ours = _ourReply(e);
+      if (ours != null) return (ok: false, message: _str(ours['message']) ?? 'تعذّر الإلغاء', code: _str(ours['code']));
+      return (ok: false, message: humanError(e, fallback: 'تعذّر التأكّد من نتيجة الإلغاء'), code: 'AMBIGUOUS');
+    }
   }
 
   /// حسم بيعٍ على الدين بنتيجةٍ مجهولة بعد فحص دين المشترك.
   static Future<({bool ok, String? message})> resolve(int id, {required bool applied}) {
     return _write(() => ApiClient.dio.post<Object?>('$_base/$id/resolve', data: {'applied': applied}), 'تعذّر الحسم');
+  }
+
+  /// حسم إلغاء بيعٍ على الدين لم يتأكّد إنقاص دينه — بعد فحص دين المشترك.
+  static Future<({bool ok, String? message})> resolveVoid(int id, {required bool applied}) {
+    return _write(() => ApiClient.dio.post<Object?>('$_base/$id/resolve-void', data: {'applied': applied}), 'تعذّر الحسم');
   }
 
   static Future<({bool ok, String? message})> _write(Future<Response<Object?>> Function() call, String fallback) async {

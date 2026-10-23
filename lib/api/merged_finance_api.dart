@@ -193,6 +193,10 @@ class MergedFinanceApi {
       goodsProfitSum: n((k) => k.goodsProfitSum),
       goodsDebtSum: n((k) => k.goodsDebtSum),
       goodsCount: i((k) => k.goodsCount),
+      // شركةٌ بلا الحقل (خادمٌ أقدم) ⇒ ديْن مبيعاتها المكتملة مكانه — كقاعدة الشركة الواحدة.
+      balanceAddSalesSum: ks.any((k) => k.balanceAddSalesSum != null)
+          ? n((k) => k.balanceAddSalesSum ?? k.goodsDebtSum)
+          : null,
     );
   }
 

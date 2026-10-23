@@ -415,6 +415,10 @@ _ActionMeta _actionMeta(String at, String desc) {
       // فصل جلسة المشترك من الشبكة — مو مالي، فحيادي رمادي.
       return _ActionMeta('فصل المستخدم', LucideIcons.power, AppColors.textMid);
     case 'BALANCE_ADD':
+      // إلغاء بيعٍ على الدين: السطر نفسه بمبلغٍ سالب يُنقص الدين — موجبٌ أخضر.
+      if (desc.startsWith('إلغاء بيع')) {
+        return _ActionMeta('إنقاص دين (إلغاء بيع)', LucideIcons.undo2, _kPositive);
+      }
       // إضافة دين = سالب أحمر (مبلغ يزيد على المشترك، خسارة للمدير).
       return _ActionMeta('إضافة دين', LucideIcons.plus, AppColors.error,
           debit: true);

@@ -32,6 +32,7 @@ String arabicActionLabel(String actionType, [String description = '']) {
     case 'SUBSCRIBER_DISCONNECT':
       return 'فصل المستخدم';
     case 'BALANCE_ADD':
+      if (description.startsWith('إلغاء بيع')) return 'إنقاص دين (إلغاء بيع)';
       return 'إضافة دين';
     case 'BALANCE_DEDUCT':
       return 'تسديد دين';

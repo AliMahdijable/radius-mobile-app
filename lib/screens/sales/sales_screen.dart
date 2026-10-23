@@ -422,6 +422,22 @@ class _SalesScreenState extends State<SalesScreen> {
 
 String _money(num v) => '${formatIQD(v)} ${'common.currency'.tr()}';
 
+/// «دين 15,000» · «رصيد له 20,000» · «صفر» — رصيد المشترك سالبٌ للدين.
+String _balanceText(num b) {
+  if (b < 0) return 'sales.bal_debt'.tr(namedArgs: {'amount': _money(-b)});
+  if (b > 0) return 'sales.bal_credit'.tr(namedArgs: {'amount': _money(b)});
+  return 'sales.bal_zero'.tr();
+}
+
+/// ما جرى بإلغاء بيعٍ على الدين: النقد المُرجَع أو بقاؤه رصيداً، وإنقاص الدين.
+String _voidDoneText(Sale s) => [
+      if (s.voidMode == 'cash') 'sales.void_done_cash'.tr(namedArgs: {'amount': _money(s.voidRefund ?? 0)}),
+      if (s.voidMode == 'credit') 'sales.void_done_credit'.tr(),
+      (s.voidDebt ?? 0) > 0
+          ? 'sales.void_done_debt'.tr(namedArgs: {'amount': _money(s.voidDebt ?? 0)})
+          : 'sales.void_done_nodebt'.tr(),
+    ].join(' · ');
+
 String _signedMoney(num v) => '${v < 0 ? '-' : ''}${_money(v)}';
 
 String _day(DateTime d) =>
@@ -673,6 +689,12 @@ class _ActionButton extends StatelessWidget {
       return (label: 'sales.st_failed'.tr(), tone: AppTone.danger);
     case 'unknown':
       return (label: 'sales.st_unknown'.tr(), tone: AppTone.warning);
+    case 'void_unknown':
+      return (label: 'sales.st_void_unknown'.tr(), tone: AppTone.warning);
+    case 'voiding':
+      return s.resolvable()
+          ? (label: 'sales.st_void_unknown'.tr(), tone: AppTone.warning)
+          : (label: 'sales.st_voiding'.tr(), tone: AppTone.warning);
     default:
       return s.resolvable()
           ? (label: 'sales.st_unknown'.tr(), tone: AppTone.warning)
@@ -757,6 +779,15 @@ class _SaleTile extends StatelessWidget {
               style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5),
             ),
           ],
+          if (sale.isVoid && sale.isDebt && sale.voidMode != null) ...[
+            const SizedBox(height: Sp.xxs),
+            Text(
+              _voidDoneText(sale),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5),
+            ),
+          ],
           const SizedBox(height: Sp.sm),
           Row(
             children: [
@@ -794,7 +825,8 @@ class _SaleTile extends StatelessWidget {
                   label: 'sales.resolve'.tr(),
                   icon: LucideIcons.triangleAlert,
                   tone: AppTone.warning,
-                  locked: !canResolve,
+                  // حسم إلغاءٍ «غير مؤكَّد» بصلاحيّة الإلغاء، وحسم بيعٍ بصلاحيّة البيع.
+                  locked: sale.resolvesVoid ? !canVoid : !canResolve,
                   onTap: onResolve,
                 ),
             ],
@@ -1674,53 +1706,200 @@ class _VoidSheetState extends State<_VoidSheet> {
   final _reason = TextEditingController();
   bool _busy = false;
 
+  /// على الدين: رصيد المشترك وما سُدّد من البيع (بمسار الدين نفسه) — يُقرأ عند الفتح.
+  VoidPreview? _pv;
+  String? _pvError;
+  bool _pvLoading = false;
+
+  /// ما يصير بما سدّده المشترك: `credit` (رصيدٌ له) · `cash` (يُرجَع نقداً).
+  String? _refund;
+
+  Sale get _s => widget.sale;
+  bool get _needsChoice => _pv != null && _pv!.needsChoice && _pv!.paid > 0;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_s.isDebt) _loadPreview();
+  }
+
   @override
   void dispose() {
     _reason.dispose();
     super.dispose();
   }
 
+  Future<void> _loadPreview() async {
+    setState(() {
+      _pvLoading = true;
+      _pvError = null;
+    });
+    final r = await SalesApi.voidPreview(_s.id);
+    if (!mounted) return;
+    setState(() {
+      _pvLoading = false;
+      _pv = r.preview;
+      _pvError = r.error;
+      _refund = null;
+    });
+  }
+
   Future<void> _submit() async {
     setState(() => _busy = true);
-    final r = await SalesApi.voidSale(widget.sale.id, _reason.text.trim());
+    final choice = _s.isDebt && _needsChoice;
+    final r = await SalesApi.voidSale(
+      _s.id,
+      _reason.text.trim(),
+      refund: choice ? _refund : null,
+      expectedPaid: choice ? _pv!.paid : null,
+    );
     if (!mounted) return;
     setState(() => _busy = false);
     if (r.ok) {
-      showSheetSnack(context, 'sales.voided'.tr(namedArgs: {'id': '${widget.sale.id}'}));
+      final id = '${_s.id}';
+      final msg = !_s.isDebt
+          ? 'sales.voided'.tr(namedArgs: {'id': id})
+          : choice && _refund == 'cash'
+              ? 'sales.voided_cash'.tr(namedArgs: {'id': id, 'amount': _money(_pv!.paid)})
+              : choice
+                  ? 'sales.voided_credit'.tr(namedArgs: {'id': id, 'amount': _money(_pv!.paid)})
+                  : 'sales.voided_debt'.tr(namedArgs: {'id': id});
+      showSheetSnack(context, msg);
+      Navigator.of(context).pop(true);
+      return;
+    }
+    // محجوزٌ «غير مؤكَّد» بالقائمة، أو لم يصل حكم الخادم — لا إعادة عمياء: تُحدَّث القائمة.
+    if (r.code == 'OUTCOME_UNKNOWN' || r.code == 'AMBIGUOUS') {
+      showSheetSnack(context, r.message ?? 'sales.not_saved'.tr(), isError: true);
       Navigator.of(context).pop(true);
       return;
     }
     showSheetSnack(context, r.message ?? 'sales.not_saved'.tr(), isError: true);
+    if (const {'SALE_PAID_PART', 'PAID_CHANGED', 'BALANCE_CHANGED'}.contains(r.code)) _loadPreview();
+  }
+
+  Widget _debtBody() {
+    final pv = _pv;
+    if (_pvError != null) {
+      return Row(
+        children: [
+          Expanded(child: _Banner(icon: LucideIcons.triangleAlert, text: _pvError!)),
+          const SizedBox(width: Sp.sm),
+          TextButton(onPressed: _loadPreview, child: Text('sales.void_retry'.tr())),
+        ],
+      );
+    }
+    if (pv == null || _pvLoading) {
+      return Row(
+        children: [
+          const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+          const SizedBox(width: Sp.sm),
+          Text('sales.void_reading'.tr(), style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5)),
+        ],
+      );
+    }
+    final remain = pv.total - pv.paid < 0 ? 0 : pv.total - pv.paid;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.md),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'sales.void_balance_now'.tr(namedArgs: {'user': iso(_s.username ?? _s.customerName ?? '—')}),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5),
+                ),
+              ),
+              const SizedBox(width: Sp.sm),
+              Text(
+                _balanceText(pv.balance),
+                style: AppType.label(color: AppColors.textHi).copyWith(fontSize: 13.5, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: Sp.md),
+        if (_needsChoice) ...[
+          Text(
+            'sales.void_paid'.tr(namedArgs: {'amount': _money(pv.paid)}),
+            style: AppType.label(color: AppColors.textHi).copyWith(fontSize: 13.5, height: 1.6),
+          ),
+          const SizedBox(height: Sp.sm),
+          _ChoiceCard(
+            selected: _refund == 'credit',
+            icon: LucideIcons.handCoins,
+            title: 'sales.void_credit'.tr(),
+            subtitle: 'sales.void_credit_sub'.tr(namedArgs: {'amount': _money(pv.total), 'after': _balanceText(pv.afterCredit)}),
+            onTap: () => setState(() => _refund = 'credit'),
+          ),
+          const SizedBox(height: Sp.sm),
+          _ChoiceCard(
+            selected: _refund == 'cash',
+            icon: LucideIcons.wallet,
+            title: 'sales.void_cash'.tr(namedArgs: {'amount': _money(pv.paid)}),
+            subtitle: 'sales.void_cash_sub'.tr(namedArgs: {'amount': _money(remain), 'after': _balanceText(pv.afterCash)}),
+            onTap: () => setState(() => _refund = 'cash'),
+          ),
+        ] else
+          Text(
+            'sales.void_unpaid'.tr(namedArgs: {'amount': _money(pv.total), 'after': _balanceText(pv.afterCredit)}),
+            style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.6),
+          ),
+        const SizedBox(height: Sp.sm),
+        Text(
+          'sales.void_debt_info'.tr(),
+          style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.6),
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final s = widget.sale;
+    final s = _s;
+    final ready = !s.isDebt || (_pv != null && !_pvLoading);
+    final canSubmit = _reason.text.trim().length >= 2 && ready && (!_needsChoice || _refund != null);
+    final label = !s.isDebt
+        ? 'sales.void_btn'.tr(namedArgs: {'amount': _money(s.total)})
+        : _needsChoice && _refund == 'cash'
+            ? 'sales.void_btn_refund'.tr(namedArgs: {'amount': _money(_pv!.paid)})
+            : 'sales.void_btn_debt'.tr();
     return DesignSheet(
       header: SheetHeaderBar(
         icon: LucideIcons.undo2,
         title: 'sales.void_title'.tr(namedArgs: {'id': '${s.id}'}),
-        subtitle: '${_linesText(s.lines)} — ${_money(s.total)}',
+        subtitle: '${_linesText(s.lines)} — ${_money(s.total)}${s.isDebt ? ' ${'sales.on_debt'.tr()}' : ''}',
         tint: AppColors.error,
         tintBg: AppColors.dangerSoftBg,
         onClose: () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
-        label: 'sales.void_btn'.tr(namedArgs: {'amount': _money(s.total)}),
+        label: label,
         icon: LucideIcons.undo2,
         color: AppColors.error,
-        enabled: _reason.text.trim().length >= 2,
+        enabled: canSubmit,
         busy: _busy,
         onPressed: _submit,
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'sales.void_info'.tr(),
-            style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.6),
-          ),
+          if (s.isDebt)
+            _debtBody()
+          else
+            Text(
+              'sales.void_info'.tr(),
+              style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.6),
+            ),
           const SizedBox(height: Sp.lg),
           SheetSection(
             label: '${'sales.f_void_reason'.tr()} *',
@@ -1733,6 +1912,77 @@ class _VoidSheetState extends State<_VoidSheet> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// اختيارٌ واحد من اثنين (ما يصير بما سدّده المشترك عند إلغاء البيع).
+class _ChoiceCard extends StatelessWidget {
+  const _ChoiceCard({
+    required this.selected,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+  final bool selected;
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    const tone = AppTone.brand;
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(R.lg),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 10),
+          decoration: BoxDecoration(
+            color: selected ? tone.softBg : null,
+            borderRadius: BorderRadius.circular(R.lg),
+            border: Border.all(color: selected ? tone.fill : AppColors.border, width: selected ? 1.5 : 1),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: selected ? tone.fill : AppColors.surfaceSunken,
+                  borderRadius: BorderRadius.circular(R.sm),
+                ),
+                child: Icon(icon, size: 16, color: selected ? AppColors.surface : AppColors.textMid),
+              ),
+              const SizedBox(width: Sp.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: AppType.label(color: AppColors.textHi).copyWith(fontSize: 13.5, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: Sp.xxs),
+                    Text(
+                      subtitle,
+                      style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5, height: 1.5),
+                    ),
+                  ],
+                ),
+              ),
+              if (selected) ...[
+                const SizedBox(width: Sp.sm),
+                Icon(LucideIcons.circleCheck, size: 18, color: tone.fill),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1756,14 +2006,18 @@ class _ResolveSheetState extends State<_ResolveSheet> {
       return;
     }
     setState(() => _busy = true);
-    final r = await SalesApi.resolve(widget.sale.id, applied: applied);
+    // إلغاءٌ على الدين لم يتأكّد إنقاص دينه ⇒ مساره (resolve-void)؛ وإلّا بيعٌ لم يتأكّد إضافة دينه.
+    final isVoid = widget.sale.resolvesVoid;
+    final r = isVoid
+        ? await SalesApi.resolveVoid(widget.sale.id, applied: applied)
+        : await SalesApi.resolve(widget.sale.id, applied: applied);
     if (!mounted) return;
     setState(() => _busy = false);
     if (r.ok) {
-      showSheetSnack(
-        context,
-        (applied ? 'sales.resolved_yes' : 'sales.resolved_no').tr(namedArgs: {'id': '${widget.sale.id}'}),
-      );
+      final key = isVoid
+          ? (applied ? 'sales.resolved_void_yes' : 'sales.resolved_void_no')
+          : (applied ? 'sales.resolved_yes' : 'sales.resolved_no');
+      showSheetSnack(context, key.tr(namedArgs: {'id': '${widget.sale.id}'}));
       Navigator.of(context).pop(true);
       return;
     }
@@ -1774,17 +2028,32 @@ class _ResolveSheetState extends State<_ResolveSheet> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final s = widget.sale;
+    final isVoid = s.resolvesVoid;
+    final before = s.voidBalanceBefore ?? 0;
+    final vDebt = s.voidDebt ?? 0;
+    final vRefund = s.voidMode == 'cash' ? (s.voidRefund ?? 0) : 0;
+    final info = isVoid
+        ? 'sales.resolve_void_info'.tr(namedArgs: {'amount': _money(vDebt), 'user': iso(s.username ?? '—')})
+        : 'sales.resolve_info'.tr(namedArgs: {'amount': _money(s.total), 'user': iso(s.username ?? '—')});
+    final hints = isVoid
+        ? '• ${'sales.resolve_void_yes_hint'.tr(namedArgs: {
+            'after': _balanceText(before + vDebt),
+            'refund': vRefund > 0 ? 'sales.resolve_void_refund'.tr(namedArgs: {'amount': _money(vRefund)}) : '',
+          })}\n• ${'sales.resolve_void_no_hint'.tr(namedArgs: {'before': _balanceText(before)})}'
+        : '• ${'sales.resolve_yes_hint'.tr()}\n• ${'sales.resolve_no_hint'.tr()}';
+    final yes = isVoid ? 'sales.resolve_void_yes' : 'sales.resolve_yes';
+    final no = isVoid ? 'sales.resolve_void_no' : 'sales.resolve_no';
     return DesignSheet(
       header: SheetHeaderBar(
         icon: LucideIcons.triangleAlert,
-        title: 'sales.resolve_title'.tr(namedArgs: {'id': '${s.id}'}),
+        title: (isVoid ? 'sales.resolve_void_title' : 'sales.resolve_title').tr(namedArgs: {'id': '${s.id}'}),
         subtitle: '${_linesText(s.lines)} — ${_money(s.total)}',
         tint: AppColors.warningFill,
         tintBg: AppColors.warningSoftBg,
         onClose: () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
-        label: _armed == true ? 'sales.resolve_yes_confirm'.tr() : 'sales.resolve_yes'.tr(),
+        label: _armed == true ? '${yes}_confirm'.tr() : yes.tr(),
         icon: LucideIcons.circleCheck,
         color: AppColors.successFill,
         busy: _busy && _armed == true,
@@ -1798,7 +2067,7 @@ class _ResolveSheetState extends State<_ResolveSheet> {
               onPressed: _busy ? null : () => _submit(false),
               icon: Icon(LucideIcons.circleX, size: 16, color: AppColors.error),
               label: Text(
-                _armed == false ? 'sales.resolve_no_confirm'.tr() : 'sales.resolve_no'.tr(),
+                _armed == false ? '${no}_confirm'.tr() : no.tr(),
                 style: AppType.label(color: AppColors.error).copyWith(fontSize: 13.5, fontWeight: FontWeight.w700),
               ),
             ),
@@ -1809,12 +2078,12 @@ class _ResolveSheetState extends State<_ResolveSheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'sales.resolve_info'.tr(namedArgs: {'amount': _money(s.total), 'user': iso(s.username ?? '—')}),
+            info,
             style: AppType.label(color: AppColors.textHi).copyWith(fontSize: 13.5, height: 1.6),
           ),
           const SizedBox(height: Sp.md),
           Text(
-            '• ${'sales.resolve_yes_hint'.tr()}\n• ${'sales.resolve_no_hint'.tr()}',
+            hints,
             style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.7),
           ),
           if (_armed != null) ...[

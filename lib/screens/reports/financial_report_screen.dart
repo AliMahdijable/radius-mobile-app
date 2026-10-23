@@ -838,6 +838,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
         debtPay = 0,
         balanceDeduct = 0,
         balanceAdd = 0,
+        balanceAddSales = 0,
         expenses = 0;
     int activationsCount = 0, extendCount = 0, expensesCount = 0;
     for (final l in logs) {
@@ -864,6 +865,8 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
         balanceDeduct += l.amount;
       } else if (at == 'BALANCE_ADD') {
         balanceAdd += l.amount;
+        // دين البيع وإنقاصه عند الإلغاء — ثمن مادّة لا «إضافة دين يدويّة» ([FinanceKPIs.manualDebtAddSum]).
+        if (l.isSaleDebtLine) balanceAddSales += l.amount;
       } else if (at == 'EXPENSE_ADD' || at == 'ADMIN_EXPENSE') {
         expenses += l.amount;
         expensesCount++;
@@ -881,6 +884,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
       extendCount: extendCount,
       packageCost: packageCost,
       partialUnpaidFromLogs: partialUnpaid,
+      balanceAddSalesSum: balanceAddSales,
     );
   }
 
