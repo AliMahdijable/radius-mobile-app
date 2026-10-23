@@ -150,7 +150,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final desk = DesktopScope.of(context);
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: canPop && !desk
+      // الحاسبة: رأس الصفحة بعرضها كباقي الأقسام، والقائمة تحته في الوسط.
+      appBar: desk
+          ? deskPageBar(
+              context,
+              mobile: AppBar(),
+              title: 'settings.title'.tr(),
+              subtitle: 'desktop.settings_subtitle'.tr(),
+            )
+          : canPop
           ? AppBar(
               backgroundColor: AppColors.bg,
               elevation: 0,
@@ -172,9 +180,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: SafeArea(
         bottom: false,
         child: Align(
-          alignment: AlignmentDirectional.topStart,
+          alignment: Alignment.topCenter,
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: desk ? 880 : double.infinity),
+            constraints: BoxConstraints(maxWidth: desk ? 920 : double.infinity),
             child: ListView(
           padding: EdgeInsets.fromLTRB(
             Sp.lg,
@@ -183,15 +191,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Sp.huge * 2,
           ),
           children: [
-            if (desk)
-              Padding(
-                padding: const EdgeInsets.only(top: Sp.xs, bottom: Sp.xl),
-                child: DeskPageHeader(
-                  title: 'settings.title'.tr(),
-                  subtitle: DeskSubtitle('desktop.settings_subtitle'.tr()),
-                ),
-              )
-            else if (!canPop)
+            if (!canPop && !desk)
               Padding(
                 padding: const EdgeInsets.only(bottom: Sp.lg),
                 child: Text('settings.title'.tr(),

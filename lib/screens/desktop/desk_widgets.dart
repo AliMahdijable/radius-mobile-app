@@ -198,11 +198,15 @@ PreferredSizeWidget deskPageBar(
         : Column(
             children: [
               head,
+              // التبويبات بعرض محتواها في بداية السطر — لا ممدودةً بعرض الصفحة كالهاتف.
               Container(
                 color: AppColors.bg,
                 padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
                 alignment: AlignmentDirectional.centerStart,
-                child: tabs,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 620),
+                  child: tabs,
+                ),
               ),
             ],
           ),
@@ -288,9 +292,12 @@ Widget deskFooter(BuildContext context, Widget bar) {
 /// مجموعة صفوفٍ مسطّحة (شريط الملخّص، صفوف القائمة): على الحاسبة بطاقةٌ بحدٍّ وزوايا داخل حشوة
 /// الصفحة بدل شرائط تلتصق بحافّتَي المحتوى، وعلى الهاتف كما هي حرفاً.
 class DeskSection extends StatelessWidget {
-  const DeskSection({super.key, required this.children, this.gap = Sp.md});
+  const DeskSection({super.key, required this.children, this.gap = Sp.md, this.inset = Sp.lg});
 
   final List<Widget> children;
+
+  /// حشوة الجانبين — بقدر بطاقات الصفحة التي تحتها لتصطفّ حوافّها.
+  final double inset;
 
   /// الفراغ تحت البطاقة.
   final double gap;
@@ -305,7 +312,7 @@ class DeskSection extends StatelessWidget {
     );
     if (!DesktopScope.of(context)) return column;
     return Padding(
-      padding: EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, gap),
+      padding: EdgeInsets.fromLTRB(inset, 0, inset, gap),
       child: Container(
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(

@@ -12,6 +12,7 @@ import 'account_settings_card.dart' show confirmAndDeleteAccount;
 import 'account_widgets.dart';
 import 'companies_screen.dart';
 import 'subscription_screen.dart';
+import '../desktop/desk_auth_frame.dart';
 
 /// Pro البند ٤: باب التطبيق بلا جلسة ساس — يقرّر أين يذهب المستخدم:
 /// لا حساب/بريدٌ غير مؤكَّد ← شاشة الحساب · اشتراكٌ منتهٍ ← التفعيل · وإلّا
@@ -129,7 +130,7 @@ class _AccountGateScreenState extends State<AccountGateScreen> {
         ],
       );
     }
-    return Scaffold(
+    return DeskAuthLayout.wrap(context, Scaffold(
       backgroundColor: AppColors.bg,
       body: Center(
         child: Column(
@@ -147,6 +148,6 @@ class _AccountGateScreenState extends State<AccountGateScreen> {
           ],
         ),
       ),
-    );
+    ));
   }
 }

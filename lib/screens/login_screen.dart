@@ -29,6 +29,7 @@ import 'main_shell.dart';
 import '../core/platform/app_platform.dart';
 import '../core/platform/desktop_layout.dart';
 import '../core/widgets/app_sheet.dart';
+import 'desktop/desk_auth_frame.dart';
 
 /// Login — Soft Pastel + Premium. Wired to https://rad.mysvcs.net/api/auth/login.
 /// Persists token on success via AuthStorage. On failure shows a snackbar.
@@ -434,7 +435,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return Scaffold(
+    return DeskAuthLayout.wrap(context, Scaffold(
       backgroundColor: AppColors.bg,
       // resizeToAvoidBottomInset lets the layout shift up when the keyboard
       // appears — without ConstrainedBox/Spacer fighting the new constraints.
@@ -542,7 +543,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -1041,7 +1042,10 @@ class _Footer extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     return Center(
       child: Text(
-        '${AppVersion.shortVersion}  •  ${'login.footer_copyright'.tr()}',
+        // الحاسبة: الإصدار في لوحة العلامة بجانب النموذج — لا يتكرّر.
+                    DeskAuthScope.of(context)
+                        ? 'login.footer_copyright'.tr()
+                        : '${AppVersion.shortVersion}  •  ${'login.footer_copyright'.tr()}',
         style: AppType.muted(color: AppColors.textLow),
       ),
     );

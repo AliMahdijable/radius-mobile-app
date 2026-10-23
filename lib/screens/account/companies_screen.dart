@@ -17,6 +17,7 @@ import 'account_widgets.dart';
 import 'company_open_flow.dart';
 import 'my_devices_screen.dart';
 import 'subscription_screen.dart';
+import '../desktop/desk_auth_frame.dart';
 
 /// Pro البند ٤ — الطبقة ②: «شركاتي». شركات الحساب يعرفها الخادم (كلّ دخول
 /// ساسٍ ناجح بحساب الإيميل يربط شركته)، وكلمات سرّها على الجهاز. ضغطةٌ على
@@ -194,7 +195,7 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
     final warnTone = neutral
         ? (!sub.active || (!sub.isFreeForever && sub.daysLeft <= 7))
         : sub.isTrial;
-    return Scaffold(
+    return DeskAuthLayout.wrap(context, Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
         child: RefreshIndicator(
@@ -296,7 +297,7 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
           ),
         ),
       ),
-    );
+    ));
   }
 
   List<Widget> _body() {

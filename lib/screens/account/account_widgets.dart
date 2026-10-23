@@ -11,6 +11,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../core/platform/desktop_layout.dart';
+import '../desktop/desk_auth_frame.dart';
 
 /// عناصر شاشات طبقة الحساب — بنفس لغة شاشة الدخول (`login_screen.dart`):
 /// كارت سطحٍ أبيض بحواف R.xl، حقولٌ بتعبئة surfaceInput، وزرٌّ أساسيّ بارتفاع 54.
@@ -110,7 +111,7 @@ class AccountScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return Scaffold(
+    return DeskAuthLayout.wrap(context, Scaffold(
       backgroundColor: AppColors.bg,
       resizeToAvoidBottomInset: true,
       body: SafeArea(
@@ -161,7 +162,10 @@ class AccountScaffold extends StatelessWidget {
                 SizedBox(height: compact ? Sp.lg : Sp.huge),
                 Center(
                   child: Text(
-                    '${AppVersion.shortVersion}  •  ${'login.footer_copyright'.tr()}',
+                    // الحاسبة: الإصدار في لوحة العلامة بجانب النموذج — لا يتكرّر.
+                    DeskAuthScope.of(context)
+                        ? 'login.footer_copyright'.tr()
+                        : '${AppVersion.shortVersion}  •  ${'login.footer_copyright'.tr()}',
                     style: AppType.muted(color: AppColors.textLow),
                   ),
                 ),
@@ -172,7 +176,7 @@ class AccountScaffold extends StatelessWidget {
           ),
         ))),
       ),
-    );
+    ));
   }
 
   Widget _refreshable(Widget scroll) {

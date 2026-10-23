@@ -462,7 +462,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
     required Color color,
   }) {
     // الحاسبة: بطاقةٌ داخل حشوة الصفحة لا شريطٌ ملتصق بالحافّتين.
-    return DeskSection(gap: 0, children: [Container(
+    return DeskSection(gap: 0, inset: 12, children: [Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
         color: AppColors.surface,

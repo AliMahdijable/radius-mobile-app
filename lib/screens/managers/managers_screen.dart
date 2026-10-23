@@ -347,7 +347,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
                   child: Center(child: CircularProgressIndicator()),
                 )
               else if (filtered.isEmpty)
-                _empty()
+                DeskSection(children: [_empty()])
               else
                 DeskSection(children: [
                   for (final m in filtered)

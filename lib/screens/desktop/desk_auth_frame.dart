@@ -8,15 +8,23 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 
-/// شاشات البداية على الحاسبة (دخول الحساب، الشركات، دخول الشركة…): لوحة العلامة على جانب —
-/// الشعار والاسم وما يفعله التطبيق — والنموذج على الجانب الآخر بعرضٍ مريح، بدل عمود هاتفٍ وسط نافذةٍ
-/// فارغة. الشاشات نفسها لا تتغيّر؛ تُخفي شعارها الكبير حين تجد [DeskAuthScope].
-class DeskAuthFrame extends StatelessWidget {
-  const DeskAuthFrame({super.key, required this.child});
+/// شاشات البداية على الحاسبة (بوّابة الحساب، دخول الحساب، شركاتي، دخول الشركة، البداية): لوحة العلامة
+/// على جانب — الشعار والاسم وما يفعله التطبيق — والنموذج على الجانب الآخر بعرضٍ مريح، بدل عمود هاتفٍ وسط
+/// نافذةٍ فارغة.
+///
+/// ⚠️ كلّ شاشةٍ تلفّ نفسها بها ([wrap]) — لا إطارٌ حول الـNavigator كلّه: الإطار حول الـNavigator كان يحصر
+/// طبقة النوافذ المنبثقة في عمود النموذج، فبدا تأكيد «تسجيل الخروج» وتعتيمه محشورَين في عمودٍ ضيّق (بلاغ
+/// المالك ٢٣ أكتوبر). هنا الـNavigator بعرض النافذة كلّها، والنوافذ تغطّيها كاملة.
+class DeskAuthLayout extends StatelessWidget {
+  const DeskAuthLayout({super.key, required this.child});
 
   final Widget child;
 
   static const double _formWidth = 560;
+
+  /// [scaffold] كما هو على الهاتف، وبلوحة العلامة بجانبه على الحاسبة قبل الغلاف ([DeskAuthScope]).
+  static Widget wrap(BuildContext context, Widget scaffold) =>
+      DeskAuthScope.of(context) ? DeskAuthLayout(child: scaffold) : scaffold;
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +33,6 @@ class DeskAuthFrame extends StatelessWidget {
     final panel = (mq.size.width * 0.42).clamp(380.0, 600.0);
     final formArea = mq.size.width - panel;
     final formWidth = formArea < _formWidth ? formArea : _formWidth;
-    // Material: الإطار فوق الـNavigator (من builder التطبيق) — بلاه تُرسم نصوص اللوحة بخطٍّ أصفر.
     return Material(
       color: AppColors.bg,
       child: Row(
@@ -37,7 +44,7 @@ class DeskAuthFrame extends StatelessWidget {
                 width: formWidth,
                 child: MediaQuery(
                   data: mq.copyWith(size: Size(formWidth, mq.size.height)),
-                  child: DeskAuthScope(child: child),
+                  child: child,
                 ),
               ),
             ),

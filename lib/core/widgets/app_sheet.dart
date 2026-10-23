@@ -27,7 +27,12 @@ Future<T?> showAppSheet<T>({
       barrierDismissible: isDismissible,
       // فوق القائمة الجانبيّة والشريط العلويّ معاً — نافذةٌ واحدة تخصّ الشاشة كلّها.
       useRootNavigator: true,
-      builder: (ctx) => DeskSheetDialog(child: builder(ctx)),
+      // خلفيّة الورقة: من يمرّر لوناً (منتقي الشركة، التحقّق بخطوتين…) يعتمد عليه سطحاً، ومن يمرّر
+      // شفّافاً يرسم سطحه بنفسه (DesignSheet).
+      builder: (ctx) => DeskSheetDialog(
+        background: backgroundColor == null || backgroundColor.a == 0 ? null : backgroundColor,
+        child: builder(ctx),
+      ),
     );
   }
   return showModalBottomSheet<T>(
@@ -47,9 +52,12 @@ Future<T?> showAppSheet<T>({
 /// إطار الورقة حين تُفتح نافذةً على الحاسبة: بعرض ٥٦٠ وسط الشاشة، زواياها الأربع مدوّرة، وارتفاعها
 /// لا يتجاوز ٨٨٪ من النافذة. ما في داخلها يقيس MediaQuery بعرض النافذة الصغيرة لا الشاشة.
 class DeskSheetDialog extends StatelessWidget {
-  const DeskSheetDialog({super.key, required this.child});
+  const DeskSheetDialog({super.key, required this.child, this.background});
 
   final Widget child;
+
+  /// سطح النافذة لورقةٍ لا ترسم سطحها بنفسها.
+  final Color? background;
 
   static const double width = 560;
 
@@ -63,7 +71,9 @@ class DeskSheetDialog extends StatelessWidget {
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: w, maxHeight: maxH),
         child: Material(
-          type: MaterialType.transparency,
+          type: background == null ? MaterialType.transparency : MaterialType.canvas,
+          color: background,
+          borderRadius: BorderRadius.circular(R.card),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(R.card),
             child: MediaQuery(

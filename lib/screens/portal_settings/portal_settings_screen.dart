@@ -14,6 +14,7 @@ import 'widgets/agent_code_tab.dart';
 import 'widgets/link_image_preview.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/widgets/app_sheet.dart';
+import '../../core/platform/desktop_layout.dart';
 
 /// شاشة "بوابة المشترك" — مطابقة PortalSettings.tsx في client-v2.
 /// tabs:
@@ -58,7 +59,7 @@ class _PortalSettingsScreenState extends State<PortalSettingsScreen>
     Theme.of(context); // theme-dep (dark-mode)
     final tab = _tab;
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: DesktopScope.of(context) ? AppColors.bg : AppColors.surface,
       appBar: deskPageBar(
         context,
         mobile: AppBar(

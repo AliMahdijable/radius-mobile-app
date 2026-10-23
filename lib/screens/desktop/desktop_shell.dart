@@ -11,11 +11,13 @@ import '../../core/widgets/permission_locked.dart';
 import '../../services/active_company.dart';
 import '../../services/alerts_service.dart';
 import '../../services/permissions_service.dart';
+import '../../services/linked_companies.dart';
 import '../../services/provider_service.dart';
 import '../../services/theme_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../account/company_switch_sheet.dart';
 import '../app_modules.dart';
 import '../search/quick_search_overlay.dart';
 import '../settings_screen.dart';
@@ -339,6 +341,7 @@ class _DesktopShellState extends State<DesktopShell> {
     final earthlink = group(AppModuleGroup.earthlink);
     final attention = AlertsService.count.value;
     return ListView(
+      key: const ValueKey('desk-sidebar'),
       padding: const EdgeInsets.fromLTRB(Sp.sm, Sp.xs, Sp.sm, Sp.md),
       children: [
         _groupTitle('nav.home'.tr()),
@@ -501,30 +504,29 @@ class _TopBar extends StatelessWidget {
       ),
       child: Row(
         children: [
+          // عنوان الصفحة في رأسها الكبير — هنا الشركة المفتوحة (والنقر يبدّلها لمن عنده أكثر من شركة).
           Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.label(color: AppColors.textHi)
-                      .copyWith(fontSize: 15, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 4),
-                ValueListenableBuilder<ActiveCompanyInfo?>(
-                  valueListenable: ActiveCompany.listenable,
-                  builder: (_, info, __) =>
-                      info == null ? const SizedBox.shrink() : _CompanyChip(info: info),
-                ),
-              ],
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: ListenableBuilder(
+                listenable: Listenable.merge([ActiveCompany.listenable, LinkedCompanies.items]),
+                builder: (context, _) {
+                  final info = ActiveCompany.current;
+                  if (info == null) return const SizedBox.shrink();
+                  return _CompanyCard(
+                    info: info,
+                    onTap: LinkedCompanies.switcherVisible
+                        ? () => showCompanySwitchSheet(context)
+                        : null,
+                  );
+                },
+              ),
             ),
           ),
           _SearchBox(shortcut: shortcut, onTap: onSearch),
           const SizedBox(width: Sp.md),
-          TopActions(switchers: true, inDesktopBar: true, openPage: openPage),
+          // «الشركات» في بطاقة الشركة يميناً — فلا يتكرّر مربّعها هنا.
+          TopActions(switchers: true, companySquare: false, inDesktopBar: true, openPage: openPage),
           const SizedBox(width: Sp.sm),
           const _ThemeToggle(),
           const SizedBox(width: Sp.sm),
@@ -538,45 +540,86 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-class _CompanyChip extends StatelessWidget {
-  const _CompanyChip({required this.info});
+/// الشركة المفتوحة في الشريط العلويّ: أيقونة واسمها ويوزر المدير، وسهمٌ حين يمكن التبديل.
+class _CompanyCard extends StatefulWidget {
+  const _CompanyCard({required this.info, required this.onTap});
 
   final ActiveCompanyInfo info;
+  final VoidCallback? onTap;
+
+  @override
+  State<_CompanyCard> createState() => _CompanyCardState();
+}
+
+class _CompanyCardState extends State<_CompanyCard> {
+  bool _hover = false;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppColors.brandSoftBg,
-        borderRadius: BorderRadius.circular(R.pill),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(LucideIcons.building2, size: 13, color: AppColors.brandOnSoft),
-          const SizedBox(width: 5),
-          Flexible(
-            child: Text(
-              info.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppType.muted(color: AppColors.brandOnSoft)
-                  .copyWith(fontSize: 12.5, fontWeight: FontWeight.w700),
+    final info = widget.info;
+    final tap = widget.onTap;
+    return Tooltip(
+      message: tap == null ? '' : 'company_switch.title'.tr(),
+      child: MouseRegion(
+        cursor: tap == null ? MouseCursor.defer : SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() => _hover = false),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: tap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            constraints: const BoxConstraints(maxWidth: 360),
+            padding: const EdgeInsetsDirectional.fromSTEB(6, 6, Sp.md, 6),
+            decoration: BoxDecoration(
+              color: _hover && tap != null ? AppColors.surfaceSunken : AppColors.surface,
+              borderRadius: BorderRadius.circular(R.md),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: AppColors.brandSoftBg,
+                    borderRadius: BorderRadius.circular(R.sm),
+                  ),
+                  child: Icon(LucideIcons.building2, size: 17, color: AppColors.brandAccent),
+                ),
+                const SizedBox(width: Sp.sm),
+                Flexible(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        info.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppType.label(color: AppColors.textHi)
+                            .copyWith(fontSize: 14, fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        info.username,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textDirection: TextDirection.ltr,
+                        style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5),
+                      ),
+                    ],
+                  ),
+                ),
+                if (tap != null) ...[
+                  const SizedBox(width: Sp.sm),
+                  Icon(LucideIcons.chevronsUpDown, size: 16, color: AppColors.textMid),
+                ],
+              ],
             ),
           ),
-          Text(' · ', style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5)),
-          Flexible(
-            child: Text(
-              info.username,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textDirection: TextDirection.ltr,
-              style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
