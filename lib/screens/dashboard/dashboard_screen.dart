@@ -37,6 +37,8 @@ import '../../theme/typography.dart';
 import '../subscribers/widgets/filter_chips_bar.dart';
 import '../top_actions.dart';
 import 'widgets/desktop_overview.dart';
+import 'widgets/desk_status_bars.dart';
+import 'widgets/desk_revenue_chart.dart';
 import 'widgets/hero_revenue_card.dart';
 import 'widgets/recent_activities.dart';
 import '../account/subscription_banner.dart';
@@ -654,6 +656,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return 'dashboard.welcome_evening'.tr();
   }
 
+  /// رسم الإيرادات على الحاسبة: بمفتاح المال وظهور القسم، وللشركة المفتوحة وحدها («كل الشركات» لها
+  /// بطاقتها المجمَّعة).
+  bool get _deskRevenueChart => _canMoney && _shown('revenue') && !MergedMode.active.value;
+
+  /// توزيع المشتركين على الحاسبة — حين تصل أرقامهم.
+  bool get _deskDistribution => _canSubs && _shown('subscribers') && _subscribersStats != null;
+
   SubscribersStats? get _subscribersStats {
     if (!_debtorsLoaded) return null;
     if (_debtorsLive == null) return null;
@@ -927,6 +936,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         onOpen: widget.onOpenSubscribers,
                       ).animate().fadeIn(duration: const Duration(milliseconds: 280)),
                     const SizedBox(height: Sp.md),
+                    // الرسوم كالموقع: الإيرادات ٣٠ يوماً (المال، والشركة المفتوحة وحدها) بجانب توزيع المشتركين.
+                    if (_deskRevenueChart || _deskDistribution) ...[
+                      IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (_deskRevenueChart) const Expanded(flex: 7, child: DeskRevenueChart()),
+                            if (_deskRevenueChart && _deskDistribution) const SizedBox(width: Sp.md),
+                            if (_deskDistribution)
+                              Expanded(
+                                flex: 5,
+                                child: DeskStatusBars(
+                                  stats: _subscribersStats!,
+                                  onOpen: widget.onOpenSubscribers,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ).animate().fadeIn(duration: const Duration(milliseconds: 280)),
+                      const SizedBox(height: Sp.md),
+                    ],
                     if (revenueSection != null || activitiesSection != null)
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,

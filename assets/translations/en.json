@@ -1713,6 +1713,11 @@
     "auth_f4_body": "Expiry and debt reminders and broadcasts, automatically.",
     "auth_sync": "Same account as your phone and the web",
     "auth_company_hint": "Sign in with your company page account",
-    "settings_subtitle": "Account, WhatsApp, printing, appearance and permissions"
+    "settings_subtitle": "Account, WhatsApp, printing, appearance and permissions",
+    "revenue_30d": "Revenue — last 30 days",
+    "total": "Total",
+    "chart_failed": "Couldn’t load the chart — try refreshing",
+    "distribution": "Subscribers by status",
+    "distribution_hint": "Current status out of {} — click one to open it"
   }
 }
