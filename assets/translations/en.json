@@ -1998,7 +1998,8 @@
     "move_voided": "«{kind}» voided — everything is back as it was",
     "move_voided_loss": "its loss is undone",
     "move_voided_box_in_n": "{amount} back to the box",
-    "move_voided_box_out_n": "{amount} left the box"
+    "move_voided_box_out_n": "{amount} left the box",
+    "print_receipt": "Print receipt"
   },
   "rexp": {
     "title": "Recurring expenses",

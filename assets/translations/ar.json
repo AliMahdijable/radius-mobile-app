@@ -1998,7 +1998,8 @@
     "move_voided": "أُلغيت «{kind}» — رجع كلّ شيءٍ كما كان",
     "move_voided_loss": "وأُلغيت خسارتها",
     "move_voided_box_in_n": "{amount} رجعت للصندوق",
-    "move_voided_box_out_n": "خرج {amount} من الصندوق"
+    "move_voided_box_out_n": "خرج {amount} من الصندوق",
+    "print_receipt": "طباعة الوصل"
   },
   "rexp": {
     "title": "الصرفيات الثابتة",

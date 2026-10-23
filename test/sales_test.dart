@@ -16,6 +16,8 @@ import 'package:rad_mysvcs/screens/more_modules_screen.dart';
 import 'package:rad_mysvcs/screens/reports/widgets/action_labels.dart';
 import 'package:rad_mysvcs/screens/sales/sales_screen.dart';
 import 'package:rad_mysvcs/screens/settlements/settle_widgets.dart';
+import 'package:rad_mysvcs/services/sale_print.dart';
+import 'package:pdf/pdf.dart';
 
 import 'visual_perm/visual_perm_harness.dart';
 
@@ -277,6 +279,18 @@ void main() {
       expect(StockMove.fromJson(const {'id': 1, 'kind': 'sale', 'qty': -1, 'qty_after': 3})!.defectiveOnly, isFalse);
     });
 
+    test('وصل البيع: PDF بورقَي الطباعة (حراري وA4)، والزبون كما يُطبع، والمُلغى يُبنى أيضاً', () async {
+      final sale = Sale.fromJson(_SalesServer.sale(27, 'cash', 'done', username: 'ali.k@sn', name: 'علي كريم'))!;
+      for (final f in [PdfPageFormat.roll80, PdfPageFormat.a4]) {
+        final bytes = await SalePrint.build(sale, f, company: 'شركة النور', fonts: false, printedAt: DateTime.utc(2026, 10, 23));
+        expect(String.fromCharCodes(bytes.take(4)), '%PDF');
+      }
+      final voided = Sale.fromJson(_SalesServer.sale(9, 'cash', 'void', total: 25000, cost: 18000))!;
+      expect((await SalePrint.build(voided, PdfPageFormat.roll80, fonts: false)).isNotEmpty, isTrue);
+      expect(SalePrint.customerOf(sale), 'علي كريم — ali.k@sn');
+      expect(SalePrint.customerOf(Sale.fromJson(_SalesServer.sale(5, 'cash', 'done'))!), 'زبون');
+    });
+
     test('probe: المقيَّد بمديرٍ فرعيّ يُعلَّم، والقدرات تُقرأ', () {
       final p = SalesProbe.fromJson(const {'enabled': true, 'reason': 'scoped', 'can': {'view': true, 'sell': false}});
       expect(p.enabled, isTrue);
@@ -374,11 +388,11 @@ void main() {
       });
       expect((k.hasGoods, k.goodsLossSum, k.goodsLossCount), (true, 25000, 2));
       expect(k.netCash, 450000 - 60000 - 25000);
-      final c = FinanceKPIs(
+      const c = FinanceKPIs(
         activateCashSum: 450000,
         activateNonCashSum: 105000,
         expensesSum: 60000,
-        packageCost: const PackageCostKpis(sum: 300000, rows: 10, knownRows: 10, estimatedRows: 0, hasEstimates: false),
+        packageCost: PackageCostKpis(sum: 300000, rows: 10, knownRows: 10, estimatedRows: 0, hasEstimates: false),
         goodsProfitSum: 25500,
         goodsCount: 2,
         goodsLossSum: 25000,
@@ -423,7 +437,7 @@ void main() {
           'cash_in': 0,
           'expected_amount': 15000,
         },
-        'collectors': const [],
+        'collectors': [],
       })!;
       final l = goodsBoxLine(cur.goodsPurchases);
       expect((l.label, l.value, l.out), ('settle.supplier_refund'.tr(), '+15,000', false));
@@ -573,6 +587,7 @@ void main() {
       expect(find.text('احسم'), findsOneWidget);
       expect(find.text('إلغاء'), findsNWidgets(2), reason: 'المكتمل نقداً وعلى الدين');
       expect(find.text('مُلغى'), findsOneWidget);
+      expect(find.byTooltip('طباعة الوصل'), findsNWidgets(3), reason: 'المكتملان والمُلغى — لا «غير المؤكَّد»');
 
       await t.tap(find.text('الموادّ والمخزون'));
       await settle(t, seconds: 1);

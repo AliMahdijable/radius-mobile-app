@@ -12,6 +12,7 @@ import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/permission_locked.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../services/permissions_service.dart';
+import '../../services/sale_print.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -821,6 +822,14 @@ class _SaleTile extends StatelessWidget {
                   ],
                 ),
               ),
+              // وصل البيع (PDF بورق الطباعة نفسه) — للمكتمل والمُلغى (بختمه).
+              if (sale.isDone || sale.isVoid)
+                IconButton(
+                  tooltip: 'sales.print_receipt'.tr(),
+                  onPressed: () => SalePrint.printReceipt(sale),
+                  icon: Icon(LucideIcons.printer, size: 17, color: AppColors.textBody),
+                  visualDensity: VisualDensity.compact,
+                ),
               if (sale.voidable)
                 _ActionButton(
                   label: 'sales.void'.tr(),
