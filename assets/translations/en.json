@@ -1718,6 +1718,8 @@
     "total": "Total",
     "chart_failed": "Couldn’t load the chart — try refreshing",
     "distribution": "Subscribers by status",
-    "distribution_hint": "Current status out of {} — click one to open it"
+    "distribution_hint": "Current status out of {} — click one to open it",
+    "revenue_header": "Revenue",
+    "financial_report": "Financial report"
   }
 }

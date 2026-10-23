@@ -47,6 +47,7 @@ import 'widgets/section_header.dart';
 import '../desktop/desk_widgets.dart';
 import 'widgets/stats_grid.dart';
 import 'widgets/subscribers_card.dart';
+import '../reports/financial_report_screen.dart';
 
 /// Dashboard with a SLIVER-pinned header — header stays on screen while
 /// the body scrolls underneath. All data is LIVE — there are no mock
@@ -656,6 +657,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return 'dashboard.welcome_evening'.tr();
   }
 
+  /// عمود «آخر النشاطات» على الحاسبة: العنوان ثمّ البطاقة تمتدّ لارتفاع جارتها (الإيرادات).
+  Widget _deskStretch(Widget activities) {
+    if (activities is! Column || activities.children.length < 2) return activities;
+    final kids = activities.children;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [kids.first, Expanded(child: kids[1])],
+    );
+  }
+
   /// رسم الإيرادات على الحاسبة: بمفتاح المال وظهور القسم، وللشركة المفتوحة وحدها («كل الشركات» لها
   /// بطاقتها المجمَّعة).
   bool get _deskRevenueChart => _canMoney && _shown('revenue') && !MergedMode.active.value;
@@ -957,16 +968,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ).animate().fadeIn(duration: const Duration(milliseconds: 280)),
                       const SizedBox(height: Sp.md),
                     ],
+                    // الإيرادات وآخر النشاطات: عنوانٌ بالارتفاع نفسه فوق كلٍّ منهما، والبطاقتان تبدآن وتنتهيان
+                    // على خطٍّ واحد (بلاغ المالك ٢٣ أكتوبر: «منشزة ويّ الإيرادات»).
                     if (revenueSection != null || activitiesSection != null)
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (revenueSection != null) Expanded(flex: 5, child: revenueSection),
-                          if (revenueSection != null && activitiesSection != null)
-                            const SizedBox(width: Sp.md),
-                          if (activitiesSection != null)
-                            Expanded(flex: 7, child: activitiesSection),
-                        ],
+                      IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (revenueSection != null)
+                              Expanded(
+                                flex: 5,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    SectionHeader(
+                                      label: 'desktop.revenue_header'.tr(),
+                                      trailingLabel: _canMoney ? 'desktop.financial_report'.tr() : null,
+                                      onTrailingTap: () => Navigator.of(context).push(
+                                        MaterialPageRoute(builder: (_) => const FinancialReportScreen()),
+                                      ),
+                                    ),
+                                    Expanded(child: revenueSection),
+                                  ],
+                                ),
+                              ),
+                            if (revenueSection != null && activitiesSection != null)
+                              const SizedBox(width: Sp.md),
+                            if (activitiesSection != null)
+                              Expanded(flex: 7, child: _deskStretch(activitiesSection)),
+                          ],
+                        ),
                       ),
                   ] else ...[
                     // أعلى كلّ شيء عمداً: انقطاع الجلسة يوقف كلّ تنبيهات المشتركين وفواتيرهم، فلا يجوز أن

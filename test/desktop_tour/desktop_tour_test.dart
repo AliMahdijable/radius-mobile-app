@@ -117,6 +117,9 @@ void main() {
         await _pump(t, dark: dark, home: (_) => const MainShell());
         await settle(t, seconds: 6);
         await _shot(t, '01_dashboard$tag');
+        await t.drag(find.byType(CustomScrollView).first, const Offset(0, -700), warnIfMissed: false);
+        await settle(t, seconds: 1);
+        await _shot(t, '01b_dashboard_bottom$tag');
 
         await _nav(t, 'nav.subscribers'.tr());
         await _shot(t, '02_subscribers$tag');
