@@ -16,6 +16,17 @@ import '../../theme/typography.dart';
 String settleMoney(num n) =>
     '${n < 0 ? '−' : ''}${formatIQD(n)} ${'common.currency'.tr()}';
 
+/// سطر «شراء مواد» بالصندوق: ما خرج لشراء المخزون ناقص ما رجّعه المورّد للصندوق عن مادّةٍ عاطلة —
+/// صافيه سالبٌ ⇒ داخلٌ «استرجاع من المورّد».
+({String label, String value, bool out}) goodsBoxLine(MoneyCount g) {
+  final out = g.sum >= 0;
+  return (
+    label: (out ? 'settle.goods_purchases' : 'settle.supplier_refund').tr(),
+    value: '${out ? '−' : '+'}${formatIQD(g.sum.abs())}',
+    out: out,
+  );
+}
+
 /// «الخميس 2026-10-01 21:40» بتوقيت الجهاز (الأجهزة في العراق).
 String settleWhen(DateTime? d, {bool weekday = false}) {
   if (d == null) return '—';
@@ -116,6 +127,7 @@ class MovementTile extends StatelessWidget {
       'sale_void' => LucideIcons.undo2,
       'purchase' => LucideIcons.packagePlus,
       'purchase_void' => LucideIcons.undo2,
+      'supplier_refund_void' => LucideIcons.undo2,
       _ => LucideIcons.handCoins,
     };
     final kindLabel = switch (m.kind) {
@@ -125,6 +137,8 @@ class MovementTile extends StatelessWidget {
       'sale_void' => 'settle.kind_sale_void'.tr(),
       'purchase' => 'settle.kind_purchase'.tr(),
       'purchase_void' => 'settle.kind_purchase_void'.tr(),
+      'supplier_refund' => 'settle.kind_supplier_refund'.tr(),
+      'supplier_refund_void' => 'settle.kind_supplier_refund_void'.tr(),
       _ => 'settle.kind_debt_payment'.tr(),
     };
     // بيع المواد: العنوان الزبون (أو «زبون»)، وما بيع يُقرأ من الوصف بسطر التفاصيل.
@@ -132,7 +146,7 @@ class MovementTile extends StatelessWidget {
     final isSale = m.source == 'sale';
     final isPurchase = m.source == 'purchase';
     final buyTitle = isPurchase
-        ? (m.description ?? '').replaceFirst(RegExp(r'^(?:إلغاء شراء|شراء مواد):\s*'), '').trim()
+        ? (m.description ?? '').replaceFirst(RegExp(r'^(?:إلغاء شراء|شراء مواد|استرجاع من المورّد|إلغاء استرجاع):\s*'), '').trim()
         : '';
     final title = m.kind == 'expense'
         ? (m.description ?? 'settle.kind_expense'.tr())

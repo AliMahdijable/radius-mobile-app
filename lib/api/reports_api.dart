@@ -166,6 +166,8 @@ class FinanceKPIs {
     this.goodsDebtSum = 0,
     this.goodsCount = 0,
     this.balanceAddSalesSum,
+    this.goodsLossSum = 0,
+    this.goodsLossCount = 0,
   });
   final num paymentsSum;
   final num debtPaySum;
@@ -202,7 +204,12 @@ class FinanceKPIs {
   /// فيصحّ لكلّ فترة ولو أُلغي البيع بعدها. `null` = خادمٌ أقدم ⇒ [goodsDebtSum].
   final num? balanceAddSalesSum;
 
-  bool get hasGoods => goodsCount > 0 || goodsCashSum != 0;
+  /// خسارة المواد (قرار المالك ٢٣ أكتوبر): تالف، عطلان شُطب، إرجاعٌ للمورّد بأقلّ من قيمته — وإلغاؤها
+  /// سالب. كلفةُ مخزونٍ لن يُباع ⇒ تُطرح من الصافيين (الشراء لا يمسّ الربح، فلا تُعدّ مرّتين).
+  final num goodsLossSum;
+  final int goodsLossCount;
+
+  bool get hasGoods => goodsCount > 0 || goodsCashSum != 0 || goodsLossCount > 0;
 
   /// إضافة الدين اليدويّة وحدها: البيع على الدين يكتب سطر «إضافة دين» بمسار الدين
   /// نفسه — وهو ثمن مادّة لا منحةٌ للمشترك، فلا يُطرح من الصافي (كلفته تُطرح)؛
@@ -233,7 +240,7 @@ class FinanceKPIs {
   /// بيع المواد: نقدها داخلٌ في [totalCashRevenue] فتُطرح كلفة ما بيع منها (ما بيع
   /// على الدين يدخل «النقد» حين يُسدَّد — فلا يُعدّ ربحه مرّتين)، و«إضافة الدين»
   /// اليدويّة وحدها تُطرح ([manualDebtAddSum]).
-  num get netCash => totalCashRevenue - expensesSum - manualDebtAddSum - goodsCostSum;
+  num get netCash => totalCashRevenue - expensesSum - manualDebtAddSum - goodsCostSum - goodsLossSum;
 
   /// المبيعات: نقد التفعيلات + «الديون الجديدة» منها (غير النقديّ + غير
   /// المدفوع من الجزئيّ). أساس صافي الربح بعد الكلفة — كـ`sales_sum` الخادم.
@@ -247,10 +254,10 @@ class FinanceKPIs {
   /// ويغيب عنه البيع بالدين، وكلفة البيع بالدين تُدفع للشركة يوم البيع — فطرحها
   /// من النقد كان يُظهر خسارةً لمالكٍ رابح (مراجعة ١٨ أكتوبر: ٩ من ١٦ مالكاً).
   /// [netCash] يبقى سطره كما كان (وفيه طرح إضافة الدين اليدوي بطلب المالك).
-  /// + ربح المواد (البيع − كلفة المخزون، نقداً وديناً) — صفرٌ بلا مبيعات.
+  /// + ربح المواد (البيع − كلفة المخزون، نقداً وديناً) − التالف والعطلان — صفرٌ بلا مبيعات.
   num? get profitAfterCost =>
       profitAfterCostOverride ??
-      (packageCost == null ? null : salesSum - expensesSum - packageCost!.sum + goodsProfitSum);
+      (packageCost == null ? null : salesSum - expensesSum - packageCost!.sum + goodsProfitSum - goodsLossSum);
 
   /// «كل الشركات»: مجموع صافي كلّ شركةٍ بقاعدتها (من بلا كلفةٍ — سوبرنت — صافيه
   /// النقديّ) — لا صيغةٌ واحدة على المجموع (قاعدة الويب sumFigures). null خارجه.
@@ -282,6 +289,8 @@ class FinanceKPIs {
       goodsDebtSum: _n(j['sales_debt_sum']),
       goodsCount: _i(j['sales_count']),
       balanceAddSalesSum: j.containsKey('balance_add_sales_sum') ? _n(j['balance_add_sales_sum']) : null,
+      goodsLossSum: _n(j['sales_loss_sum']),
+      goodsLossCount: _i(j['sales_loss_count']),
     );
   }
 }

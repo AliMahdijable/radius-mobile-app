@@ -204,9 +204,9 @@ class _SettleSheetState extends State<_SettleSheet> {
           ),
           if (p.goodsPurchases.count > 0)
             SheetRowData(
-              label: '${'settle.goods_purchases'.tr()} · ${p.goodsPurchases.count}',
-              value: '−${formatIQD(p.goodsPurchases.sum)}',
-              valueColor: AppColors.error,
+              label: '${goodsBoxLine(p.goodsPurchases).label} · ${p.goodsPurchases.count}',
+              value: goodsBoxLine(p.goodsPurchases).value,
+              valueColor: goodsBoxLine(p.goodsPurchases).out ? AppColors.error : AppColors.success,
             ),
           SheetRowData(
             label: 'settle.expected'.tr(),

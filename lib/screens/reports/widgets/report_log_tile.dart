@@ -61,7 +61,7 @@ class ReportLogTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final meta = _actionMeta(actionType, description);
+    final meta = _actionMeta(actionType, description, amount: amount);
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -357,7 +357,7 @@ bool _isNonCash(String desc) => desc.contains('غير نقدي');
 bool _isCash(String desc) =>
     desc.contains('نقدي') && !desc.contains('غير نقدي');
 
-_ActionMeta _actionMeta(String at, String desc) {
+_ActionMeta _actionMeta(String at, String desc, {num amount = 0}) {
   switch (at) {
     case 'SUBSCRIBER_ACTIVATE':
       // مُزامَنٌ من الساس (صفحة الساس أو تطبيقٌ آخر): لا نقد ولا دين عندنا —
@@ -442,6 +442,14 @@ _ActionMeta _actionMeta(String at, String desc) {
     case 'SALE_VOID':
       return _ActionMeta('إلغاء بيع', LucideIcons.undo2, AppColors.error,
           debit: true);
+    // خسارة مواد (تالف، عطلان شُطب، إرجاعٌ للمورّد) تُطرح من الربح؛ وإلغاؤها (أو إرجاعٌ بأكثر من قيمته)
+    // بالسالب يُرجعها — الإشارة من المبلغ نفسه.
+    case 'GOODS_LOSS':
+      final undo = desc.startsWith('إلغاء خسارة');
+      return _ActionMeta(undo ? 'إلغاء خسارة مواد' : 'خسارة مواد',
+          undo ? LucideIcons.undo2 : LucideIcons.packageX,
+          amount > 0 ? AppColors.error : _kPositive,
+          debit: amount > 0);
     case 'EXPENSE_EDIT':
       return _ActionMeta('تعديل صرفية', LucideIcons.receipt, AppColors.error);
     case 'EXPENSE_DELETE':

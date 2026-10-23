@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
@@ -14,6 +15,7 @@ import 'package:rad_mysvcs/core/widgets/design_sheet.dart';
 import 'package:rad_mysvcs/screens/more_modules_screen.dart';
 import 'package:rad_mysvcs/screens/reports/widgets/action_labels.dart';
 import 'package:rad_mysvcs/screens/sales/sales_screen.dart';
+import 'package:rad_mysvcs/screens/settlements/settle_widgets.dart';
 
 import 'visual_perm/visual_perm_harness.dart';
 
@@ -24,6 +26,8 @@ import 'visual_perm/visual_perm_harness.dart';
 ///     والبيع على الدين لا يُعدّ «إضافة دين» يدويّة. بلا مبيعات ⇒ الأرقام كما كانت حرفيّاً.
 ///   • التسوية: سطر «بيع مواد» وحدّا المبيعات يُعادان مع التسوية.
 ///   • موظّف ايرث لنك: العرض والبيع والموادّ في «موظّف عام»، والإلغاء فرادى.
+///   • التالف والعطلان: خانة العطلان بقيمتها وحسمها (تصلّحت/ما تتصلّح/رجّعتها للمورّد)، والخسارة تُطرح من
+///     الصافيين، وما رجّعه المورّد للصندوق «استرجاع من المورّد»، وإلغاء أيّ حركةٍ يدويّة.
 class _SalesServer implements HttpClientAdapter {
   _SalesServer(this.inner);
   final HttpClientAdapter inner;
@@ -47,6 +51,7 @@ class _SalesServer implements HttpClientAdapter {
     {
       'id': 1, 'name': 'راوتر TP-Link C6', 'code': 'C6', 'unit': 'piece', 'unit_label': 'قطعة',
       'sale_price': 45000, 'cost_avg': 32000, 'qty': 7, 'stock_value': 224000, 'margin': 13000, 'active': true,
+      'qty_defective': 1, 'defective_value': 25000,
     },
     {
       'id': 2, 'name': 'كيبل Cat6', 'code': null, 'unit': 'meter', 'unit_label': 'متر',
@@ -90,7 +95,7 @@ class _SalesServer implements HttpClientAdapter {
     if (o.path == '/api/v2/sales/items' && get) {
       return _json(200, {
         'success': true, 'enabled': enabled, 'data': items,
-        'totals': {'count': 3, 'stock_value': 300375, 'out_of_stock': 1},
+        'totals': {'count': 3, 'stock_value': 300375, 'out_of_stock': 1, 'defective_items': 1, 'defective_value': 25000},
       });
     }
     if (o.path == '/api/v2/sales' && get) {
@@ -123,6 +128,31 @@ class _SalesServer implements HttpClientAdapter {
             'paid_from': 'box', 'ref_move_id': null, 'voided': true, 'voidable': false},
         ],
       });
+    }
+    if (o.path == '/api/v2/sales/items/2/moves' && get) {
+      // آخر حركةٍ إرجاعٌ للمورّد (رجّع 15,000 للصندوق، الخسارة 5,000) — تُلغى؛ قبلها عطلانٌ على المخزون.
+      return _json(200, {
+        'success': true,
+        'data': [
+          {'id': 50, 'kind': 'supplier_return', 'qty': -2, 'unit_cost': 10000, 'qty_before': 305.5, 'qty_after': 305.5,
+            'cost_avg_after': 250, 'sale_id': null, 'note': 'المورّد', 'by': null, 'employee_id': null, 'at': '2026-10-23T10:20:00Z',
+            'paid_from': 'box', 'ref_move_id': null, 'voided': false, 'voidable': true,
+            'defective_after': 0, 'loss': 5000, 'refund': 15000},
+          {'id': 49, 'kind': 'defect', 'qty': -2, 'unit_cost': 250, 'qty_before': 307.5, 'qty_after': 305.5,
+            'cost_avg_after': 250, 'sale_id': null, 'note': 'مقطوع', 'by': null, 'employee_id': null, 'at': '2026-10-23T10:00:00Z',
+            'paid_from': null, 'ref_move_id': null, 'voided': false, 'voidable': false, 'defective_after': 2},
+        ],
+      });
+    }
+    if (o.path == '/api/v2/sales/items/2/moves/50/void' && !get) {
+      posts.add((o.path, Map<String, dynamic>.from((o.data as Map?) ?? const {})));
+      return _json(200, {'success': true, 'data': items[1], 'refund': 0, 'box_delta': -15000, 'kind': 'supplier_return', 'paid_from': 'box'});
+    }
+    if (o.path.endsWith('/stock') && !get) {
+      final body = Map<String, dynamic>.from((o.data as Map?) ?? const {});
+      posts.add((o.path, body));
+      final loss = switch (body['kind']) { 'damage' => 32000, 'supplier_return' => 10000, _ => null };
+      return _json(200, {'success': true, 'data': items[0], if (loss != null) 'loss': loss});
     }
     if (o.path == '/api/v2/sales/items/1/moves/40/void' && !get) {
       posts.add((o.path, Map<String, dynamic>.from((o.data as Map?) ?? const {})));
@@ -229,6 +259,24 @@ void main() {
       expect((old.goodsPurchases.sum, old.goodsPurchases.count), (0, 0), reason: 'تسويةٌ قبل القسم ⇒ صفر');
     });
 
+    test('التالف والعطلان: خانة العطلان بقيمتها، وحركاتها بخسارتها وما رجّعه المورّد', () {
+      final it = SaleItem.fromJson({..._SalesServer.items[0], 'qty_defective': 3, 'defective_value': 60000})!;
+      expect((it.hasDefective, it.qtyDefective, it.defectiveValue), (true, 3, 60000));
+      expect(it.defectiveValueOf(3), 60000, reason: 'كلّه ⇒ قيمته كلّها حرفاً');
+      expect(it.defectiveValueOf(1), 20000);
+      expect(it.defectiveValueOf(0), 0);
+      expect(SaleItem.fromJson(_SalesServer.items[1])!.hasDefective, isFalse);
+      final w = StockMove.fromJson(const {'id': 44, 'kind': 'defect_writeoff', 'qty': -1, 'qty_before': 8, 'qty_after': 8,
+        'defective_after': 1, 'loss': 25833.33, 'voidable': true})!;
+      expect((w.defectiveOnly, w.loss, w.defectiveAfter, w.voidable), (true, 25833.33, 1, true));
+      final r = StockMove.fromJson(const {'id': 43, 'kind': 'repair', 'qty': 1, 'qty_before': 7, 'qty_after': 8, 'defective_after': 2})!;
+      expect(r.defectiveOnly, isFalse, reason: 'التصليح يغيّر المخزون');
+      final s = StockMove.fromJson(const {'id': 46, 'kind': 'supplier_return', 'qty': -1, 'qty_before': 8, 'qty_after': 8,
+        'defective_after': 1, 'loss': -4000, 'refund': 40000, 'paid_from': 'box'})!;
+      expect((s.refund, s.loss, s.paidFrom, s.defectiveOnly), (40000, -4000, 'box', true));
+      expect(StockMove.fromJson(const {'id': 1, 'kind': 'sale', 'qty': -1, 'qty_after': 3})!.defectiveOnly, isFalse);
+    });
+
     test('probe: المقيَّد بمديرٍ فرعيّ يُعلَّم، والقدرات تُقرأ', () {
       final p = SalesProbe.fromJson(const {'enabled': true, 'reason': 'scoped', 'can': {'view': true, 'sell': false}});
       expect(p.enabled, isTrue);
@@ -242,6 +290,8 @@ void main() {
       expect(arabicActionLabel('SALE_VOID'), 'إلغاء بيع');
       expect(arabicActionLabel('BALANCE_ADD', 'إلغاء بيع #5 — إنقاص دين 35000 د.ع للمشترك u1'), 'إنقاص دين (إلغاء بيع)');
       expect(arabicActionLabel('BALANCE_ADD', 'إضافة دين 35000 د.ع للمشترك u1 - بيع #5: راوتر ×1'), 'إضافة دين');
+      expect(arabicActionLabel('GOODS_LOSS', 'تالف: راوتر ×1 (انكسر)'), 'خسارة مواد');
+      expect(arabicActionLabel('GOODS_LOSS', 'إلغاء خسارة: راوتر ×1 (خطأ)'), 'إلغاء خسارة مواد');
     });
   });
 
@@ -317,6 +367,34 @@ void main() {
       expect(k.profitAfterCost, 450000 + 105000 - 60000 - 300000 + 25500);
     });
 
+    test('التالف والعطلان: يُطرح من الصافيين، ويُظهر المواد ولو بلا بيع، ويُجمع لـ«كل الشركات»', () {
+      final k = FinanceKPIs.fromJson(const {
+        'activate_cash_sum': 450000, 'activate_non_cash_sum': 105000, 'expenses_sum': 60000,
+        'sales_loss_sum': 25000, 'sales_loss_count': 2,
+      });
+      expect((k.hasGoods, k.goodsLossSum, k.goodsLossCount), (true, 25000, 2));
+      expect(k.netCash, 450000 - 60000 - 25000);
+      final c = FinanceKPIs(
+        activateCashSum: 450000,
+        activateNonCashSum: 105000,
+        expensesSum: 60000,
+        packageCost: const PackageCostKpis(sum: 300000, rows: 10, knownRows: 10, estimatedRows: 0, hasEstimates: false),
+        goodsProfitSum: 25500,
+        goodsCount: 2,
+        goodsLossSum: 25000,
+        goodsLossCount: 2,
+      );
+      expect(c.profitAfterCost, 450000 + 105000 - 60000 - 300000 + 25500 - 25000);
+      // إلغاءٌ بالفترة أكبر من خسارتها ⇒ سالبٌ يُرجع للصافي.
+      expect(FinanceKPIs.fromJson(const {'activate_cash_sum': 1000, 'sales_loss_sum': -500, 'sales_loss_count': 1}).netCash, 1500);
+      final s = MergedFinanceApi.sumKpis(const [
+        FinanceKPIs(goodsLossSum: 25000, goodsLossCount: 2),
+        FinanceKPIs(goodsLossSum: -5000, goodsLossCount: 1),
+      ]);
+      expect((s.goodsLossSum, s.goodsLossCount, s.hasGoods), (20000, 3, true));
+      expect(FinanceKPIs.fromJson(const {'activate_cash_sum': 1000}).hasGoods, isFalse, reason: 'بلا خسارة ⇒ كما كان');
+    });
+
     test('«كل الشركات»: حقول المواد تُجمع', () {
       final s = MergedFinanceApi.sumKpis(const [
         FinanceKPIs(goodsCashSum: 10000, goodsCostSum: 6000, goodsProfitSum: 4000, goodsCount: 1),
@@ -332,6 +410,28 @@ void main() {
       expect(cut.toJson(), {'head_id': 1, 'activity_id': 100, 'expense_id': 10, 'sale_id': 12, 'sale_cash_id': 3});
       final old = SettlementCut.fromJson(const {'head_id': 1, 'activity_id': 100, 'expense_id': 10})!;
       expect(old.toJson(), {'head_id': 1, 'activity_id': 100, 'expense_id': 10});
+    });
+
+    test('ما رجّعه المورّد للصندوق: «شراء مواد» صافيه سالب ⇒ «استرجاع من المورّد» داخل', () {
+      final cur = CurrentAccount.fromJson(const {
+        'started': true,
+        'totals': {
+          'cash_activations': {'sum': 0, 'count': 0},
+          'debt_payments': {'sum': 0, 'count': 0},
+          'expenses': {'sum': 0, 'count': 0},
+          'goods_purchases': {'sum': -15000, 'count': 1},
+          'cash_in': 0,
+          'expected_amount': 15000,
+        },
+        'collectors': const [],
+      })!;
+      final l = goodsBoxLine(cur.goodsPurchases);
+      expect((l.label, l.value, l.out), ('settle.supplier_refund'.tr(), '+15,000', false));
+      final b = goodsBoxLine(const MoneyCount(270000, 2));
+      expect((b.label, b.value, b.out), ('settle.goods_purchases'.tr(), '−270,000', true));
+      final mv = BoxMovement.fromJson(const {'source': 'purchase', 'id': 62, 'kind': 'supplier_refund', 'direction': 'in',
+        'amount': 15000, 'created_at': '2026-10-23T10:20:00Z', 'description': 'استرجاع من المورّد: راوتر ×1'})!;
+      expect((mv.kind, mv.isIn, mv.amount), ('supplier_refund', true, 15000));
     });
 
     test('الصندوق: «بيع مواد» داخلٌ في عدد الحركات ولكلّ منفّذ', () {
@@ -431,6 +531,30 @@ void main() {
     });
   });
 
+  group('الـAPI — المخزون', () {
+    tearDown(visualTearDown);
+
+    testWidgets('حركة المخزون: الإرجاع للمورّد يُرسل المبلغ ووجهته والخسارة تُقرأ، وإلغاء الحركة يقرأ أثر الصندوق', (t) async {
+      final server = _SalesServer(await visualSetUp(s1bSasOwner));
+      ApiClient.dio.httpClientAdapter = server;
+      final r = (await t.runAsync(() => SalesApi.stock(1,
+          kind: 'supplier_return', qty: 1, refund: 15000, refundTo: 'box', note: 'المورّد', clientRef: 'ref0000001')))!;
+      expect((r.ok, r.loss), (true, 10000));
+      expect(server.posts.last.$2, {
+        'kind': 'supplier_return', 'qty': 1, 'refund': 15000, 'refund_to': 'box', 'note': 'المورّد', 'client_ref': 'ref0000001',
+      });
+      await t.runAsync(() => SalesApi.stock(1, kind: 'supplier_return', qty: 1, refund: 0, refundTo: 'box', clientRef: 'ref0000002'));
+      expect(server.posts.last.$2.containsKey('refund_to'), isFalse, reason: 'بلا مبلغ لا وجهة');
+      expect(server.posts.last.$2['refund'], 0);
+      await t.runAsync(() => SalesApi.stock(1, kind: 'damage', qty: 1, note: 'انكسر', clientRef: 'ref0000003'));
+      expect(server.posts.last.$2.containsKey('refund'), isFalse, reason: 'المبلغ للإرجاع وحده');
+      final v = (await t.runAsync(() => SalesApi.voidMove(2, 50, 'خطأ')))!;
+      expect((v.ok, v.boxDelta, v.refund), (true, -15000, 0));
+      final p = (await t.runAsync(() => SalesApi.voidMove(1, 40, 'سعرٌ خاطئ')))!;
+      expect((p.ok, p.boxDelta, p.refund), (true, 270000, 270000), reason: 'خادمٌ بلا box_delta ⇒ ثمن الشراء العائد');
+    });
+  });
+
   group('الشاشة', () {
     tearDown(() async {
       SalesState.reset();
@@ -511,7 +635,7 @@ void main() {
       await settle(t, seconds: 2);
       await t.tap(find.text('الموادّ والمخزون'));
       await settle(t, seconds: 1);
-      await t.tap(find.byTooltip('شراء / جرد').first);
+      await t.tap(find.byTooltip('شراء / تالف / فرق عدّ').first);
       await settle(t, seconds: 1);
       expect(find.text('من أين دُفع ثمنها؟ *'), findsOneWidget);
       // حقل الكمّيّة داخل الشيت (لا حقل البحث خلفه).
@@ -552,6 +676,94 @@ void main() {
       await settle(t, seconds: 4);
       final post = server.posts.lastWhere((p) => p.$1 == '/api/v2/sales/items/1/moves/40/void');
       expect(post.$2, {'reason': 'سعرٌ خاطئ'});
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('تالف / عطلان: الاختيار إجباريّ، و«تالف» بسببه يُرسل kind=damage مع معاينة الخسارة', (t) async {
+      final server = _SalesServer(await visualSetUp(s1bSasOwner));
+      ApiClient.dio.httpClientAdapter = server;
+      await pumpVisual(t, phoneTall, home: (_) => const SalesScreen());
+      await settle(t, seconds: 2);
+      await t.tap(find.text('الموادّ والمخزون'));
+      await settle(t, seconds: 1);
+      await t.tap(find.byTooltip('شراء / تالف / فرق عدّ').first);
+      await settle(t, seconds: 1);
+      await t.tap(find.text('تالف / عطلان'));
+      await settle(t);
+      expect(find.text('شنو صار بيها؟ *'), findsOneWidget);
+      final fields = find.descendant(of: find.byType(DesignSheet), matching: find.byType(TextField));
+      await t.enterText(fields.at(0), '1');
+      await t.enterText(fields.at(1), 'انكسر');
+      await settle(t);
+      await t.tap(find.text('اختر: تالف أو عطلان'));
+      await settle(t);
+      expect(server.posts.where((p) => p.$1.endsWith('/stock')), isEmpty, reason: 'بلا اختيار لا يُرسل');
+      await t.tap(find.text('تالف'));
+      await settle(t);
+      expect(find.text('الخسارة (بالكلفة المتوسّطة)'), findsOneWidget);
+      await t.tap(find.text('تسجيل التالف'));
+      await settle(t, seconds: 4);
+      final post = server.posts.lastWhere((p) => p.$1 == '/api/v2/sales/items/1/stock');
+      expect((post.$2['kind'], post.$2['qty'], post.$2['note']), ('damage', 1, 'انكسر'));
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('العطلان: الشارة تفتح الحسم، و«رجّعتها للمورّد» بمبلغٍ يطلب وجهته ثمّ يُرسل refund وrefund_to', (t) async {
+      final server = _SalesServer(await visualSetUp(s1bSasOwner));
+      ApiClient.dio.httpClientAdapter = server;
+      await pumpVisual(t, phoneTall, home: (_) => const SalesScreen());
+      await settle(t, seconds: 2);
+      await t.tap(find.text('الموادّ والمخزون'));
+      await settle(t, seconds: 1);
+      expect(find.textContaining('عطلان في 1 مادّة'), findsOneWidget);
+      await t.tap(find.text('عطلان 1 قطعة'));
+      await settle(t, seconds: 1);
+      expect(find.text('العطلان — راوتر TP-Link C6'), findsOneWidget);
+      expect(find.text('اختر ما صار بها'), findsOneWidget);
+      await t.tap(find.text('رجّعتها للمورّد'));
+      await settle(t);
+      // الأوّل الكمّيّة (مُعبّأةٌ بالعطلان كلّه)، والثاني المبلغ المسترجَع.
+      final fields = find.descendant(of: find.byType(DesignSheet), matching: find.byType(TextField));
+      await t.enterText(fields.at(1), '15000');
+      await settle(t);
+      expect(find.text('أين دخل المبلغ؟ *'), findsOneWidget);
+      expect(find.text('10,000 د.ع'), findsOneWidget, reason: 'الخسارة = 25,000 − 15,000');
+      await t.tap(find.text('تسجيل الإرجاع'));
+      await settle(t);
+      expect(server.posts.where((p) => p.$1.endsWith('/stock')), isEmpty, reason: 'بلا وجهة المبلغ لا يُرسل');
+      await t.tap(find.text('الصندوق'));
+      await settle(t);
+      await t.tap(find.text('تسجيل الإرجاع'));
+      await settle(t, seconds: 4);
+      final post = server.posts.lastWhere((p) => p.$1 == '/api/v2/sales/items/1/stock');
+      expect((post.$2['kind'], post.$2['qty'], post.$2['refund'], post.$2['refund_to']), ('supplier_return', 1, 15000, 'box'));
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('حركات العطلان: الخسارة وما رجّعه المورّد، و«إلغاء الحركة» يشرح ما يرجع ويُرسل لمسار الإلغاء', (t) async {
+      final server = _SalesServer(await visualSetUp(s1bSasOwner));
+      ApiClient.dio.httpClientAdapter = server;
+      await pumpVisual(t, phoneTall, home: (_) => const SalesScreen());
+      await settle(t, seconds: 2);
+      await t.tap(find.text('الموادّ والمخزون'));
+      await settle(t, seconds: 1);
+      await t.tap(find.byTooltip('الحركات').at(1));
+      await settle(t, seconds: 1);
+      expect(find.text('رجّعته للمورّد'), findsOneWidget);
+      expect(find.text('خسارة 5,000 د.ع'), findsOneWidget);
+      expect(find.textContaining('رجّع المورّد 15,000 د.ع'), findsOneWidget);
+      expect(find.text('عطلان ← 0'), findsOneWidget, reason: 'المخزون لم يتغيّر ⇒ العمود يعرض العطلان');
+      expect(find.text('العطلان ← 2'), findsOneWidget);
+      await t.tap(find.text('إلغاء الحركة'));
+      await settle(t);
+      expect(find.textContaining('وتُلغى خسارتها (5,000 د.ع)'), findsOneWidget);
+      expect(find.textContaining('ويخرج ما رجّعه المورّد (15,000 د.ع)'), findsOneWidget);
+      await t.enterText(find.byType(TextField).last, 'سُجّلت بالخطأ');
+      await settle(t);
+      await t.tap(find.text('إلغاء الحركة').last);
+      await settle(t, seconds: 4);
+      final post = server.posts.lastWhere((p) => p.$1 == '/api/v2/sales/items/2/moves/50/void');
+      expect(post.$2, {'reason': 'سُجّلت بالخطأ'});
       expect(t.takeException(), isNull);
     });
 

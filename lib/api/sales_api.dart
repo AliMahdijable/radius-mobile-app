@@ -78,6 +78,8 @@ class SaleItem {
     required this.active,
     this.code,
     this.note,
+    this.qtyDefective = 0,
+    this.defectiveValue = 0,
   });
 
   final int id;
@@ -92,8 +94,22 @@ class SaleItem {
   final bool active;
   final String? note;
 
+  /// خانة «العطلان»: لا تُباع ولا تُحسب خسارةً حتى تُحسم (تصلّحت / ما تتصلّح /
+  /// رجّعتها للمورّد) — بقيمتها بالكلفة.
+  final num qtyDefective;
+  final num defectiveValue;
+
   String get unitLabel => saleUnitLabel(unit);
   bool get outOfStock => qty <= 0;
+  bool get hasDefective => qtyDefective > 0;
+
+  /// قيمة [q] من خانة العطلان كما يحسبها الخادم: كلّه ⇒ قيمته كلّها، وإلّا بنسبته
+  /// (تقديرٌ للعرض — الخادم يحسم).
+  num defectiveValueOf(num q) {
+    if (qtyDefective <= 0 || q <= 0) return 0;
+    if ((q - qtyDefective).abs() < 1e-9) return defectiveValue;
+    return (defectiveValue * q / qtyDefective * 100).round() / 100;
+  }
 
   static SaleItem? fromJson(Map<String, dynamic> j) {
     final id = _int(j['id']);
@@ -111,6 +127,8 @@ class SaleItem {
       margin: _num(j['margin']),
       active: j['active'] != false,
       note: _str(j['note']),
+      qtyDefective: _num(j['qty_defective']),
+      defectiveValue: _num(j['defective_value']),
     );
   }
 }
@@ -348,12 +366,18 @@ class SaleItemsPage {
     this.count = 0,
     this.stockValue = 0,
     this.outOfStock = 0,
+    this.defectiveItems = 0,
+    this.defectiveValue = 0,
   });
   final bool enabled;
   final List<SaleItem> items;
   final int count;
   final num stockValue;
   final int outOfStock;
+
+  /// موادّ فيها عطلانٌ ينتظر الحسم، وقيمته كلّها بالكلفة.
+  final int defectiveItems;
+  final num defectiveValue;
 
   List<SaleItem> get active => items.where((i) => i.active).toList();
 }
@@ -364,6 +388,7 @@ class StockMove {
     required this.kind,
     required this.qty,
     required this.qtyAfter,
+    this.qtyBefore,
     this.unitCost,
     this.saleId,
     this.note,
@@ -374,14 +399,20 @@ class StockMove {
     this.refMoveId,
     this.voided = false,
     this.voidable = false,
+    this.defectiveAfter,
+    this.loss,
+    this.refund,
   });
 
   final int id;
 
-  /// `purchase` · `sale` · `return` (رجوع للمخزون) · `adjust` (جرد) · `purchase_void` (إلغاء شراء)
+  /// `purchase` · `sale` · `return` (رجوع للمخزون) · `adjust` (فرق عدّ) · `purchase_void` (إلغاء شراء) ·
+  /// `damage` (تالف) · `defect` (عطلان) · `repair` (تصلّح) · `defect_writeoff` (ما يتصلّح) ·
+  /// `supplier_return` (رجّعته للمورّد) · `void` (إلغاء حركةٍ يدويّة — يشير إليها [refMoveId]).
   final String kind;
   final num qty;
   final num qtyAfter;
+  final num? qtyBefore;
   final num? unitCost;
   final int? saleId;
   final String? note;
@@ -394,8 +425,16 @@ class StockMove {
   final int? refMoveId;
   final bool voided;
 
-  /// آخر حركةٍ على المادّة وشراءٌ لم يُلغَ — يُلغى (الخادم يتحقّق من جديد).
+  /// آخر حركةٍ على المادّة وحركةٌ يدويّة لم تُلغَ — تُلغى (الخادم يتحقّق من جديد).
   final bool voidable;
+
+  /// خانة العطلان بعد الحركة (حين مسّتها)، والخسارة (موجبة؛ وإلغاؤها سالب)، وما رجّعه المورّد.
+  final num? defectiveAfter;
+  final num? loss;
+  final num? refund;
+
+  /// حركةٌ على خانة العطلان وحدها (شطب، إرجاعٌ للمورّد، أو إلغاؤهما): المخزون لم يتغيّر.
+  bool get defectiveOnly => defectiveAfter != null && qtyBefore != null && qtyBefore == qtyAfter;
 
   static StockMove? fromJson(Map<String, dynamic> j) {
     final id = _int(j['id']);
@@ -405,6 +444,7 @@ class StockMove {
       kind: _str(j['kind']) ?? 'adjust',
       qty: _num(j['qty']),
       qtyAfter: _num(j['qty_after']),
+      qtyBefore: j['qty_before'] == null ? null : _num(j['qty_before']),
       unitCost: j['unit_cost'] == null ? null : _num(j['unit_cost']),
       saleId: _int(j['sale_id']),
       note: _str(j['note']),
@@ -415,6 +455,9 @@ class StockMove {
       refMoveId: _int(j['ref_move_id']),
       voided: j['voided'] == true,
       voidable: j['voidable'] == true,
+      defectiveAfter: j['defective_after'] == null ? null : _num(j['defective_after']),
+      loss: j['loss'] == null ? null : _num(j['loss']),
+      refund: j['refund'] == null ? null : _num(j['refund']),
     );
   }
 }
@@ -513,6 +556,8 @@ class SalesApi {
           count: _int(t['count']) ?? items.where((i) => i.active).length,
           stockValue: _num(t['stock_value']),
           outOfStock: _int(t['out_of_stock']) ?? 0,
+          defectiveItems: _int(t['defective_items']) ?? 0,
+          defectiveValue: _num(t['defective_value']),
         ),
         error: null,
       );
@@ -587,15 +632,20 @@ class SalesApi {
     return _write(() => ApiClient.dio.put<Object?>('$_base/items/$id', data: patch), 'تعذّر الحفظ');
   }
 
-  /// شراء (`purchase`: كمّيّة موجبة + كلفة الوحدة + [paidFrom] إجباريّ) أو جرد (`adjust`: ± + سبب).
-  /// [clientRef] يمنع تكرار الحركة نفسها (ولا ثمنها من الصندوق مرّتين).
-  static Future<({bool ok, String? message, String? code, bool ambiguous})> stock(
+  /// حركة مخزون (قرار المالك ٢٣ أكتوبر): شراء (`purchase`: كمّيّة + كلفة الوحدة + [paidFrom] إجباريّ) ·
+  /// فرق عدّ (`adjust`: ± + سبب) · تالف (`damage`: خسارةٌ بكلفته) · عطلان (`defect`: لخانته) · ومن خانة
+  /// العطلان: تصلّح (`repair`) · ما يتصلّح (`defect_writeoff`: خسارة) · رجّعته للمورّد (`supplier_return`:
+  /// [refund] ما رجّعه، و[refundTo] `box`/`outside` إجباريّ حين يرجّع مبلغاً). [loss] خسارة الحركة إن كانت.
+  /// [clientRef] يمنع تكرار الحركة نفسها (ولا ثمنها أو مبلغها مرّتين).
+  static Future<({bool ok, String? message, String? code, bool ambiguous, num? loss})> stock(
     int id, {
     required String kind,
     required num qty,
     int? unitCost,
     String? note,
     String? paidFrom,
+    int? refund,
+    String? refundTo,
     required String clientRef,
   }) async {
     try {
@@ -604,35 +654,50 @@ class SalesApi {
         'qty': qty,
         if (kind == 'purchase') 'unit_cost': unitCost ?? 0,
         if (kind == 'purchase' && paidFrom != null) 'paid_from': paidFrom,
+        if (kind == 'supplier_return') 'refund': refund ?? 0,
+        if (kind == 'supplier_return' && (refund ?? 0) > 0 && refundTo != null) 'refund_to': refundTo,
         if (note != null && note.isNotEmpty) 'note': note,
         'client_ref': clientRef,
       });
       final body = _map(r.data);
       final ok = body['success'] == true;
-      return (ok: ok, message: _str(body['message']), code: ok ? null : _str(body['code']), ambiguous: false);
+      return (
+        ok: ok,
+        message: _str(body['message']),
+        code: ok ? null : _str(body['code']),
+        ambiguous: false,
+        loss: body['loss'] == null ? null : _num(body['loss']),
+      );
     } catch (e) {
       _log('stock', e);
       final ours = _ourReply(e);
       if (ours != null) {
-        return (ok: false, message: _str(ours['message']), code: _str(ours['code']), ambiguous: false);
+        return (ok: false, message: _str(ours['message']), code: _str(ours['code']), ambiguous: false, loss: null);
       }
-      return (ok: false, message: humanError(e, fallback: 'تعذّر الحفظ'), code: null, ambiguous: true);
+      return (ok: false, message: humanError(e, fallback: 'تعذّر الحفظ'), code: null, ambiguous: true, loss: null);
     }
   }
 
-  /// إلغاء شراءٍ خاطئ — آخر حركةٍ على المادّة وحدها: الكمّيّة والكلفة كما كانتا، وثمنه (إن دُفع من
-  /// الصندوق) يعود لصندوق من دفعه. [refund] المبلغ العائد للصندوق.
-  static Future<({bool ok, String? message, num refund})> voidPurchase(int itemId, int moveId, String reason) async {
+  /// إلغاء حركةٍ يدويّة خاطئة (شراء، فرق عدّ، تالف، عطلان، تصليح، شطب، إرجاعٌ للمورّد) — آخر حركةٍ على
+  /// المادّة وحدها: يرجع كلّ شيءٍ كما كان، والخسارة تُلغى، والنقد بعكسه. [boxDelta] ما تغيّر بالصندوق
+  /// (+ ثمن شراءٍ عاد لصندوق من دفعه، − مبلغٌ رجّعه المورّد خرج من صندوق من استلمه)؛ [refund] ثمن الشراء العائد.
+  static Future<({bool ok, String? message, num refund, num boxDelta})> voidMove(int itemId, int moveId, String reason) async {
     try {
       final r = await ApiClient.dio.post<Object?>('$_base/items/$itemId/moves/$moveId/void', data: {'reason': reason});
       final body = _map(r.data);
       final ok = body['success'] == true;
-      return (ok: ok, message: _str(body['message']) ?? (ok ? null : 'تعذّر إلغاء الشراء'), refund: _num(body['refund']));
+      final refund = _num(body['refund']);
+      return (
+        ok: ok,
+        message: _str(body['message']) ?? (ok ? null : 'تعذّر الإلغاء'),
+        refund: refund,
+        boxDelta: body['box_delta'] == null ? refund : _num(body['box_delta']),
+      );
     } catch (e) {
-      _log('purchase-void', e);
+      _log('move-void', e);
       final ours = _ourReply(e);
-      if (ours != null) return (ok: false, message: _str(ours['message']) ?? 'تعذّر إلغاء الشراء', refund: 0);
-      return (ok: false, message: humanError(e, fallback: 'تعذّر إلغاء الشراء'), refund: 0);
+      if (ours != null) return (ok: false, message: _str(ours['message']) ?? 'تعذّر الإلغاء', refund: 0, boxDelta: 0);
+      return (ok: false, message: humanError(e, fallback: 'تعذّر الإلغاء'), refund: 0, boxDelta: 0);
     }
   }
 

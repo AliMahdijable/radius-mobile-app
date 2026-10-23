@@ -480,6 +480,16 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                 ),
               ],
             ),
+            // التالف والعطلان (خسارة المواد) — يُطرح من الصافيين؛ وإلغاؤه بالفترة سالبٌ يُرجعه.
+            if (k.goodsLossCount > 0) ...[
+              const SizedBox(height: Sp.sm),
+              _heroMini(
+                icon: LucideIcons.packageX,
+                label: 'reports.goods_loss'.tr(),
+                value: '${k.goodsLossSum > 0 ? '-' : '+'}${formatIQD(k.goodsLossSum.abs())}',
+                color: k.goodsLossSum > 0 ? AppColors.error : AppColors.success,
+              ),
+            ],
           ],
           const SizedBox(height: Sp.sm),
           // صف الصافي — يعرض netCash بشكل بارز مع رمزه ولونه.
@@ -520,12 +530,17 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               _heroNote('merged.finance_profit_rule'.tr(), warn: false)
             else
               _heroNote(
-                (k.hasGoods ? 'reports.profit_after_cost_formula_goods' : 'reports.profit_after_cost_formula')
+                (!k.hasGoods
+                        ? 'reports.profit_after_cost_formula'
+                        : k.goodsLossSum != 0
+                            ? 'reports.profit_after_cost_formula_goods_loss'
+                            : 'reports.profit_after_cost_formula_goods')
                     .tr(namedArgs: {
                   'sales': formatIQD(k.salesSum),
                   'expenses': formatIQD(k.expensesSum),
                   'cost': formatIQD(cost.sum),
                   'goods': '${k.goodsProfitSum < 0 ? '-' : ''}${formatIQD(k.goodsProfitSum)}',
+                  'loss': '${k.goodsLossSum < 0 ? '-' : ''}${formatIQD(k.goodsLossSum)}',
                 }),
                 warn: false,
               ),
@@ -706,6 +721,10 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
         _KpiItem('reports.goods_profit'.tr(), formatIQD(k.goodsProfitSum),
             AppColors.success, LucideIcons.trendingUp,
             isDebit: k.goodsProfitSum < 0),
+        if (k.goodsLossCount > 0)
+          _KpiItem('reports.goods_loss'.tr(), formatIQD(k.goodsLossSum.abs()),
+              AppColors.error, LucideIcons.packageX,
+              isDebit: k.goodsLossSum > 0),
       ],
       _KpiItem('# تفعيلات', '${k.activationsCount}', AppColors.brandAccent,
           LucideIcons.userCheck,

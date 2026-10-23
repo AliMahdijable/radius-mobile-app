@@ -626,8 +626,8 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
             ),
           if (p.goodsPurchases.sum != 0)
             _Line(
-              label: 'settle.goods_purchases'.tr(),
-              value: '−${formatIQD(p.goodsPurchases.sum)}',
+              label: goodsBoxLine(p.goodsPurchases).label,
+              value: goodsBoxLine(p.goodsPurchases).value,
             ),
           if (_opening != 0)
             _Line(
@@ -797,12 +797,13 @@ class _BoxCard extends StatelessWidget {
                   value: '−${formatIQD(cur.expenses.sum)}',
                   color: AppColors.error,
                 ),
-                // شراء المخزون «من الصندوق» (قسم «المبيعات») — خارجٌ كالصرفيات، حين يوجد بالفترة.
+                // شراء المخزون «من الصندوق» (قسم «المبيعات») — خارجٌ كالصرفيات، حين يوجد بالفترة؛ وما رجّعه
+                // المورّد للصندوق يُطرح منه (صافيه سالبٌ ⇒ «استرجاع من المورّد» داخل).
                 if (cur.goodsPurchases.count > 0)
                   _Line(
-                    label: '${'settle.goods_purchases'.tr()} · ${cur.goodsPurchases.count}',
-                    value: '−${formatIQD(cur.goodsPurchases.sum)}',
-                    color: AppColors.error,
+                    label: '${goodsBoxLine(cur.goodsPurchases).label} · ${cur.goodsPurchases.count}',
+                    value: goodsBoxLine(cur.goodsPurchases).value,
+                    color: goodsBoxLine(cur.goodsPurchases).out ? AppColors.error : AppColors.success,
                   ),
               ],
             ),

@@ -368,6 +368,14 @@ class _SalesScreenState extends State<SalesScreen> {
           ),
         ],
       ),
+      // خانة العطلان (لا تُباع ولا خسارة حتى تُحسم) — تنبيهٌ حين توجد وحدها.
+      if (page.defectiveItems > 0) ...[
+        const SizedBox(height: Sp.sm),
+        _Banner(
+          icon: LucideIcons.wrench,
+          text: 'sales.defective_banner_n'.tr(namedArgs: {'n': '${page.defectiveItems}', 'amount': _money(page.defectiveValue)}),
+        ),
+      ],
       const SizedBox(height: Sp.md),
       if (page.items.isNotEmpty) ...[
         SheetSearchField(
@@ -410,6 +418,7 @@ class _SalesScreenState extends State<SalesScreen> {
             item: shown[i],
             locked: !canItems,
             onStock: () => _after(_showSheet(context, _StockSheet(item: shown[i]))),
+            onDefect: () => _after(_showSheet(context, _DefectSheet(item: shown[i]))),
             onEdit: () => _after(_showSheet(context, _ItemSheet(item: shown[i]))),
             onMoves: () => _showSheet(context, _MovesSheet(item: shown[i], canItems: canItems, onChanged: _refresh)),
           ),
@@ -842,12 +851,16 @@ class _ItemTile extends StatelessWidget {
     required this.item,
     required this.locked,
     required this.onStock,
+    required this.onDefect,
     required this.onEdit,
     required this.onMoves,
   });
   final SaleItem item;
   final bool locked;
   final VoidCallback onStock;
+
+  /// حسم العطلان (تصلّحت / ما تتصلّح / رجّعتها للمورّد) — شارةٌ حين يوجد.
+  final VoidCallback onDefect;
   final VoidCallback onEdit;
   final VoidCallback onMoves;
 
@@ -891,6 +904,7 @@ class _ItemTile extends StatelessWidget {
               spacing: Sp.md,
               runSpacing: Sp.xs,
               children: [
+                if (item.hasDefective) _DefectiveChip(item: item, locked: locked, onTap: onDefect),
                 _meta('sales.price_n'.tr(namedArgs: {'amount': _money(item.salePrice)})),
                 _meta('sales.cost_avg_n'.tr(namedArgs: {'amount': _money(item.costAvg)})),
                 _meta(
@@ -950,6 +964,42 @@ class _ItemTile extends StatelessWidget {
         text,
         style: AppType.muted(color: color ?? AppColors.textMid).copyWith(fontSize: 11.5),
       );
+}
+
+/// شارة «عطلان N» على المادّة — تفتح حسمها، ومقفلةٌ بمكانها بلا صلاحيّة الموادّ.
+class _DefectiveChip extends StatelessWidget {
+  const _DefectiveChip({required this.item, required this.locked, required this.onTap});
+  final SaleItem item;
+  final bool locked;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    const tone = AppTone.warning;
+    return Material(
+      color: tone.softBg,
+      borderRadius: BorderRadius.circular(R.sm),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(R.sm),
+        onTap: locked ? () => showNoPermission(context, action: true) : onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: Sp.x6, vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(locked ? LucideIcons.lock : LucideIcons.wrench, size: 12, color: tone.onSoft),
+              const SizedBox(width: Sp.xxs),
+              Text(
+                'sales.defective_chip_n'.tr(namedArgs: {'qty': saleQtyText(item.qtyDefective, item.unit)}),
+                style: AppType.micro(color: tone.onSoft).copyWith(fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _IconAction extends StatelessWidget {
@@ -1957,7 +2007,7 @@ class _PaidFromChoice extends StatelessWidget {
   }
 }
 
-/// اختيارٌ واحد من اثنين (ما يصير بما سدّده المشترك عند إلغاء البيع، ومصدر ثمن الشراء).
+/// اختيارٌ واحد من بطاقات (ما يصير بما سدّده المشترك عند إلغاء البيع، مصدر ثمن الشراء، تالفٌ أم عطلان، وحسم العطلان).
 class _ChoiceCard extends StatelessWidget {
   const _ChoiceCard({
     required this.selected,
@@ -2359,17 +2409,24 @@ class _StockSheet extends StatefulWidget {
   State<_StockSheet> createState() => _StockSheetState();
 }
 
+/// حركة مخزون (قرار المالك ٢٣ أكتوبر): شراء (مصدر ثمنه إجباريّ) · تالف أو عطلان (الاختيار إجباريّ:
+/// التالف خسارةٌ الآن، والعطلان خانةٌ تُحسم لاحقاً) · فرق عدّ (± بلا مال).
 class _StockSheetState extends State<_StockSheet> {
   final _qty = TextEditingController();
   late final _cost = TextEditingController(text: AmountShorthand.format(widget.item.costAvg.round()));
   final _note = TextEditingController();
-  bool _adjust = false;
+
+  /// 0 شراء · 1 تالف / عطلان · 2 فرق عدّ.
+  int _mode = 0;
+
+  /// `damage` (تالف) أو `defect` (عطلان) — بلا اختيارٍ مسبق.
+  String? _outKind;
   bool _down = true;
   late int _costValue = widget.item.costAvg.round();
   String? _paidFrom;
   bool _busy = false;
 
-  /// مرجع الحركة: ضغطتان أو انقطاعٌ بعد الحفظ = حركةٌ واحدة (ولا ثمنٌ مرّتين)؛ يتجدّد بعد كلّ حكم.
+  /// مرجع الحركة: ضغطتان أو انقطاعٌ بعد الحفظ = حركةٌ واحدة (ولا ثمنٌ مرّتين)؛ يتجدّد بعد كلّ حكمٍ وكلّ تغييرٍ للنوع.
   String _ref = SalesApi.newClientRef();
 
   @override
@@ -2380,47 +2437,72 @@ class _StockSheetState extends State<_StockSheet> {
     super.dispose();
   }
 
+  bool get _buy => _mode == 0;
+  bool get _out => _mode == 1;
+  bool get _count => _mode == 2;
+
   num? get _q => parseSaleQty(_qty.text);
-  num? get _signed => _q == null ? null : (_adjust && _down ? -_q! : _q);
-  num? get _after => _signed == null ? null : widget.item.qty + _signed!;
+
+  /// تغيّر المخزون: الشراء والزيادة موجبان، والتالف/العطلان والنقص سالبان.
+  num? get _delta => _q == null ? null : (_buy || (_count && !_down) ? _q! : -_q!);
+  num? get _after => _delta == null ? null : widget.item.qty + _delta!;
   num? get _newAvg {
     final q = _q;
-    if (_adjust || q == null) return null;
+    if (!_buy || q == null) return null;
     final it = widget.item;
     return it.qty > 0 ? (it.qty * it.costAvg + q * _costValue) / (it.qty + q) : _costValue;
   }
 
-  num? get _amount => _adjust || _q == null || _cost.text.trim().isEmpty ? null : (_q! * _costValue).round();
+  num? get _amount => !_buy || _q == null || _cost.text.trim().isEmpty ? null : (_q! * _costValue).round();
+
+  /// التالف/العطلان بالكلفة المتوسّطة الآن (الخادم يحسبها لحظة الحفظ).
+  num? get _outValue => _out && _q != null ? widget.item.costAvg * _q! : null;
+  String? get _kind => _buy ? 'purchase' : (_count ? 'adjust' : _outKind);
 
   bool get _ok =>
       !_busy &&
       _q != null &&
-      (_adjust
-          ? _note.text.trim().length >= 2 && (_after ?? -1) >= 0
-          : _cost.text.trim().isNotEmpty && _paidFrom != null);
+      _kind != null &&
+      (_after ?? -1) >= 0 &&
+      (_buy ? _cost.text.trim().isNotEmpty && _paidFrom != null : _note.text.trim().length >= 2);
+
+  void _setOut(String k) => setState(() {
+        _outKind = k;
+        _ref = SalesApi.newClientRef();
+      });
 
   Future<void> _submit() async {
+    final kind = _kind;
+    final q = _q;
+    if (kind == null || q == null) return;
     setState(() => _busy = true);
     final r = await SalesApi.stock(
       widget.item.id,
-      kind: _adjust ? 'adjust' : 'purchase',
-      qty: _signed!,
-      unitCost: _adjust ? null : _costValue,
+      kind: kind,
+      qty: _count ? _delta! : q,
+      unitCost: _buy ? _costValue : null,
       note: _note.text.trim(),
-      paidFrom: _adjust ? null : _paidFrom,
+      paidFrom: _buy ? _paidFrom : null,
       clientRef: _ref,
     );
     if (!mounted) return;
     setState(() => _busy = false);
     if (r.ok) {
       final it = widget.item;
+      final qty = saleQtyText(q, it.unit);
+      final loss = r.loss ?? 0;
       showSheetSnack(
         context,
-        _adjust
-            ? 'sales.adjusted'.tr(namedArgs: {'name': it.name, 'qty': saleQtyText(_after!, it.unit)})
-            : _paidFrom == 'box' && (_amount ?? 0) > 0
-                ? 'sales.purchased_box'.tr(namedArgs: {'name': it.name, 'qty': saleQtyText(_q!, it.unit), 'amount': _money(_amount!)})
-                : 'sales.purchased'.tr(namedArgs: {'name': it.name, 'qty': saleQtyText(_q!, it.unit)}),
+        switch (kind) {
+          'adjust' => 'sales.adjusted'.tr(namedArgs: {'name': it.name, 'qty': saleQtyText(_after!, it.unit)}),
+          'damage' => loss > 0
+              ? 'sales.damaged_loss'.tr(namedArgs: {'name': it.name, 'qty': qty, 'amount': _money(loss)})
+              : 'sales.damaged'.tr(namedArgs: {'name': it.name, 'qty': qty}),
+          'defect' => 'sales.defected'.tr(namedArgs: {'name': it.name, 'qty': qty}),
+          _ => _paidFrom == 'box' && (_amount ?? 0) > 0
+              ? 'sales.purchased_box'.tr(namedArgs: {'name': it.name, 'qty': qty, 'amount': _money(_amount!)})
+              : 'sales.purchased'.tr(namedArgs: {'name': it.name, 'qty': qty}),
+        },
       );
       Navigator.of(context).pop(true);
       return;
@@ -2433,17 +2515,34 @@ class _StockSheetState extends State<_StockSheet> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final it = widget.item;
+    final q = _q;
     final after = _after;
     final avg = _newAvg;
+    final outValue = _outValue;
+    final noteLabel = _buy
+        ? 'sales.f_supplier_note'.tr()
+        : '${(_count ? 'sales.f_reason' : _outKind == 'defect' ? 'sales.f_defect' : 'sales.f_damage_reason').tr()} *';
     return DesignSheet(
       header: SheetHeaderBar(
-        icon: _adjust ? LucideIcons.clipboardCheck : LucideIcons.packagePlus,
+        icon: _buy ? LucideIcons.packagePlus : (_out ? LucideIcons.packageX : LucideIcons.clipboardCheck),
         title: it.name,
-        subtitle: 'sales.stock_sub'.tr(namedArgs: {'qty': saleQtyText(it.qty, it.unit), 'amount': _money(it.costAvg)}),
+        subtitle: [
+          'sales.stock_sub'.tr(namedArgs: {'qty': saleQtyText(it.qty, it.unit), 'amount': _money(it.costAvg)}),
+          if (it.hasDefective) 'sales.defective_chip_n'.tr(namedArgs: {'qty': saleQtyText(it.qtyDefective, it.unit)}),
+        ].join(' · '),
         onClose: () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
-        label: (_adjust ? 'sales.adjust_btn' : 'sales.purchase_btn').tr(),
+        label: (_buy
+                ? 'sales.purchase_btn'
+                : _count
+                    ? 'sales.count_btn'
+                    : switch (_outKind) {
+                        'damage' => 'sales.damage_btn',
+                        'defect' => 'sales.defect_btn',
+                        _ => 'sales.out_pick_btn',
+                      })
+            .tr(),
         icon: LucideIcons.check,
         enabled: _ok,
         busy: _busy,
@@ -2453,20 +2552,48 @@ class _StockSheetState extends State<_StockSheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SheetSegmented(
-            labels: ['sales.mode_purchase'.tr(), 'sales.mode_adjust'.tr()],
-            icons: const [LucideIcons.packagePlus, LucideIcons.clipboardCheck],
-            selectedIndex: _adjust ? 1 : 0,
+            labels: ['sales.mode_purchase'.tr(), 'sales.mode_out'.tr(), 'sales.mode_count'.tr()],
+            selectedIndex: _mode,
             onSelect: (i) => setState(() {
-              _adjust = i == 1;
+              _mode = i;
               _ref = SalesApi.newClientRef();
             }),
           ),
-          if (_adjust) ...[
+          if (_out) ...[
+            const SizedBox(height: Sp.lg),
+            SheetSection(
+              label: '${'sales.out_q'.tr()} *',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _ChoiceCard(
+                    selected: _outKind == 'damage',
+                    icon: LucideIcons.packageX,
+                    title: 'sales.damage_title'.tr(),
+                    subtitle: 'sales.damage_sub'.tr(),
+                    onTap: () => _setOut('damage'),
+                  ),
+                  const SizedBox(height: Sp.sm),
+                  _ChoiceCard(
+                    selected: _outKind == 'defect',
+                    icon: LucideIcons.wrench,
+                    title: 'sales.defect_title'.tr(),
+                    subtitle: 'sales.defect_sub'.tr(),
+                    onTap: () => _setOut('defect'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (_count) ...[
             const SizedBox(height: Sp.sm),
             SheetSegmented(
               labels: ['sales.dir_down'.tr(), 'sales.dir_up'.tr()],
               selectedIndex: _down ? 0 : 1,
-              onSelect: (i) => setState(() => _down = i == 0),
+              onSelect: (i) => setState(() {
+                _down = i == 0;
+                _ref = SalesApi.newClientRef();
+              }),
             ),
           ],
           const SizedBox(height: Sp.lg),
@@ -2481,7 +2608,7 @@ class _StockSheetState extends State<_StockSheet> {
               onChanged: (_) => setState(() {}),
             ),
           ),
-          if (!_adjust) ...[
+          if (_buy) ...[
             const SizedBox(height: Sp.lg),
             SheetSection(
               label: '${'sales.f_unit_cost'.tr()} *',
@@ -2492,7 +2619,7 @@ class _StockSheetState extends State<_StockSheet> {
           ],
           const SizedBox(height: Sp.lg),
           SheetSection(
-            label: _adjust ? '${'sales.f_reason'.tr()} *' : 'sales.f_supplier_note'.tr(),
+            label: noteLabel,
             child: _SheetText(
               controller: _note,
               icon: LucideIcons.fileText,
@@ -2511,15 +2638,316 @@ class _StockSheetState extends State<_StockSheet> {
               const SizedBox(height: Sp.sm),
               SheetSummaryBox(label: 'sales.avg_after'.tr(), value: _money(avg)),
             ],
+            if (after >= 0 && outValue != null && _outKind == 'damage') ...[
+              const SizedBox(height: Sp.sm),
+              SheetSummaryBox(label: 'sales.loss_preview'.tr(), value: _money(outValue), valueColor: AppColors.error),
+            ],
+            if (after >= 0 && outValue != null && q != null && _outKind == 'defect') ...[
+              const SizedBox(height: Sp.sm),
+              SheetSummaryBox(
+                label: 'sales.defective_after'.tr(),
+                value: '${saleQtyText(it.qtyDefective + q, it.unit)} · ${_money(it.defectiveValue + outValue)}',
+              ),
+            ],
             if (after < 0)
               Padding(
                 padding: const EdgeInsets.only(top: Sp.xs),
-                child: Text('sales.below_zero'.tr(), style: AppType.muted(color: AppColors.error).copyWith(fontSize: 11.5)),
+                child: Text(
+                  _out ? 'sales.out_over_n'.tr(namedArgs: {'qty': saleQtyText(it.qty, it.unit)}) : 'sales.below_zero'.tr(),
+                  style: AppType.muted(color: AppColors.error).copyWith(fontSize: 11.5),
+                ),
               ),
           ],
           const SizedBox(height: Sp.md),
           Text(
-            (_adjust ? 'sales.adjust_info' : 'sales.purchase_info').tr(),
+            (_buy ? 'sales.purchase_info' : (_out ? 'sales.out_info' : 'sales.count_info')).tr(),
+            style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5, height: 1.6),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// أين دخل ما رجّعه المورّد — إجباريّ حين يرجّع مبلغاً: الصندوق يزيد صندوق التسوية بالمبلغ، وخارجه لا.
+class _RefundToChoice extends StatelessWidget {
+  const _RefundToChoice({required this.value, required this.onChanged, required this.amount});
+  final String? value;
+  final ValueChanged<String> onChanged;
+  final num amount;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return SheetSection(
+      label: '${'sales.refund_to'.tr()} *',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _ChoiceCard(
+            selected: value == 'box',
+            icon: LucideIcons.wallet,
+            title: 'sales.refund_box'.tr(),
+            subtitle: 'sales.refund_box_sub_n'.tr(namedArgs: {'amount': _money(amount)}),
+            onTap: () => onChanged('box'),
+          ),
+          const SizedBox(height: Sp.sm),
+          _ChoiceCard(
+            selected: value == 'outside',
+            icon: LucideIcons.boxes,
+            title: 'sales.refund_outside'.tr(),
+            subtitle: 'sales.refund_outside_sub'.tr(),
+            onTap: () => onChanged('outside'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DefectSheet extends StatefulWidget {
+  const _DefectSheet({required this.item});
+  final SaleItem item;
+
+  @override
+  State<_DefectSheet> createState() => _DefectSheetState();
+}
+
+/// حسم خانة «العطلان» (قرار المالك ٢٣ أكتوبر): تصلّحت ⇒ للمخزون بكلفتها · ما تتصلّح ⇒ قيمتها خسارة ·
+/// رجّعتها للمورّد ⇒ الخسارة قيمتها ناقص ما رجّعه (ومبلغه للصندوق أو خارجه). القيمة تقديرٌ بنسبة الكمّيّة —
+/// الخادم يحسم.
+class _DefectSheetState extends State<_DefectSheet> {
+  late final _qtyCtl = TextEditingController(text: _qty3(widget.item.qtyDefective));
+  final _refund = TextEditingController();
+  final _note = TextEditingController();
+
+  /// `repair` · `defect_writeoff` · `supplier_return` — بلا اختيارٍ مسبق.
+  String? _action;
+  int _refundValue = 0;
+  String? _refundTo;
+  bool _busy = false;
+  String _ref = SalesApi.newClientRef();
+
+  @override
+  void dispose() {
+    _qtyCtl.dispose();
+    _refund.dispose();
+    _note.dispose();
+    super.dispose();
+  }
+
+  static String _qty3(num q) => q > 0 ? _qty(q) : '';
+
+  num? get _q => parseSaleQty(_qtyCtl.text);
+  bool get _over => (_q ?? 0) > widget.item.qtyDefective + 1e-9;
+  num? get _value => _q == null || _over ? null : widget.item.defectiveValueOf(_q!);
+  num? get _loss {
+    final v = _value;
+    if (v == null) return null;
+    return switch (_action) {
+      'defect_writeoff' => v,
+      'supplier_return' => ((v - _refundValue) * 100).round() / 100,
+      _ => null,
+    };
+  }
+
+  num? get _after => _action == 'repair' && _q != null && !_over ? widget.item.qty + _q! : null;
+  num? get _newAvg {
+    final q = _q;
+    final v = _value;
+    if (_action != 'repair' || q == null || v == null) return null;
+    final it = widget.item;
+    return it.qty > 0 ? (it.qty * it.costAvg + v) / (it.qty + q) : v / q;
+  }
+
+  bool get _ok =>
+      !_busy &&
+      _action != null &&
+      _q != null &&
+      !_over &&
+      (_action != 'defect_writeoff' || _note.text.trim().length >= 2) &&
+      (_action != 'supplier_return' || _refundValue == 0 || _refundTo != null);
+
+  void _pick(String a) => setState(() {
+        _action = a;
+        _ref = SalesApi.newClientRef();
+      });
+
+  Future<void> _submit() async {
+    final a = _action;
+    final q = _q;
+    if (a == null || q == null) return;
+    setState(() => _busy = true);
+    final r = await SalesApi.stock(
+      widget.item.id,
+      kind: a,
+      qty: q,
+      note: _note.text.trim(),
+      refund: a == 'supplier_return' ? _refundValue : null,
+      refundTo: a == 'supplier_return' && _refundValue > 0 ? _refundTo : null,
+      clientRef: _ref,
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (r.ok) {
+      final it = widget.item;
+      final args = {'name': it.name, 'qty': saleQtyText(q, it.unit)};
+      final l = r.loss ?? 0;
+      showSheetSnack(
+        context,
+        [
+          switch (a) {
+            'repair' => 'sales.repaired'.tr(namedArgs: args),
+            'defect_writeoff' => 'sales.written_off'.tr(namedArgs: args),
+            _ => 'sales.returned'.tr(namedArgs: args),
+          },
+          if (a == 'supplier_return' && _refundValue > 0)
+            (_refundTo == 'box' ? 'sales.returned_box_n' : 'sales.returned_out_n')
+                .tr(namedArgs: {'amount': _money(_refundValue)}),
+          if (l > 0) 'sales.mv_loss_n'.tr(namedArgs: {'amount': _money(l)}),
+          if (l < 0) 'sales.mv_gain_n'.tr(namedArgs: {'amount': _money(-l)}),
+        ].join(' · '),
+      );
+      Navigator.of(context).pop(true);
+      return;
+    }
+    if (!r.ambiguous && r.code != 'IN_PROGRESS') setState(() => _ref = SalesApi.newClientRef());
+    showSheetSnack(context, r.message ?? 'sales.not_saved'.tr(), isError: true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final it = widget.item;
+    final a = _action;
+    final value = _value;
+    final loss = _loss;
+    final after = _after;
+    final avg = _newAvg;
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.wrench,
+        title: 'sales.defect_sheet_title_n'.tr(namedArgs: {'name': it.name}),
+        subtitle: 'sales.defect_sheet_sub'.tr(
+          namedArgs: {'qty': saleQtyText(it.qtyDefective, it.unit), 'amount': _money(it.defectiveValue)},
+        ),
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      footer: SheetFooterBar(
+        label: switch (a) {
+          'repair' => 'sales.repair_btn',
+          'defect_writeoff' => 'sales.writeoff_btn',
+          'supplier_return' => 'sales.return_btn',
+          _ => 'sales.defect_pick_btn',
+        }
+            .tr(),
+        icon: LucideIcons.check,
+        enabled: _ok,
+        busy: _busy,
+        onPressed: _submit,
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SheetSection(
+            label: '${'sales.out_q'.tr()} *',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _ChoiceCard(
+                  selected: a == 'repair',
+                  icon: LucideIcons.wrench,
+                  title: 'sales.repair_title'.tr(),
+                  subtitle: 'sales.repair_sub'.tr(),
+                  onTap: () => _pick('repair'),
+                ),
+                const SizedBox(height: Sp.sm),
+                _ChoiceCard(
+                  selected: a == 'defect_writeoff',
+                  icon: LucideIcons.trash2,
+                  title: 'sales.writeoff_title'.tr(),
+                  subtitle: 'sales.writeoff_sub'.tr(),
+                  onTap: () => _pick('defect_writeoff'),
+                ),
+                const SizedBox(height: Sp.sm),
+                _ChoiceCard(
+                  selected: a == 'supplier_return',
+                  icon: LucideIcons.truck,
+                  title: 'sales.return_title'.tr(),
+                  subtitle: 'sales.return_sub'.tr(),
+                  onTap: () => _pick('supplier_return'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: Sp.lg),
+          SheetSection(
+            label: '${'sales.f_qty'.tr()} (${saleUnitLabel(it.unit)}) *',
+            child: _SheetText(
+              controller: _qtyCtl,
+              icon: LucideIcons.hash,
+              maxLength: 12,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              ltr: true,
+              onChanged: (_) => setState(() {}),
+            ),
+          ),
+          if (a == 'supplier_return') ...[
+            const SizedBox(height: Sp.lg),
+            SheetSection(
+              label: 'sales.f_refund'.tr(),
+              child: _MoneyField(controller: _refund, onValue: (v) => setState(() => _refundValue = v)),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: Sp.xs),
+              child: Text('sales.f_refund_hint'.tr(), style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5)),
+            ),
+            if (_refundValue > 0) ...[
+              const SizedBox(height: Sp.lg),
+              _RefundToChoice(value: _refundTo, onChanged: (v) => setState(() => _refundTo = v), amount: _refundValue),
+            ],
+          ],
+          const SizedBox(height: Sp.lg),
+          SheetSection(
+            label: a == 'defect_writeoff' ? '${'sales.f_reason'.tr()} *' : 'sales.f_note_opt'.tr(),
+            child: _SheetText(
+              controller: _note,
+              icon: LucideIcons.fileText,
+              maxLength: 200,
+              onChanged: (_) => setState(() {}),
+            ),
+          ),
+          if (_over)
+            Padding(
+              padding: const EdgeInsets.only(top: Sp.sm),
+              child: Text(
+                'sales.defective_over_n'.tr(namedArgs: {'qty': saleQtyText(it.qtyDefective, it.unit)}),
+                style: AppType.muted(color: AppColors.error).copyWith(fontSize: 11.5),
+              ),
+            )
+          else if (a != null && value != null) ...[
+            const SizedBox(height: Sp.lg),
+            SheetSummaryBox(label: 'sales.value_at_cost'.tr(), value: _money(value)),
+            if (after != null) ...[
+              const SizedBox(height: Sp.sm),
+              SheetSummaryBox(label: 'sales.qty_stock_after'.tr(), value: saleQtyText(after, it.unit)),
+            ],
+            if (avg != null) ...[
+              const SizedBox(height: Sp.sm),
+              SheetSummaryBox(label: 'sales.avg_after'.tr(), value: _money(avg)),
+            ],
+            if (loss != null) ...[
+              const SizedBox(height: Sp.sm),
+              SheetSummaryBox(
+                label: (loss >= 0 ? 'sales.loss' : 'sales.gain').tr(),
+                value: _money(loss.abs()),
+                valueColor: loss > 0 ? AppColors.error : AppColors.success,
+              ),
+            ],
+          ],
+          const SizedBox(height: Sp.md),
+          Text(
+            'sales.defect_info'.tr(),
             style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5, height: 1.6),
           ),
         ],
@@ -2532,10 +2960,10 @@ class _MovesSheet extends StatefulWidget {
   const _MovesSheet({required this.item, this.canItems = false, this.onChanged});
   final SaleItem item;
 
-  /// إلغاء الشراء الخاطئ بصلاحيّة الموادّ (والقسم مفعّل).
+  /// إلغاء الحركة اليدويّة الخاطئة بصلاحيّة الموادّ (والقسم مفعّل).
   final bool canItems;
 
-  /// بعد إلغاء شراء: تُحدَّث الموادّ خلف الشيت فوراً (مهما أُغلق بعدها).
+  /// بعد إلغاء حركة: تُحدَّث الموادّ خلف الشيت فوراً (مهما أُغلق بعدها).
   final Future<void> Function()? onChanged;
 
   @override
@@ -2546,7 +2974,8 @@ class _MovesSheetState extends State<_MovesSheet> {
   List<StockMove>? _rows;
   String? _error;
 
-  /// إلغاء شراءٍ خاطئ — آخر حركةٍ على المادّة وحدها.
+  /// إلغاء حركةٍ يدويّة خاطئة (شراء، فرق عدّ، تالف، عطلان، تصليح، شطب، إرجاعٌ للمورّد) — آخر حركةٍ على
+  /// المادّة وحدها: يرجع كلّ شيءٍ كما كان، والخسارة تُلغى، والنقد بعكسه.
   StockMove? _voiding;
   final _reason = TextEditingController();
   bool _busy = false;
@@ -2577,15 +3006,22 @@ class _MovesSheetState extends State<_MovesSheet> {
     final m = _voiding;
     if (m == null) return;
     setState(() => _busy = true);
-    final r = await SalesApi.voidPurchase(widget.item.id, m.id, _reason.text.trim());
+    final r = await SalesApi.voidMove(widget.item.id, m.id, _reason.text.trim());
     if (!mounted) return;
     setState(() => _busy = false);
     if (r.ok) {
       showSheetSnack(
         context,
-        r.refund > 0
-            ? 'sales.purchase_voided_box'.tr(namedArgs: {'amount': _money(r.refund)})
-            : 'sales.purchase_voided'.tr(),
+        m.kind == 'purchase'
+            ? (r.refund > 0
+                ? 'sales.purchase_voided_box'.tr(namedArgs: {'amount': _money(r.refund)})
+                : 'sales.purchase_voided'.tr())
+            : [
+                'sales.move_voided'.tr(namedArgs: {'kind': _kind(m.kind)}),
+                if ((m.loss ?? 0) != 0) 'sales.move_voided_loss'.tr(),
+                if (r.boxDelta > 0) 'sales.move_voided_box_in_n'.tr(namedArgs: {'amount': _money(r.boxDelta)}),
+                if (r.boxDelta < 0) 'sales.move_voided_box_out_n'.tr(namedArgs: {'amount': _money(-r.boxDelta)}),
+              ].join(' · '),
       );
       setState(() {
         _voiding = null;
@@ -2605,8 +3041,48 @@ class _MovesSheetState extends State<_MovesSheet> {
         'sale' => 'sales.mv_sale'.tr(),
         'return' => 'sales.mv_return'.tr(),
         'purchase_void' => 'sales.mv_purchase_void'.tr(),
+        'damage' => 'sales.mv_damage'.tr(),
+        'defect' => 'sales.mv_defect'.tr(),
+        'repair' => 'sales.mv_repair'.tr(),
+        'defect_writeoff' => 'sales.mv_defect_writeoff'.tr(),
+        'supplier_return' => 'sales.mv_supplier_return'.tr(),
+        'void' => 'sales.mv_void'.tr(),
         _ => 'sales.mv_adjust'.tr(),
       };
+
+  /// أثر الحركة بالمال: خسارتها (موجبة) أو ربحها، وسطر الإلغاء يُلغيهما — الموجب سيّئٌ دائماً.
+  static String? _lossText(StockMove m) {
+    final l = m.loss ?? 0;
+    if (l == 0) return null;
+    final amount = {'amount': _money(l.abs())};
+    if (m.kind == 'void') return (l < 0 ? 'sales.mv_loss_undone_n' : 'sales.mv_gain_undone_n').tr(namedArgs: amount);
+    return (l > 0 ? 'sales.mv_loss_n' : 'sales.mv_gain_n').tr(namedArgs: amount);
+  }
+
+  /// ما يرجع بالضبط عند إلغاء الحركة.
+  static String _voidInfo(StockMove v) {
+    final q = _qty(v.qty.abs());
+    if (v.kind == 'purchase') {
+      return v.paidFrom == 'box' && v.unitCost != null
+          ? 'sales.purchase_void_info_box'.tr(namedArgs: {'qty': q, 'amount': _money((v.qty * v.unitCost!).round())})
+          : 'sales.purchase_void_info'.tr(namedArgs: {'qty': q});
+    }
+    final base = switch (v.kind) {
+      'adjust' => 'sales.void_info_adjust'.tr(namedArgs: {'qty': '${v.qty > 0 ? '+' : '−'}$q'}),
+      'damage' => 'sales.void_info_damage'.tr(namedArgs: {'qty': q}),
+      'defect' => 'sales.void_info_defect'.tr(namedArgs: {'qty': q}),
+      'repair' => 'sales.void_info_repair'.tr(namedArgs: {'qty': q}),
+      'defect_writeoff' => 'sales.void_info_writeoff'.tr(namedArgs: {'qty': q}),
+      'supplier_return' => 'sales.void_info_return'.tr(namedArgs: {'qty': q}),
+      _ => 'sales.void_info_other'.tr(namedArgs: {'kind': _kind(v.kind)}),
+    };
+    return '${[
+      base,
+      if ((v.loss ?? 0) != 0) 'sales.void_info_loss_n'.tr(namedArgs: {'amount': _money(v.loss!.abs())}),
+      if (v.kind == 'supplier_return' && v.paidFrom == 'box' && (v.refund ?? 0) > 0)
+        'sales.void_info_box_n'.tr(namedArgs: {'amount': _money(v.refund!)}),
+    ].join('sales.void_info_sep'.tr())}.';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2620,13 +3096,16 @@ class _MovesSheetState extends State<_MovesSheet> {
         header: SheetHeaderBar(
           icon: LucideIcons.history,
           title: 'sales.moves_title_n'.tr(namedArgs: {'name': it.name}),
-          subtitle: 'sales.available_n'.tr(namedArgs: {'qty': saleQtyText(it.qty, it.unit)}),
+          subtitle: [
+            'sales.available_n'.tr(namedArgs: {'qty': saleQtyText(it.qty, it.unit)}),
+            if (it.hasDefective) 'sales.defective_chip_n'.tr(namedArgs: {'qty': saleQtyText(it.qtyDefective, it.unit)}),
+          ].join(' · '),
           onClose: () => Navigator.of(context).pop(),
         ),
         footer: v == null
             ? null
             : SheetFooterBar(
-                label: 'sales.purchase_void_btn'.tr(),
+                label: (v.kind == 'purchase' ? 'sales.purchase_void_btn' : 'sales.move_void_btn').tr(),
                 icon: LucideIcons.undo2,
                 color: AppColors.error,
                 enabled: _reason.text.trim().length >= 2 && !_busy,
@@ -2638,19 +3117,14 @@ class _MovesSheetState extends State<_MovesSheet> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        v.paidFrom == 'box' && v.unitCost != null
-                            ? 'sales.purchase_void_info_box'.tr(namedArgs: {
-                                'qty': _qty(v.qty),
-                                'amount': _money((v.qty * v.unitCost!).round()),
-                              })
-                            : 'sales.purchase_void_info'.tr(namedArgs: {'qty': _qty(v.qty)}),
+                        _voidInfo(v),
                         style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.6),
                       ),
                       const SizedBox(height: Sp.sm),
                       _SheetText(
                         controller: _reason,
                         icon: LucideIcons.fileText,
-                        hint: 'sales.purchase_void_hint'.tr(),
+                        hint: (v.kind == 'purchase' ? 'sales.purchase_void_hint' : 'sales.move_void_hint').tr(),
                         maxLength: 200,
                         onChanged: (_) => setState(() {}),
                       ),
@@ -2722,6 +3196,34 @@ class _MovesSheetState extends State<_MovesSheet> {
                                       overflow: TextOverflow.ellipsis,
                                       style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5),
                                     ),
+                                    // أثر الحركة: الخسارة أو إلغاؤها، وما رجّعه المورّد وأين دخل، والعطلان بعدها.
+                                    if (_lossText(m) != null || (m.refund ?? 0) != 0 || (m.defectiveAfter != null && !m.defectiveOnly))
+                                      Wrap(
+                                        spacing: Sp.sm,
+                                        children: [
+                                          if (_lossText(m) != null)
+                                            Text(
+                                              _lossText(m)!,
+                                              style: AppType.muted(color: (m.loss ?? 0) > 0 ? AppColors.error : AppColors.success)
+                                                  .copyWith(fontSize: 11.5),
+                                            ),
+                                          if ((m.refund ?? 0) != 0)
+                                            Text(
+                                              [
+                                                ((m.refund ?? 0) > 0 ? 'sales.mv_refund_n' : 'sales.mv_refund_undone_n')
+                                                    .tr(namedArgs: {'amount': _money(m.refund!.abs())}),
+                                                if (m.paidFrom == 'box') 'sales.refund_box'.tr(),
+                                                if (m.paidFrom == 'outside') 'sales.refund_outside'.tr(),
+                                              ].join(' · '),
+                                              style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5),
+                                            ),
+                                          if (m.defectiveAfter != null && !m.defectiveOnly)
+                                            Text(
+                                              'sales.mv_def_after_n'.tr(namedArgs: {'qty': _qty(m.defectiveAfter!)}),
+                                              style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5),
+                                            ),
+                                        ],
+                                      ),
                                     if (m.voidable && widget.canItems && v == null)
                                       Padding(
                                         padding: const EdgeInsets.only(top: Sp.xxs),
@@ -2729,7 +3231,7 @@ class _MovesSheetState extends State<_MovesSheet> {
                                           onPressed: () => setState(() => _voiding = m),
                                           icon: Icon(LucideIcons.undo2, size: 14, color: AppColors.error),
                                           label: Text(
-                                            'sales.purchase_void_btn'.tr(),
+                                            (m.kind == 'purchase' ? 'sales.purchase_void_btn' : 'sales.move_void_btn').tr(),
                                             style: AppType.label(color: AppColors.error).copyWith(fontSize: 12.5),
                                           ),
                                         ),
@@ -2747,8 +3249,11 @@ class _MovesSheetState extends State<_MovesSheet> {
                                     style: AppType.label(color: m.qty < 0 ? AppColors.error : AppColors.success)
                                         .copyWith(fontSize: 14, fontWeight: FontWeight.w700),
                                   ),
+                                  // حركةٌ على خانة العطلان وحدها: المخزون لم يتغيّر ⇒ العمود يعرض العطلان بعدها.
                                   Text(
-                                    '← ${_qty(m.qtyAfter)}',
+                                    m.defectiveOnly
+                                        ? 'sales.def_after_short_n'.tr(namedArgs: {'qty': _qty(m.defectiveAfter!)})
+                                        : '← ${_qty(m.qtyAfter)}',
                                     style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11),
                                   ),
                                 ],

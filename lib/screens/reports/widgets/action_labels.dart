@@ -47,6 +47,8 @@ String arabicActionLabel(String actionType, [String description = '']) {
       return 'بيع مواد';
     case 'SALE_VOID':
       return 'إلغاء بيع';
+    case 'GOODS_LOSS':
+      return description.startsWith('إلغاء خسارة') ? 'إلغاء خسارة مواد' : 'خسارة مواد';
     case 'EXPENSE_EDIT':
       return 'تعديل صرفية';
     case 'EXPENSE_DELETE':

@@ -242,9 +242,9 @@ class _DetailSheetState extends State<_DetailSheet> {
             ),
             if (s.goodsPurchases.count > 0)
               SheetRowData(
-                label: '${'settle.goods_purchases'.tr()} · ${s.goodsPurchases.count}',
-                value: '−${formatIQD(s.goodsPurchases.sum)}',
-                valueColor: AppColors.error,
+                label: '${goodsBoxLine(s.goodsPurchases).label} · ${s.goodsPurchases.count}',
+                value: goodsBoxLine(s.goodsPurchases).value,
+                valueColor: goodsBoxLine(s.goodsPurchases).out ? AppColors.error : AppColors.success,
               ),
             SheetRowData(
               label: 'settle.expected'.tr(),
