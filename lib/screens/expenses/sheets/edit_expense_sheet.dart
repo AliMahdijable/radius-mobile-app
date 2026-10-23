@@ -7,6 +7,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
+import '../../../core/util/ar_date.dart';
 import '../../../core/util/amount_input.dart';
 import '../../../core/widgets/app_sheet.dart';
 
@@ -119,8 +120,8 @@ class _EditExpenseSheetState extends State<_EditExpenseSheet> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    String two(int n) => n.toString().padLeft(2, '0');
-    final dateLabel = '${_date.year}/${two(_date.month)}/${two(_date.day)}';
+    // «24 تشرين الأوّل» لا «2026/10/24» (المالك ٢٤ أكتوبر).
+    final dateLabel = iqDateOf(_date);
     return DesignSheet(
       header: SheetHeaderBar(
         icon: LucideIcons.pencil,

@@ -721,6 +721,22 @@ class _BoxCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // التنبيه أعلى البطاقة لا أسفلها (المالك ٢٤ أكتوبر: «التنبيه يكون بالاعلى») — يُقرأ قبل الأرقام.
+          if (negative)
+            _Note(
+              tone: AppTone.danger,
+              icon: LucideIcons.triangleAlert,
+              text: 'settle.negative_warning'.tr(),
+            ),
+          if (cur.newDebts.sum > 0)
+            _Note(
+              tone: AppTone.neutral,
+              icon: LucideIcons.info,
+              text: 'settle.new_debts_info'.tr(namedArgs: {
+                'amt': settleMoney(cur.newDebts.sum),
+                'n': '${cur.newDebts.count}',
+              }),
+            ),
           Padding(
             padding: const EdgeInsets.all(Sp.lg),
             child: Row(
@@ -812,21 +828,6 @@ class _BoxCard extends StatelessWidget {
               ],
             ),
           ),
-          if (negative)
-            _Note(
-              tone: AppTone.danger,
-              icon: LucideIcons.triangleAlert,
-              text: 'settle.negative_warning'.tr(),
-            ),
-          if (cur.newDebts.sum > 0)
-            _Note(
-              tone: AppTone.neutral,
-              icon: LucideIcons.info,
-              text: 'settle.new_debts_info'.tr(namedArgs: {
-                'amt': settleMoney(cur.newDebts.sum),
-                'n': '${cur.newDebts.count}',
-              }),
-            ),
         ],
       ),
     );
@@ -879,7 +880,7 @@ class _Note extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.md),
       decoration: BoxDecoration(
         color: tone.softBg,
-        border: Border(top: BorderSide(color: tone.softBorder)),
+        border: Border(bottom: BorderSide(color: tone.softBorder)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

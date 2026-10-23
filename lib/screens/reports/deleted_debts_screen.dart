@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/deleted_debts_api.dart';
+import '../../core/util/ar_date.dart';
 import '../../core/util/amount_input.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/app_sheet.dart';
@@ -383,8 +384,7 @@ class _DebtTile extends StatelessWidget {
           child: _MetaText(phone, icon: LucideIcons.phone, ltr: true),
         ),
       if (at != null)
-        _MetaText(DateFormat('yyyy/MM/dd').format(at),
-            icon: LucideIcons.calendar, ltr: true),
+        _MetaText(iqDateOf(at), icon: LucideIcons.calendar),
     ];
     final auto = row.isAuto;
     return Container(

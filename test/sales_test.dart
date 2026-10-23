@@ -624,7 +624,10 @@ void main() {
       await t.tap(find.text('الموادّ والمخزون'));
       await settle(t, seconds: 1);
       expect(find.textContaining('305.5 متر'), findsOneWidget);
-      expect(find.textContaining('0 قطعة'), findsOneWidget);
+      // النافدة تقول «نافدة» بدل «0 قطعة» (كالويب) — مع عنوان خانة «نافدة» بالأعلى.
+      expect(find.textContaining('0 قطعة'), findsNothing);
+      expect(find.text('نافدة'), findsNWidgets(2));
+      expect(find.text('ربح الوحدة'), findsWidgets, reason: 'خانات البيع/الكلفة/الربح بكلّ بطاقة');
       expect(find.text('300,375 د.ع'), findsOneWidget);
       expect(t.takeException(), isNull);
     });

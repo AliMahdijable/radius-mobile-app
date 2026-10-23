@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/expenses_api.dart';
+import '../reports/widgets/date_range_chip.dart';
 import '../settlements/widgets/archive_bar.dart';
 import '../../api/archive_info.dart';
+import '../../core/util/ar_date.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/sheet_scaffold.dart';
@@ -44,16 +46,12 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
 
   /// يتغيّر مع كلّ تحديث فيُعيد قسم «الصرفيات الثابتة» جلبه.
   int _recurringToken = 0;
-  // النطاق الافتراضي: أول الشهر إلى اليوم (مطابق الويب).
-  late DateTime _from;
-  late DateTime _to;
+  // النطاق الافتراضي: أول الشهر إلى اليوم (مطابق الويب)، بشريط الفترات نفسه الذي في التقارير.
+  DateRange _range = DateRange.thisMonth();
 
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
-    _from = DateTime(now.year, now.month, 1);
-    _to = DateTime(now.year, now.month, now.day);
     _load();
   }
 
@@ -68,8 +66,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       if (withRecurring) _recurringToken++;
     });
     final r = await ExpensesApi.list(
-      from: _fmtDate(_from),
-      to: _fmtDate(_to),
+      from: _fmtDate(_range.from),
+      to: _fmtDate(_range.to),
       includeArchived: _withArchive,
     );
     if (!mounted) return;
@@ -79,25 +77,6 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       _archive = r.archive;
       _loading = false;
     });
-  }
-
-  Future<void> _pickRange() async {
-    final r = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 1)),
-      initialDateRange: DateTimeRange(start: _from, end: _to),
-      locale: const Locale('ar'),
-      helpText: 'exp.pick_range'.tr(),
-      saveText: 'common.save'.tr(),
-      cancelText: 'common.cancel'.tr(),
-    );
-    if (r == null) return;
-    setState(() {
-      _from = r.start;
-      _to = r.end;
-    });
-    _load();
   }
 
   Future<void> _openAdd() async {
@@ -203,10 +182,12 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 _CompactHeader(
                   total: _total,
                   count: _rows.length,
-                  from: _from,
-                  to: _to,
+                  range: _range,
                   accent: accent,
-                  onPickRange: _pickRange,
+                  onRange: (r) {
+                    setState(() => _range = r);
+                    _load();
+                  },
                 ),
               ]),
               // «الصرفيات الثابتة» — حين يفتحها الخادم للحساب (وإلّا لا شيء هنا).
@@ -282,22 +263,15 @@ class _CompactHeader extends StatelessWidget {
   const _CompactHeader({
     required this.total,
     required this.count,
-    required this.from,
-    required this.to,
+    required this.range,
     required this.accent,
-    required this.onPickRange,
+    required this.onRange,
   });
   final num total;
   final int count;
-  final DateTime from;
-  final DateTime to;
+  final DateRange range;
   final Color accent;
-  final VoidCallback onPickRange;
-
-  String _fmt(DateTime d) {
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${d.year}/${two(d.month)}/${two(d.day)}';
-  }
+  final ValueChanged<DateRange> onRange;
 
   @override
   Widget build(BuildContext context) {
@@ -358,32 +332,8 @@ class _CompactHeader extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          InkWell(
-            onTap: onPickRange,
-            borderRadius: BorderRadius.circular(R.sm),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceInput,
-                borderRadius: BorderRadius.circular(R.sm),
-              ),
-              child: Row(
-                children: [
-                  Icon(LucideIcons.calendar,
-                      size: 13, color: AppColors.textMid),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '${_fmt(from)}  →  ${_fmt(to)}',
-                      style: AppType.bodyBold(),
-                    ),
-                  ),
-                  Icon(LucideIcons.chevronDown,
-                      size: 13, color: AppColors.textLow),
-                ],
-              ),
-            ),
-          ),
+          // نفس شريط الفترات في التقارير: الجاهزة + الفترة بأسماء الأشهر (المالك ٢٤ أكتوبر).
+          DateRangeChipBar(value: range, onChanged: onRange),
         ],
       ),
     );
@@ -402,6 +352,12 @@ class _ExpenseTile extends StatelessWidget {
   final ExpenseRow row;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+
+  /// المولَّدة من قالب: الخادم يُلحق «(ثابتة 2026-10)» — الشارة تقولها بالشهر فتُحذف من هنا.
+  static String _note(ExpenseRow r) {
+    final n = (r.note ?? '').trim();
+    return r.isRecurring ? stripRecurringSuffix(n) : n;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -442,7 +398,7 @@ class _ExpenseTile extends StatelessWidget {
                             size: 11, color: AppColors.textLow),
                         const SizedBox(width: 4),
                         Text(
-                          row.expenseDate,
+                          iqDateLabel(row.expenseDate),
                           style: AppType.labelBold(color: AppColors.textHi),
                         ),
                         if ((row.actingEmployeeUsername ?? '').isNotEmpty) ...[
@@ -465,16 +421,19 @@ class _ExpenseTile extends StatelessWidget {
                     if (row.isRecurring) ...[
                       const SizedBox(height: 3),
                       ToneChip(
-                        label: 'rexp.badge'.tr(),
+                        // «ثابتة · تشرين الأوّل 2026» — الشهر بالشارة لا برقمٍ بالملاحظة.
+                        label: (row.recurringPeriod ?? '').isEmpty
+                            ? 'rexp.badge'.tr()
+                            : '${'rexp.badge'.tr()} · ${iqPeriodLabel(row.recurringPeriod)}',
                         icon: LucideIcons.repeat,
                         tone: AppTone.info,
                         dense: true,
                       ),
                     ],
-                    if ((row.note ?? '').trim().isNotEmpty) ...[
+                    if (_note(row).isNotEmpty) ...[
                       const SizedBox(height: 3),
                       Text(
-                        row.note!.trim(),
+                        _note(row),
                         style: AppType.muted(color: AppColors.textMid),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,

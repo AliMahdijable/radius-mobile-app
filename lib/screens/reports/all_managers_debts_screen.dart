@@ -5,10 +5,12 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../api/manager_debts_api.dart';
 import '../../api/manager_movements_api.dart';
 import '../../api/managers_api.dart';
+import '../../core/util/ar_date.dart';
 import '../../core/util/format.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'widgets/date_range_chip.dart';
 import 'widgets/report_export.dart';
 import '../desktop/desk_widgets.dart';
 
@@ -384,7 +386,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
               child: ReportExportBar(
                 title: 'reports.manager_debts'.tr(),
                 subtitle: _dateFrom != null && _dateTo != null
-                    ? '${_fmtDate(_dateFrom!)} → ${_fmtDate(_dateTo!)}'
+                    ? DateRange.rangeText(_dateFrom!, _dateTo!)
                     : 'كل الفترات',
                 fileNameBase: 'manager_debts_timeline',
                 columns: const [
@@ -818,7 +820,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                   size: 14, color: AppColors.textMid),
               label: Text(
                 hasRange
-                    ? '${_fmtDateShort(_dateFrom!)} → ${_fmtDateShort(_dateTo!)}'
+                    ? DateRange.rangeText(_dateFrom!, _dateTo!)
                     : 'كل الفترات',
                 style: AppType.button(color: AppColors.textHi)
                     .copyWith(fontSize: 12.5),
@@ -1044,13 +1046,9 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
     return '${d.year}-${two(d.month)}-${two(d.day)}';
   }
 
-  String _fmtDateShort(DateTime d) {
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${d.year}/${two(d.month)}/${two(d.day)}';
-  }
-
+  /// «24 تشرين الأوّل · 18:05» لا «2026-10-24 18:05» (المالك ٢٤ أكتوبر).
   String _fmtDateTime(DateTime d) {
     String two(int n) => n.toString().padLeft(2, '0');
-    return '${d.year}-${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}';
+    return '${iqDateOf(d)} · ${two(d.hour)}:${two(d.minute)}';
   }
 }

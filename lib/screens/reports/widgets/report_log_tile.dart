@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../core/util/ar_date.dart';
 import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -324,11 +325,10 @@ class ReportLogTile extends StatelessWidget {
     try {
       final dt = parseServerUtc(iso);
       if (dt == null) return iso;
-      final m = dt.month.toString().padLeft(2, '0');
-      final d = dt.day.toString().padLeft(2, '0');
       final h = dt.hour.toString().padLeft(2, '0');
       final mi = dt.minute.toString().padLeft(2, '0');
-      return '${dt.year}-$m-$d $h:$mi';
+      // «23 تشرين الأوّل · 18:05» لا «2026-10-23 18:05» (المالك ٢٤ أكتوبر).
+      return '${iqDateOf(dt)} · $h:$mi';
     } catch (_) {
       return iso;
     }

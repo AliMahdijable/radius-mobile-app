@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/settlements_api.dart';
+import '../../core/util/ar_date.dart';
 import '../../core/util/bidi.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/design_sheet.dart';
@@ -27,12 +28,13 @@ String settleMoney(num n) =>
   );
 }
 
-/// «الخميس 2026-10-01 21:40» بتوقيت الجهاز (الأجهزة في العراق).
+/// «الخميس 1 تشرين الأوّل · 21:40» بتوقيت الجهاز (الأجهزة في العراق).
 String settleWhen(DateTime? d, {bool weekday = false}) {
   if (d == null) return '—';
   final l = d.toLocal();
   String two(int n) => n.toString().padLeft(2, '0');
-  final s = '${l.year}-${two(l.month)}-${two(l.day)} ${two(l.hour)}:${two(l.minute)}';
+  // «23 تشرين الأوّل · 00:00» لا «2026-10-23 00:00» (المالك ٢٤ أكتوبر).
+  final s = '${iqDateOf(l)} · ${two(l.hour)}:${two(l.minute)}';
   return weekday ? '${'settle.wd${l.weekday}'.tr()} $s' : s;
 }
 

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/sales_api.dart';
+import '../../core/util/ar_date.dart';
 import '../../core/util/amount_input.dart';
 import '../../core/util/bidi.dart';
 import '../../core/util/format.dart';
@@ -518,7 +519,8 @@ String _qty(num q) {
   return s.endsWith('.') ? s.substring(0, s.length - 1) : s;
 }
 
-String _time(DateTime? at) => at == null ? '' : DateFormat('yyyy/MM/dd HH:mm').format(at);
+/// «23 تشرين الأوّل · 18:05» لا «2026/10/23 18:05» (المالك ٢٤ أكتوبر).
+String _time(DateTime? at) => at == null ? '' : '${iqDateOf(at)} · ${DateFormat('HH:mm').format(at)}';
 
 Future<bool?> _showSheet(BuildContext context, Widget sheet) {
   return showAppSheet<bool>(
@@ -944,6 +946,8 @@ class _ItemTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    // بطاقةٌ كالويب (المالك ٢٤ أكتوبر: «المخزون … الاعتناء بالتصميم»): الاسم ورمزه، ثمّ الكمّيّة بارزةً
+    // (أو «نافدة») وقيمتها، ثمّ ثلاث خانات البيع/الكلفة/ربح الوحدة، ثمّ ثلاثة أزرار بأسمائها لا أيقوناتٌ وحدها.
     return Opacity(
       opacity: item.active ? 1 : 0.6,
       child: Container(
@@ -951,7 +955,7 @@ class _ItemTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(R.lg),
-          border: Border.all(color: AppColors.border),
+          border: Border.all(color: item.outOfStock && item.active ? AppColors.dangerSoftBorder : AppColors.border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -976,17 +980,47 @@ class _ItemTile extends StatelessWidget {
                 ],
               ],
             ),
-            const SizedBox(height: Sp.x6),
-            Wrap(
-              spacing: Sp.md,
-              runSpacing: Sp.xs,
+            if (item.hasDefective) ...[
+              const SizedBox(height: Sp.x6),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: _DefectiveChip(item: item, locked: locked, onTap: onDefect),
+              ),
+            ],
+            const SizedBox(height: Sp.sm),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                if (item.hasDefective) _DefectiveChip(item: item, locked: locked, onTap: onDefect),
-                _meta('sales.price_n'.tr(namedArgs: {'amount': _money(item.salePrice)})),
-                _meta('sales.cost_avg_n'.tr(namedArgs: {'amount': _money(item.costAvg)})),
-                _meta(
-                  'sales.margin_n'.tr(namedArgs: {'amount': _signedMoney(item.margin)}),
-                  color: item.margin < 0 ? AppColors.error : AppColors.success,
+                Text(
+                  item.outOfStock ? 'sales.kpi_out'.tr() : saleQtyText(item.qty, item.unit),
+                  style: AppType.label(color: item.outOfStock ? AppColors.error : AppColors.textHi)
+                      .copyWith(fontSize: 19, fontWeight: FontWeight.w700, height: 1.1),
+                ),
+                const SizedBox(width: Sp.sm),
+                Expanded(
+                  child: Text(
+                    'sales.stock_value_n'.tr(namedArgs: {'amount': _money(item.stockValue)}),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                    style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: Sp.sm),
+            Row(
+              children: [
+                Expanded(child: _Stat(label: 'sales.stat_price'.tr(), value: _money(item.salePrice))),
+                const SizedBox(width: Sp.x6),
+                Expanded(child: _Stat(label: 'sales.stat_cost'.tr(), value: _money(item.costAvg))),
+                const SizedBox(width: Sp.x6),
+                Expanded(
+                  child: _Stat(
+                    label: 'sales.stat_margin'.tr(),
+                    value: _signedMoney(item.margin),
+                    color: item.margin < 0 ? AppColors.error : AppColors.success,
+                  ),
                 ),
               ],
             ),
@@ -994,40 +1028,33 @@ class _ItemTile extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        saleQtyText(item.qty, item.unit),
-                        style: AppType.label(color: item.outOfStock ? AppColors.error : AppColors.textHi)
-                            .copyWith(fontSize: 15, fontWeight: FontWeight.w700),
-                      ),
-                      Text(
-                        _money(item.stockValue),
-                        style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5),
-                      ),
-                    ],
+                  child: _TileButton(
+                    icon: LucideIcons.packagePlus,
+                    label: 'sales.stock_btn'.tr(),
+                    tooltip: 'sales.stock'.tr(),
+                    locked: locked,
+                    onTap: onStock,
                   ),
                 ),
-                _IconAction(
-                  icon: LucideIcons.packagePlus,
-                  tooltip: 'sales.stock'.tr(),
-                  locked: locked,
-                  onTap: onStock,
+                const SizedBox(width: Sp.x6),
+                Expanded(
+                  child: _TileButton(
+                    icon: LucideIcons.pencil,
+                    label: 'sales.edit'.tr(),
+                    tooltip: 'sales.edit'.tr(),
+                    locked: locked,
+                    onTap: onEdit,
+                  ),
                 ),
                 const SizedBox(width: Sp.x6),
-                _IconAction(
-                  icon: LucideIcons.pencil,
-                  tooltip: 'sales.edit'.tr(),
-                  locked: locked,
-                  onTap: onEdit,
-                ),
-                const SizedBox(width: Sp.x6),
-                _IconAction(
-                  icon: LucideIcons.history,
-                  tooltip: 'sales.moves'.tr(),
-                  locked: false,
-                  onTap: onMoves,
+                Expanded(
+                  child: _TileButton(
+                    icon: LucideIcons.history,
+                    label: 'sales.moves'.tr(),
+                    tooltip: 'sales.moves'.tr(),
+                    locked: false,
+                    onTap: onMoves,
+                  ),
                 ),
               ],
             ),
@@ -1036,11 +1063,103 @@ class _ItemTile extends StatelessWidget {
       ),
     );
   }
+}
 
-  static Widget _meta(String text, {Color? color}) => Text(
-        text,
-        style: AppType.muted(color: color ?? AppColors.textMid).copyWith(fontSize: 11.5),
-      );
+/// خانة رقمٍ صغيرة بالبطاقة: العنوان فوق، والمبلغ تحته بسطرٍ واحد يصغر ولا يُقصّ.
+class _Stat extends StatelessWidget {
+  const _Stat({required this.label, required this.value, this.color});
+  final String label;
+  final String value;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: Sp.x6),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSunken,
+        borderRadius: BorderRadius.circular(R.sm),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.micro(color: AppColors.textMid),
+          ),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: AppType.labelBold(color: color ?? AppColors.textHi),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// زرّ البطاقة بأيقونته واسمه — مقفلٌ بمكانه بلا صلاحيّة الموادّ.
+class _TileButton extends StatelessWidget {
+  const _TileButton({
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    required this.locked,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final String tooltip;
+  final bool locked;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final fg = locked ? LockedStyle.glyph : AppColors.textBody;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: locked ? LockedStyle.box : AppColors.surface,
+        borderRadius: BorderRadius.circular(R.md),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(R.md),
+          onTap: locked ? () => showNoPermission(context, action: true) : onTap,
+          child: Container(
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: Sp.x6),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(R.md),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(locked ? LucideIcons.lock : icon, size: 15, color: fg),
+                const SizedBox(width: Sp.xs),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.labelBold(color: fg),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// شارة «عطلان N» على المادّة — تفتح حسمها، ومقفلةٌ بمكانها بلا صلاحيّة الموادّ.
@@ -1072,35 +1191,6 @@ class _DefectiveChip extends StatelessWidget {
                 style: AppType.micro(color: tone.onSoft).copyWith(fontWeight: FontWeight.w700),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _IconAction extends StatelessWidget {
-  const _IconAction({required this.icon, required this.tooltip, required this.locked, required this.onTap});
-  final IconData icon;
-  final String tooltip;
-  final bool locked;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: locked ? LockedStyle.box : AppColors.surfaceSunken,
-        borderRadius: BorderRadius.circular(R.md),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(R.md),
-          onTap: locked ? () => showNoPermission(context, action: true) : onTap,
-          child: SizedBox(
-            width: 38,
-            height: 38,
-            child: Icon(locked ? LucideIcons.lock : icon, size: 17, color: locked ? LockedStyle.glyph : AppColors.textBody),
           ),
         ),
       ),

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/expenses_api.dart';
+import '../../../core/util/ar_date.dart';
 import '../../../core/util/format.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
@@ -122,8 +123,8 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final accent = AppColors.brandAccent;
-    String two(int n) => n.toString().padLeft(2, '0');
-    final dateLabel = '${_date.year}/${two(_date.month)}/${two(_date.day)}';
+    // «24 تشرين الأوّل» لا «2026/10/24» (المالك ٢٤ أكتوبر).
+    final dateLabel = iqDateOf(_date);
     return DesignSheet(
       header: SheetHeaderBar(
         icon: LucideIcons.receipt,

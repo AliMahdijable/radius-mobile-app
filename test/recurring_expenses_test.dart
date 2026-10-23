@@ -175,7 +175,10 @@ void main() {
       expect(find.text('موقوفة'), findsOneWidget);
       expect(find.textContaining('كلّ ٣ أشهر · يوم 15 · حتى تمّوز 2027'), findsOneWidget);
       expect(find.textContaining('القادمة 1 تشرين الثاني 2026'), findsOneWidget);
-      expect(find.text('ثابتة'), findsOneWidget, reason: 'شارة الصرفيّة المولَّدة وحدها');
+      expect(find.text('ثابتة · تشرين الأوّل 2026'), findsOneWidget, reason: 'شارة الصرفيّة المولَّدة وحدها، بشهرها');
+      expect(find.text('إيجار المحل'), findsWidgets, reason: 'الملاحظة بلا لاحقة «(ثابتة 2026-10)»');
+      expect(find.textContaining('(ثابتة 2026-10)'), findsNothing);
+      expect(find.text('1 تشرين الأوّل'), findsWidgets, reason: 'تاريخ الصرفيّة بالشهر لا 2026-10-01');
       await t.tap(find.text('أضفها'));
       await settle(t, seconds: 1);
       expect(find.textContaining('تُكتب بتاريخ استحقاقها 31 تشرين الأوّل 2026'), findsOneWidget);

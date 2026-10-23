@@ -223,6 +223,9 @@ class _SettleSheetState extends State<_SettleSheet> {
           ),
         ],
         const SizedBox(height: Sp.lg),
+        // الفرق فوق الحقل لا تحته: الكيبورد كان يغطّيه وهو يكتب (المالك ٢٤ أكتوبر: «التنبيه يكون بالاعلى»).
+        _diff(p),
+        const SizedBox(height: Sp.md),
         SheetSection(
           label: 'settle.received_label'.tr(),
           gap: 9,
@@ -260,8 +263,6 @@ class _SettleSheetState extends State<_SettleSheet> {
             ],
           ),
         ),
-        const SizedBox(height: Sp.md),
-        _diff(p),
         const SizedBox(height: Sp.lg),
         SheetSection(
           label: 'settle.note_label'.tr(),
