@@ -14,6 +14,8 @@ class ExpenseRow {
     this.note,
     this.actingEmployeeUsername,
     this.settlementNumber,
+    this.recurringName,
+    this.recurringPeriod,
   });
   final int id;
   final num amount;
@@ -31,6 +33,11 @@ class ExpenseRow {
   final int? settlementNumber;
 
   bool get isLocked => settlementNumber != null;
+
+  /// «الصرفيات الثابتة»: كتبها قالب (`recurring` من الخادم) — تُعدَّل وتُحذف كأيّ صرفيّة.
+  final String? recurringName;
+  final String? recurringPeriod;
+  bool get isRecurring => recurringName != null;
 
   static ExpenseRow? fromJson(Map<String, dynamic> j) {
     final id = j['id'];
@@ -55,6 +62,8 @@ class ExpenseRow {
           (j['acting_employee_full_name'] ?? j['acting_employee_username'])
               ?.toString(),
       settlementNumber: int.tryParse(j['settlement_number']?.toString() ?? ''),
+      recurringName: j['recurring'] is Map ? (j['recurring'] as Map)['name']?.toString() : null,
+      recurringPeriod: j['recurring'] is Map ? (j['recurring'] as Map)['period']?.toString() : null,
     );
   }
 }

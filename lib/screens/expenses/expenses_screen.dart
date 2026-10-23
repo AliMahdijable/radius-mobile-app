@@ -12,6 +12,7 @@ import '../../core/widgets/sheet_scaffold.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'recurring_expenses_section.dart';
 import 'sheets/add_expense_sheet.dart';
 import 'sheets/edit_expense_sheet.dart';
 
@@ -38,6 +39,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   ArchiveInfo? _archive;
   bool _withArchive = false;
   bool _loading = true;
+
+  /// يتغيّر مع كلّ تحديث فيُعيد قسم «الصرفيات الثابتة» جلبه.
+  int _recurringToken = 0;
   // النطاق الافتراضي: أول الشهر إلى اليوم (مطابق الويب).
   late DateTime _from;
   late DateTime _to;
@@ -56,8 +60,11 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     return '${d.year}-${two(d.month)}-${two(d.day)}';
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  Future<void> _load({bool withRecurring = true}) async {
+    setState(() {
+      _loading = true;
+      if (withRecurring) _recurringToken++;
+    });
     final r = await ExpensesApi.list(
       from: _fmtDate(_from),
       to: _fmtDate(_to),
@@ -187,6 +194,11 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 to: _to,
                 accent: accent,
                 onPickRange: _pickRange,
+              ),
+              // «الصرفيات الثابتة» — حين يفتحها الخادم للحساب (وإلّا لا شيء هنا).
+              RecurringExpensesSection(
+                reloadToken: _recurringToken,
+                onExpensesChanged: () => _load(withRecurring: false),
               ),
               ArchiveBar(
                 archive: _archive,
@@ -434,6 +446,15 @@ class _ExpenseTile extends StatelessWidget {
                         ],
                       ],
                     ),
+                    if (row.isRecurring) ...[
+                      const SizedBox(height: 3),
+                      ToneChip(
+                        label: 'rexp.badge'.tr(),
+                        icon: LucideIcons.repeat,
+                        tone: AppTone.info,
+                        dense: true,
+                      ),
+                    ],
                     if ((row.note ?? '').trim().isNotEmpty) ...[
                       const SizedBox(height: 3),
                       Text(
