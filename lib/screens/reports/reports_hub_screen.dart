@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/deleted_debts_api.dart';
 import '../../core/widgets/permission_locked.dart';
 import '../../services/permissions_service.dart';
 import '../../services/provider_service.dart';
@@ -14,6 +15,7 @@ import 'activations_report_screen.dart';
 import 'activity_log_report_screen.dart';
 import 'all_managers_debts_screen.dart';
 import 'daily_activations_report_screen.dart';
+import 'deleted_debts_screen.dart';
 import 'financial_report_screen.dart';
 import 'sessions_report_screen.dart';
 import '../../widgets/merged_company_strip.dart';
@@ -35,8 +37,29 @@ import '../../widgets/merged_company_strip.dart';
 /// بلاغ 2026-10-14: الكرت بلا مفتاحه **يبقى بمكانه مقفلاً** (خافت + قفل،
 /// والنقر رسالة لا تنقّل) بدل أن يختفي — إلّا مفتاحاً لا يُمنح لهذا الدور
 /// ([permShown]: ديون المدراء عند موظّف ايرث لنك) فيبقى مخفيّاً.
-class ReportsHubScreen extends StatelessWidget {
+///
+/// ٢٣ أكتوبر: «ديون المشتركين المحذوفين» تظهر حين تُفعَّل للحساب وحده
+/// ([DeletedDebtsHubSummary] — كبطاقة الويب)، وتُعاد قراءتها بعد الرجوع منها.
+class ReportsHubScreen extends StatefulWidget {
   const ReportsHubScreen({super.key});
+
+  @override
+  State<ReportsHubScreen> createState() => _ReportsHubScreenState();
+}
+
+class _ReportsHubScreenState extends State<ReportsHubScreen> {
+  DeletedDebtsPage? _deletedDebts;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDeletedDebts();
+  }
+
+  Future<void> _loadDeletedDebts() async {
+    final p = await DeletedDebtsHubSummary.fetch(previous: _deletedDebts);
+    if (mounted) setState(() => _deletedDebts = p);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -125,6 +148,20 @@ class ReportsHubScreen extends StatelessWidget {
                 MaterialPageRoute(
                     builder: (_) => const ActivityLogReportScreen()),
               ),
+            ),
+          if (_deletedDebts case final dd?)
+            _ReportCard(
+              icon: LucideIcons.userX,
+              color: AppColors.error,
+              title: 'reports.deleted_debts'.tr(),
+              subtitle: DeletedDebtsHubSummary.subtitle(dd),
+              onTap: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                      builder: (_) => const DeletedDebtsScreen()),
+                );
+                _loadDeletedDebts();
+              },
             ),
           // ── ايرث لنك (البند ٤) — تقاريرُ خاصّةٌ تُقرأ فقط، لموزِّعي
           // EarthLink وحدهم. الحجب من `ProviderService.isEarthlink` (مصدره

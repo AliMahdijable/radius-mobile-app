@@ -273,6 +273,8 @@ class ElEmployeePerms {
     'devices.view',
     'devices.monitor',
     'devices.manage',
+    // شطب دين مشتركٍ محذوف — يُسقطه بلا تحصيل، فيُمنح وحده (خارج «موظّف عام»).
+    'deleted_debts.write_off',
   };
 
   /// المفاتيح بلا الأجهزة — «موظّف عام» يأخذها كلّها (الأجهزة تُمنح فرادى كما في
@@ -307,6 +309,12 @@ class ElEmployeePerms {
     'reports.activity_log',
     'settlements.view',
     'settlements.create',
+    // ديون المشتركين المحذوفين (٢٣ أكتوبر) — اليدويّ والمستورد لايرث لنك
+    // (elPassthrough). الكتالوج لا يعرضها حتى تُفتح الميزة للكلّ، فالأدوار
+    // تُطابَق على ما يعرضه وحده ([matching] · [offered]).
+    'deleted_debts.view',
+    'deleted_debts.add',
+    'deleted_debts.pay',
     assistantKey,
   };
 
@@ -334,6 +342,8 @@ class ElEmployeePerms {
         'أجهزة شبكتك (OLT/مايكروتك…) — ويشمل بيانات دخول أجهزة المشتركين (الراوترات) لفحصها',
     'devices.monitor': 'يشمل بيانات دخول أجهزة المشتركين (الراوترات) لفحصها',
     'devices.manage': 'تعديل الأجهزة وإعادة تشغيلها وبيانات دخول أجهزة الشبكة',
+    'deleted_debts.pay': 'يدخل التقرير الماليّ محصَّلاً',
+    'deleted_debts.write_off': 'يُسقط الدين بلا تحصيل',
     assistantKey: 'يشرح الأخطاء ويجاوب «كيف أسوّي؟» — بلا أيّ عمليّة، ومن حصّة حسابك اليوميّة',
   };
 
@@ -399,16 +409,28 @@ class ElEmployeePerms {
   }
 
   /// الدور الجاهز المطابق للمفعَّل الآن تماماً، وإلّا null (مخصّص).
-  static ElPermPreset? matching(Map<String, bool> perms) {
+  /// [catalogKeys]: ما يعرضه كتالوج الخادم — مفتاحٌ لا يعرضه (ميزةٌ لم تُفتح
+  /// للحساب) لا يُحسب من الدور، فلا يصير «موظّف عام» القديم «مخصّصاً».
+  static ElPermPreset? matching(Map<String, bool> perms,
+      {Iterable<String>? catalogKeys}) {
+    final avail = offered(catalogKeys);
     final on = {
-      for (final k in keys)
+      for (final k in avail)
         if (k != assistantKey && perms[k] == true) k,
     };
     for (final p in presets) {
-      final want = p.keys.where((k) => k != assistantKey).toSet();
+      final want =
+          p.keys.where((k) => k != assistantKey && avail.contains(k)).toSet();
       if (want.length == on.length && on.containsAll(want)) return p;
     }
     return null;
+  }
+
+  /// مفاتيح ايرث لنك التي يعرضها الكتالوج (null = كلّها).
+  static Set<String> offered(Iterable<String>? catalogKeys) {
+    if (catalogKeys == null) return keys;
+    final c = catalogKeys.toSet();
+    return keys.where(c.contains).toSet();
   }
 }
 

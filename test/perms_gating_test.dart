@@ -453,6 +453,8 @@ void main() {
   });
 
   group('مركز التقارير — المقفل يبقى بمكانه', () {
+    // المدير يسأل الخادم عن بطاقة «ديون المحذوفين» (تظهر حين تُفعَّل) — ٤٠٤ هنا ⇒ لا بطاقة.
+    setUp(_offline);
     tearDown(() => ProviderService.debugSet(null));
 
     bool lockedCard(IconData icon) {
@@ -496,6 +498,10 @@ void main() {
     testWidgets('المدير: لا قفل', (t) async {
       PermissionsService.debugSet(isEmployee: false);
       await showScreen(t, const ReportsHubScreen());
+      // ردّ بطاقة ديون المحذوفين — مؤقّتات Dio الصفريّة تحتاج زمناً يمضي.
+      for (var i = 0; i < 5; i++) {
+        await t.pump(const Duration(milliseconds: 50));
+      }
       expect(reportCards, findsNWidgets(6));
       expect(find.byType(PermLockIcon), findsNothing);
     });

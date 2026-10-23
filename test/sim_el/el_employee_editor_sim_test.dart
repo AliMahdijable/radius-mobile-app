@@ -35,6 +35,8 @@ final _catalog = PermissionsCatalog.fromJson({
     'subscribers.pay_debt': {'label': 'تسديد دين', 'category': 'subscribers'},
     'subscribers.send_whatsapp': {'label': 'إرسال واتساب', 'category': 'subscribers'},
     'subscribers.view_activity': {'label': 'سجلّ حركات المشترك', 'category': 'subscribers'},
+    // كتالوج الخادم يعرضه منذ ١٨ أكتوبر — والأدوار تُطبَّق على ما يعرضه الكتالوج وحده.
+    'subscribers.edit_location': {'label': 'موقع المشترك', 'category': 'subscribers'},
     'packages.view': {'label': 'عرض الباقات', 'category': 'packages'},
     'packages.edit_prices': {'label': 'تعديل أسعار البيع', 'category': 'packages'},
     'discounts.view': {'label': 'عرض الخصومات', 'category': 'discounts'},

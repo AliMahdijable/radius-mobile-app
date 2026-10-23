@@ -208,9 +208,11 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
   /// بلا إشعار: الشريحة نفسها تُملأ بعلامة ✓ ويتبدّل سطر الوصف تحتها —
   /// والإشعار يغطّي زرّ «حفظ» ثلاث ثوانٍ، والمعتاد «دورٌ ثمّ حفظ» مباشرةً
   /// فكانت أوّل ضغطةٍ على الحفظ تُغلق الإشعار لا تحفظ.
+  /// ما لا يعرضه الكتالوج لا يُلمس — كان يُعَدّ في «الصلاحيات (N)» ولا يُرسَل.
   void _applyElPreset(ElPermPreset p) {
     setState(() {
-      for (final k in ElEmployeePerms.keys) {
+      for (final k
+          in ElEmployeePerms.offered(widget.catalog.permissions.keys)) {
         _perms[k] = p.keys.contains(k);
       }
     });
@@ -675,7 +677,8 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
     final byCat =
         widget.catalog.permsByCategoryWhere(ElEmployeePerms.keys.contains);
     final cats = widget.catalog.categories;
-    final current = ElEmployeePerms.matching(_perms);
+    final current = ElEmployeePerms.matching(_perms,
+        catalogKeys: widget.catalog.permissions.keys);
     final none = ElEmployeePerms.activeCount(_perms) == 0;
     return ListView(
       padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
