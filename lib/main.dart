@@ -28,7 +28,7 @@ import 'services/app_version.dart';
 import 'services/badge_service.dart';
 import 'services/client_diag.dart';
 import 'services/desktop_account_auth.dart';
-import 'services/mac_file_secure_storage.dart';
+import 'services/desktop_file_secure_storage.dart';
 import 'services/permissions_service.dart';
 import 'services/print_prefs.dart';
 import 'services/provider_service.dart';
@@ -41,8 +41,10 @@ import 'theme/typography.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // نسخة الماك للتجربة: الخزنة ملفٌّ لا سلسلة المفاتيح (mac_file_secure_storage.dart) — قبل أيّ قراءة.
-  if (AppPlatform.isMacDesktop) MacFileSecureStorage.install();
+  // الحاسبة: الخزنة ملفٌّ واحد بكتاباتٍ متتالية (desktop_file_secure_storage.dart) — قبل أيّ قراءة.
+  // الماك: سلسلة المفاتيح ترفض التوقيع المحلّيّ؛ ويندوز: ملفّ الإضافة يتصادم فيضيع التوكن.
+  if (AppPlatform.isMacDesktop) DesktopFileSecureStorage.installForMac();
+  if (AppPlatform.isWindows) DesktopFileSecureStorage.installForWindows();
 
   // easy_localization يحتاج init قبل runApp — يحمّل الـcache ويتأكّد إن
   // الـstorage جاهز حتى الـsaveLocale يشتغل من اللحظة الأولى. مطلب
