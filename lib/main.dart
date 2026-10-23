@@ -159,22 +159,40 @@ void main() async {
 /// ClientDiag، بلا هويّة) — بدونه لا نعرف ما يتعطّل على حاسبات الوكلاء.
 void _installDesktopErrorReport() {
   final seen = <String>{};
-  void report(Object error) {
+  void report(Object error, StackTrace? stack) {
     final text = error.toString();
-    final key = text.length > 160 ? text.substring(0, 160) : text;
+    // مكان الخطأ في كودنا أوّلاً: «Null check operator…» وحده (٢٣ أكتوبر) لا يدلّ على شاشة.
+    final where = desktopErrorWhere(stack);
+    final key = '$where|${text.length > 160 ? text.substring(0, 160) : text}';
     if (seen.length > 50 || !seen.add(key)) return;
-    ClientDiag.report('windows_error', code: error.runtimeType.toString(), message: text);
+    ClientDiag.report('windows_error',
+        code: error.runtimeType.toString(), message: where.isEmpty ? text : '$where | $text');
   }
 
   final previous = FlutterError.onError;
   FlutterError.onError = (details) {
-    report(details.exception);
+    report(details.exception, details.stack);
     previous?.call(details);
   };
   PlatformDispatcher.instance.onError = (error, stack) {
-    report(error);
+    report(error, stack);
     return true;
   };
+}
+
+/// أوّل ثلاثة مواضع من كود التطبيق نفسه (`package:rad_mysvcs/…`) بملفّها وسطرها — بلا مسارات الجهاز
+/// ولا قيم: يكفي لمعرفة الشاشة والسطر من سجلّ الخادم (الرسالة تُقصّ عند ٣٠٠ حرف).
+@visibleForTesting
+String desktopErrorWhere(StackTrace? stack) {
+  if (stack == null) return '';
+  final re = RegExp(r'package:rad_mysvcs/([^ ):]+\.dart):(\d+)');
+  final out = <String>[];
+  for (final m in re.allMatches(stack.toString())) {
+    final f = '${m.group(1)}:${m.group(2)}';
+    if (!out.contains(f)) out.add(f);
+    if (out.length == 3) break;
+  }
+  return out.join(' ← ');
 }
 
 /// يطبع كلّ خطأ **فريد** مرّةً واحدة بأثره الكامل، ويكتم تكراره.
