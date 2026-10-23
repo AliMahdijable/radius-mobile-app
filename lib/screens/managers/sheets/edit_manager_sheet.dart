@@ -4,10 +4,11 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/managers_api.dart';
 import '_manager_form.dart';
 import '../../../theme/colors.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// تعديل مدير قائم. كلمة السر اختيارية (تترك فاضية = لا تغيير).
 Future<bool?> showEditManagerSheet(BuildContext context, Manager m) {
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,

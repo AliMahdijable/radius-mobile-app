@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import '../core/widgets/app_sheet.dart';
 
 /// كشف كلمة السرّ — bottom sheet احترافي (2026-08-26).
 ///
@@ -35,7 +36,7 @@ Future<void> showRevealPasswordSheet(
   required String password,
   Color? accentColor,
 }) {
-  return showModalBottomSheet<void>(
+  return showAppSheet<void>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,

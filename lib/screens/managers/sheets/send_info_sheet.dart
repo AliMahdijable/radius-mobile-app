@@ -12,13 +12,14 @@ import '../../../widgets/manual_wa_chip.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// إرسال رسالة معلومات للمدير (وضعه المالي الحالي) بدون أي عملية.
 /// مطابق v1 _sendManagerInfoMessage (managers_screen.dart:1109).
 /// يُولّد قالب جاهز يحتوي على الرصيد + الدين، ويسمح للأدمن بتعديله
 /// قبل الإرسال.
 Future<bool?> showSendInfoSheet(BuildContext context, Manager m) {
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,

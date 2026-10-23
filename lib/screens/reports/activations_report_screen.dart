@@ -14,6 +14,7 @@ import 'widgets/report_log_tile.dart';
 import 'widgets/report_pagination.dart';
 import 'widgets/report_permission_gate.dart';
 import 'widgets/scope_helper.dart';
+import '../desktop/desk_widgets.dart';
 
 /// التفعيلات — تفعيلات + تمديدات في الفترة، ضمن scope المدير الحالي.
 /// نجلب الكل من backend ونفلتر client-side (مطابق web Activations.tsx).
@@ -143,16 +144,19 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
       title: 'reports.activations'.tr(),
       child: Scaffold(
         backgroundColor: AppColors.bg,
-        appBar: AppBar(
-          backgroundColor: AppColors.surface,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          title: Text(
-            'reports.activations'.tr(),
-            style:
-                AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+        appBar: deskPageBar(
+          context,
+          mobile: AppBar(
+            backgroundColor: AppColors.surface,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            title: Text(
+              'reports.activations'.tr(),
+              style:
+                  AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+            ),
+            iconTheme: IconThemeData(color: AppColors.textHi),
           ),
-          iconTheme: IconThemeData(color: AppColors.textHi),
         ),
         body: SafeArea(
           child: RefreshIndicator(

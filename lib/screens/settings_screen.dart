@@ -33,6 +33,9 @@ import 'whatsapp/whatsapp_schedules_screen.dart';
 import 'whatsapp/whatsapp_status_screen.dart';
 import 'whatsapp/whatsapp_templates_screen.dart';
 import 'view_scope_screen.dart';
+import '../core/widgets/app_sheet.dart';
+import 'desktop/desk_widgets.dart';
+import '../core/platform/desktop_layout.dart';
 
 /// Basic settings — version, identity, logout. Will grow next iteration.
 class SettingsScreen extends StatefulWidget {
@@ -143,9 +146,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // it to switch between the in-page title (when there's no
     // ancestor route) and a back-arrow AppBar (when there is).
     final canPop = Navigator.of(context).canPop();
+    // الحاسبة: رأس صفحةٍ كبير، والقائمة بعرض قراءةٍ مريح لا بعرض الشاشة كلّه.
+    final desk = DesktopScope.of(context);
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: canPop
+      appBar: canPop && !desk
           ? AppBar(
               backgroundColor: AppColors.bg,
               elevation: 0,
@@ -166,15 +171,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
           : null,
       body: SafeArea(
         bottom: false,
-        child: ListView(
+        child: Align(
+          alignment: AlignmentDirectional.topStart,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: desk ? 880 : double.infinity),
+            child: ListView(
           padding: EdgeInsets.fromLTRB(
             Sp.lg,
-            canPop ? Sp.sm : Sp.lg,
+            canPop && !desk ? Sp.sm : Sp.lg,
             Sp.lg,
             Sp.huge * 2,
           ),
           children: [
-            if (!canPop)
+            if (desk)
+              Padding(
+                padding: const EdgeInsets.only(top: Sp.xs, bottom: Sp.xl),
+                child: DeskPageHeader(
+                  title: 'settings.title'.tr(),
+                  subtitle: DeskSubtitle('desktop.settings_subtitle'.tr()),
+                ),
+              )
+            else if (!canPop)
               Padding(
                 padding: const EdgeInsets.only(bottom: Sp.lg),
                 child: Text('settings.title'.tr(),
@@ -470,6 +487,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ],
         ),
+          ),
+        ),
       ),
     );
   }
@@ -546,7 +565,7 @@ class _SectionLabel extends StatelessWidget {
 }
 
 void _openThemePicker(BuildContext ctx) {
-  showModalBottomSheet<void>(
+  showAppSheet<void>(
     barrierColor: AppColors.scrim,
     context: ctx,
     backgroundColor: Colors.transparent,
@@ -556,7 +575,7 @@ void _openThemePicker(BuildContext ctx) {
 }
 
 void _openPrinterFormatPicker(BuildContext ctx) {
-  showModalBottomSheet<void>(
+  showAppSheet<void>(
     barrierColor: AppColors.scrim,
     context: ctx,
     backgroundColor: Colors.transparent,
@@ -579,7 +598,7 @@ String _themeLabel(ThemeMode mode) {
 }
 
 void _openLanguagePicker(BuildContext ctx) {
-  showModalBottomSheet<void>(
+  showAppSheet<void>(
     barrierColor: AppColors.scrim,
     context: ctx,
     backgroundColor: Colors.transparent,

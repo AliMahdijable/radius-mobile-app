@@ -3,9 +3,11 @@
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 
+import '../platform/desktop_layout.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'app_sheet.dart';
 
 /// قوقعة الـbottom sheet ومكوّناتها — الشريحة 5 من إعادة التصميم
 /// (2026-08-29).
@@ -54,6 +56,8 @@ class DesignSheet extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     final media = MediaQuery.of(context);
     final inset = media.viewInsets.bottom;
+    // الحاسبة: نافذةٌ في وسط الشاشة ([showAppSheet]) — زوايا أربع ولا مقبض.
+    final dialog = DeskDialogScope.of(context);
     Widget content = Padding(padding: bodyPadding, child: body);
     if (scrollable) {
       content = SingleChildScrollView(child: content);
@@ -77,8 +81,9 @@ class DesignSheet extends StatelessWidget {
             maxHeight: (media.size.height - inset) * maxHeightFactor),
         decoration: BoxDecoration(
           color: AppColors.surfaceSheet,
-          borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(R.sheet)),
+          borderRadius: dialog
+              ? BorderRadius.circular(R.card)
+              : const BorderRadius.vertical(top: Radius.circular(R.sheet)),
           boxShadow: Sh.sheet,
         ),
         // 🐛 بلاغ 2026-08-31: «كل المودلات الي بيها نوع الكيبورد رقم
@@ -98,7 +103,7 @@ class DesignSheet extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const SheetHandle(),
+              if (dialog) const SizedBox(height: Sp.sm) else const SheetHandle(),
               header,
               Flexible(child: content),
               if (footer != null)
@@ -1095,7 +1100,7 @@ Future<bool?> showConfirmSheet(
       ),
     _ => (tone.fill, tone.softBg, tone.fill),
   };
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,

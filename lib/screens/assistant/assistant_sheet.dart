@@ -17,6 +17,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'assistant_consent_sheet.dart';
+import '../../core/widgets/app_sheet.dart';
 
 /// نافذة المساعد الذكيّ — «اشرحلي» و«كيف أسوّي؟» في ورقةٍ واحدة.
 ///
@@ -58,7 +59,7 @@ class AssistantSheet extends StatefulWidget {
       await AiConsent.accept();
     }
     if (!context.mounted) return;
-    await showModalBottomSheet<void>(
+    await showAppSheet<void>(
       context: context,
       isScrollControlled: true,
       useRootNavigator: true,

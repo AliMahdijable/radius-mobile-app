@@ -28,6 +28,7 @@ import 'account/my_devices_screen.dart';
 import 'main_shell.dart';
 import '../core/platform/app_platform.dart';
 import '../core/platform/desktop_layout.dart';
+import '../core/widgets/app_sheet.dart';
 
 /// Login — Soft Pastel + Premium. Wired to https://rad.mysvcs.net/api/auth/login.
 /// Persists token on success via AuthStorage. On failure shows a snackbar.
@@ -212,7 +213,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _openPicker() async {
     HapticFeedback.selectionClick();
     final items = _directory ?? const <DirectoryCompany>[];
-    final choice = await showModalBottomSheet<Object>(
+    final choice = await showAppSheet<Object>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.surfaceSheet,

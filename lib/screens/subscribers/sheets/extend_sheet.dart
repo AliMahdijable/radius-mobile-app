@@ -19,6 +19,7 @@ import '../../../theme/typography.dart';
 import '../../../widgets/package_picker_field.dart';
 import '_print_receipt_checkbox.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// Extend-subscription sheet — direct port of v1's _extendSubscription.
 ///   1. Fetch /api/v2/subscribers/:idx/extension-options. Spinner while
@@ -31,7 +32,7 @@ import '../../../core/widgets/sheet_scaffold.dart';
 ///   5. Submit → /api/v2/subscribers/:idx/extend with {profile_id,
 ///      method}.
 Future<bool?> showExtendSheet(BuildContext context, Subscriber sub) {
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,

@@ -11,11 +11,12 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../settle_widgets.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// شيت التسوية: معاينةٌ طازجة ← المبلغ المستلَم فعلاً ← تأكيد.
 /// يُرجع السند المحفوظ عند النجاح، و`null` عند الإغلاق.
 Future<SettlementRecord?> showSettleSheet(BuildContext context) {
-  return showModalBottomSheet<SettlementRecord>(
+  return showAppSheet<SettlementRecord>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,

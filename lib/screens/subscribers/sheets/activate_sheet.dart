@@ -25,6 +25,7 @@ import '../../../widgets/el_deposit_password_field.dart';
 import '../../../widgets/package_picker_field.dart';
 import '_print_receipt_checkbox.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// Bottom sheet for activating a subscriber's package — direct port of
 /// v1's `_activateSubscriber` flow from
@@ -50,7 +51,7 @@ import '../../../core/widgets/sheet_scaffold.dart';
 /// Returns true on success so callers (subscribers list, detail screen)
 /// can refresh their cached rows.
 Future<bool?> showActivateSheet(BuildContext context, Subscriber sub) {
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,

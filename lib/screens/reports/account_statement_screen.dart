@@ -16,6 +16,7 @@ import 'widgets/report_filters.dart';
 import 'widgets/report_log_tile.dart';
 import 'widgets/report_pagination.dart';
 import 'widgets/report_permission_gate.dart';
+import '../desktop/desk_widgets.dart';
 
 /// كشف حساب مشترك — الحركات المالية (تفعيل/تمديد/تسديد/إضافة دين) في
 /// فترة محدّدة + summary لإجمالي المدفوع/الدين/الرصيد.
@@ -106,27 +107,30 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
       title: 'reports.account_statement'.tr(),
       child: Scaffold(
         backgroundColor: AppColors.bg,
-        appBar: AppBar(
-          backgroundColor: AppColors.surface,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'reports.account_statement'.tr(),
-                style: AppType.title(color: AppColors.textHi)
-                    .copyWith(fontSize: 15, fontWeight: FontWeight.w700),
-              ),
-              Text(
-                widget.displayName ?? widget.username,
-                style: AppType.muted().copyWith(fontSize: 11),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+        appBar: deskPageBar(
+          context,
+          mobile: AppBar(
+            backgroundColor: AppColors.surface,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'reports.account_statement'.tr(),
+                  style: AppType.title(color: AppColors.textHi)
+                      .copyWith(fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+                Text(
+                  widget.displayName ?? widget.username,
+                  style: AppType.muted().copyWith(fontSize: 11),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+            iconTheme: IconThemeData(color: AppColors.textHi),
           ),
-          iconTheme: IconThemeData(color: AppColors.textHi),
         ),
         body: SafeArea(
           child: RefreshIndicator(

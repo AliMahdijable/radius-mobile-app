@@ -13,6 +13,7 @@ import '../../../theme/typography.dart';
 import '../../../core/util/amount_input.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// Bottom sheet for adding to a subscriber's debt — port of v1's
 /// `_showAddDebtSheet` from mobile-app/lib/screens/subscribers/
@@ -30,7 +31,7 @@ import '../../../core/widgets/sheet_scaffold.dart';
 ///      saddling a subscriber.
 ///   7. Submit → /api/v2/subscribers/:idx/add-debt.
 Future<bool?> showAddDebtSheet(BuildContext context, Subscriber sub) {
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,

@@ -13,6 +13,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/el_deposit_password_field.dart';
 import '../desktop/desk_widgets.dart';
+import '../../core/widgets/app_sheet.dart';
 
 /// ايرث لنك — تحويل الرصيد + كشف الحساب (البند ٤، EarthLink وحدهم).
 ///
@@ -121,7 +122,7 @@ class _ElTransferScreenState extends State<ElTransferScreen> {
   Future<void> _pickTarget() async {
     if (_targets.isEmpty) return;
     HapticFeedback.selectionClick();
-    final picked = await showModalBottomSheet<ElTransferTarget>(
+    final picked = await showAppSheet<ElTransferTarget>(
       context: context,
       backgroundColor: Colors.transparent,
       barrierColor: AppColors.scrim,

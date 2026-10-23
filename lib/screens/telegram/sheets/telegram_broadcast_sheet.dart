@@ -6,6 +6,7 @@ import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// telegramBroadcastSheet — إرسال رسالة عبر تلغرام لكل المرتبطين.
 /// Dry-run (يعرض عدد المستقبلين) ثم Send.
@@ -13,7 +14,7 @@ Future<void> showTelegramBroadcastSheet(
   BuildContext context, {
   required String adminId,
 }) {
-  return showModalBottomSheet(
+  return showAppSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,

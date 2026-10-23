@@ -1712,6 +1712,7 @@
     "auth_f4_title": "WhatsApp & Telegram",
     "auth_f4_body": "Expiry and debt reminders and broadcasts, automatically.",
     "auth_sync": "Same account as your phone and the web",
-    "auth_company_hint": "Sign in with your company page account"
+    "auth_company_hint": "Sign in with your company page account",
+    "settings_subtitle": "Account, WhatsApp, printing, appearance and permissions"
   }
 }

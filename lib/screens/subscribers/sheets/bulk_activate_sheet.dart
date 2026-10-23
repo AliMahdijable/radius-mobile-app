@@ -22,6 +22,7 @@ import '../../../theme/typography.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../core/util/amount_input.dart';
 import 'bulk_activate_guard.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// Bulk activate / renew sheet — direct port of v1's bulk_renew_sheet
 /// from mobile-app/lib/screens/subscribers/bulk_renew_sheet.dart with
@@ -77,7 +78,7 @@ Future<Set<String>?> showBulkActivateSheet(
     return null;
   }
   final outcome = _BulkOutcome(subs);
-  await showModalBottomSheet<void>(
+  await showAppSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,

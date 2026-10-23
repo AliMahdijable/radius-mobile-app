@@ -29,6 +29,8 @@ import '../../api/network_devices_api.dart';
 import '../../theme/typography.dart';
 import 'sheets/device_image_picker.dart';
 import '../../api/olt_profile.dart';
+import '../../core/widgets/app_sheet.dart';
+import '../desktop/desk_widgets.dart';
 
 /// شاشة تفاصيل جهاز — تصميم متقدّم:
 /// - Hero card بـpulse للـonline + brand icon + stats
@@ -178,7 +180,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
   }
 
   Future<void> _edit() async {
-    final updated = await showModalBottomSheet<NetworkDevice>(
+    final updated = await showAppSheet<NetworkDevice>(
       barrierColor: AppColors.scrim,
       context: context,
       isScrollControlled: true,
@@ -406,38 +408,41 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        title: Text(_d.name, overflow: TextOverflow.ellipsis),
-        backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.textHi,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(LucideIcons.arrowRight),
-          onPressed: () => Navigator.pop(context, _changed),
-        ),
-        actions: [
-          // Reboot — يظهر فقط للأجهزة الي عندها credentials وبروتوكول مدعوم
-          if (_canReboot())
-            IconButton(
-              icon: _rebooting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : Icon(LucideIcons.power, size: 18, color: AppColors.warning),
-              tooltip: 'إعادة تشغيل الجهاز',
-              onPressed: _rebooting ? null : _confirmAndReboot,
-            ),
-          if (Perms.has('devices.manage')) ...[
-            IconButton(
-                icon: const Icon(LucideIcons.pencil, size: 18),
-                onPressed: _edit),
-            IconButton(
-                icon:
-                    Icon(LucideIcons.trash2, size: 18, color: AppColors.error),
-                onPressed: _delete),
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          title: Text(_d.name, overflow: TextOverflow.ellipsis),
+          backgroundColor: AppColors.surface,
+          foregroundColor: AppColors.textHi,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(LucideIcons.arrowRight),
+            onPressed: () => Navigator.pop(context, _changed),
+          ),
+          actions: [
+            // Reboot — يظهر فقط للأجهزة الي عندها credentials وبروتوكول مدعوم
+            if (_canReboot())
+              IconButton(
+                icon: _rebooting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : Icon(LucideIcons.power, size: 18, color: AppColors.warning),
+                tooltip: 'إعادة تشغيل الجهاز',
+                onPressed: _rebooting ? null : _confirmAndReboot,
+              ),
+            if (Perms.has('devices.manage')) ...[
+              IconButton(
+                  icon: const Icon(LucideIcons.pencil, size: 18),
+                  onPressed: _edit),
+              IconButton(
+                  icon:
+                      Icon(LucideIcons.trash2, size: 18, color: AppColors.error),
+                  onPressed: _delete),
+            ],
           ],
-        ],
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(Sp.md),

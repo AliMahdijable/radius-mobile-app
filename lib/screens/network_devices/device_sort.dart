@@ -7,6 +7,7 @@ import '../../models/network_device.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../core/widgets/app_sheet.dart';
 
 /// ترتيب الأجهزة — مشترك بين «نظرة عامّة» وقائمة الأجهزة.
 ///
@@ -101,7 +102,7 @@ Future<({DeviceSortField field, SortDir dir})?> showDeviceSortSheet(
   required SortDir dir,
   String subtitle = 'المعيار والاتّجاه',
 }) {
-  return showModalBottomSheet<({DeviceSortField field, SortDir dir})>(
+  return showAppSheet<({DeviceSortField field, SortDir dir})>(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,

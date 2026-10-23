@@ -20,6 +20,7 @@ import '../../core/platform/store_policy.dart';
 import '../../core/util/error_text.dart';
 import '../../widgets/sas_captcha_sheet.dart';
 import '../account/my_devices_screen.dart';
+import '../desktop/desk_widgets.dart';
 
 /// شاشة "الصفحات" — التبديل السريع بين حسابات المدراء الفرعيّين
 /// (2026-08-26). طلب المستخدم:
@@ -412,11 +413,14 @@ class _AccountsScreenState extends State<AccountsScreen> {
     if (!Perms.has('managers.edit')) {
       return Scaffold(
         backgroundColor: AppColors.bg,
-        appBar: AppBar(
-          backgroundColor: AppColors.surface,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          title: Text('accounts.title'.tr(), style: AppType.cardTitleBold()),
+        appBar: deskPageBar(
+          context,
+          mobile: AppBar(
+            backgroundColor: AppColors.surface,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            title: Text('accounts.title'.tr(), style: AppType.cardTitleBold()),
+          ),
         ),
         body: Center(
           child: Padding(
@@ -432,19 +436,22 @@ class _AccountsScreenState extends State<AccountsScreen> {
     }
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: const Text(
-          'الصفحات',
-          style: TextStyle(
-            fontFamily: AppType.family,
-            fontSize: 16, height: 1.3,
-            fontWeight: FontWeight.w700,
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: const Text(
+            'الصفحات',
+            style: TextStyle(
+              fontFamily: AppType.family,
+              fontSize: 16, height: 1.3,
+              fontWeight: FontWeight.w700,
+            ),
           ),
+          iconTheme: IconThemeData(color: AppColors.textHi),
         ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       body: SafeArea(
         child: _loading

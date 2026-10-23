@@ -8,6 +8,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../account/account_widgets.dart' show openPrivacyPolicy;
+import '../../core/widgets/app_sheet.dart';
 
 /// الموافقة قبل أوّل استعمالٍ للمساعد الذكيّ (`AiConsent`): أنّ الأجوبة من
 /// مزوّد ذكاءٍ اصطناعيّ خارجيّ (Anthropic)، وما يُرسل له، وأنّ الإخفاء أفضل جهدٍ
@@ -15,7 +16,7 @@ import '../account/account_widgets.dart' show openPrivacyPolicy;
 /// وأنّه قد يُفحص آليّاً للدقّة — بلغةٍ بسيطة ورابط سياسة الخصوصيّة (البند ٣).
 /// `true` = «موافق»؛ أيّ إغلاقٍ آخر (السحب، ×، «مو هسه») = لا، ولا يُرسل شيء.
 Future<bool> showAssistantConsentSheet(BuildContext context) async {
-  final ok = await showModalBottomSheet<bool>(
+  final ok = await showAppSheet<bool>(
     context: context,
     isScrollControlled: true,
     useRootNavigator: true,

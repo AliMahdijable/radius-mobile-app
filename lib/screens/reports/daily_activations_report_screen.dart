@@ -13,6 +13,7 @@ import 'widgets/report_filters.dart';
 import 'widgets/report_pagination.dart';
 import 'widgets/report_permission_gate.dart';
 import 'widgets/scope_helper.dart';
+import '../desktop/desk_widgets.dart';
 
 /// التفعيلات اليومية — مُجمّعة بـday + إيراد لكل يوم + عدد نقدي/غير.
 class DailyActivationsReportScreen extends StatefulWidget {
@@ -116,16 +117,19 @@ class _DailyActivationsReportScreenState
       title: 'reports.daily_activations'.tr(),
       child: Scaffold(
         backgroundColor: AppColors.bg,
-        appBar: AppBar(
-          backgroundColor: AppColors.surface,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          title: Text(
-            'reports.daily_activations'.tr(),
-            style:
-                AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+        appBar: deskPageBar(
+          context,
+          mobile: AppBar(
+            backgroundColor: AppColors.surface,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            title: Text(
+              'reports.daily_activations'.tr(),
+              style:
+                  AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+            ),
+            iconTheme: IconThemeData(color: AppColors.textHi),
           ),
-          iconTheme: IconThemeData(color: AppColors.textHi),
         ),
         body: SafeArea(
           child: RefreshIndicator(

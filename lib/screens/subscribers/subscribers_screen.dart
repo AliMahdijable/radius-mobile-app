@@ -54,6 +54,7 @@ import 'widgets/subscriber_card_v3.dart';
 import 'widgets/subscriber_table_row.dart';
 import 'widgets/subscriber_columns.dart';
 import 'widgets/subscribers_desktop_header.dart';
+import '../../core/widgets/app_sheet.dart';
 
 /// Default sort field + direction per filter — mirrors v1's
 /// `_defaultSortByFilter`. Without this the 'قارب الانتهاء' chip
@@ -1474,7 +1475,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   /// عنوان 16/w700 مع «إعادة تعيين» في الطرف، شرائح، ثمّ زرّ «تطبيق».
   /// يستبدل صفّ `_ManagerFilterBar` المسطّح الذي كان تحت البحث.
   Future<void> _openManagerFilterSheet() async {
-    final picked = await showModalBottomSheet<({String? manager, String? package})>(
+    final picked = await showAppSheet<({String? manager, String? package})>(
       barrierColor: AppColors.scrim,
       context: context,
       backgroundColor: Colors.transparent,

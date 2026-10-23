@@ -7,6 +7,7 @@ import '../../api/device_probe_api.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../desktop/desk_widgets.dart';
 
 /// Admin-wide ONT + Ubiquiti credential defaults. Settings → "اعتمادات ONU/Ubiquiti".
 /// Empty fields fall back to the library hardcoded values
@@ -91,15 +92,18 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
     Theme.of(context); // theme-dep (dark-mode)
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          'settings.device_creds'.tr(),
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text(
+            'settings.device_creds'.tr(),
+            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+          ),
+          iconTheme: IconThemeData(color: AppColors.textHi),
         ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

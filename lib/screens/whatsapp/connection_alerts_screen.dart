@@ -11,6 +11,7 @@ import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../desktop/desk_widgets.dart';
 
 /// إعدادات «تنبيه المشترك» بمشكلة الاتصال — لكلّ مدير.
 ///
@@ -215,15 +216,18 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
     Theme.of(context); // theme-dep (dark-mode)
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          'conn_alerts.title'.tr(),
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text(
+            'conn_alerts.title'.tr(),
+            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+          ),
+          iconTheme: IconThemeData(color: AppColors.textHi),
         ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       // 🐛 كان `FilledButton` بنصٍّ من `AppType.button()` بلا لون — ولونه
       // الافتراضيّ `textHi` يغلب لون الزرّ، فظهر «حفظ» أسود على الأخضر.

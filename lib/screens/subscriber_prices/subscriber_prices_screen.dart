@@ -19,6 +19,7 @@ import '../subscribers/sheets/subscriber_price_sheet.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../desktop/desk_bulk_picker.dart';
+import '../../core/widgets/app_sheet.dart';
 
 /// «أسعار المشتركين» — على نمط شاشة الخصومات عمداً (طلب المستخدم: «أشبه
 /// بقسم الخصومات»): سعرٌ يُكتب، ومشتركون يُحدَّدون، وزرّ تطبيق. ومعها
@@ -245,7 +246,7 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
 
   Future<void> _openExisting() async {
     final byIdx = {for (final s in _all) s.idx!: s};
-    final changed = await showModalBottomSheet<bool>(
+    final changed = await showAppSheet<bool>(
       context: context,
       backgroundColor: Colors.transparent,
       barrierColor: AppColors.scrim,

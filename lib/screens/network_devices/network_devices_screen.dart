@@ -32,6 +32,8 @@ import 'model_detector.dart';
 import '../../core/util/error_text.dart';
 import '../../core/util/fit_hint.dart';
 import '../top_actions.dart';
+import '../../core/widgets/app_sheet.dart';
+import '../../core/platform/desktop_layout.dart';
 
 /// قائمة أجهزة الشبكة. راجع project_devices_monitoring_plan.
 ///
@@ -500,7 +502,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   }
 
   Future<void> _openForm({NetworkDevice? existing}) async {
-    final result = await showModalBottomSheet<NetworkDevice>(
+    final result = await showAppSheet<NetworkDevice>(
       barrierColor: AppColors.scrim,
       context: context,
       isScrollControlled: true,
@@ -790,13 +792,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                         : SliverPadding(
                             padding: EdgeInsets.fromLTRB(
                                 Sp.md, 0, Sp.md, Inset.tabBar(context)),
-                            sliver: SliverList.separated(
-                              itemCount: devices.length,
-                              itemBuilder: (_, i) =>
-                                  _deviceCard(devices[i]),
-                              separatorBuilder: (_, __) =>
-                                  const SizedBox(height: 8),
-                            ),
+                            sliver: _deviceList(devices),
                           ),
                   ],
                 ),
@@ -865,11 +861,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 : SliverPadding(
                     padding: EdgeInsets.fromLTRB(
                         Sp.md, 0, Sp.md, Inset.tabBar(context)),
-                    sliver: SliverList.separated(
-                      itemCount: devices.length,
-                      itemBuilder: (_, i) => _deviceCard(devices[i]),
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    ),
+                    sliver: _deviceList(devices),
                   ),
           ],
         ),
@@ -1405,6 +1397,28 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
 // _list() القديمة أُزيلت — استعملنا CustomScrollView + Slivers مباشرة في build.
 
+  /// القائمة: على الحاسبة شبكة بطاقاتٍ بأعمدة (بعرضٍ أقصى وارتفاعٍ ثابت) بدل بطاقاتٍ ممدودة بعرض
+  /// الشاشة — والبطاقة نفسها في الحالتين، تُبنى عند ظهورها وحدها.
+  Widget _deviceList(List<NetworkDevice> devices) {
+    if (DesktopScope.of(context)) {
+      return SliverGrid.builder(
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 440,
+          mainAxisExtent: 112,
+          crossAxisSpacing: Sp.md,
+          mainAxisSpacing: Sp.md,
+        ),
+        itemCount: devices.length,
+        itemBuilder: (_, i) => _deviceCard(devices[i]),
+      );
+    }
+    return SliverList.separated(
+      itemCount: devices.length,
+      itemBuilder: (_, i) => _deviceCard(devices[i]),
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+    );
+  }
+
   Widget _deviceCard(NetworkDevice d) {
     final statusCol = _statusColor(d.lastStatus);
     final selected = _selectionMode && _selectedIds.contains(d.id);
@@ -1431,6 +1445,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
             ),
           ),
           padding: const EdgeInsets.all(Sp.md),
+          // الحاسبة: البطاقة بارتفاع خليّة الشبكة — المحتوى في وسطها لا أعلاها.
+          alignment: AlignmentDirectional.centerStart,
           child: Row(
             children: [
               // في selection mode: checkbox قبل الأيقونة

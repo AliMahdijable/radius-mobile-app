@@ -12,6 +12,7 @@ import '../core/widgets/design_sheet.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import '../core/widgets/app_sheet.dart';
 
 /// حقل اختيار الباقة — حقلٌ واحد يفتح قائمةً، بدل صفوف اختيارٍ طويلة.
 ///
@@ -93,7 +94,7 @@ Future<String?> showPackagePickerSheet(
 }) async {
   final overlay = Navigator.maybeOf(context)?.overlay;
   Future<void>? gone;
-  final picked = await showModalBottomSheet<String>(
+  final picked = await showAppSheet<String>(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,

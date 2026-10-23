@@ -5,6 +5,7 @@ import '../../services/device_alerts_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../desktop/desk_widgets.dart';
 
 /// شاشة تنبيهات الأجهزة — تاريخ الـalerts + تحديد كمقروء + حذف.
 ///
@@ -32,18 +33,21 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
     final alerts = DeviceAlertsService.instance.all;
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        title: const Text('تنبيهات الأجهزة'),
-        backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.textHi,
-        actions: [
-          if (alerts.isNotEmpty)
-            IconButton(
-              onPressed: _confirmClear,
-              icon: Icon(LucideIcons.trash2, color: AppColors.error),
-              tooltip: 'حذف الكلّ',
-            ),
-        ],
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          title: const Text('تنبيهات الأجهزة'),
+          backgroundColor: AppColors.surface,
+          foregroundColor: AppColors.textHi,
+          actions: [
+            if (alerts.isNotEmpty)
+              IconButton(
+                onPressed: _confirmClear,
+                icon: Icon(LucideIcons.trash2, color: AppColors.error),
+                tooltip: 'حذف الكلّ',
+              ),
+          ],
+        ),
       ),
       body: alerts.isEmpty ? _empty() : _list(alerts),
     );

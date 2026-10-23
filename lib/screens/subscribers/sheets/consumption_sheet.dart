@@ -8,6 +8,7 @@ import '../../../models/subscriber.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// استهلاك المشترك — يوميّ عبر أيّام الشهر، أو شهريّ عبر شهور السنة.
 ///
@@ -21,7 +22,7 @@ import '../../../theme/typography.dart';
 /// فكانت البلاطتان تعرضان صفراً دائماً تحت إجماليٍّ صحيح. التفصيل
 /// الحقيقيّ يأتي الآن من `rx`/`tx` لكلّ خانة.
 Future<void> showConsumptionSheet(BuildContext context, Subscriber sub) {
-  return showModalBottomSheet(
+  return showAppSheet(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,

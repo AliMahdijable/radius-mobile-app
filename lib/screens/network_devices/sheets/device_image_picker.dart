@@ -6,6 +6,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../widgets/device_image.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// اختيار صورة الجهاز يدويّاً حين لا يُطابق الطراز المُبلَّغ أيّ صورة.
 ///
@@ -22,7 +23,7 @@ Future<String?> showDeviceImagePicker(
   required String brand,
   String? currentModel,
 }) {
-  return showModalBottomSheet<String>(
+  return showAppSheet<String>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,

@@ -13,6 +13,7 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import 'el_add_subscriber_sheet.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// Add new subscriber sheet — focused port of v1's add_subscriber_sheet
 /// (mobile-app/lib/widgets/add_subscriber_sheet.dart) into v2's design
@@ -29,7 +30,7 @@ import 'el_add_subscriber_sheet.dart';
 Future<bool?> showAddSubscriberSheet(BuildContext context) async {
   final earthlink = await _isEarthlinkSession();
   if (!context.mounted) return null;
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,

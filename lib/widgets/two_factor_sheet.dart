@@ -11,6 +11,7 @@ import '../core/util/bidi.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import '../core/widgets/app_sheet.dart';
 
 /// Pro: نافذة كود التحقّق بخطوتين عند الدخول.
 ///
@@ -31,7 +32,7 @@ Future<LoginResult?> showTwoFactorSheet(
   required String password,
   String? sasUrl,
 }) {
-  return showModalBottomSheet<LoginResult>(
+  return showAppSheet<LoginResult>(
     context: context,
     isScrollControlled: true,
     backgroundColor: AppColors.surfaceSheet,

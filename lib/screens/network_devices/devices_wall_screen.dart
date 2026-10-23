@@ -20,6 +20,7 @@ import 'device_vitals.dart';
 import 'widgets/_grade.dart';
 import 'widgets/device_image.dart';
 import 'network_device_details_screen.dart';
+import '../desktop/desk_widgets.dart';
 
 /// نظرة عامّة على الأجهزة — كلّها في صفحة واحدة، مجموعةً حسب المنطقة.
 ///
@@ -333,48 +334,51 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
     final down = _all.where((d) => d.lastStatus == 'offline').length;
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        surfaceTintColor: Colors.transparent,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('نظرة عامّة', style: AppType.cardTitle()),
-            if (!_loading && _all.isNotEmpty)
-              Text(
-                down == 0
-                    ? '${_all.length} جهازاً · الكلّ سليم'
-                    : '$down غير متّصل من ${_all.length}',
-                style: AppType.muted(
-                    color: down == 0 ? AppColors.success : AppColors.error),
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          surfaceTintColor: Colors.transparent,
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('نظرة عامّة', style: AppType.cardTitle()),
+              if (!_loading && _all.isNotEmpty)
+                Text(
+                  down == 0
+                      ? '${_all.length} جهازاً · الكلّ سليم'
+                      : '$down غير متّصل من ${_all.length}',
+                  style: AppType.muted(
+                      color: down == 0 ? AppColors.success : AppColors.error),
+                ),
+            ],
+          ),
+          actions: [
+            IconButton(
+              icon: Icon(_sortField.icon, size: 20),
+              tooltip: 'الترتيب · ${_sortField.label}',
+              onPressed: _pickSort,
+            ),
+            if (_sweeping)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: Sp.lg),
+                child: Center(
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              )
+            else
+              IconButton(
+                icon: const Icon(LucideIcons.refreshCw, size: 20),
+                tooltip: 'فحص الآن',
+                onPressed: _sweep,
               ),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: Icon(_sortField.icon, size: 20),
-            tooltip: 'الترتيب · ${_sortField.label}',
-            onPressed: _pickSort,
-          ),
-          if (_sweeping)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: Sp.lg),
-              child: Center(
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            )
-          else
-            IconButton(
-              icon: const Icon(LucideIcons.refreshCw, size: 20),
-              tooltip: 'فحص الآن',
-              onPressed: _sweep,
-            ),
-        ],
       ),
       body: _buildBody(),
     );

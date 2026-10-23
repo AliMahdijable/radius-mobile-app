@@ -7,6 +7,7 @@ import '../../../services/subscriber_usage_store.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 enum SortField {
   username,
@@ -76,7 +77,7 @@ Future<({SortField field, SortDirection direction})?> showSortSheet(
   required SortField currentField,
   required SortDirection currentDirection,
 }) {
-  return showModalBottomSheet<({SortField field, SortDirection direction})>(
+  return showAppSheet<({SortField field, SortDirection direction})>(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,

@@ -13,6 +13,7 @@ import '../../theme/typography.dart';
 import 'widgets/agent_code_tab.dart';
 import 'widgets/link_image_preview.dart';
 import '../desktop/desk_widgets.dart';
+import '../../core/widgets/app_sheet.dart';
 
 /// شاشة "بوابة المشترك" — مطابقة PortalSettings.tsx في client-v2.
 /// tabs:
@@ -603,7 +604,7 @@ class _PackagesTabState extends State<_PackagesTab> {
   }
 
   Future<void> _editPackage(PortalPackage p) async {
-    final result = await showModalBottomSheet<PortalPackage?>(
+    final result = await showAppSheet<PortalPackage?>(
       barrierColor: AppColors.scrim,
       context: context,
       isScrollControlled: true,

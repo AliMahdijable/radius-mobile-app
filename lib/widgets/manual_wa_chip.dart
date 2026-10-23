@@ -7,6 +7,7 @@ import '../api/wa_contact_risk.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import '../core/widgets/app_sheet.dart';
 
 /// 2026-08-26: Chip يعرض وضع إرسال الواتساب الحالي (تلقائي/يدوي).
 /// النقر عليه يبدّل الوضع لهذه العمليّة فقط (override محلّي).
@@ -135,7 +136,7 @@ Future<ManualWaChoice?> showManualWaPreviewSheet(
   required String messagePreview,
   Color accent = AppColors.channelWhatsApp,
 }) {
-  return showModalBottomSheet<ManualWaChoice>(
+  return showAppSheet<ManualWaChoice>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,

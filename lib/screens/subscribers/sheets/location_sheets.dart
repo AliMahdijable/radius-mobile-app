@@ -15,6 +15,7 @@ import '../../../theme/colors.dart';
 import 'location_picker_screen.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// 2026-08-26: chooser الصغير — نقرة على أيقونة الموقع تفتح قائمة
 /// خيارات فتح (Google Maps / Waze / نسخ). يتعامل مع فتح روابط
@@ -28,7 +29,7 @@ Future<void> showLocationChooserSheet(
   required Subscriber sub,
 }) {
   if (!sub.hasLocation) return Future.value();
-  return showModalBottomSheet(
+  return showAppSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
@@ -46,7 +47,7 @@ Future<void> showLocationSheet(
   required Subscriber sub,
 }) async {
   if (sub.hasLocation) {
-    await showModalBottomSheet(
+    await showAppSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -66,7 +67,7 @@ Future<bool?> showLocationEditSheet(
   BuildContext context, {
   required Subscriber sub,
 }) {
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,

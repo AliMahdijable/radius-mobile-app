@@ -11,6 +11,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/util/server_time.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// Subscriber movements / account-statement sheet — direct port of
 /// v1's _SubscriberMovementsSheetContent from
@@ -26,7 +27,7 @@ import '../../../core/util/server_time.dart';
 /// تفعيل / تمديد / تسديد / إضافة دين. Refresh icon retries the same
 /// fetch (no pagination — the window is wide enough by design).
 Future<void> showMovementsSheet(BuildContext context, Subscriber sub) {
-  return showModalBottomSheet(
+  return showAppSheet(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,

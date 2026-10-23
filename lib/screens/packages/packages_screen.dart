@@ -14,6 +14,7 @@ import '../../theme/typography.dart';
 import '../../core/util/amount_input.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
+import '../../core/widgets/app_sheet.dart';
 
 /// مديول تسعير الباقات. شاشة في-المكان: قائمة الباقات، كل باقة فيها
 /// حقل سعر بيع قابل للتعديل. أسفل الشاشة زر "حفظ" واحد ينفّذ
@@ -493,7 +494,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
       color: Colors.transparent,
       child: InkWell(
         onTap: () async {
-          final picked = await showModalBottomSheet<int?>(
+          final picked = await showAppSheet<int?>(
             barrierColor: AppColors.scrim,
             context: context,
             backgroundColor: Colors.transparent,

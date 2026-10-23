@@ -9,6 +9,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../reports/widgets/report_export.dart';
 import '../../core/util/amount_input.dart';
+import '../desktop/desk_widgets.dart';
 
 /// Unified manager movements timeline — مطابق v1
 /// mobile-app/lib/screens/managers/manager_movements_screen.dart.
@@ -164,48 +165,51 @@ class _ManagerMovementsScreenState extends State<ManagerMovementsScreen> {
     Theme.of(context); // theme-dep (dark-mode)
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.bg,
-        foregroundColor: AppColors.textHi,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        surfaceTintColor: Colors.transparent,
-        iconTheme: IconThemeData(color: AppColors.textHi),
-        title: Text(
-          'حركات ${widget.manager.username}',
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: ReportExportBar(
-              title: 'حركات ${widget.manager.username}',
-              subtitle: 'إجمالي ${_rows.length} حركة',
-              fileNameBase: 'manager_movements_${widget.manager.username}',
-              columns: const [
-                'التاريخ',
-                'النوع',
-                'المبلغ',
-                'الاتجاه',
-                'المصدر',
-                'الملاحظة',
-              ],
-              rows: _rows
-                  .map((m) => [
-                        _fmtTime(m.eventAt),
-                        m.arabicLabel,
-                        formatIQD(m.amount),
-                        m.signLabel.trim().isEmpty ? '' : m.signLabel.trim(),
-                        m.source == MovementSource.sas4
-                            ? 'الساس'
-                            : (m.source != null ? 'يدوي' : ''),
-                        (m.note ?? '').trim(),
-                      ])
-                  .toList(),
-              columnWeights: const [1.4, 1.3, 1.0, 0.6, 0.7, 2.0],
-            ),
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.bg,
+          foregroundColor: AppColors.textHi,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+          iconTheme: IconThemeData(color: AppColors.textHi),
+          title: Text(
+            'حركات ${widget.manager.username}',
+            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
           ),
-        ],
+          actions: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: ReportExportBar(
+                title: 'حركات ${widget.manager.username}',
+                subtitle: 'إجمالي ${_rows.length} حركة',
+                fileNameBase: 'manager_movements_${widget.manager.username}',
+                columns: const [
+                  'التاريخ',
+                  'النوع',
+                  'المبلغ',
+                  'الاتجاه',
+                  'المصدر',
+                  'الملاحظة',
+                ],
+                rows: _rows
+                    .map((m) => [
+                          _fmtTime(m.eventAt),
+                          m.arabicLabel,
+                          formatIQD(m.amount),
+                          m.signLabel.trim().isEmpty ? '' : m.signLabel.trim(),
+                          m.source == MovementSource.sas4
+                              ? 'الساس'
+                              : (m.source != null ? 'يدوي' : ''),
+                          (m.note ?? '').trim(),
+                        ])
+                    .toList(),
+                columnWeights: const [1.4, 1.3, 1.0, 0.6, 0.7, 2.0],
+              ),
+            ),
+          ],
+        ),
       ),
       body: RefreshIndicator(
         onRefresh: _load,

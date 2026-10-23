@@ -36,6 +36,7 @@ import 'subscribers/widgets/filter_chips_bar.dart';
 import 'top_actions.dart';
 import '../core/platform/desktop_layout.dart';
 import 'desktop/desktop_shell.dart';
+import '../core/widgets/app_sheet.dart';
 
 /// Round 10 redesign — floating pill bar with a brand-green indicator
 /// that slides between tabs. The bar is a single cohesive surface
@@ -252,7 +253,7 @@ class _MainShellState extends State<MainShell> {
     // لو انتقل مباشرة لـLoginScreen).
     // شيت خطر لا AlertDialog: الحوار الافتراضي يرث ثيم Material
     // (نصف قطر 28 وحشوة وأزرار خارج السلّم) ولا يعرف لغة المخطّط.
-    showModalBottomSheet<void>(
+    showAppSheet<void>(
       context: context,
       isDismissible: false,
       enableDrag: false,
@@ -364,7 +365,7 @@ class _MainShellState extends State<MainShell> {
     // pop (user report 2026-06-10: 'ما يصير أي حدث عن النقر ع
     // اليوزر').
     final rootCtx = context;
-    showModalBottomSheet(
+    showAppSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,

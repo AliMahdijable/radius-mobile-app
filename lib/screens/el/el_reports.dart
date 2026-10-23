@@ -12,6 +12,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/skeleton.dart';
+import '../desktop/desk_widgets.dart';
 
 /// ايرث لنك — ثلاث شاشاتٍ للقراءة فقط (البند ٤، EarthLink وحدهم):
 ///   • «استخدام التجريبيّ» → GET /api/v2/el/test-usage
@@ -498,45 +499,48 @@ class _ElReadScaffold extends StatelessWidget {
       textDirection: ui.TextDirection.rtl,
       child: Scaffold(
         backgroundColor: AppColors.bg,
-        appBar: AppBar(
-          backgroundColor: AppColors.surface,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          iconTheme: IconThemeData(color: AppColors.textHi),
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(title,
-                  style: AppType.title(color: AppColors.textHi)
-                      .copyWith(fontSize: 16)),
-              Text(subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.muted().copyWith(fontSize: 11)),
+        appBar: deskPageBar(
+          context,
+          mobile: AppBar(
+            backgroundColor: AppColors.surface,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            iconTheme: IconThemeData(color: AppColors.textHi),
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(title,
+                    style: AppType.title(color: AppColors.textHi)
+                        .copyWith(fontSize: 16)),
+                Text(subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.muted().copyWith(fontSize: 11)),
+              ],
+            ),
+            actions: [
+              if (loading)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
+                  child: Center(
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppColors.brandAccent),
+                    ),
+                  ),
+                )
+              else
+                IconButton(
+                  onPressed: () => onRefresh(),
+                  tooltip: 'el.refresh'.tr(),
+                  icon: Icon(LucideIcons.refreshCw,
+                      size: 18, color: AppColors.textMid),
+                ),
             ],
           ),
-          actions: [
-            if (loading)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
-                child: Center(
-                  child: SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: AppColors.brandAccent),
-                  ),
-                ),
-              )
-            else
-              IconButton(
-                onPressed: () => onRefresh(),
-                tooltip: 'el.refresh'.tr(),
-                icon: Icon(LucideIcons.refreshCw,
-                    size: 18, color: AppColors.textMid),
-              ),
-          ],
         ),
         body: SafeArea(
           child: RefreshIndicator(

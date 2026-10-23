@@ -21,6 +21,7 @@ import 'device_chip_micro.dart' show DeviceProbeBus;
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// كارت «معلومات الجهاز» — يفحص IP المشترك عند أوّل بناء ويعرض قياسات
 /// الجهاز. الشريحة 4 من إعادة التصميم (2026-08-29).
@@ -590,7 +591,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       showSheetSnack(context, blocked, isError: true);
       return;
     }
-    final changed = await showModalBottomSheet<bool>(
+    final changed = await showAppSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,

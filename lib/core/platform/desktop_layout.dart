@@ -58,3 +58,14 @@ class DeskAuthScope extends InheritedWidget {
   @override
   bool updateShouldNotify(DeskAuthScope old) => false;
 }
+
+/// ورقةٌ مفتوحةٌ نافذةً في وسط شاشة الحاسبة ([showAppSheet]): زواياها الأربع مدوّرة ولا مقبض سحب.
+class DeskDialogScope extends InheritedWidget {
+  const DeskDialogScope({super.key, required super.child});
+
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<DeskDialogScope>() != null;
+
+  @override
+  bool updateShouldNotify(DeskDialogScope old) => false;
+}

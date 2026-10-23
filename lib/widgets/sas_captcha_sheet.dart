@@ -9,6 +9,7 @@ import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'two_factor_sheet.dart';
+import '../core/widgets/app_sheet.dart';
 
 /// Pro: دخول الساس مع رمز الصورة **والتحقّق بخطوتين** — مكانٌ واحد لشاشة
 /// الدخول و«شركاتي» ومبدّل المدراء. بعض الساسات (الحياة عمارة…) تشترط رمز
@@ -37,7 +38,7 @@ class SasCaptchaLogin {
       if (r is! LoginFailure || !context.mounted) return r;
       if (r.needsCaptcha) {
         final first = r.captcha!;
-        r = await showModalBottomSheet<LoginResult>(
+        r = await showAppSheet<LoginResult>(
               context: context,
               isScrollControlled: true,
               backgroundColor: AppColors.surfaceSheet,

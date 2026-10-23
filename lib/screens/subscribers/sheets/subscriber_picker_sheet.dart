@@ -12,6 +12,7 @@ import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// Bottom sheet that lets the admin pick a subscriber to operate on.
 /// Used by the FAB → 'إضافة سريعة' shortcuts for تفعيل / تجديد /
@@ -27,7 +28,7 @@ Future<Subscriber?> showSubscriberPickerSheet(
   required String title,
   bool debtorsOnly = false,
 }) {
-  return showModalBottomSheet<Subscriber>(
+  return showAppSheet<Subscriber>(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,

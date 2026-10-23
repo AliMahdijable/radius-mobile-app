@@ -15,6 +15,7 @@ import '../../../theme/typography.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../core/util/amount_input.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// Unified pay-debt sheet — mirrors v1
 /// _PayDebtUnifiedSheet (mobile-app/lib/screens/managers_screen.dart:
@@ -33,7 +34,7 @@ Future<bool?> showPayDebtSheet(
   /// the summary so the sheet doesn't have to fetch it again.
   num initialCustomRemaining = 0,
 }) {
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,

@@ -7,6 +7,7 @@ import '../services/subscriber_events.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import 'desktop/desk_widgets.dart';
 
 /// «نطاق العرض» — يخفي مشتركي مدير فرعي أو ديونه من كلّ الشاشات.
 ///
@@ -147,14 +148,17 @@ class _ViewScopeScreenState extends State<ViewScopeScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.bg,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text('نطاق العرض',
-            style:
-                AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
-        iconTheme: IconThemeData(color: AppColors.textHi),
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.bg,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text('نطاق العرض',
+              style:
+                  AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
+          iconTheme: IconThemeData(color: AppColors.textHi),
+        ),
       ),
       body: _loading
           ? Center(child: CircularProgressIndicator(color: AppColors.brand))
