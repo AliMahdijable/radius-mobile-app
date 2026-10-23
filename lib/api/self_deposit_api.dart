@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/platform/app_platform.dart';
 import '../core/util/error_text.dart';
 import '../services/auth_storage.dart';
 import '../services/permissions_service.dart';
@@ -967,10 +968,14 @@ class SelfDepositState {
 
   /// البطاقة تُعرض؟ (مفتوحةً أو مقفلةً بسببها) — `false` ما لم يقل الخادم
   /// `enabled` صراحةً.
-  static bool get visible => gate.value?.enabled ?? false;
+  ///
+  /// ويندوز: مخفيّة — صفحة الدفع تحتاج WebView يلتقط رابط الرجوع قبل تحميله، ولا WebView
+  /// معتمدٌ لويندوز بعد (windows-app-plan). الشحن من الهاتف كما هو.
+  static bool get visible => !AppPlatform.isDesktop && (gate.value?.enabled ?? false);
 
   /// يجلب الحالة إن كانت قديمة. طلبٌ واحدٌ جارٍ على الأكثر، وبعد الفشل تبريد.
   static Future<void> ensureFresh({bool force = false}) {
+    if (AppPlatform.isDesktop) return Future<void>.value();
     final running = _inflight;
     if (running != null) return running;
     if (!force) {

@@ -10,6 +10,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'subscription_screen.dart';
+import '../../core/widgets/app_sheet.dart';
 
 /// حالة الحساب داخل التطبيق (بعد دخول الساس) — نداءٌ واحد كلّ ١٠ دقائق
 /// يكفي الشريط وكارت الإعدادات معاً.
@@ -99,7 +100,7 @@ class _SubscriptionChipState extends State<SubscriptionChip> {
             ? ''
             : 'account.banner_ends_on_neutral'.tr(args: [DateFormat('d MMMM y', context.locale.languageCode).format(ends)]))
         : (me.subscription.isTrial ? 'account.banner_trial_body' : 'account.banner_ending_body').tr();
-    showModalBottomSheet<void>(
+    showAppSheet<void>(
       context: context,
       backgroundColor: AppColors.surfaceSheet,
       barrierColor: AppColors.scrim,

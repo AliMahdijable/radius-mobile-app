@@ -12,6 +12,9 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'widgets/agent_code_tab.dart';
 import 'widgets/link_image_preview.dart';
+import '../desktop/desk_widgets.dart';
+import '../../core/widgets/app_sheet.dart';
+import '../../core/platform/desktop_layout.dart';
 
 /// شاشة "بوابة المشترك" — مطابقة PortalSettings.tsx في client-v2.
 /// tabs:
@@ -56,33 +59,36 @@ class _PortalSettingsScreenState extends State<PortalSettingsScreen>
     Theme.of(context); // theme-dep (dark-mode)
     final tab = _tab;
     return Scaffold(
-      backgroundColor: AppColors.surface,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        centerTitle: true,
-        title: Text(
-          'portal.title'.tr(),
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+      backgroundColor: DesktopScope.of(context) ? AppColors.bg : AppColors.surface,
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          centerTitle: true,
+          title: Text(
+            'portal.title'.tr(),
+            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+          ),
+          iconTheme: IconThemeData(color: AppColors.textHi),
+          bottom: tab == null
+              ? null
+              : TabBar(
+                  controller: tab,
+                  indicatorColor: AppColors.brand,
+                  labelColor: AppColors.brand,
+                  unselectedLabelColor: AppColors.textMid,
+                  labelStyle: AppType.button().copyWith(fontSize: 13),
+                  // ٣٢٠: ثلاث تسمياتٍ بعرضٍ متساوٍ لا تُقصّ («معلومات الشركة»
+                  // أطولها) — والحشوة الافتراضيّة ١٦ تأكل منها.
+                  labelPadding: const EdgeInsets.symmetric(horizontal: Sp.sm),
+                  tabs: [
+                    Tab(text: 'portal.tab_agent'.tr()),
+                    Tab(text: 'portal.tab_info'.tr()),
+                    Tab(text: 'portal.tab_packages'.tr()),
+                  ],
+                ),
         ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
-        bottom: tab == null
-            ? null
-            : TabBar(
-                controller: tab,
-                indicatorColor: AppColors.brand,
-                labelColor: AppColors.brand,
-                unselectedLabelColor: AppColors.textMid,
-                labelStyle: AppType.button().copyWith(fontSize: 13),
-                // ٣٢٠: ثلاث تسمياتٍ بعرضٍ متساوٍ لا تُقصّ («معلومات الشركة»
-                // أطولها) — والحشوة الافتراضيّة ١٦ تأكل منها.
-                labelPadding: const EdgeInsets.symmetric(horizontal: Sp.sm),
-                tabs: [
-                  Tab(text: 'portal.tab_agent'.tr()),
-                  Tab(text: 'portal.tab_info'.tr()),
-                  Tab(text: 'portal.tab_packages'.tr()),
-                ],
-              ),
       ),
       body: tab == null
           ? const AgentCodeTab()
@@ -599,7 +605,7 @@ class _PackagesTabState extends State<_PackagesTab> {
   }
 
   Future<void> _editPackage(PortalPackage p) async {
-    final result = await showModalBottomSheet<PortalPackage?>(
+    final result = await showAppSheet<PortalPackage?>(
       barrierColor: AppColors.scrim,
       context: context,
       isScrollControlled: true,

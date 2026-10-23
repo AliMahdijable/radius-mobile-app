@@ -1,0 +1,6 @@
+#include "../../Flutter/Flutter-Release.xcconfig"
+#include "Warnings.xcconfig"
+
+// Xcode 27: `lipo -verify_arch` accepts a single arch, so Flutter 3.44 fails its universal
+// (arm64 x86_64) framework check. The Mac build is a local test build: Apple silicon only.
+ARCHS = arm64

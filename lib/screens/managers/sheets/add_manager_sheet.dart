@@ -4,11 +4,12 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/managers_api.dart';
 import '../../../theme/colors.dart';
 import '_manager_form.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// إنشاء مدير فرعي جديد. الـform موحّد بين add/edit في
 /// _manager_form.dart، يفرّق فقط الـsubmit + العنوان.
 Future<bool?> showAddManagerSheet(BuildContext context) {
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,

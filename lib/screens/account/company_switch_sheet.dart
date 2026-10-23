@@ -15,6 +15,7 @@ import '../../widgets/active_company_line.dart';
 import 'account_gate_screen.dart';
 import 'company_open_flow.dart';
 import 'subscription_screen.dart';
+import '../../core/widgets/app_sheet.dart';
 
 /// «تبديل الشركة» من داخل التطبيق — طلب المالك ٢١ أكتوبر: «اريدك اضيف زر
 /// ثاني جنب زر تبديل بين المدراء بالتطبيق التبديل بين الشركات»، و«تنتبه لدينا
@@ -101,7 +102,7 @@ List<CompanyRowState> companyRowStates(
 /// (`pushAndRemoveUntil` في [CompanyOpenFlow]) والورقة فوقه.
 Future<void> showCompanySwitchSheet(BuildContext context) {
   HapticFeedback.selectionClick();
-  return showModalBottomSheet<void>(
+  return showAppSheet<void>(
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,

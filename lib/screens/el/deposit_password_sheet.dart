@@ -9,6 +9,7 @@ import '../../core/widgets/sheet_scaffold.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../core/widgets/app_sheet.dart';
 
 /// إعدادات باسورد إيداع ايرث لنك المحفوظ — لصاحب الحساب وحده (الإعدادات).
 ///
@@ -16,7 +17,7 @@ import '../../theme/typography.dart';
 /// بلا صرف)، ويُستعمل تلقائيّاً في التفعيل والإضافة بالرصيد والتحويل وكشف
 /// الحساب؛ الموظّفون يفعّلون به دون أن يروه.
 Future<void> showElDepositPasswordSheet(BuildContext context) {
-  return showModalBottomSheet<void>(
+  return showAppSheet<void>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,

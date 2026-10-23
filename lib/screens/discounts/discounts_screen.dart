@@ -14,6 +14,9 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'sheets/existing_discounts_sheet.dart';
+import '../desktop/desk_widgets.dart';
+import '../../core/platform/desktop_layout.dart';
+import '../desktop/desk_bulk_picker.dart';
 
 /// شاشة الخصومات — مطلب 2026-06-11 (تصميم جديد):
 ///   • الـscreen الأساسية = browse + apply: قيمة الخصم + بحث + جميع
@@ -320,17 +323,22 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
     final filtered = _filtered;
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          'الخصومات',
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text(
+            'الخصومات',
+            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+          ),
+          iconTheme: IconThemeData(color: AppColors.textHi),
         ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
       ),
-      body: SafeArea(
+      body: DesktopScope.of(context)
+          ? _desktopBody(filtered, accent)
+          : SafeArea(
         bottom: false,
         child: Column(
           children: [
@@ -404,8 +412,15 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
                           child: GridView.builder(
                             padding:
                                 const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, 90),
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
+                            gridDelegate: DesktopScope.of(context)
+                                // الحاسبة: خلايا بعرضٍ أقصى وارتفاعٍ ثابت — لا بطاقاتٌ طويلة فارغة.
+                                ? const SliverGridDelegateWithMaxCrossAxisExtent(
+                                    maxCrossAxisExtent: 280,
+                                    mainAxisExtent: 96,
+                                    crossAxisSpacing: Sp.sm,
+                                    mainAxisSpacing: Sp.sm,
+                                  )
+                                : const SliverGridDelegateWithFixedCrossAxisCount(
                               // مطلب 2026-06-11: cards أصغر — 3
                               // أعمدة + childAspectRatio أعلى = خلايا
                               // قصيرة، أكثر مشتركاً مرئياً في الشاشة.
@@ -436,13 +451,145 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
       // زرّ التطبيق ثابت أسفل الشاشة — زرّ النظام نفسه (SheetFooterBar)
       // كشاشة الأسعار، فيتطابق الشريطان. يتفعّل مع amount + مشتركين
       // مختارين، ويختفي كاملاً لمن لا يملك discounts.manage (يشاهد فقط).
-      bottomNavigationBar: !_canManage
+      bottomNavigationBar: !_canManage || DesktopScope.of(context)
           ? null
           : ColoredBox(
               color: AppColors.surface,
               child: SafeArea(
                 top: false,
-                child: SheetFooterBar(
+                child: deskFooter(
+                  context,
+                  SheetFooterBar(
+                    label: _submitting
+                        ? 'جاري التطبيق...'
+                        : (_amount > 0 && _selected.isNotEmpty
+                            ? 'تطبيق ${_fmt(_amount)} على ${_selected.length}'
+                            : 'تطبيق الخصم'),
+                    icon: LucideIcons.percent,
+                    color: accent,
+                    busy: _submitting,
+                    enabled: _amount > 0 && _selected.isNotEmpty,
+                    onPressed: _submit,
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+
+  // ============================================================
+  // الحاسبة: جدولٌ بتحديد + لوحةٌ جانبيّة للتطبيق والملخّص
+  // ============================================================
+
+  /// فلتر جدول الحاسبة: الكلّ · عليهم خصم · بلا خصم.
+  int _deskFilter = 0;
+
+  Widget _desktopBody(List<Subscriber> filtered, Color accent) {
+    final rows = switch (_deskFilter) {
+      1 => filtered.where((s) => (_existing[s.username.toLowerCase()] ?? 0) > 0).toList(),
+      2 => filtered.where((s) => (_existing[s.username.toLowerCase()] ?? 0) <= 0).toList(),
+      _ => filtered,
+    };
+    final allOn = rows.isNotEmpty && rows.every((s) => _selected.contains(s.username));
+    final muted = AppType.muted(color: AppColors.textMid).copyWith(fontSize: 13);
+    final money = AppType.label(color: AppColors.textBody).copyWith(fontSize: 13.5, fontWeight: FontWeight.w600);
+    return DeskBulkPicker(
+      searchController: _searchCtrl,
+      searchHint: 'ابحث عن مشترك بالاسم أو اليوزر أو الهاتف…',
+      filters: DeskSegmented<int>(
+        values: const [0, 1, 2],
+        labelOf: (v) => const ['الكلّ', 'عليهم خصم', 'بلا خصم'][v],
+        current: _deskFilter,
+        onChanged: (v) => setState(() => _deskFilter = v),
+      ),
+      columns: const [
+        DeskPickColumn('المشترك', flex: 3),
+        DeskPickColumn('الباقة', flex: 2),
+        DeskPickColumn('سعر الباقة', width: 120, align: AlignmentDirectional.centerEnd),
+        DeskPickColumn('الخصم', width: 110, align: AlignmentDirectional.center),
+        DeskPickColumn('سعر البيع', width: 120, align: AlignmentDirectional.centerEnd),
+      ],
+      rowCount: rows.length,
+      cellsOf: (i) {
+        final s = rows[i];
+        final d = _existing[s.username.toLowerCase()];
+        final hasName = s.fullName.trim().isNotEmpty && s.fullName != s.username;
+        final base = s.packageSalePrice;
+        final sale = s.saleAfter(d ?? 0);
+        return [
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(hasName ? s.fullName : s.username,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.label(color: AppColors.textHi).copyWith(fontSize: 14, fontWeight: FontWeight.w700)),
+              if (hasName)
+                Text(s.username, maxLines: 1, overflow: TextOverflow.ellipsis, textDirection: TextDirection.ltr, style: muted),
+            ],
+          ),
+          Text(s.profileName ?? '—', maxLines: 1, overflow: TextOverflow.ellipsis, style: muted),
+          Text(base == null ? '—' : formatIQD(base), style: money),
+          d != null && d > 0
+              ? Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: AppColors.warningSoftBg, borderRadius: BorderRadius.circular(R.sm)),
+                  child: Text('-${formatIQD(d)}', style: AppType.label(color: AppColors.warningOnSoft).copyWith(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                )
+              : Text('—', style: muted),
+          Text(sale == null ? '—' : formatIQD(sale),
+              style: money.copyWith(color: d != null && d > 0 ? AppColors.brandOnSoft : AppColors.textBody, fontWeight: FontWeight.w700)),
+        ];
+      },
+      selectedOf: (i) => _selected.contains(rows[i].username),
+      onToggle: _canManage ? (i) => _toggle(rows[i].username) : null,
+      allSelected: allOn,
+      onToggleAll: () => setState(() {
+        if (allOn) {
+          for (final s in rows) {
+            _selected.remove(s.username);
+          }
+        } else {
+          for (final s in rows) {
+            _selected.add(s.username);
+          }
+        }
+      }),
+      footer: _big && _bigSearch.total > filtered.length
+          ? '${_selected.length} محدد · ${rows.length} من ${_bigSearch.total}${_bigSearch.loadingMore ? ' · جارٍ تحميل المزيد…' : ''}'
+          : '${_selected.length} محدد · ${rows.length} نتيجة',
+      loading: _loading,
+      empty: _emptyState(),
+      onNearEnd: _big ? _bigMore : null,
+      panel: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_canManage)
+            DeskPanelCard(
+              title: 'تطبيق خصم',
+              icon: LucideIcons.percent,
+              accent: accent,
+              children: [
+                _amountField(accent),
+                const SizedBox(height: Sp.md),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _selected.isEmpty ? 'اختر مشتركين من الجدول' : '${_selected.length} مشترك محدّد',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppType.body(color: _selected.isEmpty ? AppColors.textMid : AppColors.textHi)
+                            .copyWith(fontSize: 13.5, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    if (_selected.isNotEmpty)
+                      TextButton(onPressed: _clearSelection, child: const Text('مسح التحديد')),
+                  ],
+                ),
+                const SizedBox(height: Sp.sm),
+                DeskWideButton(
                   label: _submitting
                       ? 'جاري التطبيق...'
                       : (_amount > 0 && _selected.isNotEmpty
@@ -451,11 +598,43 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
                   icon: LucideIcons.percent,
                   color: accent,
                   busy: _submitting,
-                  enabled: _amount > 0 && _selected.isNotEmpty,
-                  onPressed: _submit,
+                  onPressed: _amount > 0 && _selected.isNotEmpty ? _submit : null,
                 ),
-              ),
+              ],
             ),
+          DeskPanelCard(
+            title: 'الخصومات المطبّقة',
+            icon: LucideIcons.list,
+            accent: accent,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: DeskStat(value: '${_existing.length}', label: 'مشترك عليه خصم')),
+                  Expanded(child: DeskStat(value: formatIQD(_totalDiscount), label: 'إجمالي الخصومات (د.ع)')),
+                ],
+              ),
+              const SizedBox(height: Sp.md),
+              DeskWideButton(
+                label: 'عرض الخصومات الحالية',
+                icon: LucideIcons.list,
+                color: accent,
+                outlined: true,
+                onPressed: _openExistingDiscounts,
+              ),
+              if (_canManage) ...[
+                const SizedBox(height: Sp.sm),
+                DeskWideButton(
+                  label: 'حذف كلّ الخصومات',
+                  icon: LucideIcons.trash2,
+                  color: AppColors.error,
+                  outlined: true,
+                  onPressed: _existing.isNotEmpty ? _confirmDeleteAll : null,
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
     );
   }
 

@@ -21,6 +21,7 @@ import '../theme/typography.dart';
 import 'main_shell.dart';
 import 'account/account_gate_screen.dart';
 import 'account/employee_login_screen.dart';
+import 'desktop/desk_auth_frame.dart';
 
 /// First screen on launch. Decides where to route:
 ///   - Token + autoLogin enabled  → home (skipping login + perms)
@@ -217,7 +218,7 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return Scaffold(
+    return DeskAuthLayout.wrap(context, Scaffold(
       backgroundColor: AppColors.bg,
       body: Center(
         child: Column(
@@ -274,6 +275,6 @@ class _SplashScreenState extends State<SplashScreen> {
           ],
         ),
       ),
-    );
+    ));
   }
 }

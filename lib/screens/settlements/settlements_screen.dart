@@ -14,6 +14,7 @@ import '../../theme/typography.dart';
 import 'settle_widgets.dart';
 import 'sheets/settle_sheet.dart';
 import 'sheets/settlement_detail_sheet.dart';
+import '../desktop/desk_widgets.dart';
 
 /// «تسوية الحساب» — صندوق المدير (2026-10-02).
 ///
@@ -252,23 +253,26 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
     Theme.of(context); // theme-dep (dark-mode)
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          'settle.title'.tr(),
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
-        ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
-        actions: [
-          IconButton(
-            onPressed: _load,
-            tooltip: 'common.refresh'.tr(),
-            icon:
-                Icon(LucideIcons.refreshCw, size: 18, color: AppColors.textMid),
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text(
+            'settle.title'.tr(),
+            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
           ),
-        ],
+          iconTheme: IconThemeData(color: AppColors.textHi),
+          actions: [
+            IconButton(
+              onPressed: _load,
+              tooltip: 'common.refresh'.tr(),
+              icon:
+                  Icon(LucideIcons.refreshCw, size: 18, color: AppColors.textMid),
+            ),
+          ],
+        ),
       ),
       bottomNavigationBar: _footer(),
       body: SafeArea(

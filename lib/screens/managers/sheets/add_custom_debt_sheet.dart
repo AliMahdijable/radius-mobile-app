@@ -10,6 +10,7 @@ import '../../../theme/typography.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../core/util/amount_input.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// إضافة دين خارجي على مدير فرعي. مطابق v1 add-debt sheet
 /// (managers_screen.dart:3007). الـbackend يقوم بإرسال إشعار
@@ -18,7 +19,7 @@ Future<bool?> showAddCustomDebtSheet(
   BuildContext context,
   Manager manager,
 ) {
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,

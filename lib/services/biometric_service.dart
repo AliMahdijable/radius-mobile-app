@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
+import '../core/platform/app_platform.dart';
 
 /// قفل التطبيق بالبصمة / Face ID. التفعيل اختياري — لو الجهاز ما
 /// عنده biometrics مسجلة، الـtoggle يبقى معطّلاً.
@@ -82,8 +83,9 @@ class BiometricService {
     try {
       return await _auth.authenticate(
         localizedReason: reason,
-        options: const AuthenticationOptions(
-          biometricOnly: true,
+        options: AuthenticationOptions(
+          // ويندوز (Windows Hello) يرفض biometricOnly ويُرمي — هناك البصمة أو الوجه أو الرمز.
+          biometricOnly: !AppPlatform.isDesktop,
           stickyAuth: true,
         ),
       );

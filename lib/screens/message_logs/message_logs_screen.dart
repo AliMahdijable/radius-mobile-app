@@ -10,6 +10,8 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../core/util/server_time.dart';
+import '../desktop/desk_widgets.dart';
+import '../../core/widgets/app_sheet.dart';
 
 /// شاشة "حالة الرسائل" — نُقلت من v1 mobile-app/message_logs_screen.
 ///
@@ -150,7 +152,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
   }
 
   void _showDetail(MessageLog m) {
-    showModalBottomSheet(
+    showAppSheet(
       barrierColor: AppColors.scrim,
       context: context,
       isScrollControlled: true,
@@ -167,22 +169,25 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        title: Text(
-          'حالة الرسائل',
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
-        ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
-        actions: [
-          IconButton(
-            tooltip: 'تحديث',
-            icon:
-                Icon(LucideIcons.refreshCw, size: 18, color: AppColors.textMid),
-            onPressed: _loading ? null : () => _load(refresh: true),
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          title: Text(
+            'حالة الرسائل',
+            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
           ),
-        ],
+          iconTheme: IconThemeData(color: AppColors.textHi),
+          actions: [
+            IconButton(
+              tooltip: 'تحديث',
+              icon:
+                  Icon(LucideIcons.refreshCw, size: 18, color: AppColors.textMid),
+              onPressed: _loading ? null : () => _load(refresh: true),
+            ),
+          ],
+        ),
       ),
       body: Column(
         children: [

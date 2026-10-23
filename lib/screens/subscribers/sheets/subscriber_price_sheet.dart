@@ -14,6 +14,7 @@ import '../../../services/permissions_service.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// «أسعار المشتركين» — ضبط السعر الثابت لمشتركٍ واحد أو حذفه.
 ///
@@ -30,7 +31,7 @@ Future<bool?> showSubscriberPriceSheet(
   required String name,
   String? companyKey,
 }) {
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,

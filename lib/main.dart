@@ -2,10 +2,13 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'core/platform/app_platform.dart';
+import 'core/platform/desktop_layout.dart';
 import 'firebase_options.dart';
 import 'screens/notifications/in_app_notification_banner.dart';
 import 'screens/splash_screen.dart';
@@ -23,6 +26,9 @@ import 'services/notification_service.dart';
 import 'services/active_company.dart';
 import 'services/app_version.dart';
 import 'services/badge_service.dart';
+import 'services/client_diag.dart';
+import 'services/desktop_account_auth.dart';
+import 'services/desktop_file_secure_storage.dart';
 import 'services/permissions_service.dart';
 import 'services/print_prefs.dart';
 import 'services/provider_service.dart';
@@ -35,6 +41,10 @@ import 'theme/typography.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // الحاسبة: الخزنة ملفٌّ واحد بكتاباتٍ متتالية (desktop_file_secure_storage.dart) — قبل أيّ قراءة.
+  // الماك: سلسلة المفاتيح ترفض التوقيع المحلّيّ؛ ويندوز: ملفّ الإضافة يتصادم فيضيع التوكن.
+  if (AppPlatform.isMacDesktop) DesktopFileSecureStorage.installForMac();
+  if (AppPlatform.isWindows) DesktopFileSecureStorage.installForWindows();
 
   // easy_localization يحتاج init قبل runApp — يحمّل الـcache ويتأكّد إن
   // الـstorage جاهز حتى الـsaveLocale يشتغل من اللحظة الأولى. مطلب
@@ -87,10 +97,15 @@ void main() async {
     // قبل الشاشات حتى الـchip يعرض الوضع الصحيح من اللحظة الأولى.
     ManualWaPrefs.init(),
     UsagePrefs.init(),
+    // ويندوز: جلسة حساب Pro المحفوظة (بلا شبكة) قبل أن تقرّر شاشة البداية.
+    if (AppPlatform.isDesktop) DesktopAccountAuth.restore(),
     // Firebase — options baked في firebase_options.dart. Wrapped catchError
     // حتى TestFlight ما يصير white-screen لو plist مو registered.
     // 2026-08-05: أضفنا Crashlytics wiring داخل نفس الـchain — يبدأ
     // يجمع crashes فوراً بعد Firebase init. Zero overhead لو ما في crash.
+    // ويندوز: لا Firebase (نسخته لويندوز «ليست للاستعمال الحقيقيّ»، ولا Crashlytics فيه) —
+    // الحساب عبر DesktopAccountAuth، والأخطاء عبر _installDesktopErrorReport.
+    if (!AppPlatform.isDesktop)
     Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)
         .then((_) {
       NotificationService.markFirebaseReady(true);
@@ -117,6 +132,7 @@ void main() async {
     if (kDebugMode) debugPrint('🔴 تهيئة الإقلاع: $e\n$st');
   }
 
+  if (AppPlatform.isDesktop) _installDesktopErrorReport();
   _installDebugErrorAggregator();
 
   runApp(
@@ -138,6 +154,46 @@ void main() async {
   );
 }
 
+
+/// ويندوز بلا Crashlytics: كلّ خطأٍ جديد يصل الخادم مرّةً في التشغيل (سطرٌ في سجلّه عبر
+/// ClientDiag، بلا هويّة) — بدونه لا نعرف ما يتعطّل على حاسبات الوكلاء.
+void _installDesktopErrorReport() {
+  final seen = <String>{};
+  void report(Object error, StackTrace? stack) {
+    final text = error.toString();
+    // مكان الخطأ في كودنا أوّلاً: «Null check operator…» وحده (٢٣ أكتوبر) لا يدلّ على شاشة.
+    final where = desktopErrorWhere(stack);
+    final key = '$where|${text.length > 160 ? text.substring(0, 160) : text}';
+    if (seen.length > 50 || !seen.add(key)) return;
+    ClientDiag.report('windows_error',
+        code: error.runtimeType.toString(), message: where.isEmpty ? text : '$where | $text');
+  }
+
+  final previous = FlutterError.onError;
+  FlutterError.onError = (details) {
+    report(details.exception, details.stack);
+    previous?.call(details);
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    report(error, stack);
+    return true;
+  };
+}
+
+/// أوّل ثلاثة مواضع من كود التطبيق نفسه (`package:rad_mysvcs/…`) بملفّها وسطرها — بلا مسارات الجهاز
+/// ولا قيم: يكفي لمعرفة الشاشة والسطر من سجلّ الخادم (الرسالة تُقصّ عند ٣٠٠ حرف).
+@visibleForTesting
+String desktopErrorWhere(StackTrace? stack) {
+  if (stack == null) return '';
+  final re = RegExp(r'package:rad_mysvcs/([^ ):]+\.dart):(\d+)');
+  final out = <String>[];
+  for (final m in re.allMatches(stack.toString())) {
+    final f = '${m.group(1)}:${m.group(2)}';
+    if (!out.contains(f)) out.add(f);
+    if (out.length == 3) break;
+  }
+  return out.join(' ← ');
+}
 
 /// يطبع كلّ خطأ **فريد** مرّةً واحدة بأثره الكامل، ويكتم تكراره.
 ///
@@ -285,6 +341,9 @@ class _MyServicesAppState extends State<MyServicesApp>
 
         return MaterialApp(
           title: 'MyServices Pro',
+          // ويندوز: السحب بالفأرة يحرّك القوائم الأفقيّة والشرائح كما باللمس (فلاتر يحصره
+          // افتراضيّاً باللمس على سطح المكتب).
+          scrollBehavior: AppPlatform.isDesktop ? const _DesktopScrollBehavior() : null,
           debugShowCheckedModeBanner: false,
           themeMode: mode,
           theme: _buildTheme(Brightness.light),
@@ -319,7 +378,10 @@ class _MyServicesAppState extends State<MyServicesApp>
                 final f = FocusManager.instance.primaryFocus;
                 if (f != null && f.hasFocus) f.unfocus();
               },
-              child: _TabletFrame(child: child ?? const SizedBox.shrink()),
+              child: ValueListenableBuilder<bool>(
+                valueListenable: DesktopLayout.shellActive,
+                builder: (_, __, ___) => _TabletFrame(child: child ?? const SizedBox.shrink()),
+              ),
             ),
           ),
           home: const SplashScreen(),
@@ -457,6 +519,13 @@ class _TabletFrame extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     final mq = MediaQuery.of(context);
     if (mq.size.shortestSide < 600 || mq.size.width <= _maxWidth) return child;
+    // الحاسبة بغلافها العريض (DesktopShell): القائمة والمحتوى يأخذان النافذة كلّها.
+    if (DesktopLayout.shellActive.value) return child;
+    // الحاسبة قبل الغلاف (شاشات البداية): كلّ شاشةٍ ترسم لوحة العلامة بجانب نموذجها
+    // ([DeskAuthLayout]) — والـNavigator بعرض النافذة فتغطّيها النوافذ المنبثقة كاملة.
+    if (AppPlatform.isDesktop && mq.size.width >= DesktopLayout.minWidth) {
+      return DeskAuthScope(child: child);
+    }
     return ColoredBox(
       color: AppColors.bg,
       child: Center(
@@ -478,4 +547,17 @@ class _TabletFrame extends StatelessWidget {
       ),
     );
   }
+}
+
+class _DesktopScrollBehavior extends MaterialScrollBehavior {
+  const _DesktopScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => const {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.trackpad,
+        PointerDeviceKind.stylus,
+        PointerDeviceKind.invertedStylus,
+      };
 }

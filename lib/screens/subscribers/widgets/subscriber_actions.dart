@@ -7,6 +7,7 @@ import '../../../core/widgets/permission_locked.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// صفّ الإجراءات السريعة + شيت «إجراءات أخرى» — الشريحة 4 من مخطّط
 /// إعادة التصميم (2026-08-29).
@@ -280,7 +281,7 @@ Future<void> showMoreActionsSheet(
   required String subtitle,
   required List<SubActionGroup> groups,
 }) {
-  return showModalBottomSheet<void>(
+  return showAppSheet<void>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,

@@ -104,10 +104,12 @@ void main() {
     for (final f in dartFiles()) {
       final path = f.path.replaceAll(r'\', '/');
       final src = f.readAsStringSync();
-      if (!src.contains('showModalBottomSheet')) continue;
+      // ‏`showAppSheet` (٢٣ أكتوبر) يفتح كلّ ورقة: ورقةً على الهاتف ونافذةً على الحاسبة.
+      final call = RegExp(r'\b(showModalBottomSheet|showAppSheet)\b');
+      if (!call.hasMatch(src)) continue;
       final lines = src.split('\n');
       for (var i = 0; i < lines.length; i++) {
-        if (!lines[i].contains('showModalBottomSheet')) continue;
+        if (!call.hasMatch(lines[i])) continue;
         // أسطر التوثيق تذكر الاسم ولا تستدعيه.
         final t = lines[i].trimLeft();
         if (t.startsWith('//') || t.startsWith('///')) continue;

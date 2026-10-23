@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../api/deleted_debts_api.dart';
 import '../../core/util/amount_input.dart';
 import '../../core/util/format.dart';
+import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/permission_locked.dart';
 import '../../core/widgets/sheet_scaffold.dart';
@@ -575,7 +576,7 @@ class _ActionButton extends StatelessWidget {
 // ═══════════════════════════ الشيتات ═══════════════════════════
 
 Future<bool?> _showSheet(BuildContext context, Widget sheet) {
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,

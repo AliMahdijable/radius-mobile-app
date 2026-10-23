@@ -26,6 +26,10 @@ import '../theme/typography.dart';
 import 'account/account_gate_screen.dart';
 import 'account/my_devices_screen.dart';
 import 'main_shell.dart';
+import '../core/platform/app_platform.dart';
+import '../core/platform/desktop_layout.dart';
+import '../core/widgets/app_sheet.dart';
+import 'desktop/desk_auth_frame.dart';
 
 /// Login — Soft Pastel + Premium. Wired to https://rad.mysvcs.net/api/auth/login.
 /// Persists token on success via AuthStorage. On failure shows a snackbar.
@@ -210,7 +214,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _openPicker() async {
     HapticFeedback.selectionClick();
     final items = _directory ?? const <DirectoryCompany>[];
-    final choice = await showModalBottomSheet<Object>(
+    final choice = await showAppSheet<Object>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.surfaceSheet,
@@ -410,8 +414,8 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final ok = await auth.authenticate(
         localizedReason: 'login.biometric_reason'.tr(),
-        options: const AuthenticationOptions(
-          biometricOnly: true,
+        options: AuthenticationOptions(
+          biometricOnly: !AppPlatform.isDesktop,
           stickyAuth: true,
         ),
       );
@@ -431,7 +435,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return Scaffold(
+    return DeskAuthLayout.wrap(context, Scaffold(
       backgroundColor: AppColors.bg,
       // resizeToAvoidBottomInset lets the layout shift up when the keyboard
       // appears — without ConstrainedBox/Spacer fighting the new constraints.
@@ -539,7 +543,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -683,6 +687,8 @@ class _Logo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    // الحاسبة: الشعار في لوحة العلامة بجانب النموذج.
+    if (DeskAuthScope.of(context)) return const SizedBox.shrink();
     // Tint the logo brand-green using BlendMode.modulate via ColorFilter.
     // The logo is violet shapes on a transparent/white background.
     // We render it inside a ShaderMask that:
@@ -728,13 +734,14 @@ class _BrandTitle extends StatelessWidget {
     return Column(
       children: [
         Text(
-          'MyServices Pro',
+          // الحاسبة: الاسم في لوحة العلامة — هنا عنوان النموذج.
+          DeskAuthScope.of(context) ? 'login.welcome'.tr() : 'MyServices Pro',
           textAlign: TextAlign.center,
           style: AppType.title(color: AppColors.textHi),
         ),
         const SizedBox(height: Sp.xs),
         Text(
-          'login.subtitle'.tr(),
+          DeskAuthScope.of(context) ? 'desktop.auth_company_hint'.tr() : 'login.subtitle'.tr(),
           textAlign: TextAlign.center,
           style: AppType.subtitle(color: AppColors.textMid),
         ),
@@ -1035,7 +1042,10 @@ class _Footer extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     return Center(
       child: Text(
-        '${AppVersion.shortVersion}  •  ${'login.footer_copyright'.tr()}',
+        // الحاسبة: الإصدار في لوحة العلامة بجانب النموذج — لا يتكرّر.
+                    DeskAuthScope.of(context)
+                        ? 'login.footer_copyright'.tr()
+                        : '${AppVersion.shortVersion}  •  ${'login.footer_copyright'.tr()}',
         style: AppType.muted(color: AppColors.textLow),
       ),
     );

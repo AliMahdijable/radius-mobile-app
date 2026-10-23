@@ -22,6 +22,7 @@ import '../../../widgets/manual_wa_chip.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// اسم تطبيق المشترك كما يراه على هاتفه في المتجرين: «MyServices» (كان «MySub»،
 /// وأبل طلبت ترك الاسم القديم) — كـ`SubscriberApp.name` في تبويب «رمز الوكيل».
@@ -57,7 +58,7 @@ String qrWhatsAppText({required String greet, required String link}) =>
 /// من **داخل** تطبيق MyServices فيسجّل دخول تلقائياً بلا كتابة username/password
 /// (كاميرا الهاتف تفتح بطاقة المعلومات وحدها).
 Future<void> showQrLoginSheet(BuildContext context, Subscriber sub) {
-  return showModalBottomSheet(
+  return showAppSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,

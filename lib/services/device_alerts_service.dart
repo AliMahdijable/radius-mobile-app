@@ -120,9 +120,23 @@ class DeviceAlertsService {
       requestBadgePermission: false,
       requestSoundPermission: false,
     );
-    await _notifications.initialize(
-      const InitializationSettings(android: androidInit, iOS: iosInit),
+    // ويندوز يرمي بلا إعداداته (اسم + معرّف التطبيق + GUID ثابتٌ لا يتغيّر أبداً — به يعرف
+    // ويندوز إشعارات هذا البرنامج).
+    const windowsInit = WindowsInitializationSettings(
+      appName: 'MyServices Pro',
+      appUserModelId: 'MyServices.MyServicesPro',
+      guid: 'ce03d489-16ca-4fec-8cfc-95b07a9c437d',
     );
+    // إشعارات النظام إضافةٌ لا شرط: منصّةٌ لا تملك إضافتها (اختبار، نظامٌ ناقص) لا تُسقط
+    // التنبيهات داخل التطبيق ولا الشاشة التي استدعت التهيئة.
+    try {
+      await _notifications.initialize(
+        const InitializationSettings(
+            android: androidInit, iOS: iosInit, macOS: iosInit, windows: windowsInit),
+      );
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ DeviceAlertsService notifications init failed: $e');
+    }
 
     // Load من SharedPreferences
     try {
@@ -145,17 +159,23 @@ class DeviceAlertsService {
   /// (بدل عند startup — عشان المستخدم يعرف ليش نطلبها).
   Future<bool> requestPermission() async {
     if (!_initialized) await init();
-    // Android 13+
-    final androidGranted = await _notifications
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
-    // iOS
-    final iosGranted = await _notifications
-        .resolvePlatformSpecificImplementation<
-            IOSFlutterLocalNotificationsPlugin>()
-        ?.requestPermissions(alert: true, badge: true, sound: true);
-    return (androidGranted ?? true) && (iosGranted ?? true);
+    try {
+      // Android 13+
+      final androidGranted = await _notifications
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestNotificationsPermission();
+      // iOS
+      final iosGranted = await _notifications
+          .resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin>()
+          ?.requestPermissions(alert: true, badge: true, sound: true);
+      return (androidGranted ?? true) && (iosGranted ?? true);
+    } catch (e) {
+      // منصّةٌ بلا إضافة الإشعارات — التنبيهات داخل التطبيق تبقى.
+      if (kDebugMode) debugPrint('⚠️ DeviceAlertsService permission failed: $e');
+      return false;
+    }
   }
 
   /// النقطة الرئيسيّة — يُستدعى بعد كل probe. يرصد التغيّرات.

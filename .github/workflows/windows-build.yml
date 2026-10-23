@@ -1,0 +1,124 @@
+# نسخة ويندوز — لا تُبنى على الماك (أدوات فلاتر لويندوز تحتاج ويندوز + Visual Studio)،
+# فتُبنى هنا على خادم ويندوز عند كلّ دفعٍ لفرع app-windows.
+#
+# الناتج: مثبّتٌ بملفٍّ واحد (MyServicesPro_Setup_*.exe — هو ما يُعطى للمستخدم) + الحزمة المضغوطة.
+# مكانان:
+#  - «Artifacts» في صفحة التشغيل (للتنزيل من المتصفّح).
+#  - فرع ci/windows: سجلّ البناء + المثبّت + الحزمة، يُستبدل كاملاً في كلّ تشغيل
+#    (آخر بناءٍ وحده) — يُجلب بـ git fetch عبر SSH بلا توكن.
+name: windows-build
+
+on:
+  push:
+    branches: [app-windows]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.0
+          cache: true
+
+      - name: Versions
+        run: |
+          flutter --version
+          grep -m1 '^version:' pubspec.yaml
+
+      # pubspec.lock مُثبَّت في هذا الفرع (git-ignored في الفرع الرئيسيّ): الحلّ الجديد جلب
+      # image-4.11.0 مرّةً فكسر البناء — نبني بنفس النسخ التي تُختبر على الماك.
+      - name: Pub get
+        run: flutter pub get --enforce-lockfile
+
+      - name: Build (release, x64)
+        run: |
+          set -o pipefail
+          flutter build windows --release 2>&1 | tee build.log
+
+      - name: Package
+        id: pkg
+        run: |
+          set -e
+          ver=$(grep -m1 '^version:' pubspec.yaml | awk '{print $2}' | tr '+' '_')
+          name="MyServicesPro_windows_x64_${ver}_${GITHUB_SHA::8}.zip"
+          rel=build/windows/x64/runner/Release
+          # تشغيل مايكروسوفت (VC++) بجانب البرنامج: حاسبةٌ بلا «Visual C++ Redistributable» لا تفتحه
+          # (docs.flutter.dev — Distributing Windows apps).
+          for dll in msvcp140.dll vcruntime140.dll vcruntime140_1.dll; do
+            cp "/c/Windows/System32/$dll" "$rel/"
+          done
+          # بقايا الربط لا تلزم التشغيل (~٢٠ ميگا).
+          rm -f "$rel"/*.lib "$rel"/*.exp
+          (cd "$rel" && 7z a -tzip -mx=9 "$GITHUB_WORKSPACE/$name" . > /dev/null)
+          ls -la "$name"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      # مثبّتٌ بملفٍّ واحد (Inno Setup) — الـzip يُشغَّل خطأً من داخله فلا يجد ملفّاته.
+      - name: Installer
+        id: setup
+        env:
+          # Git Bash يحوّل «/D…» إلى مسار — ISCC يريدها كما هي.
+          MSYS2_ARG_CONV_EXCL: '*'
+        run: |
+          set -e
+          iscc="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          if [ ! -f "$iscc" ]; then choco install innosetup -y --no-progress > /dev/null; fi
+          full=$(grep -m1 '^version:' pubspec.yaml | awk '{print $2}')
+          ver=${full%%+*}
+          build=${full##*+}
+          "$iscc" /Q "/DMyAppVersion=$ver" "/DMyAppBuild=$build" 'windows\installer\MyServicesPro.iss'
+          setup=$(ls dist/MyServicesPro_Setup_*.exe)
+          ls -la "$setup"
+          echo "path=$setup" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pkg.outputs.name }}
+          path: ${{ steps.pkg.outputs.name }}
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MyServicesPro_Setup
+          path: ${{ steps.setup.outputs.path }}
+          retention-days: 14
+
+      - name: Publish to ci/windows
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          mkdir -p ci_out
+          [ -f build.log ] && cp build.log ci_out/ || echo "no build log" > ci_out/build.log
+          cp MyServicesPro_windows_*.zip ci_out/ 2>/dev/null || true
+          cp dist/MyServicesPro_Setup_*.exe ci_out/ 2>/dev/null || true
+          {
+            echo "sha=${GITHUB_SHA}"
+            echo "status=${JOB_STATUS}"
+            echo "run=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } > ci_out/RESULT.txt
+          cd ci_out
+          git init -q
+          git config user.name "windows-ci"
+          git config user.email "windows-ci@users.noreply.github.com"
+          git checkout -q -b ci/windows
+          git add -A
+          git commit -qm "windows build ${GITHUB_SHA::8} — ${JOB_STATUS}"
+          git push -qf "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ci/windows

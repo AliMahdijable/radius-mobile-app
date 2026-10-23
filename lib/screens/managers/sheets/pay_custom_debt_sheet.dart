@@ -11,6 +11,7 @@ import '../../../theme/typography.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../core/util/amount_input.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// تسديد جزئي/كلي لدين خارجي + عرض الدفعات السابقة. مطابق v1
 /// _PayDebtUnifiedSheet (لمصدر custom debt).
@@ -19,7 +20,7 @@ Future<bool?> showPayCustomDebtSheet(
   Manager manager,
   ManagerDebt debt,
 ) {
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,

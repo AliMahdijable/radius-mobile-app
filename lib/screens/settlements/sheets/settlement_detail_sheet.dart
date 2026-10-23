@@ -11,6 +11,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../settle_widgets.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// سند التسوية: اللقطة، وحصص المنفّذين، والحركات، والطباعة، والإلغاء.
 /// يُرجع `true` حين أُلغي السجلّ (فتعيد الشاشة الحساب).
@@ -20,7 +21,7 @@ Future<bool?> showSettlementDetailSheet(
   required int? headId,
   required bool canVoid,
 }) {
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
@@ -358,7 +359,7 @@ class _DetailSheetState extends State<_DetailSheet> {
 
 /// سبب الإلغاء — إلزاميّ، ثلاثة أحرف على الأقلّ (كالخادم).
 Future<String?> _askVoidReason(BuildContext context, {required bool opening}) {
-  return showModalBottomSheet<String>(
+  return showAppSheet<String>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,

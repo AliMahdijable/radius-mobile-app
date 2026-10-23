@@ -22,6 +22,7 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../widgets/package_picker_field.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// متى تتغيّر باقة مشتركٍ **فعّال** في SAS4 — خيار الساس نفسه (`user/changeProfile`
 /// بـ`change_type`)، بقرار المالك ١٨ أكتوبر. غير الفعّال «حالاً» وحدها كالساس.
@@ -120,7 +121,7 @@ Future<bool?> showEditSubscriberSheet(
   BuildContext context,
   Subscriber sub,
 ) {
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,
@@ -1032,7 +1033,7 @@ class _EditSheetState extends State<_EditSheet> {
             enabled: !_saving,
             icon: LucideIcons.phone,
             keyboardType: TextInputType.phone,
-            suffix: IconButton(
+            suffix: !ContactPicker.supported ? null : IconButton(
               icon: const Icon(LucideIcons.contact, size: 18),
               color: AppColors.brand,
               visualDensity: VisualDensity.compact,

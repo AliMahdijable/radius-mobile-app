@@ -10,6 +10,8 @@ import '../../theme/spacing.dart';
 import '../../widgets/skeleton.dart';
 import '../../theme/typography.dart';
 import '../../core/util/error_text.dart';
+import '../../core/widgets/app_sheet.dart';
+import '../desktop/desk_widgets.dart';
 
 /// شاشة إدارة مناطق الأجهزة — قائمة + إضافة + تعديل + حذف.
 /// راجع [[project_devices_monitoring_plan]].
@@ -56,7 +58,7 @@ class _RegionsScreenState extends State<RegionsScreen> {
   }
 
   Future<void> _openForm({DeviceRegion? initial}) async {
-    final result = await showModalBottomSheet<DeviceRegion>(
+    final result = await showAppSheet<DeviceRegion>(
       barrierColor: AppColors.scrim,
       context: context,
       isScrollControlled: true,
@@ -130,34 +132,37 @@ class _RegionsScreenState extends State<RegionsScreen> {
       },
       child: Scaffold(
         backgroundColor: AppColors.bg,
-        appBar: AppBar(
-          title: const Text('مناطق الأجهزة'),
-          backgroundColor: AppColors.surface,
-          foregroundColor: AppColors.textHi,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(LucideIcons.arrowRight, size: 20),
-            onPressed: () => Navigator.pop(context, _mutated),
-          ),
-          actions: [
-            Padding(
-              padding: const EdgeInsets.only(left: 4, right: 8),
-              child: Material(
-                color: AppColors.brand,
-                shape: const CircleBorder(),
-                child: InkWell(
-                  onTap: () => _openForm(),
-                  customBorder: const CircleBorder(),
-                  child: const SizedBox(
-                    width: 36,
-                    height: 36,
-                    child: Icon(LucideIcons.plus,
-                        size: 18, color: AppColors.onBrand),
+        appBar: deskPageBar(
+          context,
+          mobile: AppBar(
+            title: const Text('مناطق الأجهزة'),
+            backgroundColor: AppColors.surface,
+            foregroundColor: AppColors.textHi,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(LucideIcons.arrowRight, size: 20),
+              onPressed: () => Navigator.pop(context, _mutated),
+            ),
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(left: 4, right: 8),
+                child: Material(
+                  color: AppColors.brand,
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    onTap: () => _openForm(),
+                    customBorder: const CircleBorder(),
+                    child: const SizedBox(
+                      width: 36,
+                      height: 36,
+                      child: Icon(LucideIcons.plus,
+                          size: 18, color: AppColors.onBrand),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         body: _loading
             ? ListView.separated(

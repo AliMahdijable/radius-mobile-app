@@ -7,6 +7,7 @@ import '../../../services/subscriber_usage_store.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 enum SortField {
   username,
@@ -59,6 +60,9 @@ const _fieldDefs = <(SortField, String, IconData)>[
   (SortField.deviceLan, 'sort.device_lan', LucideIcons.cable),
 ];
 
+/// حقول الفرز بترتيب الورقة — لقائمة الترتيب المنسدلة على الحاسبة.
+List<SortField> get sortFieldOptions => [for (final d in _fieldDefs) d.$1];
+
 /// تسمية حقل الفرز المترجَمة — يستعملها شريط النتيجة أعلى القائمة
 /// ليعرض «الأيام المتبقية» بجانب سهم الاتجاه (مطابق للمخطّط).
 String sortFieldLabel(SortField f) {
@@ -73,7 +77,7 @@ Future<({SortField field, SortDirection direction})?> showSortSheet(
   required SortField currentField,
   required SortDirection currentDirection,
 }) {
-  return showModalBottomSheet<({SortField field, SortDirection direction})>(
+  return showAppSheet<({SortField field, SortDirection direction})>(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,

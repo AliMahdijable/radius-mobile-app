@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/platform/app_platform.dart';
 import '../services/auth_storage.dart';
 import '../services/device_id.dart';
 import '../services/employee_session.dart';
@@ -143,7 +144,7 @@ class _AuthInterceptor extends Interceptor {
       options.headers['x-device-id'] = await DeviceId.get();
     } catch (_) {/* لا يُفشل الطلب */}
     // نوع الجهاز لوصفه في «أجهزتي» (لاتينيّ: الترويسات لا تحمل العربيّة بأمان؛ الخادم يعرّبه).
-    options.headers['x-device-label'] = Platform.isIOS ? 'ios' : 'android';
+    options.headers['x-device-label'] = AppPlatform.deviceLabel;
     // «كل الشركات»: نداءٌ لشركةٍ من شركات الحساب — توكن الحساب وحده + مفتاحها (lib/api/company_route.dart). لا Bearer الشركة
     // المفتوحة: الخادم يرفض الهويّتين معاً (COMPANY_ROUTE_CONFLICT)، ولا يصل الهاتفَ توكنُ الشركة أبداً.
     final routeKey = CompanyRoute.keyFor(options);

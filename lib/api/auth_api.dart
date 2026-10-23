@@ -1,9 +1,9 @@
 import 'dart:convert';
-import 'dart:io' show Platform;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/platform/app_platform.dart';
 import '../services/account_service.dart';
 import '../services/auth_storage.dart';
 import '../services/device_id.dart';
@@ -669,7 +669,7 @@ class AuthApi {
         options: Options(headers: {
           'x-account-token': accountToken,
           if (deviceId != null && deviceId.isNotEmpty) 'x-device-id': deviceId,
-          'x-device-label': Platform.isIOS ? 'ios' : 'android',
+          'x-device-label': AppPlatform.deviceLabel,
         }),
       );
       dio.close();

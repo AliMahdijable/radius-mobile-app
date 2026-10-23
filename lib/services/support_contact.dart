@@ -6,6 +6,7 @@ import '../api/account_api.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import '../core/widgets/app_sheet.dart';
 
 /// Pro البند ٤: «تواصل معنا» — تيليجرام/واتساب كما يضبطهما المالك.
 ///
@@ -27,7 +28,7 @@ class SupportContact {
       return;
     }
     if (tg != null && wa != null) {
-      final pick = await showModalBottomSheet<Uri>(
+      final pick = await showAppSheet<Uri>(
         context: context,
         backgroundColor: AppColors.surfaceSheet,
         barrierColor: AppColors.scrim,

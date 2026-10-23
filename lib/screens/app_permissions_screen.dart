@@ -8,6 +8,7 @@ import '../services/notification_service.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import 'desktop/desk_widgets.dart';
 
 /// شاشة "صلاحيات التطبيق" — تجمع الأذونات الخاصة بالتطبيق نفسه:
 ///   • إشعارات النظام (FCM push) — toggle يطلب OS permission أو يفتح
@@ -176,14 +177,17 @@ class _AppPermissionsScreenState extends State<AppPermissionsScreen>
     Theme.of(context); // theme-dep (dark-mode)
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.bg,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text('settings.permissions'.tr(),
-            style:
-                AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
-        iconTheme: IconThemeData(color: AppColors.textHi),
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.bg,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text('settings.permissions'.tr(),
+              style:
+                  AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
+          iconTheme: IconThemeData(color: AppColors.textHi),
+        ),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

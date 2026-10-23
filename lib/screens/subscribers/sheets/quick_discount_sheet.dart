@@ -12,6 +12,7 @@ import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// Bottom sheet for setting/removing a subscriber's package discount —
 /// port of v1's `_showQuickDiscountSheet`. Layout:
@@ -31,7 +32,7 @@ import '../../../core/widgets/sheet_scaffold.dart';
 ///      a red 'حذف الخصم' when the field is cleared on a sub that
 ///      already has a discount set.
 Future<bool?> showQuickDiscountSheet(BuildContext context, Subscriber sub) {
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,

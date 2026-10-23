@@ -11,6 +11,7 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../widgets/skeleton.dart';
 import '../cards_widgets.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// كارتات سلسلة — غير المستعمل أوّلاً، والمستعمل لمن ومتى، بصفحاتٍ من ٥٠.
 ///
@@ -18,7 +19,7 @@ import '../cards_widgets.dart';
 /// والنموذج لا يملك حقلاً لغيرها. والقراءة من الساس بطيئة (~٢ث للصفحة)،
 /// فرأس الشيت يُرسم فوراً ممّا في الملخّص والهيكل مكان القائمة.
 Future<void> showSeriesCardsSheet(BuildContext context, CardSeries series) {
-  return showModalBottomSheet<void>(
+  return showAppSheet<void>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,

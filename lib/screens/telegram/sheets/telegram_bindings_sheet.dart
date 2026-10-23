@@ -10,6 +10,7 @@ import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// telegramBindingsSheet — قائمة المشتركين المربوطين ببوت تلغرام.
 /// - بحث نصّي (اسم / يوزر / phone)
@@ -20,7 +21,7 @@ Future<void> showTelegramBindingsSheet(
   required String adminId,
   required VoidCallback onChanged,
 }) {
-  return showModalBottomSheet(
+  return showAppSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,

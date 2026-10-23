@@ -15,6 +15,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'whatsapp_templates_screen.dart';
 import 'widgets/send_scope_panel.dart';
+import '../desktop/desk_widgets.dart';
 
 /// شاشة حالة WhatsApp — تعرض حالة الاتصال + QR للربط + قائمة
 /// الـtoggles لكل المسارات التلقائية + رابط لقوالب الواتساب.
@@ -397,15 +398,18 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
     const accent = AppColors.channelWhatsApp;
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          'settings.whatsapp'.tr(),
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text(
+            'settings.whatsapp'.tr(),
+            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+          ),
+          iconTheme: IconThemeData(color: AppColors.textHi),
         ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       body: SafeArea(
         child: RefreshIndicator(

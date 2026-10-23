@@ -11,6 +11,8 @@ import '../../core/widgets/design_sheet.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../core/widgets/app_sheet.dart';
+import '../desktop/desk_widgets.dart';
 
 /// Bulk scanner — يفحص /24 subnet بالتوازي على 6 ports شائعة،
 /// يعرض النتائج live، ويسمح للمستخدم يختار أجهزة يضيفها دفعة واحدة.
@@ -248,7 +250,7 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
     }
 
     // Sheet قبل الإضافة — يجمع region + creds + prefix تُطبّق على كل المُحدَّد
-    final opts = await showModalBottomSheet<_BulkAddOptions>(
+    final opts = await showAppSheet<_BulkAddOptions>(
       barrierColor: AppColors.scrim,
       context: context,
       isScrollControlled: true,
@@ -367,14 +369,17 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
       },
       child: Scaffold(
         backgroundColor: AppColors.bg,
-        appBar: AppBar(
-          title: const Text('اكتشاف الأجهزة'),
-          backgroundColor: AppColors.surface,
-          foregroundColor: AppColors.textHi,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(LucideIcons.arrowRight, size: 20),
-            onPressed: () => Navigator.pop(context, _mutated > 0),
+        appBar: deskPageBar(
+          context,
+          mobile: AppBar(
+            title: const Text('اكتشاف الأجهزة'),
+            backgroundColor: AppColors.surface,
+            foregroundColor: AppColors.textHi,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(LucideIcons.arrowRight, size: 20),
+              onPressed: () => Navigator.pop(context, _mutated > 0),
+            ),
           ),
         ),
         body: Column(children: [

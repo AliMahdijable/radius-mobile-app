@@ -9,6 +9,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'sheets/add_custom_debt_sheet.dart';
 import 'sheets/pay_custom_debt_sheet.dart';
+import '../desktop/desk_widgets.dart';
 
 /// شاشة "ديون أخرى" لمدير فرعي محدد. مطابق v1
 /// manager_debts_provider + manager_movements_screen. تعرض:
@@ -101,15 +102,18 @@ class _ManagerCustomDebtsScreenState extends State<ManagerCustomDebtsScreen> {
     final accent = AppColors.brandAccent;
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          'ديون ${widget.manager.username}',
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text(
+            'ديون ${widget.manager.username}',
+            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+          ),
+          iconTheme: IconThemeData(color: AppColors.textHi),
         ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: accent,

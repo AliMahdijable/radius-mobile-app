@@ -14,6 +14,7 @@ import '../../services/receipt_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../desktop/desk_widgets.dart';
 
 /// شاشة "قوالب الطباعة" — **read-only** على الموبايل.
 /// التحرير من الويب (rad.mysvcs.net/v2/print-templates). الموبايل يعرض
@@ -139,22 +140,25 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        title: Text(
-          'print_templates.title'.tr(),
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
-        ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
-        actions: [
-          IconButton(
-            tooltip: 'common.refresh'.tr(),
-            icon:
-                Icon(LucideIcons.refreshCw, size: 18, color: AppColors.textHi),
-            onPressed: _loading ? null : _load,
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          title: Text(
+            'print_templates.title'.tr(),
+            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
           ),
-        ],
+          iconTheme: IconThemeData(color: AppColors.textHi),
+          actions: [
+            IconButton(
+              tooltip: 'common.refresh'.tr(),
+              icon:
+                  Icon(LucideIcons.refreshCw, size: 18, color: AppColors.textHi),
+              onPressed: _loading ? null : _load,
+            ),
+          ],
+        ),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

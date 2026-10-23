@@ -6,6 +6,7 @@ import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// telegramBulkLinksSheet — إرسال رابط الربط لكل مشترك عبر واتساب.
 /// Dry-run أوّلاً (يعرض عدد المؤهّلين)، ثم confirm للإرسال الفعلي.
@@ -14,7 +15,7 @@ Future<void> showTelegramBulkLinksSheet(
   required String adminId,
   required VoidCallback onDone,
 }) {
-  return showModalBottomSheet(
+  return showAppSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,

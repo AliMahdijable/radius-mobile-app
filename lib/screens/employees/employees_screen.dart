@@ -17,6 +17,8 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'sheets/employee_editor_sheet.dart';
+import '../desktop/desk_widgets.dart';
+import '../../core/platform/desktop_layout.dart';
 
 /// شاشة الموظفين — مديرو الفرع يدخلون عبر حساب رئيسي، والموظفون
 /// الفرعيون يحصلون على صلاحيات محددة. القائمة + add/edit/delete.
@@ -187,16 +189,28 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     final isEl = _isEarthlink;
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text('الموظفون',
-            style:
-                AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
-        iconTheme: IconThemeData(color: AppColors.textHi),
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text('الموظفون',
+              style:
+                  AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
+          iconTheme: IconThemeData(color: AppColors.textHi),
+        ),
+        primary: (_catalog == null || !Perms.has('employees.manage'))
+            ? null
+            : DeskPrimaryButton(
+                icon: LucideIcons.userPlus,
+                label: 'موظف جديد',
+                onTap: () => _openEditor(),
+              ),
       ),
-      floatingActionButton: (_catalog == null || !Perms.has('employees.manage'))
+      floatingActionButton: (DesktopScope.of(context) ||
+              _catalog == null ||
+              !Perms.has('employees.manage'))
           ? null
           : FloatingActionButton.extended(
               backgroundColor: accent,
@@ -220,26 +234,28 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                               bottom:
                                   MediaQuery.paddingOf(context).bottom + 96),
                           children: [
-                            _compactHero(accent, isEl: isEl),
-                            for (final e in _rows)
-                              _EmployeeTile(
-                                emp: e,
-                                // ايرث لنك: ما يملكه الموظف فعلاً — مفاتيح
-                                // ايرث لنك وحدها؛ لا قيد بمدير فرعي هناك.
-                                permsCount: isEl
-                                    ? ElEmployeePerms.activeCount(e.permissions)
-                                    : e.activePermsCount,
-                                showScope: !isEl,
-                                onTap: Perms.has('employees.manage')
-                                    ? () => _openEditor(employee: e)
-                                    : null,
-                                onDelete: Perms.has('employees.manage')
-                                    ? () => _confirmDelete(e)
-                                    : null,
-                                onShowPassword: Perms.has('employees.manage')
-                                    ? () => _showEmployeePassword(e)
-                                    : null,
-                              ),
+                            DeskSection(children: [_compactHero(accent, isEl: isEl)]),
+                            DeskSection(children: [
+                              for (final e in _rows)
+                                _EmployeeTile(
+                                  emp: e,
+                                  // ايرث لنك: ما يملكه الموظف فعلاً — مفاتيح
+                                  // ايرث لنك وحدها؛ لا قيد بمدير فرعي هناك.
+                                  permsCount: isEl
+                                      ? ElEmployeePerms.activeCount(e.permissions)
+                                      : e.activePermsCount,
+                                  showScope: !isEl,
+                                  onTap: Perms.has('employees.manage')
+                                      ? () => _openEditor(employee: e)
+                                      : null,
+                                  onDelete: Perms.has('employees.manage')
+                                      ? () => _confirmDelete(e)
+                                      : null,
+                                  onShowPassword: Perms.has('employees.manage')
+                                      ? () => _showEmployeePassword(e)
+                                      : null,
+                                ),
+                            ]),
                           ],
                         ),
         ),

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../core/platform/app_platform.dart';
 import '../../core/util/format.dart';
 import '../../models/merged_company.dart';
 import '../../services/merged_mode.dart';
@@ -35,13 +36,18 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../subscribers/widgets/filter_chips_bar.dart';
 import '../top_actions.dart';
+import 'widgets/desktop_overview.dart';
+import 'widgets/desk_status_bars.dart';
+import 'widgets/desk_revenue_chart.dart';
 import 'widgets/hero_revenue_card.dart';
 import 'widgets/recent_activities.dart';
 import '../account/subscription_banner.dart';
 import '../whatsapp/whatsapp_status_screen.dart';
 import 'widgets/section_header.dart';
+import '../desktop/desk_widgets.dart';
 import 'widgets/stats_grid.dart';
 import 'widgets/subscribers_card.dart';
+import '../reports/financial_report_screen.dart';
 
 /// Dashboard with a SLIVER-pinned header — header stays on screen while
 /// the body scrolls underneath. All data is LIVE — there are no mock
@@ -651,6 +657,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return 'dashboard.welcome_evening'.tr();
   }
 
+  /// عمود «آخر النشاطات» على الحاسبة: العنوان ثمّ البطاقة تمتدّ لارتفاع جارتها (الإيرادات).
+  Widget _deskStretch(Widget activities) {
+    if (activities is! Column || activities.children.length < 2) return activities;
+    final kids = activities.children;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [kids.first, Expanded(child: kids[1])],
+    );
+  }
+
+  /// رسم الإيرادات على الحاسبة: بمفتاح المال وظهور القسم، وللشركة المفتوحة وحدها («كل الشركات» لها
+  /// بطاقتها المجمَّعة).
+  bool get _deskRevenueChart => _canMoney && _shown('revenue') && !MergedMode.active.value;
+
+  /// توزيع المشتركين على الحاسبة — حين تصل أرقامهم.
+  bool get _deskDistribution => _canSubs && _shown('subscribers') && _subscribersStats != null;
+
   SubscribersStats? get _subscribersStats {
     if (!_debtorsLoaded) return null;
     if (_debtorsLive == null) return null;
@@ -696,6 +719,101 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    // الحاسبة (منطقة محتوى عريضة): المشتركون بجانب الرصيد والإيرادات بدل عمودٍ واحدٍ يتمدّد.
+    final wide = AppPlatform.isDesktop && MediaQuery.sizeOf(context).width >= 860;
+    final subscribersSection = !_shown('subscribers')
+        ? null
+        : (_canSubs
+                ? SubscribersCard(
+                    stats: _subscribersStats,
+                    onOpen: widget.onOpenSubscribers,
+                  )
+                : LockedCard(
+                    title: 'nav.subscribers'.tr(),
+                    icon: LucideIcons.users,
+                    block: true,
+                    // ارتفاع البطاقة الحيّة (هيكلها المقيس).
+                    height: 285,
+                    radius: R.card,
+                    padding: const EdgeInsets.all(Sp.xl),
+                  ))
+            .animate()
+            .fadeIn(duration: const Duration(milliseconds: 280))
+            .slideY(begin: 0.03, end: 0);
+    // الرصيد يتبع reports.financial والمدينون subscribers.view — كلٌّ نصفٌ مستقلّ، والمحجوب منهما يبقى
+    // مكانه مقفلاً.
+    final walletSection = !_shown('wallet')
+        ? null
+        : StatsGrid(
+            wallet: _walletLoaded ? _walletLive : null,
+            debtors: _debtorsLoaded ? _debtorsLive : null,
+            balanceLocked: !_canMoney,
+            debtLocked: !_canSubs,
+            onOpenDebtors: () => widget.onOpenSubscribers?.call(SubscriberFilter.debtors),
+          )
+            .animate()
+            .fadeIn(
+              delay: const Duration(milliseconds: 80),
+              duration: const Duration(milliseconds: 280),
+            )
+            .slideY(begin: 0.03, end: 0);
+    // الكارت يجلب بنفسه (`reports/finance`)، فعدم بنائه يُسقط نداءه. ⚠️ المقفل لا يبني
+    // `HeroRevenueCard` أصلاً — `initState` فيه يُطلق النداء.
+    final revenueSection = !_shown('revenue')
+        ? null
+        : (_canMoney ? const HeroRevenueCard() : LockedCard(title: 'dashboard.revenue'.tr()))
+            .animate()
+            .fadeIn(
+              delay: const Duration(milliseconds: 160),
+              duration: const Duration(milliseconds: 280),
+            )
+            .slideY(begin: 0.03, end: 0);
+    final activitiesSection = !_shown('activities')
+        ? null
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+                    SectionHeader(
+                      // المقفل لا يُجلب فلا «تعذّر» يُكتب في عنوانه أبداً.
+                      label: !_canActivity || !_activationsLoaded
+                          ? 'dashboard.recent_activity_label'.tr()
+                          : _activationsLive == null
+                              ? 'dashboard.recent_activity_fetch_failed'.tr()
+                              : 'dashboard.recent_activity_label'.tr(),
+                      // مطلب المستخدم 2026-07-12: زر "عرض الكل" ينقل
+                      // لسجل النشاط الكامل. الـPermissionGate يتأكد من
+                      // reports.activity_log؛ لو الموظف بلا صلاحية يرى
+                      // شاشة رفض بدل الشاشة الفارغة. وموظّف ايرث لنك بلاها
+                      // يرى الزرّ مقفلاً — ما دام المفتاح ممّا يُمنح له.
+                      trailingLabel: _canActivity &&
+                              (_canActivityLog ||
+                                  permShown(const ['reports.activity_log']))
+                          ? 'dashboard.view_all'.tr()
+                          : null,
+                      trailingLocked: !_canActivityLog,
+                      onTrailingTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const ActivityLogReportScreen(),
+                        ),
+                      ),
+                    ),
+                    if (!_canActivity)
+                      const _ActivitiesLocked()
+                    else if (!_activationsLoaded)
+                      const _ActivitiesLoading()
+                    else if (_activationsLive == null)
+                      const _ActivitiesError()
+                    else if (_activationsLive!.recent.isEmpty)
+                      const _NoActivitiesYet()
+                    else
+                      RecentActivities(items: _activationsLive!.recent)
+                          .animate()
+                          .fadeIn(
+                            delay: const Duration(milliseconds: 240),
+                            duration: const Duration(milliseconds: 280),
+                          ),
+            ],
+          );
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: RefreshIndicator(
@@ -715,6 +833,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
         },
         child: CustomScrollView(
           slivers: [
+            // الحاسبة: رأس صفحةٍ كالموقع — الاسم والشركة وأزرار الأعلى في شريط الغلاف العلويّ.
+            if (wide)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.xl, Sp.lg, Sp.lg),
+                  child: DeskPageHeader(
+                    title: 'desktop.title_dashboard'.tr(),
+                    subtitle: DeskSubtitle(
+                        '${deskToday()} · ${'desktop.dashboard_subtitle'.tr()}'),
+                    actions: [
+                      if (_shown('wa_banner') &&
+                          _canWa &&
+                          !(Perms.isEmployee && _waLoaded && _waLive == null))
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: Perms.has('whatsapp.connect') ? _openWhatsApp : null,
+                          child: _WAStatusChip(status: _waStatus, loaded: _waLoaded),
+                        ),
+                      if (!_elEmployee) const SubscriptionChip(),
+                      DeskIconButton(
+                        icon: LucideIcons.refreshCw,
+                        tooltip: 'desktop.refresh'.tr(),
+                        onTap: () => Future.wait(
+                            [_loadIdentity(), _refreshLive(fresh: true)]),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
             SliverPersistentHeader(
               pinned: true,
               delegate: _PinnedHeaderDelegate(
@@ -784,100 +932,85 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   // (بلاغ ٢٠٢٦-١٠-١٤) — لا اختفاء يترك فراغاً، ولا نداء.
                   // ⚠️ التفرّع على `_canSubs` **قبل** حالة التحميل: المقفل لا
                   // يجلب، فلو بُني الحيّ لبقي على هيكله دوّارةً أبداً.
-                  if (_shown('subscribers'))
-                    (_canSubs
-                            ? SubscribersCard(
-                                stats: _subscribersStats,
-                                onOpen: widget.onOpenSubscribers,
-                              )
-                            : LockedCard(
-                                title: 'nav.subscribers'.tr(),
-                                icon: LucideIcons.users,
-                                block: true,
-                                // ارتفاع البطاقة الحيّة (هيكلها المقيس).
-                                height: 285,
-                                radius: R.card,
-                                padding: const EdgeInsets.all(Sp.xl),
-                              ))
-                        .animate()
-                        .fadeIn(duration: const Duration(milliseconds: 280))
-                        .slideY(begin: 0.03, end: 0),
-                  // ⚠️ الفراغ خارج الشرط كما كان: المالك الذي أخفى القسم من
-                  // «نطاق العرض» يرى المسافات نفسها حرفيّاً.
-                  const SizedBox(height: Sp.md),
-                  // الرصيد يتبع reports.financial والمدينون subscribers.view —
-                  // كلٌّ نصفٌ مستقلّ، والمحجوب منهما يبقى مكانه مقفلاً.
-                  if (_shown('wallet'))
-                    StatsGrid(
-                      wallet: _walletLoaded ? _walletLive : null,
-                      debtors: _debtorsLoaded ? _debtorsLive : null,
-                      balanceLocked: !_canMoney,
-                      debtLocked: !_canSubs,
-                      onOpenDebtors: () => widget.onOpenSubscribers
-                          ?.call(SubscriberFilter.debtors),
-                    )
-                        .animate()
-                        .fadeIn(
-                          delay: const Duration(milliseconds: 80),
-                          duration: const Duration(milliseconds: 280),
-                        )
-                        .slideY(begin: 0.03, end: 0),
-                  const SizedBox(height: Sp.md),
-                  // الكارت يجلب بنفسه (`reports/finance`)، فعدم بنائه
-                  // يُسقط نداءه بلا تبويبٍ إضافيّ.
-                  // ⚠️ المقفل لا يبني `HeroRevenueCard` أصلاً — `initState`
-                  // فيه يُطلق النداء. ورأسه نقطةٌ لا أيقونة كالكارت الحيّ.
-                  if (_shown('revenue'))
-                    (_canMoney
-                            ? const HeroRevenueCard()
-                            : LockedCard(title: 'dashboard.revenue'.tr()))
-                        .animate()
-                        .fadeIn(
-                          delay: const Duration(milliseconds: 160),
-                          duration: const Duration(milliseconds: 280),
-                        )
-                        .slideY(begin: 0.03, end: 0),
-                  if (_shown('activities'))
-                    SectionHeader(
-                      // المقفل لا يُجلب فلا «تعذّر» يُكتب في عنوانه أبداً.
-                      label: !_canActivity || !_activationsLoaded
-                          ? 'dashboard.recent_activity_label'.tr()
-                          : _activationsLive == null
-                              ? 'dashboard.recent_activity_fetch_failed'.tr()
-                              : 'dashboard.recent_activity_label'.tr(),
-                      // مطلب المستخدم 2026-07-12: زر "عرض الكل" ينقل
-                      // لسجل النشاط الكامل. الـPermissionGate يتأكد من
-                      // reports.activity_log؛ لو الموظف بلا صلاحية يرى
-                      // شاشة رفض بدل الشاشة الفارغة. وموظّف ايرث لنك بلاها
-                      // يرى الزرّ مقفلاً — ما دام المفتاح ممّا يُمنح له.
-                      trailingLabel: _canActivity &&
-                              (_canActivityLog ||
-                                  permShown(const ['reports.activity_log']))
-                          ? 'dashboard.view_all'.tr()
-                          : null,
-                      trailingLocked: !_canActivityLog,
-                      onTrailingTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const ActivityLogReportScreen(),
+                  if (wide) ...[
+                    // الحاسبة: صفّ الأرقام الرئيسيّة + شريط الحالات، ثمّ الإيرادات بجانب آخر النشاطات.
+                    if (_shown('subscribers') || _shown('wallet'))
+                      DesktopOverview(
+                        stats: _canSubs ? _subscribersStats : null,
+                        wallet: _walletLoaded ? _walletLive : null,
+                        debtors: _debtorsLoaded ? _debtorsLive : null,
+                        subsLocked: !_canSubs,
+                        balanceLocked: !_canMoney,
+                        debtLocked: !_canSubs,
+                        showSubscribers: _shown('subscribers'),
+                        showWallet: _shown('wallet'),
+                        onOpen: widget.onOpenSubscribers,
+                      ).animate().fadeIn(duration: const Duration(milliseconds: 280)),
+                    const SizedBox(height: Sp.md),
+                    // الرسوم كالموقع: الإيرادات ٣٠ يوماً (المال، والشركة المفتوحة وحدها) بجانب توزيع المشتركين.
+                    if (_deskRevenueChart || _deskDistribution) ...[
+                      IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (_deskRevenueChart) const Expanded(flex: 7, child: DeskRevenueChart()),
+                            if (_deskRevenueChart && _deskDistribution) const SizedBox(width: Sp.md),
+                            if (_deskDistribution)
+                              Expanded(
+                                flex: 5,
+                                child: DeskStatusBars(
+                                  stats: _subscribersStats!,
+                                  onOpen: widget.onOpenSubscribers,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ).animate().fadeIn(duration: const Duration(milliseconds: 280)),
+                      const SizedBox(height: Sp.md),
+                    ],
+                    // الإيرادات وآخر النشاطات: عنوانٌ بالارتفاع نفسه فوق كلٍّ منهما، والبطاقتان تبدآن وتنتهيان
+                    // على خطٍّ واحد (بلاغ المالك ٢٣ أكتوبر: «منشزة ويّ الإيرادات»).
+                    if (revenueSection != null || activitiesSection != null)
+                      IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (revenueSection != null)
+                              Expanded(
+                                flex: 5,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    SectionHeader(
+                                      label: 'desktop.revenue_header'.tr(),
+                                      trailingLabel: _canMoney ? 'desktop.financial_report'.tr() : null,
+                                      onTrailingTap: () => Navigator.of(context).push(
+                                        MaterialPageRoute(builder: (_) => const FinancialReportScreen()),
+                                      ),
+                                    ),
+                                    Expanded(child: revenueSection),
+                                  ],
+                                ),
+                              ),
+                            if (revenueSection != null && activitiesSection != null)
+                              const SizedBox(width: Sp.md),
+                            if (activitiesSection != null)
+                              Expanded(flex: 7, child: _deskStretch(activitiesSection)),
+                          ],
                         ),
                       ),
-                    ),
-                  if (_shown('activities'))
-                    if (!_canActivity)
-                      const _ActivitiesLocked()
-                    else if (!_activationsLoaded)
-                      const _ActivitiesLoading()
-                    else if (_activationsLive == null)
-                      const _ActivitiesError()
-                    else if (_activationsLive!.recent.isEmpty)
-                      const _NoActivitiesYet()
-                    else
-                      RecentActivities(items: _activationsLive!.recent)
-                          .animate()
-                          .fadeIn(
-                            delay: const Duration(milliseconds: 240),
-                            duration: const Duration(milliseconds: 280),
-                          ),
+                  ] else ...[
+                    // أعلى كلّ شيء عمداً: انقطاع الجلسة يوقف كلّ تنبيهات المشتركين وفواتيرهم، فلا يجوز أن
+                    // يُقرأ بعد الأرقام. موظّفٌ بلا مفتاح القسم: إطار البطاقة نفسه مقفلاً — لا اختفاء يترك
+                    // فراغاً، ولا نداء.
+                    if (subscribersSection != null) subscribersSection,
+                    // ⚠️ الفراغ خارج الشرط كما كان: المالك الذي أخفى القسم من «نطاق العرض» يرى المسافات نفسها.
+                    const SizedBox(height: Sp.md),
+                    if (walletSection != null) walletSection,
+                    const SizedBox(height: Sp.md),
+                    if (revenueSection != null) revenueSection,
+                  ],
+                  if (!wide && activitiesSection != null) activitiesSection,
                   // ⚠️ لو أُخفي كلّ شيء لا تُترك الشاشة بيضاء: المدير
                   // لن يعرف أنّه هو من أخفاها، وسيظنّها معطوبة.
                   // (والموظّف بلا مفاتيح لا يصل هنا: أقسامه مقفلةٌ في أماكنها.)

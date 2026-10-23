@@ -10,6 +10,7 @@ import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// نوع العملية المختارة من actions sheet. الـcaller (managers_screen)
 /// يفتح الـsheet المناسب بناءً على القيمة المرجعة. مطابق v1
@@ -86,7 +87,7 @@ Future<ManagerAction?> showManagerActionsSheet(
   Manager manager, {
   double customDebt = 0,
 }) {
-  return showModalBottomSheet<ManagerAction>(
+  return showAppSheet<ManagerAction>(
     barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,

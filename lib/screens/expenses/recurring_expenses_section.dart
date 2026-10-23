@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../api/recurring_expenses_api.dart';
 import '../../core/util/amount_input.dart';
 import '../../core/util/format.dart';
+import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../theme/colors.dart';
@@ -29,7 +30,7 @@ class RecurringExpensesSection extends StatefulWidget {
 
 String _money(num v) => '${formatIQD(v)} ${'common.currency'.tr()}';
 
-Future<T?> _sheet<T>(BuildContext context, Widget sheet) => showModalBottomSheet<T>(
+Future<T?> _sheet<T>(BuildContext context, Widget sheet) => showAppSheet<T>(
       context: context,
       backgroundColor: Colors.transparent,
       barrierColor: AppColors.scrim,

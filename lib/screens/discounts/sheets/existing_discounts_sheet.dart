@@ -12,6 +12,7 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import 'edit_discount_sheet.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// عرض الخصومات الحالية فقط (المشتركون الذين لديهم خصم). الـscreen
 /// الأساسية لقسم الخصومات صارت تطبيق + browse؛ هذه الـsheet تجاوب
@@ -19,7 +20,7 @@ import '../../../core/widgets/sheet_scaffold.dart';
 ///
 /// يرجّع `true` لو تم تعديل/حذف شيء (الـcaller يعيد التحميل).
 Future<bool?> showExistingDiscountsSheet(BuildContext context) {
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,

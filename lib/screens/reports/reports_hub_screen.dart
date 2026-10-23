@@ -19,6 +19,8 @@ import 'deleted_debts_screen.dart';
 import 'financial_report_screen.dart';
 import 'sessions_report_screen.dart';
 import '../../widgets/merged_company_strip.dart';
+import '../desktop/desk_widgets.dart';
+import '../../core/platform/desktop_layout.dart';
 
 /// شاشة hub للتقارير — 7 كروت تنقل لكل تقرير منفصل.
 /// تستبدل reports_screen.dart placeholder "تأتي قريباً".
@@ -205,20 +207,24 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
 
         return Scaffold(
           backgroundColor: AppColors.bg,
-          appBar: AppBar(
-            backgroundColor: AppColors.surface,
-            elevation: 0,
-            scrolledUnderElevation: 0,
-            title: Text(
-              'reports.title'.tr(),
-              style:
-                  AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+          appBar: deskPageBar(
+            context,
+            mobile: AppBar(
+              backgroundColor: AppColors.surface,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              title: Text(
+                'reports.title'.tr(),
+                style:
+                    AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+              ),
+              iconTheme: IconThemeData(color: AppColors.textHi),
             ),
-            iconTheme: IconThemeData(color: AppColors.textHi),
           ),
           body: SafeArea(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.huge),
+              padding: EdgeInsets.fromLTRB(
+                  Sp.lg, DesktopScope.of(context) ? Sp.xs : Sp.lg, Sp.lg, Sp.huge),
               children: [
                 // «كل الشركات»: الماليّ لكل الشركات، والبقيّة للشركة المفتوحة — تُسمّى
                 const MergedOpenCompanyNote(
@@ -227,6 +233,9 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
                 ),
                 if (tiles.isEmpty)
                   _emptyState()
+                else if (DesktopScope.of(context))
+                  // الحاسبة: شبكة بطاقاتٍ بثلاثة أعمدة كالموقع بدل قائمةٍ بعرض الشاشة.
+                  DeskGrid(children: tiles)
                 else
                   for (int i = 0; i < tiles.length; i++) ...[
                     if (i > 0) const SizedBox(height: Sp.sm),
@@ -286,6 +295,7 @@ class _ReportCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    final desk = DesktopScope.of(context);
     final card = Material(
       color: AppColors.surface,
       borderRadius: BorderRadius.circular(R.lg),
@@ -299,7 +309,8 @@ class _ReportCard extends StatelessWidget {
               },
         borderRadius: BorderRadius.circular(R.lg),
         child: Container(
-          padding: const EdgeInsets.all(Sp.md),
+          padding: EdgeInsets.all(desk ? Sp.xl : Sp.md),
+          constraints: BoxConstraints(minHeight: desk ? 104 : 0),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(R.lg),
             border: Border.all(color: AppColors.border),
@@ -307,8 +318,8 @@ class _ReportCard extends StatelessWidget {
           child: Row(
             children: [
               Container(
-                width: 44,
-                height: 44,
+                width: desk ? 48 : 44,
+                height: desk ? 48 : 44,
                 decoration: BoxDecoration(
                   color:
                       locked ? LockedStyle.box : color.withValues(alpha: 0.14),
@@ -331,7 +342,7 @@ class _ReportCard extends StatelessWidget {
                       style: AppType.label(
                         color: locked ? LockedStyle.title : AppColors.textHi,
                       ).copyWith(
-                        fontSize: 14,
+                        fontSize: desk ? 16 : 14,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -341,7 +352,7 @@ class _ReportCard extends StatelessWidget {
                       style: AppType.muted(
                         color:
                             locked ? LockedStyle.subtitle : AppColors.textMid,
-                      ).copyWith(fontSize: 11.5, height: 1.4),
+                      ).copyWith(fontSize: desk ? 13 : 11.5, height: 1.4),
                     ),
                   ],
                 ),

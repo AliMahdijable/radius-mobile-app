@@ -2,12 +2,17 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 
+import '../platform/app_platform.dart';
+
 /// Wraps `flutter_contacts`'s OS-presented contact picker so the
 /// add/edit subscriber sheets can pull a phone number from the
 /// device's address book without re-typing. Works on both iOS
 /// (Contacts framework) and Android (ContactsContract).
 class ContactPicker {
   ContactPicker._();
+
+  /// لا دليل أسماء على ويندوز (flutter_contacts بلا تطبيقٍ له) ⇒ الزرّ لا يظهر هناك.
+  static bool get supported => !AppPlatform.isDesktop;
 
   /// Result: (phone, error). `error` is null on success or user-cancel.
   /// When set, callers should show the message to the user instead of

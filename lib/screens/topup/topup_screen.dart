@@ -23,6 +23,7 @@ import '../../theme/typography.dart';
 import 'pay_nav_policy.dart';
 import 'topup_pay_page.dart';
 import 'topup_widgets.dart';
+import '../desktop/desk_widgets.dart';
 
 /// «شحن رصيد الصفحة» — الإيداع الذاتيّ في الساس من التطبيق.
 ///
@@ -524,21 +525,24 @@ class _TopupScreenState extends State<TopupScreen> {
     Theme.of(context); // theme-dep (dark-mode)
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        iconTheme: IconThemeData(color: AppColors.textHi),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('شحن رصيد الصفحة',
-                style: AppType.title(color: AppColors.textHi)
-                    .copyWith(fontSize: 16)),
-            Text('ايداع مالي في صفحتك بالساس',
-                style: AppType.muted().copyWith(fontSize: 11)),
-          ],
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          iconTheme: IconThemeData(color: AppColors.textHi),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('شحن رصيد الصفحة',
+                  style: AppType.title(color: AppColors.textHi)
+                      .copyWith(fontSize: 16)),
+              Text('ايداع مالي في صفحتك بالساس',
+                  style: AppType.muted().copyWith(fontSize: 11)),
+            ],
+          ),
         ),
       ),
       body: SafeArea(

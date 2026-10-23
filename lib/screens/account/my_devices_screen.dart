@@ -11,6 +11,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'account_widgets.dart';
+import '../../core/widgets/app_sheet.dart';
 
 /// «أجهزتي» (Pro — حدّ الأجهزة): الأجهزة النشطة للحساب، وإزالة واحدٍ منها
 /// لتحرير مكانه. الحدّ = شركات الباقة + ١، و«نشط» = ظهر خلال ٣٠ يوماً.
@@ -532,7 +533,7 @@ class _DeviceTile extends StatelessWidget {
 ///
 /// [message] رسالة الخادم — منها حدّ الباقة إن ذكرته («… (3) — …»).
 Future<bool> showDeviceLimitSheet(BuildContext context, {String? message}) async {
-  final r = await showModalBottomSheet<bool>(
+  final r = await showAppSheet<bool>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,

@@ -13,6 +13,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// Sheet إنشاء/تعديل موظف. tab1 = معلومات، tab2 = صلاحيات. الـpresets
 /// (3 افتراضية من backend: cashier/assistant_manager/viewer) تطبّق
@@ -30,7 +31,7 @@ Future<bool?> showEmployeeEditorSheet(
   bool isEarthlink = false,
   VoidCallback? onCreated,
 }) {
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,

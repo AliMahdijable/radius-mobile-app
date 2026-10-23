@@ -8,6 +8,7 @@ import '../services/provider_service.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import 'desktop/desk_widgets.dart';
 
 /// تنبيه «دين على مدير فرعي» لهذه الجلسة؟ شركات SAS4 نعم؛ ايرث لنك والمشروع
 /// الوطنيّ (FTTH) لا مدراء فرعيّين لهما ولا ديون مدراء، فلا يقع أبداً.
@@ -114,14 +115,17 @@ class _NotificationsSettingsScreenState
     final p = _prefs;
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.bg,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text('notifications.title'.tr(),
-            style:
-                AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
-        iconTheme: IconThemeData(color: AppColors.textHi),
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.bg,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text('notifications.title'.tr(),
+              style:
+                  AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
+          iconTheme: IconThemeData(color: AppColors.textHi),
+        ),
       ),
       body: _loading || p == null
           ? const Center(child: CircularProgressIndicator())

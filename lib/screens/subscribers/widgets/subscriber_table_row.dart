@@ -1,0 +1,1090 @@
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../../core/util/format.dart';
+import '../../../core/util/phone.dart';
+import '../../../core/widgets/permission_locked.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
+import '../../../models/subscriber.dart';
+import '../../../services/permissions_service.dart';
+import '../../../services/subscriber_usage_store.dart';
+import '../../../theme/colors.dart';
+import '../../../theme/spacing.dart';
+import '../../../theme/typography.dart';
+import '../sheets/activate_sheet.dart';
+import '../sheets/add_debt_sheet.dart';
+import '../sheets/consumption_sheet.dart';
+import '../sheets/edit_subscriber_sheet.dart';
+import '../sheets/extend_sheet.dart';
+import '../sheets/movements_sheet.dart';
+import '../sheets/pay_debt_sheet.dart';
+import '../sheets/quick_discount_sheet.dart';
+import '../sheets/subscriber_price_sheet.dart';
+import 'sort_sheet.dart';
+import 'subscriber_card_v3.dart';
+import 'subscriber_columns.dart';
+
+/// أعمدة جدول المشتركين على هذا العرض: ما اختاره المدير من زرّ «الأعمدة» بترتيبه، ناقصاً ما لا
+/// يتّسع (يسقط الأقلّ أولويّةً أوّلاً — والمتبقّي والرصيد لا يسقطان).
+class SubscriberTableColumns {
+  const SubscriberTableColumns({required this.shown, required this.dropped});
+
+  final List<SubCol> shown;
+
+  /// أعمدةٌ مختارة لم تتّسع — يُذكر عددها بجانب زرّ «الأعمدة».
+  final int dropped;
+
+  bool has(SubCol c) => shown.contains(c);
+
+  static const double stripe = 4;
+  static const double check = 40;
+  static const double avatar = 52;
+  static const double nameMin = 180;
+  static const double actions = 104;
+
+  static SubscriberTableColumns forWidth(double width) {
+    final r = SubscriberColumnPrefs.fit(
+      width,
+      reserved: stripe + check + avatar + nameMin + actions + 2 * Sp.md,
+    );
+    return SubscriberTableColumns(shown: r.shown, dropped: r.dropped);
+  }
+}
+
+/// رأس الجدول: تسمياتٌ خافتة، وما يُرتَّب به سهمٌ يدلّ على الترتيب الحاليّ واتّجاهه — نقرةٌ ترتّب
+/// ونقرةٌ ثانية تعكس.
+class SubscriberTableHeader extends StatelessWidget {
+  const SubscriberTableHeader({
+    super.key,
+    required this.columns,
+    required this.sortField,
+    required this.descending,
+    required this.onSort,
+    required this.allSelected,
+    required this.onSelectAll,
+  });
+
+  final SubscriberTableColumns columns;
+  final SortField sortField;
+  final bool descending;
+  final ValueChanged<SortField> onSort;
+  final bool allSelected;
+  final VoidCallback onSelectAll;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    Widget label(String text, {SortField? field, Alignment align = Alignment.centerRight}) {
+      final active = field != null && field == sortField;
+      final style = AppType.muted(color: active ? AppColors.textHi : AppColors.textMid)
+          .copyWith(fontSize: 13, fontWeight: FontWeight.w700);
+      final row = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(child: Text(text, style: style, maxLines: 1, overflow: TextOverflow.ellipsis)),
+          if (field != null) ...[
+            const SizedBox(width: 4),
+            Icon(
+              active
+                  ? (descending ? LucideIcons.arrowDown : LucideIcons.arrowUp)
+                  : LucideIcons.arrowUpDown,
+              size: 13,
+              color: active ? AppColors.brandAccent : AppColors.textLow,
+            ),
+          ],
+        ],
+      );
+      final aligned = Align(alignment: _directional(align), child: row);
+      if (field == null) return aligned;
+      return Tooltip(
+        message: 'desktop.sort_by'.tr(args: [text]),
+        waitDuration: const Duration(milliseconds: 600),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => onSort(field),
+            child: aligned,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      height: 48,
+      padding: const EdgeInsetsDirectional.only(end: Sp.md),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSunken,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(R.lg)),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: SubscriberTableColumns.stripe + Sp.sm - 4),
+          SizedBox(
+            width: SubscriberTableColumns.check,
+            child: _CheckBox(value: allSelected, onTap: onSelectAll),
+          ),
+          const SizedBox(width: SubscriberTableColumns.avatar),
+          Expanded(flex: 5, child: label('desktop.col_name'.tr(), field: SortField.firstname)),
+          for (final c in columns.shown)
+            _cellBox(
+              c,
+              label(c.label, field: c.sortField, align: _alignOf(c)),
+            ),
+          const SizedBox(width: SubscriberTableColumns.actions),
+        ],
+      ),
+    );
+  }
+}
+
+Alignment _alignOf(SubCol c) => switch (c) {
+      SubCol.package || SubCol.expiration || SubCol.remaining => Alignment.center,
+      SubCol.balance => Alignment.centerLeft,
+      _ => Alignment.centerRight,
+    };
+
+/// محاذاة بالاتّجاه: «بداية» السطر يمينٌ بالعربيّة.
+AlignmentDirectional _directional(Alignment a) => a == Alignment.center
+    ? AlignmentDirectional.center
+    : a == Alignment.centerLeft
+        ? AlignmentDirectional.centerEnd
+        : AlignmentDirectional.centerStart;
+
+Widget _cellBox(SubCol c, Widget child) {
+  final w = c.width;
+  if (w == null) {
+    return Expanded(
+      flex: 3,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: SubColInfo.packageMin),
+        child: child,
+      ),
+    );
+  }
+  return SizedBox(width: w, child: child);
+}
+
+/// صفّ مشترك في جدول الحاسبة بلغة الموقع: شريطٌ بلون الحالة على الحافّة، مربّع تحديد، صورةٌ
+/// بالأحرف الأولى ونقطة الاتّصال، الاسم واليوزر، ثمّ الأعمدة المختارة بترتيبها، ثمّ الإجراءات
+/// (تجديد وتمديد عند المرور + «…» بكلّ الإجراءات، والزرّ الأيمن يفتح القائمة نفسها).
+class SubscriberTableRow extends StatefulWidget {
+  const SubscriberTableRow({
+    super.key,
+    required this.sub,
+    required this.columns,
+    required this.open,
+    required this.selected,
+    required this.selectionMode,
+    required this.onTap,
+    required this.onToggleSelect,
+    this.last = false,
+  });
+
+  /// آخر صفٍّ ظاهر: زاويتا الجدول السفليّتان.
+  final bool last;
+
+  final Subscriber sub;
+  final SubscriberTableColumns columns;
+
+  /// مفتوحٌ الآن في لوحة التفاصيل.
+  final bool open;
+
+  /// محدَّدٌ للعمليّات الجماعيّة.
+  final bool selected;
+  final bool selectionMode;
+
+  /// فتح التفاصيل (اللوحة) — وفيها ما لا تحمله القائمة (تعطيل، فصل، حذف، إرسال…).
+  final VoidCallback onTap;
+  final VoidCallback onToggleSelect;
+
+  @override
+  State<SubscriberTableRow> createState() => _SubscriberTableRowState();
+}
+
+class _SubscriberTableRowState extends State<SubscriberTableRow> {
+  bool _hover = false;
+
+  void _menuAt(Offset global) {
+    showSubscriberRowMenu(context, widget.sub, position: global, onOpenDetails: widget.onTap);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final s = widget.sub;
+    final st = SubscriberCardV3.statusOf(s);
+    final name = s.fullName.trim().isEmpty ? s.username : s.fullName.trim();
+    final cols = widget.columns;
+    final bg = widget.selected || widget.open
+        ? AppColors.brandSoftBg
+        : _hover
+            ? AppColors.surfaceSunken
+            : AppColors.surface;
+    final packageInline = !cols.has(SubCol.package) && (s.profileName ?? '').isNotEmpty;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.selectionMode ? widget.onToggleSelect : widget.onTap,
+        onSecondaryTapUp: (d) => _menuAt(d.globalPosition),
+        onLongPressStart: (d) => _menuAt(d.globalPosition),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          height: 66,
+          clipBehavior: Clip.hardEdge,
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius:
+                widget.last ? const BorderRadius.vertical(bottom: Radius.circular(R.lg)) : null,
+            border: Border(
+              left: BorderSide(color: AppColors.border),
+              right: BorderSide(color: AppColors.border),
+              bottom: BorderSide(color: AppColors.border),
+            ),
+          ),
+          child: Row(
+            children: [
+              Tooltip(
+                message: st.label,
+                child: Container(width: SubscriberTableColumns.stripe, color: st.color),
+              ),
+              const SizedBox(width: Sp.sm - 4),
+              SizedBox(
+                width: SubscriberTableColumns.check,
+                child: _CheckBox(value: widget.selected, onTap: widget.onToggleSelect),
+              ),
+              SizedBox(
+                width: SubscriberTableColumns.avatar,
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: _Avatar(name: name, online: s.isOnline, disabled: s.isDisabled),
+                ),
+              ),
+              Expanded(
+                flex: 5,
+                child: _TwoLines(
+                  top: name,
+                  topStyle: AppType.label(color: s.isDisabled ? AppColors.textMid : AppColors.textHi)
+                      .copyWith(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    decoration: s.isDisabled ? TextDecoration.lineThrough : null,
+                  ),
+                  trailing: s.isOnline && s.isExpired
+                      ? Tooltip(
+                          message: 'subscribers.filter_online_no_plan'.tr(),
+                          child: Icon(LucideIcons.triangleAlert, size: 14, color: AppColors.anomaly),
+                        )
+                      : null,
+                  bottom: packageInline ? '${s.username} · ${s.profileName}' : s.username,
+                  bottomLtr: true,
+                ),
+              ),
+              for (final c in cols.shown) _cellBox(c, _cell(c, s)),
+              SizedBox(
+                width: SubscriberTableColumns.actions,
+                child: _RowActions(
+                  sub: s,
+                  hover: _hover || widget.open,
+                  onMenu: _menuAt,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _cell(SubCol c, Subscriber s) {
+    final dash = Text('—', style: AppType.muted(color: AppColors.textLow));
+    switch (c) {
+      case SubCol.phone:
+        return Padding(
+          padding: const EdgeInsetsDirectional.only(end: Sp.sm),
+          child: _PhoneCell(phone: s.displayPhone),
+        );
+      case SubCol.package:
+        return Center(child: _PackageCell(sub: s));
+      case SubCol.manager:
+        final m = s.parentUsername?.trim() ?? '';
+        return Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: m.isEmpty
+              ? dash
+              : Text(
+                  m,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textDirection: TextDirection.ltr,
+                  style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 13),
+                ),
+        );
+      case SubCol.expiration:
+        final exp = s.parsedExpiration;
+        if (exp == null) return Center(child: dash);
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              DateFormat('yyyy-MM-dd').format(exp),
+              textDirection: TextDirection.ltr,
+              style: AppType.label(color: AppColors.textBody)
+                  .copyWith(fontSize: 13.5, fontWeight: FontWeight.w600),
+            ),
+            Text(
+              DateFormat('HH:mm').format(exp),
+              textDirection: TextDirection.ltr,
+              style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5),
+            ),
+          ],
+        );
+      case SubCol.remaining:
+        return _DaysCell(sub: s);
+      case SubCol.session:
+        final v = SubscriberCardV3.sessionOf(s);
+        if (v == null) return Align(alignment: AlignmentDirectional.centerStart, child: dash);
+        return Row(
+          children: [
+            Icon(v.icon, size: 14, color: v.color),
+            const SizedBox(width: 5),
+            Expanded(
+              child: Text(
+                v.text,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: AppType.muted(color: s.isOnline ? v.color : AppColors.textMid)
+                    .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        );
+      case SubCol.mac:
+        return _MacCell(sub: s);
+      case SubCol.usage:
+        return _UsageCell(sub: s);
+      case SubCol.balance:
+        return Padding(
+          padding: const EdgeInsetsDirectional.only(start: Sp.sm),
+          child: Align(alignment: AlignmentDirectional.centerEnd, child: _balance(s)),
+        );
+    }
+  }
+
+  Widget _balance(Subscriber s) {
+    final currency = 'common.currency'.tr();
+    if (s.hasDebt) {
+      return Text(
+        '${formatIQD(s.debtAbs.round())} $currency',
+        maxLines: 1,
+        style: AppType.label(color: AppColors.dangerOnSoft)
+            .copyWith(fontWeight: FontWeight.w700, fontSize: 14),
+      );
+    }
+    if (s.hasCredit) {
+      return Text(
+        '+${formatIQD(s.balanceAmount.round())} $currency',
+        maxLines: 1,
+        style: AppType.label(color: AppColors.brandOnSoft)
+            .copyWith(fontWeight: FontWeight.w700, fontSize: 14),
+      );
+    }
+    return Text('—', style: AppType.muted(color: AppColors.textLow));
+  }
+}
+
+// ───────────────────────────── الإجراءات ─────────────────────────────
+
+/// تجديد وتمديد يظهران عند المرور على الصفّ (كالموقع)، و«…» دائماً.
+class _RowActions extends StatelessWidget {
+  const _RowActions({required this.sub, required this.hover, required this.onMenu});
+
+  final Subscriber sub;
+  final bool hover;
+  final ValueChanged<Offset> onMenu;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    Widget quick(IconData icon, String tip, String perm, Future<Object?> Function() run) {
+      final locked = !Perms.has(perm);
+      if (locked && !permShown([perm])) return const SizedBox(width: 32);
+      return AnimatedOpacity(
+        duration: const Duration(milliseconds: 120),
+        opacity: hover ? 1 : 0,
+        child: IgnorePointer(
+          ignoring: !hover,
+          child: _MiniAction(
+            icon: locked ? LucideIcons.lock : icon,
+            color: locked ? LockedStyle.glyph : AppColors.brandAccent,
+            tooltip: tip,
+            onTap: locked ? () => showNoPermission(context) : () => run(),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        quick(LucideIcons.zap, 'desktop.act_renew'.tr(), 'subscribers.activate',
+            () => showActivateSheet(context, sub)),
+        const SizedBox(width: 4),
+        quick(LucideIcons.calendarPlus, 'subscribers.op_extend'.tr(), 'subscribers.extend',
+            () => showExtendSheet(context, sub)),
+        const SizedBox(width: 4),
+        Builder(
+          builder: (btn) => _MiniAction(
+            icon: LucideIcons.ellipsis,
+            color: AppColors.textHi,
+            tooltip: 'desktop.more_actions'.tr(),
+            onTap: () {
+              final box = btn.findRenderObject() as RenderBox;
+              onMenu(box.localToGlobal(Offset(0, box.size.height)));
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// قائمة إجراءات المشترك (زرّ «…» والزرّ الأيمن): ما تفتحه الشيتات نفسها التي تفتحها التفاصيل،
+/// بالبوّابات نفسها — مقفلٌ بمكانه لمن لا يملكه (قاعدة «مقفل لا مخفيّ»). ما يغيّر الحالة بلا شيت
+/// (تعطيل، فصل، حذف، إرسال) يبقى في التفاصيل — «كلّ الإجراءات» آخر القائمة.
+Future<void> showSubscriberRowMenu(
+  BuildContext context,
+  Subscriber s, {
+  required Offset position,
+  required VoidCallback onOpenDetails,
+}) async {
+  final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+  final items = <_MenuEntry?>[
+    _gate('subscribers.activate', LucideIcons.zap, 'desktop.act_renew'.tr(),
+        () => showActivateSheet(context, s)),
+    _gate('subscribers.extend', LucideIcons.calendarPlus, 'subscribers.op_extend'.tr(),
+        () => showExtendSheet(context, s)),
+    _gate('subscribers.edit', LucideIcons.pencil, 'subscribers.op_edit'.tr(),
+        () => showEditSubscriberSheet(context, s)),
+    null,
+    if (s.hasDebt)
+      _gate('subscribers.pay_debt', LucideIcons.banknote, 'subscribers.op_pay_debt'.tr(),
+          () => showPayDebtSheet(context, s)),
+    _gate('subscribers.add_debt', LucideIcons.plus, 'subscribers.op_add_debt'.tr(),
+        () => showAddDebtSheet(context, s)),
+    _gate('discounts.manage', LucideIcons.tag, 'subscribers.op_quick_discount'.tr(),
+        () => showQuickDiscountSheet(context, s)),
+    if (s.idx != null)
+      _gate(
+          'subscriber_prices.manage',
+          LucideIcons.badgeDollarSign,
+          'sp.op_fixed_price'.tr(),
+          () => showSubscriberPriceSheet(
+                context,
+                idx: s.idx!,
+                name: s.fullName.trim().isNotEmpty ? s.fullName : s.username,
+                companyKey: s.companyKey,
+              )),
+    null,
+    _MenuEntry(LucideIcons.chartLine, 'subscribers.op_consumption'.tr(),
+        () => showConsumptionSheet(context, s)),
+    _gate('subscribers.view_activity', LucideIcons.history, 'subscribers.op_movements'.tr(),
+        () => showMovementsSheet(context, s)),
+    _MenuEntry(LucideIcons.copy, 'desktop.copy_username'.tr(), () async {
+      await Clipboard.setData(ClipboardData(text: s.username));
+      if (context.mounted) showSheetSnack(context, 'desktop.copied'.tr());
+      return null;
+    }),
+    null,
+    _MenuEntry(LucideIcons.panelLeftOpen, 'desktop.all_actions'.tr(), () async => onOpenDetails()),
+  ].where((e) => e != const _Hidden()).toList();
+
+  // فواصل لا تتكرّر ولا تبدأ القائمة.
+  final entries = <PopupMenuEntry<int>>[];
+  final actions = <int, _MenuEntry>{};
+  for (final e in items) {
+    if (e == null) {
+      if (entries.isNotEmpty && entries.last is! PopupMenuDivider) {
+        entries.add(const PopupMenuDivider(height: 9));
+      }
+      continue;
+    }
+    final i = actions.length;
+    actions[i] = e;
+    entries.add(PopupMenuItem<int>(
+      value: i,
+      height: 40,
+      child: Row(
+        children: [
+          Icon(e.locked ? LucideIcons.lock : e.icon,
+              size: 17, color: e.locked ? LockedStyle.glyph : AppColors.textMid),
+          const SizedBox(width: Sp.md),
+          Expanded(
+            child: Text(
+              e.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.body(color: e.locked ? LockedStyle.title : AppColors.textHi)
+                  .copyWith(fontSize: 14, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    ));
+  }
+  final picked = await showMenu<int>(
+    context: context,
+    position: RelativeRect.fromRect(position & const Size(1, 1), Offset.zero & overlay.size),
+    color: AppColors.surface,
+    constraints: const BoxConstraints(minWidth: 230, maxWidth: 300),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(R.md),
+      side: BorderSide(color: AppColors.border),
+    ),
+    items: entries,
+  );
+  if (picked == null || !context.mounted) return;
+  final e = actions[picked]!;
+  if (e.locked) {
+    showNoPermission(context);
+    return;
+  }
+  await e.run();
+}
+
+class _MenuEntry {
+  const _MenuEntry(this.icon, this.label, this.run, {this.locked = false});
+
+  final IconData icon;
+  final String label;
+  final Future<Object?> Function() run;
+  final bool locked;
+}
+
+class _Hidden extends _MenuEntry {
+  const _Hidden() : super(LucideIcons.x, '', _noop);
+  static Future<Object?> _noop() async => null;
+}
+
+/// يملكه ⇒ حيّ؛ لا يملكه ويمكن أن يُمنحه ⇒ مقفل بمكانه؛ لا يُمنح لدوره ⇒ مخفيّ (كالتفاصيل).
+_MenuEntry _gate(String perm, IconData icon, String label, Future<Object?> Function() run) {
+  if (Perms.has(perm)) return _MenuEntry(icon, label, run);
+  if (permShown([perm])) return _MenuEntry(icon, label, run, locked: true);
+  return const _Hidden();
+}
+
+// ───────────────────────────── الخلايا ─────────────────────────────
+
+/// الباقة شارةً، وتحتها السعر — والمخصوم يُشطب قبله سعر الباقة كالموقع.
+class _PackageCell extends StatelessWidget {
+  const _PackageCell({required this.sub});
+
+  final Subscriber sub;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final name = sub.profileName ?? '';
+    if (name.isEmpty) return Text('—', style: AppType.muted(color: AppColors.textLow));
+    final base = sub.packageSalePrice;
+    final now = sub.currentSalePrice;
+    final discounted = base != null && now != null && now < base;
+    final small = AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5);
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _Pill(text: name, fg: AppColors.textBody, bg: AppColors.surfaceSunken, border: AppColors.border),
+        if (now != null) ...[
+          const SizedBox(height: 3),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (discounted) ...[
+                Text(formatIQD(base), style: small.copyWith(decoration: TextDecoration.lineThrough)),
+                const SizedBox(width: 5),
+              ],
+              Text(
+                formatIQD(now),
+                style: discounted || sub.isFixedPrice
+                    ? small.copyWith(color: AppColors.brandOnSoft, fontWeight: FontWeight.w700)
+                    : small,
+              ),
+              if (sub.isFixedPrice) ...[
+                const SizedBox(width: 3),
+                Tooltip(
+                  message: 'sp.op_fixed_price'.tr(),
+                  child: Icon(LucideIcons.lock, size: 11, color: AppColors.brandOnSoft),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// الماك (نقرةٌ تنسخه)، وتحته IP الجلسة للمتّصل.
+class _MacCell extends StatelessWidget {
+  const _MacCell({required this.sub});
+
+  final Subscriber sub;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final mac = sub.lastMac?.trim() ?? '';
+    final ip = sub.isOnline ? (sub.ipAddress?.trim() ?? '') : '';
+    if (mac.isEmpty && ip.isEmpty) {
+      return Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: Text('—', style: AppType.muted(color: AppColors.textLow)),
+      );
+    }
+    final mono = AppType.muted(color: sub.isOnline ? AppColors.info : AppColors.textMid)
+        .copyWith(fontSize: 12.5, fontFeatures: const [FontFeature.tabularFigures()]);
+    Widget copyable(String v, TextStyle style) => Tooltip(
+          message: 'desktop.copy'.tr(),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(R.sm),
+            onTap: () async {
+              await Clipboard.setData(ClipboardData(text: v));
+              if (context.mounted) showSheetSnack(context, 'desktop.copied'.tr());
+            },
+            child: Text(v, maxLines: 1, overflow: TextOverflow.ellipsis, textDirection: TextDirection.ltr, style: style),
+          ),
+        );
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (mac.isNotEmpty) copyable(mac, mono),
+        if (ip.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          copyable(ip, mono.copyWith(color: AppColors.textMid)),
+        ],
+      ],
+    );
+  }
+}
+
+/// استهلاك اليوم فوق الشهر — يُطلب للصفوف الظاهرة وحدها (دفعاتٌ من [SubscriberUsageStore]).
+class _UsageCell extends StatelessWidget {
+  const _UsageCell({required this.sub});
+
+  final Subscriber sub;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final idx = sub.idx;
+    if (idx == null) return Text('—', style: AppType.muted(color: AppColors.textLow));
+    return ValueListenableBuilder<int>(
+      valueListenable: SubscriberUsageStore.version,
+      builder: (context, _, __) {
+        final e = SubscriberUsageStore.get(idx, company: sub.companyKey);
+        if (e == null) SubscriberUsageStore.want(idx, company: sub.companyKey);
+        final label = AppType.muted(color: AppColors.textLow).copyWith(fontSize: 12.5);
+        final value = AppType.label(color: AppColors.textBody)
+            .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600);
+        if (e == null) {
+          return Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Container(
+              width: 90,
+              height: 10,
+              decoration: BoxDecoration(
+                color: AppColors.surfaceSunken,
+                borderRadius: BorderRadius.circular(R.sm),
+              ),
+            ),
+          );
+        }
+        if (e.v == null) {
+          return Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Text('—', style: AppType.muted(color: AppColors.textLow)),
+          );
+        }
+        Widget line(String k, int? bytes) => Text.rich(
+              TextSpan(children: [
+                TextSpan(text: '$k ', style: label),
+                TextSpan(text: '\u2066${formatUsageBytes(bytes)}\u2069', style: value),
+              ]),
+              maxLines: 1,
+            );
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            line('desktop.today'.tr(), e.v!.today),
+            const SizedBox(height: 2),
+            line('desktop.month'.tr(), e.v!.month),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// الأيّام بشارةٍ وشريطٍ تحتها يتناقص من ٣٠ يوماً (المنتهي ممتلئٌ بلونه).
+class _DaysCell extends StatelessWidget {
+  const _DaysCell({required this.sub});
+
+  final Subscriber sub;
+
+  static String _short(String word) {
+    if (word.contains('ساعة')) return 'ساعة';
+    if (word.contains('دقيقة')) return 'دقيقة';
+    if (word.contains('يوم') || word.contains('أيام')) return 'يوم';
+    return word;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final d = SubscriberCardV3.daysOf(sub);
+    final exp = sub.parsedExpiration;
+    final expired = exp != null && exp.isBefore(DateTime.now());
+    final text = d.small == 'منتهي' || d.small == 'معطّل'
+        ? d.small
+        : d.small.isEmpty
+            ? d.big
+            : '${d.big} ${_short(d.small)}';
+    double? fraction;
+    if (expired) {
+      fraction = 1;
+    } else if (exp != null && !sub.isDisabled) {
+      fraction = (exp.difference(DateTime.now()).inMinutes / (30 * 24 * 60)).clamp(0.04, 1.0);
+    }
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
+          decoration: BoxDecoration(color: d.bg, borderRadius: BorderRadius.circular(R.sm)),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (expired) ...[
+                Icon(LucideIcons.triangleAlert, size: 12, color: d.color),
+                const SizedBox(width: 3),
+              ],
+              Text(
+                text,
+                maxLines: 1,
+                style: AppType.label(color: d.color).copyWith(fontWeight: FontWeight.w700, fontSize: 12.5),
+              ),
+            ],
+          ),
+        ),
+        if (fraction != null) ...[
+          const SizedBox(height: 5),
+          SizedBox(
+            width: 72,
+            height: 4,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceSunken,
+                      borderRadius: BorderRadius.circular(R.pill),
+                    ),
+                  ),
+                ),
+                Positioned.fill(
+                  child: FractionallySizedBox(
+                    alignment: AlignmentDirectional.centerStart,
+                    widthFactor: fraction,
+                    heightFactor: 1,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: d.color,
+                        borderRadius: BorderRadius.circular(R.pill),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// الهاتف محلّيّاً (نقرةٌ تنسخه) وبجانبه الاتّصال والواتساب.
+class _PhoneCell extends StatelessWidget {
+  const _PhoneCell({required this.phone});
+
+  final String phone;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    if (phone.trim().isEmpty) {
+      return Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: Text('—', style: AppType.muted(color: AppColors.textLow)),
+      );
+    }
+    final local = localPhone(phone);
+    final digits = phone.replaceAll(RegExp(r'\D'), '');
+    return Row(
+      children: [
+        Flexible(
+          child: Tooltip(
+            message: 'desktop.copy'.tr(),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(R.sm),
+              onTap: () async {
+                await Clipboard.setData(ClipboardData(text: local));
+                if (context.mounted) showSheetSnack(context, 'desktop.copied'.tr());
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                child: Text(
+                  local,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textDirection: TextDirection.ltr,
+                  style: AppType.label(color: AppColors.textBody)
+                      .copyWith(fontSize: 13.5, fontFeatures: const [FontFeature.tabularFigures()]),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        _MiniAction(
+          icon: LucideIcons.messageCircle,
+          color: AppColors.success,
+          tooltip: 'subscribers.op_whatsapp'.tr(),
+          onTap: () => launchUrl(Uri.parse('https://wa.me/$digits'),
+              mode: LaunchMode.externalApplication),
+        ),
+        const SizedBox(width: 4),
+        _MiniAction(
+          icon: LucideIcons.phone,
+          color: AppColors.info,
+          tooltip: 'subscribers.call'.tr(),
+          onTap: () => launchUrl(Uri.parse('tel:$local'), mode: LaunchMode.externalApplication),
+        ),
+      ],
+    );
+  }
+}
+
+class _MiniAction extends StatelessWidget {
+  const _MiniAction({
+    required this.icon,
+    required this.color,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: AppColors.surfaceSunken,
+        borderRadius: BorderRadius.circular(R.sm),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(R.sm),
+          child: SizedBox(width: 30, height: 30, child: Icon(icon, size: 15, color: color)),
+        ),
+      ),
+    );
+  }
+}
+
+class _Avatar extends StatelessWidget {
+  const _Avatar({required this.name, required this.online, required this.disabled});
+
+  final String name;
+  final bool online;
+  final bool disabled;
+
+  static String _initials(String n) {
+    final parts = n.trim().split(RegExp(r'[\s@._-]+')).where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return '•';
+    final a = parts.first.characters.first;
+    final b = parts.length > 1 ? parts[1].characters.first : '';
+    return (a + b).toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return SizedBox(
+      width: 44,
+      height: 44,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: disabled ? AppColors.surfaceDisabled : AppColors.infoSoftBg,
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              _initials(name),
+              style: AppType.label(color: disabled ? AppColors.textLabel : AppColors.info)
+                  .copyWith(fontSize: 13.5, fontWeight: FontWeight.w700),
+            ),
+          ),
+          if (!disabled)
+            PositionedDirectional(
+              start: 0,
+              bottom: 4,
+              child: Tooltip(
+                message: (online ? 'desktop.online' : 'desktop.offline').tr(),
+                child: Container(
+                  width: 11,
+                  height: 11,
+                  decoration: BoxDecoration(
+                    color: online ? AppColors.success : AppColors.textLow,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.surface, width: 2),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CheckBox extends StatelessWidget {
+  const _CheckBox({required this.value, required this.onTap});
+
+  final bool value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Center(
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Container(
+            width: H.checkbox,
+            height: H.checkbox,
+            decoration: BoxDecoration(
+              color: value ? AppColors.brand : AppColors.surface,
+              borderRadius: BorderRadius.circular(R.check),
+              border: Border.all(color: value ? AppColors.brand : AppColors.borderStrong, width: 1.5),
+            ),
+            child: value ? const Icon(LucideIcons.check, size: 14, color: AppColors.onBrand) : null,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill({required this.text, required this.fg, required this.bg, required this.border});
+
+  final String text;
+  final Color fg;
+  final Color bg;
+  final Color border;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 150),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(R.sm),
+        border: Border.all(color: border),
+      ),
+      child: Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: AppType.label(color: fg).copyWith(fontWeight: FontWeight.w600, fontSize: 12.5),
+      ),
+    );
+  }
+}
+
+class _TwoLines extends StatelessWidget {
+  const _TwoLines({
+    required this.top,
+    this.bottom,
+    this.topStyle,
+    this.bottomLtr = false,
+    this.trailing,
+  });
+
+  final String top;
+  final String? bottom;
+  final TextStyle? topStyle;
+  final bool bottomLtr;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(end: Sp.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            children: [
+              Flexible(
+                child: Text(
+                  top,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: topStyle ?? AppType.label(color: AppColors.textBody).copyWith(fontSize: 13.5),
+                ),
+              ),
+              if (trailing != null) ...[const SizedBox(width: 5), trailing!],
+            ],
+          ),
+          if (bottom != null && bottom!.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              bottom!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textDirection: bottomLtr ? TextDirection.ltr : null,
+              textAlign: TextAlign.start,
+              style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}

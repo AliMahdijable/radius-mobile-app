@@ -10,6 +10,7 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../core/util/amount_input.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// Add admin expense sheet — wired from FAB → 'إضافة سريعة' →
 /// 'إضافة صرفية'. Three fields:
@@ -18,7 +19,7 @@ import '../../../core/util/amount_input.dart';
 ///   • ملاحظة       — optional free text
 /// Submit → POST /api/admin/expenses.
 Future<bool?> showAddExpenseSheet(BuildContext context) {
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,

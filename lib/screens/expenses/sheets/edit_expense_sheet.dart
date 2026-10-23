@@ -8,6 +8,7 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../core/util/amount_input.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// تعديل صرفية قائمة. الـsheet مطابق visually للـadd لكن:
 ///  • Title 'تعديل صرفية'
@@ -16,7 +17,7 @@ import '../../../core/util/amount_input.dart';
 ///
 /// يرجع true عند الحفظ الناجح فالـcaller يعيد تحميل القائمة.
 Future<bool?> showEditExpenseSheet(BuildContext context, ExpenseRow row) {
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,

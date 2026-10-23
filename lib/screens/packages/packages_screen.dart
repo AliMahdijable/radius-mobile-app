@@ -12,6 +12,9 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../core/util/amount_input.dart';
+import '../desktop/desk_widgets.dart';
+import '../../core/platform/desktop_layout.dart';
+import '../../core/widgets/app_sheet.dart';
 
 /// مديول تسعير الباقات. شاشة في-المكان: قائمة الباقات، كل باقة فيها
 /// حقل سعر بيع قابل للتعديل. أسفل الشاشة زر "حفظ" واحد ينفّذ
@@ -229,26 +232,29 @@ class _PackagesScreenState extends State<PackagesScreen> {
     final canEdit = Perms.has('packages.edit_prices');
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'pkg.title'.tr(),
-              style:
-                  AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
-            ),
-            Text(
-              'pkg.subtitle'.tr(),
-              style: AppType.muted().copyWith(fontSize: 11),
-            ),
-          ],
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'pkg.title'.tr(),
+                style:
+                    AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+              ),
+              Text(
+                'pkg.subtitle'.tr(),
+                style: AppType.muted().copyWith(fontSize: 11),
+              ),
+            ],
+          ),
+          iconTheme: IconThemeData(color: AppColors.textHi),
         ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
       ),
       bottomNavigationBar: !canEdit
           ? null
@@ -305,7 +311,15 @@ class _PackagesScreenState extends State<PackagesScreen> {
                 accent: accent,
               ),
               const SizedBox(height: 6),
-              _managerPicker(accent),
+              // الحاسبة: قائمة المدير بعرض قائمةٍ لا بعرض الصفحة.
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                      maxWidth: DesktopScope.of(context) ? 460 : double.infinity),
+                  child: _managerPicker(accent),
+                ),
+              ),
               const SizedBox(height: Sp.md),
               // مطلب 2026-06-12: شيل بانر التنبيه. سعر المدير المقفل
               // واضح من الحقل نفسه (لون رمادي + لا يقبل النقر)، فما
@@ -324,6 +338,21 @@ class _PackagesScreenState extends State<PackagesScreen> {
                 )
               else if (_packages.isEmpty)
                 _empty()
+              else if (DesktopScope.of(context))
+                // الحاسبة: الباقات في أعمدة بدل بطاقاتٍ بعرض الشاشة وحقلٍ ممدود.
+                DeskGrid(
+                  minTileWidth: 260,
+                  maxColumns: 4,
+                  children: [
+                    for (final p in _packages)
+                      _PackageTile(
+                        package: p,
+                        userPriceCtrl: _userPriceCtrl[p.id]!,
+                        onUserPriceChanged: (v) => _handleEdit(
+                            p.id, v, _userPriceEdits, _userPriceCtrl[p.id]!),
+                      ),
+                  ],
+                )
               else
                 Column(
                   children: [
@@ -465,7 +494,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
       color: Colors.transparent,
       child: InkWell(
         onTap: () async {
-          final picked = await showModalBottomSheet<int?>(
+          final picked = await showAppSheet<int?>(
             barrierColor: AppColors.scrim,
             context: context,
             backgroundColor: Colors.transparent,

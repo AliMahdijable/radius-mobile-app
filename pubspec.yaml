@@ -41,6 +41,8 @@ dependencies:
   # الذي يدعم SPM. و11 تنتظر نسخةً تالية بعد أن يكون الجميع قد مرّ
   # على 10.
   flutter_secure_storage: ^10.3.4
+  # نسخة الماك للتجربة تبدّل الخزنة بملفّ (lib/services/mac_file_secure_storage.dart)
+  flutter_secure_storage_platform_interface: ^2.1.1
 
   # HTTP
   dio: ^5.7.0
@@ -61,6 +63,10 @@ dependencies:
 
   # ICMP ping — لميزة الأجهزة (network_devices) — يعمل على iOS + Android
   dart_ping: ^10.0.1
+  # ويندوز: ping من النظام (IcmpSendEcho) بدل ping.exe — lib/core/net/windows_icmp.dart
+  ffi: ^2.1.0
+  # ويندوز: «الدخول عبر المتصفّح» — بصمة سرّ PKCE (lib/services/desktop_browser_login.dart)
+  crypto: ^3.0.3
 
   # SSH client — لمراقبة UBNT airOS عبر SSH (أفضل من HTTP لكل الإصدارات 5/6/7/8)
   dartssh2: ^2.22.5

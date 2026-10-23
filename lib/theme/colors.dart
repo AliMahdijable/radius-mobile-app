@@ -91,6 +91,13 @@ class AppColors {
   static Color get brandLight => _isDark ? _darkBrandAccent : _lightBrandAccent;
   static Color get brandAccent => brandLight;
 
+  /// خطّ الرسوم ذات السلسلة الواحدة (إيرادات الثلاثين يوماً، أشرطة التوزيع) — مقيسٌ بمدقّق مهارة
+  /// الرسوم (٢٣ أكتوبر): نطاق السطوع وحدّ التشبّع والتباين مع السطح ≥ ٣:١ في الوضعين.
+  /// `brandAccent` الفاتح (#16624A) يسقط في حدّ التشبّع فيبدو رماديّاً كخطّ.
+  static const Color _lightChartLine = Color(0xFF23855F);
+  static const Color _darkChartLine = Color(0xFF3FA97B);
+  static Color get chartLine => _isDark ? _darkChartLine : _lightChartLine;
+
   /// طبقات البراند الناعمة — أيقونة رأس الـsheet 40×40، حبّة «متصل»،
   /// زرّ الفرز النشط، الشريحة المختارة الفاتحة.
   static Color get brandSoftBg =>

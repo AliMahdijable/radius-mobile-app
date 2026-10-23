@@ -176,7 +176,7 @@ class SubscriberCardV3 extends StatelessWidget {
 
   // ─────────────────── الصفّ 1 ───────────────────
 
-  Widget _identityRow(_StatusVisual st) {
+  Widget _identityRow(SubscriberStatusVisual st) {
     final days = _daysVisual();
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -629,49 +629,55 @@ class SubscriberCardV3 extends StatelessWidget {
   /// الأخضر هنا يعني «اشتراكه سليم» لا «متصل الآن»، والأزرق يعني «متصل
   /// الآن». مشترك سليم غير متصل حالة طبيعيّة تماماً، ومشترك منتهٍ لكنّه
   /// متصل حالة شاذّة — ولذلك لها لونها الخاصّ.
-  _StatusVisual _status() {
+  SubscriberStatusVisual _status() => statusOf(sub);
+
+  /// حالة المشترك (اللون والأيقونة والتسمية) — يستعملها صفّ جدول الحاسبة أيضاً.
+  static SubscriberStatusVisual statusOf(Subscriber sub) {
     if (sub.isDisabled) {
-      return _StatusVisual('معطّل', Icons.block_rounded, AppColors.textLabel,
+      return SubscriberStatusVisual('معطّل', Icons.block_rounded, AppColors.textLabel,
           AppColors.surfaceDisabled);
     }
     if (sub.isOnline) {
       if (sub.isExpired) {
-        return _StatusVisual('منتهي · متصل', Icons.wifi_rounded,
+        return SubscriberStatusVisual('منتهي · متصل', Icons.wifi_rounded,
             AppColors.anomaly, AppColors.anomalySoftBg);
       }
       if (sub.isNearExpiry) {
         // `warning` لا `warningFill`: الثاني ثابت #97650B فلا يُرى على
         // سطح داكن (2.16:1)، والأوّل يفتح ليلاً إلى #E0B457.
-        return _StatusVisual('متصل', Icons.wifi_rounded, AppColors.warning,
+        return SubscriberStatusVisual('متصل', Icons.wifi_rounded, AppColors.warning,
             AppColors.warningSoftBg);
       }
       // خلفيّة زرقاء لا خضراء: كانت `brandSoftBg` تحت أيقونة زرقاء
       // فبدا المربّع «غير ملوّن» بينما نظائره ملوّنة (بلاغ 2026-08-30).
-      return _StatusVisual(
+      return SubscriberStatusVisual(
           'متصل', Icons.wifi_rounded, AppColors.info, AppColors.infoSoftBg);
     }
     if (sub.isExpired) {
-      return _StatusVisual('منتهي', Icons.wifi_off_rounded, AppColors.error,
+      return SubscriberStatusVisual('منتهي', Icons.wifi_off_rounded, AppColors.error,
           AppColors.dangerSoftBg);
     }
     if (sub.isNearExpiry) {
-      return _StatusVisual('غير متصل', Icons.wifi_off_rounded,
+      return SubscriberStatusVisual('غير متصل', Icons.wifi_off_rounded,
           AppColors.warning, AppColors.warningSoftBg);
     }
-    return _StatusVisual('غير متصل', Icons.wifi_off_rounded, AppColors.success,
+    return SubscriberStatusVisual('غير متصل', Icons.wifi_off_rounded, AppColors.success,
         AppColors.successSoftBg);
   }
 
   /// بلاطة الأيّام. تُحسب من `parsedExpiration` — لا من `remainingDays`
   /// (SAS4 يقرّب لأعلى: 31 يوماً لباقة 30).
-  _DaysVisual _daysVisual() {
+  SubscriberDaysVisual _daysVisual() => daysOf(sub);
+
+  /// بلاطة الأيّام — يستعملها صفّ جدول الحاسبة أيضاً.
+  static SubscriberDaysVisual daysOf(Subscriber sub) {
     if (sub.isDisabled) {
-      return _DaysVisual('—', 'معطّل', AppColors.textLabel,
+      return SubscriberDaysVisual('—', 'معطّل', AppColors.textLabel,
           AppColors.surfaceDisabled, AppColors.border);
     }
     final exp = sub.parsedExpiration;
     if (exp == null) {
-      return _DaysVisual('—', '', AppColors.textLabel,
+      return SubscriberDaysVisual('—', '', AppColors.textLabel,
           AppColors.surfaceDisabled, AppColors.border);
     }
     final now = DateTime.now();
@@ -680,7 +686,7 @@ class SubscriberCardV3 extends StatelessWidget {
       // «منتهي» لا «منتهي الاشتراك»: البلاطة مصمَّمةٌ لكلمةٍ تحت رقم،
       // والطويلة توسّعها فتأكل من اسم المشترك. وهي الكلمة نفسها
       // المستعملة في شارة الحالة في شاشة التفاصيل — فاتّسق الاثنان.
-      return _DaysVisual('0', 'منتهي', AppColors.error,
+      return SubscriberDaysVisual('0', 'منتهي', AppColors.error,
           AppColors.dangerSoftBg, AppColors.dangerSoftBorder);
     }
     final days = diff.inDays;
@@ -688,7 +694,7 @@ class SubscriberCardV3 extends StatelessWidget {
       // آخر يوم: الساعات أنفع من «0 يوم» — المدير يريد أن يعرف
       // إن بقيت 5 ساعات أو 30 دقيقة.
       final h = diff.inHours;
-      return _DaysVisual(
+      return SubscriberDaysVisual(
         h > 0 ? '$h' : '${diff.inMinutes}',
         h > 0 ? 'ساعة متبقية' : 'دقيقة متبقية',
         AppColors.error,
@@ -698,24 +704,27 @@ class SubscriberCardV3 extends StatelessWidget {
     }
     final word = days == 1 ? 'يوم متبقي' : 'أيام متبقية';
     if (days <= 1) {
-      return _DaysVisual('$days', word, AppColors.error, AppColors.dangerSoftBg,
+      return SubscriberDaysVisual('$days', word, AppColors.error, AppColors.dangerSoftBg,
           AppColors.dangerSoftBorder);
     }
     if (days <= 7) {
-      return _DaysVisual('$days', word, AppColors.warning,
+      return SubscriberDaysVisual('$days', word, AppColors.warning,
           AppColors.warningSoftBg, AppColors.warningSoftBorder);
     }
-    return _DaysVisual('$days', word, AppColors.success, AppColors.brandSoftBg,
+    return SubscriberDaysVisual('$days', word, AppColors.success, AppColors.brandSoftBg,
         AppColors.brandSoftBorder);
   }
 
   /// نصّ الجلسة. متّصل ⇒ «متصل منذ …» أخضر بأيقونة ساعة؛ غير متّصل ⇒
   /// «آخر اتصال قبل …» رمادي بأيقونة سجلّ.
-  _SessionVisual? _sessionVisual() {
+  SubscriberSessionVisual? _sessionVisual() => sessionOf(sub);
+
+  /// نصّ الجلسة (متصل منذ / آخر اتصال) — يستعمله صفّ جدول الحاسبة أيضاً.
+  static SubscriberSessionVisual? sessionOf(Subscriber sub) {
     if (sub.isOnline) {
       final secs = sub.sessionTime;
       if (secs == null || secs <= 0) return null;
-      return _SessionVisual(
+      return SubscriberSessionVisual(
         'متصل منذ ${_humanDuration(secs)}',
         Icons.schedule_rounded,
         AppColors.success,
@@ -733,7 +742,7 @@ class SubscriberCardV3 extends StatelessWidget {
     if (t == null) return null;
     final mins = DateTime.now().difference(t).inMinutes;
     if (mins < 0) return null;
-    return _SessionVisual(
+    return SubscriberSessionVisual(
       'آخر اتصال ${humanMinutesAgo(mins)}',
       Icons.history_rounded,
       AppColors.textLabel,
@@ -1028,16 +1037,16 @@ class _MiniButton extends StatelessWidget {
 
 // ─────────────────── حزم القيم ───────────────────
 
-class _StatusVisual {
-  const _StatusVisual(this.label, this.icon, this.color, this.bg);
+class SubscriberStatusVisual {
+  const SubscriberStatusVisual(this.label, this.icon, this.color, this.bg);
   final String label;
   final IconData icon;
   final Color color;
   final Color bg;
 }
 
-class _DaysVisual {
-  const _DaysVisual(this.big, this.small, this.color, this.bg, this.border);
+class SubscriberDaysVisual {
+  const SubscriberDaysVisual(this.big, this.small, this.color, this.bg, this.border);
   final String big;
   final String small;
   final Color color;
@@ -1045,8 +1054,8 @@ class _DaysVisual {
   final Color border;
 }
 
-class _SessionVisual {
-  const _SessionVisual(this.text, this.icon, this.color);
+class SubscriberSessionVisual {
+  const SubscriberSessionVisual(this.text, this.icon, this.color);
   final String text;
   final IconData icon;
   final Color color;

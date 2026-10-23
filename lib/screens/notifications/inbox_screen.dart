@@ -14,6 +14,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../subscribers/subscriber_detail_screen.dart';
+import '../desktop/desk_widgets.dart';
 
 /// شاشة inbox — تعرض 3 أقسام (نفس منطق v1 mobile-app):
 ///   1. **إشعارات التطبيق** — FCM inbox items (المستلمة).
@@ -219,33 +220,36 @@ class _InboxScreenState extends State<InboxScreen> {
     Theme.of(context);
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          'notifications.title'.tr(),
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
-        ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
-        actions: [
-          ValueListenableBuilder<int>(
-            valueListenable: InboxService.changes,
-            builder: (context, _, __) {
-              final unread = InboxService.unreadCount;
-              if (unread == 0) return const SizedBox.shrink();
-              return TextButton.icon(
-                onPressed: () => InboxService.markAllRead(),
-                icon: Icon(LucideIcons.checkCheck,
-                    size: 16, color: AppColors.brand),
-                label: Text(
-                  'notifications.mark_all_read'.tr(),
-                  style: AppType.bodyBold(color: AppColors.brand),
-                ),
-              );
-            },
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text(
+            'notifications.title'.tr(),
+            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
           ),
-        ],
+          iconTheme: IconThemeData(color: AppColors.textHi),
+          actions: [
+            ValueListenableBuilder<int>(
+              valueListenable: InboxService.changes,
+              builder: (context, _, __) {
+                final unread = InboxService.unreadCount;
+                if (unread == 0) return const SizedBox.shrink();
+                return TextButton.icon(
+                  onPressed: () => InboxService.markAllRead(),
+                  icon: Icon(LucideIcons.checkCheck,
+                      size: 16, color: AppColors.brand),
+                  label: Text(
+                    'notifications.mark_all_read'.tr(),
+                    style: AppType.bodyBold(color: AppColors.brand),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
       ),
       body: SafeArea(
         child: RefreshIndicator(

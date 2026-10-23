@@ -8,6 +8,7 @@ import '../../api/sales_api.dart';
 import '../../core/util/amount_input.dart';
 import '../../core/util/bidi.dart';
 import '../../core/util/format.dart';
+import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/permission_locked.dart';
 import '../../core/widgets/sheet_scaffold.dart';
@@ -471,7 +472,7 @@ String _qty(num q) {
 String _time(DateTime? at) => at == null ? '' : DateFormat('yyyy/MM/dd HH:mm').format(at);
 
 Future<bool?> _showSheet(BuildContext context, Widget sheet) {
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,
@@ -1535,7 +1536,7 @@ class _NewSaleSheetState extends State<_NewSaleSheet> {
       child: InkWell(
         borderRadius: BorderRadius.circular(R.lg),
         onTap: () async {
-          final it = await showModalBottomSheet<SaleItem>(
+          final it = await showAppSheet<SaleItem>(
             context: context,
             backgroundColor: Colors.transparent,
             barrierColor: AppColors.scrim,

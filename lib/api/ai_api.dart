@@ -1,9 +1,9 @@
-import 'dart:io' show Platform;
 
 import 'package:dio/dio.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/platform/app_platform.dart';
 import '../core/platform/store_policy.dart';
 import '../core/util/error_text.dart';
 import '../services/account_service.dart';
@@ -813,7 +813,7 @@ class AiApi {
     return account ? AiMode.account : AiMode.none;
   }
 
-  static String get _deviceLabel => Platform.isIOS ? 'ios' : 'android';
+  static String get _deviceLabel => AppPlatform.deviceLabel;
 
   static Future<Response<Object?>> _send(
     AiMode mode,

@@ -12,6 +12,7 @@ import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// صفيحة ربط المدير الفرعيّ ببوت تلغرام الأب.
 ///
@@ -31,7 +32,7 @@ import '../../../theme/typography.dart';
 /// المعرّف فيه يُبطله. مُختبَر: حمولةٌ بمعرّفٍ مبدَّل وتوقيعٍ صحيح
 /// رُفضت.
 Future<bool?> showTelegramLinkSheet(BuildContext context, Manager m) {
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,

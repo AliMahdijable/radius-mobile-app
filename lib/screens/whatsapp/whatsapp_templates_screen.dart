@@ -8,6 +8,8 @@ import 'template_defaults.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../core/widgets/app_sheet.dart';
+import '../desktop/desk_widgets.dart';
 
 /// Label عربي لكل متغير قالب — يظهر بـtooltip + كـsubtitle داخل
 /// الـchip في الـEditTemplateSheet. مطابق v1
@@ -246,7 +248,7 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
 
   Future<void> _openEdit(_TemplateDef def) async {
     final existing = _templateOf(def.type);
-    final result = await showModalBottomSheet<bool>(
+    final result = await showAppSheet<bool>(
       barrierColor: AppColors.scrim,
       context: context,
       backgroundColor: Colors.transparent,
@@ -279,30 +281,33 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
     final all = [..._knownTypes, ...extras];
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          'قوالب الواتساب',
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text(
+            'قوالب الواتساب',
+            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+          ),
+          iconTheme: IconThemeData(color: AppColors.textHi),
+          actions: [
+            // ⚠️ يظهر **فقط** حين يوجد ناقص: زرٌّ لا يفعل شيئاً حين يُضغط
+            // أسوأ من زرٍّ غائب.
+            if (!_loading && _missingTypes(all).isNotEmpty)
+              TextButton.icon(
+                onPressed: _bulkBusy ? null : () => _generateMissing(all),
+                icon: _bulkBusy
+                    ? const SizedBox(
+                        width: 14, height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 1.8))
+                    : const Icon(LucideIcons.sparkles, size: 16),
+                label: Text('توليد ${_missingTypes(all).length}'),
+                style: TextButton.styleFrom(foregroundColor: accent),
+              ),
+          ],
         ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
-        actions: [
-          // ⚠️ يظهر **فقط** حين يوجد ناقص: زرٌّ لا يفعل شيئاً حين يُضغط
-          // أسوأ من زرٍّ غائب.
-          if (!_loading && _missingTypes(all).isNotEmpty)
-            TextButton.icon(
-              onPressed: _bulkBusy ? null : () => _generateMissing(all),
-              icon: _bulkBusy
-                  ? const SizedBox(
-                      width: 14, height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 1.8))
-                  : const Icon(LucideIcons.sparkles, size: 16),
-              label: Text('توليد ${_missingTypes(all).length}'),
-              style: TextButton.styleFrom(foregroundColor: accent),
-            ),
-        ],
       ),
       body: SafeArea(
         child: RefreshIndicator(

@@ -15,6 +15,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../subscribers/subscriber_detail_screen.dart';
+import '../../core/platform/desktop_layout.dart';
 
 /// Spotlight-style search overlay: TextField at the top, mic button on
 /// the trailing side for voice input, suggestion list below.
@@ -329,17 +330,25 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    // الحاسبة: نافذة بحثٍ بعرض ٦٨٠ أعلى الوسط بارتفاع نتائجها (كلوحة الأوامر في الموقع) — لا لوحةٌ
+    // تغطّي الشاشة كلّها كالهاتف.
+    final desk = DesktopLayout.wide(context);
     return Directionality(
       textDirection: TextDirection.rtl,
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            Sp.lg,
-            Sp.huge,
-            Sp.lg,
-            Sp.lg,
-          ),
-          child: Material(
+          padding: desk
+              ? const EdgeInsets.fromLTRB(Sp.lg, 96, Sp.lg, Sp.lg)
+              : const EdgeInsets.fromLTRB(
+                  Sp.lg,
+                  Sp.huge,
+                  Sp.lg,
+                  Sp.lg,
+                ),
+          // الهاتف كما كان حرفاً (اللوحة تملأ ما تحت الهامش)؛ الحاسبة بعرضٍ وارتفاعٍ بقدر المحتوى.
+          child: _DeskFrame(
+            desk: desk,
+            child: Material(
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(R.xl),
             clipBehavior: Clip.antiAlias,
@@ -394,7 +403,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
                     // فقط من أصل 12 والباقي يبدو "مقطوع". 0.75 يعطي
                     // مساحة كافية لـ~10 نتائج مباشرة مع القابليّة للتمرير
                     // إن تجاوزت.
-                    maxHeight: MediaQuery.sizeOf(context).height * 0.75,
+                    maxHeight: MediaQuery.sizeOf(context).height * (desk ? 0.6 : 0.75),
                   ),
                   child: SingleChildScrollView(
                     child: Column(
@@ -445,6 +454,7 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
               ],
             ),
           ),
+          ),
         ),
       ),
     ).animate().slideY(
@@ -453,6 +463,23 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeOutCubic,
         );
+  }
+}
+
+/// على الحاسبة: النافذة أعلى الوسط بعرض ٦٨٠ وارتفاع محتواها؛ وعلى الهاتف تمرّ كما هي.
+class _DeskFrame extends StatelessWidget {
+  const _DeskFrame({required this.desk, required this.child});
+
+  final bool desk;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!desk) return child;
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 680), child: child),
+    );
   }
 }
 

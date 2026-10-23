@@ -21,6 +21,7 @@ import 'widgets/report_log_tile.dart';
 import 'widgets/report_pagination.dart';
 import 'widgets/report_permission_gate.dart';
 import 'widgets/scope_helper.dart';
+import '../desktop/desk_widgets.dart';
 
 /// التقرير المالي — نسخة موبايل من client-v2/Financial.tsx:
 ///  • هيرو إجمالي الإيراد + صافي بعد المصاريف — ولمالك حسابٍ على ساسٍ بعيد
@@ -237,16 +238,19 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
       title: 'reports.financial'.tr(),
       child: Scaffold(
         backgroundColor: AppColors.bg,
-        appBar: AppBar(
-          backgroundColor: AppColors.surface,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          title: Text(
-            'reports.financial'.tr(),
-            style:
-                AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+        appBar: deskPageBar(
+          context,
+          mobile: AppBar(
+            backgroundColor: AppColors.surface,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            title: Text(
+              'reports.financial'.tr(),
+              style:
+                  AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+            ),
+            iconTheme: IconThemeData(color: AppColors.textHi),
           ),
-          iconTheme: IconThemeData(color: AppColors.textHi),
         ),
         body: SafeArea(
           child: RefreshIndicator(

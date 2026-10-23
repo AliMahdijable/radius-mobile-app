@@ -588,7 +588,7 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
           hint: 'sheets.el_add.phone_hint'.tr(),
           icon: LucideIcons.phone,
           keyboard: TextInputType.phone,
-          trailing: _contactButton(),
+          trailing: ContactPicker.supported ? _contactButton() : null,
         ),
       ),
       const SizedBox(height: 14),

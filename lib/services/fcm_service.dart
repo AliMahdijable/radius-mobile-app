@@ -6,6 +6,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
+import '../core/platform/app_platform.dart';
 import '../models/app_notification.dart';
 import 'auth_storage.dart';
 import 'inbox_service.dart';
@@ -51,6 +52,8 @@ class FcmService {
   /// يجب استدعاؤها بعد نجاح تسجيل الدخول وحفظ الجلسة. آمنة الاستدعاء
   /// المتكرر (idempotent).
   static Future<void> initAfterLogin() async {
+    // ويندوز: لا FCM فيه (firebase_messaging بلا تطبيقٍ لويندوز) — إشعارات الخادم تصل الهاتف.
+    if (AppPlatform.isDesktop) return;
     // 1) اطلب الإذن — على Android يُمنح تلقائياً < API 33.
     try {
       final settings = await FirebaseMessaging.instance.requestPermission(
@@ -117,6 +120,7 @@ class FcmService {
 
   /// عند تسجيل الخروج: نُلغي التوكن من backend + نطفي الـstreams.
   static Future<void> unregister() async {
+    if (AppPlatform.isDesktop) return;
     final token = _lastRegisteredToken;
     if (token != null && token.isNotEmpty) {
       try {

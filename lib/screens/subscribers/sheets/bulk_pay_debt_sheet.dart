@@ -13,6 +13,7 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../core/util/amount_input.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// Bulk pay-debt sheet — mirrors v1's bulk_renew_sheet per-row pattern
 /// from mobile-app/lib/screens/subscribers/bulk_renew_sheet.dart. The
@@ -50,7 +51,7 @@ Future<bool?> showBulkPayDebtSheet(
     );
     return Future.value(false);
   }
-  return showModalBottomSheet<bool>(
+  return showAppSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,

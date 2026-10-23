@@ -10,6 +10,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'widgets/report_export.dart';
+import '../desktop/desk_widgets.dart';
 
 /// تقرير موحّد للحركات المالية على المدراء الفرعيين — timeline.
 ///
@@ -367,59 +368,62 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
     final visible = _visible;
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        title: Text(
-          'reports.manager_debts'.tr(),
-          style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
-        ),
-        iconTheme: IconThemeData(color: AppColors.textHi),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: ReportExportBar(
-              title: 'reports.manager_debts'.tr(),
-              subtitle: _dateFrom != null && _dateTo != null
-                  ? '${_fmtDate(_dateFrom!)} → ${_fmtDate(_dateTo!)}'
-                  : 'كل الفترات',
-              fileNameBase: 'manager_debts_timeline',
-              columns: const [
-                'المدير',
-                'اسم المستخدم',
-                'التاريخ',
-                'الحركة',
-                'المبلغ',
-                'الاتجاه',
-                'المصدر',
-                'الملاحظة',
-              ],
-              rows: visible
-                  .map((e) => [
-                        e.manager.fullName.isEmpty
-                            ? e.manager.username
-                            : e.manager.fullName,
-                        e.manager.username,
-                        _fmtDateTime(e.date),
-                        e.meta.label,
-                        formatIQD(e.amount.abs().round()),
-                        e.meta.debit ? '-' : '+',
-                        e.movement.source == MovementSource.sas4
-                            ? 'الساس'
-                            : (e.movement.source != null ? 'يدوي' : ''),
-                        (e.movement.note ?? '').trim(),
-                      ])
-                  .toList(),
-              columnWeights: const [1.4, 1.2, 1.2, 1.5, 1.0, 0.6, 0.7, 2.0],
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          title: Text(
+            'reports.manager_debts'.tr(),
+            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+          ),
+          iconTheme: IconThemeData(color: AppColors.textHi),
+          actions: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: ReportExportBar(
+                title: 'reports.manager_debts'.tr(),
+                subtitle: _dateFrom != null && _dateTo != null
+                    ? '${_fmtDate(_dateFrom!)} → ${_fmtDate(_dateTo!)}'
+                    : 'كل الفترات',
+                fileNameBase: 'manager_debts_timeline',
+                columns: const [
+                  'المدير',
+                  'اسم المستخدم',
+                  'التاريخ',
+                  'الحركة',
+                  'المبلغ',
+                  'الاتجاه',
+                  'المصدر',
+                  'الملاحظة',
+                ],
+                rows: visible
+                    .map((e) => [
+                          e.manager.fullName.isEmpty
+                              ? e.manager.username
+                              : e.manager.fullName,
+                          e.manager.username,
+                          _fmtDateTime(e.date),
+                          e.meta.label,
+                          formatIQD(e.amount.abs().round()),
+                          e.meta.debit ? '-' : '+',
+                          e.movement.source == MovementSource.sas4
+                              ? 'الساس'
+                              : (e.movement.source != null ? 'يدوي' : ''),
+                          (e.movement.note ?? '').trim(),
+                        ])
+                    .toList(),
+                columnWeights: const [1.4, 1.2, 1.2, 1.5, 1.0, 0.6, 0.7, 2.0],
+              ),
             ),
-          ),
-          IconButton(
-            tooltip: 'common.refresh'.tr(),
-            icon:
-                Icon(LucideIcons.refreshCw, size: 18, color: AppColors.textMid),
-            onPressed: _loading ? null : _load,
-          ),
-        ],
+            IconButton(
+              tooltip: 'common.refresh'.tr(),
+              icon:
+                  Icon(LucideIcons.refreshCw, size: 18, color: AppColors.textMid),
+              onPressed: _loading ? null : _load,
+            ),
+          ],
+        ),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

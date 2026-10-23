@@ -13,6 +13,7 @@ import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/app_sheet.dart';
 
 /// telegramLinkGeneratorSheet — يبحث المدير عن مشترك بالاسم، يولّد
 /// deep link، وينسخه/يرسله عبر واتساب. يستدعي:
@@ -23,7 +24,7 @@ Future<void> showTelegramLinkGeneratorSheet(
   required String adminId,
   required VoidCallback onDone,
 }) {
-  return showModalBottomSheet(
+  return showAppSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,

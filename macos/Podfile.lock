@@ -1,0 +1,28 @@
+PODS:
+  - flutter_app_badger_plus (1.3.0):
+    - FlutterMacOS
+  - FlutterMacOS (1.0.0)
+  - printing (1.0.0):
+    - FlutterMacOS
+
+DEPENDENCIES:
+  - flutter_app_badger_plus (from `Flutter/ephemeral/.symlinks/plugins/flutter_app_badger_plus/macos`)
+  - FlutterMacOS (from `Flutter/ephemeral`)
+  - printing (from `Flutter/ephemeral/.symlinks/plugins/printing/macos`)
+
+EXTERNAL SOURCES:
+  flutter_app_badger_plus:
+    :path: Flutter/ephemeral/.symlinks/plugins/flutter_app_badger_plus/macos
+  FlutterMacOS:
+    :path: Flutter/ephemeral
+  printing:
+    :path: Flutter/ephemeral/.symlinks/plugins/printing/macos
+
+SPEC CHECKSUMS:
+  flutter_app_badger_plus: 7e579a1bbfab2cae25e045537a9bfde7afcd1982
+  FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
+  printing: c4cf83c78fd684f9bc318e6aadc18972aa48f617
+
+PODFILE CHECKSUM: 8a872fd4d79162a9d48bb72da9f212183b41573e
+
+COCOAPODS: 1.17.0
