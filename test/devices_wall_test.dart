@@ -86,16 +86,8 @@ void main() {
   });
 
   group('«منذ متى»', () {
-    // نستعمل النسخة المصدريّة للقواعد؛ الدالّة نفسها private في الشاشة.
-    String? since(DateTime? t, DateTime now) {
-      if (t == null) return null;
-      final d = now.difference(t);
-      if (d.isNegative) return null;
-      if (d.inMinutes < 1) return 'منذ لحظات';
-      if (d.inMinutes < 60) return 'منذ ${d.inMinutes} دقيقة';
-      if (d.inHours < 24) return 'منذ ${d.inHours} ساعة';
-      return 'منذ ${d.inDays} يوماً';
-    }
+    // الدالّة المشتركة نفسها (القائمة والجدول والنظرة العامّة).
+    String? since(DateTime? t, DateTime now) => NetworkDeviceLabels.since(t, now: now);
 
     final now = DateTime(2026, 9, 1, 12, 0);
 
@@ -112,9 +104,27 @@ void main() {
 
     test('الوحدات تتدرّج', () {
       expect(since(now.subtract(const Duration(seconds: 20)), now), 'منذ لحظات');
-      expect(since(now.subtract(const Duration(minutes: 4)), now), 'منذ 4 دقيقة');
-      expect(since(now.subtract(const Duration(hours: 5)), now), 'منذ 5 ساعة');
-      expect(since(now.subtract(const Duration(days: 2)), now), 'منذ 2 يوماً');
+      expect(since(now.subtract(const Duration(minutes: 4)), now), 'منذ 4 دقائق');
+      expect(since(now.subtract(const Duration(hours: 5)), now), 'منذ 5 ساعات');
+      expect(since(now.subtract(const Duration(days: 2)), now), 'منذ يومين');
+    });
+
+    // المالك ٢٥ أكتوبر (صورة الأجهزة): «منذ 7 ساعة».
+    test('العدد بتمييزه العربيّ', () {
+      Duration h(int n) => Duration(hours: n);
+      expect(since(now.subtract(const Duration(minutes: 1)), now), 'منذ دقيقة');
+      expect(since(now.subtract(const Duration(minutes: 2)), now), 'منذ دقيقتين');
+      expect(since(now.subtract(const Duration(minutes: 15)), now), 'منذ 15 دقيقة');
+      expect(since(now.subtract(h(1)), now), 'منذ ساعة');
+      expect(since(now.subtract(h(2)), now), 'منذ ساعتين');
+      expect(since(now.subtract(h(7)), now), 'منذ 7 ساعات');
+      expect(since(now.subtract(h(10)), now), 'منذ 10 ساعات');
+      expect(since(now.subtract(h(11)), now), 'منذ 11 ساعة');
+      expect(since(now.subtract(const Duration(days: 1)), now), 'منذ يوم');
+      expect(since(now.subtract(const Duration(days: 3)), now), 'منذ 3 أيام');
+      expect(since(now.subtract(const Duration(days: 30)), now), 'منذ 30 يوماً');
+      expect(since(now.subtract(const Duration(days: 100)), now), 'منذ 100 يوم');
+      expect(since(now.subtract(const Duration(days: 103)), now), 'منذ 103 أيام');
     });
   });
 

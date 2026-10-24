@@ -18,6 +18,9 @@ import '../detected_model.dart';
 import '../../../core/util/error_text.dart';
 import '../../desktop/desk_widgets.dart';
 import '../../../core/widgets/copyable.dart';
+import '../../../core/platform/desktop_layout.dart';
+import '../../../core/util/bidi.dart';
+import '../../../core/util/format.dart';
 
 /// Panel للمراقبة الحيّة لجهاز Mikrotik.
 /// - Auto-start عند فتح الصفحة (لا يحتاج المستخدم يضغط "بدء")
@@ -348,9 +351,10 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           if (_stats != null) ...[
             // RepaintBoundary لكل section — كل قسم يُرسم مستقلاً بلا rebuild
             // للـchart (الأثقل بصرياً) عند تحديث القيم فقط
-            RepaintBoundary(child: _boardBanner()),
+            RepaintBoundary(child: _desk ? _deskBoardBanner() : _boardBanner()),
             RepaintBoundary(child: _metricsRow()),
-            if (_history.length >= 2) ...[
+            // الحاسبة: مكان الرسم محجوزٌ من البداية (رسالة «تُجمع القراءات») فلا تقفز الصفحة حين يظهر.
+            if (_desk || _history.length >= 2) ...[
               const SizedBox(height: 4),
               _trafficGraph(), // فيه RepaintBoundary داخلياً
             ],
@@ -364,6 +368,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   }
 
   List<Widget> _buildExpandables() {
+    if (_desk) return _deskExpandables();
     final s = _stats!;
     final ethers = s.interfaces.where(_isEther).toList();
     // البريدجات: الأعلى ترافيكاً أوّلاً (طلب المستخدم ١٨ أكتوبر).
@@ -539,24 +544,29 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   // Header
   // ══════════════════════════════════════════════════════════════
   Widget _header() {
+    final desk = _desk;
+    final meta = desk
+        ? TextStyle(fontSize: 11.5, height: 1.3, color: AppColors.textMid)
+        : TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textMid);
+    final metaLow = meta.copyWith(color: AppColors.textLow);
     return Padding(
       padding: const EdgeInsets.all(Sp.md),
       child: Row(children: [
         Container(
-          width: 32,
-          height: 32,
+          width: desk ? 40 : 32,
+          height: desk ? 40 : 32,
           decoration: BoxDecoration(
             color: AppColors.brandSoftBg,
             borderRadius: BorderRadius.circular(R.sm),
           ),
-          child: Icon(LucideIcons.activity, size: 16, color: AppColors.brand),
+          child: Icon(LucideIcons.activity, size: desk ? 20 : 16, color: AppColors.brand),
         ),
         const SizedBox(width: 10),
         Expanded(
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('مراقبة حيّة (Mikrotik API)',
-                style: AppType.bodyBold()),
+            Text(desk ? 'مراقبة حيّة · MikroTik API' : 'مراقبة حيّة (Mikrotik API)',
+                style: desk ? AppType.cardTitleBold() : AppType.bodyBold()),
             const SizedBox(height: 2),
             Row(children: [
               if (_monitoring) ...[
@@ -567,16 +577,17 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                 // 2026-08-18: النصّ ثابت — التغيّر السابق كان يُوحي "فُصل ورجع".
                 // الـ_pulseDot يعطي المؤشّر البصري كافياً.
                 _monitoring
-                    ? 'مباشر · كل ${_refreshInterval.inSeconds}s'
+                    ? (desk
+                        ? 'مباشر · يتحدّث كلّ ${arCount(_refreshInterval.inSeconds, one: 'ثانية', two: 'ثانيتين', few: 'ثوانٍ', many: 'ثانية')}'
+                        : 'مباشر · كل ${_refreshInterval.inSeconds}s')
                     : 'متوقّف',
-                style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textMid),
+                style: meta,
               ),
               if (_lastFetch != null) ...[
-                Text(' • ',
-                    style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textLow)),
+                Text(' • ', style: metaLow),
                 Text(
-                  'آخر: ${_lastFetch!.hour.toString().padLeft(2, '0')}:${_lastFetch!.minute.toString().padLeft(2, '0')}:${_lastFetch!.second.toString().padLeft(2, '0')}',
-                  style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textLow),
+                  '${desk ? 'آخر تحديث' : 'آخر:'} ${_lastFetch!.hour.toString().padLeft(2, '0')}:${_lastFetch!.minute.toString().padLeft(2, '0')}:${_lastFetch!.second.toString().padLeft(2, '0')}',
+                  style: metaLow,
                 ),
               ],
             ]),
@@ -689,6 +700,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   // 3 metric cards: CPU / RAM / أعلى interface
   // ══════════════════════════════════════════════════════════════
   Widget _metricsRow() {
+    if (_desk) return _deskMetricsRow();
     final s = _stats!;
     final maxRx = _maxRxIface();
     final maxTx = _maxTxIface();
@@ -739,16 +751,16 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
               const SizedBox(width: 8),
               Expanded(
                   child: _topRateCard(
-                label: 'أعلى iface ↓', // per-interface max ↓
+                down: true, // أعلى واجهةٍ بالاستقبال
                 iface: maxRx,
                 color: AppColors.success,
               )),
               const SizedBox(width: 8),
               Expanded(
                   child: _topRateCard(
-                label: 'أعلى iface ↑',
+                down: false,
                 iface: maxTx,
-                color: AppColors.brandAccent,
+                color: AppColors.info,
               )),
             ],
           ),
@@ -853,7 +865,9 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                       height: 1)),
               if (unit.isNotEmpty) ...[
                 const SizedBox(width: 2),
+                // يساراً إلى يمين: «°C» كانت تظهر «C°» (صورة المالك ٢٥ أكتوبر)
                 Text(unit,
+                    textDirection: TextDirection.ltr,
                     style: AppType.muted()),
               ],
             ],
@@ -920,7 +934,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   }
 
   Widget _topRateCard({
-    required String label,
+    required bool down,
     required ({String name, int bps})? iface,
     required Color color,
   }) {
@@ -938,23 +952,19 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         children: [
           // Header row 1: icon + "أعلى" فقط (بدون اسم — يأخذ سطره الخاصّ)
           Row(children: [
-            Icon(
-              label.contains('↓') ? LucideIcons.arrowDown : LucideIcons.arrowUp,
-              size: 12,
-              color: color,
-            ),
+            Icon(down ? LucideIcons.arrowDown : LucideIcons.arrowUp, size: 12, color: color),
             const SizedBox(width: 4),
-            Text(label.replaceAll(RegExp(r'[↓↑]'), '').trim(),
+            Text(down ? 'أعلى تنزيل' : 'أعلى رفع',
                 style: AppType.microBold(color: AppColors.textMid)),
           ]),
           // Row 2: اسم الـiface بحجم مقروء بلا تقطيع (لأنّه في سطره الخاصّ)
           if (hasData)
             Text(iface.name,
                 style: AppType.bodyBold()),
-          // Row 3: value (big number)
-          Text(hasData ? _formatBps(iface.bps) : '—',
+          // Row 3: value (big number) — «يُحسب…» حتى القراءة الثانية (السرعة فرقُ قراءتين)، لا «—» كأنّه معطّل
+          Text(hasData ? _formatBps(iface.bps) : (_rates.isEmpty ? 'يُحسب…' : '—'),
               style: TextStyle(
-                  fontSize: 17,
+                  fontSize: hasData ? 17 : 12.5,
                   fontWeight: FontWeight.w700,
                   color: hasData ? color : AppColors.textLow,
                   height: 1)),
@@ -967,61 +977,48 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   // Traffic graph — RX + TX gradient area chart
   // ══════════════════════════════════════════════════════════════
   Widget _trafficGraph() {
+    final desk = _desk;
+    // نافذةٌ ثابتة بآخر [_maxHistory] قراءة (~٤ دقائق) تمتلئ من طرف «الآن»: القراءتان الأوليان قطعةٌ قصيرة
+    // عنده لا خطٌّ ممدودٌ بعرض الرسم كأنّه اتّجاه أربع دقائق (صورة المالك ٢٥ أكتوبر: خطٌّ مستقيم من نقطتين).
+    final n = _history.length;
+    final first = _maxHistory - n;
+    final lastX = (_maxHistory - 1).toDouble();
     // كلا الخطّين من الأسفل (baseline=0)، بألوان مختلفة وتعبئة شفّافة
     // → التداخل يظهر بلون مختلط، الاختلاف واضح بصرياً.
     final rxSpots = <FlSpot>[];
     final txSpots = <FlSpot>[];
-    for (int i = 0; i < _history.length; i++) {
-      final x = i.toDouble();
+    for (int i = 0; i < n; i++) {
+      final x = (first + i).toDouble();
       rxSpots.add(FlSpot(x, _history[i].rxBps.toDouble()));
       txSpots.add(FlSpot(x, _history[i].txBps.toDouble()));
     }
-    final maxRx = _history.map((s) => s.rxBps).fold<int>(0, math.max);
-    final maxTx = _history.map((s) => s.txBps).fold<int>(0, math.max);
-    final peak = math.max(maxRx, maxTx);
-    final maxY = (peak * 1.25).clamp(1000, double.infinity).toDouble();
+    final peak = _history.fold<int>(0, (m, s) => math.max(m, math.max(s.rxBps, s.txBps)));
+    final maxY = _niceCeil(peak * 1.15);
 
     final lastRx = _history.isNotEmpty ? _history.last.rxBps : 0;
     final lastTx = _history.isNotEmpty ? _history.last.txBps : 0;
 
-    final rxColor = AppColors.success;
-    final txColor = AppColors.brandAccent;
+    // التنزيل أخضر الرسوم والرفع أزرق اللوحة الوحيد — كانا أخضرين متقاربين لا يُفرَّقان.
+    final rxColor = AppColors.chartLine;
+    final txColor = AppColors.info;
+    final windowMin = (_maxHistory * _refreshInterval.inSeconds / 60).round();
 
-    return Container(
-      margin: const EdgeInsets.all(Sp.md),
-      padding: const EdgeInsets.all(Sp.md),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceSunken,
-        borderRadius: BorderRadius.circular(R.md),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Icon(LucideIcons.chartLine, size: 14, color: AppColors.brand),
-          const SizedBox(width: 6),
-          // الكراف يعرض trajectory أعلى interface (يتطابق مع كروت
-          // "أعلى iface ↓ / ↑" اللي فوق)
-          // ⚠️ مرنٌ لأنّ الصفّ بلا مرنٍ يفيض ولا يُقصّ: النصّ غير المرن
-          // يُقاس بلا حدٍّ أعلى، فـ`maxLines` و`ellipsis` عليه لا تعملان
-          // أبداً — يأخذ مقاسه كاملاً ويدفع الصفّ إلى الخطوط الصفراء.
-          Flexible(
-            child: Text('أعلى interface (سير الترفك)',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppType.pillBold(color: AppColors.textHi)),
-          ),
-          const Spacer(),
-          _legendChip('↓', _formatBps(lastRx), rxColor),
-          const SizedBox(width: 6),
-          _legendChip('↑', _formatBps(lastTx), txColor),
-        ]),
-        const SizedBox(height: 12),
+    final Widget chart = n < 2
+        ? Center(
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brand)),
+              const SizedBox(width: 8),
+              Text('تُجمع القراءات — يظهر الرسم بعد ثوانٍ',
+                  style: AppType.body(color: AppColors.textMid)),
+            ]),
+          )
         // RepaintBoundary + duration:0 → يمنع rebuild الكامل عند كل setState
         // الـchart كان أكبر مصدر للـjank (animation 150ms افتراضي × كل fetch)
-        SizedBox(
-          height: 120,
-          child: RepaintBoundary(
-              child: LineChart(
+        : RepaintBoundary(
+            child: LineChart(
             duration: Duration.zero, // ألغي الـanimation بين updates
             LineChartData(
               gridData: FlGridData(
@@ -1039,16 +1036,34 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                     const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                 rightTitles:
                     const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                bottomTitles:
-                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                // الحاسبة: محور الوقت (قبل ٤ دقائق … الآن) — النافذة ثابتة فالتسميات صادقة.
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: desk,
+                    reservedSize: 24,
+                    interval: lastX / 2,
+                    getTitlesWidget: (value, meta) => SideTitleWidget(
+                      meta: meta,
+                      fitInside: SideTitleFitInsideData.fromTitleMeta(meta),
+                      child: Text(
+                        value >= lastX
+                            ? 'الآن'
+                            : 'قبل ${arMinutes(value <= 0 ? windowMin : (windowMin / 2).round())}',
+                        style: AppType.micro(color: AppColors.textLow),
+                      ),
+                    ),
+                  ),
+                ),
                 leftTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
-                    reservedSize: 44,
-                    interval: maxY / 3,
+                    reservedSize: desk ? 52 : 44,
+                    interval: maxY / 4,
                     getTitlesWidget: (value, _) => Text(
                       _formatBpsShort(value.toInt()),
-                      style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow),
+                      style: desk
+                          ? AppType.micro(color: AppColors.textLow)
+                          : TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow),
                     ),
                   ),
                 ),
@@ -1057,13 +1072,13 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
               minY: 0,
               maxY: maxY,
               minX: 0,
-              maxX: (_history.length - 1).toDouble(),
+              maxX: lastX,
               // الأزرق (TX) أوّلاً — يُرسم تحت (bottom layer)
               // الأخضر (RX) ثاني — فوق (top layer) لكن بتعبئة شفّافة
               // → مناطق التداخل تظهر بلون مختلط
               lineBarsData: [
-                _lineBarData(txSpots, txColor), // أزرق تحت
-                _lineBarData(rxSpots, rxColor), // أخضر فوق
+                _lineBarData(txSpots, txColor, lastX), // أزرق تحت
+                _lineBarData(rxSpots, rxColor, lastX), // أخضر فوق
               ],
               lineTouchData: LineTouchData(
                 enabled: true,
@@ -1073,30 +1088,83 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                   getTooltipItems: (spots) => spots.map((s) {
                     final isTx = s.barIndex == 0; // الأوّل في lineBarsData
                     return LineTooltipItem(
-                      '${isTx ? "↑" : "↓"} ${_formatBps(s.y.toInt())}',
+                      '${isTx ? "↑" : "↓"} ${_bpsFull(s.y.toInt())}',
                       AppType.microBold(color: isTx ? txColor : rxColor),
                     );
                   }).toList(),
                 ),
               ),
             ),
-          )),
-        ),
+          ));
+
+    return Container(
+      margin: const EdgeInsets.all(Sp.md),
+      padding: EdgeInsets.all(desk ? Sp.lg : Sp.md),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSunken,
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(LucideIcons.chartLine, size: desk ? 16 : 14, color: AppColors.brand),
+          const SizedBox(width: 6),
+          // الكراف يعرض trajectory أعلى interface (يتطابق مع كروت «أعلى تنزيل / رفع» اللي فوق)
+          // ⚠️ مرنٌ لأنّ الصفّ بلا مرنٍ يفيض ولا يُقصّ: النصّ غير المرن
+          // يُقاس بلا حدٍّ أعلى، فـ`maxLines` و`ellipsis` عليه لا تعملان
+          // أبداً — يأخذ مقاسه كاملاً ويدفع الصفّ إلى الخطوط الصفراء.
+          Flexible(
+            child: desk
+                ? Text.rich(
+                    TextSpan(children: [
+                      TextSpan(text: 'سير الترفك', style: AppType.cardTitleBold(color: AppColors.textHi)),
+                      TextSpan(
+                          text: '   أعلى واجهةٍ في كلّ لحظة · آخر ${arMinutes(windowMin)}',
+                          style: AppType.muted(color: AppColors.textLow)),
+                    ]),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  )
+                : Text('سير الترفك',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.pillBold(color: AppColors.textHi)),
+          ),
+          const Spacer(),
+          if (n >= 2) ...[
+            _legendChip(down: true, value: lastRx, color: rxColor),
+            const SizedBox(width: 6),
+            _legendChip(down: false, value: lastTx, color: txColor),
+          ],
+        ]),
+        SizedBox(height: desk ? Sp.lg : 12),
+        SizedBox(height: desk ? 210 : 120, child: chart),
       ]),
     );
   }
 
   /// خطّ + تعبئة شفّافة من الأسفل (كل خطّ من baseline=0).
   /// التعبئة شفّافة عشان لمّا الاثنين يتداخلون، اللون المخلوط يبيّن التداخل.
-  LineChartBarData _lineBarData(List<FlSpot> spots, Color color) {
+  /// ونقطةٌ عند آخر قراءة وحدها — «الآن» ظاهرةٌ ولو كانت القراءات قليلة.
+  LineChartBarData _lineBarData(List<FlSpot> spots, Color color, double lastX) {
     return LineChartBarData(
       spots: spots,
       isCurved: true,
       curveSmoothness: 0.28,
+      preventCurveOverShooting: true,
       color: color,
       barWidth: 2.5,
       isStrokeCapRound: true,
-      dotData: const FlDotData(show: false),
+      dotData: FlDotData(
+        show: true,
+        checkToShowDot: (spot, _) => spot.x == lastX,
+        getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+          radius: 3.5,
+          color: color,
+          strokeWidth: 2,
+          strokeColor: AppColors.surfaceSunken,
+        ),
+      ),
       belowBarData: BarAreaData(
         show: true,
         gradient: LinearGradient(
@@ -1111,16 +1179,640 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     );
   }
 
-  Widget _legendChip(String arrow, String value, Color color) {
+  /// مفتاح الخطّ بقيمته الآن. الحاسبة: نقطةٌ بلون الخطّ + «تنزيل/رفع» + القيمة بوحدتها.
+  Widget _legendChip({required bool down, required int value, required Color color}) {
+    if (!_desk) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(R.sm),
+        ),
+        child: Text('${down ? '↓' : '↑'} ${_formatBps(value)}',
+            style: AppType.microBold(color: color)),
+      );
+    }
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(R.sm),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.pill),
+        border: Border.all(color: AppColors.border),
       ),
-      child: Text('$arrow $value',
-          style: AppType.microBold(color: color)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(down ? 'تنزيل' : 'رفع', style: AppType.label(color: AppColors.textMid)),
+        const SizedBox(width: 6),
+        Text(_bpsFull(value),
+            textDirection: TextDirection.ltr,
+            style: AppType.rowValue(color: AppColors.textHi)),
+      ]),
     );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // الحاسبة — صفّ أرقامٍ واحد، وجدول الواجهات وبطاقة الوايرلس جنباً إلى جنب، وجدول العملاء.
+  // المالك ٢٥ أكتوبر بصور «سكتر 1»: صفوفٌ بعرض الشاشة أرقامها بطرفها أو وسطها، ونصٌّ صغير،
+  // و«أعلى iface» بـ«—». الهاتف كما هو.
+  // ══════════════════════════════════════════════════════════════
+  bool get _desk => DesktopScope.of(context);
+
+  Widget _deskBoardBanner() {
+    final s = _stats!;
+    Widget fact(IconData icon, String label, String value) => Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 15, color: AppColors.brand),
+          const SizedBox(width: 6),
+          Text(label, style: AppType.label(color: AppColors.textMid)),
+          const SizedBox(width: 6),
+          Text(value, style: AppType.rowValue(color: AppColors.textHi)),
+        ]);
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(Sp.md, 0, Sp.md, Sp.md),
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.brandSoftBg,
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(color: AppColors.brandSoftBorder),
+      ),
+      child: Wrap(spacing: Sp.xl, runSpacing: Sp.sm, crossAxisAlignment: WrapCrossAlignment.center, children: [
+        fact(LucideIcons.router, 'الطراز', s.boardName),
+        fact(LucideIcons.package, 'RouterOS', s.version.split(' ').first),
+        fact(LucideIcons.clock, 'يعمل منذ', _uptimeAr(s.uptime)),
+        if (s.pppActiveCount > 0) fact(LucideIcons.users, 'جلسات PPP', '${s.pppActiveCount}'),
+      ]),
+    );
+  }
+
+  /// ستّ بطاقاتٍ في صفٍّ واحد (ثلاثٌ في صفّين إن ضاق): المعالج، الذاكرة، الحرارة، الطاقة، أعلى تنزيل، أعلى رفع.
+  Widget _deskMetricsRow() {
+    final s = _stats!;
+    final tiles = <Widget>[
+      _deskPercentTile(
+        icon: LucideIcons.cpu,
+        label: 'المعالج',
+        percent: s.cpuLoad.toDouble(),
+        sub: s.cpuFrequencyMhz > 0
+            ? isoJoin([
+                '${s.cpuFrequencyMhz} MHz',
+                if (s.cpuCount > 1) arCount(s.cpuCount, one: 'نواة', two: 'نواتان', few: 'أنوية', many: 'نواة'),
+              ], ' · ')
+            : null,
+      ),
+      _deskPercentTile(
+        icon: LucideIcons.memoryStick,
+        label: 'الذاكرة',
+        percent: s.memUsedPercent.toDouble(),
+        sub: s.memTotalBytes > 0
+            ? '${iso(_bytesShort(s.memUsedBytes))} من ${iso(_bytesShort(s.memTotalBytes))}'
+            : null,
+      ),
+      _deskTempTile(s),
+      _deskPowerTile(s),
+      _deskRateTile(down: true, iface: _maxRxIface()),
+      _deskRateTile(down: false, iface: _maxTxIface()),
+    ];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md),
+      child: LayoutBuilder(builder: (context, c) {
+        final perRow = c.maxWidth >= 6 * 140 + 5 * Sp.sm ? 6 : 3;
+        return Column(children: [
+          for (var i = 0; i < tiles.length; i += perRow) ...[
+            if (i > 0) const SizedBox(height: Sp.sm),
+            // كلّ البطاقات بارتفاعٍ واحد
+            IntrinsicHeight(
+              child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                for (var k = i; k < math.min(i + perRow, tiles.length); k++) ...[
+                  if (k > i) const SizedBox(width: Sp.sm),
+                  Expanded(child: tiles[k]),
+                ],
+              ]),
+            ),
+          ],
+        ]);
+      }),
+    );
+  }
+
+  Widget _deskTile({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required Widget value,
+    Widget? footer,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSunken,
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: Color.alphaBlend(color.withValues(alpha: AppColors.isDark ? 0.22 : 0.14), AppColors.surface),
+              borderRadius: BorderRadius.circular(R.sm),
+            ),
+            child: Icon(icon, size: 15, color: color),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(label,
+                maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.label(color: AppColors.textMid)),
+          ),
+        ]),
+        const SizedBox(height: 10),
+        value,
+        const Spacer(),
+        if (footer != null) ...[const SizedBox(height: Sp.sm), footer],
+      ]),
+    );
+  }
+
+  /// الرقم الكبير بوحدته يساراً إلى يمين («5.8 Mbps»، «38 °C») فلا يتفكّك في الفقرة العربيّة.
+  Widget _deskValue(String value, String unit, {Color? color}) {
+    final known = value != '—';
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      textDirection: TextDirection.ltr,
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        Text(value,
+            textDirection: TextDirection.ltr,
+            style: TextStyle(
+              fontSize: 24,
+              height: 1.15,
+              fontWeight: FontWeight.w700,
+              color: known ? (color ?? AppColors.textHi) : AppColors.textLow,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            )),
+        if (known && unit.isNotEmpty) ...[
+          const SizedBox(width: 4),
+          Text(unit, textDirection: TextDirection.ltr, style: AppType.body(color: AppColors.textLow)),
+        ],
+      ],
+    );
+  }
+
+  Widget _deskSub(String text, {Color? color}) => Text(text,
+      maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.muted(color: color ?? AppColors.textLow));
+
+  String _gradeWord(AppTone t, {required String ok, required String warn, required String bad}) => switch (t) {
+        AppTone.success => ok,
+        AppTone.warning => warn,
+        AppTone.danger => bad,
+        _ => '',
+      };
+
+  Widget _deskPercentTile({required IconData icon, required String label, required double percent, String? sub}) {
+    final tone = Grade.percentLowerBetter(percent);
+    return _deskTile(
+      icon: icon,
+      label: label,
+      color: tone.fill,
+      value: _deskValue('${percent.round()}', '%'),
+      footer: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(R.pill),
+          child: LinearProgressIndicator(
+            value: (percent / 100).clamp(0.0, 1.0),
+            minHeight: 6,
+            backgroundColor: AppColors.border,
+            valueColor: AlwaysStoppedAnimation(tone.fill),
+          ),
+        ),
+        if (sub != null) ...[const SizedBox(height: 6), _deskSub(sub)],
+      ]),
+    );
+  }
+
+  Widget _deskTempTile(MikrotikStats s) {
+    final t = s.temperature;
+    final tone = Grade.temperature(t);
+    return _deskTile(
+      icon: LucideIcons.thermometer,
+      label: 'الحرارة',
+      color: t == null ? AppColors.textLow : tone.fill,
+      value: _deskValue(t != null ? '$t' : '—', '°C', color: tone.fill),
+      footer: _deskSub(t == null ? 'لا يقرؤها هذا الجهاز' : _gradeWord(tone, ok: 'طبيعيّة', warn: 'مرتفعة', bad: 'حرجة')),
+    );
+  }
+
+  /// كـ[_powerStatusCard]: الفولتيّة ثمّ مزوّدات الطاقة ثمّ المراوح.
+  Widget _deskPowerTile(MikrotikStats s) {
+    if (s.voltage != null) {
+      final tone = Grade.voltage(s.voltage);
+      return _deskTile(
+        icon: LucideIcons.plug,
+        label: 'الفولتيّة',
+        color: tone.fill,
+        value: _deskValue(s.voltage!.toStringAsFixed(1), 'V', color: tone.fill),
+        footer: _deskSub(_gradeWord(tone, ok: 'طبيعيّة', warn: 'خارج المعتاد', bad: 'غير طبيعيّة')),
+      );
+    }
+    if (s.psus.isNotEmpty) {
+      final ok = s.psus.where((p) => p.isOk == true).length;
+      final total = s.psus.length;
+      final tone = ok == total ? AppTone.success : (ok > 0 ? AppTone.warning : AppTone.danger);
+      return _deskTile(
+        icon: LucideIcons.batteryCharging,
+        label: 'مزوّدات الطاقة',
+        color: tone.fill,
+        value: _deskValue('$ok/$total', '', color: tone.fill),
+        footer: _deskSub(ok == total ? 'كلّها تعمل' : 'مزوّدٌ متوقّف', color: ok == total ? null : tone.fill),
+      );
+    }
+    if (s.fans.isNotEmpty) {
+      final avg = s.fans.map((f) => f.intValue ?? 0).fold<int>(0, (a, b) => a + b) ~/ s.fans.length;
+      return _deskTile(
+        icon: LucideIcons.fan,
+        label: 'المراوح',
+        color: AppColors.info,
+        value: _deskValue('$avg', 'RPM'),
+        footer: _deskSub(arCount(s.fans.length, one: 'مروحة واحدة', two: 'مروحتان', few: 'مراوح', many: 'مروحة')),
+      );
+    }
+    return _deskTile(
+      icon: LucideIcons.plug,
+      label: 'الفولتيّة',
+      color: AppColors.textLow,
+      value: _deskValue('—', ''),
+      footer: _deskSub('لا يقرؤها هذا الجهاز'),
+    );
+  }
+
+  Widget _deskRateTile({required bool down, required ({String name, int bps})? iface}) {
+    final color = down ? AppColors.chartLine : AppColors.info;
+    final Widget value;
+    if (iface == null) {
+      // السرعة فرقُ قراءتين: «يُحسب…» حتى الثانية لا «—» كأنّه معطّل.
+      value = Text(_rates.isEmpty ? 'يُحسب…' : '—', style: AppType.statValue(color: AppColors.textLow));
+    } else {
+      final (v, u) = _bpsParts(iface.bps);
+      value = _deskValue(v, u, color: color);
+    }
+    return _deskTile(
+      icon: down ? LucideIcons.arrowDown : LucideIcons.arrowUp,
+      label: down ? 'أعلى تنزيل' : 'أعلى رفع',
+      color: color,
+      value: value,
+      footer: iface == null
+          ? _deskSub(_rates.isEmpty ? 'بعد القراءة الثانية' : 'لا ترافيك')
+          : Align(alignment: AlignmentDirectional.centerStart, child: _deskPill(iface.name, AppTone.neutral)),
+    );
+  }
+
+  Widget _deskPill(String text, AppTone tone) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: tone.softBg,
+          borderRadius: BorderRadius.circular(R.pill),
+          border: Border.all(color: tone.softBorder),
+        ),
+        child: Text(iso(text), maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.pillBold(color: tone.onSoft)),
+      );
+
+  Widget _dash() => Text('—', style: AppType.body(color: AppColors.textLow));
+
+  Widget _deskSectionHeader(IconData icon, String title, int count, {String? hint}) {
+    return Row(children: [
+      Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(color: AppColors.brandSoftBg, borderRadius: BorderRadius.circular(R.sm)),
+        child: Icon(icon, size: 16, color: AppColors.brand),
+      ),
+      const SizedBox(width: 10),
+      Text(title, style: AppType.cardTitleBold()),
+      const SizedBox(width: 8),
+      _deskPill('$count', AppTone.neutral),
+      if (hint != null) ...[
+        const SizedBox(width: 10),
+        Flexible(
+          child: Text(hint, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.muted(color: AppColors.textLow)),
+        ),
+      ],
+    ]);
+  }
+
+  List<Widget> _deskExpandables() {
+    final s = _stats!;
+    final ethers = s.interfaces.where(_isEther).toList();
+    // البريدجات: الأعلى ترافيكاً أوّلاً (طلب المستخدم ١٨ أكتوبر).
+    final bridges = s.interfaces.where(_isBridge).toList()
+      ..sort((a, b) => _trafficOf(b).compareTo(_trafficOf(a)));
+    final ifaces = bridges.isEmpty && ethers.isEmpty
+        ? null
+        : ExpandableSection(
+            key: PageStorageKey('mikrotik-${widget.device.id}-ifaces'),
+            initiallyExpanded: true,
+            header: _deskSectionHeader(LucideIcons.network, 'الواجهات', bridges.length + ethers.length,
+                hint: bridges.isEmpty ? null : 'البريدجات أوّلاً — الأعلى ترافيكاً'),
+            content: RepaintBoundary(child: _deskIfaceTable([...bridges, ...ethers], s)),
+          );
+    final wifi = !s.hasWireless
+        ? null
+        : ExpandableSection(
+            key: PageStorageKey('mikrotik-${widget.device.id}-wifi'),
+            initiallyExpanded: true,
+            header: _deskSectionHeader(LucideIcons.wifi, 'الوايرلس', s.wirelessInterfaces.length),
+            content: Column(children: [
+              for (final (k, w) in s.wirelessInterfaces.indexed) ...[
+                if (k > 0) const SizedBox(height: Sp.sm),
+                _deskWirelessCard(w),
+              ],
+            ]),
+          );
+    return [
+      if (ifaces != null || wifi != null) ...[
+        const SizedBox(height: Sp.md),
+        // الواجهات والوايرلس جنباً إلى جنب (الوايرلس أضيق) بدل قسمين بعرض الصفحة.
+        if (ifaces != null && wifi != null)
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(flex: 3, child: ifaces),
+            const SizedBox(width: Sp.md),
+            Expanded(flex: 2, child: wifi),
+          ])
+        else
+          ifaces ?? wifi!,
+      ],
+      // 2026-08-20: القسم يظهر دائماً لأي جهاز AP حتى بصفر عملاء — كالهاتف.
+      if (s.isAccessPoint) ...[
+        const SizedBox(height: Sp.md),
+        ExpandableSection(
+          key: PageStorageKey('mikrotik-${widget.device.id}-clients'),
+          initiallyExpanded: true,
+          header: _deskSectionHeader(LucideIcons.users, 'العملاء المتّصلون', _stickyClients.length),
+          content: RepaintBoundary(
+            child: _stickyClients.isEmpty ? _emptyClientsHint() : _deskClientsTable(_stickyClients),
+          ),
+        ),
+      ],
+    ];
+  }
+
+  /// الواجهات جدولاً كقائمة Winbox: البريدجات ثمّ الإيثر، وتحت كلّ سرعةٍ شريطٌ نسبةً لأعلاها في الجدول.
+  Widget _deskIfaceTable(List<MikrotikInterface> rows, MikrotikStats s) {
+    int maxRx = 0, maxTx = 0;
+    for (final i in rows) {
+      final r = _rates[i.name];
+      if (r != null) {
+        maxRx = math.max(maxRx, r.rxBps);
+        maxTx = math.max(maxTx, r.txBps);
+      }
+    }
+    final byName = {for (final i in s.interfaces) i.name: i};
+    return _DeskTable(
+      columns: const [('الواجهة', 4), ('الربط', 2), ('البريدج / المنافذ', 4), ('تنزيل ↓', 3), ('رفع ↑', 3)],
+      rows: [
+        for (final i in rows)
+          [
+            _ifaceNameCell(i),
+            _linkCell(i),
+            if (_isBridge(i))
+              _portsCell([
+                for (final p in s.bridgePorts[i.name] ?? const <String>[]) (name: p, iface: byName[p]),
+              ])
+            else if (s.bridgeOf(i.name) case final b?)
+              Align(alignment: AlignmentDirectional.centerStart, child: _deskPill(b, AppTone.brand))
+            else
+              _dash(),
+            _rateCell(i, down: true, max: maxRx),
+            _rateCell(i, down: false, max: maxTx),
+          ],
+      ],
+    );
+  }
+
+  Widget _ifaceNameCell(MikrotikInterface i) {
+    final tone = i.disabled ? AppTone.neutral : (i.running ? AppTone.success : AppTone.danger);
+    final color = i.disabled ? AppColors.textLow : tone.fill;
+    final type = switch (i.type) { 'bridge' => 'بريدج', 'ether' => 'إيثرنت', 'sfp' => 'SFP', _ => i.type };
+    final state = i.disabled ? 'معطّل' : (i.running ? 'يعمل' : 'مفصول');
+    return Row(children: [
+      Container(width: 9, height: 9, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          Text(i.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.rowValue(color: i.disabled ? AppColors.textLow : AppColors.textHi)),
+          Text('$type · $state', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.muted(color: color)),
+        ]),
+      ),
+    ]);
+  }
+
+  Widget _linkCell(MikrotikInterface i) {
+    final ls = i.linkSpeed;
+    if (ls == null || ls.isEmpty || !i.running) return _dash();
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: _deskPill(_shortLinkSpeed(ls), Grade.linkSpeedText(ls)),
+    );
+  }
+
+  Widget _portsCell(List<({String name, MikrotikInterface? iface})> members) {
+    if (members.isEmpty) return _dash();
+    return Wrap(spacing: 6, runSpacing: 6, children: [
+      for (final m in members)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(R.pill),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: m.iface == null || m.iface!.disabled
+                    ? AppColors.textLow
+                    : (m.iface!.running ? AppColors.success : AppColors.error),
+              ),
+            ),
+            const SizedBox(width: 5),
+            Text(m.name, style: AppType.pillLabel(color: AppColors.textBody)),
+          ]),
+        ),
+    ]);
+  }
+
+  Widget _rateCell(MikrotikInterface i, {required bool down, required int max}) {
+    final r = _rates[i.name];
+    if (r == null) {
+      return Text(i.running && !i.disabled ? 'يُحسب…' : '—', style: AppType.body(color: AppColors.textLow));
+    }
+    final bps = down ? r.rxBps : r.txBps;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+      Text(iso(_bpsFull(bps)), style: AppType.rowValue(color: bps > 0 ? AppColors.textHi : AppColors.textLow)),
+      const SizedBox(height: 5),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(R.pill),
+        child: LinearProgressIndicator(
+          value: max > 0 ? (bps / max).clamp(0.0, 1.0) : 0,
+          minHeight: 4,
+          backgroundColor: AppColors.borderSoft,
+          valueColor: AlwaysStoppedAnimation(down ? AppColors.chartLine : AppColors.info),
+        ),
+      ),
+    ]);
+  }
+
+  Widget _deskWirelessCard(MikrotikWireless w) {
+    final active = w.running && !w.disabled;
+    final tone = active ? AppTone.success : (w.disabled ? AppTone.neutral : AppTone.danger);
+    final clients = _stickyClients.where((c) => c.iface == w.name).length;
+    final facts = <Widget>[
+      if (w.band.isNotEmpty) _fact('النطاق', w.band, ltr: true),
+      if (w.frequency > 0) _fact('التردّد', '${w.frequency} MHz', ltr: true),
+      if (w.channelWidth > 0) _fact('عرض القناة', '${w.channelWidth} MHz', ltr: true),
+      if (w.txPower > 0) _fact('قدرة الإرسال', '${w.txPower} dBm', ltr: true),
+      if (w.isAp) _fact('العملاء', '$clients'),
+    ];
+    return Container(
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSunken,
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(w.isAp ? LucideIcons.radioTower : LucideIcons.satellite, size: 18, color: tone.fill),
+          const SizedBox(width: 8),
+          Text(w.name, style: AppType.cardTitleBold()),
+          const SizedBox(width: 8),
+          Flexible(child: _deskPill(_modeLabel(w.mode), AppTone.brand)),
+          const Spacer(),
+          _deskPill(active ? 'يعمل' : (w.disabled ? 'معطّل' : 'متوقّف'), tone),
+        ]),
+        if (w.ssid.isNotEmpty) ...[
+          const SizedBox(height: Sp.md),
+          _fact('اسم الشبكة (SSID)', w.ssid, ltr: true, copy: true),
+        ],
+        if (facts.isNotEmpty) ...[
+          const SizedBox(height: Sp.md),
+          LayoutBuilder(builder: (context, c) {
+            final cols = c.maxWidth >= 480 ? 3 : (c.maxWidth >= 300 ? 2 : 1);
+            final width = (c.maxWidth - Sp.md * (cols - 1)) / cols;
+            return Wrap(spacing: Sp.md, runSpacing: Sp.md, children: [
+              for (final f in facts) SizedBox(width: width, child: f),
+            ]);
+          }),
+        ],
+      ]),
+    );
+  }
+
+  /// حقيقةٌ بعنوانها فوقها. [ltr]: قيمةٌ لاتينيّة («5535 MHz») معزولةٌ فلا تنقلب.
+  Widget _fact(String label, String value, {bool ltr = false, bool copy = false}) {
+    final text = Text(ltr ? iso(value) : value,
+        maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.rowValue(color: AppColors.textHi));
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+      Text(label, style: AppType.label(color: AppColors.textMid)),
+      const SizedBox(height: 3),
+      copy ? Copyable(label: label, value: value, child: text) : text,
+    ]);
+  }
+
+  /// العملاء جدولاً كـ«Registration Table» في Winbox — الاسم والـIP والماك تُنسخ بضغطٍ مطوّل أو زرٍّ أيمن.
+  Widget _deskClientsTable(List<MikrotikWirelessClient> cs) {
+    const limit = 100;
+    // عمودا IP وCCQ بقدر ما يعطيه الجهاز: السكتر بوضع الجسر لا يعرف IP عملائه، وwifi في RouterOS 7 بلا CCQ —
+    // عمودٌ كلّه «—» مساحةٌ ضائعة.
+    final ip = cs.any((c) => c.ip != null);
+    final ccq = cs.any((c) => c.txCcq > 0 || c.rxCcq > 0);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      _DeskTable(
+        columns: [
+          ('العميل', 4),
+          if (ip) ('IP', 3),
+          ('الماك', 3),
+          ('الإشارة', 3),
+          if (ccq) ('CCQ', 2),
+          ('السرعة', 3),
+          ('متّصل منذ', 2),
+        ],
+        rows: [for (final c in cs.take(limit)) _clientCells(c, ip: ip, ccq: ccq)],
+      ),
+      if (cs.length > limit)
+        Padding(
+          padding: const EdgeInsets.only(top: Sp.sm),
+          child: Text(
+              '+ ${arCount(cs.length - limit, one: 'عميلٌ آخر', two: 'عميلان آخران', few: 'عملاء آخرين', many: 'عميلاً آخر')}',
+              style: AppType.muted(color: AppColors.textLow)),
+        ),
+    ]);
+  }
+
+  List<Widget> _clientCells(MikrotikWirelessClient c, {required bool ip, required bool ccq}) {
+    final name = c.hostname ?? c.comment;
+    final sig = _signalColorFor(c.signalStrength);
+    final q = c.txCcq > 0 ? c.txCcq : c.rxCcq;
+    final mono = AppType.body(color: AppColors.textMid).copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
+    return [
+      if (name != null)
+        Copyable(
+          label: 'اسم العميل',
+          value: name,
+          child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.rowValue(color: AppColors.textHi)),
+        )
+      else
+        Text('بلا اسم', style: AppType.body(color: AppColors.textLow)),
+      if (ip)
+        if (c.ip case final v?)
+          Copyable(label: 'IP', value: v, child: Text(iso(v), maxLines: 1, overflow: TextOverflow.ellipsis, style: mono))
+        else
+          _dash(),
+      Copyable(
+        label: 'الماك',
+        value: c.mac,
+        child: Text(iso(c.mac), maxLines: 1, overflow: TextOverflow.ellipsis, style: mono),
+      ),
+      Row(children: [
+        Container(width: 8, height: 8, decoration: BoxDecoration(color: sig, shape: BoxShape.circle)),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(iso(c.signalDisplay),
+              maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.rowValue(color: sig)),
+        ),
+        const SizedBox(width: 3),
+        Text('dBm', style: AppType.muted(color: AppColors.textLow)),
+      ]),
+      if (ccq)
+        if (q > 0)
+          Align(alignment: AlignmentDirectional.centerStart, child: _deskPill('$q%', Grade.percentHigherBetter(q)))
+        else
+          _dash(),
+      Row(children: [
+        Icon(LucideIcons.arrowDown, size: 12, color: AppColors.chartLine),
+        const SizedBox(width: 2),
+        Text('${c.rxRate}', style: AppType.rowValue(color: AppColors.textHi)),
+        const SizedBox(width: 8),
+        Icon(LucideIcons.arrowUp, size: 12, color: AppColors.info),
+        const SizedBox(width: 2),
+        Text('${c.txRate}', style: AppType.rowValue(color: AppColors.textHi)),
+        const SizedBox(width: 4),
+        Text('Mbps', style: AppType.muted(color: AppColors.textLow)),
+      ]),
+      Text(c.uptime > 0 ? _durAr(c.uptime) : '—',
+          maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.body(color: AppColors.textBody)),
+    ];
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -1176,32 +1868,37 @@ Widget _interfaceRow(
               ),
             ),
           ],
+          // الشارة تأخذ ما بقي وتصطفّ من البداية، فالسرعتان بطرف الصفّ دائماً. كانت `Flexible` بجانب `Spacer`
+          // يتقاسمان الفراغ نصفين فتقع السرعتان وسط الصفّ (صورة المالك ٢٥ أكتوبر).
           if (bridgeTag != null) ...[
             const SizedBox(width: 6),
-            Flexible(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(
-                  color: AppColors.brandSoftBg,
-                  borderRadius: BorderRadius.circular(R.pill),
-                ),
-                child: Text(
-                  bridgeTag,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.daysWordBold(color: AppColors.brand),
+            Expanded(
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: AppColors.brandSoftBg,
+                    borderRadius: BorderRadius.circular(R.pill),
+                  ),
+                  child: Text(
+                    bridgeTag,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.daysWordBold(color: AppColors.brand),
+                  ),
                 ),
               ),
             ),
-          ],
-          const Spacer(),
+          ] else
+            const Spacer(),
           if (rate != null) ...[
             Icon(LucideIcons.arrowDown, size: 9, color: AppColors.success),
             const SizedBox(width: 2),
             Text(_formatBps(rate.rxBps),
                 style: AppType.microBold(color: AppColors.textHi)),
             const SizedBox(width: 8),
-            Icon(LucideIcons.arrowUp, size: 9, color: AppColors.brandAccent),
+            Icon(LucideIcons.arrowUp, size: 9, color: AppColors.info),
             const SizedBox(width: 2),
             Text(_formatBps(rate.txBps),
                 style: AppType.microBold(color: AppColors.textHi)),
@@ -1279,11 +1976,12 @@ Widget _wirelessCard(MikrotikWireless w) {
         const SizedBox(height: 6),
         if (w.ssid.isNotEmpty) _wlRow(LucideIcons.wifi, 'SSID', w.ssid),
         if (w.band.isNotEmpty) _wlRow(LucideIcons.radio, 'Band', w.band),
+        // كلّ مقطعٍ معزول: كان يظهر «MHz • 20MHz 5535» و«dBm 24» (صورة المالك ٢٥ أكتوبر).
         if (w.frequency > 0)
           _wlRow(LucideIcons.satellite, 'التردد',
-              '${w.frequency} MHz${w.channelWidth > 0 ? " • ${w.channelWidth}MHz" : ""}'),
+              isoJoin(['${w.frequency} MHz', if (w.channelWidth > 0) '${w.channelWidth} MHz'], ' • ')),
         if (w.txPower > 0)
-          _wlRow(LucideIcons.zap, 'TX Power', '${w.txPower} dBm'),
+          _wlRow(LucideIcons.zap, 'TX Power', iso('${w.txPower} dBm')),
       ]),
     );
   }
@@ -1415,7 +2113,7 @@ Widget _clientRow(MikrotikWirelessClient c) {
             Text(' ${c.rxRate}',
                 style: AppType.daysWordBold(color: AppColors.textHi)),
             const SizedBox(width: 6),
-            Icon(LucideIcons.arrowUp, size: 8, color: AppColors.brandAccent),
+            Icon(LucideIcons.arrowUp, size: 8, color: AppColors.info),
             Text(' ${c.txRate}',
                 style: AppType.daysWordBold(color: AppColors.textHi)),
             Text(' Mbps',
@@ -1474,11 +2172,68 @@ Widget _clientRow(MikrotikWirelessClient c) {
     return '${(bps / 1000000000).toStringAsFixed(2)}G';
   }
 
+
+  /// 5800000 → ('5.8', 'Mbps') — الرقم ووحدته منفصلين للعرض الكبير.
+  (String, String) _bpsParts(int bps) {
+    if (bps < 1000) return ('${math.max(bps, 0)}', 'bps');
+    if (bps < 1000000) return ((bps / 1e3).toStringAsFixed(1), 'Kbps');
+    if (bps < 1000000000) return ((bps / 1e6).toStringAsFixed(1), 'Mbps');
+    return ((bps / 1e9).toStringAsFixed(2), 'Gbps');
+  }
+
+  String _bpsFull(int bps) {
+    final (v, u) = _bpsParts(bps);
+    return '$v $u';
+  }
+
+  /// أعلى المحور بقيمةٍ أرباعُها مستديرة (1، 1.2، 1.6، 2، 3، 4، 6، 8، 10 × 10ⁿ) — 3M، 6M، 9M، 12M لا 3M و7M و10M.
+  double _niceCeil(double v) {
+    if (v <= 1000) return 1000;
+    final p = math.pow(10, (math.log(v) / math.ln10).floor()).toDouble();
+    for (final m in const [1.0, 1.2, 1.6, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0]) {
+      if (m * p >= v) return m * p;
+    }
+    return 10 * p;
+  }
+
   String _formatBpsShort(int bps) {
-    if (bps < 1000) return '0';
-    if (bps < 1000000) return '${(bps / 1000).round()}K';
-    if (bps < 1000000000) return '${(bps / 1000000).round()}M';
-    return '${(bps / 1000000000).toStringAsFixed(1)}G';
+    // دون العشرة بمنزلةٍ عشريّة («2.5M»، «1.2M») وما فوقها مقرَّب («48M») — كان 2.5M يُكتب «3M» و1.2M «1M».
+    String t(double v) {
+      if (v >= 10) return '${v.round()}';
+      final s = v.toStringAsFixed(1);
+      return s.endsWith('.0') ? s.substring(0, s.length - 2) : s;
+    }
+    if (bps <= 0) return '0';
+    if (bps < 1000) return '$bps';
+    if (bps < 1000000) return '${t(bps / 1000)}K';
+    if (bps < 1000000000) return '${t(bps / 1000000)}M';
+    return '${t(bps / 1000000000)}G';
+  }
+
+  /// «9w4d» → «9 أسابيع و4 أيام» (بدل اختصار RouterOS على الحاسبة).
+  String _uptimeAr(String raw) {
+    int g(String unit) => int.tryParse(RegExp('(\\d+)$unit').firstMatch(raw)?.group(1) ?? '') ?? 0;
+    final w = g('w'), d = g('d'), h = g('h'), m = g('m(?!s)');
+    String and(String a, int n, String Function(int) f) => n > 0 ? '$a و${f(n)}' : a;
+    if (w > 0) return and(arWeeks(w), d, arDays);
+    if (d > 0) return and(arDays(d), h, arHours);
+    if (h > 0) return and(arHours(h), m, arMinutes);
+    if (m > 0) return arMinutes(m);
+    return raw.isEmpty ? '—' : raw;
+  }
+
+  /// مدّة اتّصال العميل: «45 ث» · «12 دقيقة» · «3 ساعات» · «يومين».
+  String _durAr(int seconds) {
+    if (seconds < 60) return '$seconds ث';
+    if (seconds < 3600) return arMinutes(seconds ~/ 60);
+    if (seconds < 86400) return arHours(seconds ~/ 3600);
+    return arDays(seconds ~/ 86400);
+  }
+
+  String _bytesShort(int b) {
+    const mb = 1024 * 1024;
+    if (b >= 1024 * mb) return '${(b / (1024 * mb)).toStringAsFixed(1)} GB';
+    return '${(b / mb).round()} MB';
   }
 }
 
@@ -1502,4 +2257,76 @@ class _TrafficSample {
   final int txBps;
   const _TrafficSample(
       {required this.at, required this.rxBps, required this.txBps});
+}
+
+/// جدول الحاسبة داخل اللوحة: رأسٌ بأسماء الأعمدة ثمّ صفوفٌ بفاصلٍ رفيع وتظليلٍ عند المرور — كجداول Winbox.
+/// [columns]: (العنوان، الوزن)، وخلايا كلّ صفٍّ بترتيبها.
+class _DeskTable extends StatelessWidget {
+  const _DeskTable({required this.columns, required this.rows});
+
+  final List<(String, int)> columns;
+  final List<List<Widget>> rows;
+
+  Widget _line(List<Widget> cells) => Row(children: [
+        for (var k = 0; k < columns.length; k++) ...[
+          if (k > 0) const SizedBox(width: Sp.md),
+          Expanded(flex: columns[k].$2, child: cells[k]),
+        ],
+      ]);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceSunken,
+            border: Border(bottom: BorderSide(color: AppColors.border)),
+          ),
+          child: _line([
+            for (final c in columns)
+              Text(c.$1, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.label(color: AppColors.textMid)),
+          ]),
+        ),
+        for (var r = 0; r < rows.length; r++) _DeskTableRow(divider: r > 0, child: _line(rows[r])),
+      ]),
+    );
+  }
+}
+
+class _DeskTableRow extends StatefulWidget {
+  const _DeskTableRow({required this.divider, required this.child});
+
+  final bool divider;
+  final Widget child;
+
+  @override
+  State<_DeskTableRow> createState() => _DeskTableRowState();
+}
+
+class _DeskTableRowState extends State<_DeskTableRow> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 10),
+        decoration: BoxDecoration(
+          color: _hover ? AppColors.surfaceSunken : null,
+          border: widget.divider ? Border(top: BorderSide(color: AppColors.borderSoft)) : null,
+        ),
+        child: widget.child,
+      ),
+    );
+  }
 }

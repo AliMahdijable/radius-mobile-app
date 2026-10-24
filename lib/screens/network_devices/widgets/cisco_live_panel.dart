@@ -1150,10 +1150,17 @@ class _CiscoLivePanelState extends State<CiscoLivePanel>
   }
 
   static String _formatBpsShort(int bps) {
-    if (bps < 1000) return '0';
-    if (bps < 1000000) return '${(bps / 1000).round()}K';
-    if (bps < 1000000000) return '${(bps / 1000000).round()}M';
-    return '${(bps / 1000000000).toStringAsFixed(1)}G';
+    // دون العشرة بمنزلةٍ عشريّة («2.5M»، «1.2M») وما فوقها مقرَّب («48M») — كان 2.5M يُكتب «3M» و1.2M «1M».
+    String t(double v) {
+      if (v >= 10) return '${v.round()}';
+      final s = v.toStringAsFixed(1);
+      return s.endsWith('.0') ? s.substring(0, s.length - 2) : s;
+    }
+    if (bps <= 0) return '0';
+    if (bps < 1000) return '$bps';
+    if (bps < 1000000) return '${t(bps / 1000)}K';
+    if (bps < 1000000000) return '${t(bps / 1000000)}M';
+    return '${t(bps / 1000000000)}G';
   }
 }
 

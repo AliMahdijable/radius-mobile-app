@@ -47,6 +47,22 @@ String? normalizeDigits(String? input) {
   return s;
 }
 
+/// عددٌ بتمييزه على قواعد العربيّة (بالصيغة المجرورة بعد «منذ»): 1 «ساعة» · 2 «ساعتين» · 3–10 «7 ساعات»
+/// · 11–99 «15 ساعة» · المئات «100 ساعة». المالك ٢٥ أكتوبر (صورة الأجهزة): «منذ 7 ساعة».
+String arCount(int n, {required String one, required String two, required String few, required String many}) {
+  if (n == 1) return one;
+  if (n == 2) return two;
+  final r = n % 100;
+  if (r >= 3 && r <= 10) return '$n $few';
+  if (r <= 2) return '$n $one';
+  return '$n $many';
+}
+
+String arMinutes(int n) => arCount(n, one: 'دقيقة', two: 'دقيقتين', few: 'دقائق', many: 'دقيقة');
+String arHours(int n) => arCount(n, one: 'ساعة', two: 'ساعتين', few: 'ساعات', many: 'ساعة');
+String arDays(int n) => arCount(n, one: 'يوم', two: 'يومين', few: 'أيام', many: 'يوماً');
+String arWeeks(int n) => arCount(n, one: 'أسبوع', two: 'أسبوعين', few: 'أسابيع', many: 'أسبوعاً');
+
 /// 3 → "قبل 3د", 67 → "قبل 1س", 1500 → "قبل يوم".
 String humanMinutesAgo(int minutes) {
   if (minutes < 1) return 'الآن';

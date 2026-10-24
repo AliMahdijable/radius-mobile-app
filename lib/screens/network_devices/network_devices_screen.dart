@@ -30,6 +30,7 @@ import 'widgets/device_image.dart';
 import '../../theme/typography.dart';
 import 'detected_model.dart';
 import 'model_detector.dart';
+import '../../core/util/bidi.dart';
 import '../../core/util/error_text.dart';
 import '../../core/util/fit_hint.dart';
 import '../top_actions.dart';
@@ -1432,7 +1433,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       return SliverGrid.builder(
         gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
           maxCrossAxisExtent: 420,
-          mainAxisExtent: 168,
+          // 176 لا 168: بعرض ~٣٠٨ (ثلاثة أعمدة على شاشة اللابتوب مع تكبير القسم) كان المحتوى يفيض ٤ بكسل فيُقصّ السطر الأخير.
+          mainAxisExtent: 176,
           crossAxisSpacing: Sp.md,
           mainAxisSpacing: Sp.md,
         ),
@@ -1458,15 +1460,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       };
 
   /// «منذ ٤ دقائق» من `status_since` (يتحرّك عند التحوّل وحده) — null لغيابه أو لوقتٍ قادم.
-  static String? _since(DateTime? since) {
-    if (since == null) return null;
-    final d = DateTime.now().difference(since);
-    if (d.isNegative) return null;
-    if (d.inMinutes < 1) return 'منذ لحظات';
-    if (d.inMinutes < 60) return 'منذ ${d.inMinutes} دقيقة';
-    if (d.inHours < 24) return 'منذ ${d.inHours} ساعة';
-    return 'منذ ${d.inDays} يوماً';
-  }
+  static String? _since(DateTime? since) => NetworkDeviceLabels.since(since);
 
   static String _clockOf(DateTime? t) => t == null
       ? '—'
@@ -1871,7 +1865,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                             if ((d.model ?? '').isNotEmpty) d.model!,
                             NetworkDeviceLabels.typeLabel(d.type),
                           ].join(' · '),
-                          maxLines: 1,
+                          // سطران: بسطرٍ واحد كان النوع (عربيّ، آخر السطر) يُقصّ دائماً — «…Mikrotik · BaseBox 5».
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: sub,
                         ),
@@ -1902,7 +1897,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
               Divider(height: Sp.md, thickness: 1, color: AppColors.border),
               Row(
                 children: [
-                  metric('الاستجابة', online && d.lastResponseMs != null ? '${d.lastResponseMs} ms' : '—',
+                  // معزولٌ: «179 ms» كان يظهر «ms 179» في الفقرة العربيّة (صورة المالك ٢٥ أكتوبر).
+                  metric('الاستجابة', online && d.lastResponseMs != null ? iso('${d.lastResponseMs} ms') : '—',
                       color: online ? statusCol : AppColors.textLow),
                   metric(online ? 'متصل' : 'الحالة', since ?? '—'),
                   metric('آخر فحص', _clockOf(d.lastProbedAt)),
@@ -2100,7 +2096,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 children: [
                   if (d.lastResponseMs != null && d.lastStatus == 'online')
                     Text(
-                      '${d.lastResponseMs} ms',
+                      iso('${d.lastResponseMs} ms'),
                       style: AppType.microBold(color: statusCol),
                     ),
                   const SizedBox(height: 4),

@@ -216,4 +216,16 @@ class NetworkDeviceLabels {
   static String typeLabel(String t) => types[t] ?? t;
   static String brandLabel(String b) => brands[b] ?? b;
   static String protocolLabel(String p) => protocols[p] ?? p;
+
+  /// «منذ 7 ساعات» من `status_since` (يتحرّك عند التحوّل وحده) — null لغيابه أو لوقتٍ قادم (انحراف ساعة).
+  /// للقائمة والجدول والنظرة العامّة معاً.
+  static String? since(DateTime? since, {DateTime? now}) {
+    if (since == null) return null;
+    final d = (now ?? DateTime.now()).difference(since);
+    if (d.isNegative) return null;
+    if (d.inMinutes < 1) return 'منذ لحظات';
+    if (d.inMinutes < 60) return 'منذ ${arMinutes(d.inMinutes)}';
+    if (d.inHours < 24) return 'منذ ${arHours(d.inHours)}';
+    return 'منذ ${arDays(d.inDays)}';
+  }
 }

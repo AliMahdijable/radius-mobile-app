@@ -755,15 +755,8 @@ class _DeviceCard extends StatefulWidget {
 
   /// «منذ ٤ دقائق» — من `status_since` الذي يتحرّك عند التحوّل فقط.
   /// يعيد null لغياب القيمة أو لطابع زمنيّ في المستقبل (انحراف ساعة).
-  static String? sinceText(DateTime? since, {DateTime? now}) {
-    if (since == null) return null;
-    final d = (now ?? DateTime.now()).difference(since);
-    if (d.isNegative) return null;
-    if (d.inMinutes < 1) return 'منذ لحظات';
-    if (d.inMinutes < 60) return 'منذ ${d.inMinutes} دقيقة';
-    if (d.inHours < 24) return 'منذ ${d.inHours} ساعة';
-    return 'منذ ${d.inDays} يوماً';
-  }
+  static String? sinceText(DateTime? since, {DateTime? now}) =>
+      NetworkDeviceLabels.since(since, now: now);
 
   @override
   State<_DeviceCard> createState() => _DeviceCardState();

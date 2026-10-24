@@ -24,6 +24,10 @@ class MikrotikApi {
   ///   t=500ms: CPU/RAM/interfaces (partial)
   ///   t=2s: wireless + clients (complete)
 
+  /// الاختبارات واللقطات: يُرجع إحصاءاتٍ جاهزة بدل جلسة RouterOS حقيقيّة (لا جهاز في بيئة الاختبار).
+  @visibleForTesting
+  static Future<MikrotikStats> Function()? debugFetch;
+
   static Future<MikrotikStats> fetchStats({
     required String ip,
     required int port, // 8728 (api) أو 8729 (api-ssl)
@@ -46,6 +50,12 @@ class MikrotikApi {
     /// المفتوحة تحتاجان العملاء والمنافذ فعلاً.
     bool vitalsOnly = false,
   }) async {
+    final fake = debugFetch;
+    if (fake != null) {
+      final s = await fake();
+      onPartialReady?.call(s);
+      return s;
+    }
     final client = MikrotikBinaryClient(
       host: ip,
       port: port,
