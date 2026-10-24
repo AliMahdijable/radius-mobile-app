@@ -19,6 +19,7 @@ import '_grade.dart';
 import '../../../theme/typography.dart';
 import '../../../core/util/error_text.dart';
 import '../../desktop/desk_widgets.dart';
+import '../../../core/widgets/copyable.dart';
 
 /// لوحة مراقبة حيّة لأجهزة Mimosa (B5/B5c/B11/B24/A5/C5/C5c) — SNMP v2c فقط.
 ///
@@ -778,21 +779,30 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
               Row(children: [
                 Icon(LucideIcons.globe, size: 10, color: AppColors.textLow),
                 const SizedBox(width: 3),
-                Text(c.ip!,
-                    textDirection: TextDirection.ltr,
-                    style: TextStyle(
-                        fontSize: 10.5, height: 1.3, color: AppColors.textMid)),
+                Copyable(
+                  label: 'IP',
+                  value: c.ip,
+                  child: Text(c.ip!,
+                      textDirection: TextDirection.ltr,
+                      style: TextStyle(
+                          fontSize: 10.5, height: 1.3, color: AppColors.textMid)),
+                ),
                 const SizedBox(width: 8),
                 Icon(LucideIcons.wifi, size: 10, color: AppColors.textLow),
                 const SizedBox(width: 3),
                 Expanded(
-                    child: Text(c.mac,
-                        textDirection: TextDirection.ltr,
-                        style: TextStyle(
-                            fontSize: 9.5,
-                            height: 1.2,
-                            color: AppColors.textLow),
-                        overflow: TextOverflow.ellipsis)),
+                    child: Copyable(
+                  label: 'الماك',
+                  value: c.mac,
+                  child: Text(c.mac,
+                      textDirection: TextDirection.ltr,
+                      style: TextStyle(
+                          fontSize: 9.5,
+                          height: 1.2,
+                          color: AppColors.textLow),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                )),
               ]),
               const SizedBox(height: 4),
             ],

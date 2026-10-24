@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../theme/colors.dart';
+import '../platform/app_platform.dart';
 import '../../theme/spacing.dart';
 import '../util/clipboard_helper.dart';
 
@@ -138,23 +139,36 @@ class _CopyableState extends State<Copyable> {
     final tint = widget.onBrandSurface
         ? AppColors.onBrand.withValues(alpha: 0.16)
         : AppColors.brand.withValues(alpha: AppColors.isDark ? 0.22 : 0.10);
+    // الحاسبة (ويندوز/ماك): الضغط المطوّل بالفأرة غير مألوف — النقر بالزرّ الأيمن ينسخ أيضاً، وتلميحٌ عند
+    // الوقوف يقوله (المالك ٢٤ أكتوبر: «اجعلهن قابلات للنسخ»). التلميح ثابتٌ على الحاسبة فارغةً كانت القيمة أم
+    // لا، كي لا تتغيّر البنية حين تمتلئ.
+    final desktop = AppPlatform.isDesktop;
+    final box = GestureDetector(
+      // الصندوق كلّه هدفٌ لا حروف النصّ وحدها — الفراغ بين كلمتين جزءٌ
+      // من المعلومة نفسها.
+      behavior: blank ? HitTestBehavior.deferToChild : HitTestBehavior.opaque,
+      onLongPress: blank ? null : _copy,
+      onSecondaryTap: blank || !desktop ? null : _copy,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        // فوق المعلومة لا خلفها: كثيرٌ منها بلاطاتٌ ملوّنة تحجب أيّ خلفيّة.
+        foregroundDecoration: BoxDecoration(
+          color: _flash ? tint : tint.withValues(alpha: 0),
+          borderRadius: BorderRadius.circular(widget.radius),
+        ),
+        child: widget.child,
+      ),
+    );
     return Semantics(
       onLongPressHint: blank ? null : 'نسخ ${widget.noun ?? widget.label}',
-      child: GestureDetector(
-        // الصندوق كلّه هدفٌ لا حروف النصّ وحدها — الفراغ بين كلمتين جزءٌ
-        // من المعلومة نفسها.
-        behavior: blank ? HitTestBehavior.deferToChild : HitTestBehavior.opaque,
-        onLongPress: blank ? null : _copy,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          // فوق المعلومة لا خلفها: كثيرٌ منها بلاطاتٌ ملوّنة تحجب أيّ خلفيّة.
-          foregroundDecoration: BoxDecoration(
-            color: _flash ? tint : tint.withValues(alpha: 0),
-            borderRadius: BorderRadius.circular(widget.radius),
-          ),
-          child: widget.child,
-        ),
-      ),
+      child: desktop
+          ? Tooltip(
+              message: 'انقر بالزرّ الأيمن للنسخ',
+              waitDuration: const Duration(milliseconds: 800),
+              excludeFromSemantics: true,
+              child: box,
+            )
+          : box,
     );
   }
 }

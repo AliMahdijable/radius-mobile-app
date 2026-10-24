@@ -32,6 +32,7 @@ import '../../api/olt_profile.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../desktop/desk_widgets.dart';
+import '../../core/widgets/copyable.dart';
 
 /// شاشة تفاصيل جهاز — تصميم متقدّم:
 /// - Hero card بـpulse للـonline + brand icon + stats
@@ -644,8 +645,12 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
               Row(children: [
                 Icon(LucideIcons.globe, size: 12, color: AppColors.textLow),
                 const SizedBox(width: 4),
-                Text(_d.ip,
-                    style: AppType.bodyStrong(color: AppColors.textHi)),
+                Copyable(
+                  label: 'IP',
+                  value: _d.ip,
+                  child: Text(_d.ip,
+                      style: AppType.bodyStrong(color: AppColors.textHi)),
+                ),
               ]),
               // Region (لو مُسند لواحدة) — 2026-08-18
               if (_region != null) ...[
@@ -875,11 +880,16 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(f.$2, style: AppType.micro(color: AppColors.textMid)),
-                                  Text(
-                                    f.$3,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppType.bodyBold(color: AppColors.textHi),
+                                  // الزرّ الأيمن (أو الضغط المطوّل) ينسخ القيمة — المالك ٢٤ أكتوبر.
+                                  Copyable(
+                                    label: f.$2,
+                                    value: f.$3,
+                                    child: Text(
+                                      f.$3,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppType.bodyBold(color: AppColors.textHi),
+                                    ),
                                   ),
                                 ],
                               ),

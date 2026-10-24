@@ -7,6 +7,7 @@ import '../../../core/util/ar_date.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../core/widgets/app_date_picker.dart';
 
 /// نطاق تاريخ موحَّد لكل تقارير الموبايل. الـto حصراً نهاية اليوم
 /// (23:59:59) — يطابق سلوك v1 web reports.
@@ -225,15 +226,12 @@ class DateRangeChipBar extends StatelessWidget {
   }
 
   Future<void> _openCustomPicker(BuildContext context) async {
-    final picked = await showDateRangePicker(
+    // نافذةٌ بالوسط على الحاسبة، وأسماء الأشهر العراقيّة وألوان التطبيق (showAppDateRangePicker).
+    final picked = await showAppDateRangePicker(
       context: context,
       firstDate: DateTime(2020),
       lastDate: DateTime.now().add(const Duration(days: 1)),
       initialDateRange: DateTimeRange(start: value.from, end: value.to),
-      locale: const Locale('ar'),
-      helpText: 'reports.range_pick'.tr(),
-      saveText: 'common.save'.tr(),
-      cancelText: 'common.cancel'.tr(),
     );
     if (picked != null) {
       onChanged(DateRange.custom(picked.start, picked.end));

@@ -10,6 +10,7 @@ import '../../core/util/format.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../core/widgets/app_date_picker.dart';
 import 'widgets/date_range_chip.dart';
 import 'widgets/report_export.dart';
 import '../desktop/desk_widgets.dart';
@@ -341,7 +342,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
       start: _dateFrom ?? now.subtract(const Duration(days: 30)),
       end: _dateTo ?? now,
     );
-    final picked = await showDateRangePicker(
+    final picked = await showAppDateRangePicker(
       context: context,
       firstDate: DateTime(2024),
       lastDate: DateTime(now.year + 1),

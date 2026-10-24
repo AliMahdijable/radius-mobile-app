@@ -38,6 +38,8 @@ import 'services/theme_service.dart';
 import 'theme/colors.dart';
 import 'theme/spacing.dart';
 import 'theme/typography.dart';
+import 'core/l10n/iq_material_localizations.dart';
+import 'theme/date_picker_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -354,7 +356,12 @@ class _MyServicesAppState extends State<MyServicesApp>
           // اليدوي اللي كان يجبر rtl.
           locale: context.locale,
           supportedLocales: context.supportedLocales,
-          localizationsDelegates: context.localizationDelegates,
+          // أوّلاً: تقاويم Material بأسماء الأشهر العراقيّة («تشرين الأوّل» لا «أكتوبر»). Localizations يأخذ أوّل
+          // مندوبٍ يدعم اللغة لكلّ نوع، فيسبق هذا مندوب فلاتر العربيّ ويرث منه كلّ ما سوى التواريخ.
+          localizationsDelegates: [
+            const IqMaterialLocalizationsDelegate(),
+            ...context.localizationDelegates,
+          ],
           builder: (context, child) => MediaQuery.withClampedTextScaling(
             minScaleFactor: 0.9,
             maxScaleFactor: 1.2,
@@ -484,6 +491,8 @@ class _MyServicesAppState extends State<MyServicesApp>
           borderRadius: BorderRadius.circular(R.md),
         ),
       ),
+      // منتقي التاريخ والفترة بألوان التطبيق (كان فيروزيّاً بثيم Material الافتراضيّ).
+      datePickerTheme: appDatePickerTheme(),
       splashFactory: InkSparkle.splashFactory,
       // Swipe-to-back gesture — Cupertino page-transitions تعكس الاتجاه
       // تلقائياً حسب Directionality: في RTL يكون Swipe من اليمين، وفي

@@ -21,6 +21,7 @@ import 'widgets/_grade.dart';
 import 'widgets/device_image.dart';
 import 'network_device_details_screen.dart';
 import '../desktop/desk_widgets.dart';
+import '../../core/widgets/copyable.dart';
 
 /// نظرة عامّة على الأجهزة — كلّها في صفحة واحدة، مجموعةً حسب المنطقة.
 ///
@@ -1075,13 +1076,18 @@ class _DeviceCardState extends State<_DeviceCard> {
                                 style: AppType.listName(),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis),
-                            Text(
-                              (device.model?.isNotEmpty ?? false)
-                                  ? isoJoin([device.ip, device.model!], ' · ')
-                                  : iso(device.ip),
-                              style: AppType.muted(),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            // ينسخ العنوان (IP) بالضغط المطوّل أو الزرّ الأيمن.
+                            Copyable(
+                              label: 'IP',
+                              value: device.ip,
+                              child: Text(
+                                (device.model?.isNotEmpty ?? false)
+                                    ? isoJoin([device.ip, device.model!], ' · ')
+                                    : iso(device.ip),
+                                style: AppType.muted(),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ],
                         ),
@@ -1380,10 +1386,14 @@ class _InfoRow extends StatelessWidget {
           SizedBox(width: 92, child: Text(k, style: AppType.muted())),
           Expanded(
             // ⚠️ عزل: «23.1 V» تظهر «V 23.1» بلا هذا — راجع [iso].
-            child: Text(iso(v),
-                style: AppType.body(),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
+            child: Copyable(
+              label: k,
+              value: v,
+              child: Text(iso(v),
+                  style: AppType.body(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+            ),
           ),
         ],
       ),

@@ -13,6 +13,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../desktop/desk_widgets.dart';
+import '../../core/widgets/copyable.dart';
 
 /// Bulk scanner — يفحص /24 subnet بالتوازي على 6 ports شائعة،
 /// يعرض النتائج live، ويسمح للمستخدم يختار أجهزة يضيفها دفعة واحدة.
@@ -603,10 +604,15 @@ class _BulkScanScreenState extends State<BulkScanScreen> {
                       // مسبقاً»: قِيس عند ٣٢٠ فبلغ المجموع ٢٠٨ نقطة في
                       // ٢٠٠ متاحة — فيضٌ بثمان نقاط، ويزيد مع عنوانٍ أطول.
                       Flexible(
-                        child: Text(r.ip,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppType.cardTitleBold()),
+                        // العنوان يُنسخ بالضغط المطوّل أو الزرّ الأيمن؛ النقر يبقى للاختيار.
+                        child: Copyable(
+                          label: 'IP',
+                          value: r.ip,
+                          child: Text(r.ip,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppType.cardTitleBold()),
+                        ),
                       ),
                       const SizedBox(width: 6),
                       Container(

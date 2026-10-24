@@ -16,6 +16,7 @@ import '_grade.dart';
 import '../../../theme/typography.dart';
 import '../../../core/util/error_text.dart';
 import '../../desktop/desk_widgets.dart';
+import '../../../core/widgets/copyable.dart';
 
 /// لوحة مراقبة متخصّصة لـUBNT airFiber 60 (GP/LR) — PtP 60 GHz link view.
 /// mca-status عنده مضلّل (signal=-93، wlanTxRate=0). البيانات الحقيقيّة في wstalist.prs_sta.
@@ -421,10 +422,14 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
           // اتّجاهيّ: العنوان يلتصق ببداية السطر — يميناً عربيّاً ويساراً
           // إنجليزيّاً. `centerRight` كان يثبّته يميناً في الحالتين.
           alignment: AlignmentDirectional.centerStart,
-          child: Text(peer.mac,
-              textDirection: TextDirection.ltr,
-              style: TextStyle(
-                  fontSize: 10.5, height: 1.3, color: AppColors.textLow)),
+          child: Copyable(
+            label: 'الماك',
+            value: peer.mac,
+            child: Text(peer.mac,
+                textDirection: TextDirection.ltr,
+                style: TextStyle(
+                    fontSize: 10.5, height: 1.3, color: AppColors.textLow)),
+          ),
         ),
       ]),
     );
@@ -979,11 +984,16 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
         // فيضيع نصيبها بلا إعادة توزيع — وتبقى القيمة بعيدةً عن النهاية
         // بفجوة. `Expanded` يبتلع الفراغ كلّه و`textAlign: end` يلصقها.
         Expanded(
-            child: Text(value,
-                textDirection: TextDirection.ltr,
-                style: AppType.pillBold(color: AppColors.textHi),
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end)),
+            child: Copyable(
+          label: label,
+          value: value,
+          child: Text(value,
+              textDirection: TextDirection.ltr,
+              style: AppType.pillBold(color: AppColors.textHi),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.end),
+        )),
       ]),
     );
   }

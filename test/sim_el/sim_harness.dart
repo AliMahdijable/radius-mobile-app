@@ -18,6 +18,7 @@ import 'package:rad_mysvcs/theme/typography.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/app_fonts.dart';
+import 'package:rad_mysvcs/theme/date_picker_theme.dart';
 
 // ═══════════════════════════════════════════════════════════════════════
 // محاكاة شاشات ايرث لنك — العدّة المشتركة.
@@ -155,6 +156,7 @@ ThemeData simTheme(Brightness brightness) {
             onSurface: AppColors.textHi,
             error: AppColors.error,
           ),
+    datePickerTheme: appDatePickerTheme(),
     dialogTheme: DialogThemeData(
       backgroundColor: AppColors.surfaceSheet,
       surfaceTintColor: Colors.transparent,

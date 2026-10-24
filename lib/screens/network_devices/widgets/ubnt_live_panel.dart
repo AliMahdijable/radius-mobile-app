@@ -17,6 +17,7 @@ import '../../../theme/typography.dart';
 import '../detected_model.dart';
 import '../../../core/util/error_text.dart';
 import '../../desktop/desk_widgets.dart';
+import '../../../core/widgets/copyable.dart';
 
 /// Panel للمراقبة الحيّة لجهاز UBNT airMax/airFiber.
 /// التركيز على **wireless quality** (signal/SNR) لأنه المهم في PtP/PtMP.
@@ -968,16 +969,40 @@ Widget _stationRow(UbntStation s) {
         Expanded(
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(s.hostname ?? s.ip ?? s.mac,
-                style: AppType.pillBold(color: AppColors.textHi),
-                overflow: TextOverflow.ellipsis),
-            if (s.ip != null || s.mac.isNotEmpty)
-              Text(
-                  [s.ip, s.mac]
-                      .where((e) => e != null && e.isNotEmpty)
-                      .join(' • '),
-                  style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow),
+            // كلّ قيمةٍ تُنسخ وحدها بالضغط المطوّل (أو الزرّ الأيمن على الحاسبة) — المالك ٢٤ أكتوبر.
+            Copyable(
+              label: s.hostname != null ? 'اسم الجهاز' : (s.ip != null ? 'IP' : 'الماك'),
+              value: s.hostname ?? s.ip ?? s.mac,
+              child: Text(s.hostname ?? s.ip ?? s.mac,
+                  style: AppType.pillBold(color: AppColors.textHi),
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis),
+            ),
+            if ((s.ip ?? '').isNotEmpty || s.mac.isNotEmpty)
+              Row(children: [
+                if ((s.ip ?? '').isNotEmpty)
+                  Copyable(
+                    label: 'IP',
+                    value: s.ip,
+                    child: Text(s.ip!,
+                        textDirection: TextDirection.ltr,
+                        style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow)),
+                  ),
+                if ((s.ip ?? '').isNotEmpty && s.mac.isNotEmpty)
+                  Text(' • ', style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow)),
+                if (s.mac.isNotEmpty)
+                  Flexible(
+                    child: Copyable(
+                      label: 'الماك',
+                      value: s.mac,
+                      child: Text(s.mac,
+                          textDirection: TextDirection.ltr,
+                          style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
+              ]),
           ]),
         ),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [

@@ -18,6 +18,7 @@ import '../../../theme/typography.dart';
 import 'expandable_section.dart';
 import '../../desktop/desk_widgets.dart';
 import '../../../core/platform/desktop_layout.dart';
+import '../../../core/widgets/copyable.dart';
 
 /// لوحة مراقبة حيّة لـ**OLT** ‏(VSOL وBDCOM EPON) عبر SNMP.
 ///
@@ -1055,7 +1056,11 @@ class _VsolLivePanelState extends State<VsolLivePanel>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (o.name?.isNotEmpty == true)
-                      Text(o.name!, style: AppType.rowLabelBold()),
+                      Copyable(
+                        label: 'اسم الـONU',
+                        value: o.name,
+                        child: Text(o.name!, style: AppType.rowLabelBold()),
+                      ),
                     Directionality(
                       textDirection: TextDirection.ltr,
                       child: Text(o.label,
@@ -1072,23 +1077,32 @@ class _VsolLivePanelState extends State<VsolLivePanel>
                             style: AppType.micro(color: AppColors.textLow)),
                         const SizedBox(width: 6),
                         Flexible(
-                          child: Directionality(
-                            textDirection: TextDirection.ltr,
-                            child: Text(o.mac!,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppType.micro(color: AppColors.textMid)),
+                          child: Copyable(
+                            label: 'ماك الـONU',
+                            value: o.mac,
+                            child: Directionality(
+                              textDirection: TextDirection.ltr,
+                              child: Text(o.mac!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppType.micro(color: AppColors.textMid)),
+                            ),
                           ),
                         ),
                       ])
                     else
-                      Directionality(
-                        textDirection: TextDirection.ltr,
-                        child: Text(
-                          o.serial != null
-                              ? 'SN ${o.serial}'
-                              : (o.online ? '—' : 'غير متّصل'),
-                          textAlign: TextAlign.left,
-                          style: AppType.micro(color: AppColors.textLow),
+                      Copyable(
+                        label: 'الرقم التسلسليّ',
+                        value: o.serial,
+                        child: Directionality(
+                          textDirection: TextDirection.ltr,
+                          child: Text(
+                            o.serial != null
+                                ? 'SN ${o.serial}'
+                                : (o.online ? '—' : 'غير متّصل'),
+                            textAlign: TextAlign.left,
+                            style: AppType.micro(color: AppColors.textLow),
+                          ),
                         ),
                       ),
                     if (o.online && o.reading != null) _opticsLine(o),

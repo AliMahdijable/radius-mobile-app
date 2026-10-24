@@ -17,6 +17,7 @@ import '_grade.dart';
 import '../../../theme/typography.dart';
 import '../../../core/util/error_text.dart';
 import '../../desktop/desk_widgets.dart';
+import '../../../core/widgets/copyable.dart';
 
 /// لوحة مراقبة حيّة لأجهزة Ruijie / Reyee (SNMP v2c فقط).
 ///
@@ -691,14 +692,18 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
             child: Text(label, style: AppType.micro(color: AppColors.textMid)),
           ),
           Expanded(
-            child: Directionality(
-              textDirection: TextDirection.ltr,
-              child: Text(
-                value,
-                textAlign: TextAlign.left,
-                style: AppType.rowLabelBold(),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+            child: Copyable(
+              label: label,
+              value: value,
+              child: Directionality(
+                textDirection: TextDirection.ltr,
+                child: Text(
+                  value,
+                  textAlign: TextAlign.left,
+                  style: AppType.rowLabelBold(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ),
           ),

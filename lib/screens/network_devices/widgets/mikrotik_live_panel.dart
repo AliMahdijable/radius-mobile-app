@@ -17,6 +17,7 @@ import '../../../theme/typography.dart';
 import '../detected_model.dart';
 import '../../../core/util/error_text.dart';
 import '../../desktop/desk_widgets.dart';
+import '../../../core/widgets/copyable.dart';
 
 /// Panel للمراقبة الحيّة لجهاز Mikrotik.
 /// - Auto-start عند فتح الصفحة (لا يحتاج المستخدم يضغط "بدء")
@@ -1347,24 +1348,39 @@ Widget _clientRow(MikrotikWirelessClient c) {
               // Cairo دائماً (feedback_font_cairo_always)
               final String primary =
                   hasName ? (c.hostname ?? c.comment!) : (c.ip ?? c.mac);
-              return Text(primary,
-                  style: AppType.pillBold(color: AppColors.textHi),
-                  overflow: TextOverflow.ellipsis);
+              // ضغطٌ مطوّل (أو زرٌّ أيمن على الحاسبة) ينسخ — المالك ٢٤ أكتوبر.
+              return Copyable(
+                label: hasName ? 'اسم العميل' : (c.ip != null ? 'IP' : 'الماك'),
+                value: primary,
+                child: Text(primary,
+                    style: AppType.pillBold(color: AppColors.textHi),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+              );
             }(),
             const SizedBox(height: 2),
             // secondary line: IP (لو الـprimary اسم) + MAC دائماً بعده
             Row(children: [
               if (hasName && c.ip != null) ...[
-                Text(c.ip!,
-                    style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textMid)),
+                Copyable(
+                  label: 'IP',
+                  value: c.ip,
+                  child: Text(c.ip!,
+                      style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textMid)),
+                ),
                 const SizedBox(width: 6),
               ],
               // MAC يظهر فقط لو الـprimary مو نفس MAC
               if (hasName || c.ip != null)
                 Flexible(
-                  child: Text(c.mac,
-                      style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow),
-                      overflow: TextOverflow.ellipsis),
+                  child: Copyable(
+                    label: 'الماك',
+                    value: c.mac,
+                    child: Text(c.mac,
+                        style: TextStyle(fontSize: 9.5, height: 1.2, color: AppColors.textLow),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                  ),
                 ),
             ]),
           ]),

@@ -13,6 +13,7 @@ import 'widgets/report_filters.dart';
 import 'widgets/report_pagination.dart';
 import 'widgets/report_permission_gate.dart';
 import '../desktop/desk_widgets.dart';
+import '../../core/widgets/copyable.dart';
 
 /// تقرير الجلسات — الـonline حالياً + history.
 /// Toggle بين "متصلون الآن" و "كل الجلسات (أحدث 200)".
@@ -367,12 +368,17 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  s.username ?? '—',
-                  style: AppType.label(color: AppColors.textHi)
-                      .copyWith(fontSize: 13, fontWeight: FontWeight.w700),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                // اليوزر والـIP والماك تُنسخ بالضغط المطوّل أو الزرّ الأيمن — المالك ٢٤ أكتوبر.
+                Copyable(
+                  label: 'اسم المستخدم',
+                  value: s.username,
+                  child: Text(
+                    s.username ?? '—',
+                    style: AppType.label(color: AppColors.textHi)
+                        .copyWith(fontSize: 13, fontWeight: FontWeight.w700),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Row(
@@ -381,8 +387,12 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                       Icon(LucideIcons.wifi,
                           size: 10, color: AppColors.textLow),
                       const SizedBox(width: 3),
-                      Text(s.ipAddress!,
-                          style: AppType.muted().copyWith(fontSize: 10.5)),
+                      Copyable(
+                        label: 'IP',
+                        value: s.ipAddress,
+                        child: Text(s.ipAddress!,
+                            style: AppType.muted().copyWith(fontSize: 10.5)),
+                      ),
                       const SizedBox(width: 8),
                     ],
                     if (s.userManager != null && s.userManager!.isNotEmpty) ...[
@@ -404,10 +414,14 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                       Icon(LucideIcons.smartphone,
                           size: 10, color: AppColors.textLow),
                       const SizedBox(width: 3),
-                      Text(
-                        'MAC: ${s.mac!}',
-                        style: AppType.muted().copyWith(
-                          fontSize: 10.5,
+                      Copyable(
+                        label: 'الماك',
+                        value: s.mac,
+                        child: Text(
+                          'MAC: ${s.mac!}',
+                          style: AppType.muted().copyWith(
+                            fontSize: 10.5,
+                          ),
                         ),
                       ),
                     ],
