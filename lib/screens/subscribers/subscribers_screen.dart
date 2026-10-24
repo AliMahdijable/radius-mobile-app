@@ -55,6 +55,7 @@ import 'widgets/subscriber_table_row.dart';
 import 'widgets/subscriber_columns.dart';
 import 'widgets/subscribers_desktop_header.dart';
 import '../../core/widgets/app_sheet.dart';
+import '../../core/platform/desk_nav_guard.dart';
 import '../desktop/desk_table_scroll.dart';
 
 /// Default sort field + direction per filter — mirrors v1's
@@ -2146,7 +2147,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     return Row(
       children: [
         Expanded(
-          // Shift + العجلة والعجلة الأفقيّة ولوحة اللمس تمرّر الأعمدة، والشريط تحت الجدول بمحاذاة الأعمدة المتمرّرة.
+          // Shift + العجلة والعجلة الأفقيّة ولوحة اللمس تمرّر الجدول كلّه، والشريط تحت الجدول بعرضه.
           child: DeskHScrollInput(
             scroll: _hscroll,
             child: Stack(
@@ -2154,8 +2155,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                 Positioned.fill(child: list),
                 if (cols.scrolls && !_loading)
                   PositionedDirectional(
-                    start: _hPad + 1 + SubscriberTableColumns.lead + cols.nameWidth,
-                    width: cols.middleViewport,
+                    start: _hPad + 1,
+                    width: cols.viewport,
                     bottom: Sp.sm,
                     child: DeskHScrollbar(scroll: _hscroll),
                   ),
@@ -2186,7 +2187,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                   active: false,
                   child: Navigator(
                     key: _paneNav,
-                    observers: [_paneObserver],
+                    observers: [_paneObserver, _paneGuard],
                     onGenerateRoute: (_) =>
                         MaterialPageRoute(builder: (_) => const _DetailPanePlaceholder()),
                   ),
@@ -2198,6 +2199,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       ],
     );
   }
+
+  /// النقرة المزدوجة لا تفتح التفاصيل مرّتين داخل اللوحة ([DeskNavGuard]).
+  late final NavigatorObserver _paneGuard = DeskNavGuard.observer();
 
   /// رجوعٌ من التفاصيل إلى أوّل اللوحة (زرّ الرجوع، Esc، حذف المشترك…) ⇒ تُطوى اللوحة.
   late final _PaneObserver _paneObserver = _PaneObserver(() {
@@ -2275,7 +2279,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   SubscriberTableColumns get _tableColumns {
     final cols = SubscriberTableColumns.forWidth(
         MediaQuery.sizeOf(context).width - (_paneKey != null ? _paneWidth : 0) - 2 * _hPad);
-    _hscroll.setMetrics(viewport: cols.middleViewport, content: cols.middleContent);
+    _hscroll.setMetrics(viewport: cols.viewport, content: cols.content);
     return cols;
   }
 

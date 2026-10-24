@@ -67,7 +67,9 @@ class SubscriberColumnPrefs {
   SubscriberColumnPrefs._();
 
   static const _storage = FlutterSecureStorage();
-  static const _kLayout = 'desk.subs.columns.v1';
+  // v2 (٢٤ أكتوبر): كلّ الأعمدة ظاهرة افتراضيّاً والجدول يتمرّر — المالك: «يعرض كل الاعمده». v1 المحفوظ (يُخفي
+  // بعضها) يُترك فيبدأ الجميع بالجدول كاملاً، والإخفاء من زرّ «الأعمدة» كما كان.
+  static const _kLayout = 'desk.subs.columns.v2';
   static const _kWidths = 'desk.subs.colwidths.v1';
 
   static const List<(SubCol, bool)> defaults = [
@@ -76,9 +78,9 @@ class SubscriberColumnPrefs {
     (SubCol.manager, true),
     (SubCol.expiration, true),
     (SubCol.remaining, true),
-    (SubCol.session, false),
-    (SubCol.mac, false),
-    (SubCol.usage, false),
+    (SubCol.session, true),
+    (SubCol.mac, true),
+    (SubCol.usage, true),
     (SubCol.balance, true),
   ];
 

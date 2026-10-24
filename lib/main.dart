@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'core/platform/app_platform.dart';
 import 'core/platform/desktop_layout.dart';
 import 'core/platform/desk_ui_scale.dart';
+import 'core/platform/desk_nav_guard.dart';
 import 'firebase_options.dart';
 import 'screens/notifications/in_app_notification_banner.dart';
 import 'screens/splash_screen.dart';
@@ -366,7 +367,9 @@ class _MyServicesAppState extends State<MyServicesApp>
             ...context.localizationDelegates,
           ],
           // الحاسبة: الواجهة كلّها بحجمٍ يناسب الشاشة (DeskUiScaleScope) — فوق الـNavigator فتصغر النوافذ معها.
-          builder: (context, child) => DeskUiScaleScope(child: MediaQuery.withClampedTextScaling(
+          // النقرة المزدوجة لا تفتح الصفحة مرّتين (DeskNavGuard): النقر يُمتصّ أثناء فتح صفحةٍ أو نافذة.
+          navigatorObservers: AppPlatform.isDesktop ? [_deskRootGuard] : const <NavigatorObserver>[],
+          builder: (context, child) => DeskUiScaleScope(child: DeskNavGuardScope(child: MediaQuery.withClampedTextScaling(
             minScaleFactor: 0.9,
             maxScaleFactor: 1.2,
             // 🐛 بلاغ 2026-08-31: «كل المودلات الي بيها الكيبورد رقم ما
@@ -394,7 +397,7 @@ class _MyServicesAppState extends State<MyServicesApp>
                 builder: (_, __, ___) => _TabletFrame(child: child ?? const SizedBox.shrink()),
               ),
             ),
-          )),
+          ))),
           home: const SplashScreen(),
           navigatorKey: _appNavigatorKey,
         );
@@ -561,6 +564,9 @@ class _TabletFrame extends StatelessWidget {
     );
   }
 }
+
+/// مراقب الـNavigator الجذريّ للحاسبة ([DeskNavGuard]) — نسخةٌ واحدة تبقى عبر إعادة بناء MaterialApp.
+final NavigatorObserver _deskRootGuard = DeskNavGuard.observer();
 
 class _DesktopScrollBehavior extends MaterialScrollBehavior {
   const _DesktopScrollBehavior();

@@ -15,49 +15,41 @@ void main() {
 
   group('أعمدة جدول المشتركين', () {
     double colsSum(SubscriberTableColumns c) => c.shown.fold<double>(0, (s, x) => s + c.widthOf(x));
+    double rowWidth(SubscriberTableColumns c) =>
+        SubscriberTableColumns.lead + c.nameWidth + colsSum(c) + SubscriberTableColumns.actions;
 
-    test('شاشةٌ واسعة: كلّ الأعمدة بعروضها و«المشترك» يملأ الباقي — بلا تمرير', () {
-      final c = SubscriberTableColumns.forWidth(1400);
-      expect(c.scrolls, isFalse);
-      expect(c.middleViewport, closeTo(colsSum(c), 0.01));
-      const inner = 1400 - SubscriberTableColumns.borders;
-      expect(SubscriberTableColumns.lead + c.nameWidth + c.middleViewport + SubscriberTableColumns.actions,
-          closeTo(inner, 0.01));
-    });
-
-    test('لا عمود يسقط حين يضيق الجدول: «المشترك» ثابت والباقي يتمرّر', () {
-      final c = SubscriberTableColumns.forWidth(720);
-      expect(c.shown.length, SubscriberColumnPrefs.defaults.where((e) => e.$2).length);
-      expect(c.scrolls, isTrue);
-      expect(c.middleContent, closeTo(colsSum(c), 0.01));
-      expect(c.nameWidth, greaterThanOrEqualTo(SubscriberTableColumns.nameMin));
-      expect(c.middleViewport, greaterThan(0));
-    });
-
-    test('الأعمدة الافتراضيّة تتّسع على شاشة 1440 بلا تمرير', () {
-      // الجدول على 1440 بعد القائمة الجانبيّة والحشوات ≈ 1120.
-      expect(SubscriberTableColumns.forWidth(1120).scrolls, isFalse);
-    });
-
-    test('«إظهار الكلّ» على شاشةٍ عاديّة ⇒ تمرير لا ضغط', () {
-      SubscriberColumnPrefs.layout.value = [for (final e in SubscriberColumnPrefs.defaults) (e.$1, true)];
+    test('كلّ الأعمدة ظاهرة افتراضيّاً (المالك: «يعرض كل الاعمده»)', () {
       final c = SubscriberTableColumns.forWidth(1120);
       expect(c.shown.length, SubCol.values.where((x) => x.available).length);
+    });
+
+    test('شاشةٌ واسعة جدّاً: الكلّ بعروضه و«المشترك» يملأ الباقي — بلا تمرير', () {
+      final c = SubscriberTableColumns.forWidth(1900);
+      expect(c.scrolls, isFalse);
+      expect(rowWidth(c), closeTo(1900 - SubscriberTableColumns.borders, 0.01));
+    });
+
+    test('شاشةٌ عاديّة: الجدول **كلّه** يتمرّر قطعةً واحدة — لا عمود يُضغط ولا يسقط', () {
+      final c = SubscriberTableColumns.forWidth(1120);
       expect(c.scrolls, isTrue);
+      expect(c.viewport, 1120 - SubscriberTableColumns.borders);
+      expect(c.content, closeTo(rowWidth(c), 0.01));
+      expect(c.nameWidth, SubscriberTableColumns.nameDefault);
       for (final x in c.shown) {
         expect(c.widthOf(x), x.defaultWidth, reason: '${x.name} لا يُضغط');
       }
     });
 
     test('سحب حافّة عمود: يتّسع بقدر السحب، و«المشترك» يُثبَّت على عرضه أوّلاً', () {
-      final before = SubscriberTableColumns.forWidth(1400);
+      final before = SubscriberTableColumns.forWidth(1900);
       final nameBefore = before.nameWidth;
       resizeSubscriberColumn(before, SubCol.phone.name, 40);
       expect(SubscriberColumnPrefs.widths.value[SubCol.phone.name], SubCol.phone.defaultWidth + 40);
       expect(SubscriberColumnPrefs.nameWidth, nameBefore);
-      final after = SubscriberTableColumns.forWidth(1400);
+      final after = SubscriberTableColumns.forWidth(1900);
       expect(after.widthOf(SubCol.phone), SubCol.phone.defaultWidth + 40);
       expect(after.nameWidth, nameBefore, reason: 'الحافّة تحت المؤشّر تتحرّك، لا التي قبل العمود');
+      expect(after.content, closeTo(rowWidth(after), 0.01));
     });
 
     test('لا يضيق عمودٌ تحت أقلّه، والنقر المزدوج يعيده', () async {
@@ -68,13 +60,13 @@ void main() {
       expect(SubscriberColumnPrefs.widths.value.containsKey(SubCol.balance.name), isFalse);
     });
 
-    test('«المشترك» المثبَّت يبقى بعرضه والفراغ بعد الأعمدة', () {
+    test('«المشترك» المثبَّت يبقى بعرضه والفراغ قبل الإجراءات', () {
       SubscriberColumnPrefs.widths.value = {SubscriberColumnPrefs.nameKey: 220};
-      final c = SubscriberTableColumns.forWidth(1400);
+      final c = SubscriberTableColumns.forWidth(1900);
       expect(c.nameWidth, 220);
       expect(c.scrolls, isFalse);
-      expect(c.middleContent, c.middleViewport);
-      expect(c.middleViewport, greaterThan(colsSum(c)));
+      expect(c.content, c.viewport);
+      expect(c.viewport, greaterThan(rowWidth(c)));
     });
 
     test('حفظ العروض وقراءتها', () {

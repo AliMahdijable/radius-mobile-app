@@ -30,41 +30,41 @@ import 'subscriber_card_v3.dart';
 import 'subscriber_columns.dart';
 
 /// أعمدة جدول المشتركين على هذا العرض: ما اختاره المدير من زرّ «الأعمدة» بترتيبه، كلٌّ بعرضه (الافتراضيّ أو ما
-/// سحبه المدير). لا يسقط عمود حين يضيق الجدول (كان يسقط الأقلّ أولويّةً): «المشترك» يبقى ثابتاً في البداية
-/// والإجراءات في النهاية، وما بينهما يتمرّر أفقيّاً (المالك ٢٤ أكتوبر: «لو عرض كل الحقول ماكو امكانية يمرر»).
+/// سحبه المدير). لا يسقط عمود حين يضيق الجدول: **الجدول كلّه** يتمرّر يميناً ويساراً قطعةً واحدة — لا جزءٌ ثابت ولا
+/// خطٌّ يقسمه (المالك ٢٤ أكتوبر: «الجدول خلي بي سكرول يمين ويسار ويعرض كل الاعمده… بدون ما يظهر الصفحة مقسومة»).
 ///
-/// بلا عرضٍ مثبَّت لـ«المشترك» يملأ ما يبقى؛ وإن ثبّته المدير يبقى بعرضه والباقي فراغٌ قبل الإجراءات.
+/// بلا عرضٍ مثبَّت لـ«المشترك» يملأ ما يبقى حين يتّسع الكلّ؛ وإن ثبّته المدير يبقى بعرضه والباقي فراغٌ قبل الإجراءات.
 class SubscriberTableColumns {
   const SubscriberTableColumns({
     required this.shown,
     required this.widths,
     required this.nameWidth,
-    required this.middleViewport,
-    required this.middleContent,
+    required this.viewport,
+    required this.content,
   });
 
   final List<SubCol> shown;
   final Map<SubCol, double> widths;
   final double nameWidth;
 
-  /// عرض نافذة الأعمدة المتمرّرة (بين «المشترك» والإجراءات)، ومحتواها: مجموع عروضها أو النافذة إن كانت أعرض.
-  final double middleViewport;
-  final double middleContent;
+  /// عرض الجدول الظاهر (داخل حدّيه)، وعرض محتوى الصفّ كلّه: الأكبر من مجموع الأعمدة والنافذة.
+  final double viewport;
+  final double content;
 
   bool has(SubCol c) => shown.contains(c);
   double widthOf(SubCol c) => widths[c] ?? c.defaultWidth;
-  double get columnsWidth => shown.fold<double>(0, (s, c) => s + widthOf(c));
 
-  /// المحتوى أعرض من النافذة ⇒ شريط تمريرٍ أفقيّ.
-  bool get scrolls => middleContent - middleViewport > 0.5;
+  /// المحتوى أعرض من الجدول ⇒ شريط تمريرٍ أفقيّ تحته.
+  bool get scrolls => content - viewport > 0.5;
 
   static const double stripe = 4;
   static const double check = 40;
   static const double avatar = 52;
+
   /// أضيق ما يُسحب إليه «المشترك».
   static const double nameMin = 140;
 
-  /// «المشترك» غير المثبَّت يملأ الباقي ما لم يضق عن هذا — دونه تبدأ الأعمدة بالتمرّر وهو على [nameDefault].
+  /// «المشترك» غير المثبَّت يملأ الباقي ما لم يضق عن هذا — دونه يتمرّر الجدول وهو على [nameDefault].
   static const double nameAutoMin = 170;
   static const double nameDefault = 200;
   static const double nameMax = 640;
@@ -76,9 +76,6 @@ class SubscriberTableColumns {
   /// ما قبل «المشترك»: شريط الحالة والفراغ ومربّع التحديد والصورة.
   static const double lead = stripe + (Sp.sm - 4) + check + avatar;
 
-  /// أقلّ ما يبقى لنافذة الأعمدة حين لا يتّسع الكلّ — «المشترك» يضيق إليه قبل أن يأكلها.
-  static const double minMiddle = 240;
-
   static SubscriberTableColumns forWidth(double width) {
     final inner = width - borders > 0 ? width - borders : 0.0;
     final shown = [
@@ -89,23 +86,14 @@ class SubscriberTableColumns {
     final cols = widths.values.fold<double>(0, (s, w) => s + w);
     final room = inner - lead - actions > 0 ? inner - lead - actions : 0.0;
     final pinned = SubscriberColumnPrefs.nameWidth?.clamp(nameMin, nameMax).toDouble();
-    final double name;
-    if ((pinned ?? nameAutoMin) + cols <= room) {
-      // يتّسع الكلّ: «المشترك» المثبَّت بعرضه (والباقي فراغ)، وغير المثبَّت يملأ.
-      name = pinned ?? room - cols;
-    } else {
-      // لا يتّسع: «المشترك» بعرضه ما لم يأكل نافذة الأعمدة، والباقي يتمرّر.
-      final keep = cols < minMiddle ? cols : minMiddle;
-      final cap = room - keep > nameMin ? room - keep : nameMin;
-      name = (pinned ?? nameDefault).clamp(nameMin, cap).toDouble();
-    }
-    final viewport = room - name > 0 ? room - name : 0.0;
+    final double name = pinned ?? ((nameAutoMin + cols <= room) ? room - cols : nameDefault);
+    final total = lead + name + cols + actions;
     return SubscriberTableColumns(
       shown: shown,
       widths: widths,
       nameWidth: name,
-      middleViewport: viewport,
-      middleContent: cols > viewport ? cols : viewport,
+      viewport: inner,
+      content: total > inner ? total : inner,
     );
   }
 }
@@ -235,35 +223,29 @@ class SubscriberTableHeader extends StatelessWidget {
       foregroundDecoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: AppColors.borderStrong)),
       ),
-      child: Row(
-        children: [
-          const SizedBox(width: SubscriberTableColumns.stripe + Sp.sm - 4),
-          SizedBox(
-            width: SubscriberTableColumns.check,
-            child: _CheckBox(value: allSelected, onTap: onSelectAll),
-          ),
-          const SizedBox(width: SubscriberTableColumns.avatar),
-          cell(
-            SubscriberColumnPrefs.nameKey,
-            cols.nameWidth,
-            label('desktop.col_name'.tr(), field: SortField.firstname),
-          ),
-          Expanded(
-            child: DeskHViewport(
-              scroll: scroll,
-              contentWidth: cols.middleContent,
-              edgeShadows: cols.scrolls,
-              child: Row(
-                children: [
-                  for (final c in cols.shown)
-                    cell(c.name, cols.widthOf(c), label(c.label, field: c.sortField, align: _alignOf(c))),
-                  const Spacer(),
-                ],
-              ),
+      // الرأس كلّه يتمرّر مع الصفوف قطعةً واحدة.
+      child: DeskHViewport(
+        scroll: scroll,
+        contentWidth: cols.content,
+        child: Row(
+          children: [
+            const SizedBox(width: SubscriberTableColumns.stripe + Sp.sm - 4),
+            SizedBox(
+              width: SubscriberTableColumns.check,
+              child: _CheckBox(value: allSelected, onTap: onSelectAll),
             ),
-          ),
-          const SizedBox(width: SubscriberTableColumns.actions),
-        ],
+            const SizedBox(width: SubscriberTableColumns.avatar),
+            cell(
+              SubscriberColumnPrefs.nameKey,
+              cols.nameWidth,
+              label('desktop.col_name'.tr(), field: SortField.firstname),
+            ),
+            for (final c in cols.shown)
+              cell(c.name, cols.widthOf(c), label(c.label, field: c.sortField, align: _alignOf(c))),
+            const Spacer(),
+            const SizedBox(width: SubscriberTableColumns.actions),
+          ],
+        ),
       ),
     ));
   }
@@ -381,7 +363,11 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
               bottom: BorderSide(color: AppColors.border),
             ),
           ),
-          child: Row(
+          // الصفّ كلّه يتمرّر مع الرأس قطعةً واحدة.
+          child: DeskHViewport(
+            scroll: widget.scroll,
+            contentWidth: cols.content,
+            child: Row(
             children: [
               Tooltip(
                 message: st.label,
@@ -423,19 +409,8 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
                   bottomLtr: true,
                 ),
               ),
-              Expanded(
-                child: DeskHViewport(
-                  scroll: widget.scroll,
-                  contentWidth: cols.middleContent,
-                  edgeShadows: cols.scrolls,
-                  child: Row(
-                    children: [
-                      for (final c in cols.shown) _cellBox(cols, c, _cell(c, s)),
-                      const Spacer(),
-                    ],
-                  ),
-                ),
-              ),
+              for (final c in cols.shown) _cellBox(cols, c, _cell(c, s)),
+              const Spacer(),
               SizedBox(
                 width: SubscriberTableColumns.actions,
                 child: _RowActions(
@@ -445,6 +420,7 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
                 ),
               ),
             ],
+          ),
           ),
         );
       },

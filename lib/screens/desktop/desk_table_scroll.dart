@@ -47,8 +47,7 @@ class DeskHScroll extends ChangeNotifier {
 }
 
 /// يعرض [child] (بعرض [contentWidth]) داخل نافذةٍ بعرض [width] (أو كلّ العرض المتاح)، مزاحاً بموضع [scroll] —
-/// المخفيّ لا يُرسم ولا يُنقر. [edgeShadows]: ظلٌّ خفيف على الحافّة التي يختفي تحتها محتوى (البداية بعد التمرير،
-/// والنهاية ما دام بعدها شيء) — فيُعرف أنّ هناك ما لا يُرى.
+/// المخفيّ لا يُرسم ولا يُنقر. (بلا ظلالٍ ولا خطوطٍ على الحوافّ: الجدول قطعةٌ واحدة تتحرّك — «بدون ما يظهر الصفحة مقسومة».)
 class DeskHViewport extends StatelessWidget {
   const DeskHViewport({
     super.key,
@@ -56,74 +55,34 @@ class DeskHViewport extends StatelessWidget {
     required this.contentWidth,
     required this.child,
     this.width,
-    this.edgeShadows = false,
   });
 
   final DeskHScroll scroll;
   final double? width;
   final double contentWidth;
-  final bool edgeShadows;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
     final rtl = Directionality.of(context) == TextDirection.rtl;
-    final shade = AppColors.edgeShade;
-    Widget edge(AlignmentDirectional from) => IgnorePointer(
-          child: SizedBox(
-            width: 14,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: from.resolve(Directionality.of(context)),
-                  end: AlignmentDirectional(-from.start, 0).resolve(Directionality.of(context)),
-                  colors: [shade, shade.withValues(alpha: 0)],
-                ),
-              ),
-            ),
-          ),
-        );
     return SizedBox(
       width: width,
       child: ClipRect(
-        child: Stack(
-          children: [
-            Positioned.fill(
-              // الإزاحة **داخل** OverflowBox: هو يرفض النقر خارج حدوده، فلو أُزيح هو نفسه لضاع النقر على ما ظهر
-              // بالتمرير (يُرسم ولا يُنقر).
-              child: OverflowBox(
-                alignment: AlignmentDirectional.centerStart,
-                minWidth: contentWidth,
-                maxWidth: contentWidth,
-                child: AnimatedBuilder(
-                  animation: scroll,
-                  builder: (context, inner) => Transform.translate(
-                    // البداية يمين بالعربيّ: التقدّم يُزيح المحتوى يميناً فيظهر ما على يساره.
-                    offset: Offset(rtl ? scroll.offset : -scroll.offset, 0),
-                    child: inner,
-                  ),
-                  child: child,
-                ),
-              ),
+        // الإزاحة **داخل** OverflowBox: هو يرفض النقر خارج حدوده، فلو أُزيح هو نفسه لضاع النقر على ما ظهر بالتمرير
+        // (يُرسم ولا يُنقر).
+        child: OverflowBox(
+          alignment: AlignmentDirectional.centerStart,
+          minWidth: contentWidth,
+          maxWidth: contentWidth,
+          child: AnimatedBuilder(
+            animation: scroll,
+            builder: (context, inner) => Transform.translate(
+              // البداية يمين بالعربيّ: التقدّم يُزيح المحتوى يميناً فيظهر ما على يساره.
+              offset: Offset(rtl ? scroll.offset : -scroll.offset, 0),
+              child: inner,
             ),
-            if (edgeShadows)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: AnimatedBuilder(
-                    animation: scroll,
-                    builder: (context, _) => Stack(
-                      children: [
-                        if (scroll.offset > 0.5)
-                          PositionedDirectional(
-                              start: 0, top: 0, bottom: 0, child: edge(AlignmentDirectional.centerStart)),
-                        if (scroll.offset < scroll.maxOffset - 0.5)
-                          PositionedDirectional(end: 0, top: 0, bottom: 0, child: edge(AlignmentDirectional.centerEnd)),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-          ],
+            child: child,
+          ),
         ),
       ),
     );

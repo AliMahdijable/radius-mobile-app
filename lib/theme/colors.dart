@@ -305,9 +305,6 @@ class AppColors {
       _isDark ? const Color(0xFF182D42) : const Color(0xFFE4F2FA);
 
   /// اللون الأزرق الوحيد في المخطّط (قيمة «رفع» فقط) — بلا عائلة.
-  /// ظلّ حافّة الجدول الذي يختفي تحتها محتوىً متمرّر (جداول الحاسبة).
-  static Color get edgeShade => _isDark ? const Color(0x66000000) : const Color(0x1F0C2E23);
-
   static Color get info =>
       _isDark ? const Color(0xFF8FAEE8) : const Color(0xFF3F5C99);
 

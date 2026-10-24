@@ -9,6 +9,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../../core/widgets/permission_locked.dart';
 import '../../core/widgets/desk_pressable.dart';
+import '../../core/platform/desk_nav_guard.dart';
 import '../../services/active_company.dart';
 import '../../services/alerts_service.dart';
 import '../../services/permissions_service.dart';
@@ -153,6 +154,9 @@ class _DesktopShellState extends State<DesktopShell> {
     }
   }
 
+  /// مراقب [DeskNavGuard] لكلّ قسم — المراقب لا يُشارك بين Navigatorين.
+  final Map<String, NavigatorObserver> _guards = {};
+
   Widget _rootOf(String id) {
     if (id.startsWith('tab:')) {
       final i = int.parse(id.substring(4));
@@ -252,6 +256,8 @@ class _DesktopShellState extends State<DesktopShell> {
                       scale: id == 'tab:2' ? _devicesZoom : 1,
                       child: Navigator(
                         key: _navKeys[id],
+                        // النقرة المزدوجة لا تفتح الصفحة مرّتين (DeskNavGuard).
+                        observers: [_guards[id] ??= DeskNavGuard.observer()],
                         onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => _rootOf(id)),
                       ),
                     ),
