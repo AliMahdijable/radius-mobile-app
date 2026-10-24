@@ -1,15 +1,12 @@
-import 'dart:typed_data';
-
 import 'package:flutter/foundation.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 
 import '../api/settlements_api.dart';
 import '../core/util/format.dart';
 import 'auth_storage.dart';
+import 'print_output.dart';
 import 'print_prefs.dart';
-import 'print_service.dart';
 
 /// سند «تسوية الحساب» المطبوع — PDF مبنيّ مباشرةً بعناصر `pw` كالوصل
 /// (انظر [PrintService]: WebView يتعطّل على بعض الأجهزة). الورق من
@@ -17,19 +14,20 @@ import 'print_service.dart';
 class SettlementPrint {
   SettlementPrint._();
 
-  static Future<bool> printVoucher(SettlementRecord s) async {
+  static Future<PrintResult> printVoucher(SettlementRecord s) async {
     try {
-      final format = PrintService.formatForType(PrintPrefs.currentTemplateType);
+      final format = PrintPrefs.pageFormat;
       final company = await AuthStorage.readDisplayName();
       final manager = await AuthStorage.readAdminUsername();
-      return await Printing.layoutPdf(
+      final doc = await _build(s, format, company: company, manager: manager);
+      return PrintOutput.send(await PrintDoc.of(
+        doc,
         name: s.isOpening ? 'Account-Opening' : 'Settlement-${s.number}',
-        format: format,
-        onLayout: (fmt) => _build(s, fmt, company: company, manager: manager),
-      );
+        requested: format,
+      ));
     } catch (e) {
       if (kDebugMode) debugPrint('[SettlementPrint] failed: $e');
-      return false;
+      return PrintResult.failed('$e');
     }
   }
 
@@ -42,26 +40,13 @@ class SettlementPrint {
     return '${l.year}-${two(l.month)}-${two(l.day)} ${two(l.hour)}:${two(l.minute)}';
   }
 
-  static Future<Uint8List> _build(
+  static Future<pw.Document> _build(
     SettlementRecord s,
     PdfPageFormat format, {
     String? company,
     String? manager,
   }) async {
-    pw.Font? regular;
-    pw.Font? bold;
-    try {
-      regular = await PdfGoogleFonts.iBMPlexSansArabicRegular();
-      bold = await PdfGoogleFonts.iBMPlexSansArabicBold();
-    } catch (e) {
-      if (kDebugMode) debugPrint('[SettlementPrint] font fetch failed: $e');
-    }
-    final doc = pw.Document(
-      theme: pw.ThemeData.withFont(
-        base: regular ?? pw.Font.helvetica(),
-        bold: bold ?? pw.Font.helveticaBold(),
-      ),
-    );
+    final doc = pw.Document(theme: await PdfFonts.theme());
     final pos = format.width <= PdfPageFormat.roll80.width + 5;
     final size = pos ? 9.5 : 11.0;
     final titleSize = pos ? 12.5 : 16.0;
@@ -179,8 +164,9 @@ class SettlementPrint {
     doc.addPage(
       pw.Page(
         pageFormat: format,
+        // الكاشير: ٤٫٥ ملم جانباً — حواشي الطابعة الحراريّة لا تُطبع.
         margin: pos
-            ? const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 12)
+            ? const pw.EdgeInsets.symmetric(horizontal: 12.75, vertical: 12)
             : const pw.EdgeInsets.all(32),
         textDirection: pw.TextDirection.rtl,
         build: (context) => pw.Column(
@@ -189,7 +175,7 @@ class SettlementPrint {
         ),
       ),
     );
-    return doc.save();
+    return doc;
   }
 
   static pw.Widget _signature(String label, double size) => pw.Column(

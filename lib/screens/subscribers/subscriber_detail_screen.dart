@@ -51,6 +51,8 @@ import 'widgets/device_probe_card.dart';
 import 'widgets/last_seen_card.dart';
 import 'widgets/subscriber_actions.dart';
 import 'connection_alert_flow.dart';
+import '../../services/receipt_service.dart';
+import '../../core/widgets/print_feedback.dart';
 
 /// Subscriber details — v2 visual shell over v1's structure. Layout
 /// top→bottom (info → operations):
@@ -258,6 +260,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
               title: 'subscribers.detail_title'.tr(),
               onClose: () => Navigator.of(context).pop(),
               onCopyAll: _copyAll,
+              onPrint: _printReceipt,
+              printing: _printingReceipt,
             ),
             Expanded(
               child: RefreshIndicator(
@@ -431,6 +435,19 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   /// المثبَّت ويُبقي المخزن القديم — فكان المنسوخ يُسقط ما على الشاشة أو
   /// يضيف ما ليس عليها. والمخزن احتياطٌ لكارتٍ لم يُركَّب بعد (خارج الشاشة):
   /// هو ما سيرسمه حين يُركَّب.
+  /// «طباعة وصل» — بطاقة معلومات المشترك الآن، كزرّ الموقع (بلا صلاحيّة: يُطبع ما يُعرض له).
+  /// الحاسبة بطابعةٍ مباشرة: تخرج فوراً بلا نافذة.
+  bool _printingReceipt = false;
+
+  Future<void> _printReceipt() async {
+    if (_printingReceipt) return;
+    setState(() => _printingReceipt = true);
+    final r = await ReceiptService.printSubscriberCard(sub);
+    if (!mounted) return;
+    setState(() => _printingReceipt = false);
+    showPrintResult(context, r);
+  }
+
   Future<void> _copyAll() async {
     final ip = sub.ipAddress?.trim() ?? '';
     final config = _drawnConfig ??
@@ -963,6 +980,13 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           icon: LucideIcons.copy,
           label: 'copy.all'.tr(),
           onTap: _copyAll,
+        ),
+        // «طباعة وصل» باسمه هنا أيضاً لمن لا يعرف أيقونة الرأس — كقائمة الموقع.
+        SubAction(
+          icon: LucideIcons.printer,
+          label: 'printer.receipt'.tr(),
+          busy: _printingReceipt,
+          onTap: _printingReceipt ? null : _printReceipt,
         ),
         // رمز QR / رابط البوّابة — ايرث لنك وFTTH: مخفيّ (بطاقة الرابط SAS4
         // وحده، وQR ايرث لنك لتطبيق 2.0.7 وحده — [hasPortalQrCard]) — المزوّد
@@ -1590,10 +1614,16 @@ class _SimpleAppBar extends StatelessWidget {
     required this.title,
     required this.onClose,
     required this.onCopyAll,
+    required this.onPrint,
+    this.printing = false,
   });
   final String title;
   final VoidCallback onClose;
   final VoidCallback onCopyAll;
+
+  /// «طباعة وصل» — بجانب النسخ، بمقاس زرّ الرجوع نفسه.
+  final VoidCallback onPrint;
+  final bool printing;
 
   @override
   Widget build(BuildContext context) {
@@ -1604,6 +1634,8 @@ class _SimpleAppBar extends StatelessWidget {
       child: Row(
         children: [
           _button(icon: LucideIcons.arrowRight, size: 20, onTap: onClose),
+          // يقابل زرّ الطباعة يساراً فيبقى العنوان في الوسط.
+          const SizedBox(width: H.iconBtn + Sp.sm),
           Expanded(
             child: Center(
               child: Text(
@@ -1614,6 +1646,13 @@ class _SimpleAppBar extends StatelessWidget {
               ),
             ),
           ),
+          _button(
+            icon: printing ? LucideIcons.loaderCircle : LucideIcons.printer,
+            size: 18,
+            onTap: printing ? () {} : onPrint,
+            tooltip: 'printer.receipt'.tr(),
+          ),
+          const SizedBox(width: Sp.sm),
           _button(
             icon: LucideIcons.copy,
             size: 18,

@@ -38,6 +38,7 @@ import 'desktop/desk_widgets.dart';
 import '../core/platform/desktop_layout.dart';
 import '../core/platform/desk_ui_scale.dart';
 import '../core/platform/app_platform.dart';
+import 'print_templates/direct_printer_sheet.dart';
 
 /// Basic settings — version, identity, logout. Will grow next iteration.
 class SettingsScreen extends StatefulWidget {
@@ -347,6 +348,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () => _openPrinterFormatPicker(context),
               ),
             ),
+            // «الطباعة المباشرة» (الحاسبة): طابعة الوصولات بلا نافذة طباعة — أندرويد لا يسمح بها.
+            if (PrintPrefs.directSupported) ...[
+              const SizedBox(height: Sp.xs),
+              ValueListenableBuilder<SavedPrinter?>(
+                valueListenable: PrintPrefs.printer,
+                builder: (_, p, __) => _Row(
+                  icon: Icons.bolt_outlined,
+                  label: 'printer.direct_title'.tr(),
+                  trailing: p == null
+                      ? 'printer.ask'.tr()
+                      : (p.name.length > 26 ? '${p.name.substring(0, 25)}…' : p.name),
+                  onTap: () => showDirectPrinterSheet(context),
+                ),
+              ),
+            ],
             // قوالب الطباعة (الوصولات) — لكلّ الشركات. كانت مخفيّةً لايرث لنك
             // (١٤ أكتوبر) لأنّ بوّابة الخادم ابتلعت `/api/print-templates`؛
             // المعالج قاعدتنا وحدها فمُرِّر (تدقيق ١٨ أكتوبر، الدفعة ①).

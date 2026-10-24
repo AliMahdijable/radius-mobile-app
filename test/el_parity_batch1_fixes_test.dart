@@ -14,9 +14,7 @@ import 'package:rad_mysvcs/screens/broadcast/broadcast_screen.dart';
 import 'package:rad_mysvcs/screens/notifications_settings_screen.dart';
 import 'package:rad_mysvcs/screens/print_templates/print_templates_screen.dart';
 import 'package:rad_mysvcs/screens/subscribers/widgets/subscriber_card_v3.dart';
-import 'package:rad_mysvcs/services/print_service.dart';
 import 'package:rad_mysvcs/services/provider_service.dart';
-import 'package:rad_mysvcs/services/receipt_service.dart';
 import 'package:rad_mysvcs/widgets/sas_captcha_sheet.dart';
 import 'package:rad_mysvcs/widgets/two_factor_sheet.dart';
 
@@ -426,56 +424,32 @@ void main() {
       expect(s.showFooter && s.showLogo && s.showShopInfo, isTrue);
     });
 
-    test('brandingFor: اسم المحلّ أو الحساب، والأقسام المخفيّة لا تُطبع', () {
-      final none = ReceiptService.brandingFor(null, displayName: ' admin@najaf ');
-      expect(none.companyName, 'admin@najaf');
-      expect(none.branding, isNull, reason: 'الوصل كما كان');
+    test('fromJson: QR والطباعة التلقائيّة وعرض الورق واللون وأقسام الموقع', () {
+      final s = ReceiptSettings.fromJson({
+        'show_qr': 0,
+        'auto_print': 1,
+        'design': {
+          'paper_width_mm': 58,
+          'accent_color': '#0d9488',
+          'show_package_price': false,
+          'show_manager_signature': false,
+          'show_receipt_id': false,
+        },
+      });
+      expect(s.showQr, isFalse);
+      expect(s.autoPrint, isTrue);
+      expect(s.paperWidthMm, 58);
+      expect(s.accent, 0xFF0D9488);
+      expect(s.showPackagePrice || s.showSignature || s.showReceiptId, isFalse);
+      expect(s.showSubscriberInfo && s.showPackageInfo && s.showTransactionInfo && s.showDateTime, isTrue,
+          reason: 'الغائب ظاهر — كافتراض الويب');
 
-      final full = ReceiptService.brandingFor(
-        ReceiptSettings(
-          shopName: 'مكتب النجف',
-          shopAddress: 'شارع الكوفة',
-          shopPhone: '07701234567',
-          footerText: 'نشكر ثقتكم',
-          logo: pngBytes,
-        ),
-        displayName: 'admin@najaf',
-      );
-      expect(full.companyName, 'مكتب النجف');
-      expect(full.branding!.address, 'شارع الكوفة');
-      expect(full.branding!.phone, '07701234567');
-      expect(full.branding!.footer, 'نشكر ثقتكم');
-      expect(full.branding!.logo, pngBytes);
-
-      final hidden = ReceiptService.brandingFor(
-        ReceiptSettings(
-          shopAddress: 'شارع الكوفة',
-          shopPhone: '0770',
-          footerText: 'نشكر',
-          logo: pngBytes,
-          showLogo: false,
-          showShopInfo: false,
-          showFooter: false,
-        ),
-        displayName: 'admin@najaf',
-      );
-      expect(hidden.companyName, 'admin@najaf');
-      expect(hidden.branding!.address, isNull);
-      expect(hidden.branding!.phone, isNull);
-      expect(hidden.branding!.footer, '', reason: 'فارغ = بلا تذييل');
-      expect(hidden.branding!.logo, isNull);
-
-      final defaultFooter =
-          ReceiptService.brandingFor(const ReceiptSettings(shopName: 'م'));
-      expect(defaultFooter.branding!.footer, isNull,
-          reason: 'null = سطر الشكر المعتاد');
-    });
-
-    test('ReceiptBranding.withoutLogo يُبقي الباقي', () {
-      final b = ReceiptBranding(
-          address: 'a', phone: 'p', footer: 'f', logo: Uint8List(4));
-      final w = b.withoutLogo();
-      expect([w.address, w.phone, w.footer, w.logo], ['a', 'p', 'f', null]);
+      final d = ReceiptSettings.fromJson(const {});
+      expect([d.showQr, d.autoPrint, d.paperWidthMm, d.accent], [true, false, 80, null],
+          reason: 'صفّ لم يُحفظ: QR ظاهر كالخادم، بلا طباعة تلقائيّة، كاشير ٨٠');
+      expect(ReceiptSettings.fromJson(const {'auto_print': '1', 'design': {'paper_width_mm': 300}}).paperWidthMm, 120);
+      expect(ReceiptSettings.fromJson(const {'auto_print': '1'}).autoPrint, isTrue);
+      expect(ReceiptSettings.parseHex('red'), isNull);
     });
 
     test('fetch: مخبّأٌ بمعرّف الحساب، وforce يجلب جديداً، والفشل null', () async {
@@ -511,12 +485,6 @@ void main() {
       ReceiptSettingsApi.clearCache();
     });
 
-    test('الجلسة تطبع بإعدادات الويب: ايرث لنك وحدها', () {
-      ProviderService.debugSet('earthlink');
-      expect(ReceiptService.usesWebReceiptSettings, isTrue);
-      ProviderService.debugSet(null);
-      expect(ReceiptService.usesWebReceiptSettings, isFalse);
-    });
   });
 
   group('«قوالب الطباعة» — الشاشة', () {
@@ -558,8 +526,8 @@ void main() {
       expect(find.text('محفوظ من الويب'), findsOneWidget);
       expect(find.text('شارع الكوفة'), findsOneWidget);
       expect(simText('07701234567'), findsOneWidget);
-      expect(find.text('شكراً لتعاملكم معنا'), findsOneWidget,
-          reason: 'لا تذييل مكتوب ⇒ سطر الشكر المعتاد');
+      expect(find.text('شكراً لاختياركم خدماتنا'), findsOneWidget,
+          reason: 'لا تذييل مكتوب ⇒ سطر الشكر كالموقع');
       expect(find.text('لم يُنشَأ بعد'), findsNothing);
       expect(find.text('التصميم من لوحة الويب'), findsOneWidget);
       expect(find.text('التحرير من الويب فقط'), findsNothing);
@@ -585,12 +553,18 @@ void main() {
       await drain(t);
     });
 
-    testWidgets('مالك ساس: القالبان كما كانا (لا إعدادات ويب)', (t) async {
-      final proxy = await openScreen(t, s1bSasOwner);
-      expect(find.text('قالب A4'), findsOneWidget);
-      expect(find.text('قالب POS (80mm)'), findsOneWidget);
-      expect(find.text('التحرير من الويب فقط'), findsOneWidget);
-      expect(proxy.paths.contains('/api/v2/receipt-settings'), isFalse);
+    testWidgets('مالك ساس: بيانات وصل الويب كذلك — كما يطبع الموقع', (t) async {
+      final proxy = await openScreen(t, s1bSasOwner, receipt: {
+        'shop_name': 'مكتب الكرادة',
+        'auto_print': 1,
+        'show_qr': 1,
+      });
+      expect(find.text('مكتب الكرادة'), findsOneWidget);
+      expect(find.text('قالب A4'), findsNothing);
+      expect(find.text('طباعة تلقائيّة'), findsOneWidget);
+      expect(proxy.paths.contains('/api/v2/receipt-settings'), isTrue);
+      expect(proxy.paths.any((p) => p.contains('/api/print-templates')), isFalse,
+          reason: 'قوالب الكلاسيك لا يقرؤها الموقع ولا التطبيق');
       await drain(t);
     });
   });

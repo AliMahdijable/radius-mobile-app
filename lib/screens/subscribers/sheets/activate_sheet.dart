@@ -26,6 +26,8 @@ import '../../../widgets/package_picker_field.dart';
 import '_print_receipt_checkbox.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../core/widgets/app_sheet.dart';
+import '../../../core/widgets/print_feedback.dart';
+import '../../../services/receipt_pdf.dart';
 
 /// Bottom sheet for activating a subscriber's package — direct port of
 /// v1's `_activateSubscriber` flow from
@@ -129,7 +131,23 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     _load();
     _partialCtrl.addListener(_onPartialChanged);
     _deposit.addListener(_onDepositChanged);
+    _loadAutoPrint();
   }
+
+  /// «الطباعة التلقائيّة» في مصمّم وصل الموقع ⇒ الخانة معلَّمة من البداية (الموقع يطبع بلا سؤال).
+  Future<void> _loadAutoPrint() async {
+    final on = await ReceiptService.autoPrintFor(widget.sub.companyKey);
+    if (on && mounted && !_printTouched) setState(() => _printReceiptChecked = true);
+  }
+
+  /// المستخدم غيّر الخانة بنفسه قبل وصول الإعداد — قراره يبقى.
+  bool _printTouched = false;
+
+  ReceiptPay get _receiptPay => switch (_pay) {
+        _PayType.cash => ReceiptPay.cash,
+        _PayType.partial => ReceiptPay.partial,
+        _PayType.debt => ReceiptPay.credit,
+      };
 
   void _onDepositChanged() {
     if (mounted) setState(() {}); // كي يتحدّث تفعيل الزرّ
@@ -492,17 +510,14 @@ class _ActivateSheetState extends State<_ActivateSheet> {
             isError: true, duration: const Duration(seconds: 8))));
       }
       if (_printReceiptChecked) {
-        final num paidNow = switch (_pay) {
-          _PayType.cash => _elChargePrice,
-          _PayType.partial => _partialAmount,
-          _PayType.debt => 0,
-        };
-        await ReceiptService.printActivationReceipt(
+        final printed = await ReceiptService.printActivation(
           sub: widget.sub,
-          packagePrice: _elChargePrice,
-          paidAmount: paidNow,
-          durationDays: null, // EL activation-data بلا مدّة
+          price: _elChargePrice,
+          pay: _receiptPay,
+          partialAmount: _partialAmount,
+          packageName: _elSelectedPkg?['name']?.toString() ?? _profileName,
         );
+        if (mounted) showPrintResult(context, printed);
       }
       if (!mounted) return;
       if (manualMode && result.waPreview != null) {
@@ -565,18 +580,14 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     // 2026-07-13: طباعة تلقائية بعد النجاح لو الـcheckbox مُفعَّل.
     if (_printReceiptChecked) {
       final effPrice = _effectivePrice > 0 ? _effectivePrice : _userPrice;
-      final num paidNow = switch (_pay) {
-        _PayType.cash => effPrice,
-        _PayType.partial => _partialAmount,
-        _PayType.debt => 0,
-      };
-      final durationDays = int.tryParse(_duration ?? '');
-      await ReceiptService.printActivationReceipt(
+      final printed = await ReceiptService.printActivation(
         sub: widget.sub,
-        packagePrice: effPrice,
-        paidAmount: paidNow,
-        durationDays: durationDays,
+        price: effPrice,
+        pay: _receiptPay,
+        partialAmount: _partialAmount,
+        packageName: _profileName,
       );
+      if (mounted) showPrintResult(context, printed);
     }
     if (!mounted) return;
     // 2026-08-26: preview WA بعد نجاح التفعيل.
@@ -651,7 +662,10 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         onPressed: _submit,
         above: PrintReceiptCheckbox(
           value: _printReceiptChecked,
-          onChanged: (v) => setState(() => _printReceiptChecked = v),
+          onChanged: (v) => setState(() {
+            _printTouched = true;
+            _printReceiptChecked = v;
+          }),
         ),
       ),
       body: Column(

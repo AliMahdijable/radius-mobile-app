@@ -4,26 +4,21 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/api_client.dart';
-import '../../api/print_templates_api.dart';
 import '../../api/receipt_settings_api.dart';
 import '../../core/util/bidi.dart';
-import '../../services/auth_storage.dart';
-import '../../services/print_prefs.dart';
-import '../../services/print_service.dart';
+import '../../core/widgets/print_feedback.dart';
 import '../../services/receipt_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../desktop/desk_widgets.dart';
 
-/// شاشة "قوالب الطباعة" — **read-only** على الموبايل.
-/// التحرير من الويب (rad.mysvcs.net/v2/print-templates). الموبايل يعرض
-/// القوالب المحفوظة + زر طباعة تجريبية للتحقّق من الاتصال بالطابعة.
+/// شاشة "قوالب الطباعة" — **read-only** في التطبيق، والتصميم من الويب
+/// (`/v2/print-templates` ← `receipt_settings`).
 ///
-/// ايرث لنك: لا قوالب `print_templates` لها (لا يكتبها أيّ عميل منشور، وحسابها
-/// جديدٌ في Pro) — فكانت «لم يُنشَأ بعد» دائماً، والبانر يحيل إلى مصمّمٍ لا يصل
-/// التطبيقَ ما يُحفظ فيه. تعرض بدلها **إعدادات وصل الويب** (`receipt_settings`)
-/// التي يطبع بها التطبيق وصلها ([ReceiptService.usesWebReceiptSettings]).
+/// تعرض إعدادات وصل الموقع التي يطبع بها التطبيق كلّ وصولاته لكلّ المزوّدين منذ ٢٤ أكتوبر
+/// ([ReceiptService]) — كانت للساس قوالب `print_templates` الكلاسيكيّة التي لا يقرؤها الموقع،
+/// فيخرج وصل التطبيق غير وصل الموقع. وزرّ المعاينة يطبع وصلاً تجريبيّاً بها.
 class PrintTemplatesScreen extends StatefulWidget {
   const PrintTemplatesScreen({super.key});
 
@@ -32,13 +27,10 @@ class PrintTemplatesScreen extends StatefulWidget {
 }
 
 class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
-  List<PrintTemplate> _list = const [];
   bool _loading = true;
 
-  /// ايرث لنك: إعدادات وصل الويب، و`null` إن تعذّر جلبها.
+  /// إعدادات وصل الويب، و`null` إن تعذّر جلبها.
   ReceiptSettings? _receipt;
-
-  bool get _web => ReceiptService.usesWebReceiptSettings;
 
   @override
   void initState() {
@@ -48,96 +40,23 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    if (_web) {
-      // جديدٌ دائماً (والطباعة تجده مخبّأً بعدها).
-      final r = await ReceiptSettingsApi.fetch(force: true);
-      if (!mounted) return;
-      setState(() {
-        _receipt = r;
-        _loading = false;
-      });
-      return;
-    }
-    final list = await PrintTemplatesApi.list();
+    // جديدٌ دائماً (والطباعة تجده مخبّأً بعدها).
+    final r = await ReceiptSettingsApi.fetch(force: true);
     if (!mounted) return;
     setState(() {
-      _list = list;
+      _receipt = r;
       _loading = false;
     });
   }
 
-  /// معاينة وصل ايرث لنك: بياناتٌ تجريبيّة بترويسة الويب وتذييله، وبالشكل
-  /// المختار في «الطابعة الافتراضية» — كما يخرج بعد التفعيل.
-  Future<void> _testPrintWeb() async {
-    final type = PrintPrefs.currentTemplateType;
-    final b = ReceiptService.brandingFor(_receipt,
-        displayName: await AuthStorage.readDisplayName());
-    final ok = await PrintService.printReceipt(
-      data: PrintService.sampleData,
-      format: PrintService.formatForType(type),
-      title: type == 'a4'
-          ? 'print_templates.a4_default_name'.tr()
-          : 'print_templates.pos_default_name'.tr(),
-      documentName: 'Receipt-preview',
-      companyName: b.companyName,
-      branding: b.branding,
-    );
-    if (!mounted || ok) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('print_templates.print_cancelled'.tr()),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  PrintTemplate? _byType(String type) {
-    for (final t in _list) {
-      if (t.templateType == type) return t;
-    }
-    return null;
-  }
-
-  Future<void> _testPrint(PrintTemplate t) async {
-    // 2026-07-13: نجرّب HTML template أوّلاً (تصميم الأدمن من الويب)،
-    // وإذا فشل WebView (chromium crash على الإيموليتر) نلجأ لـprintReceipt
-    // (PDF مبني بـpw widgets — يعمل بلا WebView).
-    final format = PrintService.formatForType(t.templateType);
-    final data = PrintService.sampleData;
-    bool ok = false;
-    if (t.content.trim().isNotEmpty) {
-      final filled = PrintService.fillTemplate(t.content, data);
-      ok = await PrintService.printHtml(
-        html: filled,
-        format: format,
-        documentName: t.templateName,
-      );
-    }
-    if (!ok) {
-      // fallback: PDF مباشر
-      ok = await PrintService.printReceipt(
-        data: data,
-        format: format,
-        title: t.templateType == 'a4' ? 'فاتورة A4' : 'إيصال POS',
-        documentName: t.templateName,
-      );
-    }
-    if (!mounted) return;
-    if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('print_templates.print_cancelled'.tr()),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
+  /// وصلٌ تجريبيّ بتصميم الحساب وبالشكل المختار في «الطابعة الافتراضية» — كما يخرج بعد التفعيل.
+  Future<void> _preview() async {
+    final r = await ReceiptService.printSample(_receipt);
+    if (mounted) showPrintResult(context, r);
   }
 
   @override
   Widget build(BuildContext context) {
-    final a4 = _byType('a4');
-    final pos = _byType('pos');
-
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: deskPageBar(
@@ -168,55 +87,23 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
               child: ListView(
                 padding:
                     const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.huge),
-                children: _web
-                    ? [
-                        _WebOnlyBanner(
-                          title: 'print_templates.el_banner_title'.tr(),
-                          body: 'print_templates.el_banner_body'.tr(),
-                          copyPath: '/v2/print-templates',
-                        ),
-                        const SizedBox(height: Sp.lg),
-                        _sectionLabel(
-                          'print_templates.el_section'.tr(),
-                          LucideIcons.receipt,
-                        ),
-                        const SizedBox(height: Sp.sm),
-                        _WebReceiptCard(
-                          settings: _receipt,
-                          onPreview: _testPrintWeb,
-                        ),
-                      ]
-                    : [
-                        // Banner: التحرير من الويب فقط
-                        const _WebOnlyBanner(),
-                        const SizedBox(height: Sp.lg),
-                        _sectionLabel(
-                          'print_templates.a4_section'.tr(),
-                          LucideIcons.fileText,
-                        ),
-                        const SizedBox(height: Sp.sm),
-                        _TemplateViewCard(
-                          type: 'a4',
-                          template: a4,
-                          // زر المعاينة يظهر فقط للقالب الفعّال (طلب المستخدم)
-                          onPreview: (a4 != null && a4.isActive)
-                              ? () => _testPrint(a4)
-                              : null,
-                        ),
-                        const SizedBox(height: Sp.lg),
-                        _sectionLabel(
-                          'print_templates.pos_section'.tr(),
-                          LucideIcons.receipt,
-                        ),
-                        const SizedBox(height: Sp.sm),
-                        _TemplateViewCard(
-                          type: 'pos',
-                          template: pos,
-                          onPreview: (pos != null && pos.isActive)
-                              ? () => _testPrint(pos)
-                              : null,
-                        ),
-                      ],
+                children: [
+                  _WebOnlyBanner(
+                    title: 'print_templates.el_banner_title'.tr(),
+                    body: 'print_templates.el_banner_body'.tr(),
+                    copyPath: '/v2/print-templates',
+                  ),
+                  const SizedBox(height: Sp.lg),
+                  _sectionLabel(
+                    'print_templates.el_section'.tr(),
+                    LucideIcons.receipt,
+                  ),
+                  const SizedBox(height: Sp.sm),
+                  _WebReceiptCard(
+                    settings: _receipt,
+                    onPreview: _preview,
+                  ),
+                ],
               ),
             ),
     );
@@ -318,119 +205,10 @@ class _WebOnlyBanner extends StatelessWidget {
   }
 }
 
-class _TemplateViewCard extends StatelessWidget {
-  const _TemplateViewCard({
-    required this.type,
-    required this.template,
-    required this.onPreview,
-  });
-  final String type;
-  final PrintTemplate? template;
-  final VoidCallback? onPreview;
 
-  @override
-  Widget build(BuildContext context) {
-    final exists = template != null;
-    final IconData typeIcon =
-        type == 'a4' ? LucideIcons.fileText : LucideIcons.receipt;
 
-    return Container(
-      padding: const EdgeInsets.all(Sp.md),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(R.md),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.brandSoftBg,
-              borderRadius: BorderRadius.circular(R.sm),
-            ),
-            child: Icon(typeIcon, color: AppColors.brand, size: 22),
-          ),
-          const SizedBox(width: Sp.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  exists
-                      ? template!.templateName
-                      : (type == 'a4'
-                          ? 'print_templates.a4_default_name'.tr()
-                          : 'print_templates.pos_default_name'.tr()),
-                  style: AppType.title(color: AppColors.textHi)
-                      .copyWith(fontSize: 14),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: Sp.sm, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: (exists && template!.isActive)
-                        ? AppColors.brandSoftBg
-                        : AppColors.textMid.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(R.pill),
-                  ),
-                  child: Text(
-                    exists
-                        ? (template!.isActive
-                            ? 'print_templates.active'.tr()
-                            : 'print_templates.inactive'.tr())
-                        : 'print_templates.not_created'.tr(),
-                    style: AppType.button(
-                      color: (exists && template!.isActive)
-                          ? AppColors.brand
-                          : AppColors.textMid,
-                    ).copyWith(fontSize: 10.5),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (exists && onPreview != null)
-            Material(
-              color: AppColors.brandSoftBg,
-              borderRadius: BorderRadius.circular(R.sm),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: () {
-                  HapticFeedback.selectionClick();
-                  onPreview!();
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: Sp.md, vertical: 8),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(LucideIcons.eye, size: 14, color: AppColors.brand),
-                      const SizedBox(width: 4),
-                      Text(
-                        'print_templates.preview'.tr(),
-                        style: AppType.button(color: AppColors.brand)
-                            .copyWith(fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// ايرث لنك: إعدادات وصل الويب كما يطبع بها التطبيق — للقراءة، والتعديل من
-/// المصمّم على الويب. [settings] `null` ← تعذّر الجلب (يُطبع باسم الحساب).
+/// إعدادات وصل الويب كما يطبع بها التطبيق — للقراءة، والتعديل من المصمّم على الويب.
+/// [settings] `null` ← تعذّر الجلب (يُطبع باسم الحساب).
 class _WebReceiptCard extends StatelessWidget {
   const _WebReceiptCard({required this.settings, required this.onPreview});
   final ReceiptSettings? settings;
@@ -564,6 +342,18 @@ class _WebReceiptCard extends StatelessWidget {
                   .tr(),
               style: AppType.subtitle(color: AppColors.textMid)
                   .copyWith(fontSize: 11.5, height: 1.6),
+            ),
+          ],
+          // ما يحكم الطباعة نفسها (لا الشكل): رمز QR والطباعة بعد العمليّة بلا سؤال.
+          if (s != null) ...[
+            if (!custom) const SizedBox(height: Sp.sm),
+            _WebReceiptRow(
+              label: 'print_templates.qr'.tr(),
+              value: (s.showQr ? 'print_templates.on' : 'print_templates.off').tr(),
+            ),
+            _WebReceiptRow(
+              label: 'print_templates.auto_print'.tr(),
+              value: (s.autoPrint ? 'print_templates.on' : 'print_templates.off').tr(),
             ),
           ],
         ],

@@ -12,6 +12,7 @@ import 'big_subscribers_api.dart';
 import 'bulk_activate_api.dart';
 import 'el_deposit_password.dart';
 import 'cards_api.dart';
+import 'receipt_facts.dart';
 
 /// ردّ activate. `code` رمز الرفض حين يرسله الخادم (`NO_CARDS` ·
 /// `CARD_NOT_ALLOWED`)، و`card` الكارت الذي سُحب في التفعيل بالكارت.
@@ -744,6 +745,7 @@ class SubscribersApi {
       // باسورد الإيداع حُفظ الآن، أو المحفوظ رفضته ايرث لنك فمُسح (saved_cleared).
       if (method == 'deposit') ElDepositPassword.observe(r.data);
       final body = r.data ?? const <String, dynamic>{};
+      if (body['success'] == true) ReceiptFacts.capture(idx, body);
       return (
         result: activateResultFromBody(body),
         status: r.statusCode,
@@ -891,6 +893,7 @@ class SubscribersApi {
       );
       final body = r.data ?? const {};
       final ok = body['success'] == true;
+      if (ok) ReceiptFacts.capture(idx, body);
       return (
         ok: ok,
         message: body['message']?.toString(),
@@ -1369,6 +1372,7 @@ class SubscribersApi {
       );
       final body = r.data ?? const {};
       final ok = body['success'] == true;
+      if (ok) ReceiptFacts.capture(idx, body);
       return (
         ok: ok,
         message: body['message']?.toString(),
@@ -1587,6 +1591,26 @@ class SubscribersApi {
         expiresAt: null,
         message: e.toString(),
       );
+    }
+  }
+
+  /// POST /api/v2/subscribers/:idx/generate-link — رابط «معلومات المشترك» (ساعة) لرمز QR على
+  /// الوصل، كما يطبعه الموقع. الساس وحده (ايرث لنك بلا مسار)، وبصلاحيّة `subscribers.generate_link`.
+  /// null على أيّ فشل: الوصل يُطبع بلا رمز.
+  static Future<String?> receiptLink(String idx) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/subscribers/$idx/generate-link',
+        options: Options(receiveTimeout: const Duration(seconds: 8)),
+      );
+      final body = r.data ?? const {};
+      final data = body['data'];
+      if (body['success'] != true || data is! Map) return null;
+      final url = '${data['linkUrl'] ?? ''}'.trim();
+      return url.startsWith('http') ? url : null;
+    } catch (e) {
+      _log('generate-link/$idx', e);
+      return null;
     }
   }
 

@@ -6,11 +6,12 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
+import '../../../core/widgets/print_feedback.dart';
+import '../../../services/print_output.dart';
 
 /// ================================================================
 /// Report export — CSV/Excel + PDF/Print للتقارير.
@@ -21,7 +22,7 @@ import '../../../theme/spacing.dart';
 ///   * صفوف كـ List<List<String>> (كل صف قيم بنفس ترتيب الأعمدة)
 ///
 /// الأزرار تولّد الملف مؤقتاً وتفتح shareSheet — Excel يفتح CSV مباشرة.
-/// الطباعة تفتح previewPDF عبر printing.Printing.layoutPdf.
+/// الطباعة تفتح نافذة الطباعة عبر [PrintOutput] (A4، بلا الطابعة المباشرة).
 ///
 /// نُبقي حد أعلى معقول (5000 صف) — الصفحة تعرض ضمن pagination لكن
 /// التصدير يشمل الـfiltered set كامل.
@@ -106,12 +107,11 @@ class ReportExportBar extends StatelessWidget {
 
   Future<void> _printPdf(BuildContext context) async {
     try {
-      // خطّ عربي للتقرير — NotoNaskh عمداً لا خطّ التطبيق: التقرير
-      // جدول كثيف يُقرأ مطبوعاً، والخطّ الناسخي أوضح فيه من خطّ
-      // الواجهة. الوصولات مختلفة (print_service) وتستعمل خطّ التطبيق
-      // لأنّها تُقرأ كامتداد للشاشة.
-      final font = await PdfGoogleFonts.cairoRegular();
-      final fontBold = await PdfGoogleFonts.cairoBold();
+      // خطّ التطبيق المضمَّن — كان Cairo من خطوط Google عند كلّ طباعة: حاسبةٌ بلا إنترنت
+      // لحظتها لا تطبع التقرير أصلاً.
+      final theme = await PdfFonts.theme();
+      final font = theme.defaultTextStyle.font!;
+      final fontBold = theme.defaultTextStyle.fontBold!;
       final doc = pw.Document();
       doc.addPage(
         pw.MultiPage(
@@ -178,10 +178,12 @@ class ReportExportBar extends StatelessWidget {
           ],
         ),
       );
-      await Printing.layoutPdf(
-        onLayout: (fmt) async => doc.save(),
-        name: '$fileNameBase.pdf',
+      // A4 دائماً، فلا يذهب لطابعة الكاشير المباشرة.
+      final r = await PrintOutput.send(
+        await PrintDoc.of(doc, name: '$fileNameBase.pdf', requested: PdfPageFormat.a4),
+        allowDirect: false,
       );
+      if (context.mounted) showPrintResult(context, r);
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

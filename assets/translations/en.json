@@ -240,7 +240,26 @@
     "el_phone": "Phone",
     "el_footer": "Footer",
     "el_default_footer": "Thank you for your business",
-    "el_hidden": "Hidden in the design"
+    "el_hidden": "Hidden in the design",
+    "qr": "QR code",
+    "auto_print": "Auto print",
+    "on": "On",
+    "off": "Off"
+  },
+  "printer": {
+    "receipt": "Print receipt",
+    "preparing": "Preparing the receipt…",
+    "sent_to": "Receipt sent to “{}”",
+    "failed": "Printing failed — check the printer and try again",
+    "direct_title": "Direct printing",
+    "direct_desc": "Pick the receipt printer and receipts print on it instantly, with no print dialog — after activations, payments and from “Print receipt”.",
+    "ask": "Print dialog every time",
+    "ask_desc": "The system dialog opens and you pick the printer",
+    "default_tag": "Default",
+    "unavailable": "Unavailable now",
+    "none": "No printers are set up on this computer — add the printer in system settings, then come back.",
+    "loading": "Loading printers…",
+    "test": "Print a test receipt"
   },
   "qr_login": {
     "title": "Subscriber QR login",

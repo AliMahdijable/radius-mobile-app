@@ -1,31 +1,27 @@
 import 'package:flutter/foundation.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 
 import '../api/sales_api.dart';
 import '../core/util/format.dart';
 import 'auth_storage.dart';
+import 'print_output.dart';
 import 'print_prefs.dart';
-import 'print_service.dart';
 
 /// وصل البيع (قسم «المبيعات») — PDF مبنيّ مباشرةً بعناصر `pw` كسند التسوية ([SettlementPrint]): الورق من تفضيل الطباعة
 /// نفسه (حراري 80mm أو A4)، والخطّ خطّ التطبيق، واسم الشركة من الجلسة. المُلغى يُطبع بختم «مُلغى» وسببه.
 class SalePrint {
   SalePrint._();
 
-  static Future<bool> printReceipt(Sale s) async {
+  static Future<PrintResult> printReceipt(Sale s) async {
     try {
-      final format = PrintService.formatForType(PrintPrefs.currentTemplateType);
+      final format = PrintPrefs.pageFormat;
       final company = await AuthStorage.readDisplayName();
-      return await Printing.layoutPdf(
-        name: 'Sale-${s.id}',
-        format: format,
-        onLayout: (fmt) => build(s, fmt, company: company),
-      );
+      final doc = await document(s, format, company: company);
+      return PrintOutput.send(await PrintDoc.of(doc, name: 'Sale-${s.id}', requested: format));
     } catch (e) {
       if (kDebugMode) debugPrint('[SalePrint] failed: $e');
-      return false;
+      return PrintResult.failed('$e');
     }
   }
 
@@ -56,24 +52,16 @@ class SalePrint {
     return n.isEmpty ? 'زبون' : n;
   }
 
-  /// يُبنى منفصلاً عن الطابعة (يُختبر وحده). [fonts] = false في الاختبار (لا شبكة لخطوط Google).
+  /// يُبنى منفصلاً عن الطابعة (يُختبر وحده). [fonts] = false في الاختبار: Helvetica بلا تحميل خطّ.
   @visibleForTesting
-  static Future<Uint8List> build(Sale s, PdfPageFormat format, {String? company, bool fonts = true, DateTime? printedAt}) async {
-    pw.Font? regular;
-    pw.Font? bold;
-    if (fonts) {
-      try {
-        regular = await PdfGoogleFonts.iBMPlexSansArabicRegular();
-        bold = await PdfGoogleFonts.iBMPlexSansArabicBold();
-      } catch (e) {
-        if (kDebugMode) debugPrint('[SalePrint] font fetch failed: $e');
-      }
-    }
+  static Future<Uint8List> build(Sale s, PdfPageFormat format, {String? company, bool fonts = true, DateTime? printedAt}) async =>
+      (await document(s, format, company: company, fonts: fonts, printedAt: printedAt)).save();
+
+  static Future<pw.Document> document(Sale s, PdfPageFormat format, {String? company, bool fonts = true, DateTime? printedAt}) async {
     final doc = pw.Document(
-      theme: pw.ThemeData.withFont(
-        base: regular ?? pw.Font.helvetica(),
-        bold: bold ?? pw.Font.helveticaBold(),
-      ),
+      theme: fonts
+          ? await PdfFonts.theme()
+          : pw.ThemeData.withFont(base: pw.Font.helvetica(), bold: pw.Font.helveticaBold()),
     );
     final pos = format.width <= PdfPageFormat.roll80.width + 5;
     final size = pos ? 9.5 : 11.0;
@@ -162,11 +150,12 @@ class SalePrint {
     doc.addPage(
       pw.Page(
         pageFormat: format,
-        margin: pos ? const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 12) : const pw.EdgeInsets.all(32),
+        // الكاشير: ٤٫٥ ملم جانباً — حواشي الطابعة الحراريّة لا تُطبع.
+        margin: pos ? const pw.EdgeInsets.symmetric(horizontal: 12.75, vertical: 12) : const pw.EdgeInsets.all(32),
         textDirection: pw.TextDirection.rtl,
         build: (context) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.stretch, children: children),
       ),
     );
-    return doc.save();
+    return doc;
   }
 }

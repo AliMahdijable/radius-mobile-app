@@ -20,6 +20,7 @@ import '../../../widgets/package_picker_field.dart';
 import '_print_receipt_checkbox.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../core/widgets/app_sheet.dart';
+import '../../../core/widgets/print_feedback.dart';
 
 /// Extend-subscription sheet — direct port of v1's _extendSubscription.
 ///   1. Fetch /api/v2/subscribers/:idx/extension-options. Spinner while
@@ -68,7 +69,17 @@ class _ExtendSheetState extends State<_ExtendSheet> {
   void initState() {
     super.initState();
     _load();
+    _loadAutoPrint();
   }
+
+  /// «الطباعة التلقائيّة» في مصمّم وصل الموقع ⇒ الخانة معلَّمة من البداية (الموقع يطبع بلا سؤال).
+  Future<void> _loadAutoPrint() async {
+    final on = await ReceiptService.autoPrintFor(widget.sub.companyKey);
+    if (on && mounted && !_printTouched) setState(() => _printReceiptChecked = true);
+  }
+
+  /// المستخدم غيّر الخانة بنفسه قبل وصول الإعداد — قراره يبقى.
+  bool _printTouched = false;
 
   Future<void> _load() async {
     final idx = widget.sub.idx;
@@ -205,14 +216,12 @@ class _ExtendSheetState extends State<_ExtendSheet> {
     showSheetSnack(context, 'sheets.extend_ok'.tr(), isError: false);
     // 2026-07-13: طباعة تلقائية بعد النجاح لو الـcheckbox مُفعَّل.
     if (_printReceiptChecked) {
-      final price = _method == _Method.points ? 0 : _selectedPrice;
-      final durationDays = int.tryParse(pkg['duration_days']?.toString() ?? '');
-      await ReceiptService.printActivationReceipt(
+      final printed = await ReceiptService.printExtension(
         sub: widget.sub,
-        packagePrice: price,
-        paidAmount: price, // التجديد = دفع كامل من الرصيد
-        durationDays: durationDays,
+        price: _method == _Method.points ? 0 : _selectedPrice,
+        packageName: pkg['name']?.toString(),
       );
+      if (mounted) showPrintResult(context, printed);
     }
     if (!mounted) return;
     // 2026-08-26: preview WA بعد نجاح التمديد.
@@ -256,7 +265,10 @@ class _ExtendSheetState extends State<_ExtendSheet> {
         onPressed: _submit,
         above: PrintReceiptCheckbox(
           value: _printReceiptChecked,
-          onChanged: (v) => setState(() => _printReceiptChecked = v),
+          onChanged: (v) => setState(() {
+            _printTouched = true;
+            _printReceiptChecked = v;
+          }),
         ),
       ),
       body: Column(

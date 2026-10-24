@@ -24,6 +24,7 @@ import '../../widgets/merged_company_strip.dart';
 import '../desktop/desk_widgets.dart';
 import '../reports/widgets/date_range_chip.dart';
 import '../reports/widgets/report_permission_gate.dart';
+import '../../core/widgets/print_feedback.dart';
 
 /// «المبيعات» (٢٣ أكتوبر) — `/api/v2/sales/*` (الخادم server/sales.js، الويب
 /// pages/Sales.tsx). المالك: «وكيل انترنت عنده مواد يبيعها ويعرف شكد سعرها
@@ -940,7 +941,10 @@ class _SaleTile extends StatelessWidget {
               if (sale.isDone || sale.isVoid)
                 IconButton(
                   tooltip: 'sales.print_receipt'.tr(),
-                  onPressed: () => SalePrint.printReceipt(sale),
+                  onPressed: () async {
+                    final r = await SalePrint.printReceipt(sale);
+                    if (context.mounted) showPrintResult(context, r);
+                  },
                   icon: Icon(LucideIcons.printer, size: 17, color: AppColors.textBody),
                   visualDensity: VisualDensity.compact,
                 ),

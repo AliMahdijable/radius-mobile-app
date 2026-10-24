@@ -12,6 +12,7 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../settle_widgets.dart';
 import '../../../core/widgets/app_sheet.dart';
+import '../../../core/widgets/print_feedback.dart';
 
 /// سند التسوية: اللقطة، وحصص المنفّذين، والحركات، والطباعة، والإلغاء.
 /// يُرجع `true` حين أُلغي السجلّ (فتعيد الشاشة الحساب).
@@ -101,10 +102,10 @@ class _DetailSheetState extends State<_DetailSheet> {
     final s = _s;
     if (s == null || _printing) return;
     setState(() => _printing = true);
-    final ok = await SettlementPrint.printVoucher(s);
+    final r = await SettlementPrint.printVoucher(s);
     if (!mounted) return;
     setState(() => _printing = false);
-    if (!ok) showSheetSnack(context, 'settle.print_failed'.tr(), isError: true);
+    showPrintResult(context, r);
   }
 
   Future<void> _void() async {

@@ -10,13 +10,10 @@ import 'company_route.dart';
 /// إعدادات الوصل كما يحفظها **مصمّم الويب** («قوالب الطباعة» في `/v2` ←
 /// جدول `receipt_settings` بـ`POST /api/v2/receipt-settings`).
 ///
-/// ⚠️ ليست قوالب `print_templates` التي يعرضها التطبيق للساس
-/// ([PrintTemplatesApi]): تلك لا يكتبها اليوم أيّ عميل منشور، وحساب ايرث لنك
-/// (`earthlink:<idx>`) جديدٌ في Pro فلا قالب له أصلاً — فكانت شاشته «لم يُنشَأ
-/// بعد» دائماً وما يصمّمه المالك على الويب لا يصل التطبيق. ايرث لنك تقرأ هذه.
-///
-/// التطبيق يأخذ منها ما يرسمه وصله (الترويسة والتذييل)؛ الألوان والخطوط
-/// والهوامش والمحاذاة لطباعة الويب وحدها.
+/// منذ ٢٤ أكتوبر يطبع التطبيق **كلّ** وصولاته بها لكلّ المزوّدين، كالموقع («مثل الويب» —
+/// المالك): الترويسة والتذييل وما يظهر من الأقسام ورمز QR والطباعة التلقائيّة وعرض ورق
+/// الكاشير. قوالب `print_templates` القديمة (الكلاسيك) لا يقرؤها الموقع ولا يكتبها أحد منذ
+/// النقل. الخطوط والمحاذاة لطباعة الويب وحدها.
 @immutable
 class ReceiptSettings {
   const ReceiptSettings({
@@ -25,9 +22,20 @@ class ReceiptSettings {
     this.shopPhone,
     this.footerText,
     this.logo,
+    this.showQr = true,
+    this.autoPrint = false,
+    this.paperWidthMm = 80,
+    this.accent,
     this.showLogo = true,
     this.showShopInfo = true,
+    this.showSubscriberInfo = true,
+    this.showPackageInfo = true,
+    this.showPackagePrice = true,
+    this.showTransactionInfo = true,
     this.showFooter = true,
+    this.showSignature = true,
+    this.showReceiptId = true,
+    this.showDateTime = true,
   });
 
   final String? shopName;
@@ -38,10 +46,32 @@ class ReceiptSettings {
   /// الشعار مفكوكاً من data URL — PNG أو JPEG وحدهما (ما يُرسم بلا مفاجآت).
   final Uint8List? logo;
 
+  /// رمز QR لمعلومات المشترك على الوصل (`show_qr`، الافتراضيّ ظاهر كالخادم).
+  final bool showQr;
+
+  /// «الطباعة التلقائيّة» (`auto_print`): الوصل يُطبع بعد التفعيل/التمديد/التسديد بلا سؤال —
+  /// خانة «طباعة وصل بعد التأكيد» تأتي معلَّمةً.
+  final bool autoPrint;
+
+  /// عرض ورق الكاشير بالملّيمتر (`design.paper_width_mm`، ٥٠–١٢٠) — طابعات ٥٨ موجودة.
+  final double paperWidthMm;
+
+  /// لون العناوين (`design.accent_color`، ARGB) لوصل A4 — ورق الكاشير أسود دائماً.
+  final int? accent;
+
   /// أقسام الوصل في `design` (الغائب = ظاهر، كافتراض الويب).
   final bool showLogo;
   final bool showShopInfo;
+  final bool showSubscriberInfo;
+  final bool showPackageInfo;
+  final bool showPackagePrice;
+  final bool showTransactionInfo;
   final bool showFooter;
+
+  /// «أصدره: …» (`show_manager_signature`).
+  final bool showSignature;
+  final bool showReceiptId;
+  final bool showDateTime;
 
   /// هل خصّص المالك شيئاً يظهر في الوصل؟ (لا = يُطبع باسم الحساب كما كان.)
   bool get isCustomized =>
@@ -82,16 +112,38 @@ class ReceiptSettings {
     final design = j['design'];
     bool flag(String k) =>
         design is Map ? (design[k] == null ? true : design[k] == true) : true;
+    // tinyint يصل 0/1 أو true/false أو "1".
+    bool on(Object? v, {required bool fallback}) =>
+        v == null ? fallback : (v == true || v == 1 || '$v' == '1' || '$v' == 'true');
+    final width = design is Map ? num.tryParse('${design['paper_width_mm'] ?? ''}') : null;
     return ReceiptSettings(
       shopName: _str(j['shop_name']),
       shopAddress: _str(j['shop_address']),
       shopPhone: _str(j['shop_phone']),
       footerText: _str(j['footer_text']),
       logo: decodeLogo(j['logo_data']),
+      showQr: on(j['show_qr'], fallback: true),
+      autoPrint: on(j['auto_print'], fallback: false),
+      paperWidthMm: width == null ? 80 : width.toDouble().clamp(50, 120).toDouble(),
+      accent: design is Map ? parseHex(design['accent_color']) : null,
       showLogo: flag('show_logo'),
       showShopInfo: flag('show_shop_info'),
+      showSubscriberInfo: flag('show_subscriber_info'),
+      showPackageInfo: flag('show_package_info'),
+      showPackagePrice: flag('show_package_price'),
+      showTransactionInfo: flag('show_transaction_info'),
       showFooter: flag('show_footer'),
+      showSignature: flag('show_manager_signature'),
+      showReceiptId: flag('show_receipt_id'),
+      showDateTime: flag('show_datetime'),
     );
+  }
+
+  /// `#RRGGBB` ← ARGB معتم، أو null لغيره.
+  @visibleForTesting
+  static int? parseHex(Object? v) {
+    final m = RegExp(r'^#?([0-9a-fA-F]{6})$').firstMatch('${v ?? ''}'.trim());
+    return m == null ? null : 0xFF000000 | int.parse(m.group(1)!, radix: 16);
   }
 }
 

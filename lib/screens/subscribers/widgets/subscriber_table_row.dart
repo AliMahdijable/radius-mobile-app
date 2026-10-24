@@ -28,6 +28,8 @@ import '../sheets/subscriber_price_sheet.dart';
 import 'sort_sheet.dart';
 import 'subscriber_card_v3.dart';
 import 'subscriber_columns.dart';
+import '../../../core/widgets/print_feedback.dart';
+import '../../../services/receipt_service.dart';
 
 /// أعمدة جدول المشتركين على هذا العرض: ما اختاره المدير من زرّ «الأعمدة» بترتيبه، كلٌّ بعرضه (الافتراضيّ أو ما
 /// سحبه المدير). لا يسقط عمود حين يضيق الجدول: **الجدول كلّه** يتمرّر يميناً ويساراً قطعةً واحدة — لا جزءٌ ثابت ولا
@@ -68,7 +70,7 @@ class SubscriberTableColumns {
   static const double nameAutoMin = 170;
   static const double nameDefault = 200;
   static const double nameMax = 640;
-  static const double actions = 104;
+  static const double actions = 140;
 
   /// حدّا الجدول الأيمن والأيسر (١ لكلٍّ منهما).
   static const double borders = 2;
@@ -526,7 +528,7 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
 
 // ───────────────────────────── الإجراءات ─────────────────────────────
 
-/// تجديد وتمديد يظهران عند المرور على الصفّ (كالموقع)، و«…» دائماً.
+/// تجديد وتمديد وطباعة الوصل تظهر عند المرور على الصفّ (كالموقع)، و«…» دائماً.
 class _RowActions extends StatelessWidget {
   const _RowActions({required this.sub, required this.hover, required this.onMenu});
 
@@ -564,6 +566,21 @@ class _RowActions extends StatelessWidget {
         quick(LucideIcons.calendarPlus, 'subscribers.op_extend'.tr(), 'subscribers.extend',
             () => showExtendSheet(context, sub)),
         const SizedBox(width: 4),
+        // «طباعة وصل» بنقرة (المالك ٢٤ أكتوبر: «زر طباعة مباشر ماكو») — بلا صلاحيّة كالموقع.
+        AnimatedOpacity(
+          duration: const Duration(milliseconds: 120),
+          opacity: hover ? 1 : 0,
+          child: IgnorePointer(
+            ignoring: !hover,
+            child: _MiniAction(
+              icon: LucideIcons.printer,
+              color: AppColors.brandAccent,
+              tooltip: 'printer.receipt'.tr(),
+              onTap: () => printSubscriberReceipt(context, sub),
+            ),
+          ),
+        ),
+        const SizedBox(width: 4),
         Builder(
           builder: (btn) => _MiniAction(
             icon: LucideIcons.ellipsis,
@@ -578,6 +595,12 @@ class _RowActions extends StatelessWidget {
       ],
     );
   }
+}
+
+/// بطاقة معلومات المشترك إلى الطابعة — مباشرةً إن اختيرت «طابعة مباشرة»، وإلّا نافذة الطباعة.
+Future<void> printSubscriberReceipt(BuildContext context, Subscriber s) async {
+  final r = await ReceiptService.printSubscriberCard(s);
+  if (context.mounted) showPrintResult(context, r);
 }
 
 /// قائمة إجراءات المشترك (زرّ «…» والزرّ الأيمن): ما تفتحه الشيتات نفسها التي تفتحها التفاصيل،
@@ -621,6 +644,10 @@ Future<void> showSubscriberRowMenu(
         () => showConsumptionSheet(context, s)),
     _gate('subscribers.view_activity', LucideIcons.history, 'subscribers.op_movements'.tr(),
         () => showMovementsSheet(context, s)),
+    _MenuEntry(LucideIcons.printer, 'printer.receipt'.tr(), () async {
+      await printSubscriberReceipt(context, s);
+      return null;
+    }),
     _MenuEntry(LucideIcons.copy, 'desktop.copy_username'.tr(), () async {
       await Clipboard.setData(ClipboardData(text: s.username));
       if (context.mounted) showSheetSnack(context, 'desktop.copied'.tr());

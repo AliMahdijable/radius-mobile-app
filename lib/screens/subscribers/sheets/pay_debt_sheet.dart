@@ -18,6 +18,7 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '_print_receipt_checkbox.dart';
 import '../../../core/widgets/app_sheet.dart';
+import '../../../core/widgets/print_feedback.dart';
 
 /// Bottom sheet for paying down a subscriber's debt — port of v1's
 /// `_showPayDebtSheet` from mobile-app/lib/screens/subscribers/
@@ -91,7 +92,17 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
   void initState() {
     super.initState();
     _amountCtrl.addListener(_onAmountChanged);
+    _loadAutoPrint();
   }
+
+  /// «الطباعة التلقائيّة» في مصمّم وصل الموقع ⇒ الخانة معلَّمة من البداية (الموقع يطبع بلا سؤال).
+  Future<void> _loadAutoPrint() async {
+    final on = await ReceiptService.autoPrintFor(widget.sub.companyKey);
+    if (on && mounted && !_printTouched) setState(() => _printReceiptChecked = true);
+  }
+
+  /// المستخدم غيّر الخانة بنفسه قبل وصول الإعداد — قراره يبقى.
+  bool _printTouched = false;
 
   @override
   void dispose() {
@@ -206,14 +217,11 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     }
     // 2026-07-13: طباعة تلقائية بعد النجاح لو الـcheckbox داخل المودل مُفعَّل.
     if (_printReceiptChecked) {
-      final paidAmount = _effectiveAmount;
-      final remainingDebt =
-          (_currentDebt - paidAmount).clamp(0, double.infinity);
-      await ReceiptService.printDebtPaymentReceipt(
+      final printed = await ReceiptService.printDebtPayment(
         sub: widget.sub,
-        paidAmount: paidAmount,
-        remainingDebt: remainingDebt,
+        paid: _effectiveAmount,
       );
+      if (mounted) showPrintResult(context, printed);
     }
     if (!mounted) return;
     // 2026-08-26: preview WA بعد النجاح.
@@ -273,7 +281,10 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
         above: hasDebt
             ? PrintReceiptCheckbox(
                 value: _printReceiptChecked,
-                onChanged: (v) => setState(() => _printReceiptChecked = v),
+                onChanged: (v) => setState(() {
+                  _printTouched = true;
+                  _printReceiptChecked = v;
+                }),
               )
             : null,
       ),
