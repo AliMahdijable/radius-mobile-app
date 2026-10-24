@@ -91,7 +91,76 @@ class DeviceImage extends StatelessWidget {
     'pb5ac': 'powerbeamm5',
     // الكشف التلقائيّ يكتب `sysDescr` كما هي: «MIMOSA C5c».
     'mimosac5c': 'c5cptmphero',
+    'airspanc5c': 'c5cptmphero',
+    'c5c': 'c5cptmphero',
+    // ٢٤ أكتوبر (المالك: «912 6GH هواي اجهزه موجوده صورها») — أسماءٌ يكتبها الوكلاء فعلاً (admin_devices)
+    // لصورٍ موجودة. ميكروتك:
+    // BaseBox 6 / RB912UAG-6HPnD = لوحة RB912 نفسها بنطاق 6GHz وبالهيكل نفسه تماماً كـBaseBox 5.
+    'rb912uag6hpnd': 'rb912uag5hpndout',
+    'rb912uag6hpndout': 'rb912uag5hpndout',
+    'basebox6': 'rb912uag5hpndout',
+    'rb912basebox5': 'rb912uag5hpndout',
+    'r912': 'rb912uag5hpndout',
+    'rb3011uias': 'rb3011uiasrm',
+    'rb3011': 'rb3011uiasrm',
+    '3011': 'rb3011uiasrm',
+    'rb2011uias': 'rb2011uiasrm',
+    'rb2011il': 'rb2011ilrm',
+    'rb2011': 'rb2011uiasrm',
+    '2011': 'rb2011uiasrm',
+    'crs12524g1s': 'crs12524g1sin',
+    'ccr10098g1s1s': 'ccr10098g1s',
+    'powerboxpro': 'rb960pgspb',
+    'rb5009': 'rb5009ugsin',
+    '5009': 'rb5009ugsin',
+    // أرقامٌ وحدها: أكثر طرازٍ يحملها عند الوكلاء.
+    '2004': 'ccr200416g2s',
+    '1036': 'ccr103612g4s',
+    '1016': 'ccr101612g',
+    'crs326': 'crs32624g2sin',
+    '326': 'crs32624g2sin',
+    // يوبيكويتي:
+    'liteapac': 'lap120',
+    'lightapac': 'lap120',
+    'liteap': 'lap120',
+    'nanobeamm5': 'nanobeamm516',
+    'nanobeam': 'nanobeam5ac',
+    'litebeam': 'litebeam5ac',
+    'lbe': 'litebeam5ac',
+    'nanostation': 'nanom52',
+    'airbiber4x': 'ubiquitiairfiber4x',
+    'airfiber4x': 'ubiquitiairfiber4x',
+    'airfibre11x': 'af11fx',
+    'airfiber11x': 'af11fx',
   };
+
+  /// أسماءٌ عربيّة يكتبها الوكلاء للطراز («بوربيم»، «لايت بيم») — تُترجَم قبل التطبيع، وإلّا سقطت حروفها كلّها
+  /// (المفتاح لاتينيّ) فلا صورة. الأطول أوّلاً.
+  static const List<(String, String)> _arabicNames = [
+    ('نانو ستيشن', 'nanostation'),
+    ('نانوستيشن', 'nanostation'),
+    ('نانو بيم', 'nanobeam'),
+    ('نانوبيم', 'nanobeam'),
+    ('لايت بيم', 'litebeam'),
+    ('لايتبيم', 'litebeam'),
+    ('باور بيم', 'powerbeam'),
+    ('باوربيم', 'powerbeam'),
+    ('بور بيم', 'powerbeam'),
+    ('بوربيم', 'powerbeam'),
+    ('لايت اب', 'liteap'),
+    ('لايت آب', 'liteap'),
+    ('روكيت', 'rocket'),
+    ('روكت', 'rocket'),
+    ('لوكو', 'loco'),
+  ];
+
+  static String _latinName(String model) {
+    var m = model.replaceAll(RegExp(r'\s+'), ' ').trim();
+    for (final (ar, en) in _arabicNames) {
+      m = m.replaceAll(ar, en);
+    }
+    return m;
+  }
 
   /// مفتاح مُطبَّع: حروف وأرقام لاتينيّة فقط.
   /// مدخلات الكتالوج مرتّبةً تنازليّاً بالطول — تُبنى مرّةً عند أوّل
@@ -247,7 +316,7 @@ class DeviceImage extends StatelessWidget {
       final cisco = _ciscoFamily(model);
       if (cisco != null) return cisco;
     }
-    final k = _key(model);
+    final k = _key(_latinName(model));
     if (k.isEmpty) return null;
     // المرادف أوّلاً: يُترجم الاسم التجاري إلى اسم اللوحة ثمّ يُطابَق
     // كما لو كُتب اسم اللوحة مباشرةً.
@@ -477,6 +546,7 @@ class DeviceImage extends StatelessWidget {
   'css31816g2sin': 'CSS318-16G-2S+IN.webp',
   'css32624g2srm': 'CSS326-24G-2S+RM.webp',
   'rbgroove52hpn': 'RBGroove52HPn.webp',
+  'crs12524g1sin': 'CRS125-24G-1S-IN.webp',
   'airfiber5af5': 'AirFIBER 5 af-5.png',
   'ccr101612s1s': 'CCR1016-12S-1S+.webp',
   'ccr103612g4s': 'CCR1036-12G-4S.webp',
@@ -489,11 +559,16 @@ class DeviceImage extends StatelessWidget {
   'rb5009uprsin': 'RB5009UPr+S+IN.webp',
   'rblhg5hpndxl': 'RBLHG-5HPnD-XL.webp',
   'rbsxtsqg5acd': 'RBSXTsqG-5acD.png',
+  'rb3011uiasrm': 'RB3011UiAS-RM.webp',
+  'rb2011uiasrm': 'RB2011UiAS-RM.webp',
+  'rb2011uiasin': 'RB2011UiAS-IN.webp',
   'c5cptmphero': 'c5c-ptmp-hero.png',
   'ccr10368g2s': 'CCR1036-8G-2S+.webp',
   'powerbeamm5': 'powerbeam M5.webp',
   'rb4011igsrm': 'RB4011iGS+RM.webp',
   'rb5009ugsin': 'RB5009UG+S+IN.webp',
+  'netpower16p': 'netPower 16P.webp',
+  'ccr10098g1s': 'CCR1009-8G-1S.webp',
   '5xairfiber': '5x airfiber.png',
   'ccr101612g': 'CCR1016-12G.webp',
   'l009uigsrm': 'L009UiGS-RM.webp',
@@ -501,6 +576,9 @@ class DeviceImage extends StatelessWidget {
   'rb960pgspb': 'RB960PGS-PB.webp',
   'rbsxtsq2nd': 'RBSXTsq2nD.webp',
   'rbsxtsq5nd': 'RBSXTsq5nD.webp',
+  'rb2011ilrm': 'RB2011iL-RM.webp',
+  'rb2011ilin': 'RB2011iL-IN.webp',
+  'rb1100ahx2': 'RB1100AHx2.webp',
   'lhg5axdxl': 'LHG-5axD-XL.webp',
   'rbldf5nd': 'RBLDF-5nD.webp',
   'rblhg5nd': 'RBLHG-5nD.webp',
