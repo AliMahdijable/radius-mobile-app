@@ -102,6 +102,7 @@ jobs:
           build=${full##*+}
           IFS=. read -r major minor _ <<< "$ver"
           # إصدار المتجر يتصاعد مع كلّ رفع وخانته الرابعة صفرٌ إلزاماً ⇒ X.Y.<رقم البناء>.0 (عدّادٌ واحدٌ لكلّ المتاجر).
+          # toast-activator: نقر إشعار ويندوز يفتح البرنامج داخل الحزمة — الـCLSID هو guid نفسه في WindowsInitializationSettings.
           msixver="$major.$minor.$build.0"
           suffix=""
           [ "$MSIX_READY" = "1" ] || suffix="_placeholder"
@@ -115,6 +116,9 @@ jobs:
             --logo-path windows/msix/logo.png \
             --capabilities "internetClient,privateNetworkClientServer" \
             --languages "ar,en-us" \
+            --toast-activator-clsid "ce03d489-16ca-4fec-8cfc-95b07a9c437d" \
+            --toast-activator-arguments "msix-args" \
+            --toast-activator-display-name "MyServices Pro" \
             --output-path dist \
             --output-name "MyServicesPro_${ver}_${build}_store${suffix}"
           out=$(ls dist/MyServicesPro_*_store*.msix)
