@@ -34,6 +34,10 @@ String iqDateOf(DateTime d, {DateTime? today}) {
   return iqDateLabel('${d.year}-$m-$day', today: today);
 }
 
+/// يومٌ كامل ⇒ «السبت 24 تشرين الأوّل 2026» — رأس الرئيسيّة على الحاسبة (بدل «السبت · 2026/10/24 · …»).
+String iqLongDate(DateTime d) =>
+    '${'settle.wd${d.weekday}'.tr()} ${d.day} ${_month(d.month.toString().padLeft(2, '0'))} ${d.year}';
+
 final _recurringSuffix = RegExp(r'\s*\(ثابتة[^)]*\)');
 
 /// الملاحظة بلا لاحقة «(ثابتة …)» التي يكتبها الخادم للصرفيّة المولَّدة — الشارة تقولها بالشهر.

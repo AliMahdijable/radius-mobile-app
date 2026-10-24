@@ -8,6 +8,7 @@ import '../../../core/util/format.dart';
 import '../../../core/util/phone.dart';
 import '../../../core/widgets/permission_locked.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
+import '../../../core/widgets/desk_pressable.dart';
 import '../../../models/subscriber.dart';
 import '../../../services/permissions_service.dart';
 import '../../../services/subscriber_usage_store.dart';
@@ -211,7 +212,6 @@ class SubscriberTableRow extends StatefulWidget {
 }
 
 class _SubscriberTableRowState extends State<SubscriberTableRow> {
-  bool _hover = false;
 
   void _menuAt(Offset global) {
     showSubscriberRowMenu(context, widget.sub, position: global, onOpenDetails: widget.onTap);
@@ -224,25 +224,24 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
     final st = SubscriberCardV3.statusOf(s);
     final name = s.fullName.trim().isEmpty ? s.username : s.fullName.trim();
     final cols = widget.columns;
-    // المختار/المفتوح بحبّة القائمة الرماديّة نفسها (لا أخضر)، والمرور أخفّ منها.
-    final bg = widget.selected || widget.open
-        ? AppColors.surfaceSunken
-        : _hover
-            ? AppColors.surfaceSunken.withValues(alpha: 0.5)
-            : AppColors.surface;
     // اللون على الحافّة لمن يحتاج انتباهاً وحده (منتهٍ أو قارب) — الباقي بلا لون، لا لونٌ مختلف لكلّ صفّ.
     final attention = s.isExpired || s.isNearExpiry;
     final packageInline = !cols.has(SubCol.package) && (s.profileName ?? '').isNotEmpty;
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.selectionMode ? widget.onToggleSelect : widget.onTap,
-        onSecondaryTapUp: (d) => _menuAt(d.globalPosition),
-        onLongPressStart: (d) => _menuAt(d.globalPosition),
-        child: AnimatedContainer(
+    // Tab إلى الصفّ ثمّ Enter يفتحه كالنقر (أو يحدّده في وضع التحديد)، بإطار تركيزٍ مع الكيبورد وحده.
+    return DeskPressable(
+      onTap: widget.selectionMode ? widget.onToggleSelect : widget.onTap,
+      onSecondaryTapUp: (d) => _menuAt(d.globalPosition),
+      onLongPressStart: (d) => _menuAt(d.globalPosition),
+      selected: widget.selected || widget.open,
+      semanticLabel: name,
+      builder: (context, hover) {
+        // المختار/المفتوح بحبّة القائمة الرماديّة نفسها (لا أخضر)، والمرور أخفّ منها.
+        final bg = widget.selected || widget.open
+            ? AppColors.surfaceSunken
+            : hover
+                ? AppColors.surfaceSunken.withValues(alpha: 0.5)
+                : AppColors.surface;
+        return AnimatedContainer(
           duration: const Duration(milliseconds: 120),
           height: 66,
           clipBehavior: Clip.hardEdge,
@@ -280,6 +279,7 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
               Expanded(
                 flex: 5,
                 child: _TwoLines(
+                  fullOnHover: true,
                   top: name,
                   topStyle: AppType.label(color: s.isDisabled ? AppColors.textMid : AppColors.textHi)
                       .copyWith(
@@ -302,14 +302,14 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
                 width: SubscriberTableColumns.actions,
                 child: _RowActions(
                   sub: s,
-                  hover: _hover || widget.open,
+                  hover: hover || widget.open,
                   onMenu: _menuAt,
                 ),
               ),
             ],
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -347,12 +347,12 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
               DateFormat('yyyy-MM-dd').format(exp),
               textDirection: TextDirection.ltr,
               style: AppType.label(color: AppColors.textBody)
-                  .copyWith(fontSize: 13.5, fontWeight: FontWeight.w600),
+                  .copyWith(fontSize: 13.5, fontWeight: FontWeight.w600, fontFeatures: const [FontFeature.tabularFigures()]),
             ),
             Text(
               DateFormat('HH:mm').format(exp),
               textDirection: TextDirection.ltr,
-              style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5),
+              style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, fontFeatures: const [FontFeature.tabularFigures()]),
             ),
           ],
         );
@@ -395,7 +395,7 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
         '${formatIQD(s.debtAbs.round())} $currency',
         maxLines: 1,
         style: AppType.label(color: AppColors.dangerOnSoft)
-            .copyWith(fontWeight: FontWeight.w700, fontSize: 14),
+            .copyWith(fontWeight: FontWeight.w700, fontSize: 14, fontFeatures: const [FontFeature.tabularFigures()]),
       );
     }
     if (s.hasCredit) {
@@ -403,7 +403,7 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
         '+${formatIQD(s.balanceAmount.round())} $currency',
         maxLines: 1,
         style: AppType.label(color: AppColors.brandOnSoft)
-            .copyWith(fontWeight: FontWeight.w700, fontSize: 14),
+            .copyWith(fontWeight: FontWeight.w700, fontSize: 14, fontFeatures: const [FontFeature.tabularFigures()]),
       );
     }
     return Text('—', style: AppType.muted(color: AppColors.textLow));
@@ -606,7 +606,7 @@ class _PackageCell extends StatelessWidget {
     final base = sub.packageSalePrice;
     final now = sub.currentSalePrice;
     final discounted = base != null && now != null && now < base;
-    final small = AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5);
+    final small = AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, fontFeatures: const [FontFeature.tabularFigures()]);
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -1020,6 +1020,7 @@ class _TwoLines extends StatelessWidget {
     this.topStyle,
     this.bottomLtr = false,
     this.trailing,
+    this.fullOnHover = false,
   });
 
   final String top;
@@ -1027,6 +1028,13 @@ class _TwoLines extends StatelessWidget {
   final TextStyle? topStyle;
   final bool bottomLtr;
   final Widget? trailing;
+
+  /// الاسم الطويل يُقصّ بـ«…»: المرور عليه يُظهره كاملاً — حين يُقصّ فعلاً وحده (ui-ux-pro-max: truncation-strategy).
+  final bool fullOnHover;
+
+  TextStyle get _topStyle => topStyle ?? AppType.label(color: AppColors.textBody).copyWith(fontSize: 13.5);
+
+  Widget _topText() => Text(top, maxLines: 1, overflow: TextOverflow.ellipsis, style: _topStyle);
 
   @override
   Widget build(BuildContext context) {
@@ -1040,12 +1048,22 @@ class _TwoLines extends StatelessWidget {
           Row(
             children: [
               Flexible(
-                child: Text(
-                  top,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: topStyle ?? AppType.label(color: AppColors.textBody).copyWith(fontSize: 13.5),
-                ),
+                child: fullOnHover
+                    ? LayoutBuilder(builder: (context, c) {
+                        final text = _topText();
+                        final tp = TextPainter(
+                          text: TextSpan(text: top, style: DefaultTextStyle.of(context).style.merge(_topStyle)),
+                          maxLines: 1,
+                          textDirection: Directionality.of(context),
+                          textScaler: MediaQuery.textScalerOf(context),
+                        )..layout();
+                        final clipped = tp.width > c.maxWidth;
+                        tp.dispose();
+                        return clipped
+                            ? Tooltip(message: top, waitDuration: const Duration(milliseconds: 500), child: text)
+                            : text;
+                      })
+                    : _topText(),
               ),
               if (trailing != null) ...[const SizedBox(width: 5), trailing!],
             ],

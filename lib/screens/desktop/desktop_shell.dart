@@ -8,6 +8,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/platform/desktop_layout.dart';
 import '../../core/widgets/permission_locked.dart';
+import '../../core/widgets/desk_pressable.dart';
 import '../../services/active_company.dart';
 import '../../services/alerts_service.dart';
 import '../../services/permissions_service.dart';
@@ -742,8 +743,6 @@ class _SideItem extends StatefulWidget {
 }
 
 class _SideItemState extends State<_SideItem> {
-  bool _hover = false;
-
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
@@ -795,27 +794,24 @@ class _SideItemState extends State<_SideItem> {
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Tooltip(
         message: widget.collapsed ? widget.title : '',
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          onEnter: (_) => setState(() => _hover = true),
-          onExit: (_) => setState(() => _hover = false),
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: widget.onTap,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 120),
-              height: 44,
-              padding: const EdgeInsets.symmetric(horizontal: Sp.md),
-              decoration: BoxDecoration(
-                color: selected
-                    ? AppColors.surfaceSunken
-                    : _hover
-                        ? AppColors.surfaceSunken.withValues(alpha: 0.55)
-                        : Colors.transparent,
-                borderRadius: BorderRadius.circular(R.md),
-              ),
-              child: row,
+        // يصله Tab ثمّ Enter كالنقر، بإطار تركيزٍ مع الكيبورد وحده.
+        child: DeskPressable(
+          onTap: widget.onTap,
+          radius: BorderRadius.circular(R.md),
+          selected: selected,
+          builder: (context, hover) => AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            height: 44,
+            padding: const EdgeInsets.symmetric(horizontal: Sp.md),
+            decoration: BoxDecoration(
+              color: selected
+                  ? AppColors.surfaceSunken
+                  : hover
+                      ? AppColors.surfaceSunken.withValues(alpha: 0.55)
+                      : Colors.transparent,
+              borderRadius: BorderRadius.circular(R.md),
             ),
+            child: row,
           ),
         ),
       ),

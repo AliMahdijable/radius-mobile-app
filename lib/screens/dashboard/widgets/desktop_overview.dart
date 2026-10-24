@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/dashboard_api.dart';
 import '../../../core/util/format.dart';
+import '../../../core/widgets/desk_pressable.dart';
 import '../../../core/widgets/permission_locked.dart';
 import '../../../models/dashboard.dart';
 import '../../../theme/colors.dart';
@@ -14,6 +15,9 @@ import '../../subscribers/widgets/filter_chips_bar.dart';
 /// رأس الرئيسيّة على الحاسبة — شريطُ أرقامٍ واحد مقسومٌ بخطوطٍ رفيعة إلى أعمدة (المشتركون، المتّصلون، الرصيد، ديون
 /// المشتركين). الرقم خطٌّ لا بلاطة: لا أيقونة في مربّعٍ ملوّن ولا مؤشّر تحت كلّ رقم — قواعد شاشات العمل المقيسة
 /// (مهارة الذوق: «KPIs are type, not tiles»). كلّ عمودٍ يفتح المشتركين بفلتره، والمقفل بمكانه بقفله.
+///
+/// على خلفيّة الصفحة نفسها بلا صندوق (frontend-design: البطاقات المتطابقة تحت بعضها «طقم بطاقات» قالبيّ) — الصناديق
+/// للأقسام تحته، والأرقام فوقها كرأس تقرير. ومكان الرقم قبل وصوله خطّ تحميلٍ ناعم لا «…» (ui-ux-pro-max: progressive-loading).
 ///
 /// حالات المشتركين التفصيليّة صارت في «توزيع المشتركين» و«التجديدات القادمة» بجانب بعضهما تحته (المالك ٢٤
 /// أكتوبر: «إعادة تصميم النسخة الويندوز بشكلٍ احترافي»).
@@ -52,14 +56,22 @@ class DesktopOverview extends StatelessWidget {
       if (showSubscribers) ...[
         _KpiCell(
           label: 'dashboard.total_subscribers'.tr(),
-          value: subsLocked ? null : s == null ? '…' : formatIQD(s.total),
+          value: subsLocked
+              ? null
+              : s == null
+                  ? '…'
+                  : formatIQD(s.total),
           locked: subsLocked,
           sub: subsLocked || s == null ? null : 'desktop.kpi_active_n'.tr(args: [formatIQD(s.active)]),
           onTap: () => onOpen?.call(SubscriberFilter.all),
         ),
         _KpiCell(
           label: 'dashboard.online'.tr(),
-          value: subsLocked ? null : s == null ? '…' : formatIQD(s.online),
+          value: subsLocked
+              ? null
+              : s == null
+                  ? '…'
+                  : formatIQD(s.online),
           locked: subsLocked,
           sub: subsLocked || s == null ? null : 'desktop.online_of'.tr(args: [formatIQD(s.active)]),
           // الرقم الذي يتغيّر أمام العين: نقطة «حيّ» بلون الاتّصال قبل التسمية.
@@ -70,7 +82,11 @@ class DesktopOverview extends StatelessWidget {
       if (showWallet) ...[
         _KpiCell(
           label: 'dashboard.balance'.tr(),
-          value: balanceLocked ? null : wallet == null ? '…' : formatIQD(wallet!.balance.round()),
+          value: balanceLocked
+              ? null
+              : wallet == null
+                  ? '…'
+                  : formatIQD(wallet!.balance.round()),
           unit: currency,
           locked: balanceLocked,
           sub: balanceLocked || wallet == null
@@ -98,25 +114,17 @@ class DesktopOverview extends StatelessWidget {
       ],
     ];
     if (cells.isEmpty) return const SizedBox.shrink();
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.card),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(R.card),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var i = 0; i < cells.length; i++) ...[
-                if (i > 0) VerticalDivider(width: 1, thickness: 1, color: AppColors.border),
-                Expanded(child: cells[i]),
-              ],
-            ],
-          ),
-        ),
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < cells.length; i++) ...[
+            if (i > 0)
+              VerticalDivider(
+                  width: Sp.md, thickness: 1, indent: Sp.md, endIndent: Sp.md, color: AppColors.borderStrong),
+            Expanded(child: cells[i]),
+          ],
+        ],
       ),
     );
   }
@@ -149,52 +157,55 @@ class _KpiCell extends StatefulWidget {
 }
 
 class _KpiCellState extends State<_KpiCell> {
-  bool _hover = false;
-
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final tap = widget.locked ? () => showNoPermission(context) : widget.onTap;
-    return MouseRegion(
-      cursor: tap != null ? SystemMouseCursors.click : MouseCursor.defer,
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: tap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          color: _hover && tap != null ? AppColors.surfaceSunken : AppColors.surface,
-          padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.lg, Sp.xl, Sp.lg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  if (widget.live) ...[
-                    Container(
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(color: AppColors.success, shape: BoxShape.circle),
-                    ),
-                    const SizedBox(width: 6),
-                  ],
-                  if (widget.locked) ...[
-                    Icon(LucideIcons.lock, size: 13, color: LockedStyle.glyph),
-                    const SizedBox(width: 6),
-                  ],
-                  Expanded(
-                    child: Text(
-                      widget.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 13),
-                    ),
+    final loading = !widget.locked && widget.value == '…';
+    return DeskPressable(
+      onTap: tap,
+      radius: BorderRadius.circular(R.card),
+      semanticLabel: widget.label,
+      builder: (context, hover) => AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        // المرور يرفع العمود سطحاً أبيض فوق الخلفيّة — يُعرف أنّه يُنقر دون إطارٍ دائم.
+        decoration: BoxDecoration(
+          color: hover ? AppColors.surface : Colors.transparent,
+          borderRadius: BorderRadius.circular(R.card),
+        ),
+        padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                if (widget.live) ...[
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(color: AppColors.success, shape: BoxShape.circle),
                   ),
+                  const SizedBox(width: 6),
                 ],
-              ),
-              const SizedBox(height: Sp.sm),
+                if (widget.locked) ...[
+                  Icon(LucideIcons.lock, size: 13, color: LockedStyle.glyph),
+                  const SizedBox(width: 6),
+                ],
+                Expanded(
+                  child: Text(
+                    widget.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: Sp.sm),
+            if (loading)
+              const _Skeleton(width: 112, height: 26, top: 6, bottom: 6)
+            else
               Row(
                 crossAxisAlignment: CrossAxisAlignment.baseline,
                 textBaseline: TextBaseline.alphabetic,
@@ -220,18 +231,44 @@ class _KpiCellState extends State<_KpiCell> {
                   ],
                 ],
               ),
-              if (widget.sub != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  widget.sub!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5),
-                ),
-              ],
+            if (widget.sub != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                widget.sub!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5),
+              ),
+            ] else if (loading) ...[
+              const SizedBox(height: 4),
+              const _Skeleton(width: 64, height: 10, top: 4, bottom: 4),
             ],
-          ),
+          ],
         ),
+      ),
+    );
+  }
+}
+
+/// مكان رقمٍ لم يصل بعد: خطٌّ ثابتٌ بلون الحدود بحجم الرقم تقريباً — فلا تقفز الصفحة حين يصل، ولا حركة تُبقي الإطار
+/// يُرسم بلا توقّف (ولا تعلق اختبارات «انتظر حتى تهدأ»).
+class _Skeleton extends StatelessWidget {
+  const _Skeleton({required this.width, required this.height, this.top = 0, this.bottom = 0});
+
+  final double width;
+  final double height;
+  final double top;
+  final double bottom;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Padding(
+      padding: EdgeInsets.only(top: top, bottom: bottom),
+      child: Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(R.sm)),
       ),
     );
   }

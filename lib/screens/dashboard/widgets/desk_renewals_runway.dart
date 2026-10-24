@@ -4,6 +4,7 @@ import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 
 import '../../../core/util/ar_date.dart';
+import '../../../core/widgets/desk_pressable.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -147,29 +148,26 @@ class _DayColumn extends StatefulWidget {
 }
 
 class _DayColumnState extends State<_DayColumn> {
-  bool _hover = false;
-
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final bar = widget.urgent ? AppColors.brand : AppColors.brandSoftBorder;
     final zero = widget.count == 0;
+    // الجمعة عطلة الأسبوع بالعراق: تاريخها في حبّةٍ خفيفة تفصل الأسبوعين — لا عمودٌ مظلَّلٌ يُقرأ عموداً فارغاً.
+    final friday = widget.day.weekday == DateTime.friday;
     return Tooltip(
       message: 'desktop.runway_tip'.tr(args: [iqDateOf(widget.day), '${widget.count}']),
       waitDuration: const Duration(milliseconds: 300),
-      child: MouseRegion(
-        cursor: widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
-        onEnter: (_) => setState(() => _hover = true),
-        onExit: (_) => setState(() => _hover = false),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        child: DeskPressable(
           onTap: widget.onTap,
-          child: AnimatedContainer(
+          radius: BorderRadius.circular(R.sm),
+          builder: (context, hover) => AnimatedContainer(
             duration: const Duration(milliseconds: 120),
-            margin: const EdgeInsets.symmetric(horizontal: 3),
             padding: const EdgeInsets.only(top: Sp.xs),
             decoration: BoxDecoration(
-              color: _hover ? AppColors.surfaceSunken : null,
+              color: hover ? AppColors.surfaceSunken : null,
               borderRadius: BorderRadius.circular(R.sm),
             ),
             child: Column(
@@ -198,21 +196,36 @@ class _DayColumnState extends State<_DayColumn> {
                   );
                 }),
                 Container(height: 1, color: AppColors.border),
-                const SizedBox(height: 6),
-                Text(
-                  widget.today ? 'desktop.runway_today'.tr() : '${widget.day.day}',
-                  maxLines: 1,
-                  overflow: TextOverflow.clip,
-                  style: AppType.label(color: widget.today ? AppColors.textHi : AppColors.textMid).copyWith(
-                    fontSize: 12.5,
-                    fontWeight: widget.today ? FontWeight.w700 : FontWeight.w500,
+                const SizedBox(height: 4),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+                  decoration: friday
+                      ? BoxDecoration(
+                          color: AppColors.isDark ? AppColors.surfaceSunken : AppColors.bg,
+                          borderRadius: BorderRadius.circular(R.sm),
+                        )
+                      : null,
+                  child: Column(
+                    children: [
+                      Text(
+                        widget.today ? 'desktop.runway_today'.tr() : '${widget.day.day}',
+                        maxLines: 1,
+                        overflow: TextOverflow.clip,
+                        style: AppType.label(color: widget.today ? AppColors.textHi : AppColors.textMid).copyWith(
+                          fontSize: 12.5,
+                          fontWeight: widget.today ? FontWeight.w700 : FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        widget.weekday,
+                        style: AppType.muted(color: friday ? AppColors.textMid : AppColors.textLow)
+                            .copyWith(fontSize: 11.5),
+                      ),
+                    ],
                   ),
                 ),
-                Text(
-                  widget.weekday,
-                  style: AppType.muted(color: AppColors.textLow).copyWith(fontSize: 11.5),
-                ),
-                const SizedBox(height: Sp.xs),
+                const SizedBox(height: 2),
               ],
             ),
           ),

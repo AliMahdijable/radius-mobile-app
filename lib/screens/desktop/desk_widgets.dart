@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -72,12 +75,76 @@ class DeskSubtitle extends StatelessWidget {
   }
 }
 
-/// «الخميس · 2026/10/22» — أرقامٌ لا أسماء شهور (المالك: «تشرين١» لا يعرفها أغلب المستخدمين).
-String deskToday([DateTime? now]) {
-  const days = ['الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'];
-  final d = now ?? DateTime.now();
-  String two(int n) => n.toString().padLeft(2, '0');
-  return '${days[d.weekday - 1]} · ${d.year}/${two(d.month)}/${two(d.day)}';
+/// «حُدّث الآن / منذ 3 دقيقة» بجانب زرّ التحديث — والأقدم من [staleAfter] بلون التنبيه: الأرقام الحيّة تُعلَن بوقت
+/// تحديثها وتُنبَّه حين تقدم (ui-ux-pro-max، نمط لوحات التشغيل). يتجدّد نصّه كلّ نصف دقيقة بلا نداء.
+class DeskFreshness extends StatefulWidget {
+  const DeskFreshness({super.key, required this.at, this.staleAfter = const Duration(minutes: 10)});
+
+  final DateTime at;
+  final Duration staleAfter;
+
+  @override
+  State<DeskFreshness> createState() => _DeskFreshnessState();
+}
+
+class _DeskFreshnessState extends State<DeskFreshness> {
+  late final Timer _tick = Timer.periodic(const Duration(seconds: 30), (_) {
+    if (mounted) setState(() {});
+  });
+
+  @override
+  void initState() {
+    super.initState();
+    _tick; // يبدأ المؤقّت
+  }
+
+  @override
+  void dispose() {
+    _tick.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final age = DateTime.now().difference(widget.at);
+    final stale = age > widget.staleAfter;
+    final m = age.inMinutes;
+    final text = m < 1
+        ? 'desktop.fresh_now'.tr()
+        : m < 60
+            ? 'desktop.fresh_min'.tr(args: ['$m'])
+            : 'desktop.fresh_hour'.tr(args: ['${age.inHours}']);
+    final hhmm =
+        '${widget.at.hour.toString().padLeft(2, '0')}:${widget.at.minute.toString().padLeft(2, '0')}';
+    final fg = stale ? AppColors.warningOnSoft : AppColors.textMid;
+    return Tooltip(
+      message: stale ? 'desktop.fresh_stale_tip'.tr() : 'desktop.fresh_tip'.tr(args: [hhmm]),
+      child: Container(
+        height: 32,
+        padding: const EdgeInsets.symmetric(horizontal: Sp.sm + 2),
+        decoration: BoxDecoration(
+          color: stale ? AppColors.warningSoftBg : null,
+          borderRadius: BorderRadius.circular(R.pill),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(stale ? LucideIcons.clockAlert : LucideIcons.clock, size: 14, color: fg),
+            const SizedBox(width: 6),
+            Text(
+              text,
+              style: AppType.muted(color: fg).copyWith(
+                fontSize: 12.5,
+                fontWeight: stale ? FontWeight.w700 : FontWeight.w500,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// مربّع أيقونة بإطار (تحديث، اتّجاه الترتيب، فحص) — ارتفاع حقول الصفّ نفسه.

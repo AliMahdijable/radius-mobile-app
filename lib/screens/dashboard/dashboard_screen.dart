@@ -6,6 +6,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/platform/app_platform.dart';
+import '../../core/util/ar_date.dart';
 import '../../core/util/format.dart';
 import '../../models/merged_company.dart';
 import '../../services/merged_mode.dart';
@@ -80,6 +81,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   WhatsAppStatusResult? _waLive;
   DailyActivationsResult? _activationsLive;
   DebtorsResult? _debtorsLive;
+  /// آخر مرّةٍ وصلت فيها قائمة المشتركين سليمة — «حُدّث منذ…» برأس الحاسبة (ui-ux-pro-max: الأرقام الحيّة تُعلَن
+  /// بوقت تحديثها وتُنبَّه حين تقدم). null = لم تصل بعد.
+  DateTime? _freshAt;
   WalletResult? _walletLive;
 
   // «كل الشركات»: ما لم يدخل مجاميع الرئيسية ولماذا (القائمة، الرصيد، تفعيلات اليوم) — لا صفرٌ صامت.
@@ -364,6 +368,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         setState(() {
           _mergedList = r;
           _applyMerged();
+          _freshAt = DateTime.now();
         });
       }));
     }
@@ -601,6 +606,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         setState(() {
           _debtorsLive = r;
           _debtorsLoaded = true;
+          if (r != null) _freshAt = DateTime.now();
         });
         // نُحدّث عدّاد الجرس (near-expiry + expired-today) من نفس القائمة
         // اللي fetchDebtors شغّلها تواً — بدون طلب شبكة إضافي.
@@ -850,8 +856,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.xl, Sp.lg, Sp.lg),
                   child: DeskPageHeader(
                     title: 'desktop.title_dashboard'.tr(),
-                    subtitle: DeskSubtitle(
-                        '${deskToday()} · ${'desktop.dashboard_subtitle'.tr()}'),
+                    // التاريخ وحده بالأشهر العراقيّة («السبت 24 تشرين الأوّل 2026») — لا سلسلة «· …» من المعلومات.
+                    subtitle: DeskSubtitle(iqLongDate(DateTime.now())),
                     actions: [
                       if (_shown('wa_banner') &&
                           _canWa &&
@@ -862,6 +868,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           child: _WAStatusChip(status: _waStatus, loaded: _waLoaded),
                         ),
                       if (!_elEmployee) const SubscriptionChip(),
+                      if (_freshAt != null) DeskFreshness(at: _freshAt!),
                       DeskIconButton(
                         icon: LucideIcons.refreshCw,
                         tooltip: 'desktop.refresh'.tr(),
