@@ -7,11 +7,11 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../subscribers/widgets/filter_chips_bar.dart';
+import '../../desktop/desk_widgets.dart';
 
-/// «توزيع المشتركين» على رئيسيّة الحاسبة: حصّة كلّ حالةٍ من الإجمالي أشرطةً أفقيّة بلونٍ واحد (مقارنة
-/// مقادير لا هويّات — مهارة الرسوم)، وكلّ صفٍّ يحمل أيقونة حالته وتسميتها والعدد والنسبة بلون النصّ، فالحالة
-/// لا تُقرأ من اللون وحده. والصفّ يفتح المشتركين بفلتره. (كان الموقع دائرةً بألوان الحالات: الأحمر
-/// والكهرمانيّ لا يفترقان لعمى الألوان.)
+/// «توزيع المشتركين» على رئيسيّة الحاسبة: حصّة كلّ حالةٍ من الإجمالي أشرطةً أفقيّة **بلون حالتها** (المالك ٢٤
+/// أكتوبر: الكارتات بلا ألوان «كأنها كتابة نصّيّة جامدة») — وكلّ صفٍّ يحمل أيقونة حالته في مربّعٍ بلونها
+/// وتسميتها والعدد والنسبة، فالحالة لا تُقرأ من اللون وحده. والصفّ يفتح المشتركين بفلتره.
 class DeskStatusBars extends StatelessWidget {
   const DeskStatusBars({super.key, required this.stats, this.onOpen});
 
@@ -25,7 +25,7 @@ class DeskStatusBars extends StatelessWidget {
     final total = s.total;
     final rows = <(IconData, Color, String, int, SubscriberFilter)>[
       (LucideIcons.wifi, AppColors.info, 'subscribers.filter_online'.tr(), s.online, SubscriberFilter.online),
-      (LucideIcons.wifiOff, AppColors.textMid, 'subscribers.filter_offline'.tr(), s.offline, SubscriberFilter.offline),
+      (LucideIcons.wifiOff, AppColors.warning, 'subscribers.filter_offline'.tr(), s.offline, SubscriberFilter.offline),
       (LucideIcons.timerOff, AppColors.error, 'subscribers.filter_expired'.tr(), s.expired, SubscriberFilter.expired),
       (LucideIcons.ban, AppColors.textLabel, 'subscribers.filter_disabled'.tr(), s.disabled, SubscriberFilter.disabled),
       if (s.onlineNoPlan > 0)
@@ -34,11 +34,7 @@ class DeskStatusBars extends StatelessWidget {
     ];
     return Container(
       padding: const EdgeInsets.all(Sp.xl),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.card),
-        border: Border.all(color: AppColors.border),
-      ),
+      decoration: DeskCard.decoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -108,8 +104,16 @@ class _RowState extends State<_Row> {
             children: [
               Row(
                 children: [
-                  Icon(widget.icon, size: 16, color: widget.tone),
-                  const SizedBox(width: Sp.sm),
+                  Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: widget.tone.withValues(alpha: 0.13),
+                      borderRadius: BorderRadius.circular(R.sm),
+                    ),
+                    child: Icon(widget.icon, size: 16, color: widget.tone),
+                  ),
+                  const SizedBox(width: Sp.sm + 2),
                   Expanded(
                     child: Text(widget.label,
                         maxLines: 1,
@@ -135,7 +139,7 @@ class _RowState extends State<_Row> {
                     Positioned.fill(
                       child: DecoratedBox(
                         decoration: BoxDecoration(
-                          color: AppColors.surfaceSunken,
+                          color: widget.tone.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(R.pill),
                         ),
                       ),
@@ -148,7 +152,7 @@ class _RowState extends State<_Row> {
                           heightFactor: 1,
                           child: DecoratedBox(
                             decoration: BoxDecoration(
-                              color: AppColors.chartLine,
+                              color: widget.tone,
                               borderRadius: BorderRadius.circular(R.pill),
                             ),
                           ),

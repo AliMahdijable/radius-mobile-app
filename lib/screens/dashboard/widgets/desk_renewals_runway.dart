@@ -9,10 +9,12 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../subscribers/widgets/filter_chips_bar.dart';
+import '../../desktop/desk_widgets.dart';
 
 /// «التجديدات القادمة» — العنصر الذي لا يملكه إلّا وكيل الإنترنت: من ينتهي اشتراكه في كلّ يومٍ من الأيّام الـ١٤
-/// القادمة، عموداً لكلّ يوم (اليوم أوّلاً). الأيّام الثلاثة الأولى بأخضر التطبيق (تحتاج تجديداً الآن) والباقي
-/// بدرجته الفاتحة — اللون على البيانات لا على الإطار. النقر على يومٍ عاجل يفتح «قربوا الانتهاء».
+/// القادمة، عموداً لكلّ يوم (اليوم أوّلاً). اللون بالاستعجال (المالك ٢٤ أكتوبر: الكارتات بلا ألوان «جامدة»): اليوم
+/// وغداً أحمر، وحتى ثلاثة أيّام كهرمانيّ، والباقي أخضر فاتح — ومفتاح الألوان تحت العنوان. النقر على يومٍ عاجل يفتح
+/// «قربوا الانتهاء».
 ///
 /// [days] = ١٤ عدداً من الحلقة نفسها على قائمة المشتركين (`DebtorsResult.expiringByDay`)؛ `null` حين لا قائمة
 /// (الحسابات الكبيرة، «كل الشركات») — فيُعرض عدد «قربوا الانتهاء» وحده بلا تفصيلٍ يوميٍّ مخترَع.
@@ -44,11 +46,7 @@ class DeskRenewalsRunway extends StatelessWidget {
     final all = d?.fold<int>(0, (a, b) => a + b);
     return Container(
       padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.lg, Sp.xl, Sp.lg),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.card),
-        border: Border.all(color: AppColors.border),
-      ),
+      decoration: DeskCard.decoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -70,13 +68,26 @@ class DeskRenewalsRunway extends StatelessWidget {
                 ),
             ],
           ),
-          Text(
-            d == null
-                ? 'desktop.runway_sub_soon'.tr(args: ['${soon ?? '—'}'])
-                : (all == 0
-                    ? 'desktop.runway_empty'.tr()
-                    : 'desktop.runway_sub'.tr(args: ['$soon', '$all'])),
-            style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 13),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  d == null
+                      ? 'desktop.runway_sub_soon'.tr(args: ['${soon ?? '—'}'])
+                      : (all == 0
+                          ? 'desktop.runway_empty'.tr()
+                          : 'desktop.runway_sub'.tr(args: ['$soon', '$all'])),
+                  style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 13),
+                ),
+              ),
+              if (d != null) ...[
+                _Key(color: tierColor(0), label: 'desktop.runway_key_now'.tr()),
+                const SizedBox(width: Sp.md),
+                _Key(color: tierColor(2), label: 'desktop.runway_key_soon'.tr()),
+                const SizedBox(width: Sp.md),
+                _Key(color: tierColor(4), label: 'desktop.runway_key_later'.tr()),
+              ],
+            ],
           ),
           const SizedBox(height: Sp.lg),
           if (d == null)
@@ -85,6 +96,36 @@ class DeskRenewalsRunway extends StatelessWidget {
             _Columns(days: d, today: today ?? DateTime.now(), onUrgentTap: onOpen == null ? null : () => onOpen!(SubscriberFilter.nearExpiry)),
         ],
       ),
+    );
+  }
+}
+
+/// لون عمود اليوم [i] (٠ = اليوم): اليوم وغداً أحمر، حتى ثلاثة أيّام كهرمانيّ، والباقي أخضر فاتح.
+Color tierColor(int i) => i <= 1
+    ? AppColors.error
+    : i < DeskRenewalsRunway.urgentDays
+        ? AppColors.warning
+        : AppColors.brandSoftBorder;
+
+class _Key extends StatelessWidget {
+  const _Key({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 9,
+          height: 9,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 5),
+        Text(label, style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5)),
+      ],
     );
   }
 }
@@ -112,6 +153,7 @@ class _Columns extends StatelessWidget {
                 count: days[i],
                 ratio: days[i] / max,
                 urgent: i < DeskRenewalsRunway.urgentDays,
+                color: tierColor(i),
                 today: i == 0,
                 day: base.add(Duration(days: i)),
                 weekday: narrow[base.add(Duration(days: i)).weekday % 7],
@@ -129,6 +171,7 @@ class _DayColumn extends StatefulWidget {
     required this.count,
     required this.ratio,
     required this.urgent,
+    required this.color,
     required this.today,
     required this.day,
     required this.weekday,
@@ -138,6 +181,9 @@ class _DayColumn extends StatefulWidget {
   final int count;
   final double ratio;
   final bool urgent;
+
+  /// لون العمود بحسب الاستعجال ([tierColor]).
+  final Color color;
   final bool today;
   final DateTime day;
   final String weekday;
@@ -151,7 +197,7 @@ class _DayColumnState extends State<_DayColumn> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final bar = widget.urgent ? AppColors.brand : AppColors.brandSoftBorder;
+    final bar = widget.color;
     final zero = widget.count == 0;
     // الجمعة عطلة الأسبوع بالعراق: تاريخها في حبّةٍ خفيفة تفصل الأسبوعين — لا عمودٌ مظلَّلٌ يُقرأ عموداً فارغاً.
     final friday = widget.day.weekday == DateTime.friday;

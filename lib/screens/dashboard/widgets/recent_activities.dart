@@ -5,6 +5,8 @@ import '../../../core/util/format.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../desktop/desk_widgets.dart';
+import '../../../core/platform/desktop_layout.dart';
 
 /// Recent activity feed for home. Backend rows from
 /// /api/activities/daily-activations are raw maps; the row widget reads
@@ -24,11 +26,14 @@ class RecentActivities extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
-      ),
+      // الحاسبة: بحدّ بطاقاتها وظلّها كبقيّة الرئيسيّة؛ الهاتف كما كان.
+      decoration: DesktopScope.of(context)
+          ? DeskCard.decoration(radius: R.lg)
+          : BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(R.lg),
+              border: Border.all(color: AppColors.border),
+            ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [

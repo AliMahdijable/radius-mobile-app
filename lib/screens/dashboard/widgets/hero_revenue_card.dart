@@ -14,6 +14,8 @@ import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../desktop/desk_widgets.dart';
+import '../../../core/platform/desktop_layout.dart';
 
 /// Revenue hero card. Pulls live totals from /api/reports/finance for
 /// the selected period (day/week/month). No mock fallbacks — while a
@@ -218,11 +220,14 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
-      ),
+      // الحاسبة: بحدّ بطاقاتها وظلّها كبقيّة الرئيسيّة؛ الهاتف كما كان.
+      decoration: DesktopScope.of(context)
+          ? DeskCard.decoration(radius: R.lg)
+          : BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(R.lg),
+              border: Border.all(color: AppColors.border),
+            ),
       padding: const EdgeInsets.all(Sp.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

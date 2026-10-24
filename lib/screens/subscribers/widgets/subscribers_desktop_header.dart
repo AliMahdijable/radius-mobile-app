@@ -34,7 +34,6 @@ class SubscribersDesktopHeader extends StatelessWidget {
     required this.onScanDevices,
     required this.onAdd,
     required this.addLocked,
-    this.columnsDropped = 0,
   });
 
   final String title;
@@ -63,9 +62,6 @@ class SubscribersDesktopHeader extends StatelessWidget {
   /// null = لا إضافة لهذا الحساب أصلاً (الزرّ يختفي)؛ [addLocked] = بمكانه مقفلاً.
   final VoidCallback? onAdd;
   final bool addLocked;
-
-  /// أعمدةٌ مختارة لم يتّسع لها الجدول الآن (تُذكر في قائمة «الأعمدة»).
-  final int columnsDropped;
 
   @override
   Widget build(BuildContext context) {
@@ -151,7 +147,7 @@ class SubscribersDesktopHeader extends StatelessWidget {
               busy: probing,
               onTap: onScanDevices,
             ),
-            SubscriberColumnsButton(dropped: columnsDropped),
+            const SubscriberColumnsButton(),
           ];
           List<Widget> spaced(List<Widget> items) => [
                 for (var i = 0; i < items.length; i++) ...[

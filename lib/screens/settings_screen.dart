@@ -36,6 +36,8 @@ import 'view_scope_screen.dart';
 import '../core/widgets/app_sheet.dart';
 import 'desktop/desk_widgets.dart';
 import '../core/platform/desktop_layout.dart';
+import '../core/platform/desk_ui_scale.dart';
+import '../core/platform/app_platform.dart';
 
 /// Basic settings — version, identity, logout. Will grow next iteration.
 class SettingsScreen extends StatefulWidget {
@@ -297,6 +299,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   MaterialPageRoute(
                     builder: (_) => const ViewScopeScreen(),
                   ),
+                ),
+              ),
+              const SizedBox(height: Sp.md),
+            ],
+            // الحاسبة: حجم الواجهة على هذا الجهاز (تلقائيّ بحسب الشاشة، أو Ctrl + / − / 0).
+            if (AppPlatform.isDesktop) ...[
+              _SectionLabel('desktop.settings_section'.tr()),
+              ValueListenableBuilder<double?>(
+                valueListenable: DeskUiScale.choice,
+                builder: (_, c, __) => _Row(
+                  icon: Icons.zoom_in_outlined,
+                  label: 'desktop.ui_scale'.tr(),
+                  trailing: c == null
+                      ? 'desktop.ui_scale_auto'.tr(args: [DeskUiScale.percent(DeskUiScale.auto)])
+                      : DeskUiScale.percent(c),
+                  onTap: () => showDeskUiScaleDialog(context),
                 ),
               ),
               const SizedBox(height: Sp.md),

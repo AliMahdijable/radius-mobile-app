@@ -10,10 +10,7 @@ import 'subscriber_columns.dart';
 /// زرّ «الأعمدة» في رأس قائمة المشتركين على الحاسبة: قائمةٌ تحته يُظهَر فيها كلّ عمودٍ ويُخفى
 /// بمربّع، ويُسحب من مقبضه لأعلى أو أسفل فيتغيّر مكانه في الجدول فوراً — ويُحفظ على هذا الجهاز.
 class SubscriberColumnsButton extends StatelessWidget {
-  const SubscriberColumnsButton({super.key, this.dropped = 0});
-
-  /// أعمدةٌ مختارة لم يتّسع لها العرض الآن.
-  final int dropped;
+  const SubscriberColumnsButton({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +26,7 @@ class SubscriberColumnsButton extends StatelessWidget {
           side: BorderSide(color: AppColors.border),
         )),
       ),
-      menuChildren: [SubscriberColumnsEditor(dropped: dropped)],
+      menuChildren: const [SubscriberColumnsEditor()],
       builder: (context, controller, _) => ValueListenableBuilder<List<(SubCol, bool)>>(
         valueListenable: SubscriberColumnPrefs.layout,
         builder: (context, layout, _) {
@@ -88,9 +85,7 @@ class _Count extends StatelessWidget {
 
 /// محتوى القائمة: الأعمدة بترتيبها، كلٌّ بمقبض سحبٍ ومربّع إظهار.
 class SubscriberColumnsEditor extends StatelessWidget {
-  const SubscriberColumnsEditor({super.key, this.dropped = 0});
-
-  final int dropped;
+  const SubscriberColumnsEditor({super.key});
 
   static const double _row = 42;
 
@@ -158,22 +153,22 @@ class SubscriberColumnsEditor extends StatelessWidget {
                   ],
                 ),
               ),
-              if (dropped > 0)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(Sp.sm, Sp.sm, Sp.sm, 0),
-                  child: Row(
-                    children: [
-                      Icon(LucideIcons.info, size: 14, color: AppColors.warningOnSoft),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          'desktop.columns_dropped'.tr(args: ['$dropped']),
-                          style: AppType.muted(color: AppColors.warningOnSoft).copyWith(fontSize: 12.5),
-                        ),
+              // لا عمود يسقط بعد اليوم: ما لا يتّسع يتمرّر أفقيّاً، وعرض كلّ عمودٍ يُسحب من حافّته في الرأس.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(Sp.sm, Sp.sm, Sp.sm, 0),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.moveHorizontal, size: 14, color: AppColors.textMid),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'desktop.columns_resize_hint'.tr(),
+                        style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
+              ),
               Divider(height: Sp.lg, color: AppColors.border),
               Row(
                 children: [

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../api/network_devices_api.dart';
 import '../../models/device_region.dart';
@@ -34,6 +35,7 @@ import '../../core/util/fit_hint.dart';
 import '../top_actions.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/platform/desktop_layout.dart';
+import '../desktop/desk_table_scroll.dart';
 
 /// قائمة أجهزة الشبكة. راجع project_devices_monitoring_plan.
 ///
@@ -138,6 +140,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     _probeTimer?.cancel();
     _searchDebounce?.cancel();
     _searchCtrl.dispose();
+    _devHScroll.dispose();
     super.dispose();
   }
 
@@ -762,7 +765,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
               )
             : RefreshIndicator(
                 onRefresh: _refresh,
-                child: CustomScrollView(
+                child: DeskHScrollInput(
+                  scroll: _devHScroll,
+                  child: CustomScrollView(
                   slivers: [
                     const SliverToBoxAdapter(child: header),
                     // البحث والأدوات — مثبَّتان أعلى القائمة (مكان الشريط).
@@ -798,7 +803,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                             sliver: _deviceList(devices),
                           ),
                   ],
-                ),
+                )),
               ),
       ),
     );
@@ -1504,62 +1509,187 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     );
   }
 
-  /// أعمدة الجدول (المرونة نفسها للرأس والصفوف).
-  static const _deskCols = <(String, int)>[
-    ('الحالة', 15),
-    ('الجهاز', 30),
-    ('الطراز', 18),
-    ('العنوان', 15),
-    ('الموقع', 16),
-    ('الاستجابة', 10),
-    ('آخر فحص', 9),
+  /// أعمدة الجدول: المفتاح، التسمية، حصّة العرض الافتراضيّة، وأضيق ما يُسحب إليه.
+  static const _deskCols = <(String, String, int, double)>[
+    ('status', 'الحالة', 15, 96),
+    ('device', 'الجهاز', 30, 180),
+    ('model', 'الطراز', 18, 96),
+    ('ip', 'العنوان', 15, 110),
+    ('location', 'الموقع', 16, 90),
+    ('response', 'الاستجابة', 10, 76),
+    ('probed', 'آخر فحص', 9, 76),
   ];
 
-  Widget _deskTable(List<NetworkDevice> devices) {
-    final head = Container(
-      padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceSunken,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(R.lg)),
-        border: Border(bottom: BorderSide(color: AppColors.border)),
-      ),
-      child: Row(
-        children: [
-          if (_selectionMode) const SizedBox(width: 32),
-          for (final c in _deskCols)
-            Expanded(
-              flex: c.$2,
-              child: Text(
-                c.$1,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppType.label(color: AppColors.textMid).copyWith(fontSize: 12.5, fontWeight: FontWeight.w700),
-              ),
-            ),
-          const SizedBox(width: 20),
-        ],
-      ),
-    );
-    return DecoratedSliver(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
-      ),
-      sliver: SliverMainAxisGroup(
-        slivers: [
-          SliverToBoxAdapter(child: head),
-          SliverList.separated(
-            itemCount: devices.length,
-            itemBuilder: (_, i) => _deskRow(devices[i], last: i == devices.length - 1),
-            separatorBuilder: (_, __) => Divider(height: 1, thickness: 1, color: AppColors.border),
-          ),
-        ],
-      ),
+  // ── عروض الأعمدة (المالك ٢٤ أكتوبر: «الجدول بيه صلاحيّة يلگص ويزيد حجم الأعمدة» و«يمرر ويسحب») ──
+  // افتراضيّاً كما كانت: الأعمدة تملأ العرض بحصصها. أوّل سحبٍ لحافّة عمودٍ يثبّت العروض كلّها على ما تظهر
+  // به ثمّ يغيّر العمود؛ وما لا يتّسع يتمرّر أفقيّاً و«الحالة» و«الجهاز» ثابتان في البداية. النقر المزدوج على
+  // الحافّة يعيد العمود لحصّته، وتُحفظ على هذا الجهاز.
+  static const _kDevWidths = 'desk.devices.colwidths.v1';
+  static Map<String, double> _devWidths = const {};
+  static bool _devWidthsLoaded = false;
+  final DeskHScroll _devHScroll = DeskHScroll();
+
+  /// مرّةً لكلّ تشغيل — صامتٌ إن تعذّرت الخزنة (الحصص الافتراضيّة تبقى).
+  void _loadDevWidths() {
+    if (_devWidthsLoaded) return;
+    _devWidthsLoaded = true;
+    const FlutterSecureStorage().read(key: _kDevWidths).then((raw) {
+      final out = <String, double>{};
+      for (final part in (raw ?? '').split(',')) {
+        final kv = part.split(':');
+        final v = kv.length == 2 ? double.tryParse(kv[1]) : null;
+        if (v != null && v > 0 && _deskCols.any((c) => c.$1 == kv[0])) out[kv[0]] = v;
+      }
+      if (out.isNotEmpty && mounted) setState(() => _devWidths = Map.unmodifiable(out));
+    }).catchError((_) {});
+  }
+
+  void _saveDevWidths() {
+    final raw = _devWidths.entries.map((e) => '${e.key}:${e.value.round()}').join(',');
+    const FlutterSecureStorage().write(key: _kDevWidths, value: raw).catchError((_) {});
+  }
+
+  /// ما يأخذه الصفّ غير الأعمدة: الحشوتان والسهم وحدّا الجدول (ومربّع التحديد في وضعه).
+  double get _devFixed => 2 * Sp.lg + 20 + 2 + (_selectionMode ? 32 : 0);
+
+  /// عروض الأعمدة لجدولٍ بعرض [tableWidth]، ونافذة الأعمدة المتمرّرة (ما بعد «الجهاز») ومحتواها.
+  ({Map<String, double> w, double viewport, double content}) _devLayout(double tableWidth) {
+    final avail = tableWidth - _devFixed > 0 ? tableWidth - _devFixed : 0.0;
+    final flexSum = _deskCols.fold<int>(0, (s, c) => s + c.$3);
+    final w = <String, double>{};
+    for (final c in _deskCols) {
+      final share = avail * c.$3 / flexSum;
+      w[c.$1] = _devWidths.isEmpty ? share : (_devWidths[c.$1] ?? share).clamp(c.$4, 900).toDouble();
+    }
+    // «الجهاز» لا يأكل نافذة الأعمدة المتمرّرة كلّها.
+    final maxDevice = avail - w['status']! - 160;
+    if (w['device']! > maxDevice) w['device'] = maxDevice > 180 ? maxDevice : 180;
+    final viewport = avail - w['status']! - w['device']!;
+    final middle = _deskCols.skip(2).fold<double>(0, (s, c) => s + w[c.$1]!);
+    final vp = viewport > 0 ? viewport : 0.0;
+    return (w: w, viewport: vp, content: middle > vp ? middle : vp);
+  }
+
+  void _resizeDevCol(Map<String, double> shown, String key, double delta) {
+    final live = _devWidths.isEmpty ? Map<String, double>.from(shown) : Map<String, double>.from(_devWidths);
+    final c = _deskCols.firstWhere((c) => c.$1 == key);
+    live[key] = ((live[key] ?? shown[key]!) + delta).clamp(c.$4, 900).toDouble();
+    setState(() => _devWidths = Map.unmodifiable(live));
+  }
+
+  void _resetDevCol(String key) {
+    if (!_devWidths.containsKey(key)) return;
+    setState(() => _devWidths = Map.unmodifiable({..._devWidths}..remove(key)));
+    _saveDevWidths();
+  }
+
+  /// السحب الأفقيّ بالفأرة على الرأس أو صفٍّ يمرّر الأعمدة حين يكون هناك ما يتمرّر.
+  Widget _devDrag(bool scrolls, Widget child) {
+    if (!scrolls) return child;
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    return GestureDetector(
+      onHorizontalDragUpdate: (d) => _devHScroll.scrollBy(rtl ? d.delta.dx : -d.delta.dx),
+      child: child,
     );
   }
 
-  Widget _deskRow(NetworkDevice d, {required bool last}) {
+  Widget _deskTable(List<NetworkDevice> devices) {
+    _loadDevWidths();
+    return SliverLayoutBuilder(builder: (context, constraints) {
+      final lay = _devLayout(constraints.crossAxisExtent);
+      _devHScroll.setMetrics(viewport: lay.viewport, content: lay.content);
+      final scrolls = lay.content - lay.viewport > 0.5;
+      final label = AppType.label(color: AppColors.textMid).copyWith(fontSize: 12.5, fontWeight: FontWeight.w700);
+      Widget headCell((String, String, int, double) c) => SizedBox(
+            width: lay.w[c.$1],
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: Text(c.$2, maxLines: 1, overflow: TextOverflow.ellipsis, style: label),
+                  ),
+                ),
+                PositionedDirectional(
+                  end: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: DeskColResizeHandle(
+                    tooltip: 'اسحب لتغيير العرض — نقرتان تعيدانه',
+                    onDrag: (d) => _resizeDevCol(lay.w, c.$1, d),
+                    onEnd: _saveDevWidths,
+                    onReset: () => _resetDevCol(c.$1),
+                  ),
+                ),
+              ],
+            ),
+          );
+      final head = _devDrag(
+        scrolls,
+        Container(
+          padding: const EdgeInsets.fromLTRB(Sp.lg, 12, Sp.lg, 12),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceSunken,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(R.lg)),
+            border: Border(bottom: BorderSide(color: AppColors.border)),
+          ),
+          child: Column(
+            children: [
+              // ارتفاعٌ ثابت: خلايا الرأس (والمقبض فوق حافّتها) Stack لا يتقلّص على محتواه.
+              SizedBox(
+                height: 24,
+                child: Row(
+                children: [
+                  if (_selectionMode) const SizedBox(width: 32),
+                  headCell(_deskCols[0]),
+                  headCell(_deskCols[1]),
+                  Expanded(
+                    child: DeskHViewport(
+                      scroll: _devHScroll,
+                      contentWidth: lay.content,
+                      edgeShadows: scrolls,
+                      child: Row(children: [for (final c in _deskCols.skip(2)) headCell(c), const Spacer()]),
+                    ),
+                  ),
+                  const SizedBox(width: 20),
+                ],
+              ),
+              ),
+              // شريط التمرير الأفقيّ تحت الرأس، بمحاذاة الأعمدة المتمرّرة.
+              if (scrolls)
+                Padding(
+                  padding: EdgeInsetsDirectional.only(
+                    start: (_selectionMode ? 32 : 0) + lay.w['status']! + lay.w['device']!,
+                    end: 20,
+                    top: 6,
+                  ),
+                  child: DeskHScrollbar(scroll: _devHScroll),
+                ),
+            ],
+          ),
+        ),
+      );
+      return DecoratedSliver(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(R.lg),
+          border: Border.all(color: AppColors.border),
+        ),
+        sliver: SliverMainAxisGroup(
+          slivers: [
+            SliverToBoxAdapter(child: head),
+            SliverList.separated(
+              itemCount: devices.length,
+              itemBuilder: (_, i) => _devDrag(scrolls, _deskRow(devices[i], lay.w, lay.content, scrolls, last: i == devices.length - 1)),
+              separatorBuilder: (_, __) => Divider(height: 1, thickness: 1, color: AppColors.border),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  Widget _deskRow(NetworkDevice d, Map<String, double> w, double content, bool scrolls, {required bool last}) {
     final selected = _selectionMode && _selectedIds.contains(d.id);
     final canManage = Perms.has('devices.manage');
     final online = d.lastStatus == 'online';
@@ -1567,7 +1697,13 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     final region = _deskRegion(d);
     final cell = AppType.label(color: AppColors.textHi).copyWith(fontSize: 13.5);
     final sub = AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5);
-    Widget col(int flex, Widget child) => Expanded(flex: flex, child: Align(alignment: AlignmentDirectional.centerStart, child: child));
+    Widget col(String key, Widget child) => SizedBox(
+          width: w[key],
+          child: Padding(
+            padding: const EdgeInsetsDirectional.only(end: Sp.sm),
+            child: Align(alignment: AlignmentDirectional.centerStart, child: child),
+          ),
+        );
     return Material(
       color: selected ? AppColors.brandSoftBg : Colors.transparent,
       borderRadius: last ? const BorderRadius.vertical(bottom: Radius.circular(R.lg)) : null,
@@ -1586,7 +1722,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       size: 18, color: selected ? AppColors.brand : AppColors.textLow),
                 ),
               col(
-                15,
+                'status',
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
@@ -1600,7 +1736,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 ),
               ),
               col(
-                30,
+                'device',
                 Row(
                   children: [
                     DeviceImage(brand: d.brand, model: d.model, size: 44),
@@ -1622,47 +1758,65 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                   ],
                 ),
               ),
-              col(
-                18,
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(NetworkDeviceLabels.brandLabel(d.brand), maxLines: 1, overflow: TextOverflow.ellipsis, style: cell),
-                    if ((d.model ?? '').isNotEmpty)
-                      Text(d.model!, maxLines: 1, overflow: TextOverflow.ellipsis, style: sub),
-                  ],
-                ),
-              ),
-              col(
-                15,
-                Text(d.ip,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textDirection: TextDirection.ltr,
-                    style: cell.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
-              ),
-              col(
-                16,
-                region ??
-                    Text((d.location ?? '').isEmpty ? '—' : d.location!,
-                        maxLines: 1, overflow: TextOverflow.ellipsis, style: cell.copyWith(color: AppColors.textMid)),
-              ),
-              col(
-                10,
-                Text(
-                  online && d.lastResponseMs != null ? '${d.lastResponseMs} ms' : '—',
-                  textDirection: TextDirection.ltr,
-                  style: cell.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: online ? _statusColor(d.lastStatus) : AppColors.textLow,
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: DeskHViewport(
+                    scroll: _devHScroll,
+                    contentWidth: content,
+                    edgeShadows: scrolls,
+                    child: Row(
+                      children: [
+                        col(
+                          'model',
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(NetworkDeviceLabels.brandLabel(d.brand),
+                                  maxLines: 1, overflow: TextOverflow.ellipsis, style: cell),
+                              if ((d.model ?? '').isNotEmpty)
+                                Text(d.model!, maxLines: 1, overflow: TextOverflow.ellipsis, style: sub),
+                            ],
+                          ),
+                        ),
+                        col(
+                          'ip',
+                          Text(d.ip,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textDirection: TextDirection.ltr,
+                              style: cell.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+                        ),
+                        col(
+                          'location',
+                          region ??
+                              Text((d.location ?? '').isEmpty ? '—' : d.location!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: cell.copyWith(color: AppColors.textMid)),
+                        ),
+                        col(
+                          'response',
+                          Text(
+                            online && d.lastResponseMs != null ? '${d.lastResponseMs} ms' : '—',
+                            textDirection: TextDirection.ltr,
+                            style: cell.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: online ? _statusColor(d.lastStatus) : AppColors.textLow,
+                            ),
+                          ),
+                        ),
+                        col(
+                          'probed',
+                          Text(_clockOf(d.lastProbedAt),
+                              textDirection: TextDirection.ltr, style: cell.copyWith(color: AppColors.textMid)),
+                        ),
+                        const Spacer(),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              col(
-                9,
-                Text(_clockOf(d.lastProbedAt),
-                    textDirection: TextDirection.ltr, style: cell.copyWith(color: AppColors.textMid)),
               ),
               Icon(LucideIcons.chevronLeft, size: 16, color: AppColors.textLow),
             ],

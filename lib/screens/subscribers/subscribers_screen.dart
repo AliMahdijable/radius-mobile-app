@@ -55,6 +55,7 @@ import 'widgets/subscriber_table_row.dart';
 import 'widgets/subscriber_columns.dart';
 import 'widgets/subscribers_desktop_header.dart';
 import '../../core/widgets/app_sheet.dart';
+import '../desktop/desk_table_scroll.dart';
 
 /// Default sort field + direction per filter — mirrors v1's
 /// `_defaultSortByFilter`. Without this the 'قارب الانتهاء' chip
@@ -371,6 +372,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     MergedMode.focus.addListener(_onMergedFocus);
     PermissionsService.changes.addListener(_onPermsChanged);
     SubscriberColumnPrefs.layout.addListener(_onColumnsChanged);
+    SubscriberColumnPrefs.widths.addListener(_onColumnsChanged);
     _wasLocked = _locked;
     if (!_locked) _load();
     // حدود «تنبيه المشترك» — شريط المشكلة يعمل بالافتراضيّات حتّى تصل
@@ -579,6 +581,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     MergedMode.focus.removeListener(_onMergedFocus);
     PermissionsService.changes.removeListener(_onPermsChanged);
     SubscriberColumnPrefs.layout.removeListener(_onColumnsChanged);
+    SubscriberColumnPrefs.widths.removeListener(_onColumnsChanged);
+    _hscroll.dispose();
     widget.isActive?.removeListener(_onActiveChanged);
     UsagePrefs.enabled.removeListener(_onUsagePref);
     _debounce?.cancel();
@@ -1952,6 +1956,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                   delegate: _TableHeaderDelegate(
                                     SubscriberTableHeader(
                                       columns: _tableColumns,
+                                      scroll: _hscroll,
+                                      onResize: _resizeColumn,
+                                      onResizeEnd: SubscriberColumnPrefs.saveWidths,
+                                      onResetWidth: SubscriberColumnPrefs.resetWidth,
                                       sortField: _sortField,
                                       descending: _sortDir == SortDirection.desc,
                                       onSort: _setSort,
@@ -2002,6 +2010,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                       key: ValueKey('t|${s.companyKey ?? ''}|${s.idx ?? s.username}'),
                                       sub: s,
                                       columns: _tableColumns,
+                                      scroll: _hscroll,
                                       open: _paneKey == _rowKey(s),
                                       selected: isSelected,
                                       selectionMode: _selectionMode,
@@ -2133,9 +2142,27 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     final open = _paneKey != null;
     // اللوحة تظهر حين يُفتح مشترك وتُطوى حين يُغلق — الجدول بعرضه كاملاً بينهما. الـNavigator باقٍ
     // مبنيّاً وهي مطويّة (مقصوصٌ بعرض صفر) فلا يضيع مكدّسها.
+    final cols = _tableColumns;
     return Row(
       children: [
-        Expanded(child: list),
+        Expanded(
+          // Shift + العجلة والعجلة الأفقيّة ولوحة اللمس تمرّر الأعمدة، والشريط تحت الجدول بمحاذاة الأعمدة المتمرّرة.
+          child: DeskHScrollInput(
+            scroll: _hscroll,
+            child: Stack(
+              children: [
+                Positioned.fill(child: list),
+                if (cols.scrolls && !_loading)
+                  PositionedDirectional(
+                    start: _hPad + 1 + SubscriberTableColumns.lead + cols.nameWidth,
+                    width: cols.middleViewport,
+                    bottom: Sp.sm,
+                    child: DeskHScrollbar(scroll: _hscroll),
+                  ),
+              ],
+            ),
+          ),
+        ),
         AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOutCubic,
@@ -2237,7 +2264,6 @@ class _SubscribersScreenState extends State<SubscribersScreen>
             }
           : null,
       addLocked: !Perms.hasAny(const ['subscribers.add']),
-      columnsDropped: _tableColumns.dropped,
     );
   }
 
@@ -2245,9 +2271,18 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   String? _paneKey;
   static String _rowKey(Subscriber s) => '${s.companyKey ?? ''}|${s.idx ?? s.username}';
 
-  /// أعمدة الجدول بعرض الجدول نفسه (بلا لوحة التفاصيل حين تُفتح وبلا الحشوة).
-  SubscriberTableColumns get _tableColumns => SubscriberTableColumns.forWidth(
-      MediaQuery.sizeOf(context).width - (_paneKey != null ? _paneWidth : 0) - 2 * _hPad);
+  /// أعمدة الجدول بعرض الجدول نفسه (بلا لوحة التفاصيل حين تُفتح وبلا الحشوة) — ومقاسات التمرير الأفقيّ معها.
+  SubscriberTableColumns get _tableColumns {
+    final cols = SubscriberTableColumns.forWidth(
+        MediaQuery.sizeOf(context).width - (_paneKey != null ? _paneWidth : 0) - 2 * _hPad);
+    _hscroll.setMetrics(viewport: cols.middleViewport, content: cols.middleContent);
+    return cols;
+  }
+
+  /// التمرير الأفقيّ لأعمدة الجدول — يشترك فيه الرأس والصفوف والشريط تحت الجدول.
+  final DeskHScroll _hscroll = DeskHScroll();
+
+  void _resizeColumn(String key, double delta) => resizeSubscriberColumn(_tableColumns, key, delta);
 
   void _openDetail(Subscriber s) {
     final pane = _paneMode ? _paneNav.currentState : null;

@@ -15,6 +15,7 @@ import '../../../services/subscriber_usage_store.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../desktop/desk_table_scroll.dart';
 import '../sheets/activate_sheet.dart';
 import '../sheets/add_debt_sheet.dart';
 import '../sheets/consumption_sheet.dart';
@@ -28,52 +29,134 @@ import 'sort_sheet.dart';
 import 'subscriber_card_v3.dart';
 import 'subscriber_columns.dart';
 
-/// أعمدة جدول المشتركين على هذا العرض: ما اختاره المدير من زرّ «الأعمدة» بترتيبه، ناقصاً ما لا
-/// يتّسع (يسقط الأقلّ أولويّةً أوّلاً — والمتبقّي والرصيد لا يسقطان).
+/// أعمدة جدول المشتركين على هذا العرض: ما اختاره المدير من زرّ «الأعمدة» بترتيبه، كلٌّ بعرضه (الافتراضيّ أو ما
+/// سحبه المدير). لا يسقط عمود حين يضيق الجدول (كان يسقط الأقلّ أولويّةً): «المشترك» يبقى ثابتاً في البداية
+/// والإجراءات في النهاية، وما بينهما يتمرّر أفقيّاً (المالك ٢٤ أكتوبر: «لو عرض كل الحقول ماكو امكانية يمرر»).
+///
+/// بلا عرضٍ مثبَّت لـ«المشترك» يملأ ما يبقى؛ وإن ثبّته المدير يبقى بعرضه والباقي فراغٌ قبل الإجراءات.
 class SubscriberTableColumns {
-  const SubscriberTableColumns({required this.shown, required this.dropped});
+  const SubscriberTableColumns({
+    required this.shown,
+    required this.widths,
+    required this.nameWidth,
+    required this.middleViewport,
+    required this.middleContent,
+  });
 
   final List<SubCol> shown;
+  final Map<SubCol, double> widths;
+  final double nameWidth;
 
-  /// أعمدةٌ مختارة لم تتّسع — يُذكر عددها بجانب زرّ «الأعمدة».
-  final int dropped;
+  /// عرض نافذة الأعمدة المتمرّرة (بين «المشترك» والإجراءات)، ومحتواها: مجموع عروضها أو النافذة إن كانت أعرض.
+  final double middleViewport;
+  final double middleContent;
 
   bool has(SubCol c) => shown.contains(c);
+  double widthOf(SubCol c) => widths[c] ?? c.defaultWidth;
+  double get columnsWidth => shown.fold<double>(0, (s, c) => s + widthOf(c));
+
+  /// المحتوى أعرض من النافذة ⇒ شريط تمريرٍ أفقيّ.
+  bool get scrolls => middleContent - middleViewport > 0.5;
 
   static const double stripe = 4;
   static const double check = 40;
   static const double avatar = 52;
-  static const double nameMin = 180;
+  /// أضيق ما يُسحب إليه «المشترك».
+  static const double nameMin = 140;
+
+  /// «المشترك» غير المثبَّت يملأ الباقي ما لم يضق عن هذا — دونه تبدأ الأعمدة بالتمرّر وهو على [nameDefault].
+  static const double nameAutoMin = 170;
+  static const double nameDefault = 200;
+  static const double nameMax = 640;
   static const double actions = 104;
 
+  /// حدّا الجدول الأيمن والأيسر (١ لكلٍّ منهما).
+  static const double borders = 2;
+
+  /// ما قبل «المشترك»: شريط الحالة والفراغ ومربّع التحديد والصورة.
+  static const double lead = stripe + (Sp.sm - 4) + check + avatar;
+
+  /// أقلّ ما يبقى لنافذة الأعمدة حين لا يتّسع الكلّ — «المشترك» يضيق إليه قبل أن يأكلها.
+  static const double minMiddle = 240;
+
   static SubscriberTableColumns forWidth(double width) {
-    final r = SubscriberColumnPrefs.fit(
-      width,
-      reserved: stripe + check + avatar + nameMin + actions + 2 * Sp.md,
+    final inner = width - borders > 0 ? width - borders : 0.0;
+    final shown = [
+      for (final e in SubscriberColumnPrefs.layout.value)
+        if (e.$2 && e.$1.available) e.$1,
+    ];
+    final widths = {for (final c in shown) c: SubscriberColumnPrefs.widthOf(c)};
+    final cols = widths.values.fold<double>(0, (s, w) => s + w);
+    final room = inner - lead - actions > 0 ? inner - lead - actions : 0.0;
+    final pinned = SubscriberColumnPrefs.nameWidth?.clamp(nameMin, nameMax).toDouble();
+    final double name;
+    if ((pinned ?? nameAutoMin) + cols <= room) {
+      // يتّسع الكلّ: «المشترك» المثبَّت بعرضه (والباقي فراغ)، وغير المثبَّت يملأ.
+      name = pinned ?? room - cols;
+    } else {
+      // لا يتّسع: «المشترك» بعرضه ما لم يأكل نافذة الأعمدة، والباقي يتمرّر.
+      final keep = cols < minMiddle ? cols : minMiddle;
+      final cap = room - keep > nameMin ? room - keep : nameMin;
+      name = (pinned ?? nameDefault).clamp(nameMin, cap).toDouble();
+    }
+    final viewport = room - name > 0 ? room - name : 0.0;
+    return SubscriberTableColumns(
+      shown: shown,
+      widths: widths,
+      nameWidth: name,
+      middleViewport: viewport,
+      middleContent: cols > viewport ? cols : viewport,
     );
-    return SubscriberTableColumns(shown: r.shown, dropped: r.dropped);
   }
 }
 
-/// رأس الجدول: تسمياتٌ خافتة، وما يُرتَّب به سهمٌ يدلّ على الترتيب الحاليّ واتّجاهه — نقرةٌ ترتّب
-/// ونقرةٌ ثانية تعكس.
+/// تغيير عرض عمودٍ بالسحب — تستدعيه الشاشة من مقبض الرأس. [key] اسم العمود أو [SubscriberColumnPrefs.nameKey]،
+/// و[delta] التغيّر المطلوب بالبكسل (موجبٌ = أعرض).
+///
+/// أوّل سحبٍ لعمودٍ من الأعمدة و«المشترك» يملأ: يُثبَّت «المشترك» على عرضه الظاهر أوّلاً — وإلّا امتصّ هو التغيّر
+/// فتحرّكت الحافّة التي قبل العمود لا الحافّة التي تحت المؤشّر.
+void resizeSubscriberColumn(SubscriberTableColumns cols, String key, double delta) {
+  final live = Map<String, double>.from(SubscriberColumnPrefs.widths.value);
+  const nameKey = SubscriberColumnPrefs.nameKey;
+  if (key != nameKey && !live.containsKey(nameKey)) live[nameKey] = cols.nameWidth;
+  if (key == nameKey) {
+    live[key] = (cols.nameWidth + delta)
+        .clamp(SubscriberTableColumns.nameMin, SubscriberTableColumns.nameMax)
+        .toDouble();
+  } else {
+    final c = SubCol.values.byName(key);
+    live[key] = (cols.widthOf(c) + delta).clamp(c.minWidth, SubColInfo.maxWidth).toDouble();
+  }
+  SubscriberColumnPrefs.setWidthsLive(live);
+}
+
+/// رأس الجدول: تسمياتٌ خافتة، وما يُرتَّب به سهمٌ يدلّ على الترتيب الحاليّ واتّجاهه — نقرةٌ ترتّب ونقرةٌ ثانية
+/// تعكس. وعلى نهاية كلّ عمودٍ مقبضٌ يُسحب لتوسيعه أو تضييقه (والنقر المزدوج يعيده).
 class SubscriberTableHeader extends StatelessWidget {
   const SubscriberTableHeader({
     super.key,
     required this.columns,
+    required this.scroll,
     required this.sortField,
     required this.descending,
     required this.onSort,
     required this.allSelected,
     required this.onSelectAll,
+    required this.onResize,
+    required this.onResizeEnd,
+    required this.onResetWidth,
   });
 
   final SubscriberTableColumns columns;
+  final DeskHScroll scroll;
   final SortField sortField;
   final bool descending;
   final ValueChanged<SortField> onSort;
   final bool allSelected;
   final VoidCallback onSelectAll;
+  final void Function(String key, double delta) onResize;
+  final VoidCallback onResizeEnd;
+  final ValueChanged<String> onResetWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -113,9 +196,35 @@ class SubscriberTableHeader extends StatelessWidget {
       );
     }
 
-    return Container(
+    // خليّة رأسٍ بعرض عمودها، ومقبض السحب فوق حافّتها الأخيرة (لا يأخذ من عرض العمود).
+    Widget cell(String key, double width, Widget child) => SizedBox(
+          width: width,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Padding(
+                  padding: const EdgeInsetsDirectional.only(end: Sp.xs),
+                  child: child,
+                ),
+              ),
+              PositionedDirectional(
+                end: 0,
+                top: 0,
+                bottom: 0,
+                child: DeskColResizeHandle(
+                  tooltip: 'desktop.col_resize_tip'.tr(),
+                  onDrag: (d) => onResize(key, d),
+                  onEnd: onResizeEnd,
+                  onReset: () => onResetWidth(key),
+                ),
+              ),
+            ],
+          ),
+        );
+
+    final cols = columns;
+    return _dragScroll(context, cols, scroll, Container(
       height: 48,
-      padding: const EdgeInsetsDirectional.only(end: Sp.md),
       // بلا شريط تعبئة: رأسٌ على سطح الجدول نفسه وخطٌّ أقوى تحته (قواعد الجداول المقيسة).
       // (إطارٌ موحّد اللون مع الزوايا — فلاتر يرفض زوايا على إطارٍ بألوانٍ مختلفة — والخطّ الأقوى فوقه.)
       decoration: BoxDecoration(
@@ -134,16 +243,29 @@ class SubscriberTableHeader extends StatelessWidget {
             child: _CheckBox(value: allSelected, onTap: onSelectAll),
           ),
           const SizedBox(width: SubscriberTableColumns.avatar),
-          Expanded(flex: 5, child: label('desktop.col_name'.tr(), field: SortField.firstname)),
-          for (final c in columns.shown)
-            _cellBox(
-              c,
-              label(c.label, field: c.sortField, align: _alignOf(c)),
+          cell(
+            SubscriberColumnPrefs.nameKey,
+            cols.nameWidth,
+            label('desktop.col_name'.tr(), field: SortField.firstname),
+          ),
+          Expanded(
+            child: DeskHViewport(
+              scroll: scroll,
+              contentWidth: cols.middleContent,
+              edgeShadows: cols.scrolls,
+              child: Row(
+                children: [
+                  for (final c in cols.shown)
+                    cell(c.name, cols.widthOf(c), label(c.label, field: c.sortField, align: _alignOf(c))),
+                  const Spacer(),
+                ],
+              ),
             ),
+          ),
           const SizedBox(width: SubscriberTableColumns.actions),
         ],
       ),
-    );
+    ));
   }
 }
 
@@ -160,19 +282,19 @@ AlignmentDirectional _directional(Alignment a) => a == Alignment.center
         ? AlignmentDirectional.centerEnd
         : AlignmentDirectional.centerStart;
 
-Widget _cellBox(SubCol c, Widget child) {
-  final w = c.width;
-  if (w == null) {
-    return Expanded(
-      flex: 3,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: SubColInfo.packageMin),
-        child: child,
-      ),
-    );
-  }
-  return SizedBox(width: w, child: child);
+/// السحب الأفقيّ بالفأرة على الرأس أو صفٍّ يمرّر الأعمدة (المحتوى يتبع المؤشّر) — حين يكون هناك ما يتمرّر وحده،
+/// فالنقر والقائمة والتمرير العموديّ كما هي.
+Widget _dragScroll(BuildContext context, SubscriberTableColumns cols, DeskHScroll scroll, Widget child) {
+  if (!cols.scrolls) return child;
+  final rtl = Directionality.of(context) == TextDirection.rtl;
+  return GestureDetector(
+    onHorizontalDragUpdate: (d) => scroll.scrollBy(rtl ? d.delta.dx : -d.delta.dx),
+    child: child,
+  );
 }
+
+/// خليّة صفٍّ بعرض عمودها نفسه (عرض الرأس) — فتبقى القيمة تحت تسميتها.
+Widget _cellBox(SubscriberTableColumns cols, SubCol c, Widget child) => SizedBox(width: cols.widthOf(c), child: child);
 
 /// صفّ مشترك في جدول الحاسبة بلغة الموقع: شريطٌ بلون الحالة على الحافّة، مربّع تحديد، صورةٌ
 /// بالأحرف الأولى ونقطة الاتّصال، الاسم واليوزر، ثمّ الأعمدة المختارة بترتيبها، ثمّ الإجراءات
@@ -182,6 +304,7 @@ class SubscriberTableRow extends StatefulWidget {
     super.key,
     required this.sub,
     required this.columns,
+    required this.scroll,
     required this.open,
     required this.selected,
     required this.selectionMode,
@@ -195,6 +318,9 @@ class SubscriberTableRow extends StatefulWidget {
 
   final Subscriber sub;
   final SubscriberTableColumns columns;
+
+  /// موضع التمرير الأفقيّ المشترك مع الرأس وبقيّة الصفوف.
+  final DeskHScroll scroll;
 
   /// مفتوحٌ الآن في لوحة التفاصيل.
   final bool open;
@@ -228,7 +354,7 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
     final attention = s.isExpired || s.isNearExpiry;
     final packageInline = !cols.has(SubCol.package) && (s.profileName ?? '').isNotEmpty;
     // Tab إلى الصفّ ثمّ Enter يفتحه كالنقر (أو يحدّده في وضع التحديد)، بإطار تركيزٍ مع الكيبورد وحده.
-    return DeskPressable(
+    return _dragScroll(context, cols, widget.scroll, DeskPressable(
       onTap: widget.selectionMode ? widget.onToggleSelect : widget.onTap,
       onSecondaryTapUp: (d) => _menuAt(d.globalPosition),
       onLongPressStart: (d) => _menuAt(d.globalPosition),
@@ -276,8 +402,8 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
                   child: _Avatar(name: name, online: s.isOnline, disabled: s.isDisabled),
                 ),
               ),
-              Expanded(
-                flex: 5,
+              SizedBox(
+                width: cols.nameWidth,
                 child: _TwoLines(
                   fullOnHover: true,
                   top: name,
@@ -297,7 +423,19 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
                   bottomLtr: true,
                 ),
               ),
-              for (final c in cols.shown) _cellBox(c, _cell(c, s)),
+              Expanded(
+                child: DeskHViewport(
+                  scroll: widget.scroll,
+                  contentWidth: cols.middleContent,
+                  edgeShadows: cols.scrolls,
+                  child: Row(
+                    children: [
+                      for (final c in cols.shown) _cellBox(cols, c, _cell(c, s)),
+                      const Spacer(),
+                    ],
+                  ),
+                ),
+              ),
               SizedBox(
                 width: SubscriberTableColumns.actions,
                 child: _RowActions(
@@ -310,7 +448,7 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
           ),
         );
       },
-    );
+    ));
   }
 
   Widget _cell(SubCol c, Subscriber s) {

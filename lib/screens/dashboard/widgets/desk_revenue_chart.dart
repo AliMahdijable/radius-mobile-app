@@ -11,6 +11,7 @@ import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../desktop/desk_widgets.dart';
 
 /// «الإيرادات — آخر ٣٠ يوماً» على رئيسيّة الحاسبة (كالموقع): مساحةٌ بخطٍّ واحد (٢px، غسلٌ ١٠٪)، شبكةٌ
 /// خافتة بثلاثة خطوط، وعند المرور خطٌّ رأسيّ ونقطةٌ وبطاقة اليوم ومبلغه. سلسلةٌ واحدة: العنوان يسمّيها
@@ -84,11 +85,7 @@ class _DeskRevenueChartState extends State<DeskRevenueChart> {
     final days = _days;
     return Container(
       padding: const EdgeInsets.all(Sp.xl),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(R.card),
-        border: Border.all(color: AppColors.border),
-      ),
+      decoration: DeskCard.decoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

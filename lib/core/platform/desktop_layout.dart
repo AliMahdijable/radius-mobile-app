@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import 'app_platform.dart';
+import 'desk_ui_scale.dart';
 
 /// تخطيط الحاسبة (ويندوز، ونسخة الماك للتجربة).
 class DesktopLayout {
@@ -29,7 +30,8 @@ class DesktopLayout {
   static bool wide(BuildContext context) {
     if (!AppPlatform.isDesktop) return false;
     final view = View.of(context);
-    return view.physicalSize.width / view.devicePixelRatio >= minWidth;
+    // بعد تصغير الواجهة ([DeskUiScale]) يتّسع العرض المنطقيّ بالنسبة نفسها.
+    return view.physicalSize.width / view.devicePixelRatio / DeskUiScale.current >= minWidth;
   }
 }
 

@@ -75,6 +75,34 @@ class DeskSubtitle extends StatelessWidget {
   }
 }
 
+/// بطاقات الحاسبة: سطحٌ بحدٍّ وظلٍّ خفيف بطبقتين (ارتفاعٌ هادئ)، وفي المرور ظلٌّ أعمق بلون البطاقة وحدٌّ بلونها —
+/// المالك ٢٤ أكتوبر: «الكارتات … بدون أي تأثيرات وحدود وألوان تبين كأنها كتابة نصّيّة جامدة». (مرجع ui-ux-pro-max:
+/// Dimensional Layering — ظلال ارتفاعٍ بدرجات للوحات والبطاقات.) الظلّ بالأخضر الداكن لا بالأسود، كظلال التطبيق.
+class DeskCard {
+  DeskCard._();
+
+  static List<BoxShadow> rest() => AppColors.isDark ? Sh.deskRestDark : Sh.deskRest;
+
+  static List<BoxShadow> lifted(Color accent) => [
+        BoxShadow(
+          color: accent.withValues(alpha: AppColors.isDark ? 0.30 : 0.20),
+          blurRadius: 26,
+          offset: const Offset(0, 12),
+          spreadRadius: -10,
+        ),
+        ...rest(),
+      ];
+
+  static BoxDecoration decoration({bool hover = false, Color? accent, double radius = R.card}) => BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(
+          color: hover && accent != null ? accent.withValues(alpha: 0.45) : AppColors.border,
+        ),
+        boxShadow: hover ? lifted(accent ?? AppColors.brand) : rest(),
+      );
+}
+
 /// «حُدّث الآن / منذ 3 دقيقة» بجانب زرّ التحديث — والأقدم من [staleAfter] بلون التنبيه: الأرقام الحيّة تُعلَن بوقت
 /// تحديثها وتُنبَّه حين تقدم (ui-ux-pro-max، نمط لوحات التشغيل). يتجدّد نصّه كلّ نصف دقيقة بلا نداء.
 class DeskFreshness extends StatefulWidget {

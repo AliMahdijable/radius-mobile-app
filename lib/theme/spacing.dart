@@ -110,6 +110,16 @@ class Sh {
     ),
   ];
 
+  /// بطاقات الحاسبة ([DeskCard]): ارتفاعٌ هادئ بطبقتين بالأخضر الداكن — والداكن ظلٌّ أسود واحد. (المالك ٢٤ أكتوبر:
+  /// كارتات الرئيسيّة «بدون أي تأثيرات وحدود».)
+  static const List<BoxShadow> deskRest = [
+    BoxShadow(color: Color(0x0D102820), blurRadius: 2, offset: Offset(0, 1)),
+    BoxShadow(color: Color(0x14102820), blurRadius: 16, offset: Offset(0, 6), spreadRadius: -6),
+  ];
+  static const List<BoxShadow> deskRestDark = [
+    BoxShadow(color: Color(0x47000000), blurRadius: 10, offset: Offset(0, 3), spreadRadius: -2),
+  ];
+
   /// ظلّ الـFAB — ملوَّن بلون الزرّ نفسه لا بالأسود.
   static const List<BoxShadow> fab = [
     BoxShadow(

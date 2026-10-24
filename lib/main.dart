@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 
 import 'core/platform/app_platform.dart';
 import 'core/platform/desktop_layout.dart';
+import 'core/platform/desk_ui_scale.dart';
 import 'firebase_options.dart';
 import 'screens/notifications/in_app_notification_banner.dart';
 import 'screens/splash_screen.dart';
@@ -47,6 +48,8 @@ void main() async {
   // الماك: سلسلة المفاتيح ترفض التوقيع المحلّيّ؛ ويندوز: ملفّ الإضافة يتصادم فيضيع التوكن.
   if (AppPlatform.isMacDesktop) DesktopFileSecureStorage.installForMac();
   if (AppPlatform.isWindows) DesktopFileSecureStorage.installForWindows();
+  // حجم الواجهة المختار على هذا الجهاز (تلقائيّ بحسب الشاشة إن لم يُختر) — قبل أوّل إطار فلا تقفز.
+  if (AppPlatform.isDesktop) await DeskUiScale.load();
 
   // easy_localization يحتاج init قبل runApp — يحمّل الـcache ويتأكّد إن
   // الـstorage جاهز حتى الـsaveLocale يشتغل من اللحظة الأولى. مطلب
@@ -362,7 +365,8 @@ class _MyServicesAppState extends State<MyServicesApp>
             const IqMaterialLocalizationsDelegate(),
             ...context.localizationDelegates,
           ],
-          builder: (context, child) => MediaQuery.withClampedTextScaling(
+          // الحاسبة: الواجهة كلّها بحجمٍ يناسب الشاشة (DeskUiScaleScope) — فوق الـNavigator فتصغر النوافذ معها.
+          builder: (context, child) => DeskUiScaleScope(child: MediaQuery.withClampedTextScaling(
             minScaleFactor: 0.9,
             maxScaleFactor: 1.2,
             // 🐛 بلاغ 2026-08-31: «كل المودلات الي بيها الكيبورد رقم ما
@@ -390,7 +394,7 @@ class _MyServicesAppState extends State<MyServicesApp>
                 builder: (_, __, ___) => _TabletFrame(child: child ?? const SizedBox.shrink()),
               ),
             ),
-          ),
+          )),
           home: const SplashScreen(),
           navigatorKey: _appNavigatorKey,
         );
