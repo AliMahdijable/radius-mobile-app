@@ -413,7 +413,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final auth = LocalAuthentication();
     try {
       final ok = await auth.authenticate(
-        localizedReason: 'login.biometric_reason'.tr(),
+        localizedReason: _BiometricButton.platformKey('login.biometric_reason').tr(),
         options: AuthenticationOptions(
           biometricOnly: !AppPlatform.isDesktop,
           stickyAuth: true,
@@ -1008,6 +1008,13 @@ class _BiometricButton extends StatelessWidget {
   const _BiometricButton({required this.onTap});
   final VoidCallback onTap;
 
+  /// «Face ID» كلمة آبل للهاتف: ويندوز يدخل بـWindows Hello (بصمة/وجه/رمز) والماك بـTouch ID.
+  static String platformKey(String key) => AppPlatform.isWindows
+      ? '${key}_windows'
+      : AppPlatform.isMacDesktop
+          ? '${key}_mac'
+          : key;
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
@@ -1024,7 +1031,7 @@ class _BiometricButton extends StatelessWidget {
               Icon(Icons.fingerprint_rounded, color: AppColors.brand, size: 22),
               const SizedBox(width: Sp.sm),
               Text(
-                'login.biometric_prompt'.tr(),
+                platformKey('login.biometric_prompt').tr(),
                 style: AppType.button(color: AppColors.brand),
               ),
             ],
