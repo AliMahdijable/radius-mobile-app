@@ -162,7 +162,7 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
     if (ok != true) return;
     await AccountService.signOut();
     if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
+    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const AccountLoginScreen()),
       (_) => false,
     );

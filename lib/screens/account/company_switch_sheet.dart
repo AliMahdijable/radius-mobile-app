@@ -207,7 +207,7 @@ class _CompanySwitchSheetState extends State<CompanySwitchSheet> {
         // جلسة — بوّابة الحساب برسالتها، ومنها «شركاتي».
         sessionSwapFailed: (msg, {duration}) {
           if (!mounted) return;
-          Navigator.of(context).pushAndRemoveUntil(
+          Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
             MaterialPageRoute(builder: (_) => AccountGateScreen(message: msg)),
             (_) => false,
           );

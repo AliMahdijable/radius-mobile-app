@@ -371,7 +371,7 @@ class _LoginScreenState extends State<LoginScreen> {
             );
             return;
           }
-          Navigator.of(context).pushAndRemoveUntil(
+          Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
             MaterialPageRoute(builder: (_) => const MainShell()),
             (_) => false,
           );
@@ -392,7 +392,7 @@ class _LoginScreenState extends State<LoginScreen> {
           );
           // بوّابة الحساب (اشتراكٌ منتهٍ/حسابٌ معطّل/بلا حساب): البوّابة تقرّر.
           if (f.isAccountGate) {
-            Navigator.of(context).pushAndRemoveUntil(
+            Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
               MaterialPageRoute(builder: (_) => const AccountGateScreen()),
               (_) => false,
             );

@@ -276,7 +276,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
           // ignore: unawaited_futures
           FcmService.initAfterLogin();
           if (!mounted) return;
-          Navigator.of(context).pushAndRemoveUntil(
+          Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
             MaterialPageRoute(builder: (_) => const MainShell()),
             (route) => false,
           );
@@ -372,7 +372,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
           // ignore: unawaited_futures
           FcmService.initAfterLogin();
           if (!mounted) return;
-          Navigator.of(context).pushAndRemoveUntil(
+          Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
             MaterialPageRoute(builder: (_) => const MainShell()),
             (route) => false,
           );

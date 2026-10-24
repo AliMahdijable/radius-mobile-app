@@ -84,7 +84,7 @@ class _AccountSettingsCardState extends State<AccountSettingsCard> {
     AccountStatusCache.clear();
     await AccountService.signOut();
     if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
+    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const AccountLoginScreen()),
       (_) => false,
     );

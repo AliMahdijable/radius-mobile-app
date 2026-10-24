@@ -79,7 +79,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           subscription: sub,
           support: widget.me.support,
         );
-        Navigator.of(context).pushAndRemoveUntil(
+        Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => CompaniesScreen(me: me)),
           (_) => false,
         );
@@ -105,7 +105,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       final wasEnd = _sub.endsAt;
       setState(() => _sub = me.subscription);
       if (me.subscription.active && !wasActive && !widget.fromCompanies) {
-        Navigator.of(context).pushAndRemoveUntil(
+        Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => CompaniesScreen(me: me)),
           (_) => false,
         );
@@ -126,7 +126,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   Future<void> _signOut() async {
     await AccountService.signOut();
     if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
+    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const AccountLoginScreen()),
       (_) => false,
     );

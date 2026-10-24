@@ -195,7 +195,7 @@ class CompanyOpenFlow {
     host.setBusy(false);
     final failed = host.sessionSwapFailed ?? host.showError;
     if (out == SasLoginOutcome.ok) {
-      Navigator.of(context).pushAndRemoveUntil(
+      Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => shellBuilder()),
         (_) => false,
       );
@@ -247,7 +247,7 @@ class CompanyOpenFlow {
         return true;
       }
     }
-    Navigator.of(context).pushAndRemoveUntil(
+    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const AccountGateScreen()),
       (_) => false,
     );

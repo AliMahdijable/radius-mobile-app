@@ -220,7 +220,7 @@ class _MainShellState extends State<MainShell> {
     // (دخولٌ من جهازٍ آخر، أو انتهاء الجلسة) — لا بوّابة الحساب.
     if (EmployeeSession.routeToEmployeeLogin) {
       final msg = EmployeeSession.kickMessage ?? 'common.session_expired'.tr();
-      Navigator.of(context).pushAndRemoveUntil(
+      Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => EmployeeLoginScreen(message: msg)),
         (_) => false,
       );
@@ -235,7 +235,7 @@ class _MainShellState extends State<MainShell> {
           content: Text(
               EmployeeSession.kickMessage ?? 'common.session_expired'.tr())),
     );
-    Navigator.of(context).pushAndRemoveUntil(
+    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const AccountGateScreen()),
       (_) => false,
     );
@@ -291,7 +291,7 @@ class _MainShellState extends State<MainShell> {
   void _leaveToLogin(BuildContext sheetCtx) {
     Navigator.of(sheetCtx).pop();
     if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
+    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
       MaterialPageRoute(
         builder: (_) => EmployeeSession.routeToEmployeeLogin
             ? const EmployeeLoginScreen()

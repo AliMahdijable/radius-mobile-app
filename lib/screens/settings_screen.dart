@@ -126,7 +126,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await SavedProfilesStore.clearOriginal();
     if (!mounted) return;
     // موظّف ايرث لنك المباشر لا حساب له ← شاشة دخول الموظّف لا البوّابة.
-    Navigator.of(context).pushAndRemoveUntil(
+    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
       MaterialPageRoute(
         builder: (_) => EmployeeSession.routeToEmployeeLogin
             ? const EmployeeLoginScreen()

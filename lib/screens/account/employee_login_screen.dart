@@ -100,7 +100,7 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen> {
           });
           return;
         }
-        Navigator.of(context).pushAndRemoveUntil(
+        Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const MainShell()),
           (_) => false,
         );
