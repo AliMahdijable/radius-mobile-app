@@ -164,15 +164,19 @@ void main() {
     test('البطاقة ابن مباشر للقائمة', () {
       // لو بقيت المجموعة عنصراً واحداً يضمّ بطاقاتها، لبُنيت منطقةٌ فيها
       // أربعون جهازاً دفعةً — ولانهار تبويب النظر كلّه.
-      expect(src.contains('final _DeviceRow r => _DeviceCard('), isTrue,
+      // الهاتف: البطاقة نفسها عنصر القائمة؛ الحاسبة (٢٤ أكتوبر): سطرٌ من ≤٣ بطاقات — كلاهما من itemBuilder.
+      expect(src.contains('final _DeviceRow r => card(r.device)'), isTrue,
           reason: 'البطاقة يجب أن تُبنى من itemBuilder مباشرةً');
+      expect(src.contains('final _GridRow r =>'), isTrue,
+          reason: 'سطر الحاسبة عنصرٌ في القائمة نفسها لا مجموعةٌ حاضنة');
       expect(src.contains('class _RegionGroup'), isFalse,
           reason: 'المجموعة الحاضنة تُبطل تنويف ListView');
     });
 
     test('مفتاح البطاقة بمعرّف الجهاز', () {
-      expect(src.contains('key: ValueKey(r.device.id)'), isTrue,
-          reason: 'بلا مفتاح تظهر مقاييس برجٍ فوق اسم برجٍ غيره عند الفرز');
+      expect(src.contains("key: cols > 1 ? GlobalObjectKey(('wall-card', d.id)) : ValueKey(d.id)"), isTrue,
+          reason: 'بلا مفتاح تظهر مقاييس برجٍ فوق اسم برجٍ غيره عند الفرز؛ وعلى شبكة الحاسبة مفتاحٌ عامّ '
+              'يحمل الحالة بين السطور فلا تُلغى جلسة البطاقة مع كلّ إعادة ترتيب');
     });
 
     test('الإلغاء عند التخلّص', () {

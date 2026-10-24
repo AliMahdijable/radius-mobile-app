@@ -1594,7 +1594,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 30,
                 Row(
                   children: [
-                    DeviceImage(brand: d.brand, model: d.model, size: 34),
+                    DeviceImage(brand: d.brand, model: d.model, size: 44),
                     const SizedBox(width: Sp.sm),
                     Expanded(
                       child: Column(
@@ -1707,7 +1707,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                         size: 20, color: selected ? AppColors.brand : AppColors.textLow),
                     const SizedBox(width: Sp.sm),
                   ],
-                  DeviceImage(brand: d.brand, model: d.model, size: 48),
+                  DeviceImage(brand: d.brand, model: d.model, size: 76),
                   const SizedBox(width: Sp.md),
                   Expanded(
                     child: Column(

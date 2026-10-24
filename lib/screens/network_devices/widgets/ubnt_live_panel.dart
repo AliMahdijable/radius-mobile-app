@@ -16,6 +16,7 @@ import '_grade.dart';
 import '../../../theme/typography.dart';
 import '../detected_model.dart';
 import '../../../core/util/error_text.dart';
+import '../../desktop/desk_widgets.dart';
 
 /// Panel للمراقبة الحيّة لجهاز UBNT airMax/airFiber.
 /// التركيز على **wireless quality** (signal/SNR) لأنه المهم في PtP/PtMP.
@@ -407,7 +408,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                 ),
               ]),
               content: Column(children: [
-                for (final st in _stickyStations.take(20)) _stationRow(st),
+                DeskRows(children: [for (final st in _stickyStations.take(20)) _stationRow(st)]),
                 if (_stickyStations.length > 20)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),

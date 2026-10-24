@@ -16,6 +16,8 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import 'expandable_section.dart';
+import '../../desktop/desk_widgets.dart';
+import '../../../core/platform/desktop_layout.dart';
 
 /// لوحة مراقبة حيّة لـ**OLT** ‏(VSOL وBDCOM EPON) عبر SNMP.
 ///
@@ -815,7 +817,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
                 style: AppType.bodyBold()),
           ]),
           content: RepaintBoundary(
-            child: Column(children: [for (final p in s.ponPorts) _ponRow(p)]),
+            child: DeskRows(children: [for (final p in s.ponPorts) _ponRow(p)]),
           ),
         ),
       ],
@@ -842,7 +844,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
                 '/${s.uplinks.length})',
                 style: AppType.bodyBold()),
           ]),
-          content: Column(children: [for (final u in s.uplinks) _upRow(u)]),
+          content: DeskRows(children: [for (final u in s.uplinks) _upRow(u)]),
         ),
       ],
       // مواصفات الطراز من صفحة المصنّع — منفصلةٌ عن قراءات الجهاز عمداً.
@@ -957,33 +959,60 @@ class _VsolLivePanelState extends State<VsolLivePanel>
                   style: AppType.micro(color: AppColors.textLow)),
             )
           else
-            ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight:
-                    (MediaQuery.sizeOf(context).height * 0.52).clamp(240, 420),
-              ),
-              child: Scrollbar(
-                controller: _onuScroll,
-                thumbVisibility: true,
-                child: ListView.builder(
-                  key: PageStorageKey('vsol-${widget.device.id}-onu-list'),
-                  controller: _onuScroll,
-                  primary: false,
-                  shrinkWrap: true,
-                  padding: const EdgeInsetsDirectional.only(end: 10),
-                  itemCount: shown.length,
-                  findChildIndexCallback: (key) {
-                    final index = shown
-                        .indexWhere((entry) => ValueKey(entry.$2.label) == key);
-                    return index < 0 ? null : index;
-                  },
-                  itemBuilder: (context, index) {
-                    final (position, onu) = shown[index];
-                    return _onuRow(onu, position + 1);
-                  },
+            // الحاسبة: أطول (٧٠٪ من النافذة) والصفوف جنباً إلى جنب — نفس القائمة الافتراضيّة (تُبنى الظاهرة وحدها).
+            LayoutBuilder(builder: (context, c) {
+              final desk = DesktopScope.of(context);
+              final cols = DeskRows.columnsFor(context, c.maxWidth, minTileWidth: 380, maxColumns: 3);
+              final h = MediaQuery.sizeOf(context).height;
+              return ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: desk ? (h * 0.7).clamp(320, 900) : (h * 0.52).clamp(240, 420),
                 ),
-              ),
-            ),
+                child: Scrollbar(
+                  controller: _onuScroll,
+                  thumbVisibility: true,
+                  child: cols > 1
+                      ? ListView.builder(
+                          key: PageStorageKey('vsol-${widget.device.id}-onu-list-$cols'),
+                          controller: _onuScroll,
+                          primary: false,
+                          shrinkWrap: true,
+                          padding: const EdgeInsetsDirectional.only(end: 10),
+                          itemCount: (shown.length + cols - 1) ~/ cols,
+                          itemBuilder: (context, row) => Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              for (var k = 0; k < cols; k++) ...[
+                                if (k > 0) const SizedBox(width: Sp.sm),
+                                Expanded(
+                                  child: row * cols + k < shown.length
+                                      ? _onuRow(shown[row * cols + k].$2, shown[row * cols + k].$1 + 1)
+                                      : const SizedBox.shrink(),
+                                ),
+                              ],
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          key: PageStorageKey('vsol-${widget.device.id}-onu-list'),
+                          controller: _onuScroll,
+                          primary: false,
+                          shrinkWrap: true,
+                          padding: const EdgeInsetsDirectional.only(end: 10),
+                          itemCount: shown.length,
+                          findChildIndexCallback: (key) {
+                            final index = shown
+                                .indexWhere((entry) => ValueKey(entry.$2.label) == key);
+                            return index < 0 ? null : index;
+                          },
+                          itemBuilder: (context, index) {
+                            final (position, onu) = shown[index];
+                            return _onuRow(onu, position + 1);
+                          },
+                        ),
+                ),
+              );
+            }),
         ],
       );
 

@@ -16,6 +16,7 @@ import 'expandable_section.dart';
 import '_grade.dart';
 import '../../../theme/typography.dart';
 import '../../../core/util/error_text.dart';
+import '../../desktop/desk_widgets.dart';
 
 /// لوحة مراقبة حيّة لأجهزة Ruijie / Reyee (SNMP v2c فقط).
 ///
@@ -293,7 +294,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
               Text('Interfaces (${s.ifaces.length})',
                   style: AppType.bodyBold()),
             ]),
-            content: Column(children: [
+            content: DeskRows(children: [
               for (final iface in s.ifaces) _interfaceRow(iface),
             ]),
           ),

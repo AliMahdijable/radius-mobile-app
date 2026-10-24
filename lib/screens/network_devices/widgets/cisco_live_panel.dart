@@ -18,6 +18,7 @@ import '../detected_model.dart';
 import '_grade.dart';
 import 'device_image.dart';
 import 'expandable_section.dart';
+import '../../desktop/desk_widgets.dart';
 
 /// لوحة مراقبة حيّة لسويتشات Cisco — قراءة فقط عبر SSH أو Telnet.
 ///
@@ -951,7 +952,7 @@ class _CiscoLivePanelState extends State<CiscoLivePanel>
           ),
         )
       else
-        for (final p in shown) _portRow(p, maxRate),
+        DeskRows(children: [for (final p in shown) _portRow(p, maxRate)]),
     ]);
   }
 

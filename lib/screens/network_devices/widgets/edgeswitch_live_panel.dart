@@ -15,6 +15,7 @@ import '../../../theme/typography.dart';
 import '_grade.dart';
 import 'device_image.dart';
 import 'expandable_section.dart';
+import '../../desktop/desk_widgets.dart';
 
 /// لوحة مراقبة حيّة لسويتشات **Ubiquiti EdgeSwitch** — قراءة فقط.
 ///
@@ -795,7 +796,7 @@ class _EdgeSwitchLivePanelState extends State<EdgeSwitchLivePanel>
               style: AppType.micro(color: AppColors.textLow)),
         )
       else
-        for (final p in shown) _portRow(p),
+        DeskRows(children: [for (final p in shown) _portRow(p)]),
     ]);
   }
 

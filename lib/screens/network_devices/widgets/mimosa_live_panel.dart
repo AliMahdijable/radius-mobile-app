@@ -18,6 +18,7 @@ import 'expandable_section.dart';
 import '_grade.dart';
 import '../../../theme/typography.dart';
 import '../../../core/util/error_text.dart';
+import '../../desktop/desk_widgets.dart';
 
 /// لوحة مراقبة حيّة لأجهزة Mimosa (B5/B5c/B11/B24/A5/C5/C5c) — SNMP v2c فقط.
 ///
@@ -718,7 +719,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
               style: AppType.daysWordBold(color: AppColors.success)),
         ),
       ]),
-      content: Column(children: [
+      content: DeskRows(children: [
         for (final c in _clients) _clientTile(c),
       ]),
     );

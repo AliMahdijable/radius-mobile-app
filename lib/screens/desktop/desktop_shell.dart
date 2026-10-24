@@ -23,6 +23,7 @@ import '../search/quick_search_overlay.dart';
 import '../settings_screen.dart';
 import '../top_actions.dart';
 import 'desk_widgets.dart';
+import 'desk_zoom.dart';
 
 /// غلاف الحاسبة بلغة الموقع (/v2): قائمةٌ جانبيّة بمجموعاتها، وشريطٌ علويّ فيه عنوان الصفحة وشريحة
 /// الشركة والبحث (Ctrl/⌘K) وأزرار الأعلى المشتركة، والمحتوى تحته.
@@ -59,6 +60,11 @@ class _DesktopShellState extends State<DesktopShell> {
 
   /// أعرض من هذا يتوسّط المحتوى — شاشاتٌ بُنيت للهاتف لا تتمدّد على شاشةٍ عريضة جدّاً.
   static const double _maxContent = 1240;
+
+  /// قسم الأجهزة على الحاسبة: أعرض (برامج المراقبة تملأ الشاشة) ومكبَّرٌ ×[_devicesZoom] — لوحاته مقاساتها ثابتة
+  /// فكانت «ناعمة وزغيرة» (المالك ٢٤ أكتوبر).
+  static const double _maxDevicesContent = 1680;
+  static const double _devicesZoom = 1.2;
 
   static const _moduleOrder = [
     'managers',
@@ -225,7 +231,8 @@ class _DesktopShellState extends State<DesktopShell> {
     return LayoutBuilder(builder: (context, c) {
       // حشوةٌ للجانبين فوق حشوة الصفحات (١٦) ⇒ ٢٤ من حافّة المحتوى كالموقع.
       final avail = c.maxWidth - 2 * Sp.sm;
-      final width = avail > _maxContent ? _maxContent : avail;
+      final cap = _section == 'tab:2' ? _maxDevicesContent : _maxContent;
+      final width = avail > cap ? cap : avail;
       final mq = MediaQuery.of(context);
       return Align(
         alignment: Alignment.topCenter,
@@ -240,9 +247,12 @@ class _DesktopShellState extends State<DesktopShell> {
                 index: _opened.indexOf(_section),
                 children: [
                   for (final id in _opened)
-                    Navigator(
-                      key: _navKeys[id],
-                      onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => _rootOf(id)),
+                    DeskZoom(
+                      scale: id == 'tab:2' ? _devicesZoom : 1,
+                      child: Navigator(
+                        key: _navKeys[id],
+                        onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => _rootOf(id)),
+                      ),
                     ),
                 ],
               ),

@@ -325,3 +325,55 @@ class DeskSection extends StatelessWidget {
     );
   }
 }
+
+/// صفوف قائمةٍ في لوحة (منافذ، واجهات، عملاء، ONU): على الحاسبة جنباً إلى جنب ([maxColumns] أعمدة حين يتّسع)
+/// بدل صفٍّ بعرض الصفحة كلّها نصفه فارغ؛ على الهاتف عمودٌ واحد كما هي حرفاً. كلّ سطرٍ من الأعمدة يصطفّ من الأعلى،
+/// والصفوف تحتفظ بهوامشها (المسافة العموديّة منها).
+class DeskRows extends StatelessWidget {
+  const DeskRows({
+    super.key,
+    required this.children,
+    this.minTileWidth = 420,
+    this.maxColumns = 2,
+    this.gap = Sp.sm,
+    this.crossAxisAlignment = CrossAxisAlignment.center,
+  });
+
+  final List<Widget> children;
+  final double minTileWidth;
+  final int maxColumns;
+  final double gap;
+
+  /// محاذاة العمود الواحد (الهاتف) — كما كانت في الـColumn الأصليّ.
+  final CrossAxisAlignment crossAxisAlignment;
+
+  /// عدد الأعمدة لعرضٍ [width] — 1 على الهاتف.
+  static int columnsFor(BuildContext context, double width, {double minTileWidth = 420, int maxColumns = 2, double gap = Sp.sm}) {
+    if (!DesktopScope.of(context)) return 1;
+    final cols = ((width + gap) / (minTileWidth + gap)).floor();
+    return cols.clamp(1, maxColumns);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!DesktopScope.of(context) || children.length < 2) {
+      return Column(crossAxisAlignment: crossAxisAlignment, children: children);
+    }
+    return LayoutBuilder(builder: (context, c) {
+      final cols = columnsFor(context, c.maxWidth, minTileWidth: minTileWidth, maxColumns: maxColumns, gap: gap);
+      if (cols == 1) return Column(crossAxisAlignment: crossAxisAlignment, children: children);
+      return Column(children: [
+        for (var i = 0; i < children.length; i += cols)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var k = 0; k < cols; k++) ...[
+                if (k > 0) SizedBox(width: gap),
+                Expanded(child: i + k < children.length ? children[i + k] : const SizedBox.shrink()),
+              ],
+            ],
+          ),
+      ]);
+    });
+  }
+}

@@ -16,6 +16,7 @@ import '_grade.dart';
 import '../../../theme/typography.dart';
 import '../detected_model.dart';
 import '../../../core/util/error_text.dart';
+import '../../desktop/desk_widgets.dart';
 
 /// Panel للمراقبة الحيّة لجهاز Mikrotik.
 /// - Auto-start عند فتح الصفحة (لا يحتاج المستخدم يضغط "بدء")
@@ -408,7 +409,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             Text('Wireless (${s.wirelessInterfaces.length})',
                 style: AppType.bodyBold()),
           ]),
-          content: Column(children: [
+          content: DeskRows(children: [
             for (final w in s.wirelessInterfaces) _wirelessCard(w),
           ]),
         ),
@@ -445,7 +446,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       if (r != null) maxRate = math.max(maxRate, math.max(r.rxBps, r.txBps));
     }
     final s = _stats;
-    return Column(children: [
+    return DeskRows(children: [
       for (final iface in ethers)
         _interfaceRow(iface, maxRate, bridgeTag: s?.bridgeOf(iface.name)),
     ]);
@@ -459,7 +460,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       if (r != null) maxRate = math.max(maxRate, math.max(r.rxBps, r.txBps));
     }
     final byName = {for (final i in s.interfaces) i.name: i};
-    return Column(children: [
+    return DeskRows(children: [
       for (final b in bridges)
         _interfaceRow(b, maxRate,
             members: [
@@ -523,7 +524,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
 
   Widget _clientsContent(List<MikrotikWirelessClient> cs) {
     return Column(children: [
-      for (final c in cs.take(30)) _clientRow(c),
+      DeskRows(children: [for (final c in cs.take(30)) _clientRow(c)]),
       if (cs.length > 30)
         Padding(
           padding: const EdgeInsets.only(top: 4),

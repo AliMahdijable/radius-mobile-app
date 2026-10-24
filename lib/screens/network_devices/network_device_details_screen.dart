@@ -30,6 +30,7 @@ import '../../theme/typography.dart';
 import 'sheets/device_image_picker.dart';
 import '../../api/olt_profile.dart';
 import '../../core/widgets/app_sheet.dart';
+import '../../core/platform/desktop_layout.dart';
 import '../desktop/desk_widgets.dart';
 
 /// شاشة تفاصيل جهاز — تصميم متقدّم:
@@ -447,9 +448,15 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
       body: ListView(
         padding: const EdgeInsets.all(Sp.md),
         children: [
-          _heroCard(),
-          const SizedBox(height: Sp.md),
-          _statsRow(),
+          // الحاسبة: شريط هويّةٍ عريض (صورة كبيرة تُكبَّر بالنقر + الحالة والحقائق + الاستجابة) بدل بطاقة الهاتف
+          // وصفّ الأرقام تحتها (المالك ٢٤ أكتوبر: «بشكل حاسبة وليس موبايل»).
+          if (DesktopScope.of(context))
+            _deskHero()
+          else ...[
+            _heroCard(),
+            const SizedBox(height: Sp.md),
+            _statsRow(),
+          ],
           // ICMP sparkline log أُزيل (2026-08-11) — لا فائدة عمليّة له
           // Live Panels حسب البراند — تحتاج devices.monitor (2026-08-18).
           // الـview-only يشوف كارت hint بدل الـpanel.
@@ -753,6 +760,270 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
         ]),
       ]),
     );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // الحاسبة: شريط الهويّة — الصورة كبيرة بالنقر، والحقائق بخطٍّ أكبر
+  // ══════════════════════════════════════════════════════════════
+  Widget _deskHero() {
+    final online = _d.lastStatus == 'online';
+    final statusText = online ? 'متّصل' : (_d.lastStatus == 'offline' ? 'غير متّصل' : 'لم يُفحص');
+    final times = _history.where((h) => h.ms != null).map((h) => h.ms!).toList();
+    final avg = times.isEmpty ? null : (times.reduce((a, b) => a + b) / times.length).round();
+    final min = times.isEmpty ? null : times.reduce(math.min);
+    final max = times.isEmpty ? null : times.reduce(math.max);
+    final facts = <(IconData, String, String)>[
+      (LucideIcons.globe, 'العنوان', _d.ip),
+      (LucideIcons.tag, 'النوع', NetworkDeviceLabels.typeLabel(_d.type)),
+      if (_d.model != null && _d.model!.isNotEmpty) (LucideIcons.box, 'الطراز', _d.model!),
+      if (_region != null) (LucideIcons.mapPin, 'المنطقة', _region!.name),
+      if (_d.location != null && _d.location!.isNotEmpty) (LucideIcons.building2, 'الموقع', _d.location!),
+      if (_d.protocol != null)
+        (
+          _protocolIcon(_d.protocol!),
+          'الاتصال',
+          '${NetworkDeviceLabels.protocolLabel(_d.protocol!)}${_d.apiPort != null ? ":${_d.apiPort}" : ""}'
+              '${_d.hasCredentials ? ' · بيانات الدخول محفوظة' : ''}',
+        ),
+    ];
+    return Container(
+      padding: const EdgeInsets.all(Sp.xl),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.card),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // الصورة: كبيرة، والنقر يفتحها بحجمٍ كامل قابلٍ للتكبير.
+            Tooltip(
+              message: 'عرض الصورة بحجمٍ كبير',
+              child: Material(
+                color: AppColors.surfaceSunken,
+                borderRadius: BorderRadius.circular(R.lg),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(R.lg),
+                  onTap: _viewImage,
+                  child: Container(
+                    width: 220,
+                    padding: const EdgeInsets.all(Sp.md),
+                    alignment: Alignment.center,
+                    child: Stack(clipBehavior: Clip.none, children: [
+                      DeviceImage(brand: _d.brand, model: _d.model, size: 180),
+                      PositionedDirectional(
+                        bottom: 0,
+                        end: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Icon(LucideIcons.zoomIn, size: 14, color: AppColors.textMid),
+                        ),
+                      ),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: Sp.xl),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _statusColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(R.pill),
+                      ),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        _pulseDot(online),
+                        const SizedBox(width: 6),
+                        Text(statusText, style: AppType.bodyBold(color: _statusColor)),
+                      ]),
+                    ),
+                    const SizedBox(width: Sp.sm),
+                    TypeIcon(type: _d.type, size: 16, color: AppColors.textMid),
+                  ]),
+                  const SizedBox(height: Sp.sm),
+                  Text(
+                    _d.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 24, height: 1.25),
+                  ),
+                  const SizedBox(height: Sp.md),
+                  Wrap(
+                    spacing: Sp.xl,
+                    runSpacing: Sp.md,
+                    children: [
+                      for (final f in facts)
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(minWidth: 150, maxWidth: 320),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            Icon(f.$1, size: 16, color: AppColors.textLow),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(f.$2, style: AppType.micro(color: AppColors.textMid)),
+                                  Text(
+                                    f.$3,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppType.bodyBold(color: AppColors.textHi),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ]),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: Sp.xl),
+            // الاستجابة: الرقم كبير، وزرّ الفحص، وإحصاء الجلسة.
+            SizedBox(
+              width: 230,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(Sp.md),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceSunken,
+                      borderRadius: BorderRadius.circular(R.md),
+                    ),
+                    child: Column(children: [
+                      Text('زمن الاستجابة', style: AppType.micro(color: AppColors.textMid)),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            online && _d.lastResponseMs != null ? '${_d.lastResponseMs}' : '—',
+                            style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700, color: _statusColor, height: 1.1),
+                          ),
+                          if (online && _d.lastResponseMs != null) ...[
+                            const SizedBox(width: 4),
+                            Text('ms', style: AppType.body(color: AppColors.textMid)),
+                          ],
+                        ],
+                      ),
+                    ]),
+                  ),
+                  const SizedBox(height: Sp.sm),
+                  SizedBox(
+                    height: 40,
+                    child: OutlinedButton.icon(
+                      onPressed: _probing ? null : _probe,
+                      icon: _probing
+                          ? SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brand))
+                          : Icon(LucideIcons.zap, size: 16, color: AppColors.brand),
+                      label: Text('فحص الآن (ping)', style: AppType.bodyBold(color: AppColors.brand)),
+                      style: OutlinedButton.styleFrom(side: BorderSide(color: AppColors.border)),
+                    ),
+                  ),
+                  const SizedBox(height: Sp.sm),
+                  _deskStat('المتوسّط', avg == null ? '—' : '$avg ms'),
+                  _deskStat('الأدنى / الأقصى', (min == null || max == null) ? '—' : '$min / $max ms'),
+                  _deskStat(
+                    'فقدان الحزم',
+                    _lastPacketLoss == null ? '—' : '${_lastPacketLoss!.toInt()}%',
+                    color: _lastPacketLoss != null && _lastPacketLoss! > 0 ? AppColors.error : null,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _deskStat(String label, String value, {Color? color}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(children: [
+          Expanded(
+            child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.body(color: AppColors.textMid)),
+          ),
+          Text(value, textDirection: TextDirection.ltr, style: AppType.bodyBold(color: color ?? AppColors.textHi)),
+        ]),
+      );
+
+  /// الصورة بحجمٍ كبير (تكبير وتحريك بالفأرة)، ولمن يدير الأجهزة «تغيير الصورة» منها.
+  Future<void> _viewImage() async {
+    final canPick = Perms.has('devices.manage');
+    final pick = await showDialog<bool>(
+      context: context,
+      useRootNavigator: true,
+      barrierColor: AppColors.scrim,
+      builder: (ctx) => Dialog(
+        backgroundColor: AppColors.surface,
+        insetPadding: const EdgeInsets.all(40),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.card)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760, maxHeight: 720),
+          child: Padding(
+            padding: const EdgeInsets.all(Sp.lg),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Row(children: [
+                Expanded(
+                  child: Text(
+                    [_d.name, if (_d.model != null && _d.model!.isNotEmpty) _d.model!].join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.title(color: AppColors.textHi),
+                  ),
+                ),
+                IconButton(
+                  tooltip: MaterialLocalizations.of(ctx).closeButtonTooltip,
+                  icon: Icon(LucideIcons.x, color: AppColors.textMid),
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                ),
+              ]),
+              const SizedBox(height: Sp.sm),
+              Flexible(
+                child: InteractiveViewer(
+                  minScale: 1,
+                  maxScale: 4,
+                  child: Center(child: DeviceImage(brand: _d.brand, model: _d.model, size: 520)),
+                ),
+              ),
+              const SizedBox(height: Sp.sm),
+              Text('اسحب للتحريك، وعجلة الفأرة للتكبير', style: AppType.micro(color: AppColors.textLow)),
+              if (canPick) ...[
+                const SizedBox(height: Sp.md),
+                Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: OutlinedButton.icon(
+                    onPressed: () => Navigator.of(ctx).pop(true),
+                    icon: Icon(LucideIcons.images, size: 16, color: AppColors.brand),
+                    label: Text('تغيير الصورة', style: AppType.bodyBold(color: AppColors.brand)),
+                  ),
+                ),
+              ],
+            ]),
+          ),
+        ),
+      ),
+    );
+    if (pick == true && mounted) await _pickImage();
   }
 
   Widget _pulseDot(bool online) {

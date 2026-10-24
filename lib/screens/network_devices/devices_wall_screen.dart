@@ -409,7 +409,16 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
     // تبويب النظر الذي تقوم عليه المرحلة الثانية. ولو بقيت المجموعة
     // عنصراً واحداً يضمّ بطاقاتها، لبُنيت منطقةٌ فيها أربعون جهازاً
     // دفعةً، ولفتحت أربعين جلسةً لجهازٍ واحدٍ مرئيّ.
-    final rows = _rows;
+    return LayoutBuilder(builder: (context, c) {
+      // الحاسبة: البطاقات شبكةً (حتى ٣ بالسطر) بدل عمودٍ بعرض الصفحة (المالك ٢٤ أكتوبر). المفتاح عندها عامّ
+      // (GlobalObjectKey) فتنتقل البطاقة بحالتها وجلستها بين السطور حين يتبدّل الترتيب أثناء الجولة.
+      final cols = DeskRows.columnsFor(context, c.maxWidth - 2 * Sp.md, minTileWidth: 400, maxColumns: 3);
+      return _list(context, cols);
+    });
+  }
+
+  Widget _list(BuildContext context, int cols) {
+    final rows = cols > 1 ? _gridRows(_rows, cols) : _rows;
 
     // ── معرّف الجهاز → موضعه، لإعادة تموضع البطاقة بدل هدمها ────────
     //
@@ -434,6 +443,36 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
       final r = rows[i];
       if (r is _DeviceRow) indexById[r.device.id] = i;
     }
+    Widget card(NetworkDevice d) => _DeviceCard(
+          // ⚠️ مفتاح ثابت بمعرّف الجهاز: بلا مفتاح يُعيد Flutter
+          // استعمال حالة البطاقة لجهازٍ آخر عند تغيّر الترتيب،
+          // فتظهر مقاييس برجٍ فوق اسم برجٍ غيره. على الشبكة مفتاحٌ عامّ
+          // يحمل الحالة إلى سطرٍ آخر.
+          key: cols > 1 ? GlobalObjectKey(('wall-card', d.id)) : ValueKey(d.id),
+          device: d,
+          vitals: _vitals.of(d.id),
+          onVitals: (v) => _vitals.set(d.id, v),
+          medianMs: _roundMedianMs,
+          prevSample: () => _vitals.sampleOf(d.id),
+          onSample: (c) => _vitals.saveSample(d.id, c),
+          open: _expanded.contains(d.id),
+          onToggle: () => setState(() {
+            if (_expanded.contains(d.id)) {
+              _expanded.remove(d.id);
+            } else {
+              _expanded.add(d.id);
+            }
+          }),
+          onOpen: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => NetworkDeviceDetailsScreen(device: d),
+              ),
+            );
+            if (mounted) _load(silent: true);
+          },
+        );
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -453,39 +492,44 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
               slow: r.slow,
               total: r.total,
             ),
-          final _DeviceRow r => _DeviceCard(
-              // ⚠️ مفتاح ثابت بمعرّف الجهاز: بلا مفتاح يُعيد Flutter
-              // استعمال حالة البطاقة لجهازٍ آخر عند تغيّر الترتيب،
-              // فتظهر مقاييس برجٍ فوق اسم برجٍ غيره.
-              key: ValueKey(r.device.id),
-              device: r.device,
-              vitals: _vitals.of(r.device.id),
-              onVitals: (v) => _vitals.set(r.device.id, v),
-              medianMs: _roundMedianMs,
-              prevSample: () => _vitals.sampleOf(r.device.id),
-              onSample: (c) => _vitals.saveSample(r.device.id, c),
-              open: _expanded.contains(r.device.id),
-              onToggle: () => setState(() {
-                if (_expanded.contains(r.device.id)) {
-                  _expanded.remove(r.device.id);
-                } else {
-                  _expanded.add(r.device.id);
-                }
-              }),
-              onOpen: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        NetworkDeviceDetailsScreen(device: r.device),
-                  ),
-                );
-                if (mounted) _load(silent: true);
-              },
+          final _DeviceRow r => card(r.device),
+          final _GridRow r => Padding(
+              padding: const EdgeInsets.only(bottom: Sp.sm),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var k = 0; k < cols; k++) ...[
+                    if (k > 0) const SizedBox(width: Sp.sm),
+                    Expanded(child: k < r.devices.length ? card(r.devices[k]) : const SizedBox.shrink()),
+                  ],
+                ],
+              ),
             ),
         },
       ),
     );
+  }
+
+  /// الحاسبة: بطاقات المجموعة الواحدة سطوراً من [cols] — الترويسات واللافتة كما هي.
+  List<_Row> _gridRows(List<_Row> flat, int cols) {
+    final out = <_Row>[];
+    var pending = <NetworkDevice>[];
+    void flush() {
+      for (var i = 0; i < pending.length; i += cols) {
+        out.add(_GridRow(pending.sublist(i, (i + cols).clamp(0, pending.length))));
+      }
+      pending = [];
+    }
+    for (final r in flat) {
+      if (r is _DeviceRow) {
+        pending.add(r.device);
+      } else {
+        flush();
+        out.add(r);
+      }
+    }
+    flush();
+    return out;
   }
 
   /// يُسطّح المجموعات إلى صفوف: لافتة ثمّ عنوان مجموعة ثمّ بطاقاتها.
@@ -529,6 +573,12 @@ class _HeaderRow extends _Row {
 class _DeviceRow extends _Row {
   const _DeviceRow(this.device);
   final NetworkDevice device;
+}
+
+/// سطرٌ من بطاقات على الحاسبة.
+class _GridRow extends _Row {
+  const _GridRow(this.devices);
+  final List<NetworkDevice> devices;
 }
 
 // ══════════════════════════════════════════════════════════════════

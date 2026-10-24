@@ -15,6 +15,7 @@ import 'expandable_section.dart';
 import '_grade.dart';
 import '../../../theme/typography.dart';
 import '../../../core/util/error_text.dart';
+import '../../desktop/desk_widgets.dart';
 
 /// لوحة مراقبة متخصّصة لـUBNT airFiber 60 (GP/LR) — PtP 60 GHz link view.
 /// mca-status عنده مضلّل (signal=-93، wlanTxRate=0). البيانات الحقيقيّة في wstalist.prs_sta.
@@ -831,7 +832,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
             ),
         ]),
         const SizedBox(height: 8),
-        for (final iface in eths) _ethRow(iface),
+        DeskRows(children: [for (final iface in eths) _ethRow(iface)]),
       ]),
     );
   }
