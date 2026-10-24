@@ -4,6 +4,7 @@ import '../api/big_subscribers_api.dart';
 import '../api/subscribers_api.dart';
 import '../models/app_notification.dart';
 import '../models/subscriber.dart';
+import '../screens/notifications/inbox_screen.dart';
 import '../screens/subscribers/subscriber_detail_screen.dart';
 
 /// يقرّر إلى أين يأخذ الإشعارُ المستخدم — **مصدرٌ واحد** يستعمله
@@ -78,6 +79,14 @@ class NotificationRouter {
     //     واحداً، فوجهتها القائمة لا الكرت.
     final dest = destinationFor(n.kind);
     if (dest != null) onDestination?.call(dest);
+  }
+
+  /// صندوق الوارد — لنقر إشعار الحاسبة الذي يلخّص عدّة إشعارات (DesktopPushService). قبل الجاهزيّة لا شيء:
+  /// البرنامج نفسه أظهر الإشعار فهو جاهزٌ عادةً.
+  static Future<void> openInbox() async {
+    final nav = _navKey?.currentState;
+    if (!_ready || nav == null) return;
+    await nav.push(MaterialPageRoute(builder: (_) => const InboxScreen(onTapNotification: handle)));
   }
 
   /// وجهةٌ عامّة يفسّرها الغلاف (التبويب + المرشِّح)، فلا يعرف هذا

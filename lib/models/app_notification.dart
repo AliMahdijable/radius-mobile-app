@@ -19,6 +19,9 @@ enum NotificationKind {
         return NotificationKind.expiredTodayDigest;
       case 'manager_debt':
       case 'manager_debt_add':
+      // ما يرسله الخادم فعلاً (sendFcmToAdmin «دين جديد عليك» + إشعار التسديد) — كانا يقعان «أخرى» فلا يفتح النقرُ المدراء.
+      case 'manager_debt_added':
+      case 'manager_debt_payment':
         return NotificationKind.managerDebt;
       case 'manager_balance_update':
       case 'manager_balance':

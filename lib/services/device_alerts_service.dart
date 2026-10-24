@@ -105,6 +105,12 @@ class DeviceAlertsService {
   /// عدد الـalerts غير المقروءة — يُستعمل للـbell badge.
   final ValueNotifier<int> unreadCount = ValueNotifier<int>(0);
 
+  /// نقر إشعار نظامٍ أظهره التطبيق — الإضافة تُهيَّأ هنا مرّةً للتطبيق كلّه، فمن يُظهر إشعاراً (إشعارات الحاسبة:
+  /// DesktopPushService) يضع مستقبِله هنا.
+  static void Function(NotificationResponse response)? onTap;
+
+  static void _onResponse(NotificationResponse response) => onTap?.call(response);
+
   /// كل الـalerts (من أحدث إلى أقدم) — للـlist screen.
   List<DeviceAlert> get all => List.unmodifiable(_alerts);
 
@@ -133,6 +139,7 @@ class DeviceAlertsService {
       await _notifications.initialize(
         const InitializationSettings(
             android: androidInit, iOS: iosInit, macOS: iosInit, windows: windowsInit),
+        onDidReceiveNotificationResponse: _onResponse,
       );
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ DeviceAlertsService notifications init failed: $e');

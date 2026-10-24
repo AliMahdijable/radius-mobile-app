@@ -9,6 +9,7 @@ import '../api/api_client.dart';
 import '../core/platform/app_platform.dart';
 import '../models/app_notification.dart';
 import 'auth_storage.dart';
+import 'desktop_push_service.dart';
 import 'inbox_service.dart';
 
 /// FCM lifecycle: تسجيل/إلغاء توكن + معالجة الرسائل.
@@ -52,8 +53,11 @@ class FcmService {
   /// يجب استدعاؤها بعد نجاح تسجيل الدخول وحفظ الجلسة. آمنة الاستدعاء
   /// المتكرر (idempotent).
   static Future<void> initAfterLogin() async {
-    // ويندوز: لا FCM فيه (firebase_messaging بلا تطبيقٍ لويندوز) — إشعارات الخادم تصل الهاتف.
-    if (AppPlatform.isDesktop) return;
+    // الحاسبة: لا FCM فيها (firebase_messaging بلا تطبيقٍ لويندوز) — إشعارات الخادم نفسها تُقرأ من DesktopPushService.
+    if (AppPlatform.isDesktop) {
+      unawaited(DesktopPushService.start());
+      return;
+    }
     // 1) اطلب الإذن — على Android يُمنح تلقائياً < API 33.
     try {
       final settings = await FirebaseMessaging.instance.requestPermission(
@@ -120,7 +124,10 @@ class FcmService {
 
   /// عند تسجيل الخروج: نُلغي التوكن من backend + نطفي الـstreams.
   static Future<void> unregister() async {
-    if (AppPlatform.isDesktop) return;
+    if (AppPlatform.isDesktop) {
+      await DesktopPushService.stop();
+      return;
+    }
     final token = _lastRegisteredToken;
     if (token != null && token.isNotEmpty) {
       try {
