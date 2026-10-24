@@ -749,13 +749,11 @@ class _SideItemState extends State<_SideItem> {
     Theme.of(context); // theme-dep (dark-mode)
     final selected = widget.selected;
     final locked = widget.locked;
-    final fg = selected
-        ? AppColors.brandOnSoft
-        : locked
-            ? LockedStyle.title
-            : AppColors.textHi;
+    // المختار: حبّةٌ رماديّة محايدة والتسمية بالحبر، ولون التطبيق على الأيقونة وحدها — اللون على البيانات
+    // لا على الإطار (إعادة تصميم الحاسبة ٢٤ أكتوبر؛ كانت تعبئةً خضراء بشريطٍ جانبيّ).
+    final fg = locked ? LockedStyle.title : AppColors.textHi;
     final iconColor = selected
-        ? AppColors.brandAccent
+        ? AppColors.brand
         : locked
             ? LockedStyle.glyph
             : AppColors.textMid;
@@ -810,14 +808,11 @@ class _SideItemState extends State<_SideItem> {
               padding: const EdgeInsets.symmetric(horizontal: Sp.md),
               decoration: BoxDecoration(
                 color: selected
-                    ? AppColors.brandSoftBg
+                    ? AppColors.surfaceSunken
                     : _hover
-                        ? AppColors.surfaceSunken
+                        ? AppColors.surfaceSunken.withValues(alpha: 0.55)
                         : Colors.transparent,
                 borderRadius: BorderRadius.circular(R.md),
-                border: selected
-                    ? BorderDirectional(start: BorderSide(color: AppColors.brandAccent, width: 3))
-                    : null,
               ),
               child: row,
             ),

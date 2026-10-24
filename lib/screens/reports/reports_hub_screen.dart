@@ -317,20 +317,25 @@ class _ReportCard extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Container(
-                width: desk ? 48 : 44,
-                height: desk ? 48 : 44,
-                decoration: BoxDecoration(
-                  color:
-                      locked ? LockedStyle.box : color.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(R.md),
+              // الحاسبة: أيقونةٌ رماديّة بلا صندوقٍ ملوّن (ستّ بطاقاتٍ بستّة ألوان كانت أعلى ما في الصفحة صوتاً)؛
+              // الهاتف كما كان.
+              if (desk)
+                Icon(icon, color: locked ? LockedStyle.glyph : AppColors.textMid, size: 22)
+              else
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color:
+                        locked ? LockedStyle.box : color.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(R.md),
+                  ),
+                  child: Icon(
+                    icon,
+                    color: locked ? LockedStyle.glyph : color,
+                    size: 22,
+                  ),
                 ),
-                child: Icon(
-                  icon,
-                  color: locked ? LockedStyle.glyph : color,
-                  size: 22,
-                ),
-              ),
               const SizedBox(width: Sp.md),
               Expanded(
                 child: Column(

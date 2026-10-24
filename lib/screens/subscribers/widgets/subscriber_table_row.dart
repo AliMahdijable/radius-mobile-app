@@ -80,19 +80,18 @@ class SubscriberTableHeader extends StatelessWidget {
     Widget label(String text, {SortField? field, Alignment align = Alignment.centerRight}) {
       final active = field != null && field == sortField;
       final style = AppType.muted(color: active ? AppColors.textHi : AppColors.textMid)
-          .copyWith(fontSize: 13, fontWeight: FontWeight.w700);
+          .copyWith(fontSize: 13, fontWeight: active ? FontWeight.w700 : FontWeight.w500);
       final row = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Flexible(child: Text(text, style: style, maxLines: 1, overflow: TextOverflow.ellipsis)),
-          if (field != null) ...[
+          // سهم الترتيب على العمود المرتَّب وحده (البقيّة قابلةٌ للنقر بتلميحها) — لا أسهمٌ على كلّ رأس.
+          if (active) ...[
             const SizedBox(width: 4),
             Icon(
-              active
-                  ? (descending ? LucideIcons.arrowDown : LucideIcons.arrowUp)
-                  : LucideIcons.arrowUpDown,
+              descending ? LucideIcons.arrowDown : LucideIcons.arrowUp,
               size: 13,
-              color: active ? AppColors.brandAccent : AppColors.textLow,
+              color: AppColors.textHi,
             ),
           ],
         ],
@@ -116,10 +115,15 @@ class SubscriberTableHeader extends StatelessWidget {
     return Container(
       height: 48,
       padding: const EdgeInsetsDirectional.only(end: Sp.md),
+      // بلا شريط تعبئة: رأسٌ على سطح الجدول نفسه وخطٌّ أقوى تحته (قواعد الجداول المقيسة).
+      // (إطارٌ موحّد اللون مع الزوايا — فلاتر يرفض زوايا على إطارٍ بألوانٍ مختلفة — والخطّ الأقوى فوقه.)
       decoration: BoxDecoration(
-        color: AppColors.surfaceSunken,
+        color: AppColors.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(R.lg)),
         border: Border.all(color: AppColors.border),
+      ),
+      foregroundDecoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.borderStrong)),
       ),
       child: Row(
         children: [
@@ -220,11 +224,14 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
     final st = SubscriberCardV3.statusOf(s);
     final name = s.fullName.trim().isEmpty ? s.username : s.fullName.trim();
     final cols = widget.columns;
+    // المختار/المفتوح بحبّة القائمة الرماديّة نفسها (لا أخضر)، والمرور أخفّ منها.
     final bg = widget.selected || widget.open
-        ? AppColors.brandSoftBg
+        ? AppColors.surfaceSunken
         : _hover
-            ? AppColors.surfaceSunken
+            ? AppColors.surfaceSunken.withValues(alpha: 0.5)
             : AppColors.surface;
+    // اللون على الحافّة لمن يحتاج انتباهاً وحده (منتهٍ أو قارب) — الباقي بلا لون، لا لونٌ مختلف لكلّ صفّ.
+    final attention = s.isExpired || s.isNearExpiry;
     final packageInline = !cols.has(SubCol.package) && (s.profileName ?? '').isNotEmpty;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -253,7 +260,10 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
             children: [
               Tooltip(
                 message: st.label,
-                child: Container(width: SubscriberTableColumns.stripe, color: st.color),
+                child: Container(
+                  width: SubscriberTableColumns.stripe,
+                  color: attention ? st.color : Colors.transparent,
+                ),
               ),
               const SizedBox(width: Sp.sm - 4),
               SizedBox(
@@ -758,18 +768,14 @@ class _DaysCell extends StatelessWidget {
         : d.small.isEmpty
             ? d.big
             : '${d.big} ${_short(d.small)}';
-    double? fraction;
-    if (expired) {
-      fraction = 1;
-    } else if (exp != null && !sub.isDisabled) {
-      fraction = (exp.difference(DateTime.now()).inMinutes / (30 * 24 * 60)).clamp(0.04, 1.0);
-    }
+    // أكثر من أسبوع = بخير: رقمٌ عاديّ بلا حبّةٍ خضراء (عشرون حبّةً خضراء في الجدول تغطّي الحمراء والصفراء التي تهمّ).
+    final calm = !sub.isDisabled && exp != null && !expired && exp.difference(DateTime.now()).inDays > 7;
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
-          decoration: BoxDecoration(color: d.bg, borderRadius: BorderRadius.circular(R.sm)),
+          decoration: calm ? null : BoxDecoration(color: d.bg, borderRadius: BorderRadius.circular(R.sm)),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -780,43 +786,15 @@ class _DaysCell extends StatelessWidget {
               Text(
                 text,
                 maxLines: 1,
-                style: AppType.label(color: d.color).copyWith(fontWeight: FontWeight.w700, fontSize: 12.5),
+                style: AppType.label(color: calm ? AppColors.textHi : d.color).copyWith(
+                  fontWeight: calm ? FontWeight.w600 : FontWeight.w700,
+                  fontSize: calm ? 13 : 12.5,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
             ],
           ),
         ),
-        if (fraction != null) ...[
-          const SizedBox(height: 5),
-          SizedBox(
-            width: 72,
-            height: 4,
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceSunken,
-                      borderRadius: BorderRadius.circular(R.pill),
-                    ),
-                  ),
-                ),
-                Positioned.fill(
-                  child: FractionallySizedBox(
-                    alignment: AlignmentDirectional.centerStart,
-                    widthFactor: fraction,
-                    heightFactor: 1,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: d.color,
-                        borderRadius: BorderRadius.circular(R.pill),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ],
     );
   }

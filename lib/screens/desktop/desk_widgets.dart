@@ -35,7 +35,8 @@ class DeskPageHeader extends StatelessWidget {
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: AppType.title().copyWith(fontSize: 28, height: 1.2),
+                // ٢٤ لا ٢٨: عنوان شاشة عمل لا صفحة هبوط (قواعد شاشات العمل المقيسة — الوسيط ٢٤).
+                style: AppType.title().copyWith(fontSize: 24, height: 1.25),
               ),
               if (subtitle != null) ...[
                 const SizedBox(height: 4),

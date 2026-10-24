@@ -37,6 +37,7 @@ import '../../theme/typography.dart';
 import '../subscribers/widgets/filter_chips_bar.dart';
 import '../top_actions.dart';
 import 'widgets/desktop_overview.dart';
+import 'widgets/desk_renewals_runway.dart';
 import 'widgets/desk_status_bars.dart';
 import 'widgets/desk_revenue_chart.dart';
 import 'widgets/hero_revenue_card.dart';
@@ -806,7 +807,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     else if (_activationsLive!.recent.isEmpty)
                       const _NoActivitiesYet()
                     else
-                      RecentActivities(items: _activationsLive!.recent)
+                      RecentActivities(
+                        items: _activationsLive!.recent,
+                        // الحاسبة: حصيلة اليوم مثبّتةٌ أسفل البطاقة الممتدّة (لا فراغ تحت آخر نشاط).
+                        footer: wide
+                            ? _TodayTally(
+                                activations: _activationsLive!.activations,
+                                extensions: _activationsLive!.extensions,
+                              )
+                            : null,
+                      )
                           .animate()
                           .fadeIn(
                             delay: const Duration(milliseconds: 240),
@@ -947,37 +957,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         onOpen: widget.onOpenSubscribers,
                       ).animate().fadeIn(duration: const Duration(milliseconds: 280)),
                     const SizedBox(height: Sp.md),
-                    // الرسوم كالموقع: الإيرادات ٣٠ يوماً (المال، والشركة المفتوحة وحدها) بجانب توزيع المشتركين.
-                    if (_deskRevenueChart || _deskDistribution) ...[
+                    // ٢٤ أكتوبر (إعادة تصميم الحاسبة): «التجديدات القادمة» بجانب «توزيع المشتركين» — عمل الوكيل
+                    // اليوميّ (من يجدّد، ومن متّصل/منتهٍ) أوّل ما تراه العين بعد الأرقام.
+                    if (_deskDistribution) ...[
                       IntrinsicHeight(
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            if (_deskRevenueChart) const Expanded(flex: 7, child: DeskRevenueChart()),
-                            if (_deskRevenueChart && _deskDistribution) const SizedBox(width: Sp.md),
-                            if (_deskDistribution)
-                              Expanded(
-                                flex: 5,
-                                child: DeskStatusBars(
-                                  stats: _subscribersStats!,
-                                  onOpen: widget.onOpenSubscribers,
-                                ),
+                            Expanded(
+                              flex: 7,
+                              child: DeskRenewalsRunway(
+                                days: _debtorsLive?.expiringByDay,
+                                nearExpiry: _subscribersStats?.nearExpiry,
+                                onOpen: widget.onOpenSubscribers,
                               ),
+                            ),
+                            const SizedBox(width: Sp.md),
+                            Expanded(
+                              flex: 5,
+                              child: DeskStatusBars(
+                                stats: _subscribersStats!,
+                                onOpen: widget.onOpenSubscribers,
+                              ),
+                            ),
                           ],
                         ),
                       ).animate().fadeIn(duration: const Duration(milliseconds: 280)),
                       const SizedBox(height: Sp.md),
                     ],
-                    // الإيرادات وآخر النشاطات: عنوانٌ بالارتفاع نفسه فوق كلٍّ منهما، والبطاقتان تبدآن وتنتهيان
-                    // على خطٍّ واحد (بلاغ المالك ٢٣ أكتوبر: «منشزة ويّ الإيرادات»).
-                    if (revenueSection != null || activitiesSection != null)
+                    // المال والنشاط: ملخّص الإيرادات (يوم/أسبوع/شهر) فوق رسم ٣٠ يوماً، بجانب «آخر النشاطات» —
+                    // البطاقتان تبدآن وتنتهيان على خطٍّ واحد (بلاغ المالك ٢٣ أكتوبر: «منشزة ويّ الإيرادات»).
+                    if (revenueSection != null || _deskRevenueChart || activitiesSection != null)
                       IntrinsicHeight(
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            if (revenueSection != null)
+                            if (revenueSection != null || _deskRevenueChart)
                               Expanded(
-                                flex: 5,
+                                flex: 7,
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.stretch,
                                   children: [
@@ -988,14 +1005,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         MaterialPageRoute(builder: (_) => const FinancialReportScreen()),
                                       ),
                                     ),
-                                    Expanded(child: revenueSection),
+                                    if (revenueSection != null) revenueSection,
+                                    if (revenueSection != null && _deskRevenueChart) const SizedBox(height: Sp.md),
+                                    if (_deskRevenueChart) const Expanded(child: DeskRevenueChart()),
                                   ],
                                 ),
                               ),
-                            if (revenueSection != null && activitiesSection != null)
+                            if ((revenueSection != null || _deskRevenueChart) && activitiesSection != null)
                               const SizedBox(width: Sp.md),
                             if (activitiesSection != null)
-                              Expanded(flex: 7, child: _deskStretch(activitiesSection)),
+                              Expanded(flex: 5, child: _deskStretch(activitiesSection)),
                           ],
                         ),
                       ),
@@ -1021,6 +1040,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// حصيلة اليوم أسفل «آخر النشاطات» على الحاسبة — مجموعٌ حقيقيّ من الردّ نفسه لا زينة.
+class _TodayTally extends StatelessWidget {
+  const _TodayTally({required this.activations, required this.extensions});
+
+  final int activations;
+  final int extensions;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.md),
+      child: Row(
+        children: [
+          Text('desktop.today_tally'.tr(), style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 13)),
+          const Spacer(),
+          Text(
+            'desktop.today_tally_values'.tr(args: ['$activations', '$extensions']),
+            style: AppType.bodyBold(color: AppColors.textHi),
+          ),
+        ],
       ),
     );
   }

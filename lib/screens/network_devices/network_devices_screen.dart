@@ -1031,11 +1031,20 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
           },
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+            // «الإجمالي» المختار بحبّة القائمة الرماديّة لا بإطارٍ أسود سميك؛ والمتّصل/المفصول بلونهما الخفيف.
             decoration: BoxDecoration(
-              color: active ? color.withValues(alpha: 0.10) : AppColors.surface,
+              color: !active
+                  ? AppColors.surface
+                  : filterStatus == null
+                      ? AppColors.surfaceSunken
+                      : color.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(R.md),
               border: Border.all(
-                color: active ? color : AppColors.border,
+                color: !active
+                    ? AppColors.border
+                    : filterStatus == null
+                        ? AppColors.borderStrong
+                        : color.withValues(alpha: 0.55),
                 width: active ? 1.5 : 1,
               ),
             ),

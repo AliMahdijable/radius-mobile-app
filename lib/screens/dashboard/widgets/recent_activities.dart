@@ -11,10 +11,14 @@ import '../../../theme/typography.dart';
 /// each field directly. No mock fallback — loading/empty/error states
 /// are rendered by the dashboard.
 class RecentActivities extends StatelessWidget {
-  const RecentActivities({super.key, required this.items});
+  const RecentActivities({super.key, required this.items, this.footer});
 
   /// Backend rows from /api/activities/daily-activations.
   final List<Map<String, dynamic>> items;
+
+  /// الحاسبة: البطاقة تمتدّ لارتفاع جارتها، فيُثبَّت [footer] (حصيلة اليوم) في أسفلها بدل فراغٍ تحت آخر صفّ —
+  /// ولا يُمرَّر على الهاتف (البطاقة بطول صفوفها كما كانت).
+  final Widget? footer;
 
   @override
   Widget build(BuildContext context) {
@@ -37,6 +41,11 @@ class RecentActivities extends StatelessWidget {
                 endIndent: Sp.lg,
                 color: AppColors.border,
               ),
+          ],
+          if (footer != null) ...[
+            const Spacer(),
+            Divider(height: 1, color: AppColors.border),
+            footer!,
           ],
         ],
       ),

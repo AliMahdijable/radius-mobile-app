@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import 'big_subscribers_api.dart';
+import '../models/subscriber.dart';
 import '../services/auth_storage.dart';
 import 'api_client.dart';
 import 'archive_info.dart';
@@ -74,9 +75,15 @@ class DebtorsResult {
     required this.disabled,
     this.debtsUnknown = false,
     this.debtsPending = false,
+    this.expiringByDay,
   });
   final int count;
   final int total;
+
+  /// «التجديدات القادمة» على رئيسيّة الحاسبة: عدد من ينتهي اشتراكه في كلّ يومٍ من اليوم إلى ١٣ يوماً بعده
+  /// (١٤ خانة، الأولى اليوم). من الحلقة نفسها على القائمة المحمَّلة أصلاً — بلا نداء. `null` = لا قائمة
+  /// (الحسابات الكبيرة/«كل الشركات») فلا تفصيل يوميّ يُخترع.
+  final List<int>? expiringByDay;
 
   /// الحسابات الكبيرة (BigSubscribersApi): العدّادات من الساس، والدين من notes حين يكتمل عدّه في الخادم — وإلّا «—» لا
   /// صفر ([count]/[total] صفرٌ لا يُعرض): شركةٌ دينها على دفترنا، أو [debtsPending] (جارٍ عدّه أوّل مرّة).
@@ -245,6 +252,21 @@ class DashboardApi {
   /// list. Returns the debtors metric (count + total IQD) AND the
   /// near-expiry counter (subs whose remaining_days fall in [0, 3]).
   /// Replaces v1's two-pass approach with one network call + one loop.
+
+  /// خانة «التجديدات القادمة» لمشترك: كم يوماً بالتقويم بين اليوم ويوم انتهائه (٠ = ينتهي اليوم)؛ `null` لمن انتهى أو
+  /// موقوفٌ أو بلا تاريخٍ ولا أيّام. الفرق بتواريخ UTC لا محلّيّة: بين منتصفَي ليلٍ محلّيَّين يحدث ٢٣ ساعة حيث يوجد توقيتٌ
+  /// صيفيّ فيُنقص يوماً.
+  static int? expiryDayOf(Subscriber s, DateTime now) {
+    if (s.isDisabled) return null;
+    final exp = s.parsedExpiration;
+    if (exp == null) {
+      final d = s.remainingDays;
+      return d == null || d < 0 ? null : d;
+    }
+    if (exp.isBefore(now)) return null;
+    return DateTime.utc(exp.year, exp.month, exp.day).difference(DateTime.utc(now.year, now.month, now.day)).inDays;
+  }
+
   static Future<DebtorsResult?> fetchDebtors() async {
     _logStart('subscribers/with-phones (debtors)');
     // الحسابات الكبيرة (≥ ٥٠٠٠): عدّادات الساس نفسها بتعريفات هذا التطبيق (summary.app) — لا قائمة كاملة (٨٩ ألفاً ≈ ٩٦ث).
@@ -284,6 +306,8 @@ class DashboardApi {
     var expired = 0;
     var onlineNoPlan = 0;
     var disabled = 0;
+    final now = DateTime.now();
+    final byDay = List<int>.filled(14, 0);
     for (final s in list) {
       // 2026-10-12: الحسابات المهمَلة (لم تُفعَّل قطّ) تُستثنى من كلّ
       // عدّادات اللوحة — ليست متّصلة ولا منتهية ولا مدينة، بل بطاقات
@@ -305,6 +329,8 @@ class DashboardApi {
       // يُحسب هنا لأنّ الحلقة تمرّ على القائمة مرّةً واحدة أصلاً،
       // فالعدّاد الجديد بلا كلفة شبكيّة ولا مرور ثانٍ.
       if (s.isDisabled) disabled++;
+      final day = expiryDayOf(s, now);
+      if (day != null && day < byDay.length) byDay[day]++;
     }
     return DebtorsResult(
       count: debtCount,
@@ -317,6 +343,7 @@ class DashboardApi {
       totalSubs: list.where((s) => !s.isAbandoned).length,
       onlineNoPlan: onlineNoPlan,
       disabled: disabled,
+      expiringByDay: byDay,
     );
   }
 
