@@ -11,6 +11,7 @@ import '../services/auth_storage.dart';
 import '../services/locale_service.dart';
 import '../services/permissions_service.dart';
 import '../services/provider_service.dart';
+import '../services/company_creds_store.dart';
 import '../services/saved_profiles_store.dart';
 import '../services/session_manager.dart';
 import '../services/print_prefs.dart';
@@ -462,7 +463,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         backgroundColor: AppColors.surface,
                         title: const Text('مسح الحسابات المحفوظة'),
                         content: const Text(
-                            'سيتمّ حذف كل الحسابات (يوزر+باسورد) المحفوظة على شاشة الدخول. متأكّد؟'),
+                            'سيُحذف من هذا الجهاز كلّ ما حُفظ من حسابات (اليوزر وكلمة السرّ)، وفتح أيّ شركة بعدها يطلب بياناتها من جديد. متأكّد؟'),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.of(ctx).pop(false),
@@ -479,6 +480,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     );
                     if (ok == true) {
                       await SavedProfilesStore.clearAll();
+                      // وكلمات سرّ الشركات على الجهاز + لا استئناف بضغطة لشركةٍ بلا كلمة سرّ — كان النقر على الشركة
+                      // بعد المسح يُدخله من الخادم (المالك ٢٥ أكتوبر).
+                      await CompanyCredsStore.forgetAll();
                       // الحارسان معاً: `mounted` للحالة، و`context.mounted`
                       // لعنصر الباني المحلّي — قد يموت أحدهما دون الآخر.
                       if (!mounted || !context.mounted) return;

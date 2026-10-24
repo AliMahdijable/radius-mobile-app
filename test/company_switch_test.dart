@@ -11,6 +11,7 @@ import 'package:rad_mysvcs/api/auth_api.dart';
 import 'package:rad_mysvcs/screens/account/company_open_flow.dart';
 import 'package:rad_mysvcs/screens/account/company_switch_sheet.dart';
 import 'package:rad_mysvcs/screens/dashboard/dashboard_screen.dart';
+import 'package:rad_mysvcs/screens/login_screen.dart';
 import 'package:rad_mysvcs/services/account_service.dart';
 import 'package:rad_mysvcs/services/active_company.dart';
 import 'package:rad_mysvcs/services/ai_assistant_state.dart';
@@ -167,6 +168,16 @@ void main() {
           sasUrl: jtUrl, username: 'ali.jt', password: 'p1');
       expect(await SavedProfilesStore.originalFor(supernetUrl), isNull);
       expect(await SavedProfilesStore.readOriginal(), isNull);
+    });
+
+    test('🧹 «مسح الحسابات المحفوظة»: كلمات سرّ الشركات تُمحى والجهاز «نسي» (والدخول بعدها يحفظ من جديد)', () async {
+      await CompanyCredsStore.upsert(sasUrl: jtUrl, username: 'ali.jt', password: 'p1');
+      expect(await CompanyCredsStore.forgotten(), isFalse);
+      await CompanyCredsStore.forgetAll();
+      expect(await CompanyCredsStore.passwordFor(jtUrl, 'ali.jt'), isNull);
+      expect(await CompanyCredsStore.forgotten(), isTrue);
+      await CompanyCredsStore.upsert(sasUrl: jtUrl, username: 'ali.jt', password: 'p2');
+      expect(await CompanyCredsStore.passwordFor(jtUrl, 'ali.jt'), 'p2');
     });
   });
 
@@ -452,6 +463,55 @@ void main() {
           reason: 'رفض الاستئناف لا يُعرض — الدخول المعتاد بعده هو من يتكلّم');
       expect(completed.single['token'], 'jt-session');
       expect(completed.single['pass'], 'pw-jt');
+      expect(find.text('SHELL'), findsOneWidget);
+      await finish(t);
+    });
+
+    testWidgets('🧹 بعد «مسح الحسابات المحفوظة»: شركةٌ بلا كلمة سرٍّ على الجهاز ⇒ نموذج الدخول لا الاستئناف', (t) async {
+      await setUpOwner(s1bSasOwner);
+      account.resumeStatus = 200;
+      account.resumeReply = {
+        'success': true,
+        'token': 'jt-resumed',
+        'expiresAt': '2099-01-01T00:00:00.000Z',
+        'user': {'id': 'jt:77', 'username': 'ali.jt', 'role': 'admin'},
+        'resumed': true,
+        'source': 'stored',
+      };
+      await CompanyCredsStore.upsert(sasUrl: jtUrl, username: 'ali.jt', password: 'pw-jt');
+      await CompanyCredsStore.forgetAll();
+      await openDashboard(t, 430);
+      await t.tap(square);
+      await settle(t, seconds: 2);
+      await t.tap(find.text(longName));
+      await settle(t, seconds: 3);
+      expect(account.resumes, isEmpty, reason: 'المالك: بعد المسح يطلب بياناتها من جديد — لا دخول من الخادم');
+      expect(server.requests.where((r) => r.path == '/api/auth/login'), isEmpty);
+      expect(completed, isEmpty);
+      expect(find.byType(LoginScreen), findsOneWidget);
+      await finish(t);
+    });
+
+    testWidgets('بعد المسح ثمّ دخولٍ بكلمة سرّها ⇒ تعود الشركة تُفتح بضغطة (استئناف)', (t) async {
+      await setUpOwner(s1bSasOwner);
+      account.resumeStatus = 200;
+      account.resumeReply = {
+        'success': true,
+        'token': 'jt-resumed',
+        'expiresAt': '2099-01-01T00:00:00.000Z',
+        'user': {'id': 'jt:77', 'username': 'ali.jt', 'role': 'admin'},
+        'resumed': true,
+        'source': 'stored',
+      };
+      await CompanyCredsStore.forgetAll();
+      await CompanyCredsStore.upsert(sasUrl: jtUrl, username: 'ali.jt', password: 'pw-jt');
+      await openDashboard(t, 430);
+      await t.tap(square);
+      await settle(t, seconds: 2);
+      await t.tap(find.text(longName));
+      await settle(t, seconds: 3);
+      expect(account.resumes, hasLength(1));
+      expect(completed.single['token'], 'jt-resumed');
       expect(find.text('SHELL'), findsOneWidget);
       await finish(t);
     });

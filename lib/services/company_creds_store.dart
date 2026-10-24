@@ -95,4 +95,23 @@ class CompanyCredsStore {
   }
 
   static Future<void> clearAll() => _storage.delete(key: _kList);
+
+  /// «مسح الحسابات المحفوظة» (الإعدادات): كلمات السرّ تُمحى، وشركةٌ بلا كلمة سرٍّ على هذا الجهاز بعدها **لا تُستأنف من
+  /// الخادم بضغطة** بل يُطلب دخولها ([CompanyOpenFlow]) — المالك ٢٥ أكتوبر: «مفروض من اسوي مسح الحسابات المحفوظة يفرغ
+  /// معلومات الشركة… يطلب معلومات من جديد» (كان الاستئناف يُدخله رغم المسح). من يدخل شركةً بكلمة سرّها تُحفظ فتعود تُفتح
+  /// بضغطة كما كانت.
+  static const _kForgot = 'companies.forgot';
+
+  static Future<void> forgetAll() async {
+    await clearAll();
+    await _storage.write(key: _kForgot, value: '1');
+  }
+
+  static Future<bool> forgotten() async {
+    try {
+      return await _storage.read(key: _kForgot) == '1';
+    } catch (_) {
+      return false;
+    }
+  }
 }

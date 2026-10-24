@@ -116,9 +116,11 @@ class CompanyOpenFlow {
     HapticFeedback.selectionClick();
     final url = c.sasUrl ?? '';
     final pass = await CompanyCredsStore.passwordFor(url, c.username);
+    // «مسح الحسابات المحفوظة»: الجهاز نسي حساباته — شركةٌ بلا كلمة سرٍّ عليه لا تُستأنف بضغطة، يُطلب دخولها من جديد.
+    final forgotten = pass == null && await CompanyCredsStore.forgotten();
     if (!context.mounted) return;
     // الطريق السريع: جلسة الشركة من الخادم. لا نجاح ⇒ لا شيء تغيّر، ويكمل الدخول المعتاد بلا رسالةٍ إضافيّة.
-    if (!c.isEmployee) {
+    if (!c.isEmployee && !forgotten) {
       host.setBusy(true);
       final resumed = await resumeSession(c);
       if (!context.mounted) return;
