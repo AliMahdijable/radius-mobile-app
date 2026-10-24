@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/sales_api.dart';
+import '../../core/platform/desktop_layout.dart';
 import '../../core/util/ar_date.dart';
 import '../../core/util/amount_input.dart';
 import '../../core/util/bidi.dart';
@@ -20,6 +21,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/merged_company_strip.dart';
+import '../desktop/desk_widgets.dart';
 import '../reports/widgets/date_range_chip.dart';
 import '../reports/widgets/report_permission_gate.dart';
 
@@ -169,17 +171,22 @@ class _SalesScreenState extends State<SalesScreen> {
       title: 'sales.title'.tr(),
       child: Scaffold(
         backgroundColor: AppColors.bg,
-        appBar: AppBar(
-          backgroundColor: AppColors.surface,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          title: Text(
-            'sales.title'.tr(),
-            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+        // على الحاسبة: رأس الصفحة بزرّها (بيع جديد / مادّة جديدة) مكان الزرّ العائم — كبقيّة صفحات الأقسام.
+        appBar: deskPageBar(
+          context,
+          mobile: AppBar(
+            backgroundColor: AppColors.surface,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            title: Text(
+              'sales.title'.tr(),
+              style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
+            ),
+            iconTheme: IconThemeData(color: AppColors.textHi),
           ),
-          iconTheme: IconThemeData(color: AppColors.textHi),
+          primary: _enabled ? _deskPrimary() : null,
         ),
-        floatingActionButton: _enabled ? _fab() : null,
+        floatingActionButton: _enabled && !DesktopScope.of(context) ? _fab() : null,
         body: SafeArea(
           child: RefreshIndicator(
             onRefresh: _refresh,
@@ -199,6 +206,60 @@ class _SalesScreenState extends State<SalesScreen> {
         ),
       ),
     );
+  }
+
+  /// زرّ الحاسبة: نفس فعل الزرّ العائم للتبويب المفتوح.
+  Widget _deskPrimary() {
+    if (_tab == 1) {
+      final can = Perms.has('sales.items');
+      return DeskPrimaryButton(
+        icon: LucideIcons.plus,
+        label: 'sales.new_item'.tr(),
+        locked: !can,
+        onTap: can
+            ? () => _after(_showSheet(context, const _ItemSheet()))
+            : () => showNoPermission(context, action: true),
+      );
+    }
+    final can = Perms.has('sales.sell');
+    final items = _items?.active ?? const <SaleItem>[];
+    return DeskPrimaryButton(
+      icon: LucideIcons.shoppingCart,
+      label: 'sales.new'.tr(),
+      locked: !can,
+      onTap: !can
+          ? () => showNoPermission(context, action: true)
+          : items.isEmpty
+              ? () => showSheetSnack(context, 'sales.add_item_first'.tr())
+              : () => _after(_showSheet(context, _NewSaleSheet(items: items))),
+    );
+  }
+
+  /// على الحاسبة: البطاقات عمودين بدل عمودٍ طويل بعرض الصفحة؛ على الهاتف كما هي واحدةً تحت الأخرى.
+  List<Widget> _cards(List<Widget> cards) {
+    if (DesktopScope.of(context)) {
+      return [DeskGrid(minTileWidth: 420, maxColumns: 2, spacing: Sp.sm, children: cards)];
+    }
+    return [
+      for (int i = 0; i < cards.length; i++) ...[
+        if (i > 0) const SizedBox(height: Sp.sm),
+        cards[i],
+      ],
+    ];
+  }
+
+  /// أرقام المبيعات: على الحاسبة الأربعة بصفٍّ واحد، وعلى الهاتف صفّان من اثنين.
+  List<Widget> _kpiRows(List<Widget> kpis) {
+    Widget row(List<Widget> ks) => Row(
+          children: [
+            for (int i = 0; i < ks.length; i++) ...[
+              if (i > 0) const SizedBox(width: Sp.sm),
+              Expanded(child: ks[i]),
+            ],
+          ],
+        );
+    if (DesktopScope.of(context)) return [row(kpis)];
+    return [row(kpis.sublist(0, 2)), const SizedBox(height: Sp.sm), row(kpis.sublist(2))];
   }
 
   Widget _fab() {
@@ -293,55 +354,38 @@ class _SalesScreenState extends State<SalesScreen> {
       if (page == null)
         _Notice(icon: LucideIcons.shoppingCart, text: _salesError ?? 'sales.load_failed'.tr())
       else ...[
-        Row(
-          children: [
-            Expanded(
-              child: _Kpi(
-                icon: LucideIcons.shoppingCart,
-                label: 'sales.kpi_revenue'.tr(),
-                value: _money(t.revenue),
-                sub: 'sales.count_n'.tr(namedArgs: {'n': '${t.count}'}),
-                tone: AppTone.brand,
-              ),
-            ),
-            const SizedBox(width: Sp.sm),
-            Expanded(
-              child: _Kpi(
-                icon: LucideIcons.trendingUp,
-                label: 'sales.kpi_profit'.tr(),
-                value: _signedMoney(t.profit),
-                sub: 'sales.cost_n'.tr(namedArgs: {'amount': _money(t.cost)}),
-                tone: t.profit < 0 ? AppTone.danger : AppTone.success,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: Sp.sm),
-        Row(
-          children: [
-            Expanded(
-              child: _Kpi(
-                icon: LucideIcons.wallet,
-                label: 'sales.kpi_cash'.tr(),
-                value: _money(t.cash),
-                sub: 'sales.kpi_cash_hint'.tr(),
-                tone: AppTone.info,
-              ),
-            ),
-            const SizedBox(width: Sp.sm),
-            Expanded(
-              // «بيع بالدين» = ما بيع على الدين بالفترة (لا يتغيّر بالتسديد)، وتحته ما بقي منه على المشتركين الآن — كان
-              // «على الدين 40,000» يبقى بعد التسديد فيُربك (المالك ٢٣ أكتوبر: «٤٠ مافهمت هاي»).
-              child: _Kpi(
-                icon: LucideIcons.handCoins,
-                label: 'sales.kpi_debt'.tr(),
-                value: _money(t.debt),
-                sub: _debtSub(t.debt),
-                tone: AppTone.warning,
-              ),
-            ),
-          ],
-        ),
+        ..._kpiRows([
+          _Kpi(
+            icon: LucideIcons.shoppingCart,
+            label: 'sales.kpi_revenue'.tr(),
+            value: _money(t.revenue),
+            sub: 'sales.count_n'.tr(namedArgs: {'n': '${t.count}'}),
+            tone: AppTone.brand,
+          ),
+          _Kpi(
+            icon: LucideIcons.trendingUp,
+            label: 'sales.kpi_profit'.tr(),
+            value: _signedMoney(t.profit),
+            sub: 'sales.cost_n'.tr(namedArgs: {'amount': _money(t.cost)}),
+            tone: t.profit < 0 ? AppTone.danger : AppTone.success,
+          ),
+          _Kpi(
+            icon: LucideIcons.wallet,
+            label: 'sales.kpi_cash'.tr(),
+            value: _money(t.cash),
+            sub: 'sales.kpi_cash_hint'.tr(),
+            tone: AppTone.info,
+          ),
+          // «بيع بالدين» = ما بيع على الدين بالفترة (لا يتغيّر بالتسديد)، وتحته ما بقي منه على المشتركين الآن — كان
+          // «على الدين 40,000» يبقى بعد التسديد فيُربك (المالك ٢٣ أكتوبر: «٤٠ مافهمت هاي»).
+          _Kpi(
+            icon: LucideIcons.handCoins,
+            label: 'sales.kpi_debt'.tr(),
+            value: _money(t.debt),
+            sub: _debtSub(t.debt),
+            tone: AppTone.warning,
+          ),
+        ]),
         if (page.unresolved > 0) ...[
           const SizedBox(height: Sp.md),
           _Banner(
@@ -360,17 +404,17 @@ class _SalesScreenState extends State<SalesScreen> {
         else if (page.sales.isEmpty)
           _Notice(icon: LucideIcons.shoppingCart, text: 'sales.empty'.tr())
         else
-          for (int i = 0; i < page.sales.length; i++) ...[
-            if (i > 0) const SizedBox(height: Sp.sm),
-            _SaleTile(
-              sale: page.sales[i],
-              debt: _debts[page.sales[i].id],
-              canVoid: canVoid,
-              canResolve: canResolve,
-              onVoid: () => _after(_showSheet(context, _VoidSheet(sale: page.sales[i]))),
-              onResolve: () => _after(_showSheet(context, _ResolveSheet(sale: page.sales[i]))),
-            ),
-          ],
+          ..._cards([
+            for (final sale in page.sales)
+              _SaleTile(
+                sale: sale,
+                debt: _debts[sale.id],
+                canVoid: canVoid,
+                canResolve: canResolve,
+                onVoid: () => _after(_showSheet(context, _VoidSheet(sale: sale))),
+                onResolve: () => _after(_showSheet(context, _ResolveSheet(sale: sale))),
+              ),
+          ]),
         if (page.truncated) ...[
           const SizedBox(height: Sp.md),
           Text(
@@ -464,17 +508,17 @@ class _SalesScreenState extends State<SalesScreen> {
       else if (shown.isEmpty)
         _Notice(icon: LucideIcons.search, text: 'sales.no_results'.tr())
       else
-        for (int i = 0; i < shown.length; i++) ...[
-          if (i > 0) const SizedBox(height: Sp.sm),
-          _ItemTile(
-            item: shown[i],
-            locked: !canItems,
-            onStock: () => _after(_showSheet(context, _StockSheet(item: shown[i]))),
-            onDefect: () => _after(_showSheet(context, _DefectSheet(item: shown[i]))),
-            onEdit: () => _after(_showSheet(context, _ItemSheet(item: shown[i]))),
-            onMoves: () => _showSheet(context, _MovesSheet(item: shown[i], canItems: canItems, onChanged: _refresh)),
-          ),
-        ],
+        ..._cards([
+          for (final item in shown)
+            _ItemTile(
+              item: item,
+              locked: !canItems,
+              onStock: () => _after(_showSheet(context, _StockSheet(item: item))),
+              onDefect: () => _after(_showSheet(context, _DefectSheet(item: item))),
+              onEdit: () => _after(_showSheet(context, _ItemSheet(item: item))),
+              onMoves: () => _showSheet(context, _MovesSheet(item: item, canItems: canItems, onChanged: _refresh)),
+            ),
+        ]),
     ];
   }
 }
