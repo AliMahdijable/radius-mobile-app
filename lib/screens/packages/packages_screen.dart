@@ -501,7 +501,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
             // مطلب 2026-06-12 (إصلاح): الـListTile داخل sheet مع
             // background DecoratedBox يخفي ink splashes. نلفّ بـMaterial
             // ونعطي اللون فيه ليتعامل مع الـink طبيعياً.
-            builder: (_) => Material(
+            builder: (dialogCtx) => Material(
               color: AppColors.surfaceSheet,
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(R.sheet)),
@@ -543,7 +543,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
                       title: Text(_myDisplayName == '…'
                           ? 'تسعيري الخاص'
                           : _myDisplayName),
-                      onTap: () => Navigator.of(context).pop(-1),
+                      onTap: () => Navigator.of(dialogCtx).pop(-1),
                       trailing: _selectedManagerId == null
                           ? Icon(LucideIcons.check, color: accent)
                           : null,
@@ -559,7 +559,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
                           return ListTile(
                             leading: const Icon(LucideIcons.userCog),
                             title: Text(m.displayName),
-                            onTap: () => Navigator.of(context).pop(m.id),
+                            onTap: () => Navigator.of(dialogCtx).pop(m.id),
                             trailing: selected
                                 ? Icon(LucideIcons.check, color: accent)
                                 : null,

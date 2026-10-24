@@ -1533,7 +1533,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       res.ok ? ok++ : fail++;
     }
     if (!mounted) return;
-    Navigator.of(context).pop(); // close progress
+    // الحوار على الـNavigator الجذر (showDialog): الإغلاق بأقرب Navigator كان يُغلق صفحة القسم على الحاسبة ويُبقي الحوار — «يصفن».
+    Navigator.of(context, rootNavigator: true).pop(); // close progress
     _exitSelection();
     // Disconnect doesn't change DB state (just kicks the live
     // session), but the online overlay should refresh so the rows
@@ -1629,7 +1630,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       success ? ok++ : fail++;
     }
     if (!mounted) return;
-    Navigator.of(context).pop(); // close progress
+    // الحوار على الـNavigator الجذر (showDialog): الإغلاق بأقرب Navigator كان يُغلق صفحة القسم على الحاسبة ويُبقي الحوار — «يصفن».
+    Navigator.of(context, rootNavigator: true).pop(); // close progress
     _exitSelection();
     if (ok > 0) SubscriberEvents.notifyChange();
     await _refresh();

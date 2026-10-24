@@ -199,18 +199,18 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
   Future<void> _delete() async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         icon: Icon(LucideIcons.trash2, color: AppColors.error, size: 32),
         title: const Text('حذف الجهاز'),
         content: Text(
             'سيُحذف "${_d.name}" نهائياً.\nهذا الإجراء لا يمكن التراجع عنه.'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogCtx, false),
             child: const Text('إلغاء'),
           ),
           FilledButton.icon(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogCtx, true),
             style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
             icon: const Icon(LucideIcons.trash2, size: 16),
             label: const Text('حذف نهائي'),

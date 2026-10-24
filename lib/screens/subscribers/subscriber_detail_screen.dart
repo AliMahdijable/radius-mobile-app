@@ -466,7 +466,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   Future<void> _confirmDisconnect() async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: Text(
           'subscribers.disconnect_user'.tr(),
           style: AppType.label(color: AppColors.textHi)
@@ -479,12 +479,12 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
             child: Text('common.cancel'.tr()),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
             child: Text('subscribers.disconnect'.tr()),
           ),
         ],
@@ -522,7 +522,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
         wantEnable ? 'subscribers.enable'.tr() : 'subscribers.disable'.tr();
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: Text(
           'subscribers.confirm_action'.tr(namedArgs: {'action': action}),
           style: AppType.label(color: AppColors.textHi)
@@ -537,14 +537,14 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
             child: Text('common.cancel'.tr()),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: wantEnable ? AppColors.brand : AppColors.warning,
             ),
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
             child: Text(action),
           ),
         ],
@@ -571,7 +571,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     }
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: Text(
           'subscribers.delete_confirm_title'.tr(),
           style: AppType.label(color: AppColors.textHi)
@@ -584,12 +584,12 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
             child: Text('common.cancel'.tr()),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
             child: Text('common.delete'.tr()),
           ),
         ],

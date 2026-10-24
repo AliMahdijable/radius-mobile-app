@@ -249,7 +249,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
   Future<void> _confirmDelete(Manager m) async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: Text('mgr.delete_title'.tr()),
         content: Text(
           'mgr.delete_body'.tr(namedArgs: {
@@ -258,12 +258,12 @@ class _ManagersScreenState extends State<ManagersScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
             child: Text('common.cancel'.tr()),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
             child: Text('common.delete'.tr()),
           ),
         ],

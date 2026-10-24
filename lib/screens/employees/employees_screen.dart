@@ -117,7 +117,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   Future<void> _confirmDelete(Employee emp) async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: Text('حذف الموظف',
             style:
@@ -130,12 +130,12 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
             child: const Text('إلغاء'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
             child: const Text('حذف'),
           ),
         ],

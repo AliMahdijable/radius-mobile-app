@@ -55,7 +55,7 @@ class _ManagerMovementsScreenState extends State<ManagerMovementsScreen> {
     );
     final saved = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: Text('تعديل ${m.arabicLabel}',
             style:
@@ -96,11 +96,11 @@ class _ManagerMovementsScreenState extends State<ManagerMovementsScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
             child: const Text('إلغاء'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
             child: const Text('حفظ'),
           ),
         ],
@@ -127,7 +127,7 @@ class _ManagerMovementsScreenState extends State<ManagerMovementsScreen> {
   Future<void> _confirmDelete(ManagerMovement m) async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: const Text('حذف من السجل'),
         content: Text(
@@ -137,12 +137,12 @@ class _ManagerMovementsScreenState extends State<ManagerMovementsScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
             child: const Text('إلغاء'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
             child: const Text('حذف'),
           ),
         ],

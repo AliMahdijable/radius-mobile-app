@@ -135,7 +135,7 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
   Future<void> _confirmDelete(Discount d) async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: Text('حذف الخصم',
             style:
@@ -148,12 +148,12 @@ class _ExistingDiscountsSheetState extends State<_ExistingDiscountsSheet> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
             child: const Text('إلغاء'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
             child: const Text('حذف'),
           ),
         ],

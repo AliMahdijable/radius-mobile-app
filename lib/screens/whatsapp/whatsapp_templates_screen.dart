@@ -729,16 +729,16 @@ class _EditTemplateSheetState extends State<_EditTemplateSheet> {
   Future<void> _delete() async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: const Text('حذف القالب'),
         content: Text('حذف قالب "${widget.def.label}"؟'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
+              onPressed: () => Navigator.of(dialogCtx).pop(false),
               child: const Text('إلغاء')),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
             child: const Text('حذف'),
           ),
         ],

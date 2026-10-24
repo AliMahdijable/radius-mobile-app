@@ -100,7 +100,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   Future<void> _confirmDelete(ExpenseRow row) async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: Text('exp.delete_title'.tr()),
         content: Text(
           'exp.delete_body'.tr(namedArgs: {
@@ -109,12 +109,12 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
             child: Text('common.cancel'.tr()),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
             child: Text('common.delete'.tr()),
           ),
         ],

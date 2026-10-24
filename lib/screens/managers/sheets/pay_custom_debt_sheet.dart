@@ -148,16 +148,16 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
   Future<void> _deletePayment(ManagerDebtPayment p) async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: const Text('حذف التسديد'),
         content: Text('حذف تسديد ${formatIQD(p.amountPaid)} د.ع؟'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
+              onPressed: () => Navigator.of(dialogCtx).pop(false),
               child: const Text('إلغاء')),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
             child: const Text('حذف'),
           ),
         ],

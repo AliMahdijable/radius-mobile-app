@@ -304,17 +304,17 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
   Future<void> _disconnect() async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: Text('wa.disconnect_title'.tr()),
         content: Text('wa.disconnect_body'.tr()),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
             child: Text('common.cancel'.tr()),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
             child: Text('wa.disconnect_btn'.tr()),
           ),
         ],
@@ -346,17 +346,17 @@ class _WhatsAppStatusScreenState extends State<WhatsAppStatusScreen>
   Future<void> _softReset() async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: Text('wa.full_reset_title'.tr()),
         content: Text('wa.full_reset_body'.tr()),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
             child: Text('common.cancel'.tr()),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.warning),
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
             child: Text('common.next'.tr()),
           ),
         ],
