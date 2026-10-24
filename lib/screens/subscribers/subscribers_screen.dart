@@ -2280,6 +2280,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     final cols = SubscriberTableColumns.forWidth(
         MediaQuery.sizeOf(context).width - (_paneKey != null ? _paneWidth : 0) - 2 * _hPad);
     _hscroll.setMetrics(viewport: cols.viewport, content: cols.content);
+    SubscriberUsageStore.columnShown = cols.has(SubCol.usage);
     return cols;
   }
 

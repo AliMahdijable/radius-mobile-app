@@ -70,6 +70,11 @@ class SubscriberUsageStore {
   /// يرتفع مع كلّ دفعةٍ وصلت — كارتات القائمة تستمع له.
   static final ValueNotifier<int> version = ValueNotifier<int>(0);
 
+  /// عمود «الاستهلاك» ظاهرٌ في جدول الحاسبة: إظهاره هو طلب رؤية الاستهلاك، فيُجلب كما لو فُعّل «عرض الاستهلاك»
+  /// (المالك ٢٤ أكتوبر: «الاستهلاك ما يظهر» — العمود ظهر افتراضيّاً والجلب بقي معلّقاً على التفضيل المطفأ). يضبطه
+  /// الجدول عند بنائه؛ الهاتف كما كان (التفضيل وحده).
+  static bool columnShown = false;
+
   static String _key(String idx, String? company) =>
       company == null ? idx : '$company|$idx';
 
@@ -103,7 +108,7 @@ class SubscriberUsageStore {
     if (_running) return;
     _running = true;
     try {
-      while (_queue.isNotEmpty && UsagePrefs.enabled.value) {
+      while (_queue.isNotEmpty && (UsagePrefs.enabled.value || columnShown)) {
         final gen = _gen;
         // دفعةٌ لشركةٍ واحدة (الشركة المفتوحة، أو شركة صفٍّ مدموج)
         final company = _companyOf(_queue.first);
