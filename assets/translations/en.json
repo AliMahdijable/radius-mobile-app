@@ -615,6 +615,10 @@
     "ago_minutes_n": "{n} min ago"
   },
   "reports": {
+    "group_money": "Money & debts",
+    "group_activations": "Activations",
+    "group_activity": "Sessions & activity",
+    "group_earthlink": "EarthLink reports",
     "title": "Reports",
     "financial": "Financial report",
     "activations": "Activations & extensions",

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/deleted_debts_api.dart';
+import '../../core/widgets/desk_pressable.dart';
 import '../../core/widgets/permission_locked.dart';
 import '../../services/permissions_service.dart';
 import '../../services/provider_service.dart';
@@ -72,7 +73,10 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
         ProviderService.changes,
       ]),
       builder: (context, _) {
-        final tiles = <Widget>[
+        // ٢٤ أكتوبر (المالك: «التقارير لونها ليش هيج أسود وأبيض — اهتمّ بالتصميم»): مجموعاتٌ بعناوين، ولكلّ عائلةٍ
+        // لونها الدلاليّ ثابتاً في الهاتف والحاسبة — المال أخضر والدين كهرمانيّ والمحذوف أحمر، التفعيلات بلون العلامة
+        // واليوميّة أزرق، الجلسات أزرق والسجلّ بنفسجيّ. اللون مع الأيقونة والعنوان، لا وحده.
+        final money = <Widget>[
           if (permShown(const ['reports.financial']))
             _ReportCard(
               locked: !Perms.has('reports.financial'),
@@ -85,30 +89,6 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
                     builder: (_) => const FinancialReportScreen()),
               ),
             ),
-          if (permShown(const ['reports.activations']))
-            _ReportCard(
-              locked: !Perms.has('reports.activations'),
-              icon: LucideIcons.zap,
-              color: AppColors.brandAccent,
-              title: 'reports.activations'.tr(),
-              subtitle: 'reports.activations_hint'.tr(),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                    builder: (_) => const ActivationsReportScreen()),
-              ),
-            ),
-          if (permShown(const ['reports.daily_activations']))
-            _ReportCard(
-              locked: !Perms.has('reports.daily_activations'),
-              icon: LucideIcons.calendarDays,
-              color: AppColors.brandAccent,
-              title: 'reports.daily_activations'.tr(),
-              subtitle: 'reports.daily_activations_hint'.tr(),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                    builder: (_) => const DailyActivationsReportScreen()),
-              ),
-            ),
           // ⚠️ **المصروفات ليست هنا**، وإنّما في «قوائم أخرى» وحدها.
           // كانت في الشاشتين بنفس الأيقونة والعنوان والوجهة — مدخلان
           // إلى صفحةٍ واحدة يجعلان المستخدم يظنّهما شيئين مختلفين
@@ -117,7 +97,7 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
             _ReportCard(
               locked: !Perms.has('reports.manager_debts'),
               icon: LucideIcons.users,
-              color: AppColors.brandAccent,
+              color: AppColors.warning,
               title: 'reports.manager_debts'.tr(),
               subtitle: 'reports.manager_debts_hint'.tr(),
               // 2026-07-14: كانت stub بس (رسالة "افتح من مكان ثاني").
@@ -126,29 +106,6 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
                 MaterialPageRoute(
                   builder: (_) => const AllManagersDebtsScreen(),
                 ),
-              ),
-            ),
-          if (permShown(const ['reports.sessions']))
-            _ReportCard(
-              locked: !Perms.has('reports.sessions'),
-              icon: LucideIcons.activity,
-              color: AppColors.warning,
-              title: 'reports.sessions'.tr(),
-              subtitle: 'reports.sessions_hint'.tr(),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SessionsReportScreen()),
-              ),
-            ),
-          if (permShown(const ['reports.activity_log']))
-            _ReportCard(
-              locked: !Perms.has('reports.activity_log'),
-              icon: LucideIcons.history,
-              color: AppColors.success,
-              title: 'reports.activity_log'.tr(),
-              subtitle: 'reports.activity_log_hint'.tr(),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                    builder: (_) => const ActivityLogReportScreen()),
               ),
             ),
           if (_deletedDebts case final dd?)
@@ -165,17 +122,70 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
                 _loadDeletedDebts();
               },
             ),
-          // ── ايرث لنك (البند ٤) — تقاريرُ خاصّةٌ تُقرأ فقط، لموزِّعي
-          // EarthLink وحدهم. الحجب من `ProviderService.isEarthlink` (مصدره
-          // /api/auth/me) لا صلاحيّة ساس، فالقائمة تستمع لـ`ProviderService.changes`.
-          // وكلٌّ منها بمفتاح الخادم الذي يفرضه (كانت بلا حجبٍ فيفتحها الموظّف
-          // ثمّ يردّ الخادم 403): التجريبي والباقات ← activations، والسجلّ
-          // ← activity_log.
+        ];
+        final activations = <Widget>[
+          if (permShown(const ['reports.activations']))
+            _ReportCard(
+              locked: !Perms.has('reports.activations'),
+              icon: LucideIcons.zap,
+              color: AppColors.brand,
+              title: 'reports.activations'.tr(),
+              subtitle: 'reports.activations_hint'.tr(),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                    builder: (_) => const ActivationsReportScreen()),
+              ),
+            ),
+          if (permShown(const ['reports.daily_activations']))
+            _ReportCard(
+              locked: !Perms.has('reports.daily_activations'),
+              icon: LucideIcons.calendarDays,
+              color: AppColors.info,
+              title: 'reports.daily_activations'.tr(),
+              subtitle: 'reports.daily_activations_hint'.tr(),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                    builder: (_) => const DailyActivationsReportScreen()),
+              ),
+            ),
+        ];
+        final activity = <Widget>[
+          if (permShown(const ['reports.sessions']))
+            _ReportCard(
+              locked: !Perms.has('reports.sessions'),
+              icon: LucideIcons.activity,
+              color: AppColors.info,
+              title: 'reports.sessions'.tr(),
+              subtitle: 'reports.sessions_hint'.tr(),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SessionsReportScreen()),
+              ),
+            ),
+          if (permShown(const ['reports.activity_log']))
+            _ReportCard(
+              locked: !Perms.has('reports.activity_log'),
+              icon: LucideIcons.history,
+              color: AppColors.anomaly,
+              title: 'reports.activity_log'.tr(),
+              subtitle: 'reports.activity_log_hint'.tr(),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                    builder: (_) => const ActivityLogReportScreen()),
+              ),
+            ),
+        ];
+        // ── ايرث لنك (البند ٤) — تقاريرُ خاصّةٌ تُقرأ فقط، لموزِّعي
+        // EarthLink وحدهم. الحجب من `ProviderService.isEarthlink` (مصدره
+        // /api/auth/me) لا صلاحيّة ساس، فالقائمة تستمع لـ`ProviderService.changes`.
+        // وكلٌّ منها بمفتاح الخادم الذي يفرضه (كانت بلا حجبٍ فيفتحها الموظّف
+        // ثمّ يردّ الخادم 403): التجريبي والباقات ← activations، والسجلّ
+        // ← activity_log.
+        final earthlink = <Widget>[
           if (ProviderService.isEarthlink) ...[
             _ReportCard(
               locked: !Perms.has('reports.activations'),
               icon: LucideIcons.flaskConical,
-              color: AppColors.brandAccent,
+              color: AppColors.info,
               title: 'el.test_usage_title'.tr(),
               subtitle: 'el.test_usage_hint'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -185,7 +195,7 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
             _ReportCard(
               locked: !Perms.has('reports.activity_log'),
               icon: LucideIcons.history,
-              color: AppColors.brand,
+              color: AppColors.anomaly,
               title: 'el.audit_title'.tr(),
               subtitle: 'el.audit_hint'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -204,6 +214,13 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
             ),
           ],
         ];
+        final groups = [
+          (label: 'reports.group_money'.tr(), color: AppColors.success, tiles: money),
+          (label: 'reports.group_activations'.tr(), color: AppColors.brand, tiles: activations),
+          (label: 'reports.group_activity'.tr(), color: AppColors.info, tiles: activity),
+          (label: 'reports.group_earthlink'.tr(), color: AppColors.anomaly, tiles: earthlink),
+        ].where((g) => g.tiles.isNotEmpty).toList();
+        final desk = DesktopScope.of(context);
 
         return Scaffold(
           backgroundColor: AppColors.bg,
@@ -224,22 +241,45 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
           body: SafeArea(
             child: ListView(
               padding: EdgeInsets.fromLTRB(
-                  Sp.lg, DesktopScope.of(context) ? Sp.xs : Sp.lg, Sp.lg, Sp.huge),
+                  Sp.lg, desk ? Sp.xs : Sp.lg, Sp.lg, Sp.huge),
               children: [
                 // «كل الشركات»: الماليّ لكل الشركات، والبقيّة للشركة المفتوحة — تُسمّى
                 const MergedOpenCompanyNote(
                   textKey: 'merged.reports_note',
                   padding: EdgeInsets.only(bottom: Sp.md),
                 ),
-                if (tiles.isEmpty)
+                if (groups.isEmpty)
                   _emptyState()
-                else if (DesktopScope.of(context))
-                  // الحاسبة: شبكة بطاقاتٍ بثلاثة أعمدة كالموقع بدل قائمةٍ بعرض الشاشة.
-                  DeskGrid(children: tiles)
+                else if (desk)
+                  // الحاسبة: لوحةٌ بأعمدة — كلّ عائلةٍ عمودٌ بعنوانه وبطاقاتها تحته، فتملأ الصفحة بلا عمودٍ فارغ
+                  // (مجموعةٌ ببطاقتين في شبكة ثلاثيّة كانت تترك ثلثها خالياً). الضيّقة: عمودٌ تحت عمود.
+                  DeskGrid(
+                    minTileWidth: 280,
+                    spacing: Sp.lg,
+                    children: [
+                      for (final g in groups)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _GroupLabel(text: g.label, color: g.color),
+                            const SizedBox(height: Sp.md),
+                            for (var i = 0; i < g.tiles.length; i++) ...[
+                              if (i > 0) const SizedBox(height: Sp.md),
+                              g.tiles[i],
+                            ],
+                          ],
+                        ),
+                    ],
+                  )
                 else
-                  for (int i = 0; i < tiles.length; i++) ...[
-                    if (i > 0) const SizedBox(height: Sp.sm),
-                    tiles[i],
+                  for (var g = 0; g < groups.length; g++) ...[
+                    if (g > 0) const SizedBox(height: Sp.lg),
+                    _GroupLabel(text: groups[g].label, color: groups[g].color),
+                    const SizedBox(height: Sp.sm),
+                    for (var i = 0; i < groups[g].tiles.length; i++) ...[
+                      if (i > 0) const SizedBox(height: Sp.sm),
+                      groups[g].tiles[i],
+                    ],
                   ],
               ],
             ),
@@ -273,6 +313,33 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
   }
 }
 
+/// عنوان مجموعةٍ بنقطة لونها — يقسم الصفحة لعائلاتٍ تُقرأ بنظرة (المال، التفعيلات، النشاط).
+class _GroupLabel extends StatelessWidget {
+  const _GroupLabel({required this.text, required this.color});
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Row(
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: Sp.sm),
+        Text(
+          text,
+          style: AppType.label(color: AppColors.textMid)
+              .copyWith(fontSize: 13, fontWeight: FontWeight.w700),
+        ),
+      ],
+    );
+  }
+}
+
 class _ReportCard extends StatelessWidget {
   const _ReportCard({
     this.locked = false,
@@ -283,6 +350,8 @@ class _ReportCard extends StatelessWidget {
     required this.onTap,
   });
   final IconData icon;
+
+  /// لون عائلة التقرير (الدلاليّ من اللوحة): شريط البطاقة، صندوق الأيقونة، والإطار والظلّ عند المرور.
   final Color color;
   final String title;
   final String subtitle;
@@ -292,92 +361,167 @@ class _ReportCard extends StatelessWidget {
   /// مكان السهم، والنقر رسالةٌ لا تنقّل — فلا يُفتح تقريرٌ يردّه الخادم 403.
   final bool locked;
 
+  void _open(BuildContext context) {
+    if (locked) {
+      showNoPermission(context);
+      return;
+    }
+    HapticFeedback.selectionClick();
+    onTap();
+  }
+
+  /// خلفيّة صندوق الأيقونة: اللون نفسه ممزوجاً بسطح البطاقة (أصمد من الشفافيّة تحت الظلّ، وأقوى قليلاً ليلاً).
+  Color get _soft =>
+      Color.alphaBlend(color.withValues(alpha: AppColors.isDark ? 0.22 : 0.14), AppColors.surface);
+
+  Widget _iconBox(double size) => Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: locked ? LockedStyle.box : _soft,
+          borderRadius: BorderRadius.circular(R.md),
+        ),
+        child: Icon(icon, color: locked ? LockedStyle.glyph : color, size: size * 0.46),
+      );
+
+  Widget _texts(bool desk) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.label(color: locked ? LockedStyle.title : AppColors.textHi)
+                .copyWith(fontSize: desk ? 16 : 14, fontWeight: FontWeight.w700),
+          ),
+          SizedBox(height: desk ? 4 : 2),
+          Text(
+            subtitle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.muted(color: locked ? LockedStyle.subtitle : AppColors.textMid)
+                .copyWith(fontSize: desk ? 13 : 11.5, height: 1.45),
+          ),
+        ],
+      );
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final desk = DesktopScope.of(context);
-    final card = Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(R.lg),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: locked
-            ? () => showNoPermission(context)
-            : () {
-                HapticFeedback.selectionClick();
-                onTap();
-              },
-        borderRadius: BorderRadius.circular(R.lg),
-        child: Container(
-          padding: EdgeInsets.all(desk ? Sp.xl : Sp.md),
-          constraints: BoxConstraints(minHeight: desk ? 104 : 0),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(R.lg),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Row(
-            children: [
-              // الحاسبة: أيقونةٌ رماديّة بلا صندوقٍ ملوّن (ستّ بطاقاتٍ بستّة ألوان كانت أعلى ما في الصفحة صوتاً)؛
-              // الهاتف كما كان.
-              if (desk)
-                Icon(icon, color: locked ? LockedStyle.glyph : AppColors.textMid, size: 22)
-              else
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color:
-                        locked ? LockedStyle.box : color.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(R.md),
-                  ),
-                  child: Icon(
-                    icon,
-                    color: locked ? LockedStyle.glyph : color,
-                    size: 22,
-                  ),
-                ),
-              const SizedBox(width: Sp.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      title,
-                      style: AppType.label(
-                        color: locked ? LockedStyle.title : AppColors.textHi,
-                      ).copyWith(
-                        fontSize: desk ? 16 : 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: AppType.muted(
-                        color:
-                            locked ? LockedStyle.subtitle : AppColors.textMid,
-                      ).copyWith(fontSize: desk ? 13 : 11.5, height: 1.4),
-                    ),
-                  ],
-                ),
-              ),
-              if (locked)
-                const PermLockIcon()
-              else
-                Icon(LucideIcons.chevronLeft,
-                    color: AppColors.textLow, size: 18),
-            ],
-          ),
-        ),
-      ),
-    );
+    final card = DesktopScope.of(context) ? _desk(context) : _phone(context);
     if (!locked) return card;
     return Semantics(
       button: true,
       label: 'locked.a11y'.tr(args: [title]),
       excludeSemantics: true,
       child: card,
+    );
+  }
+
+  /// الحاسبة: بطاقةٌ بشريط لونها أعلاها، وعند المرور ترتفع قليلاً بإطارٍ وظلٍّ بلونها ويمتلئ سهمها — والكيبورد
+  /// يصلها (Tab ثمّ Enter) بحلقة تركيز.
+  Widget _desk(BuildContext context) {
+    final radius = BorderRadius.circular(R.card);
+    return DeskPressable(
+      radius: radius,
+      semanticLabel: locked ? null : title,
+      onTap: () => _open(context),
+      builder: (context, hover) {
+        final live = hover && !locked;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOutCubic,
+          transform: Matrix4.translationValues(0, live ? -2 : 0, 0),
+          decoration: DeskCard.decoration(hover: live, accent: color),
+          child: ClipRRect(
+            borderRadius: radius,
+            child: Stack(
+              children: [
+                PositionedDirectional(
+                  start: 0,
+                  end: 0,
+                  top: 0,
+                  child: Container(height: 3, color: locked ? LockedStyle.box : color),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(Sp.xl, Sp.xl + 3, Sp.xl, Sp.xl),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 64),
+                    child: Row(
+                      children: [
+                        _iconBox(52),
+                        const SizedBox(width: Sp.lg),
+                        Expanded(child: _texts(true)),
+                        const SizedBox(width: Sp.md),
+                        if (locked)
+                          const PermLockIcon()
+                        else
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 160),
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: live ? _soft : AppColors.surfaceSunken,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(LucideIcons.chevronLeft,
+                                size: 18, color: live ? color : AppColors.textMid),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// الهاتف: صفٌّ بشريط لونه على حافّته وصندوق أيقونةٍ ملوّن.
+  Widget _phone(BuildContext context) {
+    final radius = BorderRadius.circular(R.lg);
+    return Material(
+      color: AppColors.surface,
+      borderRadius: radius,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _open(context),
+        borderRadius: radius,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: radius,
+            border: Border.all(color: AppColors.border),
+          ),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(width: 4, color: locked ? LockedStyle.box : color),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, Sp.md),
+                    child: Row(
+                      children: [
+                        _iconBox(44),
+                        const SizedBox(width: Sp.md),
+                        Expanded(child: _texts(false)),
+                        const SizedBox(width: Sp.sm),
+                        if (locked)
+                          const PermLockIcon()
+                        else
+                          Icon(LucideIcons.chevronLeft, color: color, size: 18),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

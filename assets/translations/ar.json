@@ -615,6 +615,10 @@
     "ago_minutes_n": "منذ {n} د"
   },
   "reports": {
+    "group_money": "المال والديون",
+    "group_activations": "التفعيلات",
+    "group_activity": "الجلسات والنشاط",
+    "group_earthlink": "تقارير ايرث لنك",
     "title": "التقارير",
     "financial": "التقرير المالي",
     "activations": "التفعيلات والتمديدات",
