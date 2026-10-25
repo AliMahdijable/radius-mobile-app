@@ -6,6 +6,8 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../desktop/desk_widgets.dart';
+import '../../core/platform/desktop_layout.dart';
+import 'widgets/desk_device_kit.dart';
 
 /// شاشة تنبيهات الأجهزة — تاريخ الـalerts + تحديد كمقروء + حذف.
 ///
@@ -49,7 +51,7 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
           ],
         ),
       ),
-      body: alerts.isEmpty ? _empty() : _list(alerts),
+      body: alerts.isEmpty ? _empty() : (DesktopScope.of(context) ? _deskList(alerts) : _list(alerts)),
     );
   }
 
@@ -86,6 +88,41 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
       separatorBuilder: (_, __) => const SizedBox(height: 6),
       itemBuilder: (_, i) => _alertRow(alerts[i]),
     );
+  }
+
+  /// الحاسبة: جدولٌ بأعمدة (الجهاز · الحالة · العنوان · الوقت) وحذفٌ بزرّ — السحب للحذف لا يُعرف بالفأرة.
+  Widget _deskList(List<DeviceAlert> alerts) {
+    return ListView(padding: const EdgeInsets.all(Sp.lg), children: [
+      DeskTable(
+        columns: const [('الجهاز', 4), ('الحالة', 3), ('العنوان', 3), ('الوقت', 2), ('', 1)],
+        rows: [
+          for (final a in alerts)
+            () {
+              final off = a.kind == DeviceAlertKind.offline;
+              return <Widget>[
+                DeskNameCell(name: a.deviceName, sub: '', tone: off ? AppTone.danger : AppTone.success),
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: DeskPill(off ? 'فصل عن الشبكة' : 'عاد للاتصال', off ? AppTone.danger : AppTone.success),
+                ),
+                DeskMonoCell(a.deviceIp, label: 'العنوان'),
+                Text(_formatTime(a.at), style: AppType.body(color: AppColors.textMid)),
+                Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: IconButton(
+                    icon: Icon(LucideIcons.trash2, size: 16, color: AppColors.error),
+                    tooltip: 'حذف',
+                    onPressed: () async {
+                      await DeviceAlertsService.instance.dismiss(a.id);
+                      if (mounted) setState(() {});
+                    },
+                  ),
+                ),
+              ];
+            }(),
+        ],
+      ),
+    ]);
   }
 
   Widget _alertRow(DeviceAlert a) {

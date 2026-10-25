@@ -10,8 +10,10 @@ import '../../theme/spacing.dart';
 import '../../widgets/skeleton.dart';
 import '../../theme/typography.dart';
 import '../../core/util/error_text.dart';
+import '../../core/util/format.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../desktop/desk_widgets.dart';
+import '../../core/platform/desktop_layout.dart';
 
 /// شاشة إدارة مناطق الأجهزة — قائمة + إضافة + تعديل + حذف.
 /// راجع [[project_devices_monitoring_plan]].
@@ -180,14 +182,22 @@ class _RegionsScreenState extends State<RegionsScreen> {
                     ? _empty()
                     : RefreshIndicator(
                         onRefresh: _load,
-                        child: ListView.separated(
-                          padding: EdgeInsets.fromLTRB(
-                    Sp.md, Sp.md, Sp.md, Inset.route(context)),
-                          itemCount: _regions.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 8),
-                          itemBuilder: (_, i) => _regionCard(_regions[i]),
-                        ),
+                        // الحاسبة: البطاقات في أعمدة (حتّى ثلاثة) بدل قائمةٍ بعرض الشاشة نصفها فارغ.
+                        child: DesktopScope.of(context)
+                            ? ListView(padding: const EdgeInsets.all(Sp.lg), children: [
+                                DeskGrid(
+                                  minTileWidth: 340,
+                                  children: [for (final r in _regions) _regionCard(r)],
+                                ),
+                              ])
+                            : ListView.separated(
+                                padding: EdgeInsets.fromLTRB(
+                          Sp.md, Sp.md, Sp.md, Inset.route(context)),
+                                itemCount: _regions.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 8),
+                                itemBuilder: (_, i) => _regionCard(_regions[i]),
+                              ),
                       ),
       ),
     );
@@ -247,7 +257,9 @@ class _RegionsScreenState extends State<RegionsScreen> {
                     Text(
                       r.deviceCount == 0
                           ? 'لا يوجد أجهزة'
-                          : '${r.deviceCount} جهاز',
+                          : r.deviceCount == 1
+                              ? 'جهاز واحد'
+                              : arCount(r.deviceCount, one: 'جهاز', two: 'جهازان', few: 'أجهزة', many: 'جهازاً'),
                       style:
                           AppType.body(color: AppColors.textMid),
                     ),
