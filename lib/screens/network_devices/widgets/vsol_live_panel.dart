@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -17,6 +18,9 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import 'expandable_section.dart';
 import '../../desktop/desk_widgets.dart';
+import '../../../core/util/bidi.dart';
+import '_grade.dart';
+import 'desk_device_kit.dart';
 import '../../../core/platform/desktop_layout.dart';
 import '../../../core/widgets/copyable.dart';
 
@@ -336,6 +340,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
             if (v != null) rates[u.name] = v;
           }
         }
+        _samplePon(s, fresh, at);
       }
       setState(() {
         _loading = false;
@@ -394,6 +399,26 @@ class _VsolLivePanelState extends State<VsolLivePanel>
         _error = 'تعذّرت القراءة: $e';
       });
     }
+  }
+
+  /// رسم الحاسبة: مجموع منافذ PON العاملة في كلّ قراءة — والتنزيل ما يُرسله الأولت (انظر [_flow]).
+  /// منفذٌ واحدٌ مجهول المعدّل ⇒ لا عيّنة: جمعُ بعضها يرسم هبوطاً لم يحدث.
+  final List<({DateTime at, int down, int up})> _history = [];
+  static const int _maxHistory = 60;
+
+  void _samplePon(VsolOltStats s, Map<String, VsolTraffic> fresh, DateTime at) {
+    var down = 0.0, up = 0.0, any = false;
+    for (final p in s.ponPorts) {
+      if (!p.up) continue;
+      final t = fresh[p.label];
+      if (t == null || !t.known) return;
+      down += t.txBps!;
+      up += t.rxBps!;
+      any = true;
+    }
+    if (!any) return;
+    _history.add((at: at, down: down.round(), up: up.round()));
+    if (_history.length > _maxHistory) _history.removeAt(0);
   }
 
   VsolOltStats _withDetails(VsolOltStats stats) {
@@ -582,6 +607,8 @@ class _VsolLivePanelState extends State<VsolLivePanel>
       );
     }
 
+    if (s != null && DesktopScope.of(context)) return _deskBuild(s);
+
     return Column(children: [
       Container(
         decoration: BoxDecoration(
@@ -604,8 +631,8 @@ class _VsolLivePanelState extends State<VsolLivePanel>
     ]);
   }
 
-  Widget _header() => Padding(
-        padding: const EdgeInsets.all(Sp.md),
+  Widget _header({EdgeInsetsGeometry padding = const EdgeInsets.all(Sp.md)}) => Padding(
+        padding: padding,
         child: Row(children: [
           Container(
             width: 32,
@@ -674,8 +701,8 @@ class _VsolLivePanelState extends State<VsolLivePanel>
         ]),
       );
 
-  Widget _errorBox() => Container(
-        margin: const EdgeInsets.fromLTRB(Sp.md, 0, Sp.md, Sp.md),
+  Widget _errorBox({EdgeInsetsGeometry margin = const EdgeInsets.fromLTRB(Sp.md, 0, Sp.md, Sp.md)}) => Container(
+        margin: margin,
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: AppColors.dangerSoftBg,
@@ -871,6 +898,352 @@ class _VsolLivePanelState extends State<VsolLivePanel>
         ),
       ],
     ];
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // الحاسبة — كصفحة المايكروتك: الحقائق في شريط، والأرقام كبيرةً في صفّ، ومرور PON برسمٍ بنافذةٍ ثابتة،
+  // ومنافذ PON والصعود جدولين جنباً إلى جنب، والمشتركون جدولاً طويلاً تُبنى صفوفه الظاهرة وحدها
+  // (المالك ٢٤ أكتوبر: «بشكل حاسبة وليس موبايل»). الهاتف كما هو.
+  // ══════════════════════════════════════════════════════════════
+  Widget _deskBuild(VsolOltStats s) {
+    final flow = _ponTotals(s);
+    final ch = s.chassis;
+    final offline = s.onusTotal - s.onusOnline;
+    final techs = {for (final p in s.ponPorts) p.technology.prefix, for (final o in s.onus) o.technology.prefix}.toList()..sort();
+    final descr = s.sysDescr?.split('\n').first.trim();
+    final interval = _history.length >= 2
+        ? _history.last.at.difference(_history.first.at) ~/ (_history.length - 1)
+        : _interval;
+    return Column(children: [
+      DeskPanelCard(children: [
+        _header(padding: EdgeInsets.zero),
+        if (_error != null) _errorBox(margin: EdgeInsets.zero),
+        DeskFactsBanner(facts: [
+          (icon: LucideIcons.server, label: 'الاسم', value: s.sysName?.isNotEmpty == true ? s.sysName! : widget.device.name),
+          (icon: LucideIcons.tag, label: 'الطراز', value: _profile.model ?? widget.device.model ?? _profile.label),
+          if (descr != null && descr.isNotEmpty)
+            (icon: LucideIcons.package, label: 'النظام', value: descr.length > 48 ? '${descr.substring(0, 47)}…' : descr),
+          if (s.uptime != null) (icon: LucideIcons.clock, label: 'يعمل منذ', value: deskUptimeAr(s.uptime!)),
+          if (techs.isNotEmpty) (icon: LucideIcons.layers, label: 'التقنية', value: techs.join(' · ')),
+        ]),
+        DeskTilesRow(tiles: [
+          DeskMetricTile(
+            icon: LucideIcons.users,
+            label: 'المشتركون',
+            color: s.onusOnline > 0 ? AppColors.success : AppColors.textLow,
+            value: DeskBigValue('${s.onusOnline}/${s.onusTotal}', '', color: s.onusOnline > 0 ? AppColors.success : null),
+            footer: deskSub(offline == 0 ? 'كلّهم متّصلون' : 'غير متّصل $offline',
+                color: offline > 0 ? AppColors.warningFill : null),
+          ),
+          DeskMetricTile(
+            icon: LucideIcons.splitSquareVertical,
+            label: 'منافذ PON',
+            color: AppColors.brand,
+            value: DeskBigValue('${s.ponUp}/${s.ponPorts.length}', '', color: AppColors.brand),
+            footer: deskSub(s.ponUp == s.ponPorts.length ? 'كلّها تعمل' : 'متوقّف ${s.ponPorts.length - s.ponUp}'),
+          ),
+          DeskRateTile(
+            down: true,
+            bps: flow?.down,
+            label: 'تنزيل المشتركين',
+            measuring: _rates.isEmpty,
+            note: flow == null ? null : (flow.partial ? 'جزئيّ — منفذٌ لم يُقرأ' : 'مجموع منافذ PON'),
+          ),
+          DeskRateTile(
+            down: false,
+            bps: flow?.up,
+            label: 'رفع المشتركين',
+            measuring: _rates.isEmpty,
+            note: flow == null ? null : (flow.partial ? 'جزئيّ — منفذٌ لم يُقرأ' : 'مجموع منافذ PON'),
+          ),
+          if (ch != null && !ch.isEmpty) ...[
+            DeskPercentTile(
+              icon: LucideIcons.cpu,
+              label: 'المعالج',
+              percent: ch.cpuPct?.toDouble(),
+              sub: ch.ramBytes != null ? 'الذاكرة ${iso(deskBytesShort(ch.ramBytes!))}' : null,
+            ),
+            DeskTempTile(celsius: ch.boxTempC, label: 'حرارة الجهاز'),
+          ] else if (s.uplinks.isNotEmpty)
+            DeskMetricTile(
+              icon: LucideIcons.network,
+              label: 'منافذ الصعود',
+              color: AppColors.brand,
+              value: DeskBigValue('${s.uplinks.where((u) => u.up).length}/${s.uplinks.length}', '', color: AppColors.brand),
+              footer: deskSub('تعمل'),
+            ),
+        ]),
+        DeskTrafficCard(
+          samples: [for (final h in _history) (rx: h.down, tx: h.up)],
+          capacity: _maxHistory,
+          interval: interval,
+          subtitle: 'مجموع منافذ PON',
+        ),
+      ]),
+      const SizedBox(height: Sp.md),
+      deskSideBySide(
+        s.ponPorts.isEmpty
+            ? null
+            : ExpandableSection(
+                key: PageStorageKey('vsol-${widget.device.id}-pon'),
+                initiallyExpanded: true,
+                header: DeskSectionHeader(
+                    icon: LucideIcons.splitSquareVertical,
+                    title: 'منافذ PON',
+                    count: s.ponPorts.length,
+                    hint: 'تعمل ${s.ponUp}'),
+                content: RepaintBoundary(child: _deskPonTable(s.ponPorts)),
+              ),
+        s.uplinks.isEmpty
+            ? null
+            : ExpandableSection(
+                key: PageStorageKey('vsol-${widget.device.id}-up'),
+                initiallyExpanded: true,
+                header: DeskSectionHeader(icon: LucideIcons.network, title: 'منافذ الصعود', count: s.uplinks.length),
+                content: _deskUplinksTable(s.uplinks),
+              ),
+      ),
+      const SizedBox(height: Sp.md),
+      ExpandableSection(
+        key: PageStorageKey('vsol-${widget.device.id}-onu'),
+        initiallyExpanded: true,
+        header: DeskSectionHeader(
+          icon: LucideIcons.users,
+          title: 'المشتركون',
+          count: s.onus.indexed.where((e) => _match(e.$2)).length,
+          hint: 'متّصلٌ الآن ${s.onusOnline}',
+        ),
+        content: RepaintBoundary(child: _deskOnuContent(s)),
+      ),
+      if (_profile.catalogSpecs != null) ...[
+        const SizedBox(height: Sp.md),
+        ExpandableSection(
+          key: PageStorageKey('vsol-${widget.device.id}-specs'),
+          initiallyExpanded: false,
+          header: DeskSectionHeader(
+              icon: LucideIcons.info, title: 'مواصفات الطراز ${_profile.model ?? ''}', hint: 'من صفحة المصنّع'),
+          content: DeskFactsGrid(facts: [
+            for (final line in _profile.catalogSpecs!)
+              Text('• $line', style: AppType.body(color: AppColors.textBody)),
+          ]),
+        ),
+      ],
+    ]);
+  }
+
+  /// مجموع معدّلات منافذ PON العاملة: التنزيل (ما يُرسله الأولت) والرفع، و«جزئيّ» إن جُهل بعضها.
+  ({int down, int up, bool partial})? _ponTotals(VsolOltStats s) {
+    if (_rates.isEmpty) return null;
+    var down = 0.0, up = 0.0;
+    var known = 0, unknown = 0;
+    for (final p in s.ponPorts) {
+      final t = _rates[p.label];
+      if (t == null || !t.known) {
+        if (p.up) unknown++;
+        continue;
+      }
+      down += t.txBps!;
+      up += t.rxBps!;
+      known++;
+    }
+    if (known == 0) return null;
+    return (down: down.round(), up: up.round(), partial: unknown > 0);
+  }
+
+  Widget _deskPonTable(List<VsolPonPort> ports) {
+    int maxDown = 0, maxUp = 0;
+    for (final p in ports) {
+      final t = _rates[p.label];
+      if (t != null && t.known) {
+        maxDown = math.max(maxDown, t.txBps!.round());
+        maxUp = math.max(maxUp, t.rxBps!.round());
+      }
+    }
+    return DeskTable(
+      columns: const [('المنفذ', 3), ('المشتركون', 3), ('تنزيل ↓', 3), ('رفع ↑', 3)],
+      rows: [
+        for (final p in ports)
+          () {
+            final t = _rates[p.label];
+            return <Widget>[
+              DeskNameCell(
+                name: p.label,
+                sub: p.up ? 'يعمل' : 'متوقّف',
+                tone: p.up ? AppTone.success : AppTone.neutral,
+                dim: !p.up,
+              ),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                Text(iso('${p.onuOnline}/${p.onuTotal}'), style: AppType.rowValue(color: AppColors.textHi)),
+                const SizedBox(height: 5),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(R.pill),
+                  child: LinearProgressIndicator(
+                    value: p.onuTotal > 0 ? (p.onuOnline / p.onuTotal).clamp(0.0, 1.0) : 0,
+                    minHeight: 4,
+                    backgroundColor: AppColors.borderSoft,
+                    valueColor: AlwaysStoppedAnimation(AppColors.success),
+                  ),
+                ),
+              ]),
+              DeskRateCell(bps: p.up ? t?.txBps?.round() : null, down: true, max: maxDown, live: p.up),
+              DeskRateCell(bps: p.up ? t?.rxBps?.round() : null, down: false, max: maxUp, live: p.up),
+            ];
+          }(),
+      ],
+    );
+  }
+
+  /// منافذ الصعود من زاوية الأولت: الوارد من الشبكة والصادر إليها — لا «تنزيل/رفع» مشتركٍ هنا.
+  Widget _deskUplinksTable(List<VsolUplink> rows) {
+    return DeskTable(
+      columns: const [('المنفذ', 3), ('السرعة', 2), ('وارد', 3), ('صادر', 3)],
+      rows: [
+        for (final u in rows)
+          () {
+            final t = _rates[u.name];
+            return <Widget>[
+              DeskNameCell(name: u.name, sub: u.up ? 'يعمل' : 'متوقّف', tone: u.up ? AppTone.success : AppTone.neutral, dim: !u.up),
+              u.up && u.speedMbps > 0
+                  ? Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: DeskPill(u.speedMbps >= 1000 ? '${u.speedMbps ~/ 1000}G' : '${u.speedMbps}M',
+                          Grade.speedMbps(u.speedMbps)))
+                  : deskDash(),
+              DeskRateCell(bps: u.up ? t?.rxBps?.round() : null, down: true, max: 0, live: u.up),
+              DeskRateCell(bps: u.up ? t?.txBps?.round() : null, down: false, max: 0, live: u.up),
+            ];
+          }(),
+      ],
+    );
+  }
+
+  Widget _deskOnuContent(VsolOltStats s) {
+    final shown = s.onus.indexed.where((e) => _match(e.$2)).toList();
+    final optics = s.onus.any((o) => o.reading?.rxDbm != null);
+    final learned = s.onus.any((o) => o.online && _showsLearned(o));
+    int maxDown = 0, maxUp = 0;
+    for (final (_, o) in shown) {
+      final t = _rates[o.label];
+      if (t != null && t.known) {
+        maxDown = math.max(maxDown, t.txBps!.round());
+        maxUp = math.max(maxUp, t.rxBps!.round());
+      }
+    }
+    final columns = <(String, int)>[
+      ('#', 1),
+      ('الـONU', 5),
+      ('ماك الـONU / الرقم', 4),
+      if (optics) ('الضوء', 3),
+      ('تنزيل ↓', 3),
+      ('رفع ↑', 3),
+      if (learned) ('أجهزة خلفها', 2),
+    ];
+    final h = MediaQuery.sizeOf(context).height;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      DeskPortFilterBar(
+        hint: 'ابحث بالاسم أو ONU أو MAC أو SN…',
+        chipLabel: 'المتّصلون فقط',
+        connectedOnly: _onlineOnly,
+        onQuery: (v) {
+          if (_onuScroll.hasClients) _onuScroll.jumpTo(0);
+          setState(() => _query = v);
+        },
+        onConnectedOnly: (v) {
+          if (_onuScroll.hasClients) _onuScroll.jumpTo(0);
+          setState(() => _onlineOnly = v);
+        },
+      ),
+      const SizedBox(height: Sp.md),
+      if (shown.isEmpty)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Text('لا مشتركين مطابقين', style: AppType.body(color: AppColors.textLow)),
+        )
+      else
+        DeskVirtualTable(
+          columns: columns,
+          itemCount: shown.length,
+          maxHeight: (h * 0.7).clamp(320, 900).toDouble(),
+          controller: _onuScroll,
+          storageKey: PageStorageKey('vsol-${widget.device.id}-onu-table'),
+          rowKey: (i) => ValueKey(shown[i].$2.label),
+          cells: (i) {
+            final (position, o) = shown[i];
+            final t = _rates[o.label];
+            final rx = o.reading?.rxDbm;
+            return [
+              Text('${position + 1}', style: AppType.label(color: AppColors.textLow)),
+              DeskNameCell(
+                name: o.name?.isNotEmpty == true ? o.name! : o.label,
+                sub: isoJoin([
+                  if (o.name?.isNotEmpty == true) o.label,
+                  o.online ? 'متّصل' : 'غير متّصل',
+                  if (o.vendor != null) o.vendor!,
+                ], ' · '),
+                tone: o.online ? AppTone.success : AppTone.neutral,
+                dim: !o.online,
+                copy: o.name?.isNotEmpty == true,
+              ),
+              if (o.mac != null)
+                DeskMonoCell(o.mac!, label: 'ماك الـONU')
+              else if (o.serial != null)
+                DeskMonoCell(o.serial!, label: 'الرقم التسلسليّ')
+              else
+                deskDash(),
+              if (optics)
+                (o.online && rx != null)
+                    ? DeskDotValue(
+                        value: rx.toStringAsFixed(1),
+                        unit: 'dBm',
+                        // سلّم الضوء عند الـONU: أضعف من ‎-27 dBm حدّ الانقطاع، ‎-24 تحذير.
+                        color: rx < -27 ? AppColors.error : (rx < -24 ? AppColors.warningFill : AppColors.success))
+                    : deskDash(),
+              DeskRateCell(bps: o.online ? t?.txBps?.round() : null, down: true, max: maxDown, live: o.online),
+              DeskRateCell(bps: o.online ? t?.rxBps?.round() : null, down: false, max: maxUp, live: o.online),
+              if (learned) _deskLearnedCell(o),
+            ];
+          },
+        ),
+    ]);
+  }
+
+  /// عدد أجهزة المشترك خلف الـONU — بنقرةٍ تُفتح قائمة ماكاتها لتُنسخ.
+  Widget _deskLearnedCell(VsolOnu o) {
+    if (!o.online || !_showsLearned(o)) return deskDash();
+    if (o.learnedMacs.isEmpty) {
+      final loading = o.technology == VsolPonTechnology.epon ? _eponLoading : _gponDetailsLoading;
+      return Text(o.learnedMacsReadAt == null && loading ? '…' : '—', style: AppType.body(color: AppColors.textLow));
+    }
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(R.pill),
+        onTap: () => showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text('أجهزة خلف ${o.name?.isNotEmpty == true ? o.name! : o.label}\u200F (${o.learnedMacs.length})',
+                style: AppType.cardTitleBold()),
+            content: SizedBox(
+              width: 360,
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                if (o.learnedMacsReadAt != null)
+                  Text(
+                      'ماكات أجهزة المشترك · آخر قراءة ${_clock(o.learnedMacsReadAt!)}${o.learnedMacsComplete ? '' : ' · ناقصة'}',
+                      style: AppType.muted(color: AppColors.textLow)),
+                const SizedBox(height: Sp.sm),
+                for (final mac in o.learnedMacs)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: SelectableText(mac, textDirection: TextDirection.ltr, style: AppType.rowValue()),
+                  ),
+              ]),
+            ),
+            actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('إغلاق'))],
+          ),
+        ),
+        child: DeskPill('${o.learnedMacs.length}', AppTone.brand),
+      ),
+    );
   }
 
   bool _match(VsolOnu o) {

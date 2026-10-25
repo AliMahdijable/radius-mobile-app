@@ -19,6 +19,10 @@ import '_grade.dart';
 import 'device_image.dart';
 import 'expandable_section.dart';
 import '../../desktop/desk_widgets.dart';
+import '../../../core/platform/desktop_layout.dart';
+import '../../../core/util/bidi.dart';
+import '../../../core/util/format.dart';
+import 'desk_device_kit.dart';
 
 /// لوحة مراقبة حيّة لسويتشات Cisco — قراءة فقط عبر SSH أو Telnet.
 ///
@@ -253,6 +257,8 @@ class _CiscoLivePanelState extends State<CiscoLivePanel>
       );
     }
 
+    if (stats != null && DesktopScope.of(context)) return _deskBuild(stats);
+
     return Column(children: [
       Container(
         decoration: BoxDecoration(
@@ -280,10 +286,10 @@ class _CiscoLivePanelState extends State<CiscoLivePanel>
 
   // ── الرأس ──
 
-  Widget _header() {
+  Widget _header({EdgeInsetsGeometry padding = const EdgeInsets.all(Sp.md)}) {
     final proto = widget.device.protocol == 'telnet' ? 'Telnet' : 'SSH';
     return Padding(
-      padding: const EdgeInsets.all(Sp.md),
+      padding: padding,
       child: Row(children: [
         Container(
           width: 32,
@@ -352,9 +358,9 @@ class _CiscoLivePanelState extends State<CiscoLivePanel>
             BoxDecoration(color: AppColors.success, shape: BoxShape.circle),
       );
 
-  Widget _errorBox() {
+  Widget _errorBox({EdgeInsetsGeometry margin = const EdgeInsets.symmetric(horizontal: Sp.md)}) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: Sp.md),
+      margin: margin,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: AppColors.dangerSoftBg,
@@ -658,6 +664,156 @@ class _CiscoLivePanelState extends State<CiscoLivePanel>
         ],
       ),
     );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // الحاسبة — كصفحة المايكروتك: الحقائق في شريط، والأرقام كبيرةً في صفّ، وحِمل المنافذ برسمٍ بنافذةٍ ثابتة،
+  // وخريطة المنافذ ثمّ جدولها (المالك ٢٤ أكتوبر: «بشكل حاسبة وليس موبايل»). الهاتف كما هو.
+  // ══════════════════════════════════════════════════════════════
+  Widget _deskBuild(CiscoStats s) {
+    final model = s.model ?? widget.device.model;
+    final top = _topPorts();
+    final all = s.physicalPorts;
+    final shown = all.where(_matchesFilter).toList();
+    final errPorts = all.where((p) => (p.inErrors ?? 0) + (p.outErrors ?? 0) > 0).length;
+    final errTotal = all.fold<int>(0, (n, p) => n + (p.inErrors ?? 0) + (p.outErrors ?? 0));
+    final mem = s.memory;
+    return Column(children: [
+      DeskPanelCard(children: [
+        _header(padding: EdgeInsets.zero),
+        if (_error != null) _errorBox(margin: EdgeInsets.zero),
+        DeskFactsBanner(facts: [
+          if (model != null && model.isNotEmpty) (icon: LucideIcons.server, label: 'الطراز', value: model),
+          if (s.hostname?.isNotEmpty == true) (icon: LucideIcons.tag, label: 'الاسم', value: s.hostname!),
+          if (s.iosVersion != null) (icon: LucideIcons.package, label: 'IOS', value: s.iosVersion!),
+          if (s.uptime != null) (icon: LucideIcons.clock, label: 'يعمل منذ', value: deskUptimeAr(s.uptime!)),
+          if (s.serial?.isNotEmpty == true) (icon: LucideIcons.fingerprint, label: 'الرقم التسلسليّ', value: s.serial!),
+        ]),
+        DeskTilesRow(tiles: [
+          DeskPercentTile(icon: LucideIcons.cpu, label: 'المعالج', percent: s.cpuPercent),
+          DeskPercentTile(
+            icon: LucideIcons.memoryStick,
+            label: 'الذاكرة',
+            percent: s.memPercent,
+            sub: mem == null ? null : '${iso(deskBytesShort(mem.usedBytes))} من ${iso(deskBytesShort(mem.totalBytes))}',
+          ),
+          DeskMetricTile(
+            icon: LucideIcons.ethernetPort,
+            label: 'المنافذ',
+            color: s.portsUp > 0 ? AppColors.success : AppColors.textLow,
+            value: DeskBigValue('${s.portsUp}/${s.portsTotal}', '', color: s.portsUp > 0 ? AppColors.success : null),
+            footer: deskSub(s.portsUp == 0
+                ? 'لا منفذ متّصل'
+                : 'يتّصل ${arCount(s.portsUp, one: 'منفذٌ واحد', two: 'منفذان', few: 'منافذ', many: 'منفذاً')}'),
+          ),
+          DeskMetricTile(
+            icon: LucideIcons.triangleAlert,
+            label: 'أخطاء المنافذ',
+            color: errTotal > 0 ? AppColors.warningFill : AppColors.success,
+            value: DeskBigValue('$errTotal', '', color: errTotal > 0 ? AppColors.warningFill : AppColors.success),
+            footer: deskSub(errTotal == 0
+                ? 'لا أخطاء'
+                : 'على ${arCount(errPorts, one: 'منفذٍ واحد', two: 'منفذين', few: 'منافذ', many: 'منفذاً')}'),
+          ),
+          DeskRateTile(
+              down: true, bps: top.rx?.bps, source: top.rx?.name, measuring: _history.length < 2, label: 'أعلى وارد'),
+          DeskRateTile(
+              down: false, bps: top.tx?.bps, source: top.tx?.name, measuring: _history.length < 2, label: 'أعلى صادر'),
+        ]),
+        DeskTrafficCard(
+          samples: [for (final h in _history) (rx: h.rxBps, tx: h.txBps)],
+          capacity: _maxHistory,
+          interval: _refreshInterval,
+          title: 'حِمل المنافذ',
+          subtitle: 'مجموع المنافذ',
+          rxLabel: 'وارد',
+          txLabel: 'صادر',
+        ),
+      ]),
+      if (all.isNotEmpty) ...[
+        const SizedBox(height: Sp.md),
+        ExpandableSection(
+          key: PageStorageKey('cisco-${widget.device.id}-map'),
+          initiallyExpanded: true,
+          header: DeskSectionHeader(
+              icon: LucideIcons.layoutGrid, title: 'خريطة المنافذ', count: all.length, hint: 'يتّصل ${s.portsUp}'),
+          content: RepaintBoundary(child: _portMap(all)),
+        ),
+      ],
+      const SizedBox(height: Sp.md),
+      ExpandableSection(
+        key: PageStorageKey('cisco-${widget.device.id}-ports'),
+        initiallyExpanded: true,
+        header: DeskSectionHeader(icon: LucideIcons.network, title: 'المنافذ', count: shown.length),
+        content: RepaintBoundary(child: _deskPortsContent(all, shown)),
+      ),
+    ]);
+  }
+
+  Widget _deskPortsContent(List<CiscoInterface> all, List<CiscoInterface> shown) {
+    int maxRx = 0, maxTx = 0;
+    for (final p in shown) {
+      maxRx = math.max(maxRx, _rxOf(p) ?? 0);
+      maxTx = math.max(maxTx, _txOf(p) ?? 0);
+    }
+    final vlan = shown.any((p) => p.vlan != null);
+    final errs = shown.any((p) => (p.inErrors ?? 0) + (p.outErrors ?? 0) > 0);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      DeskPortFilterBar(
+        hint: 'ابحث بالمنفذ أو الوصف أو VLAN',
+        connectedOnly: _connectedOnly,
+        onQuery: (v) => setState(() => _query = v),
+        onConnectedOnly: (v) => setState(() => _connectedOnly = v),
+      ),
+      const SizedBox(height: Sp.md),
+      if (shown.isEmpty)
+        Padding(
+          padding: const EdgeInsets.all(Sp.md),
+          child: Text(all.isEmpty ? 'لم تتوفّر بيانات المنافذ من الجهاز' : 'لا منافذ تطابق البحث',
+              textAlign: TextAlign.center, style: AppType.body(color: AppColors.textLow)),
+        )
+      else
+        DeskTable(
+          columns: [
+            ('المنفذ', 4),
+            if (vlan) ('VLAN', 2),
+            ('السرعة', 2),
+            ('وارد', 3),
+            ('صادر', 3),
+            if (errs) ('الأخطاء', 2),
+          ],
+          rows: [
+            for (final p in shown)
+              [
+                DeskNameCell(
+                  name: p.shortName ?? p.name,
+                  sub: isoJoin([_statusLabel(p), if (p.description?.isNotEmpty ?? false) p.description!], ' · '),
+                  tone: p.status == 'err-disabled'
+                      ? AppTone.danger
+                      : (p.up ? AppTone.success : AppTone.neutral),
+                  // الموقوف بخطأ يبقى أحمرَ ظاهراً — هو ما يُبحث عنه.
+                  dim: !p.up && p.status != 'err-disabled',
+                ),
+                if (vlan) p.vlan != null ? Text(iso(p.vlan!), style: AppType.body(color: AppColors.textBody)) : deskDash(),
+                (p.up && p.speedMbps != null)
+                    ? Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: DeskPill(
+                            isoJoin([_shortSpeed(p.speedMbps!), if (p.fullDuplex != null) p.fullDuplex! ? 'Full' : 'Half'], ' · '),
+                            Grade.speedMbps(p.speedMbps)))
+                    : deskDash(),
+                DeskRateCell(bps: p.up ? _rxOf(p) : null, down: true, max: maxRx, live: p.up),
+                DeskRateCell(bps: p.up ? _txOf(p) : null, down: false, max: maxTx, live: p.up),
+                if (errs)
+                  ((p.inErrors ?? 0) + (p.outErrors ?? 0)) > 0
+                      ? Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: DeskPill('${(p.inErrors ?? 0) + (p.outErrors ?? 0)}', AppTone.warning))
+                      : deskDash(),
+              ],
+          ],
+        ),
+    ]);
   }
 
   // ── منحنى الترفك ──

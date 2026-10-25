@@ -19,6 +19,9 @@ import '_grade.dart';
 import '../../../theme/typography.dart';
 import '../../../core/util/error_text.dart';
 import '../../desktop/desk_widgets.dart';
+import '../../../core/platform/desktop_layout.dart';
+import '../../../core/util/bidi.dart';
+import 'desk_device_kit.dart';
 import '../../../core/widgets/copyable.dart';
 
 /// لوحة مراقبة حيّة لأجهزة Mimosa (B5/B5c/B11/B24/A5/C5/C5c) — SNMP v2c فقط.
@@ -347,6 +350,7 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
     if (_stats == null) return const SizedBox.shrink();
 
     final s = _stats!;
+    if (DesktopScope.of(context)) return _deskBuild(s);
     return Column(children: [
       _controlBar(),
       const SizedBox(height: Sp.md),
@@ -377,6 +381,230 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
         const SizedBox(height: Sp.md),
       ],
       _infoCard(s),
+    ]);
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // الحاسبة — كصفحة المايكروتك: الحقائق في شريط، والوصلة أرقاماً كبيرة في صفّ، وسير الترفك برسمٍ بنافذةٍ
+  // ثابتة، والسلاسل ومعلومات الجهاز جنباً إلى جنب، والعملاء جدولاً (المالك ٢٤ أكتوبر). الهاتف كما هو.
+  // ══════════════════════════════════════════════════════════════
+  Widget _deskBuild(MimosaStats s) {
+    final fresh = _lastFetch != null ? DateTime.now().difference(_lastFetch!).inSeconds : null;
+    final rx = s.totalRxPowerDbm;
+    final snr = s.bestSnrDb;
+    final margin = s.signalMarginDb;
+    final marginTone = margin == null
+        ? AppTone.neutral
+        : (margin >= -3 ? AppTone.success : (margin >= -8 ? AppTone.warning : AppTone.danger));
+    String db(double v, {int digits = 1}) => v.toStringAsFixed(digits);
+    return Column(children: [
+      DeskPanelCard(children: [
+        DeskLiveHeader(
+          icon: LucideIcons.radioTower,
+          title: 'مراقبة حيّة · Mimosa (SNMP)',
+          monitoring: _monitoring,
+          loading: _loading,
+          status: _monitoring
+              ? 'مباشر · يتحدّث كلّ ${_refreshInterval.inSeconds} ثوانٍ${fresh != null ? ' · قبل $fresh ث' : ''}'
+              : 'موقوف',
+          onRefresh: _loading ? null : _fetch,
+          onToggle: _monitoring ? _stopMonitoring : _startMonitoring,
+        ),
+        if (_error != null) DeskNotice(icon: LucideIcons.triangleAlert, text: _error!, tone: AppTone.danger),
+        DeskFactsBanner(facts: [
+          (icon: LucideIcons.radioTower, label: 'الاسم', value: s.deviceName ?? s.sysName ?? ''),
+          if (widget.device.model?.isNotEmpty == true) (icon: LucideIcons.tag, label: 'الطراز', value: widget.device.model!),
+          if (s.firmwareVersion != null) (icon: LucideIcons.package, label: 'البرنامج', value: s.firmwareVersion!),
+          if (s.linkUptimeSec != null && s.linkUptimeSec! > 0)
+            (icon: LucideIcons.clock, label: 'الوصلة قائمةٌ منذ', value: deskUptimeAr(Duration(seconds: s.linkUptimeSec!))),
+          if (s.wirelessMode != null) (icon: LucideIcons.arrowLeftRight, label: 'الوضع', value: _modeLabel(s.wirelessMode!)),
+          if (s.channelWidthMhz != null) (icon: LucideIcons.satellite, label: 'عرض القناة', value: iso('${s.channelWidthMhz} MHz')),
+        ]),
+        DeskTilesRow(tiles: [
+          DeskMetricTile(
+            icon: LucideIcons.arrowDown,
+            label: 'قدرة الاستقبال',
+            color: rx != null ? Grade.signal(rx).fill : AppColors.textLow,
+            value: DeskBigValue(rx != null ? db(rx) : '—', 'dBm', color: rx != null ? Grade.signal(rx).fill : null),
+            footer: deskSub(s.totalTxPowerDbm != null ? 'الإرسال ${iso('${db(s.totalTxPowerDbm!)} dBm')}' : '—'),
+          ),
+          DeskMetricTile(
+            icon: LucideIcons.activity,
+            label: 'SNR',
+            color: snr != null ? Grade.snr(snr).fill : AppColors.textLow,
+            value: DeskBigValue(snr != null ? db(snr, digits: 0) : '—', 'dB', color: snr != null ? Grade.snr(snr).fill : null),
+            footer: deskSub(snr != null ? 'أفضل سلسلة' : 'لا يقرؤه هذا الجهاز'),
+          ),
+          DeskMetricTile(
+            icon: LucideIcons.gauge,
+            label: 'هامش الإشارة',
+            color: margin == null ? AppColors.textLow : marginTone.fill,
+            value: DeskBigValue(margin == null ? '—' : (margin >= 0 ? '+${db(margin)}' : db(margin)), 'dB',
+                color: margin == null ? null : marginTone.fill),
+            footer: deskSub(s.targetRxPowerDbm != null ? 'المستهدف ${iso('${db(s.targetRxPowerDbm!)} dBm')}' : 'لا قيمة مستهدفة'),
+          ),
+          DeskMetricTile(
+            icon: LucideIcons.chartLine,
+            label: 'سعة الوصلة (PHY)',
+            color: AppColors.chartLine,
+            value: DeskBigValue(s.phyRxRateMbps?.toString() ?? '—', 'Mbps', color: AppColors.chartLine),
+            footer: deskSub(s.phyTxRateMbps != null ? 'استقبال · الإرسال ${iso('${s.phyTxRateMbps} Mbps')}' : 'استقبال'),
+          ),
+          DeskMetricTile(
+            icon: LucideIcons.circleAlert,
+            label: 'أخطاء الحزم',
+            color: Grade.errorRate(math.max(s.perRxRatePct ?? 0, s.perTxRatePct ?? 0)).fill,
+            value: DeskBigValue(
+                s.perRxRatePct == null && s.perTxRatePct == null
+                    ? '—'
+                    : math.max(s.perRxRatePct ?? 0, s.perTxRatePct ?? 0).toStringAsFixed(1),
+                '%',
+                color: Grade.errorRate(math.max(s.perRxRatePct ?? 0, s.perTxRatePct ?? 0)).fill),
+            footer: deskSub(isoJoin([
+              if (s.perRxRatePct != null) 'استقبال ${iso('${s.perRxRatePct!.toStringAsFixed(1)}%')}',
+              if (s.perTxRatePct != null) 'إرسال ${iso('${s.perTxRatePct!.toStringAsFixed(1)}%')}',
+            ], ' · ')),
+          ),
+          DeskTempTile(celsius: s.temperatureC),
+        ]),
+        DeskTrafficCard(
+          samples: [for (final h in _history) (rx: h.rxBps, tx: h.txBps)],
+          capacity: _maxHistory,
+          interval: _refreshInterval,
+          subtitle: 'الواجهة الأنشط',
+        ),
+      ]),
+      if (_clients.isNotEmpty) ...[
+        const SizedBox(height: Sp.md),
+        ExpandableSection(
+          key: PageStorageKey('mimosa-${widget.device.id}-clients'),
+          initiallyExpanded: true,
+          header: DeskSectionHeader(
+            icon: LucideIcons.users,
+            title: 'العملاء المتّصلون',
+            count: _clients.length,
+            hint: 'متّصلٌ الآن ${_clients.where((c) => c.online).length}',
+          ),
+          content: RepaintBoundary(child: _deskClientsTable(_clients)),
+        ),
+      ],
+      const SizedBox(height: Sp.md),
+      deskSideBySide(
+        s.chains.isEmpty
+            ? null
+            : ExpandableSection(
+                key: PageStorageKey('mimosa-${widget.device.id}-chains'),
+                initiallyExpanded: true,
+                header: DeskSectionHeader(icon: LucideIcons.signal, title: 'السلاسل', count: s.chains.length),
+                content: _deskChainsTable(s.chains),
+              ),
+        ExpandableSection(
+          key: PageStorageKey('mimosa-${widget.device.id}-info'),
+          initiallyExpanded: true,
+          header: const DeskSectionHeader(icon: LucideIcons.info, title: 'معلومات الجهاز'),
+          content: _deskInfoFacts(s),
+        ),
+      ),
+    ]);
+  }
+
+  Widget _deskChainsTable(List<MimosaChain> chains) {
+    return DeskTable(
+      columns: const [('السلسلة', 2), ('الاستقبال', 3), ('الضوضاء', 3), ('SNR', 2), ('التردّد', 3)],
+      rows: [
+        for (final c in chains)
+          [
+            Text('${c.index}', style: AppType.rowValue(color: AppColors.textHi)),
+            c.rxPowerDbm != null
+                ? DeskDotValue(value: c.rxPowerDbm!.toStringAsFixed(1), unit: 'dBm', color: Grade.signal(c.rxPowerDbm).fill)
+                : deskDash(),
+            c.rxNoiseDbm != null
+                ? Text(iso('${c.rxNoiseDbm!.toStringAsFixed(0)} dBm'), style: AppType.body(color: AppColors.textBody))
+                : deskDash(),
+            c.snrDb != null
+                ? Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: DeskPill('${c.snrDb!.toStringAsFixed(0)} dB', Grade.snr(c.snrDb)))
+                : deskDash(),
+            c.centerFreqMhz != null
+                ? Text(iso('${c.centerFreqMhz} MHz'), style: AppType.body(color: AppColors.textBody))
+                : deskDash(),
+          ],
+      ],
+    );
+  }
+
+  Widget _deskInfoFacts(MimosaStats s) {
+    return DeskFactsGrid(maxColumns: 2, facts: [
+      if (s.ssid?.isNotEmpty == true) DeskFact('اسم الشبكة (SSID)', s.ssid!, ltr: true, copy: true),
+      if (s.antennaGainDbi != null) DeskFact('كسب الهوائي', '${s.antennaGainDbi} dBi', ltr: true),
+      if (s.firmwareVersion != null) DeskFact('البرنامج', s.firmwareVersion!, ltr: true, copy: true),
+      if (s.serialNumber != null) DeskFact('الرقم التسلسليّ', s.serialNumber!, ltr: true, copy: true),
+      if (s.hasGps)
+        DeskFact('الإحداثيّات', '${s.latitude!.toStringAsFixed(6)}, ${s.longitude!.toStringAsFixed(6)}',
+            ltr: true, copy: true),
+      if (s.altitude != null) DeskFact('الارتفاع', '${s.altitude} m', ltr: true),
+      if (s.gpsSats != null) DeskFact('أقمار GPS', '${s.gpsSats}', ltr: true),
+      const DeskFact('المعالج والذاكرة', 'لا يُظهرهما برنامج Mimosa'),
+    ]);
+  }
+
+  /// العملاء جدولاً: الاسم والـIP والماك تُنسخ، والأعمدة بقدر ما يعطيه السكتور.
+  Widget _deskClientsTable(List<MimosaClient> list) {
+    const limit = 100;
+    final ip = list.any((c) => c.ip != null);
+    final snr = list.any((c) => c.snrDb != null);
+    final dist = list.any((c) => c.distanceMeters != null);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      DeskTable(
+        columns: [
+          ('العميل', 4),
+          if (ip) ('IP', 3),
+          ('الماك', 3),
+          ('الإشارة', 3),
+          if (snr) ('SNR', 2),
+          ('السرعة', 3),
+          if (dist) ('المسافة', 2),
+          ('متّصل منذ', 2),
+        ],
+        rows: [
+          for (final c in list.take(limit))
+            [
+              DeskNameCell(
+                name: (c.name?.trim().isNotEmpty == true) ? c.name!.trim() : 'بلا اسم',
+                sub: isoJoin([c.online ? 'متّصل' : 'غير متّصل', if (c.hwModel != null) c.hwModel!], ' · '),
+                tone: c.online ? AppTone.success : AppTone.danger,
+                dim: !c.online,
+                copy: c.name?.trim().isNotEmpty == true,
+              ),
+              if (ip) c.ip != null ? DeskMonoCell(c.ip!, label: 'IP') : deskDash(),
+              DeskMonoCell(c.mac, label: 'الماك'),
+              c.rssiDbm != null
+                  ? DeskDotValue(value: '${c.rssiDbm}', unit: 'dBm', color: Grade.signal(c.rssiDbm).fill)
+                  : deskDash(),
+              if (snr)
+                c.snrDb != null
+                    ? Align(
+                        alignment: AlignmentDirectional.centerStart, child: DeskPill('${c.snrDb} dB', Grade.snr(c.snrDb)))
+                    : deskDash(),
+              (c.rxRateMbps == null && c.txRateMbps == null)
+                  ? deskDash()
+                  : DeskRatePair(rx: c.rxRateMbps ?? 0, tx: c.txRateMbps ?? 0),
+              if (dist)
+                c.distanceMeters != null
+                    ? Text(
+                        iso(c.distanceMeters! >= 1000
+                            ? '${(c.distanceMeters! / 1000).toStringAsFixed(1)} km'
+                            : '${c.distanceMeters} m'),
+                        style: AppType.body(color: AppColors.textBody))
+                    : deskDash(),
+              Text((c.uptimeSec ?? 0) > 0 ? deskDurationAr(c.uptimeSec!) : '—',
+                  maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.body(color: AppColors.textBody)),
+            ],
+        ],
+      ),
+      if (list.length > limit)
+        deskMoreRows(list.length - limit, one: 'عميلٌ آخر', two: 'عميلان آخران', few: 'عملاء آخرين', many: 'عميلاً آخر'),
     ]);
   }
 
@@ -1292,7 +1520,9 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
     );
   }
 
-  Color _rxColor(double dbm) => Grade.rxPower(dbm).fill;
+  /// قدرة الاستقبال اللاسلكيّة بسلّم الإشارة — `Grade.rxPower` سلّم الضوء (الـONT: -8…-27) فكان يلوّن
+  /// وصلةً سليمة على -54 dBm بالأحمر.
+  Color _rxColor(double dbm) => Grade.signal(dbm).fill;
 
   Color _snrColor(double snr) => Grade.snr(snr).fill;
 

@@ -37,6 +37,10 @@ import 'vsol_gpon_details.dart';
 /// BDCOM P3600-04. وعلى BDCOM لا يُقرأ `ifPhysAddress` أصلاً: عنوان واجهةٍ
 /// مشترك، وماك الـONU من جدول المصنّع ([BdcomEpon]).
 class VsolOltApi {
+  /// الاختبارات واللقطات: لقطةٌ جاهزة لكلّ طبقات القراءة بدل SNMP حقيقيّ (لا جهاز في بيئة الاختبار).
+  @visibleForTesting
+  static Future<VsolOltStats> Function()? debugFetch;
+
   VsolOltApi._();
 
   static const String _oidSysDescr = '1.3.6.1.2.1.1.1.0';
@@ -91,6 +95,8 @@ class VsolOltApi {
     OltProfile profile = OltProfile.vsolDefault,
     void Function(VsolOltStats partial)? onPartialReady,
   }) async {
+    final fake = debugFetch;
+    if (fake != null) return fake();
     final snmp = SnmpV2c(
       host: host,
       port: port,
@@ -228,6 +234,8 @@ class VsolOltApi {
     required VsolOltStats previous,
     Duration timeout = const Duration(seconds: 5),
   }) async {
+    final fake = debugFetch;
+    if (fake != null) return fake();
     final snmp = SnmpV2c(
       host: host,
       port: port,
@@ -308,6 +316,8 @@ class VsolOltApi {
     required VsolOltStats previous,
     Duration timeout = const Duration(seconds: 5),
   }) async {
+    final fake = debugFetch;
+    if (fake != null) return fake();
     final hot = <int>[
       for (final p in previous.ponPorts) p.index,
       for (final u in previous.uplinks) u.index,

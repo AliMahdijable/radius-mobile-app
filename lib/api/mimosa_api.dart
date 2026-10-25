@@ -22,6 +22,12 @@ import 'snmp_client.dart';
 /// - MIB BFIVE (B5 PtP): https://github.com/librenms/librenms/blob/master/mibs/mimosa/MIMOSA-NETWORKS-BFIVE-MIB
 /// - MIB PTMP (A5/C5):   https://github.com/librenms/librenms/blob/master/mibs/mimosa/MIMOSA-NETWORKS-PTMP-MIB
 class MimosaApi {
+  /// الاختبارات واللقطات: إحصاءاتٌ وعملاء جاهزون بدل SNMP حقيقيّ (لا جهاز في بيئة الاختبار).
+  @visibleForTesting
+  static Future<MimosaStats> Function()? debugFetch;
+  @visibleForTesting
+  static Future<List<MimosaClient>> Function()? debugClients;
+
   /// Enterprise root — `.1.3.6.1.4.1.43356`
   static const String _enterprise = '1.3.6.1.4.1.43356';
 
@@ -213,6 +219,12 @@ class MimosaApi {
     Duration timeout = const Duration(seconds: 5),
     void Function(MimosaStats partial)? onPartialReady,
   }) async {
+    final fake = debugFetch;
+    if (fake != null) {
+      final s = await fake();
+      onPartialReady?.call(s);
+      return s;
+    }
     final snmp = SnmpV2c(
       host: host,
       port: port,
@@ -451,6 +463,8 @@ class MimosaApi {
     required String community,
     Duration timeout = const Duration(seconds: 4),
   }) async {
+    final fake = debugFetch;
+    if (fake != null) return (await fake()).counters;
     final snmp = SnmpV2c(
         host: host, port: port, community: community, timeout: timeout);
     var inRows = await snmp.walk(_oidIfHcIn, chunkSize: 16);
@@ -534,6 +548,8 @@ class MimosaApi {
     required String community,
     Duration timeout = const Duration(seconds: 5),
   }) async {
+    final fakeClients = debugClients;
+    if (fakeClients != null) return fakeClients();
     final snmp = SnmpV2c(
       host: host,
       port: port,

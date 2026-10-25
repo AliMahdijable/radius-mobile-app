@@ -86,6 +86,10 @@ class EdgeSwitchApi {
     }
   }
 
+  /// الاختبارات واللقطات: يُرجع لقطةً جاهزة بدل جلسة REST حقيقيّة (لا جهاز في بيئة الاختبار).
+  @visibleForTesting
+  static Future<EdgeSwitchStats?> Function()? debugFetch;
+
   /// لقطةٌ كاملة. `null` يعني تعذّر الدخول أو انقطاع الاتّصال.
   static Future<EdgeSwitchStats?> fetchStats({
     required String host,
@@ -93,6 +97,8 @@ class EdgeSwitchApi {
     required String pass,
     int port = defaultPort,
   }) async {
+    final fake = debugFetch;
+    if (fake != null) return fake();
     final d = _dio(host, port);
     String? token;
     try {

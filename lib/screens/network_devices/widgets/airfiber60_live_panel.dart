@@ -17,6 +17,9 @@ import '../../../theme/typography.dart';
 import '../../../core/util/error_text.dart';
 import '../../desktop/desk_widgets.dart';
 import '../../../core/widgets/copyable.dart';
+import '../../../core/platform/desktop_layout.dart';
+import '../../../core/util/bidi.dart';
+import 'desk_device_kit.dart';
 
 /// لوحة مراقبة متخصّصة لـUBNT airFiber 60 (GP/LR) — PtP 60 GHz link view.
 /// mca-status عنده مضلّل (signal=-93، wlanTxRate=0). البيانات الحقيقيّة في wstalist.prs_sta.
@@ -155,6 +158,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
 
   void _updateInterfaceRates(UbntStats s) {
     final now = DateTime.now();
+    var sampled = false;
     for (final iface in s.interfaces) {
       if (iface.rxBytes == null || iface.txBytes == null) continue;
       final prev = _lastBytes[iface.ifname];
@@ -167,9 +171,242 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
             rxBps: ((iface.rxBytes! - prev.rx) * 8 / dt).round(),
             txBps: ((iface.txBytes! - prev.tx) * 8 / dt).round(),
           );
+          sampled = true;
         }
       }
     }
+    // رسم الحاسبة: أعلى منفذ إيثرنت في كلّ قراءة (الوصلة تحمل ما يمرّ به).
+    if (sampled) {
+      int rx = 0, tx = 0;
+      for (final i in s.interfaces.where((i) => i.ifname.startsWith('eth'))) {
+        final r = _rates[i.ifname];
+        if (r == null) continue;
+        if (r.rxBps > rx) rx = r.rxBps;
+        if (r.txBps > tx) tx = r.txBps;
+      }
+      _history.add((rx: rx, tx: tx));
+      if (_history.length > _maxHistory) _history.removeAt(0);
+    }
+  }
+
+  /// قراءات الرسم على الحاسبة — ~٥ دقائق.
+  final List<DeskTrafficSample> _history = [];
+  static const int _maxHistory = 30;
+
+  // ══════════════════════════════════════════════════════════════
+  // الحاسبة — الوصلة في صفّ أرقامٍ كبيرة والجهاز في صفٍّ ثانٍ، ثمّ رسم الإيثرنت، والمنافذ ومعلومات الجهاز
+  // جنباً إلى جنب (المالك ٢٤ أكتوبر: «بشكل حاسبة وليس موبايل»). الهاتف كما هو.
+  // ══════════════════════════════════════════════════════════════
+  Widget _deskBuild(UbntStats s, UbntStation? peer) {
+    final fw = _extractVersion(s.host.fwversion);
+    final eths = s.interfaces.where((i) => i.ifname.startsWith('eth')).toList();
+    return Column(children: [
+      DeskPanelCard(children: [
+        _deskHeader(),
+        if (_error != null)
+          const DeskNotice(
+              icon: LucideIcons.triangleAlert,
+              text: 'آخر تحديث فشل — البيانات معروضة من آخر جولة ناجحة',
+              tone: AppTone.danger),
+        DeskFactsBanner(facts: [
+          (icon: LucideIcons.radioTower, label: 'الطراز', value: s.host.devmodel),
+          (icon: LucideIcons.package, label: 'البرنامج', value: fw.isNotEmpty ? fw : s.host.fwversion),
+          if (s.host.uptime > 0)
+            (icon: LucideIcons.clock, label: 'يعمل منذ', value: deskUptimeAr(Duration(seconds: s.host.uptime))),
+          if (peer != null) (icon: LucideIcons.arrowLeftRight, label: 'الطرف الآخر', value: peer.hostname ?? peer.mac),
+          if (s.lanSpeed != null) (icon: LucideIcons.cable, label: 'الإيثرنت', value: s.lanSpeed!),
+        ]),
+        if (peer == null)
+          const DeskNotice(icon: LucideIcons.unlink, text: 'الوصلة غير قائمة — لا طرفٌ آخر متّصل الآن', tone: AppTone.warning)
+        else
+          DeskTilesRow(tiles: _deskLinkTiles(peer)),
+        DeskTilesRow(tiles: _deskDeviceTiles(s, peer)),
+        DeskTrafficCard(
+          samples: _history,
+          capacity: _maxHistory,
+          interval: _refreshInterval,
+          subtitle: 'منفذ الإيثرنت',
+        ),
+      ]),
+      const SizedBox(height: Sp.md),
+      deskSideBySide(
+        eths.isEmpty
+            ? null
+            : ExpandableSection(
+                key: PageStorageKey('af60-${widget.device.id}-eth'),
+                initiallyExpanded: true,
+                header: DeskSectionHeader(icon: LucideIcons.cable, title: 'الإيثرنت', count: eths.length),
+                content: _deskEthTable(eths),
+              ),
+        ExpandableSection(
+          key: PageStorageKey('af60-${widget.device.id}-info'),
+          initiallyExpanded: true,
+          header: const DeskSectionHeader(icon: LucideIcons.info, title: 'معلومات الجهاز'),
+          content: _deskInfoFacts(s, peer),
+        ),
+      ),
+    ]);
+  }
+
+  Widget _deskHeader() {
+    final fresh = _lastFetch != null ? DateTime.now().difference(_lastFetch!).inSeconds : null;
+    return DeskLiveHeader(
+      icon: LucideIcons.radioTower,
+      title: 'مراقبة حيّة · airFiber 60',
+      monitoring: _monitoring,
+      loading: _loading,
+      status: _monitoring
+          ? 'مباشر · يتحدّث كلّ ${_refreshInterval.inSeconds} ثوانٍ${fresh != null ? ' · قبل $fresh ث' : ''}'
+          : 'موقوف',
+      onRefresh: _loading ? null : _fetch,
+      onToggle: _monitoring ? _stopMonitoring : _startMonitoring,
+    );
+  }
+
+  /// الوصلة: الإشارة، الـSNR، الهامش عن المتوقّع، سعتا التنزيل والرفع، المسافة.
+  List<Widget> _deskLinkTiles(UbntStation peer) {
+    final sigTone = Grade.signal(peer.signal);
+    final snr = peer.snr;
+    final margin = peer.signalMargin;
+    final marginTone = margin == null
+        ? AppTone.neutral
+        : (margin >= -3 ? AppTone.success : (margin >= -8 ? AppTone.warning : AppTone.danger));
+    String? mbps(int? kbps) => kbps == null || kbps <= 0 ? null : (kbps / 1000).toStringAsFixed(0);
+    final dl = mbps(peer.dlCapacityKbps), ul = mbps(peer.ulCapacityKbps);
+    final util = peer.capacityUtilization;
+    final ulExpect = peer.ulCapacityExpectKbps ?? 0, ulNow = peer.ulCapacityKbps ?? 0;
+    final ulUtil = ulExpect > 0 && ulNow > 0 ? (ulNow / ulExpect * 100).clamp(0, 100) : null;
+    return [
+      DeskMetricTile(
+        icon: LucideIcons.signal,
+        label: 'الإشارة (RSSI)',
+        color: sigTone.fill,
+        value: DeskBigValue('${peer.signal}', 'dBm', color: sigTone.fill),
+        footer: deskSub(_signalLabel(peer.signal), color: sigTone.fill),
+      ),
+      DeskMetricTile(
+        icon: LucideIcons.activity,
+        label: 'SNR',
+        color: snr != null ? Grade.snr(snr).fill : AppColors.textLow,
+        value: DeskBigValue(snr != null ? '$snr' : '—', 'dB', color: snr != null ? Grade.snr(snr).fill : null),
+        footer: deskSub(snr != null ? _snrLabel(snr) : 'لا يقرؤه هذا الجهاز'),
+      ),
+      DeskMetricTile(
+        icon: LucideIcons.gauge,
+        label: 'هامش الإشارة',
+        color: margin == null ? AppColors.textLow : marginTone.fill,
+        value: DeskBigValue(margin == null ? '—' : (margin >= 0 ? '+$margin' : '$margin'), 'dB',
+            color: margin == null ? null : marginTone.fill),
+        footer: deskSub(peer.dlSignalExpect != null ? 'المتوقّع ${iso('${peer.dlSignalExpect} dBm')}' : 'لا قيمة متوقّعة'),
+      ),
+      DeskMetricTile(
+        icon: LucideIcons.arrowDown,
+        label: 'سعة التنزيل',
+        color: AppColors.chartLine,
+        value: DeskBigValue(dl ?? '—', 'Mbps', color: AppColors.chartLine),
+        footer: deskSub(util != null ? 'استغلال ${iso('${util.round()}%')} من المتوقّع' : 'سقف الوصلة'),
+      ),
+      DeskMetricTile(
+        icon: LucideIcons.arrowUp,
+        label: 'سعة الرفع',
+        color: AppColors.info,
+        value: DeskBigValue(ul ?? '—', 'Mbps', color: AppColors.info),
+        footer: deskSub(ulUtil != null ? 'استغلال ${iso('${ulUtil.round()}%')} من المتوقّع' : 'سقف الوصلة'),
+      ),
+      DeskMetricTile(
+        icon: LucideIcons.mapPin,
+        label: 'المسافة',
+        color: AppColors.brandAccent,
+        value: DeskBigValue(
+            peer.distanceMeters != null ? (peer.distanceMeters! / 1000).toStringAsFixed(2) : '—', 'km',
+            color: AppColors.brandAccent),
+        footer: deskSub(peer.linkUptimeSec != null && peer.linkUptimeSec! > 0
+            ? 'الوصلة قائمةٌ منذ ${deskUptimeAr(Duration(seconds: peer.linkUptimeSec!))}'
+            : '—'),
+      ),
+    ];
+  }
+
+  /// الجهاز: المعالج، الذاكرة، الحرارة، ترافيك الإيثرنت الآن، وMCS.
+  List<Widget> _deskDeviceTiles(UbntStats s, UbntStation? peer) {
+    ({String name, int bps})? top({required bool rx}) {
+      ({String name, int bps})? best;
+      for (final i in s.interfaces.where((i) => i.ifname.startsWith('eth'))) {
+        final r = _rates[i.ifname];
+        if (r == null) continue;
+        final v = rx ? r.rxBps : r.txBps;
+        if (best == null || v > best.bps) best = (name: i.ifname, bps: v);
+      }
+      return best;
+    }
+
+    final down = top(rx: true), up = top(rx: false);
+    return [
+      DeskPercentTile(icon: LucideIcons.cpu, label: 'المعالج', percent: s.host.cpuload.toDouble()),
+      DeskPercentTile(
+        icon: LucideIcons.memoryStick,
+        label: 'الذاكرة',
+        percent: s.memUsedPercent,
+        sub: (s.memUsedMb != null && s.memTotalMb != null) ? '${iso('${s.memUsedMb} MB')} من ${iso('${s.memTotalMb} MB')}' : null,
+      ),
+      DeskTempTile(celsius: s.host.temperature),
+      DeskRateTile(down: true, bps: down?.bps, source: down?.name, measuring: _rates.isEmpty, label: 'تنزيل الإيثرنت'),
+      DeskRateTile(down: false, bps: up?.bps, source: up?.name, measuring: _rates.isEmpty, label: 'رفع الإيثرنت'),
+      DeskMetricTile(
+        icon: LucideIcons.layers,
+        label: 'MCS',
+        color: AppColors.brand,
+        value: DeskBigValue(peer?.rxMcs?.toString() ?? '—', ''),
+        footer: deskSub(peer?.txMcs != null ? 'استقبال · الإرسال ${peer!.txMcs}' : 'استقبال'),
+      ),
+    ];
+  }
+
+  Widget _deskEthTable(List<UbntInterface> rows) {
+    int maxRx = 0, maxTx = 0;
+    for (final i in rows) {
+      final r = _rates[i.ifname];
+      if (r != null) {
+        if (r.rxBps > maxRx) maxRx = r.rxBps;
+        if (r.txBps > maxTx) maxTx = r.txBps;
+      }
+    }
+    return DeskTable(
+      columns: const [('المنفذ', 4), ('الربط', 2), ('الماك', 4), ('تنزيل ↓', 3), ('رفع ↑', 3)],
+      rows: [
+        for (final i in rows)
+          [
+            DeskNameCell(
+              name: i.ifname,
+              sub: i.plugged ? 'متّصل' : 'مفصول',
+              tone: i.plugged ? AppTone.success : AppTone.neutral,
+              dim: !i.plugged,
+            ),
+            (i.speed != null && i.speed! > 0)
+                ? Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: DeskPill(i.speed! >= 1000 ? '${i.speed! ~/ 1000}G' : '${i.speed}M', Grade.speedMbps(i.speed)))
+                : deskDash(),
+            i.hwaddr.isNotEmpty ? DeskMonoCell(i.hwaddr, label: 'الماك') : deskDash(),
+            DeskRateCell(bps: _rates[i.ifname]?.rxBps, down: true, max: maxRx, live: i.plugged),
+            DeskRateCell(bps: _rates[i.ifname]?.txBps, down: false, max: maxTx, live: i.plugged),
+          ],
+      ],
+    );
+  }
+
+  Widget _deskInfoFacts(UbntStats s, UbntStation? peer) {
+    final lat = s.hasLocation ? s.latitude!.toStringAsFixed(6) : null;
+    final lng = s.hasLocation ? s.longitude!.toStringAsFixed(6) : null;
+    return DeskFactsGrid(maxColumns: 2, facts: [
+      DeskFact('المنصّة', s.host.devmodel, ltr: true, copy: true),
+      DeskFact('البرنامج', s.host.fwversion, ltr: true, copy: true),
+      if ((s.wireless?.essid ?? '').isNotEmpty) DeskFact('اسم الوصلة (ESSID)', s.wireless!.essid, ltr: true, copy: true),
+      if (peer != null && peer.mac.isNotEmpty) DeskFact('ماك الطرف الآخر', peer.mac, ltr: true, copy: true),
+      if (peer != null && peer.rxSector != null && peer.txSector != null)
+        DeskFact('القطاع (Sector)', '${peer.rxSector}/${peer.txSector}', ltr: true),
+      if (lat != null) DeskFact('الإحداثيّات', '$lat, $lng', ltr: true, copy: true),
+    ]);
   }
 
   @override
@@ -188,6 +425,7 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
 
     final s = _stats!;
     final peer = s.stations.isNotEmpty ? s.stations.first : null;
+    if (DesktopScope.of(context)) return _deskBuild(s, peer);
 
     return Column(children: [
       // Header controls

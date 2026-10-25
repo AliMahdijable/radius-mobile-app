@@ -16,6 +16,10 @@ import '_grade.dart';
 import 'device_image.dart';
 import 'expandable_section.dart';
 import '../../desktop/desk_widgets.dart';
+import '../../../core/platform/desktop_layout.dart';
+import '../../../core/util/bidi.dart';
+import '../../../core/util/format.dart';
+import 'desk_device_kit.dart';
 
 /// لوحة مراقبة حيّة لسويتشات **Ubiquiti EdgeSwitch** — قراءة فقط.
 ///
@@ -199,6 +203,8 @@ class _EdgeSwitchLivePanelState extends State<EdgeSwitchLivePanel>
       );
     }
 
+    if (stats != null && DesktopScope.of(context)) return _deskBuild(stats);
+
     return Column(children: [
       Container(
         decoration: BoxDecoration(
@@ -224,9 +230,9 @@ class _EdgeSwitchLivePanelState extends State<EdgeSwitchLivePanel>
     ]);
   }
 
-  Widget _header() {
+  Widget _header({EdgeInsetsGeometry padding = const EdgeInsets.all(Sp.md)}) {
     return Padding(
-      padding: const EdgeInsets.all(Sp.md),
+      padding: padding,
       child: Row(children: [
         Container(
           width: 32,
@@ -296,9 +302,9 @@ class _EdgeSwitchLivePanelState extends State<EdgeSwitchLivePanel>
             BoxDecoration(color: AppColors.success, shape: BoxShape.circle),
       );
 
-  Widget _errorBox() {
+  Widget _errorBox({EdgeInsetsGeometry margin = const EdgeInsets.fromLTRB(Sp.md, 0, Sp.md, Sp.md)}) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(Sp.md, 0, Sp.md, Sp.md),
+      margin: margin,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: AppColors.dangerSoftBg,
@@ -556,6 +562,165 @@ class _EdgeSwitchLivePanelState extends State<EdgeSwitchLivePanel>
         ),
       ]),
     );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // الحاسبة — كصفحة المايكروتك: الحقائق في شريط، والأرقام كبيرةً في صفّ، وحِمل المنافذ برسمٍ بنافذةٍ ثابتة،
+  // وخريطة المنافذ ثمّ جدولها (المالك ٢٤ أكتوبر: «بشكل حاسبة وليس موبايل»). الهاتف كما هو.
+  // ══════════════════════════════════════════════════════════════
+  Widget _deskBuild(EdgeSwitchStats s) {
+    final model = s.model ?? widget.device.model;
+    final all = s.ports;
+    final shown = all.where(_matchesFilter).toList();
+    final ramUsed = (s.ramTotalBytes != null && s.ramFreeBytes != null && s.ramTotalBytes! > 0)
+        ? s.ramTotalBytes! - s.ramFreeBytes!
+        : null;
+    final (loadV, loadU) = deskBpsParts(s.rxRateTotal + s.txRateTotal);
+    return Column(children: [
+      DeskPanelCard(children: [
+        _header(padding: EdgeInsets.zero),
+        if (_error != null) _errorBox(margin: EdgeInsets.zero),
+        DeskFactsBanner(facts: [
+          if (model != null && model.isNotEmpty) (icon: LucideIcons.server, label: 'الطراز', value: model),
+          if (s.hostname?.isNotEmpty == true) (icon: LucideIcons.tag, label: 'الاسم', value: s.hostname!),
+          if (s.firmware != null) (icon: LucideIcons.package, label: 'البرنامج', value: 'v${s.firmware}'),
+          if ((s.uptimeSeconds ?? 0) > 0)
+            (icon: LucideIcons.clock, label: 'يعمل منذ', value: deskUptimeAr(Duration(seconds: s.uptimeSeconds!))),
+          if (s.mac?.isNotEmpty == true) (icon: LucideIcons.fingerprint, label: 'الماك', value: s.mac!),
+        ]),
+        DeskTilesRow(tiles: [
+          DeskPercentTile(icon: LucideIcons.cpu, label: 'المعالج', percent: s.cpuPercent?.toDouble()),
+          DeskPercentTile(
+            icon: LucideIcons.memoryStick,
+            label: 'الذاكرة',
+            percent: s.ramPercent?.toDouble(),
+            sub: ramUsed == null ? null : '${iso(deskBytesShort(ramUsed))} من ${iso(deskBytesShort(s.ramTotalBytes!))}',
+          ),
+          DeskTempTile(celsius: s.temperatureC),
+          DeskMetricTile(
+            icon: LucideIcons.ethernetPort,
+            label: 'المنافذ',
+            color: s.portsUp > 0 ? AppColors.success : AppColors.textLow,
+            value: DeskBigValue('${s.portsUp}/${s.portsTotal}', '', color: s.portsUp > 0 ? AppColors.success : null),
+            footer: deskSub(s.portsUp == 0
+                ? 'لا منفذ يعمل'
+                : 'تعمل ${arCount(s.portsUp, one: 'منفذٌ واحد', two: 'منفذان', few: 'منافذ', many: 'منفذاً')}'),
+          ),
+          DeskMetricTile(
+            icon: LucideIcons.zap,
+            label: 'طاقة PoE',
+            color: s.poePorts > 0 ? AppColors.warningFill : AppColors.textLow,
+            // صفر واط ليس «لا يوجد»: السويتش قد يغذّي ولا يبلّغ — نفرّق بالعدد لا بالطاقة وحدها.
+            value: DeskBigValue(s.poePorts == 0 ? '—' : s.poeTotalWatts.toStringAsFixed(1), 'W',
+                color: AppColors.warningFill),
+            footer: deskSub(s.poePorts == 0
+                ? 'لا منفذ يغذّي'
+                : 'على ${arCount(s.poePorts, one: 'منفذٍ واحد', two: 'منفذين', few: 'منافذ', many: 'منفذاً')}'),
+          ),
+          DeskMetricTile(
+            icon: LucideIcons.arrowUpDown,
+            label: 'حِمل المنافذ',
+            color: AppColors.brand,
+            value: DeskBigValue(loadV, loadU, color: AppColors.brand),
+            footer: deskSub('وارد ${iso(deskBpsFull(s.rxRateTotal))} · صادر ${iso(deskBpsFull(s.txRateTotal))}'),
+          ),
+        ]),
+        DeskTrafficCard(
+          samples: [for (final h in _history) (rx: h.rx, tx: h.tx)],
+          capacity: _maxHistory,
+          interval: _refreshInterval,
+          title: 'حِمل المنافذ',
+          subtitle: 'مجموع المنافذ',
+          rxLabel: 'وارد',
+          txLabel: 'صادر',
+        ),
+      ]),
+      if (all.isNotEmpty) ...[
+        const SizedBox(height: Sp.md),
+        ExpandableSection(
+          key: PageStorageKey('es-${widget.device.id}-map'),
+          initiallyExpanded: true,
+          header: DeskSectionHeader(
+              icon: LucideIcons.layoutGrid, title: 'خريطة المنافذ', count: all.length, hint: 'تعمل ${s.portsUp}'),
+          content: RepaintBoundary(child: _portMap(all)),
+        ),
+      ],
+      const SizedBox(height: Sp.md),
+      ExpandableSection(
+        key: PageStorageKey('es-${widget.device.id}-ports'),
+        initiallyExpanded: true,
+        header: DeskSectionHeader(icon: LucideIcons.network, title: 'المنافذ', count: shown.length),
+        content: RepaintBoundary(child: _deskPortsContent(shown)),
+      ),
+    ]);
+  }
+
+  Widget _deskPortsContent(List<EdgeSwitchPort> shown) {
+    int maxRx = 0, maxTx = 0;
+    for (final p in shown) {
+      maxRx = math.max(maxRx, p.rxRate ?? 0);
+      maxTx = math.max(maxTx, p.txRate ?? 0);
+    }
+    final poe = shown.any((p) => p.poeActive);
+    final errs = shown.any((p) => (p.errors ?? 0) > 0);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      DeskPortFilterBar(
+        hint: 'ابحث برقم المنفذ أو وصفه…',
+        connectedOnly: _connectedOnly,
+        onQuery: (v) => setState(() => _query = v),
+        onConnectedOnly: (v) => setState(() => _connectedOnly = v),
+      ),
+      const SizedBox(height: Sp.md),
+      if (shown.isEmpty)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Text('لا منافذ مطابقة', style: AppType.body(color: AppColors.textLow)),
+        )
+      else
+        DeskTable(
+          columns: [
+            ('المنفذ', 4),
+            ('السرعة', 2),
+            if (poe) ('PoE', 2),
+            ('وارد', 3),
+            ('صادر', 3),
+            ('المنقول', 3),
+            if (errs) ('الأخطاء', 2),
+          ],
+          rows: [
+            for (final p in shown)
+              [
+                DeskNameCell(
+                  name: p.name?.isNotEmpty == true ? '${p.shortLabel} · ${p.name}' : 'المنفذ ${p.shortLabel}',
+                  sub: !p.enabled ? 'مُعطَّل' : (p.plugged ? (p.description ?? 'موصول') : 'غير موصول'),
+                  tone: !p.enabled ? AppTone.danger : (p.plugged ? AppTone.success : AppTone.neutral),
+                  dim: !p.up,
+                ),
+                (p.up && p.speed != null)
+                    ? Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: DeskPill(_fmtSpeed(p.speed!), Grade.speedMbps(p.speed)))
+                    : deskDash(),
+                if (poe)
+                  p.poeActive
+                      ? Text(iso('${p.poeWatts!.toStringAsFixed(1)} W'),
+                          style: AppType.rowValue(color: AppColors.warningFill))
+                      : deskDash(),
+                DeskRateCell(bps: p.up ? p.rxRate : null, down: true, max: maxRx, live: p.up),
+                DeskRateCell(bps: p.up ? p.txRate : null, down: false, max: maxTx, live: p.up),
+                ((p.txBytes ?? 0) > 0 || (p.rxBytes ?? 0) > 0)
+                    ? Text(iso('↓${_fmtBytes(p.rxBytes)}  ↑${_fmtBytes(p.txBytes)}'),
+                        maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.body(color: AppColors.textBody))
+                    : deskDash(),
+                if (errs)
+                  (p.errors ?? 0) > 0
+                      ? Align(
+                          alignment: AlignmentDirectional.centerStart, child: DeskPill('${p.errors}', AppTone.danger))
+                      : deskDash(),
+              ],
+          ],
+        ),
+    ]);
   }
 
   // ══════════════════════════════════════════════════════════════

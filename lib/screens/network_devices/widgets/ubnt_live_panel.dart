@@ -18,6 +18,9 @@ import '../detected_model.dart';
 import '../../../core/util/error_text.dart';
 import '../../desktop/desk_widgets.dart';
 import '../../../core/widgets/copyable.dart';
+import '../../../core/platform/desktop_layout.dart';
+import '../../../core/util/bidi.dart';
+import 'desk_device_kit.dart';
 
 /// Panel للمراقبة الحيّة لجهاز UBNT airMax/airFiber.
 /// التركيز على **wireless quality** (signal/SNR) لأنه المهم في PtP/PtMP.
@@ -195,7 +198,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       // (نفس نمط Mikrotik). لا نُضيف قبل _lastFetch لأنّ الـrates لسّه 0.
       if (_lastFetch != null) {
         int maxRx = 0, maxTx = 0;
-        for (final iface in stats.interfaces.where(_isDataIface)) {
+        for (final iface in _headlinePool(stats.interfaces)) {
           final r = _rates[iface.ifname];
           if (r != null) {
             if (r.rxBps > maxRx) maxRx = r.rxBps;
@@ -254,6 +257,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
     //   - PtP link (Station mode): إشارة كبيرة + التركيز على peer واحد
     //   - PtMP AP mode: mode chip + التركيز على قائمة العملاء
     final s = _stats;
+    if (s != null && DesktopScope.of(context)) return _deskBuild(s);
     final isAp = s?.isAp ?? false;
     final isStation = s?.isStation ?? false;
     return Column(children: [
@@ -296,6 +300,253 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
         ..._buildExpandables(),
       ],
     ]);
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // الحاسبة — كصفحة المايكروتك: الحقائق في شريط، والأرقام كبيرةً في صفّ، والرسم بنافذةٍ ثابتة،
+  // والعملاء والواجهات جداول (المالك ٢٤ أكتوبر: «بشكل حاسبة وليس موبايل»). الهاتف كما هو.
+  // ══════════════════════════════════════════════════════════════
+  Widget _deskBuild(UbntStats s) {
+    final h = s.host;
+    final w = s.wireless;
+    return Column(children: [
+      DeskPanelCard(children: [
+        _header(),
+        if (_error != null) _errorBox(),
+        DeskFactsBanner(facts: [
+          (icon: LucideIcons.radioTower, label: 'الطراز', value: h.devmodel),
+          (icon: LucideIcons.package, label: 'airOS', value: h.fwversion),
+          if (h.uptime > 0) (icon: LucideIcons.clock, label: 'يعمل منذ', value: deskUptimeAr(Duration(seconds: h.uptime))),
+          if (w != null) (icon: LucideIcons.arrowLeftRight, label: 'الوضع', value: _modeLabel(w.mode)),
+          if (w != null && w.frequency > 0)
+            (
+              icon: LucideIcons.satellite,
+              label: 'التردّد',
+              value: iso(isoJoin(['${w.frequency} MHz', if (w.chanbw > 0) '${w.chanbw} MHz'], ' · ')),
+            ),
+        ]),
+        DeskTilesRow(tiles: _deskTiles(s)),
+        DeskTrafficCard(
+          samples: [for (final p in _history) (rx: p.rxBps, tx: p.txBps)],
+          capacity: _maxHistory,
+          interval: _refreshInterval,
+          subtitle: 'أعلى واجهةٍ في كلّ لحظة',
+        ),
+      ]),
+      ..._deskExpandables(s),
+    ]);
+  }
+
+  List<Widget> _deskTiles(UbntStats s) {
+    final h = s.host;
+    final w = s.wireless;
+    final down = _deskTopRate(rx: true), up = _deskTopRate(rx: false);
+    return [
+      DeskPercentTile(icon: LucideIcons.cpu, label: 'المعالج', percent: h.cpuload.toDouble()),
+      if (s.memUsedPercent case final mem?)
+        DeskPercentTile(
+          icon: LucideIcons.memoryStick,
+          label: 'الذاكرة',
+          percent: mem,
+          sub: (s.memUsedMb != null && s.memTotalMb != null) ? '${iso('${s.memUsedMb} MB')} من ${iso('${s.memTotalMb} MB')}' : null,
+        ),
+      DeskTempTile(celsius: h.temperature),
+      // نقطة وصولٍ لعدّة عملاء: عددهم وأضعفهم — إشارتها وحدها متوسّطٌ لا يدلّ على أحد. الوصلة: إشارتها.
+      if (s.isAp && _stickyStations.length != 1)
+        _deskClientsTile()
+      else if (w != null)
+        DeskMetricTile(
+          icon: LucideIcons.signal,
+          label: 'الإشارة',
+          color: Grade.signal(w.signal).fill,
+          value: DeskBigValue('${w.signal}', 'dBm', color: Grade.signal(w.signal).fill),
+          footer: deskSub(isoJoin([_signalLabel(w.signal), if (w.snr != null) 'SNR ${w.snr} dB'], ' · ')),
+        ),
+      DeskRateTile(down: true, bps: down?.bps, source: down?.name, measuring: _rates.isEmpty),
+      DeskRateTile(down: false, bps: up?.bps, source: up?.name, measuring: _rates.isEmpty),
+    ];
+  }
+
+  Widget _deskClientsTile() {
+    final list = _stickyStations;
+    final weakest = list.isEmpty ? null : list.map((c) => c.signal).reduce(math.min);
+    return DeskMetricTile(
+      icon: LucideIcons.users,
+      label: 'العملاء',
+      color: AppColors.brand,
+      value: DeskBigValue('${list.length}', ''),
+      footer: weakest == null
+          ? deskSub('لا عملاء الآن')
+          : deskSub('أضعفهم ${iso('$weakest dBm')}', color: Grade.signal(weakest).fill),
+    );
+  }
+
+  /// أعلى واجهةٍ تنزيلاً أو رفعاً الآن — من [_headlinePool] كالرسم.
+  ({String name, int bps})? _deskTopRate({required bool rx}) {
+    ({String name, int bps})? best;
+    for (final i in _headlinePool()) {
+      final r = _rates[i.ifname];
+      if (r == null) continue;
+      final v = rx ? r.rxBps : r.txBps;
+      if (best == null || v > best.bps) best = (name: i.ifname, bps: v);
+    }
+    return best;
+  }
+
+  List<Widget> _deskExpandables(UbntStats s) {
+    final id = widget.device.id;
+    final w = s.wireless;
+    final ifaces = s.interfaces.where(_isDataIface).toList();
+    final stations = _stickyStations.isEmpty
+        ? null
+        : ExpandableSection(
+            key: PageStorageKey('ubnt-$id-stations'),
+            initiallyExpanded: true,
+            header: DeskSectionHeader(
+              icon: LucideIcons.users,
+              title: s.isAp ? 'العملاء المتّصلون' : 'الطرف الآخر',
+              count: s.isAp ? _stickyStations.length : null,
+            ),
+            content: RepaintBoundary(child: _deskStationsTable(_stickyStations)),
+          );
+    final ifaceSection = ifaces.isEmpty
+        ? null
+        : ExpandableSection(
+            key: PageStorageKey('ubnt-$id-interfaces'),
+            initiallyExpanded: true,
+            header: DeskSectionHeader(icon: LucideIcons.network, title: 'الواجهات', count: ifaces.length),
+            content: RepaintBoundary(child: _deskInterfacesTable(ifaces)),
+          );
+    final wifi = w == null
+        ? null
+        : ExpandableSection(
+            key: PageStorageKey('ubnt-$id-wireless'),
+            initiallyExpanded: true,
+            header: const DeskSectionHeader(icon: LucideIcons.wifi, title: 'اللاسلكيّ'),
+            content: _deskWirelessFacts(w),
+          );
+    // نقطة الوصول: العملاء أوّلاً بعرض الصفحة؛ الوصلة: الطرف الآخر بعد الواجهات واللاسلكيّ.
+    return [
+      if (s.isAp && stations != null) ...[const SizedBox(height: Sp.md), stations],
+      if (ifaceSection != null || wifi != null) ...[
+        const SizedBox(height: Sp.md),
+        deskSideBySide(ifaceSection, wifi),
+      ],
+      if (!s.isAp && stations != null) ...[const SizedBox(height: Sp.md), stations],
+    ];
+  }
+
+  Widget _deskWirelessFacts(UbntWireless w) {
+    return DeskFactsGrid(facts: [
+      if (w.essid.isNotEmpty) DeskFact('اسم الشبكة (SSID)', w.essid, ltr: true, copy: true),
+      DeskFact('الوضع', _modeLabel(w.mode), ltr: true),
+      DeskFact('سرعة الوصلة', '↓${w.rxRate} / ↑${w.txRate} Mbps', ltr: true),
+      if (w.frequency > 0) DeskFact('التردّد', '${w.frequency} MHz', ltr: true),
+      if (w.chanbw > 0) DeskFact('عرض القناة', '${w.chanbw} MHz', ltr: true),
+      if (w.channel > 0) DeskFact('القناة', '${w.channel}', ltr: true),
+      if (w.signal != 0) DeskFact('الإشارة', '${w.signal} dBm', ltr: true, color: Grade.signal(w.signal).fill),
+      if (w.snr != null) DeskFact('SNR', '${w.snr} dB', ltr: true, color: Grade.snr(w.snr).fill),
+      if (w.hasCcq) DeskFact('جودة الوصلة (CCQ)', '${w.ccq}%', ltr: true, color: Grade.percentHigherBetter(w.ccq).fill),
+      if (w.hasNoise) DeskFact('الضوضاء', '${w.noise} dBm', ltr: true),
+      if (w.distance > 0)
+        DeskFact('المسافة', w.distance >= 1000 ? '${(w.distance / 1000).toStringAsFixed(1)} km' : '${w.distance} m',
+            ltr: true),
+    ]);
+  }
+
+  /// العملاء جدولاً كـ«Registration Table»: الاسم والـIP والماك تُنسخ، وأعمدة IP وCCQ والمسافة بقدر ما يعطيه الجهاز.
+  Widget _deskStationsTable(List<UbntStation> list) {
+    const limit = 100;
+    final ip = list.any((c) => (c.ip ?? '').isNotEmpty);
+    final ccq = list.any((c) => c.ccq > 0);
+    final dist = list.any((c) => (c.distanceMeters ?? 0) > 0);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      DeskTable(
+        columns: [
+          ('العميل', 4),
+          if (ip) ('IP', 3),
+          ('الماك', 3),
+          ('الإشارة', 3),
+          if (ccq) ('CCQ', 2),
+          ('السرعة', 3),
+          if (dist) ('المسافة', 2),
+          ('متّصل منذ', 2),
+        ],
+        rows: [
+          for (final c in list.take(limit))
+            [
+              if ((c.hostname ?? '').isNotEmpty)
+                Copyable(
+                  label: 'اسم الجهاز',
+                  value: c.hostname!,
+                  child: Text(c.hostname!,
+                      maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.rowValue(color: AppColors.textHi)),
+                )
+              else
+                Text('بلا اسم', style: AppType.body(color: AppColors.textLow)),
+              if (ip) (c.ip ?? '').isNotEmpty ? DeskMonoCell(c.ip!, label: 'IP') : deskDash(),
+              DeskMonoCell(c.mac, label: 'الماك'),
+              DeskDotValue(value: c.signalDisplay, unit: 'dBm', color: Grade.signal(c.signal).fill),
+              if (ccq)
+                c.ccq > 0
+                    ? Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: DeskPill('${c.ccq}%', Grade.percentHigherBetter(c.ccq)))
+                    : deskDash(),
+              DeskRatePair(rx: c.rxRate, tx: c.txRate),
+              if (dist)
+                (c.distanceMeters ?? 0) > 0
+                    ? Text(
+                        iso(c.distanceMeters! >= 1000
+                            ? '${(c.distanceMeters! / 1000).toStringAsFixed(1)} km'
+                            : '${c.distanceMeters} m'),
+                        style: AppType.body(color: AppColors.textBody))
+                    : deskDash(),
+              Text(c.connTime > 0 ? deskDurationAr(c.connTime) : '—',
+                  maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.body(color: AppColors.textBody)),
+            ],
+        ],
+      ),
+      if (list.length > limit)
+        deskMoreRows(list.length - limit, one: 'عميلٌ آخر', two: 'عميلان آخران', few: 'عملاء آخرين', many: 'عميلاً آخر'),
+    ]);
+  }
+
+  Widget _deskInterfacesTable(List<UbntInterface> rows) {
+    int maxRx = 0, maxTx = 0;
+    for (final i in rows) {
+      final r = _rates[i.ifname];
+      if (r != null) {
+        maxRx = math.max(maxRx, r.rxBps);
+        maxTx = math.max(maxTx, r.txBps);
+      }
+    }
+    return DeskTable(
+      columns: const [('الواجهة', 4), ('الربط', 2), ('الماك', 4), ('تنزيل ↓', 3), ('رفع ↑', 3)],
+      rows: [
+        for (final i in rows)
+          () {
+            final up = i.plugged && i.enabled;
+            final r = _rates[i.ifname];
+            return <Widget>[
+              DeskNameCell(
+                name: i.ifname,
+                sub: !i.enabled ? 'معطّلة' : (i.plugged ? 'تعمل' : 'مفصولة'),
+                tone: up ? AppTone.success : (i.enabled ? AppTone.danger : AppTone.neutral),
+                dim: !i.enabled,
+              ),
+              (i.speed != null && up)
+                  ? Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: DeskPill(_speedLabel(i.speed!), Grade.speedMbps(i.speed!)))
+                  : deskDash(),
+              i.hwaddr.isNotEmpty ? DeskMonoCell(i.hwaddr, label: 'الماك') : deskDash(),
+              DeskRateCell(bps: r?.rxBps, down: true, max: maxRx, live: up),
+              DeskRateCell(bps: r?.txBps, down: false, max: maxTx, live: up),
+            ];
+          }(),
+      ],
+    );
   }
 
   /// شارة تُظهر نمط عمل الجهاز — لينك PtP أم AP PtMP.
@@ -1085,6 +1336,18 @@ Widget _stationRow(UbntStation s) {
     if (bps < 1000000) return '${(bps / 1000).toStringAsFixed(1)}K';
     if (bps < 1000000000) return '${(bps / 1000000).toStringAsFixed(1)}M';
     return '${(bps / 1000000000).toStringAsFixed(2)}G';
+  }
+
+  /// الواجهات التي يُقرأ منها الرسم و«أعلى تنزيل/رفع»: السلكيّة (eth/br/ppp) كالمايكروتك — اللاسلكيّة تحمل
+  /// الحركة نفسها بالاتّجاه المعاكس، فخلطُها بها يرسم التنزيل خطّين (تنزيل eth0 = رفع ath0 إلى العملاء).
+  /// بلا سلكيّةٍ لها سرعة: كلّ واجهات البيانات (airFiber بـbr0/wlan0 وحدها).
+  List<UbntInterface> _headlinePool([List<UbntInterface>? from]) {
+    final all = (from ?? _stats?.interfaces ?? const <UbntInterface>[]).where(_isDataIface).toList();
+    final wired = [
+      for (final i in all)
+        if (!i.ifname.startsWith('wlan') && !i.ifname.startsWith('ath') && _rates.containsKey(i.ifname)) i,
+    ];
+    return wired.isNotEmpty ? wired : all;
   }
 
   /// 2026-08-18: أي واجهة تحمل بيانات فعليّة (تظهر بالـUI + traffic

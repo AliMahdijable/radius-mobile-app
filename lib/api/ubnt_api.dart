@@ -17,6 +17,10 @@ import '../core/util/dev_log.dart';
 /// **الأمر الرئيسي**: `mca-status` يُرجع نصّاً بصيغة key=value يشمل كل شيء.
 /// **fallbacks**: `ubntbox status`، `iwconfig`، `/proc/*`، `ifconfig`.
 class UbntApi {
+  /// الاختبارات واللقطات: يُرجع إحصاءاتٍ جاهزة بدل جلسة SSH حقيقيّة (لا جهاز في بيئة الاختبار).
+  @visibleForTesting
+  static Future<UbntStats> Function()? debugFetch;
+
   /// جلب صورة كاملة عن حالة الجهاز عبر SSH.
   ///
   /// **fallback usernames**: لو الـuser المُعدّ فشل بالـauth، نجرّب `ubnt`
@@ -34,6 +38,12 @@ class UbntApi {
     Duration timeout = const Duration(seconds: 10),
     void Function(UbntStats partial)? onPartialReady,
   }) async {
+    final fake = debugFetch;
+    if (fake != null) {
+      final s = await fake();
+      onPartialReady?.call(s);
+      return s;
+    }
     final userList = _buildUserFallback(user);
     UbntException? lastAuthErr;
     for (final u in userList) {

@@ -25,6 +25,10 @@ import 'package:flutter/foundation.dart';
 /// للجلسة الجارية لا يُكتَب في الإعدادات، ونتراجع إلى معالجة
 /// `--More--` يدويّاً إن رفضها الجهاز.
 class CiscoApi {
+  /// الاختبارات واللقطات: لقطةٌ جاهزة بدل جلسة SSH/Telnet حقيقيّة (لا جهاز في بيئة الاختبار).
+  @visibleForTesting
+  static Future<CiscoStats> Function()? debugFetch;
+
   // ── أوامر أساسيّة (لا تنجح اللقطة بدونها) ──
   static const _cmdVersion = 'show version';
   static const _cmdIfStatus = 'show interfaces status';
@@ -116,6 +120,12 @@ class CiscoApi {
     bool includeCounters = true,
     void Function(CiscoStats partial)? onPartialReady,
   }) async {
+    final fake = debugFetch;
+    if (fake != null) {
+      final s = await fake();
+      onPartialReady?.call(s);
+      return s;
+    }
     _CiscoCli? cli;
     try {
       cli = await _CiscoCli.connect(

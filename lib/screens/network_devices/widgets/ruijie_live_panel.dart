@@ -17,6 +17,9 @@ import '_grade.dart';
 import '../../../theme/typography.dart';
 import '../../../core/util/error_text.dart';
 import '../../desktop/desk_widgets.dart';
+import '../../../core/platform/desktop_layout.dart';
+import '../../../core/util/bidi.dart';
+import 'desk_device_kit.dart';
 import '../../../core/widgets/copyable.dart';
 
 /// لوحة مراقبة حيّة لأجهزة Ruijie / Reyee (SNMP v2c فقط).
@@ -248,6 +251,7 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
       );
     }
     final s = _stats!;
+    if (DesktopScope.of(context)) return _deskBuild(s);
     return Container(
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(
@@ -302,6 +306,183 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
         ],
       ]),
     );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // الحاسبة — كصفحة المايكروتك: الحقائق في شريط، والأرقام كبيرةً في صفّ، والترفك برسمٍ بنافذةٍ ثابتة،
+  // والمنافذ جدولاً بجانب الوصلة اللاسلكيّة (المالك ٢٤ أكتوبر: «بشكل حاسبة وليس موبايل»). الهاتف كما هو.
+  // ══════════════════════════════════════════════════════════════
+  Widget _deskBuild(RuijieStats s) {
+    final up = s.uplink;
+    final wan = _uplinkIsWan;
+    final r = up == null ? null : _rates[up.index];
+    final l = s.link;
+    final portsUp = s.ifaces.where((i) => i.operUp).length;
+    return Column(children: [
+      DeskPanelCard(children: [
+        DeskLiveHeader(
+          icon: LucideIcons.router,
+          title: 'مراقبة حيّة · Ruijie (SNMP)',
+          monitoring: _monitoring,
+          loading: _loading,
+          status: _monitoring ? 'مباشر · يتحدّث كلّ ${_refreshInterval.inSeconds} ثوانٍ' : 'المراقبة متوقّفة',
+          onRefresh: _loading ? null : _fetch,
+          onToggle: _monitoring ? _stopMonitoring : _startMonitoring,
+        ),
+        if (_error != null)
+          const DeskNotice(
+              icon: LucideIcons.triangleAlert,
+              text: 'آخر تحديث فشل — البيانات من آخر جولة ناجحة',
+              tone: AppTone.danger),
+        DeskFactsBanner(facts: [
+          (icon: LucideIcons.router, label: 'الاسم', value: s.sysName?.isNotEmpty == true ? s.sysName! : widget.device.name),
+          if (s.sysDescr?.isNotEmpty == true) (icon: LucideIcons.tag, label: 'الطراز', value: s.sysDescr!.split('\n').first),
+          if (s.uptime != null) (icon: LucideIcons.clock, label: 'يعمل منذ', value: deskUptimeAr(s.uptime!)),
+          if (s.isBridge && s.bridgeRole != null) (icon: LucideIcons.radioTower, label: 'الدور', value: s.bridgeRole!),
+          if (up != null) (icon: LucideIcons.cable, label: wan ? 'منفذ الصعود' : 'أنشط منفذ', value: up.name),
+        ]),
+        DeskTilesRow(tiles: [
+          DeskPercentTile(icon: LucideIcons.cpu, label: 'المعالج', percent: s.cpuPercent),
+          DeskPercentTile(icon: LucideIcons.memoryStick, label: 'الذاكرة', percent: s.memPercent),
+          if (s.isBridge && l != null) ...[
+            DeskMetricTile(
+              icon: LucideIcons.signal,
+              label: 'الإشارة',
+              color: l.signalDbm == null ? AppColors.textLow : _signalColor(l.signalDbm),
+              value: DeskBigValue(l.signalDbm?.toString() ?? '—', 'dBm', color: _signalColor(l.signalDbm)),
+              footer: deskSub(l.snrDb != null ? iso('SNR ${l.snrDb} dB') : '—',
+                  color: l.snrDb != null ? _snrColor(l.snrDb) : null),
+            ),
+            DeskMetricTile(
+              icon: LucideIcons.ruler,
+              label: 'المسافة',
+              color: AppColors.brand,
+              value: DeskBigValue(l.distanceM?.toString() ?? '—', 'm', color: AppColors.brand),
+              footer: deskSub(l.freqMhz != null ? 'التردّد ${iso('${l.freqMhz} MHz')}' : '—'),
+            ),
+          ] else
+            DeskMetricTile(
+              icon: LucideIcons.ethernetPort,
+              label: 'المنافذ',
+              color: portsUp > 0 ? AppColors.success : AppColors.textLow,
+              value: DeskBigValue('$portsUp/${s.ifaces.length}', '', color: portsUp > 0 ? AppColors.success : null),
+              footer: deskSub('تعمل'),
+            ),
+          DeskRateTile(
+            down: true,
+            bps: r?.rxBps,
+            source: up?.name,
+            measuring: _traffic.isEmpty,
+            label: wan ? 'التنزيل' : 'الوارد',
+          ),
+          DeskRateTile(
+            down: false,
+            bps: r?.txBps,
+            source: up?.name,
+            measuring: _traffic.isEmpty,
+            label: wan ? 'الرفع' : 'الصادر',
+          ),
+        ]),
+        // على منفذ صعودٍ حقيقيّ: تنزيلٌ ورفع. وعلى غيره «وارد/صادر» — اتّجاه الإنترنت لا معنى له هناك.
+        DeskTrafficCard(
+          samples: [for (final t in _traffic) (rx: t.rx, tx: t.tx)],
+          capacity: _maxTraffic,
+          interval: _refreshInterval,
+          title: wan ? 'سير الترفك' : 'حِمل المنفذ',
+          subtitle: up == null ? null : (wan ? 'منفذ ${up.name}' : 'أنشط منفذ · ${up.name}'),
+          rxLabel: wan ? 'تنزيل' : 'وارد',
+          txLabel: wan ? 'رفع' : 'صادر',
+        ),
+      ]),
+      const SizedBox(height: Sp.md),
+      deskSideBySide(
+        s.ifaces.isEmpty
+            ? null
+            : ExpandableSection(
+                key: PageStorageKey('ruijie-${widget.device.id}-ifaces'),
+                initiallyExpanded: true,
+                header: DeskSectionHeader(icon: LucideIcons.network, title: 'المنافذ', count: s.ifaces.length),
+                content: RepaintBoundary(child: _deskIfaceTable(s.ifaces)),
+              ),
+        !s.isBridge
+            ? null
+            : ExpandableSection(
+                key: PageStorageKey('ruijie-${widget.device.id}-bridge'),
+                initiallyExpanded: true,
+                header: DeskSectionHeader(
+                    icon: LucideIcons.radioTower, title: 'الوصلة اللاسلكيّة', hint: s.bridgeRole),
+                content: _deskBridgeFacts(s),
+              ),
+      ),
+    ]);
+  }
+
+  Widget _deskIfaceTable(List<RuijieInterface> rows) {
+    int maxRx = 0, maxTx = 0;
+    for (final i in rows) {
+      final r = _rates[i.index];
+      if (r != null) {
+        maxRx = math.max(maxRx, r.rxBps);
+        maxTx = math.max(maxTx, r.txBps);
+      }
+    }
+    return DeskTable(
+      columns: const [('المنفذ', 4), ('السرعة', 2), ('وارد ↓', 3), ('صادر ↑', 3)],
+      rows: [
+        for (final i in rows)
+          [
+            DeskNameCell(
+              name: i.name,
+              sub: i.operUp ? 'يعمل' : 'متوقّف',
+              tone: i.operUp ? AppTone.success : AppTone.neutral,
+              dim: !i.operUp,
+            ),
+            (i.operUp && i.speedMbps > 0)
+                ? Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: DeskPill(i.speedMbps >= 1000 ? '${i.speedMbps ~/ 1000}G' : '${i.speedMbps}M',
+                        Grade.speedMbps(i.speedMbps)))
+                : deskDash(),
+            DeskRateCell(bps: i.operUp ? _rates[i.index]?.rxBps : null, down: true, max: maxRx, live: i.operUp),
+            DeskRateCell(bps: i.operUp ? _rates[i.index]?.txBps : null, down: false, max: maxTx, live: i.operUp),
+          ],
+      ],
+    );
+  }
+
+  Widget _deskBridgeFacts(RuijieStats s) {
+    final l = s.link!;
+    final age = _measurementAge();
+    final p = s.peer;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (age != null) ...[
+        DeskNotice(
+          icon: LucideIcons.history,
+          text: age.inMinutes >= 5
+              ? 'الجهاز لم يُحدّث قياساته منذ ${_fmtAge(age)} — الأرقام قديمة'
+              : 'عمر القياس ${_fmtAge(age)}',
+          tone: age.inMinutes >= 5 ? AppTone.warning : AppTone.neutral,
+        ),
+        const SizedBox(height: Sp.md),
+      ],
+      DeskFactsGrid(maxColumns: 2, facts: [
+        if (l.ssid != null) DeskFact('اسم الشبكة (SSID)', l.ssid!, ltr: true, copy: true),
+        if (l.band != null) DeskFact('النطاق', l.band!, ltr: true),
+        if (l.signalDbm != null) DeskFact('الإشارة', '${l.signalDbm} dBm', ltr: true, color: _signalColor(l.signalDbm)),
+        if (l.noiseDbm != null) DeskFact('الضجيج', '${l.noiseDbm} dBm', ltr: true),
+        if (l.snrDb != null) DeskFact('SNR', '${l.snrDb} dB', ltr: true, color: _snrColor(l.snrDb)),
+        if (l.freqMhz != null)
+          DeskFact(l.channel == null ? 'التردّد' : 'التردّد (القناة ${l.channel})', '${l.freqMhz} MHz', ltr: true),
+        if (l.distanceM != null) DeskFact('المسافة', '${l.distanceM} m', ltr: true),
+        if ((l.activeSeconds ?? 0) > 0)
+          DeskFact('الارتباط قائمٌ منذ', deskUptimeAr(Duration(seconds: l.activeSeconds!))),
+        if (p != null && !p.isEmpty) ...[
+          if (p.model != null) DeskFact('طراز الطرف المقابل', p.model!, ltr: true, copy: true),
+          if (p.ip != null) DeskFact('عنوان الطرف المقابل', p.ip!, ltr: true, copy: true),
+          if (p.serial != null) DeskFact('تسلسليّ الطرف المقابل', p.serial!, ltr: true, copy: true),
+        ],
+      ]),
+    ]);
   }
 
   Widget _header(RuijieStats s) {
@@ -917,7 +1098,8 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
   }
 
   // ── Helpers ──
-  Color _percentColor(double? v) => Grade.percentHigherBetter(v).fill;
+  /// حمل المعالج والذاكرة: الأعلى أسوأ — كان `percentHigherBetter` يلوّن معالجاً على ٩٠٪ بالأخضر.
+  Color _percentColor(double? v) => Grade.percentLowerBetter(v).fill;
 
   String _bpsShort(int bps) {
     if (bps <= 0) return '0';

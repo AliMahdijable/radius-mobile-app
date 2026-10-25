@@ -24,6 +24,10 @@ import 'snmp_client.dart';
 /// - Ruijie support forum thread 151 (enterprise .4881.*)
 /// - IF-MIB (RFC 2863)، HOST-RESOURCES-MIB (RFC 2790) — fallback عام
 class RuijieApi {
+  /// الاختبارات واللقطات: لقطةٌ جاهزة بدل SNMP حقيقيّ (لا جهاز في بيئة الاختبار).
+  @visibleForTesting
+  static Future<RuijieStats> Function()? debugFetch;
+
   /// Enterprise root — `.1.3.6.1.4.1.4881` (Ruijie/myMgmt)
   static const String _enterprise = '1.3.6.1.4.1.4881';
 
@@ -102,6 +106,12 @@ class RuijieApi {
     Duration timeout = const Duration(seconds: 5),
     void Function(RuijieStats partial)? onPartialReady,
   }) async {
+    final fake = debugFetch;
+    if (fake != null) {
+      final s = await fake();
+      onPartialReady?.call(s);
+      return s;
+    }
     final snmp = SnmpV2c(
       host: host,
       port: port,
