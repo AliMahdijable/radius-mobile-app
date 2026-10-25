@@ -2015,6 +2015,11 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                       open: _paneKey == _rowKey(s),
                                       selected: isSelected,
                                       selectionMode: _selectionMode,
+                                      hasTelegram: s.idx != null &&
+                                          (s.companyKey == null
+                                                  ? _telegramBoundIdx
+                                                  : (_mergedTelegram[s.companyKey] ?? const <String>{}))
+                                              .contains(s.idx.toString()),
                                       onTap: () => _openDetail(s),
                                       onToggleSelect: () => _toggleSelect(s),
                                       last: i == page.length - 1 && remaining <= 0,

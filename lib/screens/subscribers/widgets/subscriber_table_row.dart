@@ -294,11 +294,15 @@ class SubscriberTableRow extends StatefulWidget {
     required this.selectionMode,
     required this.onTap,
     required this.onToggleSelect,
+    this.hasTelegram = false,
     this.last = false,
   });
 
   /// آخر صفٍّ ظاهر: زاويتا الجدول السفليّتان.
   final bool last;
+
+  /// مربوطٌ ببوت تلغرام — شارةٌ صغيرة بجنب الاسم كبطاقة الهاتف.
+  final bool hasTelegram;
 
   final Subscriber sub;
   final SubscriberTableColumns columns;
@@ -401,12 +405,7 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
                     fontSize: 15,
                     decoration: s.isDisabled ? TextDecoration.lineThrough : null,
                   ),
-                  trailing: s.isOnline && s.isExpired
-                      ? Tooltip(
-                          message: 'subscribers.filter_online_no_plan'.tr(),
-                          child: Icon(LucideIcons.triangleAlert, size: 14, color: AppColors.anomaly),
-                        )
-                      : null,
+                  trailing: _nameTrailing(s),
                   bottom: packageInline ? '${s.username} · ${s.profileName}' : s.username,
                   bottomLtr: true,
                 ),
@@ -427,6 +426,28 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
         );
       },
     ));
+  }
+
+  /// شارات بجنب الاسم: مربوط بتلغرام + «متّصل بلا باقة» — كبطاقة الهاتف.
+  Widget? _nameTrailing(Subscriber s) {
+    final onlineExpired = s.isOnline && s.isExpired;
+    if (!widget.hasTelegram && !onlineExpired) return null;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (widget.hasTelegram)
+          Tooltip(
+            message: 'subscribers.telegram_linked'.tr(),
+            child: Icon(Icons.send_rounded, size: 13, color: AppColors.brandAccent),
+          ),
+        if (widget.hasTelegram && onlineExpired) const SizedBox(width: 5),
+        if (onlineExpired)
+          Tooltip(
+            message: 'subscribers.filter_online_no_plan'.tr(),
+            child: Icon(LucideIcons.triangleAlert, size: 14, color: AppColors.anomaly),
+          ),
+      ],
+    );
   }
 
   Widget _cell(SubCol c, Subscriber s) {

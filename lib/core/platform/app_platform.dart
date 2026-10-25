@@ -18,6 +18,9 @@ class AppPlatform {
 
   static bool get isWindows => !kIsWeb && Platform.isWindows;
 
+  /// تحت `flutter test` — لتفادي نداءات شبكةٍ تلقائيّة (ومؤقّتاتها المعلّقة) في ودجات الاختبار.
+  static bool get isUnderTest => !kIsWeb && Platform.environment.containsKey('FLUTTER_TEST');
+
   /// تطبيق ماك (نسخة سطح المكتب للتجربة على حاسبة المالك). لا تحت `flutter test`: الاختبارات تجري على
   /// الماك نفسه، وفلاتر يعدّها أندرويد (FLUTTER_TEST) — فتبقى كما كانت.
   static bool get isMacDesktop =>

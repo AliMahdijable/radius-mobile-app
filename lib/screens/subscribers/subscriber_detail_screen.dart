@@ -11,6 +11,7 @@ import '../../api/big_subscribers_api.dart';
 import '../../api/sales_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../api/whatsapp_api.dart';
+import '../../core/platform/app_platform.dart';
 import '../../core/util/clipboard_helper.dart';
 import '../../core/util/format.dart';
 import '../../core/util/phone.dart';
@@ -160,6 +161,26 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     }
     // «كل الشركات»: هويّته من ساس شركته أوّل الفتح — يسكّ عليها الخادم مرجع النافذة الذي تطلبه كلّ كتابة
     if (sub.companyKey != null) MergedOps.ensureSubject(sub);
+    // جلب حالة الاتّصال مرّةً عند الفتح حين يكون المشترك متّصلاً بلا
+    // عنوان في الصفّ — كالسحب للتحديث تماماً.
+    //
+    // 🐛 على الحاسبة (والفتح من البحث) يصل الصفّ أحياناً من
+    // `/api/v2/subscribers` بلا طبقة الجلسة (العنوان/المدّة/التحميل)،
+    // فتبقى بلاطة الاتّصال مخفيّة وكارت الجهاز بلا عنوانٍ يفحص عليه —
+    // ولا onu/نانو ولا «ضمن الشبكة». المدير يراها على الهاتف من القائمة
+    // (تدمجها بالخلفيّة) ويفتقدها على الحاسبة. نجعل الكارت يجلبها بنفسه.
+    // المتّصل ذو العنوان أصلاً (قائمة الهاتف المدموجة) لا يُجبَر فلا جولة
+    // زائدة، والمفصول لا شيء يُعرَض له.
+    if (!AppPlatform.isUnderTest && sub.isOnline && (sub.ipAddress ?? '').trim().isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        await _onDataChanged(force: true);
+        // وصل العنوان الآن ⇒ كارت الجهاز يفحص عليه (لا didUpdateWidget فيه).
+        if (mounted && (sub.ipAddress ?? '').trim().isNotEmpty) {
+          SubscriberRefreshSignal.bump();
+        }
+      });
+    }
   }
 
   Future<void> _loadPassword() async {

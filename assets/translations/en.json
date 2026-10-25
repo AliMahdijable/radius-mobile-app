@@ -447,6 +447,7 @@
     "filter_debtors": "Debtors",
     "filter_near_expiry": "Expiring",
     "filter_online_no_plan": "No plan",
+    "telegram_linked": "Linked to Telegram",
     "filter_neglected": "Neglected",
     "add_new": "Add subscriber",
     "empty_title": "No subscribers",
