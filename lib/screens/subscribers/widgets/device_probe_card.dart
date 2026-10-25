@@ -293,6 +293,8 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           ip: creds.ip,
           user: creds.user,
           pass: creds.pass,
+          // ZTE (٢٥ أكتوبر) بجلسته وصفحاته؛ وإلّا هواوي كما كان
+          vendor: _snap?.ont?.vendor ?? 'huawei',
         );
         if (_ontSession == null) {
           _ontRetryAt = DateTime.now().add(_ontRetry);
@@ -498,6 +500,8 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   bool _canReboot() {
     if (!Perms.has('devices.manage')) return false;
     final k = _snap?.kind;
+    // ZTE (٢٥ أكتوبر): مسار إعادة تشغيله لم يُفحص على جهازٍ حقيقيّ — لا زرّ يَعِد بما لم يُجرَّب.
+    if (k == DeviceKind.ont && (_snap?.ont?.isZte ?? false)) return false;
     return k == DeviceKind.ubiquiti || k == DeviceKind.ont;
   }
 
@@ -915,7 +919,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           ],
         ),
         const SizedBox(height: 14),
-        const _DetailRow(field: _ontKind, strong: true),
+        _DetailRow(field: _ontKind(o), strong: true),
         if (_ontHasFiber(o)) _DetailRow(field: _ontFiber(o)),
       ],
     );
@@ -1495,7 +1499,10 @@ CopyField _ontVoltage(OntOpticalInfo o) =>
 CopyField _ontTemp(OntOpticalInfo o) =>
     CopyField('الحرارة', '${o.temperature} °C');
 
-const _ontKind = CopyField('نوع الجهاز', 'Huawei ONT');
+/// هواوي كما كان؛ وZTE بطرازه كما يسمّيه الجهاز («ZTE MH80»).
+CopyField _ontKind(OntOpticalInfo o) => o.isZte
+    ? CopyField('نوع الجهاز', o.model.isEmpty ? 'ZTE ONT' : 'ZTE ${o.model}')
+    : const CopyField('نوع الجهاز', 'Huawei ONT');
 
 /// «--» يرسله الـONT حين لا حالة — ليست قيمة.
 bool _ontHasFiber(OntOpticalInfo o) =>
@@ -1560,7 +1567,7 @@ List<CopyField> deviceCopyFields(DeviceHealthSnapshot snap, {DateTime? at}) {
   final u = snap.ubnt;
   if (snap.kind == DeviceKind.ont && ont != null) {
     fields.addAll([
-      _ontKind,
+      _ontKind(ont),
       _ontRx(ont),
       _ontTx(ont),
       _ontVoltage(ont),

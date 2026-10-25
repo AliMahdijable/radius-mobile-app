@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/net/huawei_ont_service.dart';
+import '../core/net/zte_ont_service.dart';
 import '../core/net/ubiquiti_service.dart';
 import '../models/device_health.dart';
 import 'company_route.dart';
@@ -536,7 +537,7 @@ class DeviceProbeApi {
             : _kUbntPass);
 
     // Admin pinned kind → probe واحد فقط.
-    if (overridesOnt) return _probeOnt(ip, ontUser, ontPass);
+    if (overridesOnt) return _probeOnt(ip, ontUser, ontPass, kindKey);
     if (overridesUbnt) return _probeUbnt(ip, ubntUser, ubntPass);
 
     // Kind cache — لو نعرف من probe سابق إن IP هذا ONT (أو UBNT)،
@@ -545,19 +546,59 @@ class DeviceProbeApi {
     // ترجع parallel لتتلاقط تغيير الجهاز.
     final knownKind = _kindByIp[kindKey];
     if (knownKind == DeviceKind.ont) {
-      return _probeOnt(ip, ontUser, ontPass);
+      return _probeOnt(ip, ontUser, ontPass, kindKey);
     }
     if (knownKind == DeviceKind.ubiquiti) {
       return _probeUbnt(ip, ubntUser, ubntPass);
     }
 
     // First-time أو kind cache cleared — parallel race.
-    final ont = _probeOnt(ip, ontUser, ontPass);
+    final ont = _probeOnt(ip, ontUser, ontPass, kindKey);
     final ubnt = _probeUbnt(ip, ubntUser, ubntPass);
     return _firstNonNull<DeviceHealthSnapshot>([ont, ubnt]);
   }
 
+  /// آخر مورّد ONT نجح لكلّ عنوان (بمفتاح كاش النوع) — الفحص التالي يذهب إليه وحده.
+  static final _ontVendorByKey = <String, String>{};
+
+  /// ONT: هواوي (الأصل) أو ZTE (ZXIC MH80، ٢٥ أكتوبر). أوّل مرّة الاثنان معاً والأسبق نجاحاً — فرع ZTE لا يدخل إلّا على
+  /// واجهة ZTE ([ZteOntService.detect])، وهواوي على جهاز ZTE يقف عند صفحة رمزه (لا محاولة دخول)؛ فلا محاولةٌ خاطئة تقفل
+  /// جهازاً. بعدها المورّد المحفوظ وحده، ويُنسى إن فشل (جهازٌ تبدّل).
   static Future<DeviceHealthSnapshot?> _probeOnt(
+      String ip, String user, String pass, String kindKey) async {
+    final known = _ontVendorByKey[kindKey];
+    if (known != null) {
+      final snap = known == 'zte'
+          ? await _probeZte(ip, user, pass)
+          : await _probeHuawei(ip, user, pass);
+      if (snap == null) _ontVendorByKey.remove(kindKey);
+      return snap;
+    }
+    final snap = await _firstNonNull<DeviceHealthSnapshot>([
+      _probeHuawei(ip, user, pass),
+      _probeZte(ip, user, pass),
+    ]);
+    if (snap != null) _ontVendorByKey[kindKey] = snap.ont?.vendor ?? 'huawei';
+    return snap;
+  }
+
+  /// ZTE: تعرّفٌ بلا دخول، ثمّ دخولٌ باعتمادات الوكيل وحدها (المرفوضة لا تُعاد)، والضوء، والخروج — الواجهة
+  /// قد ترفض دخولاً ثانياً وجلسةٌ مفتوحة، فلا تبقى جلسة الفحص تزاحم جلسة الترافيك.
+  static Future<DeviceHealthSnapshot?> _probeZte(
+      String ip, String user, String pass) async {
+    if (!await ZteOntService.detect(ip)) return null;
+    final session = await ZteOntService.loginConfigured(ip, user, pass);
+    if (session == null) return null;
+    try {
+      final optical = await ZteOntService.fetchOptical(session);
+      if (optical == null) return null;
+      return DeviceHealthSnapshot(kind: DeviceKind.ont, ip: ip, ont: optical);
+    } finally {
+      await ZteOntService.logout(session);
+    }
+  }
+
+  static Future<DeviceHealthSnapshot?> _probeHuawei(
       String ip, String user, String pass) async {
     // ⚠️ ميزانيّةٌ تساوي سقف الفحص: المستدعي يتخلّى عنّا عند
     //    `_probeCap`، و`.timeout` لا يُلغي عملنا. فبلا هذه الميزانيّة

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../../models/device_health.dart';
 import 'huawei_ont_service.dart';
+import 'zte_ont_service.dart';
 
 /// ترافيك الـONU اللحظيّ (Huawei) في كارت المشترك — طلب المالك ٢٢ أكتوبر («اشتغلي على جلب ترفك onu»).
 ///
@@ -112,22 +113,38 @@ class OntTrafficMeter {
 
 /// جلسة ويب معمَّرة لقياس ترافيك الـONU: دخولٌ واحد لعمر الكارت، ثمّ في كلّ نبضة رأسا الصفحتين وحدهما (~٨ ك.ب و~٠٫٧ث
 /// لكلٍّ بدل ٢٠٠ ك.ب–٢ م.ب كاملة)، والخروج عند الإغلاق.
+///
+/// ZTE (ZXIC MH80، ٢٥ أكتوبر): العدّادات نفسها (كلّ SSID وكلّ منفذ، ٣٢ بت) من صفحتي `status_wlaninfo_t` و`status_ponlan_info_t`
+/// كاملتين (~١٤٠ ك.ب و~١ث لكلٍّ — لا رأسَ يُقطع: الجدول بعد القالب). الواي فاي كلّ نبضة؛ والمنافذ في الأولى ثمّ كلّ سادسة ما دامت
+/// غير موصولة، وكلّ نبضة حين يُوصل منفذ.
 class OntTrafficSession {
-  OntTrafficSession._(this._session);
+  OntTrafficSession._(this._session) : _zte = null;
+  OntTrafficSession._zte(ZteOntSession zte)
+      : _session = null,
+        _zte = zte;
 
-  final OntLoginResult _session;
+  final OntLoginResult? _session;
+  final ZteOntSession? _zte;
   bool _closed = false;
+  int _zteSamples = 0;
+  bool _zteLanLinked = true;
 
   /// صفحةٌ أعطت عدّادات مرّةً ثمّ غابت ⇒ القراءة فاشلة (لا معدّل LAN وحده يُعرض كأنّه الكلّ).
   bool _hadWifi = false;
   bool _hadLan = false;
 
+  /// [vendor] من الفحص (`OntOpticalInfo.vendor`): `zte` ⇒ دخول ZTE باعتمادات الوكيل نفسها؛ وإلّا هواوي كما كان.
   static Future<OntTrafficSession?> open({
     required String ip,
     required String user,
     required String pass,
+    String vendor = 'huawei',
     Duration budget = const Duration(seconds: 15),
   }) async {
+    if (vendor == 'zte') {
+      final z = await ZteOntService.loginConfigured(ip, user, pass);
+      return z == null ? null : OntTrafficSession._zte(z);
+    }
     final s = await HuaweiOntService.login(ip, user, pass, budget: budget);
     return s == null ? null : OntTrafficSession._(s);
   }
@@ -135,9 +152,12 @@ class OntTrafficSession {
   /// عدّادات الواجهات لحظة القراءة — null: تعذّرت (جلسةٌ انتهت أو صفحةٌ غابت ⇒ المتصل يُغلق ويعيد الفتح بعد مهلة).
   Future<OntByteCounters?> sample() async {
     if (_closed) return null;
-    final w = await HuaweiOntService.fetchHead(_session, '/html/amp/wlaninfo/wlaninfo.asp', OntCounterParse.wifiEnd);
+    final zte = _zte;
+    if (zte != null) return _sampleZte(zte);
+    final session = _session!;
+    final w = await HuaweiOntService.fetchHead(session, '/html/amp/wlaninfo/wlaninfo.asp', OntCounterParse.wifiEnd);
     final wAt = DateTime.now();
-    final l = await HuaweiOntService.fetchHead(_session, '/html/amp/ethinfo/ethinfo.asp', OntCounterParse.lanEnd);
+    final l = await HuaweiOntService.fetchHead(session, '/html/amp/ethinfo/ethinfo.asp', OntCounterParse.lanEnd);
     final lAt = DateTime.now();
     final wifi = OntCounterParse.wifi(w ?? '');
     final lan = OntCounterParse.lan(l ?? '');
@@ -151,9 +171,39 @@ class OntTrafficSession {
     });
   }
 
+  /// ZTE: صفحةٌ عادت دخولاً (جلسةٌ انتهت أو طُردنا) ⇒ null فيُغلق المتصل ويعيد الفتح بعد مهلة.
+  Future<OntByteCounters?> _sampleZte(ZteOntSession zte) async {
+    final w = await ZteOntService.page(zte, 'status_wlaninfo_t.gch');
+    final wAt = DateTime.now();
+    if (w == null) return null;
+    final readLan = _zteLanLinked || _zteSamples % 6 == 0;
+    _zteSamples++;
+    ({Map<String, ({int sent, int received})> counters, bool linked})? lan;
+    var lAt = wAt;
+    if (readLan) {
+      final l = await ZteOntService.page(zte, 'status_ponlan_info_t.gch');
+      lAt = DateTime.now();
+      if (l == null) return null;
+      lan = ZteOntParse.lan(l);
+      _zteLanLinked = lan.linked;
+    }
+    final wifi = ZteOntParse.wifi(w);
+    if (wifi.isEmpty && (lan == null || lan.counters.isEmpty)) return null;
+    return OntByteCounters({
+      for (final e in wifi.entries) e.key: (sent: e.value.sent, received: e.value.received, at: wAt),
+      if (lan != null)
+        for (final e in lan.counters.entries) e.key: (sent: e.value.sent, received: e.value.received, at: lAt),
+    });
+  }
+
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
-    await HuaweiOntService.logout(_session);
+    final zte = _zte;
+    if (zte != null) {
+      await ZteOntService.logout(zte);
+      return;
+    }
+    await HuaweiOntService.logout(_session!);
   }
 }

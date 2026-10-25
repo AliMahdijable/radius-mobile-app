@@ -35,6 +35,8 @@ class OntOpticalInfo {
     required this.temperature,
     required this.bias,
     required this.sendStatus,
+    this.vendor = 'huawei',
+    this.model = '',
   });
   final String txPower;
   final String rxPower;
@@ -42,6 +44,14 @@ class OntOpticalInfo {
   final String temperature;
   final String bias;
   final String sendStatus;
+
+  /// المورّد: `huawei` (الأصل) أو `zte` (ZXIC MH80، ٢٥ أكتوبر) — يحدّد جلسة الترافيك وتوفّر إعادة التشغيل.
+  final String vendor;
+
+  /// الطراز كما يسمّيه الجهاز (ZTE: عنوان الصفحة «MH80») — فارغٌ حين لا يُعرف.
+  final String model;
+
+  bool get isZte => vendor == 'zte';
 
   bool get txOk {
     final v = double.tryParse(txPower);
@@ -75,8 +85,11 @@ class OntOpticalInfo {
         't': temperature,
         'b': bias,
         's': sendStatus,
+        if (vendor != 'huawei') 'vd': vendor,
+        if (model.isNotEmpty) 'md': model,
       };
 
+  /// مخزَّنٌ قبل حقل المورّد ⇒ هواوي كما كان.
   static OntOpticalInfo fromJson(Map<String, dynamic> j) => OntOpticalInfo(
         txPower: (j['tx'] ?? '').toString(),
         rxPower: (j['rx'] ?? '').toString(),
@@ -84,6 +97,8 @@ class OntOpticalInfo {
         temperature: (j['t'] ?? '').toString(),
         bias: (j['b'] ?? '').toString(),
         sendStatus: (j['s'] ?? '').toString(),
+        vendor: (j['vd'] ?? 'huawei').toString(),
+        model: (j['md'] ?? '').toString(),
       );
 }
 
