@@ -85,3 +85,31 @@ class _RenderNavGuard extends RenderProxyBox {
     return super.hitTest(result, position: position);
   }
 }
+
+/// يتتبّع اسم الصفحة في قمّة Navigator قسمٍ — ليمنع غلاف الدسكتوب فتح صفحة شريط الأعلى نفسها مرّتين
+/// (المالك ٢٥ أكتوبر: «نقر الإشعارات أكثر من مرّة يفتح أكثر من صفحة»). صفحات القسم الداخليّة بلا اسمٍ فلا تتعارض،
+/// وصفحات الشريط باسمٍ فريد (`deskpage:<النوع>`). مراقبٌ لكلّ Navigator (لا يُشارَك).
+class DeskNavStack extends NavigatorObserver {
+  final List<String?> _names = [];
+
+  /// اسم الصفحة في القمّة، أو null (الجذر أو صفحةٌ داخليّة بلا اسم).
+  String? get topName => _names.isEmpty ? null : _names.last;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) => _names.add(route.settings.name);
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (_names.isNotEmpty) _names.removeLast();
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (_names.isNotEmpty) _names.removeLast();
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    if (_names.isNotEmpty) _names[_names.length - 1] = newRoute?.settings.name;
+  }
+}

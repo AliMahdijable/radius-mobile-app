@@ -147,6 +147,11 @@ class _DesktopShellState extends State<DesktopShell> {
       return;
     }
     setState(() => _open(id, root, title, subtitle));
+    // نقرة القائمة تفتح القسم على رأسه نظيفاً — لا يُستأنف على صفحةٍ فرعيّة (المالك ٢٥ أكتوبر: الإعدادات تفتح من جديد).
+    // الفتح من داخل الشاشات (بطاقةٌ تفتح المشتركين بفلتر) يمرّ عبر didUpdateWidget/_open لا هنا، فيحفظ حالته.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _navKeys[id]?.currentState?.popUntil((r) => r.isFirst);
+    });
     if (id.startsWith('tab:')) {
       widget.onSelectTab(int.parse(id.substring(4)));
     } else {
@@ -156,6 +161,19 @@ class _DesktopShellState extends State<DesktopShell> {
 
   /// مراقب [DeskNavGuard] لكلّ قسم — المراقب لا يُشارك بين Navigatorين.
   final Map<String, NavigatorObserver> _guards = {};
+
+  /// يتتبّع اسم الصفحة في قمّة كلّ قسم — لمنع تكديس صفحة شريط الأعلى نفسها (الإشعارات…).
+  final Map<String, DeskNavStack> _stackObs = {};
+
+  /// يفتح صفحةً من شريط الأعلى (الإشعارات/التفاصيل) في القسم الحاليّ، **بلا تكديس** نسخةٍ مفتوحةٍ في القمّة —
+  /// نقراتٌ متكرّرة على الجرس كانت تفتح إشعاراتٍ فوق بعض (المالك ٢٥ أكتوبر).
+  void _openPage(Widget page) {
+    final nav = _navKeys[_section]?.currentState;
+    if (nav == null) return;
+    final name = 'deskpage:${page.runtimeType}';
+    if (_stackObs[_section]?.topName == name) return; // مفتوحةٌ سلفاً في القمّة
+    nav.push(MaterialPageRoute(settings: RouteSettings(name: name), builder: (_) => page));
+  }
 
   Widget _rootOf(String id) {
     if (id.startsWith('tab:')) {
@@ -215,9 +233,7 @@ class _DesktopShellState extends State<DesktopShell> {
                       title: _sectionTitle(),
                       shortcut: mac ? '⌘K' : 'Ctrl K',
                       onSearch: () => showQuickSearch(context),
-                      openPage: (page) => _navKeys[_section]
-                          ?.currentState
-                          ?.push(MaterialPageRoute(builder: (_) => page)),
+                      openPage: _openPage,
                     ),
                     Expanded(child: _content()),
                   ],
@@ -256,8 +272,11 @@ class _DesktopShellState extends State<DesktopShell> {
                       scale: id == 'tab:2' ? _devicesZoom : 1,
                       child: Navigator(
                         key: _navKeys[id],
-                        // النقرة المزدوجة لا تفتح الصفحة مرّتين (DeskNavGuard).
-                        observers: [_guards[id] ??= DeskNavGuard.observer()],
+                        // النقرة المزدوجة لا تفتح الصفحة مرّتين (DeskNavGuard)، ومراقب القمّة يمنع تكديس صفحة الشريط.
+                        observers: [
+                          _guards[id] ??= DeskNavGuard.observer(),
+                          _stackObs[id] ??= DeskNavStack(),
+                        ],
                         onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => _rootOf(id)),
                       ),
                     ),

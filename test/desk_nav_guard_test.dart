@@ -11,6 +11,51 @@ import 'package:rad_mysvcs/core/platform/desk_nav_guard.dart';
 void main() {
   setUp(DeskNavGuard.debugReset);
 
+  // مراقب القمّة (DeskNavStack) + منع تكديس صفحة الشريط — المالك ٢٥ أكتوبر: «نقر الإشعارات أكثر من مرّة يفتح أكثر من صفحة».
+  testWidgets('DeskNavStack: يتتبّع اسم القمّة؛ والفتح المُزال-للتكرار يفتح مرّةً واحدة مهما تكرّر النقر', (t) async {
+    final nav = GlobalKey<NavigatorState>();
+    final obs = DeskNavStack();
+    var inboxBuilds = 0;
+    await t.pumpWidget(MaterialApp(
+      home: Navigator(
+        key: nav,
+        observers: [obs],
+        onGenerateRoute: (_) => MaterialPageRoute(settings: const RouteSettings(name: null), builder: (_) => const SizedBox()),
+      ),
+    ));
+    await t.pump();
+    expect(obs.topName, isNull, reason: 'الجذر بلا اسم');
+
+    // نفس منطق _openPage في الغلاف: لا تدفع إن كانت القمّة بالاسم نفسه.
+    void openInbox() {
+      const name = 'deskpage:Inbox';
+      if (obs.topName == name) return;
+      nav.currentState!.push(MaterialPageRoute(
+          settings: const RouteSettings(name: name),
+          builder: (_) { inboxBuilds++; return const Text('inbox'); }));
+    }
+
+    openInbox(); await t.pumpAndSettle();
+    openInbox(); await t.pumpAndSettle();
+    openInbox(); await t.pumpAndSettle();
+    expect(inboxBuilds, 1, reason: 'ثلاث نقرات ⇒ صفحةٌ واحدة');
+    expect(obs.topName, 'deskpage:Inbox');
+    expect(find.text('inbox'), findsOneWidget);
+
+    // رجوعٌ واحد يُغلقها، ثمّ الفتح يعمل من جديد (مرّةً واحدة).
+    nav.currentState!.pop(); await t.pumpAndSettle();
+    expect(obs.topName, isNull);
+    openInbox(); await t.pumpAndSettle();
+    expect(inboxBuilds, 2);
+    expect(find.text('inbox'), findsOneWidget);
+
+    // صفحةٌ داخليّة بلا اسم فوقها لا تمنع فتح الإشعارات (أسماء مختلفة).
+    nav.currentState!.push(MaterialPageRoute(builder: (_) => const Text('detail'))); await t.pumpAndSettle();
+    expect(obs.topName, isNull);
+    openInbox(); await t.pumpAndSettle();
+    expect(inboxBuilds, 3, reason: 'الإشعارات تُفتح فوق صفحةٍ داخليّة');
+  });
+
   Future<({List<int> pushes, GlobalKey<NavigatorState> inner})> pump(WidgetTester t, {required bool guard}) async {
     final pushes = <int>[0];
     final inner = GlobalKey<NavigatorState>();
