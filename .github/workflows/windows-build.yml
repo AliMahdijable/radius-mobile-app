@@ -95,9 +95,12 @@ jobs:
         id: msix
         continue-on-error: true
         run: |
-          set -e
-          . windows/msix/store_identity.env
-          full=$(grep -m1 '^version:' pubspec.yaml | awk '{print $2}')
+          set -eo pipefail
+          # عدّاء ويندوز يُخرج الملفّات بنهايات CRLF (core.autocrlf)، و«.» يُبقي ‎\r في آخر كلّ قيمة
+          # فيرفض msix اسم الهويّة (‎^[a-zA-Z0-9.-]{3,50}$‎) — تُقرأ بلا ‎\r. خرج الأداة كاملاً في msix.log.
+          eval "$(tr -d '\r' < windows/msix/store_identity.env)"
+          : "${MSIX_IDENTITY_NAME:?}" "${MSIX_PUBLISHER:?}" "${MSIX_PUBLISHER_DISPLAY_NAME:?}"
+          full=$(grep -m1 '^version:' pubspec.yaml | awk '{print $2}' | tr -d '\r')
           ver=${full%%+*}
           build=${full##*+}
           IFS=. read -r major minor _ <<< "$ver"
@@ -106,7 +109,8 @@ jobs:
           msixver="$major.$minor.$build.0"
           suffix=""
           [ "$MSIX_READY" = "1" ] || suffix="_placeholder"
-          dart pub global activate msix 3.18.0 > /dev/null
+          echo "identity=$MSIX_IDENTITY_NAME ready=$MSIX_READY version=$msixver" | tee msix.log
+          dart pub global activate msix 3.18.0 2>&1 | tee -a msix.log > /dev/null
           dart pub global run msix:create --store --build-windows false \
             --version "$msixver" \
             --display-name "MyServices Pro" \
@@ -120,7 +124,7 @@ jobs:
             --toast-activator-arguments "msix-args" \
             --toast-activator-display-name "MyServices Pro" \
             --output-path dist \
-            --output-name "MyServicesPro_${ver}_${build}_store${suffix}"
+            --output-name "MyServicesPro_${ver}_${build}_store${suffix}" 2>&1 | tee -a msix.log
           out=$(ls dist/MyServicesPro_*_store*.msix)
           ls -la "$out"
           echo "path=$out" >> "$GITHUB_OUTPUT"
@@ -155,6 +159,7 @@ jobs:
           cp MyServicesPro_windows_*.zip ci_out/ 2>/dev/null || true
           cp dist/MyServicesPro_Setup_*.exe ci_out/ 2>/dev/null || true
           cp dist/MyServicesPro_*_store*.msix ci_out/ 2>/dev/null || true
+          cp msix.log ci_out/ 2>/dev/null || true
           echo "msix=${{ steps.msix.outcome }}" > ci_out/MSIX.txt
           {
             echo "sha=${GITHUB_SHA}"
