@@ -8,6 +8,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../api/big_subscribers_api.dart';
+import '../../core/platform/app_platform.dart';
 import '../../api/subscribers_api.dart';
 import '../../core/util/format.dart';
 import '../../models/subscriber.dart';
@@ -117,6 +118,9 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
     });
   }
 
+  /// ويندوز: التعرّف على الصوت بيتا ويحتاج صوت اللغة مثبّتاً في النظام — فالإرشاد يختلف عن أندرويد.
+  bool get _winSpeech => AppPlatform.isWindows;
+
   Future<void> _initSpeech() async {
     try {
       final ok = await _speech.initialize(
@@ -143,11 +147,14 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
           // الفعلي = تغيير المحرّك الافتراضي من إعدادات النظام.
           if (err.errorMsg.contains('language-not-supported') ||
               err.errorMsg.contains('error_language_not_supported')) {
-            _showSnack(
-              'العربية غير مدعومة في المحرّك الحالي. الحلّ:\n'
-              'Settings → Apps → Default apps → Digital assistant → Google\n'
-              'أو: Settings → General → Voice input → Google',
-            );
+            _showSnack(_winSpeech
+                // ويندوز: التعرّف يحتاج صوتاً عربيّاً مثبّتاً في النظام (المالك ٢٥ أكتوبر: «الصوت ما يتعرّف على العربي»).
+                ? 'التعرّف على العربيّة يحتاج تثبيت صوتٍ عربيّ في ويندوز:\n'
+                    'Settings → Time & language → Speech → Manage voices → Add → العربيّة،\n'
+                    'ثمّ أعد تشغيل البرنامج.'
+                : 'العربية غير مدعومة في المحرّك الحالي. الحلّ:\n'
+                    'Settings → Apps → Default apps → Digital assistant → Google\n'
+                    'أو: Settings → General → Voice input → Google');
           } else if (err.errorMsg.contains('error_client') ||
               err.errorMsg.contains('error_no_match') ||
               err.errorMsg.contains('error_speech_timeout')) {
@@ -160,11 +167,12 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
           } else if (err.errorMsg.contains('error_unknown') ||
               err.errorMsg.contains('300')) {
             // 2026-07-14: Tecno/Huawei/Xiaomi غالباً — المحرّك النشط
-            // ليس Google. اقتراح مباشر لتغييره.
-            _showSnack(
-              'محرّك الصوت الحالي لا يعمل. غيّره من:\n'
-              'Settings → Apps → Default apps → Digital assistant → Google',
-            );
+            // ليس Google. اقتراح مباشر لتغييره. وويندوز: صوتٌ عربيّ مفقود.
+            _showSnack(_winSpeech
+                ? 'التعرّف على العربيّة يحتاج تثبيت صوتٍ عربيّ في ويندوز:\n'
+                    'Settings → Time & language → Speech → Manage voices → Add → العربيّة.'
+                : 'محرّك الصوت الحالي لا يعمل. غيّره من:\n'
+                    'Settings → Apps → Default apps → Digital assistant → Google');
           }
         },
       );
@@ -251,7 +259,10 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
         setState(() => _speechFailed = true);
         _showSnack(denied
             ? 'صلاحية الميكروفون مرفوضة — فعّلها من إعدادات النظام'
-            : 'التعرّف على الصوت غير متاح على هذا الجهاز');
+            : _winSpeech
+                ? 'التعرّف على الصوت غير متاح — ثبّت صوتاً عربيّاً في ويندوز:\n'
+                    'Settings → Time & language → Speech → Manage voices → Add → العربيّة، ثمّ أعد التشغيل.'
+                : 'التعرّف على الصوت غير متاح على هذا الجهاز');
         return;
       }
     }

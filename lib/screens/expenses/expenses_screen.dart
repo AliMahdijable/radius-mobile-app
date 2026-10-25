@@ -399,7 +399,7 @@ class _ExpenseTile extends StatelessWidget {
                         const SizedBox(width: 4),
                         Text(
                           iqDateLabel(row.expenseDate),
-                          style: AppType.labelBold(color: AppColors.textHi),
+                          style: AppType.bodyBold(color: AppColors.textHi),
                         ),
                         if ((row.actingEmployeeUsername ?? '').isNotEmpty) ...[
                           Text('  ·  ',
@@ -434,7 +434,8 @@ class _ExpenseTile extends StatelessWidget {
                       const SizedBox(height: 3),
                       Text(
                         _note(row),
-                        style: AppType.muted(color: AppColors.textMid),
+                        // المالك ٢٥ أكتوبر: «معلومات الصرفيّة ناعمة جدّاً» — أكبر وأوضح (كانت muted/11 رماديّ).
+                        style: AppType.body(color: AppColors.textBody),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),

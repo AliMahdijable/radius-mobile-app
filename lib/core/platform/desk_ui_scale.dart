@@ -25,7 +25,8 @@ class DeskUiScale {
 
   static const Size designSize = Size(1440, 900);
   static const double autoMin = 0.75;
-  static const List<double> levels = [0.7, 0.75, 0.8, 0.85, 0.9, 1.0, 1.1, 1.25];
+  // درجاتٌ أكبر لضعاف النظر (المالك ٢٥ أكتوبر: «ميزة أوبتمايز للخط وحجمه») — يكبّر كلّ النصوص والقوائم معاً.
+  static const List<double> levels = [0.7, 0.75, 0.8, 0.85, 0.9, 1.0, 1.1, 1.25, 1.4, 1.6, 1.8];
 
   static const _storage = FlutterSecureStorage();
   static const _key = 'desk.ui.scale.v1';
