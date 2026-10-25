@@ -18,6 +18,7 @@ import '../../desktop/desk_widgets.dart';
 import '../../reports/package_distribution_screen.dart';
 import '../../reports/widgets/date_range_chip.dart';
 import '../../reports/widgets/scope_helper.dart';
+import 'pill_tabs.dart';
 
 /// «توزيع الباقات» في الرئيسيّة (#٥ — طلب المالك ٢٥ أكتوبر: «مختصر منهن بشكل كارتات بالداش بورد وبالتطبيق يتضمنن بنطاق
 /// العرض وصلاحيات الموظفين»).
@@ -243,21 +244,15 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
     );
   }
 
-  /// الاختصارات الأربعة سطراً واحداً — حبوبٌ كشريط الفترة في التقارير.
+  /// الاختصارات الأربعة بشكل فترات بطاقة الإيرادات («يومي · أسبوعي · شهري»): حبوبٌ في مسارٍ واحد بطرف البطاقة.
   Widget _periodBar() {
-    return Row(
-      children: [
-        for (final (i, p) in PackagesSummaryCard.periods.indexed) ...[
-          if (i > 0) const SizedBox(width: 6),
-          Expanded(
-            child: _PeriodPill(
-              label: PackagesSummaryCard.rangeOf(p).label,
-              selected: p == _period,
-              onTap: () => _pick(p),
-            ),
-          ),
-        ],
-      ],
+    return Align(
+      alignment: AlignmentDirectional.centerEnd,
+      child: PillTabs<String>(
+        options: [for (final p in PackagesSummaryCard.periods) (p, PackagesSummaryCard.rangeOf(p).label)],
+        current: _period,
+        onSelect: _pick,
+      ),
     );
   }
 
@@ -407,44 +402,6 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _PeriodPill extends StatelessWidget {
-  const _PeriodPill({required this.label, required this.selected, required this.onTap});
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: selected ? AppColors.brandSoftBg : AppColors.surfaceSunken,
-      borderRadius: BorderRadius.circular(R.pill),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(R.pill),
-        child: Container(
-          height: 32,
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 6),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(R.pill),
-            border: Border.all(color: selected ? AppColors.brandSoftBorder : AppColors.border),
-          ),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              label,
-              maxLines: 1,
-              style: AppType.label(color: selected ? AppColors.brand : AppColors.textMid)
-                  .copyWith(fontSize: 12.5, fontWeight: selected ? FontWeight.w700 : FontWeight.w500),
-            ),
-          ),
-        ),
       ),
     );
   }

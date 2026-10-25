@@ -16,6 +16,7 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../desktop/desk_widgets.dart';
 import '../../../core/platform/desktop_layout.dart';
+import 'pill_tabs.dart';
 
 /// Revenue hero card. Pulls live totals from /api/reports/finance for
 /// the selected period (day/week/month). No mock fallbacks — while a
@@ -260,7 +261,15 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
                       .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
                 ),
               ),
-              _PeriodTabs(current: _period, onSelect: _select),
+              PillTabs<RevenuePeriod>(
+                options: [
+                  (RevenuePeriod.day, 'dashboard.period_daily'.tr()),
+                  (RevenuePeriod.week, 'dashboard.period_weekly'.tr()),
+                  (RevenuePeriod.month, 'dashboard.period_monthly'.tr()),
+                ],
+                current: _period,
+                onSelect: _select,
+              ),
             ],
           ),
           // ⚠️ **سطرٌ ثانٍ لا إلحاقٌ بالعنوان.**
@@ -343,57 +352,5 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
 
 /// أعمدة الإيراد اليوميّ — رسم يدويّ لا مكتبة.
 ///
-class _PeriodTabs extends StatelessWidget {
-  const _PeriodTabs({required this.current, required this.onSelect});
-  final RevenuePeriod current;
-  final ValueChanged<RevenuePeriod> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceInput,
-        borderRadius: BorderRadius.circular(R.pill),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _tab(RevenuePeriod.day, 'dashboard.period_daily'.tr()),
-          _tab(RevenuePeriod.week, 'dashboard.period_weekly'.tr()),
-          _tab(RevenuePeriod.month, 'dashboard.period_monthly'.tr()),
-        ],
-      ),
-    );
-  }
-
-  Widget _tab(RevenuePeriod p, String label) {
-    final selected = current == p;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => onSelect(p),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.brand : Colors.transparent,
-          borderRadius: BorderRadius.circular(R.pill),
-        ),
-        child: Text(
-          label,
-          style: AppType.muted(
-            color: selected ? AppColors.onBrand : AppColors.textMid,
-          ).copyWith(
-            fontSize: 11,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // Sparkline (fl_chart LineChart) dropped along with mock data — re-add
 // once /api/reports/finance's `data.timeseries` is wired into RevenueResult.
