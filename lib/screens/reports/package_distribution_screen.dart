@@ -40,7 +40,8 @@ class PackageDistributionScreen extends StatefulWidget {
 }
 
 class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
-  static const _perm = 'reports.financial';
+  // «توزيع الباقات» بمفتاحه منذ ٢٥ أكتوبر (كان «تقرير مالي») — الخادم يفرضه (54b6dba).
+  static const _perm = 'reports.packages';
 
   late DateRange _range = _last30();
   ReportFilters _filters = const ReportFilters();

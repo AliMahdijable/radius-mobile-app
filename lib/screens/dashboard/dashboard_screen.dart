@@ -148,6 +148,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   bool get _canSubs => _allows('subscribers.view');
   bool get _canMoney => _allows('reports.financial');
+  // «توزيع الباقات» — مفتاحه الخاصّ منذ ٢٥ أكتوبر (كان «تقرير مالي»).
+  bool get _canPackages => _allows('reports.packages');
   bool get _canActivity => _allows('reports.daily_activations');
   bool get _canActivityLog => _allows('reports.activity_log');
   bool get _canWa => !_elEmployee || Perms.hasAny(_waKeys);
@@ -167,7 +169,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// بقي كلّ شيء كما هو — فلا إعادة بناءٍ ولا جلب إلّا إن تبدّلت البصمة.
   String _access = '';
   String _accessSig() =>
-      '$_elEmployee$_canSubs$_canMoney$_canActivity$_canActivityLog$_canWa';
+      '$_elEmployee$_canSubs$_canMoney$_canPackages$_canActivity$_canActivityLog$_canWa';
 
   void _onAccessChanged() {
     if (!mounted) return;
@@ -784,7 +786,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // (initState فيه يُطلق النداء)، والمخفيّ من «نطاق العرض» كذلك. لا تقرير باقاتٍ للوطنيّ.
     final packagesSection = !_shown('packages') || ProviderService.isFtth
         ? null
-        : (_canMoney
+        : (_canPackages
                 ? const PackagesSummaryCard()
                 : LockedCard(title: 'pkgdist.card_title'.tr(), icon: LucideIcons.package))
             .animate()

@@ -164,6 +164,8 @@ const s4SasSub = Scenario(
     'packages.view': false,
     'packages.edit_prices': false,
     'reports.financial': false,
+    // «توزيع الباقات» بمفتاحه منذ ٢٥ أكتوبر — مطفأٌ كبقيّة تقارير هذا الدور.
+    'reports.packages': false,
     'reports.activations': false,
     'reports.manager_debts': false,
     'reports.sessions': false,

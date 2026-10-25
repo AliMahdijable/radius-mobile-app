@@ -303,6 +303,8 @@ class ElEmployeePerms {
     'subscriber_prices.view',
     'subscriber_prices.manage',
     'reports.financial',
+    // «توزيع الباقات» (٢٥ أكتوبر) — بطاقة الرئيسيّة وتقريرها، بمفتاحه في جدول موظّفي ايرث لنك.
+    'reports.packages',
     'reports.activations',
     'reports.daily_activations',
     'reports.expenses',
@@ -339,6 +341,8 @@ class ElEmployeePerms {
         'بالرصيد (بباسورد الإيداع — يُخصم من رصيد الوكيل) أو بكارت أو تجريبي',
     'subscribers.toggle': 'يشمل قطع اتصال المشترك',
     'reports.financial': 'يشمل رصيد الوكيل والكارتات المطلوبة',
+    'reports.packages':
+        'المشتركون والتفعيلات والإيراد لكلّ باقة — الكلفة والربح لصاحب الحساب وحده',
     'reports.expenses': 'عرض الصرفيات وإدارتها',
     'subscribers.edit_location': 'موقع المشترك على الخريطة',
     // بيانات دخول أجهزة المشتركين (الافتراضيّة وجهاز كلّ مشترك) تصل بالعرض

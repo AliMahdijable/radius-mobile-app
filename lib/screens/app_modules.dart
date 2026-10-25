@@ -86,6 +86,7 @@ List<AppModule> buildAppModules() {
   final stock = CardsState.badge.value;
   const rk = [
     'reports.financial',
+    'reports.packages',
     'reports.activations',
     'reports.daily_activations',
     'reports.expenses',

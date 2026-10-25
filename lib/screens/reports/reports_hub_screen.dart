@@ -90,11 +90,11 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
                     builder: (_) => const FinancialReportScreen()),
               ),
             ),
-          // «توزيع الباقات والأرباح» (#٥، ٢٥ أكتوبر): بمفتاح التقرير الماليّ نفسه (الخادم يفرضه)، SAS4 وايرث لنك — لا
+          // «توزيع الباقات والأرباح» (#٥، ٢٥ أكتوبر): بمفتاحه «توزيع الباقات» (الخادم يفرضه)، SAS4 وايرث لنك — لا
           // تقرير باقاتٍ للوطنيّ.
-          if (permShown(const ['reports.financial']) && !ProviderService.isFtth)
+          if (permShown(const ['reports.packages']) && !ProviderService.isFtth)
             _ReportCard(
-              locked: !Perms.has('reports.financial'),
+              locked: !Perms.has('reports.packages'),
               // ليست أيقونة «حسب الباقة» (تقرير ايرث لنك) — بطاقتان متجاورتان لموزّعها لا تتشابهان.
               icon: LucideIcons.chartPie,
               color: AppColors.success,

@@ -62,10 +62,15 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
   String _period = PackagesSummaryCard.periods.first;
   static const _periodKey = 'pkgcard.period';
 
+  /// «الربح المقدَّر» مخفيٌّ حتى يُظهره صاحب الحساب (المالك ٢٥ أكتوبر: «خلي مخفي الا يظهر الشخص… حتى لاتصير خربطه
+  /// بينه وبين الايرادات اعلاه») — واختياره يُحفظ على الجهاز كالفترة.
+  bool _showProfit = false;
+  static const _profitKey = 'pkgcard.show_profit';
+
   @override
   void initState() {
     super.initState();
-    _restorePeriod();
+    _restorePrefs();
     SubscriberEvents.dataChanged.addListener(_load);
     AppResumedSignal.tick.addListener(_load);
     DashboardRefreshSignal.tick.addListener(_load);
@@ -93,13 +98,19 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
     _load();
   }
 
-  Future<void> _restorePeriod() async {
+  Future<void> _restorePrefs() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final v = prefs.getString(_periodKey);
       if (v != null && PackagesSummaryCard.periods.contains(v)) _period = v;
-    } catch (_) {/* الافتراضيّ: اليوم */}
+      _showProfit = prefs.getBool(_profitKey) ?? false;
+    } catch (_) {/* الافتراضيّ: اليوم، والربح مخفيّ */}
     _load();
+  }
+
+  void _setShowProfit(bool v) {
+    setState(() => _showProfit = v);
+    SharedPreferences.getInstance().then((p) => p.setBool(_profitKey, v)).catchError((_) => false);
   }
 
   void _pick(String period) {
@@ -339,10 +350,16 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
           ],
         ],
       ),
-      // الربح (مبلغٌ طويل) بعرض السطر لا ثلثه — رقمٌ ماليٌّ مقصوصٌ يُقرأ خطأً.
+      // الربح (مبلغٌ طويل) بعرض السطر لا ثلثه — رقمٌ ماليٌّ مقصوصٌ يُقرأ خطأً. مخفيٌّ افتراضيّاً: لا رقم بجانب التفعيلات
+      // يُظنّ إيراداً — سطرٌ «إظهار» مكانه.
       if (d.owner) ...[
         const SizedBox(height: Sp.sm),
-        _ProfitRow(value: t.profitEstimated),
+        _showProfit
+            ? _ProfitRow(
+                value: t.profitEstimated,
+                onHide: () => _setShowProfit(false),
+              )
+            : _ProfitReveal(onShow: () => _setShowProfit(true)),
       ],
       const SizedBox(height: Sp.sm),
       if (top.isEmpty)
@@ -455,10 +472,58 @@ class _Stat extends StatelessWidget {
   }
 }
 
+/// «الربح المقدَّر» مخفيّاً — بمكان [_ProfitRow] ومقاسه، بلا رقم؛ النقر يُظهره.
+class _ProfitReveal extends StatelessWidget {
+  const _ProfitReveal({required this.onShow});
+
+  final VoidCallback onShow;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'pkgdist.profit_show_full'.tr(),
+      excludeSemantics: true,
+      child: Material(
+        color: AppColors.warning.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(R.md),
+        child: InkWell(
+          onTap: onShow,
+          borderRadius: BorderRadius.circular(R.md),
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+            child: Row(
+              children: [
+                Icon(LucideIcons.eye, size: 16, color: AppColors.warning),
+                const SizedBox(width: Sp.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('pkgdist.profit_est'.tr(),
+                          style: AppType.micro(color: AppColors.textMid)),
+                      Text('pkgdist.profit_hidden_hint'.tr(),
+                          style: AppType.micro(color: AppColors.textLow)),
+                    ],
+                  ),
+                ),
+                Text('pkgdist.profit_show'.tr(),
+                    style: AppType.labelBold(color: AppColors.brand)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ProfitRow extends StatelessWidget {
-  const _ProfitRow({required this.value});
+  const _ProfitRow({required this.value, required this.onHide});
 
   final num? value;
+  final VoidCallback onHide;
 
   @override
   Widget build(BuildContext context) {
@@ -480,8 +545,30 @@ class _ProfitRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('pkgdist.profit_est'.tr(),
-                    style: AppType.micro(color: AppColors.textMid)),
+                // زرّ الإخفاء بجانب العنوان لا آخر السطر: هناك يأكل عرض التلميح فيلتفّ على ٣٢٠.
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text('pkgdist.profit_est'.tr(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppType.micro(color: AppColors.textMid)),
+                    ),
+                    Tooltip(
+                      message: 'pkgdist.profit_hide'.tr(),
+                      child: InkResponse(
+                        onTap: onHide,
+                        radius: 16,
+                        child: Padding(
+                          padding: const EdgeInsetsDirectional.only(
+                              start: 6, end: 4, top: 2, bottom: 2),
+                          child: Icon(LucideIcons.eyeOff,
+                              size: 14, color: AppColors.textLow),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
                 Text('pkgdist.profit_est_hint'.tr(),
                     style: AppType.micro(color: AppColors.textLow)),
               ],
