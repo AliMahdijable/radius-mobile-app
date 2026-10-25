@@ -185,9 +185,9 @@ class _BigServer implements HttpClientAdapter {
 
 /// حسابٌ «متوسّط» (١٬٢٠٠): الصفحات من الخادم فوراً، والقائمة الكاملة تتأخّر [fullDelay] — لإثبات العرض التدريجيّ.
 class _MediumServer implements HttpClientAdapter {
-  _MediumServer(this.inner, {this.fullDelay = const Duration(seconds: 3), this.fullFails = false});
+  _MediumServer(this.inner, {this.fullDelay = const Duration(seconds: 3), this.fullFails = false, this.total = 1200});
   final HttpClientAdapter inner;
-  final int total = 1200;
+  final int total;
 
   /// صفوف القائمة الكاملة — أقلّ من [total] عمداً: جسمٌ فوق ٥٠ك يفكّه dio في isolate (وقتٌ حقيقيّ لا يتقدّم بـpump)،
   /// والعدّاد بعد وصولها يُثبت أنّه من القائمة لا من الخادم.
@@ -346,6 +346,45 @@ void main() {
     testWidgets('حسابٌ صغير (١٬٢٠٠) ⇒ القائمة الكاملة كما كانت', (t) async {
       await open(t, total: 1200);
       expect(server.askedFullList, isTrue);
+      await drain(t);
+    });
+
+    // ٢٥ أكتوبر — وكيلٌ ٧٤٦ مشتركاً على ساسٍ بطيء (قائمته الكاملة ≈٦٫٥ث في ساسه نفسه): بعد مهلةٍ قصيرة يصير تدريجيّاً كالمتوسّط.
+    testWidgets('صغير (٧٤٦) على ساسٍ بطيء ⇒ الصفحة الأولى بعد المهلة والشرائح «…»، ثمّ القائمة الكاملة بعدّاداتها', (t) async {
+      final inner = await visualSetUp(s1bSasOwner);
+      final srv = _MediumServer(inner, total: 746, fullDelay: const Duration(seconds: 4));
+      ApiClient.dio.httpClientAdapter = srv;
+      BigSubscribersApi.reset();
+      SubscribersApi.clearAllCaches();
+      await t.runAsync(SubscribersOfflineCache.clear);
+      cmd = ValueNotifier<SubscriberFilter?>(SubscriberFilter.all);
+      await pumpVisual(t, phone, home: (_) => SubscribersScreen(filterCmd: cmd));
+      await settle(t, seconds: 2);
+      expect(srv.askedFullList, isTrue, reason: 'القائمة الكاملة بدأت أوّلاً');
+      expect(srv.pageQueries.where((m) => '${m['size']}' != '1'), isNotEmpty, reason: 'بعد المهلة: الصفحة الأولى من الخادم');
+      expect(find.text('big000001'), findsWidgets);
+      expect(find.text('…'), findsWidgets, reason: 'العدّادات من القائمة حين تصل — لا أرقامٌ تتبدّل');
+      expect(srv.summaryCalls, 0);
+      await settle(t, seconds: 4);
+      expect(find.text('120'), findsWidgets, reason: 'عدّاد «الكل» من القائمة الكاملة');
+      expect(find.text('…'), findsNothing);
+      await drain(t);
+    });
+
+    testWidgets('صغير على ساسٍ سريع ⇒ القائمة الكاملة مباشرةً بلا صفحاتٍ ولا «…» (كما كان)', (t) async {
+      final inner = await visualSetUp(s1bSasOwner);
+      final srv = _MediumServer(inner, total: 746, fullDelay: const Duration(milliseconds: 300));
+      ApiClient.dio.httpClientAdapter = srv;
+      BigSubscribersApi.reset();
+      SubscribersApi.clearAllCaches();
+      await t.runAsync(SubscribersOfflineCache.clear);
+      cmd = ValueNotifier<SubscriberFilter?>(SubscriberFilter.all);
+      await pumpVisual(t, phone, home: (_) => SubscribersScreen(filterCmd: cmd));
+      await settle(t, seconds: 2);
+      expect(srv.askedFullList, isTrue);
+      expect(srv.pageQueries.where((m) => '${m['size']}' != '1'), isEmpty, reason: 'لا صفحات: وصلت قبل المهلة');
+      expect(find.text('120'), findsWidgets);
+      expect(find.text('…'), findsNothing);
       await drain(t);
     });
   });

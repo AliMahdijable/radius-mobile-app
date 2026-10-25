@@ -702,6 +702,37 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     return parts.isEmpty ? null : parts.join('\n');
   }
 
+  /// مهلة القائمة الكاملة للحساب الصغير قبل أن يصير التحميل تدريجيّاً — ساسٌ عاديّ يجيب في أقلّ من ثانية (٠٫٥–١٫٢ث).
+  static const _slowFullListAfter = Duration(milliseconds: 1200);
+
+  /// التدريجيّ: صفحات الساس بطريقة الكبير بلا ملخّص (العدّادات «…») حتى تصل [fullF]، ثمّ يعود كلّ شيءٍ كما كان. القائمة الكاملة
+  /// إن تعذّرت تبقى الصفحات كالحساب الكبير — مع عدّاداتها من الملخّص.
+  Future<void> _loadProgressively(Future<List<Subscriber>?> fullF) async {
+    _big = true;
+    _progressive = true;
+    await _bigReload();
+    if (!mounted) return;
+    setState(() => _loading = false);
+    unawaited(_loadBigSideData());
+    final full = await fullF;
+    if (!mounted || !_progressive) return;
+    if (full == null || full.isEmpty) {
+      setState(() => _progressive = false);
+      unawaited(_bigReload());
+      return;
+    }
+    setState(() {
+      _big = false;
+      _progressive = false;
+      _all = full;
+    });
+    await _fetchAndMerge();
+    if (!mounted) return;
+    _markDataSeen();
+    setState(() => _loading = false);
+    _runProbeWave();
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
 
@@ -727,32 +758,25 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     // ── المتوسّط (١٬٠٠٠–٥٬٠٠٠): الصفحة الأولى فوراً، والقائمة الكاملة تكمل في الخلفيّة ثمّ يعود كلّ شيءٍ كما كان ──
     // قائمةٌ طازجة في الذاكرة (الرئيسيّة جلبتها للتوّ) تُعرض فوراً بلا مرحلةٍ وسطى.
     if (BigSubscribersApi.knownProgressive && !SubscribersApi.hasFreshList) {
-      final fullF = SubscribersApi.loadAll(); // تبدأ الآن — مخزَّنة ومشتركة مع الرئيسيّة
-      _big = true;
-      _progressive = true;
-      await _bigReload();
+      // تبدأ الآن — مخزَّنة ومشتركة مع الرئيسيّة
+      await _loadProgressively(SubscribersApi.loadAll());
+      return;
+    }
+    // ── الصغير على ساسٍ بطيء (٢٥ أكتوبر — وكيلٌ ٧٤٦ مشتركاً قائمته الكاملة ≈٦٫٥ث في ساسه نفسه) ──
+    // القائمة الكاملة تبدأ الآن؛ فإن لم تصل خلال [_slowFullListAfter] في أوّل تحميلٍ صار المسار تدريجيّاً كالمتوسّط (الصفحة الأولى
+    // من الساس ثمّ القائمة). الساسات السريعة تصل قبل المهلة فلا يتغيّر شيء، وحسابٌ لا يرقّم (ايرث لنك/FTTH: knownSize = 0) كما كان.
+    Future<List<Subscriber>?>? fullF;
+    if (!SubscribersApi.hasFreshList && BigSubscribersApi.knownSize > 0) {
+      fullF = SubscribersApi.loadAll();
+      final arrived = await Future.any<bool>([
+        fullF.then((_) => true, onError: (_) => true),
+        Future<bool>.delayed(_slowFullListAfter, () => false),
+      ]);
       if (!mounted) return;
-      setState(() => _loading = false);
-      unawaited(_loadBigSideData());
-      final full = await fullF;
-      if (!mounted || !_progressive) return;
-      if (full == null || full.isEmpty) {
-        // القائمة الكاملة تعذّرت: تبقى الصفحات كالحساب الكبير — مع عدّاداتها من الملخّص
-        setState(() => _progressive = false);
-        unawaited(_bigReload());
+      if (!arrived) {
+        await _loadProgressively(fullF);
         return;
       }
-      setState(() {
-        _big = false;
-        _progressive = false;
-        _all = full;
-      });
-      await _fetchAndMerge();
-      if (!mounted) return;
-      _markDataSeen();
-      setState(() => _loading = false);
-      _runProbeWave();
-      return;
     }
     _big = false;
     _progressive = false;
@@ -771,7 +795,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     // ولم يكن هذا محسوساً قبل التبويبات الكسولة (4.0.4): الشاشة كانت
     // تُبنى وتُحمّل عند الإقلاع، فينتهي الانتظار قبل أن يفتحها أحد.
     // أزلتُ الهدر فظهر الانتظار — وهذا يردّه إلى مكانه.
-    final quick = await SubscribersApi.loadAll();
+    final quick = await (fullF ?? SubscribersApi.loadAll());
     if (!mounted) return;
     if (quick != null && quick.isNotEmpty) {
       // `loadAll` مُخزَّنة 45 ثانية ومُلغّمة ضدّ التزامن، فاستدعاؤها
