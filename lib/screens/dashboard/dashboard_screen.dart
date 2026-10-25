@@ -43,6 +43,7 @@ import 'widgets/desk_status_bars.dart';
 import 'widgets/desk_revenue_chart.dart';
 import 'widgets/hero_revenue_card.dart';
 import 'widgets/packages_summary_card.dart';
+import 'widgets/money_tabs_card.dart';
 import 'widgets/recent_activities.dart';
 import '../account/subscription_banner.dart';
 import '../whatsapp/whatsapp_status_screen.dart';
@@ -795,6 +796,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
               duration: const Duration(milliseconds: 280),
             )
             .slideY(begin: 0.03, end: 0);
+    // الهاتف وحده (المالك ٢٥ أكتوبر: «هلشي فقط للهاتف، الحاسبة والويب خليهن منفصلات»): الإيرادات والباقات في بطاقةٍ واحدة
+    // بتبويبين — حين يُعرض القسمان ويملك صلاحيّتيهما معاً؛ وإلّا بطاقتان كما كانتا (المقفلة بمكانها).
+    final moneyTabs = revenueSection != null && packagesSection != null && _canMoney && _canPackages
+        ? const MoneyTabsCard()
+            .animate()
+            .fadeIn(
+              delay: const Duration(milliseconds: 160),
+              duration: const Duration(milliseconds: 280),
+            )
+            .slideY(begin: 0.03, end: 0)
+        : null;
     final activitiesSection = !_shown('activities')
         ? null
         : Column(
@@ -1055,8 +1067,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SizedBox(height: Sp.md),
                     if (walletSection != null) walletSection,
                     const SizedBox(height: Sp.md),
-                    if (revenueSection != null) revenueSection,
-                    if (packagesSection != null) ...[const SizedBox(height: Sp.md), packagesSection],
+                    if (moneyTabs != null)
+                      moneyTabs
+                    else ...[
+                      if (revenueSection != null) revenueSection,
+                      if (packagesSection != null) ...[const SizedBox(height: Sp.md), packagesSection],
+                    ],
                   ],
                   if (!wide && activitiesSection != null) activitiesSection,
                   // ⚠️ لو أُخفي كلّ شيء لا تُترك الشاشة بيضاء: المدير

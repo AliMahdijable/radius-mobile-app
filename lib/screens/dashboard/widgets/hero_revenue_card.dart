@@ -25,7 +25,10 @@ import 'pill_tabs.dart';
 /// is wired (it was previously rendering mock points, which the user
 /// noticed and asked us to drop).
 class HeroRevenueCard extends StatefulWidget {
-  const HeroRevenueCard({super.key});
+  const HeroRevenueCard({super.key, this.embedded = false});
+
+  /// داخل بطاقة الهاتف المدموجة ([MoneyTabsCard]): المحتوى وحده بلا إطاره — الإطار والحشوة للبطاقة الحاوية.
+  final bool embedded;
 
   @override
   State<HeroRevenueCard> createState() => _HeroRevenueCardState();
@@ -220,6 +223,8 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    final content = _content();
+    if (widget.embedded) return content;
     return Container(
       // الحاسبة: بحدّ بطاقاتها وظلّها كبقيّة الرئيسيّة؛ الهاتف كما كان.
       decoration: DesktopScope.of(context)
@@ -230,7 +235,12 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
               border: Border.all(color: AppColors.border),
             ),
       padding: const EdgeInsets.all(Sp.md),
-      child: Column(
+      child: content,
+    );
+  }
+
+  Widget _content() {
+    return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -344,7 +354,6 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
             ),
           ],
         ],
-      ),
     );
   }
 

@@ -31,7 +31,10 @@ import 'pill_tabs.dart';
 /// - «كل الشركات»: للشركة المختارة في الشريط (موجَّهاً)؛ بلا اختيارٍ سطرٌ يطلبه — باقات الشركات لا تُجمع.
 /// - تتحدّث مع أيّ عمليّة مشترك، والرجوع من الخلفيّة، وسحب التحديث — كبطاقة الإيرادات.
 class PackagesSummaryCard extends StatefulWidget {
-  const PackagesSummaryCard({super.key});
+  const PackagesSummaryCard({super.key, this.embedded = false});
+
+  /// داخل بطاقة الهاتف المدموجة ([MoneyTabsCard]): بلا إطارٍ ولا عنوانٍ (التبويب يسمّيها) — سطر الفترة و«التقرير الكامل».
+  final bool embedded;
 
   static const top = 4;
 
@@ -179,6 +182,17 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
       return LockedCard(
           title: 'pkgdist.card_title'.tr(), icon: LucideIcons.package);
     }
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        widget.embedded ? _embeddedHeader() : _header(),
+        const SizedBox(height: Sp.sm),
+        _periodBar(),
+        const SizedBox(height: Sp.sm),
+        ..._body(),
+      ],
+    );
+    if (widget.embedded) return content;
     final desk = DesktopScope.of(context);
     return Container(
       // الحاسبة: بحدّ بطاقاتها وظلّها كبقيّة الرئيسيّة؛ الهاتف كبطاقة الإيرادات.
@@ -190,15 +204,41 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
               border: Border.all(color: AppColors.border),
             ),
       padding: const EdgeInsets.all(Sp.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _header(),
-          const SizedBox(height: Sp.sm),
-          _periodBar(),
-          const SizedBox(height: Sp.sm),
-          ..._body(),
-        ],
+      child: content,
+    );
+  }
+
+  /// داخل البطاقة المدموجة: التبويب يسمّي القسم، فيبقى سطر الفترة («تفعيلات اليوم») و«التقرير الكامل».
+  Widget _embeddedHeader() {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            'pkgdist.card_period_x'.tr(namedArgs: {'period': PackagesSummaryCard.rangeOf(_period).label}),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.label(color: AppColors.textMid)
+                .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
+          ),
+        ),
+        _fullReportButton(),
+      ],
+    );
+  }
+
+  Widget _fullReportButton() {
+    return TextButton.icon(
+      onPressed: _openReport,
+      style: TextButton.styleFrom(
+        foregroundColor: AppColors.brand,
+        padding: const EdgeInsets.symmetric(horizontal: Sp.sm),
+        visualDensity: VisualDensity.compact,
+      ),
+      icon: const Icon(LucideIcons.chevronLeft, size: 16),
+      label: Text(
+        'pkgdist.full_report'.tr(),
+        style: AppType.label(color: AppColors.brand)
+            .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -237,20 +277,7 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
             ],
           ),
         ),
-        TextButton.icon(
-          onPressed: _openReport,
-          style: TextButton.styleFrom(
-            foregroundColor: AppColors.brand,
-            padding: const EdgeInsets.symmetric(horizontal: Sp.sm),
-            visualDensity: VisualDensity.compact,
-          ),
-          icon: const Icon(LucideIcons.chevronLeft, size: 16),
-          label: Text(
-            'pkgdist.full_report'.tr(),
-            style: AppType.label(color: AppColors.brand)
-                .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
-          ),
-        ),
+        _fullReportButton(),
       ],
     );
   }
@@ -350,13 +377,16 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
           ],
         ],
       ),
-      // الربح (مبلغٌ طويل) بعرض السطر لا ثلثه — رقمٌ ماليٌّ مقصوصٌ يُقرأ خطأً. مخفيٌّ افتراضيّاً: لا رقم بجانب التفعيلات
-      // يُظنّ إيراداً — سطرٌ «إظهار» مكانه.
+      // الأرباح (مبالغ طويلة) بعرض السطر لا ثلثه — رقمٌ ماليٌّ مقصوصٌ يُقرأ خطأً. مخفيّةٌ افتراضيّاً: لا رقم بجانب التفعيلات
+      // يُظنّ إيراداً — سطرٌ «إظهار» مكانها. بعده: المتحقّق (تفعيلات الفترة) فوق المقدَّر (المالك ٢٥ أكتوبر: «نضيف وي توزيع
+      // الباقات الربح المستلم اعلى الربح المقدر… الايرادات يشوفها وحده»).
       if (d.owner) ...[
         const SizedBox(height: Sp.sm),
         _showProfit
-            ? _ProfitRow(
-                value: t.profitEstimated,
+            ? _ProfitsBlock(
+                total: t.profitTotal,
+                estimated: t.profitEstimated,
+                period: PackagesSummaryCard.rangeOf(_period).label,
                 onHide: () => _setShowProfit(false),
               )
             : _ProfitReveal(onShow: () => _setShowProfit(true)),
@@ -472,7 +502,7 @@ class _Stat extends StatelessWidget {
   }
 }
 
-/// «الربح المقدَّر» مخفيّاً — بمكان [_ProfitRow] ومقاسه، بلا رقم؛ النقر يُظهره.
+/// «الأرباح» مخفيّةً — بمكان [_ProfitsBlock]، بلا رقم؛ النقر يُظهرها.
 class _ProfitReveal extends StatelessWidget {
   const _ProfitReveal({required this.onShow});
 
@@ -501,7 +531,7 @@ class _ProfitReveal extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('pkgdist.profit_est'.tr(),
+                      Text('pkgdist.profits'.tr(),
                           style: AppType.micro(color: AppColors.textMid)),
                       Text('pkgdist.profit_hidden_hint'.tr(),
                           style: AppType.micro(color: AppColors.textLow)),
@@ -519,11 +549,85 @@ class _ProfitReveal extends StatelessWidget {
   }
 }
 
-class _ProfitRow extends StatelessWidget {
-  const _ProfitRow({required this.value, required this.onHide});
+/// الأرباح ظاهرةً: المتحقّق من تفعيلات الفترة (البيع − كلفة الباقات) فوق المقدَّر شهريّاً من الفعّالين الآن، وزرّ «إخفاء».
+class _ProfitsBlock extends StatelessWidget {
+  const _ProfitsBlock({
+    required this.total,
+    required this.estimated,
+    required this.period,
+    required this.onHide,
+  });
 
-  final num? value;
+  final num? total;
+  final num? estimated;
+  final String period;
   final VoidCallback onHide;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsetsDirectional.only(
+          start: Sp.md, end: Sp.md, top: 2, bottom: Sp.xs),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(R.md),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _ProfitLine(
+            icon: LucideIcons.check,
+            label: 'pkgdist.profit_total'.tr(),
+            hint: 'pkgdist.profit_total_hint'.tr(namedArgs: {'period': period}),
+            value: total,
+          ),
+          Divider(height: 1, thickness: 1, color: AppColors.warningSoftBorder),
+          _ProfitLine(
+            icon: LucideIcons.sparkles,
+            label: 'pkgdist.profit_est'.tr(),
+            hint: 'pkgdist.profit_est_hint'.tr(),
+            value: estimated,
+          ),
+          Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: Tooltip(
+              message: 'pkgdist.profit_hide'.tr(),
+              child: InkResponse(
+                onTap: onHide,
+                radius: 18,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(LucideIcons.eyeOff, size: 13, color: AppColors.textLow),
+                      const SizedBox(width: 4),
+                      Text('pkgdist.hide'.tr(),
+                          style: AppType.micro(color: AppColors.textMid)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfitLine extends StatelessWidget {
+  const _ProfitLine({
+    required this.icon,
+    required this.label,
+    required this.hint,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String hint;
+  final num? value;
 
   @override
   Widget build(BuildContext context) {
@@ -531,46 +635,22 @@ class _ProfitRow extends StatelessWidget {
     final color = v == null
         ? AppColors.textLow
         : (v < 0 ? AppColors.error : AppColors.success);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
-      decoration: BoxDecoration(
-        color: AppColors.warning.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(R.md),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Sp.sm),
       child: Row(
         children: [
-          Icon(LucideIcons.sparkles, size: 16, color: AppColors.warning),
+          Icon(icon, size: 16, color: AppColors.warning),
           const SizedBox(width: Sp.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // زرّ الإخفاء بجانب العنوان لا آخر السطر: هناك يأكل عرض التلميح فيلتفّ على ٣٢٠.
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text('pkgdist.profit_est'.tr(),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppType.micro(color: AppColors.textMid)),
-                    ),
-                    Tooltip(
-                      message: 'pkgdist.profit_hide'.tr(),
-                      child: InkResponse(
-                        onTap: onHide,
-                        radius: 16,
-                        child: Padding(
-                          padding: const EdgeInsetsDirectional.only(
-                              start: 6, end: 4, top: 2, bottom: 2),
-                          child: Icon(LucideIcons.eyeOff,
-                              size: 14, color: AppColors.textLow),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                Text('pkgdist.profit_est_hint'.tr(),
-                    style: AppType.micro(color: AppColors.textLow)),
+                Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.micro(color: AppColors.textHi)
+                        .copyWith(fontWeight: FontWeight.w700)),
+                Text(hint, style: AppType.micro(color: AppColors.textLow)),
               ],
             ),
           ),

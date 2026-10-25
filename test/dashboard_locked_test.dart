@@ -5,6 +5,7 @@ import 'package:rad_mysvcs/core/widgets/permission_locked.dart';
 import 'package:rad_mysvcs/screens/dashboard/dashboard_screen.dart';
 import 'package:rad_mysvcs/screens/dashboard/widgets/hero_revenue_card.dart';
 import 'package:rad_mysvcs/screens/dashboard/widgets/packages_summary_card.dart';
+import 'package:rad_mysvcs/screens/dashboard/widgets/money_tabs_card.dart';
 import 'package:rad_mysvcs/screens/dashboard/widgets/subscribers_card.dart';
 
 import 'visual_perm/visual_perm_harness.dart';
@@ -127,8 +128,10 @@ void main() {
     expect(find.byType(LockedCard), findsNothing);
     expect(activitiesLocked, findsNothing);
     expect(find.byType(SubscribersCard), findsOneWidget);
+    // الهاتف: الإيرادات والباقات بطاقةٌ واحدة بتبويبين (٢٥ أكتوبر) — الباقات حيّةٌ خلف تبويبها.
+    expect(find.byType(MoneyTabsCard), findsOneWidget);
     expect(find.byType(HeroRevenueCard), findsOneWidget);
-    expect(find.byType(PackagesSummaryCard), findsOneWidget);
+    expect(find.byType(PackagesSummaryCard, skipOffstage: false), findsOneWidget);
 
     await drain(t);
   });
