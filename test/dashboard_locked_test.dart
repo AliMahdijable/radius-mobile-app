@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/core/widgets/permission_locked.dart';
 import 'package:rad_mysvcs/screens/dashboard/dashboard_screen.dart';
 import 'package:rad_mysvcs/screens/dashboard/widgets/hero_revenue_card.dart';
+import 'package:rad_mysvcs/screens/dashboard/widgets/packages_summary_card.dart';
 import 'package:rad_mysvcs/screens/dashboard/widgets/subscribers_card.dart';
 
 import 'visual_perm/visual_perm_harness.dart';
@@ -42,8 +43,10 @@ void main() {
     expect(find.byType(SubscribersCard), findsOneWidget);
     // ⚠️ لا يُبنى أصلاً — `initState` فيه يُطلق `reports/finance`.
     expect(find.byType(HeroRevenueCard), findsNothing);
-    // الرصيد + الإيرادات بطاقتان مقفلتان، والنشاطات إطارها المقفل.
-    expect(find.byType(LockedCard), findsNWidgets(2));
+    // الرصيد + الإيرادات + توزيع الباقات (#٥) بطاقاتٌ مقفلة، والنشاطات إطارها المقفل.
+    expect(find.byType(LockedCard), findsNWidgets(3));
+    // ⚠️ لا يُبنى أصلاً — `initState` فيه يُطلق `reports/finance/packages` (يغطّيه فحص المسارات أدناه).
+    expect(find.byType(PackagesSummaryCard), findsNothing);
     expect(activitiesLocked, findsOneWidget);
     // لا «الكارتات» تحت رصيده المقفل: بلا تفعيلٍ ولا تمديد لا يملك المخزون
     // (الخادم يردّه 403) — فلا نداء ملخّصٍ أصلاً (أدناه).
@@ -74,15 +77,16 @@ void main() {
   });
 
   testWidgets(
-      'موظّف ايرث لنك بلا مفاتيح: أربعة إطارات مقفلة لا «كلّ شيء مخفيّ»',
+      'موظّف ايرث لنك بلا مفاتيح: خمسة إطارات مقفلة لا «كلّ شيء مخفيّ»',
       (t) async {
     final server = await open(t, s3ElEmpNone);
 
     expect(allHidden, findsNothing);
     expect(find.byType(SubscribersCard), findsNothing);
     expect(find.byType(HeroRevenueCard), findsNothing);
-    // المشتركون + الرصيد + المدينون + الإيرادات، ثمّ إطار النشاطات.
-    expect(find.byType(LockedCard), findsNWidgets(4));
+    // المشتركون + الرصيد + المدينون + الإيرادات + توزيع الباقات، ثمّ إطار النشاطات.
+    expect(find.byType(LockedCard), findsNWidgets(5));
+    expect(find.byType(PackagesSummaryCard), findsNothing);
     expect(activitiesLocked, findsOneWidget);
     expect(server.log.join('\n').contains('→ 403'), isFalse,
         reason: server.log.join('\n'));
@@ -99,8 +103,9 @@ void main() {
 
     expect(find.byType(SubscribersCard), findsOneWidget);
     expect(find.byType(HeroRevenueCard), findsNothing);
-    // الرصيد + الإيرادات؛ والمدينون حيّ (يملك subscribers.view).
-    expect(find.byType(LockedCard), findsNWidgets(2));
+    // الرصيد + الإيرادات + توزيع الباقات؛ والمدينون حيّ (يملك subscribers.view).
+    expect(find.byType(LockedCard), findsNWidgets(3));
+    expect(find.byType(PackagesSummaryCard), findsNothing);
     expect(
         find.text('dashboard.recent_activity_fetch_failed'.tr()), findsNothing);
     expect(allHidden, findsNothing);
@@ -123,6 +128,7 @@ void main() {
     expect(activitiesLocked, findsNothing);
     expect(find.byType(SubscribersCard), findsOneWidget);
     expect(find.byType(HeroRevenueCard), findsOneWidget);
+    expect(find.byType(PackagesSummaryCard), findsOneWidget);
 
     await drain(t);
   });

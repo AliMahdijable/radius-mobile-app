@@ -42,6 +42,7 @@ import 'widgets/desk_renewals_runway.dart';
 import 'widgets/desk_status_bars.dart';
 import 'widgets/desk_revenue_chart.dart';
 import 'widgets/hero_revenue_card.dart';
+import 'widgets/packages_summary_card.dart';
 import 'widgets/recent_activities.dart';
 import '../account/subscription_banner.dart';
 import '../whatsapp/whatsapp_status_screen.dart';
@@ -112,6 +113,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// لا أن يُجلب ثمّ يُرمى. من يُخفي الإيرادات والنشاطات يسقط عنه
   /// نداءان من خمسة عند كلّ إقلاع.
   Set<String> _hiddenSections = <String>{};
+
+  /// أقسام الرئيسيّة كما ردّها الخادم (٦ مع «الباقات») — «كلّها مخفيّة» بعددها لا برقمٍ ثابت.
+  int _sectionCount = 0;
   bool _sectionsLoaded = false;
 
   /// ⚠️ قبل وصول التفضيلات نعتبر كلّ شيء ظاهراً — وإلّا ومضت الشاشة
@@ -197,6 +201,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         for (final s in r.sections)
           if (s.hidden) s.key
       };
+      _sectionCount = r.sections.length;
       _sectionsLoaded = true;
     });
   }
@@ -775,6 +780,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
               duration: const Duration(milliseconds: 280),
             )
             .slideY(begin: 0.03, end: 0);
+    // «توزيع الباقات» (#٥، طلب المالك ٢٥ أكتوبر): يجلب بنفسه كالإيرادات — ⚠️ المقفل لا يبني `PackagesSummaryCard` أصلاً
+    // (initState فيه يُطلق النداء)، والمخفيّ من «نطاق العرض» كذلك. لا تقرير باقاتٍ للوطنيّ.
+    final packagesSection = !_shown('packages') || ProviderService.isFtth
+        ? null
+        : (_canMoney
+                ? const PackagesSummaryCard()
+                : LockedCard(title: 'pkgdist.card_title'.tr(), icon: LucideIcons.package))
+            .animate()
+            .fadeIn(
+              delay: const Duration(milliseconds: 200),
+              duration: const Duration(milliseconds: 280),
+            )
+            .slideY(begin: 0.03, end: 0);
     final activitiesSection = !_shown('activities')
         ? null
         : Column(
@@ -1025,6 +1043,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ],
                         ),
                       ),
+                    if (packagesSection != null) ...[const SizedBox(height: Sp.md), packagesSection],
                   ] else ...[
                     // أعلى كلّ شيء عمداً: انقطاع الجلسة يوقف كلّ تنبيهات المشتركين وفواتيرهم، فلا يجوز أن
                     // يُقرأ بعد الأرقام. موظّفٌ بلا مفتاح القسم: إطار البطاقة نفسه مقفلاً — لا اختفاء يترك
@@ -1035,12 +1054,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     if (walletSection != null) walletSection,
                     const SizedBox(height: Sp.md),
                     if (revenueSection != null) revenueSection,
+                    if (packagesSection != null) ...[const SizedBox(height: Sp.md), packagesSection],
                   ],
                   if (!wide && activitiesSection != null) activitiesSection,
                   // ⚠️ لو أُخفي كلّ شيء لا تُترك الشاشة بيضاء: المدير
                   // لن يعرف أنّه هو من أخفاها، وسيظنّها معطوبة.
                   // (والموظّف بلا مفاتيح لا يصل هنا: أقسامه مقفلةٌ في أماكنها.)
-                  if (_sectionsLoaded && _hiddenSections.length >= 5)
+                  if (_sectionsLoaded && _sectionCount > 0 && _hiddenSections.length >= _sectionCount)
                     const _AllHidden(),
                 ]),
               ),

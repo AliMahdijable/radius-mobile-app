@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/screens/main_shell.dart';
+import 'package:rad_mysvcs/screens/reports/package_distribution_screen.dart';
 import 'package:rad_mysvcs/screens/reports/reports_hub_screen.dart';
 import 'package:rad_mysvcs/screens/settings_screen.dart';
 import 'package:rad_mysvcs/theme/colors.dart';
@@ -10,7 +11,7 @@ import 'visual_perm_harness.dart';
 
 /// لقطات الصلاحيّات: كلّ سيناريو × كلّ شاشة → PNG في مجلّد الإخراج.
 ///
-///   الرئيسيّة (MainShell)       <S>_dashboard.png  (+ _dark لـS1/S2/S3، و_ipad)
+///   الرئيسيّة (MainShell)       <S>_dashboard.png  (+ _dark لـS1/S2/S3، و_full بطولها، و_ipad)
 ///   «قوائم أخرى»               <S>_more.png
 ///   ورقة «+» (الإجراءات)       <S>_fab.png
 ///   مركز التقارير              <S>_reports.png
@@ -63,6 +64,20 @@ void main() {
           await shoot(t, s, 'dashboard', phoneDark, server);
         });
       }
+
+      // الرئيسيّة بطولها — ما تحت الطيّة («توزيع الباقات» #٥، آخر النشاطات).
+      visualCase(s, 'dashboard_full', (t, server) async {
+        await pumpVisual(t, phoneTall, home: (_) => const MainShell());
+        await settle(t);
+        await shoot(t, s, 'dashboard', phoneTall, server);
+      });
+
+      // «توزيع الباقات والأرباح» (#٥) — الصفحة بطولها: المالك بالكلفة والربح، والموظّف بلا مفتاحٍ يرى بوّابة القفل.
+      visualCase(s, 'pkgdist', (t, server) async {
+        await pumpVisual(t, phoneTall, home: (_) => const PackageDistributionScreen());
+        await settle(t);
+        await shoot(t, s, 'pkgdist', phoneTall, server);
+      });
 
       visualCase(s, 'dashboard_ipad', (t, server) async {
         await pumpVisual(t, ipad, home: (_) => const MainShell());

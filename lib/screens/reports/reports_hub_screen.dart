@@ -18,6 +18,7 @@ import 'all_managers_debts_screen.dart';
 import 'daily_activations_report_screen.dart';
 import 'deleted_debts_screen.dart';
 import 'financial_report_screen.dart';
+import 'package_distribution_screen.dart';
 import 'sessions_report_screen.dart';
 import '../../widgets/merged_company_strip.dart';
 import '../desktop/desk_widgets.dart';
@@ -87,6 +88,20 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                     builder: (_) => const FinancialReportScreen()),
+              ),
+            ),
+          // «توزيع الباقات والأرباح» (#٥، ٢٥ أكتوبر): بمفتاح التقرير الماليّ نفسه (الخادم يفرضه)، SAS4 وايرث لنك — لا
+          // تقرير باقاتٍ للوطنيّ.
+          if (permShown(const ['reports.financial']) && !ProviderService.isFtth)
+            _ReportCard(
+              locked: !Perms.has('reports.financial'),
+              // ليست أيقونة «حسب الباقة» (تقرير ايرث لنك) — بطاقتان متجاورتان لموزّعها لا تتشابهان.
+              icon: LucideIcons.chartPie,
+              color: AppColors.success,
+              title: 'reports.packages'.tr(),
+              subtitle: 'reports.packages_hint'.tr(),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const PackageDistributionScreen()),
               ),
             ),
           // ⚠️ **المصروفات ليست هنا**، وإنّما في «قوائم أخرى» وحدها.

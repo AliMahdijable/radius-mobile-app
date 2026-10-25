@@ -474,12 +474,13 @@ void main() {
         permissions: const {'reports.activity_log': true},
       );
       final pushed = await showScreen(t, const ReportsHubScreen());
-      // 5 تقارير عامّة (ديون المدراء لا تُمنح له فمخفيّة) + 3 لايرث لنك.
-      expect(reportCards, findsNWidgets(8));
+      // 6 تقارير عامّة (ديون المدراء لا تُمنح له فمخفيّة؛ «توزيع الباقات» #٥ بمفتاح الماليّ) + 3 لايرث لنك.
+      expect(reportCards, findsNWidgets(9));
       expect(lockedCard(LucideIcons.flaskConical), isTrue); // التجريبي
       expect(lockedCard(LucideIcons.package), isTrue); // حسب الباقة
+      expect(lockedCard(LucideIcons.chartPie), isTrue); // توزيع الباقات (reports.financial)
       // السجلّان (العامّ وايرث لنك) مفتوحان بـactivity_log.
-      expect(find.byType(PermLockIcon), findsNWidgets(6));
+      expect(find.byType(PermLockIcon), findsNWidgets(7));
       await t.tap(find.ancestor(
           of: find.byIcon(LucideIcons.flaskConical), matching: reportCards));
       await t.pump();
@@ -487,11 +488,11 @@ void main() {
       await t.pump(const Duration(seconds: 3));
     });
 
-    testWidgets('موظّف ساس بلا مفاتيح: كلّ التقارير الستّ مقفلة', (t) async {
+    testWidgets('موظّف ساس بلا مفاتيح: كلّ التقارير السبع مقفلة', (t) async {
       PermissionsService.debugSet(isEmployee: true);
       await showScreen(t, const ReportsHubScreen());
-      expect(reportCards, findsNWidgets(6));
-      expect(find.byType(PermLockIcon), findsNWidgets(6));
+      expect(reportCards, findsNWidgets(7));
+      expect(find.byType(PermLockIcon), findsNWidgets(7));
       expect(find.text('reports.empty_perms'), findsNothing);
     });
 
@@ -502,7 +503,7 @@ void main() {
       for (var i = 0; i < 5; i++) {
         await t.pump(const Duration(milliseconds: 50));
       }
-      expect(reportCards, findsNWidgets(6));
+      expect(reportCards, findsNWidgets(7));
       expect(find.byType(PermLockIcon), findsNothing);
     });
   });

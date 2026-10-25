@@ -60,7 +60,12 @@ const dashSectionLabels = <String, ({String title, String sub})>{
   'revenue': (title: 'الإيرادات', sub: 'يومي · أسبوعي · شهري'),
   'activities': (title: 'آخر النشاطات', sub: 'سجل العمليّات الأخيرة'),
   'wa_banner': (title: 'حالة واتساب', sub: 'الحبّة أعلى الرئيسيّة تحت اسم المدير'),
+  'packages': (title: 'توزيع الباقات', sub: 'الفعّالون والتفعيلات وأكثر الباقات'),
 };
+
+/// الأقسام التي يرسمها هذا الإصدار — `?sv=2` يطلب «الباقات» (٢٥ أكتوبر): الخادم لا يعرضه لمن لا يطلبه (النسخ المنشورة
+/// ترسم المفتاح المجهول خاماً).
+const _sectionsVersion = {'sv': '2'};
 
 /// «نطاق العرض» — أيّ مدير فرعي يُخفى، ومنه ماذا.
 ///
@@ -99,8 +104,10 @@ class ViewScopeApi {
   static Future<({List<ViewScopeManager>? managers, List<DashSection> sections})>
       load() async {
     try {
-      final r = await ApiClient.dio
-          .get<Map<String, dynamic>>('/api/admin/view-scope');
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/admin/view-scope',
+        queryParameters: _sectionsVersion,
+      );
       final body = r.data ?? const {};
       if (body['success'] != true) {
         return (managers: null, sections: const <DashSection>[]);
@@ -121,6 +128,7 @@ class ViewScopeApi {
     try {
       final r = await ApiClient.dio.put<Map<String, dynamic>>(
         '/api/admin/view-scope',
+        queryParameters: _sectionsVersion,
         data: {'sectionKey': key, 'hidden': hidden},
       );
       final body = r.data ?? const {};

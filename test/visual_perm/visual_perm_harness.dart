@@ -456,6 +456,51 @@ class VisualServer implements HttpClientAdapter {
       });
     }
 
+    // ── «توزيع الباقات» (#٥) — بمفتاح التقرير الماليّ؛ الكلفة والربح للمالك وحده (owner من الخادم) ──
+    if (get && p == '/api/reports/finance/packages') {
+      if (!s.allows('reports.financial')) return _denied();
+      final owner = s.actor == Actor.owner;
+      Map<String, Object?> row(String key, String name, int total, int active, int acts, int ext, int revenue, int est) => {
+            'key': key,
+            'name': name,
+            'profile_id': int.tryParse(key.substring(2)),
+            'price': 35000,
+            'subscribers_total': total,
+            'subscribers_active': active,
+            'activations': acts,
+            'sync_activations': 0,
+            'extensions': ext,
+            'revenue': revenue,
+            if (owner) ...{'unit_cost': 21000, 'cost': revenue * 6 ~/ 10, 'profit_total': revenue * 4 ~/ 10, 'profit_estimated': est},
+          };
+      return _json(200, {
+        'success': true,
+        'data': {
+          'owner': owner,
+          'cost_exempt': false,
+          'provider': s.isEl ? 'earthlink' : 'sas4',
+          'rows': [
+            row('p:5', 'FTTH 50 ميغا', 412, 365, 38, 12, 1330000, 5110000),
+            row('p:7', 'D-Active 75 ميغا العائليّة', 260, 231, 25, 9, 1375000, 4389000),
+            row('p:9', 'Gaming 100', 74, 66, 11, 3, 825000, 1518000),
+            row('p:3', 'اقتصاديّة 25', 58, 31, 6, 1, 150000, 310000),
+            row('p:11', 'أعمال 200', 9, 8, 2, 0, 300000, 320000),
+          ],
+          'totals': {
+            'packages': 5,
+            'subscribers_total': 813,
+            'subscribers_active': 701,
+            'activations': 82,
+            'sync_activations': 0,
+            'extensions': 25,
+            'revenue': 3980000,
+            if (owner) ...{'cost': 2388000, 'profit_total': 1592000, 'cost_rows': 107, 'cost_known_rows': 107, 'cost_complete': true, 'profit_estimated': 11647000},
+          },
+        },
+        'unavailable_parts': const [],
+      });
+    }
+
     // ── الرصيد والكارتات — الخادم يقنّع الرصيد بلا reports.financial ──
     if (get && p == '/api/v2/admin-widgets') {
       final money = s.allows('reports.financial');
