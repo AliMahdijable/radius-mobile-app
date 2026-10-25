@@ -45,6 +45,19 @@ class DateRange {
     );
   }
 
+  /// الأسبوع الماضي كاملاً — الأسبوع الذي قبل [thisWeek] (من الاثنين إلى الأحد، كبدايته هنا).
+  static DateRange lastWeek() {
+    final n = DateTime.now();
+    final thisStart = DateTime(n.year, n.month, n.day).subtract(Duration(days: n.weekday - 1));
+    final start = thisStart.subtract(const Duration(days: 7));
+    final end = thisStart.subtract(const Duration(days: 1));
+    return DateRange(
+      DateTime(start.year, start.month, start.day),
+      DateTime(end.year, end.month, end.day, 23, 59, 59),
+      label: 'reports.last_week'.tr(),
+    );
+  }
+
   static DateRange thisMonth() {
     final n = DateTime.now();
     return DateRange(

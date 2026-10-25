@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../api/package_report_api.dart';
 import '../../../core/platform/desktop_layout.dart';
@@ -15,12 +16,13 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../desktop/desk_widgets.dart';
 import '../../reports/package_distribution_screen.dart';
+import '../../reports/widgets/date_range_chip.dart';
 import '../../reports/widgets/scope_helper.dart';
 
 /// «توزيع الباقات» في الرئيسيّة (#٥ — طلب المالك ٢٥ أكتوبر: «مختصر منهن بشكل كارتات بالداش بورد وبالتطبيق يتضمنن بنطاق
 /// العرض وصلاحيات الموظفين»).
 ///
-/// مختصر التقرير لآخر ٣٠ يوماً كبطاقة الويب: الفعّالون من الكلّ · التفعيلات وتمديداتها · الربح المقدَّر لصاحب الحساب وحده
+/// مختصر التقرير لفترةٍ تُختار باختصار (اليوم · أمس · الأسبوع الماضي · الشهر الماضي) كبطاقة الويب: الفعّالون من الكلّ · التفعيلات وتمديداتها · الربح المقدَّر لصاحب الحساب وحده
 /// (قرار الخادم: `owner`) أو عدد الباقات للموظّف · أكثر ٤ باقاتٍ فعّالين بشريط حصّة · «التقرير الكامل».
 ///
 /// - القسم في «نطاق العرض» (`packages`) يُخفى كغيره؛ والمقفل (بلا «التقرير الماليّ») لا يبني هذه الودجة أصلاً — المتّصل
@@ -31,6 +33,17 @@ class PackagesSummaryCard extends StatefulWidget {
   const PackagesSummaryCard({super.key});
 
   static const top = 4;
+
+  /// اختصارات الفترة (المالك ٢٥ أكتوبر: «اختصارات سريعة تتغير مع القيمة: اليوم، أمس، الأسبوع الماضي، الشهر الماضي»).
+  /// الفعّالون والربح المقدَّر حالةُ الآن — الفترة تغيّر التفعيلات والتمديدات وحركة الباقات.
+  static const periods = ['today', 'yesterday', 'last_week', 'last_month'];
+
+  static DateRange rangeOf(String period) => switch (period) {
+        'yesterday' => DateRange.yesterday(),
+        'last_week' => DateRange.lastWeek(),
+        'last_month' => DateRange.lastMonth(),
+        _ => DateRange.today(),
+      };
 
   @override
   State<PackagesSummaryCard> createState() => _PackagesSummaryCardState();
@@ -44,10 +57,14 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
   bool _needsFocus = false;
   int _gen = 0;
 
+  /// الفترة المختارة — تُحفظ على الجهاز (آخر اختيارٍ يبقى).
+  String _period = PackagesSummaryCard.periods.first;
+  static const _periodKey = 'pkgcard.period';
+
   @override
   void initState() {
     super.initState();
-    _load();
+    _restorePeriod();
     SubscriberEvents.dataChanged.addListener(_load);
     AppResumedSignal.tick.addListener(_load);
     DashboardRefreshSignal.tick.addListener(_load);
@@ -75,6 +92,26 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
     _load();
   }
 
+  Future<void> _restorePeriod() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final v = prefs.getString(_periodKey);
+      if (v != null && PackagesSummaryCard.periods.contains(v)) _period = v;
+    } catch (_) {/* الافتراضيّ: اليوم */}
+    _load();
+  }
+
+  void _pick(String period) {
+    if (period == _period) return;
+    setState(() {
+      _period = period;
+      _data = null;
+      _error = null;
+    });
+    _load();
+    SharedPreferences.getInstance().then((p) => p.setString(_periodKey, period)).catchError((_) => false);
+  }
+
   Future<void> _load() async {
     if (!mounted) return;
     final gen = ++_gen;
@@ -93,11 +130,11 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
       _needsFocus = false;
       _loading = _data == null;
     });
-    final now = DateTime.now();
+    final range = PackagesSummaryCard.rangeOf(_period);
     final ids = focused == null ? await loadScopeUserIds() : null;
     final r = await PackageReportApi.fetch(
-      from: now.subtract(const Duration(days: 29)),
-      to: now,
+      from: range.from,
+      to: range.to,
       userIds: ids,
       companyKey: focused?.key,
     );
@@ -146,6 +183,8 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
         children: [
           _header(),
           const SizedBox(height: Sp.sm),
+          _periodBar(),
+          const SizedBox(height: Sp.sm),
           ..._body(),
         ],
       ),
@@ -178,7 +217,7 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
                     .copyWith(fontSize: 13.5, fontWeight: FontWeight.w700),
               ),
               Text(
-                'pkgdist.card_period'.tr(),
+                'pkgdist.card_period_x'.tr(namedArgs: {'period': PackagesSummaryCard.rangeOf(_period).label}),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: AppType.micro(color: AppColors.textLow),
@@ -200,6 +239,24 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
                 .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
           ),
         ),
+      ],
+    );
+  }
+
+  /// الاختصارات الأربعة سطراً واحداً — حبوبٌ كشريط الفترة في التقارير.
+  Widget _periodBar() {
+    return Row(
+      children: [
+        for (final (i, p) in PackagesSummaryCard.periods.indexed) ...[
+          if (i > 0) const SizedBox(width: 6),
+          Expanded(
+            child: _PeriodPill(
+              label: PackagesSummaryCard.rangeOf(p).label,
+              selected: p == _period,
+              onTap: () => _pick(p),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -350,6 +407,44 @@ class _PackagesSummaryCardState extends State<PackagesSummaryCard> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PeriodPill extends StatelessWidget {
+  const _PeriodPill({required this.label, required this.selected, required this.onTap});
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? AppColors.brandSoftBg : AppColors.surfaceSunken,
+      borderRadius: BorderRadius.circular(R.pill),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(R.pill),
+        child: Container(
+          height: 32,
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.pill),
+            border: Border.all(color: selected ? AppColors.brandSoftBorder : AppColors.border),
+          ),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              maxLines: 1,
+              style: AppType.label(color: selected ? AppColors.brand : AppColors.textMid)
+                  .copyWith(fontSize: 12.5, fontWeight: selected ? FontWeight.w700 : FontWeight.w500),
+            ),
+          ),
+        ),
       ),
     );
   }

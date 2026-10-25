@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../api/package_report_api.dart';
 import '../../core/util/format.dart';
@@ -49,6 +50,13 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
   bool _requested = false;
   int _gen = 0;
 
+  /// الباقات المفتوحة — كلّها مطويّة أوّلاً، والنقر على عنوانها يفتح تفاصيلها (المالك ٢٥ أكتوبر).
+  final Set<String> _open = {};
+
+  /// التنبيهات الزرقاء التي أخفاها المستخدم — على هذا الجهاز، لا تعود.
+  Set<String> _dismissed = {};
+  static const _dismissedKey = 'pkg_report_dismissed_hints';
+
   /// كبطاقة الرئيسيّة: آخر ٣٠ يوماً — فالرقمان واحدٌ حين تفتحه منها.
   static DateRange _last30() {
     final n = DateTime.now();
@@ -65,6 +73,23 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
     super.initState();
     PermissionsService.changes.addListener(_maybeLoad);
     _maybeLoad();
+    _loadDismissed();
+  }
+
+  Future<void> _loadDismissed() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final v = prefs.getStringList(_dismissedKey) ?? const [];
+      if (mounted && v.isNotEmpty) setState(() => _dismissed = v.toSet());
+    } catch (_) {/* تبقى ظاهرة */}
+  }
+
+  Future<void> _dismiss(String hint) async {
+    setState(() => _dismissed = {..._dismissed, hint});
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_dismissedKey, _dismissed.toList());
+    } catch (_) {/* أُخفيت لهذه الجلسة على الأقلّ */}
   }
 
   @override
@@ -300,7 +325,11 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
             signed: _signed,
             count: _count,
             profitColor: _profitColor,
-            maxSubs: _maxSubs(d)),
+            maxSubs: _maxSubs(d),
+            expanded: _open.contains(r.key),
+            onToggle: () => setState(() {
+                  if (!_open.remove(r.key)) _open.add(r.key);
+                })),
     ];
     return [
       // صفّان على الهاتف (والخامس بعرض السطر)، وصفٌّ واحد على الحاسبة.
@@ -315,11 +344,14 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
             color: AppColors.warning,
             text: packagePartText(p)),
       ],
+      // التنبيهات الزرقاء تُخفى بـ× ولا تعود على هذا الجهاز (المالك ٢٥ أكتوبر: «الهنت هذا اجعله قابل للالغاء»).
+      // التحذيرات (جزءٌ تعذّر) تبقى — هي ما يقول إنّ رقماً ناقص.
       if (d.owner &&
           !d.costExempt &&
           t.cost != null &&
           t.costComplete == false &&
-          (t.costRows ?? 0) > 0) ...[
+          (t.costRows ?? 0) > 0 &&
+          !_dismissed.contains('cost_partial')) ...[
         const SizedBox(height: Sp.sm),
         _Notice(
           icon: LucideIcons.info,
@@ -328,23 +360,27 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
             'known': _count(t.costKnownRows),
             'rows': _count(t.costRows)
           }),
+          onDismiss: () => _dismiss('cost_partial'),
         ),
       ],
-      if (d.owner && t.estimateMissingPackages > 0) ...[
+      if (d.owner && t.estimateMissingPackages > 0 && !_dismissed.contains('estimate_missing')) ...[
         const SizedBox(height: Sp.sm),
         _Notice(
           icon: LucideIcons.info,
           color: AppColors.info,
           text: 'pkgdist.estimate_missing'
               .tr(namedArgs: {'n': '${t.estimateMissingPackages}'}),
+          onDismiss: () => _dismiss('estimate_missing'),
         ),
       ],
-      if (d.subscribersPartial) ...[
+      if (d.subscribersPartial && !_dismissed.contains('partial')) ...[
         const SizedBox(height: Sp.sm),
         _Notice(
-            icon: LucideIcons.info,
-            color: AppColors.info,
-            text: 'pkgdist.partial'.tr()),
+          icon: LucideIcons.info,
+          color: AppColors.info,
+          text: 'pkgdist.partial'.tr(),
+          onDismiss: () => _dismiss('partial'),
+        ),
       ],
       const SizedBox(height: Sp.md),
       if (d.rows.isEmpty)
@@ -499,6 +535,7 @@ class _Kpi extends StatelessWidget {
   }
 }
 
+/// باقةٌ مطويّة: العنوان اسمها وعدد مشتركيها وتحته حركاتها (فعّال · تفعيل · تمديد) وشريط حصّتها؛ النقر يفتح تفاصيلها.
 class _PackageCard extends StatelessWidget {
   const _PackageCard({
     required this.row,
@@ -508,6 +545,8 @@ class _PackageCard extends StatelessWidget {
     required this.count,
     required this.profitColor,
     required this.maxSubs,
+    required this.expanded,
+    required this.onToggle,
   });
 
   final PackageReportRow row;
@@ -517,6 +556,8 @@ class _PackageCard extends StatelessWidget {
   final String Function(int?) count;
   final Color Function(num?) profitColor;
   final int maxSubs;
+  final bool expanded;
+  final VoidCallback onToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -554,8 +595,18 @@ class _PackageCard extends StatelessWidget {
           color: profitColor(r.profitEstimated)
         ),
     ];
+    final moves = r.extensions > 0
+        ? 'pkgdist.row_head_ext'.tr(namedArgs: {
+            'active': count(r.subscribersActive),
+            'acts': count(r.activations),
+            'ext': count(r.extensions),
+          })
+        : 'pkgdist.row_head'.tr(namedArgs: {
+            'active': count(r.subscribersActive),
+            'acts': count(r.activations),
+          });
     return Container(
-      padding: const EdgeInsets.all(Sp.md),
+      clipBehavior: Clip.antiAlias,
       decoration: DesktopScope.of(context)
           ? DeskCard.decoration(radius: R.md)
           : BoxDecoration(
@@ -566,43 +617,77 @@ class _PackageCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  r.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.label(
-                          color: r.isAggregate
-                              ? AppColors.textLow
-                              : AppColors.textHi)
-                      .copyWith(fontSize: 14, fontWeight: FontWeight.w700),
+          Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              onTap: onToggle,
+              child: Padding(
+                padding: const EdgeInsets.all(Sp.md),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            r.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppType.label(
+                                    color: r.isAggregate
+                                        ? AppColors.textLow
+                                        : AppColors.textHi)
+                                .copyWith(fontSize: 14, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        const SizedBox(width: Sp.sm),
+                        Text(
+                          'pkgdist.subscriber_n'
+                              .tr(namedArgs: {'n': count(r.subscribersTotal)}),
+                          style: AppType.label(color: AppColors.textMid)
+                              .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(width: Sp.xs),
+                        AnimatedRotation(
+                          turns: expanded ? 0.5 : 0,
+                          duration: const Duration(milliseconds: 180),
+                          child: Icon(LucideIcons.chevronDown, size: 18, color: AppColors.textMid),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      moves,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppType.micro(color: AppColors.textMid),
+                    ),
+                    const SizedBox(height: Sp.xs),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(R.pill),
+                      child: LinearProgressIndicator(
+                        value: maxSubs > 0
+                            ? ((r.subscribersTotal ?? 0) / maxSubs).clamp(0, 1).toDouble()
+                            : 0,
+                        minHeight: 5,
+                        backgroundColor: AppColors.border,
+                        color: AppColors.brand,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: Sp.sm),
-              Text(
-                'pkgdist.subscriber_n'
-                    .tr(namedArgs: {'n': count(r.subscribersTotal)}),
-                style: AppType.label(color: AppColors.textMid)
-                    .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-          const SizedBox(height: Sp.xs),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(R.pill),
-            child: LinearProgressIndicator(
-              value: maxSubs > 0
-                  ? ((r.subscribersTotal ?? 0) / maxSubs).clamp(0, 1).toDouble()
-                  : 0,
-              minHeight: 5,
-              backgroundColor: AppColors.border,
-              color: AppColors.brand,
             ),
           ),
-          const SizedBox(height: Sp.sm),
-          LayoutBuilder(
+          AnimatedSize(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeInOut,
+            alignment: Alignment.topCenter,
+            child: !expanded
+                ? const SizedBox(width: double.infinity)
+                : Padding(
+                    padding: const EdgeInsets.fromLTRB(Sp.md, 0, Sp.md, Sp.md),
+                    child: LayoutBuilder(
             builder: (context, c) {
               final cols = c.maxWidth >= 420 ? 4 : 3;
               final w = (c.maxWidth - (cols - 1) * Sp.sm) / cols;
@@ -639,6 +724,8 @@ class _PackageCard extends StatelessWidget {
                 ],
               );
             },
+                    ),
+                  ),
           ),
         ],
       ),
@@ -647,11 +734,14 @@ class _PackageCard extends StatelessWidget {
 }
 
 class _Notice extends StatelessWidget {
-  const _Notice({required this.icon, required this.color, required this.text});
+  const _Notice({required this.icon, required this.color, required this.text, this.onDismiss});
 
   final IconData icon;
   final Color color;
   final String text;
+
+  /// تنبيهٌ يُخفى بـ× (الأزرق) — بلا هذا ثابت (التحذيرات).
+  final VoidCallback? onDismiss;
 
   @override
   Widget build(BuildContext context) {
@@ -673,6 +763,18 @@ class _Notice extends StatelessWidget {
               child: Text(text,
                   style: AppType.label(color: AppColors.textHi)
                       .copyWith(fontSize: 12.5))),
+          if (onDismiss != null)
+            InkWell(
+              onTap: onDismiss,
+              borderRadius: BorderRadius.circular(R.sm),
+              child: Tooltip(
+                message: 'pkgdist.dismiss'.tr(),
+                child: Padding(
+                  padding: const EdgeInsetsDirectional.only(start: Sp.sm, top: 1, bottom: 1),
+                  child: Icon(LucideIcons.x, size: 16, color: AppColors.textMid),
+                ),
+              ),
+            ),
         ],
       ),
     );
