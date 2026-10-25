@@ -79,6 +79,10 @@ class SasLoginFlow {
   /// أو الدليل) — لشريط الشركة أعلى الواجهة؛ غيابهما يُقدَّر ثمّ يُحسم.
   ///
   /// [password] `null`: جلسةٌ بلا كلمة سرٍّ على هذا الجهاز («استئناف الشركة» من الخادم) — لا يُكتب فوق المحفوظ شيء.
+  /// منفذ الاختبار وحده: تهيئة الإشعارات بعد الدخول (Firebase — لا منصّة في `flutter test`).
+  @visibleForTesting
+  static Future<void> Function() fcmInit = FcmService.initAfterLogin;
+
   static Future<SasLoginOutcome> complete(
     LoginSuccess s, {
     required String username,
@@ -102,6 +106,8 @@ class SasLoginFlow {
       isEmployee: s.isEmployee,
       sasUrl: sasUrl,
     );
+    // إثبات الجلسة الحيّة (٢٥ أكتوبر) — على هذا الجهاز وحده؛ دخولٌ بلا إثبات (خادمٌ أقدم/استئناف) يمسح إثبات سابقه.
+    await AuthStorage.saveSessionProof(s.sessionProof);
     // الشركة المفتوحة الآن (شريط MainShell) — تحلّ محلّ السابقة التي مسحها
     // `clearAllSessionData` أعلاه. الموظّف تُعرض معه شركة مديره الأب.
     await ActiveCompany.saveFromLogin(
@@ -115,14 +121,21 @@ class SasLoginFlow {
     );
     // كلمة السرّ على الجهاز فقط (قرار المستخدم): لكلّ شركة+يوزر — لدخول
     // «شركاتي» بضغطة — وفي الحسابات المحفوظة لمبدّل المدراء الفرعيّين.
+    // «عدم حفظ الجلسة» (٢٥ أكتوبر، المالك: «من ما يعلّم حفظ الجلسة لازم من يدخل يطلب معلومات من جديد»): لا تُحفظ، وما حُفظ
+    // سابقاً لهذه الشركة واليوزر يُمحى — وكانت تُحفظ دائماً فيفتحها «شركاتي» بضغطة رغم الخيار.
     if (password != null && password.isNotEmpty) {
-      unawaited(CompanyCredsStore.upsert(sasUrl: sasUrl, username: username, password: password)
-          .catchError((_) {}));
-      unawaited(SavedProfilesStore.upsert(
-        username: username,
-        plainPassword: password,
-        displayName: s.displayName,
-      ).catchError((_) {}));
+      if (remember) {
+        unawaited(CompanyCredsStore.upsert(sasUrl: sasUrl, username: username, password: password)
+            .catchError((_) {}));
+        unawaited(SavedProfilesStore.upsert(
+          username: username,
+          plainPassword: password,
+          displayName: s.displayName,
+        ).catchError((_) {}));
+      } else {
+        unawaited(CompanyCredsStore.remove(sasUrl, username).catchError((_) {}));
+        unawaited(SavedProfilesStore.remove(username).catchError((_) {}));
+      }
     }
 
     if (s.isEmployee) {
@@ -141,7 +154,7 @@ class SasLoginFlow {
     // «قوائم أخرى» تستمع لـ`ProviderService.changes` فتُحدَّث تفاعليّاً،
     // والدخول لا ينتظر نداءً إضافيّاً.
     unawaited(ProviderService.refreshFromBackend());
-    unawaited(FcmService.initAfterLogin());
+    unawaited(fcmInit());
     return SasLoginOutcome.ok;
   }
 }

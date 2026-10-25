@@ -81,6 +81,30 @@ class AuthStorage {
   // ثانٍ (تبديل المدير الفرعيّ، العودة للأصل) إلى الساس الأصليّ فيفشل لمدراء
   // الشركات الأخرى (jt…). جزءٌ من الجلسة، فيُمسح معها.
   static const _kSasUrl = 'auth.sas_url';
+  // «عدم حفظ الجلسة» (٢٥ أكتوبر): إثبات الجلسة الحيّة من الخادم (x-session-proof) — به يجدّد من أدخل كلمة السرّ جلسته،
+  // والخادم لا يجدّد ربطاً بلا حفظ بدونه. على **هذا الجهاز وحده** (خزنةٌ بلا iCloud — [_local]): الإثبات لمن أدخل كلمة السرّ
+  // هنا لا لكلّ جهازٍ بالحساب نفسه. جزءٌ من الجلسة، فيُمسح معها.
+  static const _kSessionProof = 'auth.session_proof';
+  static const _local = FlutterSecureStorage(
+    aOptions: AndroidOptions(resetOnError: false),
+    iOptions: IOSOptions(
+      accessibility: KeychainAccessibility.first_unlock,
+      synchronizable: false,
+      accountName: 'mysvcs_radius_auth_local',
+    ),
+  );
+
+  /// يحفظ إثبات الجلسة (أو يمسحه إن كان null/فارغاً — دخولٌ بلا إثبات لا يُبقي إثبات سابقه).
+  static Future<void> saveSessionProof(String? proof) async {
+    final p = proof?.trim() ?? '';
+    if (p.isEmpty) {
+      await _local.delete(key: _kSessionProof);
+    } else {
+      await _local.write(key: _kSessionProof, value: p);
+    }
+  }
+
+  static Future<String?> readSessionProof() => _local.read(key: _kSessionProof);
 
   static Future<void> saveSession({
     required String token,
@@ -213,6 +237,7 @@ class AuthStorage {
       // كتبته قبل الحذف — وعلى iOS نسخته في iCloud معه.
       _storage.delete(key: _kSas4TokenLegacy),
       _storage.delete(key: _kSasUrl),
+      _local.delete(key: _kSessionProof),
     ]);
   }
 }

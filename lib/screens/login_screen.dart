@@ -338,7 +338,8 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       // ساسٌ يطلب رمز صورة (الحياة عمارة…) ← نافذة الرمز ثمّ الدخول بها. ومالكٌ فعّل التحقّق
       // بخطوتين ← نافذة الكود؛ فما يصل هنا جلسةٌ كاملة أو فشل.
-      final result = await SasCaptchaLogin.login(context, username: user, password: pass, sasUrl: _sasCtrl.text);
+      final result = await SasCaptchaLogin.login(context,
+          username: user, password: pass, sasUrl: _sasCtrl.text, remember: _remember);
       if (!mounted) return;
 
       switch (result) {

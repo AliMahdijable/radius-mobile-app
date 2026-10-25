@@ -31,6 +31,7 @@ Future<LoginResult?> showTwoFactorSheet(
   required String username,
   required String password,
   String? sasUrl,
+  bool? remember,
 }) {
   return showAppSheet<LoginResult>(
     context: context,
@@ -44,6 +45,7 @@ Future<LoginResult?> showTwoFactorSheet(
       username: username,
       password: password,
       sasUrl: sasUrl,
+      remember: remember,
     ),
   );
 }
@@ -55,6 +57,7 @@ class TwoFactorSheet extends StatefulWidget {
     required this.username,
     required this.password,
     this.sasUrl,
+    this.remember,
   });
 
   final TwoFactorChallenge challenge;
@@ -63,6 +66,9 @@ class TwoFactorSheet extends StatefulWidget {
   final String username;
   final String password;
   final String? sasUrl;
+
+  /// «حفظ الجلسة» — يصل الخادم مع إعادة الدخول كما مع الدخول الأوّل.
+  final bool? remember;
 
   /// ساعة العدّاد — منفذ الاختبار وحده.
   ///
@@ -209,6 +215,7 @@ class _TwoFactorSheetState extends State<TwoFactorSheet>
       username: widget.username,
       password: widget.password,
       sasUrl: widget.sasUrl,
+      remember: widget.remember,
     );
     if (!mounted) return;
     switch (r) {

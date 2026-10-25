@@ -135,8 +135,9 @@ class CompanyOpenFlow {
       return;
     }
     host.setBusy(true);
+    // كلمة سرٍّ محفوظة على الجهاز = دخولٌ سابق بـ«حفظ الجلسة» (لا تُحفظ بدونه) ⇒ الاختيار نفسه صريحاً للخادم.
     final res = await SasCaptchaLogin.login(context,
-        username: c.username, password: pass, sasUrl: url);
+        username: c.username, password: pass, sasUrl: url, remember: true);
     if (!context.mounted) return;
     switch (res) {
       case LoginSuccess():

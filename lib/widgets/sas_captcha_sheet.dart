@@ -27,13 +27,15 @@ class SasCaptchaLogin {
   /// وطلب الساس رمزاً جديداً) رمز ← كود. حدٌّ يمنع حلقةً لا تنتهي.
   static const _maxChallenges = 4;
 
+  /// [remember] «حفظ الجلسة» يصل الخادم مع كلّ محاولة (ومعها ما بعد رمز الصورة) — [AuthApi.login].
   static Future<LoginResult> login(
     BuildContext context, {
     required String username,
     required String password,
     String? sasUrl,
+    bool? remember,
   }) async {
-    var r = await AuthApi.login(username: username, password: password, sasUrl: sasUrl);
+    var r = await AuthApi.login(username: username, password: password, sasUrl: sasUrl, remember: remember);
     for (var i = 0; i < _maxChallenges; i++) {
       if (r is! LoginFailure || !context.mounted) return r;
       if (r.needsCaptcha) {
@@ -44,7 +46,7 @@ class SasCaptchaLogin {
               backgroundColor: AppColors.surfaceSheet,
               barrierColor: AppColors.scrim,
               shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(R.sheet))),
-              builder: (_) => _CaptchaSheet(first: first, username: username, password: password, sasUrl: sasUrl),
+              builder: (_) => _CaptchaSheet(first: first, username: username, password: password, sasUrl: sasUrl, remember: remember),
             ) ??
             const LoginFailure('', code: 'captcha-cancelled');
       } else if (r.needs2fa) {
@@ -54,6 +56,7 @@ class SasCaptchaLogin {
               username: username,
               password: password,
               sasUrl: sasUrl,
+              remember: remember,
             ) ??
             const LoginFailure('', code: '2fa-cancelled');
       } else {
@@ -65,11 +68,12 @@ class SasCaptchaLogin {
 }
 
 class _CaptchaSheet extends StatefulWidget {
-  const _CaptchaSheet({required this.first, required this.username, required this.password, this.sasUrl});
+  const _CaptchaSheet({required this.first, required this.username, required this.password, this.sasUrl, this.remember});
   final SasCaptcha first;
   final String username;
   final String password;
   final String? sasUrl;
+  final bool? remember;
 
   @override
   State<_CaptchaSheet> createState() => _CaptchaSheetState();
@@ -106,6 +110,7 @@ class _CaptchaSheetState extends State<_CaptchaSheet> {
       sasUrl: widget.sasUrl,
       captchaId: _cap.id,
       captchaText: text,
+      remember: widget.remember,
     );
     if (!mounted) return;
     if (r is LoginFailure && r.needsCaptcha) {
@@ -127,7 +132,8 @@ class _CaptchaSheetState extends State<_CaptchaSheet> {
     HapticFeedback.selectionClick();
     setState(() => _refreshing = true);
     // بلا رمز ← الخادم يُرجع صورةً جديدة دون محاولة دخولٍ على الساس.
-    final r = await AuthApi.login(username: widget.username, password: widget.password, sasUrl: widget.sasUrl);
+    final r = await AuthApi.login(
+        username: widget.username, password: widget.password, sasUrl: widget.sasUrl, remember: widget.remember);
     if (!mounted) return;
     switch (r) {
       case final LoginFailure f when f.needsCaptcha:

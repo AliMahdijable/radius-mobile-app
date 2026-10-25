@@ -27,6 +27,7 @@ class LoginSuccess extends LoginResult {
     this.canAccessPackages = false,
     this.isEmployee = false,
     this.canonicalPermissions = const {},
+    this.sessionProof,
   });
 
   final String token;
@@ -62,6 +63,25 @@ class LoginSuccess extends LoginResult {
   /// المدير الفرعيّ فاعلٌ مقيَّد لا كامل الصلاحيّات. فارغةٌ = غير مقيَّد
   /// (super-admin أو لم يُرسِلها الخادم). لا تخصّ الموظّف (له خريطته من /me).
   final Map<String, bool> canonicalPermissions;
+
+  /// «عدم حفظ الجلسة» (٢٥ أكتوبر): إثبات الجلسة الحيّة من ترويسة `x-session-proof` — يُحفظ على هذا الجهاز وحده
+  /// ([AuthStorage.saveSessionProof]) ويُرسَل مع التجديد. به يكمل من أدخل كلمة السرّ جلسته، ولا يعود إليها حسابٌ مربوطٌ
+  /// بعد الخروج بلا كلمة السرّ (الخادم: server/linkResume.js). null = خادمٌ أقدم أو ردّ استئناف.
+  final String? sessionProof;
+
+  LoginSuccess withSessionProof(String? proof) => LoginSuccess(
+        token: token,
+        adminId: adminId,
+        adminUsername: adminUsername,
+        displayName: displayName,
+        expiresAt: expiresAt,
+        isSuperAdmin: isSuperAdmin,
+        canAccessManagers: canAccessManagers,
+        canAccessPackages: canAccessPackages,
+        isEmployee: isEmployee,
+        canonicalPermissions: canonicalPermissions,
+        sessionProof: (proof == null || proof.trim().isEmpty) ? null : proof.trim(),
+      );
 }
 
 class LoginFailure extends LoginResult {
@@ -176,12 +196,16 @@ class AuthApi {
 
   /// POST /api/auth/login. Returns LoginSuccess on success (response
   /// success=true) or LoginFailure with an Arabic message otherwise.
+  ///
+  /// [remember] «حفظ الجلسة» (٢٥ أكتوبر): يُرسَل صريحاً — false ⇒ الخادم يحفظ على ربط الحساب أنّ الشركة لا تُفتح بلا كلمة
+  /// السرّ (لا من «شركاتي» ولا من الموقع)، والتوكن وكلمة السرّ عنده للواتساب كما هما. null (مستدعٍ قديم) ⇒ لا يُرسَل.
   static Future<LoginResult> login({
     required String username,
     required String password,
     String? sasUrl,
     String? captchaId,
     String? captchaText,
+    bool? remember,
   }) async {
     try {
       // Pro: رابط صفحة الشركة (إن لصقه المستخدم) — الخادم يشتقّ منه الساس
@@ -198,6 +222,7 @@ class AuthApi {
           if (sas.isNotEmpty) 'sasUrl': sas,
           if (captchaId != null) 'captchaId': captchaId,
           if (captchaText != null) 'captchaText': captchaText,
+          if (remember != null) 'remember': remember,
         },
         options: Options(headers: {
           if (accountToken != null) 'x-account-token': accountToken,
@@ -230,7 +255,8 @@ class AuthApi {
         );
       }
 
-      return _sessionFromBody(body);
+      final session = _sessionFromBody(body);
+      return session is LoginSuccess ? session.withSessionProof(res.headers.value('x-session-proof')) : session;
     } on DioException catch (e) {
       return LoginFailure(_friendlyDioError(e));
     } catch (_) {
@@ -603,6 +629,14 @@ class AuthApi {
   /// 🐛 كان كلّ فشلٍ يُعامَل «جلسةً ميتة» فتُمحى: انقطاع شبكةٍ لحظيّ،
   /// أو مهلة عشر ثوانٍ، أو حدّ طلباتٍ من الخادم — كلّها تُخرج الموظّف
   /// من حسابه وسط عمله. والجلسة لا تموت إلّا بحكمٍ صريح من الخادم.
+  /// منفذ الاختبار وحده: Dio التجديد مستقلٌّ عن [ApiClient.dio] (بلا معترض)، فيُحقن خادمه الوهميّ هنا.
+  @visibleForTesting
+  static HttpClientAdapter? refreshAdapterForTest;
+
+  /// منفذ الاختبار وحده: توكن حساب Pro بلا Firebase.
+  @visibleForTesting
+  static Future<String?> Function()? accountTokenForTest;
+
   static Future<RefreshOutcome> refreshTokenDetailed() async {
     final adminId = await AuthStorage.readAdminId();
     if (adminId == null) return RefreshOutcome.serverRejected;
@@ -655,7 +689,7 @@ class AuthApi {
       ));
       // Pro البند ٤ ③: التجديد يشترط حساباً مربوطاً بهذا المدير (كان بلا
       // أيّ تحقّق). بلا حساب = رفضٌ صريح، فيعود المستخدم لطبقة الحساب.
-      final accountToken = await AccountService.idToken();
+      final accountToken = accountTokenForTest != null ? await accountTokenForTest!() : await AccountService.idToken();
       if (accountToken == null) {
         dio.close();
         return RefreshOutcome.serverRejected;
@@ -667,6 +701,12 @@ class AuthApi {
       try {
         deviceId = await DeviceId.get();
       } catch (_) {/* لا يُفشل التجديد */}
+      // «عدم حفظ الجلسة» (٢٥ أكتوبر): إثبات هذه الجلسة الحيّة — الخادم لا يجدّد ربطاً بلا حفظ إلّا به.
+      String? proof;
+      try {
+        proof = await AuthStorage.readSessionProof();
+      } catch (_) {/* بلا إثبات: ربطٌ محفوظٌ يجدّد كما كان */}
+      if (refreshAdapterForTest != null) dio.httpClientAdapter = refreshAdapterForTest!;
       final res = await dio.post<Map<String, dynamic>>(
         '/api/auth/refresh-token',
         data: {'adminId': adminId},
@@ -674,6 +714,7 @@ class AuthApi {
           'x-account-token': accountToken,
           if (deviceId != null && deviceId.isNotEmpty) 'x-device-id': deviceId,
           'x-device-label': AppPlatform.deviceLabel,
+          if (proof != null && proof.isNotEmpty) 'x-session-proof': proof,
         }),
       );
       dio.close();
@@ -704,6 +745,9 @@ class AuthApi {
         token: newToken,
         tokenExpiry: expiresAt,
       );
+      // يتجدّد الإثبات مع التوكن — من أكمل جلسته أطال إثباتها.
+      final newProof = res.headers.value('x-session-proof');
+      if (newProof != null && newProof.isNotEmpty) await AuthStorage.saveSessionProof(newProof);
       if (!kReleaseMode) {
         debugPrint('🟢 refresh-token: token saved, expires=$expiresAt');
       }
