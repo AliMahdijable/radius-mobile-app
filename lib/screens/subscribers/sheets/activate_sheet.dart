@@ -295,6 +295,11 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   num get _rewardPoints => _readNum('reward_points');
   String get _profileName =>
       (_data?['profile_name'] ?? widget.sub.profileName ?? '').toString();
+
+  /// رقم [_profileName] من الكائن نفسه (عرض التفعيل وإلّا المشترك) — لاسمها في «بوابة المشترك» على الوصل.
+  int? get _profileId => _data?['profile_name'] != null
+      ? int.tryParse('${_data?['profile_id'] ?? ''}')
+      : widget.sub.profileId;
   String? get _duration => _data?['profile_duration']?.toString();
 
   // ───────────────────── ايرث لنك (البند ٤) ─────────────────────
@@ -516,6 +521,9 @@ class _ActivateSheetState extends State<_ActivateSheet> {
           pay: _receiptPay,
           partialAmount: _partialAmount,
           packageName: _elSelectedPkg?['name']?.toString() ?? _profileName,
+          packageId: _elSelectedPkg?['name'] != null
+              ? int.tryParse('${_elSelectedPkg?['id'] ?? ''}')
+              : _profileId,
         );
         if (mounted) showPrintResult(context, printed);
       }
@@ -586,6 +594,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         pay: _receiptPay,
         partialAmount: _partialAmount,
         packageName: _profileName,
+        packageId: _profileId,
       );
       if (mounted) showPrintResult(context, printed);
     }

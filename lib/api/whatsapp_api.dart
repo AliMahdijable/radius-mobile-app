@@ -10,6 +10,8 @@ import '../services/auth_storage.dart';
 import '../services/manual_wa_sender.dart';
 import '../widgets/manual_wa_chip.dart';
 import 'api_client.dart';
+import 'company_route.dart';
+import 'package_names_api.dart';
 import 'portal_settings_api.dart';
 
 /// A WhatsApp template row as the backend returns from
@@ -1018,7 +1020,8 @@ class WhatsAppApi {
         message: 'قالب "$arabic" مُعطَّل — فعّله من إعدادات الواتساب',
       );
     }
-    final rendered = _renderTemplate(active.first.messageContent, sub);
+    final rendered = _renderTemplate(
+        active.first.messageContent, sub, await packageNamesFor(sub));
     return sendMessage(
       to: phone,
       message: rendered,
@@ -1079,8 +1082,8 @@ class WhatsAppApi {
     }
     // {agent_code}: يُملأ هنا لا في الخادم وحده — اليدويّ يخرج من واتساب المدير
     // مباشرةً، والمعاينة تُري ما سيصل حرفيّاً (وسيط البوّابة §10).
-    final rendered = await PortalSettingsApi.fillAgentCode(
-        _renderTemplate(active.first.messageContent, sub));
+    final rendered = await PortalSettingsApi.fillAgentCode(_renderTemplate(
+        active.first.messageContent, sub, await packageNamesFor(sub)));
 
     if (!context.mounted) {
       return const WhatsSendResult(
@@ -1127,13 +1130,19 @@ class WhatsAppApi {
   /// المدخل العامّ لملء متغيّرات المشترك — لقوالب تُركَّب خارج هذا
   /// الملفّ (‏«تنبيه المشترك» يركّب أسطر المشاكل أوّلاً ثمّ يملأ الباقي
   /// هنا) فتبقى قائمة المتغيّرات واحدةً لا نسختين.
-  static String renderForSubscriber(String body, Subscriber sub) =>
-      _renderTemplate(body, sub);
+  static String renderForSubscriber(String body, Subscriber sub,
+          {PackageNames names = PackageNames.empty}) =>
+      _renderTemplate(body, sub, names);
+
+  /// أسماء باقات حساب المشترك في «بوابة المشترك» — بشركة صفّه في «كل الشركات». التعذّر ⇒ لا أسماء (اسم الساس).
+  static Future<PackageNames> packageNamesFor(Subscriber sub) =>
+      CompanyRoute.run(sub.companyKey, PackageNamesApi.fetch);
 
   /// Replaces every {placeholder} in the template body. Mirrors v1's
   /// var set from subscriber_details_screen.dart line ~2012 — same
   /// keys so existing admin templates keep working unchanged.
-  static String _renderTemplate(String body, Subscriber sub) {
+  static String _renderTemplate(String body, Subscriber sub,
+      [PackageNames names = PackageNames.empty]) {
     final arabicName = sub.fullName.trim();
     final subscriberName = sub.username.isNotEmpty ? sub.username : arabicName;
     final firstName = arabicName.isNotEmpty ? arabicName : sub.username;
@@ -1143,6 +1152,7 @@ class WhatsAppApi {
     final credit = sub.balanceAmount > 0 ? sub.balanceAmount.round() : 0;
     final remainingDays = sub.remainingDays?.toString() ?? '';
     final expiry = _formatExpiryArabic(sub.expiration);
+    final sasPackage = sub.profileName ?? '';
     final vars = <String, String>{
       '{subscriber_name}': subscriberName,
       '{firstname}': firstName,
@@ -1152,7 +1162,9 @@ class WhatsAppApi {
       '{days_remaining}': remainingDays,
       '{expiration_date}': expiry,
       '{expiry_date}': expiry,
-      '{package_name}': sub.profileName ?? '',
+      // اسمها في «بوابة المشترك» إن كتبه الحساب، وإلّا اسم الساس — كرسائل الخادم (server/packageNames.js)
+      '{package_name}': names.display(sub.profileId, sasPackage) ?? '',
+      '{sas_package_name}': sasPackage,
       '{package_price}': priceStr,
       '{debt_amount}': debt > 0 ? formatIQD(debt) : '0',
       '{credit_amount}': credit > 0 ? formatIQD(credit) : '0',

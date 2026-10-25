@@ -23,7 +23,9 @@ const Map<String, String> _kVariableLabels = {
   // المشترك تطبيق MyServices مع يوزره (يُعرض في «بوابة المشترك»).
   '{agent_code}': 'رمز الوكيل',
   '{phone}': 'رقم الهاتف',
+  // اسمها في «بوابة المشترك» إن كتبه الحساب، وإلّا اسم الساس (الخادم: server/packageNames.js)؛ والأصل بـ{sas_package_name}
   '{package_name}': 'اسم الباقة',
+  '{sas_package_name}': 'اسم الباقة في الساس',
   '{package_price}': 'سعر الباقة',
   '{days_remaining}': 'الأيام المتبقية',
   '{expiry_date}': 'تاريخ الانتهاء',
@@ -75,6 +77,7 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
     '{agent_code}',
     '{phone}',
     '{package_name}',
+    '{sas_package_name}',
     '{package_price}',
     '{days_remaining}',
     '{expiry_date}',

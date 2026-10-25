@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 
 import '../core/util/server_time.dart';
 import 'api_client.dart';
+import 'package_names_api.dart';
 
 /// Branding — كيف تبدو بوابة المشترك (اسم شركة/شعار/تواصل).
 class Branding {
@@ -483,6 +484,7 @@ class PortalSettingsApi {
         data: body,
       );
       if (r.statusCode == 200 && r.data?['success'] == true) {
+        PackageNamesApi.clearCache(); // الرسائل والوصل بالاسم الجديد من الآن
         return (ok: true, message: null);
       }
       return (ok: false, message: _refusal(r));
@@ -501,7 +503,9 @@ class PortalSettingsApi {
       final r = await ApiClient.dio.delete<Map<String, dynamic>>(
         '/api/v2/admin/portal-packages/$profileId',
       );
-      return r.statusCode == 200 && r.data?['success'] == true;
+      final ok = r.statusCode == 200 && r.data?['success'] == true;
+      if (ok) PackageNamesApi.clearCache(); // رجع اسم الساس للرسائل والوصل
+      return ok;
     } on DioException catch (e) {
       _log('portal-packages (DELETE $profileId)', e);
       return false;

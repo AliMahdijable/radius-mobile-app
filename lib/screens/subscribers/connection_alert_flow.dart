@@ -98,8 +98,9 @@ Future<void> showConnectionAlertFlow(
     problems: problems,
   );
   // {agent_code} يُملأ هنا: اليدويّ لا يمرّ بالخادم الذي يملؤه (وسيط البوّابة §10).
-  final message = await PortalSettingsApi.fillAgentCode(
-      WhatsAppApi.renderForSubscriber(body, sub));
+  // {package_name}: اسمها في «بوابة المشترك» إن كُتب، وإلّا اسم الساس (كرسائل الخادم).
+  final message = await PortalSettingsApi.fillAgentCode(WhatsAppApi.renderForSubscriber(
+      body, sub, names: await WhatsAppApi.packageNamesFor(sub)));
   if (!context.mounted) return;
 
   // ── ٤. المعاينة ──────────────────────────────────────────────

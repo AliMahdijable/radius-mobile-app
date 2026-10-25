@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../api/company_route.dart';
+import '../api/package_names_api.dart';
 import '../api/printed_receipts_api.dart';
 import '../api/receipt_facts.dart';
 import '../api/receipt_settings_api.dart';
@@ -47,12 +48,14 @@ class ReceiptService {
     required ReceiptPay pay,
     num? partialAmount,
     String? packageName,
+    int? packageId,
   }) {
     final f = ReceiptFacts.take(sub.idx, companyKey: sub.companyKey);
     return _emit(
       ReceiptKind.activation,
       sub,
       packageName: packageName,
+      packageId: packageId,
       packagePrice: price,
       amount: price,
       pay: pay,
@@ -148,10 +151,22 @@ class ReceiptService {
     );
   }
 
+  /// اسم الباقة على الوصل كما يراه المشترك (المالك ٢٦ أكتوبر): اسمها في «بوابة المشترك» لرقمها إن كتبه الحساب،
+  /// وإلّا كما وصل. الرقم من الكائن نفسه الذي جاء منه الاسم: [packageName] برقمه [packageId] — وبلا رقمٍ كما هو
+  /// (باقة التمديد ليست باقة مشترك) — وإلّا باقة المشترك ورقمها.
+  @visibleForTesting
+  static String packageLabel(
+      PackageNames names, Subscriber sub, String? packageName, int? packageId) {
+    final sas = (packageName ?? sub.profileName ?? '').trim();
+    final id = packageName == null ? sub.profileId : packageId;
+    return (names.display(id, sas) ?? sas).trim();
+  }
+
   static Future<PrintResult> _emit(
     ReceiptKind kind,
     Subscriber sub, {
     String? packageName,
+    int? packageId,
     num? packagePrice,
     num? amount,
     ReceiptPay? pay,
@@ -165,12 +180,13 @@ class ReceiptService {
       final merged = MergedMode.companyOf(key);
       final earthlink = merged != null ? merged.provider == MergedProvider.earthlink : _sessionIsEarthlink;
       final idx = sub.idx;
+      final namesF = CompanyRoute.run(key, PackageNamesApi.fetch);
       final settings = await CompanyRoute.run(key, ReceiptSettingsApi.fetch);
       final look = settings ?? const ReceiptSettings();
       final id = await _identity(merged);
       final name = sub.fullName.trim().isEmpty ? sub.username : sub.fullName.trim();
       final phone = sub.displayPhone.trim();
-      final pkg = (packageName ?? sub.profileName ?? '').trim();
+      final pkg = packageLabel(await namesF, sub, packageName, packageId);
 
       // رابط QR ورقم الأرشيف معاً لا تباعاً: الوصل لا ينتظر رحلتين. فشل أيٍّ منهما لا يمنع الطباعة.
       // QR: الساس وحده (ايرث لنك بلا مسار generate-link — كالموقع).

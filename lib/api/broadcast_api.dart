@@ -380,6 +380,8 @@ class BroadcastVariables {
     // رمز وكيل المُرسِل — الخادم يملؤه مرّةً للبثّ كلّه (وسيط البوّابة §10).
     (token: '{agent_code}', label: 'رمز الوكيل'),
     (token: '{package_name}', label: 'الباقة'),
+    // اسم الساس كما هو — {package_name} يأخذ اسمها في «بوابة المشترك» إن كُتب
+    (token: '{sas_package_name}', label: 'الباقة (الساس)'),
     (token: '{expiry_date}', label: 'تاريخ الانتهاء'),
     (token: '{days_remaining}', label: 'الأيام المتبقّية'),
     (token: '{debt_amount}', label: 'مبلغ الدين'),
