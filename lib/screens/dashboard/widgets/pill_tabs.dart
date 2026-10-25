@@ -16,15 +16,20 @@ class PillTabs<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    return Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceInput,
-        borderRadius: BorderRadius.circular(R.pill),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [for (final (value, label) in options) _tab(value, label)],
+    // ⚠️ المسار لا يفيض أبداً: «الأسبوع الماضي · الشهر الماضي» أعرض من بطاقةٍ على شاشة ٣٢٠ (فاض ٨٦ نقطة في
+    // dashboard_locked_test)، فيصغر كلّه بشكله نفسه حين يضيق. وبلا حدٍّ للعرض (صفّ عنوان الإيرادات) يبقى بعرضه الطبيعيّ.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Container(
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceInput,
+          borderRadius: BorderRadius.circular(R.pill),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [for (final (value, label) in options) _tab(value, label)],
+        ),
       ),
     );
   }
