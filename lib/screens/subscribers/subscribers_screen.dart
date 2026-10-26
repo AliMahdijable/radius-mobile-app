@@ -487,7 +487,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     // _fetchAndMerge يستفيد من cache الـ45 ثانية على قائمة المشتركين لكن
     // يجيب online status حديث في كل مرة (loadOnline لا يُخزَّن).
     try {
-      await _fetchAndMerge();
+      await _fetchAndMerge(quiet: true);
       // ⚠️ بلا هذا السطر يُدفع ثمن الاستطلاع كاملاً بلا أثر:
       // `_fetchAndMerge` يُسند `_all = merged` بلا `setState`، فالحالة
       // الحيّة (متصل/منتهي) لا تُرسَم حتّى يقع `setState` من سبب آخر.
@@ -984,14 +984,22 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   /// land in a separate map keyed by username. Mirrors v1's
   /// loadSubscribers → loadOnlineUsers → loadLastPayments sequence but
   /// runs them concurrently to cut wall time.
-  Future<void> _fetchAndMerge() async {
+  ///
+  /// [quiet] = الاستطلاع الصامت كلّ ٥ ثوانٍ: «آخر الدفعات» و«روابط تلغرام» لا تتغيّران إلّا بعمليّة — وكلّ عمليّة تمرّ
+  /// بالتحديث الكامل (`_dataStale` ⇒ `_refresh`) — فيأخذهما كلّ ١٢ نبضة (دقيقة) لا كلّ مرّة، كعدّادَي الكبير و«كل الشركات»
+  /// (٢٦ أكتوبر: كانتا ~٤٥ ألف طلبٍ يوميّاً من هذه الحلقة وحدها). المتصلون والقائمة كما كانا.
+  Future<void> _fetchAndMerge({bool quiet = false}) async {
     final adminId = await AuthStorage.readAdminId();
+    final extras = !quiet || ++_extrasTick % 12 == 0;
+    if (extras) _extrasTick = 0;
     final results = await Future.wait([
       SubscribersApi.loadAll(),
       SubscribersApi.loadOnline(),
-      SubscribersApi.loadLastPayments(),
+      if (extras) SubscribersApi.loadLastPayments() else Future<Object?>.value(),
       SubscribersApi.loadPackages(),
-      if (adminId != null)
+      if (!extras)
+        Future<Object?>.value()
+      else if (adminId != null)
         TelegramApi.listBindings(adminId)
       else
         Future.value(const <TelegramBinding>[]),
@@ -1000,8 +1008,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     final online = results[1] as Map<String, OnlineSessionInfo>?;
     final payments = results[2] as Map<String, Map<String, dynamic>>?;
     final packages = results[3] as Map<String, PackageInfo>?;
-    final bindings = results[4] as List<TelegramBinding>? ?? const [];
-    _telegramBoundIdx = bindings.map((b) => b.sas4Idx).toSet();
+    if (extras) {
+      final bindings = results[4] as List<TelegramBinding>? ?? const [];
+      _telegramBoundIdx = bindings.map((b) => b.sas4Idx).toSet();
+    }
 
     if (list == null) return;
     final onlineMap = online ?? const <String, OnlineSessionInfo>{};
@@ -1031,8 +1041,11 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       return enriched;
     }).toList();
     _all = merged;
-    _lastPayments = payments ?? {};
+    if (extras) _lastPayments = payments ?? {};
   }
+
+  /// نبضات الاستطلاع الصامت منذ آخر «آخر الدفعات» و«روابط تلغرام» ([_fetchAndMerge]).
+  int _extrasTick = 0;
 
   void _onSearchChanged() {
     _debounce?.cancel();
