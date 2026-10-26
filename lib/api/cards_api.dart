@@ -425,10 +425,15 @@ class CardsSummary {
     this.source,
     this.unsupportedMessage,
     this.partial = false,
+    this.transferEnabled = false,
   });
 
   /// `false` = لا صلاحيّة كارت أو لا سلاسل له إطلاقاً (والمصفوفتان فارغتان).
   final bool enabled;
+
+  /// نقل الكارتات لمديرٍ فرعيّ مفعّلٌ لهذا الحساب (`transfer_enabled` — مفتاح الخادم cards_transfer، ٢٧ أكتوبر).
+  /// خادمٌ أقدم لا يرسله ⇒ false: لا زرّ نقل.
+  final bool transferEnabled;
   final CardsTotals totals;
   final List<CardProfileStock> profiles;
   final List<CardSeries> series;
@@ -462,7 +467,65 @@ class CardsSummary {
         unsupportedMessage:
             _bool(body['unsupported']) ? _str(body['message']) : null,
         partial: _bool(body['partial']),
+        transferEnabled: _bool(body['transfer_enabled']),
       );
+}
+
+// ═════════════════════════ نقل الكارتات لمديرٍ فرعيّ (٢٧ أكتوبر) ═════════════════════════
+
+/// مديرٌ فرعيّ تُنقل له الكارتات — كما يراه الساس (`GET /api/v2/cards/transfer-targets`).
+class CardTransferTarget {
+  const CardTransferTarget({required this.id, required this.username});
+
+  /// رقم المدير في الساس — نصّاً كما يرسله الخادم.
+  final String id;
+  final String username;
+
+  static CardTransferTarget? fromJson(Map<String, dynamic> j) {
+    final id = _str(j['id']);
+    final username = _str(j['username']);
+    if (id == null || username == null) return null;
+    return CardTransferTarget(id: id, username: username);
+  }
+}
+
+/// ما بقي للنقل في سلسلة (`GET …/series/:series/range`): أرقام الكارتات من [start] إلى [end].
+/// [length] صفر = لا شيء يُنقل (والطرفان `null`).
+class CardSeriesRange {
+  const CardSeriesRange({required this.start, required this.end, required this.length});
+
+  final int? start;
+  final int? end;
+  final int length;
+
+  static CardSeriesRange fromJson(Map<String, dynamic> j) {
+    final start = _intOrNull(j['start']);
+    final end = _intOrNull(j['end']);
+    final length = _countOrNull(j['length']) ?? 0;
+    if (start == null || end == null || end < start || length == 0) {
+      return const CardSeriesRange(start: null, end: null, length: 0);
+    }
+    return CardSeriesRange(start: start, end: end, length: length);
+  }
+}
+
+/// طريقة النقل — كواجهة الساس: أوّل N كارتاً، أو من أوّل كارتٍ متبقٍّ حتى رقمٍ تختاره، أو المجموعة كاملة.
+enum CardTransferMode {
+  count('count'),
+  range('range'),
+  all('all');
+
+  const CardTransferMode(this.wire);
+  final String wire;
+}
+
+/// نتيجة نقلٍ نجح: كم نُقل، ورسالة الخادم العربيّة، وهل كان طلباً مكرّراً (لم يُنقل ثانيةً).
+class CardTransferResult {
+  const CardTransferResult({required this.moved, this.message, this.repeated = false});
+
+  final int moved;
+  final String? message;
+  final bool repeated;
 }
 
 // ═════════════════════════ الحالة العامّة ═════════════════════════
@@ -714,6 +777,109 @@ class CardsApi {
         code: null,
       );
     }
+  }
+
+  // ── نقل الكارتات لمديرٍ فرعيّ (٢٧ أكتوبر — صاحب الحساب وحده، خلف مفتاح الخادم cards_transfer) ──
+
+  /// GET /api/v2/cards/transfer-targets — مدراؤك الفرعيّون كما يراهم الساس.
+  static Future<({List<CardTransferTarget>? data, String? message, String? code})> transferTargets() async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/cards/transfer-targets');
+      final body = r.data ?? const {};
+      if (body['success'] != true) {
+        return (
+          data: null,
+          message: _str(body['message']) ?? 'تعذّرت قراءة المدراء أو المجموعة — أعد المحاولة',
+          code: _str(body['code']),
+        );
+      }
+      return (data: _rows(body['targets'], CardTransferTarget.fromJson), message: null, code: null);
+    } catch (e) {
+      _log('transfer-targets', e);
+      return (data: null, message: humanError(e, fallback: 'تعذّرت قراءة المدراء أو المجموعة — أعد المحاولة'), code: null);
+    }
+  }
+
+  /// GET /api/v2/cards/series/:series/range — ما بقي للنقل في السلسلة الآن.
+  static Future<({CardSeriesRange? data, String? message, String? code})> seriesRange(String series) async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/v2/cards/series/${Uri.encodeComponent(series)}/range',
+      );
+      final body = r.data ?? const {};
+      if (body['success'] != true) {
+        return (
+          data: null,
+          message: _str(body['message']) ?? 'تعذّرت قراءة المدراء أو المجموعة — أعد المحاولة',
+          code: _str(body['code']),
+        );
+      }
+      return (data: CardSeriesRange.fromJson(body), message: null, code: null);
+    } catch (e) {
+      _log('series-range', e);
+      return (data: null, message: humanError(e, fallback: 'تعذّرت قراءة المدراء أو المجموعة — أعد المحاولة'), code: null);
+    }
+  }
+
+  /// POST /api/v2/cards/series/:series/transfer — [requestId] ثابتٌ للنيّة الواحدة: إعادةٌ بعد انقطاعٍ (أو نقرةٌ
+  /// مكرّرة) بالمعرّف نفسه تأخذ النتيجة نفسها بلا نقلٍ ثانٍ. [answered] = ردّ الخادم فعلاً (حكمه نهائيّ)؛ `false` =
+  /// انقطاعٌ قبل الردّ — يُعاد بالمعرّف نفسه.
+  static Future<({CardTransferResult? data, String? message, String? code, bool answered})> transfer(
+    String series, {
+    required CardTransferMode mode,
+    required String to,
+    int? count,
+    int? toCard,
+    required String requestId,
+  }) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/cards/series/${Uri.encodeComponent(series)}/transfer',
+        data: {
+          'mode': mode.wire,
+          'to': to,
+          if (mode == CardTransferMode.count) 'count': count,
+          if (mode == CardTransferMode.range) 'to_card': toCard,
+          'request_id': requestId,
+        },
+      );
+      final body = r.data ?? const {};
+      if (body['success'] != true) {
+        return (
+          data: null,
+          message: _str(body['message']) ?? 'تعذّر النقل — تأكّد من الاتّصال وأعد',
+          code: _str(body['code']),
+          answered: true,
+        );
+      }
+      // نُقل شيءٌ أو لم يُنقل: الشارة والملخّص يُقرآن طازجين.
+      CardsState.invalidate();
+      return (
+        data: CardTransferResult(
+          moved: _int(body['moved']),
+          message: _str(body['message']),
+          repeated: _bool(body['repeated']),
+        ),
+        message: null,
+        code: null,
+        answered: true,
+      );
+    } catch (e) {
+      _log('transfer', e);
+      // رميةٌ = انقطاعٌ أو 5xx (نشرٌ/بوّابةٌ عابرة — خادمنا لا يردّ النقل بـ5xx): لا حكم، فالمعرّف نفسه للإعادة.
+      return (
+        data: null,
+        message: humanError(e, fallback: 'تعذّر النقل — تأكّد من الاتّصال وأعد'),
+        code: null,
+        answered: false,
+      );
+    }
+  }
+
+  /// معرّف طلب نقلٍ جديد (نيّةٌ واحدة) — ٣٢ خانة سداسيّة عشوائيّة.
+  static String newTransferRequestId() {
+    final rnd = math.Random.secure();
+    return List.generate(16, (_) => rnd.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
   }
 
   /// ⚠️ الحالة ونوع الخطأ فقط — لا جسم الردّ ولا نصّ الاستثناء.

@@ -7,11 +7,13 @@ import '../../core/util/bidi.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/sheet_scaffold.dart';
+import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/skeleton.dart';
 import 'cards_widgets.dart';
+import 'sheets/card_transfer_sheet.dart';
 import 'sheets/series_cards_sheet.dart';
 import '../desktop/desk_widgets.dart';
 
@@ -86,6 +88,20 @@ class _CardsScreenState extends State<CardsScreen> {
       _inFlight ??= _fetch(fresh).whenComplete(() => _inFlight = null);
 
   Future<void> _refresh() => _load(fresh: true);
+
+  /// كارتات السلسلة، ومنها «نقل لمدير فرعيّ» (٢٧ أكتوبر): لصاحب الحساب وحده (عنصرٌ لصاحب الحساب يبقى مخفيّاً عن الموظّف —
+  /// قاعدة القفل الموحّد ٥) وحين يفتحه الخادم (`transfer_enabled`)، وللساس لا لكروت ايرث لنك. نقلٌ تمّ ⇒ تحديثٌ طازج.
+  Future<void> _openSeries(CardSeries s) async {
+    final summary = _summary;
+    final canTransfer = summary != null &&
+        summary.transferEnabled &&
+        !summary.seriesArePackages &&
+        !PermissionsService.isEmployee;
+    final wantTransfer = await showSeriesCardsSheet(context, s, canTransfer: canTransfer);
+    if (wantTransfer != true || !mounted) return;
+    final moved = await showCardTransferSheet(context, s);
+    if (moved == true && mounted) await _refresh();
+  }
 
   Future<void> _fetch(bool fresh) async {
     if (!_loading) setState(() => _loading = true);
@@ -277,7 +293,7 @@ class _CardsScreenState extends State<CardsScreen> {
               separatorBuilder: (_, __) => const SizedBox(height: Sp.sm),
               itemBuilder: (_, i) => _SeriesTile(
                 series: paged[i],
-                onTap: () => showSeriesCardsSheet(context, paged[i]),
+                onTap: () => _openSeries(paged[i]),
               ),
             ),
           ),

@@ -18,20 +18,24 @@ import '../../../core/widgets/app_sheet.dart';
 /// ⚠️ لا PIN ولا رقمٌ تسلسليّ كامل: الخادم يرسل آخر أربع خانات وحدها،
 /// والنموذج لا يملك حقلاً لغيرها. والقراءة من الساس بطيئة (~٢ث للصفحة)،
 /// فرأس الشيت يُرسم فوراً ممّا في الملخّص والهيكل مكان القائمة.
-Future<void> showSeriesCardsSheet(BuildContext context, CardSeries series) {
-  return showAppSheet<void>(
+///
+/// [canTransfer] (صاحب الحساب + مفتاح الخادم + سلسلة ساس — ٢٧ أكتوبر): يُظهر «نقل لمدير فرعيّ»، والنقر يغلق الشيت
+/// ويعيد `true` فتفتح الشاشة شيت النقل (لا شيتٌ فوق شيت).
+Future<bool?> showSeriesCardsSheet(BuildContext context, CardSeries series, {bool canTransfer = false}) {
+  return showAppSheet<bool>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,
-    builder: (_) => _SeriesCardsSheet(series: series),
+    builder: (_) => _SeriesCardsSheet(series: series, canTransfer: canTransfer),
   );
 }
 
 class _SeriesCardsSheet extends StatefulWidget {
-  const _SeriesCardsSheet({required this.series});
+  const _SeriesCardsSheet({required this.series, this.canTransfer = false});
   final CardSeries series;
+  final bool canTransfer;
 
   @override
   State<_SeriesCardsSheet> createState() => _SeriesCardsSheetState();
@@ -153,6 +157,18 @@ class _SeriesCardsSheetState extends State<_SeriesCardsSheet> {
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                if (widget.canTransfer && !isPackageSeries(s)) ...[
+                  const SizedBox(height: Sp.md),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      key: const ValueKey('series-transfer'),
+                      onPressed: () => Navigator.of(context).pop(true),
+                      icon: const Icon(LucideIcons.send, size: 16),
+                      label: Text('cards.transfer_open'.tr()),
+                    ),
                   ),
                 ],
               ],
