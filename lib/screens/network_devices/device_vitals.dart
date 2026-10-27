@@ -533,6 +533,8 @@ class DeviceVitals {
           if (w != null && w.essid.isNotEmpty) (k: 'الشبكة', v: w.essid),
           if (w != null && w.mode.isNotEmpty) (k: 'الوضع', v: w.mode),
           if (s.lanSpeed != null) (k: 'منفذ LAN', v: s.lanSpeed!),
+          // airFiber X وWave: ما لا خانة له (تردّد الاستقبال، التعديل، القدرة، الاحتياطيّ…).
+          ...s.extras,
         ],
       ),
       counters: counters,

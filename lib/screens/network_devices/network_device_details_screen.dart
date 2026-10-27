@@ -1233,6 +1233,9 @@ bool _isVsolOlt(NetworkDevice d) => OltProfile.fromDevice(d).opensOltPanel;
 bool _isAirFiber60(NetworkDevice d) {
   final combined = '${d.model ?? ''} ${d.name}'.toLowerCase();
   if (combined.trim().isEmpty) return false;
+  // عائلة Wave (Wave Long-Range · Wave Pro · Wave AP · Wave Nano…) راديو 60 GHz باحتياطيّ 5 GHz — لوحتها لوحة
+  // الـ60 GHz. من الطراز وحده (الاسم يكتبه الوكيل).
+  if (RegExp(r'\bwave\b').hasMatch((d.model ?? '').toLowerCase())) return true;
   // Explicit 60 GHz mentions
   if (combined.contains('60ghz') || combined.contains('60 ghz')) return true;
   if (combined.contains('airfiber 60') || combined.contains('airfiber60')) {
