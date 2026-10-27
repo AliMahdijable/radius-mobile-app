@@ -314,6 +314,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
                 const SizedBox(height: Sp.sm),
                 _stage(),
                 if (_sel != null && _arranged[_sel] != null) _deviceCard(_arranged[_sel]!),
+                if (_cabinet.isNotEmpty) _cabinetSection(),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
                   child: Text(
@@ -681,6 +682,82 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
                 ),
             ]),
           ),
+        ),
+      ),
+    );
+  }
+
+  List<ArrangedDevice> get _cabinet =>
+      [for (final a in _arranged.values) if (!a.onTower || a.azimuth == null) a]
+        ..sort((x, y) => naturalCompare(x.device.name, y.device.name));
+
+  /// الكابينة قائمةً تحت الرسم — المالك ٢٧ أكتوبر: «اجهزه السويجات ما يظهر بيها شي بعرض البرج». في الرسم رموزٌ
+  /// صغيرة بلا أسماء؛ هنا الاسم والحالة وأنشط منفذ والمنافذ والطاقة، والضغط يختاره فتظهر بطاقته.
+  Widget _cabinetSection() {
+    final list = _cabinet;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(R.lg),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, Sp.xs),
+            child: Row(children: [
+              Icon(LucideIcons.server, size: 16, color: AppColors.brand),
+              const SizedBox(width: 6),
+              Text('الكابينة · ${list.length}', style: AppType.bodyStrong(color: AppColors.textHi)),
+              const Spacer(),
+              Text('السويجات والراوترات', style: AppType.micro(color: AppColors.textMid)),
+            ]),
+          ),
+          for (final a in list) _cabinetRow(a),
+          const SizedBox(height: Sp.xs),
+        ]),
+      ),
+    );
+  }
+
+  Widget _cabinetRow(ArrangedDevice a) {
+    final r = _readings[a.device.id];
+    final selected = a.device.id == _sel;
+    final offline = a.device.lastStatus == 'offline' || _failed.contains(a.device.id);
+    final facts = <String>[
+      if (r?.busiestPort != null) '${r!.busiestPort!.name} ${TowerText.bps(r.downBps)}',
+      if (r?.portsTotal != null) 'منافذ ${r!.portsUp}/${r.portsTotal}',
+      if (r?.poeWatts != null) 'PoE ${r!.poeWatts!.toStringAsFixed(0)} W',
+      if (r?.temperature != null) '${r!.temperature}°',
+    ];
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: InkWell(
+        onTap: () => _select(a.device.id),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 9),
+          color: selected ? AppColors.brandSoftBg : null,
+          child: Row(children: [
+            SizedBox(width: 36, child: Center(child: DeviceGlyph(shape: a.shape, size: 26, color: _healthColor(a)))),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(a.device.name,
+                    style: AppType.bodyStrong(color: AppColors.textHi), maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(
+                  offline
+                      ? 'لا يردّ'
+                      : (r == null ? 'يقرأ…' : (facts.isEmpty ? (a.device.model ?? TowerText.shape(a.shape)) : isoJoin(facts, ' · '))),
+                  style: AppType.muted(color: offline ? AppColors.error : AppColors.textMid),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ]),
+            ),
+            Container(width: 8, height: 8, decoration: BoxDecoration(color: _healthColor(a), shape: BoxShape.circle)),
+          ]),
         ),
       ),
     );
@@ -1089,8 +1166,8 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
         readings.addAll([
           ('المعالج', r?.cpu == null ? '—' : '${r!.cpu}٪'),
           ('الحرارة', r?.temperature == null ? '—' : '${r!.temperature}°'),
-          ('الترافك', TowerText.bps(r?.downBps)),
-          ('يعمل منذ', r?.uptime ?? '—'),
+          ('أنشط منفذ', TowerText.bps(r?.downBps)),
+          ('يعمل منذ', TowerText.uptime(r?.uptime)),
         ]);
     }
     if (a.role != TowerRole.cabinet) {
@@ -1098,7 +1175,17 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
         ('التردّد MHz', r?.frequency?.toString() ?? '—', null),
         ('العرض MHz', r?.channelWidth?.toString() ?? '—', null),
         ('المنفذ', r?.linkSpeed ?? '—', r?.linkSpeed == null ? null : Grade.linkSpeedText(r!.linkSpeed!).fill),
-        ('يعمل منذ', r?.uptime ?? '—', null),
+        ('يعمل منذ', TowerText.uptime(r?.uptime), null),
+      ]);
+    } else {
+      // السويج والراوتر: المنافذ وأنشطها والطاقة (المالك ٢٧ أكتوبر: «السويجات ما يظهر بيها شي»).
+      final bp = r?.busiestPort;
+      info.addAll([
+        ('المنافذ الشغّالة', r?.portsTotal == null ? '—' : '${r!.portsUp}/${r.portsTotal}', null),
+        ('المنفذ الأنشط', bp == null ? '—' : bp.name, null),
+        ('استهلاك PoE', r?.poeWatts == null ? '—' : '${r!.poeWatts!.toStringAsFixed(1)} W', null),
+        ('الفولتيّة', r?.voltage == null ? '—' : '${r!.voltage!.toStringAsFixed(1)} V',
+            r?.voltage == null ? null : Grade.voltage(r!.voltage).fill),
       ]);
     }
     final weakest = [...?r?.peers.where((p) => p.signal != null)]..sort((x, y) => x.signal!.compareTo(y.signal!));

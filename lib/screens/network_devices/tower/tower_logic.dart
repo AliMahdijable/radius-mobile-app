@@ -538,6 +538,21 @@ class TowerText {
         TowerType.roof => 'سطح بناية',
       };
 
+  /// مدّة التشغيل بالعربيّ: صيغة RouterOS («3w3d12h34m6s») تُترجَم، وما كُتب بالعربيّ (يوبيكويتي) يبقى.
+  static String uptime(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return '—';
+    final t = raw.trim();
+    if (!RegExp(r'^(\d+[wdhms])+$').hasMatch(t)) return t;
+    int g(String u) => int.tryParse(RegExp('(\\d+)$u').firstMatch(t)?.group(1) ?? '') ?? 0;
+    final w = g('w'), d = g('d'), h = g('h'), m = g('m(?!s)');
+    String and(String a, int n, String Function(int) f) => n > 0 ? '$a و${f(n)}' : a;
+    if (w > 0) return and(arWeeks(w), d, arDays);
+    if (d > 0) return and(arDays(d), h, arHours);
+    if (h > 0) return and(arHours(h), m, arMinutes);
+    if (m > 0) return arMinutes(m);
+    return 'أقلّ من دقيقة';
+  }
+
   /// «14 Mbps» · «820 Kbps» · «—».
   static String bps(int? bps) {
     if (bps == null) return '—';

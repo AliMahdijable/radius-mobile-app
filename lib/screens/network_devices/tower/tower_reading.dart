@@ -27,6 +27,11 @@ class TowerReading {
     this.temperature,
     this.cpu,
     this.peers = const [],
+    this.portsUp,
+    this.portsTotal,
+    this.busiestPort,
+    this.poeWatts,
+    this.voltage,
   });
 
   final DateTime at;
@@ -62,6 +67,14 @@ class TowerReading {
 
   /// المتّصلون واحداً واحداً — منها «أضعف المشتركين».
   final List<PeerLink> peers;
+
+  /// للسويج والراوتر (الكابينة) — المالك ٢٧ أكتوبر: «اجهزه السويجات ما يظهر بيها شي بعرض البرج».
+  /// منافذ الشبكة السلكيّة الشغّالة من مجموعها، وأنشطها الآن، واستهلاك الـPoE والفولتيّة إن قرأها الطراز.
+  final int? portsUp;
+  final int? portsTotal;
+  final PortTraffic? busiestPort;
+  final double? poeWatts;
+  final double? voltage;
 
   /// نقطة وصول (تخدم مشتركين) لا مستقبِل.
   bool get isAccessPoint {
@@ -114,6 +127,8 @@ class TowerReading {
     int? ownSignal;
     int? ownQuality;
     String? linkSpeed;
+    double? poeWatts;
+    double? voltage;
 
     if (raw is MikrotikStats) {
       final radios = raw.wirelessInterfaces.where((w) => !w.disabled).toList()
@@ -126,7 +141,10 @@ class TowerReading {
         channelWidth = w.channelWidth > 0 ? w.channelWidth : null;
       }
       temperature = raw.temperature;
-      cpu = raw.cpuLoad;
+      // SwOS عبر SNMP لا يحمل المعالج — لا «0٪».
+      cpu = raw.cpuKnown ? raw.cpuLoad : null;
+      poeWatts = raw.powerWatts;
+      voltage = raw.voltage;
     } else if (raw is UbntStats) {
       final w = raw.wireless;
       wireless = w != null;
@@ -183,6 +201,7 @@ class TowerReading {
       up = rx == null && tx == null ? null : ((rx ?? 0) >= (tx ?? 0) ? tx : rx);
     }
 
+    final wired = [for (final p in ports) if (_isEtherPort(p.name) || !_isWirelessPort(p.name)) p];
     final peerQuality = _avg(peers.map((p) => p.ccq));
     final peerSignal = _avg(peers.map((p) => p.signal));
     return TowerReading(
@@ -202,6 +221,11 @@ class TowerReading {
       temperature: temperature,
       cpu: cpu,
       peers: peers,
+      portsUp: wired.isEmpty ? null : wired.where((p) => p.up).length,
+      portsTotal: wired.isEmpty ? null : wired.length,
+      busiestPort: busiest != null && busiest.total > 0 ? busiest : null,
+      poeWatts: poeWatts,
+      voltage: voltage,
     );
   }
 }

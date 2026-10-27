@@ -255,6 +255,59 @@ void main() {
     });
   });
 
+  group('السويج والراوتر في الكابينة (المالك ٢٧ أكتوبر: «السويجات ما يظهر بيها شي»)', () {
+    test('المنافذ الشغّالة وأنشطها والطاقة، والمعالج المجهول (SwOS) لا «0٪»', () {
+      const stats = MikrotikStats(
+        cpuLoad: 0,
+        memUsedPercent: 0,
+        memTotalBytes: 0,
+        memFreeBytes: 0,
+        uptime: '3w3d12h34m6s',
+        version: '7.19.6',
+        boardName: 'netPower 16P',
+        architectureName: 'arm',
+        cpuCount: 2,
+        cpuFrequencyMhz: 800,
+        temperature: 42,
+        voltage: 25.3,
+        powerWatts: 47.3,
+        interfaces: [],
+        pppActiveCount: 0,
+        cpuKnown: false,
+      );
+      final r = TowerReading.fromProbe(
+        const ProbeResult(
+          vitals: [],
+          detail: DeviceDetail(uptime: '3w3d12h34m6s', ports: [
+            PortTraffic(name: 'ether1', up: true, rxBps: 180000000, txBps: 9000000),
+            PortTraffic(name: 'ether2-ftth', up: true, rxBps: 2000000, txBps: 40000000),
+            PortTraffic(name: 'ether3', up: false),
+            PortTraffic(name: 'sfp1', up: false),
+          ]),
+          counters: {},
+          raw: stats,
+        ),
+        at: DateTime(2026, 10, 27),
+      );
+      expect(r.portsUp, 2);
+      expect(r.portsTotal, 4);
+      expect(r.busiestPort?.name, 'ether1');
+      expect(r.downBps, 180000000);
+      expect(r.poeWatts, 47.3);
+      expect(r.voltage, 25.3);
+      expect(r.cpu, isNull, reason: 'cpuKnown=false');
+      expect(r.wireless, isFalse);
+    });
+
+    test('مدّة التشغيل بالعربيّ: صيغة RouterOS تُترجَم، والعربيّة تبقى', () {
+      expect(TowerText.uptime('3w3d12h34m6s'), '3 أسابيع و3 أيام');
+      expect(TowerText.uptime('2d5h'), 'يومين و5 ساعات');
+      expect(TowerText.uptime('45m10s'), '45 دقيقة');
+      expect(TowerText.uptime('12 يوماً'), '12 يوماً');
+      expect(TowerText.uptime(null), '—');
+    });
+  });
+
   group('القراءة من جلسة القسم', () {
     test('مايكروتك سكتر: المشتركون ومتوسّط CCQ والإشارة والتردّد، والتنزيل = إرسال الواجهة اللاسلكيّة', () {
       const stats = MikrotikStats(
