@@ -130,6 +130,7 @@ class ZteOntService {
   static void forget(String host) {
     _rejected.remove(host);
     _busyUntil.remove(host);
+    _scanMissAt.remove('http://$host');
   }
 
   /// آخر سبب فشلٍ على [host] (null: آخر دخولٍ نجح أو لا محاولة).
@@ -211,6 +212,10 @@ class ZteOntService {
   /// فأوّلاً `start.ghtml` كما يفتحها المتصفّح بعد الدخول، ثمّ صفحات الضوء المحتملة من أسماء الصفحات التي يذكرها الجهاز نفسه
   /// (صفحات حالةٍ فيها pon/opt/power — [ZteOntParse.opticalCandidates]، ثلاثٌ على الأكثر). وما لم يُقرأ يُعرف أهو صفحةٌ
   /// لم ترجع أم صيغةٌ لا نعرفها ([lastReadUnknown]).
+  ///
+  /// 🐛 ثمّ (أثر D401 الثاني: صفحة EPON ٩٦ ك.ب بلا ضوء، والمرشّحتان صفحتا خطأٍ صغيرتان، و٤٩ صفحةً في قائمته): بعد
+  /// المرشّحة تُجرَّب صفحات الحالة الأخرى في قائمته (قراءةٌ فقط — [ZteOntParse.statusPages]) حتى ثمانٍ، والتي يوجد فيها الضوء
+  /// تُحفظ للجهاز فتبدأ بها القراءة التالية. والأثر يحمل أسماء صفحاته كلّها (`p=`) — أسماءٌ بلا قيم.
   static Future<OntOpticalInfo?> fetchOptical(ZteOntSession s) async {
     _pageTrace.remove(s.baseUrl);
     _pageInfo.remove(s.baseUrl);
@@ -220,7 +225,10 @@ class ZteOntService {
     final names = <String>{};
     var title = '';
     var answered = false;
+    final missAt = _scanMissAt[s.baseUrl];
+    final scan = missAt == null || DateTime.now().difference(missAt) >= scanQuiet;
     void finish() {
+      if (!scan) tried.add('scan:later');
       _pageTrace[s.baseUrl] = tried.join(' ');
       final c = ZteOntParse.opticalCandidates(menu);
       _pageInfo[s.baseUrl] = [
@@ -228,8 +236,10 @@ class ZteOntService {
         'm=${menu.length}',
         if (c.isNotEmpty) 'c=${c.take(6).map(ZteOntParse.stem).join(',')}',
         if (names.isNotEmpty) 'n=${names.take(8).join(',')}',
+        if (menu.isNotEmpty) 'p=${(menu.map(ZteOntParse.stem).toList()..sort()).join(',')}',
       ].join(' ');
       if (answered) _unknownFormat.add(s.baseUrl);
+      if (answered && scan) _scanMissAt[s.baseUrl] = DateTime.now();
     }
 
     final st = await _getRaw(s, '/start.ghtml', referer: '${s.baseUrl}/');
@@ -239,25 +249,42 @@ class ZteOntService {
       return null;
     }
     if (st.html != null) menu.addAll(ZteOntParse.pageNames(st.html!));
-    final queue = <String>[..._opticalPages];
+    final remembered = _opticalPageOf[s.baseUrl];
+    final queue = <String>[if (remembered != null) remembered, ..._opticalPages.where((p) => p != remembered)];
+    final budget = queue.length + _maxExtraPages;
     for (var i = 0; i < queue.length; i++) {
       final name = queue[i];
       final r = await _pageRaw(s, name);
       final html = r.html;
+      final pageTitle = html == null ? '' : ZteOntParse.model(html);
+      final otherTitle = pageTitle.isNotEmpty && title.isNotEmpty && pageTitle != title;
       tried.add('${ZteOntParse.shortPage(name)}:${r.code}${r.login ? 'L' : ''}'
-          '${html == null ? '' : '/${ZteOntParse.rxForm(html)}/${ZteOntParse.kb(html)}'}');
+          '${html == null ? '' : '/${ZteOntParse.rxForm(html)}/${ZteOntParse.kb(html)}'}'
+          '${otherTitle ? '/t:${ZteOntParse.traceWord(pageTitle)}' : ''}');
       if (r.login) break;
       if (html == null) continue;
       answered = true;
       final o = ZteOntParse.optical(html);
-      if (o != null) return o;
-      if (title.isEmpty) title = ZteOntParse.model(html);
+      if (o != null) {
+        _opticalPageOf[s.baseUrl] = name;
+        _scanMissAt.remove(s.baseUrl);
+        return o;
+      }
+      if (title.isEmpty) title = pageTitle;
       menu.addAll(ZteOntParse.pageNames(html));
       names.addAll(ZteOntParse.powerNames(html));
-      for (final c in ZteOntParse.opticalCandidates(menu)) {
-        if (queue.length >= _opticalPages.length + _maxExtraPages) break;
-        if (!queue.contains(c)) queue.add(c);
-      }
+      // ما بقي بالترتيب: الأسماء المعروفة، ثمّ المرشّحة للضوء، ثمّ صفحات الحالة — بلا تكرارٍ وضمن الميزانيّة.
+      final done = queue.sublist(0, i + 1).toSet();
+      final rest = queue.sublist(i + 1);
+      final next = <String>{
+        ...rest.where(_opticalPages.contains),
+        ...ZteOntParse.opticalCandidates(menu),
+        ...rest,
+        if (scan) ...ZteOntParse.statusPages(menu),
+      }.where((p) => !done.contains(p)).take(budget - done.length).toList();
+      queue
+        ..removeRange(i + 1, queue.length)
+        ..addAll(next);
     }
     finish();
     return null;
@@ -266,8 +293,16 @@ class ZteOntService {
   /// أسماء صفحة الضوء المعروفة بالترتيب.
   static const _opticalPages = ['epon_status_link_info_t.gch', 'gpon_status_link_info_t.gch', 'pon_status_link_info_t.gch'];
 
-  /// صفحاتٌ إضافيّة من قائمة الجهاز على الأكثر (~٠٫٦–١ث لكلٍّ).
-  static const _maxExtraPages = 3;
+  /// صفحاتٌ إضافيّة من قائمة الجهاز على الأكثر (~٠٫٦–١ث لكلٍّ) — والبحث يقف عند أوّل صفحةٍ فيها الضوء.
+  static const _maxExtraPages = 8;
+
+  /// صفحة الضوء التي وُجدت لكلّ جهازٍ في هذه الجلسة — القراءة التالية تبدأ بها بلا بحث.
+  static final _opticalPageOf = <String, String>{};
+
+  /// بحثٌ في صفحات الحالة لم يجد الضوء ⇒ لا يُعاد قبل [scanQuiet] (الفحص يتكرّر كلّ دقيقتين والصفحات ثمانٍ)، إلّا بـ«حفظ
+  /// وفحص» ([forget]).
+  static final _scanMissAt = <String, DateTime>{};
+  static const scanQuiet = Duration(minutes: 30);
 
   /// ما عرفناه عن صفحات آخر قراءةٍ لم تنجح: العنوان وعدد الصفحات التي يذكرها الجهاز والمرشّحة للضوء وأسماء متغيّراتٍ
   /// تشبه الضوء — أسماءٌ بلا قيم.
@@ -424,8 +459,18 @@ class ZteOntParse {
     return 'rx?${mask(after).replaceAll(RegExp(r'\s+'), '_')}';
   }
 
-  /// طول الصفحة بالكيلوبايت للأثر: القالب الكامل ~١٣٠ ك.ب على MH80، وصفحة خطأٍ أو دخولٍ أقصر بكثير.
-  static String kb(String html) => '${(html.length / 1024).round()}k';
+  /// طول الصفحة بالكيلوبايت للأثر: القالب الكامل ~١٣٠ ك.ب على MH80 (~٩٦ على D401)، وصفحة خطأٍ أو دخولٍ أقصر بكثير —
+  /// بكسرٍ عشريّ تحت ١٠ ك.ب فتتميّز الصغيرة بعضها من بعض.
+  static String kb(String html) {
+    final k = html.length / 1024;
+    return k < 10 ? '${k.toStringAsFixed(1)}k' : '${k.round()}k';
+  }
+
+  /// كلمةٌ قصيرة للأثر (عنوان صفحة): بلا فراغاتٍ ولا فواصل الأثر، ١٦ حرفاً على الأكثر.
+  static String traceWord(String s) {
+    final w = s.replaceAll(RegExp(r'[\s|/=,:]+'), '_');
+    return w.length > 16 ? w.substring(0, 16) : w;
+  }
 
   /// اسم الصفحة بلا `_t.gch` — المرشّحة تُذكر به كاملاً فتُضاف بعينها.
   static String stem(String name) => name.replaceAll(RegExp(r'(_t)?\.gch$'), '');
@@ -444,6 +489,15 @@ class ZteOntParse {
 
   static const _knownOptical = {'epon_status_link_info_t.gch', 'gpon_status_link_info_t.gch', 'pon_status_link_info_t.gch'};
 
+  /// صفحة حالةٍ أو معلومات، لا إعدادات ولا أوامر — فتحها قراءةٌ فقط.
+  static bool _readOnlyPage(String n) {
+    final l = n.toLowerCase();
+    return (l.contains('status') || l.contains('info')) &&
+        !RegExp(r'conf|set|upgrade|update|reboot|restart|restore|reset|factory|backup|manag|mgr|auth|pass|pwd|user|del|add|save|'
+                r'apply|ping|trace|diag|log|test')
+            .hasMatch(l);
+  }
+
   /// صفحات الضوء المحتملة من أسماء [names]: صفحة حالةٍ أو معلومات (لا إعدادات ولا أوامر) فيها opt/power أوّلاً ثمّ pon.
   static List<String> opticalCandidates(Iterable<String> names) {
     int score(String n) {
@@ -451,15 +505,29 @@ class ZteOntParse {
       return (l.contains('opt') || l.contains('power') ? 4 : 0) + (l.contains('pon') ? 2 : 0) + (l.contains('link') ? 1 : 0);
     }
 
-    bool readOnly(String n) {
+    final out = [
+      for (final n in {...names})
+        if (score(n) >= 2 && _readOnlyPage(n) && !_knownOptical.contains(n)) n,
+    ];
+    out.sort((a, b) {
+      final d = score(b) - score(a);
+      return d != 0 ? d : a.compareTo(b);
+    });
+    return out;
+  }
+
+  /// صفحات الحالة الأخرى في قائمة الجهاز — يُبحث فيها حين لا تحمل الضوءَ صفحةٌ باسمه (D401). معلومات الجهاز أوّلاً (بعض
+  /// البرامج تعرض الضوء فيها)، ثمّ ما فيه pon ثمّ wan، ثمّ الباقي أبجديّاً.
+  static List<String> statusPages(Iterable<String> names) {
+    final optical = opticalCandidates(names).toSet();
+    int score(String n) {
       final l = n.toLowerCase();
-      return (l.contains('status') || l.contains('info')) &&
-          !RegExp(r'conf|set|upgrade|reboot|restore|reset|manag|mgr|auth|pass|user|del|add|save|apply').hasMatch(l);
+      return (l.contains('dev') ? 4 : 0) + (l.contains('pon') ? 2 : 0) + (l.contains('wan') ? 1 : 0);
     }
 
     final out = [
       for (final n in {...names})
-        if (score(n) >= 2 && readOnly(n) && !_knownOptical.contains(n)) n,
+        if (_readOnlyPage(n) && !_knownOptical.contains(n) && !optical.contains(n)) n,
     ];
     out.sort((a, b) {
       final d = score(b) - score(a);

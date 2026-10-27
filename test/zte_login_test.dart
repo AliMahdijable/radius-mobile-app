@@ -164,14 +164,66 @@ void main() {
       expect(await ZteOntService.fetchOptical(s!), isNull);
       expect(ZteOntService.lastReadUnknown(s), isTrue);
       final trace = ZteOntService.lastPageTrace(s)!;
-      expect(trace, contains('epon_link:200/-/0k'));
+      expect(trace, contains('epon_link:200/-/0.2k'));
       expect(trace, contains('pon_optic:404'), reason: 'المرشّحة من القائمة جُرِّبت');
       final info = ZteOntService.lastPageInfo(s)!;
       expect(info, contains('t=D401'));
       expect(info, contains('c=pon_status_optic_info'));
       expect(info, contains('RxOptPwr'));
       expect(info, contains('Frm_TxOptPwr'));
+      expect(info, endsWith('p=pon_status_optic_info'), reason: 'أسماء صفحاته كلّها');
       expect('$trace $info', isNot(contains('21')), reason: 'لا قيمة في الأثر');
+    });
+
+    test('الضوء في صفحة حالةٍ أخرى (لا اسم ضوءٍ في قائمته) ⇒ يُبحث فيها، وتُحفظ للقراءة التالية', () async {
+      d.strictPages = true;
+      const template = '<html><head><title>D401</title></head><body><script>'
+          "menu('status_wlaninfo_t.gch');menu('status_dev_info_t.gch');menu('sys_reboot_t.gch');menu('net_wan_conf_t.gch');"
+          '</script></body></html>';
+      d.pages['epon_status_link_info_t.gch'] = (200, template);
+      d.pages['status_wlaninfo_t.gch'] = (200, template);
+      d.pages['status_dev_info_t.gch'] =
+          (200, "<html><title>D401</title><script>Transfer_meaning('RxPower','-31.02');</script></html>");
+      final s = await ZteOntService.loginConfigured(d.host, 'agent', 'secret-1');
+      expect((await ZteOntService.fetchOptical(s!))?.rxPower, '-31.0');
+      expect(d.nextpages, isNot(contains('sys_reboot_t.gch')), reason: 'لا أوامر');
+      expect(d.nextpages, isNot(contains('net_wan_conf_t.gch')), reason: 'لا إعدادات');
+      expect(d.nextpages, isNot(contains('status_wlaninfo_t.gch')), reason: 'معلومات الجهاز أوّلاً والبحث يقف عند الضوء');
+      d.nextpages.clear();
+      expect((await ZteOntService.fetchOptical(s))?.rxPower, '-31.0');
+      expect(d.nextpages, ['status_dev_info_t.gch'], reason: 'الصفحة المحفوظة أوّلاً بلا بحث');
+    });
+
+    test('بحثٌ لم يجد ⇒ لا يُعاد قبل نصف ساعة، و«حفظ وفحص» يعيده', () async {
+      d.strictPages = true;
+      const template = "<html><title>D401</title><script>menu('status_dev_info_t.gch');</script></html>";
+      d.pages['epon_status_link_info_t.gch'] = (200, template);
+      d.pages['status_dev_info_t.gch'] = (200, template);
+      final s = await ZteOntService.loginConfigured(d.host, 'agent', 'secret-1');
+      expect(await ZteOntService.fetchOptical(s!), isNull);
+      expect(d.nextpages, contains('status_dev_info_t.gch'));
+      d.nextpages.clear();
+      expect(await ZteOntService.fetchOptical(s), isNull);
+      expect(d.nextpages, isNot(contains('status_dev_info_t.gch')));
+      expect(ZteOntService.lastPageTrace(s), endsWith('scan:later'));
+      ZteOntService.forget(d.host);
+      d.nextpages.clear();
+      await ZteOntService.fetchOptical(s);
+      expect(d.nextpages, contains('status_dev_info_t.gch'));
+    });
+
+    test('صفحات الحالة: معلومات الجهاز أوّلاً، ولا إعدادات ولا أوامر ولا ما يُجرَّب قبلها', () {
+      final p = ZteOntParse.statusPages([
+        'status_wlaninfo_t.gch',
+        'status_dev_info_t.gch',
+        'pon_status_alarm_t.gch',
+        'reboot_t.gch',
+        'status_user_info_t.gch',
+        'net_wan_conf_t.gch',
+        'epon_status_link_info_t.gch',
+        'status_pon_opt_info_t.gch',
+      ]);
+      expect(p, ['status_dev_info_t.gch', 'status_wlaninfo_t.gch']);
     });
 
     test('عدّاد القفل كما على MH80 الحيّ', () {
@@ -286,7 +338,7 @@ void main() {
       expect(msg, contains('| t=D401'));
     });
 
-    test('أثرٌ أطول من حدّ السجلّ ⇒ يصل بجزأين، والثاني يبدأ بـ«+»', () async {
+    test('أثرٌ أطول من حدّ السجلّ ⇒ يصل أجزاءً، وما بعد الأوّل يبدأ بـ«+»', () async {
       api.defaults = {'ontUsername': 'agent', 'ontPassword': 'secret-1'};
       d.strictPages = true;
       final menu = [for (var i = 0; i < 8; i++) "menu('pon_status_optical_power_long_name_number_${i}_info_t.gch');"].join();
@@ -299,9 +351,10 @@ void main() {
       final parts = [
         for (final r in api.requests.where((r) => r.uri.path == '/api/client-diag')) '${(r.data as Map)['message']}',
       ];
-      expect(parts, hasLength(2));
+      expect(parts.length, inInclusiveRange(2, 5));
       expect(parts.every((p) => p.length <= 291), isTrue);
-      expect(parts.where((p) => p.startsWith('+')), hasLength(1));
+      expect(parts.where((p) => p.startsWith('+')), hasLength(parts.length - 1));
+      expect(parts.join().replaceAll('+', ''), contains('pon_status_optical_power_long_name_number_7_info'));
     });
 
     test('جهازٌ لا يجاوب ⇒ «لم يُتمكّن من الوصول»', () async {

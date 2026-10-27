@@ -73,8 +73,9 @@ class DeviceProbeApi {
   /// عناوين بُلِّغ أثر «دخلنا ولم نقرأ الضوء» لها في هذه الجلسة.
   static final _readReported = <String>{};
 
-  /// طول جزء رسالة التشخيص (الخادم يقصّ عند ٣٠٠).
+  /// طول جزء رسالة التشخيص (الخادم يقصّ عند ٣٠٠)، وأقصى عدد أجزاء (أسماء صفحات جهازٍ جديد قد تبلغ ألف حرف).
   static const _diagChunk = 290;
+  static const _diagParts = 5;
 
   /// ما سجّله فرع ZTE في الفحص الجاري (بالعنوان) — يُقرأ بعد انتهائه.
   static final _zteIssue = <String, ({ProbeIssue issue, int? lockLeft, DateTime at, String trace})>{};
@@ -340,8 +341,8 @@ class DeviceProbeApi {
           ? 'kind=${snap.kind.name} vendor=${snap.ont?.vendor ?? '-'}'
           : 'type=${cfg?.deviceType?.name ?? 'auto'} ${fresh?.trace ?? (timedOut ? 'timeout' : 'no-zte-trace')}'
               ' steps=${_steps(effectiveIp, started)} ms=${now.difference(started).inMilliseconds}';
-      // السجلّ يقصّ الرسالة عند ٣٠٠ حرف ⇒ أثر الصفحات الطويل يُرسل بجزأين (الثاني يبدأ بـ«+»).
-      for (var i = 0; i < text.length && i < 2 * _diagChunk; i += _diagChunk) {
+      // السجلّ يقصّ الرسالة عند ٣٠٠ حرف ⇒ أثر الصفحات الطويل يُرسل أجزاءً (ما بعد الأوّل يبدأ بـ«+»).
+      for (var i = 0; i < text.length && i < _diagParts * _diagChunk; i += _diagChunk) {
         ClientDiag.report('device_probe',
             code: code, message: '${i == 0 ? '' : '+'}${text.substring(i, (i + _diagChunk).clamp(0, text.length))}');
       }
