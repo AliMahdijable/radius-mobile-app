@@ -154,7 +154,7 @@ class OltFiberReads {
   static const _parallel = 3;
 
   /// يشغّل [jobs] بـ[_parallel] عمّالٍ معاً، وما يرمي منها يُتجاوز وحده.
-  static Future<void> _pool(int count, Future<void> Function(int i) job, bool Function()? cancelled) async {
+  static Future<void> _pool(int count, Future<void> Function(int i) job, bool Function()? cancelled, {int parallel = _parallel}) async {
     var next = 0;
     Future<void> worker() async {
       while (true) {
@@ -167,19 +167,25 @@ class OltFiberReads {
       }
     }
 
-    await Future.wait([for (var w = 0; w < _parallel && w < count; w++) worker()]);
+    await Future.wait([for (var w = 0; w < parallel && w < count; w++) worker()]);
   }
 
-  static Future<Map<String, Varbind>> _getAll(SnmpV2c snmp, List<String> oids, bool Function()? cancelled) async {
+  static Future<Map<String, Varbind>> _getAll(SnmpV2c snmp, List<String> oids, bool Function()? cancelled,
+      {int perGet = _perGet, int parallel = _parallel}) async {
     final out = <String, Varbind>{};
-    final batches = [for (var s = 0; s < oids.length; s += _perGet) oids.sublist(s, math.min(s + _perGet, oids.length))];
+    final batches = [for (var s = 0; s < oids.length; s += perGet) oids.sublist(s, math.min(s + perGet, oids.length))];
     await _pool(batches.length, (i) async {
       for (final vb in await snmp.get(batches[i])) {
         out[vb.oid] = vb;
       }
-    }, cancelled);
+    }, cancelled, parallel: parallel);
     return out;
   }
+
+  /// جدول ضوء VSOL يُحسب جهازاً جهازاً حين يُسأل (V1600D، ٢٧ أكتوبر، مقيس حيّاً): مسحه (GETBULK) ~ثانية لكلّ صفّ —
+  /// خمس دقائق لـ٣٠٠ جهاز — ويخنق الوكيل فتسقط القراءات الأخرى معه، وطلبٌ بستّ عشرة قيمة يتجاوز المهلة. أربع قيمٍ
+  /// بالطلب ~١٫٤ث (تحت عتبة إعادة الإرسال) ⇒ أربعٌ بالطلب، طلبٌ بعد طلب.
+  static const _vsolOpticsPerGet = 4;
 
   /// مسح عمودٍ (GETBULK) — يُرجع الموجود وحده، فلا طلبٌ لجهازٍ بلا صفٍّ يُهمَل كلّه حتى المهلة. `null` = لم يُجب.
   /// العمود الذي لم يُجب يُتذكَّر لهذا العنوان ساعة — لا ندفع مهلته كلّ دورة.
@@ -202,10 +208,10 @@ class OltFiberReads {
   ///
   /// 🐛 ٢٧ أكتوبر (المالك على V1600D: «الاولتي مجاي يقره لابورات ولامكات ويطابقه وي المتصلين»): شبكة الألياف كانت تقرأ
   /// ماك BDCOM وحده، وماك VSOL في لوحة الأولت فقط — فلا ماك ولا مطابقة. عنوانٌ صفريّ أو FF (مفصولة) لا يُعدّ.
-  /// `null` = العمود لم يُجب (يُعاد بعد عشر دقائق لا ساعة — عمودٌ قياسيّ، فالصمت حِملٌ لا غياب).
+  /// `null` = العمود لم يُجب (يُعاد بعد دقيقتين لا ساعة — عمودٌ قياسيّ، فالصمت حِملٌ لا غياب).
   static Future<Map<int, String>?> vsolEponMacs(SnmpV2c snmp, Set<int> ifIndexes) async {
     if (ifIndexes.isEmpty) return const {};
-    final vbs = await _walk(snmp, ifPhysOid, silence: const Duration(minutes: 10));
+    final vbs = await _walk(snmp, ifPhysOid, silence: const Duration(minutes: 2));
     if (vbs == null) return null;
     final out = <int, String>{};
     for (final vb in vbs) {
@@ -266,21 +272,18 @@ class OltFiberReads {
         if (FiberBands.plausible(r)) out[i] = r!;
       }
     } else if (profile.readsVsolTables) {
-      for (final tech in VsolPonTechnology.values) {
-        final mine = [for (final o in online) if (o.technology == tech && o.slot == 0) o];
-        if (mine.isEmpty) continue;
-        final base = '${tech == VsolPonTechnology.gpon ? vsolGponOptics : vsolEponOptics}.7';
-        final bySuffix = {for (final o in mine) _suffix(o): o.ifIndex};
-        final vbs = await _walk(snmp, base);
-        if (vbs == null) continue;
-        answered = true;
-        for (final vb in vbs) {
-          if (!vb.oid.startsWith('$base.')) continue;
-          final i = bySuffix[vb.oid.substring(base.length + 1)];
-          if (i == null) continue;
-          final r = dbm(vb);
-          if (FiberBands.plausible(r)) out[i] = r!;
-        }
+      // بالسؤال المباشر لا بالمسح ([_vsolOpticsPerGet]) — والمتّصل أعطاه المستدعي (شريحةٌ كلّ دورة على أولتٍ كبير).
+      final mine = [for (final o in online) if (o.slot == 0) o];
+      if (mine.isEmpty) return const {};
+      String oid(VsolOnu o) => '${o.technology == VsolPonTechnology.gpon ? vsolGponOptics : vsolEponOptics}.7.${_suffix(o)}';
+      final got = await _getAll(snmp, [for (final o in mine) oid(o)], null, perGet: _vsolOpticsPerGet, parallel: 1);
+      if (got.isEmpty) return null;
+      answered = true;
+      for (final o in mine) {
+        final vb = got[oid(o)];
+        if (vb == null) continue;
+        final r = dbm(vb);
+        if (FiberBands.plausible(r)) out[o.ifIndex] = r!;
       }
     } else {
       return const {};
@@ -304,7 +307,7 @@ class OltFiberReads {
       for (final o in want)
         for (final c in const [7, 6, 3, 4]) '${base(o)}.$c.${_suffix(o)}',
     ];
-    final got = await _getAll(snmp, oids, isCancelled);
+    final got = await _getAll(snmp, oids, isCancelled, perGet: _vsolOpticsPerGet, parallel: 1);
     final out = <int, BdcomOnuReading>{};
     for (final o in want) {
       final b = base(o);
@@ -394,6 +397,8 @@ class OltFiberReads {
       // UTF-8 (أسماءٌ عربيّة)، بلا حروف تحكّم.
       final s = utf8.decode(vb.rawBytes, allowMalformed: true).replaceAll(RegExp(r'[\x00-\x1F\x7F�]'), '').trim();
       if (s.isEmpty || s.length > 64 || RegExp(r'^(onu|epon|gpon)[\d/:._-]*$', caseSensitive: false).hasMatch(s)) return null;
+      // الاسم الافتراضيّ للواجهة («EPON01ONU12» على V1600D، «EPON0/1:12»، «PON1:ONU12») ليس اسماً.
+      if (RegExp(r'^[eg]?pon[\d/:._-]*onu[\d/:._-]*$', caseSensitive: false).hasMatch(s)) return null;
       // «NULL» ونحوه حشوٌ لا اسم — يُرفض هنا فيُقرأ وصف VSOL بدله.
       if (_placeholderName.hasMatch(s)) return null;
       return s;
@@ -470,7 +475,8 @@ class OltFiberReads {
     if (profile.readsVsolTables && online.isNotEmpty) {
       final o = online.first;
       final base = o.technology == VsolPonTechnology.gpon ? vsolGponOptics : vsolEponOptics;
-      final got = await _getAll(snmp, [for (final c in const [7, 6, 3, 4]) '$base.$c.${_suffix(o)}'], null);
+      final got = await _getAll(snmp, [for (final c in const [7, 6, 3, 4]) '$base.$c.${_suffix(o)}'], null,
+          perGet: _vsolOpticsPerGet, parallel: 1);
       for (final c in const [7, 6, 3, 4]) {
         opticsShapes.add(_shape(got['$base.$c.${_suffix(o)}']));
       }

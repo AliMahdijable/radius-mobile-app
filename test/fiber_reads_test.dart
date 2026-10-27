@@ -171,10 +171,10 @@ void main() {
         '${OltFiberReads.ifAliasOid}.303': snmpText('', 'NULL'),
         '${OltFiberReads.ifAliasOid}.304': snmpText('', 'null'),
         '$a.9.3.3': snmpText('', 'karar77'),
-        '$a.9.3.4': snmpText('', 'NULL'),
+        '$a.9.3.4': snmpText('', 'EPON03ONU4'),
       });
       final r = await OltFiberReads.names(agent, vsol, [o(3, 2), o(3, 3), o(3, 4)]);
-      expect(r, {303: 'karar77'});
+      expect(r, {303: 'karar77'}, reason: '«EPON03ONU4» اسم الواجهة الافتراضيّ لا اسم مشترك');
     });
 
     test('تنظيف الأسماء: الحشو يُرفض، والقيمة الواحدة المكرّرة على أغلب الأجهزة حشو، والأسماء المميّزة تبقى', () {

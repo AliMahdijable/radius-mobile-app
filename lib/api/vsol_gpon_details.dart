@@ -99,10 +99,16 @@ class VsolGponDetails {
     return match == null ? null : '${match[1]}/${match[2]}';
   }
 
+  /// منفذ جدول الماك ⇒ «منفذ/جهاز». GPON على V1600G0B: `PON1:ONU5`. وEPON على V1600D (٢٧ أكتوبر، أسماء واجهاته
+  /// `EPON01ONU1`): نقبل `EPON01ONU1` و`EPON0/1:1` أيضاً — الصفر البادئ لا يغيّر الرقم.
   static String? portKey(String name) {
-    final match = RegExp(r'^PON([1-9]\d*):ONU([1-9]\d*)$', caseSensitive: false)
-        .firstMatch(name.trim());
-    return match == null ? null : '${match[1]}/${match[2]}';
+    final n = name.trim();
+    final m = RegExp(r'^PON(\d+):ONU(\d+)$', caseSensitive: false).firstMatch(n) ??
+        RegExp(r'^[EG]PON(\d+)ONU(\d+)$', caseSensitive: false).firstMatch(n) ??
+        RegExp(r'^[EG]PON\d+/(\d+):(\d+)$', caseSensitive: false).firstMatch(n);
+    if (m == null) return null;
+    final pon = int.parse(m[1]!), onu = int.parse(m[2]!);
+    return pon < 1 || onu < 1 ? null : '$pon/$onu';
   }
 
   static String? macAddress(List<int> bytes) {

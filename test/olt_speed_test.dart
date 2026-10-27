@@ -175,7 +175,7 @@ void main() {
 
   tearDown(FiberMonitor.debugReset);
 
-  test('الدورة الأولى: الحالة تُعرض قبل الضوء، والضوء عمودٌ واحد بلا سؤال كلّ جهاز، ولحظة السقوط للمفصولة وحدها', () async {
+  test('الدورة الأولى: الحالة تُعرض قبل الضوء، والضوء شريحةٌ بأربع قيمٍ بالطلب، ولحظة السقوط للمفصولة وحدها', () async {
     expect(olt.onus.length, 302);
     expect(olt.offline, 105);
     final m = FiberMonitor.of(_dev());
@@ -185,17 +185,22 @@ void main() {
 
     final firstShown = seen.firstWhere((e) => e.onus == 302);
     expect(firstShown.rx, 0, reason: 'المتّصل/المفصول يُرسم قبل انتظار الضوء');
-    expect(m.onus.where((o) => o.rx != null).length, 197);
+    // ٢٧ أكتوبر، مقيس على V1600D: جدول الضوء يُحسب جهازاً جهازاً — مسحه ~ثانية للصفّ ويخنق الوكيل ⇒ شريحة ٢٤ كلّ دورة.
+    expect(m.onus.where((o) => o.rx != null).length, 24);
     expect(m.onus.firstWhere((o) => o.online).rx, -21.55, reason: 'صيغة V1600D تُقرأ صحيحة');
 
     final asked = olt.agent.gets.expand((g) => g).toList();
-    expect(asked.where((o) => o.startsWith(OltFiberReads.vsolEponOptics)), isEmpty, reason: 'لا GET لكلّ جهاز عن ضوئه');
-    expect(olt.agent.walks, contains('${OltFiberReads.vsolEponOptics}.7'), reason: 'عمود الاستقبال وحده');
+    expect(olt.agent.walks.where((w) => w.startsWith(OltFiberReads.vsolEponOptics)), isEmpty, reason: 'لا مسح لجدول الضوء');
+    final optGets = olt.agent.gets.where((g) => g.any((o) => o.startsWith(OltFiberReads.vsolEponOptics))).toList();
+    expect(optGets.every((g) => g.length <= 4), isTrue, reason: 'أربع قيمٍ بالطلب — أكثر يتجاوز المهلة على V1600D');
+    expect(asked.where((o) => o.startsWith('${OltFiberReads.vsolEponOptics}.7.')).length, lessThanOrEqualTo(24 + 4),
+        reason: 'شريحةٌ واحدة (+ عيّنة فحص القدرات)');
     // المفصولة وحدها (+ عيّنة فحص القدرات مرّةً بالجلسة: ٤ متّصلة و٦ مفصولة).
     expect(asked.where((o) => o.startsWith('${OltFiberReads.ifLastChangeOid}.')).length, lessThanOrEqualTo(105 + 10));
     expect(asked.where((o) => o.startsWith('${OltFiberReads.vsolEponAuth}.15.')).length, lessThanOrEqualTo(105 + 12));
     // الكلفة على الوكيل (قيمٌ لا ثوانٍ): كانت ~١٨٢٠ قيمة لهذه المراحل (لحظات الكلّ + ٤ قيم ضوء للمتّصل + الأسماء بالسؤال).
-    expect(olt.agent.values, lessThan(650), reason: 'قيم الدورة الأولى عبر SNMP: ${olt.agent.values}');
+    // + عمود الماك (~٣٣٠، مرّةً كلّ نصف ساعة ويُحفظ مع اللقطة) — به يطابق «ربط المشتركين» على VSOL.
+    expect(olt.agent.values, lessThan(1000), reason: 'قيم الدورة الأولى عبر SNMP: ${olt.agent.values}');
     expect(m.stale, isFalse);
   });
 
@@ -210,8 +215,8 @@ void main() {
     olt.agent.put('${OltFiberReads.vsolEponAuth}.15.1.2', snmpInt('', 2));
     await m.tick();
     expect([olt.structureCalls, olt.statusCalls], [1, 1]);
-    expect(olt.agent.walks.length, walksBefore, reason: 'لا ضوء (قبل الدقيقة) ولا أسماء (قبل نصف الساعة)');
-    expect(olt.agent.values - before, lessThan(10), reason: 'لحظة الساقط وسببه وحده');
+    expect(olt.agent.walks.length, walksBefore, reason: 'لا مسح: لا أسماء (قبل نصف الساعة) ولا ماك (قبل نصف الساعة)');
+    expect(olt.agent.values - before, lessThan(10 + 24), reason: 'لحظة الساقط وسببه + شريحة ضوء (٢٤)');
     final dropped = m.onus.firstWhere((o) => o.onu.ifIndex == 1002);
     expect(dropped.online, isFalse);
     expect(dropped.changedAt, isNotNull);
@@ -253,7 +258,7 @@ void main() {
     m2.applySnapshot(jsonDecode(jsonEncode(snap)) as Map<String, dynamic>);
     expect(m2.stale, isTrue);
     expect(m2.onus.length, 302);
-    expect(m2.onus.where((o) => o.rx != null).length, 197, reason: 'الضوء من اللقطة');
+    expect(m2.onus.where((o) => o.rx != null).length, 24, reason: 'الضوء من اللقطة (شريحة الدورة الأولى)');
     final structures = olt.structureCalls;
     final values = olt.agent.values;
     await m2.tick();

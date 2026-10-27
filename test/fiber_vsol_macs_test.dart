@@ -8,6 +8,7 @@ import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/olt_fiber_reads.dart';
 import 'package:rad_mysvcs/api/olt_profile.dart';
 import 'package:rad_mysvcs/api/snmp_client.dart';
+import 'package:rad_mysvcs/api/vsol_gpon_details.dart';
 import 'package:rad_mysvcs/api/vsol_olt_api.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
 import 'package:rad_mysvcs/services/fiber/fiber_monitor.dart';
@@ -106,6 +107,11 @@ void main() {
       '${OltFiberReads.ifPhysOid}.28': snmpBytes('', [0x7c, 0x6a, 0x60, 0x0e, 0x09, 0x10]),
       '${OltFiberReads.ifPhysOid}.29': snmpBytes('', [0, 0, 0, 0, 0, 0]),
       OltFiberReads.sysUpTimeOid: snmpTicks('', 50000000),
+      // جدول الماك الخاصّ بـVSOL: راوتر المشترك خلف EPON01ONU1، وماكٌ ثانٍ خلف EPON01ONU2
+      '${VsolGponDetails.macOid}.1.10': snmpBytes('', [0x50, 0x3e, 0xaa, 0x01, 0x02, 0x03]),
+      '${VsolGponDetails.portOid}.1.10': snmpText('', 'EPON01ONU1'),
+      '${VsolGponDetails.macOid}.1.11': snmpBytes('', [0x50, 0x3e, 0xaa, 0x04, 0x05, 0x06]),
+      '${VsolGponDetails.portOid}.1.11': snmpText('', 'EPON01ONU2'),
     });
     FiberMonitor.debugReset();
     FiberMonitor.backend = _Backend(agent);
@@ -136,5 +142,15 @@ void main() {
     expect(restored[27]!.onu.mac, '7c:6a:60:0e:08:07');
     expect(restored[28]!.ident, '7c6a600e0910');
     expect(again.onus.every((o) => o.onu.name == null), isTrue);
+  });
+
+  test('VSOL EPON: الأجهزة خلف كلّ ONU من جدول الماك الخاصّ (BRIDGE-MIB لا ينسب لجهاز على V1600D)', () async {
+    final m = FiberMonitor.of(_dev())..wantDevices = true;
+    await m.tick();
+    final byIdx = {for (final o in m.onus) o.onu.ifIndex: o};
+    expect(byIdx[27]!.onu.learnedMacs, ['50:3e:aa:01:02:03']);
+    expect(byIdx[28]!.onu.learnedMacs, ['50:3e:aa:04:05:06']);
+    expect(byIdx[29]!.onu.learnedMacs, isEmpty, reason: 'المفصولة بلا أجهزة');
+    expect(agent.walks.where((w) => w.startsWith('1.3.6.1.2.1.17.')), isEmpty, reason: 'لا BRIDGE-MIB على VSOL');
   });
 }

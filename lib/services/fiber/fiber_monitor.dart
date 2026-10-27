@@ -338,9 +338,13 @@ class FiberMonitor extends ChangeNotifier {
       await _syncOutages(now);
 
       // ── ٣. الضوء: عمود الاستقبال وحده، بإيقاعه.
+      // VSOL: جدول الضوء يُحسب جهازاً جهازاً (~٠٫٣٥ث للقيمة على V1600D) ⇒ شريحةٌ كلّ دورة تتناوب حتى تكتمل، بدل
+      // سؤال الكلّ كلّ دقيقة (٧٠ث لـ٢٠٠ متّصل يخنق الوكيل فتسقط الحالة والماك معه).
+      final slices = profile.readsVsolTables;
       final opticsEvery = background ? _bgOpticsEvery : _opticsEvery;
-      if (force || _opticsAt == null || now.difference(_opticsAt!) >= opticsEvery) {
-        final online = [for (final o in cur.onus) if (o.online) o];
+      if (force || slices || _opticsAt == null || now.difference(_opticsAt!) >= opticsEvery) {
+        final allOnline = [for (final o in cur.onus) if (o.online) o];
+        final online = slices ? _rxSlice(allOnline) : allOnline;
         final rx = await OltFiberReads.rxColumn(snmp, profile, online);
         _opticsAt = now;
         if (rx != null) {
@@ -567,6 +571,7 @@ class FiberMonitor extends ChangeNotifier {
   }
 
   Future<void> _readDevices(SnmpV2c snmp, VsolOltStats s) async {
+    VsolGponSnapshot? vsolTable;
     final epon = s.onus.where((o) => o.technology == VsolPonTechnology.epon).toList();
     if (epon.isNotEmpty && profile.vendor != OltVendor.unknown) {
       final known = {for (final o in epon) o.ifIndex};
@@ -575,15 +580,46 @@ class FiberMonitor extends ChangeNotifier {
         final macs = await BdcomEpon.onuMacs(snmp, known);
         next = next.copyWith(onuMacs: {...next.onuMacs, ...macs}, macsAt: clock());
       }
-      final f = await BridgeFdb.fetch(snmp, targets: known);
+      final FdbSnapshot f;
+      if (profile.readsVsolTables) {
+        // 🐛 ٢٧ أكتوبر (المالك على V1600D: «مجاي يقره لابورات ولامكات ويطابقه وي المتصلين»): BRIDGE-MIB على VSOL لا ينسب
+        // الماك لجهاز، فلم يكن خلف أيّ ONU شيء. جدول الماك الخاصّ بـVSOL يسمّي المنفذ والجهاز صراحةً (مثبتٌ على GPON) —
+        // يُقرأ لـEPON أيضاً، ويُعاد استعماله لـGPON تحت.
+        final t = vsolTable = await VsolGponDetails.fetch(snmp);
+        final byKey = {for (final o in epon) if (o.slot == 0) '${o.ponPort}/${o.onuId}': o.ifIndex};
+        f = FdbSnapshot(
+          macsByIfIndex: {
+            for (final e in t.learnedMacs.entries)
+              if (byKey[e.key] != null) byKey[e.key]!: e.value,
+          },
+          complete: t.macsComplete,
+          supported: t.macsComplete || t.learnedMacs.isNotEmpty,
+        );
+      } else {
+        f = await BridgeFdb.fetch(snmp, targets: known);
+      }
       final keep = !f.complete && _epon.fdb.complete && f.supported;
       next = keep ? next.copyWith(fdbAt: _epon.fdbAt) : next.copyWith(fdb: f, fdbAt: clock());
       _epon = next;
     }
     if (profile.readsVsolTables && s.onus.any((o) => o.technology == VsolPonTechnology.gpon)) {
-      _gpon = await VsolGponDetails.fetch(snmp);
+      _gpon = vsolTable ?? await VsolGponDetails.fetch(snmp);
       _gponAt = clock();
     }
+  }
+
+  /// شريحة ضوء VSOL لهذه الدورة: [_rxSliceSize] جهازاً متّصلاً بعد آخر شريحة (بترتيب الفهرس)، وتعود للأوّل حين تنتهي.
+  static const _rxSliceSize = 24;
+  int _rxCursor = 0;
+
+  List<VsolOnu> _rxSlice(List<VsolOnu> online) {
+    if (online.length <= _rxSliceSize) return online;
+    final sorted = [...online]..sort((a, b) => a.ifIndex.compareTo(b.ifIndex));
+    final start = sorted.indexWhere((o) => o.ifIndex >= _rxCursor);
+    final from = start < 0 ? 0 : start;
+    final slice = [for (var k = 0; k < _rxSliceSize; k++) sorted[(from + k) % sorted.length]];
+    _rxCursor = slice.last.ifIndex + 1;
+    return slice;
   }
 
   /// يدمج القراءات كلّها فوق آخر بنية.

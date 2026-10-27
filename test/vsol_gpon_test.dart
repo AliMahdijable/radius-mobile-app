@@ -276,4 +276,13 @@ void main() {
       '1/2': ['02:00:00:00:00:02']
     });
   });
+
+  test('منفذ جدول الماك ⇒ «منفذ/جهاز»: GPON «PON1:ONU5» وEPON V1600D «EPON01ONU1» و«EPON0/1:12»', () {
+    expect(VsolGponDetails.portKey('PON1:ONU5'), '1/5');
+    expect(VsolGponDetails.portKey('EPON01ONU1'), '1/1');
+    expect(VsolGponDetails.portKey('EPON08ONU42'), '8/42');
+    expect(VsolGponDetails.portKey('EPON0/1:12'), '1/12');
+    expect(VsolGponDetails.portKey('GE0/1'), isNull);
+    expect(VsolGponDetails.portKey('EPON00ONU3'), isNull, reason: 'لا منفذ صفر');
+  });
 }
