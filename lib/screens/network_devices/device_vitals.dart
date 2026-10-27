@@ -587,7 +587,8 @@ class DeviceVitals {
                 value: s.totalRxPowerDbm!.toStringAsFixed(0),
                 unit: 'dBm',
                 icon: LucideIcons.signal,
-                tone: Grade.rxPower(s.totalRxPowerDbm),
+                // إشارةٌ لاسلكيّة: سلّم الإشارة لا سلّم الضوء (‎-54 dBm وصلةٌ سليمة لا حمراء) — كلوحة ميموزا.
+                tone: Grade.signal(s.totalRxPowerDbm),
               ),
         s.phyRxRateMbps == null
             ? Vital.empty.withIcon(LucideIcons.gauge)

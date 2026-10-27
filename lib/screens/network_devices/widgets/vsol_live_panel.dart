@@ -13,6 +13,7 @@ import '../../../api/snmp_client.dart';
 import '../../../api/vsol_gpon_details.dart';
 import '../../../models/network_device.dart';
 import '../../../services/device_stats_cache.dart';
+import '../../../services/fiber/fiber_band.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -1195,8 +1196,8 @@ class _VsolLivePanelState extends State<VsolLivePanel>
                     ? DeskDotValue(
                         value: rx.toStringAsFixed(1),
                         unit: 'dBm',
-                        // سلّم الضوء عند الـONU: أضعف من ‎-27 dBm حدّ الانقطاع، ‎-24 تحذير.
-                        color: rx < -27 ? AppColors.error : (rx < -24 ? AppColors.warningFill : AppColors.success))
+                        // سلّم الضوء نفسه في «شبكة الألياف» (FiberBands): جيّد فوق ‎-25، حدّي حتى ‎-27، ضعيف تحته.
+                        color: FiberBands.tone(rx).fill)
                     : deskDash(),
               DeskRateCell(bps: o.online ? t?.txBps?.round() : null, down: true, max: maxDown, live: o.online),
               DeskRateCell(bps: o.online ? t?.rxBps?.round() : null, down: false, max: maxUp, live: o.online),
@@ -1506,10 +1507,11 @@ class _VsolLivePanelState extends State<VsolLivePanel>
     ];
     if (parts.isEmpty) return const SizedBox.shrink();
     final rx = r.rxDbm;
-    // سلّم الضوء عند الـONU: أضعف من ‎-27 dBm حدّ الانقطاع، ‎-24 تحذير.
+    // سلّم الضوء نفسه في «شبكة الألياف» (FiberBands) — لا يقول الأولت «سليم» لما تقول عنه شاشة الألياف «حدّي».
+    final band = FiberBands.tone(rx);
     final tone = rx == null
         ? AppColors.textLow
-        : (rx < -27 ? AppColors.error : (rx < -24 ? AppColors.warning : AppColors.textMid));
+        : (band == AppTone.success ? AppColors.textMid : (band == AppTone.warning ? AppColors.warning : AppColors.error));
     return Padding(
       padding: const EdgeInsets.only(top: 2),
       child: Directionality(

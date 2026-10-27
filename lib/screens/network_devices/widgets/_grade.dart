@@ -1,4 +1,5 @@
 import '../../../theme/colors.dart';
+import '../../../services/fiber/fiber_band.dart';
 
 /// سلّم التدريج الموحّد للوحات الأجهزة.
 ///
@@ -39,13 +40,8 @@ class Grade {
     return AppTone.danger;
   }
 
-  /// قدرة الاستقبال الضوئيّة للـONT بالـdBm.
-  static AppTone rxPower(num? dbm) {
-    if (dbm == null) return AppTone.neutral;
-    if (dbm >= -27 && dbm <= -8) return AppTone.success;
-    if (dbm >= -30 && dbm <= -5) return AppTone.warning;
-    return AppTone.danger;
-  }
+  /// قدرة الاستقبال الضوئيّة للـONT بالـdBm — سلّم «شبكة الألياف» نفسه (FiberBands)، فلا تختلف شاشتان على قراءةٍ واحدة.
+  static AppTone rxPower(num? dbm) => FiberBands.tone(dbm?.toDouble());
 
   /// نسبة مئويّة **كلّما ارتفعت كان أفضل** — CCQ · جودة الرابط.
   static AppTone percentHigherBetter(num? p) {
