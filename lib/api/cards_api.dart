@@ -64,6 +64,14 @@ String? _tail(Object? v) {
   return s.length > 4 ? s.substring(s.length - 4) : s;
 }
 
+/// الرقم التسلسليّ الكامل (أرقام/حروف مطبوعة) — طلب المالك ٢٧ أكتوبر: «عرض الأرقام لكلّ سلسلة». يُعرض لصاحب صلاحيّة
+/// عرض الكارتات؛ ليس سرّاً كالـPIN. فارغٌ أو غير صالح ⇒ null.
+String? _serial(Object? v) {
+  final s = _str(v)?.trim();
+  if (s == null || s.isEmpty) return null;
+  return RegExp(r'^[0-9A-Za-z-]{1,40}$').hasMatch(s) ? s : null;
+}
+
 // ═════════════════════════ activation-data ═════════════════════════
 
 /// طرق التفعيل المسموحة للمدير — `activation_methods` في activation-data.
@@ -337,6 +345,7 @@ class CardSeries {
 class CardItem {
   const CardItem({
     required this.id,
+    required this.serial,
     required this.serialTail,
     required this.used,
     required this.usedAt,
@@ -346,7 +355,10 @@ class CardItem {
 
   final int id;
 
-  /// آخر أربع خانات من الرقم التسلسليّ.
+  /// الرقم التسلسليّ الكامل (قرار المالك: يُعرض)، أو null حين لا يُرسله الخادم (إصدارٌ أقدم).
+  final String? serial;
+
+  /// آخر أربع خانات — بديلٌ حين يغيب الكامل.
   final String? serialTail;
   final bool used;
 
@@ -367,6 +379,7 @@ class CardItem {
     final subscriberId = _str(sub['id']);
     return CardItem(
       id: id,
+      serial: _serial(j['serial']),
       serialTail: _tail(j['serial_tail']),
       // غير المستعمل في الساس: used_at فارغ ولا مشترك. والخادم يحسم
       // بـ`used` — نقرؤه أوّلاً ونستنتج فقط حين يغيب.

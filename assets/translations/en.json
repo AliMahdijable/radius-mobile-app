@@ -1665,6 +1665,7 @@
     "module_hint_pkg": "Refill card stock per package, and who used them",
     "module_hint_pkg_n": "{n} cards left — per package, and who used them",
     "unused": "Unused",
+    "serial": "Serial",
     "used": "Used",
     "load_more": "Show more",
     "shown_of": "{n} of {total}",

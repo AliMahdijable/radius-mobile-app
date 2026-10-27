@@ -16,8 +16,11 @@ import '../../theme/spacing.dart';
 String cardsMoney(num value) => '${formatIQD(value)} ${'common.currency'.tr()}';
 
 /// «••4821» — آخر أربع خانات وحدها، كما في إشعار التفعيل بالكارت حرفيّاً
-/// فيجد المدير الكارت هنا بالشكل الذي رآه هناك. ولا شيء أكثر يصل أصلاً.
+/// فيجد المدير الكارت هنا بالشكل الذي رآه هناك.
 String cardTail(String? tail) => '••${tail ?? '••••'}';
+
+/// الرقم التسلسليّ الكامل حين يرسله الخادم (قرار المالك: «عرض الأرقام لكلّ سلسلة»)، وإلّا آخر أربع خاناتٍ كبديل.
+String cardSerial(CardItem c) => c.serial ?? cardTail(c.serialTail);
 
 String _two(int n) => n.toString().padLeft(2, '0');
 

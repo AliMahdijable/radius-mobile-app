@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/cards_api.dart';
 import '../../../core/util/bidi.dart';
 import '../../../core/util/format.dart';
+import '../../../core/widgets/copyable.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -302,13 +303,19 @@ class _CardRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  cardTail(c.serialTail),
-                  textDirection: TextDirection.ltr,
-                  style: AppType.bodyBold(
-                    color: c.used ? AppColors.textMid : AppColors.textHi,
+                Copyable(
+                  label: 'cards.serial'.tr(),
+                  value: c.serial, // الكامل يُنسَخ؛ البديل (آخر ٤) لا لأنّه ناقص
+                  noun: 'cards.serial'.tr(),
+                  child: Text(
+                    cardSerial(c),
+                    textDirection: TextDirection.ltr,
+                    style: AppType.bodyBold(
+                      color: c.used ? AppColors.textMid : AppColors.textHi,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 1,
                 ),
                 const SizedBox(height: Sp.xxs),
                 if (!c.used)

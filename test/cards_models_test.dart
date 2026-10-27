@@ -380,6 +380,33 @@ void main() {
       expect(page.hasMore, isFalse);
     });
 
+    test('الرقم التسلسليّ الكامل يُقرأ ويُعرض (قرار المالك)، وبديلٌ آخر ٤ خاناتٍ حين يغيب', () {
+      final page = CardsPage.fromJson({
+        'success': true,
+        'series': {'series': '2026-1', 'type': 0, 'profile_id': 4, 'value': 46000, 'qty': 2, 'used': 0, 'remaining': 2},
+        'cards': [
+          {'id': 1, 'serial': '1234567890123454821', 'serial_tail': '4821', 'used': false},
+          {'id': 2, 'serial_tail': '7710', 'used': false}, // خادمٌ أقدم بلا الحقل الكامل
+        ],
+      });
+      expect(page.cards[0].serial, '1234567890123454821');
+      expect(cardSerial(page.cards[0]), '1234567890123454821', reason: 'الكامل يُعرض');
+      expect(page.cards[1].serial, isNull);
+      expect(cardSerial(page.cards[1]), '••7710', reason: 'بديلٌ حين يغيب الكامل');
+    });
+
+    test('🚨 رقمٌ تسلسليٌّ مشبوه (مسافات/رموز) يُرفض ⇒ null', () {
+      final page = CardsPage.fromJson({
+        'success': true,
+        'series': {'series': '2026-1', 'type': 0, 'profile_id': 4, 'value': 1, 'qty': 1, 'used': 0, 'remaining': 1},
+        'cards': [
+          {'id': 1, 'serial': '12 34<script>', 'serial_tail': '0001', 'used': false},
+        ],
+      });
+      expect(page.cards[0].serial, isNull);
+      expect(cardSerial(page.cards[0]), '••0001');
+    });
+
     test('🚨 لا PIN ولا رقمٌ تسلسليّ كامل يبقى في النموذج', () {
       const pin = '83920174';
       const serial = '1234567890123454821';
