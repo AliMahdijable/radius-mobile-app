@@ -183,6 +183,7 @@ class _FiberLinkScreenState extends State<FiberLinkScreen> {
       body: FiberPage(
         onRefresh: () => _load(force: true),
         children: [
+          FiberStaleNotice(monitor: _m),
           if (_loading) const FiberNotice(text: 'يقرأ جلسات المشتركين من الساس والأجهزة خلف كلّ ONU…', tone: AppTone.info),
           if (_m.error != null) FiberNotice(text: _m.error!, tone: AppTone.danger, onRetry: _m.refreshNow, icon: LucideIcons.wifiOff),
           if (!_loading && _LinkData.sessions.isEmpty)

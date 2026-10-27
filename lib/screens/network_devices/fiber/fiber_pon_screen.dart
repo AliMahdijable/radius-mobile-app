@@ -132,6 +132,7 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
       body: FiberPage(
         onRefresh: _m.refreshNow,
         children: [
+          FiberStaleNotice(monitor: _m),
           if (pons.length > 1) _ponChips(pons),
           Padding(
             padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),

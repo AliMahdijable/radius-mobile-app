@@ -125,7 +125,7 @@ class _Backend extends FiberBackend {
   @override
   SnmpV2c snmp(NetworkDevice d, String community) => olt.agent;
   @override
-  Future<VsolOltStats> structure(NetworkDevice d, String community, OltProfile p) async => olt.stats();
+  Future<VsolOltStats> structure(NetworkDevice d, String community, OltProfile p, {Map<int, String>? knownNames}) async => olt.stats();
   @override
   Future<VsolOltStats> hot(NetworkDevice d, String community, VsolOltStats prev) async => prev;
 }

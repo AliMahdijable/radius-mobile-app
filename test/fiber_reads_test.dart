@@ -34,6 +34,19 @@ void main() {
       expect(OltFiberReads.scaled(snmpText('1', ' -21.35 dBm '), lo: -45, hi: 10), -21.35);
       expect(OltFiberReads.scaled(snmpText('1', '−21.35'), lo: -45, hi: 10), -21.35);
       expect(OltFiberReads.scaled(snmpText('1', '45.20 C'), lo: -30, hi: 120), 45.2);
+      // VSOL V1600D (‏«Moh»، ٢٧ أكتوبر): الميلّيواط أوّلاً ثمّ الـdBm بين قوسين — كانت تُقرأ ‎0.01.
+      expect(OltFiberReads.dbm(snmpText('1', '0.0070 mW(-21.55dBm)')), -21.55);
+      expect(OltFiberReads.dbm(snmpText('1', '1.6982 mW(2.30dBm)'), lo: -15, hi: 12), 2.3);
+      expect(OltFiberReads.dbm(snmpText('1', '0.0070 mW')), -21.55, reason: 'ميلّيواط وحده ⇒ 10·log10');
+      expect(OltFiberReads.dbm(snmpText('1', '7.00 uW')), -21.55);
+      expect(OltFiberReads.dbm(snmpText('1', 'Rx:-21.55dBm')), -21.55);
+      expect(OltFiberReads.dbm(snmpText('1', '-21.55 dBm (0.0070mW)')), -21.55);
+      expect(OltFiberReads.dbm(snmpText('1', '0.0000 mW(-inf dBm)')), isNull, reason: 'لا ضوء ⇒ لا رقم');
+      expect(OltFiberReads.dbm(snmpText('1', '-21.35')), -21.35, reason: 'بلا وحدة ⇒ كالسابق');
+      expect(OltFiberReads.dbm(snmpInt('1', -2135)), -21.35);
+      final r = OltFiberReads.vsolReading(snmpText('1', '0.0070 mW(-21.55dBm)'), snmpText('1', '1.6982 mW(2.30dBm)'),
+          snmpText('1', '45.00 C'), snmpText('1', '3.27 V'))!;
+      expect([r.rxDbm, r.txDbm, r.tempC, r.voltV], [-21.55, 2.3, 45.0, 3.27]);
     });
 
     test('أعدادٌ صحيحة مقسومة: أوّل قسمةٍ في المدى المعقول', () {
@@ -148,6 +161,7 @@ void main() {
       });
       final r = await OltFiberReads.names(agent, vsol, [o(3, 2), o(3, 3), o(3, 4)]);
       expect(r, {302: 'علي كريم', 303: 'karar77'});
+      expect(agent.gets, isEmpty, reason: 'بمسح العمودين لا بسؤال كلّ جهاز');
     });
 
     test('جهازٌ لا يجيب (مهلة) ⇒ قراءاتٌ فارغة لا استثناء', () async {
@@ -173,7 +187,7 @@ void main() {
       expect(caps.hasOptics, isTrue);
       expect(caps.hasReasons, isTrue);
       expect(caps.rawReasons, {'1': 1});
-      expect(caps.opticsShapes, ['str:"-21.35"', 'str:"2.31"', 'str(len=15)', 'absent']);
+      expect(caps.opticsShapes, ['str:"-21.35"', 'str:"2.31"', 'fmt:"xxxxxx-xxx xxxx"', 'absent']);
       final js = jsonEncode(caps.toJson());
       expect(js.contains('karar77'), isFalse);
       expect(js.contains('secret'), isFalse);

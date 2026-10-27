@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
@@ -76,12 +77,42 @@ class OltFiberReads {
     return null;
   }
 
+  /// القدرة الضوئيّة بالـdBm من نصّ المصنّع: الرقم المقرون بـdBm أوّلاً — VSOL V1600D يكتب «0.0070 mW(-21.55dBm)»
+  /// فأوّل رقمٍ فيه الميلّيواط (كان يُقرأ ‎0.01 ويُعدّ «قويّاً زيادة»)؛ ثمّ الميلّيواط/الميكرواط محوّلاً
+  /// (10·log10)؛ وإلّا `null` ليقرّر [scaled]. نصٌّ بلا وحدةٍ يبقى لـ[scaled].
+  static double? dbmText(String s) {
+    final t = s.replaceAll('−', '-').replaceAll(',', '.');
+    final d = RegExp(r'(-?\d+(?:\.\d+)?)\s*\(?\s*dbm', caseSensitive: false).firstMatch(t);
+    if (d != null) return double.tryParse(d.group(1)!);
+    double? power(RegExp re, double toMw) {
+      final m = re.firstMatch(t);
+      final v = m == null ? null : double.tryParse(m.group(1)!);
+      if (v == null || v <= 0) return null;
+      return double.parse((10 * math.log(v * toMw) / math.ln10).toStringAsFixed(2));
+    }
+
+    return power(RegExp(r'(\d+(?:\.\d+)?)\s*mw', caseSensitive: false), 1) ??
+        power(RegExp(r'(\d+(?:\.\d+)?)\s*[uµ]w', caseSensitive: false), 0.001);
+  }
+
+  /// قدرةٌ ضوئيّة من عمودٍ (نصٌّ بوحدته أو عدد): [dbmText] للنصّ، و[scaled] لما سواه.
+  static double? dbm(Varbind vb, {double lo = -45, double hi = 10}) {
+    if (!vb.isAbsent && vb.rawTag == 0x04) {
+      final s = utf8.decode(vb.rawBytes, allowMalformed: true).trim();
+      if (RegExp(r'dbm|[mµu]w', caseSensitive: false).hasMatch(s)) {
+        final v = dbmText(s);
+        return v != null && v >= lo && v <= hi && v != 0 ? double.parse(v.toStringAsFixed(2)) : null;
+      }
+    }
+    return scaled(vb, lo: lo, hi: hi);
+  }
+
   /// صفّ الضوء لـONU واحدة من أعمدة VSOL.
   static BdcomOnuReading? vsolReading(Varbind? rx, Varbind? tx, Varbind? temp, Varbind? volt) {
-    final r = rx == null ? null : scaled(rx, lo: -45, hi: 10);
+    final r = rx == null ? null : dbm(rx);
     final reading = BdcomOnuReading(
       rxDbm: FiberBands.plausible(r) ? r : null,
-      txDbm: tx == null ? null : scaled(tx, lo: -15, hi: 12),
+      txDbm: tx == null ? null : dbm(tx, lo: -15, hi: 12),
       tempC: temp == null ? null : scaled(temp, lo: -30, hi: 120, divisors: const [1, 10, 100, 256]),
       voltV: volt == null ? null : scaled(volt, lo: 2.5, hi: 5.5, divisors: const [1, 10, 100, 1000, 10000]),
     );
@@ -119,19 +150,97 @@ class OltFiberReads {
 
   // ── القراءة ──────────────────────────────────────────────────────────────────────────
 
-  static Future<Map<String, Varbind>> _getAll(SnmpV2c snmp, List<String> oids, bool Function()? cancelled) async {
-    final out = <String, Varbind>{};
-    for (var s = 0; s < oids.length; s += _perGet) {
-      if (cancelled?.call() == true) break;
-      try {
-        for (final vb in await snmp.get(oids.skip(s).take(_perGet).toList())) {
-          out[vb.oid] = vb;
-        }
-      } catch (_) {
-        // دفعةٌ لا تجيب — نتجاوزها ولا نُسقط البقيّة.
+  /// كم طلباً في الطريق معاً: يُخفي زمن الرحلة على أولتٍ بعيد (~٢٥٠ مللي عبر VPN) بلا إغراق وكيلٍ يعالج ~١٠٠ قيمة/ث.
+  static const _parallel = 3;
+
+  /// يشغّل [jobs] بـ[_parallel] عمّالٍ معاً، وما يرمي منها يُتجاوز وحده.
+  static Future<void> _pool(int count, Future<void> Function(int i) job, bool Function()? cancelled) async {
+    var next = 0;
+    Future<void> worker() async {
+      while (true) {
+        if (cancelled?.call() == true) return;
+        final i = next++;
+        if (i >= count) return;
+        try {
+          await job(i);
+        } catch (_) {/* دفعةٌ لا تجيب — نتجاوزها ولا نُسقط البقيّة */}
       }
     }
+
+    await Future.wait([for (var w = 0; w < _parallel && w < count; w++) worker()]);
+  }
+
+  static Future<Map<String, Varbind>> _getAll(SnmpV2c snmp, List<String> oids, bool Function()? cancelled) async {
+    final out = <String, Varbind>{};
+    final batches = [for (var s = 0; s < oids.length; s += _perGet) oids.sublist(s, math.min(s + _perGet, oids.length))];
+    await _pool(batches.length, (i) async {
+      for (final vb in await snmp.get(batches[i])) {
+        out[vb.oid] = vb;
+      }
+    }, cancelled);
     return out;
+  }
+
+  /// مسح عمودٍ (GETBULK) — يُرجع الموجود وحده، فلا طلبٌ لجهازٍ بلا صفٍّ يُهمَل كلّه حتى المهلة. `null` = لم يُجب.
+  /// العمود الذي لم يُجب يُتذكَّر لهذا العنوان ساعة — لا ندفع مهلته كلّ دورة.
+  static Future<List<Varbind>?> _walk(SnmpV2c snmp, String base) async {
+    final key = '${snmp.host}|$base';
+    final until = _silent[key];
+    if (until != null && DateTime.now().isBefore(until)) return null;
+    try {
+      return await snmp.walk(base, chunkSize: 50, maxIterations: 200);
+    } catch (_) {
+      _silent[key] = DateTime.now().add(const Duration(hours: 1));
+      return null;
+    }
+  }
+
+  static final Map<String, DateTime> _silent = {};
+
+  @visibleForTesting
+  static void debugReset() => _silent.clear();
+
+  /// ⚡ **الضوء وحده بمسح عموده** — لكلّ أولت: VSOL (EPON/GPON، فهرس المنفذ.الجهاز) وBDCOM (فهرس الواجهة). ~٧ رحلاتٍ
+  /// لـ٣٠٠ جهاز بدل ٥٠ طلباً بأربع قيمٍ للجهاز؛ الإرسال والحرارة والفولتيّة لجهازٍ واحد حين يُفتح ([vsolOptics] /
+  /// [BdcomEpon.readings]). `null` = العمود لم يُجب (تبقى القراءة السابقة).
+  static Future<Map<int, double>?> rxColumn(SnmpV2c snmp, OltProfile profile, Iterable<VsolOnu> onus) async {
+    final online = [for (final o in onus) if (o.online) o];
+    if (online.isEmpty) return const {};
+    final out = <int, double>{};
+    var answered = false;
+    if (profile.readsBdcomEponTables) {
+      final want = {for (final o in online) if (o.technology == VsolPonTechnology.epon) o.ifIndex};
+      if (want.isEmpty) return const {};
+      final vbs = await _walk(snmp, BdcomEpon.rxOid);
+      if (vbs == null) return null;
+      answered = true;
+      for (final vb in vbs) {
+        final i = int.tryParse(vb.oid.substring(BdcomEpon.rxOid.length + 1));
+        if (i == null || !want.contains(i)) continue;
+        final r = BdcomEpon.dbmFrom(vb);
+        if (FiberBands.plausible(r)) out[i] = r!;
+      }
+    } else if (profile.readsVsolTables) {
+      for (final tech in VsolPonTechnology.values) {
+        final mine = [for (final o in online) if (o.technology == tech && o.slot == 0) o];
+        if (mine.isEmpty) continue;
+        final base = '${tech == VsolPonTechnology.gpon ? vsolGponOptics : vsolEponOptics}.7';
+        final bySuffix = {for (final o in mine) _suffix(o): o.ifIndex};
+        final vbs = await _walk(snmp, base);
+        if (vbs == null) continue;
+        answered = true;
+        for (final vb in vbs) {
+          if (!vb.oid.startsWith('$base.')) continue;
+          final i = bySuffix[vb.oid.substring(base.length + 1)];
+          if (i == null) continue;
+          final r = dbm(vb);
+          if (FiberBands.plausible(r)) out[i] = r!;
+        }
+      }
+    } else {
+      return const {};
+    }
+    return answered ? out : null;
   }
 
   /// ضوء VSOL للمتّصلة (ifIndex ← قراءة). البطاقة صفر وحدها (فهرس الجدول منفذٌ ورقم ONU بلا بطاقة).
@@ -205,37 +314,35 @@ class OltFiberReads {
   }) async {
     final want = ifIndexes.toSet().toList()..sort();
     final out = <int, DateTime>{};
-    for (var s = 0; s < want.length; s += _perGet - 1) {
-      if (isCancelled?.call() == true) break;
-      final chunk = want.skip(s).take(_perGet - 1).toList();
-      List<Varbind> vbs;
-      try {
-        vbs = await snmp.get([sysUpTimeOid, for (final i in chunk) '$ifLastChangeOid.$i']);
-      } catch (_) {
-        continue;
-      }
+    final chunks = [for (var s = 0; s < want.length; s += _perGet - 1) want.sublist(s, math.min(s + _perGet - 1, want.length))];
+    await _pool(chunks.length, (k) async {
+      final chunk = chunks[k];
+      final vbs = await snmp.get([sysUpTimeOid, for (final i in chunk) '$ifLastChangeOid.$i']);
       final at = now ?? DateTime.now();
       final by = {for (final v in vbs) v.oid: v};
       final up = by[sysUpTimeOid];
-      if (up == null || up.isAbsent || !up.isNumeric) continue;
+      if (up == null || up.isAbsent || !up.isNumeric) return;
       for (final i in chunk) {
         final vb = by['$ifLastChangeOid.$i'];
         if (vb == null || vb.isAbsent || !vb.isNumeric) continue;
         final t = changedAt(upTicks: up.asInt, lastChangeTicks: vb.asInt, now: at);
         if (t != null) out[i] = t;
       }
-    }
+    }, isCancelled);
     return out;
   }
 
   /// أسماء الأجهزة كما كتبها الوكيل: ifAlias، ووصف VSOL EPON. الفارغ لا يُعاد.
-  static Future<Map<int, String>> names(
+  /// ⚡ بمسح العمودين (GETBULK) لا بسؤال كلّ جهاز: ifAlias ثمّ — لمن بقي بلا اسم — وصف VSOL EPON. `null` = لم يُجب أيٌّ
+  /// منهما (تبقى الأسماء السابقة؛ لا تُمحى بفراغ).
+  static Future<Map<int, String>?> names(
     SnmpV2c snmp,
     OltProfile profile,
     Iterable<VsolOnu> onus, {
     bool Function()? isCancelled,
   }) async {
     final list = onus.toList();
+    final byIf = {for (final o in list) o.ifIndex: o};
     final out = <int, String>{};
     String? text(Varbind? vb) {
       if (vb == null || vb.isAbsent || vb.rawTag != 0x04) return null;
@@ -245,23 +352,38 @@ class OltFiberReads {
       return s;
     }
 
-    final alias = await _getAll(snmp, [for (final o in list) '$ifAliasOid.${o.ifIndex}'], isCancelled);
-    for (final o in list) {
-      final s = text(alias['$ifAliasOid.${o.ifIndex}']);
-      if (s != null) out[o.ifIndex] = s;
-    }
-    if (profile.readsVsolTables) {
-      final epon = [
-        for (final o in list)
-          if (o.technology == VsolPonTechnology.epon && o.slot == 0 && !out.containsKey(o.ifIndex)) o,
-      ];
-      final got = await _getAll(snmp, [for (final o in epon) '$vsolEponAuth.9.${_suffix(o)}'], isCancelled);
-      for (final o in epon) {
-        final s = text(got['$vsolEponAuth.9.${_suffix(o)}']);
-        if (s != null) out[o.ifIndex] = s;
+    var answered = false;
+    final alias = await _walk(snmp, ifAliasOid);
+    if (alias != null) {
+      answered = true;
+      for (final vb in alias) {
+        if (!vb.oid.startsWith('$ifAliasOid.')) continue;
+        final i = int.tryParse(vb.oid.substring(ifAliasOid.length + 1));
+        if (i == null || !byIf.containsKey(i)) continue;
+        final t = text(vb);
+        if (t != null) out[i] = t;
       }
     }
-    return out;
+    if (profile.readsVsolTables && isCancelled?.call() != true) {
+      final bySuffix = {
+        for (final o in list)
+          if (o.technology == VsolPonTechnology.epon && o.slot == 0 && !out.containsKey(o.ifIndex)) _suffix(o): o.ifIndex,
+      };
+      if (bySuffix.isNotEmpty) {
+        const base = '$vsolEponAuth.9';
+        final got = await _walk(snmp, base);
+        if (got != null) {
+          answered = true;
+          for (final vb in got) {
+            if (!vb.oid.startsWith('$base.')) continue;
+            final i = bySuffix[vb.oid.substring(base.length + 1)];
+            final t = i == null ? null : text(vb);
+            if (t != null) out[i!] = t;
+          }
+        }
+      }
+    }
+    return answered ? out : null;
   }
 
   // ── فحص القدرات ─────────────────────────────────────────────────────────────────────
@@ -332,7 +454,15 @@ class OltFiberReads {
     if (RegExp(r'^[-−]?\d{1,5}([.,]\d{1,4})?\s*(\(?\s*(dbm|v|c|°c|ma|mw|uw)\s*\)?)?$', caseSensitive: false).hasMatch(s)) {
       return 'str:"$s"';
     }
-    return 'str(len=${s.length})';
+    // صيغة النصّ مقنّعة: الأرقام 9 والحروف x إلّا الوحدات (‎0.0070 mW(-21.55dBm) ⇒ ‎9.9999 mW(-99.99dBm)) — نعرف كيف
+    // يكتب الجهاز القيمة بلا القيمة نفسها، ولا يتسرّب نصٌّ حرّ (اسمٌ أو وصف) إن جاء العمود بغير المتوقَّع.
+    const units = {'mw', 'dbm', 'uw', 'µw', 'c', 'v', 'ma', 'mv', 'na'};
+    final masked = s
+        .replaceAll(RegExp(r'\d'), '9')
+        .replaceAllMapped(RegExp(r'[^\W\d_]+', unicode: true),
+            (m) => units.contains(m[0]!.toLowerCase()) ? m[0]! : 'x' * m[0]!.length)
+        .replaceAll(RegExp(r'[^\x20-\x7E]'), '?');
+    return 'fmt:"${masked.length > 28 ? masked.substring(0, 28) : masked}"';
   }
 }
 

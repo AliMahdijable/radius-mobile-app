@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -51,6 +53,7 @@ class _FiberDiagnosisScreenState extends State<FiberDiagnosisScreen> {
       ..acquire();
     FiberStore.layout.addListener(_changed);
     _loadSub();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _changed());
   }
 
   @override
@@ -62,8 +65,18 @@ class _FiberDiagnosisScreenState extends State<FiberDiagnosisScreen> {
     super.dispose();
   }
 
+  bool _detailAsked = false;
+
   void _changed() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    // ⚡ الدورة تقرأ الاستقبال وحده للكلّ — الإرسال والحرارة والفولتيّة ولحظة الاتّصال لهذا الجهاز حين يُفتح.
+    final o = _onu;
+    if (!_detailAsked && o != null) {
+      _detailAsked = true;
+      if (o.online) unawaited(_m.readOne(o.onu).catchError((_) => null));
+      unawaited(_m.ensureChangedAt(o.onu).catchError((_) {}));
+    }
+    setState(() {});
   }
 
   String? get _username {

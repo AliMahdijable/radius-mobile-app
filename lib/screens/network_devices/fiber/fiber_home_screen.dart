@@ -135,6 +135,7 @@ class _FiberHomeScreenState extends State<FiberHomeScreen> {
         onRefresh: _m.refreshNow,
         children: [
           _oltLine(),
+          FiberStaleNotice(monitor: _m),
           if (_m.error != null) FiberNotice(text: _m.error!, tone: AppTone.danger, onRetry: _m.refreshNow, icon: LucideIcons.wifiOff),
           if (!FiberStore.serverReady)
             const FiberNotice(text: 'الحفظ على هذا الجهاز فقط الآن — يتزامن مع الخادم حين يتوفّر.', icon: LucideIcons.cloudOff),
@@ -180,7 +181,7 @@ class _FiberHomeScreenState extends State<FiberHomeScreen> {
   }
 
   Widget _oltLine() {
-    final live = _m.error == null && _m.lastOkAt != null;
+    final live = _m.error == null && _m.lastOkAt != null && !_m.stale;
     return Padding(
       padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.xs),
       child: Wrap(spacing: Sp.sm, runSpacing: Sp.sm, crossAxisAlignment: WrapCrossAlignment.center, children: [
@@ -200,7 +201,8 @@ class _FiberHomeScreenState extends State<FiberHomeScreen> {
           // الحاسبة: اسم الأولت في رأس الصفحة أصلاً — هنا الطراز وحده.
           Text(DesktopScope.of(context) ? (_m.profile.model ?? _m.profile.label) : '${_olt.name} · ${_m.profile.model ?? _m.profile.label}',
               style: AppType.body(color: AppColors.textMid), maxLines: 1, overflow: TextOverflow.ellipsis),
-        FiberPill(live ? 'مباشر' : (_m.busy ? 'يقرأ…' : 'متوقّف'), tone: live ? AppTone.success : AppTone.neutral, dot: live),
+        FiberPill(live ? 'مباشر' : (_m.stale ? 'محفوظة' : (_m.busy ? 'يقرأ…' : 'متوقّف')),
+            tone: live ? AppTone.success : (_m.stale ? AppTone.info : AppTone.neutral), dot: live),
       ]),
     );
   }
@@ -507,7 +509,11 @@ class _FiberHomeScreenState extends State<FiberHomeScreen> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, 0),
       child: Text(
-        at == null ? 'تتحدّث كلّ $every ثانية' : 'آخر قراءة ${FiberText.clock(at, seconds: true)} · تتحدّث كلّ $every ثانية',
+        at == null
+            ? 'تتحدّث كلّ $every ثانية'
+            : _m.stale
+                ? 'قراءة محفوظة من ${FiberText.when(at)} · نقرأ الأولت الآن'
+                : 'آخر قراءة ${FiberText.clock(at, seconds: true)} · تتحدّث كلّ $every ثانية',
         textAlign: TextAlign.center,
         style: AppType.muted(color: AppColors.textMid),
       ),

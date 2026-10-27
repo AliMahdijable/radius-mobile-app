@@ -5,7 +5,9 @@ import '../../../core/platform/desktop_layout.dart';
 import '../../../core/util/bidi.dart';
 import '../../../services/fiber/fiber_band.dart';
 import '../../../services/fiber/fiber_light.dart';
+import '../../../services/fiber/fiber_monitor.dart';
 import '../../../services/fiber/fiber_onu.dart';
+import '../../../services/fiber/fiber_text.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -336,4 +338,22 @@ class FiberIconBox extends StatelessWidget {
         decoration: BoxDecoration(color: tone.softBg, borderRadius: BorderRadius.circular(R.sm)),
         child: Icon(icon, size: size * 0.5, color: tone == AppTone.brand ? AppColors.brandOnSoft : tone.fill),
       );
+}
+
+/// «قراءة محفوظة من …» — المعروض لقطة الفتحة السابقة حتى تصل قراءة الأولت الحيّة (ثوانٍ على أولتٍ كبير بعيد).
+class FiberStaleNotice extends StatelessWidget {
+  const FiberStaleNotice({super.key, required this.monitor});
+
+  final FiberMonitor monitor;
+
+  @override
+  Widget build(BuildContext context) {
+    final at = monitor.lastOkAt;
+    if (!monitor.stale || at == null) return const SizedBox.shrink();
+    return FiberNotice(
+      text: 'قراءة محفوظة من ${FiberText.when(at)} — نقرأ الأولت الآن…',
+      tone: AppTone.info,
+      icon: LucideIcons.history,
+    );
+  }
 }

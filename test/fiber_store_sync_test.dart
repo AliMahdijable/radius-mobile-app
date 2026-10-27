@@ -244,5 +244,5 @@ class _Silent extends FiberBackend {
   @override
   Future<String?> community(NetworkDevice d) async => null;
   @override
-  Future<VsolOltStats> structure(NetworkDevice d, String community, OltProfile p) async => const VsolOltStats();
+  Future<VsolOltStats> structure(NetworkDevice d, String community, OltProfile p, {Map<int, String>? knownNames}) async => const VsolOltStats();
 }

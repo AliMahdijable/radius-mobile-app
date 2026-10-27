@@ -13,6 +13,8 @@ import '../../../api/snmp_client.dart';
 import '../../../api/vsol_gpon_details.dart';
 import '../../../models/network_device.dart';
 import '../../../services/device_stats_cache.dart';
+import '../../../services/fiber/fiber_monitor.dart';
+import '../../../services/olt_name_cache.dart';
 import '../../../services/fiber/fiber_band.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -160,10 +162,23 @@ class _VsolLivePanelState extends State<VsolLivePanel>
     // (طلب المستخدم ٢٠٢٦-١٠-٠١: «أهمّ شي عندي سرعة الاستجابة وعرض
     // البيانات وتحديثها… وهلشي بجميع الأجهزة»)
     _stats = DeviceStatsCache.instance.seedFor<VsolOltStats>(widget.device.id);
+    // ⚡ أو من «شبكة الألياف» إن قرأت هذا الأولت قبل لحظات (البنية والحالة، بلا عدّادات) — لا فتحةٌ فارغة بعد الرجوع منها.
+    Duration? fiberAge;
+    if (_stats == null) {
+      final m = FiberMonitor.existing(widget.device.id);
+      final at = m?.statsAt;
+      if (m != null && !m.stale && m.stats != null && !m.stats!.isEmpty && at != null) {
+        final age = DateTime.now().difference(at);
+        if (age <= DeviceStatsCache.seedTtl) {
+          _stats = m.stats;
+          fiberAge = age;
+        }
+      }
+    }
     // والمصنّع من البذرة إن عرفته هويّةٌ حيّة سابقة — فلا تنتظر جداوله القراءة الأولى.
     if (_stats?.profile.identified ?? false) _profile = _stats!.profile;
     // وعمرُها معها: رقمٌ عمره دقيقةٌ تحت شارة «مباشر» كذبة.
-    final age = DeviceStatsCache.instance.ageOf(widget.device.id);
+    final age = DeviceStatsCache.instance.ageOf(widget.device.id) ?? fiberAge;
     if (_stats != null && age != null) {
       _lastFetch = DateTime.now().subtract(age);
       // ⚡ والبذرة **لقطةٌ أولى** لا مجرّد صورةٍ تُعرَض: فأوّل دورةٍ
@@ -257,12 +272,16 @@ class _VsolLivePanelState extends State<VsolLivePanel>
       // ⚡ أوّل مسحةٍ **بنيةٌ فقط** (‏٦ث): أسماءٌ وحالة، بلا عدّادات
       // ولا عناوين. العدّادات تأتي من الطبقة السريعة بعدها بثانية،
       // والعناوين والسرعات في المسحة الكاملة الدوريّة.
+      // ⚡ أسماء الواجهات المحفوظة ⇒ المسحة تقرأ الحالة (والعدّادات) بلا عمود الأسماء — نصف مسحة البنية على أولتٍ كبير.
+      final knownNames = wantFull ? await OltNameCache.get(d.id) : null;
+      if (!mounted || gen != _gen) return;
       var s = wantFull
           ? await VsolOltApi.fetchStats(
               host: d.ip,
               port: d.apiPort ?? 161,
               community: community,
               structureOnly: structureOnly,
+              knownNames: knownNames,
               // العدّادات من الطبقتين الخفيفتين — أرخص وأحدث.
               withCounters: structureOnly,
               withGponDetails: false,
@@ -353,6 +372,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
         if (!s.isEmpty) {
           DeviceStatsCache.instance.putRaw(widget.device.id, s);
         }
+        if (wantFull && s.ifNames.isNotEmpty) unawaited(OltNameCache.put(widget.device.id, s.ifNames));
         // ولا نحفظها عيّنةً للمرّة القادمة كذلك.
         if (s.hasCounters) {
           _prevHot = s;

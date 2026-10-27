@@ -203,8 +203,7 @@ class BdcomEpon {
     return b.map((x) => x.toRadixString(16).padLeft(2, '0')).join(':');
   }
 
-  /// ٠٫١ dBm ← dBm، أو `null` للغائب وما خرج عن مدى الضوء المعقول.
-  @visibleForTesting
+  /// ٠٫١ dBm ← dBm، أو `null` للغائب وما خرج عن مدى الضوء المعقول. (تقرأ به شبكة الألياف عمود الضوء كاملاً أيضاً.)
   static double? dbmFrom(Varbind? vb) {
     if (vb == null || vb.isAbsent || !vb.isNumeric) return null;
     final v = vb.asInt / 10.0;

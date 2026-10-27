@@ -94,6 +94,7 @@ class VsolOltApi {
     bool withGponDetails = true,
     OltProfile profile = OltProfile.vsolDefault,
     void Function(VsolOltStats partial)? onPartialReady,
+    Map<int, String>? knownNames,
   }) async {
     final fake = debugFetch;
     if (fake != null) return fake();
@@ -147,6 +148,7 @@ class VsolOltApi {
     final scan = await _readIfTable(snmp,
         structureOnly: structureOnly,
         withCounters: withCounters,
+        knownNames: knownNames,
         // BDCOM: عنوان الواجهة مشتركٌ بين المشتركين — عمودٌ مدفوعٌ بلا فائدة.
         readInterfaceMac: live.readsInterfaceMac, onNames: (rows) {
       final early = VsolParse.build(rows, profile: live);
@@ -212,7 +214,82 @@ class VsolOltApi {
       rxAt: scan.rxAt,
       txAt: scan.txAt,
       profile: live,
+      ifNames: Map.unmodifiable(scan.names),
     );
+  }
+
+  /// للاختبار: تجديد الحالة بلا شبكة.
+  @visibleForTesting
+  static Future<({VsolOltStats stats, int unknown})?> Function(VsolOltStats previous)? debugStatus;
+
+  /// ⚡ **الحالة وحدها فوق آخر بنية** — عمود ifOperStatus (واجهات الجهاز كلّها: ~٧ رحلاتٍ لـ٣٢٧ واجهة) بدل الأسماء
+  /// والحالة معاً. نصف كلفة مسحة البنية على وكيلٍ يعالج ~١٠٠ قيمةٍ بالثانية، والأسماء لا تتغيّر بين دقيقةٍ وأخرى.
+  /// لكلّ أولت (IF-MIB قياسيّ: VSOL وBDCOM، EPON وGPON).
+  ///
+  /// [unknown] = واجهاتٌ لا تعرفها البنية (ONU سُجّلت للتوّ) ⇒ المستدعي يمسح البنية في الدورة التالية.
+  /// `null` = لا جواب أو مسحٌ ناقص — تبقى آخر قراءةٍ صحيحة ولا تُستبدل بناقصة.
+  static Future<({VsolOltStats stats, int unknown})?> refreshStatus({
+    required String host,
+    int port = 161,
+    required String community,
+    required VsolOltStats previous,
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    final fake = debugStatus;
+    if (fake != null) return fake(previous);
+    final snmp = SnmpV2c(host: host, port: port, community: community, timeout: timeout);
+    List<Varbind> vbs;
+    try {
+      vbs = await snmp.walk(_oidIfOper, chunkSize: _bulkSize, maxIterations: 200);
+    } catch (_) {
+      return null;
+    }
+    final oper = <int, bool>{};
+    for (final vb in vbs) {
+      final i = _lastIndex(vb.oid, _oidIfOper);
+      if (i != null && vb.isNumeric) oper[i] = vb.asInt == 1;
+    }
+    return applyStatus(previous, oper);
+  }
+
+  /// يطبّق حالةً مقروءة على بنيةٍ سابقة (نقيّ — للاختبار): المتّصل/المفصول، ومنافذ PON والصعود، وعدّ كلّ منفذ.
+  /// غاب أكثر من ٥٪ ممّا نعرف ⇒ `null` (مسحٌ انقطع في منتصفه لا يُعرض كأنّ نصف الأجهزة فصلت).
+  static ({VsolOltStats stats, int unknown})? applyStatus(VsolOltStats previous, Map<int, bool> oper) {
+    if (oper.isEmpty) return null;
+    final known = <int>{
+      for (final o in previous.onus) o.ifIndex,
+      for (final p in previous.ponPorts) p.index,
+      for (final u in previous.uplinks) u.index,
+    };
+    final missing = known.where((i) => !oper.containsKey(i)).length;
+    if (missing > (known.length * 0.05).ceil()) return null;
+    final unknown = previous.ifNames.isEmpty ? 0 : oper.keys.where((i) => !previous.ifNames.containsKey(i)).length;
+    final onus = [
+      for (final o in previous.onus)
+        oper.containsKey(o.ifIndex) && oper[o.ifIndex] != o.online ? o.copyWith(online: oper[o.ifIndex]) : o,
+    ];
+    final ponPorts = [
+      for (final p in previous.ponPorts)
+        () {
+          final mine = onus.where((o) => o.technology == p.technology && o.slot == p.slot && o.ponPort == p.port);
+          return VsolPonPort(
+            index: p.index,
+            slot: p.slot,
+            port: p.port,
+            up: oper[p.index] ?? p.up,
+            rxBytes: p.rxBytes,
+            txBytes: p.txBytes,
+            onuTotal: mine.length,
+            onuOnline: mine.where((o) => o.online).length,
+            technology: p.technology,
+          );
+        }(),
+    ];
+    final uplinks = [
+      for (final u in previous.uplinks)
+        VsolUplink(index: u.index, name: u.name, up: oper[u.index] ?? u.up, speedMbps: u.speedMbps, rxBytes: u.rxBytes, txBytes: u.txBytes),
+    ];
+    return (stats: previous.copyWith(onus: onus, ponPorts: ponPorts, uplinks: uplinks), unknown: unknown);
   }
 
   /// تحديثٌ خفيف: عمودا العدّاد وحدهما على بنيةٍ معروفة سلفاً.
@@ -395,6 +472,7 @@ class VsolOltApi {
   static Future<
       ({
         List<VsolIfRow> rows,
+        Map<int, String> names,
         bool narrowCounters,
         DateTime? rxAt,
         DateTime? txAt
@@ -404,6 +482,7 @@ class VsolOltApi {
     bool structureOnly = false,
     bool withCounters = true,
     bool readInterfaceMac = true,
+    Map<int, String>? knownNames,
   }) async {
     Future<List<Varbind>> safeWalk(String base) async {
       try {
@@ -427,17 +506,31 @@ class VsolOltApi {
     //
     // (بلاغ المستخدم ٢٠٢٦-١٠-٠١: «شوف بنفسك التأخير شكد فضيع»)
     final byIdx = <int, String>{};
-    for (final vb in await safeWalk(_oidIfName)) {
-      final i = _lastIndex(vb.oid, _oidIfName);
-      final n = vb.asString.trim();
-      if (i != null && n.isNotEmpty) byIdx[i] = n;
-    }
-    if (byIdx.isEmpty) {
-      for (final vb in await safeWalk(_oidIfDescr)) {
-        final i = _lastIndex(vb.oid, _oidIfDescr);
+    Future<void> readNames() async {
+      for (final vb in await safeWalk(_oidIfName)) {
+        final i = _lastIndex(vb.oid, _oidIfName);
         final n = vb.asString.trim();
         if (i != null && n.isNotEmpty) byIdx[i] = n;
       }
+      if (byIdx.isEmpty) {
+        for (final vb in await safeWalk(_oidIfDescr)) {
+          final i = _lastIndex(vb.oid, _oidIfDescr);
+          final n = vb.asString.trim();
+          if (i != null && n.isNotEmpty) byIdx[i] = n;
+        }
+      }
+    }
+
+    // ⚡ **أسماءٌ محفوظة من مسحةٍ سابقة ([OltNameCache]) ⇒ عمود الحالة وحده.** ٢٧ أكتوبر، المالك: «كلش يتاخر بفتح
+    // الاولتي… سرعة الاستجابة وعرض المعلومات مهمّة جداً» — على «Moh» (‏٣٠٢ جهاز، رحلة ~٢٥٠ مللي، ~١٠٠ قيمة/ث) الأسماء
+    // نصف المسحة وهي لا تتغيّر بين فتحةٍ وأخرى. واجهةٌ لا يعرفها المحفوظ (ONU سُجّلت للتوّ) ⇒ تُقرأ الأسماء كما كان.
+    final cached = knownNames != null && knownNames.isNotEmpty;
+    // ⚡ عمود الحالة يبدأ مع الأسماء (سلسلتان متوازيتان) — على رابطٍ بعيد تتداخل رحلاتهما بدل أن تُصفّ.
+    final operWalk = safeWalk(_oidIfOper);
+    if (cached) {
+      byIdx.addAll(knownNames);
+    } else {
+      await readNames();
     }
     // ⚠️ **بنيةٌ فارغة ليست نتيجة — بل فشل.**
     //
@@ -501,7 +594,20 @@ class VsolOltApi {
       return index(vbs, base);
     }
 
-    final oper = await column(_oidIfOper);
+    var oper = index(await operWalk, _oidIfOper);
+    // المسح لم يُجب: السؤال الفرديّ للأجهزة الصغيرة (يحتاج الأسماء — لذا بعدها).
+    if (oper.isEmpty) oper = await column(_oidIfOper);
+    // ⚠️ حالةٌ بلا جواب = فشل لا «كلّها مفصولة»: تبقى آخر قراءةٍ صحيحة معروضة.
+    if (oper.isEmpty) {
+      throw VsolException('تعذّرت قراءة حالة الواجهات — لم يُجب الجهاز');
+    }
+    if (cached && oper.keys.any((i) => !byIdx.containsKey(i))) {
+      byIdx.clear();
+      await readNames();
+      if (byIdx.isEmpty) {
+        throw VsolException('تعذّرت قراءة جدول الواجهات — لم يُجب الجهاز');
+      }
+    }
 
     // ⚡ **لقطةٌ مبكّرة: أسماءٌ وحالةٌ فقط.**
     //
@@ -550,6 +656,7 @@ class VsolOltApi {
               txBytes: 0,
             ),
         ],
+        names: byIdx,
         narrowCounters: _narrowHosts.contains(snmp.host),
         rxAt: null,
         txAt: null,
@@ -612,6 +719,7 @@ class VsolOltApi {
     }
     return (
       rows: out,
+      names: byIdx,
       narrowCounters: wideCountersGone,
       rxAt: rxAt,
       txAt: txAt,
@@ -1129,10 +1237,15 @@ class VsolOltStats {
     this.txAt,
     this.profile = OltProfile.unknown,
     this.chassis,
+    this.ifNames = const {},
   });
 
   final String? sysDescr, sysName;
   final Duration? uptime;
+
+  /// أسماء **كلّ** واجهات الجهاز من آخر مسحة بنية (ifIndex ← ifName) — منها يُحفظ [OltNameCache] وتعرف
+  /// [VsolOltApi.refreshStatus] واجهةً جديدة (ONU سُجّلت للتوّ) من واجهةٍ معروفةٍ لا تُعرض (VLAN، إدارة).
+  final Map<int, String> ifNames;
 
   /// المصنّع بعد الهويّة الحيّة — يحكم جداول المصنّع والعناوين المعروضة.
   final OltProfile profile;
@@ -1182,6 +1295,7 @@ class VsolOltStats {
     DateTime? txAt,
     OltProfile? profile,
     BdcomChassis? chassis,
+    Map<int, String>? ifNames,
   }) =>
       VsolOltStats(
         sysDescr: sysDescr,
@@ -1195,6 +1309,7 @@ class VsolOltStats {
         txAt: txAt ?? this.txAt,
         profile: profile ?? this.profile,
         chassis: chassis ?? this.chassis,
+        ifNames: ifNames ?? this.ifNames,
       );
 
   /// Merge slow identity reads into the newest traffic sample.

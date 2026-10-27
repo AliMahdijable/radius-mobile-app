@@ -28,6 +28,7 @@ import 'fiber/fiber_watch.dart';
 import 'fcm_service.dart';
 import 'inbox_service.dart';
 import 'linked_companies.dart';
+import 'olt_name_cache.dart';
 import 'merged_mode.dart';
 import 'permissions_service.dart';
 import 'provider_service.dart';
@@ -135,8 +136,9 @@ class SessionManager {
       // وسطراهما فوق شاهدان.
       _guardAsync(
           'SubscribersOfflineCache.clear', SubscribersOfflineCache.clear()),
-      // وعلى القرص: أسماء المشتركين المربوطة بأجهزتهم لا تبقى بعد الخروج.
+      // وعلى القرص: أسماء المشتركين المربوطة بأجهزتهم لا تبقى بعد الخروج، ولا أسماء واجهات أولتات الحساب.
       if (clearAuth) _guardAsync('FiberStore.clear', FiberStore.clear()),
+      if (clearAuth) _guardAsync('OltNameCache.clear', OltNameCache.clear()),
     ]);
 
     // 3) FCM unregister (network — only on real logout).

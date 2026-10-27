@@ -78,6 +78,9 @@ class ZteOntService {
     }
   }
 
+  /// اعتماداتٌ جديدة ضُبطت لهذا العنوان: الرفض السابق يُنسى.
+  static void forget(String host) => _rejected.remove(host);
+
   /// دخولٌ بالاعتمادات التي ضبطها الوكيل وحدها (المشترك ثمّ افتراضات المدير) — لا تجربة كلمات مرورٍ من عندنا. اعتماداتٌ
   /// رُفضت على هذا العنوان لا تُعاد حتى تتغيّر.
   static Future<ZteOntSession?> loginConfigured(String host, String user, String pass) async {

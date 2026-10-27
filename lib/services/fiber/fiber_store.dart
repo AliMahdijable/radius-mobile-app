@@ -38,8 +38,10 @@ class FiberStore {
   static final Map<int, DateTime> _rxLoadedAt = {};
 
   static String _key(String admin) => 'fiber.layout.v1.$admin';
-  static String _rxKey(String admin, int olt) => 'fiber.rx.v1.$admin.$olt';
+  // v2 (٢٧ أكتوبر): قراءات VSOL V1600D قبل إصلاح «0.0070 mW(-21.55dBm)» كانت ‎0.01 — دفاترها تُترك.
+  static String _rxKey(String admin, int olt) => 'fiber.rx.v2.$admin.$olt';
   static String _pendingKey(String admin) => 'fiber.pending.v1.$admin';
+  static String _snapKey(String admin, int olt) => 'fiber.snap.v1.$admin.$olt';
 
   /// يحمّل مرّةً لكلّ جلسة (أو [force]). أوّل الطريق النسخة المحفوظة على الجهاز، ثمّ الخادم.
   static Future<void> ensureLoaded({bool force = false}) {
@@ -357,6 +359,28 @@ class FiberStore {
     return book;
   }
 
+  /// آخر لقطةٍ للأولت تُرسم فوراً في الفتحة القادمة ([FiberMonitor.snapshotJson]).
+  static Future<void> saveSnapshot(int oltId, Map<String, dynamic> json) async {
+    final admin = _admin ?? await AuthStorage.readAdminId() ?? '';
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setString(_snapKey(admin, oltId), jsonEncode(json));
+    } catch (_) {/* الفتحة القادمة تقرأ من الأولت */}
+  }
+
+  static Future<Map<String, dynamic>?> loadSnapshot(int oltId) async {
+    try {
+      final admin = _admin ?? await AuthStorage.readAdminId() ?? '';
+      final p = await SharedPreferences.getInstance();
+      final raw = p.getString(_snapKey(admin, oltId));
+      if (raw == null) return null;
+      final j = jsonDecode(raw);
+      return j is Map<String, dynamic> ? j : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<void> persistBook(int oltId, {DateTime? now}) async {
     final book = _books[oltId];
     if (book == null) return;
@@ -419,7 +443,7 @@ class FiberStore {
         for (final k in keys)
           if (k.startsWith('fiber.pending.v1.')) 'fiber.layout.v1.${k.substring('fiber.pending.v1.'.length)}',
       };
-      for (final k in keys.where((k) => k.startsWith('fiber.layout.v1.') || k.startsWith('fiber.rx.v1.')).toList()) {
+      for (final k in keys.where((k) => k.startsWith('fiber.layout.v1.') || k.startsWith('fiber.rx.') || k.startsWith('fiber.snap.')).toList()) {
         if (!keep.contains(k)) await p.remove(k);
       }
     } catch (_) {}

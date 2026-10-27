@@ -88,6 +88,7 @@ class _FiberLightScreenState extends State<FiberLightScreen> {
       body: FiberPage(
         onRefresh: _m.refreshNow,
         children: [
+          FiberStaleNotice(monitor: _m),
           Padding(
             padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
             child: Text(

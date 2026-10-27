@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/net/huawei_ont_service.dart';
@@ -263,6 +264,9 @@ class DeviceProbeApi {
     _snapCache.remove(k);
     _kindByIp.remove(k);
     _deadCache.remove(k);
+    _ontVendorByKey.remove(k);
+    // اعتماداتٌ جديدة تُجرَّب: الرفض السابق على هذا العنوان يُنسى (لا يُعاد إلّا المرفوض نفسه بلا تغيير).
+    ZteOntService.forget(ip.trim());
     _schedulePersist();
   }
 
@@ -514,27 +518,8 @@ class DeviceProbeApi {
 
     final overridesOnt = cfg?.deviceType == DeviceKind.ont;
     final overridesUbnt = cfg?.deviceType == DeviceKind.ubiquiti;
-
-    final ontUser = overridesOnt && (cfg?.username?.isNotEmpty ?? false)
-        ? cfg!.username!
-        : (defaults.ontUsername?.isNotEmpty == true
-            ? defaults.ontUsername!
-            : _kOntUser);
-    final ontPass = overridesOnt && (cfg?.password?.isNotEmpty ?? false)
-        ? cfg!.password!
-        : (defaults.ontPassword?.isNotEmpty == true
-            ? defaults.ontPassword!
-            : _kOntPass);
-    final ubntUser = overridesUbnt && (cfg?.username?.isNotEmpty ?? false)
-        ? cfg!.username!
-        : (defaults.ubntUsername?.isNotEmpty == true
-            ? defaults.ubntUsername!
-            : _kUbntUser);
-    final ubntPass = overridesUbnt && (cfg?.password?.isNotEmpty ?? false)
-        ? cfg!.password!
-        : (defaults.ubntPassword?.isNotEmpty == true
-            ? defaults.ubntPassword!
-            : _kUbntPass);
+    final c = credsFor(cfg, defaults);
+    final ontUser = c.ontUser, ontPass = c.ontPass, ubntUser = c.ubntUser, ubntPass = c.ubntPass;
 
     // Admin pinned kind → probe واحد فقط.
     if (overridesOnt) return _probeOnt(ip, ontUser, ontPass, kindKey);
@@ -556,6 +541,31 @@ class DeviceProbeApi {
     final ont = _probeOnt(ip, ontUser, ontPass, kindKey);
     final ubnt = _probeUbnt(ip, ubntUser, ubntPass);
     return _firstNonNull<DeviceHealthSnapshot>([ont, ubnt]);
+  }
+
+  /// اعتمادات الفحص: ما ضبطه الوكيل لهذا المشترك أوّلاً، ثمّ افتراضات المدير، ثمّ افتراض المصنّع.
+  ///
+  /// 🐛 ٢٧ أكتوبر (المالك على ZTE MH80: «خليت يوزر وباسورد وميجلب شي»): كانت اعتمادات المشترك تُهمل ما بقي النوع
+  /// «تلقائي» — لا تُستعمل إلّا إن اختار «ONT» أو «UBNT» صراحةً — فيُجرَّب الافتراض ويُرفض. الآن «تلقائي» يستعملها للنوعين:
+  /// كلّ فرعٍ لا يدخل إلّا على واجهته (ZTE بعد التعرّف، وهواوي عند صفحة رمزه، وUBNT على airOS).
+  @visibleForTesting
+  static ({String ontUser, String ontPass, String ubntUser, String ubntPass}) credsFor(
+    DeviceConfig? cfg,
+    AdminDeviceDefaults defaults,
+  ) {
+    final kind = cfg?.deviceType;
+    final ownForOnt = kind == null || kind == DeviceKind.ont;
+    final ownForUbnt = kind == null || kind == DeviceKind.ubiquiti;
+    final user = cfg?.username?.trim() ?? '';
+    final pass = cfg?.password ?? '';
+    String pick(bool own, String mine, String? admin, String factory) =>
+        own && mine.isNotEmpty ? mine : (admin?.isNotEmpty == true ? admin! : factory);
+    return (
+      ontUser: pick(ownForOnt, user, defaults.ontUsername, _kOntUser),
+      ontPass: pick(ownForOnt, pass, defaults.ontPassword, _kOntPass),
+      ubntUser: pick(ownForUbnt, user, defaults.ubntUsername, _kUbntUser),
+      ubntPass: pick(ownForUbnt, pass, defaults.ubntPassword, _kUbntPass),
+    );
   }
 
   /// آخر مورّد ONT نجح لكلّ عنوان (بمفتاح كاش النوع) — الفحص التالي يذهب إليه وحده.

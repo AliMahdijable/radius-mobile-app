@@ -18,6 +18,10 @@ class FakeSnmpAgent extends SnmpV2c {
   final List<List<String>> gets = [];
   int bulkCalls = 0;
 
+  /// مسوحاتٌ كاملة بقاعدتها، وكم قيمةً أُرجعت إجمالاً (مقياس كلفة الوكيل: ~١٠٠ قيمة/ث على VSOL).
+  final List<String> walks = [];
+  int values = 0;
+
   void put(String oid, Varbind vb) {
     _data[oid] = Varbind(oid: oid, rawTag: vb.rawTag, rawBytes: vb.rawBytes);
     _sorted = _data.keys.toList()..sort(compareOid);
@@ -51,10 +55,27 @@ class FakeSnmpAgent extends SnmpV2c {
     return out;
   }
 
+  /// للقياس: الجواب نفسه بلا انتظار.
+  List<Varbind> getSync(List<String> oids) {
+    values += oids.length;
+    return [for (final o in oids) _data[o] ?? _absent(o)];
+  }
+
+  List<Varbind> walkSync(String baseOid) {
+    final out = [
+      for (final k in _sorted)
+        if (k.startsWith('$baseOid.')) _data[k]!,
+    ];
+    walks.add(baseOid);
+    values += out.length;
+    return out;
+  }
+
   @override
   Future<List<Varbind>> get(List<String> oids) async {
     gets.add(List.of(oids));
     if (failGets) throw SnmpTimeoutException('fixture timeout');
+    values += oids.length;
     return [for (final o in oids) _data[o] ?? _absent(o)];
   }
 
@@ -80,10 +101,13 @@ class FakeSnmpAgent extends SnmpV2c {
 
   @override
   Future<List<Varbind>> walk(String baseOid, {int chunkSize = 25, int maxIterations = 100}) async {
-    return [
+    walks.add(baseOid);
+    final out = [
       for (final k in _sorted)
         if (k.startsWith('$baseOid.')) _data[k]!,
     ];
+    values += out.length;
+    return out;
   }
 }
 

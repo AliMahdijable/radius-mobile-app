@@ -51,6 +51,18 @@ class FiberText {
               ? '$n صناديق'
               : '$n صندوقاً';
 
+  /// «14:20» لليوم، و«أمس 14:20»، وإلّا «26/10 14:20».
+  static String when(DateTime t, {DateTime? now}) {
+    final l = t.toLocal();
+    final n = (now ?? DateTime.now()).toLocal();
+    final day = DateTime(l.year, l.month, l.day);
+    final today = DateTime(n.year, n.month, n.day);
+    final diff = today.difference(day).inDays;
+    if (diff <= 0) return clock(t);
+    if (diff == 1) return 'أمس ${clock(t)}';
+    return '${l.day}/${l.month} ${clock(t)}';
+  }
+
   static String clock(DateTime t, {bool seconds = false}) {
     final l = t.toLocal();
     String p(int n) => n.toString().padLeft(2, '0');

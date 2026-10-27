@@ -15,6 +15,7 @@ import '../../api/vsol_olt_api.dart';
 import '../../models/fiber_network.dart';
 import '../../models/network_device.dart';
 import '../device_stats_cache.dart';
+import '../olt_name_cache.dart';
 import 'fiber_band.dart';
 import 'fiber_onu.dart';
 import 'fiber_outage.dart';
@@ -33,7 +34,9 @@ class FiberBackend {
 
   SnmpV2c snmp(NetworkDevice d, String community) => SnmpV2c(host: d.ip, port: d.apiPort ?? 161, community: community);
 
-  Future<VsolOltStats> structure(NetworkDevice d, String community, OltProfile p) => VsolOltApi.fetchStats(
+  /// البنية: الأسماء والحالة — أو الحالة وحدها إن أُعطيت أسماءٌ محفوظة ([knownNames]) ولم تظهر واجهةٌ جديدة.
+  Future<VsolOltStats> structure(NetworkDevice d, String community, OltProfile p, {Map<int, String>? knownNames}) =>
+      VsolOltApi.fetchStats(
         host: d.ip,
         port: d.apiPort ?? 161,
         community: community,
@@ -41,17 +44,30 @@ class FiberBackend {
         withCounters: false,
         withGponDetails: false,
         profile: p,
+        knownNames: knownNames,
       );
+
+  /// الحالة وحدها فوق آخر بنية.
+  Future<({VsolOltStats stats, int unknown})?> status(NetworkDevice d, String community, VsolOltStats prev) =>
+      VsolOltApi.refreshStatus(host: d.ip, port: d.apiPort ?? 161, community: community, previous: prev);
 
   Future<VsolOltStats> hot(NetworkDevice d, String community, VsolOltStats prev) =>
       VsolOltApi.refreshHotCounters(host: d.ip, port: d.apiPort ?? 161, community: community, previous: prev);
 }
 
-/// مراقب أولتٍ واحد لشبكة الألياف: الحالة كلّ ١٥ث، والضوء كلّ دقيقة، وسبب السقوط ولحظته عند كلّ تغيّر، والأجهزة خلف كلّ
-/// ONU حين تُطلب ([wantDevices])، ثمّ كشف الأعطال وتبليغ الخادم (فيصل الإشعار لكلّ أجهزة الحساب).
+/// مراقب أولتٍ واحد لشبكة الألياف — لكلّ أولت (VSOL وBDCOM، EPON وGPON).
 ///
-/// يعمل ما دام له مستخدم ([acquire]/[release]): شاشات الألياف على الهاتف، والحاسبة بالخلفيّة ([background]، إيقاعٌ أبطأ).
-/// لا يكتب في [DeviceStatsCache] (لقطةٌ بلا عدّادات تُفقر لوحة الأولت) — يقرأ منه بذرةً فقط.
+/// ⚡ **الأهمّ أوّلاً** (٢٧ أكتوبر، المالك: «كلش يتاخر… سرعة الاستجابة وعرض المعلومات مهمّة جداً»). كانت الدورة الأولى
+/// على «Moh» (‏٣٠٢ جهاز، رحلة ~٢٥٠ مللي، وكيلٌ يعالج ~١٠٠ قيمة/ث) تطلب كلّ شيءٍ قبل أن تعرض شيئاً: ~٢٣٥٠ قيمة و٩٠ ثانية.
+/// الآن مراحل، وبعد كلّ مرحلةٍ عرض:
+///   ٠. لقطةٌ محفوظة من الفتحة السابقة تُعرض فوراً ([stale] — الشاشة تقول «محفوظة من …»)
+///   ١. الحالة: عمود ifOperStatus فوق آخر بنية (الأسماء محفوظة) — عدد المتّصلين لكلّ منفذ
+///   ٢. لحظة السقوط وسببه للمفصولة وحدها، بالتوازي ⇒ كشف الأعطال
+///   ٣. الضوء: عمود الاستقبال وحده (الإرسال والحرارة لجهازٍ يُفتح)
+///   ٤. أسماء الوكيل كلّ نصف ساعة، والأجهزة خلف كلّ ONU حين تُطلب ([wantDevices])
+///
+/// يعمل ما دام له مستخدم ([acquire]/[release]): شاشات الألياف على الهاتف، والحاسبة بالخلفيّة ([background]، إيقاعٌ أبطأ
+/// وبلا عدّادات المنافذ). لا يكتب في [DeviceStatsCache] (لقطةٌ بلا عدّادات تُفقر لوحة الأولت) — يقرأ منه بذرةً فقط.
 class FiberMonitor extends ChangeNotifier {
   FiberMonitor._(this.device) : profile = OltProfile.fromDevice(device);
 
@@ -80,13 +96,14 @@ class FiberMonitor extends ChangeNotifier {
     _all.clear();
   }
 
-  static const _structureEvery = Duration(seconds: 15);
-  static const _bgStructureEvery = Duration(seconds: 30);
+  static const _statusEvery = Duration(seconds: 15);
+  static const _bgStatusEvery = Duration(seconds: 30);
   static const _opticsEvery = Duration(seconds: 60);
-  static const _bgOpticsEvery = Duration(minutes: 2);
-  static const _namesEvery = Duration(minutes: 10);
+  static const _bgOpticsEvery = Duration(minutes: 3);
+  static const _namesEvery = Duration(minutes: 30);
   static const _devicesEvery = Duration(minutes: 5);
   static const _rxUploadEvery = Duration(minutes: 10);
+  static const _snapshotEvery = Duration(minutes: 1);
 
   NetworkDevice device;
   OltProfile profile;
@@ -100,6 +117,9 @@ class FiberMonitor extends ChangeNotifier {
   String? error;
   bool busy = false;
   DateTime? lastOkAt;
+
+  /// المعروض لقطةٌ محفوظة من فتحةٍ سابقة ([lastOkAt] وقتها) — الحيّة في الطريق.
+  bool stale = false;
 
   /// شاشة الربط/التشخيص تطلب الأجهزة خلف كلّ ONU (ثقيلة — لا تُقرأ بلا طلب).
   bool wantDevices = false;
@@ -118,8 +138,14 @@ class FiberMonitor extends ChangeNotifier {
   DateTime? _gponAt, _devicesAt;
   final Map<String, bool> _wasOnline = {};
   bool _first = true;
-  DateTime? _rxUploadAt;
+  bool _needStructure = false;
+  DateTime? _rxUploadAt, _snapAt;
   bool _capsDone = false;
+  Future<void>? _snapLoading;
+
+  /// حالات اللقطة المحفوظة ووقتها: لقطةٌ حديثة (< نصف ساعة) ⇒ الدورة الأولى تقرأ لحظة السقوط وسببه لما تغيّر منذها وحده.
+  Map<String, bool>? _snapStates;
+  DateTime? _snapTakenAt;
 
   /// الأعطال المبلَّغة: مكانها ← سجلّها على الخادم (أو محلّيّ بلا رقم).
   final Map<String, ({FiberEventRecord? record, Set<String> keys, DateTime startedAt})> _open = {};
@@ -143,6 +169,7 @@ class FiberMonitor extends ChangeNotifier {
     }
     if (!was) {
       _seed();
+      if (stats == null) _snapLoading ??= _loadSnapshot();
       _schedule(Duration.zero);
     } else if (!background && _users == 1) {
       // شاشةٌ فُتحت على مراقبٍ خلفيّ: قراءةٌ فوريّة بإيقاع الشاشة.
@@ -170,7 +197,7 @@ class FiberMonitor extends ChangeNotifier {
     _timer = Timer(d, () async {
       await tick();
       if (!running) return;
-      final base = background ? _bgStructureEvery : _structureEvery;
+      final base = background ? _bgStatusEvery : _statusEvery;
       final paced = _cost * 2;
       _schedule(paced > base ? paced : base);
     });
@@ -197,6 +224,7 @@ class FiberMonitor extends ChangeNotifier {
     notifyListeners();
     final clockStart = DateTime.now();
     try {
+      await _snapLoading;
       final community = await backend.community(device);
       if (community == null) {
         error = 'أدخل الـcommunity من إعدادات الجهاز';
@@ -205,111 +233,170 @@ class FiberMonitor extends ChangeNotifier {
       final snmp = backend.snmp(device, community);
       final now = clock();
 
-      // ١. البنية (الحالة) + عدّادات المنافذ.
-      var s = await backend.structure(device, community, profile);
-      if (s.profile.identified) profile = s.profile;
-      if (s.isEmpty) {
-        error = 'الأولت لم يُجب بجدوله كاملاً — نعيد بعد قليل';
-        return;
-      }
+      // ── ١. الحالة: عمود الحالة فوق آخر بنية؛ البنية حين لا بنية، أو ظهرت واجهةٌ جديدة/غابت واجهة.
       final prev = stats;
       final prevAt = statsAt;
-      try {
-        s = await backend.hot(device, community, s);
-      } catch (_) {/* بلا عدّادات هذه المرّة */}
-      if (prev != null && prevAt != null && prev.hasCounters && s.hasCounters) {
-        final fresh = VsolTraffic.between(prev, s, now.difference(prevAt));
-        for (final p in s.ponPorts) {
-          final v = fresh[p.label];
-          if (v != null && v.known) ponRates[p.label] = v;
+      VsolOltStats? s;
+      if (prev != null && prev.ifNames.isNotEmpty && !_needStructure) {
+        final r = await backend.status(device, community, prev);
+        if (r != null) {
+          s = r.stats;
+          if (r.unknown > 0) _needStructure = true;
         }
       }
-
-      // ٢. التغيّرات: لحظتها وسببها.
+      if (s == null) {
+        // أسماءٌ محفوظة (هنا أو من لوحة الأولت) ⇒ الحالة وحدها، إلّا إن طُلبت البنية لواجهةٍ جديدة.
+        final known = _needStructure
+            ? null
+            : (prev != null && prev.ifNames.isNotEmpty ? prev.ifNames : await OltNameCache.get(device.id));
+        s = await backend.structure(device, community, profile, knownNames: known);
+        if (s.profile.identified) profile = s.profile;
+        if (s.isEmpty) {
+          error = 'الأولت لم يُجب بجدوله كاملاً — نعيد بعد قليل';
+          return;
+        }
+        _needStructure = false;
+        unawaited(OltNameCache.put(device.id, s.ifNames));
+      }
+      var cur = s;
+      if (_first && _snapStates != null && _snapTakenAt != null && now.difference(_snapTakenAt!) < const Duration(minutes: 30)) {
+        // ما بقي مفصولاً منذ اللقطة يحمل لحظته وسببه منها — لا يُعاد سؤاله.
+        _wasOnline.addAll(_snapStates!);
+        _first = false;
+      }
+      _snapStates = null;
       final changed = <VsolOnu>[];
       final offlineNow = <VsolOnu>[];
-      for (final o in s.onus) {
+      for (final o in cur.onus) {
         final was = _wasOnline[o.label];
         if (was != null && was != o.online) changed.add(o);
         if (!o.online) offlineNow.add(o);
       }
-      final targets = _first ? s.onus : changed;
-      if (targets.isNotEmpty) {
-        final ch = await OltFiberReads.lastChanges(snmp, targets.map((o) => o.ifIndex), now: now);
-        for (final o in targets) {
-          final t = ch[o.ifIndex];
-          if (t != null) {
-            _changes[o.ifIndex] = t;
-          } else if (!_first && changed.contains(o)) {
-            // الأولت لا يعطي اللحظة: لحظة رصدنا (دقّة الإيقاع) — فتتجمّع أجهزة الدورة الواحدة عطلاً واحداً.
-            _changes[o.ifIndex] = now;
-          }
-        }
-      }
-      final reasonTargets = _first ? offlineNow : [for (final o in changed) if (!o.online) o];
-      if (reasonTargets.isNotEmpty) {
-        _reasons.addAll(await OltFiberReads.dropReasons(snmp, profile, reasonTargets));
+      final firstPass = _first;
+      _first = false;
+      for (final o in cur.onus) {
+        _wasOnline[o.label] = o.online;
       }
       for (final o in changed) {
         if (o.online) _reasons.remove(o.ifIndex);
       }
-      for (final o in s.onus) {
-        _wasOnline[o.label] = o.online;
-      }
-      _first = false;
-
-      // ٣. الضوء.
-      final opticsEvery = background ? _bgOpticsEvery : _opticsEvery;
-      if (force || _opticsAt == null || now.difference(_opticsAt!) >= opticsEvery) {
-        final online = s.onus.where((o) => o.online).toList();
-        Map<int, BdcomOnuReading> r = const {};
-        if (profile.readsBdcomEponTables) {
-          r = await BdcomEpon.readings(snmp, online.where((o) => o.technology == VsolPonTechnology.epon).map((o) => o.ifIndex));
-        } else if (profile.readsVsolTables) {
-          r = await OltFiberReads.vsolOptics(snmp, online);
-        }
-        _optics
-          ..clear()
-          ..addAll(r);
-        _opticsAt = now;
-        final book = await FiberStore.loadBook(oltId, now: now);
-        for (final o in online) {
-          final rx = r[o.ifIndex]?.rxDbm;
-          if (FiberBands.plausible(rx)) book.record(o.label, rx!, now);
-        }
-      }
-
-      // ٤. الأسماء (بطيئة التغيّر).
-      if (_namesAt == null || now.difference(_namesAt!) >= _namesEvery) {
-        _names
-          ..clear()
-          ..addAll(await OltFiberReads.names(snmp, profile, s.onus));
-        _namesAt = now;
-      }
-
-      // ٥. الأجهزة خلف كلّ ONU (للربط) — بطلب.
-      if (wantDevices && (force || _devicesAt == null || now.difference(_devicesAt!) >= _devicesEvery)) {
-        await _readDevices(snmp, s);
-        _devicesAt = now;
-      }
-
-      stats = s;
+      stats = cur;
       statsAt = now;
       lastOkAt = now;
       error = null;
+      stale = false;
       _rebuild();
+      notifyListeners(); // ⚡ أوّل عرضٍ حيّ: المتّصل/المفصول لكلّ منفذ
 
-      // ٦. الأعطال.
+      // عدّادات المنافذ (ترفك PON) بعد أوّل عرض — للشاشة وحدها، الخلفيّة لا ترسمها.
+      if (!background) {
+        try {
+          cur = await backend.hot(device, community, cur);
+        } catch (_) {/* بلا عدّادات هذه المرّة */}
+        if (prev != null && prevAt != null && prev.hasCounters && cur.hasCounters) {
+          final fresh = VsolTraffic.between(prev, cur, now.difference(prevAt));
+          for (final p in cur.ponPorts) {
+            final v = fresh[p.label];
+            if (v != null && v.known) ponRates[p.label] = v;
+          }
+        }
+        if (cur.hasCounters) {
+          stats = cur;
+          notifyListeners();
+        }
+      }
+
+      // ── ٢. لحظة السقوط وسببه — للمفصولة وحدها (أوّل مرّة كلّها، بعدها ما تغيّر)، بالتوازي.
+      final changeTargets = firstPass ? offlineNow : changed;
+      final reasonTargets = firstPass ? offlineNow : [for (final o in changed) if (!o.online) o];
+      if (changeTargets.isNotEmpty || reasonTargets.isNotEmpty) {
+        final got = await Future.wait<Object>([
+          changeTargets.isEmpty
+              ? Future.value(const <int, DateTime>{})
+              : OltFiberReads.lastChanges(snmp, changeTargets.map((o) => o.ifIndex), now: now),
+          reasonTargets.isEmpty
+              ? Future.value(const <int, FiberDropReason>{})
+              : OltFiberReads.dropReasons(snmp, profile, reasonTargets),
+        ]);
+        final ch = got[0] as Map<int, DateTime>;
+        for (final o in changeTargets) {
+          final t = ch[o.ifIndex];
+          if (t != null) {
+            _changes[o.ifIndex] = t;
+          } else if (!firstPass) {
+            // الأولت لا يعطي اللحظة: لحظة رصدنا (دقّة الإيقاع) — فتتجمّع أجهزة الدورة الواحدة عطلاً واحداً.
+            _changes[o.ifIndex] = now;
+          }
+        }
+        _reasons.addAll(got[1] as Map<int, FiberDropReason>);
+        _rebuild();
+        notifyListeners();
+      }
       await _syncOutages(now);
 
-      // ٧. القدرات مرّةً بالجلسة، والضوء للخادم كلّ عشر دقائق.
+      // ── ٣. الضوء: عمود الاستقبال وحده، بإيقاعه.
+      final opticsEvery = background ? _bgOpticsEvery : _opticsEvery;
+      if (force || _opticsAt == null || now.difference(_opticsAt!) >= opticsEvery) {
+        final online = [for (final o in cur.onus) if (o.online) o];
+        final rx = await OltFiberReads.rxColumn(snmp, profile, online);
+        _opticsAt = now;
+        if (rx != null) {
+          for (final o in online) {
+            final old = _optics[o.ifIndex];
+            final v = rx[o.ifIndex];
+            if (v == null && old == null) continue;
+            // الإرسال والحرارة والفولتيّة من آخر قراءةٍ كاملة لهذا الجهاز (تُجدَّد حين يُفتح) — الاستقبال من هذه.
+            _optics[o.ifIndex] = BdcomOnuReading(
+              rxDbm: v,
+              txDbm: old?.txDbm,
+              tempC: old?.tempC,
+              voltV: old?.voltV,
+              vendor: old?.vendor,
+              module: old?.module,
+            );
+          }
+          final book = await FiberStore.loadBook(oltId, now: now);
+          for (final o in online) {
+            final v = rx[o.ifIndex];
+            if (FiberBands.plausible(v)) book.record(o.label, v!, now);
+          }
+          _rebuild();
+          notifyListeners();
+        }
+      }
+
+      // ── ٤. أسماء الوكيل (بطيئة التغيّر، ومحفوظة مع اللقطة).
+      if (_namesAt == null || now.difference(_namesAt!) >= _namesEvery) {
+        final n = await OltFiberReads.names(snmp, profile, cur.onus);
+        _namesAt = now;
+        if (n != null) {
+          _names
+            ..clear()
+            ..addAll(n);
+          _rebuild();
+          notifyListeners();
+        }
+      }
+
+      // الأجهزة خلف كلّ ONU (للربط) — بطلب.
+      if (wantDevices && (force || _devicesAt == null || now.difference(_devicesAt!) >= _devicesEvery)) {
+        await _readDevices(snmp, cur);
+        _devicesAt = now;
+        _rebuild();
+      }
+
+      // القدرات مرّةً بالجلسة، والضوء للخادم كلّ عشر دقائق، واللقطة على الجهاز كلّ دقيقة.
       if (!_capsDone) {
         _capsDone = true;
-        unawaited(_probeCaps(snmp, s, now));
+        unawaited(_probeCaps(snmp, cur, now));
       }
       if (_rxUploadAt == null || now.difference(_rxUploadAt!) >= _rxUploadEvery) {
         _rxUploadAt = now;
         unawaited(_uploadRx(now));
+      }
+      if (_snapAt == null || now.difference(_snapAt!) >= _snapshotEvery) {
+        _snapAt = now;
+        unawaited(_saveSnapshot());
       }
     } on VsolException catch (e) {
       error = e.message;
@@ -322,6 +409,135 @@ class FiberMonitor extends ChangeNotifier {
       busy = false;
       notifyListeners();
     }
+  }
+
+  // ── اللقطة المحفوظة ───────────────────────────────────────────────────────────────────
+
+  /// ما يُرسم فوراً في الفتحة القادمة: البنية والحالة والأسماء والضوء ولحظات السقوط وأسبابها — لا عدّادات ولا ماكات
+  /// أجهزة المشتركين خلف الـONU.
+  Map<String, dynamic>? snapshotJson() {
+    final s = stats;
+    final at = statsAt;
+    if (s == null || at == null || s.isEmpty) return null;
+    return {
+      'v': 1,
+      'at': at.toUtc().toIso8601String(),
+      'vendor': profile.vendor.name,
+      'model': profile.model,
+      'pons': [
+        for (final p in s.ponPorts) [p.index, p.slot, p.port, p.up ? 1 : 0, p.technology.index, p.onuTotal, p.onuOnline],
+      ],
+      'ups': [
+        for (final u in s.uplinks) [u.index, u.name, u.up ? 1 : 0, u.speedMbps],
+      ],
+      'onus': [
+        for (final o in s.onus) [o.ifIndex, o.slot, o.ponPort, o.onuId, o.online ? 1 : 0, o.technology.index, o.mac, o.serial, o.name],
+      ],
+      'ifn': {for (final e in s.ifNames.entries) '${e.key}': e.value},
+      'names': {for (final e in _names.entries) '${e.key}': e.value},
+      'rx': {
+        for (final e in _optics.entries)
+          if (e.value.rxDbm != null) '${e.key}': e.value.rxDbm,
+      },
+      'ch': {for (final e in _changes.entries) '${e.key}': e.value.toUtc().toIso8601String()},
+      'rs': {for (final e in _reasons.entries) '${e.key}': e.value.name},
+      if (_namesAt != null) 'namesAt': _namesAt!.toUtc().toIso8601String(),
+    };
+  }
+
+  Future<void> _saveSnapshot() async {
+    final j = snapshotJson();
+    if (j != null) await FiberStore.saveSnapshot(oltId, j);
+  }
+
+  Future<void> _loadSnapshot() async {
+    final j = await FiberStore.loadSnapshot(oltId);
+    if (j == null || stats != null) return;
+    try {
+      applySnapshot(j);
+    } catch (_) {/* لقطةٌ تالفة تُترك — القراءة الحيّة في الطريق */}
+  }
+
+  /// يرسم لقطةً محفوظة ([stale] حتى تصل الحيّة).
+  @visibleForTesting
+  void applySnapshot(Map<String, dynamic> j) {
+    if (stats != null || j['v'] != 1) return;
+    final at = DateTime.parse(j['at'] as String);
+    int i(Object? v) => (v as num).toInt();
+    Map<int, T> byIdx<T>(Object? m, T? Function(Object?) f) => {
+          for (final e in ((m as Map?) ?? const {}).entries)
+            if (int.tryParse('${e.key}') != null && f(e.value) != null) int.parse('${e.key}'): f(e.value) as T,
+        };
+    final vendor = OltVendor.values.where((v) => v.name == j['vendor']).firstOrNull ?? OltVendor.unknown;
+    final s = VsolOltStats(
+      profile: OltProfile(vendor: vendor, model: j['model'] as String?, identified: vendor != OltVendor.unknown, oltLikely: true),
+      ponPorts: [
+        for (final p in (j['pons'] as List))
+          VsolPonPort(
+            index: i(p[0]),
+            slot: i(p[1]),
+            port: i(p[2]),
+            up: p[3] == 1,
+            rxBytes: 0,
+            txBytes: 0,
+            technology: VsolPonTechnology.values[i(p[4])],
+            onuTotal: i(p[5]),
+            onuOnline: i(p[6]),
+          ),
+      ],
+      uplinks: [
+        for (final u in (j['ups'] as List))
+          VsolUplink(index: i(u[0]), name: u[1] as String, up: u[2] == 1, speedMbps: i(u[3]), rxBytes: 0, txBytes: 0),
+      ],
+      onus: [
+        for (final o in (j['onus'] as List))
+          VsolOnu(
+            ifIndex: i(o[0]),
+            slot: i(o[1]),
+            ponPort: i(o[2]),
+            onuId: i(o[3]),
+            online: o[4] == 1,
+            technology: VsolPonTechnology.values[i(o[5])],
+            mac: o[6] as String?,
+            serial: o[7] as String?,
+            name: o[8] as String?,
+          ),
+      ],
+      ifNames: Map.unmodifiable(byIdx<String>(j['ifn'], (v) => v is String ? v : null)),
+    );
+    if (s.isEmpty) return;
+    stats = s;
+    statsAt = at;
+    lastOkAt = at;
+    stale = true;
+    if (s.profile.identified) profile = s.profile;
+    _names.addAll(byIdx<String>(j['names'], (v) => v is String ? v : null));
+    for (final e in byIdx<double>(j['rx'], (v) => v is num ? v.toDouble() : null).entries) {
+      _optics[e.key] = BdcomOnuReading(rxDbm: e.value);
+    }
+    _changes.addAll(byIdx<DateTime>(j['ch'], (v) => v is String ? DateTime.tryParse(v) : null));
+    _reasons.addAll(
+        byIdx<FiberDropReason>(j['rs'], (v) => FiberDropReason.values.where((r) => r.name == v).firstOrNull));
+    // أسماء الوكيل قُرئت قبل أقلّ من نصف ساعة ⇒ لا تُعاد في الدورة الأولى.
+    final namesAt = j['namesAt'] is String ? DateTime.tryParse(j['namesAt'] as String) : null;
+    if (namesAt != null) _namesAt = namesAt; // ولو بلا أسماء: أولتٌ لا يسمّي أجهزته لا يُمسح كلّ فتحة
+    _snapStates = {for (final o in s.onus) o.label: o.online};
+    _snapTakenAt = at;
+    _rebuild();
+    notifyListeners();
+  }
+
+  /// لحظة اتّصال جهازٍ واحد حين يُفتح (التشخيص/الفنّي) — الدورة الأولى تقرؤها للمفصولة وحدها.
+  Future<void> ensureChangedAt(VsolOnu o) async {
+    if (_changes.containsKey(o.ifIndex)) return;
+    final community = await backend.community(device);
+    if (community == null) return;
+    final r = await OltFiberReads.lastChanges(backend.snmp(device, community), [o.ifIndex], now: clock());
+    final t = r[o.ifIndex];
+    if (t == null) return;
+    _changes[o.ifIndex] = t;
+    _rebuild();
+    notifyListeners();
   }
 
   Future<void> _readDevices(SnmpV2c snmp, VsolOltStats s) async {

@@ -118,11 +118,23 @@ class SnmpV2c {
   Future<Uint8List> _send(Uint8List packet) async {
     RawDatagramSocket? socket;
     StreamSubscription? sub;
+    Timer? resend;
     try {
       socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
       final addr = InternetAddress.tryParse(host) ??
           (await InternetAddress.lookup(host)).first;
       socket.send(packet, addr, port);
+      // ⚡ حزمةٌ ضاعت على رابطٍ بعيد (أولتٌ عبر VPN، ~٢٥٠ مللي) كانت تكلّف المهلة كلّها (٤–٥ث) وتُسقط دفعتها كاملة —
+      // ٢٠ دفعةً ضائعة = ٨٠ ثانيةً في أوّل فتحٍ لشبكة الألياف على أولتٍ فيه ٣٠٢ جهاز (٢٧ أكتوبر). نعيد إرسالها مرّةً بعد
+      // ٤٥٪ من المهلة على المنفذ نفسه وبالرقم نفسه: أيّ ردٍّ يصل (للأولى أو المعادة) يُقبل، والمهلة الكلّيّة كما هي.
+      if (timeout >= const Duration(seconds: 2)) {
+        final s = socket;
+        resend = Timer(timeout * 0.45, () {
+          try {
+            s.send(packet, addr, port);
+          } catch (_) {/* المنفذ أُغلق — انتهى الطلب */}
+        });
+      }
 
       final completer = Completer<Uint8List>();
       sub = socket.listen((event) {
@@ -144,6 +156,7 @@ class SnmpV2c {
             'تحقّق: الـcommunity المحفوظة، SNMP مفعّل على الجهاز، الـport مفتوح.');
       });
     } finally {
+      resend?.cancel();
       // 2026-08-28 (Google 2027 audit): subscription كان يُلغى فقط في
       // success branch — timeout/onError كانا يتركانه معلّقاً (leak
       // على كل poll لأي جهاز غير متجاوب). الآن unconditional cancel.
