@@ -201,36 +201,95 @@ class ZteOntService {
     }
   }
 
-  /// قراءة الضوء — أسماء صفحة الضوء المحتملة بالترتيب (MH80 = EPON). الطراز من عنوان الصفحة نفسها.
+  /// قراءة الضوء — أسماء صفحة الضوء المعروفة بالترتيب (MH80 = EPON)، ثمّ ما تسمّيه قائمة الجهاز نفسه. الطراز من عنوان الصفحة.
   ///
   /// 🐛 ٢٧ أكتوبر (D401 عند المالك: «دخلنا للجهاز بس ما قرينا الضوء»): كان أوّل اسمٍ غائب يوقف البحث فلا يُجرَّب
   /// الباقي. الآن صفحةٌ لا تُجاب ⇒ التالية، وصفحة الدخول (الجلسة انتهت) وحدها توقف. ما جُرِّب يبقى أثراً مختصراً للتشخيص
   /// (الحالة والطول وشكل قيمة الضوء — بلا قيمة).
+  ///
+  /// 🐛 وبعده (أثر D401: `epon:200/- gpon:200/- pon:200/-`): الأسماء الثلاثة تُجاب ولا ذكر للضوء فيها — صفحته باسمٍ آخر.
+  /// فأوّلاً `start.ghtml` كما يفتحها المتصفّح بعد الدخول، ثمّ صفحات الضوء المحتملة من أسماء الصفحات التي يذكرها الجهاز نفسه
+  /// (صفحات حالةٍ فيها pon/opt/power — [ZteOntParse.opticalCandidates]، ثلاثٌ على الأكثر). وما لم يُقرأ يُعرف أهو صفحةٌ
+  /// لم ترجع أم صيغةٌ لا نعرفها ([lastReadUnknown]).
   static Future<OntOpticalInfo?> fetchOptical(ZteOntSession s) async {
     _pageTrace.remove(s.baseUrl);
+    _pageInfo.remove(s.baseUrl);
+    _unknownFormat.remove(s.baseUrl);
     final tried = <String>[];
-    for (final name in const ['epon_status_link_info_t.gch', 'gpon_status_link_info_t.gch', 'pon_status_link_info_t.gch']) {
+    final menu = <String>{};
+    final names = <String>{};
+    var title = '';
+    var answered = false;
+    void finish() {
+      _pageTrace[s.baseUrl] = tried.join(' ');
+      final c = ZteOntParse.opticalCandidates(menu);
+      _pageInfo[s.baseUrl] = [
+        't=${title.isEmpty ? '-' : title}',
+        'm=${menu.length}',
+        if (c.isNotEmpty) 'c=${c.take(6).map(ZteOntParse.stem).join(',')}',
+        if (names.isNotEmpty) 'n=${names.take(8).join(',')}',
+      ].join(' ');
+      if (answered) _unknownFormat.add(s.baseUrl);
+    }
+
+    final st = await _getRaw(s, '/start.ghtml', referer: '${s.baseUrl}/');
+    tried.add('st:${st.code}${st.login ? 'L' : ''}${st.html == null ? '' : '/${ZteOntParse.kb(st.html!)}'}');
+    if (st.login) {
+      finish();
+      return null;
+    }
+    if (st.html != null) menu.addAll(ZteOntParse.pageNames(st.html!));
+    final queue = <String>[..._opticalPages];
+    for (var i = 0; i < queue.length; i++) {
+      final name = queue[i];
       final r = await _pageRaw(s, name);
       final html = r.html;
-      tried.add('${name.split('_').first}:${r.code}${r.login ? 'L' : ''}${html == null ? '' : '/${ZteOntParse.rxForm(html)}'}');
+      tried.add('${ZteOntParse.shortPage(name)}:${r.code}${r.login ? 'L' : ''}'
+          '${html == null ? '' : '/${ZteOntParse.rxForm(html)}/${ZteOntParse.kb(html)}'}');
       if (r.login) break;
       if (html == null) continue;
+      answered = true;
       final o = ZteOntParse.optical(html);
       if (o != null) return o;
+      if (title.isEmpty) title = ZteOntParse.model(html);
+      menu.addAll(ZteOntParse.pageNames(html));
+      names.addAll(ZteOntParse.powerNames(html));
+      for (final c in ZteOntParse.opticalCandidates(menu)) {
+        if (queue.length >= _opticalPages.length + _maxExtraPages) break;
+        if (!queue.contains(c)) queue.add(c);
+      }
     }
-    _pageTrace[s.baseUrl] = tried.join(' ');
+    finish();
     return null;
   }
 
-  /// صفحة حالةٍ بحالتها: html (null حين لم تُجب 200)، والرمز، وهل عادت صفحة الدخول.
-  static Future<({String? html, String code, bool login})> _pageRaw(ZteOntSession s, String name) async {
+  /// أسماء صفحة الضوء المعروفة بالترتيب.
+  static const _opticalPages = ['epon_status_link_info_t.gch', 'gpon_status_link_info_t.gch', 'pon_status_link_info_t.gch'];
+
+  /// صفحاتٌ إضافيّة من قائمة الجهاز على الأكثر (~٠٫٦–١ث لكلٍّ).
+  static const _maxExtraPages = 3;
+
+  /// ما عرفناه عن صفحات آخر قراءةٍ لم تنجح: العنوان وعدد الصفحات التي يذكرها الجهاز والمرشّحة للضوء وأسماء متغيّراتٍ
+  /// تشبه الضوء — أسماءٌ بلا قيم.
+  static final _pageInfo = <String, String>{};
+
+  /// أجهزةٌ أجابت صفحاتها ولم نجد فيها ضوءاً بصيغةٍ نعرفها (لا صفحةٌ لم ترجع).
+  static final _unknownFormat = <String>{};
+
+  static String? lastPageInfo(ZteOntSession s) => _pageInfo[s.baseUrl];
+
+  /// آخر قراءةٍ على [s] أجابت صفحاتها ولم يُعرف الضوء فيها — طرازٌ بصيغةٍ جديدة، لا صفحةٌ تأخّرت.
+  static bool lastReadUnknown(ZteOntSession s) => _unknownFormat.contains(s.baseUrl);
+
+  static Future<({String? html, String code, bool login})> _getRaw(ZteOntSession s, String path,
+      {Map<String, String>? query, String? referer}) async {
     try {
       final res = await _dio(s.baseUrl).get<String>(
-        '/getpage.gch',
-        queryParameters: {'pid': '1002', 'nextpage': name},
+        path,
+        queryParameters: query,
         options: Options(headers: {
           if (s.cookie.isNotEmpty) 'Cookie': s.cookie,
-          'Referer': '${s.baseUrl}/start.ghtml',
+          'Referer': referer ?? '${s.baseUrl}/start.ghtml',
         }),
       );
       final body = res.data ?? '';
@@ -241,6 +300,10 @@ class ZteOntService {
       return (html: null, code: _errName(e), login: false);
     }
   }
+
+  /// صفحة حالةٍ بحالتها: html (null حين لم تُجب 200)، والرمز، وهل عادت صفحة الدخول.
+  static Future<({String? html, String code, bool login})> _pageRaw(ZteOntSession s, String name) =>
+      _getRaw(s, '/getpage.gch', query: {'pid': '1002', 'nextpage': name});
 
   static Future<void> logout(ZteOntSession s) async {
     try {
@@ -320,11 +383,15 @@ class ZteOntParse {
     return left > 0 && left <= 60 ? left : null;
   }
 
+  /// `var <name> = "…"` — بتنصيصٍ مزدوج أو مفرد أو بلا، وبأيّ حالة أحرف.
   static String? _var(String html, String name) =>
-      RegExp('var\\s+$name\\s*=\\s*"(-?\\d+(?:\\.\\d+)?)"').firstMatch(html)?.group(1);
+      RegExp('var\\s+$name\\s*=\\s*["\']?\\s*(-?\\d+(?:\\.\\d+)?)', caseSensitive: false).firstMatch(html)?.group(1);
 
+  /// خليّةٌ بمعرّفها، وقد تتبع القيمةَ «dBm».
   static String? _cell(String html, String id) =>
-      RegExp('id="$id"[^>]*>\\s*(-?\\d+(?:\\.\\d+)?)\\s*<').firstMatch(html)?.group(1);
+      RegExp('id\\s*=\\s*["\']?$id(?!\\w)["\']?[^>]*>\\s*(-?\\d+(?:\\.\\d+)?)\\s*(?:dBm)?\\s*<', caseSensitive: false)
+          .firstMatch(html)
+          ?.group(1);
 
   static String _fixed(num v, int digits) => v.toStringAsFixed(digits);
 
@@ -334,20 +401,86 @@ class ZteOntParse {
   /// وخليّة `id="Frm_RxPower"`.
   static String? _val(String html, String name) =>
       _var(html, name) ??
-      RegExp('Transfer_meaning\\(\\s*[\'"]$name[\'"]\\s*,\\s*[\'"](-?\\d+(?:\\.\\d+)?)[\'"]').firstMatch(html)?.group(1) ??
+      RegExp('Transfer_meaning\\(\\s*[\'"]$name[\'"]\\s*,\\s*[\'"](-?\\d+(?:\\.\\d+)?)[\'"]', caseSensitive: false)
+          .firstMatch(html)
+          ?.group(1) ??
       _cell(html, 'Frm_$name');
 
-  /// شكل قيمة الضوء في الصفحة للتشخيص (بلا القيمة): var/tm/frm بأرقامٍ مقنّعة، أو «rx?» حين يُذكر الاسم بغير صيغة
-  /// معروفة، أو «-» حين لا يُذكر.
+  /// شكل قيمة الضوء في الصفحة للتشخيص (بلا القيمة): var/tm/frm بأرقامٍ مقنّعة، أو «rx?» يتبعه ما بعد الاسم مباشرةً
+  /// بأرقامٍ مقنّعة حين يُذكر بغير صيغةٍ معروفة (شكل الصيغة لا قيمتها)، أو «-» حين لا يُذكر.
   static String rxForm(String html) {
     String mask(String v) => v.replaceAll(RegExp(r'\d'), '9');
     final v = _var(html, 'RxPower');
     if (v != null) return 'var:${mask(v)}';
-    final t = RegExp('Transfer_meaning\\(\\s*[\'"]RxPower[\'"]\\s*,\\s*[\'"]([^\'"]{0,16})').firstMatch(html)?.group(1);
+    final t = RegExp('Transfer_meaning\\(\\s*[\'"]RxPower[\'"]\\s*,\\s*[\'"]([^\'"]{0,16})', caseSensitive: false)
+        .firstMatch(html)
+        ?.group(1);
     if (t != null) return 'tm:${mask(t)}';
     final c = _cell(html, 'Frm_RxPower');
     if (c != null) return 'frm:${mask(c)}';
-    return html.contains('RxPower') ? 'rx?' : '-';
+    final i = html.toLowerCase().indexOf('rxpower');
+    if (i < 0) return '-';
+    final after = html.substring(i + 7, (i + 7 + 24).clamp(0, html.length));
+    return 'rx?${mask(after).replaceAll(RegExp(r'\s+'), '_')}';
+  }
+
+  /// طول الصفحة بالكيلوبايت للأثر: القالب الكامل ~١٣٠ ك.ب على MH80، وصفحة خطأٍ أو دخولٍ أقصر بكثير.
+  static String kb(String html) => '${(html.length / 1024).round()}k';
+
+  /// اسم الصفحة بلا `_t.gch` — المرشّحة تُذكر به كاملاً فتُضاف بعينها.
+  static String stem(String name) => name.replaceAll(RegExp(r'(_t)?\.gch$'), '');
+
+  /// اسم صفحةٍ مختصرٌ لأثر ما جُرِّب: بلا `_t.gch` ولا «status/info» (`epon_status_link_info_t.gch` ⇒ `epon_link`).
+  static String shortPage(String name) {
+    final parts = stem(name).split('_').where((p) => p != 'status' && p != 'info').toList();
+    return parts.isEmpty ? stem(name) : parts.join('_');
+  }
+
+  /// أسماء الصفحات التي يذكرها الجهاز في صفحته (قائمته وروابطه) — أسماءٌ فقط.
+  static Set<String> pageNames(String html) => {
+        for (final m in RegExp(r'\b([A-Za-z0-9_]{3,60}\.gch)\b').allMatches(html))
+          if (m.group(1)!.toLowerCase() != 'getpage.gch') m.group(1)!,
+      };
+
+  static const _knownOptical = {'epon_status_link_info_t.gch', 'gpon_status_link_info_t.gch', 'pon_status_link_info_t.gch'};
+
+  /// صفحات الضوء المحتملة من أسماء [names]: صفحة حالةٍ أو معلومات (لا إعدادات ولا أوامر) فيها opt/power أوّلاً ثمّ pon.
+  static List<String> opticalCandidates(Iterable<String> names) {
+    int score(String n) {
+      final l = n.toLowerCase();
+      return (l.contains('opt') || l.contains('power') ? 4 : 0) + (l.contains('pon') ? 2 : 0) + (l.contains('link') ? 1 : 0);
+    }
+
+    bool readOnly(String n) {
+      final l = n.toLowerCase();
+      return (l.contains('status') || l.contains('info')) &&
+          !RegExp(r'conf|set|upgrade|reboot|restore|reset|manag|mgr|auth|pass|user|del|add|save|apply').hasMatch(l);
+    }
+
+    final out = [
+      for (final n in {...names})
+        if (score(n) >= 2 && readOnly(n) && !_knownOptical.contains(n)) n,
+    ];
+    out.sort((a, b) {
+      final d = score(b) - score(a);
+      return d != 0 ? d : a.compareTo(b);
+    });
+    return out;
+  }
+
+  /// أسماء متغيّراتٍ وخلايا تشبه الضوء في الصفحة (`var X =`، `Transfer_meaning('X'`، `id="X"`) — الأسماء بلا قيمها،
+  /// لمعرفة صيغة طرازٍ جديد.
+  static List<String> powerNames(String html) {
+    final out = <String>{};
+    final ident = RegExp('(?:var\\s+(\\w{2,32})\\s*=|Transfer_meaning\\(\\s*[\'"](\\w{2,32})[\'"]|id\\s*=\\s*[\'"]?(\\w{2,32}))');
+    final like = RegExp(r'power|pwr|optic|dbm|rx|tx', caseSensitive: false);
+    final counter = RegExp(r'byte|pkt|packet|frame|cnt|count|err|drop|ctx|text', caseSensitive: false);
+    for (final m in ident.allMatches(html)) {
+      final n = m.group(1) ?? m.group(2) ?? m.group(3)!;
+      if (like.hasMatch(n) && !counter.hasMatch(n)) out.add(n);
+      if (out.length >= 12) break;
+    }
+    return out.toList();
   }
 
   static OntOpticalInfo? optical(String html) {

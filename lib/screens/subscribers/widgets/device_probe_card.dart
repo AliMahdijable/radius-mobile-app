@@ -869,6 +869,10 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           title: 'دخلنا للجهاز بس ما قرينا الضوء',
           hint: 'صفحة الضوء ما رجعت — حدّث بعد لحظات',
         ),
+      ProbeIssue.unknownFormat => (
+          title: 'دخلنا للجهاز بس صفحة ضوئه جديدة علينا',
+          hint: 'انبعث شكل صفحته (بلا أيّ قيم) حتى ينضاف هذا الطراز',
+        ),
       ProbeIssue.needsCredentials => (
           title: 'جهاز ZTE يحتاج يوزر وباسورده',
           hint: 'اكتبهن من زرّ الإعدادات — الباسورد مكتوب على ظهر الجهاز',

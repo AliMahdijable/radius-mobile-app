@@ -29,6 +29,9 @@ enum ProbeIssue {
   /// دخلنا وما رجعت صفحة الضوء.
   readFailed,
 
+  /// دخلنا والصفحات تُجاب، ولا ضوء فيها بصيغةٍ نعرفها — طرازٌ جديد (أثره يُبلَّغ بلا قيم).
+  unknownFormat,
+
   /// جهاز ZTE ولا يوزر له من الوكيل — لا نجرّب افتراضاً من عندنا.
   needsCredentials,
 }
@@ -69,6 +72,9 @@ class DeviceProbeApi {
 
   /// عناوين بُلِّغ أثر «دخلنا ولم نقرأ الضوء» لها في هذه الجلسة.
   static final _readReported = <String>{};
+
+  /// طول جزء رسالة التشخيص (الخادم يقصّ عند ٣٠٠).
+  static const _diagChunk = 290;
 
   /// ما سجّله فرع ZTE في الفحص الجاري (بالعنوان) — يُقرأ بعد انتهائه.
   static final _zteIssue = <String, ({ProbeIssue issue, int? lockLeft, DateTime at, String trace})>{};
@@ -325,17 +331,20 @@ class DeviceProbeApi {
       if (userKey != null) _issueByUser.remove(userKey);
     }
     // جهازٌ دخلناه ولم نقرأ ضوءه = صيغةٌ لا نعرفها (D401، ٢٧ أكتوبر) ⇒ أثره يُبلَّغ مرّةً لكلّ عنوانٍ بالجلسة ولو بلا «حفظ وفحص».
-    if (!reportNow && snap == null && fresh?.issue == ProbeIssue.readFailed && _readReported.add(ipKey)) reportNow = true;
+    final readMiss = fresh?.issue == ProbeIssue.readFailed || fresh?.issue == ProbeIssue.unknownFormat;
+    if (!reportNow && snap == null && readMiss && _readReported.add(ipKey)) reportNow = true;
     if (reportNow) {
       // مرحلة الفشل بلا اعتمادات ولا عنوان — تصل سجلّ الخادم فيُعرف السبب بالدليل.
-      ClientDiag.report(
-        'device_probe',
-        code: snap != null ? 'ok' : (fresh?.issue ?? ProbeIssue.unreachable).name,
-        message: snap != null
-            ? 'kind=${snap.kind.name} vendor=${snap.ont?.vendor ?? '-'}'
-            : 'type=${cfg?.deviceType?.name ?? 'auto'} ${fresh?.trace ?? (timedOut ? 'timeout' : 'no-zte-trace')}'
-                ' steps=${_steps(effectiveIp, started)} ms=${now.difference(started).inMilliseconds}',
-      );
+      final code = snap != null ? 'ok' : (fresh?.issue ?? ProbeIssue.unreachable).name;
+      final text = snap != null
+          ? 'kind=${snap.kind.name} vendor=${snap.ont?.vendor ?? '-'}'
+          : 'type=${cfg?.deviceType?.name ?? 'auto'} ${fresh?.trace ?? (timedOut ? 'timeout' : 'no-zte-trace')}'
+              ' steps=${_steps(effectiveIp, started)} ms=${now.difference(started).inMilliseconds}';
+      // السجلّ يقصّ الرسالة عند ٣٠٠ حرف ⇒ أثر الصفحات الطويل يُرسل بجزأين (الثاني يبدأ بـ«+»).
+      for (var i = 0; i < text.length && i < 2 * _diagChunk; i += _diagChunk) {
+        ClientDiag.report('device_probe',
+            code: code, message: '${i == 0 ? '' : '+'}${text.substring(i, (i + _diagChunk).clamp(0, text.length))}');
+      }
     }
     if (snap != null) {
       _kindByIp[ipKey] = snap.kind;
@@ -649,8 +658,20 @@ class DeviceProbeApi {
 
     // First-time أو kind cache cleared — parallel race.
     final ont = _probeOnt(ip, ontUser, ontPass, kindKey, ontSet: c.ontSet);
-    final ubnt = _probeUbnt(ip, ubntUser, ubntPass);
+    final ubnt = _probeUbnt(ip, ubntUser, ubntPass, unlessZte: true);
     return _firstNonNull<DeviceHealthSnapshot>([ont, ubnt]);
+  }
+
+  /// تعرّف ZTE الجاري لكلّ عنوان — فرع الـONT وفرع Ubiquiti يتشاركانه (طلبٌ واحد).
+  static final _zteDetecting = <String, Future<bool>>{};
+
+  static Future<bool> _isZte(String ip) {
+    final running = _zteDetecting[ip];
+    if (running != null) return running;
+    final f = ZteOntService.detect(ip);
+    _zteDetecting[ip] = f;
+    f.whenComplete(() => _zteDetecting.remove(ip));
+    return f;
   }
 
   /// اعتمادات الفحص: ما ضبطه الوكيل لهذا المشترك أوّلاً، ثمّ افتراضات المدير، ثمّ افتراض المصنّع.
@@ -699,7 +720,7 @@ class DeviceProbeApi {
     }
     // التعرّف أوّلاً (صفحةٌ بلا دخول) ثمّ فرعٌ واحد: هواوي لا يطرق جهاز ZTE بطلباته وهو يدخل، ولا العكس.
     _zteMark(ip, 'detect');
-    final zte = ZteOntService.detect(ip);
+    final zte = _isZte(ip);
     Future<DeviceHealthSnapshot?> huawei() async => await zte ? null : _probeHuawei(ip, user, pass);
     Future<DeviceHealthSnapshot?> zteBranch() async =>
         await zte ? _probeZte(ip, user, pass, detected: true, ontSet: ontSet) : null;
@@ -714,7 +735,7 @@ class DeviceProbeApi {
       String ip, String user, String pass, {bool detected = false, bool ontSet = true}) async {
     if (!detected) {
       _zteMark(ip, 'detect');
-      if (!await ZteOntService.detect(ip)) return null;
+      if (!await _isZte(ip)) return null;
     }
     if (!ontSet) {
       _zteIssue[ip] = (issue: ProbeIssue.needsCredentials, lockLeft: null, at: DateTime.now(), trace: 'zte no-creds');
@@ -742,11 +763,12 @@ class DeviceProbeApi {
       final optical = await ZteOntService.fetchOptical(session);
       _zteMark(ip, 'readDone');
       if (optical == null) {
+        final info = ZteOntService.lastPageInfo(session);
         _zteIssue[ip] = (
-          issue: ProbeIssue.readFailed,
+          issue: ZteOntService.lastReadUnknown(session) ? ProbeIssue.unknownFormat : ProbeIssue.readFailed,
           lockLeft: null,
           at: DateTime.now(),
-          trace: 'zte read ${ZteOntService.lastPageTrace(session) ?? 'no-rx'}',
+          trace: 'zte read ${ZteOntService.lastPageTrace(session) ?? 'no-rx'}${info == null ? '' : ' | $info'}',
         );
         return null;
       }
@@ -841,8 +863,11 @@ class DeviceProbeApi {
     return (ip: effectiveIp, user: user, pass: pass);
   }
 
+  /// [unlessZte]: جهازٌ نوعه غير معروف بعد — دخول Ubiquiti لا يُرسل على جهاز ZTE (اعتماداتٌ لغير جهازها، و٢٧ أكتوبر
+  /// صار يسبق فرع ZTE إليه حين طالت قراءته).
   static Future<DeviceHealthSnapshot?> _probeUbnt(
-      String ip, String user, String pass) async {
+      String ip, String user, String pass, {bool unlessZte = false}) async {
+    if (unlessZte && await _isZte(ip)) return null;
     final session =
         await UbiquitiService.login(ip, user, pass, budget: _probeCap);
     if (session == null) return null;

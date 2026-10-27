@@ -110,17 +110,68 @@ void main() {
       final s = await ZteOntService.loginConfigured(d.host, 'agent', 'secret-1');
       expect(await ZteOntService.fetchOptical(s!), isNull);
       final trace = ZteOntService.lastPageTrace(s)!;
-      expect(trace, contains('epon:404'));
-      expect(trace, contains('gpon:200L'));
-      expect(trace.split(' '), hasLength(2), reason: 'لا محاولة بعد انتهاء الجلسة');
+      expect(trace, startsWith('st:404 '), reason: 'start.ghtml أوّلاً كما يفتحها المتصفّح');
+      expect(trace, contains('epon_link:404'));
+      expect(trace, contains('gpon_link:200L'));
+      expect(trace.split(' '), hasLength(3), reason: 'لا محاولة بعد انتهاء الجلسة');
+      expect(ZteOntService.lastReadUnknown(s), isFalse, reason: 'صفحةٌ لم ترجع ليست صيغةً جديدة');
     });
 
     test('شكل قيمة الضوء للتشخيص بلا القيمة', () {
       expect(ZteOntParse.rxForm('var RxPower = "-186300";'), 'var:-999999');
       expect(ZteOntParse.rxForm("Transfer_meaning('RxPower','-31.20');"), 'tm:-99.99');
       expect(ZteOntParse.rxForm('<td id="Frm_RxPower">-21.5</td>'), 'frm:-99.9');
-      expect(ZteOntParse.rxForm('<b>RxPower</b>'), 'rx?');
+      expect(ZteOntParse.rxForm('<b>RxPower</b>'), 'rx?</b>');
+      expect(ZteOntParse.rxForm('<td>RxPower:</td><td>-21.50 dBm</td>'), 'rx?:</td><td>-99.99_dBm</td',
+          reason: 'شكل الصيغة بأرقامٍ مقنّعة');
       expect(ZteOntParse.rxForm('<html></html>'), '-');
+    });
+
+    test('صيغٌ قريبة من MH80 تُقرأ: تنصيصٌ مفرد، وحالة أحرف، وخليّةٌ تتبعها dBm', () {
+      expect(ZteOntParse.optical("var rxpower = '-215000'; var txpower = '23000';")?.rxPower, '-21.5');
+      expect(ZteOntParse.optical('<td id="Frm_RxPower">-21.50 dBm</td><td id="Frm_TxPower">2.3 dBm</td>')?.txPower, '2.3');
+      expect(ZteOntParse.optical('<td id="Frm_RxPowerMax">-8</td>'), isNull, reason: 'اسمٌ أطول ليس قدرة الاستقبال');
+    });
+
+    test('صفحة الضوء باسمٍ آخر ⇒ تُكتشف من أسماء صفحات الجهاز، ولا تُفتح صفحة إعدادات', () async {
+      const template = '<html><head><title>D401</title></head><body><script>'
+          "menu('getpage.gch?pid=1002&nextpage=status_dev_info_t.gch');"
+          "menu('getpage.gch?pid=1002&nextpage=pon_conf_t.gch');"
+          "menu('getpage.gch?pid=1002&nextpage=pon_optical_info_t.gch');"
+          '</script></body></html>';
+      for (final p in ['epon_status_link_info_t.gch', 'gpon_status_link_info_t.gch', 'pon_status_link_info_t.gch']) {
+        d.pages[p] = (200, template);
+      }
+      d.pages['pon_optical_info_t.gch'] =
+          (200, '<html><title>D401</title><td id="Frm_RxPower">-24.10 dBm</td><td id="Frm_TxPower">2.20 dBm</td></html>');
+      final s = await ZteOntService.loginConfigured(d.host, 'agent', 'secret-1');
+      final o = await ZteOntService.fetchOptical(s!);
+      expect(o?.rxPower, '-24.1');
+      expect(o?.model, 'D401');
+      expect(d.nextpages, contains('pon_optical_info_t.gch'));
+      expect(d.nextpages, isNot(contains('pon_conf_t.gch')), reason: 'صفحات الإعدادات لا تُفتح');
+      expect(d.nextpages, isNot(contains('status_dev_info_t.gch')), reason: 'ليست صفحة ضوء');
+    });
+
+    test('الصفحات تُجاب ولا ضوء فيها ⇒ «صيغةٌ جديدة»، والأثر أسماءٌ بلا قيم', () async {
+      d.strictPages = true;
+      const template = '<html><head><title>D401</title></head><body><script>var RxOptPwr = "-21.5";'
+          "menu('pon_status_optic_info_t.gch');</script><td id=\"Frm_TxOptPwr\">2.1</td></body></html>";
+      for (final p in ['epon_status_link_info_t.gch', 'gpon_status_link_info_t.gch', 'pon_status_link_info_t.gch']) {
+        d.pages[p] = (200, template);
+      }
+      final s = await ZteOntService.loginConfigured(d.host, 'agent', 'secret-1');
+      expect(await ZteOntService.fetchOptical(s!), isNull);
+      expect(ZteOntService.lastReadUnknown(s), isTrue);
+      final trace = ZteOntService.lastPageTrace(s)!;
+      expect(trace, contains('epon_link:200/-/0k'));
+      expect(trace, contains('pon_optic:404'), reason: 'المرشّحة من القائمة جُرِّبت');
+      final info = ZteOntService.lastPageInfo(s)!;
+      expect(info, contains('t=D401'));
+      expect(info, contains('c=pon_status_optic_info'));
+      expect(info, contains('RxOptPwr'));
+      expect(info, contains('Frm_TxOptPwr'));
+      expect('$trace $info', isNot(contains('21')), reason: 'لا قيمة في الأثر');
     });
 
     test('عدّاد القفل كما على MH80 الحيّ', () {
@@ -224,14 +275,33 @@ void main() {
       d.pages['gpon_status_link_info_t.gch'] = (404, 'Not Found');
       d.pages['pon_status_link_info_t.gch'] = (200, '<html><title>D401</title><b>RxPower</b></html>');
       expect(await DeviceProbeApi.probe(fallbackIp: d.host, force: true), isNull);
-      expect(DeviceProbeApi.issueFor(ip: d.host)?.issue, ProbeIssue.readFailed);
+      expect(DeviceProbeApi.issueFor(ip: d.host)?.issue, ProbeIssue.unknownFormat, reason: 'الصفحة أُجيبت والضوء بصيغةٍ لا نعرفها');
       await DeviceProbeApi.probe(fallbackIp: d.host, force: true);
       await Future<void>.delayed(const Duration(milliseconds: 100));
       final diag = api.requests.where((r) => r.uri.path == '/api/client-diag').toList();
       expect(diag, hasLength(1), reason: 'مرّةً لكلّ عنوان بالجلسة لا كلّ فحص');
       final msg = '${(diag.single.data as Map)['message']}';
-      expect(msg, contains('epon:404'));
-      expect(msg, contains('pon:200/rx?'), reason: 'الاسم موجود بصيغةٍ لا نعرفها');
+      expect(msg, contains('epon_link:404'));
+      expect(msg, contains('pon_link:200/rx?'), reason: 'الاسم موجود بصيغةٍ لا نعرفها');
+      expect(msg, contains('| t=D401'));
+    });
+
+    test('أثرٌ أطول من حدّ السجلّ ⇒ يصل بجزأين، والثاني يبدأ بـ«+»', () async {
+      api.defaults = {'ontUsername': 'agent', 'ontPassword': 'secret-1'};
+      d.strictPages = true;
+      final menu = [for (var i = 0; i < 8; i++) "menu('pon_status_optical_power_long_name_number_${i}_info_t.gch');"].join();
+      final template = '<html><title>D401</title><script>$menu</script></html>';
+      for (final p in ['epon_status_link_info_t.gch', 'gpon_status_link_info_t.gch', 'pon_status_link_info_t.gch']) {
+        d.pages[p] = (200, template);
+      }
+      await DeviceProbeApi.probe(fallbackIp: d.host, force: true, retryLogin: true);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      final parts = [
+        for (final r in api.requests.where((r) => r.uri.path == '/api/client-diag')) '${(r.data as Map)['message']}',
+      ];
+      expect(parts, hasLength(2));
+      expect(parts.every((p) => p.length <= 291), isTrue);
+      expect(parts.where((p) => p.startsWith('+')), hasLength(1));
     });
 
     test('جهازٌ لا يجاوب ⇒ «لم يُتمكّن من الوصول»', () async {
@@ -253,10 +323,14 @@ class _FakeMh80 {
   int lockAt = 0;
   Duration pageDelay = Duration.zero;
 
-  /// صفحاتٌ بعينها (الاسم ⇒ الحالة والجسم) — ما سواها صفحة ضوء MH80.
+  /// صفحاتٌ بعينها (الاسم ⇒ الحالة والجسم) — ما سواها صفحة ضوء MH80، أو 404 مع [strictPages].
   final pages = <String, (int, String)>{};
+  bool strictPages = false;
   final posts = <String>[];
   final paths = <String>[];
+
+  /// أسماء الصفحات المطلوبة بالترتيب.
+  final nextpages = <String>[];
   String? pageCookie;
   bool _stopped = false;
 
@@ -311,7 +385,9 @@ class _FakeMh80 {
       if (req.uri.path == '/getpage.gch') {
         pageCookie = req.headers.value('cookie');
         if (pageDelay > Duration.zero) await Future<void>.delayed(pageDelay);
-        final custom = pages[req.uri.queryParameters['nextpage']];
+        final name = req.uri.queryParameters['nextpage'] ?? '';
+        nextpages.add(name);
+        final custom = pages[name] ?? (strictPages ? (404, 'Not Found') : null);
         res.statusCode = custom?.$1 ?? 200;
         res.headers.contentType = ContentType.html;
         res.write(custom?.$2 ?? _optical);
