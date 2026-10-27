@@ -221,15 +221,18 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       // "أعلى iface ↓" و "أعلى iface ↑" اللي فوق (طلب المستخدم 2026-08-14).
       // كل سامبل يحمل max rx + max tx عند تلك اللحظة (من أي ether/sfp أو بريدج).
       int maxRxSampleBps = 0, maxTxSampleBps = 0;
+      var measured = false;
       for (final iface in stats.interfaces) {
         if (!_isHeadline(iface)) continue;
         final rate = _rates[iface.name];
         if (rate != null) {
+          measured = true;
           if (rate.rxBps > maxRxSampleBps) maxRxSampleBps = rate.rxBps;
           if (rate.txBps > maxTxSampleBps) maxTxSampleBps = rate.txBps;
         }
       }
-      if (_lastFetch != null) {
+      // لا منفذ قِيس ⇒ لا نقطة: كان الرسم يخطّ «0 bps» لجهازٍ لم تصل عدّاداته (SwOS عبر SNMP قبل إصلاحه).
+      if (_lastFetch != null && measured) {
         _history.add(_TrafficSample(
             at: now, rxBps: maxRxSampleBps, txBps: maxTxSampleBps));
         if (_history.length > _maxHistory) _history.removeAt(0);
