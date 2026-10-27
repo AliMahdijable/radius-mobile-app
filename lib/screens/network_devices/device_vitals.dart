@@ -250,6 +250,8 @@ class DeviceVitals {
     if (d.brand == 'cisco' && !{'ssh', 'telnet'}.contains(d.protocol)) {
       return 'اختر SSH أو Telnet';
     }
+    // ميكروتك: API (ثمّ الويب وSSH تلقائيّاً) أو SSH أو SNMP — Telnet وحده لا يُقرأ.
+    if (d.brand == 'mikrotik' && d.protocol == 'telnet') return 'اختر API أو SSH أو SNMP';
     return null;
   }
 
@@ -340,15 +342,11 @@ class DeviceVitals {
 
   static Future<ProbeResult> _mikrotik(NetworkDevice d,
       Map<String, dynamic> creds, CounterSample? prev, bool detailed) async {
-    final user = (creds['user'] ?? '').toString();
-    final pass = (creds['pass'] ?? '').toString();
-    if (user.isEmpty || pass.isEmpty) throw StateError('بيانات دخول ناقصة');
-
-    final s = await MikrotikApi.fetchStats(
+    final s = await MikrotikApi.fetchStatsFor(
       ip: d.ip,
-      port: d.apiPort ?? 8728,
-      user: user,
-      pass: pass,
+      protocol: d.protocol,
+      apiPort: d.apiPort,
+      creds: creds,
       vitalsOnly: !detailed,
     );
 
@@ -383,6 +381,10 @@ class DeviceVitals {
           rxRate: c.rxRate,
           uptimeSec: c.uptime,
         ),
+      // 60 GHz: الطرف الآخر من `/interface/w60g/monitor` — لا جدول تسجيلٍ لها. سرعة الربط باتّجاه الإرسال وحده،
+      // فلا رقم للاستقبال (لا صفر).
+      for (final l in s.w60gLinks)
+        if (l.connected) PeerLink(name: l.remoteMac ?? l.iface, signal: l.rssi, txRate: l.phyRateMbps),
     ];
 
     return ProbeResult(
@@ -419,7 +421,18 @@ class DeviceVitals {
         model: s.boardName.isNotEmpty ? s.boardName : null,
         ports: ports,
         peers: peers,
-        peersLabel: 'العملاء اللاسلكيّون',
+        peersLabel: s.w60gLinks.isNotEmpty && s.wirelessClients.isEmpty ? 'الطرف الآخر' : 'العملاء اللاسلكيّون',
+        link: [
+          for (final l in s.w60gLinks) ...[
+            (k: 'وصلة ${l.iface}', v: l.connected ? 'متّصلة' : 'غير متّصلة'),
+            if (l.rssi != null) (k: 'الإشارة', v: '${l.rssi} dBm'),
+            if (l.signalPercent != null) (k: 'جودة الإشارة', v: '${l.signalPercent}%'),
+            if (l.phyRateMbps != null) (k: 'سرعة الربط', v: MikrotikW60gLink.rateText(l.phyRateMbps!)),
+            if (l.mcs != null) (k: 'MCS', v: '${l.mcs}'),
+            if (l.distanceMeters != null) (k: 'المسافة', v: MikrotikW60gLink.distanceText(l.distanceMeters!)),
+            if (l.frequency != null) (k: 'التردّد', v: '${l.frequency} MHz'),
+          ],
+        ],
         extras: [
           if (s.pppActiveCount > 0)
             (k: 'جلسات PPP', v: '${s.pppActiveCount}'),

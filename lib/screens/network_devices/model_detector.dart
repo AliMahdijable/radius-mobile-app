@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import '../../api/mikrotik_binary_api.dart';
+import '../../api/mikrotik_api.dart';
 import '../../api/cisco_api.dart';
 import '../../api/edgeswitch_api.dart';
 import '../../api/network_devices_api.dart';
@@ -147,28 +147,8 @@ class ModelDetector {
   static Future<String?> _mikrotik(NetworkDevice d) async {
     if (!d.hasCredentials) return null;
     final c = await NetworkDevicesApi.getCredentials(d.id);
-    final user = (c['user'] ?? '').toString();
-    final pass = (c['pass'] ?? '').toString();
-    if (user.isEmpty) return null;
-    final client = MikrotikBinaryClient(
-      host: d.ip,
-      port: d.apiPort ?? 8728,
-      user: user,
-      pass: pass,
-      timeout: const Duration(seconds: 5),
-    );
-    try {
-      await client.connect();
-      await client.login();
-      // `.proplist` يقصر الحمولة على العمود المطلوب وحده.
-      final rows = await client
-          .query(['/system/resource/print', '=.proplist=board-name']);
-      if (rows.isEmpty) return null;
-      final v = rows.first['board-name'];
-      return (v == null || v.isEmpty) ? null : v;
-    } finally {
-      client.close();
-    }
+    // بطريق اللوحة نفسه: API ثمّ الويب ثمّ SSH، أو SNMP لمن اختاره.
+    return MikrotikApi.boardNameFor(ip: d.ip, protocol: d.protocol, apiPort: d.apiPort, creds: c);
   }
 
   static Future<String?> _ubnt(NetworkDevice d) async {
