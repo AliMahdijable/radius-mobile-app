@@ -184,6 +184,8 @@ void main() {
       final distinct = {for (var i = 1; i <= 10; i++) i: 'user$i'};
       expect(OltFiberReads.cleanNames(distinct), distinct);
       expect(OltFiberReads.cleanNames({1: 'Ali', 2: 'Ali'}), {1: 'Ali', 2: 'Ali'}, reason: 'تكرارٌ قليل ليس حشواً');
+      expect(OltFiberReads.cleanNames({1: 'EPON01ONU12', 2: 'EPON0/1:3', 3: 'PON1:ONU5', 4: 'ONU0/1:1', 5: 'karar77'}), {5: 'karar77'},
+          reason: 'لقطةٌ قديمة تحمل أسماء الواجهات الافتراضيّة ⇒ تُنظَّف عند التحميل');
     });
 
     test('ماك أجهزة VSOL EPON من ifPhysAddress بمسحةٍ واحدة: الصفريّ وغير المطلوب لا يُعدّان', () async {

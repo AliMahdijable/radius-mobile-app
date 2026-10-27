@@ -225,6 +225,9 @@ class OltFiberReads {
     return out;
   }
 
+  /// اسم الواجهة الافتراضيّ («EPON01ONU12» على V1600D، «EPON0/1:12»، «PON1:ONU12»، «ONU0/1:1») — ليس اسم مشترك.
+  static final _defaultIfName = RegExp(r'^([eg]?pon[\d/:._-]*onu[\d/:._-]*|(onu|epon|gpon)[\d/:._-]*)$', caseSensitive: false);
+
   /// قيمٌ يملأ بها الأولت خانة الاسم الفارغة — ليست أسماء.
   static final _placeholderName = RegExp(r'^(null|none|nil|n/?a|unknown|undefined|default|empty|-+|0+)$', caseSensitive: false);
 
@@ -233,7 +236,7 @@ class OltFiberReads {
   static Map<int, String> cleanNames(Map<int, String> names) {
     final out = <int, String>{
       for (final e in names.entries)
-        if (!_placeholderName.hasMatch(e.value.trim())) e.key: e.value,
+        if (!_placeholderName.hasMatch(e.value.trim()) && !_defaultIfName.hasMatch(e.value.trim())) e.key: e.value,
     };
     if (out.length < 5) return out;
     final counts = <String, int>{};
@@ -396,9 +399,7 @@ class OltFiberReads {
       if (vb == null || vb.isAbsent || vb.rawTag != 0x04) return null;
       // UTF-8 (أسماءٌ عربيّة)، بلا حروف تحكّم.
       final s = utf8.decode(vb.rawBytes, allowMalformed: true).replaceAll(RegExp(r'[\x00-\x1F\x7F�]'), '').trim();
-      if (s.isEmpty || s.length > 64 || RegExp(r'^(onu|epon|gpon)[\d/:._-]*$', caseSensitive: false).hasMatch(s)) return null;
-      // الاسم الافتراضيّ للواجهة («EPON01ONU12» على V1600D، «EPON0/1:12»، «PON1:ONU12») ليس اسماً.
-      if (RegExp(r'^[eg]?pon[\d/:._-]*onu[\d/:._-]*$', caseSensitive: false).hasMatch(s)) return null;
+      if (s.isEmpty || s.length > 64 || _defaultIfName.hasMatch(s)) return null;
       // «NULL» ونحوه حشوٌ لا اسم — يُرفض هنا فيُقرأ وصف VSOL بدله.
       if (_placeholderName.hasMatch(s)) return null;
       return s;
