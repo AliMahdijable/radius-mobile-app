@@ -138,6 +138,8 @@ class _BroadcastCampaignsScreenState extends State<BroadcastCampaignsScreen> {
             child: Text(
               c.createdAt == null ? 'حملة' : _when(c.createdAt!),
               style: AppType.muted(color: AppColors.textMid),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           _Pill(pill, tone: tone),
