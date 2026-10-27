@@ -103,24 +103,48 @@ class MikrotikSnmp {
       } catch (_) {/* جدولٌ لا يدعمه الإصدار — يبقى فارغاً */}
     }
 
-    await walk(hrProcessorLoad, chunk: 8);
-    await walk(hrStorageEntry, chunk: 12);
+    // SwOS (CSS/netPower Lite — sysDescr «… SwOS v2.21»، حيّاً ٢٧ أكتوبر): لا معالج ولا ذاكرة ولا لاسلكيّ، ووكيله لا
+    // يجيب GETBULK بأكثر من عمود (مهلةٌ كاملة) — فكان جدول المنافذ كلّه يسقط: لا ترفك. يُسأل عمّا يحمله وحده.
+    final swos = all[sysDescr]?.asString.contains('SwOS') ?? false;
+    if (!swos) {
+      await walk(hrProcessorLoad, chunk: 8);
+      await walk(hrStorageEntry, chunk: 12);
+    }
     await walk(gaugeEntry);
     if (onPartialReady != null) {
       try {
         onPartialReady(build(all, vitalsOnly: true, withInterfaces: false));
       } catch (_) {}
     }
-    try {
-      put(await _pairedColumns(snmp, ifColumns));
-    } catch (_) {/* بلا منافذ — تبقى الأرقام الحيويّة */}
-    if (!vitalsOnly) {
+    final single = swos || _noPairedBulk.contains('$host:$port');
+    var paired = false;
+    if (!single) {
+      try {
+        put(await _pairedColumns(snmp, ifColumns));
+        paired = true;
+      } catch (_) {
+        // وكيلٌ لا يقبل الأعمدة المتوازية — يُحفظ فلا تُدفع مهلته في كلّ نبضة.
+        _noPairedBulk.add('$host:$port');
+      }
+    }
+    if (!paired) {
+      for (final c in ifColumns) {
+        await walk(c);
+      }
+    }
+    if (!vitalsOnly && !swos) {
       for (final t in [wlApEntry, wlStatEntry, wlRtabEntry, w60gEntry, w60gStaEntry]) {
         await walk(t);
       }
     }
     return build(all, vitalsOnly: vitalsOnly);
   }
+
+  /// وكلاء لا يقبلون GETBULK بأكثر من عمود (عنوان:منفذ) — يُقرأ منهم عموداً عموداً.
+  static final Set<String> _noPairedBulk = {};
+
+  @visibleForTesting
+  static void resetForTest() => _noPairedBulk.clear();
 
   /// أعمدةٌ متوازية بطلبٍ واحد لكلّ دفعة صفوف — راوتر PPPoE فيه مئات الواجهات، وثمانية مسوحٍ منفصلة تعني مئة طلب.
   static Future<List<Varbind>> _pairedColumns(SnmpV2c snmp, List<String> columns,
@@ -251,7 +275,7 @@ class MikrotikSnmp {
           continue;
         }
         final type = switch (t) {
-          6 => name.startsWith('sfp') ? 'sfp' : (name.startsWith('wlan60') ? 'w60g' : 'ether'),
+          6 => name.toLowerCase().startsWith('sfp') ? 'sfp' : (name.startsWith('wlan60') ? 'w60g' : 'ether'),
           71 => 'wlan',
           209 => 'bridge',
           135 => 'vlan',
