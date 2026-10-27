@@ -389,20 +389,27 @@ class DeviceVitals {
 
     return ProbeResult(
       vitals: [
-        Vital(
-          label: 'المعالج',
-          value: '${s.cpuLoad}',
-          unit: '٪',
-          icon: LucideIcons.cpu,
-          tone: Grade.percentLowerBetter(s.cpuLoad),
-        ),
-        Vital(
-          label: 'الذاكرة',
-          value: '${s.memUsedPercent}',
-          unit: '٪',
-          icon: LucideIcons.memoryStick,
-          tone: Grade.percentLowerBetter(s.memUsedPercent),
-        ),
+        // SNMP على SwOS لا يحمل المعالج والذاكرة ⇒ شرطةٌ لا صفر.
+        if (s.cpuKnown)
+          Vital(
+            label: 'المعالج',
+            value: '${s.cpuLoad}',
+            unit: '٪',
+            icon: LucideIcons.cpu,
+            tone: Grade.percentLowerBetter(s.cpuLoad),
+          )
+        else
+          Vital.empty.withIcon(LucideIcons.cpu),
+        if (s.memKnown)
+          Vital(
+            label: 'الذاكرة',
+            value: '${s.memUsedPercent}',
+            unit: '٪',
+            icon: LucideIcons.memoryStick,
+            tone: Grade.percentLowerBetter(s.memUsedPercent),
+          )
+        else
+          Vital.empty.withIcon(LucideIcons.memoryStick),
         // الحرارة غير متوفّرة على كلّ الطُرُز (CCR2116 بلا مجسّ مثلاً).
         // نُظهر شرطةً لا صفراً — الصفر رقمٌ يكذب.
         s.temperature == null
@@ -438,6 +445,8 @@ class DeviceVitals {
             (k: 'جلسات PPP', v: '${s.pppActiveCount}'),
           if (s.voltage != null)
             (k: 'الفولتيّة', v: '${s.voltage!.toStringAsFixed(1)} V'),
+          if (s.powerWatts != null) (k: 'استهلاك PoE', v: '${s.powerWatts!.toStringAsFixed(1)} W'),
+          if (s.currentAmps != null) (k: 'التيّار', v: '${s.currentAmps!.toStringAsFixed(1)} A'),
           if (s.fans.isNotEmpty) (k: 'المراوح', v: '${s.fans.length}'),
         ],
       ),

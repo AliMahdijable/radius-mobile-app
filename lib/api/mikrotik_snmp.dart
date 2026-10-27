@@ -19,6 +19,7 @@ class MikrotikSnmp {
   static Future<MikrotikStats> Function()? debugFetch;
 
   static const sysDescr = '1.3.6.1.2.1.1.1.0';
+  static const firmwareVersion = '1.3.6.1.4.1.14988.1.1.7.4.0';
   static const sysUpTime = '1.3.6.1.2.1.1.3.0';
   static const boardName = '1.3.6.1.4.1.14988.1.1.7.9.0';
   static const licVersion = '1.3.6.1.4.1.14988.1.1.4.4.0';
@@ -30,7 +31,7 @@ class MikrotikSnmp {
   static const hlProcessorTemp = '1.3.6.1.4.1.14988.1.1.3.11.0';
   static const hlCpuFrequency = '1.3.6.1.4.1.14988.1.1.3.14.0';
   static const scalars = [
-    sysDescr, sysUpTime, boardName, licVersion, //
+    sysDescr, sysUpTime, boardName, licVersion, firmwareVersion, //
     hlCpuTemp, hlBoardTemp, hlVoltage, hlTemperature, hlProcessorTemp, hlCpuFrequency,
   ];
 
@@ -174,9 +175,21 @@ class MikrotikSnmp {
     // ── الصحّة: جدول المقاييس (7) أوّلاً، ثمّ القيم المفردة (6) بأعشارها ──
     int? temp;
     double? voltage;
+    double? current;
+    double? watts;
     final fans = <MikrotikHealthItem>[];
     final temps = <MikrotikHealthItem>[];
     final gauges = _table(all, gaugeEntry);
+    // SwOS (CSS610…، حيّاً ٢٧ أكتوبر): قيمةٌ واحدة بلا اسمٍ ولا وحدة على الفهرس 52.0 = حرارة اللوحة (41 كما تعرضها
+    // صفحة النظام). لا اسم ⇒ لا تُخمَّن إلّا هذه.
+    final swos = (s(sysDescr) ?? '').contains('SwOS');
+    if (swos && (gauges[2] ?? const {}).isEmpty) {
+      final v = gauges[3]?['52.0'];
+      if (v != null && v.isNumeric && v.asInt > 0 && v.asInt < 120) {
+        temp = v.asInt;
+        temps.add(MikrotikHealthItem(name: 'board-temperature', valueStr: '${v.asInt} C', intValue: v.asInt));
+      }
+    }
     for (final idx in (gauges[2] ?? const <String, Varbind>{}).keys) {
       final name = gauges[2]![idx]!.asString.trim().toLowerCase();
       final value = gauges[3]?[idx];
@@ -189,8 +202,12 @@ class MikrotikSnmp {
           if (temp == null || name.contains('cpu')) temp = v;
         case 2: // rpm
           if (v > 0) fans.add(MikrotikHealthItem(name: name.replaceAll('-speed', ''), valueStr: '$v RPM', intValue: v));
-        case 3: // dV
-          if (name.contains('voltage')) voltage ??= v / 10;
+        case 3: // dV — المزوّد العامل (الأعلى)؛ مدخلٌ غير موصول يُرجع صفراً.
+          if (name.contains('voltage') && v > 0 && v / 10 > (voltage ?? 0)) voltage = v / 10;
+        case 4: // dA
+          if (v > 0) current = (current ?? 0) + v / 10;
+        case 5: // dW
+          if (v >= 0) watts = (watts ?? 0) + v / 10;
       }
     }
     int? deci(String oid) {
@@ -205,7 +222,11 @@ class MikrotikSnmp {
     }
 
     final descr = s(sysDescr) ?? '';
-    final board = s(boardName) ?? descr.replaceFirst(RegExp(r'^RouterOS\s*'), '').trim();
+    // «RouterOS RB921GS-5HPacD r2» · «CSS610-1Gi-7R-2S+ SwOS v2.21» — الطراز وحده (عليه تُطابَق الصورة ويُحفظ).
+    final board = s(boardName) ??
+        descr.replaceFirst(RegExp(r'^RouterOS\s*'), '').replaceFirst(RegExp(r'\s+SwOS.*$'), '').trim();
+    final fw = s(firmwareVersion);
+    final version = s(licVersion) ?? (descr.contains('SwOS') ? 'SwOS ${fw ?? ''}'.trim() : (fw ?? ''));
     final ticks = i(sysUpTime);
 
     // ── المنافذ ──
@@ -256,18 +277,22 @@ class MikrotikSnmp {
       memTotalBytes: memTotal,
       memFreeBytes: memTotal > 0 ? memTotal - memUsed : 0,
       uptime: ticks == null ? '' : uptimeText(ticks ~/ 100),
-      version: s(licVersion) ?? '',
+      version: version,
       boardName: board,
       architectureName: '',
       cpuCount: loads.length,
       cpuFrequencyMhz: i(hlCpuFrequency) ?? 0,
       temperature: temp,
       voltage: voltage,
+      currentAmps: current,
+      powerWatts: watts,
       fans: fans,
       extraTemps: temps,
       interfaces: interfaces,
       pppActiveCount: ppp,
       via: 'SNMP',
+      cpuKnown: loads.isNotEmpty,
+      memKnown: memTotal > 0,
     );
     if (vitalsOnly) return stats;
 

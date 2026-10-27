@@ -160,8 +160,12 @@ class RestRouterOsChannel implements RouterOsChannel {
     req.headers.set(HttpHeaders.authorizationHeader, 'Basic ${base64.encode(utf8.encode('$user:$pass'))}');
     req.headers.set(HttpHeaders.acceptHeader, 'application/json');
     if (r.method == 'POST') {
+      // طولٌ صريح: بلاه يُرسل HttpClient الجسم مقطّعاً (chunked) فلا يقرؤه خادم RouterOS ويردّ «missing =.id=»
+      // (جُرِّب حيّاً على netPower 16P بـ7.19.6 ٢٧ أكتوبر).
+      final body = utf8.encode(jsonEncode(r.body));
       req.headers.contentType = ContentType.json;
-      req.add(utf8.encode(jsonEncode(r.body)));
+      req.contentLength = body.length;
+      req.add(body);
     }
     final res = await req.close().timeout(timeout);
     final text = await res.transform(utf8.decoder).join().timeout(timeout);

@@ -201,6 +201,32 @@ void main() {
     });
   });
 
+  test('🚨 SwOS (CSS610 حيّاً ٢٧ أكتوبر): بلا معالجٍ ولا ذاكرة ⇒ «—» لا 0٪، والطراز بلا «SwOS v2.21»، والحرارة 52.0', () {
+    final st = MikrotikSnmp.build(Map.fromEntries([
+      s(MikrotikSnmp.sysDescr, 'CSS610-1Gi-7R-2S+ SwOS v2.21'),
+      t(MikrotikSnmp.sysUpTime, 124543614),
+      s(MikrotikSnmp.firmwareVersion, '2.21'),
+      i('${MikrotikSnmp.gaugeEntry}.3.52.0', 41),
+      s('${MikrotikSnmp.ifName}.1', 'Port1'),
+      i('${MikrotikSnmp.ifType}.1', 6),
+      i('${MikrotikSnmp.ifOper}.1', 1),
+      g('${MikrotikSnmp.ifHighSpeed}.1', 1000),
+    ]));
+    expect(st.boardName, 'CSS610-1Gi-7R-2S+');
+    expect(st.version, 'SwOS 2.21');
+    expect(st.cpuKnown, isFalse);
+    expect(st.memKnown, isFalse);
+    expect(st.temperature, 41);
+    expect(st.interfaces.single.linkSpeed, '1Gbps');
+    expect(st.uptime, '2w9h57m16s', reason: '124543614 tick = 1245436 ثانية');
+  });
+
+  test('RouterOS عبر SNMP: المعالج والذاكرة مقروءان', () {
+    final st = MikrotikSnmp.build(_lhg());
+    expect(st.cpuKnown, isTrue);
+    expect(st.memKnown, isTrue);
+  });
+
   test('الصيغ: السرعة كـethernet monitor، والمدّة كـRouterOS', () {
     expect(MikrotikSnmp.speedText(100), '100Mbps');
     expect(MikrotikSnmp.speedText(1000), '1Gbps');

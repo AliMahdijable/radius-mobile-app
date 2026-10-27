@@ -172,6 +172,10 @@ class DeviceImage extends StatelessWidget {
     'nray60g': 'wirelesswirenray',
     'nrayg60ad': 'wirelesswirenray',
     'nrayg60adpair': 'wirelesswirenray',
+    // SwOS يُبلّغ «CSS610-1Gi-7R-2S+» بلا OUT، واسمه التجاريّ netPower Lite 7R (صفحة mikrotik.com: Product code
+    // CSS610-1Gi-7R-2S+OUT · SwitchOS Lite).
+    'css6101gi7r2s': 'css6101gi7r2sout',
+    'netpowerlite7r': 'css6101gi7r2sout',
   };
 
   /// أسماءٌ عربيّة يكتبها الوكلاء للطراز («بوربيم»، «لايت بيم») — تُترجَم قبل التطبيع، وإلّا سقطت حروفها كلّها
@@ -203,7 +207,8 @@ class DeviceImage extends StatelessWidget {
   ];
 
   static String _latinName(String model) {
-    var m = model.replaceAll(RegExp(r'\s+'), ' ').trim();
+    // «CSS610-1Gi-7R-2S+ SwOS v2.21» (وصف SNMP لـSwOS يُحفظ طرازاً) — الإصدار ليس من الطراز.
+    var m = model.replaceAll(RegExp(r'\s+'), ' ').replaceFirst(RegExp(r' SwOS\b.*$', caseSensitive: false), '').trim();
     for (final (ar, en) in _arabicNames) {
       m = m.replaceAll(ar, en);
     }
@@ -257,6 +262,9 @@ class DeviceImage extends StatelessWidget {
     'rocket m5.png',
     'ubiquiti-airfiber-4x.png',
     'ubiquiti-airfiber-af24hd.png',
+    // ٢٧ أكتوبر — Wave Long-Range غائبٌ عن قاعدة بصمات Ubiquiti فلا يحصده المولِّد: الصورة من صفحته الرسميّة
+    // (techspecs.ui.com/uisp/wireless/wave-lr، خدمة صورهم).
+    'Wave-LR.png',
   };
 
   /// ملفّات ميموزا.
@@ -542,6 +550,10 @@ class DeviceImage extends StatelessWidget {
     // الحصاد. وموضعه هنا لا في الكتالوج المولَّد عمداً: أيّ حصادٍ
     // لاحقٍ يُعيد توليد ذاك الملفّ فيمحو ما أُضيف فيه.
     'eg1510xs': 'ruijie/RG-EG1510XS.png',
+    // ٢٧ أكتوبر (المالك: «صورته ما تظهر») — Wave Long-Range (UBNT، 60 GHz) وnetPower Lite 7R (CSS610، SwOS).
+    'wavelongrange': 'Wave-LR.png',
+    'wavelr': 'Wave-LR.png',
+    'css6101gi7r2sout': 'CSS610-1Gi-7R-2S+OUT.webp',
     'rgeg1510xs': 'ruijie/RG-EG1510XS.png',
     'es24250w': 'ES-24-250W.png',
     'wsc296024tcl': 'WS-C2960-24TC-L.png',

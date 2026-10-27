@@ -92,6 +92,17 @@ void main() {
     }
   });
 
+  test('Wave Long-Range (يوبيكويتي) وnetPower Lite 7R (SwOS) — كما يكتبها الجهاز', () {
+    expect(img('Wave Long-Range', 'ubnt'), 'Wave-LR.png');
+    expect(img('Wave-LR', 'ubnt'), 'Wave-LR.png');
+    expect(img('Wave Long-Range', 'mikrotik'), isNull, reason: 'البوّابة');
+    expect(img('CSS610-1Gi-7R-2S+ SwOS v2.21', 'mikrotik'), 'CSS610-1Gi-7R-2S+OUT.webp');
+    expect(img('CSS610-1Gi-7R-2S+', 'mikrotik'), 'CSS610-1Gi-7R-2S+OUT.webp');
+    expect(img('netPower Lite 7R', 'mikrotik'), 'CSS610-1Gi-7R-2S+OUT.webp');
+    expect(img('netPower 16P', 'mikrotik'), 'netPower 16P.webp', reason: 'netPower 16P باقٍ على صورته');
+    expect(DeviceImage.allAssets, containsAll(['Wave-LR.png', 'CSS610-1Gi-7R-2S+OUT.webp']));
+  });
+
   test('البوّابة باقية: صورة ميكروتك لا تظهر على جهازٍ علامته غيرها', () {
     expect(img('RB912UAG-6HPnD', 'ubnt'), isNull);
     expect(img('بوربيم', 'mikrotik'), isNull);

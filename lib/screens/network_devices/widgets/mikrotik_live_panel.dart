@@ -715,19 +715,16 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // SNMP على SwOS لا يحمل المعالج والذاكرة ⇒ «—» لا «0٪».
               Expanded(
-                  child: _percentCard(
-                icon: LucideIcons.cpu,
-                label: 'CPU',
-                percent: s.cpuLoad.toDouble(),
-              )),
+                  child: s.cpuKnown
+                      ? _percentCard(icon: LucideIcons.cpu, label: 'CPU', percent: s.cpuLoad.toDouble())
+                      : _valueCard(icon: LucideIcons.cpu, label: 'CPU', value: '—', unit: '', color: AppColors.textLow)),
               const SizedBox(width: 8),
               Expanded(
-                  child: _percentCard(
-                icon: LucideIcons.memoryStick,
-                label: 'RAM',
-                percent: s.memUsedPercent.toDouble(),
-              )),
+                  child: s.memKnown
+                      ? _percentCard(icon: LucideIcons.memoryStick, label: 'RAM', percent: s.memUsedPercent.toDouble())
+                      : _valueCard(icon: LucideIcons.memoryStick, label: 'RAM', value: '—', unit: '', color: AppColors.textLow)),
               const SizedBox(width: 8),
               Expanded(
                   child: _valueCard(
@@ -1248,7 +1245,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         DeskPercentTile(
           icon: LucideIcons.cpu,
           label: 'المعالج',
-          percent: s.cpuLoad.toDouble(),
+          percent: s.cpuKnown ? s.cpuLoad.toDouble() : null,
           sub: s.cpuFrequencyMhz > 0
               ? isoJoin([
                   '${s.cpuFrequencyMhz} MHz',
@@ -1259,7 +1256,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         DeskPercentTile(
           icon: LucideIcons.memoryStick,
           label: 'الذاكرة',
-          percent: s.memUsedPercent.toDouble(),
+          percent: s.memKnown ? s.memUsedPercent.toDouble() : null,
           sub: s.memTotalBytes > 0
               ? '${iso(deskBytesShort(s.memUsedBytes))} من ${iso(deskBytesShort(s.memTotalBytes))}'
               : null,
@@ -1276,12 +1273,18 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
   Widget _deskPowerTile(MikrotikStats s) {
     if (s.voltage != null) {
       final tone = Grade.voltage(s.voltage);
+      // ما تسحبه أجهزة الـPoE وتيّار المزوّد — netPower وCRS الـPoE تقرؤهما (٢٧ أكتوبر).
+      final load = [
+        if (s.powerWatts != null) 'PoE ${s.powerWatts!.toStringAsFixed(1)} W',
+        if (s.currentAmps != null) '${s.currentAmps!.toStringAsFixed(1)} A',
+      ];
+      final word = deskGradeWord(tone, ok: 'طبيعيّة', warn: 'خارج المعتاد', bad: 'غير طبيعيّة');
       return DeskMetricTile(
         icon: LucideIcons.plug,
         label: 'الفولتيّة',
         color: tone.fill,
         value: DeskBigValue(s.voltage!.toStringAsFixed(1), 'V', color: tone.fill),
-        footer: deskSub(deskGradeWord(tone, ok: 'طبيعيّة', warn: 'خارج المعتاد', bad: 'غير طبيعيّة')),
+        footer: deskSub(load.isEmpty ? word : '$word · ${isoJoin(load, ' · ')}'),
       );
     }
     if (s.psus.isNotEmpty) {

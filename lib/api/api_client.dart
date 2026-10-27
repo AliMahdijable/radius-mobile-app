@@ -77,6 +77,10 @@ class ApiClient {
   /// المعترض وحده — يجدّد هذا ويعيد الصفّ مرّةً، والطرد (إن ماتت الجلسة
   /// حقّاً) يأتي مع أوّل 401 بعد إغلاق الورقة. الموظّف لا يُجدَّد
   /// (`serverRejected` بلا نداء — انظر [AuthApi.refreshTokenDetailed]).
+  /// الاختبارات: كلّ اختبارٍ جلسةٌ جديدة — لا يرث «أُعلن موتها» من سابقه.
+  @visibleForTesting
+  static void debugResetSessionEnd() => _AuthInterceptor._resetSessionEnd();
+
   static Future<RefreshOutcome> refreshSession() =>
       _AuthInterceptor.sharedRefresh();
 
@@ -134,6 +138,34 @@ class _AuthInterceptor extends Interceptor {
   /// سليمة** — فتظهر بطاقةٌ واحدة «تعذّر الجلب» في شاشةٍ كلّ ما فيها
   /// يعمل. والعلامة تعني «حاولتُ بهذا التوكن» لا «حاولتُ إلى الأبد».
   static int _refreshGen = 0;
+
+  /// موت الجلسة يُعلَن **مرّةً واحدة** (المالك ٢٧ أكتوبر: «اكثر من ٢٠ مرّة انتهت الجلسة… والشاشة تتداخل»).
+  ///
+  /// موجةٌ من الطلبات المتوازية (اللوحة، أعمدة الجدول، فحص الأجهزة) تتقاسم تجديداً واحداً وتُرفض معاً، وكان
+  /// كلّ طلبٍ منها يمسح الجلسة ويُطلق إشارته: عشرون رسالة وعشرون انتقالاً لشاشة الحساب يتراكب كلٌّ منها
+  /// على سابقه فلا يكتمل أيّها، والمسح يُفرغ ذاكرة الجدول فيطلبها من جديد فتعود موجةٌ أخرى — حلقةٌ لا تقف.
+  /// الآن: طلبٌ بدأ بالتوكن الذي أُعلن موته، أو بلا توكنٍ بعد إعلانٍ قريب (المسح وقع)، لا يمسح ولا يُعلن.
+  static String? _endedToken;
+  static DateTime? _endedAt;
+  static const _endQuiet = Duration(seconds: 15);
+
+  static void _resetSessionEnd() {
+    _endedToken = null;
+    _endedAt = null;
+  }
+
+  static Future<void> _endSession(String? token) async {
+    final at = _endedAt;
+    if (at != null) {
+      final sameDead = token != null && token == _endedToken;
+      final afterWipe = token == null && DateTime.now().difference(at) < _endQuiet;
+      if (sameDead || afterWipe) return;
+    }
+    _endedToken = token;
+    _endedAt = DateTime.now();
+    await SessionManager.clearAllSessionData(unregisterFcm: false);
+    authExpiredSignal.value = authExpiredSignal.value + 1;
+  }
 
   @override
   void onRequest(
@@ -411,13 +443,10 @@ class _AuthInterceptor extends Interceptor {
       // رُفضت جلسته صراحةً لا يُمحى ولا يُطالَب بالدخول أبداً، إذ لا
       // سبيل آخر في التطبيق كلّه إلى شاشة الدخول. الرفض الصريح ينهي
       // الجلسة أيّاً كان صاحبها.
-      {
-        // 2026-07-14: نمسح كل caches الجلسة عبر SessionManager بدلاً
-        // من Auth + Perms فقط — سابقاً كان الأدمن التالي يشوف رواسب
-        // (subscribers list، device snapshots) من الجلسة السابقة.
-        await SessionManager.clearAllSessionData(unregisterFcm: false);
-        authExpiredSignal.value = authExpiredSignal.value + 1;
-      }
+      // 2026-07-14: نمسح كل caches الجلسة عبر SessionManager بدلاً
+      // من Auth + Perms فقط — سابقاً كان الأدمن التالي يشوف رواسب
+      // (subscribers list، device snapshots) من الجلسة السابقة. ومرّةً لكلّ جلسة ([_endSession]).
+      await _endSession(before);
       return null;
     }
     // كلّ نداءات التطبيق تمرّ على خادمنا (/api/**)، فالتوكن الصحيح هو
@@ -452,8 +481,7 @@ class _AuthInterceptor extends Interceptor {
     // ⇒ الجلسة ميتة حقّاً. وهذا ليس تعثّر شبكة، فالخادم ردّ فعلاً.
     final unchanged = before != null && before == newToken;
     if (unchanged && retried.statusCode == 401) {
-      await SessionManager.clearAllSessionData(unregisterFcm: false);
-      authExpiredSignal.value = authExpiredSignal.value + 1;
+      await _endSession(before);
       return null;
     }
     return retried;
