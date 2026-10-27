@@ -368,6 +368,121 @@ class BroadcastApi {
       );
     }
   }
+
+  // ── حملات البثّ (٢٧ أكتوبر): قائمة + إيقاف/استئناف/حذف لكلّ حملة ──
+
+  /// GET /api/whatsapp/broadcasts/:adminId — حملات الوكيل (كلّ بثٍّ أرسله، بأعداده وحالته).
+  static Future<({bool ok, List<BroadcastCampaign> campaigns, String? message})> listCampaigns() async {
+    try {
+      final adminId = await AuthStorage.readAdminId();
+      if (adminId == null || adminId.isEmpty) {
+        return (ok: false, campaigns: const <BroadcastCampaign>[], message: null);
+      }
+      final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/whatsapp/broadcasts/$adminId');
+      final list = (r.data ?? const {})['campaigns'];
+      final out = <BroadcastCampaign>[];
+      if (list is List) {
+        for (final m in list) {
+          if (m is Map) {
+            final c = BroadcastCampaign.fromJson(Map<String, dynamic>.from(m));
+            if (c != null) out.add(c);
+          }
+        }
+      }
+      return (ok: true, campaigns: out, message: null);
+    } on DioException catch (e) {
+      _log('listCampaigns', e);
+      final m = e.response?.data is Map ? (e.response!.data as Map)['message']?.toString() : null;
+      return (ok: false, campaigns: const <BroadcastCampaign>[], message: m ?? 'تعذّر جلب الحملات');
+    } catch (e) {
+      _log('listCampaigns', e);
+      return (ok: false, campaigns: const <BroadcastCampaign>[], message: e.toString());
+    }
+  }
+
+  /// إيقاف مؤقّت / استئناف / حذف حملةٍ بمعرّفها. action ∈ {pause, resume, delete}.
+  static Future<({bool ok, int affected, String? message})> campaignAction(String batchId, String action) async {
+    try {
+      final adminId = await AuthStorage.readAdminId();
+      if (adminId == null || adminId.isEmpty) return (ok: false, affected: 0, message: null);
+      final path = '/api/whatsapp/broadcast/${Uri.encodeComponent(batchId)}${action == 'delete' ? '' : '/$action'}';
+      final body = {'adminId': adminId};
+      final Response<Map<String, dynamic>> r = action == 'delete'
+          ? await ApiClient.dio.delete<Map<String, dynamic>>(path, data: body)
+          : await ApiClient.dio.post<Map<String, dynamic>>(path, data: body);
+      final data = r.data ?? const {};
+      return (
+        ok: data['success'] != false,
+        affected: (data['affected'] is num) ? (data['affected'] as num).toInt() : 0,
+        message: data['message']?.toString(),
+      );
+    } on DioException catch (e) {
+      _log('campaignAction', e);
+      final m = e.response?.data is Map ? (e.response!.data as Map)['message']?.toString() : null;
+      return (ok: false, affected: 0, message: m ?? 'خطأ في الشبكة');
+    } catch (e) {
+      _log('campaignAction', e);
+      return (ok: false, affected: 0, message: e.toString());
+    }
+  }
+}
+
+/// حملة بثٍّ واحدة (صفوف طابورٍ تحمل نفس batch_id) — للعرض والتحكّم.
+class BroadcastCampaign {
+  const BroadcastCampaign({
+    required this.batchId,
+    required this.sample,
+    required this.total,
+    required this.sent,
+    required this.pending,
+    required this.processing,
+    required this.failed,
+    required this.cancelled,
+    required this.paused,
+    required this.telegram,
+    this.createdAt,
+  });
+
+  final String batchId;
+
+  /// عيّنة نصّ الرسالة (أوّل ١٦٠ حرفاً) — ليميّزها الوكيل.
+  final String sample;
+  final int total;
+  final int sent;
+  final int pending;
+  final int processing;
+  final int failed;
+  final int cancelled;
+
+  /// الحملة موقوفةٌ مؤقّتاً (لها معلّقٌ paused).
+  final bool paused;
+
+  /// كم من رسائلها عبر تلغرام.
+  final int telegram;
+  final DateTime? createdAt;
+
+  /// ما زالت تُرسِل (فيها معلّقٌ أو قيد المعالجة) — تُعرض لها أزرار التحكّم.
+  bool get active => pending > 0 || processing > 0;
+
+  static int _int(Object? v) => v is num ? v.toInt() : int.tryParse('${v ?? ''}') ?? 0;
+
+  static BroadcastCampaign? fromJson(Map<String, dynamic> j) {
+    final id = j['batch_id']?.toString();
+    if (id == null || id.isEmpty) return null;
+    return BroadcastCampaign(
+      batchId: id,
+      sample: (j['sample'] ?? '').toString(),
+      total: _int(j['total']),
+      sent: _int(j['sent']),
+      pending: _int(j['pending']),
+      processing: _int(j['processing']),
+      failed: _int(j['failed']),
+      cancelled: _int(j['cancelled']),
+      paused: j['paused'] == true || j['paused'] == 1,
+      telegram: _int(j['telegram']),
+      createdAt: DateTime.tryParse('${j['created_at'] ?? ''}')?.toLocal(),
+    );
+  }
 }
 
 /// المتغيّرات المتاحة في محرّر الرسالة — تُستبدَل server-side.

@@ -15,6 +15,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../message_logs/message_logs_screen.dart';
+import 'broadcast_campaigns_screen.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
 
@@ -503,6 +504,12 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           ? (r.message ?? 'تمّت إعادة المحاولة')
           : (r.message ?? 'فشلت إعادة المحاولة'),
       isError: !r.ok,
+    );
+  }
+
+  void _openCampaigns() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const BroadcastCampaignsScreen()),
     );
   }
 
@@ -1569,6 +1576,16 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                 ],
               ),
             ),
+            // الحملات: إيقاف/استئناف/حذف ما أُرسل من بثٍّ يمشي على مدى وقت
+            IconButton(
+              tooltip: 'حملات التبليغ',
+              icon: Icon(LucideIcons.listChecks, size: 18, color: AppColors.brand),
+              onPressed: _openCampaigns,
+              style: IconButton.styleFrom(
+                backgroundColor: AppColors.brandSoftBg,
+              ),
+            ),
+            const SizedBox(width: 6),
             // logs
             IconButton(
               tooltip: 'حالة الإرسال',
