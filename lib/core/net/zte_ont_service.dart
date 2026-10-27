@@ -258,7 +258,14 @@ class ZteOntService {
     final budget = queue.length + _maxExtraPages;
     for (var i = 0; i < queue.length; i++) {
       final name = queue[i];
-      final r = await _pageRaw(s, name);
+      var r = await _pageRaw(s, name);
+      // صفحةٌ معروفةٌ رجعت 200 صغيرةً جدّاً (القالب الكامل ~٩٦ ك.ب على D401): خطأٌ عابر، الجلسة لم تُقبل بعد — إعادةٌ
+      // واحدة قبل الحكم (أوّل صفحةٍ وحدها، لئلّا نضاعف على صفحاتٍ صغيرةٍ أصلاً).
+      if (i == 0 && r.html != null && !r.login && r.html!.length < _tinyPageBytes && ZteOntParse.optical(r.html!) == null) {
+        final retry = await _pageRaw(s, name);
+        if (retry.html != null && retry.html!.length >= r.html!.length) r = retry;
+        tried.add('retry:${ZteOntParse.kb(retry.html ?? '')}');
+      }
       final html = r.html;
       final pageTitle = html == null ? '' : ZteOntParse.model(html);
       final otherTitle = pageTitle.isNotEmpty && title.isNotEmpty && pageTitle != title;
@@ -300,6 +307,9 @@ class ZteOntService {
 
   /// صفحاتٌ إضافيّة من قائمة الجهاز على الأكثر (~٠٫٦–١ث لكلٍّ) — والبحث يقف عند أوّل صفحةٍ فيها الضوء.
   static const _maxExtraPages = 8;
+
+  /// صفحةٌ أصغر من هذا (200) = خطأٌ عابر لا صفحة حالة (القالب الكامل عشرات الكيلوبايت) ⇒ إعادةٌ واحدة.
+  static const _tinyPageBytes = 4096;
 
   /// صفحة الضوء التي وُجدت لكلّ جهازٍ في هذه الجلسة — القراءة التالية تبدأ بها بلا بحث.
   static final _opticalPageOf = <String, String>{};
