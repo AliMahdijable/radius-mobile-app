@@ -259,6 +259,13 @@ PreferredSizeWidget deskPageBar(
   final sub = subtitle ?? info?.subtitle;
   final canPop = ModalRoute.of(context)?.canPop ?? false;
   final rtl = Directionality.of(context) == TextDirection.rtl;
+  // زرّ رجوع الصفحة نفسه إن كان لها واحد — بعضها يُرجع نتيجته (تفاصيل الجهاز: «عُدِّل؟» لتتحدّث القائمة). كان رجوع
+  // الحاسبة maybePop بلا نتيجة، فيُحفظ التعديل ويعود الجهاز في القائمة بقيمته القديمة (المالك ٢٧ أكتوبر: «احوله
+  // snmp يكلي تم الحفظ، اخرج وارجع يرجعه api»).
+  final leading = mobile.leading;
+  final VoidCallback back = leading is IconButton && leading.onPressed != null
+      ? leading.onPressed!
+      : () => Navigator.of(context).maybePop();
   final all = [...?(actions ?? mobile.actions), if (primary != null) primary];
   // تبويبات الصفحة (بوّابة المشترك…) تبقى تحت الرأس.
   final tabs = mobile.bottom;
@@ -272,7 +279,7 @@ PreferredSizeWidget deskPageBar(
             DeskIconButton(
               icon: rtl ? LucideIcons.arrowRight : LucideIcons.arrowLeft,
               tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-              onTap: () => Navigator.of(context).maybePop(),
+              onTap: back,
             ),
             const SizedBox(width: Sp.md),
           ],
