@@ -201,16 +201,45 @@ class ZteOntService {
     }
   }
 
-  /// قراءة الضوء — صفحة EPON ثمّ أسماء GPON المحتملة (الطراز المفحوص EPON). الطراز من عنوان الصفحة نفسها.
+  /// قراءة الضوء — أسماء صفحة الضوء المحتملة بالترتيب (MH80 = EPON). الطراز من عنوان الصفحة نفسها.
+  ///
+  /// 🐛 ٢٧ أكتوبر (D401 عند المالك: «دخلنا للجهاز بس ما قرينا الضوء»): كان أوّل اسمٍ غائب يوقف البحث فلا يُجرَّب
+  /// الباقي. الآن صفحةٌ لا تُجاب ⇒ التالية، وصفحة الدخول (الجلسة انتهت) وحدها توقف. ما جُرِّب يبقى أثراً مختصراً للتشخيص
+  /// (الحالة والطول وشكل قيمة الضوء — بلا قيمة).
   static Future<OntOpticalInfo?> fetchOptical(ZteOntSession s) async {
     _pageTrace.remove(s.baseUrl);
+    final tried = <String>[];
     for (final name in const ['epon_status_link_info_t.gch', 'gpon_status_link_info_t.gch', 'pon_status_link_info_t.gch']) {
-      final html = await page(s, name);
-      if (html == null) return null;
+      final r = await _pageRaw(s, name);
+      final html = r.html;
+      tried.add('${name.split('_').first}:${r.code}${r.login ? 'L' : ''}${html == null ? '' : '/${ZteOntParse.rxForm(html)}'}');
+      if (r.login) break;
+      if (html == null) continue;
       final o = ZteOntParse.optical(html);
       if (o != null) return o;
     }
+    _pageTrace[s.baseUrl] = tried.join(' ');
     return null;
+  }
+
+  /// صفحة حالةٍ بحالتها: html (null حين لم تُجب 200)، والرمز، وهل عادت صفحة الدخول.
+  static Future<({String? html, String code, bool login})> _pageRaw(ZteOntSession s, String name) async {
+    try {
+      final res = await _dio(s.baseUrl).get<String>(
+        '/getpage.gch',
+        queryParameters: {'pid': '1002', 'nextpage': name},
+        options: Options(headers: {
+          if (s.cookie.isNotEmpty) 'Cookie': s.cookie,
+          'Referer': '${s.baseUrl}/start.ghtml',
+        }),
+      );
+      final body = res.data ?? '';
+      final login = ZteOntParse.isLoginPage(body);
+      final ok = res.statusCode == 200 && !login;
+      return (html: ok ? body : null, code: '${res.statusCode}', login: login);
+    } catch (e) {
+      return (html: null, code: _errName(e), login: false);
+    }
   }
 
   static Future<void> logout(ZteOntSession s) async {
@@ -301,17 +330,39 @@ class ZteOntParse {
 
   /// الضوء بوحدات هواوي نفسها ([OntOpticalInfo]): dBm · mV · mA · °C. الخام: القدرة بـ١/١٠٠٠٠ dBm، والجهد µV، والتيّار µA.
   /// `LosInfo = "1"` ⇒ لا ضوء: القدرتان «--» وحالة الليف «LOS». null: ليست صفحة ضوء (لا قدرة استقبال فيها).
+  /// قيمةٌ باسمها بأيّ صيغةٍ تكتبها واجهات ZXIC: `var RxPower = "…"` (MH80)، و`Transfer_meaning('RxPower','…')`،
+  /// وخليّة `id="Frm_RxPower"`.
+  static String? _val(String html, String name) =>
+      _var(html, name) ??
+      RegExp('Transfer_meaning\\(\\s*[\'"]$name[\'"]\\s*,\\s*[\'"](-?\\d+(?:\\.\\d+)?)[\'"]').firstMatch(html)?.group(1) ??
+      _cell(html, 'Frm_$name');
+
+  /// شكل قيمة الضوء في الصفحة للتشخيص (بلا القيمة): var/tm/frm بأرقامٍ مقنّعة، أو «rx?» حين يُذكر الاسم بغير صيغة
+  /// معروفة، أو «-» حين لا يُذكر.
+  static String rxForm(String html) {
+    String mask(String v) => v.replaceAll(RegExp(r'\d'), '9');
+    final v = _var(html, 'RxPower');
+    if (v != null) return 'var:${mask(v)}';
+    final t = RegExp('Transfer_meaning\\(\\s*[\'"]RxPower[\'"]\\s*,\\s*[\'"]([^\'"]{0,16})').firstMatch(html)?.group(1);
+    if (t != null) return 'tm:${mask(t)}';
+    final c = _cell(html, 'Frm_RxPower');
+    if (c != null) return 'frm:${mask(c)}';
+    return html.contains('RxPower') ? 'rx?' : '-';
+  }
+
   static OntOpticalInfo? optical(String html) {
-    final rx = _var(html, 'RxPower');
+    final rx = _val(html, 'RxPower');
     if (rx == null) return null;
-    final tx = _var(html, 'TxPower');
-    final current = _var(html, 'Current');
+    final tx = _val(html, 'TxPower');
+    final current = _val(html, 'Current');
     final volt = _cell(html, 'Frm_Volt');
     final temp = _cell(html, 'Frm_Temp');
     final los = _var(html, 'LosInfo') == '1';
+    // MH80 يكتب القدرة بـ١/١٠٠٠٠ dBm (‎-186300)؛ وقيمةٌ في مدى dBm نفسه (‎-31.20) تُقرأ كما هي.
     String dbm(String? raw) {
       final v = num.tryParse(raw ?? '');
-      return v == null ? '--' : _fixed(v / 10000, 1);
+      if (v == null) return '--';
+      return _fixed(v.abs() > 100 ? v / 10000 : v, 1);
     }
 
     final mv = num.tryParse(volt ?? '');

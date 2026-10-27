@@ -88,6 +88,41 @@ void main() {
           reason: 'جلسةٌ مفتوحة لا تقفل الوكيل عن جهازه باعتماداتٍ صحيحة');
     });
 
+    test('D401: صفحة EPON غائبة ⇒ تُجرَّب التالية، والضوء بصيغة Transfer_meaning بالـdBm نفسه', () async {
+      d.pages['epon_status_link_info_t.gch'] = (404, 'Not Found');
+      d.pages['gpon_status_link_info_t.gch'] = (404, 'Not Found');
+      d.pages['pon_status_link_info_t.gch'] = (
+        200,
+        "<html><head><title>D401</title></head><body><script>Transfer_meaning('RxPower','-31.20');"
+            "Transfer_meaning('TxPower','2.41');</script></body></html>"
+      );
+      final s = await ZteOntService.loginConfigured(d.host, 'agent', 'secret-1');
+      final o = await ZteOntService.fetchOptical(s!);
+      expect(o?.rxPower, '-31.2', reason: 'كان أوّل اسمٍ غائب يوقف البحث');
+      expect(o?.txPower, '2.4');
+      expect(o?.model, 'D401');
+    });
+
+    test('صفحة الدخول بدل الضوء (الجلسة انتهت) ⇒ يتوقّف، والأثر يقول ما جُرِّب بلا قيم', () async {
+      d.pages['epon_status_link_info_t.gch'] = (404, 'Not Found');
+      d.pages['gpon_status_link_info_t.gch'] =
+          (200, '<html><form name="fLogin"><input name="Frm_Logintoken"></form></html>');
+      final s = await ZteOntService.loginConfigured(d.host, 'agent', 'secret-1');
+      expect(await ZteOntService.fetchOptical(s!), isNull);
+      final trace = ZteOntService.lastPageTrace(s)!;
+      expect(trace, contains('epon:404'));
+      expect(trace, contains('gpon:200L'));
+      expect(trace.split(' '), hasLength(2), reason: 'لا محاولة بعد انتهاء الجلسة');
+    });
+
+    test('شكل قيمة الضوء للتشخيص بلا القيمة', () {
+      expect(ZteOntParse.rxForm('var RxPower = "-186300";'), 'var:-999999');
+      expect(ZteOntParse.rxForm("Transfer_meaning('RxPower','-31.20');"), 'tm:-99.99');
+      expect(ZteOntParse.rxForm('<td id="Frm_RxPower">-21.5</td>'), 'frm:-99.9');
+      expect(ZteOntParse.rxForm('<b>RxPower</b>'), 'rx?');
+      expect(ZteOntParse.rxForm('<html></html>'), '-');
+    });
+
     test('عدّاد القفل كما على MH80 الحيّ', () {
       expect(ZteOntParse.lockLeft('maxtime = Math.min(60, 0 + 60 - 402930);'), isNull);
       expect(ZteOntParse.lockLeft('maxtime = Math.min(60, 402900 + 60 - 402930);'), 30);
@@ -201,6 +236,9 @@ class _FakeMh80 {
   bool sessionOpen = false;
   int lockAt = 0;
   Duration pageDelay = Duration.zero;
+
+  /// صفحاتٌ بعينها (الاسم ⇒ الحالة والجسم) — ما سواها صفحة ضوء MH80.
+  final pages = <String, (int, String)>{};
   final posts = <String>[];
   final paths = <String>[];
   String? pageCookie;
@@ -257,8 +295,10 @@ class _FakeMh80 {
       if (req.uri.path == '/getpage.gch') {
         pageCookie = req.headers.value('cookie');
         if (pageDelay > Duration.zero) await Future<void>.delayed(pageDelay);
+        final custom = pages[req.uri.queryParameters['nextpage']];
+        res.statusCode = custom?.$1 ?? 200;
         res.headers.contentType = ContentType.html;
-        res.write(_optical);
+        res.write(custom?.$2 ?? _optical);
         await res.close();
         return;
       }
