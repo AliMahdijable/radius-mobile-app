@@ -106,9 +106,16 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
     }
   }
 
+  /// مالكٌ لكلّ جهاز: المُجدوِل يُبقي مهمّةً منتظرةً واحدة لكلّ مالك. بمالكٍ واحدٍ للشاشة كانت مهامّ الأجهزة
+  /// المنتظرة (بعد أوّل ستّة تبدأ فوراً) تُلغي بعضها فلا يُقرأ منها إلّا آخرها.
+  final Map<int, Object> _owners = {};
+  Object _ownerOf(int id) => _owners[id] ??= Object();
+
   @override
   void dispose() {
-    DeepProbeScheduler.instance.cancel(this);
+    for (final o in _owners.values) {
+      DeepProbeScheduler.instance.cancel(o);
+    }
     _timer?.cancel();
     _flush?.cancel();
     _flow.dispose();
@@ -162,7 +169,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
       if (_inFlight.contains(d.id)) continue;
       if (DeviceVitals.skipReason(d) != null) continue;
       _inFlight.add(d.id);
-      DeepProbeScheduler.instance.submit(this, first: first && !_readings.containsKey(d.id), () async {
+      DeepProbeScheduler.instance.submit(_ownerOf(d.id), first: first && !_readings.containsKey(d.id), () async {
         try {
           final prev = DeviceStatsCache.instance.sampleOf(d.id);
           final r = await DeviceVitals.fetch(
@@ -233,6 +240,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
         arranged: _arranged,
         startDeviceId: deviceId,
         settings: _settings,
+        serverReady: _loadedLayout,
       ),
     ));
     if (res == null || !mounted) return;
@@ -633,17 +641,18 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
               Container(
                 decoration: selected
                     ? BoxDecoration(
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(R.check),
                         border: Border.all(color: AppColors.brand, width: 2),
                       )
                     : null,
                 padding: const EdgeInsets.all(2),
                 child: DeviceGlyph(shape: a.shape, size: base * scale, flip: flip, dashed: !a.fixed && front),
               ),
+              // أعرض من الجهاز: السكتر نحيلٌ (٠٫٦ من ارتفاعه) فكان «18» يُقصّ إلى «1».
               Positioned(
                 top: box.height + 4,
-                left: 0,
-                right: 0,
+                left: -28,
+                right: -28,
                 child: Center(
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
@@ -693,7 +702,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
           child: Container(
             padding: const EdgeInsets.all(1),
             decoration: selected
-                ? BoxDecoration(borderRadius: BorderRadius.circular(4), border: Border.all(color: AppColors.brand, width: 2))
+                ? BoxDecoration(borderRadius: BorderRadius.circular(R.check), border: Border.all(color: AppColors.brand, width: 2))
                 : null,
             child: DeviceGlyph(shape: a.shape, size: 22, color: _healthColor(a)),
           ),
@@ -710,7 +719,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
         ]);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(color: AppColors.bg, borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(color: AppColors.bg, borderRadius: BorderRadius.circular(R.sm)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         row(AppTone.success, 'ممتاز'),
         const SizedBox(height: 3),
@@ -723,7 +732,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
 
   Widget _pill(String text) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-        decoration: BoxDecoration(color: AppColors.bg, borderRadius: BorderRadius.circular(8)),
+        decoration: BoxDecoration(color: AppColors.bg, borderRadius: BorderRadius.circular(R.sm)),
         child: Text(iso(text), style: AppType.muted(color: AppColors.textHi)),
       );
 
@@ -731,12 +740,12 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
         button: true,
         child: InkWell(
           onTap: () => _openPlace(null),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(R.sm),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
             decoration: BoxDecoration(
               color: AppColors.surface,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(R.sm),
               border: Border.all(color: AppColors.warning),
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -845,7 +854,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: AppColors.surface,
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: BorderRadius.circular(R.sm),
                 border: Border.all(color: selected ? AppColors.brand : AppColors.border, width: selected ? 2 : 1),
                 boxShadow: [BoxShadow(color: AppColors.scrim.withValues(alpha: 0.08), blurRadius: 2, offset: const Offset(0, 1))],
               ),
@@ -879,13 +888,13 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
         selected: selected,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(R.sm),
           child: Container(
             constraints: const BoxConstraints(minHeight: 40),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
               color: AppColors.surface,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(R.sm),
               border: Border.all(color: selected ? AppColors.brand : AppColors.border, width: selected ? 2 : 1),
             ),
             child: Text(iso(label), style: AppType.body(color: AppColors.textHi)),
@@ -937,7 +946,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
       );
     }
 
-    TextStyle head = AppType.micro(color: AppColors.textMid);
+    final head = AppType.micro(color: AppColors.textMid);
     return Column(children: [
       SizedBox(
         height: 48,
@@ -1107,7 +1116,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
               width: 44,
               height: 44,
               alignment: Alignment.center,
-              decoration: BoxDecoration(color: AppColors.brandSoftBg, borderRadius: BorderRadius.circular(11)),
+              decoration: BoxDecoration(color: AppColors.brandSoftBg, borderRadius: BorderRadius.circular(R.chip)),
               child: DeviceGlyph(shape: a.shape, size: 26, color: AppColors.brand),
             ),
             const SizedBox(width: 10),

@@ -232,6 +232,17 @@ void main() {
       expect(tones.indexOf(AppTone.warning) > tones.lastIndexOf(AppTone.danger), isTrue);
     });
 
+    test('سبعة سكاتر على قناةٍ واحدة ⇒ تنبيهٌ واحد بالعدد لا ٢١ شريحة', () {
+      final devices = [for (var i = 1; i <= 7; i++) dev(i, 'سكتر $i', model: 'BaseBox 5')];
+      final readings = {for (var i = 1; i <= 7; i++) i: reading(clients: 10, frequency: 5180, width: 20)};
+      final alerts = TowerAttention.compute(TowerArrange.arrange(devices, readings: readings), readings);
+      final co = alerts.where((a) => a.chip.contains('متداخل')).toList();
+      expect(co, hasLength(1));
+      expect(co.single.chip, '7 أجهزة على 5180 · تردّد متداخل');
+      expect(co.single.detail, contains('سكتر 7'));
+      expect(co.single.otherId, isNotNull, reason: 'يُبرز زوجاً في «من الأعلى»');
+    });
+
     test('تردّدٌ واحد على سكترين ثبّت الوكيل أنّهما متعاكسان ⇒ لا تنبيه', () {
       final devices = [dev(1, 'أ', model: 'BaseBox 5'), dev(2, 'ب', model: 'BaseBox 5')];
       final readings = {1: reading(clients: 5, frequency: 5500), 2: reading(clients: 5, frequency: 5500)};

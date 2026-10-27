@@ -25,6 +25,7 @@ import 'devices_wall_screen.dart';
 import 'network_device_details_screen.dart';
 import 'network_device_form_sheet.dart';
 import 'regions_screen.dart';
+import 'tower/tower_screen.dart';
 import 'widgets/brand_badge.dart';
 import 'widgets/device_image.dart';
 import '../../theme/typography.dart';
@@ -582,6 +583,68 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       MaterialPageRoute(builder: (_) => const DevicesWallScreen()),
     );
     if (mounted) _refresh();
+  }
+
+  /// «عرض البرج» (المالك ٢٧ أكتوبر) — كلّ منطقةٍ برج. المنطقة المصفّاة تُفتح مباشرةً، وإلّا تُختار من قائمة.
+  Future<void> _openTower() async {
+    var id = _regionFilter;
+    if (id == null) {
+      final regions = [
+        for (final r in _regionsById.values)
+          if (_countByRegion(r.id) > 0) r,
+      ]..sort((a, b) => a.name.compareTo(b.name));
+      final orphans = _countByRegion(_kNoRegion);
+      if (regions.isEmpty && orphans == 0) return;
+      if (regions.length + (orphans > 0 ? 1 : 0) == 1) {
+        id = regions.isEmpty ? _kNoRegion : regions.first.id;
+      } else {
+        id = await showAppSheet<int>(
+          context: context,
+          barrierColor: AppColors.scrim,
+          backgroundColor: AppColors.surface,
+          builder: (ctx) => SafeArea(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.sm),
+                child: Text('أيّ برج؟', style: AppType.cardTitleBold(color: AppColors.textHi)),
+              ),
+              Flexible(
+                child: ListView(shrinkWrap: true, children: [
+                  for (final r in regions)
+                    ListTile(
+                      leading: Icon(LucideIcons.radioTower, color: _parseRegionColor(r.color) ?? AppColors.brand),
+                      title: Text(r.name),
+                      trailing: Text('${_countByRegion(r.id)} جهاز', style: AppType.muted(color: AppColors.textMid)),
+                      onTap: () => Navigator.pop(ctx, r.id),
+                    ),
+                  if (orphans > 0)
+                    ListTile(
+                      leading: Icon(LucideIcons.mapPinOff, color: AppColors.textMid),
+                      title: const Text('بلا منطقة'),
+                      trailing: Text('$orphans جهاز', style: AppType.muted(color: AppColors.textMid)),
+                      onTap: () => Navigator.pop(ctx, _kNoRegion),
+                    ),
+                ]),
+              ),
+              const SizedBox(height: Sp.sm),
+            ]),
+          ),
+        );
+        if (id == null || !mounted) return;
+      }
+    }
+    final none = id == _kNoRegion;
+    final devices = [
+      for (final d in _all)
+        if (none ? d.regionId == null : d.regionId == id) d,
+    ];
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => TowerScreen(
+        regionId: none ? 0 : id!,
+        regionName: none ? 'بلا منطقة' : (_regionsById[id]?.name ?? 'البرج'),
+        devices: devices,
+      ),
+    ));
   }
 
   Future<void> _openBulkScan() async {
@@ -1167,6 +1230,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                   switch (v) {
                     case 'wall':
                       _openWall();
+                    case 'tower':
+                      _openTower();
                     case 'sort':
                       _pickSort();
                     case 'regions':
@@ -1179,6 +1244,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 },
                 itemBuilder: (_) => [
                   _menuItem('wall', LucideIcons.layoutGrid, 'نظرة عامّة'),
+                  if (_all.isNotEmpty) _menuItem('tower', LucideIcons.radioTower, 'عرض البرج'),
                   // الترتيب الحاليّ في التسمية — القائمة المطويّة تُخفي
                   // الأيقونة التي كانت تدلّ عليه.
                   _menuItem(

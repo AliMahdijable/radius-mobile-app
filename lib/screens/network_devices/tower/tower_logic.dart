@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../api/olt_profile.dart';
+import '../../../core/util/format.dart';
 import '../../../models/network_device.dart';
 import '../../../models/tower_layout.dart';
 import '../../../theme/colors.dart';
@@ -421,10 +422,12 @@ class TowerAttention {
       }
     }
 
-    // تردّدان متداخلان على البرج نفسه — يُستثنى ما ثبّت الوكيل أنّهما متعاكسان.
+    // تردّدٌ متداخل على البرج نفسه — يُستثنى زوجٌ ثبّت الوكيل أنّه متعاكس (إعادة استعمال القناة ظهراً لظهر).
+    // تنبيهٌ واحد لكلّ مجموعةٍ متشابكة لا لكلّ زوج: سبعة سكاتر على قناةٍ واحدة كانت ٢١ شريحة تدفن ما سواها.
     final radios = list
         .where((a) => (a.role == TowerRole.sector || a.role == TowerRole.ap) && readings[a.device.id]?.frequency != null)
         .toList();
+    final links = <int, Set<int>>{};
     for (var i = 0; i < radios.length; i++) {
       for (var j = i + 1; j < radios.length; j++) {
         final a = radios[i];
@@ -437,14 +440,39 @@ class TowerAttention {
         if (a.fixed && b.fixed && a.azimuth != null && b.azimuth != null && angleGap(a.azimuth!, b.azimuth!) > 120) {
           continue;
         }
-        out.add(TowerAlert(
-          deviceId: b.device.id,
-          otherId: a.device.id,
-          tone: AppTone.warning,
-          chip: '${a.device.name} و${b.device.name} · تردّد متداخل',
-          detail: 'تردّده ${rb.frequency} قريبٌ من ${a.device.name} (${ra.frequency}) — غيّر تردّد أحدهما',
-        ));
+        (links[i] ??= {}).add(j);
+        (links[j] ??= {}).add(i);
       }
+    }
+    final seen = <int>{};
+    for (var i = 0; i < radios.length; i++) {
+      if (seen.contains(i) || !links.containsKey(i)) continue;
+      final group = <int>[];
+      final stack = [i];
+      while (stack.isNotEmpty) {
+        final k = stack.removeLast();
+        if (!seen.add(k)) continue;
+        group.add(k);
+        stack.addAll(links[k] ?? const <int>{});
+      }
+      group.sort();
+      final members = [for (final k in group) radios[k]];
+      final a = members[0];
+      final b = members[1];
+      final ra = readings[a.device.id]!;
+      final rb = readings[b.device.id]!;
+      out.add(TowerAlert(
+        deviceId: b.device.id,
+        otherId: a.device.id,
+        tone: AppTone.warning,
+        chip: members.length == 2
+            ? '${a.device.name} و${b.device.name} · تردّد متداخل'
+            : '${arCount(members.length, one: 'جهاز', two: 'جهازان', few: 'أجهزة', many: 'جهازاً')} على ${ra.frequency} · تردّد متداخل',
+        detail: members.length == 2
+            ? 'تردّده ${rb.frequency} قريبٌ من ${a.device.name} (${ra.frequency}) — غيّر تردّد أحدهما'
+            : 'على قناةٍ واحدة تقريباً: ${members.map((m) => m.device.name).join('، ')} — وزّع تردّداتها، أو ثبّت '
+                'اتّجاهاتها بالبوصلة إن كانت متعاكسة',
+      ));
     }
 
     int rank(AppTone t) => t == AppTone.danger ? 0 : (t == AppTone.warning ? 1 : 2);
