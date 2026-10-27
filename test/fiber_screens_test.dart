@@ -1,0 +1,352 @@
+import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:rad_mysvcs/api/api_client.dart';
+import 'package:rad_mysvcs/api/bdcom_epon.dart';
+import 'package:rad_mysvcs/api/olt_fiber_reads.dart';
+import 'package:rad_mysvcs/core/platform/desktop_layout.dart';
+import 'package:rad_mysvcs/core/util/bidi.dart';
+import 'package:rad_mysvcs/models/fiber_network.dart';
+import 'package:rad_mysvcs/models/subscriber.dart';
+import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_diagnosis_screen.dart';
+import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_home_screen.dart';
+import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_light_screen.dart';
+import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_link_screen.dart';
+import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_outage_screen.dart';
+import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_pon_screen.dart';
+import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_search_screen.dart';
+import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_settings_sheet.dart';
+import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_subscriber_card.dart';
+import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_tech_screen.dart';
+import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_widgets.dart';
+import 'package:rad_mysvcs/services/fiber/fiber_monitor.dart';
+import 'package:rad_mysvcs/services/fiber/fiber_store.dart';
+import 'package:rad_mysvcs/services/permissions_service.dart';
+import 'package:rad_mysvcs/theme/colors.dart';
+import 'package:rad_mysvcs/theme/typography.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'support/app_fonts.dart';
+import 'support/fake_snmp_agent.dart';
+import 'support/fiber_fixture.dart';
+
+/// شاشات «شبكة الألياف» كما يراها الوكيل: أولت BDCOM وهميّ (SNMP في الذاكرة) بمنفذين وصناديق، وخادمٌ وهميّ — بعرض
+/// الهاتف ٣٦٠/٤٣٠ والحاسبة، نهاراً وليلاً، بلا فيضٍ ولا استثناء، ومعها الأفعال: «التقط بالفصل»، «ثبّت الأكيدة»،
+/// الإعدادات، والبحث.
+const _phone = Size(360, 780);
+const _phoneWide = Size(430, 932);
+const _desk = Size(1260, 860);
+
+void main() {
+  setUpAll(loadAppFonts);
+
+  late FiberTestServer server;
+  late FiberTestOlt olt;
+
+  setUp(() {
+    FlutterSecureStorage.setMockInitialValues({'auth.token': 't', 'auth.admin_id': '2'});
+    SharedPreferences.setMockInitialValues({});
+    server = FiberTestServer();
+    ApiClient.dio.httpClientAdapter = server;
+    // معترضات العميل تقرأ التوكن من خزنة الحاسبة (ملفّ حقيقيّ) — لا تكتمل بزمن الاختبار الوهميّ.
+    final interceptors = List<Interceptor>.of(ApiClient.dio.interceptors);
+    ApiClient.dio.interceptors.clear();
+    addTearDown(() {
+      ApiClient.dio.interceptors
+        ..clear()
+        ..addAll(interceptors);
+    });
+    olt = FiberTestOlt();
+    FiberMonitor.debugReset();
+    FiberMonitor.backend = FiberTestBackend(olt);
+    FiberStore.reset();
+    FiberStore.debugSet(fiberTestLayout());
+    FiberLinkScreen.debugReset();
+    FiberSubscriberCard.debugReset();
+    PermissionsService.debugReset();
+  });
+
+  tearDown(() {
+    FiberMonitor.debugReset();
+    AppColors.setDarkMode(false);
+  });
+
+  /// يرسم [screen] بالمقاس والوضع، وينتظر قراءة الأولت الأولى.
+  Future<void> pumpScreen(WidgetTester t, Widget screen, {Size size = _phone, bool desk = false, bool dark = false}) async {
+    AppColors.setDarkMode(dark);
+    t.view.physicalSize = size;
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(MaterialApp(
+      theme: ThemeData(fontFamily: AppType.family),
+      builder: (ctx, child) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: MediaQuery(
+          data: MediaQuery.of(ctx).copyWith(disableAnimations: true),
+          child: desk ? DesktopScope(child: child!) : child!,
+        ),
+      ),
+      home: screen,
+    ));
+    for (var i = 0; i < 6; i++) {
+      await t.pump(const Duration(milliseconds: 30));
+    }
+  }
+
+  /// تمريرة الصفحة نفسها (لا شرائح الفلترة الأفقيّة).
+  Finder mainScroll() => find.descendant(of: find.byType(FiberPage), matching: find.byType(Scrollable)).first;
+
+  /// يُزيل الشجرة ويُنسي المراقبات (المصدر الوهميّ يبقى).
+  Future<void> unmount(WidgetTester t) async {
+    await t.pumpWidget(const SizedBox());
+    await t.pump();
+    FiberMonitor.resetAll();
+  }
+
+  /// كلّ شاشة × (هاتف ٣٦٠، هاتف ٤٣٠، حاسبة) × (نهار، ليل) — بلا فيضٍ ولا استثناء.
+  Future<void> everyLayout(WidgetTester t, Widget Function(FiberMonitor m) build, {void Function(FiberMonitor m)? check}) async {
+    for (final (size, desk) in const [(_phone, false), (_phoneWide, false), (_desk, true)]) {
+      for (final dark in const [false, true]) {
+        final m = FiberMonitor.of(fiberTestDevice());
+        await pumpScreen(t, build(m), size: size, desk: desk, dark: dark);
+        expect(t.takeException(), isNull, reason: '${size.width} ${desk ? 'حاسبة' : 'هاتف'} ${dark ? 'ليل' : 'نهار'}');
+        check?.call(m);
+        await unmount(t);
+      }
+    }
+  }
+
+  testWidgets('الرئيسيّة: المتّصلون والضوء والمنافذ والأدوات — والعطل بمكانه حين يسقط صندوق', (t) async {
+    await everyLayout(t, (m) => FiberHomeScreen(olts: [fiberTestDevice()], initialOltId: 9));
+    // صندوقٌ يسقط كلّه
+    olt.drop([for (var i = 1; i <= 12; i++) 300 + i]);
+    final m = FiberMonitor.of(fiberTestDevice());
+    await pumpScreen(t, FiberHomeScreen(olts: [fiberTestDevice()], initialOltId: 9));
+    expect(find.text('شبكة الألياف'), findsWidgets);
+    expect(find.textContaining('صندوق 3-أ'), findsWidgets);
+    expect(m.outages.single.scopeKey, 'box:2');
+    expect(server.to('/api/v2/admin/devices/fiber/events').length, 1, reason: 'العطل يُبلَّغ للخادم مرّةً');
+    expect(t.takeException(), isNull);
+    await unmount(t);
+  });
+
+  testWidgets('المنفذ: الشجرة بصناديقها، وما بلا صندوق ظاهرٌ بعدده', (t) async {
+    await everyLayout(t, (m) => FiberPonScreen(monitor: m, pon: 'EPON0/3'));
+    await pumpScreen(t, FiberPonScreen(monitor: FiberMonitor.of(fiberTestDevice()), pon: 'EPON0/3'));
+    expect(find.textContaining('صندوق 3-أ'), findsWidgets);
+    expect(find.textContaining('موزّع رئيسي'), findsWidgets);
+    await t.scrollUntilVisible(find.textContaining('بلا صندوق').first, 200, scrollable: mainScroll());
+    expect(find.textContaining('جهازان بلا صندوق'), findsOneWidget, reason: 'EPON0/3:23 و24 بلا سجلّ');
+    await unmount(t);
+  });
+
+  testWidgets('العطل الآن: المكان والسبب والفنّي والمتأثرون', (t) async {
+    olt.drop([for (var i = 1; i <= 12; i++) 300 + i]);
+    await everyLayout(t, (m) => FiberOutageScreen(monitor: m, scopeKey: 'box:2'));
+    await pumpScreen(t, FiberOutageScreen(monitor: FiberMonitor.of(fiberTestDevice()), scopeKey: 'box:2'));
+    expect(find.textContaining('قطع بالليف'), findsWidgets);
+    expect(find.text('أرسل الموقع للفنّي'), findsOneWidget);
+    await t.scrollUntilVisible(find.textContaining('المتأثرون'), 300, scrollable: mainScroll());
+    expect(find.text('المتأثرون · 12'), findsOneWidget);
+    await unmount(t);
+  });
+
+  testWidgets('تشخيص جهاز: الحكم والخطوات وجهاز الألياف وجيرانه', (t) async {
+    await everyLayout(t, (m) => FiberDiagnosisScreen(monitor: m, onuKey: 'EPON0/3:16'));
+    await pumpScreen(t, FiberDiagnosisScreen(monitor: FiberMonitor.of(fiberTestDevice()), onuKey: 'EPON0/3:16'));
+    expect(find.text('الفحص خطوة بخطوة'), findsOneWidget);
+    await t.scrollUntilVisible(find.text('جهاز الألياف').first, 300, scrollable: mainScroll());
+    expect(find.textContaining('-28.1'), findsWidgets, reason: 'ضوءه الضعيف ظاهر بقيمته');
+    await unmount(t);
+  });
+
+  testWidgets('صحّة الضوء: الرتب الأربع والتوزيع وقائمة ما يحتاج انتباهاً', (t) async {
+    await everyLayout(t, (m) => FiberLightScreen(monitor: m));
+    await pumpScreen(t, FiberLightScreen(monitor: FiberMonitor.of(fiberTestDevice())));
+    expect(find.text('توزيع الضوء'), findsOneWidget);
+    await t.scrollUntilVisible(find.textContaining('تحتاج انتباهاً'), 300, scrollable: mainScroll());
+    expect(find.text('تحتاج انتباهاً الآن · 2'), findsOneWidget, reason: '-26.8 حدّي و-28.1 ضعيف');
+    await unmount(t);
+  });
+
+  testWidgets('وضع الفنّي: المقياس وقبل/بعد والبلاطات — بلا جهاز يطلب الاختيار', (t) async {
+    await everyLayout(t, (m) => FiberTechScreen(monitor: m, onuKey: 'EPON0/3:5'));
+    await everyLayout(t, (m) => FiberTechScreen(monitor: m));
+    await pumpScreen(t, FiberTechScreen(monitor: FiberMonitor.of(fiberTestDevice()), onuKey: 'EPON0/3:5'));
+    expect(find.text('-21.0'), findsWidgets, reason: 'الضوء الآن بالمقياس');
+    expect(find.textContaining('قبل ·'), findsOneWidget);
+    expect(find.text('الإرسال'), findsOneWidget);
+    expect(find.text(iso('2.3 dBm')), findsOneWidget);
+    await unmount(t);
+  });
+
+  testWidgets('«التقط بالفصل»: الفصل يكشف الجهاز ويختاره، وضوءه قبل الفصل يصير «قبل»', (t) async {
+    final m = FiberMonitor.of(fiberTestDevice());
+    await pumpScreen(t, FiberTechScreen(monitor: m));
+    expect(find.textContaining('اختر الجهاز'), findsWidgets);
+    await t.tap(find.byIcon(LucideIcons.unplug));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 50));
+    expect(find.text('التقط بالفصل'), findsOneWidget);
+    expect(find.textContaining('نراقب'), findsOneWidget);
+    // الفنّي يفصل ليف ONU 3:7
+    olt.unplug(307);
+    await t.pump(const Duration(seconds: 2));
+    for (var i = 0; i < 5; i++) {
+      await t.pump(const Duration(milliseconds: 30));
+    }
+    expect(find.text('التقط بالفصل'), findsNothing, reason: 'النافذة أغلقت بجهازٍ واحد');
+    expect(find.textContaining('ONU 3:7'), findsWidgets);
+    expect(find.textContaining('قبل ·'), findsOneWidget, reason: 'ضوءه قبل الفصل محفوظ');
+    expect(find.text(iso('-21.6')), findsOneWidget, reason: '-195 - 7×3 = -216');
+    expect(m.techRecent.first, 'EPON0/3:7');
+    expect(t.takeException(), isNull);
+    await unmount(t);
+  });
+
+  testWidgets('«التقط بالفصل»: جهازان بنفس اللحظة ⇒ يختار الفنّي من بينهما', (t) async {
+    final m = FiberMonitor.of(fiberTestDevice());
+    await pumpScreen(t, FiberTechScreen(monitor: m));
+    await t.tap(find.byIcon(LucideIcons.unplug));
+    await t.pump(const Duration(milliseconds: 50));
+    olt.unplug(302);
+    olt.unplug(303);
+    await t.pump(const Duration(seconds: 2));
+    await t.pump(const Duration(milliseconds: 50));
+    expect(find.textContaining('تغيّرت جهازان بنفس اللحظة'), findsOneWidget);
+    await t.tap(find.textContaining('sub3').first);
+    await t.pump(const Duration(milliseconds: 50));
+    expect(find.textContaining('ONU 3:3'), findsWidgets);
+    await unmount(t);
+  });
+
+  testWidgets('الربط: المقترح بسببه، و«ثبّت الأكيدة» يحفظ للخادم', (t) async {
+    FiberLinkScreen.debugSeed(
+      sessions: {'ali.k12': '02:00:00:00:03:04'},
+      directory: {
+        'ali.k12': fiberTestSub('ali.k12', first: 'علي', last: 'كريم'),
+        'u20': fiberTestSub('u20'),
+      },
+    );
+    // ONU 3:20 اسمها على الأولت يوزر مشترك، وONU 3:21 ماكها نفسه ماك جلسة ali.k12.
+    olt.agent.put('${OltFiberReads.ifAliasOid}.320', snmpText('', 'u20'));
+    olt.agent.put('${BdcomEpon.onuMacOid}.321', snmpBytes('', [2, 0, 0, 0, 3, 4]));
+    await everyLayout(t, (m) => FiberLinkScreen(monitor: m));
+    await pumpScreen(t, FiberLinkScreen(monitor: FiberMonitor.of(fiberTestDevice())));
+    expect(find.text('ربط الأجهزة بالمشتركين'), findsWidgets);
+    expect(find.textContaining('من 30 جهازاً مربوط بمشترك'), findsOneWidget);
+    expect(find.text(iso('3')), findsWidgets, reason: 'المربوط ثلاثة');
+    expect(find.text('مقترح · 2'), findsOneWidget);
+    expect(find.textContaining('اسم الجهاز على الأولت = يوزره'), findsOneWidget);
+    expect(find.textContaining('الجهاز نفسه يتّصل بيوزره'), findsOneWidget);
+    expect(find.textContaining('علي كريم', findRichText: true), findsOneWidget, reason: 'الاسم من دليل الحساب لا اليوزر وحده');
+
+    await t.tap(find.text('ثبّت الأكيدة (2)'));
+    for (var i = 0; i < 4; i++) {
+      await t.pump(const Duration(milliseconds: 30));
+    }
+    final l = FiberStore.layout.value;
+    expect(l.recordFor(9, 'EPON0/3:20', null)?.username, 'u20');
+    expect(l.recordFor(9, 'EPON0/3:21', '020000000304')?.username, 'ali.k12');
+    expect(l.recordFor(9, 'EPON0/3:21', '020000000304')?.source, FiberLinkSource.onuMac);
+    final posted = server.to('/api/v2/admin/devices/fiber/onus').single.data as Map;
+    expect((posted['records'] as List).map((r) => (r as Map)['username']).toSet(), {'u20', 'ali.k12'});
+    expect(find.text('ثُبّتت كلّ الأكيدة'), findsOneWidget);
+    expect(find.text(iso('مربوط')), findsNWidgets(2), reason: 'المثبَّت يبقى بمكانه بحبّة «مربوط»');
+    expect(t.takeException(), isNull);
+    await t.pump(const Duration(seconds: 4)); // رسالة «ثُبّت ربط…» تختفي
+    await unmount(t);
+  });
+
+  testWidgets('البحث: «3:7» والماك واليوزر — والاختيار لوضع الفنّي يُرجع المفتاح', (t) async {
+    await everyLayout(t, (m) => FiberSearchScreen(monitor: m));
+    await pumpScreen(t, FiberSearchScreen(monitor: FiberMonitor.of(fiberTestDevice())));
+    await t.enterText(find.byType(TextField), 'sub2');
+    await t.pump();
+    expect(find.text('sub2'), findsOneWidget);
+    await t.enterText(find.byType(TextField), '3:7');
+    await t.pump();
+    expect(find.textContaining('ONU 3:7'), findsWidgets);
+    expect(t.takeException(), isNull);
+    await unmount(t);
+  });
+
+  testWidgets('الإعدادات: رقمٌ غلط يُرفض، والصحيح يُحفظ مع التنبيهات وأقلّ عدد', (t) async {
+    t.view.physicalSize = _phone;
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(MaterialApp(
+      theme: ThemeData(fontFamily: AppType.family),
+      builder: (ctx, child) => Directionality(textDirection: TextDirection.rtl, child: child!),
+      home: Builder(
+        builder: (ctx) => Scaffold(
+          body: Center(
+            child: TextButton(
+              onPressed: () => showFiberSettingsSheet(ctx, oltId: 9, oltName: 'أولت المركز'),
+              child: const Text('افتح'),
+            ),
+          ),
+        ),
+      ),
+    ));
+    await t.tap(find.text('افتح'));
+    await t.pumpAndSettle();
+    expect(find.text('إعدادات شبكة الألياف'), findsOneWidget);
+    await t.enterText(find.widgetWithText(TextField, 'رقم الفنّي'), '12345');
+    await t.tap(find.text('حفظ'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('رقم الفنّي غير صحيح'), findsOneWidget);
+    await t.enterText(find.widgetWithText(TextField, 'رقم الفنّي'), '0770 123 4567');
+    await t.tap(find.byTooltip('أكثر'));
+    await t.pump();
+    await t.tap(find.text('حفظ'));
+    await t.pumpAndSettle();
+    expect(find.text('إعدادات شبكة الألياف'), findsNothing);
+    final s = FiberStore.layout.value.settingsOf(9);
+    expect(s.techPhone, '07701234567');
+    expect(s.minOnus, 4);
+    expect(server.to('/api/v2/admin/devices/fiber/settings/9', 'PUT').length, 1);
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('كرت صفحة المشترك: المربوط يرى جهازه وحالته وضوءه، وغير المربوط بلا كرت، والموظّف بلا مراقبة مقفل', (t) async {
+    FiberSubscriberCard.devices = () async => [fiberTestDevice()];
+    Future<void> card(Subscriber s, {bool dark = false}) async {
+      AppColors.setDarkMode(dark);
+      t.view.physicalSize = _phone;
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(MaterialApp(
+        theme: ThemeData(fontFamily: AppType.family),
+        builder: (ctx, child) => Directionality(textDirection: TextDirection.rtl, child: child!),
+        home: Scaffold(body: ListView(padding: const EdgeInsets.all(16), children: [FiberSubscriberCard(sub: s)])),
+      ));
+      for (var i = 0; i < 6; i++) {
+        await t.pump(const Duration(milliseconds: 30));
+      }
+    }
+
+    for (final dark in [false, true]) {
+      await card(fiberTestSub('sub2'), dark: dark);
+      expect(find.text('جهاز الألياف'), findsOneWidget);
+      expect(find.text(iso('متّصل')), findsOneWidget);
+      expect(find.textContaining('ONU 3:2 · صندوق 3-أ · أولت المركز'), findsOneWidget);
+      expect(find.text('تشخيص الجهاز'), findsOneWidget);
+      expect(t.takeException(), isNull);
+      await unmount(t);
+    }
+
+    await card(fiberTestSub('nobody'));
+    expect(find.text('جهاز الألياف'), findsNothing);
+    await unmount(t);
+
+    PermissionsService.debugSet(isEmployee: true, permissions: const {'devices.view': true});
+    await card(fiberTestSub('sub2'));
+    expect(find.text('جهاز الألياف'), findsOneWidget);
+    expect(find.text('لا صلاحيّة'), findsWidgets);
+    expect(FiberMonitor.existing(9), isNull, reason: 'بلا صلاحيّة لا يُقرأ الأولت');
+    await unmount(t);
+  });
+}

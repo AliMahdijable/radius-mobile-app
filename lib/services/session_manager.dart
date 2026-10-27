@@ -22,6 +22,9 @@ import 'dashboard_cache.dart';
 import 'subscribers_offline_cache.dart';
 import 'device_alerts_service.dart';
 import 'employee_session.dart';
+import 'fiber/fiber_monitor.dart';
+import 'fiber/fiber_store.dart';
+import 'fiber/fiber_watch.dart';
 import 'fcm_service.dart';
 import 'inbox_service.dart';
 import 'linked_companies.dart';
@@ -93,6 +96,10 @@ class SessionManager {
     _guardSync('LinkedCompanies.reset', () => LinkedCompanies.reset());
     // «كل الشركات»: لا يرث أحدٌ وضع سابقه ولا مراجعه ولا قوائم شركاته.
     _guardSync('MergedMode.reset', () => MergedMode.reset());
+    // شبكة الألياف: مراقبات الأولتات تتوقّف (لا يُقرأ أولت سابقه ولا يُبلَّغ عن عطله)، وتخطيطه يفرغ من الذاكرة.
+    _guardSync('FiberWatch.stop', () => FiberWatch.stop());
+    _guardSync('FiberMonitor.resetAll', () => FiberMonitor.resetAll());
+    _guardSync('FiberStore.reset', () => FiberStore.reset());
 
     // 2) Async persistent stores — PARALLEL via Future.wait.
     //    Previously sequential: each waited on the last (~40ms × 4).
@@ -128,6 +135,8 @@ class SessionManager {
       // وسطراهما فوق شاهدان.
       _guardAsync(
           'SubscribersOfflineCache.clear', SubscribersOfflineCache.clear()),
+      // وعلى القرص: أسماء المشتركين المربوطة بأجهزتهم لا تبقى بعد الخروج.
+      if (clearAuth) _guardAsync('FiberStore.clear', FiberStore.clear()),
     ]);
 
     // 3) FCM unregister (network — only on real logout).

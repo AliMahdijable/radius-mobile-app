@@ -12,6 +12,7 @@ import '../../core/widgets/desk_pressable.dart';
 import '../../core/platform/desk_nav_guard.dart';
 import '../../services/active_company.dart';
 import '../../services/alerts_service.dart';
+import '../../services/fiber/fiber_watch.dart';
 import '../../services/permissions_service.dart';
 import '../../services/linked_companies.dart';
 import '../../services/provider_service.dart';
@@ -103,10 +104,13 @@ class _DesktopShellState extends State<DesktopShell> {
     super.initState();
     _open(_section);
     DesktopLayout.shellMounted();
+    // أعطال الألياف بالخلفيّة ما دام البرنامج مفتوحاً — الحاسبة بالمكتب على شبكة الأولت، والإشعار يصل للهاتف.
+    FiberWatch.start();
   }
 
   @override
   void dispose() {
+    FiberWatch.stop();
     DesktopLayout.shellUnmounted();
     super.dispose();
   }

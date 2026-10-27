@@ -32,6 +32,7 @@ import '../../api/olt_profile.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../desktop/desk_widgets.dart';
+import 'fiber/fiber_home_screen.dart';
 import '../../core/widgets/copyable.dart';
 
 /// شاشة تفاصيل جهاز — تصميم متقدّم:
@@ -430,6 +431,13 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
             onPressed: () => Navigator.pop(context, _changed),
           ),
           actions: [
+            // شبكة الألياف لهذا الأولت: صناديقه ومشتركوه وأعطاله.
+            if (_isVsolOlt(_d) && Perms.has('devices.monitor'))
+              IconButton(
+                icon: const Icon(LucideIcons.cable, size: 18),
+                tooltip: 'شبكة الألياف',
+                onPressed: () => openFiberHome(context, [_d], oltId: _d.id),
+              ),
             // Reboot — يظهر فقط للأجهزة الي عندها credentials وبروتوكول مدعوم
             if (_canReboot())
               IconButton(

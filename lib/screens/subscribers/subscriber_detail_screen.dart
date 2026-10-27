@@ -54,6 +54,7 @@ import 'widgets/subscriber_actions.dart';
 import 'connection_alert_flow.dart';
 import '../../services/receipt_service.dart';
 import '../../core/widgets/print_feedback.dart';
+import '../network_devices/fiber/fiber_subscriber_card.dart';
 
 /// Subscriber details — v2 visual shell over v1's structure. Layout
 /// top→bottom (info → operations):
@@ -405,6 +406,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                     // وفوقه «آخر اتصال» لغير المتّصل: متى وآخر جهاز (MAC) —
                     // كصفّ القائمة، لكلّ المزوّدين (المجموعة ② ١٨ أكتوبر).
                     LastSeenCard(sub: sub),
+                    // جهاز الألياف (ONU) للمشترك المربوط بها من «شبكة الألياف» — حالته وضوؤه الآن والتشخيص.
+                    FiberSubscriberCard(sub: sub),
                     DeviceProbeCard(
                       key: _deviceCardKey,
                       ip: sub.ipAddress ?? '',

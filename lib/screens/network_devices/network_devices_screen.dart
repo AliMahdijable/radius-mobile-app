@@ -8,6 +8,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../api/network_devices_api.dart';
+import '../../api/olt_profile.dart';
 import '../../models/device_region.dart';
 import '../../models/network_device.dart';
 import '../../services/device_alerts_service.dart';
@@ -22,6 +23,7 @@ import 'device_alerts_screen.dart';
 import 'device_sort.dart';
 import 'probe_backoff.dart';
 import 'devices_wall_screen.dart';
+import 'fiber/fiber_home_screen.dart';
 import 'network_device_details_screen.dart';
 import 'network_device_form_sheet.dart';
 import 'regions_screen.dart';
@@ -583,6 +585,29 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       MaterialPageRoute(builder: (_) => const DevicesWallScreen()),
     );
     if (mounted) _refresh();
+  }
+
+  /// «شبكة الألياف»: أولتات الحساب (VSOL/BDCOM) بصناديقها ومشتركيها وأعطالها. بلا أولت ⇒ يقول كيف يبدأ.
+  Future<void> _openFiber() async {
+    if (!Perms.has('devices.monitor')) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('شبكة الألياف تحتاج صلاحيّة مراقبة الأجهزة'),
+        behavior: SnackBarBehavior.floating,
+      ));
+      return;
+    }
+    final olts = [
+      for (final d in _all)
+        if (OltProfile.fromDevice(d).opensOltPanel) d,
+    ];
+    if (olts.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('شبكة الألياف تشتغل على أولت VSOL أو BDCOM — أضفه من «إضافة جهاز» بالـSNMP أوّلاً'),
+        behavior: SnackBarBehavior.floating,
+      ));
+      return;
+    }
+    await openFiberHome(context, olts);
   }
 
   /// «عرض البرج» (المالك ٢٧ أكتوبر) — كلّ منطقةٍ برج. المنطقة المصفّاة تُفتح مباشرةً، وإلّا تُختار من قائمة.
@@ -1232,6 +1257,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       _openWall();
                     case 'tower':
                       _openTower();
+                    case 'fiber':
+                      _openFiber();
                     case 'sort':
                       _pickSort();
                     case 'regions':
@@ -1245,6 +1272,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 itemBuilder: (_) => [
                   _menuItem('wall', LucideIcons.layoutGrid, 'نظرة عامّة'),
                   if (_all.isNotEmpty) _menuItem('tower', LucideIcons.radioTower, 'عرض البرج'),
+                  _menuItem('fiber', Perms.has('devices.monitor') ? LucideIcons.cable : LucideIcons.lock, 'شبكة الألياف'),
                   // الترتيب الحاليّ في التسمية — القائمة المطويّة تُخفي
                   // الأيقونة التي كانت تدلّ عليه.
                   _menuItem(

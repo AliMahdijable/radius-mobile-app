@@ -4,6 +4,7 @@ import '../api/big_subscribers_api.dart';
 import '../api/subscribers_api.dart';
 import '../models/app_notification.dart';
 import '../models/subscriber.dart';
+import '../screens/network_devices/fiber/fiber_push.dart';
 import '../screens/notifications/inbox_screen.dart';
 import '../screens/subscribers/subscriber_detail_screen.dart';
 
@@ -60,6 +61,9 @@ class NotificationRouter {
       _pending = n;
       return;
     }
+
+    // (٠) عطل ألياف ⇒ «العطل الآن» لأولته (لا مشترك واحد فيه).
+    if (await openFiberPush(nav, n.data)) return;
 
     // (١) حمولةٌ تحمل مشتركاً بعينه ⇒ افتح كرته. وهذا أدقّ من النوع:
     //     ملخّصٌ جماعيّ قد يحمل مشتركاً واحداً حين يكون وحده.
