@@ -104,17 +104,18 @@ void main() {
     });
 
     test('صفحة الدخول بدل الضوء (الجلسة انتهت) ⇒ يتوقّف، والأثر يقول ما جُرِّب بلا قيم', () async {
-      d.pages['epon_status_link_info_t.gch'] = (404, 'Not Found');
-      d.pages['gpon_status_link_info_t.gch'] =
+      // الجهاز يسرد epon ثمّ pon، لكنّ epon تعود صفحة دخولٍ (انتهت الجلسة) ⇒ نتوقّف ولا نُكمل pon.
+      d.pages['epon_status_link_info_t.gch'] =
           (200, '<html><form name="fLogin"><input name="Frm_Logintoken"></form></html>');
+      d.pages['pon_status_link_info_t.gch'] = (200, _FakeMh80._optical);
       final s = await ZteOntService.loginConfigured(d.host, 'agent', 'secret-1');
       expect(await ZteOntService.fetchOptical(s!), isNull);
       final trace = ZteOntService.lastPageTrace(s)!;
-      expect(trace, startsWith('st:404 '), reason: 'start.ghtml أوّلاً كما يفتحها المتصفّح');
-      expect(trace, contains('epon_link:404'));
-      expect(trace, contains('gpon_link:200L'));
-      expect(trace.split(' '), hasLength(3), reason: 'لا محاولة بعد انتهاء الجلسة');
-      expect(ZteOntService.lastReadUnknown(s), isFalse, reason: 'صفحةٌ لم ترجع ليست صيغةً جديدة');
+      expect(trace, startsWith('start:'), reason: 'الإطاران أوّلاً للقائمة');
+      expect(trace, contains('template:'));
+      expect(trace, contains('epon_link:200L'), reason: 'صفحة دخولٍ عادت');
+      expect(d.nextpages, isNot(contains('pon_status_link_info_t.gch')), reason: 'لا محاولة بعد انتهاء الجلسة');
+      expect(ZteOntService.lastReadUnknown(s), isFalse, reason: 'جلسةٌ منتهية ليست صيغةً جديدة');
     });
 
     test('شكل قيمة الضوء للتشخيص بلا القيمة', () {
@@ -153,54 +154,41 @@ void main() {
       expect(d.nextpages, isNot(contains('status_dev_info_t.gch')), reason: 'ليست صفحة ضوء');
     });
 
-    test('الصفحات تُجاب ولا ضوء فيها ⇒ «صيغةٌ جديدة»، والأثر أسماءٌ بلا قيم', () async {
-      d.strictPages = true;
-      const template = '<html><head><title>D401</title></head><body><script>var RxOptPwr = "-21.5";'
-          "menu('pon_status_optic_info_t.gch');</script><td id=\"Frm_TxOptPwr\">2.1</td></body></html>";
-      for (final p in ['epon_status_link_info_t.gch', 'gpon_status_link_info_t.gch', 'pon_status_link_info_t.gch']) {
-        d.pages[p] = (200, template);
-      }
+    test('كلّ صفحات القائمة تُجاب ولا ضوء فيها بصيغةٍ نعرفها ⇒ «صيغةٌ جديدة»، والأثر أسماءٌ بلا قيم', () async {
+      // الجهاز يسرد pon (معروفة) + مرشّحةً (pon_status_optic_info)، كلتاهما بحقلٍ باسمٍ لا نعرفه.
+      const page = '<html><head><title>D401</title></head><body><script>var RxOptPwr = "-21.5";</script>'
+          '<td id="Frm_TxOptPwr">2.1</td></body></html>';
+      d.pages['pon_status_link_info_t.gch'] = (200, page);
+      d.pages['pon_status_optic_info_t.gch'] = (200, page);
       final s = await ZteOntService.loginConfigured(d.host, 'agent', 'secret-1');
       expect(await ZteOntService.fetchOptical(s!), isNull);
       expect(ZteOntService.lastReadUnknown(s), isTrue);
       final trace = ZteOntService.lastPageTrace(s)!;
-      expect(trace, contains('epon_link:200/-/0.2k'));
-      expect(trace, contains('pon_optic:404'), reason: 'المرشّحة من القائمة جُرِّبت');
+      expect(trace, contains('pon_link:200/'));
+      expect(trace, contains('pon_optic:200/'), reason: 'المرشّحة من القائمة جُرِّبت');
       final info = ZteOntService.lastPageInfo(s)!;
       expect(info, contains('t=D401'));
-      expect(info, contains('pg=epon_link#0.2k:v:RxOptPwr'), reason: 'حقول كلّ صفحةٍ أجابت بلا ضوء — حقلٌ سالبٌ = الضوء');
+      expect(info, contains('pg=pon_link#0.1k:v:RxOptPwr'), reason: 'حقول كلّ صفحةٍ أجابت بلا ضوء — حقلٌ سالبٌ = الضوء');
       expect(info, contains('c=pon_status_optic_info'), reason: 'المرشّحة للضوء');
       expect(info, contains('Frm_TxOptPwr'), reason: 'اسمٌ يشبه الضوء من n=');
-      expect(info, contains('s=epon_status_link_info,gpon_status_link_info,pon_status_link_info'),
-          reason: 'صفحات الحالة المعروفة فقط (المرشّحة في c=)');
+      expect(info, contains('s=pon_status_link_info'), reason: 'صفحة الحالة المعروفة الموجودة في القائمة');
       expect('$trace $info', isNot(contains('21')), reason: 'لا قيمة في الأثر');
     });
 
-    test('الـpid الصحيح لكلّ صفحةٍ من روابط القائمة (D401: بـ1002 الثابت صفحة خطأ)', () {
-      const menu = '<a href="getpage.gch?pid=1003&nextpage=pon_status_optic_info_t.gch">الضوء</a>'
-          'getObj().src = "getpage.gch?pid=1005&amp;nextpage=status_dev_info_t.gch";';
-      final links = ZteOntParse.pageLinks(menu);
-      expect(links['pon_status_optic_info_t.gch'], '1003');
-      expect(links['status_dev_info_t.gch'], '1005', reason: 'يفكّ &amp;');
-      expect(links['missing_t.gch'], isNull);
-    });
-
-    test('صفحة الضوء بـpidها الصحيح من القائمة (غير 1002) ⇒ تُقرأ', () async {
-      d.strictPages = true; // بلا تطابقٍ دقيق ⇒ 404
-      d.pages['epon_status_link_info_t.gch'] = (
+    test('D401: لا تُطلب صفحةٌ ليست في قائمة الجهاز (epon غير موجودة) ⇒ لا تفسد الجلسة وتُقرأ pon', () async {
+      // قائمة الجهاز = pon وحدها (كـD401 الحيّ)؛ epon/gpon ليستا فيها. طلبهما كان يُدخل الجهاز حالة خطأٍ فتعود pon فارغة.
+      d.pages['pon_status_link_info_t.gch'] = (
         200,
-        '<html><title>D401</title>'
-            '<a href="getpage.gch?pid=1007&nextpage=pon_status_optic_t.gch">ضوء</a></html>'
+        '<html><title>D401</title><script>var LosInfo = "0";var RxPower = "-339700";var TxPower = "12000";</script>'
+            '<td id="Frm_Volt">3409000</td><td id="Frm_Temp">34</td></html>'
       );
-      // الصفحة الصحيحة لا تُخدَم إلّا بـpid=1007.
-      d.pagePid['pon_status_optic_t.gch'] = '1007';
-      d.pages['pon_status_optic_t.gch'] =
-          (200, '<html><title>D401</title><td id="Frm_RxPower">-23.40</td><td id="Frm_TxPower">2.10</td></html>');
       final s = await ZteOntService.loginConfigured(d.host, 'agent', 'secret-1');
       final o = await ZteOntService.fetchOptical(s!);
-      // الصفحة لا تُخدَم إلّا بـpid=1007، فنجاح القراءة دليلٌ أنّ الـpid الصحيح من القائمة استُعمل.
-      expect(o?.rxPower, '-23.4');
-      expect(d.nextpages, contains('pon_status_optic_t.gch'));
+      expect(o?.rxPower, '-34.0', reason: 'صيغة D401 الحيّة: ‎-339700 ÷ 10000');
+      expect(o?.txPower, '1.2');
+      expect(d.nextpages, isNot(contains('epon_status_link_info_t.gch')), reason: 'ليست في القائمة فلا تُطلب');
+      expect(d.nextpages, isNot(contains('gpon_status_link_info_t.gch')));
+      expect(d.nextpages, contains('pon_status_link_info_t.gch'));
     });
 
     test('تلميحات الضوء: حقلٌ سالب ولو باسمٍ غريب، لا «‎-1» الافتراضيّة، والقيم تُترك', () {
@@ -394,10 +382,9 @@ void main() {
     test('أثرٌ أطول من حدّ السجلّ ⇒ يصل أجزاءً، وما بعد الأوّل يبدأ بـ«+»', () async {
       api.defaults = {'ontUsername': 'agent', 'ontPassword': 'secret-1'};
       d.strictPages = true;
-      final menu = [for (var i = 0; i < 8; i++) "menu('pon_status_optical_power_long_name_number_${i}_info_t.gch');"].join();
-      final template = '<html><title>D401</title><script>$menu</script></html>';
-      for (final p in ['epon_status_link_info_t.gch', 'gpon_status_link_info_t.gch', 'pon_status_link_info_t.gch']) {
-        d.pages[p] = (200, template);
+      // قائمةٌ فيها صفحاتٌ كثيرةٌ بأسماءٍ طويلة (كلّها مرشّحةٌ للضوء وتُجاب بلا ضوء) ⇒ أثرٌ طويلٌ يتجاوز حدّ السجلّ.
+      for (var i = 0; i < 8; i++) {
+        d.pages['pon_status_optical_power_long_name_number_${i}_info_t.gch'] = (200, '<html><title>D401</title>no light</html>');
       }
       await DeviceProbeApi.probe(fallbackIp: d.host, force: true, retryLogin: true);
       await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -407,8 +394,8 @@ void main() {
       expect(parts.length, inInclusiveRange(2, 5));
       expect(parts.every((p) => p.length <= 291), isTrue);
       expect(parts.where((p) => p.startsWith('+')), hasLength(parts.length - 1));
-      // الأثر الطويل يُقطَّع عبر الأجزاء بلا فقدٍ: اسمٌ من آخر القائمة يظهر في المجموع.
-      expect(parts.join().replaceAll('+', ''), contains('pon_optical_power_long_name_number_7'));
+      // الأثر الطويل يُقطَّع عبر الأجزاء بلا فقدٍ: اسمٌ من القائمة يظهر في المجموع.
+      expect(parts.join().replaceAll('+', ''), contains('optical_power_long_name_number_'));
     });
 
     test('جهازٌ لا يجاوب ⇒ «لم يُتمكّن من الوصول»', () async {
@@ -430,12 +417,10 @@ class _FakeMh80 {
   int lockAt = 0;
   Duration pageDelay = Duration.zero;
 
-  /// صفحاتٌ بعينها (الاسم ⇒ الحالة والجسم) — ما سواها صفحة ضوء MH80، أو 404 مع [strictPages].
+  /// صفحاتٌ بعينها يخدمها الجهاز (الاسم ⇒ الحالة والجسم). القائمة (template.gch) تسرد هذه الأسماء وحدها، وطلب اسمٍ ليس
+  /// فيها يُدخل الجهاز حالة خطأ (poison) كـD401 الحيّ. فارغةٌ وبلا [strictPages] ⇒ صفحة ضوءٍ افتراضيّة واحدة.
   final pages = <String, (int, String)>{};
   bool strictPages = false;
-
-  /// صفحةٌ لا تُخدَم إلّا بهذا الـpid (D401): طلبُها بـ1002 ⇒ 404.
-  final pagePid = <String, String>{};
   final posts = <String>[];
   final paths = <String>[];
 
@@ -443,14 +428,27 @@ class _FakeMh80 {
   final nextpages = <String>[];
   String? pageCookie;
   bool _stopped = false;
+  bool _poisoned = false; // D401: بعد طلب صفحةٍ ليست في القائمة تُرجَع كلّ الصفحات صغيرةً.
 
   String get host => '127.0.0.1:${server.port}';
+
+  /// القائمة الحقيقيّة: ما في [pages]، أو صفحة الضوء الافتراضيّة حين لا شيء.
+  Set<String> get _menu =>
+      {...pages.keys, if (pages.isEmpty && !strictPages) 'pon_status_link_info_t.gch'};
 
   String _loginPage() => '<html><head><title>MH80</title><script>\n'
       'maxtime = Math.min(60, $lockAt + 60 - 402930);\n'
       'getObj("Frm_Logintoken").value = "9";\n'
       '</script></head><body><form name="fLogin" id="fLogin" method="post">'
       '<input type="hidden" name="Frm_Logintoken" id="Frm_Logintoken" value=""></form></body></html>';
+
+  /// القائمة في الإطار الرئيسيّ: روابط `getpage.gch?pid=1002&nextpage=X` لكلّ صفحةٍ موجودة.
+  String _menuPage() => '<html><head><title>MH80</title></head><body>${[
+        for (final n in _menu) '<a href="getpage.gch?pid=1002&nextpage=$n">$n</a>'
+      ].join()}</body></html>';
+
+  /// صفحة خطأٍ صغيرة (D401: ~٠٫٧ ك.ب حين طُلبت صفحةٌ ليست في القائمة، أو بعد تسمّمها).
+  static const _errorPage = '<html><head><title>MH80</title></head><body>error</body></html>';
 
   static const _optical = '<html><head><title>MH80</title></head><body><script>\n'
       'var LosInfo = "0";\nvar RxPower = "-186300";\nvar TxPower = "25900";\nvar Current = "13850";\n'
@@ -482,6 +480,7 @@ class _FakeMh80 {
             f['username'] == 'agent' &&
             f['Password'] == 'secret-1';
         if (ok) {
+          _poisoned = false;
           res.statusCode = 302;
           res.headers.set('Location', '/start.ghtml');
           if (setCookie) res.headers.add('Set-Cookie', 'SID=s1; path=/');
@@ -492,18 +491,33 @@ class _FakeMh80 {
         await res.close();
         return;
       }
+      if (req.uri.path == '/start.ghtml') {
+        res.headers.contentType = ContentType.html;
+        res.write('<html><body><iframe src="template.gch"></iframe></body></html>');
+        await res.close();
+        return;
+      }
+      if (req.uri.path == '/template.gch') {
+        res.headers.contentType = ContentType.html;
+        res.write(_menuPage());
+        await res.close();
+        return;
+      }
       if (req.uri.path == '/getpage.gch') {
         pageCookie = req.headers.value('cookie');
         if (pageDelay > Duration.zero) await Future<void>.delayed(pageDelay);
         final name = req.uri.queryParameters['nextpage'] ?? '';
         nextpages.add(name);
-        final needPid = pagePid[name];
-        final custom = needPid != null && req.uri.queryParameters['pid'] != needPid
-            ? (404, 'Not Found') // pid خاطئ ⇒ صفحة خطأ
-            : pages[name] ?? (strictPages ? (404, 'Not Found') : null);
-        res.statusCode = custom?.$1 ?? 200;
+        (int, String) out;
+        if (_poisoned || !_menu.contains(name)) {
+          _poisoned = true; // طلب صفحةٍ ليست في القائمة يفسد الجلسة
+          out = (200, _errorPage);
+        } else {
+          out = pages[name] ?? (200, _optical);
+        }
+        res.statusCode = out.$1;
         res.headers.contentType = ContentType.html;
-        res.write(custom?.$2 ?? _optical);
+        res.write(out.$2);
         await res.close();
         return;
       }

@@ -220,105 +220,110 @@ class ZteOntService {
     _pageInfo.remove(s.baseUrl);
     _unknownFormat.remove(s.baseUrl);
     final tried = <String>[];
-    final menu = <String>{};
     final names = <String>{};
-    final pidOf = <String, String>{}; // اسم الصفحة ⇒ pid الصحيح من روابط القائمة (D401).
     final pageFields = <String>[]; // لكلّ صفحةٍ أجابت بلا ضوء: اسمٌ#حجم:حقولٌ مرشّحة — أسماءٌ بلا قيم.
     var title = '';
     var answered = false;
-    final missAt = _scanMissAt[s.baseUrl];
-    final scan = missAt == null || DateTime.now().difference(missAt) >= scanQuiet;
-    void finish() {
-      if (!scan) tried.add('scan:later');
-      _pageTrace[s.baseUrl] = tried.join(' ');
-      final c = ZteOntParse.opticalCandidates(menu);
-      // صفحات الحالة فقط (لا كلّ ٤٩ صفحة): هي ما قد يحمل الضوء، فالأثر يبقى قصيراً.
-      final statusList = {..._opticalPages, ...ZteOntParse.statusPages(menu)}.map(ZteOntParse.stem).toList()..sort();
-      _pageInfo[s.baseUrl] = [
-        't=${title.isEmpty ? '-' : title}',
-        'm=${menu.length}',
-        // لكلّ صفحةٍ أجابت بلا ضوء: حقولها المرشّحة (أرقامٌ سالبة أو أسماء بلا شبكة/إعدادات) — منها نعرف أيّ صفحةٍ فيها الضوء.
-        if (pageFields.isNotEmpty) 'pg=${pageFields.join(' ')}',
-        if (c.isNotEmpty) 'c=${c.take(6).map(ZteOntParse.stem).join(',')}',
-        if (names.isNotEmpty) 'n=${names.take(8).join(',')}',
-        if (statusList.isNotEmpty) 's=${statusList.join(',')}',
-      ].join(' ');
-      if (answered) _unknownFormat.add(s.baseUrl);
-      if (answered && scan) _scanMissAt[s.baseUrl] = DateTime.now();
-    }
 
-    final st = await _getRaw(s, '/start.ghtml', referer: '${s.baseUrl}/');
-    tried.add('st:${st.code}${st.login ? 'L' : ''}${st.html == null ? '' : '/${ZteOntParse.kb(st.html!)}'}');
-    if (st.login) {
-      finish();
-      return null;
-    }
-    if (st.html != null) {
-      menu.addAll(ZteOntParse.pageNames(st.html!));
-      pidOf.addAll(ZteOntParse.pageLinks(st.html!));
-    }
-    final remembered = _opticalPageOf[s.baseUrl];
-    final queue = <String>[if (remembered != null) remembered, ..._opticalPages.where((p) => p != remembered)];
-    final budget = queue.length + _maxExtraPages;
-    for (var i = 0; i < queue.length; i++) {
-      final name = queue[i];
-      final pid = pidOf[name] ?? '1002';
-      var r = await _pageRaw(s, name, pid: pid);
-      // صفحةٌ رجعت 200 صغيرةً جدّاً (القالب الكامل عشرات الكيلوبايت): خطأٌ عابر أو pid غير صحيح — إعادةٌ واحدة قبل الحكم.
-      if (i == 0 && r.html != null && !r.login && r.html!.length < _tinyPageBytes && ZteOntParse.optical(r.html!) == null) {
-        final retry = await _pageRaw(s, name, pid: pid);
-        if (retry.html != null && retry.html!.length >= r.html!.length) r = retry;
-        tried.add('retry:${ZteOntParse.kb(retry.html ?? '')}');
-      }
+    // صفحة الضوء بحالتها: null حين لم تُجب، وإلّا تُحلَّل. تُسجَّل في الأثر والتشخيص.
+    OntOpticalInfo? read(String name, ({String? html, String code, bool login}) r) {
       final html = r.html;
       final pageTitle = html == null ? '' : ZteOntParse.model(html);
       final otherTitle = pageTitle.isNotEmpty && title.isNotEmpty && pageTitle != title;
-      tried.add('${ZteOntParse.shortPage(name)}${pid == '1002' ? '' : '@$pid'}:${r.code}${r.login ? 'L' : ''}'
+      tried.add('${ZteOntParse.shortPage(name)}:${r.code}${r.login ? 'L' : ''}'
           '${html == null ? '' : '/${ZteOntParse.rxForm(html)}/${ZteOntParse.kb(html)}'}'
           '${otherTitle ? '/t:${ZteOntParse.traceWord(pageTitle)}' : ''}');
-      if (r.login) break;
-      if (html == null) continue;
+      if (html == null) return null;
       answered = true;
       final o = ZteOntParse.optical(html);
-      if (o != null) {
-        _opticalPageOf[s.baseUrl] = name;
-        _scanMissAt.remove(s.baseUrl);
-        return o;
-      }
+      if (o != null) return o;
       if (title.isEmpty) title = pageTitle;
-      // حقول هذه الصفحة المرشّحة للضوء (أرقامٌ سالبة أوّلاً، وإلّا أسماءٌ رقميّةٌ بلا شبكة/إعدادات) — للتشخيص بلا قيم.
+      // حقول صفحةٍ أجابت بلا ضوءٍ نعرفه — للتشخيص بلا قيم (طرازٌ جديد).
       final digest = ZteOntParse.opticalHints(html).isNotEmpty ? ZteOntParse.opticalHints(html) : ZteOntParse.numericNames(html);
       if (digest.isNotEmpty && pageFields.length < 6) {
         pageFields.add('${ZteOntParse.shortPage(name)}#${ZteOntParse.kb(html)}:${digest.take(6).join('|')}');
       }
-      menu.addAll(ZteOntParse.pageNames(html));
-      pidOf.addAll(ZteOntParse.pageLinks(html));
       names.addAll(ZteOntParse.powerNames(html));
-      // ما بقي بالترتيب: الأسماء المعروفة، ثمّ المرشّحة للضوء، ثمّ صفحات الحالة — بلا تكرارٍ وضمن الميزانيّة.
-      final done = queue.sublist(0, i + 1).toSet();
-      final rest = queue.sublist(i + 1);
-      final next = <String>{
-        ...rest.where(_opticalPages.contains),
-        ...ZteOntParse.opticalCandidates(menu),
-        ...rest,
-        if (scan) ...ZteOntParse.statusPages(menu),
-      }.where((p) => !done.contains(p)).take(budget - done.length).toList();
-      queue
-        ..removeRange(i + 1, queue.length)
-        ..addAll(next);
+      return null;
     }
-    finish();
+
+    OntOpticalInfo? found(String name, OntOpticalInfo o) {
+      _opticalPageOf[s.baseUrl] = name;
+      _scanMissAt.remove(s.baseUrl);
+      _pageTrace[s.baseUrl] = tried.join(' ');
+      return o;
+    }
+
+    // ١) الصفحة المحفوظة لهذا الجهاز (وُجد فيها الضوء قبل، فهي موجودةٌ وآمنة الطلب): مسارٌ سريع بطلبٍ واحد.
+    final remembered = _opticalPageOf[s.baseUrl];
+    if (remembered != null) {
+      final r = await _pageRaw(s, remembered);
+      final o = read(remembered, r);
+      if (o != null) return found(remembered, o);
+      if (r.login) {
+        _finishUnknown(s, tried, const <String>{}, names, pageFields, title, answered, true);
+        return null;
+      }
+    }
+
+    // ٢) قائمة الجهاز الحقيقيّة من الإطارين: صفحةٌ ليست فيها (كـepon على D401) تُدخل بعض الطُرُز حالة خطأٍ تُرجع كلّ ما
+    //    بعدها فارغاً (~٠٫٧ ك.ب) — فلا نطلب إلّا صفحةً مذكورةً في القائمة.
+    final menu = <String>{};
+    final missAt = _scanMissAt[s.baseUrl];
+    final scan = missAt == null || DateTime.now().difference(missAt) >= scanQuiet;
+    for (final frame in const ['/start.ghtml', '/template.gch']) {
+      final r = await _getRaw(s, frame, referer: '${s.baseUrl}/');
+      tried.add('${frame.substring(1).split('.').first}:${r.code}${r.login ? 'L' : ''}'
+          '${r.html == null ? '' : '/${ZteOntParse.kb(r.html!)}'}');
+      if (r.login) {
+        _finishUnknown(s, tried, menu, names, pageFields, title, answered, scan);
+        return null;
+      }
+      if (r.html != null) menu.addAll(ZteOntParse.pageNames(r.html!));
+    }
+
+    // المرشّحات من القائمة فقط: المعروفة، ثمّ ما يسمّيه الجهاز حالةً فيها pon/opt/power، ثمّ باقي صفحات الحالة (بالفحص).
+    final queue = <String>{
+      ..._opticalPages.where(menu.contains),
+      ...ZteOntParse.opticalCandidates(menu),
+      if (scan) ...ZteOntParse.statusPages(menu),
+    }.where((p) => p != remembered).take(_maxExtraPages).toList();
+    for (final name in queue) {
+      final r = await _pageRaw(s, name);
+      final o = read(name, r);
+      if (o != null) return found(name, o);
+      if (r.login) break; // الجلسة انتهت ⇒ لا جدوى من بقيّة الصفحات
+    }
+
+    _finishUnknown(s, tried, menu, names, pageFields, title, answered, scan);
     return null;
   }
 
-  /// أسماء صفحة الضوء المعروفة بالترتيب.
+  /// يكتب أثر القراءة الفاشلة وتشخيصها (أسماءٌ بلا قيم)، ويعلّم «صيغةٌ جديدة» و«بحثٌ لم يجد» للتهدئة.
+  static void _finishUnknown(ZteOntSession s, List<String> tried, Set<String> menu, Set<String> names, List<String> pageFields,
+      String title, bool answered, bool scan) {
+    if (!scan) tried.add('scan:later');
+    _pageTrace[s.baseUrl] = tried.join(' ');
+    final c = ZteOntParse.opticalCandidates(menu);
+    final statusList = {..._opticalPages.where(menu.contains), ...ZteOntParse.statusPages(menu)}.map(ZteOntParse.stem).toList()
+      ..sort();
+    _pageInfo[s.baseUrl] = [
+      't=${title.isEmpty ? '-' : title}',
+      'm=${menu.length}',
+      if (pageFields.isNotEmpty) 'pg=${pageFields.join(' ')}',
+      if (c.isNotEmpty) 'c=${c.take(6).map(ZteOntParse.stem).join(',')}',
+      if (names.isNotEmpty) 'n=${names.take(8).join(',')}',
+      if (statusList.isNotEmpty) 's=${statusList.join(',')}',
+    ].join(' ');
+    if (answered) _unknownFormat.add(s.baseUrl);
+    if (answered && scan) _scanMissAt[s.baseUrl] = DateTime.now();
+  }
+
+  /// أسماء صفحة الضوء المعروفة بالترتيب (MH80 = epon، D401 = pon). تُطلب فقط إن كانت في قائمة الجهاز.
   static const _opticalPages = ['epon_status_link_info_t.gch', 'gpon_status_link_info_t.gch', 'pon_status_link_info_t.gch'];
 
-  /// صفحاتٌ إضافيّة من قائمة الجهاز على الأكثر (~٠٫٦–١ث لكلٍّ) — والبحث يقف عند أوّل صفحةٍ فيها الضوء.
+  /// صفحاتٌ من القائمة على الأكثر (~٠٫٦–١ث لكلٍّ) — والبحث يقف عند أوّل صفحةٍ فيها الضوء.
   static const _maxExtraPages = 8;
-
-  /// صفحةٌ أصغر من هذا (200) = خطأٌ عابر لا صفحة حالة (القالب الكامل عشرات الكيلوبايت) ⇒ إعادةٌ واحدة.
-  static const _tinyPageBytes = 4096;
 
   /// صفحة الضوء التي وُجدت لكلّ جهازٍ في هذه الجلسة — القراءة التالية تبدأ بها بلا بحث.
   static final _opticalPageOf = <String, String>{};
@@ -360,12 +365,10 @@ class ZteOntService {
     }
   }
 
-  /// صفحة حالةٍ بحالتها: html (null حين لم تُجب 200)، والرمز، وهل عادت صفحة الدخول.
-  ///
-  /// [pid] مجموعة الصفحة: MH80 كلّها `1002`، لكنّ D401 يعطي كلّ صفحةٍ pid مختلفاً — بـ1002 الخطأ يرجع صفحةً صغيرة
-  /// (٠٫٧ ك.ب) لا محتوى. القائمة تحمل الـpid الصحيح لكلّ صفحة ([ZteOntParse.pageLinks]).
-  static Future<({String? html, String code, bool login})> _pageRaw(ZteOntSession s, String name, {String pid = '1002'}) =>
-      _getRaw(s, '/getpage.gch', query: {'pid': pid, 'nextpage': name});
+  /// صفحة حالةٍ بحالتها: html (null حين لم تُجب 200)، والرمز، وهل عادت صفحة الدخول. كلّ الصفحات بمجموعةٍ واحدة
+  /// `pid=1002` (مُتحقَّق حيّاً على MH80 وD401) — ما يُفرّق هو اسم الصفحة، وطلب اسمٍ ليس في القائمة يفسد الجلسة.
+  static Future<({String? html, String code, bool login})> _pageRaw(ZteOntSession s, String name) =>
+      _getRaw(s, '/getpage.gch', query: {'pid': '1002', 'nextpage': name});
 
   static Future<void> logout(ZteOntSession s) async {
     try {
@@ -512,16 +515,6 @@ class ZteOntParse {
         for (final m in RegExp(r'\b([A-Za-z0-9_]{3,60}\.gch)\b').allMatches(html))
           if (m.group(1)!.toLowerCase() != 'getpage.gch') m.group(1)!,
       };
-
-  /// روابط القائمة `getpage.gch?pid=N&nextpage=NAME` ⇒ {NAME: pid}: كلّ صفحةٍ وpidها الصحيح. على D401 يختلف الـpid
-  /// بين الصفحات؛ طلبُها بـ1002 الثابت يرجع صفحة خطأٍ صغيرة. آخر pid لاسمٍ يفوز (الأحدث في القائمة).
-  static Map<String, String> pageLinks(String html) {
-    final out = <String, String>{};
-    for (final m in RegExp(r'pid=(\d{1,6})&(?:amp;)?nextpage=([A-Za-z0-9_]{3,60}\.gch)').allMatches(html)) {
-      out[m.group(2)!] = m.group(1)!;
-    }
-    return out;
-  }
 
   static const _knownOptical = {'epon_status_link_info_t.gch', 'gpon_status_link_info_t.gch', 'pon_status_link_info_t.gch'};
 
