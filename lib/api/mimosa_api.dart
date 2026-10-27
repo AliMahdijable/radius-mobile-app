@@ -92,6 +92,13 @@ class MimosaApi {
   static const String _oidPtmpStaUptime = '$_ptmp.2.1.12';
   static const String _oidPtmpStaOnline = '$_ptmp.2.1.13';
 
+  /// جدولا العملاء **الرسميّان** (MIMOSA-NETWORKS-PTMP-MIB، REVISION 2017-04-05؛ mimosaPtmp = mimosaWireless.9):
+  /// المعلومات ‎.5.1.1 (2 ماك · 3 الاسم · 4 البرنامج · 5 IP · 6 مدّة الارتباط) والإحصاء ‎.6.1.1 (2 ماك · 8 PHY
+  /// استقبال · 9 PHY إرسال · 10 أخطاء الإرسال DecimalTwo · 11 متوسّط RSSI DecimalOne). الفهرس رقم صفٍّ لا ماك.
+  /// ٢٧ أكتوبر: الجدول أعلاه (‎43356.2.2…) ليس في الـMIB الرسميّ — يبقى بديلاً لبرنامجٍ قديم إن ردّ.
+  static const String _ptmpInfoEntry = '$_bfive.9.5.1.1';
+  static const String _ptmpStatsEntry = '$_bfive.9.6.1.1';
+
   // — Standard MIB-II (works for any SNMP device) —
   /// جذر شجرة ميموزا (رقم المؤسّسة IANA ‎43356).
   static const String _oidMimosaRoot = '1.3.6.1.4.1.43356';
@@ -132,11 +139,13 @@ class MimosaApi {
   static const String _oidFirmwareVersion = '$_bfive.1.3.0';
   static const String _oidInternalTemp = '$_bfive.1.8.0';
 
-  //   mimosaLocInfo.2 = longitude, .3 = latitude, .4 = altitude, .7 = gps sats
-  static const String _oidLongitude = '$_bfive.2.2.0';
-  static const String _oidLatitude = '$_bfive.2.3.0';
-  static const String _oidAltitude = '$_bfive.2.4.0';
-  static const String _oidGpsSats = '$_bfive.2.7.0';
+  //   ٢٧ أكتوبر — بالـMIB الرسميّ (MIMOSA-NETWORKS-BFIVE-MIB): mimosaLocInfo.1 = الطول · .2 = العرض (DecimalFive:
+  //   خمس منازل) · .3 = الارتفاع (م) · .6 = أقمار GPS (.7 = GLONASS). كانت هنا .2/.3/.4/.7 بإزاحةٍ واحدة — فالعرض
+  //   يُقرأ طولاً والارتفاع عرضاً.
+  static const String _oidLongitude = '$_bfive.2.1.0';
+  static const String _oidLatitude = '$_bfive.2.2.0';
+  static const String _oidAltitude = '$_bfive.2.3.0';
+  static const String _oidGpsSats = '$_bfive.2.6.0';
 
   //   mimosaTdmaInfo.1 = wirelessMode, .3 = tdmaMode
   //   mimosaWirelessInfo.1 = SSID · .4 = مدّة الوصلة (TimeTicks)
@@ -289,13 +298,11 @@ class MimosaApi {
           'SNMP مفعّل من web UI للجهاز (Preferences → Management → SNMP)');
     }
 
-    // ⚠️ قيم الجدول تُقرأ **بلا قسمة**.
+    // ⚠️ مقياس الجدول يختلف بين البرامج — لا قسمةٌ ثابتة ولا عدمها.
     //
-    // خطأ رابع كُشف ٢٠٢٦-٠٩-٠٢: كان الجدول يمرّ على `_asDbmScaled`
-    // فيُقسم على عشرة. لكنّ المقياسة هي **المجاميع وحدها**
-    // (‎6.5.0=240 → ٢٤ dBm · ‎6.6.0=−425 → −٤٢٫٥)، أمّا الجدول فيعطي
-    // القيمة كما هي (−٤٥ · −٧٤ · ٢٩ — طابقتها لوحة الجهاز). فالقسمة
-    // كانت ستُظهر إشارةً بـ‎−٤٫٥ dBm.
+    // ٢٠٢٦-٠٩-٠٢: على C5c (najaf2262) كان الجدول يعطي القيمة كما هي (−٤٥ · −٧٤ · ٢٩ — طابقتها لوحة الجهاز)
+    // والمجاميع وحدها بأعشار (‎6.5.0=240 → ٢٤ dBm · ‎6.6.0=−425 → −٤٢٫٥). و٢٧ أكتوبر جاء جهازٌ يتبع الـMIB حرفيّاً
+    // (الجدول DecimalOne): ‎−582 ⇒ ‎−58.2 — فظهر «582.0». فالمقياس يُكتشف لكلّ جهاز ([chainsInTenths]).
     // Chain table via walk (2-4 chains عادة) — Tier 3 (اختياري)
     final chains = <MimosaChain>[];
     int? txPhyTotal;
@@ -375,14 +382,23 @@ class MimosaApi {
         ...indexRxNoise.keys,
         ...indexSnr.keys,
       };
+      // ٢٧ أكتوبر (المالك: «بدل 58.20 يكتب 582.0… راجع متغيراتها بدقة»): الـMIB يعرّف الأعمدة الأربعة DecimalOne
+      // (أعشار) — وبرنامج C5c القديم (najaf2262، أعلاه) يُرجعها أعداداً صحيحة. فالمقياس لكلّ جهاز من قيمه.
+      final tenths = chainsInTenths(
+        rx: indexRxPower.values,
+        noise: indexRxNoise.values,
+        tx: indexTxPower.values,
+        snr: indexSnr.values,
+      );
       for (final i in allIndices.toList()..sort()) {
-        chains.add(MimosaChain(
+        chains.add(MimosaChain.fromRaw(
           index: i,
-          txPowerDbm: _asPlain(indexTxPower[i]),
-          rxPowerDbm: _asPlain(indexRxPower[i]),
-          rxNoiseDbm: _asPlain(indexRxNoise[i]),
-          snrDb: _asPlain(indexSnr[i]),
-          centerFreqMhz: _asPlain(indexFreq[i])?.round(),
+          tenths: tenths,
+          tx: indexTxPower[i],
+          rx: indexRxPower[i],
+          noise: indexRxNoise[i],
+          snr: indexSnr[i],
+          freq: indexFreq[i],
         ));
       }
     } catch (e) {
@@ -523,10 +539,21 @@ class MimosaApi {
     return seen ? total : null;
   }
 
-  /// قيمة جدولٍ كما هي — بلا القسمة على عشرة التي تحتاجها المجاميع.
-  static double? _asPlain(Varbind? vb) {
-    if (vb == null || vb.isAbsent) return null;
-    return vb.asInt.toDouble();
+  /// هل أعمدة السلاسل بأعشار (كما في الـMIB) أم أعدادٌ صحيحة (برنامج C5c القديم)؟
+  ///
+  /// الضجيج والاستقبال الحقيقيّان دون ‎−15 dBm دائماً (الضجيج ~ ‎−90)، فمطلقٌ ≥ 150 = أعشار بلا لبس. وبلاهما:
+  /// قدرة إرسالٍ فوق 40 dBm أو SNR فوق 70 dB مستحيلان إلّا أعشاراً.
+  @visibleForTesting
+  static bool chainsInTenths({
+    required Iterable<Varbind> rx,
+    required Iterable<Varbind> noise,
+    required Iterable<Varbind> tx,
+    required Iterable<Varbind> snr,
+  }) {
+    Iterable<int> raw(Iterable<Varbind> vs) => vs.where((v) => !v.isAbsent && v.isNumeric).map((v) => v.asInt);
+    final rn = [...raw(rx), ...raw(noise)].where((v) => v != 0).toList();
+    if (rn.isNotEmpty) return rn.any((v) => v.abs() >= 150);
+    return raw(tx).any((v) => v > 40) || raw(snr).any((v) => v > 70);
   }
 
 
@@ -556,6 +583,16 @@ class MimosaApi {
       community: community,
       timeout: timeout,
     );
+
+    // الجدولان الرسميّان أوّلاً — مسحتان لا اثنتا عشرة.
+    try {
+      final official = await Future.wait([
+        snmp.walk(_ptmpInfoEntry, chunkSize: 24),
+        snmp.walk(_ptmpStatsEntry, chunkSize: 24),
+      ]);
+      final list = clientsFromOfficial(official[0], official[1]);
+      if (list.isNotEmpty) return list;
+    } catch (_) {/* برنامجٌ بلا الجدولين — البديل القديم */}
 
     try {
       // 6 أعمدة بالتوازي — كلها walks على نفس الجدول
@@ -630,6 +667,63 @@ class MimosaApi {
     } catch (_) {
       return const [];
     }
+  }
+
+  /// صفوف الجدولين الرسميّين ← عملاء، مرتّبين بأقوى إشارة. مكشوفة للاختبار.
+  @visibleForTesting
+  static List<MimosaClient> clientsFromOfficial(List<Varbind> info, List<Varbind> stats) {
+    Map<int, Map<String, Varbind>> cols(List<Varbind> rows, String entry) {
+      final out = <int, Map<String, Varbind>>{};
+      final p = '$entry.';
+      for (final v in rows) {
+        if (v.isAbsent || !v.oid.startsWith(p)) continue;
+        final rest = v.oid.substring(p.length);
+        final dot = rest.indexOf('.');
+        if (dot <= 0) continue;
+        final c = int.tryParse(rest.substring(0, dot));
+        if (c != null) (out[c] ??= {})[rest.substring(dot + 1)] = v;
+      }
+      return out;
+    }
+
+    final ci = cols(info, _ptmpInfoEntry);
+    final cs = cols(stats, _ptmpStatsEntry);
+    final idx = <String>{...?ci[2]?.keys, ...?cs[2]?.keys};
+    int? num(Varbind? v) => v == null || !v.isNumeric ? null : v.asInt;
+    String? text(Varbind? v) {
+      if (v == null) return null;
+      final t = v.asString.trim();
+      return t.isEmpty ? null : t;
+    }
+
+    final clients = <MimosaClient>[];
+    for (final i in idx) {
+      final mac = ci[2]?[i]?.asMac ?? cs[2]?[i]?.asMac;
+      if (mac == null) continue;
+      final rssiRaw = num(cs[11]?[i]);
+      // DecimalOne بالـMIB (‎−582 ⇒ ‎−58.2)؛ وما مطلقه دون 150 فقيمةٌ صحيحة من برنامجٍ لا يتبعه.
+      final rssi = rssiRaw == null || rssiRaw == 0 ? null : (rssiRaw.abs() >= 150 ? rssiRaw / 10 : rssiRaw.toDouble());
+      int? rate(Varbind? v) {
+        final x = num(v);
+        if (x == null || x <= 0) return null;
+        return x > 100000 ? (x / 1000).round() : x; // احتياط: برنامجٌ يكتبها kbps
+      }
+
+      final ticks = num(ci[6]?[i]);
+      clients.add(MimosaClient(
+        mac: mac,
+        ip: text(ci[5]?[i]),
+        name: text(ci[3]?[i]),
+        fwVersion: text(ci[4]?[i]),
+        rssiDbm: rssi?.round(),
+        txRateMbps: rate(cs[9]?[i]),
+        rxRateMbps: rate(cs[8]?[i]),
+        uptimeSec: ticks == null || ticks <= 0 ? null : ticks ~/ 100,
+        online: true,
+      ));
+    }
+    clients.sort((a, b) => (b.rssiDbm ?? -999).compareTo(a.rssiDbm ?? -999));
+    return clients;
   }
 
   /// يُحوّل suffix رقمي (بعد OID root) لـMAC نصّي "AA:BB:CC:DD:EE:FF".
@@ -808,13 +902,33 @@ class MimosaStats {
       return s.isEmpty ? null : s;
     }
 
-    double? gps(String oid) {
-      // Mimosa GPS often stored as int × 1e7 (LibreNMS uses / 1e7)
+    // الإحداثيّات DecimalFive (÷10⁵) بالـMIB، وبعض البرامج ×10⁷ — يُقبل المقياس الذي يقع داخل الحدّ (±90 · ±180).
+    double? gps(String oid, double limit) {
       final vb = m[oid];
-      if (vb == null) return null;
+      if (vb == null || vb.isAbsent || !vb.isNumeric) return null;
       final v = vb.asInt;
       if (v == 0) return null;
-      return v / 10000000.0;
+      for (final d in const [100000.0, 10000000.0]) {
+        final x = v / d;
+        if (x.abs() <= limit) return x;
+      }
+      return null;
+    }
+
+    // mimosaTargetSignalStrength: Integer32 dB بالـMIB (لا أعشار) — وما كان مطلقه ≥ 150 فبأعشار.
+    double? target(String oid) {
+      final vb = m[oid];
+      if (vb == null || vb.isAbsent || !vb.isNumeric) return null;
+      final v = vb.asInt;
+      if (v == 0) return null;
+      return v.abs() >= 150 ? v / 10.0 : v.toDouble();
+    }
+
+    // نسبة أخطاء الحزم DecimalTwo (÷100) بالـMIB — كانت ÷10 فتظهر 1.5٪ كأنّها 15٪.
+    double? per(String oid) {
+      final vb = m[oid];
+      if (vb == null || vb.isAbsent || !vb.isNumeric) return null;
+      return vb.asInt / 100.0;
     }
 
     return MimosaStats(
@@ -828,8 +942,8 @@ class MimosaStats {
       serialNumber: s(MimosaApi._oidSerialNumber),
       firmwareVersion: s(MimosaApi._oidFirmwareVersion),
       temperatureC: n10(MimosaApi._oidInternalTemp),
-      latitude: gps(MimosaApi._oidLatitude),
-      longitude: gps(MimosaApi._oidLongitude),
+      latitude: gps(MimosaApi._oidLatitude, 90),
+      longitude: gps(MimosaApi._oidLongitude, 180),
       altitude: n(MimosaApi._oidAltitude),
       gpsSats: n(MimosaApi._oidGpsSats),
       wirelessMode: n(MimosaApi._oidWirelessMode),
@@ -837,18 +951,19 @@ class MimosaStats {
       antennaGainDbi: n(MimosaApi._oidAntennaGain),
       totalTxPowerDbm: n10(MimosaApi._oidTotalTxPower),
       totalRxPowerDbm: n10(MimosaApi._oidTotalRxPower),
-      targetRxPowerDbm: n10(MimosaApi._oidTargetRxPower),
+      targetRxPowerDbm: target(MimosaApi._oidTargetRxPower),
       // من جدول التدفّقات — راجع التعليق في `fetchStats`. ونسقط إلى
       // `mimosaPerfInfo` فقط إن غاب الجدول كلّيّاً.
-      phyTxRateMbps: txPhyMbps ?? n(MimosaApi._oidPhyTxRate),
-      phyRxRateMbps: rxPhyMbps ?? n(MimosaApi._oidPhyRxRate),
+      // mimosaPhyTx/RxRate (7.1/7.2) معدّل حزمٍ فعليّ بأجزاء الـkbps لا سعة PHY — فلا يُعرض مكانها إن غاب الجدول.
+      phyTxRateMbps: txPhyMbps,
+      phyRxRateMbps: rxPhyMbps,
       channelWidthMhz: channelWidthMhz,
       counters: counters,
       ssid: g(MimosaApi._oidSsid)?.isAbsent == false
           ? g(MimosaApi._oidSsid)!.asString
           : null,
-      perTxRatePct: n10(MimosaApi._oidPerTxRate),
-      perRxRatePct: n10(MimosaApi._oidPerRxRate),
+      perTxRatePct: per(MimosaApi._oidPerTxRate),
+      perRxRatePct: per(MimosaApi._oidPerRxRate),
       chains: chains,
     );
   }
@@ -887,6 +1002,36 @@ class MimosaChain {
     this.snrDb,
     this.centerFreqMhz,
   });
+
+  /// من أعمدة الجدول الخام بمقياس الجهاز ([MimosaApi.chainsInTenths])، والقيم «غير صالحة» بالـMIB ⇒ null:
+  /// إرسال ‎−8 · استقبال/SNR ‎−100 · تردّد 0.
+  factory MimosaChain.fromRaw({
+    required int index,
+    required bool tenths,
+    Varbind? tx,
+    Varbind? rx,
+    Varbind? noise,
+    Varbind? snr,
+    Varbind? freq,
+  }) {
+    double? v(Varbind? b) {
+      if (b == null || b.isAbsent || !b.isNumeric) return null;
+      final x = b.asInt.toDouble();
+      return tenths ? x / 10 : x;
+    }
+
+    final t = v(tx), r = v(rx), n = v(noise), s = v(snr);
+    final f = (freq == null || freq.isAbsent || !freq.isNumeric) ? null : freq.asInt;
+    final rxValid = r != null && r != -100;
+    return MimosaChain(
+      index: index,
+      txPowerDbm: t == null || t == -8 ? null : t,
+      rxPowerDbm: rxValid ? r : null,
+      rxNoiseDbm: rxValid ? n : null,
+      snrDb: s == null || s == -100 || !rxValid ? null : s,
+      centerFreqMhz: f == null || f == 0 ? null : f,
+    );
+  }
 }
 
 class MimosaException implements Exception {

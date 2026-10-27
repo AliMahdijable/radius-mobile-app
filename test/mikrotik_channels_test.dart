@@ -81,6 +81,14 @@ Future<(HttpServer, List<String>)> _restServer(Map<String, Object> routes, {Stri
   server.listen((req) async {
     final key = '${req.method} ${req.uri.path}';
     seen.add(req.uri.query.isEmpty ? key : '$key?${req.uri.query}');
+    // كخادم RouterOS الحقيقيّ (netPower 16P، 7.19.6): جسمٌ مقطّع (chunked) لا يُقرأ ⇒ «missing =.id=».
+    if (req.method == 'POST' && req.headers.contentLength < 0) {
+      req.response.statusCode = 400;
+      req.response.headers.contentType = ContentType.json;
+      req.response.write(jsonEncode({'error': 400, 'message': 'Bad Request', 'detail': 'missing =.id='}));
+      await req.response.close();
+      return;
+    }
     if (req.method == 'POST') seen.add('body:${await utf8.decoder.bind(req).join()}');
     final ok = req.headers.value(HttpHeaders.authorizationHeader) == 'Basic ${base64.encode(utf8.encode(auth))}';
     req.response.headers.contentType = ContentType.json;
@@ -96,6 +104,25 @@ Future<(HttpServer, List<String>)> _restServer(Map<String, Object> routes, {Stri
     await req.response.close();
   });
   return (server, seen);
+}
+
+/// قناةٌ بصفوفٍ ثابتة لكلّ أمر — لا شبكة.
+class _Canned implements RouterOsChannel {
+  _Canned(this.rows);
+  final Map<String, List<Map<String, String>>> rows;
+  @override
+  String get via => 'API';
+  @override
+  Future<void> open() async {}
+  @override
+  Future<List<Map<String, String>>> query(List<String> words, {bool debugLog = false}) async {
+    final r = rows[words.first];
+    if (r == null) throw MikrotikBinaryException('no such command');
+    return r;
+  }
+
+  @override
+  Future<void> close() async {}
 }
 
 void main() {
@@ -237,6 +264,45 @@ void main() {
         MikrotikApi.fetchStatsFor(ip: '127.0.0.1', creds: {'user': 'admin', 'pass': 'pw'}),
         throwsA(isA<MikrotikBinaryException>().having((e) => e.code, 'code', 'auth')),
       );
+    });
+  });
+
+  group('الصحّة (حيّاً من netPower 16P بـ7.19.6)', () {
+    test('🚨 psu1 25.3V وpsu2 0V (غير موصول) ⇒ الفولتيّة 25.3 لا «0.0 غير طبيعيّة»، والتيّار واستهلاك PoE', () async {
+      final ch = _Canned({
+        '/system/resource/print': [
+          {'board-name': 'netPower 16P', 'version': '7.19.6 (stable)', 'cpu-load': '6', 'total-memory': '268435456', 'free-memory': '193064960'}
+        ],
+        '/interface/print': const [],
+        '/system/health/print': [
+          {'name': 'poe-out-consumption', 'value': '47.3', 'type': 'W'},
+          {'name': 'cpu-temperature', 'value': '42', 'type': 'C'},
+          {'name': 'psu1-voltage', 'value': '25.3', 'type': 'V'},
+          {'name': 'psu2-voltage', 'value': '0', 'type': 'V'},
+          {'name': 'psu1-current', 'value': '2', 'type': 'A'},
+          {'name': 'psu2-current', 'value': '0', 'type': 'A'},
+        ],
+      });
+      MikrotikApi.channelFactory = (route, ip, port, user, pass, timeout) => ch;
+      final s = await MikrotikApi.fetchStatsFor(ip: '127.0.0.1', creds: {'user': 'admin', 'pass': 'pw'}, vitalsOnly: true);
+      expect(s.voltage, 25.3);
+      expect(s.currentAmps, 2);
+      expect(s.powerWatts, 47.3);
+      expect(s.temperature, 42);
+    });
+
+    test('كلّ المداخل صفر ⇒ لا قراءة (شرطة) لا 0.0', () async {
+      MikrotikApi.channelFactory = (route, ip, port, user, pass, timeout) => _Canned({
+            '/system/resource/print': [
+              {'board-name': 'x', 'cpu-load': '1', 'total-memory': '100', 'free-memory': '50'}
+            ],
+            '/interface/print': const [],
+            '/system/health/print': [
+              {'name': 'psu1-voltage', 'value': '0', 'type': 'V'},
+            ],
+          });
+      final s = await MikrotikApi.fetchStatsFor(ip: '127.0.0.1', creds: {'user': 'admin', 'pass': 'pw'}, vitalsOnly: true);
+      expect(s.voltage, isNull);
     });
   });
 

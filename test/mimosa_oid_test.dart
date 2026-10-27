@@ -48,10 +48,10 @@ void main() {
       expect(src.contains('6.3.1.4'), isFalse, reason: 'عاد الجدول الخطأ');
     });
 
-    test('🚨 قيم الجدول بلا قسمة — المقياسة هي المجاميع', () {
-      // القسمة على عشرة كانت ستُظهر إشارةً بـ−4.5 dBm بدل −45.
-      expect(src.contains('rxPowerDbm: _asPlain('), isTrue);
-      expect(src.contains('snrDb: _asPlain('), isTrue);
+    test('🚨 مقياس الجدول لكلّ جهاز — لا قسمةٌ ثابتة ولا عدمها', () {
+      // C5c القديم يعطي −45 (لا قسمة)، وجهازٌ يتبع الـMIB يعطي −582 لـ−58.2 (المالك ٢٧ أكتوبر: «يكتب 582.0»).
+      expect(src.contains('final tenths = chainsInTenths('), isTrue);
+      expect(src.contains('MimosaChain.fromRaw('), isTrue);
       expect(src.contains('static double? _asDbmScaled'), isFalse,
           reason: 'ماتت وحُذفت — والتعليق التاريخيّ يبقى');
       // والمجاميع تبقى مقسومة.
@@ -64,8 +64,9 @@ void main() {
     test('🚨 من جدول التدفّقات لا من mimosaPerfInfo', () {
       // ‎7.1/7.2 يعيدان ١٤٦٧٢٨٣ و٣٥٩٣١٧١ على C5c حيّ — أي ١٫٥ و٣٫٦
       // غيغابت وسعة الجهاز ٦٥٠ ميغا. عدّادان تراكميّان لا معدّلان.
-      expect(src.contains('txPhyMbps ?? n(MimosaApi._oidPhyTxRate)'), isTrue,
-          reason: 'الجدول أوّلاً والسقوط إلى perfInfo احتياطاً');
+      // وصار السقوط إليهما محذوفاً (٢٧ أكتوبر): الـMIB يعرّفهما معدّل حزمٍ بأجزاء الـkbps — لا سعة PHY.
+      expect(src.contains('phyTxRateMbps: txPhyMbps,'), isTrue);
+      expect(src.contains('txPhyMbps ?? n(MimosaApi._oidPhyTxRate)'), isFalse);
       expect(src.contains('_sumStream('), isTrue,
           reason: 'الوصلة تحمل تدفّقين — المعدّل مجموعُهما لا واحدٌ منهما');
     });

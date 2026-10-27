@@ -422,6 +422,8 @@ class MikrotikApi {
     //   voltage: 24V (single value، بلا فانات)
     int? healthTemp;
     double? healthVoltage;
+    double? healthCurrent;
+    double? healthWatts;
     final fans = <MikrotikHealthItem>[];
     final psus = <MikrotikHealthItem>[];
     final extraTemps = <MikrotikHealthItem>[];
@@ -446,9 +448,19 @@ class MikrotikApi {
           }
         }
       } else if (name.contains('voltage') || name == 'v') {
+        // ٢٧ أكتوبر (المالك: «فولتيه بهواي اجهزه مثل هذا مايكروتيك ميقراها»): netPower 16P يُرجع psu1-voltage 25.3
+        // وpsu2-voltage 0 (مدخلٌ غير موصول) — وكان الأخير يغلب فتظهر «0.0 V غير طبيعيّة». الفولتيّة = المزوّد العامل
+        // (الأعلى)، وصفرٌ وحده = لا قراءة.
         final v =
             double.tryParse(valueStr.replaceAll(RegExp(r'[^\d.-]'), ''));
-        if (v != null) healthVoltage = v;
+        if (v != null && v > 0 && v > (healthVoltage ?? 0)) healthVoltage = v;
+      } else if (name.contains('current')) {
+        final a = double.tryParse(valueStr.replaceAll(RegExp(r'[^\d.-]'), ''));
+        if (a != null && a > 0) healthCurrent = (healthCurrent ?? 0) + a;
+      } else if (name.contains('consumption')) {
+        // poe-out-consumption (W) — ما تسحبه أجهزة الـPoE من السويج.
+        final w = double.tryParse(valueStr.replaceAll(RegExp(r'[^\d.-]'), ''));
+        if (w != null && w >= 0) healthWatts = (healthWatts ?? 0) + w;
       } else if (name.startsWith('fan') && name.contains('speed')) {
         // fan1-speed, fan2-speed, ...
         final rpm = int.tryParse(valueStr.replaceAll(RegExp(r'[^\d]'), ''));
@@ -487,9 +499,11 @@ class MikrotikApi {
         'power-supply-1-voltage',
       ]) {
         if (healthVoltage == null && r[vKey] != null) {
-          healthVoltage =
-              double.tryParse(r[vKey]!.replaceAll(RegExp(r'[^\d.-]'), ''));
-          if (healthVoltage != null) break;
+          final v = double.tryParse(r[vKey]!.replaceAll(RegExp(r'[^\d.-]'), ''));
+          if (v != null && v > 0) {
+            healthVoltage = v;
+            break;
+          }
         }
       }
     }
@@ -511,6 +525,8 @@ class MikrotikApi {
       cpuFrequencyMhz: _asInt(resource['cpu-frequency']),
       temperature: healthTemp,
       voltage: healthVoltage,
+      currentAmps: healthCurrent,
+      powerWatts: healthWatts,
       fans: fans,
       psus: psus,
       extraTemps: extraTemps,
@@ -1039,6 +1055,10 @@ class MikrotikStats {
   final int cpuFrequencyMhz;
   final int? temperature; // °C من /system/health (CPU-preferred)
   final double? voltage; // V (CCR1009 نعم، CCR2116 لا)
+
+  /// تيّار المزوّدات (A) وما تسحبه أجهزة الـPoE (W) — من /system/health إن قرأها الطراز (netPower · CRS PoE).
+  final double? currentAmps;
+  final double? powerWatts;
   final List<MikrotikHealthItem> fans; // fan1-speed, fan2-speed, ...
   final List<MikrotikHealthItem> psus; // psu1-state, psu2-state
   final List<MikrotikHealthItem>
@@ -1053,6 +1073,10 @@ class MikrotikStats {
 
   /// الطريق الذي قُرئ منه: «API» · «الويب» · «SSH» · «SNMP» — يُعرض في رأس اللوحة حين لا يكون الـAPI.
   final String via;
+
+  /// المعالج والذاكرة مقروءان فعلاً — SNMP على SwOS (CSS) لا يحملهما، فيُعرضان «—» لا «0٪» (٢٧ أكتوبر).
+  final bool cpuKnown;
+  final bool memKnown;
 
   /// أعضاء كلّ بريدج: اسم البريدج ← منافذه (من /interface/bridge/port). فارغٌ إن لا بريدج،
   /// أو في الوضع الخفيف (vitalsOnly) حيث لا تُعرض المنافذ.
@@ -1071,6 +1095,8 @@ class MikrotikStats {
     required this.cpuFrequencyMhz,
     this.temperature,
     this.voltage,
+    this.currentAmps,
+    this.powerWatts,
     this.fans = const [],
     this.psus = const [],
     this.extraTemps = const [],
@@ -1081,6 +1107,8 @@ class MikrotikStats {
     this.w60gLinks = const [],
     this.bridgePorts = const {},
     this.via = 'API',
+    this.cpuKnown = true,
+    this.memKnown = true,
   });
 
   bool get hasWireless => wirelessInterfaces.isNotEmpty;
@@ -1134,6 +1162,8 @@ class MikrotikStats {
         cpuFrequencyMhz: cpuFrequencyMhz,
         temperature: temperature,
         voltage: voltage,
+        currentAmps: currentAmps,
+        powerWatts: powerWatts,
         fans: fans,
         psus: psus,
         extraTemps: extraTemps,
@@ -1144,6 +1174,8 @@ class MikrotikStats {
         w60gLinks: w60gLinks ?? this.w60gLinks,
         bridgePorts: bridgePorts,
         via: via,
+        cpuKnown: cpuKnown,
+        memKnown: memKnown,
       );
   int get downInterfacesCount =>
       interfaces.where((i) => !i.running && !i.disabled).length;
