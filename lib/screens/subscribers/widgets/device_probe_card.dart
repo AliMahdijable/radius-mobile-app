@@ -458,17 +458,17 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     DeviceProbeBus.bump();
   }
 
-  Future<void> _run({bool force = false}) async {
+  Future<void> _run({bool force = false, bool retryLogin = false}) async {
     if (_probing) return;
     _probing = true;
     try {
-      await _runInner(force: force);
+      await _runInner(force: force, retryLogin: retryLogin);
     } finally {
       _probing = false;
     }
   }
 
-  Future<void> _runInner({bool force = false}) async {
+  Future<void> _runInner({bool force = false, bool retryLogin = false}) async {
     setState(() => _loading = true);
     // Probe + notes in parallel — both go through small caches so the
     // total cost on a warm session is sub-100ms.
@@ -477,6 +477,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         fallbackIp: widget.ip,
         subscriberUsername: widget.username,
         force: force,
+        retryLogin: retryLogin,
         company: widget.company,
       ),
       DeviceConfigApi.fetchConfig(widget.username, company: widget.company),
@@ -603,8 +604,9 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       builder: (_) => DeviceConfigSheet(username: widget.username),
     );
     if (changed == true && mounted) {
-      // The sheet already invalidated per-IP cache when it saved.
-      _run(force: true);
+      // The sheet already invalidated per-IP cache when it saved. «حفظ وفحص» = محاولة دخولٍ جديدة حتى باعتماداتٍ رُفضت قبل
+      // (الـIP قد يكون من الساس فلا يُبطله الحفظ).
+      _run(force: true, retryLogin: true);
     }
   }
 
@@ -831,7 +833,38 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     );
   }
 
+  /// ما يقوله الكرت حين لا قراءة — بالسبب لا «لم يُتمكّن» لكلّ شيء (المالك ٢٧ أكتوبر على ZTE MH80: «شوفلي التصحيح من
+  /// السيرفر لو من التطبيق؟»): رفضٌ للاعتمادات غير جهازٍ لا يجاوب.
+  ({String title, String hint}) _whyNoReading() {
+    final why = DeviceProbeApi.issueFor(username: widget.username, ip: widget.ip, company: widget.company);
+    final left = why?.lockLeft;
+    return switch (why?.issue) {
+      ProbeIssue.loginRejected => (
+          title: 'الجهاز رفض اليوزر أو الباسورد',
+          hint: 'صحّحهن من زرّ الإعدادات — ما نعيد نفس المحاولة حتى ما ينقفل الجهاز',
+        ),
+      ProbeIssue.busy => (
+          title: 'الجهاز رفض الدخول هسّه',
+          hint: 'صفحته مفتوحة بمكانٍ ثاني (متصفّح أو هاتف) — سكّرها وحدّث',
+        ),
+      ProbeIssue.locked => (
+          title: left == null ? 'الجهاز قافل الدخول دقيقة' : 'الجهاز قافل الدخول $left ثانية',
+          hint: 'صارت ثلاث محاولات غلط عليه — جرّب بعد ما يخلص الوقت',
+        ),
+      ProbeIssue.readFailed => (
+          title: 'دخلنا للجهاز بس ما قرينا الضوء',
+          hint: 'صفحة الضوء ما رجعت — حدّث بعد لحظات',
+        ),
+      ProbeIssue.needsCredentials => (
+          title: 'جهاز ZTE يحتاج يوزر وباسورده',
+          hint: 'اكتبهن من زرّ الإعدادات — الباسورد مكتوب على ظهر الجهاز',
+        ),
+      _ => (title: 'لم يُتمكّن من الوصول للجهاز', hint: 'اضبط الـIP وبيانات الدخول من زرّ الإعدادات'),
+    };
+  }
+
   Widget _unreachable() {
+    final why = _whyNoReading();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: 14),
       decoration: BoxDecoration(
@@ -846,10 +879,10 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('لم يُتمكّن من الوصول للجهاز',
+                Text(why.title,
                     style: AppType.rowValue(color: AppColors.textMid)),
                 const SizedBox(height: Sp.xxs),
-                Text('اضبط الـIP وبيانات الدخول من زرّ الإعدادات',
+                Text(why.hint,
                     style: AppType.muted()),
               ],
             ),

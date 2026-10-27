@@ -8,8 +8,30 @@ import '../core/net/huawei_ont_service.dart';
 import '../core/net/zte_ont_service.dart';
 import '../core/net/ubiquiti_service.dart';
 import '../models/device_health.dart';
+import '../services/client_diag.dart';
 import 'company_route.dart';
 import 'device_config_api.dart';
+
+/// لماذا لا قراءة لجهاز المشترك — يقوله الكرت بدل «لم يُتمكّن من الوصول» لكلّ شيء.
+enum ProbeIssue {
+  /// الجهاز ما يجاوب (أو ليس ONT/UBNT معروفاً).
+  unreachable,
+
+  /// الجهاز جاوب ورفض اليوزر أو الباسورد.
+  loginRejected,
+
+  /// اعتماداتٌ دخلت قبل ورُفضت الآن: صفحة الجهاز مفتوحة بمكانٍ ثانٍ.
+  busy,
+
+  /// قافلٌ دقيقة بعد ثلاث محاولاتٍ خاطئة.
+  locked,
+
+  /// دخلنا وما رجعت صفحة الضوء.
+  readFailed,
+
+  /// جهاز ZTE ولا يوزر له من الوكيل — لا نجرّب افتراضاً من عندنا.
+  needsCredentials,
+}
 
 /// Device probe API — 3-tier credential fallback (per-sub → admin → library)
 /// with a stack of caches:
@@ -40,6 +62,31 @@ class DeviceProbeApi {
   /// الفحوص الجارية الآن، مفهرسة بالعنوان الفعّال. تمنع فحصين
   /// متوازيين لجهاز واحد حين تتزامن موجة القائمة مع فتح كارت.
   static final _inFlight = <String, Future<DeviceHealthSnapshot?>>{};
+
+  /// سبب آخر فشلٍ بمفتاح العنوان وبمفتاح المشترك (العنوان الفعّال قد يكون مخصّصاً لا يعرفه الكرت).
+  static final _issueByKey = <String, ({ProbeIssue issue, int? lockLeft, DateTime at})>{};
+  static final _issueByUser = <String, ({ProbeIssue issue, int? lockLeft, DateTime at})>{};
+
+  /// ما سجّله فرع ZTE في الفحص الجاري (بالعنوان) — يُقرأ بعد انتهائه.
+  static final _zteIssue = <String, ({ProbeIssue issue, int? lockLeft, DateTime at, String trace})>{};
+
+  /// مراحل فرع ZTE في الفحص الجاري بأوقاتها (تعرّف ← دخول ← قراءة): فحصٌ انتهت مهلته يُعرف أين وقف، ويُمدَّد ما دام ZTE
+  /// في منتصف عمله (صفحاته ~١٤٠ ك.ب وواجهته بطيئة).
+  static final _zteSteps = <String, List<({String stage, DateTime at})>>{};
+
+  /// مهلةٌ إضافيّة لجهاز ZTE تجاوز [_probeCap] وهو يعمل — لا تُمنح لجهازٍ لا يجاوب (موجة القائمة لا تنتظره).
+  /// ٢٧ أكتوبر على MH80: أوّل «حفظ وفحص» انتهى عند ١٥ ثانية بلا سبب، والثاني قرأ الضوء.
+  static Duration _zteExtra = const Duration(seconds: 15);
+
+  /// للاختبار: مهلتان قصيرتان بدل ١٥+١٥ ثانية.
+  @visibleForTesting
+  static void debugCaps({required Duration probe, required Duration zteExtra}) {
+    _probeCap = probe;
+    _zteExtra = zteExtra;
+  }
+
+  static void _zteMark(String ip, String stage) =>
+      (_zteSteps[ip] ??= []).add((stage: stage, at: DateTime.now()));
   static Future<AdminDeviceDefaults>? _adminFetch;
 
   /// افتراضات كلّ شركةٍ من «كل الشركات» — النجاح يُحفظ للجلسة كالوضع العاديّ، والفشل لا (يُعاد بعد قاطع الدقيقة).
@@ -50,7 +97,7 @@ class DeviceProbeApi {
 
   static const _ttl = Duration(minutes: 5);
   // يطابق v1: 15s cap على probe واحد.
-  static const _probeCap = Duration(seconds: 15);
+  static Duration _probeCap = const Duration(seconds: 15);
 
   /// عدد العمّال المتزامنين في موجة الفحص.
   ///
@@ -147,10 +194,13 @@ class DeviceProbeApi {
   /// * [subscriberUsername] — يُستعمل لجلب DeviceConfig (customIp override).
   /// * [force=true] — يتخطّى snapshot + dead caches (زر تحديث يدوي).
   /// * [company] — صفٌّ من «كل الشركات»: إعداده وافتراضاته من شركته، وكاشه بها.
+  /// [retryLogin]: الوكيل حفظ إعداد الجهاز للتوّ ⇒ اعتماداتٌ رُفضت قبل تُجرَّب مرّةً أخرى، ولا يُشارَك فحصٌ جارٍ بإعدادٍ
+  /// قديم، والنتيجة تُبلَّغ تشخيصاً (مرحلة الفشل بلا اعتمادات).
   static Future<DeviceHealthSnapshot?> probe({
     required String fallbackIp,
     String? subscriberUsername,
     bool force = false,
+    bool retryLogin = false,
     String? company,
   }) async {
     final ip = fallbackIp.trim();
@@ -186,6 +236,9 @@ class DeviceProbeApi {
     }
     if (effectiveIp.isEmpty) return null;
     final ipKey = _k(company, effectiveIp);
+    // 🐛 ٢٧ أكتوبر: الحفظ يُبطل الـIP المخصّص وحده — ومشتركٌ على IP الساس (الحقل فارغ) بقي رفضه القديم محفوظاً، فـ«حفظ
+    // وفحص الجهاز» لا يحاول أصلاً.
+    if (retryLogin) ZteOntService.forget(effectiveIp);
 
     // Dead-IP short-circuit — إلا لو force. الـUI zاليدوي يتخطّى هذا.
     if (!force) {
@@ -213,9 +266,12 @@ class DeviceProbeApi {
     // — فينطلق فحص ثانٍ متوازٍ لنفس العنوان لأنّ الكاش لا يمتلئ إلّا
     // بعد انتهاء الأوّل. جهاز واحد، فحصان، وضِعف الاستهلاك.
     final pending = _inFlight[ipKey];
-    if (pending != null) return pending;
+    if (pending != null) {
+      if (!retryLogin) return pending;
+      await pending; // فحصٌ بإعدادٍ قديم: ننتظره ثمّ نفحص بالجديد.
+    }
 
-    final future = _probeAndStore(effectiveIp, cfg, userKey, company);
+    final future = _probeAndStore(effectiveIp, cfg, userKey, company, report: retryLogin);
     _inFlight[ipKey] = future;
     try {
       return await future;
@@ -231,17 +287,49 @@ class DeviceProbeApi {
     String effectiveIp,
     DeviceConfig? cfg,
     String? userKey,
-    String? company,
-  ) async {
+    String? company, {
+    bool report = false,
+  }) async {
     final ipKey = _k(company, effectiveIp);
     final defaults = await _loadAdminDefaults(company);
-    final snap = await _runProbe(effectiveIp, cfg, defaults, ipKey)
-        .timeout(_probeCap, onTimeout: () => null);
+    final started = DateTime.now();
+    _zteSteps.remove(effectiveIp);
+    final run = _runProbe(effectiveIp, cfg, defaults, ipKey);
+    Future<({DeviceHealthSnapshot? snap, bool done})> within(Duration d) =>
+        run.then((s) => (snap: s, done: true)).timeout(d, onTimeout: () => (snap: null, done: false));
+    var r = await within(_probeCap);
+    // ZTE في منتصف الدخول أو القراءة ⇒ نمهله بدل أن نقطعه بلا سبب.
+    final zteBusy = (_zteSteps[effectiveIp] ?? const []).any((e) => e.stage != 'detect');
+    if (!r.done && zteBusy) r = await within(_zteExtra);
+    final snap = r.snap;
+    final timedOut = !r.done;
     final now = DateTime.now();
     final entry = _Cached(snap, now);
     _snapCache[ipKey] = entry;
     if (userKey != null) {
       _snapByUser[userKey] = entry;
+    }
+    // السبب: ما سجّله فرع ZTE في هذا الفحص نفسه، وإلّا «ما يجاوب».
+    final z = _zteIssue[effectiveIp];
+    final fresh = z != null && !z.at.isBefore(started) ? z : null;
+    if (snap == null) {
+      final issue = (issue: fresh?.issue ?? ProbeIssue.unreachable, lockLeft: fresh?.lockLeft, at: now);
+      _issueByKey[ipKey] = issue;
+      if (userKey != null) _issueByUser[userKey] = issue;
+    } else {
+      _issueByKey.remove(ipKey);
+      if (userKey != null) _issueByUser.remove(userKey);
+    }
+    if (report) {
+      // مرحلة الفشل بلا اعتمادات ولا عنوان — تصل سجلّ الخادم فيُعرف السبب بالدليل.
+      ClientDiag.report(
+        'device_probe',
+        code: snap != null ? 'ok' : (fresh?.issue ?? ProbeIssue.unreachable).name,
+        message: snap != null
+            ? 'kind=${snap.kind.name} vendor=${snap.ont?.vendor ?? '-'}'
+            : 'type=${cfg?.deviceType?.name ?? 'auto'} ${fresh?.trace ?? (timedOut ? 'timeout' : 'no-zte-trace')}'
+                ' steps=${_steps(effectiveIp, started)} ms=${now.difference(started).inMilliseconds}',
+      );
     }
     if (snap != null) {
       _kindByIp[ipKey] = snap.kind;
@@ -271,6 +359,22 @@ class DeviceProbeApi {
   }
 
   /// Read-only peek بالـIP.
+  /// لماذا فشل آخر فحصٍ لهذا المشترك (بالمشترك أوّلاً ثمّ بالعنوان) — null: نجح أو لم يُفحص. [lockLeft] ما بقي من القفل الآن.
+  static ({ProbeIssue issue, int? lockLeft})? issueFor({String? username, required String ip, String? company}) {
+    final byUser = username == null || username.isEmpty ? null : _issueByUser[_k(company, username)];
+    final e = byUser ?? _issueByKey[_k(company, ip.trim())];
+    if (e == null) return null;
+    final left = e.lockLeft == null ? null : e.lockLeft! - DateTime.now().difference(e.at).inSeconds;
+    return (issue: e.issue, lockLeft: left == null || left <= 0 ? null : left);
+  }
+
+  /// مراحل ZTE بأوقاتها من بدء الفحص: `detect+0 login+340 read+1200` — لتشخيصٍ بلا محتوى.
+  static String _steps(String ip, DateTime started) {
+    final list = _zteSteps[ip];
+    if (list == null || list.isEmpty) return '-';
+    return list.map((e) => '${e.stage}+${e.at.difference(started).inMilliseconds}').join(',');
+  }
+
   static DeviceHealthSnapshot? cached(String ip, {String? company}) {
     final c = _snapCache[_k(company, ip.trim())];
     if (c == null) return null;
@@ -522,7 +626,7 @@ class DeviceProbeApi {
     final ontUser = c.ontUser, ontPass = c.ontPass, ubntUser = c.ubntUser, ubntPass = c.ubntPass;
 
     // Admin pinned kind → probe واحد فقط.
-    if (overridesOnt) return _probeOnt(ip, ontUser, ontPass, kindKey);
+    if (overridesOnt) return _probeOnt(ip, ontUser, ontPass, kindKey, ontSet: c.ontSet);
     if (overridesUbnt) return _probeUbnt(ip, ubntUser, ubntPass);
 
     // Kind cache — لو نعرف من probe سابق إن IP هذا ONT (أو UBNT)،
@@ -531,14 +635,14 @@ class DeviceProbeApi {
     // ترجع parallel لتتلاقط تغيير الجهاز.
     final knownKind = _kindByIp[kindKey];
     if (knownKind == DeviceKind.ont) {
-      return _probeOnt(ip, ontUser, ontPass, kindKey);
+      return _probeOnt(ip, ontUser, ontPass, kindKey, ontSet: c.ontSet);
     }
     if (knownKind == DeviceKind.ubiquiti) {
       return _probeUbnt(ip, ubntUser, ubntPass);
     }
 
     // First-time أو kind cache cleared — parallel race.
-    final ont = _probeOnt(ip, ontUser, ontPass, kindKey);
+    final ont = _probeOnt(ip, ontUser, ontPass, kindKey, ontSet: c.ontSet);
     final ubnt = _probeUbnt(ip, ubntUser, ubntPass);
     return _firstNonNull<DeviceHealthSnapshot>([ont, ubnt]);
   }
@@ -548,8 +652,10 @@ class DeviceProbeApi {
   /// 🐛 ٢٧ أكتوبر (المالك على ZTE MH80: «خليت يوزر وباسورد وميجلب شي»): كانت اعتمادات المشترك تُهمل ما بقي النوع
   /// «تلقائي» — لا تُستعمل إلّا إن اختار «ONT» أو «UBNT» صراحةً — فيُجرَّب الافتراض ويُرفض. الآن «تلقائي» يستعملها للنوعين:
   /// كلّ فرعٍ لا يدخل إلّا على واجهته (ZTE بعد التعرّف، وهواوي عند صفحة رمزه، وUBNT على airOS).
+  /// [ontSet]: يوزر الـONT من الوكيل (للمشترك أو افتراضات المدير) لا افتراض مصنّع هواوي — ZTE لا يُجرَّب عليه افتراضٌ من
+  /// عندنا (كلّ رفضٍ يقرّب قفله، وكلمة سرّه على ظهر كلّ جهاز).
   @visibleForTesting
-  static ({String ontUser, String ontPass, String ubntUser, String ubntPass}) credsFor(
+  static ({String ontUser, String ontPass, String ubntUser, String ubntPass, bool ontSet}) credsFor(
     DeviceConfig? cfg,
     AdminDeviceDefaults defaults,
   ) {
@@ -565,6 +671,7 @@ class DeviceProbeApi {
       ontPass: pick(ownForOnt, pass, defaults.ontPassword, _kOntPass),
       ubntUser: pick(ownForUbnt, user, defaults.ubntUsername, _kUbntUser),
       ubntPass: pick(ownForUbnt, pass, defaults.ubntPassword, _kUbntPass),
+      ontSet: (ownForOnt && user.isNotEmpty) || defaults.ontUsername?.isNotEmpty == true,
     );
   }
 
@@ -575,33 +682,68 @@ class DeviceProbeApi {
   /// واجهة ZTE ([ZteOntService.detect])، وهواوي على جهاز ZTE يقف عند صفحة رمزه (لا محاولة دخول)؛ فلا محاولةٌ خاطئة تقفل
   /// جهازاً. بعدها المورّد المحفوظ وحده، ويُنسى إن فشل (جهازٌ تبدّل).
   static Future<DeviceHealthSnapshot?> _probeOnt(
-      String ip, String user, String pass, String kindKey) async {
+      String ip, String user, String pass, String kindKey, {bool ontSet = true}) async {
     final known = _ontVendorByKey[kindKey];
     if (known != null) {
       final snap = known == 'zte'
-          ? await _probeZte(ip, user, pass)
+          ? await _probeZte(ip, user, pass, ontSet: ontSet)
           : await _probeHuawei(ip, user, pass);
       if (snap == null) _ontVendorByKey.remove(kindKey);
       return snap;
     }
-    final snap = await _firstNonNull<DeviceHealthSnapshot>([
-      _probeHuawei(ip, user, pass),
-      _probeZte(ip, user, pass),
-    ]);
+    // التعرّف أوّلاً (صفحةٌ بلا دخول) ثمّ فرعٌ واحد: هواوي لا يطرق جهاز ZTE بطلباته وهو يدخل، ولا العكس.
+    _zteMark(ip, 'detect');
+    final zte = ZteOntService.detect(ip);
+    Future<DeviceHealthSnapshot?> huawei() async => await zte ? null : _probeHuawei(ip, user, pass);
+    Future<DeviceHealthSnapshot?> zteBranch() async =>
+        await zte ? _probeZte(ip, user, pass, detected: true, ontSet: ontSet) : null;
+    final snap = await _firstNonNull<DeviceHealthSnapshot>([huawei(), zteBranch()]);
     if (snap != null) _ontVendorByKey[kindKey] = snap.ont?.vendor ?? 'huawei';
     return snap;
   }
 
   /// ZTE: تعرّفٌ بلا دخول، ثمّ دخولٌ باعتمادات الوكيل وحدها (المرفوضة لا تُعاد)، والضوء، والخروج — الواجهة
-  /// قد ترفض دخولاً ثانياً وجلسةٌ مفتوحة، فلا تبقى جلسة الفحص تزاحم جلسة الترافيك.
+  /// قد ترفض دخولاً ثانياً وجلسةٌ مفتوحة، فلا تبقى جلسة الفحص تزاحم جلسة الترافيك. سبب الفشل يُسجَّل للكرت.
   static Future<DeviceHealthSnapshot?> _probeZte(
-      String ip, String user, String pass) async {
-    if (!await ZteOntService.detect(ip)) return null;
+      String ip, String user, String pass, {bool detected = false, bool ontSet = true}) async {
+    if (!detected) {
+      _zteMark(ip, 'detect');
+      if (!await ZteOntService.detect(ip)) return null;
+    }
+    if (!ontSet) {
+      _zteIssue[ip] = (issue: ProbeIssue.needsCredentials, lockLeft: null, at: DateTime.now(), trace: 'zte no-creds');
+      return null;
+    }
+    _zteMark(ip, 'login');
     final session = await ZteOntService.loginConfigured(ip, user, pass);
-    if (session == null) return null;
+    if (session == null) {
+      final z = ZteOntService.lastIssue(ip);
+      _zteIssue[ip] = (
+        issue: switch (z?.issue) {
+          ZteLoginIssue.rejected => ProbeIssue.loginRejected,
+          ZteLoginIssue.busy => ProbeIssue.busy,
+          ZteLoginIssue.locked => ProbeIssue.locked,
+          _ => ProbeIssue.unreachable,
+        },
+        lockLeft: z?.lockLeft,
+        at: DateTime.now(),
+        trace: 'zte login ${z?.issue.name ?? '?'} ${z?.trace ?? ''}',
+      );
+      return null;
+    }
     try {
+      _zteMark(ip, 'read');
       final optical = await ZteOntService.fetchOptical(session);
-      if (optical == null) return null;
+      _zteMark(ip, 'readDone');
+      if (optical == null) {
+        _zteIssue[ip] = (
+          issue: ProbeIssue.readFailed,
+          lockLeft: null,
+          at: DateTime.now(),
+          trace: 'zte read ${ZteOntService.lastPageTrace(session) ?? 'no-rx'}',
+        );
+        return null;
+      }
       return DeviceHealthSnapshot(kind: DeviceKind.ont, ip: ip, ont: optical);
     } finally {
       await ZteOntService.logout(session);
