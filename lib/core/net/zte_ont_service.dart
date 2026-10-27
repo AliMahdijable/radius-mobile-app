@@ -222,25 +222,23 @@ class ZteOntService {
     final tried = <String>[];
     final menu = <String>{};
     final names = <String>{};
+    final pidOf = <String, String>{}; // اسم الصفحة ⇒ pid الصحيح من روابط القائمة (D401).
+    final pageFields = <String>[]; // لكلّ صفحةٍ أجابت بلا ضوء: اسمٌ#حجم:حقولٌ مرشّحة — أسماءٌ بلا قيم.
     var title = '';
     var answered = false;
-    var richest = ''; // أطول صفحةٍ أجابت — فيها الضوء غالباً (D401: صفحة EPON ٩٦ ك.ب وحدها، والباقي صفحات خطأ).
     final missAt = _scanMissAt[s.baseUrl];
     final scan = missAt == null || DateTime.now().difference(missAt) >= scanQuiet;
     void finish() {
       if (!scan) tried.add('scan:later');
       _pageTrace[s.baseUrl] = tried.join(' ');
       final c = ZteOntParse.opticalCandidates(menu);
-      final hints = ZteOntParse.opticalHints(richest);
       // صفحات الحالة فقط (لا كلّ ٤٩ صفحة): هي ما قد يحمل الضوء، فالأثر يبقى قصيراً.
       final statusList = {..._opticalPages, ...ZteOntParse.statusPages(menu)}.map(ZteOntParse.stem).toList()..sort();
-      // D401: الصفحة ٩٦ ك.ب بلا رقمٍ سالبٍ ولا اسمٍ يشبه الضوء ⇒ مفردات حقولها الرقميّة (أسماءٌ بلا قيم) لنعرف أين الضوء.
-      final vocab = hints.isEmpty ? ZteOntParse.numericNames(richest) : const <String>[];
       _pageInfo[s.baseUrl] = [
         't=${title.isEmpty ? '-' : title}',
         'm=${menu.length}',
-        if (hints.isNotEmpty) 'g=${hints.join(',')}',
-        if (vocab.isNotEmpty) 'v=${vocab.join(',')}',
+        // لكلّ صفحةٍ أجابت بلا ضوء: حقولها المرشّحة (أرقامٌ سالبة أو أسماء بلا شبكة/إعدادات) — منها نعرف أيّ صفحةٍ فيها الضوء.
+        if (pageFields.isNotEmpty) 'pg=${pageFields.join(' ')}',
         if (c.isNotEmpty) 'c=${c.take(6).map(ZteOntParse.stem).join(',')}',
         if (names.isNotEmpty) 'n=${names.take(8).join(',')}',
         if (statusList.isNotEmpty) 's=${statusList.join(',')}',
@@ -255,24 +253,27 @@ class ZteOntService {
       finish();
       return null;
     }
-    if (st.html != null) menu.addAll(ZteOntParse.pageNames(st.html!));
+    if (st.html != null) {
+      menu.addAll(ZteOntParse.pageNames(st.html!));
+      pidOf.addAll(ZteOntParse.pageLinks(st.html!));
+    }
     final remembered = _opticalPageOf[s.baseUrl];
     final queue = <String>[if (remembered != null) remembered, ..._opticalPages.where((p) => p != remembered)];
     final budget = queue.length + _maxExtraPages;
     for (var i = 0; i < queue.length; i++) {
       final name = queue[i];
-      var r = await _pageRaw(s, name);
-      // صفحةٌ معروفةٌ رجعت 200 صغيرةً جدّاً (القالب الكامل ~٩٦ ك.ب على D401): خطأٌ عابر، الجلسة لم تُقبل بعد — إعادةٌ
-      // واحدة قبل الحكم (أوّل صفحةٍ وحدها، لئلّا نضاعف على صفحاتٍ صغيرةٍ أصلاً).
+      final pid = pidOf[name] ?? '1002';
+      var r = await _pageRaw(s, name, pid: pid);
+      // صفحةٌ رجعت 200 صغيرةً جدّاً (القالب الكامل عشرات الكيلوبايت): خطأٌ عابر أو pid غير صحيح — إعادةٌ واحدة قبل الحكم.
       if (i == 0 && r.html != null && !r.login && r.html!.length < _tinyPageBytes && ZteOntParse.optical(r.html!) == null) {
-        final retry = await _pageRaw(s, name);
+        final retry = await _pageRaw(s, name, pid: pid);
         if (retry.html != null && retry.html!.length >= r.html!.length) r = retry;
         tried.add('retry:${ZteOntParse.kb(retry.html ?? '')}');
       }
       final html = r.html;
       final pageTitle = html == null ? '' : ZteOntParse.model(html);
       final otherTitle = pageTitle.isNotEmpty && title.isNotEmpty && pageTitle != title;
-      tried.add('${ZteOntParse.shortPage(name)}:${r.code}${r.login ? 'L' : ''}'
+      tried.add('${ZteOntParse.shortPage(name)}${pid == '1002' ? '' : '@$pid'}:${r.code}${r.login ? 'L' : ''}'
           '${html == null ? '' : '/${ZteOntParse.rxForm(html)}/${ZteOntParse.kb(html)}'}'
           '${otherTitle ? '/t:${ZteOntParse.traceWord(pageTitle)}' : ''}');
       if (r.login) break;
@@ -285,8 +286,13 @@ class ZteOntService {
         return o;
       }
       if (title.isEmpty) title = pageTitle;
-      if (html.length > richest.length) richest = html;
+      // حقول هذه الصفحة المرشّحة للضوء (أرقامٌ سالبة أوّلاً، وإلّا أسماءٌ رقميّةٌ بلا شبكة/إعدادات) — للتشخيص بلا قيم.
+      final digest = ZteOntParse.opticalHints(html).isNotEmpty ? ZteOntParse.opticalHints(html) : ZteOntParse.numericNames(html);
+      if (digest.isNotEmpty && pageFields.length < 6) {
+        pageFields.add('${ZteOntParse.shortPage(name)}#${ZteOntParse.kb(html)}:${digest.take(6).join('|')}');
+      }
       menu.addAll(ZteOntParse.pageNames(html));
+      pidOf.addAll(ZteOntParse.pageLinks(html));
       names.addAll(ZteOntParse.powerNames(html));
       // ما بقي بالترتيب: الأسماء المعروفة، ثمّ المرشّحة للضوء، ثمّ صفحات الحالة — بلا تكرارٍ وضمن الميزانيّة.
       final done = queue.sublist(0, i + 1).toSet();
@@ -355,8 +361,11 @@ class ZteOntService {
   }
 
   /// صفحة حالةٍ بحالتها: html (null حين لم تُجب 200)، والرمز، وهل عادت صفحة الدخول.
-  static Future<({String? html, String code, bool login})> _pageRaw(ZteOntSession s, String name) =>
-      _getRaw(s, '/getpage.gch', query: {'pid': '1002', 'nextpage': name});
+  ///
+  /// [pid] مجموعة الصفحة: MH80 كلّها `1002`، لكنّ D401 يعطي كلّ صفحةٍ pid مختلفاً — بـ1002 الخطأ يرجع صفحةً صغيرة
+  /// (٠٫٧ ك.ب) لا محتوى. القائمة تحمل الـpid الصحيح لكلّ صفحة ([ZteOntParse.pageLinks]).
+  static Future<({String? html, String code, bool login})> _pageRaw(ZteOntSession s, String name, {String pid = '1002'}) =>
+      _getRaw(s, '/getpage.gch', query: {'pid': pid, 'nextpage': name});
 
   static Future<void> logout(ZteOntSession s) async {
     try {
@@ -503,6 +512,16 @@ class ZteOntParse {
         for (final m in RegExp(r'\b([A-Za-z0-9_]{3,60}\.gch)\b').allMatches(html))
           if (m.group(1)!.toLowerCase() != 'getpage.gch') m.group(1)!,
       };
+
+  /// روابط القائمة `getpage.gch?pid=N&nextpage=NAME` ⇒ {NAME: pid}: كلّ صفحةٍ وpidها الصحيح. على D401 يختلف الـpid
+  /// بين الصفحات؛ طلبُها بـ1002 الثابت يرجع صفحة خطأٍ صغيرة. آخر pid لاسمٍ يفوز (الأحدث في القائمة).
+  static Map<String, String> pageLinks(String html) {
+    final out = <String, String>{};
+    for (final m in RegExp(r'pid=(\d{1,6})&(?:amp;)?nextpage=([A-Za-z0-9_]{3,60}\.gch)').allMatches(html)) {
+      out[m.group(2)!] = m.group(1)!;
+    }
+    return out;
+  }
 
   static const _knownOptical = {'epon_status_link_info_t.gch', 'gpon_status_link_info_t.gch', 'pon_status_link_info_t.gch'};
 

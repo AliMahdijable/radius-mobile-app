@@ -168,12 +168,39 @@ void main() {
       expect(trace, contains('pon_optic:404'), reason: 'المرشّحة من القائمة جُرِّبت');
       final info = ZteOntService.lastPageInfo(s)!;
       expect(info, contains('t=D401'));
-      expect(info, contains('g=v:RxOptPwr'), reason: 'حقلٌ قيمتُه سالبة = الضوء ولو باسمٍ لا نعرفه');
+      expect(info, contains('pg=epon_link#0.2k:v:RxOptPwr'), reason: 'حقول كلّ صفحةٍ أجابت بلا ضوء — حقلٌ سالبٌ = الضوء');
       expect(info, contains('c=pon_status_optic_info'), reason: 'المرشّحة للضوء');
       expect(info, contains('Frm_TxOptPwr'), reason: 'اسمٌ يشبه الضوء من n=');
       expect(info, contains('s=epon_status_link_info,gpon_status_link_info,pon_status_link_info'),
           reason: 'صفحات الحالة المعروفة فقط (المرشّحة في c=)');
       expect('$trace $info', isNot(contains('21')), reason: 'لا قيمة في الأثر');
+    });
+
+    test('الـpid الصحيح لكلّ صفحةٍ من روابط القائمة (D401: بـ1002 الثابت صفحة خطأ)', () {
+      const menu = '<a href="getpage.gch?pid=1003&nextpage=pon_status_optic_info_t.gch">الضوء</a>'
+          'getObj().src = "getpage.gch?pid=1005&amp;nextpage=status_dev_info_t.gch";';
+      final links = ZteOntParse.pageLinks(menu);
+      expect(links['pon_status_optic_info_t.gch'], '1003');
+      expect(links['status_dev_info_t.gch'], '1005', reason: 'يفكّ &amp;');
+      expect(links['missing_t.gch'], isNull);
+    });
+
+    test('صفحة الضوء بـpidها الصحيح من القائمة (غير 1002) ⇒ تُقرأ', () async {
+      d.strictPages = true; // بلا تطابقٍ دقيق ⇒ 404
+      d.pages['epon_status_link_info_t.gch'] = (
+        200,
+        '<html><title>D401</title>'
+            '<a href="getpage.gch?pid=1007&nextpage=pon_status_optic_t.gch">ضوء</a></html>'
+      );
+      // الصفحة الصحيحة لا تُخدَم إلّا بـpid=1007.
+      d.pagePid['pon_status_optic_t.gch'] = '1007';
+      d.pages['pon_status_optic_t.gch'] =
+          (200, '<html><title>D401</title><td id="Frm_RxPower">-23.40</td><td id="Frm_TxPower">2.10</td></html>');
+      final s = await ZteOntService.loginConfigured(d.host, 'agent', 'secret-1');
+      final o = await ZteOntService.fetchOptical(s!);
+      // الصفحة لا تُخدَم إلّا بـpid=1007، فنجاح القراءة دليلٌ أنّ الـpid الصحيح من القائمة استُعمل.
+      expect(o?.rxPower, '-23.4');
+      expect(d.nextpages, contains('pon_status_optic_t.gch'));
     });
 
     test('تلميحات الضوء: حقلٌ سالب ولو باسمٍ غريب، لا «‎-1» الافتراضيّة، والقيم تُترك', () {
@@ -406,6 +433,9 @@ class _FakeMh80 {
   /// صفحاتٌ بعينها (الاسم ⇒ الحالة والجسم) — ما سواها صفحة ضوء MH80، أو 404 مع [strictPages].
   final pages = <String, (int, String)>{};
   bool strictPages = false;
+
+  /// صفحةٌ لا تُخدَم إلّا بهذا الـpid (D401): طلبُها بـ1002 ⇒ 404.
+  final pagePid = <String, String>{};
   final posts = <String>[];
   final paths = <String>[];
 
@@ -467,7 +497,10 @@ class _FakeMh80 {
         if (pageDelay > Duration.zero) await Future<void>.delayed(pageDelay);
         final name = req.uri.queryParameters['nextpage'] ?? '';
         nextpages.add(name);
-        final custom = pages[name] ?? (strictPages ? (404, 'Not Found') : null);
+        final needPid = pagePid[name];
+        final custom = needPid != null && req.uri.queryParameters['pid'] != needPid
+            ? (404, 'Not Found') // pid خاطئ ⇒ صفحة خطأ
+            : pages[name] ?? (strictPages ? (404, 'Not Found') : null);
         res.statusCode = custom?.$1 ?? 200;
         res.headers.contentType = ContentType.html;
         res.write(custom?.$2 ?? _optical);
