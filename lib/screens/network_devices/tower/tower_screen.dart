@@ -430,7 +430,9 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
                     Container(width: 8, height: 8, decoration: BoxDecoration(color: a.tone.fill, shape: BoxShape.circle)),
                     const SizedBox(width: 7),
-                    Flexible(child: Text(iso(a.chip), style: AppType.body(color: AppColors.textHi))),
+                    Flexible(
+                        child: Text(iso(a.chip),
+                            style: AppType.body(color: AppColors.textHi), maxLines: 2, overflow: TextOverflow.ellipsis)),
                   ]),
                 ),
               ),
