@@ -184,9 +184,14 @@ class OntTrafficSession {
   Future<OntByteCounters?> _sampleZte(ZteOntSession zte) async {
     if (!_ztePagesResolved) {
       final menu = await ZteOntService.menuPages(zte);
-      if (menu.isEmpty) return null; // جلسةٌ انتهت قبل أن نقرأ القائمة
-      _zteWlanPage = _pickZtePage(menu, has: 'wlan');
-      _zteLanPage = _pickZtePage(menu, has: 'lan', avoid: 'wlan');
+      if (menu.isEmpty) {
+        // 🛡️ احتياطٌ: جهازٌ تعذّرت قراءة قائمته (إطارٌ مختلف) ⇒ أسماء MH80 المعروفة مباشرةً كما كان. D401 قائمته تُقرأ.
+        _zteWlanPage = 'status_wlaninfo_t.gch';
+        _zteLanPage = 'status_ponlan_info_t.gch';
+      } else {
+        _zteWlanPage = _pickZtePage(menu, has: 'wlan');
+        _zteLanPage = _pickZtePage(menu, has: 'lan', avoid: 'wlan');
+      }
       _ztePagesResolved = true;
     }
     var wifi = const <String, ({int sent, int received})>{};

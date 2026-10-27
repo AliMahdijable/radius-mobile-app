@@ -283,8 +283,11 @@ class ZteOntService {
     }
 
     // المرشّحات من القائمة فقط: المعروفة، ثمّ ما يسمّيه الجهاز حالةً فيها pon/opt/power، ثمّ باقي صفحات الحالة (بالفحص).
+    // 🛡️ احتياطٌ لغير D401: جهازٌ تعذّرت قراءة قائمته (إطارٌ مختلف) ⇒ القائمة فارغة، فنجرّب الأسماء المعروفة مباشرةً كما
+    //    كان (MH80 يشتغل بالحالتين). D401 قائمته تُقرأ دائماً فلا يصل هنا، فلا يُطلب epon الذي يفسد جلسته.
+    final known = _opticalPages.where((p) => menu.isEmpty || menu.contains(p));
     final queue = <String>{
-      ..._opticalPages.where(menu.contains),
+      ...known,
       ...ZteOntParse.opticalCandidates(menu),
       if (scan) ...ZteOntParse.statusPages(menu),
     }.where((p) => p != remembered).take(_maxExtraPages).toList();
@@ -522,10 +525,12 @@ class ZteOntParse {
     return parts.isEmpty ? stem(name) : parts.join('_');
   }
 
-  /// أسماء الصفحات التي يذكرها الجهاز في صفحته (قائمته وروابطه) — أسماءٌ فقط.
+  /// أسماء الصفحات التي يذكرها الجهاز في صفحته (قائمته وروابطه) — أسماءٌ فقط. تُستبعد ملفّات الهيكل (getpage/الإطارات)
+  /// فلا تُحسب صفحة محتوى: `start.ghtml` يُشير إلى `template.gch`/`top.gch` فلولا استبعادها لظنّنا القائمة غير فارغة.
+  static const _frameFiles = {'getpage.gch', 'template.gch', 'top.gch', 'start.ghtml', 'frame.gch'};
   static Set<String> pageNames(String html) => {
-        for (final m in RegExp(r'\b([A-Za-z0-9_]{3,60}\.gch)\b').allMatches(html))
-          if (m.group(1)!.toLowerCase() != 'getpage.gch') m.group(1)!,
+        for (final m in RegExp(r'\b([A-Za-z0-9_]{3,60}\.(?:gch|ghtml))\b').allMatches(html))
+          if (!_frameFiles.contains(m.group(1)!.toLowerCase()) && m.group(1)!.endsWith('.gch')) m.group(1)!,
       };
 
   static const _knownOptical = {'epon_status_link_info_t.gch', 'gpon_status_link_info_t.gch', 'pon_status_link_info_t.gch'};

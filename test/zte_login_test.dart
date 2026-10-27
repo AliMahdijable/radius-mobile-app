@@ -191,6 +191,15 @@ void main() {
       expect(d.nextpages, contains('pon_status_link_info_t.gch'));
     });
 
+    test('🛡️ احتياط MH80: جهازٌ لا تُقرأ قائمته ⇒ يُجرَّب الاسم المعروف (epon) مباشرةً ويُقرأ الضوء', () async {
+      d.bareFrames = true; // إطارٌ بلا روابطِ قائمة (القائمة المقروءة فارغة)
+      d.pages['epon_status_link_info_t.gch'] = (200, _FakeMh80._optical); // صفحة MH80 المعروفة
+      final s = await ZteOntService.loginConfigured(d.host, 'agent', 'secret-1');
+      final o = await ZteOntService.fetchOptical(s!);
+      expect(o?.rxPower, '-18.6', reason: 'بلا قائمةٍ نرجع للأسماء المعروفة كما كان');
+      expect(d.nextpages, contains('epon_status_link_info_t.gch'));
+    });
+
     test('تلميحات الضوء: حقلٌ سالب ولو باسمٍ غريب، لا «‎-1» الافتراضيّة، والقيم تُترك', () {
       const page = '<html><script>var M0 = "-1"; var PonRecv = "-25.34"; var Sig = -0310;</script>'
           "<td id=\"dev_light_a\">-27.5</td><td id=\"up\">120</td>SetVal('x', '-3.14');</html>";
@@ -430,6 +439,9 @@ class _FakeMh80 {
   bool _stopped = false;
   bool _poisoned = false; // D401: بعد طلب صفحةٍ ليست في القائمة تُرجَع كلّ الصفحات صغيرةً.
 
+  /// الإطاران بلا روابط القائمة (طرازٌ قديمٌ لا نقرأ قائمته) — لاختبار الاحتياط: نرجع للأسماء المعروفة مباشرةً.
+  bool bareFrames = false;
+
   String get host => '127.0.0.1:${server.port}';
 
   /// القائمة الحقيقيّة: ما في [pages]، أو صفحة الضوء الافتراضيّة حين لا شيء.
@@ -442,10 +454,12 @@ class _FakeMh80 {
       '</script></head><body><form name="fLogin" id="fLogin" method="post">'
       '<input type="hidden" name="Frm_Logintoken" id="Frm_Logintoken" value=""></form></body></html>';
 
-  /// القائمة في الإطار الرئيسيّ: روابط `getpage.gch?pid=1002&nextpage=X` لكلّ صفحةٍ موجودة.
-  String _menuPage() => '<html><head><title>MH80</title></head><body>${[
-        for (final n in _menu) '<a href="getpage.gch?pid=1002&nextpage=$n">$n</a>'
-      ].join()}</body></html>';
+  /// القائمة في الإطار الرئيسيّ: روابط `getpage.gch?pid=1002&nextpage=X` لكلّ صفحةٍ موجودة. [bareFrames] ⇒ بلا روابط.
+  String _menuPage() => bareFrames
+      ? '<html><head><title>MH80</title></head><body>no menu</body></html>'
+      : '<html><head><title>MH80</title></head><body>${[
+          for (final n in _menu) '<a href="getpage.gch?pid=1002&nextpage=$n">$n</a>'
+        ].join()}</body></html>';
 
   /// صفحة خطأٍ صغيرة (D401: ~٠٫٧ ك.ب حين طُلبت صفحةٌ ليست في القائمة، أو بعد تسمّمها).
   static const _errorPage = '<html><head><title>MH80</title></head><body>error</body></html>';
