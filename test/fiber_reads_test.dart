@@ -164,6 +164,42 @@ void main() {
       expect(agent.gets, isEmpty, reason: 'بمسح العمودين لا بسؤال كلّ جهاز');
     });
 
+    test('«NULL» اسماً لكلّ الأجهزة (V1600D، ٢٧ أكتوبر) ليس اسماً: يُرفض ويُقرأ وصف VSOL بدله', () async {
+      OltFiberReads.debugReset();
+      final agent = FakeSnmpAgent({
+        '${OltFiberReads.ifAliasOid}.302': snmpText('', 'NULL'),
+        '${OltFiberReads.ifAliasOid}.303': snmpText('', 'NULL'),
+        '${OltFiberReads.ifAliasOid}.304': snmpText('', 'null'),
+        '$a.9.3.3': snmpText('', 'karar77'),
+        '$a.9.3.4': snmpText('', 'NULL'),
+      });
+      final r = await OltFiberReads.names(agent, vsol, [o(3, 2), o(3, 3), o(3, 4)]);
+      expect(r, {303: 'karar77'});
+    });
+
+    test('تنظيف الأسماء: الحشو يُرفض، والقيمة الواحدة المكرّرة على أغلب الأجهزة حشو، والأسماء المميّزة تبقى', () {
+      expect(OltFiberReads.cleanNames({1: 'NULL', 2: 'none', 3: 'N/A', 4: '-', 5: 'علي'}), {5: 'علي'});
+      final same = {for (var i = 1; i <= 10; i++) i: 'test'}..[11] = 'كرار';
+      expect(OltFiberReads.cleanNames(same), {11: 'كرار'});
+      final distinct = {for (var i = 1; i <= 10; i++) i: 'user$i'};
+      expect(OltFiberReads.cleanNames(distinct), distinct);
+      expect(OltFiberReads.cleanNames({1: 'Ali', 2: 'Ali'}), {1: 'Ali', 2: 'Ali'}, reason: 'تكرارٌ قليل ليس حشواً');
+    });
+
+    test('ماك أجهزة VSOL EPON من ifPhysAddress بمسحةٍ واحدة: الصفريّ وغير المطلوب لا يُعدّان', () async {
+      OltFiberReads.debugReset();
+      final agent = FakeSnmpAgent({
+        '${OltFiberReads.ifPhysOid}.1': snmpBytes('', [0x11, 0x22, 0x33, 0x44, 0x55, 0x66]),
+        '${OltFiberReads.ifPhysOid}.302': snmpBytes('', [0x7c, 0x6a, 0x60, 0x0e, 0x08, 0x07]),
+        '${OltFiberReads.ifPhysOid}.303': snmpBytes('', [0, 0, 0, 0, 0, 0]),
+        '${OltFiberReads.ifPhysOid}.304': snmpBytes('', [0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff]),
+      });
+      final r = await OltFiberReads.vsolEponMacs(agent, {302, 303, 304});
+      expect(r, {302: '7c:6a:60:0e:08:07', 304: 'aa:bb:cc:dd:ee:ff'});
+      expect(agent.gets, isEmpty, reason: 'مسح عمود لا سؤال كلّ جهاز');
+      expect(await OltFiberReads.vsolEponMacs(FakeSnmpAgent({}, failGets: true), {302}), anyOf(isNull, isEmpty));
+    });
+
     test('جهازٌ لا يجيب (مهلة) ⇒ قراءاتٌ فارغة لا استثناء', () async {
       final agent = FakeSnmpAgent({}, failGets: true);
       expect(await OltFiberReads.vsolOptics(agent, [o(3, 2)]), isEmpty);

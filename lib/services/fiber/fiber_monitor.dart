@@ -102,6 +102,9 @@ class FiberMonitor extends ChangeNotifier {
   static const _bgOpticsEvery = Duration(minutes: 3);
   static const _namesEvery = Duration(minutes: 30);
   static const _devicesEvery = Duration(minutes: 5);
+
+  /// ماك أجهزة VSOL EPON — لا تتغيّر إلّا باستبدال جهاز، فنصف ساعة (ومحفوظة مع اللقطة).
+  static const _macsEvery = Duration(minutes: 30);
   static const _rxUploadEvery = Duration(minutes: 10);
   static const _snapshotEvery = Duration(minutes: 1);
 
@@ -135,7 +138,7 @@ class FiberMonitor extends ChangeNotifier {
   DateTime? _namesAt;
   OltEponDetails _epon = const OltEponDetails();
   VsolGponSnapshot? _gpon;
-  DateTime? _gponAt, _devicesAt;
+  DateTime? _gponAt, _devicesAt, _macsAt;
   final Map<String, bool> _wasOnline = {};
   bool _first = true;
   bool _needStructure = false;
@@ -378,6 +381,22 @@ class FiberMonitor extends ChangeNotifier {
         }
       }
 
+      // ── ٥. ماك أجهزة VSOL EPON: بها يطابق «ربط المشتركين» جلسة الساس ويظهر «ماك الـONU» (BDCOM تُقرأ مع الأجهزة).
+      if (profile.readsVsolTables && (_macsAt == null || now.difference(_macsAt!) >= _macsEvery)) {
+        final epon = {for (final o in cur.onus) if (o.technology == VsolPonTechnology.epon) o.ifIndex};
+        if (epon.isNotEmpty) {
+          final m = await OltFiberReads.vsolEponMacs(snmp, epon);
+          if (m != null) {
+            _macsAt = now;
+            if (m.isNotEmpty) {
+              _epon = _epon.copyWith(onuMacs: {..._epon.onuMacs, ...m}, macsAt: now);
+              _rebuild();
+              notifyListeners();
+            }
+          }
+        }
+      }
+
       // الأجهزة خلف كلّ ONU (للربط) — بطلب.
       if (wantDevices && (force || _devicesAt == null || now.difference(_devicesAt!) >= _devicesEvery)) {
         await _readDevices(snmp, cur);
@@ -435,6 +454,7 @@ class FiberMonitor extends ChangeNotifier {
       ],
       'ifn': {for (final e in s.ifNames.entries) '${e.key}': e.value},
       'names': {for (final e in _names.entries) '${e.key}': e.value},
+      'macs': {for (final e in _epon.onuMacs.entries) '${e.key}': e.value},
       'rx': {
         for (final e in _optics.entries)
           if (e.value.rxDbm != null) '${e.key}': e.value.rxDbm,
@@ -511,7 +531,13 @@ class FiberMonitor extends ChangeNotifier {
     lastOkAt = at;
     stale = true;
     if (s.profile.identified) profile = s.profile;
-    _names.addAll(byIdx<String>(j['names'], (v) => v is String ? v : null));
+    // لقطةٌ قديمة قد تحمل «NULL» لكلّ جهاز (قبل تنظيف الأسماء) — تُنظَّف هنا أيضاً.
+    _names.addAll(OltFiberReads.cleanNames(byIdx<String>(j['names'], (v) => v is String ? v : null)));
+    final macs = byIdx<String>(j['macs'], (v) => v is String && v.length == 17 ? v : null);
+    if (macs.isNotEmpty) {
+      _epon = _epon.copyWith(onuMacs: macs, macsAt: at);
+      _macsAt = at;
+    }
     for (final e in byIdx<double>(j['rx'], (v) => v is num ? v.toDouble() : null).entries) {
       _optics[e.key] = BdcomOnuReading(rxDbm: e.value);
     }

@@ -183,16 +183,61 @@ class OltFiberReads {
 
   /// مسح عمودٍ (GETBULK) — يُرجع الموجود وحده، فلا طلبٌ لجهازٍ بلا صفٍّ يُهمَل كلّه حتى المهلة. `null` = لم يُجب.
   /// العمود الذي لم يُجب يُتذكَّر لهذا العنوان ساعة — لا ندفع مهلته كلّ دورة.
-  static Future<List<Varbind>?> _walk(SnmpV2c snmp, String base) async {
+  static Future<List<Varbind>?> _walk(SnmpV2c snmp, String base, {Duration silence = const Duration(hours: 1)}) async {
     final key = '${snmp.host}|$base';
     final until = _silent[key];
     if (until != null && DateTime.now().isBefore(until)) return null;
     try {
       return await snmp.walk(base, chunkSize: 50, maxIterations: 200);
     } catch (_) {
-      _silent[key] = DateTime.now().add(const Duration(hours: 1));
+      _silent[key] = DateTime.now().add(silence);
       return null;
     }
+  }
+
+  /// ifPhysAddress — على VSOL EPON هو ماك الـONU نفسها للمتّصلة (مقارَنٌ بالـCLI على V1600D).
+  static const ifPhysOid = '1.3.6.1.2.1.2.2.1.6';
+
+  /// ماك أجهزة VSOL EPON بمسح عمودٍ واحد (~٣٣٠ قيمة) — بها يطابق «ربط المشتركين» الجهاز بجلسة الساس.
+  ///
+  /// 🐛 ٢٧ أكتوبر (المالك على V1600D: «الاولتي مجاي يقره لابورات ولامكات ويطابقه وي المتصلين»): شبكة الألياف كانت تقرأ
+  /// ماك BDCOM وحده، وماك VSOL في لوحة الأولت فقط — فلا ماك ولا مطابقة. عنوانٌ صفريّ أو FF (مفصولة) لا يُعدّ.
+  /// `null` = العمود لم يُجب (يُعاد بعد عشر دقائق لا ساعة — عمودٌ قياسيّ، فالصمت حِملٌ لا غياب).
+  static Future<Map<int, String>?> vsolEponMacs(SnmpV2c snmp, Set<int> ifIndexes) async {
+    if (ifIndexes.isEmpty) return const {};
+    final vbs = await _walk(snmp, ifPhysOid, silence: const Duration(minutes: 10));
+    if (vbs == null) return null;
+    final out = <int, String>{};
+    for (final vb in vbs) {
+      if (!vb.oid.startsWith('$ifPhysOid.')) continue;
+      final i = int.tryParse(vb.oid.substring(ifPhysOid.length + 1));
+      if (i == null || !ifIndexes.contains(i) || vb.isAbsent) continue;
+      final b = vb.rawBytes;
+      if (b.length != 6 || b.every((v) => v == 0) || b.every((v) => v == 255)) continue;
+      out[i] = b.map((x) => x.toRadixString(16).padLeft(2, '0')).join(':');
+    }
+    return out;
+  }
+
+  /// قيمٌ يملأ بها الأولت خانة الاسم الفارغة — ليست أسماء.
+  static final _placeholderName = RegExp(r'^(null|none|nil|n/?a|unknown|undefined|default|empty|-+|0+)$', caseSensitive: false);
+
+  /// ينظّف الأسماء: لا قيمة حشوٍ («NULL» على V1600D لكلّ الـ٣٠٢)، ولا قيمةٌ واحدة تتكرّر على أغلب الأجهزة — الاسم يميّز
+  /// جهازاً، والمكرَّر على النصف حشوٌ مهما كان.
+  static Map<int, String> cleanNames(Map<int, String> names) {
+    final out = <int, String>{
+      for (final e in names.entries)
+        if (!_placeholderName.hasMatch(e.value.trim())) e.key: e.value,
+    };
+    if (out.length < 5) return out;
+    final counts = <String, int>{};
+    for (final v in out.values) {
+      counts[v.toLowerCase()] = (counts[v.toLowerCase()] ?? 0) + 1;
+    }
+    final junk = {for (final e in counts.entries) if (e.value >= 5 && e.value * 2 >= out.length) e.key};
+    if (junk.isEmpty) return out;
+    out.removeWhere((_, v) => junk.contains(v.toLowerCase()));
+    return out;
   }
 
   static final Map<String, DateTime> _silent = {};
@@ -349,6 +394,8 @@ class OltFiberReads {
       // UTF-8 (أسماءٌ عربيّة)، بلا حروف تحكّم.
       final s = utf8.decode(vb.rawBytes, allowMalformed: true).replaceAll(RegExp(r'[\x00-\x1F\x7F�]'), '').trim();
       if (s.isEmpty || s.length > 64 || RegExp(r'^(onu|epon|gpon)[\d/:._-]*$', caseSensitive: false).hasMatch(s)) return null;
+      // «NULL» ونحوه حشوٌ لا اسم — يُرفض هنا فيُقرأ وصف VSOL بدله.
+      if (_placeholderName.hasMatch(s)) return null;
       return s;
     }
 
@@ -383,7 +430,7 @@ class OltFiberReads {
         }
       }
     }
-    return answered ? out : null;
+    return answered ? cleanNames(out) : null;
   }
 
   // ── فحص القدرات ─────────────────────────────────────────────────────────────────────
