@@ -1,0 +1,207 @@
+import 'package:flutter/foundation.dart';
+
+import '../../../api/mikrotik_api.dart';
+import '../../../api/mimosa_api.dart';
+import '../../../api/ubnt_api.dart';
+import '../device_vitals.dart';
+
+/// قراءة جهازٍ كما يحتاجها البرج — من جلسة قسم الأجهزة نفسها ([DeviceVitals.fetch]، لا جلسةٌ ثانية).
+///
+/// كلّ حقلٍ لا يقرؤه الجهاز `null` يُعرض «—»، لا صفر: الصفر رقمٌ يكذب (قاعدة القسم).
+@immutable
+class TowerReading {
+  const TowerReading({
+    required this.at,
+    this.wireless = false,
+    this.mode,
+    this.clients,
+    this.quality,
+    this.signal,
+    this.downBps,
+    this.upBps,
+    this.frequency,
+    this.channelWidth,
+    this.noise,
+    this.linkSpeed,
+    this.uptime,
+    this.temperature,
+    this.cpu,
+    this.peers = const [],
+  });
+
+  final DateTime at;
+
+  /// للجهاز واجهةٌ لاسلكيّة شغّالة (سكتر/لنك/لوحة) — لا راوتر ولا سويج.
+  final bool wireless;
+
+  /// وضع الواجهة كما يكتبه الجهاز: `ap-bridge` · `station` · `bridge` (مايكروتك)، `ap` · `sta` (يوبنتي).
+  final String? mode;
+
+  /// المتّصلون عليه الآن (المشتركون للسكتر، والطرف الآخر للّنك).
+  final int? clients;
+
+  /// متوسّط CCQ للمتّصلين (أو CCQ الوصلة نفسها).
+  final int? quality;
+
+  /// متوسّط إشارة المتّصلين بالـdBm (أو إشارة الجهاز نفسه إن كان مستقبِلاً).
+  final int? signal;
+
+  /// التنزيل نحو المشتركين والرفع منهم (بت/ثانية) على الواجهة اللاسلكيّة، وإلّا أنشط منفذ.
+  final int? downBps;
+  final int? upBps;
+
+  final int? frequency;
+  final int? channelWidth;
+  final int? noise;
+
+  /// سرعة منفذ الشبكة السلكيّ («1Gbps» · «100Mbps»).
+  final String? linkSpeed;
+  final String? uptime;
+  final int? temperature;
+  final int? cpu;
+
+  /// المتّصلون واحداً واحداً — منها «أضعف المشتركين».
+  final List<PeerLink> peers;
+
+  /// نقطة وصول (تخدم مشتركين) لا مستقبِل.
+  bool get isAccessPoint {
+    final m = (mode ?? '').toLowerCase();
+    if (m.isEmpty) return (clients ?? 0) >= 2;
+    return m.startsWith('ap') || m == 'bridge' || m.contains('master');
+  }
+
+  /// مستقبِلٌ متّصل بنقطة وصولٍ واحدة (طرف لنك أو جهاز مشترك).
+  bool get isStation {
+    final m = (mode ?? '').toLowerCase();
+    return m.startsWith('sta') || m.contains('station') || m.contains('slave');
+  }
+
+  static int? _avg(Iterable<int?> xs, {bool skipZero = true}) {
+    var n = 0;
+    var sum = 0;
+    for (final x in xs) {
+      if (x == null || (skipZero && x == 0)) continue;
+      n++;
+      sum += x;
+    }
+    return n == 0 ? null : (sum / n).round();
+  }
+
+  static bool _isWirelessPort(String name) {
+    final n = name.toLowerCase();
+    return n.startsWith('wlan') || n.startsWith('ath') || n.startsWith('wifi') || n.startsWith('wl');
+  }
+
+  static bool _isEtherPort(String name) {
+    final n = name.toLowerCase();
+    return n.startsWith('ether') || n.startsWith('eth') || n.startsWith('lan') || n.startsWith('sfp');
+  }
+
+  /// يبني القراءة من حصيلة جلسةٍ واحدة. [r.raw] يحدّد العلامة.
+  static TowerReading fromProbe(ProbeResult r, {DateTime? at}) {
+    final when = at ?? DateTime.now();
+    final raw = r.raw;
+    final peers = r.detail.peers;
+    final ports = r.detail.ports;
+
+    var wireless = false;
+    String? mode;
+    int? frequency;
+    int? channelWidth;
+    int? noise;
+    int? temperature;
+    int? cpu;
+    int? ownSignal;
+    int? ownQuality;
+    String? linkSpeed;
+
+    if (raw is MikrotikStats) {
+      final radios = raw.wirelessInterfaces.where((w) => !w.disabled).toList()
+        ..sort((a, b) => (b.running ? 1 : 0) - (a.running ? 1 : 0));
+      wireless = radios.isNotEmpty;
+      if (wireless) {
+        final w = radios.first;
+        mode = w.mode.isEmpty ? null : w.mode;
+        frequency = w.frequency > 0 ? w.frequency : null;
+        channelWidth = w.channelWidth > 0 ? w.channelWidth : null;
+      }
+      temperature = raw.temperature;
+      cpu = raw.cpuLoad;
+    } else if (raw is UbntStats) {
+      final w = raw.wireless;
+      wireless = w != null;
+      if (w != null) {
+        mode = w.mode.isEmpty ? null : w.mode;
+        frequency = w.frequency > 0 ? w.frequency : null;
+        channelWidth = w.chanbw > 0 ? w.chanbw : null;
+        noise = w.hasNoise ? w.noise : null;
+        ownSignal = w.signal == 0 ? null : w.signal;
+        ownQuality = w.hasCcq ? w.ccq : null;
+      }
+      temperature = raw.host.temperature > 0 ? raw.host.temperature : null;
+      cpu = raw.host.cpuload;
+      linkSpeed = raw.lanSpeed;
+    } else if (raw is MimosaStats) {
+      wireless = true;
+      mode = switch (raw.wirelessMode) { 1 => 'ap', 2 => 'sta', _ => null };
+      channelWidth = raw.channelWidthMhz;
+      temperature = raw.temperatureC?.round();
+      ownSignal = raw.totalRxPowerDbm?.round();
+    }
+
+    // المنفذ اللاسلكيّ يحمل حِمل المشتركين؛ بلا واحدٍ (راوتر/سويج) نأخذ أنشط منفذ.
+    PortTraffic? radioPort;
+    PortTraffic? busiest;
+    for (final p in ports) {
+      if (!p.up) continue;
+      if (radioPort == null && _isWirelessPort(p.name)) radioPort = p;
+      final load = (p.rxBps ?? 0) + (p.txBps ?? 0);
+      final best = busiest == null ? -1 : (busiest.rxBps ?? 0) + (busiest.txBps ?? 0);
+      if (load > best) busiest = p;
+    }
+    if (linkSpeed == null) {
+      for (final p in ports) {
+        if (p.up && _isEtherPort(p.name) && (p.linkSpeed ?? '').isNotEmpty) {
+          linkSpeed = p.linkSpeed;
+          break;
+        }
+      }
+    }
+
+    int? down;
+    int? up;
+    final probeAp = wireless && peers.length >= 2;
+    final station = (mode ?? '').toLowerCase().startsWith('sta') || (mode ?? '').toLowerCase().contains('station');
+    if (radioPort != null) {
+      // من نقطة الوصول نحو المشتركين = ما تُرسله (tx)؛ والمستقبِل ينزّل ما يستقبله (rx).
+      down = station ? radioPort.rxBps : radioPort.txBps;
+      up = station ? radioPort.txBps : radioPort.rxBps;
+    } else if (busiest != null) {
+      final rx = busiest.rxBps;
+      final tx = busiest.txBps;
+      down = rx == null && tx == null ? null : ((rx ?? 0) >= (tx ?? 0) ? rx : tx);
+      up = rx == null && tx == null ? null : ((rx ?? 0) >= (tx ?? 0) ? tx : rx);
+    }
+
+    final peerQuality = _avg(peers.map((p) => p.ccq));
+    final peerSignal = _avg(peers.map((p) => p.signal));
+    return TowerReading(
+      at: when,
+      wireless: wireless,
+      mode: mode,
+      clients: wireless ? peers.length : null,
+      quality: peerQuality ?? ownQuality,
+      signal: (station || !probeAp) ? (ownSignal ?? peerSignal) : (peerSignal ?? ownSignal),
+      downBps: down,
+      upBps: up,
+      frequency: frequency,
+      channelWidth: channelWidth,
+      noise: noise,
+      linkSpeed: linkSpeed,
+      uptime: r.detail.uptime,
+      temperature: temperature,
+      cpu: cpu,
+      peers: peers,
+    );
+  }
+}
