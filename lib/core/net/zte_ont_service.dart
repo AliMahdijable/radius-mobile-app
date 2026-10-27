@@ -64,8 +64,7 @@ class ZteOntService {
   }
 
   /// دخولٌ بـ[user]/[pass]. null: ليست واجهة ZTE، أو رُفضت الاعتمادات، أو تعذّر الاتّصال — السبب في [attempt].
-  static Future<ZteOntSession?> login(String host, String user, String pass) async =>
-      (await attempt(host, user, pass)).session;
+  static Future<ZteOntSession?> login(String host, String user, String pass) async => (await attempt(host, user, pass)).session;
 
   /// محاولة دخولٍ واحدة بسببها إن فشلت.
   ///
@@ -225,18 +224,23 @@ class ZteOntService {
     final names = <String>{};
     var title = '';
     var answered = false;
+    var richest = ''; // أطول صفحةٍ أجابت — فيها الضوء غالباً (D401: صفحة EPON ٩٦ ك.ب وحدها، والباقي صفحات خطأ).
     final missAt = _scanMissAt[s.baseUrl];
     final scan = missAt == null || DateTime.now().difference(missAt) >= scanQuiet;
     void finish() {
       if (!scan) tried.add('scan:later');
       _pageTrace[s.baseUrl] = tried.join(' ');
       final c = ZteOntParse.opticalCandidates(menu);
+      final hints = ZteOntParse.opticalHints(richest);
+      // صفحات الحالة فقط (لا كلّ ٤٩ صفحة): هي ما قد يحمل الضوء، فالأثر يبقى قصيراً.
+      final statusList = {..._opticalPages, ...ZteOntParse.statusPages(menu)}.map(ZteOntParse.stem).toList()..sort();
       _pageInfo[s.baseUrl] = [
         't=${title.isEmpty ? '-' : title}',
         'm=${menu.length}',
+        if (hints.isNotEmpty) 'g=${hints.join(',')}',
         if (c.isNotEmpty) 'c=${c.take(6).map(ZteOntParse.stem).join(',')}',
         if (names.isNotEmpty) 'n=${names.take(8).join(',')}',
-        if (menu.isNotEmpty) 'p=${(menu.map(ZteOntParse.stem).toList()..sort()).join(',')}',
+        if (statusList.isNotEmpty) 's=${statusList.join(',')}',
       ].join(' ');
       if (answered) _unknownFormat.add(s.baseUrl);
       if (answered && scan) _scanMissAt[s.baseUrl] = DateTime.now();
@@ -271,6 +275,7 @@ class ZteOntService {
         return o;
       }
       if (title.isEmpty) title = pageTitle;
+      if (html.length > richest.length) richest = html;
       menu.addAll(ZteOntParse.pageNames(html));
       names.addAll(ZteOntParse.powerNames(html));
       // ما بقي بالترتيب: الأسماء المعروفة، ثمّ المرشّحة للضوء، ثمّ صفحات الحالة — بلا تكرارٍ وضمن الميزانيّة.
@@ -399,8 +404,7 @@ typedef ZteLoginOutcome = ({ZteOntSession? session, ZteLoginIssue? issue, int? l
 class ZteOntParse {
   ZteOntParse._();
 
-  static bool isZte(String? server, String html) =>
-      (server ?? '').toLowerCase().contains('zte') || isLoginPage(html);
+  static bool isZte(String? server, String html) => (server ?? '').toLowerCase().contains('zte') || isLoginPage(html);
 
   /// صفحة الدخول — في البداية وحين تنتهي الجلسة (الصفحة المطلوبة تعود دخولاً).
   static bool isLoginPage(String html) => html.contains('fLogin') && html.contains('Frm_Logintoken');
@@ -547,6 +551,35 @@ class ZteOntParse {
       final n = m.group(1) ?? m.group(2) ?? m.group(3)!;
       if (like.hasMatch(n) && !counter.hasMatch(n)) out.add(n);
       if (out.length >= 12) break;
+    }
+    return out.toList();
+  }
+
+  /// أسماءٌ (بلا قيم) مرشّحةٌ لحمل الضوء في صفحةٍ لا نعرف صيغتها: متغيّرٌ أو خليّةٌ أو وسيط دالّةٍ قيمتُه رقمٌ سالب — قدرة
+  /// الاستقبال بالـdBm سالبةٌ دائماً، فأيّ طرازٍ جديد (D401) يحملها في حقلٍ سالب ولو باسمٍ لا rx/tx/power فيه. القيم تُترك،
+  /// الأسماء فقط، اثنا عشر على الأكثر. `v:` متغيّر، `t:` Transfer_meaning، `c:` خليّة، `f:` دالّةٌ وسيطها سالب.
+  static List<String> opticalHints(String html) {
+    final out = <String>{};
+    void add(String s) {
+      if (out.length < 12) out.add(s);
+    }
+
+    // قيمةٌ سالبةٌ غير «‎-1» (الأخيرة قيمةٌ افتراضيّة شائعة).
+    bool real(String? v) => v != null && v != '-1' && v != '-1.0';
+    for (final m in RegExp('var\\s+(\\w{2,40})\\s*=\\s*[\'"]?(-\\d+(?:\\.\\d+)?)').allMatches(html)) {
+      if (real(m.group(2))) add('v:${m.group(1)}');
+    }
+    for (final m in RegExp('Transfer_meaning\\(\\s*[\'"](\\w{2,40})[\'"]\\s*,\\s*[\'"](-\\d+(?:\\.\\d+)?)').allMatches(html)) {
+      if (real(m.group(2))) add('t:${m.group(1)}');
+    }
+    for (final m in RegExp('id\\s*=\\s*[\'"]?(\\w{2,40})[\'"]?[^>]*>\\s*(-\\d+(?:\\.\\d+)?)').allMatches(html)) {
+      if (real(m.group(2))) add('c:${m.group(1)}');
+    }
+    // استدعاءٌ وسيطه رقمٌ سالبٌ كسريّ (`AddRow(..,'-25.10',..)`) — بعض البرامج تبني جدول الضوء بدالّة.
+    const skip = {'Math', 'parseInt', 'parseFloat', 'Number', 'toFixed', 'substr', 'substring', 'slice', 'charAt'};
+    for (final m in RegExp('(\\w{3,40})\\s*\\([^;{)]*?-\\d+\\.\\d+').allMatches(html)) {
+      final n = m.group(1)!;
+      if (!skip.contains(n)) add('f:$n');
     }
     return out.toList();
   }

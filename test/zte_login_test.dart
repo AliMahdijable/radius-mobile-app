@@ -168,11 +168,24 @@ void main() {
       expect(trace, contains('pon_optic:404'), reason: 'المرشّحة من القائمة جُرِّبت');
       final info = ZteOntService.lastPageInfo(s)!;
       expect(info, contains('t=D401'));
-      expect(info, contains('c=pon_status_optic_info'));
-      expect(info, contains('RxOptPwr'));
-      expect(info, contains('Frm_TxOptPwr'));
-      expect(info, endsWith('p=pon_status_optic_info'), reason: 'أسماء صفحاته كلّها');
+      expect(info, contains('g=v:RxOptPwr'), reason: 'حقلٌ قيمتُه سالبة = الضوء ولو باسمٍ لا نعرفه');
+      expect(info, contains('c=pon_status_optic_info'), reason: 'المرشّحة للضوء');
+      expect(info, contains('Frm_TxOptPwr'), reason: 'اسمٌ يشبه الضوء من n=');
+      expect(info, contains('s=epon_status_link_info,gpon_status_link_info,pon_status_link_info'),
+          reason: 'صفحات الحالة المعروفة فقط (المرشّحة في c=)');
       expect('$trace $info', isNot(contains('21')), reason: 'لا قيمة في الأثر');
+    });
+
+    test('تلميحات الضوء: حقلٌ سالب ولو باسمٍ غريب، لا «‎-1» الافتراضيّة، والقيم تُترك', () {
+      const page = '<html><script>var M0 = "-1"; var PonRecv = "-25.34"; var Sig = -0310;</script>'
+          "<td id=\"dev_light_a\">-27.5</td><td id=\"up\">120</td>SetVal('x', '-3.14');</html>";
+      final g = ZteOntParse.opticalHints(page);
+      expect(g, contains('v:PonRecv'));
+      expect(g, contains('c:dev_light_a'));
+      expect(g, contains('f:SetVal'));
+      expect(g, isNot(contains('v:M0')), reason: '«‎-1» قيمةٌ افتراضيّة لا ضوء');
+      expect(g, isNot(contains('c:up')), reason: 'قيمةٌ موجبة ليست قدرة استقبال');
+      expect(g.join(), isNot(contains('25')), reason: 'أسماءٌ بلا قيم');
     });
 
     test('الضوء في صفحة حالةٍ أخرى (لا اسم ضوءٍ في قائمته) ⇒ يُبحث فيها، وتُحفظ للقراءة التالية', () async {
@@ -354,7 +367,8 @@ void main() {
       expect(parts.length, inInclusiveRange(2, 5));
       expect(parts.every((p) => p.length <= 291), isTrue);
       expect(parts.where((p) => p.startsWith('+')), hasLength(parts.length - 1));
-      expect(parts.join().replaceAll('+', ''), contains('pon_status_optical_power_long_name_number_7_info'));
+      // الأثر الطويل يُقطَّع عبر الأجزاء بلا فقدٍ: اسمٌ من آخر القائمة يظهر في المجموع.
+      expect(parts.join().replaceAll('+', ''), contains('pon_optical_power_long_name_number_7'));
     });
 
     test('جهازٌ لا يجاوب ⇒ «لم يُتمكّن من الوصول»', () async {
