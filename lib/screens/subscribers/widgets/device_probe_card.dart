@@ -438,6 +438,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       await _refreshQuietlyInner(force: force);
     } finally {
       _probing = false;
+      _afterProbe();
     }
   }
 
@@ -458,14 +459,27 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     DeviceProbeBus.bump();
   }
 
+  /// «حفظ وفحص» وفحصٌ آخر جارٍ: يُنفَّذ بعده لا يُسقط (كان يُتجاهل فلا محاولة ولا تشخيص — ٢٧ أكتوبر، D401).
+  bool _retryPending = false;
+
   Future<void> _run({bool force = false, bool retryLogin = false}) async {
-    if (_probing) return;
+    if (_probing) {
+      if (retryLogin) _retryPending = true;
+      return;
+    }
     _probing = true;
     try {
       await _runInner(force: force, retryLogin: retryLogin);
     } finally {
       _probing = false;
+      _afterProbe();
     }
+  }
+
+  void _afterProbe() {
+    if (!_retryPending || !mounted) return;
+    _retryPending = false;
+    _run(force: true, retryLogin: true);
   }
 
   Future<void> _runInner({bool force = false, bool retryLogin = false}) async {

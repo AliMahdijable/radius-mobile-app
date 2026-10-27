@@ -67,6 +67,9 @@ class DeviceProbeApi {
   static final _issueByKey = <String, ({ProbeIssue issue, int? lockLeft, DateTime at})>{};
   static final _issueByUser = <String, ({ProbeIssue issue, int? lockLeft, DateTime at})>{};
 
+  /// عناوين بُلِّغ أثر «دخلنا ولم نقرأ الضوء» لها في هذه الجلسة.
+  static final _readReported = <String>{};
+
   /// ما سجّله فرع ZTE في الفحص الجاري (بالعنوان) — يُقرأ بعد انتهائه.
   static final _zteIssue = <String, ({ProbeIssue issue, int? lockLeft, DateTime at, String trace})>{};
 
@@ -290,6 +293,7 @@ class DeviceProbeApi {
     String? company, {
     bool report = false,
   }) async {
+    var reportNow = report;
     final ipKey = _k(company, effectiveIp);
     final defaults = await _loadAdminDefaults(company);
     final started = DateTime.now();
@@ -320,7 +324,9 @@ class DeviceProbeApi {
       _issueByKey.remove(ipKey);
       if (userKey != null) _issueByUser.remove(userKey);
     }
-    if (report) {
+    // جهازٌ دخلناه ولم نقرأ ضوءه = صيغةٌ لا نعرفها (D401، ٢٧ أكتوبر) ⇒ أثره يُبلَّغ مرّةً لكلّ عنوانٍ بالجلسة ولو بلا «حفظ وفحص».
+    if (!reportNow && snap == null && fresh?.issue == ProbeIssue.readFailed && _readReported.add(ipKey)) reportNow = true;
+    if (reportNow) {
       // مرحلة الفشل بلا اعتمادات ولا عنوان — تصل سجلّ الخادم فيُعرف السبب بالدليل.
       ClientDiag.report(
         'device_probe',

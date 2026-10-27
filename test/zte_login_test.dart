@@ -218,6 +218,22 @@ void main() {
       expect('${diag['message']}', contains('steps=detect+'));
     });
 
+    test('دخلنا ولم نقرأ الضوء ⇒ الأثر يُبلَّغ مرّةً لهذا العنوان ولو بلا «حفظ وفحص»', () async {
+      api.defaults = {'ontUsername': 'agent', 'ontPassword': 'secret-1'};
+      d.pages['epon_status_link_info_t.gch'] = (404, 'Not Found');
+      d.pages['gpon_status_link_info_t.gch'] = (404, 'Not Found');
+      d.pages['pon_status_link_info_t.gch'] = (200, '<html><title>D401</title><b>RxPower</b></html>');
+      expect(await DeviceProbeApi.probe(fallbackIp: d.host, force: true), isNull);
+      expect(DeviceProbeApi.issueFor(ip: d.host)?.issue, ProbeIssue.readFailed);
+      await DeviceProbeApi.probe(fallbackIp: d.host, force: true);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      final diag = api.requests.where((r) => r.uri.path == '/api/client-diag').toList();
+      expect(diag, hasLength(1), reason: 'مرّةً لكلّ عنوان بالجلسة لا كلّ فحص');
+      final msg = '${(diag.single.data as Map)['message']}';
+      expect(msg, contains('epon:404'));
+      expect(msg, contains('pon:200/rx?'), reason: 'الاسم موجود بصيغةٍ لا نعرفها');
+    });
+
     test('جهازٌ لا يجاوب ⇒ «لم يُتمكّن من الوصول»', () async {
       final port = d.server.port;
       await d.stop();
