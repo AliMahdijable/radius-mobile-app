@@ -293,12 +293,8 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
 
       switch (_d.brand) {
         case 'mikrotik':
-          await MikrotikApi.rebootDevice(
-            ip: _d.ip,
-            port: _d.apiPort ?? 8728,
-            user: user,
-            pass: pass,
-          );
+          // بطريق القراءة نفسه: API ثمّ الويب ثمّ SSH.
+          await MikrotikApi.rebootFor(ip: _d.ip, protocol: _d.protocol, apiPort: _d.apiPort, creds: creds);
           break;
         case 'ubnt':
           await UbntApi.rebootDevice(
@@ -464,7 +460,9 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           if (Perms.has('devices.monitor')) ...[
             if (_d.brand == 'mikrotik') ...[
               const SizedBox(height: Sp.md),
-              if (_d.protocol == 'api' && _d.hasCredentials)
+              // API (ثمّ الويب وSSH تلقائيّاً حين يكون منفذه مقفولاً) أو SSH أو SNMP — ٢٧ أكتوبر: «اكو اجهزه هواي
+              // مقفول عليها». `null` للأجهزة القديمة المسجّلة بلا بروتوكول.
+              if (_isMikrotikMonitorable(_d) && _d.hasCredentials)
                 MikrotikLivePanel(device: _d)
               else
                 _mikrotikHint(),
@@ -1233,6 +1231,9 @@ bool _isVsolOlt(NetworkDevice d) => OltProfile.fromDevice(d).opensOltPanel;
 bool _isAirFiber60(NetworkDevice d) {
   final combined = '${d.model ?? ''} ${d.name}'.toLowerCase();
   if (combined.trim().isEmpty) return false;
+  // عائلة Wave (Wave Long-Range · Wave Pro · Wave AP · Wave Nano…) راديو 60 GHz باحتياطيّ 5 GHz — لوحتها لوحة
+  // الـ60 GHz. من الطراز وحده (الاسم يكتبه الوكيل).
+  if (RegExp(r'\bwave\b').hasMatch((d.model ?? '').toLowerCase())) return true;
   // Explicit 60 GHz mentions
   if (combined.contains('60ghz') || combined.contains('60 ghz')) return true;
   if (combined.contains('airfiber 60') || combined.contains('airfiber60')) {
@@ -1262,6 +1263,9 @@ bool _isAirFiber60(NetworkDevice d) {
 /// و`null` كذلك: أجهزة قديمة سُجّلت بلا بروتوكول.
 bool _isUbntMonitorable(NetworkDevice d) =>
     d.protocol == null || d.protocol == 'api' || d.protocol == 'ssh';
+
+/// ميكروتك يُراقَب بالـAPI (ومعه الويب وSSH تلقائيّاً) أو SSH أو SNMP — Telnet وحده لا.
+bool _isMikrotikMonitorable(NetworkDevice d) => d.protocol != 'telnet';
 
 extension _UbntHint on _NetworkDeviceDetailsScreenState {
   Widget _ubntHint() {
@@ -1352,16 +1356,11 @@ extension _UbntHint on _NetworkDeviceDetailsScreenState {
 
 extension _MikrotikHint on _NetworkDeviceDetailsScreenState {
   Widget _mikrotikHint() {
-    final needsApi = _d.protocol != 'api';
-    // UBNT: `ssh` يعادل `api` — الاتّصال واحد.
-    final needsCreds = (_d.protocol == 'api' ||
-            (_d.brand == 'ubnt' && _isUbntMonitorable(_d))) &&
-        !_d.hasCredentials;
-    final msg = needsApi
-        ? 'اختر بروتوكول API + أدخل user/password للراوتر لتفعيل المراقبة الحيّة (CPU/RAM/interfaces)'
-        : (needsCreds
-            ? 'أدخل user/password للراوتر لتفعيل المراقبة الحيّة'
-            : '');
+    final msg = !_isMikrotikMonitorable(_d)
+        ? 'اختر API أو SSH أو SNMP للراوتر لتفعيل المراقبة الحيّة — مع API يُجرَّب الويب وSSH تلقائيّاً إن كان منفذه مقفولاً'
+        : (_d.protocol == 'snmp'
+            ? 'أدخل الـcommunity لتفعيل المراقبة الحيّة عبر SNMP'
+            : 'أدخل user/password للراوتر لتفعيل المراقبة الحيّة');
     return Container(
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(

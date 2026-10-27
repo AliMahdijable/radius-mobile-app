@@ -406,6 +406,8 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
       if (peer != null && peer.rxSector != null && peer.txSector != null)
         DeskFact('القطاع (Sector)', '${peer.rxSector}/${peer.txSector}', ltr: true),
       if (lat != null) DeskFact('الإحداثيّات', '$lat, $lng', ltr: true, copy: true),
+      // Wave: الراديو الاحتياطيّ والسعة والتعديل والقدرة… (UbntStats.extras).
+      for (final e in s.extras) DeskFact(e.k, e.v),
     ]);
   }
 
@@ -1207,6 +1209,21 @@ class _AirFiber60LivePanelState extends State<AirFiber60LivePanel> {
         _infoRow('Firmware', fwShort.isNotEmpty ? fwShort : fw),
         _infoRow('ESSID', essid),
         if (peer != null && peer.mac.isNotEmpty) _infoRow('Peer MAC', peer.mac),
+        for (final e in s.extras) _extraRow(e.k, e.v),
+      ]),
+    );
+  }
+
+  /// حقيقةٌ إضافيّة (UbntStats.extras) — عربيّةٌ بأرقام، فلا اتّجاه LTR مفروض، وتلتفّ بدل أن تفيض.
+  Widget _extraRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: AppType.pillBold(color: AppColors.textMid)),
+        const SizedBox(width: Sp.sm),
+        Expanded(
+          child: Text(iso(value), textAlign: TextAlign.end, maxLines: 2, style: AppType.pillBold(color: AppColors.textHi)),
+        ),
       ]),
     );
   }

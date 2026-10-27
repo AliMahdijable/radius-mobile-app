@@ -52,6 +52,7 @@ import 'widgets/sort_sheet.dart';
 import 'sheets/location_sheets.dart';
 import 'widgets/subscriber_card_v3.dart';
 import 'widgets/subscriber_table_row.dart';
+import 'widgets/detail_pane_observer.dart';
 import 'widgets/subscriber_columns.dart';
 import 'widgets/subscribers_desktop_header.dart';
 import '../../core/widgets/app_sheet.dart';
@@ -2246,7 +2247,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   late final NavigatorObserver _paneGuard = DeskNavGuard.observer();
 
   /// رجوعٌ من التفاصيل إلى أوّل اللوحة (زرّ الرجوع، Esc، حذف المشترك…) ⇒ تُطوى اللوحة.
-  late final _PaneObserver _paneObserver = _PaneObserver(() {
+  late final DetailPaneObserver _paneObserver = DetailPaneObserver(() {
     if (mounted && _paneKey != null) setState(() => _paneKey = null);
   });
 
@@ -3767,20 +3768,4 @@ class _TableHeaderDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(_TableHeaderDelegate old) => true;
-}
-
-class _PaneObserver extends NavigatorObserver {
-  _PaneObserver(this.onEmpty);
-
-  final VoidCallback onEmpty;
-
-  @override
-  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    if (previousRoute?.isFirst ?? false) onEmpty();
-  }
-
-  @override
-  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    if (previousRoute?.isFirst ?? false) onEmpty();
-  }
 }

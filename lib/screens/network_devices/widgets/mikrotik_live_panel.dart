@@ -141,20 +141,16 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     setState(() => _loading = true);
     try {
       final creds = await NetworkDevicesApi.getCredentials(widget.device.id);
-      final user = (creds['user'] ?? '').toString();
-      final pass = (creds['pass'] ?? '').toString();
-      if (user.isEmpty || pass.isEmpty) {
-        throw MikrotikException('لم يتم إعداد credentials للجهاز');
-      }
       // 2026-08-18: partial فقط لأوّل تحميل — refresh لا يستفيد منه
       // (partial بلا interfaces/wireless مؤقّتاً → ExpandableSections تختفي
       // → تفقد state (expanded/collapsed)). نفس bug UBNT + AF60 المُصلَح.
       final isFirstLoad = _stats == null;
-      final stats = await MikrotikApi.fetchStats(
+      // الطريق بحسب بروتوكول الجهاز: API ثمّ الويب ثمّ SSH تلقائيّاً، أو SNMP (٢٧ أكتوبر — «اكو اجهزه هواي مقفول عليها»).
+      final stats = await MikrotikApi.fetchStatsFor(
         ip: widget.device.ip,
-        port: widget.device.apiPort ?? 8728,
-        user: user,
-        pass: pass,
+        protocol: widget.device.protocol,
+        apiPort: widget.device.apiPort,
+        creds: creds,
         // ⚡ عرض جزئي فوري — CPU/RAM/interfaces تظهر بعد ~500ms
         // بدل انتظار كل شيء (~2-3s)
         //
@@ -417,7 +413,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
                 style: AppType.bodyBold()),
           ]),
           content: DeskRows(children: [
-            for (final w in s.wirelessInterfaces) _wirelessCard(w),
+            for (final w in s.wirelessInterfaces) _wirelessCard(w, s.w60gLinkOf(w.name)),
           ]),
         ),
       ],
@@ -566,7 +562,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         Expanded(
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(desk ? 'مراقبة حيّة · MikroTik API' : 'مراقبة حيّة (Mikrotik API)',
+            Text(desk ? 'مراقبة حيّة · MikroTik ${_viaLabel()}' : 'مراقبة حيّة (Mikrotik ${_viaLabel()})',
                 style: desk ? AppType.cardTitleBold() : AppType.bodyBold()),
             const SizedBox(height: 2),
             Row(children: [
@@ -613,6 +609,12 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         ),
       ]),
     );
+  }
+
+  /// «API» أو «عبر الويب/SSH/SNMP» — الطريق الذي قُرئ منه الجهاز فعلاً (يتّضح بعد أوّل قراءة).
+  String _viaLabel() {
+    final via = _stats?.via ?? (widget.device.protocol == 'snmp' ? 'SNMP' : 'API');
+    return via == 'API' ? 'API' : 'عبر $via';
   }
 
   Widget _pulseDot() => Container(
@@ -1340,7 +1342,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
             content: Column(children: [
               for (final (k, w) in s.wirelessInterfaces.indexed) ...[
                 if (k > 0) const SizedBox(height: Sp.sm),
-                _deskWirelessCard(w),
+                _deskWirelessCard(w, s.w60gLinkOf(w.name)),
               ],
             ]),
           );
@@ -1460,7 +1462,7 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
     );
   }
 
-  Widget _deskWirelessCard(MikrotikWireless w) {
+  Widget _deskWirelessCard(MikrotikWireless w, MikrotikW60gLink? link) {
     final active = w.running && !w.disabled;
     final tone = active ? AppTone.success : (w.disabled ? AppTone.neutral : AppTone.danger);
     final clients = _stickyClients.where((c) => c.iface == w.name).length;
@@ -1469,7 +1471,22 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
       if (w.frequency > 0) DeskFact('التردّد', '${w.frequency} MHz', ltr: true),
       if (w.channelWidth > 0) DeskFact('عرض القناة', '${w.channelWidth} MHz', ltr: true),
       if (w.txPower > 0) DeskFact('قدرة الإرسال', '${w.txPower} dBm', ltr: true),
-      if (w.isAp) DeskFact('العملاء', '$clients'),
+      if (w.isAp && !w.is60g) DeskFact('العملاء', '$clients'),
+      if (link != null) ...[
+        DeskFact('الوصلة', link.connected ? 'متّصلة' : 'غير متّصلة',
+            color: (link.connected ? AppTone.success : AppTone.danger).fill),
+        if (link.rssi case final v?) DeskFact('الإشارة', '$v dBm', ltr: true, color: Grade.signal(v).fill),
+        if (link.signalPercent case final v?)
+          DeskFact('جودة الإشارة', '$v%', ltr: true, color: Grade.percentHigherBetter(v).fill),
+        if (link.phyRateMbps case final v?) DeskFact('سرعة الربط', MikrotikW60gLink.rateText(v), ltr: true),
+        if (link.mcs case final v?) DeskFact('MCS', '$v', ltr: true),
+        if (link.distanceMeters case final v?) DeskFact('المسافة', MikrotikW60gLink.distanceText(v), ltr: true),
+        if (link.sectorText case final v?) DeskFact('القطاع', v, ltr: true),
+        if (link.packetErrorRate case final v?)
+          DeskFact('أخطاء الإرسال', '$v%', ltr: true, color: Grade.errorRate(v).fill),
+        if (link.remoteMac case final v?) DeskFact('الطرف الآخر', v, ltr: true, copy: true),
+        if (link.stations > 0) DeskFact('المحطّات المتّصلة', '${link.stations}'),
+      ],
     ];
     return Container(
       padding: const EdgeInsets.all(Sp.md),
@@ -1710,7 +1727,7 @@ Widget _interfaceRow(
   // ══════════════════════════════════════════════════════════════
   // Wireless section — للـMikrotik links/sectors/APs
   // ══════════════════════════════════════════════════════════════
-Widget _wirelessCard(MikrotikWireless w) {
+Widget _wirelessCard(MikrotikWireless w, MikrotikW60gLink? link) {
     final active = w.running && !w.disabled;
     final color = active ? AppColors.success : AppColors.error;
     return Container(
@@ -1747,11 +1764,27 @@ Widget _wirelessCard(MikrotikWireless w) {
               isoJoin(['${w.frequency} MHz', if (w.channelWidth > 0) '${w.channelWidth} MHz'], ' • ')),
         if (w.txPower > 0)
           _wlRow(LucideIcons.zap, 'TX Power', iso('${w.txPower} dBm')),
+        if (link != null) ...[
+          _wlRow(LucideIcons.link, 'الوصلة', link.connected ? 'متّصلة' : 'غير متّصلة',
+              color: (link.connected ? AppTone.success : AppTone.danger).fill),
+          if (link.rssi case final v?)
+            _wlRow(LucideIcons.signal, 'الإشارة', iso('$v dBm'), color: Grade.signal(v).fill),
+          if (link.signalPercent case final v?)
+            _wlRow(LucideIcons.gauge, 'جودة الإشارة', iso('$v%'), color: Grade.percentHigherBetter(v).fill),
+          if (link.phyRateMbps case final v?) _wlRow(LucideIcons.activity, 'سرعة الربط', iso(MikrotikW60gLink.rateText(v))),
+          if (link.mcs case final v?) _wlRow(LucideIcons.layers, 'MCS', iso('$v')),
+          if (link.distanceMeters case final v?) _wlRow(LucideIcons.ruler, 'المسافة', iso(MikrotikW60gLink.distanceText(v))),
+          if (link.sectorText case final v?) _wlRow(LucideIcons.compass, 'القطاع', iso(v)),
+          if (link.packetErrorRate case final v?)
+            _wlRow(LucideIcons.triangleAlert, 'أخطاء الإرسال', iso('$v%'), color: Grade.errorRate(v).fill),
+          if (link.remoteMac case final v?) _wlRow(LucideIcons.link2, 'الطرف الآخر', iso(v)),
+          if (link.stations > 0) _wlRow(LucideIcons.users, 'المحطّات المتّصلة', '${link.stations}'),
+        ],
       ]),
     );
   }
 
-  Widget _wlRow(IconData icon, String label, String value) {
+  Widget _wlRow(IconData icon, String label, String value, {Color? color}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(children: [
@@ -1760,7 +1793,7 @@ Widget _wirelessCard(MikrotikWireless w) {
         Text(label, style: TextStyle(fontSize: 10.5, height: 1.3, color: AppColors.textMid)),
         const Spacer(),
         Text(value,
-            style: AppType.microBold(color: AppColors.textHi)),
+            style: AppType.microBold(color: color ?? AppColors.textHi)),
       ]),
     );
   }

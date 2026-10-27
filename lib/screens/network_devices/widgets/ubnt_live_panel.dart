@@ -423,7 +423,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
             key: PageStorageKey('ubnt-$id-wireless'),
             initiallyExpanded: true,
             header: const DeskSectionHeader(icon: LucideIcons.wifi, title: 'اللاسلكيّ'),
-            content: _deskWirelessFacts(w),
+            content: _deskWirelessFacts(w, s.extras),
           );
     // نقطة الوصول: العملاء أوّلاً بعرض الصفحة؛ الوصلة: الطرف الآخر بعد الواجهات واللاسلكيّ.
     return [
@@ -436,7 +436,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
     ];
   }
 
-  Widget _deskWirelessFacts(UbntWireless w) {
+  Widget _deskWirelessFacts(UbntWireless w, [List<({String k, String v})> extras = const []]) {
     return DeskFactsGrid(facts: [
       if (w.essid.isNotEmpty) DeskFact('اسم الشبكة (SSID)', w.essid, ltr: true, copy: true),
       DeskFact('الوضع', _modeLabel(w.mode), ltr: true),
@@ -451,6 +451,8 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
       if (w.distance > 0)
         DeskFact('المسافة', w.distance >= 1000 ? '${(w.distance / 1000).toStringAsFixed(1)} km' : '${w.distance} m',
             ltr: true),
+      // airFiber X وWave: تردّد الاستقبال والتعديل والقدرة والراديو الاحتياطيّ… (UbntStats.extras).
+      for (final e in extras) DeskFact(e.k, e.v),
     ]);
   }
 
@@ -637,7 +639,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                 Text('تفاصيل Wireless',
                     style: AppType.bodyBold()),
               ]),
-              content: _wirelessDetails(s.wireless!),
+              content: _wirelessDetails(s.wireless!, s.extras),
             ),
           ];
     // 2026-08-20: نستعمل _stickyStations بدل s.stations كي القسم لا يختفي
@@ -1085,7 +1087,7 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
   // ══════════════════════════════════════════════════════════════
   // Wireless details section
   // ══════════════════════════════════════════════════════════════
-  Widget _wirelessDetails(UbntWireless w) {
+  Widget _wirelessDetails(UbntWireless w, [List<({String k, String v})> extras = const []]) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: Sp.md),
       child: Container(
@@ -1119,8 +1121,25 @@ class _UbntLivePanelState extends State<UbntLivePanel> {
                 w.distance >= 1000
                     ? '${(w.distance / 1000).toStringAsFixed(1)}km'
                     : '${w.distance}m'),
+          for (final e in extras) _extraRow(e.k, e.v),
         ]),
       ),
+    );
+  }
+
+  /// حقيقةٌ إضافيّة (UbntStats.extras): القيمة قد تطول وتخلط العربيّة بالأرقام — تلتفّ بدل أن تفيض.
+  Widget _extraRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(LucideIcons.info, size: 12, color: AppColors.textLow),
+        const SizedBox(width: 6),
+        Text(label, style: AppType.micro(color: AppColors.textMid)),
+        const SizedBox(width: Sp.sm),
+        Expanded(
+          child: Text(iso(value), textAlign: TextAlign.end, maxLines: 2, style: AppType.pillBold(color: AppColors.textHi)),
+        ),
+      ]),
     );
   }
 

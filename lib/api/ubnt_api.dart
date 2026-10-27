@@ -5,6 +5,7 @@ import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 
 import '../core/util/dev_log.dart';
+import 'ubnt_udapi.dart';
 
 /// UBNT airOS SSH client — يستعمل SSH لتشغيل `mca-status` وجلب المعلومات.
 ///
@@ -20,6 +21,24 @@ class UbntApi {
   /// الاختبارات واللقطات: يُرجع إحصاءاتٍ جاهزة بدل جلسة SSH حقيقيّة (لا جهاز في بيئة الاختبار).
   @visibleForTesting
   static Future<UbntStats> Function()? debugFetch;
+
+  /// عناوين أجهزةٍ عُرف أنّها من جيل udapi (Wave · LTU…) — تُقرأ بعدها بواجهة HTTPS مباشرةً بلا جلسة SSH أولى.
+  static final Set<String> _udapiHosts = {};
+
+  @visibleForTesting
+  static void resetUdapiHostsForTest() => _udapiHosts.clear();
+
+  /// ناتج أمرٍ لا يحمل بيانات airOS: فارغ، أو «not found» من الطرفيّة، أو بلا سطر `مفتاح=قيمة` واحد.
+  @visibleForTesting
+  static bool noAirOsOutput(String out) {
+    final t = out.trim();
+    if (t.isEmpty) return true;
+    if (RegExp(r'(^|\n)\s*-?(ash|sh|bash|busybox)?:?\s*[\w./-]+: (command )?not found', caseSensitive: false).hasMatch(t) &&
+        !RegExp(r'^\s*[A-Za-z][\w.]*=\S', multiLine: true).hasMatch(t)) {
+      return true;
+    }
+    return !RegExp(r'[A-Za-z][\w.]*=\S').hasMatch(t);
+  }
 
   /// جلب صورة كاملة عن حالة الجهاز عبر SSH.
   ///
@@ -41,6 +60,11 @@ class UbntApi {
     final fake = debugFetch;
     if (fake != null) {
       final s = await fake();
+      onPartialReady?.call(s);
+      return s;
+    }
+    if (_udapiHosts.contains(ip)) {
+      final s = await UbntUdapi.fetch(host: ip, user: user, pass: pass);
       onPartialReady?.call(s);
       return s;
     }
@@ -231,7 +255,21 @@ class UbntApi {
         }
       }
 
-      if (output.trim().isEmpty) {
+      if (!isJsonDump && noAirOsOutput(output)) {
+        // UISP gen3 (Wave · LTU…، فُحص على Wave Long-Range ٢٧ أكتوبر): لا أدوات airOS إطلاقاً — الطرفيّة تطبع
+        // «ash: mca-status: not found» لا فراغاً — وبياناته في خدمة udapi التي تكشفها واجهة الويب؛ نقرؤها بنفس
+        // بيانات الدخول عبر HTTPS ونتذكّر العنوان.
+        String? board;
+        try {
+          board = utf8.decode(
+              await client.run('cat /etc/board.json 2>/dev/null').timeout(const Duration(seconds: 4)),
+              allowMalformed: true);
+        } catch (_) {}
+        if (UbntUdapi.productFromBoardJson(board) != null) {
+          _udapiHosts.add(ip);
+          final s = UbntUdapi.fetch(host: ip, user: user, pass: pass);
+          return s;
+        }
         throw UbntException('لم نستلم بيانات — تحقّق من صلاحيّات المستخدم');
       }
 
@@ -1001,6 +1039,10 @@ class UbntStats {
   final int? memBuffersKb;
   final String? lanSpeed; // "1000Mbps-Full" — من mca-status لـairFiber
 
+  /// حقائق لا خانة لها في النموذج (airFiber X: تردّد الاستقبال والتعديل والقدرة · Wave: الراديو الاحتياطيّ
+  /// والسعة والتعديل…). تُعرض كما هي في لوحات يوبيكويتي وتفصيل البطاقة.
+  final List<({String k, String v})> extras;
+
   const UbntStats({
     this.apiVersion = 5,
     required this.host,
@@ -1013,6 +1055,7 @@ class UbntStats {
     this.memFreeKb,
     this.memBuffersKb,
     this.lanSpeed,
+    this.extras = const [],
   });
 
   // 2026-08-18: أقواس صريحة — `??` أدنى precedence من `||` فالكود الأصلي
@@ -1183,6 +1226,53 @@ class UbntStats {
       );
     }
 
+    // ── airFiber X (AF-2X · AF-3X · AF-4X · AF-5X · AF-5XHD · AF-24 …) ─────────────────────────────
+    // بلاغ المالك ٢٧ أكتوبر («ال 4x ترفك وايثرات خطا يقره»)، وفُحص على AF-4X حقيقيّ (AF06 v4.1.0): مفاتيحه
+    // `af*` و`lan*` لا `wlan*` — فكان التردّد والعرض والسعة والمسافة والوضع صفراً. و`eth0` في Linux منفذ إدارةٍ
+    // مطفأ (سرعته 10 وعدّاداته صفر)؛ منفذ البيانات الحقيقيّ في `lanRxBytes/lanTxBytes/lanSpeed/lanPlugged`.
+    // و`wstalist` يردّ «Unsupported platform» — الطرف الآخر من `remoteIp/remoteMac`.
+    final afx = m.containsKey('afTxfreq') || m.containsKey('afLinkState');
+    final afTxCap = _n(m['afTxcapacity']); // bit/s
+    final afRxCap = _n(m['afRxcapacity']);
+    final extras = <({String k, String v})>[];
+    if (afx) {
+      final txFreq = _n(m['afTxfreq']);
+      final rxFreq = _n(m['afRxfreq']);
+      final txBw = _n(m['afTxchanbw']);
+      wireless = UbntWireless(
+        essid: essid,
+        mode: _afMode(m['afOpmode']),
+        signal: _n(m['signal']) != 0 ? _n(m['signal']) : (wireless?.signal ?? 0),
+        noise: 0,
+        ccq: 0,
+        txRate: (afTxCap / 1e6).round(),
+        rxRate: (afRxCap / 1e6).round(),
+        channel: 0,
+        frequency: txFreq,
+        distance: _n(m['distance']),
+        chanbw: txBw,
+      );
+      if (rxFreq > 0 && rxFreq != txFreq) extras.add((k: 'تردّد الاستقبال', v: '$rxFreq MHz'));
+      final rxBw = _n(m['afRxchanbw']);
+      if (rxBw > 0 && rxBw != txBw) extras.add((k: 'عرض الاستقبال', v: '$rxBw MHz'));
+      if ((m['afTxmodrate'] ?? '').isNotEmpty) extras.add((k: 'التعديل', v: m['afTxmodrate']!));
+      if (m['afTxpower'] != null) {
+        final eirp = m['afTxpowerEirp'];
+        extras.add((k: 'قدرة الإرسال', v: '${m['afTxpower']} dBm${eirp != null ? ' · EIRP $eirp' : ''}'));
+      }
+      final p0 = m['afRxpower0'];
+      final p1 = m['afRxpower1'];
+      if (p0 != null || p1 != null) extras.add((k: 'استقبال السلسلتين', v: '${p0 ?? '—'} / ${p1 ?? '—'} dBm'));
+      final state = (m['afLinkState'] ?? '').toLowerCase();
+      if (state.isNotEmpty) extras.add((k: 'حالة الوصلة', v: state == 'operational' ? 'تعمل' : m['afLinkState']!));
+      final duplex = (m['afDuplex'] ?? '').toLowerCase();
+      if (duplex.isNotEmpty) {
+        extras.add((k: 'نمط الإرسال', v: duplex == 'full' ? 'مزدوج كامل' : (duplex == 'half' ? 'نصف مزدوج' : m['afDuplex']!)));
+      }
+      if ((m['remoteIp'] ?? '').isNotEmpty) extras.add((k: 'الطرف الآخر', v: m['remoteIp']!));
+      if ((m['gpsFixed'] ?? '').isNotEmpty) extras.add((k: 'GPS', v: _n(m['gpsFixed']) > 0 ? 'مثبّت' : 'بلا تثبيت'));
+    }
+
     // Stations: نُفضّل wstalist (JSON — أدقّ وأكمل) على mca-status
     final stations = <UbntStation>[];
     if (wstalistStations.isNotEmpty) {
@@ -1339,11 +1429,49 @@ class UbntStats {
         .where((i) => i.ifname.isNotEmpty && i.ifname != 'lo')
         .toList();
 
+    // airFiber X: الطرف الآخر من mca-status، ومنفذ البيانات بدل eth0 الإداريّ المطفأ.
+    if (afx && stations.isEmpty && ((m['remoteMac'] ?? '').isNotEmpty || (m['remoteIp'] ?? '').isNotEmpty)) {
+      final up = _n(m['wlanUptime']);
+      stations.add(UbntStation(
+        mac: m['remoteMac'] ?? '',
+        ip: m['remoteIp'],
+        signal: _n(m['signal']),
+        noise: 0,
+        ccq: 0,
+        txRate: (afTxCap / 1e6).round(),
+        rxRate: (afRxCap / 1e6).round(),
+        connTime: up,
+        distanceMeters: _n(m['distance']) > 0 ? _n(m['distance']) : null,
+        linkUptimeSec: up > 0 ? up : null,
+        dlCapacityKbps: afTxCap > 0 ? (afTxCap / 1000).round() : null,
+        ulCapacityKbps: afRxCap > 0 ? (afRxCap / 1000).round() : null,
+      ));
+    }
+    var ports = ifs;
+    if (afx && (m['lanRxBytes'] != null || m['lanTxBytes'] != null)) {
+      final speedMatch = RegExp(r'(\d+)').firstMatch(m['lanSpeed'] ?? '');
+      final old = ifs.where((i) => i.ifname == 'eth0').firstOrNull;
+      ports = [
+        UbntInterface(
+          ifname: 'eth0',
+          hwaddr: old?.hwaddr ?? '',
+          enabled: true,
+          plugged: (m['lanPlugged'] ?? '1') != '0',
+          rxBytes: int.tryParse(m['lanRxBytes'] ?? ''),
+          txBytes: int.tryParse(m['lanTxBytes'] ?? ''),
+          speed: speedMatch == null ? null : int.tryParse(speedMatch.group(1)!),
+          duplex: (m['lanSpeed'] ?? '').toLowerCase().contains('full'),
+        ),
+        ...ifs.where((i) => i.ifname != 'eth0'),
+      ];
+    }
+
     return UbntStats(
       host: host,
       wireless: wireless,
-      interfaces: ifs,
+      interfaces: ports,
       stations: stations,
+      extras: extras,
       latitude: double.tryParse(m['latitude'] ?? ''),
       longitude: double.tryParse(m['longitude'] ?? ''),
       memTotalKb: _n(m['memTotal']) > 0 ? _n(m['memTotal']) : null,
@@ -1368,6 +1496,14 @@ class UbntStats {
     if (parts.isEmpty) return null;
     final load = double.tryParse(parts.first);
     return load == null ? null : (load * 100).round();
+  }
+
+  /// airFiber X: `afOpmode=master|slave` ⇒ الصيغة الموحّدة (وصلة PtP دائماً).
+  static String _afMode(String? raw) {
+    final low = (raw ?? '').toLowerCase();
+    if (low == 'master') return 'ap-ptp';
+    if (low == 'slave') return 'sta-ptp';
+    return raw ?? '';
   }
 
   static String _normalizeMode(String raw) {
@@ -1741,7 +1877,10 @@ extension UbntBoardName on UbntTrafficSession {
     final fromMca = _valueOf(mca, const ['platform', 'devmodel']);
     if (fromMca != null) return fromMca;
     final info = await runCommand('cat /etc/board.info 2>/dev/null');
-    return _valueOf(info, const ['board.name', 'board.shortname']);
+    final fromInfo = _valueOf(info, const ['board.name', 'board.shortname']);
+    if (fromInfo != null) return fromInfo;
+    // UISP gen3 (Wave · LTU…): لا mca-status ولا board.info — الاسم التجاريّ في /etc/board.json.
+    return UbntUdapi.productFromBoardJson(await runCommand('cat /etc/board.json 2>/dev/null'));
   }
 
   /// أوّل قيمة غير فارغة لأحد المفاتيح، بترتيب الأفضليّة.
