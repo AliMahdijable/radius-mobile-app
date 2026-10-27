@@ -234,10 +234,13 @@ class ZteOntService {
       final hints = ZteOntParse.opticalHints(richest);
       // صفحات الحالة فقط (لا كلّ ٤٩ صفحة): هي ما قد يحمل الضوء، فالأثر يبقى قصيراً.
       final statusList = {..._opticalPages, ...ZteOntParse.statusPages(menu)}.map(ZteOntParse.stem).toList()..sort();
+      // D401: الصفحة ٩٦ ك.ب بلا رقمٍ سالبٍ ولا اسمٍ يشبه الضوء ⇒ مفردات حقولها الرقميّة (أسماءٌ بلا قيم) لنعرف أين الضوء.
+      final vocab = hints.isEmpty ? ZteOntParse.numericNames(richest) : const <String>[];
       _pageInfo[s.baseUrl] = [
         't=${title.isEmpty ? '-' : title}',
         'm=${menu.length}',
         if (hints.isNotEmpty) 'g=${hints.join(',')}',
+        if (vocab.isNotEmpty) 'v=${vocab.join(',')}',
         if (c.isNotEmpty) 'c=${c.take(6).map(ZteOntParse.stem).join(',')}',
         if (names.isNotEmpty) 'n=${names.take(8).join(',')}',
         if (statusList.isNotEmpty) 's=${statusList.join(',')}',
@@ -591,6 +594,31 @@ class ZteOntParse {
       final n = m.group(1)!;
       if (!skip.contains(n)) add('f:$n');
     }
+    return out.toList();
+  }
+
+  /// مفردات الحقول الرقميّة في صفحةٍ لا نعرف صيغتها (D401: لا رقمٌ سالبٌ ولا اسم ضوء) — أسماء كلّ `var X="<رقم>"`
+  /// و`Transfer_meaning('X','<رقم>')` وخليّةٍ `id="X">رقم`، بعد استبعاد أسماء الشبكة/الإعدادات/العدّادات المعروفة
+  /// (vlan/port/mac/ip/count…). أسماءٌ فقط (القيم تُترك)، أربعٌ وعشرون على الأكثر — منها يُعرف ما يسمّيه الطراز ضوءه
+  /// (قد تكون قيمته موجبةً باسمٍ لا يشبه الضوء).
+  static List<String> numericNames(String html) {
+    final out = <String>{};
+    final noise = RegExp(
+        r'vlan|port|mac|ipv|^ip|_ip|addr|route|dns|dhcp|prefix|igmp|multicast|bpdu|firewall|filter|loopback|mirror|'
+        r'led|loid|ratelimit|flowctl|isolate|byte|pkt|packet|frame|cnt|count|num|index|^idx|mtu|time|date|id$|_id|'
+        r'enable|flag|mode|type|status|state|total|page|row|col|width|height|size|len|version|ver$|year|month|day|hour',
+        caseSensitive: false);
+    void scan(RegExp re, String tag) {
+      for (final m in re.allMatches(html)) {
+        if (out.length >= 24) return;
+        final n = m.group(1)!;
+        if (!noise.hasMatch(n)) out.add('$tag$n');
+      }
+    }
+
+    scan(RegExp('var\\s+(\\w{2,40})\\s*=\\s*[\'"]?(-?\\d+(?:\\.\\d+)?)[\'"]?\\s*;'), 'v:');
+    scan(RegExp('Transfer_meaning\\(\\s*[\'"](\\w{2,40})[\'"]\\s*,\\s*[\'"](-?\\d+(?:\\.\\d+)?)[\'"]'), 't:');
+    scan(RegExp('id\\s*=\\s*[\'"]?(\\w{2,40})[\'"]?[^>]*>\\s*(-?\\d+(?:\\.\\d+)?)\\s*<'), 'c:');
     return out.toList();
   }
 

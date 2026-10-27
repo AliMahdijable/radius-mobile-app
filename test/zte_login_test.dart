@@ -188,6 +188,19 @@ void main() {
       expect(g.join(), isNot(contains('25')), reason: 'أسماءٌ بلا قيم');
     });
 
+    test('مفردات الحقول الرقميّة: حقلٌ موجبٌ بغير اسم ضوءٍ يظهر، والشبكة/الإعدادات تُستبعد، بلا قيم', () {
+      const page = '<html><script>var OnuRecv = "253"; var Temperature = "45"; var VlanId = "33"; var PortMode = "2";'
+          "Transfer_meaning('LinkQual','7');</script><td id=\"dev_reg_status\">1</td></html>";
+      final v = ZteOntParse.numericNames(page);
+      expect(v, contains('v:OnuRecv'), reason: 'قيمةٌ موجبةٌ قد تكون الضوء (‎-25.3 ⇒ 253)');
+      expect(v, contains('v:Temperature'));
+      expect(v, contains('t:LinkQual'));
+      expect(v, isNot(contains('v:VlanId')), reason: 'شبكة');
+      expect(v, isNot(contains('v:PortMode')), reason: 'إعداد');
+      expect(v, isNot(contains('dev_reg_status')), reason: 'status مُستبعد');
+      expect(v.join(), isNot(contains('253')), reason: 'أسماءٌ بلا قيم');
+    });
+
     test('الضوء في صفحة حالةٍ أخرى (لا اسم ضوءٍ في قائمته) ⇒ يُبحث فيها، وتُحفظ للقراءة التالية', () async {
       d.strictPages = true;
       const template = '<html><head><title>D401</title></head><body><script>'
