@@ -212,10 +212,16 @@ class _MainShellState extends State<MainShell> {
   static const _backExitWindow = Duration(seconds: 2);
 
   int _authExpiredSeen = 0;
+
+  /// الغلاف يُغادر مرّةً واحدة: انتقالٌ ثانٍ وهو يُزال يبدأ انتقالاً فوق انتقال، فلا يكتمل أيّها ويبقى الغلاف
+  /// مركَّباً تحت شاشة الحساب يطلب بياناته (الشاشات المتداخلة، ٢٧ أكتوبر).
+  bool _leaving = false;
+
   void _onAuthExpired() {
     final v = authExpiredSignal.value;
-    if (v == _authExpiredSeen || !mounted) return;
+    if (v == _authExpiredSeen || !mounted || _leaving) return;
     _authExpiredSeen = v;
+    _leaving = true;
     // Pro: موظّف ايرث لنك المباشر (بلا حساب) ← شاشة دخوله مع السبب
     // (دخولٌ من جهازٍ آخر، أو انتهاء الجلسة) — لا بوّابة الحساب.
     if (EmployeeSession.routeToEmployeeLogin) {
@@ -230,11 +236,14 @@ class _MainShellState extends State<MainShell> {
     // (refresh مرفوض بقصد). نمسح أي حالة محلية ونرجع لشاشة الدخول.
     // وسبب الخادم إن قاله (موظّف ساس عُطّل أو حُذف — 401 `EMPLOYEE_DISABLED`
     // / `EMPLOYEE_SESSION_REVOKED`) بدل «انتهت الجلسة».
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-          content: Text(
-              EmployeeSession.kickMessage ?? 'common.session_expired'.tr())),
-    );
+    // رسالةٌ واحدة لا طابورٌ منها.
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+            content: Text(
+                EmployeeSession.kickMessage ?? 'common.session_expired'.tr())),
+      );
     Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const AccountGateScreen()),
       (_) => false,

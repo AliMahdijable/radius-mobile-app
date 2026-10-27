@@ -286,6 +286,7 @@ Future<VisualServer> visualSetUp(Scenario s) async {
 
   final server = VisualServer(s);
   ApiClient.dio.httpClientAdapter = server;
+  ApiClient.debugResetSessionEnd();
   return server;
 }
 

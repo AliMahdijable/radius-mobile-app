@@ -125,6 +125,7 @@ Future<SimServer> simSetUp({Map<String, String> secure = const {}}) async {
   await EasyLocalization.ensureInitialized();
   final server = SimServer();
   ApiClient.dio.httpClientAdapter = server;
+  ApiClient.debugResetSessionEnd();
   return server;
 }
 
