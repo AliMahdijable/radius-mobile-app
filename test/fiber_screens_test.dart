@@ -332,11 +332,34 @@ void main() {
       await card(fiberTestSub('sub2'), dark: dark);
       expect(find.text('جهاز الألياف'), findsOneWidget);
       expect(find.text(iso('متّصل')), findsOneWidget);
+      expect(find.text('تشخيص الجهاز'), findsNothing, reason: 'مطويٌّ أوّلاً');
+      await t.tap(find.text('جهاز الألياف'));
+      await t.pumpAndSettle();
       expect(find.textContaining('ONU 3:2 · صندوق 3-أ · أولت المركز'), findsOneWidget);
       expect(find.text('تشخيص الجهاز'), findsOneWidget);
+      await t.tap(find.text('جهاز الألياف'));
+      await t.pumpAndSettle();
+      expect(find.text('تشخيص الجهاز'), findsNothing, reason: 'نقرةٌ ثانية تطويه');
       expect(t.takeException(), isNull);
       await unmount(t);
     }
+
+    // ضوءٌ ضعيف (المالك على nael2: ‎-31.0): التنبيه بالعنوان والكرت مطويّ، بعرض ٣٢٠ بلا فيض.
+    olt.agent.put('${BdcomEpon.rxOid}.302', snmpInt('', -310));
+    FiberMonitor.debugReset();
+    FiberMonitor.backend = FiberTestBackend(olt);
+    await card(fiberTestSub('sub2'));
+    t.view.physicalSize = const Size(320, 700);
+    await t.pump();
+    expect(find.text(iso('ضوء ضعيف ${iso('-31.0')}')), findsOneWidget);
+    expect(find.text(iso('متّصل')), findsNothing);
+    expect(t.takeException(), isNull);
+    await t.tap(find.text('جهاز الألياف'));
+    await t.pumpAndSettle();
+    expect(find.text(iso('متّصل')), findsOneWidget, reason: 'مفتوحاً: الحالة بالعنوان والضوء بسطره');
+    expect(find.text(iso('ضعيف')), findsOneWidget);
+    expect(t.takeException(), isNull);
+    await unmount(t);
 
     await card(fiberTestSub('nobody'));
     expect(find.text('جهاز الألياف'), findsNothing);
@@ -345,7 +368,10 @@ void main() {
     PermissionsService.debugSet(isEmployee: true, permissions: const {'devices.view': true});
     await card(fiberTestSub('sub2'));
     expect(find.text('جهاز الألياف'), findsOneWidget);
-    expect(find.text('لا صلاحيّة'), findsWidgets);
+    expect(find.text(iso('لا صلاحيّة')), findsOneWidget, reason: 'القفل بالعنوان والكرت مطويّ');
+    await t.tap(find.text('جهاز الألياف'));
+    await t.pumpAndSettle();
+    expect(find.text('لا صلاحيّة'), findsOneWidget, reason: 'وزرّ التشخيص بقفله');
     expect(FiberMonitor.existing(9), isNull, reason: 'بلا صلاحيّة لا يُقرأ الأولت');
     await unmount(t);
   });

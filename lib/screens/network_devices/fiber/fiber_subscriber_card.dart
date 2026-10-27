@@ -20,6 +20,7 @@ import 'fiber_diagnosis_screen.dart';
 import 'fiber_widgets.dart';
 
 /// «جهاز الألياف» بصفحة المشترك المربوط: جهازه على الأولت وصندوقه، وحالته وضوؤه الآن، وزرّ التشخيص. غير المربوط بلا كرت.
+/// مطويٌّ: العنوان يحمل الحالة، أو تنبيه الضوء بقيمته حين يحتاج انتباهاً، والنقر يفتح الباقي.
 ///
 /// يقرأ الأولت ما دام الكرت ظاهراً (مراقبٌ مشترك مع شاشات الألياف — لا مسحٌ ثانٍ إن كانت مفتوحة)؛ بلا صلاحيّة مراقبة
 /// الأجهزة يبقى الكرت بقفله.
@@ -64,6 +65,9 @@ class _FiberSubscriberCardState extends State<FiberSubscriberCard> {
   FiberOnuRecord? _rec;
   FiberMonitor? _m;
   bool _ready = false;
+
+  /// مطويٌّ أوّلاً — طلب المالك ٢٧ أكتوبر: «توكلد وظاهر التنبيه بالتكول بالعنوان، من ينقر عليه يظهرله القسم».
+  bool _open = false;
 
   @override
   void initState() {
@@ -158,40 +162,67 @@ class _FiberSubscriberCardState extends State<FiberSubscriberCard> {
     ].join(' · ');
     final rx = live?.rx;
     final band = FiberBands.of(rx);
+    // مطويّ: ضوءٌ يحتاج انتباهاً على جهازٍ متّصل يحلّ محلّ «متّصل» بالعنوان بقيمته — التنبيه لا يختفي بالطيّ. مفتوح:
+    // الحالة كما كانت والضوء بسطره.
+    final alert = !_open && !locked && live != null && live.online && band != null && FiberBands.needsAttention(rx);
     return Padding(
       padding: const EdgeInsets.only(bottom: Sp.sm),
-      child: Container(
-        padding: const EdgeInsets.all(Sp.lg),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
+      child: Material(
+        color: AppColors.surface,
+        shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(R.card),
-          border: Border.all(color: AppColors.border),
+          side: BorderSide(color: AppColors.border),
         ),
+        clipBehavior: Clip.antiAlias,
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Row(children: [
-            Icon(locked ? LucideIcons.lock : LucideIcons.cable, size: 18, color: locked ? AppColors.textLow : AppColors.brandAccent),
-            const SizedBox(width: Sp.sm),
-            Expanded(child: Text('جهاز الألياف', style: AppType.cardTitle())),
-            FiberPill(pill, tone: tone, dot: !locked && live != null),
-          ]),
-          const SizedBox(height: 10),
-          Text(iso(where), style: AppType.body(color: AppColors.textMid), maxLines: 2, overflow: TextOverflow.ellipsis),
-          if (rx != null) ...[
-            const SizedBox(height: 6),
-            Row(children: [
-              Text('الضوء', style: AppType.muted(color: AppColors.textMid)),
-              const SizedBox(width: Sp.sm),
-              FiberRx(rx, unit: true, style: AppType.rowValue()),
-              const SizedBox(width: Sp.sm),
-              if (band != null) FiberPill(FiberBands.label(band), tone: FiberBands.tone(rx)),
-            ]),
-          ],
-          const SizedBox(height: Sp.md),
-          OutlinedButton.icon(
-            onPressed: locked || m == null ? null : () => openFiberDiagnosisFor(context, monitor: m, sub: widget.sub),
-            icon: Icon(locked ? LucideIcons.lock : LucideIcons.stethoscope, size: 16),
-            label: Text(locked ? 'لا صلاحيّة' : 'تشخيص الجهاز'),
-            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+          InkWell(
+            onTap: () => setState(() => _open = !_open),
+            child: Padding(
+              padding: const EdgeInsets.all(Sp.lg),
+              child: Row(children: [
+                Icon(locked ? LucideIcons.lock : LucideIcons.cable, size: 18, color: locked ? AppColors.textLow : AppColors.brandAccent),
+                const SizedBox(width: Sp.sm),
+                Expanded(child: Text('جهاز الألياف', style: AppType.cardTitle())),
+                alert
+                    ? FiberPill('ضوء ${FiberBands.label(band)} ${iso(rx!.toStringAsFixed(1))}', tone: FiberBands.tone(rx))
+                    : FiberPill(pill, tone: tone, dot: !locked && live != null),
+                const SizedBox(width: Sp.xs),
+                AnimatedRotation(
+                  turns: _open ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 180),
+                  child: Icon(LucideIcons.chevronDown, size: 18, color: AppColors.textLow),
+                ),
+              ]),
+            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 180),
+            alignment: Alignment.topCenter,
+            child: !_open
+                ? const SizedBox(width: double.infinity)
+                : Padding(
+                    padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.lg),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      Text(iso(where), style: AppType.body(color: AppColors.textMid), maxLines: 2, overflow: TextOverflow.ellipsis),
+                      if (rx != null) ...[
+                        const SizedBox(height: 6),
+                        Row(children: [
+                          Text('الضوء', style: AppType.muted(color: AppColors.textMid)),
+                          const SizedBox(width: Sp.sm),
+                          FiberRx(rx, unit: true, style: AppType.rowValue()),
+                          const SizedBox(width: Sp.sm),
+                          if (band != null) FiberPill(FiberBands.label(band), tone: FiberBands.tone(rx)),
+                        ]),
+                      ],
+                      const SizedBox(height: Sp.md),
+                      OutlinedButton.icon(
+                        onPressed: locked || m == null ? null : () => openFiberDiagnosisFor(context, monitor: m, sub: widget.sub),
+                        icon: Icon(locked ? LucideIcons.lock : LucideIcons.stethoscope, size: 16),
+                        label: Text(locked ? 'لا صلاحيّة' : 'تشخيص الجهاز'),
+                        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+                      ),
+                    ]),
+                  ),
           ),
         ]),
       ),
