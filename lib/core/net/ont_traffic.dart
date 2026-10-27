@@ -129,6 +129,12 @@ class OntTrafficSession {
   int _zteSamples = 0;
   bool _zteLanLinked = true;
 
+  /// صفحات الترافيك الموجودة فعلاً في قائمة الجهاز — تُحسم مرّةً. D401 أسماؤه ≠ MH80، وطلب اسمٍ غير موجودٍ يفسد الجلسة
+  /// (كصفحة الضوء)، فنختار من القائمة. null لم تُحسم بعد؛ `''` حُسمت وليست موجودة.
+  String? _zteWlanPage;
+  String? _zteLanPage;
+  bool _ztePagesResolved = false;
+
   /// صفحةٌ أعطت عدّادات مرّةً ثمّ غابت ⇒ القراءة فاشلة (لا معدّل LAN وحده يُعرض كأنّه الكلّ).
   bool _hadWifi = false;
   bool _hadLan = false;
@@ -172,28 +178,58 @@ class OntTrafficSession {
   }
 
   /// ZTE: صفحةٌ عادت دخولاً (جلسةٌ انتهت أو طُردنا) ⇒ null فيُغلق المتصل ويعيد الفتح بعد مهلة.
+  ///
+  /// الصفحات تُحسم من قائمة الجهاز أوّلاً (MH80: `status_wlaninfo_t`+`status_ponlan_info_t`؛ D401: `pon_status_lan_info_t`
+  /// بلا واي فاي، جدول خلايا «Bytes Received/Sent»). منفذٌ يُقرأ كلّ نبضةٍ حين لا واي فاي (مصدرٌ وحيد)، وإلّا كـMH80.
   Future<OntByteCounters?> _sampleZte(ZteOntSession zte) async {
-    final w = await ZteOntService.page(zte, 'status_wlaninfo_t.gch');
-    final wAt = DateTime.now();
-    if (w == null) return null;
-    final readLan = _zteLanLinked || _zteSamples % 6 == 0;
+    if (!_ztePagesResolved) {
+      final menu = await ZteOntService.menuPages(zte);
+      if (menu.isEmpty) return null; // جلسةٌ انتهت قبل أن نقرأ القائمة
+      _zteWlanPage = _pickZtePage(menu, has: 'wlan');
+      _zteLanPage = _pickZtePage(menu, has: 'lan', avoid: 'wlan');
+      _ztePagesResolved = true;
+    }
+    var wifi = const <String, ({int sent, int received})>{};
+    var wAt = DateTime.now();
+    if (_zteWlanPage != null && _zteWlanPage!.isNotEmpty) {
+      final w = await ZteOntService.page(zte, _zteWlanPage!);
+      wAt = DateTime.now();
+      if (w == null) return null;
+      wifi = ZteOntParse.wifi(w);
+    }
+    // بلا واي فاي (D401): المنافذ كلّ نبضة. مع واي فاي (MH80): في الأولى ثمّ كلّ سادسة ما لم يُوصل منفذ.
+    final noWifi = _zteWlanPage == null || _zteWlanPage!.isEmpty;
+    final readLan = noWifi || _zteLanLinked || _zteSamples % 6 == 0;
     _zteSamples++;
     ({Map<String, ({int sent, int received})> counters, bool linked})? lan;
     var lAt = wAt;
-    if (readLan) {
-      final l = await ZteOntService.page(zte, 'status_ponlan_info_t.gch');
+    if (readLan && _zteLanPage != null && _zteLanPage!.isNotEmpty) {
+      final l = await ZteOntService.page(zte, _zteLanPage!);
       lAt = DateTime.now();
       if (l == null) return null;
-      lan = ZteOntParse.lan(l);
+      lan = ZteOntParse.lan(l); // MH80 (Table_laninterface)
+      if (lan.counters.isEmpty) lan = ZteOntParse.lanLabels(l); // D401 (جدول Bytes Received/Sent)
       _zteLanLinked = lan.linked;
     }
-    final wifi = ZteOntParse.wifi(w);
     if (wifi.isEmpty && (lan == null || lan.counters.isEmpty)) return null;
     return OntByteCounters({
       for (final e in wifi.entries) e.key: (sent: e.value.sent, received: e.value.received, at: wAt),
       if (lan != null)
         for (final e in lan.counters.entries) e.key: (sent: e.value.sent, received: e.value.received, at: lAt),
     });
+  }
+
+  /// صفحةٌ في القائمة تحوي [has] وحالةً (status/info) وليست إعداداً، بلا [avoid]. `''` حين لا شيء.
+  static String _pickZtePage(Set<String> menu, {required String has, String? avoid}) {
+    for (final n in menu) {
+      final l = n.toLowerCase();
+      if (!l.contains(has)) continue;
+      if (avoid != null && l.contains(avoid)) continue;
+      if (!(l.contains('status') || l.contains('info'))) continue;
+      if (RegExp(r'conf|set|mode|vlan|ratelimit|flowctl|isolate').hasMatch(l)) continue;
+      return n;
+    }
+    return '';
   }
 
   Future<void> close() async {

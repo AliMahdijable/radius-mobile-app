@@ -370,6 +370,18 @@ class ZteOntService {
   static Future<({String? html, String code, bool login})> _pageRaw(ZteOntSession s, String name) =>
       _getRaw(s, '/getpage.gch', query: {'pid': '1002', 'nextpage': name});
 
+  /// أسماء صفحات الجهاز الحقيقيّة من الإطارين (start.ghtml + template.gch) — لاختيار صفحات الترافيك الموجودة فعلاً
+  /// (D401 ≠ MH80) وتجنّب تسميم الجلسة بطلب اسمٍ غير موجود. فارغةٌ حين انتهت الجلسة أو تعذّرت القراءة.
+  static Future<Set<String>> menuPages(ZteOntSession s) async {
+    final menu = <String>{};
+    for (final frame in const ['/start.ghtml', '/template.gch']) {
+      final r = await _getRaw(s, frame, referer: '${s.baseUrl}/');
+      if (r.login) break;
+      if (r.html != null) menu.addAll(ZteOntParse.pageNames(r.html!));
+    }
+    return menu;
+  }
+
   static Future<void> logout(ZteOntSession s) async {
     try {
       await _dio(s.baseUrl).post<String>(
@@ -703,6 +715,31 @@ class ZteOntParse {
       final state = (r[4] ?? '').toLowerCase();
       if (state.isNotEmpty && !state.contains('disconnect')) linked = true;
     }
+    return (counters: out, linked: linked);
+  }
+
+  /// منافذ D401 (جدول خلايا ثابتة لا سكربت): لكلّ منفذٍ «Bytes Received» (ما استقبله الـONU من المشترك = رفعُه) ثمّ
+  /// «Bytes Sent» (ما أرسله إليه = تنزيلُه)، القيمة في الخليّة التالية مباشرةً. يُرجَع كـMH80: (sent = تنزيل، received =
+  /// رفع). [linked]: منفذٌ حالته «Up». العدّادات ٣٢-بت كبقيّة ZTE فيلتقطها [OntTrafficMeter] عند الالتفاف.
+  static ({Map<String, ({int sent, int received})> counters, bool linked}) lanLabels(String html) {
+    final hits = RegExp(r'>\s*Bytes\s+(Received|Sent)\s*<[^>]*>\s*<[^>]*>\s*(\d{1,19})', caseSensitive: false)
+        .allMatches(html)
+        .toList();
+    final out = <String, ({int sent, int received})>{};
+    var port = 0;
+    int? rx;
+    for (final m in hits) {
+      final isRecv = m.group(1)!.toLowerCase() == 'received';
+      final val = int.tryParse(m.group(2)!);
+      if (val == null) continue;
+      if (isRecv) {
+        rx = val;
+      } else if (rx != null) {
+        out['lan:${++port}'] = (sent: val, received: rx);
+        rx = null;
+      }
+    }
+    final linked = RegExp(r'(Up|Full Duplex|\d+\s*Mbps)', caseSensitive: false).hasMatch(html);
     return (counters: out, linked: linked);
   }
 }

@@ -140,6 +140,23 @@ void main() {
       expect(ZteOntParse.lan(on).linked, isTrue);
     });
 
+    test('منافذ D401 (جدول Bytes Received/Sent الثابت): تنزيلٌ=المرسَل، رفعٌ=المستلَم، و«موصول» من Up/Mbps', () {
+      // كما التقطناه حيّاً من pon_status_lan_info_t.gch: استقبل ١٦١ م.ب (رفعُ المشترك)، أرسل ٢٫٤٥ غ.ب (تنزيلُه).
+      const html = '<table id="TestContent"><tr><td class="tdleft">Ethernet Port </td><td class="tdright">LAN1</td></tr>'
+          '<tr><td id="Frm_Status" class="tdright">Up/100Mbps/Full Duplex</td></tr>'
+          '<tr><td class="tdleft">Bytes Received </td><td class="tdright">161119141</td></tr>'
+          '<tr><td class="tdleft">Bytes Sent</td><td class="tdright">2452431861</td></tr></table>';
+      final r = ZteOntParse.lanLabels(html);
+      expect(r.counters['lan:1'], (sent: 2452431861, received: 161119141));
+      expect(r.linked, isTrue);
+      // منفذٌ ثانٍ مفصول بلا Up ⇒ يُقرأ عدّاده كذلك، والقراءتان تتوافقان مع المعدّل.
+      const two = '$html<table id="TestContent"><tr><td class="tdleft">Bytes Received </td><td class="tdright">5</td></tr>'
+          '<tr><td class="tdleft">Bytes Sent</td><td class="tdright">9</td></tr></table>';
+      final t = ZteOntParse.lanLabels(two);
+      expect(t.counters.length, 2);
+      expect(t.counters['lan:2'], (sent: 9, received: 5));
+    });
+
     test('المعدّل: عدّاد ٣٢ بت غير مؤشَّر — تجاوز ٢^٣١ ليس التفافاً، والالتفاف عند ٢^٣٢ يُحسب', () {
       final m = OntTrafficMeter();
       final t0 = DateTime(2026, 10, 25, 20);
