@@ -404,6 +404,18 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
 
   @override
   Widget build(BuildContext context) {
+    // كلّ رجوعٍ يحمل «عُدِّل؟» — زرّ الحاسبة وEsc ورجوع أندرويد كانت تُغلق بلا نتيجة فلا تتحدّث القائمة، ويُفتح الجهاز
+    // ثانيةً ببروتوكوله القديم رغم أنّ الخادم حفظ الجديد (المالك ٢٧ أكتوبر).
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) Navigator.pop(context, _changed);
+      },
+      child: _scaffold(context),
+    );
+  }
+
+  Widget _scaffold(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: deskPageBar(
