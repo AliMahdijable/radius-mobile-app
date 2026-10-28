@@ -256,6 +256,20 @@ class _EditSheetState extends State<_EditSheet> {
       _managers;
   bool _loadingManagers = false;
 
+  // ── ايرث لنك: «تابع إلى (المدير الفرعيّ)» — نقل المشترك (المالك ٢٨ أكتوبر: «اريدها تظهر بالتعديل ان وجدت
+  // الخاصيه لدى المدير»). الحقل يظهر فقط حين تُجلب قائمة المدراء الفرعيّين من بوّابة الإدارة فعلاً (الحساب يصلها
+  // وفيه مدراء فرعيّون)؛ وإلّا لا حقل ولا «تعذّر» — الخاصية غير متاحة لهذا الحساب.
+
+  /// المالك على جلسة ايرث لنك نفسها (لا «كل الشركات» ولا موظّف): النقل يمرّ ببوّابة حسابه وحده.
+  bool get _canTransfer =>
+      widget.sub.idx != null && widget.sub.companyKey == null && ProviderService.isEarthlink && !Perms.isEmployee;
+  String? _elCurrent;
+  List<String>? _elTargets;
+  String? _elTarget;
+
+  bool get _showAffiliate => _canTransfer && (_elTargets?.isNotEmpty ?? false);
+  bool get _affiliateChanged => _showAffiliate && _elTarget != null && _elTarget != _elCurrent;
+
   @override
   void initState() {
     super.initState();
@@ -286,6 +300,17 @@ class _EditSheetState extends State<_EditSheet> {
     _loadedExpiration = _expiration ?? widget.sub.parsedExpiration;
     _loadDetails(); // pre-fill password + parent_id from SAS4
     _resolveSuperAdmin();
+    if (_canTransfer) unawaited(_loadTransferTargets());
+  }
+
+  /// قائمة المدراء الفرعيّين والحاليّ — بالخلفيّة؛ فشلٌ أو قائمةٌ فارغة ⇒ يبقى الحقل مخفيّاً بصمت.
+  Future<void> _loadTransferTargets() async {
+    final r = await SubscribersApi.getTransferTargets(idx: widget.sub.idx!.toString());
+    if (!mounted || !r.ok || r.targets.isEmpty) return;
+    setState(() {
+      _elCurrent = r.current;
+      _elTargets = r.targets;
+    });
   }
 
   /// Fire two parallel fetches:
@@ -633,7 +658,7 @@ class _EditSheetState extends State<_EditSheet> {
     return out;
   }
 
-  bool get _hasChanges => _diff().isNotEmpty || _accountPasswordChanged;
+  bool get _hasChanges => _diff().isNotEmpty || _accountPasswordChanged || _affiliateChanged;
 
   /// ايرث لنك: هل تغيّرت كلمة سرّ الحساب عن المجلوبة؟ الفارغة لا تُرسَل
   /// (كحقل كلمة سرّ الخدمة تماماً).
@@ -707,7 +732,8 @@ class _EditSheetState extends State<_EditSheet> {
     if (_saving) return;
     final diff = _diff();
     final accChanged = _accountPasswordChanged;
-    if (diff.isEmpty && !accChanged) {
+    final transferTo = _affiliateChanged ? _elTarget : null;
+    if (diff.isEmpty && !accChanged && transferTo == null) {
       Navigator.of(context).pop();
       return;
     }
@@ -761,6 +787,18 @@ class _EditSheetState extends State<_EditSheet> {
         message = accRes.message ?? message;
       }
     }
+    // ٣) ايرث لنك: «تابع إلى» — نقل المشترك لمديرٍ فرعيّ عبر بوّابة الإدارة (تحقّقٌ بعديّ على الخادم)، بعد نجاح ما قبله.
+    var transferred = false;
+    if (ok && transferTo != null) {
+      final tr = await SubscribersApi.transferSubscriber(idx: widget.sub.idx!.toString(), target: transferTo);
+      ok = tr.ok;
+      if (tr.ok) {
+        transferred = tr.changed;
+        _elCurrent = transferTo;
+      } else {
+        message = tr.message ?? 'تعذّر نقل المشترك للمدير الفرعيّ';
+      }
+    }
     if (!mounted) return;
     final packageRefused = code != null &&
         (code.startsWith('PACKAGE_CHANGE_') || code == 'PENDING_CANCEL_FAILED');
@@ -792,9 +830,14 @@ class _EditSheetState extends State<_EditSheet> {
     if (code == 'PACKAGE_CHANGE_UNCONFIRMED') unawaited(_reloadPackageState());
     // نجاحٌ، أو رفضٌ للباقة قد سبقه حفظُ غيرها (الرسالة تقول «تغيّر اسم المستخدم…») ← تُحدَّث.
     if (ok || packageRefused) SubscriberEvents.notifyChange();
+    final onlyTransfer = diff.isEmpty && !accChanged;
     showSheetSnack(
       context,
-      ok ? _savedMessage(diff, data) : (message ?? 'تعذّر التعديل'),
+      ok
+          ? (transferred && onlyTransfer
+              ? 'نُقل المشترك إلى المدير ${iso(transferTo!)}'
+              : '${_savedMessage(diff, data)}${transferred ? ' — ونُقل إلى المدير ${iso(transferTo!)}' : ''}')
+          : (message ?? 'تعذّر التعديل'),
       isError: !ok,
     );
     if (ok) Navigator.of(context).pop(true);
@@ -1192,7 +1235,75 @@ class _EditSheetState extends State<_EditSheet> {
               onSelect: (id) => setState(() => _parentId = id),
             ),
           ],
+          if (_showAffiliate) ...[
+            const SizedBox(height: Sp.md),
+            const _FieldLabel(label: 'تابع إلى (المدير الفرعيّ)'),
+            _AffiliatePicker(
+              current: _elCurrent,
+              targets: _elTargets!,
+              selected: _elTarget ?? _elCurrent,
+              enabled: !_saving,
+              onSelect: (v) => setState(() => _elTarget = v),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+/// «تابع إلى» لمشترك ايرث لنك: الحاليّ أوّلاً ثمّ المدراء الفرعيّون — اختيار غير الحاليّ يُنقل المشترك عند الحفظ.
+class _AffiliatePicker extends StatelessWidget {
+  const _AffiliatePicker({
+    required this.current,
+    required this.targets,
+    required this.selected,
+    required this.enabled,
+    required this.onSelect,
+  });
+  final String? current;
+  final List<String> targets;
+  final String? selected;
+  final bool enabled;
+  final ValueChanged<String> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final items = [if (current != null && current!.isNotEmpty) current!, ...targets.where((t) => t != current)];
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.sm),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: items.contains(selected) ? selected : null,
+          hint: Text('اختر المدير', style: AppType.input(color: AppColors.textLow)),
+          isExpanded: true,
+          icon: Icon(LucideIcons.chevronDown, size: 16, color: AppColors.textMid),
+          onChanged: enabled
+              ? (v) {
+                  if (v != null) onSelect(v);
+                }
+              : null,
+          items: [
+            for (final t in items)
+              DropdownMenuItem<String>(
+                value: t,
+                child: Row(children: [
+                  Expanded(
+                    child: Text(iso(t),
+                        maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.input(color: AppColors.textBody)),
+                  ),
+                  if (t == current)
+                    Text('الحاليّ', style: AppType.micro(color: AppColors.textLow)),
+                ]),
+              ),
+          ],
+        ),
       ),
     );
   }

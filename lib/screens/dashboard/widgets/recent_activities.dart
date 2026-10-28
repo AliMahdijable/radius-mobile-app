@@ -215,6 +215,14 @@ class _Row extends StatelessWidget {
       final isClear = description.contains('حذف موقع');
       return (label: 'تعديل', detail: isClear ? 'حذف موقع' : 'إضافة موقع');
     }
+    // 2026-10-28: نقل مشترك ايرث لنك لمديرٍ فرعيّ — SUBSCRIBER_EDIT بوصف «نقل إلى مدير ثاني: X (كان لدى Y)» (المالك:
+    // «جاي تظهر اضافة وليس تعديل معلومات، ووصف الحركه بنقل الى مدير ثاني»). كالموقع: قبل القاعدة العامّة.
+    if ((lower.contains('subscriber_edit') ||
+            lower.contains('edit_subscriber')) &&
+        description.contains('نقل إلى مدير')) {
+      final to = RegExp(r'نقل إلى مدير ثاني:\s*([^\s(]+)').firstMatch(description)?.group(1);
+      return (label: 'تعديل معلومات', detail: to == null ? 'نقل إلى مدير ثاني' : 'نقل إلى مدير ثاني: $to');
+    }
     if (lower.contains('subscriber_edit') ||
         lower.contains('edit_subscriber')) {
       return (label: 'تعديل مشترك', detail: null);

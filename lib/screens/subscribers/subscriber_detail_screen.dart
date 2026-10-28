@@ -34,6 +34,7 @@ import '../reports/account_statement_screen.dart';
 import '../reports/sessions_report_screen.dart';
 import 'sheets/activate_sheet.dart';
 import 'sheets/add_debt_sheet.dart';
+import 'sheets/add_credit_sheet.dart';
 import 'sheets/location_sheets.dart';
 import 'sheets/edit_subscriber_sheet.dart';
 import 'sheets/extend_sheet.dart';
@@ -891,6 +892,17 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             onTap: _locked('subscribers.add_debt')
                 ? null
                 : () => showAddDebtSheet(context, sub),
+          ),
+        // عكس «إضافة الدين» — إضافة رصيدٍ دائن للمشترك (المالك ٢٧ أكتوبر).
+        if (_shows('subscribers.add_credit'))
+          SubAction(
+            icon: LucideIcons.coins,
+            label: 'إضافة رصيد',
+            color: AppColors.successFill,
+            locked: _locked('subscribers.add_credit'),
+            onTap: _locked('subscribers.add_credit')
+                ? null
+                : () => showAddCreditSheet(context, sub),
           ),
         // 2026-08-29 وسّع الشرط إلى `balanceAmount != 0` ليصل المدخلُ
         // صاحبَ الرصيد الدائن. وكان ذلك خطأً: التسديد يجمع على الرصيد

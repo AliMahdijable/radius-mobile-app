@@ -1424,6 +1424,129 @@ class SubscribersApi {
     }
   }
 
+  /// POST /api/v2/subscribers/:idx/add-credit — عكس «إضافة الدين»: يزيد
+  /// رصيد المشترك (الموجب = دائن). مرآةُ [addDebt].
+  static Future<({bool ok, String? message})> addCredit({
+    required String idx,
+    required double amount,
+    String? comment,
+  }) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/subscribers/$idx/add-credit',
+        data: {
+          'amount': amount,
+          if (comment != null && comment.isNotEmpty) 'comment': comment,
+        },
+      );
+      final body = r.data ?? const {};
+      final ok = body['success'] == true;
+      return (ok: ok, message: body['message']?.toString());
+    } on DioException catch (e) {
+      _log('add-credit/$idx', e);
+      final body = e.response?.data;
+      final msg = body is Map ? body['message']?.toString() : null;
+      return (ok: false, message: msg ?? 'تعذّر إضافة الرصيد');
+    } catch (e) {
+      _log('add-credit/$idx', e);
+      return (ok: false, message: 'تعذّر إضافة الرصيد');
+    }
+  }
+
+  /// GET /api/v2/subscribers/:idx/transfer-targets — المدراء الفرعيّون المتاحون
+  /// لنقل مشترك EarthLink إليهم + الحاليّ (بوّابة الإدارة admin.earthlink.iq).
+  /// للمالك وحده؛ [portalPassword] اختياريّةٌ إن اختلفت كلمة مرور البوّابة.
+  static Future<({bool ok, String? current, List<String> targets, String? code, String? message})>
+      getTransferTargets({required String idx, String? portalPassword}) async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/v2/subscribers/$idx/transfer-targets',
+        queryParameters: {
+          if (portalPassword != null && portalPassword.isNotEmpty)
+            'portal_password': portalPassword,
+        },
+      );
+      final body = r.data ?? const {};
+      final ok = body['success'] == true;
+      final data = body['data'];
+      final cur = data is Map ? data['current']?.toString() : null;
+      final raw = data is Map ? data['targets'] : null;
+      final targets = raw is List
+          ? raw.map((e) => e.toString()).where((s) => s.isNotEmpty).toList()
+          : <String>[];
+      return (
+        ok: ok,
+        current: cur,
+        targets: targets,
+        code: body['code']?.toString(),
+        message: body['message']?.toString()
+      );
+    } on DioException catch (e) {
+      _log('transfer-targets/$idx', e);
+      final body = e.response?.data;
+      final code = body is Map ? body['code']?.toString() : null;
+      final msg = body is Map ? body['message']?.toString() : null;
+      return (
+        ok: false,
+        current: null,
+        targets: <String>[],
+        code: code,
+        message: msg ?? 'تعذّر جلب قائمة المدراء الفرعيّين'
+      );
+    } catch (e) {
+      _log('transfer-targets/$idx', e);
+      return (
+        ok: false,
+        current: null,
+        targets: <String>[],
+        code: null,
+        message: 'تعذّر جلب قائمة المدراء الفرعيّين'
+      );
+    }
+  }
+
+  /// POST /api/v2/subscribers/:idx/transfer — نقل مشترك EarthLink للمدير الفرعيّ
+  /// المختار (بوّابة الإدارة، تحقّقٌ بعديٌّ على الخادم). للمالك وحده.
+  static Future<({bool ok, bool changed, String? code, String? message})>
+      transferSubscriber({
+    required String idx,
+    required String target,
+    String? portalPassword,
+  }) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/subscribers/$idx/transfer',
+        data: {
+          'target': target,
+          if (portalPassword != null && portalPassword.isNotEmpty)
+            'portal_password': portalPassword,
+        },
+      );
+      final body = r.data ?? const {};
+      final ok = body['success'] == true;
+      return (
+        ok: ok,
+        changed: body['changed'] == true,
+        code: body['code']?.toString(),
+        message: body['message']?.toString()
+      );
+    } on DioException catch (e) {
+      _log('transfer/$idx', e);
+      final body = e.response?.data;
+      final code = body is Map ? body['code']?.toString() : null;
+      final msg = body is Map ? body['message']?.toString() : null;
+      return (
+        ok: false,
+        changed: false,
+        code: code,
+        message: msg ?? 'تعذّر نقل المشترك'
+      );
+    } catch (e) {
+      _log('transfer/$idx', e);
+      return (ok: false, changed: false, code: null, message: 'تعذّر نقل المشترك');
+    }
+  }
+
   /// POST /api/v2/subscribers/:idx/discount — set or remove the
   /// subscriber's package discount. amount=0 removes the current
   /// discount. Returns the same success envelope as pay/add debt.

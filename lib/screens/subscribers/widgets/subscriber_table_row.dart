@@ -18,6 +18,7 @@ import '../../../theme/typography.dart';
 import '../../desktop/desk_table_scroll.dart';
 import '../sheets/activate_sheet.dart';
 import '../sheets/add_debt_sheet.dart';
+import '../sheets/add_credit_sheet.dart';
 import '../sheets/consumption_sheet.dart';
 import '../sheets/edit_subscriber_sheet.dart';
 import '../sheets/extend_sheet.dart';
@@ -647,6 +648,8 @@ Future<void> showSubscriberRowMenu(
           () => showPayDebtSheet(context, s)),
     _gate('subscribers.add_debt', LucideIcons.plus, 'subscribers.op_add_debt'.tr(),
         () => showAddDebtSheet(context, s)),
+    _gate('subscribers.add_credit', LucideIcons.coins, 'إضافة رصيد',
+        () => showAddCreditSheet(context, s)),
     _gate('discounts.manage', LucideIcons.tag, 'subscribers.op_quick_discount'.tr(),
         () => showQuickDiscountSheet(context, s)),
     if (s.idx != null)
