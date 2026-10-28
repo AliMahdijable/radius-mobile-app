@@ -871,14 +871,15 @@ class _SubscriberCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(R.sm),
+        borderRadius: BorderRadius.circular(R.md),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
           decoration: BoxDecoration(
             color: selected ? accent.withValues(alpha: 0.10) : AppColors.surface,
-            borderRadius: BorderRadius.circular(R.sm),
+            // تجانس مع بطاقات المشتركين: نفس الحافّة والراديوس مع إبقاء الكثافة.
+            borderRadius: BorderRadius.circular(R.md),
             border: Border.all(
-              color: selected ? accent : AppColors.borderSoft,
+              color: selected ? accent : AppColors.border,
               width: selected ? 1.5 : 1,
             ),
           ),

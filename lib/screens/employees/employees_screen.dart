@@ -235,6 +235,8 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                   MediaQuery.paddingOf(context).bottom + 96),
                           children: [
                             DeskSection(children: [_compactHero(accent, isEl: isEl)]),
+                            // الهاتف: فسحةٌ بين الرأس وأوّل بطاقة (الحاسبة يفصلها DeskSection نفسه).
+                            if (!DesktopScope.of(context)) const SizedBox(height: Sp.md),
                             DeskSection(children: [
                               for (final e in _rows)
                                 _EmployeeTile(
@@ -480,19 +482,11 @@ class _EmployeeTile extends StatelessWidget {
     final display =
         (emp.fullName?.isNotEmpty == true) ? emp.fullName! : emp.username;
     final accentColor = emp.isActive ? AppColors.success : AppColors.textLow;
-    return Material(
-      color: AppColors.surface,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsetsDirectional.only(
-              start: 12, end: 4, top: 10, bottom: 10),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: AppColors.border, width: 0.5),
-            ),
-          ),
-          child: Row(
+    final desk = DesktopScope.of(context);
+    final body = Padding(
+      padding: const EdgeInsetsDirectional.only(
+          start: 12, end: 4, top: 10, bottom: 10),
+      child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // 3dp rail — نفس النمط بكارت المشتركين. مفعّل = teal، معطّل = رمادي.
@@ -639,6 +633,42 @@ class _EmployeeTile extends StatelessWidget {
                       const BoxConstraints(minWidth: 32, minHeight: 32),
                 ),
             ],
+          ),
+        );
+    if (desk) {
+      // الحاسبة: صفٌّ ضمن بطاقة القسم المجمّعة بفاصلٍ رفيع (كما كان).
+      return Material(
+        color: AppColors.surface,
+        child: InkWell(
+          onTap: onTap,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: AppColors.border, width: 0.5),
+              ),
+            ),
+            child: body,
+          ),
+        ),
+      );
+    }
+    // الهاتف: بطاقةٌ مستقلّة لكلّ موظّفٍ كبطاقات المشتركين، مع إبقاء كثافة الصفّ.
+    // (المالك ٢٧ أكتوبر — تجانس القوائم) وبهامش قائمة المشتركين نفسه (١٦ جانباً، ٦ بين البطاقات) — بلاه
+    // التصقت البطاقات بحافّتي الشاشة وبالرأس (لقطة المالك ٢٨ أكتوبر: «الالتصاق… الهيدر والمحتوى»).
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.x6),
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.lg),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(R.lg),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: body,
           ),
         ),
       ),

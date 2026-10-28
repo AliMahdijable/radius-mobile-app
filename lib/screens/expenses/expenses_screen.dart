@@ -213,7 +213,9 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   padding: const EdgeInsets.all(Sp.lg),
                   child: _emptyState(),
                 )
-              else
+              else ...[
+                // الهاتف: فسحةٌ بين الرأس وأوّل بطاقة (الحاسبة يفصلها DeskSection نفسه).
+                if (!DesktopScope.of(context)) const SizedBox(height: Sp.md),
                 DeskSection(children: [
                   for (final row in _rows)
                     _ExpenseTile(
@@ -222,6 +224,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                       onDelete: () => _confirmDelete(row),
                     ),
                 ]),
+              ],
             ],
           ),
         ),
@@ -362,19 +365,11 @@ class _ExpenseTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context);
-    return Material(
-      color: AppColors.surface,
-      child: InkWell(
-        onTap: onEdit,
-        child: Container(
-          padding: const EdgeInsetsDirectional.only(
-              start: 12, end: 4, top: 10, bottom: 10),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: AppColors.border, width: 0.5),
-            ),
-          ),
-          child: Row(
+    final desk = DesktopScope.of(context);
+    final body = Padding(
+      padding: const EdgeInsetsDirectional.only(
+          start: 12, end: 4, top: 10, bottom: 10),
+      child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // Rail — أحمر رفيع (صرفية = خرج مال)
@@ -477,6 +472,41 @@ class _ExpenseTile extends StatelessWidget {
                       const BoxConstraints(minWidth: 32, minHeight: 32),
                 ),
             ],
+          ),
+        );
+    if (desk) {
+      // الحاسبة: صفٌّ ضمن بطاقة القسم المجمّعة بفاصلٍ رفيع (كما كان).
+      return Material(
+        color: AppColors.surface,
+        child: InkWell(
+          onTap: onEdit,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: AppColors.border, width: 0.5),
+              ),
+            ),
+            child: body,
+          ),
+        ),
+      );
+    }
+    // الهاتف: بطاقةٌ مستقلّة لكلّ صرفيّةٍ كبطاقات المشتركين، مع إبقاء كثافة الصفّ.
+    // (المالك ٢٧ أكتوبر — تجانس القوائم) وبهامش قائمة المشتركين (١٦ جانباً، ٦ بين البطاقات) — لا التصاق بالحافّة.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.x6),
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.lg),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onEdit,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(R.lg),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: body,
           ),
         ),
       ),
