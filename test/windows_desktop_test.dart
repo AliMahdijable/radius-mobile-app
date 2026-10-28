@@ -268,6 +268,60 @@ void main() {
               .having((e) => e.message, 'message', contains('انتهت'))));
     });
 
+    // ٢٨ أكتوبر (رفض متجر مايكروسوفت): البرنامج يسأل الخادم بسرّه أيضاً، والانتظار ٣٠ دقيقة.
+    test('الانتظار ٣٠ دقيقة، والصفحة تُفتح بـpoll=1', () async {
+      expect(DesktopBrowserLogin().timeout, const Duration(minutes: 30));
+      final login = DesktopBrowserLogin(timeout: const Duration(seconds: 10));
+      final result = login.run();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(opened.queryParameters['poll'], '1');
+      login.cancel();
+      expect(await result, isNull);
+    });
+
+    test('الدخول يصل بسؤال الخادم وحده (بلا رجوعٍ إلى 127.0.0.1)', () async {
+      var polls = 0;
+      String? sentVerifier;
+      DesktopBrowserLogin.debugDio = _dio(_Fake((o) {
+        expect(o.path, '/api/account/desktop-login/poll');
+        sentVerifier = o.data['verifier'] as String;
+        polls++;
+        return polls < 3 ? (status: 202, body: {'pending': true}) : (status: 200, body: {'token': 'polled-token'});
+      }));
+      final login = DesktopBrowserLogin(timeout: const Duration(seconds: 10), pollEvery: const Duration(milliseconds: 20));
+      expect(await login.run(), 'polled-token');
+      expect(polls, 3);
+      expect(DesktopBrowserLogin.challengeOf(sentVerifier!), opened.queryParameters['challenge']);
+    });
+
+    test('خادمٌ أقدم بلا السؤال (404) ⇒ يكفّ ويبقى 127.0.0.1', () async {
+      var polls = 0;
+      DesktopBrowserLogin.debugDio = _dio(_Fake((o) {
+        if (o.path.endsWith('/poll')) {
+          polls++;
+          return (status: 404, body: {'error': 'not found'});
+        }
+        return (status: 200, body: {'token': 'custom-token'});
+      }));
+      final login = DesktopBrowserLogin(timeout: const Duration(seconds: 10), pollEvery: const Duration(milliseconds: 10));
+      final result = login.run();
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      expect(polls, 1, reason: 'سؤالٌ واحد ثمّ يكفّ');
+      expect(await hit(opened), 200);
+      expect(await result, 'custom-token');
+    });
+
+    test('سؤالٌ ورفضٌ من الخادم (410) ⇒ رسالته', () async {
+      DesktopBrowserLogin.debugDio = _dio(_Fake((o) => (
+            status: 410,
+            body: {'error': 'DESKTOP_CODE_EXPIRED', 'message': 'انتهت صلاحيّة رمز الدخول'}
+          )));
+      final login = DesktopBrowserLogin(timeout: const Duration(seconds: 10), pollEvery: const Duration(milliseconds: 10));
+      await expectLater(
+          login.run(),
+          throwsA(isA<DesktopLoginException>().having((e) => e.message, 'message', contains('انتهت'))));
+    });
+
     test('Google على ويندوز يمرّ بالمتصفّح ثمّ التوكن المخصّص', () async {
       DesktopBrowserLogin.debugDio =
           _dio(_Fake((o) => (status: 200, body: {'token': 'custom-token'})));

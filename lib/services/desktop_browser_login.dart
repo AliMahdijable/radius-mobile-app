@@ -20,10 +20,17 @@ import '../api/api_client.dart';
 ///
 /// لماذا لا نافذة Google داخل البرنامج: Google يمنع الدخول من WebView مضمَّن، ولا مكتبة Google
 /// لويندوز في فلاتر.
+///
+/// ٣ب) (٢٨ أكتوبر — رفض متجر مايكروسوفت: «Log in with google ID غير قابل للاستعمال»): الرجوع إلى 127.0.0.1 وحده
+///    كان يسقط — البرنامج يكفّ عن الاستماع بعد ٥ دقائق فدخولٌ أخذ ٦ رجع إلى منفذٍ مغلق، والمتصفّح أو مضادّ الفيروسات
+///    قد يمنع الرجوع أصلاً. الآن: الانتظار ٣٠ دقيقة، والبرنامج **يسأل الخادم أيضاً** بسرّه كلّ [pollEvery]
+///    (`/desktop-login/poll` ⇒ 202 أو التوكن)، والصفحة (poll=1) تقول «تمّ» ولا ترجع. 127.0.0.1 يبقى طريقاً ثانياً
+///    (صفحةٌ أقدم، أو خادمٌ بلا المسار ⇒ 404 فيكفّ السؤال).
 class DesktopBrowserLogin {
-  DesktopBrowserLogin({this.timeout = const Duration(minutes: 5)});
+  DesktopBrowserLogin({this.timeout = const Duration(minutes: 30), this.pollEvery = const Duration(milliseconds: 2500)});
 
   final Duration timeout;
+  final Duration pollEvery;
 
   @visibleForTesting
   static Future<bool> Function(Uri url) openUrl =
@@ -35,6 +42,7 @@ class DesktopBrowserLogin {
   HttpServer? _server;
   Completer<String?>? _code;
   Uri? _pageUrl;
+  bool _stopped = false;
 
   /// رابط الصفحة المفتوحة (لزرّ «افتح الصفحة مرّةً أخرى»).
   Uri? get pageUrl => _pageUrl;
@@ -47,6 +55,7 @@ class DesktopBrowserLogin {
     final challenge = _challengeOf(verifier);
     final code = Completer<String?>();
     _code = code;
+    _stopped = false;
 
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     _server = server;
@@ -56,16 +65,67 @@ class DesktopBrowserLogin {
       'port': '${server.port}',
       'state': state,
       'challenge': challenge,
+      'poll': '1',
     });
+    final polled = Completer<String>();
     try {
       await openUrl(_pageUrl!);
-      final got = await code.future.timeout(timeout, onTimeout: () => null);
+      unawaited(_poll(verifier, polled));
+      final got = await Future.any<_Got?>([
+        code.future.then((c) => c == null ? null : _Got.code(c)),
+        polled.future.then(_Got.token),
+      ]).timeout(timeout, onTimeout: () => null);
       if (got == null) return null;
-      return await _exchange(got, verifier);
+      return got.token ?? await _exchange(got.code!, verifier);
     } finally {
       await close();
     }
   }
+
+  /// يسأل الخادم بالسرّ حتى يكمل المستخدم في المتصفّح: 202 ⇒ ننتظر؛ 200 ⇒ التوكن؛ 410/503 ⇒ رسالته؛ غير ذلك
+  /// (خادمٌ أقدم بلا المسار) ⇒ يكفّ ويبقى طريق 127.0.0.1. انقطاع الشبكة لا يوقفه.
+  Future<void> _poll(String verifier, Completer<String> out) async {
+    final dio = _dio();
+    var wait = pollEvery;
+    while (!_stopped && !out.isCompleted) {
+      await Future<void>.delayed(wait);
+      if (_stopped || out.isCompleted) return;
+      wait = pollEvery;
+      final Response<Object?> r;
+      try {
+        r = await dio.post<Object?>('/api/account/desktop-login/poll', data: {'verifier': verifier});
+      } on DioException {
+        continue;
+      }
+      if (_stopped || out.isCompleted) return;
+      final body = r.data;
+      final status = r.statusCode ?? 0;
+      if (status == 200 && body is Map && body['token'] is String) {
+        out.complete(body['token'] as String);
+        return;
+      }
+      if (status == 202) continue;
+      if (status == 429) {
+        wait = const Duration(seconds: 15);
+        continue;
+      }
+      if (status == 410 || status == 503) {
+        out.completeError(DesktopLoginException(
+            body is Map && body['message'] is String ? body['message'] as String : 'account.err_generic'));
+        return;
+      }
+      return;
+    }
+  }
+
+  Dio _dio() =>
+      debugDio ??
+      Dio(BaseOptions(
+        baseUrl: ApiClient.baseUrl,
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 20),
+        validateStatus: (_) => true,
+      ));
 
   /// يفتح الصفحة ثانيةً (أغلقها المستخدم بالخطأ).
   Future<void> reopen() async {
@@ -75,6 +135,7 @@ class DesktopBrowserLogin {
 
   /// إلغاءٌ من البرنامج.
   void cancel() {
+    _stopped = true;
     final c = _code;
     if (c != null && !c.isCompleted) c.complete(null);
   }
@@ -102,13 +163,7 @@ class DesktopBrowserLogin {
   }
 
   Future<String?> _exchange(String code, String verifier) async {
-    final dio = debugDio ??
-        Dio(BaseOptions(
-          baseUrl: ApiClient.baseUrl,
-          connectTimeout: const Duration(seconds: 15),
-          receiveTimeout: const Duration(seconds: 20),
-          validateStatus: (_) => true,
-        ));
+    final dio = _dio();
     final Response<Object?> r;
     try {
       r = await dio.post<Object?>('/api/account/desktop-login/token',
@@ -142,12 +197,22 @@ class DesktopBrowserLogin {
       'background:#F4F5F2;color:#121614;display:flex;align-items:center;justify-content:center;'
       'height:100vh;margin:0}div{background:#fff;border-radius:20px;padding:32px 40px;'
       'box-shadow:0 2px 12px rgba(0,0,0,.06);text-align:center}h1{color:#103D2E;font-size:22px;'
-      'margin:0 0 8px}p{margin:0;color:#4a524e}</style></head><body><div><h1>تمّ تسجيل الدخول ✓</h1>'
-      '<p>ارجع إلى برنامج MyServices Pro — يمكنك إغلاق هذه الصفحة.</p></div></body></html>';
+      'margin:0 0 8px}p{margin:0;color:#4a524e}.en{direction:ltr;margin-top:6px;color:#6b736f}</style></head><body><div>'
+      '<h1>تمّ تسجيل الدخول ✓</h1><p>ارجع إلى برنامج MyServices Pro — يمكنك إغلاق هذه الصفحة.</p>'
+      '<p class="en">Signed in ✓ — return to the MyServices Pro app. You can close this page.</p></div></body></html>';
 
   static const _badPage = '<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">'
       '<title>MyServices Pro</title></head><body style="font-family:system-ui,Segoe UI,Tahoma,sans-serif">'
-      '<p>رابطٌ غير صالح — ابدأ الدخول من البرنامج مرّةً أخرى.</p></body></html>';
+      '<p>رابطٌ غير صالح — ابدأ الدخول من البرنامج مرّةً أخرى.</p>'
+      '<p dir="ltr">Invalid link — start signing in from the app again.</p></body></html>';
+}
+
+/// أوّل ما وصل: رمزٌ من 127.0.0.1 (يُبدَّل بالسرّ) أو توكنٌ من سؤال الخادم.
+class _Got {
+  const _Got.code(this.code) : token = null;
+  const _Got.token(this.token) : code = null;
+  final String? code;
+  final String? token;
 }
 
 /// رفض الخادم تبديل الرمز. [message] مفتاح ترجمة (`account.*`) أو نصّ الخادم العربيّ.

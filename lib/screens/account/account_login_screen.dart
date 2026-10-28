@@ -333,7 +333,7 @@ class _AccountLoginScreenState extends State<AccountLoginScreen> {
             ),
           ),
         ],
-        // ويندوز: Google عبر المتصفّح — البرنامج ينتظر رجوع الدخول (حتى ٥ دقائق).
+        // ويندوز: Google عبر المتصفّح — البرنامج ينتظر الدخول (حتى ٣٠ دقيقة) ويسأل الخادم عنه.
         if (_googleBusy && AppPlatform.isDesktop) ...[
           const SizedBox(height: Sp.sm),
           Center(

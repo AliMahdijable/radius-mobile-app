@@ -1627,7 +1627,7 @@
     "employee_short": "Employee",
     "create_short": "Create account",
     "signin_short": "I have an account",
-    "desktop_wait": "Finish signing in in the browser that opened — the app continues by itself.",
+    "desktop_wait": "Finish signing in in the browser that opened, then press “Continue to the app” — the app continues by itself.",
     "desktop_reopen": "Open the page",
     "desktop_cancel": "Cancel"
   },
