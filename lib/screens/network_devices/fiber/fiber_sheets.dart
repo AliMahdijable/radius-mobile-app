@@ -129,7 +129,8 @@ class _BoxSheetState extends State<_BoxSheet> {
       return;
     }
     final used = widget.initial == null ? 0 : _used(widget.initial!.id);
-    if (_ratio < used) {
+    // صندوقٌ فاض قبل هذا الحدّ يبقى يُعدَّل باسمه ونسبته كما هي — الممنوع تصغيرها تحت المستعمل.
+    if (_ratio < used && _ratio != widget.initial?.ratio) {
       setState(() => _error = 'مستعمل منه $used — النسبة لا تقلّ عن ${iso('1:$used')}');
       return;
     }
@@ -235,8 +236,10 @@ class _BoxSheetState extends State<_BoxSheet> {
             ChoiceChip(
               label: Text(iso('1:$r')),
               selected: _ratio == r,
-              // أقلّ من المستعمل لا يُختار: صندوق ١:٨ فيه ٦ لا يصير ١:٤.
-              onSelected: edit && r < _used(widget.initial!.id) ? null : (_) => setState(() => _ratio = r),
+              // أقلّ من المستعمل لا يُختار: صندوق ١:٨ فيه ٦ لا يصير ١:٤ (ونسبته الحاليّة تبقى وإن فاض قبل الحدّ).
+              onSelected: edit && r < _used(widget.initial!.id) && r != widget.initial!.ratio
+                  ? null
+                  : (_) => setState(() => _ratio = r),
               showCheckmark: false,
               selectedColor: AppColors.brandSoftBg,
               backgroundColor: AppColors.surface,
@@ -246,8 +249,12 @@ class _BoxSheetState extends State<_BoxSheet> {
         ]),
         if (edit && _used(widget.initial!.id) > 0) ...[
           const SizedBox(height: Sp.xs),
-          Text(iso('مستعمل منه ${_used(widget.initial!.id)} من ${widget.initial!.ratio} — النسبة لا تقلّ عن المستعمل'),
-              style: AppType.muted(color: AppColors.textMid)),
+          Text(
+              iso(_used(widget.initial!.id) > widget.initial!.ratio
+                  ? 'مستعمل منه ${_used(widget.initial!.id)} وهو 1:${widget.initial!.ratio} — أكثر من نسبته، كبّرها أو انقل منه'
+                  : 'مستعمل منه ${_used(widget.initial!.id)} من ${widget.initial!.ratio} — النسبة لا تقلّ عن المستعمل'),
+              style: AppType.muted(
+                  color: _used(widget.initial!.id) > widget.initial!.ratio ? AppColors.warning : AppColors.textMid)),
         ],
         const SizedBox(height: Sp.md),
         DropdownButtonFormField<int?>(

@@ -207,6 +207,23 @@ void main() {
     Navigator.of(ctx).pop();
     await t.pump(const Duration(milliseconds: 400));
 
+    // صندوقٌ فاض قبل الحدّ (١:٤ فيه ٥): يبقى يُعدَّل باسمه ونسبته الحاليّة، والتنبيه يقول كبّرها — والتصغير ممنوع.
+    final over = FiberStore.layout.value.boxes[3]!.copyWith(ratio: 4);
+    FiberStore.debugSet(FiberStore.layout.value.withBox(over));
+    await t.pump(const Duration(milliseconds: 100));
+    showFiberBoxSheet(ctx, oltId: 9, pon: 'EPON0/3', initial: over, tree: tree);
+    await sheetIn(t);
+    expect(chip('1:4').onSelected, isNotNull, reason: 'نسبته الحاليّة تبقى');
+    expect(chip('1:2').onSelected, isNull);
+    expect(find.textContaining('أكثر من نسبته'), findsOneWidget);
+    await t.enterText(find.byType(TextField).first, 'صندوق 3-ب الجديد');
+    await t.tap(find.text('حفظ'));
+    await t.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('النسبة لا تقلّ'), findsNothing);
+    expect(server.requests.where((r) => r.method == 'PUT' && r.uri.path.endsWith('/fiber/boxes/3')), hasLength(1),
+        reason: 'الحفظ وصل الخادم');
+    await t.pump(const Duration(milliseconds: 400));
+
     // موزّع 1:4 بأربعة فروع ⇒ صندوقٌ جديد تحته يُرفض بسببه
     FiberStore.debugSet(FiberStore.layout.value
         .withBox(const FiberBox(id: 5, oltId: 9, pon: 'EPON0/3', name: 'صندوق 3-د', parentId: 1, ratio: 8)));
