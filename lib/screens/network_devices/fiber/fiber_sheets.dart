@@ -11,6 +11,7 @@ import '../../../services/fiber/fiber_band.dart';
 import '../../../services/fiber/fiber_onu.dart';
 import '../../../services/fiber/fiber_store.dart';
 import '../../../services/fiber/fiber_text.dart';
+import '../../../services/fiber/fiber_tree.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -43,16 +44,20 @@ Future<FiberBox?> showFiberBoxSheet(
   FiberBox? initial,
   int? parentId,
   FiberNodeKind kind = FiberNodeKind.box,
+  FiberPonTree? tree,
 }) =>
-    _sheet(context, (_) => _BoxSheet(oltId: oltId, pon: pon, initial: initial, parentId: parentId, kind: kind));
+    _sheet(context, (_) => _BoxSheet(oltId: oltId, pon: pon, initial: initial, parentId: parentId, kind: kind, tree: tree));
 
 class _BoxSheet extends StatefulWidget {
-  const _BoxSheet({required this.oltId, required this.pon, this.initial, this.parentId, required this.kind});
+  const _BoxSheet({required this.oltId, required this.pon, this.initial, this.parentId, required this.kind, this.tree});
   final int oltId;
   final String pon;
   final FiberBox? initial;
   final int? parentId;
   final FiberNodeKind kind;
+
+  /// شجرة المنفذ الحيّة (أجهزته الآن) — للسعة. بلاها: من التخطيط وحده (فروعه + ما أُسند له).
+  final FiberPonTree? tree;
 
   @override
   State<_BoxSheet> createState() => _BoxSheetState();
@@ -84,6 +89,19 @@ class _BoxSheetState extends State<_BoxSheet> {
           if (b.kind == FiberNodeKind.splitter && b.id != widget.initial?.id) b,
       ];
 
+  /// المستعمل من مخارج [id]: الحيّ من الشجرة، وإلّا من التخطيط (فروعه + الأجهزة المسندة له).
+  int _used(int id) {
+    final t = widget.tree;
+    if (t != null && t.nodes.containsKey(id)) return t.usedPorts(id);
+    final l = FiberStore.layout.value;
+    final kids = l.boxesOf(widget.oltId, pon: widget.pon).where((b) => b.parentId == id).length;
+    final onus = l.onus.values.where((r) => r.oltId == widget.oltId && r.boxId == id).length;
+    return kids + onus;
+  }
+
+  /// يتّسع الموزّع [p] لهذا الصندوق؟ (إن كان تحته أصلاً فلا يأخذ منفذاً جديداً.)
+  bool _parentFits(FiberBox p) => widget.initial?.parentId == p.id || _used(p.id) < p.ratio;
+
   Future<void> _locate() async {
     setState(() => _locating = true);
     try {
@@ -108,6 +126,16 @@ class _BoxSheetState extends State<_BoxSheet> {
     final name = _name.text.trim();
     if (name.isEmpty) {
       setState(() => _error = 'اكتب اسماً للصندوق');
+      return;
+    }
+    final used = widget.initial == null ? 0 : _used(widget.initial!.id);
+    if (_ratio < used) {
+      setState(() => _error = 'مستعمل منه $used — النسبة لا تقلّ عن ${iso('1:$used')}');
+      return;
+    }
+    final parent = _parents.where((p) => p.id == _parent).firstOrNull;
+    if (parent != null && !_parentFits(parent)) {
+      setState(() => _error = '${parent.name} ممتلئ (${iso('${_used(parent.id)}/${parent.ratio}')}) — كبّر نسبته أو اختر غيره');
       return;
     }
     setState(() {
@@ -207,7 +235,8 @@ class _BoxSheetState extends State<_BoxSheet> {
             ChoiceChip(
               label: Text(iso('1:$r')),
               selected: _ratio == r,
-              onSelected: (_) => setState(() => _ratio = r),
+              // أقلّ من المستعمل لا يُختار: صندوق ١:٨ فيه ٦ لا يصير ١:٤.
+              onSelected: edit && r < _used(widget.initial!.id) ? null : (_) => setState(() => _ratio = r),
               showCheckmark: false,
               selectedColor: AppColors.brandSoftBg,
               backgroundColor: AppColors.surface,
@@ -215,13 +244,28 @@ class _BoxSheetState extends State<_BoxSheet> {
               labelStyle: AppType.bodyStrong(color: _ratio == r ? AppColors.brandOnSoft : AppColors.textBody),
             ),
         ]),
+        if (edit && _used(widget.initial!.id) > 0) ...[
+          const SizedBox(height: Sp.xs),
+          Text(iso('مستعمل منه ${_used(widget.initial!.id)} من ${widget.initial!.ratio} — النسبة لا تقلّ عن المستعمل'),
+              style: AppType.muted(color: AppColors.textMid)),
+        ],
         const SizedBox(height: Sp.md),
         DropdownButtonFormField<int?>(
           initialValue: _parents.any((p) => p.id == _parent) ? _parent : null,
           decoration: _field('يتّصل بـ'),
           items: [
             DropdownMenuItem<int?>(value: null, child: Text('المنفذ مباشرةً (${fiberPonDisplay(widget.pon)})')),
-            for (final p in _parents) DropdownMenuItem<int?>(value: p.id, child: Text(p.name, overflow: TextOverflow.ellipsis)),
+            for (final p in _parents)
+              DropdownMenuItem<int?>(
+                value: p.id,
+                // الموزّع الممتلئ يبقى ظاهراً معطّلاً بسببه — لا يُخفى.
+                enabled: _parentFits(p),
+                child: Text(
+                  iso('${p.name} · ${_used(p.id)}/${p.ratio}${_parentFits(p) ? '' : ' · ممتلئ'}'),
+                  overflow: TextOverflow.ellipsis,
+                  style: _parentFits(p) ? null : AppType.body(color: AppColors.textLow),
+                ),
+              ),
           ],
           onChanged: (v) => setState(() => _parent = v),
         ),
@@ -299,13 +343,18 @@ class _AssignSheetState extends State<_AssignSheet> {
         if (b.kind == FiberNodeKind.box) b,
     ];
     int? boxOf(FiberOnuLive o) => layout.recordFor(widget.oltId, o.key, o.ident)?.boxId;
+    // السعة (المالك ٢٨ أكتوبر: «من احدد بوكس ١:٨ مفروض ميتقبل اكثر من هلشي»): المستعمل = أجهزته الحيّة + فروعه.
+    final tree = FiberPonTree.build(oltId: widget.oltId, pon: widget.pon, layout: layout, onus: widget.onus);
+    // المختار عند الفتح أوّلاً (ثابتٌ لا يقفز مع كلّ اختيار) ⇒ ما زاد عن السعة يُرى ويُشال، ثمّ ما بلا صندوق.
+    int rank(FiberOnuLive o) => widget.preselect.contains(o.key) ? 0 : (boxOf(o) == null ? 1 : 2);
     final list = [...widget.onus]..sort((a, b) {
-        final ua = boxOf(a) == null ? 0 : 1;
-        final ub = boxOf(b) == null ? 0 : 1;
-        if (ua != ub) return ua.compareTo(ub);
+        final r = rank(a).compareTo(rank(b));
+        if (r != 0) return r;
         return a.onu.onuId.compareTo(b.onu.onuId);
       });
     final target = boxes.where((b) => b.id == _box).firstOrNull;
+    final fit = target == null ? null : tree.fit(target.id, _picked);
+    final over = fit != null && !fit.ok;
     return DesignSheet(
       header: SheetHeaderBar(
         icon: LucideIcons.packagePlus,
@@ -314,11 +363,13 @@ class _AssignSheetState extends State<_AssignSheet> {
         onClose: () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
-        label: _box == null ? 'اختر صندوقاً' : 'إسناد ${FiberText.devices(_picked.length)}',
+        label: _box == null ? 'اختر صندوقاً' : (over ? 'الصندوق ما يتّسع' : 'إسناد ${FiberText.devices(_picked.length)}'),
         icon: LucideIcons.check,
         busy: _busy,
-        enabled: _box != null && _picked.isNotEmpty,
+        enabled: _box != null && _picked.isNotEmpty && !over,
         onPressed: () async {
+          final t = boxes.where((b) => b.id == _box).firstOrNull;
+          if (t == null || !tree.fit(t.id, _picked).ok) return;
           setState(() => _busy = true);
           final r = await FiberStore.assign(widget.oltId, list.where((o) => _picked.contains(o.key)), _box);
           if (!context.mounted) return;
@@ -337,13 +388,26 @@ class _AssignSheetState extends State<_AssignSheet> {
           DropdownButtonFormField<int?>(
             initialValue: _box,
             decoration: _field('الصندوق'),
-            items: [for (final b in boxes) DropdownMenuItem<int?>(value: b.id, child: Text(b.name, overflow: TextOverflow.ellipsis))],
+            items: [
+              for (final b in boxes)
+                DropdownMenuItem<int?>(
+                  value: b.id,
+                  child: Text(
+                    iso('${b.name} · ${tree.usedPorts(b.id)}/${b.ratio}${tree.freePorts(b.id) == 0 ? ' · ممتلئ' : ''}'),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
             onChanged: (v) => setState(() => _box = v),
           ),
-        if (target != null) ...[
+        if (target != null && fit != null) ...[
           const SizedBox(height: Sp.xs),
-          Text('فيه ${FiberText.ports(target.ratio)} — مختار ${_picked.length}',
-              style: AppType.muted(color: _picked.length > target.ratio ? AppColors.error : AppColors.textMid)),
+          Text(
+            iso(over
+                ? 'الصندوق 1:${target.ratio} — يتّسع لـ${FiberText.devices(fit.free)} بعد، ومختار ${FiberText.devices(fit.needed)} جديدة. شيل ${fit.needed - fit.free} أو كبّر نسبته.'
+                : 'فيه ${FiberText.ports(target.ratio)} — مستعمل ${tree.usedPorts(target.id)}، يبقى ${fit.free} · مختار ${fit.needed} جديد'),
+            style: AppType.muted(color: over ? AppColors.error : AppColors.textMid),
+          ),
         ],
         const SizedBox(height: Sp.md),
         for (final o in list)

@@ -14,6 +14,7 @@ import '../../api/ubnt_api.dart';
 import '../../api/vsol_olt_api.dart';
 import '../../models/network_device.dart';
 import '../../services/device_stats_cache.dart';
+import '../../services/fiber/fiber_monitor.dart';
 import '../../theme/colors.dart';
 import 'widgets/_grade.dart';
 
@@ -667,6 +668,11 @@ Future<ProbeResult> _olt(NetworkDevice d, Map<String, dynamic> creds) async {
     final c = s.profile.readsHsgqTables ? await HsgqOlt.chassis(snmp.get) : await BdcomEpon.chassis(snmp);
     if (!c.isEmpty) s = s.copyWith(chassis: c);
   }
+  return oltProbeResult(s);
+}
+
+/// خانات بطاقة الأولت وتفصيلها من لقطةٍ واحدة — الجدار وشاشات الألياف بالحساب نفسه ([bridgeFiberVitals]).
+ProbeResult oltProbeResult(VsolOltStats s) {
   final cpu = s.chassis?.cpuPct;
   final pct = s.onusTotal == 0 ? null : s.onusOnline * 100 / s.onusTotal;
   return ProbeResult(
@@ -723,6 +729,22 @@ Future<ProbeResult> _olt(NetworkDevice d, Map<String, dynamic> creds) async {
     counters: const {},
     raw: s.isEmpty ? null : s,
   );
+}
+
+/// شاشات الألياف تقرأ الأولت كلّ ١٥ث — قراءتها الحيّة تُكتب في مخزن القسم بخانات بطاقة الجدار نفسها، فلا يقول الجدار رقماً
+/// والألياف غيره (المالك ٢٨ أكتوبر: «تتحدث مع تزامن تحديث الاجهزه»). معالج BDCOM/HSGQ لا تقرؤه الألياف: يُستعار من آخر لقطةٍ
+/// حديثة للجدار/اللوحة، وإلّا لا كتابة (لا تُمحى خانة المعالج). يُستدعى من شاشات الألياف (مرّةً تكفي).
+void bridgeFiberVitals() {
+  FiberMonitor.onLiveStats ??= (int oltId, VsolOltStats s) {
+    var st = s;
+    if ((st.profile.readsBdcomEponTables || st.profile.readsHsgqTables) && st.chassis == null) {
+      final prev = DeviceStatsCache.instance.seedFor<VsolOltStats>(oltId)?.chassis;
+      if (prev == null || prev.isEmpty) return;
+      st = st.copyWith(chassis: prev);
+    }
+    final r = oltProbeResult(st);
+    DeviceStatsCache.instance.putVitals(oltId, r.vitals, r.detail);
+  };
 }
 
 /// سسكو: جلسة CLI بلا `show interfaces` (≈٤٠ كيلوبايت) — المعالج والذاكرة

@@ -68,7 +68,8 @@ class FiberBackend {
 ///   ٤. أسماء الوكيل كلّ نصف ساعة، والأجهزة خلف كلّ ONU حين تُطلب ([wantDevices])
 ///
 /// يعمل ما دام له مستخدم ([acquire]/[release]): شاشات الألياف على الهاتف، والحاسبة بالخلفيّة ([background]، إيقاعٌ أبطأ
-/// وبلا عدّادات المنافذ). لا يكتب في [DeviceStatsCache] (لقطةٌ بلا عدّادات تُفقر لوحة الأولت) — يقرأ منه بذرةً فقط.
+/// وبلا عدّادات المنافذ). لا يكتب الحمولة الخام في [DeviceStatsCache] (لقطةٌ بلا عدّادات تُفقر لوحة الأولت) — يقرأ منه
+/// بذرةً فقط؛ وخانات بطاقة الجدار الثلاث تصله عبر [onLiveStats].
 class FiberMonitor extends ChangeNotifier {
   FiberMonitor._(this.device) : profile = OltProfile.fromDevice(device);
 
@@ -85,6 +86,9 @@ class FiberMonitor extends ChangeNotifier {
   }
 
   static FiberMonitor? existing(int deviceId) => _all[deviceId];
+
+  /// بعد كلّ قراءة حالةٍ حيّة (لا لقطةٍ محفوظة) — جسر قسم الأجهزة ([bridgeFiberVitals]) يكتبها بخانات بطاقة الجدار.
+  static void Function(int oltId, VsolOltStats stats)? onLiveStats;
   static Iterable<FiberMonitor> get all => _all.values;
 
   /// من [SessionManager] عند الخروج: تتوقّف كلّها ولا يرث أحدٌ قراءات سابقه.
@@ -115,6 +119,9 @@ class FiberMonitor extends ChangeNotifier {
   VsolOltStats? stats;
   DateTime? statsAt;
   final Map<String, VsolTraffic> ponRates = {};
+
+  /// ترفك منافذ الأبلنك (نحو السيرفر) — «مخطّط الشبكة» يكتبه على خطّ السيرفر ⇐ الأولت. rx = النازل للمشتركين.
+  final Map<String, VsolTraffic> uplinkRates = {};
 
   /// آخر لقطةٍ تحرّكت عدّاداتها — مرجعيّة معدّل المنافذ (انظر [VsolTraffic.frozenBetween]).
   VsolOltStats? _ctrRef;
@@ -295,6 +302,9 @@ class FiberMonitor extends ChangeNotifier {
       stale = false;
       _rebuild();
       notifyListeners(); // ⚡ أوّل عرضٍ حيّ: المتّصل/المفصول لكلّ منفذ
+      try {
+        onLiveStats?.call(oltId, cur); // بطاقة الجدار بالأرقام نفسها
+      } catch (_) {}
 
       // عدّادات المنافذ (ترفك PON) بعد أوّل عرض — للشاشة وحدها، الخلفيّة لا ترسمها.
       if (!background) {
@@ -313,6 +323,10 @@ class FiberMonitor extends ChangeNotifier {
             for (final p in cur.ponPorts) {
               final v = fresh[p.label];
               if (v != null && v.known) ponRates[p.label] = v;
+            }
+            for (final u in cur.uplinks) {
+              final v = fresh[u.name];
+              if (v != null && v.known) uplinkRates[u.name] = v;
             }
             _ctrRef = cur;
             _ctrRefAt = now;

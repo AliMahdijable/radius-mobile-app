@@ -135,6 +135,21 @@ class FiberPonTree {
     return free < 0 ? 0 : free;
   }
 
+  /// يتّسع الصندوق لهذه الأجهزة؟ (المالك ٢٨ أكتوبر: «من احدد بوكس ١:٨ مفروض ميتقبل اكثر من هلشي».) ما كان فيه أصلاً لا
+  /// يأخذ منفذاً جديداً؛ والمنقول من صندوقٍ آخر يأخذ.
+  ({int free, int needed, bool ok}) fit(int boxId, Iterable<String> onuKeys) {
+    final needed = {for (final k in onuKeys) if (boxOfKey[k] != boxId) k}.length;
+    final free = freePorts(boxId);
+    return (free: free, needed: needed, ok: nodes.containsKey(boxId) && needed <= free);
+  }
+
+  /// يتّسع الموزّع [parentId] لفرعٍ جديد ([movingId] فرعٌ موجود: إن كان تحته أصلاً فلا يأخذ منفذاً جديداً)؟
+  bool canHang(int parentId, {int? movingId}) {
+    if (!nodes.containsKey(parentId)) return false;
+    if (movingId != null && nodes[movingId]?.parentId == parentId) return true;
+    return freePorts(parentId) > 0;
+  }
+
   /// مخارج الموزّعات/الصناديق الفارغة على هذا المنفذ (الصناديق النهائيّة وحدها — مخرج الموزّع الفارغ لا يخدم بيتاً).
   int get freeBoxPorts => [
         for (final b in nodes.values)

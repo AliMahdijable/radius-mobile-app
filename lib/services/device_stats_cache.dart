@@ -35,6 +35,11 @@ class DeviceStatsCache {
 
   final Map<int, _Entry> _byId = {};
 
+  /// كلّ قراءةٍ معروضة جديدة تُكتب لجهاز (الجدار/البرج) — المستمع يعرف أيّ جهاز فيعيد رسمه من المخزن بلا جلسةٍ ثانية
+  /// (المالك ٢٨ أكتوبر: «تاكد منها تتحدث مع تزامن تحديث الاجهزه… شفت جهاز يكول عليه ٥ متصلين ويعرض ٣»).
+  final ValueNotifier<({int id, int seq})> updated = ValueNotifier((id: 0, seq: 0));
+  int _seq = 0;
+
   /// يحفظ حمولة علامةٍ خام بعد جلسةٍ ناجحة.
   ///
   /// [detailed] تُفرّق بين حمولةٍ خفيفة (ثلاثة أرقام) وأخرى كاملة (مع
@@ -107,6 +112,7 @@ class DeviceStatsCache {
     e.vitals = vitals;
     e.detail = detail;
     e.vitalsAt = DateTime.now();
+    updated.value = (id: deviceId, seq: ++_seq);
   }
 
   /// القراءة المحفوظة إن كانت أحدث من [maxAge]، وإلّا `null`.

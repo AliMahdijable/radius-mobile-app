@@ -14,15 +14,18 @@ import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_diagnosis_screen.
 import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_home_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_light_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_link_screen.dart';
+import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_map_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_outage_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_pon_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_search_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_settings_sheet.dart';
+import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_sheets.dart';
 import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_subscriber_card.dart';
 import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_tech_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/fiber/fiber_widgets.dart';
 import 'package:rad_mysvcs/services/fiber/fiber_monitor.dart';
 import 'package:rad_mysvcs/services/fiber/fiber_store.dart';
+import 'package:rad_mysvcs/services/fiber/fiber_tree.dart';
 import 'package:rad_mysvcs/services/permissions_service.dart';
 import 'package:rad_mysvcs/theme/colors.dart';
 import 'package:rad_mysvcs/theme/typography.dart';
@@ -53,9 +56,11 @@ void main() {
     // معترضات العميل تقرأ التوكن من خزنة الحاسبة (ملفّ حقيقيّ) — لا تكتمل بزمن الاختبار الوهميّ.
     final interceptors = List<Interceptor>.of(ApiClient.dio.interceptors);
     ApiClient.dio.interceptors.clear();
+    // ⚠️ `clear()` يُبقي ImplyContentTypeInterceptor ⇒ الإرجاع كان يضيف نسخةً منه كلّ اختبار، فيمرّ كلّ طلبٍ بعشرات
+    // النسخ وتتباطأ الاختبارات الأخيرة حتى تعلق (٢٨ أكتوبر: «الربط» ٢٢ث و«البحث» ٨٦ث). الإرجاع يمسح كلّ شيء.
     addTearDown(() {
       ApiClient.dio.interceptors
-        ..clear()
+        ..clear(keepImplyContentTypeInterceptor: false)
         ..addAll(interceptors);
     });
     olt = FiberTestOlt();
@@ -118,6 +123,12 @@ void main() {
     }
   }
 
+  // ورقةٌ تُفتح: الإطار الأوّل يبدأ انزلاقها والثاني ينهيه — بإطارٍ واحد تبقى تحت الشاشة فتخطئ النقرات.
+  Future<void> sheetIn(WidgetTester t) async {
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 400));
+  }
+
   testWidgets('الرئيسيّة: المتّصلون والضوء والمنافذ والأدوات — والعطل بمكانه حين يسقط صندوق', (t) async {
     await everyLayout(t, (m) => FiberHomeScreen(olts: [fiberTestDevice()], initialOltId: 9));
     // صندوقٌ يسقط كلّه
@@ -137,8 +148,95 @@ void main() {
     await pumpScreen(t, FiberPonScreen(monitor: FiberMonitor.of(fiberTestDevice()), pon: 'EPON0/3'));
     expect(find.textContaining('صندوق 3-أ'), findsWidgets);
     expect(find.textContaining('موزّع رئيسي'), findsWidgets);
-    await t.scrollUntilVisible(find.textContaining('بلا صندوق').first, 200, scrollable: mainScroll());
+    // نصٌّ وحيد (مفتاح «إظهار الصناديق» فوق الشجرة يدفع البطاقة لأسفل — لا `.first` على ما لم يُبنَ بعد).
+    await t.scrollUntilVisible(find.textContaining('جهازان بلا صندوق'), 200, scrollable: mainScroll());
     expect(find.textContaining('جهازان بلا صندوق'), findsOneWidget, reason: 'EPON0/3:23 و24 بلا سجلّ');
+    await unmount(t);
+  });
+
+  // المالك ٢٨ أكتوبر: «من يصيرن صناديق هواي وموزعات هواي لازم اكو امكانيه يسوي توكل المدير ويخفيهن».
+  testWidgets('المنفذ: «إظهار الصناديق» مطفأ ⇒ الموزّعات بأرقام ما تحتها، والضغط على الموزّع يكشف صناديقه', (t) async {
+    await pumpScreen(t, FiberPonScreen(monitor: FiberMonitor.of(fiberTestDevice()), pon: 'EPON0/3'));
+    expect(find.textContaining('صندوق 3-أ'), findsWidgets);
+    await t.tap(find.text('إظهار الصناديق'));
+    await t.pump(const Duration(milliseconds: 100));
+    expect(find.textContaining('صندوق 3-أ'), findsNothing, reason: 'الصناديق مخفيّة');
+    expect(find.textContaining('موزّع رئيسي'), findsWidgets, reason: 'الموزّع يبقى');
+    expect(find.textContaining('مخفيّة تحته'), findsOneWidget);
+    await t.tap(find.textContaining('موزّع رئيسي').first);
+    await t.pump(const Duration(milliseconds: 100));
+    expect(find.textContaining('صندوق 3-أ'), findsWidgets, reason: 'كُشفت صناديق الموزّع');
+    expect(t.takeException(), isNull);
+    await unmount(t);
+  });
+
+  // المالك ٢٨ أكتوبر: «من احدد بوكس ١:٨ مفروض ميتقبل اكثر من هلشي».
+  testWidgets('السعة: صندوق ١:٨ فيه ٥ لا يقبل ٤ جدد، والنسبة لا تقلّ عن المستعمل، والموزّع الممتلئ لا يأخذ فرعاً', (t) async {
+    final m = FiberMonitor.of(fiberTestDevice());
+    await pumpScreen(t, FiberPonScreen(monitor: m, pon: 'EPON0/3'), size: _phoneWide);
+    final ctx = t.element(find.byType(FiberPonScreen));
+    final tree = FiberPonTree.build(oltId: 9, pon: 'EPON0/3', layout: FiberStore.layout.value, onus: m.onus);
+    expect(tree.freePorts(3), 3, reason: 'صندوق 3-ب: ٥ من ٨');
+
+    // ٤ أجهزة من صندوق 3-أ إلى 3-ب ⇒ لا يتّسع
+    showFiberAssignSheet(ctx, oltId: 9, pon: 'EPON0/3', onus: tree.all, boxId: 3,
+        preselect: {for (var i = 1; i <= 4; i++) 'EPON0/3:$i'});
+    await sheetIn(t);
+    expect(find.text('الصندوق ما يتّسع'), findsOneWidget);
+    expect(find.textContaining('يتّسع لـ'), findsOneWidget);
+    final checked = find.byWidgetPredicate((w) => w is CheckboxListTile && w.value == true);
+    expect(t.getTopLeft(checked.first).dy < t.getTopLeft(find.byType(CheckboxListTile).last).dy, isTrue,
+        reason: 'المختار عند الفتح بأعلى القائمة');
+    await t.ensureVisible(checked.first);
+    await t.pump(const Duration(milliseconds: 100));
+    expect(checked.first.hitTestable(), findsOneWidget);
+    await t.tap(checked.first);
+    await t.pump(const Duration(milliseconds: 100));
+    expect(find.text('الصندوق ما يتّسع'), findsNothing, reason: 'ثلاثة تتّسع');
+    Navigator.of(ctx).pop();
+    await t.pump(const Duration(milliseconds: 400));
+
+    // النسبة: ١:٢ و١:٤ معطّلتان لصندوقٍ فيه ٥
+    showFiberBoxSheet(ctx, oltId: 9, pon: 'EPON0/3', initial: FiberStore.layout.value.boxes[3], tree: tree);
+    await sheetIn(t);
+    ChoiceChip chip(String r) => t.widget<ChoiceChip>(find.byWidgetPredicate(
+        (w) => w is ChoiceChip && w.label is Text && ((w.label as Text).data ?? '').contains(r)));
+    expect(chip('1:4').onSelected, isNull);
+    expect(chip('1:2').onSelected, isNull);
+    expect(chip('1:16').onSelected, isNotNull);
+    Navigator.of(ctx).pop();
+    await t.pump(const Duration(milliseconds: 400));
+
+    // موزّع 1:4 بأربعة فروع ⇒ صندوقٌ جديد تحته يُرفض بسببه
+    FiberStore.debugSet(FiberStore.layout.value
+        .withBox(const FiberBox(id: 5, oltId: 9, pon: 'EPON0/3', name: 'صندوق 3-د', parentId: 1, ratio: 8)));
+    await t.pump(const Duration(milliseconds: 100));
+    final full = FiberPonTree.build(oltId: 9, pon: 'EPON0/3', layout: FiberStore.layout.value, onus: m.onus);
+    expect(full.canHang(1), isFalse);
+    showFiberBoxSheet(ctx, oltId: 9, pon: 'EPON0/3', parentId: 1, tree: full);
+    await sheetIn(t);
+    await t.enterText(find.byType(TextField).first, 'صندوق جديد');
+    expect(find.text('إضافة').hitTestable(), findsOneWidget, reason: 'الزرّ ظاهرٌ تحت الإصبع');
+    await t.tap(find.text('إضافة'));
+    await t.pump(const Duration(milliseconds: 200));
+    expect(find.textContaining(RegExp('ممتلئ \\(\u2068?4/4')), findsOneWidget, reason: 'رسالة الرفض بسببها (الرقم معزول الاتّجاه)');
+    expect(FiberStore.layout.value.boxes.values.any((b) => b.name == 'صندوق جديد'), isFalse, reason: 'لم يُحفظ');
+    expect(t.takeException(), isNull);
+    await unmount(t);
+  });
+
+  // المالك ٢٨ أكتوبر: «رسم خريطة بمسارات الضوئي ٢d… يوضح سيرفر الترفك والربط».
+  testWidgets('مخطّط الشبكة: يُرسم بكلّ مقاس ووضع، والرقائق تخفي الصناديق وما بلا صندوق', (t) async {
+    await everyLayout(t, (m) => FiberMapScreen(olts: [fiberTestDevice()], initialOltId: 9));
+    await pumpScreen(t, FiberMapScreen(olts: [fiberTestDevice()], initialOltId: 9));
+    expect(find.text('مخطّط الشبكة'), findsWidgets);
+    expect(find.byType(CustomPaint), findsWidgets);
+    // الرقاقة معزولة الاتّجاه (iso) ⇒ تطابقٌ جزئيّ.
+    await t.tap(find.textContaining('الصناديق'));
+    await t.pump(const Duration(milliseconds: 100));
+    await t.tap(find.textContaining('بلا صندوق'));
+    await t.pump(const Duration(milliseconds: 100));
+    expect(t.takeException(), isNull);
     await unmount(t);
   });
 

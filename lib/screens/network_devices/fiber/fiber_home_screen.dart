@@ -18,8 +18,10 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../desktop/desk_widgets.dart';
+import '../device_vitals.dart';
 import 'fiber_light_screen.dart';
 import 'fiber_link_screen.dart';
+import 'fiber_map_screen.dart';
 import 'fiber_outage_screen.dart';
 import 'fiber_pon_screen.dart';
 import 'fiber_search_screen.dart';
@@ -43,12 +45,18 @@ class _FiberHomeScreenState extends State<FiberHomeScreen> {
   late NetworkDevice _olt = widget.olts.firstWhere((d) => d.id == widget.initialOltId, orElse: () => widget.olts.first);
   late FiberMonitor _m = FiberMonitor.of(_olt);
 
+  /// وكيلٌ بأكثر من أولت (المالك ٢٨ أكتوبر: «لو وكيل عنده اكثر من جهاز اولتي كيف رح يكون العرض»): البقيّة تُقرأ بالخلفيّة
+  /// (إيقاعٌ هادئ) ما دامت الشاشة مفتوحة — فرقاقة كلّ أولت تقول متّصليه وعطله بلا تبديل.
+  final Map<int, FiberMonitor> _others = {};
+
   @override
   void initState() {
     super.initState();
+    bridgeFiberVitals();
     _m
       ..addListener(_changed)
       ..acquire();
+    _holdOthers();
     FiberStore.layout.addListener(_changed);
     FiberStore.ensureLoaded().then((_) => _changed());
   }
@@ -58,8 +66,28 @@ class _FiberHomeScreenState extends State<FiberHomeScreen> {
     _m
       ..removeListener(_changed)
       ..release();
+    for (final id in _others.keys.toList()) {
+      _releaseOther(id);
+    }
     FiberStore.layout.removeListener(_changed);
     super.dispose();
+  }
+
+  void _holdOthers() {
+    for (final d in widget.olts) {
+      if (d.id == _olt.id || _others.containsKey(d.id)) continue;
+      _others[d.id] = FiberMonitor.of(d)
+        ..addListener(_changed)
+        ..acquire(background: true);
+    }
+  }
+
+  void _releaseOther(int id) {
+    final m = _others.remove(id);
+    if (m == null) return;
+    m
+      ..removeListener(_changed)
+      ..release(background: true);
   }
 
   void _changed() {
@@ -68,6 +96,11 @@ class _FiberHomeScreenState extends State<FiberHomeScreen> {
 
   void _switch(NetworkDevice d) {
     if (d.id == _olt.id) return;
+    // السابق يبقى مقروءاً بالخلفيّة (رقاقته حيّة)، والجديد بإيقاع الشاشة — الإمساك قبل الإفلات فلا يتوقّف أحدهما ويعود.
+    final old = _olt;
+    _others[old.id] = FiberMonitor.of(old)
+      ..addListener(_changed)
+      ..acquire(background: true);
     _m
       ..removeListener(_changed)
       ..release();
@@ -77,6 +110,7 @@ class _FiberHomeScreenState extends State<FiberHomeScreen> {
         ..addListener(_changed)
         ..acquire();
     });
+    _releaseOther(d.id);
   }
 
   Future<T?> _push<T>(Widget w) => Navigator.of(context).push<T>(MaterialPageRoute(builder: (_) => w));
@@ -188,7 +222,8 @@ class _FiberHomeScreenState extends State<FiberHomeScreen> {
         if (widget.olts.length > 1)
           for (final d in widget.olts)
             ChoiceChip(
-              label: Text(d.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+              avatar: _oltCut(d) ? Icon(LucideIcons.circleAlert, size: 15, color: AppColors.error) : null,
+              label: Text(iso(_oltChip(d)), maxLines: 1, overflow: TextOverflow.ellipsis),
               selected: d.id == _olt.id,
               onSelected: (_) => _switch(d),
               labelStyle: AppType.bodyStrong(color: d.id == _olt.id ? AppColors.brandOnSoft : AppColors.textBody),
@@ -206,6 +241,18 @@ class _FiberHomeScreenState extends State<FiberHomeScreen> {
       ]),
     );
   }
+
+  FiberMonitor? _monOf(NetworkDevice d) => d.id == _olt.id ? _m : _others[d.id];
+
+  /// «اسم · متّصل/الكلّ» — من قراءة الأولت نفسه (الخلفيّة للبقيّة)، و«…» قبل أوّل قراءة.
+  String _oltChip(NetworkDevice d) {
+    final m = _monOf(d);
+    if (m == null || m.stats == null) return '${d.name} · …';
+    final on = m.onus.where((o) => o.online).length;
+    return '${d.name} · $on/${m.onus.length}';
+  }
+
+  bool _oltCut(NetworkDevice d) => (_monOf(d)?.outages ?? const []).any((e) => e.kind != FiberEventKind.power);
 
   Widget _loading() => Padding(
         padding: const EdgeInsets.all(Sp.xxl),
@@ -493,6 +540,9 @@ class _FiberHomeScreenState extends State<FiberHomeScreen> {
           () => _push(FiberLinkScreen(monitor: _m))),
       tool(LucideIcons.package, 'الصناديق', '${FiberText.ports(freePorts)} فارغة',
           firstPon == null ? () {} : () => _push(FiberPonScreen(monitor: _m, pon: firstPon))),
+      // المالك ٢٨ أكتوبر: «رسم خريطة بمسارات الضوئي ٢d… يوضح سيرفر الترفك والربط».
+      tool(LucideIcons.gitFork, 'مخطّط الشبكة', widget.olts.length > 1 ? 'كلّ الأولتات بخريطةٍ واحدة' : 'السيرفر ⇐ المنافذ ⇐ الصناديق',
+          () => _push(FiberMapScreen(olts: widget.olts, initialOltId: widget.olts.length > 1 ? null : _olt.id))),
     ];
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: Sp.lg),

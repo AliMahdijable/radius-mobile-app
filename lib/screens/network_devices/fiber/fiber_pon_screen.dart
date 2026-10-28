@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../api/vsol_olt_api.dart';
@@ -15,9 +16,11 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../desktop/desk_widgets.dart';
+import '../device_vitals.dart';
 import 'fiber_diagnosis_screen.dart';
 import 'fiber_home_screen.dart';
 import 'fiber_link_screen.dart';
+import 'fiber_map_screen.dart';
 import 'fiber_outage_screen.dart';
 import 'fiber_sheets.dart';
 import 'fiber_tech_screen.dart';
@@ -39,15 +42,36 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
   final Set<int> _open = {};
   bool _openedFirst = false;
 
+  /// «الصناديق ظاهرة؟» (المالك ٢٨ أكتوبر: «من يصيرن صناديق هواي وموزعات هواي… يسوي توكل ويخفيهن») — مخفيّة ⇒ الموزّعات
+  /// وحدها بأرقام ما تحتها، والضغط على موزّعٍ يكشف صناديقه. يُحفظ على الجهاز.
+  bool _showBoxes = true;
+  final Set<int> _revealed = {};
+  bool _revealRoots = false;
+  static const _showBoxesKey = 'fiber.pon.showBoxes.v1';
+
   FiberMonitor get _m => widget.monitor;
 
   @override
   void initState() {
     super.initState();
+    bridgeFiberVitals();
     _m
       ..addListener(_changed)
       ..acquire();
     FiberStore.layout.addListener(_changed);
+    SharedPreferences.getInstance().then((p) {
+      final v = p.getBool(_showBoxesKey);
+      if (v != null && mounted) setState(() => _showBoxes = v);
+    }).catchError((_) {});
+  }
+
+  void _setShowBoxes(bool v) {
+    setState(() {
+      _showBoxes = v;
+      _revealed.clear();
+      _revealRoots = false;
+    });
+    SharedPreferences.getInstance().then((p) => p.setBool(_showBoxesKey, v)).catchError((_) => false);
   }
 
   @override
@@ -66,7 +90,8 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
   bool get _canEdit => fiberCanEdit();
 
   Future<void> _addBox({int? parent, FiberNodeKind kind = FiberNodeKind.box}) async {
-    final b = await showFiberBoxSheet(context, oltId: _m.oltId, pon: _pon, parentId: parent, kind: kind);
+    final tree = FiberPonTree.build(oltId: _m.oltId, pon: _pon, layout: FiberStore.layout.value, onus: _m.onus);
+    final b = await showFiberBoxSheet(context, oltId: _m.oltId, pon: _pon, parentId: parent, kind: kind, tree: tree);
     if (b != null && mounted) setState(() => _open.add(b.id));
   }
 
@@ -124,6 +149,12 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
                 padding: EdgeInsetsDirectional.only(end: Sp.sm),
                 child: Center(child: FiberPill('عطل', tone: AppTone.danger, dot: true)),
               ),
+            IconButton(
+              tooltip: 'مخطّط الشبكة',
+              icon: const Icon(LucideIcons.gitFork, size: 20),
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => FiberMapScreen(olts: [_m.device], initialOltId: _m.oltId, focusPon: _pon))),
+            ),
             if (_canEdit)
               IconButton(tooltip: 'أضف صندوقاً أو موزّعاً', icon: const Icon(LucideIcons.plus, size: 20), onPressed: () => _addBox()),
           ],
@@ -156,7 +187,8 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
               ),
             ]),
           ),
-          FiberSection('من الأولت إلى البيوت', trailing: tree.nodes.isEmpty ? null : 'اضغط صندوقاً لتفتحه'),
+          FiberSection('من الأولت إلى البيوت', trailing: tree.nodes.isEmpty ? null : (_showBoxes ? 'اضغط صندوقاً لتفتحه' : 'اضغط موزّعاً لتكشف صناديقه')),
+          if (tree.nodes.isNotEmpty) _boxesToggle(tree),
           _root(port, tree),
           if (tree.nodes.isEmpty) ...[
             const SizedBox(height: Sp.sm),
@@ -164,7 +196,12 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
           ] else
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
-              child: _rail([for (final b in tree.roots) _node(tree, b, down)]),
+              child: _rail([
+                for (final b in tree.roots)
+                  if (_visible(b, null)) _node(tree, b, down),
+                if (!_showBoxes && !_revealRoots && tree.roots.any((b) => b.kind == FiberNodeKind.box))
+                  _hiddenRootBoxes(tree),
+              ]),
             ),
           if (tree.unassigned.isNotEmpty && tree.nodes.isNotEmpty) _unassigned(tree),
           if (_canEdit)
@@ -246,6 +283,59 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
     );
   }
 
+  /// الصناديق مخفيّة؟ تظهر الموزّعات، والصناديق تحت موزّعٍ كُشف (أو على المنفذ بعد «اعرضها»).
+  bool _visible(FiberBox b, int? parentId) {
+    if (_showBoxes || b.kind == FiberNodeKind.splitter) return true;
+    return parentId == null ? _revealRoots : _revealed.contains(parentId);
+  }
+
+  Widget _boxesToggle(FiberPonTree tree) {
+    final boxes = tree.boxCount;
+    final splitters = tree.nodes.length - boxes;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.sm),
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.md),
+        child: SwitchListTile.adaptive(
+          dense: true,
+          value: _showBoxes,
+          onChanged: _setShowBoxes,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.md), side: BorderSide(color: AppColors.borderSoft)),
+          title: Text('إظهار الصناديق', style: AppType.bodyStrong(color: AppColors.textHi)),
+          subtitle: Text(
+            iso([
+              FiberText.boxes(boxes),
+              if (splitters > 0) '$splitters موزّع',
+              if (!_showBoxes) 'المخفيّ يُحسب بأرقام الموزّع',
+            ].join(' · ')),
+            style: AppType.muted(color: AppColors.textMid),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// صناديق على المنفذ مباشرةً والصناديق مخفيّة — سطرٌ واحد بأرقامها.
+  Widget _hiddenRootBoxes(FiberPonTree tree) {
+    final hidden = tree.roots.where((b) => b.kind == FiberNodeKind.box).toList();
+    final under = [for (final b in hidden) ...tree.onusUnder(b.id)];
+    final online = under.where((o) => o.online).length;
+    return FiberCard(
+      dashed: true,
+      onTap: () => setState(() => _revealRoots = true),
+      child: Row(children: [
+        const FiberIconBox(LucideIcons.package, tone: AppTone.neutral, size: 32),
+        const SizedBox(width: Sp.sm),
+        Expanded(
+          child: Text(iso('${FiberText.boxes(hidden.length)} على المنفذ مباشرةً · $online/${under.length} متّصل'),
+              style: AppType.bodyStrong(color: AppColors.textBody), maxLines: 2, overflow: TextOverflow.ellipsis),
+        ),
+        Text('اعرضها', style: AppType.label(color: AppColors.brand)),
+      ]),
+    );
+  }
+
   /// خطّ الشجرة: عموديٌّ على جهة البداية تتدلّى منه العُقد.
   Widget _rail(List<Widget> nodes) => Container(
         margin: const EdgeInsetsDirectional.only(start: 17),
@@ -298,9 +388,16 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
       for (var i = 0; i < tree.freePorts(b.id); i++) FiberSlot.free,
     ];
     final rxs = [for (final o in under) if (o.rx != null) o.rx!]..sort();
+    final hiddenKids = _showBoxes ? const <FiberBox>[] : [for (final k in kids) if (!_visible(k, b.id)) k];
     final card = FiberCard(
       tone: bad ? AppTone.danger : null,
-      onTap: () => setState(() => open ? _open.remove(b.id) : _open.add(b.id)),
+      onTap: () => setState(() {
+        if (!_showBoxes && splitter) {
+          _revealed.contains(b.id) ? _revealed.remove(b.id) : _revealed.add(b.id);
+        } else {
+          open ? _open.remove(b.id) : _open.add(b.id);
+        }
+      }),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           FiberIconBox(splitter ? LucideIcons.network : LucideIcons.package, tone: bad ? AppTone.danger : AppTone.brand, size: 32),
@@ -328,9 +425,26 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
               tooltip: 'تعديل',
               visualDensity: VisualDensity.compact,
               icon: Icon(LucideIcons.pencil, size: 16, color: AppColors.textMid),
-              onPressed: () => showFiberBoxSheet(context, oltId: _m.oltId, pon: _pon, initial: b),
+              onPressed: () => showFiberBoxSheet(context, oltId: _m.oltId, pon: _pon, initial: b, tree: tree),
             ),
         ]),
+        if (hiddenKids.isNotEmpty) ...[
+          const SizedBox(height: Sp.sm),
+          Row(children: [
+            Icon(LucideIcons.eyeOff, size: 14, color: AppColors.textLow),
+            const SizedBox(width: Sp.xs),
+            Expanded(
+              child: Text(
+                iso('${FiberText.boxes(hiddenKids.length)} مخفيّة تحته · منافذ فارغة '
+                    '${hiddenKids.where((k) => k.kind == FiberNodeKind.box).fold<int>(0, (a, k) => a + tree.freePorts(k.id))}'),
+                style: AppType.muted(color: AppColors.textMid),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Text('اضغط للكشف', style: AppType.micro(color: AppColors.textLow)),
+          ]),
+        ],
         if (!splitter || mine.isNotEmpty) ...[
           const SizedBox(height: Sp.sm),
           FiberSlots(slots: slots),
@@ -406,9 +520,10 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
                 ),
               Expanded(
                 child: TextButton.icon(
-                  onPressed: () => _addBox(parent: b.id),
+                  // كلّ فرعٍ يأخذ مخرجاً: الموزّع الممتلئ لا يأخذ صندوقاً جديداً (يبقى الزرّ بسببه).
+                  onPressed: tree.canHang(b.id) ? () => _addBox(parent: b.id) : null,
                   icon: const Icon(LucideIcons.plus, size: 16),
-                  label: const Text('صندوق تحته'),
+                  label: Text(tree.canHang(b.id) ? 'صندوق تحته' : iso('ممتلئ ${tree.usedPorts(b.id)}/${b.ratio}')),
                 ),
               ),
               if (b.hasGps)
@@ -425,9 +540,10 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
         ],
       ]),
     );
+    final shown = [for (final k in kids) if (_visible(k, b.id)) k];
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       card,
-      if (kids.isNotEmpty) _rail([for (final k in kids) _node(tree, k, down)]),
+      if (shown.isNotEmpty) _rail([for (final k in shown) _node(tree, k, down)]),
     ]);
   }
 
@@ -442,6 +558,7 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
     }
     final best = hints.entries.where((h) => tree.nodes.containsKey(h.key)).fold<MapEntry<int, List<FiberOnuLive>>?>(
         null, (a, b) => a == null || b.value.length > a.value.length ? b : a);
+    final bestFit = best == null ? null : tree.fit(best.key, best.value.map((o) => o.key));
     return Padding(
       padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, 0),
       child: FiberCard(
@@ -471,10 +588,16 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
               if (best != null)
                 Expanded(
                   child: FilledButton(
-                    onPressed: () => FiberStore.assign(_m.oltId, best.value, best.key),
+                    // الصندوق المقترح لا يتّسع ⇒ الزرّ معطّلٌ بسببه (والاختيار اليدويّ بجانبه).
+                    onPressed: bestFit!.ok ? () => FiberStore.assign(_m.oltId, best.value, best.key) : null,
                     style: FilledButton.styleFrom(backgroundColor: AppColors.brand, minimumSize: const Size.fromHeight(44)),
-                    child: Text(iso('أضفها لـ${tree.nodes[best.key]!.name}'),
-                        style: AppType.bodyStrong(color: AppColors.onBrand), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    child: Text(
+                        iso(bestFit.ok
+                            ? 'أضفها لـ${tree.nodes[best.key]!.name}'
+                            : '${tree.nodes[best.key]!.name} ممتلئ ${tree.usedPorts(best.key)}/${tree.nodes[best.key]!.ratio}'),
+                        style: AppType.bodyStrong(color: bestFit.ok ? AppColors.onBrand : AppColors.textMid),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
                   ),
                 ),
               if (best != null) const SizedBox(width: Sp.sm),

@@ -833,6 +833,19 @@ class _DeviceCardState extends State<_DeviceCard> {
     // أثناء البناء تُسقط إطاراً بخطأ setState-during-build.
     WidgetsBinding.instance.addPostFrameCallback((_) => _kick());
     _timer = Timer.periodic(_pulse, (_) => _kick());
+    DeviceStatsCache.instance.updated.addListener(_onCache);
+  }
+
+  /// قراءةٌ أحدث لهذا الجهاز كتبها غيرنا (شاشات الألياف للأولت، البرج) ⇒ نعرضها الآن بلا جلسة (المالك ٢٨ أكتوبر: «تتحدث مع
+  /// تزامن تحديث الاجهزه»). كتابتنا نحن تعود بنفس الوقت تقريباً فتُترك.
+  void _onCache() {
+    final u = DeviceStatsCache.instance.updated.value;
+    if (!mounted || u.id != widget.device.id || _inFlight) return;
+    final v = DeviceStatsCache.instance.vitalsOf(widget.device.id, DeviceVitals.freshFor);
+    if (v == null) return;
+    final at = widget.vitals.value.at;
+    if (at != null && !v.at.isAfter(at.add(const Duration(seconds: 1)))) return;
+    widget.onVitals(VitalsState(vitals: v.vitals.cast<Vital>(), detail: v.detail as DeviceDetail?, at: v.at));
   }
 
   @override
@@ -856,6 +869,7 @@ class _DeviceCardState extends State<_DeviceCard> {
   @override
   void dispose() {
     _timer?.cancel();
+    DeviceStatsCache.instance.updated.removeListener(_onCache);
     // ⚠️ نصف فائدة المجدول: بطاقة خرجت من الشاشة قبل دورها تُسحب من
     // الطابور فلا تُفتح لها جلسة أصلاً.
     DeepProbeScheduler.instance.cancel(this);

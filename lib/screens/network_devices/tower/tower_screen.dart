@@ -87,11 +87,16 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
 
   bool get _canEdit => Perms.has('devices.manage');
 
+  /// قائمة المشتركين تُطوى بعد هذا العدد (و«عرض الكلّ»).
+  static const _peersFold = 6;
+  final Set<int> _peersOpen = {};
+
   @override
   void initState() {
     super.initState();
     // أجهزةُ البرج تتغيّر في مكانٍ آخر (تعديل اسم/منطقة/حذف) — أعِد الجلب فوراً.
     DeviceEvents.changes.addListener(_onDevicesChanged);
+    DeviceStatsCache.instance.updated.addListener(_onCacheUpdated);
     _seedFromCache();
     _rearrange();
     _loadLayout();
@@ -122,6 +127,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
   @override
   void dispose() {
     DeviceEvents.changes.removeListener(_onDevicesChanged);
+    DeviceStatsCache.instance.updated.removeListener(_onCacheUpdated);
     for (final o in _owners.values) {
       DeepProbeScheduler.instance.cancel(o);
     }
@@ -145,6 +151,27 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
         at: v!.at,
       );
     }
+  }
+
+  /// قرأ قسمُ الأجهزة (الجدار) جهازاً من أجهزة البرج أحدث ممّا عندنا ⇒ نرسمه من المخزن فوراً، فلا يقول البرج رقماً
+  /// والجدار رقماً غيره حتى دورتنا القادمة.
+  void _onCacheUpdated() {
+    if (!mounted) return;
+    final id = DeviceStatsCache.instance.updated.value.id;
+    if (!_devices.any((d) => d.id == id)) return;
+    final v = DeviceStatsCache.instance.vitalsOf(id, DeviceStatsCache.seedTtl);
+    final detail = v?.detail;
+    if (v == null || detail is! DeviceDetail) return;
+    // بطاقة الجدار المطويّة تقرأ الخانات الثلاث وحدها (بلا منافذ ولا عملاء) — لا تحلّ محلّ قراءتنا الكاملة فيظهر «—».
+    if (detail.ports.isEmpty && detail.peers.isEmpty) return;
+    final cur = _readings[id];
+    if (cur != null && !v.at.isAfter(cur.at)) return;
+    _readings[id] = TowerReading.fromProbe(
+      ProbeResult(vitals: const [], detail: detail, counters: const {}, raw: DeviceStatsCache.instance.seedFor<Object>(id)),
+      at: v.at,
+    );
+    _failed.remove(id);
+    _scheduleFlush();
   }
 
   Future<void> _loadLayout() async {
@@ -198,8 +225,9 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
     }
   }
 
-  void _probeAll({bool first = false}) {
+  void _probeAll({bool first = false, int? only}) {
     for (final d in _devices) {
+      if (only != null && d.id != only) continue;
       if (_inFlight.contains(d.id)) continue;
       if (DeviceVitals.skipReason(d) != null) continue;
       _inFlight.add(d.id);
@@ -216,6 +244,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
           DeviceStatsCache.instance.putVitals(d.id, r.vitals, r.detail);
           DeviceStatsCache.instance.putSample(d.id, r.counters);
           if (!mounted) return;
+          // putVitals أعلاه نبّه _onCacheUpdated بالقراءة نفسها — هذا السطر يضمنها لو سبقه.
           _readings[d.id] = TowerReading.fromProbe(r);
           _failed.remove(d.id);
           _scheduleFlush();
@@ -284,8 +313,10 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
     });
   }
 
-  void _openDevice(NetworkDevice d) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => NetworkDeviceDetailsScreen(device: d)));
+  Future<void> _openDevice(NetworkDevice d) async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => NetworkDeviceDetailsScreen(device: d)));
+    // رجع من صفحة الجهاز (رأى أرقامها الحيّة) ⇒ نقرؤه الآن، لا بعد ٢٠ ثانية.
+    if (mounted) _probeAll(only: d.id);
   }
 
   void _select(int id, {_Mode? mode}) {
@@ -1222,7 +1253,17 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
             r?.voltage == null ? null : Grade.voltage(r!.voltage).fill),
       ]);
     }
-    final weakest = [...?r?.peers.where((p) => p.signal != null)]..sort((x, y) => x.signal!.compareTo(y.signal!));
+    // كلّ المتّصلين — الأضعف إشارةً أوّلاً ومن لا قراءة إشارةٍ له آخراً. كانت «أضعف ٣» وحدها فقال البرج «٥ مشتركين» وعرض ثلاثة
+    // (بلاغ المالك ٢٨ أكتوبر).
+    final weakest = [...?r?.peers]..sort((x, y) {
+        final a = x.signal, b = y.signal;
+        if (a == null && b == null) return 0;
+        if (a == null) return 1;
+        if (b == null) return -1;
+        return a.compareTo(b);
+      });
+    final peersOpen = _peersOpen.contains(d.id);
+    final shownPeers = peersOpen || weakest.length <= _peersFold ? weakest : weakest.take(_peersFold).toList();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
@@ -1283,12 +1324,19 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
           ],
           if (a.role == TowerRole.sector || a.role == TowerRole.ap) ...[
             const SizedBox(height: Sp.md),
-            Text('أضعف المشتركين إشارةً', style: AppType.bodyStrong(color: AppColors.textHi)),
+            Text(weakest.isEmpty ? 'المشتركون المتّصلون' : 'المشتركون المتّصلون (${weakest.length}) — الأضعف إشارةً أوّلاً',
+                style: AppType.bodyStrong(color: AppColors.textHi)),
             const SizedBox(height: 4),
             if (weakest.isEmpty)
               Text(r == null ? 'نقرأ الجهاز…' : 'لا مشتركين متّصلين الآن', style: AppType.muted(color: AppColors.textMid))
-            else
-              for (final p in weakest.take(3)) _peerRow(p),
+            else ...[
+              for (final p in shownPeers) _peerRow(p),
+              if (weakest.length > _peersFold)
+                TextButton(
+                  onPressed: () => setState(() => peersOpen ? _peersOpen.remove(d.id) : _peersOpen.add(d.id)),
+                  child: Text(peersOpen ? 'أقلّ' : 'عرض الكلّ (${weakest.length})'),
+                ),
+            ],
           ],
           const SizedBox(height: Sp.md),
           Row(children: [
@@ -1340,7 +1388,8 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
       decoration: BoxDecoration(color: AppColors.bg, borderRadius: BorderRadius.circular(R.sm)),
       child: Row(children: [
         Expanded(child: Text(iso(p.name), style: AppType.body(color: AppColors.textHi), maxLines: 1, overflow: TextOverflow.ellipsis)),
-        Text(iso('${p.signal} dBm'), style: AppType.bodyBold(color: tone.fill)),
+        // بلا قراءة إشارة ⇒ «—» لا «null dBm» (القائمة صارت تضمّهم آخراً).
+        Text(iso(p.signal == null ? '—' : '${p.signal} dBm'), style: AppType.bodyBold(color: p.signal == null ? AppColors.textLow : tone.fill)),
         if (p.ccq != null) ...[
           const SizedBox(width: 10),
           Text(iso('CCQ ${p.ccq}٪'), style: AppType.body(color: AppColors.textMid)),
