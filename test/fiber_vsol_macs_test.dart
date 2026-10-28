@@ -88,7 +88,7 @@ void main() {
     final interceptors = List<Interceptor>.of(ApiClient.dio.interceptors);
     ApiClient.dio.interceptors.clear();
     addTearDown(() => ApiClient.dio.interceptors
-      ..clear()
+      ..clear(keepImplyContentTypeInterceptor: false)
       ..addAll(interceptors));
     OltFiberReads.debugReset();
     agent = FakeSnmpAgent({

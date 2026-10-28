@@ -25,7 +25,7 @@ void main() {
       handler.reject(DioException(requestOptions: options, error: 'offline fixture'));
     }));
     addTearDown(() {
-      ApiClient.dio.interceptors.clear();
+      ApiClient.dio.interceptors.clear(keepImplyContentTypeInterceptor: false);
       ApiClient.dio.interceptors.addAll(oldInterceptors);
     });
     tester.view.physicalSize = const Size(320 * 3, 900 * 3);

@@ -296,7 +296,7 @@ void main() {
       addTearDown(() {
         ApiClient.dio.httpClientAdapter = adapter;
         ApiClient.dio.interceptors
-          ..clear()
+          ..clear(keepImplyContentTypeInterceptor: false)
           ..addAll(interceptors);
       });
       DeviceProbeApi.invalidateAdminDefaults();

@@ -22,7 +22,7 @@ void main() {
           DioException(requestOptions: options, error: 'offline fixture'));
     }));
     addTearDown(() {
-      ApiClient.dio.interceptors.clear();
+      ApiClient.dio.interceptors.clear(keepImplyContentTypeInterceptor: false);
       ApiClient.dio.interceptors.addAll(oldInterceptors);
     });
     const id = 99004452;
@@ -109,7 +109,7 @@ void main() {
           DioException(requestOptions: options, error: 'offline fixture'));
     }));
     addTearDown(() {
-      ApiClient.dio.interceptors.clear();
+      ApiClient.dio.interceptors.clear(keepImplyContentTypeInterceptor: false);
       ApiClient.dio.interceptors.addAll(oldInterceptors);
     });
     const id = 99004453;
