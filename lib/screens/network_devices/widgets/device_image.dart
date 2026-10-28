@@ -1,4 +1,5 @@
 import 'device_image_bdcom_catalog.dart';
+import 'device_image_cdata_catalog.dart';
 import 'device_image_hsgq_catalog.dart';
 import 'device_image_olt_catalog.dart';
 import 'device_image_ruijie_catalog.dart';
@@ -388,7 +389,28 @@ class DeviceImage extends StatelessWidget {
     return null;
   }
 
+  /// صورة أولت C-Data — لسجلٍّ مصنّعه C-Data وحده (العلامة `cdata`، أو vsol/other وطرازه أو اسمه يقول C-Data/FD1xxx):
+  /// طرازٌ له صورةٌ رسميّة في كتالوج الأولتيات (‏FD1304S-B2 …) أو في [kCdataCatalog] بمطابقةٍ تامّةٍ لكلمة، وإلّا صورة
+  /// العائلة المقاربة [kCdataFamilyPhoto] — بقرار المالك (٢٩ أكتوبر: «الصورة اي شي شبيه او مقارب اله»)، لأنّ الأولت لا
+  /// يُبلّغ طرازه.
+  static String? cdataAssetFor(String? model, {String? brand}) {
+    final b = (brand == null || brand.trim().isEmpty) ? 'other' : brand;
+    if (OltProfile.fromRecord(brand: b, model: model).vendor != OltVendor.cdata) return null;
+    for (final w in (model ?? '').split(RegExp(r'[\s,;()]+'))) {
+      final k = _key(w).replaceFirst(RegExp(r'^cdata'), '');
+      if (k.isEmpty) continue;
+      final official = kOltCatalog[k];
+      if (official != null && official.startsWith('olt/FD')) return official;
+      final own = kCdataCatalog[k.toUpperCase()];
+      if (own != null) return own;
+    }
+    return kCdataFamilyPhoto;
+  }
+
   static String? assetFor(String? model, {String? brand}) {
+    // C-Data أوّلاً: صورة طرازه أو صورة العائلة — ولو بلا طراز (الأولت لا يُبلّغه).
+    final cd = cdataAssetFor(model, brand: brand);
+    if (cd != null) return cd;
     if (model == null) return null;
     final bd = bdcomAssetFor(model, brand: brand);
     if (bd != null) return bd;
@@ -527,6 +549,8 @@ class DeviceImage extends StatelessWidget {
     if (file.startsWith('bdcom/')) return null;
     // وصور HSGQ كذلك: بوّابتها المصنّع والرمز التامّ (`hsgqAssetFor`).
     if (file.startsWith('hsgq/')) return null;
+    // وصورة C-Data المقاربة: بوّابتها المصنّع وحده (`cdataAssetFor`).
+    if (file.startsWith('cdata/')) return null;
     if (file.startsWith('vsol/')) {
       return (b == 'vsol' || b == 'other') ? file : null;
     }
@@ -559,6 +583,7 @@ class DeviceImage extends StatelessWidget {
       ...kOltCatalog.values,
       ...kBdcomCatalog.values,
       ...kHsgqCatalog.values,
+      ...kCdataCatalog.values,
     }.toList()
       ..sort();
     return v;

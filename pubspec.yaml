@@ -213,6 +213,8 @@ flutter:
     - assets/devices-images/bdcom/
     # أولتيات HSGQ — يدويّة من صفحة المصنّع. device_image_hsgq_catalog.dart
     - assets/devices-images/hsgq/
+    # أولتيات C-Data — صورة العائلة المقاربة بقرار المالك. device_image_cdata_catalog.dart
+    - assets/devices-images/cdata/
     - assets/images/
     - assets/translations/
 

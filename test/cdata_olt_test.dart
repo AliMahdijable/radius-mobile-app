@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -12,6 +13,8 @@ import 'package:rad_mysvcs/api/olt_profile.dart';
 import 'package:rad_mysvcs/api/snmp_client.dart';
 import 'package:rad_mysvcs/api/vsol_olt_api.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
+import 'package:rad_mysvcs/screens/network_devices/widgets/device_image.dart';
+import 'package:rad_mysvcs/screens/network_devices/widgets/device_image_cdata_catalog.dart';
 import 'package:rad_mysvcs/screens/network_devices/widgets/vsol_live_panel.dart';
 import 'package:rad_mysvcs/services/device_stats_cache.dart';
 import 'package:rad_mysvcs/theme/typography.dart';
@@ -297,6 +300,40 @@ void main() {
       expect(h.containsKey('EPON0/1'), isTrue);
       expect(h.containsKey('EPON0/1:22'), isFalse, reason: 'لا عدّادات لكلّ ONU — لا «0 bps» كاذب');
       expect(t0.isBefore(DateTime(2026, 10, 30)), isTrue);
+    });
+  });
+
+  group('الصورة — صورة الطراز الرسميّة، وإلّا صورة العائلة المقاربة (قرار المالك ٢٩ أكتوبر)', () {
+    const file = 'cdata/C-Data-FD1104SN-R1.webp';
+
+    test('سجلّ C-Data بلا طراز أو «C-Data OLT» ⇒ صورة العائلة؛ وطرازٌ رسميّ ⇒ صورته؛ وغير C-Data لا يأخذها', () {
+      expect(kCdataFamilyPhoto, file);
+      expect(DeviceImage.assetFor(null, brand: 'cdata'), file);
+      expect(DeviceImage.assetFor('', brand: 'cdata'), file);
+      expect(DeviceImage.assetFor('C-Data OLT', brand: 'vsol'), file, reason: 'ما يكتبه الكاشف على سجلّ vsol');
+      expect(DeviceImage.assetFor('C-Data OLT', brand: 'other'), file);
+      expect(DeviceImage.assetFor('FD1304S-B2', brand: 'cdata'), 'olt/FD1304S-B2.png', reason: 'الرسميّة تسبق المقاربة');
+      expect(DeviceImage.assetFor('C-Data FD1608S-B1', brand: 'other'), 'olt/FD1608S-B1.jpg');
+      expect(DeviceImage.assetFor('FD1608S-B1', brand: 'other'), 'olt/FD1608S-B1.jpg', reason: 'كما كان');
+      expect(DeviceImage.assetFor(null, brand: 'vsol'), isNull);
+      expect(DeviceImage.assetFor(null, brand: 'hsgq'), isNull);
+      expect(DeviceImage.assetFor('V1600D', brand: 'vsol'), isNot(file));
+      expect(DeviceImage.assetFor('C-Data', brand: 'mikrotik'), isNot(file), reason: 'علامةٌ لها لوحتها');
+      expect(DeviceImage.assetFor('HSGQ-XE04R', brand: 'hsgq'), 'hsgq/HSGQ-XE04R.webp', reason: 'HSGQ كما كان');
+    });
+
+    test('المنتقي ذهاباً وإياباً، والملفّ WebP حقيقيّ بأبعاده الموثّقة', () {
+      expect(DeviceImage.allAssets, contains(file));
+      expect(DeviceImage.boardNameOf(file), 'C-Data-FD1104SN-R1');
+      expect(DeviceImage.assetFor(DeviceImage.boardNameOf(file), brand: 'vsol'), file);
+      expect(DeviceImage.assetFor(DeviceImage.boardNameOf(file), brand: 'cdata'), file);
+      final b = File('assets/devices-images/$file').readAsBytesSync();
+      expect(ascii.decode(b.sublist(0, 4)), 'RIFF');
+      expect(ascii.decode(b.sublist(8, 12)), 'WEBP');
+      expect(ascii.decode(b.sublist(12, 16)), 'VP8 ');
+      final w = (b[26] | (b[27] << 8)) & 0x3fff;
+      final h = (b[28] | (b[29] << 8)) & 0x3fff;
+      expect('${w}x$h', '481x66');
     });
   });
 

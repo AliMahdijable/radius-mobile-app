@@ -237,14 +237,21 @@ void main() {
       }
     });
 
-    test('صور C-Data/FiberHome تُقبل على «أخرى» وحدها', () {
+    test('صور C-Data/FiberHome تُقبل على «أخرى» — وC-Data على علامتها وعلى vsol بطرازها', () {
       expect(DeviceImage.assetFor('FD1608S-B1', brand: 'other'),
           'olt/FD1608S-B1.jpg');
       expect(DeviceImage.assetFor('AN6000-17', brand: 'other'),
           'olt/AN6000-17.png');
-      for (final b in ['mikrotik', 'vsol', 'ruijie', 'ubnt']) {
+      // ٢٩ أكتوبر: علامة `cdata`، وسجلٌّ `vsol` طرازه يقول C-Data (اختار الوكيل أقرب علامةٍ قبلها) — كـHSGQ.
+      expect(DeviceImage.assetFor('FD1608S-B1', brand: 'cdata'),
+          'olt/FD1608S-B1.jpg');
+      expect(DeviceImage.assetFor('FD1608S-B1', brand: 'vsol'),
+          'olt/FD1608S-B1.jpg');
+      for (final b in ['mikrotik', 'ruijie', 'ubnt']) {
         expect(DeviceImage.assetFor('FD1608S-B1', brand: b), isNull);
       }
+      expect(DeviceImage.assetFor('AN6000-17', brand: 'vsol'), isNull,
+          reason: 'FiberHome على «أخرى» وحدها كما كان');
     });
   });
 
