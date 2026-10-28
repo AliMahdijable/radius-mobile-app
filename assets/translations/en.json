@@ -1593,6 +1593,7 @@
     "locked_title": "Trial ended for this company",
     "locked_body": "Your account is free for SuperNet only. Delete this company to stay free, or activate a subscription code to run it. Your account on the ISP system is not touched.",
     "locked_body_neutral": "The trial period for this company has ended. You can delete it from your list — your account on the ISP system is not touched.",
+    "locked_body_expired": "Your account subscription has ended. Activate a subscription code to run it, or delete it from your list — your account on the ISP system is not touched.",
     "delete_company": "Delete company",
     "company_not_active_neutral": "This company isn't active for your account right now.",
     "banner_ends_on": "The account subscription ends on {}",

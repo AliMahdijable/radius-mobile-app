@@ -137,6 +137,20 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
 
+  testWidgets('الكلّ متوقّف (إعفاء سوبرنت مُلغى): النافذة تقول «انتهى اشتراك حسابك» لا «مجّاني لسوبرنت»', (t) async {
+    account.companies = [
+      for (final c in _companies()) {...c, 'locked': true}
+    ];
+    await pump(t);
+    expect(find.text('انتهت التجربة للشركات الأخرى'), findsNothing);
+    await t.tap(find.text('SuperNet'));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('انتهى اشتراك حسابك'), findsOneWidget);
+    expect(find.textContaining('حسابك مجّاني لشركة سوبرنت'), findsNothing);
+    await t.pumpWidget(const SizedBox());
+  });
+
   test('LinkedCompany.locked: من الخادم، وغيابه false، والموظّف لا يُقفل', () {
     expect(LinkedCompany.fromJson({'sasCode': 'x', 'username': 'u', 'locked': true}).locked, isTrue);
     expect(LinkedCompany.fromJson({'sasCode': 'x', 'username': 'u'}).locked, isFalse);

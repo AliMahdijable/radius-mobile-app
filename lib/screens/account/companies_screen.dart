@@ -136,13 +136,16 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
   Future<void> _lockedDialog(LinkedCompany c) async {
     HapticFeedback.mediumImpact();
     final neutral = StorePolicy.hidePurchaseFlows;
+    // سوبرنت مفتوحةٌ مجّاناً لهذا الحساب؟ وإلّا فالاشتراك منتهٍ للكلّ (إعفاءٌ أُلغي) — لا «مجّاني لسوبرنت».
+    final freeHome = _items?.any((x) => !x.locked && !x.isEmployee) ?? false;
+    final body = neutral ? 'account.locked_body_neutral' : (freeHome ? 'account.locked_body' : 'account.locked_body_expired');
     final pick = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
         title: Text('account.locked_title'.tr(), style: AppType.sheetTitle(color: AppColors.textHi)),
         content: Text(
-          '${c.label} (${c.username})\n\n${(neutral ? 'account.locked_body_neutral' : 'account.locked_body').tr()}',
+          '${c.label} (${c.username})\n\n${body.tr()}',
           style: AppType.subtitle(color: AppColors.textMid).copyWith(height: 1.55),
         ),
         actions: [
