@@ -5,12 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../api/network_devices_api.dart';
 import '../../../api/tower_api.dart';
 import '../../../core/util/bidi.dart';
 import '../../../core/widgets/permission_locked.dart';
 import '../../../models/network_device.dart';
 import '../../../models/tower_layout.dart';
 import '../../../services/deep_probe_scheduler.dart';
+import '../../../services/device_events.dart';
 import '../../../services/device_stats_cache.dart';
 import '../../../services/permissions_service.dart';
 import '../../../theme/colors.dart';
@@ -65,6 +67,10 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
   Map<int, ArrangedDevice> _arranged = const {};
   List<TowerAlert> _alerts = const [];
 
+  /// أجهزة البرج — لقطةٌ حيّة تُعاد جلبها عند أيّ تغيير (تعديل اسم/منطقة/حذف)،
+  /// لا لقطةٌ مجمَّدة من لحظة الفتح. (المالك ٢٧ أكتوبر — «عرض البرج ما يتحدّث».)
+  late List<NetworkDevice> _devices = widget.devices;
+
   _Mode _mode = _Mode.side;
   _Sort _sort = _Sort.clients;
   double _view = _startView;
@@ -84,6 +90,8 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
   @override
   void initState() {
     super.initState();
+    // أجهزةُ البرج تتغيّر في مكانٍ آخر (تعديل اسم/منطقة/حذف) — أعِد الجلب فوراً.
+    DeviceEvents.changes.addListener(_onDevicesChanged);
     _seedFromCache();
     _rearrange();
     _loadLayout();
@@ -113,6 +121,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
 
   @override
   void dispose() {
+    DeviceEvents.changes.removeListener(_onDevicesChanged);
     for (final o in _owners.values) {
       DeepProbeScheduler.instance.cancel(o);
     }
@@ -126,7 +135,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
   // ── البيانات ────────────────────────────────────────────────────────────────────────────
 
   void _seedFromCache() {
-    for (final d in widget.devices) {
+    for (final d in _devices) {
       final v = DeviceStatsCache.instance.vitalsOf(d.id, DeviceStatsCache.seedTtl);
       final detail = v?.detail;
       if (detail is! DeviceDetail) continue;
@@ -145,7 +154,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
       _loadedLayout = r.ok;
       if (r.ok) {
         _settings = r.layouts.towers[widget.regionId] ?? TowerSettings(regionId: widget.regionId);
-        final ids = {for (final d in widget.devices) d.id};
+        final ids = {for (final d in _devices) d.id};
         _saved = {
           for (final e in r.layouts.placements.entries)
             if (ids.contains(e.key)) e.key: e.value,
@@ -156,7 +165,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
   }
 
   void _rearrange() {
-    _arranged = TowerArrange.arrange(widget.devices, readings: _readings, saved: _saved);
+    _arranged = TowerArrange.arrange(_devices, readings: _readings, saved: _saved);
     _alerts = TowerAttention.compute(_arranged, _readings);
     if (_sel == null || !_arranged.containsKey(_sel)) {
       final link = _arranged.values.where((a) => a.role == TowerRole.link);
@@ -164,8 +173,33 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
     }
   }
 
+  /// تغيّرت الأجهزة في مكانٍ آخر — نافذة البرج ترسمها فوراً.
+  void _onDevicesChanged() {
+    if (mounted) _reloadTowerDevices();
+  }
+
+  /// يُعيد جلب أجهزة هذا البرج (حسب منطقته) ويعيد الترتيب فوراً — فيظهر الاسم
+  /// الجديد، وتدخل الأجهزة المنقولة للمنطقة، وتختفي المنقولة منها أو المحذوفة.
+  Future<void> _reloadTowerDevices() async {
+    try {
+      final all = await NetworkDevicesApi.list();
+      if (!mounted) return;
+      final mine = [
+        for (final d in all)
+          if (widget.regionId == 0 ? d.regionId == null : d.regionId == widget.regionId) d,
+      ];
+      setState(() {
+        _devices = mine;
+        _rearrange();
+      });
+      _probeAll(); // الأجهزة الجديدة تُقرأ.
+    } catch (_) {
+      // فشل الجلب لا يُسقط اللقطة الحاليّة.
+    }
+  }
+
   void _probeAll({bool first = false}) {
-    for (final d in widget.devices) {
+    for (final d in _devices) {
       if (_inFlight.contains(d.id)) continue;
       if (DeviceVitals.skipReason(d) != null) continue;
       _inFlight.add(d.id);
@@ -212,7 +246,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
       builder: (_) => TowerBuilderScreen(
         regionId: widget.regionId,
         regionName: widget.regionName,
-        devices: widget.devices,
+        devices: _devices,
         readings: Map.unmodifiable(_readings),
         saved: _saved,
         settings: _settings,
@@ -236,7 +270,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
     }
     final res = await Navigator.of(context).push<Map<int, TowerPlacement>>(MaterialPageRoute(
       builder: (_) => TowerPlaceScreen(
-        devices: widget.devices,
+        devices: _devices,
         arranged: _arranged,
         startDeviceId: deviceId,
         settings: _settings,
@@ -278,7 +312,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
-    final online = widget.devices.where((d) => d.lastStatus != 'offline' && !_failed.contains(d.id)).length;
+    final online = _devices.where((d) => d.lastStatus != 'offline' && !_failed.contains(d.id)).length;
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: deskPageBar(
@@ -343,7 +377,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
       );
 
   Widget _liveLine(int online) {
-    final total = widget.devices.length;
+    final total = _devices.length;
     return Padding(
       padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.sm),
       child: Row(children: [
@@ -401,7 +435,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
         const SizedBox(width: Sp.sm),
         tile('المشتركون', subs == null ? '—' : '$subs', 'على $servers جهاز'),
         const SizedBox(width: Sp.sm),
-        tile('الأجهزة', '$online/${widget.devices.length}', online == widget.devices.length ? 'كلّها تردّ' : 'بعضها لا يردّ'),
+        tile('الأجهزة', '$online/${_devices.length}', online == _devices.length ? 'كلّها تردّ' : 'بعضها لا يردّ'),
       ]),
     );
   }

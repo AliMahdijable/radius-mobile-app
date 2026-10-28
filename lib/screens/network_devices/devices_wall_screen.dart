@@ -9,6 +9,7 @@ import '../../core/util/bidi.dart';
 import '../../models/device_region.dart';
 import '../../models/network_device.dart';
 import '../../services/device_alerts_service.dart';
+import '../../services/device_events.dart';
 import '../../services/device_stats_cache.dart';
 import '../../services/device_sweep_coordinator.dart';
 import '../../services/deep_probe_scheduler.dart';
@@ -90,13 +91,21 @@ class _DevicesWallScreenState extends State<DevicesWallScreen>
     // بالتوازي لولا هذا.
     DeviceSweep.acquire();
     WidgetsBinding.instance.addObserver(this);
+    // تحديثٌ فوريّ حين يتغيّر أيّ جهاز (تعديل/حذف/إضافة) من أيّ شاشة.
+    DeviceEvents.changes.addListener(_onDevicesChanged);
     _load();
+  }
+
+  /// تغيّرت الأجهزة في مكانٍ آخر — أعِد جلب النظرة العامّة بصمت.
+  void _onDevicesChanged() {
+    if (mounted && !_loading) _load(silent: true);
   }
 
   @override
   void dispose() {
     _timer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
+    DeviceEvents.changes.removeListener(_onDevicesChanged);
     DeviceSweep.release();
     _vitals.dispose();
     super.dispose();

@@ -6,6 +6,7 @@ import '../../api/bdcom_epon.dart';
 import '../../api/bridge_fdb.dart';
 import '../../api/broadcast_api.dart';
 import '../../api/fiber_api.dart';
+import '../../api/hsgq_olt.dart';
 import '../../api/network_devices_api.dart';
 import '../../api/olt_fiber_reads.dart';
 import '../../api/olt_profile.dart';
@@ -114,6 +115,10 @@ class FiberMonitor extends ChangeNotifier {
   VsolOltStats? stats;
   DateTime? statsAt;
   final Map<String, VsolTraffic> ponRates = {};
+
+  /// آخر لقطةٍ تحرّكت عدّاداتها — مرجعيّة معدّل المنافذ (انظر [VsolTraffic.frozenBetween]).
+  VsolOltStats? _ctrRef;
+  DateTime? _ctrRefAt;
   List<FiberOnuLive> onus = const [];
   List<FiberOutage> outages = const [];
   FiberOltCaps? caps;
@@ -296,12 +301,25 @@ class FiberMonitor extends ChangeNotifier {
         try {
           cur = await backend.hot(device, community, cur);
         } catch (_) {/* بلا عدّادات هذه المرّة */}
-        if (prev != null && prevAt != null && prev.hasCounters && cur.hasCounters) {
-          final fresh = VsolTraffic.between(prev, cur, now.difference(prevAt));
-          for (final p in cur.ponPorts) {
-            final v = fresh[p.label];
-            if (v != null && v.known) ponRates[p.label] = v;
+        // المرجعيّة آخر عدّاداتٍ **تحرّكت** — أولتٌ يُحدّثها دوريّاً (HSGQ كلّ ~٣١ث) يُرجعها كما هي بين دورتين، فالفرق
+        // صفرٌ «لم يُحدَّث» لا «لا ترفك»؛ ولغيره هي لقطة الدورة السابقة كما كانت.
+        final ref = _ctrRef ?? prev;
+        final refAt = _ctrRefAt ?? prevAt;
+        // مرجعيّةٌ أقدم من دقيقتين (عودةٌ من الخلفيّة) لا يُقاس عليها: عدّاد ٣٢ بت قد التفّ أكثر من مرّة بينهما.
+        final recent = refAt != null && now.difference(refAt) <= const Duration(minutes: 2);
+        if (ref != null && refAt != null && recent && ref.hasCounters && cur.hasCounters) {
+          if (!VsolTraffic.frozenBetween(profile, ref, cur, now.difference(refAt))) {
+            final fresh = VsolTraffic.between(ref, cur, now.difference(refAt));
+            for (final p in cur.ponPorts) {
+              final v = fresh[p.label];
+              if (v != null && v.known) ponRates[p.label] = v;
+            }
+            _ctrRef = cur;
+            _ctrRefAt = now;
           }
+        } else if (cur.hasCounters) {
+          _ctrRef = cur;
+          _ctrRefAt = now;
         }
         if (cur.hasCounters) {
           stats = cur;
@@ -314,7 +332,8 @@ class FiberMonitor extends ChangeNotifier {
       final reasonTargets = firstPass ? offlineNow : [for (final o in changed) if (!o.online) o];
       if (changeTargets.isNotEmpty || reasonTargets.isNotEmpty) {
         final got = await Future.wait<Object>([
-          changeTargets.isEmpty
+          // HSGQ لا يعطي اللحظة (فهرس الـONU فهرس جدول المصنّع لا IF-MIB) ⇒ لا يُسأل؛ لحظة رصدنا وحدها تحت.
+          changeTargets.isEmpty || profile.readsHsgqTables
               ? Future.value(const <int, DateTime>{})
               : OltFiberReads.lastChanges(snmp, changeTargets.map((o) => o.ifIndex), now: now),
           reasonTargets.isEmpty
@@ -542,7 +561,8 @@ class FiberMonitor extends ChangeNotifier {
       _epon = _epon.copyWith(onuMacs: macs, macsAt: at);
       _macsAt = at;
     }
-    for (final e in byIdx<double>(j['rx'], (v) => v is num ? v.toDouble() : null).entries) {
+    // المعقول وحده يُخزَّن (كمسار القراءة الحيّ): لقطةٌ تالفة أو قديمة لا تحقن rx غير معقول يرمي عنده `FiberBands.of(rx)!`.
+    for (final e in byIdx<double>(j['rx'], (v) => v is num && FiberBands.plausible(v.toDouble()) ? v.toDouble() : null).entries) {
       _optics[e.key] = BdcomOnuReading(rxDbm: e.value);
     }
     _changes.addAll(byIdx<DateTime>(j['ch'], (v) => v is String ? DateTime.tryParse(v) : null));
@@ -559,7 +579,7 @@ class FiberMonitor extends ChangeNotifier {
 
   /// لحظة اتّصال جهازٍ واحد حين يُفتح (التشخيص/الفنّي) — الدورة الأولى تقرؤها للمفصولة وحدها.
   Future<void> ensureChangedAt(VsolOnu o) async {
-    if (_changes.containsKey(o.ifIndex)) return;
+    if (_changes.containsKey(o.ifIndex) || profile.readsHsgqTables) return;
     final community = await backend.community(device);
     if (community == null) return;
     final r = await OltFiberReads.lastChanges(backend.snmp(device, community), [o.ifIndex], now: clock());
@@ -573,6 +593,11 @@ class FiberMonitor extends ChangeNotifier {
   Future<void> _readDevices(SnmpV2c snmp, VsolOltStats s) async {
     VsolGponSnapshot? vsolTable;
     final epon = s.onus.where((o) => o.technology == VsolPonTechnology.epon).toList();
+    // HSGQ: لا جدول جسر — «غير متوفّر» صريحاً (لا «لا أجهزة»)، وماك الـONU جاء مع البنية.
+    if (epon.isNotEmpty && profile.readsHsgqTables) {
+      _epon = _epon.copyWith(fdb: FdbSnapshot.unsupported, fdbAt: clock());
+      return;
+    }
     if (epon.isNotEmpty && profile.vendor != OltVendor.unknown) {
       final known = {for (final o in epon) o.ifIndex};
       var next = _epon;
@@ -766,9 +791,14 @@ class FiberMonitor extends ChangeNotifier {
     final snmp = backend.snmp(device, community);
     bool? up;
     try {
-      final vb = await snmp.get(['${OltFiberReads.ifOperStatusOid}.${o.ifIndex}']);
-      final v = vb.isEmpty ? null : vb.first.asIntOrNull;
-      if (v != null) up = v == 1;
+      if (profile.readsHsgqTables) {
+        // HSGQ: حالة الـONU من جدول المصنّع — صفّها في IF-MIB لا يطابق موضعها.
+        up = (await HsgqOlt.statusOf(snmp.get, [o.ifIndex]))?[o.ifIndex];
+      } else {
+        final vb = await snmp.get(['${OltFiberReads.ifOperStatusOid}.${o.ifIndex}']);
+        final v = vb.isEmpty ? null : vb.first.asIntOrNull;
+        if (v != null) up = v == 1;
+      }
     } catch (_) {/* لا جواب — نجرّب الضوء على آخر حالةٍ معروفة */}
     if (up == false || (up == null && !o.online)) return (online: up, reading: null);
     final reading = await _readOptics(snmp, o.online ? o : o.copyWith(online: true));
@@ -792,6 +822,15 @@ class FiberMonitor extends ChangeNotifier {
     final byIf = {for (final o in s.onus) o.ifIndex: o};
     const base = OltFiberReads.ifOperStatusOid;
     Future<Map<int, bool>?> read() async {
+      // HSGQ: عمود الحالة في جدول المصنّع بالـGET لكلّ ONU معروفة (~٧ دفعات لمئة، ~١٥٠ مللي) — لا مسح.
+      if (profile.readsHsgqTables) {
+        try {
+          final got = await HsgqOlt.statusOf(snmp.get, byIf.keys);
+          return got == null || got.isEmpty ? null : got;
+        } catch (_) {
+          return null;
+        }
+      }
       try {
         final rows = await snmp.walk(base, chunkSize: 50, maxIterations: 60);
         final out = <int, bool>{};
@@ -836,7 +875,9 @@ class FiberMonitor extends ChangeNotifier {
   Future<BdcomOnuReading?> _readOptics(SnmpV2c snmp, VsolOnu o) async {
     final Map<int, BdcomOnuReading> r = profile.readsBdcomEponTables
         ? await BdcomEpon.readings(snmp, [o.ifIndex])
-        : await OltFiberReads.vsolOptics(snmp, [o]);
+        : profile.readsHsgqTables
+            ? await HsgqOlt.readings(snmp.get, [o.ifIndex])
+            : await OltFiberReads.vsolOptics(snmp, [o]);
     final reading = r[o.ifIndex];
     if (reading != null) {
       _optics[o.ifIndex] = reading;

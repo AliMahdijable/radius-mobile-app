@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../services/fiber/fiber_band.dart';
 import '../services/fiber/fiber_onu.dart';
 import 'bdcom_epon.dart';
+import 'hsgq_olt.dart';
 import 'olt_profile.dart';
 import 'snmp_client.dart';
 import 'vsol_olt_api.dart';
@@ -288,6 +289,9 @@ class OltFiberReads {
         final r = dbm(vb);
         if (FiberBands.plausible(r)) out[o.ifIndex] = r!;
       }
+    } else if (profile.readsHsgqTables) {
+      // ⚠️ GET لا مسح: مسح جدول الضوء على HSGQ يُعلّق وكيله ([HsgqOlt]). ~٢٠ مللي لكلّ ستّ عشرة قيمة.
+      return HsgqOlt.rxOnly(snmp.get, [for (final o in online) o.ifIndex]);
     } else {
       return const {};
     }
@@ -393,6 +397,11 @@ class OltFiberReads {
     bool Function()? isCancelled,
   }) async {
     final list = onus.toList();
+    // HSGQ: الاسم من جدول المصنّع بالـGET — ifAlias لصفوف الـONU لا يطابق موضعها، والافتراضيّ «ONU01/07» يُهمل.
+    if (profile.readsHsgqTables) {
+      final n = await HsgqOlt.names(snmp.get, list.map((o) => o.ifIndex), isCancelled: isCancelled);
+      return n == null ? null : cleanNames(n);
+    }
     final byIf = {for (final o in list) o.ifIndex: o};
     final out = <int, String>{};
     String? text(Varbind? vb) {
@@ -454,8 +463,14 @@ class OltFiberReads {
     final sample = [...online, ...offline];
     final at = now ?? DateTime.now();
 
-    final changes = await lastChanges(snmp, sample.map((o) => o.ifIndex), now: at);
-    final optics = profile.readsVsolTables ? await vsolOptics(snmp, online) : const <int, BdcomOnuReading>{};
+    // HSGQ: فهرس الـONU فهرس جدول المصنّع لا IF-MIB — ifLastChange لا يعرفه، فلا يُسأل (ولا لحظة سقوطٍ عنده أصلاً).
+    final hsgq = profile.readsHsgqTables;
+    final changes = hsgq ? const <int, DateTime>{} : await lastChanges(snmp, sample.map((o) => o.ifIndex), now: at);
+    final optics = profile.readsVsolTables
+        ? await vsolOptics(snmp, online)
+        : hsgq
+            ? await HsgqOlt.readings(snmp.get, online.map((o) => o.ifIndex))
+            : const <int, BdcomOnuReading>{};
     final reasons = await dropReasons(snmp, profile, offline);
     final rawReasons = <String, int>{};
     if (offline.isNotEmpty) {

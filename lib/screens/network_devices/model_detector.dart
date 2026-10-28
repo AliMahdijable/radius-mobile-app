@@ -53,7 +53,7 @@ class ModelDetector {
       if (!DetectedModel.needsDetection(d)) return false;
       if (d.lastStatus != 'online') return false;
       final b = d.brand.toLowerCase();
-      if (const ['mikrotik', 'ubnt', 'mimosa', 'roji', 'ruijie', 'cisco', 'vsol', 'bdcom']
+      if (const ['mikrotik', 'ubnt', 'mimosa', 'roji', 'ruijie', 'cisco', 'vsol', 'bdcom', 'hsgq']
           .contains(b)) {
         return true;
       }
@@ -209,8 +209,16 @@ class ModelDetector {
       timeout: const Duration(seconds: 4),
     );
     try {
-      final r = await snmp.get(['1.3.6.1.2.1.1.1.0']);
-      final descr = r.isEmpty ? null : r.first.asString;
+      final r = await snmp.get(['1.3.6.1.2.1.1.1.0', '1.3.6.1.2.1.1.2.0']);
+      String? descr, objectId;
+      for (final vb in r) {
+        if (vb.isAbsent) continue;
+        if (vb.oid == '1.3.6.1.2.1.1.1.0') descr = vb.asString;
+        if (vb.oid == '1.3.6.1.2.1.1.2.0') objectId = vb.asString;
+      }
+      // HSGQ: وصفه «EPON OLT» بلا طراز، والبصمة مؤسّسته (50224) — «HSGQ OLT» في السجلّ يجعل `OltProfile` يعرفه ولو
+      // سُجّل `other` أو بالاسم الذي على الجهاز.
+      if (objectId != null && objectId.startsWith(OltProfile.hsgqEnterprise)) return 'HSGQ OLT';
       return _modelFromSysDescr(descr);
     } catch (_) {
       return null;

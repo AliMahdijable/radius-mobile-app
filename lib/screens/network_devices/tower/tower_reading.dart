@@ -191,9 +191,22 @@ class TowerReading {
     final probeAp = wireless && peers.length >= 2;
     final station = (mode ?? '').toLowerCase().startsWith('sta') || (mode ?? '').toLowerCase().contains('station');
     if (radioPort != null) {
-      // من نقطة الوصول نحو المشتركين = ما تُرسله (tx)؛ والمستقبِل ينزّل ما يستقبله (rx).
-      down = station ? radioPort.rxBps : radioPort.txBps;
-      up = station ? radioPort.txBps : radioPort.rxBps;
+      final rx = radioPort.rxBps;
+      final tx = radioPort.txBps;
+      if (station) {
+        // مستقبِل (sta): ينزّل ما يستقبله (rx) ويرفع ما يرسله (tx).
+        down = rx;
+        up = tx;
+      } else if (probeAp) {
+        // نقطة وصولٍ تخدم مشتركين (≥٢ أطراف): التنزيل = ما تُرسله إليهم (tx).
+        down = tx;
+        up = rx;
+      } else {
+        // لنك PtP (طرفٌ واحد): مود AirFiber «master/slave» لا يدلّ على الاتّجاه، فكان يُحسب
+        // tx تنزيلاً فيُقلَب (الرفع يظهر مكان التنزيل). التنزيل = الاتّجاه الأكبر (الوارد للبرج غالباً).
+        down = rx == null && tx == null ? null : ((rx ?? 0) >= (tx ?? 0) ? rx : tx);
+        up = rx == null && tx == null ? null : ((rx ?? 0) >= (tx ?? 0) ? tx : rx);
+      }
     } else if (busiest != null) {
       final rx = busiest.rxBps;
       final tx = busiest.txBps;

@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/device_region.dart';
 import '../models/network_device.dart';
+import '../services/device_events.dart';
 import 'api_client.dart';
 import '../core/net/windows_icmp.dart';
 import '../core/platform/app_platform.dart';
@@ -75,6 +76,7 @@ class NetworkDevicesApi {
     if (r.data?['success'] != true) {
       throw Exception(r.data?['message'] ?? 'فشل إضافة الجهاز');
     }
+    DeviceEvents.bump();
     return NetworkDevice.fromJson(r.data!['data'] as Map<String, dynamic>);
   }
 
@@ -87,6 +89,7 @@ class NetworkDevicesApi {
     if (r.data?['success'] != true) {
       throw Exception(r.data?['message'] ?? 'فشل التعديل');
     }
+    DeviceEvents.bump();
     return NetworkDevice.fromJson(r.data!['data'] as Map<String, dynamic>);
   }
 
@@ -98,6 +101,7 @@ class NetworkDevicesApi {
     if (r.data?['success'] != true) {
       throw Exception(r.data?['message'] ?? 'فشل الحذف');
     }
+    DeviceEvents.bump();
   }
 
   /// POST /api/v2/admin/devices/bulk-create — يُنشئ مجموعة أجهزة بطلب واحد.
@@ -123,6 +127,7 @@ class NetworkDevicesApi {
       throw Exception(msg);
     }
     final list = (r.data?['created'] as List?) ?? const [];
+    DeviceEvents.bump();
     return list
         .whereType<Map>()
         .map((m) => NetworkDevice.fromJson(Map<String, dynamic>.from(m)))
@@ -149,6 +154,7 @@ class NetworkDevicesApi {
     final requested = (r.data?['requested'] is int)
         ? r.data!['requested'] as int
         : ids.length;
+    DeviceEvents.bump();
     return (deleted: deleted, requested: requested);
   }
 
@@ -682,6 +688,7 @@ class NetworkDevicesApi {
     if (r.data?['success'] != true) {
       throw Exception(r.data?['message'] ?? 'فشل الإضافة');
     }
+    DeviceEvents.bump();
     return DeviceRegion.fromJson(r.data!['data'] as Map<String, dynamic>);
   }
 
@@ -703,6 +710,7 @@ class NetworkDevicesApi {
     if (r.data?['success'] != true) {
       throw Exception(r.data?['message'] ?? 'فشل التعديل');
     }
+    DeviceEvents.bump();
     return DeviceRegion.fromJson(r.data!['data'] as Map<String, dynamic>);
   }
 
@@ -715,6 +723,7 @@ class NetworkDevicesApi {
     if (r.data?['success'] != true) {
       throw Exception(r.data?['message'] ?? 'فشل الحذف');
     }
+    DeviceEvents.bump();
     final n = r.data?['devices_unassigned'];
     return (n is int) ? n : int.tryParse('$n') ?? 0;
   }

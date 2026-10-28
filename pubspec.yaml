@@ -211,6 +211,8 @@ flutter:
     - assets/devices-images/olt/
     # أولتيات BDCOM — يدويّة بمصدرها. device_image_bdcom_catalog.dart
     - assets/devices-images/bdcom/
+    # أولتيات HSGQ — يدويّة من صفحة المصنّع. device_image_hsgq_catalog.dart
+    - assets/devices-images/hsgq/
     - assets/images/
     - assets/translations/
 

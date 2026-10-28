@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/bdcom_epon.dart';
 import '../../../api/bridge_fdb.dart';
+import '../../../api/hsgq_olt.dart';
 import '../../../api/network_devices_api.dart';
 import '../../../api/olt_profile.dart';
 import '../../../api/vsol_olt_api.dart';
@@ -192,6 +193,22 @@ class _VsolLivePanelState extends State<VsolLivePanel>
   }
 
   @override
+  void didUpdateWidget(VsolLivePanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // عُدّل الجهاز (براند/طراز/سجلّ OLT) من شاشة التعديل — أعِد حساب الملف
+    // فورَ ما يُعيد الأب البناء، فلا يبقى الطراز/المصنّع على القيمة القديمة
+    // حتى إعادة فتح الصفحة. الاسم يُقرأ من widget.device مباشرةً فيتحدّث وحده.
+    if (oldWidget.device.brand != widget.device.brand ||
+        oldWidget.device.model != widget.device.model) {
+      final p = OltProfile.fromDevice(widget.device);
+      // لا تدُس هويّةً حيّةً مؤكّدة من SNMP بتخمينٍ من السجلّ.
+      if (!(_profile.identified) || p.identified) {
+        setState(() => _profile = p);
+      }
+    }
+  }
+
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
@@ -219,7 +236,9 @@ class _VsolLivePanelState extends State<VsolLivePanel>
     // ⚡ ما دمنا بلا معدّلٍ بعد، فالنبضة التالية **فوريّة**: المعدّل
     // يحتاج قراءةً ثانية، وكلّ انتظارٍ هنا يُضاف إلى زمن ظهور أوّل
     // رقم. والقراءة السريعة ثانيةٌ واحدة.
-    final gap = _rates.isEmpty && _stats != null && !_loading && _error == null
+    // ⚠️ إلّا على أولتٍ يُحدّث عدّاداته دوريّاً (HSGQ كلّ ~٣١ث): القراءة الثانية الفوريّة تُرجع القيمة نفسها، فـ«فوريّة»
+    // حتى يظهر معدّلٌ كانت تُصبح سيلاً متّصلاً من الطلبات نصف دقيقة.
+    final gap = _rates.isEmpty && _stats != null && !_loading && _error == null && _profile.countersRefresh == null
         ? Duration.zero
         : _interval;
     // Await the read before rearming, including while the first rate is pending.
@@ -337,7 +356,11 @@ class _VsolLivePanelState extends State<VsolLivePanel>
       final ref = wantAll ? _prevAll : _prevHot;
       final refAt = wantAll ? _prevAllAt : _prevHotAt;
       final rates = Map<String, VsolTraffic>.from(_rates);
-      if (ref != null && refAt != null && ref.hasCounters && s.hasCounters) {
+      // عدّاداتٌ لم يُحدّثها الجهاز بعد (HSGQ: كلّ ~٣١ث) ⇒ لا معدّل ولا تتقدّم المرجعيّة: يبقى آخر معدّلٍ صحيح، ويُحسب
+      // التالي بين القيمتين المختلفتين بختميهما — لا صفرٌ ثمّ قفزةٌ بعشرة أضعاف.
+      final frozen = ref != null && refAt != null && ref.hasCounters && s.hasCounters &&
+          VsolTraffic.frozenBetween(_profile, ref, s, at.difference(refAt));
+      if (ref != null && refAt != null && ref.hasCounters && s.hasCounters && !frozen) {
         final fresh = VsolTraffic.between(ref, s, at.difference(refAt));
         if (wantAll) {
           rates.addAll(fresh);
@@ -374,7 +397,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
         }
         if (wantFull && s.ifNames.isNotEmpty) unawaited(OltNameCache.put(widget.device.id, s.ifNames));
         // ولا نحفظها عيّنةً للمرّة القادمة كذلك.
-        if (s.hasCounters) {
+        if (s.hasCounters && !frozen) {
           _prevHot = s;
           _prevHotAt = at;
           if (wantAll) {
@@ -513,19 +536,27 @@ class _VsolLivePanelState extends State<VsolLivePanel>
         if (o.technology == VsolPonTechnology.epon) o,
     ];
     final bdcom = _profile.readsBdcomEponTables;
+    // HSGQ: ماك الـONU يأتي مع البنية؛ هنا الصانع/الطراز والضوء والمعالج — بالـGET ([HsgqOlt]).
+    final hsgq = _profile.readsHsgqTables;
+    final tables = bdcom || hsgq;
     // جدول الجسر قياسيّ: BDCOM (مثبت) وVSOL EPON (ما يربطه الجدول بـONU
-    // بعينها وحده — وإلّا فلا شيء).
+    // بعينها وحده — وإلّا فلا شيء). وHSGQ بلا جدول جسرٍ أصلاً.
     if (epon.isEmpty || _profile.vendor == OltVendor.unknown) return;
     final known = {for (final o in epon) o.ifIndex};
-    final newOnus = bdcom && known.any((i) => !_epon.onuMacs.containsKey(i)) &&
+    final onlineNow = {for (final o in epon) if (o.online) o.ifIndex};
+    // ONU ظهرت للتوّ ⇒ ماكها (BDCOM) أو صانعها (HSGQ — المتّصلة وحدها: ما لم يُسجَّل قطّ بلا صانعٍ فلا يُعاد سؤاله).
+    final newOnus = tables &&
+        (hsgq
+            ? onlineNow.any((i) => !_epon.identities.containsKey(i))
+            : known.any((i) => !_epon.onuMacs.containsKey(i))) &&
         _due(_epon.macsAt, const Duration(seconds: 45));
-    final wantMacs = bdcom && (newOnus || _due(_epon.macsAt, _macsEvery));
-    final wantReadings = bdcom && _due(_epon.readingsAt, _readingsEvery);
-    final wantChassis = bdcom && _due(_epon.chassisAt, _chassisEvery);
+    final wantMacs = tables && (newOnus || _due(_epon.macsAt, _macsEvery));
+    final wantReadings = tables && _due(_epon.readingsAt, _readingsEvery);
+    final wantChassis = tables && _due(_epon.chassisAt, _chassisEvery);
     final fdbEvery = !_epon.fdb.supported && _epon.fdbAt != null
         ? _fdbUnsupportedRetry
         : (_epon.fdb.complete ? _fdbEvery : _fdbRetry);
-    var wantFdb = _due(_epon.fdbAt, fdbEvery);
+    var wantFdb = _profile.readsBridgeFdb && _due(_epon.fdbAt, fdbEvery);
     if (!wantMacs && !wantReadings && !wantChassis && !wantFdb) return;
     // ⚡ **قارئٌ ثقيلٌ واحدٌ في كلّ دورة** (والمعالج الرخيص معه): وكيل SNMP
     // يعالج ~١٠٠ قيمةً في الثانية، فثلاثة قرّاءٍ معاً يُبطئون نبضة الترفك
@@ -546,23 +577,30 @@ class _VsolLivePanelState extends State<VsolLivePanel>
     try {
       var next = _epon;
       if (wantChassis) {
-        final c = await BdcomEpon.chassis(snmp);
+        final c = hsgq ? await HsgqOlt.chassis(snmp.get) : await BdcomEpon.chassis(snmp);
         next = next.copyWith(chassis: c, chassisAt: DateTime.now());
       }
       if (wantMacs && !cancelled()) {
-        final macs = await BdcomEpon.onuMacs(snmp, known, isCancelled: cancelled);
-        final online = [for (final o in epon) if (o.online) o.ifIndex];
-        final ids = await BdcomEpon.identities(snmp, online, isCancelled: cancelled);
-        // لا نمسح ما عرفناه بفراغ: دفعةٌ لم تُجب لا تمحو ماكاً قرأناه قبل دقائق.
-        next = next.copyWith(
-          onuMacs: {...next.onuMacs, ...macs},
-          identities: {...next.identities, ...ids},
-          macsAt: DateTime.now(),
-        );
+        if (hsgq) {
+          final ids = await HsgqOlt.identities(snmp.get, known, isCancelled: cancelled);
+          next = next.copyWith(identities: {...next.identities, ...ids}, macsAt: DateTime.now());
+        } else {
+          final macs = await BdcomEpon.onuMacs(snmp, known, isCancelled: cancelled);
+          final online = [for (final o in epon) if (o.online) o.ifIndex];
+          final ids = await BdcomEpon.identities(snmp, online, isCancelled: cancelled);
+          // لا نمسح ما عرفناه بفراغ: دفعةٌ لم تُجب لا تمحو ماكاً قرأناه قبل دقائق.
+          next = next.copyWith(
+            onuMacs: {...next.onuMacs, ...macs},
+            identities: {...next.identities, ...ids},
+            macsAt: DateTime.now(),
+          );
+        }
       }
       if (wantReadingsNow && !cancelled()) {
         final online = [for (final o in epon) if (o.online) o.ifIndex];
-        final r = await BdcomEpon.readings(snmp, online, isCancelled: cancelled);
+        final r = hsgq
+            ? await HsgqOlt.readings(snmp.get, online, isCancelled: cancelled)
+            : await BdcomEpon.readings(snmp, online, isCancelled: cancelled);
         next = next.copyWith(readings: r, readingsAt: DateTime.now());
       }
       if (wantFdb && !cancelled()) {
@@ -1155,8 +1193,8 @@ class _VsolLivePanelState extends State<VsolLivePanel>
       ('الـONU', 5),
       ('ماك الـONU / الرقم', 4),
       if (optics) ('الضوء', 3),
-      ('تنزيل ↓', 3),
-      ('رفع ↑', 3),
+      // HSGQ بلا عدّاداتٍ للـONU: العمودان يُحذفان لا يُملآن «يُحسب…» إلى الأبد.
+      if (_profile.hasOnuCounters) ...[('تنزيل ↓', 3), ('رفع ↑', 3)],
       if (learned) ('أجهزة خلفها', 2),
     ];
     final h = MediaQuery.sizeOf(context).height;
@@ -1219,8 +1257,10 @@ class _VsolLivePanelState extends State<VsolLivePanel>
                         // سلّم الضوء نفسه في «شبكة الألياف» (FiberBands): جيّد فوق ‎-25، حدّي حتى ‎-27، ضعيف تحته.
                         color: FiberBands.tone(rx).fill)
                     : deskDash(),
-              DeskRateCell(bps: o.online ? t?.txBps?.round() : null, down: true, max: maxDown, live: o.online),
-              DeskRateCell(bps: o.online ? t?.rxBps?.round() : null, down: false, max: maxUp, live: o.online),
+              if (_profile.hasOnuCounters) ...[
+                DeskRateCell(bps: o.online ? t?.txBps?.round() : null, down: true, max: maxDown, live: o.online),
+                DeskRateCell(bps: o.online ? t?.rxBps?.round() : null, down: false, max: maxUp, live: o.online),
+              ],
               if (learned) _deskLearnedCell(o),
             ];
           },
@@ -1502,7 +1542,8 @@ class _VsolLivePanelState extends State<VsolLivePanel>
                     if (o.online && o.reading != null) _opticsLine(o),
                   ]),
             ),
-            if (o.online) _flow(o.label),
+            // بلا عدّاداتٍ للـONU (HSGQ) لا سطر ترفك: «…» دائمٌ يوهم أنّ الرقم في الطريق.
+            if (o.online && _profile.hasOnuCounters) _flow(o.label),
           ]),
           if (o.online && _showsLearned(o)) _learnedMacs(o),
         ]),
@@ -1512,7 +1553,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
   /// من جدول الجسر (حين يُقرأ لهذا المصنّع).
   bool _showsLearned(VsolOnu o) =>
       o.technology == VsolPonTechnology.gpon ||
-      (_profile.vendor != OltVendor.unknown &&
+      (_profile.readsBridgeFdb &&
           (o.learnedMacsReadAt != null || _eponLoading));
 
   /// «الضوء ‎-13.5 dBm · 46°C · 3.32V · HWTC» — قراءة الـONU عند لحظتها.

@@ -367,6 +367,53 @@ void main() {
       expect(r.temperature, 51);
     });
 
+    test('لنك PtP بطرفٍ واحد: التنزيل = الاتّجاه الأكبر (الوارد) لا الإرسال — إصلاح قلب AirFiber', () {
+      // AirFiber/لنك ظهري: مودُه ليس «sta» ولا يخدم مشتركين (طرفٌ واحد)، فكان يُحسب الإرسال (tx)
+      // تنزيلاً فيظهر مقلوباً. التنزيل الصحيح = الاتّجاه الأكبر (الوارد للبرج): rx=246 > tx=15.
+      const stats = MikrotikStats(
+        cpuLoad: 8,
+        memUsedPercent: 30,
+        memTotalBytes: 64,
+        memFreeBytes: 44,
+        uptime: '107d',
+        version: '6.49',
+        boardName: 'LHG 60',
+        architectureName: 'arm',
+        cpuCount: 1,
+        cpuFrequencyMhz: 800,
+        temperature: 40,
+        interfaces: [],
+        pppActiveCount: 0,
+        wirelessInterfaces: [
+          MikrotikWireless(
+            name: 'wlan1',
+            ssid: 'backhaul',
+            mode: 'bridge',
+            band: '5ghz-a/n',
+            frequency: 5500,
+            channelWidth: 40,
+            txPower: 27,
+            disabled: false,
+            running: true,
+          ),
+        ],
+      );
+      final r = TowerReading.fromProbe(const ProbeResult(
+        vitals: [],
+        detail: DeviceDetail(
+          ports: [
+            PortTraffic(name: 'wlan1', up: true, rxBps: 246000000, txBps: 15000000),
+          ],
+          peers: [PeerLink(name: 'remote', signal: -54, ccq: 99)],
+        ),
+        counters: {},
+        raw: stats,
+      ));
+      expect(r.clients, 1);
+      expect(r.downBps, 246000000, reason: 'التنزيل = الوارد الأكبر، لا الإرسال');
+      expect(r.upBps, 15000000);
+    });
+
     test('بلا علامةٍ معروفة: لا لاسلكيّ ولا مشتركين — شرطة لا صفر', () {
       final r = TowerReading.fromProbe(const ProbeResult(vitals: [], detail: DeviceDetail(), counters: {}));
       expect(r.wireless, isFalse);

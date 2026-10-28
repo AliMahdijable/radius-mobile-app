@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import 'bdcom_epon.dart';
 import 'bridge_fdb.dart';
+import 'hsgq_olt.dart';
 import 'olt_profile.dart';
 import 'snmp_client.dart';
 import 'vsol_gpon_details.dart';
@@ -138,6 +139,20 @@ class VsolOltApi {
       profile: live,
     ));
 
+    // ⚠️ HSGQ (٢٨ أكتوبر): لا مسح لـIF-MIB ولا لجداول المصنّع — صفوف الـONU في IF-MIB هويّتها خاطئة، والمسح على
+    // جدولي الـONU يُعلّق الوكيل. GET وحده بفهارس محسوبة ([HsgqOlt]).
+    if (live.readsHsgqTables) {
+      return HsgqOlt.fetchStats(
+        snmp.get,
+        profile: live,
+        sysDescr: descr,
+        sysName: name,
+        uptime: uptime,
+        withCounters: withCounters,
+        onPartialReady: onPartialReady,
+      );
+    }
+
     // ⚡ **مرحلتان لا واحدة.** الأسماء والحالة تصل في ~١٠ ثوانٍ،
     // والعدّادات تأخذ ١٥ أخرى. وعدد المشتركين ومنافذ PON لا يحتاج
     // العدّادات أصلاً — فننشرها فور وصولها بدل حبس اللوحة ثلاثين
@@ -238,6 +253,8 @@ class VsolOltApi {
     final fake = debugStatus;
     if (fake != null) return fake(previous);
     final snmp = SnmpV2c(host: host, port: port, community: community, timeout: timeout);
+    // HSGQ: حالة الـONU من جدول المصنّع بالـGET — ifOperStatus لصفوفها يُخطئ الهويّة ويغيب عن المفصولة.
+    if (previous.profile.readsHsgqTables) return HsgqOlt.refreshStatus(snmp.get, previous);
     List<Varbind> vbs;
     try {
       vbs = await snmp.walk(_oidIfOper, chunkSize: _bulkSize, maxIterations: 200);
@@ -313,6 +330,10 @@ class VsolOltApi {
   }) async {
     final fake = debugFetch;
     if (fake != null) return fake();
+    // HSGQ: عدّادات الـONU أصفار (لا ترفك لكلّ مشترك) — فـ«الكاملة» هي عدّادات المنافذ وحدها، بالـGET.
+    if (previous.profile.readsHsgqTables) {
+      return refreshHotCounters(host: host, port: port, community: community, previous: previous, timeout: timeout);
+    }
     final snmp = SnmpV2c(
       host: host,
       port: port,
@@ -1417,6 +1438,26 @@ class VsolTraffic {
     return bps;
   }
 
+  /// هل تحرّكت عدّادات المنافذ (PON والصعود) بين لقطتين؟ على أولتٍ يُحدّثها دوريّاً ([OltProfile.countersRefresh])
+  /// قراءتان بين تحديثين متطابقتان — فلا تُحسب منهما «0 bps»، ولا تتقدّم المرجعيّة إليها.
+  static bool portsMoved(VsolOltStats a, VsolOltStats b) {
+    final before = <int, (int, int)>{
+      for (final p in a.ponPorts) p.index: (p.rxBytes, p.txBytes),
+      for (final u in a.uplinks) u.index: (u.rxBytes, u.txBytes),
+    };
+    for (final p in [...b.ponPorts.map((p) => (p.index, p.rxBytes, p.txBytes)), ...b.uplinks.map((u) => (u.index, u.rxBytes, u.txBytes))]) {
+      final old = before[p.$1];
+      if (old != null && (old.$1 != p.$2 || old.$2 != p.$3)) return true;
+    }
+    return false;
+  }
+
+  /// هل نؤجّل المعدّل لأنّ عدّادات [ref] و[now] لم يُحدّثها الجهاز بعد؟ بعد تحديثين فائتين يُقبل الصفر: منافذ ساكنةٌ حقّاً.
+  static bool frozenBetween(OltProfile profile, VsolOltStats ref, VsolOltStats now, Duration elapsed) {
+    final every = profile.countersRefresh;
+    return every != null && elapsed < every * 2 && !portsMoved(ref, now);
+  }
+
   /// سرعة منفذ EPON الاسميّة — ‏١٫٢٥ جيجابت.
   ///
   /// `VsolPonPort` لا تحمل سرعةً من الجهاز (العمود `ifSpeed` يرجع
@@ -1480,8 +1521,11 @@ class VsolTraffic {
           p.technology == VsolPonTechnology.gpon ? 1244 : eponPortMbps,
           p.technology == VsolPonTechnology.gpon ? 2488 : eponPortMbps);
     }
-    for (final o in now.onus) {
-      put(o.label, o.rxBytes, o.txBytes, o.speedMbps);
+    // ⚠️ لا معدّل لـONU بلا عدّادات (HSGQ): «0 bps» من صفرٍ بقي صفراً كذبةٌ تُري مشتركاً يتصفّح خاملاً — والغياب «—».
+    if (now.profile.hasOnuCounters) {
+      for (final o in now.onus) {
+        put(o.label, o.rxBytes, o.txBytes, o.speedMbps);
+      }
     }
     for (final u in now.uplinks) {
       put(u.name, u.rxBytes, u.txBytes, u.speedMbps);

@@ -1478,11 +1478,16 @@ extension _RuijieHint on _NetworkDeviceDetailsScreenState {
   /// المشغّل يقف أمام جهازٍ لا يعرف قوائمه، وإرشادٌ عامٌّ يُبقيه واقفاً.
   Widget _vsolHint() {
     final needsSnmp = _d.protocol != 'snmp';
-    final bdcom = OltProfile.fromDevice(_d).vendor == OltVendor.bdcom;
-    final msg = needsSnmp
-        ? 'اختر بروتوكول SNMP وأدخل الـcommunity.\n'
-            '${bdcom ? 'BDCOM: تُضبط بالأمر snmp-server community <الاسم> ro من الـCLI.' : 'VSOL V1600D: الافتراضيّة عادةً "public" للقراءة، وتُضبط من واجهة الجهاز أو بالأمر snmp-server community.'}'
-        : 'أدخل الـcommunity string.${bdcom ? '' : ' الافتراضيّة على V1600D عادةً "public".'}';
+    final vendor = OltProfile.fromDevice(_d).vendor;
+    final bdcom = vendor == OltVendor.bdcom;
+    // HSGQ: المسار كما في واجهة الجهاز نفسها (لقطة المالك ٢٨ أكتوبر).
+    const hsgqWhere = 'HSGQ: من واجهة الجهاز Advanced Setting ← Service ← SNMP، والمطلوب «Read Community» (الافتراضيّة "public").';
+    final msg = vendor == OltVendor.hsgq
+        ? (needsSnmp ? 'اختر بروتوكول SNMP وأدخل الـcommunity.\n$hsgqWhere' : 'أدخل الـcommunity string.\n$hsgqWhere')
+        : needsSnmp
+            ? 'اختر بروتوكول SNMP وأدخل الـcommunity.\n'
+                '${bdcom ? 'BDCOM: تُضبط بالأمر snmp-server community <الاسم> ro من الـCLI.' : 'VSOL V1600D: الافتراضيّة عادةً "public" للقراءة، وتُضبط من واجهة الجهاز أو بالأمر snmp-server community.'}'
+            : 'أدخل الـcommunity string.${bdcom ? '' : ' الافتراضيّة على V1600D عادةً "public".'}';
     return Container(
       padding: const EdgeInsets.all(Sp.md),
       decoration: BoxDecoration(

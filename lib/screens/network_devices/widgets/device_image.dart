@@ -1,4 +1,5 @@
 import 'device_image_bdcom_catalog.dart';
+import 'device_image_hsgq_catalog.dart';
 import 'device_image_olt_catalog.dart';
 import 'device_image_ruijie_catalog.dart';
 import 'device_image_ubnt_catalog.dart';
@@ -364,10 +365,35 @@ class DeviceImage extends StatelessWidget {
     return null;
   }
 
+  /// رموز طراز HSGQ من نصٍّ حرّ: كلماتٌ تجمع حرفاً ورقماً بعد إسقاط «HSGQ» (بادئةً أو كلمة) — «HSGQ-XE04R» و«HSGQ
+  /// XE04R» و«HSGQXE04R» ← `XE04R`. والمطابقة بعدها تامّةٌ في الكتالوج: ‏`XE04RD` لا يصير `XE04R`.
+  static List<String> hsgqTokens(String model) {
+    final out = <String>[];
+    for (final w in model.toUpperCase().split(RegExp(r'[^A-Z0-9]+'))) {
+      final t = w.startsWith('HSGQ') ? w.substring(4) : w;
+      if (t.length >= 3 && RegExp(r'\d').hasMatch(t) && RegExp(r'[A-Z]').hasMatch(t)) out.add(t);
+    }
+    return out;
+  }
+
+  /// صورة أولت HSGQ — لسجلٍّ مصنّعه HSGQ وحده (العلامة، أو vsol/other وطرازه يقول HSGQ)، وبمطابقةٍ تامّةٍ للرمز.
+  static String? hsgqAssetFor(String? model, {String? brand}) {
+    if (model == null || model.trim().isEmpty) return null;
+    final b = (brand == null || brand.trim().isEmpty) ? 'other' : brand;
+    if (OltProfile.fromRecord(brand: b, model: model).vendor != OltVendor.hsgq) return null;
+    for (final t in hsgqTokens(model)) {
+      final f = kHsgqCatalog[t];
+      if (f != null) return f;
+    }
+    return null;
+  }
+
   static String? assetFor(String? model, {String? brand}) {
     if (model == null) return null;
     final bd = bdcomAssetFor(model, brand: brand);
     if (bd != null) return bd;
+    final hs = hsgqAssetFor(model, brand: brand);
+    if (hs != null) return hs;
     if (brand == null || brand.isEmpty || brand.toLowerCase() == 'cisco') {
       final cisco = _ciscoFamily(model);
       if (cisco != null) return cisco;
@@ -499,6 +525,8 @@ class DeviceImage extends StatelessWidget {
     // صور BDCOM لا تمرّ من هنا: مطابقتها تامّةٌ وبوّابتها المصنّع
     // (`bdcomAssetFor`) — لا احتواءٌ ولا علامةٌ وحدها.
     if (file.startsWith('bdcom/')) return null;
+    // وصور HSGQ كذلك: بوّابتها المصنّع والرمز التامّ (`hsgqAssetFor`).
+    if (file.startsWith('hsgq/')) return null;
     if (file.startsWith('vsol/')) {
       return (b == 'vsol' || b == 'other') ? file : null;
     }
@@ -530,6 +558,7 @@ class DeviceImage extends StatelessWidget {
       ...kRuijieCatalog.values,
       ...kOltCatalog.values,
       ...kBdcomCatalog.values,
+      ...kHsgqCatalog.values,
     }.toList()
       ..sort();
     return v;

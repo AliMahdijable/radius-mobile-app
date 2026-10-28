@@ -12,6 +12,7 @@ import '../../api/olt_profile.dart';
 import '../../models/device_region.dart';
 import '../../models/network_device.dart';
 import '../../services/device_alerts_service.dart';
+import '../../services/device_events.dart';
 import '../../services/device_sweep_coordinator.dart';
 import '../../services/device_warmup.dart';
 import '../../services/permissions_service.dart';
@@ -126,6 +127,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.isActive?.addListener(_onActiveChanged);
+    // تحديثٌ فوريّ حين يتغيّر أيّ جهازٍ من أيّ شاشة (تعديل/حذف/إضافة/منطقة).
+    DeviceEvents.changes.addListener(_onDevicesChanged);
     _initialLoad();
     // نطلب صلاحيّة الإشعارات مرّة واحدة (Android 13+/iOS)
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -141,6 +144,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     DeviceWarmup.instance.stop();
     WidgetsBinding.instance.removeObserver(this);
     widget.isActive?.removeListener(_onActiveChanged);
+    DeviceEvents.changes.removeListener(_onDevicesChanged);
     _probeTimer?.cancel();
     _searchDebounce?.cancel();
     _searchCtrl.dispose();
@@ -279,7 +283,10 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     }
   }
 
+  bool _refreshing = false;
   Future<void> _refresh() async {
+    if (_refreshing) return; // تكرار الإشارة + الرجوع من التفاصيل لا يُضاعف العمل.
+    _refreshing = true;
     try {
       // devices + regions معاً — يضمن ظهور مناطق مُنشأة من شاشة أخرى.
       final results = await Future.wait([
@@ -319,7 +326,14 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       } else if (mounted) {
         setState(() => _error = humanError(e, fallback: 'فشل التحميل'));
       }
+    } finally {
+      _refreshing = false;
     }
+  }
+
+  /// تغيّرت الأجهزة في مكانٍ آخر (تعديل/حذف/إضافة/منطقة) — حدِّث القائمة فوراً.
+  void _onDevicesChanged() {
+    if (mounted) _refresh();
   }
 
   /// probe كل الأجهزة بالتوازي (batch) + قارن مع الحالة السابقة + أنشئ alerts.

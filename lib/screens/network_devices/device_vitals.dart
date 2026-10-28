@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/bdcom_epon.dart';
 import '../../api/cisco_api.dart';
+import '../../api/hsgq_olt.dart';
 import '../../api/mikrotik_api.dart';
 import '../../api/mimosa_api.dart';
 import '../../api/network_devices_api.dart';
@@ -661,9 +662,9 @@ Future<ProbeResult> _olt(NetworkDevice d, Map<String, dynamic> creds) async {
     withGponDetails: false,
     profile: OltProfile.fromDevice(d),
   );
-  if (s.profile.readsBdcomEponTables) {
-    final c = await BdcomEpon.chassis(
-        SnmpV2c(host: d.ip, port: port, community: community));
+  if (s.profile.readsBdcomEponTables || s.profile.readsHsgqTables) {
+    final snmp = SnmpV2c(host: d.ip, port: port, community: community);
+    final c = s.profile.readsHsgqTables ? await HsgqOlt.chassis(snmp.get) : await BdcomEpon.chassis(snmp);
     if (!c.isEmpty) s = s.copyWith(chassis: c);
   }
   final cpu = s.chassis?.cpuPct;

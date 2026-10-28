@@ -7,7 +7,9 @@ import '../models/network_device.dart';
 /// اللوحة مشتركة (‏IF-MIB · العدّادات · الواجهة) لكنّ جداول المصنّع ليست
 /// كذلك. سؤال BDCOM عن جدول VSOL ‏(`37950`) يُهدر مهلةً في أحسن الأحوال،
 /// وفي أسوئها يجمع أعمدة مصنّعٍ آخر فيُعرض أمام مشتركٍ ماكُ غيره.
-enum OltVendor { vsol, bdcom, unknown }
+///
+/// `hsgq` (٢٨ أكتوبر): أولت HSGQ EPON وما يحمل برمجيّته بأسماءٍ أخرى — يُعرف بالمؤسّسة `50224` لا بالاسم ([HsgqOlt]).
+enum OltVendor { vsol, bdcom, hsgq, unknown }
 
 /// ملفّ المصنّع لجهازٍ واحد: من السجلّ أوّلاً، ثمّ من هويّته الحيّة.
 ///
@@ -49,13 +51,31 @@ class OltProfile {
   /// يُختبر حيّاً، فلا تُعمَّم عليه أعمدة `101.10`.
   bool get readsBdcomEponTables => vendor == OltVendor.bdcom;
 
+  /// جداول HSGQ ‏(`1.3.6.1.4.1.50224`) — بالـGET وحده على فهارس محسوبة ([HsgqOlt]): المسح يُعلّق وكيلها.
+  bool get readsHsgqTables => vendor == OltVendor.hsgq;
+
   /// `ifPhysAddress` على BDCOM عنوانُ واجهةٍ مشترك (٣ عناوين لـ٨٦ ONU)،
-  /// فقراءته هناك عمودٌ مدفوعٌ بلا فائدة.
-  bool get readsInterfaceMac => vendor != OltVendor.bdcom;
+  /// فقراءته هناك عمودٌ مدفوعٌ بلا فائدة. وعلى HSGQ صفوف الـONU في IF-MIB
+  /// كلّها لا يُعتمد عليها (أسماءٌ قديمة، وصفوفٌ لمفصولة) — هويّتها من جدول المصنّع.
+  bool get readsInterfaceMac => vendor != OltVendor.bdcom && vendor != OltVendor.hsgq;
+
+  /// هل لكلّ ONU عدّادات ترفك في IF-MIB؟ HSGQ يُرجعها أصفاراً (‏١٦ من ١٦ حيّاً، ٢٨ أكتوبر) — وصفرٌ بقي صفراً
+  /// يُحسب «0 bps» فيُرى مشتركٌ يتصفّح خاملاً. فلا ترفك لكلّ مشترك هناك، وترفك منافذ PON يبقى.
+  bool get hasOnuCounters => vendor != OltVendor.hsgq;
+
+  /// أجهزة المشترك خلف الـONU (جدول الجسر/جدول VSOL). HSGQ بلا BRIDGE-MIB ولا Q-BRIDGE (يقفز السؤال إلى ifXTable)،
+  /// فلا يُسأل أصلاً.
+  bool get readsBridgeFdb => vendor == OltVendor.vsol || vendor == OltVendor.bdcom;
+
+  /// كم يُحدّث الجهاز عدّادات منافذه — `null` = لحظيّاً. HSGQ كلّ ~٣١ ثانية (خمسون قراءةً بفاصل ثانية، ٢٨ أكتوبر):
+  /// بينهما تُرجع القيمة نفسها، فالفرق صفرٌ هناك «لم يُحدَّث» لا «لم يمرّ شيء»، ونبضة ثلاث ثوانٍ تقسم نصف دقيقةٍ من
+  /// الترفك على ثلاث ثوانٍ (عشرة أضعاف). فالمعدّل بين قيمتين مختلفتين وحدهما ([VsolTraffic.portsMoved]).
+  Duration? get countersRefresh => vendor == OltVendor.hsgq ? const Duration(seconds: 31) : null;
 
   String get label => switch (vendor) {
         OltVendor.bdcom => 'BDCOM OLT',
         OltVendor.vsol => 'VSOL OLT',
+        OltVendor.hsgq => 'HSGQ OLT',
         OltVendor.unknown => 'OLT',
       };
 
@@ -80,6 +100,13 @@ class OltProfile {
 
   static const bdcomEnterprise = '1.3.6.1.4.1.3320.';
   static const vsolEnterprise = '1.3.6.1.4.1.37950.';
+
+  /// Shenzhen HS Fiber Communication (HSGQ) في سجلّ IANA — وأولت المالك يُبلّغ `…50224.3.1.1`. وصفُه «EPON OLT»
+  /// وحده عامٌّ لا يُعرف به، فالمؤسّسة هي البصمة: تبقى مع البرمجيّة مهما تبدّل الاسم على الجهاز.
+  static const hsgqEnterprise = '1.3.6.1.4.1.50224.';
+
+  /// «HSGQ» كلمةً لا جزءاً من كلمة — في طرازٍ كتبه المشغّل أو كشفه [ModelDetector] («HSGQ OLT»).
+  static final _hsgqWord = RegExp(r'(^|[^a-z0-9])hsgq([^a-z]|$)', caseSensitive: false);
 
   /// «BDCOM» كلمةً لا جزءاً من كلمة: `BDCOM(tm)` · `bdcom p3600` ·
   /// `BDCOM-P3600-04`.
@@ -114,10 +141,14 @@ class OltProfile {
     'cisco',
     'ruijie',
     'bdcom',
+    'hsgq',
   };
 
   static bool hasBdcomIdentity(String? text) =>
       text != null && _bdcomWord.hasMatch(text);
+
+  static bool hasHsgqIdentity(String? text) =>
+      text != null && _hsgqWord.hasMatch(text);
 
   static bool hasVsolIdentity(String? text) =>
       text != null && _vsolText.hasMatch(text);
@@ -176,6 +207,15 @@ class OltProfile {
         oltLikely: !isBdcomSwitchModel(token),
       );
     }
+    // HSGQ: العلامة، أو «HSGQ» في طراز سجلٍّ علامته `vsol`/`other` — الخادم لم يكن يقبل `hsgq`، والوكيل يختار أقرب
+    // علامة. والهويّة الحيّة (المؤسّسة 50224) تحكم بعدها أيّاً كان المكتوب.
+    if (b == 'hsgq' || ((b == 'vsol' || b == 'other') && hasHsgqIdentity(text))) {
+      return OltProfile(
+        vendor: OltVendor.hsgq,
+        model: _firstModelToken(model),
+        oltLikely: true,
+      );
+    }
     // كما كانت `_isVsolOlt`: العلامة، أو الاسم/الطراز لما لا علامة له
     // تخصّه (أجهزةٌ سُجّلت `other` قبل أن يقبل الخادم `vsol`).
     if (b == 'vsol' || (!_ownBrands.contains(b) && hasVsolIdentity(text))) {
@@ -200,22 +240,29 @@ class OltProfile {
     OltVendor? live;
     if (oid.startsWith(bdcomEnterprise) || hasBdcomIdentity(descr)) {
       live = OltVendor.bdcom;
+    } else if (oid.startsWith(hsgqEnterprise) || hasHsgqIdentity(descr)) {
+      live = OltVendor.hsgq;
     } else if (oid.startsWith(vsolEnterprise) ||
         hasVsolIdentity(descr) ||
         _vsolLiveModel.hasMatch(descr)) {
       live = OltVendor.vsol;
     }
     if (live == null) return hint;
-    final model = live == OltVendor.bdcom
-        ? (bdcomModelFrom(descr) ??
-            (hint.vendor == OltVendor.bdcom ? hint.model : null))
-        : (_vsolLiveModel.firstMatch(descr)?.group(1)?.toUpperCase() ??
-            (hint.vendor == OltVendor.vsol ? hint.model : null));
+    final model = switch (live) {
+      OltVendor.bdcom => bdcomModelFrom(descr) ??
+          (hint.vendor == OltVendor.bdcom ? hint.model : null),
+      // وصف HSGQ بلا طراز («EPON OLT») — طراز السجلّ إن كان سجلّ HSGQ أصلاً، لا طراز VSOL كُتب خطأً.
+      OltVendor.hsgq => hint.vendor == OltVendor.hsgq ? hint.model : null,
+      _ => _vsolLiveModel.firstMatch(descr)?.group(1)?.toUpperCase() ??
+          (hint.vendor == OltVendor.vsol ? hint.model : null),
+    };
     return OltProfile(
       vendor: live,
       model: model,
       identified: true,
+      // HSGQ: القارئ يُثبت أنّه أولت بعدد منافذ PON في جدوله ([HsgqOlt.fetchStats]) — وإلّا يقولها صراحةً.
       oltLikely: live == OltVendor.vsol ||
+          live == OltVendor.hsgq ||
           isBdcomOltModel(model) ||
           (hint.oltLikely && !isBdcomSwitchModel(model)),
     );
