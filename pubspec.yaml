@@ -1,7 +1,7 @@
 name: rad_mysvcs
 description: "MyServices Pro — subscriber and network device management for internet service agents"
 publish_to: 'none'
-version: 3.0.10+169
+version: 3.0.11+170
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
