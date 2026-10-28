@@ -8,6 +8,7 @@ import '../../../api/manager_debts_api.dart';
 import '../../../api/managers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../services/manager_notice.dart';
+import '../../../services/manager_notice_prefs.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -80,10 +81,13 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
 
   // Notification toggles — match the deposit/withdraw sheets so the
   // admin can opt out of either channel before submitting.
-  bool _sendWhatsApp = true;
-  bool _sendPush = true;
+  bool _sendWhatsApp = ManagerNoticePrefs.defaults.whatsApp;
+  bool _sendPush = ManagerNoticePrefs.defaults.push;
   /// مطفأ افتراضياً — قناةٌ إضافيّة لا بديلة (انظر ManagerNoticeService).
-  bool _sendTelegram = false;
+  bool _sendTelegram = ManagerNoticePrefs.defaults.telegram;
+
+  /// لمسها المستخدم قبل وصول المحفوظ؟ (٢٨ أكتوبر) — فلا يُكتب المحفوظ فوق نقرته.
+  bool _noticeTouched = false;
 
   /// ⚠️ **لا نثق بلقطة القائمة وحدها.** الراية مأخوذةٌ وقت تحميل
   /// القائمة، و**الربط يقع في تلغرام على جهاز التابع** — فلا حدثٌ يصل
@@ -104,6 +108,15 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     _amountCtrl.addListener(_onAmount);
     _loadFresh();
     if (!_tgLinked) _refreshTgStatus();
+    // الاختيار المحفوظ (آخر عمليّةٍ نجحت) — نفس حفظ نافذة الشحن/السحب (ManagerNoticePrefs).
+    ManagerNoticePrefs.load().then((p) {
+      if (!mounted || _noticeTouched) return;
+      setState(() {
+        _sendWhatsApp = p.whatsApp;
+        _sendPush = p.push;
+        _sendTelegram = p.telegram;
+      });
+    });
   }
 
   Future<void> _loadFresh() async {
@@ -223,6 +236,7 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     // Fire notifications without blocking the UI — the sheet pops
     // immediately so the admin moves on, the WA/push spinner runs
     // out in the background via unawaited().
+    unawaited(ManagerNoticePrefs.save(whatsApp: _sendWhatsApp, push: _sendPush, telegram: _sendTelegram));
     final paidAmount = _amount.toDouble();
     final newSasDebt =
         _source == _PaySource.sas ? (_sasDebt - paidAmount) : _sasDebt;
@@ -241,9 +255,10 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
       sasDebts: newSasDebt,
       otherDebts: newCustomDebt,
       actionKind: 'debt_payment',
-      sendWhatsApp: _sendWhatsApp,
+      // القناة المعطّلة لهذا المدير لا تُرسَل وإن حُفظ اختيارها من مديرٍ آخر.
+      sendWhatsApp: _sendWhatsApp && widget.manager.mobile.trim().isNotEmpty,
       sendPush: _sendPush,
-      sendTelegram: _sendTelegram,
+      sendTelegram: _sendTelegram && _tgLinked,
       notes: note,
     ));
 
@@ -429,11 +444,20 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
                     sendWhatsApp: _sendWhatsApp,
                     sendPush: _sendPush,
                     waEnabled: widget.manager.mobile.trim().isNotEmpty,
-                    onWa: (v) => setState(() => _sendWhatsApp = v),
-                    onPush: (v) => setState(() => _sendPush = v),
+                    onWa: (v) => setState(() {
+                      _noticeTouched = true;
+                      _sendWhatsApp = v;
+                    }),
+                    onPush: (v) => setState(() {
+                      _noticeTouched = true;
+                      _sendPush = v;
+                    }),
                     sendTelegram: _sendTelegram,
                     tgEnabled: _tgLinked,
-                    onTg: (v) => setState(() => _sendTelegram = v),
+                    onTg: (v) => setState(() {
+                      _noticeTouched = true;
+                      _sendTelegram = v;
+                    }),
                   ),
                 ],
               ],

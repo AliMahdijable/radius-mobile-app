@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../api/managers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../services/manager_notice.dart';
+import '../../../services/manager_notice_prefs.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -93,13 +94,16 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
 
   /// مطلب 2026-06-12 (إشعارات): toggles إرسال واتساب + push للمدير
   /// بعد العملية. الـwhatsapp يقفل تلقائياً لو المدير ما عنده رقم.
-  bool _sendWhatsApp = true;
-  bool _sendPush = true;
+  bool _sendWhatsApp = ManagerNoticePrefs.defaults.whatsApp;
+  bool _sendPush = ManagerNoticePrefs.defaults.push;
+
+  /// لمسها المستخدم قبل وصول المحفوظ؟ (٢٨ أكتوبر) — فلا يُكتب المحفوظ فوق نقرته.
+  bool _noticeTouched = false;
 
   /// ⚠️ مطفأ افتراضياً: تلغرام قناةٌ **إضافيّة** لا بديلة، وتشغيلها
   /// تلقائياً يعني رسالتين للمدير المربوط في كلّ عمليّة. يُشغّله من
   /// يريده — والمفتاح لا يُعرض أصلاً لمن لم يربط.
-  bool _sendTelegram = false;
+  bool _sendTelegram = ManagerNoticePrefs.defaults.telegram;
 
   /// ⚠️ **لا نثق بلقطة القائمة وحدها.** الراية مأخوذةٌ وقت تحميل
   /// القائمة، و**الربط يقع في تلغرام على جهاز التابع** — فلا حدثٌ يصل
@@ -123,6 +127,15 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     super.initState();
     _amountCtrl.addListener(_onAmount);
     if (!_tgLinked) _refreshTgStatus();
+    // الاختيار المحفوظ (آخر عمليّةٍ نجحت) — المالك ٢٨ أكتوبر: «يحفظهن مره وحده ويبقن ثابتات».
+    ManagerNoticePrefs.load().then((p) {
+      if (!mounted || _noticeTouched) return;
+      setState(() {
+        _sendWhatsApp = p.whatsApp;
+        _sendPush = p.push;
+        _sendTelegram = p.telegram;
+      });
+    });
   }
 
   @override
@@ -186,6 +199,8 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     // العملية نجحت — أرسل الإشعارات بحسب الـtoggles. الإشعار لا يحدّد
     // نجاح العملية في الـsnackbar الأساسي.
     showSheetSnack(context, 'تمت العملية', isError: false);
+    // الاختيار يبقى للعمليّة القادمة (قناةٌ معطّلة لهذا المدير لم تُمسّ فتبقى كما حُفظت).
+    unawaited(ManagerNoticePrefs.save(whatsApp: _sendWhatsApp, push: _sendPush, telegram: _sendTelegram));
     // حساب أرصدة ما بعد العملية (تقديرية — السيرفر قد يدور بـSAS4
     // قيم مختلفة قليلاً، لكن هذا كافٍ للقالب).
     num currentCredit = previousCredit;
@@ -228,7 +243,10 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     required String actionKind,
     String? notes,
   }) async {
-    if (!_sendWhatsApp && !_sendPush && !_sendTelegram) return;
+    // القناة المعطّلة لهذا المدير (بلا رقم/غير مربوط) لا تُرسَل وإن حُفظ اختيارها من مديرٍ آخر.
+    final sendWa = _sendWhatsApp && widget.manager.mobile.trim().isNotEmpty;
+    final sendTg = _sendTelegram && _tgLinked;
+    if (!sendWa && !_sendPush && !sendTg) return;
     final r = await ManagerNoticeService.notify(
       manager: widget.manager,
       amount: _amount,
@@ -244,15 +262,15 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
       otherDebts: 0,
       actionKind: actionKind,
       notes: notes,
-      sendWhatsApp: _sendWhatsApp,
+      sendWhatsApp: sendWa,
       sendPush: _sendPush,
-      sendTelegram: _sendTelegram,
+      sendTelegram: sendTg,
     );
     // التغذية الراجعة عن الإشعار تظهر فقط إذا أحدها فشل — نتجنب
     // إغراق الـadmin بـ"تم إرسال الواتساب" snackbars متعدّدة.
     if (!mounted) return;
     final failures = <String>[];
-    if (_sendWhatsApp && !r.whatsAppOk) {
+    if (sendWa && !r.whatsAppOk) {
       failures.add('واتساب: ${r.whatsAppMessage ?? "فشل"}');
     }
     if (_sendPush && !r.pushOk) {
@@ -493,7 +511,10 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
               controlAffinity: ListTileControlAffinity.leading,
               value: hasPhone ? _sendWhatsApp : false,
               onChanged: hasPhone
-                  ? (v) => setState(() => _sendWhatsApp = v ?? false)
+                  ? (v) => setState(() {
+                        _noticeTouched = true;
+                        _sendWhatsApp = v ?? false;
+                      })
                   : null,
               title: Row(
                 children: [
@@ -519,7 +540,10 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
               contentPadding: EdgeInsets.zero,
               controlAffinity: ListTileControlAffinity.leading,
               value: _sendPush,
-              onChanged: (v) => setState(() => _sendPush = v ?? false),
+              onChanged: (v) => setState(() {
+                _noticeTouched = true;
+                _sendPush = v ?? false;
+              }),
               title: Row(
                 children: [
                   Icon(LucideIcons.bell,
@@ -554,7 +578,10 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
               controlAffinity: ListTileControlAffinity.leading,
               value: _tgLinked ? _sendTelegram : false,
               onChanged: _tgLinked
-                  ? (v) => setState(() => _sendTelegram = v ?? false)
+                  ? (v) => setState(() {
+                        _noticeTouched = true;
+                        _sendTelegram = v ?? false;
+                      })
                   : null,
               title: Row(
                 children: [
@@ -574,6 +601,11 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                   ),
                 ],
               ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6, right: 2),
+              child: Text('يبقى اختيارك للعمليّات الجاية',
+                  style: AppType.muted(color: AppColors.textLow).copyWith(fontSize: 11)),
             ),
           ],
         ),
