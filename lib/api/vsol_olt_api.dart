@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import 'bdcom_epon.dart';
 import 'bridge_fdb.dart';
-import 'hsgq_olt.dart';
+import 'olt_get_tables.dart';
 import 'olt_profile.dart';
 import 'snmp_client.dart';
 import 'vsol_gpon_details.dart';
@@ -140,9 +140,11 @@ class VsolOltApi {
     ));
 
     // ⚠️ HSGQ (٢٨ أكتوبر): لا مسح لـIF-MIB ولا لجداول المصنّع — صفوف الـONU في IF-MIB هويّتها خاطئة، والمسح على
-    // جدولي الـONU يُعلّق الوكيل. GET وحده بفهارس محسوبة ([HsgqOlt]).
-    if (live.readsHsgqTables) {
-      return HsgqOlt.fetchStats(
+    // جدولي الـONU يُعلّق الوكيل. GET وحده بفهارس محسوبة ([HsgqOlt]). وC-Data (٢٩ أكتوبر) كذلك: لا صفوف ONU في
+    // IF-MIB أصلاً، وGETNEXT بعد شجرة الـONU لا يُجاب ([CdataOlt]).
+    final getTables = OltGetTables.of(live);
+    if (getTables != null) {
+      return getTables.fetchStats(
         snmp.get,
         profile: live,
         sysDescr: descr,
@@ -253,8 +255,9 @@ class VsolOltApi {
     final fake = debugStatus;
     if (fake != null) return fake(previous);
     final snmp = SnmpV2c(host: host, port: port, community: community, timeout: timeout);
-    // HSGQ: حالة الـONU من جدول المصنّع بالـGET — ifOperStatus لصفوفها يُخطئ الهويّة ويغيب عن المفصولة.
-    if (previous.profile.readsHsgqTables) return HsgqOlt.refreshStatus(snmp.get, previous);
+    // HSGQ · C-Data: حالة الـONU من جدول المصنّع بالـGET — ifOperStatus لصفوفها يُخطئ الهويّة أو لا صفوف لها أصلاً.
+    final getTables = OltGetTables.of(previous.profile);
+    if (getTables != null) return getTables.refreshStatus(snmp.get, previous);
     List<Varbind> vbs;
     try {
       vbs = await snmp.walk(_oidIfOper, chunkSize: _bulkSize, maxIterations: 200);
@@ -330,8 +333,9 @@ class VsolOltApi {
   }) async {
     final fake = debugFetch;
     if (fake != null) return fake();
-    // HSGQ: عدّادات الـONU أصفار (لا ترفك لكلّ مشترك) — فـ«الكاملة» هي عدّادات المنافذ وحدها، بالـGET.
-    if (previous.profile.readsHsgqTables) {
+    // HSGQ: عدّادات الـONU أصفار، وC-Data بلا صفوف ONU في IF-MIB (لا ترفك لكلّ مشترك) — فـ«الكاملة» هي عدّادات المنافذ
+    // وحدها، بالـGET.
+    if (previous.profile.readsGetTables) {
       return refreshHotCounters(host: host, port: port, community: community, previous: previous, timeout: timeout);
     }
     final snmp = SnmpV2c(

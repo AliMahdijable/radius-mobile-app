@@ -199,7 +199,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
       _brand = v;
       // OLT من VSOL أو BDCOM لا يُراقَب إلّا بـSNMP — نختاره بدل أن نتركه
       // للمشغّل يكتشفه من لوحةٍ فارغة. ولا نمسّ بروتوكولاً اختاره هو.
-      if ((v == 'vsol' || v == 'bdcom' || v == 'hsgq') && _protocol == null) {
+      if ((v == 'vsol' || v == 'bdcom' || v == 'hsgq' || v == 'cdata') && _protocol == null) {
         _protocol = 'snmp';
         _apiPortCtrl.text =
             NetworkDeviceLabels.portForBrandProtocol(v, 'snmp').toString();

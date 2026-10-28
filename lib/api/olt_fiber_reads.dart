@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../services/fiber/fiber_band.dart';
 import '../services/fiber/fiber_onu.dart';
 import 'bdcom_epon.dart';
-import 'hsgq_olt.dart';
+import 'olt_get_tables.dart';
 import 'olt_profile.dart';
 import 'snmp_client.dart';
 import 'vsol_olt_api.dart';
@@ -289,9 +289,9 @@ class OltFiberReads {
         final r = dbm(vb);
         if (FiberBands.plausible(r)) out[o.ifIndex] = r!;
       }
-    } else if (profile.readsHsgqTables) {
-      // ⚠️ GET لا مسح: مسح جدول الضوء على HSGQ يُعلّق وكيله ([HsgqOlt]). ~٢٠ مللي لكلّ ستّ عشرة قيمة.
-      return HsgqOlt.rxOnly(snmp.get, [for (final o in online) o.ifIndex]);
+    } else if (profile.readsGetTables) {
+      // ⚠️ GET لا مسح: مسح جدول الضوء على HSGQ يُعلّق وكيله ([HsgqOlt])، وC-Data بالـGET كذلك ([CdataOlt]).
+      return OltGetTables.of(profile)!.rxOnly(snmp.get, [for (final o in online) o.ifIndex]);
     } else {
       return const {};
     }
@@ -397,9 +397,10 @@ class OltFiberReads {
     bool Function()? isCancelled,
   }) async {
     final list = onus.toList();
-    // HSGQ: الاسم من جدول المصنّع بالـGET — ifAlias لصفوف الـONU لا يطابق موضعها، والافتراضيّ «ONU01/07» يُهمل.
-    if (profile.readsHsgqTables) {
-      final n = await HsgqOlt.names(snmp.get, list.map((o) => o.ifIndex), isCancelled: isCancelled);
+    // HSGQ · C-Data: الاسم من جدول المصنّع بالـGET — ifAlias لصفوف الـONU لا يطابق موضعها (أو لا صفوف لها)، والافتراضيّ
+    // («ONU01/07» · «unknown») يُهمل.
+    if (profile.readsGetTables) {
+      final n = await OltGetTables.of(profile)!.names(snmp.get, list.map((o) => o.ifIndex), isCancelled: isCancelled);
       return n == null ? null : cleanNames(n);
     }
     final byIf = {for (final o in list) o.ifIndex: o};
@@ -463,13 +464,14 @@ class OltFiberReads {
     final sample = [...online, ...offline];
     final at = now ?? DateTime.now();
 
-    // HSGQ: فهرس الـONU فهرس جدول المصنّع لا IF-MIB — ifLastChange لا يعرفه، فلا يُسأل (ولا لحظة سقوطٍ عنده أصلاً).
-    final hsgq = profile.readsHsgqTables;
-    final changes = hsgq ? const <int, DateTime>{} : await lastChanges(snmp, sample.map((o) => o.ifIndex), now: at);
+    // HSGQ · C-Data: فهرس الـONU فهرس جدول المصنّع لا IF-MIB — ifLastChange لا يعرفه، فلا يُسأل (ولا لحظة سقوطٍ عنده أصلاً).
+    final getTables = OltGetTables.of(profile);
+    final changes =
+        getTables != null ? const <int, DateTime>{} : await lastChanges(snmp, sample.map((o) => o.ifIndex), now: at);
     final optics = profile.readsVsolTables
         ? await vsolOptics(snmp, online)
-        : hsgq
-            ? await HsgqOlt.readings(snmp.get, online.map((o) => o.ifIndex))
+        : getTables != null
+            ? await getTables.readings(snmp.get, online.map((o) => o.ifIndex))
             : const <int, BdcomOnuReading>{};
     final reasons = await dropReasons(snmp, profile, offline);
     final rawReasons = <String, int>{};

@@ -9,7 +9,7 @@ class NetworkDevice {
   final int? regionId;
   final String name;
   final String type; // router|switch|ap|link|sector|camera|other
-  final String brand; // mikrotik|ubnt|mimosa|cisco|ruijie|vsol|bdcom|hsgq|other
+  final String brand; // mikrotik|ubnt|mimosa|cisco|ruijie|vsol|bdcom|hsgq|cdata|other
   final String? model;
   final String ip;
   final int port;
@@ -177,6 +177,9 @@ class NetworkDeviceLabels {
     // ٢٨ أكتوبر: أولت HSGQ EPON — وما يحمل برمجيّته بأسماءٍ أخرى. يُعرف حيّاً بالمؤسّسة 50224 أيّاً كانت العلامة
     // المختارة (`OltProfile`)؛ والعلامة هنا للوضوح فقط. الخادم يقبلها بعد هجرة ENUM (كـbdcom).
     'hsgq': 'HSGQ (OLT)',
+    // ٢٩ أكتوبر: أولت C-Data EPON — يُعرف حيّاً بالمؤسّسة 34592 أيّاً كانت العلامة المختارة (`OltProfile`). الخادم يقبلها
+    // بعد هجرة ENUM (كـhsgq).
+    'cdata': 'C-Data (OLT)',
     'other': 'آخر',
   };
 

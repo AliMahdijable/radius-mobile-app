@@ -6,7 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/bdcom_epon.dart';
 import '../../../api/bridge_fdb.dart';
-import '../../../api/hsgq_olt.dart';
+import '../../../api/olt_get_tables.dart';
 import '../../../api/network_devices_api.dart';
 import '../../../api/olt_profile.dart';
 import '../../../api/vsol_olt_api.dart';
@@ -536,9 +536,9 @@ class _VsolLivePanelState extends State<VsolLivePanel>
         if (o.technology == VsolPonTechnology.epon) o,
     ];
     final bdcom = _profile.readsBdcomEponTables;
-    // HSGQ: ماك الـONU يأتي مع البنية؛ هنا الصانع/الطراز والضوء والمعالج — بالـGET ([HsgqOlt]).
-    final hsgq = _profile.readsHsgqTables;
-    final tables = bdcom || hsgq;
+    // HSGQ · C-Data: ماك الـONU يأتي مع البنية؛ هنا الصانع/الطراز والضوء والمعالج — بالـGET ([OltGetTables]).
+    final getTables = OltGetTables.of(_profile);
+    final tables = bdcom || getTables != null;
     // جدول الجسر قياسيّ: BDCOM (مثبت) وVSOL EPON (ما يربطه الجدول بـONU
     // بعينها وحده — وإلّا فلا شيء). وHSGQ بلا جدول جسرٍ أصلاً.
     if (epon.isEmpty || _profile.vendor == OltVendor.unknown) return;
@@ -546,7 +546,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
     final onlineNow = {for (final o in epon) if (o.online) o.ifIndex};
     // ONU ظهرت للتوّ ⇒ ماكها (BDCOM) أو صانعها (HSGQ — المتّصلة وحدها: ما لم يُسجَّل قطّ بلا صانعٍ فلا يُعاد سؤاله).
     final newOnus = tables &&
-        (hsgq
+        (getTables != null
             ? onlineNow.any((i) => !_epon.identities.containsKey(i))
             : known.any((i) => !_epon.onuMacs.containsKey(i))) &&
         _due(_epon.macsAt, const Duration(seconds: 45));
@@ -577,12 +577,12 @@ class _VsolLivePanelState extends State<VsolLivePanel>
     try {
       var next = _epon;
       if (wantChassis) {
-        final c = hsgq ? await HsgqOlt.chassis(snmp.get) : await BdcomEpon.chassis(snmp);
+        final c = getTables != null ? await getTables.chassis(snmp.get) : await BdcomEpon.chassis(snmp);
         next = next.copyWith(chassis: c, chassisAt: DateTime.now());
       }
       if (wantMacs && !cancelled()) {
-        if (hsgq) {
-          final ids = await HsgqOlt.identities(snmp.get, known, isCancelled: cancelled);
+        if (getTables != null) {
+          final ids = await getTables.identities(snmp.get, known, isCancelled: cancelled);
           next = next.copyWith(identities: {...next.identities, ...ids}, macsAt: DateTime.now());
         } else {
           final macs = await BdcomEpon.onuMacs(snmp, known, isCancelled: cancelled);
@@ -598,8 +598,8 @@ class _VsolLivePanelState extends State<VsolLivePanel>
       }
       if (wantReadingsNow && !cancelled()) {
         final online = [for (final o in epon) if (o.online) o.ifIndex];
-        final r = hsgq
-            ? await HsgqOlt.readings(snmp.get, online, isCancelled: cancelled)
+        final r = getTables != null
+            ? await getTables.readings(snmp.get, online, isCancelled: cancelled)
             : await BdcomEpon.readings(snmp, online, isCancelled: cancelled);
         next = next.copyWith(readings: r, readingsAt: DateTime.now());
       }

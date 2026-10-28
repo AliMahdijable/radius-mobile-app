@@ -1482,8 +1482,10 @@ extension _RuijieHint on _NetworkDeviceDetailsScreenState {
     final bdcom = vendor == OltVendor.bdcom;
     // HSGQ: المسار كما في واجهة الجهاز نفسها (لقطة المالك ٢٨ أكتوبر).
     const hsgqWhere = 'HSGQ: من واجهة الجهاز Advanced Setting ← Service ← SNMP، والمطلوب «Read Community» (الافتراضيّة "public").';
-    final msg = vendor == OltVendor.hsgq
-        ? (needsSnmp ? 'اختر بروتوكول SNMP وأدخل الـcommunity.\n$hsgqWhere' : 'أدخل الـcommunity string.\n$hsgqWhere')
+    const cdataWhere = 'C-Data: المطلوب «Read Community» للقراءة — الافتراضيّة "public".';
+    final where = switch (vendor) { OltVendor.hsgq => hsgqWhere, OltVendor.cdata => cdataWhere, _ => null };
+    final msg = where != null
+        ? (needsSnmp ? 'اختر بروتوكول SNMP وأدخل الـcommunity.\n$where' : 'أدخل الـcommunity string.\n$where')
         : needsSnmp
             ? 'اختر بروتوكول SNMP وأدخل الـcommunity.\n'
                 '${bdcom ? 'BDCOM: تُضبط بالأمر snmp-server community <الاسم> ro من الـCLI.' : 'VSOL V1600D: الافتراضيّة عادةً "public" للقراءة، وتُضبط من واجهة الجهاز أو بالأمر snmp-server community.'}'

@@ -53,7 +53,7 @@ class ModelDetector {
       if (!DetectedModel.needsDetection(d)) return false;
       if (d.lastStatus != 'online') return false;
       final b = d.brand.toLowerCase();
-      if (const ['mikrotik', 'ubnt', 'mimosa', 'roji', 'ruijie', 'cisco', 'vsol', 'bdcom', 'hsgq']
+      if (const ['mikrotik', 'ubnt', 'mimosa', 'roji', 'ruijie', 'cisco', 'vsol', 'bdcom', 'hsgq', 'cdata']
           .contains(b)) {
         return true;
       }
@@ -219,6 +219,8 @@ class ModelDetector {
       // HSGQ: وصفه «EPON OLT» بلا طراز، والبصمة مؤسّسته (50224) — «HSGQ OLT» في السجلّ يجعل `OltProfile` يعرفه ولو
       // سُجّل `other` أو بالاسم الذي على الجهاز.
       if (objectId != null && objectId.startsWith(OltProfile.hsgqEnterprise)) return 'HSGQ OLT';
+      // C-Data: «GEPON OLT» بلا طراز، و`sysObjectID` = المؤسّسة 34592 نفسها.
+      if (OltProfile.isCdataObjectId(objectId)) return 'C-Data OLT';
       return _modelFromSysDescr(descr);
     } catch (_) {
       return null;

@@ -6,7 +6,7 @@ import '../../api/bdcom_epon.dart';
 import '../../api/bridge_fdb.dart';
 import '../../api/broadcast_api.dart';
 import '../../api/fiber_api.dart';
-import '../../api/hsgq_olt.dart';
+import '../../api/olt_get_tables.dart';
 import '../../api/network_devices_api.dart';
 import '../../api/olt_fiber_reads.dart';
 import '../../api/olt_profile.dart';
@@ -346,8 +346,8 @@ class FiberMonitor extends ChangeNotifier {
       final reasonTargets = firstPass ? offlineNow : [for (final o in changed) if (!o.online) o];
       if (changeTargets.isNotEmpty || reasonTargets.isNotEmpty) {
         final got = await Future.wait<Object>([
-          // HSGQ لا يعطي اللحظة (فهرس الـONU فهرس جدول المصنّع لا IF-MIB) ⇒ لا يُسأل؛ لحظة رصدنا وحدها تحت.
-          changeTargets.isEmpty || profile.readsHsgqTables
+          // HSGQ · C-Data لا يعطيان اللحظة (فهرس الـONU فهرس جدول المصنّع لا IF-MIB) ⇒ لا يُسأل؛ لحظة رصدنا وحدها تحت.
+          changeTargets.isEmpty || profile.readsGetTables
               ? Future.value(const <int, DateTime>{})
               : OltFiberReads.lastChanges(snmp, changeTargets.map((o) => o.ifIndex), now: now),
           reasonTargets.isEmpty
@@ -593,7 +593,7 @@ class FiberMonitor extends ChangeNotifier {
 
   /// لحظة اتّصال جهازٍ واحد حين يُفتح (التشخيص/الفنّي) — الدورة الأولى تقرؤها للمفصولة وحدها.
   Future<void> ensureChangedAt(VsolOnu o) async {
-    if (_changes.containsKey(o.ifIndex) || profile.readsHsgqTables) return;
+    if (_changes.containsKey(o.ifIndex) || profile.readsGetTables) return;
     final community = await backend.community(device);
     if (community == null) return;
     final r = await OltFiberReads.lastChanges(backend.snmp(device, community), [o.ifIndex], now: clock());
@@ -607,8 +607,8 @@ class FiberMonitor extends ChangeNotifier {
   Future<void> _readDevices(SnmpV2c snmp, VsolOltStats s) async {
     VsolGponSnapshot? vsolTable;
     final epon = s.onus.where((o) => o.technology == VsolPonTechnology.epon).toList();
-    // HSGQ: لا جدول جسر — «غير متوفّر» صريحاً (لا «لا أجهزة»)، وماك الـONU جاء مع البنية.
-    if (epon.isNotEmpty && profile.readsHsgqTables) {
+    // HSGQ · C-Data: لا جدول جسر نعرفه — «غير متوفّر» صريحاً (لا «لا أجهزة»)، وماك الـONU جاء مع البنية.
+    if (epon.isNotEmpty && profile.readsGetTables) {
       _epon = _epon.copyWith(fdb: FdbSnapshot.unsupported, fdbAt: clock());
       return;
     }
@@ -805,9 +805,10 @@ class FiberMonitor extends ChangeNotifier {
     final snmp = backend.snmp(device, community);
     bool? up;
     try {
-      if (profile.readsHsgqTables) {
-        // HSGQ: حالة الـONU من جدول المصنّع — صفّها في IF-MIB لا يطابق موضعها.
-        up = (await HsgqOlt.statusOf(snmp.get, [o.ifIndex]))?[o.ifIndex];
+      final getTables = OltGetTables.of(profile);
+      if (getTables != null) {
+        // HSGQ · C-Data: حالة الـONU من جدول المصنّع — صفّها في IF-MIB لا يطابق موضعها (أو لا صفّ لها).
+        up = (await getTables.statusOf(snmp.get, [o.ifIndex]))?[o.ifIndex];
       } else {
         final vb = await snmp.get(['${OltFiberReads.ifOperStatusOid}.${o.ifIndex}']);
         final v = vb.isEmpty ? null : vb.first.asIntOrNull;
@@ -836,10 +837,11 @@ class FiberMonitor extends ChangeNotifier {
     final byIf = {for (final o in s.onus) o.ifIndex: o};
     const base = OltFiberReads.ifOperStatusOid;
     Future<Map<int, bool>?> read() async {
-      // HSGQ: عمود الحالة في جدول المصنّع بالـGET لكلّ ONU معروفة (~٧ دفعات لمئة، ~١٥٠ مللي) — لا مسح.
-      if (profile.readsHsgqTables) {
+      // HSGQ · C-Data: عمود الحالة في جدول المصنّع بالـGET لكلّ ONU معروفة (~٧ دفعات لمئة) — لا مسح.
+      final getTables = OltGetTables.of(profile);
+      if (getTables != null) {
         try {
-          final got = await HsgqOlt.statusOf(snmp.get, byIf.keys);
+          final got = await getTables.statusOf(snmp.get, byIf.keys);
           return got == null || got.isEmpty ? null : got;
         } catch (_) {
           return null;
@@ -889,8 +891,8 @@ class FiberMonitor extends ChangeNotifier {
   Future<BdcomOnuReading?> _readOptics(SnmpV2c snmp, VsolOnu o) async {
     final Map<int, BdcomOnuReading> r = profile.readsBdcomEponTables
         ? await BdcomEpon.readings(snmp, [o.ifIndex])
-        : profile.readsHsgqTables
-            ? await HsgqOlt.readings(snmp.get, [o.ifIndex])
+        : profile.readsGetTables
+            ? await OltGetTables.of(profile)!.readings(snmp.get, [o.ifIndex])
             : await OltFiberReads.vsolOptics(snmp, [o]);
     final reading = r[o.ifIndex];
     if (reading != null) {
