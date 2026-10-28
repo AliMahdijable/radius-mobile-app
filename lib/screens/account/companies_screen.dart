@@ -369,7 +369,8 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
       ];
     }
     // «انتهت التجربة»: شركاتٌ متوقّفة وأخرى (سوبرنت) مفتوحة — شريطٌ يقول السبب والطريق (احذف لتبقى مجّاناً).
-    final trialEnded = items.any((c) => c.locked) && items.any((c) => !c.locked);
+    // المفتوحة المقصودة شركةُ مديرٍ (سوبرنت) — صفّ الموظّف مفتوحٌ دائماً فلا يُحسب.
+    final trialEnded = items.any((c) => c.locked) && items.any((c) => !c.locked && !c.isEmployee);
     if (items.isEmpty) {
       return [
         AccountCard(

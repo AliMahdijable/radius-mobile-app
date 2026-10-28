@@ -125,8 +125,21 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
 
-  test('LinkedCompany.locked: من الخادم، وغيابه false', () {
+  testWidgets('صفّ الموظّف يُفتح كما كان ولا يُحسب «مفتوحةً» للشريط (يتبع اشتراك مديره)', (t) async {
+    account.companies = [
+      {'sasCode': 'speednet-iq', 'sasUrl': 'https://sas.speednet.example', 'username': 'remote.agent', 'label': 'Speednet', 'role': 'admin', 'locked': true},
+      // خادمٌ أرسل locked لصفّ موظّف (قبل 79ac70a): يُهمَل احتياطاً.
+      {'sasCode': 'speednet-iq', 'sasUrl': 'https://sas.speednet.example', 'username': 'emp.one', 'label': 'Speednet', 'role': 'employee', 'locked': true},
+    ];
+    await pump(t);
+    expect(find.text('متوقّفة'), findsOneWidget, reason: 'المدير وحده');
+    expect(find.text('انتهت التجربة للشركات الأخرى'), findsNothing, reason: 'لا سوبرنت مفتوحة لمدير ⇒ لا شريط');
+    await t.pumpWidget(const SizedBox());
+  });
+
+  test('LinkedCompany.locked: من الخادم، وغيابه false، والموظّف لا يُقفل', () {
     expect(LinkedCompany.fromJson({'sasCode': 'x', 'username': 'u', 'locked': true}).locked, isTrue);
     expect(LinkedCompany.fromJson({'sasCode': 'x', 'username': 'u'}).locked, isFalse);
+    expect(LinkedCompany.fromJson({'sasCode': 'x', 'username': 'u', 'role': 'employee', 'locked': true}).locked, isFalse);
   });
 }

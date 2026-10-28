@@ -505,6 +505,7 @@ class LinkedCompany {
 
   /// «انتهت التجربة» (الخادم، ٢٨ أكتوبر): اشتراكٌ غير نشط ⇒ الشركة متوقّفة (غير سوبرنت، أو سوبرنت أُلغي إعفاؤه). للعرض:
   /// «شركاتي» تقول السبب وتُظهر الحذف — والقرار لدخول الساس نفسه. خادمٌ أقدم لا يرسله ⇒ false كما كان.
+  /// صفّ الموظّف لا يُقفل أبداً: يعمل تحت اشتراك مديره لا اشتراك هذا الحساب (الخادم 79ac70a، وهنا احتياطاً).
   final bool locked;
 
   bool get isEmployee => role == 'employee';
@@ -518,7 +519,7 @@ class LinkedCompany {
         lastLoginAt: j['lastLoginAt'] == null
             ? null
             : DateTime.tryParse(j['lastLoginAt'].toString())?.toLocal(),
-        locked: j['locked'] == true,
+        locked: j['locked'] == true && (j['role'] ?? 'admin').toString() != 'employee',
       );
 }
 
