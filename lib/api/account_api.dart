@@ -489,6 +489,7 @@ class LinkedCompany {
     required this.label,
     required this.role,
     this.lastLoginAt,
+    this.locked = false,
   });
 
   final String sasCode;
@@ -502,6 +503,10 @@ class LinkedCompany {
   final String role;
   final DateTime? lastLoginAt;
 
+  /// «انتهت التجربة» (الخادم، ٢٨ أكتوبر): اشتراكٌ غير نشط ⇒ الشركة متوقّفة (غير سوبرنت، أو سوبرنت أُلغي إعفاؤه). للعرض:
+  /// «شركاتي» تقول السبب وتُظهر الحذف — والقرار لدخول الساس نفسه. خادمٌ أقدم لا يرسله ⇒ false كما كان.
+  final bool locked;
+
   bool get isEmployee => role == 'employee';
 
   factory LinkedCompany.fromJson(Map<String, dynamic> j) => LinkedCompany(
@@ -513,6 +518,7 @@ class LinkedCompany {
         lastLoginAt: j['lastLoginAt'] == null
             ? null
             : DateTime.tryParse(j['lastLoginAt'].toString())?.toLocal(),
+        locked: j['locked'] == true,
       );
 }
 

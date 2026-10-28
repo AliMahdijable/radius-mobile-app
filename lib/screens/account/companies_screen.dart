@@ -59,6 +59,11 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
   /// دخول الشركة — المسار المشترك مع ورقة «تبديل الشركة» ([CompanyOpenFlow]).
   Future<void> _open(LinkedCompany c) async {
     if (_opening != null) return;
+    // متوقّفة بعد التجربة: السبب والحذف مباشرةً — لا دخول ساسٍ يُرفض 402 ثمّ يعود إلى هنا بلا كلمة.
+    if (c.locked) {
+      await _lockedDialog(c);
+      return;
+    }
     await CompanyOpenFlow.open(
       context,
       c,
@@ -113,6 +118,10 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
       ),
     );
     if (ok != true) return;
+    await _doRemove(c);
+  }
+
+  Future<void> _doRemove(LinkedCompany c) async {
     try {
       await AccountApi.removeCompany(c);
       await CompanyCredsStore.remove(c.sasUrl ?? '', c.username);
@@ -120,6 +129,42 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
     } on AccountApiException catch (e) {
       if (mounted) showAccountSnack(context, accountText(e.message), error: true);
     }
+  }
+
+  /// شركةٌ متوقّفة بعد التجربة (المالك ٢٧–٢٨ أكتوبر: «انتهت التجربة، احذف الشركات» + حذفٌ فعليّ): السبب، و«حذف الشركة»
+  /// (هذه النافذة هي التأكيد)، و«تفعيل كود» على غير الآيفون. آيفون: سطرٌ محايد بلا دعوةٍ لتفعيل (3.1.1).
+  Future<void> _lockedDialog(LinkedCompany c) async {
+    HapticFeedback.mediumImpact();
+    final neutral = StorePolicy.hidePurchaseFlows;
+    final pick = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text('account.locked_title'.tr(), style: AppType.sheetTitle(color: AppColors.textHi)),
+        content: Text(
+          '${c.label} (${c.username})\n\n${(neutral ? 'account.locked_body_neutral' : 'account.locked_body').tr()}',
+          style: AppType.subtitle(color: AppColors.textMid).copyWith(height: 1.55),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('common.cancel'.tr(), style: AppType.button(color: AppColors.textMid)),
+          ),
+          if (!neutral)
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop('code'),
+              child: Text('account.company_needs_plan_action'.tr(), style: AppType.button(color: AppColors.brand)),
+            ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop('delete'),
+            child: Text('account.delete_company'.tr(), style: AppType.button(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (pick == 'delete') await _doRemove(c);
+    if (pick == 'code') await _openSubscription();
   }
 
   Future<void> _openSubscription() async {
@@ -323,6 +368,8 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
         ),
       ];
     }
+    // «انتهت التجربة»: شركاتٌ متوقّفة وأخرى (سوبرنت) مفتوحة — شريطٌ يقول السبب والطريق (احذف لتبقى مجّاناً).
+    final trialEnded = items.any((c) => c.locked) && items.any((c) => !c.locked);
     if (items.isEmpty) {
       return [
         AccountCard(
@@ -338,12 +385,17 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
       ];
     }
     return [
+      if (trialEnded) ...[
+        _TrialEndedBanner(neutral: StorePolicy.hidePurchaseFlows),
+        const SizedBox(height: Sp.md),
+      ],
       for (final c in items) ...[
         _CompanyTile(
           company: c,
           busy: _opening == _keyOf(c),
           onTap: () => _open(c),
           onRemove: () => _remove(c),
+          onDeleteLocked: () => _lockedDialog(c),
         ),
         const SizedBox(height: Sp.md),
       ],
@@ -351,12 +403,52 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
   }
 }
 
+/// «انتهت التجربة للشركات الأخرى» — فوق قائمة «شركاتي» حين تتوقّف شركاتٌ وتبقى سوبرنت مفتوحة.
+class _TrialEndedBanner extends StatelessWidget {
+  const _TrialEndedBanner({required this.neutral});
+  final bool neutral;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Container(
+      padding: const EdgeInsets.all(Sp.lg),
+      decoration: BoxDecoration(
+        color: AppColors.warningSoftBg,
+        borderRadius: BorderRadius.circular(R.lg),
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.35)),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(Icons.hourglass_bottom_rounded, color: AppColors.warning, size: 22),
+        const SizedBox(width: Sp.md),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('account.trial_ended_title'.tr(), style: AppType.cardTitleBold(color: AppColors.warningOnSoft)),
+            const SizedBox(height: Sp.xs),
+            Text((neutral ? 'account.trial_ended_body_neutral' : 'account.trial_ended_body').tr(),
+                style: AppType.body(color: AppColors.textBody).copyWith(height: 1.5)),
+          ]),
+        ),
+      ]),
+    );
+  }
+}
+
 class _CompanyTile extends StatelessWidget {
-  const _CompanyTile({required this.company, required this.busy, required this.onTap, required this.onRemove});
+  const _CompanyTile({
+    required this.company,
+    required this.busy,
+    required this.onTap,
+    required this.onRemove,
+    required this.onDeleteLocked,
+  });
   final LinkedCompany company;
   final bool busy;
   final VoidCallback onTap;
   final VoidCallback onRemove;
+
+  /// زرّ حذفٍ ظاهرٌ للمتوقّفة — الإزالة بالضغط المطوّل وحده لم يكن يعرفها أحد (بلاغ المالك).
+  final VoidCallback onDeleteLocked;
 
   @override
   Widget build(BuildContext context) {
@@ -401,12 +493,28 @@ class _CompanyTile extends StatelessWidget {
                           child: Text('account.role_employee'.tr(), style: AppType.pillBold(color: AppColors.textMid)),
                         ),
                       ],
+                      if (c.locked) ...[
+                        const SizedBox(width: Sp.sm),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 2),
+                          decoration: BoxDecoration(
+                              color: AppColors.warningSoftBg, borderRadius: BorderRadius.circular(R.pill)),
+                          child: Text('account.company_locked'.tr(),
+                              style: AppType.pillBold(color: AppColors.warningOnSoft)),
+                        ),
+                      ],
                     ]),
                   ],
                 ),
               ),
               if (busy)
                 SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.2, color: AppColors.brand))
+              else if (c.locked)
+                IconButton(
+                  tooltip: 'account.delete_company'.tr(),
+                  onPressed: onDeleteLocked,
+                  icon: Icon(Icons.delete_outline_rounded, color: AppColors.error),
+                )
               else
                 Icon(Icons.chevron_left_rounded, color: AppColors.textLow),
             ],
