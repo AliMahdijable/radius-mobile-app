@@ -895,7 +895,7 @@ class _DeviceCell extends StatelessWidget {
               Text(name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12)),
+                  style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5)),
             ],
           ],
         );

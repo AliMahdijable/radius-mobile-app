@@ -835,6 +835,10 @@
     "ont_default_hint": "System default: telecomadmin / admintelecom. Leave empty to use it.",
     "ubnt_default_hint": "System default: ubnt / ubnt. Leave empty to use it.",
     "save_creds": "Save credentials",
+    "add_cred": "Add another login",
+    "extra_cred": "Login {}",
+    "remove_cred": "Remove this login",
+    "extra_hint": "If the first is rejected, the next ones are tried in order and the one that works is remembered per device. ZTE devices lock after three wrong tries, so a rejected login is never retried on them.",
     "info_hint": "These credentials are used when fetching device info for all subscribers. If left empty, the system default is used."
   },
   "copy": {

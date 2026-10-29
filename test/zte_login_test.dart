@@ -55,6 +55,16 @@ void main() {
       expect(await ZteOntService.loginConfigured(d.host, 'agent', 'secret-1'), isNotNull, reason: 'اعتماداتٌ غيرها تُجرَّب فوراً');
     });
 
+    test('⑦ مرفوضان يُحفظان معاً — التناوب بينهما لا يعيد أيّاً منهما', () async {
+      expect(await ZteOntService.loginConfigured(d.host, 'agent', 'wrong-1'), isNull);
+      expect(await ZteOntService.loginConfigured(d.host, 'agent', 'wrong-2'), isNull);
+      expect(await ZteOntService.loginConfigured(d.host, 'agent', 'wrong-1'), isNull);
+      expect(d.posts, hasLength(2), reason: 'كان يُحفظ آخر مرفوضٍ وحده فيُعاد الأوّل — والمحاولة الغلط الثالثة تقفل الجهاز');
+      expect(await ZteOntService.loginConfigured(d.host, 'agent', 'secret-1'), isNotNull);
+      expect(await ZteOntService.loginConfigured(d.host, 'agent', 'wrong-2'), isNull);
+      expect(d.posts, hasLength(3), reason: 'نجاح اعتمادٍ لا يُخرج المرفوضين غيره');
+    });
+
     test('انقطاع الاتّصال عند الإرسال ليس رفضاً ⇒ الفحص التالي يحاول', () async {
       d.dropPost = true;
       expect(await ZteOntService.loginConfigured(d.host, 'agent', 'secret-1'), isNull);
@@ -311,6 +321,39 @@ void main() {
       expect(DeviceProbeApi.issueFor(ip: d.host), isNull);
     });
 
+    test('⑦ الأوّل مرفوض والإضافيّ صحيح ⇒ يدخل بالإضافيّ، و«حفظ وفحص» بعده يبدأ بالفائز', () async {
+      api.defaults = {
+        'ontUsername': 'agent',
+        'ontPassword': 'wrong-1',
+        'ontExtra': [
+          {'username': 'agent', 'password': 'secret-1'},
+        ],
+      };
+      final snap = await DeviceProbeApi.probe(fallbackIp: d.host, force: true);
+      expect(snap?.ont?.rxPower, '-18.6');
+      expect(d.posts, hasLength(2));
+      expect(DeviceProbeApi.issueFor(ip: d.host), isNull, reason: 'الرفض الأوّل لا يبقى سبباً بعد دخول الإضافيّ');
+      // «حفظ وفحص» ينسى المرفوضات ⇒ لولا الفائز أوّلاً لأُرسل المرفوض ثانيةً (محاولةٌ تقرّب القفل).
+      await DeviceProbeApi.probe(fallbackIp: d.host, force: true, retryLogin: true);
+      expect(d.posts, hasLength(3));
+      expect(Uri.splitQueryString(d.posts.last)['Password'], 'secret-1');
+      final creds = await DeviceProbeApi.resolveOntCreds(fallbackIp: d.host);
+      expect(creds?.pass, 'secret-1', reason: 'الترافيك وإعادة التشغيل بالاعتماد الذي دخل');
+    });
+
+    test('⑦ الخانة الأولى فارغة وإضافيٌّ مرفوض ⇒ لا يُجرَّب افتراض المصنّع على ZTE، والسبب «رُفض»', () async {
+      api.defaults = {
+        'ontExtra': [
+          {'username': 'agent', 'password': 'wrong-1'},
+        ],
+      };
+      expect(await DeviceProbeApi.probe(fallbackIp: d.host, force: true), isNull);
+      expect(d.posts, hasLength(1));
+      expect(Uri.splitQueryString(d.posts.single)['Password'], 'wrong-1');
+      expect(DeviceProbeApi.issueFor(ip: d.host)?.issue, ProbeIssue.loginRejected,
+          reason: 'لا «يحتاج يوزر وباسورد» — الوكيل ضبط اعتماداً ورفضه الجهاز');
+    });
+
     test('بلا يوزر من الوكيل ⇒ لا دخول على ZTE بافتراضٍ من عندنا، والسبب «يحتاج يوزر وباسورد»', () async {
       final snap = await DeviceProbeApi.probe(fallbackIp: d.host, force: true);
       expect(snap, isNull);
@@ -555,7 +598,7 @@ class _FakeMh80 {
 
 /// خادم التطبيق الوهميّ: افتراضات الأجهزة والتشخيص.
 class _FakeApi implements HttpClientAdapter {
-  Map<String, String> defaults = {};
+  Map<String, Object?> defaults = {};
   final requests = <RequestOptions>[];
 
   @override

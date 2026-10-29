@@ -28,4 +28,75 @@ void main() {
     expect(f.ubntUser, isNotEmpty);
     expect(f.ontUser, isNot('  '), reason: 'يوزرٌ فارغ لا يُعدّ اعتماداً');
   });
+
+  // ⑦ (٢٩ أكتوبر — المالك: «مرات عدهم أكثر من يوزر وباسورد موحّد»): حتى ثلاثة اعتماداتٍ لكلّ نوع، تُجرَّب بالترتيب.
+  group('مرشّحو الاعتماد', () {
+    final factory = DeviceProbeApi.credsFor(null, AdminDeviceDefaults.empty);
+    final ontFactory = DeviceCred(factory.ontUser, factory.ontPass);
+    final ubntFactory = DeviceCred(factory.ubntUser, factory.ubntPass);
+    const e1 = DeviceCred('x-1', 'x-1-p');
+    const e2 = DeviceCred('x-2', 'x-2-p');
+
+    test('الخانة الأولى ثمّ الإضافيّان بالترتيب، ولا افتراض مصنّع', () {
+      const d = AdminDeviceDefaults(
+          ontUsername: 'adm-ont', ontPassword: 'adm-ont-p', ontExtra: [e1, e2],
+          ubntUsername: 'adm-ub', ubntPassword: 'adm-ub-p', ubntExtra: [e2]);
+      final c = DeviceProbeApi.candidatesFor(null, d);
+      expect(c.ont, [const DeviceCred('adm-ont', 'adm-ont-p'), e1, e2]);
+      expect(c.ubnt, [const DeviceCred('adm-ub', 'adm-ub-p'), e2]);
+      expect(c.ontFactory, isNull);
+    });
+
+    test('الخانة الأولى فارغة ⇒ الإضافيّان ثمّ افتراض المصنّع آخراً، ومعلَّمٌ كي لا يُجرَّب على ZTE', () {
+      const d = AdminDeviceDefaults(ontExtra: [e1], ubntExtra: [e1, e2]);
+      final c = DeviceProbeApi.candidatesFor(null, d);
+      expect(c.ont, [e1, ontFactory], reason: 'جهاز هواوي يعمل بالافتراض لا يتوقّف لأنّ الوكيل أضاف إضافيّاً');
+      expect(c.ontFactory, ontFactory);
+      expect(c.ubnt, [e1, e2, ubntFactory]);
+    });
+
+    test('اعتماد المشترك وحده — ضبطه الوكيل لهذا الجهاز', () {
+      const d = AdminDeviceDefaults(ontUsername: 'adm-ont', ontPassword: 'p', ontExtra: [e1], ubntExtra: [e2]);
+      final c = DeviceProbeApi.candidatesFor(const DeviceConfig(username: 'sub-u', password: 'sub-p'), d);
+      expect(c.ont, [const DeviceCred('sub-u', 'sub-p')]);
+      expect(c.ubnt, [const DeviceCred('sub-u', 'sub-p')]);
+      expect(c.ontFactory, isNull);
+      final pinned = DeviceProbeApi.candidatesFor(
+          const DeviceConfig(deviceType: DeviceKind.ont, username: 'sub-u', password: 'sub-p'), d);
+      expect(pinned.ont, [const DeviceCred('sub-u', 'sub-p')]);
+      expect(pinned.ubnt, [e2, ubntFactory], reason: 'النوع الآخر من سلسلة المدير');
+    });
+
+    test('بلا تكرار، وبلا شيء ⇒ افتراض المصنّع وحده', () {
+      const d = AdminDeviceDefaults(ontUsername: 'x-1', ontPassword: 'x-1-p', ontExtra: [e1, e2, e2]);
+      expect(DeviceProbeApi.candidatesFor(null, d).ont, [e1, e2]);
+      final none = DeviceProbeApi.candidatesFor(null, AdminDeviceDefaults.empty);
+      expect(none.ont, [ontFactory]);
+      expect(none.ontFactory, ontFactory);
+      expect(none.ubnt, [ubntFactory]);
+    });
+
+    test('من الخادم وإليه: اليوزر الفارغ يُسقط، وبحدّ اثنين، والقائمتان تُرسلان دائماً', () {
+      final d = AdminDeviceDefaults.fromJson({
+        'ontUsername': 'adm-ont',
+        'ontPassword': 'p',
+        'ontExtra': [
+          {'username': '  ', 'password': 'ignored'},
+          {'username': ' x-1 ', 'password': 'x-1-p'},
+          {'username': 'x-2', 'password': 'x-2-p'},
+          {'username': 'x-3', 'password': 'x-3-p'},
+        ],
+        'ubntExtra': 'not-a-list',
+      });
+      expect(d.ontExtra, [e1, e2]);
+      expect(d.ubntExtra, isEmpty);
+      final j = d.toJson();
+      expect(j['ontExtra'], [
+        {'username': 'x-1', 'password': 'x-1-p'},
+        {'username': 'x-2', 'password': 'x-2-p'},
+      ]);
+      expect(j['ubntExtra'], isEmpty, reason: 'قائمةٌ فارغة تمسح ما حُفظ — لا غيابٌ يبقيه');
+      expect(AdminDeviceDefaults.fromJson({'ontUsername': 'a'}).ontExtra, isEmpty, reason: 'خادمٌ قديم بلا الحقل');
+    });
+  });
 }

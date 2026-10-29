@@ -44,6 +44,36 @@ class DeviceConfig {
       (notes == null || notes!.isEmpty);
 }
 
+/// يوزر/باسورد جهاز — الاعتمادان الإضافيّان لكلّ نوع (⑦، ٢٩ أكتوبر).
+class DeviceCred {
+  const DeviceCred(this.username, this.password);
+  final String username;
+  final String password;
+
+  /// [{username, password}] من الخادم: اليوزر الفارغ يُسقط، ولحدّ [AdminDeviceDefaults.maxExtra].
+  static List<DeviceCred> listFrom(Object? raw) {
+    if (raw is! List) return const [];
+    final out = <DeviceCred>[];
+    for (final e in raw) {
+      if (e is! Map) continue;
+      final u = e['username']?.toString().trim() ?? '';
+      if (u.isEmpty) continue;
+      out.add(DeviceCred(u, e['password']?.toString() ?? ''));
+      if (out.length >= AdminDeviceDefaults.maxExtra) break;
+    }
+    return List.unmodifiable(out);
+  }
+
+  Map<String, dynamic> toJson() => {'username': username, 'password': password};
+
+  @override
+  bool operator ==(Object other) =>
+      other is DeviceCred && other.username == username && other.password == password;
+
+  @override
+  int get hashCode => Object.hash(username, password);
+}
+
 /// Admin-wide defaults for the two protocols. Empty fields fall back
 /// to the library hard-coded values (telecomadmin/admintelecom, ubnt/ubnt).
 class AdminDeviceDefaults {
@@ -52,11 +82,20 @@ class AdminDeviceDefaults {
     this.ontPassword,
     this.ubntUsername,
     this.ubntPassword,
+    this.ontExtra = const [],
+    this.ubntExtra = const [],
   });
   final String? ontUsername;
   final String? ontPassword;
   final String? ubntUsername;
   final String? ubntPassword;
+
+  /// ⑦ (المالك ٢٩ أكتوبر: «مرات عدهم أكثر من يوزر وباسورد موحّد»): لحدّ اعتمادين إضافيّين لكلّ نوع — الفحص
+  /// يجرّبهما بالترتيب بعد الأوّل ويحفظ الناجح لكلّ جهاز.
+  final List<DeviceCred> ontExtra;
+  final List<DeviceCred> ubntExtra;
+
+  static const int maxExtra = 2;
 
   static const empty = AdminDeviceDefaults();
 
@@ -66,13 +105,18 @@ class AdminDeviceDefaults {
         ontPassword: _nullIfBlank(j['ontPassword']?.toString()),
         ubntUsername: _nullIfBlank(j['ubntUsername']?.toString()),
         ubntPassword: _nullIfBlank(j['ubntPassword']?.toString()),
+        ontExtra: DeviceCred.listFrom(j['ontExtra']),
+        ubntExtra: DeviceCred.listFrom(j['ubntExtra']),
       );
 
+  /// يُرسل القائمتين دائماً (ولو فارغتين): هذه النسخة تملك القائمة كاملةً — والخادم لا يلمس العمود إلّا حين يصله المفتاحان.
   Map<String, dynamic> toJson() => {
         'ontUsername': ontUsername,
         'ontPassword': ontPassword,
         'ubntUsername': ubntUsername,
         'ubntPassword': ubntPassword,
+        'ontExtra': [for (final c in ontExtra) c.toJson()],
+        'ubntExtra': [for (final c in ubntExtra) c.toJson()],
       };
 }
 

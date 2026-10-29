@@ -13,6 +13,9 @@ import '../desktop/desk_widgets.dart';
 /// Empty fields fall back to the library hardcoded values
 /// (telecomadmin/admintelecom and ubnt/ubnt). This is the 2nd tier of
 /// the credential chain: per-subscriber override > these > library.
+///
+/// ⑦ (٢٩ أكتوبر — المالك: «نضيف ٣ اختيارات بقسم اعتمادات الأجهزة… مرات عدهم أكثر من يوزر وباسورد موحّد»): لكلّ نوعٍ
+/// لحدّ اعتمادين إضافيّين فوق الأوّل؛ الفحص يجرّبها بالترتيب حين يُرفض الأوّل ويحفظ الذي يعمل لكلّ جهاز.
 class DeviceDefaultsScreen extends StatefulWidget {
   const DeviceDefaultsScreen({super.key});
 
@@ -20,11 +23,16 @@ class DeviceDefaultsScreen extends StatefulWidget {
   State<DeviceDefaultsScreen> createState() => _DeviceDefaultsScreenState();
 }
 
+/// خانةٌ إضافيّة: يوزر + باسورد.
+typedef _ExtraField = ({TextEditingController user, TextEditingController pass});
+
 class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
   final _ontUser = TextEditingController();
   final _ontPass = TextEditingController();
   final _ubntUser = TextEditingController();
   final _ubntPass = TextEditingController();
+  final List<_ExtraField> _ontExtra = [];
+  final List<_ExtraField> _ubntExtra = [];
   bool _loading = true;
   bool _saving = false;
   bool _ontObscure = true;
@@ -42,8 +50,17 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
     _ontPass.dispose();
     _ubntUser.dispose();
     _ubntPass.dispose();
+    for (final f in [..._ontExtra, ..._ubntExtra]) {
+      f.user.dispose();
+      f.pass.dispose();
+    }
     super.dispose();
   }
+
+  static _ExtraField _field([DeviceCred? c]) => (
+        user: TextEditingController(text: c?.username ?? ''),
+        pass: TextEditingController(text: c?.password ?? ''),
+      );
 
   Future<void> _load() async {
     final d = await AdminDeviceDefaultsApi.fetch();
@@ -53,7 +70,30 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
       _ontPass.text = d.ontPassword ?? '';
       _ubntUser.text = d.ubntUsername ?? '';
       _ubntPass.text = d.ubntPassword ?? '';
+      _ontExtra.addAll(d.ontExtra.map(_field));
+      _ubntExtra.addAll(d.ubntExtra.map(_field));
       _loading = false;
+    });
+  }
+
+  /// الخانات الإضافيّة ⇒ اعتمادات (اليوزر الفارغ يُسقط).
+  static List<DeviceCred> _credsOf(List<_ExtraField> fields) => [
+        for (final f in fields)
+          if (f.user.text.trim().isNotEmpty) DeviceCred(f.user.text.trim(), f.pass.text),
+      ];
+
+  void _addExtra(List<_ExtraField> list) {
+    if (list.length >= AdminDeviceDefaults.maxExtra) return;
+    setState(() => list.add(_field()));
+  }
+
+  void _removeExtra(List<_ExtraField> list, int i) {
+    final f = list[i];
+    setState(() => list.removeAt(i));
+    // بعد الإطار: حقلا الخانة المحذوفة ما زالا مرسومين حتى يُعاد البناء.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      f.user.dispose();
+      f.pass.dispose();
     });
   }
 
@@ -66,6 +106,8 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
         ubntUsername:
             _ubntUser.text.trim().isEmpty ? null : _ubntUser.text.trim(),
         ubntPassword: _ubntPass.text.isEmpty ? null : _ubntPass.text,
+        ontExtra: _credsOf(_ontExtra),
+        ubntExtra: _credsOf(_ubntExtra),
       ),
     );
     if (!mounted) return;
@@ -116,12 +158,16 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
                   const SizedBox(height: Sp.lg),
                   _section(
                     icon: LucideIcons.cable,
-                    title: 'Huawei ONT',
+                    // ZTE أيضاً منذ MH80 والنكست (HS8546V6) — لا هواوي وحده.
+                    title: 'ONT — Huawei / ZTE',
                     subtitle: 'devices.ont_default_hint'.tr(),
                     userController: _ontUser,
                     passController: _ontPass,
                     obscure: _ontObscure,
                     onToggle: () => setState(() => _ontObscure = !_ontObscure),
+                    extras: _ontExtra,
+                    onAdd: () => _addExtra(_ontExtra),
+                    onRemove: (i) => _removeExtra(_ontExtra, i),
                   ),
                   const SizedBox(height: Sp.md),
                   _section(
@@ -133,6 +179,9 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
                     obscure: _ubntObscure,
                     onToggle: () =>
                         setState(() => _ubntObscure = !_ubntObscure),
+                    extras: _ubntExtra,
+                    onAdd: () => _addExtra(_ubntExtra),
+                    onRemove: (i) => _removeExtra(_ubntExtra, i),
                   ),
                   const SizedBox(height: Sp.lg),
                   SizedBox(
@@ -196,6 +245,9 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
     required TextEditingController passController,
     required bool obscure,
     required VoidCallback onToggle,
+    required List<_ExtraField> extras,
+    required VoidCallback onAdd,
+    required ValueChanged<int> onRemove,
   }) =>
       Container(
         padding: const EdgeInsets.all(Sp.md),
@@ -243,19 +295,69 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
               controller: passController,
               obscureText: obscure,
               style: const TextStyle(fontSize: 13, height: 1.45),
-              decoration: _dec(
-                suffix: IconButton(
-                  icon: Icon(
-                    obscure ? LucideIcons.eye : LucideIcons.eyeOff,
-                    size: 16,
-                    color: AppColors.textMid,
+              decoration: _dec(suffix: _eye(obscure, onToggle)),
+            ),
+            for (var i = 0; i < extras.length; i++) ...[
+              const SizedBox(height: Sp.md),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'devices.extra_cred'.tr(args: ['${i + 2}']),
+                      style: AppType.label(color: AppColors.textMid)
+                          .copyWith(fontSize: 11, fontWeight: FontWeight.w700),
+                    ),
                   ),
-                  onPressed: onToggle,
+                  IconButton(
+                    tooltip: 'devices.remove_cred'.tr(),
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(LucideIcons.trash2, size: 15, color: AppColors.error),
+                    onPressed: () => onRemove(i),
+                  ),
+                ],
+              ),
+              TextField(
+                controller: extras[i].user,
+                style: const TextStyle(fontSize: 13, height: 1.45),
+                decoration: _dec(hint: 'login.username'.tr()),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: extras[i].pass,
+                obscureText: obscure,
+                style: const TextStyle(fontSize: 13, height: 1.45),
+                decoration: _dec(hint: 'login.password'.tr(), suffix: _eye(obscure, onToggle)),
+              ),
+            ],
+            if (extras.length < AdminDeviceDefaults.maxExtra) ...[
+              const SizedBox(height: Sp.sm),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextButton.icon(
+                  onPressed: onAdd,
+                  icon: const Icon(LucideIcons.plus, size: 15),
+                  label: Text('devices.add_cred'.tr()),
                 ),
               ),
-            ),
+            ],
+            if (extras.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                'devices.extra_hint'.tr(),
+                style: AppType.muted().copyWith(fontSize: 10.5, height: 1.4),
+              ),
+            ],
           ],
         ),
+      );
+
+  Widget _eye(bool obscure, VoidCallback onToggle) => IconButton(
+        icon: Icon(
+          obscure ? LucideIcons.eye : LucideIcons.eyeOff,
+          size: 16,
+          color: AppColors.textMid,
+        ),
+        onPressed: onToggle,
       );
 
   Widget _labelText(String text) => Padding(
@@ -265,8 +367,9 @@ class _DeviceDefaultsScreenState extends State<DeviceDefaultsScreen> {
                 AppType.label(color: AppColors.textMid).copyWith(fontSize: 11)),
       );
 
-  InputDecoration _dec({Widget? suffix}) => InputDecoration(
+  InputDecoration _dec({Widget? suffix, String? hint}) => InputDecoration(
         isDense: true,
+        hintText: hint,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
         filled: true,

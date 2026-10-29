@@ -193,6 +193,8 @@ class DeviceProbeApi {
     _kindByIp.clear();
     _deadCache.clear();
     _reachCache.clear();
+    _ontWinner.clear();
+    _ubntWinner.clear();
     _adminFetch = null;
     _adminFetchBy.clear();
     _persistDebounce?.cancel();
@@ -237,7 +239,8 @@ class DeviceProbeApi {
     }
     bool ok;
     try {
-      ok = Platform.isWindows
+      // عنوانٌ بمنفذ (IP مخصّص خلف تحويل منفذ) ⇒ اتّصالٌ بذلك المنفذ نفسه على كلّ منصّة.
+      ok = Platform.isWindows && TcpReachability.split(ip).port == null
           ? (await WindowsIcmp.ping(ip, count: 2, timeout: const Duration(seconds: 1)))
               .isNotEmpty
           : await TcpReachability.isReachable(ip);
@@ -419,6 +422,8 @@ class DeviceProbeApi {
     _kindByIp.remove(k);
     _deadCache.remove(k);
     _ontVendorByKey.remove(k);
+    _ontWinner.remove(k);
+    _ubntWinner.remove(k);
     // اعتماداتٌ جديدة تُجرَّب: الرفض السابق على هذا العنوان يُنسى (لا يُعاد إلّا المرفوض نفسه بلا تغيير).
     ZteOntService.forget(ip.trim());
     _schedulePersist();
@@ -661,6 +666,9 @@ class DeviceProbeApi {
     _snapByUser.clear();
     _kindByIp.clear();
     _deadCache.clear();
+    // اعتماداتٌ جديدة ⇒ الفائز القديم قد لا يكون بينها.
+    _ontWinner.clear();
+    _ubntWinner.clear();
     _schedulePersist();
   }
 
@@ -688,12 +696,12 @@ class DeviceProbeApi {
 
     final overridesOnt = cfg?.deviceType == DeviceKind.ont;
     final overridesUbnt = cfg?.deviceType == DeviceKind.ubiquiti;
-    final c = credsFor(cfg, defaults);
-    final ontUser = c.ontUser, ontPass = c.ontPass, ubntUser = c.ubntUser, ubntPass = c.ubntPass;
+    // ⑦: مرشّحو الاعتماد لكلّ نوع (الأوّل ثمّ إضافيّا المدير) — بالترتيب، والفائز يُحفظ لهذا العنوان.
+    final c = candidatesFor(cfg, defaults);
 
     // Admin pinned kind → probe واحد فقط.
-    if (overridesOnt) return _probeOnt(ip, ontUser, ontPass, kindKey, ontSet: c.ontSet);
-    if (overridesUbnt) return _probeUbnt(ip, ubntUser, ubntPass);
+    if (overridesOnt) return _probeOntAny(ip, c.ont, kindKey, factory: c.ontFactory);
+    if (overridesUbnt) return _probeUbntAny(ip, c.ubnt, kindKey);
 
     // Kind cache — لو نعرف من probe سابق إن IP هذا ONT (أو UBNT)،
     // نفجّر النوع الصحيح فقط. توفير ~5s متوسط. مطلب المستخدم 2026-07-12.
@@ -701,15 +709,15 @@ class DeviceProbeApi {
     // ترجع parallel لتتلاقط تغيير الجهاز.
     final knownKind = _kindByIp[kindKey];
     if (knownKind == DeviceKind.ont) {
-      return _probeOnt(ip, ontUser, ontPass, kindKey, ontSet: c.ontSet);
+      return _probeOntAny(ip, c.ont, kindKey, factory: c.ontFactory);
     }
     if (knownKind == DeviceKind.ubiquiti) {
-      return _probeUbnt(ip, ubntUser, ubntPass);
+      return _probeUbntAny(ip, c.ubnt, kindKey);
     }
 
     // First-time أو kind cache cleared — parallel race.
-    final ont = _probeOnt(ip, ontUser, ontPass, kindKey, ontSet: c.ontSet);
-    final ubnt = _probeUbnt(ip, ubntUser, ubntPass, unlessZte: true);
+    final ont = _probeOntAny(ip, c.ont, kindKey, factory: c.ontFactory);
+    final ubnt = _probeUbntAny(ip, c.ubnt, kindKey, unlessZte: true);
     return _firstNonNull<DeviceHealthSnapshot>([ont, ubnt]);
   }
 
@@ -751,6 +759,93 @@ class DeviceProbeApi {
       ubntPass: pick(ownForUbnt, pass, defaults.ubntPassword, _kUbntPass),
       ontSet: (ownForOnt && user.isNotEmpty) || defaults.ontUsername?.isNotEmpty == true,
     );
+  }
+
+  /// ⑦ (٢٩ أكتوبر — المالك: «مرات عدهم أكثر من يوزر وباسورد موحّد»): مرشّحو الاعتماد لكلّ نوع بالترتيب. اعتماد
+  /// المشترك ⇒ هو وحده (ضبطه الوكيل لهذا الجهاز)؛ وإلّا الخانة الأولى للمدير ثمّ إضافيّاه بلا تكرار. والخانة الأولى
+  /// فارغة ⇒ افتراض المصنّع **آخراً** — هواوي وUBNT يجرّبانه كما كانا (لا يتوقّف جهازٌ يعمل به لأنّ الوكيل أضاف
+  /// إضافيّاً)، و[ontFactory] يدلّ عليه فيُجرَّب بلا ontSet: جهاز ZTE لا يدخل به أبداً (افتراضٌ من عندنا يقرّب قفله).
+  @visibleForTesting
+  static ({List<DeviceCred> ont, List<DeviceCred> ubnt, DeviceCred? ontFactory}) candidatesFor(
+    DeviceConfig? cfg,
+    AdminDeviceDefaults defaults,
+  ) {
+    final c = credsFor(cfg, defaults);
+    final kind = cfg?.deviceType;
+    final user = cfg?.username?.trim() ?? '';
+    final ontOwn = (kind == null || kind == DeviceKind.ont) && user.isNotEmpty;
+    final ubntOwn = (kind == null || kind == DeviceKind.ubiquiti) && user.isNotEmpty;
+    // [first] = اختيار credsFor نفسه: اعتماد المشترك، وإلّا الخانة الأولى للمدير، وإلّا افتراض المصنّع.
+    ({List<DeviceCred> list, DeviceCred? factory}) chain(DeviceCred first,
+        {required bool own, required bool adminSet, required List<DeviceCred> extra}) {
+      if (own) return (list: [first], factory: null);
+      final out = <DeviceCred>[if (adminSet) first];
+      for (final e in extra) {
+        if (!out.contains(e)) out.add(e);
+      }
+      if (!adminSet && !out.contains(first)) {
+        out.add(first);
+        return (list: out, factory: first);
+      }
+      return (list: out, factory: null);
+    }
+
+    final ont = chain(DeviceCred(c.ontUser, c.ontPass),
+        own: ontOwn, adminSet: defaults.ontUsername?.isNotEmpty == true, extra: defaults.ontExtra);
+    final ubnt = chain(DeviceCred(c.ubntUser, c.ubntPass),
+        own: ubntOwn, adminSet: defaults.ubntUsername?.isNotEmpty == true, extra: defaults.ubntExtra);
+    return (ont: ont.list, ubnt: ubnt.list, ontFactory: ont.factory);
+  }
+
+  /// ⑦: الاعتماد الذي دخل على كلّ عنوان (بمفتاح كاش النوع) — الفحص التالي يبدأ به، وجلسة الترافيك وإعادة التشغيل
+  /// تستعملانه ([resolveOntCreds]/[resolveUbntCreds]).
+  static final _ontWinner = <String, DeviceCred>{};
+  static final _ubntWinner = <String, DeviceCred>{};
+
+  static List<DeviceCred> _winnerFirst(List<DeviceCred> c, DeviceCred? w) =>
+      (w == null || !c.contains(w)) ? c : [w, ...c.where((x) => x != w)];
+
+  /// ⑦: يجرّب مرشّحي ONT بالترتيب (الفائز المحفوظ أوّلاً)، ويقف حين لا يكون الاعتماد هو السبب ([_nextCredWorth]).
+  /// [factory] افتراض المصنّع إن كان بالقائمة: يُجرَّب بلا ontSet ⇒ ZTE يردّ «يحتاج اعتمادات» بلا أيّ محاولة دخول.
+  static Future<DeviceHealthSnapshot?> _probeOntAny(
+      String ip, List<DeviceCred> cands, String kindKey, {DeviceCred? factory}) async {
+    final list = _winnerFirst(cands, _ontWinner[kindKey]);
+    for (var i = 0; i < list.length; i++) {
+      final started = DateTime.now();
+      final snap = await _probeOnt(ip, list[i].username, list[i].password, kindKey, ontSet: list[i] != factory);
+      if (snap != null) {
+        _ontWinner[kindKey] = list[i];
+        return snap;
+      }
+      if (i == list.length - 1 || !await _nextCredWorth(ip, started, nextIsFactory: list[i + 1] == factory)) break;
+    }
+    return null;
+  }
+
+  /// ⑦: مثل [_probeOntAny] لـUbiquiti.
+  static Future<DeviceHealthSnapshot?> _probeUbntAny(
+      String ip, List<DeviceCred> cands, String kindKey, {bool unlessZte = false}) async {
+    final list = _winnerFirst(cands, _ubntWinner[kindKey]);
+    for (var i = 0; i < list.length; i++) {
+      final started = DateTime.now();
+      final snap = await _probeUbnt(ip, list[i].username, list[i].password, unlessZte: unlessZte);
+      if (snap != null) {
+        _ubntWinner[kindKey] = list[i];
+        return snap;
+      }
+      if (i == list.length - 1 || !await _nextCredWorth(ip, started)) break;
+    }
+    return null;
+  }
+
+  /// يستحقّ الاعتمادُ التالي المحاولة؟ ZTE سجّل سببه في هذه الجولة ⇒ «مرفوض» وحده، ولا يُنتقل منه إلى افتراض المصنّع
+  /// ([nextIsFactory]) — فيبقى سبب الكرت «رفض اليوزر أو الباسورد» لا «يحتاج اعتمادات» (قفلٌ/مشغولٌ/لا يجاوب ⇒ قف، فلا
+  /// يُطرَق جهازٌ يقترب من قفله)؛ هواوي وUBNT لا يقولان سببهما ⇒ التالي فقط إن كان الجهاز واصلاً (بنگ) — فلا ينتظر
+  /// جهازٌ مطفأ مهلةً لكلّ اعتماد.
+  static Future<bool> _nextCredWorth(String ip, DateTime started, {bool nextIsFactory = false}) async {
+    final z = _zteIssue[ip];
+    if (z != null && !z.at.isBefore(started)) return z.issue == ProbeIssue.loginRejected && !nextIsFactory;
+    return (await reachable(fallbackIp: ip)) == true;
   }
 
   /// آخر مورّد ONT نجح لكلّ عنوان (بمفتاح كاش النوع) — الفحص التالي يذهب إليه وحده.
@@ -864,6 +959,9 @@ class DeviceProbeApi {
       if (custom != null && custom.isNotEmpty) effectiveIp = custom;
     }
     if (effectiveIp.isEmpty) return null;
+    // ⑦: الاعتماد الذي دخل به الفحص على هذا العنوان — الترافيك وإعادة التشغيل بالاعتماد العامل نفسه.
+    final won = _ubntWinner[_k(company, effectiveIp)];
+    if (won != null) return (ip: effectiveIp, user: won.username, pass: won.password);
     final defaults = await _loadAdminDefaults(company);
     final overrides = (cfg?.username?.isNotEmpty ?? false) ||
         (cfg?.password?.isNotEmpty ?? false);
@@ -898,6 +996,9 @@ class DeviceProbeApi {
       if (custom != null && custom.isNotEmpty) effectiveIp = custom;
     }
     if (effectiveIp.isEmpty) return null;
+    // ⑦: الاعتماد الذي دخل به الفحص على هذا العنوان (انظر [resolveUbntCreds]).
+    final won = _ontWinner[_k(company, effectiveIp)];
+    if (won != null) return (ip: effectiveIp, user: won.username, pass: won.password);
     final defaults = await _loadAdminDefaults(company);
     final overrides = (cfg?.username?.isNotEmpty ?? false) ||
         (cfg?.password?.isNotEmpty ?? false);

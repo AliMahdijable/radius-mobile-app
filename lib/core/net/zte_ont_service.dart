@@ -17,8 +17,10 @@ import '../../models/device_health.dart';
 class ZteOntService {
   ZteOntService._();
 
-  /// اعتماداتٌ رفضها جهازٌ (عنوان ⇒ يوزر+باسورد): لا تُعاد عليه حتى تتغيّر — كلّ رفضٍ يقرّب قفل الواجهة (ثلاثٌ ⇒ دقيقة).
-  static final _rejected = <String, String>{};
+  /// اعتماداتٌ رفضها جهازٌ (عنوان ⇒ مجموعة يوزر+باسورد): لا يُعاد أيٌّ منها عليه حتى تتغيّر — كلّ رفضٍ يقرّب قفل الواجهة
+  /// (ثلاثٌ ⇒ دقيقة). مجموعةٌ لا مفردة (⑦، ٢٩ أكتوبر): مع اعتماداتٍ إضافيّة كان الرفض الثاني يمسح تذكّر الأوّل، فتعيده
+  /// الدورة التالية غلطاً — ثالثةٌ تقفل الجهاز.
+  static final _rejected = <String, Set<String>>{};
 
   /// اعتماداتٌ دخلت على هذا العنوان مرّةً: رفضها بعدها ليس غلطاً بها بل جلسةٌ أخرى مفتوحة (جلسة الترافيك، أو صفحة الجهاز
   /// بمتصفّح) — فلا تُحفظ مرفوضةً، وإلّا قفلنا الوكيل عن جهازه باعتماداتٍ صحيحة.
@@ -146,7 +148,7 @@ class ZteOntService {
       _issues[host] = (issue: ZteLoginIssue.rejected, lockLeft: null, trace: 'no-user');
       return null;
     }
-    if (_rejected[host] == key) {
+    if (_rejected[host]?.contains(key) ?? false) {
       _issues[host] = (issue: ZteLoginIssue.rejected, lockLeft: null, trace: 'remembered');
       return null;
     }
@@ -158,7 +160,8 @@ class ZteOntService {
     final r = await attempt(host, user, pass);
     final s = r.session;
     if (s != null) {
-      _rejected.remove(host);
+      // هذا الاعتماد وحده يخرج من المرفوضات؛ المرفوض غيره يبقى لا يُعاد (لا يقرّب القفل ثانيةً).
+      _rejected[host]?.remove(key);
       _busyUntil.remove(host);
       _issues.remove(host);
       _good[host] = key;
@@ -170,7 +173,7 @@ class ZteOntService {
         issue = ZteLoginIssue.busy;
         _busyUntil[host] = DateTime.now().add(busyCooldown);
       } else {
-        _rejected[host] = key;
+        (_rejected[host] ??= <String>{}).add(key);
       }
     }
     _issues[host] = (issue: issue, lockLeft: r.lockLeft, trace: r.trace);

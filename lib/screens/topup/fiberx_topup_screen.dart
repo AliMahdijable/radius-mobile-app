@@ -337,7 +337,7 @@ class _FiberxTopupScreenState extends State<FiberxTopupScreen> {
           style: FilledButton.styleFrom(
               backgroundColor: AppColors.brand, padding: const EdgeInsets.symmetric(vertical: Sp.md)),
           child: _busy
-              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onBrand))
               : const Text('شحن'),
         ),
       ),
@@ -360,7 +360,7 @@ class _FiberxTopupScreenState extends State<FiberxTopupScreen> {
               style: FilledButton.styleFrom(
                   backgroundColor: AppColors.brand, padding: const EdgeInsets.symmetric(vertical: Sp.md)),
               child: _checking
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onBrand))
                   : const Text('تحقّقت من الدفع'),
             ),
           ),
