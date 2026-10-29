@@ -529,6 +529,7 @@ class Subscriber {
     int? dl,
     int? ul,
     String? device,
+    String? mac,
   }) {
     return Subscriber(
       idx: idx,
@@ -539,7 +540,8 @@ class Subscriber {
       mobile: mobile,
       expiration: expiration,
       lastOnline: lastOnline,
-      lastMac: lastMac,
+      // ماك الجلسة الحيّة (online-users) — كان يُجلب ويُرمى، فيبقى عمود الماك فارغاً للمتّصل (٢٩ أكتوبر).
+      lastMac: (mac != null && mac.trim().isNotEmpty) ? mac.trim() : lastMac,
       remainingDays: remainingDays,
       canChangePackage: canChangePackage,
       packageChangeNote: packageChangeNote,

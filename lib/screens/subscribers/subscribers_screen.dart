@@ -1047,6 +1047,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
           dl: session.downloadBytes,
           ul: session.uploadBytes,
           device: session.device,
+          mac: session.mac,
         );
       }
       return enriched;

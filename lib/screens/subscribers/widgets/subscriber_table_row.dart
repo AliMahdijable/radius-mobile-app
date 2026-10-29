@@ -26,6 +26,7 @@ import '../sheets/movements_sheet.dart';
 import '../sheets/pay_debt_sheet.dart';
 import '../sheets/quick_discount_sheet.dart';
 import '../sheets/subscriber_price_sheet.dart';
+import 'device_chip_micro.dart' show DeviceProbeBus;
 import 'sort_sheet.dart';
 import 'subscriber_card_v3.dart';
 import 'subscriber_columns.dart';
@@ -71,7 +72,10 @@ class SubscriberTableColumns {
   static const double nameAutoMin = 170;
   static const double nameDefault = 200;
   static const double nameMax = 640;
-  static const double actions = 140;
+
+  /// الأزرار الأربعة وفراغاتها (١٤٠) + هامشٌ بنهايتها (١٢) — كان «…» ملتصقاً بحافّة الجدول
+  /// (المالك ٢٩ أكتوبر: «ليش ملتصق هيج»). الرأس يحجز الثابت نفسه فيبقى محاذياً.
+  static const double actions = 152;
 
   /// حدّا الجدول الأيمن والأيسر (١ لكلٍّ منهما).
   static const double borders = 2;
@@ -515,7 +519,9 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
           ],
         );
       case SubCol.mac:
-        return _MacCell(sub: s);
+        return _IpSignalCell(sub: s);
+      case SubCol.device:
+        return _DeviceCell(sub: s);
       case SubCol.usage:
         return _UsageCell(sub: s);
       case SubCol.balance:
@@ -614,6 +620,8 @@ class _RowActions extends StatelessWidget {
             },
           ),
         ),
+        // هامش النهاية — لا يلتصق «…» بحافّة الجدول ([SubscriberTableColumns.actions]).
+        const SizedBox(width: 12),
       ],
     );
   }
@@ -806,9 +814,65 @@ class _PackageCell extends StatelessWidget {
   }
 }
 
-/// الماك (نقرةٌ تنسخه)، وتحته IP الجلسة للمتّصل.
-class _MacCell extends StatelessWidget {
-  const _MacCell({required this.sub});
+TextStyle _monoStyle(bool online) => AppType.muted(color: online ? AppColors.info : AppColors.textMid)
+    .copyWith(fontSize: 12.5, fontFeatures: const [FontFeature.tabularFigures()]);
+
+Widget _dashCell() => Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: Text('—', style: AppType.muted(color: AppColors.textLow)),
+    );
+
+/// قيمةٌ بسطرٍ واحد من اليسار لليمين، نقرةٌ تنسخها.
+Widget _copyableValue(BuildContext context, String v, TextStyle style) => Tooltip(
+      message: 'desktop.copy'.tr(),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(R.sm),
+        onTap: () async {
+          await Clipboard.setData(ClipboardData(text: v));
+          if (context.mounted) showSheetSnack(context, 'desktop.copied'.tr());
+        },
+        child: Text(v, maxLines: 1, overflow: TextOverflow.ellipsis, textDirection: TextDirection.ltr, style: style),
+      ),
+    );
+
+/// «IP / الإشارة» (٢٩ أكتوبر — المالك: «ما يظهر اشارات المشتركين… تكدر تحقنهن وي حقل الماك ip»): IP الجلسة
+/// للمتّصل (نقرةٌ تنسخه) وتحته قراءة جهاز المشترك من كاش الفحص — النانو: الإشارة وسرعة LAN، والـONU: الضوء
+/// والحرارة — بألوان صحّة كارت الهاتف نفسها ([SubscriberNetworkMetrics])، وتتحدّث مع موجة الفحص.
+class _IpSignalCell extends StatelessWidget {
+  const _IpSignalCell({required this.sub});
+
+  final Subscriber sub;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final ip = sub.isOnline ? (sub.ipAddress?.trim() ?? '') : '';
+    return ValueListenableBuilder<int>(
+      valueListenable: DeviceProbeBus.tick,
+      builder: (context, _, __) {
+        final probed = SubscriberNetworkMetrics.snapshotOf(sub) != null;
+        if (ip.isEmpty && !probed) return _dashCell();
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (ip.isNotEmpty) _copyableValue(context, ip, _monoStyle(sub.isOnline)),
+            if (probed) ...[
+              if (ip.isNotEmpty) const SizedBox(height: 3),
+              SubscriberNetworkMetrics(sub: sub, wrap: true),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// «الماك / الجهاز» (٢٩ أكتوبر — المالك: «الماك واسم الجهاز اعزله بحقل ثاني اختيار الاظهار»؛ يُخفى ويُظهَر من
+/// «الأعمدة»): الماك (نقرةٌ تنسخه) — ماك الجلسة الحيّة للمتّصل وآخر ماكٍ لغيره — وتحته اسم الجهاز: اسم النانو أو
+/// طراز الـONU من الفحص، وإلّا مصنّع الراوتر كما يقوله الساس.
+class _DeviceCell extends StatelessWidget {
+  const _DeviceCell({required this.sub});
 
   final Subscriber sub;
 
@@ -816,36 +880,26 @@ class _MacCell extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final mac = sub.lastMac?.trim() ?? '';
-    final ip = sub.isOnline ? (sub.ipAddress?.trim() ?? '') : '';
-    if (mac.isEmpty && ip.isEmpty) {
-      return Align(
-        alignment: AlignmentDirectional.centerStart,
-        child: Text('—', style: AppType.muted(color: AppColors.textLow)),
-      );
-    }
-    final mono = AppType.muted(color: sub.isOnline ? AppColors.info : AppColors.textMid)
-        .copyWith(fontSize: 12.5, fontFeatures: const [FontFeature.tabularFigures()]);
-    Widget copyable(String v, TextStyle style) => Tooltip(
-          message: 'desktop.copy'.tr(),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(R.sm),
-            onTap: () async {
-              await Clipboard.setData(ClipboardData(text: v));
-              if (context.mounted) showSheetSnack(context, 'desktop.copied'.tr());
-            },
-            child: Text(v, maxLines: 1, overflow: TextOverflow.ellipsis, textDirection: TextDirection.ltr, style: style),
-          ),
+    return ValueListenableBuilder<int>(
+      valueListenable: DeviceProbeBus.tick,
+      builder: (context, _, __) {
+        final name = SubscriberNetworkMetrics.deviceNameOf(sub, SubscriberNetworkMetrics.snapshotOf(sub));
+        if (mac.isEmpty && name == null) return _dashCell();
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (mac.isNotEmpty) _copyableValue(context, mac, _monoStyle(sub.isOnline)),
+            if (name != null) ...[
+              if (mac.isNotEmpty) const SizedBox(height: 2),
+              Text(name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12)),
+            ],
+          ],
         );
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (mac.isNotEmpty) copyable(mac, mono),
-        if (ip.isNotEmpty) ...[
-          const SizedBox(height: 2),
-          copyable(ip, mono.copyWith(color: AppColors.textMid)),
-        ],
-      ],
+      },
     );
   }
 }

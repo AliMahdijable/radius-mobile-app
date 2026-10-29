@@ -7,7 +7,11 @@ import 'sort_sheet.dart';
 
 /// أعمدة جدول المشتركين على الحاسبة. «المشترك» (الاسم واليوزر) والإجراءات ثابتان؛ الباقي يُظهَر
 /// ويُخفى ويُرتَّب من زرّ «الأعمدة»، ويُحفظ على هذا الجهاز.
-enum SubCol { phone, package, manager, expiration, remaining, session, mac, usage, balance }
+///
+/// ٢٩ أكتوبر (المالك على الحاسبة: «ما يظهر اشارات المشتركين… والماك واسم الجهاز اعزله بحقل ثاني»):
+/// [SubCol.mac] صار «IP / الإشارة» — IP الجلسة وقراءة جهاز المشترك (النانو/الـONU) — ويبقى اسمه `mac`
+/// حتى لا يضيع مكانه وعرضه المحفوظان؛ والماك واسم الجهاز انتقلا إلى [SubCol.device] الجديد.
+enum SubCol { phone, package, manager, expiration, remaining, session, mac, device, usage, balance }
 
 extension SubColInfo on SubCol {
   String get label => switch (this) {
@@ -18,6 +22,7 @@ extension SubColInfo on SubCol {
         SubCol.remaining => 'desktop.col_days'.tr(),
         SubCol.session => 'desktop.col_session'.tr(),
         SubCol.mac => 'desktop.col_mac'.tr(),
+        SubCol.device => 'desktop.col_device'.tr(),
         SubCol.usage => 'desktop.col_usage'.tr(),
         SubCol.balance => 'desktop.col_balance'.tr(),
       };
@@ -32,6 +37,7 @@ extension SubColInfo on SubCol {
         SubCol.remaining => 96,
         SubCol.session => 140,
         SubCol.mac => 144,
+        SubCol.device => 150,
         SubCol.usage => 132,
         SubCol.balance => 112,
       };
@@ -39,7 +45,7 @@ extension SubColInfo on SubCol {
   /// أضيق ما يُسحب إليه: تسميةٌ قصيرة وقيمةٌ تُقرأ.
   double get minWidth => switch (this) {
         SubCol.phone => 120,
-        SubCol.mac || SubCol.session || SubCol.usage => 96,
+        SubCol.mac || SubCol.device || SubCol.session || SubCol.usage => 96,
         _ => 76,
       };
 
@@ -54,6 +60,7 @@ extension SubColInfo on SubCol {
         SubCol.remaining => SortField.remainingDays,
         SubCol.session => SortField.sessionTime,
         SubCol.mac => null,
+        SubCol.device => null,
         SubCol.usage => SortField.dailyTraffic,
         SubCol.balance => SortField.notes,
       };
@@ -80,6 +87,8 @@ class SubscriberColumnPrefs {
     (SubCol.remaining, true),
     (SubCol.session, true),
     (SubCol.mac, true),
+    // جديد ٢٩ أكتوبر — يُلحق تلقائيّاً بمكانه عند من حفظ تخطيطاً قديماً ([decode]).
+    (SubCol.device, true),
     (SubCol.usage, true),
     (SubCol.balance, true),
   ];

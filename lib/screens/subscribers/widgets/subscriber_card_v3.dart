@@ -366,7 +366,7 @@ class SubscriberCardV3 extends StatelessWidget {
             ),
             const SizedBox(width: 4),
           ],
-          _NetworkMetrics(sub: sub),
+          SubscriberNetworkMetrics(sub: sub),
         ],
       ),
     );
@@ -808,21 +808,44 @@ class SubscriberCardV3 extends StatelessWidget {
 
 /// يقرأ من كاش `DeviceProbeApi` فقط ولا يبدأ فحصاً — موجة القائمة هي
 /// من تملك الفحص، وهذا الصفّ يستمع لـ`DeviceProbeBus` فيتحدّث معها.
-class _NetworkMetrics extends StatelessWidget {
-  const _NetworkMetrics({required this.sub});
+class SubscriberNetworkMetrics extends StatelessWidget {
+  const SubscriberNetworkMetrics({super.key, required this.sub, this.wrap = false});
   final Subscriber sub;
+
+  /// جدول الحاسبة: خليّةٌ ضيّقة ⇒ تلتفّ القياسات بدل أن تفيض (الهاتف صفٌّ واحد كما كان).
+  final bool wrap;
+
+  /// لقطة جهاز المشترك من الكاش وحده (لا فحص) — باليوزر أوّلاً ثمّ بـIP الجلسة.
+  static DeviceHealthSnapshot? snapshotOf(Subscriber sub) {
+    final ip = sub.ipAddress?.trim() ?? '';
+    return DeviceProbeApi.cachedForUser(sub.username, company: sub.companyKey) ??
+        (ip.isEmpty ? null : DeviceProbeApi.cached(ip, company: sub.companyKey));
+  }
+
+  /// اسم جهاز المشترك: اسم النانو (hostname) أو طراز الـONU من الفحص، وإلّا مصنّع الراوتر من الساس (oui).
+  static String? deviceNameOf(Subscriber sub, DeviceHealthSnapshot? snap) {
+    if (snap != null) {
+      if (snap.kind == DeviceKind.ubiquiti) {
+        final h = snap.ubnt?.hostname.trim() ?? '';
+        if (h.isNotEmpty) return h;
+      } else if (snap.kind == DeviceKind.ont) {
+        final m = snap.ont?.model.trim() ?? '';
+        if (m.isNotEmpty) return m;
+        final v = snap.ont?.vendor ?? '';
+        if (v == 'zte') return 'ZTE';
+        if (v == 'huawei') return 'Huawei';
+      }
+    }
+    final oui = sub.deviceVendor?.trim() ?? '';
+    return oui.isEmpty ? null : oui;
+  }
 
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<int>(
       valueListenable: DeviceProbeBus.tick,
       builder: (_, __, ___) {
-        final ip = sub.ipAddress?.trim() ?? '';
-        final snap = DeviceProbeApi.cachedForUser(sub.username,
-                company: sub.companyKey) ??
-            (ip.isEmpty
-                ? null
-                : DeviceProbeApi.cached(ip, company: sub.companyKey));
+        final snap = snapshotOf(sub);
         if (snap == null) return const SizedBox.shrink();
 
         final items = <Widget>[];
@@ -850,6 +873,7 @@ class _NetworkMetrics extends StatelessWidget {
           ));
         }
         if (items.isEmpty) return const SizedBox.shrink();
+        if (wrap) return Wrap(spacing: 8, runSpacing: 2, children: items);
 
         return Row(
           mainAxisSize: MainAxisSize.min,
