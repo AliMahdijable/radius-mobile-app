@@ -124,6 +124,33 @@ class MikrotikApi {
     };
   }
 
+  /// منافذ بديلة لفحص «حيّ؟» حين يرفض الجهازُ منفذَه المسجَّل (أقفل الـAPI): بقيّة طرق القراءة ([routeOrder]) بلا
+  /// المنفذ 80 — شبكات الموبايل تقبل الاتّصال عليه لأيّ عنوان (وسيطٌ شفّاف؛ ٣٠ أكتوبر: 192.0.2.1:80 «اتّصل» بـ23ms).
+  ///
+  /// ٣٠ أكتوبر — المالك («اكو اجهزه جاي تظهر هيج الرقم خطا»): جهازٌ أقفل الـAPI (8728) وفتح SSH كان يُعرض
+  /// «فقدان الحزم 100%» ومفصولاً، واللوحة تحته تقرؤه حيّاً عبر SSH.
+  static List<int> fallbackPorts({String? protocol, int? apiPort}) {
+    final out = <int>[];
+    for (final r in routeOrder(protocol: protocol, apiPort: apiPort).skip(1)) {
+      if (r.port > 0 && r.port != 80 && !out.contains(r.port)) out.add(r.port);
+    }
+    return out;
+  }
+
+  /// قيمة فولتيّة من `/system/health` ⇒ فولت، أو null إن لم تُعقل.
+  ///
+  /// RouterOS 6 يحفظ الفولتيّة بأعشار الفولت: سكربته (`[/system health get]` — طريق SSH) يُرجعها عدداً صحيحاً
+  /// («239» = 23.9V، و«50» = 5.0V)، وبعض إصداراته القديمة كذلك عبر الـAPI. ولا يُغذّى RouterBOARD بأكثر من ~57V،
+  /// فما فوق 60 أعشارٌ حتماً. ٣٠ أكتوبر — BaseBox 5 بـ6.34.3 ظهر «239.0 V» بالأحمر.
+  @visibleForTesting
+  static double? healthVolts(String raw, {bool decivoltInts = false}) {
+    final s = raw.trim();
+    final v = double.tryParse(s.replaceAll(RegExp(r'[^\d.-]'), ''));
+    if (v == null || v <= 0) return null;
+    final volts = (decivoltInts && RegExp(r'^\d+$').hasMatch(s)) || v > 60 ? v / 10 : v;
+    return volts <= 60 ? volts : null;
+  }
+
   /// قراءة جهازٍ بكلّ الطرق — ما تستعمله اللوحة والنظرة العامّة.
   ///
   /// - `snmp` ⇒ SNMP وحده بالـcommunity ([MikrotikSnmp]).
@@ -422,6 +449,8 @@ class MikrotikApi {
     //   voltage: 24V (single value، بلا فانات)
     int? healthTemp;
     double? healthVoltage;
+    // سكربت RouterOS 6 (SSH) يُرجع الفولتيّة أعشاراً بعددٍ صحيح — [healthVolts].
+    final decivoltInts = ch.via == 'SSH' && (resource['version'] ?? '').trim().startsWith('6.');
     double? healthCurrent;
     double? healthWatts;
     final fans = <MikrotikHealthItem>[];
@@ -451,9 +480,8 @@ class MikrotikApi {
         // ٢٧ أكتوبر (المالك: «فولتيه بهواي اجهزه مثل هذا مايكروتيك ميقراها»): netPower 16P يُرجع psu1-voltage 25.3
         // وpsu2-voltage 0 (مدخلٌ غير موصول) — وكان الأخير يغلب فتظهر «0.0 V غير طبيعيّة». الفولتيّة = المزوّد العامل
         // (الأعلى)، وصفرٌ وحده = لا قراءة.
-        final v =
-            double.tryParse(valueStr.replaceAll(RegExp(r'[^\d.-]'), ''));
-        if (v != null && v > 0 && v > (healthVoltage ?? 0)) healthVoltage = v;
+        final v = healthVolts(valueStr, decivoltInts: decivoltInts);
+        if (v != null && v > (healthVoltage ?? 0)) healthVoltage = v;
       } else if (name.contains('current')) {
         final a = double.tryParse(valueStr.replaceAll(RegExp(r'[^\d.-]'), ''));
         if (a != null && a > 0) healthCurrent = (healthCurrent ?? 0) + a;
@@ -499,8 +527,8 @@ class MikrotikApi {
         'power-supply-1-voltage',
       ]) {
         if (healthVoltage == null && r[vKey] != null) {
-          final v = double.tryParse(r[vKey]!.replaceAll(RegExp(r'[^\d.-]'), ''));
-          if (v != null && v > 0) {
+          final v = healthVolts(r[vKey]!, decivoltInts: decivoltInts);
+          if (v != null) {
             healthVoltage = v;
             break;
           }

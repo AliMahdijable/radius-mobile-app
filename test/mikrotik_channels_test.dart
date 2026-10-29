@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/mikrotik_api.dart';
 import 'package:rad_mysvcs/api/mikrotik_binary_api.dart';
+import 'package:rad_mysvcs/api/network_devices_api.dart';
 import 'package:rad_mysvcs/api/routeros_channel.dart';
 
 /// ٢٧ أكتوبر — المالك: «لازم نفعل ميزات ssh و snmp وويب للمايكروتيك اكو اجهزه هواي مقفول عليها».
@@ -108,10 +109,11 @@ Future<(HttpServer, List<String>)> _restServer(Map<String, Object> routes, {Stri
 
 /// قناةٌ بصفوفٍ ثابتة لكلّ أمر — لا شبكة.
 class _Canned implements RouterOsChannel {
-  _Canned(this.rows);
+  _Canned(this.rows, {this.name = 'API'});
   final Map<String, List<Map<String, String>>> rows;
+  final String name;
   @override
-  String get via => 'API';
+  String get via => name;
   @override
   Future<void> open() async {}
   @override
@@ -303,6 +305,117 @@ void main() {
           });
       final s = await MikrotikApi.fetchStatsFor(ip: '127.0.0.1', creds: {'user': 'admin', 'pass': 'pw'}, vitalsOnly: true);
       expect(s.voltage, isNull);
+    });
+  });
+
+  group('فولتيّة RouterOS 6 بأعشار الفولت (٣٠ أكتوبر — BaseBox 5 بـ6.34.3 ظهر «239.0 V» بالأحمر)', () {
+    Future<MikrotikStats> read(String via, String version, Map<String, String> health) {
+      MikrotikApi.channelFactory = (route, ip, port, user, pass, timeout) => _Canned({
+            '/system/resource/print': [
+              {'board-name': 'BaseBox 5', 'version': version, 'cpu-load': '31', 'total-memory': '67108864', 'free-memory': '44040192'}
+            ],
+            '/interface/print': const [],
+            '/system/health/print': [health],
+          }, name: via);
+      return MikrotikApi.fetchStatsFor(ip: '127.0.0.1', creds: {'user': 'admin', 'pass': 'pw'}, vitalsOnly: true);
+    }
+
+    test('🚨 سكربت 6.x عبر SSH: «239» ⇒ 23.9V، و«50» ⇒ 5.0V؛ الحرارة كما هي', () async {
+      final s = await read('SSH', '6.34.3 (stable)', {'voltage': '239', 'temperature': '36'});
+      expect(s.voltage, 23.9);
+      expect(s.temperature, 36);
+      expect((await read('SSH', '6.49.10 (long-term)', {'voltage': '50'})).voltage, 5.0);
+    });
+
+    test('الـAPI: ما فوق 60 أعشارٌ حتماً والعشريّ فولتٌ كما هو؛ وRouterOS 7 بلا قسمة', () async {
+      expect((await read('API', '6.34.3 (stable)', {'voltage': '239'})).voltage, 23.9);
+      expect((await read('API', '6.48.6 (long-term)', {'voltage': '24.1'})).voltage, 24.1);
+      expect((await read('API', '6.48.6 (long-term)', {'voltage': '24'})).voltage, 24.0);
+      expect((await read('SSH', '7.15.3 (stable)', {'voltage': '24'})).voltage, 24.0, reason: 'v7 ليس أعشاراً');
+    });
+
+    test('healthVolts: صفرٌ/سالبٌ/غير مقروءٍ/خارج المعقول ⇒ null (شرطة لا رقمٌ كاذب)', () {
+      expect(MikrotikApi.healthVolts('23.9V'), 23.9);
+      expect(MikrotikApi.healthVolts('0'), isNull);
+      expect(MikrotikApi.healthVolts('-5'), isNull);
+      expect(MikrotikApi.healthVolts('x'), isNull);
+      expect(MikrotikApi.healthVolts('2390'), isNull, reason: '239V بعد القسمة — لا يُعقل');
+      expect(MikrotikApi.healthVolts('239', decivoltInts: true), 23.9);
+      expect(MikrotikApi.healthVolts('24.1', decivoltInts: true), 24.1, reason: 'العشريّ فولتٌ دائماً');
+    });
+  });
+
+  group('فحص «حيّ؟» لمايكروتك (٣٠ أكتوبر — «فقدان الحزم 100%» وهو يُقرأ حيّاً عبر SSH)', () {
+    setUp(NetworkDevicesApi.resetAltReachForTest);
+
+    Future<(ServerSocket, List<int>)> listening() async {
+      final s = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      final accepted = <int>[];
+      s.listen((c) {
+        accepted.add(1);
+        c.destroy();
+      });
+      addTearDown(s.close);
+      return (s, accepted);
+    }
+
+    Future<int> closedPort() async {
+      final s = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      final p = s.port;
+      await s.close();
+      return p;
+    }
+
+    Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 80));
+
+    test('المنافذ البديلة: بقيّة طرق القراءة بلا 80 (وسيط الموبايل يقبل أيّ عنوانٍ عليه)', () {
+      expect(MikrotikApi.fallbackPorts(), [443, 22]);
+      expect(MikrotikApi.fallbackPorts(apiPort: 8080), [443, 22]);
+      expect(MikrotikApi.fallbackPorts(apiPort: 443), [8728, 22]);
+      expect(MikrotikApi.fallbackPorts(protocol: 'ssh', apiPort: 2222), [8728, 443]);
+    });
+
+    test('🚨 المنفذ المسجَّل مرفوض (أقفل الـAPI) وSSH مفتوح ⇒ حيّ — والتثبيت مرّةً كلّ ٥ دقائق لا مع كلّ فحص', () async {
+      final api = await closedPort();
+      final (ssh, accepted) = await listening();
+      var r = await NetworkDevicesApi.mikrotikProbe('127.0.0.1', api, [ssh.port]);
+      expect([r.status, r.packetLoss], ['online', 0.0]);
+      expect(r.responseMs, isNotNull);
+      await settle();
+      expect(accepted.length, 1);
+      for (var i = 0; i < 3; i++) {
+        r = await NetworkDevicesApi.mikrotikProbe('127.0.0.1', api, [ssh.port]);
+        expect(r.status, 'online');
+      }
+      await settle();
+      expect(accepted.length, 1, reason: 'لا طرق 22 مع كلّ فحصٍ دوريّ (قواعد حماية التخمين تحظر عنوان المدير)');
+    });
+
+    test('المنفذ المسجَّل مفتوح ⇒ حيّ بلا طرق البدائل؛ الرفض وحده لا يكفي؛ المهلة = مفصول بلا بدائل', () async {
+      final (api, _) = await listening();
+      final (alt, altAccepted) = await listening();
+      var r = await NetworkDevicesApi.mikrotikProbe('127.0.0.1', api.port, [alt.port]);
+      expect(r.status, 'online');
+      await settle();
+      expect(altAccepted, isEmpty);
+      final closed = await closedPort();
+      r = await NetworkDevicesApi.mikrotikProbe('127.0.0.1', closed, const []);
+      expect([r.status, r.packetLoss, r.responseMs], ['offline', 100.0, null], reason: 'رفضٌ بلا اتّصالٍ يُثبت شيئاً (قد يردّه وسيط)');
+      final another = await closedPort();
+      r = await NetworkDevicesApi.mikrotikProbe('127.0.0.1', closed, [another]);
+      expect(r.status, 'offline', reason: 'كلّ طرقه مقفولة');
+      final sw = Stopwatch()..start();
+      r = await NetworkDevicesApi.mikrotikProbe('192.0.2.1', 8728, const [], timeout: const Duration(milliseconds: 400));
+      expect(r.status, 'offline');
+      expect(sw.elapsedMilliseconds, lessThan(1500));
+    });
+
+    test('probeDevice: مايكروتك بفحصه، وSNMP (١٦١) قبله كما كان', () {
+      final api = File('lib/api/network_devices_api.dart').readAsStringSync();
+      final iMtk = api.indexOf("if (d.brand == 'mikrotik' && port != 161) {");
+      expect(iMtk, greaterThan(0));
+      expect(api.contains('mikrotikProbe(d.ip, port, MikrotikApi.fallbackPorts(protocol: d.protocol, apiPort: d.apiPort))'), isTrue);
+      expect(api.indexOf('if (port == 161) {'), lessThan(iMtk), reason: 'الـcommunity تُقرأ قبل أيّ فرع');
     });
   });
 

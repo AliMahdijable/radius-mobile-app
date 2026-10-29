@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Socket;
+import 'dart:io' show Socket, SocketException;
 
 import 'package:dart_ping/dart_ping.dart';
 import 'package:dio/dio.dart';
@@ -11,6 +11,7 @@ import '../models/device_region.dart';
 import '../models/network_device.dart';
 import '../services/device_events.dart';
 import 'api_client.dart';
+import 'mikrotik_api.dart' show MikrotikApi;
 import '../core/net/windows_icmp.dart';
 import '../core/platform/app_platform.dart';
 
@@ -276,7 +277,75 @@ class NetworkDevicesApi {
         // فشل الجلب لا يمنع الفحص — نجرّب الافتراضيّة.
       }
     }
+    if (d.brand == 'mikrotik' && port != 161) {
+      return mikrotikProbe(d.ip, port, MikrotikApi.fallbackPorts(protocol: d.protocol, apiPort: d.apiPort));
+    }
     return localIcmpPing(ip: d.ip, tcpPort: port, snmpCommunity: community);
+  }
+
+  /// رفضُ الاتّصال (RST): ردٌّ من الجهاز — أو من وسيطٍ بالطريق؛ فلا يُثبت وحده أنّه حيّ.
+  static bool _refused(Object e) {
+    if (e is! SocketException) return false;
+    final code = e.osError?.errorCode;
+    return code == 61 || code == 111 || code == 10061 || '${e.osError?.message} ${e.message}'.toLowerCase().contains('refused');
+  }
+
+  /// المنافذ معاً: أوّل اتّصالٍ ينجح ⇒ زمنه؛ وإلّا null، مع «رُفض أحدها؟» وزمن أوّل رفض. لا ينتظر أبطأها.
+  static Future<({int? ms, bool refused, int? refusedMs})> _connectAny(String ip, List<int> ports, Duration timeout) {
+    final done = Completer<({int? ms, bool refused, int? refusedMs})>();
+    if (ports.isEmpty) return Future.value((ms: null, refused: false, refusedMs: null));
+    final sw = Stopwatch()..start();
+    var left = ports.length;
+    int? refusedMs;
+    for (final p in ports) {
+      Socket.connect(ip, p, timeout: timeout).then((s) {
+        s.destroy();
+        if (!done.isCompleted) done.complete((ms: sw.elapsedMilliseconds, refused: refusedMs != null, refusedMs: refusedMs));
+      }, onError: (Object e) {
+        if (_refused(e)) {
+          refusedMs ??= sw.elapsedMilliseconds;
+        } else if (kDebugMode) {
+          print('⚠️ tcpProbe $ip:$p failed: $e');
+        }
+        left -= 1;
+        if (left == 0 && !done.isCompleted) done.complete((ms: null, refused: refusedMs != null, refusedMs: refusedMs));
+      });
+    }
+    return done.future;
+  }
+
+  /// آخر تثبيتٍ بطريقٍ بديل لكلّ جهاز («ip|منفذ») — مرّةً كلّ [_altEvery] على الأكثر.
+  static final Map<String, ({DateTime at, bool ok})> _altReach = {};
+  static const _altEvery = Duration(minutes: 5);
+
+  @visibleForTesting
+  static void resetAltReachForTest() => _altReach.clear();
+
+  /// مايكروتك: منفذه المسجَّل كما كان؛ فإن **رفضه** الجهاز (حيٌّ وأقفل الـAPI) ثُبِّت باتّصالٍ على طرق قراءته الأخرى
+  /// ([MikrotikApi.fallbackPorts]: SSH · الويب المشفّر) مرّةً كلّ ٥ دقائق على الأكثر — لا طرق 22 مع كلّ فحصٍ دوريّ (٢٠ث)
+  /// فقواعد «حماية التخمين» الشائعة تحظر عنوان المدير. الرفض وحده لا يكفي (وسيطٌ بالطريق قد يردّه)، والمهلة = مفصول.
+  /// ٣٠ أكتوبر: جهازٌ أقفل الـAPI وفتح SSH كان «مفصولاً · فقدان الحزم 100%» واللوحة تقرؤه حيّاً عبر SSH.
+  @visibleForTesting
+  static Future<({String status, int? responseMs, double? packetLoss})> mikrotikProbe(
+    String ip,
+    int port,
+    List<int> alternates, {
+    Duration timeout = const Duration(seconds: 2),
+  }) async {
+    const ({String status, int? responseMs, double? packetLoss}) down = (status: 'offline', responseMs: null, packetLoss: 100.0);
+    final r = await _connectAny(ip, [port], timeout);
+    if (r.ms != null) return (status: 'online', responseMs: r.ms, packetLoss: 0.0);
+    final alt = alternates.where((p) => p != port).toList();
+    if (!r.refused || alt.isEmpty) return down;
+    final key = '$ip|$port';
+    final seen = _altReach[key];
+    if (seen != null && DateTime.now().difference(seen.at) < _altEvery) {
+      return seen.ok ? (status: 'online', responseMs: r.refusedMs, packetLoss: 0.0) : down;
+    }
+    final a = await _connectAny(ip, alt, timeout);
+    if (_altReach.length > 500) _altReach.remove(_altReach.keys.first);
+    _altReach[key] = (at: DateTime.now(), ok: a.ms != null);
+    return a.ms != null ? (status: 'online', responseMs: a.ms, packetLoss: 0.0) : down;
   }
 
   /// `sysUpTime.0` — أخفّ استعلام قياسيّ، تدعمه كلّ أجهزة SNMP.
