@@ -2090,7 +2090,9 @@
     "move_voided_loss": "its loss is undone",
     "move_voided_box_in_n": "{amount} back to the box",
     "move_voided_box_out_n": "{amount} left the box",
-    "print_receipt": "Print receipt",
+    "print_receipt": "Print invoice",
+    "issue_invoice": "Issue invoice",
+    "issue_invoice_note": "Printed after the sale with your receipt design (print templates)",
     "sell_to_sub": "Sell an item"
   },
   "rexp": {

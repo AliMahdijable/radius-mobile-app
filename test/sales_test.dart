@@ -16,6 +16,7 @@ import 'package:rad_mysvcs/screens/more_modules_screen.dart';
 import 'package:rad_mysvcs/screens/reports/widgets/action_labels.dart';
 import 'package:rad_mysvcs/screens/sales/sales_screen.dart';
 import 'package:rad_mysvcs/screens/settlements/settle_widgets.dart';
+import 'package:rad_mysvcs/services/receipt_pdf.dart';
 import 'package:rad_mysvcs/services/sale_print.dart';
 import 'package:rad_mysvcs/services/subscriber_events.dart';
 import 'package:pdf/pdf.dart';
@@ -294,12 +295,18 @@ void main() {
       expect(StockMove.fromJson(const {'id': 1, 'kind': 'sale', 'qty': -1, 'qty_after': 3})!.defectiveOnly, isFalse);
     });
 
-    test('وصل البيع: PDF بورقَي الطباعة (حراري وA4)، والزبون كما يُطبع، والمُلغى يُبنى أيضاً', () async {
+    test('فاتورة البيع: PDF بورقَي الطباعة (حراري وA4) بتصميم الوصل، والزبون كما يُطبع، والمُلغى يُبنى أيضاً', () async {
       final sale = Sale.fromJson(_SalesServer.sale(27, 'cash', 'done', username: 'ali.k@sn', name: 'علي كريم'))!;
       for (final f in [PdfPageFormat.roll80, PdfPageFormat.a4]) {
-        final bytes = await SalePrint.build(sale, f, company: 'شركة النور', fonts: false, printedAt: DateTime.utc(2026, 10, 23));
+        final bytes = await SalePrint.build(sale, f, company: 'شركة النور', fonts: false);
         expect(String.fromCharCodes(bytes.take(4)), '%PDF');
       }
+      // الفاتورة وصلٌ من نوع «فاتورة بيع» برقم البيع، بالموادّ والمجموع وطريقة الدفع، بلا أرشفة.
+      final d = SalePrint.doc(sale, shop: 'شركة النور', issuer: 'admin');
+      expect((d.kind, d.kind.archiveOp, d.title, d.sale!.id, d.sale!.total, d.sale!.debt, d.username),
+          (ReceiptKind.sale, null, 'فاتورة بيع رقم 27', 27, sale.total, false, 'ali.k@sn'));
+      expect(d.sale!.lines.length, sale.lines.length);
+      expect(d.issuer, 'admin', reason: 'بيع المدير: «أصدره» المدير');
       final voided = Sale.fromJson(_SalesServer.sale(9, 'cash', 'void', total: 25000, cost: 18000))!;
       expect((await SalePrint.build(voided, PdfPageFormat.roll80, fonts: false)).isNotEmpty, isTrue);
       expect(SalePrint.customerOf(sale), 'علي كريم — ali.k@sn');
@@ -619,7 +626,7 @@ void main() {
       expect(find.text('احسم'), findsOneWidget);
       expect(find.text('إلغاء'), findsNWidgets(2), reason: 'المكتمل نقداً وعلى الدين');
       expect(find.text('مُلغى'), findsOneWidget);
-      expect(find.byTooltip('طباعة الوصل'), findsNWidgets(3), reason: 'المكتملان والمُلغى — لا «غير المؤكَّد»');
+      expect(find.byTooltip('طباعة الفاتورة'), findsNWidgets(3), reason: 'المكتملان والمُلغى — لا «غير المؤكَّد»');
 
       await t.tap(find.text('الموادّ والمخزون'));
       await settle(t, seconds: 1);

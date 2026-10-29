@@ -58,6 +58,11 @@ class PrintPrefs {
 
   static const _kFormat = 'app.print_format';
   static const _kPrinter = 'app.print_printer';
+  static const _kSaleInvoice = 'app.sale_invoice';
+
+  /// «إصدار فاتورة» بعد البيع (قسم المبيعات) — اختياريٌّ ويُحفظ على الجهاز (المالك ٢٩ أكتوبر: «بيع المادة بيها
+  /// اصدار فاتورة اختياري»).
+  static final ValueNotifier<bool> saleInvoice = ValueNotifier<bool>(false);
 
   /// الافتراضي POS — أكثر انتشاراً في مكاتب الاشتراك.
   static final ValueNotifier<PrintFormatChoice> notifier =
@@ -83,6 +88,20 @@ class PrintPrefs {
       printer.value = SavedPrinter.decode(await _storage.read(key: _kPrinter));
     } catch (_) {
       printer.value = null;
+    }
+    try {
+      saleInvoice.value = await _storage.read(key: _kSaleInvoice) == '1';
+    } catch (_) {
+      saleInvoice.value = false;
+    }
+  }
+
+  static Future<void> setSaleInvoice(bool on) async {
+    saleInvoice.value = on;
+    try {
+      await _storage.write(key: _kSaleInvoice, value: on ? '1' : '0');
+    } catch (_) {
+      // تفضيلٌ لا يُحفظ لا يُسقط البيع — يبقى للجلسة.
     }
   }
 

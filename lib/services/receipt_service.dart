@@ -124,6 +124,10 @@ class ReceiptService {
     return _print(doc);
   }
 
+  /// اسم المحلّ الاحتياطيّ و«أصدره» لشركةٍ ([companyKey] في «كل الشركات») — لفاتورة البيع ([SalePrint]).
+  static Future<({String shop, String? issuer})> identityFor(String? companyKey) =>
+      _identity(MergedMode.companyOf(companyKey));
+
   /// «الطباعة التلقائيّة» في مصمّم الموقع لشركة المشترك: خانة «طباعة وصل بعد التأكيد» تأتي
   /// معلَّمةً (الموقع: `printChecked || isAutoPrintEnabled()`).
   static Future<bool> autoPrintFor(String? companyKey) async {

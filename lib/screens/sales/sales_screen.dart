@@ -15,6 +15,7 @@ import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/permission_locked.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../services/permissions_service.dart';
+import '../../services/print_prefs.dart';
 import '../../services/sale_print.dart';
 import '../../services/subscriber_events.dart';
 import '../../theme/colors.dart';
@@ -1531,6 +1532,13 @@ class _NewSaleSheetState extends State<_NewSaleSheet> {
                   'amount': _money(s.total),
                   'profit': _signedMoney(s.profit),
                 });
+      // «إصدار فاتورة» مفعَّلاً ⇒ تُطبع الآن (لا للبيع المكرَّر)؛ ونتيجتها على الصفحة الأمّ — النافذة تُغلق.
+      if (PrintPrefs.saleInvoice.value && !r.duplicate) {
+        final host = Navigator.of(context, rootNavigator: true).context;
+        unawaited(SalePrint.printReceipt(s).then((p) {
+          if (host.mounted) showPrintResult(host, p);
+        }));
+      }
       showSheetSnack(context, msg);
       Navigator.of(context).pop(true);
       return;
@@ -1666,7 +1674,19 @@ class _NewSaleSheetState extends State<_NewSaleSheet> {
           ),
           const SizedBox(height: Sp.lg),
           _SheetText(controller: _note, icon: LucideIcons.fileText, hint: 'sales.f_note_opt'.tr(), maxLength: 200, enabled: !_locked),
-          const SizedBox(height: Sp.lg),
+          const SizedBox(height: Sp.sm),
+          // «إصدار فاتورة» — اختياريّ ويُحفظ على الجهاز؛ مفعَّلاً تُطبع الفاتورة بعد البيع بتصميم وصل النظام.
+          ValueListenableBuilder<bool>(
+            valueListenable: PrintPrefs.saleInvoice,
+            builder: (_, on, __) => SheetSwitchRow(
+              icon: LucideIcons.printer,
+              label: 'sales.issue_invoice'.tr(),
+              footnote: 'sales.issue_invoice_note'.tr(),
+              value: on,
+              onChanged: PrintPrefs.setSaleInvoice,
+            ),
+          ),
+          const SizedBox(height: Sp.md),
           SheetSummaryBox(label: 'sales.total'.tr(), value: _money(total)),
           const SizedBox(height: Sp.sm),
           SheetSummaryBox(

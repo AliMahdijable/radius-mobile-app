@@ -11,7 +11,10 @@ enum ReceiptKind {
   activation('وصل تفعيل', 'activate'),
   extension('وصل تمديد', 'extend'),
   payment('وصل تسديد دين', 'pay_debt'),
-  info('بطاقة معلومات المشترك', null);
+  info('بطاقة معلومات المشترك', null),
+
+  /// فاتورة البيع (قسم «المبيعات») — لا تُؤرشف: البيع محفوظٌ في جدوله برقمه.
+  sale('فاتورة بيع', null);
 
   const ReceiptKind(this.title, this.archiveOp);
 
@@ -31,6 +34,33 @@ enum ReceiptPay {
 
   final String label;
   final String archiveMethod;
+}
+
+/// فاتورة البيع — المالك ٢٩ أكتوبر: «الفاتورة… اشبه بفاتورة النظام… نفسه الفاتورة لكن تصير مبيعات»: الموادّ والمجموع
+/// وطريقة الدفع بأقسام الوصل وتصميمه نفسه ([ReceiptPdf]).
+@immutable
+class SaleInvoiceDoc {
+  const SaleInvoiceDoc({
+    required this.id,
+    required this.lines,
+    required this.total,
+    required this.debt,
+    this.note,
+    this.voided = false,
+    this.voidReason,
+  });
+
+  final int id;
+
+  /// كلّ مادّة: اسمها، والكمّيّة بوحدتها («15 متر»)، وسعر الوحدة، ومجموعها.
+  final List<({String name, String qty, num unitPrice, num total})> lines;
+  final num total;
+
+  /// على حساب المشترك (دين) لا نقداً.
+  final bool debt;
+  final String? note;
+  final bool voided;
+  final String? voidReason;
 }
 
 /// محتوى وصلٍ واحد — مستقلٌّ عن الشبكة والطابعة (يُبنى ويُختبر وحده).
@@ -55,6 +85,7 @@ class ReceiptDoc {
     this.newBalance,
     this.qrUrl,
     this.issuer,
+    this.sale,
   });
 
   final ReceiptKind kind;
@@ -83,6 +114,12 @@ class ReceiptDoc {
 
   /// «أصدره: …» — اسم الموظّف إن طبع موظّف، وإلّا يوزر المدير.
   final String? issuer;
+
+  /// فاتورة البيع ([ReceiptKind.sale]) — الزبون في [subscriberName]/[username]/[phone]، ووقت البيع في [issuedAt].
+  final SaleInvoiceDoc? sale;
+
+  /// العنوان المطبوع: الفاتورة برقمها.
+  String get title => sale != null ? '${kind.title} رقم ${sale!.id}' : kind.title;
 
   String get receiptId => receiptNo != null
       ? 'No. ${receiptNo.toString().padLeft(5, '0')}'
@@ -130,14 +167,15 @@ class ReceiptPdf {
   /// الانتهاء كما يعرضه الموقع: أوّل ١٦ حرفاً («2026-11-24 18:30»).
   static String expiry(String s) => s.length > 16 ? s.substring(0, 16) : s;
 
-  static Future<PrintDoc> build(ReceiptDoc d, {required bool a4}) async {
-    final theme = await PdfFonts.theme();
+  /// [theme] للاختبار وحده (خطٌّ بلا تحميل أصول)؛ بلاه خطّ التطبيق.
+  static Future<PrintDoc> build(ReceiptDoc d, {required bool a4, pw.ThemeData? theme}) async {
+    final th = theme ?? await PdfFonts.theme();
     final requested = a4
         ? PdfPageFormat.a4
         : PdfPageFormat(d.look.paperWidthMm * PdfPageFormat.mm, double.infinity);
-    final name = '${d.kind.name}-${d.username}';
+    final name = d.sale != null ? 'Sale-${d.sale!.id}' : '${d.kind.name}-${d.username}';
     Future<PrintDoc> render(bool withLogo) {
-      final doc = pw.Document(theme: theme, title: d.kind.title, creator: 'MyServices Pro');
+      final doc = pw.Document(theme: th, title: d.title, creator: 'MyServices Pro');
       pw.MemoryImage? logo;
       if (withLogo && d.look.showLogo && d.look.logo != null) {
         logo = pw.MemoryImage(d.look.logo!);
@@ -206,10 +244,11 @@ class _Body {
         if (look.showShopInfo) ..._shopMeta(),
         pw.SizedBox(height: _gap * 0.8),
         _title(),
-        if (look.showReceiptId || look.showDateTime) ...[
+        if ((look.showReceiptId && d.sale == null) || look.showDateTime) ...[
           pw.SizedBox(height: 4),
           _meta(),
         ],
+        if (d.sale != null) ..._saleSections() else ...[
         if (look.showSubscriberInfo)
           _section('المشترك', [
             _row('الاسم', d.subscriberName, bold: true),
@@ -231,6 +270,7 @@ class _Body {
               _row(label, value, bold: true, balance: balance),
           ]),
         if (d.qrUrl != null) _qr(),
+        ],
         if (look.showFooter) _footer(),
       ],
     );
@@ -268,7 +308,7 @@ class _Body {
           borderRadius: pw.BorderRadius.circular(a4 ? 6 : 4),
         ),
         child: pw.Text(
-          _p(d.kind.title),
+          _p(d.title),
           textAlign: pw.TextAlign.center,
           style: pw.TextStyle(fontSize: a4 ? 14 : 11.5, fontWeight: pw.FontWeight.bold, color: _accent),
         ),
@@ -277,15 +317,88 @@ class _Body {
   pw.Widget _meta() {
     final style = pw.TextStyle(fontSize: _small, color: _muted);
     return pw.Row(
-      mainAxisAlignment: d.look.showReceiptId && d.look.showDateTime
+      mainAxisAlignment: d.look.showReceiptId && d.sale == null && d.look.showDateTime
           ? pw.MainAxisAlignment.spaceBetween
           : pw.MainAxisAlignment.center,
       children: [
-        if (d.look.showReceiptId) pw.Text('#${d.receiptId}', textDirection: pw.TextDirection.ltr, style: style),
+        // الفاتورة رقمها في عنوانها.
+        if (d.look.showReceiptId && d.sale == null)
+          pw.Text('#${d.receiptId}', textDirection: pw.TextDirection.ltr, style: style),
         if (d.look.showDateTime) pw.Text(d.issuedText, textDirection: pw.TextDirection.ltr, style: style),
       ],
     );
   }
+
+  /// الفاتورة: «مُلغاة» إن أُلغيت، والزبون، والموادّ، والمجموع وطريقة الدفع (دائماً — فاتورةٌ بلاهما لا تُقرأ)، والملاحظة.
+  List<pw.Widget> _saleSections() {
+    final s = d.sale!;
+    final red = a4 ? const PdfColor.fromInt(0xFFB00020) : PdfColors.black;
+    final reason = (s.voidReason ?? '').trim();
+    final note = (s.note ?? '').trim();
+    return [
+      if (s.voided)
+        pw.Padding(
+          padding: pw.EdgeInsets.only(top: _gap),
+          child: pw.Container(
+            padding: const pw.EdgeInsets.all(4),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: red, width: 1.4),
+              borderRadius: pw.BorderRadius.circular(4),
+            ),
+            child: pw.Text(
+              _p(reason.isEmpty ? 'مُلغاة' : 'مُلغاة — $reason'),
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(fontSize: _base, fontWeight: pw.FontWeight.bold, color: red),
+            ),
+          ),
+        ),
+      if (d.look.showSubscriberInfo)
+        _section('الزبون', [
+          _row('الاسم', d.subscriberName, bold: true),
+          if (d.username.trim().isNotEmpty) _row('اسم المستخدم', d.username.trim(), ltr: true),
+          if ((d.phone ?? '').trim().isNotEmpty) _row('الهاتف', d.phone!.trim(), ltr: true),
+        ]),
+      _section('المواد', [for (final l in s.lines) _itemRow(l)]),
+      _section('المعاملة', [
+        _row('المجموع', ReceiptPdf.money(s.total), bold: true),
+        _row('طريقة الدفع', s.debt ? 'على حساب المشترك (دين)' : 'نقداً', bold: true),
+      ]),
+      if (note.isNotEmpty)
+        pw.Padding(
+          padding: pw.EdgeInsets.only(top: _gap),
+          child: pw.Container(
+            padding: const pw.EdgeInsets.all(4),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey500, width: 0.6, style: pw.BorderStyle.dashed),
+              borderRadius: pw.BorderRadius.circular(4),
+            ),
+            child: pw.Text(_p('ملاحظة: $note'), style: pw.TextStyle(fontSize: _small + 0.5)),
+          ),
+        ),
+    ];
+  }
+
+  /// مادّة: اسمها وتحته «الكمّيّة × سعر الوحدة» يميناً، ومجموعها يساراً.
+  pw.Widget _itemRow(({String name, String qty, num unitPrice, num total}) l) => pw.Padding(
+        padding: pw.EdgeInsets.symmetric(vertical: a4 ? 3 : 2),
+        child: pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Expanded(
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(_p(l.name), style: pw.TextStyle(fontSize: _base, fontWeight: pw.FontWeight.bold)),
+                  pw.Text(_p('${l.qty} × ${ReceiptPdf.money(l.unitPrice)}'),
+                      style: pw.TextStyle(fontSize: _small, color: _muted)),
+                ],
+              ),
+            ),
+            pw.SizedBox(width: 8),
+            pw.Text(_p(ReceiptPdf.money(l.total)), style: pw.TextStyle(fontSize: _base, fontWeight: pw.FontWeight.bold)),
+          ],
+        ),
+      );
 
   pw.Widget _section(String title, List<pw.Widget> rows) => pw.Padding(
         padding: pw.EdgeInsets.only(top: _gap),

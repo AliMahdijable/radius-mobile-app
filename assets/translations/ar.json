@@ -2090,7 +2090,9 @@
     "move_voided_loss": "وأُلغيت خسارتها",
     "move_voided_box_in_n": "{amount} رجعت للصندوق",
     "move_voided_box_out_n": "خرج {amount} من الصندوق",
-    "print_receipt": "طباعة الوصل",
+    "print_receipt": "طباعة الفاتورة",
+    "issue_invoice": "إصدار فاتورة",
+    "issue_invoice_note": "تُطبع بعد البيع بتصميم وصلك (قوالب الطباعة)",
     "sell_to_sub": "بيع مادّة"
   },
   "rexp": {
