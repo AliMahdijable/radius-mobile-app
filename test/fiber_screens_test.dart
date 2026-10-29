@@ -242,6 +242,47 @@ void main() {
     await unmount(t);
   });
 
+  // المالك ٢٩ أكتوبر: «تحديد موقع بقسم الألياف… اختيار موقع يدوي كذلك مثل ما موجود بوضع اليوزر نكدر نحدد احداثيات».
+  testWidgets('موقع الصندوق: ثلاث طرق — كتابة/لصق إحداثيّات، اختر من الخريطة، موقعي الآن — واللصق يُحفظ', (t) async {
+    await pumpScreen(t, FiberPonScreen(monitor: FiberMonitor.of(fiberTestDevice()), pon: 'EPON0/3'), size: _phoneWide);
+    final ctx = t.element(find.byType(FiberPonScreen));
+    final tree = FiberPonTree.build(oltId: 9, pon: 'EPON0/3', layout: FiberStore.layout.value, onus: FiberMonitor.of(fiberTestDevice()).onus);
+
+    // صندوقٌ جديد: الطرق الثلاث حاضرة (كتعديل موقع المشترك).
+    showFiberBoxSheet(ctx, oltId: 9, pon: 'EPON0/3', tree: tree);
+    await sheetIn(t);
+    expect(find.text('اختر من الخريطة'), findsOneWidget);
+    expect(find.text('موقعي الآن'), findsOneWidget);
+    // أربعة حقول: الاسم · المكان · الإحداثيّات · ملاحظة. حقل الإحداثيّات هو الثالث.
+    final coords = find.byType(TextField).at(2);
+    await t.enterText(find.byType(TextField).first, 'صندوق موقعه');
+    await t.enterText(coords, '33.312345, 44.361234');
+    await t.pump(const Duration(milliseconds: 100));
+    await t.tap(find.text('إضافة'));
+    await t.pump(const Duration(milliseconds: 300));
+    final saved = server.to('/api/v2/admin/devices/fiber/boxes/0', 'PUT');
+    expect(saved, hasLength(1), reason: 'صندوقٌ جديد يُحفظ بالخادم');
+    final body = saved.single.data as Map;
+    expect((body['lat'] as num).toStringAsFixed(6), '33.312345');
+    expect((body['lng'] as num).toStringAsFixed(6), '44.361234');
+    expect(body['name'], 'صندوق موقعه');
+    await t.pump(const Duration(milliseconds: 400));
+
+    // إحداثيّاتٌ غير صالحة: لا تُحفظ صامتةً — رسالةٌ تقول السبب، ولا طلب جديد.
+    final before = server.to('/api/v2/admin/devices/fiber/boxes/0', 'PUT').length;
+    showFiberBoxSheet(ctx, oltId: 9, pon: 'EPON0/3', tree: tree);
+    await sheetIn(t);
+    await t.enterText(find.byType(TextField).first, 'صندوقٌ ثانٍ');
+    await t.enterText(find.byType(TextField).at(2), 'رابط غير صالح');
+    await t.pump(const Duration(milliseconds: 100));
+    await t.tap(find.text('إضافة'));
+    await t.pump(const Duration(milliseconds: 200));
+    expect(find.textContaining('ما قدرت أستخرج إحداثيّات'), findsWidgets);
+    expect(server.to('/api/v2/admin/devices/fiber/boxes/0', 'PUT').length, before, reason: 'لم يُحفظ بإحداثيّاتٍ فاسدة');
+    expect(t.takeException(), isNull);
+    await unmount(t);
+  });
+
   // المالك ٢٨ أكتوبر: «رسم خريطة بمسارات الضوئي ٢d… يوضح سيرفر الترفك والربط».
   testWidgets('مخطّط الشبكة: يُرسم بكلّ مقاس ووضع، والرقائق تخفي الصناديق وما بلا صندوق', (t) async {
     await everyLayout(t, (m) => FiberMapScreen(olts: [fiberTestDevice()], initialOltId: 9));

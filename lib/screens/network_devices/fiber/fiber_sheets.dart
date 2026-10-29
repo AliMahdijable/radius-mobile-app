@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../../core/util/bidi.dart';
+import '../../../core/util/geo_coords.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../models/fiber_network.dart';
+import '../../subscribers/sheets/location_picker_screen.dart';
 import '../../../services/fiber/fiber_band.dart';
 import '../../../services/fiber/fiber_onu.dart';
 import '../../../services/fiber/fiber_store.dart';
@@ -72,6 +76,12 @@ class _BoxSheetState extends State<_BoxSheet> {
   late int? _parent = widget.initial?.parentId ?? widget.parentId;
   late double? _lat = widget.initial?.lat;
   late double? _lng = widget.initial?.lng;
+  // إدخال الإحداثيّات يدويّاً: لصق رابط Google Maps أو «lat,lng» (كتعديل موقع المشترك).
+  late final _coords = TextEditingController(
+      text: (widget.initial?.lat != null && widget.initial?.lng != null)
+          ? '${widget.initial!.lat!.toStringAsFixed(6)},${widget.initial!.lng!.toStringAsFixed(6)}'
+          : '');
+  String? _coordsError;
   bool _busy = false;
   bool _locating = false;
   String? _error;
@@ -80,6 +90,7 @@ class _BoxSheetState extends State<_BoxSheet> {
   void dispose() {
     _name.dispose();
     _location.dispose();
+    _coords.dispose();
     _note.dispose();
     super.dispose();
   }
@@ -111,10 +122,8 @@ class _BoxSheetState extends State<_BoxSheet> {
       if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) throw 'لا إذن للموقع';
       final pos = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high));
       if (!mounted) return;
-      setState(() {
-        _lat = double.parse(pos.latitude.toStringAsFixed(6));
-        _lng = double.parse(pos.longitude.toStringAsFixed(6));
-      });
+      _setCoords(double.parse(pos.latitude.toStringAsFixed(6)),
+          double.parse(pos.longitude.toStringAsFixed(6)));
     } catch (e) {
       if (mounted) showSheetSnack(context, 'تعذّر جلب الموقع: $e', isError: true);
     } finally {
@@ -122,10 +131,60 @@ class _BoxSheetState extends State<_BoxSheet> {
     }
   }
 
+  /// يثبّت الإحداثيّات ويعكسها في حقل النصّ (من «موقعي الآن» أو من الخريطة).
+  void _setCoords(double lat, double lng) {
+    setState(() {
+      _lat = lat;
+      _lng = lng;
+      _coordsError = null;
+      _coords.text = '${lat.toStringAsFixed(6)},${lng.toStringAsFixed(6)}';
+    });
+  }
+
+  void _clearCoords() {
+    setState(() {
+      _lat = _lng = null;
+      _coordsError = null;
+      _coords.clear();
+    });
+  }
+
+  /// لصقٌ أو كتابةٌ حيّة: يستخرج lat/lng من رابط Google Maps أو «lat,lng».
+  void _onCoords(String v) {
+    final (lat, lng, err) = parseLatLng(v);
+    setState(() {
+      _lat = lat;
+      _lng = lng;
+      _coordsError = err;
+    });
+  }
+
+  Future<void> _pasteCoords() async {
+    final data = await Clipboard.getData('text/plain');
+    final text = data?.text?.trim();
+    if (text == null || text.isEmpty) return;
+    _coords.text = text;
+    _onCoords(text);
+  }
+
+  /// يفتح خريطة الاختيار (نفس شاشة موقع المشترك): دبّوسٌ في المركز + «موقعي الحالي».
+  Future<void> _pickOnMap() async {
+    final initial = (_lat != null && _lng != null) ? LatLng(_lat!, _lng!) : null;
+    final picked = await showLocationPickerScreen(context, initial: initial);
+    if (picked == null || !mounted) return;
+    _setCoords(double.parse(picked.latitude.toStringAsFixed(6)),
+        double.parse(picked.longitude.toStringAsFixed(6)));
+  }
+
   Future<void> _save() async {
     final name = _name.text.trim();
     if (name.isEmpty) {
       setState(() => _error = 'اكتب اسماً للصندوق');
+      return;
+    }
+    // إحداثيّاتٌ مكتوبة لم تُقرأ: لا نحفظ موقعاً فارغاً صامتاً — نقول السبب.
+    if (_coords.text.trim().isNotEmpty && (_lat == null || _lng == null)) {
+      setState(() => _error = _coordsError ?? 'إحداثيّات غير صالحة');
       return;
     }
     final used = widget.initial == null ? 0 : _used(widget.initial!.id);
@@ -279,25 +338,54 @@ class _BoxSheetState extends State<_BoxSheet> {
         const SizedBox(height: Sp.md),
         TextField(controller: _location, decoration: _field('المكان', hint: 'مثال: شارع المدارس · قرب الجامع')),
         const SizedBox(height: Sp.sm),
+        // الموقع على الخريطة — ثلاث طرق (كتعديل موقع المشترك): كتابة/لصق إحداثيّات، اختيار من الخريطة، أو موقعي الآن.
         Row(children: [
           Icon(LucideIcons.mapPin, size: 16, color: _lat == null ? AppColors.textLow : AppColors.brandLight),
           const SizedBox(width: Sp.xs),
           Expanded(
             child: Text(
               _lat == null ? 'بلا موقعٍ على الخريطة' : iso('${_lat!.toStringAsFixed(5)}, ${_lng!.toStringAsFixed(5)}'),
-              style: AppType.muted(color: AppColors.textMid),
+              style: AppType.muted(color: _lat == null ? AppColors.textMid : AppColors.brandLight),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (_lat != null)
-            TextButton(onPressed: () => setState(() => _lat = _lng = null), child: const Text('مسح')),
-          TextButton.icon(
-            onPressed: _locating ? null : _locate,
-            icon: _locating
-                ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brand))
-                : const Icon(LucideIcons.locateFixed, size: 16),
-            label: const Text('موقعي الآن'),
+          if (_lat != null || _coords.text.isNotEmpty)
+            TextButton(onPressed: _clearCoords, child: const Text('مسح')),
+        ]),
+        const SizedBox(height: Sp.xs),
+        TextField(
+          controller: _coords,
+          onChanged: _onCoords,
+          textDirection: TextDirection.ltr,
+          style: AppType.body(color: AppColors.textHi),
+          decoration: _field('الصق رابط Google Maps أو "lat,lng"').copyWith(
+            errorText: _coordsError,
+            suffixIcon: IconButton(
+              onPressed: _pasteCoords,
+              icon: const Icon(LucideIcons.clipboardPaste, size: 18),
+              tooltip: 'لصق',
+            ),
+          ),
+        ),
+        const SizedBox(height: Sp.sm),
+        Row(children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: _busy ? null : _pickOnMap,
+              icon: const Icon(LucideIcons.map, size: 16),
+              label: const Text('اختر من الخريطة'),
+            ),
+          ),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: _locating ? null : _locate,
+              icon: _locating
+                  ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brand))
+                  : const Icon(LucideIcons.locateFixed, size: 16),
+              label: const Text('موقعي الآن'),
+            ),
           ),
         ]),
         const SizedBox(height: Sp.sm),
