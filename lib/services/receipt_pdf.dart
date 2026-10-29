@@ -206,6 +206,9 @@ class ReceiptPdf {
 /// زوايا بطاقة A4 (نقطة PDF) — ورقٌ مطبوع خارج توكنات الواجهة.
 const double _cardRadius = 8;
 
+/// زوايا ختم «مُلغاة» وإطار الملاحظة في فاتورة البيع (نقطة PDF).
+const double _stampRadius = 4;
+
 class _Body {
   _Body(this.d, {required this.logo, required this.a4});
 
@@ -343,7 +346,7 @@ class _Body {
             padding: const pw.EdgeInsets.all(4),
             decoration: pw.BoxDecoration(
               border: pw.Border.all(color: red, width: 1.4),
-              borderRadius: pw.BorderRadius.circular(4),
+              borderRadius: pw.BorderRadius.circular(_stampRadius),
             ),
             child: pw.Text(
               _p(reason.isEmpty ? 'مُلغاة' : 'مُلغاة — $reason'),
@@ -370,7 +373,7 @@ class _Body {
             padding: const pw.EdgeInsets.all(4),
             decoration: pw.BoxDecoration(
               border: pw.Border.all(color: PdfColors.grey500, width: 0.6, style: pw.BorderStyle.dashed),
-              borderRadius: pw.BorderRadius.circular(4),
+              borderRadius: pw.BorderRadius.circular(_stampRadius),
             ),
             child: pw.Text(_p('ملاحظة: $note'), style: pw.TextStyle(fontSize: _small + 0.5)),
           ),
