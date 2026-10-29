@@ -48,6 +48,9 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
   final Set<int> _revealed = {};
   bool _revealRoots = false;
   static const _showBoxesKey = 'fiber.pon.showBoxes.v1';
+  // بحثٌ داخل المنفذ (اسم · يوزر · ماك) — طلب المالك ٢٩ أكتوبر.
+  final _search = TextEditingController();
+  String _q = '';
 
   FiberMonitor get _m => widget.monitor;
 
@@ -59,6 +62,14 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
       ..addListener(_changed)
       ..acquire();
     FiberStore.layout.addListener(_changed);
+    _search.addListener(() {
+      final q = _search.text.trim();
+      if (q != _q) setState(() => _q = q);
+    });
+    // دليل أسماء الحساب (يوزر ← اسم عربيّ) — يُكاش ٤٥ث؛ يُعاد البناء حين يصل.
+    FiberLinkData.ensure().then((_) {
+      if (mounted) setState(() {});
+    });
     SharedPreferences.getInstance().then((p) {
       final v = p.getBool(_showBoxesKey);
       if (v != null && mounted) setState(() => _showBoxes = v);
@@ -80,6 +91,7 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
       ..removeListener(_changed)
       ..release();
     FiberStore.layout.removeListener(_changed);
+    _search.dispose();
     super.dispose();
   }
 
@@ -187,6 +199,9 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
               ),
             ]),
           ),
+          _searchField(),
+          if (_q.isNotEmpty) _searchResults(tree),
+          if (_q.isEmpty) ...[
           FiberSection('من الأولت إلى البيوت', trailing: tree.nodes.isEmpty ? null : (_showBoxes ? 'اضغط صندوقاً لتفتحه' : 'اضغط موزّعاً لتكشف صناديقه')),
           if (tree.nodes.isNotEmpty) _boxesToggle(tree),
           _root(port, tree),
@@ -204,6 +219,7 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
               ]),
             ),
           if (tree.unassigned.isNotEmpty && tree.nodes.isNotEmpty) _unassigned(tree),
+          ],
           if (_canEdit)
             Padding(
               padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
@@ -216,6 +232,55 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _searchField() => Padding(
+        padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
+        child: TextField(
+          controller: _search,
+          style: AppType.body(color: AppColors.textHi),
+          decoration: InputDecoration(
+            hintText: 'ابحث: اسم · يوزر · ماك',
+            prefixIcon: const Icon(LucideIcons.search, size: 18),
+            isDense: true,
+            filled: true,
+            fillColor: AppColors.surfaceInput,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(R.sm), borderSide: BorderSide.none),
+          ),
+        ),
+      );
+
+  /// اسم المشترك العربيّ لجهازٍ مربوط (من دليل الحساب)، أو null.
+  String? _nameFor(FiberOnuLive o) {
+    final u = FiberStore.layout.value.recordFor(_m.oltId, o.key, o.ident)?.username;
+    return u == null ? null : FiberLinkData.nameOf(u);
+  }
+
+  /// نتائج البحث: كلّ أجهزة المنفذ المطابقة (اسم · يوزر · معرّف · ماك/SN) مسطّحةً بلا شجرة.
+  Widget _searchResults(FiberPonTree tree) {
+    final q = _q.toLowerCase();
+    final matches = [
+      for (final o in tree.all)
+        if ('${FiberStore.layout.value.recordFor(_m.oltId, o.key, o.ident)?.username ?? ''} ${_nameFor(o) ?? ''} ${o.display} ${o.onu.mac ?? ''} ${o.onu.serial ?? ''}'
+            .toLowerCase()
+            .contains(q))
+          o,
+    ];
+    if (matches.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(Sp.lg, 40, Sp.lg, 40),
+        child: Center(
+            child: Text('لا أجهزة تطابق «$_q»', style: AppType.body(color: AppColors.textMid))),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, 0),
+      child: Column(children: [
+        FiberSection('نتائج البحث', trailing: FiberText.devices(matches.length)),
+        for (final o in matches)
+          FiberOnuRow(oltId: _m.oltId, onu: o, name: _nameFor(o), onTap: () => _onuTap(o)),
+      ]),
     );
   }
 
@@ -365,7 +430,7 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
             ),
             const SizedBox(height: Sp.md),
             for (final o in tree.all.take(40))
-              FiberOnuRow(oltId: _m.oltId, onu: o, onTap: () => _onuTap(o)),
+              FiberOnuRow(oltId: _m.oltId, onu: o, name: _nameFor(o), onTap: () => _onuTap(o)),
             if (tree.all.length > 40)
               Text('و${tree.all.length - 40} غيرها', style: AppType.muted(color: AppColors.textMid)),
           ]),
@@ -502,6 +567,7 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
             FiberOnuRow(
               oltId: _m.oltId,
               onu: o,
+              name: _nameFor(o),
               onTap: () => _onuTap(o),
               sub: !o.online && down.containsKey(o.key) && o.changedAt != null
                   ? '${o.display} · ${o.reason == null ? 'مفصول' : fiberReasonLabel(o.reason!)} ${FiberText.clock(o.changedAt!, seconds: true)}'
@@ -580,7 +646,7 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
             ),
           ],
           const SizedBox(height: Sp.sm),
-          for (final o in tree.unassigned.take(30)) FiberOnuRow(oltId: _m.oltId, onu: o, onTap: () => _onuTap(o)),
+          for (final o in tree.unassigned.take(30)) FiberOnuRow(oltId: _m.oltId, onu: o, name: _nameFor(o), onTap: () => _onuTap(o)),
           if (tree.unassigned.length > 30) Text('و${tree.unassigned.length - 30} غيرها', style: AppType.muted(color: AppColors.textMid)),
           if (_canEdit) ...[
             const SizedBox(height: Sp.sm),

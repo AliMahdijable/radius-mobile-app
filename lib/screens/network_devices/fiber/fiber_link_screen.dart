@@ -23,8 +23,8 @@ import 'fiber_home_screen.dart';
 import 'fiber_sheets.dart';
 import 'fiber_widgets.dart';
 
-/// بيانات الربط من الساس: الجلسات الحيّة (يوزر ← ماك) ودليل الحساب العاديّ — مشتركةٌ بين الشاشة والنافذة (٤٥ث).
-class _LinkData {
+/// بيانات الربط من الساس: الجلسات الحيّة (يوزر ← ماك) ودليل الحساب العاديّ — مشتركةٌ بين شاشات الألياف (٤٥ث). عامّة ليقرأها المنفذ (الاسم العربيّ).
+class FiberLinkData {
   static Map<String, String> sessions = const {};
   static Map<String, Subscriber> directory = const {};
   static DateTime? at;
@@ -63,17 +63,17 @@ class FiberLinkScreen extends StatefulWidget {
   /// للاختبار: جلسات الساس ودليل الحساب جاهزان (بلا شبكة).
   @visibleForTesting
   static void debugSeed({Map<String, String> sessions = const {}, Map<String, Subscriber> directory = const {}}) {
-    _LinkData.sessions = sessions;
-    _LinkData.directory = directory;
-    _LinkData.at = DateTime.now();
+    FiberLinkData.sessions = sessions;
+    FiberLinkData.directory = directory;
+    FiberLinkData.at = DateTime.now();
   }
 
   /// للاختبار: تُنسى البيانات المحمّلة.
   @visibleForTesting
   static void debugReset() {
-    _LinkData.sessions = const {};
-    _LinkData.directory = const {};
-    _LinkData.at = null;
+    FiberLinkData.sessions = const {};
+    FiberLinkData.directory = const {};
+    FiberLinkData.at = null;
   }
 
   @override
@@ -120,7 +120,7 @@ class _FiberLinkScreenState extends State<FiberLinkScreen> {
 
   Future<void> _load({bool force = false}) async {
     setState(() => _loading = true);
-    await Future.wait([_LinkData.ensure(force: force), if (force) _m.refreshNow()]);
+    await Future.wait([FiberLinkData.ensure(force: force), if (force) _m.refreshNow()]);
     if (mounted) setState(() => _loading = false);
   }
 
@@ -128,8 +128,8 @@ class _FiberLinkScreenState extends State<FiberLinkScreen> {
         oltId: _m.oltId,
         onus: _m.onus,
         layout: FiberStore.layout.value,
-        sessionMacByUser: _LinkData.sessions,
-        knownUsernames: _LinkData.known,
+        sessionMacByUser: FiberLinkData.sessions,
+        knownUsernames: FiberLinkData.known,
       );
 
   Future<void> _confirm(List<FiberLinkSuggestion> list) async {
@@ -186,7 +186,7 @@ class _FiberLinkScreenState extends State<FiberLinkScreen> {
           FiberStaleNotice(monitor: _m),
           if (_loading) const FiberNotice(text: 'يقرأ جلسات المشتركين من الساس والأجهزة خلف كلّ ONU…', tone: AppTone.info),
           if (_m.error != null) FiberNotice(text: _m.error!, tone: AppTone.danger, onRetry: _m.refreshNow, icon: LucideIcons.wifiOff),
-          if (!_loading && _LinkData.sessions.isEmpty)
+          if (!_loading && FiberLinkData.sessions.isEmpty)
             const FiberNotice(
               text: 'ما وصلتنا جلسات المشتركين المتّصلين من الساس، فالربط بالماك متوقّف — يبقى الربط باسم الجهاز واليدويّ.',
               tone: AppTone.warning,
@@ -318,7 +318,7 @@ class _FiberLinkScreenState extends State<FiberLinkScreen> {
     final done = _done.contains(s.key) || layout.recordFor(_m.oltId, s.key, s.ident)?.username != null;
     final rec = layout.recordFor(_m.oltId, s.key, s.ident);
     final box = rec?.boxId == null ? null : layout.boxes[rec!.boxId];
-    final name = _LinkData.nameOf(s.username);
+    final name = FiberLinkData.nameOf(s.username);
     final tone = done || s.sure ? AppTone.success : AppTone.warning;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: Sp.md),
@@ -593,14 +593,14 @@ class _LinkPickerState extends State<_LinkPicker> {
   }
 
   Future<void> _load() async {
-    await _LinkData.ensure();
+    await FiberLinkData.ensure();
     if (!mounted) return;
     final plan = FiberLinker.plan(
       oltId: _oltId,
       onus: [_onu],
       layout: FiberStore.layout.value,
-      sessionMacByUser: _LinkData.sessions,
-      knownUsernames: _LinkData.known,
+      sessionMacByUser: FiberLinkData.sessions,
+      knownUsernames: FiberLinkData.known,
     );
     setState(() {
       _loading = false;
@@ -656,11 +656,11 @@ class _LinkPickerState extends State<_LinkPicker> {
   @override
   Widget build(BuildContext context) {
     final rec = FiberStore.layout.value.recordFor(_oltId, _onu.key, _onu.ident);
-    final big = !_loading && _LinkData.directory.isEmpty;
+    final big = !_loading && FiberLinkData.directory.isEmpty;
     final q = _q.text.trim().toLowerCase();
     final hits = big || q.length < 2
         ? const <Subscriber>[]
-        : _LinkData.directory.values
+        : FiberLinkData.directory.values
             .where((s) => s.username.toLowerCase().contains(q) || s.fullName.toLowerCase().contains(q))
             .take(30)
             .toList();
@@ -678,8 +678,8 @@ class _LinkPickerState extends State<_LinkPicker> {
           Text('مقترح', style: AppType.label(color: AppColors.textMid)),
           const SizedBox(height: 4),
           _candidate(
-            title: _LinkData.nameOf(s.username) ?? s.username,
-            sub: [if (_LinkData.nameOf(s.username) != null) s.username, s.why].join(' · '),
+            title: FiberLinkData.nameOf(s.username) ?? s.username,
+            sub: [if (FiberLinkData.nameOf(s.username) != null) s.username, s.why].join(' · '),
             pill: FiberPill(s.sure ? 'أكيد' : 'محتمل', tone: s.sure ? AppTone.success : AppTone.warning),
             onTap: () => _save(s.username, s.source),
           ),

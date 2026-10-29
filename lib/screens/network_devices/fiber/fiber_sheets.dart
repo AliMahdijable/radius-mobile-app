@@ -606,7 +606,7 @@ Future<FiberOnuAction?> showFiberOnuSheet(BuildContext context, {required int ol
 
 /// عنصر قائمةٍ لجهاز (شجرة المنفذ، العطل، البحث).
 class FiberOnuRow extends StatelessWidget {
-  const FiberOnuRow({super.key, required this.oltId, required this.onu, this.trailing, this.onTap, this.sub, this.title});
+  const FiberOnuRow({super.key, required this.oltId, required this.onu, this.trailing, this.onTap, this.sub, this.title, this.name});
 
   final int oltId;
   final FiberOnuLive onu;
@@ -617,13 +617,21 @@ class FiberOnuRow extends StatelessWidget {
   /// اسمٌ أدقّ من اليوزر حين يُعرف (اسم المشترك من الساس).
   final String? title;
 
+  /// اسم المشترك العربيّ (دليل الحساب) — يُعرض عنواناً واليوزر ينزل للسطر الثاني (طلب المالك ٢٩ أكتوبر).
+  final String? name;
+
   @override
   Widget build(BuildContext context) {
     final layout = FiberStore.layout.value;
-    final title = this.title ?? _onuTitle(layout, oltId, onu);
+    final linkedUser = layout.recordFor(oltId, onu.key, onu.ident)?.username;
+    final title = name ?? this.title ?? _onuTitle(layout, oltId, onu);
     final line = sub ??
         [
-          if (title != onu.display) onu.display,
+          // الاسم العربيّ عنواناً ⇒ اليوزر ينزل للسطر الثاني؛ وإلّا معرّف الجهاز حين يختلف عن العنوان.
+          if (name != null && linkedUser != null && linkedUser != title)
+            linkedUser
+          else if (title != onu.display)
+            onu.display,
           if (onu.online) 'متّصل' else (onu.reason == null ? 'مفصول' : fiberReasonLabel(onu.reason!)),
           if (!onu.online && onu.changedAt != null) 'من ${FiberText.clock(onu.changedAt!)}',
         ].join(' · ');

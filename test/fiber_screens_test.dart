@@ -216,7 +216,7 @@ void main() {
     expect(chip('1:4').onSelected, isNotNull, reason: 'نسبته الحاليّة تبقى');
     expect(chip('1:2').onSelected, isNull);
     expect(find.textContaining('أكثر من نسبته'), findsOneWidget);
-    await t.enterText(find.byType(TextField).first, 'صندوق 3-ب الجديد');
+    await t.enterText(find.descendant(of: find.byType(BottomSheet), matching: find.byType(TextField)).first, 'صندوق 3-ب الجديد');
     await t.tap(find.text('حفظ'));
     await t.pump(const Duration(milliseconds: 300));
     expect(find.textContaining('النسبة لا تقلّ'), findsNothing);
@@ -232,7 +232,7 @@ void main() {
     expect(full.canHang(1), isFalse);
     showFiberBoxSheet(ctx, oltId: 9, pon: 'EPON0/3', parentId: 1, tree: full);
     await sheetIn(t);
-    await t.enterText(find.byType(TextField).first, 'صندوق جديد');
+    await t.enterText(find.descendant(of: find.byType(BottomSheet), matching: find.byType(TextField)).first, 'صندوق جديد');
     expect(find.text('إضافة').hitTestable(), findsOneWidget, reason: 'الزرّ ظاهرٌ تحت الإصبع');
     await t.tap(find.text('إضافة'));
     await t.pump(const Duration(milliseconds: 200));
@@ -254,8 +254,8 @@ void main() {
     expect(find.text('اختر من الخريطة'), findsOneWidget);
     expect(find.text('موقعي الآن'), findsOneWidget);
     // أربعة حقول: الاسم · المكان · الإحداثيّات · ملاحظة. حقل الإحداثيّات هو الثالث.
-    final coords = find.byType(TextField).at(2);
-    await t.enterText(find.byType(TextField).first, 'صندوق موقعه');
+    final coords = find.descendant(of: find.byType(BottomSheet), matching: find.byType(TextField)).at(2);
+    await t.enterText(find.descendant(of: find.byType(BottomSheet), matching: find.byType(TextField)).first, 'صندوق موقعه');
     await t.enterText(coords, '33.312345, 44.361234');
     await t.pump(const Duration(milliseconds: 100));
     await t.tap(find.text('إضافة'));
@@ -272,14 +272,39 @@ void main() {
     final before = server.to('/api/v2/admin/devices/fiber/boxes/0', 'PUT').length;
     showFiberBoxSheet(ctx, oltId: 9, pon: 'EPON0/3', tree: tree);
     await sheetIn(t);
-    await t.enterText(find.byType(TextField).first, 'صندوقٌ ثانٍ');
-    await t.enterText(find.byType(TextField).at(2), 'رابط غير صالح');
+    await t.enterText(find.descendant(of: find.byType(BottomSheet), matching: find.byType(TextField)).first, 'صندوقٌ ثانٍ');
+    await t.enterText(find.descendant(of: find.byType(BottomSheet), matching: find.byType(TextField)).at(2), 'رابط غير صالح');
     await t.pump(const Duration(milliseconds: 100));
     await t.tap(find.text('إضافة'));
     await t.pump(const Duration(milliseconds: 200));
     expect(find.textContaining('ما قدرت أستخرج إحداثيّات'), findsWidgets);
     expect(server.to('/api/v2/admin/devices/fiber/boxes/0', 'PUT').length, before, reason: 'لم يُحفظ بإحداثيّاتٍ فاسدة');
     expect(t.takeException(), isNull);
+    await unmount(t);
+  });
+
+  // المالك ٢٩ أكتوبر: «البون (الكابينات الفرعية) نضيف زر بحث، واليوزر نظهر ويا اسم عربي».
+  testWidgets('المنفذ: البحث يصفّي الأجهزة، والاسم العربيّ يظهر مع اليوزر', (t) async {
+    FiberLinkScreen.debugSeed(directory: {'sub1': fiberTestSub('sub1', first: 'علي', last: 'حسن')});
+    await pumpScreen(t, FiberPonScreen(monitor: FiberMonitor.of(fiberTestDevice()), pon: 'EPON0/3'));
+    final box = find.widgetWithIcon(TextField, LucideIcons.search);
+    expect(box, findsOneWidget, reason: 'زرّ/حقل البحث حاضر');
+    // بحثٌ بالاسم العربيّ ⇒ نتائج مسطّحة، والاسم عنواناً واليوزر معه.
+    await t.enterText(box, 'علي');
+    await t.pump(const Duration(milliseconds: 100));
+    expect(find.text('نتائج البحث'), findsOneWidget);
+    expect(find.textContaining('علي حسن'), findsWidgets);
+    expect(find.textContaining('sub1'), findsWidgets, reason: 'اليوزر مع الاسم');
+    // يوزرٌ بلا اسمٍ بالدليل يُطابق هو، والاسم العربيّ يختفي.
+    await t.enterText(box, 'sub2');
+    await t.pump(const Duration(milliseconds: 100));
+    expect(find.textContaining('علي حسن'), findsNothing);
+    expect(find.textContaining('sub2'), findsWidgets);
+    // لا تطابق ⇒ رسالة.
+    await t.enterText(box, 'zzz-nomatch');
+    await t.pump(const Duration(milliseconds: 100));
+    expect(find.textContaining('لا أجهزة تطابق'), findsOneWidget);
+    FiberLinkScreen.debugReset();
     await unmount(t);
   });
 
