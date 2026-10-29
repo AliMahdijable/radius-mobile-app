@@ -20,3 +20,28 @@ bool get sessionIsEarthlink =>
 /// `DELETE /api/v2/subscribers/:idx` بـ409 `EL_DELETE_UNSUPPORTED` قبل أيّ نداء.
 /// `false` = شركات SAS4 وFTTH: كما كان (القفل بالصلاحيّة وحدها).
 bool subscriberDeleteHidden() => sessionIsEarthlink;
+
+/// جلسة فايبر اكس (OpenRadius): المزوّد المحفوظ، أو رمز الشركة النشطة قبل أن يردّ.
+bool get sessionIsFiberx =>
+    ProviderService.isFiberx || ActiveCompany.current?.sasCode == 'fiberx';
+
+/// إجراءات المشترك التي **لا يخدمها فايبر اكس** (لا مسار عنده ولا عندنا) — لا تظهر لجلساته أصلاً، لا مقفلةً بـ«لا صلاحيّة»
+/// (مالكٌ يرى «تعديل/حذف/فصل» مقفلةً يظنّها صلاحيّةً تُطلب). كما يعرضها الموقع (`FIBERX_ACTIONS` في SubscriberDetailSheet.tsx)،
+/// والخادم يجعل مفاتيحها false (`fiberxRoutes.canonicalPermissions`). «تمديد» فايبر اكس رسالةٌ منهم بمفتاحه `fiberx.extend`
+/// لا `subscribers.extend`.
+const Set<String> _fiberxUnsupported = {
+  'subscribers.extend',
+  'subscribers.edit',
+  'subscribers.toggle',
+  'subscribers.disconnect',
+  'subscribers.add_credit',
+  'subscribers.delete',
+  'subscribers.edit_location',
+  'reports.sessions',
+  'reports.manager_debts',
+  'reports.daily_activations',
+};
+
+/// [key] إجراءٌ لا يخدمه مزوّد الجلسة فيُخفى (فايبر اكس وحده الآن).
+bool providerHidesAction(String key) =>
+    sessionIsFiberx && _fiberxUnsupported.contains(key);

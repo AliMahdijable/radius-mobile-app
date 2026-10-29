@@ -671,6 +671,9 @@ class SubscribersApi {
     String? pin, // method=='card'
     int? profileId, // باقة مختارة (مبدّل)
     bool confirmRepeat = false, // تجاوز حارس التكرار RECENT_DUPLICATE
+    // ── فايبر اكس (٢٩ أكتوبر) ──
+    String? changeType, // باقةٌ غير الحاليّة: 'now' | 'expiry' (الخادم يرفض بلاها CHANGE_TYPE_REQUIRED)
+    bool confirmCooloff = false, // تجاوز «تفعيلٌ مكرّر» عند فايبر اكس (FIBERX_COOLOFF) — بتأكيدٍ صريح وحده
   }) async =>
       (await activateDetailed(
         idx: idx,
@@ -685,6 +688,8 @@ class SubscribersApi {
         pin: pin,
         profileId: profileId,
         confirmRepeat: confirmRepeat,
+        changeType: changeType,
+        confirmCooloff: confirmCooloff,
       ))
           .result;
 
@@ -711,6 +716,8 @@ class SubscribersApi {
     int? profileId,
     bool confirmRepeat = false,
     bool bulk = false,
+    String? changeType,
+    bool confirmCooloff = false,
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -736,6 +743,8 @@ class SubscribersApi {
           if (profileId != null) 'profile_id': profileId,
           if (confirmRepeat) 'confirmRepeat': true,
           if (bulk) 'bulk': true,
+          if (changeType != null && changeType.isNotEmpty) 'change_type': changeType,
+          if (confirmCooloff) 'confirmCooloff': true,
         },
         // الخادم قد ينتظر قفل كارتات الوكيل ثمّ الساس (حتى ٩٠ث للتفعيل نفسه):
         // مهلة الثلاثين كانت تقطع طلباً يكمله الخادم بعدها، فيقول التطبيق
@@ -805,6 +814,7 @@ class SubscribersApi {
   /// رموزٌ تعني «ربّما نُفّذ»: لا تُعاد الضغطة قبل مراجعة انتهاء المشترك.
   static const activateUnclearCodes = {
     activateOutcomeUnknown,
+    'FIBERX_OUTCOME_UNKNOWN', // فايبر اكس: لا ندري إن تمّ — لا دين سُجّل ولا إعادة عمياء
     'NOT_CONFIRMED',
     'APPLIED_WITH_ERRORS',
     'IN_PROGRESS',
@@ -1654,6 +1664,39 @@ class SubscribersApi {
   /// The legacy /api/subscribers/{id} path used here previously
   /// doesn't exist on this backend — the call silently failed which
   /// is why bulk delete worked half the time at best.
+  /// «تمديد» فايبر اكس — `POST /api/v2/fiberx/subscribers/:uuid/extend-notice`: رسالة واتساب **منهم** للمشترك ليمدّد من
+  /// تطبيقهم (لا مال). [delivered] = وصلت (لا «قُبلت» وحدها). الرموز: `RECENT_DUPLICATE` (أُرسلت خلال دقيقتين ⇒ تأكيدٌ ثمّ
+  /// [confirmRepeat])، `FIBERX_EXTEND_UNKNOWN` (لا نعرف هل وصلت — لا «فشل»)، `IN_PROGRESS`، `FIBERX_EXTEND_*`، `FIBERX_RELOGIN`.
+  static Future<({bool ok, bool delivered, String? code, String? message})>
+      fiberxExtendNotice({required String idx, bool confirmRepeat = false}) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/fiberx/subscribers/${Uri.encodeComponent(idx)}/extend-notice',
+        data: confirmRepeat ? {'confirmRepeat': true} : const <String, dynamic>{},
+      );
+      final body = r.data ?? const {};
+      if (body['success'] != true) {
+        return (
+          ok: false,
+          delivered: false,
+          code: body['code']?.toString(),
+          message: body['message']?.toString(),
+        );
+      }
+      return (ok: true, delivered: body['status'] == 'delivered', code: null, message: null);
+    } on DioException catch (e) {
+      final b = e.response?.data;
+      return (
+        ok: false,
+        delivered: false,
+        code: b is Map ? b['code']?.toString() : null,
+        message: b is Map ? b['message']?.toString() : null,
+      );
+    } catch (_) {
+      return (ok: false, delivered: false, code: null, message: null);
+    }
+  }
+
   /// POST /api/v2/subscribers/:idx/portal-qr-token
   /// يولّد token طويل الأمد (30 يوم، multi-use) لدخول المشترك عبر QR.
   /// الرابط بشكل: https://rad.mysvcs.net/user-info/<token> — يُشفَّر

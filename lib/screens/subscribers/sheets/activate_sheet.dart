@@ -82,6 +82,9 @@ enum _Method { credit, card }
 /// مستقلّة عن [_Method] (SAS4) وعن [_PayType] (ما بين المشترك والوكيل).
 enum _ElMethod { deposit, card }
 
+/// فايبر اكس: متى تبدأ باقةٌ غير الحاليّة (change_type) — لا افتراض، يختار الوكيل صراحةً.
+enum _FxTiming { now, expiry }
+
 class _ActivateSheetState extends State<_ActivateSheet> {
   Map<String, dynamic>? _data;
   bool _loading = true;
@@ -124,6 +127,9 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   final _pinCtrl = TextEditingController();         // Pin الكارت (card)
   // RECENT_DUPLICATE (409) من خادم البرو: يُؤكَّد ويُعاد مع confirmRepeat=true.
   bool _confirmRepeat = false;
+  // فايبر اكس: «تفعيلٌ مكرّر» عندهم (FIBERX_COOLOFF) يُعاد بتأكيدٍ صريح وحده؛ وتوقيت باقةٍ غير الحاليّة.
+  bool _confirmCooloff = false;
+  _FxTiming? _fxTiming;
 
   @override
   void initState() {
@@ -232,7 +238,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         // الرصيد افتراضيّ؛ والكارت يُختار وحده حين يكون الطريق الوحيد.
         _method = _methods.cardOnly ? _Method.card : _Method.credit;
         // ايرث لنك: افتح المبدّل على الباقة الحاليّة (أو أوّل باقة)، والافتراض رصيد أونلاين.
-        if (data['provider']?.toString() == 'earthlink') {
+        final prov = data['provider']?.toString();
+        if (prov == 'earthlink' || prov == 'fiberx') {
           final pid = data['profile_id']?.toString();
           final pkgIds = ((data['packages'] as List?) ?? const [])
               .whereType<Map>()
@@ -246,6 +253,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
           }
           _elMethod = _ElMethod.deposit;
           _confirmRepeat = false;
+          _confirmCooloff = false;
+          _fxTiming = null;
         }
       }
     });
@@ -307,6 +316,14 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   /// في ردّ activation-data (كشيت التمديد).
   bool get _isEarthlink => _data?['provider']?.toString() == 'earthlink';
 
+  // ───────────────────── فايبر اكس (٢٩ أكتوبر) ─────────────────────
+  /// مبدّل الباقة نفسه (packages بشكل ايرث لنك: id/name/price/cost)، والدفع من محفظة الوكيل بلا «طريقة»؛ باقةٌ غير الحاليّة
+  /// ⇒ «حالاً / عند الانتهاء» صريحاً (change_type)، و«تفعيلٌ مكرّر» عندهم ⇒ تأكيدٌ صريح (confirmCooloff) — كالويب.
+  bool get _isFiberx => _data?['provider']?.toString() == 'fiberx';
+
+  /// مبدّل الباقة (ايرث لنك وفايبر اكس) بدل باقة SAS4 الواحدة.
+  bool get _pkgSwitcher => _isEarthlink || _isFiberx;
+
   List<Map<String, dynamic>> get _elPackages =>
       ((_data?['packages'] as List?) ?? const [])
           .whereType<Map>()
@@ -354,14 +371,16 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     if (_elIsCurrentPkg) {
       return _effectivePrice > 0 ? _effectivePrice : _elRawPrice;
     }
-    final v = _readNumOf(pkg, 'price') - _discount;
+    // فايبر اكس: الثابت يلغي الخصم لباقته وحدها — لباقةٍ أخرى يعود الخصم (overridden_discount) كما يحسبه الخادم.
+    final d = _isFiberx && _discount <= 0 ? _readNum('overridden_discount') : _discount;
+    final v = _readNumOf(pkg, 'price') - d;
     return v < 0 ? 0 : v;
   }
 
   num get _elSelectedPkgCost => _readNumOf(_elSelectedPkg, 'cost');
 
   /// السعر المعروض في البطاقة/البانر: ايرث لنك ⇒ elChargePrice، وإلّا منطق SAS4.
-  num get _displayPrice => _isEarthlink
+  num get _displayPrice => _pkgSwitcher
       ? _elChargePrice
       : (_effectivePrice > 0 ? _effectivePrice : _userPrice);
 
@@ -400,7 +419,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   String get _footerLabel {
     if (_submitting) return 'sheets.renewing'.tr();
     if (_outcomeUnclear) return 'sheets.activate_check_first'.tr();
-    if (_isEarthlink) return 'sheets.renew_now'.tr(); // «تفعيل/تجديد الآن» (كارت ايرث لنك لا مخزون)
+    if (_pkgSwitcher) return 'sheets.renew_now'.tr(); // «تفعيل/تجديد الآن» (كارت ايرث لنك لا مخزون، وفايبر اكس من المحفظة)
     if (!_cardMode) return 'sheets.renew_now'.tr();
     if (_cardDenied) return 'cards.not_allowed_short'.tr();
     if (_cards.level == CardStockLevel.empty) {
@@ -412,6 +431,12 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   bool get _canSubmit {
     if (_loading || _submitting || _data == null) return false;
     if (_outcomeUnclear) return false;
+    if (_isFiberx) {
+      if (_selectedPackageId.isEmpty) return false;
+      if (!_elIsCurrentPkg && _fxTiming == null) return false; // باقةٌ أخرى ⇒ التوقيت صريحاً
+      if (_pay == _PayType.partial && _partialAmount <= 0) return false;
+      return true;
+    }
     if (_isEarthlink) {
       if (_selectedPackageId.isEmpty) return false;
       if (_elMethod == _ElMethod.deposit && !_deposit.ready) return false;
@@ -441,6 +466,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       _PayType.partial => 'partial-cash',
       _PayType.debt => 'non-cash',
     };
+    // ── مسار فايبر اكس (٢٩ أكتوبر) — فرعٌ مستقلّ كايرث لنك ──
+    if (_isFiberx) return _submitFiberx(idx, paymentType);
     // ── مسار ايرث لنك (البند ٤) — فرعٌ مستقلّ لا يمسّ منطق SAS4 أدناه ──
     if (_isEarthlink) {
       final profileId = int.tryParse(_selectedPackageId);
@@ -720,12 +747,12 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     final price = _displayPrice;
     final cur = 'common.currency'.tr();
     final after = _balanceAfter;
-    final planName = _isEarthlink
+    final planName = _pkgSwitcher
         ? (_elSelectedPkg?['name']?.toString() ??
             (_profileName.isEmpty ? '—' : _profileName))
         : (_profileName.isEmpty ? '—' : _profileName);
     // السعر الأصلي مشطوباً: ايرث لنك ⇒ elRawPrice حين يختلف عن المعروض (خصم)؛ وإلّا منطق SAS4.
-    final strike = _isEarthlink
+    final strike = _pkgSwitcher
         ? (_elRawPrice > 0 && _elRawPrice != price
             ? formatIQD(_elRawPrice.round())
             : null)
@@ -747,14 +774,27 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       ),
       const SizedBox(height: 14),
       SheetRowsGroup(
-        rows: _isEarthlink
+        rows: _pkgSwitcher
             ? [
                 // ايرث لنك: كلفة الباقة المختارة (كلفة الوكيل) + الخصم + الدين/الرصيد + رصيد الإيداع.
+                // فايبر اكس: كلفتها = ما تخصمه فايبر اكس من المحفظة، والسعر الثابت لباقته (كالساس).
                 if (_elSelectedPkgCost > 0)
                   SheetRowData(
-                    label: 'كلفة الباقة المختارة',
+                    label: _isFiberx ? 'sheets.fx_pkg_cost'.tr() : 'كلفة الباقة المختارة',
                     value: '${formatIQD(_elSelectedPkgCost.round())} $cur',
                     valueColor: AppColors.textMid,
+                  ),
+                if (_isFiberx && _elIsCurrentPkg && _isFixedPrice)
+                  SheetRowData(
+                    label: 'sp.fixed_price'.tr(),
+                    value: 'sp.fixed_for_subscriber'.tr(),
+                    valueColor: AppColors.brandAccent,
+                  )
+                else if (_isFiberx && _elIsCurrentPkg && _needsRepricing)
+                  SheetRowData(
+                    label: 'sp.fixed_price'.tr(),
+                    value: 'sp.needs_repricing_short'.tr(),
+                    valueColor: AppColors.warning,
                   ),
                 if (_discount > 0)
                   SheetRowData(
@@ -829,6 +869,13 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         _elPackageSection(),
         const SizedBox(height: 14),
         _elMethodSection(),
+      ] else if (_isFiberx) ...[
+        const SizedBox(height: 14),
+        _elPackageSection(),
+        if (!_elIsCurrentPkg) ...[
+          const SizedBox(height: 14),
+          _fxTimingSection(),
+        ],
       ] else if (_methods.card) ...[
         const SizedBox(height: 14),
         _methodSection(),
@@ -957,6 +1004,128 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         ],
       ),
     );
+  }
+
+  /// فايبر اكس: باقةٌ غير الحاليّة ⇒ متى تبدأ — «حالاً» (الآن، ومدّتها من اليوم) أو «عند الانتهاء» (بعد الحاليّة). لا اختيار
+  /// افتراضيّ: الزرّ مقفلٌ حتى يختار (الخادم يرفض بلاه CHANGE_TYPE_REQUIRED).
+  Widget _fxTimingSection() {
+    return SheetSection(
+      label: 'sheets.fx_timing'.tr(),
+      gap: Sp.sm,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SheetChoiceTiles(
+            labels: ['sheets.fx_timing_now'.tr(), 'sheets.fx_timing_expiry'.tr()],
+            icons: const [LucideIcons.zap, LucideIcons.calendarClock],
+            selectedIndex: switch (_fxTiming) {
+              _FxTiming.now => 0,
+              _FxTiming.expiry => 1,
+              null => -1,
+            },
+            enabled: !_submitting,
+            onSelect: (i) => setState(() => _fxTiming = i == 1 ? _FxTiming.expiry : _FxTiming.now),
+          ),
+          const SizedBox(height: Sp.xs),
+          Text(
+            switch (_fxTiming) {
+              _FxTiming.now => 'sheets.fx_timing_now_note'.tr(),
+              _FxTiming.expiry => 'sheets.fx_timing_expiry_note'.tr(),
+              null => 'sheets.fx_timing_pick'.tr(),
+            },
+            style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.4),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// فايبر اكس (٢٩ أكتوبر) — كالويب (ActivationModal): الباقة الحاليّة تجديد، وغيرها بـchange_type صريح؛ الدفع من محفظة الوكيل
+  /// والدين بدفترنا بسعر المشترك (يحسبه الخادم). «تفعيلٌ مكرّر» عندهم يُعاد بتأكيدٍ صريح وحده، والمجهول يقفل الزرّ (لا إعادة).
+  Future<void> _submitFiberx(String idx, String paymentType) async {
+    final change = !_elIsCurrentPkg;
+    setState(() => _submitting = true);
+    final manualMode = ManualWaPrefs.enabled.value;
+    final result = await MergedOps.run(widget.sub, () => SubscribersApi.activate(
+      idx: idx,
+      paymentType: paymentType,
+      activationData: _data!,
+      partialAmount: _pay == _PayType.partial ? _partialAmount : null,
+      skipAutoWa: manualMode,
+      profileId: change ? int.tryParse(_selectedPackageId) : null,
+      changeType: change ? (_fxTiming == _FxTiming.expiry ? 'expiry' : 'now') : null,
+      confirmRepeat: _confirmRepeat,
+      confirmCooloff: _confirmCooloff,
+    ));
+    if (!mounted) return;
+    setState(() {
+      _submitting = false;
+      if (SubscribersApi.activateUnclearCodes.contains(result.code)) _outcomeUnclear = true;
+    });
+    if (_outcomeUnclear) SubscriberEvents.notifyChange();
+    if (!result.ok && result.code == 'RECENT_DUPLICATE' && !_confirmRepeat) {
+      final again = await showConfirmSheet(
+        context,
+        title: 'تفعيل مكرّر',
+        message: result.message ?? 'فعّلت هذا المشترك قبل لحظات — أكّد الإعادة إن أردت تفعيلاً آخر',
+        confirmLabel: 'أكّد التفعيل',
+      );
+      if (again == true) {
+        _confirmRepeat = true;
+        return _submitFiberx(idx, paymentType);
+      }
+      return;
+    }
+    if (!result.ok && result.code == 'FIBERX_COOLOFF' && !_confirmCooloff) {
+      final again = await showConfirmSheet(
+        context,
+        title: 'sheets.fx_cooloff_title'.tr(),
+        message: [result.message ?? '', 'sheets.fx_cooloff_extra'.tr()].where((x) => x.isNotEmpty).join('\n\n'),
+        confirmLabel: 'sheets.fx_cooloff_confirm'.tr(),
+      );
+      if (!mounted) return;
+      if (again == true) {
+        _confirmCooloff = true;
+        return _submitFiberx(idx, paymentType);
+      }
+      showSheetSnack(context, 'sheets.nothing_done'.tr(), isError: false);
+      return;
+    }
+    _confirmRepeat = false;
+    _confirmCooloff = false;
+    if (!result.ok) {
+      showSheetSnack(context, _failureText(result.code, result.message), isError: true);
+      return;
+    }
+    SubscriberEvents.notifyChange();
+    final rootOverlay = Overlay.maybeOf(context, rootOverlay: true);
+    final okShown = showSheetSnack(context, 'sheets.renew_ok'.tr(), isError: false);
+    if (result.debtWriteFailed && rootOverlay != null) {
+      final warn = result.debtWriteMessage ?? 'sheets.activate_debt_not_recorded'.tr();
+      unawaited(okShown.then((_) => showSheetSnackOn(rootOverlay, warn,
+          isError: true, duration: const Duration(seconds: 8))));
+    }
+    if (_printReceiptChecked) {
+      final printed = await ReceiptService.printActivation(
+        sub: widget.sub,
+        price: _elChargePrice,
+        pay: _receiptPay,
+        partialAmount: _partialAmount,
+        packageName: _elSelectedPkg?['name']?.toString() ?? _profileName,
+      );
+      if (mounted) showPrintResult(context, printed);
+    }
+    if (!mounted) return;
+    if (manualMode && result.waPreview != null) {
+      await handleWaPreviewAfterOp(
+        context: context,
+        preview: result.waPreview!,
+        opTitle: 'تأكيد التفعيل',
+        sas4Idx: widget.sub.idx,
+      );
+      if (!mounted) return;
+    }
+    Navigator.of(context).pop(true);
   }
 
   /// مبدّل باقة ايرث لنك — حقلٌ واحد يفتح قائمة الباقات (بلاغ ٢٠٢٦-١٠-١٣:

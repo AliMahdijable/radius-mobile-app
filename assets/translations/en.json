@@ -942,6 +942,17 @@
     "templates_hint": "Edit notification texts (welcome / activation / reminder…)"
   },
   "sheets": {
+    "fx_timing": "When should the new package start?",
+    "fx_timing_now": "Now",
+    "fx_timing_expiry": "At expiry",
+    "fx_timing_now_note": "The new package starts now, its period counted from today — the rest of the current one is replaced",
+    "fx_timing_expiry_note": "The new package starts when the current one ends — the price is charged now",
+    "fx_timing_pick": "Choose when the new package starts: now or at expiry",
+    "fx_cooloff_title": "Repeated activation at FiberX",
+    "fx_cooloff_extra": "A second activation charges your wallet again — continue?",
+    "fx_cooloff_confirm": "Continue",
+    "fx_pkg_cost": "FiberX package cost",
+    "nothing_done": "Nothing was done",
     "package_details": "Package details",
     "duration": "Duration",
     "original_price": "Original price",

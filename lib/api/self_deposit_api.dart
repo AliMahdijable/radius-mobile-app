@@ -283,7 +283,7 @@ class SelfDepositOptions {
     if (!enabled) return SelfDepositBlock.disabled;
     // المزوّد أوّلاً: ايرث لنك والمشروع الوطنيّ لا يملكان الشحن أصلاً — فموظّفهما
     // أيضاً يرى «غير متاح لدى …» (السبب الأصدق) لا «لصاحب الحساب».
-    if (ProviderService.isEarthlink || ProviderService.isFtth) {
+    if (ProviderService.isEarthlink || ProviderService.isFtth || ProviderService.isFiberx) {
       return SelfDepositBlock.provider;
     }
     if (PermissionsService.isEmployee) return SelfDepositBlock.ownerOnly;

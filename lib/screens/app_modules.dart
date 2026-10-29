@@ -9,6 +9,7 @@ import '../core/util/format.dart';
 import '../core/widgets/permission_locked.dart';
 import '../services/app_resumed_signal.dart';
 import '../services/permissions_service.dart';
+import '../services/provider_limits.dart';
 import '../services/provider_service.dart';
 import '../theme/colors.dart';
 import 'broadcast/broadcast_screen.dart';
@@ -234,6 +235,8 @@ List<AppModule> buildAppModules() {
         id: 'managers',
         group: AppModuleGroup.manage,
         locked: !Perms.has('managers.view'),
+        // فايبر اكس: لا مدراء فرعيّين عندنا لحسابه بعد — بمكانه مقفلاً بالسبب لا «لا صلاحيّة».
+        unavailable: sessionIsFiberx ? 'غير متاح لحساب فايبر اكس بعد' : null,
         icon: LucideIcons.userCog,
         tone: AppTone.brand,
         title: 'more.managers'.tr(),
@@ -279,6 +282,7 @@ List<AppModule> buildAppModules() {
         id: 'employees',
         group: AppModuleGroup.manage,
         locked: !Perms.has('employees.view'),
+        unavailable: sessionIsFiberx ? 'غير متاح لحساب فايبر اكس بعد' : null,
         icon: LucideIcons.users,
         tone: AppTone.brand,
         title: 'more.employees'.tr(),

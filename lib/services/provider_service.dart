@@ -47,6 +47,11 @@ class ProviderService {
   /// `ftth` في دليل الشركات فساس SAS4 حقيقيّ (فايبر الجزيرة) ومدراؤه بلا provider.
   static bool get isFtth => _provider == 'ftth';
 
+  /// فايبر اكس (OpenRadius، رمز الشركة `fiberx`) — `provider:'fiberx'` من الدخول و`/api/auth/me`. التطبيق خلف مفتاح الخادم
+  /// `pro_settings.fiberx_app` (٢٩ أكتوبر): بلاه يُردّ الدخول `fiberx-web-only`. يتكلّم عقود SAS4 العامّة (القائمة، مودل
+  /// التفعيل بوضع «فايبر اكس»، الديون من دفترنا)، وما لا يخدمه يُقفل بقدراته (`canonicalPermissions` false).
+  static bool get isFiberx => _provider == 'fiberx';
+
   /// للشركة بوّابة مشتركين (تطبيق MyServices)؟ وسيط البوّابة (١٨ أكتوبر،
   /// الخادم fdcc2d7) يخدم شركات SAS4 كلّها **وايرث لنك** برمز الوكيل وQR؛
   /// وFTTH وحده بلا بوّابة بعد (الخادم لا يصدر له رمز وكيل) — فإعداداتها

@@ -955,6 +955,8 @@ class _TopupScreenState extends State<TopupScreen> {
 String topupProviderUnavailable() {
   if (ProviderService.isEarthlink) return 'غير متاح لدى ايرث لنك';
   if (ProviderService.isFtth) return 'غير متاح لدى المشروع الوطنيّ';
+  // محفظة فايبر اكس (زين كاش / كي كارد) تُشحن من موقع الويب حالياً.
+  if (ProviderService.isFiberx) return 'محفظة فايبر اكس تُشحن من الموقع حالياً';
   return 'غير متاح لشركتك';
 }
 

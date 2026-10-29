@@ -7,6 +7,7 @@ import '../../api/deleted_debts_api.dart';
 import '../../core/widgets/desk_pressable.dart';
 import '../../core/widgets/permission_locked.dart';
 import '../../services/permissions_service.dart';
+import '../../services/provider_limits.dart';
 import '../../services/provider_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -108,7 +109,7 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
           // كانت في الشاشتين بنفس الأيقونة والعنوان والوجهة — مدخلان
           // إلى صفحةٍ واحدة يجعلان المستخدم يظنّهما شيئين مختلفين
           // ويظلّ يبحث عن الفرق. (حُذفت من هنا بطلب صاحب المشروع.)
-          if (permShown(const ['reports.manager_debts']))
+          if (permShown(const ['reports.manager_debts']) && !providerHidesAction('reports.manager_debts'))
             _ReportCard(
               locked: !Perms.has('reports.manager_debts'),
               icon: LucideIcons.users,
@@ -151,7 +152,7 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
                     builder: (_) => const ActivationsReportScreen()),
               ),
             ),
-          if (permShown(const ['reports.daily_activations']))
+          if (permShown(const ['reports.daily_activations']) && !providerHidesAction('reports.daily_activations'))
             _ReportCard(
               locked: !Perms.has('reports.daily_activations'),
               icon: LucideIcons.calendarDays,
@@ -165,7 +166,7 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
             ),
         ];
         final activity = <Widget>[
-          if (permShown(const ['reports.sessions']))
+          if (permShown(const ['reports.sessions']) && !providerHidesAction('reports.sessions'))
             _ReportCard(
               locked: !Perms.has('reports.sessions'),
               icon: LucideIcons.activity,

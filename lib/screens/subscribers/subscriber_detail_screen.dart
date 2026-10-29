@@ -38,6 +38,7 @@ import 'sheets/add_credit_sheet.dart';
 import 'sheets/location_sheets.dart';
 import 'sheets/edit_subscriber_sheet.dart';
 import 'sheets/extend_sheet.dart';
+import 'sheets/fiberx_extend_flow.dart';
 import 'sheets/movements_sheet.dart';
 import 'sheets/consumption_sheet.dart';
 import 'sheets/pay_debt_sheet.dart';
@@ -750,10 +751,19 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
 
   /// لا يملكه **ويمكن أن يُمنحه** → يُعرض مقفلاً. (لا يملكه ولا يُمنح
   /// لدوره → لا هذا ولا ذاك، فيبقى مخفيّاً.)
-  static bool _locked(String key) => !Perms.has(key) && permShown([key]);
+  ///
+  /// وما لا يخدمه مزوّد الجلسة (فايبر اكس: تعديل/حذف/فصل… — [providerHidesAction]) لا يُعرض أصلاً، لا مقفلاً ولا حيّاً.
+  bool _locked(String key) =>
+      !_providerHides(key) && !Perms.has(key) && permShown([key]);
 
   /// يُعرض الإجراء أصلاً (حيّاً أو مقفلاً)؟
-  static bool _shows(String key) => Perms.has(key) || _locked(key);
+  bool _shows(String key) =>
+      !_providerHides(key) && (Perms.has(key) || _locked(key));
+
+  /// مزوّد **شركة المشترك** لا يخدم [key]. «كل الشركات» تُبقي الجلسة المفتوحة كما هي، ومشترك شركةٍ أخرى (`companyKey`)
+  /// ساسٌ يصلح للتطبيق (فايبر اكس خارج `MergedCompany.appCapable`) — فقيود جلسة فايبر اكس لا تمسّه.
+  bool _providerHides(String key) =>
+      sub.companyKey == null && providerHidesAction(key);
 
   /// حالة زرّ «تذكير بالدين» بمعزلٍ عن الصلاحيّة: دَينٌ + هاتف + لا إرسال
   /// جارٍ. غيابها يُخفي الزرّ للجميع؛ وحضورها بلا مفتاح يُقفله.
@@ -764,6 +774,16 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   /// «المزيد» حاضرة دائماً — هي المدخل الوحيد لباقي العمليّات.
   List<SubAction> _quickActions() {
     return <SubAction>[
+      // فايبر اكس: «تمديد» رسالة واتساب منهم للمشترك ليمدّد من تطبيقهم (لا مال) — بمفتاحه `fiberx.extend` (مع التفعيل).
+      if (sessionIsFiberx && sub.companyKey == null && _shows('fiberx.extend'))
+        SubAction(
+          icon: LucideIcons.calendarPlus,
+          label: 'subscribers.op_extend'.tr(),
+          locked: _locked('fiberx.extend'),
+          onTap: (_isBusy || _locked('fiberx.extend'))
+              ? null
+              : () => showFiberxExtendFlow(context, sub),
+        ),
       if (_shows('subscribers.extend'))
         SubAction(
           icon: LucideIcons.calendarPlus,

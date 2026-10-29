@@ -2943,11 +2943,16 @@ class _BulkActionBar extends StatelessWidget {
     final canToggle = Perms.has('subscribers.toggle');
     final canDelete = Perms.has('subscribers.delete');
     final showRenew = permShown(renewKeys);
-    final showToggle = permShown(const ['subscribers.toggle']);
+    // فايبر اكس لا يعطّل ولا يفصل ولا يحذف ([providerHidesAction]) — لا يظهر أصلاً، كصفحة المشترك والموقع. «كل الشركات»
+    // صفوفها شركاتٌ أخرى (فايبر اكس خارجها) فلا تمسّها قيود الجلسة المفتوحة.
+    bool hides(String key) => !MergedMode.active.value && providerHidesAction(key);
+    final showToggle =
+        !hides('subscribers.toggle') && permShown(const ['subscribers.toggle']);
     // ايرث لنك لا تسمح بحذف المشترك (قرار المالك ١٩ أكتوبر): لا «حذف» جماعيّ
     // لمشتركيها أصلاً ([subscriberDeleteHidden]) — لا مقفلاً ولا بالصلاحيّة.
-    final showDelete =
-        !subscriberDeleteHidden() && permShown(const ['subscribers.delete']);
+    final showDelete = !subscriberDeleteHidden() &&
+        !hides('subscribers.delete') &&
+        permShown(const ['subscribers.delete']);
     // مطلب المستخدم 2026-07-12: تصميم مضغوط — صفّان بدل 4:
     //   Row1 (primary): Renew | Pay debt | Disconnect (كل ما يظهر يتقاسم العرض)
     //   Row2 (secondary): Disable | Enable | Delete
