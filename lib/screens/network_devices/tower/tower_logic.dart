@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+import 'dart:ui' show Offset, Rect, Size;
+
 import 'package:flutter/foundation.dart';
 
 import '../../../api/olt_profile.dart';
@@ -166,6 +169,80 @@ int normDeg(num a) => ((a.round() % 360) + 360) % 360;
 int angleGap(int a, int b) {
   final d = (normDeg(a) - normDeg(b)).abs();
   return d > 180 ? 360 - d : d;
+}
+
+/// يباعد بين أجهزةٍ متداخلة على المنظر — المالك ٢٩ أكتوبر: «حل مشكلة تزاحم الأجهزة».
+///
+/// [centers] مراكز صناديقها (الرمز وشارته تحته) بحجم [box] لكلٍّ. الدفع أفقيٌّ ما أمكن (يبقى الجهاز على ارتفاع حلقته)،
+/// وعموديٌّ حين يكون التداخل العموديّ أصغر بكثير، والكلّ داخل [bounds] وخارج [obstacles] (الكابينة وأزرار المنظر).
+/// نقيّة بلا رسم — تُختبر وحدها. الترتيب محفوظ.
+List<Offset> spreadApart(
+  List<Offset> centers,
+  Size box,
+  Rect bounds, {
+  List<Rect> obstacles = const [],
+  double gap = 6,
+  int rounds = 40,
+}) {
+  final pts = [...centers];
+  if (pts.isEmpty || (pts.length < 2 && obstacles.isEmpty)) return pts;
+  final w = box.width + gap;
+  final h = box.height + gap;
+  final minX = bounds.left + box.width / 2;
+  final maxX = math.max(minX, bounds.right - box.width / 2);
+  final minY = bounds.top + box.height / 2;
+  final maxY = math.max(minY, bounds.bottom - box.height / 2);
+  for (var round = 0; round < rounds; round++) {
+    var moved = false;
+    for (var i = 0; i < pts.length; i++) {
+      for (var j = i + 1; j < pts.length; j++) {
+        final dx = pts[j].dx - pts[i].dx;
+        final dy = pts[j].dy - pts[i].dy;
+        final ox = w - dx.abs();
+        final oy = h - dy.abs();
+        if (ox <= 0.5 || oy <= 0.5) continue;
+        moved = true;
+        if (ox <= oy * 1.6) {
+          // متطابقان أفقيّاً ⇒ الأوّل يميناً والثاني يساراً (حتميّ لا عشوائيّ).
+          final dir = dx == 0 ? -1.0 : dx.sign;
+          final step = dir * ox / 2;
+          pts[i] = Offset(pts[i].dx - step, pts[i].dy);
+          pts[j] = Offset(pts[j].dx + step, pts[j].dy);
+        } else {
+          final dir = dy == 0 ? 1.0 : dy.sign;
+          final step = dir * oy / 2;
+          pts[i] = Offset(pts[i].dx, pts[i].dy - step);
+          pts[j] = Offset(pts[j].dx, pts[j].dy + step);
+        }
+      }
+    }
+    // العوائق: يخرج الصندوق من أقرب جهة (أقلّ إزاحة).
+    for (var i = 0; i < pts.length; i++) {
+      final b = Rect.fromCenter(center: pts[i], width: box.width, height: box.height);
+      for (final o in obstacles) {
+        if (!b.overlaps(o)) continue;
+        final left = b.right - o.left;
+        final right = o.right - b.left;
+        final up = b.bottom - o.top;
+        final down = o.bottom - b.top;
+        final m = [left, right, up, down].reduce(math.min);
+        pts[i] = m == left
+            ? pts[i].translate(-left - 1, 0)
+            : m == right
+                ? pts[i].translate(right + 1, 0)
+                : m == up
+                    ? pts[i].translate(0, -up - 1)
+                    : pts[i].translate(0, down + 1);
+        moved = true;
+        break;
+      }
+    }
+    for (var i = 0; i < pts.length; i++) {
+      pts[i] = Offset(pts[i].dx.clamp(minX, maxX), pts[i].dy.clamp(minY, maxY));
+    }
+    if (!moved) break;
+  }
+  return pts;
 }
 
 /// جهازٌ بمكانه النهائيّ على البرج — من المحفوظ، وإلّا من الترتيب التلقائيّ.

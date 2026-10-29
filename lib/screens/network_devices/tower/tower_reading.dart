@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../../api/mikrotik_api.dart';
 import '../../../api/mimosa_api.dart';
 import '../../../api/ubnt_api.dart';
+import '../../../api/vsol_olt_api.dart';
 import '../device_vitals.dart';
 
 /// قراءة جهازٍ كما يحتاجها البرج — من جلسة قسم الأجهزة نفسها ([DeviceVitals.fetch]، لا جلسةٌ ثانية).
@@ -32,6 +33,7 @@ class TowerReading {
     this.busiestPort,
     this.poeWatts,
     this.voltage,
+    this.olt,
   });
 
   final DateTime at;
@@ -75,6 +77,10 @@ class TowerReading {
   final PortTraffic? busiestPort;
   final double? poeWatts;
   final double? voltage;
+
+  /// أولت — المالك ٢٩ أكتوبر: «الاولتي مجاي يجلب بيانات في وضع البرج». من لقطة البنية نفسها التي تملأ بطاقة الجدار
+  /// ([VsolOltStats])؛ `null` لغير الأولت.
+  final OltSummary? olt;
 
   /// نقطة وصول (تخدم مشتركين) لا مستقبِل.
   bool get isAccessPoint {
@@ -129,6 +135,7 @@ class TowerReading {
     String? linkSpeed;
     double? poeWatts;
     double? voltage;
+    OltSummary? olt;
 
     if (raw is MikrotikStats) {
       final radios = raw.wirelessInterfaces.where((w) => !w.disabled).toList()
@@ -165,6 +172,11 @@ class TowerReading {
       channelWidth = raw.channelWidthMhz;
       temperature = raw.temperatureC?.round();
       ownSignal = raw.totalRxPowerDbm?.round();
+    } else if (raw is VsolOltStats) {
+      olt = OltSummary.of(raw);
+      // BDCOM/HSGQ تقرأ المعالج وحرارة الصندوق؛ VSOL بلا مجسّ معالج في SNMP ⇒ «—» لا صفر.
+      cpu = raw.chassis?.cpuPct;
+      temperature = raw.chassis?.boxTempC;
     }
 
     // المنفذ اللاسلكيّ يحمل حِمل المشتركين؛ بلا واحدٍ (راوتر/سويج) نأخذ أنشط منفذ.
@@ -239,6 +251,44 @@ class TowerReading {
       busiestPort: busiest != null && busiest.total > 0 ? busiest : null,
       poeWatts: poeWatts,
       voltage: voltage,
+      olt: olt,
     );
   }
+}
+
+/// خلاصة أولت للبرج: المشتركون (ONU) المتّصلون من مجموعهم، ومنافذ PON واحداً واحداً، ومنافذ الربط.
+@immutable
+class OltSummary {
+  const OltSummary({
+    required this.onusOnline,
+    required this.onusTotal,
+    required this.pons,
+    required this.uplinksUp,
+    required this.uplinksTotal,
+    this.ramMb,
+  });
+
+  factory OltSummary.of(VsolOltStats s) => OltSummary(
+        onusOnline: s.onusOnline,
+        onusTotal: s.onusTotal,
+        pons: [
+          for (final p in s.ponPorts) (label: p.label, up: p.up, online: p.onuOnline, total: p.onuTotal),
+        ],
+        uplinksUp: s.uplinks.where((u) => u.up).length,
+        uplinksTotal: s.uplinks.length,
+        // الإجماليّ وحده (BDCOM) — لا نسبة استخدام.
+        ramMb: s.chassis?.ramBytes == null ? null : (s.chassis!.ramBytes! / (1024 * 1024)).round(),
+      );
+
+  final int onusOnline;
+  final int onusTotal;
+  final List<({String label, bool up, int online, int total})> pons;
+  final int uplinksUp;
+  final int uplinksTotal;
+  final int? ramMb;
+
+  int get ponUp => pons.where((p) => p.up).length;
+
+  /// نسبة المتّصلين ٪ — `null` بلا مشتركين (لا «0٪» كاذبة).
+  double? get onlinePct => onusTotal == 0 ? null : onusOnline * 100 / onusTotal;
 }

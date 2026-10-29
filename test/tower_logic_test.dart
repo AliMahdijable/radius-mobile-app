@@ -1,9 +1,14 @@
+import 'dart:ui' show Offset, Rect, Size;
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rad_mysvcs/api/bdcom_epon.dart';
 import 'package:rad_mysvcs/api/mikrotik_api.dart';
+import 'package:rad_mysvcs/api/vsol_olt_api.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
 import 'package:rad_mysvcs/models/tower_layout.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
 import 'package:rad_mysvcs/screens/network_devices/tower/tower_logic.dart';
+import 'package:rad_mysvcs/screens/network_devices/tower/tower_paint.dart';
 import 'package:rad_mysvcs/screens/network_devices/tower/tower_reading.dart';
 import 'package:rad_mysvcs/theme/colors.dart';
 
@@ -453,5 +458,91 @@ void main() {
     expect(layouts.towers.length, 1);
     expect(layouts.placements[7], p);
     expect(TowerLayouts.fromJson({'success': false}).placements, isEmpty);
+  });
+
+  group('تزاحم الأجهزة (المالك ٢٩ أكتوبر: «حل مشكلة تزاحم الاجهزه»)', () {
+    test('spreadApart: المتطابقان يتباعدان أفقيّاً بعرض الصندوق، والبعيدان لا يتحرّكان، والكلّ داخل الحدود', () {
+      const box = Size(50, 64);
+      const bounds = Rect.fromLTWH(0, 0, 390, 430);
+      final out = spreadApart(const [Offset(200, 200), Offset(200, 200), Offset(60, 380)], box, bounds);
+      expect((out[0].dx - out[1].dx).abs(), greaterThanOrEqualTo(box.width + 6 - 0.6));
+      expect(out[0].dy, 200);
+      expect(out[2], const Offset(60, 380));
+      for (final o in out) {
+        expect(bounds.contains(o), isTrue);
+      }
+      // عند الحافّة: يُحبس الأوّل بالحدّ فيتمدّد الثاني نحو الداخل — لا يخرج أحدٌ من المنظر.
+      final edge = spreadApart(const [Offset(20, 100), Offset(22, 100)], box, bounds);
+      expect(edge.every((o) => o.dx >= box.width / 2 && o.dx <= 390 - box.width / 2), isTrue);
+      expect((edge[0].dx - edge[1].dx).abs(), greaterThanOrEqualTo(box.width));
+    });
+
+    test('spreadApart: يخرج من العائق (الكابينة/أزرار المنظر) من أقرب جهة', () {
+      final out = spreadApart(
+        const [Offset(300, 380)],
+        const Size(50, 64),
+        const Rect.fromLTWH(0, 0, 390, 430),
+        obstacles: const [Rect.fromLTWH(270, 360, 110, 70)],
+      );
+      final b = Rect.fromCenter(center: out.single, width: 50, height: 64);
+      expect(b.overlaps(const Rect.fromLTWH(270, 360, 110, 70)), isFalse);
+    });
+
+    test('armRadius: الحلقة تتّسع بعدد أجهزتها حتى حدّ المنظر، وجهازٌ وحده على الهيكل كما كان', () {
+      final geo = TowerGeometry(const Size(390, 430), const TowerSettings(regionId: 1));
+      final i = geo.ringOf(TowerLevel.upper);
+      final base = geo.ringRadius(i) + 8;
+      expect(geo.armRadius(i, 1), base);
+      expect(geo.armRadius(i, 5), greaterThan(base));
+      expect(geo.armRadius(i, 5), greaterThan(geo.armRadius(i, 3)));
+      expect(geo.armRadius(i, 40), 390 / 2 - 48);
+      // الموضع على الحلقة الواسعة: الأماميّ بعيدٌ عن محور البرج بنصف القطر الجديد.
+      final p = geo.place(TowerLevel.upper, 190, 100, crowd: 5);
+      expect((p.x - geo.cx).abs(), closeTo(geo.armRadius(i, 5), 0.5));
+    });
+  });
+
+  group('الأولت بعرض البرج (المالك ٢٩ أكتوبر: «الاولتي مجاي يجلب بينات في وضع البرج»)', () {
+    VsolOltStats stats({BdcomChassis? chassis}) => VsolOltStats(
+          uptime: const Duration(days: 3),
+          uplinks: const [
+            VsolUplink(index: 1, name: 'GE1', up: true, speedMbps: 1000, rxBytes: 0, txBytes: 0),
+            VsolUplink(index: 2, name: 'GE2', up: false, speedMbps: 0, rxBytes: 0, txBytes: 0),
+          ],
+          ponPorts: const [
+            VsolPonPort(index: 1, slot: 0, port: 1, up: true, rxBytes: 0, txBytes: 0, onuTotal: 2, onuOnline: 2),
+            VsolPonPort(index: 2, slot: 0, port: 2, up: false, rxBytes: 0, txBytes: 0, onuTotal: 1, onuOnline: 0),
+          ],
+          onus: const [
+            VsolOnu(ifIndex: 11, slot: 0, ponPort: 1, onuId: 1, online: true),
+            VsolOnu(ifIndex: 12, slot: 0, ponPort: 1, onuId: 2, online: true),
+            VsolOnu(ifIndex: 21, slot: 0, ponPort: 2, onuId: 1, online: false),
+          ],
+          chassis: chassis,
+        );
+
+    test('من لقطة البنية نفسها (oltProbeResult): المشتركون ومنافذ PON والربط والمعالج والحرارة', () {
+      final r = TowerReading.fromProbe(oltProbeResult(stats(chassis: const BdcomChassis(cpuPct: 14, boxTempC: 46, ramBytes: 268435456))));
+      final o = r.olt!;
+      expect([o.onusOnline, o.onusTotal, o.ponUp, o.pons.length, o.uplinksUp, o.uplinksTotal, o.ramMb], [2, 3, 1, 2, 1, 2, 256]);
+      expect(o.pons.first, (label: o.pons.first.label, up: true, online: 2, total: 2));
+      expect(o.onlinePct!.round(), 67);
+      expect([r.cpu, r.temperature], [14, 46]);
+      expect(r.uptime, isNotNull);
+      expect(r.wireless, isFalse);
+      expect(r.clients, isNull, reason: 'مشتركو الأولت في olt لا في عدّاد اللاسلكيّ');
+    });
+
+    test('VSOL بلا مجسّ معالج: «—» لا صفر، وأولت بلا مشتركين بلا نسبة', () {
+      final r = TowerReading.fromProbe(oltProbeResult(stats()));
+      expect([r.cpu, r.temperature, r.olt!.ramMb], [null, null, null]);
+      expect(const VsolOltStats().onusTotal, 0);
+      expect(OltSummary.of(const VsolOltStats()).onlinePct, isNull);
+    });
+
+    test('بلا لقطة (قراءة الألياف الخفيفة بلا حمولة) ⇒ لا خلاصة أولت', () {
+      final r = TowerReading.fromProbe(const ProbeResult(vitals: [], detail: DeviceDetail(), counters: {}));
+      expect(r.olt, isNull);
+    });
   });
 }

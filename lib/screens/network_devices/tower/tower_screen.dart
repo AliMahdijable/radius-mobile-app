@@ -6,7 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/network_devices_api.dart';
+import '../../../api/olt_profile.dart';
 import '../../../api/tower_api.dart';
+import '../../../api/vsol_olt_api.dart';
 import '../../../core/util/bidi.dart';
 import '../../../core/widgets/permission_locked.dart';
 import '../../../models/network_device.dart';
@@ -140,12 +142,16 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
 
   // ── البيانات ────────────────────────────────────────────────────────────────────────────
 
+  /// الأولت يُرسم من لقطة بنيته ([TowerReading.olt]) — تفصيلٌ بلاها (قراءة شاشات الألياف الخفيفة) يُظهر «—» في كلّ خانة.
+  static bool _oltWithoutSnapshot(NetworkDevice d, Object? raw) => OltProfile.fromDevice(d).opensOltPanel && raw is! VsolOltStats;
+
   void _seedFromCache() {
     for (final d in _devices) {
       final v = DeviceStatsCache.instance.vitalsOf(d.id, DeviceStatsCache.seedTtl);
       final detail = v?.detail;
       if (detail is! DeviceDetail) continue;
       final raw = DeviceStatsCache.instance.seedFor<Object>(d.id);
+      if (_oltWithoutSnapshot(d, raw)) continue;
       _readings[d.id] = TowerReading.fromProbe(
         ProbeResult(vitals: const [], detail: detail, counters: const {}, raw: raw),
         at: v!.at,
@@ -158,16 +164,19 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
   void _onCacheUpdated() {
     if (!mounted) return;
     final id = DeviceStatsCache.instance.updated.value.id;
-    if (!_devices.any((d) => d.id == id)) return;
+    final dev = _devices.where((d) => d.id == id).firstOrNull;
+    if (dev == null) return;
     final v = DeviceStatsCache.instance.vitalsOf(id, DeviceStatsCache.seedTtl);
     final detail = v?.detail;
     if (v == null || detail is! DeviceDetail) return;
     // بطاقة الجدار المطويّة تقرأ الخانات الثلاث وحدها (بلا منافذ ولا عملاء) — لا تحلّ محلّ قراءتنا الكاملة فيظهر «—».
     if (detail.ports.isEmpty && detail.peers.isEmpty) return;
+    final raw = DeviceStatsCache.instance.seedFor<Object>(id);
+    if (_oltWithoutSnapshot(dev, raw)) return;
     final cur = _readings[id];
     if (cur != null && !v.at.isAfter(cur.at)) return;
     _readings[id] = TowerReading.fromProbe(
-      ProbeResult(vitals: const [], detail: detail, counters: const {}, raw: DeviceStatsCache.instance.seedFor<Object>(id)),
+      ProbeResult(vitals: const [], detail: detail, counters: const {}, raw: raw),
       at: v.at,
     );
     _failed.remove(id);
@@ -436,13 +445,20 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
       final v = _readings[a.device.id]?.downBps;
       return v == null ? s : (s ?? 0) + v;
     });
-    final subs = _arranged.values
-        .where((a) => a.role == TowerRole.sector || a.role == TowerRole.ap)
-        .fold<int?>(null, (s, a) {
-      final v = _readings[a.device.id]?.clients;
+    // من يخدم مشتركين: السكاترات ونقاط الوصول، والأولت (مشتركو الفايبر المتّصلون — المالك ٢٩ أكتوبر).
+    final serving = _arranged.values
+        .where((a) =>
+            a.role == TowerRole.sector ||
+            a.role == TowerRole.ap ||
+            a.shape == TowerShape.olt ||
+            _readings[a.device.id]?.olt != null)
+        .toList();
+    final subs = serving.fold<int?>(null, (s, a) {
+      final r = _readings[a.device.id];
+      final v = r?.olt?.onusOnline ?? r?.clients;
       return v == null ? s : (s ?? 0) + v;
     });
-    final servers = _arranged.values.where((a) => a.role == TowerRole.sector || a.role == TowerRole.ap).length;
+    final servers = serving.length;
     Widget tile(String label, String value, String foot) => Expanded(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
@@ -549,9 +565,16 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
     );
   }
 
+  /// صندوق الجهاز على المنظر الجانبيّ: رمزه وشارته تحته — للمباعدة بين المتداخلة ([spreadApart]).
+  static const _slotW = 50.0;
+  static const _slotH = 64.0;
+  static const _badgeDrop = 22.0;
+
   Widget _stage() {
+    // برجٌ مزدحم يأخذ ارتفاعاً أكبر فتتباعد حلقاته (حتى +١٣٠).
+    final onTower = _arranged.values.where((a) => a.onTower && a.azimuth != null).length;
     return Container(
-      height: 390,
+      height: 390.0 + (onTower > 8 ? math.min(130.0, (onTower - 8) * 14.0) : 0.0),
       decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border.symmetric(horizontal: BorderSide(color: AppColors.border)),
@@ -573,6 +596,8 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
     final r = _readings[a.device.id];
     if (a.device.lastStatus == 'offline' || _failed.contains(a.device.id)) return AppColors.error;
     if (r == null) return AppColors.textMid;
+    final olt = r.olt;
+    if (olt != null) return olt.onlinePct == null ? AppColors.brand : Grade.percentHigherBetter(olt.onlinePct).fill;
     if (a.role == TowerRole.link) return r.signal == null ? AppColors.brand : Grade.signal(r.signal).fill;
     if (r.quality == null) return AppColors.brand;
     return Grade.percentHigherBetter(r.quality).fill;
@@ -591,15 +616,52 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
     final onTower = _arranged.values.where((a) => a.onTower && a.azimuth != null).toList();
     final cabinet = _arranged.values.where((a) => !a.onTower || a.azimuth == null).toList();
 
-    final placed = <({ArrangedDevice a, ({double x, double y, double sx, double cz}) p})>[
-      for (final a in onTower) (a: a, p: geo.place(a.level, a.azimuth!, _view)),
-    ]..sort((x, y) => x.p.cz.compareTo(y.p.cz));
+    // أجهزة كلّ حلقة — الحلقة تتّسع بعددها ([TowerGeometry.armRadius]) فلا تتكدّس فوق الهيكل وفوق بعضها.
+    final crowd = <int, int>{};
+    for (final a in onTower) {
+      final i = geo.ringOf(a.level);
+      crowd[i] = (crowd[i] ?? 0) + 1;
+    }
+    final ideal = [
+      for (final a in onTower) (a: a, p: geo.place(a.level, a.azimuth!, _view, crowd: crowd[geo.ringOf(a.level)] ?? 1)),
+    ];
+    // وما بقي متداخلاً (اتّجاهان متقاربان) يتباعد — كلّ طبقةٍ وحدها: الأماميّ فوق الخلفيّ عمقٌ لا تزاحم — بعيداً عن
+    // الكابينة وعن عناصر المنظر الثابتة (المفتاح يساراً، الواجهة يميناً، أزرار التدوير أسفل اليسار).
+    final cab = geo.cabinet(cabinet.length);
+    final bounds = Rect.fromLTRB(4, 4, size.width - 4, size.height - 4);
+    final obstacles = [
+      cab.inflate(6),
+      const Rect.fromLTWH(0, 0, 88, 78),
+      Rect.fromLTWH(size.width - 160, 0, 160, 80),
+      Rect.fromLTWH(0, size.height - 106, 126, 106),
+    ];
+    final placed = <({ArrangedDevice a, ({double x, double y, double sx, double cz}) p})>[];
+    for (final front in const [true, false]) {
+      final layer = ideal.where((e) => (e.p.cz > -0.25) == front).toList();
+      final spread = spreadApart(
+        [for (final e in layer) Offset(e.p.x, e.p.y + _badgeDrop / 2)],
+        const Size(_slotW, _slotH),
+        bounds,
+        obstacles: obstacles,
+      );
+      for (var i = 0; i < layer.length; i++) {
+        final e = layer[i];
+        placed.add((a: e.a, p: (x: spread[i].dx, y: spread[i].dy - _badgeDrop / 2, sx: e.p.sx, cz: e.p.cz)));
+      }
+    }
+    placed.sort((x, y) => x.p.cz.compareTo(y.p.cz));
+    final armsFront = <({Offset from, Offset to})>[];
+    final armsBack = <({Offset from, Offset to})>[];
+    for (final e in placed) {
+      final arm = (from: geo.armRoot(e.a.level, e.p.sx, e.p.cz), to: Offset(e.p.x, e.p.y));
+      (e.p.cz > -0.25 ? armsFront : armsBack).add(arm);
+    }
 
     final sel = _sel == null ? null : _arranged[_sel];
     var beam = <Offset>[];
     var beamFront = true;
     if (sel != null && sel.onTower && sel.azimuth != null && (sel.role == TowerRole.sector || sel.role == TowerRole.ap)) {
-      final p = geo.place(sel.level, sel.azimuth!, _view);
+      final p = placed.firstWhere((e) => e.a.device.id == sel.device.id).p;
       final half = math.min(sel.beamwidth / 2, 45.0);
       beam = [Offset(p.x, p.y)];
       for (var k = -2; k <= 2; k++) {
@@ -625,6 +687,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
                   beam: beamFront == front ? beam : const [],
                   beamColor: sel == null ? AppColors.brand : _healthColor(sel),
                   links: front ? linksFront : linksBack,
+                  arms: front ? armsFront : armsBack,
                   phase: _flow.value,
                   front: front,
                 ),
@@ -633,7 +696,6 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
           ),
         );
 
-    final cab = geo.cabinet(cabinet.length);
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onHorizontalDragStart: (_) => _spin.stop(),
@@ -698,7 +760,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
       left: p.x - box.width / 2,
       top: p.y - box.height / 2,
       child: Opacity(
-        opacity: front ? 1 : 0.55,
+        opacity: front ? 1 : 0.5,
         child: Semantics(
           button: true,
           selected: selected,
@@ -716,19 +778,21 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
                 padding: const EdgeInsets.all(2),
                 child: DeviceGlyph(shape: a.shape, size: base * scale, flip: flip, dashed: !a.fixed && front),
               ),
-              // أعرض من الجهاز: السكتر نحيلٌ (٠٫٦ من ارتفاعه) فكان «18» يُقصّ إلى «1».
-              Positioned(
-                top: box.height + 4,
-                left: -28,
-                right: -28,
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                    decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(R.pill)),
-                    child: Text(iso(_badge(a)), style: AppType.microBold(color: AppColors.onBrand), maxLines: 1),
+              // أعرض من الجهاز: السكتر نحيلٌ (٠٫٦ من ارتفاعه) فكان «18» يُقصّ إلى «1». خلف البرج بلا شارة (إلّا
+              // المختار) — كانت شاراتُ الخلف تتراكب على الأماميّة.
+              if (front || selected)
+                Positioned(
+                  top: box.height + 4,
+                  left: -28,
+                  right: -28,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(R.pill)),
+                      child: Text(iso(_badge(a)), style: AppType.microBold(color: AppColors.onBrand), maxLines: 1),
+                    ),
                   ),
                 ),
-              ),
               if (alert != null)
                 Positioned(
                   top: -6,
@@ -790,12 +854,20 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
     final r = _readings[a.device.id];
     final selected = a.device.id == _sel;
     final offline = a.device.lastStatus == 'offline' || _failed.contains(a.device.id);
-    final facts = <String>[
-      if (r?.busiestPort != null) '${r!.busiestPort!.name} ${TowerText.bps(r.downBps)}',
-      if (r?.portsTotal != null) 'منافذ ${r!.portsUp}/${r.portsTotal}',
-      if (r?.poeWatts != null) 'PoE ${r!.poeWatts!.toStringAsFixed(0)} W',
-      if (r?.temperature != null) '${r!.temperature}°',
-    ];
+    final olt = r?.olt;
+    final facts = olt != null
+        ? <String>[
+            'المشتركون ${olt.onusOnline}/${olt.onusTotal}',
+            'PON ${olt.ponUp}/${olt.pons.length}',
+            if (r?.cpu != null) 'المعالج ${r!.cpu}٪',
+            if (r?.temperature != null) '${r!.temperature}°',
+          ]
+        : <String>[
+            if (r?.busiestPort != null) '${r!.busiestPort!.name} ${TowerText.bps(r.downBps)}',
+            if (r?.portsTotal != null) 'منافذ ${r!.portsUp}/${r.portsTotal}',
+            if (r?.poeWatts != null) 'PoE ${r!.poeWatts!.toStringAsFixed(0)} W',
+            if (r?.temperature != null) '${r!.temperature}°',
+          ];
     return Semantics(
       button: true,
       selected: selected,
@@ -944,6 +1016,18 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
         ),
     ];
     final cabinet = _arranged.values.where((a) => !a.onTower || a.azimuth == null).toList();
+    // البطاقات الصغيرة على أشعّتها — والمتقاربة الاتّجاه تتباعد (كانت «10» فوق «4»)، بعيداً عن أزرار الكابينة أسفلاً.
+    final labels = [...radios, ...links];
+    final labelAt = spreadApart(
+      [
+        for (final a in radios) TopViewPainter.polar(c, radiusOf(a) * 0.64, a.azimuth!),
+        for (final l in links) TopViewPainter.polar(c, rMax - 8, l.azimuth!),
+      ],
+      const Size(42, 38),
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      obstacles: [if (cabinet.isNotEmpty) Rect.fromLTWH(0, size.height - 52, size.width, 52)],
+      gap: 4,
+    );
     return Stack(children: [
       Positioned.fill(
         child: Semantics(
@@ -961,8 +1045,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
           ),
         ),
       ),
-      for (final a in radios) _topLabel(a, TopViewPainter.polar(c, radiusOf(a) * 0.64, a.azimuth!)),
-      for (final l in links) _topLabel(l, TopViewPainter.polar(c, rMax - 8, l.azimuth!)),
+      for (var i = 0; i < labels.length; i++) _topLabel(labels[i], labelAt[i]),
       if (cabinet.isNotEmpty)
         PositionedDirectional(
           end: 12,
@@ -1190,11 +1273,14 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
     final alert = _alerts.where((x) => x.deviceId == d.id).firstOrNull;
     final offline = d.lastStatus == 'offline';
     final failed = _failed.contains(d.id);
+    final olt = r?.olt;
     final AppTone tone = offline || failed
         ? AppTone.danger
-        : (a.role == TowerRole.link
-            ? Grade.signal(r?.signal)
-            : (r?.quality == null ? AppTone.neutral : Grade.percentHigherBetter(r!.quality)));
+        : olt != null
+            ? (olt.onlinePct == null ? AppTone.neutral : Grade.percentHigherBetter(olt.onlinePct))
+            : (a.role == TowerRole.link
+                ? Grade.signal(r?.signal)
+                : (r?.quality == null ? AppTone.neutral : Grade.percentHigherBetter(r!.quality)));
     final healthText = offline
         ? 'لا يردّ'
         : failed
@@ -1227,6 +1313,14 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
           ('الإشارة', r?.signal == null ? '—' : '${r!.signal} dBm'),
           ('الترافك', TowerText.bps(r?.downBps)),
         ]);
+      case TowerRole.cabinet when olt != null:
+        // الأولت: مشتركو الفايبر ومنافذ PON — من لقطة البنية نفسها التي تملأ بطاقة الجدار.
+        readings.addAll([
+          ('المشتركون', '${olt.onusOnline}/${olt.onusTotal}'),
+          ('منافذ PON', '${olt.ponUp}/${olt.pons.length}'),
+          ('المعالج', r?.cpu == null ? '—' : '${r!.cpu}٪'),
+          ('الحرارة', r?.temperature == null ? '—' : '${r!.temperature}°'),
+        ]);
       case TowerRole.cabinet:
         readings.addAll([
           ('المعالج', r?.cpu == null ? '—' : '${r!.cpu}٪'),
@@ -1235,7 +1329,15 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
           ('يعمل منذ', TowerText.uptime(r?.uptime)),
         ]);
     }
-    if (a.role != TowerRole.cabinet) {
+    if (olt != null) {
+      final pct = olt.onlinePct;
+      info.addAll([
+        ('المتّصلون', pct == null ? '—' : '${pct.round()}٪', pct == null ? null : Grade.percentHigherBetter(pct).fill),
+        ('منافذ الربط', olt.uplinksTotal == 0 ? '—' : '${olt.uplinksUp}/${olt.uplinksTotal}', null),
+        ('الذاكرة', olt.ramMb == null ? '—' : '${olt.ramMb} MB', null),
+        ('يعمل منذ', TowerText.uptime(r?.uptime), null),
+      ]);
+    } else if (a.role != TowerRole.cabinet) {
       info.addAll([
         ('التردّد MHz', r?.frequency?.toString() ?? '—', null),
         ('العرض MHz', r?.channelWidth?.toString() ?? '—', null),
@@ -1322,6 +1424,12 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
             const SizedBox(height: 6),
             _grid([for (final x in info) _cell(x.$1, x.$2, color: x.$3)]),
           ],
+          if (olt != null && olt.pons.isNotEmpty) ...[
+            const SizedBox(height: Sp.md),
+            Text('منافذ PON (${olt.pons.length}) — المتّصلون من المسجَّلين', style: AppType.bodyStrong(color: AppColors.textHi)),
+            const SizedBox(height: 4),
+            for (final p in olt.pons) _ponRow(p),
+          ],
           if (a.role == TowerRole.sector || a.role == TowerRole.ap) ...[
             const SizedBox(height: Sp.md),
             Text(weakest.isEmpty ? 'المشتركون المتّصلون' : 'المشتركون المتّصلون (${weakest.length}) — الأضعف إشارةً أوّلاً',
@@ -1394,6 +1502,34 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
           const SizedBox(width: 10),
           Text(iso('CCQ ${p.ccq}٪'), style: AppType.body(color: AppColors.textMid)),
         ],
+      ]),
+    );
+  }
+
+  /// منفذ PON: حالته والمتّصلون من المسجَّلين عليه بشريطٍ ملوّن (المطفأ أحمر، وبلا مشتركين «—»).
+  Widget _ponRow(({String label, bool up, int online, int total}) p) {
+    final pct = p.total == 0 ? null : p.online * 100 / p.total;
+    final color = !p.up ? AppColors.error : (pct == null ? AppColors.textLow : Grade.percentHigherBetter(pct).fill);
+    return Container(
+      height: 34,
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(color: AppColors.bg, borderRadius: BorderRadius.circular(R.sm)),
+      child: Row(children: [
+        SizedBox(width: 74, child: Text(iso(p.label), style: AppType.bodyBold(color: AppColors.textHi), maxLines: 1)),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(R.pill),
+            child: LinearProgressIndicator(
+              value: pct == null ? 0 : pct / 100,
+              minHeight: 6,
+              color: color,
+              backgroundColor: AppColors.border,
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Text(iso(!p.up ? 'مطفأ' : (p.total == 0 ? '—' : '${p.online}/${p.total}')), style: AppType.bodyBold(color: color)),
       ]),
     );
   }

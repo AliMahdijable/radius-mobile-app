@@ -69,15 +69,34 @@ class TowerGeometry {
 
   double ringRadius(int i) => halfAt(ringYs[i]) + 14;
 
-  /// مكان جهازٍ على حلقته من زاوية النظر — `cz > -0.25` يعني أمام البرج.
-  ({double x, double y, double sx, double cz}) place(TowerLevel level, int azimuth, double view) {
+  /// نصف قطر الحلقة بأجهزتها — المالك ٢٩ أكتوبر: «حل مشكلة تزاحم الأجهزة». كانت الحلقة بعرض الهيكل نفسه (~٣٠px)
+  /// فتتكدّس تسعة سكاتر فوق الأرجل وفوق بعضها؛ صارت تتّسع بعدد أجهزتها (كأذرع البرج الحقيقيّة) حتى حدّ المنظر.
+  double armRadius(int i, int crowd) {
+    final base = ringRadius(i) + 8;
+    if (crowd <= 1) return base;
+    final maxR = math.max(base, size.width / 2 - 48);
+    return (22.0 + crowd * 15.0).clamp(base, maxR);
+  }
+
+  /// ارتفاع الحلقة على المنظر (القمّة فوق أولى الحلقات قليلاً).
+  double ringY(TowerLevel level) => level == TowerLevel.top ? ringYs[0] - 6 : ringYs[ringOf(level)];
+
+  /// مكان جهازٍ على حلقته من زاوية النظر — `cz > -0.25` يعني أمام البرج. [crowd] = أجهزة حلقته.
+  ({double x, double y, double sx, double cz}) place(TowerLevel level, int azimuth, double view, {int crowd = 1}) {
     final i = ringOf(level);
-    final r = ringRadius(i) + 8;
+    final r = armRadius(i, crowd);
     final rel = (azimuth - view) * math.pi / 180;
     final sx = math.sin(rel);
     final cz = math.cos(rel);
-    final y = level == TowerLevel.top ? ringYs[0] - 6 : ringYs[i];
+    final y = ringY(level);
     return (x: cx + r * sx, y: y + r * kTowerSquash * cz, sx: sx, cz: cz);
+  }
+
+  /// منبت ذراع الجهاز على سطح الهيكل عند حلقته — منه يمتدّ الذراع إلى الجهاز.
+  Offset armRoot(TowerLevel level, double sx, double cz) {
+    final y = ringY(level);
+    final h = halfAt(y);
+    return Offset(cx + h * sx, y + h * kTowerSquash * cz);
   }
 
   /// الكابينة على يمين قاعدة البرج: مستطيلٌ يتّسع لأجهزتها.
@@ -254,7 +273,11 @@ class SideOverlayPainter extends CustomPainter {
     required this.links,
     required this.phase,
     required this.front,
+    this.arms = const [],
   });
+
+  /// أذرع الأجهزة: من سطح الهيكل إلى الجهاز (تُظهر لأيّ حلقةٍ ينتمي حين تتباعد الأجهزة).
+  final List<({Offset from, Offset to})> arms;
 
   /// نقاط مخروط الحزمة (الأولى رأسه عند الجهاز)، أو فارغة.
   final List<Offset> beam;
@@ -271,6 +294,15 @@ class SideOverlayPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (arms.isNotEmpty) {
+      final arm = Paint()
+        ..color = AppColors.textMid.withValues(alpha: front ? 0.55 : 0.28)
+        ..strokeWidth = front ? 1.6 : 1.2
+        ..strokeCap = StrokeCap.round;
+      for (final a in arms) {
+        canvas.drawLine(a.from, a.to, arm);
+      }
+    }
     if (beam.length >= 3) {
       final p = Path()..addPolygon(beam, true);
       canvas.drawPath(p, Paint()..color = beamColor.withValues(alpha: 0.14));
@@ -310,7 +342,7 @@ class SideOverlayPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(SideOverlayPainter old) =>
-      old.phase != phase || old.beam != beam || old.links != links || old.beamColor != beamColor;
+      old.phase != phase || old.beam != beam || old.links != links || old.beamColor != beamColor || old.arms != arms;
 }
 
 /// المنظر من الأعلى: بوصلةٌ ودوائر، وقوسٌ لكلّ سكتر بلون حالته، وخطٌّ لكلّ لنك نحو وجهته.
