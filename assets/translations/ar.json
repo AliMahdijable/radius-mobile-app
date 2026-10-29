@@ -431,7 +431,8 @@
     "points_singular": "نقطة",
     "recent_activity_label": "آخر النشاطات",
     "recent_activity_fetch_failed": "آخر النشاطات (تعذّر الجلب)",
-    "reports": "التقارير"
+    "reports": "التقارير",
+    "revenue_deferred": "+ {} د.ع آجل (دين) — يدخل الإيرادات عند التسديد"
   },
   "subscribers": {
     "big_debtors_unavailable": "«مديون» غير متاح بعد للقوائم الكبيرة في هذه الشركة: دين مشتركيها على خادمنا لا في الساس. ابحث عن المشترك بالاسم أو اليوزر، أو افتح تقرير الديون.",
@@ -2374,7 +2375,7 @@
     "profit_hidden_hint": "المتحقّق والمقدَّر — مخفيّة حتى تُظهرها",
     "profit_hide": "إخفاء الأرباح",
     "profits": "الأرباح",
-    "profit_total_hint": "تفعيلات {period}: البيع − الكلفة",
+    "profit_total_hint": "تفعيلات {period}: البيع − الكلفة (نقداً وآجلاً)",
     "hide": "إخفاء",
     "row_counts": "{active} فعّال · {acts} تفعيل",
     "row_acts": "{acts} تفعيل",

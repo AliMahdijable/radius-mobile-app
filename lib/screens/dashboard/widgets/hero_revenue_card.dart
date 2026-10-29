@@ -106,6 +106,8 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
     final m = f == null ? sum : sum.only(f);
     _mergedExcluded[p] = m.excluded;
     final r = m.value;
+    // «كل الشركات»: المجموع بلا سطر الآجل (لا يُجمع لكلّ شركة بعد).
+    _deferreds[p] = null;
     if (r != null) {
       _amounts[p] = r.amount;
       _archives[p] = r.archive;
@@ -126,6 +128,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
       _amounts[RevenuePeriod.day] = null;
       _amounts[RevenuePeriod.week] = null;
       _amounts[RevenuePeriod.month] = null;
+      _deferreds.clear();
       _failed.clear();
       _mergedSums.clear();
     });
@@ -188,6 +191,7 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
       if (r != null) {
         _amounts[p] = r.amount;
         _archives[p] = r.archive;
+        _deferreds[p] = r.deferred;
       } else {
         _failed.add(p);
       }
@@ -197,6 +201,9 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
 
   /// وصف الأرشيف لكلّ مدّة — لا يُخزَّن، يُعاد قراءته مع كلّ جلبة.
   final Map<RevenuePeriod, ArchiveInfo?> _archives = {};
+
+  /// ما بيع آجلاً في كلّ مدّة ([RevenueResult.deferred]) — سطرٌ تحت الرقم حين يزيد على صفر.
+  final Map<RevenuePeriod, int?> _deferreds = {};
 
   /// «كل الشركات»: شركاتٌ خارج المجموع لكلّ مدّة («الاسم: السبب»).
   final Map<RevenuePeriod, List<String>> _mergedExcluded = {};
@@ -345,6 +352,14 @@ class _HeroRevenueCardState extends State<HeroRevenueCard> {
               ],
             ],
           ),
+          // تفعيلاتٌ على الدين في المدّة: ليست إيراداً بعد (تدخله يوم تُسدَّد) — تُقال كي لا يُقرأ «0» «لا حركة».
+          if (!_periodLoading && !_periodFailed && _amount != null && (_deferreds[_period] ?? 0) > 0) ...[
+            const SizedBox(height: Sp.xs),
+            Text(
+              'dashboard.revenue_deferred'.tr(args: [formatIQD(_deferreds[_period]!)]),
+              style: AppType.micro(color: AppTone.warning.fill).copyWith(height: 1.45),
+            ),
+          ],
           // «كل الشركات»: من لم يدخل المجموع ولماذا — لا رقمٌ يبدو كاملاً وهو ناقص
           if ((_mergedExcluded[_period] ?? const <String>[]).isNotEmpty) ...[
             const SizedBox(height: Sp.xs),

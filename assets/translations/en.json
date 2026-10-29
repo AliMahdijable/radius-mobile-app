@@ -431,7 +431,8 @@
     "points_singular": "pt",
     "recent_activity_label": "Recent activity",
     "recent_activity_fetch_failed": "Recent activity (couldn't load)",
-    "reports": "Reports"
+    "reports": "Reports",
+    "revenue_deferred": "+ {} IQD deferred (debt) — counted in revenue when paid"
   },
   "subscribers": {
     "big_debtors_unavailable": "“Debtors” is not available yet for large lists in this company: its debts live on our server, not in the SAS. Search the subscriber by name or username, or open the debts report.",
@@ -2374,7 +2375,7 @@
     "profit_hidden_hint": "Realized and estimated — hidden until you show them",
     "profit_hide": "Hide profits",
     "profits": "Profits",
-    "profit_total_hint": "{period} activations: sale − cost",
+    "profit_total_hint": "{period} activations: sale − cost (cash and deferred)",
     "hide": "Hide",
     "row_counts": "{active} active · {acts} activations",
     "row_acts": "{acts} activations",

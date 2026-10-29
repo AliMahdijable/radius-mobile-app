@@ -162,8 +162,15 @@ class RevenueResult {
     required this.amount,
     this.series = const [],
     this.archive,
+    this.deferred,
   });
   final int amount;
+
+  /// ما بيع آجلاً (ديناً) في المدّة: التفعيلات غير النقديّة + الجزء غير المدفوع من الجزئيّ
+  /// (`data.kpis.activate_non_cash_sum`). ليس من الإيرادات — هي ما دخل نقداً، والآجل يدخلها يوم يُسدَّد — فيُعرض تحت
+  /// الرقم كي لا يُقرأ «0» على أنّه «لا حركة» (المالك ٢٩ أكتوبر: «الإيرادات اليوم كيف صفر… واكو حركة تفعيل!»).
+  /// `null` = خادمٌ لا يرسله. خارج `toJson`/`fromJson` كـ[archive].
+  final int? deferred;
 
   /// ⚠️ **خارج `toJson`/`fromJson` عمداً.**
   ///
@@ -394,11 +401,13 @@ class DashboardApi {
       // السلسلة اختياريّة: غيابها لا يمنع عرض الرقم — الخادم القديم
       // (قبل إصلاح 2026-08-30) يُرجعها صفريّة، والأقدم لا يُرجعها.
       final series = parseRevenueSeries((body['data'] as Map?)?['timeseries']);
+      final dv = ((body['data'] as Map?)?['kpis'] as Map?)?['activate_non_cash_sum'];
       return RevenueResult(
         amount: amount,
         series: series,
         // `data.archive` لا الجذر — انظر `ArchiveInfo`.
         archive: ArchiveInfo.fromJson((body['data'] as Map?)?['archive']),
+        deferred: dv is num ? dv.toInt() : (dv == null ? null : num.tryParse(dv.toString())?.round()),
       );
     } on DioException catch (e) {
       _logErr('reports/finance(${period.name}) from=$from to=$to', e);
