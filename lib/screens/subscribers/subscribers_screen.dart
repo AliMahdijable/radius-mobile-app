@@ -40,6 +40,7 @@ import '../../theme/typography.dart';
 import '../../widgets/active_company_line.dart';
 import '../../services/provider_limits.dart';
 import '../top_actions.dart';
+import 'fiberx_entertainment_view.dart';
 import 'sheets/add_subscriber_sheet.dart';
 import 'sheets/bulk_activate_sheet.dart';
 import 'sheets/bulk_pay_debt_sheet.dart';
@@ -149,6 +150,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
   String _query = '';
   SubscriberFilter _filter = SubscriberFilter.all;
+  /// فايبر اكس: تبويب «الخدمة الترفيهية» (المحتوى) مقابل «الانترنت» — كبوّابتهم. افتراضاً الانترنت.
+  bool _fxEntMode = false;
   SortField _sortField = SortField.remainingDays;
   SortDirection _sortDir = SortDirection.desc;
 
@@ -558,6 +561,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     final next = widget.filterCmd?.value;
     if (next == null || next == _filter) return;
     setState(() {
+      _clearSearchForSectionChange();
       _filter = next;
       _applyDefaultSortFor(next);
       _visibleCount = _kPageStep;
@@ -1745,10 +1749,60 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   }
 
   // ───────── build ─────────
+  /// شريط تبويب فايبر اكس: «الانترنت» / «الخدمة الترفيهية» — يُعرض لوكيل فايبر اكس وحده.
+  Widget _fxTabBar() {
+    Widget pill(String label, bool active, VoidCallback onTap) => Expanded(
+          child: GestureDetector(
+            onTap: onTap,
+            child: Container(
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(vertical: Sp.sm + 2),
+              decoration: BoxDecoration(
+                color: active ? AppColors.brand : AppColors.surfaceInput,
+                borderRadius: BorderRadius.circular(R.sm),
+              ),
+              child: Text(label,
+                  style: AppType.bodyBold(
+                      color: active ? AppColors.onBrand : AppColors.textMid)),
+            ),
+          ),
+        );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, 0),
+      child: Row(children: [
+        pill('مشتركون الانترنت', !_fxEntMode, () {
+          if (_fxEntMode) setState(() => _fxEntMode = false);
+        }),
+        const SizedBox(width: Sp.sm),
+        pill('الخدمة الترفيهية', _fxEntMode, () {
+          if (!_fxEntMode) setState(() => _fxEntMode = true);
+        }),
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     if (_locked) return const _SubscribersLocked();
+    // فايبر اكس بوضع «الخدمة الترفيهية»: الشريط نفسه أعلاه ثمّ قائمة المحتوى (قراءةٌ فقط) بدل مشتركي الانترنت.
+    if (ProviderService.isFiberx && _fxEntMode) {
+      return Scaffold(
+        backgroundColor: AppColors.bg,
+        body: SafeArea(
+          bottom: false,
+          child: Column(children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, 0),
+              child: TabHeader(title: 'subscribers.title'.tr()),
+            ),
+            _fxTabBar(),
+            const SizedBox(height: Sp.sm),
+            const Expanded(child: FiberxEntertainmentView()),
+          ]),
+        ),
+      );
+    }
     // ⚡ تُحسب مرّةً واحدة للإطار (تدقيق أداء 2026-08-31).
     //
     // كانت `_filteredAll` تُستدعى ثلاثاً و`_counts()` ثلاثاً
@@ -1776,6 +1830,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
         bottom: false,
         child: Column(
           children: [
+            if (ProviderService.isFiberx) _fxTabBar(),
             // ⚠️ **عمر البيانات على الشاشة لا في الكود.** حين تُعرض
             // نسخةٌ محفوظة بلا شبكة، يجب أن يعرف المدير أنّها قديمة
             // قبل أن يقول لزبونه «عليك ٢٥ ألفاً». رقمٌ قديمٌ بلا علامة
@@ -2259,8 +2314,21 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   /// حشوة الجانبين (الغلاف يزيد عليها على الحاسبة).
   double get _hPad => Sp.lg;
 
+  /// التنقّل بين الأقسام (المتصلون · المدينون · …) يصفّر البحث — طلب المالك ٢٩ أكتوبر: «من يتنقّل بين المتصلين
+  /// وبقيّة الأقسام مفروض البحث يصفّر». فلا يبقى نصّ بحثٍ من قسمٍ سابق يُخفي صفوف القسم الجديد. إزالة المستمع حول
+  /// `clear()` تمنع تحديثاً مؤجّلاً ثانياً (البحث الكبير يُعيد التحميل مرّةً واحدة أسفله).
+  void _clearSearchForSectionChange() {
+    _debounce?.cancel();
+    if (_searchCtrl.text.isEmpty && _query.isEmpty) return;
+    _searchCtrl.removeListener(_onSearchChanged);
+    _searchCtrl.clear();
+    _searchCtrl.addListener(_onSearchChanged);
+    _query = '';
+  }
+
   void _selectFilter(SubscriberFilter f) {
     setState(() {
+      _clearSearchForSectionChange();
       _filter = f;
       _applyDefaultSortFor(f);
       _visibleCount = _kPageStep;
