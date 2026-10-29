@@ -38,6 +38,23 @@ class TcpReachability {
     return completer.future;
   }
 
+  /// زمن فتح اتّصالٍ واحد بالعنوان (منفذه إن كُتب، وإلّا 80 — منفذ صفحة الجهاز) — null: لم يُفتح خلال [timeout].
+  /// يقيس بُعد الشبكة لا صحّة الجهاز: ~5 ملّي ث على شبكة الوكيل، ونصف ثانيةٍ فأكثر عبر VPN من بعيد (قِيس ٢٩ أكتوبر).
+  static Future<Duration?> connectTime(String address,
+      {Duration timeout = const Duration(seconds: 2)}) async {
+    final target = split(address);
+    if (target.host.isEmpty) return null;
+    final sw = Stopwatch()..start();
+    try {
+      final socket = await Socket.connect(target.host, target.port ?? 80, timeout: timeout);
+      sw.stop();
+      socket.destroy();
+      return sw.elapsed;
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<bool> _tryConnect(
       String host, int port, Duration timeout) async {
     try {

@@ -815,12 +815,11 @@ class SubscriberNetworkMetrics extends StatelessWidget {
   /// جدول الحاسبة: خليّةٌ ضيّقة ⇒ تلتفّ القياسات بدل أن تفيض (الهاتف صفٌّ واحد كما كان).
   final bool wrap;
 
-  /// لقطة جهاز المشترك من الكاش وحده (لا فحص) — باليوزر أوّلاً ثمّ بـIP الجلسة.
-  static DeviceHealthSnapshot? snapshotOf(Subscriber sub) {
-    final ip = sub.ipAddress?.trim() ?? '';
-    return DeviceProbeApi.cachedForUser(sub.username, company: sub.companyKey) ??
-        (ip.isEmpty ? null : DeviceProbeApi.cached(ip, company: sub.companyKey));
-  }
+  /// لقطة جهاز المشترك من الكاش وحده (لا فحص) — باليوزر أوّلاً ثمّ بـIP الجلسة: آخر نتيجة فحصٍ مهما قدُمت حتى يحلّ
+  /// محلّها فحصٌ أحدث. 🐛 ٢٩ أكتوبر: كانت تُعامَل منتهيةً بعد خمس دقائق فتختفي القراءة من البطاقة والجدول — والموجة
+  /// تعيد ما قدُم ([DeviceProbeApi.needsProbe]).
+  static DeviceHealthSnapshot? snapshotOf(Subscriber sub) =>
+      DeviceProbeApi.peek(username: sub.username, ip: sub.ipAddress?.trim(), company: sub.companyKey)?.snap;
 
   /// اسم جهاز المشترك: اسم النانو (hostname) أو طراز الـONU من الفحص، وإلّا مصنّع الراوتر من الساس (oui).
   static String? deviceNameOf(Subscriber sub, DeviceHealthSnapshot? snap) {

@@ -145,6 +145,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   /// آخر إيقاظٍ لبطاقات الأجهزة — لخنق تواتره أثناء الموجة.
   DateTime? _lastProbeBump;
 
+  /// الحاسبة: نبضات الاستطلاع منذ آخر موجة — كلّ ٦٠ (٥ دقائق) موجةٌ لما قدُم ([DeviceProbeApi.needsProbe]): نافذتها
+  /// تبقى مفتوحة ساعات، والهاتف يُعيد القائمة (فالموجة) كلّما رجع إليها.
+  int _probeTick = 0;
+
   /// مطلب 2026-06-11: زر تكويل عام — true يخفي قسم الاتصال على
   /// كل البطاقات المعروضة. الـSubscriberCardV3 يلتقط الـprop عبر
   /// didUpdateWidget فيتزامن الكل لحظياً.
@@ -379,6 +383,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     PermissionsService.changes.addListener(_onPermsChanged);
     SubscriberColumnPrefs.layout.addListener(_onColumnsChanged);
     SubscriberColumnPrefs.widths.addListener(_onColumnsChanged);
+    // قراءةٌ وصلت بعد سقف فحصها تُحفظ ⇒ توقظ البطاقات والجدول كقراءة الموجة.
+    DeviceProbeApi.onLateResult = DeviceProbeBus.bump;
     _wasLocked = _locked;
     if (!_locked) _load();
     // حدود «تنبيه المشترك» — شريط المشكلة يعمل بالافتراضيّات حتّى تصل
@@ -498,6 +504,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       // الحيّة (متصل/منتهي) لا تُرسَم حتّى يقع `setState` من سبب آخر.
       // أي أنّ الحلقة كانت تعمل على الفراغ منذ إنشائها.
       if (mounted) setState(() {});
+      if (mounted && AppPlatform.isDesktop && ++_probeTick % 60 == 0 && !_probing) _runProbeWave();
     } catch (_) {
       // silent — لا نُشوّش المستخدم بأخطاء polling. الـpull-to-refresh
       // يُعيد المحاولة صريحاً لو الاتصال انقطع.
@@ -864,12 +871,11 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     // للشاشة وتُطلق 500 مستقبَلاً، ولو كانت كلّ النتائج في الكاش:
     // شريط تقدّم يعدّ إلى 500 بلا عمل حقيقي، وإيحاء للمستخدم بأنّ
     // الفحص يُعاد من الصفر في كل مرّة.
+    // (المفحوص منذ أكثر من خمس دقائق يُعاد — كان «لا نتيجة أصلاً» فلا يُعاد أبداً.)
     if (!force) {
       targets = targets
-          .where((t) =>
-              DeviceProbeApi.peek(
-                  username: t.username, ip: t.ip, company: t.company) ==
-              null)
+          .where((t) => DeviceProbeApi.needsProbe(
+              username: t.username, ip: t.ip, company: t.company))
           .toList();
     }
 
@@ -895,8 +901,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     final visible = _visibleForCurrentPage();
     final priorityUsernames = visible.map((s) => s.username).toSet();
 
+    _probeTick = 0;
     DeviceProbeApi.warmProbe(
       targets,
+      force: force,
       priorityUsernames: priorityUsernames.isEmpty ? null : priorityUsernames,
       // ⚠️ **بلا `setState`.** كان يُعيد بناء الشاشة كاملةً مع كلّ دفعة
       //    ليُحدّث رقم العدّاد — والرقم حُذف. و`DeviceProbeBus.bump()`

@@ -134,6 +134,46 @@ class DeviceProbeApi {
   ///
   /// وإن ظهر أثرٌ على الشبكة فالعودة سطرٌ واحد هنا.
   static const _defaultWorkers = 40;
+
+  /// عمّال الموجة على خطٍّ بعيد (VPN من خارج شبكة الوكيل).
+  ///
+  /// 🐛 ٢٩ أكتوبر (المالك على الماك: «الاشارات مال اجهزه مجاي تظهر شي مثل التطبيق حتى بعد اكمال الفحص»): الحاسبة
+  /// تصل أجهزة المشتركين عبر VPN — ذهابٌ وإيابٌ ٢١١–٣٠٠٠ ملّي ث (الوسيط ٥٦٥) بدل بضعٍ على شبكة الوكيل. أربعون عاملاً
+  /// يفتح كلٌّ ثلاثة اتّصالاتٍ معاً خنقت النفق: نصف الاتّصالات بلا ردّ في دقيقة الموجة، والفحوص تجاوزت سقفها فلا قراءة؛
+  /// وفتح المشترك وحده (فحصٌ واحد) يقرأ. فالموجة تقيس بُعد الخطّ أوّلاً ([_workersForLink]) وتنزل إلى هذا العدد عليه.
+  static const _slowLinkWorkers = 8;
+
+  /// وسيط زمن فتح الاتّصال فوق هذا = خطٌّ بعيد.
+  static const _slowLinkConnect = Duration(milliseconds: 150);
+
+  /// للاختبار: زمن فتح الاتّصال بدل الشبكة.
+  @visibleForTesting
+  static Future<Duration?> Function(String address)? debugConnectTime;
+
+  /// للاختبار: فحصٌ وهميّ بدل الشبكة (العنوان ⇒ اللقطة).
+  @visibleForTesting
+  static Future<DeviceHealthSnapshot?> Function(String ip)? debugRunProbe;
+
+  /// عمّال آخر موجة — للاختبار.
+  @visibleForTesting
+  static int? lastWaveWorkers;
+
+  /// للاختبار: نتيجة المشترك و/أو العنوان أقدم بـ[by].
+  @visibleForTesting
+  static void debugBackdate({String? username, String? ip, String? company, required Duration by}) {
+    void back(Map<String, _Cached> m, String key) {
+      final c = m[key];
+      if (c != null) m[key] = _Cached(c.snap, c.at.subtract(by));
+    }
+
+    if (username != null) back(_snapByUser, _k(company, username));
+    if (ip != null) back(_snapCache, _k(company, ip.trim()));
+  }
+
+  /// يُنادى حين تصل قراءةٌ بعد أن تخلّى عنها فحصها (تجاوز سقفه) فتُحفظ — يوقظ من يقرأ الكاش (الجدول والبطاقات عبر
+  /// `DeviceProbeBus`)؛ هذه الطبقة لا تعرف الواجهة.
+  static void Function()? onLateResult;
+
   // IPs الميتة نتجاهلها 2د قبل إعادة المحاولة (يُلغى بـforce أو نجاح جديد).
   static const _deadTtl = Duration(minutes: 2);
 
@@ -358,7 +398,7 @@ class DeviceProbeApi {
     final defaults = await _loadAdminDefaults(company);
     final started = DateTime.now();
     _zteSteps.remove(effectiveIp);
-    final run = _runProbe(effectiveIp, cfg, defaults, ipKey);
+    final run = debugRunProbe?.call(effectiveIp) ?? _runProbe(effectiveIp, cfg, defaults, ipKey);
     Future<({DeviceHealthSnapshot? snap, bool done})> within(Duration d) =>
         run.then((s) => (snap: s, done: true)).timeout(d, onTimeout: () => (snap: null, done: false));
     var r = await within(_probeCap);
@@ -411,7 +451,27 @@ class DeviceProbeApi {
       _kindByIp.remove(ipKey);
     }
     _schedulePersist();
+    if (timedOut) _keepLate(run, entry, ipKey, userKey);
     return snap;
+  }
+
+  /// قراءةٌ وصلت بعد سقف الفحص — كانت تُرمى: مستقبَلات Dart لا تُلغى، فالفحص يُكمل بعد أن نتخلّى عنه (على خطٍّ بعيد
+  /// يُكمل كثيراً). تُحفظ ما دامت نتيجة الفشل التي كتبناها هي الأحدث — فحصٌ أحدث أو إبطالٌ بعدنا لا يُغطّى.
+  static void _keepLate(Future<DeviceHealthSnapshot?> run, _Cached failed, String ipKey, String? userKey) {
+    unawaited(run.then((late) {
+      if (late == null || !identical(_snapCache[ipKey], failed)) return;
+      final e = _Cached(late, DateTime.now());
+      _snapCache[ipKey] = e;
+      if (userKey != null && (_snapByUser[userKey] == null || identical(_snapByUser[userKey], failed))) {
+        _snapByUser[userKey] = e;
+      }
+      _kindByIp[ipKey] = late.kind;
+      _deadCache.remove(ipKey);
+      _issueByKey.remove(ipKey);
+      if (userKey != null) _issueByUser.remove(userKey);
+      _schedulePersist();
+      onLateResult?.call();
+    }, onError: (_) {}));
   }
 
   /// Drop one IP's cached snapshot — call after editing per-sub
@@ -490,20 +550,49 @@ class DeviceProbeApi {
     );
   }
 
+  /// تحتاج الموجة (غير المُجبَرة) فحص هذا الهدف؟ لا نتيجة له، أو نتيجته أقدم من [_ttl].
+  ///
+  /// 🐛 ٢٩ أكتوبر: كان الترشيح «لا نتيجة أصلاً» — فالمفحوص مرّةً لا تعيده الموجة ولو بعد ساعة، وقراءته تُعامَل منتهيةً
+  /// بعد خمس دقائق ولا تتجدّد إلّا بـ«فحص الأجهزة».
+  static bool needsProbe({String? username, String? ip, String? company}) {
+    final p = peek(username: username, ip: ip, company: company);
+    return p == null || p.stale;
+  }
+
+  /// عدد عمّال الموجة بحسب بُعد الخطّ: فتح اتّصالٍ بأوّل خمسة عناوين (الظاهرون أوّلاً) معاً — جولةٌ واحدة. وسيطٌ فوق
+  /// [_slowLinkConnect] ⇒ [_slowLinkWorkers]؛ وإلّا — أو لم يردّ اثنان — [_defaultWorkers] كما كان (شبكة الوكيل لا تتغيّر).
+  static Future<int> _workersForLink(List<ProbeTarget> ordered) async {
+    final sample = <String>[];
+    for (final t in ordered) {
+      final custom = DeviceConfigApi.peekConfig(t.username, company: t.company)?.customIp?.trim();
+      final ip = custom != null && custom.isNotEmpty ? custom : t.ip.trim();
+      if (ip.isNotEmpty && !sample.contains(ip)) sample.add(ip);
+      if (sample.length == 5) break;
+    }
+    if (sample.isEmpty) return _defaultWorkers;
+    final measure = debugConnectTime ?? TcpReachability.connectTime;
+    final times = (await Future.wait(sample.map(measure))).whereType<Duration>().toList()..sort();
+    if (times.length < 2) return _defaultWorkers;
+    return times[times.length ~/ 2] > _slowLinkConnect ? _slowLinkWorkers : _defaultWorkers;
+  }
+
   /// Wave batched probe.
   ///
   /// * [priorityUsernames] — تُفحص أوّلاً. للـviewport-visible subs،
   ///   يمنح إحساس بأن الفحص "فوري" حتى مع قوائم كبيرة.
   /// * [concurrency] — عدد العمّال المتزامنين. حوضٌ منزلق لا دفعاتٌ
   ///   متتابعة: من فرغ أخذ الهدف التالي فوراً. راجع [_defaultWorkers]
-  ///   لسبب الرقم.
+  ///   لسبب الرقم. null ⇒ بحسب بُعد الخطّ ([_workersForLink]).
   /// * [onProgress] — يُنادى بعد **كلّ هدف** لا بعد كلّ دفعة. فليكن
   ///   رخيصاً؛ لا `setState` على شاشةٍ كاملة فيه.
   /// * `company` في الهدف — شركة الصفّ في «كل الشركات» (null في الوضع العاديّ): دفعة إعدادات لكلّ شركة، وحوضٌ واحد للكلّ.
+  /// * [force] — «فحص الأجهزة»: كلّ هدفٍ يُفحص من جديد. 🐛 ٢٩ أكتوبر: كان الفحص المُجبَر يُبطل كاش العنوان وحده ثمّ يسأل
+  ///   [probe] بلا force — فنتيجة المشترك المحفوظة (فشلٌ عمره دون خمس دقائق) تعود كما هي: «اكتمل الفحص» ولا جديد.
   static Future<void> warmProbe(
     List<ProbeTarget> targets, {
     Set<String>? priorityUsernames,
-    int concurrency = _defaultWorkers,
+    int? concurrency,
+    bool force = false,
     void Function(int done, int total)? onProgress,
     bool Function()? isCanceled,
   }) async {
@@ -644,6 +733,7 @@ class DeviceProbeApi {
           await probe(
               fallbackIp: t.ip,
               subscriberUsername: t.username,
+              force: force,
               company: t.company);
         } catch (_) {}
         done++;
@@ -655,7 +745,9 @@ class DeviceProbeApi {
       }
     }
 
-    final workers = concurrency < ordered.length ? concurrency : ordered.length;
+    final wanted = concurrency ?? await _workersForLink(ordered);
+    lastWaveWorkers = wanted;
+    final workers = wanted < ordered.length ? wanted : ordered.length;
     await Future.wait(List.generate(workers, (_) => worker()));
   }
 

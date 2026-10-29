@@ -51,7 +51,7 @@ void main() {
     expect(DeviceProbeApi.peek(ip: '   '), isNull,
         reason: 'عنوان فارغ ليس مفتاحاً صالحاً');
 
-    // ④ الترشيح الذي تعتمده الموجة: تُفحص الأجهزة المجهولة وحدها
+    // ④ الترشيح الذي تعتمده الموجة: تُفحص المجهولة (والقديمة — device_probe_wave_test) وحدها
     const targets = [
       (username: 'a', ip: '10.0.0.5'),
       (username: 'b', ip: '10.0.0.6'),
@@ -59,7 +59,7 @@ void main() {
       (username: 'd', ip: ''),
     ];
     final toProbe = targets
-        .where((t) => DeviceProbeApi.peek(username: t.username, ip: t.ip) == null)
+        .where((t) => DeviceProbeApi.needsProbe(username: t.username, ip: t.ip))
         .toList();
     expect(toProbe.map((t) => t.username), ['c', 'd'],
         reason: 'الموجة تُعيد فحص أجهزة معروفة أصلاً');
