@@ -28,6 +28,7 @@ import 'sales/sales_screen.dart';
 import 'settlements/settlements_screen.dart';
 import 'subscriber_prices/subscriber_prices_screen.dart';
 import 'telegram/telegram_screen.dart';
+import 'topup/fiberx_topup_screen.dart';
 import 'topup/topup_screen.dart';
 
 /// مجموعات القائمة الجانبيّة على الحاسبة — بترتيب الموقع (nav-config.ts).
@@ -169,10 +170,14 @@ List<AppModule> buildAppModules() {
         tone: AppTone.success,
         title: 'شحن رصيد الصفحة',
         // «متوقّفٌ مؤقّتاً»: البطاقة مفتوحة لسجلّ العمليّات و«تحقّق» وحدهما.
-        subtitle: SelfDepositState.gate.value!.block == SelfDepositBlock.paused
-            ? 'متوقّف مؤقّتاً — تابِع عمليّاتك التي لم تُحسم'
-            : 'زين كاش أو كارت تعبئة — يُضاف لرصيد صفحتك بالساس',
-        page: () => const TopupScreen(),
+        subtitle: ProviderService.isFiberx
+            ? 'زين كاش أو كي كارد — يُضاف لمحفظة فايبر اكس'
+            : SelfDepositState.gate.value!.block == SelfDepositBlock.paused
+                ? 'متوقّف مؤقّتاً — تابِع عمليّاتك التي لم تُحسم'
+                : 'زين كاش أو كارت تعبئة — يُضاف لرصيد صفحتك بالساس',
+        page: () => ProviderService.isFiberx
+            ? const FiberxTopupScreen()
+            : const TopupScreen(),
       ),
     // §١٢ «الكارتات» — مخزون كارتات التعبئة. الخادم يقول `enabled` في admin-widgets والبطاقة تتبعه،
     // ومجهولة الشارة لا تُظهرها. الموظّف يفتحه بصلاحيّة التفعيل/التمديد وحدها.
