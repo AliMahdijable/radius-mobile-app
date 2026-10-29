@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../core/platform/app_platform.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../../api/bulk_activate_api.dart';
 import '../../api/device_probe_api.dart';
@@ -505,7 +506,12 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    _appActive = state == AppLifecycleState.resumed;
+    // على الحاسبة (ويندوز/ماك) النافذة كثيراً «inactive» — ظاهرةٌ لكنّها ليست
+    // المركَّز عليها — والمستخدم يراقب القائمة وهو يعمل بنافذةٍ أخرى؛ فنُبقي الاستطلاع
+    // حيّاً حتى لا تتجمّد حالة الاتصال/الجلسة بصفحة المشتركين. على الهاتف resumed
+    // وحده = مُستعمَل.
+    _appActive = state == AppLifecycleState.resumed ||
+        (AppPlatform.isDesktop && state == AppLifecycleState.inactive);
     if (_appActive) {
       // عند الرجوع من الـbackground: refresh فوري + إعادة تشغيل timer.
       // Timer.periodic لا يُلغى تلقائياً في pause، بس رح يتخطّى بسبب
