@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,6 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/net/huawei_ont_service.dart';
 import '../core/net/zte_ont_service.dart';
 import '../core/net/ubiquiti_service.dart';
+import '../core/net/tcp_reachability.dart';
+import '../core/net/windows_icmp.dart';
 import '../models/device_health.dart';
 import '../services/client_diag.dart';
 import 'company_route.dart';
@@ -189,6 +192,7 @@ class DeviceProbeApi {
     _snapByUser.clear();
     _kindByIp.clear();
     _deadCache.clear();
+    _reachCache.clear();
     _adminFetch = null;
     _adminFetchBy.clear();
     _persistDebounce?.cancel();
@@ -196,6 +200,52 @@ class DeviceProbeApi {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_prefsKey);
     } catch (_) {}
+  }
+
+  // ── فحص وصولٍ سريع (بنگ) ─────────────────────────────────────────
+  // لمسة شبكة على عنوان الجهاز وحده — لا دخول ولا قراءة — تُظهر «واصل/لا»
+  // خلال ~ثانية، قبل أن يكمل الفحص الكامل (دخولٌ وقراءةٌ ~٤ث). لا تنتظر جلسة
+  // الساس: customIp المخزَّن يكفي، وإلّا عنوان الساس المتوفّر. ويندوز: ICMP من
+  // النظام؛ غيره: اتّصال TCP على 80/443/8080.
+  static final Map<String, ({bool ok, DateTime at})> _reachCache = {};
+  static const _reachTtl = Duration(seconds: 20);
+
+  /// `true` واصل · `false` لا يردّ · `null` لا عنوان بعد (فلا حكم).
+  static Future<bool?> reachable({
+    required String fallbackIp,
+    String? subscriberUsername,
+    String? company,
+    bool force = false,
+  }) async {
+    var ip = fallbackIp.trim();
+    if (subscriberUsername != null && subscriberUsername.isNotEmpty) {
+      // peek فقط — لا جلبٌ شبكيّ: الفحص الكامل يجلب الإعداد، وهذا البنگ لا
+      // يضيف طلباً. إن لم يكن customIp مخزَّناً بعد نُبنگ عنوان الساس، ويُعاد
+      // البنگ من نهاية [_runInner] بعد أن يُعرف الإعداد.
+      final custom = DeviceConfigApi.peekConfig(subscriberUsername, company: company)
+          ?.customIp
+          ?.trim();
+      if (custom != null && custom.isNotEmpty) ip = custom;
+    }
+    if (ip.isEmpty) return null;
+    final key = _k(company, ip);
+    if (!force) {
+      final hit = _reachCache[key];
+      if (hit != null && DateTime.now().difference(hit.at) < _reachTtl) {
+        return hit.ok;
+      }
+    }
+    bool ok;
+    try {
+      ok = Platform.isWindows
+          ? (await WindowsIcmp.ping(ip, count: 2, timeout: const Duration(seconds: 1)))
+              .isNotEmpty
+          : await TcpReachability.isReachable(ip);
+    } catch (_) {
+      ok = false;
+    }
+    _reachCache[key] = (ok: ok, at: DateTime.now());
+    return ok;
   }
 
   /// Resolves credentials + probes the device.

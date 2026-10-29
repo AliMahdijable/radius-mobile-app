@@ -89,6 +89,10 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     with WidgetsBindingObserver {
   bool _loading = true;
   DeviceHealthSnapshot? _snap;
+
+  /// بنگ سريع مستقلّ عن الفحص الكامل: `true` واصل · `false` غير واصل ·
+  /// `null` لم يُحسم بعد (أو لا عنوان) — يملأ الحبّة فوراً قبل أن يكمل الفحص.
+  bool? _reach;
   String? _notes;
 
   // ═══════════ الترافيك اللحظي ═══════════
@@ -186,6 +190,27 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       return;
     }
     _run();
+  }
+
+  @override
+  void didUpdateWidget(DeviceProbeCard old) {
+    super.didUpdateWidget(old);
+    // وصل عنوان المشترك بعد الفتح (من جلسة الساس)، أو تبدّل ⇒ أعد البنگ.
+    if (old.ip != widget.ip || old.username != widget.username) {
+      _checkReach(force: true);
+    }
+  }
+
+  /// بنگ سريع — مستقلٌّ عن الفحص الكامل: يُظهر «واصل/لا» خلال ~ثانية بدل
+  /// انتظار الدخول والقراءة. لا ينتظر جلسة الساس (customIp يكفي).
+  Future<void> _checkReach({bool force = false}) async {
+    final r = await DeviceProbeApi.reachable(
+      fallbackIp: widget.ip,
+      subscriberUsername: widget.username,
+      company: widget.company,
+      force: force,
+    );
+    if (mounted) setState(() => _reach = r);
   }
 
   /// الجهاز مفحوص أصلاً: نكمل بجلب الملاحظات بلا دوّارة ولا فحص.
@@ -432,6 +457,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   /// الدالّة اللقطة المخزَّنة نفسها، فتبدو النبضة الدوريّة عاملةً
   /// والأرقام لا تتغيّر.
   Future<void> _refreshQuietly({bool force = false}) async {
+    unawaited(_checkReach(force: force));
     if (_probing) return;
     _probing = true;
     try {
@@ -463,6 +489,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   bool _retryPending = false;
 
   Future<void> _run({bool force = false, bool retryLogin = false}) async {
+    unawaited(_checkReach(force: force));
     if (_probing) {
       if (retryLogin) _retryPending = true;
       return;
@@ -506,6 +533,8 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       if (snap != null) _lastAt = DateTime.now();
     });
     DeviceProbeBus.bump();
+    // أُعيد البنگ بعد أن عُرف الإعداد (customIp) — فيُصحَّح عنوانه إن لزم.
+    unawaited(_checkReach(force: force));
     _maybeStartTraffic();
     _maybeStartSignal();
   }
@@ -746,18 +775,10 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   Widget _statusChip() {
     late final String label;
     late final Color fg, bg, border;
-    if (_loading && _snap == null) {
-      label = 'جارٍ الفحص';
-      fg = AppColors.textMid;
-      bg = AppColors.surfaceSunken;
-      border = AppColors.border;
-    } else if (_snap == null) {
-      label = 'غير متاح';
-      fg = AppColors.dangerOnSoft;
-      bg = AppColors.dangerSoftBg;
-      border = AppColors.dangerSoftBorder;
-    } else {
-      label = switch (_snap!.kind) {
+    final snap = _snap;
+    if (snap != null) {
+      // الفحص الكامل جاهز: واصلٌ ومقروء.
+      label = switch (snap.kind) {
         DeviceKind.ont => 'ONT',
         DeviceKind.ubiquiti => 'UBNT',
         _ => 'متصل',
@@ -765,6 +786,28 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       fg = AppColors.brandOnSoft;
       bg = AppColors.brandSoftBg;
       border = AppColors.brandSoftBorder;
+    } else if (_reach == false) {
+      // بنگ حسم: غير واصل — بلا انتظار الفحص الكامل.
+      label = 'غير واصل';
+      fg = AppColors.dangerOnSoft;
+      bg = AppColors.dangerSoftBg;
+      border = AppColors.dangerSoftBorder;
+    } else if (_reach == true) {
+      // واصلٌ ببنگ؛ القراءة إمّا جاريةٌ أو تعذّرت — والجسم يفصّل.
+      label = 'واصل';
+      fg = AppColors.successFill;
+      bg = AppColors.successSoftBg;
+      border = AppColors.successSoftBorder;
+    } else if (_loading) {
+      label = 'جارٍ الفحص';
+      fg = AppColors.textMid;
+      bg = AppColors.surfaceSunken;
+      border = AppColors.border;
+    } else {
+      label = 'غير متاح';
+      fg = AppColors.dangerOnSoft;
+      bg = AppColors.dangerSoftBg;
+      border = AppColors.dangerSoftBorder;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: Sp.xs),
@@ -877,7 +920,20 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           title: 'جهاز ZTE يحتاج يوزر وباسورده',
           hint: 'اكتبهن من زرّ الإعدادات — الباسورد مكتوب على ظهر الجهاز',
         ),
-      _ => (title: 'لم يُتمكّن من الوصول للجهاز', hint: 'اضبط الـIP وبيانات الدخول من زرّ الإعدادات'),
+      _ => _reach == false
+          ? (
+              title: 'الجهاز غير واصل',
+              hint: 'ما يردّ على البنگ — تأكّد إنّه شغّال وبنفس الشبكة',
+            )
+          : _reach == true
+              ? (
+                  title: 'الجهاز واصل بس تعذّرت قراءته',
+                  hint: 'البنگ يوصل — غالباً النوع أو بيانات الدخول، اضبطهن من زرّ الإعدادات',
+                )
+              : (
+                  title: 'لم يُتمكّن من الوصول للجهاز',
+                  hint: 'اضبط الـIP وبيانات الدخول من زرّ الإعدادات',
+                ),
     };
   }
 
