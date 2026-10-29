@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -13,6 +15,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/skeleton.dart';
 import 'cards_widgets.dart';
+import 'sheets/card_purchase_sheet.dart';
 import 'sheets/card_transfer_sheet.dart';
 import 'sheets/series_cards_sheet.dart';
 import '../desktop/desk_widgets.dart';
@@ -61,11 +64,37 @@ class _CardsScreenState extends State<CardsScreen> {
         .toList();
   }
 
+  /// «شراء كارتات» من رصيد الساس (٢٩ أكتوبر): يظهر حين يفتحه الخادم لهذا الحساب ([CardPurchaseOptions.enabled]) — عنصرٌ
+  /// لصاحب الحساب يبقى مخفيّاً عن الموظّف (قاعدة القفل الموحّد ٥)، والخادم لا يفتحه له أصلاً.
+  CardPurchaseOptions _purchase = CardPurchaseOptions.hidden;
+
+  /// الوظيفة تولّد السلسلة المشتراة خلال ثوانٍ: إغلاقٌ مبكّر قبلها ⇒ قراءةٌ ثانية بعد قليل.
+  Timer? _lateRefresh;
+
   @override
   void initState() {
     super.initState();
     _setSummary(CardsState.lastSummary);
     _load();
+    _loadPurchase();
+  }
+
+  Future<void> _loadPurchase() async {
+    final o = await CardsApi.purchaseOptions();
+    if (mounted) setState(() => _purchase = o);
+  }
+
+  Future<void> _openPurchase() async {
+    var bought = false;
+    await showCardPurchaseSheet(context, _purchase, onPurchased: () => bought = true);
+    if (!mounted) return;
+    unawaited(_loadPurchase());
+    if (!bought) return;
+    await _refresh();
+    _lateRefresh?.cancel();
+    _lateRefresh = Timer(const Duration(seconds: 8), () {
+      if (mounted) _refresh();
+    });
   }
 
   void _setSummary(CardsSummary? s) {
@@ -78,6 +107,7 @@ class _CardsScreenState extends State<CardsScreen> {
 
   @override
   void dispose() {
+    _lateRefresh?.cancel();
     _seriesSearch.dispose();
     super.dispose();
   }
@@ -87,7 +117,10 @@ class _CardsScreenState extends State<CardsScreen> {
   Future<void> _load({bool fresh = false}) =>
       _inFlight ??= _fetch(fresh).whenComplete(() => _inFlight = null);
 
-  Future<void> _refresh() => _load(fresh: true);
+  Future<void> _refresh() {
+    unawaited(_loadPurchase());
+    return _load(fresh: true);
+  }
 
   /// كارتات السلسلة، ومنها «نقل لمدير فرعيّ» (٢٧ أكتوبر): لصاحب الحساب وحده (عنصرٌ لصاحب الحساب يبقى مخفيّاً عن الموظّف —
   /// قاعدة القفل الموحّد ٥) وحين يفتحه الخادم (`transfer_enabled`)، وللساس لا لكروت ايرث لنك. نقلٌ تمّ ⇒ تحديثٌ طازج.
@@ -209,6 +242,11 @@ class _CardsScreenState extends State<CardsScreen> {
             // ايرث لنك لا تعرض المخزون لهذا الحساب: سببها لا «الساس».
             text: s.unsupportedMessage ?? 'cards.none_hint'.tr(),
           ),
+          // بلا كارتات بعد: الشراء أوّلها.
+          if (_purchase.enabled) ...[
+            const SizedBox(height: Sp.md),
+            _PurchaseButton(onTap: _openPurchase),
+          ],
         ],
       );
     }
@@ -232,6 +270,10 @@ class _CardsScreenState extends State<CardsScreen> {
                 totals: s.totals,
                 byPackage: byPackage,
               ),
+              if (_purchase.enabled) ...[
+                const SizedBox(height: Sp.md),
+                _PurchaseButton(onTap: _openPurchase),
+              ],
               // ايرث لنك: قراءةٌ لم تكتمل (سقف الكروت/المهلة) تُقال — كالويب.
               if (s.partial) ...[
                 const SizedBox(height: Sp.md),
@@ -809,6 +851,52 @@ class _StateCard extends StatelessWidget {
           ),
           if (action != null) ...[const SizedBox(height: Sp.sm), action!],
         ],
+      ),
+    );
+  }
+}
+
+/// «شراء كارتات» — صفٌّ بعرض الشاشة تحت العدد الإجماليّ: أيقونة السلّة، العنوان، «من رصيدك في الساس»، وسهم.
+class _PurchaseButton extends StatelessWidget {
+  const _PurchaseButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    const tone = AppTone.brand;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: const ValueKey('cards-purchase-open'),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(R.lg),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: 12),
+          decoration: BoxDecoration(
+            color: tone.softBg,
+            borderRadius: BorderRadius.circular(R.lg),
+            border: Border.all(color: tone.softBorder),
+          ),
+          child: Row(
+            children: [
+              Icon(LucideIcons.shoppingCart, size: 18, color: tone.fill),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('cards.purchase_open'.tr(), style: AppType.bodyBold(color: tone.onSoft)),
+                    const SizedBox(height: 2),
+                    Text('cards.purchase_open_hint'.tr(), style: AppType.muted(color: tone.onSoft)),
+                  ],
+                ),
+              ),
+              Icon(Directionality.of(context) == TextDirection.rtl ? LucideIcons.chevronLeft : LucideIcons.chevronRight,
+                  size: 16, color: tone.fill),
+            ],
+          ),
+        ),
       ),
     );
   }

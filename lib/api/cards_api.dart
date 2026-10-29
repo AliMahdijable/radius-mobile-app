@@ -541,6 +541,143 @@ class CardTransferResult {
   final bool repeated;
 }
 
+// ═════════════════════════ شراء الكارتات من الرصيد (٢٩ أكتوبر) ═════════════════════════
+
+/// فئةٌ من صفحة «شراء كروت» في الساس: [value] سعر الكارت بالدينار، و[name] اسم الباقة («Economy +»).
+class CardPurchaseValue {
+  const CardPurchaseValue({required this.value, required this.label, this.name});
+
+  final int value;
+  final String label;
+  final String? name;
+
+  static CardPurchaseValue? fromJson(Map<String, dynamic> j) {
+    final value = _countOrNull(j['value']);
+    if (value == null || value <= 0) return null;
+    return CardPurchaseValue(value: value, label: _str(j['label']) ?? '$value', name: _str(j['name']));
+  }
+}
+
+/// «شراء كارتات» لهذا الحساب (`GET /api/v2/cards/purchase/options`). [enabled] وحده يُظهر الزرّ؛ [locked] يُظهره مقفلاً
+/// بسببه ([message]) — الموظّف؛ وغيرهما لا يظهر (المفتاح مطفأ أو الساس بلا الإضافة).
+class CardPurchaseOptions {
+  const CardPurchaseOptions({
+    required this.enabled,
+    this.locked = false,
+    this.message,
+    this.title,
+    this.values = const [],
+    this.balance,
+    this.maxQty = 0,
+    this.maxTotal = 0,
+  });
+
+  static const hidden = CardPurchaseOptions(enabled: false);
+
+  final bool enabled;
+  final bool locked;
+  final String? message;
+  final String? title;
+  final List<CardPurchaseValue> values;
+
+  /// رصيد الوكيل في الساس الآن. `null` = تعذّرت قراءته (لا صفرٌ مخترَع).
+  final num? balance;
+  final int maxQty;
+  final int maxTotal;
+
+  bool get visible => enabled || locked;
+
+  static CardPurchaseOptions fromJson(Map<String, dynamic> j) {
+    if (j['enabled'] != true) {
+      return _bool(j['locked']) ? CardPurchaseOptions(enabled: false, locked: true, message: _str(j['message'])) : hidden;
+    }
+    final values = _rows(j['values'], CardPurchaseValue.fromJson);
+    final maxQty = _countOrNull(j['max_qty']) ?? 0;
+    if (values.isEmpty || maxQty < 1) return hidden;
+    final b = j['balance'];
+    return CardPurchaseOptions(
+      enabled: true,
+      title: _str(j['title']),
+      values: values,
+      balance: (b == null || _bool(j['balance_unavailable'])) ? null : _num(b),
+      maxQty: maxQty,
+      maxTotal: _countOrNull(j['max_total']) ?? 0,
+    );
+  }
+}
+
+/// حال طلب شراءٍ كما يحفظه الساس — 0 pending · 1 processing · 2 finished · 3 canceled.
+enum CardPurchaseState { pending, processing, finished, canceled, unknown }
+
+/// صفٌّ من سجلّ الشراء (`GET /api/v2/cards/purchase/history`).
+class CardPurchaseRow {
+  const CardPurchaseRow({
+    required this.id,
+    required this.value,
+    required this.qty,
+    required this.total,
+    required this.state,
+    this.createdAt,
+  });
+
+  final int id;
+  final int value;
+  final int qty;
+  final int total;
+  final CardPurchaseState state;
+
+  /// كما يكتبه الساس («2026-10-29 16:03:32»).
+  final String? createdAt;
+
+  static CardPurchaseRow? fromJson(Map<String, dynamic> j) {
+    final id = _countOrNull(j['id']);
+    final value = _countOrNull(j['value']);
+    final qty = _countOrNull(j['qty']);
+    if (id == null || value == null || qty == null) return null;
+    final state = switch (_str(j['status'])) {
+      'pending' => CardPurchaseState.pending,
+      'processing' => CardPurchaseState.processing,
+      'finished' => CardPurchaseState.finished,
+      'canceled' => CardPurchaseState.canceled,
+      _ => CardPurchaseState.unknown,
+    };
+    return CardPurchaseRow(
+      id: id,
+      value: value,
+      qty: qty,
+      total: _countOrNull(j['total']) ?? value * qty,
+      state: state,
+      createdAt: _str(j['created_at']),
+    );
+  }
+}
+
+/// طلبٌ أرسلناه ولم يُحسم (مهلة/انقطاع) — يُعرض ليراجعه الوكيل بالسجلّ قبل أن يعيد.
+class CardPurchasePending {
+  const CardPurchasePending({required this.value, required this.qty, required this.total});
+
+  final int value;
+  final int qty;
+  final int total;
+
+  static CardPurchasePending? fromJson(Map<String, dynamic> j) {
+    final value = _countOrNull(j['value']);
+    final qty = _countOrNull(j['qty']);
+    if (value == null || qty == null) return null;
+    return CardPurchasePending(value: value, qty: qty, total: _countOrNull(j['total']) ?? value * qty);
+  }
+}
+
+/// نتيجة شراءٍ قُبل: رسالة الخادم ورقم صفّ الشراء في الساس (إن عُرف).
+class CardPurchaseResult {
+  const CardPurchaseResult({this.message, this.purchaseId, required this.total, this.repeated = false});
+
+  final String? message;
+  final int? purchaseId;
+  final int total;
+  final bool repeated;
+}
+
 // ═════════════════════════ الحالة العامّة ═════════════════════════
 
 /// شارة «الكارتات المتبقّية» — ما تعرضه اللوحة و«قوائم أخرى» بلا طلبٍ خاصّ.
@@ -883,6 +1020,98 @@ class CardsApi {
       return (
         data: null,
         message: humanError(e, fallback: 'تعذّر النقل — تأكّد من الاتّصال وأعد'),
+        code: null,
+        answered: false,
+      );
+    }
+  }
+
+  // ── شراء الكارتات من الرصيد (٢٩ أكتوبر — صاحب الحساب وحده، خلف مفتاح الخادم cards_purchase) ──
+
+  /// رموز ردّ الشراء التي تحتاج تصرّفاً: تكرارٌ خلال ٥ دقائق يطلب تأكيداً، وغير المحسوم/الجاري لا يُعاد بمعرّفٍ جديد.
+  static const codeRecentDuplicate = 'RECENT_DUPLICATE';
+  static const codeOutcomeUnknown = 'OUTCOME_UNKNOWN';
+  static const codeInProgress = 'IN_PROGRESS';
+
+  /// GET /api/v2/cards/purchase/options — هل يظهر «شراء كارتات» وفئاته ورصيد الوكيل. أيّ تعذّر ⇒ لا يظهر (لا خطأ في
+  /// شاشة الكارتات بسبب ميزةٍ إضافيّة).
+  static Future<CardPurchaseOptions> purchaseOptions() async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/cards/purchase/options');
+      final body = r.data ?? const {};
+      if (body['success'] != true) return CardPurchaseOptions.hidden;
+      return CardPurchaseOptions.fromJson(body);
+    } catch (e) {
+      _log('purchase-options', e);
+      return CardPurchaseOptions.hidden;
+    }
+  }
+
+  /// GET /api/v2/cards/purchase/history — سجلّ الشراء كما يحفظه الساس (الأحدث أوّلاً) + طلباتٌ لم تُحسم.
+  static Future<({List<CardPurchaseRow>? rows, List<CardPurchasePending> pending, String? message})> purchaseHistory() async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/cards/purchase/history');
+      final body = r.data ?? const {};
+      if (body['success'] != true) {
+        return (rows: null, pending: const <CardPurchasePending>[], message: _str(body['message']) ?? 'تعذّرت قراءة سجلّ الشراء');
+      }
+      return (
+        rows: _rows(body['rows'], CardPurchaseRow.fromJson),
+        pending: _rows(body['unconfirmed'], CardPurchasePending.fromJson),
+        message: null,
+      );
+    } catch (e) {
+      _log('purchase-history', e);
+      return (rows: null, pending: const <CardPurchasePending>[], message: humanError(e, fallback: 'تعذّرت قراءة سجلّ الشراء'));
+    }
+  }
+
+  /// POST /api/v2/cards/purchase — [requestId] ثابتٌ للنيّة الواحدة (كالنقل): الملتبس يُعاد بالمعرّف نفسه فلا يُشترى
+  /// مرّتين، والحكم النهائيّ يجدّده. [confirmRepeat] بعد [codeRecentDuplicate] وحده. [answered] = حكم الخادم.
+  static Future<({CardPurchaseResult? data, String? message, String? code, bool answered})> purchase({
+    required int cardValue,
+    required int quantity,
+    required String requestId,
+    bool confirmRepeat = false,
+  }) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/cards/purchase',
+        data: {
+          'card_value': cardValue,
+          'quantity': quantity,
+          'request_id': requestId,
+          if (confirmRepeat) 'confirm_repeat': true,
+        },
+      );
+      final body = r.data ?? const {};
+      if (body['success'] != true) {
+        return (
+          data: null,
+          message: _str(body['message']) ?? 'تعذّر الشراء — راجع «سجل الشراء» قبل أن تعيد',
+          code: _str(body['code']),
+          answered: true,
+        );
+      }
+      // سلسلةٌ جديدة تُولَّد خلال ثوانٍ: الشارة والملخّص يُقرآن طازجين.
+      CardsState.invalidate();
+      return (
+        data: CardPurchaseResult(
+          message: _str(body['message']),
+          purchaseId: _countOrNull(body['purchase_id']),
+          total: _int(body['total']),
+          repeated: _bool(body['repeated']),
+        ),
+        message: null,
+        code: null,
+        answered: true,
+      );
+    } catch (e) {
+      _log('purchase', e);
+      // رميةٌ = انقطاعٌ أو 5xx عابر (خادمنا لا يردّ الشراء بـ5xx): لا حكم، فالمعرّف نفسه للإعادة — ولا شراء مرّتين.
+      return (
+        data: null,
+        message: humanError(e, fallback: 'انقطع الاتّصال — راجع «سجل الشراء» قبل أن تعيد'),
         code: null,
         answered: false,
       );
