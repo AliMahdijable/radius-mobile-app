@@ -106,6 +106,8 @@ class CompanyOpenFlow {
     'company-limit',
     'ftth-web-only',
     'ftth-2fa',
+    // فايبر اكس قبل أن يُفتح للوكيل في التطبيق (`pro_settings.fiberx_app`) — «يعمل من موقع الويب حالياً».
+    'fiberx-web-only',
   };
 
   static Future<void> open(

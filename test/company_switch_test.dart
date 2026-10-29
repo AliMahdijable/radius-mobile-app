@@ -516,13 +516,18 @@ void main() {
       await finish(t);
     });
 
-    testWidgets('رفضٌ يخصّ الشركة (حدّ الشركات) ⇒ رسالته بالورقة والجلسة كما هي',
+    for (final c in [
+      ('company-limit', 'بلغت حدّ الشركات لباقتك'),
+      // فايبر اكس لم يُفتح للوكيل في التطبيق بعد (٢٩ أكتوبر) — كان يُعدّ بوّابة حسابٍ فيرتدّ إلى «شركاتي» بلا كلمة.
+      ('fiberx-web-only', 'حساب فايبر اكس يعمل من موقع الويب حالياً — قريباً في التطبيق'),
+    ])
+    testWidgets('رفضٌ يخصّ الشركة (${c.$1}) ⇒ رسالته بالورقة والجلسة كما هي',
         (t) async {
       await setUpOwner(s1bSasOwner, routes: {
         'POST /api/auth/login': {
           'success': false,
-          'error': 'company-limit',
-          'message': 'بلغت حدّ الشركات لباقتك',
+          'error': c.$1,
+          'message': c.$2,
         },
       });
       await CompanyCredsStore.upsert(
@@ -534,7 +539,7 @@ void main() {
       await settle(t, seconds: 2);
       await t.tap(find.text(longName));
       await settle(t, seconds: 3);
-      expect(find.text('بلغت حدّ الشركات لباقتك'), findsOneWidget);
+      expect(find.text(c.$2), findsOneWidget);
       expect(completed, isEmpty);
       expect(find.text('SHELL'), findsNothing);
       expect((await SavedProfilesStore.readOriginal())?.username, 'mahdi',
