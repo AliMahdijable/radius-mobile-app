@@ -191,11 +191,15 @@ class TopupBalanceCard extends StatelessWidget {
     required this.currency,
     this.pageLine,
     this.onRefresh,
+    this.label = 'رصيد صفحتك',
   });
 
   final num? balance;
   final bool loading;
   final String currency;
+
+  /// «رصيد صفحتك» — و«رصيد pay» لمحفظة شحن الجزيرة.
+  final String label;
 
   /// «ali · سوبرنت» — أيّ صفحةٍ يُشحن رصيدها (معزول الاتّجاه عند المستدعي).
   final String? pageLine;
@@ -227,7 +231,7 @@ class TopupBalanceCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('رصيد صفحتك',
+                Text(label,
                     style: AppType.label(color: AppColors.onBrandSecondary)),
                 const SizedBox(height: Sp.xs),
                 if (loading)
@@ -294,7 +298,7 @@ class TopupBalanceCard extends StatelessWidget {
 IconData topupMethodIcon(SelfDepositMethod m) => switch (m.internalName) {
       'zaincash' || 'zaincashv2' => LucideIcons.smartphone,
       'voucher' => LucideIcons.ticket,
-      'kushok' => LucideIcons.creditCard,
+      'kushok' || 'qi' => LucideIcons.creditCard,
       'tasdid' => LucideIcons.receiptText,
       _ => LucideIcons.externalLink,
     };

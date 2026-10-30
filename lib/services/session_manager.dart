@@ -8,6 +8,7 @@ import '../api/cards_api.dart';
 import '../api/device_config_api.dart';
 import '../api/device_probe_api.dart';
 import '../api/el_deposit_password.dart';
+import '../api/jtpay_api.dart';
 import '../api/sales_api.dart';
 import '../api/self_deposit_api.dart';
 import '../api/subscribers_api.dart';
@@ -87,6 +88,8 @@ class SessionManager {
     // كاش المعلّقة **لا** تُمسح هنا: خروجٌ وسط الدفع لا يمحو ماله —
     // SelfDepositPendingStore يحفظها لصاحبها وحده.)
     _guardSync('SelfDepositState.reset', () => SelfDepositState.reset());
+    // «شحن من pay الجزيرة» — حالة المفتاح لحساب المدير السابق (روابط الرجوع المعلّقة تبقى لصاحبها وحده).
+    _guardSync('JtpayState.reset', () => JtpayState.reset());
     // «المبيعات» — حالة المفتاح لحساب المدير السابق.
     _guardSync('SalesState.reset', () => SalesState.reset());
     // المساعد الذكيّ — حالته (الحصّة، القفل) وآخر أخطاء الخادم المحفوظة

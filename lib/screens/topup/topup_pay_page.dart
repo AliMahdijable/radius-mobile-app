@@ -160,7 +160,7 @@ class TopupPayPage extends StatefulWidget {
   });
 
   final Uri payUrl;
-  final PayNavPolicy policy;
+  final PayNavRule policy;
 
   /// «زين كاش».
   final String methodLabel;

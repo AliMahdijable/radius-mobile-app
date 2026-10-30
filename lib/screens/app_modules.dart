@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../api/cards_api.dart';
+import '../api/jtpay_api.dart';
 import '../api/sales_api.dart';
 import '../api/self_deposit_api.dart';
 import '../core/util/format.dart';
@@ -29,6 +30,7 @@ import 'settlements/settlements_screen.dart';
 import 'subscriber_prices/subscriber_prices_screen.dart';
 import 'telegram/telegram_screen.dart';
 import 'topup/fiberx_topup_screen.dart';
+import 'topup/jtpay_screen.dart';
 import 'topup/topup_screen.dart';
 
 /// مجموعات القائمة الجانبيّة على الحاسبة — بترتيب الموقع (nav-config.ts).
@@ -79,6 +81,8 @@ Listenable appModulesListenable() => Listenable.merge([
       SelfDepositState.gate,
       // «المبيعات» — الاستماع يطلب حالتها إن كانت قديمة (مفتاحٌ بالخادم).
       SalesState.gate,
+      // «شحن من pay الجزيرة» — لشركات الجزيرة وحدها (لا سؤال لغيرها).
+      JtpayState.gate,
       // العودة للتطبيق ⇒ يُسأل ثانيةً (بمهلته) — فتشغيله من الخادم يظهر.
       AppResumedSignal.tick,
     ]);
@@ -178,6 +182,22 @@ List<AppModule> buildAppModules() {
         page: () => ProviderService.isFiberx
             ? const FiberxTopupScreen()
             : const TopupScreen(),
+      ),
+    // ٣٠ أكتوبر: «شحن من pay الجزيرة» — لوكلاء شركة الجزيرة (jt لاسلكي / ftth فايبر) حين يقول الخادم إنّها
+    // مفتوحة لحسابهم: تعبئة رصيد pay بزين كاش أو بطاقة ثمّ تحويله لصفحتهم بالساس أو لصفحة ثانية. الموظّف
+    // يراها بمكانها مقفلةً بسببها. الهاتف وحده (صفحة الدفع تحتاج WebView يلتقط الرجوع).
+    if (JtpayState.visible)
+      AppModule(
+        id: 'jtpay',
+        group: AppModuleGroup.finance,
+        unavailable: JtpayState.gate.value!.ownerOnly ? 'لصاحب الصفحة فقط — اطلبه من مديرك' : null,
+        icon: LucideIcons.walletCards,
+        tone: AppTone.success,
+        title: 'شحن من pay الجزيرة',
+        subtitle: JtpayState.gate.value!.paused
+            ? 'متوقّف مؤقّتاً — تابِع عمليّاتك التي لم تُحسم'
+            : 'زين كاش أو بطاقة ← رصيد pay ← صفحتك بالساس',
+        page: () => const JtpayScreen(),
       ),
     // §١٢ «الكارتات» — مخزون كارتات التعبئة. الخادم يقول `enabled` في admin-widgets والبطاقة تتبعه،
     // ومجهولة الشارة لا تُظهرها. الموظّف يفتحه بصلاحيّة التفعيل/التمديد وحدها.

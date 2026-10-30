@@ -14,6 +14,11 @@ enum PayNavAction {
   block,
 }
 
+/// قاعدة تنقّلٍ لصفحة الدفع ([TopupPayPage]) — منطقٌ صافٍ يُختبر وحده.
+abstract interface class PayNavRule {
+  PayNavAction decide(String url);
+}
+
 /// قاعدة التنقّل في صفحة الدفع — منطقٌ صافٍ بلا WebView، فيُختبر وحده.
 ///
 /// الرجوع رابطٌ **يحمل دليل الدفع** (`token=` أو `waiting_webhook=1`، في الهاش
@@ -34,7 +39,7 @@ enum PayNavAction {
 /// للمراجعة ويردّ `received` (sasSelfDeposit.complete). أمّا تركه يُحمَّل هنا
 /// فيُضيّع الرمز يقيناً (الساس بلا جلسة). والمضيف يُطبَّع بلا نقطةٍ ختاميّة في
 /// الطرفين.
-class PayNavPolicy {
+class PayNavPolicy implements PayNavRule {
   PayNavPolicy({
     required this.capture,
     required Uri payUrl,
@@ -97,6 +102,7 @@ class PayNavPolicy {
     return false;
   }
 
+  @override
   PayNavAction decide(String url) {
     final u = Uri.tryParse(url.trim());
     if (u == null) return PayNavAction.block;
@@ -108,6 +114,36 @@ class PayNavPolicy {
           : PayNavAction.block;
     }
     if ((scheme == 'https' || scheme == 'http') && isReturn(u)) {
+      return PayNavAction.capture;
+    }
+    if (scheme == 'https' && u.host.isNotEmpty) return PayNavAction.allow;
+    return PayNavAction.block;
+  }
+}
+
+/// «شحن من pay الجزيرة»: رجوع البوّابة (زين كاش/كي كارد) = **أوّل** انتقالٍ إلى موقع الشحن ([returnHost]) — يُلتقط
+/// ولا يُحمَّل (الموقع هنا بلا جلسة الوكيل؛ الخادم يسلّمه بجلسته)، بدليلٍ أو بلا دليل: لا شيء على موقع الشحن يلزم
+/// صفحة الدفع، وتركه يُحمَّل يضيّعه. وما سواه كقاعدة الشحن: https يُحمَّل، والباقي يُمنع.
+class HostReturnNavPolicy implements PayNavRule {
+  HostReturnNavPolicy({required String returnHost}) : _host = _norm(returnHost);
+
+  final String _host;
+
+  static String _norm(String host) {
+    final h = host.trim().toLowerCase();
+    return h.endsWith('.') ? h.substring(0, h.length - 1) : h;
+  }
+
+  @override
+  PayNavAction decide(String url) {
+    final u = Uri.tryParse(url.trim());
+    if (u == null) return PayNavAction.block;
+    final scheme = u.scheme.toLowerCase();
+    if (scheme == 'about') {
+      final rest = url.trim().toLowerCase();
+      return rest == 'about:blank' || rest.startsWith('about:srcdoc') ? PayNavAction.allow : PayNavAction.block;
+    }
+    if ((scheme == 'https' || scheme == 'http') && _host.isNotEmpty && _norm(u.host) == _host) {
       return PayNavAction.capture;
     }
     if (scheme == 'https' && u.host.isNotEmpty) return PayNavAction.allow;
