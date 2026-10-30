@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 
@@ -11,6 +12,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'pay_nav_policy.dart';
+import 'wallet_app_link.dart';
 
 /// نتيجة صفحة الدفع.
 @immutable
@@ -33,6 +35,7 @@ class PayWebCallbacks {
     required this.onUrl,
     required this.onProgress,
     required this.onLoadError,
+    required this.onPageFinished,
   });
 
   /// تنقّلٌ يوشك أن يبدأ — `true` = يُحمَّل.
@@ -42,6 +45,9 @@ class PayWebCallbacks {
   final void Function(String url) onUrl;
   final void Function(int percent) onProgress;
   final void Function() onLoadError;
+
+  /// انتهى تحميل صفحة — موضع حقن سكربت القاعدة ([PayNavRule.scriptFor]).
+  final void Function(String url) onPageFinished;
 }
 
 /// المتصفّح خلف الصفحة — WebView حقيقيّ في التطبيق، وبديلٌ في الاختبار
@@ -50,6 +56,9 @@ abstract class PayWebEngine {
   Widget view(BuildContext context);
   Future<void> open(Uri url);
   Future<void> reload();
+
+  /// يشغّل سكربتاً في الصفحة الحاليّة (الإطار الرئيسيّ).
+  Future<void> runScript(String js);
 
   /// يمحو الكوكيز والكاش والتخزين — قبل الفتح (لا تبقى جلسة زين كاش لمديرٍ
   /// سابق على الهاتف) وبعد الإغلاق.
@@ -61,9 +70,10 @@ typedef PayWebEngineFactory = PayWebEngine Function(PayWebCallbacks callbacks);
 /// الـWebView الحقيقيّ.
 ///
 /// • جافاسكربت مفعّل (صفحة زين كاش تحتاجه) — **بلا جسور** (لا
-///   `JavaScriptChannel`): الصفحة لا تخاطب التطبيق بشيء.
+///   `JavaScriptChannel`): الصفحة لا تخاطب التطبيق بشيء. وما تحقنه القاعدة ([PayNavRule.scriptFor] — صفحة كي وحدها)
+///   يقرأ ولا يخاطب التطبيق إلّا بتنقّلٍ عاديّ يمرّ على القاعدة نفسها.
 /// • أخطاء الشهادة تُرفض (السلوك الافتراضيّ حين لا يُضبط `onSslAuthError`).
-/// • لا رفع ملفّات ولا نوافذ جديدة ولا تطبيقات خارجيّة.
+/// • لا رفع ملفّات ولا نوافذ جديدة، ولا تطبيقات خارجيّة إلّا رابط محفظةٍ مسجَّل ([WalletAppLink]).
 class WebViewPayEngine implements PayWebEngine {
   WebViewPayEngine(PayWebCallbacks cb) {
     _c = WebViewController()
@@ -79,6 +89,7 @@ class WebViewPayEngine implements PayWebEngine {
           if (u != null) cb.onUrl(u);
         },
         onProgress: cb.onProgress,
+        onPageFinished: cb.onPageFinished,
         onWebResourceError: (e) {
           if (isFatalLoadError(
               type: e.errorType, code: e.errorCode, mainFrame: e.isForMainFrame)) {
@@ -110,6 +121,9 @@ class WebViewPayEngine implements PayWebEngine {
 
   @override
   Future<void> reload() => _c.reload();
+
+  @override
+  Future<void> runScript(String js) => _c.runJavaScript(js);
 
   @override
   Future<void> wipe() async {
@@ -162,6 +176,9 @@ bool isFatalLoadError({
 ///
 /// والإغلاق قبل الرجوع يُسأل عنه: من دفع وأغلق قبل الرجوع يتأخّر رصيده حتى
 /// يُتحقَّق منه.
+///
+/// والخروج الوحيد رابط تطبيق محفظةٍ مسجَّل ([WalletAppLink] — SuperQi): يُفتح بتطبيقه، وتبقى هذه الصفحة مفتوحةً تنتظر
+/// النتيجة وتلتقط الرجوع؛ والسطر أسفلها يقول «أكمل الدفع في SuperQi» ويعيد فتحه.
 class TopupPayPage extends StatefulWidget {
   const TopupPayPage({
     super.key,
@@ -186,6 +203,10 @@ class TopupPayPage extends StatefulWidget {
   /// للاختبار وحده: متصفّحٌ بديل.
   @visibleForTesting
   static PayWebEngineFactory? debugEngineFactory;
+
+  /// للاختبار وحده: فتح رابطٍ خارج التطبيق (`appOnly` = بتطبيقه لا بالمتصفّح) ⇒ فُتح؟
+  @visibleForTesting
+  static Future<bool> Function(Uri url, {required bool appOnly})? debugLaunch;
 
   @override
   State<TopupPayPage> createState() => _TopupPayPageState();
@@ -212,6 +233,7 @@ class _TopupPayPageState extends State<TopupPayPage> {
       onUrl: _onUrl,
       onProgress: _onProgress,
       onLoadError: _onLoadError,
+      onPageFinished: _onPageFinished,
     ));
     _start();
   }
@@ -242,16 +264,68 @@ class _TopupPayPageState extends State<TopupPayPage> {
         if (!mainFrame) return true;
         _noteBlocked();
         return false;
+      case PayNavAction.external:
+        // لا يُحمَّل هنا أبداً؛ ويُفتح بتطبيقه بأمر الصفحة نفسها وحدها، لا إطارٍ داخليّ.
+        if (mainFrame) unawaited(_openWallet(url));
+        return false;
     }
   }
 
   void _onUrl(String url) {
     if (_done) return;
-    if (widget.policy.decide(url) == PayNavAction.capture) {
-      _capture(url);
-    } else {
-      _noteHost(url);
+    switch (widget.policy.decide(url)) {
+      case PayNavAction.capture:
+        _capture(url);
+      case PayNavAction.allow:
+        _noteHost(url);
+      case PayNavAction.block || PayNavAction.external:
+        break;
     }
+  }
+
+  void _onPageFinished(String url) {
+    if (_done) return;
+    final js = widget.policy.scriptFor(url);
+    if (js == null) return;
+    unawaited(_engine.runScript(js).catchError((Object _) {/* أفضل جهد — بدونه يبقى زرّ المحفظة كما كان */}));
+  }
+
+  /// آخر تطبيق محفظةٍ فُتح — السطر أسفل الصفحة يدلّ عليه ويعيد فتحه.
+  WalletAppLink? _wallet;
+  DateTime? _walletAt;
+
+  Future<void> _openWallet(String url) async {
+    final link = WalletAppLink.of(url);
+    if (link == null || _done) return;
+    final now = DateTime.now();
+    final last = _walletAt;
+    // الطلب نفسه يُبلَّغ مرّتين أحياناً — لا يُفتح التطبيق مرّتين.
+    if (last != null && _wallet?.url == link.url && now.difference(last) < const Duration(seconds: 3)) return;
+    _walletAt = now;
+    if (mounted) setState(() => _wallet = link);
+    await _launchWallet(link);
+  }
+
+  /// بتطبيقه أوّلاً؛ غير مثبّت ⇒ المتصفّح، وفيه صفحة كي نفسها «حمّل SuperQi».
+  Future<void> _launchWallet(WalletAppLink link) async {
+    Future<bool> go({required bool appOnly}) async {
+      final test = TopupPayPage.debugLaunch;
+      if (test != null) return test(link.url, appOnly: appOnly);
+      try {
+        return await launchUrl(
+          link.url,
+          mode: appOnly ? LaunchMode.externalNonBrowserApplication : LaunchMode.externalApplication,
+        );
+      } catch (_) {
+        return false;
+      }
+    }
+
+    if (await go(appOnly: true) || await go(appOnly: false)) return;
+    if (!mounted || _done) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text('تعذّر فتح ${link.name} — جرّب ثانيةً أو ادفع بالبطاقة')));
   }
 
   void _onProgress(int p) {
@@ -422,7 +496,10 @@ class _TopupPayPageState extends State<TopupPayPage> {
                 ],
               ),
             ),
-            const _SafetyNote(),
+            _SafetyNote(
+              wallet: _wallet?.name,
+              onOpenWallet: _wallet == null || _done ? null : () => unawaited(_launchWallet(_wallet!)),
+            ),
           ],
         ),
       ),
@@ -430,9 +507,12 @@ class _TopupPayPageState extends State<TopupPayPage> {
   }
 }
 
-/// سطرٌ ثابت أسفل الصفحة: ما يحفظ مال المدير.
+/// سطرٌ ثابت أسفل الصفحة: ما يحفظ مال المدير — وبعد فتح تطبيق محفظةٍ: «أكمل الدفع فيه» وزرٌّ يعيد فتحه.
 class _SafetyNote extends StatelessWidget {
-  const _SafetyNote();
+  const _SafetyNote({this.wallet, this.onOpenWallet});
+
+  final String? wallet;
+  final VoidCallback? onOpenWallet;
 
   @override
   Widget build(BuildContext context) {
@@ -452,11 +532,26 @@ class _SafetyNote extends StatelessWidget {
               const SizedBox(width: Sp.sm),
               Expanded(
                 child: Text(
-                  'لا تغلق الصفحة بعد الدفع — يرجع التطبيق وحده',
+                  wallet == null
+                      ? 'لا تغلق الصفحة بعد الدفع — يرجع التطبيق وحده'
+                      : 'أكمل الدفع في $wallet ثمّ ارجع هنا — يرجع التطبيق وحده',
                   style: AppType.body(color: AppColors.textBody)
                       .copyWith(fontSize: 11.5),
                 ),
               ),
+              if (wallet != null && onOpenWallet != null) ...[
+                const SizedBox(width: Sp.sm),
+                TextButton(
+                  onPressed: onOpenWallet,
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.brandAccent,
+                    padding: const EdgeInsets.symmetric(horizontal: Sp.md),
+                    minimumSize: const Size(0, 36),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text('فتح $wallet', style: AppType.cardTitleBold(color: AppColors.brandAccent).copyWith(fontSize: 12.5)),
+                ),
+              ],
             ],
           ),
         ),

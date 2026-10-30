@@ -1,4 +1,5 @@
 import '../../api/self_deposit_api.dart';
+import 'wallet_app_link.dart';
 
 /// ما يُفعل بتنقّلٍ في صفحة الدفع.
 enum PayNavAction {
@@ -12,11 +13,18 @@ enum PayNavAction {
   /// ما لا يلزم الدفع: رابطٌ غير مشفَّر، أو تطبيقٌ خارجيّ (`intent:`،
   /// `tel:`…) يُخرج الدفع من هنا فيضيع رجوعه، أو `javascript:`/`data:`.
   block,
+
+  /// رابط تطبيق محفظةٍ مسجَّل أعطته صفحة الدفع ([WalletAppLink] — SuperQi): **لا يُحمَّل هنا** بل يُفتح بتطبيقه،
+  /// وتبقى صفحة الدفع مفتوحةً تنتظر النتيجة وتلتقط الرجوع.
+  external,
 }
 
 /// قاعدة تنقّلٍ لصفحة الدفع ([TopupPayPage]) — منطقٌ صافٍ يُختبر وحده.
 abstract interface class PayNavRule {
   PayNavAction decide(String url);
+
+  /// سكربتٌ يُحقن في الصفحة [url] بعد تحميلها، أو null.
+  String? scriptFor(String url);
 }
 
 /// قاعدة التنقّل في صفحة الدفع — منطقٌ صافٍ بلا WebView، فيُختبر وحده.
@@ -119,11 +127,16 @@ class PayNavPolicy implements PayNavRule {
     if (scheme == 'https' && u.host.isNotEmpty) return PayNavAction.allow;
     return PayNavAction.block;
   }
+
+  /// صفحة الساس وزين كاش لا تحتاج شيئاً.
+  @override
+  String? scriptFor(String url) => null;
 }
 
 /// «شحن من pay الجزيرة»: رجوع البوّابة (زين كاش/كي كارد) = **أوّل** انتقالٍ إلى موقع الشحن ([returnHost]) — يُلتقط
 /// ولا يُحمَّل (الموقع هنا بلا جلسة الوكيل؛ الخادم يسلّمه بجلسته)، بدليلٍ أو بلا دليل: لا شيء على موقع الشحن يلزم
-/// صفحة الدفع، وتركه يُحمَّل يضيّعه. وما سواه كقاعدة الشحن: https يُحمَّل، والباقي يُمنع.
+/// صفحة الدفع، وتركه يُحمَّل يضيّعه. ورابط SuperQi يُفتح بتطبيقه ([WalletAppLink]). وما سواه كقاعدة الشحن: https
+/// يُحمَّل، والباقي يُمنع.
 class HostReturnNavPolicy implements PayNavRule {
   HostReturnNavPolicy({required String returnHost}) : _host = _norm(returnHost);
 
@@ -146,7 +159,12 @@ class HostReturnNavPolicy implements PayNavRule {
     if ((scheme == 'https' || scheme == 'http') && _host.isNotEmpty && _norm(u.host) == _host) {
       return PayNavAction.capture;
     }
+    if (WalletAppLink.of(url) != null) return PayNavAction.external;
     if (scheme == 'https' && u.host.isNotEmpty) return PayNavAction.allow;
     return PayNavAction.block;
   }
+
+  /// صفحة كي: زرّ SuperQi لا يفعل شيئاً على الهاتف — يُقرأ ردّه ويُفتح التطبيق ([WalletAppLink.qiHookScript]).
+  @override
+  String? scriptFor(String url) => WalletAppLink.hooks(url) ? WalletAppLink.qiHookScript : null;
 }

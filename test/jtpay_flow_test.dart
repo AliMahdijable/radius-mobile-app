@@ -6,6 +6,7 @@ import 'package:rad_mysvcs/screens/app_modules.dart';
 import 'package:rad_mysvcs/screens/topup/jtpay_screen.dart';
 import 'package:rad_mysvcs/screens/topup/pay_nav_policy.dart';
 import 'package:rad_mysvcs/screens/topup/topup_pay_page.dart';
+import 'package:rad_mysvcs/screens/topup/wallet_app_link.dart';
 import 'package:rad_mysvcs/services/jtpay_pending.dart';
 import 'package:rad_mysvcs/services/permissions_service.dart';
 import 'package:rad_mysvcs/services/provider_service.dart';
@@ -129,6 +130,35 @@ void main() {
     expect(p.decide('http://pg.zaincash.iq/x'), PayNavAction.block);
     expect(p.decide('about:blank'), PayNavAction.allow);
     expect(p.decide('javascript:alert(1)'), PayNavAction.block);
+  });
+
+  // صفحة كي بالموبايل: زرّ «Pay with SuperQi» يجلب رابط دفعٍ ولا يفعل به شيئاً (يعرضه QR على الحاسبة وحدها).
+  test('SuperQi: رابطه المسجَّل وحده يُفتح بتطبيقه، وسكربت القراءة لصفحة كي وحدها', () {
+    final p = HostReturnNavPolicy(returnHost: 'pay.jt.iq');
+    const link = 'https://m.banqi.qi.iq/shortlink/h5/dxyvgq4m';
+    expect(p.decide(link), PayNavAction.external);
+    expect(WalletAppLink.of(link)!.name, 'SuperQi');
+    for (final u in [
+      'http://m.banqi.qi.iq/shortlink/h5/x',
+      'https://m.banqi.qi.iq.evil.com/shortlink/h5/x',
+      'https://evilm.banqi.qi.iq/shortlink/h5/x',
+      'https://u:p@m.banqi.qi.iq/shortlink/h5/x',
+      'https://m.banqi.qi.iq:8443/shortlink/h5/x',
+      'https://m.banqi.qi.iq/page/qicard-web/index.html',
+      'https://m.banqi.qi.iq/shortlink/',
+      'superqi://pay?x=1',
+    ]) {
+      expect(WalletAppLink.of(u), isNull, reason: u);
+      expect(p.decide(u) == PayNavAction.external, isFalse, reason: u);
+    }
+    expect(p.scriptFor('https://3ds-api.qi.iq/api/v1/payment/b321'), WalletAppLink.qiHookScript);
+    for (final u in ['https://pg.zaincash.iq/transaction/pay?id=1', 'https://pay.jt.iq/x', 'http://3ds-api.qi.iq/api/v1/payment/b', 'https://3ds-api.qi.iq.evil.com/x']) {
+      expect(p.scriptFor(u), isNull, reason: u);
+    }
+    // السكربت يراقب طلب الزرّ نفسه، ولا ينقل الصفحة إلّا لرابط SuperQi (شُغّل على ردٍّ حقيقيّ من كي، ٣٠ أكتوبر).
+    expect(WalletAppLink.qiHookScript, contains(r'var REQ = /\/payment\/[^\/?#]+\/requisites(?:[?#]|$)/;'));
+    expect(WalletAppLink.qiHookScript, contains(r'var LINK = /^https:\/\/m\.banqi\.qi\.iq\/shortlink\//;'));
+    expect(WalletAppLink.qiHookScript, contains("d.type === 'ALIPAY'"));
   });
 
   test('النماذج: حالة الخادم ⇒ حالة العميل، الأرقام لا صفر كاذب، والعمليّة بلا معرّف ⇒ null', () {
@@ -316,6 +346,77 @@ void main() {
     expect(n, 2);
     expect(server.bodies('POST', '/api/v2/jtpay/transfer').last, {'to': 'page', 'amount': 10000, 'target': 'admin@other', 'confirm_repeat': true});
     expect(find.text('تحوّل 10,000 د.ع إلى admin@other'), findsOneWidget);
+    await simDrain(t);
+  });
+
+  testWidgets('SuperQi: يُفتح بتطبيقه (أو بالمتصفّح إن لم يُثبَّت)، الصفحة تبقى تنتظر، والرجوع بعد الدفع يُلتقط', (t) async {
+    await setUpJt();
+    final launched = <(Uri, bool)>[];
+    var installed = true;
+    TopupPayPage.debugLaunch = (u, {required appOnly}) async {
+      launched.add((u, appOnly));
+      return appOnly ? installed : true;
+    };
+    addTearDown(() => TopupPayPage.debugLaunch = null);
+    const qi = 'https://3ds-api.qi.iq/api/v1/payment/b321f92b-9594-4aa7-975d-8c2a328935d9';
+    const link = 'https://m.banqi.qi.iq/shortlink/h5/dxyvgq4m';
+    const back = 'https://pay.jt.iq/hook/qi?requestId=41590b53&paymentId=b321f92b';
+    PayPageResult? result;
+    await pumpSim(
+      t,
+      v,
+      home: (ctx) => Scaffold(
+        body: Center(
+          child: ElevatedButton(
+            onPressed: () async => result = await Navigator.of(ctx).push<PayPageResult>(MaterialPageRoute(
+              builder: (_) => TopupPayPage(
+                payUrl: Uri.parse(qi),
+                policy: HostReturnNavPolicy(returnHost: 'pay.jt.iq'),
+                methodLabel: 'بطاقة بنكية',
+              ),
+            )),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+    await t.tap(find.text('open'));
+    await settle(t);
+    final e = FakePayEngine.last!;
+    e.pageFinished(qi);
+    e.pageFinished('https://pg.zaincash.iq/transaction/pay?id=1');
+    await t.pump();
+    expect(e.scripts, [WalletAppLink.qiHookScript], reason: 'صفحة كي وحدها');
+    expect(find.text('لا تغلق الصفحة بعد الدفع — يرجع التطبيق وحده'), findsOneWidget);
+    expect(find.text('فتح SuperQi'), findsNothing);
+
+    // إطارٌ داخليّ لا يفتح شيئاً.
+    expect(e.navigate(link, mainFrame: false), isFalse);
+    await t.pump();
+    expect(launched, isEmpty);
+
+    // الصفحة تنتقل لرابط SuperQi (بأمر السكربت): لا يُحمَّل، يُفتح بتطبيقه، والصفحة باقيةٌ تنتظر.
+    expect(e.navigate(link), isFalse);
+    await settle(t, 3);
+    expect(launched, [(Uri.parse(link), true)]);
+    expect(find.byType(TopupPayPage), findsOneWidget);
+    expect(find.text('أكمل الدفع في SuperQi ثمّ ارجع هنا — يرجع التطبيق وحده'), findsOneWidget);
+    expect(e.navigate(link), isFalse);
+    await settle(t, 2);
+    expect(launched, hasLength(1), reason: 'البلاغ المكرّر لا يفتحه ثانيةً');
+
+    // «فتح SuperQi» يعيده؛ وغير مثبّت ⇒ المتصفّح (صفحة كي: «حمّل SuperQi»).
+    installed = false;
+    await t.tap(find.text('فتح SuperQi'));
+    await settle(t, 2);
+    expect(launched.skip(1).toList(), [(Uri.parse(link), true), (Uri.parse(link), false)]);
+
+    // دُفع ⇒ صفحة كي تعرض النتيجة ثمّ تذهب وحدها لموقع الشحن ⇒ يُلتقط كرجوع البطاقة.
+    expect(e.navigate(qi), isTrue);
+    expect(e.navigate(back), isFalse);
+    await settle(t);
+    expect(find.byType(TopupPayPage), findsNothing);
+    expect(result?.returnUrl, back);
     await simDrain(t);
   });
 }

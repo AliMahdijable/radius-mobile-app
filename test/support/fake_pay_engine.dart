@@ -18,6 +18,7 @@ class FakePayEngine implements PayWebEngine {
 
   final PayWebCallbacks cb;
   final opened = <Uri>[];
+  final scripts = <String>[];
   int wipes = 0;
   int reloads = 0;
 
@@ -29,6 +30,9 @@ class FakePayEngine implements PayWebEngine {
   void urlChanged(String url) => cb.onUrl(url);
 
   void failLoad() => cb.onLoadError();
+
+  /// انتهى تحميل صفحة — كما يبلّغه الـWebView (`onPageFinished`).
+  void pageFinished(String url) => cb.onPageFinished(url);
 
   @override
   Widget view(BuildContext context) => const _FakePayView();
@@ -43,6 +47,11 @@ class FakePayEngine implements PayWebEngine {
   Future<void> reload() async {
     reloads++;
     cb.onProgress(100);
+  }
+
+  @override
+  Future<void> runScript(String js) async {
+    scripts.add(js);
   }
 
   @override

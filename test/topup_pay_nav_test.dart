@@ -103,6 +103,11 @@ void main() {
       expect(policy().decide('https://otp.zaincash.iq/verify'), PayNavAction.allow);
       expect(policy().decide('about:blank'), PayNavAction.allow);
     });
+
+    test('صفحة زين كاش لا يُحقن فيها شيء', () {
+      expect(policy().scriptFor(pay.toString()), isNull);
+      expect(policy().scriptFor('https://3ds-api.qi.iq/api/v1/payment/x'), isNull);
+    });
   });
 
   group('ما يُخرج الدفع من هنا يُمنع', () {
