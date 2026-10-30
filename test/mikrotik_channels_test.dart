@@ -410,12 +410,12 @@ void main() {
       expect(sw.elapsedMilliseconds, lessThan(1500));
     });
 
-    test('probeDevice: مايكروتك بفحصه، وSNMP (١٦١) قبله كما كان', () {
+    test('probeDevice: مايكروتك بفحصه، وSNMP (١٦١ أو بروتوكول SNMP) قبله', () {
       final api = File('lib/api/network_devices_api.dart').readAsStringSync();
-      final iMtk = api.indexOf("if (d.brand == 'mikrotik' && port != 161) {");
+      final iMtk = api.indexOf('mikrotikProbe(d.ip, port, MikrotikApi.fallbackPorts(protocol: d.protocol, apiPort: d.apiPort))');
       expect(iMtk, greaterThan(0));
-      expect(api.contains('mikrotikProbe(d.ip, port, MikrotikApi.fallbackPorts(protocol: d.protocol, apiPort: d.apiPort))'), isTrue);
-      expect(api.indexOf('if (port == 161) {'), lessThan(iMtk), reason: 'الـcommunity تُقرأ قبل أيّ فرع');
+      expect(api.indexOf("final snmp = port == 161 || d.protocol == 'snmp';"), lessThan(iMtk), reason: 'SNMP يُحسم قبل فرع مايكروتك');
+      expect(api.indexOf('if (snmp) {'), lessThan(iMtk), reason: 'الـcommunity تُقرأ قبل أيّ فرع');
     });
   });
 

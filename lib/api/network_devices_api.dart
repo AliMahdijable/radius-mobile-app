@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Socket, SocketException;
+import 'dart:io' show Platform, Socket, SocketException;
 
 import 'package:dart_ping/dart_ping.dart';
 import 'package:dio/dio.dart';
@@ -14,6 +14,13 @@ import 'api_client.dart';
 import 'mikrotik_api.dart' show MikrotikApi;
 import '../core/net/windows_icmp.dart';
 import '../core/platform/app_platform.dart';
+
+/// نتيجة فحصٍ واحد (ping أو خدمة).
+typedef Probe3 = ({String status, int? responseMs, double? packetLoss});
+
+/// نتيجة [NetworkDevicesApi.probeDevice]: الحالة (متّصل = يردّ على الشبكة) والزمن والفقدان، و`serviceOk` = ردّت خدمة الإدارة
+/// (المنفذ والبيانات المسجّلة) — false مع «متّصل» = يردّ على ping وخدمته لا.
+typedef DeviceProbe = ({String status, int? responseMs, double? packetLoss, bool? serviceOk});
 
 /// نتيجة scan واحدة — تُستهلك من bulk_scan_screen.dart.
 class ScanResult {
@@ -260,15 +267,23 @@ class NetworkDevicesApi {
   /// وأجهزة SNMP تحتاج الـcommunity المخزَّنة: `public` تكفي معظمها،
   /// لكنّ من غيّرها يبدو ساقطاً أبداً. والجلب مخزَّن ٦٠ ثانية فلا يكلّف
   /// طلباً في كلّ جولة.
-  static Future<({String status, int? responseMs, double? packetLoss})>
-      probeDevice(NetworkDevice d) async {
+  ///
+  /// ٣٠ أكتوبر — المالك (زرّ «فحص الآن (ping)» على أولتي بـSNMP:444): «ان كان الجهاز خطا معلومات او اي شي ثاني مفترض ان يرد
+  /// فحص البنك لان رح يربك الوكيل ان الجهاز فاصل». «متّصل» = الجهاز يردّ على الشبكة: خدمته (كما كانت) **أو** ping حقيقيّ
+  /// (ICMP) حيث يصلح (أندرويد/الماك/ويندوز؛ iOS كما كان — [icmpUsable]). `serviceOk` يقول هل ردّت خدمة الإدارة (المنفذ/البيانات)
+  /// فتقول الشاشة «يردّ على ping لكن SNMP:444 لا يردّ» بدل «مفصول».
+  ///   • الدوريّ (القائمة/النظرة العامّة): الخدمة أوّلاً (أسرع وأخفّ)، وحزمة ping واحدة حين لا تردّ.
+  ///   • الزرّ ([ping]): ثلاث حزم ping والخدمة معاً — الزمن والفقدان من الـping.
+  static Future<DeviceProbe> probeDevice(NetworkDevice d, {bool ping = false}) async {
     final port = d.apiPort ?? d.port;
+    // SNMP (UDP) بالـcommunity: المنفذ ١٦١ أو جهازٌ بروتوكوله SNMP على منفذٍ آخر — فحص TCP لمنفذ SNMP لا يردّ أبداً.
+    final snmp = port == 161 || d.protocol == 'snmp';
     // ⚠️ بلا اشتراط `hasCredentials`: جهاز SNMP يحمل community مخزَّنةً
     // دون أن تُحسب «اعتماداً» في النموذج، واشتراطها يُعيدنا إلى
     // `public`. وروجي تمنعه في فيرمويرها، فيُعرَض جهازٌ حيٌّ «مفصولاً»
     // وهو يبثّ بياناته في اللوحة تحته. ٢٠٢٦-٠٩-٢٨.
     var community = 'public';
-    if (port == 161) {
+    if (snmp) {
       try {
         final creds = await getCredentials(d.id);
         final c = (creds['community'] ?? '').toString();
@@ -277,10 +292,45 @@ class NetworkDevicesApi {
         // فشل الجلب لا يمنع الفحص — نجرّب الافتراضيّة.
       }
     }
-    if (d.brand == 'mikrotik' && port != 161) {
-      return mikrotikProbe(d.ip, port, MikrotikApi.fallbackPorts(protocol: d.protocol, apiPort: d.apiPort));
+    final Future<Probe3> service = snmp
+        ? (port == 161
+            ? localIcmpPing(ip: d.ip, tcpPort: port, snmpCommunity: community)
+            : _snmpProbe(ip: d.ip, port: port, community: community, timeout: const Duration(seconds: 2)))
+        : d.brand == 'mikrotik'
+            ? mikrotikProbe(d.ip, port, MikrotikApi.fallbackPorts(protocol: d.protocol, apiPort: d.apiPort))
+            : localIcmpPing(ip: d.ip, tcpPort: port, snmpCommunity: community);
+    if (!icmpUsable) {
+      final s = await service;
+      return (status: s.status, responseMs: s.responseMs, packetLoss: s.packetLoss, serviceOk: s.status == 'online');
     }
-    return localIcmpPing(ip: d.ip, tcpPort: port, snmpCommunity: community);
+    if (ping) {
+      final both = await Future.wait([icmpProbe(d.ip, 3), service]);
+      return combineProbes(both[0], both[1]);
+    }
+    final s = await service;
+    if (s.status == 'online') return (status: 'online', responseMs: s.responseMs, packetLoss: s.packetLoss, serviceOk: true);
+    return combineProbes(await icmpProbe(d.ip, 1), s);
+  }
+
+  /// ping حقيقيّ يصلح هنا؟ أندرويد والماك (أمر ping) وويندوز (windows_icmp) نعم؛ iOS لا — dart_ping بلا تنفيذٍ موثوقٍ عليه
+  /// (راجع [localIcmpPing]).
+  static bool get icmpUsable => debugIcmpUsable ?? (!kIsWeb && !Platform.isIOS);
+  @visibleForTesting
+  static bool? debugIcmpUsable;
+
+  /// ping بعدد الحزم ⇒ نتيجة [_icmpProbe] (قابلٌ للحقن في الاختبار).
+  @visibleForTesting
+  static Future<Probe3> Function(String ip, int count) icmpProbe =
+      (ip, count) => _icmpProbe(ip: ip, count: count, timeout: const Duration(seconds: 2));
+
+  /// الـping والخدمة ⇒ الحالة: ردّ الـping = متّصل بزمنه وفقدانه (والخدمة تُقال في serviceOk)؛ لا ping (جدارٌ يحجبه) والخدمة تردّ
+  /// = متّصل بزمن الخدمة بلا «فقدان» (لا 100% مع «متّصل»)؛ لا هذا ولا ذاك = مفصول.
+  @visibleForTesting
+  static DeviceProbe combineProbes(Probe3 ping, Probe3 svc) {
+    final svcOk = svc.status == 'online';
+    if (ping.status == 'online') return (status: 'online', responseMs: ping.responseMs, packetLoss: ping.packetLoss, serviceOk: svcOk);
+    if (svcOk) return (status: 'online', responseMs: svc.responseMs, packetLoss: null, serviceOk: true);
+    return (status: 'offline', responseMs: null, packetLoss: 100.0, serviceOk: false);
   }
 
   /// رفضُ الاتّصال (RST): ردٌّ من الجهاز — أو من وسيطٍ بالطريق؛ فلا يُثبت وحده أنّه حيّ.

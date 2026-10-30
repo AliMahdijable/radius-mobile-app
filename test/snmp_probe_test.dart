@@ -45,8 +45,8 @@ void main() {
     });
 
     test('فشل جلب البيانات لا يمنع الفحص', () {
-      final i = api.indexOf('static Future<({String status, int? responseMs, '
-          'double? packetLoss})>\n      probeDevice(');
+      // (٣٠ أكتوبر: النوع DeviceProbe — الحالة + serviceOk.)
+      final i = api.indexOf('static Future<DeviceProbe> probeDevice(');
       expect(i, greaterThan(0));
       final body = api.substring(i, api.indexOf('/// `sysUpTime.0`', i));
       expect(body.contains('} catch (_) {'), isTrue,

@@ -57,6 +57,8 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
   bool _changed = false;
   bool _rebooting = false; // spinner على زرّ reboot
   double? _lastPacketLoss;
+  /// آخر فحص: ردّت خدمة الإدارة (المنفذ/البيانات المسجّلة)؟ false مع «متّصل» = يردّ على ping وخدمته لا ([_serviceNote]).
+  bool? _serviceOk;
   DeviceRegion? _region; // يُحمَّل asynchronously — لعرض اسم/لون المنطقة
 
   /// runtime override — لو `EdgeSwitchApi.probe` أكّد أنّ الجهاز سويتش
@@ -148,7 +150,8 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
       // فتسأل بـ`public` دائماً. `probeDevice` هي النقطة الوحيدة التي
       // تقرأ المخزَّنة — والتعليق فوقها يقول حرفيّاً إنّ وجود مسارين
       // يجعل أحدهما يُنسى. وهو ما حدث.
-      final r = await NetworkDevicesApi.probeDevice(_d);
+      // ٣٠ أكتوبر (المالك): «فحص الآن (ping)» ping حقيقيّ — جهازٌ يعمل ببياناتٍ/منفذٍ خطأ لا يُعرض «مفصولاً».
+      final r = await NetworkDevicesApi.probeDevice(_d, ping: true);
       NetworkDevicesApi.saveProbeResult(
         deviceId: _d.id,
         status: r.status,
@@ -162,6 +165,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
           lastResponseMs: r.responseMs,
         );
         _lastPacketLoss = r.packetLoss;
+        _serviceOk = r.serviceOk;
         _history.add(_PingSample(
             at: DateTime.now(),
             ms: r.responseMs,
@@ -473,6 +477,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
             _heroCard(),
             const SizedBox(height: Sp.md),
             _statsRow(),
+            if (_serviceNote() case final note?) ...[const SizedBox(height: Sp.sm), note],
           ],
           // ICMP sparkline log أُزيل (2026-08-11) — لا فائدة عمليّة له
           // Live Panels حسب البراند — تحتاج devices.monitor (2026-08-18).
@@ -975,6 +980,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                     _lastPacketLoss == null ? '—' : '${_lastPacketLoss!.toInt()}%',
                     color: _lastPacketLoss != null && _lastPacketLoss! > 0 ? AppColors.error : null,
                   ),
+                  if (_serviceNote() case final note?) ...[const SizedBox(height: Sp.sm), note],
                 ],
               ),
             ),
@@ -1089,6 +1095,35 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
   // ══════════════════════════════════════════════════════════════
   // Stats row — 3 stat cards (ping avg / packet loss / آخر فحص)
   // ══════════════════════════════════════════════════════════════
+  /// يردّ على ping وخدمة الإدارة لا (منفذٌ/بياناتٌ خطأ أو خدمةٌ مطفأة) — يُقال صراحةً تحت الفحص، والحالة «متّصل» (٣٠ أكتوبر).
+  Widget? _serviceNote() {
+    if (_serviceOk != false || _d.lastStatus != 'online') return null;
+    final port = _d.apiPort ?? _d.port;
+    final svc = _d.protocol != null ? '${NetworkDeviceLabels.protocolLabel(_d.protocol!)}:$port' : 'منفذ الإدارة $port';
+    return Container(
+      padding: const EdgeInsets.all(Sp.sm),
+      decoration: BoxDecoration(
+        color: AppColors.warningSoftBg,
+        border: Border.all(color: AppColors.warningSoftBorder),
+        borderRadius: BorderRadius.circular(R.md),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(LucideIcons.triangleAlert, size: 16, color: AppColors.warningOnSoft),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text.rich(
+            TextSpan(children: [
+              const TextSpan(text: 'الجهاز يردّ على ping، لكن '),
+              TextSpan(text: svc, style: const TextStyle(fontWeight: FontWeight.w700)),
+              const TextSpan(text: ' لا يردّ — تحقّق من المنفذ أو بيانات الدخول'),
+            ]),
+            style: AppType.micro(color: AppColors.warningOnSoft),
+          ),
+        ),
+      ]),
+    );
+  }
+
   Widget _statsRow() {
     final times =
         _history.where((h) => h.ms != null).map((h) => h.ms!).toList();
