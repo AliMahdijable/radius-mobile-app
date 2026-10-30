@@ -1,6 +1,7 @@
 /// «كل الشركات»: شركةٌ من شركات حساب Pro (صفّ `GET /api/account/merged/companies`) — كقارئ الويب (client-v2 lib/merged.ts
 /// parseMergedCompanies) حرفاً: مفتاحٌ بصيغته وإلّا يُسقط، والمكرّر يُسقط، والعملة مجهولةٌ (null) لساسٍ لم تُقرأ عملته.
-enum MergedProvider { sas4, earthlink, ftth, fiberx }
+/// kit = «الشركات المُضافة» (providerKit بالخادم — نبض، AccessGate…؛ «كل الشركات» لها منذ ba3a054، ٣٠ أكتوبر).
+enum MergedProvider { sas4, earthlink, ftth, fiberx, kit }
 
 enum MergedStatus { ok, needsLogin, unavailable, loading }
 
@@ -64,6 +65,8 @@ class MergedCompany {
 
   /// FTTH يعمل من الويب وحده الآن (الخادم يرفضه من التطبيق: ftth_web_only).
   // فايبر اكس لا تمرّ «كل الشركات» بالخادم أصلاً (companyRouting) — كالوطنيّ: «من الموقع» لا ساسٌ يُطلب.
+  // الشركة المُضافة (kit) تمرّ بعقود SAS4 نفسها، والتطبيق خلف مفتاحها بالخادم (`<name>_app`): مغلقٌ ⇒ حالها unavailable
+  // بسببها (kit_web_only) فلا تدخل الدمج — لا قرار هنا.
   bool get appCapable => provider != MergedProvider.ftth && provider != MergedProvider.fiberx;
 
   /// تُسأل وتدخل الدمج والمجاميع.
@@ -87,6 +90,7 @@ class MergedCompany {
         'earthlink' => MergedProvider.earthlink,
         'ftth' => MergedProvider.ftth,
         'fiberx' => MergedProvider.fiberx,
+        'kit' => MergedProvider.kit,
         _ => MergedProvider.sas4,
       };
 

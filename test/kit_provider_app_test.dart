@@ -14,6 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/auth_api.dart';
 import 'package:rad_mysvcs/api/cards_api.dart';
+import 'package:rad_mysvcs/models/merged_company.dart';
 import 'package:rad_mysvcs/models/package_change.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/app_modules.dart';
@@ -99,6 +100,18 @@ void main() {
       expect(mods['managers']?.unavailable, 'غير متاح لحساب نبض بعد');
       PermissionsService.debugSet(isEmployee: false, managerRestricted: true, managerCaps: {'managers.view': true});
       expect({for (final m in buildAppModules()) m.id: m}['managers']?.unavailable, isNull, reason: 'نبض بمدرائه');
+    });
+
+    test('«كل الشركات»: المزوّد kit يُقرأ شركةً مُضافة (لا SAS4)، تدخل الدمج حين يقول الخادم ok، ومفتاحها المغلق ⇒ خارجه بسببه', () {
+      final cs = MergedCompany.listFrom([
+        {'key': 'c111111111111', 'code': 'nabd', 'provider': 'kit', 'status': 'ok', 'admin_id': 'nabd:myservices'},
+        {'key': 'c222222222222', 'code': 'accessgate', 'provider': 'kit', 'status': 'unavailable', 'reason': 'kit_web_only',
+          'message': 'حساب هذه الشركة يعمل من موقع الويب حالياً — قريباً في التطبيق'},
+        {'key': 'c333333333333', 'code': 'jt', 'provider': 'sas4', 'status': 'ok'},
+      ]);
+      expect(cs.map((c) => c.provider), [MergedProvider.kit, MergedProvider.kit, MergedProvider.sas4]);
+      expect([cs[0].appCapable, cs[0].usable, cs[0].currency], [true, true, 'IQD']);
+      expect([cs[1].usable, cs[1].reason], [false, 'kit_web_only']);
     });
 
     test('activation-data: schedule_supported:false صريحةً ⇒ لا جدولة؛ غيابها (SAS4) ⇒ كما كان', () {
