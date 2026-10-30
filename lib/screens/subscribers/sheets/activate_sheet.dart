@@ -16,6 +16,7 @@ import '../../../models/subscriber.dart';
 import '../../../services/merged_mode.dart';
 import '../../../services/manual_wa_prefs.dart';
 import '../../../services/manual_wa_sender.dart';
+import '../../../services/provider_service.dart';
 import '../../../services/receipt_service.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
@@ -239,7 +240,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         _method = _methods.cardOnly ? _Method.card : _Method.credit;
         // ايرث لنك: افتح المبدّل على الباقة الحاليّة (أو أوّل باقة)، والافتراض رصيد أونلاين.
         final prov = data['provider']?.toString();
-        if (prov == 'earthlink' || prov == 'fiberx') {
+        if (prov == 'earthlink' || prov == 'fiberx' || ProviderService.isKitName(prov)) {
           final pid = data['profile_id']?.toString();
           final pkgIds = ((data['packages'] as List?) ?? const [])
               .whereType<Map>()
@@ -321,8 +322,22 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   /// ⇒ «حالاً / عند الانتهاء» صريحاً (change_type)، و«تفعيلٌ مكرّر» عندهم ⇒ تأكيدٌ صريح (confirmCooloff) — كالويب.
   bool get _isFiberx => _data?['provider']?.toString() == 'fiberx';
 
-  /// مبدّل الباقة (ايرث لنك وفايبر اكس) بدل باقة SAS4 الواحدة.
-  bool get _pkgSwitcher => _isEarthlink || _isFiberx;
+  // ───────────────────── الشركات المُضافة (providerKit، ٣٠ أكتوبر) ─────────────────────
+  /// نبض، AccessGate…: وضع فايبر اكس نفسه — مبدّل الباقة والدفع نقديّ/دين/جزئيّ والمبالغ من الخادم — بلا «عند الانتهاء» (الخادم
+  /// يقول `package_change_timing: ['now']`: الباقة الأخرى تبدأ حالاً) ولا «تفعيلٌ مكرّر» فايبر اكس. كالموقع (ActivationModal isKit).
+  bool get _isKit => ProviderService.isKitName(_data?['provider']?.toString());
+
+  /// اسم الشركة المُضافة كما يقوله الخادم (`provider_label`).
+  String get _kitName {
+    final l = _data?['provider_label']?.toString().trim() ?? '';
+    return l.isNotEmpty ? l : ProviderService.label;
+  }
+
+  /// وضع «المزوّد»: فايبر اكس أو شركةٌ مُضافة — فرعٌ مستقلّ لا يمسّ SAS4 ولا ايرث لنك.
+  bool get _fxMode => _isFiberx || _isKit;
+
+  /// مبدّل الباقة (ايرث لنك وفايبر اكس والشركات المُضافة) بدل باقة SAS4 الواحدة.
+  bool get _pkgSwitcher => _isEarthlink || _fxMode;
 
   List<Map<String, dynamic>> get _elPackages =>
       ((_data?['packages'] as List?) ?? const [])
@@ -372,7 +387,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       return _effectivePrice > 0 ? _effectivePrice : _elRawPrice;
     }
     // فايبر اكس: الثابت يلغي الخصم لباقته وحدها — لباقةٍ أخرى يعود الخصم (overridden_discount) كما يحسبه الخادم.
-    final d = _isFiberx && _discount <= 0 ? _readNum('overridden_discount') : _discount;
+    final d = _fxMode && _discount <= 0 ? _readNum('overridden_discount') : _discount;
     final v = _readNumOf(pkg, 'price') - d;
     return v < 0 ? 0 : v;
   }
@@ -431,9 +446,10 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   bool get _canSubmit {
     if (_loading || _submitting || _data == null) return false;
     if (_outcomeUnclear) return false;
-    if (_isFiberx) {
+    if (_fxMode) {
       if (_selectedPackageId.isEmpty) return false;
-      if (!_elIsCurrentPkg && _fxTiming == null) return false; // باقةٌ أخرى ⇒ التوقيت صريحاً
+      // فايبر اكس: باقةٌ أخرى ⇒ التوقيت صريحاً. الشركة المُضافة: «حالاً» وحدها فلا اختيار.
+      if (_isFiberx && !_elIsCurrentPkg && _fxTiming == null) return false;
       if (_pay == _PayType.partial && _partialAmount <= 0) return false;
       return true;
     }
@@ -466,8 +482,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       _PayType.partial => 'partial-cash',
       _PayType.debt => 'non-cash',
     };
-    // ── مسار فايبر اكس (٢٩ أكتوبر) — فرعٌ مستقلّ كايرث لنك ──
-    if (_isFiberx) return _submitFiberx(idx, paymentType);
+    // ── مسار فايبر اكس (٢٩ أكتوبر) والشركات المُضافة (٣٠ أكتوبر) — فرعٌ مستقلّ كايرث لنك ──
+    if (_fxMode) return _submitFiberx(idx, paymentType);
     // ── مسار ايرث لنك (البند ٤) — فرعٌ مستقلّ لا يمسّ منطق SAS4 أدناه ──
     if (_isEarthlink) {
       final profileId = int.tryParse(_selectedPackageId);
@@ -780,17 +796,21 @@ class _ActivateSheetState extends State<_ActivateSheet> {
                 // فايبر اكس: كلفتها = ما تخصمه فايبر اكس من المحفظة، والسعر الثابت لباقته (كالساس).
                 if (_elSelectedPkgCost > 0)
                   SheetRowData(
-                    label: _isFiberx ? 'sheets.fx_pkg_cost'.tr() : 'كلفة الباقة المختارة',
+                    label: _isFiberx
+                        ? 'sheets.fx_pkg_cost'.tr()
+                        : _isKit
+                            ? 'sheets.kit_pkg_cost'.tr(namedArgs: {'name': _kitName})
+                            : 'كلفة الباقة المختارة',
                     value: '${formatIQD(_elSelectedPkgCost.round())} $cur',
                     valueColor: AppColors.textMid,
                   ),
-                if (_isFiberx && _elIsCurrentPkg && _isFixedPrice)
+                if (_fxMode && _elIsCurrentPkg && _isFixedPrice)
                   SheetRowData(
                     label: 'sp.fixed_price'.tr(),
                     value: 'sp.fixed_for_subscriber'.tr(),
                     valueColor: AppColors.brandAccent,
                   )
-                else if (_isFiberx && _elIsCurrentPkg && _needsRepricing)
+                else if (_fxMode && _elIsCurrentPkg && _needsRepricing)
                   SheetRowData(
                     label: 'sp.fixed_price'.tr(),
                     value: 'sp.needs_repricing_short'.tr(),
@@ -869,12 +889,19 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         _elPackageSection(),
         const SizedBox(height: 14),
         _elMethodSection(),
-      ] else if (_isFiberx) ...[
+      ] else if (_fxMode) ...[
         const SizedBox(height: 14),
         _elPackageSection(),
-        if (!_elIsCurrentPkg) ...[
+        if (!_elIsCurrentPkg && _isFiberx) ...[
           const SizedBox(height: 14),
           _fxTimingSection(),
+        ] else if (!_elIsCurrentPkg) ...[
+          // الشركة المُضافة: الباقة الأخرى تبدأ حالاً وحدها — سطرٌ يقوله بدل اختيارٍ لا يوجد.
+          const SizedBox(height: Sp.sm),
+          Text(
+            'sheets.kit_timing_now_note'.tr(namedArgs: {'name': _kitName}),
+            style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.4),
+          ),
         ],
       ] else if (_methods.card) ...[
         const SizedBox(height: 14),
@@ -1053,7 +1080,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       partialAmount: _pay == _PayType.partial ? _partialAmount : null,
       skipAutoWa: manualMode,
       profileId: change ? int.tryParse(_selectedPackageId) : null,
-      changeType: change ? (_fxTiming == _FxTiming.expiry ? 'expiry' : 'now') : null,
+      // الشركة المُضافة: «حالاً» وحدها (package_change_timing) — والخادم يرفض غيرها قبل أيّ نداء.
+      changeType: change ? (_isFiberx && _fxTiming == _FxTiming.expiry ? 'expiry' : 'now') : null,
       confirmRepeat: _confirmRepeat,
       confirmCooloff: _confirmCooloff,
     ));

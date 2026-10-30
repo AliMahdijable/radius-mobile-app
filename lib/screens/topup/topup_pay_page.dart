@@ -535,6 +535,9 @@ class _SafetyNote extends StatelessWidget {
                   wallet == null
                       ? 'لا تغلق الصفحة بعد الدفع — يرجع التطبيق وحده'
                       : 'أكمل الدفع في $wallet ثمّ ارجع هنا — يرجع التطبيق وحده',
+                  // يزاحمه زرّ «فتح SuperQi» على ٣٢٠ — سطران ثمّ «…» لا سحقٌ عموديّ (flex_text_guard).
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: AppType.body(color: AppColors.textBody)
                       .copyWith(fontSize: 11.5),
                 ),

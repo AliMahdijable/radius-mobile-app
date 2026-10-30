@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../services/merged_mode.dart';
+import '../../../services/provider_service.dart';
 import '../../../api/traffic_api.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../models/subscriber.dart';
@@ -114,6 +115,11 @@ class _ConsumptionSheetState extends State<_ConsumptionSheet> {
   String? _error;
   bool _loading = true;
 
+  /// شركةٌ مُضافة (نبض، AccessGate…): مزوّدها يعطي مجاميع لا تفصيلاً يوميّاً — الشهر (واليوم وأمس للشهر الجاري) بلا أعمدة.
+  /// «كل الشركات» خارجها (مشترك شركةٍ أخرى = ساس).
+  bool get _totalsOnly => ProviderService.isKit && widget.sub.companyKey == null;
+  ({int? today, int? month, int? yesterday})? _totals;
+
   @override
   void initState() {
     super.initState();
@@ -142,6 +148,16 @@ class _ConsumptionSheetState extends State<_ConsumptionSheet> {
       _loading = true;
       _error = null;
     });
+    if (_totalsOnly) {
+      final t = await TrafficApi.usageTotals(subscriberId: id, month: _month, year: _year);
+      if (!mounted) return;
+      setState(() {
+        _totals = t.error == null ? (today: t.today, month: t.month, yesterday: t.yesterday) : null;
+        _error = t.error;
+        _loading = false;
+      });
+      return;
+    }
     final r = await TrafficApi.fetch(
       subscriberId: id,
       type: _type,
@@ -202,8 +218,11 @@ class _ConsumptionSheetState extends State<_ConsumptionSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _TypeToggle(type: _type, onChanged: _switch),
-          const SizedBox(height: Sp.md),
+          // الشركة المُضافة: شهرٌ بشهر وحده (لا «يوميّ/شهريّ» — لا تفصيل عند مزوّدها).
+          if (!_totalsOnly) ...[
+            _TypeToggle(type: _type, onChanged: _switch),
+            const SizedBox(height: Sp.md),
+          ],
           _PeriodBar(
             label: _periodLabel,
             onPrev: () => _shift(-1),
@@ -218,6 +237,12 @@ class _ConsumptionSheetState extends State<_ConsumptionSheet> {
             )
           else if (_error != null)
             _Notice(icon: LucideIcons.triangleAlert, text: _error!)
+          else if (_totalsOnly)
+            _KitTotals(
+              totals: _totals,
+              current: _isCurrentPeriod,
+              name: ProviderService.label,
+            )
           else if (_report == null || _report!.isEmpty)
             const _Notice(
               icon: LucideIcons.inbox,
@@ -238,6 +263,67 @@ class _ConsumptionSheetState extends State<_ConsumptionSheet> {
     if (_type == 'monthly') return _year >= now.year;
     return _year > now.year || (_year == now.year && _month >= now.month);
   }
+}
+
+/// مجاميع الشركة المُضافة: «هذا الشهر» (واليوم وأمس للشهر الجاري) — المجهول «—» لا صفر، وسطرٌ يقول لماذا لا أعمدة.
+class _KitTotals extends StatelessWidget {
+  const _KitTotals({required this.totals, required this.current, required this.name});
+  final ({int? today, int? month, int? yesterday})? totals;
+  final bool current;
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final t = totals;
+    String v(int? b) => b == null ? '—' : fmtBytes(b);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(child: _tile(current ? 'هذا الشهر' : 'الشهر', v(t?.month), AppColors.brand)),
+            if (current) ...[
+              const SizedBox(width: Sp.sm),
+              Expanded(child: _tile('اليوم', v(t?.today), AppColors.success)),
+              if (t?.yesterday != null) ...[
+                const SizedBox(width: Sp.sm),
+                Expanded(child: _tile('أمس', v(t?.yesterday), AppColors.info)),
+              ],
+            ],
+          ],
+        ),
+        const SizedBox(height: Sp.md),
+        Text(
+          'التفصيل اليوميّ غير متاح عند $name — هذه مجاميعه',
+          textAlign: TextAlign.center,
+          style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.4),
+        ),
+        const SizedBox(height: Sp.sm),
+      ],
+    );
+  }
+
+  Widget _tile(String label, String value, Color c) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceInput,
+          borderRadius: BorderRadius.circular(R.md),
+          border: Border.all(color: AppColors.borderSoft),
+        ),
+        child: Column(
+          children: [
+            Text(label, style: AppType.micro(color: AppColors.textMid)),
+            const SizedBox(height: 3),
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.cardTitleBold(color: c),
+            ),
+          ],
+        ),
+      );
 }
 
 class _TypeToggle extends StatelessWidget {

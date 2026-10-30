@@ -11,6 +11,7 @@ import '../../../models/subscriber.dart';
 import '../../../services/merged_mode.dart';
 import '../../../services/manual_wa_prefs.dart';
 import '../../../services/manual_wa_sender.dart';
+import '../../../services/provider_service.dart';
 import '../../../services/receipt_service.dart';
 import '../../../services/subscriber_events.dart';
 import '../../../theme/colors.dart';
@@ -140,6 +141,17 @@ class _ExtendSheetState extends State<_ExtendSheet> {
   /// مدير ولا اختيار طريقة دفع. يُكتشَف من provider في ردّ extension-options.
   bool get _isEarthlink => _data?['provider']?.toString() == 'earthlink';
 
+  /// تمديدٌ **بالمدّة** عند الشركة المُضافة (نبض، ٣٠ أكتوبر — `mode: 'days'`): يومٌ أو يومان أو ثلاثة بلا كلفة ولا طريقة دفع —
+  /// «الباقات» هنا المدد (id = عدد الأيّام، السعر صفر). كالموقع (ExtendModal mode:'days'). والتمديد بباقاتٍ مدفوعة
+  /// (AccessGate) بشكل SAS4 تماماً فيسلك المسار المعتاد.
+  bool get _daysMode => _data?['mode']?.toString() == 'days';
+
+  /// اسم الشركة كما يقوله الخادم (`provider_label`).
+  String get _providerName {
+    final l = _data?['provider_label']?.toString().trim() ?? '';
+    return l.isNotEmpty ? l : ProviderService.label;
+  }
+
   num get _selectedPrice => _read(_selectedPkg, 'price');
   num get _selectedPoints => _read(_selectedPkg, 'reward_points_required');
   String? get _selectedDuration => _selectedPkg?['duration']?.toString();
@@ -148,6 +160,7 @@ class _ExtendSheetState extends State<_ExtendSheet> {
     if (_loading || _submitting || _data == null || _selectedPkg == null) {
       return false;
     }
+    if (_daysMode) return true; // بلا كلفة: لا رصيد يُفحص
     if (_method == _Method.points) {
       return _pointsBalance >= _selectedPoints && _selectedPoints > 0;
     }
@@ -155,7 +168,7 @@ class _ExtendSheetState extends State<_ExtendSheet> {
   }
 
   String? get _disabledReason {
-    if (_selectedPkg == null) return null;
+    if (_selectedPkg == null || _daysMode) return null;
     if (_method == _Method.points) {
       if (_selectedPoints <= 0) return 'sheets.no_points_support'.tr();
       if (_pointsBalance < _selectedPoints) {
@@ -315,12 +328,12 @@ class _ExtendSheetState extends State<_ExtendSheet> {
             label: 'الباقة الحالية',
             value: _currentProfileName.isEmpty ? '—' : _currentProfileName,
           ),
-          if (!_isEarthlink)
+          if (!_isEarthlink && !_daysMode)
             SheetRowData(
               label: 'dashboard.manager_balance'.tr(),
               value: '${formatIQD(_managerBalance.round())} $cur',
             ),
-          if (_pointsBalance > 0)
+          if (_pointsBalance > 0 && !_daysMode)
             SheetRowData(
               label: 'sheets.points'.tr(),
               value: formatIQD(_pointsBalance.round()),
@@ -338,7 +351,7 @@ class _ExtendSheetState extends State<_ExtendSheet> {
         )
       else
         SheetSection(
-          label: 'اختر باقة التمديد',
+          label: _daysMode ? 'sheets.extend_days_label'.tr() : 'اختر باقة التمديد',
           child: Container(
             decoration: BoxDecoration(
               color: AppColors.surface,
@@ -353,6 +366,8 @@ class _ExtendSheetState extends State<_ExtendSheet> {
                   _PackageRow(
                     pkg: list[i],
                     selected: _selectedPkg == list[i],
+                    // المدّة بلا كلفة: «0 د.ع» بجانبها تضلّل — الاسم يقول «بلا كلفة».
+                    showPrice: !_daysMode,
                     onTap: () => setState(() => _selectedPkg = list[i]),
                   ),
                 ],
@@ -368,12 +383,21 @@ class _ExtendSheetState extends State<_ExtendSheet> {
           durationLabel:
               (_selectedDuration ?? '').isEmpty ? null : _selectedDuration,
           amountLabel: 'sheets.amount_due'.tr(),
-          amount: _method == _Method.points
-              ? '${formatIQD(_selectedPoints.round())} نقطة'
-              : '${formatIQD(_selectedPrice.round())} $cur',
+          amount: _daysMode
+              ? 'sheets.extend_free'.tr()
+              : _method == _Method.points
+                  ? '${formatIQD(_selectedPoints.round())} نقطة'
+                  : '${formatIQD(_selectedPrice.round())} $cur',
         ),
-        // ايرث لنك: لا اختيار طريقة — التمديد بالنقاط حصراً (user/extend ٢٤ ساعة).
-        if (!_isEarthlink) ...[
+        if (_daysMode) ...[
+          const SizedBox(height: Sp.sm),
+          Text(
+            'sheets.extend_days_note'.tr(namedArgs: {'name': _providerName}),
+            style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.4),
+          ),
+        ],
+        // ايرث لنك: لا اختيار طريقة — التمديد بالنقاط حصراً (user/extend ٢٤ ساعة). والمدّة بلا كلفة: لا طريقة.
+        if (!_isEarthlink && !_daysMode) ...[
           const SizedBox(height: 14),
           SheetSection(
             label: 'sheets.payment_method'.tr(),
@@ -482,10 +506,14 @@ class _PackageRow extends StatelessWidget {
     required this.pkg,
     required this.selected,
     required this.onTap,
+    this.showPrice = true,
   });
   final Map<String, dynamic> pkg;
   final bool selected;
   final VoidCallback onTap;
+
+  /// السعر بجانب الاسم — يُخفى لمدّة تمديدٍ بلا كلفة.
+  final bool showPrice;
 
   @override
   Widget build(BuildContext context) {
@@ -536,12 +564,13 @@ class _PackageRow extends StatelessWidget {
               ),
               const SizedBox(width: Sp.x6),
             ],
-            Text(
-              '${formatIQD(price)} ${'common.currency'.tr()}',
-              textDirection: ui.TextDirection.ltr,
-              style: AppType.bodyStrong(color: AppColors.brandAccent)
-                  .copyWith(fontWeight: FontWeight.w700),
-            ),
+            if (showPrice)
+              Text(
+                '${formatIQD(price)} ${'common.currency'.tr()}',
+                textDirection: ui.TextDirection.ltr,
+                style: AppType.bodyStrong(color: AppColors.brandAccent)
+                    .copyWith(fontWeight: FontWeight.w700),
+              ),
           ],
         ),
       ),

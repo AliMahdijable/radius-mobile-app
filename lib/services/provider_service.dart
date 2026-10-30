@@ -24,8 +24,12 @@ class ProviderService {
     iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
   );
   static const _kProvider = 'provider.current';
+  static const _kLabel = 'provider.label';
 
   static String? _provider;
+
+  /// اسم الشركة كما يقوله الخادم (`providerLabel` — الشركات المُضافة وحدها ترسله).
+  static String? _label;
   static bool _loaded = false;
   static final ValueNotifier<int> _version = ValueNotifier<int>(0);
 
@@ -52,6 +56,27 @@ class ProviderService {
   /// التفعيل بوضع «فايبر اكس»، الديون من دفترنا)، وما لا يخدمه يُقفل بقدراته (`canonicalPermissions` false).
   static bool get isFiberx => _provider == 'fiberx';
 
+  /// المزوّدون الذين يعرفهم التطبيق باسمهم — وكلّ ما عداهم «شركةٌ مُضافة» ([isKitName]).
+  static const knownProviders = {'sas4', 'earthlink', 'ftth', 'fiberx'};
+
+  /// «الشركات المُضافة» (providerKit بالخادم، ٣٠ أكتوبر — نبض وAccessGate أوّلها): كلّ مزوّدٍ يقوله الخادم ليس من
+  /// [knownProviders] — كالموقع (`components/kit/kit.ts`) حرفاً. الخادم يخدمها بعقود SAS4 نفسها والمال من دفترنا، وما لا
+  /// يخدمه مزوّدها مفتاحه false في قدراتها فلا يظهر (`providerHidesAction`)، ومودل التفعيل بوضع «المزوّد» كفايبر اكس.
+  /// التطبيق خلف مفتاح الخادم `pro_settings.<name>_app`: بلاه يُردّ الدخول `<name>-web-only`. شركةٌ جديدة لا تحتاج سطراً هنا.
+  static bool isKitName(String? provider) {
+    final p = provider?.trim() ?? '';
+    return p.isNotEmpty && !knownProviders.contains(p);
+  }
+
+  /// الجلسة لشركةٍ مُضافة ([isKitName]).
+  static bool get isKit => isKitName(_provider);
+
+  /// اسم الشركة المُضافة كما يقوله الخادم (`providerLabel`)، وإلّا رمزها — للنصوص («غير متاح لحساب نبض بعد»).
+  static String get label {
+    final l = _label?.trim() ?? '';
+    return l.isNotEmpty ? l : (_provider ?? '');
+  }
+
   /// للشركة بوّابة مشتركين (تطبيق MyServices)؟ وسيط البوّابة (١٨ أكتوبر،
   /// الخادم fdcc2d7) يخدم شركات SAS4 كلّها **وايرث لنك** برمز الوكيل وQR؛
   /// وFTTH وحده بلا بوّابة بعد (الخادم لا يصدر له رمز وكيل) — فإعداداتها
@@ -70,6 +95,8 @@ class ProviderService {
     try {
       final raw = await _storage.read(key: _kProvider);
       _provider = (raw == null || raw.isEmpty) ? null : raw;
+      final lab = await _storage.read(key: _kLabel);
+      _label = (lab == null || lab.isEmpty) ? null : lab;
     } catch (e) {
       if (kDebugMode) debugPrint('ProviderService.init failed: $e');
     } finally {
@@ -118,7 +145,7 @@ class ProviderService {
     // وتطبيقه. (`Future.wait` يبدأ عناصره بالترتيب، في الخطوة نفسها.)
     final canon = r.canonical;
     await Future.wait<void>([
-      _set(r.provider),
+      _set(r.provider, label: r.providerLabel),
       if (r.isEmployee == false &&
           !PermissionsService.isEmployee &&
           r.userId != null &&
@@ -164,16 +191,24 @@ class ProviderService {
   /// `provider:'earthlink'`) — فلا تنتظر الواجهة نداء `/api/auth/me`.
   static Future<void> setProvider(String? provider) => _set(provider);
 
-  static Future<void> _set(String? provider) async {
+  static Future<void> _set(String? provider, {String? label}) async {
     final p = (provider == null || provider.trim().isEmpty) ? null : provider.trim();
-    if (p == _provider) return;
+    // الاسم للشركات المُضافة وحدها (المعروفة تُسمّى بنصوص التطبيق)؛ ويتبع المزوّد: مزوّدٌ آخر بلا اسم ⇒ لا اسم قديم.
+    final l = (p != null && isKitName(p) && label != null && label.trim().isNotEmpty) ? label.trim() : null;
+    if (p == _provider && l == _label) return;
     _provider = p;
+    _label = l;
     _loaded = true;
     try {
       if (p == null) {
         await _storage.delete(key: _kProvider);
       } else {
         await _storage.write(key: _kProvider, value: p);
+      }
+      if (l == null) {
+        await _storage.delete(key: _kLabel);
+      } else {
+        await _storage.write(key: _kLabel, value: l);
       }
     } catch (e) {
       if (kDebugMode) debugPrint('ProviderService._set failed: $e');
@@ -185,8 +220,10 @@ class ProviderService {
   static Future<void> clear() async {
     _generation++; // أيّ ردٍّ في الطريق صار لجلسةٍ منتهية
     _provider = null;
+    _label = null;
     try {
       await _storage.delete(key: _kProvider);
+      await _storage.delete(key: _kLabel);
     } catch (e) {
       if (kDebugMode) debugPrint('ProviderService.clear failed: $e');
     }
@@ -196,9 +233,10 @@ class ProviderService {
   /// منفذٌ للاختبار وحده: يضبط المزوّد في الذاكرة بلا خزنةٍ آمنة
   /// (الخزنة لا تعمل في `flutter test`).
   @visibleForTesting
-  static void debugSet(String? provider) {
+  static void debugSet(String? provider, {String? label}) {
     _loaded = true;
     _provider = (provider == null || provider.isEmpty) ? null : provider;
+    _label = label;
     _version.value = _version.value + 1;
   }
 }

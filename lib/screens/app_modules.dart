@@ -260,8 +260,13 @@ List<AppModule> buildAppModules() {
         id: 'managers',
         group: AppModuleGroup.manage,
         locked: !Perms.has('managers.view'),
-        // فايبر اكس: لا مدراء فرعيّين عندنا لحسابه بعد — بمكانه مقفلاً بالسبب لا «لا صلاحيّة».
-        unavailable: sessionIsFiberx ? 'غير متاح لحساب فايبر اكس بعد' : null,
+        // فايبر اكس: لا مدراء فرعيّين عندنا لحسابه بعد — بمكانه مقفلاً بالسبب لا «لا صلاحيّة». والشركة المُضافة: حساباتها
+        // الفرعيّة عند مزوّدها بقدرة محوّله (managers.view) — بلاها السبب نفسه.
+        unavailable: sessionIsFiberx
+            ? 'غير متاح لحساب فايبر اكس بعد'
+            : (sessionIsKit && !Perms.isEmployee && !Perms.has('managers.view'))
+                ? 'more.kit_unavailable'.tr(namedArgs: {'name': ProviderService.label})
+                : null,
         icon: LucideIcons.userCog,
         tone: AppTone.brand,
         title: 'more.managers'.tr(),
@@ -307,7 +312,10 @@ List<AppModule> buildAppModules() {
         id: 'employees',
         group: AppModuleGroup.manage,
         locked: !Perms.has('employees.view'),
-        // فايبر اكس (٣١ أكتوبر): موظّفونا لحسابه — مفتوحٌ كايرث لنك.
+        // فايبر اكس (٣١ أكتوبر): موظّفونا لحسابه — مفتوحٌ كايرث لنك. الشركة المُضافة: بعد (بمكانه مقفلاً بالسبب).
+        unavailable: sessionIsKit && !Perms.isEmployee
+            ? 'more.kit_unavailable'.tr(namedArgs: {'name': ProviderService.label})
+            : null,
         icon: LucideIcons.users,
         tone: AppTone.brand,
         title: 'more.employees'.tr(),

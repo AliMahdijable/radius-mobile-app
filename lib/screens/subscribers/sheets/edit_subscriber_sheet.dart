@@ -550,8 +550,18 @@ class _EditSheetState extends State<_EditSheet> {
         changesPackage: _changesPackage,
         active: _isActiveNow,
         isEarthlink: !_sasRules,
-        timingSupported: _timingSupported,
+        // مزوّدٌ لا يجدول (الشركة المُضافة، `schedule_supported: false`) ⇒ لا «متى؟» — «حالاً» وحدها ([_nowOnly]).
+        timingSupported: _timingSupported && _pc.scheduleSupported != false,
       );
+
+  /// فعّالٌ تتغيّر باقته عند مزوّدٍ لا يجدول (نبض…): «حالاً» وحدها — بلا اختيار، والملاحظة تقول ما سيجري للتاريخ،
+  /// و«سيُعتبر منتهياً» يُؤكَّد كما مع «حالاً» المختارة.
+  bool get _nowOnly =>
+      _timingSupported &&
+      _pc.scheduleSupported == false &&
+      _changesPackage &&
+      _isActiveNow &&
+      !_packageLocked;
 
   /// عدّل المدير التاريخ بيده (لا مجرّد إعادة إرسال الأصليّ)؟
   bool get _expirationEdited =>
@@ -565,7 +575,10 @@ class _EditSheetState extends State<_EditSheet> {
       (_showExpiration && _expirationEdited);
 
   PackageChangeTiming get _timing =>
-      _timingPick ?? PackageChangeTiming.schedule;
+      _timingPick ??
+      (_pc.scheduleSupported == false
+          ? PackageChangeTiming.immediate
+          : PackageChangeTiming.schedule);
 
   /// خادمٌ أقدم لا يعرف «متى؟» — activation-data **وصلت** بلا حقولها. تعذّرُها ليس خادماً
   /// أقدم ([_detailsFailed] ⇒ [_pkgWaiting]): كان يسلك القاعدة السابقة فيرسل تاريخ الصفّ.
@@ -745,7 +758,8 @@ class _EditSheetState extends State<_EditSheet> {
       return;
     }
     final timed = diff['change_type'] as String?;
-    if (timed == PackageChangeTiming.immediate.wire && !_immediateKeepsDate) {
+    if ((timed == PackageChangeTiming.immediate.wire || (_nowOnly && diff.containsKey('profile_id'))) &&
+        !_immediateKeepsDate) {
       if (!await _confirmImmediateCancels() || !mounted) return;
     }
     setState(() => _saving = true);
@@ -954,6 +968,7 @@ class _EditSheetState extends State<_EditSheet> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final timingHint = _offersTiming ? _timingHint : null;
+    final nowOnlyHint = _nowOnly ? _timingHint : null;
     // حشوة لوحة المفاتيح صارت داخل DesignSheet.
     return DesignSheet(
       header: SheetHeaderBar(
@@ -1187,6 +1202,14 @@ class _EditSheetState extends State<_EditSheet> {
                 icon: timingHint.icon,
                 tone: timingHint.tone,
                 text: timingHint.text,
+              ),
+            ] else if (nowOnlyHint != null) ...[
+              // مزوّدٌ لا يجدول: «حالاً» وحدها — ما سيجري للتاريخ بلا سؤال «متى؟».
+              const SizedBox(height: Sp.sm),
+              _PackageNote(
+                icon: nowOnlyHint.icon,
+                tone: nowOnlyHint.tone,
+                text: nowOnlyHint.text,
               ),
             ],
             // غير الفعّال: «حالاً» وحدها — يُقال بلا سؤال (كالويب).

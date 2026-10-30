@@ -99,4 +99,33 @@ class TrafficApi {
       return (report: null, error: humanError(e, fallback: 'تعذّر جلب الاستهلاك'));
     }
   }
+
+  /// استهلاك مشتركٍ **بمجاميعه** — اليوم والشهر (وأمس إن عُرف) — للشركات المُضافة (نبض، AccessGate…، ٣٠ أكتوبر): مزوّدها
+  /// لا يعطي تفصيلاً يوميّاً، فـ`/traffic` لا يخدمها (ردٌّ فارغ كان يُقرأ «لا استهلاك»). المصدر عقد القائمة نفسه
+  /// `GET /api/v2/subscribers-usage?ids=<idx>&month=YYYY-MM` (بايت؛ null = لا نعرف — لا صفرٌ كاذب).
+  static Future<({int? today, int? month, int? yesterday, String? error})> usageTotals({
+    required String subscriberId,
+    required int month,
+    required int year,
+  }) async {
+    int? n(Object? v) => v is num ? v.round() : num.tryParse('${v ?? ''}')?.round();
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/v2/subscribers-usage',
+        queryParameters: {
+          'ids': subscriberId,
+          'month': '$year-${month.toString().padLeft(2, '0')}',
+        },
+      );
+      final b = r.data ?? const {};
+      final d = b['data'];
+      final u = d is Map ? d[subscriberId] : null;
+      if (b['success'] != true || u is! Map) {
+        return (today: null, month: null, yesterday: null, error: (b['message'] ?? 'تعذّر جلب الاستهلاك').toString());
+      }
+      return (today: n(u['today']), month: n(u['month']), yesterday: n(u['yesterday']), error: null);
+    } catch (e) {
+      return (today: null, month: null, yesterday: null, error: humanError(e, fallback: 'تعذّر جلب الاستهلاك'));
+    }
+  }
 }

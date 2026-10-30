@@ -8,6 +8,7 @@ import '../../../api/managers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../services/manager_notice.dart';
 import '../../../services/manager_notice_prefs.dart';
+import '../../../services/provider_limits.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -258,7 +259,9 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     // القناة المعطّلة لهذا المدير (بلا رقم/غير مربوط) لا تُرسَل وإن حُفظ اختيارها من مديرٍ آخر.
     final sendWa = _sendWhatsApp && widget.manager.mobile.trim().isNotEmpty;
     final sendTg = _sendTelegram && _tgLinked;
-    if (!sendWa && !_sendPush && !sendTg) return;
+    // حساب الشركة المُضافة الفرعيّ حسابٌ عند مزوّدها لا مستخدمٌ لتطبيقنا — لا إشعار داخل التطبيق يصله.
+    final sendPush = _sendPush && !sessionIsKit;
+    if (!sendWa && !sendPush && !sendTg) return;
     // شحن/سحب/نقاط تمسّ دين الساس وحده؛ «ديون أخرى» (دفترنا) كما هي — فتُقرأ طازجةً وقت الإرسال (والقائمة
     // احتياط). كانت صفراً ثابتاً: المالك ٣٠ أكتوبر «ديون اخرى مجاي يرسله النظام» — الرسالة قالت 0 وعليه 125,000.
     // والدين السابق/الحاليّ مجموعهما كورقة التسديد (pay_debt_sheet): الإشعار والقالب يقولان الدين كلّه.
@@ -276,7 +279,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
       actionKind: actionKind,
       notes: notes,
       sendWhatsApp: sendWa,
-      sendPush: _sendPush,
+      sendPush: sendPush,
       sendTelegram: sendTg,
     );
     // التغذية الراجعة عن الإشعار تظهر فقط إذا أحدها فشل — نتجنب
@@ -286,7 +289,7 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     if (sendWa && !r.whatsAppOk) {
       failures.add('واتساب: ${r.whatsAppMessage ?? "فشل"}');
     }
-    if (_sendPush && !r.pushOk) {
+    if (sendPush && !r.pushOk) {
       failures.add('الإشعار: ${r.pushMessage ?? "فشل"}');
     }
     // ⚠️ كلّ قناةٍ تُبلَّغ على حدة: «فشل الإرسال» وحدها لا تقول أيّها
@@ -377,7 +380,8 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
           // مطلب 2026-06-12: toggle "آجل" يظهر فقط في وضع
           // الشحن — يحوّل الإيداع لـدين على المدير الفرعي
           // (مطابق v1 loan deposit).
-          if (_op == _BalanceOp.deposit) ...[
+          // الشركة المُضافة: الشحن عند مزوّدها نقدٌ وحده (لا «آجل» — الخادم يردّ LOAN_UNSUPPORTED)، كالموقع.
+          if (_op == _BalanceOp.deposit && !sessionIsKit) ...[
             const SizedBox(height: Sp.md),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -548,7 +552,8 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
                 ],
               ),
             ),
-            CheckboxListTile.adaptive(
+            if (!sessionIsKit)
+              CheckboxListTile.adaptive(
               dense: true,
               contentPadding: EdgeInsets.zero,
               controlAffinity: ListTileControlAffinity.leading,

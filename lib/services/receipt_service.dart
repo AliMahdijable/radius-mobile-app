@@ -194,8 +194,8 @@ class ReceiptService {
 
       // رابط QR ورقم الأرشيف معاً لا تباعاً: الوصل لا ينتظر رحلتين. فشل أيٍّ منهما لا يمنع الطباعة.
       // QR: الساس وحده (ايرث لنك بلا مسار generate-link — كالموقع).
-      // فايبر اكس بلا generate-link (رابطه رمز QR البوّابة من نافذة المشترك) — كايرث لنك: بلا QR على الوصل.
-      final noQr = earthlink || (merged == null && ProviderService.isFiberx);
+      // فايبر اكس والشركات المُضافة بلا generate-link (رابطهما رمز QR البوّابة من نافذة المشترك) — كايرث لنك: بلا QR على الوصل.
+      final noQr = earthlink || (merged == null && (ProviderService.isFiberx || ProviderService.isKit));
       final qrF = look.showQr && !noQr && idx != null && idx.isNotEmpty
           ? CompanyRoute.run(key, () => SubscribersApi.receiptLink(idx))
           : Future<String?>.value(null);

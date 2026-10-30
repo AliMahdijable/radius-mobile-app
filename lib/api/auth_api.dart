@@ -126,7 +126,12 @@ class LoginFailure extends LoginResult {
   };
 
   /// رمزٌ من بوّابة الحساب (انتهى الاشتراك/الحساب معطّل…) ← البوّابة تقرّر.
-  bool get isAccountGate => code != null && !_notGate.contains(code);
+  bool get isAccountGate => code != null && !_notGate.contains(code) && !isWebOnly;
+
+  /// «حساب … يعمل من موقع الويب حالياً» — رفضٌ يخصّ **الشركة** لا الحساب، لأيّ مزوّد: `ftth-web-only`، `fiberx-web-only`،
+  /// و`<name>-web-only` للشركات المُضافة (نبض، AccessGate… — مفتاح `pro_settings.<name>_app` بالخادم، ٣٠ أكتوبر). البوّابة
+  /// لا تحلّه (كان يرسل المستخدم إليها فترتدّ إلى «شركاتي» بلا كلمة)، فرسالته تُعرض ويبقى مكانه.
+  bool get isWebOnly => code?.endsWith('-web-only') ?? false;
 
   /// `device-limit` (403): جهازٌ جديد فوق حدّ أجهزة الباقة. رمز بوّابةٍ أيضاً
   /// ([isAccountGate])، لكنّ البوّابة لا تحلّه — `/api/account/me` ينجح
@@ -560,6 +565,7 @@ class AuthApi {
       ({
         bool ok,
         String? provider,
+        String? providerLabel,
         String? userId,
         bool? isEmployee,
         bool isSuperAdmin,
@@ -568,6 +574,7 @@ class AuthApi {
     const fail = (
       ok: false,
       provider: null,
+      providerLabel: null,
       userId: null,
       isEmployee: null,
       isSuperAdmin: false,
@@ -597,9 +604,12 @@ class AuthApi {
       final canonRaw = user is Map ? user['canonicalPermissions'] : null;
       final empRaw = user is Map ? user['isEmployee'] : null;
       final idRaw = user is Map ? user['id']?.toString().trim() : null;
+      // اسم الشركة المُضافة (providerKit) كما يقوله الخادم — «نبض»… (ProviderService.label).
+      final labelRaw = user is Map ? user['providerLabel']?.toString().trim() : null;
       return (
         ok: true,
         provider: (raw == null || raw.isEmpty) ? null : raw,
+        providerLabel: (labelRaw == null || labelRaw.isEmpty) ? null : labelRaw,
         userId: (idRaw == null || idRaw.isEmpty) ? null : idRaw,
         isEmployee: empRaw is bool ? empRaw : null,
         isSuperAdmin: user is Map && user['isSuperAdmin'] == true,

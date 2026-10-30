@@ -108,6 +108,7 @@ class CompanyOpenFlow {
     'ftth-2fa',
     // فايبر اكس قبل أن يُفتح للوكيل في التطبيق (`pro_settings.fiberx_app`) — «يعمل من موقع الويب حالياً».
     'fiberx-web-only',
+    // والشركات المُضافة (`<name>-web-only`، ٣٠ أكتوبر) بلا قائمة: `LoginFailure.isWebOnly` يخرجها من بوّابة الحساب.
   };
 
   static Future<void> open(

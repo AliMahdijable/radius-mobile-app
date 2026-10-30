@@ -77,6 +77,7 @@ class PackageChangeInfo {
     this.canChangeActive,
     this.immediateKeepsDate,
     this.scheduled,
+    this.scheduleSupported,
   });
 
   /// الخادم يعرف `change_type`: يجدول، ويلغي المجدول قبل تغييرٍ جديد، ويُبقي تاريخ
@@ -104,6 +105,10 @@ class PackageChangeInfo {
   /// تغييرٌ مجدول ينتظر — null = لا شيء.
   final ScheduledPackageChange? scheduled;
 
+  /// «عند انتهاء الاشتراك» متاحٌ عند مزوّد الشركة؟ `false` صريحةً من الشركات المُضافة بلا جدولة (نبض، ٣٠ أكتوبر —
+  /// `schedule_supported`): الباقة تتغيّر «حالاً» وحدها فلا يُسأل «متى؟». null = لا يقولها الخادم (SAS4 — يجدول كما كان).
+  final bool? scheduleSupported;
+
   static bool? _flag(Object? v) {
     if (v is bool) return v;
     if (v == 1 || v == '1' || v == 'true') return true;
@@ -126,6 +131,7 @@ class PackageChangeInfo {
       immediateKeepsDate: _flag(data['immediate_keeps_date']),
       scheduled: ScheduledPackageChange.tryParse(
           data['profile_change'] ?? data['profileChange']),
+      scheduleSupported: _flag(data['schedule_supported']),
     );
   }
 
@@ -136,5 +142,6 @@ class PackageChangeInfo {
         canChangeProfile: canChangeProfile,
         canChangeActive: canChangeActive,
         immediateKeepsDate: immediateKeepsDate,
+        scheduleSupported: scheduleSupported,
       );
 }
