@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'history_page.dart';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -865,22 +866,38 @@ class SelfDepositApi {
   }
 
   /// GET history — آخر عمليّات الشحن للحساب. `null` = تعذّرت القراءة.
-  static Future<List<SelfDepositRecord>?> history({int limit = 10}) async {
+  static Future<List<SelfDepositRecord>?> history({int limit = 10}) async =>
+      (await historyPage(limit: limit))?.rows;
+
+  /// GET history بصفحات: `before` = psid آخر صفٍّ معروض (ما قبله)، `query` = رقم العمليّة (الخادم 824b597).
+  /// `null` = تعذّرت القراءة.
+  static Future<HistoryPage<SelfDepositRecord>?> historyPage({
+    int limit = 10,
+    String? before,
+    String? query,
+  }) async {
     try {
       final r = await ApiClient.dio.get<Object?>(
         '$_base/history',
-        queryParameters: {'limit': limit},
+        queryParameters: {
+          'limit': limit,
+          if (before != null) 'before': before,
+          if (query != null) 'q': query,
+        },
       );
       final body = _map(r.data);
       if (body['success'] != true) return null;
       final items = body['items'];
-      return [
-        if (items is List)
-          for (final e in items.whereType<Map>())
-            if (SelfDepositRecord.fromJson(Map<String, dynamic>.from(e))
-                case final rec?)
-              rec,
-      ];
+      return HistoryPage(
+        [
+          if (items is List)
+            for (final e in items.whereType<Map>())
+              if (SelfDepositRecord.fromJson(Map<String, dynamic>.from(e))
+                  case final rec?)
+                rec,
+        ],
+        hasMore: body['has_more'] == true,
+      );
     } catch (e) {
       _log('history', e);
       return null;

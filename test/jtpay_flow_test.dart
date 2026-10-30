@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/jtpay_api.dart';
 import 'package:rad_mysvcs/core/platform/app_platform.dart';
+import 'package:rad_mysvcs/core/widgets/design_sheet.dart';
 import 'package:rad_mysvcs/screens/app_modules.dart';
 import 'package:rad_mysvcs/screens/topup/jtpay_screen.dart';
 import 'package:rad_mysvcs/screens/topup/pay_nav_policy.dart';
@@ -346,6 +347,51 @@ void main() {
     expect(n, 2);
     expect(server.bodies('POST', '/api/v2/jtpay/transfer').last, {'to': 'page', 'amount': 10000, 'target': 'admin@other', 'confirm_repeat': true});
     expect(find.text('تحوّل 10,000 د.ع إلى admin@other'), findsOneWidget);
+    await simDrain(t);
+  });
+
+  testWidgets('آخر العمليّات: ١٠ من الخادم، «عرض المزيد» ما قبل آخر صفّ، وبحثٌ برقم الطلب (العربيّة ⇒ لاتينيّة)', (t) async {
+    await setUpJt();
+    serve();
+    String id(int i) => i.toRadixString(16).padLeft(32, '0');
+    final ops = [
+      for (var i = 20; i >= 1; i--)
+        {...opJson(status: 'success', state: 'paid', after: 1000), 'id': id(i), 'order_no': '3115${i.toString().padLeft(2, '0')}', 'amount': 1000 * i},
+    ];
+    server.on('GET', '/api/v2/jtpay/history', (o) {
+      final q = o.queryParameters;
+      var list = ops;
+      if (q['before'] != null) list = list.sublist(list.indexWhere((x) => x['id'] == q['before']) + 1);
+      if (q['q'] != null) list = list.where((x) => (x['order_no'] as String).contains('${q['q']}')).toList();
+      final lim = int.parse('${q['limit']}');
+      return SimReply(200, {'success': true, 'tab': 'ops', 'rows': list.take(lim).toList(), 'has_more': list.length > lim});
+    });
+    await pumpSim(t, v, home: (_) => const JtpayScreen());
+    await settle(t);
+    final calls = server.calls('GET', '/api/v2/jtpay/history');
+    expect([calls.first.queryParameters['tab'], calls.first.queryParameters['limit']], ['ops', 10]);
+    // القائمة تُبنى عند الوصول إليها: تمريرٌ حتى تُبنى، ثمّ إلى وسط الشاشة.
+    final main = find.byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.down).first;
+    await t.scrollUntilVisible(find.text('عرض المزيد'), 300, scrollable: main);
+    await t.ensureVisible(find.text('عرض المزيد'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('311511'), findsOneWidget);
+    expect(find.textContaining('311510'), findsNothing, reason: 'الصفحة الأولى ١٠ وحدها');
+    await t.tap(find.text('عرض المزيد'));
+    await settle(t);
+    expect(server.calls('GET', '/api/v2/jtpay/history').last.queryParameters['before'], id(11), reason: 'ما قبل آخر صفٍّ معروض');
+    await t.scrollUntilVisible(find.textContaining('311501'), 300, scrollable: main);
+    expect(find.text('عرض المزيد'), findsNothing, reason: 'انتهت العمليّات');
+
+    await t.scrollUntilVisible(find.byType(SheetSearchField), -300, scrollable: main);
+    await t.ensureVisible(find.byType(SheetSearchField));
+    await t.pumpAndSettle();
+    await t.enterText(find.descendant(of: find.byType(SheetSearchField), matching: find.byType(TextField)), '#٣١١٥٠٥');
+    await t.pump(const Duration(milliseconds: 500));
+    await settle(t);
+    expect(server.calls('GET', '/api/v2/jtpay/history').last.queryParameters['q'], '311505');
+    expect(find.textContaining('311505'), findsOneWidget);
+    expect(find.textContaining('311506'), findsNothing);
     await simDrain(t);
   });
 

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'history_page.dart';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -459,6 +460,22 @@ class JtpayApi {
         'history',
         () => ApiClient.dio.get<Object?>('$_base/history', queryParameters: const {'tab': 'ops'}),
         (b) => [for (final o in _maps(b['rows'])) if (JtpayOp.fromJson(o) != null) JtpayOp.fromJson(o)!],
+        fallback: 'تعذّر جلب السجلّ',
+      );
+
+  /// عمليّاتنا بصفحات: `before` = معرّف آخر صفٍّ معروض، `query` = رقم الطلب عند الموقع (الخادم 824b597).
+  static Future<JtpayReply<HistoryPage<JtpayOp>>> opsPage({int limit = 10, String? before, String? query}) => _run(
+        'history',
+        () => ApiClient.dio.get<Object?>('$_base/history', queryParameters: {
+          'tab': 'ops',
+          'limit': limit,
+          if (before != null) 'before': before,
+          if (query != null) 'q': query,
+        }),
+        (b) => HistoryPage(
+          [for (final o in _maps(b['rows'])) if (JtpayOp.fromJson(o) case final op?) op],
+          hasMore: b['has_more'] == true,
+        ),
         fallback: 'تعذّر جلب السجلّ',
       );
 

@@ -20,6 +20,7 @@ import '../../services/self_deposit_sync.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'paged_history.dart';
 import 'pay_nav_policy.dart';
 import 'topup_pay_page.dart';
 import 'topup_widgets.dart';
@@ -79,8 +80,15 @@ class _TopupScreenState extends State<TopupScreen> {
   bool _checking = false;
   _Shown? _shown;
 
-  /// آخر عمليّات الشحن من الخادم — `null` = لم تُقرأ (لا يُرسم القسم).
-  List<SelfDepositRecord>? _history;
+  /// آخر عمليّات الشحن من الخادم: ١٠ ثمّ «عرض المزيد»، وبحثٌ برقم العمليّة (المالك ٣٠ أكتوبر). لا صفوف ⇒ لا قسم.
+  late final PagedHistoryController<SelfDepositRecord> _history = PagedHistoryController<SelfDepositRecord>(
+    fetch: ({before, query, required limit}) => SelfDepositApi.historyPage(limit: limit, before: before, query: query),
+    idOf: (r) => r.psid,
+  )..addListener(_onHistory);
+
+  void _onHistory() {
+    if (mounted) setState(() {});
+  }
   String? _checkingPsid;
 
   @override
@@ -118,6 +126,7 @@ class _TopupScreenState extends State<TopupScreen> {
   @override
   void dispose() {
     SelfDepositSync.changes.removeListener(_onSyncChange);
+    _history.dispose();
     _amountCtrl.dispose();
     _pinCtrl.dispose();
     _nameCtrl.dispose();
@@ -164,11 +173,7 @@ class _TopupScreenState extends State<TopupScreen> {
     }
   }
 
-  Future<void> _loadHistory() async {
-    final h = await SelfDepositApi.history(limit: 5);
-    if (!mounted || h == null) return;
-    setState(() => _history = h);
-  }
+  Future<void> _loadHistory() => _history.reload();
 
   /// عمليّات زين كاش سابقةٌ لم يُحسم أمرها (انقطع النت لحظة الرجوع، أو
   /// أُغلق التطبيق قبل أن يردّ الخادم) — يُعاد إرسال رجوعها أو يُسأل عنها.
@@ -613,28 +618,27 @@ class _TopupScreenState extends State<TopupScreen> {
           _formSection(_method!, o),
         ],
       ],
-      if ((_history ?? const []).isNotEmpty) ...[
+      if (_history.visible) ...[
         const SizedBox(height: Sp.lg),
-        _historySection(_history!, o.currencyLabel),
+        _historySection(o.currencyLabel),
       ],
     ];
   }
 
-  Widget _historySection(List<SelfDepositRecord> items, String currency) {
+  Widget _historySection(String currency) {
     return TopupSection(
       title: 'آخر العمليّات',
       children: [
-        for (var i = 0; i < items.length; i++) ...[
-          if (i > 0) Divider(height: Sp.lg, color: AppColors.divider),
-          TopupHistoryRow(
-            record: items[i],
+        PagedHistoryList<SelfDepositRecord>(
+          history: _history,
+          divided: true,
+          rowBuilder: (r) => TopupHistoryRow(
+            record: r,
             currency: currency,
-            busy: _checkingPsid == items[i].psid,
-            onCheck: items[i].outcome.checkable
-                ? () => _checkRecord(items[i])
-                : null,
+            busy: _checkingPsid == r.psid,
+            onCheck: r.outcome.checkable ? () => _checkRecord(r) : null,
           ),
-        ],
+        ),
       ],
     );
   }

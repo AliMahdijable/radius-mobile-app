@@ -19,6 +19,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../desktop/desk_widgets.dart';
+import 'paged_history.dart';
 import 'pay_nav_policy.dart';
 import 'topup_pay_page.dart';
 import 'topup_widgets.dart';
@@ -141,6 +142,17 @@ class _JtpayScreenState extends State<JtpayScreen> {
   /// رابطٌ التُقط ولم يتأكّد الخادم من استلامه.
   List<JtpayPending> _pending = const [];
 
+  /// «آخر العمليّات»: ١٠ ثمّ «عرض المزيد»، وبحثٌ برقم الطلب عند الموقع (المالك ٣٠ أكتوبر).
+  late final PagedHistoryController<JtpayOp> _ops = PagedHistoryController<JtpayOp>(
+    fetch: ({before, query, required limit}) async =>
+        (await JtpayApi.opsPage(limit: limit, before: before, query: query)).data,
+    idOf: (o) => o.id,
+  )..addListener(_onOps);
+
+  void _onOps() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
@@ -151,6 +163,7 @@ class _JtpayScreenState extends State<JtpayScreen> {
   @override
   void dispose() {
     _quoteTimer?.cancel();
+    _ops.dispose();
     _amountCtrl.dispose();
     super.dispose();
   }
@@ -171,6 +184,11 @@ class _JtpayScreenState extends State<JtpayScreen> {
     await _deliverPending();
     final r = await JtpayApi.overview();
     if (!mounted) return;
+    // «آخر العمليّات»: ما في النظرة يُرسم فوراً، والصفحة الأولى (ومعها «عرض المزيد») تُقرأ خلفه.
+    if (r.data != null) {
+      _ops.seed(r.data!.recent);
+      unawaited(_ops.reload());
+    }
     setState(() {
       _loading = false;
       _ov = r.data ?? _ov;
@@ -322,6 +340,7 @@ class _JtpayScreenState extends State<JtpayScreen> {
   }
 
   Future<void> _refreshOverview() async {
+    unawaited(_ops.reload());
     final r = await JtpayApi.overview();
     if (!mounted || r.data == null) return;
     setState(() => _ov = r.data);
@@ -460,9 +479,9 @@ class _JtpayScreenState extends State<JtpayScreen> {
       TopupSection(title: 'تعبئة رصيد pay', children: [_topupForm(ov)]),
       const SizedBox(height: Sp.lg),
       TopupSection(title: 'تحويل من رصيد pay', children: [_transferButtons(ov)]),
-      if (ov.recent.isNotEmpty) ...[
+      if (_ops.visible) ...[
         const SizedBox(height: Sp.lg),
-        TopupSection(title: 'آخر العمليّات', children: [for (final op in ov.recent) _opRow(op)]),
+        TopupSection(title: 'آخر العمليّات', children: [PagedHistoryList<JtpayOp>(history: _ops, rowBuilder: _opRow)]),
       ],
       const SizedBox(height: Sp.md),
       Align(
@@ -660,6 +679,8 @@ class _JtpayScreenState extends State<JtpayScreen> {
         : '${at.year}-${at.month.toString().padLeft(2, '0')}-${at.day.toString().padLeft(2, '0')} '
             '${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
     final rest = [
+      // رقم الطلب عند الموقع — ما يبحث به الوكيل.
+      if (op.orderNo != null) iso('#${op.orderNo}'),
       if (op.methodLabel != null) op.methodLabel!,
       if (op.target != null) iso(op.target!),
       if (when.isNotEmpty) iso(when),
