@@ -100,6 +100,22 @@ class DebtAgePill extends StatelessWidget {
   final DebtAge age;
   final bool dense;
 
+  static TextStyle _textStyle(Color fg, bool dense) =>
+      AppType.pillBold(color: fg).copyWith(fontSize: dense ? 10.5 : 11.5, height: dense ? 1.1 : null);
+
+  /// عرض الشارة كما تُرسم (للقياس قبل البناء — شريط الدين يقرّر بها «بجانب المبلغ أم تحته»).
+  static double widthOf(BuildContext context, DebtAge age, {bool dense = false}) {
+    final tp = TextPainter(
+      text: TextSpan(text: age.pillText(), style: _textStyle(AppColors.textBody, dense)),
+      textDirection: TextDirection.rtl,
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final w = tp.width;
+    tp.dispose();
+    return (dense ? 14 : 16) + 2 + (dense ? 11 : 12.5) + (dense ? 3 : 4) + w;
+  }
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
@@ -125,7 +141,7 @@ class DebtAgePill extends StatelessWidget {
                 age.pillText(),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: AppType.pillBold(color: fg).copyWith(fontSize: dense ? 10.5 : 11.5, height: dense ? 1.1 : null),
+                style: _textStyle(fg, dense),
               ),
             ),
           ],

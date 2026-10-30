@@ -497,20 +497,31 @@ class SubscriberCardV3 extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, c) {
         final tight = c.maxWidth < 330;
-        // «أيّام الدين» (المالك ٣٠ أكتوبر: «ياخذ من الوجدت مساحه»): بجانب المبلغ إن اتّسع الشريط (اللوحيّ)،
-        // وعلى الهاتف سطرٌ رفيع تحته داخل الشريط نفسه بحشوةٍ أقلّ — لا شريط جديد، والكرت يطول بضع نقاطٍ فقط.
-        final ageInline = age != null && c.maxWidth >= 400;
+        final labelStyle = AppType.body(color: AppColors.dangerOnSoft);
+        final amountText = '${formatIQD(debt)} د.ع';
+        final amountStyle = AppType.bodyStrong(color: AppColors.error).copyWith(fontWeight: FontWeight.w700);
+        // «أيّام الدين» (المالك ٣٠ أكتوبر: «ياخذ من الوجدت مساحه»): بجانب المبلغ حين يتّسعان **كاملين** — المساحة
+        // مقيسةٌ لا مفترضة (عرض الشريط ناقص الأيقونة والزرّين بنصّيهما)، فرقمٌ كبير بجانب شارةٍ طويلة لا يُقصّ أبداً؛
+        // وإلّا سطرٌ رفيع تحته داخل الشريط نفسه بحشوةٍ أقلّ — لا شريط جديد، والكرت يطول بضع نقاطٍ فقط.
+        var ageInline = false;
+        if (age != null) {
+          var free = c.maxWidth - 2 - 24 - 16 - 7 - 7;
+          if (onSendDebtReminder != null) free -= _MiniButton.widthOf(context, tight ? '' : 'تذكير دين', filled: false) + 7;
+          if (onPayDebt != null) free -= _MiniButton.widthOf(context, tight ? '' : 'تسديد', filled: true);
+          final need = _textWidth(context, 'دين', labelStyle) + 7 + _textWidth(context, amountText, amountStyle) + 8 +
+              DebtAgePill.widthOf(context, age, dense: true);
+          ageInline = need + 2 <= free;
+        }
         final ageStacked = age != null && !ageInline;
         final amountRow = Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('دين', style: AppType.body(color: AppColors.dangerOnSoft)),
+            Text('دين', style: labelStyle),
             const SizedBox(width: 7),
             Flexible(
               child: Text(
-                '${formatIQD(debt)} د.ع',
-                style: AppType.bodyStrong(color: AppColors.error)
-                    .copyWith(fontWeight: FontWeight.w700),
+                amountText,
+                style: amountStyle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -1023,7 +1034,29 @@ class _ConnectionIssueBar extends StatelessWidget {
 
 /// الحشو الرأسي 4 للشبحي و5 للمملوء — لأنّ الشبحي يحمل حدّاً 1px،
 /// فالارتفاع النهائي يتساوى. (تفصيلة من المخطّط.)
+/// عرض نصٍّ بسطرٍ واحد بخطّ التطبيق ومقياس النصّ الحاليّ — لقرار «بجانب المبلغ أم تحته» في شريط الدين.
+double _textWidth(BuildContext context, String text, TextStyle style) {
+  final tp = TextPainter(
+    text: TextSpan(text: text, style: style),
+    textDirection: TextDirection.rtl,
+    textScaler: MediaQuery.textScalerOf(context),
+    maxLines: 1,
+  )..layout();
+  final w = tp.width;
+  tp.dispose();
+  return w;
+}
+
 class _MiniButton extends StatelessWidget {
+  /// عرض الزرّ كما يُرسم (للقياس قبل البناء): الحشوة + الحدّ + الأيقونة + الفاصل + النصّ.
+  static double widthOf(BuildContext context, String label, {required bool filled}) {
+    final text = label.isEmpty ? 0.0 : 4 + _textWidth(context, label, _labelStyle(AppColors.textBody));
+    return (filled ? 24 : 22) + 15 + text;
+  }
+
+  static TextStyle _labelStyle(Color c) =>
+      AppType.body(color: c).copyWith(fontSize: 12.5, fontWeight: FontWeight.w600);
+
   const _MiniButton({
     required this.label,
     required this.filled,
@@ -1070,9 +1103,7 @@ class _MiniButton extends StatelessWidget {
               if (label.isNotEmpty)
                 Text(
                   label,
-                  style: AppType.body(
-                    color: filled ? AppColors.onBrand : color,
-                  ).copyWith(fontSize: 12.5, fontWeight: FontWeight.w600),
+                  style: _labelStyle(filled ? AppColors.onBrand : color),
                 ),
             ],
           ),

@@ -146,6 +146,26 @@ void main() {
       expect((withAge - without).abs(), lessThanOrEqualTo(1));
     });
 
+    // الهواتف الشائعة ٤١١–٤١٢ وما فوقها: الزرّان بنصّيهما — القرار بالقياس لا بعتبة عرضٍ ثابتة (عتبة ٤٠٠ كانت تقصّ
+    // «1,250,000 د.ع» بجانب «47 يوماً (إضافة دين)»).
+    for (final w in <double>[411, 440, 460, 500])
+    for (final c in [('-1250000', 'manual', 47), ('-30000', 'activate', 1), ('-30000', 'manual', 0)]) {
+      testWidgets('${w.toInt()} بمبلغ ${c.$1} وشارة ${c.$2}/${c.$3}: لا يُقصّ المبلغ ولا الشارة، والكرت لا يكبر > 8', (t) async {
+        final without = await _cardHeight(t, _sub(notes: c.$1), w);
+        final withAge = await _cardHeight(t, _sub(notes: c.$1, since: _ago(c.$3), kind: c.$2), w);
+        expect(withAge - without, inInclusiveRange(0, 8));
+        var checked = 0;
+        for (final f in [find.textContaining('د.ع'), find.byWidgetPredicate((w) => w is Text && (w.data ?? '').contains('('))]) {
+          for (final e in f.evaluate()) {
+            checked++;
+            final p = e.renderObject;
+            if (p is RenderParagraph) expect(p.didExceedMaxLines, isFalse, reason: (e.widget as Text).data);
+          }
+        }
+        expect(checked, greaterThanOrEqualTo(2), reason: 'المبلغ والشارة فُحصا فعلاً');
+      });
+    }
+
     testWidgets('غير المدين وبلا تاريخ: لا شارة', (t) async {
       await _cardHeight(t, _sub(notes: '', since: _ago(3), kind: 'activate'), 390);
       expect(find.byType(DebtAgePill), findsNothing);
