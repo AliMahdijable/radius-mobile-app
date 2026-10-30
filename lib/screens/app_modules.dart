@@ -307,7 +307,7 @@ List<AppModule> buildAppModules() {
         id: 'employees',
         group: AppModuleGroup.manage,
         locked: !Perms.has('employees.view'),
-        unavailable: sessionIsFiberx ? 'غير متاح لحساب فايبر اكس بعد' : null,
+        // فايبر اكس (٣١ أكتوبر): موظّفونا لحسابه — مفتوحٌ كايرث لنك.
         icon: LucideIcons.users,
         tone: AppTone.brand,
         title: 'more.employees'.tr(),

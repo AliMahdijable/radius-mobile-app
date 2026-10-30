@@ -730,7 +730,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
         for (final entry in byCat.entries) ...[
           _categoryHeader(cats[entry.key]?.label ?? entry.key, entry.value),
           for (final p in entry.value)
-            _permRow(p, hint: ElEmployeePerms.hints[p.key]),
+            _permRow(p, hint: ElEmployeePerms.hintFor(p.key)),
           const SizedBox(height: Sp.md),
         ],
         _elOwnerOnlyNote(),

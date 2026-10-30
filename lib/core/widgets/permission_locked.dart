@@ -51,7 +51,7 @@ import '../../theme/typography.dart';
 ///     _ModuleCard(locked: !Perms.has('managers.view'), …)
 bool permShown(Iterable<String> anyOf) {
   if (Perms.hasAny(anyOf)) return true;
-  if (!(ProviderService.isEarthlink && Perms.isEmployee)) return true;
+  if (!((ProviderService.isEarthlink || ProviderService.isFiberx) && Perms.isEmployee)) return true;
   return anyOf
       .any((k) => ElEmployeePerms.keys.contains(k) || k == 'whatsapp.send');
 }

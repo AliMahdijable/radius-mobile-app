@@ -41,9 +41,13 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   /// المالك موزّع ايرث لنك؟ المصدر `ProviderService` (من `/api/auth/me`)،
   /// وكود الشركة المفتوحة احتياطٌ يُعرف لحظة الدخول قبل أن يردّ ذلك النداء
   /// (لا يُنتظر بعد الدخول) — كي لا يرى مالك ايرث لنك محرّر SAS4.
+  ///
+  /// فايبر اكس (٣١ أكتوبر) مثله: موظّفونا لحسابه بمفاتيحه وحدها ([ElEmployeePerms.keys] تتبع الشركة المفتوحة).
   static bool get _isEarthlink =>
       ProviderService.isEarthlink ||
-      ActiveCompany.current?.sasCode == 'earthlink';
+      ProviderService.isFiberx ||
+      ActiveCompany.current?.sasCode == 'earthlink' ||
+      ActiveCompany.current?.sasCode == 'fiberx';
 
   @override
   void initState() {

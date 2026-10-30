@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import '../services/provider_service.dart';
 import 'api_client.dart';
 
 /// Employee row. Mirrors v1 _Employee.
@@ -39,9 +40,7 @@ class Employee {
   /// Convenience for the list tile — drop unused / always-false. بلا «المساعد
   /// الذكي» ([ElEmployeePerms.assistantKey]): ليس عمليّة، والخادم يرسله `true`
   /// افتراضيّاً حتى والمساعد مطفأ (والمحرّر يخفيه) — كعدّ ايرث لنك نفسه.
-  int get activePermsCount => permissions.entries
-      .where((e) => e.value && e.key != ElEmployeePerms.assistantKey)
-      .length;
+  int get activePermsCount => permissions.entries.where((e) => e.value && e.key != ElEmployeePerms.assistantKey).length;
 
   static Employee? fromJson(Map<String, dynamic> j) {
     final id = int.tryParse(j['id']?.toString() ?? '') ?? 0;
@@ -188,8 +187,7 @@ class PermissionsCatalog {
   /// المحفوظة — `employees.sanitizePermissions`). للمساعد الذكيّ: مفتاحه لا
   /// يظهر قبل أن يقول الخادم إنّ المساعد مفعّل ([ElEmployeePerms.assistantKey]).
   PermissionsCatalog without(Set<String> keys) {
-    if (!keys.any(permissions.containsKey) &&
-        !keys.any(defaults.containsKey)) {
+    if (!keys.any(permissions.containsKey) && !keys.any(defaults.containsKey)) {
       return this;
     }
     bool keep(String k) => !keys.contains(k);
@@ -221,8 +219,7 @@ class PermissionsCatalog {
 
   /// [permsByCategory] مقصوراً على المفاتيح التي يقبلها [keep] — الفئات
   /// بترتيبها في الكتالوج، والفئة التي لا يبقى فيها شيءٌ تسقط.
-  Map<String, List<PermissionDef>> permsByCategoryWhere(
-      bool Function(String key) keep) {
+  Map<String, List<PermissionDef>> permsByCategoryWhere(bool Function(String key) keep) {
     final out = <String, List<PermissionDef>>{};
     permsByCategory.forEach((cat, defs) {
       final kept = defs.where((d) => keep(d.key)).toList();
@@ -265,7 +262,60 @@ class ElPermPreset {
 class ElEmployeePerms {
   ElEmployeePerms._();
 
-  static const keys = <String>{
+  /// مفاتيح موظّف الشركة المفتوحة: فايبر اكس ([fiberxKeys]، ٣١ أكتوبر) أو ايرث لنك ([earthlinkKeys]).
+  static Set<String> get keys => ProviderService.isFiberx ? fiberxKeys : earthlinkKeys;
+
+  /// موظّفونا لحساب فايبر اكس (٣١ أكتوبر — المالك: «فايبر اكس خلي موظفينا فقط… احنه اصلا موفرين هلمزية»): ما يفرضه
+  /// الخادم على مسارات فايبر اكس (fiberxRoutes.routePermission) ومعالجات التمرير. لا إضافة/تعديل/إيقاف مشترك، ولا كلمة
+  /// سرّه أو موقعه، ولا الجلسات — فايبر اكس لا يخدمها. مطابقٌ للويب (FX_EMPLOYEE_KEYS).
+  static const fiberxKeys = <String>{
+    'subscribers.view',
+    'subscribers.activate',
+    'subscribers.extend',
+    'subscribers.add_debt',
+    'subscribers.pay_debt',
+    'subscribers.send_whatsapp',
+    'subscribers.view_activity',
+    'packages.view',
+    'packages.edit_prices',
+    'discounts.view',
+    'discounts.manage',
+    'subscriber_prices.view',
+    'subscriber_prices.manage',
+    'reports.financial',
+    'reports.packages',
+    'reports.activations',
+    'reports.daily_activations',
+    'reports.expenses',
+    'reports.account_statement',
+    'reports.activity_log',
+    'settlements.view',
+    'settlements.create',
+    'deleted_debts.view',
+    'deleted_debts.add',
+    'deleted_debts.pay',
+    'deleted_debts.write_off',
+    'sales.view',
+    'sales.sell',
+    'sales.items',
+    'sales.void',
+    'devices.view',
+    'devices.monitor',
+    'devices.manage',
+    assistantKey,
+  };
+
+  /// ما يختلف معناه لموظّف فايبر اكس عن ايرث لنك.
+  static const _fiberxHints = <String, String>{
+    'reports.financial': 'يشمل رصيد المحفظة وحركاتها',
+    'subscribers.extend': '«التمديد» في فايبر اكس رسالةٌ منهم للمشترك ليمدّد من تطبيقهم — لا مال',
+    'subscribers.activate': 'التفعيل من محفظة الوكيل — ويعمل حين يكون التفعيل مفتوحاً لحسابك',
+  };
+
+  /// توضيح المفتاح للشركة المفتوحة.
+  static String? hintFor(String key) => (ProviderService.isFiberx ? _fiberxHints[key] : null) ?? hints[key];
+
+  static const earthlinkKeys = <String>{
     ..._operations,
     // استيراد/تصدير الديون للمدير وحده — لا يُمنح لموظّف (قرار المالك ٢١ أكتوبر؛
     // الخادم يردّ OWNER_ONLY ولا مفتاح له في الكتالوج).
@@ -337,20 +387,17 @@ class ElEmployeePerms {
 
   /// ما يشمله المفتاح عند ايرث لنك ولا تقوله تسميته في الكتالوج.
   static const hints = <String, String>{
-    'subscribers.add':
-        'بالرصيد (بباسورد الإيداع — يُخصم من رصيد الوكيل) أو بكارت أو تجريبي',
+    'subscribers.add': 'بالرصيد (بباسورد الإيداع — يُخصم من رصيد الوكيل) أو بكارت أو تجريبي',
     'subscribers.toggle': 'يشمل قطع اتصال المشترك',
     'reports.financial': 'يشمل رصيد الوكيل والكارتات المطلوبة',
-    'reports.packages':
-        'المشتركون والتفعيلات والإيراد لكلّ باقة — الكلفة والربح لصاحب الحساب وحده',
+    'reports.packages': 'المشتركون والتفعيلات والإيراد لكلّ باقة — الكلفة والربح لصاحب الحساب وحده',
     'reports.expenses': 'عرض الصرفيات وإدارتها',
     'subscribers.edit_location': 'موقع المشترك على الخريطة',
     // بيانات دخول أجهزة المشتركين (الافتراضيّة وجهاز كلّ مشترك) تصل بالعرض
     // والمراقبة أيضاً — يحتاجها فحص الجهاز (`device_probe_api`). تُقال صراحةً
     // فلا يمنح المالك «العرض» ظنّاً أنّه لا يكشف كلمة سرّ (كـ`EL_KEY_HINTS` في
     // الويب، تدقيق ١٨ أكتوبر).
-    'devices.view':
-        'أجهزة شبكتك (OLT/مايكروتك…) — ويشمل بيانات دخول أجهزة المشتركين (الراوترات) لفحصها',
+    'devices.view': 'أجهزة شبكتك (OLT/مايكروتك…) — ويشمل بيانات دخول أجهزة المشتركين (الراوترات) لفحصها',
     'devices.monitor': 'يشمل بيانات دخول أجهزة المشتركين (الراوترات) لفحصها',
     'devices.manage': 'تعديل الأجهزة وإعادة تشغيلها وبيانات دخول أجهزة الشبكة',
     'deleted_debts.pay': 'يدخل التقرير الماليّ محصَّلاً',
@@ -406,16 +453,14 @@ class ElEmployeePerms {
 
   /// عدد مفاتيح ايرث لنك المفعّلة — ما يملكه الموظّف فعلاً (بلا المساعد:
   /// ليس عمليّة — [assistantKey]).
-  static int activeCount(Map<String, bool> perms) =>
-      keys.where((k) => k != assistantKey && perms[k] == true).length;
+  static int activeCount(Map<String, bool> perms) => keys.where((k) => k != assistantKey && perms[k] == true).length;
 
   /// ما يُرسَل للخادم: كلّ مفاتيح الكتالوج — مفاتيح ايرث لنك من [perms]،
   /// والباقي `false`. الاستثناء `whatsapp.send`: يتبع «إرسال واتساب»
   /// (`subscribers.send_whatsapp`) — مسارا تذكير الدين/معلومات المشترك يرسلان
   /// عبر `/api/whatsapp/send-message` بتوكن الموظّف، وهو يفحص `whatsapp.send`،
   /// فبدونه يُرفض موظّفٌ مُنح المراسلة (كـbuildElPermissions في الويب).
-  static Map<String, bool> outgoing(
-      Iterable<String> catalogKeys, Map<String, bool> perms) {
+  static Map<String, bool> outgoing(Iterable<String> catalogKeys, Map<String, bool> perms) {
     final out = {
       for (final k in catalogKeys) k: keys.contains(k) && perms[k] == true,
     };
@@ -428,16 +473,14 @@ class ElEmployeePerms {
   /// الدور الجاهز المطابق للمفعَّل الآن تماماً، وإلّا null (مخصّص).
   /// [catalogKeys]: ما يعرضه كتالوج الخادم — مفتاحٌ لا يعرضه (ميزةٌ لم تُفتح
   /// للحساب) لا يُحسب من الدور، فلا يصير «موظّف عام» القديم «مخصّصاً».
-  static ElPermPreset? matching(Map<String, bool> perms,
-      {Iterable<String>? catalogKeys}) {
+  static ElPermPreset? matching(Map<String, bool> perms, {Iterable<String>? catalogKeys}) {
     final avail = offered(catalogKeys);
     final on = {
       for (final k in avail)
         if (k != assistantKey && perms[k] == true) k,
     };
     for (final p in presets) {
-      final want =
-          p.keys.where((k) => k != assistantKey && avail.contains(k)).toSet();
+      final want = p.keys.where((k) => k != assistantKey && avail.contains(k)).toSet();
       if (want.length == on.length && on.containsAll(want)) return p;
     }
     return null;
@@ -482,9 +525,7 @@ class CurrentIdentity {
       isEmployee: j['is_employee'] == true,
       adminId: j['admin_id']?.toString(),
       adminUsername: j['admin_username']?.toString(),
-      employeeId: j['employee_id'] is int
-          ? j['employee_id'] as int
-          : int.tryParse(j['employee_id']?.toString() ?? ''),
+      employeeId: j['employee_id'] is int ? j['employee_id'] as int : int.tryParse(j['employee_id']?.toString() ?? ''),
       employeeUsername: j['employee_username']?.toString(),
       permissions: m,
     );
@@ -496,8 +537,7 @@ class EmployeesApi {
 
   /// [withDeleted]: فلاتر التقارير — يُلحق الخادم المحذوفين الذين لهم حركات بعد
   /// الحاليّين (`deleted`). شاشة الموظّفين بلاه.
-  static Future<({List<Employee> rows, String? error})> list(
-      {bool withDeleted = false}) async {
+  static Future<({List<Employee> rows, String? error})> list({bool withDeleted = false}) async {
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/v2/employees',
@@ -544,8 +584,7 @@ class EmployeesApi {
 
   static Future<CurrentIdentity?> me() async {
     try {
-      final r =
-          await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/employees/me');
+      final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/employees/me');
       final body = r.data ?? const {};
       if (body['success'] != true) return null;
       final data = body['data'];
@@ -559,8 +598,7 @@ class EmployeesApi {
 
   /// [status] رمز HTTP الردّ — `409` = اسم المستخدم محجوز (الأسماء فريدةٌ
   /// على مستوى النظام كلّه، لا عند المدير وحده).
-  static Future<({bool ok, String? message, Employee? employee, int? status})>
-      create({
+  static Future<({bool ok, String? message, Employee? employee, int? status})> create({
     required String username,
     required String password,
     String? fullName,
@@ -582,8 +620,7 @@ class EmployeesApi {
           if (phone != null) 'phone': phone,
           'is_active': isActive,
           'permissions': permissions,
-          if (scopeAdminId != null && scopeAdminId.isNotEmpty)
-            'scope_admin_id': scopeAdminId,
+          if (scopeAdminId != null && scopeAdminId.isNotEmpty) 'scope_admin_id': scopeAdminId,
         },
       );
       final body = r.data ?? const {};
@@ -638,15 +675,11 @@ class EmployeesApi {
           if (isActive != null) 'is_active': isActive,
           if (permissions != null) 'permissions': permissions,
           // فرّق بين "لا تغيير" (null) و "مسح" (empty string).
-          if (scopeAdminId != null)
-            'scope_admin_id': scopeAdminId.isEmpty ? null : scopeAdminId,
+          if (scopeAdminId != null) 'scope_admin_id': scopeAdminId.isEmpty ? null : scopeAdminId,
         },
       );
       final body = r.data ?? const {};
-      return (
-        ok: body['success'] == true,
-        message: body['message']?.toString()
-      );
+      return (ok: body['success'] == true, message: body['message']?.toString());
     } on DioException catch (e) {
       _log('employees (PUT)', e);
       final body = e.response?.data;
@@ -662,8 +695,7 @@ class EmployeesApi {
   /// Backend يفكّ التشفير AES من `employees.password_encrypted`.
   /// الحقل يُملأ عند create/update. موظّف قديم (قبل feature) → 404
   /// مع نصيحة "عدّل كلمة سرّه مرّة".
-  static Future<({String? password, String? message})> fetchPassword(
-      int id) async {
+  static Future<({String? password, String? message})> fetchPassword(int id) async {
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/v2/employees/$id/password',
@@ -675,9 +707,7 @@ class EmployeesApi {
       final data = body['data'] as Map?;
       return (password: data?['password']?.toString(), message: null);
     } on DioException catch (e) {
-      final msg = e.response?.data is Map
-          ? (e.response?.data as Map)['message']?.toString()
-          : null;
+      final msg = e.response?.data is Map ? (e.response?.data as Map)['message']?.toString() : null;
       return (password: null, message: msg ?? 'تعذّر جلب كلمة السر');
     } catch (_) {
       return (password: null, message: 'تعذّر جلب كلمة السر');
@@ -686,13 +716,9 @@ class EmployeesApi {
 
   static Future<({bool ok, String? message})> delete(int id) async {
     try {
-      final r = await ApiClient.dio
-          .delete<Map<String, dynamic>>('/api/v2/employees/$id');
+      final r = await ApiClient.dio.delete<Map<String, dynamic>>('/api/v2/employees/$id');
       final body = r.data ?? const {};
-      return (
-        ok: body['success'] == true,
-        message: body['message']?.toString()
-      );
+      return (ok: body['success'] == true, message: body['message']?.toString());
     } on DioException catch (e) {
       _log('employees (DELETE)', e);
       final body = e.response?.data;
