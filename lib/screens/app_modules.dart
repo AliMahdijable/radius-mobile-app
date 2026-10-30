@@ -312,10 +312,7 @@ List<AppModule> buildAppModules() {
         id: 'employees',
         group: AppModuleGroup.manage,
         locked: !Perms.has('employees.view'),
-        // فايبر اكس (٣١ أكتوبر): موظّفونا لحسابه — مفتوحٌ كايرث لنك. الشركة المُضافة: بعد (بمكانه مقفلاً بالسبب).
-        unavailable: sessionIsKit && !Perms.isEmployee
-            ? 'more.kit_unavailable'.tr(namedArgs: {'name': ProviderService.label})
-            : null,
+        // فايبر اكس (٣١ أكتوبر) والشركات المُضافة (٣٠ أكتوبر، الخادم 03cc682): موظّفونا لحسابها — مفتوحٌ كايرث لنك.
         icon: LucideIcons.users,
         tone: AppTone.brand,
         title: 'more.employees'.tr(),

@@ -189,7 +189,7 @@ class ProviderService {
 
   /// يُضبط المزوّد مباشرةً حين يعرفه ردّ الدخول نفسه (دخول موظّف ايرث لنك:
   /// `provider:'earthlink'`) — فلا تنتظر الواجهة نداء `/api/auth/me`.
-  static Future<void> setProvider(String? provider) => _set(provider);
+  static Future<void> setProvider(String? provider, {String? label}) => _set(provider, label: label);
 
   static Future<void> _set(String? provider, {String? label}) async {
     final p = (provider == null || provider.trim().isEmpty) ? null : provider.trim();

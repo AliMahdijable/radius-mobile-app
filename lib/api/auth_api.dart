@@ -28,7 +28,13 @@ class LoginSuccess extends LoginResult {
     this.isEmployee = false,
     this.canonicalPermissions = const {},
     this.sessionProof,
+    this.provider,
+    this.providerLabel,
   });
+
+  /// مزوّد جلسة الموظّف كما يقوله ردّ `employee-login` (`earthlink`، `fiberx`، أو اسم شركةٍ مُضافة) واسمها — null لغيره.
+  final String? provider;
+  final String? providerLabel;
 
   final String token;
   final String adminId;
@@ -515,6 +521,9 @@ class AuthApi {
         canAccessManagers: canAccessManagers,
         canAccessPackages: canAccessPackages,
         isEmployee: true,
+        // مزوّد الأب (ايرث لنك، فايبر اكس، أو شركةٌ مُضافة — ٣٠ أكتوبر) واسمه: «قوائم أخرى» تُبنى عليه من أوّل إطار.
+        provider: (user['provider'] ?? '').toString().trim().isEmpty ? null : user['provider'].toString().trim(),
+        providerLabel: (user['providerLabel'] ?? '').toString().trim().isEmpty ? null : user['providerLabel'].toString().trim(),
       );
     } on DioException catch (e) {
       return LoginFailure(_friendlyDioError(e));

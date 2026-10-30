@@ -167,8 +167,9 @@ class EmployeeSession {
       adminUsername: s.adminUsername,
       isEmployee: true,
     );
-    // فوراً لا بعد `/api/auth/me`: «قوائم أخرى» تُبنى بشاشات ايرث لنك من أوّل إطار.
-    await ProviderService.setProvider('earthlink');
+    // فوراً لا بعد `/api/auth/me`: «قوائم أخرى» تُبنى بشاشات مزوّد الأب من أوّل إطار — ما قاله ردّ الدخول (ايرث لنك، فايبر اكس،
+    // أو شركةٌ مُضافة باسمها)، وخادمٌ أقدم بلاه ⇒ ايرث لنك كما كان (و`/me` بعده يصحّحه).
+    await ProviderService.setProvider(s.provider ?? 'earthlink', label: s.providerLabel);
     final ok = await PermissionsService.refreshFromBackend();
     // و`/me` يقول «ليس موظّفاً» ⇒ PermissionsService يفتح كلّ شيء (فرع المدير)
     // — لا يُقبل لجلسةٍ دخلت من باب الموظّف: يُعامَل فشلاً لا صلاحيّاتٍ كاملة.

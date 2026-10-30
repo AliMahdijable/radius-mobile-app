@@ -14,6 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/auth_api.dart';
 import 'package:rad_mysvcs/api/cards_api.dart';
+import 'package:rad_mysvcs/api/employees_api.dart';
 import 'package:rad_mysvcs/models/merged_company.dart';
 import 'package:rad_mysvcs/models/package_change.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
@@ -88,15 +89,15 @@ void main() {
       expect(providerHidesAction('subscribers.delete'), isFalse);
     });
 
-    test('«قوائم أخرى»: الموظّفون والمدراء (بلا قدرته) بمكانهم مقفلين بسببٍ يسمّي الشركة', () async {
+    test('«قوائم أخرى»: الموظّفون مفتوحون (موظّفونا — 03cc682)، والمدراء بلا قدرة المحوّل بمكانهم مقفلين بسببٍ يسمّي الشركة', () async {
       await _loadTranslations();
       ProviderService.debugSet('nabd', label: 'نبض');
       PermissionsService.debugSet(isEmployee: false, managerRestricted: true, managerCaps: {
         'managers.view': false,
-        'employees.view': false,
+        'employees.view': true,
       });
       final mods = {for (final m in buildAppModules()) m.id: m};
-      expect(mods['employees']?.unavailable, 'غير متاح لحساب نبض بعد');
+      expect([mods['employees']?.unavailable, mods['employees']?.isLocked], [null, false]);
       expect(mods['managers']?.unavailable, 'غير متاح لحساب نبض بعد');
       PermissionsService.debugSet(isEmployee: false, managerRestricted: true, managerCaps: {'managers.view': true});
       expect({for (final m in buildAppModules()) m.id: m}['managers']?.unavailable, isNull, reason: 'نبض بمدرائه');
@@ -112,6 +113,20 @@ void main() {
       expect(cs.map((c) => c.provider), [MergedProvider.kit, MergedProvider.kit, MergedProvider.sas4]);
       expect([cs[0].appCapable, cs[0].usable, cs[0].currency], [true, true, 'IQD']);
       expect([cs[1].usable, cs[1].reason], [false, 'kit_web_only']);
+    });
+
+    test('موظّف الشركة المُضافة: مفاتيحها (المشتركون كاملاً + الحسابات الفرعيّة) لا مفاتيح فايبر اكس، وتوضيحها باسمها', () {
+      ProviderService.debugSet('nabd', label: 'نبض');
+      final k = ElEmployeePerms.keys;
+      for (final on in ['subscribers.add', 'subscribers.edit', 'subscribers.delete', 'subscribers.toggle', 'managers.view', 'managers.deposit']) {
+        expect(k.contains(on), isTrue, reason: on);
+      }
+      for (final off in ['subscribers.edit_location', 'reports.sessions', 'reports.manager_debts', 'employees.manage']) {
+        expect(k.contains(off), isFalse, reason: off);
+      }
+      expect(ElEmployeePerms.hintFor('managers.view'), 'الحسابات الفرعيّة عند الشركة (المدراء) وأرصدتها');
+      ProviderService.debugSet('fiberx');
+      expect(ElEmployeePerms.keys.contains('subscribers.add'), isFalse, reason: 'فايبر اكس كما كان');
     });
 
     test('activation-data: schedule_supported:false صريحةً ⇒ لا جدولة؛ غيابها (SAS4) ⇒ كما كان', () {

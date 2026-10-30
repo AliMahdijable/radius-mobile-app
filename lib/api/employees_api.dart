@@ -263,7 +263,64 @@ class ElEmployeePerms {
   ElEmployeePerms._();
 
   /// مفاتيح موظّف الشركة المفتوحة: فايبر اكس ([fiberxKeys]، ٣١ أكتوبر) أو ايرث لنك ([earthlinkKeys]).
-  static Set<String> get keys => ProviderService.isFiberx ? fiberxKeys : earthlinkKeys;
+  static Set<String> get keys => ProviderService.isFiberx
+      ? fiberxKeys
+      : ProviderService.isKit
+          ? kitKeys
+          : earthlinkKeys;
+
+  /// موظّفونا لحساب شركةٍ مُضافة (providerKit — نبض، AccessGate…، ٣٠ أكتوبر؛ الخادم 03cc682 providerKit/employeeRoutes): المشتركون
+  /// كاملاً، والحسابات الفرعيّة عند الشركة ومالها، والأسعار والتقارير والتسويات والمبيعات وديون المحذوفين والأجهزة والمساعد. لا موقع
+  /// ولا جلسات ولا ديون مدراء (لا تخدمها). وما لا يخدمه محوّل الشركة لحسابٍ بعينه يعرضه الخادم false. مطابقٌ للويب (KIT_EMPLOYEE_KEYS).
+  static const kitKeys = <String>{
+    'subscribers.view',
+    'subscribers.add',
+    'subscribers.activate',
+    'subscribers.extend',
+    'subscribers.toggle',
+    'subscribers.edit',
+    'subscribers.delete',
+    'subscribers.view_credentials',
+    'subscribers.add_debt',
+    'subscribers.pay_debt',
+    'subscribers.add_credit',
+    'subscribers.send_whatsapp',
+    'subscribers.view_activity',
+    'managers.view',
+    'managers.add',
+    'managers.edit',
+    'managers.delete',
+    'managers.deposit',
+    'managers.withdraw',
+    'managers.add_points',
+    'packages.view',
+    'packages.edit_prices',
+    'discounts.view',
+    'discounts.manage',
+    'subscriber_prices.view',
+    'subscriber_prices.manage',
+    'reports.financial',
+    'reports.packages',
+    'reports.activations',
+    'reports.daily_activations',
+    'reports.expenses',
+    'reports.account_statement',
+    'reports.activity_log',
+    'settlements.view',
+    'settlements.create',
+    'deleted_debts.view',
+    'deleted_debts.add',
+    'deleted_debts.pay',
+    'deleted_debts.write_off',
+    'sales.view',
+    'sales.sell',
+    'sales.items',
+    'sales.void',
+    'devices.view',
+    'devices.monitor',
+    'devices.manage',
+    'assistant.use',
+  };
 
   /// موظّفونا لحساب فايبر اكس (٣١ أكتوبر — المالك: «فايبر اكس خلي موظفينا فقط… احنه اصلا موفرين هلمزية»): ما يفرضه
   /// الخادم على مسارات فايبر اكس (fiberxRoutes.routePermission) ومعالجات التمرير. لا إضافة/تعديل/إيقاف مشترك، ولا كلمة
@@ -313,7 +370,14 @@ class ElEmployeePerms {
   };
 
   /// توضيح المفتاح للشركة المفتوحة.
-  static String? hintFor(String key) => (ProviderService.isFiberx ? _fiberxHints[key] : null) ?? hints[key];
+  static const _kitHints = <String, String>{
+    'reports.financial': 'يشمل رصيد حسابك عند الشركة',
+    'subscribers.activate': 'التفعيل من رصيدك عند الشركة — ويعمل حين يكون التفعيل مفتوحاً لحسابك',
+    'managers.view': 'الحسابات الفرعيّة عند الشركة (المدراء) وأرصدتها',
+  };
+
+  static String? hintFor(String key) =>
+      (ProviderService.isFiberx ? _fiberxHints[key] : ProviderService.isKit ? _kitHints[key] : null) ?? hints[key];
 
   static const earthlinkKeys = <String>{
     ..._operations,

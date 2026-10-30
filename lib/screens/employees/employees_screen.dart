@@ -46,6 +46,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   static bool get _isEarthlink =>
       ProviderService.isEarthlink ||
       ProviderService.isFiberx ||
+      ProviderService.isKit ||
       ActiveCompany.current?.sasCode == 'earthlink' ||
       ActiveCompany.current?.sasCode == 'fiberx';
 
