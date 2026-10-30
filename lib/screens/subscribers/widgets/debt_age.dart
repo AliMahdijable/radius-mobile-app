@@ -97,9 +97,13 @@ class DebtAge {
 /// شارةٌ ملوّنة بعمر الدين — حتى 7 أيّام هادئة، 8–30 كهرمانيّة، أكثر من 30 حمراء، «دين قديم» رماديّة.
 /// dense = داخل شريط الدين بكرت القائمة وخليّة الجدول: رفيعةٌ (18) كي لا يطول الكرت.
 class DebtAgePill extends StatelessWidget {
-  const DebtAgePill({super.key, required this.age, this.dense = false});
+  const DebtAgePill({super.key, required this.age, this.dense = false, this.fit = false});
   final DebtAge age;
   final bool dense;
+
+  /// خليّة جدولٍ بعرضٍ ثابت: الشارة كلّها تصغر قليلاً حين لا تتّسع («38 يوماً (إضافة دين)» بعمود 120) — لا تُقصّ ولا تلاصق
+  /// العمود المجاور. (بلا `Flexible` هنا: FittedBox يعطي ابنه عرضاً مفتوحاً.)
+  final bool fit;
 
   static TextStyle _textStyle(Color fg, bool dense) =>
       AppType.pillBold(color: fg).copyWith(fontSize: dense ? 10.5 : 11.5, height: dense ? 1.1 : null);
@@ -121,7 +125,7 @@ class DebtAgePill extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final (bg, border, fg) = debtAgeColors(age.tierAt());
-    return Semantics(
+    final pill = Semantics(
       label: age.legacy ? 'دين قديم، ${age.dateLine}' : 'أيّام الدين: ${age.pillText()}',
       excludeSemantics: true,
       child: Container(
@@ -137,17 +141,21 @@ class DebtAgePill extends StatelessWidget {
           children: [
             Icon(age.legacy ? LucideIcons.history : LucideIcons.clock3, size: dense ? 11 : 12.5, color: fg),
             SizedBox(width: dense ? 3 : 4),
-            Flexible(
-              child: Text(
-                age.pillText(),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: _textStyle(fg, dense),
+            if (fit)
+              Text(age.pillText(), maxLines: 1, style: _textStyle(fg, dense))
+            else
+              Flexible(
+                child: Text(
+                  age.pillText(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _textStyle(fg, dense),
+                ),
               ),
-            ),
           ],
         ),
       ),
     );
+    return fit ? FittedBox(fit: BoxFit.scaleDown, child: pill) : pill;
   }
 }

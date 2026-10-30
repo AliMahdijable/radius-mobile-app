@@ -534,9 +534,13 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
         // «أيّام الدين» (٣٠ أكتوبر): منذ متى آخر عمليّة دين ونوعها — للمدين وحده.
         final age = DebtAge.of(s);
         if (age == null) return Text('—', style: AppType.muted(color: AppColors.textLow));
-        return Align(
-          alignment: AlignmentDirectional.center,
-          child: DebtAgePill(age: age, dense: true),
+        // فاصلٌ من جهة البداية عن مبلغ «الرصيد» (محاذى لنهاية خليّته فيلاصقنا)، والشارة الأطول تصغر قليلاً لا تُقصّ.
+        return Padding(
+          padding: const EdgeInsetsDirectional.only(start: Sp.md),
+          child: Align(
+            alignment: AlignmentDirectional.center,
+            child: DebtAgePill(age: age, dense: true, fit: true),
+          ),
         );
     }
   }
