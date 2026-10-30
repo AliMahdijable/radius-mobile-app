@@ -147,6 +147,8 @@ dependencies:
   # المال بلا رصيد. الـWebView يلتقط الرجوع ويسلّمه للخادم. يحتاج نشر
   # متجرين (إضافة native) — انظر lib/screens/topup/topup_pay_page.dart.
   webview_flutter: ^4.14.1
+  # صفحة الدفع على أندرويد بـHybrid Composition (AndroidWebViewWidgetCreationParams) — نفس النسخة المقفلة.
+  webview_flutter_android: ^4.14.1
   flutter_compass: ^0.8.1
 # ⚠️ **نسخةٌ مُقلَّمة من lucide — توفّر ٢٫٧٤ ميجابايت في كلّ تثبيت.**
 #

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import '../../core/widgets/design_sheet.dart';
 import '../../theme/colors.dart';
@@ -89,8 +90,20 @@ class WebViewPayEngine implements PayWebEngine {
 
   late final WebViewController _c;
 
+  /// أندرويد: Hybrid Composition — الصفحة عرضٌ أندرويديّ حقيقيّ في الشجرة، لا نسيجٌ يُستورد في Vulkan. على
+  /// كرتٍ لا يدعم AHardwareBuffer (محاكي MuMu، ٣٠ أكتوبر: «يصير كراش ويخرج» لحظة فتح صفحة البطاقة — SIGABRT في
+  /// vkFreeMemory على خيط الرسم) يطيح الطريق الافتراضيّ (TLHC). ولصفحة إدخالٍ (رقم المحفظة، رمز التحقّق) هو
+  /// الأثبت أصلاً؛ كلفته الأداء لا يعني صفحةً قصيرة العمر.
   @override
-  Widget view(BuildContext context) => WebViewWidget(controller: _c);
+  Widget view(BuildContext context) {
+    final p = _c.platform;
+    if (p is AndroidWebViewController) {
+      return WebViewWidget.fromPlatformCreationParams(
+        params: AndroidWebViewWidgetCreationParams(controller: p, displayWithHybridComposition: true),
+      );
+    }
+    return WebViewWidget(controller: _c);
+  }
 
   @override
   Future<void> open(Uri url) => _c.loadRequest(url);
