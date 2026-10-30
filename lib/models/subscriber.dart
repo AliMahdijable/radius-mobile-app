@@ -107,6 +107,13 @@ class Subscriber {
   /// كلّ نداءٍ يخصّ هذا المشترك يُغلَّف بـ`CompanyRoute.run(companyKey, …)`.
   final String? companyKey;
 
+  /// «أيّام الدين» (٣٠ أكتوبر): وقت آخر حركةٍ زادت دين المشترك في دفتر رصيده — من الخادم على صفّ المدين وحده
+  /// (`debt_since`، server/debtAge.js). null لغير المدين، أو لمدينٍ بلا حركةٍ مسجَّلة، أو لخادمٍ أقدم.
+  final DateTime? debtSince;
+
+  /// نوع تلك الحركة (`debt_kind`): activate · extend · sale · manual · opening («رصيد سابق»).
+  final String? debtKind;
+
   // ⚠️ ليس `const`: الحقلان المحفوظان (`balanceAmount` · `parsedExpiration`)
   // حقلا `late final`، ولا يجتمعان مع باني ثابت. لا موضع في المشروع
   // ينشئ `const Subscriber(...)`، فالكلفة صفر.
@@ -151,6 +158,8 @@ class Subscriber {
     this.basePackagePrice,
     this.abandonedFlag = false,
     this.companyKey,
+    this.debtSince,
+    this.debtKind,
   });
 
   /// true فقط لو الـbackend أرجع إحداثيّات صالحة (parse من prefix gps:).
@@ -415,6 +424,8 @@ class Subscriber {
       needsRepricing: j['price_needs_repricing'] == true,
       basePackagePrice: toDouble(j['base_package_price']),
       abandonedFlag: toBool(j['abandoned']),
+      debtSince: DateTime.tryParse(j['debt_since']?.toString() ?? '')?.toLocal(),
+      debtKind: blankToNull(j['debt_kind']?.toString()),
     );
   }
 
@@ -468,6 +479,8 @@ class Subscriber {
           basePackagePrice: basePackagePrice,
           abandonedFlag: abandonedFlag,
           companyKey: key,
+          debtSince: debtSince,
+          debtKind: debtKind,
         );
 
   Subscriber enrichWithPackages(Map<String, PackageInfo> packagesById) {
@@ -519,6 +532,8 @@ class Subscriber {
       basePackagePrice: basePackagePrice,
       abandonedFlag: abandonedFlag,
       companyKey: companyKey,
+      debtSince: debtSince,
+      debtKind: debtKind,
     );
   }
 
@@ -574,6 +589,8 @@ class Subscriber {
       basePackagePrice: basePackagePrice,
       abandonedFlag: abandonedFlag,
       companyKey: companyKey,
+      debtSince: debtSince,
+      debtKind: debtKind,
     );
   }
 
@@ -622,6 +639,8 @@ class Subscriber {
       basePackagePrice: basePackagePrice,
       abandonedFlag: abandonedFlag,
       companyKey: companyKey,
+      debtSince: debtSince,
+      debtKind: debtKind,
     );
   }
 }

@@ -51,6 +51,7 @@ import 'subscriber_detail_screen.dart';
 import 'widgets/device_chip_micro.dart';
 import 'widgets/filter_chips_bar.dart';
 import 'widgets/sort_sheet.dart';
+import 'widgets/debt_age.dart';
 import 'sheets/location_sheets.dart';
 import 'widgets/subscriber_card_v3.dart';
 import 'widgets/subscriber_table_row.dart';
@@ -159,6 +160,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   bool _fxEntMode = false;
   SortField _sortField = SortField.remainingDays;
   SortDirection _sortDir = SortDirection.desc;
+
+  /// «أيّام الدين» (٣٠ أكتوبر، المالك: «مدين أكثر من 30 يوماً»): تحت «مديون» — المدينون بعمرٍ أكبر من N يوماً
+  /// (0 = الكلّ). القائمة الكاملة وحدها: الحساب الكبير صفحاتٌ من الخادم فلا يُصفّى محلّيّاً.
+  int _debtAgedOver = 0;
 
   /// كم مشتركاً معروضاً الآن. يكبر بـ`_kPageStep` عند «تحميل المزيد»
   /// بدل التنقّل بين صفحات مرقّمة: القائمة نتيجة بحث لا فهرس كتاب،
@@ -1152,6 +1157,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
         it = it.where((s) => s.isExpired);
       case SubscriberFilter.debtors:
         it = it.where((s) => s.hasDebt);
+        if (_debtAgedOver > 0 && !_big) {
+          final now = DateTime.now();
+          it = it.where((s) => (DebtAge.of(s)?.days(now) ?? -1) > _debtAgedOver);
+        }
       case SubscriberFilter.nearExpiry:
         it = it.where((s) => s.isNearExpiry);
       case SubscriberFilter.onlineNoPlan:
@@ -1183,6 +1192,22 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   }
 
   void _applySort(List<Subscriber> list) {
+    // «أيّام الدين» (٣٠ أكتوبر): الأيّام تُحسب مرّةً لكلّ مشترك، ومن بلا عمرٍ (غير مدين أو بلا حركةٍ من الخادم) أسفلَ
+    // القائمة بالاتّجاهين — كمقاييس الأجهزة أدناه.
+    if (_sortField == SortField.debtAge) {
+      final asc = _sortDir == SortDirection.asc;
+      final now = DateTime.now();
+      final keys = <Subscriber, int?>{for (final s in list) s: DebtAge.of(s)?.days(now)};
+      list.sort((a, b) {
+        final ka = keys[a];
+        final kb = keys[b];
+        if (ka == null && kb == null) return 0;
+        if (ka == null) return 1;
+        if (kb == null) return -1;
+        return asc ? ka.compareTo(kb) : kb.compareTo(ka);
+      });
+      return;
+    }
     // مقاييس الأجهزة مسارٌ مستقلّ: قيمتها تأتي من كاش الفحص لا من صفّ
     // المشترك، وغير المفحوص يغوص في الاتّجاهين معاً — وهو ما لا يعبّر
     // عنه مقارنٌ عاديّ.
@@ -1273,8 +1298,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
           if (!aHas) return _sortDir == SortDirection.asc ? 1 : -1;
           if (!bHas) return _sortDir == SortDirection.asc ? -1 : 1;
           return a.sessionTime!.compareTo(b.sessionTime!);
-        // حقول الأجهزة لا تصل هنا — تُعالَج في المسار المستقلّ أعلى
+        // حقول الأجهزة و«أيّام الدين» لا تصل هنا — تُعالَج في المسارين المستقلّين أعلى
         // الدالّة وتعود قبل بناء هذا المقارن. الفرع للاكتمال النحويّ.
+        case SortField.debtAge:
         case SortField.deviceRx:
         case SortField.deviceTemp:
         case SortField.deviceSignal:
@@ -2006,7 +2032,14 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                 if (_filter == SubscriberFilter.debtors &&
                                     !_selectionMode &&
                                     !_big)
-                                  _DebtSummaryCard(subscribers: filtered),
+                                  _DebtSummaryCard(
+                                    subscribers: filtered,
+                                    agedOver: _debtAgedOver,
+                                    onAgedOver: (d) => setState(() {
+                                      _debtAgedOver = d;
+                                      _visibleCount = _kPageStep;
+                                    }),
+                                  ),
                                 // الكبير: مجموع الديون من الخادم (قراءة كلّ المدينين، لا الصفحة المحمَّلة) حين يكتمل
                                 if (_big &&
                                     _filter == SubscriberFilter.debtors &&
@@ -3366,18 +3399,23 @@ class _EmptyState extends StatelessWidget {
 /// من `_filteredAll`، هو تلقائياً محكوم بفلتر المدير الفرعي وأي بحث
 /// نصّي حالي — بلا حاجة لـproviders أو حسابات خارجيّة.
 class _DebtSummaryCard extends StatelessWidget {
-  const _DebtSummaryCard({required this.subscribers, this.total, this.count});
+  const _DebtSummaryCard({required this.subscribers, this.total, this.count, this.agedOver = 0, this.onAgedOver});
   final List<Subscriber> subscribers;
 
   /// الحساب الكبير: المجموع والعدد من الخادم (كلّ المدينين) بدل الصفوف المحمَّلة.
   final double? total;
   final int? count;
 
+  /// «أيّام الدين»: عتبة الفلتر المختارة (0 = كل المدينين) ومغيّرها — null ⇒ بلا زرّ (الحساب الكبير).
+  final int agedOver;
+  final ValueChanged<int>? onAgedOver;
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final given = this.total;
-    if (subscribers.isEmpty && given == null) return const SizedBox.shrink();
+    // فلترٌ عمريّ مختار بلا نتائج: البطاقة تبقى (زرّها هو طريق الرجوع).
+    if (subscribers.isEmpty && given == null && agedOver == 0) return const SizedBox.shrink();
     var total = given ?? 0.0;
     if (given == null) {
       for (final s in subscribers) {
@@ -3422,6 +3460,54 @@ class _DebtSummaryCard extends StatelessWidget {
                 ),
               ),
             ),
+            if (onAgedOver != null) ...[
+              const SizedBox(width: 6),
+              _DebtAgeFilterButton(value: agedOver, onChanged: onAgedOver!),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// «أيّام الدين» داخل بطاقة «إجمالي الديون» (لا شريط جديد): «كل المدينين» أو «+N يوماً» — قائمةٌ منسدلة بالعتبات.
+class _DebtAgeFilterButton extends StatelessWidget {
+  const _DebtAgeFilterButton({required this.value, required this.onChanged});
+  final int value;
+  final ValueChanged<int> onChanged;
+
+  String _label(int d) => d == 0 ? 'كل المدينين' : 'أكثر من $d يوماً';
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final on = value > 0;
+    return PopupMenuButton<int>(
+      tooltip: 'عمر الدين',
+      initialValue: value,
+      onSelected: onChanged,
+      position: PopupMenuPosition.under,
+      itemBuilder: (_) => [
+        for (final d in [0, ...debtAgeThresholds])
+          PopupMenuItem<int>(value: d, child: Text(_label(d), style: AppType.body())),
+      ],
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 28),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: BoxDecoration(
+          color: on ? AppColors.warning : AppColors.surface,
+          borderRadius: BorderRadius.circular(R.pill),
+          border: Border.all(color: on ? AppColors.warning : AppColors.warningSoftBorder),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(LucideIcons.clock3, size: 12, color: on ? AppColors.onBrand : AppColors.warningOnSoft),
+            const SizedBox(width: 4),
+            Text(on ? '+$value يوماً' : 'عمر الدين',
+                style: AppType.pillBold(color: on ? AppColors.onBrand : AppColors.warningOnSoft)),
+            Icon(LucideIcons.chevronDown, size: 12, color: on ? AppColors.onBrand : AppColors.warningOnSoft),
           ],
         ),
       ),

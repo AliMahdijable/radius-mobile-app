@@ -29,6 +29,7 @@ import '../sheets/subscriber_price_sheet.dart';
 import 'device_chip_micro.dart' show DeviceProbeBus;
 import 'sort_sheet.dart';
 import 'subscriber_card_v3.dart';
+import 'debt_age.dart';
 import 'subscriber_columns.dart';
 import '../../../core/widgets/print_feedback.dart';
 import '../../../services/receipt_service.dart';
@@ -259,7 +260,7 @@ class SubscriberTableHeader extends StatelessWidget {
 }
 
 Alignment _alignOf(SubCol c) => switch (c) {
-      SubCol.package || SubCol.expiration || SubCol.remaining => Alignment.center,
+      SubCol.package || SubCol.expiration || SubCol.remaining || SubCol.debtAge => Alignment.center,
       SubCol.balance => Alignment.centerLeft,
       _ => Alignment.centerRight,
     };
@@ -528,6 +529,14 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
         return Padding(
           padding: const EdgeInsetsDirectional.only(start: Sp.sm),
           child: Align(alignment: AlignmentDirectional.centerEnd, child: _balance(s)),
+        );
+      case SubCol.debtAge:
+        // «أيّام الدين» (٣٠ أكتوبر): منذ متى آخر عمليّة دين ونوعها — للمدين وحده.
+        final age = DebtAge.of(s);
+        if (age == null) return Text('—', style: AppType.muted(color: AppColors.textLow));
+        return Align(
+          alignment: AlignmentDirectional.center,
+          child: DebtAgePill(age: age, dense: true),
         );
     }
   }

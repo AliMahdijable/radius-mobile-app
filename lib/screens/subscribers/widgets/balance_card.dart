@@ -11,6 +11,7 @@ import '../../../models/subscriber.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import 'debt_age.dart';
 
 /// بطاقة الرصيد — «كم له وكم عليه؟»، السؤال الذي يُسأل في كلّ زيارة.
 ///
@@ -65,6 +66,7 @@ class BalanceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final isDebt = sub.hasDebt;
+    final age = DebtAge.of(sub);
     final isZero = sub.balanceAmount == 0;
     final accent = isZero
         ? AppColors.textMid
@@ -175,6 +177,19 @@ class BalanceCard extends StatelessWidget {
                             ? AppType.bodyStrong(color: accent)
                             : AppType.statValue(color: accent),
                       ),
+                      // «أيّام الدين» (٣٠ أكتوبر): منذ متى ونوع آخر عمليّة دين، وتاريخها.
+                      if (isDebt && age != null) ...[
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            DebtAgePill(age: age),
+                            Text(age.dateLine, style: AppType.micro(color: AppColors.textLabel)),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),

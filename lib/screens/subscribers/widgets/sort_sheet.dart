@@ -17,6 +17,8 @@ enum SortField {
   expiration,
   remainingDays,
   notes,
+  // «أيّام الدين» (٣٠ أكتوبر): منذ متى آخر دين — تنازليّاً الأقدم أوّلاً، ومن بلا عمرٍ أسفلَ بالاتّجاهين.
+  debtAge,
   parentUsername,
   sessionTime, // for the 'متصل' filter — recent connects first when asc
 
@@ -51,6 +53,7 @@ const _fieldDefs = <(SortField, String, IconData)>[
   (SortField.remainingDays, 'sort.remaining_days', LucideIcons.clock),
   (SortField.sessionTime, 'sort.session_time', LucideIcons.timer),
   (SortField.notes, 'sort.debts', LucideIcons.wallet),
+  (SortField.debtAge, 'sort.debt_age', LucideIcons.clock3),
   (SortField.parentUsername, 'sort.parent', LucideIcons.userCog),
   (SortField.dailyTraffic, 'sort.daily_traffic', LucideIcons.activity),
   (SortField.deviceRx, 'sort.device_rx', LucideIcons.zap),

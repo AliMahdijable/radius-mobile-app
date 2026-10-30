@@ -14,6 +14,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../widgets/company_tag.dart';
+import 'debt_age.dart';
 import 'device_chip_micro.dart' show DeviceProbeBus;
 
 /// فعل شريط «آخر حركة ماليّة» الأخضر — ما قبل «قبل 5 د».
@@ -492,11 +493,32 @@ class SubscriberCardV3 extends StatelessWidget {
     //
     // وعلى الشاشات الضيّقة يسقط نصّ الزرّين وتبقى الأيقونة وحدها بدل
     // أن يُقصّ المبلغ — المبلغ معلومة والزرّ إجراء معروف بأيقونته.
+    final age = DebtAge.of(sub);
     return LayoutBuilder(
       builder: (context, c) {
         final tight = c.maxWidth < 330;
+        // «أيّام الدين» (المالك ٣٠ أكتوبر: «ياخذ من الوجدت مساحه»): بجانب المبلغ إن اتّسع الشريط (اللوحيّ)،
+        // وعلى الهاتف سطرٌ رفيع تحته داخل الشريط نفسه بحشوةٍ أقلّ — لا شريط جديد، والكرت يطول بضع نقاطٍ فقط.
+        final ageInline = age != null && c.maxWidth >= 400;
+        final ageStacked = age != null && !ageInline;
+        final amountRow = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('دين', style: AppType.body(color: AppColors.dangerOnSoft)),
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text(
+                '${formatIQD(debt)} د.ع',
+                style: AppType.bodyStrong(color: AppColors.error)
+                    .copyWith(fontWeight: FontWeight.w700),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        );
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: ageStacked ? 5 : 9),
           decoration: BoxDecoration(
             color: AppColors.dangerSoftBg,
             borderRadius: BorderRadius.circular(R.icon),
@@ -508,23 +530,25 @@ class SubscriberCardV3 extends StatelessWidget {
                   size: 16, color: AppColors.dangerOnSoft),
               const SizedBox(width: 7),
               Expanded(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('دين',
-                        style: AppType.body(color: AppColors.dangerOnSoft)),
-                    const SizedBox(width: 7),
-                    Flexible(
-                      child: Text(
-                        '${formatIQD(debt)} د.ع',
-                        style: AppType.bodyStrong(color: AppColors.error)
-                            .copyWith(fontWeight: FontWeight.w700),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
+                child: age == null
+                    ? amountRow
+                    : ageInline
+                        ? Row(
+                            children: [
+                              Flexible(child: amountRow),
+                              const SizedBox(width: 8),
+                              DebtAgePill(age: age, dense: true),
+                            ],
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              amountRow,
+                              const SizedBox(height: 2),
+                              DebtAgePill(age: age, dense: true),
+                            ],
+                          ),
               ),
               const SizedBox(width: 7),
               if (onSendDebtReminder != null) ...[

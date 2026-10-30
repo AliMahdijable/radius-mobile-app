@@ -11,7 +11,7 @@ import 'sort_sheet.dart';
 /// ٢٩ أكتوبر (المالك على الحاسبة: «ما يظهر اشارات المشتركين… والماك واسم الجهاز اعزله بحقل ثاني»):
 /// [SubCol.mac] صار «IP / الإشارة» — IP الجلسة وقراءة جهاز المشترك (النانو/الـONU) — ويبقى اسمه `mac`
 /// حتى لا يضيع مكانه وعرضه المحفوظان؛ والماك واسم الجهاز انتقلا إلى [SubCol.device] الجديد.
-enum SubCol { phone, package, manager, expiration, remaining, session, mac, device, usage, balance }
+enum SubCol { phone, package, manager, expiration, remaining, session, mac, device, usage, balance, debtAge }
 
 extension SubColInfo on SubCol {
   String get label => switch (this) {
@@ -25,6 +25,8 @@ extension SubColInfo on SubCol {
         SubCol.device => 'desktop.col_device'.tr(),
         SubCol.usage => 'desktop.col_usage'.tr(),
         SubCol.balance => 'desktop.col_balance'.tr(),
+        // «أيّام الدين» (٣٠ أكتوبر).
+        SubCol.debtAge => 'desktop.col_debt_age'.tr(),
       };
 
   /// العرض الافتراضيّ — والمدير يغيّره بسحب حافّة العمود في الرأس ([SubscriberColumnPrefs.widths]).
@@ -40,12 +42,14 @@ extension SubColInfo on SubCol {
         SubCol.device => 150,
         SubCol.usage => 132,
         SubCol.balance => 112,
+        // الشارة الرفيعة «47 يوماً (تفعيل)» ~١٠٠ نقطة — ١٢٠ تكفيها وتُبقي الأعمدة الافتراضيّة بلا تمرير على الشاشة الواسعة.
+        SubCol.debtAge => 120,
       };
 
   /// أضيق ما يُسحب إليه: تسميةٌ قصيرة وقيمةٌ تُقرأ.
   double get minWidth => switch (this) {
         SubCol.phone => 120,
-        SubCol.mac || SubCol.device || SubCol.session || SubCol.usage => 96,
+        SubCol.mac || SubCol.device || SubCol.session || SubCol.usage || SubCol.debtAge => 96,
         _ => 76,
       };
 
@@ -63,6 +67,7 @@ extension SubColInfo on SubCol {
         SubCol.device => null,
         SubCol.usage => SortField.dailyTraffic,
         SubCol.balance => SortField.notes,
+        SubCol.debtAge => SortField.debtAge,
       };
 
   /// متاحٌ لهذا المزوّد؟ (استهلاك المشروع الوطنيّ في لوحته لا هنا).
@@ -91,6 +96,7 @@ class SubscriberColumnPrefs {
     (SubCol.device, true),
     (SubCol.usage, true),
     (SubCol.balance, true),
+    (SubCol.debtAge, true),
   ];
 
   static final ValueNotifier<List<(SubCol, bool)>> layout = ValueNotifier<List<(SubCol, bool)>>(defaults);
