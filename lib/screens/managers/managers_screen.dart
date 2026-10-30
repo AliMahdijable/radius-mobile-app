@@ -143,7 +143,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
   }
 
   Future<void> _openBalanceOp(Manager m, {BalanceOpKind? preselected}) async {
-    final done = await showBalanceOpSheet(context, m, preselected: preselected);
+    final done = await showBalanceOpSheet(context, m, preselected: preselected, otherDebts: _customDebtByManager[m.id]);
     if (done == true) _load();
   }
 

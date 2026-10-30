@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../api/manager_debts_api.dart';
 import '../../../api/managers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../services/manager_notice.dart';
@@ -26,6 +27,7 @@ Future<bool?> showBalanceOpSheet(
   BuildContext context,
   Manager m, {
   BalanceOpKind? preselected,
+  num? otherDebts,
 }) {
   return showAppSheet<bool>(
     barrierColor: AppColors.scrim,
@@ -33,7 +35,7 @@ Future<bool?> showBalanceOpSheet(
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _BalanceOpSheet(manager: m, preselected: preselected),
+    builder: (_) => _BalanceOpSheet(manager: m, preselected: preselected, otherDebts: otherDebts),
   );
 }
 
@@ -72,9 +74,12 @@ enum _BalanceOp {
 }
 
 class _BalanceOpSheet extends StatefulWidget {
-  const _BalanceOpSheet({required this.manager, this.preselected});
+  const _BalanceOpSheet({required this.manager, this.preselected, this.otherDebts});
   final Manager manager;
   final BalanceOpKind? preselected;
+
+  /// «ديون أخرى» (دفتر ديون المدراء عندنا) كما عرضتها القائمة — احتياطٌ إن تعذّرت قراءتها طازجةً وقت الإرسال.
+  final num? otherDebts;
 
   @override
   State<_BalanceOpSheet> createState() => _BalanceOpSheetState();
@@ -235,6 +240,13 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     if (mounted) Navigator.of(context).pop(true);
   }
 
+  /// «ديون أخرى» الباقية على هذا المدير الآن — من ملخّص دفتر ديون المدراء، وإلّا ما عرضته القائمة، وإلّا صفر.
+  Future<num> _otherDebtsNow() async {
+    final s = await ManagerDebtsApi.summary();
+    if (s != null) return s.remainingForDebtor(widget.manager.id);
+    return widget.otherDebts ?? 0;
+  }
+
   Future<void> _dispatchNotice({
     required num previousCredit,
     required num previousDebt,
@@ -247,19 +259,20 @@ class _BalanceOpSheetState extends State<_BalanceOpSheet> {
     final sendWa = _sendWhatsApp && widget.manager.mobile.trim().isNotEmpty;
     final sendTg = _sendTelegram && _tgLinked;
     if (!sendWa && !_sendPush && !sendTg) return;
+    // شحن/سحب/نقاط تمسّ دين الساس وحده؛ «ديون أخرى» (دفترنا) كما هي — فتُقرأ طازجةً وقت الإرسال (والقائمة
+    // احتياط). كانت صفراً ثابتاً: المالك ٣٠ أكتوبر «ديون اخرى مجاي يرسله النظام» — الرسالة قالت 0 وعليه 125,000.
+    // والدين السابق/الحاليّ مجموعهما كورقة التسديد (pay_debt_sheet): الإشعار والقالب يقولان الدين كلّه.
+    final other = await _otherDebtsNow();
     final r = await ManagerNoticeService.notify(
       manager: widget.manager,
       amount: _amount,
       isLoan: _isLoan && _op == _BalanceOp.deposit,
       previousCredit: previousCredit,
-      previousDebt: previousDebt,
+      previousDebt: previousDebt + other,
       currentCredit: currentCredit,
-      currentDebt: currentDebt,
-      // شحن/سحب/نقاط تؤثّر فقط على دين الـSAS — الديون الخارجية
-      // تبقى كما هي. الكاش هنا لا يعرف الـperDebtor remaining لذا
-      // نقدّر sasDebts ≈ currentDebt و otherDebts = 0. كافٍ للقالب.
+      currentDebt: currentDebt + other,
       sasDebts: currentDebt,
-      otherDebts: 0,
+      otherDebts: other,
       actionKind: actionKind,
       notes: notes,
       sendWhatsApp: sendWa,
