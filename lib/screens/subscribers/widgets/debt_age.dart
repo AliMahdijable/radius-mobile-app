@@ -14,7 +14,8 @@ import '../../../theme/typography.dart';
 /// اكثر لان هسه ياخذ من الوجدت مساحه» ⇒ داخل شريط الدين بسطرٍ رفيع، لا شريط جديد.
 ///
 /// المصدر الخادم (`debt_since` · `debt_kind` على صفّ المدين وحده — آخر حركةٍ زادت دينه في دفتر رصيده؛ التسديد الجزئيّ
-/// لا يصفّر العدّاد). «رصيد سابق» = دينٌ دخل دفترنا باستيرادٍ أو ترحيل: تاريخه تاريخ الإدخال لا الدين، فلا تُكتب أيّامه.
+/// لا يصفّر العدّاد). «دين قديم» = دينٌ دخل دفترنا باستيرادٍ أو ترحيل: تاريخه تاريخ الإدخال لا الدين، فلا تُكتب أيّامه
+/// (المالك ٣٠ أكتوبر: التسمية الأولى «تربك الوكيل»).
 
 /// درجة عمر الدين — اللون مع الرقم والأيقونة دائماً (لا يحمل اللون المعنى وحده).
 enum DebtAgeTier { fresh, aging, old, legacy }
@@ -53,7 +54,7 @@ class DebtAge {
         'sale' => 'شراء',
         'manual' => 'إضافة دين',
         'extend' => 'تمديد',
-        _ => 'رصيد سابق',
+        _ => 'دين قديم',
       };
 
   bool get legacy => !const {'activate', 'sale', 'manual', 'extend'}.contains(kind);
@@ -78,8 +79,8 @@ class DebtAge {
     return '\u2066${since.year}/${two(since.month)}/${two(since.day)}\u2069';
   }
 
-  /// نصّ الشارة: «12 يوماً (تفعيل)» · «رصيد سابق».
-  String pillText([DateTime? now]) => legacy ? 'رصيد سابق' : '${daysText(now)} ($kindLabel)';
+  /// نصّ الشارة: «12 يوماً (تفعيل)» · «دين قديم».
+  String pillText([DateTime? now]) => legacy ? 'دين قديم' : '${daysText(now)} ($kindLabel)';
 
   /// تحت الشارة بصفحة المشترك: «آخر دين 2026/10/18» · «قبل 2026/10/19».
   String get dateLine => legacy ? 'قبل $dateText' : 'آخر دين $dateText';
@@ -93,7 +94,7 @@ class DebtAge {
       DebtAgeTier.legacy => (AppColors.surface, AppColors.border, AppColors.textMid),
     };
 
-/// شارةٌ ملوّنة بعمر الدين — حتى 7 أيّام هادئة، 8–30 كهرمانيّة، أكثر من 30 حمراء، «رصيد سابق» رماديّة.
+/// شارةٌ ملوّنة بعمر الدين — حتى 7 أيّام هادئة، 8–30 كهرمانيّة، أكثر من 30 حمراء، «دين قديم» رماديّة.
 /// dense = داخل شريط الدين بكرت القائمة وخليّة الجدول: رفيعةٌ (18) كي لا يطول الكرت.
 class DebtAgePill extends StatelessWidget {
   const DebtAgePill({super.key, required this.age, this.dense = false});
@@ -121,7 +122,7 @@ class DebtAgePill extends StatelessWidget {
     Theme.of(context); // theme-dep (dark-mode)
     final (bg, border, fg) = debtAgeColors(age.tierAt());
     return Semantics(
-      label: age.legacy ? 'رصيد سابق، ${age.dateLine}' : 'أيّام الدين: ${age.pillText()}',
+      label: age.legacy ? 'دين قديم، ${age.dateLine}' : 'أيّام الدين: ${age.pillText()}',
       excludeSemantics: true,
       child: Container(
         height: dense ? 18 : 24,

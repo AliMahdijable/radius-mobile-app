@@ -111,7 +111,7 @@ class Subscriber {
   /// (`debt_since`، server/debtAge.js). null لغير المدين، أو لمدينٍ بلا حركةٍ مسجَّلة، أو لخادمٍ أقدم.
   final DateTime? debtSince;
 
-  /// نوع تلك الحركة (`debt_kind`): activate · extend · sale · manual · opening («رصيد سابق»).
+  /// نوع تلك الحركة (`debt_kind`): activate · extend · sale · manual · opening («دين قديم»).
   final String? debtKind;
 
   // ⚠️ ليس `const`: الحقلان المحفوظان (`balanceAmount` · `parsedExpiration`)
