@@ -58,8 +58,9 @@ void main() {
       'اسم المنفذ (pppoe-x> بقوس مقلوب)': 'child: Text(iso(port.name),',
       'معدّل النزول (M 251.2)': 'Text(iso(DeviceVitals.fmtBps(port.rxBps))',
       'معدّل الصعود': 'Text(iso(DeviceVitals.fmtBps(port.txBps))',
+      // ٣٠ أكتوبر: العنوان صار رابطاً مستقلّاً (DeviceIpLink، LTR) والطراز بعده معزولٌ وحده.
       'عنوان البطاقة (+CCR1009 بعلامة سابقة)':
-          "isoJoin([device.ip, device.model!], ' · ')",
+          "' · \${iso(device.model!)}'",
       'اسم المتّصل': 'child: Text(iso(peer.name),',
     };
 

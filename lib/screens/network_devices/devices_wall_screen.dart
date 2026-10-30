@@ -23,6 +23,7 @@ import 'widgets/device_image.dart';
 import 'network_device_details_screen.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/widgets/copyable.dart';
+import 'widgets/device_ip_link.dart';
 
 /// نظرة عامّة على الأجهزة — كلّها في صفحة واحدة، مجموعةً حسب المنطقة.
 ///
@@ -1092,19 +1093,19 @@ class _DeviceCardState extends State<_DeviceCard> {
                                 style: AppType.listName(),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis),
-                            // ينسخ العنوان (IP) بالضغط المطوّل أو الزرّ الأيمن.
-                            Copyable(
-                              label: 'IP',
-                              value: device.ip,
-                              child: Text(
-                                (device.model?.isNotEmpty ?? false)
-                                    ? isoJoin([device.ip, device.model!], ' · ')
-                                    : iso(device.ip),
-                                style: AppType.muted(),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
+                            // العنوان رابطٌ يفتح الجهاز بالمتصفح (المالك ٣٠ أكتوبر)، والمطوّل أو الزرّ الأيمن ينسخه.
+                            Row(children: [
+                              Flexible(child: DeviceIpLink(device.ip, style: AppType.muted())),
+                              if (device.model?.isNotEmpty ?? false)
+                                Flexible(
+                                  child: Text(
+                                    ' · ${iso(device.model!)}',
+                                    style: AppType.muted(),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ]),
                           ],
                         ),
                       ),

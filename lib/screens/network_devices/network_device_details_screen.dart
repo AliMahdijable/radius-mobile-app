@@ -34,6 +34,7 @@ import '../../core/platform/desktop_layout.dart';
 import '../desktop/desk_widgets.dart';
 import 'fiber/fiber_home_screen.dart';
 import '../../core/widgets/copyable.dart';
+import 'widgets/device_ip_link.dart';
 
 /// شاشة تفاصيل جهاز — تصميم متقدّم:
 /// - Hero card بـpulse للـonline + brand icon + stats
@@ -668,12 +669,8 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
               Row(children: [
                 Icon(LucideIcons.globe, size: 12, color: AppColors.textLow),
                 const SizedBox(width: 4),
-                Copyable(
-                  label: 'IP',
-                  value: _d.ip,
-                  child: Text(_d.ip,
-                      style: AppType.bodyStrong(color: AppColors.textHi)),
-                ),
+                // النقر يفتح واجهة الجهاز بالمتصفح، والمطوّل ينسخ (المالك ٣٠ أكتوبر).
+                DeviceIpLink(_d.ip, style: AppType.bodyStrong()),
               ]),
               // Region (لو مُسند لواحدة) — 2026-08-18
               if (_region != null) ...[
@@ -903,17 +900,21 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(f.$2, style: AppType.micro(color: AppColors.textMid)),
-                                  // الزرّ الأيمن (أو الضغط المطوّل) ينسخ القيمة — المالك ٢٤ أكتوبر.
-                                  Copyable(
-                                    label: f.$2,
-                                    value: f.$3,
-                                    child: Text(
-                                      f.$3,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: AppType.bodyBold(color: AppColors.textHi),
+                                  // الزرّ الأيمن (أو الضغط المطوّل) ينسخ القيمة — المالك ٢٤ أكتوبر؛ والعنوان رابطٌ يفتح الجهاز
+                                  // بالمتصفح (٣٠ أكتوبر).
+                                  if (f.$2 == 'العنوان')
+                                    DeviceIpLink(f.$3, style: AppType.bodyBold())
+                                  else
+                                    Copyable(
+                                      label: f.$2,
+                                      value: f.$3,
+                                      child: Text(
+                                        f.$3,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: AppType.bodyBold(color: AppColors.textHi),
+                                      ),
                                     ),
-                                  ),
                                 ],
                               ),
                             ),

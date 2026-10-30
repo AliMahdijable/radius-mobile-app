@@ -41,6 +41,7 @@ import '../top_actions.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../desktop/desk_table_scroll.dart';
+import 'widgets/device_ip_link.dart';
 
 /// قائمة أجهزة الشبكة. راجع project_devices_monitoring_plan.
 ///
@@ -1872,11 +1873,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                     ),
                     col(
                       'ip',
-                      Text(d.ip,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textDirection: TextDirection.ltr,
-                          style: cell.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+                      // النقر يفتح واجهة الجهاز بالمتصفح، والمطوّل ينسخ (المالك ٣٠ أكتوبر).
+                      DeviceIpLink(d.ip, style: cell.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
                     ),
                     col(
                       'location',
@@ -1990,7 +1988,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 children: [
                   Icon(LucideIcons.globe, size: 13, color: AppColors.textLow),
                   const SizedBox(width: 4),
-                  Text(d.ip, textDirection: TextDirection.ltr, style: sub.copyWith(color: AppColors.textBody)),
+                  DeviceIpLink(d.ip, style: sub),
                   const SizedBox(width: Sp.md),
                   if (region != null)
                     Flexible(child: region)
@@ -2110,12 +2108,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       // تتجاوز الصفّ عند ٣٢٠ — وبلا مرونةٍ يفيض بدل أن
                       // يُقصّ، والفيض عطلٌ ظاهر.
                       Flexible(
-                        child: Text(
-                          d.ip,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppType.muted(color: AppColors.textMid),
-                        ),
+                        child: DeviceIpLink(d.ip, style: AppType.muted()),
                       ),
                       const SizedBox(width: 8),
                       Container(
