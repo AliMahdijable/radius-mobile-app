@@ -13,7 +13,8 @@ import 'company_route.dart';
 /// منذ ٢٤ أكتوبر يطبع التطبيق **كلّ** وصولاته بها لكلّ المزوّدين، كالموقع («مثل الويب» —
 /// المالك): الترويسة والتذييل وما يظهر من الأقسام ورمز QR والطباعة التلقائيّة وعرض ورق
 /// الكاشير. قوالب `print_templates` القديمة (الكلاسيك) لا يقرؤها الموقع ولا يكتبها أحد منذ
-/// النقل. الخطوط والمحاذاة لطباعة الويب وحدها.
+/// النقل. نوع الخطّ والمحاذاة والإطارات لطباعة الويب وحدها؛ أبعاد الكاشير (الحواشي وحجم الخطّ والشعار وQR
+/// والمسافات) يطبعها التطبيق كالموقع منذ ٣٠ أكتوبر.
 @immutable
 class ReceiptSettings {
   const ReceiptSettings({
@@ -25,6 +26,15 @@ class ReceiptSettings {
     this.showQr = true,
     this.autoPrint = false,
     this.paperWidthMm = 80,
+    this.marginTopMm = 4,
+    this.marginRightMm = 4,
+    this.marginBottomMm = 4,
+    this.marginLeftMm = 4,
+    this.fontBasePx = 13,
+    this.fontTitlePx = 16,
+    this.logoSizeMm = 18,
+    this.qrSizeMm = 35,
+    this.sectionGapMm = 6,
     this.accent,
     this.showLogo = true,
     this.showShopInfo = true,
@@ -55,6 +65,20 @@ class ReceiptSettings {
 
   /// عرض ورق الكاشير بالملّيمتر (`design.paper_width_mm`، ٥٠–١٢٠) — طابعات ٥٨ موجودة.
   final double paperWidthMm;
+
+  /// أبعاد وصل الكاشير من المصمّم بمدياته وافتراضاته (`print-receipt.ts`): حواشي الورق (`margin_*_mm`، ٠–٣٠)،
+  /// الخطّ الأساسيّ والعنوان بنقاط الشاشة (`font_size_base` ٩–٢٢، `font_size_title` ١٢–٣٦)، ارتفاع الشعار
+  /// (`logo_size_mm` ٨–٥٠)، رمز QR (`qr_size_mm` ١٥–٦٠)، والمسافة بين الأقسام (`section_gap_mm` ٠–٢٠).
+  /// المالك ٣٠ أكتوبر: «الابعاد مجاي تتصح مثل الويب» — نحو ٤٠٪ من الوكلاء غيّروا واحداً منها على الأقلّ.
+  final double marginTopMm;
+  final double marginRightMm;
+  final double marginBottomMm;
+  final double marginLeftMm;
+  final double fontBasePx;
+  final double fontTitlePx;
+  final double logoSizeMm;
+  final double qrSizeMm;
+  final double sectionGapMm;
 
   /// لون العناوين (`design.accent_color`، ARGB) لوصل A4 — ورق الكاشير أسود دائماً.
   final int? accent;
@@ -116,6 +140,12 @@ class ReceiptSettings {
     bool on(Object? v, {required bool fallback}) =>
         v == null ? fallback : (v == true || v == 1 || '$v' == '1' || '$v' == 'true');
     final width = design is Map ? num.tryParse('${design['paper_width_mm'] ?? ''}') : null;
+    // رقمٌ من المصمّم بمداه، والغائب أو التالف افتراض الموقع.
+    double dim(String k, double fallback, double lo, double hi) {
+      final v = design is Map ? num.tryParse('${design[k] ?? ''}') : null;
+      return v == null || !v.isFinite ? fallback : v.toDouble().clamp(lo, hi).toDouble();
+    }
+
     return ReceiptSettings(
       shopName: _str(j['shop_name']),
       shopAddress: _str(j['shop_address']),
@@ -125,6 +155,15 @@ class ReceiptSettings {
       showQr: on(j['show_qr'], fallback: true),
       autoPrint: on(j['auto_print'], fallback: false),
       paperWidthMm: width == null ? 80 : width.toDouble().clamp(50, 120).toDouble(),
+      marginTopMm: dim('margin_top_mm', 4, 0, 30),
+      marginRightMm: dim('margin_right_mm', 4, 0, 30),
+      marginBottomMm: dim('margin_bottom_mm', 4, 0, 30),
+      marginLeftMm: dim('margin_left_mm', 4, 0, 30),
+      fontBasePx: dim('font_size_base', 13, 9, 22),
+      fontTitlePx: dim('font_size_title', 16, 12, 36),
+      logoSizeMm: dim('logo_size_mm', 18, 8, 50),
+      qrSizeMm: dim('qr_size_mm', 35, 15, 60),
+      sectionGapMm: dim('section_gap_mm', 6, 0, 20),
       accent: design is Map ? parseHex(design['accent_color']) : null,
       showLogo: flag('show_logo'),
       showShopInfo: flag('show_shop_info'),

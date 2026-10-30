@@ -371,4 +371,113 @@ void main() {
       expect(on, isTrue);
     });
   });
+
+  /// المالك ٣٠ أكتوبر: «تطبيق الويندوز طباعه الوصل الابعاد مجاي تتصح مثل الويب».
+  ///   ١. ويندوز يرسل ورق الطابعة قبل الطباعة ويطبع الصفحة بمقاسها الحقيقيّ — الوصل يُعاد بناؤه على ذلك الورق
+  ///      (كالمتصفّح بوصل الموقع): لا قصّ على ٥٨/٧٢ ولا وصلاً صغيراً في زاوية A4.
+  ///   ٢. أبعاد مصمّم الموقع (الحواشي، الخطّ، الشعار، QR، المسافات) — كان التطبيق يقرأ عرض الورق وحده.
+  group('٥. أبعاد الموقع وورق طابعة ويندوز', () {
+    const mm = PdfPageFormat.mm;
+    tearDown(() => PrintOutput.debugFitToPrinter = null);
+
+    PdfPageFormat printerPaper(double wMm, double hMm, {double sideMm = 4}) =>
+        PdfPageFormat(wMm * mm, hMm * mm, marginLeft: sideMm * mm, marginRight: sideMm * mm);
+
+    test('fromJson: أبعاد المصمّم بمدياته، والغائب والتالف افتراض الموقع', () {
+      final s = ReceiptSettings.fromJson({
+        'design': {
+          'margin_top_mm': 0,
+          'margin_right_mm': 7,
+          'margin_bottom_mm': 99,
+          'margin_left_mm': 'x',
+          'font_size_base': 15,
+          'font_size_title': 40,
+          'logo_size_mm': 25,
+          'qr_size_mm': 5,
+          'section_gap_mm': '2',
+        },
+      });
+      expect([s.marginTopMm, s.marginRightMm, s.marginBottomMm, s.marginLeftMm], [0, 7, 30, 4]);
+      expect([s.fontBasePx, s.fontTitlePx, s.logoSizeMm, s.qrSizeMm, s.sectionGapMm], [15, 36, 25, 15, 2]);
+      final none = ReceiptSettings.fromJson(const {});
+      expect([none.fontBasePx, none.fontTitlePx, none.logoSizeMm, none.qrSizeMm, none.sectionGapMm], [13, 16, 18, 35, 6]);
+      expect([none.marginTopMm, none.marginRightMm, none.marginBottomMm, none.marginLeftMm], [4, 4, 4, 4]);
+    });
+
+    test('خطّ المصمّم ومسافاته تغيّر الوصل (الكبير أطول)', () async {
+      Future<double> height(ReceiptSettings look) async =>
+          (await ReceiptPdf.build(_receipt(ReceiptKind.activation, look: look, qr: 'https://x.y/z'), a4: false))
+              .format
+              .height;
+      final small = await height(const ReceiptSettings(fontBasePx: 9, fontTitlePx: 12, sectionGapMm: 0, qrSizeMm: 15));
+      final big = await height(const ReceiptSettings(fontBasePx: 22, fontTitlePx: 36, sectionGapMm: 20, qrSizeMm: 60));
+      expect(big, greaterThan(small * 1.5));
+    });
+
+    test('QR والشعار لا يتجاوزان عرض الورق (QR ٦٠ على ٥٨)', () async {
+      final d = await ReceiptPdf.build(
+          _receipt(ReceiptKind.activation,
+              look: const ReceiptSettings(paperWidthMm: 58, qrSizeMm: 60), qr: 'https://x.y/z'),
+          a4: false);
+      expect(d.format.width, moreOrLessEquals(58 * mm, epsilon: 0.01));
+      expect(d.bytes, isNotEmpty);
+    });
+
+    test('🚨 ويندوز: وصل الـ٨٠ يُعاد بناؤه على ورق طابعة ٥٨ — وحواشيه لا تقلّ عن حواشي الطابعة', () async {
+      PrintOutput.debugFitToPrinter = true;
+      final d = await ReceiptPdf.build(_receipt(ReceiptKind.activation, qr: 'https://x.y/z'), a4: false);
+      expect(d.format.width, moreOrLessEquals(80 * mm, epsilon: 0.01));
+      expect(d.refit, isNotNull);
+      final bytes = await PrintOutput.bytesFor(d, printerPaper(58, 297, sideMm: 5));
+      expect(bytes, isNot(d.bytes));
+      final again = await ReceiptPdf.build(_receipt(ReceiptKind.activation, qr: 'https://x.y/z'),
+          a4: false, paper: printerPaper(58, 297, sideMm: 5));
+      expect(again.format.width, moreOrLessEquals(58 * mm, epsilon: 0.01));
+      expect(again.refit, isNull, reason: 'المُعاد بناؤه لا يُعاد ثانيةً');
+      expect(again.format.height, greaterThanOrEqualTo(d.format.height), reason: 'الأضيق لا يقصر');
+    });
+
+    test('ويندوز: وصل الكاشير على طابعة A4 بعرض الورق كالموقع، وA4 بورق الطابعة', () async {
+      final pos = await ReceiptPdf.build(_receipt(ReceiptKind.info), a4: false, paper: printerPaper(210, 297));
+      expect(pos.format.width, moreOrLessEquals(210 * mm, epsilon: 0.01));
+      final letter = await ReceiptPdf.build(_receipt(ReceiptKind.info), a4: true,
+          paper: PdfPageFormat(PdfPageFormat.letter.width, PdfPageFormat.letter.height));
+      expect([letter.format.width, letter.format.height], [PdfPageFormat.letter.width, PdfPageFormat.letter.height]);
+    });
+
+    test('غير ويندوز، أو ورقٌ غير معقول، أو فشل إعادة البناء: المستند كما بُني', () async {
+      var calls = 0;
+      final doc = PrintDoc(
+        Uint8List.fromList(utf8.encode('%PDF-1.4 original')),
+        PdfPageFormat(80 * mm, 300),
+        name: 'r',
+        refit: (paper) async {
+          calls++;
+          if (paper.width < 60 * mm) throw StateError('boom');
+          return Uint8List.fromList(utf8.encode('%PDF-1.4 refit'));
+        },
+      );
+      PrintOutput.debugFitToPrinter = false;
+      expect(await PrintOutput.bytesFor(doc, printerPaper(80, 297)), doc.bytes);
+      PrintOutput.debugFitToPrinter = true;
+      expect(utf8.decode(await PrintOutput.bytesFor(doc, printerPaper(80, 297))), '%PDF-1.4 refit');
+      expect(await PrintOutput.bytesFor(doc, printerPaper(58, 297)), doc.bytes, reason: 'رمى ⇒ كما بُني');
+      for (final bad in [
+        PdfPageFormat(10 * mm, 297 * mm),
+        PdfPageFormat(double.infinity, 297 * mm),
+        PdfPageFormat(80 * mm, 297 * mm, marginLeft: 30 * mm, marginRight: 20 * mm),
+      ]) {
+        expect(PrintOutput.usablePaper(bad), isFalse);
+        expect(await PrintOutput.bytesFor(doc, bad), doc.bytes);
+      }
+      expect(calls, 2);
+      final plain = PrintDoc(doc.bytes, doc.format, name: 'r');
+      expect(await PrintOutput.bytesFor(plain, printerPaper(80, 297)), doc.bytes, reason: 'بلا إعادة بناء');
+    });
+
+    test('finite: صفحةٌ أقصر من عرضها تطول (ويندوز يقلب الأعرض أفقيّاً)', () {
+      final f = PrintDoc.finite(PdfPageFormat(80 * mm, 50 * mm), PdfPageFormat.roll80);
+      expect(f.height, greaterThan(f.width));
+    });
+  });
 }

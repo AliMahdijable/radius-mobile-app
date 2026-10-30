@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart' as intl;
 import 'package:pdf/pdf.dart';
@@ -168,28 +170,47 @@ class ReceiptPdf {
   static String expiry(String s) => s.length > 16 ? s.substring(0, 16) : s;
 
   /// [theme] للاختبار وحده (خطٌّ بلا تحميل أصول)؛ بلاه خطّ التطبيق.
-  static Future<PrintDoc> build(ReceiptDoc d, {required bool a4, pw.ThemeData? theme}) async {
+  ///
+  /// [paper] ورق الطابعة كما أرسله النظام قبل الطباعة (ويندوز، [PrintOutput.bytesFor]): الوصل يُرسم بعرضه،
+  /// وحواشيه لا تقلّ عن حواشي الطابعة غير المطبوعة — كما يرسم المتصفّح وصل الموقع. بلاه عرض المصمّم.
+  static Future<PrintDoc> build(ReceiptDoc d, {required bool a4, pw.ThemeData? theme, PdfPageFormat? paper}) async {
     final th = theme ?? await PdfFonts.theme();
+    final look = d.look;
+    const mm = PdfPageFormat.mm;
     final requested = a4
-        ? PdfPageFormat.a4
-        : PdfPageFormat(d.look.paperWidthMm * PdfPageFormat.mm, double.infinity);
+        ? (paper == null ? PdfPageFormat.a4 : PdfPageFormat(paper.width, paper.height))
+        : PdfPageFormat(paper?.width ?? look.paperWidthMm * mm, double.infinity);
+    double edge(double own, double? printer) => math.max(own, printer ?? 0);
+    final margin = a4
+        ? pw.EdgeInsets.fromLTRB(edge(48, paper?.marginLeft), edge(32, paper?.marginTop),
+            edge(48, paper?.marginRight), edge(32, paper?.marginBottom))
+        // الكاشير: حواشي المصمّم (٤ ملم افتراضاً، كالموقع).
+        : pw.EdgeInsets.fromLTRB(
+            edge(look.marginLeftMm * mm, paper?.marginLeft),
+            edge(look.marginTopMm * mm, paper?.marginTop),
+            edge(look.marginRightMm * mm, paper?.marginRight),
+            edge(look.marginBottomMm * mm, paper?.marginBottom),
+          );
     final name = d.sale != null ? 'Sale-${d.sale!.id}' : '${d.kind.name}-${d.username}';
     Future<PrintDoc> render(bool withLogo) {
       final doc = pw.Document(theme: th, title: d.title, creator: 'MyServices Pro');
       pw.MemoryImage? logo;
-      if (withLogo && d.look.showLogo && d.look.logo != null) {
-        logo = pw.MemoryImage(d.look.logo!);
+      if (withLogo && look.showLogo && look.logo != null) {
+        logo = pw.MemoryImage(look.logo!);
       }
+      final width = requested.width - margin.horizontal;
       doc.addPage(pw.Page(
         pageFormat: requested,
         textDirection: pw.TextDirection.rtl,
-        margin: a4
-            ? const pw.EdgeInsets.symmetric(horizontal: 48, vertical: 32)
-            // الكاشير: ٤٫٥ ملم جانباً — حواشي الطابعة الحراريّة لا تُطبع (~٤ ملم).
-            : const pw.EdgeInsets.fromLTRB(12.75, 11, 12.75, 17),
-        build: (_) => _Body(d, logo: logo, a4: a4).build(),
+        margin: margin,
+        build: (_) => _Body(d, logo: logo, a4: a4, width: width).build(),
       ));
-      return PrintDoc.of(doc, name: name, requested: requested);
+      return PrintDoc.of(
+        doc,
+        name: name,
+        requested: requested,
+        refit: paper != null ? null : (printer) async => (await build(d, a4: a4, theme: th, paper: printer)).bytes,
+      );
     }
 
     try {
@@ -210,11 +231,14 @@ const double _cardRadius = 8;
 const double _stampRadius = 4;
 
 class _Body {
-  _Body(this.d, {required this.logo, required this.a4});
+  _Body(this.d, {required this.logo, required this.a4, required this.width});
 
   final ReceiptDoc d;
   final pw.MemoryImage? logo;
   final bool a4;
+
+  /// عرض المحتوى بين الحاشيتين (نقطة PDF) — الشعار ورمز QR لا يتجاوزانه.
+  final double width;
 
   // الكاشير أسود (الحراريّة لا تطبع لوناً)؛ A4 بلون المصمّم.
   PdfColor get _accent => !a4
@@ -222,9 +246,19 @@ class _Body {
       : (d.look.accent != null ? PdfColor.fromInt(d.look.accent!) : const PdfColor.fromInt(0xFF0D9488));
   PdfColor get _muted => a4 ? PdfColors.grey700 : PdfColors.black;
 
-  double get _base => a4 ? 11 : 9.5;
-  double get _small => a4 ? 9.5 : 8.5;
-  double get _gap => a4 ? 10 : 7;
+  // أحجام وصل الموقع (`print-receipt.ts`) من مصمّمه، بنقاط PDF (بكسل الشاشة × ٠٫٧٥): القيمة ٠٫٩٥ من الخطّ
+  // الأساسيّ، التسمية وعناوين الأقسام والرقم والوقت ٠٫٨٥، الحاشية ٠٫٧٨، اسم المحلّ خطّ العنوان ونوع الوصل ٠٫٨ منه،
+  // والمسافة بين الأقسام والشعار وQR بالملّيمتر. A4 كما كان.
+  static double _pt(num px) => px * 0.75;
+  ReceiptSettings get _look => d.look;
+  double get _value => a4 ? 11 : _pt((_look.fontBasePx * 0.95).round());
+  double get _label => a4 ? 11 : _pt((_look.fontBasePx * 0.85).round());
+  double get _small => a4 ? 9.5 : _pt((_look.fontBasePx * 0.78).round());
+  double get _metaSize => a4 ? _small : _label;
+  double get _gap => a4 ? 10 : _look.sectionGapMm * PdfPageFormat.mm;
+
+  /// حشوة الصفّ (الموقع: ‎5px‎ للكاشير).
+  double get _rowPad => a4 ? 3 : 3.75;
 
   static String _p(String s) => ReceiptPdf.plain(s);
 
@@ -236,19 +270,30 @@ class _Body {
       crossAxisAlignment: pw.CrossAxisAlignment.stretch,
       children: [
         if (logo != null) ...[
-          pw.Center(child: pw.Image(logo!, height: a4 ? 56 : 42, fit: pw.BoxFit.contain)),
-          pw.SizedBox(height: 4),
+          pw.Center(
+            child: a4
+                ? pw.Image(logo!, height: 56, fit: pw.BoxFit.contain)
+                // الموقع: ارتفاعٌ أقصى من المصمّم وعرضٌ أقصى ضعفاه ونصف.
+                : pw.Image(
+                    logo!,
+                    height: _look.logoSizeMm * PdfPageFormat.mm,
+                    width: math.min(width, _look.logoSizeMm * 2.5 * PdfPageFormat.mm),
+                    fit: pw.BoxFit.contain,
+                  ),
+          ),
+          pw.SizedBox(height: a4 ? 4 : 6),
         ],
         pw.Text(
           _p(d.shopName),
           textAlign: pw.TextAlign.center,
-          style: pw.TextStyle(fontSize: a4 ? 19 : 13, fontWeight: pw.FontWeight.bold, color: _accent),
+          style: pw.TextStyle(
+              fontSize: a4 ? 19 : _pt(_look.fontTitlePx), fontWeight: pw.FontWeight.bold, color: _accent),
         ),
         if (look.showShopInfo) ..._shopMeta(),
-        pw.SizedBox(height: _gap * 0.8),
+        pw.SizedBox(height: a4 ? _gap * 0.8 : _gap),
         _title(),
         if ((look.showReceiptId && d.sale == null) || look.showDateTime) ...[
-          pw.SizedBox(height: 4),
+          pw.SizedBox(height: a4 ? 4 : _gap),
           _meta(),
         ],
         if (d.sale != null) ..._saleSections() else ...[
@@ -313,12 +358,15 @@ class _Body {
         child: pw.Text(
           _p(d.title),
           textAlign: pw.TextAlign.center,
-          style: pw.TextStyle(fontSize: a4 ? 14 : 11.5, fontWeight: pw.FontWeight.bold, color: _accent),
+          style: pw.TextStyle(
+              fontSize: a4 ? 14 : _pt((_look.fontTitlePx * 0.8).round()),
+              fontWeight: pw.FontWeight.bold,
+              color: _accent),
         ),
       );
 
   pw.Widget _meta() {
-    final style = pw.TextStyle(fontSize: _small, color: _muted);
+    final style = pw.TextStyle(fontSize: _metaSize, color: _muted);
     return pw.Row(
       mainAxisAlignment: d.look.showReceiptId && d.sale == null && d.look.showDateTime
           ? pw.MainAxisAlignment.spaceBetween
@@ -351,7 +399,7 @@ class _Body {
             child: pw.Text(
               _p(reason.isEmpty ? 'مُلغاة' : 'مُلغاة — $reason'),
               textAlign: pw.TextAlign.center,
-              style: pw.TextStyle(fontSize: _base, fontWeight: pw.FontWeight.bold, color: red),
+              style: pw.TextStyle(fontSize: _value, fontWeight: pw.FontWeight.bold, color: red),
             ),
           ),
         ),
@@ -383,7 +431,7 @@ class _Body {
 
   /// مادّة: اسمها وتحته «الكمّيّة × سعر الوحدة» يميناً، ومجموعها يساراً.
   pw.Widget _itemRow(({String name, String qty, num unitPrice, num total}) l) => pw.Padding(
-        padding: pw.EdgeInsets.symmetric(vertical: a4 ? 3 : 2),
+        padding: pw.EdgeInsets.symmetric(vertical: _rowPad),
         child: pw.Row(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
@@ -391,14 +439,14 @@ class _Body {
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Text(_p(l.name), style: pw.TextStyle(fontSize: _base, fontWeight: pw.FontWeight.bold)),
+                  pw.Text(_p(l.name), style: pw.TextStyle(fontSize: _value, fontWeight: pw.FontWeight.bold)),
                   pw.Text(_p('${l.qty} × ${ReceiptPdf.money(l.unitPrice)}'),
                       style: pw.TextStyle(fontSize: _small, color: _muted)),
                 ],
               ),
             ),
             pw.SizedBox(width: 8),
-            pw.Text(_p(ReceiptPdf.money(l.total)), style: pw.TextStyle(fontSize: _base, fontWeight: pw.FontWeight.bold)),
+            pw.Text(_p(ReceiptPdf.money(l.total)), style: pw.TextStyle(fontSize: _value, fontWeight: pw.FontWeight.bold)),
           ],
         ),
       );
@@ -415,7 +463,7 @@ class _Body {
                 border: pw.Border(bottom: pw.BorderSide(color: _accent, width: 0.8)),
               ),
               child: pw.Text(_p(title),
-                  style: pw.TextStyle(fontSize: _base, fontWeight: pw.FontWeight.bold, color: _accent)),
+                  style: pw.TextStyle(fontSize: _label, fontWeight: pw.FontWeight.bold, color: _accent)),
             ),
             for (var i = 0; i < rows.length; i++)
               pw.Container(
@@ -439,11 +487,11 @@ class _Body {
       color = balance < 0 ? const PdfColor.fromInt(0xFFDC2626) : const PdfColor.fromInt(0xFF059669);
     }
     return pw.Padding(
-      padding: pw.EdgeInsets.symmetric(vertical: a4 ? 3 : 2),
+      padding: pw.EdgeInsets.symmetric(vertical: _rowPad),
       child: pw.Row(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text(_p(label), style: pw.TextStyle(fontSize: _base, color: _muted)),
+          pw.Text(_p(label), style: pw.TextStyle(fontSize: _label, color: _muted)),
           pw.SizedBox(width: 8),
           pw.Expanded(
             child: pw.Text(
@@ -451,7 +499,7 @@ class _Body {
               textAlign: pw.TextAlign.left,
               textDirection: ltr ? pw.TextDirection.ltr : null,
               style: pw.TextStyle(
-                fontSize: _base,
+                fontSize: _value,
                 color: color,
                 fontWeight: bold || balance != null ? pw.FontWeight.bold : pw.FontWeight.normal,
               ),
@@ -463,7 +511,7 @@ class _Body {
   }
 
   pw.Widget _qr() {
-    final size = (a4 ? 30 : 35) * PdfPageFormat.mm;
+    final size = a4 ? 30 * PdfPageFormat.mm : math.min(width, _look.qrSizeMm * PdfPageFormat.mm);
     return pw.Padding(
       padding: pw.EdgeInsets.only(top: _gap),
       child: pw.Column(
@@ -489,7 +537,8 @@ class _Body {
     return pw.Padding(
       padding: pw.EdgeInsets.only(top: _gap),
       child: pw.Container(
-        padding: pw.EdgeInsets.only(top: _gap * 0.7),
+        // الموقع: ‎8px‎ تحت خطّ الذيل.
+        padding: pw.EdgeInsets.only(top: a4 ? _gap * 0.7 : 6),
         decoration: const pw.BoxDecoration(
           border: pw.Border(top: pw.BorderSide(color: PdfColors.grey500, width: 0.6, style: pw.BorderStyle.dashed)),
         ),

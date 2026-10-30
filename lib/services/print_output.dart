@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -6,7 +7,11 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../core/platform/app_platform.dart';
 import 'print_prefs.dart';
+
+/// يعيد بناء المستند على ورق الطابعة كما أرسله النظام قبل الطباعة (عرضه وحواشيه غير المطبوعة).
+typedef PrintRefit = Future<Uint8List> Function(PdfPageFormat printerPaper);
 
 /// مستندٌ جاهزٌ للطابعة: بايتات PDF ومقاس صفحته — **محدودٌ دائماً**.
 ///
@@ -16,31 +21,38 @@ import 'print_prefs.dart';
 /// (اللفّة تأخذ طول محتواها) فلا يصل النظامَ طولٌ لا نهائيّ أبداً.
 @immutable
 class PrintDoc {
-  const PrintDoc(this.bytes, this.format, {required this.name});
+  const PrintDoc(this.bytes, this.format, {required this.name, this.refit});
 
   final Uint8List bytes;
   final PdfPageFormat format;
   final String name;
+
+  /// إعادة البناء على ورق الطابعة ([PrintOutput.bytesFor]) — null = يُطبع كما بُني.
+  final PrintRefit? refit;
 
   /// يحفظ [doc] ويقرأ مقاس صفحته الأولى كما بُنيت.
   static Future<PrintDoc> of(
     pw.Document doc, {
     required String name,
     required PdfPageFormat requested,
+    PrintRefit? refit,
   }) async {
     final bytes = await doc.save();
     final pages = doc.document.pdfPageList.pages;
     final built = pages.isEmpty ? requested : pages.first.pageFormat;
-    return PrintDoc(bytes, finite(built, requested), name: name);
+    return PrintDoc(bytes, finite(built, requested), name: name, refit: refit);
   }
 
   /// [f] بلا بُعدٍ لا نهائيّ (ولا هوامش: الصفحة مرسومةٌ سلفاً).
+  ///
+  /// ⚠️ ولا أقصر من عرضه: مكتبة الطباعة على ويندوز تقلب الورق أفقيّاً متى زاد العرض على الطول،
+  /// فيخرج وصلٌ قصير مدوَّراً على ورق الكاشير.
   @visibleForTesting
   static PdfPageFormat finite(PdfPageFormat f, PdfPageFormat requested) {
     double pick(double v, double fallback) => v.isFinite && v > 0 ? v : fallback;
     final w = pick(f.width, pick(requested.width, PdfPageFormat.roll80.width));
     final h = pick(f.height, pick(requested.height, PdfPageFormat.a4.height));
-    return PdfPageFormat(w, h);
+    return PdfPageFormat(w, math.max(h, w + 1));
   }
 }
 
@@ -105,7 +117,7 @@ class _PluginBackend implements PrintBackend {
         name: doc.name,
         format: doc.format,
         dynamicLayout: false,
-        onLayout: (_) async => doc.bytes,
+        onLayout: (paper) => PrintOutput.bytesFor(doc, paper),
       );
 
   @override
@@ -114,7 +126,7 @@ class _PluginBackend implements PrintBackend {
         name: doc.name,
         format: doc.format,
         dynamicLayout: false,
-        onLayout: (_) async => doc.bytes,
+        onLayout: (paper) => PrintOutput.bytesFor(doc, paper),
       );
 
   @override
@@ -130,6 +142,41 @@ class PrintOutput {
 
   /// الطابعة المحفوظة لا تردّ ⇒ نافذة الطباعة بعد هذه المدّة (الوصل لا يضيع).
   static const directTimeout = Duration(seconds: 30);
+
+  /// 🐛 المالك ٣٠ أكتوبر: «تطبيق الويندوز طباعه الوصل الابعاد مجاي تتصح مثل الويب». إضافة الطباعة على
+  /// ويندوز (5.14) تطبع الصفحة بمقاسها الحقيقيّ من حافّة الورق، وتُرسل قبلها ورق الطابعة الفعليّ (عرضه
+  /// وحواشيه غير المطبوعة) — فوصلٌ بعرض ٨٠ على طابعة ٥٨/٧٢ يُقصّ يمينه (التسميات)، وعلى A4 يصغر في زاويته.
+  /// المتصفّح يرسم وصل الموقع على ورق الطابعة نفسه، فالتطبيق على ويندوز مثله: يعيد البناء على ذلك الورق.
+  /// غيره كما كان: أندرويد وآيفون يصغّران المستند للورق بأنفسهما.
+  @visibleForTesting
+  static bool? debugFitToPrinter;
+
+  static bool get fitToPrinter => debugFitToPrinter ?? AppPlatform.isWindows;
+
+  /// بايتات [doc] لورقٍ أرسلته الطابعة [paper]: مُعادٌ بناؤه عليه إن أمكن، وإلّا كما بُني — لا يُسقط الطباعة أبداً.
+  static Future<Uint8List> bytesFor(PrintDoc doc, PdfPageFormat paper) async {
+    final refit = doc.refit;
+    if (!fitToPrinter || refit == null || !usablePaper(paper)) return doc.bytes;
+    try {
+      return await refit(paper);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[PrintOutput] refit failed: $e');
+      return doc.bytes;
+    }
+  }
+
+  /// ورقٌ معقول من النظام (٣٠–٦٠٠ ملم، وحواشٍ لا تأكل نصفه) — غيره يُطبع المستند كما بُني.
+  @visibleForTesting
+  static bool usablePaper(PdfPageFormat p) {
+    final w = p.width;
+    final side = p.marginLeft + p.marginRight;
+    return w.isFinite &&
+        w >= 30 * PdfPageFormat.mm &&
+        w <= 600 * PdfPageFormat.mm &&
+        p.marginLeft >= 0 &&
+        p.marginRight >= 0 &&
+        side < w / 2;
+  }
 
   /// يرسل [doc] إلى «الطابعة المباشرة» المحفوظة (الحاسبة، [allowDirect]) بلا نافذة، وإلّا نافذة
   /// الطباعة. التقارير (A4 دائماً) تمرّر `allowDirect: false`: طابعة الكاشير ليست لها.

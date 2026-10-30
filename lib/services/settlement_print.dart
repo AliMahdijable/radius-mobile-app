@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -24,6 +26,8 @@ class SettlementPrint {
         doc,
         name: s.isOpening ? 'Account-Opening' : 'Settlement-${s.number}',
         requested: format,
+        // ويندوز: يُعاد رسمه على ورق الطابعة كالوصل ([PrintOutput.bytesFor]).
+        refit: (paper) async => (await _build(s, format, company: company, manager: manager, paper: paper)).save(),
       ));
     } catch (e) {
       if (kDebugMode) debugPrint('[SettlementPrint] failed: $e');
@@ -40,11 +44,13 @@ class SettlementPrint {
     return '${l.year}-${two(l.month)}-${two(l.day)} ${two(l.hour)}:${two(l.minute)}';
   }
 
+  /// [paper] ورق الطابعة كما أرسله النظام (ويندوز): السند بعرضه وحواشٍ لا تقلّ عن حواشيه غير المطبوعة.
   static Future<pw.Document> _build(
     SettlementRecord s,
     PdfPageFormat format, {
     String? company,
     String? manager,
+    PdfPageFormat? paper,
   }) async {
     final doc = pw.Document(theme: await PdfFonts.theme());
     final pos = format.width <= PdfPageFormat.roll80.width + 5;
@@ -161,13 +167,19 @@ class SettlementPrint {
       ),
     ];
 
+    // الكاشير: ٤٫٥ ملم جانباً — حواشي الطابعة الحراريّة لا تُطبع.
+    final own = pos ? const pw.EdgeInsets.symmetric(horizontal: 12.75, vertical: 12) : const pw.EdgeInsets.all(32);
     doc.addPage(
       pw.Page(
-        pageFormat: format,
-        // الكاشير: ٤٫٥ ملم جانباً — حواشي الطابعة الحراريّة لا تُطبع.
-        margin: pos
-            ? const pw.EdgeInsets.symmetric(horizontal: 12.75, vertical: 12)
-            : const pw.EdgeInsets.all(32),
+        pageFormat: paper == null ? format : PdfPageFormat(paper.width, pos ? double.infinity : paper.height),
+        margin: paper == null
+            ? own
+            : pw.EdgeInsets.fromLTRB(
+                math.max(own.left, paper.marginLeft),
+                math.max(own.top, paper.marginTop),
+                math.max(own.right, paper.marginRight),
+                math.max(own.bottom, paper.marginBottom),
+              ),
         textDirection: pw.TextDirection.rtl,
         build: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
