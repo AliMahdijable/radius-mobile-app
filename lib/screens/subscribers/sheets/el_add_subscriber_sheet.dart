@@ -73,6 +73,11 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
   _PayType _pay = _PayType.debt;
   int _partialAmount = 0;
 
+  // لاحقة الشركة (@najaf40) اختياريّة ومطفأةٌ افتراضاً (المالك ٣٠ أكتوبر: «اجبار اليوزر
+  // اختياري… الا هو يختاره»)، و«تابع إلى» (null = الحساب نفسه).
+  bool _appendSuffix = false;
+  String? _affiliate;
+
   // ── فحص اسم الدخول (مؤجَّل ٥٠٠ms) ──
   Timer? _userTimer;
   _Check _userState = _Check.idle;
@@ -165,11 +170,18 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
 
   String get _suffix => _opts?.userSuffix ?? '';
 
-  /// اسم الدخول بلا لاحقة — لو لُصق «ahmed@xxx» يُؤخذ ما قبل @.
+  /// اسم الدخول كما كُتب (habe67@bh يبقى بنطاقه) — @ واحدة فقط.
   String get _normalizedUsername {
     final t = _username.text.trim();
     final at = t.indexOf('@');
-    return at < 0 ? t : t.substring(0, at);
+    return at < 0 ? t : t.substring(0, at + 1) + t.substring(at + 1).replaceAll('@', '');
+  }
+
+  /// «تابع إلى» مرسَلاً: غير الحساب نفسه وحده، وللرصيد والتجريبيّ (الكارت على الحساب نفسه).
+  String? get _affiliateToSend {
+    final a = _affiliate;
+    if (a == null || a == _opts?.affiliateIndex) return null;
+    return _method == _Method.card ? null : a;
   }
 
   ElCreatePackage? get _cardPkg {
@@ -258,9 +270,10 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
   }
 
   Future<void> _checkUsername(String u) async {
-    final r = await EarthlinkApi.checkUsername(u);
-    // ردٌّ متأخّر لاسمٍ تغيّر بعده — يُهمل.
-    if (!mounted || u != _normalizedUsername) return;
+    final append = _appendSuffix;
+    final r = await EarthlinkApi.checkUsername(u, appendSuffix: append);
+    // ردٌّ متأخّر لاسمٍ (أو خيار لاحقةٍ) تغيّر بعده — يُهمل.
+    if (!mounted || u != _normalizedUsername || append != _appendSuffix) return;
     setState(() {
       final avail = r.available;
       if (avail == null) {
@@ -378,6 +391,8 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
       cardPin: method == _Method.card ? _pinCtrl.text.trim() : null,
       paymentType: method == _Method.test ? null : paymentType,
       paidAmount: method == _Method.test ? null : paidAmount,
+      appendSuffix: _appendSuffix,
+      affiliateIndex: _affiliateToSend,
     );
     final duplicate = r.code == EarthlinkApi.codeRecentDuplicate;
     // ربّما أُضيف (`unclear`: مهلة/بوّابة/CREATE_UNCONFIRMED/
@@ -598,6 +613,10 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _usernameBox(),
+            if (_suffix.isNotEmpty) ...[
+              const SizedBox(height: Sp.x6),
+              _suffixToggle(),
+            ],
             if (_userState != _Check.idle) ...[
               const SizedBox(height: Sp.x6),
               _usernameStatus(),
@@ -641,6 +660,14 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
             onSelected: (id) => setState(() => _packageId = id),
           ),
         ),
+      // «تابع إلى» (المالك ٣٠ أكتوبر): للرصيد والتجريبيّ — الكارت يُضاف على الحساب نفسه.
+      if (_method != _Method.card && _opts!.affiliates.isNotEmpty) ...[
+        const SizedBox(height: 14),
+        SheetSection(
+          label: 'sheets.el_add.affiliate'.tr(),
+          child: _affiliateBox(enabled),
+        ),
+      ],
       if (_method == _Method.deposit) ...[
         const SizedBox(height: 14),
         SheetSection(
@@ -1082,7 +1109,7 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
                   ),
                 ),
               ),
-              if (suffix.isNotEmpty)
+              if (_appendSuffix && suffix.isNotEmpty && !_username.text.contains('@'))
                 ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: c.maxWidth * 0.5),
                   child: Text(
@@ -1099,6 +1126,80 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  /// «إلحاق @najaf40 بالاسم» — مطفأ افتراضاً؛ تبديله يعيد فحص الاسم (الاسم النهائيّ يتغيّر).
+  Widget _suffixToggle() {
+    return InkWell(
+      onTap: _submitting
+          ? null
+          : () {
+              setState(() => _appendSuffix = !_appendSuffix);
+              _onUsernameChanged(_username.text);
+            },
+      borderRadius: BorderRadius.circular(R.sm),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 22,
+            height: 22,
+            child: Checkbox(
+              value: _appendSuffix,
+              onChanged: _submitting
+                  ? null
+                  : (v) {
+                      setState(() => _appendSuffix = v == true);
+                      _onUsernameChanged(_username.text);
+                    },
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+          const SizedBox(width: Sp.x6),
+          Flexible(
+            child: Text(
+              'sheets.el_add.append_suffix'.tr(namedArgs: {'suffix': '\u2066$_suffix\u2069'}),
+              style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// «تابع إلى»: الحساب نفسه (افتراضاً) أو مديرٌ فرعيّ — قائمةٌ منسدلة بشكل حقول الشيت.
+  Widget _affiliateBox(bool enabled) {
+    final o = _opts!;
+    final value = _affiliate ?? o.affiliateIndex ?? o.affiliates.first.index;
+    return SheetBox(
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: o.affiliates.any((a) => a.index == value) ? value : o.affiliates.first.index,
+          isExpanded: true,
+          isDense: true,
+          icon: Icon(LucideIcons.chevronDown, size: 18, color: AppColors.textHint),
+          style: AppType.input(),
+          dropdownColor: AppColors.surface,
+          onChanged: !enabled || o.affiliates.length < 2
+              ? null
+              : (v) => setState(() => _affiliate = v),
+          items: [
+            for (final a in o.affiliates)
+              DropdownMenuItem<String>(
+                value: a.index,
+                child: Text(
+                  a.index == o.affiliateIndex
+                      ? '${a.name} ${'sheets.el_add.affiliate_own'.tr()}'
+                      : a.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
         ),
       ),
     );

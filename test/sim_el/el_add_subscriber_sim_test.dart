@@ -71,6 +71,7 @@ void main() {
     bool card = true,
     bool test = true,
     num? balance = 100000,
+    List<Map<String, Object?>>? affiliates,
   }) {
     server.reply('GET', '/api/v2/el/create-options', 200, {
       'success': true,
@@ -89,6 +90,8 @@ void main() {
         'deposit_balance': balance,
         'test_count': testCount,
         'methods': {'deposit': deposit, 'card': card, 'test': test},
+        if (affiliates != null) 'affiliates': affiliates,
+        if (affiliates != null) 'affiliate_index': affiliates.first['index'],
       },
     });
   }
@@ -199,8 +202,44 @@ void main() {
         reason: 'التجريبيّ مسموحٌ لكن بلا حصّة (test_count 0) ⇒ مخفيّ');
     expect(find.text('باسورد الإيداع *'), findsOneWidget);
     expect(footerEnabled(t, _submit), isFalse);
-    expect(find.text(_suffix), findsOneWidget);
+    // لاحقة الشركة اختياريّة ومطفأة (المالك ٣٠ أكتوبر): لا تُفرض بالحقل — تظهر بخيار «إلحاق … بالاسم» وحده.
+    expect(find.text(_suffix), findsNothing);
+    expect(find.textContaining(_suffix), findsOneWidget);
+    expect(find.text('تابع إلى'), findsNothing, reason: 'خادمٌ بلا affiliates ⇒ بلا الحقل');
     await simCheck(t, v, _screen, 'deposit_default');
+  });
+
+  simCase(_screen, 'suffix_optional_and_affiliate', (t, v) async {
+    options(affiliates: [
+      {'index': '58077', 'name': 'najaf2002'},
+      {'index': '58078', 'name': 'najaf2002sub'},
+    ]);
+    await open(t, v);
+    await fillDeposit(t);
+    // الاسم كما كُتب — والفحص بلا لاحقة.
+    final checks = server.bodies('POST', '/api/v2/el/check-username');
+    expect(checks.last['append_suffix'], false);
+    // «تابع إلى»: الحساب نفسه افتراضاً ⇒ اختيار الفرعيّ.
+    expect(find.text('تابع إلى'), findsOneWidget);
+    await reveal(t, find.text('najaf2002 (حسابك)'));
+    await t.tap(find.text('najaf2002 (حسابك)'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('najaf2002sub').last);
+    await t.pumpAndSettle();
+    // إلحاق اللاحقة بطلبه ⇒ تظهر بالحقل ويُعاد الفحص بها.
+    await reveal(t, find.textContaining('إلحاق'));
+    await t.tap(find.textContaining('إلحاق'));
+    await t.pump(const Duration(milliseconds: 600));
+    await t.pumpAndSettle();
+    expect(find.text(_suffix), findsOneWidget);
+    expect(server.bodies('POST', '/api/v2/el/check-username').last['append_suffix'], true);
+    await simCheck(t, v, _screen, 'suffix_optional_and_affiliate');
+    await tapSubmit(t);
+    final body = server.bodies('POST', _createPath).single;
+    expect(body['append_suffix'], true);
+    expect(body['affiliate_index'], '58078');
+    expect(body['username'], 'ali1');
+    await simDrain(t);
   });
 
   simCase(_screen, 'test_method', (t, v) async {

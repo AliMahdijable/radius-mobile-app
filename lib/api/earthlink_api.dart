@@ -236,6 +236,13 @@ class ElCreatePackage {
 /// GET /api/v2/el/create-options — ما يحتاجه شيت «مشترك جديد» لايرث لنك:
 /// لاحقة اسم الدخول، الباقات بأسعارنا، رصيد الإيداع، حصّة التجريبيّ،
 /// والطرق المسموحة لهذا الحساب.
+/// حسابٌ في «تابع إلى» — الحساب نفسه أو مديرٌ فرعيّ (GET affiliates بالخادم).
+class ElAffiliate {
+  const ElAffiliate({required this.index, required this.name});
+  final String index;
+  final String name;
+}
+
 class ElCreateOptions {
   const ElCreateOptions({
     required this.userSuffix,
@@ -245,7 +252,16 @@ class ElCreateOptions {
     required this.canDeposit,
     required this.canCard,
     required this.canTest,
+    this.affiliates = const [],
+    this.affiliateIndex,
   });
+
+  /// «تابع إلى» للرصيد والتجريبيّ (المالك ٣٠ أكتوبر): الحساب نفسه أوّلاً ثمّ مدراؤه
+  /// الفرعيّون. خادمٌ أقدم ⇒ فارغة ⇒ بلا الحقل.
+  final List<ElAffiliate> affiliates;
+
+  /// الحساب نفسه (الافتراضيّ) — لا يُرسَل حين يبقى مختاراً.
+  final String? affiliateIndex;
 
   /// `@xxx` — تُعرض ثابتةً بعد اسم الدخول. فارغة حين لا يعرفها الخادم.
   final String userSuffix;
@@ -284,6 +300,16 @@ class ElCreateOptions {
       canDeposit: methods == null || methods['deposit'] == true,
       canCard: methods == null || methods['card'] == true,
       canTest: methods != null && methods['test'] == true,
+      affiliates: [
+        for (final a in (j['affiliates'] is List ? j['affiliates'] as List : const []))
+          if (a is Map &&
+              RegExp(r'^\d+$').hasMatch('${a['index'] ?? ''}') &&
+              '${a['name'] ?? ''}'.trim().isNotEmpty)
+            ElAffiliate(index: '${a['index']}', name: '${a['name']}'.trim()),
+      ],
+      affiliateIndex: RegExp(r'^\d+$').hasMatch('${j['affiliate_index'] ?? ''}')
+          ? '${j['affiliate_index']}'
+          : null,
     );
   }
 }
@@ -497,11 +523,12 @@ class EarthlinkApi {
   /// POST /api/v2/el/check-username — هل اسم الدخول متاح؟ `available: null`
   /// = تعذّر الفحص (الخادم يتحقّق مجدّداً عند الإضافة نفسها).
   static Future<({bool? available, String? userId, String? message})>
-      checkUsername(String username) async {
+      checkUsername(String username, {bool appendSuffix = false}) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
         '/api/v2/el/check-username',
-        data: {'username': username},
+        // الاسم كما كُتب، ولاحقة الشركة بطلبه وحده (المالك ٣٠ أكتوبر).
+        data: {'username': username, 'append_suffix': appendSuffix},
       );
       final body = r.data ?? const {};
       final data = body['data'];
@@ -579,6 +606,8 @@ class EarthlinkApi {
     String? cardPin,
     String? paymentType,
     num? paidAmount,
+    bool appendSuffix = false,
+    String? affiliateIndex, // «تابع إلى» غير الحساب نفسه — للرصيد والتجريبيّ
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -586,6 +615,9 @@ class EarthlinkApi {
         data: {
           'method': method,
           'username': username,
+          'append_suffix': appendSuffix,
+          if ((method == 'deposit' || method == 'test') && affiliateIndex != null)
+            'affiliate_index': affiliateIndex,
           'password': password,
           'firstname': firstname,
           if (lastname != null && lastname.isNotEmpty) 'lastname': lastname,
