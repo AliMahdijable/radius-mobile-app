@@ -269,7 +269,7 @@ class _FiberPonScreenState extends State<FiberPonScreen> {
     ];
     if (matches.isEmpty) {
       return Padding(
-        padding: const EdgeInsets.fromLTRB(Sp.lg, 40, Sp.lg, 40),
+        padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.huge + Sp.sm, Sp.lg, Sp.huge + Sp.sm),
         child: Center(
             child: Text('لا أجهزة تطابق «$_q»', style: AppType.body(color: AppColors.textMid))),
       );
