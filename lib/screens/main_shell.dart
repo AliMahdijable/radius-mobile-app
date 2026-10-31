@@ -13,6 +13,7 @@ import '../services/permissions_service.dart';
 import '../services/provider_service.dart';
 import '../core/widgets/design_sheet.dart';
 import '../core/widgets/permission_locked.dart';
+import '../services/provider_limits.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
@@ -744,10 +745,12 @@ class _QuickAddSheet extends StatelessWidget {
     // الحالة الفارغة لا تظهر إلّا إن لم يُعرض بندٌ واحد (ولا مقفلاً) —
     // عمليّاً لا تُبلَغ. ⚠️ كانت `hasAny` تضمّ `extend` وليس له بند هنا،
     // فمَن يملك التمديد وحده يرى شيتاً بعنوانٍ وفراغ.
-    final anyShown = permShown(kAdd) ||
-        permShown(kActivate) ||
-        permShown(kPay) ||
-        permShown(kAddDebt) ||
+    // وما لا يخدمه مزوّد الجلسة لا يظهر أصلاً (الشركة المُضافة: محوّلها لا ينشئ، أو التفعيل والديون مطفأة لحسابه — providerHidesAction).
+    bool shown(List<String> keys) => permShown(keys) && !keys.every(providerHidesAction);
+    final anyShown = shown(kAdd) ||
+        shown(kActivate) ||
+        shown(kPay) ||
+        shown(kAddDebt) ||
         permShown(kExpense);
     return DesignSheet(
       header: SheetHeaderBar(
@@ -774,7 +777,7 @@ class _QuickAddSheet extends StatelessWidget {
           // تسديد دين → إضافة دين → إضافة صرفية. مطلب 2026-06-11:
           // لا خطأ "غير مسموح" بعد الضغط — والبند بلا مفتاحه يبقى
           // مقفلاً بمكانه (٢٠٢٦-١٠-١٤) بدل أن يختفي.
-          if (permShown(kAdd))
+          if (shown(kAdd))
             _QuickItem(
               locked: !Perms.hasAny(kAdd),
               icon: Icons.person_add_rounded,
@@ -790,7 +793,7 @@ class _QuickAddSheet extends StatelessWidget {
           // تسميةً: التفعيل يبدأ اشتراكاً بباقة وسعر، والتمديد يزيد
           // أيّاماً على القائم. مَن يملك التمديد وحده يصل إليه من كارت
           // المشترك، وهو موضعه الطبيعي لأنّه يحتاج اشتراكاً قائماً.
-          if (permShown(kActivate))
+          if (shown(kActivate))
             _QuickItem(
               locked: !Perms.hasAny(kActivate),
               icon: Icons.bolt_rounded,
@@ -807,7 +810,7 @@ class _QuickAddSheet extends StatelessWidget {
                 }
               },
             ),
-          if (permShown(kPay))
+          if (shown(kPay))
             _QuickItem(
               locked: !Perms.hasAny(kPay),
               icon: Icons.payments_rounded,
@@ -825,7 +828,7 @@ class _QuickAddSheet extends StatelessWidget {
                 }
               },
             ),
-          if (permShown(kAddDebt))
+          if (shown(kAddDebt))
             _QuickItem(
               locked: !Perms.hasAny(kAddDebt),
               icon: Icons.account_balance_wallet_rounded,

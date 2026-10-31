@@ -125,6 +125,17 @@ void main() {
         expect(k.contains(off), isFalse, reason: off);
       }
       expect(ElEmployeePerms.hintFor('managers.view'), 'الحسابات الفرعيّة عند الشركة (المدراء) وأرصدتها');
+      expect(ElEmployeePerms.hintFor('subscribers.add'), 'مشتركٌ جديد عند الشركة بحسابك فيها', reason: 'لا نصّ ايرث لنك (باسورد الإيداع/الكارت)');
+      // صاحب حساب AccessGate (بلا حساباتٍ فرعيّة): محرّره بلا مفاتيح «المدراء» — لا يُمنح ما لا يخدمه حسابه
+      PermissionsService.debugSet(isEmployee: false, managerRestricted: true, managerCaps: {
+        'managers.view': false, 'managers.add': false, 'managers.deposit': false, 'subscribers.add': true, 'subscribers.view': true,
+      });
+      final owner = ElEmployeePerms.keys;
+      expect(owner.contains('managers.view') || owner.contains('managers.deposit'), isFalse);
+      expect(owner.contains('subscribers.add') && owner.contains('sales.view'), isTrue, reason: 'الغائب من القدرات = ميزةٌ عندنا');
+      PermissionsService.debugSet(isEmployee: true, permissions: {'subscribers.view': true});
+      expect(ElEmployeePerms.keys.contains('managers.view'), isTrue, reason: 'موظّفها: مفاتيحها كلّها (الخادم يعرض ∩ القدرات)');
+      PermissionsService.debugReset();
       ProviderService.debugSet('fiberx');
       expect(ElEmployeePerms.keys.contains('subscribers.add'), isFalse, reason: 'فايبر اكس كما كان');
     });

@@ -428,7 +428,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                     //
                     // ٢٠٢٦-١٠-١٤: بلا `subscribers.activate` يبقى الزرّ مقفلاً
                     // في مكانه (لا شيت تفعيل ولا طلب) بدل أن يختفي.
-                    if (permShown(const ['subscribers.activate'])) ...[
+                    // وما لا يخدمه مزوّد الشركة (تفعيلٌ مطفأٌ لحساب شركةٍ مُضافة) لا يظهر — [_providerHides].
+                    if (permShown(const ['subscribers.activate']) && !_providerHides('subscribers.activate')) ...[
                       const SizedBox(height: Sp.md),
                       SubscriberPrimaryAction(
                         icon: LucideIcons.refreshCw,

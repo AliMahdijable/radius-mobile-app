@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import '../services/permissions_service.dart';
 import '../services/provider_service.dart';
 import 'api_client.dart';
 
@@ -266,8 +267,13 @@ class ElEmployeePerms {
   static Set<String> get keys => ProviderService.isFiberx
       ? fiberxKeys
       : ProviderService.isKit
-          ? kitKeys
+          ? _kitKeysForSession()
           : earthlinkKeys;
+
+  /// مفاتيح الشركة المُضافة كما تُعرض الآن: لصاحب الحساب ما يخدمه حسابه وحده (قدرته من الخادم ليست false — AccessGate بلا حساباتٍ
+  /// فرعيّة فلا «المدراء»، وتفعيلٌ مطفأ لا يُمنح)، ولموظّفها مفاتيحها كلّها (الخادم أصلاً يعرض ما مُنح ∩ ما يخدمه حساب أبيه).
+  static Set<String> _kitKeysForSession() =>
+      PermissionsService.isEmployee ? kitKeys : kitKeys.where(Perms.has).toSet();
 
   /// موظّفونا لحساب شركةٍ مُضافة (providerKit — نبض، AccessGate…، ٣٠ أكتوبر؛ الخادم 03cc682 providerKit/employeeRoutes): المشتركون
   /// كاملاً، والحسابات الفرعيّة عند الشركة ومالها، والأسعار والتقارير والتسويات والمبيعات وديون المحذوفين والأجهزة والمساعد. لا موقع
@@ -371,6 +377,7 @@ class ElEmployeePerms {
 
   /// توضيح المفتاح للشركة المفتوحة.
   static const _kitHints = <String, String>{
+    'subscribers.add': 'مشتركٌ جديد عند الشركة بحسابك فيها',
     'reports.financial': 'يشمل رصيد حسابك عند الشركة',
     'subscribers.activate': 'التفعيل من رصيدك عند الشركة — ويعمل حين يكون التفعيل مفتوحاً لحسابك',
     'managers.view': 'الحسابات الفرعيّة عند الشركة (المدراء) وأرصدتها',
