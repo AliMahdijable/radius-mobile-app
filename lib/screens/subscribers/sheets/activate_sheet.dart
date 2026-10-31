@@ -5,8 +5,10 @@ import 'package:easy_localization/easy_localization.dart';
 
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../api/cards_api.dart';
+import '../../../api/kit_card_api.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/bidi.dart';
 import '../../../core/util/format.dart';
@@ -131,6 +133,12 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   // فايبر اكس: «تفعيلٌ مكرّر» عندهم (FIBERX_COOLOFF) يُعاد بتأكيدٍ صريح وحده؛ وتوقيت باقةٍ غير الحاليّة.
   bool _confirmCooloff = false;
   _FxTiming? _fxTiming;
+  // المشروع الوطنيّ (٣١ أكتوبر): الدفع للشركة من «محفظتي» أو بالبطاقة (card_payment من الخادم — مفتاح watani_card). بالبطاقة:
+  // رابط دفعٍ يفتحه الوكيل، والشيت يتابع الطلب حتى يُحسم — الدين يُسجَّل على الخادم حين يظهر التفعيل (لا من هنا).
+  bool _payByCard = false;
+  _CardOrder? _cardOrder;
+  Timer? _cardPoll;
+  DateTime? _cardSince;
 
   @override
   void initState() {
@@ -204,6 +212,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
 
   @override
   void dispose() {
+    _cardPoll?.cancel();
     _partialCtrl.dispose();
     _deposit.removeListener(_onDepositChanged);
     _deposit.dispose();
@@ -436,7 +445,10 @@ class _ActivateSheetState extends State<_ActivateSheet> {
 
   /// تسمية الزرّ — وسبب المنع عليه حين يُمنع الكارت (كشيت التمديد).
   String get _footerLabel {
+    if (_cardOrder != null) return 'common.close'.tr();
+    if (_submitting && _kitCard) return 'جارٍ إنشاء رابط الدفع…';
     if (_submitting) return 'sheets.renewing'.tr();
+    if (_kitCard) return 'إنشاء رابط الدفع';
     if (_outcomeUnclear) return 'sheets.activate_check_first'.tr();
     if (_pkgSwitcher) return 'sheets.renew_now'.tr(); // «تفعيل/تجديد الآن» (كارت ايرث لنك لا مخزون، وفايبر اكس من المحفظة)
     if (!_cardMode) return 'sheets.renew_now'.tr();
@@ -448,6 +460,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   }
 
   bool get _canSubmit {
+    if (_cardOrder != null) return true; // «إغلاق»
     if (_loading || _submitting || _data == null) return false;
     if (_outcomeUnclear) return false;
     if (_fxMode) {
@@ -480,12 +493,17 @@ class _ActivateSheetState extends State<_ActivateSheet> {
 
   Future<void> _submit() async {
     final idx = widget.sub.idx;
+    if (_cardOrder != null) {
+      Navigator.of(context).pop(_cardOrder!.status == 'applied');
+      return;
+    }
     if (idx == null || _data == null || _cardBlocked || _outcomeUnclear) return;
     final paymentType = switch (_pay) {
       _PayType.cash => 'cash',
       _PayType.partial => 'partial-cash',
       _PayType.debt => 'non-cash',
     };
+    if (_fxMode && _kitCard) return _submitCard(idx, paymentType);
     // ── مسار فايبر اكس (٢٩ أكتوبر) والشركات المُضافة (٣٠ أكتوبر) — فرعٌ مستقلّ كايرث لنك ──
     if (_fxMode) return _submitFiberx(idx, paymentType);
     // ── مسار ايرث لنك (البند ٤) — فرعٌ مستقلّ لا يمسّ منطق SAS4 أدناه ──
@@ -712,7 +730,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       ),
       footer: SheetFooterBar(
         label: _footerLabel,
-        icon: LucideIcons.refreshCw,
+        icon: _cardOrder != null ? LucideIcons.x : (_kitCard ? LucideIcons.creditCard : LucideIcons.refreshCw),
         enabled: _canSubmit,
         busy: _submitting,
         onPressed: _submit,
@@ -726,7 +744,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: _buildBody(),
+        children: _cardOrder != null ? _cardPayBody(_cardOrder!) : _buildBody(),
       ),
     );
   }
@@ -896,6 +914,10 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       ] else if (_fxMode) ...[
         const SizedBox(height: 14),
         _elPackageSection(),
+        if (_cardPayAvailable) ...[
+          const SizedBox(height: 14),
+          _kitPaySection(),
+        ],
         if (!_elIsCurrentPkg && _isFiberx) ...[
           const SizedBox(height: 14),
           _fxTimingSection(),
@@ -1035,6 +1057,184 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         ],
       ),
     );
+  }
+
+  /// الدفع بالبطاقة متاحٌ لهذا الحساب (الخادم يقول card_payment) وفي شركته نفسها — لا في «كل الشركات» (كالموقع).
+  bool get _cardPayAvailable => _isKit && _data?['card_payment'] == true && widget.sub.companyKey == null;
+  bool get _kitCard => _cardPayAvailable && _payByCard;
+
+  /// «الدفع لـ<الشركة>»: «محفظتي» (من رصيدك في البوّابة) أو «بطاقة» (ماستر كارد/فيزا — صفحة دفع).
+  Widget _kitPaySection() {
+    return SheetSection(
+      label: 'الدفع لـ$_kitName',
+      gap: Sp.sm,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SheetChoiceTiles(
+            labels: const ['محفظتي', 'بطاقة'],
+            icons: const [LucideIcons.wallet, LucideIcons.creditCard],
+            selectedIndex: _payByCard ? 1 : 0,
+            enabled: !_submitting,
+            onSelect: (i) => setState(() => _payByCard = i == 1),
+          ),
+          if (_payByCard) ...[
+            const SizedBox(height: Sp.xs),
+            Text(
+              'يُنشأ رابط دفعٍ تفتحه وتدفع منه بالبطاقة؛ يتفعّل المشترك ويُسجَّل الدين عندنا حين يكتمل الدفع.',
+              style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.4),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// رابط الدفع: يُنشأ (أو رابط الطلب المفتوح نفسه) ثمّ يُفتح ويُتابع الطلب.
+  Future<void> _submitCard(String idx, String paymentType) async {
+    setState(() => _submitting = true);
+    final r = await MergedOps.run(widget.sub, () => KitCardApi.start(
+          idx: idx,
+          paymentType: paymentType,
+          activationData: _data!,
+          partialAmount: _pay == _PayType.partial ? _partialAmount : null,
+        ));
+    if (!mounted) return;
+    setState(() => _submitting = false);
+    if (!r.ok) {
+      final msg = r.noReply
+          ? 'انقطع الاتّصال قبل الردّ — أعد المحاولة: إن كان الرابط أُنشئ يعود نفسه (لا خصم بلا دفع)'
+          : (r.message ?? _failureText(r.code, null));
+      showSheetSnack(context, msg, isError: true);
+      return;
+    }
+    // طلبٌ مفتوح (CARD_ORDER_OPEN) ⇒ لوحته نفسها تقول حاله — لا تنبيهٌ فوقها يغطّي «إغلاق».
+    setState(() {
+      _cardOrder = _CardOrder(order: r.orderNumber!, url: r.paymentUrl, status: 'link', cost: r.cost, price: r.price);
+      _cardSince = DateTime.now();
+    });
+    _startCardPoll();
+    unawaited(_openPayPage());
+  }
+
+  Future<void> _openPayPage() async {
+    final url = _cardOrder?.url;
+    if (url == null) return;
+    var ok = false;
+    try {
+      ok = await kitCardLauncher(Uri.parse(url));
+    } catch (_) {
+      ok = false;
+    }
+    if (!ok && mounted) showSheetSnack(context, 'تعذّر فتح صفحة الدفع — اضغط «افتح صفحة الدفع»', isError: true);
+  }
+
+  void _startCardPoll() {
+    _cardPoll?.cancel();
+    _cardPoll = Timer.periodic(const Duration(seconds: 4), (_) => _pollCard());
+  }
+
+  Future<void> _pollCard() async {
+    final o = _cardOrder;
+    if (o == null || !KitCardApi.live.contains(o.status)) {
+      _cardPoll?.cancel();
+      return;
+    }
+    if (_cardSince != null && DateTime.now().difference(_cardSince!) > const Duration(minutes: 70)) {
+      _cardPoll?.cancel();
+      return;
+    }
+    final st = await MergedOps.run(widget.sub, () => KitCardApi.status(o.order));
+    if (!mounted || st == null || _cardOrder?.order != o.order) return;
+    setState(() => _cardOrder = o.copyWith(status: st.status, url: st.paymentUrl ?? o.url, cost: st.cost ?? o.cost, price: st.price ?? o.price));
+    if (st.status == 'applied') {
+      _cardPoll?.cancel();
+      await _cardApplied();
+    } else if (!KitCardApi.live.contains(st.status)) {
+      _cardPoll?.cancel();
+    }
+  }
+
+  /// حُسم بالتفعيل ⇒ كمسار المحفظة: تحديث القوائم + الوصل (إن طُلب) + إغلاق.
+  Future<void> _cardApplied() async {
+    SubscriberEvents.notifyChange();
+    final rootOverlay = Overlay.maybeOf(context, rootOverlay: true);
+    if (rootOverlay != null) {
+      unawaited(showSheetSnackOn(rootOverlay, 'تمّ الدفع بالبطاقة وتفعّل المشترك — سُجّل عندنا', isError: false));
+    }
+    if (_printReceiptChecked) {
+      final printed = await ReceiptService.printActivation(
+        sub: widget.sub,
+        price: _elChargePrice,
+        pay: _receiptPay,
+        partialAmount: _partialAmount,
+        packageName: _elSelectedPkg?['name']?.toString() ?? _profileName,
+      );
+      if (mounted) showPrintResult(context, printed);
+    }
+    if (!mounted) return;
+    Navigator.of(context).pop(true);
+  }
+
+  /// لوحة طلب الدفع: الحالة كما يقولها الخادم، وما يُدفع، ورقم الطلب، و«افتح صفحة الدفع» ما دام الرابط قائماً.
+  List<Widget> _cardPayBody(_CardOrder o) {
+    final cur = 'common.currency'.tr();
+    final st = o.status;
+    final waiting = st == 'link' || st == 'creating';
+    final (text, tone, icon) = switch (st) {
+      'link' || 'creating' => ('بانتظار الدفع بالبطاقة…', AppColors.textMid, LucideIcons.loader),
+      'paid' || 'applying' => ('تمّ الدفع — جارٍ تفعيل المشترك…', AppColors.brandAccent, LucideIcons.loader),
+      'applied' => ('تمّ التفعيل ✓', AppColors.brandAccent, LucideIcons.circleCheck),
+      'failed' => ('لم يكتمل الدفع — لم يُخصم شيء', AppColors.error, LucideIcons.triangleAlert),
+      'expired' => ('انتهى رابط الدفع بلا دفع', AppColors.error, LucideIcons.triangleAlert),
+      _ => ('تعذّر التأكّد من النتيجة — افحص المشترك في $_kitName قبل أيّ إعادة', AppColors.warning, LucideIcons.triangleAlert),
+    };
+    return [
+      Row(
+        children: [
+          Icon(icon, color: tone, size: 20),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: Text(text, style: AppType.rowValue(color: tone), maxLines: 3, overflow: TextOverflow.ellipsis),
+          ),
+        ],
+      ),
+      const SizedBox(height: 14),
+      SheetRowsGroup(rows: [
+        SheetRowData(
+          label: 'يُدفع بالبطاقة لـ$_kitName',
+          value: o.cost != null ? '${formatIQD(o.cost!.round())} $cur' : '—',
+          strong: true,
+        ),
+        if (o.price != null)
+          SheetRowData(label: 'سعر المشترك', value: '${formatIQD(o.price!.round())} $cur'),
+        SheetRowData(label: 'رقم الطلب', value: iso(o.order)),
+      ]),
+      if (waiting && o.url != null) ...[
+        const SizedBox(height: 14),
+        FilledButton.icon(
+          onPressed: _openPayPage,
+          icon: const Icon(LucideIcons.externalLink, size: 18),
+          label: const Text('افتح صفحة الدفع'),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.brandAccent,
+            foregroundColor: AppColors.onBrand,
+            minimumSize: const Size.fromHeight(48),
+          ),
+        ),
+      ],
+      const SizedBox(height: Sp.md),
+      Text(
+        KitCardApi.live.contains(st)
+            ? 'يمكنك إغلاق الشيت — يُسجَّل التفعيل والدين عندنا تلقائيّاً حين يكتمل الدفع.'
+            : st == 'unknown'
+                ? 'لم يُسجَّل دينٌ لهذا الطلب — راجع حالة المشترك ثمّ سجّله يدويّاً إن تفعّل.'
+                : st == 'failed' || st == 'expired'
+                    ? 'أغلق الشيت وافتحه من جديد لطلبٍ آخر.'
+                    : '',
+        style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.4),
+      ),
+    ];
   }
 
   /// فايبر اكس: باقةٌ غير الحاليّة ⇒ متى تبدأ — «حالاً» (الآن، ومدّتها من اليوم) أو «عند الانتهاء» (بعد الحاليّة). لا اختيار
@@ -1322,6 +1522,23 @@ class _ActivateSheetState extends State<_ActivateSheet> {
 
 /// سطر حال الكارت تحت «طريقة التفعيل» — بنغمةٍ من `AppTone` لا بلونٍ خاصّ.
 /// ومع [onRetry] يصير السطر كلّه زرّاً («جرّب مجدّداً») بأيقونة تحديث.
+/// يفتح صفحة الدفع في المتصفّح الخارجيّ — قابلٌ للاستبدال في الاختبار.
+@visibleForTesting
+Future<bool> Function(Uri url) kitCardLauncher = (url) => launchUrl(url, mode: LaunchMode.externalApplication);
+
+/// طلب دفعٍ بالبطاقة يتابعه الشيت (GET /api/v2/ftth/card-orders/:order).
+class _CardOrder {
+  const _CardOrder({required this.order, required this.url, required this.status, this.cost, this.price});
+  final String order;
+  final String? url;
+  final String status;
+  final num? cost;
+  final num? price;
+
+  _CardOrder copyWith({String? status, String? url, num? cost, num? price}) =>
+      _CardOrder(order: order, url: url ?? this.url, status: status ?? this.status, cost: cost ?? this.cost, price: price ?? this.price);
+}
+
 class _CardNote extends StatelessWidget {
   const _CardNote({
     required this.tone,
