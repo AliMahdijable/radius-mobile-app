@@ -53,6 +53,7 @@ import '../sales/sales_screen.dart' show showSellToSubscriber;
 import 'widgets/device_probe_card.dart';
 import 'widgets/last_seen_card.dart';
 import 'widgets/subscriber_actions.dart';
+import 'widgets/kit_fiber_card.dart';
 import 'connection_alert_flow.dart';
 import '../../services/receipt_service.dart';
 import '../../core/widgets/print_feedback.dart';
@@ -410,6 +411,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                     LastSeenCard(sub: sub),
                     // جهاز الألياف (ONU) للمشترك المربوط بها من «شبكة الألياف» — حالته وضوؤه الآن والتشخيص.
                     FiberSubscriberCard(sub: sub),
+                    // «الليف والموقع» للشركات المُضافة التي يقرأ خادمها الضوء والعنوان (المشروع الوطنيّ، ٣١ أكتوبر — «الباور والموقع»).
+                    if (KitFiberCard.shownFor(sub)) KitFiberCard(key: ValueKey('kit-fiber-${sub.idx}'), sub: sub),
                     DeviceProbeCard(
                       key: _deviceCardKey,
                       ip: sub.ipAddress ?? '',
