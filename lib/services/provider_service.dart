@@ -51,6 +51,10 @@ class ProviderService {
   /// `ftth` في دليل الشركات فساس SAS4 حقيقيّ (فايبر الجزيرة) ومدراؤه بلا provider.
   static bool get isFtth => _provider == 'ftth';
 
+  /// حقل «المدير» عند الشركة زونٌ لا مديرٌ فرعيّ — المشروع الوطنيّ بقديمه (ftth) وجديده على providerKit (`watani`) (المالك ٣١
+  /// أكتوبر: «بالويب والتطبيقات الوطني بدل المدير الحقل يصير الزون»). تسميةٌ وحدها: القيمة parent_username كما هي.
+  static bool get parentIsZone => _provider == 'ftth' || _provider == 'watani';
+
   /// فايبر اكس (OpenRadius، رمز الشركة `fiberx`) — `provider:'fiberx'` من الدخول و`/api/auth/me`. التطبيق خلف مفتاح الخادم
   /// `pro_settings.fiberx_app` (٢٩ أكتوبر): بلاه يُردّ الدخول `fiberx-web-only`. يتكلّم عقود SAS4 العامّة (القائمة، مودل
   /// التفعيل بوضع «فايبر اكس»، الديون من دفترنا)، وما لا يخدمه يُقفل بقدراته (`canonicalPermissions` false).

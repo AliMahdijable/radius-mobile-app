@@ -1895,8 +1895,10 @@ class _SubscriberHero extends StatelessWidget {
   static CopyField _remainingField(_Remaining r) =>
       CopyField('المتبقي', r.text, noun: 'المدّة المتبقية');
 
-  static CopyField _parentField(String parent) =>
-      CopyField('تابع إلى', parent, noun: 'اسم المدير');
+  // المشروع الوطنيّ: الحقل زون لا مدير (ProviderService.parentIsZone).
+  static CopyField _parentField(String parent) => ProviderService.parentIsZone
+      ? CopyField('الزون', parent, noun: 'الزون')
+      : CopyField('تابع إلى', parent, noun: 'اسم المدير');
 
   static CopyField _expiryField(DateTime exp) =>
       CopyField('تاريخ الانتهاء', _dateTimeText(exp));
@@ -2309,7 +2311,7 @@ class _SubscriberHero extends StatelessWidget {
               _parentField(parent),
               onBrandSurface: true,
               child: Text(
-                'تابع إلى $parent',
+                ProviderService.parentIsZone ? 'الزون $parent' : 'تابع إلى $parent',
                 style: AppType.muted(color: AppColors.onBrandSecondary)
                     .copyWith(fontSize: 11.5),
                 maxLines: 1,

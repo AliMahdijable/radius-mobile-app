@@ -2881,7 +2881,7 @@ class _ManagerFilterSheetState extends State<_ManagerFilterSheet> {
         children: [
           if (widget.managers.isNotEmpty) ...[
             const SizedBox(height: Sp.lg),
-            Text('المدير الفرعي', style: AppType.pillLabel()),
+            Text(ProviderService.parentIsZone ? 'الزون' : 'المدير الفرعي', style: AppType.pillLabel()),
             const SizedBox(height: Sp.sm),
             Wrap(
               spacing: Sp.sm,

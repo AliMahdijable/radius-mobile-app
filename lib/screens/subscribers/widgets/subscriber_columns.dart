@@ -17,7 +17,7 @@ extension SubColInfo on SubCol {
   String get label => switch (this) {
         SubCol.phone => 'desktop.col_phone'.tr(),
         SubCol.package => 'desktop.col_package'.tr(),
-        SubCol.manager => ProviderService.isFtth ? 'desktop.col_zone'.tr() : 'desktop.col_manager'.tr(),
+        SubCol.manager => ProviderService.parentIsZone ? 'desktop.col_zone'.tr() : 'desktop.col_manager'.tr(),
         SubCol.expiration => 'desktop.col_expiry'.tr(),
         SubCol.remaining => 'desktop.col_days'.tr(),
         SubCol.session => 'desktop.col_session'.tr(),
