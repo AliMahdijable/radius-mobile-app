@@ -344,16 +344,19 @@ void main() {
       // أخطر خطأ محتمل هنا: تمريره على percentLowerBetter (سلّم المعالج
       // والذاكرة) يقلب الحكم فتُصبَغ وصلةٌ بجودة ٩٦٪ حمراء، وتبدو
       // المنهارة سليمة.
-      expect(card.contains('Grade.percentHigherBetter(p.ccq)'), isTrue);
-      expect(card.contains('percentLowerBetter(p.ccq)'), isFalse);
+      expect(card.contains("'الجودة CCQ', LucideIcons.activity, '\$ccq', '%', Grade.percentHigherBetter(ccq)"), isTrue);
+      expect(card.contains('percentLowerBetter(ccq)'), isFalse);
     });
 
-    test('الجودة تسبق الإشارة في الصفّ', () {
-      final i = card.indexOf('class _PeerRow');
-      final body = card.substring(i, card.indexOf('class _LinkFacts'));
-      expect(body.indexOf('CCQ \${p.ccq}%'), greaterThan(0));
-      expect(body.indexOf('CCQ \${p.ccq}%'), lessThan(body.indexOf("'\${p.signal} dBm'")),
-          reason: 'الإشارة وحدها تكذب — الجودة هي التشخيص');
+    test('الجودة بجانب الإشارة في اللنك، والسكتر باختصار', () {
+      // اللنك: الجودة خانةٌ بجانب الإشارة؛ والسكتر باختصار (المالك ٣١ أكتوبر): اسم المتّصل وإشارته وحدهما.
+      final i = card.indexOf('List<_TileData> _linkTiles(');
+      final body = card.substring(i, card.indexOf('/// الخانة الثالثة للسويتش', i));
+      expect(body.indexOf('quality,'), greaterThan(body.indexOf("'الإشارة', LucideIcons.signal")),
+          reason: 'الإشارة وحدها تكذب — الجودة خانتها تليها');
+      final cell = card.substring(card.indexOf('class _PeerCell'), card.indexOf('/// أرقام الوصلة كما يراها الجهاز'));
+      expect(cell.contains('Text(iso(p.name)'), isTrue);
+      expect(cell.contains("'\${p.signal}'"), isTrue);
     });
 
     test('الوصلة قسم مستقلّ لا مدفون في النظام', () {
@@ -411,11 +414,10 @@ void main() {
       expect(body.contains('TextDirection.ltr'), isTrue);
     });
 
-    test('رأسٌ بلون الدور وشارته — تُعرف البطاقة قبل قراءة اسمها', () {
-      expect(card.contains('color: down ? null : rc.softBg,'), isTrue);
-      expect(card.contains('color: rc.fill,'), isTrue, reason: 'شارة الدور بلونه على صورة الجهاز');
-      expect(card.contains('Text(role.label, style: AppType.pillBold(color: rc.fill))'), isTrue,
-          reason: 'اسم الدور مع لونه — لا يحمل اللون المعنى وحده');
+    test('رأسٌ محايد بشارة الدور واسمه — بلا ألوان أدوار (المالك: «صايره نشاز»)', () {
+      expect(card.contains('color: down ? null : AppColors.surfaceSunken,'), isTrue);
+      expect(card.contains('Icon(role.icon, size: 11, color: AppColors.onBrand)'), isTrue, reason: 'شارة الدور على صورة الجهاز');
+      expect(card.contains('Text(role.label, style: AppType.pillBold(color: AppColors.textMid))'), isTrue);
     });
 
     test('«بطيء» نسبيّ لوسيط الجولة نفسها', () {

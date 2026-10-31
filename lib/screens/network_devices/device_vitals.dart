@@ -85,10 +85,15 @@ class PortTraffic {
     this.rxBps,
     this.txBps,
     this.linkSpeed,
+    this.physical = true,
   });
 
   final String name;
   final bool up;
+
+  /// منفذ إيثرنت فعليّ (ether/sfp/combo…) لا واجهةٌ منطقيّة (جلسة PPP، نفق، جسر، VLAN، لاسلكيّ). المالك ٣١ أكتوبر: «سيرفر
+  /// التوزيع شو عارض ١٤٨؟ ذوله ppp مالنا علاقة بيهن — السويجات والسيرفرات كلنا بس الإيثرات ومعدّلات السحب».
+  final bool physical;
 
   /// `null` = لا عيّنة سابقة بعد، أو العدّاد ارتدّ (إقلاع الجهاز).
   final int? rxBps;
@@ -447,15 +452,20 @@ class DeviceVitals {
         rxBps: r.rx,
         txBps: r.tx,
         linkSpeed: i.linkSpeed,
+        // RouterOS يسمّي كلّ منفذٍ فعليّ (إيثر، SFP، كومبو) بالنوع ether؛ وغيره منطقيّ (pppoe-in، أنفاق، جسر، vlan، wlan).
+        physical: i.type == 'ether',
       ));
     }
 
     final peers = [
       for (final c in s.wirelessClients)
         PeerLink(
+          // كلوحة المايكروتك: اسم DHCP ثمّ تعليق جدول التسجيل (غالباً يوزر المشترك) ثمّ العنوان ثمّ الـMAC.
           name: c.hostname?.isNotEmpty == true
               ? c.hostname!
-              : (c.ip?.isNotEmpty == true ? c.ip! : c.mac),
+              : (c.comment?.isNotEmpty == true
+                  ? c.comment!
+                  : (c.ip?.isNotEmpty == true ? c.ip! : c.mac)),
           signal: c.signalStrength,
           // نُفضّل txCcq: يقيس جودة ما نُرسله إلى العميل، وهو ما يشعر
           // به المشترك. ونسقط إلى rxCcq حين لا يُرجع الطرازُ الأوّل.
@@ -614,6 +624,7 @@ class DeviceVitals {
         rxBps: r.rx,
         txBps: r.tx,
         linkSpeed: i.speed != null && i.speed! > 0 ? '${i.speed}M' : null,
+        physical: isWiredPortName(i.ifname),
       ));
     }
 
@@ -1047,6 +1058,7 @@ Future<ProbeResult> _ruijie(NetworkDevice d, Map<String, dynamic> creds, Counter
       rxBps: r.rx,
       txBps: r.tx,
       linkSpeed: i.speedMbps > 0 ? '${i.speedMbps}M' : null,
+      physical: isWiredPortName(i.name),
     ));
   }
   final link = s.link;
@@ -1117,6 +1129,19 @@ Future<ProbeResult> _ruijie(NetworkDevice d, Map<String, dynamic> creds, Counter
     counters: counters,
     raw: s,
   );
+}
+
+/// اسم منفذ إيثرنت فعليّ (UBNT/روجي بلا نوع واجهة): eth0 · lan0 · GigabitEthernet 0/1 · Gi0/1 · Te1/0/1 · sfp1 · combo1 · Port 3
+/// — لا جسر ولا VLAN ولا لاسلكيّ ولا نفق ولا جلسة PPP ولا إدارة/حلقة داخليّة.
+bool isWiredPortName(String raw) {
+  final n = raw.trim().toLowerCase();
+  if (n.isEmpty) return false;
+  const logical = ['vlan', 'br', 'bridge', 'wlan', 'ath', 'wifi', 'wl', 'ppp', 'l2tp', 'sstp', 'ovpn', 'pptp', 'tun', 'gre',
+      'eoip', 'ipip', 'wg', 'lo', 'null', 'mgmt', 'manage', 'bond', 'veth', 'lte', 'cap', 'svi', 'dummy', 'sit', 'imq', 'ifb'];
+  for (final p in logical) {
+    if (n.startsWith(p)) return false;
+  }
+  return RegExp(r'^(eth|lan|wan|sfp|combo|qsfp|port|ge|xge|te|gi|fa|fe|hu|fo)').hasMatch(n);
 }
 
 /// مدّة تشغيل RouterOS بالثواني: «1w2d03:04:05» (API) · «9w4d» · «5h3m2s» · «03:04:05» — وغير المقروء null.

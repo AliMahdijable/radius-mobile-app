@@ -45,7 +45,15 @@ enum DeviceRole {
         _ => TypeIcon.iconFor(key),
       };
 
-  ({Color fill, Color softBg, Color softBorder}) get colors => AppColors.deviceRole(key);
+  /// الدور الذي تُعرض به البطاقة: المسجّل، إلّا جهاز بثٍّ يعمل AP وعليه أكثر من لاسلكيٍّ متّصل فهو سكتر أيّاً كان نوعه المسجّل
+  /// (المالك ٣١ أكتوبر: «اجهزه البث الي تكون ap اكثر من وايرلس متصل بجهاز واحد مثلا مايكروتيك يوبنتي» — «سكتر 1» عنده مسجّلٌ
+  /// «راوتر» فلم تظهر متّصلوه). والأولت يبقى أولتاً.
+  static DeviceRole live(NetworkDevice d, DeviceDetail? detail) {
+    final base = of(d);
+    if (base == DeviceRole.olt || base == DeviceRole.sector) return base;
+    if (detail != null && detail.glance.isAp == true && detail.peers.length >= 2) return DeviceRole.sector;
+    return base;
+  }
 
   static DeviceRole of(NetworkDevice d) {
     if (OltProfile.fromDevice(d).opensOltPanel) return DeviceRole.olt;
@@ -124,8 +132,7 @@ class DeviceBigCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final role = DeviceRole.of(device);
-    final rc = role.colors;
+    final role = DeviceRole.live(device, state.detail);
     final down = device.lastStatus == 'offline';
     final tone = DeviceLiveStatus.toneFor(device.lastStatus, device.lastResponseMs, medianMs);
     final radius = BorderRadius.circular(R.lg);
@@ -133,7 +140,7 @@ class DeviceBigCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: down ? AppTone.danger.softBg : AppColors.surface,
         borderRadius: radius,
-        border: Border.all(color: down ? AppTone.danger.softBorder : rc.softBorder),
+        border: Border.all(color: down ? AppTone.danger.softBorder : AppColors.border),
         // ارتفاعٌ هادئ (ظلّ بطاقات الحاسبة) — المالك يريد البطاقة «بحدّ وظلّ» لا أرقاماً على الخلفيّة.
         boxShadow: AppColors.isDark ? Sh.deskRestDark : Sh.deskRest,
       ),
@@ -176,10 +183,9 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rc = role.colors;
+    // بلا ألوان أدوار (المالك ٣١ أكتوبر: «الالوان الكارتات الغيها لان صايره نشاز») — الدور اسمٌ وأيقونة، واللون للحالة وحدها.
     return Container(
-      // رأسٌ بلون الدور — تمسح العين البطاقات فتعرف السكتر من السويتش قبل قراءة اسم.
-      color: down ? null : rc.softBg,
+      color: down ? null : AppColors.surfaceSunken,
       padding: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, Sp.md),
       child: Row(
         children: [
@@ -195,7 +201,7 @@ class _Header extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: AppColors.surface,
                       borderRadius: BorderRadius.circular(R.md),
-                      border: Border.all(color: rc.softBorder),
+                      border: Border.all(color: AppColors.border),
                     ),
                     padding: const EdgeInsets.all(3),
                     child: DeviceImage(brand: device.brand, model: device.model, size: 40),
@@ -208,7 +214,7 @@ class _Header extends StatelessWidget {
                     width: 22,
                     height: 22,
                     decoration: BoxDecoration(
-                      color: rc.fill,
+                      color: AppColors.brand,
                       shape: BoxShape.circle,
                       border: Border.all(color: AppColors.surface, width: 2),
                     ),
@@ -227,7 +233,7 @@ class _Header extends StatelessWidget {
                 const SizedBox(height: 3),
                 Row(
                   children: [
-                    Text(role.label, style: AppType.pillBold(color: rc.fill)),
+                    Text(role.label, style: AppType.pillBold(color: AppColors.textMid)),
                     Text(' · ', style: AppType.muted()),
                     // العنوان رابطٌ يفتح الجهاز بالمتصفّح (المالك ٣٠ أكتوبر)، والمطوّل ينسخه.
                     Flexible(child: DeviceIpLink(device.ip, style: AppType.muted())),
@@ -406,7 +412,7 @@ class _Body extends StatelessWidget {
       case DeviceRole.link:
         return _linkTiles(g, peers);
       case DeviceRole.switchRole:
-        final ports = detail?.ports ?? const <PortTraffic>[];
+        final ports = _wired(detail?.ports);
         final up = ports.where((p) => p.up).length;
         final busiest = _busiest(ports);
         return [
@@ -474,7 +480,7 @@ class _Body extends StatelessWidget {
 
   Widget? _sectionFor(DeviceRole role, DeviceGlance g, DeviceDetail? detail) {
     final peers = detail?.peers ?? const <PeerLink>[];
-    final ports = detail?.ports ?? const <PortTraffic>[];
+    final ports = _wired(detail?.ports);
     switch (role) {
       case DeviceRole.sector:
         if (g.isAp == false) return _LinkFacts(g: g, peers: peers);
@@ -509,6 +515,14 @@ class _Body extends StatelessWidget {
         );
     }
   }
+}
+
+/// منافذ الإيثرنت الفعليّة وحدها (لا جلسات PPP ولا أنفاق ولا جسر ولا VLAN ولا لاسلكيّ — «سيرفر التوزيع» عرض ١٤٣ منفذاً
+/// أغلبها pppoe-in). جهازٌ لا يُعرف نوع واجهاته (كلّها غير معلَّمة) يبقى بها كلّها.
+List<PortTraffic> _wired(List<PortTraffic>? ports) {
+  final all = ports ?? const <PortTraffic>[];
+  final wired = [for (final p in all) if (p.physical) p];
+  return wired.isEmpty ? all : wired;
 }
 
 /// أعلى منفذٍ حِملاً بمعدّلٍ معروف (لا مجموع المنافذ: الجسر والإيثر واللاسلكيّ تحمل المرور نفسه فيُعدّ مرّتين).
@@ -653,10 +667,13 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-/// المتّصلون — **الأضعف أوّلاً**: من يراقب سكتراً يريد من يوشك أن ينقطع، لا من إشارته ممتازة.
+/// المتّصلون — **الأضعف أوّلاً**، باختصار: الاسم وإشارته، خليّتان بالسطر (المالك ٣١ أكتوبر: «جالب بي المتصلين اسمائهم واشارته
+/// وبشكل مختصر»). من يراقب سكتراً يريد من يوشك أن ينقطع، لا من إشارته ممتازة.
 class _PeersSection extends StatelessWidget {
   const _PeersSection({required this.peers, required this.rows, required this.label});
   final List<PeerLink> peers;
+
+  /// أسطر الخلايا (خليّتان بالسطر).
   final int rows;
   final String label;
 
@@ -666,47 +683,53 @@ class _PeersSection extends StatelessWidget {
       return const _Notice(icon: LucideIcons.userX, text: 'لا متّصلين الآن');
     }
     final sorted = [...peers]..sort((a, b) => (a.signal ?? 0).compareTo(b.signal ?? 0));
-    final shown = sorted.take(rows).toList();
+    final shown = sorted.take(rows * 2).toList();
     final more = peers.length - shown.length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
         _SectionTitle('$label · الأضعف أوّلاً', trailing: '${peers.length}'),
-        for (final p in shown) _PeerRow(p),
+        for (var i = 0; i < shown.length; i += 2)
+          Padding(
+            padding: const EdgeInsets.only(bottom: Sp.x6),
+            child: Row(
+              children: [
+                Expanded(child: _PeerCell(shown[i])),
+                const SizedBox(width: Sp.x6),
+                Expanded(child: i + 1 < shown.length ? _PeerCell(shown[i + 1]) : const SizedBox.shrink()),
+              ],
+            ),
+          ),
         if (more > 0) _MoreLine(more == 1 ? 'وواحدٌ آخر' : 'و$more آخرون'),
       ],
     );
   }
 }
 
-class _PeerRow extends StatelessWidget {
-  const _PeerRow(this.p);
+/// خليّة متّصل: اسمه (الأطول يُقصّ) وإشارته بلون سلّمها.
+class _PeerCell extends StatelessWidget {
+  const _PeerCell(this.p);
   final PeerLink p;
 
   @override
   Widget build(BuildContext context) {
+    final known = p.signal != null && p.signal != 0;
     final tone = Grade.signal(p.signal);
-    final rates = [
-      if (p.rxRate != null && p.rxRate! > 0) '↓${p.rxRate}',
-      if (p.txRate != null && p.txRate! > 0) '↑${p.txRate}',
-    ].join(' ');
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: Sp.x6),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSunken,
+        borderRadius: BorderRadius.circular(R.sm),
+        border: Border.all(color: AppColors.border),
+      ),
       child: Row(
         children: [
           Expanded(
             child: Text(iso(p.name), style: AppType.bodyStrong(), maxLines: 1, overflow: TextOverflow.ellipsis),
           ),
-          if (p.hasCcq) ...[
-            Text(iso('CCQ ${p.ccq}%'), style: AppType.micro(color: Grade.percentHigherBetter(p.ccq).fill)),
-            const SizedBox(width: Sp.sm),
-          ],
-          if (rates.isNotEmpty) ...[
-            Text(iso(rates), style: AppType.micro(color: AppColors.textMid)),
-            const SizedBox(width: Sp.sm),
-          ],
-          _ValuePill(text: p.signal == null || p.signal == 0 ? '—' : '${p.signal} dBm', tone: tone),
+          const SizedBox(width: Sp.x6),
+          Text(iso(known ? '${p.signal}' : '—'), style: AppType.bodyBold(color: known ? tone.fill : AppColors.textMid)),
         ],
       ),
     );
@@ -825,7 +848,7 @@ class _PortsSection extends StatelessWidget {
           ),
           const SizedBox(height: Sp.sm),
         ],
-        _SectionTitle(map ? 'الأعلى حِملاً' : 'الواجهات الأعلى حِملاً'),
+        _SectionTitle(map ? 'الأعلى حِملاً' : 'المنافذ الأعلى حِملاً'),
         if (measuring)
           Text('يُحسب المعدّل…', style: AppType.micro(color: AppColors.textLow))
         else if (shown.isEmpty)
@@ -1023,7 +1046,7 @@ class _Footer extends StatelessWidget {
       );
     }
     final g = detail?.glance ?? const DeviceGlance();
-    final busiest = _busiest(detail?.ports ?? const []);
+    final busiest = _busiest(_wired(detail?.ports));
     final up = g.uptimeSec;
     final age = state.at == null ? null : (now ?? DateTime.now()).difference(state.at!);
     final stale = age != null && age > const Duration(seconds: 60);

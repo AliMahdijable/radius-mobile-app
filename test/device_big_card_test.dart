@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -59,6 +60,10 @@ void main() {
       expect(g.signal, isNull, reason: 'نقطة الوصول لا إشارة لها — إشاراتها عند عملائها');
       expect(g.uptimeSec, 9 * 604800 + 4 * 86400 + 3 * 3600 + 12 * 60 + 5);
       expect([g.cpu, g.mem, g.temp], [5, 37, 38]);
+      // المنافذ الفعليّة بنوع الواجهة (ether)، والجلسات/الأنفاق/الجسر ليست منافذ؛ واسم العميل: DHCP ثمّ تعليقه.
+      expect({for (final p in r.detail.ports) p.name: p.physical},
+          {'ether1': true, 'sfp-sfpplus1': true, 'bridge1': false, 'wlan1': false, '<pppoe-ali>': false, 'Tunn-Hassan': false});
+      expect(r.detail.peers.first.name, 'c1', reason: 'تعليق جدول التسجيل حين لا اسم DHCP');
       final light = await DeviceVitals.fetch(dev(11, 'sector', 'mikrotik'));
       expect(light.detail.glance.peersKnown, isFalse, reason: 'القراءة الخفيفة بلا جدول التسجيل');
     });
@@ -129,18 +134,25 @@ void main() {
       expect(DeviceRole.of(d('other', 'mikrotik')), DeviceRole.other);
     });
 
-    test('لكلّ دورٍ لونٌ مختلف في الوضعين، وكلّها بعيدةٌ عن ألوان الحالة', () {
-      for (final dark in [false, true]) {
-        AppColors.setDarkMode(dark);
-        final fills = {for (final r in DeviceRole.values) r: r.colors.fill};
-        expect(fills.values.toSet(), hasLength(DeviceRole.values.length));
-        for (final f in fills.values) {
-          expect(f, isNot(AppTone.success.fill));
-          expect(f, isNot(AppTone.danger.fill));
-          expect(f, isNot(AppTone.warning.fill));
-        }
-      }
-      AppColors.setDarkMode(false);
+    test('🚨 بلا ألوان أدوار (المالك: «الالوان الكارتات الغيها لان صايره نشاز») — الدور اسمٌ وأيقونة', () {
+      final src = File('lib/screens/network_devices/widgets/device_big_card.dart').readAsStringSync();
+      expect(src.contains('deviceRole('), isFalse);
+      expect(src.contains('color: down ? null : AppColors.surfaceSunken,'), isTrue);
+      expect(src.contains('Text(role.label, style: AppType.pillBold(color: AppColors.textMid))'), isTrue);
+      expect(File('lib/theme/colors.dart').readAsStringSync().contains('deviceRole'), isFalse);
+    });
+
+    test('جهاز بثٍّ AP عليه أكثر من لاسلكيّ = سكتر أيّاً كان نوعه المسجّل؛ وبواحدٍ أو بلا AP يبقى نوعه', () {
+      const ap3 = DeviceDetail(
+          peers: [PeerLink(name: 'a'), PeerLink(name: 'b'), PeerLink(name: 'c')], glance: DeviceGlance(isAp: true, peersKnown: true));
+      const ap1 = DeviceDetail(peers: [PeerLink(name: 'a')], glance: DeviceGlance(isAp: true, peersKnown: true));
+      const sta = DeviceDetail(peers: [PeerLink(name: 'a'), PeerLink(name: 'b')], glance: DeviceGlance(isAp: false));
+      final router = d('router', 'mikrotik');
+      expect(DeviceRole.live(router, ap3), DeviceRole.sector, reason: '«سكتر 1» مسجّلٌ راوتراً');
+      expect(DeviceRole.live(router, ap1), DeviceRole.router);
+      expect(DeviceRole.live(router, sta), DeviceRole.router);
+      expect(DeviceRole.live(router, null), DeviceRole.router);
+      expect(DeviceRole.live(d('other', 'bdcom', model: 'BDCOM P3600-04'), ap3), DeviceRole.olt);
     });
   });
 
@@ -180,9 +192,31 @@ void main() {
       expect(find.textContaining('-64'), findsOneWidget, reason: 'متوسّط الإشارات −64.45 ⇒ −64');
       expect(find.textContaining('-79'), findsWidgets, reason: 'أضعف إشارة (الخانة + سطر صاحبها)');
       expect(shows('ali-home'), isTrue, reason: 'الأضعف أوّلاً');
-      expect(shows('m.jawad'), isFalse, reason: 'الأقوى خارج الأربعة');
-      expect(find.text('و7 آخرون'), findsOneWidget);
-      expect(shows('CCQ 61%'), isTrue);
+      expect(shows('m.jawad'), isFalse, reason: 'الأقوى خارج الثمانية');
+      expect(find.text('و3 آخرون'), findsOneWidget, reason: 'أربعة أسطر × خليّتين = ٨ من ١١');
+      expect(shows('-79'), isTrue);
+      expect(shows('CCQ 61%'), isFalse, reason: 'باختصار: الاسم وإشارته');
+    });
+
+    testWidgets('«سكتر 1» المسجّل راوتراً (AP بمتّصلين): يُعرض سكتراً بمتّصليه', (t) async {
+      final asRouter = NetworkDevice(
+        id: 21, adminId: '1', name: 'سكتر 1', type: 'router', brand: 'mikrotik', model: 'BaseBox 5', ip: '10.70.241.2', port: 8728,
+        protocol: 'api', hasCredentials: true, lastStatus: 'online', lastResponseMs: 7, createdAt: DateTime(2026));
+      AppColors.setDarkMode(false);
+      t.view.physicalSize = const Size(390, 1400);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(MaterialApp(
+        home: Directionality(
+          textDirection: TextDirection.rtl,
+          child: Scaffold(
+              body: SingleChildScrollView(child: DeviceBigCard(device: asRouter, state: fx.stateOf(fx.sector), now: now))),
+        ),
+      ));
+      await t.pump();
+      expect(find.text('سكتر'), findsOneWidget);
+      expect(find.text('راوتر'), findsNothing);
+      expect(shows('ali-home'), isTrue);
     });
 
     testWidgets('اللنك (ميموزا): الإشارة، SNR مكان CCQ (لا يقرؤه)، سرعة الربط وإرساله، وأرقام الوصلة', (t) async {
@@ -219,6 +253,35 @@ void main() {
           reason: 'مربّعٌ لكلّ منفذ');
     });
 
+    testWidgets('🚨 السويتش/السيرفر: الإيثرات وحدها — جلسات PPP والأنفاق لا تُعدّ منافذ ولا تدخل «الأعلى حِملاً»', (t) async {
+      final st = fx.stateOf(fx.switchDev);
+      final ports = [
+        ...st.detail!.ports,
+        for (var i = 0; i < 120; i++) PortTraffic(name: '<pppoe-u$i>', up: true, rxBps: 900000000, txBps: 900000000, physical: false),
+        const PortTraffic(name: 'Tunn-Hassan', up: true, rxBps: 950000000, txBps: 1, physical: false),
+      ];
+      final withPpp = VitalsState(
+        vitals: st.vitals,
+        at: st.at,
+        detail: DeviceDetail(ports: ports, glance: st.detail!.glance),
+      );
+      AppColors.setDarkMode(false);
+      t.view.physicalSize = const Size(390, 1400);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(MaterialApp(
+        home: Directionality(
+          textDirection: TextDirection.rtl,
+          child: Scaffold(body: SingleChildScrollView(child: DeviceBigCard(device: fx.switchDev, state: withPpp, now: now))),
+        ),
+      ));
+      await t.pump();
+      expect(shows('13 متّصل من 18'), isTrue, reason: 'لا ١٣٣ من ١٣٩');
+      expect(shows('Tunn-Hassan'), isFalse);
+      expect(shows('<pppoe-u0>'), isFalse);
+      expect(find.byWidgetPredicate((w) => w is Tooltip && (w.message ?? '').startsWith('<pppoe')), findsNothing);
+    });
+
     testWidgets('الأولت: منافذ PON — المطفأ أوّلاً ثمّ الأقلّ نسبةً، وغير المتّصلين والربط في العنوان', (t) async {
       await pump(t, fx.olt);
       expect(find.text('أولت'), findsOneWidget);
@@ -239,6 +302,7 @@ void main() {
       expect(shows('1284'), isTrue);
       expect(shows('24.1 V'), isTrue);
       expect(shows('sfp-sfpplus1-WAN'), isTrue);
+      expect(find.text('المنافذ الأعلى حِملاً'), findsOneWidget);
     });
 
     testWidgets('المعطّل: سطر «آخر ظهور» وحده بلا خانات؛ وبلا بيانات دخول: سببٌ صريح؛ وقبل القراءة: «…»', (t) async {
@@ -300,7 +364,14 @@ MikrotikStats _mtk({required String mode, required int clients, bool temp = true
     cpuFrequencyMhz: 600,
     temperature: temp ? 38 : null,
     voltage: 22.6,
-    interfaces: const [],
+    interfaces: const [
+      MikrotikInterface(name: 'ether1', type: 'ether', running: true, disabled: false, rxBytes: 1, txBytes: 1),
+      MikrotikInterface(name: 'sfp-sfpplus1', type: 'ether', running: true, disabled: false, rxBytes: 1, txBytes: 1),
+      MikrotikInterface(name: 'bridge1', type: 'bridge', running: true, disabled: false, rxBytes: 1, txBytes: 1),
+      MikrotikInterface(name: 'wlan1', type: 'wlan', running: true, disabled: false, rxBytes: 1, txBytes: 1),
+      MikrotikInterface(name: '<pppoe-ali>', type: 'pppoe-in', running: true, disabled: false, rxBytes: 1, txBytes: 1),
+      MikrotikInterface(name: 'Tunn-Hassan', type: 'eoip-tunnel', running: true, disabled: false, rxBytes: 1, txBytes: 1),
+    ],
     pppActiveCount: 0,
     cpuKnown: cpuKnown,
     wirelessInterfaces: [
