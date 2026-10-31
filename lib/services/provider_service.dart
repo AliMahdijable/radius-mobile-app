@@ -55,6 +55,11 @@ class ProviderService {
   /// أكتوبر: «بالويب والتطبيقات الوطني بدل المدير الحقل يصير الزون»). تسميةٌ وحدها: القيمة parent_username كما هي.
   static bool get parentIsZone => _provider == 'ftth' || _provider == 'watani';
 
+  /// «تعليق/تشغيل» المشترك بدل «تعطيل/تفعيل الحساب» — المشروع الوطنيّ (`watani`، ١ نوفمبر — كلمات بوّابته): الحال «موقوف»، بلا
+  /// «فصل الاتصال» (البوّابة لا تسمح به للمقاول) ولا تعليقٍ جماعيّ (ميزانيّة نداءات البوّابة) — والخادم يفرض الاثنين. كالموقع
+  /// (`components/kit/kit.ts` isSuspendProvider).
+  static bool get togglesAsSuspend => _provider == 'watani';
+
   /// فايبر اكس (OpenRadius، رمز الشركة `fiberx`) — `provider:'fiberx'` من الدخول و`/api/auth/me`. التطبيق خلف مفتاح الخادم
   /// `pro_settings.fiberx_app` (٢٩ أكتوبر): بلاه يُردّ الدخول `fiberx-web-only`. يتكلّم عقود SAS4 العامّة (القائمة، مودل
   /// التفعيل بوضع «فايبر اكس»، الديون من دفترنا)، وما لا يخدمه يُقفل بقدراته (`canonicalPermissions` false).

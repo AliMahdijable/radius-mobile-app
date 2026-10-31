@@ -906,6 +906,12 @@ class _ActivateSheetState extends State<_ActivateSheet> {
             ),
         ],
       ),
+      // تنبيه المزوّد قبل الدفع (المشروع الوطنيّ، ١ نوفمبر): «المشترك موقوف في البوّابة — التفعيل يمدّد اشتراكه لكنّه يبقى
+      // موقوفاً حتى تضغط «تشغيل»» — البوّابة نفسها لا ترفع التعليق بالشراء. تنبيهٌ وحده، لا يمسّ المال.
+      if (_providerNotice != null) ...[
+        const SizedBox(height: 14),
+        _CardNote(tone: AppTone.warning, icon: LucideIcons.pause, text: _providerNotice!, maxLines: 4),
+      ],
       if (_isEarthlink) ...[
         const SizedBox(height: 14),
         _elPackageSection(),
@@ -1057,6 +1063,12 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         ],
       ),
     );
+  }
+
+  /// تنبيهٌ من المزوّد يُعرض قبل الدفع (`provider_notice` في بيانات التفعيل) — null بلا تنبيه.
+  String? get _providerNotice {
+    final n = _data?['provider_notice']?.toString().trim() ?? '';
+    return n.isEmpty || n.length > 300 ? null : n;
   }
 
   /// الدفع بالبطاقة متاحٌ لهذا الحساب (الخادم يقول card_payment) وفي شركته نفسها — لا في «كل الشركات» (كالموقع).

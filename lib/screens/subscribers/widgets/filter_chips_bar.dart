@@ -4,6 +4,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../services/provider_service.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -121,6 +122,10 @@ class _FilterChipsBarState extends State<FilterChipsBar> {
         LucideIcons.ban, AppColors.textMid),
   ];
 
+  /// «معطّل» ⇒ «موقوف» للمشروع الوطنيّ (معلّقٌ في بوّابته — ١ نوفمبر).
+  static String _labelOf(_ChipDef d) =>
+      d.key == SubscriberFilter.disabled && ProviderService.togglesAsSuspend ? 'subscribers.filter_suspended' : d.label;
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
@@ -131,7 +136,7 @@ class _FilterChipsBarState extends State<FilterChipsBar> {
         children: [
           for (final d in _defs)
             _Chip(
-              label: d.label.tr(),
+              label: _labelOf(d).tr(),
               icon: d.icon,
               color: d.color,
               count: widget.counts[d.key] ?? 0,
@@ -154,7 +159,7 @@ class _FilterChipsBarState extends State<FilterChipsBar> {
           final selected = widget.current == d.key;
           final count = widget.counts[d.key] ?? 0;
           return _Chip(
-            label: d.label.tr(),
+            label: _labelOf(d).tr(),
             icon: d.icon,
             color: d.color,
             count: count,

@@ -1609,6 +1609,41 @@ class SubscribersApi {
     }
   }
 
+  /// كـ[toggle] لمشتركٍ واحد مع ما يقوله الخادم: رسالته العربيّة عند الرفض (409 — «الاشتراك منتهٍ — البوّابة لا تعلّق المنتهي…»،
+  /// «عمليّات تعليق كثيرة…»، «ما نعرف…»)، و`unchanged` حين كان المشترك على الحال المطلوبة أصلاً (المشروع الوطنيّ، ١ نوفمبر —
+  /// الفحص المسبق لا يرسل شيئاً). الرفض يصل جسماً لا استثناءً (validateStatus < 500)، و5xx/انقطاعٌ ⇒ رسالة الخادم إن وُجدت.
+  static Future<({bool ok, bool unchanged, String? message, String? code})> toggleResult(String id,
+      {required bool enable}) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/v2/subscribers/$id/toggle-enabled',
+        data: {'enabled': enable},
+      );
+      return toggleResultOf(r.data);
+    } on DioException catch (e) {
+      _log('v2/subscribers/$id/toggle-enabled', e);
+      final b = e.response?.data;
+      return toggleResultOf(b is Map ? b : null);
+    } catch (e) {
+      _log('v2/subscribers/$id/toggle-enabled', e);
+      return (ok: false, unchanged: false, message: null, code: null);
+    }
+  }
+
+  /// جسم ردّ toggle-enabled ⇒ النتيجة (للاختبار أيضاً).
+  @visibleForTesting
+  static ({bool ok, bool unchanged, String? message, String? code}) toggleResultOf(Map? b) {
+    final ok = b?['success'] == true;
+    final d = b?['data'];
+    final m = b?['message']?.toString().trim();
+    return (
+      ok: ok,
+      unchanged: ok && d is Map && d['unchanged'] == true,
+      message: !ok && m != null && m.isNotEmpty && m.length <= 240 ? m : null,
+      code: b?['code']?.toString(),
+    );
+  }
+
   /// 2026-08-26: تعديل موقع GPS للمشترك.
   /// - `lat/lng` = تعيين موقع.
   /// - `clear=true` = حذف الموقع.

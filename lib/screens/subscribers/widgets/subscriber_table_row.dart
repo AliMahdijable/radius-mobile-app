@@ -995,7 +995,7 @@ class _DaysCell extends StatelessWidget {
     final d = SubscriberCardV3.daysOf(sub);
     final exp = sub.parsedExpiration;
     final expired = exp != null && exp.isBefore(DateTime.now());
-    final text = d.small == 'منتهي' || d.small == 'معطّل'
+    final text = d.small == 'منتهي' || d.small == 'معطّل' || d.small == 'موقوف'
         ? d.small
         : d.small.isEmpty
             ? d.big
