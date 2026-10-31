@@ -1156,11 +1156,14 @@ class SubscribersApi {
   /// with payload encryption client-side. `parent_id` is required;
   /// admins typically pass their own adminId unless they're managing
   /// a sub-admin's subscriber tree.
+  ///
+  /// [parentId] null = بلا `parent_id`: الشركات المُضافة (نبض، AccessGate…) تُنشئ المشترك تحت حساب الجلسة نفسه، ومعرّفها
+  /// نصّيّ (`accessgate:admin@kdm`) لا رقم مديرٍ في الساس (٣١ أكتوبر — كان النموذج يقف «تعذّر تحديد المدير الأصلي»).
   static Future<({bool ok, String? message})> createSubscriber({
     required String username,
     required String password,
     required int profileId,
-    required int parentId,
+    required int? parentId,
     String? firstname,
     String? lastname,
     String? phone,
@@ -1173,7 +1176,7 @@ class SubscribersApi {
           'username': username,
           'password': password,
           'profile_id': profileId,
-          'parent_id': parentId,
+          if (parentId != null) 'parent_id': parentId,
           if (firstname != null && firstname.isNotEmpty) 'firstname': firstname,
           if (lastname != null && lastname.isNotEmpty) 'lastname': lastname,
           if (phone != null && phone.isNotEmpty) 'phone': phone,

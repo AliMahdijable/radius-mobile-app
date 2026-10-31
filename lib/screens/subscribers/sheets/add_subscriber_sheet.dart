@@ -174,7 +174,9 @@ class _AddSheetState extends State<_AddSheet> {
     final parentId = _canPickParent && _parentId != null
         ? _parentId
         : int.tryParse((adminId ?? '').split(':').last);
-    if (parentId == null) {
+    // الشركة المُضافة (٣١ أكتوبر): معرّف جلستها نصّيّ (`accessgate:admin@kdm`) — بلا مديرٍ مختار يُنشأ المشترك تحت حسابها نفسه
+    // (الخادم: بلا parent_id ⇒ حساب الجلسة)، فلا «تعذّر تحديد المدير الأصلي» لها.
+    if (parentId == null && !ProviderService.isKit) {
       if (!mounted) return;
       showSheetSnack(context, 'تعذّر تحديد المدير الأصلي — أعد تسجيل الدخول',
           isError: true);

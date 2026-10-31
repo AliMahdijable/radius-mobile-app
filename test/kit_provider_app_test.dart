@@ -15,6 +15,7 @@ import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/auth_api.dart';
 import 'package:rad_mysvcs/api/cards_api.dart';
 import 'package:rad_mysvcs/api/employees_api.dart';
+import 'package:rad_mysvcs/api/subscribers_api.dart';
 import 'package:rad_mysvcs/models/merged_company.dart';
 import 'package:rad_mysvcs/models/package_change.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
@@ -171,6 +172,19 @@ void main() {
       ApiClient.dio.httpClientAdapter = server;
       CardsState.reset();
       ProviderService.debugSet('nabd', label: 'نبض');
+    });
+
+    test('«مشترك جديد»: بلا مديرٍ رقميّ (معرّف الشركة نصّيّ) يُرسَل بلا parent_id ويُنشأ تحت حسابها؛ ومع مديرٍ مختار كما كان', () async {
+      final a = await SubscribersApi.createSubscriber(username: 'kt1', password: 'x1', profileId: 32, parentId: null);
+      final b = await SubscribersApi.createSubscriber(username: 'kt2', password: 'x2', profileId: 32, parentId: 7);
+      expect([a.ok, b.ok], [true, true]);
+      final sent = server.bodies('/api/v2/subscribers');
+      expect(sent, hasLength(2));
+      expect(sent[0].containsKey('parent_id'), isFalse, reason: 'الخادم: بلا parent_id ⇒ حساب الجلسة');
+      expect(sent[1]['parent_id'], 7);
+      // النموذج لا يقف عند «تعذّر تحديد المدير الأصلي» للشركة المُضافة وحدها
+      final sheet = File('lib/screens/subscribers/sheets/add_subscriber_sheet.dart').readAsStringSync();
+      expect(sheet.contains('if (parentId == null && !ProviderService.isKit) {'), isTrue);
     });
 
     final sub = Subscriber.fromJson({
@@ -357,6 +371,8 @@ class _Server implements HttpClientAdapter {
             ],
           },
         });
+      case '/api/v2/subscribers':
+        reply = (200, {'success': true, 'message': 'تمّ'});
       case '/api/v2/subscribers-usage':
         reply = (200, {
           'success': true,
