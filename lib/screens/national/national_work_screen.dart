@@ -11,6 +11,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../desktop/desk_widgets.dart';
 import 'national_labels.dart';
+import 'national_ticket_write.dart';
 import 'national_widgets.dart';
 
 /// «المهامّ والطلبات» — المشروع الوطنيّ (watani، ٣١ أكتوبر): الطلبات (تسجيل زبون، عنوان جديد، نقل ملكيّة…) بفلاترها و«بانتظار
@@ -264,8 +265,8 @@ class _NationalWorkScreenState extends State<NationalWorkScreen> {
     ];
   }
 
-  void _openRequest(NationalRequest r) {
-    showAppSheet<void>(
+  Future<void> _openRequest(NationalRequest r) async {
+    final changed = await showAppSheet<bool>(
       context: context,
       backgroundColor: Colors.transparent,
       barrierColor: AppColors.scrim,
@@ -273,6 +274,8 @@ class _NationalWorkScreenState extends State<NationalWorkScreen> {
       useSafeArea: true,
       builder: (_) => _RequestSheet(row: r),
     );
+    // أُلغي الطلب (أو لم يتأكّد): القائمة والعدّادات من جديد
+    if (changed == true && mounted) _reload();
   }
 }
 
@@ -454,7 +457,7 @@ class _RequestSheetState extends State<_RequestSheet> {
                     Row(
                       children: [
                         ToneChip(label: st.label, tone: st.tone),
-                        if (d?.cancelable == true) ...[
+                        if (d?.cancelable == true && d?.canCancel != true) ...[
                           const SizedBox(width: Sp.sm),
                           Expanded(child: Text('يمكن إلغاؤه من بوّابة المشروع الوطني', style: AppType.muted())),
                         ],
@@ -522,8 +525,36 @@ class _RequestSheetState extends State<_RequestSheet> {
                             ),
                           ),
                       ]),
+                    if (d?.canCancel == true) ...[
+                      const SizedBox(height: Sp.xl),
+                      OutlinedButton.icon(
+                        onPressed: _cancelling ? null : _cancel,
+                        icon: Icon(nationalWriteLocked ? LucideIcons.lock : LucideIcons.circleX, size: 18),
+                        label: Text(_cancelling ? 'جارٍ الإلغاء…' : 'إلغاء الطلب'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: nationalWriteLocked ? AppColors.textHint : AppColors.error,
+                          side: BorderSide(color: nationalWriteLocked ? AppColors.border : AppColors.error.withValues(alpha: 0.45)),
+                          minimumSize: const Size.fromHeight(48),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
     );
+  }
+
+  bool _cancelling = false;
+
+  Future<void> _cancel() async {
+    setState(() => _cancelling = true);
+    final changed = await nationalCancelRequest(
+      context,
+      id: widget.row.id!,
+      type: widget.row.type,
+      label: nationalRequestType(widget.row.type),
+    );
+    if (!mounted) return;
+    setState(() => _cancelling = false);
+    if (changed) Navigator.of(context).pop(true);
   }
 }

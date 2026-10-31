@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
@@ -6,7 +8,11 @@ import 'api_client.dart';
 /// المشروع الوطنيّ (watani، ٣١ أكتوبر — المالك: «الطلبات التذاكر هاي مهمه مموجوده كذلك المواضع الي متعلقة بالمالية…
 /// سرعه بالاستجابه والعرض… والفلاتر»): أقسام البوّابة بالتطبيق من `/api/v2/ftth/*` بالخادم
 /// (`server/watani/wataniPortalRoutes.js`) — فلاتر البوّابة نفسها، وكاشٌ بالخادم: الجلب الأوّل البطيء (الطلبات ~١٦ث، المهامّ ~٨ث)
-/// يردّ `pending` والشاشة تعيد السؤال كلّ ٤ث. لا هواتف ولا وثائق هويّة ولا إحداثيّات (الخادم لا يرسلها). قراءةٌ وحدها.
+/// يردّ `pending` والشاشة تعيد السؤال كلّ ٤ث. لا هواتف ولا وثائق هويّة ولا إحداثيّات (الخادم لا يرسلها).
+///
+/// الكتابة (المرحلة ٢، ٣١ أكتوبر — خلف مفتاح الحساب `watani_portal`، والخادم يقول `can_write`/`can`): فتح تذكرة (لمشترك أو للزون)،
+/// والتعليق، وموعد الزيارة، وإلغاء الطلب. لا إعادة إرسالٍ تلقائيّة أبداً: «غير مؤكَّد» (202 UNCONFIRMED) يُعرض كما هو، والتذكرة
+/// تحمل مرجع النموذج (`client_ref` = ticketId) فإعادتها بالمرجع نفسه لا تفتح ثانية.
 
 class NationalRef {
   const NationalRef(this.id, this.name);
@@ -121,6 +127,7 @@ class NationalComment {
 
 class NationalTicketDetails {
   const NationalTicketDetails({
+    this.id,
     required this.title,
     required this.displayId,
     required this.status,
@@ -137,7 +144,10 @@ class NationalTicketDetails {
     this.scheduleReason,
     this.attachments = const [],
     this.comments,
+    this.canComment = false,
+    this.canSchedule = false,
   });
+  final String? id;
   final String title;
   final String displayId;
   final String status;
@@ -157,10 +167,16 @@ class NationalTicketDetails {
   /// null = تعذّر جلبها الآن (لا «لا تعليقات» كاذبة).
   final List<NationalComment>? comments;
 
+  /// ما يُسمح به من هنا (مفتاح الحساب + حالة التذكرة + حاجتها لموعد) — من الخادم.
+  final bool canComment;
+  final bool canSchedule;
+
   static NationalTicketDetails fromJson(Map<String, dynamic> j) {
     final sch = j['schedule'];
     final cs = j['comments'];
+    final can = j['can'] is Map ? j['can'] as Map : const {};
     return NationalTicketDetails(
+      id: _sn(j['id']),
       title: _s(j['title']),
       displayId: _s(j['display_id']),
       status: _s(j['status']),
@@ -179,6 +195,8 @@ class NationalTicketDetails {
       comments: cs is List
           ? cs.whereType<Map>().map((c) => NationalComment(_s(c['text']), _s(c['by']), _sn(c['at']))).toList()
           : null,
+      canComment: can['comment'] == true,
+      canSchedule: can['schedule'] == true,
     );
   }
 }
@@ -232,6 +250,7 @@ class NationalRequestDetail {
     this.tasks = const [],
     this.logs,
     this.logsPending = false,
+    this.canCancel = false,
   });
   final String status;
   final String? plan;
@@ -244,6 +263,9 @@ class NationalRequestDetail {
   /// null = لم يصل بعد (`logsPending`) أو تعذّر.
   final List<({String? at, bool? ok, String text})>? logs;
   final bool logsPending;
+
+  /// «إلغاء الطلب» من هنا (مفتاح الحساب + isCancelable) — من الخادم.
+  final bool canCancel;
 
   static NationalRequestDetail fromJson(Map<String, dynamic> j) {
     final d = j['detail'] is Map ? Map<String, dynamic>.from(j['detail'] as Map) : const <String, dynamic>{};
@@ -263,6 +285,7 @@ class NationalRequestDetail {
           ? logs.whereType<Map>().map((l) => (at: _sn(l['at']), ok: l['ok'] is bool ? l['ok'] as bool : null, text: _s(l['text']))).toList()
           : null,
       logsPending: j['logs_pending'] == true,
+      canCancel: j['can'] is Map && (j['can'] as Map)['cancel'] == true,
     );
   }
 }
@@ -343,16 +366,22 @@ class NationalLookupItem {
 class NationalLookups {
   const NationalLookups({
     this.ticketStatuses,
+    this.ticketCategories,
     this.requestTypes,
     this.requestStatuses,
     this.zones,
     this.transactionTypes,
+    this.canWrite = false,
   });
   final List<NationalLookupItem>? ticketStatuses;
+  final List<NationalLookupItem>? ticketCategories;
   final List<NationalLookupItem>? requestTypes;
   final List<NationalLookupItem>? requestStatuses;
   final List<NationalLookupItem>? zones;
   final List<NationalLookupItem>? transactionTypes;
+
+  /// الكتابة مفتوحةٌ لهذا الحساب (تذكرة/تعليق/موعد/إلغاء طلب).
+  final bool canWrite;
 
   static List<NationalLookupItem>? _list(dynamic v) => v is List
       ? v.whereType<Map>().map((x) => NationalLookupItem(_s(x['id']), _s(x['name']))).where((x) => x.id.isNotEmpty).toList()
@@ -360,11 +389,53 @@ class NationalLookups {
 
   static NationalLookups fromJson(Map<String, dynamic> j) => NationalLookups(
         ticketStatuses: _list(j['ticket_statuses']),
+        ticketCategories: _list(j['ticket_categories']),
         requestTypes: _list(j['request_types']),
         requestStatuses: _list(j['request_statuses']),
         zones: _list(j['zones']),
         transactionTypes: _list(j['transaction_types']),
+        canWrite: j['can_write'] == true,
       );
+}
+
+/// مشتركٌ تُفتح له تذكرة: معرّف زبونه وزون اشتراكه عند البوّابة (بحث المشتركين بالخادم).
+class NationalTarget {
+  const NationalTarget({required this.idx, required this.username, required this.name, this.customerId, this.zoneId, this.zone});
+  final String idx;
+  final String username;
+  final String name;
+  final String? customerId;
+  final String? zoneId;
+  final String? zone;
+
+  static NationalTarget? fromJson(Map<String, dynamic> j) {
+    final w = j['watani'] is Map ? j['watani'] as Map : const {};
+    final idx = _s(j['idx']);
+    if (idx.isEmpty) return null;
+    final name = [_s(j['firstname']), _s(j['lastname'])].where((x) => x.isNotEmpty).join(' ');
+    return NationalTarget(
+      idx: idx,
+      username: _s(j['username']),
+      name: name.isEmpty ? _s(j['username']) : name,
+      customerId: _sn(w['customerId']),
+      zoneId: _sn(w['zoneId']),
+      zone: _sn(w['zone']),
+    );
+  }
+}
+
+/// نتيجة كتابة: نجاحٌ (+ بيانات)، أو «غير مؤكَّد» (لا «فشل» — ربّما وصلت)، أو رفضٌ برسالة الخادم (+ رسالة البوّابة إن وُجدت).
+enum NationalWriteState { ok, unconfirmed, failed }
+
+class NationalWrite {
+  const NationalWrite(this.state, {this.message, this.portalMessage, this.code, this.data = const {}});
+  final NationalWriteState state;
+  final String? message;
+  final String? portalMessage;
+  final String? code;
+  final Map<String, dynamic> data;
+  bool get ok => state == NationalWriteState.ok;
+  bool get unconfirmed => state == NationalWriteState.unconfirmed;
 }
 
 class NationalCounts {
@@ -505,6 +576,95 @@ class NationalPortalApi {
     });
     return r.ok ? NationalResult.ok(_page(r.data!, NationalMoneyRow.fromJson)) : NationalResult.fail(r.error, relogin: r.relogin);
   }
+
+  /* ───────────── الكتابة ───────────── */
+
+  static const summaryMax = 150;
+  static const detailsMax = 2000;
+  static const commentMax = 1000;
+  static const reasonMax = 300;
+
+  static Future<NationalWrite> _write(String method, String path, Map<String, dynamic> body) async {
+    try {
+      final r = await ApiClient.dio.request<Map<String, dynamic>>(path, data: body, options: Options(method: method));
+      final b = r.data ?? const {};
+      if (b['success'] == true) {
+        return NationalWrite(NationalWriteState.ok, data: b['data'] is Map ? Map<String, dynamic>.from(b['data'] as Map) : const {});
+      }
+      if (b['code'] == 'UNCONFIRMED') {
+        return NationalWrite(NationalWriteState.unconfirmed, message: _sn(b['message']) ?? 'لم تتأكّد النتيجة — تحقّق قبل الإعادة', code: 'UNCONFIRMED');
+      }
+      return NationalWrite(NationalWriteState.failed, message: _writeMsg(b), portalMessage: _sn(b['portal_message']), code: _sn(b['code']));
+    } on DioException catch (e) {
+      final b = e.response?.data;
+      if (!kReleaseMode) debugPrint('🔴 $method $path: ${e.response?.statusCode}');
+      if (b is Map) {
+        return NationalWrite(NationalWriteState.failed, message: _writeMsg(b), portalMessage: _sn(b['portal_message']), code: _sn(b['code']));
+      }
+      return const NationalWrite(NationalWriteState.failed, message: 'تعذّر الاتّصال — لم يُرسل شيء، أعد المحاولة');
+    } catch (e) {
+      if (!kReleaseMode) debugPrint('🔴 $method $path: $e');
+      return const NationalWrite(NationalWriteState.failed, message: 'تعذّر الاتّصال — لم يُرسل شيء، أعد المحاولة');
+    }
+  }
+
+  static String _writeMsg(dynamic b) {
+    final m = b is Map ? b['message']?.toString().trim() : null;
+    return (m != null && m.isNotEmpty && m.length < 220) ? m : 'تعذّر التنفيذ — لم يتغيّر شيء';
+  }
+
+  /// مرجع نموذجٍ جديد (UUID v4) — ticketId عند البوّابة.
+  static String newRef([Random? rnd]) {
+    final r = rnd ?? Random.secure();
+    final b = List<int>.generate(16, (_) => r.nextInt(256));
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    final h = b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
+    return '${h.substring(0, 8)}-${h.substring(8, 12)}-${h.substring(12, 16)}-${h.substring(16, 20)}-${h.substring(20)}';
+  }
+
+  /// مشتركون للتذكرة (الاسم/اليوزر/الهاتف ≥ حرفين) — من بحث الخادم بحقول الوطنيّ.
+  static Future<List<NationalTarget>?> searchTargets(String q) async {
+    final t = q.trim();
+    if (t.length < 2) return const [];
+    final r = await _get('/api/subscribers/search', {'search': t, 'count': 12});
+    if (!r.ok) return null;
+    return (r.data!['data'] is List ? r.data!['data'] as List : const [])
+        .whereType<Map>()
+        .map((m) => NationalTarget.fromJson(Map<String, dynamic>.from(m)))
+        .whereType<NationalTarget>()
+        .toList();
+  }
+
+  /// فتح تذكرة: لمشترك (customerId + زون اشتراكه) أو للزون (بلا customerId). `ref` يبقى نفسه لإعادة «تحقّق».
+  static Future<NationalWrite> createTicket({
+    required String ref,
+    required String category,
+    required String summary,
+    required String details,
+    required String zone,
+    String? customerId,
+    String? subscriber,
+  }) =>
+      _write('POST', '/api/v2/ftth/tickets', {
+        'client_ref': ref,
+        'category': category,
+        'summary': summary.trim(),
+        'details': details.trim(),
+        'zone': zone,
+        if (customerId != null && customerId.isNotEmpty) 'customer_id': customerId,
+        if (subscriber != null && subscriber.isNotEmpty) 'subscriber': subscriber,
+      });
+
+  static Future<NationalWrite> comment(String ticketId, String text) =>
+      _write('POST', '/api/v2/ftth/tickets/${Uri.encodeComponent(ticketId)}/comments', {'text': text.trim()});
+
+  /// موعد الزيارة: اليوم «YYYY-MM-DD» والساعة «HH:MM» بتوقيت بغداد (٩ص–١١م).
+  static Future<NationalWrite> schedule(String ticketId, {required String date, required String time, required String reason}) =>
+      _write('PUT', '/api/v2/ftth/tickets/${Uri.encodeComponent(ticketId)}/schedule', {'date': date, 'time': time, 'reason': reason.trim()});
+
+  static Future<NationalWrite> cancelRequest(String requestId, String type) =>
+      _write('POST', '/api/v2/ftth/requests/${Uri.encodeComponent(requestId)}/cancel', {'confirm': true, 'type': type});
 
   static Future<NationalLookups?> lookups() async {
     final r = await _get('/api/v2/ftth/lookups', const {});

@@ -6,16 +6,19 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../api/national_portal_api.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
+import '../../core/widgets/permission_locked.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../desktop/desk_widgets.dart';
 import 'national_labels.dart';
+import 'national_ticket_write.dart';
 import 'national_widgets.dart';
 
 /// «التذاكر» — المشروع الوطنيّ (watani، ٣١ أكتوبر — المالك: «الطلبات التذاكر هاي مهمه مموجوده… والفلاتر»): تذاكر الدعم في بوّابة
-/// الشركة بفلاترها (رقم التذكرة أو اسم المشترك، الحالة، الزون، الفترة)، وورقة التذكرة بتفاصيلها وتعليقاتها. قراءةٌ وحدها — الإنشاء
-/// والتعليق من هنا مرحلةٌ تالية. القائمة سريعة (~١ث) وتُكاش بالخادم.
+/// الشركة بفلاترها (رقم التذكرة أو اسم المشترك، الحالة، الزون، الفترة)، وورقة التذكرة بتفاصيلها وتعليقاتها. القائمة سريعة (~١ث)
+/// وتُكاش بالخادم. الكتابة (المرحلة ٢): «تذكرة جديدة» والتعليق وموعد الزيارة حين يقول الخادم can_write/can
+/// (`national_ticket_write.dart`)، والموظّف بلا «تعديل المشترك» يراها مقفلةً بمكانها.
 class NationalTicketsScreen extends StatefulWidget {
   const NationalTicketsScreen({super.key});
 
@@ -136,8 +139,18 @@ class _NationalTicketsScreenState extends State<NationalTicketsScreen> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep
+    final canWrite = _lk?.canWrite == true;
     return Scaffold(
       backgroundColor: AppColors.bg,
+      floatingActionButton: canWrite
+          ? FloatingActionButton.extended(
+              onPressed: _newTicket,
+              backgroundColor: nationalWriteLocked ? AppColors.surfaceDisabled : AppColors.brand,
+              foregroundColor: nationalWriteLocked ? AppColors.textHint : AppColors.onBrand,
+              icon: Icon(nationalWriteLocked ? LucideIcons.lock : LucideIcons.plus, size: 18),
+              label: Text('تذكرة جديدة', style: AppType.label(color: nationalWriteLocked ? AppColors.textHint : AppColors.onBrand)),
+            )
+          : null,
       appBar: deskPageBar(
         context,
         mobile: AppBar(
@@ -203,6 +216,19 @@ class _NationalTicketsScreenState extends State<NationalTicketsScreen> {
           child: Text('$_total تذكرة', textAlign: TextAlign.center, style: AppType.muted()),
         ),
     ];
+  }
+
+  Future<void> _newTicket() async {
+    final lk = _lk;
+    if (lk == null) return;
+    if (nationalWriteLocked) {
+      showNoPermission(context, action: true);
+      return;
+    }
+    final t = await showNationalNewTicket(context, lk);
+    if (!mounted || t == null) return;
+    _reload();
+    _openTicket(NationalTicket(id: t.id, displayId: t.displayId ?? '', source: 'partner', title: t.title, summary: '', status: t.status));
   }
 
   void _openTicket(NationalTicket t) {
@@ -357,12 +383,30 @@ class _TicketSheetState extends State<_TicketSheet> {
                       NationalInfoRow(icon: LucideIcons.user, label: 'المشترك', value: d.infra ? 'بنية تحتيّة' : (d.customer?.name ?? '—')),
                       if (d.zone?.name.isNotEmpty == true) NationalInfoRow(icon: LucideIcons.mapPin, label: 'الزون', value: d.zone!.name, ltr: true),
                       if ((d.category ?? d.issue) != null)
-                        NationalInfoRow(icon: LucideIcons.tag, label: 'التصنيف', value: [d.category, d.issue].whereType<String>().join(' · ')),
+                        NationalInfoRow(
+                          icon: LucideIcons.tag,
+                          label: 'التصنيف',
+                          value: [if (d.category != null) nationalTicketCategory(d.category!), d.issue].whereType<String>().join(' · '),
+                        ),
                       NationalInfoRow(icon: LucideIcons.calendarClock, label: 'فُتحت', value: nationalTime(d.createdAt), ltr: true),
                       if (d.closedAt != null) NationalInfoRow(icon: LucideIcons.calendarCheck, label: 'أُغلقت', value: nationalTime(d.closedAt), ltr: true),
                       if (d.scheduleDate != null)
                         NationalInfoRow(icon: LucideIcons.calendarClock, label: 'موعد الزيارة', value: nationalTime(d.scheduleDate), ltr: true),
                     ]),
+                    if (d.canSchedule) ...[
+                      const SizedBox(height: Sp.sm),
+                      Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            final saved = await showNationalSchedule(context, ticketId: widget.row.id!, current: d.scheduleDate);
+                            if (saved == true && mounted) _load();
+                          },
+                          icon: Icon(nationalWriteLocked ? LucideIcons.lock : LucideIcons.calendarClock, size: 16),
+                          label: Text(d.scheduleDate == null ? 'تحديد موعد الزيارة' : 'تغيير موعد الزيارة'),
+                        ),
+                      ),
+                    ],
                     if (d.details.isNotEmpty) ...[
                       const SizedBox(height: Sp.lg),
                       Text('التفاصيل', style: AppType.label(color: AppColors.textLabel)),
@@ -407,6 +451,10 @@ class _TicketSheetState extends State<_TicketSheet> {
                         ),
                         const SizedBox(height: Sp.sm),
                       ],
+                    if (d.canComment) ...[
+                      const SizedBox(height: Sp.sm),
+                      NationalCommentBox(ticketId: widget.row.id!, onSent: _load),
+                    ],
                   ],
                 ),
     );

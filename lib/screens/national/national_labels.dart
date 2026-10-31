@@ -127,6 +127,10 @@ const Map<String, String> nationalTxTypes = {
 };
 String nationalTxType(String t) => nationalTxTypes[t.trim().toUpperCase()] ?? (t.isEmpty ? '—' : 'حركة أخرى');
 
+/// أصناف التذاكر الثلاثة (support/tickets/categories — ٣١ أكتوبر).
+String nationalTicketCategory(String c) =>
+    const {'service request': 'طلب خدمة', 'inquiry': 'استفسار', 'incident': 'عطل / انقطاع'}[c.trim().toLowerCase()] ?? (c.isEmpty ? '—' : c);
+
 String nationalPayMethod(String m) => const {'Wallet': 'محفظة', 'Card': 'بطاقة'}[m] ?? (m.isEmpty ? '—' : m);
 String nationalPayer(String p) => const {'Partner': 'الوكيل', 'Customer': 'المشترك'}[p] ?? p;
 String nationalPlanKind(String k) => const {'BASE_PLAN': 'باقة', 'VAS': 'خدمة مضافة'}[k] ?? k;
