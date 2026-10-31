@@ -225,13 +225,17 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       _loading = true;
       _loadError = null;
     });
-    final data = await MergedOps.run(widget.sub, () => SubscribersApi.fetchActivationData(idx));
+    final res = await MergedOps.run(widget.sub, () => SubscribersApi.fetchActivationDataDetailed(idx));
+    final data = res.data;
     if (!mounted) return;
     setState(() {
       _loading = false;
       _data = data;
       if (data == null) {
-        _loadError = 'sheets.activate_load_failed'.tr();
+        // رفضٌ مقصود من الخادم (409 برسالةٍ عربيّة — مثل «لا سعر بيع لباقة … حدّده من «الباقات»» للمشروع الوطنيّ) يُعرض نصّه؛
+        // وغيره الرسالة العامّة كما كانت.
+        final m = res.message?.trim() ?? '';
+        _loadError = res.status == 409 && m.isNotEmpty && m.length < 200 ? m : 'sheets.activate_load_failed'.tr();
       } else {
         _methods = ActivationMethods.fromActivationData(data);
         _cards = CardStockInfo.fromActivationData(data);
