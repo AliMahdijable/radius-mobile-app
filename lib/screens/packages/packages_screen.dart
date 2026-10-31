@@ -45,6 +45,10 @@ class _PackagesScreenState extends State<PackagesScreen> {
   /// — والأصل (سوبرنت) عارٍ (`42`). المؤهَّل يُقرأ «تسعيري الخاص» من
   /// `/api/v2/price-list/<رقمه>` لا `/api/v2/packages` (انظر [_load]).
   bool _myIdQualified = false;
+
+  /// شركةٌ مُضافة (نبض، AccessGate…): رقم الحساب بعد «:» اسمٌ لا عدد
+  /// (`nabd:myservices`) فلا [_myManagerId] — «تسعيري الخاص» بالمعرّف كاملاً.
+  String? _mySelfKey;
   String _myDisplayName = '…';
 
   /// مطلب 2026-06-12: السوبر/المدير الفرعي يقدر يعدّل تسعير
@@ -81,6 +85,11 @@ class _PackagesScreenState extends State<PackagesScreen> {
     if (id != null) {
       _myManagerId = id;
       _myIdQualified = idStr.contains(':');
+    } else if (idStr.contains(':')) {
+      // 🐛 ٣١ أكتوبر (المالك: «من الموقع جاي يحفظ بس ميعرضهن بالتطبيق والتطبيق
+      // مجاي يحفظ»): حساب نبض/AccessGate بلا رقم ⇒ كانت القائمة من
+      // `/api/v2/packages` بلا سعر البيع، والحفظ يرجع بصمت.
+      _mySelfKey = idStr;
     }
     // اسم المدير الحالي — username فقط (admin@xxx) مطابق طلب 2026-06-12.
     final username = await AuthStorage.readAdminUsername();
@@ -127,7 +136,9 @@ class _PackagesScreenState extends State<PackagesScreen> {
         ? await PackagesApi.listForManager(_selectedManagerId!)
         : selfById
             ? await PackagesApi.listForManager(_myManagerId!)
-            : await PackagesApi.list();
+            : _mySelfKey != null
+                ? await PackagesApi.listForKey(_mySelfKey!)
+                : await PackagesApi.list();
     if (!mounted) return;
     setState(() {
       _packages = pkgs;
@@ -183,7 +194,8 @@ class _PackagesScreenState extends State<PackagesScreen> {
   Future<void> _save() async {
     if (_saving) return;
     final targetManagerId = _selectedManagerId ?? _myManagerId;
-    if (targetManagerId == null) return;
+    final selfKey = targetManagerId == null ? _mySelfKey : null;
+    if (targetManagerId == null && selfKey == null) return;
     setState(() => _saving = true);
     final payload = <Map<String, dynamic>>[];
     for (final p in _packages) {
@@ -201,6 +213,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
     }
     final r = await PackagesApi.savePrices(
       managerId: targetManagerId,
+      managerKey: selfKey,
       priceList: payload,
     );
     if (!mounted) return;

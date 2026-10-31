@@ -91,7 +91,16 @@ class PackagesApi {
   /// sub-manager. Used by the super-admin/parent to view/edit a
   /// sub-manager's price list. Returns minimal Package rows (id, name,
   /// userPrice, cost, basePrice) — no SAS4 metadata.
-  static Future<List<Package>> listForManager(int managerId) async {
+  static Future<List<Package>> listForManager(int managerId) =>
+      _priceList('$managerId');
+
+  /// «تسعيري الخاص» لشركةٍ مُضافة (نبض، AccessGate…): رقم حسابها اسمٌ لا عدد
+  /// (`nabd:myservices`) فيُرسل كاملاً كما يفعل الموقع — والخادم يتجاهله ويقرأ
+  /// المالك من الجلسة.
+  static Future<List<Package>> listForKey(String key) =>
+      _priceList(Uri.encodeComponent(key));
+
+  static Future<List<Package>> _priceList(String managerId) async {
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/v2/price-list/$managerId',
@@ -119,15 +128,17 @@ class PackagesApi {
   /// user_price). The screen builds it from the current Package list
   /// and the user's edits — مطلب 2026-06-12 يحرّر `price` (سعر شراء
   /// المدير من الأب) إضافة إلى `user_price` (سعر البيع للمشترك).
+  /// [managerKey] بدل [managerId] للشركة المُضافة (انظر [listForKey]).
   static Future<({bool ok, String? message})> savePrices({
-    required int managerId,
+    int? managerId,
+    String? managerKey,
     required List<Map<String, dynamic>> priceList,
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
         '/api/v2/price-list',
         data: {
-          'manager_id': managerId,
+          'manager_id': managerId ?? managerKey,
           'priceList': priceList,
         },
       );

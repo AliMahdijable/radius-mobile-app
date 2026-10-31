@@ -188,6 +188,49 @@ void main() {
     await simDrain(t);
   });
 
+  // 🐛 ٣١ أكتوبر (المالك: «من الموقع جاي يحفظ بس ميعرضهن بالتطبيق والتطبيق مجاي يحفظ»): رقم حساب الشركة المُضافة
+  // اسمٌ لا عدد ⇒ `int.tryParse` = null ⇒ القائمة من /api/v2/packages بلا سعر البيع والحفظ يرجع بصمت.
+  for (final (adminId, username) in const [
+    ('nabd:myservices', 'myservices'),
+    ('accessgate:admin@kdm', 'admin@kdm'),
+  ]) {
+    testWidgets(
+        '🚨 شركةٌ مُضافة ($adminId): سعر البيع من price-list بمعرّفه كاملاً، والحفظ يصل',
+        (t) async {
+      await session(adminId, username: username);
+      ProviderService.debugSet(adminId.split(':').first);
+      server.reply('GET', _managers, 200, {'success': true, 'data': []});
+      final path = '/api/v2/price-list/${Uri.encodeComponent(adminId)}';
+      server.reply('GET', path, 200, {
+        'success': true,
+        'data': [_row(1580274321, 'Economy', 25000), _row(931104377, 'Family', 0)],
+      });
+      await open(t);
+
+      expect(server.calls('GET', path), hasLength(1));
+      expect(server.calls('GET', _packages), isEmpty,
+          reason: 'قائمة الإضافة بلا user_price — ليست «تسعيري الخاص»');
+      expect(field('25,000'), findsOneWidget,
+          reason: 'ما حُفظ من الموقع ظاهرٌ بالتطبيق');
+
+      await saveEconomyAs(t, '30000');
+
+      final posts = server.bodies('POST', _priceListPost);
+      expect(posts, hasLength(1), reason: 'الحفظ لا يرجع بصمت');
+      expect(posts.single['manager_id'], adminId);
+      final items = (posts.single['priceList'] as List).cast<Map>();
+      expect(
+        {for (final i in items) i['profile_id']: i['user_price']},
+        {1580274321: 30000, 931104377: 0},
+      );
+      expect(find.text('تمّ حفظ الأسعار'), findsOneWidget);
+      expect(server.calls('GET', path), hasLength(2),
+          reason: 'يُعاد التحميل بعد الحفظ');
+      expect(server.calls('GET', _packages), isEmpty);
+      await simDrain(t);
+    });
+  }
+
   testWidgets('FTTH (ftth-iq:9): بلا price-list عنده — يبقى على /api/v2/packages',
       (t) async {
     await session('ftth-iq:9', username: 'partner');
