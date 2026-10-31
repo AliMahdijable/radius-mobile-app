@@ -238,6 +238,26 @@ void main() {
     await simDrain(t);
   });
 
+  testWidgets('الفلاتر: النوع والمنفّذ ورقم المعاملة (بأرقامٍ هنديّة) ⇒ معاملات الطلب', (t) async {
+    server.reply('GET', '/api/v2/ftth/wallet', 200, _walletReply());
+    await pumpSim(t, _v, home: (_) => const NationalWalletScreen());
+    await t.tap(find.text('الفلاتر'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('تجديد').last);
+    await t.ensureVisible(find.text('أنا وحدي'));
+    await t.tap(find.text('أنا وحدي'));
+    await t.ensureVisible(find.text('رقم المعاملة'));
+    final tx = find.descendant(of: find.byType(BottomSheet), matching: find.byType(TextField)).first;
+    await t.enterText(tx, '١٢٣٤');
+    await t.pumpAndSettle();
+    await t.tap(find.text('تطبيق'));
+    await t.pumpAndSettle();
+    final q = server.calls('GET', '/api/v2/ftth/wallet').last.queryParameters;
+    expect((q['types'], q['by'], q['tx']), ('PLAN_RENEW', 'me', '1234'));
+    expect(find.text('3'), findsOneWidget, reason: 'عدّاد الفلاتر المفعّلة');
+    await simDrain(t);
+  });
+
   testWidgets('عضو فريقٍ بحدّ ⇒ «حدّ المحفظة»؛ وخادمٌ أقدم (بلا caps) ⇒ لا مجموعات ولا «التحويلات»', (t) async {
     server.reply('GET', '/api/v2/ftth/wallet', 200, _walletReply(limit: {'balance': 200000}));
     await pumpSim(t, _v, home: (_) => const NationalWalletScreen());

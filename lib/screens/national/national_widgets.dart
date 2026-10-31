@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/national_portal_api.dart';
+import '../../core/util/format.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../theme/colors.dart';
@@ -235,7 +236,8 @@ class _FiltersSheetState extends State<_FiltersSheet> {
         keyboardType: s.digits ? TextInputType.number : TextInputType.text,
         textDirection: TextDirection.ltr,
         maxLength: 40,
-        onChanged: (v) => _v[s.key] = s.digits ? v.replaceAll(RegExp(r'[^0-9]'), '') : v.trim(),
+        // الأرقام الهنديّة (٠-٩) تُقرأ لاتينيّة قبل التنظيف — لوحة عربيّة لا تُسقط الرقم كلّه
+        onChanged: (v) => _v[s.key] = s.digits ? (normalizeDigits(v) ?? '').replaceAll(RegExp(r'[^0-9]'), '') : v.trim(),
         style: AppType.input(color: AppColors.textHi),
         decoration: InputDecoration(
           counterText: '',
