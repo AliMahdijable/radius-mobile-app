@@ -90,6 +90,21 @@ class DateRange {
     );
   }
 
+  /// آخر [n] يوماً حتى اليوم (اليوم أوّلها عدّاً: ٣٠ ⇒ اليوم − ٢٩) — «محفظتي» للمشروع الوطنيّ تبدأ بآخر ٣٠ يوماً.
+  static DateRange lastDays(int n) {
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day).subtract(Duration(days: n - 1));
+    return DateRange(
+      start,
+      DateTime(now.year, now.month, now.day, 23, 59, 59),
+      label: switch (n) {
+        7 => 'reports.last_7_days'.tr(),
+        30 => 'reports.last_30_days'.tr(),
+        _ => rangeText(start, now),
+      },
+    );
+  }
+
   static DateRange custom(DateTime from, DateTime to) => DateRange(
         DateTime(from.year, from.month, from.day),
         DateTime(to.year, to.month, to.day, 23, 59, 59),
@@ -103,7 +118,10 @@ class DateRange {
     return a == b ? a : 'reports.range_text'.tr(namedArgs: {'from': a, 'to': b});
   }
 
-  bool get isCustom => !presets().any((p) => p.label == label);
+  bool get isCustom => isCustomAmong(presets());
+
+  /// ليست واحدةً من [list] (شريطٌ بفتراتٍ خاصّة به).
+  bool isCustomAmong(List<DateRange> list) => !list.any((p) => p.label == label);
 
   /// الفترات الجاهزة بترتيبها في الشريط.
   static List<DateRange> presets() => [
@@ -127,14 +145,19 @@ class DateRangeChipBar extends StatelessWidget {
     super.key,
     required this.value,
     required this.onChanged,
+    this.presets,
   });
   final DateRange value;
   final ValueChanged<DateRange> onChanged;
 
+  /// فتراتٌ جاهزة خاصّة بالشاشة (وإلّا فترات التقارير [DateRange.presets]).
+  final List<DateRange> Function()? presets;
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep
-    final custom = value.isCustom;
+    final list = presets?.call() ?? DateRange.presets();
+    final custom = value.isCustomAmong(list);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -143,7 +166,7 @@ class DateRangeChipBar extends StatelessWidget {
           spacing: 6,
           runSpacing: 6,
           children: [
-            for (final p in DateRange.presets())
+            for (final p in list)
               _chip(
                 label: p.label,
                 selected: value.label == p.label,

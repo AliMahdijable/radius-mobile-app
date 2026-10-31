@@ -124,6 +124,19 @@ const Map<String, String> nationalTxTypes = {
   'SHOP_CASH_WALLET_TOPUP': 'شحنٌ نقديّ (المتجر)',
   'SHOP_CASH_WALLET_REFUND': 'استرجاعٌ نقديّ (المتجر)',
   'SHOP_CASH_WITHDRAWAL': 'سحبٌ نقديّ (المتجر)',
+  // في قائمة البوّابة البرمجيّة لا في transactions/types (١ نوفمبر) — بأسماء البوّابة حيث وُجدت، فلا تظهر «حركة أخرى».
+  'SCHEDULE_CHANGE': 'تغيير مجدول',
+  'COMMIT_CHANGE': 'تأكيد التغيير',
+  'HIERACHY_COMMISSION': 'عمولة التسلسل الهرميّ',
+  'HIER_COMM_REVERSAL': 'عكس عمولة التسلسل',
+  'B2B_POSTPAID_DISCOUNT': 'خصم الدفع الآجل',
+  'HARDWARE_SELL': 'بيع جهاز',
+  'HARDWARE_PRLN': 'جهاز بكارت',
+  'ONLINE_PAYMENT': 'الدفع عبر الإنترنت',
+  'PAUSE': 'إيقاف مؤقّت',
+  'RESUME': 'استئناف',
+  'REFILL_BALANCE': 'تعبئة رصيد',
+  'TEAM_MEMBER_BALANCE': 'رصيد عضو الفريق',
 };
 String nationalTxType(String t) => nationalTxTypes[t.trim().toUpperCase()] ?? (t.isEmpty ? '—' : 'حركة أخرى');
 
@@ -131,6 +144,37 @@ String nationalTxType(String t) => nationalTxTypes[t.trim().toUpperCase()] ?? (t
 String nationalTicketCategory(String c) =>
     const {'service request': 'طلب خدمة', 'inquiry': 'استفسار', 'incident': 'عطل / انقطاع'}[c.trim().toLowerCase()] ?? (c.isEmpty ? '—' : c);
 
-String nationalPayMethod(String m) => const {'Wallet': 'محفظة', 'Card': 'بطاقة'}[m] ?? (m.isEmpty ? '—' : m);
+String nationalPayMethod(String m) => const {
+      'Wallet': 'محفظة',
+      'Card': 'بطاقة',
+      'Tabadul': 'بطاقة',
+      'BalanceCard': 'بطاقة رصيد',
+      'Balance Card': 'بطاقة رصيد',
+      'Cash': 'نقد',
+      'FastPay': 'فاست باي',
+      'Fastpay': 'فاست باي',
+    }[m] ??
+    (m.isEmpty ? '—' : m);
 String nationalPayer(String p) => const {'Partner': 'الوكيل', 'Customer': 'المشترك'}[p] ?? p;
 String nationalPlanKind(String k) => const {'BASE_PLAN': 'باقة', 'VAS': 'خدمة مضافة'}[k] ?? k;
+
+/// مجموعات «محفظتي» السريعة (الخادم `TX_GROUPS` ⇒ transactionTypes): المفتاح كما يُرسل `group=`.
+const List<({String key, String label})> nationalTxGroups = [
+  (key: 'activations', label: 'حركات التفعيل'),
+  (key: 'topups', label: 'الشحن والتحويل'),
+  (key: 'refunds', label: 'المرتجعات'),
+  (key: 'commissions', label: 'العمولات'),
+];
+
+/// نوع المحفظة: الرئيسيّة أو العمولة (أسماء البوّابة).
+String nationalWalletType(String w) => const {'Main': 'الرئيسي', 'Commission': 'العمولة'}[w] ?? '';
+
+/// مالك المحفظة في «التحويلات».
+String nationalWalletOwner(String o) => const {'Partner': 'محفظة الوكيل', 'Customer': 'محفظة المشترك'}[o] ?? '';
+
+/// نوع التغيير: مجدول أو فوري.
+String nationalChangeType(String c) => const {'Scheduled': 'مجدول', 'Instant': 'فوري'}[c] ?? '';
+
+/// نوع الدفع: دفعة واحدة أو دفعات شهريّة (displayValue البوّابة أو رمزنا).
+String nationalSalesType(String t) =>
+    const {'Upfront': 'دفعة واحدة', 'upfront': 'دفعة واحدة', 'Installment': 'دفعات شهرية', 'installment': 'دفعات شهرية'}[t] ?? '';

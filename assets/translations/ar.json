@@ -638,6 +638,8 @@
     "this_month": "هذا الشهر",
     "last_month": "الشهر الماضي",
     "last_week": "الأسبوع الماضي",
+    "last_7_days": "آخر ٧ أيّام",
+    "last_30_days": "آخر ٣٠ يوماً",
     "last_3_months": "3 شهور",
     "range_text": "من {from} إلى {to}",
     "range_pick": "اختر الفترة",
