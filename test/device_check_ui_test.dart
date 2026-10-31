@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -165,6 +166,118 @@ void main() {
     expect(DeviceReadHealth.instance.errorOf(7), 'اسم المستخدم أو كلمة المرور خاطئة', reason: 'اللوحة سجّلت فشل الدخول');
     expect(noteText(t), 'الجهاز يردّ على الاتصال (ping) — تأكّد من إعدادات الجهاز: اسم المستخدم وكلمة المرور والمنفذ');
     await finish(t);
+  });
+
+  group('المراجعة: «يردّ» لا يُقال بفحصٍ أقدم من خطأ القراءة', () {
+    const stats = MikrotikStats(
+      cpuLoad: 7,
+      memUsedPercent: 31,
+      memTotalBytes: 64 << 20,
+      memFreeBytes: 44 << 20,
+      uptime: '3d4h',
+      version: '6.49.10',
+      boardName: 'RB912UAG-5HPnD',
+      architectureName: 'mipsbe',
+      cpuCount: 1,
+      cpuFrequencyMhz: 720,
+      interfaces: [],
+      pppActiveCount: 0,
+    );
+
+    /// يفتح الشاشة والجهاز يردّ واللوحة تقرأ؛ ثمّ بعد ٦٠ث (بالساعة المحقونة) تفشل القراءة: انطفأ الجهاز، أو ([stillAnswers])
+    /// تغيّرت كلمة مروره وهو يعمل. الـping في الفحص المُعاد يُحبس حتى يُفتح `gate` فنرى ما قبل الحكم الجديد.
+    Future<({List<int> pings, Completer<void> gate})> openThenReadFails(WidgetTester t, {required bool stillAnswers}) async {
+      await setUpNet(t, icmp: true, serviceUp: true, authFails: false);
+      var now = DateTime(2026, 11, 1, 10);
+      DeviceReadHealth.clock = () => now;
+      var later = false;
+      final gate = Completer<void>();
+      final pings = <int>[];
+      const up = (status: 'online', responseMs: 9, packetLoss: 0.0);
+      const down = (status: 'offline', responseMs: null, packetLoss: 100.0);
+      NetworkDevicesApi.icmpProbe = (ip, n) async {
+        pings.add(n);
+        if (!later) return up;
+        await gate.future;
+        return stillAnswers ? up : down;
+      };
+      // منفذ الـAPI يقبل ما دام الجهاز يعمل — كلمة مرورٍ خطأ لا تُغلقه.
+      NetworkDevicesApi.debugService = (_) async => later && !stillAnswers ? down : (status: 'online', responseMs: 14, packetLoss: 0.0);
+      MikrotikApi.debugFetch = () async {
+        if (!later) return stats;
+        throw stillAnswers
+            ? MikrotikException('اسم المستخدم أو كلمة المرور خاطئة', code: 'auth')
+            : MikrotikException('انتهت مهلة الاتّصال بالجهاز', code: 'timeout');
+      };
+      await pumpScreen(t, NetworkDeviceDetailsScreen(device: NetworkDevice.fromJson(_json())));
+      await settle(t);
+      expect(find.text('متّصل'), findsOneWidget);
+      expect(note(), findsNothing, reason: 'يردّ واللوحة تقرأ — لا سطر');
+      expect(pings, [3], reason: 'فحص الفتح وحده');
+
+      // بعد دقيقة تفشل القراءة في نبضة اللوحة التالية.
+      now = now.add(const Duration(seconds: 60));
+      later = true;
+      await settle(t, const Duration(seconds: 6));
+      expect(DeviceReadHealth.instance.failureOf(7)?.since, now, reason: 'فشلٌ بدأ بعد الفحص بدقيقة');
+      expect(pings, [3, 1], reason: 'الخطأ أحدث من الفحص ⇒ يُعاد الفحص (حزمةٌ واحدة) قبل أيّ سطر');
+      expect(note(), findsNothing, reason: 'قبل الحكم الجديد لا «يردّ — تأكّد من الإعدادات»: خطأ اللوحة وحده');
+      expect(find.textContaining('تأكّد من إعدادات الجهاز'), findsNothing);
+      return (pings: pings, gate: gate);
+    }
+
+    testWidgets('🚨 انطفأ بعد الفحص ⇒ يُعاد الفحص، ثمّ «لا يردّ على ping — تأكّد من العنوان والشبكة» و«غير متّصل»', (t) async {
+      final r = await openThenReadFails(t, stillAnswers: false);
+      r.gate.complete();
+      await settle(t);
+      expect(noteText(t), 'لا يردّ على ping — تأكّد من العنوان والشبكة');
+      expect(find.text('غير متّصل'), findsOneWidget);
+      expect(find.text('متّصل'), findsNothing);
+      await finish(t);
+    });
+
+    testWidgets('ما زال يردّ (الدخول هو الذي فشل) ⇒ بعد الفحص المُعاد سطر «تأكّد من إعدادات الجهاز»', (t) async {
+      final r = await openThenReadFails(t, stillAnswers: true);
+      r.gate.complete();
+      await settle(t);
+      expect(noteText(t), 'الجهاز يردّ على الاتصال (ping) — تأكّد من إعدادات الجهاز: اسم المستخدم وكلمة المرور والمنفذ');
+      expect(find.text('متّصل'), findsOneWidget);
+      expect(r.pings, [3, 1], reason: 'لا فحص ثالث: الحكم الجديد بعد بدء الفشل ولم يمضِ عليه ٣٠ث');
+      await finish(t);
+    });
+
+    testWidgets('كلمة المرور خطأ من البداية ثمّ انطفأ: السطر الكهرمانيّ يبقى بلا فحصٍ جديد حتى تمضي ~٣٠ث، ثمّ يُعاد فينكشف', (t) async {
+      await setUpNet(t, icmp: true, ping: (status: 'online', responseMs: 9, packetLoss: 0.0), serviceUp: true);
+      var now = DateTime(2026, 11, 1, 10);
+      DeviceReadHealth.clock = () => now;
+      var off = false;
+      final pings = <int>[];
+      NetworkDevicesApi.icmpProbe = (ip, n) async {
+        pings.add(n);
+        return off ? (status: 'offline', responseMs: null, packetLoss: 100.0) : (status: 'online', responseMs: 9, packetLoss: 0.0);
+      };
+      NetworkDevicesApi.debugService = (_) async =>
+          off ? (status: 'offline', responseMs: null, packetLoss: 100.0) : (status: 'online', responseMs: 14, packetLoss: 0.0);
+      await pumpScreen(t, NetworkDeviceDetailsScreen(device: NetworkDevice.fromJson(_json())));
+      await settle(t);
+      const settings = 'الجهاز يردّ على الاتصال (ping) — تأكّد من إعدادات الجهاز: اسم المستخدم وكلمة المرور والمنفذ';
+      expect(noteText(t), settings);
+      expect(pings, [3]);
+
+      // انطفأ — والقراءة تفشل كما كانت (الفشل نفسه مستمرّ): لا طرق كلّ نبضة، الحكم ما زال حديثاً.
+      off = true;
+      await settle(t, const Duration(seconds: 9));
+      expect(pings, [3], reason: 'حكمٌ بعد بدء الفشل ولم يمضِ عليه ٣٠ث — لا فحص مع كلّ نبضةٍ فاشلة');
+      expect(noteText(t), settings);
+
+      // مضت ٣٠ث والقراءة ما زالت تفشل ⇒ يُعاد الفحص مع النبضة الفاشلة التالية فينكشف أنّه لا يردّ.
+      now = now.add(const Duration(seconds: 31));
+      await settle(t, const Duration(seconds: 9));
+      expect(pings, [3, 1]);
+      expect(noteText(t), 'لا يردّ على ping — تأكّد من العنوان والشبكة');
+      expect(find.text('غير متّصل'), findsOneWidget);
+      await finish(t);
+    });
   });
 
   testWidgets('لا يردّ شيء ⇒ «غير متّصل» + «لا يردّ على ping — تأكّد من العنوان والشبكة»', (t) async {

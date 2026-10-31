@@ -63,6 +63,15 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
 
   /// آخر «فحص الآن (ping)»: يردّ؟ بأيّ طريق وكم ms؟ وهل ردّت خدمة إدارته المسجّلة — منه ومن قراءة اللوحة سطر [_checkNote].
   DeviceCheck? _check;
+
+  /// متى انتهى [_check] — بساعة [DeviceReadHealth.clock]: حكمه يصلح لخطأ قراءةٍ بدأ قبله وحده ([ReachVerdict.covers]).
+  DateTime? _checkAt;
+
+  /// يتقدّم مع كلّ تعديلٍ للجهاز — فحصٌ بدأ قبل التعديل نتيجته لإعداداتٍ قديمة فلا تُعرض.
+  int _checkGen = 0;
+
+  /// آخر خطأ قراءةٍ رُسم لهذا الجهاز (الرسالة وبدء الفشل) — النبضة الفاشلة بلا جديد لا تعيد رسم الشاشة.
+  (String, DateTime)? _seenFailure;
   DeviceRegion? _region; // يُحمَّل asynchronously — لعرض اسم/لون المنطقة
 
   /// runtime override — لو `EdgeSwitchApi.probe` أكّد أنّ الجهاز سويتش
@@ -141,8 +150,27 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
   }
 
 
+  /// قراءة اللوحة فشلت أو عادت (المراجعة ١ نوفمبر): الفحص لقطةٌ من لحظته والقراءة تفشل بعده — جهازٌ انطفأ والشاشة مفتوحة.
+  /// فحكمٌ أقدم من بدء الفشل، أو مضت عليه ~٣٠ث والقراءة ما زالت تفشل، يُعاد ([ReachVerdict.due]) قبل أن يُقال «يردّ —
+  /// تأكّد من الإعدادات»؛ وقراءةٌ عادت بعد فحصٍ قال «لا يردّ» تُعيده كذلك.
   void _onReadHealth() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    final f = DeviceReadHealth.instance.failureOf(_d.id);
+    final seen = f == null ? null : (f.error, f.since);
+    final recovered = f == null && _seenFailure != null;
+    final changed = seen != _seenFailure;
+    _seenFailure = seen;
+    final c = _check;
+    if (!_probing && c != null) {
+      final stale = f != null
+          ? ReachVerdict.due(checkedAt: _checkAt, since: f.since, now: DeviceReadHealth.clock())
+          : recovered && !c.reachable;
+      if (stale) {
+        _probe(quiet: true); // يعيد الرسم بنفسه
+        return;
+      }
+    }
+    if (changed) setState(() {});
   }
 
   @override
@@ -152,8 +180,10 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
     super.dispose();
   }
 
-  Future<void> _probe() async {
+  /// [quiet]: إعادة فحصٍ تلقائيّة (قراءةٌ تفشل بعد الفحص) — بلا اهتزاز.
+  Future<void> _probe({bool quiet = false}) async {
     if (_probing) return;
+    final gen = _checkGen;
     setState(() => _probing = true);
     try {
       // TCP probe (أدقّ من ICMP على iOS)
@@ -163,13 +193,23 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
       // يجعل أحدهما يُنسى. وهو ما حدث.
       // ٣٠ أكتوبر (المالك): «فحص الآن (ping)» ping حقيقيّ — جهازٌ يعمل ببياناتٍ/منفذٍ خطأ لا يُعرض «مفصولاً».
       // ١ نوفمبر: «حتى لو ما مضيوف صح… يرد بنك» — ping والخدمة ومنافذ الإدارة الشائعة معاً، مستقلّاً عن السجلّ (iOS بلا ping كذلك).
-      final r = await NetworkDevicesApi.checkDevice(_d);
+      // الإعادة التلقائيّة سؤال «هل يردّ؟» وحده: حزمةٌ واحدة (تعود بأجزاء الثانية) — الثلاث للزرّ وفحص الفتح.
+      final r = await NetworkDevicesApi.checkDevice(_d, pings: quiet ? 1 : 3);
+      if (gen != _checkGen) {
+        // عُدِّل الجهاز أثناء الفحص: النتيجة لإعداداته (وربّما عنوانه) القديمة — فحصٌ جديد بالجديدة.
+        if (mounted) {
+          setState(() => _probing = false);
+          _probe(quiet: true);
+        }
+        return;
+      }
       NetworkDevicesApi.saveProbeResult(
         deviceId: _d.id,
         status: r.status,
         responseMs: r.latencyMs,
       );
       if (!mounted) return;
+      final at = DeviceReadHealth.clock();
       setState(() {
         _d = _d.copyWith(
           lastProbedAt: DateTime.now(),
@@ -178,6 +218,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
         );
         _lastPacketLoss = r.packetLoss;
         _check = r;
+        _checkAt = at;
         _history.add(_PingSample(
             at: DateTime.now(),
             ms: r.latencyMs,
@@ -192,9 +233,12 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
       } else if (r.status != 'online' && _pulseCtrl.isAnimating) {
         _pulseCtrl.stop();
       }
-      HapticFeedback.selectionClick();
+      if (!quiet) HapticFeedback.selectionClick();
     } catch (_) {
-      if (mounted) setState(() => _probing = false);
+      if (mounted) {
+        setState(() => _probing = false);
+        if (gen != _checkGen) _probe(quiet: true);
+      }
     }
   }
 
@@ -212,6 +256,8 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
         _d = updated;
         _changed = true;
         _check = null;
+        _checkAt = null;
+        _checkGen++;
       });
       // إعداداتٌ جديدة ⇒ فحصٌ جديد فوراً — جهازٌ عُدّل خطأً يردّ على ping في الحال.
       _probe();
@@ -1114,8 +1160,19 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
   /// سطر الفحص تحت «فحص الآن (ping)» (المالك ١ نوفمبر): يردّ على الاتصال وخدمته المسجّلة أو قراءة لوحته لا ⇒ «الجهاز يردّ على
   /// الاتصال (ping) — تأكّد من إعدادات الجهاز: …» والحالة «متّصل» لا «مفصول»؛ لا يردّ شيء ⇒ «لا يردّ على ping — تأكّد من العنوان
   /// والشبكة». (٣٠ أكتوبر كان: «يردّ على ping، لكن SNMP:444 لا يردّ».)
+  ///
+  /// «يردّ» لا يُقال إلّا بفحصٍ انتهى بعد بدء فشل القراءة ([ReachVerdict.covers]): خطأٌ أحدث من الفحص = ربّما انطفأ الجهاز بعده،
+  /// فلا سطر إعدادات (ولا من الخدمة) حتى يُعاد الفحص ([_onReadHealth] يعيده الآن) — ويبقى خطأ اللوحة وحده (المراجعة ١ نوفمبر).
   Widget? _checkNote() {
-    final note = DeviceCheckText.note(_d, _check, readError: DeviceReadHealth.instance.errorOf(_d.id));
+    final failure = DeviceReadHealth.instance.failureOf(_d.id);
+    final c = _check;
+    if (failure != null &&
+        c != null &&
+        c.reachable &&
+        !ReachVerdict.covers(checkedAt: _checkAt, since: failure.since, now: DeviceReadHealth.clock())) {
+      return null;
+    }
+    final note = DeviceCheckText.note(_d, c, readError: failure?.error);
     if (note == null) return null;
     final tone = note.tone;
     return Container(
