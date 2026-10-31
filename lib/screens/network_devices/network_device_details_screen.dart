@@ -10,9 +10,11 @@ import '../../api/ubnt_api.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/device_region.dart';
 import '../../models/network_device.dart';
+import '../../services/device_read_health.dart';
 import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
+import 'device_check_text.dart';
 import 'network_device_form_sheet.dart';
 import 'widgets/brand_badge.dart';
 import 'widgets/device_image.dart';
@@ -58,8 +60,9 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
   bool _changed = false;
   bool _rebooting = false; // spinner على زرّ reboot
   double? _lastPacketLoss;
-  /// آخر فحص: ردّت خدمة الإدارة (المنفذ/البيانات المسجّلة)؟ false مع «متّصل» = يردّ على ping وخدمته لا ([_serviceNote]).
-  bool? _serviceOk;
+
+  /// آخر «فحص الآن (ping)»: يردّ؟ بأيّ طريق وكم ms؟ وهل ردّت خدمة إدارته المسجّلة — منه ومن قراءة اللوحة سطر [_checkNote].
+  DeviceCheck? _check;
   DeviceRegion? _region; // يُحمَّل asynchronously — لعرض اسم/لون المنطقة
 
   /// runtime override — لو `EdgeSwitchApi.probe` أكّد أنّ الجهاز سويتش
@@ -101,6 +104,8 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
     }
     // اجلب معلومات المنطقة لو الجهاز مُسند لواحدة (يعرض الاسم في الهيرو).
     _loadRegionInfo();
+    // قراءة اللوحة الحيّة نجحت/فشلت ⇒ سطر الفحص يتبعها («يردّ على الاتصال — تأكّد من الإعدادات»).
+    DeviceReadHealth.instance.changes.addListener(_onReadHealth);
     // Auto-ping فور فتح الشاشة — يضمن أن الحالة المعروضة حقيقيّة الآن
     // (وليس آخر ping ناجح قديم لمّا كان المدير داخل الشبكة).
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -136,8 +141,13 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
   }
 
 
+  void _onReadHealth() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    DeviceReadHealth.instance.changes.removeListener(_onReadHealth);
     _pulseCtrl.dispose();
     super.dispose();
   }
@@ -152,25 +162,26 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
       // تقرأ المخزَّنة — والتعليق فوقها يقول حرفيّاً إنّ وجود مسارين
       // يجعل أحدهما يُنسى. وهو ما حدث.
       // ٣٠ أكتوبر (المالك): «فحص الآن (ping)» ping حقيقيّ — جهازٌ يعمل ببياناتٍ/منفذٍ خطأ لا يُعرض «مفصولاً».
-      final r = await NetworkDevicesApi.probeDevice(_d, ping: true);
+      // ١ نوفمبر: «حتى لو ما مضيوف صح… يرد بنك» — ping والخدمة ومنافذ الإدارة الشائعة معاً، مستقلّاً عن السجلّ (iOS بلا ping كذلك).
+      final r = await NetworkDevicesApi.checkDevice(_d);
       NetworkDevicesApi.saveProbeResult(
         deviceId: _d.id,
         status: r.status,
-        responseMs: r.responseMs,
+        responseMs: r.latencyMs,
       );
       if (!mounted) return;
       setState(() {
         _d = _d.copyWith(
           lastProbedAt: DateTime.now(),
           lastStatus: r.status,
-          lastResponseMs: r.responseMs,
+          lastResponseMs: r.latencyMs,
         );
         _lastPacketLoss = r.packetLoss;
-        _serviceOk = r.serviceOk;
+        _check = r;
         _history.add(_PingSample(
             at: DateTime.now(),
-            ms: r.responseMs,
-            online: r.status == 'online'));
+            ms: r.latencyMs,
+            online: r.reachable));
         if (_history.length > 10) _history.removeAt(0);
         _probing = false;
         _changed = true;
@@ -193,13 +204,17 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => NetworkDeviceFormSheet(existing: _d),
+      // الفحص بعد الحفظ هنا لا في الشيت: هذه الشاشة تعرضه كاملاً (الحالة والزمن والسطر).
+      builder: (_) => NetworkDeviceFormSheet(existing: _d, checkAfterSave: false),
     );
     if (updated != null) {
       setState(() {
         _d = updated;
         _changed = true;
+        _check = null;
       });
+      // إعداداتٌ جديدة ⇒ فحصٌ جديد فوراً — جهازٌ عُدّل خطأً يردّ على ping في الحال.
+      _probe();
     }
   }
 
@@ -478,7 +493,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
             _heroCard(),
             const SizedBox(height: Sp.md),
             _statsRow(),
-            if (_serviceNote() case final note?) ...[const SizedBox(height: Sp.sm), note],
+            if (_checkNote() case final note?) ...[const SizedBox(height: Sp.sm), note],
           ],
           // ICMP sparkline log أُزيل (2026-08-11) — لا فائدة عمليّة له
           // Live Panels حسب البراند — تحتاج devices.monitor (2026-08-18).
@@ -981,7 +996,7 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
                     _lastPacketLoss == null ? '—' : '${_lastPacketLoss!.toInt()}%',
                     color: _lastPacketLoss != null && _lastPacketLoss! > 0 ? AppColors.error : null,
                   ),
-                  if (_serviceNote() case final note?) ...[const SizedBox(height: Sp.sm), note],
+                  if (_checkNote() case final note?) ...[const SizedBox(height: Sp.sm), note],
                 ],
               ),
             ),
@@ -1096,29 +1111,31 @@ class _NetworkDeviceDetailsScreenState extends State<NetworkDeviceDetailsScreen>
   // ══════════════════════════════════════════════════════════════
   // Stats row — 3 stat cards (ping avg / packet loss / آخر فحص)
   // ══════════════════════════════════════════════════════════════
-  /// يردّ على ping وخدمة الإدارة لا (منفذٌ/بياناتٌ خطأ أو خدمةٌ مطفأة) — يُقال صراحةً تحت الفحص، والحالة «متّصل» (٣٠ أكتوبر).
-  Widget? _serviceNote() {
-    if (_serviceOk != false || _d.lastStatus != 'online') return null;
-    final port = _d.apiPort ?? _d.port;
-    final svc = _d.protocol != null ? '${NetworkDeviceLabels.protocolLabel(_d.protocol!)}:$port' : 'منفذ الإدارة $port';
+  /// سطر الفحص تحت «فحص الآن (ping)» (المالك ١ نوفمبر): يردّ على الاتصال وخدمته المسجّلة أو قراءة لوحته لا ⇒ «الجهاز يردّ على
+  /// الاتصال (ping) — تأكّد من إعدادات الجهاز: …» والحالة «متّصل» لا «مفصول»؛ لا يردّ شيء ⇒ «لا يردّ على ping — تأكّد من العنوان
+  /// والشبكة». (٣٠ أكتوبر كان: «يردّ على ping، لكن SNMP:444 لا يردّ».)
+  Widget? _checkNote() {
+    final note = DeviceCheckText.note(_d, _check, readError: DeviceReadHealth.instance.errorOf(_d.id));
+    if (note == null) return null;
+    final tone = note.tone;
     return Container(
+      key: const ValueKey('device-check-note'),
       padding: const EdgeInsets.all(Sp.sm),
       decoration: BoxDecoration(
-        color: AppColors.warningSoftBg,
-        border: Border.all(color: AppColors.warningSoftBorder),
+        color: tone.softBg,
+        border: Border.all(color: tone.softBorder),
         borderRadius: BorderRadius.circular(R.md),
       ),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(LucideIcons.triangleAlert, size: 16, color: AppColors.warningOnSoft),
+        Icon(note.icon, size: 16, color: tone.onSoft),
         const SizedBox(width: 6),
         Expanded(
           child: Text.rich(
             TextSpan(children: [
-              const TextSpan(text: 'الجهاز يردّ على ping، لكن '),
-              TextSpan(text: svc, style: const TextStyle(fontWeight: FontWeight.w700)),
-              const TextSpan(text: ' لا يردّ — تحقّق من المنفذ أو بيانات الدخول'),
+              TextSpan(text: note.title, style: const TextStyle(fontWeight: FontWeight.w700)),
+              TextSpan(text: ' — ${note.detail}'),
             ]),
-            style: AppType.micro(color: AppColors.warningOnSoft),
+            style: AppType.micro(color: tone.onSoft),
           ),
         ),
       ]),

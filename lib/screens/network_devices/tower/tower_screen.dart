@@ -15,6 +15,7 @@ import '../../../models/network_device.dart';
 import '../../../models/tower_layout.dart';
 import '../../../services/deep_probe_scheduler.dart';
 import '../../../services/device_events.dart';
+import '../../../services/device_read_health.dart';
 import '../../../services/device_stats_cache.dart';
 import '../../../services/permissions_service.dart';
 import '../../../theme/colors.dart';
@@ -256,8 +257,10 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
           // putVitals أعلاه نبّه _onCacheUpdated بالقراءة نفسها — هذا السطر يضمنها لو سبقه.
           _readings[d.id] = TowerReading.fromProbe(r);
           _failed.remove(d.id);
+          DeviceReadHealth.instance.ok(d.id);
           _scheduleFlush();
         } catch (_) {
+          DeviceReadHealth.instance.failed(d.id, 'تعذّر الاتّصال');
           if (!mounted) return;
           _failed.add(d.id);
           _scheduleFlush();
@@ -352,7 +355,8 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
-    final online = _devices.where((d) => d.lastStatus != 'offline' && !_failed.contains(d.id)).length;
+    // «يردّ» = يردّ على الفحص — قراءةٌ فاشلة لجهازٍ يردّ إعداداتٌ لا انقطاع (المالك ١ نوفمبر)، فلا تُنقص العدّ.
+    final online = _devices.where((d) => d.lastStatus != 'offline').length;
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: deskPageBar(
@@ -594,7 +598,9 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
 
   Color _healthColor(ArrangedDevice a) {
     final r = _readings[a.device.id];
-    if (a.device.lastStatus == 'offline' || _failed.contains(a.device.id)) return AppColors.error;
+    if (a.device.lastStatus == 'offline') return AppColors.error;
+    // يردّ على الفحص وقراءته تفشل: إعداداته لا الجهاز — كهرمانيّ لا أحمر.
+    if (_failed.contains(a.device.id)) return AppColors.warning;
     if (r == null) return AppColors.textMid;
     final olt = r.olt;
     if (olt != null) return olt.onlinePct == null ? AppColors.brand : Grade.percentHigherBetter(olt.onlinePct).fill;
@@ -853,7 +859,8 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
   Widget _cabinetRow(ArrangedDevice a) {
     final r = _readings[a.device.id];
     final selected = a.device.id == _sel;
-    final offline = a.device.lastStatus == 'offline' || _failed.contains(a.device.id);
+    final offline = a.device.lastStatus == 'offline';
+    final failed = !offline && _failed.contains(a.device.id);
     final olt = r?.olt;
     final facts = olt != null
         ? <String>[
@@ -886,8 +893,10 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
                 Text(
                   offline
                       ? 'لا يردّ'
-                      : (r == null ? 'يقرأ…' : (facts.isEmpty ? (a.device.model ?? TowerText.shape(a.shape)) : isoJoin(facts, ' · '))),
-                  style: AppType.muted(color: offline ? AppColors.error : AppColors.textMid),
+                      : failed
+                          ? 'يردّ — تأكّد من إعدادات الجهاز'
+                          : (r == null ? 'يقرأ…' : (facts.isEmpty ? (a.device.model ?? TowerText.shape(a.shape)) : isoJoin(facts, ' · '))),
+                  style: AppType.muted(color: offline ? AppColors.error : (failed ? AppColors.warningOnSoft : AppColors.textMid)),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1272,11 +1281,13 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
     final r = _readings[d.id];
     final alert = _alerts.where((x) => x.deviceId == d.id).firstOrNull;
     final offline = d.lastStatus == 'offline';
-    final failed = _failed.contains(d.id);
+    final failed = !offline && _failed.contains(d.id);
     final olt = r?.olt;
-    final AppTone tone = offline || failed
+    final AppTone tone = offline
         ? AppTone.danger
-        : olt != null
+        : failed
+            ? AppTone.warning
+            : olt != null
             ? (olt.onlinePct == null ? AppTone.neutral : Grade.percentHigherBetter(olt.onlinePct))
             : (a.role == TowerRole.link
                 ? Grade.signal(r?.signal)
@@ -1284,7 +1295,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
     final healthText = offline
         ? 'لا يردّ'
         : failed
-            ? 'تعذّر الاتّصال'
+            ? 'تحقّق من الإعدادات'
             : switch (tone) {
                 AppTone.success => 'ممتاز',
                 AppTone.warning => 'متوسّط',

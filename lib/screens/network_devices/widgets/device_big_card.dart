@@ -7,6 +7,7 @@ import '../../../models/network_device.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../device_check_text.dart';
 import '../device_vitals.dart';
 import '_grade.dart';
 import 'brand_badge.dart';
@@ -322,10 +323,14 @@ class _Body extends StatelessWidget {
     // لا قراءة بعد: السبب الصريح (بلا بيانات دخول، اختر SNMP…) أو «يقرأ…».
     if (vitals == null && detail == null) {
       final err = state.error;
+      // يردّ على الفحص وقراءته تفشل ⇒ إعداداته لا الجهاز (المالك ١ نوفمبر) — سطرٌ تحذيريّ يقول ما يُراجَع.
+      final settings = err == 'تعذّر الاتّصال' && device.lastStatus == 'online';
       return Padding(
         padding: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, Sp.xs),
         child: err != null
-            ? _Notice(icon: err == 'بلا بيانات دخول' ? LucideIcons.keyRound : LucideIcons.info, text: _noticeText(err))
+            ? (settings
+                ? _Notice(icon: LucideIcons.triangleAlert, text: DeviceCheckText.settingsLine(device), tone: AppTone.warning)
+                : _Notice(icon: err == 'بلا بيانات دخول' ? LucideIcons.keyRound : LucideIcons.info, text: _noticeText(err)))
             : _Tiles(tiles: [for (final t in _pendingTiles(role)) t]),
       );
     }
@@ -1000,23 +1005,28 @@ class _MoreLine extends StatelessWidget {
 }
 
 class _Notice extends StatelessWidget {
-  const _Notice({required this.icon, required this.text});
+  const _Notice({required this.icon, required this.text, this.tone});
   final IconData icon;
   final String text;
 
+  /// `null` = محايد (السبب الصريح)؛ تحذيريّ لـ«يردّ — تأكّد من الإعدادات».
+  final AppTone? tone;
+
   @override
   Widget build(BuildContext context) {
+    final t = tone;
+    final fg = t?.onSoft ?? AppColors.textMid;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
       decoration: BoxDecoration(
-        color: AppColors.surfaceSunken,
+        color: t?.softBg ?? AppColors.surfaceSunken,
         borderRadius: BorderRadius.circular(R.md),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: t?.softBorder ?? AppColors.border),
       ),
       child: Row(children: [
-        Icon(icon, size: 14, color: AppColors.textMid),
+        Icon(icon, size: 14, color: fg),
         const SizedBox(width: Sp.sm),
-        Expanded(child: Text(text, style: AppType.body(color: AppColors.textMid))),
+        Expanded(child: Text(text, style: AppType.body(color: fg))),
       ]),
     );
   }

@@ -10,6 +10,7 @@ import '../../../api/ruijie_api.dart';
 import '../../../api/network_devices_api.dart';
 import '../../../models/network_device.dart';
 import '../../../services/device_stats_cache.dart';
+import '../../../services/device_read_health.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import 'expandable_section.dart';
@@ -227,10 +228,13 @@ class _RuijieLivePanelState extends State<RuijieLivePanel> {
         _error = null;
         _lastFetch = now;
       });
+      DeviceReadHealth.instance.ok(widget.device.id);
     } catch (e) {
+      final msg = e is RuijieException ? e.message : humanError(e);
+      DeviceReadHealth.instance.failed(widget.device.id, msg);
       if (!mounted) return;
       setState(() {
-        _error = e is RuijieException ? e.message : humanError(e);
+        _error = msg;
         _loading = false;
       });
     }

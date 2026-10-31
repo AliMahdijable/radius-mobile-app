@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Platform, Socket, SocketException;
+import 'dart:io' show Platform, Socket;
 
 import 'package:dart_ping/dart_ping.dart';
 import 'package:dio/dio.dart';
@@ -11,15 +11,18 @@ import '../models/device_region.dart';
 import '../models/network_device.dart';
 import '../services/device_events.dart';
 import 'api_client.dart';
+import 'device_reach.dart';
 import 'mikrotik_api.dart' show MikrotikApi;
 import '../core/net/windows_icmp.dart';
 import '../core/platform/app_platform.dart';
+
+export 'device_reach.dart' show DeviceCheck, ReachVia;
 
 /// نتيجة فحصٍ واحد (ping أو خدمة).
 typedef Probe3 = ({String status, int? responseMs, double? packetLoss});
 
 /// نتيجة [NetworkDevicesApi.probeDevice]: الحالة (متّصل = يردّ على الشبكة) والزمن والفقدان، و`serviceOk` = ردّت خدمة الإدارة
-/// (المنفذ والبيانات المسجّلة) — false مع «متّصل» = يردّ على ping وخدمته لا.
+/// (المنفذ والبيانات المسجّلة) — false مع «متّصل» = يردّ على ping وخدمته لا. (النتيجة الكاملة: [DeviceCheck].)
 typedef DeviceProbe = ({String status, int? responseMs, double? packetLoss, bool? serviceOk});
 
 /// نتيجة scan واحدة — تُستهلك من bulk_scan_screen.dart.
@@ -257,24 +260,61 @@ class NetworkDevicesApi {
     return _icmpProbe(ip: ip, count: count, timeout: timeout);
   }
 
-  /// يفحص جهازاً بالطريقة المناسبة **لبروتوكوله**.
+  /// يفحص جهازاً: هل يردّ على الشبكة، وهل ردّت خدمة إدارته المسجّلة.
   ///
   /// ⚠️ نقطة واحدة لاختيار طريقة الفحص. كانت الشاشتان تكتبان
   /// `tcpPort: d.apiPort ?? d.port` كلٌّ على حدة — فحين اتّضح أنّ ١٦١
   /// منفذ UDP لا TCP كان لا بدّ من إصلاح موضعين، وهو بالضبط ما يجعل
   /// أحدهما يُنسى.
   ///
+  /// ٣٠ أكتوبر — المالك (زرّ «فحص الآن (ping)» على أولتي بـSNMP:444): «ان كان الجهاز خطا معلومات او اي شي ثاني مفترض ان يرد
+  /// فحص البنك لان رح يربك الوكيل ان الجهاز فاصل». ١ نوفمبر: «اذا الجهاز حتى لو ما مضيوف صح المفروض تخلي زر فحص الجهاز بالبنك
+  /// يرد». «متّصل» = الجهاز يردّ على الشبكة: خدمته **أو** ping حقيقيّ (أندرويد/الماك/ويندوز — [icmpUsable]) **أو** منفذ إدارةٍ
+  /// شائعٌ لعلامته ([DeviceReach]: iOS بلا ping، أو جهازٌ يحجبه). و`serviceOk` يقول هل ردّت خدمته المسجّلة — false مع «متّصل»
+  /// = الإعدادات خطأ لا الجهاز مفصول.
+  ///   • الدوريّ (القائمة/البطاقات): الخدمة أوّلاً (أخفّ)، فحزمة ping واحدة حين لا تردّ؛ وحيث لا ping أصلاً (iOS) منافذ الإدارة
+  ///     الشائعة بلا منافذ الدخول المحميّة. (حيث يصلح ping لا تُمسح المنافذ دوريّاً: جهازٌ مطفأ كان سيدفع مهلةً ثالثة كلّ جولة —
+  ///     والسرعة أوّلاً؛ الزرّ يمسحها.)
+  ///   • الزرّ ([ping]): [checkDevice] — ثلاث حزم ping والخدمة والمنافذ معاً.
+  static Future<DeviceProbe> probeDevice(NetworkDevice d, {bool ping = false}) async {
+    if (ping) {
+      final c = await checkDevice(d);
+      return (status: c.status, responseMs: c.latencyMs, packetLoss: c.packetLoss, serviceOk: c.serviceOk);
+    }
+    final s = await _service(d);
+    if (s.status == 'online') return (status: 'online', responseMs: s.responseMs, packetLoss: s.packetLoss, serviceOk: true);
+    final icmp = icmpUsable ? await icmpProbe(d.ip, 1) : null;
+    final hit = icmp != null
+        ? null
+        : await DeviceReach.sweep(d.ip, DeviceReach.portsFor(d, periodic: true, exclude: {d.apiPort ?? d.port}));
+    final c = DeviceReach.decide(icmp: icmp, service: s, hit: hit);
+    return (status: c.status, responseMs: c.latencyMs, packetLoss: c.packetLoss, serviceOk: c.serviceOk);
+  }
+
+  /// «فحص الآن (ping)» وفحص ما بعد الحفظ: الـping ([pings] حزمة) وخدمة الإدارة المسجّلة ومنافذ الإدارة الشائعة **معاً** —
+  /// فيردّ الجهاز ولو كانت علامته أو منفذه أو بياناته المسجّلة خطأ، وبزمنه.
+  static Future<DeviceCheck> checkDevice(NetworkDevice d, {int pings = 3}) async {
+    final port = d.apiPort ?? d.port;
+    final (ping, svc, hit) = await (
+      icmpUsable ? icmpProbe(d.ip, pings).then<Probe3?>((r) => r) : Future<Probe3?>.value(null),
+      _service(d),
+      DeviceReach.sweep(d.ip, DeviceReach.portsFor(d, exclude: {port}), allowGuarded: true),
+    ).wait;
+    return DeviceReach.decide(icmp: ping, service: svc, hit: hit);
+  }
+
+  /// خدمة الإدارة المسجّلة (منفذ السجلّ وبروتوكوله) — للاختبار: نتيجةٌ جاهزة بلا شبكة.
+  @visibleForTesting
+  static Future<Probe3> Function(NetworkDevice d)? debugService;
+
+  /// خدمة الإدارة المسجّلة بالطريقة المناسبة **لبروتوكولها**.
+  ///
   /// وأجهزة SNMP تحتاج الـcommunity المخزَّنة: `public` تكفي معظمها،
   /// لكنّ من غيّرها يبدو ساقطاً أبداً. والجلب مخزَّن ٦٠ ثانية فلا يكلّف
   /// طلباً في كلّ جولة.
-  ///
-  /// ٣٠ أكتوبر — المالك (زرّ «فحص الآن (ping)» على أولتي بـSNMP:444): «ان كان الجهاز خطا معلومات او اي شي ثاني مفترض ان يرد
-  /// فحص البنك لان رح يربك الوكيل ان الجهاز فاصل». «متّصل» = الجهاز يردّ على الشبكة: خدمته (كما كانت) **أو** ping حقيقيّ
-  /// (ICMP) حيث يصلح (أندرويد/الماك/ويندوز؛ iOS كما كان — [icmpUsable]). `serviceOk` يقول هل ردّت خدمة الإدارة (المنفذ/البيانات)
-  /// فتقول الشاشة «يردّ على ping لكن SNMP:444 لا يردّ» بدل «مفصول».
-  ///   • الدوريّ (القائمة/النظرة العامّة): الخدمة أوّلاً (أسرع وأخفّ)، وحزمة ping واحدة حين لا تردّ.
-  ///   • الزرّ ([ping]): ثلاث حزم ping والخدمة معاً — الزمن والفقدان من الـping.
-  static Future<DeviceProbe> probeDevice(NetworkDevice d, {bool ping = false}) async {
+  static Future<Probe3> _service(NetworkDevice d) async {
+    final fake = debugService;
+    if (fake != null) return fake(d);
     final port = d.apiPort ?? d.port;
     // SNMP (UDP) بالـcommunity: المنفذ ١٦١ أو جهازٌ بروتوكوله SNMP على منفذٍ آخر — فحص TCP لمنفذ SNMP لا يردّ أبداً.
     final snmp = port == 161 || d.protocol == 'snmp';
@@ -292,28 +332,22 @@ class NetworkDevicesApi {
         // فشل الجلب لا يمنع الفحص — نجرّب الافتراضيّة.
       }
     }
-    final Future<Probe3> service = snmp
+    final Probe3 s = await (snmp
         ? (port == 161
             ? localIcmpPing(ip: d.ip, tcpPort: port, snmpCommunity: community)
             : _snmpProbe(ip: d.ip, port: port, community: community, timeout: const Duration(seconds: 2)))
         : d.brand == 'mikrotik'
             ? mikrotikProbe(d.ip, port, MikrotikApi.fallbackPorts(protocol: d.protocol, apiPort: d.apiPort))
-            : localIcmpPing(ip: d.ip, tcpPort: port, snmpCommunity: community);
-    if (!icmpUsable) {
-      final s = await service;
-      return (status: s.status, responseMs: s.responseMs, packetLoss: s.packetLoss, serviceOk: s.status == 'online');
+            : localIcmpPing(ip: d.ip, tcpPort: port, snmpCommunity: community));
+    // منفذ ويب مسجّل (80 · 443 · 8080): وسيط الموبايل يقبله عن أيّ عنوان — الاتّصال وحده ليس ردّاً من الجهاز حتى يسكت الشاهد.
+    if (!snmp && s.status == 'online' && DeviceReach.webPorts.contains(port) && !await DeviceReach.trusts(port, PortReply.open)) {
+      return (status: 'offline', responseMs: null, packetLoss: 100.0);
     }
-    if (ping) {
-      final both = await Future.wait([icmpProbe(d.ip, 3), service]);
-      return combineProbes(both[0], both[1]);
-    }
-    final s = await service;
-    if (s.status == 'online') return (status: 'online', responseMs: s.responseMs, packetLoss: s.packetLoss, serviceOk: true);
-    return combineProbes(await icmpProbe(d.ip, 1), s);
+    return s;
   }
 
   /// ping حقيقيّ يصلح هنا؟ أندرويد والماك (أمر ping) وويندوز (windows_icmp) نعم؛ iOS لا — dart_ping بلا تنفيذٍ موثوقٍ عليه
-  /// (راجع [localIcmpPing]).
+  /// (راجع [localIcmpPing]) فيثبت الوصول هناك بمنافذ الإدارة الشائعة ([DeviceReach]).
   static bool get icmpUsable => debugIcmpUsable ?? (!kIsWeb && !Platform.isIOS);
   @visibleForTesting
   static bool? debugIcmpUsable;
@@ -324,21 +358,15 @@ class NetworkDevicesApi {
       (ip, count) => _icmpProbe(ip: ip, count: count, timeout: const Duration(seconds: 2));
 
   /// الـping والخدمة ⇒ الحالة: ردّ الـping = متّصل بزمنه وفقدانه (والخدمة تُقال في serviceOk)؛ لا ping (جدارٌ يحجبه) والخدمة تردّ
-  /// = متّصل بزمن الخدمة بلا «فقدان» (لا 100% مع «متّصل»)؛ لا هذا ولا ذاك = مفصول.
+  /// = متّصل بزمن الخدمة بلا «فقدان» (لا 100% مع «متّصل»)؛ لا هذا ولا ذاك = مفصول. (الحكم الكامل مع المنافذ: [DeviceReach.decide].)
   @visibleForTesting
   static DeviceProbe combineProbes(Probe3 ping, Probe3 svc) {
-    final svcOk = svc.status == 'online';
-    if (ping.status == 'online') return (status: 'online', responseMs: ping.responseMs, packetLoss: ping.packetLoss, serviceOk: svcOk);
-    if (svcOk) return (status: 'online', responseMs: svc.responseMs, packetLoss: null, serviceOk: true);
-    return (status: 'offline', responseMs: null, packetLoss: 100.0, serviceOk: false);
+    final c = DeviceReach.decide(icmp: ping, service: svc);
+    return (status: c.status, responseMs: c.latencyMs, packetLoss: c.packetLoss, serviceOk: c.serviceOk);
   }
 
   /// رفضُ الاتّصال (RST): ردٌّ من الجهاز — أو من وسيطٍ بالطريق؛ فلا يُثبت وحده أنّه حيّ.
-  static bool _refused(Object e) {
-    if (e is! SocketException) return false;
-    final code = e.osError?.errorCode;
-    return code == 61 || code == 111 || code == 10061 || '${e.osError?.message} ${e.message}'.toLowerCase().contains('refused');
-  }
+  static bool _refused(Object e) => DeviceReach.isRefused(e);
 
   /// المنافذ معاً: أوّل اتّصالٍ ينجح ⇒ زمنه؛ وإلّا null، مع «رُفض أحدها؟» وزمن أوّل رفض. لا ينتظر أبطأها.
   static Future<({int? ms, bool refused, int? refusedMs})> _connectAny(String ip, List<int> ports, Duration timeout) {
@@ -438,31 +466,19 @@ class NetworkDevicesApi {
 
   /// TCP connect probe — أدقّ probe للأجهزة على LAN.
   /// نجاح = الجهاز يقبل connections على هذا الـport (بمعنى: online + السيرفس شغّال).
-  /// فشل = timeout أو refused → offline.
+  /// فشل = timeout أو refused → offline. (الاتّصال عبر [DeviceReach.connect] — يُحقن في الاختبار.)
   static Future<({String status, int? responseMs, double? packetLoss})>
       _tcpProbe({
     required String ip,
     required int port,
     required Duration timeout,
   }) async {
-    final sw = Stopwatch()..start();
-    Socket? socket;
-    try {
-      socket = await Socket.connect(ip, port, timeout: timeout);
-      sw.stop();
-      socket.destroy();
-      return (
-        status: 'online',
-        responseMs: sw.elapsedMilliseconds,
-        packetLoss: 0.0
-      );
-    } catch (e) {
-      if (kDebugMode) print('⚠️ tcpProbe $ip:$port failed: $e');
-      try {
-        socket?.destroy();
-      } catch (_) {}
-      return (status: 'offline', responseMs: null, packetLoss: 100.0);
+    final a = await DeviceReach.connect(ip, port, timeout);
+    if (a.reply == PortReply.open) {
+      return (status: 'online', responseMs: a.ms, packetLoss: 0.0);
     }
+    if (kDebugMode) print('⚠️ tcpProbe $ip:$port ${a.reply.name}');
+    return (status: 'offline', responseMs: null, packetLoss: 100.0);
   }
 
   /// ICMP ping — fallback لو ما نعرف الـport.

@@ -9,6 +9,7 @@ import '../../../api/edgeswitch_api.dart';
 import '../../../api/network_devices_api.dart';
 import '../../../models/network_device.dart';
 import '../../../services/device_stats_cache.dart';
+import '../../../services/device_read_health.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -125,6 +126,7 @@ class _EdgeSwitchLivePanelState extends State<EdgeSwitchLivePanel>
         _loading = false;
         _error = 'أدخل اسم مستخدم السويتش من إعدادات الجهاز';
       });
+      DeviceReadHealth.instance.failed(widget.device.id, _error!);
       return;
     }
 
@@ -137,6 +139,11 @@ class _EdgeSwitchLivePanelState extends State<EdgeSwitchLivePanel>
 
     // الردّ الذي تجاوزه الزمن يُهمَل — وإلّا رسمنا لقطةً أقدم فوق أحدث.
     if (!mounted || gen != _generation) return;
+    if (s == null) {
+      DeviceReadHealth.instance.failed(widget.device.id, 'تعذّر الاتّصال — تحقّق من العنوان وبيانات الدخول');
+    } else {
+      DeviceReadHealth.instance.ok(widget.device.id);
+    }
     setState(() {
       _loading = false;
       if (s == null) {

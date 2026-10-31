@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -6,6 +8,8 @@ import '../../api/network_devices_api.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/device_region.dart';
 import '../../models/network_device.dart';
+import '../../services/device_read_health.dart';
+import 'device_check_text.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -15,7 +19,11 @@ import '../../theme/typography.dart';
 /// bottom sheet لإضافة/تعديل جهاز شبكة — مع اختيار protocol + credentials.
 class NetworkDeviceFormSheet extends StatefulWidget {
   final NetworkDevice? existing;
-  const NetworkDeviceFormSheet({super.key, this.existing});
+
+  /// بعد الحفظ: فحص الاتصال (ping والخدمة ومنافذ الإدارة الشائعة) ونتيجته في الإشعار، والجهاز يعود بحالته — جهازٌ أُضيف
+  /// بإعداداتٍ خطأ يردّ على ping فوراً (المالك ١ نوفمبر). شاشة الجهاز تُطفئه وتفحص بنفسها (تعرض النتيجة كاملة).
+  final bool checkAfterSave;
+  const NetworkDeviceFormSheet({super.key, this.existing, this.checkAfterSave = true});
 
   @override
   State<NetworkDeviceFormSheet> createState() => _NetworkDeviceFormSheetState();
@@ -45,6 +53,12 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
 
   bool _obscurePassword = true;
   bool _submitting = false;
+
+  /// الحفظ تمّ والفحص جارٍ — نصّ الزرّ «يفحص الاتصال…».
+  bool _checking = false;
+
+  /// مهلة فحص ما بعد الحفظ كلّه — الحفظ تمّ، والفحص لا يحبس الشيت أكثر منها.
+  static const _checkBudget = Duration(seconds: 5);
 
   @override
   void initState() {
@@ -165,10 +179,30 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
       if (widget.existing != null) {
         NetworkDevicesApi.invalidateCredentialsCache(widget.existing!.id);
       }
+      // إعداداتٌ جديدة: خطأ قراءةٍ بالقديمة لا يُقال عنها.
+      DeviceReadHealth.instance.forget(saved.id);
       if (!mounted) return;
-      showSheetSnack(
-          context, widget.existing == null ? 'تم إضافة الجهاز' : 'تم الحفظ');
-      Navigator.of(context).pop(saved);
+      var result = saved;
+      var message = widget.existing == null ? 'تم إضافة الجهاز' : 'تم الحفظ';
+      var long = false;
+      if (widget.checkAfterSave) {
+        // ١ نوفمبر (المالك): «حتى لو ما مضيوف صح… يرد بنك» — حزمة ping والخدمة ومنافذ الإدارة معاً، فيعرف الوكيل في الحال
+        // أنّ الجهاز يردّ وأنّ إعداداته هي الخطأ (أو أنّ العنوان/الشبكة لا يصل).
+        setState(() => _checking = true);
+        try {
+          final c = await NetworkDevicesApi.checkDevice(saved, pings: 1).timeout(_checkBudget);
+          unawaited(NetworkDevicesApi.saveProbeResult(deviceId: saved.id, status: c.status, responseMs: c.latencyMs));
+          result = saved.copyWith(lastProbedAt: DateTime.now(), lastStatus: c.status, lastResponseMs: c.latencyMs);
+          message = DeviceCheckText.afterSave(saved, c, created: widget.existing == null);
+          // التحذير يبقى أطول ليُقرأ: لا يردّ، أو يردّ وخدمته المسجّلة لا (لجهاز «ICMP فقط» لا خدمة تُراجَع).
+          long = !c.reachable || (c.serviceOk == false && saved.protocol != null);
+        } catch (_) {
+          // الفحص ثانويّ — الحفظ تمّ، والقائمة تفحصه في جولتها.
+        }
+        if (!mounted) return;
+      }
+      showSheetSnack(context, message, duration: Duration(seconds: long ? 7 : 3));
+      Navigator.of(context).pop(result);
     } catch (e) {
       if (!mounted) return;
       showSheetSnack(context, e.toString().replaceFirst('Exception: ', ''),
@@ -226,7 +260,7 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
         onClose: _submitting ? () {} : () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
-        label: widget.existing == null ? 'إضافة الجهاز' : 'حفظ التعديلات',
+        label: _checking ? 'يفحص الاتصال…' : (widget.existing == null ? 'إضافة الجهاز' : 'حفظ التعديلات'),
         icon: LucideIcons.check,
         busy: _submitting,
         onPressed: _submit,

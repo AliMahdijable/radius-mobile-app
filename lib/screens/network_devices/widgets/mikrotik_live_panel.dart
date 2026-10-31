@@ -9,6 +9,7 @@ import '../../../api/mikrotik_api.dart';
 import '../../../api/network_devices_api.dart';
 import '../../../models/network_device.dart';
 import '../../../services/device_stats_cache.dart';
+import '../../../services/device_read_health.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import 'desk_device_kit.dart';
@@ -256,13 +257,17 @@ class _MikrotikLivePanelState extends State<MikrotikLivePanel> {
         _error = null;
         _lastFetch = now;
       });
+      DeviceReadHealth.instance.ok(widget.device.id);
       // الموديل من الجهاز نفسه — `board-name` أدقّ ممّا يُكتب يدويّاً،
       // وعليه تُطابَق صورة الجهاز في القائمة.
       DetectedModel.save(widget.device, stats.boardName);
     } catch (e) {
+      // قراءةٌ فاشلة تُسجَّل ولو غادر المستخدم — شاشة الجهاز تجمعها مع الفحص («يردّ — تأكّد من الإعدادات»).
+      final msg = e is MikrotikException ? e.message : humanError(e);
+      DeviceReadHealth.instance.failed(widget.device.id, msg);
       if (!mounted) return;
       setState(() {
-        _error = e is MikrotikException ? e.message : humanError(e);
+        _error = msg;
         _loading = false;
       });
     }

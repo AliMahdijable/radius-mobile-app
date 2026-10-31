@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/network_device.dart';
 import '../../services/deep_probe_scheduler.dart';
+import '../../services/device_read_health.dart';
 import '../../services/device_stats_cache.dart';
 import 'device_vitals.dart';
 import 'widgets/device_big_card.dart';
@@ -268,6 +269,7 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
             .putVitals(widget.device.id, r.vitals, r.detail);
 
         _ownAt = DateTime.now();
+        DeviceReadHealth.instance.ok(widget.device.id);
         if (!mounted) return;
         // العيّنة تُحفظ **قبل** النشر: الجلسة القادمة تطرح منها.
         widget.onSample(r.counters);
@@ -277,6 +279,8 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
           at: DateTime.now(),
         ));
       } catch (_) {
+        // شاشة الجهاز تجمعها مع فحصها: يردّ على الاتصال وقراءته تفشل = إعداداته (١ نوفمبر).
+        DeviceReadHealth.instance.failed(widget.device.id, 'تعذّر الاتّصال');
         if (!mounted) return;
         widget.onVitals(VitalsState(
           vitals: st.vitals,
