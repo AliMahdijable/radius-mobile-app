@@ -23,7 +23,8 @@ class _NoLocalNotifications extends FlutterLocalNotificationsPlatform {}
 /// أزرار الأعلى)، وأدوات القائمة التي كان الشريط يحملها (تنبيهات الأجهزة ·
 /// التحديث · المزيد · الإضافة) جنب البحث في سطرٍ مثبَّت. لم تتغيّر وظيفة أيٍّ
 /// منها — هذه الاختبارات تحرس أنّها كلّها باقية وتعمل، وأنّ «تحديث» يبقى طريق
-/// إعادة المحاولة بعد فشل التحميل.
+/// إعادة المحاولة بعد فشل التحميل. (١ نوفمبر: «+» قائمة الإضافات كلّها، والشريط
+/// تحت السطر في devices_filter_bar_test.)
 void main() {
   setUpAll(() async {
     await simSetUpAll();
@@ -97,6 +98,9 @@ void main() {
     // و«+» تحت الترس تماماً (عمودٌ واحد).
     final gear = find.byKey(const ValueKey('top-actions-settings'));
     expect(t.getCenter(add).dx, moreOrLessEquals(t.getCenter(gear).dx));
+    // حسابٌ بلا أجهزة: لا شريط توزيع («الكلّ ٠ · متّصل ٠» فوق «لا توجد أجهزة» ضجيج).
+    expect(find.byKey(const ValueKey('devices-strip')), findsNothing);
+    expect(find.text('لا توجد أجهزة'), findsOneWidget);
     await finish(t);
   });
 
@@ -116,14 +120,23 @@ void main() {
     await finish(t);
   });
 
-  testWidgets('«المزيد» للمالك: القائمة كما كانت — بلا «نظرة عامّة»', (t) async {
+  testWidgets('«المزيد» للمالك: الترتيب والألياف — والإضافات (المناطق والاكتشاف) انتقلت إلى «+»', (t) async {
     await open(t, s1bSasOwner);
     await t.tap(more);
     await t.pumpAndSettle();
     expect(find.text('نظرة عامّة'), findsNothing, reason: 'أُلغيت (٣١ أكتوبر) — مكانها نوع العرض');
     expect(find.textContaining('الترتيب · '), findsOneWidget);
-    expect(find.text('إدارة المناطق'), findsOneWidget);
+    expect(find.text('شبكة الألياف'), findsOneWidget);
+    // ١ نوفمبر: «+» قائمة الإضافات كلّها — لا تكرار في «المزيد».
+    expect(find.text('إدارة المناطق'), findsNothing);
+    expect(find.text('اكتشاف أجهزة الشبكة'), findsNothing);
+    await t.tapAt(const Offset(10, 700));
+    await t.pumpAndSettle();
+    await t.tap(add);
+    await t.pumpAndSettle();
+    expect(find.text('إضافة جهاز'), findsOneWidget);
     expect(find.text('اكتشاف أجهزة الشبكة'), findsOneWidget);
+    expect(find.text('إدارة المناطق'), findsOneWidget);
     await t.tapAt(const Offset(10, 700));
     await t.pumpAndSettle();
     await finish(t);
