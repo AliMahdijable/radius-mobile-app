@@ -22,6 +22,9 @@ bool showManagerDebtToggle() {
       code != 'ftth-iq';
 }
 
+/// «تذاكر المشروع الوطني»: الوطنيّ على providerKit (`watani`) وحده — FTTH القديم وبقيّة الشركات بلا هذا التنبيه.
+bool showNationalTicketToggle() => ProviderService.isKit && ProviderService.parentIsZone;
+
 /// شاشة "الإشعارات" — تجمع 3 toggles لإشعارات FCM + أوقات السكون
 /// (DND). كل تغيير يُحفظ تلقائياً بـPUT مع snackbar.
 class NotificationsSettingsScreen extends StatefulWidget {
@@ -160,6 +163,16 @@ class _NotificationsSettingsScreenState
                     value: p.pushManagerDebt,
                     onChanged: (v) =>
                         _patch((x) => x.copyWith(pushManagerDebt: v)),
+                  ),
+                // «تذاكر المشروع الوطني» (١ نوفمبر): للوطنيّ على providerKit وحده — غيره لا تصله هذه التنبيهات.
+                if (showNationalTicketToggle())
+                  _Toggle(
+                    icon: LucideIcons.headset,
+                    label: 'notifs.national_ticket_label'.tr(),
+                    sub: 'notifs.national_ticket_hint'.tr(),
+                    value: p.pushWataniTicket,
+                    onChanged: (v) =>
+                        _patch((x) => x.copyWith(pushWataniTicket: v)),
                   ),
                 const SizedBox(height: Sp.md),
                 _SectionLabel('notifs.dnd_section'.tr()),

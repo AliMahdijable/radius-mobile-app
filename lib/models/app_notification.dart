@@ -9,6 +9,7 @@ enum NotificationKind {
   expiredTodayDigest, // اشتراكات انتهت اليوم
   managerDebt, // دين مدير فرعي
   managerBalance, // تحديث رصيد مدير
+  nationalTicket, // تذكرة جديدة من المشروع الوطني (server/watani/wataniTicketAlerts.js) — data.ticket_id يفتح ورقتها
   other; // fallback
 
   static NotificationKind fromString(String? s) {
@@ -26,6 +27,8 @@ enum NotificationKind {
       case 'manager_balance_update':
       case 'manager_balance':
         return NotificationKind.managerBalance;
+      case 'watani_ticket':
+        return NotificationKind.nationalTicket;
       default:
         return NotificationKind.other;
     }
@@ -36,6 +39,7 @@ enum NotificationKind {
         NotificationKind.expiredTodayDigest => 'expired_today_digest',
         NotificationKind.managerDebt => 'manager_debt',
         NotificationKind.managerBalance => 'manager_balance_update',
+        NotificationKind.nationalTicket => 'watani_ticket',
         NotificationKind.other => 'other',
       };
 }

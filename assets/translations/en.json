@@ -883,7 +883,9 @@
     "from": "From",
     "to": "To",
     "mute_deferred_hint": "Notifications sent during this window are deferred until the mute ends. They aren't lost — they arrive in a batch once quiet hours end.",
-    "saving": "Saving…"
+    "saving": "Saving…",
+    "national_ticket_label": "National project tickets",
+    "national_ticket_hint": "Alert when the company sends a new ticket to your page"
   },
   "wa": {
     "qr_not_ready": "QR isn't ready yet — try again in a moment",
@@ -1160,7 +1162,8 @@
     "digest_expired_today": "Subscriptions expired today",
     "mgr_debt": "Sub-manager debt",
     "mgr_balance_update": "Manager balance update",
-    "other": "Notification"
+    "other": "Notification",
+    "national_ticket": "National project ticket"
   },
   "conn_alerts": {
     "title": "Connection alerts",

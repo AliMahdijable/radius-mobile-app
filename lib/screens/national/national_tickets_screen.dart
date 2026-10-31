@@ -20,7 +20,11 @@ import 'national_widgets.dart';
 /// وتُكاش بالخادم. الكتابة (المرحلة ٢): «تذكرة جديدة» والتعليق وموعد الزيارة حين يقول الخادم can_write/can
 /// (`national_ticket_write.dart`)، والموظّف بلا «تعديل المشترك» يراها مقفلةً بمكانها.
 class NationalTicketsScreen extends StatefulWidget {
-  const NationalTicketsScreen({super.key});
+  const NationalTicketsScreen({super.key, this.openTicketId, this.openDisplayId});
+
+  /// تنبيه «تذكرة جديدة» (national_ticket_push.dart): ورقة هذه التذكرة فوق القائمة بعد أوّل إطار.
+  final String? openTicketId;
+  final String? openDisplayId;
 
   @override
   State<NationalTicketsScreen> createState() => _NationalTicketsScreenState();
@@ -51,6 +55,20 @@ class _NationalTicketsScreenState extends State<NationalTicketsScreen> {
     NationalPortalApi.lookups().then((v) {
       if (mounted && v != null) setState(() => _lk = v);
     });
+    final open = widget.openTicketId;
+    if (open != null && open.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _openTicket(NationalTicket(
+          id: open,
+          displayId: widget.openDisplayId ?? '',
+          source: 'call_center',
+          title: '',
+          summary: '',
+          status: '',
+        ));
+      });
+    }
   }
 
   @override

@@ -13,6 +13,7 @@ import '../../services/inbox_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../national/national_ticket_push.dart';
 import '../subscribers/subscriber_detail_screen.dart';
 import '../desktop/desk_widgets.dart';
 
@@ -187,6 +188,11 @@ class _InboxScreenState extends State<InboxScreen> {
   /// عندنا هوية، نستخدم onTapNotification callback الخارجي (fallback).
   Future<void> _handleNotificationTap(AppNotification n) async {
     InboxService.markRead(n.id);
+    // تذكرة المشروع الوطني: «التذاكر» وورقتها — من الصندوق كما من شاشة القفل (الموجِّه نفسه).
+    if (n.kind == NotificationKind.nationalTicket) {
+      await openNationalTicketPush(Navigator.of(context), n.data);
+      return;
+    }
     final username = _extractUsername(n);
     if (username != null && username.isNotEmpty) {
       final sub = await _findSubscriber(username);
@@ -854,6 +860,12 @@ class _NotificationRow extends StatelessWidget {
           icon: LucideIcons.banknote,
           color: AppColors.success,
           fallbackTitle: 'notifications.mgr_balance_update'.tr(),
+        );
+      case NotificationKind.nationalTicket:
+        return _KindMeta(
+          icon: LucideIcons.headset,
+          color: AppColors.info,
+          fallbackTitle: 'notifications.national_ticket'.tr(),
         );
       case NotificationKind.other:
         return _KindMeta(
