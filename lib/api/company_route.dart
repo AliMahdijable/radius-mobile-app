@@ -59,6 +59,8 @@ class CompanyRefs {
   static const Set<String> _subjectWrites = {
     '', 'pay-debt', 'add-debt', 'discount', 'price', 'disconnect', 'toggle-enabled', 'cancel-profile-change',
     'account-password', 'send-info', 'send-link', 'send-debt-reminder', 'generate-link', 'portal-qr-token',
+    // «ملاحظة خاصّة» (٣١ أكتوبر): الحفظ والحذف بمرجع النافذة (companyRoutingAllow private-note-set/remove).
+    'private-note',
   };
 
   static String _k(String key, String idx, CompanyRefKind kind) => '$key|$idx|${kind.name}';

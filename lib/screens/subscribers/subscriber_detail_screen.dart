@@ -54,6 +54,7 @@ import 'widgets/device_probe_card.dart';
 import 'widgets/last_seen_card.dart';
 import 'widgets/subscriber_actions.dart';
 import 'widgets/kit_fiber_card.dart';
+import 'widgets/private_note_card.dart';
 import 'connection_alert_flow.dart';
 import '../../services/receipt_service.dart';
 import '../../core/widgets/print_feedback.dart';
@@ -383,6 +384,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                       sub: sub,
                       onDrawn: (cfg) => _drawnConfig = cfg,
                     ),
+                    // «ملاحظة» خاصّة على خادمنا (المالك ٣١ أكتوبر: «تنعرض بكارت المشترك فقط، لكل الساسات»).
+                    PrivateNoteCard(key: ValueKey('private-note-${sub.companyKey ?? ''}-${sub.idx}'), sub: sub),
                     // معلومات الجهاز (ONT/UBNT) — تظهر لأي مشترك غير معطَّل
                     // ولم ينتهِ اشتراكه. الـcard يجرّب:
                     //   1) SAS4 IP لو موجود

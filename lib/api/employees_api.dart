@@ -279,6 +279,8 @@ class ElEmployeePerms {
   /// كاملاً، والحسابات الفرعيّة عند الشركة ومالها، والأسعار والتقارير والتسويات والمبيعات وديون المحذوفين والأجهزة والمساعد. لا موقع
   /// ولا جلسات ولا ديون مدراء (لا تخدمها). وما لا يخدمه محوّل الشركة لحسابٍ بعينه يعرضه الخادم false. مطابقٌ للويب (KIT_EMPLOYEE_KEYS).
   static const kitKeys = <String>{
+    // «ملاحظة خاصّة» (٣١ أكتوبر): جدولنا وحده، ومسارها ممرَّرٌ لكلّ مزوّد — يفحصها معالجه العامّ.
+    'subscribers.private_note',
     'subscribers.view',
     'subscribers.add',
     'subscribers.activate',
@@ -332,6 +334,8 @@ class ElEmployeePerms {
   /// الخادم على مسارات فايبر اكس (fiberxRoutes.routePermission) ومعالجات التمرير. لا إضافة/تعديل/إيقاف مشترك، ولا كلمة
   /// سرّه أو موقعه، ولا الجلسات — فايبر اكس لا يخدمها. مطابقٌ للويب (FX_EMPLOYEE_KEYS).
   static const fiberxKeys = <String>{
+    // «ملاحظة خاصّة» (٣١ أكتوبر): جدولنا وحده، ومسارها ممرَّرٌ لكلّ مزوّد — يفحصها معالجه العامّ.
+    'subscribers.private_note',
     'subscribers.view',
     'subscribers.activate',
     'subscribers.extend',
@@ -387,6 +391,7 @@ class ElEmployeePerms {
       (ProviderService.isFiberx ? _fiberxHints[key] : ProviderService.isKit ? _kitHints[key] : null) ?? hints[key];
 
   static const earthlinkKeys = <String>{
+    'subscribers.private_note', // «ملاحظة خاصّة» (٣١ أكتوبر)
     ..._operations,
     // استيراد/تصدير الديون للمدير وحده — لا يُمنح لموظّف (قرار المالك ٢١ أكتوبر؛
     // الخادم يردّ OWNER_ONLY ولا مفتاح له في الكتالوج).
