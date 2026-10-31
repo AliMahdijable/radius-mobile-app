@@ -1,0 +1,10 @@
+identity=ALIMAHDI.MyServicesPro ready=1 version=3.0.173.0
+Package msix is currently active at version 3.18.0.
+Resolving dependencies...
+Downloading packages...
+The package msix is already activated at newest available version.
+To recompile executables, first run `dart pub global deactivate msix`.
+Activated msix 3.18.0.
+building msix files...                  /-\|/-\|/-\|/-\|/-\|/-\|/-2.0s
+packing msix files...                   /-\|/-\|/-\|/-\|/-\|/-\|/-\|/2.3s
+[32mmsix created: [0m[1m[34mdist\MyServicesPro_3.0.13_173_store.msix[0m[0m
