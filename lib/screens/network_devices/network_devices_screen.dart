@@ -23,7 +23,8 @@ import 'bulk_scan_screen.dart';
 import 'device_alerts_screen.dart';
 import 'device_sort.dart';
 import 'probe_backoff.dart';
-import 'devices_wall_screen.dart';
+import 'device_live_card.dart';
+import 'device_vitals.dart';
 import 'fiber/fiber_home_screen.dart';
 import 'network_device_details_screen.dart';
 import 'network_device_form_sheet.dart';
@@ -49,6 +50,37 @@ import 'widgets/device_ip_link.dart';
 /// - Row 1 (chips): فلتر بالنوع (لنكات/سويتشات/سكاتر/راوترات/AP/كاميرات/أخرى)
 /// - Row 2 (chips): فلتر بالحالة (الكلّ/متصل/غير متصل/لم يُفحص)
 /// - القائمة: cards بتصميم متسق مع باقي المشروع (AppColors)
+/// نوع العرض بقائمة الأجهزة (المالك ٣١ أكتوبر: «نظرة عامه ع الاجهز نلغيها ونستبدل بدالها تغير نوع العرض مثل الي بالحاسوب، نخلي
+/// عرض كارتات كبار…»): «قائمة» (البطاقات المعتادة؛ وعلى الحاسبة شبكةٌ منها)، «بطاقات كبيرة» حيّةٌ ملوّنة بدور كلّ جهاز، و«جدول»
+/// على الحاسبة وحدها (عرضه أوسع من الهاتف).
+enum DevicesView {
+  list('list'),
+  big('big'),
+  table('table');
+
+  const DevicesView(this.key);
+  final String key;
+
+  String labelFor({required bool desk}) => switch (this) {
+        DevicesView.list => desk ? 'بطاقات' : 'قائمة',
+        DevicesView.big => 'بطاقات كبيرة',
+        DevicesView.table => 'جدول',
+      };
+
+  IconData iconFor({required bool desk}) => switch (this) {
+        DevicesView.list => desk ? LucideIcons.layoutGrid : LucideIcons.list,
+        DevicesView.big => LucideIcons.galleryVerticalEnd,
+        DevicesView.table => LucideIcons.table2,
+      };
+
+  static DevicesView? parse(String? raw) {
+    for (final v in DevicesView.values) {
+      if (v.key == raw) return v;
+    }
+    return null;
+  }
+}
+
 class NetworkDevicesScreen extends StatefulWidget {
   const NetworkDevicesScreen({super.key, this.isActive});
 
@@ -62,6 +94,10 @@ class NetworkDevicesScreen extends StatefulWidget {
   ///
   /// `null` = بلا بوّابة (تُستعمل حين تُفتح الشاشة بمسار مستقلّ).
   final ValueListenable<bool>? isActive;
+
+  /// للاختبار: نوع العرض إلى الافتراضيّ — الاختيار static يعيش بين الاختبارات كما يعيش بين الزيارات.
+  @visibleForTesting
+  static void debugResetView() => _NetworkDevicesScreenState._viewChoice = null;
 
   @override
   State<NetworkDevicesScreen> createState() => _NetworkDevicesScreenState();
@@ -88,8 +124,23 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   // Selection mode — long-press لتنشيطه، tap يبدّل عنصر، exit بزرّ الـclose. 2026-08-18.
   bool _selectionMode = false;
 
-  /// الحاسبة: جدولٌ (كبرامج مراقبة الشبكات) أو بطاقات — يبقى اختيار الجلسة بين الزيارات.
-  static bool _deskTableView = true;
+  /// نوع العرض المختار — يبقى بين الزيارات (static) ويُحفظ على الجهاز. `null` = الافتراضيّ: جدولٌ على الحاسبة (كبرامج مراقبة
+  /// الشبكات) وقائمةٌ على الهاتف.
+  static DevicesView? _viewChoice;
+  static const _kDevView = 'devices.view.v1';
+
+  /// قراءات «البطاقات الكبيرة» لكلّ جهاز — تعيش في الشاشة لا في البطاقة (تُهدم مع التمرير). راجع [DeviceLiveCard].
+  final VitalsStore _vitals = VitalsStore();
+
+  /// وسيط زمن الاستجابة في آخر جولة — أساس «بطيء» في شارة البطاقة الكبيرة (نسبيٌّ لا عتبةٌ ثابتة).
+  int? _roundMedianMs;
+
+  /// لم يستجب أحدٌ في آخر جولة (وفُحص ثلاثةٌ فأكثر) — لافتة «تأكّد أنّك على شبكة الأجهزة» فوق البطاقات الكبيرة.
+  ///
+  /// ⚠️ الفحص وحده لا يفرّق بين «لستُ على الشبكة» و«كلّ الأجهزة ساقطة فعلاً» — كلاهما صمت. فالنصّ يصف **ما رأيناه** ويقترح
+  /// السبب ولا يجزم. والشرط فشل **الكلّ**: جهازٌ واحد معطّل صدفةً لا يُطلق الإنذار.
+  bool _offNetwork = false;
+  static const _offNetworkThreshold = 3;
   final Set<int> _selectedIds = <int>{};
   bool _bulkDeleting = false;
 
@@ -131,6 +182,12 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     // تحديثٌ فوريّ حين يتغيّر أيّ جهازٍ من أيّ شاشة (تعديل/حذف/إضافة/منطقة).
     DeviceEvents.changes.addListener(_onDevicesChanged);
     _initialLoad();
+    if (_viewChoice == null) {
+      const FlutterSecureStorage().read(key: _kDevView).then((raw) {
+        final v = DevicesView.parse(raw);
+        if (v != null && mounted && _viewChoice == null) setState(() => _viewChoice = v);
+      }).catchError((_) {});
+    }
     // نطلب صلاحيّة الإشعارات مرّة واحدة (Android 13+/iOS)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       DeviceAlertsService.instance.requestPermission();
@@ -150,6 +207,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     _searchDebounce?.cancel();
     _searchCtrl.dispose();
     _devHScroll.dispose();
+    _vitals.dispose();
     super.dispose();
   }
 
@@ -168,7 +226,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       if (_all.isNotEmpty) {
         _probeAll(force: true);
         // يستأنف من حيث وقف — ما سُخِّن لا يُعاد.
-        DeviceWarmup.instance.start(_all);
+        if (_viewChoice != DevicesView.big) DeviceWarmup.instance.start(_all);
       }
     }
   }
@@ -229,7 +287,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       // 🔥 probe فوري — لا ننتظر 20s للـTimer الأوّل.
       // تسخينٌ صامت في الخلفيّة: يملأ مخزن القراءات ما دام المدير
       // هنا، فيكون فتحُ أيّ جهازٍ فوريّاً. راجع [DeviceWarmup].
-      DeviceWarmup.instance.start(_all);
+      if (_viewChoice != DevicesView.big) DeviceWarmup.instance.start(_all);
       _probeAll(force: true);
     } catch (e) {
       if (!mounted) return;
@@ -432,15 +490,19 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       // `bulkScanSubnet`.
       final queue = Queue<NetworkDevice>.from(
           _all.where((d) => _shouldProbeInRound(d.id, force: force)));
+      var reachable = 0;
+      var attempted = 0;
       Future<void> probeWorker() async {
         while (queue.isNotEmpty) {
           final d = queue.removeFirst();
+          attempted++;
           try {
             // الطريقة تتبع البروتوكول: TCP لميكروتك وUBNT، وSNMP على
             // UDP لمنفذ ١٦١، وICMP لمن لا منفذ له. راجع [probeDevice].
             final r = await NetworkDevicesApi.probeDevice(d);
             final oldStatus = _lastKnownStatus[d.id] ?? 'unknown';
             final newStatus = r.status;
+            if (newStatus == 'online') reachable++;
 
             if (oldStatus != newStatus && oldStatus != 'unknown') {
               pendingTransitions.add(_PendingTransition(
@@ -485,6 +547,11 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
       // رسمةٌ ختاميّة: تضمن وصول ما جاء بعد آخر خنق.
       flush();
+
+      // وسيط الجولة — «بطيء» نسبيّ (ضعف الوسيط) لا عتبةٌ ثابتة: الجولة تفحص العشرات معاً فيحمل كلّ رقمٍ إزاحة ازدحامٍ مشتركة.
+      final lat = probed.map((p) => p.responseMs).whereType<int>().toList()..sort();
+      if (lat.isNotEmpty) _roundMedianMs = lat[lat.length ~/ 2];
+      _offNetwork = reachable == 0 && attempted >= _offNetworkThreshold;
 
       // كشف تغيير شبكة الهاتف (بدل مشكلة الأجهزة):
       // - "خروج من الشبكة": ≥70% من الأجهزة راحت offline في جولة واحدة → suppress
@@ -590,16 +657,6 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       _sortField = r.field;
       _sortDir = r.dir;
     });
-  }
-
-  /// يفتح «نظرة عامّة». الشاشة تمسك [DeviceSweep] فتتوقّف جولتنا ما
-  /// دامت مفتوحة، ثمّ نُحدّث عند العودة لأنّها مسحت نيابةً عنّا.
-  Future<void> _openWall() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const DevicesWallScreen()),
-    );
-    if (mounted) _refresh();
   }
 
   /// «شبكة الألياف»: أولتات الحساب (VSOL/BDCOM) بصناديقها ومشتركيها وأعطالها. بلا أولت ⇒ يقول كيف يبدأ.
@@ -882,6 +939,11 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                     SliverToBoxAdapter(child: _typeFilterRow()),
                     SliverToBoxAdapter(child: _regionFilterRow()),
                     const SliverToBoxAdapter(child: SizedBox(height: 8)),
+                    if (_offNetwork && _view == DevicesView.big)
+                      const SliverPadding(
+                        padding: EdgeInsets.symmetric(horizontal: Sp.md),
+                        sliver: SliverToBoxAdapter(child: _OffNetworkBanner()),
+                      ),
                     // List
                     devices.isEmpty
                         ? SliverFillRemaining(
@@ -1214,6 +1276,10 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     // الأدوات بمقاس أزرار الأعلى وفراغها، وطرفها على حشوة الرأس (‎16) — فكلّ
     // أداةٍ تحت نظيرها فوقها، والبحث على حافّة المحتوى تحته (‎12).
     final gap = TopActionChip.gapOf(context);
+    // هاتفٌ ضيّق (العرض مقسوماً على سلّم الخطّ ‎< 375): زرّ «نوع العرض» يأخذ مكان «تحديث فوري» وينتقل التحديث إلى «المزيد»
+    // — وإلّا ضاق البحث حتّى يُبتر تلميحه «بحث» (٣٢٠، و٣٧٥ بخطٍّ ١٫٢). السحب للتحديث باقٍ، و«المزيد» طريق إعادة المحاولة بعد
+    // فشل التحميل.
+    final narrow = MediaQuery.sizeOf(context).width / MediaQuery.textScalerOf(context).scale(1) < 375;
     return ColoredBox(
       color: AppColors.bg,
       child: Padding(
@@ -1240,26 +1306,21 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 ),
               ),
             ),
-            // الحاسبة: جدول ⇄ بطاقات.
-            if (DesktopScope.of(context)) ...[
-              SizedBox(width: gap),
-              _ToolButton(
-                tooltip: _deskTableView ? 'عرض بطاقات' : 'عرض جدول',
-                onTap: () => setState(() => _deskTableView = !_deskTableView),
-                child: Icon(_deskTableView ? LucideIcons.layoutGrid : LucideIcons.table2,
-                    size: 20, color: AppColors.textBody),
-              ),
-            ],
+            // نوع العرض — قائمة · بطاقات كبيرة · (جدول على الحاسبة). كان على الحاسبة زرّ جدول ⇄ بطاقات وحده.
+            SizedBox(width: gap),
+            _viewButton(),
             SizedBox(width: gap),
             // تحديث فوري — دوّارةٌ مكانه أثناء الفحص.
-            _ToolButton(
-              tooltip: 'تحديث فوري',
-              busy: _probing,
-              onTap: _refresh,
-              child:
-                  Icon(LucideIcons.refreshCw, size: 20, color: AppColors.textBody),
-            ),
-            SizedBox(width: gap),
+            if (!narrow) ...[
+              _ToolButton(
+                tooltip: 'تحديث فوري',
+                busy: _probing,
+                onTap: _refresh,
+                child:
+                    Icon(LucideIcons.refreshCw, size: 20, color: AppColors.textBody),
+              ),
+              SizedBox(width: gap),
+            ],
             // ── ما تبقّى في قائمةٍ منسدلة — ودوّارة الكشف مكانها وهو يعمل ──
             _ToolButton(
               busy: _detecting,
@@ -1268,8 +1329,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 borderRadius: BorderRadius.circular(R.icon),
                 onSelected: (v) {
                   switch (v) {
-                    case 'wall':
-                      _openWall();
+                    case 'refresh':
+                      _refresh();
                     case 'tower':
                       _openTower();
                     case 'fiber':
@@ -1285,7 +1346,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                   }
                 },
                 itemBuilder: (_) => [
-                  _menuItem('wall', LucideIcons.layoutGrid, 'نظرة عامّة'),
+                  if (narrow) _menuItem('refresh', LucideIcons.refreshCw, _probing ? 'يُحدّث الآن…' : 'تحديث فوري'),
                   if (_all.isNotEmpty) _menuItem('tower', LucideIcons.radioTower, 'عرض البرج'),
                   _menuItem('fiber', Perms.has('devices.monitor') ? LucideIcons.cable : LucideIcons.lock, 'شبكة الألياف'),
                   // الترتيب الحاليّ في التسمية — القائمة المطويّة تُخفي
@@ -1534,11 +1595,114 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
 // _list() القديمة أُزيلت — استعملنا CustomScrollView + Slivers مباشرة في build.
 
+  /// نوع العرض الفعليّ: المختار، وإلّا الافتراضيّ (جدولٌ على الحاسبة، قائمةٌ على الهاتف). والجدول لا يُعرض على الهاتف.
+  DevicesView get _view {
+    final desk = DesktopScope.of(context);
+    final v = _viewChoice ?? (desk ? DevicesView.table : DevicesView.list);
+    return (v == DevicesView.table && !desk) ? DevicesView.list : v;
+  }
+
+  void _setView(DevicesView v) {
+    setState(() => _viewChoice = v);
+    const FlutterSecureStorage().write(key: _kDevView, value: v.key).catchError((_) {});
+    // البطاقات الكبيرة تقرأ أجهزتها المرئيّة بنفسها — التسخين لا يضيف إلّا مزاحمةً على الخانات الستّ (قاعدة «النظرة العامّة»).
+    if (v == DevicesView.big) {
+      DeviceWarmup.instance.stop();
+    } else if (_all.isNotEmpty) {
+      DeviceWarmup.instance.start(_all);
+    }
+  }
+
+  /// زرّ «نوع العرض» — قائمةٌ منسدلة بالأنواع وعلامةٌ على المختار (كعرض المجلّدات على الحاسبة).
+  Widget _viewButton() {
+    final desk = DesktopScope.of(context);
+    final cur = _view;
+    return _ToolButton(
+      wrap: (content) => PopupMenuButton<DevicesView>(
+        tooltip: 'نوع العرض · ${cur.labelFor(desk: desk)}',
+        borderRadius: BorderRadius.circular(R.icon),
+        onSelected: _setView,
+        itemBuilder: (_) => [
+          for (final v in DevicesView.values)
+            if (v != DevicesView.table || desk)
+              PopupMenuItem<DevicesView>(
+                value: v,
+                child: Row(
+                  children: [
+                    Icon(v.iconFor(desk: desk), size: 16, color: v == cur ? AppColors.brand : AppColors.textMid),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(v.labelFor(desk: desk),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: v == cur ? AppType.bodyBold(color: AppColors.brand) : null),
+                    ),
+                    if (v == cur) Icon(LucideIcons.check, size: 16, color: AppColors.brand),
+                  ],
+                ),
+              ),
+        ],
+        child: content,
+      ),
+      child: Icon(cur.iconFor(desk: desk), size: 20, color: AppColors.textBody),
+    );
+  }
+
+  /// «بطاقات كبيرة»: بطاقةٌ حيّة لكلّ جهاز بعرضٍ أقصى ~٥٢٠ — عمودٌ على الهاتف، وأعمدةٌ على الحاسبة/اللوحيّ صفّاً صفّاً بارتفاع
+  /// أطولها (لا ارتفاعٌ ثابت يقصّ سكتراً بعملائه أو يترك فراغاً تحت معطّل). تُبنى عند ظهورها وحدها، وكلّ بطاقةٍ تقرأ جهازها
+  /// بنفسها عبر المجدول (ستّ خانات) — ما خرج من الشاشة يُسحب من الطابور.
+  Widget _bigCards(List<NetworkDevice> devices) {
+    return SliverLayoutBuilder(builder: (context, c) {
+      const maxW = 520.0;
+      const gap = Sp.md;
+      final w = c.crossAxisExtent;
+      final cols = w < 2 * 360 + gap ? 1 : ((w + gap) / (maxW + gap)).ceil().clamp(1, 4);
+      final rows = (devices.length / cols).ceil();
+      return SliverList.separated(
+        itemCount: rows,
+        separatorBuilder: (_, __) => const SizedBox(height: gap),
+        itemBuilder: (_, r) {
+          if (cols == 1) return _liveCard(devices[r]);
+          return IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < cols; i++) ...[
+                  if (i > 0) const SizedBox(width: gap),
+                  Expanded(
+                    child: r * cols + i < devices.length ? _liveCard(devices[r * cols + i]) : const SizedBox.shrink(),
+                  ),
+                ],
+              ],
+            ),
+          );
+        },
+      );
+    });
+  }
+
+  Widget _liveCard(NetworkDevice d) => DeviceLiveCard(
+        // ⚠️ مفتاحٌ بمعرّف الجهاز: بلا مفتاح يُعيد Flutter استعمال حالة البطاقة لجهازٍ آخر عند تغيّر الترتيب، فتظهر مقاييس برجٍ
+        // فوق اسم برجٍ غيره. والقراءة نفسها في [_vitals] لا في البطاقة.
+        key: ValueKey(('big', d.id)),
+        device: d,
+        vitals: _vitals.of(d.id),
+        onVitals: (v) => _vitals.set(d.id, v),
+        medianMs: _roundMedianMs,
+        prevSample: () => _vitals.sampleOf(d.id),
+        onSample: (c) => _vitals.saveSample(d.id, c),
+        onOpen: () => _openDetails(d),
+        rows: DesktopScope.of(context) ? 5 : 4,
+      );
+
   /// القائمة: على الحاسبة شبكة بطاقاتٍ بأعمدة (بعرضٍ أقصى وارتفاعٍ ثابت) بدل بطاقاتٍ ممدودة بعرض
   /// الشاشة — والبطاقة نفسها في الحالتين، تُبنى عند ظهورها وحدها.
   Widget _deviceList(List<NetworkDevice> devices) {
+    final view = _view;
+    // التحديد (حذفٌ جماعيّ) على بطاقات القائمة — للكبيرة صفحتها بالنقر.
+    if (view == DevicesView.big && !_selectionMode) return _bigCards(devices);
     if (DesktopScope.of(context)) {
-      if (_deskTableView) return _deskTable(devices);
+      if (view == DevicesView.table) return _deskTable(devices);
       return SliverGrid.builder(
         gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
           maxCrossAxisExtent: 420,
@@ -2324,6 +2488,37 @@ class _ToolButton extends StatelessWidget {
 }
 
 /// Empty state — يظهر لو ما في أجهزة أصلاً أو ما في نتائج للفلتر.
+/// لم يستجب أيّ جهاز في آخر جولة — سطرٌ يصف ما رأيناه (لا يجزم بالسبب). من «النظرة العامّة» حرفاً.
+class _OffNetworkBanner extends StatelessWidget {
+  const _OffNetworkBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: Sp.md),
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: AppTone.warning.softBg,
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(color: AppTone.warning.softBorder),
+      ),
+      child: Row(
+        children: [
+          Icon(LucideIcons.wifiOff, size: 18, color: AppTone.warning.fill),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: Text(
+              'لم يستجب أيّ جهاز — تأكّد أنّك على شبكة الأجهزة. '
+              'القيم أدناه آخر ما سجّله الخادم.',
+              style: AppType.muted(color: AppTone.warning.fill),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _EmptyDevices extends StatelessWidget {
   const _EmptyDevices({this.hasActiveFilter = false, this.onClearFilter});
   final bool hasActiveFilter;

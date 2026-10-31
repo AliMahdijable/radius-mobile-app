@@ -154,38 +154,40 @@ void main() {
     });
   });
 
-  group('بنية الجدار', () {
-    late String src;
+  group('بنية البطاقات الكبيرة', () {
+    // «النظرة العامّة» أُلغيت (المالك ٣١ أكتوبر) وصار قلبها «بطاقات كبيرة» داخل قائمة الأجهزة — الحرّاس نفسها على مكانها الجديد.
+    late String list;
+    late String live;
+    late String card;
     setUpAll(() {
-      src = File('lib/screens/network_devices/devices_wall_screen.dart')
-          .readAsStringSync();
+      list = File('lib/screens/network_devices/network_devices_screen.dart').readAsStringSync();
+      live = File('lib/screens/network_devices/device_live_card.dart').readAsStringSync();
+      card = File('lib/screens/network_devices/widgets/device_big_card.dart').readAsStringSync();
     });
 
     test('البطاقة ابن مباشر للقائمة', () {
-      // لو بقيت المجموعة عنصراً واحداً يضمّ بطاقاتها، لبُنيت منطقةٌ فيها
-      // أربعون جهازاً دفعةً — ولانهار تبويب النظر كلّه.
-      // الهاتف: البطاقة نفسها عنصر القائمة؛ الحاسبة (٢٤ أكتوبر): سطرٌ من ≤٣ بطاقات — كلاهما من itemBuilder.
-      expect(src.contains('final _DeviceRow r => card(r.device)'), isTrue,
+      // لو بُنيت مجموعةٌ تضمّ بطاقاتها عنصراً واحداً لبُنيت أربعون بطاقةً دفعةً. الهاتف: البطاقة نفسها عنصر القائمة؛ الحاسبة:
+      // سطرٌ من بطاقات — كلاهما من itemBuilder.
+      expect(list.contains('if (cols == 1) return _liveCard(devices[r]);'), isTrue,
           reason: 'البطاقة يجب أن تُبنى من itemBuilder مباشرةً');
-      expect(src.contains('final _GridRow r =>'), isTrue,
+      expect(list.contains('return SliverList.separated(\n        itemCount: rows,'), isTrue,
           reason: 'سطر الحاسبة عنصرٌ في القائمة نفسها لا مجموعةٌ حاضنة');
-      expect(src.contains('class _RegionGroup'), isFalse,
-          reason: 'المجموعة الحاضنة تُبطل تنويف ListView');
     });
 
     test('مفتاح البطاقة بمعرّف الجهاز', () {
-      expect(src.contains("key: cols > 1 ? GlobalObjectKey(('wall-card', d.id)) : ValueKey(d.id)"), isTrue,
-          reason: 'بلا مفتاح تظهر مقاييس برجٍ فوق اسم برجٍ غيره عند الفرز؛ وعلى شبكة الحاسبة مفتاحٌ عامّ '
-              'يحمل الحالة بين السطور فلا تُلغى جلسة البطاقة مع كلّ إعادة ترتيب');
+      expect(list.contains("key: ValueKey(('big', d.id)),"), isTrue,
+          reason: 'بلا مفتاح تظهر مقاييس برجٍ فوق اسم برجٍ غيره عند الفرز');
     });
 
     test('الإلغاء عند التخلّص', () {
-      expect(src.contains('DeepProbeScheduler.instance.cancel(this)'), isTrue);
+      expect(live.contains('DeepProbeScheduler.instance.cancel(this)'), isTrue);
     });
 
-    test('لا جلسة عميقة للمعطّل', () {
-      expect(src.contains('if (!isDown)'), isTrue,
-          reason: 'الشريط يُرسَم للحيّ فقط');
+    test('لا جلسة ولا خانات للمعطّل', () {
+      expect(card.contains('if (down)\n                  _DownLine('), isTrue, reason: 'المعطّل سطر «آخر ظهور» وحده');
+      final vitals = File('lib/screens/network_devices/device_vitals.dart').readAsStringSync();
+      expect(vitals.contains("if (d.lastStatus == 'offline') return 'غير متّصل';"), isTrue,
+          reason: 'والجلسة نفسها ممتنعة له');
     });
   });
 
@@ -279,41 +281,37 @@ void main() {
     });
   });
 
-  group('عرض المطويّ', () {
-    late String src;
+  group('عرض البطاقة الكبيرة', () {
+    late String card;
     setUpAll(() {
-      src = File('lib/screens/network_devices/devices_wall_screen.dart')
-          .readAsStringSync();
+      card = File('lib/screens/network_devices/widgets/device_big_card.dart').readAsStringSync();
     });
 
-    test('الفتح لا يفتح جلسة جديدة', () {
+    test('البطاقة لا تفتح جلسة — ترسم ما وصل', () {
       // التفصيل يأتي من نفس الحمولة — أيّ نداء هنا يُبطل جوهر التصميم.
-      final i = src.indexOf('class _CardDetails');
-      final body = src.substring(i, src.indexOf('class _DetailHeading'));
-      expect(body.contains('DeviceVitals.fetch'), isFalse);
-      expect(body.contains('await '), isFalse,
-          reason: 'المطويّ يرسم ما وصل، لا يجلب');
+      expect(card.contains('DeviceVitals.fetch'), isFalse);
+      expect(card.contains('await '), isFalse, reason: 'البطاقة ترسم ما وصل، لا تجلب');
     });
 
     test('الأضعف إشارةً أوّلاً', () {
-      // من يفتح قائمة المتّصلين يبحث عن الشكوى لا عن الأفضل.
-      expect(src.contains('(a.signal ?? 0).compareTo(b.signal ?? 0)'), isTrue);
+      // من يراقب سكتراً يبحث عن الشكوى لا عن الأفضل.
+      expect(card.contains('(a.signal ?? 0).compareTo(b.signal ?? 0)'), isTrue);
     });
 
     test('المنافذ المطفأة لا تُغرق العاملة', () {
-      expect(src.contains('d.ports.where((p) => p.up)'), isTrue);
-      expect(src.contains('b.total.compareTo(a.total)'), isTrue,
+      expect(card.contains('if (p.up && (p.rxBps != null || p.txBps != null)) p]'), isTrue);
+      expect(card.contains('((b.rxBps ?? 0) + (b.txBps ?? 0)).compareTo((a.rxBps ?? 0) + (a.txBps ?? 0))'), isTrue,
           reason: 'الأكثر مروراً أوّلاً');
     });
   });
 
   group('CCQ', () {
     late String vitals;
-    late String wall;
+    late String card;
     setUpAll(() {
       vitals = File('lib/screens/network_devices/device_vitals.dart')
           .readAsStringSync();
-      wall = File('lib/screens/network_devices/devices_wall_screen.dart')
+      card = File('lib/screens/network_devices/widgets/device_big_card.dart')
           .readAsStringSync();
     });
 
@@ -346,23 +344,23 @@ void main() {
       // أخطر خطأ محتمل هنا: تمريره على percentLowerBetter (سلّم المعالج
       // والذاكرة) يقلب الحكم فتُصبَغ وصلةٌ بجودة ٩٦٪ حمراء، وتبدو
       // المنهارة سليمة.
-      expect(wall.contains('Grade.percentHigherBetter(peer.ccq)'), isTrue);
-      expect(wall.contains('percentLowerBetter(peer.ccq)'), isFalse);
+      expect(card.contains('Grade.percentHigherBetter(p.ccq)'), isTrue);
+      expect(card.contains('percentLowerBetter(p.ccq)'), isFalse);
     });
 
     test('الجودة تسبق الإشارة في الصفّ', () {
-      final i = wall.indexOf('class _PeerRow');
-      final body = wall.substring(i, wall.indexOf('class _MiniChip'));
-      expect(body.indexOf('peer.ccq'), lessThan(body.indexOf("'\$sig'")),
+      final i = card.indexOf('class _PeerRow');
+      final body = card.substring(i, card.indexOf('class _LinkFacts'));
+      expect(body.indexOf('CCQ \${p.ccq}%'), greaterThan(0));
+      expect(body.indexOf('CCQ \${p.ccq}%'), lessThan(body.indexOf("'\${p.signal} dBm'")),
           reason: 'الإشارة وحدها تكذب — الجودة هي التشخيص');
     });
 
     test('الوصلة قسم مستقلّ لا مدفون في النظام', () {
-      expect(wall.contains("_DetailHeading('الوصلة اللاسلكيّة')"), isTrue);
+      // اللنك (والسكتر محطّةً): خانة «الجودة CCQ» ثمّ قسم أرقام الوصلة بنفسه.
+      expect(card.contains('class _LinkFacts'), isTrue);
+      expect(card.contains("'الجودة CCQ'"), isTrue);
       expect(vitals.contains("(k: 'الجودة CCQ'"), isTrue);
-      final i = wall.indexOf("_DetailHeading('الوصلة اللاسلكيّة')");
-      final j = wall.indexOf("_DetailHeading('النظام')");
-      expect(i, lessThan(j), reason: 'الوصلة قبل النظام');
     });
   });
 
@@ -398,28 +396,31 @@ void main() {
   });
 
   group('عرض عصريّ', () {
-    late String wall;
+    late String card;
+    late String list;
     setUpAll(() {
-      wall = File('lib/screens/network_devices/devices_wall_screen.dart')
-          .readAsStringSync();
+      card = File('lib/screens/network_devices/widgets/device_big_card.dart').readAsStringSync();
+      list = File('lib/screens/network_devices/network_devices_screen.dart').readAsStringSync();
     });
 
     test('اتّجاه صريح للرقم ووحدته', () {
       // بلا هذا يقلبهما محرّك الاتّجاه الثنائيّ: «٪ ٣٤» بدل «٣٤٪».
-      final i = wall.indexOf('class _VitalChip');
-      final body = wall.substring(i, wall.indexOf('class _Note'));
+      final i = card.indexOf('class _Tile extends');
+      final body = card.substring(i, card.indexOf('class _SectionTitle'));
       expect(body.contains('Directionality('), isTrue);
       expect(body.contains('TextDirection.ltr'), isTrue);
     });
 
-    test('شريط حالة على الحافّة بدل الصندوق', () {
-      expect(wall.contains('PositionedDirectional('), isTrue);
-      expect(wall.contains('Container(width: 3, color: tone.fill)'), isTrue);
+    test('رأسٌ بلون الدور وشارته — تُعرف البطاقة قبل قراءة اسمها', () {
+      expect(card.contains('color: down ? null : rc.softBg,'), isTrue);
+      expect(card.contains('color: rc.fill,'), isTrue, reason: 'شارة الدور بلونه على صورة الجهاز');
+      expect(card.contains('Text(role.label, style: AppType.pillBold(color: rc.fill))'), isTrue,
+          reason: 'اسم الدور مع لونه — لا يحمل اللون المعنى وحده');
     });
 
-    test('الملخّص يوافق البطاقات تحته', () {
-      // «الكلّ سليم» فوق اثنَي عشر جهازاً بطيئاً أسوأ من غياب الملخّص.
-      expect(wall.contains("if (slow > 0) return ('\$slow بطيء'"), isTrue);
+    test('«بطيء» نسبيّ لوسيط الجولة نفسها', () {
+      expect(card.contains('DeviceLiveStatus.labelFor(device.lastStatus, device.lastResponseMs, medianMs)'), isTrue);
+      expect(list.contains('if (lat.isNotEmpty) _roundMedianMs = lat[lat.length ~/ 2];'), isTrue);
     });
   });
 
@@ -492,14 +493,10 @@ void main() {
       expect(order, ['A', 'B']);
     });
 
-    test('البطاقة تطلب الأولويّة حين لا قيمة عندها — أو عند فتحها', () {
-      final wall = File('lib/screens/network_devices/devices_wall_screen.dart')
+    test('البطاقة تطلب الأولويّة حين لا قيمة عندها', () {
+      final wall = File('lib/screens/network_devices/device_live_card.dart')
           .readAsStringSync();
       expect(wall.contains('first: urgent || st.vitals == null'), isTrue);
-      // والفتح إعلانُ نيّة: من فتح بطاقةً ينتظر تفصيلها الآن، بينما
-      // بطاقاتٌ لا ينظر إليها أحد كانت تُجدّد أمامها.
-      expect(wall.contains('if (!old.open && widget.open) _kick(urgent: true)'),
-          isTrue);
       // والطازج يُحترم حتّى مع الاستعجال — لا جلسة لجهازٍ قُرئ قبل ثوانٍ.
       expect(
           wall.contains('if (_inFlight || (st.isFresh && !needsDetail)) return;'),
@@ -528,7 +525,7 @@ void main() {
     setUpAll(() {
       vitals = File('lib/screens/network_devices/device_vitals.dart')
           .readAsStringSync();
-      wall = File('lib/screens/network_devices/devices_wall_screen.dart')
+      wall = File('lib/screens/network_devices/device_live_card.dart')
           .readAsStringSync();
       mtk = File('lib/api/mikrotik_api.dart').readAsStringSync();
     });
@@ -545,18 +542,23 @@ void main() {
       expect(j, greaterThan(i), reason: 'الخروج قبل الطبقة الثانية');
     });
 
-    test('المفتوح وحده يطلب التفاصيل', () {
+    test('البطاقة الكبيرة تطلب التفاصيل (تعرضها)، والتسخين خفيف', () {
       expect(vitals.contains('bool detailed = false'), isTrue);
       expect(vitals.contains('vitalsOnly: !detailed'), isTrue);
-      expect(wall.contains('detailed: widget.open'), isTrue);
+      expect(wall.contains('detailed: true,'), isTrue);
+      expect(wall.contains('.putRaw(widget.device.id, r.raw!, detailed: true);'), isTrue);
+      final warm = File('lib/services/device_warmup.dart').readAsStringSync();
+      expect(warm.contains('DeviceVitals.fetch(d);'), isTrue, reason: 'التسخين خفيف — لا يزاحم المرئيّ بجلسةٍ كاملة');
     });
 
     test('🚨 الفتح يتجاوز الطزاجة حين تنقص التفاصيل', () {
       // القراءة المطويّة خفيفة، فطزاجتُها لا تُغني المفتوحَ عن جلسته.
       // ولولا الاستثناء لبقي المفتوح بلا تفصيلٍ عشرين ثانية بحجّة أنّ
       // أرقامه حديثة.
-      expect(wall.contains('final needsDetail = widget.open'), isTrue);
+      expect(wall.contains('final needsDetail = !hasDetail && st.error == null;'), isTrue);
       expect(wall.contains('st.isFresh && !needsDetail'), isTrue);
+      // وجلستها هي الحديثة تكفي — لا تُعاد كلّ نبضة لأولتٍ بلا حمولةٍ خام.
+      expect(wall.contains('final own = _ownAt != null'), isTrue);
     });
   });
 

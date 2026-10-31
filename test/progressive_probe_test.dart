@@ -6,14 +6,14 @@ import 'package:flutter_test/flutter_test.dart';
 /// ينتظر جواب جهاز جهاز».
 void main() {
   late String list;
-  late String wall;
+  late String card;
   late String detail;
   late String regions;
 
   setUpAll(() {
     list = File('lib/screens/network_devices/network_devices_screen.dart')
         .readAsStringSync();
-    wall = File('lib/screens/network_devices/devices_wall_screen.dart')
+    card = File('lib/screens/network_devices/widgets/device_big_card.dart')
         .readAsStringSync();
     detail = File('lib/screens/subscribers/subscriber_detail_screen.dart')
         .readAsStringSync();
@@ -22,11 +22,12 @@ void main() {
   });
 
   group('الرسم لا ينتظر اكتمال الجولة', () {
-    test('🚨 الشاشتان تدفقان تدريجيّاً', () {
+    test('🚨 القائمة تدفق تدريجيّاً', () {
       // الجولة كانت ترسم مرّةً بعد اكتمالها كلّها: ثمانون جهازاً على
       // ٢٤ عاملاً، والمنقطع يستهلك مهلته كاملةً — أربع موجاتٍ = ثماني
-      // ثوانٍ جمود، وأوّل جهازٍ ردّ بعد جزءٍ من الثانية.
-      for (final e in {'القائمة': list, 'نظرة عامّة': wall}.entries) {
+      // ثوانٍ جمود، وأوّل جهازٍ ردّ بعد جزءٍ من الثانية. («نظرة عامّة»
+      // أُلغيت ٣١ أكتوبر — صار عرضها «بطاقات كبيرة» بجولة القائمة نفسها.)
+      for (final e in {'القائمة': list}.entries) {
         expect(e.value.contains('scheduleFlush();'), isTrue,
             reason: '${e.key} ما زالت ترسم مرّةً واحدة');
         expect(e.value.contains('void flush()'), isTrue, reason: e.key);
@@ -36,7 +37,7 @@ void main() {
     test('🚨 مخنوق لا لكلّ جهاز', () {
       // ثمانون إعادة بناء كاملة للقائمة = إطارات ساقطة، وهو ما تجنّبته
       // النسخة الأصليّة بـsetState واحد. الخنق يجمع الفائدتين.
-      for (final src in [list, wall]) {
+      for (final src in [list]) {
         expect(src.contains('if (pendingFlush) return;'), isTrue);
         expect(src.contains('Duration(milliseconds: 400)'), isTrue,
             reason: 'رسمتان أو ثلاث في الثانية على الأكثر');
@@ -45,12 +46,10 @@ void main() {
   });
 
   group('صورة الجهاز', () {
-    test('🚨 «نظرة عامّة» تعرضها', () {
-      // كانت في المخطّط وسقطت من التنفيذ. والصورة تُميّز السكتور من
+    test('🚨 «البطاقات الكبيرة» تعرضها', () {
+      // كانت في مخطّط «نظرة عامّة» وسقطت من التنفيذ (بلاغ ٢٠٢٦-٠٩-٠٢). والصورة تُميّز السكتور من
       // السويتش من البرج بلمحة، قبل قراءة اسمٍ واحد.
-      expect(wall.contains('DeviceImage('), isTrue);
-      expect(wall.contains('brand: device.brand'), isTrue);
-      expect(wall.contains('model: device.model'), isTrue);
+      expect(card.contains('DeviceImage(brand: device.brand, model: device.model'), isTrue);
     });
   });
 

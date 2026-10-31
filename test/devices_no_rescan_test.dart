@@ -58,7 +58,7 @@ void main() {
   group('حارس البنية — لا يعود العطل', () {
     late String src;
     setUpAll(() {
-      src = File('lib/screens/network_devices/devices_wall_screen.dart')
+      src = File('lib/screens/network_devices/device_live_card.dart')
           .readAsStringSync();
     });
 

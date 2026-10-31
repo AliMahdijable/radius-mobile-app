@@ -9,13 +9,10 @@ import 'package:flutter_test/flutter_test.dart';
 /// أصلاً. ٣٠ جهازاً من ٣١ كانت تُعرَض «غير متّصل» أبداً.
 void main() {
   late String api;
-  late String wall;
   late String devices;
 
   setUpAll(() {
     api = File('lib/api/network_devices_api.dart').readAsStringSync();
-    wall = File('lib/screens/network_devices/devices_wall_screen.dart')
-        .readAsStringSync();
     devices = File('lib/screens/network_devices/network_devices_screen.dart')
         .readAsStringSync();
   });
@@ -59,7 +56,8 @@ void main() {
       // كانت الشاشتان تكتبان `tcpPort: d.apiPort ?? d.port` كلٌّ على
       // حدة — فحين اتّضح أنّ ١٦١ UDP كان لا بدّ من إصلاح موضعين، وهو
       // بالضبط ما يجعل أحدهما يُنسى.
-      for (final e in {'نظرة عامّة': wall, 'قائمة الأجهزة': devices}.entries) {
+      // («نظرة عامّة» أُلغيت ٣١ أكتوبر — جولة القائمة وحدها تفحص، والبطاقات الكبيرة منها.)
+      for (final e in {'قائمة الأجهزة': devices}.entries) {
         expect(e.value.contains('tcpPort: d.apiPort ?? d.port'), isFalse,
             reason: '${e.key} ما زالت تختار المنفذ بنفسها');
         expect(e.value.contains('NetworkDevicesApi.probeDevice(d)'), isTrue,

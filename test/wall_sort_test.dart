@@ -121,36 +121,22 @@ void main() {
   });
 
   group('البنية', () {
-    late String wall;
     late String devices;
     setUpAll(() {
-      wall = File('lib/screens/network_devices/devices_wall_screen.dart')
-          .readAsStringSync();
       devices = File('lib/screens/network_devices/network_devices_screen.dart')
           .readAsStringSync();
     });
 
-    test('المناطق تتبع المعيار نفسه', () {
-      // بطاقاتٌ مرتّبةٌ أبجديّاً داخل مناطق مرتّبةٍ بالأعطال تبدو عشوائيّة.
-      expect(wall.contains('if (_sortField == DeviceSortField.health)'),
-          isTrue);
-      expect(wall.contains("a.region!.name.compareTo(b.region!.name)"), isTrue);
-    });
-
-    test('«بلا منطقة» تبقى في الذيل', () {
-      // مجموعةٌ باقية لا اسمٌ يُرتَّب أبجديّاً.
-      expect(wall.contains('if (a.region == null) return 1;'), isTrue);
-    });
+    // («نظرة عامّة» أُلغيت ٣١ أكتوبر وصار عرضها «بطاقات كبيرة» داخل القائمة — بترتيب القائمة ومرشّحاتها نفسها، فلا ترتيب
+    // مناطق ثانٍ يختلف عنها.)
 
     test('🚨 لا نسختين من منطق الترتيب', () {
       // كانت القائمة تحمل `_compareIps` و«نظرة عامّة» تحمل `ipSortKey`
       // — دالّتان لمسألةٍ واحدة تنحرفان حتماً، فيرى المستخدم ترتيبين
       // مختلفين لنفس الأجهزة في شاشتين متجاورتين.
       expect(devices.contains('_compareIps'), isFalse);
-      expect(wall.contains('int ipSortKey('), isFalse);
-      for (final f in [devices, wall]) {
-        expect(f.contains('compareDevices('), isTrue);
-      }
+      expect(devices.contains('int ipSortKey('), isFalse);
+      expect(devices.contains('compareDevices('), isTrue);
     });
 
     test('القسم العامّ يرتّب باختيار المستخدم', () {
@@ -159,11 +145,10 @@ void main() {
           isTrue);
     });
 
-    test('التسمية «نظرة عامّة» في الشاشة ومدخلها', () {
-      expect(wall.contains("Text('نظرة عامّة'"), isTrue);
-      expect(devices.contains("tooltip: 'نظرة عامّة'"), isTrue);
-      expect(wall.contains("'جدار الأجهزة'"), isFalse,
-          reason: 'بقيت التسمية القديمة في نصّ واجهة');
+    test('«نظرة عامّة» أُلغيت — مكانها نوع العرض «بطاقات كبيرة»', () {
+      expect(devices.contains("'نظرة عامّة'"), isFalse, reason: 'عاد مدخل الشاشة الملغاة');
+      expect(devices.contains("DevicesView.big => 'بطاقات كبيرة'"), isTrue);
+      expect(File('lib/screens/network_devices/devices_wall_screen.dart').existsSync(), isFalse);
     });
   });
 }

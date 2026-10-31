@@ -107,8 +107,8 @@ void main() {
       expect(list.contains('DeviceWarmup.instance.start(_all)'), isTrue);
       expect(
           RegExp(r'DeviceWarmup\.instance\.stop\(\)').allMatches(list).length,
-          2,
-          reason: 'عند التخلّص وعند دخول الخلفيّة');
+          3,
+          reason: 'عند التخلّص وعند دخول الخلفيّة، وعند اختيار «بطاقات كبيرة» (تقرأ أجهزتها المرئيّة بنفسها)');
     });
   });
 
@@ -202,7 +202,7 @@ void main() {
     late String wall;
     setUpAll(() {
       warm = File('lib/services/device_warmup.dart').readAsStringSync();
-      wall = File('lib/screens/network_devices/devices_wall_screen.dart')
+      wall = File('lib/screens/network_devices/device_live_card.dart')
           .readAsStringSync();
     });
 
@@ -222,10 +222,15 @@ void main() {
       expect(warm.contains('..addAll(upgrades)'), isFalse);
     });
 
-    test('🚨 الجدار لا يُشغّل التسخين', () {
-      // بطاقاته تقرأ أجهزتها بنفسها وهي مرئيّة — فالتسخين لا يضيف
-      // إلّا مزاحمةً على الخانات الستّ.
+    test('🚨 البطاقات الكبيرة لا تُشغّل التسخين', () {
+      // بطاقاتها تقرأ أجهزتها بنفسها وهي مرئيّة — فالتسخين لا يضيف
+      // إلّا مزاحمةً على الخانات الستّ (قاعدة «النظرة العامّة» التي حلّت محلّها).
       expect(wall.contains('DeviceWarmup'), isFalse);
+      final list =
+          File('lib/screens/network_devices/network_devices_screen.dart')
+              .readAsStringSync();
+      expect(list.contains('if (_viewChoice != DevicesView.big) DeviceWarmup.instance.start(_all);'), isTrue);
+      expect(list.contains('if (v == DevicesView.big) {\n      DeviceWarmup.instance.stop();'), isTrue);
     });
 
     test('القائمة وحدها تُشغّله', () {

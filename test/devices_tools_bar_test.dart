@@ -7,6 +7,7 @@ import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/screens/main_shell.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_alerts_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/network_devices_screen.dart';
+import 'package:rad_mysvcs/screens/network_devices/widgets/device_big_card.dart';
 import 'package:rad_mysvcs/screens/top_actions.dart';
 import 'package:rad_mysvcs/services/ai_assistant_state.dart';
 import 'package:rad_mysvcs/services/device_alerts_service.dart';
@@ -42,6 +43,7 @@ void main() {
   );
 
   final siren = find.byIcon(LucideIcons.siren);
+  final view = find.byIcon(LucideIcons.list);
   final refresh = find.byIcon(LucideIcons.refreshCw);
   final more = find.byIcon(LucideIcons.ellipsisVertical);
   final add = find.byIcon(LucideIcons.plus);
@@ -53,6 +55,7 @@ void main() {
   }
 
   Future<void> open(WidgetTester t, Scenario s, {Set<String>? failing}) async {
+    NetworkDevicesScreen.debugResetView();
     final inner = await visualSetUp(s);
     server = AiStatusOverlay(inner, status: aiStatusOff, failing: failing);
     ApiClient.dio.httpClientAdapter = server;
@@ -80,12 +83,12 @@ void main() {
     expect(find.byType(TabHeader), findsOneWidget);
     expect(find.text('الأجهزة'), findsOneWidget);
     expect(find.byType(TopActions), findsOneWidget);
-    for (final f in [siren, refresh, more, add]) {
+    for (final f in [siren, view, refresh, more, add]) {
       expect(f, findsOneWidget);
     }
-    // من اليمين: البحث ← التنبيهات ← التحديث ← المزيد ← الإضافة.
+    // من اليمين: البحث ← التنبيهات ← نوع العرض ← التحديث ← المزيد ← الإضافة.
     final search = t.getRect(find.byType(TextField));
-    final xs = [siren, refresh, more, add].map((f) => t.getCenter(f).dx);
+    final xs = [siren, view, refresh, more, add].map((f) => t.getCenter(f).dx);
     expect(search.left, greaterThan(xs.first));
     final list = xs.toList();
     for (var i = 1; i < list.length; i++) {
@@ -105,7 +108,7 @@ void main() {
     expect(refresh, findsOneWidget);
     await t.tap(more);
     await t.pumpAndSettle();
-    expect(find.text('نظرة عامّة'), findsOneWidget);
+    expect(find.text('نظرة عامّة'), findsNothing, reason: 'أُلغيت (٣١ أكتوبر) — مكانها نوع العرض');
     expect(find.text('إدارة المناطق'), findsNothing);
     expect(find.text('اكتشاف أجهزة الشبكة'), findsNothing);
     await t.tapAt(const Offset(10, 700)); // يُغلق القائمة
@@ -113,16 +116,46 @@ void main() {
     await finish(t);
   });
 
-  testWidgets('«المزيد» للمالك: القائمة كما كانت', (t) async {
+  testWidgets('«المزيد» للمالك: القائمة كما كانت — بلا «نظرة عامّة»', (t) async {
     await open(t, s1bSasOwner);
     await t.tap(more);
     await t.pumpAndSettle();
-    expect(find.text('نظرة عامّة'), findsOneWidget);
+    expect(find.text('نظرة عامّة'), findsNothing, reason: 'أُلغيت (٣١ أكتوبر) — مكانها نوع العرض');
     expect(find.textContaining('الترتيب · '), findsOneWidget);
     expect(find.text('إدارة المناطق'), findsOneWidget);
     expect(find.text('اكتشاف أجهزة الشبكة'), findsOneWidget);
     await t.tapAt(const Offset(10, 700));
     await t.pumpAndSettle();
+    await finish(t);
+  });
+
+  testWidgets('نوع العرض: «قائمة» ⇄ «بطاقات كبيرة» (لا «جدول» على الهاتف) — والاختيار يبقى', (t) async {
+    await open(t, s1bSasOwner);
+    expect(find.byType(DeviceBigCard), findsNothing, reason: 'الافتراضيّ على الهاتف القائمة');
+    await t.tap(view);
+    await t.pumpAndSettle();
+    expect(find.text('قائمة'), findsOneWidget);
+    expect(find.text('بطاقات كبيرة'), findsOneWidget);
+    expect(find.text('جدول'), findsNothing, reason: 'الجدول للحاسبة وحدها');
+    await t.tap(find.text('بطاقات كبيرة'));
+    await settle(t);
+    expect(t.takeException(), isNull);
+    // (هذا الحساب بلا أجهزة — البطاقات نفسها في device_big_card_test.)
+    expect(find.byIcon(LucideIcons.galleryVerticalEnd), findsOneWidget, reason: 'أيقونة الزرّ تقول النوع المختار');
+    expect(view, findsNothing);
+    // يبقى بعد إعادة بناء الشاشة (الخروج من التبويب والعودة)
+    await t.pumpWidget(const SizedBox());
+    await t.pump(const Duration(seconds: 1));
+    await pumpSim(t, const SimVariant(390, dark: false),
+        settle: false, home: (_) => NetworkDevicesScreen(isActive: ValueNotifier<bool>(true)));
+    await settle(t);
+    expect(find.byIcon(LucideIcons.galleryVerticalEnd), findsOneWidget, reason: 'الاختيار يبقى بين الزيارات');
+    await t.tap(find.byIcon(LucideIcons.galleryVerticalEnd));
+    await t.pumpAndSettle();
+    await t.tap(find.text('قائمة'));
+    await settle(t);
+    expect(view, findsOneWidget);
+    expect(find.byType(DeviceBigCard), findsNothing);
     await finish(t);
   });
 

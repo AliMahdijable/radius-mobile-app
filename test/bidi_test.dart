@@ -43,71 +43,66 @@ void main() {
     });
   });
 
-  group('مواضع الجدار مغطّاة', () {
-    late String wall;
+  group('مواضع البطاقة الكبيرة مغطّاة', () {
+    // «نظرة عامّة» أُلغيت (٣١ أكتوبر) وصار عرضها «بطاقات كبيرة» — المواضع نفسها على البطاقة الجديدة.
+    late String card;
     setUpAll(() {
-      wall = File('lib/screens/network_devices/devices_wall_screen.dart')
+      card = File('lib/screens/network_devices/widgets/device_big_card.dart')
           .readAsStringSync();
     });
 
     // كلّ سطر هنا عطلٌ رآه المستخدم بعينه في لقطة.
     const sites = {
-      'قيمة صفّ المعلومات (V 24.2)': 'child: Text(iso(v),',
-      'سطر المتّصل (86/78 10 Mbps · يوماً)': 'final sub = isoJoin([',
-      'تذييل المنافذ (و133 منفذاً آخر)': 'live.add(_DetailFoot(isoJoin([',
-      'اسم المنفذ (pppoe-x> بقوس مقلوب)': 'child: Text(iso(port.name),',
-      'معدّل النزول (M 251.2)': 'Text(iso(DeviceVitals.fmtBps(port.rxBps))',
-      'معدّل الصعود': 'Text(iso(DeviceVitals.fmtBps(port.txBps))',
-      // ٣٠ أكتوبر: العنوان صار رابطاً مستقلّاً (DeviceIpLink، LTR) والطراز بعده معزولٌ وحده.
-      'عنوان البطاقة (+CCR1009 بعلامة سابقة)':
-          "' · \${iso(device.model!)}'",
-      'اسم المتّصل': 'child: Text(iso(peer.name),',
+      'قيمة رقاقة الوصلة (V 24.2)': 'child: Text(iso(f.value),',
+      'سطر المتّصل (↓130 ↑87)': 'Text(iso(rates),',
+      'اسم المنفذ/المتّصل (pppoe-x> بقوس مقلوب)': 'child: Text(iso(p.name),',
+      'اسم منفذ PON (EPON0/1)': 'child: Text(iso(p.label),',
+      'معدّل النزول (M 251.2)': "Text(iso('↓ \${_bpsShort(p.rxBps)}')",
+      'معدّل الصعود': "Text(iso('↑ \${_bpsShort(p.txBps)}')",
+      'مرور التذييل': 'Text(iso(_bpsShort(busiest.port.rxBps))',
+      'شارة الحالة (12ms)': 'Text(iso(text), style: AppType.pillBold(color: tone.fill))',
     };
 
     for (final e in sites.entries) {
       test(e.key, () {
-        expect(wall.contains(e.value), isTrue,
+        expect(card.contains(e.value), isTrue,
             reason: 'موضعٌ غير معزول — ستتفكّك قيمته في العربيّة');
       });
     }
 
+    test('الرقم ووحدته باتّجاهٍ صريح في الخانات', () {
+      final i = card.indexOf('class _Tile extends');
+      final body = card.substring(i, card.indexOf('class _SectionTitle'));
+      expect(body.contains('textDirection: TextDirection.ltr'), isTrue);
+    });
+
     test('التسمية «غير متّصل» لا «معطّل»', () {
-      // «معطّل» تعني مُوقَفاً بقرار المدير، وهذا جهازٌ لا يردّ فحسب.
-      // وبقيّة التطبيق تستعملها أصلاً — الجدار وحده شذّ.
-      // (بلاغ المستخدم ٢٠٢٦-٠٩-٠١)
-      //
-      // ⚠️ سطراً سطراً مع تخطّي التعليقات: مطابقةٌ على الملفّ كلّه
-      // تعبر الأسطر فتلتقط تعليقاً بين اقتباسَي شيفرةٍ متباعدين.
+      // «معطّل» تعني مُوقَفاً بقرار المدير، وهذا جهازٌ لا يردّ فحسب. (بلاغ المستخدم ٢٠٢٦-٠٩-٠١)
+      // ⚠️ سطراً سطراً مع تخطّي التعليقات.
       final offenders = <String>[];
-      for (final line in wall.split('\n')) {
+      for (final line in card.split('\n')) {
         final t = line.trimLeft();
         if (t.startsWith('//')) continue;
         for (final m in RegExp("'[^']*معطّل[^']*'").allMatches(line)) {
           offenders.add(m[0]!);
         }
       }
-      expect(offenders, isEmpty,
-          reason: 'بقي نصّ واجهة يقول «معطّل»: $offenders');
-      expect(wall.contains("'offline' => 'غير متّصل'"), isTrue);
+      expect(offenders, isEmpty, reason: 'بقي نصّ واجهة يقول «معطّل»: $offenders');
+      expect(card.contains("'offline' => 'غير متّصل'"), isTrue);
     });
 
     test('«آخر ظهور» سطر لا صندوق', () {
-      // الصندوق كان يأخذ من البطاقة غير المتّصلة ضعف ما يأخذه شريط
-      // المقاييس من المتّصلة، لحقيقةٍ واحدة.
-      final i = wall.indexOf('if (isDown && since != null)');
+      // الصندوق كان يأخذ من البطاقة غير المتّصلة ضعف ما يأخذه شريط المقاييس من المتّصلة، لحقيقةٍ واحدة.
+      final i = card.indexOf('class _DownLine');
       expect(i, greaterThan(0), reason: 'لم يُعثر على كتلة «آخر ظهور»');
-      final block = wall.substring(i, wall.indexOf('if (open)', i));
+      final block = card.substring(i, card.indexOf('// ═══', i));
       expect(block.contains('BoxDecoration'), isFalse, reason: 'عاد الصندوق');
       expect(block.contains('LucideIcons.clock'), isTrue);
       expect(block.contains('آخر ظهور'), isTrue);
     });
 
     test('لا شارة «الكلّ سليم»', () {
-      // مكرّرةً فوق كلّ منطقة تُدرَّب العين على تجاهل ذلك الموضع، فحين
-      // يظهر فيه «٣ معطّل» لا تراه. (طلب المستخدم ٢٠٢٦-٠٩-٠١)
-      expect(wall.contains("'الكلّ سليم'"), isFalse);
-      expect(wall.contains('if (summary != null)'), isTrue,
-          reason: 'الشارة تحمل خبراً أو تغيب');
+      expect(card.contains("'الكلّ سليم'"), isFalse);
     });
   });
 }

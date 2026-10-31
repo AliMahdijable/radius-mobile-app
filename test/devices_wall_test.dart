@@ -57,7 +57,7 @@ void main() {
   group('الحالة الثالثة', () {
     late String src;
     setUpAll(() {
-      src = File('lib/screens/network_devices/devices_wall_screen.dart')
+      src = File('lib/screens/network_devices/widgets/device_big_card.dart')
           .readAsStringSync();
     });
 
@@ -179,7 +179,7 @@ void main() {
   group('حارس الشبكة', () {
     late String src;
     setUpAll(() {
-      src = File('lib/screens/network_devices/devices_wall_screen.dart')
+      src = File('lib/screens/network_devices/network_devices_screen.dart')
           .readAsStringSync();
     });
 

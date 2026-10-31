@@ -143,6 +143,7 @@ class DeviceDetail {
     this.peersLabel = 'المتّصلون',
     this.link = const [],
     this.extras = const [],
+    this.glance = const DeviceGlance(),
   });
 
   final String? uptime;
@@ -152,6 +153,9 @@ class DeviceDetail {
   final List<PeerLink> peers;
   final String peersLabel;
 
+  /// أرقام البطاقة الكبيرة (٣١ أكتوبر) — من الحمولة نفسها، أرقامٌ لا نصوص.
+  final DeviceGlance glance;
+
   /// مقاييس الوصلة اللاسلكيّة — قسمٌ خاصّ لا يُدفَن في «النظام».
   ///
   /// CCQ تحديداً: الإشارة وحدها تكذب، ووصلةٌ قويّة وسط تداخلٍ شديد
@@ -160,6 +164,83 @@ class DeviceDetail {
   final List<({String k, String v})> link;
 
   final List<({String k, String v})> extras;
+}
+
+/// نظرة «البطاقات الكبيرة» على الجهاز (المالك ٣١ أكتوبر: «كارتات كبار بيها المعلومات المهمّة… للسكتر المعلومات الحسّاسة وعدد
+/// المتصلين وتفاصيلهن بشكل مختصر، السويجات، اللنكات، الأولتي… بدقّة»).
+///
+/// ⚠️ أرقامٌ من **حمولة الجلسة نفسها** التي ملأت الخانات الثلاث — لا جلسة إضافيّة. و`null` = لا يقرؤه هذا الجهاز أو طرازه،
+/// فيُعرض «—» لا صفراً: الصفر رقمٌ يكذب (إشارة 0 dBm ممتازةٌ لو صُدّقت، وCCQ صفرٌ يعني عند بعض الطُرُز «غير متوفّر»).
+/// العملاء والمنافذ في [DeviceDetail.peers]/[DeviceDetail.ports] كما هي.
+@immutable
+class DeviceGlance {
+  const DeviceGlance({
+    this.cpu,
+    this.mem,
+    this.temp,
+    this.voltage,
+    this.poeWatts,
+    this.ppp,
+    this.signal,
+    this.noise,
+    this.snr,
+    this.ccq,
+    this.freqMhz,
+    this.widthMhz,
+    this.distanceM,
+    this.rxRateMbps,
+    this.txRateMbps,
+    this.ssid,
+    this.mode,
+    this.signalPct,
+    this.isAp,
+    this.onusOnline,
+    this.onusTotal,
+    this.pons = const [],
+    this.uplinksUp,
+    this.uplinksTotal,
+    this.uptimeSec,
+    this.linkUptime = false,
+    this.peersKnown = false,
+  });
+
+  /// مدّة التشغيل بالثواني — أو مدّة **الوصلة** حين [linkUptime] (ميموزا: عمر وكيل SNMP يُصفَّر بلا سقوط، فلا يُعرض).
+  final int? uptimeSec;
+  final bool linkUptime;
+
+  /// قائمة العملاء/المحطّات في [DeviceDetail.peers] قُرئت فعلاً — فراغها «لا متّصلين» لا «لم تُقرأ بعد». القراءة الخفيفة
+  /// (ميكروتك بلا جدول التسجيل، ميموزا بلا محطّاتها) تتركها false فلا يظهر «0 متّصل» كاذب.
+  final bool peersKnown;
+
+  /// المعالج والذاكرة ٪، الحرارة °م، الفولتيّة، استهلاك PoE (واط)، جلسات PPP.
+  final int? cpu, mem, temp;
+  final double? voltage, poeWatts;
+  final int? ppp;
+
+  /// الوصلة اللاسلكيّة كما يراها **هذا** الجهاز: إشارته (dBm)، الضجيج، SNR، CCQ ٪، التردّد وعرض القناة (MHz)، المسافة (م)،
+  /// وسرعة الربط استقبالاً/إرسالاً (Mbps). لنقطة وصولٍ (سكتر) لا إشارة لها — هي المصدر — وإشاراتها عند عملائها.
+  final int? signal, noise, snr, ccq, freqMhz, widthMhz, distanceM, rxRateMbps, txRateMbps;
+  final String? ssid, mode;
+
+  /// جودة الإشارة ٪ (60GHz ميكروتك — `signal` في monitor نسبةٌ لا dBm، ولا CCQ لها).
+  final int? signalPct;
+
+  /// نقطة وصول تخدم عملاء (true)، أو محطّةٌ/طرف وصلة (false)، أو لا لاسلكيّ (null).
+  final bool? isAp;
+
+  /// الأولت: المشتركون المتّصلون/الكلّ، منافذ PON، ومنافذ الربط (المتّصلة/الكلّ).
+  final int? onusOnline, onusTotal;
+  final List<PonGlance> pons;
+  final int? uplinksUp, uplinksTotal;
+}
+
+/// منفذ PON في البطاقة الكبيرة: اسمه وحالته ومشتركوه المتّصلون من الكلّ.
+@immutable
+class PonGlance {
+  const PonGlance(this.label, {required this.up, required this.online, required this.total});
+  final String label;
+  final bool up;
+  final int online, total;
 }
 
 /// حصيلة جلسة واحدة.
@@ -279,7 +360,7 @@ class DeviceVitals {
       case 'ubnt':
         return _ubnt(d, creds, prev);
       case 'mimosa':
-        return _mimosa(d, creds);
+        return _mimosa(d, creds, detailed);
       case 'cisco':
         return _cisco(d, creds, detailed);
       case 'ruijie':
@@ -389,6 +470,51 @@ class DeviceVitals {
         if (l.connected) PeerLink(name: l.remoteMac ?? l.iface, signal: l.rssi, txRate: l.phyRateMbps),
     ];
 
+    // ── البطاقة الكبيرة: الوصلة كما يراها هذا الجهاز ─────────────
+    // اللاسلكيّ الشغّال الأوّل يعطي التردّد والعرض والوضع. نقطة الوصول (ap-bridge/bridge/wds-master) لا إشارة لها — إشاراتها
+    // عند عملائها؛ والمحطّة إشارتها وجودتها في جدول تسجيلها (الطرف الآخر وحده). و60GHz من monitor.
+    MikrotikWireless? wl;
+    for (final w in s.wirelessInterfaces) {
+      if (!w.disabled && w.running) {
+        wl = w;
+        break;
+      }
+    }
+    MikrotikW60gLink? w60;
+    for (final l in s.w60gLinks) {
+      if (l.connected) {
+        w60 = l;
+        break;
+      }
+    }
+    final wlMode = wl?.mode.toLowerCase() ?? '';
+    final isAp = wl == null ? (w60 != null ? false : null) : (wlMode.contains('ap') || wlMode == 'bridge' || wlMode == 'wds-master');
+    final upstream = isAp == false && s.wirelessClients.isNotEmpty ? s.wirelessClients.first : null;
+    int? pos(int? v) => v != null && v > 0 ? v : null;
+    final glance = DeviceGlance(
+      uptimeSec: routerOsSeconds(s.uptime),
+      peersKnown: detailed,
+      cpu: s.cpuKnown ? s.cpuLoad : null,
+      mem: s.memKnown ? s.memUsedPercent : null,
+      temp: s.temperature,
+      voltage: s.voltage,
+      poeWatts: s.powerWatts,
+      ppp: s.pppActiveCount > 0 ? s.pppActiveCount : null,
+      signal: upstream != null && upstream.signalStrength != 0 ? upstream.signalStrength : w60?.rssi,
+      snr: pos(upstream?.signalToNoise),
+      ccq: upstream == null ? null : pos(upstream.txCcq) ?? pos(upstream.rxCcq),
+      freqMhz: pos(wl?.frequency) ?? w60?.frequency,
+      widthMhz: pos(wl?.channelWidth),
+      distanceM: w60?.distanceMeters?.round(),
+      // 60GHz: سرعة الربط باتّجاه الإرسال وحده (monitor) — لا رقم للاستقبال، لا نسخه.
+      rxRateMbps: pos(upstream?.rxRate),
+      txRateMbps: pos(upstream?.txRate) ?? w60?.phyRateMbps,
+      ssid: (wl?.ssid.isNotEmpty ?? false) ? wl!.ssid : null,
+      mode: wl?.mode,
+      signalPct: w60?.signalPercent,
+      isAp: isAp,
+    );
+
     return ProbeResult(
       vitals: [
         // SNMP على SwOS لا يحمل المعالج والذاكرة ⇒ شرطةٌ لا صفر.
@@ -451,6 +577,7 @@ class DeviceVitals {
           if (s.currentAmps != null) (k: 'التيّار', v: '${s.currentAmps!.toStringAsFixed(1)} A'),
           if (s.fans.isNotEmpty) (k: 'المراوح', v: '${s.fans.length}'),
         ],
+        glance: glance,
       ),
       counters: counters,
       raw: s,
@@ -560,6 +687,25 @@ class DeviceVitals {
           // airFiber X وWave: ما لا خانة له (تردّد الاستقبال، التعديل، القدرة، الاحتياطيّ…).
           ...s.extras,
         ],
+        // نقطة الوصول (ap / ap-ptmp / ap-ptp) إشارتها عند محطّاتها؛ والمحطّة/airFiber إشارتها هي إشارة الوصلة.
+        glance: DeviceGlance(
+          uptimeSec: s.host.uptime > 0 ? s.host.uptime : null,
+          peersKnown: true,
+          cpu: s.host.cpuload,
+          temp: s.host.temperature == 0 ? null : s.host.temperature,
+          signal: (w == null || w.signal == 0) ? null : w.signal,
+          noise: (w != null && w.hasNoise) ? w.noise : null,
+          snr: w?.snr,
+          ccq: (w != null && w.hasCcq) ? w.ccq : null,
+          freqMhz: (w != null && w.frequency > 0) ? w.frequency : null,
+          widthMhz: (w != null && w.chanbw > 0) ? w.chanbw : null,
+          distanceM: (w != null && w.distance > 0) ? w.distance : null,
+          rxRateMbps: (w != null && w.rxRate > 0) ? w.rxRate : null,
+          txRateMbps: (w != null && w.txRate > 0) ? w.txRate : null,
+          ssid: (w != null && w.essid.isNotEmpty) ? w.essid : null,
+          mode: w?.mode,
+          isAp: w?.mode.toLowerCase().startsWith('ap'),
+        ),
       ),
       counters: counters,
       raw: s,
@@ -572,13 +718,54 @@ class DeviceVitals {
   // فلا فارق عدّادات يُحسب. المرور يظهر معدّلاً لحظيّاً في «إضافات».
 
   static Future<ProbeResult> _mimosa(
-      NetworkDevice d, Map<String, dynamic> creds) async {
+      NetworkDevice d, Map<String, dynamic> creds, bool detailed) async {
     final community =
         (creds['community'] ?? creds['user'] ?? 'public').toString();
     final s = await MimosaApi.fetchStats(
       host: d.ip,
       port: d.apiPort ?? 161,
       community: community,
+    );
+    // سكتر PtMP (A5/C5 بوضع AP): محطّاته للبطاقة المفتوحة/الكبيرة وحدها — مسحتا SNMP إضافيّتان، والمطويّة تكتفي بالثلاثة.
+    final isAp = s.wirelessMode == 1 ? true : (s.wirelessMode == 2 ? false : null);
+    var clients = const <MimosaClient>[];
+    var clientsRead = false;
+    if (detailed && isAp == true) {
+      try {
+        clients = await MimosaApi.fetchClients(host: d.ip, port: d.apiPort ?? 161, community: community);
+        clientsRead = true;
+      } catch (_) {/* بلا محطّات — الخانات الثلاث تكفي */}
+    }
+    int? worst(Iterable<double?> xs, {required bool low}) {
+      double? r;
+      for (final x in xs) {
+        if (x == null) continue;
+        if (r == null || (low ? x < r : x > r)) r = x;
+      }
+      return r?.round();
+    }
+    int? freq;
+    for (final c in s.chains) {
+      if (c.centerFreqMhz != null && c.centerFreqMhz! > 0) {
+        freq = c.centerFreqMhz;
+        break;
+      }
+    }
+    final glance = DeviceGlance(
+      uptimeSec: s.linkUptimeSec,
+      linkUptime: true,
+      peersKnown: clientsRead,
+      temp: s.temperatureC?.round(),
+      signal: s.totalRxPowerDbm?.round(),
+      // أسوأ سلسلة لا متوسّطها: سلسلةٌ ضعيفة تكفي لتكسر الوصلة.
+      snr: worst(s.chains.map((c) => c.snrDb), low: true),
+      noise: worst(s.chains.map((c) => c.rxNoiseDbm), low: false),
+      freqMhz: freq,
+      widthMhz: s.channelWidthMhz,
+      rxRateMbps: s.phyRxRateMbps,
+      txRateMbps: s.phyTxRateMbps,
+      ssid: (s.ssid?.isNotEmpty ?? false) ? s.ssid : null,
+      isAp: isAp,
     );
     return ProbeResult(
       vitals: [
@@ -620,7 +807,19 @@ class DeviceVitals {
         uptime: s.linkUptimeSec == null ? null : fmtUptime(s.linkUptimeSec!),
         firmware: s.firmwareVersion,
         model: s.deviceName,
+        peers: [
+          for (final c in clients)
+            if (c.online)
+              PeerLink(
+                name: (c.name?.isNotEmpty ?? false) ? c.name! : ((c.ip?.isNotEmpty ?? false) ? c.ip! : c.mac),
+                signal: c.rssiDbm,
+                txRate: c.txRateMbps,
+                rxRate: c.rxRateMbps,
+                uptimeSec: c.uptimeSec,
+              ),
+        ],
         peersLabel: 'المحطّات',
+        glance: glance,
         link: [
           if (s.ssid?.isNotEmpty ?? false) (k: 'الوصلة', v: s.ssid!),
           if (s.channelWidthMhz != null)
@@ -725,6 +924,19 @@ ProbeResult oltProbeResult(VsolOltStats s) {
         if (s.chassis?.ramBytes != null)
           (k: 'الذاكرة', v: '${(s.chassis!.ramBytes! / (1024 * 1024)).round()} MB'),
       ],
+      // لقطةٌ بلا بنية (لم يُقرأ شيء) ⇒ لا أعداد — «—» لا «0/0».
+      glance: s.isEmpty
+          ? const DeviceGlance()
+          : DeviceGlance(
+              uptimeSec: s.uptime?.inSeconds,
+              cpu: cpu,
+              temp: s.chassis?.boxTempC,
+              onusOnline: s.onusOnline,
+              onusTotal: s.onusTotal,
+              pons: [for (final p in s.ponPorts) PonGlance(p.label, up: p.up, online: p.onuOnline, total: p.onuTotal)],
+              uplinksUp: s.uplinks.where((u) => u.up).length,
+              uplinksTotal: s.uplinks.length,
+            ),
     ),
     counters: const {},
     raw: s.isEmpty ? null : s,
@@ -807,6 +1019,7 @@ Future<ProbeResult> _cisco(NetworkDevice d, Map<String, dynamic> creds, bool det
       extras: [
         if (s.serial != null) (k: 'التسلسل', v: s.serial!),
       ],
+      glance: DeviceGlance(uptimeSec: s.uptime?.inSeconds, cpu: s.cpuPercent?.round(), mem: mem?.round()),
     ),
     counters: const {},
     raw: s,
@@ -886,10 +1099,45 @@ Future<ProbeResult> _ruijie(NetworkDevice d, Map<String, dynamic> creds, Counter
         if (link?.snrDb != null) (k: 'SNR', v: '${link!.snrDb} dB'),
         if (link?.distanceM != null) (k: 'المسافة', v: '${link!.distanceM} m'),
       ],
+      glance: DeviceGlance(
+        uptimeSec: s.uptime?.inSeconds,
+        cpu: s.cpuPercent?.round(),
+        mem: s.memPercent?.round(),
+        signal: link?.signalDbm,
+        noise: link?.noiseDbm,
+        snr: link?.snrDb,
+        freqMhz: link?.freqMhz ?? link?.centerFreqMhz,
+        distanceM: link?.distanceM,
+        rxRateMbps: link?.rxRateMbps,
+        txRateMbps: link?.txRateMbps,
+        ssid: link?.ssid,
+        isAp: link == null ? null : false,
+      ),
     ),
     counters: counters,
     raw: s,
   );
+}
+
+/// مدّة تشغيل RouterOS بالثواني: «1w2d03:04:05» (API) · «9w4d» · «5h3m2s» · «03:04:05» — وغير المقروء null.
+int? routerOsSeconds(String raw) {
+  final r = raw.trim();
+  if (r.isEmpty) return null;
+  const unit = {'w': 604800, 'd': 86400, 'h': 3600, 'm': 60, 's': 1};
+  var total = 0;
+  var any = false;
+  for (final m in RegExp(r'(\d+)(ms|w|d|h|m|s)').allMatches(r)) {
+    final u = m.group(2)!;
+    if (u == 'ms') continue;
+    total += int.parse(m.group(1)!) * unit[u]!;
+    any = true;
+  }
+  final hms = RegExp(r'(\d{1,3}):(\d{2}):(\d{2})').firstMatch(r);
+  if (hms != null) {
+    total += int.parse(hms.group(1)!) * 3600 + int.parse(hms.group(2)!) * 60 + int.parse(hms.group(3)!);
+    any = true;
+  }
+  return any ? total : null;
 }
 
 extension on Vital {

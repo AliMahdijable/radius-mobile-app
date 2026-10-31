@@ -315,6 +315,34 @@ class AppColors {
       _isDark ? const Color(0xFF26313D) : const Color(0xFFE8EEF9);
   static Color get infoSoftBorder =>
       _isDark ? const Color(0xFF2B3A4E) : const Color(0xFFCFDCF0);
+
+  // ══════════════════ أدوار أجهزة الشبكة ══════════════════
+  // «البطاقات الكبيرة» بقسم الأجهزة (المالك ٣١ أكتوبر: «كارتات كبار… ملوّنة للسكتر…»): لكلّ دورٍ لونٌ ثابت يُعرَف به (سكتر · لنك ·
+  // سويتش · أولت · راوتر) — بعيدٌ عن ألوان الحالة (الأخضر/الأحمر/الكهرمانيّ لها شارتها)، ويأتي دائماً مع أيقونة الدور واسمه (لا يحمل
+  // اللون المعنى وحده). ثلاثيّةٌ صريحة لكلّ وضع (اللون · الخلفيّة الناعمة · الحدّ) لا اشتقاقٌ بالشفافيّة — انظر [AppTone].
+  static const Map<String, List<Color>> _roleLight = {
+    'sector': [Color(0xFF2A6FC9), Color(0xFFEAF2FC), Color(0xFFC9DDF5)],
+    'link': [Color(0xFF5B47C9), Color(0xFFF0EEFB), Color(0xFFD9D3F4)],
+    'switch': [Color(0xFF0B7782), Color(0xFFE6F4F5), Color(0xFFC0E2E5)],
+    'olt': [Color(0xFFB8501F), Color(0xFFFCEFE8), Color(0xFFF2D2C2)],
+    'router': [Color(0xFFAD3C74), Color(0xFFFAEDF3), Color(0xFFEDCDDC)],
+    'other': [Color(0xFF5F6B66), Color(0xFFF0F2F0), Color(0xFFDDE1DD)],
+  };
+  static const Map<String, List<Color>> _roleDark = {
+    'sector': [Color(0xFF6AA6EE), Color(0xFF1C2B3D), Color(0xFF29405C)],
+    'link': [Color(0xFFA195EE), Color(0xFF262338), Color(0xFF3A3458)],
+    'switch': [Color(0xFF3CBCC6), Color(0xFF15302F), Color(0xFF1F4A4B)],
+    'olt': [Color(0xFFF0915A), Color(0xFF33241C), Color(0xFF523424)],
+    'router': [Color(0xFFE884B5), Color(0xFF33202A), Color(0xFF51304A)],
+    'other': [Color(0xFFA9B3AD), Color(0xFF2A312E), Color(0xFF3D4541)],
+  };
+
+  /// لون دور الجهاز: `sector` · `link` · `switch` · `olt` · `router` · `other` (غيره ⇒ other).
+  static ({Color fill, Color softBg, Color softBorder}) deviceRole(String role) {
+    final pal = _isDark ? _roleDark : _roleLight;
+    final c = pal[role] ?? pal['other']!;
+    return (fill: c[0], softBg: c[1], softBorder: c[2]);
+  }
 }
 
 /// النغمة الدلاليّة — رباعيّة `fill · softBg · softBorder · onSoft`
