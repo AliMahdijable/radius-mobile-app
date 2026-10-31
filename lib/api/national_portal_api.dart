@@ -1,0 +1,526 @@
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+
+import 'api_client.dart';
+
+/// المشروع الوطنيّ (watani، ٣١ أكتوبر — المالك: «الطلبات التذاكر هاي مهمه مموجوده كذلك المواضع الي متعلقة بالمالية…
+/// سرعه بالاستجابه والعرض… والفلاتر»): أقسام البوّابة بالتطبيق من `/api/v2/ftth/*` بالخادم
+/// (`server/watani/wataniPortalRoutes.js`) — فلاتر البوّابة نفسها، وكاشٌ بالخادم: الجلب الأوّل البطيء (الطلبات ~١٦ث، المهامّ ~٨ث)
+/// يردّ `pending` والشاشة تعيد السؤال كلّ ٤ث. لا هواتف ولا وثائق هويّة ولا إحداثيّات (الخادم لا يرسلها). قراءةٌ وحدها.
+
+class NationalRef {
+  const NationalRef(this.id, this.name);
+  final String? id;
+  final String name;
+
+  static NationalRef? from(dynamic v) {
+    if (v is! Map) return null;
+    final name = (v['name'] ?? '').toString().trim();
+    final id = v['id']?.toString();
+    if (name.isEmpty && (id == null || id.isEmpty)) return null;
+    return NationalRef(id, name);
+  }
+}
+
+int? _int(dynamic v) => v is int ? v : (v is num ? v.toInt() : int.tryParse(v?.toString() ?? ''));
+num? _num(dynamic v) => v is num ? v : (v == null ? null : num.tryParse(v.toString()));
+String _s(dynamic v) => v == null ? '' : v.toString().trim();
+String? _sn(dynamic v) {
+  final s = _s(v);
+  return s.isEmpty ? null : s;
+}
+
+/// صفحةٌ من قسم: الصفوف والإجماليّ، أو `pending` (الخادم يجلب — اسأل ثانيةً بعد قليل).
+class NationalPage<T> {
+  const NationalPage({
+    required this.items,
+    this.total,
+    this.page = 1,
+    this.pageCount,
+    this.pending = false,
+    this.stale = false,
+    this.fetchedAt,
+    this.raw = const {},
+  });
+  final List<T> items;
+  final int? total;
+  final int page;
+  final int? pageCount;
+  final bool pending;
+  final bool stale;
+  final String? fetchedAt;
+
+  /// الردّ كاملاً — ما يخصّ القسم (summary · balance · sum).
+  final Map<String, dynamic> raw;
+
+  bool get hasMore => !pending && pageCount != null && page < pageCount!;
+}
+
+/// نتيجة نداء: البيانات، أو رسالة الخادم العربيّة (`relogin` حين انتهت جلسة الشركة).
+class NationalResult<T> {
+  const NationalResult.ok(this.data)
+      : error = null,
+        relogin = false;
+  const NationalResult.fail(this.error, {this.relogin = false}) : data = null;
+  final T? data;
+  final String? error;
+  final bool relogin;
+  bool get ok => data != null;
+}
+
+class NationalTicket {
+  const NationalTicket({
+    required this.id,
+    required this.displayId,
+    required this.source,
+    required this.title,
+    required this.summary,
+    required this.status,
+    this.customer,
+    this.zone,
+    this.infra = false,
+    this.comments = 0,
+    this.attachments = 0,
+    this.createdAt,
+  });
+  final String? id;
+  final String displayId;
+  final String source; // partner | call_center
+  final String title;
+  final String summary;
+  final String status;
+  final NationalRef? customer;
+  final NationalRef? zone;
+  final bool infra;
+  final int comments;
+  final int attachments;
+  final String? createdAt;
+
+  static NationalTicket fromJson(Map<String, dynamic> j) => NationalTicket(
+        id: _sn(j['id']),
+        displayId: _s(j['display_id']),
+        source: _s(j['source']),
+        title: _s(j['title']),
+        summary: _s(j['summary']),
+        status: _s(j['status']),
+        customer: NationalRef.from(j['customer']),
+        zone: NationalRef.from(j['zone']),
+        infra: j['infra'] == true,
+        comments: _int(j['comments']) ?? 0,
+        attachments: _int(j['attachments']) ?? 0,
+        createdAt: _sn(j['created_at']),
+      );
+}
+
+class NationalComment {
+  const NationalComment(this.text, this.by, this.at);
+  final String text;
+  final String by;
+  final String? at;
+}
+
+class NationalTicketDetails {
+  const NationalTicketDetails({
+    required this.title,
+    required this.displayId,
+    required this.status,
+    required this.details,
+    this.category,
+    this.issue,
+    this.customer,
+    this.zone,
+    this.infra = false,
+    this.createdAt,
+    this.updatedAt,
+    this.closedAt,
+    this.scheduleDate,
+    this.scheduleReason,
+    this.attachments = const [],
+    this.comments,
+  });
+  final String title;
+  final String displayId;
+  final String status;
+  final String details;
+  final String? category;
+  final String? issue;
+  final NationalRef? customer;
+  final NationalRef? zone;
+  final bool infra;
+  final String? createdAt;
+  final String? updatedAt;
+  final String? closedAt;
+  final String? scheduleDate;
+  final String? scheduleReason;
+  final List<String> attachments;
+
+  /// null = تعذّر جلبها الآن (لا «لا تعليقات» كاذبة).
+  final List<NationalComment>? comments;
+
+  static NationalTicketDetails fromJson(Map<String, dynamic> j) {
+    final sch = j['schedule'];
+    final cs = j['comments'];
+    return NationalTicketDetails(
+      title: _s(j['title']),
+      displayId: _s(j['display_id']),
+      status: _s(j['status']),
+      details: _s(j['details']),
+      category: NationalRef.from(j['category'])?.name,
+      issue: j['issue'] is Map ? _sn((j['issue'] as Map)['name']) : null,
+      customer: NationalRef.from(j['customer']),
+      zone: NationalRef.from(j['zone']),
+      infra: j['infra'] == true,
+      createdAt: _sn(j['created_at']),
+      updatedAt: _sn(j['updated_at']),
+      closedAt: _sn(j['closed_at']),
+      scheduleDate: sch is Map ? _sn(sch['date']) : null,
+      scheduleReason: sch is Map ? _sn(sch['reason']) : null,
+      attachments: (j['attachments'] is List ? j['attachments'] as List : const []).map(_s).where((x) => x.isNotEmpty).toList(),
+      comments: cs is List
+          ? cs.whereType<Map>().map((c) => NationalComment(_s(c['text']), _s(c['by']), _sn(c['at']))).toList()
+          : null,
+    );
+  }
+}
+
+class NationalRequest {
+  const NationalRequest({
+    required this.id,
+    required this.type,
+    required this.typeLabel,
+    required this.status,
+    this.customer,
+    this.username,
+    this.zone,
+    this.createdAt,
+    this.closedAt,
+    this.cancelable = false,
+  });
+  final String? id;
+  final String type; // CustomerOnboardingRequest…
+  final String typeLabel;
+  final String status;
+  final NationalRef? customer;
+  final String? username;
+  final NationalRef? zone;
+  final String? createdAt;
+  final String? closedAt;
+  final bool cancelable;
+
+  static NationalRequest fromJson(Map<String, dynamic> j) => NationalRequest(
+        id: _sn(j['id']),
+        type: _s(j['type']),
+        typeLabel: _s(j['type_label']),
+        status: _s(j['status']),
+        customer: NationalRef.from(j['customer']),
+        username: _sn(j['username']),
+        zone: NationalRef.from(j['zone']),
+        createdAt: _sn(j['created_at']),
+        closedAt: _sn(j['closed_at']),
+        cancelable: j['cancelable'] == true,
+      );
+}
+
+class NationalRequestDetail {
+  const NationalRequestDetail({
+    required this.status,
+    this.plan,
+    this.address,
+    this.cancelable = false,
+    this.createdAt,
+    this.closedAt,
+    this.tasks = const [],
+    this.logs,
+    this.logsPending = false,
+  });
+  final String status;
+  final String? plan;
+  final String? address;
+  final bool cancelable;
+  final String? createdAt;
+  final String? closedAt;
+  final List<({String title, String status, String? dueAt})> tasks;
+
+  /// null = لم يصل بعد (`logsPending`) أو تعذّر.
+  final List<({String? at, bool? ok, String text})>? logs;
+  final bool logsPending;
+
+  static NationalRequestDetail fromJson(Map<String, dynamic> j) {
+    final d = j['detail'] is Map ? Map<String, dynamic>.from(j['detail'] as Map) : const <String, dynamic>{};
+    final logs = j['logs'];
+    return NationalRequestDetail(
+      status: _s(d['status']),
+      plan: _sn(d['plan']),
+      address: _sn(d['address']),
+      cancelable: d['cancelable'] == true,
+      createdAt: _sn(d['created_at']),
+      closedAt: _sn(d['closed_at']),
+      tasks: (d['tasks'] is List ? d['tasks'] as List : const [])
+          .whereType<Map>()
+          .map((t) => (title: _s(t['title']), status: _s(t['status']), dueAt: _sn(t['due_at'])))
+          .toList(),
+      logs: logs is List
+          ? logs.whereType<Map>().map((l) => (at: _sn(l['at']), ok: l['ok'] is bool ? l['ok'] as bool : null, text: _s(l['text']))).toList()
+          : null,
+      logsPending: j['logs_pending'] == true,
+    );
+  }
+}
+
+class NationalTask {
+  const NationalTask({required this.id, required this.title, required this.status, this.dueAt, this.customer, this.zone});
+  final String? id;
+  final String title;
+  final String status;
+  final String? dueAt;
+  final NationalRef? customer;
+  final NationalRef? zone;
+
+  static NationalTask fromJson(Map<String, dynamic> j) => NationalTask(
+        id: _sn(j['id']),
+        title: _s(j['title']),
+        status: _s(j['status']),
+        dueAt: _sn(j['due_at']),
+        customer: NationalRef.from(j['customer']),
+        zone: NationalRef.from(j['zone']),
+      );
+}
+
+/// حركةٌ ماليّة: إيرادٌ (transactions/revenue) أو حركة محفظة الوكيل (transactions).
+class NationalMoneyRow {
+  const NationalMoneyRow({
+    required this.at,
+    required this.type,
+    this.amount,
+    this.balanceAfter,
+    this.method = '',
+    this.paidBy = '',
+    this.username,
+    this.customer,
+    this.subscriptionId,
+    this.ends,
+    this.planKind = '',
+    this.outsidePeriod = false,
+  });
+  final String? at;
+  final String type;
+  final num? amount;
+  final num? balanceAfter;
+  final String method;
+  final String paidBy;
+  final String? username;
+  final NationalRef? customer;
+  final String? subscriptionId;
+  final String? ends;
+  final String planKind;
+  final bool outsidePeriod;
+
+  static NationalMoneyRow fromJson(Map<String, dynamic> j) {
+    final sub = j['subscription'] is Map ? j['subscription'] as Map : null;
+    return NationalMoneyRow(
+      at: _sn(j['at']),
+      type: _s(j['type']),
+      amount: _num(j['amount']),
+      balanceAfter: _num(j['balance_after']),
+      method: _s(j['method']),
+      paidBy: _s(j['paid_by']),
+      username: _sn(j['username']),
+      customer: NationalRef.from(j['customer']),
+      subscriptionId: sub == null ? null : _sn(sub['id']),
+      ends: sub == null ? null : _sn(sub['ends']),
+      planKind: _s(j['plan_kind']),
+      outsidePeriod: j['outside_period'] == true,
+    );
+  }
+}
+
+class NationalLookupItem {
+  const NationalLookupItem(this.id, this.name);
+  final String id;
+  final String name;
+}
+
+class NationalLookups {
+  const NationalLookups({
+    this.ticketStatuses,
+    this.requestTypes,
+    this.requestStatuses,
+    this.zones,
+    this.transactionTypes,
+  });
+  final List<NationalLookupItem>? ticketStatuses;
+  final List<NationalLookupItem>? requestTypes;
+  final List<NationalLookupItem>? requestStatuses;
+  final List<NationalLookupItem>? zones;
+  final List<NationalLookupItem>? transactionTypes;
+
+  static List<NationalLookupItem>? _list(dynamic v) => v is List
+      ? v.whereType<Map>().map((x) => NationalLookupItem(_s(x['id']), _s(x['name']))).where((x) => x.id.isNotEmpty).toList()
+      : null;
+
+  static NationalLookups fromJson(Map<String, dynamic> j) => NationalLookups(
+        ticketStatuses: _list(j['ticket_statuses']),
+        requestTypes: _list(j['request_types']),
+        requestStatuses: _list(j['request_statuses']),
+        zones: _list(j['zones']),
+        transactionTypes: _list(j['transaction_types']),
+      );
+}
+
+class NationalCounts {
+  const NationalCounts({this.tasksOpen, this.requestsOpen, this.actionRequired});
+  final int? tasksOpen;
+  final int? requestsOpen;
+
+  /// طلباتٌ بانتظار إجراء الوكيل — null حتى يدفأ كاشها بالخادم.
+  final int? actionRequired;
+}
+
+class NationalPortalApi {
+  NationalPortalApi._();
+
+  /// يُسقط الفارغ — الخادم يتجاهل ما لا يعرفه ويرفض الصالح شكلاً فقط.
+  static Map<String, dynamic> _q(Map<String, Object?> m) =>
+      {for (final e in m.entries) if (e.value != null && e.value.toString().isNotEmpty) e.key: e.value};
+
+  static Future<NationalResult<Map<String, dynamic>>> _get(String path, Map<String, Object?> query) async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(path, queryParameters: _q(query));
+      final b = r.data ?? const {};
+      if (b['success'] != true) return NationalResult.fail(_msg(b));
+      return NationalResult.ok(b);
+    } on DioException catch (e) {
+      final b = e.response?.data;
+      if (!kReleaseMode) debugPrint('🔴 $path: ${e.response?.statusCode}');
+      final code = b is Map ? b['code']?.toString() : null;
+      return NationalResult.fail(_msg(b), relogin: code == 'FTTH_RELOGIN' || code == 'PROVIDER_RELOGIN');
+    } catch (e) {
+      if (!kReleaseMode) debugPrint('🔴 $path: $e');
+      return const NationalResult.fail('تعذّر الاتّصال — أعد المحاولة');
+    }
+  }
+
+  static String _msg(dynamic b) {
+    final m = b is Map ? b['message']?.toString().trim() : null;
+    return (m != null && m.isNotEmpty && m.length < 200) ? m : 'تعذّر جلب البيانات من بوّابة المشروع الوطني';
+  }
+
+  static NationalPage<T> _page<T>(Map<String, dynamic> b, T Function(Map<String, dynamic>) map) => NationalPage<T>(
+        items: (b['data'] is List ? b['data'] as List : const [])
+            .whereType<Map>()
+            .map((m) => map(Map<String, dynamic>.from(m)))
+            .toList(),
+        total: _int(b['total']),
+        page: _int(b['page']) ?? 1,
+        pageCount: _int(b['page_count']),
+        pending: b['pending'] == true,
+        stale: b['stale'] == true,
+        fetchedAt: _sn(b['fetched_at']),
+        raw: b,
+      );
+
+  static Future<NationalResult<NationalPage<NationalTicket>>> tickets({
+    int page = 1,
+    String? q,
+    String? status,
+    String? zone,
+    String? from,
+    String? to,
+  }) async {
+    final r = await _get('/api/v2/ftth/tickets', {'page': page, 'q': q, 'status': status, 'zone': zone, 'from': from, 'to': to});
+    return r.ok ? NationalResult.ok(_page(r.data!, NationalTicket.fromJson)) : NationalResult.fail(r.error, relogin: r.relogin);
+  }
+
+  /// تذكرةٌ واحدة — null داخل ok = pending (اسأل ثانيةً).
+  static Future<NationalResult<NationalTicketDetails?>> ticket(String id) async {
+    final r = await _get('/api/v2/ftth/tickets/${Uri.encodeComponent(id)}', const {});
+    if (!r.ok) return NationalResult.fail(r.error, relogin: r.relogin);
+    if (r.data!['pending'] == true || r.data!['data'] is! Map) return const NationalResult.ok(null);
+    return NationalResult.ok(NationalTicketDetails.fromJson(Map<String, dynamic>.from(r.data!['data'] as Map)));
+  }
+
+  static Future<NationalResult<NationalPage<NationalRequest>>> requests({
+    int page = 1,
+    String? q,
+    String? type,
+    String? status,
+    bool actionRequired = false,
+    String? zone,
+    String? from,
+    String? to,
+  }) async {
+    final r = await _get('/api/v2/ftth/requests', {
+      'page': page,
+      'q': q,
+      'type': type,
+      'status': status,
+      'action': actionRequired ? '1' : null,
+      'zone': zone,
+      'from': from,
+      'to': to,
+    });
+    return r.ok ? NationalResult.ok(_page(r.data!, NationalRequest.fromJson)) : NationalResult.fail(r.error, relogin: r.relogin);
+  }
+
+  /// طلبٌ واحد (تفاصيله حسب نوعه + سجلّه) — null داخل ok = pending.
+  static Future<NationalResult<NationalRequestDetail?>> request(String id, String type) async {
+    final r = await _get('/api/v2/ftth/requests/${Uri.encodeComponent(id)}', {'type': type});
+    if (!r.ok) return NationalResult.fail(r.error, relogin: r.relogin);
+    if (r.data!['pending'] == true || r.data!['data'] is! Map) return const NationalResult.ok(null);
+    return NationalResult.ok(NationalRequestDetail.fromJson(Map<String, dynamic>.from(r.data!['data'] as Map)));
+  }
+
+  static Future<NationalResult<NationalPage<NationalTask>>> tasks({
+    int page = 1,
+    String? q,
+    String? zone,
+    String? from,
+    String? to,
+  }) async {
+    final r = await _get('/api/v2/ftth/tasks', {'page': page, 'q': q, 'zone': zone, 'from': from, 'to': to});
+    return r.ok ? NationalResult.ok(_page(r.data!, NationalTask.fromJson)) : NationalResult.fail(r.error, relogin: r.relogin);
+  }
+
+  /// الإيرادات (revenue=true) أو حركات محفظة الوكيل لنافذة تاريخ (YYYY-MM-DD بتوقيت بغداد).
+  static Future<NationalResult<NationalPage<NationalMoneyRow>>> money({
+    required bool revenue,
+    required String from,
+    required String to,
+    int page = 1,
+    String? q,
+    String? type,
+    String? method,
+    String? min,
+    String? max,
+  }) async {
+    final r = await _get(revenue ? '/api/v2/ftth/transactions' : '/api/v2/ftth/wallet', {
+      'from': from,
+      'to': to,
+      'page': page,
+      'q': revenue ? q : null,
+      'types': revenue ? null : type,
+      'method': revenue ? null : method,
+      'min': min,
+      'max': max,
+    });
+    return r.ok ? NationalResult.ok(_page(r.data!, NationalMoneyRow.fromJson)) : NationalResult.fail(r.error, relogin: r.relogin);
+  }
+
+  static Future<NationalLookups?> lookups() async {
+    final r = await _get('/api/v2/ftth/lookups', const {});
+    if (!r.ok || r.data!['data'] is! Map) return null;
+    return NationalLookups.fromJson(Map<String, dynamic>.from(r.data!['data'] as Map));
+  }
+
+  /// العدّادات — والنداء نفسه يُدفئ بالخادم القوائم البطيئة فتفتح فوراً.
+  static Future<NationalCounts?> counts() async {
+    final r = await _get('/api/v2/ftth/counts', const {});
+    if (!r.ok || r.data!['data'] is! Map) return null;
+    final d = r.data!['data'] as Map;
+    return NationalCounts(
+      tasksOpen: _int(d['tasks_open']),
+      requestsOpen: _int(d['requests_open']),
+      actionRequired: _int(d['requests_action_required']),
+    );
+  }
+}

@@ -1,0 +1,529 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+
+import '../../api/national_portal_api.dart';
+import '../../core/widgets/app_sheet.dart';
+import '../../core/widgets/design_sheet.dart';
+import '../../theme/colors.dart';
+import '../../theme/spacing.dart';
+import '../../theme/typography.dart';
+import '../desktop/desk_widgets.dart';
+import 'national_labels.dart';
+import 'national_widgets.dart';
+
+/// «المهامّ والطلبات» — المشروع الوطنيّ (watani، ٣١ أكتوبر): الطلبات (تسجيل زبون، عنوان جديد، نقل ملكيّة…) بفلاترها و«بانتظار
+/// إجرائي» بعدّاده، وورقة الطلب (تفاصيله حسب نوعه، المهامّ المرتبطة، سجلّه)؛ والمهامّ (توصيل، توقيع عقد، صيانة) بفلاترها وملخّصها.
+/// البوّابة بطيئة هنا (الطلبات ~١٦ث، المهامّ ~٨ث، سجلّ الطلب ~١١ث) ⇒ الخادم يكاشها ويُدفئها، والجلب الأوّل «جارٍ» ثمّ يصل وحده.
+class NationalWorkScreen extends StatefulWidget {
+  const NationalWorkScreen({super.key, this.initialTab = 0});
+
+  /// ٠ = الطلبات، ١ = المهامّ.
+  final int initialTab;
+
+  @override
+  State<NationalWorkScreen> createState() => _NationalWorkScreenState();
+}
+
+class _NationalWorkScreenState extends State<NationalWorkScreen> {
+  late int _tab = widget.initialTab;
+  String _q = '';
+  Map<String, String> _f = const {'type': '', 'status': '', 'zone': '', 'period': ''};
+  bool _action = false;
+  NationalLookups? _lk;
+  NationalCounts? _counts;
+
+  final _req = NationalPaged<NationalRequest>();
+  final _tasks = NationalPaged<NationalTask>();
+
+  bool get _alive => mounted;
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  int get _active => [
+        _f['zone'],
+        _f['period'],
+        if (_tab == 0) ...[_f['type'], _f['status']],
+      ].where((v) => v != null && v.isNotEmpty).length;
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+    NationalPortalApi.lookups().then((v) {
+      if (mounted && v != null) setState(() => _lk = v);
+    });
+    NationalPortalApi.counts().then((v) {
+      if (mounted && v != null) setState(() => _counts = v);
+    });
+  }
+
+  @override
+  void dispose() {
+    _req.dispose();
+    _tasks.dispose();
+    super.dispose();
+  }
+
+  void _reload() {
+    final p = _tab == 0 ? _req : _tasks;
+    p.reset();
+    setState(() {});
+    _next();
+  }
+
+  void _next() {
+    final period = nationalPeriodRange(_f['period'] ?? '');
+    if (_tab == 0) {
+      _req.next(
+        (page) => NationalPortalApi.requests(
+          page: page,
+          q: _q,
+          type: _f['type'],
+          status: _f['status'],
+          actionRequired: _action,
+          zone: _f['zone'],
+          from: period.from,
+          to: period.to,
+        ),
+        onChange: _changed,
+        alive: () => _alive,
+      );
+    } else {
+      _tasks.next(
+        (page) => NationalPortalApi.tasks(page: page, q: _q, zone: _f['zone'], from: period.from, to: period.to),
+        onChange: _changed,
+        alive: () => _alive,
+      );
+    }
+  }
+
+  Future<void> _openFilters() async {
+    final v = await showNationalFilters(context, sections: [
+      if (_tab == 0) ...[
+        NationalFilterSection(
+          key: 'type',
+          title: 'نوع الطلب',
+          value: _f['type'] ?? '',
+          options: _lk?.requestTypes?.map((x) => NationalChoice(x.id, nationalRequestTypeName(x.name))).toList(),
+        ),
+        NationalFilterSection(
+          key: 'status',
+          title: 'الحالة',
+          value: _f['status'] ?? '',
+          options: _lk?.requestStatuses?.map((x) => NationalChoice(x.id, nationalRequestStatus(x.name).label)).toList(),
+        ),
+      ],
+      NationalFilterSection(
+        key: 'zone',
+        title: 'الزون',
+        value: _f['zone'] ?? '',
+        options: _lk?.zones?.map((x) => NationalChoice(x.id, x.name.isEmpty ? x.id : x.name)).toList(),
+      ),
+      NationalFilterSection(key: 'period', title: 'الفترة', value: _f['period'] ?? '', options: nationalPeriods, allLabel: 'كلّ الأوقات'),
+    ]);
+    if (v == null || !mounted) return;
+    setState(() => _f = {..._f, ...v});
+    _reload();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep
+    final p = _tab == 0 ? _req : _tasks;
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      appBar: deskPageBar(
+        context,
+        mobile: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text('المهامّ والطلبات', style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
+          iconTheme: IconThemeData(color: AppColors.textHi),
+        ),
+      ),
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: () async => _reload(),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
+            children: [
+              SegmentedButton<int>(
+                segments: const [
+                  ButtonSegment(value: 0, label: Text('الطلبات'), icon: Icon(LucideIcons.fileText, size: 16)),
+                  ButtonSegment(value: 1, label: Text('المهامّ'), icon: Icon(LucideIcons.listChecks, size: 16)),
+                ],
+                selected: {_tab},
+                showSelectedIcon: false,
+                onSelectionChanged: (s) {
+                  setState(() {
+                    _tab = s.first;
+                    _f = {..._f, 'type': '', 'status': ''};
+                  });
+                  _reload();
+                },
+              ),
+              const SizedBox(height: Sp.md),
+              Row(
+                children: [
+                  Expanded(
+                    child: NationalSearchField(
+                      hint: 'اسم المشترك',
+                      initial: _q,
+                      onChanged: (v) {
+                        _q = v;
+                        _reload();
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: Sp.sm),
+                  NationalFilterButton(active: _active, onTap: _openFilters),
+                ],
+              ),
+              if (_tab == 0) ...[
+                const SizedBox(height: Sp.sm),
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: FilterChip(
+                    label: Text(_counts?.actionRequired != null ? 'بانتظار إجرائي (${_counts!.actionRequired})' : 'بانتظار إجرائي'),
+                    selected: _action,
+                    showCheckmark: false,
+                    avatar: Icon(LucideIcons.bellRing, size: 15, color: _action ? AppColors.warningOnSoft : AppColors.textMid),
+                    selectedColor: AppColors.warningSoftBg,
+                    side: BorderSide(color: _action ? AppColors.warningSoftBorder : AppColors.border),
+                    labelStyle: AppType.label(color: _action ? AppColors.warningOnSoft : AppColors.textHi),
+                    onSelected: (v) {
+                      setState(() => _action = v);
+                      _reload();
+                    },
+                  ),
+                ),
+              ],
+              if (_tab == 1) ..._taskSummary(),
+              const SizedBox(height: Sp.md),
+              ..._body(p),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _taskSummary() {
+    final s = _tasks.raw['summary'];
+    if (s is! Map) return const [];
+    String n(dynamic v) => v == null ? '—' : '$v';
+    return [
+      const SizedBox(height: Sp.sm),
+      Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: [
+          ToneChip(label: 'مفتوحة ${n(s['open'])}', tone: AppTone.info),
+          ToneChip(label: 'مكتملة ${n(s['completed'])}', tone: AppTone.success),
+          ToneChip(label: 'مستحقّة اليوم ${n(s['due_today'])}', tone: AppTone.warning),
+        ],
+      ),
+    ];
+  }
+
+  List<Widget> _body(NationalPaged<Object?> p) {
+    if (p.rows.isEmpty) {
+      if (p.error != null) return [NationalStateBox.error(text: p.error!, onRetry: _reload)];
+      if (p.pending) return const [NationalStateBox.pending()];
+      if (p.loading || p.page == 0) return const [NationalStateBox.loading()];
+      final filtered = _q.isNotEmpty || _active > 0 || (_tab == 0 && _action);
+      return [
+        NationalStateBox.empty(
+          text: filtered ? 'لا نتائج تطابق البحث' : (_tab == 0 ? 'لا توجد طلبات' : 'لا توجد مهامّ'),
+          icon: _tab == 0 ? LucideIcons.fileText : LucideIcons.listChecks,
+        ),
+      ];
+    }
+    return [
+      if (_tab == 0)
+        for (final r in _req.rows) ...[
+          _RequestCard(r: r, onTap: r.id == null ? null : () => _openRequest(r)),
+          const SizedBox(height: Sp.sm),
+        ]
+      else
+        for (final t in _tasks.rows) ...[
+          _TaskCard(t: t),
+          const SizedBox(height: Sp.sm),
+        ],
+      if (p.hasMore)
+        NationalLoadMore(loading: p.loading, onTap: _next, shown: p.rows.length, total: p.total, unit: _tab == 0 ? 'طلب' : 'مهمّة')
+      else if (p.total != null)
+        Padding(
+          padding: const EdgeInsets.only(top: Sp.sm),
+          child: Text('${p.total} ${_tab == 0 ? 'طلب' : 'مهمّة'}', textAlign: TextAlign.center, style: AppType.muted()),
+        ),
+    ];
+  }
+
+  void _openRequest(NationalRequest r) {
+    showAppSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: AppColors.scrim,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _RequestSheet(row: r),
+    );
+  }
+}
+
+Widget _meta(IconData i, String text, {bool ltr = false}) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(i, size: 13, color: AppColors.textMid),
+        const SizedBox(width: 4),
+        Text(text, textDirection: ltr ? TextDirection.ltr : null, style: AppType.micro(color: AppColors.textMid)),
+      ],
+    );
+
+class _RequestCard extends StatelessWidget {
+  const _RequestCard({required this.r, this.onTap});
+  final NationalRequest r;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep
+    final st = nationalRequestStatus(r.status);
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(R.lg),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(R.lg),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(R.lg), border: Border.all(color: AppColors.border)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: Text(nationalRequestType(r.type), style: AppType.cardTitle(color: AppColors.textHi))),
+                  ToneChip(label: st.label, tone: st.tone, dense: true),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(r.customer?.name ?? '—', style: AppType.listName(color: AppColors.textHi)),
+              if (r.username != null)
+                Text(r.username!, textDirection: TextDirection.ltr, textAlign: TextAlign.end, style: AppType.micro(color: AppColors.textMid)),
+              const SizedBox(height: Sp.sm),
+              Wrap(
+                spacing: 12,
+                runSpacing: 4,
+                children: [
+                  _meta(LucideIcons.clock, 'أُنشئ ${nationalTime(r.createdAt)}'),
+                  if (r.closedAt != null) _meta(LucideIcons.calendarCheck, 'أُغلق ${nationalTime(r.closedAt)}'),
+                  if (r.zone?.name.isNotEmpty == true) _meta(LucideIcons.mapPin, r.zone!.name, ltr: true),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TaskCard extends StatelessWidget {
+  const _TaskCard({required this.t});
+  final NationalTask t;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep
+    final st = nationalTaskStatus(t.status);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.lg),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(nationalTaskTitle(t.title), style: AppType.cardTitle(color: AppColors.textHi))),
+              ToneChip(label: st.label, tone: st.tone, dense: true),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(t.customer?.name ?? '—', style: AppType.listName(color: AppColors.textHi)),
+          const SizedBox(height: Sp.sm),
+          Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            children: [
+              _meta(LucideIcons.calendarClock, 'الاستحقاق ${nationalTime(t.dueAt)}'),
+              if (t.zone?.name.isNotEmpty == true) _meta(LucideIcons.mapPin, t.zone!.name, ltr: true),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RequestSheet extends StatefulWidget {
+  const _RequestSheet({required this.row});
+  final NationalRequest row;
+
+  @override
+  State<_RequestSheet> createState() => _RequestSheetState();
+}
+
+class _RequestSheetState extends State<_RequestSheet> {
+  NationalRequestDetail? _d;
+  String? _error;
+  bool _waiting = true;
+  Timer? _poll;
+  int _polls = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final r = await NationalPortalApi.request(widget.row.id!, widget.row.type);
+    if (!mounted) return;
+    if (!r.ok) {
+      setState(() {
+        _error = r.error;
+        _waiting = false;
+      });
+      return;
+    }
+    setState(() {
+      if (r.data != null) _d = r.data;
+      _waiting = r.data == null;
+      _error = null;
+    });
+    // التفاصيل لم تصل، أو السجلّ ما زال يُجلب بالخادم (~١١ث): اسأل ثانيةً
+    final again = r.data == null || r.data!.logsPending;
+    if (again && _polls++ < 15) {
+      _poll?.cancel();
+      _poll = Timer(const Duration(seconds: 4), _load);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep
+    final row = widget.row;
+    final d = _d;
+    final st = nationalRequestStatus(d?.status.isNotEmpty == true ? d!.status : row.status);
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.fileText,
+        title: nationalRequestType(row.type),
+        subtitle: row.customer?.name ?? '—',
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      body: _error != null
+          ? NationalStateBox.error(text: _error!, onRetry: () {
+              setState(() {
+                _error = null;
+                _waiting = true;
+              });
+              _load();
+            })
+          : _waiting && d == null
+              ? const NationalStateBox.loading()
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        ToneChip(label: st.label, tone: st.tone),
+                        if (d?.cancelable == true) ...[
+                          const SizedBox(width: Sp.sm),
+                          Expanded(child: Text('يمكن إلغاؤه من بوّابة المشروع الوطني', style: AppType.muted())),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: Sp.md),
+                    NationalInfoGroup(children: [
+                      if (row.username != null) NationalInfoRow(icon: LucideIcons.user, label: 'اليوزر', value: row.username!, ltr: true),
+                      if (row.zone?.name.isNotEmpty == true) NationalInfoRow(icon: LucideIcons.mapPin, label: 'الزون', value: row.zone!.name, ltr: true),
+                      if (d?.plan != null) NationalInfoRow(icon: LucideIcons.package, label: 'الباقة', value: d!.plan!, ltr: true),
+                      if (d?.address != null) NationalInfoRow(icon: LucideIcons.mapPin, label: 'العنوان', value: d!.address!),
+                      NationalInfoRow(icon: LucideIcons.calendarClock, label: 'أُنشئ', value: nationalTime(d?.createdAt ?? row.createdAt), ltr: true),
+                      if ((d?.closedAt ?? row.closedAt) != null)
+                        NationalInfoRow(icon: LucideIcons.calendarCheck, label: 'أُغلق', value: nationalTime(d?.closedAt ?? row.closedAt), ltr: true),
+                    ]),
+                    if (d != null && d.tasks.isNotEmpty) ...[
+                      const SizedBox(height: Sp.lg),
+                      Text('المهامّ المرتبطة', style: AppType.label(color: AppColors.textLabel)),
+                      const SizedBox(height: Sp.sm),
+                      NationalInfoGroup(children: [
+                        for (final t in d.tasks)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            child: Row(
+                              children: [
+                                Icon(LucideIcons.clipboardList, size: 16, color: AppColors.textMid),
+                                const SizedBox(width: Sp.sm),
+                                Expanded(child: Text(nationalTaskTitle(t.title), style: AppType.body(color: AppColors.textHi))),
+                                ToneChip(label: nationalTaskStatus(t.status).label, tone: nationalTaskStatus(t.status).tone, dense: true),
+                              ],
+                            ),
+                          ),
+                      ]),
+                    ],
+                    const SizedBox(height: Sp.lg),
+                    Text('سجلّ الطلب', style: AppType.label(color: AppColors.textLabel)),
+                    const SizedBox(height: Sp.sm),
+                    if (d == null || d.logsPending)
+                      Text('جارٍ جلب السجلّ من البوّابة…', style: AppType.muted())
+                    else if (d.logs == null)
+                      Text('تعذّر جلب السجلّ الآن.', style: AppType.muted())
+                    else if (d.logs!.isEmpty)
+                      Text('لا أحداث.', style: AppType.muted())
+                    else
+                      NationalInfoGroup(children: [
+                        for (final l in d.logs!)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  l.ok == false ? LucideIcons.circleX : LucideIcons.circleCheck,
+                                  size: 16,
+                                  color: l.ok == false ? AppColors.error : AppColors.success,
+                                ),
+                                const SizedBox(width: Sp.sm),
+                                Expanded(
+                                  child: Text(l.text.isEmpty ? '—' : l.text,
+                                      maxLines: 4, overflow: TextOverflow.ellipsis, style: AppType.body(color: AppColors.textBody)),
+                                ),
+                                const SizedBox(width: Sp.sm),
+                                Text(nationalTime(l.at), textDirection: TextDirection.ltr, style: AppType.micro(color: AppColors.textMid)),
+                              ],
+                            ),
+                          ),
+                      ]),
+                  ],
+                ),
+    );
+  }
+}

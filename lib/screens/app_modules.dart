@@ -22,6 +22,9 @@ import 'employees/employees_screen.dart';
 import 'expenses/expenses_screen.dart';
 import 'managers/managers_screen.dart';
 import 'message_logs/message_logs_screen.dart';
+import 'national/national_money_screen.dart';
+import 'national/national_tickets_screen.dart';
+import 'national/national_work_screen.dart';
 import 'packages/packages_screen.dart';
 import 'portal_settings/portal_settings_screen.dart';
 import 'reports_screen.dart';
@@ -111,7 +114,43 @@ List<AppModule> buildAppModules() {
   const logKeys = ['whatsapp.broadcast', 'whatsapp.send'];
   const pkgKeys = ['packages.view', 'packages.edit_prices'];
   final cardsLocked = !Perms.hasAny(cardKeys);
+  // المشروع الوطنيّ على providerKit (watani، ٣١ أكتوبر — المالك: «الطلبات التذاكر هاي مهمه مموجوده كذلك المواضع الي متعلقة
+  // بالمالية»): أقسام البوّابة نفسها كالموقع. الموظّف بلا مفتاحها يراها مقفلةً بمكانها.
+  final national = ProviderService.isKit && ProviderService.parentIsZone;
   return [
+    if (national && permShown(const ['subscribers.view']))
+      AppModule(
+        id: 'national_work',
+        group: AppModuleGroup.manage,
+        locked: !Perms.has('subscribers.view'),
+        icon: LucideIcons.listChecks,
+        tone: AppTone.warning,
+        title: 'المهامّ والطلبات',
+        subtitle: 'طلبات التسجيل والنقل ومهامّ التركيب في بوّابة الوطني',
+        page: () => const NationalWorkScreen(),
+      ),
+    if (national && permShown(const ['subscribers.view']))
+      AppModule(
+        id: 'national_tickets',
+        group: AppModuleGroup.manage,
+        locked: !Perms.has('subscribers.view'),
+        icon: LucideIcons.headset,
+        tone: AppTone.info,
+        title: 'التذاكر',
+        subtitle: 'تذاكر الدعم في بوّابة الوطني',
+        page: () => const NationalTicketsScreen(),
+      ),
+    if (national && permShown(const ['reports.financial']))
+      AppModule(
+        id: 'national_money',
+        group: AppModuleGroup.finance,
+        locked: !Perms.has('reports.financial'),
+        icon: LucideIcons.receiptText,
+        tone: AppTone.success,
+        title: 'الحركات الماليّة',
+        subtitle: 'الإيرادات وكشف محفظتك في بوّابة الوطني',
+        page: () => const NationalMoneyScreen(),
+      ),
     // «كيف أسوّي؟» صار زرّاً في الأعلى بكلّ التبويبات (TopActions) — لا بطاقة هنا (المالك ٢٠ أكتوبر).
     // مطلب 2026-08-12: التقارير صارت أوّل عنصر. مفتوحةٌ لأي مدير عادي، وللموظّف لو عنده أي
     // صلاحيّة reports.*، وإلّا فمقفلة بمكانها.
