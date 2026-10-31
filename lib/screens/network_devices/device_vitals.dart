@@ -985,6 +985,9 @@ Future<ProbeResult> _cisco(NetworkDevice d, Map<String, dynamic> creds, bool det
     includeCounters: detailed,
   );
   final mem = s.memPercent;
+  // «المنافذ» = الإيثرات (Fa/Gi/Te…) — لا Serial ولا ما لا يُعرف؛ جهازٌ لا يُعرف اسم منفذٍ فيه يبقى بمنافذ لوحته كلّها.
+  final eth = [for (final i in s.physicalPorts) if (isWiredPortName(i.name)) i];
+  final shownPorts = eth.isEmpty ? s.physicalPorts : eth;
   return ProbeResult(
     vitals: [
       s.cpuPercent == null
@@ -1005,12 +1008,12 @@ Future<ProbeResult> _cisco(NetworkDevice d, Map<String, dynamic> creds, bool det
               icon: LucideIcons.memoryStick,
               tone: Grade.percentLowerBetter(mem),
             ),
-      s.portsTotal == 0
+      shownPorts.isEmpty
           ? Vital.empty.withIcon(LucideIcons.network)
           : Vital(
               label: 'المنافذ',
-              value: '${s.portsUp}',
-              unit: '/${s.portsTotal}',
+              value: '${shownPorts.where((i) => i.up).length}',
+              unit: '/${shownPorts.length}',
               icon: LucideIcons.network,
               tone: AppTone.neutral,
             ),
@@ -1024,7 +1027,12 @@ Future<ProbeResult> _cisco(NetworkDevice d, Map<String, dynamic> creds, bool det
           PortTraffic(
             name: i.shortName ?? i.name,
             up: i.up,
+            // معدّل الخمس دقائق كما يحسبه الجهاز (show interfaces — القراءة المفصّلة): يصحّ من أوّل لقطة بلا فرق عدّادات.
+            rxBps: i.rxBps,
+            txBps: i.txBps,
             linkSpeed: i.speedMbps == null ? null : '${i.speedMbps}M',
+            // الإيثرات وحدها (Fa/Gi/Te…) — لا Serial ولا ما لا يُعرف (المالك: «اهم شي الايثرات للسسكو»).
+            physical: isWiredPortName(i.name),
           ),
       ],
       extras: [
@@ -1137,11 +1145,15 @@ bool isWiredPortName(String raw) {
   final n = raw.trim().toLowerCase();
   if (n.isEmpty) return false;
   const logical = ['vlan', 'br', 'bridge', 'wlan', 'ath', 'wifi', 'wl', 'ppp', 'l2tp', 'sstp', 'ovpn', 'pptp', 'tun', 'gre',
-      'eoip', 'ipip', 'wg', 'lo', 'null', 'mgmt', 'manage', 'bond', 'veth', 'lte', 'cap', 'svi', 'dummy', 'sit', 'imq', 'ifb'];
+      'eoip', 'ipip', 'wg', 'lo', 'null', 'mgmt', 'manage', 'bond', 'veth', 'lte', 'cap', 'svi', 'dummy', 'sit', 'imq', 'ifb',
+      'port-channel', 'virtual', 'dialer', 'async', 'bvi', 'nvi', 'multilink', 'cellular', 'appgigabit', 'embedded', 'vasi',
+      'nve', 'serial', 'switch', 'vtun', 'ucse'];
   for (final p in logical) {
     if (n.startsWith(p)) return false;
   }
-  return RegExp(r'^(eth|lan|wan|sfp|combo|qsfp|port|ge|xge|te|gi|fa|fe|hu|fo)').hasMatch(n);
+  // أسماء سسكو المختصرة للواجهات المنطقيّة: Po1 · Vl90 · Vi2.1 · Vt1 · Di1 · Tu0 · Nu0 · BV1 · Mu1 · Ap1/0/1 · Se0/0/0.
+  if (RegExp(r'^(po|vl|vi|vt|di|tu|nu|bv|mu|ap|se)\d').hasMatch(n)) return false;
+  return RegExp(r'^(eth|et\d|lan|wan|sfp|combo|qsfp|port|ge|xge|te|tw|fi|fo|hu|gi|fa|fe)').hasMatch(n);
 }
 
 /// مدّة تشغيل RouterOS بالثواني: «1w2d03:04:05» (API) · «9w4d» · «5h3m2s» · «03:04:05» — وغير المقروء null.

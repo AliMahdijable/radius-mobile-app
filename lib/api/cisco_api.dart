@@ -719,12 +719,19 @@ class CiscoInterface {
 
   /// واجهةٌ منطقيّة لا يقابلها قابسٌ في اللوحة.
   static const _logical = [
-    'vlan', 'port-channel', 'loopback', 'tunnel', 'null', 'bdi'
+    'vlan', 'port-channel', 'loopback', 'tunnel', 'null', 'bdi',
+    // ٣١ أكتوبر (المالك: «البورتات ppp ماريدها»): جلسات PPP على راوتر سسكو (Virtual-Access لكلّ مشترك) وقوالبها والطلب الهاتفيّ
+    // والجسور والخدمات الداخليّة — واجهاتٌ لا منافذ لوحة.
+    'virtual-access', 'virtual-template', 'virtual-ppp', 'dialer', 'async', 'group-async', 'bvi', 'nvi', 'multilink',
+    'cellular', 'embedded-service-engine', 'service-engine', 'appgigabitethernet', 'ucse', 'vasi', 'nve', 'lisp',
   ];
+
+  /// الأسماء المختصرة للواجهات المنطقيّة (Po1 · Vl90 · Vi2.1 · Vt1 · Di1 · Lo0 · Tu0 · Nu0 · BV1 · Mu1 · Ap1/0/1).
+  static final _logicalShort = RegExp(r'^(po|vl|vi|vt|di|lo|tu|nu|bv|mu|ap)\d');
 
   bool get isPhysical {
     final n = name.toLowerCase();
-    return !_logical.any(n.startsWith);
+    return !_logical.any(n.startsWith) && !_logicalShort.hasMatch(n);
   }
 
   /// يضمّ العدّادات القادمة من `show interfaces` إلى صفٍّ من

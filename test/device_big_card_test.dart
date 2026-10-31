@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/bdcom_epon.dart';
+import 'package:rad_mysvcs/api/cisco_api.dart';
 import 'package:rad_mysvcs/api/mikrotik_api.dart';
 import 'package:rad_mysvcs/api/network_devices_api.dart';
 import 'package:rad_mysvcs/api/vsol_olt_api.dart';
@@ -106,6 +107,43 @@ void main() {
       expect(g.pons.map((p) => '${p.label}:${p.up}:${p.online}/${p.total}'), ['EPON0/1:true:2/3', 'EPON0/2:false:0/0']);
       expect(g.uptimeSec, 27 * 86400);
       expect(oltProbeResult(const VsolOltStats()).detail.glance.onusTotal, isNull, reason: 'لقطةٌ فارغة لا «0/0»');
+    });
+
+    test('🚨 سسكو: الإيثرات وحدها بمعدّل الجهاز — لا Virtual-Access (PPP) ولا Dialer ولا Po ولا Vlan ولا Serial', () async {
+      CiscoApi.debugFetch = () async => const CiscoStats(cpuPercent: 7, ifaces: [
+            CiscoInterface(name: 'Gi0/1', up: true, rxBps: 225743000, txBps: 19291000, speedMbps: 1000),
+            CiscoInterface(name: 'GigabitEthernet0/2', up: true, rxBps: 1000, txBps: 2000),
+            CiscoInterface(name: 'Te1/1/1', up: false),
+            CiscoInterface(name: 'Virtual-Access2.1', up: true, rxBps: 900000000, txBps: 900000000),
+            CiscoInterface(name: 'Vi2.7', up: true, rxBps: 900000000),
+            CiscoInterface(name: 'Virtual-Template1', up: true),
+            CiscoInterface(name: 'Dialer1', up: true),
+            CiscoInterface(name: 'Po1', up: true),
+            CiscoInterface(name: 'Vlan90', up: true),
+            CiscoInterface(name: 'Serial0/0/0', up: true),
+          ]);
+      addTearDown(() => CiscoApi.debugFetch = null);
+      final cisco = NetworkDevice(
+          id: 31, adminId: '1', name: 'c', type: 'switch', brand: 'cisco', ip: '10.0.0.31', port: 22, protocol: 'ssh',
+          hasCredentials: true, lastStatus: 'online', createdAt: DateTime(2026));
+      final r = await DeviceVitals.fetch(cisco, detailed: true);
+      final wired = [for (final p in r.detail.ports) if (p.physical) p.name];
+      expect(wired, ['Gi0/1', 'GigabitEthernet0/2', 'Te1/1/1']);
+      expect(r.detail.ports.map((p) => p.name), isNot(contains('Virtual-Access2.1')), reason: 'جلسات PPP ليست منافذ لوحة');
+      expect(r.detail.ports.map((p) => p.name), isNot(contains('Vi2.7')));
+      expect(r.detail.ports.firstWhere((p) => p.name == 'Gi0/1').rxBps, 225743000, reason: 'معدّل الخمس دقائق من الجهاز نفسه');
+      expect(r.vitals[2].value, '2', reason: 'خانة «المنافذ» = الإيثرات المتّصلة (Gi0/1، Gi0/2)');
+    });
+
+    test('اسم منفذ الإيثرنت لكلّ العلامات بلا نوع واجهة', () {
+      for (final n in ['eth0', 'eth1', 'lan0', 'GigabitEthernet 0/1', 'Gi0/1', 'Fa0/24', 'Te1/1/1', 'Tw1/0/1', 'Hu1/0/49', 'sfp1',
+          'combo1', 'Port 3', 'WAN', 'ge-0/0/1']) {
+        expect(isWiredPortName(n), isTrue, reason: n);
+      }
+      for (final n in ['ath0', 'br0', 'wifi0', 'wlan0', 'pppoe0', 'vtun0', 'switch0', 'Vlan1', 'VLAN 10', 'Po1', 'Port-channel1',
+          'Vi2.1', 'Virtual-Access3', 'Dialer1', 'Tunnel0', 'Loopback0', 'Null0', 'Serial0/0/0', 'Se0/1', 'Mgmt 0', 'Ag1', 'BVI1']) {
+        expect(isWiredPortName(n), isFalse, reason: n);
+      }
     });
 
     test('مدّة RouterOS بكلّ صيغها، وغير المقروء null', () {
