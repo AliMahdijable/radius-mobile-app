@@ -52,6 +52,9 @@ class PrintTemplatesScreen extends StatefulWidget {
   State<PrintTemplatesScreen> createState() => _PrintTemplatesScreenState();
 }
 
+/// أعمدة الحاسبة: المعاينة وبجانبها القائمة (والخصائص بجانبها إن اتّسع العرض، وإلّا مكانها).
+enum _DeskColumns { none, two, three }
+
 class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
   late final ReceiptDesignController _c = widget.controller ?? ReceiptDesignController();
   late final ReceiptPreviewController _p = widget.preview ?? ReceiptPreviewController();
@@ -60,6 +63,22 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
   bool? _canRaster;
   ({String shop, String? issuer}) _id = (shop: receiptDefaultShopName, issuer: null);
   String? _selected;
+
+  /// عمود القائمة (العناصر/الورق/النصوص) وعمود الخصائص على الحاسبة، وأضيق معاينةٍ تُقرأ بجانبهما.
+  static const double _listWidth = 420;
+  static const double _inspectorWidth = 380;
+  static const double _minPreview = 280;
+
+  /// آخر تخطيطٍ رُسم — النقر على عنصرٍ يفتح خصائصه عموداً فيه، أو ورقةً حين لا أعمدة.
+  _DeskColumns _columns = _DeskColumns.none;
+
+  /// التخطيط من عرض الشاشة نفسها لا النافذة: داخل غلاف الحاسبة تأخذ منطقة المحتوى (النافذة − القائمة الجانبيّة ٢٧٢ − ١٦)،
+  /// فنافذة ١٠٢٤ تعطي ٧٣٦ — كان القرار بعرض النافذة فتُرسم الأعمدة الثابتة (٤٢٠ + ٣٨٠) وتختفي المعاينة وتفيض.
+  /// ثلاثة أعمدة حين تبقى للمعاينة [_minPreview]، وإلّا تحلّ الخصائص محلّ القائمة؛ وأضيق من عمودين = تخطيط الهاتف.
+  _DeskColumns _columnsFor(BuildContext context, double width) {
+    if (!DesktopLayout.wide(context) || width < _listWidth + 1 + _minPreview) return _DeskColumns.none;
+    return width >= _listWidth + _inspectorWidth + 2 + _minPreview ? _DeskColumns.three : _DeskColumns.two;
+  }
 
   @override
   void initState() {
@@ -209,7 +228,7 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
   }
 
   void _open(String id) {
-    if (DesktopLayout.wide(context)) {
+    if (_columns != _DeskColumns.none) {
       setState(() => _selected = id);
       return;
     }
@@ -242,7 +261,6 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final wide = DesktopLayout.wide(context);
     return PopScope(
       canPop: !_c.dirty,
       onPopInvokedWithResult: (didPop, _) async {
@@ -255,7 +273,7 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
         child: Scaffold(
           backgroundColor: AppColors.bg,
           appBar: deskPageBar(context, mobile: _appBar()),
-          body: _body(wide),
+          body: _body(),
         ),
       ),
     );
@@ -360,7 +378,7 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
         ),
       );
 
-  Widget _body(bool wide) {
+  Widget _body() {
     if (_c.loading) return const Center(child: CircularProgressIndicator());
     if (_c.loadError != null) {
       return Center(
@@ -383,79 +401,95 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
         ),
       );
     }
-    final preview = PreviewPane(
-      controller: _c,
-      preview: _p,
-      kind: _kind,
-      onKind: (k) => setState(() => _kind = k),
-      shopName: _id.shop,
-      issuer: _id.issuer,
-      qrAvailable: _qrAvailable,
-      canRaster: _canRaster ?? true,
-      onPrintSample: _printSample,
-    );
-    final tabs = Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.xs),
-          child: SheetSegmented(
-            labels: const ['العناصر', 'الورق والخطّ', 'النصوص'],
-            selectedIndex: _tab,
-            onSelect: (i) => setState(() => _tab = i),
-          ),
-        ),
-        Expanded(child: _tabBody(wide)),
-      ],
-    );
-    if (!wide) {
-      return LayoutBuilder(
-        builder: (context, box) => Column(
+    return LayoutBuilder(
+      builder: (context, box) {
+        final columns = _columns = _columnsFor(context, box.maxWidth);
+        final preview = PreviewPane(
+          controller: _c,
+          preview: _p,
+          kind: _kind,
+          onKind: (k) => setState(() => _kind = k),
+          shopName: _id.shop,
+          issuer: _id.issuer,
+          qrAvailable: _qrAvailable,
+          canRaster: _canRaster ?? true,
+          onPrintSample: _printSample,
+        );
+        final tabs = Column(
           children: [
-            SizedBox(height: (box.maxHeight * 0.42).clamp(200.0, 520.0), child: preview),
-            Divider(height: 1, color: AppColors.border),
-            Expanded(child: tabs),
-          ],
-        ),
-      );
-    }
-    // الحاسبة: المعاينة والقائمة جنباً إلى جنب، والخصائص عمودٌ ثالث بدل الورقة.
-    final sel = _selected;
-    return Row(
-      children: [
-        Expanded(child: preview),
-        VerticalDivider(width: 1, color: AppColors.border),
-        SizedBox(width: 420, child: tabs),
-        if (sel != null && _tab == 0) ...[
-          VerticalDivider(width: 1, color: AppColors.border),
-          SizedBox(
-            width: 380,
-            child: Column(
-              children: [
-                ListTile(
-                  title: Text(
-                    designerElementNames[sel] ?? sel,
-                    style: AppType.bodyStrong(color: AppColors.textHi),
-                  ),
-                  trailing: IconButton(
-                    icon: Icon(LucideIcons.x, size: 18, color: AppColors.textMid),
-                    onPressed: () => setState(() => _selected = null),
-                  ),
-                ),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(Sp.lg),
-                    child: ElementInspector(controller: _c, id: sel, kind: _kind.name, sampleVars: _sampleVars()),
-                  ),
-                ),
-              ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.xs),
+              child: SheetSegmented(
+                labels: const ['العناصر', 'الورق والخطّ', 'النصوص'],
+                selectedIndex: _tab,
+                onSelect: (i) => setState(() => _tab = i),
+              ),
             ),
-          ),
-        ],
-      ],
+            Expanded(child: _tabBody(inline: columns != _DeskColumns.none)),
+          ],
+        );
+        if (columns == _DeskColumns.none) {
+          return Column(
+            children: [
+              SizedBox(height: (box.maxHeight * 0.42).clamp(200.0, 520.0), child: preview),
+              Divider(height: 1, color: AppColors.border),
+              Expanded(child: tabs),
+            ],
+          );
+        }
+        // الحاسبة: المعاينة والقائمة جنباً إلى جنب، والخصائص عمودٌ ثالث بدل الورقة — أو مكان القائمة حين لا يتّسع العرض
+        // (القائمة باقيةٌ خلفها بموضع تمريرها، والمعاينة لا تضيق).
+        final sel = _tab == 0 ? _selected : null;
+        final three = columns == _DeskColumns.three;
+        return Row(
+          children: [
+            Expanded(child: preview),
+            VerticalDivider(width: 1, color: AppColors.border),
+            SizedBox(
+              width: _listWidth,
+              child: IndexedStack(
+                index: !three && sel != null ? 1 : 0,
+                sizing: StackFit.expand,
+                children: [
+                  tabs,
+                  if (!three && sel != null) _inspectorColumn(sel, replacesList: true) else const SizedBox.shrink(),
+                ],
+              ),
+            ),
+            if (three && sel != null) ...[
+              VerticalDivider(width: 1, color: AppColors.border),
+              SizedBox(width: _inspectorWidth, child: _inspectorColumn(sel)),
+            ],
+          ],
+        );
+      },
     );
   }
 
-  Widget _tabBody(bool wide) => switch (_tab) {
+  /// خصائص العنصر عموداً على الحاسبة (بدل الورقة): اسمه وزرّ إغلاقه — وحين تحلّ محلّ القائمة يعيدها الزرّ.
+  Widget _inspectorColumn(String id, {bool replacesList = false}) => Column(
+        children: [
+          ListTile(
+            title: Text(
+              designerElementNames[id] ?? id,
+              style: AppType.bodyStrong(color: AppColors.textHi),
+            ),
+            trailing: IconButton(
+              tooltip: replacesList ? 'رجوع للعناصر' : 'إغلاق',
+              icon: Icon(LucideIcons.x, size: 18, color: AppColors.textMid),
+              onPressed: () => setState(() => _selected = null),
+            ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(Sp.lg),
+              child: ElementInspector(controller: _c, id: id, kind: _kind.name, sampleVars: _sampleVars()),
+            ),
+          ),
+        ],
+      );
+
+  Widget _tabBody({required bool inline}) => switch (_tab) {
         1 => PaperTab(controller: _c, qrAvailable: _qrAvailable),
         2 => TextsTab(controller: _c, kind: _kind.name, sampleVars: _sampleVars()),
         _ => ElementsTab(
@@ -463,7 +497,7 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
             kind: _kind.name,
             qrAvailable: _qrAvailable,
             onOpen: _open,
-            selected: wide ? _selected : null,
+            selected: inline ? _selected : null,
           ),
       };
 }

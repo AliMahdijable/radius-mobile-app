@@ -3,9 +3,16 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/receipt_settings_api.dart';
+import 'package:rad_mysvcs/core/platform/app_platform.dart';
+import 'package:rad_mysvcs/core/platform/desktop_layout.dart';
+import 'package:rad_mysvcs/core/widgets/design_sheet.dart';
 import 'package:rad_mysvcs/core/widgets/permission_locked.dart';
+import 'package:rad_mysvcs/screens/desktop/desk_zoom.dart';
 import 'package:rad_mysvcs/screens/print_templates/designer/designer_controller.dart';
 import 'package:rad_mysvcs/screens/print_templates/designer/designer_elements.dart';
+import 'package:rad_mysvcs/screens/print_templates/designer/element_inspector_sheet.dart';
+import 'package:rad_mysvcs/screens/print_templates/designer/elements_tab.dart';
+import 'package:rad_mysvcs/screens/print_templates/designer/preview_pane.dart';
 import 'package:rad_mysvcs/screens/print_templates/print_templates_screen.dart';
 import 'package:rad_mysvcs/services/permissions_service.dart';
 import 'package:rad_mysvcs/services/provider_service.dart';
@@ -407,6 +414,117 @@ void main() {
       PermissionsService.debugSet(isEmployee: true, permissions: {'subscribers.view': true});
       await open(t);
       expect(find.text('تصميم الوصل يغيّره صاحب الحساب'), findsOneWidget);
+      await simDrain(t);
+    });
+  });
+
+  group('٣. الحاسبة: الأعمدة من عرض الشاشة لا النافذة', () {
+    late SimServer server;
+    setUpAll(simSetUpAll);
+    setUp(() async {
+      server = await simSetUp();
+      ReceiptSettingsApi.clearCache();
+      PermissionsService.debugSet(isEmployee: false);
+      AppPlatform.debugIsDesktop = true;
+    });
+    tearDown(() {
+      AppPlatform.debugIsDesktop = null;
+      PermissionsService.debugReset();
+      ReceiptSettingsApi.clearCache();
+    });
+
+    /// كغلاف الحاسبة (desktop_shell.dart `_content`): النافذة = المحتوى + القائمة الجانبيّة ٢٧٢ + ١٦، والشاشة في منطقة
+    /// المحتوى — MediaQuery بعرضها وDesktopScope وDeskZoom ومكدّس القسم.
+    Future<void> openDesk(WidgetTester t, double content) async {
+      server.reply('GET', '/api/v2/receipt-settings', 200, {'success': true, 'data': _row()});
+      await pumpSim(
+        t,
+        SimVariant(content + 272 + 16, dark: false),
+        settle: false,
+        home: (_) => Builder(
+          builder: (context) {
+            final mq = MediaQuery.of(context);
+            return Row(
+              children: [
+                const SizedBox(width: 272),
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, c) => Align(
+                      alignment: Alignment.topCenter,
+                      child: SizedBox(
+                        width: content,
+                        height: c.maxHeight,
+                        child: MediaQuery(
+                          data: mq.copyWith(size: Size(content, c.maxHeight), padding: EdgeInsets.zero),
+                          child: DesktopScope(
+                            child: DeskZoom(
+                              scale: 1,
+                              child: Navigator(
+                                onGenerateRoute: (_) =>
+                                    MaterialPageRoute(builder: (_) => const PrintTemplatesScreen(canRaster: false)),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+      await t.pump(const Duration(milliseconds: 300));
+      await t.pumpAndSettle();
+    }
+
+    double previewWidth(WidgetTester t) => t.getSize(find.byType(PreviewPane)).width;
+
+    for (final c in [
+      (content: 736.0, three: false, label: 'نافذة ١٠٢٤ (محتوى ٧٣٦): الخصائص مكان القائمة'),
+      (content: 960.0, three: false, label: 'نصف شاشة ١٩٢٠ (محتوى ٩٦٠): الخصائص مكان القائمة'),
+      (content: 1264.0, three: true, label: 'محتوى ١٢٦٤: ثلاثة أعمدة'),
+    ]) {
+      testWidgets('${c.label} — بلا فيضان، والمعاينة ظاهرة', (t) async {
+        await openDesk(t, c.content);
+        expect(DesktopLayout.wide(t.element(find.byType(PrintTemplatesScreen))), isTrue);
+        expect(t.takeException(), isNull);
+        expect(previewWidth(t), greaterThanOrEqualTo(280));
+        expect(find.byType(ElementsTab).hitTestable(), findsOneWidget);
+
+        await t.tap(find.text('اسم المحلّ').first);
+        await t.pumpAndSettle();
+        expect(t.takeException(), isNull, reason: 'لا «RenderFlex overflowed» والخصائص مفتوحة');
+        expect(find.byType(DesignSheet), findsNothing, reason: 'عمودٌ بجانب المعاينة، لا ورقة');
+        expect(find.byType(ElementInspector).hitTestable(), findsOneWidget);
+        expect(previewWidth(t), greaterThanOrEqualTo(280), reason: 'المعاينة لا تختفي والخصائص مفتوحة');
+        expect(find.byType(ElementsTab).hitTestable(), c.three ? findsOneWidget : findsNothing);
+        expect(t.getSize(find.byType(ElementInspector)).width, lessThan(c.three ? 380 : 420));
+        expect(
+          previewWidth(t) + (c.three ? 420 + 380 + 2 : 420 + 1),
+          moreOrLessEquals(c.content),
+          reason: 'الأعمدة تملأ عرض المحتوى بالضبط',
+        );
+
+        await t.tap(find.byTooltip(c.three ? 'إغلاق' : 'رجوع للعناصر'));
+        await t.pumpAndSettle();
+        expect(find.byType(ElementInspector), findsNothing);
+        expect(find.byType(ElementsTab).hitTestable(), findsOneWidget);
+        expect(t.takeException(), isNull);
+        await simDrain(t);
+      });
+    }
+
+    testWidgets('محتوى أضيق من عمودين (٦٤٠): تخطيط الهاتف — المعاينة فوق بعرضها، والخصائص ورقة', (t) async {
+      await openDesk(t, 640);
+      expect(t.takeException(), isNull);
+      expect(previewWidth(t), 640);
+      await t.tap(find.text('اسم المحلّ').first);
+      await t.pumpAndSettle();
+      expect(find.byType(DesignSheet), findsOneWidget);
+      expect(find.byType(ElementInspector), findsOneWidget);
+      expect(t.takeException(), isNull);
       await simDrain(t);
     });
   });
