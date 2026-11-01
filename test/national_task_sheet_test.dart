@@ -28,7 +28,7 @@ Map<String, Object?> _lookups({bool beta = true, Object? caps = const {}, Map<St
         'can_write': canWrite,
         'beta': beta,
         'caps': caps,
-        'portal_locks': {'revenue': 'لا صلاحيّة «الإيرادات»', 'customer_wallet': null, 'sub_sessions': null, ...locks},
+        'portal_locks': {'revenue': 'لا صلاحيّة «الإيرادات»', 'sub_wallet': null, 'sub_sessions': null, ...locks},
       },
     };
 

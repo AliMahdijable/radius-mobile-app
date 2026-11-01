@@ -32,7 +32,7 @@ Map<String, Object?> _lookups({bool beta = true, Object? caps = const {}, Map<St
         'can_write': canWrite,
         'beta': beta,
         'caps': caps,
-        'portal_locks': {'revenue': 'لا صلاحيّة «الإيرادات»', 'customer_wallet': null, 'sub_sessions': null, ...locks},
+        'portal_locks': {'revenue': 'لا صلاحيّة «الإيرادات»', 'sub_wallet': null, 'sub_balance': null, 'sub_sessions': null, ...locks},
       },
     };
 
@@ -248,7 +248,8 @@ void main() {
     });
 
     testWidgets('الرصيد وحده مقفل (balance_locked) ⇒ «لا صلاحيّة» مكان الرقم، والحركات تظهر', (t) async {
-      server.reply('GET', '/api/v2/ftth/lookups', 200, _lookups());
+      // قفل الرصيد وحده (sub_balance) لا يقفل القسم — الحركات تُجلب
+      server.reply('GET', '/api/v2/ftth/lookups', 200, _lookups(locks: {'sub_balance': 'لا صلاحيّة «رصيد محفظة المشترك» في البوّابة'}));
       server.reply('GET', '$_base/wallet', 200,
           _page([_walletRow('PLAN_RENEW', -35000, '2026-10-21 10:00:00')], extra: {'balance': null, 'balance_locked': true}));
       await pumpExtras(t);
@@ -307,7 +308,10 @@ void main() {
     });
 
     testWidgets('ردٌّ مقفل من البوّابة ⇒ قفلٌ بعنوانه وسببه لا «إعادة»؛ وportal_locks ⇒ مقفلٌ بلا جلب', (t) async {
-      server.reply('GET', '/api/v2/ftth/lookups', 200, _lookups(locks: {'sub_sessions': 'لا صلاحيّة «سجلّ الجلسات» في البوّابة'}));
+      server.reply('GET', '/api/v2/ftth/lookups', 200, _lookups(locks: {
+        'sub_sessions': 'لا صلاحيّة «سجلّ الجلسات» في البوّابة',
+        'sub_wallet': 'لا صلاحيّة «محفظة المشترك» في البوّابة',
+      }));
       server.reply('GET', '$_base/tickets', 200, _locked(_lockMsg));
       await pumpExtras(t);
       await t.tap(find.text('التذاكر'));
@@ -320,6 +324,10 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('لا صلاحيّة «سجلّ الجلسات» في البوّابة'), findsOneWidget);
       expect(server.calls('GET', '$_base/sessions'), isEmpty);
+      await t.tap(find.text('المحفظة'));
+      await t.pumpAndSettle();
+      expect(find.text('لا صلاحيّة «محفظة المشترك» في البوّابة'), findsOneWidget);
+      expect(server.calls('GET', '$_base/wallet'), isEmpty);
     });
 
     testWidgets('خطأٌ عابر (FTTH_BUSY) ⇒ رسالته و«إعادة» تجلب من جديد', (t) async {

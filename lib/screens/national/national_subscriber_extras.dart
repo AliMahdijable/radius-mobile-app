@@ -52,9 +52,10 @@ extension on NationalSheetSection {
   List<String> get perms =>
       this == NationalSheetSection.wallet ? const ['reports.financial', 'subscribers.view_activity'] : const ['subscribers.view'];
 
-  /// مفتاح القسم في `portal_locks` (سبب القفل الجاهز من الخادم §2).
+  /// مفتاح القسم في `portal_locks` (سبب القفل الجاهز من الخادم §2). المحفظة: `sub_wallet` = حركاتها (القسم كلّه)؛ أمّا رصيدها وحده
+  /// (`sub_balance`) فلا يقفل القسم — الردّ نفسه يقول `balance_locked` والحركات تظهر.
   String get lockKey => switch (this) {
-        NationalSheetSection.wallet => 'customer_wallet',
+        NationalSheetSection.wallet => 'sub_wallet',
         NationalSheetSection.errors => 'sub_errors',
         NationalSheetSection.tickets => 'sub_tickets',
         NationalSheetSection.tasks => 'sub_tasks',
