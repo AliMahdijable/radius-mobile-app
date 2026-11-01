@@ -55,6 +55,9 @@ class ReceiptSettings {
     this.sectionTitleUnderline = true,
     this.lineHeight = 1.5,
     this.design,
+    this.paperSize = 'pos',
+    this.updatedAt,
+    this.raw,
   });
 
   final String? shopName;
@@ -115,6 +118,17 @@ class ReceiptSettings {
 
   /// التصميم كما حفظه المصمّم (`data.design`: مفاتيح v1 و`layout`) — يقرؤه المحلِّل ([ReceiptResolver]) بدلالات الموقع.
   final Map<String, dynamic>? design;
+
+  /// نوع الورق المحفوظ (`paper_size`: `pos` أو `a4`) — يكتبه المصمّم مع الأعمدة كلّها (عمودٌ غائب يعيده الخادم `pos`).
+  /// الطباعة ما زالت بإعداد الجهاز («الطابعة الافتراضية»).
+  final String paperSize;
+
+  /// ختم آخر حفظ (`updated_at` نصّاً كما أعاده الخادم) — يعود مع الحفظ (`if_updated_at`) فلا يمحو جهازٌ آخر أو صفحةٌ
+  /// قديمة تصميماً أحدث منه (409). null = خادمٌ أقدم أو لا صفّ بعد.
+  final String? updatedAt;
+
+  /// `data` كما أعادها الخادم بلا الشعار — المصمّم يرقّع التصميم الخامّ ويحفظ الأعمدة كلّها منه.
+  final Map<String, dynamic>? raw;
 
   /// «تصميم الوصل» v2 — `null` = طريق v1 (كلّ التصاميم قبل ١ نوفمبر، وكلّ تصميمٍ بلا `layout`).
   ReceiptLayout? get layout => ReceiptLayout.fromJson(design?['layout']);
@@ -188,7 +202,10 @@ class ReceiptSettings {
   }
 
   /// من `data` في ردّ الخادم. صفّ لم يُحفظ بعد يأتي بقيمٍ فارغة (لا خطأ).
-  static ReceiptSettings fromJson(Map<String, dynamic> j) {
+  ///
+  /// [logo] بايتات الشعار مفكوكةً سلفاً (مسوّدة المصمّم تُبنى مع كلّ تعديل — لا يُفكّ الشعار كلّ مرّة)؛ بلاها من
+  /// `logo_data`.
+  static ReceiptSettings fromJson(Map<String, dynamic> j, {Uint8List? logo}) {
     final design = j['design'];
     bool flag(String k) =>
         design is Map ? (design[k] == null ? true : design[k] == true) : true;
@@ -213,7 +230,7 @@ class ReceiptSettings {
       shopAddress: _str(j['shop_address']),
       shopPhone: _str(j['shop_phone']),
       footerText: _str(j['footer_text']),
-      logo: decodeLogo(j['logo_data']),
+      logo: logo ?? decodeLogo(j['logo_data']),
       showQr: on(j['show_qr'], fallback: true),
       autoPrint: on(j['auto_print'], fallback: false),
       paperWidthMm: width == null ? 80 : width.toDouble().clamp(50, 120).toDouble(),
@@ -241,6 +258,9 @@ class ReceiptSettings {
       sectionTitleUnderline: flag('section_title_underline'),
       lineHeight: dim('line_height', 1.5, 1, 2.2),
       design: design is Map ? Map<String, dynamic>.from(design) : null,
+      paperSize: j['paper_size'] == 'a4' ? 'a4' : 'pos',
+      updatedAt: _str(j['updated_at']),
+      raw: Map<String, dynamic>.from(j)..remove('logo_data'),
     );
   }
 
@@ -295,6 +315,149 @@ class ReceiptSettingsApi {
     }
   }
 
+  /// المصمّم: جديدٌ دائماً للشركة **المفتوحة** (في «كل الشركات» لا يوجَّه — الحفظ لها وحدها في الخادم أيضاً)، وفشلٌ بنصٍّ
+  /// يُعرض لا null. ويحدّث مخبأ الطباعة.
+  static Future<ReceiptDesignLoad> fetchRaw() async {
+    try {
+      final r = await ApiClient.dio.get<dynamic>(
+        '/api/v2/receipt-settings',
+        options: Options(receiveTimeout: const Duration(seconds: 12)),
+      );
+      final body = r.data;
+      final data = body is Map ? body['data'] : null;
+      if (body is! Map || body['success'] != true || data is! Map) {
+        final m = body is Map ? body['message'] : null;
+        return ReceiptDesignLoad.failed(m is String && m.trim().isNotEmpty ? m.trim() : 'تعذّر جلب تصميم الوصل');
+      }
+      final value = ReceiptSettings.fromJson(Map<String, dynamic>.from(data));
+      final adminId = await AuthStorage.readAdminId();
+      if (adminId != null && adminId.isNotEmpty) _cache = (adminId: adminId, at: DateTime.now(), value: value);
+      return ReceiptDesignLoad.ok(value);
+    } on DioException catch (e) {
+      if (kDebugMode) debugPrint('[ReceiptSettingsApi] fetchRaw: ${e.type}');
+      return const ReceiptDesignLoad.failed('تعذّر جلب تصميم الوصل — تحقّق من الاتصال ثمّ أعد المحاولة');
+    } catch (e) {
+      if (kDebugMode) debugPrint('[ReceiptSettingsApi] fetchRaw: $e');
+      return const ReceiptDesignLoad.failed('تعذّر جلب تصميم الوصل');
+    }
+  }
+
+  /// `POST /api/v2/receipt-settings` — المصمّم يرسل الأعمدة السبعة كلّها (الغائب يمحوه الخادم أو يعيده افتراضيّاً)،
+  /// والتصميم كاملاً، و`if_updated_at`، **بلا الشعار** (يبقى المحفوظ). الرفض بنصّه ورمزه ومساره (400)، والتعارض (409)،
+  /// والطلب الكبير (413). النجاح يُسقط مخبأ الطباعة فيُطبع الوصل التالي بالجديد.
+  static Future<ReceiptSaveResult> save(Map<String, dynamic> body) async {
+    try {
+      final r = await ApiClient.dio.post<dynamic>(
+        '/api/v2/receipt-settings',
+        data: body,
+        options: Options(sendTimeout: const Duration(seconds: 20), receiveTimeout: const Duration(seconds: 20)),
+      );
+      final status = r.statusCode ?? 0;
+      final m = r.data is Map ? Map<String, dynamic>.from(r.data as Map) : const <String, dynamic>{};
+      if (status >= 200 && status < 300 && m['success'] == true) {
+        clearCache();
+        final design = m['design'];
+        final at = m['updated_at'];
+        return ReceiptSaveResult(
+          ok: true,
+          status: status,
+          message: _text(m['message']) ?? 'تمّ حفظ تصميم الوصل',
+          design: design is Map ? Map<String, dynamic>.from(design) : null,
+          hasDesign: m.containsKey('design'),
+          updatedAt: at,
+          hasUpdatedAt: m.containsKey('updated_at'),
+        );
+      }
+      final code = _text(m['code']);
+      return ReceiptSaveResult(
+        ok: false,
+        status: status,
+        code: code,
+        path: _text(m['path']),
+        message: _text(m['message']) ?? _defaultError(status, code),
+      );
+    } on DioException catch (e) {
+      if (kDebugMode) debugPrint('[ReceiptSettingsApi] save: ${e.type} ${e.response?.statusCode}');
+      final status = e.response?.statusCode;
+      return ReceiptSaveResult(
+        ok: false,
+        status: status,
+        message: status == null ? 'تعذّر الحفظ — تحقّق من الاتصال ثمّ أعد المحاولة' : _defaultError(status, null),
+      );
+    } catch (e) {
+      if (kDebugMode) debugPrint('[ReceiptSettingsApi] save: $e');
+      return const ReceiptSaveResult(ok: false, message: 'تعذّر الحفظ — أعد المحاولة');
+    }
+  }
+
+  static String? _text(Object? v) => v is String && v.trim().isNotEmpty ? v.trim() : null;
+
+  /// نصّ الرفض حين لا يرسل الخادم نصّاً (خادمٌ أقدم، أو 413 من محلّل الطلب قبل المعالج).
+  static String _defaultError(int status, String? code) {
+    if (code == 'STALE_DESIGN') return 'تغيّر تصميم الوصل من جهازٍ آخر بعد فتحك له — حدّث ثمّ أعد تعديلك';
+    if (code == 'LAYOUT_NEWER') return 'هذا التصميم صُنع بالمصمّم الجديد — حدّث ثمّ احفظ';
+    return switch (status) {
+      413 => 'الطلب أكبر من المسموح — صغّر الشعار ثمّ احفظ',
+      403 => 'ليس لديك صلاحيّة لتعديل تصميم الوصل',
+      409 => 'تغيّر تصميم الوصل من جهازٍ آخر بعد فتحك له — حدّث ثمّ أعد تعديلك',
+      >= 500 => 'تعذّر الحفظ من الخادم — أعد المحاولة',
+      _ => 'تعذّر حفظ تصميم الوصل',
+    };
+  }
+
   @visibleForTesting
   static void clearCache() => _cache = null;
+}
+
+/// جلب المصمّم: الإعدادات أو نصّ الفشل.
+@immutable
+class ReceiptDesignLoad {
+  const ReceiptDesignLoad.ok(ReceiptSettings this.settings) : error = null;
+  const ReceiptDesignLoad.failed(String this.error) : settings = null;
+
+  final ReceiptSettings? settings;
+  final String? error;
+}
+
+/// نتيجة حفظ المصمّم.
+@immutable
+class ReceiptSaveResult {
+  const ReceiptSaveResult({
+    required this.ok,
+    required this.message,
+    this.status,
+    this.code,
+    this.path,
+    this.design,
+    this.hasDesign = false,
+    this.updatedAt,
+    this.hasUpdatedAt = false,
+  });
+
+  final bool ok;
+
+  /// null = لا ردّ (الشبكة).
+  final int? status;
+  final String message;
+
+  /// `LAYOUT_*` · `STALE_DESIGN` · `LAYOUT_NEWER` · `BODY_TOO_BIG` …
+  final String? code;
+
+  /// موضع الرفض في التصميم (`fields.username.pt`) — 400 وحده.
+  final String? path;
+
+  /// التصميم كما حُفظ (ردّ الخادم).
+  final Map<String, dynamic>? design;
+
+  /// الردّ يحمل `design` (حتّى null = حُذف التصميم).
+  final bool hasDesign;
+
+  /// ختم الحفظ الجديد كما أعاده الخادم (يُرسل كما هو مع الحفظ التالي).
+  final Object? updatedAt;
+
+  /// الردّ يحمل `updated_at` (خادمٌ يعرف بروتوكول التعارض).
+  final bool hasUpdatedAt;
+
+  /// تعارضٌ مع حفظٍ أحدث (جهازٌ آخر أو المصمّم الجديد) — يُعرض «تحديث».
+  bool get conflict => status == 409;
 }

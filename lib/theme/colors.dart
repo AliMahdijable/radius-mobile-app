@@ -270,6 +270,9 @@ class AppColors {
   static const Color onBrandMint = Color(0xFF6EE7A8); // نقطة حيّة + واتساب
   static const Color onBrandDanger = Color(0xFFFFC9C3); // قيمة الدين
 
+  /// ورق الوصل في معاينة «تصميم الوصل» — أبيض في الوضعين: صورة ما يخرج من الطابعة لا سطحٌ من الواجهة.
+  static const Color paper = Color(0xFFFFFFFF);
+
   // ══════════════════ الطبقة المعتّمة ══════════════════
   // مبنيّة على #121614 لا على أسود صافٍ — `Colors.black.withOpacity`
   // لن تطابقها. على الداكن تُرفع إلى .62 وإلّا ضاع الفصل.

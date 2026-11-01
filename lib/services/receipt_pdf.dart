@@ -170,11 +170,24 @@ class ReceiptPdf {
   /// الانتهاء كما يعرضه الموقع: أوّل ١٦ حرفاً («2026-11-24 18:30»).
   static String expiry(String s) => s.length > 16 ? s.substring(0, 16) : s;
 
+  /// ضغط محتوى PDF (الافتراضيّ كما كان). بصمات الوصولات (`test/receipt_fingerprint_test.dart`) تبنيها بلا ضغط —
+  /// فرقٌ في المحتوى نفسه لا في خوارزميّة الضغط.
+  @visibleForTesting
+  static bool debugCompress = true;
+
   /// [theme] للاختبار وحده (خطٌّ بلا تحميل أصول)؛ بلاه خطّ التطبيق.
   ///
   /// [paper] ورق الطابعة كما أرسله النظام قبل الطباعة (ويندوز، [PrintOutput.bytesFor]): الوصل يُرسم بعرضه،
   /// وحواشيه لا تقلّ عن حواشي الطابعة غير المطبوعة — كما يرسم المتصفّح وصل الموقع. بلاه عرض المصمّم.
-  static Future<PrintDoc> build(ReceiptDoc d, {required bool a4, pw.ThemeData? theme, PdfPageFormat? paper}) async {
+  ///
+  /// [compress] للمعاينة (بلا ضغط: أسرع، والرسم نفسه)؛ بلاه [debugCompress].
+  static Future<PrintDoc> build(
+    ReceiptDoc d, {
+    required bool a4,
+    pw.ThemeData? theme,
+    PdfPageFormat? paper,
+    bool? compress,
+  }) async {
     final th = theme ?? await PdfFonts.theme();
     final look = d.look;
     const mm = PdfPageFormat.mm;
@@ -194,7 +207,7 @@ class ReceiptPdf {
           );
     final name = d.sale != null ? 'Sale-${d.sale!.id}' : '${d.kind.name}-${d.username}';
     Future<PrintDoc> render(bool withLogo) {
-      final doc = pw.Document(theme: th, title: d.title, creator: 'MyServices Pro');
+      final doc = pw.Document(theme: th, title: d.title, creator: 'MyServices Pro', compress: compress ?? debugCompress);
       pw.MemoryImage? logo;
       if (withLogo && look.showLogo && look.logo != null) {
         logo = pw.MemoryImage(look.logo!);
@@ -210,7 +223,9 @@ class ReceiptPdf {
         doc,
         name: name,
         requested: requested,
-        refit: paper != null ? null : (printer) async => (await build(d, a4: a4, theme: th, paper: printer)).bytes,
+        refit: paper != null
+            ? null
+            : (printer) async => (await build(d, a4: a4, theme: th, paper: printer, compress: compress)).bytes,
       );
     }
 
