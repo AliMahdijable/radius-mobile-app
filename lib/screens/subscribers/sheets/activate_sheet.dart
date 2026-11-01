@@ -1071,8 +1071,9 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     return n.isEmpty || n.length > 300 ? null : n;
   }
 
-  /// الدفع بالبطاقة متاحٌ لهذا الحساب (الخادم يقول card_payment) وفي شركته نفسها — لا في «كل الشركات» (كالموقع).
-  bool get _cardPayAvailable => _isKit && _data?['card_payment'] == true && widget.sub.companyKey == null;
+  /// الدفع بالبطاقة متاحٌ لهذا الحساب (الخادم يقول card_payment) — ومن «كل الشركات» أيضاً (١ نوفمبر، المالك: «بعض وكلاء الوطني
+  /// مايطلعلهم التفعيل ماستر كارد»): البدء والحالة بـMergedOps.run الموجَّه، والخادم يوجّه card-orders/:id (08db690) كالموقع (6631f71).
+  bool get _cardPayAvailable => _isKit && _data?['card_payment'] == true;
   bool get _kitCard => _cardPayAvailable && _payByCard;
 
   /// «الدفع لـ<الشركة>»: «محفظتي» (من رصيدك في البوّابة) أو «بطاقة» (ماستر كارد/فيزا — صفحة دفع).
