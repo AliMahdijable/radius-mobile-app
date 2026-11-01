@@ -216,7 +216,7 @@
   "print_templates": {
     "title": "Print Templates",
     "a4_section": "A4 Template",
-    "pos_section": "POS Template (80mm)",
+    "pos_section": "POS Template",
     "a4_default_name": "A4 Invoice",
     "pos_default_name": "POS Receipt",
     "active": "Active",
@@ -228,7 +228,7 @@
     "preview_hint": "Preview the final receipt — you can print from the preview screen if you want",
     "print_cancelled": "Print cancelled",
     "el_banner_title": "Designed on the web dashboard",
-    "el_banner_body": "Design the receipt on the web dashboard → “Print templates”: the app prints with the shop name, address, phone, logo and footer saved there. Colors, fonts and margins apply to web printing only.",
+    "el_banner_body": "Design the receipt on the web dashboard → “Print templates”: the app prints with what you save there — shop name, address, phone, logo and footer, the shown sections and fields with their labels, extra texts, and the receipt size and dimensions. The font family applies to web printing only, and thermal receipts print in black.",
     "el_section": "Receipt details",
     "el_card_title": "App receipt",
     "el_customized": "Saved on the web",
@@ -244,7 +244,15 @@
     "qr": "QR code",
     "auto_print": "Auto print",
     "on": "On",
-    "off": "Off"
+    "off": "Off",
+    "size": "Receipt size",
+    "size_normal": "Normal",
+    "size_compact": "Compact",
+    "size_tight": "Extra compact",
+    "size_custom": "Custom",
+    "hidden_fields": "Hidden fields",
+    "custom_texts": "Extra texts",
+    "none": "None"
   },
   "printer": {
     "receipt": "Print receipt",
@@ -883,7 +891,9 @@
     "from": "From",
     "to": "To",
     "mute_deferred_hint": "Notifications sent during this window are deferred until the mute ends. They aren't lost — they arrive in a batch once quiet hours end.",
-    "saving": "Saving…"
+    "saving": "Saving…",
+    "national_ticket_label": "National project tickets",
+    "national_ticket_hint": "Alert when the company sends a new ticket to your page"
   },
   "wa": {
     "qr_not_ready": "QR isn't ready yet — try again in a moment",
@@ -1160,7 +1170,8 @@
     "digest_expired_today": "Subscriptions expired today",
     "mgr_debt": "Sub-manager debt",
     "mgr_balance_update": "Manager balance update",
-    "other": "Notification"
+    "other": "Notification",
+    "national_ticket": "National project ticket"
   },
   "conn_alerts": {
     "title": "Connection alerts",

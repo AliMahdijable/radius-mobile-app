@@ -15,6 +15,7 @@ class NotificationPrefs {
     required this.pushNearExpiry,
     required this.pushExpiredToday,
     required this.pushManagerDebt,
+    this.pushWataniTicket = true,
     required this.quietHoursEnabled,
     required this.quietHoursStart,
     required this.quietHoursEnd,
@@ -23,6 +24,9 @@ class NotificationPrefs {
   final bool pushNearExpiry;
   final bool pushExpiredToday;
   final bool pushManagerDebt;
+
+  /// «تذاكر المشروع الوطني» (push_watani_ticket، الخادم ١ نوفمبر) — غائبٌ من خادمٍ أقدم ⇒ مفعّل.
+  final bool pushWataniTicket;
   final bool quietHoursEnabled;
   final String quietHoursStart;
   final String quietHoursEnd;
@@ -42,6 +46,7 @@ class NotificationPrefs {
     bool? pushNearExpiry,
     bool? pushExpiredToday,
     bool? pushManagerDebt,
+    bool? pushWataniTicket,
     bool? quietHoursEnabled,
     String? quietHoursStart,
     String? quietHoursEnd,
@@ -50,6 +55,7 @@ class NotificationPrefs {
         pushNearExpiry: pushNearExpiry ?? this.pushNearExpiry,
         pushExpiredToday: pushExpiredToday ?? this.pushExpiredToday,
         pushManagerDebt: pushManagerDebt ?? this.pushManagerDebt,
+        pushWataniTicket: pushWataniTicket ?? this.pushWataniTicket,
         quietHoursEnabled: quietHoursEnabled ?? this.quietHoursEnabled,
         quietHoursStart: quietHoursStart ?? this.quietHoursStart,
         quietHoursEnd: quietHoursEnd ?? this.quietHoursEnd,
@@ -74,6 +80,7 @@ class NotificationPrefs {
       pushNearExpiry: b(j['push_near_expiry'], true),
       pushExpiredToday: b(j['push_expired_today'], true),
       pushManagerDebt: b(j['push_manager_debt'], true),
+      pushWataniTicket: b(j['push_watani_ticket'], true),
       quietHoursEnabled: b(j['quiet_hours_enabled'], false),
       quietHoursStart: t(j['quiet_hours_start'], '22:00'),
       quietHoursEnd: t(j['quiet_hours_end'], '08:00'),
@@ -114,6 +121,7 @@ class NotificationsApi {
           'pushNearExpiry': p.pushNearExpiry,
           'pushExpiredToday': p.pushExpiredToday,
           'pushManagerDebt': p.pushManagerDebt,
+          'pushWataniTicket': p.pushWataniTicket,
           'quietHoursEnabled': p.quietHoursEnabled,
           'quietHoursStart': p.quietHoursStart,
           'quietHoursEnd': p.quietHoursEnd,

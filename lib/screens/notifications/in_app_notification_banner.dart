@@ -206,6 +206,8 @@ class _BannerCardState extends State<_BannerCard>
         return _M(LucideIcons.creditCard, AppColors.error, 'دين مدير فرعي');
       case NotificationKind.managerBalance:
         return _M(LucideIcons.banknote, AppColors.success, 'تحديث رصيد مدير');
+      case NotificationKind.nationalTicket:
+        return _M(LucideIcons.headset, AppColors.info, 'تذكرة من المشروع الوطني');
       case NotificationKind.other:
         return _M(LucideIcons.bell, AppColors.brand, 'إشعار');
     }
