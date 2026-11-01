@@ -512,13 +512,21 @@ class NationalPaged<T> {
     loading = false;
     final d = r.data;
     if (!r.ok) {
+      // فشلٌ بعد «جارٍ» (مراجعة ١ نوفمبر): pending يُطفأ وإلّا بقي «المزيد» معطّلاً/دوّاراً بلا رسالةٍ ولا «إعادة»
+      pending = false;
       error = r.error;
     } else if (d!.pending) {
       pending = true;
       raw = d.raw;
+      if (_polls >= 15) {
+        // نفدت الأسئلة (~٦٠ث) والصفحة ما زالت «جارٍ» ⇒ خطأٌ بـ«إعادة» لا انتظارٌ بلا نهاية
+        pending = false;
+        error = 'لم تصل من بوّابة المشروع الوطني بعد — أعد المحاولة';
+      }
     } else {
       pending = false;
       error = null;
+      _polls = 0;
       rows.addAll(d.items);
       page = want;
       total = d.total;

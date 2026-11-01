@@ -358,14 +358,18 @@ class NationalSheetApi {
     }
   }
 
-  /// للاختبار: ينسى ما عرف.
-  @visibleForTesting
-  static void debugReset() {
+  /// يُنسى بالخروج (SessionManager.clearAllSessionData) — «refused» حالُ الموظّف الداخل لا الحساب: صاحبه على الجهاز نفسه بعده
+  /// لا يرثها خمس دقائق (مراجعة ١ نوفمبر).
+  static void reset() {
     _beta = null;
     _betaAt = null;
     _betaOwner = null;
     _betaInflight = null;
   }
+
+  /// للاختبار: ينسى ما عرف.
+  @visibleForTesting
+  static void debugReset() => reset();
 
   /* ───────────── صفحة المشترك (S1، §3) ───────────── */
 

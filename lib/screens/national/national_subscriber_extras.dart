@@ -332,11 +332,12 @@ class _NationalSubscriberExtrasState extends State<NationalSubscriberExtras> {
           if (i > 0) Divider(height: 1, color: AppColors.divider),
           rows[i],
         ],
-        if (p.hasMore)
+        // فشل الصفحة التالية يُقال بـ«إعادة» ولو بقيت صفحاتٌ أخرى (مراجعة ١ نوفمبر: كان «المزيد» يعلق بلا رسالة)
+        if (p.error != null)
+          _ErrorRow(text: p.error!, onRetry: () => _next(s))
+        else if (p.hasMore)
           // والصفحة التالية «جارٍ» (pending، تُسأل وحدها بعد ٤ث): دوّارةٌ لا نداءٌ ثانٍ لها
-          _MoreRow(loading: p.loading || p.pending, shown: p.rows.length, total: p.total, unit: s.unit, onTap: () => _next(s))
-        else if (p.error != null)
-          _ErrorRow(text: p.error!, onRetry: () => _next(s)),
+          _MoreRow(loading: p.loading || p.pending, shown: p.rows.length, total: p.total, unit: s.unit, onTap: () => _next(s)),
       ],
     );
   }

@@ -410,13 +410,15 @@ class _NationalRequestCommentsState extends State<NationalRequestComments> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           NationalCommentList(comments: p.rows, emptyText: 'لا توجد تعليقات على الطلب حتى الآن.'),
-          if (p.hasMore)
+          if (p.hasMore || p.error != null)
             Align(
               alignment: AlignmentDirectional.centerStart,
               child: TextButton(
-                // والصفحة التالية «جارٍ» (pending، تُسأل وحدها بعد ٤ث): لا نداءٌ ثانٍ لها
+                // والصفحة التالية «جارٍ» (pending، تُسأل وحدها بعد ٤ث): لا نداءٌ ثانٍ لها؛ وفشلها «إعادة» بنصّه (مراجعة ١ نوفمبر)
                 onPressed: p.loading || p.pending ? null : _next,
-                child: Text(p.total == null ? 'المزيد' : 'المزيد (${p.rows.length} من ${p.total})'),
+                child: Text(p.error != null
+                    ? 'تعذّر جلب المزيد — إعادة'
+                    : (p.total == null ? 'المزيد' : 'المزيد (${p.rows.length} من ${p.total})')),
               ),
             ),
         ],
