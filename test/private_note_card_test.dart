@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -9,8 +11,9 @@ import 'package:rad_mysvcs/services/provider_service.dart';
 import 'sim_el/sim_harness.dart';
 
 /// «ملاحظة» خاصّة بكرت المشترك (المالك ٣١ أكتوبر: «زر ملاحظات خاص بنظامنا… تنعرض بكارت المشترك فقط، لكل الساسات»):
-/// الملاحظة تُقرأ وتظهر بنصّها ومن كتب، و«تعديل» يحفظها (PUT)، والنصّ الفارغ أو «حذف» يحذفها (DELETE)، و«إضافة ملاحظة» حين لا
-/// ملاحظة، والموظّف بلا subscribers.private_note يرى الزرّ مقفلاً بمكانه.
+/// الملاحظة تُقرأ وتظهر بنصّها ومن كتب، و«تعديل» يحفظها (PUT)، والنصّ الفارغ أو «حذف» يحذفها (DELETE). بلا ملاحظة لا كرت (المالك
+/// ١ نوفمبر: «اضافة الملاحظة حولها بالمزيد») — الإضافة من «المزيد» بمتحكّم الشاشة، والموظّف بلا subscribers.private_note يراها
+/// هناك مقفلة.
 const _v = SimVariant(390, dark: false);
 const _path = '/api/v2/subscribers/900003/private-note';
 
@@ -38,8 +41,9 @@ void main() {
     ProviderService.debugSet(null);
   });
 
-  Future<void> open(WidgetTester t) async {
-    await pumpSim(t, _v, home: (_) => Scaffold(body: SingleChildScrollView(child: PrivateNoteCard(sub: _sub()))));
+  Future<void> open(WidgetTester t, {PrivateNoteController? controller}) async {
+    await pumpSim(t, _v,
+        home: (_) => Scaffold(body: SingleChildScrollView(child: PrivateNoteCard(sub: _sub(), controller: controller))));
   }
 
   testWidgets('ملاحظةٌ قائمة: نصّها ومن كتب، و«تعديل» يحفظ النصّ الجديد', (t) async {
@@ -66,7 +70,7 @@ void main() {
     await simDrain(t);
   });
 
-  testWidgets('بلا ملاحظة: «إضافة ملاحظة»، وحذفٌ من الورقة يُرسل DELETE', (t) async {
+  testWidgets('بلا ملاحظة: لا كرت ولا زرّ؛ الإضافة بالمتحكّم (المزيد) تُظهره، وحذفٌ من الورقة يُرسل DELETE ويخفيه', (t) async {
     var note = '';
     server.on('GET', _path, (_) => SimReply(200, {'success': true, 'data': note.isEmpty ? null : {'note': note}}));
     server.on('PUT', _path, (o) {
@@ -77,10 +81,15 @@ void main() {
       note = '';
       return const SimReply(200, {'success': true, 'data': null, 'removed': 1});
     });
-    await open(t);
-    expect(find.text('إضافة ملاحظة'), findsOneWidget);
+    final c = PrivateNoteController(_sub());
+    addTearDown(c.dispose);
+    await open(t, controller: c);
+    expect(find.text('إضافة ملاحظة'), findsNothing, reason: 'الإضافة انتقلت إلى «المزيد»');
+    expect(find.text('ملاحظة'), findsNothing);
+    expect(c.ready, isTrue);
+    expect(c.note, isNull);
 
-    await t.tap(find.text('إضافة ملاحظة'));
+    unawaited(c.edit(t.element(find.byType(PrivateNoteCard))));
     await t.pumpAndSettle();
     await t.enterText(find.byType(TextField), 'اتّصل قبل الزيارة');
     await t.pumpAndSettle();
@@ -96,16 +105,17 @@ void main() {
     await t.tap(find.byIcon(LucideIcons.trash2));
     await t.pumpAndSettle();
     expect(server.calls('DELETE', _path), hasLength(1));
-    expect(find.text('إضافة ملاحظة'), findsOneWidget);
+    expect(find.text('اتّصل قبل الزيارة'), findsNothing);
+    expect(c.note, isNull);
     await simDrain(t);
   });
 
-  testWidgets('الموظّف بلا مفتاحها: الزرّ بمكانه مقفلاً ولا ورقة', (t) async {
+  testWidgets('الموظّف بلا مفتاحها: الملاحظة تُقرأ و«تعديل» مقفل ولا ورقة', (t) async {
     PermissionsService.debugSet(isEmployee: true, permissions: const {'subscribers.view': true});
-    server.reply('GET', _path, 200, {'success': true, 'data': null});
+    server.reply('GET', _path, 200, {'success': true, 'data': {'note': 'يدفع آخر الشهر'}});
     await open(t);
-    expect(find.text('إضافة ملاحظة — لا صلاحيّة'), findsOneWidget);
-    await t.tap(find.text('إضافة ملاحظة — لا صلاحيّة'));
+    expect(find.text('يدفع آخر الشهر'), findsOneWidget);
+    await t.tap(find.text('تعديل'));
     await t.pumpAndSettle();
     expect(find.byType(TextField), findsNothing);
     await simDrain(t);

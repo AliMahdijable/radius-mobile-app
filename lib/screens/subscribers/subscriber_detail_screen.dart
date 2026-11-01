@@ -85,6 +85,20 @@ class SubscriberDetailScreen extends StatefulWidget {
 
 class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   late Subscriber sub = widget.sub;
+
+  /// ملاحظة المشترك الخاصّة: حالها هنا لا في كرتها — القائمة تطوي الكرت خارج الشاشة، و«المزيد» يقرأ منها «إضافة» أو «تعديل».
+  /// متحكّمٌ لكلّ مشترك (شركته + رقمه).
+  PrivateNoteController? _note;
+  String? _noteId;
+  PrivateNoteController get _privateNote {
+    final id = '${sub.companyKey ?? ''}-${sub.idx}';
+    if (_note == null || _noteId != id) {
+      _note?.dispose();
+      _noteId = id;
+      _note = PrivateNoteController(sub)..load();
+    }
+    return _note!;
+  }
   bool _disconnecting = false;
   bool _alerting = false;
   bool _toggling = false;
@@ -200,6 +214,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   void dispose() {
     SubscriberEvents.dataChanged.removeListener(_onDataChanged);
     AppResumedSignal.tick.removeListener(_onDataChanged);
+    _note?.dispose();
     super.dispose();
   }
 
@@ -384,8 +399,13 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                       sub: sub,
                       onDrawn: (cfg) => _drawnConfig = cfg,
                     ),
-                    // «ملاحظة» خاصّة على خادمنا (المالك ٣١ أكتوبر: «تنعرض بكارت المشترك فقط، لكل الساسات»).
-                    PrivateNoteCard(key: ValueKey('private-note-${sub.companyKey ?? ''}-${sub.idx}'), sub: sub),
+                    // «ملاحظة» خاصّة على خادمنا (المالك ٣١ أكتوبر: «تنعرض بكارت المشترك فقط، لكل الساسات») — القائمة وحدها
+                    // هنا؛ «إضافة ملاحظة» في «المزيد» (المالك ١ نوفمبر: «اضافة الملاحظة حولها بالمزيد»).
+                    PrivateNoteCard(
+                      key: ValueKey('private-note-${sub.companyKey ?? ''}-${sub.idx}'),
+                      sub: sub,
+                      controller: _privateNote,
+                    ),
                     // معلومات الجهاز (ONT/UBNT) — تظهر لأي مشترك غير معطَّل
                     // ولم ينتهِ اشتراكه. الـcard يجرّب:
                     //   1) SAS4 IP لو موجود
@@ -1117,6 +1137,20 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           ),
       ]),
       SubActionGroup('subscribers.group_records'.tr(), [
+        // «ملاحظة» خاصّة (المالك ١ نوفمبر: «اضافة الملاحظة حولها بالمزيد») — كانت زرّاً عريضاً بكرتٍ بحاله أعلى الصفحة.
+        // قبل جلبها (أو إن تعذّر) معطّلة: حفظٌ على ملاحظةٍ لم تُقرأ قد يمحوها.
+        if (sub.idx != null && _shows('subscribers.private_note'))
+          SubAction(
+            icon: LucideIcons.notebookPen,
+            label: _privateNote.note != null ? 'تعديل الملاحظة' : 'إضافة ملاحظة',
+            locked: _locked('subscribers.private_note'),
+            meta: _locked('subscribers.private_note') || _privateNote.ready
+                ? null
+                : (_privateNote.failed ? 'غير متاحة الآن' : 'جارٍ التحميل…'),
+            onTap: _locked('subscribers.private_note') || !_privateNote.ready
+                ? null
+                : () => _privateNote.edit(context),
+          ),
         // ⚠️ لا شرطَ اتّصال.
         //
         // 🐛 بلاغ ٢٠٢٦-٠٩-٠٢: «الاستهلاك مفروض يظهر حتّى لو طافي
