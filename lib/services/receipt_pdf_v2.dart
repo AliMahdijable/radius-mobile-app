@@ -191,12 +191,13 @@ class ReceiptV2Body {
   /// لون «خطّ تحته» (v3): أسود على الكاشير و«أسود فقط»، ورماديّ على A4.
   PdfColor get _sepColor => !a4 || _mono ? PdfColors.black : PdfColors.grey500;
 
-  /// «خطّ تحته» لكتلة/سطر (v3): حشوة ١ ملم ثمّ خطّ ٠٫٧٥ نقطة. null/none ⇒ العنصر كما هو.
+  /// «خطّ تحته» لكتلة/سطر (v3): حشوة ١ ملم ثمّ خطّ ٠٫٧٥ نقطة — يزيد الطول بهما معاً كحدّ CSS في الموقع (إطار مكتبة PDF
+  /// يُرسم داخل الحشوة فيُضاف سُمكه إليها). null/none ⇒ العنصر كما هو.
   pw.Widget _underline(String? sep, pw.Widget child) {
     final style = _sepStyle(sep);
     if (style == null) return child;
     return pw.Container(
-      padding: const pw.EdgeInsets.only(bottom: 1 * _mm),
+      padding: const pw.EdgeInsets.only(bottom: 1 * _mm + 0.75),
       decoration: pw.BoxDecoration(
         border: pw.Border(bottom: pw.BorderSide(color: _sepColor, width: 0.75, style: style)),
       ),

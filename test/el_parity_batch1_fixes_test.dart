@@ -513,7 +513,8 @@ void main() {
       await visualTearDown();
     }
 
-    testWidgets('🚨 مالك ايرث لنك: بيانات وصل الويب لا «لم يُنشَأ بعد»', (t) async {
+    // «تصميم الوصل» (١ نوفمبر): الشاشة صارت مصمّماً كاملاً — المعاينة والعناصر من وصل الويب نفسه، لا قوالب الكلاسيك.
+    testWidgets('🚨 مالك ايرث لنك: مصمّم وصل الويب لا «لم يُنشَأ بعد» — وبلا QR على وصله', (t) async {
       final proxy = await openScreen(t, s1Owner, receipt: {
         'shop_name': 'مكتب النجف',
         'shop_address': 'شارع الكوفة',
@@ -522,14 +523,10 @@ void main() {
         'logo_data': 'data:image/png;base64,$_png1x1',
         'design': {'show_footer': true},
       });
-      expect(find.text('مكتب النجف'), findsOneWidget);
-      expect(find.text('محفوظ من الويب'), findsOneWidget);
-      expect(find.text('شارع الكوفة'), findsOneWidget);
-      expect(simText('07701234567'), findsOneWidget);
-      expect(find.text('شكراً لاختياركم خدماتنا'), findsOneWidget,
-          reason: 'لا تذييل مكتوب ⇒ سطر الشكر كالموقع');
+      expect(find.text('تصميم الوصل'), findsOneWidget);
+      expect(find.text('اسم المحلّ'), findsOneWidget);
+      expect(find.text('العنوان والهاتف'), findsOneWidget);
       expect(find.text('لم يُنشَأ بعد'), findsNothing);
-      expect(find.text('التصميم من لوحة الويب'), findsOneWidget);
       expect(find.text('التحرير من الويب فقط'), findsNothing);
       expect(proxy.paths.any((p) => p.contains('/api/print-templates')), isFalse,
           reason: 'لا قوالب print_templates لايرث لنك');
@@ -537,34 +534,36 @@ void main() {
       await drain(t);
     });
 
-    testWidgets('ايرث لنك بلا تخصيص: «لم يُخصَّص بعد» وسببه', (t) async {
+    testWidgets('ايرث لنك بلا تخصيص: المصمّم بالتصميم الافتراضيّ', (t) async {
       await openScreen(t, s1Owner, receipt: {'shop_name': null});
-      expect(find.text('لم يُخصَّص بعد'), findsOneWidget);
-      expect(
-          find.text('يُطبع الوصل باسم حسابك حتى تحفظ بيانات المحلّ من لوحة الويب.'),
-          findsOneWidget);
+      expect(find.text('اسم المحلّ'), findsOneWidget);
+      expect(find.text('حفظ'), findsNothing, reason: 'لا تعديل بعد');
+      expect(t.takeException(), isNull);
       await drain(t);
     });
 
-    testWidgets('ايرث لنك وتعذّر الجلب: «تعذّر الجلب» لا شاشة فارغة', (t) async {
+    testWidgets('ايرث لنك وتعذّر الجلب: سببه و«إعادة المحاولة» لا شاشة فارغة', (t) async {
       await openScreen(t, s1Owner); // الوكيل يردّ null ⇒ فشل
-      expect(find.text('تعذّر الجلب'), findsOneWidget);
-      expect(find.text('معاينة'), findsOneWidget, reason: 'المعاينة باسم الحساب');
+      expect(find.textContaining('تعذّر جلب تصميم الوصل'), findsOneWidget);
+      expect(find.text('إعادة المحاولة'), findsOneWidget);
       await drain(t);
     });
 
-    testWidgets('مالك ساس: بيانات وصل الويب كذلك — كما يطبع الموقع', (t) async {
+    testWidgets('مالك ساس: المصمّم من وصل الويب — كما يطبع الموقع', (t) async {
       final proxy = await openScreen(t, s1bSasOwner, receipt: {
         'shop_name': 'مكتب الكرادة',
         'auto_print': 1,
         'show_qr': 1,
       });
-      expect(find.text('مكتب الكرادة'), findsOneWidget);
+      expect(find.text('تصميم الوصل'), findsOneWidget);
       expect(find.text('قالب A4'), findsNothing);
-      expect(find.text('طباعة تلقائيّة'), findsOneWidget);
       expect(proxy.paths.contains('/api/v2/receipt-settings'), isTrue);
       expect(proxy.paths.any((p) => p.contains('/api/print-templates')), isFalse,
           reason: 'قوالب الكلاسيك لا يقرؤها الموقع ولا التطبيق');
+      await t.tap(find.text('الورق والخطّ'));
+      await settle(t, seconds: 1);
+      await t.scrollUntilVisible(find.text('طباعة الوصل تلقائياً'), 240, scrollable: find.byType(Scrollable).last);
+      expect(find.text('طباعة الوصل تلقائياً'), findsOneWidget);
       await drain(t);
     });
   });

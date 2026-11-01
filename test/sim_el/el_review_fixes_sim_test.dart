@@ -110,9 +110,11 @@ void main() {
         'design': {'show_logo': true, 'show_shop_info': true},
       },
     });
-    await pumpSim(t, v, home: (_) => const PrintTemplatesScreen());
-    expect(find.text('مكتب النور للإنترنت'), findsOneWidget);
-    expect(find.text('محفوظ من الويب'), findsOneWidget);
+    // «تصميم الوصل» (١ نوفمبر): مصمّمٌ كامل — المعاينة فوق والعناصر تحتها، وبلا QR على وصل ايرث لنك.
+    await pumpSim(t, v, home: (_) => const PrintTemplatesScreen(canRaster: false));
+    expect(find.text('تصميم الوصل'), findsOneWidget);
+    expect(find.text('اسم المحلّ'), findsOneWidget);
+    expect(find.text('العنوان والهاتف'), findsOneWidget);
     await simCheck(t, v, _receipt, 'customized');
   });
 
@@ -122,8 +124,9 @@ void main() {
       'success': true,
       'data': {'shop_name': null, 'design': null},
     });
-    await pumpSim(t, v, home: (_) => const PrintTemplatesScreen());
-    expect(find.text('لم يُخصَّص بعد'), findsOneWidget);
+    await pumpSim(t, v, home: (_) => const PrintTemplatesScreen(canRaster: false));
+    expect(find.text('اسم المحلّ'), findsOneWidget);
+    expect(find.text('حفظ'), findsNothing);
     await simCheck(t, v, _receipt, 'not_customized');
   });
 }

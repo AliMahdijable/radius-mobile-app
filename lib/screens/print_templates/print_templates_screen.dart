@@ -1,419 +1,469 @@
-import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../api/api_client.dart';
-import '../../api/receipt_settings_api.dart';
-import '../../core/util/bidi.dart';
+import '../../core/platform/desktop_layout.dart';
+import '../../core/widgets/app_sheet.dart';
+import '../../core/widgets/design_sheet.dart';
+import '../../core/widgets/permission_locked.dart';
 import '../../core/widgets/print_feedback.dart';
+import '../../core/widgets/sheet_scaffold.dart';
+import '../../services/active_company.dart';
+import '../../services/merged_mode.dart';
+import '../../services/permissions_service.dart';
+import '../../services/print_output.dart';
+import '../../services/print_prefs.dart';
+import '../../services/provider_service.dart';
+import '../../services/receipt_layout.dart';
+import '../../services/receipt_pdf.dart';
+import '../../services/receipt_pdf_v2.dart';
+import '../../services/receipt_preview.dart';
+import '../../services/receipt_samples.dart';
 import '../../services/receipt_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../desktop/desk_widgets.dart';
+import 'designer/controls.dart';
+import 'designer/designer_controller.dart';
+import 'designer/designer_elements.dart';
+import 'designer/element_inspector_sheet.dart';
+import 'designer/elements_tab.dart';
+import 'designer/paper_tab.dart';
+import 'designer/preview_pane.dart';
+import 'designer/texts_tab.dart';
 
-/// شاشة "قوالب الطباعة" — **read-only** في التطبيق، والتصميم من الويب
-/// (`/v2/print-templates` ← `receipt_settings`).
+/// «تصميم الوصل» في التطبيق — مصمّمٌ كامل (spec §4.4)، كان عرضاً للقراءة. المالك يجرّب على الهاتف:
+/// المعاينة فوق (صورة الطباعة نفسها، ٤٢٪ من الشاشة)، وتحتها «العناصر» (كلّ ما في الوصل بترتيبه — النقر يفتح خصائصه في
+/// ورقةٍ لا تغطّي المعاينة)، و«الورق والخطّ»، و«النصوص». «حفظ» يظهر حين يتغيّر شيء، و«تراجع» خطوةً خطوة.
 ///
-/// تعرض إعدادات وصل الموقع التي يطبع بها التطبيق كلّ وصولاته لكلّ المزوّدين منذ ٢٤ أكتوبر
-/// ([ReceiptService]) — كانت للساس قوالب `print_templates` الكلاسيكيّة التي لا يقرؤها الموقع،
-/// فيخرج وصل التطبيق غير وصل الموقع. وزرّ المعاينة يطبع وصلاً تجريبيّاً بها.
+/// القفل (لا إخفاء): موظّفٌ بلا `print_templates.edit` يرى التصميم والمعاينة وأنواعها، والتعديل مقفل («ليس لديك صلاحيّة»)؛
+/// وموظّف شركةٍ لا تُمنح فيها الصلاحيّة (ايرث لنك، فايبر اكس، المُضافة) يرى «يغيّره صاحب الحساب».
+/// في «كل الشركات» يعدّل الشركة المفتوحة وحدها (الحفظ لا يُوجَّه) — واسمها تحت العنوان.
 class PrintTemplatesScreen extends StatefulWidget {
-  const PrintTemplatesScreen({super.key});
+  const PrintTemplatesScreen({super.key, this.controller, this.preview, this.canRaster});
+
+  /// للاختبار.
+  final ReceiptDesignController? controller;
+  final ReceiptPreviewController? preview;
+  final bool? canRaster;
 
   @override
   State<PrintTemplatesScreen> createState() => _PrintTemplatesScreenState();
 }
 
 class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
-  bool _loading = true;
-
-  /// إعدادات وصل الويب، و`null` إن تعذّر جلبها.
-  ReceiptSettings? _receipt;
+  late final ReceiptDesignController _c = widget.controller ?? ReceiptDesignController();
+  late final ReceiptPreviewController _p = widget.preview ?? ReceiptPreviewController();
+  ReceiptKind _kind = ReceiptKind.activation;
+  int _tab = 0;
+  bool? _canRaster;
+  ({String shop, String? issuer}) _id = (shop: receiptDefaultShopName, issuer: null);
+  String? _selected;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _canRaster = widget.canRaster;
+    _c.addListener(_changed);
+    _c.load();
+    ReceiptService.identityFor(null).then((id) {
+      if (mounted) setState(() => _id = id);
+    }).catchError((Object _) {});
+    if (_canRaster == null) {
+      receiptCanRaster().then((v) {
+        if (mounted) setState(() => _canRaster = v);
+      });
+    }
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
-    // جديدٌ دائماً (والطباعة تجده مخبّأً بعدها).
-    final r = await ReceiptSettingsApi.fetch(force: true);
+  @override
+  void dispose() {
+    _c.removeListener(_changed);
+    if (widget.controller == null) _c.dispose();
+    if (widget.preview == null) _p.dispose();
+    super.dispose();
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  /// موظّف شركةٍ لا تُمنح فيها صلاحيّة التصميم أصلاً.
+  bool get _ownerOnly => !permShown(const ['print_templates.edit']);
+  bool get _locked => _ownerOnly || !Perms.has('print_templates.edit');
+  String? get _lockMessage => _ownerOnly ? 'تصميم الوصل يغيّره صاحب الحساب' : null;
+
+  /// رسالة القفل (سياق الشاشة فوق [DesignerLockScope]).
+  void _deny() => showNoPermission(context, action: true, message: _lockMessage);
+
+  /// QR على وصل الساس وحده — ايرث لنك وفايبر اكس والشركات المُضافة بلا رابطٍ على الوصل.
+  bool get _qrAvailable =>
+      !(ProviderService.isEarthlink ||
+          ActiveCompany.current?.sasCode == 'earthlink' ||
+          ProviderService.isFiberx ||
+          ProviderService.isKit);
+
+  Map<String, String> _sampleVars() {
+    final look = _c.draft;
+    final doc = receiptSampleDoc(_kind, look: look, shopName: look.shopName ?? _id.shop, issuer: _id.issuer, qr: false);
+    final currency = ReceiptLayout.normalize(look.design?['layout']).currency;
+    return receiptVars(receiptInputOf(doc, hasLogo: false), currency);
+  }
+
+  // ───────────────────────── الإجراءات ─────────────────────────
+
+  Future<void> _save() async {
+    if (_locked) return _deny();
+    final unknown = receiptLayoutUnknownVars(_c.compactLayout);
+    if (unknown.isNotEmpty) {
+      final u = unknown.first;
+      return showSheetSnack(
+        context,
+        'متغيّرٌ غير معروف ${u.vars.map((v) => '{$v}').join('، ')} في ${u.path} — اختره من «إدراج متغيّر»',
+        isError: true,
+      );
+    }
+    final r = await _c.save();
     if (!mounted) return;
-    setState(() {
-      _receipt = r;
-      _loading = false;
-    });
+    if (r.ok) {
+      HapticFeedback.mediumImpact();
+      return showSheetSnack(context, r.message, isError: r.notSaved.isNotEmpty);
+    }
+    if (r.conflict) {
+      final reload = await showConfirmSheet(
+        context,
+        title: 'تغيّر التصميم',
+        message: r.message,
+        confirmLabel: 'تحديث (تضيع تعديلاتك)',
+        icon: LucideIcons.refreshCw,
+        tone: AppTone.warning,
+      );
+      if (reload == true && mounted) await _c.load();
+      return;
+    }
+    return showSheetSnack(context, r.message, isError: true);
   }
 
-  /// وصلٌ تجريبيّ بتصميم الحساب وبالشكل المختار في «الطابعة الافتراضية» — كما يخرج بعد التفعيل.
-  Future<void> _preview() async {
-    final r = await ReceiptService.printSample(_receipt);
+  Future<void> _reset() async {
+    if (_locked) return _deny();
+    final ok = await showConfirmSheet(
+      context,
+      title: 'إعادة للافتراضي',
+      message: 'يرجع الوصل لشكله الافتراضيّ — الأحجام والمحاذاة والترتيب والنصوص. اسم المحلّ وعنوانه وهاتفه والذيل كما هي، '
+          'ولا يُحفظ شيءٌ قبل «حفظ».',
+      confirmLabel: 'إعادة',
+      icon: LucideIcons.rotateCcw,
+      tone: AppTone.warning,
+    );
+    if (ok == true) _c.resetToDefault();
+  }
+
+  /// «اطبع تجربة»: المسوّدة الحاليّة لنوع المعاينة على طابعة الجهاز.
+  Future<void> _printSample() async {
+    final look = _c.draft;
+    final doc = receiptSampleDoc(
+      _kind,
+      look: look,
+      shopName: look.shopName ?? _id.shop,
+      issuer: _id.issuer,
+      qr: _qrAvailable && look.showQr,
+    );
+    PrintResult r;
+    try {
+      final pdf = await ReceiptPdf.build(doc, a4: PrintPrefs.currentTemplateType == 'a4');
+      r = await PrintOutput.send(pdf);
+    } catch (e) {
+      r = PrintResult.failed('$e');
+    }
     if (mounted) showPrintResult(context, r);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: deskPageBar(
-        context,
-        mobile: AppBar(
-          backgroundColor: AppColors.surface,
-          elevation: 0,
-          title: Text(
-            'print_templates.title'.tr(),
-            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16),
-          ),
-          iconTheme: IconThemeData(color: AppColors.textHi),
-          actions: [
-            IconButton(
-              tooltip: 'common.refresh'.tr(),
-              icon:
-                  Icon(LucideIcons.refreshCw, size: 18, color: AppColors.textHi),
-              onPressed: _loading ? null : _load,
-            ),
+  Future<void> _templates() async {
+    if (_locked) return _deny();
+    final id = await showAppSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: AppColors.scrim,
+      builder: (ctx) => DesignSheet(
+        header: SheetHeaderBar(
+          icon: LucideIcons.layoutTemplate,
+          title: 'قوالب جاهزة',
+          subtitle: 'الورق والحجم والكثافة — الحقول والنصوص كما هي',
+          onClose: () => Navigator.of(ctx).pop(),
+        ),
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final id in receiptTemplateIds)
+              Padding(
+                padding: const EdgeInsets.only(bottom: Sp.sm),
+                child: DesignerChip(label: receiptTemplates[id]!.label, selected: false, onTap: () => Navigator.of(ctx).pop(id)),
+              ),
           ],
         ),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              color: AppColors.brand,
-              onRefresh: _load,
-              child: ListView(
-                padding:
-                    const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.huge),
+    );
+    if (id != null) _c.applyTemplate(id);
+  }
+
+  void _open(String id) {
+    if (DesktopLayout.wide(context)) {
+      setState(() => _selected = id);
+      return;
+    }
+    showElementInspector(
+      context,
+      controller: _c,
+      id: id,
+      kind: _kind.name,
+      sampleVars: _sampleVars(),
+      locked: _locked,
+      lockMessage: _lockMessage,
+    );
+  }
+
+  Future<bool> _confirmLeave() async {
+    if (!_c.dirty) return true;
+    final ok = await showConfirmSheet(
+      context,
+      title: 'تعديلاتٌ لم تُحفظ',
+      message: 'الخروج الآن يترك تعديلاتك بلا حفظ.',
+      confirmLabel: 'خروج بلا حفظ',
+      icon: LucideIcons.logOut,
+      tone: AppTone.warning,
+    );
+    return ok == true;
+  }
+
+  // ───────────────────────── البناء ─────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final wide = DesktopLayout.wide(context);
+    return PopScope(
+      canPop: !_c.dirty,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        if (await _confirmLeave() && context.mounted) Navigator.of(context).pop();
+      },
+      child: DesignerLockScope(
+        locked: _locked,
+        message: _lockMessage,
+        child: Scaffold(
+          backgroundColor: AppColors.bg,
+          appBar: deskPageBar(context, mobile: _appBar()),
+          body: _body(wide),
+        ),
+      ),
+    );
+  }
+
+  AppBar _appBar() {
+    final merged = MergedMode.active.value ? ActiveCompany.current?.label : null;
+    // القفل سطرٌ تحت العنوان (لا شريطٌ زائد): «عرضٌ فقط» أو «يغيّره صاحب الحساب».
+    final lockLine = _locked && !_c.loading ? (_lockMessage ?? 'عرضٌ فقط — لا صلاحيّة لتعديل التصميم') : null;
+    return AppBar(
+      backgroundColor: AppColors.surface,
+      elevation: 0,
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('تصميم الوصل', style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
+          if (lockLine != null)
+            GestureDetector(
+              onTap: _deny,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  _WebOnlyBanner(
-                    title: 'print_templates.el_banner_title'.tr(),
-                    body: 'print_templates.el_banner_body'.tr(),
-                    copyPath: '/v2/print-templates',
-                  ),
-                  const SizedBox(height: Sp.lg),
-                  _sectionLabel(
-                    'print_templates.el_section'.tr(),
-                    LucideIcons.receipt,
-                  ),
-                  const SizedBox(height: Sp.sm),
-                  _WebReceiptCard(
-                    settings: _receipt,
-                    onPreview: _preview,
+                  const PermLockIcon(size: 11),
+                  const SizedBox(width: Sp.xs),
+                  Flexible(
+                    child: Text(lockLine, style: AppType.muted(), maxLines: 1, overflow: TextOverflow.ellipsis),
                   ),
                 ],
               ),
+            )
+          else if (merged != null && merged.isNotEmpty)
+            Text('لشركة $merged', style: AppType.muted(), maxLines: 1, overflow: TextOverflow.ellipsis),
+        ],
+      ),
+      iconTheme: IconThemeData(color: AppColors.textHi),
+      actions: [
+        if (!_c.loading && _c.loadError == null) ...[
+          IconButton(
+            tooltip: 'تراجع',
+            icon: Icon(LucideIcons.undo2, size: 18, color: _c.canUndo && !_locked ? AppColors.textHi : AppColors.textHint),
+            onPressed: _c.canUndo && !_locked ? _c.undo : null,
+          ),
+          if (_locked)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Sp.sm),
+              child: InkWell(
+                onTap: _deny,
+                child: PermLockBadge(child: Icon(LucideIcons.save, size: 18, color: AppColors.textLow)),
+              ),
+            )
+          else if (_c.dirty || _c.saving)
+            Padding(
+              padding: const EdgeInsetsDirectional.only(end: Sp.xs),
+              child: TextButton(
+                onPressed: _c.saving ? null : _save,
+                style: TextButton.styleFrom(
+                  backgroundColor: AppColors.brand,
+                  foregroundColor: AppColors.onBrand,
+                  minimumSize: const Size(0, H.chipSm),
+                  padding: const EdgeInsets.symmetric(horizontal: Sp.md),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.sm)),
+                ),
+                child: _c.saving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onBrand),
+                      )
+                    : Text('حفظ', style: AppType.bodyStrong(color: AppColors.onBrand)),
+              ),
             ),
-    );
-  }
-}
-
-Widget _sectionLabel(String text, IconData icon) => Row(
-      children: [
-        Icon(icon, size: 14, color: AppColors.brand),
-        const SizedBox(width: Sp.xs),
-        Text(text,
-            style: AppType.title(color: AppColors.textHi)
-                .copyWith(fontSize: 12.5)),
+          PopupMenuButton<String>(
+            tooltip: 'المزيد',
+            icon: Icon(LucideIcons.ellipsisVertical, size: 18, color: AppColors.textHi),
+            color: AppColors.surface,
+            onSelected: (v) => switch (v) {
+              'reset' => _reset(),
+              'print' => _printSample(),
+              'templates' => _templates(),
+              _ => null,
+            },
+            itemBuilder: (_) => [
+              _menuItem('templates', LucideIcons.layoutTemplate, 'قوالب جاهزة'),
+              _menuItem('print', LucideIcons.printer, 'اطبع تجربة'),
+              _menuItem('reset', LucideIcons.rotateCcw, 'إعادة للافتراضي'),
+            ],
+          ),
+        ],
       ],
     );
+  }
 
-class _WebOnlyBanner extends StatelessWidget {
-  // الافتراضيّات نصّ الساس ورابطه كما كانا.
-  const _WebOnlyBanner({
-    this.title,
-    this.body,
-    this.copyPath = '/v2/portal-settings',
-  });
-  final String? title;
-  final String? body;
-  final String copyPath;
+  PopupMenuItem<String> _menuItem(String v, IconData icon, String label) => PopupMenuItem(
+        value: v,
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: AppColors.textMid),
+            const SizedBox(width: Sp.sm),
+            Text(label, style: AppType.body(color: AppColors.textHi)),
+          ],
+        ),
+      );
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(Sp.md),
-      decoration: BoxDecoration(
-        color: AppColors.brandSoftBg,
-        border: Border.all(color: AppColors.brandSoftBorder),
-        borderRadius: BorderRadius.circular(R.md),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+  Widget _body(bool wide) {
+    if (_c.loading) return const Center(child: CircularProgressIndicator());
+    if (_c.loadError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(Sp.xl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(LucideIcons.info, size: 14, color: AppColors.brand),
-              const SizedBox(width: Sp.sm),
-              Text(
-                title ?? 'print_templates.web_only_title'.tr(),
-                style: AppType.title(color: AppColors.brand)
-                    .copyWith(fontSize: 12.5),
+              Icon(LucideIcons.cloudOff, size: 28, color: AppColors.textLow),
+              const SizedBox(height: Sp.sm),
+              Text(_c.loadError!, textAlign: TextAlign.center, style: AppType.body(color: AppColors.textMid)),
+              const SizedBox(height: Sp.md),
+              TextButton.icon(
+                onPressed: _c.load,
+                icon: Icon(LucideIcons.refreshCw, size: 16, color: AppColors.brand),
+                label: Text('إعادة المحاولة', style: AppType.bodyStrong(color: AppColors.brand)),
               ),
             ],
           ),
-          const SizedBox(height: Sp.sm),
-          Text(
-            body ?? 'print_templates.web_only_body'.tr(),
-            style: AppType.subtitle(color: AppColors.textMid)
-                .copyWith(fontSize: 11.5, height: 1.6),
-          ),
-          const SizedBox(height: Sp.sm),
-          GestureDetector(
-            onTap: () async {
-              // رابط ويب الخادم نفسه (Pro ⇒ pro.mysvcs.net) لا الكلاسيك المثبَّت سابقاً.
-              await Clipboard.setData(
-                  ClipboardData(text: '${ApiClient.baseUrl}$copyPath'));
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('common.copied'.tr()),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              }
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: Sp.md, vertical: Sp.sm),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                border: Border.all(color: AppColors.brandSoftBorder),
-                borderRadius: BorderRadius.circular(R.sm),
-              ),
-              child: Row(
-                children: [
-                  Icon(LucideIcons.link, size: 12, color: AppColors.brand),
-                  const SizedBox(width: Sp.sm),
-                  Expanded(
-                    child: Text(
-                      '${Uri.parse(ApiClient.baseUrl).host}/v2',
-                      style: AppType.bodyBold(color: AppColors.brand),
-                    ),
-                  ),
-                  Icon(LucideIcons.copy,
-                      size: 12, color: AppColors.brandSoftBorder),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      );
+    }
+    final preview = PreviewPane(
+      controller: _c,
+      preview: _p,
+      kind: _kind,
+      onKind: (k) => setState(() => _kind = k),
+      shopName: _id.shop,
+      issuer: _id.issuer,
+      qrAvailable: _qrAvailable,
+      canRaster: _canRaster ?? true,
+      onPrintSample: _printSample,
     );
-  }
-}
-
-
-
-/// إعدادات وصل الويب كما يطبع بها التطبيق — للقراءة، والتعديل من المصمّم على الويب.
-/// [settings] `null` ← تعذّر الجلب (يُطبع باسم الحساب).
-class _WebReceiptCard extends StatelessWidget {
-  const _WebReceiptCard({required this.settings, required this.onPreview});
-  final ReceiptSettings? settings;
-  final VoidCallback onPreview;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    final s = settings;
-    final custom = s != null && s.isCustomized;
-    final chip = s == null
-        ? 'print_templates.el_failed'.tr()
-        : custom
-            ? 'print_templates.el_customized'.tr()
-            : 'print_templates.el_not_customized'.tr();
-    final hidden = 'print_templates.el_hidden'.tr();
-    final logo = s?.logo;
-    return Container(
-      padding: const EdgeInsets.all(Sp.md),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(R.md),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: AppColors.brandSoftBg,
-                  borderRadius: BorderRadius.circular(R.sm),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: logo != null && s!.showLogo
-                    ? Image.memory(logo, fit: BoxFit.contain)
-                    : Icon(LucideIcons.receipt,
-                        color: AppColors.brand, size: 22),
-              ),
-              const SizedBox(width: Sp.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      s?.shopName ?? 'print_templates.el_card_title'.tr(),
-                      style: AppType.title(color: AppColors.textHi)
-                          .copyWith(fontSize: 14),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: Sp.sm, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: custom
-                              ? AppColors.brandSoftBg
-                              : AppColors.textMid.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(R.pill),
-                        ),
-                        child: Text(
-                          chip,
-                          style: AppType.button(
-                            color: custom ? AppColors.brand : AppColors.textMid,
-                          ).copyWith(fontSize: 10.5),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Material(
-                color: AppColors.brandSoftBg,
-                borderRadius: BorderRadius.circular(R.sm),
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    onPreview();
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: Sp.md, vertical: 8),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(LucideIcons.eye, size: 14, color: AppColors.brand),
-                        const SizedBox(width: 4),
-                        Text(
-                          'print_templates.preview'.tr(),
-                          style: AppType.button(color: AppColors.brand)
-                              .copyWith(fontSize: 11),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
+    final tabs = Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.xs),
+          child: SheetSegmented(
+            labels: const ['العناصر', 'الورق والخطّ', 'النصوص'],
+            selectedIndex: _tab,
+            onSelect: (i) => setState(() => _tab = i),
           ),
-          if (custom) ...[
-            const SizedBox(height: Sp.md),
-            _WebReceiptRow(
-              label: 'print_templates.el_address'.tr(),
-              value: s.showShopInfo ? s.shopAddress : hidden,
-            ),
-            _WebReceiptRow(
-              label: 'print_templates.el_phone'.tr(),
-              value: s.showShopInfo ? s.shopPhone : hidden,
-              ltr: s.showShopInfo,
-            ),
-            _WebReceiptRow(
-              label: 'print_templates.el_footer'.tr(),
-              value: !s.showFooter
-                  ? hidden
-                  : (s.footerText ?? 'print_templates.el_default_footer'.tr()),
-            ),
-          ] else ...[
-            const SizedBox(height: Sp.sm),
-            Text(
-              (s == null
-                      ? 'print_templates.el_failed_hint'
-                      : 'print_templates.el_not_customized_hint')
-                  .tr(),
-              style: AppType.subtitle(color: AppColors.textMid)
-                  .copyWith(fontSize: 11.5, height: 1.6),
-            ),
-          ],
-          // ما يحكم الطباعة نفسها (لا الشكل): رمز QR والطباعة بعد العمليّة بلا سؤال.
-          if (s != null) ...[
-            if (!custom) const SizedBox(height: Sp.sm),
-            _WebReceiptRow(
-              label: 'print_templates.qr'.tr(),
-              value: (s.showQr ? 'print_templates.on' : 'print_templates.off').tr(),
-            ),
-            _WebReceiptRow(
-              label: 'print_templates.auto_print'.tr(),
-              value: (s.autoPrint ? 'print_templates.on' : 'print_templates.off').tr(),
-            ),
-            // «تصميم الوصل» v2 (١ نوفمبر): حجمه («مخصّص» حين لا يطابق مقاساً) وما أُخفي وما أُضيف — التعديل من الموقع.
-            _WebReceiptRow(
-              label: 'print_templates.size'.tr(),
-              value: 'print_templates.size_${s.preset ?? 'custom'}'.tr(),
-            ),
-            _WebReceiptRow(
-              label: 'print_templates.hidden_fields'.tr(),
-              value: s.hiddenFields == 0 ? 'print_templates.none'.tr() : '${s.hiddenFields}',
-            ),
-            _WebReceiptRow(
-              label: 'print_templates.custom_texts'.tr(),
-              value: s.customTexts == 0 ? 'print_templates.none'.tr() : '${s.customTexts}',
-            ),
-          ],
-        ],
-      ),
+        ),
+        Expanded(child: _tabBody(wide)),
+      ],
     );
-  }
-}
-
-class _WebReceiptRow extends StatelessWidget {
-  const _WebReceiptRow({
-    required this.label,
-    required this.value,
-    this.ltr = false,
-  });
-  final String label;
-  final String? value;
-
-  /// قيمةٌ لاتينيّة الاتّجاه (رقم الهاتف).
-  final bool ltr;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    final v = value?.trim() ?? '';
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    if (!wide) {
+      return LayoutBuilder(
+        builder: (context, box) => Column(
+          children: [
+            SizedBox(height: (box.maxHeight * 0.42).clamp(200.0, 520.0), child: preview),
+            Divider(height: 1, color: AppColors.border),
+            Expanded(child: tabs),
+          ],
+        ),
+      );
+    }
+    // الحاسبة: المعاينة والقائمة جنباً إلى جنب، والخصائص عمودٌ ثالث بدل الورقة.
+    final sel = _selected;
+    return Row(
+      children: [
+        Expanded(child: preview),
+        VerticalDivider(width: 1, color: AppColors.border),
+        SizedBox(width: 420, child: tabs),
+        if (sel != null && _tab == 0) ...[
+          VerticalDivider(width: 1, color: AppColors.border),
           SizedBox(
-            width: 72,
-            child: Text(label,
-                style: AppType.muted(color: AppColors.textMid)
-                    .copyWith(fontSize: 11.5)),
-          ),
-          const SizedBox(width: Sp.sm),
-          Expanded(
-            child: Text(
-              v.isEmpty ? '—' : (ltr ? iso(v) : v),
-              style: AppType.body(color: AppColors.textHi)
-                  .copyWith(fontSize: 12.5),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+            width: 380,
+            child: Column(
+              children: [
+                ListTile(
+                  title: Text(
+                    designerElementNames[sel] ?? sel,
+                    style: AppType.bodyStrong(color: AppColors.textHi),
+                  ),
+                  trailing: IconButton(
+                    icon: Icon(LucideIcons.x, size: 18, color: AppColors.textMid),
+                    onPressed: () => setState(() => _selected = null),
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(Sp.lg),
+                    child: ElementInspector(controller: _c, id: sel, kind: _kind.name, sampleVars: _sampleVars()),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
-      ),
+      ],
     );
   }
+
+  Widget _tabBody(bool wide) => switch (_tab) {
+        1 => PaperTab(controller: _c, qrAvailable: _qrAvailable),
+        2 => TextsTab(controller: _c, kind: _kind.name, sampleVars: _sampleVars()),
+        _ => ElementsTab(
+            controller: _c,
+            kind: _kind.name,
+            qrAvailable: _qrAvailable,
+            onOpen: _open,
+            selected: wide ? _selected : null,
+          ),
+      };
 }

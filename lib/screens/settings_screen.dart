@@ -368,9 +368,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // (١٤ أكتوبر) لأنّ بوّابة الخادم ابتلعت `/api/print-templates`؛
             // المعالج قاعدتنا وحدها فمُرِّر (تدقيق ١٨ أكتوبر، الدفعة ①).
             const SizedBox(height: Sp.xs),
+            // «تصميم الوصل» (١ نوفمبر): يُفتح للجميع — المعاينة للكلّ، والتعديل بـprint_templates.edit (قفلٌ لا إخفاء).
             _Row(
               icon: Icons.receipt_long_outlined,
               label: 'settings.print_templates'.tr(),
+              lockHint: !Perms.has('print_templates.edit'),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const PrintTemplatesScreen(),
@@ -983,10 +985,14 @@ class _Row extends StatelessWidget {
     this.trailing,
     this.onTap,
     this.locked = false,
+    this.lockHint = false,
   });
   final IconData icon;
   final String label;
   final String? trailing;
+
+  /// يُفتح ([onTap]) وبجانبه قفلٌ صغير: الشاشة للعرض وتعديلها مقفل (تصميم الوصل).
+  final bool lockHint;
 
   /// When non-null the row becomes an InkWell — section entries
   /// (واتساب / طباعة / مظهر / إلخ) use this; the about-version row
@@ -1028,6 +1034,10 @@ class _Row extends StatelessWidget {
                 style: AppType.muted(color: AppColors.textLow)
                     .copyWith(fontSize: 12.5)),
             const SizedBox(width: 6),
+          ],
+          if (lockHint) ...[
+            const PermLockIcon(size: 14),
+            const SizedBox(width: Sp.xs),
           ],
           if (onTap != null)
             Icon(Icons.chevron_left_rounded,
