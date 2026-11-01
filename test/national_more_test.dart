@@ -215,6 +215,87 @@ void main() {
     });
   });
 
+  group('صاحب الحساب والموظّف المرفوض (مراجعة ١ نوفمبر)', () {
+    Map<String, AppModule> mods() => {for (final m in buildAppModules()) m.id: m};
+    const fresh = {'national_sessions', 'national_team', 'national_reports', 'national_notes'};
+
+    /// قدرات صاحب حساب الوطنيّ كما يرسلها الخادم (providerKit canonicalPermissions): reports.sessions وsubscribers.edit false دائماً.
+    const kitOwnerCaps = {
+      'subscribers.view': true,
+      'reports.financial': true,
+      'reports.packages': true,
+      'reports.sessions': false,
+      'reports.manager_debts': false,
+      'subscribers.edit': false,
+      'employees.view': true,
+    };
+
+    test('مالكٌ مقيَّدٌ بقدرات الخادم (reports.sessions:false) ⇒ «الجلسات» و«تقارير البوّابة» والجرس مفتوحة — مفاتيح العقد §9 للموظّف وحده', () {
+      PermissionsService.debugSet(isEmployee: false, managerRestricted: true, managerCaps: kitOwnerCaps);
+      expect(Perms.has('reports.sessions'), isFalse, reason: 'القدرة نفسها تبقى false (لا تقرير جلسات الساس العامّ)');
+      final m = mods();
+      for (final id in fresh) {
+        expect(m[id], isNotNull, reason: id);
+        expect(m[id]!.isLocked, isFalse, reason: id);
+      }
+      // ولو حملت القدرات notifications.view false (خادمٌ لاحق) — المالك لا يُقفل بها
+      PermissionsService.debugSet(isEmployee: false, managerRestricted: true, managerCaps: {...kitOwnerCaps, 'notifications.view': false});
+      expect(mods()['national_notes']!.isLocked, isFalse);
+    });
+
+    testWidgets('«تقارير البوّابة» لمالكٍ مقيَّد (reports.sessions:false): «تقرير الجلسات» يُجلب ويُعرض لا «اطلبها من مديرك»', (t) async {
+      PermissionsService.debugSet(isEmployee: false, managerRestricted: true, managerCaps: kitOwnerCaps);
+      server.reply('GET', '/api/v2/ftth/reports/zones', 200, {
+        'success': true,
+        'data': const [],
+        'totals': {'total': 0, 'active': 0, 'expired': 0},
+      });
+      server.reply('GET', '/api/v2/ftth/reports/sessions', 200, {
+        'success': true,
+        'data': [
+          {'zone_id': 'FBG885-3', 'online': 41, 'offline': 7, 'total': 48},
+        ],
+        'totals': {'online': 41, 'offline': 7, 'total': 48},
+        'fetched_at': '2026-11-01 09:40:00',
+        'stale': false,
+      });
+      await pumpSim(t, _v, home: (_) => const NationalReportsScreen());
+      expect(server.calls('GET', '/api/v2/ftth/reports/sessions'), hasLength(1));
+      expect(find.text('لا صلاحيّة — اطلبها من مديرك'), findsNothing);
+      expect(find.text('41'), findsOneWidget);
+      expect(find.text('48'), findsOneWidget);
+      await simDrain(t);
+    });
+
+    test('موظّفٌ رفض الخادم سؤاله (lookups ⇒ 403 PERMISSION_DENIED): الأقسام بمكانها مقفلةً لا مخفيّة، والرفض جوابٌ يُحفظ', () async {
+      PermissionsService.debugSet(isEmployee: true, permissions: const {'subscribers.view_activity': true});
+      server.reply('GET', '/api/v2/ftth/lookups', 403,
+          {'success': false, 'code': 'PERMISSION_DENIED', 'message': 'تحتاج إحدى الصلاحيات: subscribers.view'});
+      NationalMoreState.reset();
+      await NationalMoreState.ensureFresh();
+      final c = NationalMoreState.gate.value;
+      expect((c?.refused, c?.beta, c?.shown), (true, false, true));
+      expect(NationalMoreState.shown, isTrue);
+      final m = mods();
+      for (final id in fresh) {
+        expect(m[id], isNotNull, reason: '$id مقفلٌ لا مخفيّ');
+        expect(m[id]!.isLocked, isTrue, reason: id);
+        expect(m[id]!.unavailable, isNull, reason: '$id — قفل الموظّف لا سبب البوّابة');
+      }
+      await NationalMoreState.ensureFresh();
+      expect(server.calls('GET', '/api/v2/ftth/lookups'), hasLength(1), reason: 'لا يُسأل كلّ ٤٥ث كالفشل');
+      // خطأٌ عابر لا يُعدّ رفضاً: لا أقسام (لا يُعرف)
+      server.reply('GET', '/api/v2/ftth/lookups', 503, {'success': false, 'code': 'FTTH_BUSY', 'message': 'مشغولة'});
+      expect(await NationalMoreApi.caps(), isNull);
+    });
+
+    test('NationalCaps.shown: مفتوحةٌ أو مرفوضة — والمطفأة وحدها لا تُعرض', () {
+      expect(const NationalCaps(beta: true).shown, isTrue);
+      expect(const NationalCaps(refused: true).shown, isTrue);
+      expect(const NationalCaps().shown, isFalse);
+    });
+  });
+
   group('التحليل', () {
     test('الجلسة: صفّ العقد، وغير المتّصل بلا آيبي ولا مدّة (null لا صفر)', () {
       final a = NationalSession.fromJson(_session(1));

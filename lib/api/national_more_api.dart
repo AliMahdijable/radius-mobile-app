@@ -15,7 +15,9 @@ import 'national_portal_api.dart';
 /// وقدرات مستخدم البوّابة (`caps` + `portal_locks` من current-user بالخادم): ما لا يملكه المستخدم الذي دخل به الوكيل يبقى بمكانه
 /// مقفلاً **بسببه** («لا صلاحيّة في البوّابة») لا «تعذّر» — ومنها «الإيرادات». المجهول (null) لا يُقفل شيئاً.
 ///
-/// الأقسام الجديدة خلف المفتاح التجريبيّ للحساب (`watani_beta`، مطفأٌ افتراضاً): `lookups.data.beta` true فتظهر، وإلّا لا تظهر.
+/// الأقسام الجديدة خلف مفتاح الحساب لأقسام البوّابة (`watani_sections`، نوع providerKit `sections` — منفصلٌ عن `watani_beta` الذي بقي
+/// لـ«تبديل الباقة» وحدها، قرار ١ نوفمبر؛ مطفأٌ افتراضاً): `lookups.data.beta` (الاسم بقي) true فتظهر، وإلّا لا تظهر — إلّا موظّفاً
+/// رفض الخادم سؤاله (403) فتبقى بمكانها مقفلةً بمفاتيحه ([NationalCaps.refused]).
 /// العقد: release_work/national_rest/contract.md (الخادم `server/watani/wataniPortalBeta.js`) — كاشٌ لكلّ حساب، وميزانيّة البوّابة
 /// المشتركة (≤٣٠ نداءً/د للخادم كلّه)؛ ما لا يُعرف يصل null ويُعرض «—» لا صفراً.
 
@@ -101,11 +103,18 @@ abstract final class NationalPerms {
 /// ما يقوله الخادم عن هذا الحساب في البوّابة (`lookups`): المفتاح التجريبيّ ([beta])، وقدرات مستخدم البوّابة ([caps]: الاسم ⇒
 /// يملك/لا؛ الغائب مجهول)، وأسباب القفل الجاهزة بالعربيّ ([locks] من `portal_locks`؛ الغائب/null متاحٌ أو مجهول).
 class NationalCaps {
-  const NationalCaps({this.beta = false, this.caps = const {}, this.locks = const {}, this.canWrite = false});
+  const NationalCaps({this.beta = false, this.caps = const {}, this.locks = const {}, this.canWrite = false, this.refused = false});
 
   final bool beta;
   final Map<String, bool> caps;
   final Map<String, String> locks;
+
+  /// موظّفٌ رفض الخادم سؤاله (`lookups` ⇒ 403 PERMISSION_DENIED: لا يملك أيّ مفتاحٍ من مفاتيح الأقسام — القرار ٤، ١ نوفمبر): لا نعرف
+  /// أهي مفتوحةٌ للحساب، فتبقى الأقسام **بمكانها مقفلةً بمفاتيحه** لا مخفيّة (المراجعة: كانت تختفي كلّها).
+  final bool refused;
+
+  /// تُعرض الأقسام الجديدة (مفتوحةً أو مقفلةً بمكانها).
+  bool get shown => beta || refused;
 
   /// الكتابة عبر البوّابة مفتوحةٌ للحساب (`watani_portal`).
   final bool canWrite;
@@ -172,6 +181,9 @@ class NationalMoreState {
   static bool get isNational => ProviderService.isKit && ProviderService.parentIsZone;
 
   static bool get beta => isNational && (gate.value?.beta ?? false);
+
+  /// الأقسام الجديدة تُعرض (مفتوحةً، أو مقفلةً بمكانها لموظّفٍ رفض الخادم سؤاله).
+  static bool get shown => isNational && (gate.value?.shown ?? false);
 
   static Future<void> ensureFresh({bool force = false}) {
     if (!isNational) return Future<void>.value();
@@ -560,9 +572,11 @@ class NationalMoreApi {
           ? NationalMoreResult.ok(_page(r.data!, map))
           : NationalMoreResult.fail(r.error, code: r.code, title: r.title, relogin: r.relogin);
 
-  /// المفتاح التجريبيّ وقدرات مستخدم البوّابة وأسباب القفل — من `lookups` (كاشٌ ستّ ساعات بالخادم). null = تعذّر الآن.
+  /// المفتاح التجريبيّ وقدرات مستخدم البوّابة وأسباب القفل — من `lookups` (كاشٌ ستّ ساعات بالخادم). null = تعذّر الآن. وموظّفٌ رفض
+  /// الخادم سؤاله (403 PERMISSION_DENIED) ⇒ `refused` (جوابٌ يُحفظ بمهلته كغيره، لا فشلٌ يُعاد كلّ ٤٥ث).
   static Future<NationalCaps?> caps() async {
     final r = await _get('/api/v2/ftth/lookups', const {});
+    if (r.code == 'PERMISSION_DENIED') return const NationalCaps(refused: true);
     if (!r.ok) return null;
     final d = r.data!['data'];
     if (d is! Map) return null;

@@ -126,10 +126,13 @@ List<AppModule> buildAppModules() {
   // بالمالية»): أقسام البوّابة نفسها كالموقع. الموظّف بلا مفتاحها يراها مقفلةً بمكانها.
   final national = ProviderService.isKit && ProviderService.parentIsZone;
   // ١ نوفمبر — المالك: «اقسام البوابة البقية افضل تمضي بيها وتكملها»: الجلسات و«فريقي» و«تقارير البوّابة» و«الإشعارات والإعلانات»
-  // خلف المفتاح التجريبيّ للحساب (الخادم يقول beta — وإلّا لا تظهر). ومستخدم البوّابة الذي لا يملك قسماً يراه بمكانه مقفلاً بسببه
-  // («لا صلاحيّة في البوّابة») — ومنها «الإيرادات» (CanQueryRevenues) — لا شاشة «تعذّر».
+  // خلف مفتاح أقسام البوّابة للحساب (الخادم يقول beta — وإلّا لا تظهر؛ وموظّفٌ رفض الخادم سؤاله يراها بمكانها مقفلة). ومستخدم البوّابة
+  // الذي لا يملك قسماً يراه بمكانه مقفلاً بسببه («لا صلاحيّة في البوّابة») — ومنها «الإيرادات» (CanQueryRevenues) — لا شاشة «تعذّر».
   final nat = national ? NationalMoreState.gate.value : null;
-  final beta = national && (nat?.beta ?? false);
+  final beta = national && (nat?.shown ?? false);
+  // مفاتيح أقسام البوّابة للموظّف وحده (العقد §9): صاحب الحساب لا تقفله — قدراته من الخادم تجعل reports.sessions false (كي لا يظهر
+  // تقرير جلسات الساس العامّ لحساب شركةٍ مُضافة) وهي لا تخصّ «الجلسات» هنا (مراجعة ١ نوفمبر: كان المالك يرى «الجلسات» مقفلة).
+  bool natLocked(List<String> keys) => Perms.isEmployee && !Perms.hasAny(keys);
   return [
     if (national && permShown(const ['subscribers.view']))
       AppModule(
@@ -157,7 +160,7 @@ List<AppModule> buildAppModules() {
       AppModule(
         id: 'national_sessions',
         group: AppModuleGroup.manage,
-        locked: !Perms.has(NationalPerms.sessions),
+        locked: natLocked(const [NationalPerms.sessions]),
         unavailable: nat?.lockOf(const ['sessions']),
         icon: LucideIcons.activity,
         tone: AppTone.success,
@@ -169,7 +172,7 @@ List<AppModule> buildAppModules() {
       AppModule(
         id: 'national_team',
         group: AppModuleGroup.manage,
-        locked: !Perms.has(NationalPerms.team),
+        locked: natLocked(const [NationalPerms.team]),
         unavailable: nat?.lockOf(const ['team']),
         icon: LucideIcons.usersRound,
         tone: AppTone.brand,
@@ -208,7 +211,7 @@ List<AppModule> buildAppModules() {
       AppModule(
         id: 'national_reports',
         group: AppModuleGroup.finance,
-        locked: !Perms.hasAny(const [NationalPerms.zonesReport, NationalPerms.sessionsReport]),
+        locked: natLocked(const [NationalPerms.zonesReport, NationalPerms.sessionsReport]),
         icon: LucideIcons.chartColumn,
         tone: AppTone.info,
         title: 'تقارير البوّابة',
@@ -219,7 +222,7 @@ List<AppModule> buildAppModules() {
       AppModule(
         id: 'national_notes',
         group: AppModuleGroup.comms,
-        locked: !Perms.has(NationalPerms.notes),
+        locked: natLocked(const [NationalPerms.notes]),
         unavailable: nat?.lockOf(const ['notifications', 'announcements']),
         icon: LucideIcons.megaphone,
         tone: AppTone.brand,

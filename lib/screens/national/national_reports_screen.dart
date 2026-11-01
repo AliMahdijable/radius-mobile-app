@@ -52,9 +52,13 @@ class _NationalReportsScreenState extends State<NationalReportsScreen> {
     super.dispose();
   }
 
+  /// مفتاح التقرير يقفله على الموظّف وحده (العقد §9) — صاحب الحساب لا: قدراته من الخادم تجعل reports.sessions false لتقرير جلسات الساس
+  /// العامّ (لا يخدمه حساب شركةٍ مُضافة) لا لتقرير البوّابة هذا (مراجعة ١ نوفمبر: كان «تقرير الجلسات» يقول للمالك «اطلبها من مديرك»).
+  static bool _allowed(String key) => !Perms.isEmployee || Perms.has(key);
+
   Future<void> _loadAll() => Future.wait([
-        if (Perms.has(NationalPerms.zonesReport)) _load(_zones, NationalMoreApi.zonesReport),
-        if (Perms.has(NationalPerms.sessionsReport)) _load(_sessions, NationalMoreApi.sessionsReport),
+        if (_allowed(NationalPerms.zonesReport)) _load(_zones, NationalMoreApi.zonesReport),
+        if (_allowed(NationalPerms.sessionsReport)) _load(_sessions, NationalMoreApi.sessionsReport),
       ]);
 
   /// تقريرٌ واحد، وإعادة السؤال كلّ ٤ث ما دام «جارٍ» (حتى دقيقة) — وردٌّ قديمٌ لسؤالٍ سابق يُهمل.
@@ -109,7 +113,7 @@ class _NationalReportsScreenState extends State<NationalReportsScreen> {
                 title: 'المشتركون حسب الزون',
                 icon: LucideIcons.users,
                 part: _zones,
-                noPerm: !Perms.has(NationalPerms.zonesReport),
+                noPerm: !_allowed(NationalPerms.zonesReport),
                 onRetry: () => _load(_zones, NationalMoreApi.zonesReport),
                 kpis: const [
                   (key: 'active', label: 'فعّال', tone: AppTone.success),
@@ -129,7 +133,7 @@ class _NationalReportsScreenState extends State<NationalReportsScreen> {
                 title: 'تقرير الجلسات',
                 icon: LucideIcons.activity,
                 part: _sessions,
-                noPerm: !Perms.has(NationalPerms.sessionsReport),
+                noPerm: !_allowed(NationalPerms.sessionsReport),
                 onRetry: () => _load(_sessions, NationalMoreApi.sessionsReport),
                 kpis: const [
                   (key: 'online', label: 'متّصل', tone: AppTone.success),
