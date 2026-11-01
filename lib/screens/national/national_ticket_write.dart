@@ -403,8 +403,13 @@ class _NationalNewTicketSheetState extends State<NationalNewTicketSheet> {
 /* ───────────────────────────── التعليق ───────────────────────────── */
 
 class NationalCommentBox extends StatefulWidget {
-  const NationalCommentBox({super.key, required this.ticketId, required this.onSent});
-  final String ticketId;
+  const NationalCommentBox({super.key, required String this.ticketId, required this.onSent}) : send = null;
+
+  /// تعليقٌ على غير التذكرة (المهمّة، الطلب — ١ نوفمبر): [send] يرسله مرّةً واحدة (لا إعادة تلقائيّة) والصندوق نفسه.
+  const NationalCommentBox.to({super.key, required Future<NationalWrite> Function(String text) this.send, required this.onSent})
+      : ticketId = null;
+  final String? ticketId;
+  final Future<NationalWrite> Function(String text)? send;
   final VoidCallback onSent;
 
   @override
@@ -435,7 +440,8 @@ class _NationalCommentBoxState extends State<NationalCommentBox> {
     }
     if (_busy || _text.text.trim().isEmpty) return;
     setState(() => _busy = true);
-    final r = await NationalPortalApi.comment(widget.ticketId, _text.text);
+    final send = widget.send;
+    final r = await (send != null ? send(_text.text) : NationalPortalApi.comment(widget.ticketId!, _text.text));
     if (!mounted) return;
     setState(() => _busy = false);
     if (r.ok) {

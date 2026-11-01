@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/national_portal_api.dart';
+import '../../api/national_sheet_api.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../theme/colors.dart';
@@ -11,6 +12,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../desktop/desk_widgets.dart';
 import 'national_labels.dart';
+import 'national_task_sheet.dart';
 import 'national_ticket_write.dart';
 import 'national_widgets.dart';
 
@@ -35,6 +37,9 @@ class _NationalWorkScreenState extends State<NationalWorkScreen> {
   NationalLookups? _lk;
   NationalCounts? _counts;
 
+  /// الأقسام التجريبيّة (١ نوفمبر): تفاصيل المهمّة وتعليقاتها، وتعليقات الطلب — حين يقول الخادم إنّها مفتوحة لهذا الحساب.
+  bool _beta = false;
+
   final _req = NationalPaged<NationalRequest>();
   final _tasks = NationalPaged<NationalTask>();
 
@@ -58,6 +63,9 @@ class _NationalWorkScreenState extends State<NationalWorkScreen> {
     });
     NationalPortalApi.counts().then((v) {
       if (mounted && v != null) setState(() => _counts = v);
+    });
+    NationalSheetApi.beta().then((b) {
+      if (mounted && b != null && b.on) setState(() => _beta = true);
     });
   }
 
@@ -252,7 +260,7 @@ class _NationalWorkScreenState extends State<NationalWorkScreen> {
         ]
       else
         for (final t in _tasks.rows) ...[
-          _TaskCard(t: t),
+          _TaskCard(t: t, onTap: _beta && t.id != null ? () => showNationalTaskSheet(context, t) : null),
           const SizedBox(height: Sp.sm),
         ],
       if (p.hasMore)
@@ -272,7 +280,7 @@ class _NationalWorkScreenState extends State<NationalWorkScreen> {
       barrierColor: AppColors.scrim,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => _RequestSheet(row: r),
+      builder: (_) => _RequestSheet(row: r, comments: _beta),
     );
     // أُلغي الطلب (أو لم يتأكّد): القائمة والعدّادات من جديد
     if (changed == true && mounted) _reload();
@@ -338,49 +346,59 @@ class _RequestCard extends StatelessWidget {
 }
 
 class _TaskCard extends StatelessWidget {
-  const _TaskCard({required this.t});
+  const _TaskCard({required this.t, this.onTap});
   final NationalTask t;
+
+  /// تفاصيل المهمّة وتعليقاتها (الأقسام التجريبيّة) — null ⇒ الكرت للعرض وحده كما كان.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep
     final st = nationalTaskStatus(t.status);
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(R.lg),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(R.lg),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(R.lg), border: Border.all(color: AppColors.border)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(child: Text(nationalTaskTitle(t.title), style: AppType.cardTitle(color: AppColors.textHi))),
-              ToneChip(label: st.label, tone: st.tone, dense: true),
+              Row(
+                children: [
+                  Expanded(child: Text(nationalTaskTitle(t.title), style: AppType.cardTitle(color: AppColors.textHi))),
+                  ToneChip(label: st.label, tone: st.tone, dense: true),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(t.customer?.name ?? '—', style: AppType.listName(color: AppColors.textHi)),
+              const SizedBox(height: Sp.sm),
+              Wrap(
+                spacing: 12,
+                runSpacing: 4,
+                children: [
+                  _meta(LucideIcons.calendarClock, 'الاستحقاق ${nationalTime(t.dueAt)}'),
+                  if (t.zone?.name.isNotEmpty == true) _meta(LucideIcons.mapPin, t.zone!.name, ltr: true),
+                ],
+              ),
             ],
           ),
-          const SizedBox(height: 6),
-          Text(t.customer?.name ?? '—', style: AppType.listName(color: AppColors.textHi)),
-          const SizedBox(height: Sp.sm),
-          Wrap(
-            spacing: 12,
-            runSpacing: 4,
-            children: [
-              _meta(LucideIcons.calendarClock, 'الاستحقاق ${nationalTime(t.dueAt)}'),
-              if (t.zone?.name.isNotEmpty == true) _meta(LucideIcons.mapPin, t.zone!.name, ltr: true),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
 class _RequestSheet extends StatefulWidget {
-  const _RequestSheet({required this.row});
+  const _RequestSheet({required this.row, this.comments = false});
   final NationalRequest row;
+
+  /// «التعليقات» (الأقسام التجريبيّة، ١ نوفمبر).
+  final bool comments;
 
   @override
   State<_RequestSheet> createState() => _RequestSheetState();
@@ -525,6 +543,10 @@ class _RequestSheetState extends State<_RequestSheet> {
                             ),
                           ),
                       ]),
+                    if (widget.comments && row.id != null) ...[
+                      const SizedBox(height: Sp.lg),
+                      NationalRequestComments(requestId: row.id!, type: row.type),
+                    ],
                     if (d?.canCancel == true) ...[
                       const SizedBox(height: Sp.xl),
                       OutlinedButton.icon(
