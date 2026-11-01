@@ -341,6 +341,7 @@ class NationalMoneyRow {
     this.zone,
     this.direction = '',
     this.by,
+    this.byName,
     this.transferFrom,
     this.transferTo,
   });
@@ -379,6 +380,9 @@ class NationalMoneyRow {
 
   /// `me` · `team` · null (لا يُعرف).
   final String? by;
+
+  /// اسم عضو «فريقي» الذي نفّذها (الخادم يطابق المنفّذ بأعضاء الفريق — لا يوزر ولا هاتف خامٌ أبداً)؛ null لحركاتك أو حين لا يُعرف.
+  final String? byName;
   final NationalRef? transferFrom;
   final NationalRef? transferTo;
 
@@ -436,6 +440,7 @@ class NationalMoneyRow {
               ? ''
               : (amount < 0 ? 'out' : 'in'),
       by: by == 'me' || by == 'team' ? by : null,
+      byName: by == 'me' ? null : _sn(j['by_name']),
       transferFrom: tr == null ? null : NationalRef.from(tr['from']),
       transferTo: tr == null ? null : NationalRef.from(tr['to']),
     );

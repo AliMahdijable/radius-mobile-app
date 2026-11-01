@@ -70,6 +70,15 @@ class _DesktopShellState extends State<DesktopShell> {
   static const double _devicesZoom = 1.2;
 
   static const _moduleOrder = [
+    // المشروع الوطنيّ أوّلاً بترتيب الهاتف — بلاها تُفرز كلّها «‎-1» وترتيبها بينها غير ثابت.
+    'national_work',
+    'national_tickets',
+    'national_sessions',
+    'national_team',
+    'national_wallet',
+    'national_money',
+    'national_reports',
+    'national_notes',
     'managers',
     'employees',
     'packages',

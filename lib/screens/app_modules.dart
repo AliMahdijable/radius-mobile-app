@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../api/cards_api.dart';
 import '../api/jtpay_api.dart';
+import '../api/national_more_api.dart';
 import '../api/sales_api.dart';
 import '../api/self_deposit_api.dart';
 import '../core/util/format.dart';
@@ -23,6 +24,10 @@ import 'expenses/expenses_screen.dart';
 import 'managers/managers_screen.dart';
 import 'message_logs/message_logs_screen.dart';
 import 'national/national_money_screen.dart';
+import 'national/national_notes_screen.dart';
+import 'national/national_reports_screen.dart';
+import 'national/national_sessions_screen.dart';
+import 'national/national_team_screen.dart';
 import 'national/national_tickets_screen.dart';
 import 'national/national_wallet_screen.dart';
 import 'national/national_work_screen.dart';
@@ -89,6 +94,8 @@ Listenable appModulesListenable() => Listenable.merge([
       JtpayState.gate,
       // العودة للتطبيق ⇒ يُسأل ثانيةً (بمهلته) — فتشغيله من الخادم يظهر.
       AppResumedSignal.tick,
+      // المشروع الوطنيّ: المفتاح التجريبيّ وقدرات مستخدم البوّابة — الاستماع يطلبها للوطنيّ وحده (لا نداء لغيره).
+      NationalMoreState.gate,
     ]);
 
 /// الأقسام بترتيب الهاتف («قوائم أخرى»). الحاسبة ترتّبها بمجموعاتها.
@@ -118,6 +125,11 @@ List<AppModule> buildAppModules() {
   // المشروع الوطنيّ على providerKit (watani، ٣١ أكتوبر — المالك: «الطلبات التذاكر هاي مهمه مموجوده كذلك المواضع الي متعلقة
   // بالمالية»): أقسام البوّابة نفسها كالموقع. الموظّف بلا مفتاحها يراها مقفلةً بمكانها.
   final national = ProviderService.isKit && ProviderService.parentIsZone;
+  // ١ نوفمبر — المالك: «اقسام البوابة البقية افضل تمضي بيها وتكملها»: الجلسات و«فريقي» و«تقارير البوّابة» و«الإشعارات والإعلانات»
+  // خلف المفتاح التجريبيّ للحساب (الخادم يقول beta — وإلّا لا تظهر). ومستخدم البوّابة الذي لا يملك قسماً يراه بمكانه مقفلاً بسببه
+  // («لا صلاحيّة في البوّابة») — ومنها «الإيرادات» (CanQueryRevenues) — لا شاشة «تعذّر».
+  final nat = national ? NationalMoreState.gate.value : null;
+  final beta = national && (nat?.beta ?? false);
   return [
     if (national && permShown(const ['subscribers.view']))
       AppModule(
@@ -141,6 +153,30 @@ List<AppModule> buildAppModules() {
         subtitle: 'تذاكر الدعم في بوّابة الوطني',
         page: () => const NationalTicketsScreen(),
       ),
+    if (beta)
+      AppModule(
+        id: 'national_sessions',
+        group: AppModuleGroup.manage,
+        locked: !Perms.has(NationalPerms.sessions),
+        unavailable: nat?.lockOf(const ['sessions']),
+        icon: LucideIcons.activity,
+        tone: AppTone.success,
+        title: 'الجلسات',
+        subtitle: 'المتّصلون الآن وغير المتّصلين في بوّابة الوطني',
+        page: () => const NationalSessionsScreen(),
+      ),
+    if (beta)
+      AppModule(
+        id: 'national_team',
+        group: AppModuleGroup.manage,
+        locked: !Perms.has(NationalPerms.team),
+        unavailable: nat?.lockOf(const ['team']),
+        icon: LucideIcons.usersRound,
+        tone: AppTone.brand,
+        title: 'فريقي',
+        subtitle: 'مستخدمو حسابك في بوّابة الوطني وحدود محافظهم',
+        page: () => const NationalTeamScreen(),
+      ),
     // «محفظتي» قسمٌ بنفسها كالبوّابة (١ نوفمبر — المالك: حركات التفعيل لا تظهر): الرصيد والعمولة وكلّ حركات محفظتي لآخر ٣٠ يوماً،
     // و«التحويلات» حين يملكها الحساب. و«الإيرادات» (كانت «الحركات الماليّة» بتبويب «محفظتي») حركات التفعيل بكلّ طرق الدفع.
     if (national && permShown(const ['reports.financial']))
@@ -159,11 +195,37 @@ List<AppModule> buildAppModules() {
         id: 'national_money',
         group: AppModuleGroup.finance,
         locked: !Perms.has('reports.financial'),
+        // البوّابة تردّ 403 للإيرادات حين لا يملك المستخدم CanQueryRevenues (حساب المالك ١ نوفمبر) ⇒ بمكانها مقفلةً بسببها
+        unavailable: nat?.lockOf(const ['revenue']),
         icon: LucideIcons.receiptText,
         tone: AppTone.success,
         title: 'الإيرادات',
         subtitle: 'حركات التفعيل بكلّ طرق الدفع في بوّابة الوطني',
         page: () => const NationalMoneyScreen(),
+      ),
+    // «المشتركون حسب الزون» من قائمتنا (لا قفل من البوّابة)، و«تقرير الجلسات» يُقفل داخل الصفحة وحده حين لا تعطيه البوّابة
+    if (beta)
+      AppModule(
+        id: 'national_reports',
+        group: AppModuleGroup.finance,
+        locked: !Perms.hasAny(const [NationalPerms.zonesReport, NationalPerms.sessionsReport]),
+        icon: LucideIcons.chartColumn,
+        tone: AppTone.info,
+        title: 'تقارير البوّابة',
+        subtitle: 'المشتركون الفعّالون والمنتهون لكلّ زون، وتقرير الجلسات',
+        page: () => const NationalReportsScreen(),
+      ),
+    if (beta)
+      AppModule(
+        id: 'national_notes',
+        group: AppModuleGroup.comms,
+        locked: !Perms.has(NationalPerms.notes),
+        unavailable: nat?.lockOf(const ['notifications', 'announcements']),
+        icon: LucideIcons.megaphone,
+        tone: AppTone.brand,
+        title: 'الإشعارات والإعلانات',
+        subtitle: 'جرس بوّابة الوطني — للقراءة، لا تُعلَّم مقروءةً هناك',
+        page: () => const NationalNotesScreen(),
       ),
     // «كيف أسوّي؟» صار زرّاً في الأعلى بكلّ التبويبات (TopActions) — لا بطاقة هنا (المالك ٢٠ أكتوبر).
     // مطلب 2026-08-12: التقارير صارت أوّل عنصر. مفتوحةٌ لأي مدير عادي، وللموظّف لو عنده أي
