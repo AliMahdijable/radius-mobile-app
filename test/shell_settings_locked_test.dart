@@ -72,8 +72,8 @@ void main() {
     lockedCase('موظّف ساس بلا مفاتيح: ٤ صفوف واتساب + نطاق العرض + الأجهزة',
         sasEmpNone, (t) async {
       await openSettings(t);
-      // ٤ (واتساب) + ١ (نطاق العرض) + ١ (بيانات دخول الأجهزة).
-      expect(find.byType(PermLockIcon), findsNWidgets(6));
+      // ٤ (واتساب) + ١ (نطاق العرض) + ١ (بيانات دخول الأجهزة) + ١ («قوالب الطباعة»: تُفتح للعرض وتعديلها مقفل).
+      expect(find.byType(PermLockIcon), findsNWidgets(7));
       expect(t.takeException(), isNull);
     });
 

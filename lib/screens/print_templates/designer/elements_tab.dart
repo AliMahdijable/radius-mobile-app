@@ -112,7 +112,9 @@ class _ElementRow extends StatelessWidget {
     final shown = c.shown(id);
     final dim = c.dimReason(id, kind);
     final summary = c.summary(id);
-    final sub = dim ?? (shown == false ? 'مخفيّ' : (summary.isEmpty ? null : summary));
+    // إخفاء الدين قرارٌ ماليّ — يُقال صراحةً في سطره.
+    final hiddenText = id == 'balance_debt' ? 'مخفيّ — الوصل لن يذكر دين المشترك' : 'مخفيّ';
+    final sub = dim ?? (shown == false ? hiddenText : (summary.isEmpty ? null : summary));
     final locked = DesignerLockScope.lockedOf(context);
     final faded = dim != null || shown == false;
     return Padding(

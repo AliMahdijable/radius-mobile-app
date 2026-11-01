@@ -372,7 +372,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _Row(
               icon: Icons.receipt_long_outlined,
               label: 'settings.print_templates'.tr(),
-              lockHint: !Perms.has('print_templates.edit'),
+              // مفتاحٌ لا يُمنح لموظّف ايرث لنك/فايبر اكس/المُضافة ⇒ بلا قفلٍ هنا (وعدٌ كاذب) — الشاشة تقول «يغيّره صاحب الحساب».
+              lockHint: permShown(const ['print_templates.edit']) && !Perms.has('print_templates.edit'),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const PrintTemplatesScreen(),
