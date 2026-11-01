@@ -6,23 +6,107 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:rad_mysvcs/api/receipt_settings_api.dart';
-import 'package:rad_mysvcs/screens/print_templates/print_templates_screen.dart';
 import 'package:rad_mysvcs/services/receipt_layout.dart';
 import 'package:rad_mysvcs/services/receipt_pdf.dart';
 import 'package:rad_mysvcs/services/receipt_pdf_v2.dart';
 
-import 'sim_el/sim_harness.dart';
 
 /// «تصميم الوصل» v2 في التطبيق (المالك ١ نوفمبر: «الطباعه اضافة ميزات اخفاء وتقليص الوصل والتحكم اكثر بالمتغيرات…»):
 ///   ١. المحلِّل هو محلِّل الموقع حرفاً بحرف — ملفّ التثبيت المشترك نسخةٌ بالبايت (بصمته مثبّتة هنا وفي الموقع)، ثوابته
 ///      وكلّ حالاته.
 ///   ٢. قراءة الإعدادات: بلا `layout` ⇒ طريق v1 كما كان؛ التالف افتراضيّ؛ «حجم الوصل» والعدّادات.
 ///   ٣. PDF: «مضغوط جداً» < «مضغوط» < «عادي»، وورق ٥٨، والمخفيّ لا يُرسم، وبلا تشكيلٍ ولا رموزٍ عند الرسم.
-///   ٤. «قوالب الطباعة»: الحجم والحقول المخفيّة والنصوص الإضافيّة.
+///   ٤. v3 (المصمّم الاحترافيّ): الضغط (compact_cases) والقوالب (template_cases) وصالحات الخادم، وتصاميم v2 كما هي
+///      حرفاً (بند 29: المحلِّل الجديد على حالات الملفّ الأوّل المجمَّد = ناتجه بلا مفاتيح v3).
 const _fixturePath = 'test/fixtures/receipt_layout.fixtures.json';
+const _frozenPath = 'test/fixtures/receipt_layout.fixtures.v1.json';
 
 /// البصمة المثبّتة — هي `RECEIPT_FIXTURES_SHA256` في الموقع. ملفٌّ تغيّر في جهةٍ واحدة يُسقط هذا الاختبار.
-const _pinnedSha = 'd18f3130a40e532cdaed7301fb32f6adfdd699cae87dde0a399a5e54f07614f1';
+const _pinnedSha = '8e0aa26e3ab0a3773be82acdbd68ca2a4221ed81fad72bd5a9110792718821c5';
+
+/// الملفّ الأوّل مجمَّداً (بند 29) — لا يتغيّر أبداً.
+const _frozenSha = 'd18f3130a40e532cdaed7301fb32f6adfdd699cae87dde0a399a5e54f07614f1';
+
+/// ناتج v3 بلا مفاتيحه الجديدة — ويذكر أيّ مفتاحٍ جديد خرج بغير قيمته الحياديّة (`stripV3` في فحص الموقع).
+({Map<String, dynamic> out, List<String> bad}) _stripV3(Map<String, dynamic> r) {
+  final out = jsonDecode(jsonEncode(r)) as Map<String, dynamic>;
+  final bad = <String>[];
+  void g(Map o, String w) {
+    if (o['gap_before'] != 0 || o['gap_after'] != 0 || o['sep'] != null) bad.add(w);
+    o
+      ..remove('gap_before')
+      ..remove('gap_after')
+      ..remove('sep');
+  }
+
+  for (final b in (out['blocks'] as List).cast<Map<String, dynamic>>()) {
+    final t = b['t'] as String;
+    g(b, t);
+    if (t == 'shop_name' || t == 'title' || t == 'text') {
+      if (b['pt'] != null) bad.add('$t.pt');
+      b.remove('pt');
+    }
+    if (t == 'shop_lines' || t == 'footer') {
+      for (final l in (b['lines'] as List).cast<Map<String, dynamic>>()) {
+        if (l['align'] != b['align'] || l['pt'] != null || l['stack'] != false) bad.add('${l['id']}');
+        g(l, '${l['id']}');
+        l
+          ..remove('align')
+          ..remove('pt')
+          ..remove('stack');
+      }
+    }
+    if (t == 'meta') {
+      const keys = [
+        'split', 'no_align', 'at_align', 'no_pt', 'at_pt', 'no_bold', 'at_bold', //
+        'no_gap_before', 'no_gap_after', 'at_gap_before', 'at_gap_after',
+      ];
+      if (b['split'] == true ||
+          b['no_align'] != null ||
+          b['at_align'] != null ||
+          b['no_pt'] != null ||
+          b['at_pt'] != null ||
+          b['no_bold'] == true ||
+          b['at_bold'] == true ||
+          b['no_gap_before'] != 0 ||
+          b['no_gap_after'] != 0 ||
+          b['at_gap_before'] != 0 ||
+          b['at_gap_after'] != 0) {
+        bad.add('meta');
+      }
+      for (final k in keys) {
+        b.remove(k);
+      }
+    }
+    if (t == 'section' || t == 'sale_items') {
+      if (b['title_pt'] != null || b['title_align'] != null) bad.add('$t title');
+      b
+        ..remove('title_pt')
+        ..remove('title_align');
+    }
+    if (t == 'section') {
+      for (final row in (b['rows'] as List).cast<Map<String, dynamic>>()) {
+        if (row['align'] != null || row['stack'] == true || row['pt'] != null || row['label_pt'] != null) {
+          bad.add('${row['id']}');
+        }
+        g(row, '${row['id']}');
+        row
+          ..remove('align')
+          ..remove('stack')
+          ..remove('pt')
+          ..remove('label_pt');
+      }
+    }
+    if (t == 'qr') {
+      if (b['caption_pt'] != null || b['caption_align'] != b['align'] || b['caption_bold'] == true) bad.add('qr caption');
+      b
+        ..remove('caption_pt')
+        ..remove('caption_align')
+        ..remove('caption_bold');
+    }
+  }
+  return (out: out, bad: bad);
+}
 
 ReceiptDoc _doc(ReceiptKind kind, ReceiptSettings look, {String? qr = 'https://pro.mysvcs.net/user-info/abc', SaleInvoiceDoc? sale}) =>
     ReceiptDoc(
@@ -78,14 +162,18 @@ void main() {
   final bytes = File(_fixturePath).readAsBytesSync();
   final fixture = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
   final cases = (fixture['cases'] as List).cast<Map<String, dynamic>>();
+  final frozenBytes = File(_frozenPath).readAsBytesSync();
+  final frozen = jsonDecode(utf8.decode(frozenBytes)) as Map<String, dynamic>;
 
   group('١. محلِّل الموقع حرفاً بحرف (ملفّ التثبيت المشترك)', () {
     test('الملفّ نسخةٌ بالبايت: بصمته هي المثبّتة هنا وفي المحلِّل', () {
       final sha = sha256.convert(bytes).toString();
       expect(sha, _pinnedSha, reason: 'غيّر الملفّ وبصمته في الموقع والتطبيق معاً');
       expect(receiptFixturesSha256, _pinnedSha);
-      expect(fixture['schema'], 'receipt-layout-fixtures/1');
-      expect(cases.length, greaterThanOrEqualTo(15), reason: 'الحالات الخمس عشرة في التصميم على الأقلّ');
+      expect(fixture['schema'], 'receipt-layout-fixtures/2');
+      expect(cases.length, greaterThanOrEqualTo(40), reason: 'c01–c30 بفروعها');
+      expect(sha256.convert(frozenBytes).toString(), _frozenSha, reason: 'الملفّ الأوّل مجمَّد');
+      expect(frozen['schema'], 'receipt-layout-fixtures/1');
     });
 
     test('الثوابت (tokens) هي ثوابت الموقع', () {
@@ -110,6 +198,100 @@ void main() {
         expect(got, equals(want), reason: '${c['note']}');
       });
     }
+  });
+
+  group('١ب. v3: الضغط والقوالب، وv2 كما هو (بند 29)', () {
+    test('بند 29: حالات الملفّ الأوّل بمحلِّل v3 = ناتجها القديم + مفاتيحٌ حياديّة وحدها', () {
+      final old = (frozen['cases'] as List).cast<Map<String, dynamic>>();
+      final byName = {for (final c in cases) c['name']: c};
+      for (final c in old) {
+        final now = byName[c['name']];
+        expect(now, isNotNull, reason: '${c['name']} حُذفت من الملفّ الثاني');
+        expect(now!['design'], equals(c['design']), reason: '${c['name']}: تغيّر مُدخلها');
+        expect(now['input'], equals(c['input']), reason: '${c['name']}: تغيّر مُدخلها');
+        final got = ReceiptResolver.resolve(c['design'], ReceiptInput.fromJson(c['input'] as Map<String, dynamic>)).toJson();
+        final r = _stripV3(got);
+        expect(r.bad, isEmpty, reason: '${c['name']}: مفتاح v3 بغير قيمته الحياديّة');
+        expect(r.out, equals(c['expected']), reason: '${c['name']}');
+      }
+      expect(old.length, 21);
+    });
+
+    for (final k in (fixture['compact_cases'] as List).cast<Map<String, dynamic>>()) {
+      test('ضغط ${k['name']}', () {
+        expect(receiptCompactLayout(k['input']), equals(k['expected']), reason: '${k['note']}');
+      });
+    }
+
+    for (final t in (fixture['template_cases'] as List).cast<Map<String, dynamic>>()) {
+      test('قالب ${t['name']}', () {
+        final input = jsonDecode(jsonEncode(t['input'])) as Map<String, dynamic>;
+        final got = receiptApplyTemplate(
+          (
+            paperSize: input['paper_size'] as String,
+            design: Map<String, dynamic>.from(input['design'] as Map),
+            layout: input['layout'] is Map ? Map<String, dynamic>.from(input['layout'] as Map) : null,
+          ),
+          t['template'] as String,
+        );
+        expect({'paper_size': got.paperSize, 'design': got.design, 'layout': got.layout}, equals(t['expected']));
+        expect(receiptCompactLayout(got.layout), equals(t['expected_compact']));
+        final il = (input['layout'] as Map?) ?? const {};
+        for (final k in const ['fields', 'texts', 'titles', 'emoji']) {
+          expect(got.layout[k], equals(il[k]), reason: 'القالب لا يمسّ $k');
+        }
+      });
+    }
+
+    test('صالحات الخادم: الضغط لا يغيّر الوصل، ولا يحفظ خاصيّةً خارج قدرات العنصر', () {
+      final bases = [
+        for (final c in cases)
+          if (RegExp(r'^c0[14]_|^c11a_|^c12_|^c14_').hasMatch(c['name'] as String)) c['input'] as Map<String, dynamic>,
+      ];
+      expect(bases, hasLength(5));
+      var n = 0;
+      for (final c in (fixture['sanitize_cases'] as List).cast<Map<String, dynamic>>()) {
+        if (!c.containsKey('expect') || c['expect'] == null) continue;
+        n++;
+        final packed = receiptCompactLayout(c['expect']);
+        for (final inp in bases) {
+          final a = ReceiptResolver.resolve({'layout': c['expect']}, ReceiptInput.fromJson(inp)).toJson();
+          final b = ReceiptResolver.resolve({'layout': packed}, ReceiptInput.fromJson(inp)).toJson();
+          expect(b, equals(a), reason: '${c['name']}: الضغط غيّر وصل ${inp['kind']}');
+        }
+        final fields = (packed?['fields'] as Map?) ?? const {};
+        for (final e in fields.entries) {
+          for (final p in (e.value as Map).keys) {
+            expect(receiptFieldCaps[e.key]!.contains(p), isTrue, reason: '${c['name']}: ${e.key}.$p ليست من قدراته');
+          }
+        }
+      }
+      expect(n, greaterThanOrEqualTo(3));
+    });
+
+    test('labelPt وuiPt وpinnedCount وunpinAll وlayoutDiff', () {
+      expect([receiptLabelPt(12), receiptLabelPt(14), receiptLabelPt(9)], [11, 12.5, 8]);
+      final design = {'font_size_base': 13, 'font_size_title': 16};
+      expect(receiptUiPt(design, null, field: 'username'), (pt: 9, pinned: false));
+      expect(receiptUiPt(design, {'fields': {'username': {'pt': 12}}}, field: 'username'), (pt: 12, pinned: true));
+      expect(receiptUiPt(design, null, field: 'shop_name').pt, 12);
+      expect(receiptUiPt(design, null, field: 'qr_caption').pt, 7.5);
+      expect(receiptUiPt(design, null, section: 'package').pt, 8.5, reason: 'round(13×0.85)=11px ⇒ 8.25 ⇒ نصف نقطة 8.5');
+      final l = {
+        'v': 3,
+        'fields': {'username': {'pt': 12, 'size': 'lg'}, 'phone': {'pt': 9}},
+        'sections': {'package': {'pt': 10}},
+        'texts': [{'at': 'top', 'text': 'x', 'pt': 7}],
+      };
+      expect(receiptPinnedCount(l), 4);
+      final un = receiptUnpinAll(l);
+      expect(receiptPinnedCount(un), 0);
+      expect((un['fields'] as Map)['username'], {'size': 'lg'});
+      expect(receiptLayoutDiff({'v': 3, 'fields': {'a': {'pt': 9}}}, {'v': 3, 'fields': {'a': {'pt': 9.0}}}), isEmpty);
+      expect(receiptLayoutDiff({'v': 3, 'fields': {'username': {'pt': 12}}, 'currency': 'IQD'}, {'v': 3}),
+          ['fields', 'currency']);
+      expect(receiptLayoutDiff({'texts': [{'text': 'a'}]}, {'texts': [{'text': 'b'}]}), ['texts[0].text']);
+    });
   });
 
   group('٢. قراءة إعدادات الوصل', () {
@@ -320,57 +502,6 @@ void main() {
         sale: const SaleInvoiceDoc(id: 42, lines: [], total: 0, debt: false),
       );
       expect(receiptInputOf(sale, hasLogo: false).receiptNoText, '42');
-    });
-  });
-
-  group('٤. «قوالب الطباعة»', () {
-    late SimServer server;
-    setUpAll(simSetUpAll);
-    setUp(() async {
-      server = await simSetUp();
-      ReceiptSettingsApi.clearCache();
-    });
-    tearDown(ReceiptSettingsApi.clearCache);
-
-    testWidgets('حجم الوصل والحقول المخفيّة والنصوص الإضافيّة من تصميم الموقع', (t) async {
-      server.reply('GET', '/api/v2/receipt-settings', 200, {
-        'success': true,
-        'data': {
-          'shop_name': 'مكتب النور',
-          'shop_address': 'النجف',
-          'show_qr': 1,
-          'auto_print': 0,
-          'design': _preset('compact', {
-            'fields': {
-              'username': {'show': false},
-              'phone': {'show': false},
-            },
-            'texts': [
-              {'at': 'bottom', 'text': 'للدعم'},
-            ],
-          })
-            ..['show_manager_signature'] = false,
-        },
-      });
-      await pumpSim(t, const SimVariant(390, dark: false), home: (_) => const PrintTemplatesScreen());
-      expect(find.text('حجم الوصل'), findsOneWidget);
-      expect(find.text('مضغوط'), findsOneWidget);
-      expect(find.text('حقول مخفيّة'), findsOneWidget);
-      expect(find.text('3'), findsOneWidget);
-      expect(find.text('نصوص إضافيّة'), findsOneWidget);
-      expect(find.text('1'), findsOneWidget);
-      await simDrain(t);
-    });
-
-    testWidgets('تصميم v1 بلا تعديل: «عادي» و«لا شيء»', (t) async {
-      server.reply('GET', '/api/v2/receipt-settings', 200, {
-        'success': true,
-        'data': {'shop_name': 'مكتب النور', 'show_qr': 1, 'auto_print': 0, 'design': null},
-      });
-      await pumpSim(t, const SimVariant(390, dark: false), home: (_) => const PrintTemplatesScreen());
-      expect(find.text('عادي'), findsOneWidget);
-      expect(find.text('لا شيء'), findsNWidgets(2));
-      await simDrain(t);
     });
   });
 }
