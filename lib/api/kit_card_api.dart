@@ -8,8 +8,8 @@ import 'api_client.dart';
 ///
 /// الإصدار الثاني (١ نوفمبر — مراجعة الخادم): الطلب المفتوح (409 `CARD_ORDER_OPEN`) قد يكون **مدفوعاً بلا رابط** (`paid:true`) ⇒ لا
 /// دفعٌ ثانٍ ولا صفحة دفع، يُتابَع حتى يتفعّل؛ والحالة تقول أيضاً هل رجع الدفع (`paid_seen`)، وهل انتهى بلا رجوعٍ يُثبت شيئاً
-/// (`no_return` — لا «بلا دفع» كاذبة)، وحال الدين عندنا (`debt_state`: written · failed · maybe · none) وفشل كتابته
-/// (`debt_write_failed`) — فلا «سُجّل عندنا» لدينٍ لم يُكتب.
+/// (`no_return` — لا «بلا دفع» كاذبة)، وحال الدين عندنا (`debt_state`: written · failed · maybe · other-recorded · none) وفشل كتابته
+/// (`debt_write_failed`) — فلا «سُجّل عندنا» لدينٍ لم يُكتب. ورابطٌ رُفضت بطاقته (رجع Status=1) يبقى `link` بلا `payment_url`.
 typedef KitCardStart = ({
   bool ok,
   bool open,
@@ -23,8 +23,10 @@ typedef KitCardStart = ({
   bool noReply,
 });
 
-/// حال الدين عندنا لطلب: كُتب · فشلت كتابته (تفعّل ولم يُسجَّل) · ربّما (خطأٌ بعد الحسم) · لا دين (لم يُحسم بتفعيل).
-enum KitCardDebt { written, failed, maybe, none }
+/// حال الدين عندنا لطلب: كُتب · فشلت كتابته (تفعّل ولم يُسجَّل) · ربّما (خطأٌ بعد الحسم) · لا دين (لم يُحسم بتفعيل) · تفعيلٌ آخر
+/// في سجلّنا (`other-recorded`: تحرّك الانتهاء وفي سجلّنا تفعيلٌ آخر للمشترك منذ الطلب — لم يُكتب دينٌ لهذا الطلب عمداً) · حالٌ لا
+/// يعرفها التطبيق (أحدث منه، أو فارغة) — هذه نصّها متحفّظ: لا «سُجّل عندنا» ولا «سجّله يدويّاً».
+enum KitCardDebt { written, failed, maybe, none, otherRecorded, unknown }
 
 typedef KitCardStatus = ({
   String status,
@@ -120,13 +122,18 @@ class KitCardApi {
     );
   }
 
-  static KitCardDebt? _debt(dynamic v) => switch (v?.toString()) {
-        'written' => KitCardDebt.written,
-        'failed' => KitCardDebt.failed,
-        'maybe' => KitCardDebt.maybe,
-        'none' => KitCardDebt.none,
-        _ => null,
-      };
+  /// null = خادمٌ أقدم لا يرسل الحقل أصلاً (النصّ القديم)؛ وحالٌ موجودةٌ لا يعرفها التطبيق ⇒ unknown (المتحفّظ) لا null.
+  static KitCardDebt? _debt(Map d) {
+    if (!d.containsKey('debt_state')) return null;
+    return switch (d['debt_state']?.toString().trim()) {
+      'written' => KitCardDebt.written,
+      'failed' => KitCardDebt.failed,
+      'maybe' => KitCardDebt.maybe,
+      'none' => KitCardDebt.none,
+      'other-recorded' => KitCardDebt.otherRecorded,
+      _ => KitCardDebt.unknown,
+    };
+  }
 
   /// جسم `data` من حالة الطلب.
   static KitCardStatus parseStatus(Map d) {
@@ -134,7 +141,7 @@ class KitCardApi {
     final price = d['price'];
     final url = d['payment_url']?.toString();
     final failed = d['debt_write_failed'] == true;
-    final debt = _debt(d['debt_state']);
+    final debt = _debt(d);
     return (
       status: d['status']?.toString() ?? 'unknown',
       paymentUrl: url != null && url.startsWith('https://') ? url : null,

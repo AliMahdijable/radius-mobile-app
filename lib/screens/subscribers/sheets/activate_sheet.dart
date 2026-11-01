@@ -1142,7 +1142,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     }
   }
 
-  /// «محاولة جديدة» بعد طلبٍ لم يكتمل (فشل/انتهى): يعود الشيت إلى نموذج التفعيل — والخادم يرفض طلباً ثانياً ما دام الأوّل مفتوحاً.
+  /// «محاولة جديدة» بعد طلبٍ لم يكتمل (فشل/انتهى/رُفضت بطاقته): يعود الشيت إلى نموذج التفعيل — والخادم يرفض طلباً ثانياً ما دام
+  /// الأوّل مفتوحاً.
   void _newCardAttempt() {
     _cardPoll?.cancel();
     setState(() {
@@ -1204,11 +1205,12 @@ class _ActivateSheetState extends State<_ActivateSheet> {
 
   /// حُسم بالتفعيل ⇒ كمسار المحفظة: تحديث القوائم + الوصل (إن طُلب) + إغلاق. والدين الذي لم يُكتب عندنا (`debt_write_failed`)
   /// لا يُقال عنه «سُجّل عندنا»: اللوحة تبقى مفتوحةً بتنبيهها حتى يغلقها الوكيل بنفسه، والتنبيه يبقى بعد الإغلاق ([_closeCard]).
+  /// وكذا دينٌ في شكّ (ربّما، تفعيلٌ آخر في سجلّنا، حالٌ لا يعرفها التطبيق — [_CardOrder.debtSure]): لوحته بتنبيهها، بلا «سُجّل عندنا».
   Future<void> _cardApplied() async {
     SubscriberEvents.notifyChange();
-    final debtLost = _cardOrder?.debtWriteFailed ?? false;
+    final unsure = !(_cardOrder?.debtSure ?? true);
     final rootOverlay = Overlay.maybeOf(context, rootOverlay: true);
-    if (rootOverlay != null && !debtLost) {
+    if (rootOverlay != null && !unsure) {
       unawaited(showSheetSnackOn(rootOverlay, 'تمّ الدفع بالبطاقة وتفعّل المشترك — سُجّل عندنا', isError: false));
     }
     if (_printReceiptChecked) {
@@ -1228,21 +1230,26 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       );
       if (mounted) showPrintResult(context, printed);
     }
-    if (!mounted || debtLost) return;
+    if (!mounted || unsure) return;
     Navigator.of(context).pop(true);
   }
 
   static const _cardDebtLostText = 'تمّ الدفع بالبطاقة وتفعّل المشترك، لكن لم يُسجَّل الدين في دفترنا — سجّله يدويّاً';
 
   /// لوحة طلب الدفع: الحالة كما يقولها الخادم، وما يُدفع، ورقم الطلب، و«افتح صفحة الدفع» ما دام الرابط قائماً. وما يقوله الخادم عن
-  /// الدين عندنا (`debt_state`) يُقال كما هو — لا «سُجّل» لدينٍ لم يُكتب ولا «لم يُسجَّل» لدينٍ ربّما كُتب — وانتهاءٌ بلا رجوعٍ من صفحة
-  /// الدفع (`no_return`) لا يُسمّى «بلا دفع»: تنبيهٌ فوق «محاولة جديدة» ألّا يدفع ثانيةً قبل أن يفحص.
+  /// الدين عندنا (`debt_state`) يُقال كما هو — لا «سُجّل» لدينٍ لم يُكتب ولا «لم يُسجَّل» لدينٍ ربّما كُتب، ولا «سجّله يدويّاً» لتفعيلٍ
+  /// آخر في سجلّنا أو لحالٍ لا يعرفها التطبيق — وانتهاءٌ بلا رجوعٍ من صفحة الدفع (`no_return`) لا يُسمّى «بلا دفع»: تنبيهٌ فوق «محاولة
+  /// جديدة» ألّا يدفع ثانيةً قبل أن يفحص. ورابطٌ سحبه الخادم بعد سؤاله (رُفضت البطاقة) «لم يكتمل» بـ«محاولة جديدة»، والمتابعة باقية:
+  /// نجاحٌ لاحق من صفحة الدفع نفسها يُحيي الطلب.
   List<Widget> _cardPayBody(_CardOrder o) {
     final cur = 'common.currency'.tr();
     final st = o.status;
-    final waiting = st == 'link' || st == 'creating';
-    final ended = st == 'failed' || st == 'expired';
+    // رجع الدفع مرفوضاً (Status=1): الطلب `link` بلا رابطٍ بعد سؤال الخادم — لا «بانتظار الدفع» ولا «يُسجَّل تلقائيّاً»
+    final declined = st == 'link' && o.polled && o.url == null;
+    final waiting = !declined && (st == 'link' || st == 'creating');
+    final ended = declined || st == 'failed' || st == 'expired';
     final (text, tone, icon) = switch (st) {
+      'link' when declined => ('لم يكتمل الدفع — لم يُخصم شيء', AppColors.error, LucideIcons.triangleAlert),
       'link' || 'creating' => ('بانتظار الدفع بالبطاقة…', AppColors.textMid, LucideIcons.loader),
       'paid' || 'applying' => ('تمّ الدفع — جارٍ تفعيل المشترك…', AppColors.brandAccent, LucideIcons.loader),
       'applied' => ('تمّ التفعيل ✓', AppColors.brandAccent, LucideIcons.circleCheck),
@@ -1259,19 +1266,25 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       'partial-cash' => 'sheets.pay_partial'.tr(),
       _ => null,
     };
-    // حال الدين عندنا بعد الحسم — من الخادم وحده.
+    // حال الدين عندنا بعد الحسم — من الخادم وحده. «سجّله يدويّاً» لدينٍ لم يُكتب يقيناً، أو لخادمٍ أقدم لا يقول حاله (النصّ القديم)؛
+    // وتفعيلٌ آخر في سجلّنا منذ الطلب (other-recorded) وحالٌ لا يعرفها التطبيق: راجع قبل أيّ تسجيل — لا تسجيلٌ مكرّر.
     final debtNote = switch (st) {
       'applied' when o.debtWriteFailed => (AppTone.danger, 'لم يُسجَّل الدين في دفترنا — سجّله يدويّاً من «إضافة دين»'),
-      'unknown' when o.debt == KitCardDebt.maybe =>
+      _ when o.debt == KitCardDebt.otherRecorded && !KitCardApi.live.contains(st) =>
+        (AppTone.warning, 'في سجلّنا تفعيلٌ آخر لهذا المشترك منذ الطلب — لا تسجّل ديناً يدويّاً قبل مراجعة حركاته وديونه'),
+      'applied' || 'unknown' when o.debt == KitCardDebt.maybe =>
         (AppTone.warning, 'ربّما سُجّل الدين عندنا — افحص كشف المشترك قبل أن تسجّله يدويّاً (لا تسجّله مرّتين)'),
+      'applied' || 'unknown' when o.debt == KitCardDebt.unknown =>
+        (AppTone.warning, 'ربّما سُجّل الدين — راجع ديون المشترك قبل أيّ تسجيلٍ يدويّ'),
       'unknown' => (AppTone.warning, 'لم يُسجَّل دينٌ لهذا الطلب — إن تفعّل المشترك بهذا الدفع وليس تفعيله في كشفه فسجّله يدويّاً'),
       _ => null,
     };
     final footNote = switch (st) {
+      _ when declined => '',
       _ when KitCardApi.live.contains(st) && (st == 'paid' || st == 'applying') =>
         'لا تدفع مرّةً ثانية — يمكنك إغلاق الشيت، يُسجَّل التفعيل والدين عندنا تلقائيّاً حين يتفعّل.',
       _ when KitCardApi.live.contains(st) => 'يمكنك إغلاق الشيت — يُسجَّل التفعيل والدين عندنا تلقائيّاً حين يكتمل الدفع.',
-      'applied' when !o.debtWriteFailed => 'سُجّل عندنا.',
+      'applied' when o.debtSure => 'سُجّل عندنا.',
       _ => '',
     };
     return [
@@ -1284,8 +1297,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
           ),
         ],
       ),
-      // طلبٌ مفتوحٌ سابق: جملة الخادم عنه («مدفوعٌ ينتظر التفعيل — لا تدفع مرّةً ثانية»، «أكمل الدفع من رابطه…»)
-      if ((o.note ?? '').isNotEmpty && KitCardApi.live.contains(st)) ...[
+      // طلبٌ مفتوحٌ سابق: جملة الخادم عنه («مدفوعٌ ينتظر التفعيل — لا تدفع مرّةً ثانية»، «أكمل الدفع من رابطه…») — لا بعد رفض البطاقة
+      if ((o.note ?? '').isNotEmpty && KitCardApi.live.contains(st) && !declined) ...[
         const SizedBox(height: Sp.md),
         _CardNote(tone: AppTone.info, icon: LucideIcons.info, text: o.note!, maxLines: 4),
       ],
@@ -1654,6 +1667,7 @@ class _CardOrder {
     this.noReturn = false,
     this.debt,
     this.debtWriteFailed = false,
+    this.polled = false,
   });
   final String order;
   final String? url;
@@ -1670,6 +1684,14 @@ class _CardOrder {
   final KitCardDebt? debt;
   final bool debtWriteFailed;
 
+  /// وصلت حالٌ من الخادم (card-orders) — `link` بلا رابطٍ بعدها رابطٌ سحبه الخادم (رُفضت البطاقة)، لا رابطٌ لم يصل بعد.
+  final bool polled;
+
+  /// لا شكّ في الدين عندنا: كُتب، أو لا دين للطلب، أو خادمٌ أقدم لا يقول حاله ولم يقل إنّ كتابته فشلت — وحده يُقال عنه «سُجّل عندنا»
+  /// ويُغلق الشيت بعد التفعيل. وما سواه (لم يُكتب، ربّما، تفعيلٌ آخر في سجلّنا، حالٌ لا يعرفها التطبيق) تبقى لوحته بتنبيهها.
+  bool get debtSure =>
+      !debtWriteFailed && (debt == null || debt == KitCardDebt.written || debt == KitCardDebt.none);
+
   /// حالٌ جديدة من الخادم: الرابط كما يقوله وحده (يسقط حين يُدفع، أو يرجع الدفع فاشلاً — لا دفعٌ على رابطٍ رُفض)، والمبالغ والشروط
   /// التي لا يقولها تبقى.
   _CardOrder withStatus(KitCardStatus st) => _CardOrder(
@@ -1685,6 +1707,7 @@ class _CardOrder {
         noReturn: st.noReturn,
         debt: st.debt,
         debtWriteFailed: st.debtWriteFailed,
+        polled: true,
       );
 }
 
