@@ -1,3 +1,6 @@
+import 'dart:async' show TimeoutException;
+import 'dart:io' show HandshakeException, HttpException, SocketException, TlsException, WebSocketException;
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/cupertino.dart';
@@ -115,12 +118,13 @@ void main() async {
     Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)
         .then((_) {
       NotificationService.markFirebaseReady(true);
-      // Crashlytics: كل uncaught Flutter error يُرسل تلقائياً
-      FlutterError.onError =
-          FirebaseCrashlytics.instance.recordFlutterFatalError;
+      // Crashlytics: كل uncaught Flutter error يُرسل تلقائياً — وانقطاع الشبكة العابر «غير قاتل» (انظر transientNetworkError).
+      FlutterError.onError = (details) => transientNetworkError(details.exception)
+          ? FirebaseCrashlytics.instance.recordFlutterError(details)
+          : FirebaseCrashlytics.instance.recordFlutterFatalError(details);
       // Crashlytics: كل uncaught async error يُرسل تلقائياً
       PlatformDispatcher.instance.onError = (error, stack) {
-        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: !transientNetworkError(error));
         return true;
       };
       // Debug mode: نعطّل الإرسال حتى لا نضيف noise أثناء التطوير
@@ -163,6 +167,22 @@ void main() async {
 
 /// ويندوز بلا Crashlytics: كلّ خطأٍ جديد يصل الخادم مرّةً في التشغيل (سطرٌ في سجلّه عبر
 /// ClientDiag، بلا هويّة) — بدونه لا نعرف ما يتعطّل على حاسبات الوكلاء.
+/// انقطاعٌ عابر في الشبكة لا عطلٌ في التطبيق: الهاتف بلا إنترنت، أو خرج التطبيق للخلفيّة فقطع النظام مقابسه («Software
+/// caused connection abort»)، أو ردٌّ من الوسيط على اتّصالٍ خامل («unsolicited response»)، أو مصافحة TLS انقطعت. التطبيق
+/// لا يتوقّف عندها، وكانت تُسجَّل «Crash» قاتلة فتملأ Crashlytics ورسائل «Trending stability issues» اليوميّة (المالك ١ نوفمبر:
+/// «شنو هاي هواي تجيني منها») — تبقى مسجّلةً لكن «غير قاتلة»، فتظهر الانهيارات الحقيقيّة وحدها.
+@visibleForTesting
+bool transientNetworkError(Object? e) {
+  if (e is SocketException || e is HttpException || e is HandshakeException || e is TlsException) return true;
+  if (e is WebSocketException || e is TimeoutException) return true;
+  // package:http يغلّف SocketException بـClientException (غير مستورَد هنا — الاسم وحده يكفي).
+  if (e != null && e.runtimeType.toString() == 'ClientException') {
+    final m = e.toString();
+    return m.contains('SocketException') || m.contains('Connection closed') || m.contains('HandshakeException');
+  }
+  return false;
+}
+
 void _installDesktopErrorReport() {
   final seen = <String>{};
   void report(Object error, StackTrace? stack) {
