@@ -6,6 +6,7 @@ import 'package:rad_mysvcs/screens/national/national_subscriber_extras.dart';
 import 'package:rad_mysvcs/screens/national/national_task_sheet.dart';
 import 'package:rad_mysvcs/services/permissions_service.dart';
 import 'package:rad_mysvcs/services/provider_service.dart';
+import 'package:rad_mysvcs/services/subscriber_refresh_signal.dart';
 
 import 'sim_el/sim_harness.dart';
 
@@ -377,7 +378,7 @@ void main() {
       await simDrain(t);
     });
 
-    testWidgets('الموظّف بـ«سجلّ حركات المشترك» وحده يفتح «المحفظة» (أيٌّ من المفتاحين)', (t) async {
+    testWidgets('الموظّف بـ«سجلّ حركات المشترك» وحده يفتح «المحفظة» (أيٌّ من المفتاحين) — ورصيدها يُقال ولو بلا حركات', (t) async {
       PermissionsService.debugSet(isEmployee: true, permissions: const {'subscribers.view': true, 'subscribers.view_activity': true});
       server.reply('GET', '/api/v2/ftth/lookups', 200, _lookups());
       server.reply(
@@ -393,7 +394,117 @@ void main() {
       await t.tap(find.text('المحفظة'));
       await t.pumpAndSettle();
       expect(server.calls('GET', '$_base/wallet'), hasLength(1));
+      // مراجعة ١ نوفمبر: كان الاختبار يثبّت الخطأ («لا حركات» وحدها) — الرصيد مستقلٌّ عن حركات النافذة الافتراضيّة
+      expect(find.text('رصيد محفظة المشترك'), findsOneWidget);
+      expect(find.text('2,500'), findsOneWidget);
       expect(find.text('لا حركات في محفظة المشترك'), findsOneWidget);
+    });
+
+    testWidgets('بلا حركات: الرصيد المقفل وحده «لا صلاحيّة»، والمجهول «—»، والسالب بإشارته — ثمّ «لا حركات»', (t) async {
+      server.reply('GET', '/api/v2/ftth/lookups', 200, _lookups(locks: {'sub_balance': 'لا صلاحيّة «رصيد محفظة المشترك» في البوّابة'}));
+      var n = 0;
+      server.on('GET', '$_base/wallet', (_) {
+        n += 1;
+        return SimReply(
+          200,
+          _page(const [],
+              total: 0,
+              extra: switch (n) {
+                1 => {'balance': null, 'balance_locked': true},
+                2 => {'balance': null, 'balance_locked': false},
+                _ => {
+                    'balance': {'balance': -4000, 'credit': null, 'currency': 'IQD'},
+                    'balance_locked': false,
+                  },
+              }),
+        );
+      });
+      await pumpExtras(t);
+      await t.tap(find.text('المحفظة'));
+      await t.pumpAndSettle();
+      expect(find.text('رصيد محفظة المشترك'), findsOneWidget);
+      expect(find.text('لا صلاحيّة'), findsOneWidget, reason: 'balance_locked مع صفر حركات');
+      expect(find.text('لا حركات في محفظة المشترك'), findsOneWidget);
+
+      SubscriberRefreshSignal.bump();
+      await t.pumpAndSettle();
+      expect(find.text('رصيد محفظة المشترك'), findsOneWidget);
+      expect(find.text('—'), findsOneWidget, reason: 'رصيدٌ لم يُقرأ «—» لا صفر');
+      expect(find.text('لا صلاحيّة'), findsNothing);
+
+      SubscriberRefreshSignal.bump();
+      await t.pumpAndSettle();
+      expect(find.text('−4,000'), findsOneWidget, reason: 'formatIQD يُسقط الإشارة — السالب سالب');
+      expect(find.text('لا حركات في محفظة المشترك'), findsOneWidget);
+    });
+
+    testWidgets('«المنفّذ» باسم عضو «فريقي» (by_name) ولو كان by null، و«أنت» لحركاتك، ومستخدمٌ آخر بلا اسم', (t) async {
+      server.reply('GET', '/api/v2/ftth/lookups', 200, _lookups());
+      Map<String, Object?> row(String at, Object? by, Object? byName) => {..._walletRow('PLAN_RENEW', -35000, at), 'by': by, 'by_name': byName};
+      server.reply(
+          'GET',
+          '$_base/wallet',
+          200,
+          _page([
+            row('2026-10-24 10:00:00', 'team', 'علي حسن'),
+            row('2026-10-23 10:00:00', null, 'زينب'),
+            row('2026-10-22 10:00:00', 'team', null),
+            row('2026-10-21 10:00:00', 'me', 'لا يُقرأ'),
+          ], extra: {
+            'balance': {'balance': 0, 'currency': 'IQD'},
+          }));
+      await pumpExtras(t);
+      await t.tap(find.text('المحفظة'));
+      await t.pumpAndSettle();
+      expect(find.textContaining('المنفّذ: علي حسن'), findsOneWidget);
+      expect(find.textContaining('المنفّذ: زينب'), findsOneWidget, reason: 'by:null مع by_name (العقد §5)');
+      expect(find.textContaining('المنفّذ: مستخدمٌ آخر لحسابك'), findsOneWidget);
+      expect(find.textContaining('المنفّذ: أنت'), findsOneWidget);
+      expect(find.textContaining('لا يُقرأ'), findsNothing, reason: 'حركاتك بلا اسم');
+    });
+
+    testWidgets('صاحب الحساب لا تقفله مفاتيح الموظّف ولو قيّدته قدراته (canonicalPermissions) — «المحفظة» تُجلب', (t) async {
+      PermissionsService.debugSet(isEmployee: false, managerRestricted: true, managerCaps: const {
+        'subscribers.view': false,
+        'subscribers.view_activity': false,
+        'reports.financial': false,
+        'reports.sessions': false,
+        'subscribers.edit': false,
+      });
+      server.reply('GET', '/api/v2/ftth/lookups', 200, _lookups());
+      server.reply('GET', '$_base/wallet', 200, _page([_walletRow('PLAN_RENEW', -35000, '2026-10-21 10:00:00')]));
+      server.reply('GET', '$_base/errors', 200, _page(const [], total: 0));
+      await pumpExtras(t);
+      expect(find.bySemanticsLabel(RegExp('مقفل')), findsNothing, reason: 'لا حبّة مقفلة للمالك');
+      await t.tap(find.text('المحفظة'));
+      await t.pumpAndSettle();
+      expect(server.calls('GET', '$_base/wallet'), hasLength(1));
+      expect(find.text('تجديد'), findsOneWidget);
+      await t.tap(find.text('سجل الأخطاء'));
+      await t.pumpAndSettle();
+      expect(server.calls('GET', '$_base/errors'), hasLength(1));
+    });
+
+    testWidgets('موظّفٌ رفض الخادم سؤاله عن الأقسام (403) ⇒ الكرت بمكانه وحبّاته مقفلةٌ بمفاتيحه لا مخفيّة', (t) async {
+      PermissionsService.debugSet(isEmployee: true, permissions: const {'subscribers.view_activity': true});
+      server.reply('GET', '/api/v2/ftth/lookups', 403,
+          {'success': false, 'code': 'PERMISSION_DENIED', 'message': 'تحتاج إحدى الصلاحيات: subscribers.view'});
+      server.reply('GET', '$_base/wallet', 200, _page(const [], total: 0, extra: {'balance': {'balance': 100, 'currency': 'IQD'}}));
+      await pumpExtras(t);
+      expect(find.text('من بوّابة الوطني'), findsOneWidget, reason: 'مقفلٌ لا مخفيّ');
+      for (final l in ['سجل الأخطاء', 'التذاكر', 'المهامّ', 'الجلسات']) {
+        expect(find.bySemanticsLabel('$l — مقفل'), findsOneWidget, reason: l);
+      }
+      expect(find.bySemanticsLabel('المحفظة — مقفل'), findsNothing, reason: '«سجلّ حركات المشترك» يفتحها');
+      await t.tap(find.text('التذاكر'));
+      await t.pump();
+      expect(server.calls('GET', '$_base/tickets'), isEmpty, reason: 'المقفل لا يجلب');
+      await t.pump(const Duration(seconds: 3));
+      await t.tap(find.text('المحفظة'));
+      await t.pumpAndSettle();
+      expect(server.calls('GET', '$_base/wallet'), hasLength(1));
+      expect(find.text('100'), findsOneWidget);
+      expect(server.calls('GET', '/api/v2/ftth/lookups'), hasLength(1), reason: 'الرفض جوابٌ يُحفظ — لا يُسأل ثانيةً');
     });
 
     testWidgets('pending ⇒ «جارٍ الجلب…» ثمّ الصفوف وحدها بعد ٤ث', (t) async {

@@ -536,14 +536,8 @@ class _WalletRowCard extends StatelessWidget {
     final transfer = r.transferFrom != null || r.transferTo != null
         ? 'من ${r.transferFrom?.name ?? '—'} إلى ${r.transferTo?.name ?? '—'}'
         : null;
-    // «المنفّذ»: أنت، أو اسم عضو «فريقي» حين يعرفه الخادم (by_name)، وإلّا «مستخدمٌ آخر لحسابك»
-    final by = r.by == 'me'
-        ? 'المنفّذ: أنت'
-        : r.byName != null
-            ? 'المنفّذ: ${r.byName}'
-            : r.by == 'team'
-                ? 'المنفّذ: مستخدمٌ آخر لحسابك'
-                : null;
+    // «المنفّذ»: أنت، أو اسم عضو «فريقي» حين يعرفه الخادم (by_name)، وإلّا «مستخدمٌ آخر لحسابك» — كمحفظة المشترك ([nationalMaker])
+    final by = nationalMaker(r.by, r.byName);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(

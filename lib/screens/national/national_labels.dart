@@ -178,3 +178,13 @@ String nationalChangeType(String c) => const {'Scheduled': 'مجدول', 'Instan
 /// نوع الدفع: دفعة واحدة أو دفعات شهريّة (displayValue البوّابة أو رمزنا).
 String nationalSalesType(String t) =>
     const {'Upfront': 'دفعة واحدة', 'upfront': 'دفعة واحدة', 'Installment': 'دفعات شهرية', 'installment': 'دفعات شهرية'}[t] ?? '';
+
+/// «المنفّذ» على حركة محفظة (العقد §5، ١ نوفمبر): «أنت» لحركاتك، واسم عضو «فريقي» حين يعرفه الخادم (`by_name` — ولو كان `by` null:
+/// عضوٌ يوزره ليس هاتفاً)، وإلّا «مستخدمٌ آخر لحسابك» لمن لا يُعرف اسمه؛ ولا شيء يُعرف ⇒ null (لا سطر). «محفظتي» ومحفظة المشترك معاً.
+String? nationalMaker(String? by, String? byName) {
+  final name = byName?.trim() ?? '';
+  if (by == 'me') return 'المنفّذ: أنت';
+  if (name.isNotEmpty) return 'المنفّذ: $name';
+  if (by == 'team') return 'المنفّذ: مستخدمٌ آخر لحسابك';
+  return null;
+}

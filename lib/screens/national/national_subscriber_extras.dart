@@ -26,9 +26,10 @@ import 'national_widgets.dart';
 /// وتذاكره، ومهامّه، وجلساته السابقة — كما في صفحة المشترك بالبوّابة. كرتٌ واحد مطويّ: سطرٌ بخمس حبّات، والنقر يفتح القسم تحتها
 /// (واحداً في المرّة) ويجلبه حينها لا قبل، وما جُلب يبقى حتى السحب للتحديث. قليلٌ في المرّة (١٠) و«المزيد» للباقي.
 ///
-/// يظهر حين يقول الخادم إنّ الأقسام التجريبيّة مفتوحةٌ لهذا الحساب (`lookups.beta` — مفتاح `watani_beta`)، خارج «كل الشركات»
-/// (عقد الخادم §3). الموظّف بلا مفتاح القسم يراه مقفلاً بمكانه (المحفظة = «التقارير الماليّة» أو «سجلّ حركات المشترك»، والباقي =
-/// «عرض المشتركين»)، وما لا يملكه مستخدم البوّابة نفسه يُقفل بسببه (`portal_locks` أو ردٌّ `locked`) — لا خطأ ولا قائمة فارغة.
+/// يظهر حين يقول الخادم إنّ الأقسام التجريبيّة مفتوحةٌ لهذا الحساب (`lookups.beta`)، خارج «كل الشركات» (عقد الخادم §3) — أو حين
+/// يرفض الخادم سؤال موظّفٍ عنها (403: لا مفتاح له يقرأ به) فتبقى بمكانها مقفلةً. الموظّف بلا مفتاح القسم يراه مقفلاً بمكانه
+/// (المحفظة = «التقارير الماليّة» أو «سجلّ حركات المشترك»، والباقي = «عرض المشتركين») — وصاحب الحساب لا تقفله هذه المفاتيح أبداً —
+/// وما لا يملكه مستخدم البوّابة نفسه يُقفل بسببه (`portal_locks` أو ردٌّ `locked`) — لا خطأ ولا قائمة فارغة.
 enum NationalSheetSection { wallet, errors, tickets, tasks, sessions }
 
 extension on NationalSheetSection {
@@ -162,7 +163,8 @@ class _NationalSubscriberExtrasState extends State<NationalSubscriberExtras> {
     if (s != null && _canOpen(s)) _next(s);
   }
 
-  bool _employeeLocked(NationalSheetSection s) => !Perms.hasAny(s.perms);
+  /// الموظّف وحده يُقفل بمفتاح القسم — صاحب الحساب لا (قدراته من الخادم تخصّ الساس لا أقسام البوّابة؛ العقد §9).
+  bool _employeeLocked(NationalSheetSection s) => Perms.isEmployee && !Perms.hasAny(s.perms);
 
   /// قفل البوّابة: ردٌّ مقفل وصل، أو سببٌ جاهز في `portal_locks` (فلا نداء أصلاً).
   NationalLock? _lockOf(NationalSheetSection s) {
@@ -232,7 +234,8 @@ class _NationalSubscriberExtrasState extends State<NationalSubscriberExtras> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep
     final b = _beta;
-    if (b == null || !b.on) return const SizedBox.shrink();
+    // مفتوحةٌ للحساب، أو موظّفٌ رفض الخادم سؤاله (refused) ⇒ بمكانها مقفلةً بمفاتيحه لا مخفيّة
+    if (b == null || !b.shown) return const SizedBox.shrink();
     final open = _open;
     return Padding(
       padding: const EdgeInsets.only(bottom: Sp.sm),
@@ -306,9 +309,16 @@ class _NationalSubscriberExtrasState extends State<NationalSubscriberExtras> {
       if (p.error != null) return _ErrorRow(text: p.error!, onRetry: () => _retry(s));
       if (p.pending) return const _BusyRow(text: 'جارٍ الجلب من بوّابة المشروع الوطني…');
       if (p.loading || p.page == 0) return const _BusyRow(text: 'جارٍ التحميل…');
-      return Padding(
+      final empty = Padding(
         padding: const EdgeInsets.symmetric(vertical: Sp.md),
         child: Text(s.empty, textAlign: TextAlign.center, style: AppType.muted()),
+      );
+      if (s != NationalSheetSection.wallet) return empty;
+      // رصيد المحفظة مستقلٌّ عن حركاتها (البوّابة تعرض «رصيد المحفظة» وحده، والحركات بنافذتها الافتراضيّة بلا تاريخ): زبونٌ بلا حركاتٍ
+      // فيها رصيده يُقال — أو «لا صلاحيّة» أو «—» — ثمّ «لا حركات» (مراجعة ١ نوفمبر: كان يُخفى الرصيد مع القائمة الفارغة).
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [_balance(), Divider(height: 1, color: AppColors.divider), empty],
       );
     }
     final rows = <Widget>[
@@ -323,7 +333,8 @@ class _NationalSubscriberExtrasState extends State<NationalSubscriberExtras> {
           rows[i],
         ],
         if (p.hasMore)
-          _MoreRow(loading: p.loading, shown: p.rows.length, total: p.total, unit: s.unit, onTap: () => _next(s))
+          // والصفحة التالية «جارٍ» (pending، تُسأل وحدها بعد ٤ث): دوّارةٌ لا نداءٌ ثانٍ لها
+          _MoreRow(loading: p.loading || p.pending, shown: p.rows.length, total: p.total, unit: s.unit, onTap: () => _next(s))
         else if (p.error != null)
           _ErrorRow(text: p.error!, onRetry: () => _next(s)),
       ],
@@ -363,7 +374,8 @@ class _NationalSubscriberExtrasState extends State<NationalSubscriberExtras> {
             child: Text('رصيد محفظة المشترك', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.label(color: AppColors.textLabel)),
           ),
           Text(
-            b.locked ? 'لا صلاحيّة' : (v == null ? '—' : formatIQD(v)),
+            // formatIQD يُسقط الإشارة — رصيدٌ سالب يُقال سالباً لا موجباً
+            b.locked ? 'لا صلاحيّة' : (v == null ? '—' : '${v < 0 ? '−' : ''}${formatIQD(v)}'),
             textDirection: b.locked ? null : TextDirection.ltr,
             style: b.locked ? AppType.muted() : AppType.amount(color: AppColors.textHi).copyWith(fontSize: 15),
           ),
@@ -498,12 +510,14 @@ class _WalletLine extends StatelessWidget {
     final sign = r.isOut ? '−' : (r.isIn ? '+' : '');
     final color = r.isOut ? AppColors.error : (r.isIn ? AppColors.success : AppColors.textHi);
     final method = nationalPayMethod(r.payMethod.isNotEmpty ? r.payMethod : r.method);
+    // «المنفّذ»: أنت، أو اسم عضو «فريقي» (by_name — ولو كان by null)، وإلّا «مستخدمٌ آخر لحسابك» — كـ«محفظتي»
+    final maker = nationalMaker(r.by, r.byName);
     final meta = [
       iso(nationalTime(r.at)),
       if ((r.planName ?? '').isNotEmpty) iso(r.planName!),
       if ((r.ends ?? '').isNotEmpty) 'ينتهي ${iso(_day(r.ends))}',
       if (method != '—') method,
-      if (r.by == 'me') 'المنفّذ: أنت' else if (r.by == 'team') 'المنفّذ: مستخدمٌ آخر لحسابك',
+      if (maker != null) maker,
     ].join(' · ');
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Sp.sm),

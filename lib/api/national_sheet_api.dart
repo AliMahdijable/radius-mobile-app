@@ -8,7 +8,8 @@ import 'national_portal_api.dart';
 /// أقسام البوّابة الباقية في التطبيق — الجزء الأوّل (المشروع الوطنيّ، ١ نوفمبر؛ المالك: «اقسام البوابة البقية افضل تمضي بيها
 /// وتكملها»): ما يخصّ المشترك الواحد في صفحته (محفظته، سجلّ أخطاء اشتراكه، تذاكره، مهامّه، جلساته السابقة) وتفاصيل المهمّة
 /// وتعليقاتها وتعليقات الطلب، والتعليق عليهما. عقد الخادم: `release_work/national_rest/contract.md` §1–§3 و§6
-/// (`server/watani/wataniPortalBeta.js`)، خلف مفتاح الحساب «التجريبيّ» (`watani_beta`) — مطفأٌ ⇒ لا شيء من هذا يظهر.
+/// (`server/watani/wataniPortalBeta.js`)، خلف مفتاح الحساب لأقسام البوّابة (`watani_sections` — `lookups.beta`؛ «تبديل الباقة» بقيت
+/// على `watani_beta`) — مطفأٌ ⇒ لا شيء من هذا يظهر.
 ///
 /// القراءة بكاش الخادم (الجلب الأوّل قد يردّ `pending` ⇒ اسأل بعد ٤ث). «لا صلاحيّة في البوّابة» ردٌّ ناجح بعلم `locked` (عنوانٌ
 /// وسبب) يُعرض قفلاً بمكانه — لا خطأ ولا قائمة فارغة. الكتابة (التعليق) خلف مفتاح الكتابة (`watani_portal`) أيضاً: نداءٌ واحد،
@@ -219,8 +220,15 @@ NationalComment nationalCommentOf(Map c) => NationalComment(_s(c['text']), _s(c[
 
 /// ما يقوله الخادم عن الأقسام التجريبيّة لهذا الحساب (§2): مفتوحةٌ أم لا، وأقفال البوّابة الجاهزة بأسبابها.
 class NationalBeta {
-  const NationalBeta({required this.on, this.caps, this.locks = const {}, this.canWrite = false});
+  const NationalBeta({required this.on, this.caps, this.locks = const {}, this.canWrite = false, this.refused = false});
   final bool on;
+
+  /// موظّفٌ رفض الخادم سؤاله (403 PERMISSION_DENIED — لا يملك أيّ مفتاحٍ يقرأ به `lookups`، القرار ٤ في ١ نوفمبر): لا نعرف أهي مفتوحة،
+  /// والأقسام تبقى بمكانها **مقفلةً بمفاتيحه** لا مخفيّة (الموظّف يرى ما لا يملكه مقفلاً).
+  final bool refused;
+
+  /// تُعرض الأقسام (مفتوحةً أو مقفلةً بمكانها).
+  bool get shown => on || refused;
 
   /// null = لم تُعرف بعد (لا قفل على المجهول).
   final Map<String, bool>? caps;
@@ -329,8 +337,13 @@ class NationalSheetApi {
     _betaOwner = owner;
     final run = () async {
       final r = await _get('/api/v2/ftth/lookups');
-      if (!r.ok || r.data!['data'] is! Map) return null;
-      final b = NationalBeta.fromJson(Map<String, dynamic>.from(r.data!['data'] as Map));
+      // موظّفٌ بلا مفتاحٍ يقرأ به (403 PERMISSION_DENIED): الأقسام بمكانها مقفلةً لا مخفيّة — جوابٌ يُحفظ كغيره (لا يُسأل كلّ مرّة)
+      final NationalBeta? b = r.code == 'PERMISSION_DENIED'
+          ? const NationalBeta(on: false, refused: true)
+          : (!r.ok || r.data!['data'] is! Map)
+              ? null
+              : NationalBeta.fromJson(Map<String, dynamic>.from(r.data!['data'] as Map));
+      if (b == null) return null;
       if (owner == _betaOwner) {
         _beta = b;
         _betaAt = DateTime.now();
