@@ -13,7 +13,7 @@ import 'national_more_widgets.dart';
 import 'national_widgets.dart';
 
 /// «فريقي» — المشروع الوطنيّ (١ نوفمبر، تبويب البوّابة نفسه): مستخدمو حساب الشريك في البوّابة — الاسم واليوزر (آخر ٤ أرقام حين
-/// يكون هاتفاً) والوظيفة وحدّ المحفظة («غير محدود» بلا حدّ، «—» حين لا تقوله البوّابة) وآخر تسجيل دخول، وإجماليّ حدود الفريق.
+/// يكون هاتفاً) والوظيفة وحدّ المحفظة («غير محدود» بلا حدّ، «—» للرئيسيّ وما لا يُقرأ) وآخر تسجيل دخول، وعدد الأعضاء.
 /// قراءةٌ وحدها: لا إضافة ولا تعبئة ولا تصفير للمصادقة من هنا، و**لا هاتف ولا بريد أبداً** (الخادم لا يرسلهما). الخادم
 /// `/api/v2/ftth/team` (العقد §5).
 class NationalTeamScreen extends StatefulWidget {
@@ -83,8 +83,6 @@ class _NationalTeamScreenState extends State<NationalTeamScreen> {
             padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
             children: [
               if (_locked == null) ...[
-                _Summary(raw: _p.raw, total: _p.total, busy: _p.loading || _p.pending),
-                const SizedBox(height: Sp.md),
                 NationalSearchField(
                   hint: 'الاسم أو اليوزر',
                   initial: _q,
@@ -93,6 +91,10 @@ class _NationalTeamScreenState extends State<NationalTeamScreen> {
                     _reload();
                   },
                 ),
+                if (_p.total != null && _p.rows.isNotEmpty) ...[
+                  const SizedBox(height: Sp.sm),
+                  Text('الأعضاء: ${nationalCount(_p.total)}', style: AppType.micro(color: AppColors.textMid)),
+                ],
                 const SizedBox(height: Sp.md),
               ],
               ..._body(),
@@ -128,56 +130,6 @@ class _NationalTeamScreenState extends State<NationalTeamScreen> {
   }
 }
 
-/// عدد الأعضاء وإجماليّ حدود محافظهم (كالبوّابة: «اجمالي حد المحفظة للفريق») — ما لا يُعرف «—».
-class _Summary extends StatelessWidget {
-  const _Summary({required this.raw, required this.total, required this.busy});
-  final Map<String, dynamic> raw;
-  final int? total;
-  final bool busy;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep
-    final lim = raw['limits_total'];
-    String dash() => busy ? '…' : '—';
-    return NationalCard(
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(color: AppColors.brandSoftBg, borderRadius: BorderRadius.circular(R.icon)),
-            child: Icon(LucideIcons.usersRound, color: AppColors.brand, size: 20),
-          ),
-          const SizedBox(width: Sp.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('الأعضاء', style: AppType.muted()),
-                const SizedBox(height: 2),
-                Text(total == null ? dash() : nationalCount(total),
-                    textDirection: TextDirection.ltr, style: AppType.statValue(color: AppColors.textHi)),
-              ],
-            ),
-          ),
-          Container(width: 1, height: 36, color: AppColors.divider),
-          const SizedBox(width: Sp.md),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('إجماليّ حدود المحافظ', style: AppType.muted()),
-              const SizedBox(height: 2),
-              Text(lim is num ? formatIQD(lim) : dash(),
-                  textDirection: TextDirection.ltr, style: AppType.amount(color: AppColors.textHi).copyWith(fontSize: 15)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _MemberCard extends StatelessWidget {
   const _MemberCard({required this.m});
   final NationalTeamMember m;
@@ -185,15 +137,13 @@ class _MemberCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep
-    // كالبوّابة: الوكيل الرئيسيّ بلا حدٍّ يُذكر؛ العضو: حدّه، أو «غير محدود»، أو «—» حين لا تقوله البوّابة
-    final wallet = m.main
-        ? null
-        : switch (m.limited) {
-            true => 'حدّ المحفظة: ${m.walletLimit == null ? '—' : iso(formatIQD(m.walletLimit!))}',
-            false => 'حدّ المحفظة: غير محدود',
-            null => 'حدّ المحفظة: —',
-          };
-    final role = m.role.isNotEmpty ? m.role : (m.main ? 'الوكيل الرئيسيّ' : 'عضو الفريق');
+    // كالبوّابة: حدّه، أو «غير محدود» (بلا محفظةٍ محدودة)، و«—» للمستخدم الرئيسيّ وما لا يُقرأ
+    final wallet = switch (m.limited) {
+      true => 'حدّ المحفظة: ${m.walletLimit == null ? '—' : iso(formatIQD(m.walletLimit!))}',
+      false => 'حدّ المحفظة: غير محدود',
+      null => 'حدّ المحفظة: —',
+    };
+    final role = m.role.isNotEmpty ? m.role : (m.main ? 'مشرف' : 'عضو الفريق');
     final login = m.login;
     return NationalCard(
       child: Column(
@@ -222,7 +172,7 @@ class _MemberCard extends StatelessWidget {
             spacing: 12,
             runSpacing: 4,
             children: [
-              if (wallet != null) nationalMeta(LucideIcons.wallet, wallet),
+              nationalMeta(LucideIcons.wallet, wallet),
               nationalMeta(LucideIcons.logIn, m.lastLogin == null ? 'آخر دخول: —' : 'آخر دخول ${iso(nationalTime(m.lastLogin))}'),
             ],
           ),

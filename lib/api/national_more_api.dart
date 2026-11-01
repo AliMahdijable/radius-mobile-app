@@ -328,10 +328,10 @@ class NationalTeamMember {
   /// الوظيفة بالعربيّ (من الخادم، وإلّا من رمزها).
   final String role;
 
-  /// الوكيل الرئيسيّ (البوّابة لا تذكر له حدّاً).
+  /// المستخدم الرئيسيّ للشريك (البوّابة تسمّيه «مشرف» ولا تذكر له حدّاً — «—»).
   final bool main;
 
-  /// true = له «حدّ المحفظة» ([walletLimit])، false = «غير محدود»، null = لا يُعرف («—»).
+  /// true = له «حدّ المحفظة» ([walletLimit])، false = «غير محدود»، null = الرئيسيّ أو لا يُعرف («—»).
   final bool? limited;
   final num? walletLimit;
   final String? lastLogin;
@@ -360,7 +360,7 @@ class NationalTeamMember {
 /// وظيفة عضو الفريق بأسماء البوّابة (TEAM_MEMBER_ROLES في ترجمتها) — حين لا يرسل الخادم اسمها.
 String nationalTeamRole(String? code) {
   const names = {
-    'contractor': 'الوكيل الرئيسيّ',
+    'contractor': 'مشرف',
     'fieldworker': 'عامل ميداني',
     'fieldworkersmanagingcustomers': 'عامل ميداني يدير المشتركين',
     'superadminmember': 'مشرف عام',

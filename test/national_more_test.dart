@@ -250,6 +250,8 @@ void main() {
       });
       expect((p.login, p.role, p.limited), ('•••4567', 'كاشير', null));
       expect(NationalTeamMember.fromJson({'name': 'x', 'wallet_limit': {'limited': false, 'amount': null}}).limited, isFalse);
+      final main = NationalTeamMember.fromJson({'name': 'الوكيل', 'role': {'code': 'Contractor'}, 'is_main': true, 'wallet_limit': null});
+      expect((main.main, main.limited, main.role), (true, null, 'مشرف'), reason: 'بلا label ⇒ اسم البوّابة للرئيسيّ');
       expect(nationalTeamRole('FieldWorker'), 'عامل ميداني');
       expect(nationalTeamRole('Mystery'), 'Mystery');
     });
@@ -368,32 +370,32 @@ void main() {
       await simDrain(t);
     });
 
-    testWidgets('«فريقي»: الوظيفة والحدّ و«غير محدود» و«—» والمقنّع وإجماليّ الحدود — ولا هاتف', (t) async {
+    testWidgets('«فريقي» (العقد v2): «مشرف» للرئيسيّ بحدٍّ «—»، والحدّ و«غير محدود»، والمقنّع، وعدد الأعضاء — ولا هاتف', (t) async {
       server.reply('GET', '/api/v2/ftth/team', 200, {
         'success': true,
         'data': [
-          {'id': '1', 'name': 'حسين الوكيل', 'username': 'owner77', 'role': {'code': 'Contractor', 'label': 'الوكيل الرئيسيّ'}, 'is_main': true, 'wallet_limit': {'limited': null, 'amount': null}, 'last_login_at': null},
+          {'id': '1', 'name': 'حسين الوكيل', 'username': 'owner77', 'role': {'code': 'Contractor', 'label': 'مشرف'}, 'is_main': true, 'wallet_limit': null, 'last_login_at': null},
           {'id': '2', 'name': 'علي حسن', 'username': 'ali_fw', 'role': {'code': 'FieldWorker', 'label': 'عامل ميداني'}, 'is_main': false, 'wallet_limit': {'limited': true, 'amount': 250000}, 'last_login_at': '2026-10-31 20:05:00'},
           {'id': '3', 'name': 'زينب', 'username': 'zainab88', 'role': {'code': 'SupportTeamMember', 'label': 'عضو فريق الدعم'}, 'is_main': false, 'wallet_limit': {'limited': false, 'amount': null}, 'last_login_at': null},
-          {'id': '4', 'name': 'مصطفى', 'username': null, 'username_masked': '•••4567', 'role': {'code': 'SupportTeamMember', 'label': 'عضو فريق الدعم'}, 'is_main': false, 'wallet_limit': {'limited': null, 'amount': null}, 'last_login_at': null},
+          {'id': '4', 'name': null, 'username': null, 'username_masked': '•••4567', 'role': {'code': 'SupportTeamMember', 'label': 'عضو فريق الدعم'}, 'is_main': false, 'wallet_limit': {'limited': false, 'amount': null}, 'last_login_at': null},
         ],
         'total': 4,
         'page': 1,
         'size': 25,
         'page_count': 1,
-        'limits_total': 250000,
         'fetched_at': '2026-11-01T06:50:00.000Z',
         'stale': false,
       });
       await pumpSim(t, _v, home: (_) => const NationalTeamScreen());
-      expect(find.text('الوكيل الرئيسيّ'), findsOneWidget);
+      expect(find.text('مشرف'), findsOneWidget);
       expect(find.text('عامل ميداني'), findsOneWidget);
       expect(find.text('عضو فريق الدعم'), findsNWidgets(2));
-      expect(find.textContaining('غير محدود'), findsOneWidget);
-      expect(find.textContaining('حدّ المحفظة: —'), findsOneWidget, reason: 'walletSetup null ⇒ «—» لا «غير محدود»');
-      expect(find.textContaining('250,000'), findsWidgets);
-      expect(find.text('•••4567'), findsOneWidget);
+      expect(find.textContaining('غير محدود'), findsNWidgets(2), reason: 'hasWallet:false و walletSetup:null كالبوّابة');
+      expect(find.textContaining('حدّ المحفظة: —'), findsOneWidget, reason: 'الرئيسيّ: wallet_limit null');
+      expect(find.textContaining('250,000'), findsOneWidget);
+      expect(find.text('•••4567'), findsOneWidget, reason: 'اسمٌ هاتفيّ ⇒ name null ⇒ المقنّع عنواناً');
       expect(find.textContaining('2026-10-31 20:05'), findsOneWidget);
+      expect(find.text('الأعضاء: 4'), findsOneWidget);
       expect(find.textContaining('077'), findsNothing);
       expect(server.calls('GET', '/api/v2/ftth/team').last.queryParameters['size'], 25);
       await simDrain(t);
