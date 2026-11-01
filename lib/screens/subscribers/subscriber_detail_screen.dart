@@ -566,23 +566,35 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     );
   }
 
+  /// المشروع الوطنيّ (١ نوفمبر): «تعليق/تشغيل» المشترك في بوّابته لا «تعطيل/تفعيل الحساب» — لمشترك الجلسة نفسها (صفّ «كل
+  /// الشركات» من شركةٍ أخرى بكلماته العامّة).
+  bool get _suspendVocab => sub.companyKey == null && ProviderService.togglesAsSuspend;
+
   Future<void> _confirmToggleEnabled() async {
     final wantEnable = sub.isDisabled;
-    final action =
-        wantEnable ? 'subscribers.enable'.tr() : 'subscribers.disable'.tr();
+    final suspend = _suspendVocab;
+    final action = suspend
+        ? (wantEnable ? 'subscribers.resume'.tr() : 'subscribers.suspend'.tr())
+        : (wantEnable ? 'subscribers.enable'.tr() : 'subscribers.disable'.tr());
     final ok = await showDialog<bool>(
       context: context,
       builder: (dialogCtx) => AlertDialog(
         title: Text(
-          'subscribers.confirm_action'.tr(namedArgs: {'action': action}),
+          suspend
+              ? (wantEnable ? 'subscribers.resume_title'.tr() : 'subscribers.suspend_title'.tr())
+              : 'subscribers.confirm_action'.tr(namedArgs: {'action': action}),
           style: AppType.label(color: AppColors.textHi)
               .copyWith(fontSize: 16, fontWeight: FontWeight.w700),
         ),
         content: Text(
-          wantEnable
-              ? 'subscribers.enable_body'.tr(namedArgs: {'name': sub.fullName})
-              : 'subscribers.disable_body'
-                  .tr(namedArgs: {'name': sub.fullName}),
+          suspend
+              ? (wantEnable
+                  ? 'subscribers.resume_body'.tr(namedArgs: {'name': sub.fullName})
+                  : 'subscribers.suspend_body'.tr(namedArgs: {'name': sub.fullName}))
+              : wantEnable
+                  ? 'subscribers.enable_body'.tr(namedArgs: {'name': sub.fullName})
+                  : 'subscribers.disable_body'
+                      .tr(namedArgs: {'name': sub.fullName}),
           style: AppType.subtitle(color: AppColors.textMid),
         ),
         actions: [
@@ -711,8 +723,12 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   Future<void> _runToggleEnabled(bool wantEnable) async {
     final id = sub.idx;
     if (id == null) return;
+    final suspend = _suspendVocab;
     setState(() => _toggling = true);
-    final success = await MergedOps.write(sub, () => SubscribersApi.toggle(id, enable: wantEnable));
+    // رسالة الخادم نفسها عند الرفض (المشروع الوطنيّ: «الاشتراك منتهٍ…»، «عمليّات تعليق كثيرة…»، «ما نعرف… الإعادة آمنة») — لا
+    // «تعذّر» عامّة؛ و«كما هو» (الحال المطلوبة أصلاً) يُقال كما هو.
+    final r = await MergedOps.write(sub, () => SubscribersApi.toggleResult(id, enable: wantEnable));
+    final success = r.ok;
     if (!mounted) return;
     // The backend disconnects any live session on disable (matches v1 —
     // see /api/v2/subscribers/:idx/toggle-enabled in server.js). Reflect
@@ -724,18 +740,29 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
         sub = sub.copyWithOnline(online: false);
       }
     });
-    if (success) SubscriberEvents.notifyChange();
+    // «ما نعرف» يتغيّر عند المزوّد ربّما ⇒ تحديثٌ أيضاً (الخادم أسقط قائمته)
+    if (success || r.code == 'OUTCOME_UNKNOWN') SubscriberEvents.notifyChange();
     if (!mounted) return;
+    final String text;
+    if (success && r.unchanged) {
+      text = suspend
+          ? (wantEnable ? 'subscribers.resume_already'.tr() : 'subscribers.suspend_already'.tr())
+          : (wantEnable ? 'subscribers.enable_ok'.tr() : 'subscribers.disable_ok'.tr());
+    } else if (success) {
+      text = suspend
+          ? (wantEnable ? 'subscribers.resume_ok'.tr() : 'subscribers.suspend_ok'.tr())
+          : (wantEnable ? 'subscribers.enable_ok'.tr() : 'subscribers.disable_ok'.tr());
+    } else {
+      text = r.message ??
+          (suspend
+              ? (wantEnable ? 'subscribers.resume_failed'.tr() : 'subscribers.suspend_failed'.tr())
+              : (wantEnable ? 'subscribers.enable_failed'.tr() : 'subscribers.disable_failed'.tr()));
+    }
     showSheetSnack(
       context,
-      success
-          ? (wantEnable
-              ? 'subscribers.enable_ok'.tr()
-              : 'subscribers.disable_ok'.tr())
-          : (wantEnable
-              ? 'subscribers.enable_failed'.tr()
-              : 'subscribers.disable_failed'.tr()),
+      text,
       isError: !success,
+      duration: Duration(seconds: !success && r.message != null ? 6 : 3),
     );
   }
 
@@ -809,13 +836,17 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
               ? null
               : () => showEditSubscriberSheet(context, sub),
         ),
-      // التسمية تتبع الحالة (`isDisabled`) حتّى وهو مقفل.
+      // التسمية تتبع الحالة (`isDisabled`) حتّى وهو مقفل. المشروع الوطنيّ: «تعليق/تشغيل» بأيقونتَي الإيقاف المؤقّت والتشغيل.
       if (_shows('subscribers.toggle'))
         SubAction(
-          icon: sub.isDisabled ? LucideIcons.circleCheck : LucideIcons.ban,
-          label: sub.isDisabled
-              ? 'subscribers.enable'.tr()
-              : 'subscribers.disable'.tr(),
+          icon: _suspendVocab
+              ? (sub.isDisabled ? LucideIcons.play : LucideIcons.pause)
+              : (sub.isDisabled ? LucideIcons.circleCheck : LucideIcons.ban),
+          label: _suspendVocab
+              ? (sub.isDisabled ? 'subscribers.resume'.tr() : 'subscribers.suspend'.tr())
+              : sub.isDisabled
+                  ? 'subscribers.enable'.tr()
+                  : 'subscribers.disable'.tr(),
           color: sub.isDisabled ? AppColors.success : AppColors.warningFill,
           busy: _toggling,
           locked: _locked('subscribers.toggle'),
@@ -831,7 +862,11 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       // يُحجَب عنه الفصل الجماعيّ ويبقى فصل التفصيل = تصعيد صلاحيّة
       // أغلقه تدقيق ٢٠٢٦-١٠-٠٨.
       // والحالة (متّصل + idx) تُخفيه للجميع؛ نقص المفتاح وحده يُقفله.
-      if (_shows('subscribers.toggle') && sub.isOnline && sub.idx != null)
+      // وما لا يخدمه المزوّد لا يظهر أصلاً ([subscriberDisconnectHidden]: الوطنيّ لا فصل عنده للمقاول، والشركة المُضافة بقدرتها).
+      if (_shows('subscribers.toggle') &&
+          sub.isOnline &&
+          sub.idx != null &&
+          !(sub.companyKey == null && subscriberDisconnectHidden()))
         SubAction(
           icon: LucideIcons.power,
           // «فصل» لا «فصل المستخدم»: البلاطات تتقاسم العرض، وخمسٌ منها
@@ -2012,7 +2047,13 @@ class _SubscriberHero extends StatelessWidget {
 
   /// (التسمية، لون النقطة). الحالة تُقرأ من هنا بدل تلوين البطاقة كلّها.
   static (String, Color) _statusPill(Subscriber sub) {
-    if (sub.isDisabled) return ('معطّل', AppColors.onBrandDanger);
+    if (sub.isDisabled) {
+      // الوطنيّ: «موقوف» (معلّقٌ في بوّابته) لا «معطّل»
+      return (
+        sub.companyKey == null && ProviderService.togglesAsSuspend ? 'subscribers.status_suspended'.tr() : 'معطّل',
+        AppColors.onBrandDanger,
+      );
+    }
     if (sub.isExpired) return ('منتهي', AppColors.onBrandDanger);
     if (sub.isOnline) return ('متصل', AppColors.onBrandMint);
     return ('غير متصل', AppColors.onBrandTertiary);

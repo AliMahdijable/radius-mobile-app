@@ -83,3 +83,12 @@ bool providerHidesAction(String key) {
   }
   return false;
 }
+
+/// «فصل الاتصال» لا يخدمه مزوّد الجلسة: المشروع الوطنيّ (البوّابة لا تسمح به للمقاول — يُخفى للمالك وللموظّف)، أو شركةٌ مُضافة
+/// قدرتها `subscribers.disconnect` false لصاحب الحساب. كان الفصل يتبع `subscribers.toggle` وحده، فيظهر للوطنيّ حين يُفتح التعليق
+/// ويردّه الخادم بـ409.
+bool subscriberDisconnectHidden() =>
+    ProviderService.togglesAsSuspend || (sessionIsKit && !Perms.isEmployee && !Perms.has('subscribers.disconnect'));
+
+/// التعليق/التشغيل الجماعيّ — لا للوطنيّ (كلّ تعليقٍ ~٣ نداءات للبوّابة، والخادم يحدّه ٤/د و٢٠/١٠د لكلّ شريك).
+bool bulkToggleHidden() => ProviderService.togglesAsSuspend;

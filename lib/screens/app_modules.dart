@@ -24,6 +24,7 @@ import 'managers/managers_screen.dart';
 import 'message_logs/message_logs_screen.dart';
 import 'national/national_money_screen.dart';
 import 'national/national_tickets_screen.dart';
+import 'national/national_wallet_screen.dart';
 import 'national/national_work_screen.dart';
 import 'packages/packages_screen.dart';
 import 'portal_settings/portal_settings_screen.dart';
@@ -140,6 +141,19 @@ List<AppModule> buildAppModules() {
         subtitle: 'تذاكر الدعم في بوّابة الوطني',
         page: () => const NationalTicketsScreen(),
       ),
+    // «محفظتي» قسمٌ بنفسها كالبوّابة (١ نوفمبر — المالك: حركات التفعيل لا تظهر): الرصيد والعمولة وكلّ حركات محفظتي لآخر ٣٠ يوماً،
+    // و«التحويلات» حين يملكها الحساب. و«الإيرادات» (كانت «الحركات الماليّة» بتبويب «محفظتي») حركات التفعيل بكلّ طرق الدفع.
+    if (national && permShown(const ['reports.financial']))
+      AppModule(
+        id: 'national_wallet',
+        group: AppModuleGroup.finance,
+        locked: !Perms.has('reports.financial'),
+        icon: LucideIcons.walletCards,
+        tone: AppTone.brand,
+        title: 'محفظتي',
+        subtitle: 'رصيدك وحركات محفظتك في بوّابة الوطني',
+        page: () => const NationalWalletScreen(),
+      ),
     if (national && permShown(const ['reports.financial']))
       AppModule(
         id: 'national_money',
@@ -147,8 +161,8 @@ List<AppModule> buildAppModules() {
         locked: !Perms.has('reports.financial'),
         icon: LucideIcons.receiptText,
         tone: AppTone.success,
-        title: 'الحركات الماليّة',
-        subtitle: 'الإيرادات وكشف محفظتك في بوّابة الوطني',
+        title: 'الإيرادات',
+        subtitle: 'حركات التفعيل بكلّ طرق الدفع في بوّابة الوطني',
         page: () => const NationalMoneyScreen(),
       ),
     // «كيف أسوّي؟» صار زرّاً في الأعلى بكلّ التبويبات (TopActions) — لا بطاقة هنا (المالك ٢٠ أكتوبر).

@@ -235,7 +235,7 @@ void main() {
     await simDrain(t);
   });
 
-  testWidgets('الحركات الماليّة: المجموع للإيرادات، والرصيد للمحفظة', (t) async {
+  testWidgets('الإيرادات: المجموع واليوم افتراضاً — و«محفظتي» قسمٌ بنفسها لا تبويبٌ هنا', (t) async {
     server.reply('GET', '/api/v2/ftth/transactions', 200, {
       'success': true,
       'data': [
@@ -246,44 +246,32 @@ void main() {
       'page_count': 1,
       'sum': 35000,
     });
-    server.reply('GET', '/api/v2/ftth/wallet', 200, {
-      'success': true,
-      'data': [
-        {'at': '2026-10-31 11:15:00', 'type': 'WALLET_TOPUP', 'amount': 500000, 'balance_after': 1250000, 'method': 'Wallet', 'customer': null},
-      ],
-      'total': 1,
-      'page': 1,
-      'page_count': 1,
-      'balance': {'balance': 1250000, 'commission': 5000, 'currency': 'IQD'},
-    });
     await pumpSim(t, _v, home: (_) => const NationalMoneyScreen());
     expect(find.text('تجديد'), findsOneWidget);
     expect(find.textContaining('مجموع الفترة'), findsOneWidget);
+    expect(find.text('الإيرادات'), findsOneWidget);
+    expect(find.text('محفظتي'), findsNothing);
     final rq = server.calls('GET', '/api/v2/ftth/transactions').last.queryParameters;
     expect(rq['from'], isNotNull);
     expect(rq['from'], rq['to'], reason: 'اليوم افتراضاً');
-
-    await t.tap(find.text('محفظتي'));
-    await t.pumpAndSettle();
-    expect(find.text('شحن المحفظة'), findsOneWidget);
-    expect(find.textContaining('الرصيد الحاليّ'), findsOneWidget);
-    expect(find.textContaining('1,250,000'), findsWidgets);
+    expect(server.calls('GET', '/api/v2/ftth/wallet'), isEmpty);
     await simDrain(t);
   });
 
   test('الأقسام بقائمة «قوائم أخرى»: للوطنيّ وحده، والموظّف بلا مفتاحها مقفلة', () {
     var ids = buildAppModules().map((m) => m.id).toSet();
-    expect(ids.containsAll({'national_work', 'national_tickets', 'national_money'}), isTrue);
+    expect(ids.containsAll({'national_work', 'national_tickets', 'national_wallet', 'national_money'}), isTrue);
 
     ProviderService.debugSet('nabd', label: 'نبض');
     ids = buildAppModules().map((m) => m.id).toSet();
-    expect(ids.intersection({'national_work', 'national_tickets', 'national_money'}), isEmpty);
+    expect(ids.intersection({'national_work', 'national_tickets', 'national_wallet', 'national_money'}), isEmpty);
 
     ProviderService.debugSet('watani', label: 'المشروع الوطني');
     PermissionsService.debugSet(isEmployee: true, permissions: const {'subscribers.view': true});
     final mods = {for (final m in buildAppModules()) m.id: m};
     expect(mods['national_tickets']?.isLocked, isFalse);
     expect(mods['national_money']?.isLocked ?? true, isTrue, reason: 'بلا reports.financial: مقفلة أو غائبة');
+    expect(mods['national_wallet']?.isLocked ?? true, isTrue, reason: 'بلا reports.financial: مقفلة أو غائبة');
   });
 
   test('NationalPage.hasMore والردّ «جارٍ»', () {

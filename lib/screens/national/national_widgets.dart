@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/national_portal_api.dart';
+import '../../core/util/format.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../theme/colors.dart';
@@ -140,14 +141,27 @@ class NationalChoice {
   final String label;
 }
 
-/// قسمٌ في ورقة الفلاتر: عنوانه، وخياراته (null = لم تصل بعد)، وقيمته الحاليّة ('' = الكلّ).
+/// قسمٌ في ورقة الفلاتر: عنوانه، وخياراته (null = لم تصل بعد)، وقيمته الحاليّة ('' = الكلّ). أو ([NationalFilterSection.text])
+/// حقلٌ يُكتب (رقم المعاملة، رقم الاشتراك) — فارغه = الكلّ.
 class NationalFilterSection {
-  const NationalFilterSection({required this.key, required this.title, required this.options, this.value = '', this.allLabel = 'الكلّ'});
+  const NationalFilterSection({required this.key, required this.title, required this.options, this.value = '', this.allLabel = 'الكلّ'})
+      : isText = false,
+        hint = null,
+        digits = false;
+  const NationalFilterSection.text({required this.key, required this.title, this.value = '', this.hint, this.digits = false})
+      : isText = true,
+        options = const [],
+        allLabel = '';
   final String key;
   final String title;
   final List<NationalChoice>? options;
   final String value;
   final String allLabel;
+  final bool isText;
+  final String? hint;
+
+  /// أرقامٌ وحدها (لوحة أرقام، ٤٠ حرفاً).
+  final bool digits;
 }
 
 /// الفترات الجاهزة لفلترٍ اختياريّ: '' = بلا فترة.
@@ -200,6 +214,46 @@ class _FiltersSheet extends StatefulWidget {
 
 class _FiltersSheetState extends State<_FiltersSheet> {
   late final Map<String, String> _v = {for (final s in widget.sections) s.key: s.value};
+  late final Map<String, TextEditingController> _text = {
+    for (final s in widget.sections)
+      if (s.isText) s.key: TextEditingController(text: s.value),
+  };
+
+  @override
+  void dispose() {
+    for (final c in _text.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Widget _field(NationalFilterSection s) {
+    final c = _text[s.key]!;
+    return SizedBox(
+      height: 44,
+      child: TextField(
+        controller: c,
+        keyboardType: s.digits ? TextInputType.number : TextInputType.text,
+        textDirection: TextDirection.ltr,
+        maxLength: 40,
+        // الأرقام الهنديّة (٠-٩) تُقرأ لاتينيّة قبل التنظيف — لوحة عربيّة لا تُسقط الرقم كلّه
+        onChanged: (v) => _v[s.key] = s.digits ? (normalizeDigits(v) ?? '').replaceAll(RegExp(r'[^0-9]'), '') : v.trim(),
+        style: AppType.input(color: AppColors.textHi),
+        decoration: InputDecoration(
+          counterText: '',
+          hintText: s.hint,
+          hintTextDirection: TextDirection.rtl,
+          hintStyle: AppType.input(color: AppColors.textPlaceholder),
+          filled: true,
+          fillColor: AppColors.surfaceInput,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(R.sm), borderSide: BorderSide(color: AppColors.border)),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(R.sm), borderSide: BorderSide(color: AppColors.border)),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(R.sm), borderSide: BorderSide(color: AppColors.brand, width: 1.5)),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -217,7 +271,9 @@ class _FiltersSheetState extends State<_FiltersSheet> {
           for (final s in widget.sections) ...[
             Text(s.title, style: AppType.label(color: AppColors.textLabel)),
             const SizedBox(height: Sp.sm),
-            if (s.options == null)
+            if (s.isText)
+              _field(s)
+            else if (s.options == null)
               Text('جارٍ تحميل الخيارات…', style: AppType.muted())
             else
               Wrap(
@@ -433,6 +489,8 @@ class NationalPaged<T> {
     page = 0;
     total = null;
     pageCount = null;
+    // ردّ الجيل السابق يُهمل قبل أن يُطفئ «جارٍ التحميل» — فلا يبقى مشغولاً ويصدّ next() الجديد (شاشةٌ عالقة على التحميل)
+    loading = false;
     pending = false;
     error = null;
     raw = const {};

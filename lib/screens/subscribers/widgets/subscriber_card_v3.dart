@@ -666,10 +666,15 @@ class SubscriberCardV3 extends StatelessWidget {
   /// متصل حالة شاذّة — ولذلك لها لونها الخاصّ.
   SubscriberStatusVisual _status() => statusOf(sub);
 
+  /// كلمة «المعطّل»: «موقوف» لمشترك المشروع الوطنيّ (معلّقٌ في بوّابته — ١ نوفمبر)، وإلّا «معطّل». صفّ «كل الشركات» من شركةٍ
+  /// أخرى بكلمته العامّة.
+  static String disabledWord(Subscriber sub) =>
+      sub.companyKey == null && ProviderService.togglesAsSuspend ? 'موقوف' : 'معطّل';
+
   /// حالة المشترك (اللون والأيقونة والتسمية) — يستعملها صفّ جدول الحاسبة أيضاً.
   static SubscriberStatusVisual statusOf(Subscriber sub) {
     if (sub.isDisabled) {
-      return SubscriberStatusVisual('معطّل', Icons.block_rounded, AppColors.textLabel,
+      return SubscriberStatusVisual(disabledWord(sub), Icons.block_rounded, AppColors.textLabel,
           AppColors.surfaceDisabled);
     }
     if (sub.isOnline) {
@@ -707,7 +712,7 @@ class SubscriberCardV3 extends StatelessWidget {
   /// بلاطة الأيّام — يستعملها صفّ جدول الحاسبة أيضاً.
   static SubscriberDaysVisual daysOf(Subscriber sub) {
     if (sub.isDisabled) {
-      return SubscriberDaysVisual('—', 'معطّل', AppColors.textLabel,
+      return SubscriberDaysVisual('—', disabledWord(sub), AppColors.textLabel,
           AppColors.surfaceDisabled, AppColors.border);
     }
     final exp = sub.parsedExpiration;

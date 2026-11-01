@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rad_mysvcs/api/kit_card_api.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/subscribers/sheets/activate_sheet.dart';
 import 'package:rad_mysvcs/services/permissions_service.dart';
@@ -136,6 +137,334 @@ void main() {
     await t.pumpAndSettle();
     expect(find.textContaining('ORD777'), findsNothing);
     await simDrain(t);
+  });
+
+  // ── البطاقة v2 (١ نوفمبر — مراجعة الخادم): مدفوعٌ بلا رابط، انتهاءٌ بلا رجوع، وحال الدين عندنا ──
+
+  Future<void> startCard(WidgetTester t) async {
+    await open(t);
+    await t.tap(find.text('بطاقة'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('إنشاء رابط الدفع'));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 300));
+  }
+
+  testWidgets('بطاقة v2: طلبٌ مفتوح مدفوعٌ بلا رابط ⇒ «لا تدفع مرّةً ثانية» بلا صفحة دفع، ويُتابَع حتى التفعيل', (t) async {
+    final opened = <Uri>[];
+    kitCardLauncher = (u) async { opened.add(u); return true; };
+    addTearDown(() => kitCardLauncher = (u) async => true);
+    server.reply('GET', '/api/v2/subscribers/$_idx/activation-data', 200, activationData());
+    server.reply('POST', '/api/v2/subscribers/$_idx/activate', 409, {
+      'success': false, 'code': 'CARD_ORDER_OPEN', 'payment_url': null, 'order_number': 'ORD555', 'paid': true,
+      'message': 'دفعٌ بالبطاقة تمّ لهذا المشترك ويُنتظر تفعيله — لا تدفع مرّةً ثانية',
+    });
+    var status = 'paid';
+    server.on('GET', '/api/v2/ftth/card-orders/ORD555', (_) => SimReply(200, {
+          'success': true,
+          'data': {
+            'order_number': 'ORD555', 'status': status, 'amount': 35000, 'price': 40000, 'payment_type': 'non-cash',
+            'payment_url': null, 'paid_seen': true, 'no_return': false, 'debt_state': status == 'applied' ? 'written' : 'none',
+            'debt_write_failed': false,
+          },
+        }));
+    await startCard(t);
+    await t.pump(const Duration(milliseconds: 300));
+    expect(opened, isEmpty, reason: 'المدفوع لا تُفتح له صفحة دفع');
+    expect(find.text('افتح صفحة الدفع'), findsNothing);
+    expect(find.textContaining('جارٍ تفعيل المشترك'), findsOneWidget);
+    expect(find.textContaining('لا تدفع مرّةً ثانية'), findsWidgets);
+    expect(find.textContaining('ORD555'), findsOneWidget);
+    expect(find.textContaining('35,000'), findsOneWidget, reason: 'المبلغ من حالة الطلب فوراً');
+    expect(find.text('دين'), findsOneWidget, reason: '«يُسجَّل عندنا» بشروط الطلب نفسه');
+    expect(server.calls('POST', '/api/v2/subscribers/$_idx/activate'), hasLength(1));
+    status = 'applied';
+    await t.pump(const Duration(seconds: 5));
+    await t.pump(const Duration(milliseconds: 500));
+    await t.pumpAndSettle();
+    expect(find.textContaining('ORD555'), findsNothing, reason: 'تفعّل وسُجّل ⇒ أُغلق الشيت');
+    await simDrain(t);
+  });
+
+  testWidgets('بطاقة v2: قيد الإنشاء بلا رقم ⇒ رسالة الخادم حالاً لا خطأ، ولا لوحة', (t) async {
+    kitCardLauncher = (u) async => true;
+    server.reply('GET', '/api/v2/subscribers/$_idx/activation-data', 200, activationData());
+    server.reply('POST', '/api/v2/subscribers/$_idx/activate', 409, {
+      'success': false, 'code': 'CARD_ORDER_OPEN', 'payment_url': null, 'order_number': null, 'paid': false,
+      'message': 'طلب دفعٍ بالبطاقة لهذا المشترك قيد الإنشاء — انتظر لحظات ثمّ أعد المحاولة',
+    });
+    await startCard(t);
+    await t.pump(const Duration(milliseconds: 500));
+    expect(find.textContaining('قيد الإنشاء'), findsOneWidget);
+    expect(find.text('إنشاء رابط الدفع'), findsOneWidget, reason: 'الشيت باقٍ على النموذج');
+    await simDrain(t);
+  });
+
+  testWidgets('بطاقة v2: انتهى بلا رجوع ⇒ لا «بلا دفع»، وتنبيهٌ فوق «محاولة جديدة» التي تعيد النموذج', (t) async {
+    kitCardLauncher = (u) async => true;
+    server.reply('GET', '/api/v2/subscribers/$_idx/activation-data', 200, activationData());
+    server.reply('POST', '/api/v2/subscribers/$_idx/activate', 200, {
+      'success': true, 'outcome': 'payment_required', 'payment_url': payUrl, 'order_number': 'ORD321', 'amount': 40000, 'cost': 35000,
+    });
+    var status = 'link';
+    server.on('GET', '/api/v2/ftth/card-orders/ORD321', (_) => SimReply(200, {
+          'success': true,
+          'data': {
+            'order_number': 'ORD321', 'status': status, 'amount': 35000, 'price': 40000, 'payment_type': 'non-cash',
+            'payment_url': status == 'link' ? payUrl : null, 'paid_seen': false, 'no_return': status == 'expired',
+            'debt_state': 'none', 'debt_write_failed': false,
+          },
+        }));
+    await startCard(t);
+    status = 'expired';
+    await t.pump(const Duration(seconds: 5));
+    await t.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('بلا دفع'), findsNothing);
+    expect(find.textContaining('لم يصلنا رجوعٌ من صفحة الدفع'), findsOneWidget);
+    expect(find.textContaining('فلا تدفع مرّةً ثانية'), findsOneWidget);
+    expect(find.text('افتح صفحة الدفع'), findsNothing);
+    final warn = t.getTopLeft(find.textContaining('فلا تدفع مرّةً ثانية'));
+    final retry = t.getTopLeft(find.text('محاولة جديدة'));
+    expect(warn.dy, lessThan(retry.dy), reason: 'التنبيه فوق «محاولة جديدة»');
+    await t.ensureVisible(find.text('محاولة جديدة'));
+    await t.tap(find.text('محاولة جديدة'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('ORD321'), findsNothing);
+    expect(find.text('إنشاء رابط الدفع'), findsOneWidget, reason: 'عاد النموذج لطلبٍ جديد');
+    await simDrain(t);
+  });
+
+  testWidgets('بطاقة v2: تفعّل ولم يُكتب الدين ⇒ لا «سُجّل عندنا»، واللوحة تبقى بتنبيهها حتى «إغلاق»', (t) async {
+    kitCardLauncher = (u) async => true;
+    server.reply('GET', '/api/v2/subscribers/$_idx/activation-data', 200, activationData());
+    server.reply('POST', '/api/v2/subscribers/$_idx/activate', 200, {
+      'success': true, 'outcome': 'payment_required', 'payment_url': payUrl, 'order_number': 'ORD222', 'amount': 40000, 'cost': 35000,
+    });
+    var status = 'link';
+    server.on('GET', '/api/v2/ftth/card-orders/ORD222', (_) => SimReply(200, {
+          'success': true,
+          'data': {
+            'order_number': 'ORD222', 'status': status, 'amount': 35000, 'price': 40000, 'payment_type': 'non-cash',
+            'payment_url': status == 'link' ? payUrl : null, 'paid_seen': status != 'link', 'no_return': false,
+            'new_expiration': status == 'applied' ? '2026-12-01 10:00:00' : null,
+            'debt_state': status == 'applied' ? 'failed' : 'none', 'debt_write_failed': status == 'applied',
+          },
+        }));
+    await startCard(t);
+    status = 'applied';
+    await t.pump(const Duration(seconds: 5));
+    await t.pump(const Duration(milliseconds: 500));
+    expect(find.textContaining('ORD222'), findsOneWidget, reason: 'لا إغلاق تلقائيّ مع دينٍ لم يُكتب');
+    expect(find.textContaining('لم يُسجَّل الدين في دفترنا'), findsWidgets);
+    expect(find.textContaining('سُجّل عندنا'), findsNothing);
+    expect(find.textContaining('2026-12-01'), findsOneWidget);
+    await t.tap(find.text('إغلاق'));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 500));
+    expect(find.textContaining('ORD222'), findsNothing);
+    expect(find.textContaining('لم يُسجَّل الدين في دفترنا — سجّله يدويّاً'), findsOneWidget, reason: 'التنبيه يبقى بعد الإغلاق');
+    await simDrain(t);
+  });
+
+  // other-recorded (تفعيلٌ آخر في سجلّنا منذ الطلب) وحالٌ لا يعرفها التطبيق (reversed) ⇒ نصٌّ متحفّظ، لا «سجّله يدويّاً» أبداً
+  for (final debt in const ['maybe', 'none', 'other-recorded', 'reversed']) {
+    testWidgets('بطاقة v2: «مجهول» ⇒ نصّ الدين بحاله ($debt)', (t) async {
+      kitCardLauncher = (u) async => true;
+      server.reply('GET', '/api/v2/subscribers/$_idx/activation-data', 200, activationData());
+      server.reply('POST', '/api/v2/subscribers/$_idx/activate', 200, {
+        'success': true, 'outcome': 'payment_required', 'payment_url': payUrl, 'order_number': 'ORD111', 'amount': 40000, 'cost': 35000,
+      });
+      var status = 'link';
+      final paidSeen = debt == 'maybe' || debt == 'other-recorded';
+      server.on('GET', '/api/v2/ftth/card-orders/ORD111', (_) => SimReply(200, {
+            'success': true,
+            'data': {
+              'order_number': 'ORD111', 'status': status, 'amount': 35000, 'price': 40000, 'payment_type': 'non-cash',
+              'payment_url': status == 'link' ? payUrl : null, 'paid_seen': paidSeen, 'no_return': false,
+              'debt_state': status == 'link' ? 'none' : debt, 'debt_write_failed': false,
+            },
+          }));
+      await startCard(t);
+      status = 'unknown';
+      await t.pump(const Duration(seconds: 5));
+      await t.pump(const Duration(milliseconds: 300));
+      expect(find.textContaining(paidSeen ? 'وصلنا أنّ الدفع تمّ' : 'تعذّر التأكّد من النتيجة'), findsOneWidget);
+      switch (debt) {
+        case 'maybe':
+          expect(find.textContaining('ربّما سُجّل الدين عندنا'), findsOneWidget);
+          expect(find.textContaining('لم يُسجَّل دينٌ لهذا الطلب'), findsNothing);
+        case 'none':
+          expect(find.textContaining('لم يُسجَّل دينٌ لهذا الطلب'), findsOneWidget);
+          expect(find.textContaining('ربّما سُجّل الدين'), findsNothing);
+        case 'other-recorded':
+          expect(find.text('في سجلّنا تفعيلٌ آخر لهذا المشترك منذ الطلب — لا تسجّل ديناً يدويّاً قبل مراجعة حركاته وديونه'),
+              findsOneWidget);
+          expect(find.textContaining('لم يُسجَّل دينٌ لهذا الطلب'), findsNothing);
+          expect(find.textContaining('سجّله يدويّاً'), findsNothing);
+        default:
+          expect(find.text('ربّما سُجّل الدين — راجع ديون المشترك قبل أيّ تسجيلٍ يدويّ'), findsOneWidget);
+          expect(find.textContaining('لم يُسجَّل دينٌ لهذا الطلب'), findsNothing);
+          expect(find.textContaining('سجّله يدويّاً'), findsNothing);
+      }
+      expect(find.text('محاولة جديدة'), findsNothing, reason: 'المجهول يُفحص أوّلاً — لا طلبٌ جديد من هنا');
+      await t.tap(find.text('إغلاق'));
+      await t.pumpAndSettle();
+      await simDrain(t);
+    });
+  }
+
+  // تفعّل والدين في شكّ: تفعيلٌ آخر في سجلّنا منذ الطلب (لم يُكتب دينٌ لهذا الطلب عمداً)، أو حالٌ لا يعرفها التطبيق
+  for (final debt in const ['other-recorded', 'reversed']) {
+    testWidgets('بطاقة v2: تفعّل والدين $debt ⇒ لا «سُجّل عندنا» ولا «سجّله يدويّاً»، واللوحة تبقى بتنبيهها', (t) async {
+      kitCardLauncher = (u) async => true;
+      server.reply('GET', '/api/v2/subscribers/$_idx/activation-data', 200, activationData());
+      server.reply('POST', '/api/v2/subscribers/$_idx/activate', 200, {
+        'success': true, 'outcome': 'payment_required', 'payment_url': payUrl, 'order_number': 'ORD333', 'amount': 40000, 'cost': 35000,
+      });
+      var status = 'link';
+      server.on('GET', '/api/v2/ftth/card-orders/ORD333', (_) => SimReply(200, {
+            'success': true,
+            'data': {
+              'order_number': 'ORD333', 'status': status, 'amount': 35000, 'price': 40000, 'payment_type': 'non-cash',
+              'payment_url': status == 'link' ? payUrl : null, 'paid_seen': status != 'link', 'no_return': false,
+              'new_expiration': status == 'applied' ? '2026-12-01 10:00:00' : null,
+              'debt_state': status == 'applied' ? debt : 'none', 'debt_write_failed': false,
+            },
+          }));
+      await startCard(t);
+      status = 'applied';
+      await t.pump(const Duration(seconds: 5));
+      await t.pump(const Duration(milliseconds: 500));
+      expect(find.textContaining('ORD333'), findsOneWidget, reason: 'لا إغلاق تلقائيّ والدين في شكّ');
+      expect(find.text('تمّ التفعيل ✓'), findsOneWidget);
+      expect(
+          find.text(debt == 'other-recorded'
+              ? 'في سجلّنا تفعيلٌ آخر لهذا المشترك منذ الطلب — لا تسجّل ديناً يدويّاً قبل مراجعة حركاته وديونه'
+              : 'ربّما سُجّل الدين — راجع ديون المشترك قبل أيّ تسجيلٍ يدويّ'),
+          findsOneWidget);
+      expect(find.textContaining('سُجّل عندنا'), findsNothing);
+      expect(find.textContaining('سجّله يدويّاً'), findsNothing);
+      await t.tap(find.text('إغلاق'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 500));
+      expect(find.textContaining('ORD333'), findsNothing);
+      expect(find.textContaining('سجّله يدويّاً'), findsNothing, reason: 'ولا تنبيه «سجّله يدويّاً» بعد الإغلاق');
+      await simDrain(t);
+    });
+  }
+
+  testWidgets('بطاقة v2: رُفضت البطاقة (link بلا رابطٍ بعد السؤال) ⇒ «لم يكتمل» و«محاولة جديدة»، والمتابعة باقية حتى التفعيل', (t) async {
+    final opened = <Uri>[];
+    kitCardLauncher = (u) async { opened.add(u); return true; };
+    addTearDown(() => kitCardLauncher = (u) async => true);
+    server.reply('GET', '/api/v2/subscribers/$_idx/activation-data', 200, activationData());
+    server.reply('POST', '/api/v2/subscribers/$_idx/activate', 200, {
+      'success': true, 'outcome': 'payment_required', 'payment_url': payUrl, 'order_number': 'ORD444', 'amount': 40000, 'cost': 35000,
+    });
+    var status = 'link';
+    var declined = false;
+    server.on('GET', '/api/v2/ftth/card-orders/ORD444', (_) => SimReply(200, {
+          'success': true,
+          'data': {
+            'order_number': 'ORD444', 'status': status, 'amount': 35000, 'price': 40000, 'payment_type': 'non-cash',
+            'payment_url': status == 'link' && !declined ? payUrl : null, 'paid_seen': status != 'link', 'no_return': false,
+            'debt_state': status == 'applied' ? 'written' : 'none', 'debt_write_failed': false,
+          },
+        }));
+    await startCard(t);
+    expect(opened.single.toString(), payUrl);
+    // سؤالٌ والرابط قائم ⇒ ما زال بانتظار الدفع
+    await t.pump(const Duration(seconds: 5));
+    await t.pump(const Duration(milliseconds: 300));
+    expect(find.text('بانتظار الدفع بالبطاقة…'), findsOneWidget);
+    expect(find.text('افتح صفحة الدفع'), findsOneWidget);
+    // رجع الدفع مرفوضاً (Status=1): الخادم يسحب الرابط والطلب link
+    declined = true;
+    await t.pump(const Duration(seconds: 5));
+    await t.pump(const Duration(milliseconds: 300));
+    expect(find.text('لم يكتمل الدفع — لم يُخصم شيء'), findsOneWidget);
+    expect(find.textContaining('بانتظار الدفع'), findsNothing);
+    expect(find.text('افتح صفحة الدفع'), findsNothing);
+    expect(find.textContaining('تلقائيّاً حين يكتمل الدفع'), findsNothing, reason: 'لا وعدٌ بتسجيلٍ تلقائيّ لدفعٍ رُفض');
+    expect(find.text('محاولة جديدة'), findsOneWidget);
+    // نجاحٌ لاحق من صفحة الدفع نفسها يُحيي الطلب ⇒ المتابعة لم تتوقّف
+    status = 'paid';
+    await t.pump(const Duration(seconds: 5));
+    await t.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('جارٍ تفعيل المشترك'), findsOneWidget);
+    expect(find.text('محاولة جديدة'), findsNothing);
+    status = 'applied';
+    await t.pump(const Duration(seconds: 5));
+    await t.pump(const Duration(milliseconds: 500));
+    await t.pumpAndSettle();
+    expect(find.textContaining('ORD444'), findsNothing, reason: 'تفعّل وسُجّل ⇒ أُغلق الشيت');
+    expect(server.calls('POST', '/api/v2/subscribers/$_idx/activate'), hasLength(1));
+    await simDrain(t);
+  });
+
+  testWidgets('بطاقة v2: «محاولة جديدة» بعد رفض البطاقة ⇒ يعود النموذج', (t) async {
+    kitCardLauncher = (u) async => true;
+    server.reply('GET', '/api/v2/subscribers/$_idx/activation-data', 200, activationData());
+    server.reply('POST', '/api/v2/subscribers/$_idx/activate', 200, {
+      'success': true, 'outcome': 'payment_required', 'payment_url': payUrl, 'order_number': 'ORD445', 'amount': 40000, 'cost': 35000,
+    });
+    server.reply('GET', '/api/v2/ftth/card-orders/ORD445', 200, {
+      'success': true,
+      'data': {
+        'order_number': 'ORD445', 'status': 'link', 'amount': 35000, 'price': 40000, 'payment_type': 'non-cash',
+        'payment_url': null, 'paid_seen': false, 'no_return': false, 'debt_state': 'none', 'debt_write_failed': false,
+      },
+    });
+    await startCard(t);
+    expect(find.text('افتح صفحة الدفع'), findsOneWidget, reason: 'قبل أيّ سؤال: رابط الإنشاء نفسه');
+    await t.pump(const Duration(seconds: 5));
+    await t.pump(const Duration(milliseconds: 300));
+    expect(find.text('لم يكتمل الدفع — لم يُخصم شيء'), findsOneWidget);
+    await t.ensureVisible(find.text('محاولة جديدة'));
+    await t.tap(find.text('محاولة جديدة'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('ORD445'), findsNothing);
+    expect(find.text('إنشاء رابط الدفع'), findsOneWidget, reason: 'عاد النموذج لطلبٍ جديد');
+    await simDrain(t);
+  });
+
+  test('KitCardApi: parse/parseStatus بعقد الخادم v2', () {
+    final paid = KitCardApi.parse({
+      'success': false, 'code': 'CARD_ORDER_OPEN', 'payment_url': 'https://pay/x', 'order_number': 'ORD9', 'paid': true, 'message': 'm',
+    }, noReply: false);
+    expect(paid.ok, isTrue);
+    expect(paid.open, isTrue);
+    expect(paid.paid, isTrue);
+    expect(paid.paymentUrl, isNull, reason: 'المدفوع بلا رابطٍ أبداً');
+    final pending = KitCardApi.parse({'success': false, 'code': 'CARD_ORDER_OPEN', 'order_number': 'pending-abc', 'paid': false}, noReply: false);
+    expect(pending.ok, isFalse);
+    expect(pending.open, isTrue);
+    final fresh = KitCardApi.parse({
+      'success': true, 'outcome': 'payment_required', 'payment_url': 'https://pay/y', 'order_number': 'ORD8', 'amount': 40000, 'cost': 35000,
+    }, noReply: false);
+    expect((fresh.ok, fresh.open, fresh.cost, fresh.price), (true, false, 35000, 40000));
+    final plain = KitCardApi.parse({'success': true, 'outcome': 'payment_required', 'payment_url': 'http://x', 'order_number': 'O'}, noReply: false);
+    expect(plain.ok, isFalse, reason: 'رابطٌ غير https لا يُفتح');
+
+    final s = KitCardApi.parseStatus({
+      'status': 'applied', 'amount': 35000, 'price': 40000, 'payment_type': 'non-cash', 'paid_seen': true, 'no_return': false,
+      'debt_state': 'written', 'debt_write_failed': true,
+    });
+    expect(s.debt, KitCardDebt.failed, reason: 'debt_write_failed يغلب');
+    expect(s.debtWriteFailed, isTrue);
+    final old = KitCardApi.parseStatus({'status': 'applied', 'amount': 35000});
+    expect(old.debt, isNull);
+    expect(old.debtWriteFailed, isFalse);
+    expect(old.noReturn, isFalse);
+    final maybe = KitCardApi.parseStatus({'status': 'unknown', 'debt_state': 'maybe'});
+    expect(maybe.debt, KitCardDebt.maybe);
+    expect(KitCardApi.parseStatus({'status': 'applied', 'debt_state': 'other-recorded'}).debt, KitCardDebt.otherRecorded);
+    // حالٌ موجودةٌ لا يعرفها التطبيق ⇒ unknown (المتحفّظ) — null للحقل الغائب وحده (خادمٌ أقدم)
+    for (final v in const ['reversed', '', null]) {
+      expect(KitCardApi.parseStatus({'status': 'unknown', 'debt_state': v}).debt, KitCardDebt.unknown, reason: 'debt_state=$v');
+    }
+    final declined = KitCardApi.parseStatus({'status': 'link', 'payment_url': null, 'debt_state': 'none'});
+    expect((declined.status, declined.paymentUrl), ('link', null));
   });
 
   testWidgets('خطأٌ غير مقصود (500) ⇒ الرسالة العامّة كما كانت', (t) async {

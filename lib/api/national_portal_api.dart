@@ -309,11 +309,16 @@ class NationalTask {
       );
 }
 
-/// حركةٌ ماليّة: إيرادٌ (transactions/revenue) أو حركة محفظة الوكيل (transactions).
+/// حركةٌ ماليّة: إيرادٌ (transactions/revenue) أو حركة محفظة (transactions — «محفظتي» و«التحويلات»).
+///
+/// صفّ المحفظة v2 (الخادم ١ نوفمبر، `ftthAdapter.mapWalletRow`): نوع المحفظة (الرئيسيّة/العمولة) ومالكها (الوكيل/المشترك) ونوع التغيير
+/// (مجدول/فوري) وطريقة الدفع والتسلسليّ والزون والاتّجاه، والتحويل (من/إلى)، و«المنفّذ» مشتقّاً بالخادم (`by`: me · team · null) — لا
+/// اسم مستخدمٍ خامٌ أبداً (قرار الخصوصيّة ١٩ أكتوبر). ما لا يرسله خادمٌ أقدم يبقى فارغاً.
 class NationalMoneyRow {
   const NationalMoneyRow({
     required this.at,
     required this.type,
+    this.id,
     this.amount,
     this.balanceAfter,
     this.method = '',
@@ -321,10 +326,25 @@ class NationalMoneyRow {
     this.username,
     this.customer,
     this.subscriptionId,
+    this.planName,
+    this.starts,
     this.ends,
     this.planKind = '',
     this.outsidePeriod = false,
+    this.discount,
+    this.walletType = '',
+    this.owner = '',
+    this.changeType = '',
+    this.payMethod = '',
+    this.salesType = '',
+    this.serial,
+    this.zone,
+    this.direction = '',
+    this.by,
+    this.transferFrom,
+    this.transferTo,
   });
+  final String? id;
   final String? at;
   final String type;
   final num? amount;
@@ -334,25 +354,149 @@ class NationalMoneyRow {
   final String? username;
   final NationalRef? customer;
   final String? subscriptionId;
+  final String? planName;
+  final String? starts;
   final String? ends;
   final String planKind;
   final bool outsidePeriod;
+  final num? discount;
+
+  /// `Main` · `Commission` · ''.
+  final String walletType;
+
+  /// `Partner` · `Customer` · ''.
+  final String owner;
+
+  /// `Scheduled` · `Instant` · ''.
+  final String changeType;
+  final String payMethod;
+  final String salesType;
+  final String? serial;
+  final String? zone;
+
+  /// `in` · `out` — من الخادم، وإلّا من إشارة المبلغ.
+  final String direction;
+
+  /// `me` · `team` · null (لا يُعرف).
+  final String? by;
+  final NationalRef? transferFrom;
+  final NationalRef? transferTo;
+
+  bool get isCommission => walletType == 'Commission';
+  bool get isOut => direction == 'out';
+  bool get isIn => direction == 'in';
+
+  static String _walletTypeOf(dynamic v) {
+    final s = _s(v is Map ? (v['id'] ?? v['displayValue']) : v).toLowerCase();
+    if (s == 'main' || s == '0') return 'Main';
+    if (s == 'commission' || s == '1') return 'Commission';
+    return '';
+  }
+
+  static String _ownerOf(dynamic v) {
+    final s = _s(v is Map ? (v['id'] ?? v['displayValue']) : v).toLowerCase();
+    if (s == 'partner' || s == '1') return 'Partner';
+    if (s == 'customer' || s == '0') return 'Customer';
+    return '';
+  }
 
   static NationalMoneyRow fromJson(Map<String, dynamic> j) {
     final sub = j['subscription'] is Map ? j['subscription'] as Map : null;
+    final tr = j['transfer'] is Map ? j['transfer'] as Map : null;
+    final amount = _num(j['amount']);
+    final dir = _s(j['direction']).toLowerCase();
+    final by = _s(j['by']).toLowerCase();
     return NationalMoneyRow(
+      id: _sn(j['id']),
       at: _sn(j['at']),
       type: _s(j['type']),
-      amount: _num(j['amount']),
+      amount: amount,
       balanceAfter: _num(j['balance_after']),
       method: _s(j['method']),
       paidBy: _s(j['paid_by']),
       username: _sn(j['username']),
       customer: NationalRef.from(j['customer']),
       subscriptionId: sub == null ? null : _sn(sub['id']),
+      planName: sub == null ? null : _sn(sub['name']),
+      starts: sub == null ? null : _sn(sub['starts']),
       ends: sub == null ? null : _sn(sub['ends']),
       planKind: _s(j['plan_kind']),
       outsidePeriod: j['outside_period'] == true,
+      discount: _num(j['discount']),
+      walletType: _walletTypeOf(j['wallet_type']),
+      owner: _ownerOf(j['owner']),
+      changeType: const {'scheduled': 'Scheduled', 'instant': 'Instant'}[_s(j['change_type']).toLowerCase()] ?? '',
+      payMethod: _s(j['pay_method']),
+      salesType: _s(j['sales_type']),
+      serial: _sn(j['serial']),
+      zone: _sn(j['zone']),
+      direction: dir == 'in' || dir == 'out'
+          ? dir
+          : amount == null || amount == 0
+              ? ''
+              : (amount < 0 ? 'out' : 'in'),
+      by: by == 'me' || by == 'team' ? by : null,
+      transferFrom: tr == null ? null : NationalRef.from(tr['from']),
+      transferTo: tr == null ? null : NationalRef.from(tr['to']),
+    );
+  }
+}
+
+/// ما يخصّ «محفظتي» من ردّ الخادم: الرصيد (أو «حدّ المحفظة» لعضو فريقٍ بحدّ) والعمولة، وما يملكه الحساب في البوّابة (caps)، ونطاق
+/// الفترة، و«أيّ مشترك؟» حين يطابق الاسم أكثر من واحد. خادمٌ أقدم (v1) بلا caps ⇒ [v2] false: لا أقسام ولا فرزٌ لا يفهمه.
+class NationalWalletMeta {
+  const NationalWalletMeta({
+    this.balance,
+    this.commission,
+    this.limit,
+    this.currency = 'IQD',
+    this.caps = const {},
+    this.v2 = false,
+    this.rangeDefault = false,
+    this.from,
+    this.to,
+    this.ambiguous,
+  });
+
+  final num? balance;
+  final num? commission;
+
+  /// «حدّ المحفظة» لعضو فريقٍ له حدّ — يُعرض بدل الرصيد كما تفعل البوّابة.
+  final num? limit;
+  final String currency;
+
+  /// commission · transfers · records · team (لا يُعرف ⇒ غائب).
+  final Map<String, bool> caps;
+  final bool v2;
+  final bool rangeDefault;
+  final String? from;
+  final String? to;
+  final List<({String? customerId, String name, String? username})>? ambiguous;
+
+  bool cap(String k) => caps[k] == true;
+
+  static NationalWalletMeta fromRaw(Map<String, dynamic> raw) {
+    final b = raw['balance'] is Map ? raw['balance'] as Map : null;
+    final lim = b == null ? null : b['limit'];
+    final caps = raw['caps'] is Map ? raw['caps'] as Map : null;
+    final amb = raw['ambiguous'];
+    return NationalWalletMeta(
+      balance: b == null ? null : _num(b['balance']),
+      commission: b == null ? null : _num(b['commission']),
+      limit: lim is Map ? _num(lim['balance']) : null,
+      currency: b == null ? 'IQD' : (_sn(b['currency']) ?? 'IQD'),
+      caps: caps == null ? const {} : {for (final e in caps.entries) e.key.toString(): e.value == true},
+      v2: caps != null || raw.containsKey('range_default') || raw['wallet'] is String,
+      rangeDefault: raw['range_default'] == true,
+      from: _sn(raw['from']),
+      to: _sn(raw['to']),
+      ambiguous: amb is List
+          ? amb
+              .whereType<Map>()
+              .map((m) => (customerId: _sn(m['customer_id']), name: _s(m['name']), username: _sn(m['username'])))
+              .where((x) => x.name.isNotEmpty || (x.username ?? '').isNotEmpty)
+              .toList()
+          : null,
     );
   }
 }
@@ -575,6 +719,92 @@ class NationalPortalApi {
       'max': max,
     });
     return r.ok ? NationalResult.ok(_page(r.data!, NationalMoneyRow.fromJson)) : NationalResult.fail(r.error, relogin: r.relogin);
+  }
+
+  /// «محفظتي» (حركات محفظة الوكيل: الرئيسيّة والعمولة) أو «التحويلات» ([transfers]: كلّ المحافظ التي يراها الحساب، ومنها محافظ
+  /// المشتركين — دفعهم بالبطاقة). الفترة YYYY-MM-DD بتوقيت بغداد (حتى ٩٢ يوماً)؛ [group] مجموعة أنواع (activations · topups · refunds
+  /// · commissions)، [type] نوعٌ واحد، [wallet] main|commission، [owner] partner|customer (التحويلات)، [method] طريقة الدفع (التحويلات)،
+  /// [change] scheduled|instant، [sales] upfront|installment، [tx] رقم المعاملة، [sub] رقم الاشتراك، [q] رمز الاشتراك أو اسم المشترك،
+  /// [mine] حركاتي أنا وحدي (المنفّذ). ما كان «الكلّ» لا يُرسل — إلّا محفظة «محفظتي»: `wallet=all` صريحةً (بلاها الرئيسيّة وحدها).
+  static Future<NationalResult<NationalPage<NationalMoneyRow>>> wallet({
+    bool transfers = false,
+    String? from,
+    String? to,
+    int page = 1,
+    int? size,
+    String? group,
+    String? type,
+    String? wallet,
+    String? owner,
+    String? method,
+    String? change,
+    String? sales,
+    String? tx,
+    String? sub,
+    String? q,
+    bool mine = false,
+  }) async {
+    final r = await _get(transfers ? '/api/v2/ftth/transfers' : '/api/v2/ftth/wallet', walletQuery(
+      transfers: transfers,
+      from: from,
+      to: to,
+      page: page,
+      size: size,
+      group: group,
+      type: type,
+      wallet: wallet,
+      owner: owner,
+      method: method,
+      change: change,
+      sales: sales,
+      tx: tx,
+      sub: sub,
+      q: q,
+      mine: mine,
+    ));
+    return r.ok ? NationalResult.ok(_page(r.data!, NationalMoneyRow.fromJson)) : NationalResult.fail(r.error, relogin: r.relogin);
+  }
+
+  /// معاملات «محفظتي»/«التحويلات» كما تُرسل (الفارغ يسقط في [_get]).
+  @visibleForTesting
+  static Map<String, Object?> walletQuery({
+    bool transfers = false,
+    String? from,
+    String? to,
+    int page = 1,
+    int? size,
+    String? group,
+    String? type,
+    String? wallet,
+    String? owner,
+    String? method,
+    String? change,
+    String? sales,
+    String? tx,
+    String? sub,
+    String? q,
+    bool mine = false,
+  }) {
+    String? opt(String? v) => v == null || v.isEmpty || v == 'all' ? null : v;
+    return {
+      'from': from,
+      'to': to,
+      'page': page,
+      'size': size,
+      'group': opt(group),
+      'types': opt(type),
+      // «محفظتي»: المحفظة صريحةً دائماً — الخادم بلاها يردّ الرئيسيّة وحدها (توافقاً مع النسخ الأقدم)، فـ«الكلّ» = all.
+      // و«التحويلات» افتراضها الكلّ عند الخادم: «الكلّ» لا يُرسل
+      'wallet': transfers ? opt(wallet) : (opt(wallet) ?? 'all'),
+      'owner': transfers ? opt(owner) : null,
+      'method': transfers ? opt(method) : null,
+      'change': opt(change),
+      'sales': opt(sales),
+      'tx': opt(tx?.trim()),
+      'sub': opt(sub?.trim()),
+      'q': opt(q?.trim()),
+      'by': mine ? 'me' : null,
+    };
   }
 
   /* ───────────── الكتابة ───────────── */

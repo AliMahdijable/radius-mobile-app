@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../models/dashboard.dart';
+import '../../../services/provider_service.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -27,7 +28,13 @@ class DeskStatusBars extends StatelessWidget {
       (LucideIcons.wifi, AppColors.info, 'subscribers.filter_online'.tr(), s.online, SubscriberFilter.online),
       (LucideIcons.wifiOff, AppColors.warning, 'subscribers.filter_offline'.tr(), s.offline, SubscriberFilter.offline),
       (LucideIcons.timerOff, AppColors.error, 'subscribers.filter_expired'.tr(), s.expired, SubscriberFilter.expired),
-      (LucideIcons.ban, AppColors.textLabel, 'subscribers.filter_disabled'.tr(), s.disabled, SubscriberFilter.disabled),
+      (
+        LucideIcons.ban,
+        AppColors.textLabel,
+        (ProviderService.togglesAsSuspend ? 'subscribers.filter_suspended' : 'subscribers.filter_disabled').tr(),
+        s.disabled,
+        SubscriberFilter.disabled,
+      ),
       if (s.onlineNoPlan > 0)
         (LucideIcons.triangleAlert, AppColors.anomaly, 'subscribers.filter_online_no_plan'.tr(), s.onlineNoPlan,
             SubscriberFilter.onlineNoPlan),

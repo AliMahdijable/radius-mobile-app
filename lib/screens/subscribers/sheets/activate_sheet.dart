@@ -494,7 +494,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   Future<void> _submit() async {
     final idx = widget.sub.idx;
     if (_cardOrder != null) {
-      Navigator.of(context).pop(_cardOrder!.status == 'applied');
+      _closeCard();
       return;
     }
     if (idx == null || _data == null || _cardBlocked || _outcomeUnclear) return;
@@ -726,7 +726,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         icon: LucideIcons.refreshCw,
         title: 'dashboard.renew_sub'.tr(),
         subtitle: widget.sub.fullName,
-        onClose: () => Navigator.of(context).pop(),
+        onClose: _cardOrder != null ? _closeCard : () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
         label: _footerLabel,
@@ -906,6 +906,12 @@ class _ActivateSheetState extends State<_ActivateSheet> {
             ),
         ],
       ),
+      // تنبيه المزوّد قبل الدفع (المشروع الوطنيّ، ١ نوفمبر): «المشترك موقوف في البوّابة — التفعيل يمدّد اشتراكه لكنّه يبقى
+      // موقوفاً حتى تضغط «تشغيل»» — البوّابة نفسها لا ترفع التعليق بالشراء. تنبيهٌ وحده، لا يمسّ المال.
+      if (_providerNotice != null) ...[
+        const SizedBox(height: 14),
+        _CardNote(tone: AppTone.warning, icon: LucideIcons.pause, text: _providerNotice!, maxLines: 4),
+      ],
       if (_isEarthlink) ...[
         const SizedBox(height: 14),
         _elPackageSection(),
@@ -1059,6 +1065,12 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     );
   }
 
+  /// تنبيهٌ من المزوّد يُعرض قبل الدفع (`provider_notice` في بيانات التفعيل) — null بلا تنبيه.
+  String? get _providerNotice {
+    final n = _data?['provider_notice']?.toString().trim() ?? '';
+    return n.isEmpty || n.length > 300 ? null : n;
+  }
+
   /// الدفع بالبطاقة متاحٌ لهذا الحساب (الخادم يقول card_payment) وفي شركته نفسها — لا في «كل الشركات» (كالموقع).
   bool get _cardPayAvailable => _isKit && _data?['card_payment'] == true && widget.sub.companyKey == null;
   bool get _kitCard => _cardPayAvailable && _payByCard;
@@ -1102,19 +1114,42 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     if (!mounted) return;
     setState(() => _submitting = false);
     if (!r.ok) {
+      // طلبٌ مفتوح بلا رقمٍ يُتابَع (قيد الإنشاء، أو مدفوعٌ من خادمٍ أقدم): رسالة الخادم كما هي — حالٌ لا خطأ.
       final msg = r.noReply
           ? 'انقطع الاتّصال قبل الردّ — أعد المحاولة: إن كان الرابط أُنشئ يعود نفسه (لا خصم بلا دفع)'
           : (r.message ?? _failureText(r.code, null));
-      showSheetSnack(context, msg, isError: true);
+      showSheetSnack(context, msg, isError: !r.open, duration: Duration(seconds: r.open ? 6 : 3));
       return;
     }
-    // طلبٌ مفتوح (CARD_ORDER_OPEN) ⇒ لوحته نفسها تقول حاله — لا تنبيهٌ فوقها يغطّي «إغلاق».
+    // طلبٌ مفتوح (CARD_ORDER_OPEN) ⇒ لوحته نفسها تقول حاله وجملة الخادم فيها — لا تنبيهٌ فوقها يغطّي «إغلاق»، ولا تُفتح صفحة
+    // الدفع وحدها: ربّما دفع الوكيل ولم يرجع رجوعه، والمدفوع (paid) لا رابط له أصلاً — «لا تدفع مرّةً ثانية».
     setState(() {
-      _cardOrder = _CardOrder(order: r.orderNumber!, url: r.paymentUrl, status: 'link', cost: r.cost, price: r.price);
+      _cardOrder = _CardOrder(
+        order: r.orderNumber!,
+        url: r.paymentUrl,
+        status: r.paid ? 'paid' : 'link',
+        cost: r.cost,
+        price: r.price,
+        note: r.open ? r.message : null,
+      );
       _cardSince = DateTime.now();
     });
     _startCardPoll();
-    unawaited(_openPayPage());
+    if (r.open) {
+      unawaited(_pollCard()); // المبلغ والحال الآن — لا بعد ٤ث
+    } else {
+      unawaited(_openPayPage());
+    }
+  }
+
+  /// «محاولة جديدة» بعد طلبٍ لم يكتمل (فشل/انتهى/رُفضت بطاقته): يعود الشيت إلى نموذج التفعيل — والخادم يرفض طلباً ثانياً ما دام
+  /// الأوّل مفتوحاً.
+  void _newCardAttempt() {
+    _cardPoll?.cancel();
+    setState(() {
+      _cardOrder = null;
+      _cardSince = null;
+    });
   }
 
   Future<void> _openPayPage() async {
@@ -1145,8 +1180,10 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       return;
     }
     final st = await MergedOps.run(widget.sub, () => KitCardApi.status(o.order));
-    if (!mounted || st == null || _cardOrder?.order != o.order) return;
-    setState(() => _cardOrder = o.copyWith(status: st.status, url: st.paymentUrl ?? o.url, cost: st.cost ?? o.cost, price: st.price ?? o.price));
+    final cur = _cardOrder;
+    // ردٌّ متأخّر بعد «محاولة جديدة» أو بعد حسم الطلب لا يمسّه.
+    if (!mounted || st == null || cur == null || cur.order != o.order || !KitCardApi.live.contains(cur.status)) return;
+    setState(() => _cardOrder = cur.withStatus(st));
     if (st.status == 'applied') {
       _cardPoll?.cancel();
       await _cardApplied();
@@ -1155,39 +1192,100 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     }
   }
 
-  /// حُسم بالتفعيل ⇒ كمسار المحفظة: تحديث القوائم + الوصل (إن طُلب) + إغلاق.
+  /// إغلاق لوحة الطلب: تفعّل ⇒ true. ودينٌ لم يُكتب عندنا ⇒ تنبيهه يبقى بعد الإغلاق (على الطبقة العليا، كمسار المحفظة) — لا فوق
+  /// اللوحة يغطّي «إغلاق».
+  void _closeCard() {
+    final o = _cardOrder;
+    final rootOverlay = Overlay.maybeOf(context, rootOverlay: true);
+    Navigator.of(context).pop(o?.status == 'applied');
+    if (o != null && o.status == 'applied' && o.debtWriteFailed && rootOverlay != null) {
+      unawaited(showSheetSnackOn(rootOverlay, _cardDebtLostText, isError: true, duration: const Duration(seconds: 8)));
+    }
+  }
+
+  /// حُسم بالتفعيل ⇒ كمسار المحفظة: تحديث القوائم + الوصل (إن طُلب) + إغلاق. والدين الذي لم يُكتب عندنا (`debt_write_failed`)
+  /// لا يُقال عنه «سُجّل عندنا»: اللوحة تبقى مفتوحةً بتنبيهها حتى يغلقها الوكيل بنفسه، والتنبيه يبقى بعد الإغلاق ([_closeCard]).
+  /// وكذا دينٌ في شكّ (ربّما، تفعيلٌ آخر في سجلّنا، حالٌ لا يعرفها التطبيق — [_CardOrder.debtSure]): لوحته بتنبيهها، بلا «سُجّل عندنا».
   Future<void> _cardApplied() async {
     SubscriberEvents.notifyChange();
+    final unsure = !(_cardOrder?.debtSure ?? true);
     final rootOverlay = Overlay.maybeOf(context, rootOverlay: true);
-    if (rootOverlay != null) {
+    if (rootOverlay != null && !unsure) {
       unawaited(showSheetSnackOn(rootOverlay, 'تمّ الدفع بالبطاقة وتفعّل المشترك — سُجّل عندنا', isError: false));
     }
     if (_printReceiptChecked) {
+      // شروط الطلب نفسه حين يقولها الخادم (طلبٌ مفتوحٌ سابق قد يختلف عن اختيار الشيت الآن)
+      final o = _cardOrder;
       final printed = await ReceiptService.printActivation(
         sub: widget.sub,
-        price: _elChargePrice,
-        pay: _receiptPay,
+        price: o?.price ?? _elChargePrice,
+        pay: switch (o?.paymentType) {
+          'cash' => ReceiptPay.cash,
+          'non-cash' => ReceiptPay.credit,
+          'partial-cash' => ReceiptPay.partial,
+          _ => _receiptPay,
+        },
         partialAmount: _partialAmount,
         packageName: _elSelectedPkg?['name']?.toString() ?? _profileName,
       );
       if (mounted) showPrintResult(context, printed);
     }
-    if (!mounted) return;
+    if (!mounted || unsure) return;
     Navigator.of(context).pop(true);
   }
 
-  /// لوحة طلب الدفع: الحالة كما يقولها الخادم، وما يُدفع، ورقم الطلب، و«افتح صفحة الدفع» ما دام الرابط قائماً.
+  static const _cardDebtLostText = 'تمّ الدفع بالبطاقة وتفعّل المشترك، لكن لم يُسجَّل الدين في دفترنا — سجّله يدويّاً';
+
+  /// لوحة طلب الدفع: الحالة كما يقولها الخادم، وما يُدفع، ورقم الطلب، و«افتح صفحة الدفع» ما دام الرابط قائماً. وما يقوله الخادم عن
+  /// الدين عندنا (`debt_state`) يُقال كما هو — لا «سُجّل» لدينٍ لم يُكتب ولا «لم يُسجَّل» لدينٍ ربّما كُتب، ولا «سجّله يدويّاً» لتفعيلٍ
+  /// آخر في سجلّنا أو لحالٍ لا يعرفها التطبيق — وانتهاءٌ بلا رجوعٍ من صفحة الدفع (`no_return`) لا يُسمّى «بلا دفع»: تنبيهٌ فوق «محاولة
+  /// جديدة» ألّا يدفع ثانيةً قبل أن يفحص. ورابطٌ سحبه الخادم بعد سؤاله (رُفضت البطاقة) «لم يكتمل» بـ«محاولة جديدة»، والمتابعة باقية:
+  /// نجاحٌ لاحق من صفحة الدفع نفسها يُحيي الطلب.
   List<Widget> _cardPayBody(_CardOrder o) {
     final cur = 'common.currency'.tr();
     final st = o.status;
-    final waiting = st == 'link' || st == 'creating';
+    // رجع الدفع مرفوضاً (Status=1): الطلب `link` بلا رابطٍ بعد سؤال الخادم — لا «بانتظار الدفع» ولا «يُسجَّل تلقائيّاً»
+    final declined = st == 'link' && o.polled && o.url == null;
+    final waiting = !declined && (st == 'link' || st == 'creating');
+    final ended = declined || st == 'failed' || st == 'expired';
     final (text, tone, icon) = switch (st) {
+      'link' when declined => ('لم يكتمل الدفع — لم يُخصم شيء', AppColors.error, LucideIcons.triangleAlert),
       'link' || 'creating' => ('بانتظار الدفع بالبطاقة…', AppColors.textMid, LucideIcons.loader),
       'paid' || 'applying' => ('تمّ الدفع — جارٍ تفعيل المشترك…', AppColors.brandAccent, LucideIcons.loader),
       'applied' => ('تمّ التفعيل ✓', AppColors.brandAccent, LucideIcons.circleCheck),
       'failed' => ('لم يكتمل الدفع — لم يُخصم شيء', AppColors.error, LucideIcons.triangleAlert),
+      'expired' when o.noReturn => ('انتهى رابط الدفع ولم يصلنا رجوعٌ من صفحة الدفع', AppColors.warning, LucideIcons.triangleAlert),
       'expired' => ('انتهى رابط الدفع بلا دفع', AppColors.error, LucideIcons.triangleAlert),
+      _ when o.paidSeen => ('وصلنا أنّ الدفع تمّ ولم يظهر التفعيل — افحص المشترك في $_kitName قبل أيّ إعادة', AppColors.warning,
+          LucideIcons.triangleAlert),
       _ => ('تعذّر التأكّد من النتيجة — افحص المشترك في $_kitName قبل أيّ إعادة', AppColors.warning, LucideIcons.triangleAlert),
+    };
+    final payType = switch (o.paymentType) {
+      'cash' => 'sheets.pay_cash'.tr(),
+      'non-cash' => 'sheets.pay_debt'.tr(),
+      'partial-cash' => 'sheets.pay_partial'.tr(),
+      _ => null,
+    };
+    // حال الدين عندنا بعد الحسم — من الخادم وحده. «سجّله يدويّاً» لدينٍ لم يُكتب يقيناً، أو لخادمٍ أقدم لا يقول حاله (النصّ القديم)؛
+    // وتفعيلٌ آخر في سجلّنا منذ الطلب (other-recorded) وحالٌ لا يعرفها التطبيق: راجع قبل أيّ تسجيل — لا تسجيلٌ مكرّر.
+    final debtNote = switch (st) {
+      'applied' when o.debtWriteFailed => (AppTone.danger, 'لم يُسجَّل الدين في دفترنا — سجّله يدويّاً من «إضافة دين»'),
+      _ when o.debt == KitCardDebt.otherRecorded && !KitCardApi.live.contains(st) =>
+        (AppTone.warning, 'في سجلّنا تفعيلٌ آخر لهذا المشترك منذ الطلب — لا تسجّل ديناً يدويّاً قبل مراجعة حركاته وديونه'),
+      'applied' || 'unknown' when o.debt == KitCardDebt.maybe =>
+        (AppTone.warning, 'ربّما سُجّل الدين عندنا — افحص كشف المشترك قبل أن تسجّله يدويّاً (لا تسجّله مرّتين)'),
+      'applied' || 'unknown' when o.debt == KitCardDebt.unknown =>
+        (AppTone.warning, 'ربّما سُجّل الدين — راجع ديون المشترك قبل أيّ تسجيلٍ يدويّ'),
+      'unknown' => (AppTone.warning, 'لم يُسجَّل دينٌ لهذا الطلب — إن تفعّل المشترك بهذا الدفع وليس تفعيله في كشفه فسجّله يدويّاً'),
+      _ => null,
+    };
+    final footNote = switch (st) {
+      _ when declined => '',
+      _ when KitCardApi.live.contains(st) && (st == 'paid' || st == 'applying') =>
+        'لا تدفع مرّةً ثانية — يمكنك إغلاق الشيت، يُسجَّل التفعيل والدين عندنا تلقائيّاً حين يتفعّل.',
+      _ when KitCardApi.live.contains(st) => 'يمكنك إغلاق الشيت — يُسجَّل التفعيل والدين عندنا تلقائيّاً حين يكتمل الدفع.',
+      'applied' when o.debtSure => 'سُجّل عندنا.',
+      _ => '',
     };
     return [
       Row(
@@ -1199,6 +1297,11 @@ class _ActivateSheetState extends State<_ActivateSheet> {
           ),
         ],
       ),
+      // طلبٌ مفتوحٌ سابق: جملة الخادم عنه («مدفوعٌ ينتظر التفعيل — لا تدفع مرّةً ثانية»، «أكمل الدفع من رابطه…») — لا بعد رفض البطاقة
+      if ((o.note ?? '').isNotEmpty && KitCardApi.live.contains(st) && !declined) ...[
+        const SizedBox(height: Sp.md),
+        _CardNote(tone: AppTone.info, icon: LucideIcons.info, text: o.note!, maxLines: 4),
+      ],
       const SizedBox(height: 14),
       SheetRowsGroup(rows: [
         SheetRowData(
@@ -1208,6 +1311,9 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         ),
         if (o.price != null)
           SheetRowData(label: 'سعر المشترك', value: '${formatIQD(o.price!.round())} $cur'),
+        if (payType != null) SheetRowData(label: 'يُسجَّل عندنا', value: payType),
+        if (st == 'applied' && (o.newExpiration ?? '').isNotEmpty)
+          SheetRowData(label: 'ينتهي الاشتراك', value: iso(o.newExpiration!.length > 10 ? o.newExpiration!.substring(0, 10) : o.newExpiration!)),
         SheetRowData(label: 'رقم الطلب', value: iso(o.order)),
       ]),
       if (waiting && o.url != null) ...[
@@ -1223,17 +1329,37 @@ class _ActivateSheetState extends State<_ActivateSheet> {
           ),
         ),
       ],
-      const SizedBox(height: Sp.md),
-      Text(
-        KitCardApi.live.contains(st)
-            ? 'يمكنك إغلاق الشيت — يُسجَّل التفعيل والدين عندنا تلقائيّاً حين يكتمل الدفع.'
-            : st == 'unknown'
-                ? 'لم يُسجَّل دينٌ لهذا الطلب — راجع حالة المشترك ثمّ سجّله يدويّاً إن تفعّل.'
-                : st == 'failed' || st == 'expired'
-                    ? 'أغلق الشيت وافتحه من جديد لطلبٍ آخر.'
-                    : '',
-        style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.4),
-      ),
+      if (debtNote != null) ...[
+        const SizedBox(height: Sp.md),
+        _CardNote(tone: debtNote.$1, icon: LucideIcons.triangleAlert, text: debtNote.$2, maxLines: 4),
+      ],
+      if (o.noReturn && !KitCardApi.live.contains(st) && st != 'applied') ...[
+        const SizedBox(height: Sp.md),
+        _CardNote(
+          tone: AppTone.warning,
+          icon: LucideIcons.triangleAlert,
+          text: 'إن كنت دفعت من صفحة الدفع فلا تدفع مرّةً ثانية — افحص المشترك في $_kitName أوّلاً'
+              '${ended ? '، ثمّ «محاولة جديدة» إن لم يتفعّل' : ''}.',
+          maxLines: 4,
+        ),
+      ],
+      if (ended) ...[
+        const SizedBox(height: Sp.md),
+        OutlinedButton.icon(
+          onPressed: _newCardAttempt,
+          icon: const Icon(LucideIcons.rotateCcw, size: 18),
+          label: Text('محاولة جديدة', style: AppType.button(color: AppColors.brand)),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size.fromHeight(48),
+            side: BorderSide(color: AppColors.brandSoftBorder),
+            foregroundColor: AppColors.brand,
+          ),
+        ),
+      ],
+      if (footNote.isNotEmpty) ...[
+        const SizedBox(height: Sp.md),
+        Text(footNote, style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.4)),
+      ],
     ];
   }
 
@@ -1528,15 +1654,61 @@ Future<bool> Function(Uri url) kitCardLauncher = (url) => launchUrl(url, mode: L
 
 /// طلب دفعٍ بالبطاقة يتابعه الشيت (GET /api/v2/ftth/card-orders/:order).
 class _CardOrder {
-  const _CardOrder({required this.order, required this.url, required this.status, this.cost, this.price});
+  const _CardOrder({
+    required this.order,
+    required this.url,
+    required this.status,
+    this.cost,
+    this.price,
+    this.note,
+    this.paymentType,
+    this.newExpiration,
+    this.paidSeen = false,
+    this.noReturn = false,
+    this.debt,
+    this.debtWriteFailed = false,
+    this.polled = false,
+  });
   final String order;
   final String? url;
   final String status;
   final num? cost;
   final num? price;
 
-  _CardOrder copyWith({String? status, String? url, num? cost, num? price}) =>
-      _CardOrder(order: order, url: url ?? this.url, status: status ?? this.status, cost: cost ?? this.cost, price: price ?? this.price);
+  /// جملة الخادم عن طلبٍ مفتوحٍ سابق (CARD_ORDER_OPEN).
+  final String? note;
+  final String? paymentType;
+  final String? newExpiration;
+  final bool paidSeen;
+  final bool noReturn;
+  final KitCardDebt? debt;
+  final bool debtWriteFailed;
+
+  /// وصلت حالٌ من الخادم (card-orders) — `link` بلا رابطٍ بعدها رابطٌ سحبه الخادم (رُفضت البطاقة)، لا رابطٌ لم يصل بعد.
+  final bool polled;
+
+  /// لا شكّ في الدين عندنا: كُتب، أو لا دين للطلب، أو خادمٌ أقدم لا يقول حاله ولم يقل إنّ كتابته فشلت — وحده يُقال عنه «سُجّل عندنا»
+  /// ويُغلق الشيت بعد التفعيل. وما سواه (لم يُكتب، ربّما، تفعيلٌ آخر في سجلّنا، حالٌ لا يعرفها التطبيق) تبقى لوحته بتنبيهها.
+  bool get debtSure =>
+      !debtWriteFailed && (debt == null || debt == KitCardDebt.written || debt == KitCardDebt.none);
+
+  /// حالٌ جديدة من الخادم: الرابط كما يقوله وحده (يسقط حين يُدفع، أو يرجع الدفع فاشلاً — لا دفعٌ على رابطٍ رُفض)، والمبالغ والشروط
+  /// التي لا يقولها تبقى.
+  _CardOrder withStatus(KitCardStatus st) => _CardOrder(
+        order: order,
+        url: st.status == 'link' || st.status == 'creating' ? st.paymentUrl : null,
+        status: st.status,
+        cost: st.cost ?? cost,
+        price: st.price ?? price,
+        note: note,
+        paymentType: st.paymentType ?? paymentType,
+        newExpiration: st.newExpiration ?? newExpiration,
+        paidSeen: st.paidSeen,
+        noReturn: st.noReturn,
+        debt: st.debt,
+        debtWriteFailed: st.debtWriteFailed,
+        polled: true,
+      );
 }
 
 class _CardNote extends StatelessWidget {
@@ -1546,6 +1718,7 @@ class _CardNote extends StatelessWidget {
     required this.text,
     this.onRetry,
     this.busy = false,
+    this.maxLines = 2,
   });
 
   final AppTone tone;
@@ -1553,6 +1726,7 @@ class _CardNote extends StatelessWidget {
   final String text;
   final VoidCallback? onRetry;
   final bool busy;
+  final int maxLines;
 
   @override
   Widget build(BuildContext context) {
@@ -1578,7 +1752,7 @@ class _CardNote extends StatelessWidget {
                 child: Text(
                   text,
                   style: AppType.body(color: tone.onSoft),
-                  maxLines: 2,
+                  maxLines: maxLines,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),

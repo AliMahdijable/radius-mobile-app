@@ -3062,8 +3062,11 @@ class _BulkActionBar extends StatelessWidget {
     // فايبر اكس لا يعطّل ولا يفصل ولا يحذف ([providerHidesAction]) — لا يظهر أصلاً، كصفحة المشترك والموقع. «كل الشركات»
     // صفوفها شركاتٌ أخرى (فايبر اكس خارجها) فلا تمسّها قيود الجلسة المفتوحة.
     bool hides(String key) => !MergedMode.active.value && providerHidesAction(key);
-    final showToggle =
-        !hides('subscribers.toggle') && permShown(const ['subscribers.toggle']);
+    // المشروع الوطنيّ: لا تعليق/تشغيل جماعيّ ولا «فصل» (ميزانيّة البوّابة، ولا فصل للمقاول) — فرديّاً من صفحة المشترك وحدها.
+    final sessionOnly = !MergedMode.active.value;
+    final showToggle = !hides('subscribers.toggle') &&
+        !(sessionOnly && bulkToggleHidden()) &&
+        permShown(const ['subscribers.toggle']);
     // ايرث لنك لا تسمح بحذف المشترك (قرار المالك ١٩ أكتوبر): لا «حذف» جماعيّ
     // لمشتركيها أصلاً ([subscriberDeleteHidden]) — لا مقفلاً ولا بالصلاحيّة.
     final showDelete = !subscriberDeleteHidden() &&
@@ -3075,7 +3078,7 @@ class _BulkActionBar extends StatelessWidget {
     // ارتفاع أقل بـ~40% من التصميم القديم؛ زر Renew يبقى أول+مهيمن.
     final showPay =
         debtorCount > 0 && permShown(const ['subscribers.pay_debt']);
-    final showDisconnect = onlineCount > 0 && showToggle;
+    final showDisconnect = onlineCount > 0 && showToggle && !(sessionOnly && subscriberDisconnectHidden());
     // لا زرّ يُعرض أصلاً (لا مفتاح يُمنح لهذا الدور) — عمليّاً لا يقع.
     if (!showRenew && !showPay && !showDisconnect && !showToggle &&
         !showDelete) {

@@ -12,6 +12,7 @@ import '../../core/platform/app_platform.dart';
 import '../../api/subscribers_api.dart';
 import '../../core/util/format.dart';
 import '../../models/subscriber.dart';
+import '../../services/provider_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -1229,7 +1230,7 @@ class _ResultRow extends StatelessWidget {
   }
 
   static String _statusLabel(Subscriber s) {
-    if (s.isDisabled) return 'معطّل';
+    if (s.isDisabled) return s.companyKey == null && ProviderService.togglesAsSuspend ? 'موقوف' : 'معطّل';
     if (s.isOnline) {
       if (s.isExpired) return 'متصل / منتهي';
       if (s.isNearExpiry) return 'متصل / قارب';
