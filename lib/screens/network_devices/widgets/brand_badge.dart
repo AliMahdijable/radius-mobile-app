@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../theme/typography.dart';
+
 /// Brand badge — تصميم قريب من هويّة كل براند بدون نسخ اللوقو الفعلي.
 ///
 /// **الآمن قانونياً**:
@@ -18,6 +20,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 /// - Cisco     → أعمدة رأسيّة متدرّجة (توحي بجسر الشبكة)
 /// - Roji      → حرف R نظيف
 /// - VSOL      → حرف V (‏OLT)
+/// - BDCOM     → حرف B · HSGQ → حرف H · C-Data → حرف C (أولتيات — ١ نوفمبر: «يظهر شعار الجهاز» ولو كان طرازه مجهولاً)
 /// - Other     → 3 نقاط generic
 class BrandBadge extends StatelessWidget {
   final String brand;
@@ -37,6 +40,8 @@ class BrandBadge extends StatelessWidget {
     'ruijie': (color: Color(0xFF5B4CDB), accent: Color(0xFF7B6EE8)),
     'vsol': (color: Color(0xFF0F766E), accent: Color(0xFF14B8A6)),
     'bdcom': (color: Color(0xFF0B5CAB), accent: Color(0xFF2F80D1)),
+    'hsgq': (color: Color(0xFF155E75), accent: Color(0xFF0E7490)),
+    'cdata': (color: Color(0xFF86198F), accent: Color(0xFFA21CAF)),
     'other': (color: Color(0xFF4B5563), accent: Color(0xFF6B7280)),
   };
 
@@ -105,6 +110,12 @@ class _BrandGlyphPainter extends CustomPainter {
       case 'bdcom':
         _paintLetter(canvas, size, 'B');
         break;
+      case 'hsgq':
+        _paintLetter(canvas, size, 'H');
+        break;
+      case 'cdata':
+        _paintLetter(canvas, size, 'C');
+        break;
       default:
         _paintOther(canvas, size);
     }
@@ -116,7 +127,9 @@ class _BrandGlyphPainter extends CustomPainter {
     final tp = TextPainter(
       text: TextSpan(
         text: letter,
+        // خطّ التطبيق نفسه (المضمَّن) — لا خطّ المنصّة الافتراضيّ، فيتطابق الحرف على كلّ جهاز.
         style: TextStyle(
+          fontFamily: AppType.family,
           color: color,
           fontSize: size.width * sizeFactor,
           fontWeight: FontWeight.w700,

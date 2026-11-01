@@ -14,6 +14,7 @@ import '../../../api/snmp_client.dart';
 import '../../../api/vsol_gpon_details.dart';
 import '../../../models/network_device.dart';
 import '../../../services/device_stats_cache.dart';
+import '../../../services/device_read_health.dart';
 import '../../../services/fiber/fiber_monitor.dart';
 import '../../../services/olt_name_cache.dart';
 import '../../../services/fiber/fiber_band.dart';
@@ -267,6 +268,7 @@ class _VsolLivePanelState extends State<VsolLivePanel>
           _loading = false;
           _error = 'أدخل الـcommunity من إعدادات الجهاز';
         });
+        DeviceReadHealth.instance.failed(widget.device.id, _error!);
         return;
       }
 
@@ -428,16 +430,20 @@ class _VsolLivePanelState extends State<VsolLivePanel>
         final paced = _lightCost * 1.5;
         _interval = paced > _minInterval ? paced : _minInterval;
       });
+      // لقطةٌ فارغة ليست قراءةً ناجحة (أولتٌ ردّ بلا واجهات).
+      if (!s.isEmpty) DeviceReadHealth.instance.ok(widget.device.id);
       unawaited(_refreshGponDetails(community));
       unawaited(_refreshEponDetails(community));
     } on VsolException catch (e) {
       if (!mounted || gen != _gen) return;
+      DeviceReadHealth.instance.failed(widget.device.id, e.message);
       setState(() {
         _loading = false;
         _error = e.message;
       });
     } catch (e) {
       if (!mounted || gen != _gen) return;
+      DeviceReadHealth.instance.failed(widget.device.id, 'تعذّرت القراءة: $e');
       setState(() {
         _loading = false;
         _error = 'تعذّرت القراءة: $e';

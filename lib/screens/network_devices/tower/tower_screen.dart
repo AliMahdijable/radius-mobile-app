@@ -15,6 +15,7 @@ import '../../../models/network_device.dart';
 import '../../../models/tower_layout.dart';
 import '../../../services/deep_probe_scheduler.dart';
 import '../../../services/device_events.dart';
+import '../../../services/device_read_health.dart';
 import '../../../services/device_stats_cache.dart';
 import '../../../services/permissions_service.dart';
 import '../../../theme/colors.dart';
@@ -64,7 +65,13 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
   late TowerSettings _settings = TowerSettings(regionId: widget.regionId);
   Map<int, TowerPlacement> _saved = const {};
   final Map<int, TowerReading> _readings = {};
-  final Set<int> _failed = {};
+
+  /// متى بدأ فشل قراءة البرج الجاري لكلّ جهاز — يُمسح بأوّل قراءةٍ ناجحة.
+  final Map<int, DateTime> _failedSince = {};
+
+  /// آخر فحص وصولٍ أجراه البرج لكلّ جهاز ([_checkReach]) — «يردّ» مع قراءةٍ تفشل لا يُقال إلّا بحكمٍ بعد بدء الفشل ([TowerLive]).
+  final Map<int, TowerReach> _reach = {};
+  final Set<int> _reaching = {};
   final Set<int> _inFlight = {};
   Map<int, ArrangedDevice> _arranged = const {};
   List<TowerAlert> _alerts = const [];
@@ -179,7 +186,8 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
       ProbeResult(vitals: const [], detail: detail, counters: const {}, raw: raw),
       at: v.at,
     );
-    _failed.remove(id);
+    _failedSince.remove(id);
+    _reached(id);
     _scheduleFlush();
   }
 
@@ -224,8 +232,23 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
         for (final d in all)
           if (widget.regionId == 0 ? d.regionId == null : d.regionId == widget.regionId) d,
       ];
+      // حكم البرج الحديث أصدق من لقطة الخادم — إلّا لجهازٍ تغيّر عنوانه: حكمه وفشله كانا لعنوانٍ آخر.
+      final now = DeviceReadHealth.clock();
+      final before = {for (final d in _devices) d.id: d};
+      final merged = <NetworkDevice>[];
+      for (final d in mine) {
+        if (before[d.id]?.ip != d.ip) {
+          _reach.remove(d.id);
+          _failedSince.remove(d.id);
+          merged.add(d);
+          continue;
+        }
+        final v = _reach[d.id];
+        final fresh = v != null && now.difference(v.at) <= ReachVerdict.validFor;
+        merged.add(fresh ? d.copyWith(lastStatus: v.reachable ? 'online' : 'offline') : d);
+      }
       setState(() {
-        _devices = mine;
+        _devices = merged;
         _rearrange();
       });
       _probeAll(); // الأجهزة الجديدة تُقرأ.
@@ -237,6 +260,11 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
   void _probeAll({bool first = false, int? only}) {
     for (final d in _devices) {
       if (only != null && d.id != only) continue;
+      // لا يردّ (لقطة السجلّ أو فحص البرج): لا جلسة قراءة — فحص وصولٍ خفيف كلّ ~٣٠ث، ويُقرأ حين يعود.
+      if (d.lastStatus == 'offline') {
+        _checkReach(d);
+        continue;
+      }
       if (_inFlight.contains(d.id)) continue;
       if (DeviceVitals.skipReason(d) != null) continue;
       _inFlight.add(d.id);
@@ -255,17 +283,85 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
           if (!mounted) return;
           // putVitals أعلاه نبّه _onCacheUpdated بالقراءة نفسها — هذا السطر يضمنها لو سبقه.
           _readings[d.id] = TowerReading.fromProbe(r);
-          _failed.remove(d.id);
+          _failedSince.remove(d.id);
+          DeviceReadHealth.instance.ok(d.id);
           _scheduleFlush();
         } catch (_) {
+          DeviceReadHealth.instance.failed(d.id, 'تعذّر الاتّصال');
           if (!mounted) return;
-          _failed.add(d.id);
+          _failedSince[d.id] ??= DeviceReadHealth.clock();
+          // مطفأ أم إعداداته؟ لا يُقال «يردّ» قبل أن يجيب فحص الوصول ([TowerLive]).
+          _checkReach(d);
           _scheduleFlush();
         } finally {
           _inFlight.remove(d.id);
         }
       });
     }
+  }
+
+  /// حالته على البرج الآن ([TowerLive]).
+  TowerLive _live(NetworkDevice d) => TowerLive.of(
+        lastStatus: d.lastStatus,
+        failedSince: _failedSince[d.id],
+        reach: _reach[d.id],
+        now: DeviceReadHealth.clock(),
+      );
+
+  /// فحص وصولٍ خفيف ([NetworkDevicesApi.probeDevice]: خدمته ثمّ ping واحد، أو منافذ الإدارة حيث لا ping) لجهازٍ قراءته تفشل
+  /// أو لا يردّ — مرّةً لكلّ جهاز كلّ ~٣٠ث على الأكثر ([ReachVerdict.due])، وحكمه في [_reach] و`lastStatus`.
+  /// [force]: الآن ولو كان الحكم حديثاً (رجع الوكيل من صفحة الجهاز).
+  void _checkReach(NetworkDevice d, {bool force = false}) {
+    final id = d.id;
+    if (_reaching.contains(id)) return;
+    if (!force && !ReachVerdict.due(checkedAt: _reach[id]?.at, since: _failedSince[id], now: DeviceReadHealth.clock())) return;
+    _reaching.add(id);
+    _runReach(d);
+  }
+
+  Future<void> _runReach(NetworkDevice d) async {
+    try {
+      final r = await NetworkDevicesApi.probeDevice(d);
+      if (!mounted) return;
+      final ok = r.status == 'online';
+      _reach[d.id] = (reachable: ok, at: DeviceReadHealth.clock());
+      final wasDown = _setStatus(d.id, ok ? 'online' : 'offline', responseMs: r.responseMs);
+      _scheduleFlush();
+      // عاد يردّ ⇒ يُقرأ الآن لا بعد الجولة القادمة.
+      if (ok && wasDown) _probeAll(only: d.id);
+    } catch (_) {
+      // فحصٌ فشل بلا حكم — يبقى «تعذّر الاتّصال» حتى الفحص التالي.
+    } finally {
+      _reaching.remove(d.id);
+    }
+  }
+
+  /// قُرئ الجهاز (هنا أو في قسم الأجهزة) — فهو يردّ الآن.
+  void _reached(int id) {
+    _reach[id] = (reachable: true, at: DeviceReadHealth.clock());
+    _setStatus(id, 'online');
+  }
+
+  /// يكتب حالةً جديدة في لقطة البرج — يُرجع: كان «لا يردّ» قبلها؟
+  bool _setStatus(int id, String status, {int? responseMs}) {
+    final i = _devices.indexWhere((x) => x.id == id);
+    if (i < 0) return false;
+    final cur = _devices[i];
+    final wasDown = cur.lastStatus == 'offline';
+    if (cur.lastStatus == status && responseMs == null) return wasDown;
+    final now = DateTime.now();
+    _devices = [
+      for (final x in _devices)
+        x.id == id
+            ? x.copyWith(
+                lastStatus: status,
+                lastProbedAt: now,
+                lastResponseMs: responseMs,
+                statusSince: x.lastStatus == status ? null : now,
+              )
+            : x,
+    ];
+    return wasDown;
   }
 
   // دفعةٌ كلّ ٤٠٠ms بدل إعادة بناءٍ لكلّ جهاز (نفس علاج الجدار).
@@ -324,8 +420,12 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
 
   Future<void> _openDevice(NetworkDevice d) async {
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => NetworkDeviceDetailsScreen(device: d)));
-    // رجع من صفحة الجهاز (رأى أرقامها الحيّة) ⇒ نقرؤه الآن، لا بعد ٢٠ ثانية.
-    if (mounted) _probeAll(only: d.id);
+    // رجع من صفحة الجهاز (رأى أرقامها الحيّة) ⇒ نقرؤه الآن، لا بعد ٢٠ ثانية — وما لا يردّ أو تفشل قراءته يُفحص وصوله الآن،
+    // فلا يقول البرج «لا يردّ» عن جهازٍ رآه للتوّ يعمل.
+    if (!mounted) return;
+    final cur = _devices.where((x) => x.id == d.id).firstOrNull;
+    if (cur != null && _live(cur) != TowerLive.ok) _checkReach(cur, force: true);
+    _probeAll(only: d.id);
   }
 
   void _select(int id, {_Mode? mode}) {
@@ -352,7 +452,9 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
-    final online = _devices.where((d) => d.lastStatus != 'offline' && !_failed.contains(d.id)).length;
+    // «يردّ»: قراءته لم تفشل، أو تفشل وفحص البرج بعد الفشل يقول «يردّ» (إعداداته — المالك ١ نوفمبر). قراءةٌ تفشل بلا حكمٍ
+    // بعدها خارج العدّ حتى يجيب الفحص ([TowerLive]) — لقطة السجلّ وحدها لا تقول «يردّ».
+    final online = _devices.where((d) => _live(d).answers).length;
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: deskPageBar(
@@ -594,7 +696,16 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
 
   Color _healthColor(ArrangedDevice a) {
     final r = _readings[a.device.id];
-    if (a.device.lastStatus == 'offline' || _failed.contains(a.device.id)) return AppColors.error;
+    switch (_live(a.device)) {
+      case TowerLive.down:
+      case TowerLive.failing:
+        return AppColors.error;
+      case TowerLive.settings:
+        // يردّ على فحص البرج بعد فشل قراءته: إعداداته لا الجهاز — كهرمانيّ لا أحمر.
+        return AppColors.warning;
+      case TowerLive.ok:
+        break;
+    }
     if (r == null) return AppColors.textMid;
     final olt = r.olt;
     if (olt != null) return olt.onlinePct == null ? AppColors.brand : Grade.percentHigherBetter(olt.onlinePct).fill;
@@ -605,7 +716,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
 
   String _badge(ArrangedDevice a) {
     final r = _readings[a.device.id];
-    if (a.device.lastStatus == 'offline') return 'لا يردّ';
+    if (_live(a.device) == TowerLive.down) return 'لا يردّ';
     if (r == null) return '…';
     if (a.role == TowerRole.link) return r.downBps == null ? '—' : TowerText.bps(r.downBps).replaceAll(' ', '');
     return r.clients == null ? '—' : '${r.clients}';
@@ -853,7 +964,7 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
   Widget _cabinetRow(ArrangedDevice a) {
     final r = _readings[a.device.id];
     final selected = a.device.id == _sel;
-    final offline = a.device.lastStatus == 'offline' || _failed.contains(a.device.id);
+    final live = _live(a.device);
     final olt = r?.olt;
     final facts = olt != null
         ? <String>[
@@ -884,10 +995,20 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
                 Text(a.device.name,
                     style: AppType.bodyStrong(color: AppColors.textHi), maxLines: 1, overflow: TextOverflow.ellipsis),
                 Text(
-                  offline
-                      ? 'لا يردّ'
-                      : (r == null ? 'يقرأ…' : (facts.isEmpty ? (a.device.model ?? TowerText.shape(a.shape)) : isoJoin(facts, ' · '))),
-                  style: AppType.muted(color: offline ? AppColors.error : AppColors.textMid),
+                  switch (live) {
+                    TowerLive.down => 'لا يردّ',
+                    TowerLive.failing => 'تعذّر الاتّصال',
+                    TowerLive.settings => 'يردّ — تأكّد من إعدادات الجهاز',
+                    TowerLive.ok =>
+                      r == null ? 'يقرأ…' : (facts.isEmpty ? (a.device.model ?? TowerText.shape(a.shape)) : isoJoin(facts, ' · ')),
+                  },
+                  style: AppType.muted(
+                    color: switch (live) {
+                      TowerLive.down || TowerLive.failing => AppColors.error,
+                      TowerLive.settings => AppColors.warningOnSoft,
+                      TowerLive.ok => AppColors.textMid,
+                    },
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1271,26 +1392,30 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
     final d = a.device;
     final r = _readings[d.id];
     final alert = _alerts.where((x) => x.deviceId == d.id).firstOrNull;
-    final offline = d.lastStatus == 'offline';
-    final failed = _failed.contains(d.id);
+    final live = _live(d);
     final olt = r?.olt;
-    final AppTone tone = offline || failed
-        ? AppTone.danger
-        : olt != null
-            ? (olt.onlinePct == null ? AppTone.neutral : Grade.percentHigherBetter(olt.onlinePct))
-            : (a.role == TowerRole.link
-                ? Grade.signal(r?.signal)
-                : (r?.quality == null ? AppTone.neutral : Grade.percentHigherBetter(r!.quality)));
-    final healthText = offline
-        ? 'لا يردّ'
-        : failed
-            ? 'تعذّر الاتّصال'
-            : switch (tone) {
-                AppTone.success => 'ممتاز',
-                AppTone.warning => 'متوسّط',
-                AppTone.danger => 'ضعيف',
-                _ => r == null ? 'يقرأ…' : 'طبيعي',
-              };
+    final AppTone tone = switch (live) {
+      TowerLive.down || TowerLive.failing => AppTone.danger,
+      // يردّ على فحص البرج بعد فشل قراءته — إعداداته.
+      TowerLive.settings => AppTone.warning,
+      TowerLive.ok => olt != null
+          ? (olt.onlinePct == null ? AppTone.neutral : Grade.percentHigherBetter(olt.onlinePct))
+          : (a.role == TowerRole.link
+              ? Grade.signal(r?.signal)
+              : (r?.quality == null ? AppTone.neutral : Grade.percentHigherBetter(r!.quality))),
+    };
+    final healthText = switch (live) {
+      TowerLive.down => 'لا يردّ',
+      // قراءته تفشل ولم يجب فحص الوصول بعد — لا «يردّ» قبل حكمه.
+      TowerLive.failing => 'تعذّر الاتّصال',
+      TowerLive.settings => 'تحقّق من الإعدادات',
+      TowerLive.ok => switch (tone) {
+          AppTone.success => 'ممتاز',
+          AppTone.warning => 'متوسّط',
+          AppTone.danger => 'ضعيف',
+          _ => r == null ? 'يقرأ…' : 'طبيعي',
+        },
+    };
     final where = a.azimuth == null
         ? TowerText.level(a.level)
         : '${TowerText.level(a.level)} · ${TowerText.dir(a.azimuth!)} ${a.azimuth}° · ${TowerText.source(a.azimuthSource)}';

@@ -11,6 +11,7 @@ import '../../../core/util/error_text.dart';
 import '../../../models/network_device.dart';
 import '../../../services/permissions_service.dart';
 import '../../../services/device_stats_cache.dart';
+import '../../../services/device_read_health.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -171,13 +172,15 @@ class _CiscoLivePanelState extends State<CiscoLivePanel>
         _lastFetch = now;
         _error = null;
       });
+      DeviceReadHealth.instance.ok(widget.device.id);
       if (Perms.has('devices.manage')) {
         unawaited(DetectedModel.save(device, stats.model));
       }
     } catch (e) {
       if (mounted && generation == _generation) {
-        setState(
-            () => _error = e is CiscoException ? e.message : humanError(e));
+        final msg = e is CiscoException ? e.message : humanError(e);
+        DeviceReadHealth.instance.failed(widget.device.id, msg);
+        setState(() => _error = msg);
       }
     } finally {
       if (mounted && generation == _generation) {

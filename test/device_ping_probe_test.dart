@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rad_mysvcs/api/device_reach.dart';
 import 'package:rad_mysvcs/api/network_devices_api.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
 
@@ -25,16 +26,33 @@ void main() {
   final pings = <int>[];
   Probe3 pingReply = (status: 'online', responseMs: 12, packetLoss: 0.0);
 
+  // منافذ الإدارة الشائعة (١ نوفمبر): لا تُطرق شبكة الجهاز الحقيقيّة في الاختبار — صمتٌ ما لم يقل الاختبار غيره.
+  final knocked = <int>[];
+  PortReply Function(int port) sweepReply = (_) => PortReply.silent;
+
   setUp(() {
     pings.clear();
+    knocked.clear();
+    sweepReply = (_) => PortReply.silent;
     pingReply = (status: 'online', responseMs: 12, packetLoss: 0.0);
     NetworkDevicesApi.debugIcmpUsable = true;
     NetworkDevicesApi.icmpProbe = (ip, count) async {
       pings.add(count);
       return pingReply;
     };
+    DeviceReach.resetForTest();
+    DeviceReach.debugConnect = (host, port, timeout) async {
+      if (host == DeviceReach.canaryHost) return (port: port, reply: PortReply.silent, ms: null);
+      knocked.add(port);
+      final r = sweepReply(port);
+      return (port: port, reply: r, ms: r == PortReply.silent ? null : 7);
+    };
   });
-  tearDown(() => NetworkDevicesApi.debugIcmpUsable = null);
+  tearDown(() {
+    NetworkDevicesApi.debugIcmpUsable = null;
+    NetworkDevicesApi.debugService = null;
+    DeviceReach.resetForTest();
+  });
 
   Future<int> closedPort() async {
     final s = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
@@ -66,6 +84,7 @@ void main() {
     });
 
     test('الدوريّ: الخدمة تردّ ⇒ متّصل بلا ping (أخفّ)؛ لا تردّ ⇒ حزمة ping واحدة', () async {
+      DeviceReach.debugConnect = null; // اتّصالٌ حقيقيّ بخادمٍ محلّيّ — منفذ الخدمة نفسه.
       final srv = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
       addTearDown(srv.close);
       srv.listen((s) => s.destroy());
@@ -77,16 +96,27 @@ void main() {
       expect(pings, [1]);
     });
 
-    test('مطفأٌ فعلاً (لا ping ولا خدمة) ⇒ مفصول 100%', () async {
+    test('مطفأٌ فعلاً (لا ping ولا خدمة ولا منفذ) ⇒ مفصول 100%', () async {
       pingReply = (status: 'offline', responseMs: null, packetLoss: 100.0);
       final r = await NetworkDevicesApi.probeDevice(_dev(await closedPort()), ping: true);
       expect([r.status, r.packetLoss, r.serviceOk], ['offline', 100.0, false]);
+      expect(knocked, isNotEmpty, reason: 'سُئلت منافذ الإدارة الشائعة قبل الحكم بـ«مفصول»');
     });
 
-    test('iOS (لا ping موثوق) ⇒ الخدمة وحدها كما كان، بلا ping', () async {
+    test('iOS (لا ping موثوق) ⇒ بلا ping؛ لا يردّ شيء ⇒ مفصول بلا «فقدان 100%» (لم تُرسل حزمة)', () async {
       NetworkDevicesApi.debugIcmpUsable = false;
       final r = await NetworkDevicesApi.probeDevice(_dev(await closedPort()), ping: true);
-      expect([r.status, r.serviceOk], ['offline', false]);
+      expect([r.status, r.serviceOk, r.packetLoss], ['offline', false, null]);
+      expect(pings, isEmpty);
+    });
+
+    test('🚨 iOS والمنفذ المسجّل خطأ وWinbox يردّ ⇒ «متّصل» بزمن الاتّصال (١ نوفمبر: «يرد بنك» ولو مضيوف غلط)', () async {
+      NetworkDevicesApi.debugIcmpUsable = false;
+      // خدمته المسجّلة (API:8729) لا تردّ — مزيّفةً، فلا يطرق `mikrotikProbe` منافذ الجهاز الحقيقيّ.
+      NetworkDevicesApi.debugService = (_) async => (status: 'offline', responseMs: null, packetLoss: 100.0);
+      sweepReply = (p) => p == 8291 ? PortReply.open : PortReply.silent;
+      final r = await NetworkDevicesApi.probeDevice(_dev(8729, brand: 'mikrotik', protocol: 'api'), ping: true);
+      expect([r.status, r.responseMs, r.packetLoss, r.serviceOk], ['online', 7, null, false]);
       expect(pings, isEmpty);
     });
   });

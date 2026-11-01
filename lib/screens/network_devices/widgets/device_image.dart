@@ -484,11 +484,26 @@ class DeviceImage extends StatelessWidget {
     return null;
   }
 
+  /// علامة الشعار حين لا صورة للطراز: العلامة المسجّلة — وأولتٌ مسجّلٌ `other`/`vsol` وطرازه أو اسمه يقول مصنّعه (HSGQ ·
+  /// C-Data · BDCOM) بشعار مصنّعه، لا بثلاث نقاطٍ عامّة (المالك ١ نوفمبر: «ويظهر شعار الجهاز» ولو أُضيف بلا طراز).
+  static String badgeBrandFor(String brand, String? model) {
+    final b = brand.toLowerCase().trim();
+    if (b.isNotEmpty && b != 'other' && b != 'vsol') return b;
+    return switch (OltProfile.fromRecord(brand: b.isEmpty ? 'other' : b, model: model).vendor) {
+      OltVendor.bdcom => 'bdcom',
+      OltVendor.hsgq => 'hsgq',
+      OltVendor.cdata => 'cdata',
+      OltVendor.vsol => 'vsol',
+      OltVendor.unknown => b.isEmpty ? 'other' : b,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final file = assetFor(model, brand: brand);
-    if (file == null) return BrandBadge(brand: brand, size: size);
+    // لا صورة لطرازه (مجهولٌ أو مكتوبٌ خطأ) ⇒ شعار علامته — لا صندوقٌ فارغ.
+    if (file == null) return BrandBadge(brand: badgeBrandFor(brand, model), size: size);
     return Container(
       width: size,
       height: size,
@@ -509,7 +524,7 @@ class DeviceImage extends StatelessWidget {
         fit: BoxFit.contain,
         filterQuality: FilterQuality.medium,
         // ملفّ مفقود أو تالف لا يُسقط الشاشة — نعود للشارة.
-        errorBuilder: (_, __, ___) => BrandBadge(brand: brand, size: size),
+        errorBuilder: (_, __, ___) => BrandBadge(brand: badgeBrandFor(brand, model), size: size),
       ),
     );
   }

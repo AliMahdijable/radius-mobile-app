@@ -604,7 +604,20 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     // 2026-08-18: نستعمل _refresh (يجلب list + يحافظ على status) بدل
     // _initialLoad الذي يعرض spinner كامل ويمسح القائمة مؤقّتاً — تجربة
     // مزعجة بعد إضافة/تعديل جهاز واحد.
-    if (result != null) _refresh();
+    if (result != null && mounted) {
+      // الشيت فحص الجهاز بعد حفظه (١ نوفمبر) — حالته تظهر فوراً ويحفظها `_refresh` بدل انتظار الجولة.
+      if (result.lastProbedAt != null) {
+        final i = _all.indexWhere((x) => x.id == result.id);
+        setState(() {
+          if (i >= 0) {
+            _all[i] = result;
+          } else {
+            _all = [..._all, result];
+          }
+        });
+      }
+      _refresh();
+    }
   }
 
   Future<void> _openDetails(NetworkDevice d) async {

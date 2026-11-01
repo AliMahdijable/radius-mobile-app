@@ -12,6 +12,7 @@ import '../../../api/mimosa_api.dart';
 import '../../../api/network_devices_api.dart';
 import '../../../models/network_device.dart';
 import '../../../services/device_stats_cache.dart';
+import '../../../services/device_read_health.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import 'expandable_section.dart';
@@ -198,13 +199,16 @@ class _MimosaLivePanelState extends State<MimosaLivePanel> {
         _maybeQuickSecondSample();
         _loading = false;
       });
+      DeviceReadHealth.instance.ok(widget.device.id);
       // العملاء PtMP (اختياري — للسكتورات فقط A5/A6/C5). لا يوقف الـpanel لو
       // فشل — الأجهزة PtP (B5) ترجع قائمة فارغة تلقائياً.
       _fetchClients(community, port);
     } catch (e) {
+      final msg = e is MimosaException ? e.message : humanError(e);
+      DeviceReadHealth.instance.failed(widget.device.id, msg);
       if (!mounted) return;
       setState(() {
-        _error = e is MimosaException ? e.message : humanError(e);
+        _error = msg;
         _loading = false;
       });
     }

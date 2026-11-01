@@ -7,6 +7,7 @@ import '../../../api/olt_profile.dart';
 import '../../../core/util/format.dart';
 import '../../../models/network_device.dart';
 import '../../../models/tower_layout.dart';
+import '../../../services/device_read_health.dart';
 import '../../../theme/colors.dart';
 import '../widgets/_grade.dart';
 import 'tower_reading.dart';
@@ -14,6 +15,45 @@ import 'tower_reading.dart';
 /// ما يفعله الجهاز على البرج — يحدّد مستواه: اللنك في القمّة، السكتر على الحلقات، نقطة الوصول الصغيرة بالوسط،
 /// والسلكيّ (راوتر/سويج/أولت) في الكابينة.
 enum TowerRole { link, sector, ap, cabinet }
+
+/// حكم وصولٍ أجراه البرج نفسه (الفحص الخفيف) ولحظته.
+typedef TowerReach = ({bool reachable, DateTime at});
+
+/// حالة الجهاز على البرج الآن — ومنها العدّ «N يردّ» ولون الجهاز ونصّ بطاقته وصفّ الكابينة.
+///
+/// المراجعة (١ نوفمبر): البرج لا يفحص الوصول من نفسه، ولقطة السجلّ (`lastStatus`) من لحظة فتحه — فقراءةٌ تفشل لجهازٍ لقطته
+/// «متّصل» كانت تُقال «يردّ — تأكّد من الإعدادات» وتُعدّ «يردّ»، والجهاز مطفأ. الآن «يردّ» مع قراءةٍ تفشل لا يُقال إلّا بحكم
+/// وصولٍ أجراه البرج **بعد** بدء الفشل ([ReachVerdict.covers]).
+enum TowerLive {
+  /// قراءته لم تفشل (تُقرأ، أو لم تُقرأ بعد، أو لا تُقرأ أصلاً) ولقطته ليست «لا يردّ».
+  ok,
+
+  /// قراءته تفشل وفحص الوصول بعد الفشل يقول «يردّ»: إعداداته لا الجهاز — كهرمانيّ «تحقّق من الإعدادات»، ويُعدّ «يردّ».
+  settings,
+
+  /// قراءته تفشل ولا حكم وصولٍ بعد الفشل بعد (يُفحص الآن) — أحمر «تعذّر الاتّصال» وخارج «يردّ»، كما قبل ١ نوفمبر.
+  failing,
+
+  /// لا يردّ — لقطة السجلّ، أو فحص البرج بعد الفشل.
+  down;
+
+  /// يُعدّ في «N يردّ».
+  bool get answers => this == ok || this == settings;
+
+  /// [failedSince] بدء فشل قراءة البرج الجاري (null = لا فشل)؛ [reach] آخر فحص وصولٍ أجراه البرج.
+  static TowerLive of({
+    required String lastStatus,
+    DateTime? failedSince,
+    TowerReach? reach,
+    required DateTime now,
+  }) {
+    if (failedSince == null) return lastStatus == 'offline' ? down : ok;
+    if (reach != null && ReachVerdict.covers(checkedAt: reach.at, since: failedSince, now: now)) {
+      return reach.reachable ? settings : down;
+    }
+    return lastStatus == 'offline' ? down : failing;
+  }
+}
 
 /// من أين جاء الشكل: حفظه الوكيل، أو الموديل، أو العلامة، أو النوع المكتوب، أو ما قرأناه من الجهاز.
 enum ShapeSource { saved, model, brand, type, reading }
