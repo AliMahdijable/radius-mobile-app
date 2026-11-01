@@ -287,10 +287,94 @@ void main() {
       final un = receiptUnpinAll(l);
       expect(receiptPinnedCount(un), 0);
       expect((un['fields'] as Map)['username'], {'size': 'lg'});
-      expect(receiptLayoutDiff({'v': 3, 'fields': {'a': {'pt': 9}}}, {'v': 3, 'fields': {'a': {'pt': 9.0}}}), isEmpty);
+      expect(
+          receiptLayoutDiff({'v': 3, 'fields': {'username': {'pt': 9}}}, {'v': 3, 'fields': {'username': {'pt': 9.0}}}),
+          isEmpty);
       expect(receiptLayoutDiff({'v': 3, 'fields': {'username': {'pt': 12}}, 'currency': 'IQD'}, {'v': 3}),
-          ['fields', 'currency']);
-      expect(receiptLayoutDiff({'texts': [{'text': 'a'}]}, {'texts': [{'text': 'b'}]}), ['texts[0].text']);
+          unorderedEquals(['fields', 'currency']));
+      expect(
+        receiptLayoutDiff({'texts': [{'at': 'bottom', 'text': 'a'}]}, {'texts': [{'at': 'bottom', 'text': 'b'}]}),
+        ['texts[0].text'],
+      );
+    });
+
+    // الخادم ينظّف كلّ نصّ (cleanStr): NFC، و\r\n ⇒ \n، والجدولة ⇒ فراغ، بلا محارف تحكّم ولا قلب اتّجاه ولا U+FEFF، وبلا
+    // فراغٍ في آخر كلّ سطرٍ ولا في الطرفين. القيم المتوقّعة هنا ناتج cleanStr الحقيقيّ (Node، Unicode 16 كالخادم).
+    test('receiptServerCleanText = cleanStr الخادم (أسطرٌ للنصوص، وسطرٌ لغيرها)', () {
+      final cases = <(String, String, String)>[
+        // (المكتوب، أسطر، سطر)
+        ('سدّد قبل {expiry_date} ', 'سدّد قبل {expiry_date}', 'سدّد قبل {expiry_date}'),
+        ('شكراً لكم\n', 'شكراً لكم', 'شكراً لكم'),
+        (' سطر\r\nثانٍ ', 'سطر\nثانٍ', 'سطر ثانٍ'),
+        ('x  \ny \t', 'x\ny', 'x   y'),
+        ('\u2068{phone}\u2069 ', '{phone}', '{phone}'),
+        ('\u200Fنص ', '\u200Fنص', '\u200Fنص'), // RLM يبقى
+        ('a\u0085', 'a\u0085', 'a\u0085'), // NEL ليس فراغاً عند JavaScript (يحذفه String.trim في Dart)
+        ('م\u064Fحم\u0651\u064Eد', 'م\u064Fحم\u064E\u0651د', 'م\u064Fحم\u064E\u0651د'), // NFC: الفتحة قبل الشدّة
+        ('ا\u0654', '\u0623', '\u0623'), // NFC: ا + همزة ⇒ أ
+        ('ب\u0651\u202B\u064E', 'ب\u0651\u064E', 'ب\u0651\u064E'), // NFC قبل حذف العزل: الترتيب يبقى
+        ('  ', '', ''),
+      ];
+      for (final (typed, multi, one) in cases) {
+        expect(receiptServerCleanText(typed, multiline: true), multi, reason: jsonEncode(typed));
+        expect(receiptServerCleanText(typed), one, reason: jsonEncode(typed));
+      }
+    });
+
+    test('ما حفظه الخادم بعد تنظيفه = ما أُرسل: s03 والنصوص بفراغٍ أو سطرٍ في آخرها لا تُنذر «لم يحفظ»', () {
+      // s03: تصميمٌ ينظّفه الخادم بلا خطأ؛ expect = ناتج الخادم الصارم له. المُرسل = ضغط التطبيق للتصميم كما كُتب.
+      final s03 = (fixture['sanitize_cases'] as List).cast<Map<String, dynamic>>().firstWhere(
+            (c) => (c['name'] as String).startsWith('s03'),
+          );
+      final sent = receiptCompactLayout(s03['layout'])!;
+      final stored = receiptCompactLayout(s03['expect'])!;
+      expect((sent['texts'] as List).first['text'], isNot((stored['texts'] as List).first['text']),
+          reason: 'النصّ أُرسل كما كُتب (« سطر\\r\\nثانٍ ») والخادم نظّفه');
+      expect(receiptLayoutDiff(sent, stored), isEmpty);
+
+      List<Map<String, dynamic>> texts(List<String> xs) => [
+            for (var i = 0; i < xs.length; i++) {'id': 't${i + 1}', 'at': 'bottom', 'text': xs[i]},
+          ];
+      // مثال المراجعة نفسه: كيبورد الهاتف يضيف فراغاً بعد الكلمة المقترحة.
+      expect(
+        receiptLayoutDiff(
+          {'v': 3, 'texts': texts(['سدّد قبل {expiry_date} ', 'شكراً لكم\n'])},
+          {'v': 3, 'texts': texts(['سدّد قبل {expiry_date}', 'شكراً لكم'])},
+        ),
+        isEmpty,
+      );
+      // ترتيب الحركات (NFC)، وعلامتان فصلهما عزلٌ يحذفه الخادم بعد NFC.
+      expect(
+        receiptLayoutDiff(
+          {'v': 3, 'texts': texts(['م\u064Fحم\u0651\u064Eد', 'ب\u0651\u202B\u064E'])},
+          {'v': 3, 'texts': texts(['مُحمَّد', 'بَّ'])},
+        ),
+        isEmpty,
+      );
+      // نصٌّ لا يبقى منه شيء بعد التنظيف يُسقطه الخادم وتُرقَّم النصوص بعده.
+      expect(
+        receiptLayoutDiff({'v': 3, 'texts': texts(['\u202B\u202C', 'ثالث'])}, {'v': 3, 'texts': texts(['ثالث'])}),
+        isEmpty,
+      );
+      // تسميةٌ بعزلٍ حول الافتراضيّة: الخادم يحفظها الافتراضيّة، فلا تُحفظ في الضغط.
+      final def = receiptFieldDefs['amount']!.label;
+      expect(receiptLayoutDiff({'v': 3, 'fields': {'amount': {'label': '\u2068$def\u2069'}}}, {'v': 3}), isEmpty);
+
+      // وما لم يُحفظ فعلاً يُقال بمساره.
+      expect(
+        receiptLayoutDiff({'v': 3, 'texts': texts(['سدّد قبل {expiry_date} '])}, {'v': 3, 'texts': texts(['سدّد قبل'])}),
+        ['texts[0].text'],
+      );
+      expect(receiptLayoutDiff({'v': 3, 'texts': texts(['أوّل', 'ثانٍ'])}, {'v': 3, 'texts': texts(['أوّل'])}),
+          ['texts[1]']);
+      expect(receiptLayoutDiff({'v': 3, 'fields': {'amount': {'label': 'المدفوع '}}}, {'v': 3}), ['fields']);
+      expect(
+        receiptLayoutDiff(
+          {'v': 3, 'fields': {'amount': {'label': 'المدفوع', 'pt': 12}}},
+          {'v': 3, 'fields': {'amount': {'label': 'المدفوع'}}},
+        ),
+        ['fields.amount.pt'],
+      );
     });
   });
 

@@ -229,6 +229,52 @@ void main() {
       expect(r.message, contains('لم يحفظ'));
     });
 
+    test('الخادم ينظّف النصوص (فراغٌ وسطرٌ في آخرها، \\r\\n، عزل الاتّجاه، ترتيب الحركات): «حُفظ» بلا إنذار، ويُتبنّى ما حفظه',
+        () async {
+      // تنظيف الخادم الحقيقيّ (cleanStr في receiptDesign.js) لهذه النصوص — مسجّلٌ من Node. الأخير: شدّةٌ ثمّ فتحة
+      // (كما يكتبها الكيبورد) ⇐ NFC: الفتحة ثمّ الشدّة.
+      const typed = ['سدّد قبل {expiry_date} ', 'شكراً لكم\n', ' سطر\r\nثانٍ ', '\u2068{phone}\u2069 ', 'م\u064Fحم\u0651\u064Eد'];
+      const saved = ['سدّد قبل {expiry_date}', 'شكراً لكم', 'سطر\nثانٍ', '{phone}', 'م\u064Fحم\u064E\u0651د'];
+      expect([for (final s in typed) receiptServerCleanText(s, multiline: true)], saved);
+      final sent = <Map<String, dynamic>>[];
+      final c = _ctl(
+        _row(),
+        sent: sent,
+        reply: (body) {
+          final design = jsonDecode(jsonEncode(body['design'])) as Map<String, dynamic>;
+          final layout = design['layout'] as Map<String, dynamic>;
+          for (final t in (layout['texts'] as List).cast<Map>()) {
+            final k = typed.indexOf(t['text'] as String);
+            if (k >= 0) t['text'] = saved[k];
+          }
+          return ReceiptSaveResult(
+            ok: true,
+            status: 200,
+            message: 'تم',
+            design: design,
+            hasDesign: true,
+            updatedAt: '2026-11-01T08:00:00.000Z',
+            hasUpdatedAt: true,
+          );
+        },
+      );
+      await c.load();
+      for (final s in typed) {
+        c.addText();
+        c.setText(c.texts.length - 1, {'text': s});
+      }
+      final r = await c.save();
+      expect([r.ok, r.notSaved, r.message], [true, isEmpty, 'حُفظ تصميم الوصل'], reason: 'حُفظ كلّه — لا «لم يحفظ الخادم»');
+      final body = sent.single['design'] as Map;
+      expect([for (final t in (body['layout'] as Map)['texts'] as List) (t as Map)['text']], typed,
+          reason: 'النصّ يُرسل كما كُتب — الخادم ينظّفه');
+      expect([for (final t in c.texts) t['text']], saved, reason: 'ما حفظه الخادم يُتبنّى: الحفظ التالي لا يُنذر');
+      expect(c.dirty, isFalse);
+      c.setText(0, {'bold': true});
+      final again = await c.save();
+      expect([again.ok, again.notSaved], [true, isEmpty]);
+    });
+
     test('409 ⇒ تعارض، والتصميم كما هو (لا يُتبنّى شيء)', () async {
       final c = _ctl(
         _row(),

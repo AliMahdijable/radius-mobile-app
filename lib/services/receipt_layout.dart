@@ -2558,20 +2558,206 @@ Object? _canon(Object? x) {
   return x;
 }
 
+// ───────────────────────── تنظيف الخادم للنصوص (cleanStr) ─────────────────────────
+
+/// علامات التشكيل العربيّة وصنف ترتيبها القانونيّ (ccc) — (من، إلى، الصنف)، كما في Node على الخادم (Unicode 16).
+/// غيرها صنفه 0 هنا: يُعامل حرفاً أساساً (لا ترتيب عبره).
+const List<(int, int, int)> _arabicMarkClasses = [
+  (0x0610, 0x0617, 230), (0x0618, 0x0618, 30), (0x0619, 0x0619, 31), (0x061A, 0x061A, 32), //
+  (0x064B, 0x064B, 27), (0x064C, 0x064C, 28), (0x064D, 0x064D, 29), (0x064E, 0x064E, 30), //
+  (0x064F, 0x064F, 31), (0x0650, 0x0650, 32), (0x0651, 0x0651, 33), (0x0652, 0x0652, 34), //
+  (0x0653, 0x0654, 230), (0x0655, 0x0656, 220), (0x0657, 0x065B, 230), (0x065C, 0x065C, 220), //
+  (0x065D, 0x065E, 230), (0x065F, 0x065F, 220), (0x0670, 0x0670, 35), (0x06D6, 0x06DC, 230), //
+  (0x06DF, 0x06E2, 230), (0x06E3, 0x06E3, 220), (0x06E4, 0x06E4, 230), (0x06E7, 0x06E8, 230), //
+  (0x06EA, 0x06EA, 220), (0x06EB, 0x06EC, 230), (0x06ED, 0x06ED, 220), (0x0897, 0x0898, 230), //
+  (0x0899, 0x089B, 220), (0x089C, 0x089F, 230), (0x08CA, 0x08CE, 230), (0x08CF, 0x08D3, 220), //
+  (0x08D4, 0x08E1, 230), (0x08E3, 0x08E3, 220), (0x08E4, 0x08E5, 230), (0x08E6, 0x08E6, 220), //
+  (0x08E7, 0x08E8, 230), (0x08E9, 0x08E9, 220), (0x08EA, 0x08EC, 230), (0x08ED, 0x08EF, 220), //
+  (0x08F0, 0x08F0, 27), (0x08F1, 0x08F1, 28), (0x08F2, 0x08F2, 29), (0x08F3, 0x08F5, 230), //
+  (0x08F6, 0x08F6, 220), (0x08F7, 0x08F8, 230), (0x08F9, 0x08FA, 220), (0x08FB, 0x08FF, 230),
+];
+
+int _arabicCcc(int c) {
+  if (c < 0x0610 || c > 0x08FF) return 0;
+  for (final (from, to, ccc) in _arabicMarkClasses) {
+    if (c < from) return 0;
+    if (c <= to) return ccc;
+  }
+  return 0;
+}
+
+/// الحروف العربيّة المركّبة قانونيّاً (الهمزة والمدّة على حروفها) ⇐ الحرف + العلامة — UnicodeData، ولا استثناء تركيبٍ فيها.
+const Map<int, (int, int)> _arabicDecomposition = {
+  0x0622: (0x0627, 0x0653), // آ
+  0x0623: (0x0627, 0x0654), // أ
+  0x0624: (0x0648, 0x0654), // ؤ
+  0x0625: (0x0627, 0x0655), // إ
+  0x0626: (0x064A, 0x0654), // ئ
+  0x06C0: (0x06D5, 0x0654), // ۀ
+  0x06C2: (0x06C1, 0x0654), // ۂ
+  0x06D3: (0x06D2, 0x0654), // ۓ
+};
+
+final Map<(int, int), int> _arabicComposition = {for (final e in _arabicDecomposition.entries) e.value: e.key};
+
+/// NFC للعربيّة وحدها — Dart بلا NFC، والخادم يطبّقه قبل كلّ شيء: تفكيك المركّب، ثمّ ترتيب العلامات بصنفها (الشدّة ثمّ
+/// الفتحة ⇒ الفتحة ثمّ الشدّة)، ثمّ التركيب حيث لا يحجبه شيء. حرفٌ لاتينيّ بعلامةٍ منفصلة يبقى كما كُتب.
+String _arabicNfc(String s) {
+  var touched = false;
+  for (final c in s.runes) {
+    if (_arabicDecomposition.containsKey(c) || _arabicCcc(c) != 0) {
+      touched = true;
+      break;
+    }
+  }
+  if (!touched) return s;
+  final cps = <int>[];
+  for (final c in s.runes) {
+    final d = _arabicDecomposition[c];
+    if (d == null) {
+      cps.add(c);
+    } else {
+      cps
+        ..add(d.$1)
+        ..add(d.$2);
+    }
+  }
+  // الترتيب القانونيّ: كلّ سلسلة علاماتٍ متتالية مرتّبةٌ بصنفها، والمتساوية بترتيب كتابتها.
+  for (var i = 1; i < cps.length; i++) {
+    final c = cps[i];
+    final k = _arabicCcc(c);
+    if (k == 0) continue;
+    var j = i - 1;
+    while (j >= 0 && _arabicCcc(cps[j]) > k) {
+      cps[j + 1] = cps[j];
+      j--;
+    }
+    cps[j + 1] = c;
+  }
+  // التركيب: علامةٌ تُدمج بآخر حرفٍ أساس إن لم تحجبها علامةٌ قبلها من صنفها أو أعلى.
+  final out = <int>[];
+  var starter = -1;
+  var last = 0;
+  for (final c in cps) {
+    final k = _arabicCcc(c);
+    if (starter >= 0 && k != 0 && last < k) {
+      final composed = _arabicComposition[(out[starter], c)];
+      if (composed != null) {
+        out[starter] = composed;
+        continue;
+      }
+    }
+    if (k == 0) {
+      starter = out.length;
+      last = 0;
+    } else {
+      last = k;
+    }
+    out.add(c);
+  }
+  return String.fromCharCodes(out);
+}
+
+/// مسافةٌ عند JavaScript (`\s` و`trim()` على الخادم) — لا [String.trim] في Dart: ذاك يحذف U+0085 والخادم يبقيه.
+bool _jsSpace(int c) =>
+    c == 0x20 ||
+    (c >= 0x09 && c <= 0x0D) ||
+    c == 0xA0 ||
+    c == 0x1680 ||
+    (c >= 0x2000 && c <= 0x200A) ||
+    c == 0x2028 ||
+    c == 0x2029 ||
+    c == 0x202F ||
+    c == 0x205F ||
+    c == 0x3000 ||
+    c == 0xFEFF;
+
+String _jsTrim(String s, {bool start = true}) {
+  var a = 0;
+  var b = s.length;
+  while (start && a < b && _jsSpace(s.codeUnitAt(a))) {
+    a++;
+  }
+  while (b > a && _jsSpace(s.codeUnitAt(b - 1))) {
+    b--;
+  }
+  return s.substring(a, b);
+}
+
+/// ما يحذفه الخادم: محارف التحكّم (عدا السطر الجديد في النصوص متعدّدة الأسطر)، وDEL، وقلب الاتّجاه وعزله
+/// (U+202A–202E، U+2066–2069)، وU+FEFF. علامتا الاتّجاه RLM/LRM تبقيان.
+bool _serverDrops(int c, {required bool multiline}) =>
+    (c <= 0x1F && !(multiline && c == 0x0A)) ||
+    c == 0x7F ||
+    (c >= 0x202A && c <= 0x202E) ||
+    (c >= 0x2066 && c <= 0x2069) ||
+    c == 0xFEFF;
+
+/// النصّ كما يحفظه الخادم (`cleanStr` في `server/receiptDesign.js`): NFC، و\r\n و\r ⇒ \n، والجدولة ⇒ فراغ؛ ثمّ سطرٌ
+/// واحد (السطر ⇒ فراغ)، أو أسطرٌ ([multiline]: نصوص `texts` — بلا فراغٍ في آخر كلّ سطر)؛ بلا محارف تحكّم ولا قلب
+/// اتّجاه ولا U+FEFF، وبلا فراغٍ في الطرفين (`normStr` في الموقع). للمقارنة بعد الحفظ — النصّ يُرسل كما كُتب.
+/// NFC هنا للعربيّة وحدها ([_arabicNfc]).
+String receiptServerCleanText(String s, {bool multiline = false}) {
+  var t = _arabicNfc(s).replaceAll(RegExp(r'\r\n?'), '\n').replaceAll('\t', ' ');
+  if (!multiline) t = t.replaceAll('\n', ' ');
+  final kept = StringBuffer();
+  for (final c in t.runes) {
+    if (!_serverDrops(c, multiline: multiline)) kept.writeCharCode(c);
+  }
+  t = kept.toString();
+  if (multiline) t = t.split('\n').map((line) => _jsTrim(line, start: false)).join('\n');
+  return _jsTrim(t);
+}
+
+/// مفتاح مقارنة النصّ: تنظيف الخادم ثمّ NFC ثانيةً — الخادم يطبّق NFC قبل حذف محارف التحكّم، فعلامتان فصلهما محرفٌ
+/// محذوف تبقيان بترتيب كتابتهما، وتنظيف ما حفظه مرّةً أخرى يرتّبهما. بالخطوة الأخيرة يتّفق الطرفان.
+String _savedKey(String s, {bool multiline = false}) => _arabicNfc(receiptServerCleanText(s, multiline: multiline));
+
+/// كلّ نصٍّ سطرٌ واحدٌ كما يحفظه الخادم.
+Object? _asSaved(Object? x) {
+  if (x is String) return _savedKey(x);
+  if (x is Map) return {for (final e in x.entries) '${e.key}': _asSaved(e.value)};
+  if (x is List) return [for (final v in x) _asSaved(v)];
+  return x;
+}
+
+/// `layout` بنصوصه كما يحفظها الخادم (`texts[i].text` أسطرٌ، وغيره سطرٌ واحد)، مضغوطاً بعدها كما يُضغط ما يُرسل: النصّ
+/// الذي يفرغ يُسقط وتُرقَّم النصوص، والتسمية التي تصير الافتراضيّة تُسقط — ما يفعله الخادم بلا خطأ (s03). الافتراضيّ
+/// (null أو ما لا يبقى منه شيء) `{v: 3}`، فيُقال ما نقص بمساره لا «layout».
+Map<String, dynamic> _comparableLayout(Object? raw) {
+  if (raw is! Map) return const {'v': 3};
+  final saved = <String, dynamic>{
+    for (final e in raw.entries)
+      '${e.key}': '${e.key}' == 'texts' && e.value is List
+          ? [
+              for (final t in e.value as List)
+                t is Map && t['text'] is String
+                    ? {..._asSaved(t) as Map, 'text': _savedKey(t['text'] as String, multiline: true)}
+                    : _asSaved(t),
+            ]
+          : _asSaved(e.value),
+  };
+  return receiptCompactLayout(saved) ?? const {'v': 3};
+}
+
 /// ما أُرسل وما رجع من الخادم: مسارات المفاتيح المختلفة («fields.username.pt»…) — [] = حُفظ كلّه (`layoutDiff`).
-List<String> receiptLayoutDiff(Object? a, Object? b, [String path = '']) {
+/// يُقارَن الطرفان بعد تنظيف الخادم للنصوص: فراغٌ أو سطرٌ فارغ في آخر نصٍّ حُفظ فعلاً، فلا يُقال «لم يحفظ».
+List<String> receiptLayoutDiff(Object? a, Object? b) =>
+    _layoutDiff(_comparableLayout(a), _comparableLayout(b), '');
+
+List<String> _layoutDiff(Object? a, Object? b, String path) {
   if (jsonEncode(_canon(a)) == jsonEncode(_canon(b))) return const [];
   if (a is Map && b is Map) {
     final out = <String>[];
     for (final k in <String>{for (final x in a.keys) '$x', for (final x in b.keys) '$x'}) {
-      out.addAll(receiptLayoutDiff(a[k], b[k], path.isEmpty ? k : '$path.$k'));
+      out.addAll(_layoutDiff(a[k], b[k], path.isEmpty ? k : '$path.$k'));
     }
     return out;
   }
   if (a is List && b is List && path == 'texts') {
     final out = <String>[];
     for (var i = 0; i < (a.length > b.length ? a.length : b.length); i++) {
-      out.addAll(receiptLayoutDiff(i < a.length ? a[i] : null, i < b.length ? b[i] : null, 'texts[$i]'));
+      out.addAll(_layoutDiff(i < a.length ? a[i] : null, i < b.length ? b[i] : null, 'texts[$i]'));
     }
     return out;
   }
