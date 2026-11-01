@@ -40,14 +40,23 @@ class NationalTaskSheet extends StatefulWidget {
 
 class _NationalTaskSheetState extends State<NationalTaskSheet> {
   NationalTaskDetail? _d;
+
+  /// سبب تعذّر الجلب: يحلّ محلّ الورقة قبل أن تُحمَّل وحده؛ بعدها (إعادة الجلب بعد تعليق) سطرٌ صغير بـ«إعادة» والتفاصيل باقية —
+  /// «غير مؤكَّد» يعني أنّ البوّابة تعثّرت، فالجلب التالي يتعثّر غالباً أيضاً (مراجعة ١ نوفمبر: كان يمحو الورقة كلّها وتنبيهها).
   String? _error;
   NationalLock? _lock;
+
+  /// «غير مؤكَّد» آخر تعليق — بحالة الورقة لا الصندوق، فيبقى بعد إعادة الجلب (وإن أُزيل الصندوق أو تعذّر الجلب) حتى إرسالٍ ناجح.
+  String? _unconfirmed;
 
   /// سببا قفل التعليقات وإضافتها الجاهزان من الخادم (`portal_locks.task_comments` / `task_comment_add`) — إن وُجدا.
   String? _commentsWhy;
   String? _addWhy;
   Timer? _poll;
   int _polls = 0;
+
+  /// ردُّ جلبٍ أقدم (سبقه جلبٌ أحدث: تعليقٌ ثمّ «إعادة») يُهمل.
+  int _gen = 0;
 
   @override
   void initState() {
@@ -68,10 +77,17 @@ class _NationalTaskSheetState extends State<NationalTaskSheet> {
     super.dispose();
   }
 
+  /// جلبٌ جديد (بعد تعليق، أو «إعادة»): بمهلة «جارٍ» كاملة من جديد.
+  void _reload() {
+    _polls = 0;
+    _load();
+  }
+
   Future<void> _load() async {
     _poll?.cancel();
+    final gen = ++_gen;
     final r = await NationalSheetApi.task(widget.row.id!);
-    if (!mounted) return;
+    if (!mounted || gen != _gen) return;
     if (r.locked) {
       setState(() {
         _lock = r.lock;
@@ -80,7 +96,8 @@ class _NationalTaskSheetState extends State<NationalTaskSheet> {
       return;
     }
     if (!r.ok) {
-      setState(() => _error = r.error);
+      // الورقة المحمَّلة تبقى بتفاصيلها وتعليقاتها وصندوقها — الخطأ سطرٌ فوق التعليقات ([build])
+      setState(() => _error = r.error ?? 'تعذّر تحديث المهمّة الآن — أعد المحاولة');
       return;
     }
     if (r.data == null) {
@@ -103,13 +120,20 @@ class _NationalTaskSheetState extends State<NationalTaskSheet> {
     final st = nationalTaskStatus(d?.status.isNotEmpty == true ? d!.status : row.status);
     final title = nationalTaskTitle(d != null && d.label.isNotEmpty ? d.label : row.title);
     final customer = (d?.customer ?? row.customer)?.name;
+    final unconfirmed = _unconfirmed;
     final Widget body;
     if (_lock != null) {
-      body = NationalPortalLockBox(title: _lock!.title, text: _lock!.message);
-    } else if (_error != null) {
+      final lock = NationalPortalLockBox(title: _lock!.title, text: _lock!.message);
+      body = unconfirmed == null
+          ? lock
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [NationalUnconfirmedBox(text: unconfirmed), const SizedBox(height: Sp.sm), lock],
+            );
+    } else if (d == null && _error != null) {
       body = NationalStateBox.error(text: _error!, onRetry: () {
         setState(() => _error = null);
-        _load();
+        _reload();
       });
     } else if (d == null) {
       body = const NationalStateBox.loading();
@@ -145,6 +169,17 @@ class _NationalTaskSheetState extends State<NationalTaskSheet> {
           const SizedBox(height: Sp.lg),
           _CommentsTitle(total: d.commentsTotal ?? d.comments?.length),
           const SizedBox(height: Sp.sm),
+          if (_error != null) ...[
+            _ReloadErrorRow(text: _error!, onRetry: () {
+              setState(() => _error = null);
+              _reload();
+            }),
+            const SizedBox(height: Sp.sm),
+          ],
+          if (unconfirmed != null) ...[
+            NationalUnconfirmedBox(text: unconfirmed),
+            const SizedBox(height: Sp.sm),
+          ],
           if (d.commentsLocked)
             NationalPortalLockBox(
               text: _commentsWhy ?? 'المستخدم الذي دخلت به في المشروع الوطني لا يملك صلاحيّة «تعليقات المهامّ» في البوّابة',
@@ -153,7 +188,14 @@ class _NationalTaskSheetState extends State<NationalTaskSheet> {
             NationalCommentList(comments: d.comments, emptyText: 'لا توجد تعليقات على المهمّة حتى الآن.'),
           if (d.canComment) ...[
             const SizedBox(height: Sp.sm),
-            NationalCommentBox.to(send: (text) => NationalSheetApi.commentTask(row.id!, text), onSent: _load),
+            NationalCommentBox.to(
+              key: const ValueKey('national-task-comment-box'),
+              send: (text) => NationalSheetApi.commentTask(row.id!, text),
+              onSent: _reload,
+              onUnconfirmed: (t) {
+                if (mounted) setState(() => _unconfirmed = t);
+              },
+            ),
           ] else if (_addWhy != null) ...[
             // التعليق مقفلٌ بمكانه بسببه (صلاحيّة البوّابة) — لا يختفي بلا تفسير
             const SizedBox(height: Sp.sm),
@@ -170,6 +212,26 @@ class _NationalTaskSheetState extends State<NationalTaskSheet> {
         onClose: () => Navigator.of(context).pop(),
       ),
       body: body,
+    );
+  }
+}
+
+/// تعذّر جلبٌ بعد أن حُمّلت الورقة: سطرٌ صغير بـ«إعادة» — التفاصيل والتعليقات والصندوق باقية تحته.
+class _ReloadErrorRow extends StatelessWidget {
+  const _ReloadErrorRow({required this.text, required this.onRetry});
+  final String text;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep
+    return Row(
+      children: [
+        Icon(LucideIcons.circleAlert, size: 16, color: AppColors.error),
+        const SizedBox(width: Sp.sm),
+        Expanded(child: Text(text, maxLines: 3, overflow: TextOverflow.ellipsis, style: AppType.body(color: AppColors.textMid))),
+        TextButton.icon(onPressed: onRetry, icon: const Icon(LucideIcons.refreshCw, size: 15), label: const Text('إعادة')),
+      ],
     );
   }
 }
@@ -278,6 +340,13 @@ class _NationalRequestCommentsState extends State<NationalRequestComments> {
   /// سبب قفل «إضافة تعليق» الجاهز من الخادم (`portal_locks.request_comment_add`) — إن وُجد.
   String? _addWhy;
 
+  /// آخر `can.comment` عرفناه من ردٍّ كامل — لا يُصفَّر بإعادة الجلب ولا بـ«المزيد» (ردّ pending بلا `can`): كان الصندوق يختفي ثوانيَ
+  /// الجلب البطيء (~٩ث) فيضيع ما كُتب فيه ومعه «غير مؤكَّد» (مراجعة ١ نوفمبر).
+  bool _can = false;
+
+  /// «غير مؤكَّد» آخر تعليق — بحالة القسم لا الصندوق، فوق القائمة، حتى إرسالٍ ناجح.
+  String? _unconfirmed;
+
   @override
   void initState() {
     super.initState();
@@ -294,6 +363,9 @@ class _NationalRequestCommentsState extends State<NationalRequestComments> {
   }
 
   void _changed() {
+    // من الردّ الكامل وحده: ردّ «جارٍ» لا يحمل `can` فلا يغيّر آخر ما عُرف
+    final can = _p.raw['can'];
+    if (can is Map && can.containsKey('comment')) _can = can['comment'] == true;
     if (mounted) setState(() {});
   }
 
@@ -315,11 +387,6 @@ class _NationalRequestCommentsState extends State<NationalRequestComments> {
     _lock = null;
     setState(() {});
     _next();
-  }
-
-  bool get _canComment {
-    final can = _p.raw['can'];
-    return can is Map && can['comment'] == true;
   }
 
   @override
@@ -347,22 +414,35 @@ class _NationalRequestCommentsState extends State<NationalRequestComments> {
             Align(
               alignment: AlignmentDirectional.centerStart,
               child: TextButton(
-                onPressed: p.loading ? null : _next,
+                // والصفحة التالية «جارٍ» (pending، تُسأل وحدها بعد ٤ث): لا نداءٌ ثانٍ لها
+                onPressed: p.loading || p.pending ? null : _next,
                 child: Text(p.total == null ? 'المزيد' : 'المزيد (${p.rows.length} من ${p.total})'),
               ),
             ),
         ],
       );
     }
+    final unconfirmed = _unconfirmed;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _CommentsTitle(total: _lock == null ? p.total : null),
         const SizedBox(height: Sp.sm),
-        list,
-        if (_lock == null && _canComment) ...[
+        if (unconfirmed != null) ...[
+          NationalUnconfirmedBox(text: unconfirmed),
           const SizedBox(height: Sp.sm),
-          NationalCommentBox.to(send: (text) => NationalSheetApi.commentRequest(widget.requestId, widget.type, text), onSent: _reload),
+        ],
+        list,
+        if (_lock == null && _can) ...[
+          const SizedBox(height: Sp.sm),
+          NationalCommentBox.to(
+            key: const ValueKey('national-request-comment-box'),
+            send: (text) => NationalSheetApi.commentRequest(widget.requestId, widget.type, text),
+            onSent: _reload,
+            onUnconfirmed: (t) {
+              if (mounted) setState(() => _unconfirmed = t);
+            },
+          ),
         ] else if (_lock == null && _addWhy != null && p.page > 0) ...[
           const SizedBox(height: Sp.sm),
           NationalPortalLockBox(title: 'إضافة تعليق', text: _addWhy!),

@@ -82,6 +82,50 @@ Map<String, Object?> _taskDetail({bool comment = true, List<Map<String, Object?>
       'stale': false,
     };
 
+Map<String, Object?> _reqComment(String id, String text) =>
+    {'id': id, 'text': text, 'by': 'الدعم', 'by_type': 'Agent', 'at': '2026-10-30 10:00:00'};
+
+/// «المهامّ والطلبات» ⇒ ورقة الطلب وتعليقاتها: [onComments] يجيب نداء التعليقات رقم n (من 1). [firstPending] = الأوّل pending كالبوّابة.
+Future<void> _openRequest(WidgetTester t, SimServer server, {required SimReply Function(int n) onComments, bool firstPending = true}) async {
+  server.reply('GET', '/api/v2/ftth/lookups', 200, _lookups());
+  server.reply('GET', '/api/v2/ftth/counts', 200, {
+    'success': true,
+    'data': {'tasks_open': 0, 'requests_open': 1, 'beta': true}
+  });
+  server.reply(
+      'GET',
+      '/api/v2/ftth/requests',
+      200,
+      _page([
+        {
+          'id': _req,
+          'type': 'NewAddressRequest',
+          'type_label': '',
+          'status': 'New',
+          'customer': {'id': '7', 'name': 'حيدر'},
+          'created_at': '2026-10-29 11:01:00'
+        },
+      ]));
+  server.reply('GET', '/api/v2/ftth/requests/$_req', 200, {
+    'success': true,
+    'data': {
+      'can': {'cancel': false},
+      'detail': {'status': 'New', 'created_at': '2026-10-29 11:01:00', 'tasks': []},
+      'logs': [],
+      'logs_pending': false,
+    },
+  });
+  var n = 0;
+  server.on('GET', '/api/v2/ftth/requests/$_req/comments', (_) => onComments(++n));
+  await pumpSim(t, _v, home: (_) => const NationalWorkScreen());
+  await t.tap(find.text('عنوان جديد'));
+  for (var i = 0; i < 8; i++) {
+    await t.pump(const Duration(milliseconds: 100));
+  }
+  if (firstPending) await t.pump(const Duration(seconds: 4));
+  await t.pumpAndSettle();
+}
+
 void main() {
   late SimServer server;
 
@@ -176,6 +220,81 @@ void main() {
       expect(find.text('لم يتأكّد إرسال التعليق — افتح المهمّة وتحقّق قبل إعادته'), findsOneWidget);
       expect(server.calls('POST', '/api/v2/ftth/tasks/$_task/comments'), hasLength(1), reason: 'لا إعادة تلقائيّة');
       await simDrain(t);
+    });
+
+    testWidgets('«غير مؤكَّد» ثمّ تعذّر الجلب (503): التفاصيل والتنبيه باقيان، والخطأ سطرٌ بـ«إعادة» لا يمحو الورقة', (t) async {
+      const unconfirmed = 'لم يتأكّد إرسال التعليق — افتح المهمّة وتحقّق قبل إعادته';
+      var n = 0;
+      server.on('GET', '/api/v2/ftth/tasks/$_task', (_) {
+        n += 1;
+        if (n == 1) return SimReply(200, _taskDetail());
+        // UNCONFIRMED = البوّابة تعثّرت ⇒ الجلب التالي يتعثّر غالباً (وApiClient يعيد GET مرّةً بعد 503)
+        if (n <= 3) {
+          return const SimReply(
+              503, {'success': false, 'code': 'PORTAL_ERROR', 'message': 'تعذّر جلب «المهمّة» من المشروع الوطني — أعد المحاولة بعد قليل'});
+        }
+        return SimReply(
+            200,
+            _taskDetail(comments: [
+              {'id': 'c9', 'text': 'تحديث', 'by': 'أنا', 'by_type': '', 'at': '2026-11-01 10:00:00'},
+            ]));
+      });
+      server.reply('POST', '/api/v2/ftth/tasks/$_task/comments', 202, {'success': false, 'code': 'UNCONFIRMED', 'message': unconfirmed});
+      await openTask(t);
+      final box = find.byType(NationalCommentBox);
+      await t.ensureVisible(box);
+      await t.enterText(find.descendant(of: box, matching: find.byType(TextField)), 'تحديث');
+      await t.pumpAndSettle();
+      await t.tap(find.descendant(of: box, matching: find.text('إرسال')));
+      await t.pump();
+      await t.pump(const Duration(seconds: 2));
+      await t.pumpAndSettle();
+      expect(server.calls('GET', '/api/v2/ftth/tasks/$_task').length, greaterThanOrEqualTo(2));
+      expect(find.text(unconfirmed), findsOneWidget, reason: 'التنبيه بحالة الورقة — لا يضيع بالجلب الفاشل');
+      expect(find.text('ضعف إشارة عند المشترك'), findsOneWidget, reason: 'التفاصيل باقية');
+      expect(find.text('بغداد، الكرادة، محلّة 905'), findsOneWidget);
+      expect(find.text('تعذّر جلب «المهمّة» من المشروع الوطني — أعد المحاولة بعد قليل'), findsOneWidget);
+      expect(find.byType(NationalCommentBox), findsOneWidget, reason: 'الصندوق باقٍ بنصّه (لا يُعاد تلقائيّاً)');
+      expect(server.calls('POST', '/api/v2/ftth/tasks/$_task/comments'), hasLength(1));
+
+      final retry = find.widgetWithText(TextButton, 'إعادة');
+      await t.ensureVisible(retry);
+      await t.tap(retry);
+      await t.pump(const Duration(seconds: 2));
+      await t.pumpAndSettle();
+      expect(find.text('تعذّر جلب «المهمّة» من المشروع الوطني — أعد المحاولة بعد قليل'), findsNothing);
+      expect(find.text('التعليقات (1)'), findsOneWidget, reason: 'الوكيل يرى تعليقه قبل أن يعيده');
+      expect(find.text(unconfirmed), findsOneWidget, reason: 'حتى إرسالٍ ناجح');
+      await simDrain(t);
+    });
+
+    testWidgets('صاحب الحساب لا يقفله «تعديل المشترك» ولو قدراته false (canonicalPermissions الوطنيّ) — التعليق يُرسل', (t) async {
+      PermissionsService.debugSet(isEmployee: false, managerRestricted: true, managerCaps: const {
+        'subscribers.view': true,
+        'subscribers.edit': false,
+        'reports.sessions': false,
+      });
+      server.reply('GET', '/api/v2/ftth/tasks/$_task', 200, _taskDetail());
+      server.reply('POST', '/api/v2/ftth/tasks/$_task/comments', 200, {'success': true});
+      await openTask(t);
+      final box = find.byType(NationalCommentBox);
+      await t.ensureVisible(box);
+      expect(find.text('التعليق — لا صلاحيّة'), findsNothing);
+      await t.enterText(find.descendant(of: box, matching: find.byType(TextField)), 'تمّ');
+      await t.pumpAndSettle();
+      await t.tap(find.descendant(of: box, matching: find.text('إرسال')));
+      await t.pumpAndSettle();
+      expect(server.bodies('POST', '/api/v2/ftth/tasks/$_task/comments').single, {'text': 'تمّ'});
+      await simDrain(t);
+    });
+
+    testWidgets('الموظّف: «تعديل المشترك» يفتح التعليق، وبلاه مقفلٌ بمكانه', (t) async {
+      PermissionsService.debugSet(isEmployee: true, permissions: const {'subscribers.view': true});
+      expect(nationalWriteLocked, isTrue);
+      PermissionsService.debugSet(isEmployee: true, permissions: const {'subscribers.view': true, 'subscribers.edit': true});
+      expect(nationalWriteLocked, isFalse);
+      PermissionsService.debugSet(isEmployee: false, managerRestricted: true, managerCaps: const {'subscribers.edit': false});
+      expect(nationalWriteLocked, isFalse, reason: 'المالك لا يُقفل بمفتاح الموظّف');
     });
 
     testWidgets('«أُرسل للتوّ» (REPEATED) رسالة الخادم نفسها؛ والقفل الناجح لا يُقال «أُرسل»', (t) async {
@@ -300,6 +419,62 @@ void main() {
       await t.pumpAndSettle();
       expect(server.bodies('POST', '/api/v2/ftth/requests/$_req/comments').single, {'text': 'وقّع اليوم', 'type': 'NewAddressRequest'});
       expect(server.calls('GET', '/api/v2/ftth/requests/$_req/comments'), hasLength(3), reason: 'تُقرأ ثانيةً بعد الإرسال');
+      await simDrain(t);
+    });
+
+    testWidgets('ورقة الطلب: «غير مؤكَّد» يبقى أثناء الجلب البطيء (pending) وبعده، والصندوق بنصّه لا يختفي', (t) async {
+      const unconfirmed = 'لم يتأكّد إرسال التعليق — افتح الطلب وتحقّق قبل إعادته';
+      await _openRequest(t, server, onComments: (n) {
+        // الأولى pending (~٩ث عند البوّابة)، ثمّ التعليقات، وبعد الإرسال pending ثانيةً ثمّ التعليقات
+        if (n == 1 || n == 3) return const SimReply(200, {'success': true, 'pending': true, 'page': 1, 'size': 10});
+        return SimReply(200, _page([_reqComment('c1', 'بانتظار توقيع المشترك')], extra: {'can': {'comment': true}}));
+      });
+      server.reply('POST', '/api/v2/ftth/requests/$_req/comments', 202, {'success': false, 'code': 'UNCONFIRMED', 'message': unconfirmed});
+      final box = find.byType(NationalCommentBox);
+      await t.ensureVisible(box);
+      await t.enterText(find.descendant(of: box, matching: find.byType(TextField)), 'وقّع اليوم');
+      await t.pumpAndSettle();
+      await t.tap(find.descendant(of: box, matching: find.text('إرسال')));
+      for (var i = 0; i < 6; i++) {
+        await t.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.text('جارٍ جلب التعليقات من البوّابة…'), findsOneWidget, reason: 'إعادة الجلب بعد الإرسال pending');
+      expect(find.text(unconfirmed), findsOneWidget, reason: 'التنبيه بحالة القسم أثناء pending');
+      expect(find.byType(NationalCommentBox), findsOneWidget, reason: 'آخر can.comment معروف — لا يُصفَّر بإعادة الجلب');
+      expect(find.descendant(of: find.byType(NationalCommentBox), matching: find.text('وقّع اليوم')), findsOneWidget,
+          reason: 'النصّ باقٍ ليتحقّق قبل إعادته');
+      await t.pump(const Duration(seconds: 4));
+      await t.pumpAndSettle();
+      expect(find.text('بانتظار توقيع المشترك'), findsOneWidget);
+      expect(find.text(unconfirmed), findsOneWidget, reason: 'وبعد وصول التعليقات');
+      expect(server.calls('POST', '/api/v2/ftth/requests/$_req/comments'), hasLength(1), reason: 'لا إعادة تلقائيّة');
+      await simDrain(t);
+    });
+
+    testWidgets('ورقة الطلب: «المزيد» بردٍّ pending لا يُخفي الصندوق ولا يمحو ما كُتب فيه', (t) async {
+      await _openRequest(t, server, onComments: (n) {
+        if (n == 1) {
+          return SimReply(200, _page([_reqComment('c1', 'التعليق الأوّل')], pages: 2, total: 2, extra: {'can': {'comment': true}}));
+        }
+        if (n == 2) return const SimReply(200, {'success': true, 'pending': true, 'page': 2, 'size': 10});
+        return SimReply(200, _page([_reqComment('c2', 'التعليق الثاني')], page: 2, pages: 2, total: 2, extra: {'can': {'comment': true}}));
+      }, firstPending: false);
+      final box = find.byType(NationalCommentBox);
+      await t.ensureVisible(box);
+      await t.enterText(find.descendant(of: box, matching: find.byType(TextField)), 'مسوّدة');
+      await t.pumpAndSettle();
+      final more = find.widgetWithText(TextButton, 'المزيد (1 من 2)');
+      await t.ensureVisible(more);
+      await t.tap(more);
+      for (var i = 0; i < 4; i++) {
+        await t.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.byType(NationalCommentBox), findsOneWidget, reason: 'ردّ pending بلا can لا يُخفي الصندوق');
+      expect(find.descendant(of: find.byType(NationalCommentBox), matching: find.text('مسوّدة')), findsOneWidget);
+      await t.pump(const Duration(seconds: 4));
+      await t.pumpAndSettle();
+      expect(find.text('التعليق الثاني'), findsOneWidget);
+      expect(find.descendant(of: find.byType(NationalCommentBox), matching: find.text('مسوّدة')), findsOneWidget);
       await simDrain(t);
     });
 

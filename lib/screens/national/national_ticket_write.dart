@@ -19,8 +19,9 @@ import 'national_labels.dart';
 /// (`client-v2/src/components/ftth/FtthTicketWrite.tsx`). تظهر حين يقول الخادم `can_write`/`can`، والموظّف بلا «تعديل المشترك»
 /// يراها مقفلةً بمكانها. لا إعادة تلقائيّة: «غير مؤكَّد» يُعرض كما هو، و«تحقّق» يعيد النموذج نفسه بمرجعه (لا تذكرة ثانية).
 
-/// الموظّف بلا «تعديل المشترك»: الأزرار بمكانها مقفلة.
-bool get nationalWriteLocked => !Perms.has('subscribers.edit');
+/// الموظّف بلا «تعديل المشترك»: الأزرار بمكانها مقفلة. صاحب الحساب لا يُقفل بهذا المفتاح أبداً (١ نوفمبر): قدراته من الخادم تجعله false
+/// لأنّ الوطنيّ لا «يعدّل المشترك» عند البوّابة — وكتابته هنا يحرسها مفتاح الكتابة للحساب (`can_write`/`can`) لا هذا المفتاح.
+bool get nationalWriteLocked => Perms.isEmployee && !Perms.has('subscribers.edit');
 
 /// تذكرةٌ فُتحت للتوّ — لتُفتح ورقتها.
 typedef NationalCreatedTicket = ({String id, String? displayId, String title, String status});
@@ -403,14 +404,23 @@ class _NationalNewTicketSheetState extends State<NationalNewTicketSheet> {
 /* ───────────────────────────── التعليق ───────────────────────────── */
 
 class NationalCommentBox extends StatefulWidget {
-  const NationalCommentBox({super.key, required String this.ticketId, required this.onSent}) : send = null;
+  const NationalCommentBox({super.key, required String this.ticketId, required this.onSent, this.onUnconfirmed}) : send = null;
 
   /// تعليقٌ على غير التذكرة (المهمّة، الطلب — ١ نوفمبر): [send] يرسله مرّةً واحدة (لا إعادة تلقائيّة) والصندوق نفسه.
-  const NationalCommentBox.to({super.key, required Future<NationalWrite> Function(String text) this.send, required this.onSent})
-      : ticketId = null;
+  const NationalCommentBox.to({
+    super.key,
+    required Future<NationalWrite> Function(String text) this.send,
+    required this.onSent,
+    this.onUnconfirmed,
+  }) : ticketId = null;
   final String? ticketId;
   final Future<NationalWrite> Function(String text)? send;
   final VoidCallback onSent;
+
+  /// «غير مؤكَّد» يحفظه صاحب الصندوق (ورقة المهمّة والطلب) ويعرضه فوق تعليقاته — فيبقى بعد إعادة الجلب ولو أُزيل الصندوق أثناءها
+  /// (مراجعة ١ نوفمبر: كان يضيع فيُعاد التعليق فيتكرّر في البوّابة). يُستدعى بنصّه، وبـnull بعد إرسالٍ ناجح. null ⇒ الصندوق يعرضه
+  /// تحته بنفسه (التذكرة كما كانت).
+  final ValueChanged<String?>? onUnconfirmed;
 
   @override
   State<NationalCommentBox> createState() => _NationalCommentBoxState();
@@ -448,11 +458,19 @@ class _NationalCommentBoxState extends State<NationalCommentBox> {
       showSheetSnack(context, 'أُرسل التعليق');
       _text.clear();
       setState(() => _unconfirmed = null);
+      widget.onUnconfirmed?.call(null);
       widget.onSent();
       return;
     }
     if (r.unconfirmed) {
-      setState(() => _unconfirmed = r.message);
+      // قبل إعادة الجلب: صاحب الصندوق يحفظه أوّلاً (يبقى ولو أُزيل الصندوق أثناءها)، وإلّا تحته هنا
+      final text = r.message ?? 'لم يتأكّد إرسال التعليق — حدّث التعليقات وتحقّق قبل إعادته';
+      final lifted = widget.onUnconfirmed;
+      if (lifted != null) {
+        lifted(text);
+      } else {
+        setState(() => _unconfirmed = text);
+      }
       widget.onSent();
       return;
     }
