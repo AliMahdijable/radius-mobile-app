@@ -260,9 +260,11 @@ class ReceiptService {
         issuer: id.issuer,
       );
       return _print(doc);
-    } catch (e) {
+    } catch (e, st) {
       if (kDebugMode) debugPrint('[ReceiptService] error: $e');
-      return PrintResult.failed('$e');
+      // أوّل أسطر المكدّس مع الخطأ: يعرف التشخيص أين تعذّرت (الإعدادات/اسم الباقة/رسم الوصل/الطابعة).
+      final where = st.toString().split('\n').where((l) => l.contains('package:rad_mysvcs')).take(3).join(' < ');
+      return PrintResult.failed('$e${where.isEmpty ? '' : ' @ $where'}');
     }
   }
 

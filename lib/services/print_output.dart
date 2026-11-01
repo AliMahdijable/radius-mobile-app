@@ -197,7 +197,7 @@ class PrintOutput {
       return ok ? const PrintResult.printed() : const PrintResult.cancelled();
     } catch (e) {
       if (kDebugMode) debugPrint('[PrintOutput] layout failed: $e');
-      return PrintResult.failed('$e');
+      return PrintResult.failed('layout: $e');
     }
   }
 

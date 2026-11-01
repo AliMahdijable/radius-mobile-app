@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/widgets.dart';
 
+import '../../services/client_diag.dart';
 import '../../services/print_output.dart';
 import 'sheet_scaffold.dart';
 
@@ -14,6 +15,8 @@ void showPrintResult(BuildContext context, PrintResult r) {
     case PrintOutcome.cancelled:
       break;
     case PrintOutcome.failed:
+      // سبب الفشل يصلنا (بلا هويّة) — «تعذّرت الطباعة» وحدها لا تُصلَح (المالك ١ نوفمبر: «بالوطني الطباعه مجاي تشتغل»).
+      ClientDiag.report('print_failed', message: r.error);
       showSheetSnack(context, 'printer.failed'.tr(), isError: true, autoExplain: false);
   }
 }
