@@ -349,34 +349,24 @@ class _NationalSubscriberExtrasState extends State<NationalSubscriberExtras> {
   /// اسم المشترك للورقة التي تُفتح من صفّه (المهمّة لا تحمل غير رقمها وعنوانها).
   NationalRef get _customer => NationalRef(null, widget.sub.fullName);
 
+  /// رصيد محفظة المشترك كما تعرضه البوّابة («رصيد المحفظة»): صفرٌ معروف صفر، والمجهول «—»، والمقفل وحده «لا صلاحيّة».
   Widget _balance() {
     final b = NationalCustomerBalance.fromRaw(_wallet.raw);
     final v = b.balance;
-    final credit = b.credit;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Sp.sm),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Icon(b.locked ? LucideIcons.lock : LucideIcons.wallet, size: 16, color: b.locked ? AppColors.textLow : AppColors.success),
-              const SizedBox(width: Sp.sm),
-              Expanded(
-                child: Text('رصيد محفظة المشترك', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.label(color: AppColors.textLabel)),
-              ),
-              Text(
-                b.locked ? 'لا صلاحيّة' : (v == null ? '—' : formatIQD(v)),
-                textDirection: b.locked ? null : TextDirection.ltr,
-                style: b.locked ? AppType.muted() : AppType.amount(color: AppColors.textHi).copyWith(fontSize: 15),
-              ),
-            ],
+          Icon(b.locked ? LucideIcons.lock : LucideIcons.wallet, size: 16, color: b.locked ? AppColors.textLow : AppColors.success),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: Text('رصيد محفظة المشترك', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.label(color: AppColors.textLabel)),
           ),
-          if (credit != null && credit != 0)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text('الائتمان المتبقّي ${iso(formatIQD(credit))}', textAlign: TextAlign.end, style: AppType.micro(color: AppColors.textMid)),
-            ),
+          Text(
+            b.locked ? 'لا صلاحيّة' : (v == null ? '—' : formatIQD(v)),
+            textDirection: b.locked ? null : TextDirection.ltr,
+            style: b.locked ? AppType.muted() : AppType.amount(color: AppColors.textHi).copyWith(fontSize: 15),
+          ),
         ],
       ),
     );
