@@ -1,0 +1,5758 @@
+{
+  "schema": "receipt-layout-fixtures/1",
+  "contract": [
+    "Shared contract for receipt design v2 (web client-v2/src/lib/receipt-layout.ts ⇄ app lib/services/receipt_layout.dart). This file is copied byte-for-byte to the app (test/fixtures/receipt_layout.fixtures.json); both sides pin its sha256 (web: RECEIPT_FIXTURES_SHA256). Change it in both repos together.",
+    "resolveReceipt(design, input) → {density, emoji, mono, label_align, value_align, blocks}. Pure: no clock, no I/O, no HTML. `design` is the stored design object (partial v1 keys + optional `layout`); `input` is the ReceiptInput of each case. Every case's `expected` must deep-equal the resolver output (all keys present, null where empty, numbers compared numerically: 1 == 1.0).",
+    "Renderers draw ONLY the resolved blocks; a stored design WITHOUT `layout` keeps the old v1 renderer unchanged on both sides (the resolver is still defined for it: missing layout = all defaults).",
+    "v1 keys read by the resolver (default when the key is absent): show_logo, show_shop_info, show_subscriber_info, show_package_info, show_package_price, show_transaction_info, show_footer, show_manager_signature, show_receipt_id, show_datetime (default true; only the boolean false switches off); header_align, footer_align, logo_align, qr_align ∈ right|center|left (default center); default_align ∈ right|center|left|justify (default right). Invalid values ⇒ default.",
+    "Tolerant layout parsing (never throws): density ∉ DENSITIES ⇒ 'normal'; emoji = (layout.emoji !== false); mono = (layout.mono === true); fields/sections only for known ids, each property kept only with the right type (show/bold boolean, label/title string, size ∈ SIZE_STEPS); titles only string values for known kinds; texts: walk the array in order, skip entries that are not objects, whose `at` ∉ TEXT_POS or whose `text` is not a string, stop after 6 accepted; text id = given non-empty string else 't'+(accepted index+1); align ∈ right|center|left else 'center'; size ∈ SIZE_STEPS else 'md'; bold = (bold === true); boxed = (boxed === true); only = known kinds in KINDS order (empty ⇒ every kind).",
+    "Field visibility: a field whose FIELD_DEFS[id].v1 is set (receipt_no, issued_at, package_price, issuer) is visible iff that v1 switch is on (fields[id].show is ignored); every other field is visible unless fields[id].show === false. scale = SIZE_SCALE[fields[id].size ?? 'md']; bold = fields[id].bold if boolean else FIELD_DEFS[id].bold.",
+    "Labels: if fields[id].label is a string, the label is that string trimmed ('' = no label); otherwise the default FIELD_DEFS[id].label, except LABEL_VARIANTS: amount on a payment receipt ⇒ 'المبلغ المسدَّد', balance_credit when the balance is exactly 0 ⇒ 'الرصيد'. Table rows carry label null when it is ''. shop_name, title and footer_text never use labels; qr_caption's label IS the caption text ('' ⇒ caption null).",
+    "joinLabel(label, value) for inline fields (shop_address, shop_phone, receipt_no, issued_at, issuer): l = label.trim(); '' ⇒ value; l ends with '#' ⇒ l + value; l ends with ':' ⇒ l + ' ' + value; else l + ': ' + value.",
+    "Text cleanup: str(x) = x.trim() for strings, String(n) for finite numbers (an integral value prints with no decimal point: 30 ⇒ '30', never '30.0'), '' otherwise. Money fmtMoney(n) = round(|n|) with ',' thousands + ' د.ع' (e.g. '25,000 د.ع'). Display name = str(subscriber.name) || str(subscriber.username). Shop name = str(shopName) || 'MyServices'. Expiry text = first 16 UTF-16 units of str(expiration).",
+    "Block order: (1) texts at 'top'; (2) logo if show_logo && hasLogo; (3) shop_name if visible; (4) shop_lines if show_shop_info — address then phone, each only if it has a value and is visible, text = joinLabel(label, value), icons pin/phone, block skipped when empty; (5) title if visible: custom = titles[kind] trimmed; text = fill(custom).text if custom non-empty and that text is non-empty, else fill(DEFAULT_TITLES[kind]).text (titles never hide); (6) texts at 'after_title'; (7) meta {no, at}: no = joinLabel(label(receipt_no), receiptId) if show_receipt_id && kind ≠ sale && receiptId non-empty; at = joinLabel(label(issued_at), issuedText) if show_datetime && issuedText non-empty; skipped when both null; (8) body; (9) texts at 'before_qr'; (10) qr if hasQr && kind ≠ sale, caption = label(qr_caption) when visible and non-empty else null; (11) footer if show_footer: issuer line (visible && issuer non-empty, joinLabel) then footer_text line (if visible: footerText split on line breaks, each line trimmed, empty lines dropped, joined with '\\n'; empty ⇒ DEFAULT_FOOTER with icon 'pray', else icon null); skipped when no lines; (12) texts at 'bottom'.",
+    "Body, non-sale kinds: subscriber section (show_subscriber_info): subscriber_name (display name, if non-empty), username, phone (each only if non-empty). Package section (show_package_info): package_name (value str(packageName) || '—', always present when visible), package_price (if > 0, money), expiry_date (if non-empty), days_remaining (if a number: '<n> يوم'). Transaction section (show_transaction_info): activation/extension ⇒ payment_type (if set, PAYMENT_TYPE_LABELS), amount (if a number), cash_paid (partial-cash with a partialAmount); payment ⇒ amount; info ⇒ none of these; then the balance when newBalance is a number: < 0 ⇒ balance_debt (tone 'debt'), ≥ 0 ⇒ balance_credit (tone 'credit' when > 0, null when 0). A section with no rows is dropped. Section title: null if sections[id].show_title === false; else sections[id].title trimmed if non-empty, else SECTION_TITLES[id]; '' ⇒ null.",
+    "Body, sale (only when input.sale is set): sale_void if voided ('مُلغاة' or 'مُلغاة — <reason>'); sale_customer section (show_subscriber_info): subscriber_name (display name || 'زبون'), username, phone (if non-empty; field show/label/size/bold apply); sale_items {title, lines:[{name, detail:'<qtyText> × <money(unitPrice)>', total: money(total)}]} always; sale_totals section always, fixed rows sale_total (tone 'total') and sale_payment (bold, scale 1, ltr false); sale_note 'ملاحظة: <note>' when the note is non-empty. No QR and no receipt number in meta on sales.",
+    "Rows: {id, label, value, ltr = FIELD_DEFS[id].ltr, bold, scale, tone}. label_align = default_align; value_align = the physical opposite: right|justify ⇒ left, left ⇒ right, center ⇒ center.",
+    "Variables (fill): /\\{([a-z_]+)\\}/ tokens whose name is in VARIABLES are replaced (no re-scan of inserted values); any other {…} stays literal. A variable whose kinds do not include the receipt kind is ''. Then every line: runs of [ \\t\\u00a0] ⇒ one space, trimmed; empty lines dropped; lines joined with '\\n'. hidden = result '' OR (≥1 known variable and every known variable empty). Hidden texts are not emitted.",
+    "Variable values: shop_name (as printed), shop_phone, shop_address, receipt_type = RECEIPT_TYPE_LABELS[kind], receipt_no = receiptNoText, date / time = issuedText split at its first space, issuer, subscriber_name = display name, firstname = first whitespace-separated word of str(subscriber.name), username, phone, package_name, sas_package_name = str(sasPackageName) || str(packageName), package_price (money if > 0), expiry_date (expiry text), days_remaining = '<n>', remaining_days = '<n> يوم', payment_type (label), amount (money), paid_amount (payment ⇒ amount; cash ⇒ amount; partial-cash ⇒ partialAmount; non-cash ⇒ 0; else ''), debt_amount (money when newBalance < 0), credit_amount (money when > 0), balance ('دين <money>' / 'رصيد <money>' / '0 د.ع'), sale_total (money), sale_payment ('على حساب المشترك (دين)' | 'نقداً').",
+    "Rendering tokens: final font px = round(font_size_base × RATIOS[value|label|caption] × scale) (subtitle/title box from font_size_title × 0.8 × scale; shop name = font_size_title × scale). DENSITY values are web px; the app uses pt = px × 0.75. tone 'debt' red / 'credit' green / 'total' = subtitle size, weight 800 (colours dropped when mono or on POS in the app). emoji (web only): 📍 before shop_address, 📞 before shop_phone, 🙏 after the default footer (icon 'pray'). Tashkeel is kept in resolved text; the app strips it when drawing."
+  ],
+  "tokens": {
+    "KINDS": [
+      "activation",
+      "extension",
+      "payment",
+      "info",
+      "sale"
+    ],
+    "SIZE_STEPS": [
+      "xs",
+      "sm",
+      "md",
+      "lg",
+      "xl"
+    ],
+    "SIZE_SCALE": {
+      "xs": 0.8,
+      "sm": 0.9,
+      "md": 1,
+      "lg": 1.2,
+      "xl": 1.4
+    },
+    "RATIOS": {
+      "value": 0.95,
+      "label": 0.85,
+      "caption": 0.78,
+      "subtitle": 0.8
+    },
+    "TEXT_POS": [
+      "top",
+      "after_title",
+      "before_qr",
+      "bottom"
+    ],
+    "DENSITIES": [
+      "normal",
+      "compact",
+      "tight"
+    ],
+    "DENSITY": {
+      "normal": {
+        "row_pad": 5,
+        "title_pad_v": 4,
+        "title_pad_h": 8,
+        "title_fill": true,
+        "meta_pad": 8,
+        "meta_line": true,
+        "qr_pad": 12,
+        "qr_line": true,
+        "qr_gap": 4,
+        "footer_pad": 8,
+        "logo_gap": 8,
+        "section_title_gap": 4,
+        "table_gap": 8
+      },
+      "compact": {
+        "row_pad": 2,
+        "title_pad_v": 2,
+        "title_pad_h": 6,
+        "title_fill": true,
+        "meta_pad": 3,
+        "meta_line": true,
+        "qr_pad": 4,
+        "qr_line": true,
+        "qr_gap": 2,
+        "footer_pad": 4,
+        "logo_gap": 3,
+        "section_title_gap": 1,
+        "table_gap": 2
+      },
+      "tight": {
+        "row_pad": 1,
+        "title_pad_v": 1,
+        "title_pad_h": 4,
+        "title_fill": false,
+        "meta_pad": 2,
+        "meta_line": false,
+        "qr_pad": 2,
+        "qr_line": false,
+        "qr_gap": 1,
+        "footer_pad": 2,
+        "logo_gap": 2,
+        "section_title_gap": 0,
+        "table_gap": 0
+      }
+    },
+    "FIELD_IDS": [
+      "shop_name",
+      "shop_address",
+      "shop_phone",
+      "title",
+      "receipt_no",
+      "issued_at",
+      "subscriber_name",
+      "username",
+      "phone",
+      "package_name",
+      "package_price",
+      "expiry_date",
+      "days_remaining",
+      "payment_type",
+      "amount",
+      "cash_paid",
+      "balance_debt",
+      "balance_credit",
+      "qr_caption",
+      "issuer",
+      "footer_text"
+    ],
+    "FIELD_DEFS": {
+      "shop_name": {
+        "group": "header",
+        "label": "",
+        "bold": true,
+        "ltr": false,
+        "mode": "none",
+        "v1": null
+      },
+      "shop_address": {
+        "group": "header",
+        "label": "",
+        "bold": false,
+        "ltr": false,
+        "mode": "inline",
+        "v1": null
+      },
+      "shop_phone": {
+        "group": "header",
+        "label": "",
+        "bold": false,
+        "ltr": true,
+        "mode": "inline",
+        "v1": null
+      },
+      "title": {
+        "group": "header",
+        "label": "",
+        "bold": true,
+        "ltr": false,
+        "mode": "none",
+        "v1": null
+      },
+      "receipt_no": {
+        "group": "header",
+        "label": "#",
+        "bold": false,
+        "ltr": true,
+        "mode": "inline",
+        "v1": "show_receipt_id"
+      },
+      "issued_at": {
+        "group": "header",
+        "label": "",
+        "bold": false,
+        "ltr": true,
+        "mode": "inline",
+        "v1": "show_datetime"
+      },
+      "subscriber_name": {
+        "group": "subscriber",
+        "label": "الاسم",
+        "bold": true,
+        "ltr": false,
+        "mode": "row",
+        "v1": null
+      },
+      "username": {
+        "group": "subscriber",
+        "label": "اسم المستخدم",
+        "bold": false,
+        "ltr": true,
+        "mode": "row",
+        "v1": null
+      },
+      "phone": {
+        "group": "subscriber",
+        "label": "الهاتف",
+        "bold": false,
+        "ltr": true,
+        "mode": "row",
+        "v1": null
+      },
+      "package_name": {
+        "group": "package",
+        "label": "الباقة",
+        "bold": true,
+        "ltr": false,
+        "mode": "row",
+        "v1": null
+      },
+      "package_price": {
+        "group": "package",
+        "label": "سعر الباقة",
+        "bold": true,
+        "ltr": false,
+        "mode": "row",
+        "v1": "show_package_price"
+      },
+      "expiry_date": {
+        "group": "package",
+        "label": "تاريخ الانتهاء",
+        "bold": false,
+        "ltr": true,
+        "mode": "row",
+        "v1": null
+      },
+      "days_remaining": {
+        "group": "package",
+        "label": "الأيام المتبقّية",
+        "bold": true,
+        "ltr": false,
+        "mode": "row",
+        "v1": null
+      },
+      "payment_type": {
+        "group": "transaction",
+        "label": "طريقة الدفع",
+        "bold": true,
+        "ltr": false,
+        "mode": "row",
+        "v1": null
+      },
+      "amount": {
+        "group": "transaction",
+        "label": "المبلغ",
+        "bold": true,
+        "ltr": false,
+        "mode": "row",
+        "v1": null
+      },
+      "cash_paid": {
+        "group": "transaction",
+        "label": "المُدفَع نقداً",
+        "bold": true,
+        "ltr": false,
+        "mode": "row",
+        "v1": null
+      },
+      "balance_debt": {
+        "group": "transaction",
+        "label": "الدين المتبقّي",
+        "bold": true,
+        "ltr": false,
+        "mode": "row",
+        "v1": null
+      },
+      "balance_credit": {
+        "group": "transaction",
+        "label": "الرصيد المتبقّي",
+        "bold": true,
+        "ltr": false,
+        "mode": "row",
+        "v1": null
+      },
+      "qr_caption": {
+        "group": "qr",
+        "label": "امسح للاطلاع على معلومات الاشتراك",
+        "bold": false,
+        "ltr": false,
+        "mode": "caption",
+        "v1": null
+      },
+      "issuer": {
+        "group": "footer",
+        "label": "أصدره",
+        "bold": false,
+        "ltr": false,
+        "mode": "inline",
+        "v1": "show_manager_signature"
+      },
+      "footer_text": {
+        "group": "footer",
+        "label": "",
+        "bold": false,
+        "ltr": false,
+        "mode": "none",
+        "v1": null
+      }
+    },
+    "LABEL_VARIANTS": {
+      "amount_payment": "المبلغ المسدَّد",
+      "balance_zero": "الرصيد"
+    },
+    "SECTION_IDS": [
+      "subscriber",
+      "package",
+      "transaction",
+      "sale_customer",
+      "sale_items",
+      "sale_totals"
+    ],
+    "SECTION_TITLES": {
+      "subscriber": "المشترك",
+      "package": "الباقة",
+      "transaction": "المعاملة",
+      "sale_customer": "الزبون",
+      "sale_items": "المواد",
+      "sale_totals": ""
+    },
+    "DEFAULT_TITLES": {
+      "activation": "وصل تفعيل",
+      "extension": "وصل تمديد",
+      "payment": "وصل تسديد دين",
+      "info": "بطاقة معلومات المشترك",
+      "sale": "فاتورة بيع رقم {receipt_no}"
+    },
+    "RECEIPT_TYPE_LABELS": {
+      "activation": "وصل تفعيل",
+      "extension": "وصل تمديد",
+      "payment": "وصل تسديد دين",
+      "info": "بطاقة معلومات المشترك",
+      "sale": "فاتورة بيع"
+    },
+    "PAYMENT_TYPE_LABELS": {
+      "cash": "نقدي",
+      "partial-cash": "نقدي جزئي",
+      "non-cash": "غير نقدي"
+    },
+    "SALE_LABELS": {
+      "total": "المجموع",
+      "payment": "طريقة الدفع",
+      "cash": "نقداً",
+      "debt": "على حساب المشترك (دين)",
+      "void": "مُلغاة",
+      "note": "ملاحظة",
+      "customer": "زبون"
+    },
+    "DEFAULT_FOOTER": "شكراً لاختياركم خدماتنا",
+    "DEFAULT_SHOP_NAME": "MyServices",
+    "TEXT_DEFAULTS": {
+      "align": "center",
+      "size": "md",
+      "bold": false,
+      "boxed": false
+    },
+    "LIMITS": {
+      "label": 40,
+      "sectionTitle": 40,
+      "typeTitle": 60,
+      "text": 300,
+      "textLines": 4,
+      "texts": 6,
+      "fields": 40,
+      "layoutBytes": 12000
+    },
+    "V1_DEFAULTS": {
+      "show_logo": true,
+      "show_shop_info": true,
+      "show_subscriber_info": true,
+      "show_package_info": true,
+      "show_package_price": true,
+      "show_transaction_info": true,
+      "show_footer": true,
+      "show_manager_signature": true,
+      "show_receipt_id": true,
+      "show_datetime": true,
+      "default_align": "right",
+      "header_align": "center",
+      "footer_align": "center",
+      "logo_align": "center",
+      "qr_align": "center"
+    },
+    "VARIABLES": [
+      {
+        "id": "shop_name",
+        "label": "اسم المحلّ",
+        "kinds": [
+          "activation",
+          "extension",
+          "payment",
+          "info",
+          "sale"
+        ]
+      },
+      {
+        "id": "shop_phone",
+        "label": "هاتف المحلّ",
+        "kinds": [
+          "activation",
+          "extension",
+          "payment",
+          "info",
+          "sale"
+        ]
+      },
+      {
+        "id": "shop_address",
+        "label": "عنوان المحلّ",
+        "kinds": [
+          "activation",
+          "extension",
+          "payment",
+          "info",
+          "sale"
+        ]
+      },
+      {
+        "id": "receipt_type",
+        "label": "نوع الوصل",
+        "kinds": [
+          "activation",
+          "extension",
+          "payment",
+          "info",
+          "sale"
+        ]
+      },
+      {
+        "id": "receipt_no",
+        "label": "رقم الوصل",
+        "kinds": [
+          "activation",
+          "extension",
+          "payment",
+          "info",
+          "sale"
+        ]
+      },
+      {
+        "id": "date",
+        "label": "التاريخ",
+        "kinds": [
+          "activation",
+          "extension",
+          "payment",
+          "info",
+          "sale"
+        ]
+      },
+      {
+        "id": "time",
+        "label": "الوقت",
+        "kinds": [
+          "activation",
+          "extension",
+          "payment",
+          "info",
+          "sale"
+        ]
+      },
+      {
+        "id": "issuer",
+        "label": "أصدره",
+        "kinds": [
+          "activation",
+          "extension",
+          "payment",
+          "info",
+          "sale"
+        ]
+      },
+      {
+        "id": "subscriber_name",
+        "label": "اسم المشترك",
+        "kinds": [
+          "activation",
+          "extension",
+          "payment",
+          "info",
+          "sale"
+        ]
+      },
+      {
+        "id": "firstname",
+        "label": "الاسم الأول",
+        "kinds": [
+          "activation",
+          "extension",
+          "payment",
+          "info",
+          "sale"
+        ]
+      },
+      {
+        "id": "username",
+        "label": "اسم المستخدم",
+        "kinds": [
+          "activation",
+          "extension",
+          "payment",
+          "info",
+          "sale"
+        ]
+      },
+      {
+        "id": "phone",
+        "label": "هاتف المشترك",
+        "kinds": [
+          "activation",
+          "extension",
+          "payment",
+          "info",
+          "sale"
+        ]
+      },
+      {
+        "id": "package_name",
+        "label": "الباقة",
+        "kinds": [
+          "activation",
+          "extension",
+          "payment",
+          "info"
+        ]
+      },
+      {
+        "id": "sas_package_name",
+        "label": "الباقة في الساس",
+        "kinds": [
+          "activation",
+          "extension",
+          "payment",
+          "info"
+        ]
+      },
+      {
+        "id": "package_price",
+        "label": "سعر الباقة",
+        "kinds": [
+          "activation",
+          "extension",
+          "payment",
+          "info"
+        ]
+      },
+      {
+        "id": "expiry_date",
+        "label": "تاريخ الانتهاء",
+        "kinds": [
+          "activation",
+          "extension",
+          "payment",
+          "info"
+        ]
+      },
+      {
+        "id": "days_remaining",
+        "label": "الأيام المتبقّية (رقم)",
+        "kinds": [
+          "activation",
+          "extension",
+          "info"
+        ]
+      },
+      {
+        "id": "remaining_days",
+        "label": "الأيام المتبقّية",
+        "kinds": [
+          "activation",
+          "extension",
+          "info"
+        ]
+      },
+      {
+        "id": "payment_type",
+        "label": "طريقة الدفع",
+        "kinds": [
+          "activation",
+          "extension"
+        ]
+      },
+      {
+        "id": "amount",
+        "label": "المبلغ",
+        "kinds": [
+          "activation",
+          "extension",
+          "payment"
+        ]
+      },
+      {
+        "id": "paid_amount",
+        "label": "المدفوع",
+        "kinds": [
+          "activation",
+          "extension",
+          "payment"
+        ]
+      },
+      {
+        "id": "debt_amount",
+        "label": "الدين",
+        "kinds": [
+          "activation",
+          "extension",
+          "payment",
+          "info"
+        ]
+      },
+      {
+        "id": "credit_amount",
+        "label": "الرصيد",
+        "kinds": [
+          "activation",
+          "extension",
+          "payment",
+          "info"
+        ]
+      },
+      {
+        "id": "balance",
+        "label": "الدين أو الرصيد",
+        "kinds": [
+          "activation",
+          "extension",
+          "payment",
+          "info"
+        ]
+      },
+      {
+        "id": "sale_total",
+        "label": "مجموع الفاتورة",
+        "kinds": [
+          "sale"
+        ]
+      },
+      {
+        "id": "sale_payment",
+        "label": "دفع الفاتورة",
+        "kinds": [
+          "sale"
+        ]
+      }
+    ],
+    "PRESETS": {
+      "normal": {
+        "label": "عادي",
+        "v1": {
+          "font_size_base": 13,
+          "font_size_title": 16,
+          "section_gap_mm": 6,
+          "line_height": 1.5,
+          "margin_top_mm": 4,
+          "margin_right_mm": 4,
+          "margin_bottom_mm": 4,
+          "margin_left_mm": 4,
+          "logo_size_mm": 18,
+          "qr_size_mm": 35,
+          "row_separator": "dotted",
+          "section_title_underline": true
+        },
+        "density": "normal",
+        "emoji": true
+      },
+      "compact": {
+        "label": "مضغوط",
+        "v1": {
+          "font_size_base": 11,
+          "font_size_title": 14,
+          "section_gap_mm": 2,
+          "line_height": 1.25,
+          "margin_top_mm": 2,
+          "margin_right_mm": 2,
+          "margin_bottom_mm": 2,
+          "margin_left_mm": 2,
+          "logo_size_mm": 12,
+          "qr_size_mm": 24,
+          "row_separator": "dotted",
+          "section_title_underline": true
+        },
+        "density": "compact",
+        "emoji": false
+      },
+      "tight": {
+        "label": "مضغوط جداً",
+        "v1": {
+          "font_size_base": 10,
+          "font_size_title": 13,
+          "section_gap_mm": 1,
+          "line_height": 1.1,
+          "margin_top_mm": 1,
+          "margin_right_mm": 1,
+          "margin_bottom_mm": 1,
+          "margin_left_mm": 1,
+          "logo_size_mm": 9,
+          "qr_size_mm": 20,
+          "row_separator": "none",
+          "section_title_underline": false
+        },
+        "density": "tight",
+        "emoji": false
+      }
+    }
+  },
+  "cases": [
+    {
+      "name": "c01_default_v2_activation",
+      "note": "layout {v:2} only = today's content: every block, partial cash, debt left.",
+      "design": {
+        "layout": {
+          "v": 2
+        }
+      },
+      "input": {
+        "kind": "activation",
+        "shopName": "مكتب النور للإنترنت",
+        "shopAddress": "النجف — حيّ الأمير",
+        "shopPhone": "0780 111 2222",
+        "footerText": null,
+        "issuedText": "2026-11-01 10:05",
+        "receiptId": "No. 00012",
+        "receiptNoText": "00012",
+        "issuer": "admin@najaf",
+        "hasLogo": true,
+        "hasQr": true,
+        "subscriber": {
+          "name": "علي حسن",
+          "username": "ali1@najaf",
+          "phone": "07701000001",
+          "packageName": "Plus 50M",
+          "sasPackageName": "PLUS",
+          "packagePrice": 35000,
+          "expiration": "2026-12-01 10:05:00",
+          "remainingDays": 30
+        },
+        "paymentType": "partial-cash",
+        "amount": 35000,
+        "partialAmount": 25000,
+        "newBalance": -10000,
+        "sale": null
+      },
+      "expected": {
+        "density": "normal",
+        "emoji": true,
+        "mono": false,
+        "label_align": "right",
+        "value_align": "left",
+        "blocks": [
+          {
+            "t": "logo",
+            "align": "center"
+          },
+          {
+            "t": "shop_name",
+            "text": "مكتب النور للإنترنت",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "shop_lines",
+            "lines": [
+              {
+                "id": "shop_address",
+                "text": "النجف — حيّ الأمير",
+                "ltr": false,
+                "icon": "pin",
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "shop_phone",
+                "text": "0780 111 2222",
+                "ltr": true,
+                "icon": "phone",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "title",
+            "text": "وصل تفعيل",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "meta",
+            "no": "#No. 00012",
+            "at": "2026-11-01 10:05"
+          },
+          {
+            "t": "section",
+            "id": "subscriber",
+            "title": "المشترك",
+            "rows": [
+              {
+                "id": "subscriber_name",
+                "label": "الاسم",
+                "value": "علي حسن",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "username",
+                "label": "اسم المستخدم",
+                "value": "ali1@najaf",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "phone",
+                "label": "الهاتف",
+                "value": "07701000001",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "package",
+            "title": "الباقة",
+            "rows": [
+              {
+                "id": "package_name",
+                "label": "الباقة",
+                "value": "Plus 50M",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "package_price",
+                "label": "سعر الباقة",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "expiry_date",
+                "label": "تاريخ الانتهاء",
+                "value": "2026-12-01 10:05",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "days_remaining",
+                "label": "الأيام المتبقّية",
+                "value": "30 يوم",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "transaction",
+            "title": "المعاملة",
+            "rows": [
+              {
+                "id": "payment_type",
+                "label": "طريقة الدفع",
+                "value": "نقدي جزئي",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "amount",
+                "label": "المبلغ",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "cash_paid",
+                "label": "المُدفَع نقداً",
+                "value": "25,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "balance_debt",
+                "label": "الدين المتبقّي",
+                "value": "10,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": "debt"
+              }
+            ]
+          },
+          {
+            "t": "qr",
+            "caption": "امسح للاطلاع على معلومات الاشتراك",
+            "align": "center"
+          },
+          {
+            "t": "footer",
+            "lines": [
+              {
+                "id": "issuer",
+                "text": "أصدره: admin@najaf",
+                "icon": null,
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "footer_text",
+                "text": "شكراً لاختياركم خدماتنا",
+                "icon": "pray",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          }
+        ]
+      }
+    },
+    {
+      "name": "c02_compact_hidden_username_phone",
+      "note": "compact preset (v1 keys + density/emoji); username, phone and shop name hidden; default_align justify ⇒ values left.",
+      "design": {
+        "font_size_base": 11,
+        "font_size_title": 14,
+        "section_gap_mm": 2,
+        "line_height": 1.25,
+        "margin_top_mm": 2,
+        "margin_right_mm": 2,
+        "margin_bottom_mm": 2,
+        "margin_left_mm": 2,
+        "logo_size_mm": 12,
+        "qr_size_mm": 24,
+        "row_separator": "dotted",
+        "section_title_underline": true,
+        "default_align": "justify",
+        "layout": {
+          "v": 2,
+          "density": "compact",
+          "emoji": false,
+          "fields": {
+            "username": {
+              "show": false
+            },
+            "phone": {
+              "show": false
+            },
+            "shop_name": {
+              "show": false
+            }
+          }
+        }
+      },
+      "input": {
+        "kind": "activation",
+        "shopName": "مكتب النور للإنترنت",
+        "shopAddress": "النجف — حيّ الأمير",
+        "shopPhone": "0780 111 2222",
+        "footerText": null,
+        "issuedText": "2026-11-01 10:05",
+        "receiptId": "No. 00012",
+        "receiptNoText": "00012",
+        "issuer": "admin@najaf",
+        "hasLogo": true,
+        "hasQr": true,
+        "subscriber": {
+          "name": "علي حسن",
+          "username": "ali1@najaf",
+          "phone": "07701000001",
+          "packageName": "Plus 50M",
+          "sasPackageName": "PLUS",
+          "packagePrice": 35000,
+          "expiration": "2026-12-01 10:05:00",
+          "remainingDays": 30
+        },
+        "paymentType": "cash",
+        "amount": 35000,
+        "partialAmount": null,
+        "newBalance": 0,
+        "sale": null
+      },
+      "expected": {
+        "density": "compact",
+        "emoji": false,
+        "mono": false,
+        "label_align": "justify",
+        "value_align": "left",
+        "blocks": [
+          {
+            "t": "logo",
+            "align": "center"
+          },
+          {
+            "t": "shop_lines",
+            "lines": [
+              {
+                "id": "shop_address",
+                "text": "النجف — حيّ الأمير",
+                "ltr": false,
+                "icon": "pin",
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "shop_phone",
+                "text": "0780 111 2222",
+                "ltr": true,
+                "icon": "phone",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "title",
+            "text": "وصل تفعيل",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "meta",
+            "no": "#No. 00012",
+            "at": "2026-11-01 10:05"
+          },
+          {
+            "t": "section",
+            "id": "subscriber",
+            "title": "المشترك",
+            "rows": [
+              {
+                "id": "subscriber_name",
+                "label": "الاسم",
+                "value": "علي حسن",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "package",
+            "title": "الباقة",
+            "rows": [
+              {
+                "id": "package_name",
+                "label": "الباقة",
+                "value": "Plus 50M",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "package_price",
+                "label": "سعر الباقة",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "expiry_date",
+                "label": "تاريخ الانتهاء",
+                "value": "2026-12-01 10:05",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "days_remaining",
+                "label": "الأيام المتبقّية",
+                "value": "30 يوم",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "transaction",
+            "title": "المعاملة",
+            "rows": [
+              {
+                "id": "payment_type",
+                "label": "طريقة الدفع",
+                "value": "نقدي",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "amount",
+                "label": "المبلغ",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "balance_credit",
+                "label": "الرصيد",
+                "value": "0 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "qr",
+            "caption": "امسح للاطلاع على معلومات الاشتراك",
+            "align": "center"
+          },
+          {
+            "t": "footer",
+            "lines": [
+              {
+                "id": "issuer",
+                "text": "أصدره: admin@najaf",
+                "icon": null,
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "footer_text",
+                "text": "شكراً لاختياركم خدماتنا",
+                "icon": "pray",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          }
+        ]
+      }
+    },
+    {
+      "name": "c03_custom_labels_empty_label",
+      "note": "custom labels incl. empty label (value only), joinLabel rules (#, trailing colon, plain), sizes/bold on shop name, title and debt; multi-line footer kept.",
+      "design": {
+        "layout": {
+          "v": 2,
+          "fields": {
+            "subscriber_name": {
+              "label": "المشترك"
+            },
+            "package_name": {
+              "label": ""
+            },
+            "balance_debt": {
+              "label": "عليه",
+              "size": "lg",
+              "bold": true
+            },
+            "receipt_no": {
+              "label": "رقم الوصل"
+            },
+            "issued_at": {
+              "label": "التاريخ:"
+            },
+            "shop_phone": {
+              "label": "هاتف"
+            },
+            "issuer": {
+              "label": ""
+            },
+            "qr_caption": {
+              "label": "امسح الرمز لمعرفة رصيدك"
+            },
+            "shop_name": {
+              "size": "xl"
+            },
+            "title": {
+              "size": "sm",
+              "bold": false
+            },
+            "username": {
+              "size": "xs",
+              "bold": true
+            }
+          }
+        }
+      },
+      "input": {
+        "kind": "activation",
+        "shopName": "مكتب النور للإنترنت",
+        "shopAddress": "النجف — حيّ الأمير",
+        "shopPhone": "0780 111 2222",
+        "footerText": "سطر أول\n\n   سطر   ثاني  ",
+        "issuedText": "2026-11-01 10:05",
+        "receiptId": "No. 00012",
+        "receiptNoText": "00012",
+        "issuer": "admin@najaf",
+        "hasLogo": true,
+        "hasQr": true,
+        "subscriber": {
+          "name": "علي حسن",
+          "username": "ali1@najaf",
+          "phone": "07701000001",
+          "packageName": "Plus 50M",
+          "sasPackageName": "PLUS",
+          "packagePrice": 35000,
+          "expiration": "2026-12-01 10:05:00",
+          "remainingDays": 30
+        },
+        "paymentType": "partial-cash",
+        "amount": 35000,
+        "partialAmount": 25000,
+        "newBalance": -10000,
+        "sale": null
+      },
+      "expected": {
+        "density": "normal",
+        "emoji": true,
+        "mono": false,
+        "label_align": "right",
+        "value_align": "left",
+        "blocks": [
+          {
+            "t": "logo",
+            "align": "center"
+          },
+          {
+            "t": "shop_name",
+            "text": "مكتب النور للإنترنت",
+            "scale": 1.4,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "shop_lines",
+            "lines": [
+              {
+                "id": "shop_address",
+                "text": "النجف — حيّ الأمير",
+                "ltr": false,
+                "icon": "pin",
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "shop_phone",
+                "text": "هاتف: 0780 111 2222",
+                "ltr": true,
+                "icon": "phone",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "title",
+            "text": "وصل تفعيل",
+            "scale": 0.9,
+            "bold": false,
+            "align": "center"
+          },
+          {
+            "t": "meta",
+            "no": "رقم الوصل: No. 00012",
+            "at": "التاريخ: 2026-11-01 10:05"
+          },
+          {
+            "t": "section",
+            "id": "subscriber",
+            "title": "المشترك",
+            "rows": [
+              {
+                "id": "subscriber_name",
+                "label": "المشترك",
+                "value": "علي حسن",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "username",
+                "label": "اسم المستخدم",
+                "value": "ali1@najaf",
+                "ltr": true,
+                "bold": true,
+                "scale": 0.8,
+                "tone": null
+              },
+              {
+                "id": "phone",
+                "label": "الهاتف",
+                "value": "07701000001",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "package",
+            "title": "الباقة",
+            "rows": [
+              {
+                "id": "package_name",
+                "label": null,
+                "value": "Plus 50M",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "package_price",
+                "label": "سعر الباقة",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "expiry_date",
+                "label": "تاريخ الانتهاء",
+                "value": "2026-12-01 10:05",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "days_remaining",
+                "label": "الأيام المتبقّية",
+                "value": "30 يوم",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "transaction",
+            "title": "المعاملة",
+            "rows": [
+              {
+                "id": "payment_type",
+                "label": "طريقة الدفع",
+                "value": "نقدي جزئي",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "amount",
+                "label": "المبلغ",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "cash_paid",
+                "label": "المُدفَع نقداً",
+                "value": "25,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "balance_debt",
+                "label": "عليه",
+                "value": "10,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1.2,
+                "tone": "debt"
+              }
+            ]
+          },
+          {
+            "t": "qr",
+            "caption": "امسح الرمز لمعرفة رصيدك",
+            "align": "center"
+          },
+          {
+            "t": "footer",
+            "lines": [
+              {
+                "id": "issuer",
+                "text": "admin@najaf",
+                "icon": null,
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "footer_text",
+                "text": "سطر أول\nسطر   ثاني",
+                "icon": null,
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          }
+        ]
+      }
+    },
+    {
+      "name": "c04_custom_payment_title",
+      "note": "payment receipt with a custom title using {receipt_no}; amount label variant «المبلغ المسدَّد»; no days on payments.",
+      "design": {
+        "layout": {
+          "v": 2,
+          "titles": {
+            "payment": "وصل استلام دين رقم {receipt_no}"
+          }
+        }
+      },
+      "input": {
+        "kind": "payment",
+        "shopName": "مكتب النور للإنترنت",
+        "shopAddress": "النجف — حيّ الأمير",
+        "shopPhone": "0780 111 2222",
+        "footerText": null,
+        "issuedText": "2026-11-01 10:05",
+        "receiptId": "No. 00031",
+        "receiptNoText": "00031",
+        "issuer": "admin@najaf",
+        "hasLogo": true,
+        "hasQr": true,
+        "subscriber": {
+          "name": "علي حسن",
+          "username": "ali1@najaf",
+          "phone": "07701000001",
+          "packageName": "Plus 50M",
+          "sasPackageName": "PLUS",
+          "packagePrice": 35000,
+          "expiration": "2026-12-01 10:05:00",
+          "remainingDays": null
+        },
+        "paymentType": null,
+        "amount": 20000,
+        "partialAmount": null,
+        "newBalance": -5000,
+        "sale": null
+      },
+      "expected": {
+        "density": "normal",
+        "emoji": true,
+        "mono": false,
+        "label_align": "right",
+        "value_align": "left",
+        "blocks": [
+          {
+            "t": "logo",
+            "align": "center"
+          },
+          {
+            "t": "shop_name",
+            "text": "مكتب النور للإنترنت",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "shop_lines",
+            "lines": [
+              {
+                "id": "shop_address",
+                "text": "النجف — حيّ الأمير",
+                "ltr": false,
+                "icon": "pin",
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "shop_phone",
+                "text": "0780 111 2222",
+                "ltr": true,
+                "icon": "phone",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "title",
+            "text": "وصل استلام دين رقم 00031",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "meta",
+            "no": "#No. 00031",
+            "at": "2026-11-01 10:05"
+          },
+          {
+            "t": "section",
+            "id": "subscriber",
+            "title": "المشترك",
+            "rows": [
+              {
+                "id": "subscriber_name",
+                "label": "الاسم",
+                "value": "علي حسن",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "username",
+                "label": "اسم المستخدم",
+                "value": "ali1@najaf",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "phone",
+                "label": "الهاتف",
+                "value": "07701000001",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "package",
+            "title": "الباقة",
+            "rows": [
+              {
+                "id": "package_name",
+                "label": "الباقة",
+                "value": "Plus 50M",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "package_price",
+                "label": "سعر الباقة",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "expiry_date",
+                "label": "تاريخ الانتهاء",
+                "value": "2026-12-01 10:05",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "transaction",
+            "title": "المعاملة",
+            "rows": [
+              {
+                "id": "amount",
+                "label": "المبلغ المسدَّد",
+                "value": "20,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "balance_debt",
+                "label": "الدين المتبقّي",
+                "value": "5,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": "debt"
+              }
+            ]
+          },
+          {
+            "t": "qr",
+            "caption": "امسح للاطلاع على معلومات الاشتراك",
+            "align": "center"
+          },
+          {
+            "t": "footer",
+            "lines": [
+              {
+                "id": "issuer",
+                "text": "أصدره: admin@najaf",
+                "icon": null,
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "footer_text",
+                "text": "شكراً لاختياركم خدماتنا",
+                "icon": "pray",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          }
+        ]
+      }
+    },
+    {
+      "name": "c05_texts_all_positions",
+      "note": "texts at all 4 positions; `only` filters; variables; spaces collapse and blank lines drop; text defaults.",
+      "design": {
+        "layout": {
+          "v": 2,
+          "texts": [
+            {
+              "id": "t1",
+              "at": "top",
+              "text": "مرحباً بكم في {shop_name}"
+            },
+            {
+              "id": "t2",
+              "at": "after_title",
+              "text": "المشترك: {subscriber_name} — {sas_package_name}",
+              "only": [
+                "activation",
+                "extension"
+              ],
+              "align": "right",
+              "size": "sm"
+            },
+            {
+              "id": "t3",
+              "at": "before_qr",
+              "text": "سُدِّد {amount}",
+              "only": [
+                "payment"
+              ]
+            },
+            {
+              "id": "t4",
+              "at": "before_qr",
+              "text": "دفع {paid_amount}   من {amount}\n\n\nالتاريخ {date} الساعة {time}",
+              "size": "lg",
+              "bold": true
+            },
+            {
+              "id": "t5",
+              "at": "bottom",
+              "text": "للدعم: 0780 000 0000",
+              "align": "left",
+              "size": "xs",
+              "boxed": true
+            }
+          ]
+        }
+      },
+      "input": {
+        "kind": "activation",
+        "shopName": "مكتب النور للإنترنت",
+        "shopAddress": "النجف — حيّ الأمير",
+        "shopPhone": "0780 111 2222",
+        "footerText": null,
+        "issuedText": "2026-11-01 10:05",
+        "receiptId": "No. 00012",
+        "receiptNoText": "00012",
+        "issuer": "admin@najaf",
+        "hasLogo": true,
+        "hasQr": true,
+        "subscriber": {
+          "name": "علي حسن",
+          "username": "ali1@najaf",
+          "phone": "07701000001",
+          "packageName": "Plus 50M",
+          "sasPackageName": "PLUS",
+          "packagePrice": 35000,
+          "expiration": "2026-12-01 10:05:00",
+          "remainingDays": 30
+        },
+        "paymentType": "partial-cash",
+        "amount": 35000,
+        "partialAmount": 25000,
+        "newBalance": -10000,
+        "sale": null
+      },
+      "expected": {
+        "density": "normal",
+        "emoji": true,
+        "mono": false,
+        "label_align": "right",
+        "value_align": "left",
+        "blocks": [
+          {
+            "t": "text",
+            "id": "t1",
+            "text": "مرحباً بكم في مكتب النور للإنترنت",
+            "align": "center",
+            "scale": 1,
+            "bold": false,
+            "boxed": false
+          },
+          {
+            "t": "logo",
+            "align": "center"
+          },
+          {
+            "t": "shop_name",
+            "text": "مكتب النور للإنترنت",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "shop_lines",
+            "lines": [
+              {
+                "id": "shop_address",
+                "text": "النجف — حيّ الأمير",
+                "ltr": false,
+                "icon": "pin",
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "shop_phone",
+                "text": "0780 111 2222",
+                "ltr": true,
+                "icon": "phone",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "title",
+            "text": "وصل تفعيل",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "text",
+            "id": "t2",
+            "text": "المشترك: علي حسن — PLUS",
+            "align": "right",
+            "scale": 0.9,
+            "bold": false,
+            "boxed": false
+          },
+          {
+            "t": "meta",
+            "no": "#No. 00012",
+            "at": "2026-11-01 10:05"
+          },
+          {
+            "t": "section",
+            "id": "subscriber",
+            "title": "المشترك",
+            "rows": [
+              {
+                "id": "subscriber_name",
+                "label": "الاسم",
+                "value": "علي حسن",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "username",
+                "label": "اسم المستخدم",
+                "value": "ali1@najaf",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "phone",
+                "label": "الهاتف",
+                "value": "07701000001",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "package",
+            "title": "الباقة",
+            "rows": [
+              {
+                "id": "package_name",
+                "label": "الباقة",
+                "value": "Plus 50M",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "package_price",
+                "label": "سعر الباقة",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "expiry_date",
+                "label": "تاريخ الانتهاء",
+                "value": "2026-12-01 10:05",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "days_remaining",
+                "label": "الأيام المتبقّية",
+                "value": "30 يوم",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "transaction",
+            "title": "المعاملة",
+            "rows": [
+              {
+                "id": "payment_type",
+                "label": "طريقة الدفع",
+                "value": "نقدي جزئي",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "amount",
+                "label": "المبلغ",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "cash_paid",
+                "label": "المُدفَع نقداً",
+                "value": "25,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "balance_debt",
+                "label": "الدين المتبقّي",
+                "value": "10,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": "debt"
+              }
+            ]
+          },
+          {
+            "t": "text",
+            "id": "t4",
+            "text": "دفع 25,000 د.ع من 35,000 د.ع\nالتاريخ 2026-11-01 الساعة 10:05",
+            "align": "center",
+            "scale": 1.2,
+            "bold": true,
+            "boxed": false
+          },
+          {
+            "t": "qr",
+            "caption": "امسح للاطلاع على معلومات الاشتراك",
+            "align": "center"
+          },
+          {
+            "t": "footer",
+            "lines": [
+              {
+                "id": "issuer",
+                "text": "أصدره: admin@najaf",
+                "icon": null,
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "footer_text",
+                "text": "شكراً لاختياركم خدماتنا",
+                "icon": "pray",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "text",
+            "id": "t5",
+            "text": "للدعم: 0780 000 0000",
+            "align": "left",
+            "scale": 0.8,
+            "bold": false,
+            "boxed": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "c06_days_remaining_hidden_on_payment",
+      "note": "{days_remaining} does not apply to payments ⇒ the only variable is empty ⇒ block hidden; {receipt_type} and {balance} fill.",
+      "design": {
+        "layout": {
+          "v": 2,
+          "texts": [
+            {
+              "id": "t1",
+              "at": "before_qr",
+              "text": "باقي {days_remaining} يوم"
+            },
+            {
+              "id": "t2",
+              "at": "bottom",
+              "text": "{receipt_type} — {balance}"
+            },
+            {
+              "id": "t3",
+              "at": "bottom",
+              "text": "المدفوع {paid_amount}"
+            }
+          ]
+        }
+      },
+      "input": {
+        "kind": "payment",
+        "shopName": "مكتب النور للإنترنت",
+        "shopAddress": "النجف — حيّ الأمير",
+        "shopPhone": "0780 111 2222",
+        "footerText": null,
+        "issuedText": "2026-11-01 10:05",
+        "receiptId": "No. 00012",
+        "receiptNoText": "00012",
+        "issuer": "admin@najaf",
+        "hasLogo": true,
+        "hasQr": true,
+        "subscriber": {
+          "name": "علي حسن",
+          "username": "ali1@najaf",
+          "phone": "07701000001",
+          "packageName": "Plus 50M",
+          "sasPackageName": "PLUS",
+          "packagePrice": 35000,
+          "expiration": "2026-12-01 10:05:00",
+          "remainingDays": 30
+        },
+        "paymentType": null,
+        "amount": 20000,
+        "partialAmount": null,
+        "newBalance": -5000,
+        "sale": null
+      },
+      "expected": {
+        "density": "normal",
+        "emoji": true,
+        "mono": false,
+        "label_align": "right",
+        "value_align": "left",
+        "blocks": [
+          {
+            "t": "logo",
+            "align": "center"
+          },
+          {
+            "t": "shop_name",
+            "text": "مكتب النور للإنترنت",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "shop_lines",
+            "lines": [
+              {
+                "id": "shop_address",
+                "text": "النجف — حيّ الأمير",
+                "ltr": false,
+                "icon": "pin",
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "shop_phone",
+                "text": "0780 111 2222",
+                "ltr": true,
+                "icon": "phone",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "title",
+            "text": "وصل تسديد دين",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "meta",
+            "no": "#No. 00012",
+            "at": "2026-11-01 10:05"
+          },
+          {
+            "t": "section",
+            "id": "subscriber",
+            "title": "المشترك",
+            "rows": [
+              {
+                "id": "subscriber_name",
+                "label": "الاسم",
+                "value": "علي حسن",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "username",
+                "label": "اسم المستخدم",
+                "value": "ali1@najaf",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "phone",
+                "label": "الهاتف",
+                "value": "07701000001",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "package",
+            "title": "الباقة",
+            "rows": [
+              {
+                "id": "package_name",
+                "label": "الباقة",
+                "value": "Plus 50M",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "package_price",
+                "label": "سعر الباقة",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "expiry_date",
+                "label": "تاريخ الانتهاء",
+                "value": "2026-12-01 10:05",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "days_remaining",
+                "label": "الأيام المتبقّية",
+                "value": "30 يوم",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "transaction",
+            "title": "المعاملة",
+            "rows": [
+              {
+                "id": "amount",
+                "label": "المبلغ المسدَّد",
+                "value": "20,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "balance_debt",
+                "label": "الدين المتبقّي",
+                "value": "5,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": "debt"
+              }
+            ]
+          },
+          {
+            "t": "qr",
+            "caption": "امسح للاطلاع على معلومات الاشتراك",
+            "align": "center"
+          },
+          {
+            "t": "footer",
+            "lines": [
+              {
+                "id": "issuer",
+                "text": "أصدره: admin@najaf",
+                "icon": null,
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "footer_text",
+                "text": "شكراً لاختياركم خدماتنا",
+                "icon": "pray",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "text",
+            "id": "t2",
+            "text": "وصل تسديد دين — دين 5,000 د.ع",
+            "align": "center",
+            "scale": 1,
+            "bold": false,
+            "boxed": false
+          },
+          {
+            "t": "text",
+            "id": "t3",
+            "text": "المدفوع 20,000 د.ع",
+            "align": "center",
+            "scale": 1,
+            "bold": false,
+            "boxed": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "c07_unknown_variable_literal",
+      "note": "unknown / malformed variables stay literal; a text with only unknown variables still prints.",
+      "design": {
+        "layout": {
+          "v": 2,
+          "texts": [
+            {
+              "id": "t1",
+              "at": "bottom",
+              "text": "مرحباً {subscriber_name} {foo_bar} {USERNAME} { username }"
+            },
+            {
+              "id": "t2",
+              "at": "bottom",
+              "text": "{nothing_here}"
+            },
+            {
+              "id": "t3",
+              "at": "bottom",
+              "text": "قوس {بلا إغلاق"
+            }
+          ]
+        }
+      },
+      "input": {
+        "kind": "activation",
+        "shopName": "مكتب النور للإنترنت",
+        "shopAddress": "النجف — حيّ الأمير",
+        "shopPhone": "0780 111 2222",
+        "footerText": null,
+        "issuedText": "2026-11-01 10:05",
+        "receiptId": "No. 00012",
+        "receiptNoText": "00012",
+        "issuer": "admin@najaf",
+        "hasLogo": true,
+        "hasQr": true,
+        "subscriber": {
+          "name": "علي حسن",
+          "username": "ali1@najaf",
+          "phone": "07701000001",
+          "packageName": "Plus 50M",
+          "sasPackageName": "PLUS",
+          "packagePrice": 35000,
+          "expiration": "2026-12-01 10:05:00",
+          "remainingDays": 30
+        },
+        "paymentType": "partial-cash",
+        "amount": 35000,
+        "partialAmount": 25000,
+        "newBalance": -10000,
+        "sale": null
+      },
+      "expected": {
+        "density": "normal",
+        "emoji": true,
+        "mono": false,
+        "label_align": "right",
+        "value_align": "left",
+        "blocks": [
+          {
+            "t": "logo",
+            "align": "center"
+          },
+          {
+            "t": "shop_name",
+            "text": "مكتب النور للإنترنت",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "shop_lines",
+            "lines": [
+              {
+                "id": "shop_address",
+                "text": "النجف — حيّ الأمير",
+                "ltr": false,
+                "icon": "pin",
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "shop_phone",
+                "text": "0780 111 2222",
+                "ltr": true,
+                "icon": "phone",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "title",
+            "text": "وصل تفعيل",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "meta",
+            "no": "#No. 00012",
+            "at": "2026-11-01 10:05"
+          },
+          {
+            "t": "section",
+            "id": "subscriber",
+            "title": "المشترك",
+            "rows": [
+              {
+                "id": "subscriber_name",
+                "label": "الاسم",
+                "value": "علي حسن",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "username",
+                "label": "اسم المستخدم",
+                "value": "ali1@najaf",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "phone",
+                "label": "الهاتف",
+                "value": "07701000001",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "package",
+            "title": "الباقة",
+            "rows": [
+              {
+                "id": "package_name",
+                "label": "الباقة",
+                "value": "Plus 50M",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "package_price",
+                "label": "سعر الباقة",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "expiry_date",
+                "label": "تاريخ الانتهاء",
+                "value": "2026-12-01 10:05",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "days_remaining",
+                "label": "الأيام المتبقّية",
+                "value": "30 يوم",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "transaction",
+            "title": "المعاملة",
+            "rows": [
+              {
+                "id": "payment_type",
+                "label": "طريقة الدفع",
+                "value": "نقدي جزئي",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "amount",
+                "label": "المبلغ",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "cash_paid",
+                "label": "المُدفَع نقداً",
+                "value": "25,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "balance_debt",
+                "label": "الدين المتبقّي",
+                "value": "10,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": "debt"
+              }
+            ]
+          },
+          {
+            "t": "qr",
+            "caption": "امسح للاطلاع على معلومات الاشتراك",
+            "align": "center"
+          },
+          {
+            "t": "footer",
+            "lines": [
+              {
+                "id": "issuer",
+                "text": "أصدره: admin@najaf",
+                "icon": null,
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "footer_text",
+                "text": "شكراً لاختياركم خدماتنا",
+                "icon": "pray",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "text",
+            "id": "t1",
+            "text": "مرحباً علي حسن {foo_bar} {USERNAME} { username }",
+            "align": "center",
+            "scale": 1,
+            "bold": false,
+            "boxed": false
+          },
+          {
+            "t": "text",
+            "id": "t2",
+            "text": "{nothing_here}",
+            "align": "center",
+            "scale": 1,
+            "bold": false,
+            "boxed": false
+          },
+          {
+            "t": "text",
+            "id": "t3",
+            "text": "قوس {بلا إغلاق",
+            "align": "center",
+            "scale": 1,
+            "bold": false,
+            "boxed": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "c08a_info_debt_credit_hidden",
+      "note": "info card, balance −15,000 with balance_credit hidden ⇒ the debt row still shows.",
+      "design": {
+        "layout": {
+          "v": 2,
+          "fields": {
+            "balance_credit": {
+              "show": false
+            }
+          }
+        }
+      },
+      "input": {
+        "kind": "info",
+        "shopName": "مكتب النور للإنترنت",
+        "shopAddress": "النجف — حيّ الأمير",
+        "shopPhone": "0780 111 2222",
+        "footerText": null,
+        "issuedText": "2026-11-01 10:05",
+        "receiptId": "R-MHFZ01",
+        "receiptNoText": "R-MHFZ01",
+        "issuer": "admin@najaf",
+        "hasLogo": true,
+        "hasQr": true,
+        "subscriber": {
+          "name": "علي حسن",
+          "username": "ali1@najaf",
+          "phone": "07701000001",
+          "packageName": "Plus 50M",
+          "sasPackageName": "PLUS",
+          "packagePrice": 35000,
+          "expiration": "2026-12-01 10:05:00",
+          "remainingDays": 30
+        },
+        "paymentType": null,
+        "amount": null,
+        "partialAmount": null,
+        "newBalance": -15000,
+        "sale": null
+      },
+      "expected": {
+        "density": "normal",
+        "emoji": true,
+        "mono": false,
+        "label_align": "right",
+        "value_align": "left",
+        "blocks": [
+          {
+            "t": "logo",
+            "align": "center"
+          },
+          {
+            "t": "shop_name",
+            "text": "مكتب النور للإنترنت",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "shop_lines",
+            "lines": [
+              {
+                "id": "shop_address",
+                "text": "النجف — حيّ الأمير",
+                "ltr": false,
+                "icon": "pin",
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "shop_phone",
+                "text": "0780 111 2222",
+                "ltr": true,
+                "icon": "phone",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "title",
+            "text": "بطاقة معلومات المشترك",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "meta",
+            "no": "#R-MHFZ01",
+            "at": "2026-11-01 10:05"
+          },
+          {
+            "t": "section",
+            "id": "subscriber",
+            "title": "المشترك",
+            "rows": [
+              {
+                "id": "subscriber_name",
+                "label": "الاسم",
+                "value": "علي حسن",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "username",
+                "label": "اسم المستخدم",
+                "value": "ali1@najaf",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "phone",
+                "label": "الهاتف",
+                "value": "07701000001",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "package",
+            "title": "الباقة",
+            "rows": [
+              {
+                "id": "package_name",
+                "label": "الباقة",
+                "value": "Plus 50M",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "package_price",
+                "label": "سعر الباقة",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "expiry_date",
+                "label": "تاريخ الانتهاء",
+                "value": "2026-12-01 10:05",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "days_remaining",
+                "label": "الأيام المتبقّية",
+                "value": "30 يوم",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "transaction",
+            "title": "المعاملة",
+            "rows": [
+              {
+                "id": "balance_debt",
+                "label": "الدين المتبقّي",
+                "value": "15,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": "debt"
+              }
+            ]
+          },
+          {
+            "t": "qr",
+            "caption": "امسح للاطلاع على معلومات الاشتراك",
+            "align": "center"
+          },
+          {
+            "t": "footer",
+            "lines": [
+              {
+                "id": "issuer",
+                "text": "أصدره: admin@najaf",
+                "icon": null,
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "footer_text",
+                "text": "شكراً لاختياركم خدماتنا",
+                "icon": "pray",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          }
+        ]
+      }
+    },
+    {
+      "name": "c08b_info_credit_hidden",
+      "note": "info card, balance +5,000 with balance_credit hidden ⇒ no transaction section; show_footer false.",
+      "design": {
+        "show_footer": false,
+        "layout": {
+          "v": 2,
+          "fields": {
+            "balance_credit": {
+              "show": false
+            }
+          }
+        }
+      },
+      "input": {
+        "kind": "info",
+        "shopName": "مكتب النور للإنترنت",
+        "shopAddress": "النجف — حيّ الأمير",
+        "shopPhone": "0780 111 2222",
+        "footerText": null,
+        "issuedText": "2026-11-01 10:05",
+        "receiptId": "R-MHFZ02",
+        "receiptNoText": "R-MHFZ02",
+        "issuer": "admin@najaf",
+        "hasLogo": true,
+        "hasQr": true,
+        "subscriber": {
+          "name": "علي حسن",
+          "username": "ali1@najaf",
+          "phone": "07701000001",
+          "packageName": "Plus 50M",
+          "sasPackageName": "PLUS",
+          "packagePrice": 35000,
+          "expiration": "2026-12-01 10:05:00",
+          "remainingDays": 30
+        },
+        "paymentType": null,
+        "amount": null,
+        "partialAmount": null,
+        "newBalance": 5000,
+        "sale": null
+      },
+      "expected": {
+        "density": "normal",
+        "emoji": true,
+        "mono": false,
+        "label_align": "right",
+        "value_align": "left",
+        "blocks": [
+          {
+            "t": "logo",
+            "align": "center"
+          },
+          {
+            "t": "shop_name",
+            "text": "مكتب النور للإنترنت",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "shop_lines",
+            "lines": [
+              {
+                "id": "shop_address",
+                "text": "النجف — حيّ الأمير",
+                "ltr": false,
+                "icon": "pin",
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "shop_phone",
+                "text": "0780 111 2222",
+                "ltr": true,
+                "icon": "phone",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "title",
+            "text": "بطاقة معلومات المشترك",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "meta",
+            "no": "#R-MHFZ02",
+            "at": "2026-11-01 10:05"
+          },
+          {
+            "t": "section",
+            "id": "subscriber",
+            "title": "المشترك",
+            "rows": [
+              {
+                "id": "subscriber_name",
+                "label": "الاسم",
+                "value": "علي حسن",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "username",
+                "label": "اسم المستخدم",
+                "value": "ali1@najaf",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "phone",
+                "label": "الهاتف",
+                "value": "07701000001",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "package",
+            "title": "الباقة",
+            "rows": [
+              {
+                "id": "package_name",
+                "label": "الباقة",
+                "value": "Plus 50M",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "package_price",
+                "label": "سعر الباقة",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "expiry_date",
+                "label": "تاريخ الانتهاء",
+                "value": "2026-12-01 10:05",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "days_remaining",
+                "label": "الأيام المتبقّية",
+                "value": "30 يوم",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "qr",
+            "caption": "امسح للاطلاع على معلومات الاشتراك",
+            "align": "center"
+          }
+        ]
+      }
+    },
+    {
+      "name": "c08c_info_zero_balance",
+      "note": "balance 0 ⇒ label variant «الرصيد», tone null.",
+      "design": {
+        "layout": {
+          "v": 2
+        }
+      },
+      "input": {
+        "kind": "info",
+        "shopName": "مكتب النور للإنترنت",
+        "shopAddress": "النجف — حيّ الأمير",
+        "shopPhone": "0780 111 2222",
+        "footerText": null,
+        "issuedText": "2026-11-01 10:05",
+        "receiptId": "R-MHFZ03",
+        "receiptNoText": "R-MHFZ03",
+        "issuer": "admin@najaf",
+        "hasLogo": true,
+        "hasQr": true,
+        "subscriber": {
+          "name": "علي حسن",
+          "username": "ali1@najaf",
+          "phone": "07701000001",
+          "packageName": "Plus 50M",
+          "sasPackageName": "PLUS",
+          "packagePrice": 35000,
+          "expiration": "2026-12-01 10:05:00",
+          "remainingDays": 30
+        },
+        "paymentType": null,
+        "amount": null,
+        "partialAmount": null,
+        "newBalance": 0,
+        "sale": null
+      },
+      "expected": {
+        "density": "normal",
+        "emoji": true,
+        "mono": false,
+        "label_align": "right",
+        "value_align": "left",
+        "blocks": [
+          {
+            "t": "logo",
+            "align": "center"
+          },
+          {
+            "t": "shop_name",
+            "text": "مكتب النور للإنترنت",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "shop_lines",
+            "lines": [
+              {
+                "id": "shop_address",
+                "text": "النجف — حيّ الأمير",
+                "ltr": false,
+                "icon": "pin",
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "shop_phone",
+                "text": "0780 111 2222",
+                "ltr": true,
+                "icon": "phone",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "title",
+            "text": "بطاقة معلومات المشترك",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "meta",
+            "no": "#R-MHFZ03",
+            "at": "2026-11-01 10:05"
+          },
+          {
+            "t": "section",
+            "id": "subscriber",
+            "title": "المشترك",
+            "rows": [
+              {
+                "id": "subscriber_name",
+                "label": "الاسم",
+                "value": "علي حسن",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "username",
+                "label": "اسم المستخدم",
+                "value": "ali1@najaf",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "phone",
+                "label": "الهاتف",
+                "value": "07701000001",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "package",
+            "title": "الباقة",
+            "rows": [
+              {
+                "id": "package_name",
+                "label": "الباقة",
+                "value": "Plus 50M",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "package_price",
+                "label": "سعر الباقة",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "expiry_date",
+                "label": "تاريخ الانتهاء",
+                "value": "2026-12-01 10:05",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "days_remaining",
+                "label": "الأيام المتبقّية",
+                "value": "30 يوم",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "transaction",
+            "title": "المعاملة",
+            "rows": [
+              {
+                "id": "balance_credit",
+                "label": "الرصيد",
+                "value": "0 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "qr",
+            "caption": "امسح للاطلاع على معلومات الاشتراك",
+            "align": "center"
+          },
+          {
+            "t": "footer",
+            "lines": [
+              {
+                "id": "issuer",
+                "text": "أصدره: admin@najaf",
+                "icon": null,
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "footer_text",
+                "text": "شكراً لاختياركم خدماتنا",
+                "icon": "pray",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          }
+        ]
+      }
+    },
+    {
+      "name": "c08d_activation_credit",
+      "note": "cash activation leaving +5,000 credit ⇒ «الرصيد المتبقّي», tone credit.",
+      "design": {
+        "layout": {
+          "v": 2
+        }
+      },
+      "input": {
+        "kind": "activation",
+        "shopName": "مكتب النور للإنترنت",
+        "shopAddress": "النجف — حيّ الأمير",
+        "shopPhone": "0780 111 2222",
+        "footerText": null,
+        "issuedText": "2026-11-01 10:05",
+        "receiptId": "No. 00012",
+        "receiptNoText": "00012",
+        "issuer": "admin@najaf",
+        "hasLogo": true,
+        "hasQr": true,
+        "subscriber": {
+          "name": "علي حسن",
+          "username": "ali1@najaf",
+          "phone": "07701000001",
+          "packageName": "Plus 50M",
+          "sasPackageName": "PLUS",
+          "packagePrice": 35000,
+          "expiration": "2026-12-01 10:05:00",
+          "remainingDays": 30
+        },
+        "paymentType": "cash",
+        "amount": 35000,
+        "partialAmount": null,
+        "newBalance": 5000,
+        "sale": null
+      },
+      "expected": {
+        "density": "normal",
+        "emoji": true,
+        "mono": false,
+        "label_align": "right",
+        "value_align": "left",
+        "blocks": [
+          {
+            "t": "logo",
+            "align": "center"
+          },
+          {
+            "t": "shop_name",
+            "text": "مكتب النور للإنترنت",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "shop_lines",
+            "lines": [
+              {
+                "id": "shop_address",
+                "text": "النجف — حيّ الأمير",
+                "ltr": false,
+                "icon": "pin",
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "shop_phone",
+                "text": "0780 111 2222",
+                "ltr": true,
+                "icon": "phone",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "title",
+            "text": "وصل تفعيل",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "meta",
+            "no": "#No. 00012",
+            "at": "2026-11-01 10:05"
+          },
+          {
+            "t": "section",
+            "id": "subscriber",
+            "title": "المشترك",
+            "rows": [
+              {
+                "id": "subscriber_name",
+                "label": "الاسم",
+                "value": "علي حسن",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "username",
+                "label": "اسم المستخدم",
+                "value": "ali1@najaf",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "phone",
+                "label": "الهاتف",
+                "value": "07701000001",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "package",
+            "title": "الباقة",
+            "rows": [
+              {
+                "id": "package_name",
+                "label": "الباقة",
+                "value": "Plus 50M",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "package_price",
+                "label": "سعر الباقة",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "expiry_date",
+                "label": "تاريخ الانتهاء",
+                "value": "2026-12-01 10:05",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "days_remaining",
+                "label": "الأيام المتبقّية",
+                "value": "30 يوم",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "transaction",
+            "title": "المعاملة",
+            "rows": [
+              {
+                "id": "payment_type",
+                "label": "طريقة الدفع",
+                "value": "نقدي",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "amount",
+                "label": "المبلغ",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "balance_credit",
+                "label": "الرصيد المتبقّي",
+                "value": "5,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": "credit"
+              }
+            ]
+          },
+          {
+            "t": "qr",
+            "caption": "امسح للاطلاع على معلومات الاشتراك",
+            "align": "center"
+          },
+          {
+            "t": "footer",
+            "lines": [
+              {
+                "id": "issuer",
+                "text": "أصدره: admin@najaf",
+                "icon": null,
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "footer_text",
+                "text": "شكراً لاختياركم خدماتنا",
+                "icon": "pray",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          }
+        ]
+      }
+    },
+    {
+      "name": "c09_v1_switches_win",
+      "note": "v1 switches decide the 4 mapped fields: show_package_price/show_manager_signature/show_receipt_id false win over fields.*.show true.",
+      "design": {
+        "show_package_price": false,
+        "show_manager_signature": false,
+        "show_receipt_id": false,
+        "layout": {
+          "v": 2,
+          "fields": {
+            "package_price": {
+              "show": true
+            },
+            "issuer": {
+              "show": true
+            },
+            "receipt_no": {
+              "show": true
+            }
+          }
+        }
+      },
+      "input": {
+        "kind": "activation",
+        "shopName": "مكتب النور للإنترنت",
+        "shopAddress": "النجف — حيّ الأمير",
+        "shopPhone": "0780 111 2222",
+        "footerText": null,
+        "issuedText": "2026-11-01 10:05",
+        "receiptId": "No. 00012",
+        "receiptNoText": "00012",
+        "issuer": "admin@najaf",
+        "hasLogo": true,
+        "hasQr": true,
+        "subscriber": {
+          "name": "علي حسن",
+          "username": "ali1@najaf",
+          "phone": "07701000001",
+          "packageName": "Plus 50M",
+          "sasPackageName": "PLUS",
+          "packagePrice": 35000,
+          "expiration": "2026-12-01 10:05:00",
+          "remainingDays": 30
+        },
+        "paymentType": "partial-cash",
+        "amount": 35000,
+        "partialAmount": 25000,
+        "newBalance": -10000,
+        "sale": null
+      },
+      "expected": {
+        "density": "normal",
+        "emoji": true,
+        "mono": false,
+        "label_align": "right",
+        "value_align": "left",
+        "blocks": [
+          {
+            "t": "logo",
+            "align": "center"
+          },
+          {
+            "t": "shop_name",
+            "text": "مكتب النور للإنترنت",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "shop_lines",
+            "lines": [
+              {
+                "id": "shop_address",
+                "text": "النجف — حيّ الأمير",
+                "ltr": false,
+                "icon": "pin",
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "shop_phone",
+                "text": "0780 111 2222",
+                "ltr": true,
+                "icon": "phone",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "title",
+            "text": "وصل تفعيل",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "meta",
+            "no": null,
+            "at": "2026-11-01 10:05"
+          },
+          {
+            "t": "section",
+            "id": "subscriber",
+            "title": "المشترك",
+            "rows": [
+              {
+                "id": "subscriber_name",
+                "label": "الاسم",
+                "value": "علي حسن",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "username",
+                "label": "اسم المستخدم",
+                "value": "ali1@najaf",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "phone",
+                "label": "الهاتف",
+                "value": "07701000001",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "package",
+            "title": "الباقة",
+            "rows": [
+              {
+                "id": "package_name",
+                "label": "الباقة",
+                "value": "Plus 50M",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "expiry_date",
+                "label": "تاريخ الانتهاء",
+                "value": "2026-12-01 10:05",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "days_remaining",
+                "label": "الأيام المتبقّية",
+                "value": "30 يوم",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "transaction",
+            "title": "المعاملة",
+            "rows": [
+              {
+                "id": "payment_type",
+                "label": "طريقة الدفع",
+                "value": "نقدي جزئي",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "amount",
+                "label": "المبلغ",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "cash_paid",
+                "label": "المُدفَع نقداً",
+                "value": "25,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "balance_debt",
+                "label": "الدين المتبقّي",
+                "value": "10,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": "debt"
+              }
+            ]
+          },
+          {
+            "t": "qr",
+            "caption": "امسح للاطلاع على معلومات الاشتراك",
+            "align": "center"
+          },
+          {
+            "t": "footer",
+            "lines": [
+              {
+                "id": "footer_text",
+                "text": "شكراً لاختياركم خدماتنا",
+                "icon": "pray",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          }
+        ]
+      }
+    },
+    {
+      "name": "c10_section_titles",
+      "note": "section title hidden (show_title false), custom («الدفع»), and whitespace-only ⇒ default.",
+      "design": {
+        "layout": {
+          "v": 2,
+          "sections": {
+            "subscriber": {
+              "show_title": false
+            },
+            "transaction": {
+              "title": "الدفع"
+            },
+            "package": {
+              "title": "   "
+            }
+          }
+        }
+      },
+      "input": {
+        "kind": "activation",
+        "shopName": "مكتب النور للإنترنت",
+        "shopAddress": "النجف — حيّ الأمير",
+        "shopPhone": "0780 111 2222",
+        "footerText": null,
+        "issuedText": "2026-11-01 10:05",
+        "receiptId": "No. 00012",
+        "receiptNoText": "00012",
+        "issuer": "admin@najaf",
+        "hasLogo": true,
+        "hasQr": true,
+        "subscriber": {
+          "name": "علي حسن",
+          "username": "ali1@najaf",
+          "phone": "07701000001",
+          "packageName": "Plus 50M",
+          "sasPackageName": "PLUS",
+          "packagePrice": 35000,
+          "expiration": "2026-12-01 10:05:00",
+          "remainingDays": 30
+        },
+        "paymentType": "partial-cash",
+        "amount": 35000,
+        "partialAmount": 25000,
+        "newBalance": -10000,
+        "sale": null
+      },
+      "expected": {
+        "density": "normal",
+        "emoji": true,
+        "mono": false,
+        "label_align": "right",
+        "value_align": "left",
+        "blocks": [
+          {
+            "t": "logo",
+            "align": "center"
+          },
+          {
+            "t": "shop_name",
+            "text": "مكتب النور للإنترنت",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "shop_lines",
+            "lines": [
+              {
+                "id": "shop_address",
+                "text": "النجف — حيّ الأمير",
+                "ltr": false,
+                "icon": "pin",
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "shop_phone",
+                "text": "0780 111 2222",
+                "ltr": true,
+                "icon": "phone",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "title",
+            "text": "وصل تفعيل",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "meta",
+            "no": "#No. 00012",
+            "at": "2026-11-01 10:05"
+          },
+          {
+            "t": "section",
+            "id": "subscriber",
+            "title": null,
+            "rows": [
+              {
+                "id": "subscriber_name",
+                "label": "الاسم",
+                "value": "علي حسن",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "username",
+                "label": "اسم المستخدم",
+                "value": "ali1@najaf",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "phone",
+                "label": "الهاتف",
+                "value": "07701000001",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "package",
+            "title": "الباقة",
+            "rows": [
+              {
+                "id": "package_name",
+                "label": "الباقة",
+                "value": "Plus 50M",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "package_price",
+                "label": "سعر الباقة",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "expiry_date",
+                "label": "تاريخ الانتهاء",
+                "value": "2026-12-01 10:05",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "days_remaining",
+                "label": "الأيام المتبقّية",
+                "value": "30 يوم",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "transaction",
+            "title": "الدفع",
+            "rows": [
+              {
+                "id": "payment_type",
+                "label": "طريقة الدفع",
+                "value": "نقدي جزئي",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "amount",
+                "label": "المبلغ",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "cash_paid",
+                "label": "المُدفَع نقداً",
+                "value": "25,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "balance_debt",
+                "label": "الدين المتبقّي",
+                "value": "10,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": "debt"
+              }
+            ]
+          },
+          {
+            "t": "qr",
+            "caption": "امسح للاطلاع على معلومات الاشتراك",
+            "align": "center"
+          },
+          {
+            "t": "footer",
+            "lines": [
+              {
+                "id": "issuer",
+                "text": "أصدره: admin@najaf",
+                "icon": null,
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "footer_text",
+                "text": "شكراً لاختياركم خدماتنا",
+                "icon": "pray",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          }
+        ]
+      }
+    },
+    {
+      "name": "c11a_sale_invoice",
+      "note": "sale: no QR, no receipt number in meta, default title «فاتورة بيع رقم {receipt_no}», items, totals (tone total), note; custom totals title.",
+      "design": {
+        "layout": {
+          "v": 2,
+          "sections": {
+            "sale_totals": {
+              "title": "الحساب"
+            }
+          }
+        }
+      },
+      "input": {
+        "kind": "sale",
+        "shopName": "مكتب النور للإنترنت",
+        "shopAddress": "النجف — حيّ الأمير",
+        "shopPhone": "0780 111 2222",
+        "footerText": null,
+        "issuedText": "2026-10-29 18:40",
+        "receiptId": "R-MHFZ10",
+        "receiptNoText": "15",
+        "issuer": "admin@najaf",
+        "hasLogo": true,
+        "hasQr": true,
+        "subscriber": {
+          "name": "علي حسن",
+          "username": "ali1@najaf",
+          "phone": "07701000001",
+          "packageName": null,
+          "sasPackageName": null,
+          "packagePrice": null,
+          "expiration": null,
+          "remainingDays": null
+        },
+        "paymentType": null,
+        "amount": null,
+        "partialAmount": null,
+        "newBalance": null,
+        "sale": {
+          "lines": [
+            {
+              "name": "راوتر TP-Link",
+              "qtyText": "1",
+              "unitPrice": 45000,
+              "total": 45000
+            },
+            {
+              "name": "كيبل شبكة",
+              "qtyText": "2.5 م",
+              "unitPrice": 1000,
+              "total": 2500
+            }
+          ],
+          "total": 47500,
+          "payment": "debt",
+          "note": "يُسدَّد مع الاشتراك",
+          "voided": false,
+          "voidReason": null
+        }
+      },
+      "expected": {
+        "density": "normal",
+        "emoji": true,
+        "mono": false,
+        "label_align": "right",
+        "value_align": "left",
+        "blocks": [
+          {
+            "t": "logo",
+            "align": "center"
+          },
+          {
+            "t": "shop_name",
+            "text": "مكتب النور للإنترنت",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "shop_lines",
+            "lines": [
+              {
+                "id": "shop_address",
+                "text": "النجف — حيّ الأمير",
+                "ltr": false,
+                "icon": "pin",
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "shop_phone",
+                "text": "0780 111 2222",
+                "ltr": true,
+                "icon": "phone",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "title",
+            "text": "فاتورة بيع رقم 15",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "meta",
+            "no": null,
+            "at": "2026-10-29 18:40"
+          },
+          {
+            "t": "section",
+            "id": "sale_customer",
+            "title": "الزبون",
+            "rows": [
+              {
+                "id": "subscriber_name",
+                "label": "الاسم",
+                "value": "علي حسن",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "username",
+                "label": "اسم المستخدم",
+                "value": "ali1@najaf",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "phone",
+                "label": "الهاتف",
+                "value": "07701000001",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "sale_items",
+            "title": "المواد",
+            "lines": [
+              {
+                "name": "راوتر TP-Link",
+                "detail": "1 × 45,000 د.ع",
+                "total": "45,000 د.ع"
+              },
+              {
+                "name": "كيبل شبكة",
+                "detail": "2.5 م × 1,000 د.ع",
+                "total": "2,500 د.ع"
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "sale_totals",
+            "title": "الحساب",
+            "rows": [
+              {
+                "id": "sale_total",
+                "label": "المجموع",
+                "value": "47,500 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": "total"
+              },
+              {
+                "id": "sale_payment",
+                "label": "طريقة الدفع",
+                "value": "على حساب المشترك (دين)",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "sale_note",
+            "text": "ملاحظة: يُسدَّد مع الاشتراك"
+          },
+          {
+            "t": "footer",
+            "lines": [
+              {
+                "id": "issuer",
+                "text": "أصدره: admin@najaf",
+                "icon": null,
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "footer_text",
+                "text": "شكراً لاختياركم خدماتنا",
+                "icon": "pray",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          }
+        ]
+      }
+    },
+    {
+      "name": "c11b_sale_voided_cash",
+      "note": "voided sale with reason, walk-in customer (no name/username/phone ⇒ «زبون»), cash, no note, custom sale title without number.",
+      "design": {
+        "layout": {
+          "v": 2,
+          "titles": {
+            "sale": "فاتورة مبيعات"
+          }
+        }
+      },
+      "input": {
+        "kind": "sale",
+        "shopName": "مكتب النور للإنترنت",
+        "shopAddress": "النجف — حيّ الأمير",
+        "shopPhone": "0780 111 2222",
+        "footerText": null,
+        "issuedText": "2026-10-30 09:00",
+        "receiptId": "R-MHFZ11",
+        "receiptNoText": "16",
+        "issuer": "admin@najaf",
+        "hasLogo": true,
+        "hasQr": true,
+        "subscriber": {
+          "name": null,
+          "username": null,
+          "phone": null,
+          "packageName": null,
+          "sasPackageName": null,
+          "packagePrice": null,
+          "expiration": null,
+          "remainingDays": null
+        },
+        "paymentType": null,
+        "amount": null,
+        "partialAmount": null,
+        "newBalance": null,
+        "sale": {
+          "lines": [
+            {
+              "name": "شاحن",
+              "qtyText": "1",
+              "unitPrice": 7000,
+              "total": 7000
+            }
+          ],
+          "total": 7000,
+          "payment": "cash",
+          "note": null,
+          "voided": true,
+          "voidReason": "أُعيدت البضاعة"
+        }
+      },
+      "expected": {
+        "density": "normal",
+        "emoji": true,
+        "mono": false,
+        "label_align": "right",
+        "value_align": "left",
+        "blocks": [
+          {
+            "t": "logo",
+            "align": "center"
+          },
+          {
+            "t": "shop_name",
+            "text": "مكتب النور للإنترنت",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "shop_lines",
+            "lines": [
+              {
+                "id": "shop_address",
+                "text": "النجف — حيّ الأمير",
+                "ltr": false,
+                "icon": "pin",
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "shop_phone",
+                "text": "0780 111 2222",
+                "ltr": true,
+                "icon": "phone",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "title",
+            "text": "فاتورة مبيعات",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "meta",
+            "no": null,
+            "at": "2026-10-30 09:00"
+          },
+          {
+            "t": "sale_void",
+            "text": "مُلغاة — أُعيدت البضاعة"
+          },
+          {
+            "t": "section",
+            "id": "sale_customer",
+            "title": "الزبون",
+            "rows": [
+              {
+                "id": "subscriber_name",
+                "label": "الاسم",
+                "value": "زبون",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "sale_items",
+            "title": "المواد",
+            "lines": [
+              {
+                "name": "شاحن",
+                "detail": "1 × 7,000 د.ع",
+                "total": "7,000 د.ع"
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "sale_totals",
+            "title": null,
+            "rows": [
+              {
+                "id": "sale_total",
+                "label": "المجموع",
+                "value": "7,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": "total"
+              },
+              {
+                "id": "sale_payment",
+                "label": "طريقة الدفع",
+                "value": "نقداً",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "footer",
+            "lines": [
+              {
+                "id": "issuer",
+                "text": "أصدره: admin@najaf",
+                "icon": null,
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "footer_text",
+                "text": "شكراً لاختياركم خدماتنا",
+                "icon": "pray",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          }
+        ]
+      }
+    },
+    {
+      "name": "c12_info_card",
+      "note": "info card: R-… fallback number in meta and {receipt_no}; QR caption hidden; {balance}.",
+      "design": {
+        "layout": {
+          "v": 2,
+          "fields": {
+            "qr_caption": {
+              "show": false
+            }
+          },
+          "texts": [
+            {
+              "id": "t1",
+              "at": "bottom",
+              "text": "رقم {receipt_no} · {balance}"
+            }
+          ]
+        }
+      },
+      "input": {
+        "kind": "info",
+        "shopName": "مكتب النور للإنترنت",
+        "shopAddress": "النجف — حيّ الأمير",
+        "shopPhone": "0780 111 2222",
+        "footerText": null,
+        "issuedText": "2026-11-01 10:05",
+        "receiptId": "R-MHFZ12",
+        "receiptNoText": "R-MHFZ12",
+        "issuer": "admin@najaf",
+        "hasLogo": true,
+        "hasQr": true,
+        "subscriber": {
+          "name": "علي حسن",
+          "username": "ali1@najaf",
+          "phone": "07701000001",
+          "packageName": "Plus 50M",
+          "sasPackageName": "PLUS",
+          "packagePrice": 35000,
+          "expiration": "2026-12-01 10:05:00",
+          "remainingDays": 12
+        },
+        "paymentType": null,
+        "amount": null,
+        "partialAmount": null,
+        "newBalance": -12000,
+        "sale": null
+      },
+      "expected": {
+        "density": "normal",
+        "emoji": true,
+        "mono": false,
+        "label_align": "right",
+        "value_align": "left",
+        "blocks": [
+          {
+            "t": "logo",
+            "align": "center"
+          },
+          {
+            "t": "shop_name",
+            "text": "مكتب النور للإنترنت",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "shop_lines",
+            "lines": [
+              {
+                "id": "shop_address",
+                "text": "النجف — حيّ الأمير",
+                "ltr": false,
+                "icon": "pin",
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "shop_phone",
+                "text": "0780 111 2222",
+                "ltr": true,
+                "icon": "phone",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "title",
+            "text": "بطاقة معلومات المشترك",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "meta",
+            "no": "#R-MHFZ12",
+            "at": "2026-11-01 10:05"
+          },
+          {
+            "t": "section",
+            "id": "subscriber",
+            "title": "المشترك",
+            "rows": [
+              {
+                "id": "subscriber_name",
+                "label": "الاسم",
+                "value": "علي حسن",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "username",
+                "label": "اسم المستخدم",
+                "value": "ali1@najaf",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "phone",
+                "label": "الهاتف",
+                "value": "07701000001",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "package",
+            "title": "الباقة",
+            "rows": [
+              {
+                "id": "package_name",
+                "label": "الباقة",
+                "value": "Plus 50M",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "package_price",
+                "label": "سعر الباقة",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "expiry_date",
+                "label": "تاريخ الانتهاء",
+                "value": "2026-12-01 10:05",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "days_remaining",
+                "label": "الأيام المتبقّية",
+                "value": "12 يوم",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "transaction",
+            "title": "المعاملة",
+            "rows": [
+              {
+                "id": "balance_debt",
+                "label": "الدين المتبقّي",
+                "value": "12,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": "debt"
+              }
+            ]
+          },
+          {
+            "t": "qr",
+            "caption": null,
+            "align": "center"
+          },
+          {
+            "t": "footer",
+            "lines": [
+              {
+                "id": "issuer",
+                "text": "أصدره: admin@najaf",
+                "icon": null,
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "footer_text",
+                "text": "شكراً لاختياركم خدماتنا",
+                "icon": "pray",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "text",
+            "id": "t1",
+            "text": "رقم R-MHFZ12 · دين 12,000 د.ع",
+            "align": "center",
+            "scale": 1,
+            "bold": false,
+            "boxed": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "c13_no_qr_no_logo",
+      "note": "no QR, no logo, shop info off, title hidden, footer_text hidden ⇒ footer = issuer only.",
+      "design": {
+        "show_shop_info": false,
+        "layout": {
+          "v": 2,
+          "fields": {
+            "title": {
+              "show": false
+            },
+            "footer_text": {
+              "show": false
+            }
+          }
+        }
+      },
+      "input": {
+        "kind": "activation",
+        "shopName": "مكتب النور للإنترنت",
+        "shopAddress": "النجف — حيّ الأمير",
+        "shopPhone": "0780 111 2222",
+        "footerText": null,
+        "issuedText": "2026-11-01 10:05",
+        "receiptId": "No. 00012",
+        "receiptNoText": "00012",
+        "issuer": "admin@najaf",
+        "hasLogo": false,
+        "hasQr": false,
+        "subscriber": {
+          "name": "علي حسن",
+          "username": "ali1@najaf",
+          "phone": "07701000001",
+          "packageName": "Plus 50M",
+          "sasPackageName": "PLUS",
+          "packagePrice": 35000,
+          "expiration": "2026-12-01 10:05:00",
+          "remainingDays": 30
+        },
+        "paymentType": "partial-cash",
+        "amount": 35000,
+        "partialAmount": 25000,
+        "newBalance": -10000,
+        "sale": null
+      },
+      "expected": {
+        "density": "normal",
+        "emoji": true,
+        "mono": false,
+        "label_align": "right",
+        "value_align": "left",
+        "blocks": [
+          {
+            "t": "shop_name",
+            "text": "مكتب النور للإنترنت",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "meta",
+            "no": "#No. 00012",
+            "at": "2026-11-01 10:05"
+          },
+          {
+            "t": "section",
+            "id": "subscriber",
+            "title": "المشترك",
+            "rows": [
+              {
+                "id": "subscriber_name",
+                "label": "الاسم",
+                "value": "علي حسن",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "username",
+                "label": "اسم المستخدم",
+                "value": "ali1@najaf",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "phone",
+                "label": "الهاتف",
+                "value": "07701000001",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "package",
+            "title": "الباقة",
+            "rows": [
+              {
+                "id": "package_name",
+                "label": "الباقة",
+                "value": "Plus 50M",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "package_price",
+                "label": "سعر الباقة",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "expiry_date",
+                "label": "تاريخ الانتهاء",
+                "value": "2026-12-01 10:05",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "days_remaining",
+                "label": "الأيام المتبقّية",
+                "value": "30 يوم",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "transaction",
+            "title": "المعاملة",
+            "rows": [
+              {
+                "id": "payment_type",
+                "label": "طريقة الدفع",
+                "value": "نقدي جزئي",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "amount",
+                "label": "المبلغ",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "cash_paid",
+                "label": "المُدفَع نقداً",
+                "value": "25,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "balance_debt",
+                "label": "الدين المتبقّي",
+                "value": "10,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": "debt"
+              }
+            ]
+          },
+          {
+            "t": "footer",
+            "lines": [
+              {
+                "id": "issuer",
+                "text": "أصدره: admin@najaf",
+                "icon": null,
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          }
+        ]
+      }
+    },
+    {
+      "name": "c14_extension",
+      "note": "extension, non-cash, no issuer, no display name (username shown), no package name (—), texts per kind.",
+      "design": {
+        "layout": {
+          "v": 2,
+          "texts": [
+            {
+              "id": "t1",
+              "at": "before_qr",
+              "text": "ينتهي {expiry_date} — باقي {remaining_days}",
+              "only": [
+                "extension"
+              ]
+            },
+            {
+              "id": "t2",
+              "at": "before_qr",
+              "text": "تفعيل فقط",
+              "only": [
+                "activation"
+              ]
+            }
+          ]
+        }
+      },
+      "input": {
+        "kind": "extension",
+        "shopName": "مكتب النور للإنترنت",
+        "shopAddress": "النجف — حيّ الأمير",
+        "shopPhone": "0780 111 2222",
+        "footerText": null,
+        "issuedText": "2026-11-01 10:05",
+        "receiptId": "No. 00040",
+        "receiptNoText": "00040",
+        "issuer": null,
+        "hasLogo": true,
+        "hasQr": true,
+        "subscriber": {
+          "name": "",
+          "username": "ali1@najaf",
+          "phone": "07701000001",
+          "packageName": null,
+          "sasPackageName": null,
+          "packagePrice": 35000,
+          "expiration": "2027-01-01 10:05:00",
+          "remainingDays": 61
+        },
+        "paymentType": "non-cash",
+        "amount": 35000,
+        "partialAmount": null,
+        "newBalance": -35000,
+        "sale": null
+      },
+      "expected": {
+        "density": "normal",
+        "emoji": true,
+        "mono": false,
+        "label_align": "right",
+        "value_align": "left",
+        "blocks": [
+          {
+            "t": "logo",
+            "align": "center"
+          },
+          {
+            "t": "shop_name",
+            "text": "مكتب النور للإنترنت",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "shop_lines",
+            "lines": [
+              {
+                "id": "shop_address",
+                "text": "النجف — حيّ الأمير",
+                "ltr": false,
+                "icon": "pin",
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "shop_phone",
+                "text": "0780 111 2222",
+                "ltr": true,
+                "icon": "phone",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "title",
+            "text": "وصل تمديد",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "meta",
+            "no": "#No. 00040",
+            "at": "2026-11-01 10:05"
+          },
+          {
+            "t": "section",
+            "id": "subscriber",
+            "title": "المشترك",
+            "rows": [
+              {
+                "id": "subscriber_name",
+                "label": "الاسم",
+                "value": "ali1@najaf",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "username",
+                "label": "اسم المستخدم",
+                "value": "ali1@najaf",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "phone",
+                "label": "الهاتف",
+                "value": "07701000001",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "package",
+            "title": "الباقة",
+            "rows": [
+              {
+                "id": "package_name",
+                "label": "الباقة",
+                "value": "—",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "package_price",
+                "label": "سعر الباقة",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "expiry_date",
+                "label": "تاريخ الانتهاء",
+                "value": "2027-01-01 10:05",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "days_remaining",
+                "label": "الأيام المتبقّية",
+                "value": "61 يوم",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "transaction",
+            "title": "المعاملة",
+            "rows": [
+              {
+                "id": "payment_type",
+                "label": "طريقة الدفع",
+                "value": "غير نقدي",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "amount",
+                "label": "المبلغ",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "balance_debt",
+                "label": "الدين المتبقّي",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": "debt"
+              }
+            ]
+          },
+          {
+            "t": "text",
+            "id": "t1",
+            "text": "ينتهي 2027-01-01 10:05 — باقي 61 يوم",
+            "align": "center",
+            "scale": 1,
+            "bold": false,
+            "boxed": false
+          },
+          {
+            "t": "qr",
+            "caption": "امسح للاطلاع على معلومات الاشتراك",
+            "align": "center"
+          },
+          {
+            "t": "footer",
+            "lines": [
+              {
+                "id": "footer_text",
+                "text": "شكراً لاختياركم خدماتنا",
+                "icon": "pray",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          }
+        ]
+      }
+    },
+    {
+      "name": "c15_tashkeel_kept",
+      "note": "tashkeel is kept in resolved text (the app strips it at draw time).",
+      "design": {
+        "layout": {
+          "v": 2,
+          "fields": {
+            "subscriber_name": {
+              "label": "الاسمُ"
+            }
+          },
+          "titles": {
+            "activation": "وَصْلُ تَفْعِيل"
+          },
+          "texts": [
+            {
+              "id": "t1",
+              "at": "bottom",
+              "text": "شُكْرًا {firstname}"
+            }
+          ]
+        }
+      },
+      "input": {
+        "kind": "activation",
+        "shopName": "مكتب النور للإنترنت",
+        "shopAddress": "النجف — حيّ الأمير",
+        "shopPhone": "0780 111 2222",
+        "footerText": null,
+        "issuedText": "2026-11-01 10:05",
+        "receiptId": "No. 00012",
+        "receiptNoText": "00012",
+        "issuer": "admin@najaf",
+        "hasLogo": true,
+        "hasQr": true,
+        "subscriber": {
+          "name": "علي حسن",
+          "username": "ali1@najaf",
+          "phone": "07701000001",
+          "packageName": "Plus 50M",
+          "sasPackageName": "PLUS",
+          "packagePrice": 35000,
+          "expiration": "2026-12-01 10:05:00",
+          "remainingDays": 30
+        },
+        "paymentType": "partial-cash",
+        "amount": 35000,
+        "partialAmount": 25000,
+        "newBalance": -10000,
+        "sale": null
+      },
+      "expected": {
+        "density": "normal",
+        "emoji": true,
+        "mono": false,
+        "label_align": "right",
+        "value_align": "left",
+        "blocks": [
+          {
+            "t": "logo",
+            "align": "center"
+          },
+          {
+            "t": "shop_name",
+            "text": "مكتب النور للإنترنت",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "shop_lines",
+            "lines": [
+              {
+                "id": "shop_address",
+                "text": "النجف — حيّ الأمير",
+                "ltr": false,
+                "icon": "pin",
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "shop_phone",
+                "text": "0780 111 2222",
+                "ltr": true,
+                "icon": "phone",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "title",
+            "text": "وَصْلُ تَفْعِيل",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "meta",
+            "no": "#No. 00012",
+            "at": "2026-11-01 10:05"
+          },
+          {
+            "t": "section",
+            "id": "subscriber",
+            "title": "المشترك",
+            "rows": [
+              {
+                "id": "subscriber_name",
+                "label": "الاسمُ",
+                "value": "علي حسن",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "username",
+                "label": "اسم المستخدم",
+                "value": "ali1@najaf",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "phone",
+                "label": "الهاتف",
+                "value": "07701000001",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "package",
+            "title": "الباقة",
+            "rows": [
+              {
+                "id": "package_name",
+                "label": "الباقة",
+                "value": "Plus 50M",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "package_price",
+                "label": "سعر الباقة",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "expiry_date",
+                "label": "تاريخ الانتهاء",
+                "value": "2026-12-01 10:05",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "days_remaining",
+                "label": "الأيام المتبقّية",
+                "value": "30 يوم",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "transaction",
+            "title": "المعاملة",
+            "rows": [
+              {
+                "id": "payment_type",
+                "label": "طريقة الدفع",
+                "value": "نقدي جزئي",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "amount",
+                "label": "المبلغ",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "cash_paid",
+                "label": "المُدفَع نقداً",
+                "value": "25,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "balance_debt",
+                "label": "الدين المتبقّي",
+                "value": "10,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": "debt"
+              }
+            ]
+          },
+          {
+            "t": "qr",
+            "caption": "امسح للاطلاع على معلومات الاشتراك",
+            "align": "center"
+          },
+          {
+            "t": "footer",
+            "lines": [
+              {
+                "id": "issuer",
+                "text": "أصدره: admin@najaf",
+                "icon": null,
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "footer_text",
+                "text": "شكراً لاختياركم خدماتنا",
+                "icon": "pray",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "text",
+            "id": "t1",
+            "text": "شُكْرًا علي",
+            "align": "center",
+            "scale": 1,
+            "bold": false,
+            "boxed": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "c16_tolerant_parsing",
+      "note": "malformed layout values fall back to defaults; unknown ids ignored; invalid texts skipped; only the first 6 valid texts are taken; only:[unknown] ⇒ every kind.",
+      "design": {
+        "layout": {
+          "v": 2,
+          "density": "ultra",
+          "emoji": "no",
+          "mono": 1,
+          "fields": {
+            "username": {
+              "show": "no",
+              "size": "huge",
+              "bold": "yes",
+              "label": 5
+            },
+            "foo": {
+              "show": false
+            },
+            "phone": null
+          },
+          "sections": {
+            "subscriber": {
+              "title": 7,
+              "show_title": "x"
+            },
+            "bogus": {
+              "title": "x"
+            }
+          },
+          "titles": {
+            "activation": 42,
+            "info": "x"
+          },
+          "texts": [
+            null,
+            {
+              "at": "middle",
+              "text": "x"
+            },
+            {
+              "at": "top",
+              "text": 5
+            },
+            {
+              "at": "bottom",
+              "text": "ن١",
+              "align": "up",
+              "size": "big",
+              "only": [
+                "nope"
+              ],
+              "bold": 1,
+              "boxed": "y"
+            },
+            {
+              "at": "bottom",
+              "text": "ن٢"
+            },
+            {
+              "at": "bottom",
+              "text": "ن٣"
+            },
+            {
+              "at": "bottom",
+              "text": "ن٤"
+            },
+            {
+              "at": "bottom",
+              "text": "ن٥"
+            },
+            {
+              "at": "bottom",
+              "text": "ن٦"
+            },
+            {
+              "at": "bottom",
+              "text": "ن٧ (السابع لا يظهر)"
+            }
+          ]
+        }
+      },
+      "input": {
+        "kind": "activation",
+        "shopName": "مكتب النور للإنترنت",
+        "shopAddress": "النجف — حيّ الأمير",
+        "shopPhone": "0780 111 2222",
+        "footerText": null,
+        "issuedText": "2026-11-01 10:05",
+        "receiptId": "No. 00012",
+        "receiptNoText": "00012",
+        "issuer": "admin@najaf",
+        "hasLogo": true,
+        "hasQr": true,
+        "subscriber": {
+          "name": "علي حسن",
+          "username": "ali1@najaf",
+          "phone": "07701000001",
+          "packageName": "Plus 50M",
+          "sasPackageName": "PLUS",
+          "packagePrice": 35000,
+          "expiration": "2026-12-01 10:05:00",
+          "remainingDays": 30
+        },
+        "paymentType": "partial-cash",
+        "amount": 35000,
+        "partialAmount": 25000,
+        "newBalance": -10000,
+        "sale": null
+      },
+      "expected": {
+        "density": "normal",
+        "emoji": true,
+        "mono": false,
+        "label_align": "right",
+        "value_align": "left",
+        "blocks": [
+          {
+            "t": "logo",
+            "align": "center"
+          },
+          {
+            "t": "shop_name",
+            "text": "مكتب النور للإنترنت",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "shop_lines",
+            "lines": [
+              {
+                "id": "shop_address",
+                "text": "النجف — حيّ الأمير",
+                "ltr": false,
+                "icon": "pin",
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "shop_phone",
+                "text": "0780 111 2222",
+                "ltr": true,
+                "icon": "phone",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "title",
+            "text": "وصل تفعيل",
+            "scale": 1,
+            "bold": true,
+            "align": "center"
+          },
+          {
+            "t": "meta",
+            "no": "#No. 00012",
+            "at": "2026-11-01 10:05"
+          },
+          {
+            "t": "section",
+            "id": "subscriber",
+            "title": "المشترك",
+            "rows": [
+              {
+                "id": "subscriber_name",
+                "label": "الاسم",
+                "value": "علي حسن",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "username",
+                "label": "اسم المستخدم",
+                "value": "ali1@najaf",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "phone",
+                "label": "الهاتف",
+                "value": "07701000001",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "package",
+            "title": "الباقة",
+            "rows": [
+              {
+                "id": "package_name",
+                "label": "الباقة",
+                "value": "Plus 50M",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "package_price",
+                "label": "سعر الباقة",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "expiry_date",
+                "label": "تاريخ الانتهاء",
+                "value": "2026-12-01 10:05",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "days_remaining",
+                "label": "الأيام المتبقّية",
+                "value": "30 يوم",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "transaction",
+            "title": "المعاملة",
+            "rows": [
+              {
+                "id": "payment_type",
+                "label": "طريقة الدفع",
+                "value": "نقدي جزئي",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "amount",
+                "label": "المبلغ",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "cash_paid",
+                "label": "المُدفَع نقداً",
+                "value": "25,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "balance_debt",
+                "label": "الدين المتبقّي",
+                "value": "10,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": "debt"
+              }
+            ]
+          },
+          {
+            "t": "qr",
+            "caption": "امسح للاطلاع على معلومات الاشتراك",
+            "align": "center"
+          },
+          {
+            "t": "footer",
+            "lines": [
+              {
+                "id": "issuer",
+                "text": "أصدره: admin@najaf",
+                "icon": null,
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "footer_text",
+                "text": "شكراً لاختياركم خدماتنا",
+                "icon": "pray",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "center"
+          },
+          {
+            "t": "text",
+            "id": "t1",
+            "text": "ن١",
+            "align": "center",
+            "scale": 1,
+            "bold": false,
+            "boxed": false
+          },
+          {
+            "t": "text",
+            "id": "t2",
+            "text": "ن٢",
+            "align": "center",
+            "scale": 1,
+            "bold": false,
+            "boxed": false
+          },
+          {
+            "t": "text",
+            "id": "t3",
+            "text": "ن٣",
+            "align": "center",
+            "scale": 1,
+            "bold": false,
+            "boxed": false
+          },
+          {
+            "t": "text",
+            "id": "t4",
+            "text": "ن٤",
+            "align": "center",
+            "scale": 1,
+            "bold": false,
+            "boxed": false
+          },
+          {
+            "t": "text",
+            "id": "t5",
+            "text": "ن٥",
+            "align": "center",
+            "scale": 1,
+            "bold": false,
+            "boxed": false
+          },
+          {
+            "t": "text",
+            "id": "t6",
+            "text": "ن٦",
+            "align": "center",
+            "scale": 1,
+            "bold": false,
+            "boxed": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "c17_flags_and_aligns",
+      "note": "tight density, emoji off, mono on; v1 aligns flow into blocks; default_align center ⇒ values center.",
+      "design": {
+        "default_align": "center",
+        "header_align": "right",
+        "footer_align": "left",
+        "logo_align": "right",
+        "qr_align": "left",
+        "layout": {
+          "v": 2,
+          "density": "tight",
+          "emoji": false,
+          "mono": true
+        }
+      },
+      "input": {
+        "kind": "activation",
+        "shopName": "مكتب النور للإنترنت",
+        "shopAddress": "النجف — حيّ الأمير",
+        "shopPhone": "0780 111 2222",
+        "footerText": null,
+        "issuedText": "2026-11-01 10:05",
+        "receiptId": "No. 00012",
+        "receiptNoText": "00012",
+        "issuer": "admin@najaf",
+        "hasLogo": true,
+        "hasQr": true,
+        "subscriber": {
+          "name": "علي حسن",
+          "username": "ali1@najaf",
+          "phone": "07701000001",
+          "packageName": "Plus 50M",
+          "sasPackageName": "PLUS",
+          "packagePrice": 35000,
+          "expiration": "2026-12-01 10:05:00",
+          "remainingDays": 30
+        },
+        "paymentType": "partial-cash",
+        "amount": 35000,
+        "partialAmount": 25000,
+        "newBalance": -10000,
+        "sale": null
+      },
+      "expected": {
+        "density": "tight",
+        "emoji": false,
+        "mono": true,
+        "label_align": "center",
+        "value_align": "center",
+        "blocks": [
+          {
+            "t": "logo",
+            "align": "right"
+          },
+          {
+            "t": "shop_name",
+            "text": "مكتب النور للإنترنت",
+            "scale": 1,
+            "bold": true,
+            "align": "right"
+          },
+          {
+            "t": "shop_lines",
+            "lines": [
+              {
+                "id": "shop_address",
+                "text": "النجف — حيّ الأمير",
+                "ltr": false,
+                "icon": "pin",
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "shop_phone",
+                "text": "0780 111 2222",
+                "ltr": true,
+                "icon": "phone",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "right"
+          },
+          {
+            "t": "title",
+            "text": "وصل تفعيل",
+            "scale": 1,
+            "bold": true,
+            "align": "right"
+          },
+          {
+            "t": "meta",
+            "no": "#No. 00012",
+            "at": "2026-11-01 10:05"
+          },
+          {
+            "t": "section",
+            "id": "subscriber",
+            "title": "المشترك",
+            "rows": [
+              {
+                "id": "subscriber_name",
+                "label": "الاسم",
+                "value": "علي حسن",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "username",
+                "label": "اسم المستخدم",
+                "value": "ali1@najaf",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "phone",
+                "label": "الهاتف",
+                "value": "07701000001",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "package",
+            "title": "الباقة",
+            "rows": [
+              {
+                "id": "package_name",
+                "label": "الباقة",
+                "value": "Plus 50M",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "package_price",
+                "label": "سعر الباقة",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "expiry_date",
+                "label": "تاريخ الانتهاء",
+                "value": "2026-12-01 10:05",
+                "ltr": true,
+                "bold": false,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "days_remaining",
+                "label": "الأيام المتبقّية",
+                "value": "30 يوم",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              }
+            ]
+          },
+          {
+            "t": "section",
+            "id": "transaction",
+            "title": "المعاملة",
+            "rows": [
+              {
+                "id": "payment_type",
+                "label": "طريقة الدفع",
+                "value": "نقدي جزئي",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "amount",
+                "label": "المبلغ",
+                "value": "35,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "cash_paid",
+                "label": "المُدفَع نقداً",
+                "value": "25,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": null
+              },
+              {
+                "id": "balance_debt",
+                "label": "الدين المتبقّي",
+                "value": "10,000 د.ع",
+                "ltr": false,
+                "bold": true,
+                "scale": 1,
+                "tone": "debt"
+              }
+            ]
+          },
+          {
+            "t": "qr",
+            "caption": "امسح للاطلاع على معلومات الاشتراك",
+            "align": "left"
+          },
+          {
+            "t": "footer",
+            "lines": [
+              {
+                "id": "issuer",
+                "text": "أصدره: admin@najaf",
+                "icon": null,
+                "scale": 1,
+                "bold": false
+              },
+              {
+                "id": "footer_text",
+                "text": "شكراً لاختياركم خدماتنا",
+                "icon": "pray",
+                "scale": 1,
+                "bold": false
+              }
+            ],
+            "align": "left"
+          }
+        ]
+      }
+    }
+  ]
+}

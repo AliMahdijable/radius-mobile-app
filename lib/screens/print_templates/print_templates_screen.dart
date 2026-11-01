@@ -355,6 +355,19 @@ class _WebReceiptCard extends StatelessWidget {
               label: 'print_templates.auto_print'.tr(),
               value: (s.autoPrint ? 'print_templates.on' : 'print_templates.off').tr(),
             ),
+            // «تصميم الوصل» v2 (١ نوفمبر): حجمه («مخصّص» حين لا يطابق مقاساً) وما أُخفي وما أُضيف — التعديل من الموقع.
+            _WebReceiptRow(
+              label: 'print_templates.size'.tr(),
+              value: 'print_templates.size_${s.preset ?? 'custom'}'.tr(),
+            ),
+            _WebReceiptRow(
+              label: 'print_templates.hidden_fields'.tr(),
+              value: s.hiddenFields == 0 ? 'print_templates.none'.tr() : '${s.hiddenFields}',
+            ),
+            _WebReceiptRow(
+              label: 'print_templates.custom_texts'.tr(),
+              value: s.customTexts == 0 ? 'print_templates.none'.tr() : '${s.customTexts}',
+            ),
           ],
         ],
       ),

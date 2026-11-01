@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../services/auth_storage.dart';
+import '../services/receipt_layout.dart';
 import 'api_client.dart';
 import 'company_route.dart';
 
@@ -13,8 +14,12 @@ import 'company_route.dart';
 /// منذ ٢٤ أكتوبر يطبع التطبيق **كلّ** وصولاته بها لكلّ المزوّدين، كالموقع («مثل الويب» —
 /// المالك): الترويسة والتذييل وما يظهر من الأقسام ورمز QR والطباعة التلقائيّة وعرض ورق
 /// الكاشير. قوالب `print_templates` القديمة (الكلاسيك) لا يقرؤها الموقع ولا يكتبها أحد منذ
-/// النقل. نوع الخطّ والمحاذاة والإطارات لطباعة الويب وحدها؛ أبعاد الكاشير (الحواشي وحجم الخطّ والشعار وQR
+/// النقل. نوع الخطّ والإطارات لطباعة الويب وحدها؛ أبعاد الكاشير (الحواشي وحجم الخطّ والشعار وQR
 /// والمسافات) يطبعها التطبيق كالموقع منذ ٣٠ أكتوبر.
+///
+/// «تصميم الوصل» v2 (١ نوفمبر): `design.layout` ([layout]) — الإخفاء والتسميات والأحجام والعناوين والنصوص والضغط —
+/// يقرؤه المحلِّل من التصميم الخامّ ([design]) كما يقرؤه الموقع، ومعه المحاذاة وفواصل الصفوف وخطّ عناوين الأقسام. بلا
+/// `layout` يُطبع الوصل بطريق v1 كما كان ([ReceiptPdf]).
 @immutable
 class ReceiptSettings {
   const ReceiptSettings({
@@ -46,6 +51,10 @@ class ReceiptSettings {
     this.showSignature = true,
     this.showReceiptId = true,
     this.showDateTime = true,
+    this.rowSeparator = 'dotted',
+    this.sectionTitleUnderline = true,
+    this.lineHeight = 1.5,
+    this.design,
   });
 
   final String? shopName;
@@ -97,6 +106,53 @@ class ReceiptSettings {
   final bool showReceiptId;
   final bool showDateTime;
 
+  /// فاصل صفوف الأقسام (`none|dotted|dashed|solid`) وخطّ تحت عنوان القسم — وصل v2 وحده.
+  final String rowSeparator;
+  final bool sectionTitleUnderline;
+
+  /// ارتفاع السطر (١٫٠–٢٫٢) — للموقع؛ يُقرأ هنا لمعرفة «حجم الوصل» وحده.
+  final double lineHeight;
+
+  /// التصميم كما حفظه المصمّم (`data.design`: مفاتيح v1 و`layout`) — يقرؤه المحلِّل ([ReceiptResolver]) بدلالات الموقع.
+  final Map<String, dynamic>? design;
+
+  /// «تصميم الوصل» v2 — `null` = طريق v1 (كلّ التصاميم قبل ١ نوفمبر، وكلّ تصميمٍ بلا `layout`).
+  ReceiptLayout? get layout => ReceiptLayout.fromJson(design?['layout']);
+
+  /// «حجم الوصل» في المصمّم: `normal` · `compact` · `tight`، أو null («مخصّص») حين لا يطابق مقاساً.
+  String? get preset {
+    final l = layout;
+    for (final e in receiptPresets.entries) {
+      final p = e.value;
+      final v = p.v1;
+      bool same(num a, Object? b) => b is num && (a - b).abs() < 0.001;
+      if (same(fontBasePx, v['font_size_base']) &&
+          same(fontTitlePx, v['font_size_title']) &&
+          same(sectionGapMm, v['section_gap_mm']) &&
+          same(lineHeight, v['line_height']) &&
+          same(marginTopMm, v['margin_top_mm']) &&
+          same(marginRightMm, v['margin_right_mm']) &&
+          same(marginBottomMm, v['margin_bottom_mm']) &&
+          same(marginLeftMm, v['margin_left_mm']) &&
+          same(logoSizeMm, v['logo_size_mm']) &&
+          same(qrSizeMm, v['qr_size_mm']) &&
+          rowSeparator == v['row_separator'] &&
+          sectionTitleUnderline == v['section_title_underline'] &&
+          (l?.density ?? 'normal') == p.density &&
+          (l?.emoji ?? true) == p.emoji) {
+        return e.key;
+      }
+    }
+    return null;
+  }
+
+  /// الحقول المخفيّة في «المعلومات»: مفاتيح v1 الأربعة (الرقم والوقت وسعر الباقة و«أصدره») وما أخفاه v2.
+  int get hiddenFields =>
+      [showReceiptId, showDateTime, showPackagePrice, showSignature].where((on) => !on).length + (layout?.hiddenFields ?? 0);
+
+  /// النصوص الإضافيّة (v2).
+  int get customTexts => layout?.texts.length ?? 0;
+
   /// هل خصّص المالك شيئاً يظهر في الوصل؟ (لا = يُطبع باسم الحساب كما كان.)
   bool get isCustomized =>
       [shopName, shopAddress, shopPhone, footerText]
@@ -146,6 +202,12 @@ class ReceiptSettings {
       return v == null || !v.isFinite ? fallback : v.toDouble().clamp(lo, hi).toDouble();
     }
 
+    // نصٌّ من قائمةٍ مغلقة، وغيره افتراض الموقع.
+    String pick(String k, List<String> allowed, String fallback) {
+      final v = design is Map ? design[k] : null;
+      return v is String && allowed.contains(v) ? v : fallback;
+    }
+
     return ReceiptSettings(
       shopName: _str(j['shop_name']),
       shopAddress: _str(j['shop_address']),
@@ -175,6 +237,10 @@ class ReceiptSettings {
       showSignature: flag('show_manager_signature'),
       showReceiptId: flag('show_receipt_id'),
       showDateTime: flag('show_datetime'),
+      rowSeparator: pick('row_separator', const ['none', 'dotted', 'dashed', 'solid'], 'dotted'),
+      sectionTitleUnderline: flag('section_title_underline'),
+      lineHeight: dim('line_height', 1.5, 1, 2.2),
+      design: design is Map ? Map<String, dynamic>.from(design) : null,
     );
   }
 
