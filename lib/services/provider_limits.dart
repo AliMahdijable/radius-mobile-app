@@ -75,14 +75,21 @@ const Set<String> _kitCapabilityKeys = {
 };
 
 /// [key] إجراءٌ لا يخدمه مزوّد الجلسة فيُخفى: فايبر اكس بقائمته الثابتة، والشركات المُضافة بقدرات حسابها من الخادم
-/// (مفتاحٌ false لصاحب الحساب). موظّف الشركة المُضافة غير موجودٍ بعد — وحين يوجد يحكمه ما مُنح كموظّف ايرث لنك.
+/// (مفتاحٌ false لصاحب الحساب). موظّف الشركة المُضافة يحكمه ما مُنح كموظّف ايرث لنك — إلّا موظّف المشروع الوطنيّ في مفاتيح أقسام
+/// بوّابته ([_nationalPortalOnlyKeys]).
 bool providerHidesAction(String key) {
   if (sessionIsFiberx) return _fiberxUnsupported.contains(key);
   if (sessionIsKit) {
-    return _kitCapabilityKeys.contains(key) && !Perms.isEmployee && !Perms.has(key);
+    if (Perms.isEmployee) return ProviderService.parentIsZone && _nationalPortalOnlyKeys.contains(key);
+    return _kitCapabilityKeys.contains(key) && !Perms.has(key);
   }
   return false;
 }
+
+/// مفتاحان يُمنحان لموظّف المشروع الوطنيّ لأقسام بوّابته وحدها (١ نوفمبر — `ElEmployeePerms.nationalExtraKeys`): «الجلسات» و«تقرير
+/// الجلسات» فيها، والتعليق على المهامّ والطلبات. ما يفتحه المفتاح نفسه خارجها — تقرير جلسات الساس العامّ، «سجلّ الجلسات» و«تعديل»
+/// المشترك — لا يخدمه الوطنيّ (قدرات صاحبه false)، فيبقى مخفيّاً للموظّف كما هو لصاحب الحساب.
+const Set<String> _nationalPortalOnlyKeys = {'reports.sessions', 'subscribers.edit'};
 
 /// «فصل الاتصال» لا يخدمه مزوّد الجلسة: المشروع الوطنيّ (البوّابة لا تسمح به للمقاول — يُخفى للمالك وللموظّف)، أو شركةٌ مُضافة
 /// قدرتها `subscribers.disconnect` false لصاحب الحساب. كان الفصل يتبع `subscribers.toggle` وحده، فيظهر للوطنيّ حين يُفتح التعليق

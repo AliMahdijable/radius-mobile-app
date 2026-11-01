@@ -11,6 +11,7 @@ import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../core/widgets/desk_pressable.dart';
 import '../../../models/subscriber.dart';
 import '../../../services/permissions_service.dart';
+import '../../../services/provider_limits.dart';
 import '../../../services/subscriber_usage_store.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -771,6 +772,8 @@ class _Hidden extends _MenuEntry {
 
 /// يملكه ⇒ حيّ؛ لا يملكه ويمكن أن يُمنحه ⇒ مقفل بمكانه؛ لا يُمنح لدوره ⇒ مخفيّ (كالتفاصيل).
 _MenuEntry _gate(String perm, IconData icon, String label, Future<Object?> Function() run) {
+  // موظّف المشروع الوطنيّ: «تعديل» بمفتاحٍ مُنحه للتعليق في البوّابة لا يخدمه الوطنيّ — مخفيٌّ كصفحة المشترك ([providerHidesAction])
+  if (Perms.isEmployee && providerHidesAction(perm)) return const _Hidden();
   if (Perms.has(perm)) return _MenuEntry(icon, label, run);
   if (permShown([perm])) return _MenuEntry(icon, label, run, locked: true);
   return const _Hidden();

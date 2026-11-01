@@ -272,8 +272,21 @@ class ElEmployeePerms {
 
   /// مفاتيح الشركة المُضافة كما تُعرض الآن: لصاحب الحساب ما يخدمه حسابه وحده (قدرته من الخادم ليست false — AccessGate بلا حساباتٍ
   /// فرعيّة فلا «المدراء»، وتفعيلٌ مطفأ لا يُمنح)، ولموظّفها مفاتيحها كلّها (الخادم أصلاً يعرض ما مُنح ∩ ما يخدمه حساب أبيه).
-  static Set<String> _kitKeysForSession() =>
-      PermissionsService.isEmployee ? kitKeys : kitKeys.where(Perms.has).toSet();
+  /// والمشروع الوطنيّ يزيد [nationalExtraKeys] بلا تصفيةٍ بقدرات صاحبه (لا تخصّ الساس — أقسام بوّابته).
+  static Set<String> _kitKeysForSession() {
+    final base = PermissionsService.isEmployee ? kitKeys : kitKeys.where(Perms.has).toSet();
+    return isNationalSession ? {...base, ...nationalExtraKeys} : base;
+  }
+
+  /// جلسة المشروع الوطنيّ (شركةٌ مُضافة أبو مشتركها الزون — watani).
+  static bool get isNationalSession => ProviderService.isKit && ProviderService.parentIsZone;
+
+  /// مفاتيح أقسام بوّابة المشروع الوطنيّ (١ نوفمبر — القرار ٢؛ العقد §9، `providerKit/employeeRoutes`): «الجلسات» و«تقرير الجلسات»
+  /// (`reports.sessions`)، وجرس البوّابة — إشعاراتها وإعلاناتها (`notifications.view`)، والتعليق على المهامّ والطلبات
+  /// (`subscribers.edit`). قدرات صاحب الحساب من الخادم تُبقي الأوّل والأخير false (لا تقرير جلسات الساس العامّ، ولا «تعديل» المشترك
+  /// عند الوطنيّ) — فلا تُصفّى بها: يمنحها المالك لموظّفه لأقسام البوّابة وحدها، و[outgoing] يحفظ قيمها (كانت تُرسل false بصمت
+  /// فيُسحب «عرض التبليغات» الممنوح من الويب بأيّ تعديلٍ من التطبيق). ومطابقٌ للويب (WATANI_EXTRA_KEYS).
+  static const nationalExtraKeys = <String>{'reports.sessions', 'notifications.view', 'subscribers.edit'};
 
   /// موظّفونا لحساب شركةٍ مُضافة (providerKit — نبض، AccessGate…، ٣٠ أكتوبر؛ الخادم 03cc682 providerKit/employeeRoutes): المشتركون
   /// كاملاً، والحسابات الفرعيّة عند الشركة ومالها، والأسعار والتقارير والتسويات والمبيعات وديون المحذوفين والأجهزة والمساعد. لا موقع
@@ -387,8 +400,20 @@ class ElEmployeePerms {
     'managers.view': 'الحسابات الفرعيّة عند الشركة (المدراء) وأرصدتها',
   };
 
+  /// مفاتيح أقسام بوّابة المشروع الوطنيّ ([nationalExtraKeys]) — لا جلسات الساس ولا تبليغات الواتساب ولا تعديل المشترك (نصّ الويب).
+  static const _nationalHints = <String, String>{
+    'reports.sessions': 'جلسات المشتركين و«تقرير الجلسات» في بوّابة المشروع الوطني',
+    'notifications.view': 'إشعارات بوّابة المشروع الوطني وإعلاناتها — للقراءة',
+    'subscribers.edit': 'التعليق على المهامّ والطلبات في بوّابة المشروع الوطني',
+  };
+
   static String? hintFor(String key) =>
-      (ProviderService.isFiberx ? _fiberxHints[key] : ProviderService.isKit ? _kitHints[key] : null) ?? hints[key];
+      (ProviderService.isFiberx
+          ? _fiberxHints[key]
+          : ProviderService.isKit
+              ? (isNationalSession ? _nationalHints[key] : null) ?? _kitHints[key]
+              : null) ??
+      hints[key];
 
   static const earthlinkKeys = <String>{
     'subscribers.private_note', // «ملاحظة خاصّة» (٣١ أكتوبر)
