@@ -725,7 +725,7 @@ class NationalPortalApi {
   /// المشتركين — دفعهم بالبطاقة). الفترة YYYY-MM-DD بتوقيت بغداد (حتى ٩٢ يوماً)؛ [group] مجموعة أنواع (activations · topups · refunds
   /// · commissions)، [type] نوعٌ واحد، [wallet] main|commission، [owner] partner|customer (التحويلات)، [method] طريقة الدفع (التحويلات)،
   /// [change] scheduled|instant، [sales] upfront|installment، [tx] رقم المعاملة، [sub] رقم الاشتراك، [q] رمز الاشتراك أو اسم المشترك،
-  /// [mine] حركاتي أنا وحدي (المنفّذ). ما كان «الكلّ» لا يُرسل.
+  /// [mine] حركاتي أنا وحدي (المنفّذ). ما كان «الكلّ» لا يُرسل — إلّا محفظة «محفظتي»: `wallet=all` صريحةً (بلاها الرئيسيّة وحدها).
   static Future<NationalResult<NationalPage<NationalMoneyRow>>> wallet({
     bool transfers = false,
     String? from,
@@ -793,7 +793,9 @@ class NationalPortalApi {
       'size': size,
       'group': opt(group),
       'types': opt(type),
-      'wallet': opt(wallet),
+      // «محفظتي»: المحفظة صريحةً دائماً — الخادم بلاها يردّ الرئيسيّة وحدها (توافقاً مع النسخ الأقدم)، فـ«الكلّ» = all.
+      // و«التحويلات» افتراضها الكلّ عند الخادم: «الكلّ» لا يُرسل
+      'wallet': transfers ? opt(wallet) : (opt(wallet) ?? 'all'),
       'owner': transfers ? opt(owner) : null,
       'method': transfers ? opt(method) : null,
       'change': opt(change),

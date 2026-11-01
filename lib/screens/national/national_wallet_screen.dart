@@ -263,7 +263,7 @@ class _NationalWalletScreenState extends State<NationalWalletScreen> {
               _BalanceCard(meta: _meta, total: _p.total, busy: _p.loading || _p.pending, transfers: _transfers),
               const SizedBox(height: Sp.md),
               DateRangeChipBar(value: _range, presets: _presets, onChanged: _setRange),
-              // خادمٌ أقدم (v1) لا يفهم المجموعات ⇒ لا شرائح تَعِد بفرزٍ لا يقع
+              // خادمٌ أقدم (v1) لا يفهم المجموعات ولا بحث «محفظتي» وأغلب فلاترها ⇒ لا شرائح ولا بحث ولا «الفلاتر» تَعِد بفرزٍ لا يقع
               if (_v2 != false) ...[
                 const SizedBox(height: Sp.sm),
                 _GroupChips(
@@ -273,25 +273,25 @@ class _NationalWalletScreenState extends State<NationalWalletScreen> {
                     _reload();
                   },
                 ),
-              ],
-              const SizedBox(height: Sp.md),
-              Row(
-                children: [
-                  Expanded(
-                    child: NationalSearchField(
-                      key: ValueKey('q$_qGen'),
-                      hint: 'رمز الاشتراك أو الاسم',
-                      initial: _q,
-                      onChanged: (v) {
-                        _q = v;
-                        _reload();
-                      },
+                const SizedBox(height: Sp.md),
+                Row(
+                  children: [
+                    Expanded(
+                      child: NationalSearchField(
+                        key: ValueKey('q$_qGen'),
+                        hint: 'رمز الاشتراك أو الاسم',
+                        initial: _q,
+                        onChanged: (v) {
+                          _q = v;
+                          _reload();
+                        },
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: Sp.sm),
-                  NationalFilterButton(active: _active, onTap: _openFilters),
-                ],
-              ),
+                    const SizedBox(width: Sp.sm),
+                    NationalFilterButton(active: _active, onTap: _openFilters),
+                  ],
+                ),
+              ],
               const SizedBox(height: Sp.md),
               ..._body(),
             ],

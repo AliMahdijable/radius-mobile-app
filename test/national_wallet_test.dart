@@ -4,6 +4,7 @@ import 'package:rad_mysvcs/api/national_portal_api.dart';
 import 'package:rad_mysvcs/screens/app_modules.dart';
 import 'package:rad_mysvcs/screens/national/national_labels.dart';
 import 'package:rad_mysvcs/screens/national/national_wallet_screen.dart';
+import 'package:rad_mysvcs/screens/national/national_widgets.dart';
 import 'package:rad_mysvcs/screens/reports/widgets/date_range_chip.dart';
 import 'package:rad_mysvcs/services/permissions_service.dart';
 import 'package:rad_mysvcs/services/provider_service.dart';
@@ -134,7 +135,7 @@ void main() {
         tx: ' 123 ',
         mine: true);
     expect(w['group'], 'activations');
-    expect(w['wallet'], isNull);
+    expect(w['wallet'], 'all', reason: '«محفظتي»: الخادم بلا wallet يردّ الرئيسيّة وحدها');
     expect(w['owner'], isNull, reason: '«محفظتي» بلا مالك');
     expect(w['method'], isNull);
     expect(w['change'], 'instant');
@@ -144,6 +145,16 @@ void main() {
     final t = NationalPortalApi.walletQuery(
         transfers: true, owner: 'customer', method: 'card', wallet: 'commission', type: 'PLAN_RENEW');
     expect((t['owner'], t['method'], t['wallet'], t['types'], t['by']), ('customer', 'card', 'commission', 'PLAN_RENEW', null));
+  });
+
+  test('محفظة «محفظتي» صريحةً دائماً (الكلّ = all)، و«التحويلات» بلاها حين «الكلّ» (افتراض الخادم الكلّ)', () {
+    for (final v in const [null, '', 'all']) {
+      expect(NationalPortalApi.walletQuery(wallet: v)['wallet'], 'all', reason: '«محفظتي» wallet=$v');
+      expect(NationalPortalApi.walletQuery(transfers: true, wallet: v)['wallet'], isNull, reason: '«التحويلات» wallet=$v');
+    }
+    expect(NationalPortalApi.walletQuery(wallet: 'main')['wallet'], 'main');
+    expect(NationalPortalApi.walletQuery(wallet: 'commission')['wallet'], 'commission');
+    expect(NationalPortalApi.walletQuery(transfers: true, wallet: 'main')['wallet'], 'main');
   });
 
   test('آخر ٣٠ يوماً: اليوم − ٢٩ ⇒ اليوم، وآخر ٧ أيّام', () {
@@ -193,7 +204,7 @@ void main() {
     final now = DateTime.now();
     expect(q['to'], _day(now));
     expect(q['from'], _day(DateTime(now.year, now.month, now.day).subtract(const Duration(days: 29))));
-    expect(q.containsKey('wallet'), isFalse, reason: 'المحفظتان معاً افتراضاً');
+    expect(q['wallet'], 'all', reason: 'المحفظتان معاً افتراضاً — صريحةً، فالخادم بلاها يردّ الرئيسيّة وحدها');
     expect(find.text('رصيد المحفظة'), findsOneWidget);
     expect(find.textContaining('1,250,000'), findsWidgets);
     expect(find.text('رصيد العمولة'), findsOneWidget);
@@ -207,6 +218,34 @@ void main() {
     await t.tap(find.text('حركات التفعيل'));
     await t.pumpAndSettle();
     expect(server.calls('GET', '/api/v2/ftth/wallet').last.queryParameters['group'], 'activations');
+    await simDrain(t);
+  });
+
+  testWidgets('شريحةٌ قبل وصول الردّ الأوّل ⇒ طلبٌ ثانٍ بمجموعتها وصفوفه تظهر — لا «جارٍ التحميل…» عالقة', (t) async {
+    server.on(
+        'GET',
+        '/api/v2/ftth/wallet',
+        (req) => SimReply(
+            200,
+            req.queryParameters['group'] == 'activations'
+                ? _walletReply(rows: [_row('PLAN_RENEW', -42000)])
+                : _walletReply()));
+    server.hold('GET', '/api/v2/ftth/wallet');
+    await pumpSim(t, _v, home: (_) => const NationalWalletScreen(), settle: false);
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 100));
+    expect(server.calls('GET', '/api/v2/ftth/wallet'), hasLength(1));
+    expect(find.text('جارٍ التحميل…'), findsOneWidget);
+    await t.tap(find.text('حركات التفعيل'));
+    await t.pump(const Duration(milliseconds: 100));
+    final calls = server.calls('GET', '/api/v2/ftth/wallet');
+    expect(calls, hasLength(2), reason: 'الشريحة تطلب بنفسها — لا ينتظر طلبها ردّاً سيُهمل');
+    expect(calls.last.queryParameters['group'], 'activations');
+    server.release('GET', '/api/v2/ftth/wallet');
+    await t.pumpAndSettle();
+    expect(find.textContaining('−42,000'), findsOneWidget);
+    expect(find.textContaining('−35,000'), findsNothing, reason: 'ردّ ما قبل الشريحة يُهمل');
+    expect(find.text('جارٍ التحميل…'), findsNothing);
     await simDrain(t);
   });
 
@@ -266,11 +305,14 @@ void main() {
     await simDrain(t);
   });
 
-  testWidgets('خادمٌ أقدم (v1): لا شرائح فرزٍ لا يفهمها ولا تبويب', (t) async {
+  testWidgets('خادمٌ أقدم (v1): لا شرائح فرزٍ لا يفهمها ولا بحث ولا «الفلاتر» ولا تبويب', (t) async {
     server.reply('GET', '/api/v2/ftth/wallet', 200, _walletReply(v2: false));
     await pumpSim(t, _v, home: (_) => const NationalWalletScreen());
     expect(find.text('حركات التفعيل'), findsNothing);
     expect(find.text('التحويلات'), findsNothing);
+    expect(find.byType(NationalSearchField), findsNothing);
+    expect(find.byType(NationalFilterButton), findsNothing);
+    expect(find.text('الفلاتر'), findsNothing);
     expect(find.textContaining('−35,000'), findsOneWidget);
     await simDrain(t);
   });

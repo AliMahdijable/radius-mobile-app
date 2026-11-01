@@ -489,6 +489,8 @@ class NationalPaged<T> {
     page = 0;
     total = null;
     pageCount = null;
+    // ردّ الجيل السابق يُهمل قبل أن يُطفئ «جارٍ التحميل» — فلا يبقى مشغولاً ويصدّ next() الجديد (شاشةٌ عالقة على التحميل)
+    loading = false;
     pending = false;
     error = null;
     raw = const {};
