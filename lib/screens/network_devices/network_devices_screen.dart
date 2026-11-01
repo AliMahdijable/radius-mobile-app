@@ -22,6 +22,7 @@ import '../../widgets/skeleton.dart';
 import 'bulk_scan_screen.dart';
 import 'device_alerts_screen.dart';
 import 'device_sort.dart';
+import 'devices_filters.dart';
 import 'probe_backoff.dart';
 import 'device_live_card.dart';
 import 'device_vitals.dart';
@@ -32,6 +33,7 @@ import 'regions_screen.dart';
 import 'tower/tower_screen.dart';
 import 'widgets/brand_badge.dart';
 import 'widgets/device_image.dart';
+import 'widgets/devices_filter_bar.dart';
 import '../../theme/typography.dart';
 import 'detected_model.dart';
 import 'model_detector.dart';
@@ -46,9 +48,10 @@ import 'widgets/device_ip_link.dart';
 
 /// قائمة أجهزة الشبكة. راجع project_devices_monitoring_plan.
 ///
-/// التصميم:
-/// - Row 1 (chips): فلتر بالنوع (لنكات/سويتشات/سكاتر/راوترات/AP/كاميرات/أخرى)
-/// - Row 2 (chips): فلتر بالحالة (الكلّ/متصل/غير متصل/لم يُفحص)
+/// التصميم (المالك ١ نوفمبر: «٤ حقول فلاتر واضافات وتوزيع اجهزه ومناطق ماخذات هواي من الصفحه»):
+/// - سطرٌ مثبَّت: البحث + التنبيهات · نوع العرض · التحديث · المزيد · «+» (قائمة الإضافات كلّها)
+/// - شريطٌ رفيع واحد ([DevicesFilterStrip]): «فلاتر» (ورقة الحالة والنوع والمناطق) + التوزيع شرائحَ تُرشِّح بنقرة
+///   — بدل بلاطات الإجمالي/المتّصل/المفصول وصفّي الأنواع والمناطق
 /// - القائمة: cards بتصميم متسق مع باقي المشروع (AppColors)
 /// نوع العرض بقائمة الأجهزة (المالك ٣١ أكتوبر: «نظرة عامه ع الاجهز نلغيها ونستبدل بدالها تغير نوع العرض مثل الي بالحاسوب، نخلي
 /// عرض كارتات كبار…»): «قائمة» (البطاقات المعتادة؛ وعلى الحاسبة شبكةٌ منها)، «بطاقات كبيرة» حيّةٌ ملوّنة بدور كلّ جهاز، و«جدول»
@@ -116,7 +119,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// وهذه الأخيرة ليست ترفاً: أجهزةٌ لم تُسنَد إلى منطقة تضيع في
   /// القائمة، ولا سبيل إلى جمعها لتصنيفها إلّا بمُرشِّحٍ لها.
   int? _regionFilter;
-  static const int _kNoRegion = -1;
+  static const int _kNoRegion = DevicesFacets.noRegion;
   String _search = '';
   final _searchCtrl = TextEditingController();
   Timer? _searchDebounce;
@@ -811,31 +814,32 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     );
   }
 
-  List<NetworkDevice> get _filtered {
-    final q = _search.trim().toLowerCase();
-    final result = _all.where((d) {
-      if (_typeFilter != null && d.type != _typeFilter) return false;
-      if (_statusFilter != null && d.lastStatus != _statusFilter) return false;
-      if (_regionFilter != null) {
-        if (_regionFilter == _kNoRegion) {
-          if (d.regionId != null) return false;
-        } else if (d.regionId != _regionFilter) {
-          return false;
-        }
-      }
-      if (q.isNotEmpty) {
-        // اسم المنطقة جزءٌ من الكومة: المنطقة تُعرَض على كلّ كرت،
-        // والبحث الذي لا يجد ما تراه العين يبدو مكسوراً.
-        final regionName = d.regionId == null
-            ? ''
-            : (_regionsById[d.regionId!]?.name ?? '');
-        final haystack =
-            '${d.name} ${d.ip} ${d.mac ?? ''} ${d.location ?? ''} ${d.model ?? ''} $regionName'
-                .toLowerCase();
-        if (!haystack.contains(q)) return false;
-      }
-      return true;
-    }).toList();
+  /// المرشّحات الثلاثة قيمةً واحدة — لشريط التوزيع وورقة «فلاتر». الحقول نفسها باقية كما كانت (عرض البرج ومسح الفلتر
+  /// من الحالة الفارغة يقرأانها).
+  DevicesFilter get _filter =>
+      DevicesFilter(status: _statusFilter, type: _typeFilter, region: _regionFilter);
+
+  void _setFilter(DevicesFilter f) {
+    if (!mounted || f == _filter) return;
+    setState(() {
+      _statusFilter = f.status;
+      _typeFilter = f.type;
+      _regionFilter = f.region;
+    });
+  }
+
+  /// ما يُعرض وتوزيعه بمرورٍ واحد على الأجهزة — الأعداد ضمن المرشّحات الأخرى والبحث (راجع [DevicesFacets]). اسم
+  /// المنطقة جزءٌ من كومة البحث: المنطقة تُعرَض على كلّ كرت، والبحث الذي لا يجد ما تراه العين يبدو مكسوراً.
+  DevicesFacets _facetsFor(DevicesFilter f) => DevicesFacets.compute(
+        _all,
+        f,
+        query: _search,
+        regionName: (d) => d.regionId == null ? '' : (_regionsById[d.regionId!]?.name ?? ''),
+      );
+
+  /// المعروض مرتّباً باختيار المستخدم.
+  List<NetworkDevice> _sortedShown(DevicesFacets facets) {
+    final result = facets.shown;
     // 2026-08-18: كان ترتيباً ثابتاً بالـIP تصاعديّاً. صار قابلاً
     // للاختيار (٢٠٢٦-٠٩-٠٢) بنفس وحدة «نظرة عامّة» — شاشتان تعرضان
     // الأجهزة نفسها يجب ألّا ترتّباها بمنطقين.
@@ -843,14 +847,15 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     return result;
   }
 
-  int _countByType(String type) => _all.where((d) => d.type == type).length;
+  List<NetworkDevice> get _filtered => _sortedShown(_facetsFor(_filter));
 
-  /// عدد الأجهزة لكلّ منطقة — يُحسَب **مرّةً عند تغيّر البيانات**.
+  /// عدد الأجهزة لكلّ منطقة (كلّها، بلا مرشّحات) — يُحسَب **مرّةً عند تغيّر البيانات**، لمنتقي «عرض البرج».
   ///
   /// 🐛 كان يُحسَب في كلّ بناء: صفّ المناطق يُعاد بناؤه مع كلّ ضغطة
   /// مفتاح في البحث ومع كلّ نبضة فحص، وكلّ شريحةٍ تمسح قائمة الأجهزة
   /// كاملة. أربعون منطقة × ألفا جهاز = ثمانون ألف فحصٍ في الإطار
-  /// الواحد — تلعثمٌ مرئيّ على كلّ حرفٍ يُكتب.
+  /// الواحد — تلعثمٌ مرئيّ على كلّ حرفٍ يُكتب. (أعداد الشريط والورقة
+  /// اليوم من [DevicesFacets]: مرورٌ واحد لكلّ بناء، لا مسحٌ لكلّ شريحة.)
   Map<int?, int> _regionCounts = const {};
 
   void _recomputeRegionCounts() {
@@ -863,19 +868,6 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
   int _countByRegion(int? regionId) =>
       _regionCounts[regionId == _kNoRegion ? null : regionId] ?? 0;
-  int _countByStatus(String s) => _all.where((d) => d.lastStatus == s).length;
-
-  IconData _typeIcon(String type) {
-    return switch (type) {
-      'link' => LucideIcons.satellite,
-      'switch' => LucideIcons.network,
-      'sector' => LucideIcons.radioTower,
-      'router' => LucideIcons.router,
-      'ap' => LucideIcons.wifi,
-      'camera' => LucideIcons.video,
-      _ => LucideIcons.circuitBoard,
-    };
-  }
 
   Color _statusColor(String status) => switch (status) {
         'online' => AppColors.success,
@@ -891,7 +883,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     // يشقّ العنوانين ويُجري أربع `int.tryParse` لكلّ طرف. وكان
     // يُستدعى داخل `itemBuilder` — أي فرزةٌ كاملة لكلّ صفّ مرسوم،
     // فقائمةٌ من 40 جهازاً تُفرَز 40 مرّة في الإطار الواحد.
-    final devices = _filtered;
+    // والتوزيع (أعداد الشريط) من المرور نفسه — لا مسحٌ للقائمة لكلّ شريحة.
+    final facets = _facetsFor(_filter);
+    final devices = _sortedShown(facets);
     // Selection mode → AppBar تعرض عدد المحدَّد + أزرار bulk actions
     // بدل الـtitle العادي. زرّ الـback (Android) يخرج من selection بدل الخروج من الشاشة.
     if (_selectionMode) {
@@ -901,7 +895,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
           if (didPop) return;
           _exitSelection();
         },
-        child: _buildSelectionScaffold(),
+        child: _buildSelectionScaffold(facets, devices),
       );
     }
     // ٢٠ أكتوبر (طلب المالك): لا AppBar — رأس التبويب الموحّد كباقي التبويبات:
@@ -946,12 +940,10 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                     const SliverToBoxAdapter(child: header),
                     // البحث والأدوات — مثبَّتان أعلى القائمة (مكان الشريط).
                     PinnedHeaderSliver(child: _toolsBar()),
-                    // Summary row: total + online + offline
-                    SliverToBoxAdapter(child: _summaryRow()),
-                    // Type filters (chips الحالة أُزيلت — تدمج بكارتات الملخّص)
-                    SliverToBoxAdapter(child: _typeFilterRow()),
-                    SliverToBoxAdapter(child: _regionFilterRow()),
-                    const SliverToBoxAdapter(child: SizedBox(height: 8)),
+                    // «فلاتر» + التوزيع في شريطٍ رفيعٍ واحد — كانت بلاطات الإجمالي/المتّصل/المفصول وصفّا الأنواع
+                    // والمناطق، نحو ثلث شاشة الهاتف قبل أوّل جهاز (المالك ١ نوفمبر). وحسابٌ بلا أجهزة لا شريط له:
+                    // «الكلّ ٠ · متّصل ٠ · مفصول ٠» فوق «لا توجد أجهزة» ضجيجٌ لا معلومة.
+                    if (_all.isNotEmpty) SliverToBoxAdapter(child: _filterStrip(facets)),
                     if (_offNetwork && _view == DevicesView.big)
                       const SliverPadding(
                         padding: EdgeInsets.symmetric(horizontal: Sp.md),
@@ -990,9 +982,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
   /// Scaffold بديل يظهر في selection mode — AppBar فيها عدد المحدَّد
   /// وأزرار bulk actions. القائمة تبقى نفسها لكن الكارتات تعرض checkbox.
-  Widget _buildSelectionScaffold() {
-    // نفس الرفع كما في build: الفرزة كانت تتكرّر لكلّ صفّ.
-    final devices = _filtered;
+  Widget _buildSelectionScaffold(DevicesFacets facets, List<NetworkDevice> devices) {
+    // نفس الرفع كما في build: الفرزة كانت تتكرّر لكلّ صفّ — تصل من build محسوبةً مرّةً واحدة.
     final canManage = Perms.has('devices.manage');
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -1037,9 +1028,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
         child: CustomScrollView(
           slivers: [
             SliverToBoxAdapter(child: _searchBar()),
-            SliverToBoxAdapter(child: _summaryRow()),
-            SliverToBoxAdapter(child: _typeFilterRow()),
-            const SliverToBoxAdapter(child: SizedBox(height: 8)),
+            // الشريط نفسه — «تحديد الكلّ» يأخذ المعروض، فالترشيح هنا قبل التحديد.
+            SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.only(top: Sp.sm), child: _filterStrip(facets))),
             devices.isEmpty
                 ? const SliverFillRemaining(
                     hasScrollBody: false,
@@ -1156,116 +1146,36 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     await _refresh();
   }
 
-  Widget _summaryRow() {
-    final online = _countByStatus('online');
-    final offline = _countByStatus('offline');
-    final total = _all.length;
-    // 2026-08-18: الكارتات الآن قابلة للنقر → تعمل toggle للـstatus filter.
-    // (chips الفلترة السفليّة أُزيلت — دمج نفس الوظيفة هنا).
+  /// الشريط الرفيع تحت البحث: «فلاتر» + التوزيع (راجع [DevicesFilterStrip]) — بدل بلاطات الإجمالي/المتّصل/المفصول وصفّي
+  /// الأنواع والمناطق. حشوته على حافّة القائمة تحته (‎Sp.md) كما كانت الصفوف.
+  Widget _filterStrip(DevicesFacets facets) {
+    final region = _regionFilter;
+    final r = region == null || region == _kNoRegion ? null : _regionsById[region];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(Sp.md, 12, Sp.md, 8),
-      child: Row(children: [
-        _summaryTile(
-          icon: LucideIcons.layers,
-          label: 'الإجمالي',
-          value: '$total',
-          color: AppColors.textHi,
-          filterStatus: null, // نقر → يعرض الكل
-        ),
-        const SizedBox(width: 8),
-        _summaryTile(
-          icon: LucideIcons.wifi,
-          label: 'متّصل',
-          value: '$online',
-          color: AppColors.success,
-          filterStatus: 'online',
-        ),
-        const SizedBox(width: 8),
-        _summaryTile(
-          icon: LucideIcons.wifiOff,
-          label: 'مفصول',
-          value: '$offline',
-          color: AppColors.error,
-          filterStatus: 'offline',
-        ),
-      ]),
+      padding: const EdgeInsets.only(top: Sp.xs, bottom: Sp.md),
+      child: DevicesFilterStrip(
+        filter: _filter,
+        facets: facets,
+        onChanged: _setFilter,
+        onOpenSheet: _openFilters,
+        regionName: region == _kNoRegion ? 'بلا منطقة' : r?.name,
+        regionColor: r == null ? AppColors.textLow : (_parseRegionColor(r.color) ?? AppColors.brand),
+      ),
     );
   }
 
-  Widget _summaryTile({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-    required String? filterStatus,
-  }) {
-    final active = _statusFilter == filterStatus;
-    return Expanded(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(R.md),
-          onTap: () {
-            HapticFeedback.selectionClick();
-            setState(() {
-              // نقر ثاني على نفس الحالة النشطة → يلغي الفلتر (يرجع للكل)
-              _statusFilter =
-                  active && filterStatus != null ? null : filterStatus;
-            });
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-            // «الإجمالي» المختار بحبّة القائمة الرماديّة لا بإطارٍ أسود سميك؛ والمتّصل/المفصول بلونهما الخفيف.
-            decoration: BoxDecoration(
-              color: !active
-                  ? AppColors.surface
-                  : filterStatus == null
-                      ? AppColors.surfaceSunken
-                      : color.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(R.md),
-              border: Border.all(
-                color: !active
-                    ? AppColors.border
-                    : filterStatus == null
-                        ? AppColors.borderStrong
-                        : color.withValues(alpha: 0.55),
-                width: active ? 1.5 : 1,
-              ),
-            ),
-            child: Row(children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(R.sm),
-                ),
-                child: Icon(icon, size: 14, color: color),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                  child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(label,
-                      style: TextStyle(
-                          fontSize: 10.5, height: 1.3,
-                          color: AppColors.textLow,
-                          fontWeight: FontWeight.w600)),
-                  Text(value,
-                      textDirection: TextDirection.ltr,
-                      style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: color,
-                          height: 1.1)),
-                ],
-              )),
-            ]),
-          ),
-        ),
-      ),
+  /// ورقة «فلاتر»: الحالة والنوع والمنطقة بأعدادها، تُطبَّق فوراً على القائمة خلفها. «إدارة المناطق» فيها لمن يملك الإدارة
+  /// (ومكانها الآخر قائمة «+»).
+  Future<void> _openFilters() {
+    final regions = _regionsById.values.toList()..sort((a, b) => a.name.compareTo(b.name));
+    return showDevicesFilterSheet(
+      context,
+      initial: _filter,
+      regions: regions,
+      facetsFor: _facetsFor,
+      onChanged: _setFilter,
+      hasUnassigned: _countByRegion(_kNoRegion) > 0,
+      onManageRegions: Perms.has('devices.manage') ? _openRegions : null,
     );
   }
 
@@ -1285,6 +1195,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// يُكتسب: الإضافة والتحديث يُستعملان في كلّ زيارة، والتنبيهات تحمل **عدداً**
   /// لا يُرى داخل قائمة مطويّة. وما عداها يُفتح مرّةً كلّ حين فمكانه «المزيد».
   /// والدوّارات لا تدخل القائمة: الفحص والكشف يُريان وهما يعملان، مكان زرّيهما.
+  ///
+  /// و«+» (١ نوفمبر) قائمة الإضافات كلّها: جهازٌ يدويّاً، واكتشاف أجهزة الشبكة بمسح نطاق، والمناطق — كانت الأخيرتان في
+  /// «المزيد». والمرشّحات تحت السطر في شريطٍ واحد ([_filterStrip]) لا في أزراره.
   Widget _toolsBar() {
     // الأدوات بمقاس أزرار الأعلى وفراغها، وطرفها على حشوة الرأس (‎16) — فكلّ
     // أداةٍ تحت نظيرها فوقها، والبحث على حافّة المحتوى تحته (‎12).
@@ -1350,10 +1263,6 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       _openFiber();
                     case 'sort':
                       _pickSort();
-                    case 'regions':
-                      _openRegions();
-                    case 'scan':
-                      _openBulkScan();
                     case 'detect':
                       _detectModels();
                   }
@@ -1366,11 +1275,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                   // الأيقونة التي كانت تدلّ عليه.
                   _menuItem(
                       'sort', _sortField.icon, 'الترتيب · ${_sortField.label}'),
-                  if (Perms.has('devices.manage'))
-                    _menuItem('regions', LucideIcons.mapPin, 'إدارة المناطق'),
-                  if (Perms.has('devices.manage'))
-                    _menuItem(
-                        'scan', LucideIcons.radar, 'اكتشاف أجهزة الشبكة'),
+                  // (إدارة المناطق واكتشاف أجهزة الشبكة انتقلا إلى «+» مع الإضافة — ١ نوفمبر.)
                   // كشف الطُرُز — لا يظهر إلّا حين يوجد جهاز يحتاجه، ولا
                   // يُشغَّل تلقائيّاً لأنّه يفتح جلسة مصادَقة على كلّ
                   // جهاز، وذلك قرار المستخدم لا سلوك خفيّ.
@@ -1383,13 +1288,32 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
               child: Icon(LucideIcons.ellipsisVertical,
                   size: 20, color: AppColors.textBody),
             ),
-            // إضافة جهاز — لمن يملك الإدارة وحده.
+            // «+» — الإضافات كلّها في قائمة، لمن يملك الإدارة وحده (كما كان زرّ الإضافة).
             if (Perms.has('devices.manage')) ...[
               SizedBox(width: gap),
               _ToolButton(
                 filled: true,
-                tooltip: 'إضافة جهاز',
-                onTap: () => _openForm(),
+                wrap: (content) => PopupMenuButton<String>(
+                  key: const ValueKey('devices-add'),
+                  tooltip: 'إضافة',
+                  borderRadius: BorderRadius.circular(R.icon),
+                  onSelected: (v) {
+                    switch (v) {
+                      case 'device':
+                        _openForm();
+                      case 'scan':
+                        _openBulkScan();
+                      case 'regions':
+                        _openRegions();
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    _menuItem('device', LucideIcons.circlePlus, 'إضافة جهاز'),
+                    _menuItem('scan', LucideIcons.radar, 'اكتشاف أجهزة الشبكة'),
+                    _menuItem('regions', LucideIcons.mapPinPlus, 'إدارة المناطق'),
+                  ],
+                  child: content,
+                ),
                 child: const Icon(LucideIcons.plus,
                     size: 18, color: AppColors.onBrand),
               ),
@@ -1467,141 +1391,6 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
             borderSide: BorderSide(color: AppColors.brand, width: 1.5),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _typeFilterRow() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 6),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(children: [
-          _typeChip(null, 'الكلّ', _all.length, LucideIcons.layoutGrid),
-          const SizedBox(width: 6),
-          for (final entry in NetworkDeviceLabels.types.entries) ...[
-            _typeChip(entry.key, entry.value, _countByType(entry.key),
-                _typeIcon(entry.key)),
-            const SizedBox(width: 6),
-          ],
-        ]),
-      ),
-    );
-  }
-
-  /// صفّ المناطق — يظهر فقط حين توجد مناطق فعلاً.
-  ///
-  /// بلا هذا كانت المنطقة شارةً على الكرت لا أكثر: تُرى ولا يُبنى
-  /// عليها. وشبكة المزوّد تُدار بالمناطق — «أيّ أجهزة الكرادة معطّلة؟»
-  /// سؤالٌ يوميّ لم يكن له جواب إلّا بالقراءة اليدويّة.
-  Widget _regionFilterRow() {
-    if (_regionsById.isEmpty) return const SizedBox.shrink();
-    final regions = _regionsById.values.toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
-    final orphans = _countByRegion(_kNoRegion);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 2),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(children: [
-          _regionChip(null, 'كلّ المناطق', _all.length, AppColors.brand),
-          const SizedBox(width: 6),
-          for (final r in regions) ...[
-            _regionChip(r.id, r.name, _countByRegion(r.id),
-                _parseRegionColor(r.color) ?? AppColors.brand),
-            const SizedBox(width: 6),
-          ],
-          if (orphans > 0)
-            _regionChip(_kNoRegion, 'بلا منطقة', orphans, AppColors.textMid),
-        ]),
-      ),
-    );
-  }
-
-  Widget _regionChip(int? id, String label, int count, Color color) {
-    final active = _regionFilter == id;
-    return InkWell(
-      onTap: () {
-        HapticFeedback.selectionClick();
-        setState(() => _regionFilter = active ? null : id);
-      },
-      borderRadius: BorderRadius.circular(R.card),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 6),
-        decoration: BoxDecoration(
-          color: active ? color.withValues(alpha: 0.12) : AppColors.surfaceInput,
-          borderRadius: BorderRadius.circular(R.card),
-          border: Border.all(
-            color: active ? color : AppColors.border,
-            width: active ? 1.5 : 1,
-          ),
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 6),
-          Text(label,
-              style: AppType.bodyStrong(
-                  color: active ? color : AppColors.textHi)),
-          const SizedBox(width: 5),
-          Text('$count',
-              style: TextStyle(
-                  fontSize: 10.5,
-                  height: 1.3,
-                  fontWeight: FontWeight.bold,
-                  color: active ? color : AppColors.textMid)),
-        ]),
-      ),
-    );
-  }
-
-  Widget _typeChip(String? type, String label, int count, IconData icon) {
-    final active = _typeFilter == type;
-    return InkWell(
-      onTap: () => setState(() => _typeFilter = active ? null : type),
-      borderRadius: BorderRadius.circular(R.card),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 7),
-        decoration: BoxDecoration(
-          color: active ? AppColors.brand : AppColors.surfaceInput,
-          borderRadius: BorderRadius.circular(R.card),
-          border: Border.all(
-            color: active ? AppColors.brand : AppColors.border,
-            width: 1,
-          ),
-        ),
-        child: Row(children: [
-          Icon(icon,
-              size: 14, color: active ? AppColors.onBrand : AppColors.textMid),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: AppType.bodyStrong(color: active ? AppColors.onBrand : AppColors.textHi),
-          ),
-          if (count > 0) ...[
-            const SizedBox(width: 5),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-              decoration: BoxDecoration(
-                color: active
-                    ? AppColors.onBrand.withValues(alpha: 0.25)
-                    : AppColors.brandSoftBg,
-                borderRadius: BorderRadius.circular(R.sm),
-              ),
-              child: Text(
-                '$count',
-                style: TextStyle(
-                  fontSize: 10.5, height: 1.3,
-                  fontWeight: FontWeight.bold,
-                  color: active ? AppColors.onBrand : AppColors.brand,
-                ),
-              ),
-            ),
-          ],
-        ]),
       ),
     );
   }
