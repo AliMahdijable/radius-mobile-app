@@ -59,6 +59,7 @@ import 'connection_alert_flow.dart';
 import '../../services/receipt_service.dart';
 import '../../core/widgets/print_feedback.dart';
 import '../network_devices/fiber/fiber_subscriber_card.dart';
+import '../national/national_subscriber_extras.dart';
 
 /// Subscriber details — v2 visual shell over v1's structure. Layout
 /// top→bottom (info → operations):
@@ -436,6 +437,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                     FiberSubscriberCard(sub: sub),
                     // «الليف والموقع» للشركات المُضافة التي يقرأ خادمها الضوء والعنوان (المشروع الوطنيّ، ٣١ أكتوبر — «الباور والموقع»).
                     if (KitFiberCard.shownFor(sub)) KitFiberCard(key: ValueKey('kit-fiber-${sub.idx}'), sub: sub),
+                    // «من بوّابة الوطني» (١ نوفمبر — الأقسام التجريبيّة): محفظته وسجل أخطائه وتذاكره ومهامّه وجلساته، تُجلب حين تُفتح.
+                    if (NationalSubscriberExtras.shownFor(sub)) NationalSubscriberExtras(key: ValueKey('national-extras-${sub.idx}'), sub: sub),
                     DeviceProbeCard(
                       key: _deviceCardKey,
                       ip: sub.ipAddress ?? '',

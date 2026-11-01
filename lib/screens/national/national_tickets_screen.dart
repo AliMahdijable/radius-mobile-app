@@ -249,16 +249,19 @@ class _NationalTicketsScreenState extends State<NationalTicketsScreen> {
     _openTicket(NationalTicket(id: t.id, displayId: t.displayId ?? '', source: 'partner', title: t.title, summary: '', status: t.status));
   }
 
-  void _openTicket(NationalTicket t) {
-    showAppSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      barrierColor: AppColors.scrim,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (_) => _TicketSheet(row: t),
-    );
-  }
+  void _openTicket(NationalTicket t) => showNationalTicketSheet(context, t);
+}
+
+/// ورقة التذكرة (تفاصيلها وتعليقاتها والتعليق والموعد) — من قائمة التذاكر، ومن تذاكر المشترك في صفحته (١ نوفمبر).
+Future<void> showNationalTicketSheet(BuildContext context, NationalTicket t) {
+  return showAppSheet<void>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    barrierColor: AppColors.scrim,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (_) => _TicketSheet(row: t),
+  );
 }
 
 class _TicketCard extends StatelessWidget {
