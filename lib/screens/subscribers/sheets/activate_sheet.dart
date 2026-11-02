@@ -124,6 +124,12 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   // ── ايرث لنك (البند ٤) — كلّه من provider=='earthlink' في activation-data ──
   _ElMethod _elMethod = _ElMethod.deposit;         // الافتراض: رصيد أونلاين (كالويب)
   String _selectedPackageId = '';                  // id الباقة المختارة من المبدّل
+  // ── الشركة المُضافة: التفعيل لعدّة أشهر (المشروع الوطنيّ، ١ نوفمبر — `months_options` من الخادم؛ البطاقة شهرٌ واحد) ──
+  int _months = 1;
+  Map<String, dynamic>? _quote; // معاينة الشركة للأشهر المختارة (السعر والكلفة والعروض والانتهاء الجديد)
+  String? _quoteFor; // مفتاح المعاينة المعروضة: «أشهر|باقة»
+  String? _quoteErr;
+  bool _quoting = false;
   // باسورد الإيداع (deposit): المحفوظ على الخادم («محفوظ · تغيير») أو يُكتب.
   final _deposit = ElDepositPasswordController();
   final _identifierCtrl = TextEditingController();  // رقم الكارت (card)
@@ -393,7 +399,54 @@ class _ActivateSheetState extends State<_ActivateSheet> {
 
   /// السعر المعروض (بعد الخصم): الحاليّة ⇒ price_after_discount (يراعي الثابت)؛
   /// المُغيَّرة ⇒ سعرها − الخصم (تقريبيّ؛ الخادم يحسب الدقيق).
+  /// الأشهر المسموحة (`months_options`) — أكثر من خيار ⇒ تظهر «مدّة التفعيل».
+  List<int> get _monthsOpts {
+    final v = _data?['months_options'];
+    if (!_isKit || v is! List) return const [];
+    return [for (final m in v) if (m is num && m == m.roundToDouble() && m >= 1) m.toInt()];
+  }
+
+  /// الأشهر الفعليّة: المختارة إن كانت مسموحة والدفع ليس بالبطاقة، وإلّا شهرٌ واحد.
+  int get _kitMonths => _isKit && !_kitCard && _monthsOpts.contains(_months) ? _months : 1;
+  String get _quoteKey => '$_kitMonths|$_selectedPackageId';
+  Map<String, dynamic>? get _liveQuote => _kitMonths > 1 && _quoteFor == _quoteKey ? _quote : null;
+
+  /// عدّة أشهرٍ بلا معاينةٍ صالحة ⇒ لا تفعيل (كالموقع monthsBlocked).
+  bool get _monthsBlocked {
+    if (!_isKit || _kitMonths <= 1) return false;
+    final q = _liveQuote;
+    if (q == null) return true;
+    final price = q['price'];
+    return (q['blocked']?.toString().trim().isNotEmpty ?? false) || q['sale_price_missing'] == true || price is! num || price <= 0;
+  }
+
+  static String _monthsLabel(int m) => m == 1 ? 'شهر' : m == 2 ? 'شهران' : m <= 10 ? '$m أشهر' : '$m شهراً';
+
+  Future<void> _fetchQuote() async {
+    if (_kitMonths <= 1) return;
+    final idx = widget.sub.idx;
+    if (idx == null) return;
+    final key = _quoteKey;
+    setState(() {
+      _quoting = true;
+      _quoteErr = null;
+    });
+    final r = await MergedOps.run(widget.sub, () => SubscribersApi.activationQuote(idx, months: _kitMonths, profileId: _selectedPackageId));
+    if (!mounted || key != _quoteKey) return;
+    setState(() {
+      _quoting = false;
+      _quote = r.data;
+      _quoteFor = r.data == null ? null : key;
+      _quoteErr = r.data == null ? (r.message ?? 'تعذّرت معاينة ${_monthsLabel(_kitMonths)} — اختر مدّةً أخرى') : null;
+    });
+  }
+
   num get _elChargePrice {
+    // عدّة أشهر: السعر من معاينة الخادم (الشهريّ × الأشهر) — وحتى تصل صفرٌ والتفعيل ممنوع (_monthsBlocked)
+    if (_isKit && _kitMonths > 1) {
+      final p = _liveQuote?['price'];
+      return p is num && p > 0 ? p : 0;
+    }
     final pkg = _elSelectedPkg;
     if (pkg == null) return _effectivePrice;
     if (_elIsCurrentPkg) {
@@ -405,7 +458,13 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     return v < 0 ? 0 : v;
   }
 
-  num get _elSelectedPkgCost => _readNumOf(_elSelectedPkg, 'cost');
+  num get _elSelectedPkgCost {
+    if (_isKit && _kitMonths > 1) {
+      final c = _liveQuote?['cost'];
+      return c is num ? c : 0;
+    }
+    return _readNumOf(_elSelectedPkg, 'cost');
+  }
 
   /// السعر المعروض في البطاقة/البانر: ايرث لنك ⇒ elChargePrice، وإلّا منطق SAS4.
   num get _displayPrice => _pkgSwitcher
@@ -803,7 +862,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       SheetPlanCard(
         planLabel: 'subscribers.label_package'.tr(),
         planName: planName,
-        durationLabel: (_duration ?? '').isEmpty ? null : _duration,
+        durationLabel: _isKit && _kitMonths > 1 ? _monthsLabel(_kitMonths) : ((_duration ?? '').isEmpty ? null : _duration),
         amountLabel: 'sheets.amount_due'.tr(),
         amount: '${formatIQD(price.round())} $cur',
         // السعر الأصلي مشطوباً بجانب النهائي — أوضح من صفَّي «السعر
@@ -923,6 +982,10 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         if (_cardPayAvailable) ...[
           const SizedBox(height: 14),
           _kitPaySection(),
+        ],
+        if (_isKit && _monthsOpts.length > 1 && !_kitCard) ...[
+          const SizedBox(height: 14),
+          _monthsSection(),
         ],
         if (!_elIsCurrentPkg && _isFiberx) ...[
           const SizedBox(height: 14),
@@ -1089,7 +1152,11 @@ class _ActivateSheetState extends State<_ActivateSheet> {
             icons: const [LucideIcons.wallet, LucideIcons.creditCard],
             selectedIndex: _payByCard ? 1 : 0,
             enabled: !_submitting,
-            onSelect: (i) => setState(() => _payByCard = i == 1),
+            onSelect: (i) {
+              setState(() => _payByCard = i == 1);
+              // عائدٌ إلى «محفظتي» بأشهرٍ مختارة ⇒ معاينتها من جديد (البطاقة شهرٌ واحد)
+              if (i == 0 && _kitMonths > 1 && _quoteFor != _quoteKey) _fetchQuote();
+            },
           ),
           if (_payByCard) ...[
             const SizedBox(height: Sp.xs),
@@ -1097,6 +1164,70 @@ class _ActivateSheetState extends State<_ActivateSheet> {
               'يُنشأ رابط دفعٍ تفتحه وتدفع منه بالبطاقة؛ يتفعّل المشترك ويُسجَّل الدين عندنا حين يكتمل الدفع.',
               style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.4),
             ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// «مدّة التفعيل» (الشركة المُضافة، `months_options`): شهرٌ أو أكثر — والسعر والكلفة والانتهاء من معاينة الشركة نفسها.
+  Widget _monthsSection() {
+    final q = _liveQuote;
+    final m = _kitMonths;
+    final cur = 'common.currency'.tr();
+    Widget line(String text, {Color? color}) => Padding(
+          padding: const EdgeInsets.only(top: Sp.xs),
+          child: Text(text, style: AppType.muted(color: color ?? AppColors.textMid).copyWith(fontSize: 12.5, height: 1.4)),
+        );
+    final offers = q?['offers'] is List ? (q!['offers'] as List).whereType<Map>().toList() : const <Map>[];
+    final disc = q?['offers_discount'];
+    return SheetSection(
+      label: 'مدّة التفعيل',
+      gap: Sp.sm,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final o in _monthsOpts)
+                ChoiceChip(
+                  label: Text(_monthsLabel(o)),
+                  selected: m == o,
+                  onSelected: _submitting
+                      ? null
+                      : (_) {
+                          setState(() => _months = o);
+                          if (o > 1 && _quoteFor != _quoteKey) _fetchQuote();
+                        },
+                  labelStyle: AppType.label(color: m == o ? AppColors.brand : AppColors.textHi),
+                  selectedColor: AppColors.brandSoftBg,
+                  backgroundColor: AppColors.surface,
+                  side: BorderSide(color: m == o ? AppColors.brandSoftBorder : AppColors.border),
+                  showCheckmark: false,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.pill)),
+                ),
+            ],
+          ),
+          if (m > 1) ...[
+            if (_quoting && q == null)
+              line('جارٍ حساب كلفة ${_monthsLabel(m)} من $_kitName…')
+            else if (q == null)
+              line(_quoteErr ?? 'تعذّرت معاينة ${_monthsLabel(m)} — اختر مدّةً أخرى', color: AppColors.error)
+            else if ((q['blocked']?.toString().trim().isNotEmpty ?? false))
+              line(q['blocked'].toString(), color: AppColors.warningOnSoft)
+            else if (q['sale_price_missing'] == true)
+              line('لا سعر بيعٍ للمشترك لهذه الباقة — حدّده من «الباقات» أوّلاً', color: AppColors.warningOnSoft)
+            else ...[
+              line('سعر المشترك لـ${_monthsLabel(m)}: ${formatIQD(((q['price'] as num?) ?? 0).round())} $cur'),
+              if (q['cost'] is num) line('الكلفة من رصيدك عند $_kitName: ${formatIQD((q['cost'] as num).round())} $cur'),
+              if (disc is num && disc > 0) line('خصم عروض الشركة: ${formatIQD(disc.round())} $cur', color: AppColors.success),
+              for (final o in offers.take(2))
+                if ((o['description']?.toString().trim().isNotEmpty ?? false)) line('• ${o['description']}', color: AppColors.success),
+              if (q['new_expiration'] != null && q['new_expiration'].toString().isNotEmpty)
+                line('ينتهي في: ${q['new_expiration']}'),
+            ],
           ],
         ],
       ),
@@ -1402,6 +1533,12 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   /// والدين بدفترنا بسعر المشترك (يحسبه الخادم). «تفعيلٌ مكرّر» عندهم يُعاد بتأكيدٍ صريح وحده، والمجهول يقفل الزرّ (لا إعادة).
   Future<void> _submitFiberx(String idx, String paymentType) async {
     final change = !_elIsCurrentPkg;
+    if (_monthsBlocked) {
+      showSheetSnack(context, 'انتظر معاينة الأشهر من $_kitName — أو اختر شهراً واحداً', isError: true);
+      return;
+    }
+    final months = _isKit ? _kitMonths : 1;
+    final num? expectedCost = months > 1 ? (_liveQuote?['cost'] as num?) : null;
     setState(() => _submitting = true);
     final manualMode = ManualWaPrefs.enabled.value;
     final result = await MergedOps.run(widget.sub, () => SubscribersApi.activate(
@@ -1415,6 +1552,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       changeType: change ? (_isFiberx && _fxTiming == _FxTiming.expiry ? 'expiry' : 'now') : null,
       confirmRepeat: _confirmRepeat,
       confirmCooloff: _confirmCooloff,
+      months: months > 1 ? months : null,
+      expectedCost: expectedCost,
     ));
     if (!mounted) return;
     setState(() {
@@ -1464,6 +1603,12 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       unawaited(okShown.then((_) => showSheetSnackOn(rootOverlay, warn,
           isError: true, duration: const Duration(seconds: 8))));
     }
+    // طُلبت أشهرٌ وقال الخادم غيرها (أو لم يقلها: خادمٌ أقدم) ⇒ يُقال لا يُخفى (كالموقع)
+    final doneMonths = SubscribersApi.takeActivatedMonths(idx);
+    if (months > 1 && (doneMonths ?? 1) != months && rootOverlay != null) {
+      unawaited(okShown.then((_) => showSheetSnackOn(rootOverlay, 'تفعّل المشترك لـ${_monthsLabel(doneMonths ?? 1)} لا لـ${_monthsLabel(months)} — راجع المشترك',
+          isError: true, duration: const Duration(seconds: 12))));
+    }
     if (_printReceiptChecked) {
       final printed = await ReceiptService.printActivation(
         sub: widget.sub,
@@ -1510,7 +1655,10 @@ class _ActivateSheetState extends State<_ActivateSheet> {
             selectedId: _selectedPackageId,
             currentId: _data?['profile_id']?.toString(),
             enabled: !_submitting && !locked,
-            onSelected: (id) => setState(() => _selectedPackageId = id),
+            onSelected: (id) {
+              setState(() => _selectedPackageId = id);
+              if (_kitMonths > 1) _fetchQuote(); // عدّة أشهر بباقةٍ أخرى ⇒ معاينتها
+            },
           ),
           if (locked) ...[
             const SizedBox(height: Sp.xs),

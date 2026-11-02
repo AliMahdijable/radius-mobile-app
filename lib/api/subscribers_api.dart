@@ -674,6 +674,9 @@ class SubscribersApi {
     // ── فايبر اكس (٢٩ أكتوبر) ──
     String? changeType, // باقةٌ غير الحاليّة: 'now' | 'expiry' (الخادم يرفض بلاها CHANGE_TYPE_REQUIRED)
     bool confirmCooloff = false, // تجاوز «تفعيلٌ مكرّر» عند فايبر اكس (FIBERX_COOLOFF) — بتأكيدٍ صريح وحده
+    // ── الشركة المُضافة: عدّة أشهر (المشروع الوطنيّ، ١ نوفمبر — مفتاح <name>_months) ──
+    int? months, // > 1 وحده يُرسل؛ الخادم يعاين طازجاً ويرفض ما لا تقبله الشركة
+    num? expectedCost, // الكلفة التي رآها الوكيل في المعاينة — حارسٌ لا مبلغ (تغيّرت ⇒ 409 PRICE_CHANGED بلا تفعيل)
   }) async =>
       (await activateDetailed(
         idx: idx,
@@ -690,8 +693,36 @@ class SubscribersApi {
         confirmRepeat: confirmRepeat,
         changeType: changeType,
         confirmCooloff: confirmCooloff,
+        months: months,
+        expectedCost: expectedCost,
       ))
           .result;
+
+  /// الأشهر التي تفعّل بها آخر تفعيلٍ ناجح لهذا المشترك (ردّ الخادم `months`) — يُقرأ مرّةً. null = لم يقلها الخادم.
+  static int? takeActivatedMonths(String idx) => _activatedMonths.remove(idx);
+  static final Map<String, int> _activatedMonths = {};
+
+  /// معاينة المزوّد لعدّة أشهر (GET /api/v2/subscribers/:idx/activation-quote — للعرض؛ التفعيل يعاين طازجاً على الخادم):
+  /// {months, cost, single_month_cost, offers[], offers_discount, monthly_price, price, sale_price_missing, blocked, new_expiration}.
+  static Future<({Map<String, dynamic>? data, String? message})> activationQuote(String idx, {required int months, String? profileId}) async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/v2/subscribers/$idx/activation-quote',
+        queryParameters: {'months': months, if (profileId != null && profileId.isNotEmpty) 'profile_id': profileId},
+        options: Options(receiveTimeout: const Duration(seconds: 60)),
+      );
+      final b = r.data ?? const {};
+      if (b['success'] != true || b['data'] is! Map) return (data: null, message: b['message']?.toString());
+      return (data: Map<String, dynamic>.from(b['data'] as Map), message: null);
+    } on DioException catch (e) {
+      _log('activation-quote/$idx', e);
+      final b = e.response?.data;
+      return (data: null, message: b is Map ? b['message']?.toString() : null);
+    } catch (e) {
+      _log('activation-quote/$idx', e);
+      return (data: null, message: null);
+    }
+  }
 
   /// [activate] نفسه ومعه ما يحتاجه التجديد الجماعيّ ليحكم «أُكمل أم أقف»:
   /// حالة HTTP، ورمز الساس الخام (`rsp_insufficient_balance`…)، وهل عاد ردٌّ
@@ -718,6 +749,8 @@ class SubscribersApi {
     bool bulk = false,
     String? changeType,
     bool confirmCooloff = false,
+    int? months,
+    num? expectedCost,
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -745,6 +778,8 @@ class SubscribersApi {
           if (bulk) 'bulk': true,
           if (changeType != null && changeType.isNotEmpty) 'change_type': changeType,
           if (confirmCooloff) 'confirmCooloff': true,
+          if (months != null && months > 1) 'months': months,
+          if (months != null && months > 1 && expectedCost != null) 'expected_cost': expectedCost,
         },
         // الخادم قد ينتظر قفل كارتات الوكيل ثمّ الساس (حتى ٩٠ث للتفعيل نفسه):
         // مهلة الثلاثين كانت تقطع طلباً يكمله الخادم بعدها، فيقول التطبيق
@@ -755,6 +790,11 @@ class SubscribersApi {
       if (method == 'deposit') ElDepositPassword.observe(r.data);
       final body = r.data ?? const <String, dynamic>{};
       if (body['success'] == true) ReceiptFacts.capture(idx, body);
+      if (body['success'] == true && body['months'] is num) {
+        _activatedMonths[idx] = (body['months'] as num).toInt();
+      } else {
+        _activatedMonths.remove(idx);
+      }
       return (
         result: activateResultFromBody(body),
         status: r.statusCode,

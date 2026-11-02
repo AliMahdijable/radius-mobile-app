@@ -467,6 +467,100 @@ void main() {
     expect((declined.status, declined.paymentUrl), ('link', null));
   });
 
+  // ── التفعيل لعدّة أشهر (٢ نوفمبر — الخادم: months_options + GET activation-quote + months/expected_cost بالتفعيل) ──
+
+  Map<String, dynamic> monthsData({List<int> months = const [1, 2, 3, 6], bool card = false}) {
+    final d = activationData(card: card);
+    (d['data'] as Map)['months_options'] = months;
+    return d;
+  }
+
+  Map<String, dynamic> quote({String? blocked, bool missing = false, num price = 80000, num cost = 59000}) => {
+        'success': true,
+        'data': {
+          'months': 2, 'cost': cost, 'single_month_cost': 35000,
+          'offers': [
+            {'description': 'عرض الوطني الجديد', 'discount': 11000, 'percentage': null, 'valid_to': '2027-11-18'},
+          ],
+          'offers_discount': 11000, 'monthly_price': 40000, 'price': price, 'sale_price_missing': missing, 'blocked': blocked,
+          'manager_balance': 478063, 'new_expiration': '2027-01-02',
+        },
+      };
+
+  testWidgets('عدّة أشهر: «مدّة التفعيل» ⇒ معاينة الشركة (السعر والكلفة والعرض والانتهاء) ⇒ التفعيل يرسل months وexpected_cost', (t) async {
+    server.reply('GET', '/api/v2/subscribers/$_idx/activation-data', 200, monthsData());
+    server.reply('GET', '/api/v2/subscribers/$_idx/activation-quote', 200, quote());
+    server.reply('POST', '/api/v2/subscribers/$_idx/activate', 200, {
+      'success': true, 'months': 2, 'amount': 80000, 'data': {'new_balance': -80000},
+    });
+    await open(t);
+    expect(find.text('مدّة التفعيل'), findsOneWidget);
+    for (final l in ['شهر', 'شهران', '3 أشهر', '6 أشهر']) {
+      expect(find.text(l), findsOneWidget, reason: l);
+    }
+    expect(server.calls('GET', '/api/v2/subscribers/$_idx/activation-quote'), isEmpty, reason: 'شهرٌ واحد بلا معاينة');
+    await t.tap(find.text('شهران'));
+    await t.pump();
+    await t.pumpAndSettle();
+    final q = server.calls('GET', '/api/v2/subscribers/$_idx/activation-quote').single;
+    expect(q.queryParameters, {'months': 2, 'profile_id': '11'});
+    expect(find.textContaining('سعر المشترك لـشهران'), findsOneWidget);
+    expect(find.textContaining('59,000'), findsWidgets);
+    expect(find.textContaining('عرض الوطني الجديد'), findsOneWidget);
+    expect(find.textContaining('2027-01-02'), findsOneWidget);
+    await t.tap(find.text('تجديد الآن'));
+    await t.pump();
+    await t.pumpAndSettle();
+    final body = server.bodies('POST', '/api/v2/subscribers/$_idx/activate').single;
+    expect((body['months'], body['expected_cost']), (2, 59000));
+    await simDrain(t);
+  });
+
+  testWidgets('عدّة أشهر: معاينةٌ محجوبة أو بلا سعر بيع ⇒ لا تفعيل؛ وشهرٌ واحد يرسل الطلب كما كان بلا months', (t) async {
+    server.reply('GET', '/api/v2/subscribers/$_idx/activation-data', 200, monthsData());
+    server.reply('GET', '/api/v2/subscribers/$_idx/activation-quote', 200, quote(blocked: 'رصيدك في البوّابة لا يكفي لشهرين'));
+    server.reply('POST', '/api/v2/subscribers/$_idx/activate', 200, {'success': true, 'data': {'new_balance': -40000}});
+    await open(t);
+    await t.tap(find.text('شهران'));
+    await t.pump();
+    await t.pumpAndSettle();
+    expect(find.text('رصيدك في البوّابة لا يكفي لشهرين'), findsOneWidget);
+    await t.tap(find.text('تجديد الآن'));
+    await t.pump();
+    await t.pumpAndSettle();
+    expect(server.calls('POST', '/api/v2/subscribers/$_idx/activate'), isEmpty, reason: 'محجوبة ⇒ لا تفعيل');
+    expect(find.textContaining('انتظر معاينة الأشهر'), findsOneWidget);
+    await t.pump(const Duration(seconds: 5)); // الإشعار يغطّي الزرّ حتى يختفي
+    await t.pumpAndSettle();
+    await t.tap(find.text('شهر'));
+    await t.pump();
+    await t.pumpAndSettle();
+    await t.tap(find.text('تجديد الآن'));
+    await t.pump();
+    await t.pumpAndSettle();
+    final body = server.bodies('POST', '/api/v2/subscribers/$_idx/activate').single;
+    expect(body.containsKey('months'), isFalse);
+    expect(body.containsKey('expected_cost'), isFalse);
+    await simDrain(t);
+  });
+
+  testWidgets('عدّة أشهر: البطاقة شهرٌ واحد — «مدّة التفعيل» تختفي معها؛ وخيارٌ واحد لا يُظهرها', (t) async {
+    server.reply('GET', '/api/v2/subscribers/$_idx/activation-data', 200, monthsData(card: true));
+    await open(t);
+    expect(find.text('مدّة التفعيل'), findsOneWidget);
+    await t.tap(find.text('بطاقة'));
+    await t.pumpAndSettle();
+    expect(find.text('مدّة التفعيل'), findsNothing);
+    await simDrain(t);
+  });
+
+  testWidgets('عدّة أشهر: خيارٌ واحد من الخادم ⇒ لا «مدّة التفعيل»', (t) async {
+    server.reply('GET', '/api/v2/subscribers/$_idx/activation-data', 200, monthsData(months: const [1]));
+    await open(t);
+    expect(find.text('مدّة التفعيل'), findsNothing);
+    await simDrain(t);
+  });
+
   testWidgets('خطأٌ غير مقصود (500) ⇒ الرسالة العامّة كما كانت', (t) async {
     server.reply('GET', '/api/v2/subscribers/$_idx/activation-data', 500, {'success': false, 'message': 'Internal'});
     await open(t);
