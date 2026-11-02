@@ -428,9 +428,12 @@ class _NationalInstallSheetState extends State<NationalInstallSheet> {
       else if (_fatsLoading)
         Text('جارٍ جلب الفاتات…', style: AppType.muted())
       else if (_fatsErr != null)
-        Row(children: [
-          Expanded(child: Text(_fatsErr!, style: AppType.micro(color: AppColors.error))),
-          TextButton(onPressed: () => _loadFats(_fdtId), child: const Text('إعادة')),
+        Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text(_fatsErr!, style: AppType.micro(color: AppColors.error)),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton(onPressed: () => _loadFats(_fdtId), child: const Text('إعادة')),
+          ),
         ])
       else
         NationalPickField(

@@ -266,7 +266,7 @@ class _NationalMapScreenState extends State<NationalMapScreen> {
   Widget _bar(MapCounts c) {
     if (c.total == 0) return const SizedBox(height: 6);
     return ClipRRect(
-      borderRadius: BorderRadius.circular(3),
+      borderRadius: BorderRadius.circular(R.sm),
       child: SizedBox(
         height: 6,
         child: Row(children: [
@@ -579,7 +579,7 @@ class _Pin extends StatelessWidget {
             color: zone ? AppColors.brand : AppColors.surface,
             borderRadius: BorderRadius.circular(R.pill),
             border: Border.all(color: AppColors.brand, width: 1.2),
-            boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 3)],
+            boxShadow: Sh.menu,
           ),
           child: Text(label,
               textDirection: TextDirection.ltr,
