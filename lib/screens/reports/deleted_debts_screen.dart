@@ -89,20 +89,62 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
 
   Future<void> _twinSame(PendingTwin t) async {
     var keep = t.partialKeep;
-    if (keep == null && t.differ) {
-      final pick = await showConfirmSheet(
+    if (keep == null && !t.differ) {
+      // مبلغٌ واحد: تأكيدٌ صريح قبل الحسم (مراجعة r8 — نقرةٌ واحدة كانت تحسم)؛ الإغلاق لا يحفظ شيئاً
+      final go = await showConfirmSheet(
         context,
-        title: 'أيّ المبلغين صحيح؟',
-        message: 'المسجَّل يدويّاً ${_money(t.manualOrig ?? t.manualDebt)} و${t.autoKey.startsWith('d') ? 'بسجلّ ديونك' : 'دين الدفتر'} ${_money(t.autoDebt ?? 0)} — '
-            'يُحصَّل الصحيح مرّةً واحدة ويُشطب الآخر (ليس نقداً).',
-        confirmLabel: '${t.autoKey.startsWith('d') ? 'مبلغ سجلّ ديونك' : 'مبلغ الدفتر'} ${_money(t.autoDebt ?? 0)}',
-        cancelLabel: 'المسجَّل يدويّاً ${_money(t.manualOrig ?? t.manualDebt)}',
+        title: 'نفس الدين؟',
+        message: '«${t.name}»: ${_money(t.manualOrig ?? t.manualDebt)} مسجَّلٌ يدويّاً و${t.autoKey.startsWith('d') ? 'بسجلّ ديونك' : 'بالدفتر'} — '
+            'يُحصَّل مرّةً واحدة ويُشطب المكرّر (ليس نقداً).',
+        confirmLabel: 'نعم، نفس الدين',
+        cancelLabel: 'تراجع',
         icon: LucideIcons.scale,
       );
-      if (!mounted || pick == null) return;
-      keep = pick ? 'ledger' : 'manual';
+      if (go != true || !mounted) return;
+    }
+    if (keep == null && t.differ) {
+      // خياران صريحان؛ الإغلاق (X أو السحب) لا يقرّر شيئاً — مراجعة r8: كان الإغلاق يعني «المسجَّل يدويّاً» فيُحسم «نفس الدين» بلا قصد.
+      keep = await _pickTwinAmount(t);
+      if (!mounted || keep == null) return;
     }
     await _decideTwin(t, same: true, keep: keep ?? 'manual');
+  }
+
+  String _ledgerWord(PendingTwin t) => t.autoKey.startsWith('d') ? 'سجلّ ديونك' : 'الدفتر';
+
+  /// «أيّ المبلغين صحيح؟» ⇒ 'ledger' أو 'manual'، أو null إن أُغلقت بلا اختيار. [only] = الخيار الصحيح وحده (ردّ الخادم).
+  Future<String?> _pickTwinAmount(PendingTwin t, {String? only}) {
+    final manual = 'المسجَّل يدويّاً ${_money(t.manualOrig ?? t.manualDebt)}';
+    final ledger = 'مبلغ ${_ledgerWord(t)} ${_money(t.autoDebt ?? 0)}';
+    return showAppSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: AppColors.scrim,
+      builder: (ctx) => DesignSheet(
+        header: SheetHeaderBar(
+          icon: LucideIcons.scale,
+          title: 'أيّ المبلغين صحيح؟',
+          subtitle: '«${t.name}» — نفس الدين',
+          onClose: () => Navigator.of(ctx).pop(),
+        ),
+        body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text(
+            only == null
+                ? 'المسجَّل يدويّاً ${_money(t.manualOrig ?? t.manualDebt)} و${t.autoKey.startsWith('d') ? 'بسجلّ ديونك' : 'دين الدفتر'} ${_money(t.autoDebt ?? 0)} — '
+                    'يُحصَّل الصحيح مرّةً واحدة ويُشطب الآخر (ليس نقداً). الإغلاق لا يحفظ شيئاً.'
+                : only == 'ledger'
+                    ? 'تحرّك دين ${_ledgerWord(t)} بعد الربط (تسديدٌ أو تفعيل) — يُحصَّل من ${_ledgerWord(t)} ويُشطب الصفّ اليدويّ. الإغلاق لا يحفظ شيئاً.'
+                    : 'لا دين على ${_ledgerWord(t)} الآن — يبقى التحصيل من صفّك اليدويّ. الإغلاق لا يحفظ شيئاً.',
+            style: AppType.rowValue(color: AppColors.textBody).copyWith(height: 1.6),
+          ),
+          const SizedBox(height: Sp.lg),
+          if (only != 'manual') _TwinAmountOption(label: ledger, icon: LucideIcons.bookOpen, onTap: () => Navigator.of(ctx).pop('ledger')),
+          if (only == null) const SizedBox(height: Sp.sm),
+          if (only != 'ledger') _TwinAmountOption(label: manual, icon: LucideIcons.pencil, onTap: () => Navigator.of(ctx).pop('manual')),
+        ]),
+      ),
+    );
   }
 
   Future<void> _twinDistinct(PendingTwin t) async {
@@ -156,6 +198,14 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
       'TWIN_MOVED', 'TWIN_KEEP_LEDGER', 'TWIN_KEEP_MANUAL',
     };
     if (refresh.contains(r.code)) await _load();
+    // «نفس الدين» والمبلغ الصحيح غير ما أُرسل (الخادم ٢ نوفمبر): يُعرض الخيار الوحيد الصحيح صريحاً بدل طريقٍ مسدود — مرّةً واحدة
+    if (same && (r.code == 'TWIN_KEEP_LEDGER' || r.code == 'TWIN_KEEP_MANUAL') && mounted) {
+      final need = r.code == 'TWIN_KEEP_LEDGER' ? 'ledger' : 'manual';
+      if (keep == need) return;
+      final fresh = _page?.pendingTwins.where((x) => x.manualKey == t.manualKey).firstOrNull ?? t;
+      final pick = await _pickTwinAmount(fresh, only: need);
+      if (pick == need && mounted) await _decideTwin(fresh, same: true, keep: need);
+    }
   }
 
   List<DeletedDebt> get _shown {
@@ -286,6 +336,7 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
         const SizedBox(height: Sp.md),
         _TwinsCard(
           twins: page.pendingTwins,
+          decide: page.twinsApi >= 2,
           busyKey: _twinBusy,
           onSame: _twinSame,
           onDistinct: _twinDistinct,
@@ -355,8 +406,11 @@ String _originLabel(String origin) => switch (origin) {
 
 /// «ديونٌ مكرّرة تنتظر قرارك» — صفٌّ لكلّ دين: اسمه والمبلغان وحال المشترك، و«نفس الدين» / «دينان مختلفان» (أو «أكمل القرار»).
 class _TwinsCard extends StatelessWidget {
-  const _TwinsCard({required this.twins, required this.busyKey, required this.onSame, required this.onDistinct});
+  const _TwinsCard({required this.twins, required this.busyKey, required this.onSame, required this.onDistinct, this.decide = true});
   final List<PendingTwin> twins;
+
+  /// أزرار القرار (خادمٌ بـtwins_api ≥ 2)؛ وإلّا تُعرض الديون للقراءة و«القرار من الموقع».
+  final bool decide;
   final String? busyKey;
   final ValueChanged<PendingTwin> onSame;
   final ValueChanged<PendingTwin> onDistinct;
@@ -409,25 +463,28 @@ class _TwinsCard extends StatelessWidget {
                   style: AppType.micro(color: AppColors.warningOnSoft)),
             ],
             const SizedBox(height: Sp.sm),
-            Row(children: [
-              Expanded(
-                child: FilledButton(
-                  onPressed: busyKey != null ? null : () => onSame(t),
-                  child: busyKey == t.manualKey
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : Text(t.partialKeep != null ? 'أكمل القرار' : 'نفس الدين'),
-                ),
-              ),
-              if (t.partialKeep == null) ...[
-                const SizedBox(width: Sp.sm),
+            if (!decide)
+              Text('القرار من الموقع حاليّاً (الديون المحذوفة) — يصل هنا بتحديث الخادم', style: AppType.micro(color: AppColors.warningOnSoft))
+            else
+              Row(children: [
                 Expanded(
-                  child: OutlinedButton(
-                    onPressed: busyKey != null ? null : () => onDistinct(t),
-                    child: const Text('دينان مختلفان'),
+                  child: FilledButton(
+                    onPressed: busyKey != null ? null : () => onSame(t),
+                    child: busyKey == t.manualKey
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : Text(t.partialKeep != null ? 'أكمل القرار' : 'نفس الدين'),
                   ),
                 ),
-              ],
-            ]),
+                if (t.partialKeep == null) ...[
+                  const SizedBox(width: Sp.sm),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: busyKey != null ? null : () => onDistinct(t),
+                      child: const Text('دينان مختلفان'),
+                    ),
+                  ),
+                ],
+              ]),
           ],
         ],
       ),
@@ -1285,4 +1342,38 @@ class DeletedDebtsHubSummary {
       ? 'reports.deleted_debts_count'
           .tr(namedArgs: {'count': formatIQD(p.count), 'total': _money(p.total)})
       : 'reports.deleted_debts_hint'.tr();
+}
+
+/// خيار مبلغٍ صريح في «أيّ المبلغين صحيح؟» — بعرض النافذة، بحدٍّ خافت.
+class _TwinAmountOption extends StatelessWidget {
+  const _TwinAmountOption({required this.label, required this.icon, required this.onTap});
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(R.lg),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(R.lg),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.md),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(R.lg), border: Border.all(color: AppColors.border)),
+          child: Row(children: [
+            Icon(icon, size: 18, color: AppColors.brand),
+            const SizedBox(width: Sp.sm),
+            Expanded(
+              child: Text(label,
+                  maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.body(color: AppColors.textHi).copyWith(fontWeight: FontWeight.w600)),
+            ),
+            Icon(LucideIcons.chevronLeft, size: 18, color: AppColors.textMid),
+          ]),
+        ),
+      ),
+    );
+  }
 }

@@ -135,6 +135,7 @@ class DeletedDebtsPage {
     required this.total,
     this.truncated = false,
     this.pendingTwins = const [],
+    this.twinsApi = 0,
   });
   final bool enabled;
   final List<DeletedDebt> rows;
@@ -144,6 +145,10 @@ class DeletedDebtsPage {
 
   /// ديونٌ مكرّرة تنتظر قرار المدير (لصاحب الحساب — الموظّف لا تصله).
   final List<PendingTwin> pendingTwins;
+
+  /// إصدار قرار التوائم عند الخادم (`twins_api`): أزرار القرار في التطبيق من 2 فما فوق وحده (المصحَّح بعد مراجعة r8)؛ ما قبله
+  /// يُعرض للقراءة و«قرّر من الموقع» — فلا يقرّر التطبيق بقواعد خادمٍ أقدم.
+  final int twinsApi;
 }
 
 class DeletedDebtsApi {
@@ -175,6 +180,7 @@ class DeletedDebtsApi {
         page: DeletedDebtsPage(
           enabled: body['enabled'] == true,
           pendingTwins: twins,
+          twinsApi: int.tryParse(body['twins_api']?.toString() ?? '') ?? 0,
           rows: rows,
           count: int.tryParse(totals['count']?.toString() ?? '') ?? rows.length,
           total: double.tryParse(totals['debt']?.toString() ?? '') ??

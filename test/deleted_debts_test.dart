@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rad_mysvcs/core/widgets/design_sheet.dart' show SheetCloseButton;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/deleted_debts_api.dart';
@@ -70,6 +71,9 @@ class _DdServer implements HttpClientAdapter {
   List<Map<String, dynamic>> twins = [];
   (int, Map<String, dynamic>)? nextTwin;
 
+  /// إصدار قرار التوائم عند الخادم (twins_api): 2 = المصحَّح بعد مراجعة r8 (أزرار القرار في التطبيق)، null = خادمٌ أقدم.
+  int? twinsApi = 2;
+
   /// الردّ القادم لتسديد: (status, body) — null ⇒ نجاح.
   (int, Map<String, dynamic>)? nextPay;
   final posts = <(String, Map<String, dynamic>)>[];
@@ -97,6 +101,7 @@ class _DdServer implements HttpClientAdapter {
         'data': rows,
         'totals': {'count': rows.length, 'debt': total},
         if (twins.isNotEmpty) 'pending_twins': twins,
+        if (twinsApi != null) 'twins_api': twinsApi,
       });
     }
     if (o.path.startsWith('/api/v2/deleted-debts') && !get) {
@@ -369,11 +374,19 @@ void main() {
       expect(DeletedDebt.fromJson({'key': 'd5', 'origin': 'auto', 'name': 'مخزن', 'debt': 3000})?.key, 'd5');
     });
 
-    testWidgets('مبلغٌ واحد: «نفس الدين» يرسل keep manual ودين الدفتر المعروض، والبطاقة تختفي', (t) async {
+    testWidgets('مبلغٌ واحد: «نفس الدين» بتأكيد يرسل keep manual ودين الدفتر المعروض، والبطاقة تختفي؛ «تراجع» لا يرسل شيئاً', (t) async {
       final server = await open(t, [twin()]);
       expect(find.textContaining('ديونٌ مكرّرة تنتظر قرارك (1)'), findsOneWidget);
       await t.ensureVisible(find.text('نفس الدين'));
       await t.tap(find.text('نفس الدين'));
+      await settle(t, seconds: 1);
+      expect(find.text('نفس الدين؟'), findsOneWidget);
+      await t.tap(find.text('تراجع'));
+      await settle(t, seconds: 1);
+      expect(server.posts, isEmpty, reason: 'نقرةٌ واحدة لا تحسم');
+      await t.tap(find.text('نفس الدين'));
+      await settle(t, seconds: 1);
+      await t.tap(find.text('نعم، نفس الدين'));
       await settle(t, seconds: 1);
       expect(server.posts.single.$1, '/api/v2/deleted-debts/m7/twin');
       expect(server.posts.single.$2, {'same': true, 'keep': 'manual', 'seen_auto_debt': 25000.0});
@@ -391,6 +404,63 @@ void main() {
       await settle(t, seconds: 1);
       expect(server.posts.single.$2, {'same': true, 'keep': 'ledger', 'seen_auto_debt': 35000.0});
       await t.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('مبلغان مختلفان: إغلاق «أيّ المبلغين صحيح؟» بـX لا يرسل شيئاً (مراجعة r8)', (t) async {
+      final server = await open(t, [twin(auto: 35000)]);
+      await t.ensureVisible(find.text('نفس الدين'));
+      await t.tap(find.text('نفس الدين'));
+      await settle(t, seconds: 1);
+      expect(find.text('أيّ المبلغين صحيح؟'), findsOneWidget);
+      expect(find.text('المسجَّل يدويّاً 25,000 د.ع'), findsOneWidget);
+      await t.tap(find.byType(SheetCloseButton).last);
+      await settle(t, seconds: 1);
+      expect(find.text('أيّ المبلغين صحيح؟'), findsNothing, reason: 'أُغلقت');
+      expect(server.posts, isEmpty, reason: 'الإغلاق لا يقرّر «نفس الدين»');
+      expect(find.textContaining('ديونٌ مكرّرة تنتظر قرارك (1)'), findsOneWidget);
+    });
+
+    testWidgets('«المسجَّل يدويّاً» صراحةً يرسل keep manual', (t) async {
+      final server = await open(t, [twin(auto: 35000)]);
+      await t.ensureVisible(find.text('نفس الدين'));
+      await t.tap(find.text('نفس الدين'));
+      await settle(t, seconds: 1);
+      await t.tap(find.text('المسجَّل يدويّاً 25,000 د.ع'));
+      await settle(t, seconds: 1);
+      expect(server.posts.single.$2, {'same': true, 'keep': 'manual', 'seen_auto_debt': 35000.0});
+      await t.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('TWIN_KEEP_LEDGER بعد «نفس الدين» بمبلغٍ واحد ⇒ يُعرض «مبلغ الدفتر» وحده ⇒ keep ledger (لا طريقٌ مسدود)', (t) async {
+      final server = await open(t, [twin()]);
+      server.nextTwin = (409, {'success': false, 'code': 'TWIN_KEEP_LEDGER', 'message': 'تحرّك دين الدفتر بعد الربط — يُحصَّل منه'});
+      await t.ensureVisible(find.text('نفس الدين'));
+      await t.tap(find.text('نفس الدين'));
+      await settle(t, seconds: 1);
+      await t.tap(find.text('نعم، نفس الدين'));
+      await settle(t, seconds: 2);
+      expect(server.posts.single.$2['keep'], 'manual');
+      expect(find.text('أيّ المبلغين صحيح؟'), findsOneWidget);
+      expect(find.text('المسجَّل يدويّاً 25,000 د.ع'), findsNothing, reason: 'الخيار الصحيح وحده');
+      await t.tap(find.text('مبلغ الدفتر 25,000 د.ع'));
+      await settle(t, seconds: 1);
+      expect(server.posts, hasLength(2));
+      expect(server.posts.last.$2['keep'], 'ledger');
+      await t.pump(const Duration(seconds: 11));
+    });
+
+    testWidgets('خادمٌ أقدم (بلا twins_api) ⇒ الديون للقراءة و«القرار من الموقع» بلا أزرار', (t) async {
+      final server = _DdServer(await visualSetUp(s1bSasOwner))
+        ..twins = [twin(auto: 35000)]
+        ..twinsApi = null;
+      ApiClient.dio.httpClientAdapter = server;
+      await pumpVisual(t, phone, home: (_) => const DeletedDebtsScreen());
+      await settle(t, seconds: 2);
+      expect(find.textContaining('ديونٌ مكرّرة تنتظر قرارك (1)'), findsOneWidget);
+      expect(find.textContaining('القرار من الموقع حاليّاً'), findsOneWidget);
+      expect(find.text('نفس الدين'), findsNothing);
+      expect(find.text('دينان مختلفان'), findsNothing);
+      expect(server.posts, isEmpty);
     });
 
     testWidgets('«دينان مختلفان» بتأكيد ⇒ {same:false}؛ و«أكمل القرار» لما حُفظ جزؤه بلا seen', (t) async {
@@ -417,6 +487,8 @@ void main() {
       server.nextTwin = (409, {'success': false, 'code': 'TWIN_AUTO_CHANGED', 'message': 'تغيّر دين الدفتر بعد عرضه — حدّث القسم وانظر المبلغين ثمّ قرّر (لم يتغيّر شيء)'});
       await t.ensureVisible(find.text('نفس الدين'));
       await t.tap(find.text('نفس الدين'));
+      await settle(t, seconds: 1);
+      await t.tap(find.text('نعم، نفس الدين'));
       await settle(t, seconds: 1);
       expect(find.textContaining('تغيّر دين الدفتر بعد عرضه'), findsOneWidget);
       expect(server.gets, getsBefore + 1);
