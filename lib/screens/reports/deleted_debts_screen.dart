@@ -93,9 +93,9 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
       final pick = await showConfirmSheet(
         context,
         title: 'أيّ المبلغين صحيح؟',
-        message: 'المسجَّل يدويّاً ${_money(t.manualOrig ?? t.manualDebt)} ودين الدفتر ${_money(t.autoDebt ?? 0)} — '
+        message: 'المسجَّل يدويّاً ${_money(t.manualOrig ?? t.manualDebt)} و${t.autoKey.startsWith('d') ? 'بسجلّ ديونك' : 'دين الدفتر'} ${_money(t.autoDebt ?? 0)} — '
             'يُحصَّل الصحيح مرّةً واحدة ويُشطب الآخر (ليس نقداً).',
-        confirmLabel: 'مبلغ الدفتر ${_money(t.autoDebt ?? 0)}',
+        confirmLabel: '${t.autoKey.startsWith('d') ? 'مبلغ سجلّ ديونك' : 'مبلغ الدفتر'} ${_money(t.autoDebt ?? 0)}',
         cancelLabel: 'المسجَّل يدويّاً ${_money(t.manualOrig ?? t.manualDebt)}',
         icon: LucideIcons.scale,
       );
@@ -150,7 +150,11 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
     }
     showSheetSnack(context, r.message ?? 'تعذّر حفظ القرار — أعد المحاولة', isError: true, duration: const Duration(seconds: 10), autoExplain: false);
     // البطاقة قديمة (حُفظ جزءٌ، أو حُسم، أو تغيّر دين الدفتر، أو تعذّر التأكّد) ⇒ تُقرأ من جديد
-    const refresh = {'TWIN_PARTIAL', 'TWIN_RESUME_SAME', 'TWIN_DECIDED', 'TWIN_AUTO_CHANGED', 'TWIN_UNVERIFIED', 'TWIN_KEEP_REQUIRED'};
+    const refresh = {
+      'TWIN_PARTIAL', 'TWIN_RESUME_SAME', 'TWIN_DECIDED', 'TWIN_AUTO_CHANGED', 'TWIN_UNVERIFIED', 'TWIN_KEEP_REQUIRED',
+      // تحرّك الدين بعد الربط، أو المبلغ الصحيح غير ما اختير (الخادم ٢ نوفمبر)
+      'TWIN_MOVED', 'TWIN_KEEP_LEDGER', 'TWIN_KEEP_MANUAL',
+    };
     if (refresh.contains(r.code)) await _load();
   }
 
@@ -395,7 +399,7 @@ class _TwinsCard extends StatelessWidget {
             Text(t.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bodyStrong(color: AppColors.textHi)),
             const SizedBox(height: 2),
             Text(
-              'المسجَّل يدويّاً ${_money(t.manualOrig ?? t.manualDebt)} · دين الدفتر ${t.autoDebt == null ? '—' : _money(t.autoDebt!)}'
+              'المسجَّل يدويّاً ${_money(t.manualOrig ?? t.manualDebt)} · ${t.autoKey.startsWith('d') ? 'بسجلّ ديونك' : 'دين الدفتر'} ${t.autoDebt == null ? '—' : _money(t.autoDebt!)}'
               '${t.autoStatus != null && _status[t.autoStatus] != null ? ' · ${_status[t.autoStatus]}' : ''}',
               style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.5),
             ),
@@ -1040,15 +1044,17 @@ class _PaySheetState extends State<_PaySheet> {
     return 'dd.step_250'.tr();
   }
 
-  Future<void> _submit() async {
-    final ok = await _confirm(
-      context,
-      title: 'dd.pay_confirm_title'.tr(),
-      body: 'dd.pay_confirm_body'
-          .tr(namedArgs: {'amount': _money(_amount), 'name': widget.row.name}),
-      color: AppColors.success,
-    );
-    if (!ok || !mounted) return;
+  Future<void> _submit({bool confirmRepeat = false}) async {
+    if (!confirmRepeat) {
+      final ok = await _confirm(
+        context,
+        title: 'dd.pay_confirm_title'.tr(),
+        body: 'dd.pay_confirm_body'
+            .tr(namedArgs: {'amount': _money(_amount), 'name': widget.row.name}),
+        color: AppColors.success,
+      );
+      if (!ok || !mounted) return;
+    }
     setState(() => _busy = true);
     final c = _comment.text.trim();
     final r = await DeletedDebtsApi.pay(
@@ -1056,10 +1062,23 @@ class _PaySheetState extends State<_PaySheet> {
       amount: _full ? null : _amount,
       payAll: _full,
       comment: c.isEmpty ? null : c,
+      confirmRepeat: confirmRepeat,
     );
     if (!mounted) return;
     setState(() => _busy = false);
     if (!r.ok) {
+      // تسديدٌ بالمبلغ نفسه قبل لحظات ⇒ يُسأل المدير ثمّ يُعاد بالتأكيد وحده
+      if (r.code == 'RECENT_DUPLICATE' && !confirmRepeat) {
+        final again = await _confirm(
+          context,
+          title: 'تسديدٌ مكرّر؟',
+          body: r.message ?? 'سُجّل تسديدٌ بالمبلغ نفسه لهذا الدين قبل لحظات — أكّد إن كان تسديداً آخر',
+          color: AppColors.success,
+          yes: 'سجّله',
+        );
+        if (again && mounted) await _submit(confirmRepeat: true);
+        return;
+      }
       showSheetSnack(context, r.message ?? 'dd.pay_failed'.tr(),
           isError: true);
       return;

@@ -233,16 +233,19 @@ class DeletedDebtsApi {
 
   /// تسديد: [payAll] الكلّ، وإلّا [amount] (مضاعف 250 ≤ الدين) — الخادم يحسب من
   /// الرصيد المحفوظ ويحصيه بالتقرير الماليّ محصَّلاً.
-  static Future<({bool ok, String? message, double paid, double remaining})> pay({
+  static Future<({bool ok, String? message, double paid, double remaining, String? code})> pay({
     required String key,
     int? amount,
     bool payAll = false,
     String? comment,
+    bool confirmRepeat = false,
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>('$_base/$key/pay', data: {
         if (payAll) 'payAll': true else 'amount': amount,
         if (comment != null && comment.isNotEmpty) 'comment': comment,
+        // تسديدٌ بالمبلغ نفسه خلال دقيقتين (الخادم ٢ نوفمبر) ⇒ RECENT_DUPLICATE، ويُعاد بعد تأكيد المدير وحده
+        if (confirmRepeat) 'confirmRepeat': true,
       });
       final body = r.data ?? const {};
       final d = body['data'] is Map ? body['data'] as Map : const {};
@@ -252,10 +255,11 @@ class DeletedDebtsApi {
         message: body['message']?.toString() ?? (ok ? null : 'تعذّر التسديد'),
         paid: double.tryParse(d['amount_paid']?.toString() ?? '') ?? 0,
         remaining: double.tryParse(d['remaining_debt']?.toString() ?? '') ?? 0,
+        code: ok ? null : body['code']?.toString(),
       );
     } catch (e) {
       _log('pay', e);
-      return (ok: false, message: humanError(e, fallback: 'تعذّر التسديد'), paid: 0.0, remaining: 0.0);
+      return (ok: false, message: humanError(e, fallback: 'تعذّر التسديد'), paid: 0.0, remaining: 0.0, code: null);
     }
   }
 

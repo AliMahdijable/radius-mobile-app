@@ -69,6 +69,9 @@ class _DdServer implements HttpClientAdapter {
   /// ديونٌ مكرّرة تنتظر القرار (pending_twins — ٢ نوفمبر)، والردّ القادم لقرار: (status, body) — null ⇒ نجاح «نفس الدين».
   List<Map<String, dynamic>> twins = [];
   (int, Map<String, dynamic>)? nextTwin;
+
+  /// الردّ القادم لتسديد: (status, body) — null ⇒ نجاح.
+  (int, Map<String, dynamic>)? nextPay;
   final posts = <(String, Map<String, dynamic>)>[];
   int gets = 0;
 
@@ -117,6 +120,11 @@ class _DdServer implements HttpClientAdapter {
               ? {'decision': 'merged', 'keep': body['keep'] ?? 'manual', 'written_off_copy': body['keep'] == 'ledger' ? 0 : 35000, 'written_off_manual': body['keep'] == 'ledger' ? 25000 : 0}
               : {'decision': 'distinct'},
         });
+      }
+      if (o.path.endsWith('/pay') && nextPay != null) {
+        final r = nextPay!;
+        nextPay = null;
+        return _json(r.$1, r.$2);
       }
       final m = RegExp(r'^/api/v2/deleted-debts/([amd]\d+)/(pay|write-off)$').firstMatch(o.path);
       final row = rows.firstWhere((r) => r['key'] == m?.group(1), orElse: () => const {});
@@ -286,6 +294,26 @@ void main() {
       expect(server.posts.single.$2, {'payAll': true});
       expect(server.gets, getsBefore + 1);
       expect(find.text('حسين علي'), findsNothing, reason: 'سُدِّد كاملاً فخرج من القائمة');
+      await t.pump(const Duration(seconds: 4));
+    });
+
+    testWidgets('تسديدٌ مكرّر: الخادم يسأل ⇒ «سجّله» ⇒ يُعاد بـconfirmRepeat مرّةً واحدة', (t) async {
+      final server = await open(t, s1bSasOwner);
+      server.nextPay = (409, {'success': false, 'code': 'RECENT_DUPLICATE', 'message': 'سُجّل تسديدٌ بالمبلغ نفسه لهذا الدين قبل لحظات — أكّد إن كان تسديداً آخر'});
+      await t.tap(find.text('تسديد').first);
+      await settle(t, seconds: 1);
+      await t.tap(find.text('الكل'));
+      await t.pump();
+      await t.tap(find.text('تسديد').last);
+      await settle(t, seconds: 1);
+      await t.tap(find.text('تأكيد'));
+      await settle(t, seconds: 1);
+      expect(find.text('تسديدٌ مكرّر؟'), findsOneWidget);
+      await t.tap(find.text('سجّله'));
+      await settle(t, seconds: 1);
+      expect(server.posts.length, 2);
+      expect(server.posts.first.$2, {'payAll': true});
+      expect(server.posts.last.$2, {'payAll': true, 'confirmRepeat': true});
       await t.pump(const Duration(seconds: 4));
     });
 
