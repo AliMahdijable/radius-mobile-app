@@ -7,6 +7,8 @@ import 'package:pdf/widgets.dart' as pw;
 
 import '../api/receipt_settings_api.dart';
 import 'print_output.dart';
+import 'receipt_grid.dart';
+import 'receipt_pdf_grid.dart';
 import 'receipt_pdf_v2.dart';
 
 /// نوع الوصل وعنوانه كما يطبعه الموقع (`client-v2/src/lib/print-receipt.ts`).
@@ -279,6 +281,9 @@ class _Body {
   static String _p(String s) => ReceiptPdf.plain(s);
 
   pw.Widget build() {
+    // «تصميم الوصل» v4 «الشبكة» (٢ نوفمبر — مصمّم السحب والتحريك في الموقع): يُطبع كما صُمّم، قبل v2.
+    final grid = GridLayout.from(d.look.design?['layout']);
+    if (grid != null) return ReceiptGridBody(d, grid, logo: logo, a4: a4, width: width).build();
     // «تصميم الوصل» v2 (`design.layout`، ١ نوفمبر) — بلاه وصل v1 أدناه كما هو.
     if (d.look.layout != null) return ReceiptV2Body(d, logo: logo, a4: a4, width: width).build();
     final look = d.look;

@@ -305,6 +305,9 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
                 ],
               ),
             )
+          else if (!_c.loading && _c.isGrid)
+            Text('مصمَّمٌ بالسحب والتحريك من الموقع — يُطبع كما هو هناك',
+                style: AppType.muted(), maxLines: 1, overflow: TextOverflow.ellipsis)
           else if (merged != null && merged.isNotEmpty)
             Text('لشركة $merged', style: AppType.muted(), maxLines: 1, overflow: TextOverflow.ellipsis),
         ],

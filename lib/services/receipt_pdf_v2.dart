@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
@@ -127,13 +126,11 @@ class ReceiptV2Body {
   static final RegExp _latinRun = RegExp(r'[#+@]?[0-9A-Za-z](?:[0-9A-Za-z@#.,:/_+\- ]*[0-9A-Za-z])?');
 
   /// سطرٌ بلا عربيّ ⇒ LTR كلّه؛ وفيه عربيّ ⇒ RTL (مكتبة PDF لا تشكّل العربيّ في سطرٍ LTR — حروفٌ منفصلة معكوسة).
-  @visibleForTesting
   static pw.TextDirection? directionFor(String text) => _arabic.hasMatch(text) ? null : pw.TextDirection.ltr;
 
   /// السطر المختلط مقاطع: كلّ مقطعٍ لاتينيّ وحده — مكتبة PDF في سطرٍ RTL تفكّ المقطع متعدّد الأجزاء («2026-11-01 10:05»
   /// تخرج «10:05 01-11-2026»، و«0780 000 0000» بأجزاءٍ معكوسة)، ومقطعاً يبقى بترتيبه كما يرسمه الموقع بـ`<bdi>`. ما سوى
   /// ذلك (المبالغ، «31 يوم»، «أصدره: …») يُرسم كما يرسمه النصّ العاديّ حرفاً بحرف.
-  @visibleForTesting
   static List<String> runsOf(String text) {
     final out = <String>[];
     var i = 0;

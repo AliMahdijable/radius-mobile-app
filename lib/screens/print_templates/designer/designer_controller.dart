@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import '../../../api/receipt_settings_api.dart';
+import '../../../services/receipt_grid.dart';
 import '../../../services/receipt_layout.dart';
 
 /// نتيجة «حفظ» كما تعرضها الشاشة.
@@ -84,6 +85,10 @@ class ReceiptDesignController extends ChangeNotifier {
 
   bool get canUndo => _history.isNotEmpty;
   bool get dirty => !_loading && _loadError == null && _signature() != _savedSig;
+
+  /// التصميم المحفوظ «شبكة» v4 (مصمّم السحب والتحريك في الموقع، ٢ نوفمبر): الطباعة بها وحدها — ما يُعدَّل هنا لا يغيّر الوصل
+  /// (والحفظ لا يمحوها: مفاتيح layout التي لا يعرفها هذا المصمّم تبقى، والخادم يقرأ الشبكة أوّلاً).
+  bool get isGrid => GridLayout.from(_design['layout']) != null;
 
   /// إعدادات الوصل كما ستُطبع بعد الحفظ — المعاينة و«اطبع تجربة» تبنيان منها.
   ReceiptSettings get draft => ReceiptSettings.fromJson(
