@@ -481,7 +481,8 @@
     "PAYMENT_TYPE_LABELS": {
       "cash": "نقدي",
       "partial-cash": "نقدي جزئي",
-      "non-cash": "غير نقدي"
+      "non-cash": "غير نقدي",
+      "wallet": "من محفظة المشترك"
     },
     "SALE_LABELS": {
       "total": "المجموع",

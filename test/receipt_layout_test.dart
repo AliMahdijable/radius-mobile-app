@@ -22,7 +22,7 @@ const _fixturePath = 'test/fixtures/receipt_layout.fixtures.json';
 const _frozenPath = 'test/fixtures/receipt_layout.fixtures.v1.json';
 
 /// البصمة المثبّتة — هي `RECEIPT_FIXTURES_SHA256` في الموقع. ملفٌّ تغيّر في جهةٍ واحدة يُسقط هذا الاختبار.
-const _pinnedSha = '8e0aa26e3ab0a3773be82acdbd68ca2a4221ed81fad72bd5a9110792718821c5';
+const _pinnedSha = 'ce3363995b28f8c435ee9b4e1573ad7b48b4d0e43490f174b7417d387e91b94f'; // ٢ نوفمبر: «wallet» (تفعيل الوطنيّ من محفظة المشترك)
 
 /// الملفّ الأوّل مجمَّداً (بند 29) — لا يتغيّر أبداً.
 const _frozenSha = 'd18f3130a40e532cdaed7301fb32f6adfdd699cae87dde0a399a5e54f07614f1';

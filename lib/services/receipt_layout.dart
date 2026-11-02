@@ -21,7 +21,7 @@ import 'package:flutter/foundation.dart';
 /// نقيّ: لا ساعة ولا شبكة ولا واجهة — الوقت والرقم يصلان نصّاً جاهزاً، وما لا يُفهم من التصميم افتراضيّ (لا رمي أبداً).
 
 /// بصمة sha256 لملفّ التثبيت المشترك — هي نفسها `RECEIPT_FIXTURES_SHA256` في الموقع.
-const String receiptFixturesSha256 = '8e0aa26e3ab0a3773be82acdbd68ca2a4221ed81fad72bd5a9110792718821c5';
+const String receiptFixturesSha256 = 'ce3363995b28f8c435ee9b4e1573ad7b48b4d0e43490f174b7417d387e91b94f';
 
 // ───────────────────────── الثوابت المشتركة (tokens في ملفّ التثبيت) ─────────────────────────
 
