@@ -2,20 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/national_more_api.dart';
+import '../../api/national_sheet_api.dart';
+import '../../api/national_team_api.dart';
 import '../../core/util/bidi.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/design_sheet.dart';
+import '../../core/widgets/sheet_scaffold.dart';
+import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../desktop/desk_widgets.dart';
 import 'national_more_widgets.dart';
+import 'national_team_sheet.dart';
 import 'national_widgets.dart';
 
 /// «فريقي» — المشروع الوطنيّ (١ نوفمبر، تبويب البوّابة نفسه): مستخدمو حساب الشريك في البوّابة — الاسم واليوزر (آخر ٤ أرقام حين
 /// يكون هاتفاً) والوظيفة وحدّ المحفظة («غير محدود» بلا حدّ، «—» للرئيسيّ وما لا يُقرأ) وآخر تسجيل دخول، وعدد الأعضاء.
-/// قراءةٌ وحدها: لا إضافة ولا تعبئة ولا تصفير للمصادقة من هنا، و**لا هاتف ولا بريد أبداً** (الخادم لا يرسلهما). الخادم
-/// `/api/v2/ftth/team` (العقد §5).
+/// والإضافة والتعديل والحذف (٢ نوفمبر — كالموقع) لصاحب الحساب حين تسمح البوّابة («إدارة أعضاء الفريق») ومفتاح الكتابة: «إضافة عضو»
+/// أعلى الصفحة، و«تعديل»/«حذف» لكلّ عضوٍ يقول الخادم can_manage (لا الرئيسيّ ولا أنت). **لا هاتف ولا بريد أبداً** (الخادم لا
+/// يرسلهما). الخادم `/api/v2/ftth/team` (العقد §5).
 class NationalTeamScreen extends StatefulWidget {
   const NationalTeamScreen({super.key});
 
@@ -28,10 +34,54 @@ class _NationalTeamScreenState extends State<NationalTeamScreen> {
   NationalMoreResult<Object?>? _locked;
   final _p = NationalPaged<NationalTeamMember>();
 
+  /// الإدارة مسموحةٌ لهذا الحساب؟ صاحب الحساب + مفتاح الكتابة + صلاحيّة البوّابة (المجهولة لا تقفل).
+  bool _canManage = false;
+
   @override
   void initState() {
     super.initState();
     _reload();
+    if (!Perms.isEmployee) {
+      NationalSheetApi.beta().then((b) {
+        if (!mounted || b == null) return;
+        setState(() => _canManage = b.on && b.canWrite && b.lockOf('team_manage') == null);
+      });
+    }
+  }
+
+  Future<void> _addMember() async {
+    final changed = await showNationalTeamSheet(context);
+    if (changed == true && mounted) _reload();
+  }
+
+  Future<void> _editMember(NationalTeamMember m) async {
+    final changed = await showNationalTeamSheet(context, member: m);
+    if (changed == true && mounted) _reload();
+  }
+
+  Future<void> _deleteMember(NationalTeamMember m) async {
+    final name = m.name.isNotEmpty ? m.name : (m.login ?? 'العضو');
+    final go = await showConfirmSheet(
+      context,
+      title: 'حذف «$name» من فريقك؟',
+      message: 'لا يدخل بوّابة المشروع الوطني بعدها، ولا رجوع بعد الحذف.',
+      confirmLabel: 'حذف',
+      cancelLabel: 'تراجع',
+      icon: LucideIcons.trash2,
+      tone: AppTone.danger,
+    );
+    if (go != true || !mounted) return;
+    final r = await NationalTeamApi.remove(m.id!);
+    if (!mounted) return;
+    if (r.ok) {
+      showSheetSnack(context, r.outcome == 'applied' ? 'حُذف «$name» من فريقك' : (r.message ?? 'قبلت البوّابة الحذف — حدّث «فريقي» لتتأكّد'),
+          duration: Duration(seconds: r.outcome == 'applied' ? 3 : 8));
+      _reload();
+      return;
+    }
+    showSheetSnack(context, r.unconfirmed ? (r.message ?? 'لم يتأكّد الحذف — حدّث «فريقي» وتحقّق') : r.text,
+        isError: !r.unconfirmed, duration: const Duration(seconds: 10), autoExplain: false);
+    if (r.unconfirmed) _reload();
   }
 
   @override
@@ -74,6 +124,17 @@ class _NationalTeamScreenState extends State<NationalTeamScreen> {
           scrolledUnderElevation: 0,
           title: Text('فريقي', style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
           iconTheme: IconThemeData(color: AppColors.textHi),
+          actions: [
+            if (_canManage)
+              Padding(
+                padding: const EdgeInsetsDirectional.only(end: Sp.sm),
+                child: TextButton.icon(
+                  onPressed: _addMember,
+                  icon: const Icon(LucideIcons.userPlus, size: 18),
+                  label: const Text('إضافة عضو'),
+                ),
+              ),
+          ],
         ),
       ),
       body: SafeArea(
@@ -121,7 +182,11 @@ class _NationalTeamScreenState extends State<NationalTeamScreen> {
     }
     return [
       for (final m in _p.rows) ...[
-        _MemberCard(m: m),
+        _MemberCard(
+          m: m,
+          onEdit: _canManage && m.canManage && m.id != null ? () => _editMember(m) : null,
+          onDelete: _canManage && m.canManage && m.id != null ? () => _deleteMember(m) : null,
+        ),
         const SizedBox(height: Sp.sm),
       ],
       if (_p.hasMore)
@@ -131,8 +196,10 @@ class _NationalTeamScreenState extends State<NationalTeamScreen> {
 }
 
 class _MemberCard extends StatelessWidget {
-  const _MemberCard({required this.m});
+  const _MemberCard({required this.m, this.onEdit, this.onDelete});
   final NationalTeamMember m;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -165,6 +232,18 @@ class _MemberCard extends StatelessWidget {
               ),
               const SizedBox(width: Sp.sm),
               Flexible(child: ToneChip(label: role, tone: m.main ? AppTone.info : AppTone.neutral, dense: true)),
+              if (onEdit != null || onDelete != null)
+                PopupMenuButton<String>(
+                  tooltip: 'إدارة العضو',
+                  icon: Icon(LucideIcons.ellipsisVertical, size: 18, color: AppColors.textMid),
+                  onSelected: (v) => v == 'edit' ? onEdit?.call() : onDelete?.call(),
+                  itemBuilder: (_) => [
+                    if (onEdit != null)
+                      const PopupMenuItem(value: 'edit', child: Row(children: [Icon(LucideIcons.userPen, size: 16), SizedBox(width: 8), Text('تعديل')])),
+                    if (onDelete != null)
+                      const PopupMenuItem(value: 'delete', child: Row(children: [Icon(LucideIcons.trash2, size: 16), SizedBox(width: 8), Text('حذف')])),
+                  ],
+                ),
             ],
           ),
           const SizedBox(height: Sp.sm),

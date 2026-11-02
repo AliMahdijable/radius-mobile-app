@@ -274,7 +274,6 @@ class NationalDeviceApi {
     }
   }
 
-  @visibleForTesting
   static NationalSheetResult<Map<String, dynamic>?> readOf(dynamic b) {
     if (b is! Map) return const NationalSheetResult.fail('تعذّر جلب البيانات من بوّابة المشروع الوطني');
     final lock = NationalLock.of(b);
@@ -318,7 +317,6 @@ class NationalDeviceApi {
   }
 
   /// ردّ الحفظ ⇒ نتيجته (القفل والمفاتيح المطفأة رفضٌ لم يُرسل شيئاً).
-  @visibleForTesting
   static NationalEditResult editOf(dynamic b, {int? status}) {
     if (b is! Map) return const NationalEditResult(NationalEditState.failed, message: 'تعذّر التنفيذ — لم يتغيّر شيء');
     final raw = Map<String, dynamic>.from(b);

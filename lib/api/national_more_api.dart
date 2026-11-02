@@ -319,6 +319,9 @@ class NationalSession {
 /// بريد** (الخادم لا يرسلهما أصلاً).
 class NationalTeamMember {
   const NationalTeamMember({
+    this.id,
+    this.canManage = false,
+    this.isSelf = false,
     required this.name,
     this.username,
     this.usernameMasked,
@@ -330,6 +333,14 @@ class NationalTeamMember {
     this.lastLogin,
   });
 
+  /// معرّف العضو في البوّابة (للتعديل والحذف).
+  final String? id;
+
+  /// «تعديل»/«حذف» مسموحان لهذا الصفّ (الخادم: صلاحيّة البوّابة، لا الرئيسيّ ولا أنت ولا الأدوار المحميّة — ٢ نوفمبر).
+  final bool canManage;
+
+  /// هذا المستخدم الذي دخل به الحساب نفسه.
+  final bool isSelf;
   final String name;
   final String? username;
 
@@ -356,6 +367,9 @@ class NationalTeamMember {
     final label = role is Map ? _sn(role['label']) ?? _sn(role['displayValue']) : null;
     final w = j['wallet_limit'];
     return NationalTeamMember(
+      id: _sn(j['id']),
+      canManage: j['can_manage'] == true,
+      isSelf: j['is_self'] == true,
       name: _s(j['name']),
       username: _sn(j['username']),
       usernameMasked: _sn(j['username_masked']),
