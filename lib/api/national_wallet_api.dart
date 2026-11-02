@@ -146,10 +146,12 @@ class WalletTopupResult {
 class NationalWalletApi {
   NationalWalletApi._();
 
-  /// مهلة الخادم ٣٠ث للكتابة + قراءة الرصيد قبلها وبعدها (+٣ث للتحقّق) — لا نقطع قبله فنظنّه «لم يتأكّد».
-  static const _writeTimeout = Duration(seconds: 80);
+  /// مهلة الخادم ٣٠ث للكتابة + قراءة الرصيد قبلها وبعدها (+التحقّق) — لا نقطع قبله (مراجعة المال ٢ نوفمبر: ٩٠ث فأكثر).
+  static const _writeTimeout = Duration(seconds: 95);
 
   static String _base(String sid) => '/api/v2/ftth/subscriptions/${Uri.encodeComponent(sid)}/wallet';
+
+  static const _ambiguous = 'انقطع الاتّصال قبل الردّ — ربّما تمّ: افتح محفظة المشترك بعد دقيقة وتحقّق قبل أيّ إعادة';
 
   /// النافذة — ok(info) · locked · fail.
   static Future<NationalSheetResult<WalletTopupInfo?>> info(String sid) async {
@@ -175,17 +177,19 @@ class NationalWalletApi {
           data: body, options: Options(receiveTimeout: _writeTimeout, sendTimeout: _writeTimeout));
       return WalletTopupResult.of(r.data);
     } on DioException catch (e) {
-      if (!kReleaseMode) debugPrint('🔴 POST wallet: ${e.response?.statusCode}');
+      if (!kReleaseMode) debugPrint('🔴 POST wallet: ${e.type} ${e.response?.statusCode}');
       final b = e.response?.data;
-      if (b is Map) return WalletTopupResult.of(b);
-      if (e.type == DioExceptionType.receiveTimeout) {
-        return const WalletTopupResult(WalletTopupState.unknown,
-            message: 'انقطع الاتّصال قبل الردّ — ربّما تمّ: افتح محفظة المشترك بعد دقيقة وتحقّق قبل أيّ إعادة');
+      final status = e.response?.statusCode ?? 0;
+      // ردّ خادمنا (409 برمزه) يُقرأ؛ و5xx ليس ردّنا (كلاودفلير يستبدل جسمه) ⇒ ربّما تمّ
+      if (b is Map && status < 500) return WalletTopupResult.of(b);
+      // لم يتّصل أصلاً ⇒ لم يُرسل شيء — وحده؛ وكلّ ما سواه (مهلة الردّ، انقطاعٌ بعد الإرسال، 5xx) ⇒ ربّما تمّ (مراجعة المال ٢ نوفمبر)
+      if (e.type == DioExceptionType.connectionTimeout || e.type == DioExceptionType.cancel) {
+        return const WalletTopupResult(WalletTopupState.rejected, message: 'تعذّر الاتّصال — لم يُرسل شيء، أعد المحاولة');
       }
-      return const WalletTopupResult(WalletTopupState.rejected, message: 'تعذّر الاتّصال — لم يُرسل شيء، أعد المحاولة');
+      return const WalletTopupResult(WalletTopupState.unknown, message: _ambiguous);
     } catch (e) {
       if (!kReleaseMode) debugPrint('🔴 POST wallet: $e');
-      return const WalletTopupResult(WalletTopupState.rejected, message: 'تعذّر الاتّصال — لم يُرسل شيء، أعد المحاولة');
+      return const WalletTopupResult(WalletTopupState.unknown, message: _ambiguous);
     }
   }
 

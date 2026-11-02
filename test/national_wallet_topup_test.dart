@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/national_sheet_api.dart';
@@ -139,6 +140,33 @@ void main() {
       expect(find.textContaining('لم تقبل البوّابة الكارت'), findsOneWidget);
       expect(find.text('١٢٣٤ ٥٦٧٨ ٩٠١٢'), findsNothing, reason: 'الرقم لا يبقى في الحقل');
       expect(got, isNull, reason: 'النافذة باقية');
+      await simDrain(t);
+    });
+
+    testWidgets('انقطاعٌ بعد الإرسال أو 502 ليس منّا ⇒ «ربّما تمّ» وتُغلق النافذة؛ تعذّر الاتّصال أصلاً ⇒ «لم يُرسل شيء» وتبقى', (t) async {
+      server.reply('GET', '$_base/topup', 200, _info());
+      server.on('POST', '$_base/transfer', (o) => throw DioException(requestOptions: o, type: DioExceptionType.connectionError));
+      await open(t);
+      await _typeAmount(t, 0, '25000');
+      await t.tap(find.textContaining('حوّل 25,000'));
+      await _settle(t);
+      expect(got?.state, WalletTopupState.unknown, reason: 'انقطاعٌ بعد الإرسال ليس «لم يتغيّر شيء»');
+      expect(find.text('تعبئة محفظة المشترك'), findsNothing, reason: 'أُغلقت لتُقرأ المحفظة');
+
+      server.on('POST', '$_base/transfer', (o) => const SimReply(502, '<html>Bad gateway</html>'));
+      await open(t);
+      await _typeAmount(t, 0, '25000');
+      await t.tap(find.textContaining('حوّل 25,000'));
+      await _settle(t);
+      expect(got?.state, WalletTopupState.unknown, reason: '5xx ليس ردّنا');
+
+      server.on('POST', '$_base/transfer', (o) => throw DioException(requestOptions: o, type: DioExceptionType.connectionTimeout));
+      await open(t);
+      await _typeAmount(t, 0, '25000');
+      await t.tap(find.textContaining('حوّل 25,000'));
+      await _settle(t);
+      expect(got, isNull, reason: 'لم يتّصل أصلاً ⇒ النافذة باقية');
+      expect(find.textContaining('لم يُرسل شيء'), findsOneWidget);
       await simDrain(t);
     });
 
