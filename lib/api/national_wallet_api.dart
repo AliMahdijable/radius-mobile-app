@@ -103,6 +103,28 @@ enum WalletTopupState {
   repeat,
 }
 
+/// محفظة المشترك في شيت التفعيل (الوطنيّ، ٢ نوفمبر — activation-data.customer_wallet): الرصيد، والمبلغ الذي تخصمه الشركة منها
+/// للتفعيل، وهل يكفي (الخادم يحسبه؛ null = تعذّرت قراءة الرصيد فيُتحقَّق عند التفعيل نفسه)، وهل «شحن المحفظة» متاحٌ لهذا الحساب.
+class CustomerWalletInfo {
+  const CustomerWalletInfo({this.balance, this.price, this.enough, this.topup = false});
+  final num? balance;
+  final num? price;
+  final bool? enough;
+  final bool topup;
+
+  /// ينقصه للتفعيل (موجب) أو null حين لا يُعرف أو يكفي.
+  num? get shortBy => balance != null && price != null && price! > balance! ? price! - balance! : null;
+
+  static CustomerWalletInfo? of(dynamic v) {
+    if (v is! Map) return null;
+    num? n(dynamic x) => x is num ? x : (x is String ? num.tryParse(x.trim()) : null);
+    final b = n(v['balance']);
+    final p = n(v['price']);
+    final e = v['enough'] is bool ? v['enough'] as bool : (b != null && p != null ? b >= p : null);
+    return CustomerWalletInfo(balance: b, price: p, enough: e, topup: v['topup'] == true);
+  }
+}
+
 class WalletTopupResult {
   const WalletTopupResult(this.state, {this.message, this.code, this.amount, this.debtAdded, this.credited, this.customerBalance, this.debtWarning});
   final WalletTopupState state;

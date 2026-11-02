@@ -45,6 +45,7 @@ ReceiptInput receiptInputOf(ReceiptDoc d, {required bool hasLogo}) {
       ReceiptPay.cash => 'cash',
       ReceiptPay.partial => 'partial-cash',
       ReceiptPay.credit => 'non-cash',
+      ReceiptPay.wallet => 'wallet',
       null => null,
     },
     amount: d.amount,

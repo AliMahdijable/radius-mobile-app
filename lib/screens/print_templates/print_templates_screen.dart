@@ -135,6 +135,18 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
 
   Future<void> _save() async {
     if (_locked) return _deny();
+    // وصل الشبكة (٢ نوفمبر): الرجوع للمعتاد وحده يُسأل عنه — الورق والأحجام ومعلومات المحلّ تُحفظ مع الشبكة كما هي
+    if (_c.willDropGrid) {
+      final go = await showConfirmSheet(
+        context,
+        title: 'الرجوع للتصميم المعتاد',
+        message: 'غيّرت خيارات التصميم المعتاد — الحفظ يرجع وصلك من مصمّم السحب والتحريك (الموقع) للتصميم المعتاد. متابعة؟',
+        confirmLabel: 'احفظ بالتصميم المعتاد',
+        icon: LucideIcons.layoutGrid,
+        tone: AppTone.warning,
+      );
+      if (go != true || !mounted) return;
+    }
     final unknown = receiptLayoutUnknownVars(_c.compactLayout);
     if (unknown.isNotEmpty) {
       final u = unknown.first;

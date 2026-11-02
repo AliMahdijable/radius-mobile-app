@@ -38,6 +38,7 @@ ReceiptDoc receiptSampleDoc(
       'cash' => ReceiptPay.cash,
       'partial-cash' => ReceiptPay.partial,
       'non-cash' => ReceiptPay.credit,
+      'wallet' => ReceiptPay.wallet,
       _ => null,
     },
     amount: n(s['amount']),

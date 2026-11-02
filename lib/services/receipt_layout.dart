@@ -213,7 +213,11 @@ const Map<String, String> receiptTypeLabels = {
   'sale': 'فاتورة بيع',
 };
 
-const Map<String, String> receiptPaymentLabels = {'cash': 'نقدي', 'partial-cash': 'نقدي جزئي', 'non-cash': 'غير نقدي'};
+const Map<String, String> receiptPaymentLabels = {
+  'cash': 'نقدي', 'partial-cash': 'نقدي جزئي', 'non-cash': 'غير نقدي',
+  // تفعيل الوطنيّ من محفظة المشترك (٢ نوفمبر): مدفوعٌ كاملاً كالنقد في الحساب
+  'wallet': 'من محفظة المشترك',
+};
 
 const Map<String, String> receiptSaleLabels = {
   'total': 'المجموع',

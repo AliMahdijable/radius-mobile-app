@@ -51,6 +51,10 @@ class ReceiptDesignController extends ChangeNotifier {
   Map<String, dynamic> _row = const {};
   Map<String, dynamic> _cols = {};
   Map<String, dynamic> _design = {};
+
+  /// الوصل مصمَّمٌ بالسحب والتحريك في الموقع (layout v4 «الشبكة») — محفوظٌ هنا كما هو ولا يُحرَّر في هذا المصمّم (٢ نوفمبر):
+  /// كان يُخلط بخيارات المعتاد (قالبٌ جاهز، «أسود فقط»…) فيرفض الخادم الحفظ كلّه «خيارٌ لا يعرفه الخادم: mono».
+  Map<String, dynamic>? _grid;
   Object? _token;
 
   /// الخادم يعرف بروتوكول التعارض (`updated_at` في الجلب): `if_updated_at` يُرسل دائماً — null = «لم أرَ صفّاً».
@@ -86,9 +90,12 @@ class ReceiptDesignController extends ChangeNotifier {
   bool get canUndo => _history.isNotEmpty;
   bool get dirty => !_loading && _loadError == null && _signature() != _savedSig;
 
-  /// التصميم المحفوظ «شبكة» v4 (مصمّم السحب والتحريك في الموقع، ٢ نوفمبر): الطباعة بها وحدها — ما يُعدَّل هنا لا يغيّر الوصل
-  /// (والحفظ لا يمحوها: مفاتيح layout التي لا يعرفها هذا المصمّم تبقى، والخادم يقرأ الشبكة أوّلاً).
-  bool get isGrid => GridLayout.from(_design['layout']) != null;
+  /// التصميم المحفوظ «شبكة» v4 (مصمّم السحب والتحريك في الموقع، ٢ نوفمبر): الورق والأحجام ومعلومات المحلّ تُحفظ معها كما هي، وخيارات
+  /// التصميم المعتاد (القوالب والكثافة و«أسود فقط» والحقول…) إن غُيّرت هنا ترجع الوصل للمعتاد — بتأكيدٍ قبل الحفظ (willDropGrid).
+  bool get isGrid => _grid != null;
+
+  /// الحفظ الآن يرجع وصل الشبكة للتصميم المعتاد (غُيّرت هنا خيارات المعتاد) — يُسأل قبله.
+  bool get willDropGrid => _grid != null && compactLayout != null;
 
   /// إعدادات الوصل كما ستُطبع بعد الحفظ — المعاينة و«اطبع تجربة» تبنيان منها.
   ReceiptSettings get draft => ReceiptSettings.fromJson(
@@ -137,6 +144,9 @@ class ReceiptDesignController extends ChangeNotifier {
     };
     final d = row['design'];
     _design = d is Map ? _deep(d) as Map<String, dynamic> : <String, dynamic>{};
+    // الشبكة جانباً (تُرسل كما حُمّلت)، وخيارات المعتاد تبدأ من الافتراضيّ
+    _grid = GridLayout.from(_design['layout']) != null ? Map<String, dynamic>.from(_design['layout'] as Map) : null;
+    if (_grid != null) _design.remove('layout');
     final l = _design['layout'];
     if (l is Map) {
       final v = l['v'];
@@ -158,7 +168,8 @@ class ReceiptDesignController extends ChangeNotifier {
         ...receiptV1AllDefaults,
         for (final k in receiptV1AllDefaults.keys)
           if (_design.containsKey(k) && _design[k] != null) k: _design[k],
-        'layout': compactLayout,
+        // الشبكة كما هي ما لم تُغيَّر هنا خيارات المعتاد (وإلّا المعتاد — بتأكيد willDropGrid قبل الحفظ)
+        'layout': _grid != null && compactLayout == null ? _grid : compactLayout,
       };
 
   /// جسم الحفظ (spec §4.4): الأعمدة السبعة + التصميم + `if_updated_at` — بلا `logo_data`.
@@ -184,7 +195,9 @@ class ReceiptDesignController extends ChangeNotifier {
     // ما حُفظ فعلاً: ردّ الخادم إن حمل التصميم (خادمٌ أقدم يُسقط مفاتيح v3 — يُقال بالمسار).
     final stored = r.hasDesign ? r.design : body['design'] as Map<String, dynamic>;
     final storedLayout = stored is Map ? receiptCompactLayout(stored!['layout']) : null;
-    final lost = r.hasDesign ? receiptLayoutDiff(sent, storedLayout) : const <String>[];
+    // الشبكة لم تُحرَّر هنا (تنظيف الخادم لها يقارنه مصمّمها في الموقع)
+    final sentGrid = sent is Map && GridLayout.from(sent) != null;
+    final lost = r.hasDesign && !sentGrid ? receiptLayoutDiff(sent, storedLayout) : const <String>[];
     final row = <String, dynamic>{
       ..._row,
       ..._cols,
@@ -402,7 +415,9 @@ class ReceiptDesignController extends ChangeNotifier {
         (paperSize: paperSize, design: {..._design}..remove('layout'), layout: layout),
         id,
       );
-      _design = {...r.design, 'layout': r.layout};
+      // وصل الشبكة: الورق والأحجام وحدها — «الضغط» و«أسود فقط» من خيارات التصميم المعتاد
+      final keep = _design['layout'];
+      _design = _grid != null ? {...r.design, if (keep != null) 'layout': keep} : {...r.design, 'layout': r.layout};
       _cols['paper_size'] = r.paperSize;
     });
   }
@@ -413,6 +428,7 @@ class ReceiptDesignController extends ChangeNotifier {
     if (p == null) return;
     _edit(() {
       _design.addAll(p.v1);
+      if (_grid != null) return; // وصل الشبكة: الأحجام وحدها — الكثافة والرموز للمعتاد
       final l = _layout();
       if (p.density == 'normal') {
         l.remove('density');

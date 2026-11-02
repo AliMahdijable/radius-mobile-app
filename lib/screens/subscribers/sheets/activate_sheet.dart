@@ -31,6 +31,8 @@ import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../core/widgets/print_feedback.dart';
 import '../../../services/receipt_pdf.dart';
+import '../../../api/national_wallet_api.dart' show CustomerWalletInfo;
+import '../../national/national_wallet_topup_sheet.dart';
 
 /// Bottom sheet for activating a subscriber's package — direct port of
 /// v1's `_activateSubscriber` flow from
@@ -145,6 +147,10 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   _CardOrder? _cardOrder;
   Timer? _cardPoll;
   DateTime? _cardSince;
+  // المشروع الوطنيّ (٢ نوفمبر — المالك: «بالتفعيل تظهر زرّ محفظة المشترك إن عنده رصيد، وإن ماعنده تكلّه شحن المحفظة وتظهر مودل
+  // الشحن»): الدفع للشركة من محفظة المشترك نفسه (customer_wallet من الخادم — مفتاح <name>_custwallet). لا نقداً ولا ديناً عندنا:
+  // المشترك دفع من رصيده، فلا «طريقة الدفع» ولا دين بعده؛ شهرٌ واحد.
+  bool _payByCustWallet = false;
 
   @override
   void initState() {
@@ -407,7 +413,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   }
 
   /// الأشهر الفعليّة: المختارة إن كانت مسموحة والدفع ليس بالبطاقة، وإلّا شهرٌ واحد.
-  int get _kitMonths => _isKit && !_kitCard && _monthsOpts.contains(_months) ? _months : 1;
+  int get _kitMonths => _isKit && !_kitCard && !_kitCust && _monthsOpts.contains(_months) ? _months : 1;
   String get _quoteKey => '$_kitMonths|$_selectedPackageId';
   Map<String, dynamic>? get _liveQuote => _kitMonths > 1 && _quoteFor == _quoteKey ? _quote : null;
 
@@ -508,6 +514,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     if (_submitting && _kitCard) return 'جارٍ إنشاء رابط الدفع…';
     if (_submitting) return 'sheets.renewing'.tr();
     if (_kitCard) return 'إنشاء رابط الدفع';
+    if (_kitCust) return 'تفعيل من محفظة المشترك';
     if (_outcomeUnclear) return 'sheets.activate_check_first'.tr();
     if (_pkgSwitcher) return 'sheets.renew_now'.tr(); // «تفعيل/تجديد الآن» (كارت ايرث لنك لا مخزون، وفايبر اكس من المحفظة)
     if (!_cardMode) return 'sheets.renew_now'.tr();
@@ -979,11 +986,11 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       ] else if (_fxMode) ...[
         const SizedBox(height: 14),
         _elPackageSection(),
-        if (_cardPayAvailable) ...[
+        if (_cardPayAvailable || _custWallet != null) ...[
           const SizedBox(height: 14),
           _kitPaySection(),
         ],
-        if (_isKit && _monthsOpts.length > 1 && !_kitCard) ...[
+        if (_isKit && _monthsOpts.length > 1 && !_kitCard && !_kitCust) ...[
           const SizedBox(height: 14),
           _monthsSection(),
         ],
@@ -1002,6 +1009,15 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         const SizedBox(height: 14),
         _methodSection(),
       ],
+      if (_kitCust) ...[
+        const SizedBox(height: 14),
+        const _CardNote(
+          tone: AppTone.brand,
+          icon: LucideIcons.walletCards,
+          text: 'يُدفع للشركة من محفظة المشترك نفسه — لا نقداً ولا ديناً عندك',
+          maxLines: 3,
+        ),
+      ] else ...[
       const SizedBox(height: 14),
       SheetSection(
         label: 'sheets.payment_method'.tr(),
@@ -1084,6 +1100,7 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         value: '${formatIQD(after.abs().round())} $cur',
         tone: after < 0 ? AppTone.danger : AppTone.brand,
       ),
+      ],
     ];
   }
 
@@ -1137,10 +1154,76 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   /// الدفع بالبطاقة متاحٌ لهذا الحساب (الخادم يقول card_payment) — ومن «كل الشركات» أيضاً (١ نوفمبر، المالك: «بعض وكلاء الوطني
   /// مايطلعلهم التفعيل ماستر كارد»): البدء والحالة بـMergedOps.run الموجَّه، والخادم يوجّه card-orders/:id (08db690) كالموقع (6631f71).
   bool get _cardPayAvailable => _isKit && _data?['card_payment'] == true;
-  bool get _kitCard => _cardPayAvailable && _payByCard;
+  bool get _kitCard => _cardPayAvailable && _payByCard && !_payByCustWallet;
+
+  /// محفظة المشترك عند الشركة (الخادم يقولها لمن فُتحت له) — null = غير متاحة.
+  CustomerWalletInfo? get _custWallet => _isKit ? CustomerWalletInfo.of(_data?['customer_wallet']) : null;
+  bool get _kitCust => _custWallet != null && _payByCustWallet;
+
+  /// اختيار «الدفع لـ<الشركة>»: محفظتي · بطاقة · محفظة المشترك — والأخيرة برصيدٍ لا يكفي ⇒ «شحن المحفظة؟» لا اختيارٌ صامت.
+  Future<void> _onKitPay(String k) async {
+    if (k == 'cust') {
+      final cw = _custWallet;
+      if (cw == null) return;
+      if (cw.enough == false) return _offerCustTopup(cw);
+      setState(() {
+        _payByCard = false;
+        _payByCustWallet = true;
+      });
+      return;
+    }
+    setState(() {
+      _payByCard = k == 'card';
+      _payByCustWallet = false;
+    });
+    // عائدٌ إلى «محفظتي» بأشهرٍ مختارة ⇒ معاينتها من جديد (البطاقة ومحفظة المشترك شهرٌ واحد)
+    if (k == 'mine' && _kitMonths > 1 && _quoteFor != _quoteKey) _fetchQuote();
+  }
+
+  /// رصيد محفظة المشترك لا يكفي ⇒ «شحن المحفظة؟» ثمّ نافذة «تعبئة محفظة المشترك» نفسها، وبعدها يُقرأ الرصيد من جديد ويُختار
+  /// «محفظة المشترك» إن صار يكفي.
+  Future<void> _offerCustTopup(CustomerWalletInfo cw) async {
+    final idx = widget.sub.idx;
+    final cur = 'common.currency'.tr();
+    final short = cw.shortBy;
+    if (!cw.topup || idx == null) {
+      showSheetSnack(
+        context,
+        'رصيد محفظة المشترك لا يكفي${short != null ? ' (ينقصه ${formatIQD(short.round())} $cur)' : ''} — وشحن المحفظة غير متاحٍ لحسابك بعد',
+        isError: true,
+      );
+      return;
+    }
+    final go = await showConfirmSheet(
+      context,
+      title: 'رصيد محفظة المشترك لا يكفي',
+      message: [
+        if (cw.balance != null) 'رصيده ${formatIQD(cw.balance!.round())} $cur',
+        if (cw.price != null) 'يُخصم للتفعيل ${formatIQD(cw.price!.round())} $cur',
+        'شحن المحفظة الآن؟',
+      ].join('\n'),
+      confirmLabel: 'شحن المحفظة',
+      icon: LucideIcons.walletCards,
+    );
+    if (go != true || !mounted) return;
+    final r = await showNationalWalletTopupSheet(context, sid: idx);
+    if (!mounted || r == null) return;
+    await _load();
+    if (!mounted) return;
+    final now = _custWallet;
+    if (now != null && now.enough != false) {
+      setState(() {
+        _payByCard = false;
+        _payByCustWallet = true;
+      });
+    }
+  }
 
   /// «الدفع لـ<الشركة>»: «محفظتي» (من رصيدك في البوّابة) أو «بطاقة» (ماستر كارد/فيزا — صفحة دفع).
   Widget _kitPaySection() {
+    final cw = _custWallet;
+    final keys = <String>['mine', if (_cardPayAvailable) 'card', if (cw != null) 'cust'];
+    final sel = _kitCust ? keys.indexOf('cust') : (_kitCard ? keys.indexOf('card') : 0);
     return SheetSection(
       label: 'الدفع لـ$_kitName',
       gap: Sp.sm,
@@ -1148,17 +1231,29 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SheetChoiceTiles(
-            labels: const ['محفظتي', 'بطاقة'],
-            icons: const [LucideIcons.wallet, LucideIcons.creditCard],
-            selectedIndex: _payByCard ? 1 : 0,
+            labels: [for (final k in keys) switch (k) { 'card' => 'بطاقة', 'cust' => 'محفظة المشترك', _ => 'محفظتي' }],
+            icons: [
+              for (final k in keys)
+                switch (k) { 'card' => LucideIcons.creditCard, 'cust' => LucideIcons.walletCards, _ => LucideIcons.wallet },
+            ],
+            selectedIndex: sel < 0 ? 0 : sel,
             enabled: !_submitting,
-            onSelect: (i) {
-              setState(() => _payByCard = i == 1);
-              // عائدٌ إلى «محفظتي» بأشهرٍ مختارة ⇒ معاينتها من جديد (البطاقة شهرٌ واحد)
-              if (i == 0 && _kitMonths > 1 && _quoteFor != _quoteKey) _fetchQuote();
-            },
+            onSelect: (i) => _onKitPay(keys[i]),
           ),
-          if (_payByCard) ...[
+          if (cw != null) ...[
+            const SizedBox(height: Sp.xs),
+            Text(
+              [
+                cw.balance != null
+                    ? 'رصيد محفظة المشترك ${formatIQD(cw.balance!.round())} ${'common.currency'.tr()}'
+                    : 'تعذّرت قراءة رصيد محفظة المشترك — يُتحقَّق منه عند التفعيل',
+                if (cw.enough == false) 'لا يكفي — اضغط «محفظة المشترك» لشحنها',
+              ].join(' · '),
+              style: AppType.muted(color: cw.enough == false ? AppColors.warningFill : AppColors.textMid)
+                  .copyWith(fontSize: 12.5, height: 1.4),
+            ),
+          ],
+          if (_kitCard) ...[
             const SizedBox(height: Sp.xs),
             Text(
               'يُنشأ رابط دفعٍ تفتحه وتدفع منه بالبطاقة؛ يتفعّل المشترك ويُسجَّل الدين عندنا حين يكتمل الدفع.',
@@ -1548,6 +1643,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       partialAmount: _pay == _PayType.partial ? _partialAmount : null,
       skipAutoWa: manualMode,
       profileId: change ? int.tryParse(_selectedPackageId) : null,
+      // محفظة المشترك (الوطنيّ، ٢ نوفمبر): الشركة تخصم من رصيده — والخادم لا يسجّل نقداً ولا ديناً
+      method: _kitCust ? 'customer_wallet' : 'credit',
       // الشركة المُضافة: «حالاً» وحدها (package_change_timing) — والخادم يرفض غيرها قبل أيّ نداء.
       changeType: change ? (_isFiberx && _fxTiming == _FxTiming.expiry ? 'expiry' : 'now') : null,
       confirmRepeat: _confirmRepeat,
@@ -1591,6 +1688,15 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     }
     _confirmRepeat = false;
     _confirmCooloff = false;
+    // رصيد محفظة المشترك نقص بين القراءة والتفعيل ⇒ يُقرأ من جديد و«شحن المحفظة؟» (لم يُفعَّل شيء)
+    if (!result.ok && result.code == 'CUST_WALLET_INSUFFICIENT') {
+      await _load();
+      final cw = _custWallet;
+      if (!mounted) return;
+      if (cw != null) return _offerCustTopup(cw);
+      showSheetSnack(context, result.message ?? 'رصيد محفظة المشترك لا يكفي — لم يُفعَّل شيء', isError: true);
+      return;
+    }
     if (!result.ok) {
       showSheetSnack(context, _failureText(result.code, result.message), isError: true);
       return;
@@ -1613,8 +1719,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
       final printed = await ReceiptService.printActivation(
         sub: widget.sub,
         price: _elChargePrice,
-        pay: _receiptPay,
-        partialAmount: _partialAmount,
+        pay: _kitCust ? ReceiptPay.wallet : _receiptPay,
+        partialAmount: _kitCust ? null : _partialAmount,
         packageName: _elSelectedPkg?['name']?.toString() ?? _profileName,
       );
       if (mounted) showPrintResult(context, printed);

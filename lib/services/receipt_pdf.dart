@@ -33,7 +33,9 @@ enum ReceiptKind {
 enum ReceiptPay {
   cash('نقدي', 'cash'),
   partial('نقدي جزئي', 'partial'),
-  credit('غير نقدي', 'credit');
+  credit('غير نقدي', 'credit'),
+  // تفعيل الوطنيّ من محفظة المشترك نفسه (٢ نوفمبر): مدفوعٌ كاملاً — يُؤرشَف «نقدي» (الخادم يعرف الثلاثة وحدها) ويُطبع باسمه
+  wallet('من محفظة المشترك', 'cash');
 
   const ReceiptPay(this.label, this.archiveMethod);
 
