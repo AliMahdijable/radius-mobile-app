@@ -1666,6 +1666,10 @@ class _ActivateSheetState extends State<_ActivateSheet> {
               _elPackageNote,
               style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.4),
             ),
+          ] else if (_isKit && !_elIsCurrentPkg && (_data?['package_change_note']?.toString().trim().isNotEmpty ?? false)) ...[
+            // «تبديل الباقة» لمشتركٍ فعّال (الوطنيّ): الشركة تقرّر بداية مدّة الباقة الأخرى — تنبيهٌ قبل التأكيد كالموقع
+            const SizedBox(height: Sp.xs),
+            _CardNote(tone: AppTone.warning, icon: LucideIcons.triangleAlert, text: _data!['package_change_note'].toString(), maxLines: 4),
           ],
         ],
       ),

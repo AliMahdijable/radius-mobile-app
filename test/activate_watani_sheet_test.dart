@@ -5,6 +5,7 @@ import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/subscribers/sheets/activate_sheet.dart';
 import 'package:rad_mysvcs/services/permissions_service.dart';
 import 'package:rad_mysvcs/services/provider_service.dart';
+import 'package:rad_mysvcs/widgets/package_picker_field.dart';
 
 import 'sim_el/sim_harness.dart';
 
@@ -558,6 +559,42 @@ void main() {
     server.reply('GET', '/api/v2/subscribers/$_idx/activation-data', 200, monthsData(months: const [1]));
     await open(t);
     expect(find.text('مدّة التفعيل'), findsNothing);
+    await simDrain(t);
+  });
+
+  // ── «تبديل الباقة» (watani_beta بالخادم — providerKit: package_change_allowed + الباقات كلّها + package_change_note) ──
+
+  testWidgets('تبديل الباقة: الباقة الأخرى «حالاً» بتنبيه المزوّد ⇒ التفعيل يرسل profile_id وchange_type now؛ ومعاينة الأشهر بالباقة المختارة', (t) async {
+    final d = monthsData();
+    final data = d['data'] as Map;
+    data['package_change_allowed'] = true;
+    data['packages'] = [
+      {'id': 11, 'name': 'BASIC', 'price': 40000, 'cost': 35000, 'days': 30},
+      {'id': 12, 'name': 'PLUS', 'price': 55000, 'cost': 48000, 'days': 30},
+    ];
+    data['package_change_note'] = 'باقةٌ أخرى «حالاً» لمشتركٍ فعّال: المشروع الوطني يقرّر بداية مدّتها';
+    server.reply('GET', '/api/v2/subscribers/$_idx/activation-data', 200, d);
+    server.reply('GET', '/api/v2/subscribers/$_idx/activation-quote', 200, quote(price: 110000, cost: 96000));
+    server.reply('POST', '/api/v2/subscribers/$_idx/activate', 200, {'success': true, 'months': 2, 'data': {'new_balance': -110000}});
+    await open(t);
+    final picker = find.byType(PackagePickerField);
+    await t.ensureVisible(picker);
+    await t.pumpAndSettle();
+    expect(find.textContaining('يقرّر بداية مدّتها'), findsNothing, reason: 'الباقة الحاليّة بلا تنبيه');
+    await t.tap(picker);
+    await t.pumpAndSettle();
+    await t.tap(find.textContaining('PLUS').last); // الاسم بعزلٍ اتّجاهيّ (iso)
+    await t.pumpAndSettle();
+    expect(find.textContaining('يقرّر بداية مدّتها'), findsOneWidget);
+    await t.tap(find.text('شهران'));
+    await t.pump();
+    await t.pumpAndSettle();
+    expect(server.calls('GET', '/api/v2/subscribers/$_idx/activation-quote').last.queryParameters, {'months': 2, 'profile_id': '12'});
+    await t.tap(find.text('تجديد الآن'));
+    await t.pump();
+    await t.pumpAndSettle();
+    final body = server.bodies('POST', '/api/v2/subscribers/$_idx/activate').single;
+    expect((body['profile_id'], body['change_type'], body['months'], body['expected_cost']), (12, 'now', 2, 96000));
     await simDrain(t);
   });
 
