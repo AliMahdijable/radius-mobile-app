@@ -23,11 +23,11 @@
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>لاختيار صورة تُرفقها برسالة جماعيّة إلى مشتركيك. To pick a photo to attach to a broadcast message to your subscribers.</string>
+	<string>لاختيار صورة تُرفقها برسالة جماعيّة إلى مشتركيك، أو صورة بطاقة المشترك حين تقدّم له طلب اشتراكٍ جديد. To pick a photo to attach to a broadcast message to your subscribers, or a subscriber's ID card photo when you submit a new subscription request for them.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>لحفظ صورة رمز QR الخاصّ بدخول المشترك في الصور عند طلبك. To save a subscriber's login QR code image to your photos when you ask.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>تُستخدم الكاميرا فقط إن اخترت التقاط صورة لإرفاقها برسالة. The camera is used only if you choose to take a photo to attach to a message.</string>
+	<string>تُستخدم الكاميرا فقط إن اخترت التقاط صورة لإرفاقها برسالة، أو لتصوير بطاقتَي المشترك حين تقدّم له طلب اشتراكٍ جديد. The camera is used only if you choose to take a photo to attach to a message, or to photograph a subscriber's ID cards when you submit a new subscription request for them.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>لتحديد موقع المشترك على الخريطة عند إضافته أو تعديله. To set a subscriber's location on the map when you add or edit them.</string>
 	<!-- 2026-08-28: Apple validator (90683) يطلب المفتاح "always and when in use"

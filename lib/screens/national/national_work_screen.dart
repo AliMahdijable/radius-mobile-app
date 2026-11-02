@@ -7,11 +7,14 @@ import '../../api/national_portal_api.dart';
 import '../../api/national_sheet_api.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
+import '../../core/widgets/permission_locked.dart';
+import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../desktop/desk_widgets.dart';
 import 'national_labels.dart';
+import 'national_onboard_screen.dart';
 import 'national_task_sheet.dart';
 import 'national_ticket_write.dart';
 import 'national_widgets.dart';
@@ -40,6 +43,9 @@ class _NationalWorkScreenState extends State<NationalWorkScreen> {
   /// الأقسام التجريبيّة (١ نوفمبر): تفاصيل المهمّة وتعليقاتها، وتعليقات الطلب — حين يقول الخادم إنّها مفتوحة لهذا الحساب.
   bool _beta = false;
 
+  /// «إضافة مشترك» (٢ نوفمبر — طلب «تسجيل زبون جديد»): زرٌّ في «الطلبات» حين يفتحه الخادم (`onboard`)، ومقفلٌ بمكانه للموظّف.
+  bool _onboard = false;
+
   final _req = NationalPaged<NationalRequest>();
   final _tasks = NationalPaged<NationalTask>();
 
@@ -65,7 +71,11 @@ class _NationalWorkScreenState extends State<NationalWorkScreen> {
       if (mounted && v != null) setState(() => _counts = v);
     });
     NationalSheetApi.beta().then((b) {
-      if (mounted && b != null && b.on) setState(() => _beta = true);
+      if (!mounted || b == null) return;
+      setState(() {
+        if (b.on) _beta = true;
+        _onboard = b.onboard || (Perms.isEmployee && b.refused);
+      });
     });
   }
 
@@ -138,10 +148,20 @@ class _NationalWorkScreenState extends State<NationalWorkScreen> {
     _reload();
   }
 
+  Future<void> _openOnboard() async {
+    if (Perms.isEmployee) {
+      showNoPermission(context);
+      return;
+    }
+    final sent = await showNationalOnboardScreen(context);
+    if (sent == true && mounted && _tab == 0) _reload();
+  }
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep
     final p = _tab == 0 ? _req : _tasks;
+    final onboardLocked = Perms.isEmployee;
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: deskPageBar(
@@ -154,6 +174,17 @@ class _NationalWorkScreenState extends State<NationalWorkScreen> {
           iconTheme: IconThemeData(color: AppColors.textHi),
         ),
       ),
+      floatingActionButton: _tab == 0 && _onboard
+          ? FloatingActionButton.extended(
+              heroTag: 'national-onboard',
+              tooltip: onboardLocked ? 'إضافة مشترك — مقفل' : 'إضافة مشترك',
+              onPressed: _openOnboard,
+              backgroundColor: onboardLocked ? AppColors.surfaceSunken : AppColors.brand,
+              foregroundColor: onboardLocked ? AppColors.textLow : AppColors.onBrand,
+              icon: Icon(onboardLocked ? LucideIcons.lock : LucideIcons.userPlus, size: 18),
+              label: const Text('إضافة مشترك'),
+            )
+          : null,
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async => _reload(),

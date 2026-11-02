@@ -236,6 +236,7 @@ class NationalBeta {
     this.deviceEdit = false,
     this.installEdit = false,
     this.walletTopup = false,
+    this.onboard = false,
   });
   final bool on;
 
@@ -248,6 +249,10 @@ class NationalBeta {
   /// «تعبئة محفظة المشترك» (`wallet_topup`، ٢ نوفمبر): الأقسام + الكتابة + مفتاح watani_wallet + صلاحيّة البوّابة — لصاحب الحساب
   /// (الموظّف يراه مقفلاً بمكانه).
   final bool walletTopup;
+
+  /// «إضافة مشترك» (`onboard`، ٢ نوفمبر): الأقسام + الكتابة + مفتاح watani_onboard — طلب «تسجيل زبون جديد» في «الطلبات»، لصاحب
+  /// الحساب (الموظّف يراه مقفلاً بمكانه).
+  final bool onboard;
 
   /// موظّفٌ رفض الخادم سؤاله (403 PERMISSION_DENIED — لا يملك أيّ مفتاحٍ يقرأ به `lookups`، القرار ٤ في ١ نوفمبر): لا نعرف أهي مفتوحة،
   /// والأقسام تبقى بمكانها **مقفلةً بمفاتيحه** لا مخفيّة (الموظّف يرى ما لا يملكه مقفلاً).
@@ -283,6 +288,7 @@ class NationalBeta {
       deviceEdit: j['device_edit'] == true,
       installEdit: j['install_edit'] == true,
       walletTopup: j['wallet_topup'] == true,
+      onboard: j['onboard'] == true,
     );
   }
 }
