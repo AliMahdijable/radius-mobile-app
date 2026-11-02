@@ -10,6 +10,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../desktop/desk_widgets.dart';
+import 'widgets/message_weight_card.dart';
 
 /// Label عربي لكل متغير قالب — يظهر بـtooltip + كـsubtitle داخل
 /// الـchip في الـEditTemplateSheet. مطابق v1
@@ -319,6 +320,8 @@ class _WhatsAppTemplatesScreenState extends State<WhatsAppTemplatesScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
             children: [
+              // «سُمك خطّ الرسائل» (٢ نوفمبر): العريض في واتساب وتلغرام بدرجة الحساب — تختفي مع خادمٍ أقدم
+              const MessageWeightCard(),
               if (_loading)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 32),
