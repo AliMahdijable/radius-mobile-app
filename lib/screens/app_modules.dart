@@ -27,6 +27,7 @@ import 'national/national_money_screen.dart';
 import 'national/national_notes_screen.dart';
 import 'national/national_reports_screen.dart';
 import 'national/national_sessions_screen.dart';
+import 'national/national_map_screen.dart';
 import 'national/national_team_screen.dart';
 import 'national/national_tickets_screen.dart';
 import 'national/national_wallet_screen.dart';
@@ -144,6 +145,18 @@ List<AppModule> buildAppModules() {
         title: 'المهامّ والطلبات',
         subtitle: 'طلبات التسجيل والنقل ومهامّ التركيب في بوّابة الوطني',
         page: () => const NationalWorkScreen(),
+      ),
+    // «خريطة المشتركين» (٢ نوفمبر — كالموقع): المخطّط بالزونات والفاتات، ومواقعها على الخريطة والقمر الصناعيّ، والبحث
+    if (national && permShown(const ['subscribers.view']))
+      AppModule(
+        id: 'national_map',
+        group: AppModuleGroup.manage,
+        locked: !Perms.has('subscribers.view'),
+        icon: LucideIcons.map,
+        tone: AppTone.success,
+        title: 'خريطة المشتركين',
+        subtitle: 'توزيع المشتركين على الزونات والفاتات، ومواقعها على الخريطة',
+        page: () => const NationalMapScreen(),
       ),
     if (national && permShown(const ['subscribers.view']))
       AppModule(
