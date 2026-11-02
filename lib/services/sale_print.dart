@@ -23,7 +23,8 @@ class SalePrint {
       final settingsF = CompanyRoute.run(companyKey, ReceiptSettingsApi.fetch);
       final id = await ReceiptService.identityFor(companyKey);
       final look = await settingsF ?? const ReceiptSettings();
-      final d = doc(s, look: look, shop: look.shopName ?? id.shop, issuer: id.issuer);
+      // «أصدره»: البائع إن كان موظّفاً (كما كان)، وإلّا الاسم الذي اختاره المدير لنفسه (٢ نوفمبر)
+      final d = doc(s, look: look, shop: look.shopName ?? id.shop, issuer: ReceiptService.issuerOf(look, id.issuer));
       return PrintOutput.send(await ReceiptPdf.build(d, a4: PrintPrefs.currentTemplateType == 'a4'));
     } catch (e) {
       if (kDebugMode) debugPrint('[SalePrint] failed: $e');

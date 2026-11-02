@@ -58,9 +58,14 @@ class ReceiptSettings {
     this.paperSize = 'pos',
     this.updatedAt,
     this.raw,
+    this.issuerName,
   });
 
   final String? shopName;
+
+  /// «أصدره» باسمٍ اختاره المدير لمن يطبع الآن (٢ نوفمبر — الخادم server/receiptIssuer.js): المدير ⇒ اسمه، والموظّف ⇒ اسمه
+  /// المختار؛ null ⇒ كما كان (يوزر المدير، أو اسم الموظّف).
+  final String? issuerName;
   final String? shopAddress;
   final String? shopPhone;
   final String? footerText;
@@ -260,6 +265,7 @@ class ReceiptSettings {
       design: design is Map ? Map<String, dynamic>.from(design) : null,
       paperSize: j['paper_size'] == 'a4' ? 'a4' : 'pos',
       updatedAt: _str(j['updated_at']),
+      issuerName: _str(j['issuer_name']),
       raw: Map<String, dynamic>.from(j)..remove('logo_data'),
     );
   }

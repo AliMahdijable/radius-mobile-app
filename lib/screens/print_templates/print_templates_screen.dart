@@ -32,6 +32,7 @@ import 'designer/elements_tab.dart';
 import 'designer/paper_tab.dart';
 import 'designer/preview_pane.dart';
 import 'designer/texts_tab.dart';
+import 'issuer_names_sheet.dart';
 
 /// «تصميم الوصل» في التطبيق — مصمّمٌ كامل (spec §4.4)، كان عرضاً للقراءة. المالك يجرّب على الهاتف:
 /// المعاينة فوق (صورة الطباعة نفسها، ٤٢٪ من الشاشة)، وتحتها «العناصر» (كلّ ما في الوصل بترتيبه — النقر يفتح خصائصه في
@@ -357,11 +358,14 @@ class _PrintTemplatesScreenState extends State<PrintTemplatesScreen> {
               'reset' => _reset(),
               'print' => _printSample(),
               'templates' => _templates(),
+              'issuer' => _locked ? _deny() : showIssuerNamesSheet(context),
               _ => null,
             },
             itemBuilder: (_) => [
               _menuItem('templates', LucideIcons.layoutTemplate, 'قوالب جاهزة'),
               _menuItem('print', LucideIcons.printer, 'اطبع تجربة'),
+              // «أصدره» باسمٍ عربيّ للمدير وموظّفيه (٢ نوفمبر — طلب المالك)
+              _menuItem('issuer', LucideIcons.signature, 'اسم «أصدره» على الوصل'),
               _menuItem('reset', LucideIcons.rotateCcw, 'إعادة للافتراضي'),
             ],
           ),

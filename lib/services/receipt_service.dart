@@ -119,9 +119,15 @@ class ReceiptService {
       pay: ReceiptPay.cash,
       amount: 35000,
       newBalance: 0,
-      issuer: id.issuer,
+      issuer: issuerOf(settings, id.issuer),
     );
     return _print(doc);
+  }
+
+  /// «أصدره»: الاسم الذي اختاره المدير لمن يطبع (إعدادات الوصل) إن وُجد، وإلّا [fallback] كما كان.
+  static String? issuerOf(ReceiptSettings? look, String? fallback) {
+    final chosen = (look?.issuerName ?? '').trim();
+    return chosen.isNotEmpty ? chosen : fallback;
   }
 
   /// اسم المحلّ الاحتياطيّ و«أصدره» لشركةٍ ([companyKey] في «كل الشركات») — لفاتورة البيع ([SalePrint]).
@@ -233,7 +239,7 @@ class ReceiptService {
                       if (pay != null) 'paymentType': pay.name,
                       if (partialAmount != null) 'partialAmount': partialAmount,
                       if (newBalance != null) 'newBalance': newBalance,
-                      if (id.issuer != null) 'issuer': id.issuer,
+                      if (issuerOf(look, id.issuer) != null) 'issuer': issuerOf(look, id.issuer),
                     },
                   }));
       final qr = await qrF;
@@ -257,7 +263,7 @@ class ReceiptService {
         partialAmount: partialAmount,
         newBalance: newBalance,
         qrUrl: qr,
-        issuer: id.issuer,
+        issuer: issuerOf(look, id.issuer),
       );
       return _print(doc);
     } catch (e, st) {
