@@ -24,7 +24,8 @@ class DeletedDebt {
     this.note,
   });
 
-  /// `m<id>` يدويّ/مستورد · `a<id>` تلقائيّ — يُمرَّر كما هو لمسارات التسديد/الشطب.
+  /// `m<id>` يدويّ/مستورد · `a<id>` تلقائيّ (دفتر الشركة) · `d<id>` مخزن ديوننا (فحص الدخول — ٢ نوفمبر) — يُمرَّر كما هو لمسارات
+  /// التسديد/الشطب.
   final String key;
   final String origin;
   final String name;
@@ -47,7 +48,7 @@ class DeletedDebt {
   static DeletedDebt? fromJson(Map<String, dynamic> j) {
     final key = (j['key'] ?? '').toString();
     final debt = double.tryParse(j['debt']?.toString() ?? '');
-    if (!RegExp(r'^[ma]\d{1,18}$').hasMatch(key) || debt == null || debt <= 0) {
+    if (!RegExp(r'^[mad]\d{1,18}$').hasMatch(key) || debt == null || debt <= 0) {
       return null;
     }
     String? s(Object? v) {
@@ -70,6 +71,61 @@ class DeletedDebt {
   }
 }
 
+/// دينٌ مكرّر ينتظر قرار المدير (٢ نوفمبر — `pending_twins`، لصاحب الحساب وحده): صفٌّ يدويّ وتوأمه التلقائيّ مقفلان حتى «نفس الدين»
+/// (يُحصَّل مرّةً) أو «دينان مختلفان» (كلٌّ وحده). [partialKeep] ≠ null ⇒ قرار «نفس الدين» حُفظ جزؤه ⇒ «أكمل القرار» وحده.
+class PendingTwin {
+  const PendingTwin({
+    required this.manualKey,
+    required this.autoKey,
+    required this.name,
+    required this.manualDebt,
+    this.manualOrig,
+    this.autoDebt,
+    this.autoStatus,
+    this.partialKeep,
+  });
+  final String manualKey;
+  final String autoKey;
+  final String name;
+  final double manualDebt;
+  final double? manualOrig;
+
+  /// دين الطرف التلقائيّ كما عُرض — يُعاد للخادم (seen_auto_debt) فيرفض إن تغيّر بعد العرض.
+  final double? autoDebt;
+
+  /// deleted · absent · pending_sas · present.
+  final String? autoStatus;
+  final String? partialKeep;
+
+  /// مبلغان مختلفان ⇒ يُسأل المدير أيّهما الصحيح.
+  bool get differ {
+    final o = manualOrig;
+    final a = autoDebt;
+    return o != null && a != null && a > 0 && (o - a).abs() >= 0.01;
+  }
+
+  static PendingTwin? fromJson(Map<String, dynamic> j) {
+    final mk = (j['manual_key'] ?? '').toString();
+    final ak = (j['auto_key'] ?? '').toString();
+    if (!RegExp(r'^m\d{1,18}$').hasMatch(mk) || !RegExp(r'^[ad]\d{1,18}$').hasMatch(ak)) return null;
+    final m = j['manual'] is Map ? Map<String, dynamic>.from(j['manual'] as Map) : const <String, dynamic>{};
+    final a = j['auto'] is Map ? Map<String, dynamic>.from(j['auto'] as Map) : null;
+    final p = j['partial'] is Map ? Map<String, dynamic>.from(j['partial'] as Map) : null;
+    double? n(dynamic v) => v == null ? null : double.tryParse(v.toString());
+    final name = (m['name'] ?? m['username'] ?? (a == null ? null : a['name']) ?? mk).toString();
+    return PendingTwin(
+      manualKey: mk,
+      autoKey: ak,
+      name: name,
+      manualDebt: n(m['debt']) ?? 0,
+      manualOrig: n(m['orig']),
+      autoDebt: a == null ? null : n(a['debt']),
+      autoStatus: a?['status']?.toString(),
+      partialKeep: p == null ? null : (p['keep'] == 'ledger' ? 'ledger' : 'manual'),
+    );
+  }
+}
+
 /// ردّ القائمة: [enabled] = الميزة مفعّلة لحساب الشركة المفتوحة.
 class DeletedDebtsPage {
   const DeletedDebtsPage({
@@ -78,12 +134,16 @@ class DeletedDebtsPage {
     required this.count,
     required this.total,
     this.truncated = false,
+    this.pendingTwins = const [],
   });
   final bool enabled;
   final List<DeletedDebt> rows;
   final int count;
   final double total;
   final bool truncated;
+
+  /// ديونٌ مكرّرة تنتظر قرار المدير (لصاحب الحساب — الموظّف لا تصله).
+  final List<PendingTwin> pendingTwins;
 }
 
 class DeletedDebtsApi {
@@ -107,9 +167,14 @@ class DeletedDebtsApi {
               .toList()
           : const <DeletedDebt>[];
       final totals = body['totals'] is Map ? body['totals'] as Map : const {};
+      final tw = body['pending_twins'];
+      final twins = tw is List
+          ? tw.whereType<Map>().map((m) => PendingTwin.fromJson(Map<String, dynamic>.from(m))).whereType<PendingTwin>().toList()
+          : const <PendingTwin>[];
       return (
         page: DeletedDebtsPage(
           enabled: body['enabled'] == true,
+          pendingTwins: twins,
           rows: rows,
           count: int.tryParse(totals['count']?.toString() ?? '') ?? rows.length,
           total: double.tryParse(totals['debt']?.toString() ?? '') ??
@@ -213,6 +278,39 @@ class DeletedDebtsApi {
     } catch (e) {
       _log('write-off', e);
       return (ok: false, message: humanError(e, fallback: 'تعذّر الشطب'));
+    }
+  }
+
+  /// قرار الدين المكرّر (لصاحب الحساب): [same] «نفس الدين» — [keep] 'manual' (يُحصَّل اليدويّ وتُصفَّر نسخة الدفتر) أو 'ledger' (يُشطب
+  /// اليدويّ ويُحصَّل الدفتر)؛ وإلّا «دينان مختلفان». [seenAutoDebt] دين الدفتر كما عُرض — تغيّر ⇒ 409 TWIN_AUTO_CHANGED بلا حركة.
+  static Future<({bool ok, String? message, String? code, Map<String, dynamic> data})> decideTwin({
+    required String manualKey,
+    required bool same,
+    String? keep,
+    double? seenAutoDebt,
+  }) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>('$_base/$manualKey/twin', data: {
+        'same': same,
+        if (same && keep != null) 'keep': keep,
+        if (same && seenAutoDebt != null && seenAutoDebt >= 0) 'seen_auto_debt': seenAutoDebt,
+      });
+      final body = r.data ?? const {};
+      final ok = body['success'] == true;
+      final d = body['data'] is Map ? Map<String, dynamic>.from(body['data'] as Map) : const <String, dynamic>{};
+      return (ok: ok, message: body['message']?.toString(), code: ok ? null : body['code']?.toString(), data: d);
+    } on DioException catch (e) {
+      _log('twin', e);
+      final b = e.response?.data;
+      return (
+        ok: false,
+        message: b is Map && b['message'] != null ? b['message'].toString() : humanError(e, fallback: 'تعذّر حفظ القرار — أعد المحاولة'),
+        code: b is Map ? b['code']?.toString() : null,
+        data: const <String, dynamic>{},
+      );
+    } catch (e) {
+      _log('twin', e);
+      return (ok: false, message: humanError(e, fallback: 'تعذّر حفظ القرار — أعد المحاولة'), code: null, data: const <String, dynamic>{});
     }
   }
 

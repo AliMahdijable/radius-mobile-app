@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/national_portal_api.dart';
 import '../../api/national_sheet_api.dart';
+import '../../api/national_wallet_api.dart' show WalletTopupState;
 import '../../core/util/bidi.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/design_sheet.dart';
@@ -20,6 +21,7 @@ import '../subscribers/sheets/consumption_sheet.dart' show fmtBytes;
 import 'national_labels.dart';
 import 'national_task_sheet.dart';
 import 'national_tickets_screen.dart' show showNationalTicketSheet;
+import 'national_wallet_topup_sheet.dart';
 import 'national_widgets.dart';
 
 /// أقسام البوّابة في صفحة مشترك الوطنيّ (١ نوفمبر — المالك: «اقسام البوابة البقية… تكملها»): محفظته، و«سجل الأخطاء» لاشتراكه،
@@ -81,8 +83,11 @@ extension on NationalSheetSection {
 }
 
 class NationalSubscriberExtras extends StatefulWidget {
-  const NationalSubscriberExtras({super.key, required this.sub});
+  const NationalSubscriberExtras({super.key, required this.sub, this.onChanged});
   final Subscriber sub;
+
+  /// تغيّر شيءٌ في المشترك من هنا (تعبئة محفظته بدين) ⇒ صفحة المشترك تعيد قراءته (دينه).
+  final VoidCallback? onChanged;
 
   /// مشتركٌ للمشروع الوطنيّ برقمه، خارج «كل الشركات» (الأقسام تقرأ بجلسة الحساب المفتوح وحده).
   static bool shownFor(Subscriber sub) =>
@@ -380,13 +385,60 @@ class _NationalSubscriberExtrasState extends State<NationalSubscriberExtras> {
             textDirection: b.locked ? null : TextDirection.ltr,
             style: b.locked ? AppType.muted() : AppType.amount(color: AppColors.textHi).copyWith(fontSize: 15),
           ),
+          // «تعبئة» (٢ نوفمبر): من محفظة الوكيل أو بكارت — حين يفتحه الخادم وحده، ومقفلٌ بمكانه للموظّف
+          if (_beta?.walletTopup == true) ...[
+            const SizedBox(width: Sp.sm),
+            _TopupChip(locked: Perms.isEmployee, onTap: _topup),
+          ],
         ],
       ),
     );
   }
+
+  Future<void> _topup() async {
+    if (Perms.isEmployee) {
+      showNoPermission(context);
+      return;
+    }
+    final r = await showNationalWalletTopupSheet(context, sid: _idx);
+    if (!mounted || r == null) return;
+    nationalWalletSnack(context, r);
+    _retry(NationalSheetSection.wallet);
+    if ((r.debtAdded ?? 0) > 0 || r.state == WalletTopupState.unknown) widget.onChanged?.call();
+  }
 }
 
 /* ───────────────────────────── أجزاء ───────────────────────────── */
+
+/// زرّ «تعبئة» صغير بجانب رصيد المحفظة — مقفلٌ بمكانه (قفلٌ بدل الأيقونة) لمن لا يملكه.
+class _TopupChip extends StatelessWidget {
+  const _TopupChip({required this.locked, required this.onTap});
+  final bool locked;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep
+    final fg = locked ? AppColors.textLow : AppColors.brand;
+    return Semantics(
+      button: true,
+      label: locked ? 'تعبئة محفظة المشترك — مقفل' : 'تعبئة محفظة المشترك',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(R.chip),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(R.chip), border: Border.all(color: AppColors.border)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(locked ? LucideIcons.lock : LucideIcons.circlePlus, size: 14, color: fg),
+            const SizedBox(width: Sp.xs),
+            Text('تعبئة', style: AppType.label(color: fg)),
+          ]),
+        ),
+      ),
+    );
+  }
+}
 
 /// حبّة قسم: مختارة (بلون العلامة = مفتوحٌ تحتها، والنقر ثانيةً يطويه)، أو مقفلة (قفلٌ بدل الأيقونة، خافتة) — بمكانها لا تختفي.
 class _SectionChip extends StatelessWidget {

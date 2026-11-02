@@ -235,6 +235,7 @@ class NationalBeta {
     this.fatEdit = false,
     this.deviceEdit = false,
     this.installEdit = false,
+    this.walletTopup = false,
   });
   final bool on;
 
@@ -243,6 +244,10 @@ class NationalBeta {
   final bool fatEdit;
   final bool deviceEdit;
   final bool installEdit;
+
+  /// «تعبئة محفظة المشترك» (`wallet_topup`، ٢ نوفمبر): الأقسام + الكتابة + مفتاح watani_wallet + صلاحيّة البوّابة — لصاحب الحساب
+  /// (الموظّف يراه مقفلاً بمكانه).
+  final bool walletTopup;
 
   /// موظّفٌ رفض الخادم سؤاله (403 PERMISSION_DENIED — لا يملك أيّ مفتاحٍ يقرأ به `lookups`، القرار ٤ في ١ نوفمبر): لا نعرف أهي مفتوحة،
   /// والأقسام تبقى بمكانها **مقفلةً بمفاتيحه** لا مخفيّة (الموظّف يرى ما لا يملكه مقفلاً).
@@ -277,6 +282,7 @@ class NationalBeta {
       fatEdit: j['fat_edit'] == true,
       deviceEdit: j['device_edit'] == true,
       installEdit: j['install_edit'] == true,
+      walletTopup: j['wallet_topup'] == true,
     );
   }
 }

@@ -41,6 +41,9 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
   String? _error;
   bool _loading = true;
 
+  /// قرار دينٍ مكرّر قيد الإرسال (مفتاح صفّه اليدويّ) — زرٌّ واحد في المرّة.
+  String? _twinBusy;
+
   @override
   void initState() {
     super.initState();
@@ -80,6 +83,75 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
 
   Future<void> _afterSheet(Future<bool?> sheet) async {
     if (await sheet == true && mounted) await _load();
+  }
+
+  /* ── الدين المكرّر (٢ نوفمبر — كالموقع: «نفس الدين» يُحصَّل مرّةً، «دينان مختلفان» كلٌّ وحده، و«أكمل القرار» لما حُفظ جزؤه) ── */
+
+  Future<void> _twinSame(PendingTwin t) async {
+    var keep = t.partialKeep;
+    if (keep == null && t.differ) {
+      final pick = await showConfirmSheet(
+        context,
+        title: 'أيّ المبلغين صحيح؟',
+        message: 'المسجَّل يدويّاً ${_money(t.manualOrig ?? t.manualDebt)} ودين الدفتر ${_money(t.autoDebt ?? 0)} — '
+            'يُحصَّل الصحيح مرّةً واحدة ويُشطب الآخر (ليس نقداً).',
+        confirmLabel: 'مبلغ الدفتر ${_money(t.autoDebt ?? 0)}',
+        cancelLabel: 'المسجَّل يدويّاً ${_money(t.manualOrig ?? t.manualDebt)}',
+        icon: LucideIcons.scale,
+      );
+      if (!mounted || pick == null) return;
+      keep = pick ? 'ledger' : 'manual';
+    }
+    await _decideTwin(t, same: true, keep: keep ?? 'manual');
+  }
+
+  Future<void> _twinDistinct(PendingTwin t) async {
+    final go = await showConfirmSheet(
+      context,
+      title: 'دينان مختلفان؟',
+      message: 'يبقى الصفّ اليدويّ ودين الدفتر كلٌّ يُحصَّل وحده — لا يُعاد ربطهما.',
+      confirmLabel: 'نعم، دينان مختلفان',
+      cancelLabel: 'تراجع',
+      icon: LucideIcons.split,
+      tone: AppTone.warning,
+    );
+    if (go != true || !mounted) return;
+    await _decideTwin(t, same: false);
+  }
+
+  Future<void> _decideTwin(PendingTwin t, {required bool same, String? keep}) async {
+    if (_twinBusy != null) return;
+    setState(() => _twinBusy = t.manualKey);
+    final r = await DeletedDebtsApi.decideTwin(
+      manualKey: t.manualKey,
+      same: same,
+      keep: keep,
+      seenAutoDebt: t.partialKeep == null ? t.autoDebt : null,
+    );
+    if (!mounted) return;
+    setState(() => _twinBusy = null);
+    if (r.ok) {
+      final d = r.data;
+      final wm = (d['written_off_manual'] as num?) ?? 0;
+      final msg = !same
+          ? '«${t.name}»: دينان مختلفان — كلٌّ يُحصَّل وحده'
+          : d['resumed'] == true
+              ? '«${t.name}»: اكتمل القرار — ${d['keep'] == 'ledger' ? 'يُحصَّل من دفتر الشركة' : wm > 0 ? 'الدين مسدَّدٌ بدفتر الشركة وشُطب صفّك اليدويّ' : 'يُحصَّل من صفّك اليدويّ'}'
+              : d['keep'] == 'ledger'
+                  ? '«${t.name}»: نفس الدين بمبلغ دفتر الشركة — شُطب الصفّ اليدويّ ويُحصَّل من الدفتر'
+                  : wm > 0
+                      ? '«${t.name}»: دينه مسدَّدٌ بدفتر الشركة — شُطب الصفّ اليدويّ'
+                      : d['manual_kept'] == true
+                          ? '«${t.name}»: نفس الدين — لا دين على دفتر الشركة الآن، ويبقى التحصيل من صفّك اليدويّ'
+                          : '«${t.name}»: نفس الدين — صُفّر من دفتر الشركة، ويُحصَّل من صفّك اليدويّ';
+      showSheetSnack(context, msg, duration: const Duration(seconds: 5));
+      await _load();
+      return;
+    }
+    showSheetSnack(context, r.message ?? 'تعذّر حفظ القرار — أعد المحاولة', isError: true, duration: const Duration(seconds: 10), autoExplain: false);
+    // البطاقة قديمة (حُفظ جزءٌ، أو حُسم، أو تغيّر دين الدفتر، أو تعذّر التأكّد) ⇒ تُقرأ من جديد
+    const refresh = {'TWIN_PARTIAL', 'TWIN_RESUME_SAME', 'TWIN_DECIDED', 'TWIN_AUTO_CHANGED', 'TWIN_UNVERIFIED', 'TWIN_KEEP_REQUIRED'};
+    if (refresh.contains(r.code)) await _load();
   }
 
   List<DeletedDebt> get _shown {
@@ -206,6 +278,15 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
           ),
         ],
       ),
+      if (page.pendingTwins.isNotEmpty) ...[
+        const SizedBox(height: Sp.md),
+        _TwinsCard(
+          twins: page.pendingTwins,
+          busyKey: _twinBusy,
+          onSame: _twinSame,
+          onDistinct: _twinDistinct,
+        ),
+      ],
       if (page.rows.isNotEmpty) ...[
         const SizedBox(height: Sp.md),
         SheetSearchField(
@@ -267,6 +348,88 @@ String _originLabel(String origin) => switch (origin) {
       'import' => 'dd.origin_import'.tr(),
       _ => 'dd.origin_manual'.tr(),
     };
+
+/// «ديونٌ مكرّرة تنتظر قرارك» — صفٌّ لكلّ دين: اسمه والمبلغان وحال المشترك، و«نفس الدين» / «دينان مختلفان» (أو «أكمل القرار»).
+class _TwinsCard extends StatelessWidget {
+  const _TwinsCard({required this.twins, required this.busyKey, required this.onSame, required this.onDistinct});
+  final List<PendingTwin> twins;
+  final String? busyKey;
+  final ValueChanged<PendingTwin> onSame;
+  final ValueChanged<PendingTwin> onDistinct;
+
+  static const _status = {
+    'deleted': 'محذوفٌ من الساس',
+    'absent': 'غير موجود بقائمتك',
+    'pending_sas': 'لم يُدرَج بعد',
+    'present': 'موجودٌ الآن',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Container(
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: AppColors.warningSoftBg,
+        borderRadius: BorderRadius.circular(R.card),
+        border: Border.all(color: AppColors.warningSoftBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(children: [
+            Icon(LucideIcons.copy, size: 16, color: AppColors.warningOnSoft),
+            const SizedBox(width: Sp.x6),
+            Expanded(
+              child: Text('ديونٌ مكرّرة تنتظر قرارك (${twins.length})',
+                  maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.label(color: AppColors.warningOnSoft)),
+            ),
+          ]),
+          const SizedBox(height: Sp.xs),
+          Text('دينٌ مسجَّلٌ يدويّاً ومتتبَّعٌ تلقائيّاً معاً — مقفلان حتى تقرّر، فلا يُحصَّل مرّتين.',
+              style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.5)),
+          for (final t in twins) ...[
+            const SizedBox(height: Sp.sm),
+            Divider(height: 1, color: AppColors.warningSoftBorder),
+            const SizedBox(height: Sp.sm),
+            Text(t.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bodyStrong(color: AppColors.textHi)),
+            const SizedBox(height: 2),
+            Text(
+              'المسجَّل يدويّاً ${_money(t.manualOrig ?? t.manualDebt)} · دين الدفتر ${t.autoDebt == null ? '—' : _money(t.autoDebt!)}'
+              '${t.autoStatus != null && _status[t.autoStatus] != null ? ' · ${_status[t.autoStatus]}' : ''}',
+              style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.5),
+            ),
+            if (t.partialKeep != null) ...[
+              const SizedBox(height: 2),
+              Text('بدأ قرار «نفس الدين» ولم يكتمل — «أكمل القرار» يُتمّه بلا حركةٍ جديدة',
+                  style: AppType.micro(color: AppColors.warningOnSoft)),
+            ],
+            const SizedBox(height: Sp.sm),
+            Row(children: [
+              Expanded(
+                child: FilledButton(
+                  onPressed: busyKey != null ? null : () => onSame(t),
+                  child: busyKey == t.manualKey
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : Text(t.partialKeep != null ? 'أكمل القرار' : 'نفس الدين'),
+                ),
+              ),
+              if (t.partialKeep == null) ...[
+                const SizedBox(width: Sp.sm),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: busyKey != null ? null : () => onDistinct(t),
+                    child: const Text('دينان مختلفان'),
+                  ),
+                ),
+              ],
+            ]),
+          ],
+        ],
+      ),
+    );
+  }
+}
 
 class _Kpi extends StatelessWidget {
   const _Kpi({

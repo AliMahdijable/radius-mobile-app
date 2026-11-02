@@ -65,6 +65,10 @@ class _DdServer implements HttpClientAdapter {
 
   /// الردّ القادم لإضافة: (status, body) — null ⇒ نجاح.
   (int, Map<String, dynamic>)? nextAdd;
+
+  /// ديونٌ مكرّرة تنتظر القرار (pending_twins — ٢ نوفمبر)، والردّ القادم لقرار: (status, body) — null ⇒ نجاح «نفس الدين».
+  List<Map<String, dynamic>> twins = [];
+  (int, Map<String, dynamic>)? nextTwin;
   final posts = <(String, Map<String, dynamic>)>[];
   int gets = 0;
 
@@ -89,6 +93,7 @@ class _DdServer implements HttpClientAdapter {
         'enabled': true,
         'data': rows,
         'totals': {'count': rows.length, 'debt': total},
+        if (twins.isNotEmpty) 'pending_twins': twins,
       });
     }
     if (o.path.startsWith('/api/v2/deleted-debts') && !get) {
@@ -100,7 +105,20 @@ class _DdServer implements HttpClientAdapter {
         if (r != null) return _json(r.$1, r.$2);
         return _json(200, {'success': true, 'data': {'key': 'm99', 'debt': body['amount']}});
       }
-      final m = RegExp(r'^/api/v2/deleted-debts/([am]\d+)/(pay|write-off)$').firstMatch(o.path);
+      final tm = RegExp(r'^/api/v2/deleted-debts/(m\d+)/twin$').firstMatch(o.path);
+      if (tm != null) {
+        final r = nextTwin;
+        nextTwin = null;
+        if (r != null) return _json(r.$1, r.$2);
+        twins = twins.where((x) => x['manual_key'] != tm.group(1)).toList();
+        return _json(200, {
+          'success': true,
+          'data': body['same'] == true
+              ? {'decision': 'merged', 'keep': body['keep'] ?? 'manual', 'written_off_copy': body['keep'] == 'ledger' ? 0 : 35000, 'written_off_manual': body['keep'] == 'ledger' ? 25000 : 0}
+              : {'decision': 'distinct'},
+        });
+      }
+      final m = RegExp(r'^/api/v2/deleted-debts/([amd]\d+)/(pay|write-off)$').firstMatch(o.path);
       final row = rows.firstWhere((r) => r['key'] == m?.group(1), orElse: () => const {});
       if (m == null || row.isEmpty) return _json(404, {'success': false, 'message': 'الدين غير موجود أو ليس من ديونك'});
       final debt = (row['debt'] as num).toInt();
@@ -292,6 +310,89 @@ void main() {
       expect(server.posts.last.$2, {'name': 'علي', 'amount': 20000, 'confirmRepeat': true});
       expect(find.text('إضافة دين لمشترك محذوف'), findsNothing, reason: 'أُغلق الشيت بعد الحفظ');
       await t.pump(const Duration(seconds: 4));
+    });
+  });
+
+  group('الدين المكرّر (٢ نوفمبر)', () {
+    tearDown(visualTearDown);
+
+    Map<String, dynamic> twin({String key = 'm7', double orig = 25000, double auto = 25000, String? partial}) => {
+          'manual_key': key,
+          'auto_key': 'a41',
+          'reason': 'username',
+          'manual': {'name': 'كرار جاسم', 'username': null, 'debt': orig, 'closed': false, 'orig': orig},
+          'auto': {'name': 'كرار جاسم', 'username': 'karrar', 'idx': '41', 'debt': auto, 'status': 'deleted'},
+          if (partial != null) 'partial': {'keep': partial, 'copy_off': 0, 'manual_off': 0},
+        };
+
+    Future<_DdServer> open(WidgetTester t, List<Map<String, dynamic>> twins) async {
+      final server = _DdServer(await visualSetUp(s1bSasOwner))..twins = twins;
+      ApiClient.dio.httpClientAdapter = server;
+      await pumpVisual(t, phone, home: (_) => const DeletedDebtsScreen());
+      await settle(t, seconds: 2);
+      return server;
+    }
+
+    test('النموذج: المفتاحان، والمبلغان، وما حُفظ جزؤه؛ وصفوف d تُقرأ', () {
+      final p = PendingTwin.fromJson(twin(auto: 35000));
+      expect((p?.manualKey, p?.autoKey, p?.manualOrig, p?.autoDebt, p?.differ, p?.partialKeep), ('m7', 'a41', 25000.0, 35000.0, true, null));
+      expect(PendingTwin.fromJson(twin(partial: 'ledger'))?.partialKeep, 'ledger');
+      expect(PendingTwin.fromJson({...twin(), 'manual_key': 'x1'}), isNull);
+      expect(DeletedDebt.fromJson({'key': 'd5', 'origin': 'auto', 'name': 'مخزن', 'debt': 3000})?.key, 'd5');
+    });
+
+    testWidgets('مبلغٌ واحد: «نفس الدين» يرسل keep manual ودين الدفتر المعروض، والبطاقة تختفي', (t) async {
+      final server = await open(t, [twin()]);
+      expect(find.textContaining('ديونٌ مكرّرة تنتظر قرارك (1)'), findsOneWidget);
+      await t.ensureVisible(find.text('نفس الدين'));
+      await t.tap(find.text('نفس الدين'));
+      await settle(t, seconds: 1);
+      expect(server.posts.single.$1, '/api/v2/deleted-debts/m7/twin');
+      expect(server.posts.single.$2, {'same': true, 'keep': 'manual', 'seen_auto_debt': 25000.0});
+      expect(find.textContaining('ديونٌ مكرّرة تنتظر قرارك'), findsNothing);
+      await t.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('مبلغان مختلفان: يُسأل أيّهما ⇒ «مبلغ الدفتر» يرسل keep ledger', (t) async {
+      final server = await open(t, [twin(auto: 35000)]);
+      await t.ensureVisible(find.text('نفس الدين'));
+      await t.tap(find.text('نفس الدين'));
+      await settle(t, seconds: 1);
+      expect(find.text('أيّ المبلغين صحيح؟'), findsOneWidget);
+      await t.tap(find.text('مبلغ الدفتر 35,000 د.ع'));
+      await settle(t, seconds: 1);
+      expect(server.posts.single.$2, {'same': true, 'keep': 'ledger', 'seen_auto_debt': 35000.0});
+      await t.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('«دينان مختلفان» بتأكيد ⇒ {same:false}؛ و«أكمل القرار» لما حُفظ جزؤه بلا seen', (t) async {
+      final server = await open(t, [twin(), twin(key: 'm9', partial: 'ledger')]);
+      expect(find.text('أكمل القرار'), findsOneWidget);
+      await t.ensureVisible(find.text('دينان مختلفان'));
+      await t.tap(find.text('دينان مختلفان'));
+      await settle(t, seconds: 1);
+      await t.tap(find.text('نعم، دينان مختلفان'));
+      await settle(t, seconds: 1);
+      expect(server.posts.last.$2, {'same': false});
+      await t.pump(const Duration(seconds: 6));
+      await t.ensureVisible(find.text('أكمل القرار'));
+      await t.tap(find.text('أكمل القرار'));
+      await settle(t, seconds: 1);
+      expect(server.posts.last.$1, '/api/v2/deleted-debts/m9/twin');
+      expect(server.posts.last.$2, {'same': true, 'keep': 'ledger'});
+      await t.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('دين الدفتر تغيّر بعد العرض ⇒ رسالة الخادم وتُقرأ القائمة من جديد', (t) async {
+      final server = await open(t, [twin()]);
+      final getsBefore = server.gets;
+      server.nextTwin = (409, {'success': false, 'code': 'TWIN_AUTO_CHANGED', 'message': 'تغيّر دين الدفتر بعد عرضه — حدّث القسم وانظر المبلغين ثمّ قرّر (لم يتغيّر شيء)'});
+      await t.ensureVisible(find.text('نفس الدين'));
+      await t.tap(find.text('نفس الدين'));
+      await settle(t, seconds: 1);
+      expect(find.textContaining('تغيّر دين الدفتر بعد عرضه'), findsOneWidget);
+      expect(server.gets, getsBefore + 1);
+      await t.pump(const Duration(seconds: 11));
     });
   });
 

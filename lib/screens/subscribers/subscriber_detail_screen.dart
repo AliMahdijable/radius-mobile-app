@@ -438,7 +438,13 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                     // «الليف والموقع» للشركات المُضافة التي يقرأ خادمها الضوء والعنوان (المشروع الوطنيّ، ٣١ أكتوبر — «الباور والموقع»).
                     if (KitFiberCard.shownFor(sub)) KitFiberCard(key: ValueKey('kit-fiber-${sub.idx}'), sub: sub),
                     // «من بوّابة الوطني» (١ نوفمبر — الأقسام التجريبيّة): محفظته وسجل أخطائه وتذاكره ومهامّه وجلساته، تُجلب حين تُفتح.
-                    if (NationalSubscriberExtras.shownFor(sub)) NationalSubscriberExtras(key: ValueKey('national-extras-${sub.idx}'), sub: sub),
+                    if (NationalSubscriberExtras.shownFor(sub))
+                      NationalSubscriberExtras(
+                        key: ValueKey('national-extras-${sub.idx}'),
+                        sub: sub,
+                        // «تعبئة محفظته» بدين ⇒ دينه تغيّر: قراءةٌ طازجة كالسحب للتحديث
+                        onChanged: () => unawaited(_onDataChanged(force: true)),
+                      ),
                     DeviceProbeCard(
                       key: _deviceCardKey,
                       ip: sub.ipAddress ?? '',
