@@ -158,6 +158,7 @@ class NationalTaskDetail {
     this.commentsTotal,
     this.commentsLocked = false,
     this.canComment = false,
+    this.install,
   });
   final String? id;
   final String title;
@@ -186,6 +187,10 @@ class NationalTaskDetail {
   final bool commentsLocked;
   final bool canComment;
 
+  /// «تنصيب الجهاز» (٢ نوفمبر): مهمّة «اعداد مشترك» مفتوحة ⇒ `open` (النموذج يغلقها)، مكتملة ⇒ `done` (ما سُجّل بها)، وإلّا null —
+  /// يقوله الخادم (`can.install`: مفتاح watani_install + الكتابة + صلاحيّتا البوّابة).
+  final String? install;
+
   /// اسم المهمّة بالعربيّ: من نوعها، وإلّا عنوانها.
   String get label => type.isNotEmpty ? type : title;
 
@@ -211,6 +216,7 @@ class NationalTaskDetail {
       commentsTotal: _int(j['comments_total']),
       commentsLocked: j['comments_locked'] == true,
       canComment: can['comment'] == true,
+      install: can['install'] == 'open' || can['install'] == 'done' ? can['install'] as String : null,
     );
   }
 }
@@ -220,8 +226,23 @@ NationalComment nationalCommentOf(Map c) => NationalComment(_s(c['text']), _s(c[
 
 /// ما يقوله الخادم عن الأقسام التجريبيّة لهذا الحساب (§2): مفتوحةٌ أم لا، وأقفال البوّابة الجاهزة بأسبابها.
 class NationalBeta {
-  const NationalBeta({required this.on, this.caps, this.locks = const {}, this.canWrite = false, this.refused = false});
+  const NationalBeta({
+    required this.on,
+    this.caps,
+    this.locks = const {},
+    this.canWrite = false,
+    this.refused = false,
+    this.fatEdit = false,
+    this.deviceEdit = false,
+    this.installEdit = false,
+  });
   final bool on;
+
+  /// «تغيير الفات» (`fat_edit`) و«تعديل معلومات الجهاز» (`device_edit`) و«تنصيب الجهاز» (`install_edit`) مفتوحةٌ لهذا الحساب —
+  /// يقولها الخادم بمفاتيحها (watani_fat · watani_device · watani_install) والكتابة وصلاحيّات البوّابة (٢ نوفمبر).
+  final bool fatEdit;
+  final bool deviceEdit;
+  final bool installEdit;
 
   /// موظّفٌ رفض الخادم سؤاله (403 PERMISSION_DENIED — لا يملك أيّ مفتاحٍ يقرأ به `lookups`، القرار ٤ في ١ نوفمبر): لا نعرف أهي مفتوحة،
   /// والأقسام تبقى بمكانها **مقفلةً بمفاتيحه** لا مخفيّة (الموظّف يرى ما لا يملكه مقفلاً).
@@ -253,6 +274,9 @@ class NationalBeta {
             }
           : const {},
       canWrite: j['can_write'] == true,
+      fatEdit: j['fat_edit'] == true,
+      deviceEdit: j['device_edit'] == true,
+      installEdit: j['install_edit'] == true,
     );
   }
 }

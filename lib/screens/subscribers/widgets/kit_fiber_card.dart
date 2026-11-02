@@ -1,11 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../api/api_client.dart';
+import '../../../api/national_sheet_api.dart';
 import '../../../core/util/bidi.dart';
+import '../../../core/widgets/permission_locked.dart';
+import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../models/subscriber.dart';
 import '../../../services/fiber/fiber_band.dart';
 import '../../../services/permissions_service.dart';
@@ -14,6 +19,8 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../network_devices/fiber/fiber_widgets.dart';
+import '../../national/national_device_sheet.dart';
+import '../../national/national_ticket_write.dart' show nationalWriteLocked;
 
 /// قراءة «الليف والموقع» من الخادم (GET /api/v2/subscribers/:idx/fiber) — الحقول كما يرسلها محوّل الشركة.
 class KitFiberInfo {
@@ -121,10 +128,24 @@ class KitFiberCard extends StatefulWidget {
 
   static Future<bool> _openMap(Uri uri) => launchUrl(uri, mode: LaunchMode.externalApplication);
 
+  /// للاختبار: «إرسال الموقع» (ورقة المشاركة في النظام — لا قناة منصّة في `flutter test`).
+  @visibleForTesting
+  static Future<void> Function(String text, Rect origin) shareText = _systemShare;
+
+  static Future<void> _systemShare(String text, Rect origin) =>
+      // ignore: deprecated_member_use
+      Share.share(text, sharePositionOrigin: origin);
+
+  /// للاختبار: ما يقوله الخادم عن نافذة الجهاز (المشروع الوطنيّ — `lookups.fat_edit`/`device_edit`).
+  @visibleForTesting
+  static Future<NationalBeta?> Function() beta = NationalSheetApi.beta;
+
   @visibleForTesting
   static void debugReset() {
     fetch = _fetch;
     openMap = _openMap;
+    shareText = _systemShare;
+    beta = NationalSheetApi.beta;
   }
 
   /// يظهر لشركةٍ مُضافة خارج «كل الشركات»: لصاحب الحساب بقدرة شركته (`subscribers.fiber_info` من الخادم)، ولموظّفنا بعرض المشتركين
@@ -144,10 +165,63 @@ class _KitFiberCardState extends State<KitFiberCard> {
   bool _loading = true;
   bool _open = false;
 
+  /// المشروع الوطنيّ: «تغيير الفات» / «تعديل معلومات الجهاز» مفتوحان لهذا الحساب؟ (يقوله الخادم — null حتى يُعرف)
+  NationalBeta? _beta;
+
+  static bool get _national => ProviderService.isKit && ProviderService.parentIsZone;
+
   @override
   void initState() {
     super.initState();
     unawaited(_load());
+    if (_national) {
+      unawaited(KitFiberCard.beta().then((b) {
+        if (mounted && b != null) setState(() => _beta = b);
+      }));
+    }
+  }
+
+  bool get _editOn => _national && _beta != null && (_beta!.fatEdit || _beta!.deviceEdit);
+
+  Future<void> _openEdit() async {
+    final b = _beta;
+    final idx = widget.sub.idx;
+    if (b == null || idx == null) return;
+    if (nationalWriteLocked) {
+      showNoPermission(context, action: true);
+      return;
+    }
+    final changed = await showNationalDeviceSheet(
+      context,
+      sid: idx,
+      name: widget.sub.fullName.trim().isEmpty ? widget.sub.username : widget.sub.fullName.trim(),
+      fatOn: b.fatEdit,
+      devOn: b.deviceEdit,
+    );
+    if (changed == true && mounted) {
+      setState(() => _loading = true);
+      unawaited(_load());
+    }
+  }
+
+  String _coords(KitFiberInfo d) => '${d.lat!.toStringAsFixed(6)}, ${d.lng!.toStringAsFixed(6)}';
+  String _link(KitFiberInfo d) => 'https://www.google.com/maps?q=${d.lat!.toStringAsFixed(6)},${d.lng!.toStringAsFixed(6)}';
+
+  Future<void> _copyCoords(KitFiberInfo d) async {
+    await Clipboard.setData(ClipboardData(text: _coords(d)));
+    if (mounted) showSheetSnack(context, 'نُسخت الإحداثيّات');
+  }
+
+  Future<void> _share(BuildContext btn, KitFiberInfo d) async {
+    final box = btn.findRenderObject() as RenderBox?;
+    final origin = box == null ? const Rect.fromLTWH(0, 0, 1, 1) : box.localToGlobal(Offset.zero) & box.size;
+    final who = widget.sub.fullName.trim().isEmpty ? widget.sub.username : widget.sub.fullName.trim();
+    try {
+      await KitFiberCard.shareText('موقع $who\n${_link(d)}', origin);
+    } catch (_) {
+      await Clipboard.setData(ClipboardData(text: _link(d)));
+      if (mounted) showSheetSnack(context, 'نُسخ رابط الموقع');
+    }
   }
 
   Future<void> _load() async {
@@ -191,7 +265,8 @@ class _KitFiberCardState extends State<KitFiberCard> {
   @override
   Widget build(BuildContext context) {
     final d = _info;
-    if (!_loading && d == null) return const SizedBox.shrink();
+    // نافذة الجهاز (الوطنيّ) تبقى ولو تعذّرت قراءة الضوء — كالموقع
+    if (!_loading && d == null && !_editOn) return const SizedBox.shrink();
     final rx = d?.rx;
     final band = FiberBands.of(rx);
     final Widget pill = _loading
@@ -199,7 +274,9 @@ class _KitFiberCardState extends State<KitFiberCard> {
         : rx != null
             ? FiberPill('${iso('${rx.toStringAsFixed(1)} dBm')}${band != null ? ' · ${FiberBands.label(band)}' : ''}',
                 tone: FiberBands.tone(rx))
-            : d!.down
+            : d == null
+                ? const FiberPill('لا قياس', tone: AppTone.neutral)
+                : d.down
                 ? const FiberPill('لا ضوء — مفصول', tone: AppTone.danger)
                 : FiberPill(d.ontError == 'busy' ? 'البوّابة مشغولة' : 'لا قياس', tone: AppTone.neutral);
     return Padding(
@@ -252,10 +329,44 @@ class _KitFiberCardState extends State<KitFiberCard> {
                           label: const Text('افتح الموقع على الخريطة'),
                           style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
                         ),
+                        // نسخ الإحداثيّات أو إرسالها رابطاً (المالك ٢ نوفمبر: «امكانيه نسخ الاحداثيات او ارساله كرابط احداثي»)
+                        const SizedBox(height: Sp.sm),
+                        Row(children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => _copyCoords(d),
+                              icon: const Icon(LucideIcons.copy, size: 16),
+                              label: const Text('نسخ الإحداثيّات'),
+                              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+                            ),
+                          ),
+                          const SizedBox(width: Sp.sm),
+                          Expanded(
+                            child: Builder(
+                              builder: (btn) => OutlinedButton.icon(
+                                onPressed: () => _share(btn, d),
+                                icon: const Icon(LucideIcons.share2, size: 16),
+                                label: const Text('إرسال الموقع'),
+                                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+                              ),
+                            ),
+                          ),
+                        ]),
                       ],
                     ]),
                   ),
           ),
+          // المشروع الوطنيّ: «تعديل معلومات الجهاز» (أو «تغيير الفات» وحده) — يبقى ظاهراً تحت القسم كالموقع
+          if (_editOn)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.lg),
+              child: OutlinedButton.icon(
+                onPressed: _openEdit,
+                icon: Icon(nationalWriteLocked ? LucideIcons.lock : (_beta!.deviceEdit ? LucideIcons.cpu : LucideIcons.network), size: 16),
+                label: Text(_beta!.deviceEdit ? 'تعديل معلومات الجهاز' : 'تغيير الفات'),
+                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+              ),
+            ),
         ]),
       ),
     );

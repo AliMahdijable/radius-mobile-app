@@ -258,7 +258,8 @@ class NationalRequestDetail {
   final bool cancelable;
   final String? createdAt;
   final String? closedAt;
-  final List<({String title, String status, String? dueAt})> tasks;
+  /// [id] (٢ نوفمبر): تُفتح المهمّة المرتبطة بورقتها — ومنها «تنصيب الجهاز».
+  final List<({String? id, String title, String status, String? dueAt})> tasks;
 
   /// null = لم يصل بعد (`logsPending`) أو تعذّر.
   final List<({String? at, bool? ok, String text})>? logs;
@@ -279,7 +280,7 @@ class NationalRequestDetail {
       closedAt: _sn(d['closed_at']),
       tasks: (d['tasks'] is List ? d['tasks'] as List : const [])
           .whereType<Map>()
-          .map((t) => (title: _s(t['title']), status: _s(t['status']), dueAt: _sn(t['due_at'])))
+          .map((t) => (id: _sn(t['id']), title: _s(t['title']), status: _s(t['status']), dueAt: _sn(t['due_at'])))
           .toList(),
       logs: logs is List
           ? logs.whereType<Map>().map((l) => (at: _sn(l['at']), ok: l['ok'] is bool ? l['ok'] as bool : null, text: _s(l['text']))).toList()

@@ -7,9 +7,11 @@ import '../../api/national_portal_api.dart';
 import '../../api/national_sheet_api.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
+import '../../core/widgets/permission_locked.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'national_install_sheet.dart';
 import 'national_labels.dart';
 import 'national_ticket_write.dart';
 import 'national_widgets.dart';
@@ -75,6 +77,16 @@ class _NationalTaskSheetState extends State<NationalTaskSheet> {
   void dispose() {
     _poll?.cancel();
     super.dispose();
+  }
+
+  /// «تنصيب الجهاز» (مفتوحة) أو «معلومات التنصيب» (مكتملة) — الموظّف بلا «تعديل المشترك» يرى الأوّل مقفلاً بمكانه.
+  Future<void> _openInstall(NationalTaskDetail d) async {
+    if (d.install == 'open' && nationalWriteLocked) {
+      showNoPermission(context, action: true);
+      return;
+    }
+    final changed = await showNationalInstallSheet(context, taskId: widget.row.id!, customer: d.customer?.name);
+    if (changed == true && mounted) _reload();
   }
 
   /// جلبٌ جديد (بعد تعليق، أو «إعادة»): بمهلة «جارٍ» كاملة من جديد.
@@ -160,6 +172,34 @@ class _NationalTaskSheetState extends State<NationalTaskSheet> {
                 ltr: true,
               ),
           ]),
+          if (d.install != null && row.id != null) ...[
+            const SizedBox(height: Sp.lg),
+            SizedBox(
+              height: 48,
+              child: d.install == 'open'
+                  ? FilledButton.icon(
+                      key: const ValueKey('national-install-open'),
+                      onPressed: () => _openInstall(d),
+                      icon: Icon(nationalWriteLocked ? LucideIcons.lock : LucideIcons.wrench, size: 18),
+                      label: Text('تنصيب الجهاز', style: AppType.label(color: nationalWriteLocked ? AppColors.textHint : AppColors.onBrand)),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: nationalWriteLocked ? AppColors.surfaceDisabled : AppColors.brand,
+                        foregroundColor: nationalWriteLocked ? AppColors.textHint : AppColors.onBrand,
+                      ),
+                    )
+                  : OutlinedButton.icon(
+                      key: const ValueKey('national-install-done'),
+                      onPressed: () => _openInstall(d),
+                      icon: const Icon(LucideIcons.wrench, size: 18),
+                      label: const Text('معلومات التنصيب'),
+                    ),
+            ),
+            if (d.install == 'open') ...[
+              const SizedBox(height: 6),
+              Text('سجّل جهاز المشترك (الاسم والرمز والفات والسيريال وكود التفعيل) فتُغلق المهمّة في البوّابة.',
+                  style: AppType.micro(color: AppColors.textMid)),
+            ],
+          ],
           if (d.description != null) ...[
             const SizedBox(height: Sp.lg),
             Text('الوصف', style: AppType.label(color: AppColors.textLabel)),

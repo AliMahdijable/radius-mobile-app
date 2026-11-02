@@ -496,16 +496,30 @@ class _RequestSheetState extends State<_RequestSheet> {
                       Text('المهامّ المرتبطة', style: AppType.label(color: AppColors.textLabel)),
                       const SizedBox(height: Sp.sm),
                       NationalInfoGroup(children: [
+                        // المهمّة المرتبطة تُفتح بورقتها (٢ نوفمبر) — ومنها «تنصيب الجهاز» لطلب التسجيل، كرابط المهمّة في البوّابة
                         for (final t in d.tasks)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                            child: Row(
-                              children: [
-                                Icon(LucideIcons.clipboardList, size: 16, color: AppColors.textMid),
-                                const SizedBox(width: Sp.sm),
-                                Expanded(child: Text(nationalTaskTitle(t.title), style: AppType.body(color: AppColors.textHi))),
-                                ToneChip(label: nationalTaskStatus(t.status).label, tone: nationalTaskStatus(t.status).tone, dense: true),
-                              ],
+                          InkWell(
+                            onTap: widget.comments && t.id != null
+                                ? () => showNationalTaskSheet(
+                                      context,
+                                      NationalTask(id: t.id, title: t.title, status: t.status, dueAt: t.dueAt, customer: row.customer, zone: row.zone),
+                                    )
+                                : null,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                              child: Row(
+                                children: [
+                                  Icon(LucideIcons.clipboardList, size: 16, color: AppColors.textMid),
+                                  const SizedBox(width: Sp.sm),
+                                  Expanded(child: Text(nationalTaskTitle(t.title), style: AppType.body(color: AppColors.textHi))),
+                                  if (t.status.isNotEmpty)
+                                    ToneChip(label: nationalTaskStatus(t.status).label, tone: nationalTaskStatus(t.status).tone, dense: true),
+                                  if (widget.comments && t.id != null) ...[
+                                    const SizedBox(width: 4),
+                                    Icon(LucideIcons.chevronLeft, size: 16, color: AppColors.textMid),
+                                  ],
+                                ],
+                              ),
                             ),
                           ),
                       ]),

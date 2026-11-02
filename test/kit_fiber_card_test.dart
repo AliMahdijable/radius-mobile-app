@@ -38,6 +38,8 @@ void main() {
   setUp(() {
     ProviderService.debugSet('watani', label: 'المشروع الوطني');
     PermissionsService.debugSet(isEmployee: false);
+    // نافذة الجهاز (٢ نوفمبر): لا سؤال للخادم هنا — غير مفتوحة إلّا حيث يقول الاختبار
+    KitFiberCard.beta = () async => null;
   });
 
   tearDown(() {
