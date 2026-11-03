@@ -406,6 +406,23 @@ class _QueueTile extends StatelessWidget {
   }
 }
 
+/// «تحميل المزيد» — عشرةٌ أخرى (المالك ٣ نوفمبر).
+class _MoreButton extends StatelessWidget {
+  const _MoreButton({required this.busy, required this.onTap});
+  final bool busy;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => OutlinedButton.icon(
+        onPressed: busy ? null : onTap,
+        icon: busy
+            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(LucideIcons.chevronDown, size: 18),
+        label: const Text('تحميل المزيد'),
+        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+      );
+}
+
 class _NavTile extends StatelessWidget {
   const _NavTile({required this.icon, required this.title, required this.subtitle, required this.onTap});
   final IconData icon;
@@ -520,6 +537,9 @@ class _CaseListState extends State<_CaseList> with AutomaticKeepAliveClientMixin
   List<ConnAlertCase>? _items;
   String? _err;
   final Set<String> _busy = {};
+  int _limit = ConnectionAutoApi.pageSize;
+  bool _more = false;
+  bool _loadingMore = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -527,16 +547,39 @@ class _CaseListState extends State<_CaseList> with AutomaticKeepAliveClientMixin
   @override
   void initState() {
     super.initState();
+    ConnectionAutoApi.changes.addListener(_load);
     _load();
   }
 
+  @override
+  void dispose() {
+    ConnectionAutoApi.changes.removeListener(_load);
+    super.dispose();
+  }
+
+  /// الصفحات المعروضة كما هي (لا ترجع للأولى بعد إجراء) — صفحةٌ + ١ لتعرف أنّ هناك المزيد.
   Future<void> _load() async {
     try {
-      final items = await ConnectionAutoApi.queue(widget.state);
-      if (mounted) setState(() { _items = items; _err = null; });
+      final items = await ConnectionAutoApi.queue(widget.state, limit: _limit + 1);
+      if (mounted) {
+        setState(() {
+          _more = items.length > _limit;
+          _items = items.take(_limit).toList();
+          _err = null;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _err = 'تعذّر التحميل — اسحب للتحديث');
     }
+  }
+
+  Future<void> _loadMore() async {
+    setState(() {
+      _loadingMore = true;
+      _limit += ConnectionAutoApi.pageSize;
+    });
+    await _load();
+    if (mounted) setState(() => _loadingMore = false);
   }
 
   Future<void> _act(String action, List<String> keys, {bool all = false}) async {
@@ -547,7 +590,7 @@ class _CaseListState extends State<_CaseList> with AutomaticKeepAliveClientMixin
       _busy.clear();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(!r.ok ? (r.message ?? 'تعذّر الإرسال الآن') : r.dry ? 'أُرسل (محاكاة — لم يصل للمشترك)' : 'أُرسل التنبيه للمشترك')));
-      await _load();
+      if (!r.ok) await _load(); // الناجح يعيد تحميل كلّ التبويبات (changes)
       return;
     }
     setState(() => _busy.addAll(all ? (_items ?? const []).map((e) => e.key) : keys));
@@ -564,7 +607,7 @@ class _CaseListState extends State<_CaseList> with AutomaticKeepAliveClientMixin
             _ => 'تم',
           };
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-    await _load();
+    if (!r.ok) await _load(); // الناجح يعيد تحميل كلّ التبويبات (changes)
   }
 
   @override
@@ -583,7 +626,8 @@ class _CaseListState extends State<_CaseList> with AutomaticKeepAliveClientMixin
               style: FilledButton.styleFrom(backgroundColor: AppColors.brand, foregroundColor: AppColors.onBrand, minimumSize: const Size.fromHeight(46)),
               onPressed: _busy.isEmpty ? () => _act('approve', const [], all: true) : null,
               icon: const Icon(LucideIcons.sendHorizontal, size: 18),
-              label: Text('أرسل للكلّ (${items!.where((e) => !e.muted).length})'),
+              // العدد من الخادم (كلّ ما ينتظر) لا من الصفحة المعروضة وحدها
+              label: Text('أرسل للكلّ (${ConnectionAutoApi.status.value.count('pending') > 0 ? ConnectionAutoApi.status.value.count('pending') : items!.where((e) => !e.muted).length})'),
             ),
             const SizedBox(height: Sp.md),
           ],
@@ -600,6 +644,7 @@ class _CaseListState extends State<_CaseList> with AutomaticKeepAliveClientMixin
             _CaseCard(c: c, busy: _busy.contains(c.key), onAct: (a) => _act(a, [c.key])),
             const SizedBox(height: Sp.sm),
           ],
+          if (_more) _MoreButton(busy: _loadingMore, onTap: _loadMore),
         ],
       ),
     );
@@ -732,6 +777,9 @@ class _LogList extends StatefulWidget {
 
 class _LogListState extends State<_LogList> with AutomaticKeepAliveClientMixin {
   List<ConnAlertLogEntry>? _items;
+  int _limit = ConnectionAutoApi.pageSize;
+  bool _more = false;
+  bool _loadingMore = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -739,16 +787,37 @@ class _LogListState extends State<_LogList> with AutomaticKeepAliveClientMixin {
   @override
   void initState() {
     super.initState();
+    ConnectionAutoApi.changes.addListener(_load);
     _load();
+  }
+
+  @override
+  void dispose() {
+    ConnectionAutoApi.changes.removeListener(_load);
+    super.dispose();
   }
 
   Future<void> _load() async {
     try {
-      final items = await ConnectionAutoApi.log();
-      if (mounted) setState(() => _items = items);
+      final items = await ConnectionAutoApi.log(limit: _limit + 1);
+      if (mounted) {
+        setState(() {
+          _more = items.length > _limit;
+          _items = items.take(_limit).toList();
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _items = const []);
     }
+  }
+
+  Future<void> _loadMore() async {
+    setState(() {
+      _loadingMore = true;
+      _limit += ConnectionAutoApi.pageSize;
+    });
+    await _load();
+    if (mounted) setState(() => _loadingMore = false);
   }
 
   static const _action = <String, String>{
@@ -774,9 +843,12 @@ class _LogListState extends State<_LogList> with AutomaticKeepAliveClientMixin {
       onRefresh: _load,
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
-        itemCount: items.isEmpty ? 1 : items.length,
+        itemCount: items.isEmpty ? 1 : items.length + (_more ? 1 : 0),
         separatorBuilder: (_, __) => Divider(height: 1, color: AppColors.divider),
         itemBuilder: (_, i) {
+          if (i == items.length && _more) {
+            return Padding(padding: const EdgeInsets.only(top: Sp.sm), child: _MoreButton(busy: _loadingMore, onTap: _loadMore));
+          }
           if (items.isEmpty) {
             return Padding(
               padding: const EdgeInsets.only(top: Sp.huge),

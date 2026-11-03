@@ -309,5 +309,51 @@ void main() {
       expect(server.bodies('POST', '/api/v2/connection-alerts/queue/action').last, {'action': 'approve', 'all': true});
       await simDrain(t);
     });
+
+    testWidgets('عشرةٌ بكلّ تبويب و«تحميل المزيد»؛ وإجراءٌ ناجح يعيد تحميل التبويبات الأخرى بلا سحب (المالك ٣ نوفمبر)', (t) async {
+      Map<String, dynamic> cs(int i, String st) => {
+            'key': 'i:$i', 'idx': '$i', 'username': 'u$i', 'name': 'مشترك $i', 'state': st,
+            'problems': [{'kind': 'signal', 'label': 'الإشارة', 'text': '-70 dBm'}],
+            'confirmed_ms': DateTime.now().subtract(const Duration(hours: 1)).millisecondsSinceEpoch, 'sends': 0, 'muted': false,
+          };
+      var watching = 3;
+      server.reply('GET', '/api/v2/connection-alerts/auto', 200, _status(pending: 25));
+      server.on('GET', '/api/v2/connection-alerts/queue', (o) {
+        final st = '${o.queryParameters['state']}';
+        final limit = int.parse('${o.queryParameters['limit']}');
+        final all = st == 'pending' ? [for (var i = 1; i <= 25; i++) cs(i, 'pending')] : st == 'watching' ? [for (var i = 100; i < 100 + watching; i++) cs(i, 'watching')] : <Map<String, dynamic>>[];
+        return SimReply(200, {'success': true, 'data': {'available': true, 'items': all.take(limit).toList()}});
+      });
+      server.reply('POST', '/api/v2/connection-alerts/queue/action', 200, {'success': true, 'data': {'done': 1, 'skipped': 0}});
+      server.reply('GET', '/api/v2/connection-alerts/log', 200, {'success': true, 'data': {'available': true, 'items': []}});
+      ConnectionAutoApi.status.value = ConnAutoStatus.fromJson(Map<String, dynamic>.from(_status(pending: 25)['data'] as Map));
+      await pumpSim(t, _v, home: (_) => const ConnAutoQueueScreen());
+      await t.pumpAndSettle();
+      expect(server.calls('GET', '/api/v2/connection-alerts/queue').first.queryParameters['limit'], 11);
+      expect(find.textContaining('أرسل للكلّ (25)'), findsOneWidget, reason: 'العدد من الخادم لا من الصفحة');
+      await t.dragUntilVisible(find.text('تحميل المزيد'), find.byType(ListView).first, const Offset(0, -300));
+      await t.pumpAndSettle();
+      expect(find.text('مشترك 10'), findsOneWidget);
+      expect(find.text('مشترك 11'), findsNothing);
+      await t.tap(find.text('تحميل المزيد'));
+      await t.pumpAndSettle();
+      expect(server.calls('GET', '/api/v2/connection-alerts/queue').where((c) => c.queryParameters['state'] == 'pending').last.queryParameters['limit'], 21);
+      // تبويب «تحت المراقبة» محمَّلٌ مسبقاً؟ نفتحه ثمّ نرجع ونرسل ⇒ يُعاد تحميله وحده
+      await t.tap(find.text('تحت المراقبة'));
+      await t.pumpAndSettle();
+      expect(find.text('مشترك 102'), findsOneWidget);
+      final before = server.calls('GET', '/api/v2/connection-alerts/queue').where((c) => c.queryParameters['state'] == 'watching').length;
+      watching = 1;
+      await t.tap(find.text('بانتظار موافقتك'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('أرسل').first);
+      await t.pumpAndSettle();
+      final after = server.calls('GET', '/api/v2/connection-alerts/queue').where((c) => c.queryParameters['state'] == 'watching').length;
+      expect(after, greaterThan(before), reason: 'الإجراء يعيد تحميل التبويبات الأخرى');
+      await t.tap(find.text('تحت المراقبة'));
+      await t.pumpAndSettle();
+      expect(find.text('مشترك 102'), findsNothing);
+      await simDrain(t);
+    });
   });
 }

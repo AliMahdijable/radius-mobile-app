@@ -221,13 +221,11 @@ class _ConnVpnScreenState extends State<ConnVpnScreen> {
       const SizedBox(height: Sp.md),
       if (st.covered)
         _note(
-          icon: LucideIcons.wifi,
-          text: 'شركتك (${st.companyLabel}) مربوطة عبر نفق النظام — لا تحتاج ملفّاً. ${st.companyHealthy ? '🟢 قائم' : '🔴 يعيد الاتّصال'}',
+          text: 'شركتك (${st.companyLabel}) مربوطة عبر نفق النظام — لا تحتاج ملفّاً. ${st.companyHealthy ? 'النفق قائم' : 'النفق يعيد الاتّصال'}',
         )
       else ...[
         if (st.autoLinked && _analysis == null) ...[
           _note(
-            icon: LucideIcons.wifi,
             text: 'تُربط تلقائيّاً عبر ${st.autoLabel} بحسابك ${iso(st.autoUser ?? '')} — جرّب «فحص الاتصال».',
             hint: 'يوزرك هناك مختلف؟ ارفع ملفّك بيوزرك وباسوردك.',
           ),
@@ -378,21 +376,14 @@ class _ConnVpnScreenState extends State<ConnVpnScreen> {
         ),
       );
 
-  Widget _note({required IconData icon, required String text, String? hint}) => _box(
-        color: AppColors.successSoftBg,
-        border: AppColors.successSoftBorder,
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(icon, size: 18, color: AppColors.success),
-          const SizedBox(width: Sp.sm),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(text, style: AppType.body(color: AppColors.textHi)),
-              if (hint != null) ...[
-                const SizedBox(height: 2),
-                Text(hint, style: AppType.micro(color: AppColors.textMid)),
-              ],
-            ]),
-          ),
+  // بلا أيقونةٍ ولا لون (المالك ٣ نوفمبر: «التنبيه الاعلى ايقونه اللون الاخضر الغيها»)
+  Widget _note({required String text, String? hint}) => _box(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text(text, style: AppType.body(color: AppColors.textHi)),
+          if (hint != null) ...[
+            const SizedBox(height: 2),
+            Text(hint, style: AppType.micro(color: AppColors.textMid)),
+          ],
         ]),
       );
 

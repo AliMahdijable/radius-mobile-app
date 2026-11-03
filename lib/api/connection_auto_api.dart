@@ -241,6 +241,13 @@ class ConnectionAutoApi {
 
   /// آخر حالةٍ معروفة (شارة «بانتظار موافقتك» وقرار رفع القراءات).
   static final ValueNotifier<ConnAutoStatus> status = ValueNotifier(ConnAutoStatus.off);
+
+  /// يزيد بعد كلّ إجراءٍ ناجح (أرسل/تجاهل/منع/أرسل الآن…) ⇒ كلّ تبويبات «تنبيهات المشتركين» تُعيد التحميل (المالك ٣ نوفمبر: «من
+  /// اسوي اي حدث ميتحدث بالكل الاقسام البقية الا اعمل رفريش»).
+  static final ValueNotifier<int> changes = ValueNotifier(0);
+
+  /// صفحة القوائم (المالك: «كل صفحه خلي ماكس عرض ١٠ وتحميل المزيد»).
+  static const pageSize = 10;
   static DateTime? _at;
   static Future<ConnAutoStatus>? _flight;
   static const _ttl = Duration(minutes: 5);
@@ -337,6 +344,7 @@ class ConnectionAutoApi {
           data: {'action': 'send_now', 'keys': [key]});
       final d = r.data?['data'];
       unawaitedLoad();
+      if (r.data?['success'] == true) changes.value++;
       return (ok: r.data?['success'] == true, dry: d is Map && d['dry'] == true, message: r.data?['message']?.toString());
     } catch (e) {
       return (ok: false, dry: false, message: _msg(e, 'تعذّر الإرسال الآن — حاول بعد قليل'));
@@ -347,8 +355,9 @@ class ConnectionAutoApi {
     load(force: true).ignore();
   }
 
-  static Future<List<ConnAlertCase>> queue(String state) async {
-    final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/connection-alerts/queue', queryParameters: {'state': state, 'limit': 300});
+  /// [limit] صفّاً على الأكثر (الخادم ≤٥٠٠) — الشاشة تطلب صفحتها + ١ لتعرف أنّ هناك المزيد.
+  static Future<List<ConnAlertCase>> queue(String state, {int limit = 300}) async {
+    final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/connection-alerts/queue', queryParameters: {'state': state, 'limit': limit});
     final d = r.data?['data'];
     if (d is! Map || d['items'] is! List) return const [];
     return (d['items'] as List).whereType<Map>().map((m) => ConnAlertCase.fromJson(Map<String, dynamic>.from(m))).toList();
@@ -362,14 +371,15 @@ class ConnectionAutoApi {
       final d = r.data?['data'];
       final done = d is Map && d['done'] is num ? (d['done'] as num).toInt() : 0;
       unawaitedLoad();
+      if (r.data?['success'] == true) changes.value++;
       return (ok: r.data?['success'] == true, done: done, message: r.data?['message']?.toString());
     } catch (e) {
       return (ok: false, done: 0, message: _msg(e, 'تعذّر الآن — حاول بعد قليل'));
     }
   }
 
-  static Future<List<ConnAlertLogEntry>> log() async {
-    final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/connection-alerts/log', queryParameters: {'limit': 100});
+  static Future<List<ConnAlertLogEntry>> log({int limit = 100}) async {
+    final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/connection-alerts/log', queryParameters: {'limit': limit});
     final d = r.data?['data'];
     if (d is! Map || d['items'] is! List) return const [];
     return (d['items'] as List).whereType<Map>().map((m) {
