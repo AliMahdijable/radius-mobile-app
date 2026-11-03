@@ -29,6 +29,7 @@ import '../../widgets/merged_company_strip.dart';
 import '../../services/active_company.dart';
 import '../../services/auth_storage.dart';
 import '../../services/connection_alerts.dart';
+import '../../services/connection_readings_uploader.dart';
 import '../../services/permissions_service.dart';
 import '../../services/provider_service.dart';
 import '../../services/subscriber_events.dart';
@@ -888,6 +889,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       setState(() {
         _probing = false;
       });
+      // «تنبيه المشترك» التلقائيّ: الكلّ طازجٌ في الكاش ⇒ قراءاته للخادم (مخنوقةٌ لكلّ مشترك؛ لا شيء إن لم يُفتح للحساب)
+      unawaited(ConnectionReadingsUploader.collect(_big ? _bigRows : _all));
       return;
     }
     if (force) {
@@ -938,6 +941,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       //    أوّل تمرير.
       DeviceProbeBus.bump();
       setState(() => _probing = false);
+      // «تنبيه المشترك» التلقائيّ (٣ نوفمبر): القراءات الخام للخادم — هو يقرّر ويؤكّد ويرسل
+      unawaited(ConnectionReadingsUploader.collect(_big ? _bigRows : _all));
     });
   }
 

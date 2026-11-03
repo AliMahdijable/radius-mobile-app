@@ -287,8 +287,7 @@ class ConnectionAlerts {
   static const lan10 = 'يقرأ 10 ميكا';
 
   /// حالة كيبل LAN إن كانت عطلاً: [lanUnplugged] أو [lan10].
-  /// `null` = سليم أو مجهول.
-  @visibleForTesting
+  /// `null` = سليم أو مجهول. (يقرؤها أيضاً رافع القراءات للإرسال التلقائيّ.)
   static String? lanState(UbiquitiStatus u) {
     // لا منافذ مقروءة = لم نعرف، لا «غير مربوط».
     if (u.lanPorts.isEmpty) return null;

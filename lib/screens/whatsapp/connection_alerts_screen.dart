@@ -12,6 +12,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../desktop/desk_widgets.dart';
+import 'connection_auto_widgets.dart';
 
 /// إعدادات «تنبيه المشترك» بمشكلة الاتصال — لكلّ مدير.
 ///
@@ -272,6 +273,8 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
                     ),
                   ),
                 ]),
+                // «الإرسال التلقائيّ» (٣ نوفمبر) — يظهر وحده لحسابٍ فتحه الخادم
+                ConnAutoCard(canEdit: _canEdit),
                 const SizedBox(height: Sp.lg),
                 _sectionTitle('conn_alerts.thresholds'.tr()),
                 const SizedBox(height: Sp.sm),
