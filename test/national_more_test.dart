@@ -206,8 +206,11 @@ void main() {
         expect(m[id]!.isLocked, isTrue, reason: id);
       }
       expect(m['national_reports']!.isLocked, isFalse, reason: 'reports.packages يفتح «المشتركون حسب الزون»');
+      // «فريقي» = طاقم الشركة ⇒ «عرض قائمة الموظفين» (٣ نوفمبر): التقرير الماليّ وحده لم يعد يفتحه
+      PermissionsService.debugSet(isEmployee: true, permissions: const {'subscribers.view': true, 'reports.financial': true});
+      expect(mods()['national_team']!.isLocked, isTrue, reason: 'التقرير الماليّ لا يفتح «فريقي»');
       PermissionsService.debugSet(
-          isEmployee: true, permissions: const {'reports.sessions': true, 'reports.financial': true, 'notifications.view': true});
+          isEmployee: true, permissions: const {'reports.sessions': true, 'employees.view': true, 'notifications.view': true});
       final n = mods();
       for (final id in fresh) {
         expect(n[id]!.isLocked, isFalse, reason: id);

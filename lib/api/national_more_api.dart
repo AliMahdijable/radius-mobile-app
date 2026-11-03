@@ -92,7 +92,7 @@ class NationalMoreResult<T> {
 /// (العقد §9، `server/providerKit/employeeRoutes.js`). والموظّف بلاها يرى القسم **بمكانه مقفلاً لا مخفيّاً**.
 abstract final class NationalPerms {
   static const sessions = 'reports.sessions';
-  static const team = 'reports.financial';
+  static const team = 'employees.view'; // «فريقي» طاقم الشركة (٣ نوفمبر — كان التقرير الماليّ)
   static const zonesReport = 'reports.packages';
   static const sessionsReport = 'reports.sessions';
   static const notes = 'notifications.view';

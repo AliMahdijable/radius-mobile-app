@@ -85,7 +85,7 @@ class NationalNowValue extends StatelessWidget {
   }
 }
 
-/// قيمةٌ سرّيّة (رمز الجهاز): نقاطٌ، وزرّا إظهارٍ ونسخ — أو «محجوب» لموظّفٍ بلا «تعديل المشترك».
+/// قيمةٌ سرّيّة (رمز الجهاز): نقاطٌ، وزرّا إظهارٍ ونسخ — أو «محجوب» لموظّفٍ بلا «عرض كلمة مرور المشترك» (٣ نوفمبر).
 class NationalSecretValue extends StatefulWidget {
   const NationalSecretValue({super.key, required this.value, this.hidden = false, this.prefix = 'الحاليّ '});
   final String? value;
@@ -102,7 +102,7 @@ class _NationalSecretValueState extends State<NationalSecretValue> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep
-    if (widget.hidden) return Text('محجوب — يحتاج «تعديل المشترك»', style: AppType.micro(color: AppColors.textMid));
+    if (widget.hidden) return Text('محجوب — يحتاج «عرض كلمة مرور المشترك»', style: AppType.micro(color: AppColors.textMid));
     final v = widget.value;
     if (v == null || v.isEmpty) return const NationalNowValue(null);
     return Row(mainAxisSize: MainAxisSize.min, children: [
