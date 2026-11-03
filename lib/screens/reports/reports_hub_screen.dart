@@ -208,16 +208,7 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
                 MaterialPageRoute(builder: (_) => const ElTestUsageScreen()),
               ),
             ),
-            _ReportCard(
-              locked: !Perms.has('reports.activity_log'),
-              icon: LucideIcons.history,
-              color: AppColors.anomaly,
-              title: 'el.audit_title'.tr(),
-              subtitle: 'el.audit_hint'.tr(),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ElAuditScreen()),
-              ),
-            ),
+            // «سجلّ ايرث لنك» أُلغي (٣ نوفمبر — المالك: «سجل ايرث لنك هذا الغي»): كان يُظهر عنوان خادمنا لكلّ وكيل.
             _ReportCard(
               locked: !Perms.has('reports.activations'),
               icon: LucideIcons.package,
