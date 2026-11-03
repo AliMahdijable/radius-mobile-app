@@ -1,13 +1,18 @@
 import 'dart:async';
 import 'dart:io' show Platform;
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
+import '../api/device_config_api.dart';
 import '../api/device_probe_api.dart';
 import '../api/subscribers_api.dart';
 import '../core/net/tcp_reachability.dart';
+import '../models/subscriber.dart';
 import '../screens/subscribers/widgets/device_chip_micro.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'connection_readings_uploader.dart';
 import 'provider_service.dart';
 
@@ -18,8 +23,10 @@ import 'provider_service.dart';
 ///   مباشرةً — فبطاقات المشتركين تفتح بقراءاتها، و«تنبيه المشترك» التلقائيّ يقيس ولو لم تُفتح القائمة.
 /// * **الأولويّة لما يفعله المستخدم:** يبدأ بعد [firstDelay] من الواجهة (لا يزاحم طلبات الرئيسيّة الأولى)، بعمّالٍ أقلّ
 ///   ([_workers]) من موجة القائمة، ويتوقّف فوراً حين تبدأ موجةٌ أماميّة ([DeviceProbeApi.foregroundWaves]) أو يذهب التطبيق للخلفيّة.
-/// * **لا هدر:** خارج شبكة الوكيل (بيانات الهاتف) لا يردّ أيّ جهاز من عيّنةٍ صغيرة ⇒ لا موجة؛ وما فُحص خلال ٥ دقائق لا يُعاد
-///   ([DeviceProbeApi.needsProbe])؛ والحسابات الكبيرة (≥٥٠٠٠) والشركات بلا أجهزة (الوطنيّ وفايبر اكس والمُضافة) خارجها.
+/// * **لا هدر:** خارج شبكة الوكيل (بيانات الهاتف) لا يردّ أيّ جهازٍ من العيّنة ([_sample]: ما ردّ سابقاً + متّصلون الآن عشوائيّاً) ⇒
+///   لا موجة ويُعاد السؤال بعد [offNetRetry]؛ وما فُحص خلال ٥ دقائق لا يُعاد ([DeviceProbeApi.needsProbe])؛ والحسابات الكبيرة
+///   (≥٥٠٠٠ — لا قائمة كاملة) والوطنيّ وفايبر اكس (لا عنوان جهازٍ من بوّابتهما) خارجها.
+/// * الهاتف يتوقّف بالخلفيّة (النظام يعلّق الشبكة)، والحاسبة تستمرّ مصغَّرةً أو خلف نافذةٍ أخرى.
 /// * كلّ [interval] موجة، وكلّ [_tick] تُقاس أجهزة «تحت المراقبة» التي حان موعد تأكيدها ([ConnectionReadingsUploader.runRechecks]).
 class DeviceWarmService with WidgetsBindingObserver {
   DeviceWarmService._();
@@ -29,13 +36,23 @@ class DeviceWarmService with WidgetsBindingObserver {
   static const interval = Duration(minutes: 15);
   static const _tick = Duration(seconds: 30);
   static const _workers = 12;
-  static const _sample = 5;
+
+  /// عيّنة «هل نحن على شبكة الوكيل؟» (٣ نوفمبر — المالك: «ربما اول خمسه مبيهم وصول»): ما ردّ سابقاً أوّلاً (محفوظٌ بين
+  /// الجلسات)، ثمّ متّصلون الآن مختارون من القائمة كلّها لا من أوّلها، بعنوان الجهاز الفعّال (المخصّص بمنفذه إن وُجد).
+  static const _sampleKnown = 6;
+  static const _sampleOnline = 8;
+
+  /// لم يردّ أحدٌ من العيّنة ⇒ محاولةٌ بعد هذه المدّة (لا ربع ساعة): الشبكة قد تعود سريعاً.
+  static const offNetRetry = Duration(minutes: 5);
+  static const _goodKey = 'warm.good_ips.v1';
+  static const _goodMax = 20;
 
   Timer? _timer;
   Timer? _first;
   DateTime? _lastWave;
   bool _running = false;
   bool _waving = false;
+  bool _offNet = false;
   bool _resumed = true;
 
   /// الاختبار: لا مؤقّتات حقيقيّة.
@@ -64,15 +81,23 @@ class DeviceWarmService with WidgetsBindingObserver {
     _i._first = null;
   }
 
+  /// الحاسبة (ويندوز/ماك) لا يُعلّقها النظام: نافذةٌ أخرى أمامها (inactive) أو مصغَّرة (hidden) ⇒ يستمرّ — محطّة قياسٍ بالمكتب.
+  /// الهاتف: النظام يوقف الشبكة والمؤقّتات بعد ثوانٍ من الخلفيّة (paused/hidden) ⇒ يتوقّف ويعود مع عودة التطبيق.
+  static bool get _desktop => Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    _resumed = state == AppLifecycleState.resumed;
+    _resumed = _desktop
+        ? state != AppLifecycleState.detached
+        : (state == AppLifecycleState.resumed || state == AppLifecycleState.inactive);
     if (_resumed) unawaited(_step());
   }
 
   bool get _yield => !_running || !_resumed || DeviceProbeApi.foregroundWaves > 0;
 
-  static bool get _providerHasDevices => !ProviderService.isKit && !ProviderService.isFiberx;
+  /// المشروع الوطنيّ وفايبر اكس: لا عنوان جهازٍ للمشترك من بوّابتهما (جهازه تديره الشركة — «الباور» يُقرأ من البوّابة)، فلا شيء يُفحص.
+  /// بقيّة الشركات المُضافة (نبض، AccessGate…) كالساس: من له عنوانٌ يُفحص.
+  static bool get _providerHasDevices => !ProviderService.isFiberx && !(ProviderService.isKit && ProviderService.parentIsZone);
 
   Future<void> _step() async {
     if (_yield || _waving) return;
@@ -80,7 +105,7 @@ class DeviceWarmService with WidgetsBindingObserver {
     await ConnectionReadingsUploader.runRechecks();
     // ٢) الموجة الدوريّة
     final last = _lastWave;
-    if (last != null && DateTime.now().difference(last) < interval) return;
+    if (last != null && DateTime.now().difference(last) < (_offNet ? offNetRetry : interval)) return;
     await wave();
   }
 
@@ -101,15 +126,15 @@ class DeviceWarmService with WidgetsBindingObserver {
           .where((t) => DeviceProbeApi.needsProbe(username: t.username, ip: t.ip, company: null))
           .toList();
       if (targets.isNotEmpty) {
-        // خارج شبكة الوكيل لا يردّ شيء ⇒ لا موجة (عيّنةٌ من عناوين الراديوس، ١٫٢ث)
-        final ips = targets.map((t) => t.ip).where((ip) => ip.isNotEmpty).toSet().take(_sample).toList();
-        if (ips.isNotEmpty) {
-          final ok = await Future.wait(ips.map((ip) => TcpReachability.isReachable(ip)));
-          if (!ok.contains(true)) return 0;
-        }
-        if (_yield) return 0;
+        // خارج شبكة الوكيل لا يردّ شيء ⇒ لا موجة (عيّنةٌ ذكيّة، ١٫٢ث بالتوازي)
+        final ips = await _sample(subs);
+        if (ips.isEmpty) return 0; // لا عنوان جهازٍ معروف لأحد ⇒ لا شيء يُفحص
+        final ok = await Future.wait(ips.map((ip) => TcpReachability.isReachable(ip)));
+        _offNet = !ok.contains(true);
+        if (_offNet || _yield) return 0;
         await DeviceProbeApi.warmProbe(targets, concurrency: _workers, isCanceled: () => _yield);
         DeviceProbeBus.bump();
+        unawaited(_rememberGood(subs));
       }
       unawaited(ConnectionReadingsUploader.collect(subs));
       return targets.length;
@@ -121,6 +146,44 @@ class DeviceWarmService with WidgetsBindingObserver {
     }
   }
 
+  static String _effectiveIp(Subscriber s) {
+    final custom = DeviceConfigApi.peekConfig(s.username)?.customIp?.trim();
+    return custom != null && custom.isNotEmpty ? custom : (s.ipAddress ?? '').trim();
+  }
+
+  /// العيّنة: ما ردّ في جلساتٍ سابقة (حتى [_sampleKnown]) + متّصلون الآن عشوائيّاً من القائمة كلّها (حتى [_sampleOnline])؛
+  /// وإن لم يكن أيٌّ منهما فعناوين عشوائيّة من الكلّ. جهازٌ مطفأ أو بلا وصولٍ في أوّل القائمة لا يحسم شيئاً بعد اليوم.
+  Future<List<String>> _sample(List<Subscriber> subs) async {
+    final out = <String>{};
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      out.addAll((prefs.getStringList(_goodKey) ?? const <String>[]).take(_sampleKnown));
+    } catch (_) {/* بلا ذاكرة ⇒ المتّصلون وحدهم */}
+    final rnd = math.Random();
+    List<String> pick(Iterable<Subscriber> from, int n) {
+      final ips = from.map(_effectiveIp).where((ip) => ip.isNotEmpty && !out.contains(ip)).toSet().toList()..shuffle(rnd);
+      return ips.take(n).toList();
+    }
+    out.addAll(pick(subs.where((s) => s.isOnline), _sampleOnline));
+    if (out.isEmpty) out.addAll(pick(subs, _sampleOnline));
+    return out.toList();
+  }
+
+  /// عناوين أجهزةٍ قُرئت فعلاً في هذه الموجة ⇒ أوّل العيّنة في الجلسات القادمة.
+  Future<void> _rememberGood(List<Subscriber> subs) async {
+    final good = <String>[];
+    for (final s in subs) {
+      final snap = DeviceProbeApi.cachedForUser(s.username);
+      if (snap != null && snap.ip.isNotEmpty) good.add(snap.ip);
+      if (good.length >= _goodMax) break;
+    }
+    if (good.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_goodKey, good);
+    } catch (_) {/* لا شيء */}
+  }
+
   /// للاختبار: يعيد الحالة.
   @visibleForTesting
   static void debugReset() {
@@ -128,5 +191,6 @@ class DeviceWarmService with WidgetsBindingObserver {
     _i._lastWave = null;
     _i._waving = false;
     _i._resumed = true;
+    _i._offNet = false;
   }
 }
