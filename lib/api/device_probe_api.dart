@@ -158,6 +158,9 @@ class DeviceProbeApi {
   @visibleForTesting
   static int? lastWaveWorkers;
 
+  /// موجاتٌ يراها المستخدم الآن (قائمة المشتركين) — فحص الخلفيّة (DeviceWarmService) يتنحّى ما دامت > ٠ (الأولويّة للأمام).
+  static int foregroundWaves = 0;
+
   /// للاختبار: نتيجة المشترك و/أو العنوان أقدم بـ[by].
   @visibleForTesting
   static void debugBackdate({String? username, String? ip, String? company, required Duration by}) {

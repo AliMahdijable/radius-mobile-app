@@ -286,7 +286,7 @@ class ElEmployeePerms {
   /// (`subscribers.edit`). قدرات صاحب الحساب من الخادم تُبقي الأوّل والأخير false (لا تقرير جلسات الساس العامّ، ولا «تعديل» المشترك
   /// عند الوطنيّ) — فلا تُصفّى بها: يمنحها المالك لموظّفه لأقسام البوّابة وحدها، و[outgoing] يحفظ قيمها (كانت تُرسل false بصمت
   /// فيُسحب «عرض التبليغات» الممنوح من الويب بأيّ تعديلٍ من التطبيق). ومطابقٌ للويب (WATANI_EXTRA_KEYS).
-  static const nationalExtraKeys = <String>{'reports.sessions', 'notifications.view', 'subscribers.edit'};
+  static const nationalExtraKeys = <String>{'reports.sessions', 'notifications.view', 'subscribers.edit', 'subscribers.add'};
 
   /// موظّفونا لحساب شركةٍ مُضافة (providerKit — نبض، AccessGate…، ٣٠ أكتوبر؛ الخادم 03cc682 providerKit/employeeRoutes): المشتركون
   /// كاملاً، والحسابات الفرعيّة عند الشركة ومالها، والأسعار والتقارير والتسويات والمبيعات وديون المحذوفين والأجهزة والمساعد. لا موقع
@@ -405,6 +405,9 @@ class ElEmployeePerms {
     'reports.sessions': 'جلسات المشتركين و«تقرير الجلسات» في بوّابة المشروع الوطني',
     'notifications.view': 'إشعارات بوّابة المشروع الوطني وإعلاناتها — للقراءة',
     'subscribers.edit': 'التعليق على المهامّ والطلبات في بوّابة المشروع الوطني',
+    // ٣ نوفمبر (المالك: «ضيفهن بصلاحيه الهم»)
+    'subscribers.add': '«إضافة مشترك» للمشروع الوطني — البطاقة الموحّدة وصورها ورمز الزبون',
+    'subscribers.add_credit': 'إضافة رصيد، و«تعبئة محفظة المشترك» (من محفظة الحساب أو بكارت)',
   };
 
   static String? hintFor(String key) =>

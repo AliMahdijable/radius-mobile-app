@@ -148,8 +148,11 @@ class _NationalWorkScreenState extends State<NationalWorkScreen> {
     _reload();
   }
 
+  /// «إضافة مشترك» للموظّف بصلاحيّة «إضافة مشترك» (٣ نوفمبر — المالك: «ضيفهن بصلاحيه الهم»؛ الخادم employeeRoutes)
+  static bool get _onboardLocked => Perms.isEmployee && !Perms.has('subscribers.add');
+
   Future<void> _openOnboard() async {
-    if (Perms.isEmployee) {
+    if (_onboardLocked) {
       showNoPermission(context);
       return;
     }
@@ -161,7 +164,7 @@ class _NationalWorkScreenState extends State<NationalWorkScreen> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep
     final p = _tab == 0 ? _req : _tasks;
-    final onboardLocked = Perms.isEmployee;
+    final onboardLocked = _onboardLocked;
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: deskPageBar(

@@ -12,6 +12,7 @@ import '../../core/util/format.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/sheet_scaffold.dart';
+import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -329,7 +330,11 @@ class _NationalWalletTopupSheetState extends State<NationalWalletTopupSheet> {
       body = const NationalStateBox.pending(text: 'جارٍ قراءة المحفظتين من البوّابة…');
     } else {
       body = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: [_tile('رصيد محفظتك', i.partnerBalance), const SizedBox(width: Sp.sm), _tile('رصيد محفظة المشترك', i.customerBalance)]),
+        // موظّفٌ بلا «التقرير الماليّ» لا يرى رصيد محفظة الحساب (الخادم يحجبه أيضاً — walletHidden)
+        Row(children: [
+          if (!Perms.isEmployee || Perms.has('reports.financial')) ...[_tile('رصيد محفظتك', i.partnerBalance), const SizedBox(width: Sp.sm)],
+          _tile('رصيد محفظة المشترك', i.customerBalance),
+        ]),
         const SizedBox(height: Sp.md),
         SheetSegmented(
           labels: const ['من محفظتي', 'بكارت'],

@@ -388,15 +388,18 @@ class _NationalSubscriberExtrasState extends State<NationalSubscriberExtras> {
           // «تعبئة» (٢ نوفمبر): من محفظة الوكيل أو بكارت — حين يفتحه الخادم وحده، ومقفلٌ بمكانه للموظّف
           if (_beta?.walletTopup == true) ...[
             const SizedBox(width: Sp.sm),
-            _TopupChip(locked: Perms.isEmployee, onTap: _topup),
+            _TopupChip(locked: _topupLocked, onTap: _topup),
           ],
         ],
       ),
     );
   }
 
+  /// «تعبئة محفظة المشترك» للموظّف بصلاحيّة «إضافة رصيد» (٣ نوفمبر — المالك؛ الخادم employeeRoutes + wataniWallet)
+  static bool get _topupLocked => Perms.isEmployee && !Perms.has('subscribers.add_credit');
+
   Future<void> _topup() async {
-    if (Perms.isEmployee) {
+    if (_topupLocked) {
       showNoPermission(context);
       return;
     }

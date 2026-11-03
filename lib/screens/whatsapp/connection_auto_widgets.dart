@@ -61,6 +61,9 @@ class ConnAutoCard extends StatefulWidget {
 class _ConnAutoCardState extends State<ConnAutoCard> {
   ConnAutoStatus _st = ConnectionAutoApi.status.value;
   ConnAutoSettings _s = ConnectionAutoApi.status.value.settings;
+
+  /// آخر ما حُفظ بالخادم — «حفظ» يظهر حين يختلف عنه وحده (🐛 ٣ نوفمبر: كان يُقارَن بحالةٍ تُستبدل بقراءةٍ سابقة للحفظ فيبقى ظاهراً)
+  ConnAutoSettings _saved = ConnectionAutoApi.status.value.settings;
   bool _loaded = false;
   bool _saving = false;
 
@@ -72,12 +75,13 @@ class _ConnAutoCardState extends State<ConnAutoCard> {
       setState(() {
         _st = st;
         _s = st.settings;
+        _saved = st.settings;
         _loaded = true;
       });
     });
   }
 
-  bool get _dirty => _s != _st.settings;
+  bool get _dirty => _s != _saved;
 
   Future<void> _save() async {
     setState(() => _saving = true);
@@ -88,6 +92,7 @@ class _ConnAutoCardState extends State<ConnAutoCard> {
       if (r.ok) {
         _st = ConnectionAutoApi.status.value;
         _s = _st.settings;
+        _saved = _st.settings;
       }
     });
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r.ok ? 'تم حفظ الإرسال التلقائيّ' : (r.message ?? 'تعذّر الحفظ'))));
@@ -164,9 +169,9 @@ class _ConnAutoCardState extends State<ConnAutoCard> {
                 label: 'تأكّد من المشكلة بعد',
                 unit: 'دقيقة',
                 value: _s.confirmMin,
-                min: 10,
-                max: 720,
-                step: 10,
+                min: ConnAutoSettings.kConfirmSteps.first,
+                max: ConnAutoSettings.kConfirmSteps.last,
+                values: ConnAutoSettings.kConfirmSteps,
                 onChanged: edit ? (v) => setState(() => _s = _s.copyWith(confirmMin: v)) : null,
               ),
               _Stepper(
@@ -281,6 +286,7 @@ class _Stepper extends StatelessWidget {
     required this.min,
     required this.max,
     this.step = 1,
+    this.values,
     this.format,
     this.onChanged,
   });
@@ -291,8 +297,25 @@ class _Stepper extends StatelessWidget {
   final int min;
   final int max;
   final int step;
+
+  /// خياراتٌ محدّدة (التأكيد ٣/٥/١٠…٣٠) — ‑/+ ينتقلان للسابق/التالي بدل [step].
+  final List<int>? values;
   final String Function(int)? format;
   final ValueChanged<int>? onChanged;
+
+  int get _prev {
+    final vs = values;
+    if (vs == null) return (value - step).clamp(min, max);
+    final lower = vs.where((v) => v < value);
+    return lower.isEmpty ? value : lower.last;
+  }
+
+  int get _next {
+    final vs = values;
+    if (vs == null) return (value + step).clamp(min, max);
+    final higher = vs.where((v) => v > value);
+    return higher.isEmpty ? value : higher.first;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -313,12 +336,12 @@ class _Stepper extends StatelessWidget {
         Icon(icon, size: 15, color: AppColors.textMid),
         const SizedBox(width: Sp.x6),
         Expanded(child: Text(label, style: AppType.body(color: AppColors.textHi), maxLines: 2)),
-        btn(LucideIcons.minus, (value - step).clamp(min, max), 'إنقاص'),
+        btn(LucideIcons.minus, _prev, 'إنقاص'),
         ConstrainedBox(
           constraints: const BoxConstraints(minWidth: 74),
           child: Text(txt, textAlign: TextAlign.center, style: AppType.bodyStrong(color: AppColors.brand)),
         ),
-        btn(LucideIcons.plus, (value + step).clamp(min, max), 'زيادة'),
+        btn(LucideIcons.plus, _next, 'زيادة'),
       ]),
     );
   }
@@ -472,6 +495,16 @@ class _CaseListState extends State<_CaseList> with AutomaticKeepAliveClientMixin
   }
 
   Future<void> _act(String action, List<String> keys, {bool all = false}) async {
+    if (action == 'send_now') {
+      setState(() => _busy.addAll(keys));
+      final r = await ConnectionAutoApi.sendNow(keys.single);
+      if (!mounted) return;
+      _busy.clear();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(!r.ok ? (r.message ?? 'تعذّر الإرسال الآن') : r.dry ? 'أُرسل (محاكاة — لم يصل للمشترك)' : 'أُرسل التنبيه للمشترك')));
+      await _load();
+      return;
+    }
     setState(() => _busy.addAll(all ? (_items ?? const []).map((e) => e.key) : keys));
     final r = await ConnectionAutoApi.act(action, keys, all: all);
     if (!mounted) return;
@@ -535,6 +568,20 @@ class _CaseListState extends State<_CaseList> with AutomaticKeepAliveClientMixin
       };
 }
 
+/// «تحت المراقبة»: هذه أوّل قراءة — متى تتأكّد، وأنّ «أرسل الآن» يرسل له وحده الآن (٣ نوفمبر — المالك).
+String _watchNote(ConnAlertCase c) {
+  final mins = ConnectionAutoApi.status.value.settings.confirmMin;
+  final due = c.firstBadAt?.add(Duration(minutes: mins));
+  final left = due?.difference(DateTime.now());
+  final when = left == null
+      ? 'بعد $mins دقيقة من أوّل قراءة'
+      : left.inMinutes >= 1
+          ? 'بعد ${left.inMinutes} دقيقة تقريباً'
+          : 'بأوّل قراءةٍ قادمة';
+  return 'هذه أوّل قراءةٍ سيّئة — تتأكّد بقراءةٍ ثانية $when ثمّ تنتقل لـ«بانتظار موافقتك». '
+      'تقدر ترسل له التنبيه الآن مباشرةً بـ«أرسل الآن».';
+}
+
 class _CaseCard extends StatelessWidget {
   const _CaseCard({required this.c, required this.busy, required this.onAct});
   final ConnAlertCase c;
@@ -596,6 +643,14 @@ class _CaseCard extends StatelessWidget {
           const SizedBox(height: Sp.x6),
           Text(when, style: AppType.micro(color: AppColors.textMid)),
         ],
+        if (c.state == 'watching') ...[
+          const SizedBox(height: Sp.x6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: Sp.x6),
+            decoration: BoxDecoration(color: AppColors.infoSoftBg, borderRadius: BorderRadius.circular(R.sm), border: Border.all(color: AppColors.infoSoftBorder)),
+            child: Text(_watchNote(c), style: AppType.micro(color: AppColors.textBody)),
+          ),
+        ],
         if (c.lastError != null) ...[
           const SizedBox(height: 2),
           Text(c.lastError == 'no_phone' ? 'لا رقم هاتف لهذا المشترك' : 'لم يُرسل: ${c.lastError}',
@@ -609,11 +664,12 @@ class _CaseCard extends StatelessWidget {
               act('approve', 'أرسل', LucideIcons.send, primary: true),
               act('skip', 'تجاهل', LucideIcons.clock),
             ],
+            if (c.state == 'watching' && !c.muted) act('send_now', 'أرسل الآن', LucideIcons.send, primary: true),
             if (['sent', 'skipped'].contains(c.state) && !c.muted) act('requeue', 'ذكّره الآن', LucideIcons.repeat),
             if (!c.muted && c.state != 'watching') act('mute', 'لا ترسل له', LucideIcons.bellOff, color: AppColors.error),
             if (c.muted) act('unmute', 'اسمح بالإرسال له', LucideIcons.bell),
             if (c.state == 'queued') Text('يُرسل ضمن ساعات الإرسال', style: AppType.micro(color: AppColors.textMid)),
-            if (c.state == 'watching') Text('ننتظر قراءةً ثانية تؤكّدها', style: AppType.micro(color: AppColors.textMid)),
+
           ]),
         ),
         const SizedBox(height: Sp.xs),

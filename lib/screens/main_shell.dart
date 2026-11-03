@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../api/api_client.dart'
     show authExpiredSignal, accessBlockedSignal, blockedMessage;
+import '../services/device_warm_service.dart';
 import '../services/merged_mode.dart';
 import '../services/active_company.dart';
 import '../services/ai_assistant_state.dart';
@@ -348,6 +349,8 @@ class _MainShellState extends State<MainShell> {
       unawaited(AiAssistantState.ensureFresh());
       // «كل الشركات»: يعود الوضع إن كان مفعّلاً لهذا الحساب وما زال متاحاً.
       unawaited(MergedMode.restore());
+      // فحص أجهزة المشتركين بالخلفيّة من فتح البرنامج (٣ نوفمبر): بعد ٨ث، بعمّالٍ أقلّ، يتنحّى للموجة الأماميّة وللخلفيّة
+      DeviceWarmService.start();
     });
     _authExpiredSeen = authExpiredSignal.value;
     authExpiredSignal.addListener(_onAuthExpired);
@@ -357,6 +360,7 @@ class _MainShellState extends State<MainShell> {
 
   @override
   void dispose() {
+    DeviceWarmService.stop();
     authExpiredSignal.removeListener(_onAuthExpired);
     accessBlockedSignal.removeListener(_onAccessBlocked);
     _subsFilterCmd.dispose();

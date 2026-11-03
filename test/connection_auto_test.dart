@@ -115,6 +115,31 @@ void main() {
       expect(server.calls('POST', '/api/v2/connection-alerts/readings'), hasLength(1), reason: 'مخنوقٌ لكلّ مشترك');
     });
 
+    test('تحت المراقبة: الخادم يعطي موعد إعادة القياس ⇒ يُقاس المشترك وحده عنده (قبله لا) ويُرفع فوراً', () async {
+      final due = DateTime.now().add(const Duration(minutes: 3));
+      server.reply('GET', '/api/v2/connection-alerts/auto', 200, _status());
+      server.reply('POST', '/api/v2/connection-alerts/readings', 200, {
+        'success': true,
+        'data': {'active': true, 'recheck': [{'key': 'i:1', 'idx': '1', 'username': 'u1', 'due_ms': due.millisecondsSinceEpoch}]},
+      });
+      ConnectionReadingsUploader.debugSnapshotOf = (_) => _snapU(_ubnt(signal: -70));
+      var probes = 0;
+      ConnectionReadingsUploader.debugProbe = (s) async {
+        probes++;
+        return _snapU(_ubnt(signal: -71));
+      };
+      await ConnectionReadingsUploader.collect([_sub('1')]);
+      expect(ConnectionReadingsUploader.pendingRechecks.keys, ['u1']);
+      expect(await ConnectionReadingsUploader.runRechecks(now: due.subtract(const Duration(seconds: 30))), 0, reason: 'قبل موعده لا');
+      expect(probes, 0);
+      server.reply('POST', '/api/v2/connection-alerts/readings', 200, {'success': true, 'data': {'active': true, 'confirmed': 1, 'recheck': []}});
+      expect(await ConnectionReadingsUploader.runRechecks(now: due.add(const Duration(seconds: 1))), 1);
+      expect(probes, 1, reason: 'فحصٌ مُجبَر لجهازه وحده');
+      expect(server.calls('POST', '/api/v2/connection-alerts/readings'), hasLength(2));
+      expect(((server.bodies('POST', '/api/v2/connection-alerts/readings').last['readings'] as List).single as Map)['signal'], -71);
+      expect(ConnectionReadingsUploader.pendingRechecks, isEmpty, reason: 'تأكّد ⇒ لا موعد');
+    });
+
     test('الوضع يدويّ أو التنبيه مطفأ ⇒ لا رفع', () async {
       ConnectionReadingsUploader.debugSnapshotOf = (_) => _snapU(_ubnt(signal: -70));
       server.reply('GET', '/api/v2/connection-alerts/auto', 200, _status(mode: 'manual'));
@@ -165,6 +190,68 @@ void main() {
       await t.pumpAndSettle();
       final put = server.bodies('PUT', '/api/v2/connection-alerts/auto').single;
       expect((put['mode'], put['remind_days'], put['max_sends']), ('auto', 4, 3));
+      await simDrain(t);
+    });
+
+    testWidgets('🐛 الرجوع للوضع المحفوظ يُخفي «حفظ»؛ والتأكيد بخيارات ٣/٥/١٠…٣٠ دقيقة', (t) async {
+      server.reply('GET', '/api/v2/connection-alerts/auto', 200, _status());
+      await pumpSim(t, _v, home: (_) => Scaffold(body: ListView(children: const [ConnAutoCard(canEdit: true)])));
+      await t.pumpAndSettle();
+      for (final m in ['تلقائيّ', 'يدويّ']) {
+        await t.tap(find.text(m));
+        await t.pump();
+        expect(find.text('حفظ الإرسال التلقائيّ'), findsOneWidget, reason: m);
+        await t.tap(find.text('بموافقتي'));
+        await t.pump();
+        expect(find.text('حفظ الإرسال التلقائيّ'), findsNothing, reason: 'رجع للمحفوظ من $m');
+      }
+      Finder btn(String tip) => find.descendant(
+          of: find.ancestor(of: find.text('تأكّد من المشكلة بعد'), matching: find.byType(Row)).first, matching: find.byTooltip(tip));
+      expect(find.text('30 دقيقة'), findsOneWidget);
+      await t.tap(btn('إنقاص'));
+      await t.pump();
+      expect(find.text('25 دقيقة'), findsOneWidget);
+      for (var i = 0; i < 6; i++) {
+        await t.tap(btn('إنقاص'));
+        await t.pump();
+      }
+      expect(find.text('3 دقيقة'), findsOneWidget, reason: '٢٥ ⇒ ٢٠ ⇒ ١٥ ⇒ ١٠ ⇒ ٥ ⇒ ٣ ثمّ يقف');
+      await t.tap(btn('زيادة'));
+      await t.pump();
+      expect(find.text('5 دقيقة'), findsOneWidget);
+      await simDrain(t);
+    });
+
+    testWidgets('تحت المراقبة: «هذه أوّل قراءة» + «أرسل الآن» يرسل له وحده', (t) async {
+      server.reply('GET', '/api/v2/connection-alerts/auto', 200, _status());
+      server.on('GET', '/api/v2/connection-alerts/queue', (o) => SimReply(200, {
+            'success': true,
+            'data': {
+              'available': true,
+              'items': o.queryParameters['state'] == 'watching'
+                  ? [
+                      {
+                        'key': 'i:7', 'idx': '7', 'username': 'u7', 'name': 'ابو مصطفى', 'state': 'watching',
+                        'problems': [{'kind': 'signal', 'label': 'الإشارة', 'text': '-62 dBm'}],
+                        'first_bad_ms': DateTime.now().subtract(const Duration(minutes: 2)).millisecondsSinceEpoch,
+                        'last_reading_ms': DateTime.now().subtract(const Duration(minutes: 2)).millisecondsSinceEpoch, 'sends': 0, 'muted': false,
+                      },
+                    ]
+                  : [],
+            },
+          }));
+      server.reply('POST', '/api/v2/connection-alerts/queue/action', 200, {'success': true, 'data': {'sent': true, 'dry': true}});
+      ConnectionAutoApi.status.value = ConnAutoStatus.fromJson(Map<String, dynamic>.from(_status()['data'] as Map));
+      await pumpSim(t, _v, home: (_) => const ConnAutoQueueScreen());
+      await t.pumpAndSettle();
+      await t.tap(find.text('تحت المراقبة'));
+      await t.pumpAndSettle();
+      expect(find.textContaining('هذه أوّل قراءةٍ سيّئة'), findsOneWidget);
+      expect(find.textContaining(RegExp(r'بعد 2[78] دقيقة تقريباً')), findsOneWidget);
+      await t.tap(find.text('أرسل الآن'));
+      await t.pumpAndSettle();
+      expect(server.bodies('POST', '/api/v2/connection-alerts/queue/action').single, {'action': 'send_now', 'keys': ['i:7']});
+      expect(find.textContaining('محاكاة'), findsWidgets);
       await simDrain(t);
     });
 

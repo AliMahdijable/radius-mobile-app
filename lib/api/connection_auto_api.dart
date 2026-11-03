@@ -23,6 +23,9 @@ class ConnAutoSettings {
 
   static const kAllKinds = <String>['cable', 'signal', 'ccq', 'fiber_rx', 'fiber_temp'];
 
+  /// خيارات «تأكّد من المشكلة بعد» بالدقائق (٣ نوفمبر — المالك؛ الخادم AUTO_LIMITS.confirm_min.steps).
+  static const kConfirmSteps = <int>[3, 5, 10, 15, 20, 25, 30];
+
   /// manual (يدويّ: لا شيء تلقائيّ) · approval (بموافقتي) · auto (تلقائيّ)
   final String mode;
   final int remindDays;
@@ -121,6 +124,9 @@ class ConnAutoStatus {
   final bool inWindow;
 
   int count(String k) => counts[k] ?? 0;
+
+  ConnAutoStatus withSettings(ConnAutoSettings s) => ConnAutoStatus(
+      available: available, dryRun: dryRun, alertsEnabled: alertsEnabled, settings: s, counts: counts, inWindow: inWindow);
 
   /// يُرفع القياس؟ (الحساب مفتوح، والتنبيه مفعّل، والوضع غير يدويّ)
   bool get collects => available && alertsEnabled && settings.mode != 'manual';
@@ -248,7 +254,14 @@ class ConnectionAutoApi {
 
   static Future<ConnAutoStatus> load({bool force = false}) {
     if (!force && _at != null && DateTime.now().difference(_at!) < _ttl) return Future.value(status.value);
-    return _flight ??= _load().whenComplete(() => _flight = null);
+    final running = _flight;
+    // 🐛 ٣ نوفمبر: «إجبار» كان يرجع طلباً بدأ قبل الحفظ فيعيد الإعدادات القديمة ⇒ طلبٌ جديدٌ بعد الجاري
+    if (running != null && !force) return running;
+    final next = (running ?? Future<ConnAutoStatus>.value(status.value)).then((_) => _load());
+    _flight = next;
+    return next.whenComplete(() {
+      if (identical(_flight, next)) _flight = null;
+    });
   }
 
   static Future<ConnAutoStatus> _load() async {
@@ -278,7 +291,11 @@ class ConnectionAutoApi {
     try {
       final r = await ApiClient.dio.put<Map<String, dynamic>>('/api/v2/connection-alerts/auto', data: s.toJson());
       if (r.data?['success'] == true) {
-        await load(force: true);
+        // المحفوظ كما ردّه الخادم (لا قراءةٌ ثانية قد تسبقها قراءةٌ قديمة)
+        final d = r.data?['data'];
+        final saved = d is Map && d['settings'] is Map ? ConnAutoSettings.fromJson(Map<String, dynamic>.from(d['settings'] as Map)) : s;
+        status.value = status.value.withSettings(saved);
+        _at = DateTime.now();
         return (ok: true, message: r.data?['message']?.toString());
       }
       return (ok: false, message: r.data?['message']?.toString() ?? 'تعذّر الحفظ');
@@ -287,9 +304,10 @@ class ConnectionAutoApi {
     }
   }
 
-  /// قراءاتٌ خام (دفعة ≤ ٤٠٠). صامتة: فشلها لا يُزعج أحداً — الموجة التالية تعيدها.
-  static Future<bool> uploadReadings(List<Map<String, dynamic>> readings) async {
-    if (readings.isEmpty) return true;
+  /// قراءاتٌ خام (دفعة ≤ ٤٠٠). صامتة: فشلها لا يُزعج أحداً — الموجة التالية تعيدها. null = لم تُقبل؛ وإلّا مواعيد إعادة القياس
+  /// لمن صار «تحت المراقبة» (username ⇒ الموعد) — يقيسه التطبيق وحده حينها فيتأكّد في وقته (٣ نوفمبر).
+  static Future<Map<String, DateTime>?> uploadReadings(List<Map<String, dynamic>> readings) async {
+    if (readings.isEmpty) return const {};
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>('/api/v2/connection-alerts/readings', data: {'readings': readings});
       final d = r.data?['data'];
@@ -297,9 +315,31 @@ class ConnectionAutoApi {
         // الخادم يقول: لا قياس (أُطفئ/صار يدويّاً) ⇒ تُحدَّث الحالة فيتوقّف الرفع
         unawaitedLoad();
       }
-      return r.data?['success'] == true;
+      if (r.data?['success'] != true) return null;
+      final out = <String, DateTime>{};
+      if (d is Map && d['recheck'] is List) {
+        for (final x in (d['recheck'] as List).whereType<Map>()) {
+          final u = '${x['username'] ?? ''}'.trim();
+          final ms = x['due_ms'] is num ? (x['due_ms'] as num).toInt() : null;
+          if (u.isNotEmpty && ms != null) out[u] = DateTime.fromMillisecondsSinceEpoch(ms);
+        }
+      }
+      return out;
     } catch (_) {
-      return false;
+      return null;
+    }
+  }
+
+  /// «أرسل الآن» لمشتركٍ واحد (من «تحت المراقبة» أو «بانتظار موافقتك»): رسالةٌ مباشرة بطلبك.
+  static Future<({bool ok, bool dry, String? message})> sendNow(String key) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>('/api/v2/connection-alerts/queue/action',
+          data: {'action': 'send_now', 'keys': [key]});
+      final d = r.data?['data'];
+      unawaitedLoad();
+      return (ok: r.data?['success'] == true, dry: d is Map && d['dry'] == true, message: r.data?['message']?.toString());
+    } catch (e) {
+      return (ok: false, dry: false, message: _msg(e, 'تعذّر الإرسال الآن — حاول بعد قليل'));
     }
   }
 

@@ -23,6 +23,18 @@ class ConnectionReadingsUploader {
   static final Map<String, DateTime> _lastSent = {};
   static bool _busy = false;
 
+  /// «تحت المراقبة» (٣ نوفمبر): موعد إعادة قياس كلّ مشتركٍ كما ردّه الخادم (أوّل قراءةٍ سيّئة + مدّة التأكيد) — يُقاس وحده عندها
+  /// ([runRechecks]) فيتأكّد في وقته (٣ دقائق مثلاً) لا مع الموجة العامّة كلّ ١٥ دقيقة.
+  static final Map<String, DateTime> _recheck = {};
+  static final Map<String, Subscriber> _subs = {};
+
+  /// الاختبار: فحصٌ مُجبَر بدل [DeviceProbeApi.probe].
+  @visibleForTesting
+  static Future<DeviceHealthSnapshot?> Function(Subscriber s)? debugProbe;
+
+  /// مواعيد إعادة القياس المعلّقة (للاختبار والخدمة).
+  static Map<String, DateTime> get pendingRechecks => Map.unmodifiable(_recheck);
+
   /// الاختبار: لقطة المشترك بدل كاش [DeviceProbeApi].
   @visibleForTesting
   static DeviceHealthSnapshot? Function(String username)? debugSnapshotOf;
@@ -32,6 +44,9 @@ class ConnectionReadingsUploader {
     _lastSent.clear();
     _busy = false;
     debugSnapshotOf = null;
+    debugProbe = null;
+    _recheck.clear();
+    _subs.clear();
   }
 
   /// قراءة جهازٍ واحد كما يفهمها الخادم (normReading)، أو null إن لم يُقرأ شيء.
@@ -86,6 +101,58 @@ class ConnectionReadingsUploader {
     return any ? m : null;
   }
 
+  /// يقيس من حان موعد إعادة قياسه (فحصٌ مُجبَر لجهازه وحده) ويرفع قراءته فوراً — تجاوزاً لـ[minGap]. يُنادى من خدمة الخلفيّة.
+  static Future<int> runRechecks({DateTime? now}) async {
+    if (_busy || _recheck.isEmpty) return 0;
+    final t = now ?? DateTime.now();
+    final due = _recheck.entries.where((e) => !e.value.isAfter(t)).map((e) => e.key).toList();
+    if (due.isEmpty) return 0;
+    _busy = true;
+    var n = 0;
+    try {
+      final st = await ConnectionAutoApi.load();
+      if (!st.collects) {
+        _recheck.clear();
+        return 0;
+      }
+      final out = <Map<String, dynamic>>[];
+      final keys = <String>[];
+      for (final u in due.take(40)) {
+        _recheck.remove(u);
+        final s = _subs[u];
+        if (s == null) continue;
+        DeviceHealthSnapshot? snap;
+        try {
+          snap = debugProbe != null
+              ? await debugProbe!(s)
+              : await DeviceProbeApi.probe(fallbackIp: (s.ipAddress ?? '').trim(), subscriberUsername: s.username, force: true);
+        } catch (_) {
+          snap = null;
+        }
+        if (snap == null) continue; // لم نقرأ ⇒ لا شيء (الموجة التالية)
+        final r = readingFor(s, snap);
+        if (r == null) continue;
+        out.add(r);
+        keys.add(u);
+      }
+      if (out.isEmpty) return 0;
+      final again = await ConnectionAutoApi.uploadReadings(out);
+      if (again != null) {
+        for (final k in keys) {
+          _lastSent[k] = t;
+        }
+        // ما زال تحت المراقبة (الساعة سبقت بثوانٍ) ⇒ موعده الجديد بهامش
+        again.forEach((u, d) => _recheck[u] = d.add(const Duration(seconds: 5)));
+        n = out.length;
+      }
+    } catch (e) {
+      if (!kReleaseMode) debugPrint('🔴 conn rechecks: $e');
+    } finally {
+      _busy = false;
+    }
+    return n;
+  }
+
   /// بعد موجة الفحص: ما في الكاش من لقطاتٍ حديثة لمشتركي الحساب ⇒ الخادم. لا ينتظره أحد.
   static Future<void> collect(Iterable<Subscriber> subs) async {
     if (_busy) return;
@@ -107,13 +174,18 @@ class ConnectionReadingsUploader {
         out.add(r);
         keys.add(s.username);
       }
+      for (final s in subs) {
+        if (s.companyKey == null && s.username.isNotEmpty) _subs[s.username] = s;
+      }
       for (var i = 0; i < out.length; i += _batch) {
         final end = i + _batch > out.length ? out.length : i + _batch;
-        final ok = await ConnectionAutoApi.uploadReadings(out.sublist(i, end));
-        if (!ok) break; // الشبكة/الخادم ⇒ الموجة التالية تعيدها
+        final due = await ConnectionAutoApi.uploadReadings(out.sublist(i, end));
+        if (due == null) break; // الشبكة/الخادم ⇒ الموجة التالية تعيدها
         for (final k in keys.sublist(i, end)) {
           _lastSent[k] = now;
+          if (!due.containsKey(k)) _recheck.remove(k);
         }
+        _recheck.addAll(due);
       }
     } catch (e) {
       if (!kReleaseMode) debugPrint('🔴 conn readings upload: $e');

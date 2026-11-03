@@ -910,6 +910,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     final priorityUsernames = visible.map((s) => s.username).toSet();
 
     _probeTick = 0;
+    DeviceProbeApi.foregroundWaves++; // فحص الخلفيّة يتنحّى (٣ نوفمبر — DeviceWarmService)
     DeviceProbeApi.warmProbe(
       targets,
       force: force,
@@ -935,6 +936,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       },
       isCanceled: () => !mounted || _probeRunId != myRun,
     ).whenComplete(() {
+      if (DeviceProbeApi.foregroundWaves > 0) DeviceProbeApi.foregroundWaves--;
       if (!mounted || _probeRunId != myRun) return;
       // ⚠️ إيقاظٌ أخير غير مخنوق: آخر نتائج الموجة قد تقع داخل ربع
       //    الثانية الأخيرة فتُبتلع، فتبقى بطاقةٌ أو اثنتان فارغةً حتّى

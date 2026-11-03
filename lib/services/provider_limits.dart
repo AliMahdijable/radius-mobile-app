@@ -89,7 +89,7 @@ bool providerHidesAction(String key) {
 /// مفتاحان يُمنحان لموظّف المشروع الوطنيّ لأقسام بوّابته وحدها (١ نوفمبر — `ElEmployeePerms.nationalExtraKeys`): «الجلسات» و«تقرير
 /// الجلسات» فيها، والتعليق على المهامّ والطلبات. ما يفتحه المفتاح نفسه خارجها — تقرير جلسات الساس العامّ، «سجلّ الجلسات» و«تعديل»
 /// المشترك — لا يخدمه الوطنيّ (قدرات صاحبه false)، فيبقى مخفيّاً للموظّف كما هو لصاحب الحساب.
-const Set<String> _nationalPortalOnlyKeys = {'reports.sessions', 'subscribers.edit'};
+const Set<String> _nationalPortalOnlyKeys = {'reports.sessions', 'subscribers.edit', 'subscribers.add'}; // + «إضافة مشترك» (بوّابته، ٣ نوفمبر)
 
 /// «فصل الاتصال» لا يخدمه مزوّد الجلسة: المشروع الوطنيّ (البوّابة لا تسمح به للمقاول — يُخفى للمالك وللموظّف)، أو شركةٌ مُضافة
 /// قدرتها `subscribers.disconnect` false لصاحب الحساب. كان الفصل يتبع `subscribers.toggle` وحده، فيظهر للوطنيّ حين يُفتح التعليق
