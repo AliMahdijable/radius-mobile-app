@@ -4,9 +4,11 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../api/connection_auto_api.dart';
 import '../../core/util/server_time.dart';
 import '../../core/widgets/design_sheet.dart';
+import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'conn_vpn_screen.dart';
 
 /// «تنبيه المشترك» التلقائيّ (٣ نوفمبر): الوضع والضوابط بشاشة الإعدادات، وقائمة «بانتظار موافقتك».
 /// النصوص بالعربيّة مباشرةً (كأقسام الوطنيّ) — كلماتٌ يفهمها الوكيل.
@@ -234,6 +236,16 @@ class _ConnAutoCardState extends State<ConnAutoCard> {
           const SizedBox(height: Sp.sm),
           _QueueTile(st: _st, onTap: _openQueue),
         ],
+        // «ربط VPN» (٣ نوفمبر): لصاحب الحساب وحده — أسرار شبكته
+        if (!PermissionsService.isEmployee) ...[
+          const SizedBox(height: Sp.sm),
+          _NavTile(
+            icon: LucideIcons.shieldCheck,
+            title: 'ربط VPN',
+            subtitle: 'قياس أجهزة مشتركيك عبر VPN حين يكون تطبيقك خارج الشبكة',
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ConnVpnScreen())),
+          ),
+        ],
       ]),
     );
   }
@@ -392,6 +404,39 @@ class _QueueTile extends StatelessWidget {
       ),
     );
   }
+}
+
+class _NavTile extends StatelessWidget {
+  const _NavTile({required this.icon, required this.title, required this.subtitle, required this.onTap});
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.lg), side: BorderSide(color: AppColors.border)),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(R.lg),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(Sp.md),
+            child: Row(children: [
+              Icon(icon, size: 18, color: AppColors.brand),
+              const SizedBox(width: Sp.sm),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(title, style: AppType.bodyStrong(color: AppColors.textHi)),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: AppType.micro(color: AppColors.textMid)),
+                ]),
+              ),
+              Icon(LucideIcons.chevronLeft, size: 18, color: AppColors.textMid),
+            ]),
+          ),
+        ),
+      );
 }
 
 /* ═════════════════════════════ القائمة ═════════════════════════════ */

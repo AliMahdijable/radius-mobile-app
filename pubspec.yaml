@@ -150,6 +150,7 @@ dependencies:
   # صفحة الدفع على أندرويد بـHybrid Composition (AndroidWebViewWidgetCreationParams) — نفس النسخة المقفلة.
   webview_flutter_android: ^4.14.1
   flutter_compass: ^0.8.1
+  file_selector: ^1.1.0
 # ⚠️ **نسخةٌ مُقلَّمة من lucide — توفّر ٢٫٧٤ ميجابايت في كلّ تثبيت.**
 #
 # الحزمة الأصليّة تُعلن ستّ عائلاتِ خطوطٍ بأوزانٍ متغيّرة لا يستعملها
