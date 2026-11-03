@@ -70,6 +70,7 @@ void main() {
       server = await simSetUp(secure: {'auth.admin_id': 'watani:2963757', 'auth.admin_username': 'owner'});
       PermissionsService.debugSet(isEmployee: false);
       ProviderService.debugSet('watani', label: 'المشروع الوطني');
+      NationalMapScreen.debugNoTiles = true;
     });
     tearDown(() {
       PermissionsService.debugReset();
@@ -139,6 +140,43 @@ void main() {
       await t.enterText(find.byType(TextField).first, '2260');
       await t.pumpAndSettle();
       expect(find.text('FBG2260-5'), findsOneWidget);
+      await simDrain(t);
+    });
+
+    testWidgets('الخريطة (ويندوز): البحث يبقى عليها بنتائجه، والمشترك ⇒ بطاقته بموقع فاته لا انتقالٌ لتبويبٍ آخر', (t) async {
+      routes();
+      await pumpSim(t, _v, home: (_) => const NationalMapScreen());
+      await t.pumpAndSettle();
+      await t.tap(find.text('الخريطة'));
+      await t.pumpAndSettle();
+      expect(find.text('FBG2251 · 2'), findsOneWidget, reason: 'علامة الزون بعدد مشتركيه');
+      expect(find.text('FAT7 · 2'), findsOneWidget, reason: 'علامة الفات بعدد مشتركيه');
+      expect(find.byTooltip('تكبير'), findsOneWidget);
+      expect(find.byTooltip('عرض الكلّ'), findsOneWidget);
+      await t.enterText(find.byType(TextField).first, 'زينب');
+      await t.pumpAndSettle();
+      expect(find.text('زينب كاظم'), findsOneWidget);
+      expect(find.text('FBG2251 · 2'), findsOneWidget, reason: 'ما زلنا على الخريطة (لم ننتقل للمخطّط)');
+      await t.tap(find.text('زينب كاظم'));
+      await t.pumpAndSettle();
+      expect(find.text('تفاصيل المشترك'), findsOneWidget);
+      expect(find.text('منتهٍ'), findsWidgets);
+      expect(find.text('نسخ الإحداثيّات'), findsOneWidget, reason: 'موقع فاته FAT7 من KML');
+      await simDrain(t);
+    });
+
+    testWidgets('الخريطة: مشتركٌ فاته بلا موقع ⇒ بطاقته تقول ذلك ومعها «تفاصيل المشترك»', (t) async {
+      routes();
+      await pumpSim(t, _v, home: (_) => const NationalMapScreen());
+      await t.pumpAndSettle();
+      await t.tap(find.text('الخريطة'));
+      await t.pumpAndSettle();
+      await t.enterText(find.byType(TextField).first, 'مريم');
+      await t.pumpAndSettle();
+      await t.tap(find.descendant(of: find.byType(InkWell), matching: find.text('مريم')).first);
+      await t.pumpAndSettle();
+      expect(find.textContaining('لا موقع لفاته'), findsOneWidget);
+      expect(find.text('تفاصيل المشترك'), findsOneWidget);
       await simDrain(t);
     });
 

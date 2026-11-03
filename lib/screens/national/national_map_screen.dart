@@ -26,6 +26,10 @@ import '../subscribers/subscriber_detail_screen.dart';
 class NationalMapScreen extends StatefulWidget {
   const NationalMapScreen({super.key});
 
+  /// للاختبار: بلا بلاطات الخريطة (لا شبكة في الاختبارات).
+  @visibleForTesting
+  static bool debugNoTiles = false;
+
   @override
   State<NationalMapScreen> createState() => _NationalMapScreenState();
 }
@@ -61,6 +65,9 @@ class _NationalMapScreenState extends State<NationalMapScreen> {
   String? _openZone;
   bool _sat = false;
   final _map = MapController();
+  // ٣ نوفمبر (المالك عن تطبيق ويندوز: «البحث والمعلومات مو واضحة، من تبحث على مشترك يخرج من الخريطة»): البحث في تبويب
+  // «الخريطة» يبقى عليها — نتائجه فوقها، والاختيار يحرّك الخريطة إلى المكان ويُبرزه ويفتح بطاقته (لا انتقالٌ لتبويبٍ آخر).
+  String? _focusRef;
 
   @override
   void initState() {
@@ -175,6 +182,190 @@ class _NationalMapScreenState extends State<NationalMapScreen> {
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SubscriberDetailScreen(sub: sub)));
   }
 
+  void _clearSearch() {
+    _q.clear();
+    FocusManager.instance.primaryFocus?.unfocus();
+  }
+
+  /// تحريك الخريطة بأمان (قد لا تكون مرسومةً — تبويب «المخطّط»).
+  void _flyTo(LatLng p, double zoom) {
+    try {
+      _map.move(p, zoom);
+    } catch (_) {}
+  }
+
+  void _zoomBy(double d) {
+    try {
+      final c = _map.camera;
+      _map.move(c.center, (c.zoom + d).clamp(3.0, 20.0));
+    } catch (_) {}
+  }
+
+  void _fitAll(List<LatLng> pts) {
+    if (pts.isEmpty) return;
+    try {
+      if (pts.length == 1) {
+        _map.move(pts.first, 16);
+      } else {
+        _map.fitCamera(CameraFit.bounds(bounds: LatLngBounds.fromPoints(pts), padding: const EdgeInsets.all(48)));
+      }
+    } catch (_) {}
+    setState(() => _focusRef = null);
+  }
+
+  /// الفات (ومعه زونه) بمرجع موقعه «FAT7-FBG2251» — لعلامة الخريطة.
+  ({MapFat f, MapZone z})? _fatOfRef(String ref) {
+    final t = _tree;
+    if (t == null) return null;
+    final want = ref.toUpperCase();
+    for (final z in t.zones) {
+      for (final f in z.fats) {
+        if (f.kind != MapFatKind.fat) continue;
+        final r = geoFatRef(f.name, f.fdt ?? z.name);
+        if (r != null && r.toUpperCase() == want) return (f: f, z: z);
+      }
+    }
+    return null;
+  }
+
+  MapZone? _zoneOfCode(String code) {
+    final t = _tree;
+    if (t == null) return null;
+    final want = code.toUpperCase();
+    for (final z in t.zones) {
+      final c = geoZoneCode(z.name) ?? geoZoneCode(z.key);
+      if (c != null && c.toUpperCase() == want) return z;
+    }
+    return null;
+  }
+
+  void _pickZone(MapZone z) {
+    final g = _zonePlace(z);
+    final c = g == null ? null : _center(g);
+    _clearSearch();
+    setState(() => _focusRef = g?.ref.toUpperCase());
+    if (c != null) _flyTo(c, 15);
+    _zoneSheet(z, g);
+  }
+
+  void _pickFat(MapFat f, MapZone z) {
+    final g = _fatPlace(f, z);
+    _clearSearch();
+    setState(() => _focusRef = g?.ref.toUpperCase());
+    if (g != null) _flyTo(LatLng(g.lat!, g.lng!), 18);
+    _showFat(f, z);
+  }
+
+  void _pickSub(MapRow r, MapFat f, MapZone z) {
+    final g = _fatPlace(f, z);
+    _clearSearch();
+    setState(() => _focusRef = g?.ref.toUpperCase());
+    if (g != null) _flyTo(LatLng(g.lat!, g.lng!), 18);
+    _subCard(r, f, z, g);
+  }
+
+  Widget _infoRow(String label, String value, {Color? color, bool ltr = false}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(children: [
+          SizedBox(width: 72, child: Text(label, style: AppType.micro(color: AppColors.textMid))),
+          Expanded(
+            child: Text(value,
+                textDirection: ltr ? TextDirection.ltr : null, textAlign: TextAlign.start, style: AppType.body(color: color ?? AppColors.textHi)),
+          ),
+        ]),
+      );
+
+  /// بطاقة المشترك على الخريطة: حالته وزونه وفاته ومنفذه، وموقع فاته، و«تفاصيل المشترك» (لا انتقالٌ بلا قصد).
+  Future<void> _subCard(MapRow r, MapFat f, MapZone z, GeoPlace? g) async {
+    final port = _items?[r.raw['idx']?.toString() ?? '']?.port;
+    final fatLabel = switch (f.kind) {
+      MapFatKind.fat => f.name,
+      MapFatKind.nofat => 'بلا FAT في البوّابة',
+      MapFatKind.pending => 'لم يُعرف بعد',
+    };
+    await showAppSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: AppColors.scrim,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (c) => DesignSheet(
+        header: SheetHeaderBar(icon: LucideIcons.user, title: r.name, subtitle: r.username, onClose: () => Navigator.of(c).pop()),
+        body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          _infoRow('الحالة', _statusLabel(r.status), color: _statusColor(r.status)),
+          _infoRow('الاتصال', r.online ? 'متّصل الآن' : 'غير متّصل', color: r.online ? AppColors.success : AppColors.textMid),
+          _infoRow('الزون', z.name, ltr: true),
+          _infoRow('الفات', fatLabel, ltr: f.kind == MapFatKind.fat),
+          if (port != null) _infoRow('المنفذ', '$port'),
+          const SizedBox(height: Sp.md),
+          if (g != null) ...[
+            _LocationActions(name: '${f.name} — ${r.name}', lat: g.lat!, lng: g.lng!),
+            const SizedBox(height: Sp.sm),
+          ] else
+            Padding(
+              padding: const EdgeInsets.only(bottom: Sp.sm),
+              child: Text('لا موقع لفاته على الخريطة بعد — استورد مواقع الفاتات (KML) من الموقع.',
+                  textAlign: TextAlign.center, style: AppType.micro(color: AppColors.textMid)),
+            ),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.of(c).pop();
+              _openSub(r);
+            },
+            icon: const Icon(LucideIcons.user, size: 16),
+            label: const Text('تفاصيل المشترك'),
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  /// بطاقة الزون: مجاميعه، وموقعه، وفاتاته (الاختيار يحرّك الخريطة إليه).
+  Future<void> _zoneSheet(MapZone z, GeoPlace? g) async {
+    final c = g == null ? null : _center(g);
+    await showAppSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: AppColors.scrim,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (s) => DesignSheet(
+        header: SheetHeaderBar(
+          icon: LucideIcons.mapPin,
+          title: z.name,
+          subtitle: ['زون', '${z.total} مشترك', '${z.fatCount} فات'].join(' · '),
+          onClose: () => Navigator.of(s).pop(),
+        ),
+        body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          _bar(z),
+          const SizedBox(height: 6),
+          Text(
+            [
+              'فعّال ${z.active}',
+              if (z.suspended > 0) 'موقوف ${z.suspended}',
+              if (z.expired > 0) 'منتهٍ ${z.expired}',
+              if (z.online > 0) 'متّصل ${z.online}',
+            ].join(' · '),
+            style: AppType.micro(color: AppColors.textMid),
+          ),
+          const SizedBox(height: Sp.md),
+          if (c != null) ...[_LocationActions(name: z.name, lat: c.latitude, lng: c.longitude), const SizedBox(height: Sp.md)],
+          for (final f in z.fats)
+            _ResultLine(
+              icon: f.kind == MapFatKind.fat ? LucideIcons.network : LucideIcons.circleHelp,
+              title: f.name,
+              subtitle: '${f.total} مشترك${f.kind == MapFatKind.fat && _fatPlace(f, z) == null ? ' · بلا موقع' : ''}',
+              onTap: () {
+                Navigator.of(s).pop();
+                _pickFat(f, z);
+              },
+            ),
+        ]),
+      ),
+    );
+  }
+
   Future<void> _showFat(MapFat f, MapZone z) async {
     final place = _fatPlace(f, z);
     await showAppSheet<void>(
@@ -195,10 +386,14 @@ class _NationalMapScreenState extends State<NationalMapScreen> {
             _LocationActions(name: f.name, lat: place.lat!, lng: place.lng!),
             const SizedBox(height: Sp.md),
           ],
-          for (final r in f.rows) _SubLine(row: r, port: _items?[r.raw['idx']?.toString() ?? '']?.port, onTap: () {
-            Navigator.of(c).pop();
-            _openSub(r);
-          }),
+          for (final r in f.rows)
+            _SubLine(
+                row: r,
+                port: _items?[r.raw['idx']?.toString() ?? '']?.port,
+                onTap: () {
+                  Navigator.of(c).pop();
+                  _openSub(r);
+                }),
         ]),
       ),
     );
@@ -214,10 +409,14 @@ class _NationalMapScreenState extends State<NationalMapScreen> {
     var n = 0;
     for (final z in t.zones) {
       if (_fold(z.name).contains(q) || _fold(z.key).contains(q)) {
-        out.add(_ResultLine(icon: LucideIcons.mapPin, title: z.name, subtitle: 'زون · ${z.total} مشترك', onTap: () => setState(() {
-              _openZone = z.key;
-              _q.clear();
-            })));
+        out.add(_ResultLine(
+            icon: LucideIcons.mapPin,
+            title: z.name,
+            subtitle: 'زون · ${z.total} مشترك',
+            onTap: () => setState(() {
+                  _openZone = z.key;
+                  _q.clear();
+                })));
         n++;
       }
       for (final f in z.fats) {
@@ -232,7 +431,7 @@ class _NationalMapScreenState extends State<NationalMapScreen> {
               icon: LucideIcons.user,
               title: r.name,
               subtitle: [z.name, if (f.kind == MapFatKind.fat) f.name, _statusLabel(r.status)].join(' · '),
-              onTap: () => _openSub(r),
+              onTap: () => _pickSub(r, f, z),
             ));
             n++;
           }
@@ -293,7 +492,13 @@ class _NationalMapScreenState extends State<NationalMapScreen> {
               Row(children: [
                 Icon(LucideIcons.mapPin, size: 16, color: AppColors.brandAccent),
                 const SizedBox(width: Sp.sm),
-                Expanded(child: Text(z.name, textDirection: TextDirection.ltr, textAlign: TextAlign.start, style: AppType.cardTitle(), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                Expanded(
+                    child: Text(z.name,
+                        textDirection: TextDirection.ltr,
+                        textAlign: TextAlign.start,
+                        style: AppType.cardTitle(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis)),
                 if (_zonePlace(z) != null)
                   IconButton(
                     tooltip: 'موقع الزون',
@@ -303,7 +508,10 @@ class _NationalMapScreenState extends State<NationalMapScreen> {
                   ),
                 Text('${z.total} مشترك', style: AppType.label(color: AppColors.textHi)),
                 const SizedBox(width: Sp.xs),
-                AnimatedRotation(turns: open ? 0.5 : 0, duration: const Duration(milliseconds: 160), child: Icon(LucideIcons.chevronDown, size: 18, color: AppColors.textLow)),
+                AnimatedRotation(
+                    turns: open ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 160),
+                    child: Icon(LucideIcons.chevronDown, size: 18, color: AppColors.textLow)),
               ]),
               const SizedBox(height: Sp.sm),
               _bar(z),
@@ -335,7 +543,8 @@ class _NationalMapScreenState extends State<NationalMapScreen> {
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(f.name, textDirection: f.kind == MapFatKind.fat ? TextDirection.ltr : null, style: AppType.body(color: AppColors.textHi)),
                       if (f.ports.isNotEmpty)
-                        Text('المنافذ: ${f.ports.take(12).join('، ')}${f.ports.length > 12 ? '…' : ''}', style: AppType.micro(color: AppColors.textMid)),
+                        Text('المنافذ: ${f.ports.take(12).join('، ')}${f.ports.length > 12 ? '…' : ''}',
+                            style: AppType.micro(color: AppColors.textMid)),
                     ]),
                   ),
                   if (_fatPlace(f, z) != null) ...[Icon(LucideIcons.locateFixed, size: 14, color: AppColors.brand), const SizedBox(width: 6)],
@@ -357,7 +566,8 @@ class _NationalMapScreenState extends State<NationalMapScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.xl),
         children: [
-          if (q.length >= 2) ..._results()
+          if (q.length >= 2)
+            ..._results()
           else ...[
             _totals(t.totals, t.fatCount),
             const SizedBox(height: Sp.md),
@@ -403,24 +613,30 @@ class _NationalMapScreenState extends State<NationalMapScreen> {
         }
       }
     }
+    String label(String ref, int? n) => n == null ? ref : '$ref · $n';
+    final searching = _q.text.trim().length >= 2;
     return Stack(children: [
       FlutterMap(
         mapController: _map,
         options: MapOptions(
           initialCenter: LatLng(lat, lng),
           initialZoom: 14,
+          // كلّ المواقع ظاهرةٌ من أوّل فتح (لا مركزٌ متوسّطٌ قد يُبعد بعضها)
+          initialCameraFit: pts.length > 1 ? CameraFit.bounds(bounds: LatLngBounds.fromPoints(pts), padding: const EdgeInsets.all(48)) : null,
           interactionOptions: const InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.rotate),
+          onTap: (_, __) => FocusManager.instance.primaryFocus?.unfocus(),
         ),
         children: [
-          TileLayer(
-            urlTemplate: _sat
-                ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-                : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            userAgentPackageName: 'com.mysvcs.radMysvcs',
-            maxNativeZoom: _sat ? 18 : 19,
-            maxZoom: 20,
-          ),
-          if (_sat)
+          if (!NationalMapScreen.debugNoTiles)
+            TileLayer(
+              urlTemplate: _sat
+                  ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+                  : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.mysvcs.radMysvcs',
+              maxNativeZoom: _sat ? 18 : 19,
+              maxZoom: 20,
+            ),
+          if (_sat && !NationalMapScreen.debugNoTiles)
             TileLayer(
               urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
               userAgentPackageName: 'com.mysvcs.radMysvcs',
@@ -432,9 +648,9 @@ class _NationalMapScreenState extends State<NationalMapScreen> {
               if (g.polygon.length >= 3)
                 Polygon(
                   points: [for (final p in g.polygon) LatLng(p[0], p[1])],
-                  color: AppColors.brand.withValues(alpha: 0.12),
+                  color: AppColors.brand.withValues(alpha: _focusRef == g.ref.toUpperCase() ? 0.22 : 0.12),
                   borderColor: AppColors.brand,
-                  borderStrokeWidth: 1.5,
+                  borderStrokeWidth: _focusRef == g.ref.toUpperCase() ? 2.5 : 1.5,
                 ),
           ]),
           MarkerLayer(markers: [
@@ -442,49 +658,134 @@ class _NationalMapScreenState extends State<NationalMapScreen> {
               if (_center(g) != null)
                 Marker(
                   point: _center(g)!,
-                  width: 120,
-                  height: 34,
-                  child: GestureDetector(
-                    onTap: () => _placeCard(g, 'زون', counts[g.ref.toUpperCase()]),
-                    child: _Pin(label: g.ref, zone: true),
+                  width: 150,
+                  height: 36,
+                  child: _Tap(
+                    onTap: () {
+                      final z = _zoneOfCode(g.ref);
+                      z != null ? _pickZone(z) : _placeCard(g, 'زون', counts[g.ref.toUpperCase()]);
+                    },
+                    child: _Pin(label: label(g.ref, counts[g.ref.toUpperCase()]), zone: true, focused: _focusRef == g.ref.toUpperCase()),
                   ),
                 ),
             for (final g in _gFats)
               if (g.hasPoint)
                 Marker(
                   point: LatLng(g.lat!, g.lng!),
-                  width: 92,
-                  height: 30,
-                  child: GestureDetector(
-                    onTap: () => _placeCard(g, 'فات', counts[g.ref.toUpperCase()]),
-                    child: _Pin(label: (g.name ?? g.ref).split('-').first, zone: false),
+                  width: 120,
+                  height: 32,
+                  child: _Tap(
+                    onTap: () {
+                      final hit = _fatOfRef(g.ref);
+                      hit != null ? _pickFat(hit.f, hit.z) : _placeCard(g, 'فات', counts[g.ref.toUpperCase()]);
+                    },
+                    child: _Pin(
+                      label: label((g.name ?? g.ref).split('-').first, counts[g.ref.toUpperCase()]),
+                      zone: false,
+                      focused: _focusRef == g.ref.toUpperCase(),
+                    ),
                   ),
                 ),
           ]),
         ],
       ),
-      PositionedDirectional(
-        top: Sp.sm,
-        end: Sp.sm,
-        child: Material(
-          color: AppColors.surface,
-          elevation: 2,
-          borderRadius: BorderRadius.circular(R.pill),
-          child: InkWell(
+      // نتائج البحث فوق الخريطة نفسها
+      if (searching)
+        PositionedDirectional(
+          top: Sp.sm,
+          start: Sp.sm,
+          end: Sp.sm,
+          child: Material(
+            color: AppColors.surface,
+            elevation: 3,
+            borderRadius: BorderRadius.circular(R.card),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 320),
+              child: ListView(shrinkWrap: true, padding: const EdgeInsets.all(Sp.sm), children: _mapResults()),
+            ),
+          ),
+        )
+      else
+        PositionedDirectional(
+          top: Sp.sm,
+          end: Sp.sm,
+          child: Material(
+            color: AppColors.surface,
+            elevation: 2,
             borderRadius: BorderRadius.circular(R.pill),
-            onTap: () => setState(() => _sat = !_sat),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(_sat ? LucideIcons.map : LucideIcons.satellite, size: 16, color: AppColors.textHi),
-                const SizedBox(width: 6),
-                Text(_sat ? 'خريطة' : 'قمر صناعي', style: AppType.label(color: AppColors.textHi)),
-              ]),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(R.pill),
+              onTap: () => setState(() => _sat = !_sat),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(_sat ? LucideIcons.map : LucideIcons.satellite, size: 16, color: AppColors.textHi),
+                  const SizedBox(width: 6),
+                  Text(_sat ? 'خريطة' : 'قمر صناعي', style: AppType.label(color: AppColors.textHi)),
+                ]),
+              ),
             ),
           ),
         ),
+      // تحكّمٌ صريح بالماوس واللمس (ويندوز: التكبير بالعجلة وحده لا يكفي)
+      PositionedDirectional(
+        bottom: Sp.md,
+        end: Sp.sm,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          _MapBtn(icon: LucideIcons.plus, tip: 'تكبير', onTap: () => _zoomBy(1)),
+          const SizedBox(height: 6),
+          _MapBtn(icon: LucideIcons.minus, tip: 'تصغير', onTap: () => _zoomBy(-1)),
+          const SizedBox(height: 6),
+          _MapBtn(icon: LucideIcons.scan, tip: 'عرض الكلّ', onTap: () => _fitAll(pts)),
+        ]),
       ),
     ]);
+  }
+
+  /// البحث في تبويب «الخريطة»: الزون والفات والمشترك — الاختيار يحرّك الخريطة ويفتح البطاقة.
+  List<Widget> _mapResults() {
+    final q = _fold(_q.text);
+    final t = _tree;
+    if (t == null || q.length < 2) return const [];
+    final out = <Widget>[];
+    var n = 0;
+    for (final z in t.zones) {
+      if (n >= 40) break;
+      if (_fold(z.name).contains(q) || _fold(z.key).contains(q)) {
+        out.add(_ResultLine(
+          icon: LucideIcons.mapPin,
+          title: z.name,
+          subtitle: 'زون · ${z.total} مشترك${_zonePlace(z) == null ? ' · بلا موقع' : ''}',
+          onTap: () => _pickZone(z),
+        ));
+        n++;
+      }
+      for (final f in z.fats) {
+        if (f.kind == MapFatKind.fat && _fold(f.name).contains(q)) {
+          out.add(_ResultLine(
+            icon: LucideIcons.network,
+            title: f.name,
+            subtitle: 'فات · ${z.name} · ${f.total} مشترك${_fatPlace(f, z) == null ? ' · بلا موقع' : ''}',
+            onTap: () => _pickFat(f, z),
+          ));
+          n++;
+        }
+        for (final r in f.rows) {
+          if (n >= 40) break;
+          if (_fold(r.name).contains(q) || _fold(r.username).contains(q)) {
+            out.add(_ResultLine(
+              icon: LucideIcons.user,
+              title: r.name,
+              subtitle: [z.name, if (f.kind == MapFatKind.fat) f.name, _statusLabel(r.status)].join(' · '),
+              onTap: () => _pickSub(r, f, z),
+            ));
+            n++;
+          }
+        }
+      }
+    }
+    if (out.isEmpty) out.add(Padding(padding: const EdgeInsets.all(Sp.lg), child: Text('لا شيء بهذا البحث', style: AppType.muted())));
+    return out;
   }
 
   Future<void> _placeCard(GeoPlace g, String kind, int? subs) async {
@@ -528,9 +829,7 @@ class _NationalMapScreenState extends State<NationalMapScreen> {
       body = Column(children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, 0),
-          child: SheetSearchField(controller: _q, hint: 'ابحث: اسم مشترك أو زون أو فات', onChanged: (_) => setState(() {
-                if (_tab == 1 && _q.text.trim().length >= 2) _tab = 0;
-              })),
+          child: SheetSearchField(controller: _q, hint: 'ابحث: اسم مشترك أو زون أو فات', onChanged: (_) => setState(() {})),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, 0),
@@ -567,25 +866,62 @@ class _NationalMapScreenState extends State<NationalMapScreen> {
 }
 
 class _Pin extends StatelessWidget {
-  const _Pin({required this.label, required this.zone});
+  const _Pin({required this.label, required this.zone, this.focused = false});
   final String label;
   final bool zone;
+  final bool focused;
 
   @override
   Widget build(BuildContext context) => Center(
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: zone ? AppColors.brand : AppColors.surface,
+            color: focused ? AppColors.warningFill : (zone ? AppColors.brand : AppColors.surface),
             borderRadius: BorderRadius.circular(R.pill),
-            border: Border.all(color: AppColors.brand, width: 1.2),
+            border: Border.all(color: focused ? AppColors.warningFill : AppColors.brand, width: focused ? 2 : 1.2),
             boxShadow: Sh.menu,
           ),
           child: Text(label,
               textDirection: TextDirection.ltr,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: AppType.micro(color: zone ? AppColors.onBrand : AppColors.brand).copyWith(fontWeight: FontWeight.w700)),
+              style: AppType.micro(color: focused || zone ? AppColors.onBrand : AppColors.brand).copyWith(fontWeight: FontWeight.w700)),
+        ),
+      );
+}
+
+/// علامةٌ قابلة للنقر بمؤشّر اليد على سطح المكتب.
+class _Tap extends StatelessWidget {
+  const _Tap({required this.onTap, required this.child});
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: child),
+      );
+}
+
+/// زرّ تحكّمٍ دائريّ فوق الخريطة (تكبير/تصغير/عرض الكلّ).
+class _MapBtn extends StatelessWidget {
+  const _MapBtn({required this.icon, required this.tip, required this.onTap});
+  final IconData icon;
+  final String tip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+        message: tip,
+        child: Material(
+          color: AppColors.surface,
+          elevation: 2,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: SizedBox(width: 42, height: 42, child: Icon(icon, size: 18, color: AppColors.textHi)),
+          ),
         ),
       );
 }
@@ -710,4 +1046,3 @@ class _LocationActions extends StatelessWidget {
     ]);
   }
 }
-
