@@ -236,6 +236,30 @@ class ConnAlertLogEntry {
   final DateTime? at;
 }
 
+/// نتيجة «افحص الآن» (٤ نوفمبر): من شبكة الوكيل (التطبيق نفسه — local) أو عبر VPN الخادم (vpn)، أو لم يُفحص (none).
+@immutable
+class ConnCheckResult {
+  const ConnCheckResult({required this.ok, required this.via, required this.message, this.readable, this.problems, this.atMs});
+  final bool ok;
+  final String via;
+  final String message;
+  final int? readable, problems;
+  final int? atMs;
+
+  static ConnCheckResult fromVpn(Object? j) {
+    if (j is! Map) return const ConnCheckResult(ok: false, via: 'vpn', message: 'تعذّر الفحص الآن — حاول بعد قليل');
+    int? n(String k) => j[k] is num ? (j[k] as num).toInt() : null;
+    return ConnCheckResult(
+      ok: j['ok'] == true,
+      via: 'vpn',
+      message: '${j['message'] ?? ''}'.trim().isEmpty ? 'تعذّر الفحص الآن — حاول بعد قليل' : '${j['message']}',
+      readable: n('readable'),
+      problems: n('problems'),
+      atMs: n('at_ms'),
+    );
+  }
+}
+
 class ConnectionAutoApi {
   ConnectionAutoApi._();
 
@@ -313,8 +337,14 @@ class ConnectionAutoApi {
 
   /// قراءاتٌ خام (دفعة ≤ ٤٠٠). صامتة: فشلها لا يُزعج أحداً — الموجة التالية تعيدها. null = لم تُقبل؛ وإلّا مواعيد إعادة القياس
   /// لمن صار «تحت المراقبة» (username ⇒ الموعد) — يقيسه التطبيق وحده حينها فيتأكّد في وقته (٣ نوفمبر).
-  static Future<Map<String, DateTime>?> uploadReadings(List<Map<String, dynamic>> readings) async {
-    if (readings.isEmpty) return const {};
+  static Future<Map<String, DateTime>?> uploadReadings(List<Map<String, dynamic>> readings) async =>
+      (await uploadReadingsStats(readings))?.due;
+
+  /// القراءات ⇒ الخادم، مع إحصاء ما فعلته (لـ«افحص الآن» من شبكة الوكيل): المقروء، ومن دخل «تحت المراقبة»، ومن تأكّد، ومن حُلّ.
+  /// null = تعذّر (شبكة/خادم).
+  static Future<({Map<String, DateTime> due, int usable, int watching, int confirmed, int resolved})?> uploadReadingsStats(
+      List<Map<String, dynamic>> readings) async {
+    if (readings.isEmpty) return (due: const <String, DateTime>{}, usable: 0, watching: 0, confirmed: 0, resolved: 0);
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>('/api/v2/connection-alerts/readings', data: {'readings': readings});
       final d = r.data?['data'];
@@ -331,9 +361,34 @@ class ConnectionAutoApi {
           if (u.isNotEmpty && ms != null) out[u] = DateTime.fromMillisecondsSinceEpoch(ms);
         }
       }
-      return out;
+      int n(String k) => d is Map && d[k] is num ? (d[k] as num).toInt() : 0;
+      return (due: out, usable: n('usable'), watching: n('watching'), confirmed: n('confirmed'), resolved: n('resolved'));
     } catch (_) {
       return null;
+    }
+  }
+
+  /// «افحص الآن» عبر VPN الخادم (٤ نوفمبر — حين يكون التطبيق خارج شبكة الوكيل): يبدأ جولةً واحدة ثمّ يستطلع حتى تكتمل. الخادم
+  /// يعيد الفحص الجاري نفسه للضغطة المكرّرة.
+  static Future<ConnCheckResult> vpnCheckNow({
+    Duration every = const Duration(milliseconds: 2500),
+    int maxPolls = 120,
+  }) async {
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>('/api/v2/conn-vpn/check-now');
+      final id = (r.data?['data'] as Map?)?['check_id']?.toString();
+      if (id == null || id.isEmpty) {
+        return ConnCheckResult(ok: false, via: 'vpn', message: r.data?['message']?.toString() ?? 'تعذّر الفحص الآن — حاول بعد قليل');
+      }
+      for (var i = 0; i < maxPolls; i++) {
+        final p = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/conn-vpn/check-now/$id');
+        final d = p.data?['data'];
+        if (d is Map && d['state'] == 'done') return ConnCheckResult.fromVpn(d['result']);
+        await Future<void>.delayed(every);
+      }
+      return const ConnCheckResult(ok: false, via: 'vpn', message: 'الفحص أطول من المعتاد — افتح الصفحة بعد قليل');
+    } catch (e) {
+      return ConnCheckResult(ok: false, via: 'vpn', message: _msg(e, 'تعذّر الفحص الآن — حاول بعد قليل'));
     }
   }
 

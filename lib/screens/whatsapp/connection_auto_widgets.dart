@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../api/connection_auto_api.dart';
 import '../../core/util/server_time.dart';
 import '../../core/widgets/design_sheet.dart';
+import '../../services/conn_check_now.dart';
 import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -503,6 +504,7 @@ class _ConnAutoQueueScreenState extends State<ConnAutoQueueScreen> {
           scrolledUnderElevation: 0,
           iconTheme: IconThemeData(color: AppColors.textHi),
           title: Text('تنبيهات المشتركين', style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
+          actions: const [_CheckNowButton(), SizedBox(width: Sp.sm)],
           bottom: TabBar(
             isScrollable: true,
             tabAlignment: TabAlignment.start,
@@ -514,6 +516,7 @@ class _ConnAutoQueueScreenState extends State<ConnAutoQueueScreen> {
         ),
         body: Column(children: [
           if (st.dryRun) Padding(padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0), child: _dryBanner()),
+          const _CheckNowStatus(),
           Expanded(
             child: TabBarView(children: [
               for (final t in _tabs) t.$1 == 'log' ? const _LogList() : _CaseList(state: t.$1),
@@ -523,6 +526,61 @@ class _ConnAutoQueueScreenState extends State<ConnAutoQueueScreen> {
       ),
     );
   }
+}
+
+/// «افحص الآن» (٤ نوفمبر): من شبكة الوكيل يفحص التطبيق بنفسه، وخارجها جولةٌ واحدة عبر VPN الخادم — ويُنتظر حتى تكتمل. معطَّلٌ وهو
+/// يفحص، والضغطة الثانية تعود بالفحص نفسه ([ConnCheckNow.run]).
+class _CheckNowButton extends StatelessWidget {
+  const _CheckNowButton();
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+        valueListenable: ConnCheckNow.running,
+        builder: (_, busy, __) => TextButton.icon(
+          onPressed: busy ? null : () => ConnCheckNow.run(),
+          style: TextButton.styleFrom(foregroundColor: AppColors.brand, minimumSize: const Size(44, 44)),
+          icon: busy
+              ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textMid))
+              : const Icon(LucideIcons.refreshCw, size: 16),
+          label: Text(busy ? 'يفحص…' : 'افحص الآن', style: AppType.bodyBold(color: busy ? AppColors.textMid : AppColors.brand)),
+        ),
+      );
+}
+
+/// سطر «افحص الآن»: ما يجري الآن، ثمّ النتيجة (تبقى حتى الفحص التالي). لا شيء قبل أوّل فحص.
+class _CheckNowStatus extends StatelessWidget {
+  const _CheckNowStatus();
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<String?>(
+        valueListenable: ConnCheckNow.progress,
+        builder: (_, prog, __) => ValueListenableBuilder<ConnCheckResult?>(
+          valueListenable: ConnCheckNow.last,
+          builder: (_, last, __) {
+            if (prog == null && last == null) return const SizedBox.shrink();
+            final busy = prog != null;
+            final ok = !busy && last!.ok;
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
+              child: _box(
+                color: busy ? AppColors.infoSoftBg : (ok ? AppColors.successSoftBg : AppColors.warningSoftBg),
+                border: busy ? AppColors.infoSoftBorder : (ok ? AppColors.successSoftBorder : AppColors.warningSoftBorder),
+                child: Row(children: [
+                  if (busy)
+                    SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textMid))
+                  else
+                    Icon(ok ? LucideIcons.circleCheck : LucideIcons.circleAlert, size: 16, color: AppColors.textMid),
+                  const SizedBox(width: Sp.sm),
+                  Expanded(
+                    child: Text(busy ? prog : last!.message,
+                        maxLines: 3, overflow: TextOverflow.ellipsis, style: AppType.muted(color: AppColors.textHi)),
+                  ),
+                ]),
+              ),
+            );
+          },
+        ),
+      );
 }
 
 class _CaseList extends StatefulWidget {

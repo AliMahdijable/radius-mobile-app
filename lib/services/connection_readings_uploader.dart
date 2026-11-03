@@ -153,6 +153,53 @@ class ConnectionReadingsUploader {
     return n;
   }
 
+  /// «افحص الآن» من شبكة الوكيل (٤ نوفمبر): كلّ لقطةٍ حديثة لمشتركي الحساب ⇒ الخادم **الآن** (تجاوزاً لـ[minGap]) ويُنتظر الإحصاء.
+  /// ينتظر رفعاً خلفيّاً جارياً ثمّ يمسك القفل. null = التنبيه غير مفعّل/يدويّ، أو تعذّر الرفع.
+  static Future<({int sent, int usable, int watching, int confirmed, int resolved})?> collectNow(Iterable<Subscriber> subs) async {
+    for (var i = 0; i < 60 && _busy; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+    _busy = true;
+    try {
+      final st = await ConnectionAutoApi.load(force: true);
+      if (!st.collects) return null;
+      final now = DateTime.now();
+      final out = <Map<String, dynamic>>[];
+      final keys = <String>[];
+      for (final s in subs) {
+        if (s.companyKey != null || s.username.isEmpty) continue;
+        _subs[s.username] = s;
+        final snap = (debugSnapshotOf ?? (u) => DeviceProbeApi.cachedForUser(u))(s.username);
+        if (snap == null) continue;
+        final r = readingFor(s, snap);
+        if (r == null) continue;
+        out.add(r);
+        keys.add(s.username);
+      }
+      var usable = 0, watching = 0, confirmed = 0, resolved = 0;
+      for (var i = 0; i < out.length; i += _batch) {
+        final end = i + _batch > out.length ? out.length : i + _batch;
+        final r = await ConnectionAutoApi.uploadReadingsStats(out.sublist(i, end));
+        if (r == null) return null;
+        usable += r.usable;
+        watching += r.watching;
+        confirmed += r.confirmed;
+        resolved += r.resolved;
+        for (final k in keys.sublist(i, end)) {
+          _lastSent[k] = now;
+          if (!r.due.containsKey(k)) _recheck.remove(k);
+        }
+        _recheck.addAll(r.due);
+      }
+      return (sent: out.length, usable: usable, watching: watching, confirmed: confirmed, resolved: resolved);
+    } catch (e) {
+      if (!kReleaseMode) debugPrint('🔴 conn readings now: $e');
+      return null;
+    } finally {
+      _busy = false;
+    }
+  }
+
   /// بعد موجة الفحص: ما في الكاش من لقطاتٍ حديثة لمشتركي الحساب ⇒ الخادم. لا ينتظره أحد.
   static Future<void> collect(Iterable<Subscriber> subs) async {
     if (_busy) return;

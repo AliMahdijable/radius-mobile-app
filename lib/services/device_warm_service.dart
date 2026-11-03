@@ -146,6 +146,58 @@ class DeviceWarmService with WidgetsBindingObserver {
     }
   }
 
+  /// نتيجة [checkNow]: onNet=false ⇒ خارج شبكة الوكيل (لا جهاز من العيّنة يردّ) أو لا شيء يُفحص — [reason]: off_net · no_ips ·
+  /// big (حسابٌ كبير بلا قائمةٍ كاملة) · no_devices (مزوّدٌ بلا عنوان جهاز) · error.
+  @visibleForTesting
+  static Future<({bool onNet, List<Subscriber> subs, int probed, String? reason})> Function(
+      void Function(int done, int total)? onProgress)? debugCheckNow;
+
+  /// «افحص الآن» (٤ نوفمبر — المالك: «من هو خارج شبكه او داخله يستدعي داله الفحص وينتظر لحد مايكمل»): فحصٌ أماميّ لكلّ أجهزة
+  /// المتّصلين **من شبكة الوكيل** — مُجبَر (لا كاش) ويُنتظر. خارج الشبكة ⇒ onNet=false فيذهب المستدعي لـVPN الخادم. لا موجتان معاً:
+  /// ينتظر الموجة الخلفيّة الجارية ثمّ يمسكها حتى ينتهي.
+  static Future<({bool onNet, List<Subscriber> subs, int probed, String? reason})> checkNow({
+    void Function(int done, int total)? onProgress,
+  }) {
+    final dbg = debugCheckNow;
+    if (dbg != null) return dbg(onProgress);
+    return _i._checkNow(onProgress);
+  }
+
+  Future<({bool onNet, List<Subscriber> subs, int probed, String? reason})> _checkNow(
+      void Function(int done, int total)? onProgress) async {
+    for (var i = 0; i < 120 && _waving; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+    _waving = true;
+    try {
+      if (!_providerHasDevices) return (onNet: false, subs: const <Subscriber>[], probed: 0, reason: 'no_devices');
+      final list = await SubscribersApi.loadAll(); // null = حسابٌ كبير أو تعذّر
+      if (list == null) return (onNet: false, subs: const <Subscriber>[], probed: 0, reason: 'big');
+      final subs = list.where((s) => s.companyKey == null && s.username.isNotEmpty).toList();
+      final ips = await _sample(subs);
+      if (ips.isEmpty) return (onNet: false, subs: subs, probed: 0, reason: 'no_ips');
+      final ok = await Future.wait(ips.map((ip) => TcpReachability.isReachable(ip)));
+      _offNet = !ok.contains(true);
+      if (_offNet) return (onNet: false, subs: subs, probed: 0, reason: 'off_net');
+      // المتّصلون الآن بعناوينهم (أجهزة المفصولين لا تردّ — تأخيرٌ بلا فائدة)؛ وإن لم تُعرف الحالة فكلّ من له عنوان
+      List<Subscriber> pick(bool onlineOnly) =>
+          subs.where((s) => (!onlineOnly || s.isOnline) && _effectiveIp(s).isNotEmpty).toList();
+      var chosen = pick(true);
+      if (chosen.isEmpty) chosen = pick(false);
+      final targets = chosen.map<ProbeTarget>((s) => (username: s.username, ip: (s.ipAddress ?? '').trim(), company: null)).toList();
+      await DeviceProbeApi.warmProbe(targets, force: true, onProgress: onProgress);
+      DeviceProbeBus.bump();
+      unawaited(_rememberGood(subs));
+      _lastWave = DateTime.now();
+      return (onNet: true, subs: subs, probed: targets.length, reason: null);
+    } catch (e) {
+      if (!kReleaseMode) debugPrint('🔴 check now: $e');
+      return (onNet: false, subs: const <Subscriber>[], probed: 0, reason: 'error');
+    } finally {
+      _waving = false;
+    }
+  }
+
   static String _effectiveIp(Subscriber s) {
     final custom = DeviceConfigApi.peekConfig(s.username)?.customIp?.trim();
     return custom != null && custom.isNotEmpty ? custom : (s.ipAddress ?? '').trim();
@@ -187,6 +239,7 @@ class DeviceWarmService with WidgetsBindingObserver {
   /// للاختبار: يعيد الحالة.
   @visibleForTesting
   static void debugReset() {
+    debugCheckNow = null;
     stop();
     _i._lastWave = null;
     _i._waving = false;
