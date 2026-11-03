@@ -15,6 +15,7 @@ import 'device_alerts_service.dart';
 import 'fcm_service.dart';
 import 'inbox_service.dart';
 import 'notification_router.dart';
+import 'app_version.dart';
 
 /// إشعارات الحاسبة (ويندوز/الماك) — المالك ٢٥ أكتوبر: «الاشعارات مهمه اريده».
 ///
@@ -153,7 +154,8 @@ class DesktopPushService {
     final r = await ApiClient.dio.post<Map<String, dynamic>>('/api/push/desktop/register', data: {
       'adminId': adminId,
       'installId': await _installId(),
-      'deviceInfo': AppPlatform.isWindows ? 'Windows' : 'macOS',
+      // رقم النسخة (٣ نوفمبر — إجبار التحديث يحذف تسجيلات النسخ الأقدم)
+      'deviceInfo': '${AppPlatform.isWindows ? 'Windows' : 'macOS'}${AppVersion.buildNumber.isEmpty ? '' : ' b${AppVersion.buildNumber}'}',
     });
     if (r.data?['success'] == true) _registeredAt = DateTime.now();
   }

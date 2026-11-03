@@ -40,6 +40,7 @@ import 'services/provider_service.dart';
 import 'services/secure_storage_health.dart';
 import 'services/self_deposit_sync.dart';
 import 'services/theme_service.dart';
+import 'services/update_gate.dart';
 import 'theme/colors.dart';
 import 'theme/spacing.dart';
 import 'theme/typography.dart';
@@ -144,6 +145,8 @@ void main() async {
 
   if (AppPlatform.isDesktop) _installDesktopErrorReport();
   _installDebugErrorAggregator();
+  // إجبار التحديث (٣ نوفمبر): الخادم يقول أقلّ نسخة — الجواب يصل بعد أوّل إطار فتظهر الشاشة فوقه إن لزم
+  UpdateGate.check().ignore();
 
   runApp(
     EasyLocalization(
@@ -414,7 +417,7 @@ class _MyServicesAppState extends State<MyServicesApp>
               },
               child: ValueListenableBuilder<bool>(
                 valueListenable: DesktopLayout.shellActive,
-                builder: (_, __, ___) => _TabletFrame(child: child ?? const SizedBox.shrink()),
+                builder: (_, __, ___) => UpdateGateOverlay(child: _TabletFrame(child: child ?? const SizedBox.shrink())),
               ),
             ),
           ))),

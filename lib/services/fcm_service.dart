@@ -11,6 +11,7 @@ import '../models/app_notification.dart';
 import 'auth_storage.dart';
 import 'desktop_push_service.dart';
 import 'inbox_service.dart';
+import 'app_version.dart';
 
 /// FCM lifecycle: تسجيل/إلغاء توكن + معالجة الرسائل.
 ///
@@ -222,7 +223,9 @@ class FcmService {
   static String _shortDeviceInfo() {
     final os =
         Platform.isIOS ? 'iOS' : (Platform.isAndroid ? 'Android' : 'other');
-    return '$os v2';
+    // رقم النسخة (٣ نوفمبر): الخادم يحذف تسجيلات النسخ الأقدم من الحدّ حين يُفعَّل إجبار التحديث (scripts/app_gate.js)
+    final b = AppVersion.buildNumber;
+    return b.isEmpty ? '$os v2' : '$os v2 b$b';
   }
 
   // ────────────────────────────────────────────

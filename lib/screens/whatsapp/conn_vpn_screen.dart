@@ -238,7 +238,7 @@ class _ConnVpnScreenState extends State<ConnVpnScreen> {
               const SizedBox(width: Sp.sm),
               Expanded(
                 child: Text('ملفّك محفوظ مشفّراً${st.profileHasAuth ? ' مع اليوزر والباسورد' : ''}',
-                    style: AppType.body(color: AppColors.textHi)),
+                    maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.body(color: AppColors.textHi)),
               ),
               TextButton.icon(
                 onPressed: _busy == null ? _pick : null,

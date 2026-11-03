@@ -474,12 +474,13 @@ void main() {
         permissions: const {'reports.activity_log': true},
       );
       final pushed = await showScreen(t, const ReportsHubScreen());
-      // 6 تقارير عامّة (ديون المدراء لا تُمنح له فمخفيّة؛ «توزيع الباقات» #٥ بمفتاح الماليّ) + 3 لايرث لنك.
-      expect(reportCards, findsNWidgets(9));
+      // 6 تقارير عامّة (ديون المدراء لا تُمنح له فمخفيّة؛ «توزيع الباقات» #٥ بمفتاح الماليّ) + 2 لايرث لنك
+      // («سجلّ ايرث لنك» أُلغي ٣ نوفمبر 929c76eb — كان يُظهر عنوان خادمنا).
+      expect(reportCards, findsNWidgets(8));
       expect(lockedCard(LucideIcons.flaskConical), isTrue); // التجريبي
       expect(lockedCard(LucideIcons.package), isTrue); // حسب الباقة
       expect(lockedCard(LucideIcons.chartPie), isTrue); // توزيع الباقات (reports.financial)
-      // السجلّان (العامّ وايرث لنك) مفتوحان بـactivity_log.
+      // السجلّ العامّ مفتوحٌ بـactivity_log.
       expect(find.byType(PermLockIcon), findsNWidgets(7));
       await t.tap(find.ancestor(
           of: find.byIcon(LucideIcons.flaskConical), matching: reportCards));

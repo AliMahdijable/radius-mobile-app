@@ -26,6 +26,12 @@ class AppVersion {
     }
   }
 
+  @visibleForTesting
+  static void debugSet({String version = '', String build = ''}) {
+    _version = version;
+    _buildNumber = build;
+  }
+
   /// "2.0.1" — من pubspec.yaml `version: 2.0.1+88`
   static String get version => _version;
 

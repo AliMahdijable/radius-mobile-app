@@ -13,6 +13,8 @@ import 'account_api.dart';
 import 'api_error_tap.dart';
 import 'auth_api.dart';
 import 'company_route.dart';
+import '../services/app_version.dart';
+import '../services/update_gate.dart';
 
 /// تنبيه عام لِلوصول 401 + فشل refresh — تستمع له الـMainShell/Splash
 /// لتدفع المستخدم لـLoginScreen. القيمة عداد بسيط (bump على كل
@@ -177,6 +179,9 @@ class _AuthInterceptor extends Interceptor {
     } catch (_) {/* لا يُفشل الطلب */}
     // نوع الجهاز لوصفه في «أجهزتي» (لاتينيّ: الترويسات لا تحمل العربيّة بأمان؛ الخادم يعرّبه).
     options.headers['x-device-label'] = AppPlatform.deviceLabel;
+    // نسخة التطبيق (٣ نوفمبر — إجبار التحديث، server/appGate.js): ما قبل 3.0.15 لا يرسلها فيُعرف قديماً.
+    if (AppVersion.buildNumber.isNotEmpty) options.headers['x-app-build'] = AppVersion.buildNumber;
+    if (AppVersion.version.isNotEmpty) options.headers['x-app-version'] = AppVersion.version;
     // «كل الشركات»: نداءٌ لشركةٍ من شركات الحساب — توكن الحساب وحده + مفتاحها (lib/api/company_route.dart). لا Bearer الشركة
     // المفتوحة: الخادم يرفض الهويّتين معاً (COMPANY_ROUTE_CONFLICT)، ولا يصل الهاتفَ توكنُ الشركة أبداً.
     final routeKey = CompanyRoute.keyFor(options);
@@ -223,6 +228,8 @@ class _AuthInterceptor extends Interceptor {
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) async {
     final data = response.data;
+    // نسخةٌ أقدم من حدّ الخادم ⇒ شاشة «حدّث التطبيق» فوق كلّ شيء (lib/services/update_gate.dart)
+    UpdateGate.fromResponse(response.statusCode, data);
 
     // «كل الشركات»: ردٌّ موجَّه لا يمرّ بمسارات جلسة الشركة المفتوحة (لا تجديد ولا مسح ولا طرد بسببه).
     final routed = response.requestOptions.extra['_routed'];
