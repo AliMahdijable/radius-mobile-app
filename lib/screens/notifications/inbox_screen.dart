@@ -14,6 +14,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../national/national_ticket_push.dart';
+import '../whatsapp/connection_auto_widgets.dart';
 import '../subscribers/subscriber_detail_screen.dart';
 import '../desktop/desk_widgets.dart';
 
@@ -193,6 +194,7 @@ class _InboxScreenState extends State<InboxScreen> {
       await openNationalTicketPush(Navigator.of(context), n.data);
       return;
     }
+    if (await openConnAlertPush(Navigator.of(context), n.data)) return;
     final username = _extractUsername(n);
     if (username != null && username.isNotEmpty) {
       final sub = await _findSubscriber(username);

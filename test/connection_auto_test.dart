@@ -168,6 +168,23 @@ void main() {
       await simDrain(t);
     });
 
+    testWidgets('نقرة تنبيه «بانتظار موافقتك» (conn_alert_pending) ⇒ «تنبيهات المشتركين»؛ وغيره لا', (t) async {
+      server.reply('GET', '/api/v2/connection-alerts/auto', 200, _status(pending: 2));
+      server.reply('GET', '/api/v2/connection-alerts/queue', 200, {'success': true, 'data': {'available': true, 'items': []}});
+      final key = GlobalKey<NavigatorState>();
+      await pumpSim(t, _v, navigatorKey: key, home: (_) => const Scaffold(body: Text('الرئيسيّة')));
+      await t.pumpAndSettle();
+      expect(await openConnAlertPush(key.currentState!, const {'type': 'watani_ticket'}), isFalse);
+      final f = openConnAlertPush(key.currentState!, const {'type': 'conn_alert_pending', 'count': '2'});
+      await t.pumpAndSettle();
+      expect(find.text('تنبيهات المشتركين'), findsOneWidget);
+      expect(find.textContaining('وضع المحاكاة'), findsOneWidget);
+      key.currentState!.pop();
+      await t.pumpAndSettle();
+      expect(await f, isTrue);
+      await simDrain(t);
+    });
+
     testWidgets('القائمة: «بانتظار موافقتك» بمشاكله وأوقاته؛ «أرسل» يرسل مفتاحه، و«أرسل للكلّ» all', (t) async {
       server.reply('GET', '/api/v2/connection-alerts/auto', 200, _status(pending: 1));
       server.on('GET', '/api/v2/connection-alerts/queue', (o) {
@@ -180,7 +197,7 @@ void main() {
                 ? [
                     {
                       'key': 'i:101', 'idx': '101', 'username': 'u101', 'name': 'علي حسن', 'state': 'pending',
-                      'problems': [{'kind': 'signal', 'label': 'الإشارة', 'text': '⁨-70 dBm⁩'}],
+                      'problems': [{'kind': 'signal', 'label': 'الإشارة', 'text': '\u2068-70 dBm\u2069'}],
                       'confirmed_ms': DateTime.now().subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
                       'last_reading_ms': DateTime.now().subtract(const Duration(minutes: 5)).millisecondsSinceEpoch, 'sends': 0, 'muted': false,
                     },

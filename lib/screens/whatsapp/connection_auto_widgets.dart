@@ -373,6 +373,13 @@ class _QueueTile extends StatelessWidget {
 
 /* ═════════════════════════════ القائمة ═════════════════════════════ */
 
+/// نقرة تنبيه «بانتظار موافقتك» (الخادم: `type: conn_alert_pending`) ⇒ «تنبيهات المشتركين». false = ليس هذا التنبيه.
+Future<bool> openConnAlertPush(NavigatorState nav, Map<String, String> data) async {
+  if (data['type'] != 'conn_alert_pending') return false;
+  await nav.push(MaterialPageRoute(builder: (_) => const ConnAutoQueueScreen()));
+  return true;
+}
+
 class ConnAutoQueueScreen extends StatefulWidget {
   const ConnAutoQueueScreen({super.key});
 
@@ -381,6 +388,15 @@ class ConnAutoQueueScreen extends StatefulWidget {
 }
 
 class _ConnAutoQueueScreenState extends State<ConnAutoQueueScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // من تنبيهٍ مباشرةً: الحالة (شريط المحاكاة) قد لا تكون محمّلة بعد
+    ConnectionAutoApi.load().then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
   static const _tabs = <(String, String)>[
     ('pending', 'بانتظار موافقتك'),
     ('queued', 'بالطابور'),
