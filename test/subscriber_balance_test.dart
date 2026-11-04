@@ -48,9 +48,11 @@ void main() {
       expect(card.contains("label: 'إضافة دين',"), isTrue);
     });
 
-    test('التسديد يبقى مشروطاً برصيدٍ غير صفر', () {
-      // شيتٌ يقول «لا يوجد دين» لا يفيد أحداً.
-      expect(src.contains('onPay: sub.balanceAmount != 0 &&'), isTrue);
+    test('التسديد للمدين وحده — الرصيد الدائن بابه «إضافة دين»', () {
+      // شيتٌ يقول «لا يوجد دين» لا يفيد أحداً. و٥ سبتمبر: `balanceAmount != 0` كان يفتح «تسديد» لصاحب الرصيد الدائن
+      // أيضاً — والتسديد يجمع على الرصيد لا يطرح منه، فمن له ٣٠٬٠٠٠ يصير له ٦٠٬٠٠٠. (كان الاختبار يحرس الشرط القديم.)
+      expect(src.contains("onPay: sub.hasDebt && Perms.has('subscribers.pay_debt')"), isTrue);
+      expect(src.contains('onPay: sub.balanceAmount != 0 &&'), isFalse, reason: 'عاد الشرط الذي يفتح «تسديد» للرصيد الدائن');
     });
   });
 

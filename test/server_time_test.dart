@@ -24,10 +24,11 @@ void main() {
       final wrong = DateTime.parse('2026-09-04T11:39:56'); // السلوك القديم
       final right = parseServerUtc('2026-09-04 11:39:56')!;
       // في بغداد (+3) يكون الفرق ٣ ساعات؛ وفي UTC يكون صفراً.
-      // فنؤكّد أنّ الفرق يساوي إزاحة الجهاز بالضبط — أيّاً كانت.
+      // فنؤكّد أنّ الفرق يساوي إزاحة الجهاز بالضبط — أيّاً كانت. (٤ نوفمبر: كانت بإشارةٍ سالبة —
+      // كُتب على خادمٍ بتوقيت UTC فمرّ صفراً، وعلى جهاز بغداد يكون +١٨٠: الصحيح متأخّرٌ عن الخطأ بالإزاحة.)
       expect(
         right.difference(wrong).inMinutes,
-        equals(-wrong.timeZoneOffset.inMinutes),
+        equals(wrong.timeZoneOffset.inMinutes),
         reason: 'الفرق بين الصحيح والخطأ = إزاحة الجهاز عن UTC',
       );
     });

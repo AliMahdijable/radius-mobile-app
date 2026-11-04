@@ -21,11 +21,13 @@ Map<String, dynamic> _alerts() => {
       },
     };
 
-Map<String, dynamic> _vitals({bool available = true, bool canEdit = true, List<Map<String, dynamic>> alerts = const [], int watched = 20, bool enabled = true}) => {
+Map<String, dynamic> _vitals({bool available = true, bool canEdit = true, List<Map<String, dynamic>> alerts = const [], int watched = 20, bool enabled = true,
+        List<Map<String, dynamic>> power = const [], int learning = 0}) => {
       'success': true,
       'data': available
           ? {
               'available': true, 'dry_run': false, 'can_use': true, 'can_edit': canEdit, 'watched': watched, 'alerts': alerts,
+              'power': power, 'power_learning': learning,
               'settings': {'enabled': enabled, 'cpu_max': 90, 'temp_max': 80, 'volt_drop_pct': 15, 'signal_drop_db': 8, 'signal_min': -80, 'ccq_min': 50},
             }
           : {'available': false},
@@ -47,6 +49,21 @@ void main() {
     expect(s2.toJson(), {'enabled': false, 'cpu_max': 95, 'temp_max': 80, 'volt_drop_pct': 15, 'signal_drop_db': 8, 'signal_min': -80, 'ccq_min': 50});
     expect(vitalValueText('volt', 19.94), '19.9V');
     expect(vitalValueText('signal', -70.4), '-70 dBm');
+    final pw = AgentVitalsStatus.fromJson(Map<String, dynamic>.from(_vitals(power: [
+      {'id': 1, 'name': 'راوتر البرج', 'base': 24.0, 'alert_below': 20.4, 'value': 23.9, 'state': 'ok'},
+      {'id': 2, 'name': 'سويج', 'base': 48.2, 'alert_below': 41.0, 'state': 'alert'},
+    ], learning: 2)['data'] as Map));
+    expect(pw.power.map((p) => (p.name, p.base, p.alertBelow, p.alert)).toList().toString(), '[(راوتر البرج, 24.0, 20.4, false), (سويج, 48.2, 41.0, true)]');
+    expect(pw.powerLearning, 2);
+  });
+
+  test('النسبة بالفولت: بأوّل أجهزته إن عُرفت، وإلّا بمثال 24V؛ الاسم الطويل يُختصر', () {
+    String plain(String s) => s.replaceAll(RegExp('[\u2066-\u2069]'), '').replaceAll('\u00A0', ' ');
+    expect(plain(voltDropHint(15, const [])), 'نزولها عن طبيعيّ الجهاز\nمثلاً: جهازٌ طبيعيّه 24.0V، التنبيه تحت 20.4V');
+    const p = [AgentVitalPower(id: 1, name: 'راوتر البرج', base: 24.0, alertBelow: 20.4), AgentVitalPower(id: 2, name: 'سويج', base: 48.0, alertBelow: 40.8)];
+    expect(plain(voltDropHint(20, p)), 'نزولها عن طبيعيّ الجهاز\nمثلاً: «راوتر البرج» طبيعيّه 24.0V، التنبيه تحت 19.2V');
+    const long = [AgentVitalPower(id: 3, name: 'سويج البرج الرئيسيّ الطويل جدّاً', base: 48.2, alertBelow: 41.0)];
+    expect(plain(voltDropHint(15, long)), 'نزولها عن طبيعيّ الجهاز\nمثلاً: «سويج البرج…» طبيعيّه 48.2V، التنبيه تحت 41.0V');
   });
 
   test('القراءة: ما يقيسه الجهاز فعلاً (لا صفر لما لم يُقرأ)', () {
@@ -105,7 +122,7 @@ void main() {
       ]}});
     });
 
-    testWidgets('القسم: الإنذارات بقيمها ومعدّلها (الكهرباء 24.0V ← 19.9V) والسجلّ بأيقوناته؛ «الحدود» تحفظ', (t) async {
+    testWidgets('القسم: الإنذارات بقيمها وتحتها طبيعيّ الجهاز (19.9V · طبيعيّه 24.0V — لا سهم) والسجلّ بأيقوناته؛ «الحدود» تحفظ', (t) async {
       server.reply('GET', '/api/v2/agent-alerts/vitals', 200, _vitals(alerts: [
         {'id': 3, 'name': 'راوتر البرج', 'metric': 'volt', 'place': 'برج «النصر»', 'value': 19.9, 'base': 24.0, 'since_ms': _ago(const Duration(minutes: 6))},
         {'id': 5, 'name': 'سكتر 2', 'metric': 'temp', 'value': 82, 'since_ms': _ago(const Duration(minutes: 12))},
@@ -115,7 +132,9 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('القراءات الحسّاسة'), findsOneWidget);
       expect(find.text('الكهرباء · راوتر البرج'), findsOneWidget);
-      expect(find.text('24.0V ← 19.9V'), findsOneWidget);
+      expect(find.text('19.9V'), findsOneWidget);
+      expect(find.text('طبيعيّه \u206624.0V\u2069'), findsOneWidget);
+      expect(find.textContaining('←'), findsNothing, reason: 'السهم بين رقمين يُقرأ بالعكس');
       expect(find.text('الحرارة · سكتر 2'), findsOneWidget);
       expect(find.text('82°'), findsOneWidget);
       await t.tap(find.text('الحدود'));
@@ -129,6 +148,26 @@ void main() {
       expect(server.bodies('PUT', '/api/v2/agent-alerts/vitals/settings').single['cpu_max'], 95);
       await t.scrollUntilVisible(find.text('الكهرباء — برج «النصر»'), 300, scrollable: find.byType(Scrollable).first);
       expect(find.text('الكهرباء — برج «النصر»'), findsOneWidget, reason: 'العنوان بلا رمزه');
+      await simDrain(t);
+    });
+
+    testWidgets('الكهرباء بالفولت: لكلّ جهاز طبيعيّه وحدّ تنبيهه، ومن يتعلّم؛ والحدود تقولها فولتاً وتتغيّر مع ±', (t) async {
+      server.reply('GET', '/api/v2/agent-alerts/vitals', 200, _vitals(power: [
+        {'id': 1, 'name': 'راوتر البرج', 'base': 24.0, 'alert_below': 20.4, 'value': 23.9, 'state': 'ok'},
+      ], learning: 3));
+      await pumpSim(t, _v, home: (_) => const AgentAlertsScreen());
+      await t.pumpAndSettle();
+      expect(find.textContaining('يُنبَّه إذا نزلت 15٪ عن طبيعيّ الجهاز'), findsOneWidget);
+      expect(find.text('راوتر البرج'), findsOneWidget);
+      expect(find.text('24.0V'), findsOneWidget);
+      expect(find.text('20.4V'), findsOneWidget);
+      expect(find.textContaining('3 أجهزة تتعلّم فولتيّتها الطبيعيّة'), findsOneWidget);
+      await t.tap(find.text('الحدود'));
+      await t.pumpAndSettle();
+      expect(find.textContaining('تحت\u00A0\u206620.4V'), findsOneWidget);
+      await t.tap(find.byTooltip('أكثر').at(2)); // الكهرباء 15 ⇒ 20
+      await t.pump();
+      expect(find.textContaining('تحت\u00A0\u206619.2V'), findsOneWidget);
       await simDrain(t);
     });
 
@@ -161,8 +200,12 @@ void main() {
       testWidgets('القسم والحدود بلا فيضٍ @${v.tag}', (t) async {
         server.reply('GET', '/api/v2/agent-alerts/vitals', 200, _vitals(alerts: [
           {'id': 3, 'name': 'راوتر البرج الرئيسيّ الطويل جدّاً', 'metric': 'signal', 'place': 'برج «النصر الجديد»', 'value': -71, 'base': -58, 'since_ms': _ago(const Duration(hours: 3))},
+          {'id': 4, 'name': 'سويج البرج', 'metric': 'volt', 'value': 39.9, 'base': 48.2, 'since_ms': _ago(const Duration(minutes: 2))},
           {'id': 5, 'name': 'سكتر 2', 'metric': 'cpu', 'value': 97, 'since_ms': _ago(const Duration(minutes: 12))},
-        ]));
+        ], power: [
+          {'id': 4, 'name': 'سويج البرج الرئيسيّ الطويل جدّاً جدّاً', 'base': 48.2, 'alert_below': 41.0, 'value': 39.9, 'state': 'alert'},
+          {'id': 6, 'name': 'راوتر', 'base': 12.1, 'alert_below': 10.3, 'value': 12.0, 'state': 'ok'},
+        ], learning: 1));
         await pumpSim(t, v, home: (_) => const AgentAlertsScreen());
         await t.pumpAndSettle();
         expect(t.takeException(), isNull);

@@ -454,7 +454,55 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
         )
       else
         for (final a in v.alerts) _vitalRow(a),
+      if (v.settings.enabled && (v.power.isNotEmpty || v.powerLearning > 0)) ...[
+        const SizedBox(height: Sp.sm),
+        _powerBox(v),
+      ],
     ]);
+  }
+
+  /// الكهرباء بالفولت (المالك ٤ نوفمبر: «مافهمت ليش مسوي نسبة… مفروض توضح كم يعني للنسبه»): لكلّ جهازٍ فولتيّته الطبيعيّة وحدّ تنبيهه.
+  Widget _powerBox(AgentVitalsStatus v) {
+    return _box(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Icon(LucideIcons.plugZap, size: 16, color: AppColors.textMid),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: Text('الكهرباء — يُنبَّه إذا نزلت ${v.settings.voltDropPct}٪ عن طبيعيّ الجهاز',
+                style: AppType.bodyStrong(color: AppColors.textHi)),
+          ),
+        ]),
+        for (final p in v.power)
+          Padding(
+            padding: const EdgeInsets.only(top: Sp.xs),
+            child: Row(children: [
+              Expanded(
+                child: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: AppType.body(color: p.alert ? AppColors.error : AppColors.textBody)),
+              ),
+              const SizedBox(width: Sp.sm),
+              Text('طبيعيّه ', style: AppType.micro(color: AppColors.textMid)),
+              Directionality(textDirection: TextDirection.ltr, child: Text(vitalValueText('volt', p.base), style: AppType.micro(color: AppColors.textHi))),
+              Text(' · التنبيه تحت ', style: AppType.micro(color: AppColors.textMid)),
+              Directionality(
+                textDirection: TextDirection.ltr,
+                child: Text(vitalValueText('volt', p.alertBelow), style: AppType.microBold(color: AppColors.textHi)),
+              ),
+            ]),
+          ),
+        if (v.powerLearning > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: Sp.xs),
+            child: Text(
+              v.powerLearning == 1
+                  ? 'جهازٌ واحد يتعلّم فولتيّته الطبيعيّة (ساعتان من القراءات)'
+                  : '${v.powerLearning} أجهزة تتعلّم فولتيّتها الطبيعيّة (ساعتان من القراءات)',
+              style: AppType.micro(color: AppColors.textMid),
+            ),
+          ),
+      ]),
+    );
   }
 
   Widget _vitalRow(AgentVitalAlert a) {
@@ -465,9 +513,14 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
       _ => LucideIcons.signalLow,
     };
     final color = a.metric == 'volt' ? AppColors.error : AppColors.warning;
-    final value = (a.metric == 'volt' || a.metric == 'signal') && a.base != null
-        ? '${vitalValueText(a.metric, a.base)} ← ${vitalValueText(a.metric, a.value)}'
-        : vitalValueText(a.metric, a.value);
+    // القيمة الآن وتحتها طبيعيّ الجهاز — لا سهم: «24.0V ← 19.9V» كان يُقرأ صعوداً من 19.9 إلى 24.0 (٤ نوفمبر)
+    final ref = a.base == null
+        ? null
+        : switch (a.metric) {
+            'volt' => 'طبيعيّه \u2066${vitalValueText('volt', a.base)}\u2069',
+            'signal' => 'معدّلها \u2066${vitalValueText('signal', a.base)}\u2069',
+            _ => null,
+          };
     final since = a.sinceMs != null ? 'منذ ${_dur(DateTime.now().millisecondsSinceEpoch - a.sinceMs!)}' : null;
     return Padding(
       padding: const EdgeInsets.only(bottom: Sp.xs),
@@ -484,19 +537,26 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
             ]),
           ),
           const SizedBox(width: Sp.sm),
-          Directionality(textDirection: TextDirection.ltr, child: Text(value, style: AppType.bodyStrong(color: color))),
+          Column(crossAxisAlignment: CrossAxisAlignment.end, mainAxisSize: MainAxisSize.min, children: [
+            Directionality(
+              textDirection: TextDirection.ltr,
+              child: Text(vitalValueText(a.metric, a.value), style: AppType.bodyStrong(color: color)),
+            ),
+            if (ref != null) Text(ref, style: AppType.micro(color: AppColors.textMid)),
+          ]),
         ]),
       ),
     );
   }
 
   Future<void> _editVitals(AgentVitalSettings cur) async {
+    // (الأجهزة بفولتيّتها — مثالٌ حيّ بالفولت تحت «الكهرباء» في الحدود)
     final saved = await showAppSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: AppColors.scrim,
-      builder: (_) => VitalsLimitsSheet(initial: cur),
+      builder: (_) => VitalsLimitsSheet(initial: cur, power: _vit?.power ?? const []),
     );
     if (saved == true && mounted) _load();
   }
@@ -582,10 +642,33 @@ String vitalValueText(String metric, double? v) {
   };
 }
 
+/// النسبة بالفولت (المالك ٤ نوفمبر: «مفروض توضح كم يعني للنسبه»): مثالٌ واحد بأوّل جهازٍ عُرفت فولتيّته، وإلّا بجهاز 24V —
+/// سطرٌ ثانٍ قصير (كان مثالين باسمين طويلين: خمسة أسطر بعرض 320).
+String voltDropHint(int pct, List<AgentVitalPower> power) {
+  String v(double x) => '\u2066${vitalValueText('volt', x)}\u2069'; // عزلٌ: رقمٌ لاتينيّ داخل جملةٍ عربيّة
+  final p = power.isEmpty ? null : power.first;
+  final base = p?.base ?? 24.0;
+  final who = p == null ? 'جهازٌ' : '«${_shortName(p.name)}»';
+  const nb = '\u00A0'; // «طبيعيّه 24.0V» و«التنبيه تحت 20.4V» لا يُكسران بين سطرين
+  return 'نزولها عن طبيعيّ الجهاز\nمثلاً: $who طبيعيّه$nb${v(base)}، التنبيه$nbتحت$nb${v(base * (1 - pct / 100))}';
+}
+
+/// اسمٌ طويل ⇒ أوّل ١٥ حرفاً مقطوعةً عند آخر كلمةٍ كاملة («سويج البرج…» لا «سويج البرج الرئ…»).
+String _shortName(String name) {
+  final c = name.trim().characters;
+  if (c.length <= 16) return c.toString();
+  final head = c.take(15).toString();
+  final cut = head.lastIndexOf(' ');
+  return '${cut >= 6 ? head.substring(0, cut) : head}…';
+}
+
 /// حدود «القراءات الحسّاسة» — أزرار ± بخطوات الخادم وحدوده (server/agentVitals.js LIMITS).
 class VitalsLimitsSheet extends StatefulWidget {
-  const VitalsLimitsSheet({super.key, required this.initial});
+  const VitalsLimitsSheet({super.key, required this.initial, this.power = const []});
   final AgentVitalSettings initial;
+
+  /// أجهزة الوكيل بفولتيّتها الطبيعيّة — مثالٌ حيّ بالفولت تحت «الكهرباء»
+  final List<AgentVitalPower> power;
 
   @override
   State<VitalsLimitsSheet> createState() => _VitalsLimitsSheetState();
@@ -643,7 +726,7 @@ class _VitalsLimitsSheetState extends State<VitalsLimitsSheet> {
       header: SheetHeaderBar(
         icon: LucideIcons.slidersHorizontal,
         title: 'حدود القراءات الحسّاسة',
-        subtitle: 'متى نخبرك — الكهرباء والإشارة بالنسبة لمعدّل كلّ جهاز',
+        subtitle: 'متى نخبرك بكلّ قراءة',
         onClose: () => Navigator.of(context).pop(false),
       ),
       footer: SheetFooterBar(label: 'حفظ', icon: LucideIcons.check, busy: _busy, onPressed: _save),
@@ -657,7 +740,7 @@ class _VitalsLimitsSheetState extends State<VitalsLimitsSheet> {
             onChanged: (v) => _s = _s.copyWith(cpuMax: v)),
         _stepper(title: 'الحرارة', hint: 'إذا بلغها الجهاز', value: _s.tempMax, unit: '°', min: 50, max: 110, step: 5,
             onChanged: (v) => _s = _s.copyWith(tempMax: v)),
-        _stepper(title: 'الكهرباء', hint: 'نزول الفولتيّة عن معدّل الجهاز — انقطاع والجهاز على البطارية', value: _s.voltDropPct,
+        _stepper(title: 'الكهرباء', hint: voltDropHint(_s.voltDropPct, widget.power), value: _s.voltDropPct,
             unit: '%', min: 5, max: 50, step: 5, onChanged: (v) => _s = _s.copyWith(voltDropPct: v)),
         _stepper(title: 'الإشارة', hint: 'أسوأ من معدّلها بهذا القدر', value: _s.signalDropDb, unit: ' dB', min: 3, max: 30, step: 1,
             onChanged: (v) => _s = _s.copyWith(signalDropDb: v)),

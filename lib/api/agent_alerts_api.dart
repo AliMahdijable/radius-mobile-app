@@ -247,6 +247,35 @@ class AgentVitalAlert {
   }
 }
 
+/// الكهرباء بالفولت لجهازٍ له معدّل (المالك ٤ نوفمبر: «مفروض توضح كم يعني للنسبه»): فولتيّته الطبيعيّة وحدّ تنبيهه.
+class AgentVitalPower {
+  const AgentVitalPower({required this.id, required this.name, required this.base, required this.alertBelow, this.place, this.value, this.alert = false});
+  final int id;
+  final String name;
+  final String? place;
+  final double base;
+  final double alertBelow;
+  final double? value;
+  final bool alert;
+
+  static AgentVitalPower? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final id = (j['id'] as num?)?.toInt();
+    final base = (j['base'] as num?)?.toDouble();
+    final below = (j['alert_below'] as num?)?.toDouble();
+    if (id == null || base == null || below == null) return null;
+    return AgentVitalPower(
+      id: id,
+      name: '${j['name'] ?? '#$id'}',
+      place: j['place']?.toString(),
+      base: base,
+      alertBelow: below,
+      value: (j['value'] as num?)?.toDouble(),
+      alert: j['state'] == 'alert',
+    );
+  }
+}
+
 class AgentVitalsStatus {
   const AgentVitalsStatus({
     required this.available,
@@ -256,10 +285,16 @@ class AgentVitalsStatus {
     this.canEdit = false,
     this.watched = 0,
     this.alerts = const [],
+    this.power = const [],
+    this.powerLearning = 0,
   });
   final bool available;
   final bool dryRun;
   final AgentVitalSettings settings;
+
+  /// الكهرباء بالفولت لكلّ جهازٍ له معدّل، وكم جهازاً يتعلّم معدّله بعد
+  final List<AgentVitalPower> power;
+  final int powerLearning;
   final bool canUse;
   final bool canEdit;
 
@@ -271,6 +306,7 @@ class AgentVitalsStatus {
 
   factory AgentVitalsStatus.fromJson(Map<String, dynamic> j) {
     final a = j['alerts'];
+    final p = j['power'];
     return AgentVitalsStatus(
       available: j['available'] == true,
       dryRun: j['dry_run'] == true,
@@ -279,6 +315,8 @@ class AgentVitalsStatus {
       canEdit: j['can_edit'] == true,
       watched: (j['watched'] as num?)?.toInt() ?? 0,
       alerts: a is List ? a.map(AgentVitalAlert.fromJson).whereType<AgentVitalAlert>().toList() : const [],
+      power: p is List ? p.map(AgentVitalPower.fromJson).whereType<AgentVitalPower>().toList() : const [],
+      powerLearning: (j['power_learning'] as num?)?.toInt() ?? 0,
     );
   }
 }

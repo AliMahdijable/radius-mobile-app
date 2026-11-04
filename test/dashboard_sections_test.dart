@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/server_source.dart';
+
 /// أقسام الرئيسيّة — الإخفاء يُسقط النداء لا الرسم فقط.
 ///
 /// الميزة (طلب المستخدم): «الداش بورد يقدر يتحكّم بشنو يظهر». والفائدة
@@ -56,11 +58,10 @@ void main() {
         reason: 'بلا هذا تومض الشاشة فارغةً قبل وصول التفضيلات');
   });
 
-  test('مفاتيح العميل تطابق الخادم', () {
-    final server = File('../server.js').existsSync()
-        ? File('../server.js').readAsStringSync()
-        : File('/home/ali/MyServices Raduis/server.js').readAsStringSync();
-    final db = File('/home/ali/MyServices Raduis/database/db.js').readAsStringSync();
+  final root = proServerRoot();
+  test('مفاتيح العميل تطابق الخادم', skip: root == null ? serverSourceSkip : false, () {
+    final server = File('$root/server.js').readAsStringSync();
+    final db = File('$root/database/db.js').readAsStringSync();
     for (final s in sections) {
       expect(db.contains("'$s'"), isTrue,
           reason: 'المفتاح $s غير معرَّف في DASHBOARD_SECTIONS — '
