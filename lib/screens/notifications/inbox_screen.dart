@@ -17,6 +17,8 @@ import '../national/national_ticket_push.dart';
 import '../whatsapp/connection_auto_widgets.dart';
 import '../subscribers/subscriber_detail_screen.dart';
 import '../desktop/desk_widgets.dart';
+import '../renew/renew_widgets.dart';
+import '../../api/renew_requests_api.dart';
 
 /// شاشة inbox — تعرض 3 أقسام (نفس منطق v1 mobile-app):
 ///   1. **إشعارات التطبيق** — FCM inbox items (المستلمة).
@@ -195,6 +197,9 @@ class _InboxScreenState extends State<InboxScreen> {
       return;
     }
     if (await openConnAlertPush(Navigator.of(context), n.data)) return;
+    // «طلب تجديد اشتراك» ⇒ الطلب نفسه بصورته وإجراءاته (لا كرت المشترك)
+    if (!mounted) return;
+    if (await openRenewRequestPush(Navigator.of(context), n.data)) return;
     final username = _extractUsername(n);
     if (username != null && username.isNotEmpty) {
       final sub = await _findSubscriber(username);
@@ -261,7 +266,7 @@ class _InboxScreenState extends State<InboxScreen> {
       ),
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: _loadLists,
+          onRefresh: () => Future.wait([_loadLists(), RenewRequestsState.ensureFresh(force: true)]),
           color: AppColors.brand,
           child: ValueListenableBuilder<int>(
             valueListenable: InboxService.changes,
@@ -270,12 +275,15 @@ class _InboxScreenState extends State<InboxScreen> {
               final hasApp = items.isNotEmpty;
               final hasExpiredToday = _expiredToday.isNotEmpty;
               final hasNearExpiry = _nearExpiry.isNotEmpty;
+              final hasRenew = RenewRequestsState.on && (RenewRequestsState.gate.value?.items.isNotEmpty ?? false);
               final allEmpty =
-                  _loaded && !hasApp && !hasExpiredToday && !hasNearExpiry;
+                  _loaded && !hasApp && !hasExpiredToday && !hasNearExpiry && !hasRenew;
               return ListView(
                 padding:
                     const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
                 children: [
+                  // «طلبات التجديد» بالأعلى — حين يوجد طلبٌ مفتوح وحده
+                  const RenewInboxSection(),
                   if (hasApp) ...[
                     _SectionHeader(
                       title: 'notifications.app_notifications'.tr(),

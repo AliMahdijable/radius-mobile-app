@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../api/cards_api.dart';
 import '../api/jtpay_api.dart';
 import '../api/national_more_api.dart';
+import '../api/renew_requests_api.dart';
 import '../api/sales_api.dart';
 import '../api/self_deposit_api.dart';
 import '../core/util/format.dart';
@@ -34,6 +35,7 @@ import 'national/national_wallet_screen.dart';
 import 'national/national_work_screen.dart';
 import 'packages/packages_screen.dart';
 import 'portal_settings/portal_settings_screen.dart';
+import 'renew/renew_requests_screen.dart';
 import 'reports_screen.dart';
 import 'sales/sales_screen.dart';
 import 'settlements/settlements_screen.dart';
@@ -97,6 +99,8 @@ Listenable appModulesListenable() => Listenable.merge([
       AppResumedSignal.tick,
       // المشروع الوطنيّ: المفتاح التجريبيّ وقدرات مستخدم البوّابة — الاستماع يطلبها للوطنيّ وحده (لا نداء لغيره).
       NationalMoreState.gate,
+      // «طلبات التفعيل» — المفتاح العامّ portal_renew وما يملكه المستخدم (الاستماع يطلبها).
+      RenewRequestsState.gate,
     ]);
 
 /// الأقسام بترتيب الهاتف («قوائم أخرى»). الحاسبة ترتّبها بمجموعاتها.
@@ -384,6 +388,22 @@ List<AppModule> buildAppModules() {
         title: 'more.message_logs'.tr(),
         subtitle: 'more.message_logs_hint'.tr(),
         page: () => const MessageLogsScreen(),
+      ),
+    // «طلبات التفعيل» (٤ نوفمبر): طلبات تجديد المشتركين من تطبيقهم بصورة التحويل — حين يُفتح المفتاح العامّ للحساب، ومقفلٌ بمكانه
+    // لموظّفٍ بلا «طلبات التفعيل»، والمقيَّد بمديرٍ فرعيّ بسببه (القسم يشمل كلّ مشتركي الحساب). الرقم: بانتظارك.
+    if ((RenewRequestsState.gate.value?.access.available ?? false) && permShown(const ['renew_requests.use']))
+      AppModule(
+        id: 'renew_requests',
+        group: AppModuleGroup.manage,
+        locked: !Perms.has('renew_requests.use'),
+        unavailable: RenewRequestsState.gate.value!.access.scoped ? 'لموظّفي الحساب كلّه' : null,
+        icon: LucideIcons.inbox,
+        tone: AppTone.warning,
+        title: 'طلبات التفعيل',
+        subtitle: RenewRequestsState.pending > 0
+            ? '${RenewRequestsState.pending} بانتظارك — طلبات تجديد من تطبيق المشترك'
+            : 'طلبات تجديد مشتركيك من تطبيقهم مع صورة التحويل',
+        page: () => const RenewRequestsScreen(),
       ),
     // المدراء والموظّفون: مفتاحان لا يُمنحان لموظّف ايرث لنك أصلاً — مخفيّان عنده ومقفلان عند غيره.
     if (permShown(const ['managers.view']))

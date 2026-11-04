@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../models/app_notification.dart';
 import '../../services/inbox_service.dart';
+import '../../services/notification_router.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -16,7 +17,7 @@ import 'inbox_screen.dart';
 /// * يُعرض في overlay الـtop-level (Navigator/rootNavigator) عشان
 ///   يظهر فوق كل الـcontent.
 /// * auto-dismiss بعد 4 ثواني.
-/// * tap → يفتح InboxScreen + يعلّم الإشعار كمقروء.
+/// * tap → يفتح InboxScreen + يعلّم الإشعار كمقروء («طلب تجديد اشتراك» ⇒ الطلب نفسه).
 ///
 /// **الاستخدام:**
 ///   InAppNotificationBanner.show(context, notification: n);
@@ -96,6 +97,11 @@ class _BannerCardState extends State<_BannerCard>
     await InboxService.markRead(widget.notification.id);
     if (!mounted) return;
     widget.onDismiss();
+    // «طلب تجديد اشتراك» ⇒ الطلب نفسه بصورته لا الصندوق — أسرع للتفعيل، والموجِّه يبدّل الشركة أوّلاً إن كان لغيرها (٤ نوفمبر)
+    if (widget.notification.data['type'] == 'renew_request') {
+      unawaited(NotificationRouter.handle(widget.notification));
+      return;
+    }
     Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute(builder: (_) => const InboxScreen()),
     );
