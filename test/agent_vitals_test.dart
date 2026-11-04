@@ -73,6 +73,24 @@ void main() {
     expect(VitalsReporter.readingOf(3, const DeviceGlance()), isNull);
   });
 
+  test('الإشارة لوصلةٍ لا لنقطة وصول: سكتر بوضع AP لا يرسل «-96»؛ بمحطّةٍ واحدة ⇒ إشارتها؛ محطّاته لم تُقرأ ⇒ لا مفتاح', () {
+    const p = PeerLink(name: 'a', signal: -63);
+    const q = PeerLink(name: 'b', signal: -70);
+    // الحال الحيّة (٤ نوفمبر، سكتر يوبيكويتي): وضع AP، محطّاتٌ مقروءة، و«إشارة» الجهاز -96 ⇒ null صريح (لا تنطبق)
+    expect(VitalsReporter.readingOf(1, const DeviceGlance(cpu: 5, signal: -96, isAp: true, peersKnown: true), peers: const [p, q]),
+        {'id': 1, 'cpu': 5, 'signal': null});
+    expect(VitalsReporter.readingOf(1, const DeviceGlance(signal: -96, isAp: true, peersKnown: true)), {'id': 1, 'signal': null},
+        reason: 'بلا محطّات أيضاً — والخريطة لا تُهمل: null الصريح يغلق إنذاراً قديماً');
+    // نقطة وصولٍ بمحطّةٍ واحدة = وصلة PtP ⇒ إشارة المحطّة (لا إشارة الجهاز)
+    expect(VitalsReporter.readingOf(2, const DeviceGlance(signal: -96, ccq: 91, isAp: true, peersKnown: true), peers: const [p]),
+        {'id': 2, 'signal': -63, 'ccq': 91});
+    // قراءةٌ خفيفة (محطّاتها لم تُقرأ) ⇒ لا مفتاح إشارة أصلاً
+    expect(VitalsReporter.readingOf(3, const DeviceGlance(cpu: 7, signal: -60, isAp: true)), {'id': 3, 'cpu': 7});
+    // المحطّة/الوصلة ⇒ إشارتها هي
+    expect(VitalsReporter.readingOf(4, const DeviceGlance(signal: -58, isAp: false, peersKnown: true), peers: const [p, q]),
+        {'id': 4, 'signal': -58});
+  });
+
   group('الرفع', () {
     late SimServer server;
     setUpAll(simSetUpAll);
@@ -89,15 +107,18 @@ void main() {
       await t.runAsync(() => AgentAlertsApi.vitalsStatus());
       VitalsReporter.instance.record(_dev(1), const DeviceGlance(cpu: 50));
       VitalsReporter.instance.record(_dev(1), const DeviceGlance(cpu: 97, temp: 81));
-      VitalsReporter.instance.record(_dev(2), const DeviceGlance(voltage: 23.9));
+      // سكترٌ بوضع AP بمحطّتين: إشارته «-96» لا تُرسل — null صريحٌ يصل الخادم كما هو (يغلق إنذاراً قديماً)
+      VitalsReporter.instance.record(_dev(2), const DeviceGlance(voltage: 23.9, signal: -96, isAp: true, peersKnown: true),
+          peers: const [PeerLink(name: 'x', signal: -60), PeerLink(name: 'y', signal: -70)]);
       expect(VitalsReporter.instance.pending.length, 2);
       server.reply('POST', '/api/v2/agent-alerts/vitals', 200, {'success': true, 'data': {'active': true, 'accepted': 3}});
       await t.runAsync(() => VitalsReporter.instance.flush());
       final body = server.bodies('POST', '/api/v2/agent-alerts/vitals').single;
       expect(body['readings'], [
         {'id': 1, 'cpu': 97, 'temp': 81},
-        {'id': 2, 'volt': 23.9},
+        {'id': 2, 'volt': 23.9, 'signal': null},
       ]);
+      expect((body['readings'] as List)[1].containsKey('signal'), isTrue, reason: 'null بالجسم لا مفتاحٌ محذوف');
       expect(VitalsReporter.instance.pending, isEmpty);
       server.reply('POST', '/api/v2/agent-alerts/vitals', 200, {'success': true, 'data': {'active': false}});
       VitalsReporter.instance.record(_dev(3), const DeviceGlance(cpu: 10));

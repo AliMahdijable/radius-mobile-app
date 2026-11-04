@@ -1,0 +1,487 @@
+{
+ "status_down": {
+  "success": true,
+  "data": {
+   "available": true,
+   "dry_run": false,
+   "enabled": true,
+   "notify_up": true,
+   "is_default": true,
+   "can_use": true,
+   "can_edit": true,
+   "remote": null,
+   "devices": 10,
+   "monitored": 10,
+   "down": [
+    {
+     "id": 6,
+     "name": "جهاز 6",
+     "type": "ap",
+     "place": null,
+     "since_ms": 1793775718000
+    }
+   ],
+   "quiet": [],
+   "network_down": false,
+   "last_app_ms": 1793775938000,
+   "last_vpn_ms": null
+  }
+ },
+ "vitals_alert": {
+  "success": true,
+  "data": {
+   "available": true,
+   "dry_run": false,
+   "settings": {
+    "enabled": true,
+    "cpu_max": 90,
+    "temp_max": 80,
+    "volt_drop_pct": 15,
+    "signal_drop_db": 8,
+    "signal_min": -80,
+    "ccq_min": 50
+   },
+   "is_default": true,
+   "limits": {
+    "cpu_max": [
+     50,
+     100
+    ],
+    "temp_max": [
+     50,
+     110
+    ],
+    "volt_drop_pct": [
+     5,
+     50
+    ],
+    "signal_drop_db": [
+     3,
+     30
+    ],
+    "signal_min": [
+     -95,
+     -40
+    ],
+    "ccq_min": [
+     10,
+     95
+    ]
+   },
+   "can_use": true,
+   "can_edit": true,
+   "watched": 14,
+   "alerts": [
+    {
+     "id": 1,
+     "name": "جهاز 1",
+     "place": "برج «النصر»",
+     "metric": "volt",
+     "value": 19.8,
+     "base": 24,
+     "since_ms": 1793793398000
+    },
+    {
+     "id": 2,
+     "name": "جهاز 2",
+     "place": "برج «النصر»",
+     "metric": "volt",
+     "value": 39.6,
+     "base": 48.2,
+     "since_ms": 1793793398000
+    }
+   ],
+   "power": [
+    {
+     "id": 1,
+     "name": "جهاز 1",
+     "place": "برج «النصر»",
+     "base": 24,
+     "alert_below": 20.4,
+     "value": 19.8,
+     "state": "alert"
+    },
+    {
+     "id": 2,
+     "name": "جهاز 2",
+     "place": "برج «النصر»",
+     "base": 48.2,
+     "alert_below": 41,
+     "value": 39.6,
+     "state": "alert"
+    },
+    {
+     "id": 5,
+     "name": "جهاز 5",
+     "place": "منطقة «الحيّ»",
+     "base": 12.1,
+     "alert_below": 10.3,
+     "value": 12.1,
+     "state": "ok"
+    }
+   ],
+   "power_learning": 0
+  }
+ },
+ "vitals_mixed": {
+  "success": true,
+  "data": {
+   "available": true,
+   "dry_run": false,
+   "settings": {
+    "enabled": true,
+    "cpu_max": 90,
+    "temp_max": 55,
+    "volt_drop_pct": 10,
+    "signal_drop_db": 8,
+    "signal_min": -80,
+    "ccq_min": 50
+   },
+   "is_default": false,
+   "limits": {
+    "cpu_max": [
+     50,
+     100
+    ],
+    "temp_max": [
+     50,
+     110
+    ],
+    "volt_drop_pct": [
+     5,
+     50
+    ],
+    "signal_drop_db": [
+     3,
+     30
+    ],
+    "signal_min": [
+     -95,
+     -40
+    ],
+    "ccq_min": [
+     10,
+     95
+    ]
+   },
+   "can_use": true,
+   "can_edit": true,
+   "watched": 15,
+   "alerts": [
+    {
+     "id": 1,
+     "name": "جهاز 1",
+     "place": "برج «النصر»",
+     "metric": "temp",
+     "value": 56,
+     "base": null,
+     "since_ms": 1793798558000
+    }
+   ],
+   "power": [
+    {
+     "id": 1,
+     "name": "جهاز 1",
+     "place": "برج «النصر»",
+     "base": 24,
+     "alert_below": 21.6,
+     "value": 24,
+     "state": "ok"
+    },
+    {
+     "id": 2,
+     "name": "جهاز 2",
+     "place": "برج «النصر»",
+     "base": 48.2,
+     "alert_below": 43.4,
+     "value": 48.2,
+     "state": "ok"
+    },
+    {
+     "id": 5,
+     "name": "جهاز 5",
+     "place": "منطقة «الحيّ»",
+     "base": 12.1,
+     "alert_below": 10.9,
+     "value": 12.1,
+     "state": "ok"
+    }
+   ],
+   "power_learning": 0
+  }
+ },
+ "log": {
+  "success": true,
+  "data": {
+   "available": true,
+   "items": [
+    {
+     "id": 20,
+     "kind": "vital_cpu",
+     "title": "⚠️ معالج «جهاز 2» ⁦97%⁩",
+     "detail": "مرتفعٌ منذ دقائق (الحدّ ⁦90%⁩) · برج «النصر»",
+     "devices": [
+      2
+     ],
+     "source": "app",
+     "push": "dry",
+     "at_ms": 1793799654000
+    },
+    {
+     "id": 19,
+     "kind": "vital_temp",
+     "title": "🌡️ حرارة «جهاز 1» ⁦56°⁩",
+     "detail": "الحدّ ⁦55°⁩ · برج «النصر»",
+     "devices": [
+      1
+     ],
+     "source": "app",
+     "push": "sent",
+     "at_ms": 1793798903000
+    },
+    {
+     "id": 18,
+     "kind": "vital_signal",
+     "title": "📉 إشارة «جهاز 4» ⁦-96 dBm⁩",
+     "detail": "دون ⁦-80 dBm⁩ · منطقة «الحيّ»",
+     "devices": [
+      4
+     ],
+     "source": "app",
+     "push": "sent",
+     "at_ms": 1793796863000
+    },
+    {
+     "id": 17,
+     "kind": "vital_ok",
+     "title": "✅ رجعت طبيعيّة — جهاز",
+     "detail": "الإشارة جهاز 3 ⁦-58 dBm⁩",
+     "devices": [
+      3
+     ],
+     "source": "app",
+     "push": "none",
+     "at_ms": 1793796383000
+    },
+    {
+     "id": 16,
+     "kind": "vital_signal",
+     "title": "📉 إشارة «جهاز 3» ⁦-70 dBm⁩",
+     "detail": "أسوأ من معدّلها ⁦-58 dBm⁩ بـ⁦12 dB⁩ · برج «النصر»",
+     "devices": [
+      3
+     ],
+     "source": "app",
+     "push": "sent",
+     "at_ms": 1793795843000
+    },
+    {
+     "id": 15,
+     "kind": "vital_ok",
+     "title": "✅ رجعت طبيعيّة — جهاز",
+     "detail": "الحرارة جهاز 5 ⁦49°⁩",
+     "devices": [
+      5
+     ],
+     "source": "app",
+     "push": "none",
+     "at_ms": 1793795363000
+    },
+    {
+     "id": 14,
+     "kind": "vital_temp",
+     "title": "🌡️ حرارة «جهاز 5» ⁦85°⁩",
+     "detail": "الحدّ ⁦80°⁩ · منطقة «الحيّ»",
+     "devices": [
+      5
+     ],
+     "source": "app",
+     "push": "sent",
+     "at_ms": 1793794823000
+    },
+    {
+     "id": 13,
+     "kind": "vital_power_ok",
+     "title": "🔌 رجعت الكهرباء — جهازان",
+     "detail": "جهاز 1 ⁦24.0V⁩ بعد 8 د، جهاز 2 ⁦48.2V⁩ بعد 8 د",
+     "devices": [
+      1,
+      2
+     ],
+     "source": "app",
+     "push": "sent",
+     "at_ms": 1793793923000
+    },
+    {
+     "id": 12,
+     "kind": "vital_power",
+     "title": "🔋 الكهرباء — برج «النصر»",
+     "detail": "جهازان نزلت فولتيّتها (جهاز 1 من ⁦24.0V⁩ إلى ⁦19.8V⁩، جهاز 2 من ⁦48.2V⁩ إلى ⁦39.6V⁩) — انقطاع كهرباء والأجهزة على البطارية؟",
+     "devices": [
+      1,
+      2
+     ],
+     "source": "app",
+     "push": "sent",
+     "at_ms": 1793793563000
+    },
+    {
+     "id": 11,
+     "kind": "up",
+     "title": "🟢 رجع «جهاز 9»",
+     "detail": "بعد 8 د انقطاع",
+     "devices": [
+      9
+     ],
+     "source": "app",
+     "push": "sent",
+     "at_ms": 1793782638000
+    },
+    {
+     "id": 10,
+     "kind": "down",
+     "title": "🔴 طفى «جهاز 9»",
+     "detail": "لا يستجيب منذ 3 د",
+     "devices": [
+      9
+     ],
+     "source": "app",
+     "push": "sent",
+     "at_ms": 1793782298000
+    },
+    {
+     "id": 9,
+     "kind": "flap",
+     "title": "🟠 «جهاز 5» يطفي ويشتغل",
+     "detail": "طفى 3 مرّات بنصف ساعة — نسكت عنه ساعة ونخبرك إن بقي طافياً",
+     "devices": [
+      5
+     ],
+     "source": "app",
+     "push": "sent",
+     "at_ms": 1793777648000
+    },
+    {
+     "id": 8,
+     "kind": "up",
+     "title": "🟢 رجع «جهاز 5»",
+     "detail": "بعد 3 د انقطاع · منطقة «الحيّ»",
+     "devices": [
+      5
+     ],
+     "source": "app",
+     "push": "sent",
+     "at_ms": 1793777518000
+    },
+    {
+     "id": 7,
+     "kind": "down",
+     "title": "🔴 طفى «جهاز 5»",
+     "detail": "لا يستجيب منذ 3 د · منطقة «الحيّ»",
+     "devices": [
+      5
+     ],
+     "source": "app",
+     "push": "sent",
+     "at_ms": 1793777398000
+    },
+    {
+     "id": 6,
+     "kind": "up",
+     "title": "🟢 رجع «جهاز 5»",
+     "detail": "بعد 3 د انقطاع · منطقة «الحيّ»",
+     "devices": [
+      5
+     ],
+     "source": "app",
+     "push": "sent",
+     "at_ms": 1793777278000
+    },
+    {
+     "id": 5,
+     "kind": "down",
+     "title": "🔴 طفى «جهاز 5»",
+     "detail": "لا يستجيب منذ 3 د · منطقة «الحيّ»",
+     "devices": [
+      5
+     ],
+     "source": "app",
+     "push": "sent",
+     "at_ms": 1793777158000
+    },
+    {
+     "id": 4,
+     "kind": "up",
+     "title": "🟢 رجع «جهاز 6»",
+     "detail": "بعد 8 د انقطاع",
+     "devices": [
+      6
+     ],
+     "source": "app",
+     "push": "sent",
+     "at_ms": 1793776278000
+    },
+    {
+     "id": 3,
+     "kind": "tower_up",
+     "title": "🟢 رجع برج «النصر»",
+     "detail": "كلّ أجهزته (3) بعد 5 د انقطاع",
+     "devices": [
+      1,
+      2,
+      3
+     ],
+     "source": "app",
+     "push": "sent",
+     "at_ms": 1793776278000
+    },
+    {
+     "id": 2,
+     "kind": "tower_down",
+     "title": "🔴 طفى برج «النصر»",
+     "detail": "كلّ أجهزته (3) لا تستجيب منذ 3 د",
+     "devices": [
+      1,
+      2,
+      3
+     ],
+     "source": "app",
+     "push": "sent",
+     "at_ms": 1793776138000
+    },
+    {
+     "id": 1,
+     "kind": "down",
+     "title": "🔴 طفى «جهاز 6»",
+     "detail": "لا يستجيب منذ 3 د",
+     "devices": [
+      6
+     ],
+     "source": "app",
+     "push": "sent",
+     "at_ms": 1793775898000
+    }
+   ]
+  }
+ },
+ "status_now": {
+  "success": true,
+  "data": {
+   "available": true,
+   "dry_run": false,
+   "enabled": true,
+   "notify_up": true,
+   "is_default": false,
+   "can_use": true,
+   "can_edit": true,
+   "remote": null,
+   "devices": 10,
+   "monitored": 10,
+   "down": [],
+   "quiet": [],
+   "network_down": false,
+   "last_app_ms": null,
+   "last_vpn_ms": null
+  }
+ }
+}

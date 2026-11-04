@@ -32,15 +32,24 @@ class VitalsReporter {
   Map<int, Map<String, dynamic>> get pending => _pending;
 
   /// قراءة جهازٍ بما يقيسه فعلاً (لا صفر لما لم يُقرأ) ⇒ null إن لم يحمل شيئاً من الخمسة.
+  ///
+  /// الإشارة لوصلةٍ لا لنقطة وصول (الفحص الأخير ٤ نوفمبر: سكترٌ يوبيكويتي بوضع AP أرسل «-96 dBm» — أرضيّة الضجيج، لا إشارة — فوصل
+  /// المالكَ «📉 إشارة» كاذب): نقطة الوصول بمحطّةٍ واحدة (وصلة PtP) ⇒ إشارة تلك المحطّة؛ وبغير واحدة ⇒ `signal: null` صريحاً
+  /// («لا تنطبق» — الخادم يغلق إنذاراً قديماً لها بصمت)؛ ومحطّاتها لم تُقرأ هذه المرّة ([DeviceGlance.peersKnown]) ⇒ لا مفتاح.
   @visibleForTesting
-  static Map<String, dynamic>? readingOf(int id, DeviceGlance g) {
+  static Map<String, dynamic>? readingOf(int id, DeviceGlance g, {List<PeerLink> peers = const []}) {
     final m = <String, dynamic>{'id': id};
     if (g.cpu != null) m['cpu'] = g.cpu;
     if (g.temp != null) m['temp'] = g.temp;
     final v = g.voltage;
     if (v != null && v > 0) m['volt'] = double.parse(v.toStringAsFixed(1));
-    final s = g.signal;
-    if (s != null && s < 0) m['signal'] = s;
+    if (g.isAp != true) {
+      final s = g.signal;
+      if (s != null && s < 0) m['signal'] = s;
+    } else if (g.peersKnown) {
+      final s = peers.length == 1 ? peers.single.signal : null;
+      m['signal'] = s != null && s < 0 ? s : null;
+    }
     final c = g.ccq;
     if (c != null && c > 0) m['ccq'] = c;
     return m.length > 1 ? m : null;
@@ -54,9 +63,9 @@ class VitalsReporter {
   }
 
   /// يُستدعى بعد كلّ قراءةٍ ناجحة ([DeviceVitals.fetch]).
-  void record(NetworkDevice d, DeviceGlance g) {
+  void record(NetworkDevice d, DeviceGlance g, {List<PeerLink> peers = const []}) {
     if (!_wanted) return;
-    final r = readingOf(d.id, g);
+    final r = readingOf(d.id, g, peers: peers);
     if (r == null) return;
     _pending[d.id] = r;
     _timer ??= Timer(flushEvery, flush);

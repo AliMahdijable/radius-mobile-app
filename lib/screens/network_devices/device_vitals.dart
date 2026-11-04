@@ -361,7 +361,7 @@ class DeviceVitals {
     final r = await _fetch(d, prev: prev, detailed: detailed);
     // «القراءات الحسّاسة» (٤ نوفمبر): ما قُرئ يُرفع للخادم — المعالج والحرارة والفولتيّة والإشارة وCCQ ([VitalsReporter]؛ لا شيء ما لم
     // تُفتح للشركة)
-    VitalsReporter.instance.record(d, r.detail.glance);
+    VitalsReporter.instance.record(d, r.detail.glance, peers: r.detail.peers);
     return r;
   }
 
