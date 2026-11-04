@@ -1193,7 +1193,7 @@
     "title": "Connection alerts",
     "tile": "Alert",
     "alert_subscriber": "Alert subscriber",
-    "intro": "When a subscriber's device check finds a problem within the limits below, an «Alert» tile appears in their card and a strip on their list card. The message is sent automatically: through the Telegram bot if the subscriber is linked, otherwise through WhatsApp.",
+    "intro": "When a subscriber's device check finds a problem within the limits below, an «Alert» tile appears in their card and a strip on their list card. The message always goes to the subscriber through WhatsApp, and you get a notification with their name and username.",
     "enable": "Enable subscriber alerts",
     "enabled_hint": "The button appears when the subscriber's device has a problem",
     "disabled_hint": "Off — enable it to show the «Alert subscriber» button",

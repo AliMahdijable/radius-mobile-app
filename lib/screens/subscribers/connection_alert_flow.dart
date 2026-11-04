@@ -26,8 +26,8 @@ import 'widgets/device_chip_micro.dart';
 /// ٣. الرسالة من قوالب المدير، والناقص بالافتراضيّ.
 /// ٤. المعاينة نفسها التي تستعملها أزرار القوالب الأخرى: فيها حارس الحظر
 ///    ومفتاح الوضع اليدويّ/التلقائيّ، فلا نسخة ثانية منهما.
-/// ٥. الإرسال عبر `/api/whatsapp/send-message` بـ`sas4Idx` — القناة
-///    «تلقائي»: بوت تلغرام إن كان المشترك مربوطاً، وإلّا واتساب.
+/// ٥. الإرسال عبر `/api/whatsapp/send-message` بالواتساب دائماً (المالك ٤ نوفمبر:
+///    «والمشتركين واتساب لازم يكون») — والخادم يفرضه للنسخ الأقدم أيضاً.
 Future<void> showConnectionAlertFlow(
     BuildContext context, Subscriber sub) async {
   // «كل الشركات»: القوالب والإرسال (send-message) خارج جدول التوجيه — كانت الرسالة ستخرج من واتساب الشركة المفتوحة
@@ -138,6 +138,7 @@ Future<void> showConnectionAlertFlow(
     message: message,
     intent: 'connection_alert',
     sas4Idx: sub.idx,
+    forceChannel: 'whatsapp',
   );
   if (!context.mounted) return;
   // اسم القناة من مفتاحه لا من `channelArabic`: تلك عربيّةٌ دائماً،
