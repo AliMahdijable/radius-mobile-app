@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../services/vitals_reporter.dart';
 import '../../api/bdcom_epon.dart';
 import '../../api/cisco_api.dart';
 import '../../api/hsgq_olt.dart';
@@ -357,6 +358,14 @@ class DeviceVitals {
   /// وبستّ خانات، كلّ جلسةٍ طويلة تحجب خمس بطاقات.
   static Future<ProbeResult> fetch(NetworkDevice d,
       {CounterSample? prev, bool detailed = false}) async {
+    final r = await _fetch(d, prev: prev, detailed: detailed);
+    // «القراءات الحسّاسة» (٤ نوفمبر): ما قُرئ يُرفع للخادم — المعالج والحرارة والفولتيّة والإشارة وCCQ ([VitalsReporter]؛ لا شيء ما لم
+    // تُفتح للشركة)
+    VitalsReporter.instance.record(d, r.detail.glance);
+    return r;
+  }
+
+  static Future<ProbeResult> _fetch(NetworkDevice d, {CounterSample? prev, bool detailed = false}) async {
     final creds = await NetworkDevicesApi.getCredentials(d.id);
     if (_isOlt(d)) return _olt(d, creds);
     switch (d.brand.toLowerCase()) {

@@ -212,6 +212,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     widget.isActive?.removeListener(_onActiveChanged);
     DeviceEvents.changes.removeListener(_onDevicesChanged);
     _probeTimer?.cancel();
+    _vitalsTimer?.cancel();
     _searchDebounce?.cancel();
     _searchCtrl.dispose();
     _devHScroll.dispose();
@@ -656,8 +657,26 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// وتنبيه الموبايل المحلّيّ يسكت ([AgentAlertsApi.shouldFireLocalAlerts]) — الخادم يقول الانطفاء نفسه مؤكَّداً ومجمَّعاً.
   Future<void> _loadAgentAlerts() async {
     final st = await AgentAlertsApi.status();
-    if (!mounted || st == null) return;
-    setState(() => _agentAlerts = st);
+    if (!mounted) return;
+    if (st != null) setState(() => _agentAlerts = st);
+    await AgentAlertsApi.vitalsStatus();
+    if (mounted) _syncVitalsTimer();
+  }
+
+  /// «القراءات الحسّاسة» مفتوحةٌ لهذه الشركة ⇒ إعادة قراءة الأجهزة كلّ ١٠ د ما دام القسم ظاهراً ([DeviceWarmup.refresh] — خفيفةٌ واحداً
+  /// بعد واحد) فتصل قراءاتها للخادم ([VitalsReporter])؛ وإلّا لا مؤقّت.
+  Timer? _vitalsTimer;
+  void _syncVitalsTimer() {
+    final v = AgentAlertsApi.vitalsCached;
+    final on = v != null && v.available && v.settings.enabled;
+    if (on && _vitalsTimer == null) {
+      _vitalsTimer = Timer.periodic(const Duration(minutes: 10), (_) {
+        if (mounted && _mayProbe && _all.isNotEmpty) DeviceWarmup.instance.refresh(_all);
+      });
+    } else if (!on) {
+      _vitalsTimer?.cancel();
+      _vitalsTimer = null;
+    }
   }
 
   Future<void> _openAlerts() async {

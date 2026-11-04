@@ -61,6 +61,21 @@ class DeviceWarmup {
     _tick();
   }
 
+  /// «القراءات الحسّاسة» (٤ نوفمبر): إعادة قراءة من شاخت قراءته أكثر من [olderThan] — خفيفةً واحداً بعد واحد كالتسخين نفسه (تتنحّى
+  /// للبطاقات المرئيّة)، فتصل قراءاتها للخادم ([VitalsReporter]) كلّ ١٠ د ما دام القسم مفتوحاً.
+  void refresh(List<NetworkDevice> devices, {Duration olderThan = const Duration(minutes: 10)}) {
+    for (final d in devices) {
+      if (DeviceVitals.skipReason(d) != null) continue;
+      final age = DeviceStatsCache.instance.ageOf(d.id);
+      if (age != null && age <= olderThan) continue;
+      if (_queue.any((x) => x.id == d.id)) continue;
+      _queue.add(d);
+    }
+    if (_running || _queue.isEmpty) return;
+    _running = true;
+    _tick();
+  }
+
   void stop() {
     _running = false;
     _timer?.cancel();

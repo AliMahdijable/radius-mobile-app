@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/subscriber.dart';
+import '../services/vitals_reporter.dart';
 import '../services/auth_storage.dart';
 import '../services/subscribers_offline_cache.dart';
 import 'agent_alerts_api.dart';
@@ -523,8 +524,9 @@ class SubscribersApi {
     BulkActivateApi.reset();
     // «الحساب كبير؟» يخصّ هذه الجلسة وحدها.
     BigSubscribersApi.reset();
-    // «تنبيهات أجهزتي» (هل يقول الخادم الانطفاء لهذه الشركة؟) كذلك.
+    // «تنبيهات أجهزتي» (هل يقول الخادم الانطفاء لهذه الشركة؟) كذلك، وقراءاتها الحسّاسة المعلّقة.
     AgentAlertsApi.forget();
+    VitalsReporter.instance.reset();
   }
 
   /// Forces the next `loadAll` to re-fetch from the backend instead

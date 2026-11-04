@@ -170,6 +170,119 @@ class AgentAlertEvent {
   }
 }
 
+/// «القراءات الحسّاسة» (المرحلة ٢ — server/agentVitals.js): حدود الوكيل.
+class AgentVitalSettings {
+  const AgentVitalSettings({
+    this.enabled = true,
+    this.cpuMax = 90,
+    this.tempMax = 80,
+    this.voltDropPct = 15,
+    this.signalDropDb = 8,
+    this.signalMin = -80,
+    this.ccqMin = 50,
+  });
+  final bool enabled;
+  final int cpuMax, tempMax, voltDropPct, signalDropDb, signalMin, ccqMin;
+
+  static AgentVitalSettings fromJson(Object? j) {
+    if (j is! Map) return const AgentVitalSettings();
+    int n(String k, int d) => (j[k] as num?)?.toInt() ?? d;
+    return AgentVitalSettings(
+      enabled: j['enabled'] != false,
+      cpuMax: n('cpu_max', 90),
+      tempMax: n('temp_max', 80),
+      voltDropPct: n('volt_drop_pct', 15),
+      signalDropDb: n('signal_drop_db', 8),
+      signalMin: n('signal_min', -80),
+      ccqMin: n('ccq_min', 50),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'enabled': enabled,
+        'cpu_max': cpuMax,
+        'temp_max': tempMax,
+        'volt_drop_pct': voltDropPct,
+        'signal_drop_db': signalDropDb,
+        'signal_min': signalMin,
+        'ccq_min': ccqMin,
+      };
+
+  AgentVitalSettings copyWith({bool? enabled, int? cpuMax, int? tempMax, int? voltDropPct, int? signalDropDb, int? signalMin, int? ccqMin}) =>
+      AgentVitalSettings(
+        enabled: enabled ?? this.enabled,
+        cpuMax: cpuMax ?? this.cpuMax,
+        tempMax: tempMax ?? this.tempMax,
+        voltDropPct: voltDropPct ?? this.voltDropPct,
+        signalDropDb: signalDropDb ?? this.signalDropDb,
+        signalMin: signalMin ?? this.signalMin,
+        ccqMin: ccqMin ?? this.ccqMin,
+      );
+}
+
+/// مقياسٌ في الإنذار الآن: volt · temp · cpu · signal · ccq.
+class AgentVitalAlert {
+  const AgentVitalAlert({required this.id, required this.name, required this.metric, this.place, this.value, this.base, this.sinceMs});
+  final int id;
+  final String name;
+  final String metric;
+  final String? place;
+  final double? value;
+  final double? base;
+  final int? sinceMs;
+
+  static AgentVitalAlert? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final id = (j['id'] as num?)?.toInt();
+    if (id == null) return null;
+    return AgentVitalAlert(
+      id: id,
+      name: '${j['name'] ?? '#$id'}',
+      metric: '${j['metric'] ?? ''}',
+      place: j['place']?.toString(),
+      value: (j['value'] as num?)?.toDouble(),
+      base: (j['base'] as num?)?.toDouble(),
+      sinceMs: (j['since_ms'] as num?)?.toInt(),
+    );
+  }
+}
+
+class AgentVitalsStatus {
+  const AgentVitalsStatus({
+    required this.available,
+    this.dryRun = false,
+    this.settings = const AgentVitalSettings(),
+    this.canUse = false,
+    this.canEdit = false,
+    this.watched = 0,
+    this.alerts = const [],
+  });
+  final bool available;
+  final bool dryRun;
+  final AgentVitalSettings settings;
+  final bool canUse;
+  final bool canEdit;
+
+  /// مقاييس تحت المراقبة (جهاز × مقياس)
+  final int watched;
+  final List<AgentVitalAlert> alerts;
+
+  static const off = AgentVitalsStatus(available: false);
+
+  factory AgentVitalsStatus.fromJson(Map<String, dynamic> j) {
+    final a = j['alerts'];
+    return AgentVitalsStatus(
+      available: j['available'] == true,
+      dryRun: j['dry_run'] == true,
+      settings: AgentVitalSettings.fromJson(j['settings']),
+      canUse: j['can_use'] == true,
+      canEdit: j['can_edit'] == true,
+      watched: (j['watched'] as num?)?.toInt() ?? 0,
+      alerts: a is List ? a.map(AgentVitalAlert.fromJson).whereType<AgentVitalAlert>().toList() : const [],
+    );
+  }
+}
+
 class AgentAlertsApi {
   AgentAlertsApi._();
 
@@ -181,7 +294,10 @@ class AgentAlertsApi {
   static bool shouldFireLocalAlerts() => !serverActive;
 
   /// شركةٌ أخرى فُتحت ⇒ حالها يُقرأ من جديد (لا يُسكت تنبيهها بحال غيرها)
-  static void forget() => cached = null;
+  static void forget() {
+    cached = null;
+    vitalsCached = null;
+  }
 
   static String _msg(Object e, String fallback) {
     if (e is DioException) {
@@ -222,6 +338,54 @@ class AgentAlertsApi {
       return (ok: r.data?['success'] == true, message: r.data?['message']?.toString());
     } catch (e) {
       return (ok: false, message: _msg(e, 'تعذّر الحفظ'));
+    }
+  }
+
+  /// حال «القراءات الحسّاسة» — آخر قراءةٍ لهذه الشركة: هل يُرفع ما يقرؤه التطبيق ([VitalsReporter]) وتُعاد القراءة كلّ ١٠ د
+  static AgentVitalsStatus? vitalsCached;
+
+  static Future<AgentVitalsStatus?> vitalsStatus() async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/agent-alerts/vitals');
+      final d = r.data?['data'];
+      if (r.data?['success'] == true && d is Map) {
+        final st = AgentVitalsStatus.fromJson(Map<String, dynamic>.from(d));
+        vitalsCached = st;
+        return st;
+      }
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 403 || e.response?.statusCode == 404) {
+        vitalsCached = AgentVitalsStatus.off;
+        return AgentVitalsStatus.off;
+      }
+      if (kDebugMode) debugPrint('⚠️ agent-vitals status: ${e.message}');
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ agent-vitals status: $e');
+    }
+    return null;
+  }
+
+  static Future<({bool ok, String? message})> saveVitals(AgentVitalSettings s) async {
+    try {
+      final r = await ApiClient.dio.put<Map<String, dynamic>>('/api/v2/agent-alerts/vitals/settings', data: s.toJson());
+      return (ok: r.data?['success'] == true, message: r.data?['message']?.toString());
+    } catch (e) {
+      return (ok: false, message: _msg(e, 'تعذّر الحفظ'));
+    }
+  }
+
+  /// قراءاتٌ ⇒ هل ما زال الخادم يريدها (active)؛ null = تعذّر (يُعاد لاحقاً).
+  static Future<bool?> uploadVitals(List<Map<String, dynamic>> readings) async {
+    if (readings.isEmpty) return true;
+    try {
+      final r = await ApiClient.dio.post<Map<String, dynamic>>('/api/v2/agent-alerts/vitals', data: {'readings': readings});
+      final d = r.data?['data'];
+      return d is Map ? d['active'] == true : false;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 403 || e.response?.statusCode == 404) return false;
+      return null;
+    } catch (_) {
+      return null;
     }
   }
 

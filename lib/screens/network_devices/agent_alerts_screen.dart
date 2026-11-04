@@ -3,6 +3,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/agent_alerts_api.dart';
 import '../../core/util/server_time.dart';
+import '../../core/widgets/app_sheet.dart';
+import '../../core/widgets/design_sheet.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -29,6 +31,7 @@ class AgentAlertsScreen extends StatefulWidget {
 
 class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
   AgentAlertsStatus? _st;
+  AgentVitalsStatus? _vit;
   List<AgentAlertEvent> _log = const [];
   bool _loading = true;
   bool _failed = false;
@@ -45,10 +48,15 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
   Future<void> _load() async {
     final st = await AgentAlertsApi.status();
     List<AgentAlertEvent>? log;
-    if (st != null && st.available && st.canUse) log = await AgentAlertsApi.log();
+    AgentVitalsStatus? vit;
+    if (st != null && st.available && st.canUse) {
+      log = await AgentAlertsApi.log();
+      vit = await AgentAlertsApi.vitalsStatus();
+    }
     if (!mounted) return;
     setState(() {
       _st = st;
+      _vit = vit;
       _failed = st == null;
       if (log != null) {
         _log = log;
@@ -159,6 +167,10 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
         const SizedBox(height: Sp.lg),
         _section('تطفي وتشتغل — مسكوتٌ عنها ساعة'),
         for (final d in st.quiet) _deviceRow(d, quiet: true),
+      ],
+      if (_vit != null && _vit!.available && _vit!.canUse) ...[
+        const SizedBox(height: Sp.lg),
+        _vitalsSection(_vit!),
       ],
       const SizedBox(height: Sp.lg),
       _settings(st),
@@ -346,6 +358,13 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
       'flap' => (LucideIcons.activity, AppColors.warning),
       'blip' => (LucideIcons.zap, AppColors.textMid),
       'up' => (LucideIcons.wifi, AppColors.success),
+      'vital_power' => (LucideIcons.batteryWarning, AppColors.error),
+      'vital_power_ok' => (LucideIcons.plugZap, AppColors.success),
+      'vital_temp' => (LucideIcons.thermometer, AppColors.warning),
+      'vital_cpu' => (LucideIcons.cpu, AppColors.warning),
+      'vital_signal' || 'vital_ccq' => (LucideIcons.signalLow, AppColors.warning),
+      'vital_ok' => (LucideIcons.circleCheck, AppColors.success),
+      'vital_rebase' => (LucideIcons.refreshCw, AppColors.textMid),
       _ => (LucideIcons.wifiOff, AppColors.error),
     };
     final tag = switch (e.push) {
@@ -356,7 +375,7 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
     };
     // العنوان كما وصلك بلا رمزه الملوّن (الأيقونة تحمله)
     // (بالبدائل لا [..]: الرمز زوجٌ بديل في UTF-16 — فئةٌ تقطعه نصفين فيُرمى النصّ)
-    final title = (e.title ?? '').replaceFirst(RegExp(r'^(🔴|🟢|🟠)\s*'), '');
+    final title = (e.title ?? '').replaceFirst(RegExp(r'^(🔴|🟢|🟠|🔋|🔌|🌡️|⚠️|📉|✅)\s*'), '');
     return Padding(
       padding: const EdgeInsets.only(bottom: Sp.xs),
       child: _box(
@@ -388,6 +407,98 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
         ]),
       ),
     );
+  }
+
+  // ── «القراءات الحسّاسة» (المرحلة ٢) ─────────────────────────────
+
+  static const _vitalLabel = {'volt': 'الكهرباء', 'temp': 'الحرارة', 'cpu': 'المعالج', 'signal': 'الإشارة', 'ccq': 'جودة الوصلة'};
+
+  Widget _vitalsSection(AgentVitalsStatus v) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Row(children: [
+        Expanded(child: _section('القراءات الحسّاسة')),
+        if (v.dryRun)
+          Padding(
+            padding: const EdgeInsetsDirectional.only(end: Sp.xs, bottom: Sp.sm),
+            child: Text('تجربة', style: AppType.micro(color: AppColors.warningOnSoft)),
+          ),
+        if (v.canEdit)
+          Padding(
+            padding: const EdgeInsets.only(bottom: Sp.sm),
+            child: TextButton.icon(
+              onPressed: () => _editVitals(v.settings),
+              icon: const Icon(LucideIcons.slidersHorizontal, size: 16),
+              label: const Text('الحدود'),
+            ),
+          ),
+      ]),
+      if (!v.settings.enabled)
+        _box(child: Text('القراءات الحسّاسة مطفأة — لا يُقال لك شيءٌ عنها', style: AppType.body(color: AppColors.textMid)))
+      else if (v.alerts.isEmpty)
+        _box(
+          child: Row(children: [
+            Icon(LucideIcons.gauge, size: 18, color: AppColors.success),
+            const SizedBox(width: Sp.sm),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(v.watched > 0 ? 'كلّها طبيعيّة' : 'لم تصل قراءات بعد', style: AppType.body(color: AppColors.textHi)),
+                Text(
+                  v.watched > 0
+                      ? 'المعالج والحرارة والكهرباء والإشارة — تُقرأ مع قسم الأجهزة'
+                      : 'تصل حين تفتح قسم الأجهزة وأنت على شبكتك (كلّ 10 دقائق)',
+                  style: AppType.micro(color: AppColors.textMid),
+                ),
+              ]),
+            ),
+          ]),
+        )
+      else
+        for (final a in v.alerts) _vitalRow(a),
+    ]);
+  }
+
+  Widget _vitalRow(AgentVitalAlert a) {
+    final icon = switch (a.metric) {
+      'volt' => LucideIcons.batteryWarning,
+      'temp' => LucideIcons.thermometer,
+      'cpu' => LucideIcons.cpu,
+      _ => LucideIcons.signalLow,
+    };
+    final color = a.metric == 'volt' ? AppColors.error : AppColors.warning;
+    final value = (a.metric == 'volt' || a.metric == 'signal') && a.base != null
+        ? '${vitalValueText(a.metric, a.base)} ← ${vitalValueText(a.metric, a.value)}'
+        : vitalValueText(a.metric, a.value);
+    final since = a.sinceMs != null ? 'منذ ${_dur(DateTime.now().millisecondsSinceEpoch - a.sinceMs!)}' : null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Sp.xs),
+      child: _box(
+        child: Row(children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('${_vitalLabel[a.metric] ?? a.metric} · ${a.name}', maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: AppType.body(color: AppColors.textHi)),
+              Text([if (a.place != null) a.place!, if (since != null) since].join(' · '), maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: AppType.micro(color: AppColors.textMid)),
+            ]),
+          ),
+          const SizedBox(width: Sp.sm),
+          Directionality(textDirection: TextDirection.ltr, child: Text(value, style: AppType.bodyStrong(color: color))),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _editVitals(AgentVitalSettings cur) async {
+    final saved = await showAppSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: AppColors.scrim,
+      builder: (_) => VitalsLimitsSheet(initial: cur),
+    );
+    if (saved == true && mounted) _load();
   }
 
   Widget _line(IconData icon, String text, {Color? color}) => Padding(
@@ -458,4 +569,105 @@ String countDevices(int n) => switch (n) {
 
 extension on String {
   String ifEmpty(String other) => isEmpty ? other : this;
+}
+
+/// قيمة مقياسٍ بوحدته: 19.9V · 82° · -70 dBm · 95%
+String vitalValueText(String metric, double? v) {
+  if (v == null) return '—';
+  return switch (metric) {
+    'volt' => '${v.toStringAsFixed(1)}V',
+    'temp' => '${v.round()}°',
+    'signal' => '${v.round()} dBm',
+    _ => '${v.round()}%',
+  };
+}
+
+/// حدود «القراءات الحسّاسة» — أزرار ± بخطوات الخادم وحدوده (server/agentVitals.js LIMITS).
+class VitalsLimitsSheet extends StatefulWidget {
+  const VitalsLimitsSheet({super.key, required this.initial});
+  final AgentVitalSettings initial;
+
+  @override
+  State<VitalsLimitsSheet> createState() => _VitalsLimitsSheetState();
+}
+
+class _VitalsLimitsSheetState extends State<VitalsLimitsSheet> {
+  late AgentVitalSettings _s = widget.initial;
+  bool _busy = false;
+
+  Future<void> _save() async {
+    setState(() => _busy = true);
+    final r = await AgentAlertsApi.saveVitals(_s);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (r.ok) {
+      Navigator.of(context).pop(true);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r.message ?? 'تعذّر الحفظ')));
+    }
+  }
+
+  Widget _stepper({required String title, required String hint, required int value, required String unit, required int min,
+      required int max, required int step, required ValueChanged<int> onChanged}) {
+    Widget btn(IconData icon, int next, String tip) => IconButton(
+          tooltip: tip,
+          onPressed: !_busy && next >= min && next <= max ? () => setState(() => onChanged(next)) : null,
+          icon: Icon(icon, size: 18),
+        );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Sp.sm),
+      child: Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, style: AppType.body(color: AppColors.textHi)),
+            Text(hint, style: AppType.micro(color: AppColors.textMid)),
+          ]),
+        ),
+        btn(LucideIcons.minus, value - step, 'أقلّ'),
+        SizedBox(
+          width: 64,
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: Text('$value$unit', textAlign: TextAlign.center, style: AppType.bodyStrong(color: AppColors.textHi)),
+          ),
+        ),
+        btn(LucideIcons.plus, value + step, 'أكثر'),
+      ]),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.slidersHorizontal,
+        title: 'حدود القراءات الحسّاسة',
+        subtitle: 'متى نخبرك — الكهرباء والإشارة بالنسبة لمعدّل كلّ جهاز',
+        onClose: () => Navigator.of(context).pop(false),
+      ),
+      footer: SheetFooterBar(label: 'حفظ', icon: LucideIcons.check, busy: _busy, onPressed: _save),
+      body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Expanded(child: Text('نبّهني بالقراءات الحسّاسة', style: AppType.body(color: AppColors.textHi))),
+          Switch(value: _s.enabled, onChanged: _busy ? null : (v) => setState(() => _s = _s.copyWith(enabled: v))),
+        ]),
+        const SizedBox(height: Sp.sm),
+        _stepper(title: 'المعالج', hint: 'إذا بقي فوق هذا الحدّ', value: _s.cpuMax, unit: '%', min: 50, max: 100, step: 5,
+            onChanged: (v) => _s = _s.copyWith(cpuMax: v)),
+        _stepper(title: 'الحرارة', hint: 'إذا بلغها الجهاز', value: _s.tempMax, unit: '°', min: 50, max: 110, step: 5,
+            onChanged: (v) => _s = _s.copyWith(tempMax: v)),
+        _stepper(title: 'الكهرباء', hint: 'نزول الفولتيّة عن معدّل الجهاز — انقطاع والجهاز على البطارية', value: _s.voltDropPct,
+            unit: '%', min: 5, max: 50, step: 5, onChanged: (v) => _s = _s.copyWith(voltDropPct: v)),
+        _stepper(title: 'الإشارة', hint: 'أسوأ من معدّلها بهذا القدر', value: _s.signalDropDb, unit: ' dB', min: 3, max: 30, step: 1,
+            onChanged: (v) => _s = _s.copyWith(signalDropDb: v)),
+        _stepper(title: 'أضعف إشارة', hint: 'دونها تنبيهٌ ولو بلا معدّل', value: _s.signalMin, unit: '', min: -95, max: -40, step: 5,
+            onChanged: (v) => _s = _s.copyWith(signalMin: v)),
+        _stepper(title: 'جودة الوصلة (CCQ)', hint: 'إذا نزلت دونها', value: _s.ccqMin, unit: '%', min: 10, max: 95, step: 5,
+            onChanged: (v) => _s = _s.copyWith(ccqMin: v)),
+        const SizedBox(height: Sp.xs),
+        Text('الكهرباء تصلك حتى بساعات الهدوء (انقطاع)؛ الباقي يحترمها.', style: AppType.micro(color: AppColors.textMid)),
+      ]),
+    );
+  }
 }
