@@ -181,6 +181,28 @@ class AccountApi {
     }
   }
 
+  /// «إشعارات كلّ شركاتي» (٤ نوفمبر — المالك: «اي هاي ضروريه لان كل وكيل اذا عدنه اكثر من شركه كيف بهيج حاله»): توكن دفع
+  /// الهاتف للحساب (`POST /api/account/push/register`)، فيصله دفع كلّ شركةٍ مربوطةٍ به كمدير — باسمها — لا المفتوحة وحدها.
+  /// صامت: false = لا حساب على الجهاز أو تعذّر (يُعاد عند الدخول التالي أو تجدّد التوكن).
+  static Future<bool> registerPush(String token, String deviceInfo) async {
+    try {
+      final res = await _send('POST', '/api/account/push/register', data: {'token': token, 'deviceInfo': deviceInfo});
+      return res.statusCode == 200 && res.data?['success'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// الخروج من الحساب: الهاتف لا يبقى له (قبل خروج Firebase — توكن الحساب ما زال صالحاً). صامت.
+  static Future<bool> unregisterPush(String token) async {
+    try {
+      final res = await _send('POST', '/api/account/push/unregister', data: {'token': token});
+      return res.statusCode == 200 && res.data?['success'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// دليل الشركات المعروفة (يضبطه المالك) — «إضافة شركة» تختار منه.
   static Future<List<DirectoryCompany>> sasDirectory() async {
     final res = await _send('GET', '/api/account/sas-directory');
@@ -490,6 +512,7 @@ class LinkedCompany {
     required this.role,
     this.lastLoginAt,
     this.locked = false,
+    this.adminId,
   });
 
   final String sasCode;
@@ -508,6 +531,10 @@ class LinkedCompany {
   /// صفّ الموظّف لا يُقفل أبداً: يعمل تحت اشتراك مديره لا اشتراك هذا الحساب (الخادم 79ac70a، وهنا احتياطاً).
   final bool locked;
 
+  /// معرّف الشركة بخادمنا كما في دفعها (`company_admin_id`) — «إشعارات كلّ شركاتي» (٤ نوفمبر): نقرة إشعارها تفتحها.
+  /// null = خادمٌ أقدم، أو ربطٌ قديمٌ لم يُثبَت معرّفه (لا دفع له من الحساب أصلاً).
+  final String? adminId;
+
   bool get isEmployee => role == 'employee';
 
   factory LinkedCompany.fromJson(Map<String, dynamic> j) => LinkedCompany(
@@ -520,6 +547,7 @@ class LinkedCompany {
             ? null
             : DateTime.tryParse(j['lastLoginAt'].toString())?.toLocal(),
         locked: j['locked'] == true && (j['role'] ?? 'admin').toString() != 'employee',
+        adminId: (j['adminId'] ?? '').toString().trim().isEmpty ? null : j['adminId'].toString().trim(),
       );
 }
 

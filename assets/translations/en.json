@@ -1486,7 +1486,8 @@
     "current": "Open now",
     "inside_as": "Open now as {} — tap for its page",
     "opening": "Opening {}…",
-    "load_failed": "Couldn’t load your companies — check the connection and try again."
+    "load_failed": "Couldn’t load your companies — check the connection and try again.",
+    "push_opening": "A notification from “{}” — opening that company…"
   },
   "account": {
     "signin_title": "Sign in",

@@ -100,7 +100,11 @@ List<CompanyRowState> companyRowStates(
 
 /// الورقة على الـNavigator الجذر: فتح شركةٍ يستبدل التطبيق كلّه
 /// (`pushAndRemoveUntil` في [CompanyOpenFlow]) والورقة فوقه.
-Future<void> showCompanySwitchSheet(BuildContext context) {
+///
+/// [autoOpen] («إشعارات كلّ شركاتي»، ٤ نوفمبر): نقرة إشعار شركةٍ غير المفتوحة ⇒ الورقة تفتحها بنفسها كأنّ المدير نقرها،
+/// و[notice] سطرٌ أعلاها يقول لماذا (اسم شركة الإشعار).
+Future<void> showCompanySwitchSheet(BuildContext context,
+    {LinkedCompany? autoOpen, String? notice}) {
   HapticFeedback.selectionClick();
   return showAppSheet<void>(
     context: context,
@@ -108,12 +112,18 @@ Future<void> showCompanySwitchSheet(BuildContext context) {
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,
-    builder: (_) => const CompanySwitchSheet(),
+    builder: (_) => CompanySwitchSheet(autoOpen: autoOpen, notice: notice),
   );
 }
 
 class CompanySwitchSheet extends StatefulWidget {
-  const CompanySwitchSheet({super.key});
+  const CompanySwitchSheet({super.key, this.autoOpen, this.notice});
+
+  /// تُفتح بنفسها عند ظهور الورقة (إشعارٌ لها).
+  final LinkedCompany? autoOpen;
+
+  /// اسم شركة الإشعار — سطرٌ أعلى الورقة.
+  final String? notice;
 
   @override
   State<CompanySwitchSheet> createState() => _CompanySwitchSheetState();
@@ -136,6 +146,12 @@ class _CompanySwitchSheetState extends State<CompanySwitchSheet> {
     _refresh();
     // «كل الشركات» يظهر حين يفتحه الخادم لهذا الحساب ولشركتين صالحتين فأكثر — لا ينتظر قائمة «شركاتي».
     MergedMode.load();
+    final auto = widget.autoOpen;
+    if (auto != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _open(auto);
+      });
+    }
   }
 
   /// «كل الشركات»: دخولٌ بلا تسجيل (الجلسة المفتوحة كما هي)، أو العودة منه.
@@ -246,6 +262,12 @@ class _CompanySwitchSheetState extends State<CompanySwitchSheet> {
         builder: (context, items, _) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if ((widget.notice ?? '').trim().isNotEmpty) ...[
+              _NoticeBanner(
+                  text: 'company_switch.push_opening'
+                      .tr(args: [widget.notice!.trim()])),
+              const SizedBox(height: Sp.md),
+            ],
             if (_error != null) ...[
               _ErrorBanner(text: _error!),
               const SizedBox(height: Sp.md),
@@ -396,6 +418,37 @@ class _AllCompaniesRow extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// لماذا فُتحت الورقة: إشعارٌ لشركةٍ غير المفتوحة («إشعارات كلّ شركاتي»).
+class _NoticeBanner extends StatelessWidget {
+  const _NoticeBanner({required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Container(
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: AppColors.infoSoftBg,
+        borderRadius: BorderRadius.circular(R.md),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.notifications_active_outlined,
+              size: 18, color: AppColors.info),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: Text(text,
+                style: AppType.body(color: AppColors.textBody)
+                    .copyWith(height: 1.5)),
+          ),
+        ],
       ),
     );
   }

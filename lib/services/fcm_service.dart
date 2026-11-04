@@ -5,9 +5,11 @@ import 'package:dio/dio.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
+import '../api/account_api.dart';
 import '../api/api_client.dart';
 import '../core/platform/app_platform.dart';
 import '../models/app_notification.dart';
+import 'account_service.dart';
 import 'auth_storage.dart';
 import 'desktop_push_service.dart';
 import 'inbox_service.dart';
@@ -50,6 +52,33 @@ class FcmService {
 
   /// آخر token مُسجّل. نستعمله لتفادي إعادة الإرسال بلا داعٍ.
   static String? _lastRegisteredToken;
+
+  /// آخر تسجيلٍ للشركة المفتوحة «المدير|التوكن» (٤ نوفمبر): التوكن نفسه بعد تبديل الشركة يُسجَّل لها من جديد — كان التكرار
+  /// بالتوكن وحده فيبقى الهاتف للشركة السابقة حتى يُعاد تشغيل التطبيق، فيصله دفعها ونقرته تفتح شاشة المفتوحة.
+  static String? _lastRegisteredKey;
+
+  /// «إشعارات كلّ شركاتي» (٤ نوفمبر): التوكن مسجَّلٌ للحساب «uid|التوكن» — فيصل الهاتف دفع كلّ شركات الحساب باسمها.
+  static String? _lastAccountKey;
+  static String? _lastAccountToken;
+
+  /// منفذ الاختبار: حساب Pro على الجهاز (Firebase uid) — null = لا حساب (موظّفٌ مباشر).
+  @visibleForTesting
+  static String? Function() accountUid = () => AccountService.currentUser?.uid;
+
+  @visibleForTesting
+  static Future<void> debugRegister(String token) => _registerToken(token);
+
+  @visibleForTesting
+  static Future<void> debugUnregisterAccount() => _unregisterAccount();
+
+  @visibleForTesting
+  static void debugReset() {
+    _lastRegisteredToken = null;
+    _lastRegisteredKey = null;
+    _lastAccountKey = null;
+    _lastAccountToken = null;
+    accountUid = () => AccountService.currentUser?.uid;
+  }
 
   /// يجب استدعاؤها بعد نجاح تسجيل الدخول وحفظ الجلسة. آمنة الاستدعاء
   /// المتكرر (idempotent).
@@ -145,7 +174,10 @@ class FcmService {
         if (kDebugMode) debugPrint('FCM unregister threw: $e');
       }
     }
+    // «إشعارات كلّ شركاتي»: الهاتف لا يبقى للحساب بعد الخروج (هنا قبل خروج Firebase — توكن الحساب ما زال صالحاً).
+    await _unregisterAccount();
     _lastRegisteredToken = null;
+    _lastRegisteredKey = null;
 
     await _onMessageSub?.cancel();
     _onMessageSub = null;
@@ -180,7 +212,30 @@ class FcmService {
   }
 
   static Future<void> _registerToken(String token) async {
-    if (token == _lastRegisteredToken) return;
+    await _registerCompany(token);
+    await _registerAccount(token);
+  }
+
+  /// «إشعارات كلّ شركاتي»: التوكن للحساب — مرّةً لكلّ (حساب، توكن) في هذا التشغيل (والإقلاع التالي يجدّده فيبقى حديثاً).
+  static Future<void> _registerAccount(String token) async {
+    final uid = accountUid();
+    if (uid == null || uid.isEmpty) return;
+    final key = '$uid|$token';
+    if (key == _lastAccountKey) return;
+    if (await AccountApi.registerPush(token, _shortDeviceInfo())) {
+      _lastAccountKey = key;
+      _lastAccountToken = token;
+    }
+  }
+
+  static Future<void> _unregisterAccount() async {
+    final token = _lastAccountToken;
+    _lastAccountKey = null;
+    _lastAccountToken = null;
+    if (token != null && token.isNotEmpty) await AccountApi.unregisterPush(token);
+  }
+
+  static Future<void> _registerCompany(String token) async {
     final adminId = await AuthStorage.readAdminId();
     final username = await AuthStorage.readAdminUsername();
     if (adminId == null || adminId.isEmpty) {
@@ -189,6 +244,8 @@ class FcmService {
       }
       return;
     }
+    final key = '$adminId|$token';
+    if (key == _lastRegisteredKey) return;
     final deviceInfo = _shortDeviceInfo();
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -203,6 +260,7 @@ class FcmService {
       final ok = r.data?['success'] == true;
       if (ok) {
         _lastRegisteredToken = token;
+        _lastRegisteredKey = key;
         if (kDebugMode) debugPrint('FCM token registered ok');
       } else {
         if (kDebugMode) {

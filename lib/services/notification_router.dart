@@ -9,6 +9,7 @@ import '../screens/whatsapp/connection_auto_widgets.dart';
 import '../screens/network_devices/fiber/fiber_push.dart';
 import '../screens/notifications/inbox_screen.dart';
 import '../screens/subscribers/subscriber_detail_screen.dart';
+import 'company_push.dart';
 
 /// يقرّر إلى أين يأخذ الإشعارُ المستخدم — **مصدرٌ واحد** يستعمله
 /// النقرُ داخل صندوق الوارد والنقرُ من شاشة القفل معاً.
@@ -46,6 +47,14 @@ class NotificationRouter {
     }
   }
 
+  /// إشعار شركةٍ أخرى ينتظر رئيسيّتها بعد فتحها ([CompanyPush]).
+  static void _defer(AppNotification n) => _pending = n;
+
+  /// لم تُفتح (أُغلقت الورقة أو رُفض الدخول) ⇒ لا يبقى ينتظر.
+  static void _undefer(AppNotification n) {
+    if (identical(_pending, n)) _pending = null;
+  }
+
   /// يُستدعى عند تسجيل الخروج — لئلّا تُفتح شاشةٌ لحسابٍ انتهى.
   static void reset() {
     _ready = false;
@@ -63,6 +72,10 @@ class NotificationRouter {
       _pending = n;
       return;
     }
+
+    // (−١) «إشعارات كلّ شركاتي» (٤ نوفمبر): إشعارٌ لشركةٍ أخرى من شركات الحساب ⇒ ورقة «تبديل الشركة» تفتحها، ويُوجَّه هو
+    //      فيها حين تُبنى رئيسيّتها ([markReady]). ليست من شركات الحساب، أو بلا شركة ⇒ كما كان.
+    if (await CompanyPush.redirect(nav, n, defer: _defer, undefer: _undefer)) return;
 
     // (٠) عطل ألياف ⇒ «العطل الآن» لأولته (لا مشترك واحد فيه).
     if (await openFiberPush(nav, n.data)) return;
