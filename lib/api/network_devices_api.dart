@@ -13,6 +13,7 @@ import '../services/device_events.dart';
 import 'api_client.dart';
 import 'device_reach.dart';
 import 'mikrotik_api.dart' show MikrotikApi;
+import '../core/net/android_ping.dart';
 import '../core/net/windows_icmp.dart';
 import '../core/platform/app_platform.dart';
 
@@ -503,13 +504,25 @@ class NetworkDevicesApi {
           packetLoss: ((count - times.length) / count) * 100.0,
         );
       }
+      if (!kIsWeb && Platform.isAndroid && !AppPlatform.isUnderTest) {
+        // أندرويد: الأمر نفسه وقراءة سطوره ([AndroidPing]) — ping أندرويد يطبع خطأ «الجهاز غير قابل للوصول» من الراوتر ردّاً من الجهاز
+        // («time=0.000 ms» ثمّ «wrong data byte») ودart_ping يعدّه ردّاً: جهازٌ مفصول كان «متّصلاً · 0 ms» (المالك ٤ نوفمبر).
+        final good = await AndroidPing.ping(ip, count: count, timeout: timeout);
+        if (good.isEmpty) {
+          return (status: 'offline', responseMs: null, packetLoss: 100.0);
+        }
+        final avg = (good.reduce((a, b) => a + b) / good.length).round();
+        return (status: 'online', responseMs: avg, packetLoss: ((count - good.length).clamp(0, count) / count) * 100.0);
+      }
       final ping = Ping(ip, count: count, timeout: timeout.inSeconds);
       final times = <int>[];
       int received = 0;
       await for (final event in ping.stream) {
         if (event is PingResponse) {
-          if (event.time != null) {
-            times.add(event.time!.inMilliseconds);
+          // ردٌّ بزمنٍ صفر أو أطول من المهلة ليس من الجهاز (خطأ ICMP مقروءٌ ردّاً — راجع [AndroidPing])
+          final t = event.time;
+          if (t != null && t > Duration.zero && t <= timeout + const Duration(milliseconds: 500)) {
+            times.add(t.inMilliseconds);
             received++;
           }
         } else if (event is PingSummary) {
