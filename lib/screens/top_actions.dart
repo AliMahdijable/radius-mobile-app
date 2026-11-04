@@ -4,6 +4,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../api/renew_requests_api.dart';
 import '../core/platform/desktop_layout.dart';
 import '../core/widgets/permission_locked.dart';
 import '../services/ai_assistant_state.dart';
@@ -154,10 +155,30 @@ class TopActions extends StatelessWidget {
 /// الجرس — والشارة كما كانت في الرئيسيّة: الإشعارات غير المقروءة + المشتركون
 /// في خطر (قربوا الانتهاء + انتهوا اليوم)، رقمٌ واحد لكلّ ما يحتاج انتباهاً.
 /// `AlertsService.count` يتحدّث من قائمة المشتركين ومن شاشة الإشعارات.
-class _NotificationsChip extends StatelessWidget {
+/// + «طلبات التجديد» بانتظارك (٤ نوفمبر — المالك: «في حال اكو طلب يظهر بالجرس»): الاستماع نفسه يقرؤها، والعودة للتطبيق كذلك.
+class _NotificationsChip extends StatefulWidget {
   const _NotificationsChip({required this.onOpen});
 
   final void Function(Widget page) onOpen;
+
+  @override
+  State<_NotificationsChip> createState() => _NotificationsChipState();
+}
+
+class _NotificationsChipState extends State<_NotificationsChip> {
+  @override
+  void initState() {
+    super.initState();
+    AppResumedSignal.tick.addListener(_onResume);
+  }
+
+  @override
+  void dispose() {
+    AppResumedSignal.tick.removeListener(_onResume);
+    super.dispose();
+  }
+
+  void _onResume() => unawaited(RenewRequestsState.onResume());
 
   @override
   Widget build(BuildContext context) {
@@ -165,12 +186,15 @@ class _NotificationsChip extends StatelessWidget {
       valueListenable: InboxService.changes,
       builder: (context, _, __) => ValueListenableBuilder<int>(
         valueListenable: AlertsService.count,
-        builder: (context, alerts, __) => TopActionChip(
-          key: const ValueKey('top-actions-notifications'),
-          icon: Icons.notifications_none_rounded,
-          label: 'notifications.title'.tr(),
-          badge: InboxService.unreadCount + alerts,
-          onTap: () => onOpen(const InboxScreen()),
+        builder: (context, alerts, __) => ValueListenableBuilder<RenewSnapshot?>(
+          valueListenable: RenewRequestsState.gate,
+          builder: (context, _, __) => TopActionChip(
+            key: const ValueKey('top-actions-notifications'),
+            icon: Icons.notifications_none_rounded,
+            label: 'notifications.title'.tr(),
+            badge: InboxService.unreadCount + alerts + RenewRequestsState.pending,
+            onTap: () => widget.onOpen(const InboxScreen()),
+          ),
         ),
       ),
     );

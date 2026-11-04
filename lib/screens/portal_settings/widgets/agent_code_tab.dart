@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../renew/renew_settings_card.dart';
 import '../../../api/portal_settings_api.dart';
 import '../../../core/util/bidi.dart';
 import '../../../core/util/server_time.dart';
@@ -427,6 +428,8 @@ class _AgentCodeTabState extends State<AgentCodeTab> {
               ),
             ],
           ],
+          // «طلب التجديد من التطبيق» (٤ نوفمبر): حين يُفتح المفتاح العامّ لحسابه وحده
+          const RenewSettingsCard(),
           const SizedBox(height: Sp.xl),
           if (!_canSeeLogins || _loginsDenied)
             // بلا `subscribers.view`: إطارٌ هادئ بقفل (عنوانه فيه) — ولا طلب

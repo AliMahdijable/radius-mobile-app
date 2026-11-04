@@ -18,6 +18,7 @@ import 'firebase_options.dart';
 import 'screens/notifications/in_app_notification_banner.dart';
 import 'screens/splash_screen.dart';
 import 'api/device_probe_api.dart';
+import 'api/renew_requests_api.dart';
 import 'api/subscribers_api.dart';
 import 'services/app_resumed_signal.dart';
 import 'services/device_alerts_service.dart';
@@ -295,6 +296,8 @@ class _MyServicesAppState extends State<MyServicesApp>
     // ولا شيء غير ذلك. المنطق كان موجوداً ومحبوساً في شاشةٍ واحدة.
     NotificationRouter.attach(_appNavigatorKey);
     FcmService.onNotificationTap = NotificationRouter.handle;
+    // «طلبات التفعيل» (٤ نوفمبر): إشعار طلب تجديدٍ وصل (FCM بالواجهة أو تغذية الحاسبة — كلاهما يمرّ بالصندوق) ⇒ الجرس يعدّه فوراً.
+    InboxService.changes.addListener(RenewRequestsState.onInboxChanged);
   }
 
   @override
