@@ -481,6 +481,8 @@ class _ConnAutoQueueScreenState extends State<ConnAutoQueueScreen> {
     ConnectionAutoApi.load().then((_) {
       if (mounted) setState(() {});
     });
+    // نتيجة «افحص الآن» لحسابٍ آخر (قبل تبديل الشركة) لا تظهر هنا
+    ConnCheckNow.forgetOtherAccount();
   }
 
   static const _tabs = <(String, String)>[

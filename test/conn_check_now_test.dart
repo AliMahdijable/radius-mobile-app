@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/connection_auto_api.dart';
 import 'package:rad_mysvcs/models/device_health.dart';
@@ -122,6 +122,21 @@ void main() {
       expect((r.ok, r.via, r.problems), (true, 'vpn', 1));
       expect(r.message, contains('قُرئ 5 من 9'));
       expect(server.calls('POST', '/api/v2/connection-alerts/readings'), isEmpty);
+    });
+
+    test('بعد تبديل الشركة: نتيجة فحص حسابٍ آخر لا تظهر (كان «لا مشاكل» لشركةٍ فوق مشاكل غيرها)؛ والحساب نفسه تبقى له', () async {
+      DeviceWarmService.debugCheckNow = (_) async => (onNet: false, subs: <Subscriber>[], probed: 0, reason: 'off_net');
+      server.reply('POST', '/api/v2/conn-vpn/check-now', 200, {'success': true, 'data': {'check_id': 'c2', 'state': 'running'}});
+      server.reply('GET', '/api/v2/conn-vpn/check-now/c2', 200, {
+        'success': true,
+        'data': {'state': 'done', 'result': {'ok': true, 'message': 'فُحص عبر VPN ✓ — قُرئ 20 من 72 متّصلاً — لا مشاكل'}},
+      });
+      await ConnCheckNow.run();
+      await ConnCheckNow.forgetOtherAccount();
+      expect(ConnCheckNow.last.value?.message, contains('20 من 72'), reason: 'الحساب نفسه ⇒ تبقى');
+      FlutterSecureStorage.setMockInitialValues({'auth.admin_id': 'ip-46-225-123-41:10'});
+      await ConnCheckNow.forgetOtherAccount();
+      expect(ConnCheckNow.last.value, isNull, reason: 'حسابٌ آخر ⇒ تُمسح');
     });
 
     test('مزوّدٌ بلا عناوين أجهزة ⇒ رسالةٌ لا VPN ولا رفع', () async {

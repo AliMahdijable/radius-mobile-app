@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../api/connection_auto_api.dart';
+import 'auth_storage.dart';
 import 'connection_readings_uploader.dart';
 import 'device_warm_service.dart';
 
@@ -18,6 +19,9 @@ class ConnCheckNow {
   /// آخر نتيجة (تبقى ظاهرةً إن خرج الوكيل من الشاشة ورجع).
   static final ValueNotifier<ConnCheckResult?> last = ValueNotifier(null);
 
+  /// حساب آخر نتيجة: بعد تبديل الشركة لا تظهر نتيجة حسابٍ آخر (٤ نوفمبر — ظهر «لا مشاكل» لفحص الشركة الجديدة فوق مشاكل سوبرنت).
+  static String? _lastAdmin;
+
   static Future<ConnCheckResult>? _flight;
 
   @visibleForTesting
@@ -26,6 +30,14 @@ class ConnCheckNow {
     running.value = false;
     progress.value = null;
     last.value = null;
+    _lastAdmin = null;
+  }
+
+  /// عند فتح «تنبيهات المشتركين»: نتيجةٌ لحسابٍ غير المفتوح الآن تُمسح.
+  static Future<void> forgetOtherAccount() async {
+    if (last.value == null) return;
+    final cur = await AuthStorage.readAdminId();
+    if (cur != _lastAdmin) last.value = null;
   }
 
   static Future<ConnCheckResult> run() {
@@ -43,7 +55,9 @@ class ConnCheckNow {
     running.value = true;
     progress.value = 'يتأكّد من شبكتك…';
     ConnCheckResult res;
+    String? admin;
     try {
+      admin = await AuthStorage.readAdminId();
       final local = await DeviceWarmService.checkNow(
         onProgress: (done, total) => progress.value = 'يفحص أجهزة مشتركيك من شبكتك… $done/$total',
       );
@@ -65,6 +79,7 @@ class ConnCheckNow {
       running.value = false;
       progress.value = null;
     }
+    _lastAdmin = admin;
     last.value = res;
     ConnectionAutoApi.changes.value++;
     ConnectionAutoApi.unawaitedLoad();
