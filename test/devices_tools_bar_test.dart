@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:rad_mysvcs/api/agent_alerts_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/screens/main_shell.dart';
+import 'package:rad_mysvcs/screens/network_devices/agent_alerts_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_alerts_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/network_devices_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/widgets/device_big_card.dart';
@@ -55,10 +57,11 @@ void main() {
     }
   }
 
-  Future<void> open(WidgetTester t, Scenario s, {Set<String>? failing}) async {
+  Future<void> open(WidgetTester t, Scenario s, {Set<String>? failing, Map<String, Object>? routes}) async {
     NetworkDevicesScreen.debugResetView();
+    AgentAlertsApi.forget();
     final inner = await visualSetUp(s);
-    server = AiStatusOverlay(inner, status: aiStatusOff, failing: failing);
+    server = AiStatusOverlay(inner, status: aiStatusOff, failing: failing, routes: routes);
     ApiClient.dio.httpClientAdapter = server;
     AiAssistantState.reset();
     await pumpSim(t, const SimVariant(390, dark: false),
@@ -74,6 +77,7 @@ void main() {
     await visualTearDown();
     AiAssistantState.reset();
     DeviceAlertsService.instance.unreadCount.value = 0;
+    AgentAlertsApi.forget();
   }
 
   testWidgets('المالك: العنوان الموحّد، والبحث وأدواته الأربع بترتيبها',
@@ -200,6 +204,55 @@ void main() {
     await t.tap(siren);
     await settle(t);
     expect(find.byType(DeviceAlertsScreen), findsOneWidget);
+    await finish(t);
+  });
+
+  // «تنبيهات أجهزتي» من الخادم (٤ نوفمبر — server/agentAlerts.js)
+  Map<String, Object> agentAlerts(Map<String, dynamic> data) => {
+        'GET /api/v2/agent-alerts/status': {'success': true, 'data': data},
+        'GET /api/v2/agent-alerts/log': {'success': true, 'data': {'available': true, 'items': <Object>[]}},
+      };
+
+  testWidgets('«تنبيهات أجهزتي» من الخادم: الصفّارة تعدّ الطافية الآن وتفتحها، وتنبيه الموبايل المحلّيّ يسكت', (t) async {
+    final since = DateTime.now().subtract(const Duration(minutes: 7)).millisecondsSinceEpoch;
+    await open(t, s1bSasOwner, routes: agentAlerts({
+      'available': true, 'enabled': true, 'notify_up': true, 'can_use': true, 'can_edit': true, 'devices': 3, 'monitored': 3,
+      'down': [{'id': 1, 'name': 'سكتر 2', 'since_ms': since}, {'id': 2, 'name': 'لنك', 'since_ms': since}], 'quiet': <Object>[],
+      'network_down': false,
+    }));
+    expect(server.requests.where((r) => r.path == '/api/v2/agent-alerts/status'), isNotEmpty, reason: 'يُقرأ مع أوّل تحميل');
+    expect(find.text('2'), findsOneWidget, reason: 'العدّاد = الطافية الآن من الخادم');
+    expect((t.getCenter(find.text('2')) - t.getCenter(siren)).distance, lessThan(40));
+    expect(AgentAlertsApi.shouldFireLocalAlerts(), isFalse, reason: 'الخادم يقول الانطفاء ⇒ لا إشعار موبايلٍ ثانٍ');
+    await t.tap(siren);
+    await settle(t);
+    expect(find.byType(AgentAlertsScreen), findsOneWidget);
+    expect(find.text('جهازان طافيان الآن'), findsOneWidget);
+    await finish(t);
+  });
+
+  testWidgets('«تنبيهات أجهزتي» أطفأها الوكيل ⇒ تفتح شاشتها لكنّ تنبيه الموبايل المحلّيّ يعود', (t) async {
+    await open(t, s1bSasOwner, routes: agentAlerts({
+      'available': true, 'enabled': false, 'notify_up': true, 'can_use': true, 'can_edit': true, 'devices': 3, 'monitored': 3,
+      'down': <Object>[], 'quiet': <Object>[], 'network_down': false,
+    }));
+    expect(AgentAlertsApi.shouldFireLocalAlerts(), isTrue);
+    await t.tap(siren);
+    await settle(t);
+    expect(find.byType(AgentAlertsScreen), findsOneWidget);
+    expect(find.text('التنبيه مطفأ — لا يُقال لك شيء'), findsOneWidget);
+    await finish(t);
+  });
+
+  testWidgets('غير مفتوحةٍ للحساب ⇒ الصفّارة كما كانت: عدّاد الموبايل وشاشته، والتنبيه المحلّيّ يعمل', (t) async {
+    DeviceAlertsService.instance.unreadCount.value = 3;
+    await open(t, s1bSasOwner, routes: agentAlerts({'available': false}));
+    expect(find.text('3'), findsOneWidget);
+    expect(AgentAlertsApi.shouldFireLocalAlerts(), isTrue);
+    await t.tap(siren);
+    await settle(t);
+    expect(find.byType(DeviceAlertsScreen), findsOneWidget);
+    expect(find.byType(AgentAlertsScreen), findsNothing);
     await finish(t);
   });
 
