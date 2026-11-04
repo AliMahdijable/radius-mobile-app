@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../api/connection_auto_api.dart';
 import '../../core/util/server_time.dart';
 import '../../core/widgets/design_sheet.dart';
+import '../../core/widgets/permission_locked.dart';
 import '../../services/conn_check_now.dart';
 import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
@@ -235,7 +236,8 @@ class _ConnAutoCardState extends State<ConnAutoCard> {
         ),
         if (on) ...[
           const SizedBox(height: Sp.sm),
-          _QueueTile(st: _st, onTap: _openQueue),
+          // موظّفٌ بلا مفتاح القسم (conn_alerts.use) أو مقيَّدٌ بمديرٍ فرعيّ: مكانها مقفلةً لا مخفيّة (٤ نوفمبر)
+          PermissionLocked(locked: !_st.canUse, label: 'تنبيهات المشتركين', child: _QueueTile(st: _st, onTap: _openQueue)),
         ],
         // «ربط VPN» (٣ نوفمبر): لصاحب الحساب وحده — أسرار شبكته
         if (!PermissionsService.isEmployee) ...[
@@ -459,15 +461,21 @@ class _NavTile extends StatelessWidget {
 
 /* ═════════════════════════════ القائمة ═════════════════════════════ */
 
-/// نقرة تنبيه «بانتظار موافقتك» (الخادم: `type: conn_alert_pending`) ⇒ «تنبيهات المشتركين». false = ليس هذا التنبيه.
+/// نقرة تنبيه «بانتظار موافقتك» (`conn_alert_pending`) أو «أُرسل بالواتساب» (`conn_alert_sent` — ٤ نوفمبر) ⇒ «تنبيهات المشتركين»
+/// على تبويبه. false = ليس هذا التنبيه.
 Future<bool> openConnAlertPush(NavigatorState nav, Map<String, String> data) async {
-  if (data['type'] != 'conn_alert_pending') return false;
-  await nav.push(MaterialPageRoute(builder: (_) => const ConnAutoQueueScreen()));
+  final type = data['type'];
+  if (type != 'conn_alert_pending' && type != 'conn_alert_sent') return false;
+  await nav.push(MaterialPageRoute(
+      builder: (_) => ConnAutoQueueScreen(initialTab: type == 'conn_alert_sent' ? 'sent,skipped' : 'pending')));
   return true;
 }
 
 class ConnAutoQueueScreen extends StatefulWidget {
-  const ConnAutoQueueScreen({super.key});
+  const ConnAutoQueueScreen({super.key, this.initialTab = 'pending'});
+
+  /// التبويب الأوّل: pending · queued · sent,skipped · watching · log
+  final String initialTab;
 
   @override
   State<ConnAutoQueueScreen> createState() => _ConnAutoQueueScreenState();
@@ -496,8 +504,29 @@ class _ConnAutoQueueScreenState extends State<ConnAutoQueueScreen> {
   @override
   Widget build(BuildContext context) {
     final st = ConnectionAutoApi.status.value;
+    // موظّفٌ بلا مفتاح القسم (أو مقيَّدٌ بمديرٍ فرعيّ) — وصل من إشعار «أُرسل» مثلاً (الإشعار مفتاحٌ مستقلّ): القفل لا قائمةٌ فارغة
+    if (st.available && !st.canUse) {
+      return Scaffold(
+        backgroundColor: AppColors.bg,
+        appBar: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          iconTheme: IconThemeData(color: AppColors.textHi),
+          title: Text('تنبيهات المشتركين', style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
+        ),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(Sp.xl),
+            child: LockedNotice.block(message: 'ليس لديك صلاحيّة «تنبيهات المشتركين» — اطلبها من مديرك'),
+          ),
+        ),
+      );
+    }
+    final first = _tabs.indexWhere((t) => t.$1 == widget.initialTab);
     return DefaultTabController(
       length: _tabs.length,
+      initialIndex: first < 0 ? 0 : first,
       child: Scaffold(
         backgroundColor: AppColors.bg,
         appBar: AppBar(

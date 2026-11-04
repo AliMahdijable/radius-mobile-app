@@ -272,6 +272,50 @@ void main() {
       await simDrain(t);
     });
 
+    test('الحالة: can_use/can_edit من الخادم؛ خادمٌ أقدم بلاهما ⇒ مفتوحٌ كما كان', () {
+      final d = Map<String, dynamic>.from(_status()['data'] as Map);
+      final old = ConnAutoStatus.fromJson(d);
+      expect((old.canUse, old.canEdit), (true, null));
+      final e = ConnAutoStatus.fromJson({...d, 'can_use': false, 'can_edit': false});
+      expect((e.canUse, e.canEdit), (false, false));
+      expect(e.withSettings(e.settings).canUse, isFalse, reason: 'نسخة الإعدادات تحفظه');
+    });
+
+    // ٤ نوفمبر — المالك: القسم والإشعار مفتاحان مستقلّان للموظّف («حتى لو القسم مفعل وطفي الاشعارات ماتوصله والعكس صحيح»)
+    testWidgets('موظّفٌ بلا مفتاح القسم: «تنبيهات المشتركين» قفلٌ لا قائمة — ولو فتحها إشعار «أُرسل» (الإشعار مفتاحٌ مستقلّ)', (t) async {
+      server.reply('GET', '/api/v2/connection-alerts/auto', 200,
+          {'success': true, 'data': {...(_status()['data'] as Map), 'can_use': false, 'can_edit': false}});
+      final key = GlobalKey<NavigatorState>();
+      await pumpSim(t, _v, navigatorKey: key, home: (_) => const Scaffold(body: Text('الرئيسيّة')));
+      await t.pumpAndSettle();
+      ConnectionAutoApi.status.value = ConnAutoStatus.fromJson({...(_status()['data'] as Map), 'can_use': false, 'can_edit': false});
+      final f = openConnAlertPush(key.currentState!, const {'type': 'conn_alert_sent', 'count': '1'});
+      await t.pumpAndSettle();
+      expect(find.textContaining('ليس لديك صلاحيّة «تنبيهات المشتركين»'), findsOneWidget);
+      expect(server.calls('GET', '/api/v2/connection-alerts/queue'), isEmpty, reason: 'لا يُطلب قسمٌ مقفل');
+      key.currentState!.pop();
+      await t.pumpAndSettle();
+      expect(await f, isTrue);
+      await simDrain(t);
+    });
+
+    testWidgets('إشعار «أُرسل بالواتساب» (conn_alert_sent) يفتح «تنبيهات المشتركين» على تبويب «أُرسل»', (t) async {
+      server.reply('GET', '/api/v2/connection-alerts/auto', 200, _status());
+      server.reply('GET', '/api/v2/connection-alerts/queue', 200, {'success': true, 'data': {'available': true, 'items': []}});
+      final key = GlobalKey<NavigatorState>();
+      await pumpSim(t, _v, navigatorKey: key, home: (_) => const Scaffold(body: Text('الرئيسيّة')));
+      await t.pumpAndSettle();
+      final f = openConnAlertPush(key.currentState!, const {'type': 'conn_alert_sent', 'count': '3'});
+      await t.pumpAndSettle();
+      expect(find.text('تنبيهات المشتركين'), findsOneWidget);
+      final states = server.calls('GET', '/api/v2/connection-alerts/queue').map((r) => r.queryParameters['state']).toSet();
+      expect(states, contains('sent,skipped'));
+      key.currentState!.pop();
+      await t.pumpAndSettle();
+      expect(await f, isTrue);
+      await simDrain(t);
+    });
+
     testWidgets('القائمة: «بانتظار موافقتك» بمشاكله وأوقاته؛ «أرسل» يرسل مفتاحه، و«أرسل للكلّ» all', (t) async {
       server.reply('GET', '/api/v2/connection-alerts/auto', 200, _status(pending: 1));
       server.on('GET', '/api/v2/connection-alerts/queue', (o) {

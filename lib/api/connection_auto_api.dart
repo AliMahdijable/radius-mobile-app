@@ -106,6 +106,8 @@ class ConnAutoStatus {
     this.settings = const ConnAutoSettings(),
     this.counts = const {},
     this.inWindow = false,
+    this.canUse = true,
+    this.canEdit,
   });
 
   static const off = ConnAutoStatus(available: false);
@@ -123,10 +125,18 @@ class ConnAutoStatus {
   final Map<String, int> counts;
   final bool inWindow;
 
+  /// قسم «تنبيهات المشتركين» مفتوحٌ لهذا الفاعل؟ الموظّف بمفتاحه conn_alerts.use وغير مقيَّدٍ بمديرٍ فرعيّ (٤ نوفمبر — مستقلٌّ عن مفتاح
+  /// الإشعار). خادمٌ أقدم لا يرسله ⇒ true كما كان.
+  final bool canUse;
+
+  /// إعدادات الإرسال قابلةٌ للتعديل (+whatsapp.templates)؛ null من خادمٍ أقدم ⇒ الشاشة تقرّر بصلاحيّاتها كما كانت.
+  final bool? canEdit;
+
   int count(String k) => counts[k] ?? 0;
 
   ConnAutoStatus withSettings(ConnAutoSettings s) => ConnAutoStatus(
-      available: available, dryRun: dryRun, alertsEnabled: alertsEnabled, settings: s, counts: counts, inWindow: inWindow);
+      available: available, dryRun: dryRun, alertsEnabled: alertsEnabled, settings: s, counts: counts, inWindow: inWindow,
+      canUse: canUse, canEdit: canEdit);
 
   /// يُرفع القياس؟ (الحساب مفتوح، والتنبيه مفعّل، والوضع غير يدويّ)
   bool get collects => available && alertsEnabled && settings.mode != 'manual';
@@ -144,6 +154,8 @@ class ConnAutoStatus {
       settings: j['settings'] is Map ? ConnAutoSettings.fromJson(Map<String, dynamic>.from(j['settings'] as Map)) : const ConnAutoSettings(),
       counts: c,
       inWindow: j['in_window'] == true,
+      canUse: j['can_use'] != false,
+      canEdit: j['can_edit'] is bool ? j['can_edit'] as bool : null,
     );
   }
 }
