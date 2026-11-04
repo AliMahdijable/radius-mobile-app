@@ -1,6 +1,9 @@
+import 'package:flutter/foundation.dart';
+
 import 'api_client.dart';
 import 'company_route.dart';
 import '../models/device_health.dart';
+import '../services/permissions_service.dart';
 
 /// Per-subscriber CPE credentials override. When non-null fields are
 /// present, they take precedence over the admin-wide defaults during
@@ -155,6 +158,28 @@ class DeviceConfigApi {
     if (company != null) _routedDownAt[company] = DateTime.now();
   }
 
+  /// موظّفٌ بلا صلاحيّة الأجهزة (٤ نوفمبر — جولة فحص الخادم: ~١٠ آلاف ردّ 403 يوميّاً من ٣–٤ أجهزة): الخادم يرفض إعداد جهاز
+  /// المشترك (devices.view/monitor/manage) والتطبيق كان يسأل عن كلّ مشترك كلّ ٥ دقائق مع كلّ موجة فحص. الآن: لا نداء بلا
+  /// الصلاحيّة، ورفضٌ 403 من الخادم يُحفظ للحساب كلّه نصف ساعة (الصلاحيّة للحساب لا للمشترك) — للشركة المفتوحة وحدها؛ صفوف
+  /// «كل الشركات» لها قاطعها ([routedDown]).
+  static const devicePerms = ['devices.view', 'devices.monitor', 'devices.manage'];
+  static const _deniedFor = Duration(minutes: 30);
+  static DateTime? _deniedAt;
+
+  @visibleForTesting
+  static DateTime Function() now = DateTime.now;
+
+  static bool _blocked(String? company) {
+    if (company != null) return false;
+    if (!Perms.hasAny(devicePerms)) return true;
+    final at = _deniedAt;
+    return at != null && now().difference(at) < _deniedFor;
+  }
+
+  static void _noteDenied(String? company, int? status) {
+    if (company == null && status == 403) _deniedAt = now();
+  }
+
   /// GET /api/subscribers/:username/device — per-subscriber override.
   /// Returns an empty DeviceConfig when the subscriber has none pinned.
   /// Returns null on hard errors (network/auth) so the caller can
@@ -172,6 +197,7 @@ class DeviceConfigApi {
       return cached.cfg;
     }
     if (routedDown(company)) return const DeviceConfig();
+    if (_blocked(company)) return const DeviceConfig();
     try {
       final r = await CompanyRoute.run(
         company,
@@ -179,6 +205,7 @@ class DeviceConfigApi {
           '/api/subscribers/$username/device',
         ),
       );
+      _noteDenied(company, r.statusCode);
       final body = r.data ?? const {};
       // «كل الشركات»: رفضٌ موجَّه (409 COMPANY_*، 429 الضغط — والعميل يعدّ ما دون 500 نجاحاً) ليس «لا إعداد»: لا يُحفظ
       // ويفتح القاطع. الوضع العاديّ كما كان (الرفض يُحفظ فارغاً خمس دقائق).
@@ -211,6 +238,7 @@ class DeviceConfigApi {
   static void clearAllCaches() {
     _cache.clear();
     _routedDownAt.clear();
+    _deniedAt = null;
   }
 
   /// مطلب المستخدم 2026-07-12: batch prime قبل probe wave. يجلب configs
@@ -254,6 +282,7 @@ class DeviceConfigApi {
     }
     if (needed.isEmpty) return true; // الكاش يغطّيهم سلفاً
     if (routedDown(company)) return false;
+    if (_blocked(company)) return false;
     try {
       // نُقسّم لدفعات صغيرة (100/دفعة) لتفادي URL/body ضخم.
       for (var i = 0; i < needed.length; i += 100) {
@@ -265,6 +294,7 @@ class DeviceConfigApi {
             data: {'usernames': chunk},
           ),
         );
+        _noteDenied(company, r.statusCode);
         final body = r.data ?? const {};
         final configs = body['configs'];
         if (body['success'] != true || configs is! Map) {
