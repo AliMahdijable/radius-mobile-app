@@ -31,6 +31,14 @@ class CompanyRoute {
   /// بعد كلّ كتابةٍ موجَّهة وصلت الخادم — أيّاً كان ردّها — تُسقط قائمة شركتها فتُجلب من جديد (كبطاقتها في «لوحة حسابي»).
   static void Function(String key)? onWrite;
 
+  /// طلباتٌ غير GET لا تغيّر قائمة مشتركي الشركة فلا تُسقطها ([onWrite]): قراءةٌ بـPOST، أو قراءات «تنبيه المشترك» إلى جدولنا
+  /// (٤ نوفمبر — تُرفع بعد كلّ موجة فحص، فإسقاطها كان يعيد جلب قائمة كلّ شركةٍ معها).
+  static const Set<String> keepsList = {
+    '/api/v2/subscribers/device-batch',
+    '/api/v2/subscribers/last-macs',
+    '/api/v2/connection-alerts/readings',
+  };
+
   /// مفتاح شركة الطلب: `extra['companyKey']` صراحةً أوّلاً، ثمّ النطاق.
   static String? keyFor(RequestOptions o) {
     final x = o.extra['companyKey'];

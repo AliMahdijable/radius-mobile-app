@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import 'api_client.dart';
+import 'company_route.dart';
 
 /// «تنبيه المشترك» التلقائيّ (٣ نوفمبر — الخادم server/connAlertsAuto.js).
 ///
@@ -288,11 +289,16 @@ class ConnectionAutoApi {
   static Future<ConnAutoStatus>? _flight;
   static const _ttl = Duration(minutes: 5);
 
+  /// «كل الشركات» (٤ نوفمبر): حالة كلّ شركةٍ برفع قراءاتها — طلبٌ موجَّه بكاشٍ لكلّ مفتاح، لا يمسّ [status] (شارة الشركة المفتوحة
+  /// وقسمها).
+  static final Map<String, ({ConnAutoStatus st, DateTime at})> _companies = {};
+
   @visibleForTesting
   static void debugReset() {
     status.value = ConnAutoStatus.off;
     _at = null;
     _flight = null;
+    _companies.clear();
   }
 
   static Future<ConnAutoStatus> load({bool force = false}) {
@@ -322,6 +328,26 @@ class ConnectionAutoApi {
     return status.value;
   }
 
+  /// حالة الشركة [companyKey] لرفع القراءات: null ⇒ الشركة المفتوحة ([load])؛ وإلّا طلبٌ موجَّه (x-company-key) يُحفظ [_ttl]،
+  /// وفشلُه أو شركةٌ لا يُوجَّه لها المسار (FTTH والشركات المُضافة) ⇒ off حتى المهلة. مفتاحٌ غير صالح ⇒ off (لا طلب بلا توجيه).
+  static Future<ConnAutoStatus> statusOf(String? companyKey) async {
+    if (companyKey == null) return load();
+    if (!CompanyRoute.keyRe.hasMatch(companyKey)) return ConnAutoStatus.off;
+    final hit = _companies[companyKey];
+    if (hit != null && DateTime.now().difference(hit.at) < _ttl) return hit.st;
+    var st = ConnAutoStatus.off;
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/connection-alerts/auto',
+          options: Options(extra: {'companyKey': companyKey}));
+      final d = r.data?['data'];
+      if (r.data?['success'] == true && d is Map) st = ConnAutoStatus.fromJson(Map<String, dynamic>.from(d));
+    } catch (e) {
+      if (!kReleaseMode) debugPrint('🔴 connection-alerts/auto (company): $e');
+    }
+    _companies[companyKey] = (st: st, at: DateTime.now());
+    return st;
+  }
+
   static String _msg(Object e, String fallback) {
     if (e is DioException) {
       final d = e.response?.data;
@@ -348,21 +374,29 @@ class ConnectionAutoApi {
   }
 
   /// قراءاتٌ خام (دفعة ≤ ٤٠٠). صامتة: فشلها لا يُزعج أحداً — الموجة التالية تعيدها. null = لم تُقبل؛ وإلّا مواعيد إعادة القياس
-  /// لمن صار «تحت المراقبة» (username ⇒ الموعد) — يقيسه التطبيق وحده حينها فيتأكّد في وقته (٣ نوفمبر).
-  static Future<Map<String, DateTime>?> uploadReadings(List<Map<String, dynamic>> readings) async =>
-      (await uploadReadingsStats(readings))?.due;
+  /// لمن صار «تحت المراقبة» (username ⇒ الموعد) — يقيسه التطبيق وحده حينها فيتأكّد في وقته (٣ نوفمبر). [companyKey]: صفوف
+  /// شركةٍ من «كل الشركات» ⇒ الطلب موجَّهٌ لها.
+  static Future<Map<String, DateTime>?> uploadReadings(List<Map<String, dynamic>> readings, {String? companyKey}) async =>
+      (await uploadReadingsStats(readings, companyKey: companyKey))?.due;
 
   /// القراءات ⇒ الخادم، مع إحصاء ما فعلته (لـ«افحص الآن» من شبكة الوكيل): المقروء، ومن دخل «تحت المراقبة»، ومن تأكّد، ومن حُلّ.
   /// null = تعذّر (شبكة/خادم).
   static Future<({Map<String, DateTime> due, int usable, int watching, int confirmed, int resolved})?> uploadReadingsStats(
-      List<Map<String, dynamic>> readings) async {
+      List<Map<String, dynamic>> readings, {String? companyKey}) async {
     if (readings.isEmpty) return (due: const <String, DateTime>{}, usable: 0, watching: 0, confirmed: 0, resolved: 0);
+    // قراءات شركةٍ أخرى لا تذهب للمفتوحة أبداً: مفتاحٌ غير صالح يُسقطه التوجيه بصمت ⇒ لا طلب
+    if (companyKey != null && !CompanyRoute.keyRe.hasMatch(companyKey)) return null;
     try {
-      final r = await ApiClient.dio.post<Map<String, dynamic>>('/api/v2/connection-alerts/readings', data: {'readings': readings});
+      final r = await ApiClient.dio.post<Map<String, dynamic>>('/api/v2/connection-alerts/readings',
+          data: {'readings': readings}, options: companyKey == null ? null : Options(extra: {'companyKey': companyKey}));
       final d = r.data?['data'];
       if (d is Map && d['active'] == false) {
-        // الخادم يقول: لا قياس (أُطفئ/صار يدويّاً) ⇒ تُحدَّث الحالة فيتوقّف الرفع
-        unawaitedLoad();
+        // الخادم يقول: لا قياس (أُطفئ/صار يدويّاً) ⇒ تُحدَّث الحالة فيتوقّف الرفع؛ والشركة الموجَّهة تُقرأ حالتها من جديد بالموجة التالية
+        if (companyKey == null) {
+          unawaitedLoad();
+        } else {
+          _companies.remove(companyKey);
+        }
       }
       if (r.data?['success'] != true) return null;
       final out = <String, DateTime>{};

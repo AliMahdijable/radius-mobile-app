@@ -311,7 +311,7 @@ class _AuthInterceptor extends Interceptor {
       ));
     }
     CompanyRefs.capture(key, o.method, o.uri.path, response.headers);
-    if (o.method.toUpperCase() != 'GET') CompanyRoute.onWrite?.call(key);
+    if (o.method.toUpperCase() != 'GET' && !CompanyRoute.keepsList.contains(o.uri.path)) CompanyRoute.onWrite?.call(key);
     final ok = (response.statusCode ?? 0) < 300 && !(data is Map && data['success'] == false);
     if (ok) CompanyRefs.consume(key, o.method, o.uri.path);
     handler.next(response);

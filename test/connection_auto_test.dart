@@ -103,7 +103,7 @@ void main() {
       expect(server.calls('POST', '/api/v2/connection-alerts/readings'), isEmpty);
     });
 
-    test('مفتوح ومفعّل ⇒ مشتركو الحساب بلقطاتهم (لا شركةٌ أخرى ولا بلا لقطة)، ثمّ لا تكرار قبل ١٥ دقيقة', () async {
+    test('مفتوح ومفعّل ⇒ مشتركو الحساب بلقطاتهم (لا صفٌّ بمفتاح شركةٍ غير صالح ولا بلا لقطة)، ثمّ لا تكرار قبل ١٥ دقيقة', () async {
       server.reply('GET', '/api/v2/connection-alerts/auto', 200, _status());
       final other = _sub('3').withCompany('nbtel:9');
       ConnectionReadingsUploader.debugSnapshotOf = (u) => u == 'u4' ? null : _snapU(_ubnt(signal: -70));
