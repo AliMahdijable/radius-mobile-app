@@ -1614,19 +1614,26 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
 
   Widget _peerRow(PeerLink p) {
     final tone = Grade.signal(p.signal);
+    // CCQ والسرعتان (المالك ٤ نوفمبر: «المفترض ccq وريت هم») سطراً ثانياً — بجانب الاسم كانت تأكله على الهاتف الضيّق
+    final rx = (p.rxRate ?? 0) > 0 ? p.rxRate : null;
+    final tx = (p.txRate ?? 0) > 0 ? p.txRate : null;
+    final second = [
+      if (p.hasCcq) 'CCQ ${p.ccq}٪',
+      if (rx != null || tx != null) '${rx != null ? '↓$rx' : ''}${rx != null && tx != null ? ' ' : ''}${tx != null ? '↑$tx' : ''} Mbps',
+    ].join(' · ');
     return Container(
-      height: 32,
+      constraints: const BoxConstraints(minHeight: 32),
       margin: const EdgeInsets.only(bottom: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(color: AppColors.bg, borderRadius: BorderRadius.circular(R.sm)),
-      child: Row(children: [
-        Expanded(child: Text(iso(p.name), style: AppType.body(color: AppColors.textHi), maxLines: 1, overflow: TextOverflow.ellipsis)),
-        // بلا قراءة إشارة ⇒ «—» لا «null dBm» (القائمة صارت تضمّهم آخراً).
-        Text(iso(p.signal == null ? '—' : '${p.signal} dBm'), style: AppType.bodyBold(color: p.signal == null ? AppColors.textLow : tone.fill)),
-        if (p.ccq != null) ...[
-          const SizedBox(width: 10),
-          Text(iso('CCQ ${p.ccq}٪'), style: AppType.body(color: AppColors.textMid)),
-        ],
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+        Row(children: [
+          Expanded(child: Text(iso(p.name), style: AppType.body(color: AppColors.textHi), maxLines: 1, overflow: TextOverflow.ellipsis)),
+          // بلا قراءة إشارة ⇒ «—» لا «null dBm» (القائمة صارت تضمّهم آخراً).
+          Text(iso(p.signal == null ? '—' : '${p.signal} dBm'), style: AppType.bodyBold(color: p.signal == null ? AppColors.textLow : tone.fill)),
+        ]),
+        if (second.isNotEmpty)
+          Text(iso(second), style: AppType.muted(color: AppColors.textMid), maxLines: 1, overflow: TextOverflow.ellipsis),
       ]),
     );
   }

@@ -233,7 +233,59 @@ void main() {
       expect(shows('m.jawad'), isFalse, reason: 'الأقوى خارج الثمانية');
       expect(find.text('و3 آخرون'), findsOneWidget, reason: 'أربعة أسطر × خليّتين = ٨ من ١١');
       expect(shows('-79'), isTrue);
-      expect(shows('CCQ 61%'), isFalse, reason: 'باختصار: الاسم وإشارته');
+      // المالك ٤ نوفمبر: «جاي يعرض فقط اشاره المفترض ccq وريت هم» — تحت كلّ متّصل CCQ بلون سلّمها و↓الاستقبال ↑الإرسال
+      expect(shows('61%'), isTrue, reason: 'CCQ الأضعف (ali-home)');
+      expect(find.text(' 130'), findsOneWidget, reason: '↓ استقبال ali-home');
+      expect(find.text(' 87'), findsOneWidget, reason: '↑ إرسال ali-home');
+      expect(find.text(' Mbps'), findsNWidgets(8), reason: 'سطرٌ لكلّ متّصلٍ معروض');
+    });
+
+    testWidgets('🆕 CCQ والسرعتان لكلّ متّصل (ميكروتك ويوبيكويتي) — وما لا يقرؤه الجهاز لا يظهر: لا «0%» ولا «0 Mbps»', (t) async {
+      final d = NetworkDevice(
+        id: 31, adminId: '1', name: 'سكتر 2', type: 'sector', brand: 'mikrotik', model: 'BaseBox 5', ip: '10.70.241.9', port: 8728,
+        protocol: 'api', hasCredentials: true, lastStatus: 'online', lastResponseMs: 6, createdAt: DateTime(2026));
+      final st = VitalsState(
+        at: now.subtract(const Duration(seconds: 4)),
+        detail: const DeviceDetail(
+          peers: [
+            PeerLink(name: 'kamil@popq', signal: -72, ccq: 58, txRate: 54, rxRate: 24),
+            PeerLink(name: 'no.ccq@popq', signal: -66, txRate: 130), // طرازٌ بلا CCQ ولا استقبال
+            PeerLink(name: 'bare@popq', signal: -60), // لا CCQ ولا سرعات ⇒ سطرٌ واحد
+          ],
+          peersLabel: 'العملاء اللاسلكيّون',
+          glance: DeviceGlance(peersKnown: true, isAp: true),
+        ),
+      );
+      for (final w in [320.0, 390.0]) {
+        for (final dark in [false, true]) {
+          AppColors.setDarkMode(dark);
+          t.view.physicalSize = Size(w, 1400);
+          t.view.devicePixelRatio = 1;
+          addTearDown(t.view.reset);
+          await t.pumpWidget(MaterialApp(
+            theme: ThemeData(fontFamily: 'IBMPlexSansArabic'),
+            home: Directionality(
+              textDirection: TextDirection.rtl,
+              child: Scaffold(
+                backgroundColor: AppColors.bg,
+                body: SingleChildScrollView(
+                  padding: const EdgeInsets.all(12),
+                  child: DeviceBigCard(device: d, state: st, medianMs: 12, now: now),
+                ),
+              ),
+            ),
+          ));
+          await t.pump();
+          expect(t.takeException(), isNull, reason: 'بلا فيضان على $w');
+          expect(shows('58%'), isTrue);
+          expect(find.text(' 24'), findsOneWidget);
+          expect(find.text(' 54'), findsOneWidget);
+          expect(find.text(' 130'), findsOneWidget, reason: 'الإرسال وحده حين لا استقبال');
+          expect(find.text(' Mbps'), findsNWidgets(2), reason: 'bare بلا سطرٍ ثانٍ');
+          expect(find.textContaining('0%'), findsNothing);
+          expect(find.text(' 0'), findsNothing);
+        }
+      }
     });
 
     testWidgets('«سكتر 1» المسجّل راوتراً (AP بمتّصلين): يُعرض سكتراً بمتّصليه', (t) async {

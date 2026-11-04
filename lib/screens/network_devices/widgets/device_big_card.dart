@@ -672,8 +672,9 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-/// المتّصلون — **الأضعف أوّلاً**، باختصار: الاسم وإشارته، خليّتان بالسطر (المالك ٣١ أكتوبر: «جالب بي المتصلين اسمائهم واشارته
-/// وبشكل مختصر»). من يراقب سكتراً يريد من يوشك أن ينقطع، لا من إشارته ممتازة.
+/// المتّصلون — **الأضعف أوّلاً**، باختصار: الاسم وإشارته، وتحتهما CCQ والسرعتان، خليّتان بالسطر (المالك ٣١ أكتوبر: «جالب بي
+/// المتصلين اسمائهم واشارته وبشكل مختصر»؛ ثمّ ٤ نوفمبر: «جاي يعرض فقط اشاره المفترض ccq وريت هم»). من يراقب سكتراً يريد من يوشك
+/// أن ينقطع، لا من إشارته ممتازة.
 class _PeersSection extends StatelessWidget {
   const _PeersSection({required this.peers, required this.rows, required this.label});
   final List<PeerLink> peers;
@@ -712,7 +713,8 @@ class _PeersSection extends StatelessWidget {
   }
 }
 
-/// خليّة متّصل: اسمه (الأطول يُقصّ) وإشارته بلون سلّمها.
+/// خليّة متّصل: اسمه (الأطول يُقصّ) وإشارته بلون سلّمها، وتحتهما جودة الربط CCQ وسرعتاه ↓↑ كلوحة الجهاز (يوبيكويتي
+/// ومايكروتك — المالك ٤ نوفمبر). ما لا يقرؤه الجهاز لا يظهر (لا صفر)، وبلا شيءٍ منهما يبقى سطراً واحداً.
 class _PeerCell extends StatelessWidget {
   const _PeerCell(this.p);
   final PeerLink p;
@@ -721,6 +723,9 @@ class _PeerCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final known = p.signal != null && p.signal != 0;
     final tone = Grade.signal(p.signal);
+    final rx = (p.rxRate ?? 0) > 0 ? p.rxRate : null;
+    final tx = (p.txRate ?? 0) > 0 ? p.txRate : null;
+    final ccq = p.hasCcq ? p.ccq : null;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: Sp.x6),
       decoration: BoxDecoration(
@@ -728,15 +733,74 @@ class _PeerCell extends StatelessWidget {
         borderRadius: BorderRadius.circular(R.sm),
         border: Border.all(color: AppColors.border),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: Text(iso(p.name), style: AppType.bodyStrong(), maxLines: 1, overflow: TextOverflow.ellipsis),
+          Row(
+            children: [
+              Expanded(
+                child: Text(iso(p.name), style: AppType.bodyStrong(), maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+              const SizedBox(width: Sp.x6),
+              Text(iso(known ? '${p.signal}' : '—'), style: AppType.bodyBold(color: known ? tone.fill : AppColors.textMid)),
+            ],
           ),
-          const SizedBox(width: Sp.x6),
-          Text(iso(known ? '${p.signal}' : '—'), style: AppType.bodyBold(color: known ? tone.fill : AppColors.textMid)),
+          if (ccq != null || rx != null || tx != null) ...[
+            const SizedBox(height: 3),
+            _PeerQuality(ccq: ccq, rx: rx, tx: tx),
+          ],
         ],
       ),
+    );
+  }
+}
+
+/// السطر الثاني في خليّة المتّصل: CCQ رقاقةٌ بلون سلّمها، ثمّ ↓الاستقبال ↑الإرسال Mbps كما في لوحة الجهاز. يصغر على الضيّق
+/// (خليّتان بالسطر على ٣٢٠) ولا يفيض.
+class _PeerQuality extends StatelessWidget {
+  const _PeerQuality({required this.ccq, required this.rx, required this.tx});
+  final int? ccq;
+  final int? rx;
+  final int? tx;
+
+  @override
+  Widget build(BuildContext context) {
+    final q = ccq == null ? null : Grade.percentHigherBetter(ccq);
+    return Row(
+      children: [
+        if (q != null)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(color: q.fill.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(R.pill)),
+            child: Text(iso('$ccq%'), style: AppType.pillBold(color: q.fill)),
+          ),
+        if (rx != null || tx != null) ...[
+          if (q != null) const SizedBox(width: Sp.x6),
+          Expanded(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerStart,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (rx != null) ...[
+                    Icon(LucideIcons.arrowDown, size: 9, color: AppColors.chartLine),
+                    Text(' $rx', style: AppType.daysWordBold(color: AppColors.textHi)),
+                  ],
+                  if (rx != null && tx != null) const SizedBox(width: 5),
+                  if (tx != null) ...[
+                    Icon(LucideIcons.arrowUp, size: 9, color: AppColors.info),
+                    Text(' $tx', style: AppType.daysWordBold(color: AppColors.textHi)),
+                  ],
+                  Text(' Mbps', style: AppType.daysWord(color: AppColors.textLow)),
+                ],
+              ),
+            ),
+          ),
+        ] else
+          const Spacer(),
+      ],
     );
   }
 }
