@@ -34,8 +34,12 @@ void main() {
     final both = ConnVpnStatus.fromJson(Map<String, dynamic>.from(
         _status(auto: {'label': 'x', 'user': '@m'}, profile: {'saved': true, 'has_auth': true})['data'] as Map));
     expect((both.autoLinked, both.profileSaved, both.canTest), (false, true, true));
-    final none = ConnVpnStatus.fromJson(Map<String, dynamic>.from(_status()['data'] as Map));
+    final none = ConnVpnStatus.fromJson(Map<String, dynamic>.from(_status(reverse: true)['data'] as Map));
     expect(none.canTest, false);
+    expect(none.remoteScan, false, reason: '«الاتصال العكسي» بلا ربط ⇒ لا فحص');
+    expect(auto.remoteScan, false, reason: 'ربطٌ بلا «الاتصال العكسي» ⇒ لا فحص');
+    final on = ConnVpnStatus.fromJson(Map<String, dynamic>.from(_status(company: {'label': 'x', 'healthy': true}, reverse: true)['data'] as Map));
+    expect(on.remoteScan, true);
     expect(none.sweepReachable, 3);
     final a = ConnVpnAnalysis.fromJson({'ok': true, 'errors': [], 'needs_auth': false, 'embedded_auth': true, 'needs_key_password': true, 'servers': 1});
     expect((a.needsKeyPassword, a.embeddedAuth), (true, true));
@@ -65,7 +69,8 @@ void main() {
       });
       await pumpSim(t, _v, home: (_) => const ConnVpnScreen());
       await t.pumpAndSettle();
-      expect(find.textContaining('تُربط تلقائيّاً عبر سوبرنت الثالث (VPN-ALL)'), findsOneWidget);
+      expect(find.textContaining('متاحٌ ربطك عبر سوبرنت الثالث (VPN-ALL)'), findsOneWidget);
+      expect(find.text('الفحص الآن من موبايلك وأنت على شبكتك فقط'), findsOneWidget, reason: 'بلا «الاتصال العكسي» لا فحص من الخادم');
       expect(find.textContaining('@m'), findsOneWidget);
       expect(find.text('ارفع ملفّك بيوزرك (اختياريّ)'), findsOneWidget);
       expect(find.textContaining('آخر جولة'), findsOneWidget);
@@ -84,11 +89,14 @@ void main() {
       server.reply('PUT', '/api/v2/conn-vpn/reverse', 200, {'success': true, 'message': 'فُعّل الاتصال العكسي'});
       await pumpSim(t, _v, home: (_) => const ConnVpnScreen());
       await t.pumpAndSettle();
-      expect(find.textContaining('شركتك (ايرث لنك) مربوطة'), findsOneWidget);
+      expect(find.textContaining('شركتك (ايرث لنك) متاحة'), findsOneWidget);
       expect(find.textContaining('ارفع ملفّ'), findsNothing);
+      expect(find.text('الفحص الآن من موبايلك وأنت على شبكتك فقط'), findsOneWidget);
+      server.reply('GET', '/api/v2/conn-vpn/status', 200, _status(company: {'label': 'ايرث لنك', 'healthy': true}, reverse: true));
       await t.tap(find.byType(Switch));
       await t.pumpAndSettle();
       expect(server.bodies('PUT', '/api/v2/conn-vpn/reverse').single['enabled'], true);
+      expect(find.text('النظام يفحص شبكتك عبر الـVPN وأنت بعيد'), findsOneWidget, reason: 'فعّله ⇒ يفحص الخادم');
       await simDrain(t);
     });
   });

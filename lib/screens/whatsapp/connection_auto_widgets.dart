@@ -245,7 +245,7 @@ class _ConnAutoCardState extends State<ConnAutoCard> {
           _NavTile(
             icon: LucideIcons.shieldCheck,
             title: 'ربط VPN',
-            subtitle: 'قياس أجهزة مشتركيك عبر VPN حين يكون تطبيقك خارج الشبكة',
+            subtitle: 'فعّل «الاتصال العكسي» ليقيس النظام وأنت خارج شبكتك — بدونه الفحص من موبايلك على شبكتك فقط',
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ConnVpnScreen())),
           ),
         ],

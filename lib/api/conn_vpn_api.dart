@@ -63,6 +63,10 @@ class ConnVpnStatus {
   bool get autoLinked => !covered && !profileSaved && autoLabel != null;
   bool get canTest => covered || profileSaved || autoLinked;
 
+  /// يفحص الخادم شبكتك عبر الـVPN؟ (المالك ٤ نوفمبر: «منخلي النظام يفحص اذا وكيل… مرابط vpn مالتنا بنظامه») — ربطٌ قائم + «الاتصال
+  /// العكسي» مفعّلاً، كقاعدة الخادم (remote_scan). غيره: الفحص من موبايلك وأنت على شبكتك فقط.
+  bool get remoteScan => reverse && canTest;
+
   factory ConnVpnStatus.fromJson(Map<String, dynamic> j) {
     final c = j['company_tunnel'];
     final a = j['auto_link'];

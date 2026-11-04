@@ -214,19 +214,37 @@ class _ConnVpnScreenState extends State<ConnVpnScreen> {
     final shown = _test ?? st.lastTest;
     return [
       Text(
-        'حين لا يكون تطبيقك على شبكتك (خارج المكتب، أو الحاسبة مطفأة) يقيس النظام أجهزة مشتركيك عبر نفق VPN — '
-        'كلّ نصف ساعة نهاراً وكلّ ساعة ليلاً.',
+        'الفحص من موبايلك وأنت على شبكتك دائماً. وإن فعّلت «الاتصال العكسي» أدناه يقيس النظام أيضاً عبر نفق VPN حين لا يكون '
+        'تطبيقك على شبكتك (خارج المكتب، أو الحاسبة مطفأة) — كلّ نصف ساعة نهاراً وكلّ ساعة ليلاً؛ وبلا تفعيله لا يفحص النظام شبكتك.',
         style: AppType.muted(color: AppColors.textMid),
+      ),
+      const SizedBox(height: Sp.sm),
+      // ⛔ المالك ٤ نوفمبر: النظام يفحص من ربط VPN وفعّل «الاتصال العكسي» وحده — الحال بكلمةٍ واحدة
+      _box(
+        color: st.remoteScan ? AppColors.successSoftBg : null,
+        border: st.remoteScan ? AppColors.successSoftBorder : null,
+        child: Row(children: [
+          Icon(st.remoteScan ? LucideIcons.shieldCheck : LucideIcons.smartphone, size: 18,
+              color: st.remoteScan ? AppColors.success : AppColors.textMid),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: Text(
+              st.remoteScan ? 'النظام يفحص شبكتك عبر الـVPN وأنت بعيد' : 'الفحص الآن من موبايلك وأنت على شبكتك فقط',
+              style: AppType.bodyStrong(color: AppColors.textHi),
+            ),
+          ),
+        ]),
       ),
       const SizedBox(height: Sp.md),
       if (st.covered)
         _note(
-          text: 'شركتك (${st.companyLabel}) مربوطة عبر نفق النظام — لا تحتاج ملفّاً. ${st.companyHealthy ? 'النفق قائم' : 'النفق يعيد الاتّصال'}',
+          text: 'شركتك (${st.companyLabel}) متاحة عبر نفق النظام — لا تحتاج ملفّاً. ${st.companyHealthy ? 'النفق قائم' : 'النفق يعيد الاتّصال'}',
+          hint: st.reverse ? null : 'يُستعمل حين تفعّل «الاتصال العكسي» أدناه.',
         )
       else ...[
         if (st.autoLinked && _analysis == null) ...[
           _note(
-            text: 'تُربط تلقائيّاً عبر ${st.autoLabel} بحسابك ${iso(st.autoUser ?? '')} — جرّب «فحص الاتصال».',
+            text: 'متاحٌ ربطك عبر ${st.autoLabel} بحسابك ${iso(st.autoUser ?? '')} بلا ملف — جرّب «فحص الاتصال» ثمّ فعّل «الاتصال العكسي».',
             hint: 'يوزرك هناك مختلف؟ ارفع ملفّك بيوزرك وباسوردك.',
           ),
           const SizedBox(height: Sp.sm),
@@ -291,7 +309,7 @@ class _ConnVpnScreenState extends State<ConnVpnScreen> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('الاتصال العكسي عند الخروج من الشبكة', style: AppType.bodyStrong(color: AppColors.textHi)),
                 const SizedBox(height: 2),
-                Text('مفعّلاً: حين لا يقيس تطبيقك من شبكتك ٢٠ دقيقة، يقيس النظام عبر الـVPN.',
+                Text('مفعّلاً: حين لا يقيس تطبيقك من شبكتك ٢٠ دقيقة، يقيس النظام عبر الـVPN. مطفأً: الفحص من موبايلك وأنت على شبكتك فقط.',
                     style: AppType.micro(color: AppColors.textMid)),
               ]),
             ),
