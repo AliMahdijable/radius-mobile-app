@@ -896,24 +896,12 @@ class _PortsSection extends StatelessWidget {
       children: [
         if (map) ...[
           _SectionTitle('المنافذ', trailing: '$up متّصل من ${ports.length}'),
+          // كلّ منفذٍ باسمه المختصر (المالك ٤ نوفمبر: «اسماء المنافذ متكدر تظهرهن» — كانت مربّعاتٍ بلا أسماء، والاسم بالضغط المطوّل
+          // وحده): المتّصل أخضر، والمطفأ رماديّ؛ الاسم الكامل والسرعة بالضغط المطوّل.
           Wrap(
-            spacing: 3,
-            runSpacing: 3,
-            children: [
-              for (final p in ports)
-                Tooltip(
-                  message: p.name,
-                  child: Container(
-                    width: 14,
-                    height: 14,
-                    decoration: BoxDecoration(
-                      color: p.up ? AppTone.success.fill : AppColors.surfaceSunken,
-                      borderRadius: BorderRadius.circular(R.check / 2),
-                      border: Border.all(color: p.up ? AppTone.success.fill : AppColors.borderStrong),
-                    ),
-                  ),
-                ),
-            ],
+            spacing: 4,
+            runSpacing: 4,
+            children: [for (final p in ports) _PortChip(p)],
           ),
           const SizedBox(height: Sp.sm),
         ],
@@ -925,6 +913,70 @@ class _PortsSection extends StatelessWidget {
         else
           for (final p in shown) _PortRow(p),
       ],
+    );
+  }
+}
+
+/// اسم المنفذ مختصراً لخريطة المنافذ: الرقم لاسم الجهاز الافتراضيّ (ether5 ⇒ «5»، sfp1 ⇒ «S1»، sfp-sfpplus2 ⇒ «S+2»، combo1 ⇒
+/// «C1»)، والاسم الذي كتبه الوكيل بعده (ether2-towers ⇒ «2 towers»)، وصيغة سسكو/رويجي القصيرة (GigabitEthernet0/1 ⇒ «Gi0/1»)؛
+/// وغيرها كما هو حتى ٩ أحرف ثمّ «…».
+@visibleForTesting
+String portShortLabel(String raw) {
+  final n = raw.trim();
+  if (n.isEmpty) return '?';
+  String cut(String x, int max) => x.length <= max ? x : '${x.substring(0, max - 1)}…';
+  final ros = RegExp(r'^(ether|sfp-?sfpplus|sfpplus|sfp28-|sfp|combo|qsfpplus|qsfp28-)(\d+(?:-\d+)?)(?:[-_ .]+(.+))?$', caseSensitive: false)
+      .firstMatch(n);
+  if (ros != null) {
+    final kind = ros[1]!.toLowerCase();
+    final num = ros[2]!;
+    final short = switch (kind) {
+      'ether' => num,
+      'sfp-sfpplus' || 'sfpsfpplus' || 'sfpplus' || 'sfp28-' => 'S+$num',
+      'sfp' => 'S$num',
+      'combo' => 'C$num',
+      _ => 'Q$num',
+    };
+    final custom = ros[3]?.trim();
+    return custom == null || custom.isEmpty ? short : '$short ${cut(custom, 8)}';
+  }
+  const cisco = {
+    'gigabitethernet': 'Gi', 'fastethernet': 'Fa', 'tengigabitethernet': 'Te', 'tengige': 'Te', 'twentyfivegige': 'Twe',
+    'fortygigabitethernet': 'Fo', 'hundredgige': 'Hu', 'ethernet': 'Eth',
+  };
+  final c = RegExp(r'^([A-Za-z]+)\s*(\d+(?:/\d+)*)$').firstMatch(n);
+  if (c != null) {
+    final short = cisco[c[1]!.toLowerCase()];
+    if (short != null) return '$short${c[2]}';
+  }
+  return cut(n, 9);
+}
+
+/// منفذٌ في الخريطة: اسمه المختصر داخله، أخضر متّصلاً ورماديّ مطفأً؛ الاسم الكامل والسرعة بالضغط المطوّل.
+class _PortChip extends StatelessWidget {
+  const _PortChip(this.p);
+  final PortTraffic p;
+
+  @override
+  Widget build(BuildContext context) {
+    final up = p.up;
+    return Tooltip(
+      message: [p.name, if (p.linkSpeed != null) p.linkSpeed!].join(' · '),
+      // بعرض اسمه لا بعرض السطر (Container بـalignment يتمدّد للسطر كلّه — كلّ منفذٍ صار سطراً)
+      child: Container(
+        height: 22,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: BoxDecoration(
+          color: up ? AppTone.success.softBg : AppColors.surfaceSunken,
+          borderRadius: BorderRadius.circular(R.check / 2),
+          border: Border.all(color: up ? AppTone.success.fill : AppColors.borderStrong),
+        ),
+        child: Align(
+          widthFactor: 1,
+          child: Text(iso(portShortLabel(p.name)), maxLines: 1,
+              style: AppType.pillBold(color: up ? AppTone.success.onSoft : AppColors.textLow)),
+        ),
+      ),
     );
   }
 }

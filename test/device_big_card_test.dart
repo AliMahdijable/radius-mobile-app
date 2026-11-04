@@ -339,8 +339,25 @@ void main() {
       expect(find.textContaining('47.3'), findsOneWidget);
       expect(shows('ether1-uplink'), isTrue, reason: 'الأعلى حِملاً');
       final ports = {'ether1-uplink', for (var i = 2; i <= 16; i++) 'ether$i', 'sfp17', 'sfp18'};
-      expect(find.byWidgetPredicate((w) => w is Tooltip && ports.contains(w.message)), findsNWidgets(18),
-          reason: 'مربّعٌ لكلّ منفذ');
+      expect(
+          find.byWidgetPredicate((w) => w is Tooltip && ports.any((p) => w.message == p || (w.message ?? '').startsWith('$p · '))),
+          findsNWidgets(18),
+          reason: 'منفذٌ لكلّ منفذ، واسمه الكامل وسرعته بالضغط المطوّل');
+      // المالك ٤ نوفمبر: «اسماء المنافذ متكدر تظهرهن» — الاسم داخل كلّ منفذ
+      for (final l in ['1 uplink', '12', '16', 'S17', 'S18']) {
+        expect(shows(l), isTrue, reason: 'اسم المنفذ ظاهر: $l');
+      }
+    });
+
+    test('اسم المنفذ المختصر: رقم الافتراضيّ، واسم الوكيل بعده، وصيغة سسكو/رويجي، وغيرها حتى ٩ أحرف', () {
+      const cases = {
+        'ether5': '5', 'ether1-uplink': '1 uplink', 'ether2-towers': '2 towers', 'sfp1': 'S1', 'sfp-sfpplus2': 'S+2',
+        'sfp-sfpplus1-WAN': 'S+1 WAN', 'sfpplus3': 'S+3', 'combo1': 'C1', 'qsfp28-1-1': 'Q1-1', 'ether9-distribution': '9 distrib…',
+        'GigabitEthernet0/1': 'Gi0/1', 'GigabitEthernet1/0/24': 'Gi1/0/24', 'FastEthernet0/3': 'Fa0/3',
+        'TenGigabitEthernet1/1/1': 'Te1/1/1', 'GigabitEthernet 0/2': 'Gi0/2', 'GE0/1': 'GE0/1', 'TGE0/1': 'TGE0/1',
+        '0/1': '0/1', 'eth0': 'eth0', 'WAN': 'WAN', 'Distribution-Uplink': 'Distribu…', '': '?', '  ether7  ': '7',
+      };
+      cases.forEach((name, want) => expect(portShortLabel(name), want, reason: name));
     });
 
     testWidgets('🚨 السويتش/السيرفر: الإيثرات وحدها — جلسات PPP والأنفاق لا تُعدّ منافذ ولا تدخل «الأعلى حِملاً»', (t) async {
