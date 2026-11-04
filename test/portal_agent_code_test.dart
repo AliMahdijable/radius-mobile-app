@@ -183,9 +183,9 @@ void main() {
     test('التوقيت: «منذ…» لليوم، وتاريخٌ قصير لما قبله', () {
       final now = DateTime(2026, 10, 18, 12, 0);
       expect(portalLoginWhen(now.subtract(const Duration(minutes: 5)), now: now),
-          'منذ 5 دقيقة');
+          'منذ 5 دقائق');
       expect(portalLoginWhen(now.subtract(const Duration(hours: 3)), now: now),
-          'منذ 3 ساعة');
+          'منذ 3 ساعات');
       expect(portalLoginWhen(DateTime(2026, 10, 16, 21, 5), now: now),
           '16/10 21:05');
       expect(portalLoginWhen(null, now: now), '');
@@ -514,12 +514,12 @@ void main() {
       });
       await open(t);
       expect(simText('ali.abbas@popq'), findsOneWidget);
-      expect(simText('QR · منذ 5 دقيقة'), findsOneWidget);
+      expect(simText('QR · منذ 5 دقائق'), findsOneWidget);
       expect(find.text('دخل'), findsOneWidget);
       expect(simText('noor@popq'), findsOneWidget);
-      expect(simText('كلمة مرور · منذ 2 ساعة'), findsOneWidget);
+      expect(simText('كلمة مرور · منذ ساعتين'), findsOneWidget);
       expect(find.text('كلمة مرور خاطئة'), findsOneWidget);
-      expect(simText('منذ 3 ساعة'), findsOneWidget, reason: 'بلا طريقة');
+      expect(simText('منذ 3 ساعات'), findsOneWidget, reason: 'بلا طريقة');
       // «البوابة موقوفة» لا «موقوفة» وحدها بجانب يوزر المشترك — كي لا تُقرأ
       // «حساب المشترك موقوف» (كالويب).
       expect(find.text('البوابة موقوفة'), findsOneWidget);

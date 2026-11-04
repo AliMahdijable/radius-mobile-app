@@ -51,6 +51,8 @@
 /// `parseSasLocal` — فلا يبقى الفرق بينهما معرفةً في رأس أحد.
 library;
 
+import 'format.dart';
+
 /// هل يحمل النصّ منطقةً زمنيّة صريحة؟ (`Z` أو `+03:00` أو `-05:00`)
 final _hasZone = RegExp(r'(Z|[+-]\d{2}:?\d{2})$');
 
@@ -96,10 +98,11 @@ String timeAgoAr(DateTime? at, {DateTime? now}) {
   final n = now ?? DateTime.now();
   final d = n.difference(at);
   if (d.isNegative || d.inMinutes < 1) return 'الآن';
-  if (d.inMinutes < 60) return 'منذ ${d.inMinutes} دقيقة';
-  if (d.inHours < 24) return 'منذ ${d.inHours} ساعة';
-  if (d.inDays < 30) return 'منذ ${d.inDays} يوم';
+  // العدد بتمييزه العربيّ (format.dart arCount — ٤ نوفمبر: «منذ 4 ساعة» بلقطة «تنبيهات المشتركين» ⇒ «منذ 4 ساعات»)
+  if (d.inMinutes < 60) return 'منذ ${arMinutes(d.inMinutes)}';
+  if (d.inHours < 24) return 'منذ ${arHours(d.inHours)}';
+  if (d.inDays < 30) return 'منذ ${arDays(d.inDays)}';
   final months = d.inDays ~/ 30;
-  if (months < 12) return 'منذ $months شهر';
-  return 'منذ ${d.inDays ~/ 365} سنة';
+  if (months < 12) return 'منذ ${arCount(months, one: 'شهر', two: 'شهرين', few: 'أشهر', many: 'شهراً')}';
+  return 'منذ ${arCount(d.inDays ~/ 365, one: 'سنة', two: 'سنتين', few: 'سنوات', many: 'سنة')}';
 }

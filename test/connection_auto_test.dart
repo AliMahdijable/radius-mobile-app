@@ -300,7 +300,7 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('علي حسن'), findsOneWidget);
       expect(find.textContaining('الإشارة: '), findsOneWidget);
-      expect(find.textContaining('تأكّدت منذ 2 ساعة'), findsOneWidget);
+      expect(find.textContaining('تأكّدت منذ ساعتين'), findsOneWidget);
       await t.tap(find.text('أرسل'));
       await t.pumpAndSettle();
       expect(server.bodies('POST', '/api/v2/connection-alerts/queue/action').last, {'action': 'approve', 'keys': ['i:101']});

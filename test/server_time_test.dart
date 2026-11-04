@@ -104,13 +104,13 @@ void main() {
 
     test('التدرّج', () {
       expect(timeAgoAr(now.subtract(const Duration(minutes: 5)), now: now),
-          equals('منذ 5 دقيقة'));
+          equals('منذ 5 دقائق'));
       expect(timeAgoAr(now.subtract(const Duration(hours: 3)), now: now),
-          equals('منذ 3 ساعة'));
+          equals('منذ 3 ساعات'));
       expect(timeAgoAr(now.subtract(const Duration(days: 2)), now: now),
-          equals('منذ 2 يوم'));
+          equals('منذ يومين'));
       expect(timeAgoAr(now.subtract(const Duration(days: 60)), now: now),
-          equals('منذ 2 شهر'));
+          equals('منذ شهرين'));
     });
 
     test('الفارغ لا يطبع شيئاً', () {
