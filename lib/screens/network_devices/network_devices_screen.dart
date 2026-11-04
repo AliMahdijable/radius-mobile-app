@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../../api/agent_alerts_api.dart';
 import '../../api/network_devices_api.dart';
 import '../../api/olt_profile.dart';
 import '../../models/device_region.dart';
@@ -19,6 +20,7 @@ import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../widgets/skeleton.dart';
+import 'agent_alerts_screen.dart';
 import 'bulk_scan_screen.dart';
 import 'device_alerts_screen.dart';
 import 'device_sort.dart';
@@ -109,6 +111,9 @@ class NetworkDevicesScreen extends StatefulWidget {
 class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     with WidgetsBindingObserver {
   List<NetworkDevice> _all = [];
+
+  /// «تنبيهات أجهزتي» من الخادم لهذه الشركة ([_loadAgentAlerts]) — null قبل أوّل قراءة
+  AgentAlertsStatus? _agentAlerts;
   bool _loading = true;
   bool _probing = false;
   String? _error;
@@ -292,6 +297,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       // هنا، فيكون فتحُ أيّ جهازٍ فوريّاً. راجع [DeviceWarmup].
       if (_viewChoice != DevicesView.big) DeviceWarmup.instance.start(_all);
       _probeAll(force: true);
+      _loadAgentAlerts();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -349,6 +355,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   Future<void> _refresh() async {
     if (_refreshing) return; // تكرار الإشارة + الرجوع من التفاصيل لا يُضاعف العمل.
     _refreshing = true;
+    _loadAgentAlerts();
     try {
       // devices + regions معاً — يضمن ظهور مناطق مُنشأة من شاشة أخرى.
       final results = await Future.wait([
@@ -576,6 +583,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
         return;
       }
 
+      // «تنبيهات أجهزتي» من الخادم مفعّلة لهذه الشركة ⇒ هو يقول الانطفاء (مؤكَّداً ومجمَّعاً، ولكلّ هواتف الحساب) — لا تنبيهٌ ثانٍ من هنا
+      if (!AgentAlertsApi.shouldFireLocalAlerts()) return;
       // أطلق alerts للـtransitions المتبقّية
       for (final t in pendingTransitions) {
         await DeviceAlertsService.instance.checkTransition(
@@ -643,8 +652,21 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     }
   }
 
-  void _openAlerts() {
-    Navigator.of(context).push(
+  /// «تنبيهات أجهزتي» من الخادم (server/agentAlerts.js — ٤ نوفمبر): مفتوحةٌ لهذه الشركة ⇒ زرّ التنبيهات يفتحها وعدّاده الطافية الآن،
+  /// وتنبيه الموبايل المحلّيّ يسكت ([AgentAlertsApi.shouldFireLocalAlerts]) — الخادم يقول الانطفاء نفسه مؤكَّداً ومجمَّعاً.
+  Future<void> _loadAgentAlerts() async {
+    final st = await AgentAlertsApi.status();
+    if (!mounted || st == null) return;
+    setState(() => _agentAlerts = st);
+  }
+
+  Future<void> _openAlerts() async {
+    if (_agentAlerts?.available == true) {
+      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AgentAlertsScreen()));
+      if (mounted) _loadAgentAlerts();
+      return;
+    }
+    await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const DeviceAlertsScreen()),
     );
   }
@@ -1218,19 +1240,24 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
             // تنبيهات الأجهزة (فصلٌ/عودة) بعددها — والضغط المطوّل إشعارٌ
             // تجريبيّ. صفّارةٌ لا جرس: جرس الإشعارات في أزرار الأعلى فوقها
             // مباشرةً، وجرسان في شاشةٍ واحدة لا يُعرف أيّهما لأيّ شيء.
+            // «تنبيهات أجهزتي» من الخادم مفتوحةٌ لهذه الشركة ⇒ العدّاد = الطافية الآن (لا تنبيهات الموبايل).
             ValueListenableBuilder<int>(
               valueListenable: DeviceAlertsService.instance.unreadCount,
-              builder: (context, count, _) => _ToolButton(
-                tooltip: 'تنبيهات الأجهزة (اضغط مطوّلاً للاختبار)',
-                onTap: _openAlerts,
-                onLongPress: _testAlert,
-                badge: count,
-                child: Icon(
-                  LucideIcons.siren,
-                  size: 20,
-                  color: count > 0 ? AppColors.error : AppColors.textBody,
-                ),
-              ),
+              builder: (context, local, _) {
+                final server = _agentAlerts;
+                final count = server != null && server.available && server.canUse ? server.down.length : local;
+                return _ToolButton(
+                  tooltip: 'تنبيهات الأجهزة (اضغط مطوّلاً للاختبار)',
+                  onTap: _openAlerts,
+                  onLongPress: _testAlert,
+                  badge: count,
+                  child: Icon(
+                    LucideIcons.siren,
+                    size: 20,
+                    color: count > 0 ? AppColors.error : AppColors.textBody,
+                  ),
+                );
+              },
             ),
             // نوع العرض — قائمة · بطاقات كبيرة · (جدول على الحاسبة). كان على الحاسبة زرّ جدول ⇄ بطاقات وحده.
             SizedBox(width: gap),

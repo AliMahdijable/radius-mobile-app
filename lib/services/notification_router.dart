@@ -6,6 +6,7 @@ import '../models/app_notification.dart';
 import '../models/subscriber.dart';
 import '../screens/national/national_ticket_push.dart';
 import '../screens/whatsapp/connection_auto_widgets.dart';
+import '../screens/network_devices/agent_alerts_screen.dart';
 import '../screens/network_devices/fiber/fiber_push.dart';
 import '../screens/notifications/inbox_screen.dart';
 import '../screens/subscribers/subscriber_detail_screen.dart';
@@ -82,6 +83,9 @@ class NotificationRouter {
 
     // (٠ب) تذكرةٌ من المشروع الوطني ⇒ «التذاكر» وفوقها ورقتها (قد تكون للزون لا لمشترك — لا كرت).
     if (await openNationalTicketPush(nav, n.data)) return;
+
+    // (٠ب٢) «تنبيهات الوكيل»: جهازٌ/برجٌ/الشبكة طفى أو رجع ⇒ «تنبيهات أجهزتي».
+    if (await openAgentAlertPush(nav, n.data)) return;
 
     // (٠ج) «تنبيه المشترك» بموافقتي: مشتركون بانتظار موافقتك ⇒ «تنبيهات المشتركين».
     if (await openConnAlertPush(nav, n.data)) return;
