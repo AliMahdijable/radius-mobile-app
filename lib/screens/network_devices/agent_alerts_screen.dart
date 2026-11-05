@@ -37,7 +37,11 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
   bool _failed = false;
   bool _more = false;
   bool _noOlder = false;
-  String? _busy; // enabled | notify_up
+  String? _busy; // enabled | notify_up | v_enabled | v_volt
+
+  /// الكهرباء و«كيف تُراقَب» تنطويان (٦ نوفمبر — المالك: «قسم الكهرباء شوفه هذا يكون توكل»؛ ولا كرت يكبر بلا داعٍ).
+  bool _powerOpen = false;
+  bool _howOpen = false;
 
   @override
   void initState() {
@@ -78,6 +82,16 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
         _noOlder = more.length < 50;
       }
     });
+  }
+
+  /// مفتاحا «القراءات الحسّاسة» والكهرباء على الشاشة نفسها (كانا داخل «الحدود» وحدها).
+  Future<void> _setVitals(AgentVitalSettings next, String key) async {
+    setState(() => _busy = key);
+    final r = await AgentAlertsApi.saveVitals(next);
+    if (!mounted) return;
+    if (!r.ok) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r.message ?? 'تعذّر الحفظ')));
+    await _load();
+    if (mounted) setState(() => _busy = null);
   }
 
   Future<void> _set({bool? enabled, bool? notifyUp}) async {
@@ -274,7 +288,9 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
   }
 
   Widget _settings(AgentAlertsStatus st) {
-    Widget row({required String title, required String sub, required bool value, required String key, required ValueChanged<bool> onChanged}) {
+    final vit = _vit != null && _vit!.available ? _vit! : null;
+    Widget row({required String title, required String sub, required bool value, required String key, required ValueChanged<bool> onChanged,
+        bool? canEdit}) {
       final busy = _busy == key;
       return Row(children: [
         Expanded(
@@ -287,7 +303,8 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
         const SizedBox(width: Sp.sm),
         busy
             ? const SizedBox(width: 40, height: 24, child: Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))))
-            : Switch(value: value, onChanged: st.canEdit && _busy == null ? onChanged : null),
+            : Switch(
+                key: ValueKey('aa-switch-$key'), value: value, onChanged: (canEdit ?? st.canEdit) && _busy == null ? onChanged : null),
       ]);
     }
 
@@ -310,6 +327,29 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
             onChanged: (v) => _set(notifyUp: v),
           ),
         ],
+        // ٦ نوفمبر (المالك: «والداخلي الفحص وقسم الكهرباء… يكون توكل»): مفتاحان ظاهران لا داخل «الحدود» وحدها
+        if (vit != null) ...[
+          Divider(height: Sp.xl, color: AppColors.divider),
+          row(
+            title: 'نبّهني بالقراءات الحسّاسة',
+            sub: 'المعالج والحرارة والإشارة وجودة الوصلة — حين تتجاوز حدودك',
+            value: vit.settings.enabled,
+            key: 'v_enabled',
+            canEdit: vit.canEdit,
+            onChanged: (v) => _setVitals(vit.settings.copyWith(enabled: v), 'v_enabled'),
+          ),
+          if (vit.settings.enabled) ...[
+            Divider(height: Sp.xl, color: AppColors.divider),
+            row(
+              title: 'نبّهني حين تنزل الكهرباء',
+              sub: 'نزولها عن طبيعيّ الجهاز ورجوعها — يصلك حتى بساعات الهدوء',
+              value: vit.settings.voltOn,
+              key: 'v_volt',
+              canEdit: vit.canEdit,
+              onChanged: (v) => _setVitals(vit.settings.copyWith(voltOn: v), 'v_volt'),
+            ),
+          ],
+        ],
         if (!st.canEdit) ...[
           const SizedBox(height: Sp.sm),
           Text('التعديل للمدير أو لمن يملك «إدارة الأجهزة»', style: AppType.micro(color: AppColors.textMid)),
@@ -322,14 +362,23 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
     final r = st.remote;
     return _box(
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text('كيف تُراقَب أجهزتك', style: AppType.bodyStrong(color: AppColors.textHi)),
-        const SizedBox(height: Sp.xs),
-        _line(LucideIcons.smartphone, 'من موبايلك وأنت على شبكتك وقسم الأجهزة مفتوح (كلّ 20 ثانية)'),
-        _line(
-          r != null && r.on ? LucideIcons.shieldCheck : LucideIcons.cloudOff,
-          r?.text ?? 'الفحص عن بُعد غير مفتوح لحسابك بعد — تُراقَب من موبايلك وأنت على شبكتك',
-          color: r != null && r.on ? AppColors.success : null,
+        _foldHead(
+          key: 'aa-how-head',
+          icon: LucideIcons.info,
+          title: 'كيف تُراقَب أجهزتك',
+          sub: r != null && r.on ? 'من موبايلك على شبكتك، والخادم عبر VPN وأنت بعيد' : 'من موبايلك وأنت على شبكتك',
+          open: _howOpen,
+          onTap: () => setState(() => _howOpen = !_howOpen),
         ),
+        if (_howOpen) ...[
+          const SizedBox(height: Sp.xs),
+          _line(LucideIcons.smartphone, 'من موبايلك وأنت على شبكتك وقسم الأجهزة مفتوح (كلّ 20 ثانية)'),
+          _line(
+            r != null && r.on ? LucideIcons.shieldCheck : LucideIcons.cloudOff,
+            r?.text ?? 'الفحص عن بُعد غير مفتوح لحسابك بعد — تُراقَب من موبايلك وأنت على شبكتك',
+            color: r != null && r.on ? AppColors.success : null,
+          ),
+        ],
         if (r != null && r.fixableInVpn)
           Align(
             alignment: AlignmentDirectional.centerStart,
@@ -342,9 +391,33 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
               label: const Text('ربط VPN'),
             ),
           ),
-        const SizedBox(height: Sp.xs),
-        Text('«طفى» بعد دقيقتين من عدم الاستجابة، و«رجع» حين يستجيب مرّتين — والجهاز الذي لم يُرَ يعمل قطّ لا يُنبَّه عنه',
-            style: AppType.micro(color: AppColors.textMid)),
+        if (_howOpen) ...[
+          const SizedBox(height: Sp.xs),
+          Text('«طفى» بعد دقيقتين من عدم الاستجابة، و«رجع» حين يستجيب مرّتين — والجهاز الذي لم يُرَ يعمل قطّ لا يُنبَّه عنه',
+              style: AppType.micro(color: AppColors.textMid)),
+        ],
+      ]),
+    );
+  }
+
+  /// رأسٌ ينطوي: أيقونة + عنوان + سطرٌ مختصر + سهم.
+  Widget _foldHead({required String key, required IconData icon, required String title, required String sub, required bool open,
+      required VoidCallback onTap, Color? subColor}) {
+    return InkWell(
+      key: ValueKey(key),
+      borderRadius: BorderRadius.circular(R.sm),
+      onTap: onTap,
+      child: Row(children: [
+        Icon(icon, size: 16, color: AppColors.textMid),
+        const SizedBox(width: Sp.sm),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, style: AppType.bodyStrong(color: AppColors.textHi)),
+            const SizedBox(height: 2),
+            Text(sub, style: AppType.micro(color: subColor ?? AppColors.textMid)),
+          ]),
+        ),
+        Icon(open ? LucideIcons.chevronUp : LucideIcons.chevronDown, size: 18, color: AppColors.textMid),
       ]),
     );
   }
@@ -463,16 +536,24 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
 
   /// الكهرباء بالفولت (المالك ٤ نوفمبر: «مافهمت ليش مسوي نسبة… مفروض توضح كم يعني للنسبه»): لكلّ جهازٍ فولتيّته الطبيعيّة وحدّ تنبيهه.
   Widget _powerBox(AgentVitalsStatus v) {
+    final low = v.power.where((p) => p.alert).length;
+    final sub = !v.settings.voltOn
+        ? 'إشعارها مطفأ — القراءة مستمرّة'
+        : v.power.isEmpty
+            ? 'تتعلّم فولتيّة أجهزتك الطبيعيّة'
+            : '${v.power.length} جهاز · ${low > 0 ? '$low تحت حدّه' : 'كلّها طبيعيّة'} · التنبيه إذا نزلت ${v.settings.voltDropPct}٪';
     return _box(
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: [
-          Icon(LucideIcons.plugZap, size: 16, color: AppColors.textMid),
-          const SizedBox(width: Sp.sm),
-          Expanded(
-            child: Text('الكهرباء — يُنبَّه إذا نزلت ${v.settings.voltDropPct}٪ عن طبيعيّ الجهاز',
-                style: AppType.bodyStrong(color: AppColors.textHi)),
-          ),
-        ]),
+        _foldHead(
+          key: 'aa-power-head',
+          icon: LucideIcons.plugZap,
+          title: 'الكهرباء',
+          sub: sub,
+          subColor: low > 0 && v.settings.voltOn ? AppColors.error : null,
+          open: _powerOpen,
+          onTap: () => setState(() => _powerOpen = !_powerOpen),
+        ),
+        if (_powerOpen)
         for (final p in v.power)
           Padding(
             padding: const EdgeInsets.only(top: Sp.xs),
@@ -491,7 +572,7 @@ class _AgentAlertsScreenState extends State<AgentAlertsScreen> {
               ),
             ]),
           ),
-        if (v.powerLearning > 0)
+        if (_powerOpen && v.powerLearning > 0)
           Padding(
             padding: const EdgeInsets.only(top: Sp.xs),
             child: Text(

@@ -46,7 +46,12 @@ void main() {
     expect(st.alerts.single.metric, 'volt');
     expect(st.alerts.single.base, 24.0);
     final s2 = st.settings.copyWith(cpuMax: 95, enabled: false);
-    expect(s2.toJson(), {'enabled': false, 'cpu_max': 95, 'temp_max': 80, 'volt_drop_pct': 15, 'signal_drop_db': 8, 'signal_min': -80, 'ccq_min': 50});
+    expect(s2.toJson(),
+        {'enabled': false, 'volt_on': true, 'cpu_max': 95, 'temp_max': 80, 'volt_drop_pct': 15, 'signal_drop_db': 8, 'signal_min': -80, 'ccq_min': 50});
+    // مفتاح الكهرباء (٦ نوفمبر): الغائب مفعّل (خادمٌ أقدم)، والمطفأ يُقرأ ويُرسل
+    expect(AgentVitalSettings.fromJson(const {'enabled': true}).voltOn, isTrue);
+    expect(AgentVitalSettings.fromJson(const {'volt_on': false}).voltOn, isFalse);
+    expect(s2.copyWith(voltOn: false).toJson()['volt_on'], isFalse);
     expect(vitalValueText('volt', 19.94), '19.9V');
     expect(vitalValueText('signal', -70.4), '-70 dBm');
     final pw = AgentVitalsStatus.fromJson(Map<String, dynamic>.from(_vitals(power: [
@@ -172,13 +177,36 @@ void main() {
       await simDrain(t);
     });
 
+    testWidgets('٦ نوفمبر — «يكون توكل»: مفتاحا القراءات الحسّاسة والكهرباء ظاهران؛ إطفاء الكهرباء يرسل volt_on:false ويطوي التنبيه', (t) async {
+      server.reply('GET', '/api/v2/agent-alerts/vitals', 200, _vitals(power: [
+        {'id': 1, 'name': 'راوتر البرج', 'base': 24.0, 'alert_below': 20.4, 'value': 23.9, 'state': 'ok'},
+      ]));
+      server.reply('PUT', '/api/v2/agent-alerts/vitals/settings', 200, {'success': true, 'data': {}});
+      await pumpSim(t, _v, home: (_) => const AgentAlertsScreen());
+      await t.pumpAndSettle();
+      final vOn = find.byKey(const ValueKey('aa-switch-v_enabled'));
+      final volt = find.byKey(const ValueKey('aa-switch-v_volt'));
+      await t.scrollUntilVisible(volt, 300, scrollable: find.byType(Scrollable).first);
+      expect(t.widget<Switch>(vOn).value, isTrue);
+      expect(t.widget<Switch>(volt).value, isTrue);
+      await t.tap(volt);
+      await t.pumpAndSettle();
+      final body = server.bodies('PUT', '/api/v2/agent-alerts/vitals/settings').single;
+      expect(body['volt_on'], isFalse);
+      expect(body['enabled'], isTrue, reason: 'الباقي كما هو');
+    });
     testWidgets('الكهرباء بالفولت: لكلّ جهاز طبيعيّه وحدّ تنبيهه، ومن يتعلّم؛ والحدود تقولها فولتاً وتتغيّر مع ±', (t) async {
       server.reply('GET', '/api/v2/agent-alerts/vitals', 200, _vitals(power: [
         {'id': 1, 'name': 'راوتر البرج', 'base': 24.0, 'alert_below': 20.4, 'value': 23.9, 'state': 'ok'},
       ], learning: 3));
       await pumpSim(t, _v, home: (_) => const AgentAlertsScreen());
       await t.pumpAndSettle();
-      expect(find.textContaining('يُنبَّه إذا نزلت 15٪ عن طبيعيّ الجهاز'), findsOneWidget);
+      expect(find.textContaining('1 جهاز · كلّها طبيعيّة · التنبيه إذا نزلت 15٪'), findsOneWidget);
+      // الكهرباء تنطوي (٦ نوفمبر — «قسم الكهرباء… يكون توكل»): سطرٌ مختصر، والتفاصيل بالضغط
+      await t.scrollUntilVisible(find.byKey(const ValueKey('aa-power-head')), 300, scrollable: find.byType(Scrollable).first);
+      expect(find.text('20.4V'), findsNothing);
+      await t.tap(find.byKey(const ValueKey('aa-power-head')));
+      await t.pumpAndSettle();
       expect(find.text('راوتر البرج'), findsOneWidget);
       expect(find.text('24.0V'), findsOneWidget);
       expect(find.text('20.4V'), findsOneWidget);

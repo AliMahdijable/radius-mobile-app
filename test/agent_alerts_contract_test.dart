@@ -94,7 +94,10 @@ void main() {
         expect(find.text('الكهرباء · جهاز 1'), findsOneWidget);
         expect(find.text('19.8V'), findsOneWidget);
         expect(find.text('طبيعيّه \u206624.0V\u2069'), findsOneWidget);
-        expect(find.textContaining('يُنبَّه إذا نزلت 15٪ عن طبيعيّ الجهاز'), findsOneWidget);
+        expect(find.textContaining('التنبيه إذا نزلت 15٪'), findsOneWidget);
+        await t.scrollUntilVisible(find.byKey(const ValueKey('aa-power-head')), 300, scrollable: find.byType(Scrollable).first);
+        await t.tap(find.byKey(const ValueKey('aa-power-head')));
+        await t.pumpAndSettle();
         expect(find.text('20.4V'), findsOneWidget);
         expect(find.textContaining('←'), findsNothing);
         await t.scrollUntilVisible(find.textContaining('يطفي ويشتغل'), 300, scrollable: find.byType(Scrollable).first);

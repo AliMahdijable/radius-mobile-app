@@ -48,6 +48,7 @@ import '../../core/platform/desktop_layout.dart';
 import '../desktop/desk_table_scroll.dart';
 import 'widgets/device_ip_link.dart';
 import '../../services/vpn_now.dart';
+import 'check/devices_check_screen.dart';
 import '../../widgets/vpn_now_bar.dart';
 import '../whatsapp/conn_vpn_screen.dart';
 import '../../services/agent_net_presence.dart';
@@ -1350,6 +1351,20 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// و«+» (١ نوفمبر) قائمة الإضافات كلّها: جهازٌ يدويّاً، واكتشاف أجهزة الشبكة بمسح نطاق، والمناطق — كانت الأخيرتان في
   /// «المزيد». والمرشّحات تحت السطر في شريطٍ واحد ([_filterStrip]) لا في أزراره.
   /// زرّ «وضع VPN»: مطفأ ⇒ درعٌ بإطار؛ شغّال ⇒ ممتلئ بلون العلامة. الضغط يشغّله (ويفحص أجهزتك فوراً) أو يطفئه.
+  /// «الفحص الشامل»: عبر الـVPN بوضعه أو وأنت خارج شبكتك ولك طريق؛ وخارجها بلا طريق لا فحص (المحلّيّ سيقول «طافي» كذباً).
+  void _openDeepCheck() {
+    final viaVpn = VpnNow.mode.value || (_vpnLinked && !AgentNetPresence.isOn);
+    if (!viaVpn && AgentNetPresence.isOff) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('خارج شبكتك — اربط VPN حتى تُفحص أجهزتك عن بُعد')));
+      return;
+    }
+    if (_all.isEmpty) return;
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => DevicesCheckScreen(devices: List<NetworkDevice>.of(_all), viaVpn: viaVpn),
+    ));
+  }
+
   Widget _vpnButton() {
     final on = VpnNow.mode.value;
     return _ToolButton(
@@ -1410,18 +1425,24 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
             SizedBox(width: gap),
             _viewButton(),
             SizedBox(width: gap),
-            // تحديث فوري — دوّارةٌ مكانه أثناء الفحص.
+            // «فحص شامل» (٦ نوفمبر — المالك: «فحص عام… ويخضع لل vpn» · «يفحص الجهاز نفسه ويفحص المشتركين الي بداخلة ويعطي تقرير
+            // منفصل لكل جهاز»): مكان «تحديث فوري» — الفحص الشامل يحدّث الحال أيضاً، والتحديث انتقل إلى «المزيد» (والسحب باقٍ).
+            // بلا أجهزة (أو فشل التحميل) يبقى «تحديث» ظاهراً — طريق إعادة المحاولة.
             if (!narrow) ...[
-              // «وضع VPN»: التحديث فحصٌ عبر الـVPN الآن، ودوّارته دوّارة ذلك الفحص
-              ListenableBuilder(
-                listenable: VpnNow.devices,
-                builder: (_, __) => _ToolButton(
-                  tooltip: VpnNow.mode.value ? 'تحديث عبر VPN' : 'تحديث فوري',
-                  busy: _probing || (VpnNow.mode.value && VpnNow.devices.busy),
+              if (_all.isNotEmpty)
+                _ToolButton(
+                  key: const ValueKey('devices-deep-check'),
+                  tooltip: 'فحص شامل',
+                  onTap: _openDeepCheck,
+                  child: Icon(LucideIcons.radar, size: 20, color: AppColors.textBody),
+                )
+              else
+                _ToolButton(
+                  tooltip: 'تحديث فوري',
+                  busy: _probing,
                   onTap: _refresh,
                   child: Icon(LucideIcons.refreshCw, size: 20, color: AppColors.textBody),
                 ),
-              ),
               SizedBox(width: gap),
             ],
             // ── ما تبقّى في قائمةٍ منسدلة — ودوّارة الكشف مكانها وهو يعمل ──
@@ -1434,6 +1455,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                   switch (v) {
                     case 'refresh':
                       _refresh();
+                    case 'deep':
+                      _openDeepCheck();
                     case 'tower':
                       _openTower();
                     case 'fiber':
@@ -1445,7 +1468,10 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                   }
                 },
                 itemBuilder: (_) => [
-                  if (narrow) _menuItem('refresh', LucideIcons.refreshCw, _probing ? 'يُحدّث الآن…' : 'تحديث فوري'),
+                  if (narrow && _all.isNotEmpty) _menuItem('deep', LucideIcons.radar, 'فحص شامل'),
+                  if (narrow || _all.isNotEmpty)
+                    _menuItem('refresh', LucideIcons.refreshCw,
+                      _probing || (VpnNow.mode.value && VpnNow.devices.busy) ? 'يُحدّث الآن…' : (VpnNow.mode.value ? 'تحديث عبر VPN' : 'تحديث فوري')),
                   if (_all.isNotEmpty) _menuItem('tower', LucideIcons.radioTower, 'عرض البرج'),
                   _menuItem('fiber', Perms.has('devices.monitor') ? LucideIcons.cable : LucideIcons.lock, 'شبكة الألياف'),
                   // الترتيب الحاليّ في التسمية — القائمة المطويّة تُخفي

@@ -131,7 +131,11 @@ void main() {
       expect(find.text('طفى برج «النصر»'), findsOneWidget, reason: 'العنوان بلا رمزه الملوّن');
       expect(find.text('تجربة'), findsOneWidget);
       expect(find.text('بلا إشعار'), findsOneWidget);
-      expect(find.text('ربط VPN'), findsOneWidget);
+      expect(find.text('ربط VPN'), findsOneWidget, reason: 'الإجراء ظاهرٌ والقسم مطويّ');
+      // «كيف تُراقَب» تنطوي (٦ نوفمبر) — تُفتح أوّلاً
+      await t.scrollUntilVisible(find.byKey(const ValueKey('aa-how-head')), 300, scrollable: find.byType(Scrollable).first);
+      await t.tap(find.byKey(const ValueKey('aa-how-head')));
+      await t.pumpAndSettle();
       expect(find.textContaining('«الاتصال العكسي»'), findsWidgets);
       server.reply('GET', '/api/v2/agent-alerts/status', 200, _status(enabled: false, remote: {'on': false, 'why': 'reverse_off'}));
       await t.scrollUntilVisible(find.text('نبّهني حين يطفى جهاز'), -300, scrollable: find.byType(Scrollable).first);
@@ -151,6 +155,10 @@ void main() {
       final sw = t.widget<Switch>(find.byType(Switch).first);
       expect(sw.onChanged, isNull);
       expect(find.textContaining('التعديل للمدير'), findsOneWidget);
+      // «كيف تُراقَب» تنطوي (٦ نوفمبر) — تُفتح أوّلاً
+      await t.scrollUntilVisible(find.byKey(const ValueKey('aa-how-head')), 300, scrollable: find.byType(Scrollable).first);
+      await t.tap(find.byKey(const ValueKey('aa-how-head')));
+      await t.pumpAndSettle();
       expect(find.textContaining('والخادم يفحصها عبر الـVPN كلّ دقيقة'), findsOneWidget);
       expect(find.text('ربط VPN'), findsNothing);
       expect(find.textContaining('لا شيء بعد'), findsOneWidget);

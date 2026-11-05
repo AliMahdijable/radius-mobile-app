@@ -174,6 +174,7 @@ class AgentAlertEvent {
 class AgentVitalSettings {
   const AgentVitalSettings({
     this.enabled = true,
+    this.voltOn = true,
     this.cpuMax = 90,
     this.tempMax = 80,
     this.voltDropPct = 15,
@@ -182,6 +183,9 @@ class AgentVitalSettings {
     this.ccqMin = 50,
   });
   final bool enabled;
+
+  /// مفتاح الكهرباء وحدها (٦ نوفمبر — المالك: «قسم الكهرباء… يكون توكل»): مطفأ ⇒ لا إشعار نزولٍ ولا «رجعت»؛ القراءة تستمرّ.
+  final bool voltOn;
   final int cpuMax, tempMax, voltDropPct, signalDropDb, signalMin, ccqMin;
 
   static AgentVitalSettings fromJson(Object? j) {
@@ -189,6 +193,7 @@ class AgentVitalSettings {
     int n(String k, int d) => (j[k] as num?)?.toInt() ?? d;
     return AgentVitalSettings(
       enabled: j['enabled'] != false,
+      voltOn: j['volt_on'] != false,
       cpuMax: n('cpu_max', 90),
       tempMax: n('temp_max', 80),
       voltDropPct: n('volt_drop_pct', 15),
@@ -200,6 +205,7 @@ class AgentVitalSettings {
 
   Map<String, dynamic> toJson() => {
         'enabled': enabled,
+        'volt_on': voltOn,
         'cpu_max': cpuMax,
         'temp_max': tempMax,
         'volt_drop_pct': voltDropPct,
@@ -208,9 +214,10 @@ class AgentVitalSettings {
         'ccq_min': ccqMin,
       };
 
-  AgentVitalSettings copyWith({bool? enabled, int? cpuMax, int? tempMax, int? voltDropPct, int? signalDropDb, int? signalMin, int? ccqMin}) =>
+  AgentVitalSettings copyWith({bool? enabled, bool? voltOn, int? cpuMax, int? tempMax, int? voltDropPct, int? signalDropDb, int? signalMin, int? ccqMin}) =>
       AgentVitalSettings(
         enabled: enabled ?? this.enabled,
+        voltOn: voltOn ?? this.voltOn,
         cpuMax: cpuMax ?? this.cpuMax,
         tempMax: tempMax ?? this.tempMax,
         voltDropPct: voltDropPct ?? this.voltDropPct,

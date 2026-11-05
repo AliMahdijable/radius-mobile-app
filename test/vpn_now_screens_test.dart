@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/agent_alerts_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/subscribers_api.dart';
+import 'package:rad_mysvcs/screens/network_devices/check/devices_check_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/network_devices_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/widgets/device_big_card.dart';
 import 'package:rad_mysvcs/screens/subscribers/subscribers_screen.dart';
@@ -16,6 +17,8 @@ import 'package:rad_mysvcs/screens/subscribers/widgets/filter_chips_bar.dart';
 import 'package:rad_mysvcs/services/agent_net_presence.dart';
 import 'package:rad_mysvcs/services/ai_assistant_state.dart';
 import 'package:rad_mysvcs/services/device_alerts_service.dart';
+import 'package:rad_mysvcs/services/devices_check.dart';
+import 'package:rad_mysvcs/services/devices_check_runner.dart';
 import 'package:rad_mysvcs/services/vpn_now.dart';
 
 import 'sim_el/sim_harness.dart';
@@ -180,6 +183,28 @@ void main() {
       expect(c.state.vitals?.map((v) => v.value), contains('737'), reason: 'المعالج من الخادم عبر الـVPN');
       expect(c.device.lastStatus, 'online');
     }
+    await close(t);
+  });
+
+  testWidgets('«فحص شامل» (٦ نوفمبر): الرادار مكان «تحديث» بوجود أجهزة — على شبكتك يفحص منها، وبوضع VPN عبر الـVPN', (t) async {
+    DevicesCheckRunner.debugLimits = () async => const CheckLimits();
+    DevicesCheckRunner.debugProbe = (d) async => (status: 'offline', responseMs: null, packetLoss: null, serviceOk: null);
+    addTearDown(() {
+      DevicesCheckRunner.debugLimits = null;
+      DevicesCheckRunner.debugProbe = null;
+    });
+    VpnNow.routeSource = () async => (linked: true, via: 'company');
+    AgentNetPresence.debugSet(NetPresence.on);
+    await openDevices(t);
+    final deep = find.byKey(const ValueKey('devices-deep-check'));
+    expect(deep, findsOneWidget);
+    expect(find.byTooltip('تحديث فوري'), findsNothing, reason: 'التحديث انتقل إلى «المزيد»');
+    await t.tap(deep);
+    await settleFor(t, seconds: 2);
+    final screen = t.widget<DevicesCheckScreen>(find.byType(DevicesCheckScreen));
+    expect(screen.viaVpn, isFalse);
+    expect(screen.devices.length, 14);
+    expect(find.text('فُحصت 14 أجهزة'), findsOneWidget);
     await close(t);
   });
 

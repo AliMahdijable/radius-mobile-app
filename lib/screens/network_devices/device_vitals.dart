@@ -89,10 +89,23 @@ class PortTraffic {
     this.txBps,
     this.linkSpeed,
     this.physical = true,
+    this.halfDuplex = false,
+    this.linkDowns,
+    this.errors,
+    this.sfpRx,
+    this.poeStatus,
   });
 
   final String name;
   final bool up;
+
+  /// «الفحص الشامل» للسويجات (٦ نوفمبر): half-duplex صريح، انقطاعات الربط والأخطاء منذ الإقلاع، ضوء الـSFP (dBm)، وحال الـPoE —
+  /// ما يقرؤه الطراز وحده (مايكروتك محلّيّاً، وعبر الـVPN من `pl`)؛ الغائب null.
+  final bool halfDuplex;
+  final int? linkDowns;
+  final int? errors;
+  final double? sfpRx;
+  final String? poeStatus;
 
   /// منفذ إيثرنت فعليّ (ether/sfp/combo…) لا واجهةٌ منطقيّة (جلسة PPP، نفق، جسر، VLAN، لاسلكيّ). المالك ٣١ أكتوبر: «سيرفر
   /// التوزيع شو عارض ١٤٨؟ ذوله ppp مالنا علاقة بيهن — السويجات والسيرفرات كلنا بس الإيثرات ومعدّلات السحب».
@@ -439,7 +452,22 @@ class DeviceVitals {
     );
     final ports = <PortTraffic>[];
     final pt = v['ports'];
-    if (pt is Map) {
+    final pl = list(v['pl']);
+    if (pl.isNotEmpty) {
+      // «الفحص الشامل» (٦ نوفمبر): لكلّ منفذٍ فعليّ اسمه وحاله وسرعته والدوبلكس والانقطاعات والأخطاء وضوء الـSFP والـPoE
+      for (final p in pl.take(64)) {
+        ports.add(PortTraffic(
+          name: s(p['n']) ?? '—',
+          up: p['r'] == true,
+          linkSpeed: s(p['sp']),
+          halfDuplex: p['fd'] == false,
+          linkDowns: n(p['ld']),
+          errors: n(p['er']),
+          sfpRx: d(p['sfp']),
+          poeStatus: s(p['poe']),
+        ));
+      }
+    } else if (pt is Map) {
       final upN = n(pt['up']) ?? 0;
       final total = n(pt['total']) ?? 0;
       for (var k = 0; k < total && k < 64; k++) {
@@ -603,6 +631,11 @@ class DeviceVitals {
         linkSpeed: i.linkSpeed,
         // RouterOS يسمّي كلّ منفذٍ فعليّ (إيثر، SFP، كومبو) بالنوع ether؛ وغيره منطقيّ (pppoe-in، أنفاق، جسر، vlan، wlan).
         physical: i.type == 'ether',
+        halfDuplex: i.halfDuplex,
+        linkDowns: i.linkDowns,
+        errors: i.errors,
+        sfpRx: i.sfpRxPower,
+        poeStatus: i.poeStatus,
       ));
     }
 

@@ -1492,6 +1492,18 @@ class MikrotikInterface {
   /// full-duplex من ethernet/monitor
   final bool fullDuplex;
 
+  /// «الفحص الشامل» (٦ نوفمبر — المالك: «السوجات من حيث المتغيرات الحيوية فكر بيها بدقة»): من الصفوف نفسها، بلا طلبٍ زائد.
+  /// half-duplex صريحٌ من الـmonitor (غيابه ليس half — منفذ SFP أو بلا ربط لا يكتبه).
+  final bool halfDuplex;
+
+  /// انقطاعات الربط منذ الإقلاع (`link-downs`)، وأخطاء الاستقبال والإرسال (`rx-error` + `tx-error`).
+  final int? linkDowns;
+  final int? errors;
+
+  /// قدرة ضوء الـSFP المستقبَلة (dBm) وحال الـPoE (`powered-on` · `short-circuit` · `overload` · `voltage-too-low` …) من الـmonitor.
+  final double? sfpRxPower;
+  final String? poeStatus;
+
   const MikrotikInterface({
     required this.name,
     required this.type,
@@ -1502,6 +1514,11 @@ class MikrotikInterface {
     this.txBytes,
     this.linkSpeed,
     this.fullDuplex = true,
+    this.halfDuplex = false,
+    this.linkDowns,
+    this.errors,
+    this.sfpRxPower,
+    this.poeStatus,
   });
 
   /// Binary API يرجع كل القيم كـString — نحوّل نحن.
@@ -1526,6 +1543,11 @@ class MikrotikInterface {
       txBytes: asInt(j['tx-byte']),
       linkSpeed: monitor?['rate'],
       fullDuplex: monitor == null ? true : asBool(monitor['full-duplex']),
+      halfDuplex: monitor?['full-duplex']?.toLowerCase() == 'false',
+      linkDowns: asInt(j['link-downs']),
+      errors: (j['rx-error'] == null && j['tx-error'] == null) ? null : (asInt(j['rx-error']) ?? 0) + (asInt(j['tx-error']) ?? 0),
+      sfpRxPower: double.tryParse(monitor?['sfp-rx-power'] ?? ''),
+      poeStatus: (monitor?['poe-out-status'] ?? '').trim().isEmpty ? null : monitor!['poe-out-status']!.trim(),
     );
   }
 }
