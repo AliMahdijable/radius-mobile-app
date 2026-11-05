@@ -65,6 +65,7 @@ import '../desktop/desk_table_scroll.dart';
 import '../../services/device_warm_service.dart';
 import '../../services/vpn_now.dart';
 import '../../widgets/vpn_now_bar.dart';
+import '../../widgets/vpn_problems_sheet.dart';
 import '../whatsapp/conn_vpn_screen.dart';
 import '../whatsapp/connection_alerts_screen.dart';
 import '../../services/agent_net_presence.dart';
@@ -505,6 +506,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   void _openConnAlerts() {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ConnectionAlertsScreen()));
   }
+
+  /// «المشاكل» من شريط الـVPN: المشتركون بمشاكلهم (لا القسم) — والقسم تحتها.
+  void _showVpnProblems() => showVpnProblemsSheet(context, subscribers: _all, onOpen: _openDetail, onSection: _openConnAlerts);
 
   void _onActiveChanged() {
     _syncVpnAttach();
@@ -2352,7 +2356,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                 kind: VpnNowKind.subscribers,
                 offNetwork: _offNet,
                 onOpenVpn: _openVpnPage,
-                onShowProblems: _openConnAlerts,
+                onShowProblems: _showVpnProblems,
               ),
             ),
         ]),

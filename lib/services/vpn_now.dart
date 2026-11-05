@@ -355,6 +355,12 @@ class VpnNow {
 
   static VpnDeviceResult? deviceFor(int id) => _fresh(_devAt) ? _devices[id] : null;
 
+  /// قراءات المشتركين من آخر فحصٍ عبر الـVPN (باليوزر صغيراً) — فارغة إن قدمت (٣٠ د).
+  static Map<String, VpnSubReading> get readings => _fresh(_readAt) ? Map.unmodifiable(_readings) : const {};
+
+  /// متى آخر فحصٍ للمشتركين عبر الـVPN.
+  static DateTime? get readingsAt => _fresh(_readAt) ? _readAt : null;
+
   static void _apply(VpnNowKind k, VpnNowResult r) {
     if (k == VpnNowKind.devices) {
       _devices

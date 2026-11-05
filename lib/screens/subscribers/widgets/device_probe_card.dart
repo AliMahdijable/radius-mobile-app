@@ -9,7 +9,11 @@ import '../../../api/device_probe_api.dart';
 import '../../../api/ubnt_api.dart';
 import '../../../core/net/huawei_ont_service.dart';
 import '../../../core/net/ont_traffic.dart';
+import '../../../services/agent_net_presence.dart';
 import '../../../services/subscriber_refresh_signal.dart';
+import '../../../services/vpn_now.dart';
+import '../../../widgets/vpn_now_bar.dart' show VpnTag;
+import '../../../core/widgets/metric_tile.dart';
 import '../../../core/util/clipboard_helper.dart';
 import '../../../core/widgets/copyable.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
@@ -211,6 +215,9 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     SubscriberRefreshSignal.tick.addListener(_onPullRefresh);
+    // ٦ نوفمبر: «وضع VPN» ونتائج فحصه ⇒ الكرت يعرض قراءة الـVPN بدل «غير واصل»
+    VpnNow.version.addListener(_onVpn);
+    VpnNow.mode.addListener(_onVpn);
     // ⚠️ اقرأ ما فحصته موجة القائمة قبل أن تفحص.
     //
     // كان الكارت يُطلق فحصاً كاملاً عند كل فتح بلا سؤال الكاش، بينما
@@ -282,6 +289,8 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
 
   @override
   void dispose() {
+    VpnNow.version.removeListener(_onVpn);
+    VpnNow.mode.removeListener(_onVpn);
     SubscriberRefreshSignal.tick.removeListener(_onPullRefresh);
     WidgetsBinding.instance.removeObserver(this);
     _stopTraffic();
@@ -866,9 +875,24 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     );
   }
 
+  void _onVpn() {
+    if (mounted) setState(() {});
+  }
+
+  /// خارج شبكتك / «وضع VPN»: آخر قراءةٍ لهذا المشترك عبر الـVPN (٣٠ د) — null إن لم تُقرأ أو كنت على شبكتك.
+  VpnSubReading? _vpnReading() {
+    if (!(VpnNow.mode.value || AgentNetPresence.isOff)) return null;
+    return VpnNow.readingFor(widget.username);
+  }
+
   Widget _body() {
-    if (_loading && _snap == null) return _scanning();
     final snap = _snap;
+    // ٦ نوفمبر (المالك: «من افعل وضع vpn للمشتركين مفروض هنا هم يعرض القراءات»): لا قراءة من موبايلك ⇒ قراءة الـVPN
+    if (snap == null) {
+      final vr = _vpnReading();
+      if (vr != null) return _vpnBody(vr);
+    }
+    if (_loading && _snap == null) return _scanning();
     if (snap == null) return _unreachable();
     if (snap.kind == DeviceKind.ont) return _ontBody(snap.ont!);
     if (snap.kind == DeviceKind.ubiquiti) return _ubntBody(snap.ubnt!);
@@ -976,6 +1000,75 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
                   hint: 'اضبط الـIP وبيانات الدخول من زرّ الإعدادات',
                 ),
     };
+  }
+
+  /// قراءة المشترك من آخر فحصٍ عبر الـVPN: جهازه (الإشارة، CCQ، الكيبل) أو سكتره، أو الأولت (الضوء والحرارة)، أو البنگ وحده.
+  Widget _vpnBody(VpnSubReading r) {
+    final at = VpnNow.readingsAt;
+    final mins = at == null ? null : DateTime.now().difference(at).inMinutes;
+    final when = mins == null ? '' : (mins < 1 ? 'الآن' : 'قبل $mins د');
+    final from = switch (r.src) {
+      'cpe' => 'من جهازه',
+      'sector' => 'من السكتر',
+      'olt' => 'من الأولت',
+      'ping' => 'بنگ وحده',
+      _ => '',
+    };
+    AppTone toneSig(int v) => v >= -65 ? AppTone.success : (v >= -75 ? AppTone.warning : AppTone.danger);
+    AppTone toneCcq(int v) => v >= 75 ? AppTone.success : (v >= 50 ? AppTone.warning : AppTone.danger);
+    final tiles = <Widget>[
+      if (r.sig != null) MetricTile(label: 'الإشارة', value: '${r.sig} dBm', tone: toneSig(r.sig!), icon: LucideIcons.signal),
+      if (r.ccq != null) MetricTile(label: 'CCQ', value: '${r.ccq}%', tone: toneCcq(r.ccq!), icon: LucideIcons.activity),
+      if (r.lan != null)
+        MetricTile(
+          label: 'الكيبل',
+          value: r.lan == 'unplugged' ? 'غير مربوط' : (r.lan == '10' ? '10M' : (r.lan == 'ok' ? 'سليم' : '${r.lan}M')),
+          tone: r.lan == 'unplugged' ? AppTone.danger : (r.lan == '10' ? AppTone.warning : AppTone.success),
+          icon: LucideIcons.cable,
+          valueLtr: r.lan != 'unplugged' && r.lan != 'ok',
+        ),
+      if (r.rx != null)
+        MetricTile(
+          label: 'الضوء',
+          value: '${r.rx!.toStringAsFixed(1)} dBm',
+          tone: r.rx! >= -25 ? AppTone.success : (r.rx! >= -27 ? AppTone.warning : AppTone.danger),
+          icon: LucideIcons.zap,
+        ),
+      if (r.temp != null)
+        MetricTile(
+          label: 'الحرارة',
+          value: '${r.temp!.round()}°C',
+          tone: r.temp! < 60 ? AppTone.success : (r.temp! < 70 ? AppTone.warning : AppTone.danger),
+          icon: LucideIcons.thermometer,
+        ),
+      if (r.src == 'ping') MetricTile(label: 'البنگ', value: r.ms != null ? '${r.ms} ms' : 'واصل', tone: AppTone.success, icon: LucideIcons.radar),
+    ];
+    return Column(
+      key: const ValueKey('device-card-vpn'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(children: [
+          Expanded(
+            child: Text(
+              ['قراءة عبر الـVPN', if (from.isNotEmpty) from, if (when.isNotEmpty) when].join(' · '),
+              style: AppType.muted(color: AppColors.textMid),
+            ),
+          ),
+          const VpnTag(),
+        ]),
+        const SizedBox(height: Sp.sm),
+        if (r.dead)
+          Text('لا يستجيب عبر الـVPN', style: AppType.rowValue(color: AppColors.dangerOnSoft))
+        else if (tiles.isEmpty)
+          Text('يردّ عبر الـVPN بلا قراءة', style: AppType.muted())
+        else
+          Wrap(spacing: Sp.sm, runSpacing: Sp.sm, children: [
+            for (final w in tiles) SizedBox(width: 132, child: w),
+          ]),
+        const SizedBox(height: Sp.xs),
+        Text('القراءة الكاملة والترافك من موبايلك لمّا ترجع لشبكتك', style: AppType.micro(color: AppColors.textLow)),
+      ],
+    );
   }
 
   Widget _unreachable() {
