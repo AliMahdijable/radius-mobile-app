@@ -6,13 +6,14 @@ import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 
-/// شريط «أنت خارج شبكتك» أسفل قسم المشتركين/الأجهزة (٥ نوفمبر — المالك: «يطلع له فد هنت صغير جوا يقدر يخفيه ويقدر يعطيه فحص الان»).
+/// شريط الفحص عبر VPN أسفل قسم المشتركين/الأجهزة (٥ نوفمبر — المالك: «يطلع له فد هنت صغير جوا يقدر يخفيه»، ثمّ «اريد من ينقر ع
+/// vpn يتفعل الفحص يتوجه ع vpn… حارس… يحول الفحص للشبكه بدون vpn»).
 ///
-/// الحالات (صفحة «حالات الفحص عبر VPN» التي وافق عليها):
-/// * خارج الشبكة + VPN مربوط ⇒ «تقدر تفحص … عبر الـVPN» [فحص الآن] [×]؛ بلا VPN ⇒ «اربط VPN مرّة وحدة» [ربط VPN] [×].
-/// * يفحص ⇒ دائرة + «يفحص مشتركينك… ١٢٠ من ٣١٠» + خطّ تقدّم. انتهى ⇒ النتيجة وسطرها الثاني [×]. فشل ⇒ أحمر [صفحة VPN] [أعد].
-/// * [×] على الهنت يخفيه لباقي اليوم ([VpnNow.dismiss])؛ والفحص الجاري أو نتيجته تظهر ولو رجع للشبكة.
-/// ظهوره لا يفتح أيّ اتّصال — الخادم يدخل الـVPN فقط بالضغط.
+/// * الوضع مطفأ + خارج الشبكة + VPN مربوط ⇒ «أنت خارج شبكتك» [تشغيل VPN] [×]؛ بلا VPN ⇒ [ربط VPN] [×]. [×] يخفيه لباقي اليوم.
+/// * «وضع VPN» ([VpnNow.mode]) ⇒ الشريط يبقى: يتّصل/يفحص (دائرة + «١٢٠ من ٣١٠» + خطّ تقدّم) ⇒ النتيجة + «يتحدّث كلّ دقيقة»
+///   [المشاكل] [إيقاف]؛ فشل ⇒ أحمر [صفحة VPN] [أعد] [إيقاف].
+/// * الحارس أطفأ الوضع ⇒ «رجعت لشبكتك — الفحص صار مباشر» لحظات.
+/// ظهوره لا يفتح أيّ اتّصال — الخادم يدخل الـVPN فقط بعد الضغط.
 class VpnNowBar extends StatefulWidget {
   const VpnNowBar({
     super.key,
@@ -45,6 +46,8 @@ class _VpnNowBarState extends State<VpnNowBar> {
     super.initState();
     _job.addListener(_changed);
     VpnNow.dismissals.addListener(_reloadDismiss);
+    VpnNow.mode.addListener(_changed);
+    VpnNow.notice.addListener(_changed);
     if (widget.offNetwork) _resolve();
   }
 
@@ -58,6 +61,8 @@ class _VpnNowBarState extends State<VpnNowBar> {
   void dispose() {
     _job.removeListener(_changed);
     VpnNow.dismissals.removeListener(_reloadDismiss);
+    VpnNow.mode.removeListener(_changed);
+    VpnNow.notice.removeListener(_changed);
     super.dispose();
   }
 
@@ -83,23 +88,44 @@ class _VpnNowBarState extends State<VpnNowBar> {
 
   String get _what => widget.kind == VpnNowKind.devices ? 'أجهزتك' : 'مشتركينك';
 
+  /// «كلّ دقيقة» / «كلّ ٣ دقائق» — إيقاع الوضع لهذا القسم.
+  String get _every {
+    final m = VpnNow.intervalOf(widget.kind).inMinutes;
+    return m <= 1 ? 'يتحدّث كلّ دقيقة' : 'يتحدّث كلّ \u2066$m\u2069 دقائق';
+  }
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final job = _job;
     Widget? child;
-    switch (job.phase) {
-      case VpnBarPhase.running:
-        child = _running(job);
-      case VpnBarPhase.done:
-        child = _done(job);
-      case VpnBarPhase.failed:
-        child = _failed(job);
-      case VpnBarPhase.idle:
-        // الميزة غير مفتوحة لحسابه/لا صلاحيّة (route == null) ⇒ لا هنت
-        if (widget.offNetwork && !_dismissed && _routeKnown && _route != null) {
-          child = _route!.linked ? _offer() : _link();
-        }
+    if (VpnNow.mode.value) {
+      switch (job.phase) {
+        case VpnBarPhase.running:
+          child = _running(job, stop: true);
+        case VpnBarPhase.done:
+          child = _modeDone(job);
+        case VpnBarPhase.failed:
+          child = _failed(job, stop: true);
+        case VpnBarPhase.idle:
+          child = _running(job, stop: true);
+      }
+    } else if (VpnNow.notice.value != null) {
+      child = _back(VpnNow.notice.value!);
+    } else {
+      switch (job.phase) {
+        case VpnBarPhase.running:
+          child = _running(job);
+        case VpnBarPhase.done:
+          child = _done(job);
+        case VpnBarPhase.failed:
+          child = _failed(job);
+        case VpnBarPhase.idle:
+          // الميزة غير مفتوحة لحسابه/لا صلاحيّة (route == null) ⇒ لا هنت
+          if (widget.offNetwork && !_dismissed && _routeKnown && _route != null) {
+            child = _route!.linked ? _offer() : _link();
+          }
+      }
     }
     return AnimatedSize(
       duration: const Duration(milliseconds: 200),
@@ -119,10 +145,37 @@ class _VpnNowBarState extends State<VpnNowBar> {
   Widget _offer() => Row(children: [
         _circle(LucideIcons.wifiOff, AppColors.warningOnSoft, AppColors.warningSoftBg),
         const SizedBox(width: Sp.sm),
-        Expanded(child: _texts('أنت خارج شبكتك', 'تقدر تفحص $_what عبر الـVPN')),
-        _primary('فحص الآن', LucideIcons.shieldCheck, () => _job.run()),
+        Expanded(child: _texts('أنت خارج شبكتك', 'افحص $_what عبر الـVPN — يرجع مباشر وحده لمّا ترجع')),
+        _primary('تشغيل VPN', LucideIcons.shieldCheck, () => VpnNow.enterMode(from: widget.kind)),
         _close(() => VpnNow.dismiss(widget.kind)),
       ]);
+
+  /// الحارس رأى شبكة الوكيل فأطفأ الوضع.
+  Widget _back(String note) => Row(children: [
+        _circle(LucideIcons.wifi, AppColors.successFill, AppColors.successSoftBg),
+        const SizedBox(width: Sp.sm),
+        Expanded(child: _texts('رجعت لشبكتك', note.contains('—') ? note.split('—').last.trim() : note)),
+        _close(VpnNow.dismissNotice),
+      ]);
+
+  /// الوضع شغّال وآخر فحصٍ انتهى: النتيجة + إيقاعه، و[إيقاف].
+  Widget _modeDone(VpnNowJob job) {
+    final sub = [if ((job.sub ?? '').isNotEmpty) job.sub!, _every].join(' · ');
+    return Row(children: [
+      _circle(LucideIcons.shieldCheck, AppColors.brandOnSoft, AppColors.brandSoftBg),
+      const SizedBox(width: Sp.sm),
+      Expanded(child: _texts(job.line ?? 'الفحص عبر VPN', sub)),
+      if (widget.onShowProblems != null && widget.kind == VpnNowKind.subscribers && (job.sub ?? '').contains('بمشكلة'))
+        _secondary('المشاكل', null, widget.onShowProblems!),
+      const SizedBox(width: 4),
+      _stop(),
+    ]);
+  }
+
+  Widget _stop() => Padding(
+        padding: const EdgeInsetsDirectional.only(end: Sp.xs),
+        child: _secondary('إيقاف', LucideIcons.shieldOff, VpnNow.exitMode),
+      );
 
   Widget _link() => Row(children: [
         _circle(LucideIcons.shieldOff, AppColors.textMid, AppColors.surfaceSunken),
@@ -132,7 +185,7 @@ class _VpnNowBarState extends State<VpnNowBar> {
         _close(() => VpnNow.dismiss(widget.kind)),
       ]);
 
-  Widget _running(VpnNowJob job) => Column(
+  Widget _running(VpnNowJob job, {bool stop = false}) => Column(
         key: const ValueKey('vpn-now-running'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
@@ -144,7 +197,8 @@ class _VpnNowBarState extends State<VpnNowBar> {
               child: CircularProgressIndicator(strokeWidth: 2.6, color: AppColors.brandAccent),
             ),
             const SizedBox(width: Sp.sm + 2),
-            Expanded(child: _texts(job.line ?? 'يتّصل بالـVPN…', job.sub)),
+            Expanded(child: _texts(job.line ?? 'يتّصل بالـVPN…', stop ? 'الفحص عبر الـVPN — يرجع مباشر لمّا ترجع لشبكتك' : job.sub)),
+            if (stop) _stop(),
           ]),
           const SizedBox(height: Sp.sm),
           ClipRRect(
@@ -168,19 +222,28 @@ class _VpnNowBarState extends State<VpnNowBar> {
         _close(job.clear),
       ]);
 
-  Widget _failed(VpnNowJob job) {
+  Widget _failed(VpnNowJob job, {bool stop = false}) {
     final vpnPage = job.reason == null || job.reason == 'tunnel_failed' || job.reason == 'no_vpn';
-    return Row(children: [
-      _circle(LucideIcons.shieldAlert, AppColors.dangerOnSoft, AppColors.surface),
-      const SizedBox(width: Sp.sm),
-      Expanded(
-        child: Text(job.line ?? 'تعذّر الفحص', style: AppType.bodyStrong(color: AppColors.dangerOnSoft), maxLines: 3),
-      ),
-      if (vpnPage) _secondary('صفحة VPN', null, widget.onOpenVpn),
-      const SizedBox(width: 4),
-      _secondary('أعد', LucideIcons.refreshCw, () => _job.run()),
-      _close(job.clear),
-    ]);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(children: [
+          _circle(LucideIcons.shieldAlert, AppColors.dangerOnSoft, AppColors.surface),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: Text(job.line ?? 'تعذّر الفحص', style: AppType.bodyStrong(color: AppColors.dangerOnSoft), maxLines: 3),
+          ),
+          if (!stop) _close(job.clear),
+        ]),
+        const SizedBox(height: Sp.sm),
+        Wrap(alignment: WrapAlignment.end, spacing: Sp.xs, runSpacing: Sp.xs, children: [
+          if (vpnPage) _secondary('صفحة VPN', null, widget.onOpenVpn),
+          _secondary('أعد', LucideIcons.refreshCw, () => _job.run()),
+          if (stop) _secondary('إيقاف', LucideIcons.shieldOff, VpnNow.exitMode),
+        ]),
+      ],
+    );
   }
 
   // ───────────────────── عناصر ─────────────────────

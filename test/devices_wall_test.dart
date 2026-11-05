@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rad_mysvcs/services/agent_net_presence.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_sort.dart';
 import 'package:rad_mysvcs/services/device_sweep_coordinator.dart';
@@ -184,10 +185,16 @@ void main() {
     });
 
     test('يشترط فشل الكلّ لا فشل بعضهم', () {
-      // جهاز واحد معطّل صدفةً يجب ألّا يُعلن «لستَ على الشبكة».
-      expect(src.contains('reachable == 0 && attempted >= _offNetworkThreshold'),
-          isTrue,
-          reason: 'الشرط يجب أن يجمع: لا أحد وصل، والمحاولات كافية');
+      // جهاز واحد معطّل صدفةً يجب ألّا يُعلن «لستَ على الشبكة». ٥ نوفمبر: الحال مشتركةٌ مع المشتركين (AgentNetPresence) —
+      // العناوين الخاصّة وحدها، ردٌّ واحد ⇒ على الشبكة، ولا «خارج» إلّا بلا ردٍّ من ≥٣ (والجزئيّة لا تمسحها — vpn_now_test).
+      expect(src.contains('AgentNetPresence.report(attempted: privAttempted, reached: privReached)'), isTrue,
+          reason: 'الجولة تبلّغ ما جرّبته من الخاصّ وما ردّ منه');
+      expect(src.contains('_offNetwork = AgentNetPresence.isOff'), isTrue);
+      AgentNetPresence.reset();
+      expect(AgentNetPresence.report(attempted: 14, reached: 1), NetPresence.on, reason: 'جهازٌ واحد ردّ ⇒ على الشبكة');
+      AgentNetPresence.reset();
+      expect(AgentNetPresence.report(attempted: 14, reached: 0), NetPresence.off, reason: 'لا أحد وصل والمحاولات كافية');
+      AgentNetPresence.reset();
     });
   });
 }

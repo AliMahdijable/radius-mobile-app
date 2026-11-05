@@ -16,6 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'connection_readings_uploader.dart';
 import 'provider_service.dart';
 import 'agent_net_presence.dart';
+import 'vpn_now.dart';
 
 /// فحص أجهزة المشتركين بالخلفيّة من فتح البرنامج (٣ نوفمبر — المالك: «ليش مانخلي الدالة بالخلفية تشتغل بمجرد فتح البرنامج… حتى يكون
 /// اسرع وتكون لها الاولية»).
@@ -102,6 +103,8 @@ class DeviceWarmService with WidgetsBindingObserver {
 
   Future<void> _step() async {
     if (_yield || _waving) return;
+    // «وضع VPN»: الوكيل خارج شبكته والفحص من الخادم — لا موجة ولا إعادة قياسٍ من الموبايل (لا تصل شيئاً)
+    if (VpnNow.mode.value) return;
     // ١) تحت المراقبة: من حان موعد تأكيده يُقاس وحده
     await ConnectionReadingsUploader.runRechecks();
     // ٢) الموجة الدوريّة

@@ -1,7 +1,9 @@
 import 'package:flutter/widgets.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../services/agent_net_presence.dart';
 import '../../services/vitals_reporter.dart';
+import '../../services/vpn_now.dart';
 import '../../api/bdcom_epon.dart';
 import '../../api/cisco_api.dart';
 import '../../api/hsgq_olt.dart';
@@ -327,7 +329,13 @@ class DeviceVitals {
   ///
   /// نمتنع صراحةً بدل أن نحاول ونفشل: كلّ محاولة فاشلة تحجز خانةً من
   /// ستّ وتنتظر مهلتها كاملةً.
+  /// سبب الامتناع خارج شبكة الوكيل — البطاقة الكبيرة تعرضه سطراً ([DeviceBigCard]).
+  static const offNetworkReason = 'خارج شبكتك';
+
   static String? skipReason(NetworkDevice d) {
+    // ٥ نوفمبر: خارج شبكة الوكيل (أو «وضع VPN») لا جلسة تصل الجهاز من الموبايل — محاولاتٌ تفشل وتحجز الخانات، وتُظهر
+    // «راجع الإعدادات» لجهازٍ سليم (حاله من الـVPN «متّصل» وقراءته تفشل)
+    if (VpnNow.mode.value || AgentNetPresence.isOff) return offNetworkReason;
     // «غير متّصل» لا «معطّل»: الثانية تعني مُوقَفاً بقرار المدير،
     // وهذا جهازٌ لا يردّ فحسب. وبقيّة التطبيق تستعمل الأولى.
     if (d.lastStatus == 'offline') return 'غير متّصل';

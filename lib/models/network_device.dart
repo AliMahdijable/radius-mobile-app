@@ -53,6 +53,31 @@ class NetworkDevice {
     required this.createdAt,
   });
 
+  /// نسخةٌ بحالٍ معروضة من مصدرٍ غير فحص الموبايل («وضع VPN»: آخر فحصٍ عبر الخادم) — «منذ» تُترك فارغة (لم نرَ التحوّل)، وزمن
+  /// الاستجابة كما أُعطي ولو null ([copyWith] لا يصفّر).
+  NetworkDevice withLive({required String status, int? ms}) => NetworkDevice(
+        id: id,
+        adminId: adminId,
+        regionId: regionId,
+        name: name,
+        type: type,
+        brand: brand,
+        model: model,
+        ip: ip,
+        port: port,
+        apiPort: apiPort,
+        protocol: protocol,
+        mac: mac,
+        location: location,
+        notes: notes,
+        hasCredentials: hasCredentials,
+        lastProbedAt: lastProbedAt,
+        lastStatus: status,
+        statusSince: null,
+        lastResponseMs: ms,
+        createdAt: createdAt,
+      );
+
   /// نسخة بحقول محدَّثة — يحلّ مشكلة نسيان field عند التحديث اليدوي.
   /// كان قبل: 3 مواقع تُنشئ NetworkDevice(...) بـ15 param → أي field جديد
   /// يُنسى في أحدها فيصير bug صامت.

@@ -384,9 +384,11 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     // ٥ نوفمبر: «خارج شبكتك» بعيّنةٍ واحدة بعد لحظة (لا ثلاث جولات) — والحال مشتركةٌ مع قسم الأجهزة
     _netTimer = Timer(const Duration(milliseconds: 1500), _checkNet);
     AgentNetPresence.state.addListener(_onPresence);
+    VpnNow.mode.addListener(_onVpnMode);
     VpnNow.route().then((r) {
       if (mounted) setState(() => _vpnLinked = r?.linked == true);
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncVpnAttach());
     _scrollCtrl.addListener(_onScroll);
     WidgetsBinding.instance.addObserver(this);
     _filter = widget.filterCmd?.value ?? SubscriberFilter.all;
@@ -453,61 +455,47 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   // كلّ دقيقتين والقسم ظاهر. الفحص عبر الـVPN لا يبدأ إلّا بضغطة: «فحص الآن» بالهنت، أو «فحص عبر VPN» من زرّ الرادار.
   Timer? _netTimer;
   bool _vpnLinked = false;
-  final _radarKey = GlobalKey();
+  bool _vpnAttached = false;
   bool get _offNet => AgentNetPresence.isOff;
   void _onPresence() {
     if (mounted) setState(() {});
   }
 
+  /// «وضع VPN» شُغّل أو أُطفئ ⇒ إعادة رسم (الزرّ والقراءات)؛ الرجوع للمباشر ⇒ موجةٌ من الموبايل لمن قدمت قراءته.
+  void _onVpnMode() {
+    if (!mounted) return;
+    setState(() {});
+    if (!VpnNow.mode.value && _mayRefresh) _runProbeWave();
+  }
+
+  /// القسم ظاهر ⇒ «وضع VPN» يحدّث مشتركيه؛ مختفٍ ⇒ لا.
+  void _syncVpnAttach() {
+    final want = mounted && _mayRefresh;
+    if (want && !_vpnAttached) {
+      _vpnAttached = true;
+      VpnNow.attach(VpnNowKind.subscribers);
+    } else if (!want && _vpnAttached) {
+      _vpnAttached = false;
+      VpnNow.detach(VpnNowKind.subscribers);
+    }
+  }
+
+  /// زرّ VPN بالرأس: لمن له طريق VPN، خارج شبكته (أو والحال مجهولة) وطول ما الوضع شغّال.
+  bool get _vpnButton => _vpnLinked && (VpnNow.mode.value || !AgentNetPresence.isOn);
+
+  void _toggleVpn() => VpnNow.mode.value ? VpnNow.exitMode() : VpnNow.enterMode(from: VpnNowKind.subscribers);
+
   Future<void> _checkNet() async {
     _netTimer?.cancel();
     if (!mounted) return;
-    if (_mayRefresh) await DeviceWarmService.onAgentNetwork(); // يقيس ويبلّغ الحال المشتركة
+    // يقيس ويبلّغ الحال المشتركة — و«وضع VPN» له حارسه (كلّ ٢٠ث)
+    if (_mayRefresh && !VpnNow.mode.value) await DeviceWarmService.onAgentNetwork();
     if (!mounted) return;
     _netTimer = Timer(const Duration(minutes: 2), _checkNet);
   }
 
-  /// الرادار: بلا VPN ⇒ فحصٌ من موبايلك كما كان؛ ومع VPN ⇒ قائمةٌ صغيرة: «فحص من موبايلي» · «فحص عبر VPN» (خارج شبكتك يتقدّم الـVPN).
-  Future<void> _onRadar() async {
-    final ctx = _radarKey.currentContext;
-    if (!_vpnLinked || ctx == null) {
-      _runProbeWave(force: true);
-      return;
-    }
-    final box = ctx.findRenderObject() as RenderBox?;
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (box == null || overlay == null) {
-      _runProbeWave(force: true);
-      return;
-    }
-    final at = RelativeRect.fromRect(
-      Rect.fromPoints(
-        box.localToGlobal(Offset(0, box.size.height), ancestor: overlay),
-        box.localToGlobal(box.size.bottomRight(Offset.zero), ancestor: overlay),
-      ),
-      Offset.zero & overlay.size,
-    );
-    PopupMenuItem<String> item(String v, IconData i, String t) => PopupMenuItem<String>(
-          value: v,
-          child: Row(children: [
-            Icon(i, size: 18, color: v == 'vpn' ? AppColors.brandAccent : AppColors.textMid),
-            const SizedBox(width: Sp.sm),
-            Text(t, style: AppType.body()),
-          ]),
-        );
-    final local = item('local', Icons.radar_rounded, 'فحص من موبايلي');
-    final vpn = item('vpn', LucideIcons.shieldCheck, 'فحص عبر VPN');
-    final v = await showMenu<String>(
-      context: context,
-      position: at,
-      color: AppColors.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.icon)),
-      items: _offNet ? [vpn, local] : [local, vpn],
-    );
-    if (!mounted) return;
-    if (v == 'local') _runProbeWave(force: true);
-    if (v == 'vpn') unawaited(VpnNow.subscribers.run());
-  }
+  /// الرادار: فحص أجهزة المشتركين من موبايلك — و«وضع VPN» يحدّث الفحص عبر الـVPN الآن ([_runProbeWave]).
+  void _onRadar() => _runProbeWave(force: true);
 
   Future<void> _openVpnPage() async {
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ConnVpnScreen()));
@@ -519,6 +507,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   }
 
   void _onActiveChanged() {
+    _syncVpnAttach();
     if (_locked) return;
     if (_mayRefresh) {
       // ٥ نوفمبر: العودة للقسم والحال مجهولة/قديمة ⇒ عيّنة «على شبكتك؟» الآن (لا انتظار دورة الدقيقتين)
@@ -683,6 +672,11 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   void dispose() {
     _netTimer?.cancel();
     AgentNetPresence.state.removeListener(_onPresence);
+    VpnNow.mode.removeListener(_onVpnMode);
+    if (_vpnAttached) {
+      _vpnAttached = false;
+      VpnNow.detach(VpnNowKind.subscribers);
+    }
     _scrollCtrl.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _autoRefreshTimer?.cancel();
@@ -934,6 +928,11 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   /// false (لو في snapshots حديثة محفوظة في الـin-memory cache من
   /// زيارة سابقة، نريد نقدّمها فوراً).
   void _runProbeWave({bool force = false}) {
+    // «وضع VPN»: لا موجة من الموبايل (خارج شبكتك لا تصل شيئاً) — الرادار (force) يحدّث الفحص عبر الـVPN الآن
+    if (VpnNow.mode.value) {
+      if (force) unawaited(VpnNow.subscribers.run());
+      return;
+    }
     _probeRunId += 1;
     final myRun = _probeRunId;
     // مطلب المستخدم 2026-07-12: الـwave يفحص كل مشترك — لأن المدير
@@ -2048,7 +2047,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                           // الفرز إلى هنا بجانب الفرز والتصفية — طلب المستخدم.
                                           probing: _probing,
                                           onScanDevices: _probing ? null : _onRadar,
-                                          radarKey: _radarKey,
+                                          vpnOn: VpnNow.mode.value,
+                                          onVpn: _vpnButton ? _toggleVpn : null,
                                         ),
                                 ),
                                 // «كل الشركات»: الشركات بعدد كلٍّ منها — اضغط شركة لعرض مشتركيها وحدها
@@ -2603,7 +2603,8 @@ class _ListHeader extends StatelessWidget {
     required this.onFilter,
     required this.probing,
     required this.onScanDevices,
-    this.radarKey,
+    this.vpnOn = false,
+    this.onVpn,
   });
 
   final TextEditingController controller;
@@ -2626,8 +2627,9 @@ class _ListHeader extends StatelessWidget {
   /// لأنّه لا يعتمد على وجود مدراء فرعيّين.
   final VoidCallback? onScanDevices;
 
-  /// زرّ الرادار — قائمة «من موبايلي/عبر VPN» تُفتح تحته.
-  final Key? radarKey;
+  /// «وضع VPN» (٥ نوفمبر — المالك: «المشتركين مابي زر فحص ع vpn»): null ⇒ لا زرّ (لا طريق VPN، أو على شبكتك والوضع مطفأ).
+  final VoidCallback? onVpn;
+  final bool vpnOn;
 
   @override
   Widget build(BuildContext context) {
@@ -2745,16 +2747,24 @@ class _ListHeader extends StatelessWidget {
             // رادار لا «تحديث»: الزرّ يفحص أجهزة المشتركين
             // (RX/إشارة/CCQ/LAN) ولا يعيد تحميل القائمة — كان يُقرأ
             // كـreload. طلب المستخدم 2026-08-29.
-            KeyedSubtree(
-              key: radarKey,
-              child: _HeaderIconButton(
-                icon: Icons.radar_rounded,
-                active: false,
-                busy: probing,
-                onTap: onScanDevices ?? () {},
-                tooltip: 'subscribers.probe_devices'.tr(),
+            if (onVpn != null) ...[
+              _HeaderIconButton(
+                key: const ValueKey('subs-vpn-mode'),
+                icon: vpnOn ? LucideIcons.shieldCheck : LucideIcons.shield,
+                active: vpnOn,
+                onTap: onVpn!,
+                tooltip: vpnOn ? 'إيقاف الفحص عبر VPN' : 'الفحص عبر VPN',
                 size: TopActionChip.sizeOf(context),
               ),
+              SizedBox(width: TopActionChip.gapOf(context)),
+            ],
+            _HeaderIconButton(
+              icon: Icons.radar_rounded,
+              active: false,
+              busy: probing,
+              onTap: onScanDevices ?? () {},
+              tooltip: 'subscribers.probe_devices'.tr(),
+              size: TopActionChip.sizeOf(context),
             ),
             SizedBox(width: TopActionChip.gapOf(context)),
             _HeaderIconButton(
@@ -2783,6 +2793,7 @@ class _ListHeader extends StatelessWidget {
 /// 9×9 في الزاوية الخارجيّة محاطة بحدّ بلون الخلفيّة ليبدو مقطوعاً.
 class _HeaderIconButton extends StatelessWidget {
   const _HeaderIconButton({
+    super.key,
     required this.icon,
     required this.active,
     required this.onTap,

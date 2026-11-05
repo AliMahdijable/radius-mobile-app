@@ -885,8 +885,13 @@ class SubscriberNetworkMetrics extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([DeviceProbeBus.tick, VpnNow.version]),
+      listenable: Listenable.merge([DeviceProbeBus.tick, VpnNow.version, VpnNow.mode]),
       builder: (_, __) {
+        // «وضع VPN»: قراءة الـVPN أوّلاً (قراءة الموبايل المخبّأة أقدم — خارج شبكتك لا تتجدّد)
+        if (VpnNow.mode.value) {
+          final vr = VpnNow.readingFor(sub.username);
+          if (vr != null) return _vpn(vr);
+        }
         final snap = snapshotOf(sub);
         // ٥ نوفمبر: لا قراءة من موبايلك (خارج شبكتك) ⇒ آخر «فحص الآن» عبر الـVPN (٣٠ دقيقة) بعلامة VPN
         if (snap == null) return _vpn(VpnNow.readingFor(sub.username));

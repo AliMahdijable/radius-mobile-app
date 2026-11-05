@@ -154,14 +154,62 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// السبب ولا يجزم. والشرط فشل **الكلّ**: جهازٌ واحد معطّل صدفةً لا يُطلق الإنذار.
   bool _offNetwork = false;
 
-  /// للحساب طريق VPN (ملفّه/نفق شركته/قالبها) ⇒ «فحص عبر VPN» في «المزيد».
+  /// للحساب طريق VPN (ملفّه/نفق شركته/قالبها) ⇒ زرّ VPN بجنب البحث.
   bool _vpnLinked = false;
+  bool _vpnAttached = false;
   void _onPresence() {
     if (mounted) setState(() {});
   }
 
   /// خارج شبكة الوكيل: من جولة هذا القسم، أو من قسم المشتركين (الحال المشتركة).
   bool get _offNet => _offNetwork || AgentNetPresence.isOff;
+
+  /// «وضع VPN» شُغّل أو أُطفئ (زرّه، أو الحارس رأى شبكتك) ⇒ إعادة رسم؛ والرجوع للمباشر جولةٌ فوريّة من الموبايل.
+  void _onVpnMode() {
+    if (!mounted) return;
+    setState(() {});
+    if (!VpnNow.mode.value && _mayProbe && _all.isNotEmpty) _probeAll(force: true);
+  }
+
+  /// القسم ظاهر ⇒ «وضع VPN» يحدّث أجهزته؛ مختفٍ ⇒ لا.
+  void _syncVpnAttach() {
+    final want = mounted && _mayProbe;
+    if (want && !_vpnAttached) {
+      _vpnAttached = true;
+      VpnNow.attach(VpnNowKind.devices);
+    } else if (!want && _vpnAttached) {
+      _vpnAttached = false;
+      VpnNow.detach(VpnNowKind.devices);
+    }
+  }
+
+  /// حارس «وضع VPN» (المالك: «حارس فحص بداخل التطبيق يفحص متى يكون بنك ناصي»): أجهزتك بعناوينها الخاصّة — حتى ٤، ما ردّ قبلاً
+  /// أوّلاً. ردٌّ واحد ⇒ رجعت لشبكتك. (العامّ يردّ من أيّ مكان فلا يدلّ.)
+  Future<bool?> _guardDevices() async {
+    final cand = _all.where((d) => AgentNetPresence.isPrivate(d.ip)).toList()
+      ..sort((a, b) => (b.lastStatus == 'online' ? 1 : 0) - (a.lastStatus == 'online' ? 1 : 0));
+    final pick = cand.take(4).toList();
+    if (pick.isEmpty) return null;
+    final rs = await Future.wait(pick.map((d) =>
+        NetworkDevicesApi.probeDevice(d).then((r) => r.status == 'online').catchError((Object _) => false)));
+    final reached = rs.where((x) => x).length;
+    AgentNetPresence.report(attempted: pick.length, reached: reached);
+    if (reached > 0) return true;
+    return pick.length >= AgentNetPresence.minAttempts ? false : null;
+  }
+
+  /// خارج الشبكة أو «وضع VPN»: الحال المعروضة من آخر فحصٍ عبر الـVPN، وما لم يُفحص «غير معروف» (رماديّ) — لا «غير متّصل» أحمر:
+  /// الجهاز لم يطفِ، موبايلك هو البعيد (المالك ٥ نوفمبر: الفحص قال «١٤ من ١٤ واصل» والبطاقات بقيت حمراء).
+  bool get _overlay => VpnNow.mode.value || _offNet;
+
+  NetworkDevice _shown(NetworkDevice d) {
+    final v = VpnNow.deviceFor(d.id);
+    if (v == null) return d.lastStatus == 'unknown' ? d : d.withLive(status: 'unknown');
+    return d.withLive(status: v.alive ? 'online' : 'offline', ms: v.alive ? v.ms : null);
+  }
+
+  /// ما تعرضه القائمة والبطاقات والجدول وأعداد الشريط — والفحص يبقى على [_all].
+  List<NetworkDevice> get _allShown => _overlay ? [for (final d in _all) _shown(d)] : _all;
   final Set<int> _selectedIds = <int>{};
   bool _bulkDeleting = false;
 
@@ -205,9 +253,12 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     // ٥ نوفمبر: «خارج شبكتك» مشتركٌ مع المشتركين، ونتائج «فحص عبر VPN» تلوّن حال الأجهزة
     AgentNetPresence.state.addListener(_onPresence);
     VpnNow.version.addListener(_onPresence);
+    VpnNow.mode.addListener(_onVpnMode);
+    VpnNow.guardSources['devices'] = _guardDevices;
     VpnNow.route().then((r) {
       if (mounted) setState(() => _vpnLinked = r?.linked == true);
     });
+    _syncVpnAttach();
     // أجهزةٌ بعناوين عامّة أو أقلّ من ثلاثة خاصّة لا تحسم «على شبكتك؟» ⇒ عيّنة المشتركين المشتركة (مخبّأة، ١٫٢ث)
     if (AgentNetPresence.current == NetPresence.unknown) unawaited(DeviceWarmService.onAgentNetwork());
     _initialLoad();
@@ -231,6 +282,12 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     DeviceWarmup.instance.stop();
     AgentNetPresence.state.removeListener(_onPresence);
     VpnNow.version.removeListener(_onPresence);
+    VpnNow.mode.removeListener(_onVpnMode);
+    if (VpnNow.guardSources['devices'] == _guardDevices) VpnNow.guardSources.remove('devices');
+    if (_vpnAttached) {
+      _vpnAttached = false;
+      VpnNow.detach(VpnNowKind.devices);
+    }
     WidgetsBinding.instance.removeObserver(this);
     widget.isActive?.removeListener(_onActiveChanged);
     DeviceEvents.changes.removeListener(_onDevicesChanged);
@@ -269,6 +326,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       (widget.isActive?.value ?? true) && !DeviceSweep.suspended;
 
   void _onActiveChanged() {
+    _syncVpnAttach();
     if (_mayProbe) {
       if (AgentNetPresence.current == NetPresence.unknown) unawaited(DeviceWarmService.onAgentNetwork());
       _startProbeTimer();
@@ -378,6 +436,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
   bool _refreshing = false;
   Future<void> _refresh() async {
+    // «وضع VPN»: التحديث = فحص أجهزتك عبر الـVPN الآن (والقائمة من الخادم كما هي)
+    if (VpnNow.mode.value) unawaited(VpnNow.devices.run());
     if (_refreshing) return; // تكرار الإشارة + الرجوع من التفاصيل لا يُضاعف العمل.
     _refreshing = true;
     _loadAgentAlerts();
@@ -460,6 +520,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// تقسم دورتُه رقمَ الجولة وحده — أقلّيّةٌ تتبدّل في كلّ مرّة، وثلاث
   /// دخلاتٍ تلزم لتغطية الجميع. وهو بالضبط ما وصفه المستخدم.
   Future<void> _probeAll({bool force = false}) async {
+    // «وضع VPN»: الفحص من الخادم عبر الـVPN — جولة الموبايل لا تُطلق (كانت تعيد كلّ الأجهزة «غير متّصل» فوق نتيجته)
+    if (VpnNow.mode.value) return;
     // ⚠️ جولةٌ جارية لا تُسقط طلب المستخدم بل تؤجّله.
     //
     // المؤقّت يطلق كلّ ٢٠ ثانية، فاحتمال أن يدخل المدير التبويب أثناء
@@ -900,7 +962,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// ما يُعرض وتوزيعه بمرورٍ واحد على الأجهزة — الأعداد ضمن المرشّحات الأخرى والبحث (راجع [DevicesFacets]). اسم
   /// المنطقة جزءٌ من كومة البحث: المنطقة تُعرَض على كلّ كرت، والبحث الذي لا يجد ما تراه العين يبدو مكسوراً.
   DevicesFacets _facetsFor(DevicesFilter f) => DevicesFacets.compute(
-        _all,
+        _allShown,
         f,
         query: _search,
         regionName: (d) => d.regionId == null ? '' : (_regionsById[d.regionId!]?.name ?? ''),
@@ -1017,7 +1079,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                     // والمناطق، نحو ثلث شاشة الهاتف قبل أوّل جهاز (المالك ١ نوفمبر). وحسابٌ بلا أجهزة لا شريط له:
                     // «الكلّ ٠ · متّصل ٠ · مفصول ٠» فوق «لا توجد أجهزة» ضجيجٌ لا معلومة.
                     if (_all.isNotEmpty) SliverToBoxAdapter(child: _filterStrip(facets)),
-                    if (_offNet && _view == DevicesView.big)
+                    if (_offNet && !VpnNow.mode.value && _view == DevicesView.big)
                       const SliverPadding(
                         padding: EdgeInsets.symmetric(horizontal: Sp.md),
                         sliver: SliverToBoxAdapter(child: _OffNetworkBanner()),
@@ -1287,6 +1349,18 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   ///
   /// و«+» (١ نوفمبر) قائمة الإضافات كلّها: جهازٌ يدويّاً، واكتشاف أجهزة الشبكة بمسح نطاق، والمناطق — كانت الأخيرتان في
   /// «المزيد». والمرشّحات تحت السطر في شريطٍ واحد ([_filterStrip]) لا في أزراره.
+  /// زرّ «وضع VPN»: مطفأ ⇒ درعٌ بإطار؛ شغّال ⇒ ممتلئ بلون العلامة. الضغط يشغّله (ويفحص أجهزتك فوراً) أو يطفئه.
+  Widget _vpnButton() {
+    final on = VpnNow.mode.value;
+    return _ToolButton(
+      key: const ValueKey('devices-vpn-mode'),
+      tooltip: on ? 'إيقاف الفحص عبر VPN' : 'الفحص عبر VPN',
+      filled: on,
+      onTap: () => on ? VpnNow.exitMode() : VpnNow.enterMode(from: VpnNowKind.devices),
+      child: Icon(on ? LucideIcons.shieldCheck : LucideIcons.shield, size: 20, color: on ? AppColors.onBrand : AppColors.textBody),
+    );
+  }
+
   Widget _toolsBar() {
     // الأدوات بمقاس أزرار الأعلى وفراغها، وطرفها على حشوة الرأس (‎16) — فكلّ
     // أداةٍ تحت نظيرها فوقها، والبحث على حافّة المحتوى تحته (‎12).
@@ -1304,6 +1378,12 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
           children: [
             Expanded(child: _searchField()),
             const SizedBox(width: Sp.sm),
+            // ٥ نوفمبر (المالك: «اريد من ينقر ع vpn يتفعل الفحص يتوجه ع vpn»): زرّ «وضع VPN» لمن له طريق VPN — يظهر خارج شبكتك
+            // (أو والحال مجهولة) وطول ما الوضع شغّال؛ على شبكتك لا حاجة له فلا يأخذ من البحث.
+            if (_vpnLinked && (VpnNow.mode.value || !AgentNetPresence.isOn)) ...[
+              _vpnButton(),
+              SizedBox(width: gap),
+            ],
             // تنبيهات الأجهزة (فصلٌ/عودة) بعددها — والضغط المطوّل إشعارٌ
             // تجريبيّ. صفّارةٌ لا جرس: جرس الإشعارات في أزرار الأعلى فوقها
             // مباشرةً، وجرسان في شاشةٍ واحدة لا يُعرف أيّهما لأيّ شيء.
@@ -1332,12 +1412,15 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
             SizedBox(width: gap),
             // تحديث فوري — دوّارةٌ مكانه أثناء الفحص.
             if (!narrow) ...[
-              _ToolButton(
-                tooltip: 'تحديث فوري',
-                busy: _probing,
-                onTap: _refresh,
-                child:
-                    Icon(LucideIcons.refreshCw, size: 20, color: AppColors.textBody),
+              // «وضع VPN»: التحديث فحصٌ عبر الـVPN الآن، ودوّارته دوّارة ذلك الفحص
+              ListenableBuilder(
+                listenable: VpnNow.devices,
+                builder: (_, __) => _ToolButton(
+                  tooltip: VpnNow.mode.value ? 'تحديث عبر VPN' : 'تحديث فوري',
+                  busy: _probing || (VpnNow.mode.value && VpnNow.devices.busy),
+                  onTap: _refresh,
+                  child: Icon(LucideIcons.refreshCw, size: 20, color: AppColors.textBody),
+                ),
               ),
               SizedBox(width: gap),
             ],
@@ -1359,13 +1442,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       _pickSort();
                     case 'detect':
                       _detectModels();
-                    case 'vpn':
-                      VpnNow.devices.run();
                   }
                 },
                 itemBuilder: (_) => [
-                  // ٥ نوفمبر (المالك: «الطبيعي بدون vpn بس من ينقر عبر vpn»): أجهزتك عبر الـVPN بضغطتك وحدها
-                  if (_vpnLinked) _menuItem('vpn', LucideIcons.shieldCheck, 'فحص عبر VPN'),
                   if (narrow) _menuItem('refresh', LucideIcons.refreshCw, _probing ? 'يُحدّث الآن…' : 'تحديث فوري'),
                   if (_all.isNotEmpty) _menuItem('tower', LucideIcons.radioTower, 'عرض البرج'),
                   _menuItem('fiber', Perms.has('devices.monitor') ? LucideIcons.cable : LucideIcons.lock, 'شبكة الألياف'),
@@ -1977,8 +2056,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   Widget _deskDeviceCard(NetworkDevice d) {
     final selected = _selectionMode && _selectedIds.contains(d.id);
     final canManage = Perms.has('devices.manage');
-    final online = _shownStatus(d) == 'online';
-    final statusCol = _statusColor(_shownStatus(d));
+    final online = d.lastStatus == 'online';
+    final statusCol = _statusColor(d.lastStatus);
     final since = _since(d.statusSince);
     final region = _deskRegion(d);
     final sub = AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5);
@@ -2081,23 +2160,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     );
   }
 
-  /// الحال المعروضة: خارج شبكتك ⇒ نتيجة «فحص عبر VPN» إن وُجدت، وإلّا «غير معروف» (رماديّ) — لا «طافي» أحمر: الجهاز لم يطفِ،
-  /// موبايلك هو البعيد (٥ نوفمبر).
-  String _shownStatus(NetworkDevice d) {
-    if (!_offNet) return d.lastStatus;
-    final v = VpnNow.deviceFor(d.id);
-    if (v == null) return 'unknown';
-    return v.alive ? 'online' : 'offline';
-  }
-
-  int? _shownMs(NetworkDevice d) {
-    if (!_offNet) return d.lastStatus == 'online' ? d.lastResponseMs : null;
-    final v = VpnNow.deviceFor(d.id);
-    return v != null && v.alive ? v.ms : null;
-  }
 
   Widget _deviceCard(NetworkDevice d) {
-    final statusCol = _statusColor(_shownStatus(d));
+    final statusCol = _statusColor(d.lastStatus);
     final selected = _selectionMode && _selectedIds.contains(d.id);
     final canManage = Perms.has('devices.manage');
     return Material(
@@ -2276,9 +2341,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  if (_shownMs(d) != null)
+                  if (d.lastResponseMs != null && d.lastStatus == 'online')
                     Text(
-                      iso('${_shownMs(d)} ms'),
+                      iso('${d.lastResponseMs} ms'),
                       style: AppType.microBold(color: statusCol),
                     ),
                   const SizedBox(height: 4),
@@ -2311,6 +2376,7 @@ class _PendingTransition {
 /// الشاشات الضيّقة). و[filled] بتعبئة البراند (الإضافة).
 class _ToolButton extends StatelessWidget {
   const _ToolButton({
+    super.key,
     required this.child,
     this.onTap,
     this.onLongPress,

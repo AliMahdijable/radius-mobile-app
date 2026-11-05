@@ -1,9 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleState, WidgetsBinding;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/vpn_now_api.dart';
+import 'agent_net_presence.dart';
+import 'device_warm_service.dart';
 
 export '../api/vpn_now_api.dart' show VpnNowKind, VpnSubReading, VpnDeviceResult, VpnNowResult;
 
@@ -25,6 +28,9 @@ class VpnNowJob extends ChangeNotifier {
 
   /// سبب الفشل من الخادم (tunnel_failed، no_vpn…) — يقرّر زرّ «صفحة VPN».
   String? reason;
+
+  /// بدء آخر فحص — «وضع VPN» يعيده بعد [VpnNow.intervalOf].
+  DateTime? startedAt;
   int _gen = 0;
 
   bool get busy => phase == VpnBarPhase.running;
@@ -33,6 +39,7 @@ class VpnNowJob extends ChangeNotifier {
   Future<void> run() async {
     if (busy) return;
     final gen = ++_gen;
+    startedAt = VpnNow.now();
     phase = VpnBarPhase.running;
     line = 'يتّصل بالـVPN…';
     sub = 'تقدر تطلع من الشاشة — الفحص يكمل';
@@ -127,6 +134,18 @@ class VpnNowJob extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// يترك الفحص الجاري (الخادم يكمله وحده) ويرجع بلا نتيجة — إطفاء «وضع VPN».
+  void cancel() {
+    _gen++;
+    phase = VpnBarPhase.idle;
+    line = null;
+    sub = null;
+    value = null;
+    result = null;
+    reason = null;
+    notifyListeners();
+  }
+
   /// يُغلق النتيجة أو الخطأ (لا يوقف فحصاً جارياً بالخادم).
   void clear() {
     if (busy) return;
@@ -141,6 +160,7 @@ class VpnNowJob extends ChangeNotifier {
   /// تبديل الحساب/الخروج: يُنسى كلّ شيء ويُترك أيّ استطلاعٍ جارٍ.
   void reset() {
     _gen++;
+    startedAt = null;
     phase = VpnBarPhase.idle;
     line = null;
     sub = null;
@@ -160,6 +180,158 @@ class VpnNow {
   static Duration pollEvery = const Duration(milliseconds: 2500);
   static Duration maxWait = const Duration(minutes: 6);
   static const ttl = Duration(minutes: 30);
+
+  @visibleForTesting
+  static DateTime Function() now = DateTime.now;
+
+  // ── «وضع VPN» (٥ نوفمبر — المالك: «اريد من ينقر ع vpn يتفعل الفحص يتوجه ع vpn… لازم نخلي حارس فحص بداخل التطبيق يفحص
+  //    متى يكون بنك ناصي… حتى يعرفه هو داخل شبكه يحول الفحص للشبكه بدون vpn») ──
+  // زرّ VPN بالقسمين يشغّله: الفحص المباشر من الموبايل يتوقّف، والفحص عبر الـVPN يتكرّر للقسم الظاهر ([attach]) — الأجهزة كلّ
+  // دقيقة والمشتركون كلّ ٣ د على نفق الشركة الدائم، وأبطأ على ملفّه/قالب شركته (غرفةٌ مؤقّتة أثقل). والحارس كلّ ٢٠ث يجرّب عناوين
+  // شبكة الوكيل الخاصّة: أوّل ردٍّ ⇒ رجع لشبكته ⇒ الوضع ينطفي وحده والفحص يرجع مباشراً ([notice] «رجعت لشبكتك»).
+  // دخله وهو على شبكته (ضغطةٌ صريحة) ⇒ الحارس لا يُطفئه حتى يرى الشبكة تغيب مرّةً ثمّ تعود.
+  static final ValueNotifier<bool> mode = ValueNotifier<bool>(false);
+  static final ValueNotifier<String?> notice = ValueNotifier<String?>(null);
+  static final Map<VpnNowKind, int> _attached = {};
+  static Timer? _loop;
+  static Timer? _noticeTimer;
+  static DateTime? _guardAt;
+  static bool _armed = false;
+  static bool _guarding = false;
+  static String? _via;
+
+  @visibleForTesting
+  static Duration loopEvery = const Duration(seconds: 10);
+  @visibleForTesting
+  static Duration guardEvery = const Duration(seconds: 20);
+
+  /// الحارس في الاختبار: true على الشبكة · false خارجها · null لا يُعرف.
+  @visibleForTesting
+  static Future<bool?> Function()? guardProbe;
+
+  /// مصادر إضافيّة للحارس (قسم الأجهزة: أجهزة الوكيل بعناوينها الخاصّة) — true/false/null كـ[guardProbe].
+  static final Map<String, Future<bool?> Function()> guardSources = {};
+
+  static bool get isOn => mode.value;
+
+  /// كم بين فحصين بالوضع — نفق الشركة الدائم أخفّ من الغرفة المؤقّتة.
+  static Duration intervalOf(VpnNowKind k) {
+    final company = _via == 'company';
+    if (k == VpnNowKind.devices) return Duration(seconds: company ? 60 : 180);
+    return Duration(seconds: company ? 180 : 300);
+  }
+
+  /// يشغّل الوضع ويفحص [from] فوراً (والأقسام الظاهرة).
+  static Future<void> enterMode({VpnNowKind? from}) async {
+    if (mode.value) {
+      if (from != null) unawaited(jobOf(from).run());
+      return;
+    }
+    _noticeTimer?.cancel();
+    notice.value = null;
+    _armed = AgentNetPresence.current != NetPresence.on;
+    _guardAt = now(); // لا حارس بالثواني الأولى — الضغطة نفسها قرار
+    mode.value = true;
+    _loop?.cancel();
+    _loop = Timer.periodic(loopEvery, (_) => unawaited(_tick()));
+    if (from != null) unawaited(jobOf(from).run());
+    unawaited(route().then((r) => _via = r?.via));
+    unawaited(_tick());
+  }
+
+  /// يطفئ الوضع: [auto] = الحارس رأى شبكة الوكيل ⇒ سطر «رجعت لشبكتك» لحظات. نتائج الوضع تُغلق (القراءات تبقى ٣٠ د).
+  static void exitMode({bool auto = false}) {
+    if (!mode.value) return;
+    _loop?.cancel();
+    _loop = null;
+    mode.value = false;
+    subscribers.cancel();
+    devices.cancel();
+    if (auto) {
+      notice.value = 'رجعت لشبكتك — الفحص صار مباشر من موبايلك';
+      _noticeTimer?.cancel();
+      _noticeTimer = Timer(const Duration(seconds: 8), () {
+        if (!mode.value) notice.value = null;
+      });
+    }
+  }
+
+  static void dismissNotice() {
+    _noticeTimer?.cancel();
+    notice.value = null;
+  }
+
+  /// القسم ظاهر (تبويبٌ نشط والتطبيق بالواجهة) ⇒ يُحدَّث بالوضع؛ [detach] حين يختفي.
+  static void attach(VpnNowKind k) {
+    _attached[k] = (_attached[k] ?? 0) + 1;
+    if (mode.value) unawaited(_tick());
+  }
+
+  static void detach(VpnNowKind k) {
+    final n = (_attached[k] ?? 0) - 1;
+    if (n <= 0) {
+      _attached.remove(k);
+    } else {
+      _attached[k] = n;
+    }
+  }
+
+  @visibleForTesting
+  static Set<VpnNowKind> get attached => _attached.keys.toSet();
+
+  static bool get _foreground {
+    final st = WidgetsBinding.instance.lifecycleState;
+    return st == null || st == AppLifecycleState.resumed;
+  }
+
+  /// نبضة الوضع: الحارس (كلّ [guardEvery]) ثمّ فحص كلّ قسمٍ ظاهر حان موعده.
+  @visibleForTesting
+  static Future<void> tick() => _tick();
+
+  static Future<void> _tick() async {
+    if (!mode.value || !_foreground) return;
+    final t = now();
+    final g = _guardAt;
+    if (!_guarding && (g == null || t.difference(g) >= guardEvery)) {
+      _guardAt = t;
+      _guarding = true;
+      bool? on;
+      try {
+        on = await _guard();
+      } catch (_) {
+        on = null;
+      } finally {
+        _guarding = false;
+      }
+      if (!mode.value) return;
+      if (on == false) _armed = true;
+      if (on == true && _armed) {
+        exitMode(auto: true);
+        return;
+      }
+    }
+    for (final k in _attached.keys.toList()) {
+      final job = jobOf(k);
+      if (job.busy) continue;
+      final last = job.startedAt;
+      if (last == null || now().difference(last) >= intervalOf(k)) unawaited(job.run());
+    }
+  }
+
+  /// «هل رجع لشبكته؟» — مصادر الأقسام (أجهزته) ثمّ عيّنة المشتركين ([DeviceWarmService.onAgentNetwork]): ردٌّ واحد يكفي.
+  static Future<bool?> _guard() async {
+    final f = guardProbe;
+    if (f != null) return f();
+    bool? out;
+    for (final src in guardSources.values.toList()) {
+      final r = await src();
+      if (r == true) return true;
+      if (r == false) out = false;
+    }
+    final s = await DeviceWarmService.onAgentNetwork();
+    if (s == true) return true;
+    return s ?? out;
+  }
 
   static final subscribers = VpnNowJob(VpnNowKind.subscribers);
   static final devices = VpnNowJob(VpnNowKind.devices);
@@ -256,6 +428,14 @@ class VpnNow {
 
   /// خروجٌ/تبديل حساب — `SessionManager.clearAllSessionData`.
   static void reset() {
+    _loop?.cancel();
+    _loop = null;
+    _noticeTimer?.cancel();
+    mode.value = false;
+    notice.value = null;
+    _armed = false;
+    _guardAt = null;
+    _via = null;
     _readings.clear();
     _devices.clear();
     _readAt = null;

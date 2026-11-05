@@ -91,7 +91,11 @@ void main() {
   });
   tearDown(() {
     VpnNow.routeSource = () async => null;
+    VpnNow.guardProbe = null;
+    VpnNow.now = DateTime.now;
+    VpnNow.loopEvery = const Duration(seconds: 10);
     VpnNow.reset();
+    AgentNetPresence.reset();
   });
 
   test('المشتركون: يبدأ ⇒ «يفحص مشتركينك… 32 من 70» بالتقدّم ⇒ النتيجة وسطرها الثاني، وقراءة كلّ مشترك للكروت (باليوزر صغيراً)', () async {
@@ -193,14 +197,14 @@ void main() {
         home: Directionality(textDirection: TextDirection.rtl, child: Scaffold(body: Align(alignment: Alignment.bottomCenter, child: child))),
       );
 
-  testWidgets('الهنت: خارج الشبكة + مربوط ⇒ «فحص الآن» و×؛ × يخفيه؛ غير مربوط ⇒ «ربط VPN»؛ الميزة مغلقة ⇒ لا شيء؛ على الشبكة ⇒ لا شيء', (t) async {
+  testWidgets('الهنت: خارج الشبكة + مربوط ⇒ «تشغيل VPN» و×؛ × يخفيه؛ غير مربوط ⇒ «ربط VPN»؛ الميزة مغلقة ⇒ لا شيء؛ على الشبكة ⇒ لا شيء', (t) async {
     VpnNow.routeSource = () async => (linked: true, via: 'own');
     var opened = 0;
     await t.pumpWidget(host(VpnNowBar(kind: VpnNowKind.subscribers, offNetwork: true, onOpenVpn: () => opened++)));
     await _drain(t);
     expect(find.text('أنت خارج شبكتك'), findsOneWidget);
-    expect(find.text('تقدر تفحص مشتركينك عبر الـVPN'), findsOneWidget);
-    expect(find.text('فحص الآن'), findsOneWidget);
+    expect(find.text('افحص مشتركينك عبر الـVPN — يرجع مباشر وحده لمّا ترجع'), findsOneWidget);
+    expect(find.text('تشغيل VPN'), findsOneWidget);
     await t.tap(find.byTooltip('إخفاء'));
     await _drain(t);
     expect(find.text('أنت خارج شبكتك'), findsNothing, reason: 'مخفيٌّ لباقي اليوم');
@@ -250,13 +254,13 @@ void main() {
       ),
     ));
     await _drain(t);
-    final bar = t.getRect(find.text('فحص الآن'));
+    final bar = t.getRect(find.text('تشغيل VPN'));
     final nav = t.getRect(find.byKey(navKey));
     expect(bar.bottom <= nav.top, isTrue, reason: 'الزرّ $bar فوق الشريط $nav');
-    expect(t.hitTestOnBinding(t.getCenter(find.text('فحص الآن'))).path.isNotEmpty, isTrue);
+    expect(t.hitTestOnBinding(t.getCenter(find.text('تشغيل VPN'))).path.isNotEmpty, isTrue);
   });
 
-  testWidgets('الضغط على «فحص الآن» ⇒ الفحص ثمّ النتيجة بالشريط، وحبّة الجهاز وكرت المشترك بعلامة VPN', (t) async {
+  testWidgets('«تشغيل VPN» ⇒ الوضع يشتغل ويفحص ⇒ النتيجة تبقى بالشريط مع إيقاعه و[إيقاف]؛ الكرت والحبّة بعلامة VPN؛ «إيقاف» يرجعه', (t) async {
     VpnNow.routeSource = () async => (linked: true, via: 'own');
     final sub = Subscriber.fromJson({'idx': 1, 'username': 'u0', 'firstname': 'علي', 'expiration': '2026-12-01 00:00:00', 'remaining_days': 25});
     await t.pumpWidget(host(Column(mainAxisSize: MainAxisSize.min, children: [
@@ -266,9 +270,13 @@ void main() {
     ])));
     await _drain(t);
     expect(find.text('-61 dBm'), findsNothing);
-    await t.tap(find.text('فحص الآن'));
+    await t.tap(find.text('تشغيل VPN'));
     await _drain(t);
+    expect(VpnNow.mode.value, isTrue);
     expect(find.text('فُحص عبر VPN ✓ — قُرئ 60 من 70 متّصلاً — 2 بمشكلة'), findsOneWidget);
+    expect(find.textContaining('يتحدّث كلّ'), findsOneWidget, reason: 'الوضع يبقى ويتحدّث');
+    expect(find.text('إيقاف'), findsOneWidget);
+    expect(find.byTooltip('إخفاء'), findsNothing, reason: 'بالوضع لا ×: «إيقاف» وحده');
     expect(find.text('-61 dBm'), findsOneWidget);
     expect(find.text('CCQ 93%'), findsOneWidget);
     expect(find.text('VPN'), findsOneWidget, reason: 'كرت المشترك وحده (الأجهزة لم تُفحص بعد)');
@@ -276,5 +284,115 @@ void main() {
     await t.pump();
     expect(find.textContaining('38 متّصل'), findsOneWidget);
     expect(find.text('VPN'), findsNWidgets(2));
+    await t.tap(find.text('إيقاف'));
+    await _drain(t);
+    expect(VpnNow.mode.value, isFalse);
+    expect(find.text('إيقاف'), findsNothing);
+    expect(find.text('أنت خارج شبكتك'), findsOneWidget, reason: 'أُطفئ يدويّاً وهو خارج شبكته ⇒ العرض يرجع');
+    VpnNow.reset();
+  });
+
+  testWidgets('الحارس أطفأ الوضع ⇒ «رجعت لشبكتك» بالشريط لحظات ثمّ يختفي', (t) async {
+    VpnNow.routeSource = () async => (linked: true, via: 'company');
+    await t.pumpWidget(host(VpnNowBar(kind: VpnNowKind.devices, offNetwork: false, onOpenVpn: () {})));
+    await _drain(t);
+    await t.runAsync(() => VpnNow.enterMode());
+    VpnNow.exitMode(auto: true);
+    await t.pump();
+    expect(find.text('رجعت لشبكتك'), findsOneWidget);
+    expect(find.text('الفحص صار مباشر من موبايلك'), findsOneWidget);
+    await t.pump(const Duration(seconds: 9));
+    expect(find.text('رجعت لشبكتك'), findsNothing);
+    VpnNow.reset();
+  });
+
+  group('«وضع VPN» والحارس', () {
+    late DateTime clock;
+    bool? net;
+    int posts() => server.asked.where((a) => a.startsWith('POST')).length;
+    Future<void> settleJobs() async {
+      for (var i = 0; i < 200 && (VpnNow.devices.busy || VpnNow.subscribers.busy); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 2));
+      }
+    }
+
+    setUp(() {
+      clock = DateTime(2026, 11, 5, 21);
+      VpnNow.now = () => clock;
+      VpnNow.loopEvery = const Duration(hours: 1); // النبضة يدويّة بالاختبار
+      net = false;
+      VpnNow.guardProbe = () async => net;
+      VpnNow.routeSource = () async => (linked: true, via: 'company');
+      AgentNetPresence.reset();
+    });
+
+    test('خارج الشبكة ⇒ الحارس يرى شبكتك ⇒ يطفئ الوضع وحده ويقول «رجعت لشبكتك»؛ قبل ٢٠ث لا يسأل', () async {
+      await VpnNow.enterMode();
+      expect(VpnNow.mode.value, isTrue);
+      net = true;
+      clock = clock.add(const Duration(seconds: 10));
+      await VpnNow.tick();
+      expect(VpnNow.mode.value, isTrue, reason: 'الحارس كلّ ٢٠ث — والضغطة نفسها قرار');
+      clock = clock.add(const Duration(seconds: 15));
+      await VpnNow.tick();
+      expect(VpnNow.mode.value, isFalse);
+      expect(VpnNow.notice.value, contains('رجعت لشبكتك'));
+    });
+
+    test('شغّله وهو على شبكته (ضغطةٌ صريحة) ⇒ لا يُطفأ حتى تغيب الشبكة مرّةً ثمّ تعود', () async {
+      AgentNetPresence.debugSet(NetPresence.on);
+      await VpnNow.enterMode();
+      net = true;
+      clock = clock.add(const Duration(seconds: 25));
+      await VpnNow.tick();
+      expect(VpnNow.mode.value, isTrue);
+      net = false;
+      clock = clock.add(const Duration(seconds: 25));
+      await VpnNow.tick();
+      expect(VpnNow.mode.value, isTrue);
+      net = true;
+      clock = clock.add(const Duration(seconds: 25));
+      await VpnNow.tick();
+      expect(VpnNow.mode.value, isFalse);
+    });
+
+    test('القسم الظاهر يُحدَّث بإيقاعه (الأجهزة كلّ دقيقة على نفق الشركة) والمختفي لا؛ «إيقاف» يترك الفحص الجاري', () async {
+      server.done = _devDone;
+      VpnNow.attach(VpnNowKind.devices);
+      addTearDown(() => VpnNow.detach(VpnNowKind.devices));
+      await VpnNow.enterMode();
+      await settleJobs();
+      expect(posts(), 1, reason: 'الدخول يفحص القسم الظاهر');
+      expect(VpnNow.intervalOf(VpnNowKind.devices), const Duration(minutes: 1));
+      clock = clock.add(const Duration(seconds: 30));
+      await VpnNow.tick();
+      await settleJobs();
+      expect(posts(), 1, reason: 'قبل الدقيقة لا');
+      clock = clock.add(const Duration(seconds: 35));
+      server.polls = 0;
+      await VpnNow.tick();
+      await settleJobs();
+      expect(posts(), 2, reason: 'بعد الدقيقة يُعاد');
+      VpnNow.detach(VpnNowKind.devices);
+      clock = clock.add(const Duration(minutes: 5));
+      await VpnNow.tick();
+      await settleJobs();
+      expect(posts(), 2, reason: 'القسم مختفٍ ⇒ لا فحص');
+      VpnNow.attach(VpnNowKind.devices);
+      server.polls = 0;
+      final run = VpnNow.devices.run();
+      expect(VpnNow.devices.busy, isTrue);
+      VpnNow.exitMode();
+      await run;
+      expect(VpnNow.devices.phase, VpnBarPhase.idle, reason: 'نتيجة فحصٍ بعد الإيقاف لا تُعرض');
+    });
+
+    test('ملفّه أو قالب شركته (غرفةٌ مؤقّتة) ⇒ إيقاعٌ أبطأ', () async {
+      VpnNow.routeSource = () async => (linked: true, via: 'own');
+      await VpnNow.enterMode();
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      expect(VpnNow.intervalOf(VpnNowKind.devices), const Duration(minutes: 3));
+      expect(VpnNow.intervalOf(VpnNowKind.subscribers), const Duration(minutes: 5));
+    });
   });
 }
