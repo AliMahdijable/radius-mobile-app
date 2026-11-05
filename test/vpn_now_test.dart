@@ -190,6 +190,36 @@ void main() {
     expect(find.text('أنت خارج شبكتك'), findsNothing, reason: 'على الشبكة');
   });
 
+  testWidgets('الهنت فوق شريط التنقّل العائم (extendBody كالغلاف) لا تحته — بلاغ المالك ٥ نوفمبر: «لحد هسه مظاهرلي شي»', (t) async {
+    VpnNow.routeSource = () async => (linked: true, via: 'company');
+    const navKey = ValueKey('nav');
+    await t.pumpWidget(MaterialApp(
+      home: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          extendBody: true,
+          bottomNavigationBar: const SizedBox(key: navKey, height: 80, child: ColoredBox(color: Colors.white)),
+          body: Builder(
+            builder: (ctx) => Stack(children: [
+              const Positioned.fill(child: ColoredBox(color: Colors.grey)),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: MediaQuery.paddingOf(ctx).bottom,
+                child: VpnNowBar(kind: VpnNowKind.subscribers, offNetwork: true, onOpenVpn: () {}),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    ));
+    await _drain(t);
+    final bar = t.getRect(find.text('فحص الآن'));
+    final nav = t.getRect(find.byKey(navKey));
+    expect(bar.bottom <= nav.top, isTrue, reason: 'الزرّ $bar فوق الشريط $nav');
+    expect(t.hitTestOnBinding(t.getCenter(find.text('فحص الآن'))).path.isNotEmpty, isTrue);
+  });
+
   testWidgets('الضغط على «فحص الآن» ⇒ الفحص ثمّ النتيجة بالشريط، وحبّة الجهاز وكرت المشترك بعلامة VPN', (t) async {
     VpnNow.routeSource = () async => (linked: true, via: 'own');
     final sub = Subscriber.fromJson({'idx': 1, 'username': 'u0', 'firstname': 'علي', 'expiration': '2026-12-01 00:00:00', 'remaining_days': 25});

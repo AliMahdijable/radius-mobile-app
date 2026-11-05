@@ -960,17 +960,10 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     return Scaffold(
       backgroundColor: AppColors.bg,
       // ٥ نوفمبر (المالك: «… وكذلك الاجهزة»): لا يردّ أيّ جهاز ⇒ «أنت خارج شبكتك — تفحص أجهزتك عبر الـVPN؟» (أو الفحص/نتيجته)
-      bottomNavigationBar: _selectionMode
-          ? null
-          : VpnNowBar(
-              kind: VpnNowKind.devices,
-              offNetwork: _offNetwork,
-              onOpenVpn: () async {
-                await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ConnVpnScreen()));
-                unawaited(VpnNow.route(force: true));
-              },
-            ),
-      body: SafeArea(
+      // — يطفو فوق شريط التنقّل (Stack): لا bottomNavigationBar هنا، فهو يُزيل حشوة الجسم السفلى فتختفي آخر الأجهزة تحت الشريط
+      body: Stack(children: [
+        Positioned.fill(
+          child: SafeArea(
         bottom: false,
         child: _loading || _error != null
             ? Column(
@@ -1032,6 +1025,22 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 )),
               ),
       ),
+        ),
+        if (!_selectionMode)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: MediaQuery.paddingOf(context).bottom,
+            child: VpnNowBar(
+              kind: VpnNowKind.devices,
+              offNetwork: _offNetwork,
+              onOpenVpn: () async {
+                await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ConnVpnScreen()));
+                unawaited(VpnNow.route(force: true));
+              },
+            ),
+          ),
+      ]),
     );
   }
 

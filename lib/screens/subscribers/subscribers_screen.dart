@@ -1923,7 +1923,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       backgroundColor: AppColors.bg,
       body: _withDetailPane(SafeArea(
         bottom: false,
-        child: Column(
+        // ٥ نوفمبر: الهنت يطفو فوق شريط التنقّل (الغلاف يمدّ الجسم تحته — extendBody) — لا يُضاف للعمود فيختفي تحته
+        child: Stack(children: [
+        Column(
           children: [
             if (ProviderService.isFiberx) _fxTabBar(),
             // ⚠️ **عمر البيانات على الشاشة لا في الكود.** حين تُعرض
@@ -2301,16 +2303,22 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                 backgroundColor: Colors.transparent,
                 minHeight: 2,
               ),
-            // ٥ نوفمبر: «أنت خارج شبكتك — تفحص عبر الـVPN؟» (أو الفحص الجاري/نتيجته)
-            if (!_selectionMode)
-              VpnNowBar(
+          ],
+        ),
+          // ٥ نوفمبر: «أنت خارج شبكتك — تفحص عبر الـVPN؟» (أو الفحص الجاري/نتيجته) — فوق شريط التنقّل
+          if (!_selectionMode)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: MediaQuery.paddingOf(context).bottom,
+              child: VpnNowBar(
                 kind: VpnNowKind.subscribers,
                 offNetwork: _offNet,
                 onOpenVpn: _openVpnPage,
                 onShowProblems: _openConnAlerts,
               ),
-          ],
-        ),
+            ),
+        ]),
       )),
       // Selection bottom action bar
       // حكم الخادم على التجديد الجماعيّ يصل بعد دخول التحديد — الشريط يُعاد
