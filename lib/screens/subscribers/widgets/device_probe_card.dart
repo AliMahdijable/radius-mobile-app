@@ -18,6 +18,7 @@ import '../../../services/permissions_service.dart';
 import '../../../models/device_health.dart';
 import '../sheets/device_config_sheet.dart';
 import 'device_chip_micro.dart' show DeviceProbeBus;
+import 'subscriber_traffic_chart.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -151,6 +152,59 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   int? _rxBps;
   int? _txBps;
   bool _pulsing = false;
+  final _trafficHistory = SubscriberTrafficHistory();
+  bool _trafficPaused = false;
+  bool _trafficFailed = false;
+  int _trafficEpoch = 0;
+
+  bool _trafficCurrent(int epoch) => mounted && !_trafficPaused && epoch == _trafficEpoch;
+
+  void _recordTraffic(int down, int up) {
+    setState(() {
+      _rxBps = down;
+      _txBps = up;
+      _trafficFailed = false;
+      _trafficHistory.add(DateTime.now(), down, up);
+    });
+  }
+
+  void _loseTraffic() {
+    if (!mounted) return;
+    setState(() {
+      _rxBps = null;
+      _txBps = null;
+      _trafficFailed = true;
+      _lastRx = null;
+      _lastTx = null;
+      _lastSample = null;
+      _trafficHistory.gap(DateTime.now());
+    });
+  }
+
+  void _stopTraffic({bool clear = false}) {
+    _trafficEpoch++;
+    _trafficFailed = false;
+    _trafficTimer?.cancel();
+    _trafficTimer = null;
+    _session?.close();
+    _session = null;
+    _closeOntTraffic();
+    _ontRetryAt = null;
+    _rxBps = null;
+    _txBps = null;
+    _lastRx = null;
+    _lastTx = null;
+    _lastSample = null;
+    if (clear) {
+      _trafficHistory.clear();
+    } else {
+      _trafficHistory.gap(DateTime.now());
+    }
+  }
+
+  Widget _trafficChart() => SubscriberTrafficChart(
+    samples: _trafficHistory.samples, downBps: _rxBps, upBps: _txBps, unavailable: _trafficFailed,
+  );
 
   @override
   void initState() {
@@ -196,7 +250,9 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   void didUpdateWidget(DeviceProbeCard old) {
     super.didUpdateWidget(old);
     // وصل عنوان المشترك بعد الفتح (من جلسة الساس)، أو تبدّل ⇒ أعد البنگ.
-    if (old.ip != widget.ip || old.username != widget.username) {
+    if (old.ip != widget.ip || old.username != widget.username || old.company != widget.company) {
+      _stopTraffic(clear: true);
+      _maybeStartTraffic();
       _checkReach(force: true);
     }
   }
@@ -228,11 +284,9 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   void dispose() {
     SubscriberRefreshSignal.tick.removeListener(_onPullRefresh);
     WidgetsBinding.instance.removeObserver(this);
-    _trafficTimer?.cancel();
+    _stopTraffic();
     _signalTimer?.cancel();
     _agoTimer?.cancel();
-    _session?.close();
-    _closeOntTraffic();
     super.dispose();
   }
 
@@ -241,21 +295,16 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     // ⚠️ بدون هذا يبقى المؤقّت يطرق جهاز المشترك كلّ 3 ثوانٍ والتطبيق
     // في الخلفيّة — شاشة التفاصيل كانت خالية من أيّ مراقب دورة حياة.
     if (state == AppLifecycleState.resumed) {
+      setState(() => _trafficPaused = false);
       _maybeStartTraffic();
       _maybeStartSignal();
     } else {
-      _trafficTimer?.cancel();
-      _trafficTimer = null;
+      _trafficPaused = true;
+      _stopTraffic();
       _signalTimer?.cancel();
       _signalTimer = null;
       _agoTimer?.cancel();
       _agoTimer = null;
-      // نُغلق قناة SSH أيضاً — إبقاؤها مفتوحة والتطبيق في الخلفيّة
-      // يستهلك جلسة على جهاز المشترك بلا أيّ فائدة.
-      _session?.close();
-      _session = null;
-      // وجلسة الـONU: جلسته الوحيدة لا تبقى محجوزةً والتطبيق في الخلفيّة
-      _closeOntTraffic();
     }
   }
 
@@ -276,7 +325,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   }
 
   void _maybeStartTraffic() {
-    if (_trafficTimer != null) return;
+    if (_trafficTimer != null || _trafficPaused) return;
     final snap = _snap;
     // ⚠️ الشرط على **نوع الجهاز** لا على وجود عدّادات في لقطة الفحص:
     // لقطة الفحص تأتي من `status.cgi` وهو لا يُصدّر عدّادات بايت على
@@ -302,7 +351,8 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   /// نبضة ترافيك الـONU: جلسةٌ تُفتح مرّةً (باعتمادات شركة المشترك وعنوانه المثبَّت — كالفحص حرفاً)، ثمّ قراءةٌ ومعدّل.
   Future<void> _pulseOntTraffic() async {
     // فحصٌ جارٍ يدخل على الجهاز نفسه — دخولنا الآن يطرده (جلسةٌ واحدة) أو يطردنا؛ ننتظر النبضة التالية
-    if (_pulsing || _probing || !mounted) return;
+    if (_pulsing || _probing || !mounted || _trafficPaused) return;
+    final epoch = _trafficEpoch;
     final retryAt = _ontRetryAt;
     if (_ontSession == null && retryAt != null && DateTime.now().isBefore(retryAt)) return;
     _pulsing = true;
@@ -313,15 +363,19 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           subscriberUsername: widget.username,
           company: widget.company,
         );
-        if (creds == null || !mounted) return;
-        _ontSession = await OntTrafficSession.open(
+        if (!_trafficCurrent(epoch)) return;
+        if (creds == null) { _loseTraffic(); return; }
+        final session = await OntTrafficSession.open(
           ip: creds.ip,
           user: creds.user,
           pass: creds.pass,
           // ZTE (٢٥ أكتوبر) بجلسته وصفحاته؛ وإلّا هواوي كما كان
           vendor: _snap?.ont?.vendor ?? 'huawei',
         );
+        if (!_trafficCurrent(epoch)) { if (session != null) unawaited(session.close()); return; }
+        _ontSession = session;
         if (_ontSession == null) {
+          _loseTraffic();
           _ontRetryAt = DateTime.now().add(_ontRetry);
           return;
         }
@@ -331,46 +385,29 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
         }
       }
       final counters = await _ontSession?.sample();
+      if (!_trafficCurrent(epoch)) return;
       if (counters == null) {
         // طُردنا (دخولٌ آخر على الجهاز) أو انتهت الجلسة — دخولٌ جديد بعد المهلة، ولا يبقى رقمٌ قديم معروضاً كأنّه الآن
         _closeOntTraffic();
         _ontRetryAt = DateTime.now().add(_ontRetry);
-        if (mounted && _rxBps != null) {
-          setState(() {
-            _rxBps = null;
-            _txBps = null;
-          });
-        }
+        _loseTraffic();
         return;
       }
       final r = _ontMeter.add(counters, DateTime.now());
       // القراءة الأولى تزرع المرجع: الثانية بعد ٣ث لا عند النبضة التالية — أوّل رقمٍ أسرع، والمدّة كافية للدقّة
       if (r == null) Timer(const Duration(seconds: 3), _pulseOntTraffic);
       if (r != null && mounted) {
-        setState(() {
-          _rxBps = r.downBps;
-          _txBps = r.upBps;
-        });
+        _recordTraffic(r.downBps, r.upBps);
       }
     } catch (_) {
-      _closeOntTraffic();
-      _ontRetryAt = DateTime.now().add(_ontRetry);
+      if (_trafficCurrent(epoch)) {
+        _closeOntTraffic();
+        _ontRetryAt = DateTime.now().add(_ontRetry);
+        _loseTraffic();
+      }
     } finally {
       _pulsing = false;
     }
-  }
-
-  /// التحميل بلون العلامة والرفع أسود كما كانا («للتمييز» — المالك ٢٢ أكتوبر). null قبل أوّل معدّل («—» بلونٍ خافت).
-  List<({String text, Color color})>? _trafficParts({required bool unit}) {
-    final down = _rxBps;
-    if (down == null) return null;
-    final up = _txBps ?? 0;
-    String f(int v) => unit ? formatBpsUnit(v) : _fmtBps(v);
-    return [
-      (text: '↓${f(down)}', color: AppColors.brandAccent),
-      (text: unit ? '   ' : ' ', color: AppColors.textLow),
-      (text: '↑${f(up)}', color: AppColors.textHi),
-    ];
   }
 
   void _closeOntTraffic() {
@@ -381,7 +418,8 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   }
 
   Future<void> _pulseTraffic() async {
-    if (_pulsing || !mounted) return;
+    if (_pulsing || !mounted || _trafficPaused) return;
+    final epoch = _trafficEpoch;
     _pulsing = true;
     try {
       // الجلسة تُفتح مرّة وتُعاد. الأمر الوحيد في كلّ نبضة هو
@@ -392,22 +430,27 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           subscriberUsername: widget.username,
           company: widget.company,
         );
-        if (creds == null) return;
-        _session = await UbntTrafficSession.open(
+        if (!_trafficCurrent(epoch)) return;
+        if (creds == null) { _loseTraffic(); return; }
+        final session = await UbntTrafficSession.open(
           ip: creds.ip,
           user: creds.user,
           pass: creds.pass,
         );
+        if (!_trafficCurrent(epoch)) { session?.close(); return; }
+        _session = session;
       }
       final sess = _session;
-      if (sess == null) return;
+      if (sess == null) { _loseTraffic(); return; }
 
       final read = await sess.sample();
+      if (!_trafficCurrent(epoch)) return;
       if (read == null) {
         // الجلسة ماتت غالباً (انقطاع أو مهلة الجهاز) — نُغلقها ليُعاد
         // فتحها في النبضة القادمة بدل الإصرار على قناة ميّتة.
         sess.close();
         _session = null;
+        _loseTraffic();
         return;
       }
 
@@ -424,10 +467,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
           // سقف عقلانيّة: قراءة شاذّة بعد التفاف 32-bit تمرّ بلا هذا.
           const sane = 10000000000;
           if (r <= sane && t <= sane && mounted) {
-            setState(() {
-              _rxBps = r;
-              _txBps = t;
-            });
+            _recordTraffic(r, t);
           }
         }
       }
@@ -435,10 +475,11 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
       _lastTx = read.up;
       _lastSample = now;
     } catch (_) {
-      // نبضة فاشلة: لا نمسّ المرجع، فالنبضة الناجحة التالية تحسب
-      // المعدّل على كامل الفجوة — متوسّط صحيح لا قفزة.
-      _session?.close();
-      _session = null;
+      if (_trafficCurrent(epoch)) {
+        _session?.close();
+        _session = null;
+        _loseTraffic();
+      }
     } finally {
       _pulsing = false;
     }
@@ -972,24 +1013,10 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // شبكة 2×2 كما كانت (طلب المالك ٢٢ أكتوبر: «٤ كارتات بشكل مربّعات مثل السابق»): الترافيك أوّلاً («خلّي الترفك بالأوّل»)
-        // ثمّ RX/TX بلاطةٌ واحدة، وتحتهما الفولتيّة والحرارة. RX والتحميل بلون العلامة، وTX والرفع أسود كما كانا («للتمييز»)؛ والأحمر لقيمةٍ خارج حدّها.
-        // القيمة تُصغَّر لتتّسع النصف (fit) لا تُقصّ — القصّ يُسقط وحدةً أو رقماً (انظر _ubntBody).
+        _trafficChart(),
+        const SizedBox(height: Sp.sm),
         Row(
           children: [
-            Expanded(
-              child: _MetricTile(
-                icon: LucideIcons.activity,
-                field: CopyField(
-                  'الترافيك الآن',
-                  _rxBps == null ? '—' : '↓${_fmtBps(_rxBps!)} ↑${_fmtBps(_txBps ?? 0)}',
-                ),
-                color: _rxBps == null ? AppColors.textLow : AppColors.brandAccent,
-                fit: true,
-                parts: _trafficParts(unit: false),
-              ),
-            ),
-            const SizedBox(width: Sp.sm),
             Expanded(
               child: _MetricTile(
                 icon: LucideIcons.arrowDownUp,
@@ -1081,16 +1108,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
     // شبه ثابت يُنظر إليه عند التركيب، والترافيك هو ما يُسأل عنه
     // يوميّاً — «هل المشترك يسحب فعلاً؟».
     final Widget? wide = _snap?.kind == DeviceKind.ubiquiti
-        ? _MetricTile(
-            field: CopyField(
-              'الترافيك',
-              _rxBps == null
-                  ? '—'
-                  : '↓${_fmtBps(_rxBps!)} ↑${_fmtBps(_txBps ?? 0)}',
-            ),
-            color: _rxBps == null ? AppColors.textLow : AppColors.brandAccent,
-            parts: _trafficParts(unit: false),
-          )
+        ? _trafficChart()
         : null;
 
     return Column(
