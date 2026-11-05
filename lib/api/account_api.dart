@@ -59,6 +59,7 @@ class AccountApi {
         path,
         data: data,
         options: Options(method: method, headers: {
+          ...ApiClient.versionHeaders(),
           ...headers,
           'x-account-token': token,
           'x-device-id': await DeviceId.get(),

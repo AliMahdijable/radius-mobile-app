@@ -730,6 +730,7 @@ class AuthApi {
         '/api/auth/refresh-token',
         data: {'adminId': adminId},
         options: Options(headers: {
+          ...ApiClient.versionHeaders(),
           'x-account-token': accountToken,
           if (deviceId != null && deviceId.isNotEmpty) 'x-device-id': deviceId,
           'x-device-label': AppPlatform.deviceLabel,

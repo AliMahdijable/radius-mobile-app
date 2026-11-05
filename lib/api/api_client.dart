@@ -72,6 +72,14 @@ class ApiClient {
 
   static final Dio dio = _buildDio(baseUrl);
 
+  /// رقم النسخة لكلّ عميلٍ — والعملاء المستقلّون عن [dio] (التجديد، الحساب، المساعد بوضع الحساب) يضمّونه بأنفسهم: بوّابة
+  /// التحديث (server/appGate.js) تحكم به، و3.0.15 لم يرسله منها فرُدّت «نسخةً قديمة» (٥ نوفمبر: «انتهاء الجلسة» بالهواتف —
+  /// الخادم يمرّرها بلا رقمٍ منذ da9dcea، وهذا كي لا يحتاج استثناءً بعد اليوم).
+  static Map<String, String> versionHeaders() => {
+        if (AppVersion.buildNumber.isNotEmpty) 'x-app-build': AppVersion.buildNumber,
+        if (AppVersion.version.isNotEmpty) 'x-app-version': AppVersion.version,
+      };
+
   /// تجديد الجلسة بالمسار نفسه الذي يسلكه المعترض عند 401 — نداءٌ واحدٌ
   /// مشترك مع أيّ تجديدٍ جارٍ — لكن **بلا** مسحٍ للجلسة ولا طردٍ عند الرفض:
   /// المستدعي يقرّر. التجديد الجماعيّ يأخذ جلسة الساس المنتهية 409
@@ -180,8 +188,7 @@ class _AuthInterceptor extends Interceptor {
     // نوع الجهاز لوصفه في «أجهزتي» (لاتينيّ: الترويسات لا تحمل العربيّة بأمان؛ الخادم يعرّبه).
     options.headers['x-device-label'] = AppPlatform.deviceLabel;
     // نسخة التطبيق (٣ نوفمبر — إجبار التحديث، server/appGate.js): ما قبل 3.0.15 لا يرسلها فيُعرف قديماً.
-    if (AppVersion.buildNumber.isNotEmpty) options.headers['x-app-build'] = AppVersion.buildNumber;
-    if (AppVersion.version.isNotEmpty) options.headers['x-app-version'] = AppVersion.version;
+    options.headers.addAll(ApiClient.versionHeaders());
     // «كل الشركات»: نداءٌ لشركةٍ من شركات الحساب — توكن الحساب وحده + مفتاحها (lib/api/company_route.dart). لا Bearer الشركة
     // المفتوحة: الخادم يرفض الهويّتين معاً (COMPANY_ROUTE_CONFLICT)، ولا يصل الهاتفَ توكنُ الشركة أبداً.
     final routeKey = CompanyRoute.keyFor(options);

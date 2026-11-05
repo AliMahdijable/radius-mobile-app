@@ -836,6 +836,7 @@ class AiApi {
       path,
       data: data,
       options: Options(method: method, headers: {
+        ...ApiClient.versionHeaders(),
         'x-account-token': token,
         'x-device-id': await DeviceId.get(),
         'x-device-label': _deviceLabel,
