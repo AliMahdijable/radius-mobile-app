@@ -384,8 +384,9 @@ class DevicesCheck {
       final w = subs.where((s) => s.weak).length;
       final l = subs.where((s) => s.lowCcq).length;
       if (w > 0 || l > 0) {
+        // الرقم بعد الكلمة لا قبلها: «1 CCQ» يُرسم «CCQ 1» في سطرٍ عربيّ (لقطة ٦ نوفمبر)
         f.add(CheckFinding(
-            CheckLevel.warn, '${[if (w > 0) '$w إشارة ضعيفة', if (l > 0) '$l CCQ واطي'].join(' · ')} — من ${subs.length} مشترك'));
+            CheckLevel.warn, '${[if (w > 0) 'إشارة ضعيفة: $w', if (l > 0) 'CCQ واطي: $l'].join(' · ')} — من ${subs.length} مشترك'));
       }
       if (subsKnown && subs.isEmpty) {
         final was = prev?.peers ?? 0;

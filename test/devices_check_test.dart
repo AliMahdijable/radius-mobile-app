@@ -112,7 +112,7 @@ void main() {
       expect(r.subs.map((s) => s.name), ['omar', 'zaid', 'ali', 'sami']);
       expect(r.subsWeak, 1);
       expect(r.subsLowCcq, 1);
-      expect(texts(r), contains('1 إشارة ضعيفة · 1 CCQ واطي — من 4 مشترك'));
+      expect(texts(r), contains('إشارة ضعيفة: 1 · CCQ واطي: 1 — من 4 مشترك'));
       expect(r.subs.last.ccq, isNull);
       final txt = r.toText();
       expect(txt, contains('omar: -78 dBm · CCQ 88٪'));
