@@ -331,6 +331,43 @@ void main() {
     });
   });
 
+  group('٦ نوفمبر — الماك: «النقر عليه يفتحله اليوزر المشابه… ونفس الشي للسكاتر»', () {
+    const idx = {'a0b1c2d3e4f5': 'ali@popq', 'a0b1c2d3e4f9': 'omar@popq', '001122334455': 'zaid@popq'};
+    test('المطابق، ثمّ الأقرب من الشركة نفسها بفرقٍ ≤ ٨، والتعادل والبعيد لا', () {
+      expect(DevicesCheck.matchMac('A0:B1:C2:D3:E4:F5', idx), (user: 'ali@popq', approx: false));
+      expect(DevicesCheck.matchMac('a0-b1-c2-d3-e4-f7', idx), isNull, reason: 'بين اثنين بالبعد نفسه ⇒ لا حسم');
+      expect(DevicesCheck.matchMac('a0b1c2d3e4fb', idx), (user: 'omar@popq', approx: true));
+      expect(DevicesCheck.matchMac('a0b1c2d3e5ff', idx), isNull, reason: 'أبعد من ٨');
+      expect(DevicesCheck.matchMac('ffb1c2d3e4f5', idx), isNull, reason: 'شركةٌ أخرى');
+      expect(DevicesCheck.matchMac('zz', idx), isNull);
+      expect(DevicesCheck.fmtMac('a0b1c2d3e4f5'), 'A0:B1:C2:D3:E4:F5');
+    });
+
+    test('محطّة السكتر وONU الأولت تأخذان اليوزر بماكهما، والتقرير النصّيّ يحمل الماك', () {
+      final sec = DevicesCheck.evaluate(
+        d: dev(5, type: 'sector', brand: 'mikrotik'),
+        alive: true,
+        macUsers: idx,
+        detail: detail(glance: const DeviceGlance(isAp: true), peers: const [
+          PeerLink(name: '10.0.0.9', signal: -80, mac: 'A0:B1:C2:D3:E4:F5'),
+          PeerLink(name: 'x', signal: -50, mac: '11:22:33:44:55:66'),
+        ]),
+        limits: lim,
+      );
+      expect(sec.subs.first.title, 'ali@popq');
+      expect(sec.subs.first.mac, 'a0b1c2d3e4f5');
+      expect(sec.subs.last.user, isNull);
+      expect(sec.toText(), contains('ali@popq (A0:B1:C2:D3:E4:F5): -80 dBm'));
+      final olt = DevicesCheck.evaluate(
+        d: dev(8, type: 'other', brand: 'vsol'),
+        alive: true,
+        macUsers: idx,
+        detail: const DeviceDetail(glance: DeviceGlance(onusTotal: 1), onuLights: [OnuLight(name: 'EPON0/1:3', rx: -22, mac: 'a0b1c2d3e4fb')]),
+      );
+      expect((olt.subs.single.title, olt.subs.single.approx), ('omar@popq', true));
+    });
+  });
+
   test('السرعة نصّاً ⇒ ميغابت', () {
     expect(DevicesCheck.mbpsOf('1Gbps'), 1000);
     expect(DevicesCheck.mbpsOf('100Mbps'), 100);

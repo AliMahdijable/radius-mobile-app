@@ -8,6 +8,8 @@ import '../../../core/util/clipboard_helper.dart';
 import '../../../models/network_device.dart';
 import '../../../services/devices_check.dart';
 import '../../../services/devices_check_runner.dart';
+import '../../../services/notification_router.dart';
+import '../../subscribers/subscriber_detail_screen.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
@@ -127,7 +129,8 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
   Widget _iconBox(IconData icon, AppTone tone, {double size = 40}) => Container(
         width: size,
         height: size,
-        decoration: BoxDecoration(color: tone.softBg, borderRadius: BorderRadius.circular(R.icon), border: Border.all(color: tone.softBorder)),
+        decoration:
+            BoxDecoration(color: tone.softBg, borderRadius: BorderRadius.circular(R.icon), border: Border.all(color: tone.softBorder)),
         child: Icon(icon, size: size * 0.5, color: tone.fill),
       );
 
@@ -235,7 +238,8 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
 
   Widget _pill(String text, AppTone tone) => Container(
         padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 3),
-        decoration: BoxDecoration(color: tone.softBg, borderRadius: BorderRadius.circular(R.pill), border: Border.all(color: tone.softBorder)),
+        decoration:
+            BoxDecoration(color: tone.softBg, borderRadius: BorderRadius.circular(R.pill), border: Border.all(color: tone.softBorder)),
         child: Text(text, style: AppType.label(color: tone.onSoft)),
       );
 
@@ -343,69 +347,121 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
     ]);
   }
 
+  /// النقر: صفحة المشترك المطابق بماك جلسته، وإلّا نسخ الماك؛ والضغط المطوّل ينسخ الماك دائماً — المالك ٦ نوفمبر: «لازم تفعل
+  /// امكانيه نسخ الماك حتى يعرف وين يحدد او النقر عليه يفتحله اليوزر المشابه ونفس الشي للسكاتر».
+  Future<void> _tapSub(CheckSub s) async {
+    final user = s.user;
+    if (user == null) return _copyMac(s);
+    final nav = Navigator.of(context);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final sub = _run.subscriberFor(user) ?? await NotificationRouter.findSubscriber(user);
+    if (sub == null) {
+      messenger?.showSnackBar(SnackBar(content: Text('تعذّر فتح «$user» الآن — ابحث عنه من «المشتركين»')));
+      return;
+    }
+    await nav.push(MaterialPageRoute<void>(builder: (_) => SubscriberDetailScreen(sub: sub), fullscreenDialog: true));
+  }
+
+  Future<void> _copyMac(CheckSub s) async {
+    final m = s.mac;
+    await copyToClipboard(context, m == null ? s.title : DevicesCheck.fmtMac(m), label: m == null ? 'الاسم' : 'الماك');
+  }
+
   Widget _subRow(CheckSub s) {
     final sigTone = s.weak ? AppTone.warning : (s.light != null ? AppTone.success : Grade.signal(s.signal));
+    final mac = s.mac == null ? null : DevicesCheck.fmtMac(s.mac!);
+    final showMac = mac != null && mac.toLowerCase() != s.title.toLowerCase();
     return Container(
       margin: const EdgeInsets.only(bottom: Sp.xs),
-      padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: Sp.xs + 2),
       decoration: BoxDecoration(
         color: s.bad ? AppTone.warning.softBg : AppColors.surfaceSunken,
         borderRadius: BorderRadius.circular(R.sm),
       ),
-      child: Row(children: [
-        Expanded(child: Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.body(color: AppColors.textHi))),
-        if (s.light != null) ...[
-          const SizedBox(width: Sp.xs),
-          Directionality(
-            textDirection: TextDirection.ltr,
-            child: Text('${s.light!.toStringAsFixed(1)} dBm', style: AppType.label(color: sigTone.fill)),
-          ),
-        ],
-        if (s.signal != null) ...[
-          const SizedBox(width: Sp.xs),
-          // إشارته من جهتنا (عليها الحكم) وتحتها ما نستقبله منه (rx) — المالك: «او تظهرهن الاثنين»
-          Column(crossAxisAlignment: CrossAxisAlignment.end, mainAxisSize: MainAxisSize.min, children: [
-            Directionality(
-              textDirection: TextDirection.ltr,
-              child: Text('${s.signal} dBm', style: AppType.label(color: sigTone.fill)),
-            ),
-            if (s.rxSignal != null && s.rxSignal != s.signal)
-              Directionality(
-                textDirection: TextDirection.ltr,
-                child: Text('rx ${s.rxSignal}', style: AppType.micro(color: AppColors.textMid)),
-              ),
-          ]),
-        ],
-        if (s.ccq != null) ...[
-          const SizedBox(width: Sp.xs),
-          _pill('CCQ ${s.ccq}٪', s.lowCcq ? AppTone.warning : AppTone.success),
-        ],
-        if (s.rxRate != null || s.txRate != null) ...[
-          const SizedBox(width: Sp.xs),
-          // كبطاقة الجهاز الكبيرة: ↓الاستقبال ↑الإرسال ثمّ Mbps (المالك ٦ نوفمبر: «مابيها Mbps بس ارقام») — يصغر على الضيّق
-          Flexible(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: AlignmentDirectional.centerEnd,
-              child: Directionality(
-                textDirection: TextDirection.ltr,
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  if (s.rxRate != null) ...[
-                    Icon(LucideIcons.arrowDown, size: 10, color: AppColors.chartLine),
-                    Text('${s.rxRate}', style: AppType.microBold(color: AppColors.textHi)),
-                  ],
-                  if (s.rxRate != null && s.txRate != null) const SizedBox(width: 4),
-                  if (s.txRate != null) ...[
-                    Icon(LucideIcons.arrowUp, size: 10, color: AppColors.info),
-                    Text('${s.txRate}', style: AppType.microBold(color: AppColors.textHi)),
-                  ],
-                  Text(' Mbps', style: AppType.micro(color: AppColors.textLow)),
+      clipBehavior: Clip.antiAlias,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          key: ValueKey('check-sub-${s.mac ?? s.name}'),
+          onTap: () => _tapSub(s),
+          onLongPress: () => _copyMac(s),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: Sp.xs + 2),
+            child: Row(children: [
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                  Row(children: [
+                    if (s.user != null) ...[
+                      Icon(LucideIcons.userCheck, size: 13, color: s.approx ? AppColors.warning : AppColors.success),
+                      const SizedBox(width: 3),
+                    ],
+                    Flexible(
+                      child: Text(s.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.body(color: AppColors.textHi)),
+                    ),
+                  ]),
+                  if (showMac)
+                    Text(
+                      '\u2066$mac\u2069${s.approx ? ' · ماكٌ مشابه' : ''}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppType.micro(color: AppColors.textMid),
+                    ),
                 ]),
               ),
-            ),
+              if (s.light != null) ...[
+                const SizedBox(width: Sp.xs),
+                Directionality(
+                  textDirection: TextDirection.ltr,
+                  child: Text('${s.light!.toStringAsFixed(1)} dBm', style: AppType.label(color: sigTone.fill)),
+                ),
+              ],
+              if (s.signal != null) ...[
+                const SizedBox(width: Sp.xs),
+                // إشارته من جهتنا (عليها الحكم) وتحتها ما نستقبله منه (rx) — المالك: «او تظهرهن الاثنين»
+                Column(crossAxisAlignment: CrossAxisAlignment.end, mainAxisSize: MainAxisSize.min, children: [
+                  Directionality(
+                    textDirection: TextDirection.ltr,
+                    child: Text('${s.signal} dBm', style: AppType.label(color: sigTone.fill)),
+                  ),
+                  if (s.rxSignal != null && s.rxSignal != s.signal)
+                    Directionality(
+                      textDirection: TextDirection.ltr,
+                      child: Text('rx ${s.rxSignal}', style: AppType.micro(color: AppColors.textMid)),
+                    ),
+                ]),
+              ],
+              if (s.ccq != null) ...[
+                const SizedBox(width: Sp.xs),
+                _pill('CCQ ${s.ccq}٪', s.lowCcq ? AppTone.warning : AppTone.success),
+              ],
+              if (s.rxRate != null || s.txRate != null) ...[
+                const SizedBox(width: Sp.xs),
+                // كبطاقة الجهاز الكبيرة: ↓الاستقبال ↑الإرسال ثمّ Mbps (المالك ٦ نوفمبر: «مابيها Mbps بس ارقام») — يصغر على الضيّق
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: Directionality(
+                      textDirection: TextDirection.ltr,
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        if (s.rxRate != null) ...[
+                          Icon(LucideIcons.arrowDown, size: 10, color: AppColors.chartLine),
+                          Text('${s.rxRate}', style: AppType.microBold(color: AppColors.textHi)),
+                        ],
+                        if (s.rxRate != null && s.txRate != null) const SizedBox(width: 4),
+                        if (s.txRate != null) ...[
+                          Icon(LucideIcons.arrowUp, size: 10, color: AppColors.info),
+                          Text('${s.txRate}', style: AppType.microBold(color: AppColors.textHi)),
+                        ],
+                        Text(' Mbps', style: AppType.micro(color: AppColors.textLow)),
+                      ]),
+                    ),
+                  ),
+                ),
+              ],
+            ]),
           ),
-        ],
-      ]),
+        ),
+      ),
     );
   }
 
@@ -434,7 +490,8 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
-          Container(width: 8, height: 8, decoration: BoxDecoration(color: p.up ? AppColors.success : AppColors.textLow, shape: BoxShape.circle)),
+          Container(
+              width: 8, height: 8, decoration: BoxDecoration(color: p.up ? AppColors.success : AppColors.textLow, shape: BoxShape.circle)),
           const SizedBox(width: Sp.sm),
           Directionality(
             textDirection: TextDirection.ltr,

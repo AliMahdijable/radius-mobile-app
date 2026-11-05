@@ -127,6 +127,7 @@ class PeerLink {
     required this.name,
     this.signal,
     this.txSignal,
+    this.mac,
     this.ccq,
     this.txRate,
     this.rxRate,
@@ -141,6 +142,9 @@ class PeerLink {
   /// إشارة الطرف من جهتنا — كيف يستقبلنا (مايكروتك tx-signal-strength، يوبيكويتي remote/tx signal)؛ null = لا يعطيها الطراز.
   /// المالك ٦ نوفمبر: «مفروض تقره الاشارة من عدنا وليس rx او تظهرهن الاثنين».
   final int? txSignal;
+
+  /// ماك الطرف — للمطابقة بماك جلسة المشترك ونسخه (المالك ٦ نوفمبر: «لازم تفعل امكانيه نسخ الماك… او النقر عليه يفتحله اليوزر»).
+  final String? mac;
 
   /// جودة الاتّصال ٪ — CCQ.
   ///
@@ -438,7 +442,7 @@ class DeviceVitals {
           glance: DeviceGlance(onusOnline: online, onusTotal: total, pons: pons),
           onuLights: [
             for (final o in list(v['onus']))
-              if (d(o['rx']) case final rx?) OnuLight(name: s(o['n']) ?? s(o['k']) ?? '—', rx: rx),
+              if (d(o['rx']) case final rx?) OnuLight(name: s(o['n']) ?? s(o['k']) ?? '—', rx: rx, mac: s(o['m'])),
           ],
         ),
         at: when,
@@ -496,6 +500,7 @@ class DeviceVitals {
           name: s(p['n']) ?? '—',
           signal: n(p['s']),
           txSignal: n(p['ts']),
+          mac: s(p['m']),
           ccq: n(p['q']),
           txRate: n(p['tx']),
           rxRate: n(p['rx']),
@@ -667,6 +672,7 @@ class DeviceVitals {
                   : (c.ip?.isNotEmpty == true ? c.ip! : c.mac)),
           signal: c.signalStrength,
           txSignal: c.txSignalStrength != 0 ? c.txSignalStrength : null,
+          mac: c.mac,
           // نُفضّل txCcq: يقيس جودة ما نُرسله إلى العميل، وهو ما يشعر
           // به المشترك. ونسقط إلى rxCcq حين لا يُرجع الطرازُ الأوّل.
           ccq: c.txCcq > 0 ? c.txCcq : (c.rxCcq > 0 ? c.rxCcq : null),
@@ -836,6 +842,7 @@ class DeviceVitals {
               : (st.ip?.isNotEmpty == true ? st.ip! : st.mac),
           signal: st.signal,
           txSignal: st.txSignal != 0 ? st.txSignal : null,
+          mac: st.mac,
           ccq: st.ccq > 0 ? st.ccq : null,
           txRate: st.txRate,
           rxRate: st.rxRate,
@@ -1092,6 +1099,7 @@ Future<ProbeResult> _olt(NetworkDevice d, Map<String, dynamic> creds, {bool deta
               OnuLight(
                 name: (o.name ?? '').trim().isNotEmpty ? o.name!.trim() : (o.serial ?? o.mac ?? 'PON${o.ponPort}:${o.onuId}'),
                 rx: rx[o.ifIndex]!,
+                mac: o.mac,
               ),
         ]..sort((a, b) => a.rx.compareTo(b.rx));
       }
@@ -1103,9 +1111,10 @@ Future<ProbeResult> _olt(NetworkDevice d, Map<String, dynamic> creds, {bool deta
 /// ضوء ONU واحدة (dBm) — لتقرير الأولت.
 @immutable
 class OnuLight {
-  const OnuLight({required this.name, required this.rx});
+  const OnuLight({required this.name, required this.rx, this.mac});
   final String name;
   final double rx;
+  final String? mac;
 }
 
 /// خانات بطاقة الأولت وتفصيلها من لقطةٍ واحدة — الجدار وشاشات الألياف بالحساب نفسه ([bridgeFiberVitals]).

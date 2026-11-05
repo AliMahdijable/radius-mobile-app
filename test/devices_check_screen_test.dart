@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
+import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/network_devices/check/devices_check_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
 import 'package:rad_mysvcs/services/devices_check.dart';
@@ -42,6 +43,9 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     DevicesCheckRunner.debugLimits = () async => const CheckLimits(subSignal: -70, subCcq: 50);
+    DevicesCheckRunner.debugSubscribers = () async => [
+          Subscriber.fromJson(const {'idx': '7', 'username': 'weak.user@popq', 'last_mac': 'AA:BB:CC:00:00:01'}),
+        ];
     DevicesCheckRunner.debugProbe = (d) async => (
           status: d.id == 4 ? 'offline' : 'online',
           responseMs: d.id == 4 ? null : 3,
@@ -71,6 +75,7 @@ void main() {
     DevicesCheckRunner.debugLimits = null;
     DevicesCheckRunner.debugProbe = null;
     DevicesCheckRunner.debugFetch = null;
+    DevicesCheckRunner.debugSubscribers = null;
   });
 
   /// القائمة كسولة: يُرجَع لأعلاها ثمّ يُنزَل حتّى يظهر المطلوب.
@@ -126,7 +131,7 @@ void main() {
   testWidgets('٦ نوفمبر: كلّ قسمٍ يُفتح وحده (المشتركون لا يفتحون المنافذ)، والسرعة بـMbps', (t) async {
     final mt = _d(7, 'سكتر مايكروتك', 'sector');
     DevicesCheckRunner.debugFetch = (d) async => _r(const DeviceDetail(glance: DeviceGlance(isAp: true), peers: [
-          PeerLink(name: 'weak.one', signal: -80, txSignal: -79, ccq: 90, txRate: 86, rxRate: 13),
+          PeerLink(name: 'weak.one', signal: -80, txSignal: -79, ccq: 90, txRate: 86, rxRate: 13, mac: 'aa:bb:cc:00:00:01'),
           PeerLink(name: 'good.one', signal: -55, txSignal: -57, ccq: 99, txRate: 130, rxRate: 117),
         ], ports: [
           PortTraffic(name: 'ether1', up: true, linkSpeed: '1Gbps'),
@@ -135,7 +140,9 @@ void main() {
         ]));
     await pumpSim(t, const SimVariant(390, dark: false), settle: false, home: (_) => DevicesCheckScreen(devices: [mt], viaVpn: false));
     await settle(t);
-    expect(find.text('weak.one'), findsOneWidget);
+    // ماك المحطّة طابق ماك جلسة مشترك ⇒ يوزره بدل الاسم، والماك تحته (للنسخ)
+    expect(find.text('weak.user@popq'), findsOneWidget);
+    expect(find.text('\u2066AA:BB:CC:00:00:01\u2069'), findsOneWidget);
     expect(find.text('good.one'), findsNothing);
     expect(find.text('ether3'), findsNothing, reason: 'المنفذ السليم مطويّ');
     expect(find.text(' Mbps'), findsOneWidget, reason: 'السرعة بوحدتها');

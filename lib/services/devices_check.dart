@@ -27,9 +27,30 @@ class CheckFinding {
 
 /// مشتركٌ على السكتر (محطّة بجدول تسجيله).
 class CheckSub {
-  const CheckSub(
-      {required this.name, this.signal, this.rxSignal, this.light, this.ccq, this.txRate, this.rxRate, this.weak = false, this.lowCcq = false});
+  const CheckSub({
+    required this.name,
+    this.signal,
+    this.rxSignal,
+    this.light,
+    this.ccq,
+    this.txRate,
+    this.rxRate,
+    this.weak = false,
+    this.lowCcq = false,
+    this.mac,
+    this.user,
+    this.approx = false,
+  });
   final String name;
+
+  /// ماك المحطّة/الـONU (للنسخ)، ويوزر المشترك المطابق بماك جلسته — [approx] = ماكٌ قريب لا مطابق (جهاز الضوئي كثيراً ما يأخذ
+  /// ماك الجلسة بفرقٍ صغير عن ماكه) — المالك ٦ نوفمبر: «او النقر عليه يفتحله اليوزر المشابه».
+  final String? mac;
+  final String? user;
+  final bool approx;
+
+  /// ما يُعرض: اليوزر إن عُرف، وإلّا الاسم.
+  String get title => user ?? name;
 
   /// إشارة المشترك من جهتنا (كيف يستقبلنا) إن أعطاها الطراز، وإلّا ما نستقبله منه — وعليها الحكم.
   final int? signal;
@@ -222,7 +243,7 @@ class DeviceCheckReport {
       b.write('\n• ${f.text}');
     }
     for (final s in subs.where((s) => s.bad)) {
-      b.write('\n  - ${s.name}: ${DevicesCheck.subLine(s)}');
+      b.write('\n  - ${s.title}${s.mac != null ? ' (${DevicesCheck.fmtMac(s.mac!)})' : ''}: ${DevicesCheck.subLine(s)}');
     }
     for (final p in ports.where((p) => p.flagged)) {
       b.write('\n  - ${p.name}: ${p.notes.join('، ')}');
@@ -269,6 +290,41 @@ class DevicesCheck {
     };
   }
 
+  /// ماكٌ بأيّ صيغة ⇒ ١٢ حرفاً ستّ‌عشريّاً صغيراً؛ غير ذلك null.
+  static String? normMac(String? m) {
+    final h = (m ?? '').toLowerCase().replaceAll(RegExp(r'[^0-9a-f]'), '');
+    return h.length == 12 ? h : null;
+  }
+
+  /// «AA:BB:CC:DD:EE:FF» للعرض والنسخ.
+  static String fmtMac(String norm) => [for (var i = 0; i < 12; i += 2) norm.substring(i, i + 2)].join(':').toUpperCase();
+
+  /// يوزر المشترك بماك جلسته: المطابق أوّلاً، وإلّا الأقرب من الشركة نفسها (أوّل ستّة حروف) بفرقٍ ≤ ٨ — جهاز الضوئي بوضع
+  /// الراوتر يأخذ للجلسة ماكاً بعد ماكه بقليل. التعادل لا يُحسم (null).
+  static ({String user, bool approx})? matchMac(String? mac, Map<String, String> index) {
+    final m = normMac(mac);
+    if (m == null || index.isEmpty) return null;
+    final exact = index[m];
+    if (exact != null) return (user: exact, approx: false);
+    final v = int.parse(m, radix: 16);
+    final oui = m.substring(0, 6);
+    String? best;
+    var bestD = 9;
+    var tie = false;
+    for (final e in index.entries) {
+      if (!e.key.startsWith(oui)) continue;
+      final d = (int.parse(e.key, radix: 16) - v).abs();
+      if (d < bestD) {
+        bestD = d;
+        best = e.value;
+        tie = false;
+      } else if (d == bestD && e.value != best) {
+        tie = true;
+      }
+    }
+    return best == null || tie ? null : (user: best, approx: true);
+  }
+
   static String fmtMbps(int mbps) => mbps >= 1000 && mbps % 1000 == 0 ? '${mbps ~/ 1000}G' : (mbps >= 1000 ? '${mbps / 1000}G' : '${mbps}M');
 
   static String subLine(CheckSub s) => [
@@ -307,8 +363,10 @@ class DevicesCheck {
     CheckMemo? prev,
     bool viaVpn = false,
     bool portsCountsOnly = false,
+    Map<String, String> macUsers = const {},
     DateTime? now,
   }) {
+    ({String user, bool approx})? who(String? mac) => matchMac(mac, macUsers);
     final at = now ?? DateTime.now();
     final g = detail?.glance;
     final role = roleOf(d, g);
@@ -405,6 +463,9 @@ class DevicesCheck {
             rxRate: p.rxRate,
             weak: (p.txSignal ?? p.signal) != null && (p.txSignal ?? p.signal)! < limits.subSignal,
             lowCcq: p.hasCcq && p.ccq! <= limits.subCcq,
+            mac: normMac(p.mac),
+            user: who(p.mac)?.user,
+            approx: who(p.mac)?.approx ?? false,
           ),
       ]..sort((a, b) {
           if (a.bad != b.bad) return a.bad ? -1 : 1;
@@ -433,7 +494,15 @@ class DevicesCheck {
       if (detail.onuLights.isNotEmpty) {
         subsKnown = true;
         subs = [
-          for (final o in detail.onuLights) CheckSub(name: o.name, light: o.rx, weak: o.rx < limits.fiberRxMin),
+          for (final o in detail.onuLights)
+            CheckSub(
+              name: o.name,
+              light: o.rx,
+              weak: o.rx < limits.fiberRxMin,
+              mac: normMac(o.mac),
+              user: who(o.mac)?.user,
+              approx: who(o.mac)?.approx ?? false,
+            ),
         ]..sort((a, b) => a.light!.compareTo(b.light!));
         final w = subs.where((x) => x.weak).length;
         if (w > 0) f.add(CheckFinding(CheckLevel.warn, 'ضوء ضعيف: $w — من ${subs.length} مشترك'));

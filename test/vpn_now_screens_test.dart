@@ -188,10 +188,12 @@ void main() {
 
   testWidgets('«فحص شامل» (٦ نوفمبر): الرادار مكان «تحديث» بوجود أجهزة — على شبكتك يفحص منها، وبوضع VPN عبر الـVPN', (t) async {
     DevicesCheckRunner.debugLimits = () async => const CheckLimits();
+    DevicesCheckRunner.debugSubscribers = () async => const [];
     DevicesCheckRunner.debugProbe = (d) async => (status: 'offline', responseMs: null, packetLoss: null, serviceOk: null);
     addTearDown(() {
       DevicesCheckRunner.debugLimits = null;
       DevicesCheckRunner.debugProbe = null;
+      DevicesCheckRunner.debugSubscribers = null;
     });
     VpnNow.routeSource = () async => (linked: true, via: 'company');
     AgentNetPresence.debugSet(NetPresence.on);

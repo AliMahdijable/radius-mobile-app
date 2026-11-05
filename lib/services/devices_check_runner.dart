@@ -8,6 +8,9 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/agent_alerts_api.dart';
+import '../api/big_subscribers_api.dart';
+import '../api/subscribers_api.dart';
+import '../models/subscriber.dart';
 import '../api/network_devices_api.dart';
 import '../models/network_device.dart';
 import '../screens/network_devices/device_vitals.dart';
@@ -72,6 +75,32 @@ class DevicesCheckRunner extends ChangeNotifier {
   DateTime? at;
   final reports = <int, DeviceCheckReport>{};
 
+  /// المشترك بيوزره — لفتح صفحته من صفّ محطّةٍ/ONU طابق ماكها ماكَ جلسته.
+  final _subsByUser = <String, Subscriber>{};
+  Subscriber? subscriberFor(String user) => _subsByUser[user];
+
+  @visibleForTesting
+  static Future<List<Subscriber>> Function()? debugSubscribers;
+
+  /// ماك الجلسة ⇒ اليوزر، من قائمة الحساب المخبّأة (الحساب الكبير لا قائمة كاملة له ⇒ بلا مطابقة، والنسخ يبقى).
+  Future<Map<String, String>> _macIndex() async {
+    final out = <String, String>{};
+    try {
+      List<Subscriber>? list;
+      if (debugSubscribers != null) {
+        list = await debugSubscribers!();
+      } else if (await BigSubscribersApi.probe().timeout(const Duration(seconds: 8)) <= 0) {
+        list = await SubscribersApi.loadAllWithOnline().timeout(const Duration(seconds: 20));
+      }
+      for (final s in list ?? const <Subscriber>[]) {
+        _subsByUser[s.username] = s;
+        final m = DevicesCheck.normMac(s.lastMac);
+        if (m != null) out[m] = s.username;
+      }
+    } catch (_) {}
+    return out;
+  }
+
   /// للاختبار: بدائل الشبكة.
   @visibleForTesting
   static Future<DeviceProbe> Function(NetworkDevice d)? debugProbe;
@@ -117,12 +146,12 @@ class DevicesCheckRunner extends ChangeNotifier {
     reports.clear();
     notifyListeners();
     try {
-      final (limits, memos) = await (loadLimits(), DevicesCheckMemoStore.load()).wait;
+      final (limits, memos, macs) = await (loadLimits(), DevicesCheckMemoStore.load(), _macIndex()).wait;
       if (gen != _gen) return;
       if (viaVpn) {
-        await _viaVpn(limits, memos, gen);
+        await _viaVpn(limits, memos, macs, gen);
       } else {
-        await _local(limits, memos, gen);
+        await _local(limits, memos, macs, gen);
       }
       if (gen != _gen) return;
       at = DateTime.now();
@@ -148,12 +177,12 @@ class DevicesCheckRunner extends ChangeNotifier {
 
   // ── من شبكتك ──────────────────────────────────────────────────────
 
-  Future<void> _local(CheckLimits limits, Map<int, CheckMemo> memos, int gen) async {
+  Future<void> _local(CheckLimits limits, Map<int, CheckMemo> memos, Map<String, String> macs, int gen) async {
     final queue = Queue<NetworkDevice>.from(devices);
     Future<void> worker() async {
       while (queue.isNotEmpty && gen == _gen) {
         final d = queue.removeFirst();
-        final r = await _checkLocal(d, limits, memos[d.id]);
+        final r = await _checkLocal(d, limits, memos[d.id], macs);
         if (gen != _gen) return;
         reports[d.id] = r;
         done++;
@@ -165,7 +194,7 @@ class DevicesCheckRunner extends ChangeNotifier {
     await Future.wait([for (var i = 0; i < 6; i++) worker()]);
   }
 
-  static Future<DeviceCheckReport> _checkLocal(NetworkDevice d, CheckLimits limits, CheckMemo? prev) async {
+  static Future<DeviceCheckReport> _checkLocal(NetworkDevice d, CheckLimits limits, CheckMemo? prev, Map<String, String> macs) async {
     DeviceProbe? probe;
     try {
       probe = await (debugProbe?.call(d) ?? NetworkDevicesApi.probeDevice(d, ping: true)).timeout(const Duration(seconds: 15));
@@ -191,6 +220,7 @@ class DevicesCheckRunner extends ChangeNotifier {
         raw: p.raw,
         limits: limits,
         prev: prev,
+        macUsers: macs,
       );
     } catch (_) {
       final svc = probe?.serviceOk == false;
@@ -210,7 +240,7 @@ class DevicesCheckRunner extends ChangeNotifier {
 
   // ── عبر الـVPN ──────────────────────────────────────────────────────
 
-  Future<void> _viaVpn(CheckLimits limits, Map<int, CheckMemo> memos, int gen) async {
+  Future<void> _viaVpn(CheckLimits limits, Map<int, CheckMemo> memos, Map<String, String> macs, int gen) async {
     final job = VpnNow.devices;
     void onJob() {
       line = job.line;
@@ -260,6 +290,7 @@ class DevicesCheckRunner extends ChangeNotifier {
           prev: prev,
           viaVpn: true,
           portsCountsOnly: v?['pl'] is! List,
+          macUsers: macs,
         );
       }
       done++;
