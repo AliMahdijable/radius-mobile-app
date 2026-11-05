@@ -64,40 +64,18 @@ String subscriberTrafficRate(int? bps) {
   return '${value == 0 ? '0' : value < 10 ? value.toStringAsFixed(1) : value.toStringAsFixed(0)} $unit';
 }
 
-enum SubscriberTrafficDesign { wave, bars, gauges, compact }
-
-double _niceScale(int value) {
-  final peak = math.max(1000, value);
-  final magnitude =
-      math.pow(10, (math.log(peak) / math.ln10).floor()).toDouble();
-  return (peak * 1.1 / magnitude).ceil() * magnitude;
-}
-
-// Comparison APKs select only the presentation; polling and data stay identical.
-const _buildDesign =
-    String.fromEnvironment('TRAFFIC_DESIGN', defaultValue: 'wave');
-const _defaultDesign = _buildDesign == 'bars'
-    ? SubscriberTrafficDesign.bars
-    : _buildDesign == 'gauges'
-        ? SubscriberTrafficDesign.gauges
-        : _buildDesign == 'compact'
-            ? SubscriberTrafficDesign.compact
-            : SubscriberTrafficDesign.wave;
-
-/// Live device readings; no extra requests or invented history in any design.
+/// Approved waveform design from device polls; no extra requests or invented history.
 class SubscriberTrafficChart extends StatelessWidget {
   const SubscriberTrafficChart(
       {super.key,
       required this.samples,
       required this.downBps,
       required this.upBps,
-      this.design = _defaultDesign,
       this.unavailable = false});
   final List<SubscriberTrafficSample> samples;
   final int? downBps;
   final int? upBps;
   final bool unavailable;
-  final SubscriberTrafficDesign design;
 
   @override
   Widget build(BuildContext context) {
@@ -149,162 +127,82 @@ class SubscriberTrafficChart extends StatelessWidget {
                 Text(period, style: AppType.micro(color: AppColors.textLabel)),
             ]),
             const SizedBox(height: Sp.sm),
-            if (design == SubscriberTrafficDesign.gauges) ...[
-              Row(children: [
-                Expanded(
-                    child: _gauge(
-                        'تحميل',
-                        downBps,
-                        readings.isEmpty ? null : peakDown,
-                        AppColors.chartLine)),
-                const SizedBox(width: Sp.sm),
-                Expanded(
-                    child: _gauge(
-                        'رفع',
-                        upBps,
-                        readings.isEmpty
-                            ? null
-                            : readings.fold<int>(
-                                0, (p, s) => math.max(p, s.up!)),
-                        AppColors.textHi)),
-              ]),
-              if (readings.length < 2) _waiting(readings.isEmpty),
-            ] else if (design == SubscriberTrafficDesign.compact) ...[
-              Row(children: [
-                Expanded(child: _rates(18, 16)),
-                const SizedBox(width: Sp.sm),
-                SizedBox(
-                    width: 70,
-                    height: 28,
-                    child: readings.length < 2
-                        ? null
-                        : _graph(maxY, live, compact: true)),
-              ]),
-              if (readings.length < 2) _waiting(readings.isEmpty),
-            ] else ...[
-              _rates(22, 18),
-              const SizedBox(height: Sp.sm),
-              SizedBox(
-                  height: 78,
-                  child: readings.length < 2
-                      ? _waiting(readings.isEmpty)
-                      : Stack(children: [
-                          Positioned.fill(child: _graph(maxY, live)),
-                          Positioned(
-                              left: 0,
-                              top: 0,
-                              child: Text(subscriberTrafficRate(maxY.round()),
-                                  textDirection: TextDirection.ltr,
-                                  style: AppType.micro(
-                                      color: AppColors.textLabel))),
-                        ])),
-            ],
-            if (design == SubscriberTrafficDesign.wave ||
-                design == SubscriberTrafficDesign.bars) ...[
-              const SizedBox(height: Sp.x6),
-              Wrap(
-                  alignment: WrapAlignment.spaceBetween,
-                  spacing: Sp.sm,
-                  runSpacing: Sp.xs,
-                  children: [
-                    Text(
-                        'ذروة التحميل: \u2066${readings.isEmpty ? '—' : subscriberTrafficRate(peakDown)}\u2069',
-                        style: AppType.micro(color: AppColors.textLabel)),
-                    Row(mainAxisSize: MainAxisSize.min, children: [
-                      _legend('تحميل', AppColors.chartLine),
-                      const SizedBox(width: Sp.sm),
-                      _legend('رفع', AppColors.textHi),
-                    ]),
+            Row(children: [
+              Expanded(
+                  child: _rate(Icons.arrow_downward_rounded, downBps,
+                      AppColors.chartLine)),
+              const SizedBox(width: Sp.sm),
+              Expanded(
+                  child: _rate(
+                      Icons.arrow_upward_rounded, upBps, AppColors.textHi)),
+            ]),
+            const SizedBox(height: Sp.sm),
+            SizedBox(
+                height: 78,
+                child: readings.length < 2
+                    ? Center(
+                        child: Text(
+                            unavailable
+                                ? 'بانتظار إعادة المحاولة'
+                                : readings.isEmpty
+                                    ? 'يظهر الرسم عند وصول القراءات'
+                                    : 'تجميع القراءات…',
+                            textAlign: TextAlign.center,
+                            style: AppType.micro(color: AppColors.textLabel)))
+                    : Stack(children: [
+                        Positioned.fill(
+                            child: ClipRect(
+                                child: CustomPaint(
+                                    painter: _TrafficPainter(
+                          samples: samples,
+                          maxY: maxY,
+                          downColor: AppColors.chartLine
+                              .withValues(alpha: live ? 1 : 0.45),
+                          upColor: AppColors.textHi
+                              .withValues(alpha: live ? 0.7 : 0.35),
+                          gridColor: AppColors.border,
+                        )))),
+                        Positioned(
+                            left: 0,
+                            top: 0,
+                            child: Text(subscriberTrafficRate(maxY.round()),
+                                textDirection: TextDirection.ltr,
+                                style:
+                                    AppType.micro(color: AppColors.textLabel))),
+                      ])),
+            const SizedBox(height: Sp.x6),
+            Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                spacing: Sp.sm,
+                runSpacing: Sp.xs,
+                children: [
+                  Text(
+                      'ذروة التحميل: \u2066${readings.isEmpty ? '—' : subscriberTrafficRate(peakDown)}\u2069',
+                      style: AppType.micro(color: AppColors.textLabel)),
+                  Row(mainAxisSize: MainAxisSize.min, children: [
+                    _legend('تحميل', AppColors.chartLine),
+                    const SizedBox(width: Sp.sm),
+                    _legend('رفع', AppColors.textHi),
                   ]),
-            ],
+                ]),
           ]),
     );
   }
 
-  Widget _waiting(bool empty) => Center(
-      child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: Sp.xs),
-          child: Text(
-              unavailable
-                  ? 'بانتظار إعادة المحاولة'
-                  : empty
-                      ? 'يظهر الرسم عند وصول القراءات'
-                      : 'تجميع القراءات…',
-              textAlign: TextAlign.center,
-              style: AppType.micro(color: AppColors.textLabel))));
-
-  Widget _rates(double downSize, double upSize) => Row(children: [
-        Expanded(
-            child: _rate(Icons.arrow_downward_rounded, downBps,
-                AppColors.chartLine, downSize)),
-        const SizedBox(width: Sp.sm),
-        Expanded(
-            child: _rate(
-                Icons.arrow_upward_rounded, upBps, AppColors.textHi, upSize)),
-      ]);
-
-  Widget _graph(double maxY, bool live, {bool compact = false}) => ClipRect(
-      child: CustomPaint(
-          painter: _TrafficPainter(
-              samples: samples,
-              maxY: maxY,
-              bars: design == SubscriberTrafficDesign.bars,
-              grid: !compact,
-              downColor: AppColors.chartLine.withValues(alpha: live ? 1 : 0.45),
-              upColor: AppColors.textHi.withValues(alpha: live ? 0.7 : 0.35),
-              gridColor: AppColors.border)));
-
-  Widget _gauge(String label, int? value, int? peak, Color color) {
-    final actualPeak =
-        peak == null && value == null ? null : math.max(peak ?? 0, value ?? 0);
-    final scale = _niceScale(actualPeak ?? 0);
-    return Column(mainAxisSize: MainAxisSize.min, children: [
-      SizedBox(
-          width: double.infinity,
-          height: 60,
-          child: Stack(alignment: Alignment.bottomCenter, children: [
-            Positioned.fill(
-                child: CustomPaint(
-                    painter: _GaugePainter(
-                        fraction: value == null ? null : value / scale,
-                        color: color,
-                        trackColor: AppColors.border))),
-            Padding(
-                padding: const EdgeInsets.only(bottom: Sp.xs),
-                child: Text(label,
-                    style: AppType.microBold(color: AppColors.textMid))),
-          ])),
-      const SizedBox(height: Sp.x6),
-      FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(subscriberTrafficRate(value),
-              textDirection: TextDirection.ltr,
-              style: AppType.statValue(color: color).copyWith(fontSize: 18))),
-      const SizedBox(height: Sp.xs),
-      Text('ذروة: \u2066${subscriberTrafficRate(actualPeak)}\u2069',
-          textAlign: TextAlign.center,
-          style: AppType.micro(color: AppColors.textLabel)),
-      Text(
-          'المقياس: \u2066${subscriberTrafficRate(actualPeak == null ? null : scale.round())}\u2069',
-          textAlign: TextAlign.center,
-          style: AppType.micro(color: AppColors.textLabel)),
-    ]);
-  }
-
-  Widget _rate(IconData icon, int? value, Color color, double size) =>
-      FittedBox(
+  Widget _rate(IconData icon, int? value, Color color) => FittedBox(
         fit: BoxFit.scaleDown,
         alignment: AlignmentDirectional.centerStart,
         child: Row(
             mainAxisSize: MainAxisSize.min,
             textDirection: TextDirection.ltr,
             children: [
-              Icon(icon, size: 17, color: color),
+              Icon(icon, size: 15, color: color),
               const SizedBox(width: Sp.xs),
               Text(subscriberTrafficRate(value),
                   textDirection: TextDirection.ltr,
-                  style: AppType.statValue(color: color)
-                      .copyWith(fontSize: size, fontWeight: FontWeight.w700)),
+                  // Device metric values use 14; traffic stays only one step larger.
+                  style: AppType.cardTitle(color: color)
+                      .copyWith(fontSize: 16, fontWeight: FontWeight.w700)),
             ]),
       );
 
@@ -320,73 +218,32 @@ class SubscriberTrafficChart extends StatelessWidget {
       ]);
 }
 
-class _GaugePainter extends CustomPainter {
-  const _GaugePainter(
-      {required this.fraction, required this.color, required this.trackColor});
-  final double? fraction;
-  final Color color, trackColor;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const stroke = 7.0;
-    final radius = math.min(size.width / 2, size.height) - stroke / 2 - 2;
-    if (radius <= 0) return;
-    final rect = Rect.fromCircle(
-        center: Offset(size.width / 2, size.height - 4), radius: radius);
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..strokeCap = StrokeCap.round;
-    canvas.drawArc(rect, math.pi, math.pi, false, paint..color = trackColor);
-    // Missing and true-zero readings never draw a positive filled segment.
-    if (fraction != null && fraction! > 0) {
-      canvas.drawArc(rect, math.pi, math.pi * fraction!.clamp(0, 1), false,
-          paint..color = color);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _GaugePainter old) =>
-      old.fraction != fraction ||
-      old.color != color ||
-      old.trackColor != trackColor;
-}
-
 class _TrafficPainter extends CustomPainter {
   const _TrafficPainter(
       {required this.samples,
       required this.maxY,
       required this.downColor,
       required this.upColor,
-      required this.gridColor,
-      this.bars = false,
-      this.grid = true});
+      required this.gridColor});
   final List<SubscriberTrafficSample> samples;
   final double maxY;
   final Color downColor, upColor, gridColor;
-  final bool bars, grid;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final gridPaint = Paint()
+    final grid = Paint()
       ..color = gridColor
       ..strokeWidth = 1;
-    for (final fraction in grid ? [0.0, 0.5, 1.0] : <double>[]) {
+    for (final fraction in [0.0, 0.5, 1.0]) {
       for (var x = 0.0; x < size.width; x += 6) {
-        canvas.drawLine(
-            Offset(x, size.height * fraction),
-            Offset(math.min(x + 3, size.width), size.height * fraction),
-            gridPaint);
+        canvas.drawLine(Offset(x, size.height * fraction),
+            Offset(math.min(x + 3, size.width), size.height * fraction), grid);
       }
     }
     if (samples.length < 2) return;
     final start = samples.first.at;
     final duration = samples.last.at.difference(start).inMilliseconds;
     if (duration <= 0) return;
-    if (bars) {
-      _paintBars(canvas, size, start, duration);
-      return;
-    }
     final runs = <List<SubscriberTrafficSample>>[];
     var run = <SubscriberTrafficSample>[];
     for (final sample in samples) {
@@ -439,39 +296,9 @@ class _TrafficPainter extends CustomPainter {
     }
   }
 
-  void _paintBars(Canvas canvas, Size size, DateTime start, int duration) {
-    final baseline = size.height / 2;
-    final halfHeight = baseline - 4;
-    final barWidth =
-        math.min(6.0, math.max(1.0, size.width / samples.length * 0.64));
-    for (var i = 0; i < samples.length; i++) {
-      final sample = samples[i];
-      if (!sample.valid) continue; // A missing reading stays a gap, not zero.
-      final x = sample.at.difference(start).inMilliseconds /
-          duration *
-          (size.width - barWidth);
-      final opacity = 0.45 + 0.55 * i / (samples.length - 1);
-      void bar(int value, bool download) {
-        if (value <= 0) return;
-        final height = math.max(1.0, value / maxY * halfHeight);
-        final rect = Rect.fromLTWH(x,
-            download ? baseline - 2 - height : baseline + 2, barWidth, height);
-        final color = download ? downColor : upColor;
-        canvas.drawRRect(
-            RRect.fromRectAndRadius(rect, Radius.circular(barWidth / 2)),
-            Paint()..color = color.withValues(alpha: color.a * opacity));
-      }
-
-      bar(sample.down!, true);
-      bar(sample.up!, false);
-    }
-  }
-
   @override
   bool shouldRepaint(covariant _TrafficPainter old) =>
       old.samples != samples ||
-      old.bars != bars ||
-      old.grid != grid ||
       old.maxY != maxY ||
       old.downColor != downColor ||
       old.upColor != upColor ||
