@@ -364,6 +364,138 @@ class DeviceVitals {
   /// أرقام: جدول اللاسلكيّ، ثمّ جدول التسجيل، ثمّ صيغةٌ ثانية، ثمّ
   /// جلسة SSH — نحو خمس عشرة ثانية لما يصل في أقلّ من ثانيتين.
   /// وبستّ خانات، كلّ جلسةٍ طويلة تحجب خمس بطاقات.
+  /// «المعلومات الحيّة» من فحص الـVPN (٥ نوفمبر — المالك: «المعلومات الحيه مال الاجهزه ماتنعرض عبر vpn هم؟»): الخادم يقرأ الجهاز
+  /// عبر النفق (مايكروتك بالـAPI، يوبيكويتي بالويب، الأولت بـSNMP) ⇒ الخانات الثلاث نفسها بمواضعها لكلّ علامة كقراءة الموبايل
+  /// ([_mikrotik] · [_ubnt] · [oltProbeResult]). المعدّلات منفذاً منفذاً ليست فيها — تلك من موبايلك حين ترجع لشبكتك.
+  static VitalsState fromVpn(Map<String, dynamic> v, {DateTime? at}) {
+    int? n(Object? x) => x is num ? x.round() : int.tryParse('${x ?? ''}');
+    double? d(Object? x) => x is num ? x.toDouble() : double.tryParse('${x ?? ''}');
+    String? s(Object? x) => x == null || '$x'.trim().isEmpty ? null : '$x'.trim();
+    List<Map> list(Object? x) => x is List ? x.whereType<Map>().toList() : const [];
+    final kind = '${v['kind'] ?? ''}';
+    final when = at ?? DateTime.now();
+    Vital pct(String label, int? val, IconData icon) => val == null
+        ? Vital.empty.withIcon(icon)
+        : Vital(label: label, value: '$val', unit: '٪', icon: icon, tone: Grade.percentLowerBetter(val));
+    Vital temp(int? t) => t == null
+        ? Vital.empty.withIcon(LucideIcons.thermometer)
+        : Vital(label: 'الحرارة', value: '$t', unit: '°', icon: LucideIcons.thermometer, tone: Grade.temperature(t));
+
+    if (kind == 'olt') {
+      final total = n(v['total']) ?? 0;
+      final online = n(v['online']) ?? 0;
+      final pons = [
+        for (final p in list(v['pons']))
+          PonGlance(s(p['label']) ?? '', up: p['up'] == true, online: n(p['online']) ?? 0, total: n(p['total']) ?? 0),
+      ];
+      final ponUp = pons.where((p) => p.up).length;
+      final onPct = total == 0 ? null : online * 100 / total;
+      return VitalsState(
+        vitals: [
+          Vital(
+            label: 'المشتركون',
+            value: '$online',
+            unit: '/$total',
+            icon: LucideIcons.users,
+            tone: onPct == null ? AppTone.neutral : Grade.percentHigherBetter(onPct),
+          ),
+          Vital(
+            label: 'منافذ PON',
+            value: '$ponUp',
+            unit: '/${pons.length}',
+            icon: LucideIcons.splitSquareVertical,
+            tone: pons.isEmpty ? AppTone.neutral : Grade.percentHigherBetter(ponUp * 100 / pons.length),
+          ),
+          Vital.empty.withIcon(LucideIcons.cpu),
+        ],
+        detail: DeviceDetail(
+          extras: [for (final p in pons) (k: p.label, v: '${p.online}/${p.total}')],
+          glance: DeviceGlance(onusOnline: online, onusTotal: total, pons: pons),
+        ),
+        at: when,
+      );
+    }
+
+    final up = n(v['up']);
+    final ppp = n(v['ppp']);
+    final glance = DeviceGlance(
+      uptimeSec: up,
+      peersKnown: v['peers'] is List,
+      cpu: n(v['cpu']),
+      mem: n(v['mem']),
+      temp: n(v['temp']),
+      voltage: d(v['volt']),
+      ppp: ppp != null && ppp > 0 ? ppp : null,
+      signal: n(v['sig']),
+      ccq: n(v['ccq']),
+      freqMhz: n(v['freq']),
+      widthMhz: n(v['width']),
+      distanceM: n(v['dist']),
+      rxRateMbps: n(v['rx']),
+      txRateMbps: n(v['tx']),
+      ssid: s(v['ssid']),
+      mode: s(v['mode']),
+      isAp: v['ap'] is bool ? v['ap'] as bool : null,
+    );
+    final ports = <PortTraffic>[];
+    final pt = v['ports'];
+    if (pt is Map) {
+      final upN = n(pt['up']) ?? 0;
+      final total = n(pt['total']) ?? 0;
+      for (var k = 0; k < total && k < 64; k++) {
+        ports.add(PortTraffic(name: 'ether${k + 1}', up: k < upN));
+      }
+    }
+    final peers = [
+      for (final p in list(v['peers']))
+        PeerLink(
+          name: s(p['n']) ?? '—',
+          signal: n(p['s']),
+          ccq: n(p['q']),
+          txRate: n(p['tx']),
+          rxRate: n(p['rx']),
+          uptimeSec: n(p['up']),
+        ),
+    ];
+    final airos = kind == 'airos';
+    return VitalsState(
+      vitals: airos
+          ? [
+              glance.signal == null
+                  ? Vital.empty.withIcon(LucideIcons.signal)
+                  : Vital(
+                      label: 'الإشارة',
+                      value: '${glance.signal}',
+                      unit: 'dBm',
+                      icon: LucideIcons.signal,
+                      tone: Grade.signal(glance.signal),
+                    ),
+              pct('المعالج', glance.cpu, LucideIcons.cpu),
+              temp(glance.temp),
+            ]
+          : [
+              pct('المعالج', glance.cpu, LucideIcons.cpu),
+              pct('الذاكرة', glance.mem, LucideIcons.memoryStick),
+              temp(glance.temp),
+            ],
+      detail: DeviceDetail(
+        uptime: up == null ? null : fmtUptime(up),
+        firmware: s(v['fw']),
+        model: s(v['model']),
+        ports: ports,
+        peers: peers,
+        peersLabel: airos ? 'المحطّات' : 'العملاء اللاسلكيّون',
+        extras: [
+          if (glance.ppp != null) (k: 'جلسات PPP', v: '${glance.ppp}'),
+          if (glance.voltage != null) (k: 'الفولتيّة', v: '${glance.voltage!.toStringAsFixed(1)} V'),
+          (k: 'المصدر', v: 'عبر VPN'),
+        ],
+        glance: glance,
+      ),
+      at: when,
+    );
+  }
+
   static Future<ProbeResult> fetch(NetworkDevice d,
       {CounterSample? prev, bool detailed = false}) async {
     final r = await _fetch(d, prev: prev, detailed: detailed);

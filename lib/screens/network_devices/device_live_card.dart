@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../models/network_device.dart';
+import '../../services/vpn_now.dart';
 import '../../services/deep_probe_scheduler.dart';
 import '../../services/device_read_health.dart';
 import '../../services/device_stats_cache.dart';
@@ -111,6 +112,14 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _kick());
     _timer = Timer.periodic(_pulse, (_) => _kick());
     DeviceStatsCache.instance.updated.addListener(_onCache);
+    VpnNow.version.addListener(_onVpn);
+  }
+
+  /// نتيجة فحصٍ عبر الـVPN وصلت ⇒ البطاقة تأخذ معلوماتها الآن — لا تنتظر نبضتها ولا طزاجة سطر «خارج شبكتك» (٢٠ث).
+  void _onVpn() {
+    if (!mounted || DeviceVitals.skipReason(widget.device) != DeviceVitals.offNetworkReason) return;
+    final v = VpnNow.deviceFor(widget.device.id)?.vitals;
+    if (v != null) widget.onVitals(DeviceVitals.fromVpn(v));
   }
 
   /// قراءةٌ أحدث لهذا الجهاز كتبها غيرنا (شاشات الألياف للأولت، البرج) ⇒ نعرضها الآن بلا جلسة (المالك ٢٨ أكتوبر: «تتحدث مع
@@ -138,6 +147,7 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
   void dispose() {
     _timer?.cancel();
     DeviceStatsCache.instance.updated.removeListener(_onCache);
+    VpnNow.version.removeListener(_onVpn);
     // ⚠️ نصف فائدة المجدول: بطاقة خرجت من الشاشة قبل دورها تُسحب من
     // الطابور فلا تُفتح لها جلسة أصلاً.
     DeepProbeScheduler.instance.cancel(this);
@@ -219,7 +229,9 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
     // ستّ وتنتظر مهلتها كاملةً قبل أن تُحرّرها.
     final skip = DeviceVitals.skipReason(widget.device);
     if (skip != null) {
-      widget.onVitals(VitalsState(error: skip, at: DateTime.now()));
+      // خارج شبكتك / «وضع VPN» (٥ نوفمبر): المعلومات الحيّة من آخر فحصٍ عبر الـVPN إن وُجدت، وإلّا السطر
+      final vpn = skip == DeviceVitals.offNetworkReason ? VpnNow.deviceFor(widget.device.id)?.vitals : null;
+      widget.onVitals(vpn != null ? DeviceVitals.fromVpn(vpn) : VitalsState(error: skip, at: DateTime.now()));
       return;
     }
 

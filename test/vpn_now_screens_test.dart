@@ -4,11 +4,13 @@
 // والأجهزة بالوضع تُعرض بحالها من الـVPN (الأعداد والبطاقات)، وما لم يُفحص «غير معروف» لا «مفصول».
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/agent_alerts_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/subscribers_api.dart';
 import 'package:rad_mysvcs/screens/network_devices/network_devices_screen.dart';
+import 'package:rad_mysvcs/screens/network_devices/widgets/device_big_card.dart';
 import 'package:rad_mysvcs/screens/subscribers/subscribers_screen.dart';
 import 'package:rad_mysvcs/screens/subscribers/widgets/filter_chips_bar.dart';
 import 'package:rad_mysvcs/services/agent_net_presence.dart';
@@ -144,6 +146,40 @@ void main() {
     await t.tap(devVpn);
     await settleFor(t, seconds: 1);
     expect(VpnNow.mode.value, isFalse);
+    await close(t);
+  });
+
+  testWidgets('الأجهزة بالبطاقات الكبيرة + «وضع VPN»: المعالج والحرارة من الخادم عبر الـVPN على البطاقة (المالك: «المعلومات الحيه… عبر vpn هم»)', (t) async {
+    VpnNow.routeSource = () async => (linked: true, via: 'company');
+    AgentNetPresence.debugSet(NetPresence.off);
+    NetworkDevicesScreen.debugResetView();
+    AgentAlertsApi.forget();
+    final inner = await visualSetUp(s1bSasOwner);
+    await const FlutterSecureStorage().write(key: 'devices.view.v1', value: DevicesView.big.key);
+    ApiClient.dio.httpClientAdapter = AiStatusOverlay(inner, status: aiStatusOff, routes: DevicesDemoData.routes());
+    AiAssistantState.reset();
+    await pumpSim(t, const SimVariant(412, dark: false),
+        settle: false, home: (_) => NetworkDevicesScreen(isActive: ValueNotifier<bool>(true)));
+    await settleFor(t);
+    await t.tap(devVpn);
+    await settleFor(t, seconds: 1);
+    expect(find.textContaining('737', findRichText: true), findsNothing);
+    VpnNow.debugApply(VpnNowKind.devices, VpnNowResult.fromJson({
+      'ok': true,
+      'message': 'فُحصت أجهزتك ✓',
+      'devices': [
+        for (var id = 1; id <= 14; id++)
+          {'id': id, 'alive': true, 'ms': 20, 'v': {'kind': 'ros', 'cpu': 737, 'mem': 41, 'temp': 52, 'up': 3600}},
+      ],
+    }));
+    await settleFor(t, seconds: 2);
+    final cards = t.widgetList<DeviceBigCard>(find.byType(DeviceBigCard)).toList();
+    expect(cards, isNotEmpty, reason: 'البطاقات الكبيرة');
+    for (final c in cards) {
+      expect(c.state.error, isNull, reason: 'لا سطر «خارج شبكتك» لجهازٍ له معلومات من الـVPN');
+      expect(c.state.vitals?.map((v) => v.value), contains('737'), reason: 'المعالج من الخادم عبر الـVPN');
+      expect(c.device.lastStatus, 'online');
+    }
     await close(t);
   });
 

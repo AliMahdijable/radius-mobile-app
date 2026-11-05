@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/subscribers/widgets/subscriber_card_v3.dart';
+import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
 import 'package:rad_mysvcs/services/agent_net_presence.dart';
 import 'package:rad_mysvcs/services/vpn_now.dart';
 import 'package:rad_mysvcs/widgets/vpn_now_bar.dart';
@@ -304,6 +305,35 @@ void main() {
     await t.pump(const Duration(seconds: 9));
     expect(find.text('رجعت لشبكتك'), findsNothing);
     VpnNow.reset();
+  });
+
+  test('«المعلومات الحيّة» عبر الـVPN ⇒ خانات البطاقة نفسها: مايكروتك (معالج/ذاكرة/حرارة + PPP والفولتيّة والمنافذ)، يوبيكويتي (إشارة/معالج/حرارة + المحطّات)، أولت (المشتركون/منافذ PON)', () {
+    final r = VpnDeviceResult.fromJson({'id': 9, 'alive': true, 'ms': 21,
+      'v': {'kind': 'ros', 'cpu': 37, 'mem': 41, 'temp': 52, 'up': 90000, 'volt': 24.2, 'ppp': 120, 'ports': {'up': 5, 'total': 8}, 'model': 'CCR1036', 'fw': '7.15'}})!;
+    final ros = DeviceVitals.fromVpn(r.vitals!);
+    expect(ros.vitals!.map((v) => '${v.label}=${v.value}${v.unit ?? ''}'), ['المعالج=37٪', 'الذاكرة=41٪', 'الحرارة=52°']);
+    expect(ros.detail!.ports.where((p) => p.up).length, 5);
+    expect(ros.detail!.ports.length, 8);
+    expect(ros.detail!.extras.map((e) => e.k), containsAll(['جلسات PPP', 'الفولتيّة', 'المصدر']));
+    expect(ros.detail!.glance.voltage, 24.2);
+    expect(ros.detail!.uptime, isNotNull);
+    expect(ros.error, isNull);
+
+    final ap = DeviceVitals.fromVpn({'kind': 'airos', 'cpu': 8, 'temp': null, 'ap': true,
+      'peers': [{'n': 'cust1', 's': -61, 'q': 95}, {'n': 'c2', 's': -72, 'q': 80}]});
+    expect(ap.vitals!.first.label, '—', reason: 'نقطة وصول: لا إشارة لها (عند محطّاتها)');
+    expect(ap.vitals![1].value, '8');
+    expect(ap.detail!.glance.isAp, isTrue);
+    expect(ap.detail!.glance.peersKnown, isTrue);
+    expect(ap.detail!.peers.map((p) => p.signal), [-61, -72]);
+    final sta = DeviceVitals.fromVpn({'kind': 'airos', 'sig': -58, 'ccq': 96, 'ap': false, 'tx': 300, 'rx': 270});
+    expect(sta.vitals!.first.value, '-58');
+    expect([sta.detail!.glance.ccq, sta.detail!.glance.txRateMbps, sta.detail!.glance.isAp], [96, 300, false]);
+
+    final olt = DeviceVitals.fromVpn({'kind': 'olt', 'total': 3, 'online': 2,
+      'pons': [{'label': 'EPON0/1', 'online': 2, 'total': 2, 'up': true}, {'label': 'EPON0/2', 'online': 0, 'total': 1, 'up': false}]});
+    expect(olt.vitals!.take(2).map((v) => '${v.label}=${v.value}${v.unit}'), ['المشتركون=2/3', 'منافذ PON=1/2']);
+    expect(olt.detail!.glance.onusTotal, 3);
   });
 
   group('«وضع VPN» والحارس', () {

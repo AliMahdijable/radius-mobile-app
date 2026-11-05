@@ -46,12 +46,15 @@ class VpnSubReading {
 
 /// جهازٌ من أجهزة شبكة الوكيل بعد «فحص الآن» عبر الـVPN.
 class VpnDeviceResult {
-  const VpnDeviceResult({required this.id, required this.alive, this.name, this.ms, this.stations});
+  const VpnDeviceResult({required this.id, required this.alive, this.name, this.ms, this.stations, this.vitals});
   final int id;
   final String? name;
   final bool alive;
   final int? ms;
   final int? stations;
+
+  /// «المعلومات الحيّة» كما قرأها الخادم عبر النفق (٥ نوفمبر): kind ros|airos|olt ومقاييسه — [DeviceVitals.fromVpn].
+  final Map<String, dynamic>? vitals;
 
   static VpnDeviceResult? fromJson(Object? j) {
     if (j is! Map) return null;
@@ -63,6 +66,7 @@ class VpnDeviceResult {
       alive: j['alive'] == true,
       ms: j['ms'] is num ? (j['ms'] as num).round() : null,
       stations: j['stations'] is num ? (j['stations'] as num).toInt() : null,
+      vitals: j['v'] is Map ? Map<String, dynamic>.from(j['v'] as Map) : null,
     );
   }
 }
