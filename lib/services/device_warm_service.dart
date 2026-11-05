@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'connection_readings_uploader.dart';
 import 'provider_service.dart';
+import 'agent_net_presence.dart';
 
 /// فحص أجهزة المشتركين بالخلفيّة من فتح البرنامج (٣ نوفمبر — المالك: «ليش مانخلي الدالة بالخلفية تشتغل بمجرد فتح البرنامج… حتى يكون
 /// اسرع وتكون لها الاولية»).
@@ -131,6 +132,7 @@ class DeviceWarmService with WidgetsBindingObserver {
         if (ips.isEmpty) return 0; // لا عنوان جهازٍ معروف لأحد ⇒ لا شيء يُفحص
         final ok = await Future.wait(ips.map((ip) => TcpReachability.isReachable(ip)));
         _offNet = !ok.contains(true);
+        _reportPresence(ips, ok);
         if (_offNet || _yield) return 0;
         await DeviceProbeApi.warmProbe(targets, concurrency: _workers, isCanceled: () => _yield);
         DeviceProbeBus.bump();
@@ -178,6 +180,7 @@ class DeviceWarmService with WidgetsBindingObserver {
       if (ips.isEmpty) return (onNet: false, subs: subs, probed: 0, reason: 'no_ips');
       final ok = await Future.wait(ips.map((ip) => TcpReachability.isReachable(ip)));
       _offNet = !ok.contains(true);
+      _reportPresence(ips, ok);
       if (_offNet) return (onNet: false, subs: subs, probed: 0, reason: 'off_net');
       // المتّصلون الآن بعناوينهم (أجهزة المفصولين لا تردّ — تأخيرٌ بلا فائدة)؛ وإن لم تُعرف الحالة فكلّ من له عنوان
       List<Subscriber> pick(bool onlineOnly) =>
@@ -196,6 +199,17 @@ class DeviceWarmService with WidgetsBindingObserver {
     } finally {
       _waving = false;
     }
+  }
+
+  /// الحال المشتركة (هنت «أنت خارج شبكتك») من عيّنة — العناوين الخاصّة وحدها تُحسب.
+  static void _reportPresence(List<String> ips, List<bool> ok) {
+    var attempted = 0, reached = 0;
+    for (var i = 0; i < ips.length && i < ok.length; i++) {
+      if (!AgentNetPresence.isPrivate(ips[i])) continue;
+      attempted++;
+      if (ok[i]) reached++;
+    }
+    AgentNetPresence.report(attempted: attempted, reached: reached);
   }
 
   static String _effectiveIp(Subscriber s) {
@@ -222,13 +236,15 @@ class DeviceWarmService with WidgetsBindingObserver {
       final list = await SubscribersApi.loadAll();
       if (list == null || list.isEmpty) return null;
       final subs = list.where((s) => s.companyKey == null && s.username.isNotEmpty).toList();
-      final ips = await _sample(subs);
+      // العناوين الخاصّة وحدها تدلّ على شبكة الوكيل (العامّ يردّ من أيّ مكان) — AgentNetPresence
+      final ips = (await _sample(subs)).where(AgentNetPresence.isPrivate).toList();
       if (ips.isEmpty) return null;
       final ok = await Future.wait(ips.map((ip) => TcpReachability.isReachable(ip)));
-      final on = ok.contains(true);
-      _offNet = !on;
-      if (on) unawaited(_rememberGood(subs));
-      return on;
+      final reached = ok.where((x) => x).length;
+      final p = AgentNetPresence.report(attempted: ips.length, reached: reached);
+      _offNet = reached == 0;
+      if (reached > 0) unawaited(_rememberGood(subs));
+      return p == NetPresence.unknown ? null : p == NetPresence.on;
     } catch (_) {
       return null;
     }

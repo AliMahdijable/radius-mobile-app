@@ -50,6 +50,8 @@ import 'widgets/device_ip_link.dart';
 import '../../services/vpn_now.dart';
 import '../../widgets/vpn_now_bar.dart';
 import '../whatsapp/conn_vpn_screen.dart';
+import '../../services/agent_net_presence.dart';
+import '../../services/device_warm_service.dart';
 
 /// قائمة أجهزة الشبكة. راجع project_devices_monitoring_plan.
 ///
@@ -151,7 +153,15 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// ⚠️ الفحص وحده لا يفرّق بين «لستُ على الشبكة» و«كلّ الأجهزة ساقطة فعلاً» — كلاهما صمت. فالنصّ يصف **ما رأيناه** ويقترح
   /// السبب ولا يجزم. والشرط فشل **الكلّ**: جهازٌ واحد معطّل صدفةً لا يُطلق الإنذار.
   bool _offNetwork = false;
-  static const _offNetworkThreshold = 3;
+
+  /// للحساب طريق VPN (ملفّه/نفق شركته/قالبها) ⇒ «فحص عبر VPN» في «المزيد».
+  bool _vpnLinked = false;
+  void _onPresence() {
+    if (mounted) setState(() {});
+  }
+
+  /// خارج شبكة الوكيل: من جولة هذا القسم، أو من قسم المشتركين (الحال المشتركة).
+  bool get _offNet => _offNetwork || AgentNetPresence.isOff;
   final Set<int> _selectedIds = <int>{};
   bool _bulkDeleting = false;
 
@@ -192,6 +202,14 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     widget.isActive?.addListener(_onActiveChanged);
     // تحديثٌ فوريّ حين يتغيّر أيّ جهازٍ من أيّ شاشة (تعديل/حذف/إضافة/منطقة).
     DeviceEvents.changes.addListener(_onDevicesChanged);
+    // ٥ نوفمبر: «خارج شبكتك» مشتركٌ مع المشتركين، ونتائج «فحص عبر VPN» تلوّن حال الأجهزة
+    AgentNetPresence.state.addListener(_onPresence);
+    VpnNow.version.addListener(_onPresence);
+    VpnNow.route().then((r) {
+      if (mounted) setState(() => _vpnLinked = r?.linked == true);
+    });
+    // أجهزةٌ بعناوين عامّة أو أقلّ من ثلاثة خاصّة لا تحسم «على شبكتك؟» ⇒ عيّنة المشتركين المشتركة (مخبّأة، ١٫٢ث)
+    if (AgentNetPresence.current == NetPresence.unknown) unawaited(DeviceWarmService.onAgentNetwork());
     _initialLoad();
     if (_viewChoice == null) {
       const FlutterSecureStorage().read(key: _kDevView).then((raw) {
@@ -211,6 +229,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     // التسخين خدمةٌ لهذه الشاشة — يتوقّف بخروجها فلا يستنزف الشبكة
     // والمستخدم في مكانٍ آخر.
     DeviceWarmup.instance.stop();
+    AgentNetPresence.state.removeListener(_onPresence);
+    VpnNow.version.removeListener(_onPresence);
     WidgetsBinding.instance.removeObserver(this);
     widget.isActive?.removeListener(_onActiveChanged);
     DeviceEvents.changes.removeListener(_onDevicesChanged);
@@ -250,6 +270,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
   void _onActiveChanged() {
     if (_mayProbe) {
+      if (AgentNetPresence.current == NetPresence.unknown) unawaited(DeviceWarmService.onAgentNetwork());
       _startProbeTimer();
       // فحص فوري عند العودة — القيم المعروضة قد تكون قديمة بدقائق.
       if (_all.isNotEmpty) _probeAll(force: true);
@@ -504,19 +525,21 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       // `bulkScanSubnet`.
       final queue = Queue<NetworkDevice>.from(
           _all.where((d) => _shouldProbeInRound(d.id, force: force)));
-      var reachable = 0;
-      var attempted = 0;
+      // العناوين الخاصّة وحدها تقرّر «خارج الشبكة» (العامّ يردّ من أيّ مكان) — AgentNetPresence
+      var privAttempted = 0;
+      var privReached = 0;
       Future<void> probeWorker() async {
         while (queue.isNotEmpty) {
           final d = queue.removeFirst();
-          attempted++;
+          final priv = AgentNetPresence.isPrivate(d.ip);
+          if (priv) privAttempted++;
           try {
             // الطريقة تتبع البروتوكول: TCP لميكروتك وUBNT، وSNMP على
             // UDP لمنفذ ١٦١، وICMP لمن لا منفذ له. راجع [probeDevice].
             final r = await NetworkDevicesApi.probeDevice(d);
             final oldStatus = _lastKnownStatus[d.id] ?? 'unknown';
             final newStatus = r.status;
-            if (newStatus == 'online') reachable++;
+            if (newStatus == 'online' && priv) privReached++;
 
             if (oldStatus != newStatus && oldStatus != 'unknown') {
               pendingTransitions.add(_PendingTransition(
@@ -565,7 +588,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       // وسيط الجولة — «بطيء» نسبيّ (ضعف الوسيط) لا عتبةٌ ثابتة: الجولة تفحص العشرات معاً فيحمل كلّ رقمٍ إزاحة ازدحامٍ مشتركة.
       final lat = probed.map((p) => p.responseMs).whereType<int>().toList()..sort();
       if (lat.isNotEmpty) _roundMedianMs = lat[lat.length ~/ 2];
-      _offNetwork = reachable == 0 && attempted >= _offNetworkThreshold;
+      // ٥ نوفمبر: جولةٌ جزئيّة (المؤقّت يخفّف الفاشل) لا تمسح «خارج الشبكة» — كانت تُخفي الهنت بعد ٢٠ث
+      AgentNetPresence.report(attempted: privAttempted, reached: privReached);
+      _offNetwork = AgentNetPresence.isOff;
 
       // كشف تغيير شبكة الهاتف (بدل مشكلة الأجهزة):
       // - "خروج من الشبكة": ≥70% من الأجهزة راحت offline في جولة واحدة → suppress
@@ -992,7 +1017,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                     // والمناطق، نحو ثلث شاشة الهاتف قبل أوّل جهاز (المالك ١ نوفمبر). وحسابٌ بلا أجهزة لا شريط له:
                     // «الكلّ ٠ · متّصل ٠ · مفصول ٠» فوق «لا توجد أجهزة» ضجيجٌ لا معلومة.
                     if (_all.isNotEmpty) SliverToBoxAdapter(child: _filterStrip(facets)),
-                    if (_offNetwork && _view == DevicesView.big)
+                    if (_offNet && _view == DevicesView.big)
                       const SliverPadding(
                         padding: EdgeInsets.symmetric(horizontal: Sp.md),
                         sliver: SliverToBoxAdapter(child: _OffNetworkBanner()),
@@ -1033,7 +1058,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
             bottom: MediaQuery.paddingOf(context).bottom,
             child: VpnNowBar(
               kind: VpnNowKind.devices,
-              offNetwork: _offNetwork,
+              offNetwork: _offNet,
               onOpenVpn: () async {
                 await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ConnVpnScreen()));
                 unawaited(VpnNow.route(force: true));
@@ -1334,9 +1359,13 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       _pickSort();
                     case 'detect':
                       _detectModels();
+                    case 'vpn':
+                      VpnNow.devices.run();
                   }
                 },
                 itemBuilder: (_) => [
+                  // ٥ نوفمبر (المالك: «الطبيعي بدون vpn بس من ينقر عبر vpn»): أجهزتك عبر الـVPN بضغطتك وحدها
+                  if (_vpnLinked) _menuItem('vpn', LucideIcons.shieldCheck, 'فحص عبر VPN'),
                   if (narrow) _menuItem('refresh', LucideIcons.refreshCw, _probing ? 'يُحدّث الآن…' : 'تحديث فوري'),
                   if (_all.isNotEmpty) _menuItem('tower', LucideIcons.radioTower, 'عرض البرج'),
                   _menuItem('fiber', Perms.has('devices.monitor') ? LucideIcons.cable : LucideIcons.lock, 'شبكة الألياف'),
@@ -1948,8 +1977,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   Widget _deskDeviceCard(NetworkDevice d) {
     final selected = _selectionMode && _selectedIds.contains(d.id);
     final canManage = Perms.has('devices.manage');
-    final online = d.lastStatus == 'online';
-    final statusCol = _statusColor(d.lastStatus);
+    final online = _shownStatus(d) == 'online';
+    final statusCol = _statusColor(_shownStatus(d));
     final since = _since(d.statusSince);
     final region = _deskRegion(d);
     final sub = AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5);
@@ -2052,8 +2081,23 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     );
   }
 
+  /// الحال المعروضة: خارج شبكتك ⇒ نتيجة «فحص عبر VPN» إن وُجدت، وإلّا «غير معروف» (رماديّ) — لا «طافي» أحمر: الجهاز لم يطفِ،
+  /// موبايلك هو البعيد (٥ نوفمبر).
+  String _shownStatus(NetworkDevice d) {
+    if (!_offNet) return d.lastStatus;
+    final v = VpnNow.deviceFor(d.id);
+    if (v == null) return 'unknown';
+    return v.alive ? 'online' : 'offline';
+  }
+
+  int? _shownMs(NetworkDevice d) {
+    if (!_offNet) return d.lastStatus == 'online' ? d.lastResponseMs : null;
+    final v = VpnNow.deviceFor(d.id);
+    return v != null && v.alive ? v.ms : null;
+  }
+
   Widget _deviceCard(NetworkDevice d) {
-    final statusCol = _statusColor(d.lastStatus);
+    final statusCol = _statusColor(_shownStatus(d));
     final selected = _selectionMode && _selectedIds.contains(d.id);
     final canManage = Perms.has('devices.manage');
     return Material(
@@ -2232,9 +2276,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  if (d.lastResponseMs != null && d.lastStatus == 'online')
+                  if (_shownMs(d) != null)
                     Text(
-                      iso('${d.lastResponseMs} ms'),
+                      iso('${_shownMs(d)} ms'),
                       style: AppType.microBold(color: statusCol),
                     ),
                   const SizedBox(height: 4),

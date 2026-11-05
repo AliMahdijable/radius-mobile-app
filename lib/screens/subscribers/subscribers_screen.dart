@@ -67,6 +67,7 @@ import '../../services/vpn_now.dart';
 import '../../widgets/vpn_now_bar.dart';
 import '../whatsapp/conn_vpn_screen.dart';
 import '../whatsapp/connection_alerts_screen.dart';
+import '../../services/agent_net_presence.dart';
 
 /// Default sort field + direction per filter — mirrors v1's
 /// `_defaultSortByFilter`. Without this the 'قارب الانتهاء' chip
@@ -380,7 +381,12 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   @override
   void initState() {
     super.initState();
-    _netTimer = Timer(const Duration(seconds: 4), _checkNet);
+    // ٥ نوفمبر: «خارج شبكتك» بعيّنةٍ واحدة بعد لحظة (لا ثلاث جولات) — والحال مشتركةٌ مع قسم الأجهزة
+    _netTimer = Timer(const Duration(milliseconds: 1500), _checkNet);
+    AgentNetPresence.state.addListener(_onPresence);
+    VpnNow.route().then((r) {
+      if (mounted) setState(() => _vpnLinked = r?.linked == true);
+    });
     _scrollCtrl.addListener(_onScroll);
     WidgetsBinding.instance.addObserver(this);
     _filter = widget.filterCmd?.value ?? SubscriberFilter.all;
@@ -442,35 +448,65 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   /// الشاشة حيّة **ومرئيّة** معاً.
   bool get _mayRefresh => widget.isActive?.value ?? true;
 
-  // ── «أنت خارج شبكتك» (٥ نوفمبر — المالك: «من يتحسس النظام هو مو ضمن الشبكة… البينج مو ناصي… يطلع له فد هنت صغير») ──
-  // ثلاث محاولاتٍ متتالية (عيّنة الأجهزة نفسها: ما ردّ سابقاً + متّصلون الآن) لا يردّ فيها أحد ⇒ الهنت؛ وأوّل ردٍّ يخفيه.
-  // الفحص عبر الـVPN نفسه لا يبدأ إلّا بضغطة «فحص الآن» ([VpnNowBar]).
+  // ── «أنت خارج شبكتك» (٥ نوفمبر — المالك: «من يتحسس النظام هو مو ضمن الشبكة… يطلع له فد هنت صغير» ثمّ «فكر باحترافيه اكثر») ──
+  // الحال مشتركةٌ مع قسم الأجهزة ([AgentNetPresence]): عيّنةٌ واحدة (عناوين خاصّة: ما ردّ سابقاً + متّصلون الآن) تقرّر فوراً، وتُعاد
+  // كلّ دقيقتين والقسم ظاهر. الفحص عبر الـVPN لا يبدأ إلّا بضغطة: «فحص الآن» بالهنت، أو «فحص عبر VPN» من زرّ الرادار.
   Timer? _netTimer;
-  int _offStreak = 0;
-  bool _offNet = false;
+  bool _vpnLinked = false;
+  final _radarKey = GlobalKey();
+  bool get _offNet => AgentNetPresence.isOff;
+  void _onPresence() {
+    if (mounted) setState(() {});
+  }
 
   Future<void> _checkNet() async {
     _netTimer?.cancel();
     if (!mounted) return;
-    if (!_mayRefresh) {
-      _netTimer = Timer(const Duration(minutes: 1), _checkNet);
+    if (_mayRefresh) await DeviceWarmService.onAgentNetwork(); // يقيس ويبلّغ الحال المشتركة
+    if (!mounted) return;
+    _netTimer = Timer(const Duration(minutes: 2), _checkNet);
+  }
+
+  /// الرادار: بلا VPN ⇒ فحصٌ من موبايلك كما كان؛ ومع VPN ⇒ قائمةٌ صغيرة: «فحص من موبايلي» · «فحص عبر VPN» (خارج شبكتك يتقدّم الـVPN).
+  Future<void> _onRadar() async {
+    final ctx = _radarKey.currentContext;
+    if (!_vpnLinked || ctx == null) {
+      _runProbeWave(force: true);
       return;
     }
-    final on = await DeviceWarmService.onAgentNetwork();
-    if (!mounted) return;
-    var next = const Duration(minutes: 2);
-    if (on == false) {
-      _offStreak++;
-      if (_offStreak < 3) {
-        next = const Duration(seconds: 15);
-      } else if (!_offNet) {
-        setState(() => _offNet = true);
-      }
-    } else {
-      _offStreak = 0;
-      if (_offNet) setState(() => _offNet = false);
+    final box = ctx.findRenderObject() as RenderBox?;
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (box == null || overlay == null) {
+      _runProbeWave(force: true);
+      return;
     }
-    _netTimer = Timer(next, _checkNet);
+    final at = RelativeRect.fromRect(
+      Rect.fromPoints(
+        box.localToGlobal(Offset(0, box.size.height), ancestor: overlay),
+        box.localToGlobal(box.size.bottomRight(Offset.zero), ancestor: overlay),
+      ),
+      Offset.zero & overlay.size,
+    );
+    PopupMenuItem<String> item(String v, IconData i, String t) => PopupMenuItem<String>(
+          value: v,
+          child: Row(children: [
+            Icon(i, size: 18, color: v == 'vpn' ? AppColors.brandAccent : AppColors.textMid),
+            const SizedBox(width: Sp.sm),
+            Text(t, style: AppType.body()),
+          ]),
+        );
+    final local = item('local', Icons.radar_rounded, 'فحص من موبايلي');
+    final vpn = item('vpn', LucideIcons.shieldCheck, 'فحص عبر VPN');
+    final v = await showMenu<String>(
+      context: context,
+      position: at,
+      color: AppColors.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.icon)),
+      items: _offNet ? [vpn, local] : [local, vpn],
+    );
+    if (!mounted) return;
+    if (v == 'local') _runProbeWave(force: true);
+    if (v == 'vpn') unawaited(VpnNow.subscribers.run());
   }
 
   Future<void> _openVpnPage() async {
@@ -485,6 +521,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   void _onActiveChanged() {
     if (_locked) return;
     if (_mayRefresh) {
+      // ٥ نوفمبر: العودة للقسم والحال مجهولة/قديمة ⇒ عيّنة «على شبكتك؟» الآن (لا انتظار دورة الدقيقتين)
+      if (AgentNetPresence.current == NetPresence.unknown) unawaited(_checkNet());
       _startAutoRefresh();
       // تحديث فوري عند العودة: القيم قد تكون قديمة بدقائق. ولو وصل
       // حدث تغيير أثناء الاختفاء نُنفّذ تحديثاً كاملاً لا صامتاً.
@@ -644,6 +682,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   @override
   void dispose() {
     _netTimer?.cancel();
+    AgentNetPresence.state.removeListener(_onPresence);
     _scrollCtrl.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _autoRefreshTimer?.cancel();
@@ -2008,10 +2047,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                           // 2026-08-29: زرّ فحص الأجهزة انتقل من شريط شرائح
                                           // الفرز إلى هنا بجانب الفرز والتصفية — طلب المستخدم.
                                           probing: _probing,
-                                          onScanDevices: _probing
-                                              ? null
-                                              : () =>
-                                                  _runProbeWave(force: true),
+                                          onScanDevices: _probing ? null : _onRadar,
+                                          radarKey: _radarKey,
                                         ),
                                 ),
                                 // «كل الشركات»: الشركات بعدد كلٍّ منها — اضغط شركة لعرض مشتركيها وحدها
@@ -2566,6 +2603,7 @@ class _ListHeader extends StatelessWidget {
     required this.onFilter,
     required this.probing,
     required this.onScanDevices,
+    this.radarKey,
   });
 
   final TextEditingController controller;
@@ -2587,6 +2625,9 @@ class _ListHeader extends StatelessWidget {
   /// null أثناء الفحص فقط. الزرّ يبقى ظاهراً دائماً (بخلاف زرّ التصفية)
   /// لأنّه لا يعتمد على وجود مدراء فرعيّين.
   final VoidCallback? onScanDevices;
+
+  /// زرّ الرادار — قائمة «من موبايلي/عبر VPN» تُفتح تحته.
+  final Key? radarKey;
 
   @override
   Widget build(BuildContext context) {
@@ -2704,13 +2745,16 @@ class _ListHeader extends StatelessWidget {
             // رادار لا «تحديث»: الزرّ يفحص أجهزة المشتركين
             // (RX/إشارة/CCQ/LAN) ولا يعيد تحميل القائمة — كان يُقرأ
             // كـreload. طلب المستخدم 2026-08-29.
-            _HeaderIconButton(
-              icon: Icons.radar_rounded,
-              active: false,
-              busy: probing,
-              onTap: onScanDevices ?? () {},
-              tooltip: 'subscribers.probe_devices'.tr(),
-              size: TopActionChip.sizeOf(context),
+            KeyedSubtree(
+              key: radarKey,
+              child: _HeaderIconButton(
+                icon: Icons.radar_rounded,
+                active: false,
+                busy: probing,
+                onTap: onScanDevices ?? () {},
+                tooltip: 'subscribers.probe_devices'.tr(),
+                size: TopActionChip.sizeOf(context),
+              ),
             ),
             SizedBox(width: TopActionChip.gapOf(context)),
             _HeaderIconButton(

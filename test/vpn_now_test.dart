@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/subscribers/widgets/subscriber_card_v3.dart';
+import 'package:rad_mysvcs/services/agent_net_presence.dart';
 import 'package:rad_mysvcs/services/vpn_now.dart';
 import 'package:rad_mysvcs/widgets/vpn_now_bar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -151,6 +152,41 @@ void main() {
     expect(await VpnNow.dismissedToday(VpnNowKind.devices), isFalse);
     await VpnNow.undismiss(VpnNowKind.subscribers);
     expect(await VpnNow.dismissedToday(VpnNowKind.subscribers), isFalse);
+  });
+
+  test('«على شبكتك؟» المشتركة: الخاصّ وحده يقرّر؛ ردٌّ واحد ⇒ على الشبكة؛ ≥٣ بلا ردّ ⇒ خارجها فوراً؛ الجولة الجزئيّة لا تمسحها؛ تشيخ', () {
+    var t = DateTime(2026, 11, 5, 20);
+    AgentNetPresence.now = () => t;
+    addTearDown(() {
+      AgentNetPresence.now = DateTime.now;
+      AgentNetPresence.reset();
+    });
+    AgentNetPresence.reset();
+    for (final ip in ['10.1.2.3', '172.16.0.1', '172.31.255.1', '192.168.1.1', '100.64.0.1', '100.127.1.1']) {
+      expect(AgentNetPresence.isPrivate(ip), isTrue, reason: ip);
+    }
+    for (final ip in ['8.8.8.8', '172.32.0.1', '100.128.0.1', '185.1.2.3', '', 'x', '10.1.2']) {
+      expect(AgentNetPresence.isPrivate(ip), isFalse, reason: ip);
+    }
+    expect(AgentNetPresence.isPrivate('10.0.0.1:8291'), isTrue, reason: 'بمنفذه');
+    expect(AgentNetPresence.current, NetPresence.unknown);
+    expect(AgentNetPresence.report(attempted: 2, reached: 0), NetPresence.unknown, reason: 'عنوانان لا يكفيان');
+    expect(AgentNetPresence.report(attempted: 3, reached: 0), NetPresence.off, reason: 'جولةٌ كاملة بلا ردّ ⇒ فوراً');
+    t = t.add(const Duration(seconds: 20));
+    expect(AgentNetPresence.report(attempted: 1, reached: 0), NetPresence.off, reason: 'جولة المؤقّت الجزئيّة لا تمسحها');
+    expect(AgentNetPresence.report(attempted: 0, reached: 0), NetPresence.off);
+    // الجولات الجزئيّة بلا ردّ تُبقي «خارج» حيّة: ٤ جولاتٍ متباعدة (دقيقتان) = ٨ دقائق ولا تشيخ
+    for (var i = 0; i < 4; i++) {
+      t = t.add(const Duration(minutes: 2));
+      expect(AgentNetPresence.report(attempted: 1, reached: 0), NetPresence.off, reason: 'جولة $i');
+    }
+    AgentNetPresence.reset();
+    expect(AgentNetPresence.report(attempted: 2, reached: 0), NetPresence.unknown, reason: 'الجزئيّة لا تقرّر «خارج» من «غير معروف»');
+    expect(AgentNetPresence.report(attempted: 3, reached: 0), NetPresence.off);
+    expect(AgentNetPresence.report(attempted: 5, reached: 1), NetPresence.on, reason: 'ردٌّ واحد من عنوانٍ خاصّ');
+    t = t.add(const Duration(minutes: 4));
+    expect(AgentNetPresence.current, NetPresence.unknown, reason: 'تشيخ بعد ٣ دقائق');
+    expect(AgentNetPresence.isOff, isFalse);
   });
 
   Widget host(Widget child) => MaterialApp(
