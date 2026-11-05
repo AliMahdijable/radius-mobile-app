@@ -272,7 +272,7 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
                 const SizedBox(height: Sp.sm),
                 for (final f in r.findings) _finding(f),
               ],
-              if (r.role == CheckRole.sector && r.subs.isNotEmpty) _subs(r, open),
+              if ((r.role == CheckRole.sector || r.role == CheckRole.olt) && r.subs.isNotEmpty) _subs(r, open),
               if (r.ports.isNotEmpty) _ports(r, open),
             ]),
           ),
@@ -326,7 +326,10 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
   Widget _subs(DeviceCheckReport r, bool open) {
     final bad = r.subs.where((s) => s.bad).toList();
     final shown = open ? r.subs : bad.take(3).toList();
-    final head = 'المشتركون ${r.subs.length}${r.subsBad > 0 ? ' — ${r.subsBad} فيهم مشكلة' : ' — كلّهم بخير'}';
+    final olt = r.role == CheckRole.olt;
+    final head = olt
+        ? 'المشتركون (ONU) ${r.subs.length}${r.subsBad > 0 ? ' — ${r.subsBad} ضوءهم ضعيف' : ' — ضوءهم كلّه جيّد'}'
+        : 'المشتركون ${r.subs.length}${r.subsBad > 0 ? ' — ${r.subsBad} فيهم مشكلة' : ' — كلّهم بخير'}';
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       _sectionHead(LucideIcons.users, head),
       for (final s in shown) _subRow(s),
@@ -335,7 +338,7 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
   }
 
   Widget _subRow(CheckSub s) {
-    final sigTone = s.weak ? AppTone.warning : Grade.signal(s.signal);
+    final sigTone = s.weak ? AppTone.warning : (s.light != null ? AppTone.success : Grade.signal(s.signal));
     return Container(
       margin: const EdgeInsets.only(bottom: Sp.xs),
       padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: Sp.xs + 2),
@@ -345,12 +348,27 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
       ),
       child: Row(children: [
         Expanded(child: Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.body(color: AppColors.textHi))),
-        if (s.signal != null) ...[
+        if (s.light != null) ...[
           const SizedBox(width: Sp.xs),
           Directionality(
             textDirection: TextDirection.ltr,
-            child: Text('${s.signal} dBm', style: AppType.label(color: sigTone.fill)),
+            child: Text('${s.light!.toStringAsFixed(1)} dBm', style: AppType.label(color: sigTone.fill)),
           ),
+        ],
+        if (s.signal != null) ...[
+          const SizedBox(width: Sp.xs),
+          // إشارته من جهتنا (عليها الحكم) وتحتها ما نستقبله منه (rx) — المالك: «او تظهرهن الاثنين»
+          Column(crossAxisAlignment: CrossAxisAlignment.end, mainAxisSize: MainAxisSize.min, children: [
+            Directionality(
+              textDirection: TextDirection.ltr,
+              child: Text('${s.signal} dBm', style: AppType.label(color: sigTone.fill)),
+            ),
+            if (s.rxSignal != null && s.rxSignal != s.signal)
+              Directionality(
+                textDirection: TextDirection.ltr,
+                child: Text('rx ${s.rxSignal}', style: AppType.micro(color: AppColors.textMid)),
+              ),
+          ]),
         ],
         if (s.ccq != null) ...[
           const SizedBox(width: Sp.xs),

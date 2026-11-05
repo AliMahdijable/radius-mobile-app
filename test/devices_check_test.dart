@@ -272,6 +272,65 @@ void main() {
     expect(r.vitals.firstWhere((v) => v.k == 'ONU').v, '79/101');
   });
 
+  group('٦ نوفمبر — «الاشارة من عدنا وليس rx او تظهرهن الاثنين» + الأولت', () {
+    test('السكتر: إشارة المشترك من جهتنا عليها الحكم، والـrx بجانبها؛ وما لا يعطيها الطراز ⇒ الـrx وحده', () {
+      final r = DevicesCheck.evaluate(
+        d: dev(5, type: 'sector', brand: 'ubnt'),
+        alive: true,
+        detail: detail(glance: const DeviceGlance(isAp: true), peers: const [
+          PeerLink(name: 'abo', signal: -76, txSignal: -62, ccq: 82), // rx ضعيف لكنّه يستقبلنا جيّداً ⇒ سليم
+          PeerLink(name: 'seed', signal: -60, txSignal: -74, ccq: 94), // العكس ⇒ ضعيف
+          PeerLink(name: 'old', signal: -75, ccq: 90), // طرازٌ بلا إشارةٍ من جهتنا ⇒ الـrx
+        ]),
+        limits: lim,
+      );
+      final by = {for (final x in r.subs) x.name: x};
+      expect((by['abo']!.signal, by['abo']!.rxSignal, by['abo']!.weak), (-62, -76, false));
+      expect((by['seed']!.signal, by['seed']!.rxSignal, by['seed']!.weak), (-74, -60, true));
+      expect((by['old']!.signal, by['old']!.rxSignal, by['old']!.weak), (-75, null, true));
+      expect(DevicesCheck.subLine(by['seed']!), '-74 dBm (rx -60) · CCQ 94٪');
+      expect(DevicesCheck.subLine(by['old']!), '-75 dBm · CCQ 90٪');
+    });
+
+    test('الوصلة: الإشارتان بالحيويّات، والحكم على الأضعف (عند الطرف الثاني)', () {
+      final r = DevicesCheck.evaluate(
+        d: dev(6, type: 'link', brand: 'ubnt'),
+        alive: true,
+        detail: detail(glance: const DeviceGlance(isAp: false, signal: -58, ccq: 96), peers: const [
+          PeerLink(name: 'AP', signal: -58, txSignal: -83),
+        ]),
+      );
+      expect(r.vitals.map((v) => '${v.k}=${v.v}'), containsAll(['الإشارة=-58 dBm', 'الطرف الثاني=-83 dBm', 'CCQ=96٪']));
+      expect(texts(r), ['إشارة الوصلة -83 dBm — ضعيفة (عند الطرف الثاني)']);
+    });
+
+    test('الأولت: ضوء كلّ ONU بحدّ الفايبر، الأضعف أوّلاً', () {
+      final r = DevicesCheck.evaluate(
+        d: dev(8, type: 'other', brand: 'vsol'),
+        alive: true,
+        detail: const DeviceDetail(glance: DeviceGlance(onusOnline: 3, onusTotal: 4), onuLights: [
+          OnuLight(name: 'ali', rx: -21.4),
+          OnuLight(name: 'omar', rx: -28.9),
+          OnuLight(name: 'zaid', rx: -24.0),
+        ]),
+        limits: const CheckLimits(fiberRxMin: -27),
+      );
+      expect(r.role, CheckRole.olt);
+      expect(r.subs.map((x) => x.name), ['omar', 'zaid', 'ali']);
+      expect(r.subs.first.weak, isTrue);
+      expect(texts(r), ['ضوء ضعيف: 1 — من 3 مشترك']);
+      expect(r.toText(), contains('omar: -28.9 dBm'));
+    });
+
+    test('عبر الـVPN: ts للمحطّة، وonus للأولت', () {
+      final sec = DeviceVitals.fromVpn({'kind': 'airos', 'ap': true, 'peers': [{'n': 'abo', 's': -76, 'ts': -62, 'q': 82}]});
+      expect((sec.detail!.peers.single.signal, sec.detail!.peers.single.txSignal), (-76, -62));
+      final olt = DeviceVitals.fromVpn({'kind': 'olt', 'total': 4, 'online': 3, 'pons': [], 'onus': [{'n': 'omar', 'k': 'EPON0/1:2', 'rx': -28.9}]});
+      expect(olt.detail!.onuLights.single.rx, -28.9);
+      expect(olt.detail!.onuLights.single.name, 'omar');
+    });
+  });
+
   test('السرعة نصّاً ⇒ ميغابت', () {
     expect(DevicesCheck.mbpsOf('1Gbps'), 1000);
     expect(DevicesCheck.mbpsOf('100Mbps'), 100);

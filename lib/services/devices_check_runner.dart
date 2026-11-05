@@ -100,6 +100,7 @@ class DevicesCheckRunner extends ChangeNotifier {
       linkCcqMin: s?.ccqMin ?? 50,
       subSignal: ct.signalDbm,
       subCcq: ct.ccqPct,
+      fiberRxMin: ct.fiberRxDbm,
       voltBase: {for (final p in vs?.power ?? const <AgentVitalPower>[]) p.id: p.base},
       voltBelow: {for (final p in vs?.power ?? const <AgentVitalPower>[]) p.id: p.alertBelow},
     );

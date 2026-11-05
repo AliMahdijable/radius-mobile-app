@@ -27,9 +27,19 @@ class CheckFinding {
 
 /// مشتركٌ على السكتر (محطّة بجدول تسجيله).
 class CheckSub {
-  const CheckSub({required this.name, this.signal, this.ccq, this.txRate, this.rxRate, this.weak = false, this.lowCcq = false});
+  const CheckSub(
+      {required this.name, this.signal, this.rxSignal, this.light, this.ccq, this.txRate, this.rxRate, this.weak = false, this.lowCcq = false});
   final String name;
-  final int? signal, ccq, txRate, rxRate;
+
+  /// إشارة المشترك من جهتنا (كيف يستقبلنا) إن أعطاها الطراز، وإلّا ما نستقبله منه — وعليها الحكم.
+  final int? signal;
+
+  /// ما نستقبله منه (rx عند السكتر) — يُعرض بجانبها حين تختلفان (المالك ٦ نوفمبر: «او تظهرهن الاثنين»).
+  final int? rxSignal;
+
+  /// ONU بالأولت: ضوءها (dBm).
+  final double? light;
+  final int? ccq, txRate, rxRate;
   final bool weak, lowCcq;
   bool get bad => weak || lowCcq;
 }
@@ -57,6 +67,7 @@ class CheckLimits {
     this.linkCcqMin = 50,
     this.subSignal = -60,
     this.subCcq = 50,
+    this.fiberRxMin = -27,
     this.voltBase = const {},
     this.voltBelow = const {},
   });
@@ -68,6 +79,9 @@ class CheckLimits {
 
   /// محطّات السكتر — حدّا «تنبيه المشترك».
   final int subSignal, subCcq;
+
+  /// ضوء الـONU — حدّ «تنبيه المشترك» للفايبر.
+  final double fiberRxMin;
 
   /// الكهرباء: معدّل كلّ جهاز وحدّ تنبيهه (بمعرّفه) من «تنبيهات أجهزتي».
   final Map<int, double> voltBase, voltBelow;
@@ -121,6 +135,9 @@ class DeviceCheckReport {
     required this.at,
     this.viaVpn = false,
     this.ms,
+    this.signal,
+    this.remoteSignal,
+    this.linkCcq,
     this.cpu,
     this.mem,
     this.temp,
@@ -146,6 +163,9 @@ class DeviceCheckReport {
   final DateTime at;
   final bool viaVpn;
   final int? ms;
+
+  /// الوصلة: إشارتها هنا، وإشارة الطرف الثاني (كيف يستقبلنا)، وCCQ.
+  final int? signal, remoteSignal, linkCcq;
   final int? cpu, mem, temp, uptimeSec, ppp;
   final double? volt, voltBase, poeWatts;
   final List<CheckFinding> findings;
@@ -178,6 +198,9 @@ class DeviceCheckReport {
 
   /// الحيويّات كما تُعرض وتُنسخ: (العنوان، القيمة).
   List<({String k, String v})> get vitals => [
+        if (signal != null) (k: 'الإشارة', v: '$signal dBm'),
+        if (remoteSignal != null) (k: 'الطرف الثاني', v: '$remoteSignal dBm'),
+        if (linkCcq != null && linkCcq! > 0) (k: 'CCQ', v: '$linkCcq٪'),
         if (cpu != null) (k: 'المعالج', v: '$cpu٪'),
         if (mem != null) (k: 'الذاكرة', v: '$mem٪'),
         if (temp != null) (k: 'الحرارة', v: '$temp°'),
@@ -249,7 +272,8 @@ class DevicesCheck {
   static String fmtMbps(int mbps) => mbps >= 1000 && mbps % 1000 == 0 ? '${mbps ~/ 1000}G' : (mbps >= 1000 ? '${mbps / 1000}G' : '${mbps}M');
 
   static String subLine(CheckSub s) => [
-        if (s.signal != null) '${s.signal} dBm',
+        if (s.light != null) '${s.light!.toStringAsFixed(1)} dBm',
+        if (s.signal != null) '${s.signal} dBm${s.rxSignal != null && s.rxSignal != s.signal ? ' (rx ${s.rxSignal})' : ''}',
         if (s.ccq != null && s.ccq! > 0) 'CCQ ${s.ccq}٪',
         if (s.rxRate != null || s.txRate != null) '↓${s.rxRate ?? '—'} ↑${s.txRate ?? '—'} Mbps',
       ].join(' · ');
@@ -352,9 +376,12 @@ class DevicesCheck {
     }
 
     // ── الوصلة ──
+    // الوصلة: إشارتها هنا وإشارة الطرف الثاني (من جدول تسجيلها) — والحكم على الأضعف
+    final remote = role == CheckRole.link && detail.peers.length == 1 ? detail.peers.first.txSignal : null;
     if (role == CheckRole.link) {
-      if (g.signal != null && g.signal! <= limits.linkSignalMin) {
-        f.add(CheckFinding(CheckLevel.warn, 'إشارة الوصلة ${g.signal} dBm — ضعيفة'));
+      final worst = [g.signal, remote].whereType<int>().fold<int?>(null, (a, b) => a == null || b < a ? b : a);
+      if (worst != null && worst <= limits.linkSignalMin) {
+        f.add(CheckFinding(CheckLevel.warn, 'إشارة الوصلة $worst dBm — ضعيفة${worst == remote && remote != g.signal ? ' (عند الطرف الثاني)' : ''}'));
       }
       if (g.ccq != null && g.ccq! > 0 && g.ccq! < limits.linkCcqMin) {
         f.add(CheckFinding(CheckLevel.warn, 'CCQ الوصلة ${g.ccq}٪ — واطي'));
@@ -370,11 +397,13 @@ class DevicesCheck {
         for (final p in detail.peers)
           CheckSub(
             name: p.name,
-            signal: p.signal,
+            // المالك ٦ نوفمبر: «مفروض تقره الاشارة من عدنا وليس rx» — إشارته من جهتنا أوّلاً، والـrx بجانبها
+            signal: p.txSignal ?? p.signal,
+            rxSignal: p.txSignal != null ? p.signal : null,
             ccq: p.hasCcq ? p.ccq : null,
             txRate: p.txRate,
             rxRate: p.rxRate,
-            weak: p.signal != null && p.signal! < limits.subSignal,
+            weak: (p.txSignal ?? p.signal) != null && (p.txSignal ?? p.signal)! < limits.subSignal,
             lowCcq: p.hasCcq && p.ccq! <= limits.subCcq,
           ),
       ]..sort((a, b) {
@@ -400,6 +429,15 @@ class DevicesCheck {
     if (role == CheckRole.olt) {
       final downPons = [for (final p in g.pons) if (!p.up && p.total > 0) p.label];
       if (downPons.isNotEmpty) f.add(CheckFinding(CheckLevel.warn, 'منفذ PON طافي: ${downPons.join('، ')}'));
+      // ضوء كلّ ONU (المالك: «+ الاولتي… مفروض هم تظهرهن») — بحدّ «تنبيه المشترك» للفايبر
+      if (detail.onuLights.isNotEmpty) {
+        subsKnown = true;
+        subs = [
+          for (final o in detail.onuLights) CheckSub(name: o.name, light: o.rx, weak: o.rx < limits.fiberRxMin),
+        ]..sort((a, b) => a.light!.compareTo(b.light!));
+        final w = subs.where((x) => x.weak).length;
+        if (w > 0) f.add(CheckFinding(CheckLevel.warn, 'ضوء ضعيف: $w — من ${subs.length} مشترك'));
+      }
     }
 
     // ── المنافذ (السويج والراوتر وكلّ ما له إيثر) ──
@@ -479,6 +517,9 @@ class DevicesCheck {
       at: at,
       viaVpn: viaVpn,
       ms: ms,
+      signal: role == CheckRole.link ? g.signal : null,
+      remoteSignal: remote,
+      linkCcq: role == CheckRole.link ? g.ccq : null,
       cpu: g.cpu,
       mem: g.mem,
       temp: g.temp,

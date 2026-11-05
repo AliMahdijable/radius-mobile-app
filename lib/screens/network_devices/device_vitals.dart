@@ -10,6 +10,7 @@ import '../../api/hsgq_olt.dart';
 import '../../api/mikrotik_api.dart';
 import '../../api/mimosa_api.dart';
 import '../../api/network_devices_api.dart';
+import '../../api/olt_fiber_reads.dart';
 import '../../api/olt_profile.dart';
 import '../../api/ruijie_api.dart';
 import '../../api/snmp_client.dart';
@@ -125,6 +126,7 @@ class PeerLink {
   const PeerLink({
     required this.name,
     this.signal,
+    this.txSignal,
     this.ccq,
     this.txRate,
     this.rxRate,
@@ -132,7 +134,13 @@ class PeerLink {
   });
 
   final String name;
+
+  /// ما نستقبله نحن من الطرف (rx عند السكتر).
   final int? signal;
+
+  /// إشارة الطرف من جهتنا — كيف يستقبلنا (مايكروتك tx-signal-strength، يوبيكويتي remote/tx signal)؛ null = لا يعطيها الطراز.
+  /// المالك ٦ نوفمبر: «مفروض تقره الاشارة من عدنا وليس rx او تظهرهن الاثنين».
+  final int? txSignal;
 
   /// جودة الاتّصال ٪ — CCQ.
   ///
@@ -165,7 +173,11 @@ class DeviceDetail {
     this.link = const [],
     this.extras = const [],
     this.glance = const DeviceGlance(),
+    this.onuLights = const [],
   });
+
+  /// أولت: ضوء كلّ ONU متّصلة مقروء (الأضعف أوّلاً) — «الفحص الشامل» وحده يطلبه (detailed).
+  final List<OnuLight> onuLights;
 
   final String? uptime;
   final String? firmware;
@@ -424,6 +436,10 @@ class DeviceVitals {
         detail: DeviceDetail(
           extras: [for (final p in pons) (k: p.label, v: '${p.online}/${p.total}')],
           glance: DeviceGlance(onusOnline: online, onusTotal: total, pons: pons),
+          onuLights: [
+            for (final o in list(v['onus']))
+              if (d(o['rx']) case final rx?) OnuLight(name: s(o['n']) ?? s(o['k']) ?? '—', rx: rx),
+          ],
         ),
         at: when,
       );
@@ -479,6 +495,7 @@ class DeviceVitals {
         PeerLink(
           name: s(p['n']) ?? '—',
           signal: n(p['s']),
+          txSignal: n(p['ts']),
           ccq: n(p['q']),
           txRate: n(p['tx']),
           rxRate: n(p['rx']),
@@ -535,7 +552,7 @@ class DeviceVitals {
 
   static Future<ProbeResult> _fetch(NetworkDevice d, {CounterSample? prev, bool detailed = false}) async {
     final creds = await NetworkDevicesApi.getCredentials(d.id);
-    if (_isOlt(d)) return _olt(d, creds);
+    if (_isOlt(d)) return _olt(d, creds, detailed: detailed);
     switch (d.brand.toLowerCase()) {
       case 'mikrotik':
         return _mikrotik(d, creds, prev, detailed);
@@ -649,6 +666,7 @@ class DeviceVitals {
                   ? c.comment!
                   : (c.ip?.isNotEmpty == true ? c.ip! : c.mac)),
           signal: c.signalStrength,
+          txSignal: c.txSignalStrength != 0 ? c.txSignalStrength : null,
           // نُفضّل txCcq: يقيس جودة ما نُرسله إلى العميل، وهو ما يشعر
           // به المشترك. ونسقط إلى rxCcq حين لا يُرجع الطرازُ الأوّل.
           ccq: c.txCcq > 0 ? c.txCcq : (c.rxCcq > 0 ? c.rxCcq : null),
@@ -817,6 +835,7 @@ class DeviceVitals {
               ? st.hostname!
               : (st.ip?.isNotEmpty == true ? st.ip! : st.mac),
           signal: st.signal,
+          txSignal: st.txSignal != 0 ? st.txSignal : null,
           ccq: st.ccq > 0 ? st.ccq : null,
           txRate: st.txRate,
           rxRate: st.rxRate,
@@ -1042,7 +1061,7 @@ class DeviceVitals {
 ///
 /// ⚡ والحمولة لقطة أولت كاملة البنية: تُحفظ في المخزن فتُفتح اللوحة
 /// المفردة بالمشتركين ومنافذ PON فوراً، كما تُفتح لوحة ميكروتك بحمولة جدارها.
-Future<ProbeResult> _olt(NetworkDevice d, Map<String, dynamic> creds) async {
+Future<ProbeResult> _olt(NetworkDevice d, Map<String, dynamic> creds, {bool detailed = false}) async {
   final community = (creds['community'] ?? creds['pass'] ?? '').toString().trim();
   if (community.isEmpty) throw StateError('أدخل الـcommunity');
   final port = d.apiPort ?? 161;
@@ -1060,11 +1079,37 @@ Future<ProbeResult> _olt(NetworkDevice d, Map<String, dynamic> creds) async {
     final c = s.profile.readsHsgqTables ? await HsgqOlt.chassis(snmp.get) : await BdcomEpon.chassis(snmp);
     if (!c.isEmpty) s = s.copyWith(chassis: c);
   }
-  return oltProbeResult(s);
+  // «الفحص الشامل» (٦ نوفمبر — المالك: «+ الاولتي… مفروض هم تظهرهن»): ضوء كلّ ONU متّصلة بمسح عموده (قارئ شبكة الألياف نفسه)
+  var lights = const <OnuLight>[];
+  if (detailed) {
+    try {
+      final snmp = SnmpV2c(host: d.ip, port: port, community: community);
+      final rx = await OltFiberReads.rxColumn(snmp, s.profile, s.onus).timeout(const Duration(seconds: 25));
+      if (rx != null) {
+        lights = [
+          for (final o in s.onus)
+            if (o.online && rx[o.ifIndex] != null)
+              OnuLight(
+                name: (o.name ?? '').trim().isNotEmpty ? o.name!.trim() : (o.serial ?? o.mac ?? 'PON${o.ponPort}:${o.onuId}'),
+                rx: rx[o.ifIndex]!,
+              ),
+        ]..sort((a, b) => a.rx.compareTo(b.rx));
+      }
+    } catch (_) {}
+  }
+  return oltProbeResult(s, lights: lights);
+}
+
+/// ضوء ONU واحدة (dBm) — لتقرير الأولت.
+@immutable
+class OnuLight {
+  const OnuLight({required this.name, required this.rx});
+  final String name;
+  final double rx;
 }
 
 /// خانات بطاقة الأولت وتفصيلها من لقطةٍ واحدة — الجدار وشاشات الألياف بالحساب نفسه ([bridgeFiberVitals]).
-ProbeResult oltProbeResult(VsolOltStats s) {
+ProbeResult oltProbeResult(VsolOltStats s, {List<OnuLight> lights = const []}) {
   final cpu = s.chassis?.cpuPct;
   final pct = s.onusTotal == 0 ? null : s.onusOnline * 100 / s.onusTotal;
   return ProbeResult(
@@ -1105,6 +1150,7 @@ ProbeResult oltProbeResult(VsolOltStats s) {
         Vital.empty.withIcon(LucideIcons.cpu),
     ],
     detail: DeviceDetail(
+      onuLights: lights,
       uptime: s.uptime == null ? null : DeviceVitals.fmtUptime(s.uptime!.inSeconds),
       model: s.profile.model,
       ports: [
