@@ -294,23 +294,13 @@ void main() {
     });
   });
 
-  group('فولتيّة جهاز الفايبر واسم المشترك (٥ نوفمبر)', () {
-    test('خارج ٣٫١–٣٫٥ V مشكلة بسطرها؛ الطبيعيّ والفارغ والصفر لا', () {
-      expect(kinds(snapO(volt: '2950')), [ConnectionProblemKind.fiberVolt]);
-      expect(kinds(snapO(volt: '3620')), [ConnectionProblemKind.fiberVolt]);
-      expect(kinds(snapO(volt: '3300')), isEmpty);
-      expect(kinds(snapO(volt: '3100')), isEmpty, reason: 'الحدّ نفسه طبيعيّ');
-      expect(kinds(snapO(volt: '')), isEmpty);
-      expect(kinds(snapO(volt: '0')), isEmpty);
-      final p = ConnectionAlerts.detect(snapO(volt: '2950'), t).single;
-      expect(p.templateType, 'conn_alert_fiber_volt');
-      expect(p.vars['{voltage}'], contains('2.95 V'));
-      expect(ConnectionAlertTemplates.lineTypes, contains('conn_alert_fiber_volt'));
-      final msg = ConnectionAlerts.compose(
-          envelope: ConnectionAlertTemplates.defaultFor(ConnectionAlertTemplates.envelopeType),
-          lines: const {},
-          problems: [p]);
-      expect(msg, contains('فولتيّة جهاز الفايبر غير طبيعيّة'));
+  group('فولتيّة موديول الضوء واسم المشترك (٥–٦ نوفمبر)', () {
+    test('فولتيّة موديول الضوء ليست مشكلةً تُرسل (٦ نوفمبر — ليست فولتيّة الأدابتر): لا سطر ولا قالب لها مهما كانت', () {
+      for (final mv in ['2950', '3620', '3300', '', '0']) {
+        expect(kinds(snapO(volt: mv)), isEmpty, reason: mv);
+      }
+      expect(ConnectionAlertTemplates.lineTypes, isNot(contains('conn_alert_fiber_volt')));
+      expect(ConnectionAlertTemplates.defaultFor('conn_alert_fiber_volt'), isEmpty);
     });
 
     test('{subscriber_name}: الاسم بالعربي أو اليوزر بحسب الاختيار — وما غاب أحدهما ⇒ الآخر؛ يُحفظ مع الحدود', () {
@@ -321,6 +311,13 @@ void main() {
       expect(byName.subscriberName(name: ' ', username: 'ali@popq'), 'ali@popq');
       expect(byUser.subscriberName(name: 'علي', username: ''), 'علي');
       expect(byUser.toJson()['name_mode'], 'username');
+      // «الاثنين معاً» (٦ نوفمبر): «الاسم (اليوزر)»؛ أحدهما غائب أو مطابقٌ للآخر ⇒ واحد
+      final both = ConnectionAlertThresholds.fromJson({'name_mode': 'both'});
+      expect(both.subscriberName(name: 'علي', username: 'ali@popq'), 'علي (ali@popq)');
+      expect(both.subscriberName(name: '', username: 'ali@popq'), 'ali@popq');
+      expect(both.subscriberName(name: 'علي', username: ''), 'علي');
+      expect(both.subscriberName(name: 'ALI@popq', username: 'ali@popq'), 'ALI@popq', reason: 'الاسم هو اليوزر ⇒ مرّة');
+      expect(both.toJson()['name_mode'], 'both');
       expect(ConnectionAlertThresholds.fromJson({'name_mode': 'x'}).nameMode, 'name');
       expect(byName.copyWith(nameMode: 'username').nameMode, 'username');
     });

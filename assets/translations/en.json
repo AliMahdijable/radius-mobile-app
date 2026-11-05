@@ -1241,14 +1241,11 @@
     "p_ccq": "CCQ {}",
     "p_fiber_rx": "Optical {}",
     "p_fiber_temp": "Temp {}",
-    "fiber_volt": "Fiber device voltage",
-    "volt_fixed": "Fiber device voltage · outside 3.1–3.5 V",
-    "line_fiber_volt": "Fiber device voltage",
-    "p_fiber_volt": "Voltage {}",
     "name_mode": "Subscriber name in the message",
     "name_mode_name": "Arabic name",
     "name_mode_username": "Username",
-    "name_mode_hint": "{subscriber_name} becomes the name or the username — whichever exists",
+    "name_mode_both": "Both",
+    "name_mode_hint": "{subscriber_name} becomes the name, the username, or “name (username)” — whichever exists",
     "preview_all_hint": "All lines with examples past your limits — a subscriber gets only the lines of his own device"
   },
   "sp": {

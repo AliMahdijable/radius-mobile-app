@@ -1712,7 +1712,16 @@ CopyField _ontTx(OntOpticalInfo o) => CopyField('TX Power', '${o.txPower} dBm');
 CopyField _ontRxTx(OntOpticalInfo o) => CopyField('RX / TX (dBm)', '${o.rxPower} / ${o.txPower}');
 
 CopyField _ontVoltage(OntOpticalInfo o) =>
-    CopyField('الفولتية', '${o.voltage} mV');
+    // ٦ نوفمبر (المالك: «لازم تتحول لل V» ثمّ «ماكو ٣.35 هيج فولتيه… اقل شي ١١ او ١٢»): هذه فولتيّة موديول الضوء داخل الجهاز (٣٫٣ V
+    // دائماً) لا فولتيّة الأدابتر (١٢ V — لا يقيسها الجهاز) ⇒ اسمها الصريح وبالفولت
+    CopyField('فولتيّة موديول الضوء', _volts(o.voltage));
+
+/// ملّي فولت (كما تعطيه صفحة الجهاز) ⇒ «3.35 V»؛ ما لا يُفهم يبقى كما هو.
+String _volts(String mv) {
+  final v = double.tryParse(mv.trim());
+  if (v == null || v <= 0) return mv.trim().isEmpty ? '—' : mv;
+  return '${(v / 1000).toStringAsFixed(2)} V';
+}
 
 CopyField _ontTemp(OntOpticalInfo o) =>
     CopyField('الحرارة', '${o.temperature} °C');

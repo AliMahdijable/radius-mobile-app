@@ -343,8 +343,6 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
                   ),
                   _divider(),
                   _fixedCableRow(),
-                  _divider(),
-                  _fixedRow(LucideIcons.zap, 'conn_alerts.volt_fixed'.tr()),
                 ]),
                 const SizedBox(height: Sp.lg),
                 Row(
@@ -543,7 +541,6 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
         'conn_alert_ccq' => 'conn_alerts.line_ccq'.tr(),
         'conn_alert_fiber_rx' => 'conn_alerts.line_fiber_rx'.tr(),
         'conn_alert_fiber_temp' => 'conn_alerts.line_fiber_temp'.tr(),
-        'conn_alert_fiber_volt' => 'conn_alerts.line_fiber_volt'.tr(),
         _ => type,
       };
 
@@ -565,30 +562,10 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
           Wrap(spacing: Sp.x6, children: [
             chip('name', 'conn_alerts.name_mode_name'.tr()),
             chip('username', 'conn_alerts.name_mode_username'.tr()),
+            chip('both', 'conn_alerts.name_mode_both'.tr()),
           ]),
           const SizedBox(height: 2),
           Text('conn_alerts.name_mode_hint'.tr(), style: AppType.micro(color: AppColors.textLow)),
-        ],
-      ),
-    );
-  }
-
-  /// حدٌّ ثابت (لا منزلق): عنوانه وشارة «ثابت» — الكيبل والفولتيّة.
-  Widget _fixedRow(IconData icon, String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: Sp.sm),
-      child: Row(
-        children: [
-          Icon(icon, size: 15, color: AppColors.textMid),
-          const SizedBox(width: Sp.x6),
-          Expanded(
-            child: Text(text, style: AppType.body(color: AppColors.textHi), maxLines: 1, overflow: TextOverflow.ellipsis),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(color: AppColors.surfaceInput, borderRadius: BorderRadius.circular(R.sm)),
-            child: Text('conn_alerts.fixed'.tr(), style: AppType.label(color: AppColors.textMid)),
-          ),
         ],
       ),
     );
@@ -651,7 +628,7 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
   }
 
   /// معاينة كلّ الأسطر (٦ نوفمبر — المالك: «والمعاينه اذكر كلشي بيها»): كلّ مشكلةٍ بمثالٍ يتجاوز حدّك الحاليّ — الكيبل والإشارة وCCQ
-  /// (النانو) والضوئيّ والحرارة والفولتيّة (جهاز الفايبر). بالواقع تصل المشترك أسطر مشاكل جهازه وحدها.
+  /// (النانو) والضوئيّ والحرارة (جهاز الفايبر). بالواقع تصل المشترك أسطر مشاكل جهازه وحدها.
   Widget _preview() {
     final sample = <ConnectionProblem>[
       const ConnectionProblem(
@@ -678,11 +655,6 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
         kind: ConnectionProblemKind.fiberTemp,
         label: '',
         vars: {'{temperature}': iso('${_t.fiberTempC + 3}°C')},
-      ),
-      ConnectionProblem(
-        kind: ConnectionProblemKind.fiberVolt,
-        label: '',
-        vars: {'{voltage}': iso('2.95 V')},
       ),
     ];
     final body = ConnectionAlerts.compose(

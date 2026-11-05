@@ -1,5 +1,5 @@
-// معاينة «تنبيه المشترك» تذكر كلّ الأسطر (٦ نوفمبر — المالك: «والمعاينه اذكر كلشي بيها»): الكيبل والإشارة وCCQ والضوئيّ والحرارة
-// والفولتيّة، بأمثلةٍ تتجاوز حدود الوكيل؛ واسم المشترك بالمعاينة يتبع «الاسم بالعربي / اليوزر».
+// معاينة «تنبيه المشترك» تذكر كلّ الأسطر (٦ نوفمبر — المالك: «والمعاينه اذكر كلشي بيها»): الكيبل والإشارة وCCQ والضوئيّ والحرارة،
+// بأمثلةٍ تتجاوز حدود الوكيل (فولتيّة موديول الضوء أُخرجت ٦ نوفمبر)؛ واسم المشترك يتبع «الاسم بالعربي / اليوزر / الاثنين معاً».
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
@@ -11,7 +11,7 @@ import 'visual_perm/visual_perm_harness.dart';
 void main() {
   setUpAll(visualSetUpAll);
 
-  testWidgets('المعاينة: الأسطر الستّة كلّها، والاسم بالعربي ثمّ اليوزر', (t) async {
+  testWidgets('المعاينة: الأسطر الخمسة كلّها بلا فولتيّة، والاسم بالعربي ثمّ اليوزر ثمّ الاثنين معاً', (t) async {
     final inner = await visualSetUp(s1bSasOwner);
     ApiClient.dio.httpClientAdapter = AiStatusOverlay(inner, status: aiStatusOff, routes: {
       'GET /api/v2/connection-alerts/settings': {
@@ -32,10 +32,10 @@ void main() {
       'جودة الربط منخفضة',
       'الإشارة الضوئيّة ضعيفة',
       'حرارة جهاز الفايبر مرتفعة',
-      'فولتيّة جهاز الفايبر غير طبيعيّة',
     ]) {
       expect(text(), contains(line), reason: line);
     }
+    expect(text(), isNot(contains('فولتيّة')), reason: 'لا سطر لفولتيّة موديول الضوء');
     expect(text(), contains('محمد علي'));
     final user = find.byKey(const ValueKey('ca-name-username'));
     await t.ensureVisible(user);
@@ -46,6 +46,14 @@ void main() {
     await t.scrollUntilVisible(preview, 300, scrollable: find.byType(Scrollable).first);
     expect(text(), contains('mohammed.ali'), reason: 'اليوزر بدل الاسم');
     expect(text(), isNot(contains('محمد علي')));
+    final both = find.byKey(const ValueKey('ca-name-both'));
+    await t.ensureVisible(both);
+    await t.pump(const Duration(milliseconds: 300));
+    await t.tap(both);
+    await t.pump();
+    expect(t.widget<ChoiceChip>(both).selected, isTrue);
+    await t.scrollUntilVisible(preview, 300, scrollable: find.byType(Scrollable).first);
+    expect(text(), contains('محمد علي (mohammed.ali)'), reason: 'الاثنين معاً');
     await t.pumpWidget(const SizedBox());
     await visualTearDown();
   });
