@@ -34,6 +34,7 @@ import 'debt_age.dart';
 import 'subscriber_columns.dart';
 import '../../../core/widgets/print_feedback.dart';
 import '../../../services/receipt_service.dart';
+import 'usage_on_demand.dart';
 
 /// أعمدة جدول المشتركين على هذا العرض: ما اختاره المدير من زرّ «الأعمدة» بترتيبه، كلٌّ بعرضه (الافتراضيّ أو ما
 /// سحبه المدير). لا يسقط عمود حين يضيق الجدول: **الجدول كلّه** يتمرّر يميناً ويساراً قطعةً واحدة — لا جزءٌ ثابت ولا
@@ -934,6 +935,13 @@ class _UsageCell extends StatelessWidget {
     return ValueListenableBuilder<int>(
       valueListenable: SubscriberUsageStore.version,
       builder: (context, _, __) {
+        // ⑯ الوطنيّ: «عرض الاستهلاك» بلمسةٍ لكلّ مشترك (طلبٌ منفصل) لا دفعة
+        if (SubscriberUsageStore.isOnDemand(sub.companyKey)) {
+          return Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: UsageOnDemand(idx: idx, company: sub.companyKey, stacked: true),
+          );
+        }
         final e = SubscriberUsageStore.get(idx, company: sub.companyKey);
         if (e == null) SubscriberUsageStore.want(idx, company: sub.companyKey);
         final label = AppType.muted(color: AppColors.textLow).copyWith(fontSize: 12.5);

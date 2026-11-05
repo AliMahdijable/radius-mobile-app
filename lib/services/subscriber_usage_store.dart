@@ -5,6 +5,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../api/api_client.dart';
 import '../api/company_route.dart';
+import '../core/util/error_text.dart';
+import 'provider_service.dart';
 
 /// استهلاك مشتركٍ واحد (بايت) — `today` null لشهرٍ مضى.
 @immutable
@@ -78,6 +80,64 @@ class SubscriberUsageStore {
   static String _key(String idx, String? company) =>
       company == null ? idx : '$company|$idx';
 
+  // ── ⑯ «عند الطلب» (المشروع الوطنيّ، المالك ٥ نوفمبر: «كونه ثكيل استعلامته… ينقر ع عرض الاستهلاك حتى يكون بطلب منفصل») ──
+  // لا دفعات للصفوف الظاهرة: كلّ مشتركٍ بلمسة ([requestOne] — `?ids=<idx>&one=1`، والتحديث `&fresh=1`). الشركة المفتوحة من
+  // مزوّدها ([ProviderService.usageOnDemand])، وأيّ شركةٍ ردّت دفعتها `on_demand` (صفوف «كل الشركات») تُعرف من ردّها.
+  static final _onDemand = <String>{}; // '' = الشركة المفتوحة، وإلّا مفتاح شركة الصفّ
+  static final _oneBusy = <String>{};
+  static final _err = <String, String>{};
+
+  /// صفوف هذه الشركة «عند الطلب» (زرّ «عرض الاستهلاك») لا دفعات.
+  static bool isOnDemand(String? company) => company == null
+      ? (ProviderService.usageOnDemand || _onDemand.contains(''))
+      : _onDemand.contains(company);
+
+  /// حال صفٍّ «عند الطلب»: يُجلب · قيمته (تبقى بعد جلبها) · سبب التعذّر — وكلّها فارغة = لم يُطلب بعد.
+  static ({bool loading, SubscriberUsage? v, String? err}) one(String idx, {String? company}) {
+    final k = _key(idx, company);
+    return (loading: _oneBusy.contains(k), v: _cache[k]?.v, err: _err[k]);
+  }
+
+  /// لمسة «عرض الاستهلاك» (أو التحديث بـ[fresh]): طلبٌ لمشتركٍ واحد — الخادم يجلب جلسته وسجلّه وحده.
+  static Future<void> requestOne(String idx, {String? company, bool fresh = false}) async {
+    final k = _key(idx, company);
+    if (idx.isEmpty || _oneBusy.contains(k)) return;
+    final gen = _gen;
+    _oneBusy.add(k);
+    _err.remove(k);
+    version.value++;
+    SubscriberUsage? v;
+    String? msg;
+    try {
+      final r = await CompanyRoute.run(
+        company,
+        () => ApiClient.dio.get<Map<String, dynamic>>(
+          '/api/v2/subscribers-usage',
+          queryParameters: {'ids': idx, 'one': '1', if (fresh) 'fresh': '1'},
+        ),
+      );
+      final body = r.data ?? const {};
+      final d = body['data'];
+      final u = d is Map ? d[idx] : null;
+      if (body['success'] == true && u is Map) {
+        v = SubscriberUsage(today: _int(u['today']), month: _int(u['month']));
+      } else {
+        msg = (body['message'] ?? 'تعذّر جلب الاستهلاك — أعد بعد قليل').toString();
+      }
+    } catch (e) {
+      msg = humanError(e, fallback: 'تعذّر جلب الاستهلاك — أعد بعد قليل');
+    }
+    if (gen != _gen) return; // حسابٌ آخر الآن
+    _oneBusy.remove(k);
+    if (v != null) {
+      _cache[k] = (at: DateTime.now(), v: v);
+    } else {
+      _err[k] = msg ?? 'تعذّر جلب الاستهلاك';
+    }
+    if (_err.length > 2000) _err.remove(_err.keys.first);
+    version.value++;
+  }
+
   static String? _companyOf(String key) {
     final i = key.indexOf('|');
     return i < 0 ? null : key.substring(0, i);
@@ -90,6 +150,7 @@ class SubscriberUsageStore {
   }
 
   static void want(String idx, {String? company}) {
+    if (isOnDemand(company)) return; // ⑯ لمسةٌ لكلّ مشترك، لا دفعة
     final k = _key(idx, company);
     if (idx.isEmpty || _busy.contains(k) || _queue.contains(k)) return;
     final e = _cache[k];
@@ -122,6 +183,7 @@ class SubscriberUsageStore {
         ];
         Map<String, dynamic> data = const {};
         var ok = false;
+        var od = false;
         try {
           final r = await CompanyRoute.run(
             company,
@@ -132,6 +194,7 @@ class SubscriberUsageStore {
           );
           final body = r.data ?? const {};
           ok = body['success'] == true;
+          od = body['on_demand'] == true;
           final d = body['data'];
           if (d is Map<String, dynamic>) data = d;
         } catch (e) {
@@ -139,9 +202,15 @@ class SubscriberUsageStore {
         }
         _busy.removeAll(batch);
         if (gen != _gen) continue; // حسابٌ آخر الآن
+        // ⑯ خادم الشركة يقول «عند الطلب»: ما بقي بلا قيمة يصير زرّاً (لا «—» ولا إعادة) وتُترك دفعاتها
+        if (od) {
+          _onDemand.add(company ?? '');
+          _queue.removeWhere((k) => _companyOf(k) == company);
+        }
         final now = DateTime.now();
         for (var i = 0; i < batch.length; i++) {
           final u = data[ids[i]];
+          if (od && u is! Map) continue;
           _cache[batch[i]] = (
             at: now,
             v: ok && u is Map
@@ -173,6 +242,9 @@ class SubscriberUsageStore {
     _queue.clear();
     _busy.clear();
     _cache.clear();
+    _onDemand.clear();
+    _oneBusy.clear();
+    _err.clear();
     version.value++;
   }
 }

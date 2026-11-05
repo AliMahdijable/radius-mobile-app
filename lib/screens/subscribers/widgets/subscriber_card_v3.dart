@@ -16,6 +16,7 @@ import '../../../theme/typography.dart';
 import '../../../widgets/company_tag.dart';
 import 'debt_age.dart';
 import 'device_chip_micro.dart' show DeviceProbeBus;
+import 'usage_on_demand.dart';
 
 /// فعل شريط «آخر حركة ماليّة» الأخضر — ما قبل «قبل 5 د».
 ///
@@ -1177,6 +1178,10 @@ class _UsageRowState extends State<_UsageRow> {
     return ValueListenableBuilder<int>(
       valueListenable: SubscriberUsageStore.version,
       builder: (context, _, __) {
+        // ⑯ الوطنيّ: «عرض الاستهلاك» بلمسةٍ لكلّ مشترك (طلبٌ منفصل) لا دفعة
+        if (SubscriberUsageStore.isOnDemand(widget.company)) {
+          return UsageOnDemand(idx: widget.idx, company: widget.company);
+        }
         final e = SubscriberUsageStore.get(widget.idx, company: widget.company);
         // لم يصل بعد (أو فُرّغ بتبديل الحساب) — يُطلب؛ الطلب مؤجَّلٌ لا يبني شيئاً الآن.
         if (e == null) SubscriberUsageStore.want(widget.idx, company: widget.company);

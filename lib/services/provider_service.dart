@@ -60,6 +60,10 @@ class ProviderService {
   /// (`components/kit/kit.ts` isSuspendProvider).
   static bool get togglesAsSuspend => _provider == 'watani';
 
+  /// «الاستهلاك» عند الطلب (المالك ٥ نوفمبر: «الاستهلاك بالمشروع الوطني كونه ثكيل استعلامته… ينقر ع عرض الاستهلاك حتى يكون بطلب
+  /// منفصل»): لا دفعات للصفوف الظاهرة، كلّ مشتركٍ بلمسة — والخادم يفرضها (دفعة الوطني من ذاكرته وحدها، `on_demand`).
+  static bool get usageOnDemand => _provider == 'watani';
+
   /// فايبر اكس (OpenRadius، رمز الشركة `fiberx`) — `provider:'fiberx'` من الدخول و`/api/auth/me`. التطبيق خلف مفتاح الخادم
   /// `pro_settings.fiberx_app` (٢٩ أكتوبر): بلاه يُردّ الدخول `fiberx-web-only`. يتكلّم عقود SAS4 العامّة (القائمة، مودل
   /// التفعيل بوضع «فايبر اكس»، الديون من دفترنا)، وما لا يخدمه يُقفل بقدراته (`canonicalPermissions` false).
