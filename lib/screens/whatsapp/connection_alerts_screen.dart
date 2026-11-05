@@ -257,19 +257,23 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
                 _intro(),
                 const SizedBox(height: Sp.md),
                 _card(children: [
-                  SwitchListTile.adaptive(
-                    contentPadding: EdgeInsets.zero,
-                    value: _enabled,
-                    onChanged:
-                        _canEdit ? (v) => setState(() => _enabled = v) : null,
-                    activeTrackColor: AppColors.brand,
-                    title: Text('conn_alerts.enable'.tr(),
-                        style: AppType.bodyStrong(color: AppColors.textHi)),
-                    subtitle: Text(
-                      _enabled
-                          ? 'conn_alerts.enabled_hint'.tr()
-                          : 'conn_alerts.disabled_hint'.tr(),
-                      style: AppType.muted(color: AppColors.textMid),
+                  // Material شفّاف: الكرت ملوّن فيُخفي أثر الضغطة (وتحذير ListTile في نسخة التطوير)
+                  Material(
+                    type: MaterialType.transparency,
+                    child: SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      value: _enabled,
+                      onChanged:
+                          _canEdit ? (v) => setState(() => _enabled = v) : null,
+                      activeTrackColor: AppColors.brand,
+                      title: Text('conn_alerts.enable'.tr(),
+                          style: AppType.bodyStrong(color: AppColors.textHi)),
+                      subtitle: Text(
+                        _enabled
+                            ? 'conn_alerts.enabled_hint'.tr()
+                            : 'conn_alerts.disabled_hint'.tr(),
+                        style: AppType.muted(color: AppColors.textMid),
+                      ),
                     ),
                   ),
                 ]),
@@ -646,8 +650,8 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
     );
   }
 
-  /// معاينة بمثالٍ ثابت: نانو كيبله مفصول وإشارته ‎-68 — يكفي ليرى المدير
-  /// الرسالة العامّة وسطرين معاً.
+  /// معاينة كلّ الأسطر (٦ نوفمبر — المالك: «والمعاينه اذكر كلشي بيها»): كلّ مشكلةٍ بمثالٍ يتجاوز حدّك الحاليّ — الكيبل والإشارة وCCQ
+  /// (النانو) والضوئيّ والحرارة والفولتيّة (جهاز الفايبر). بالواقع تصل المشترك أسطر مشاكل جهازه وحدها.
   Widget _preview() {
     final sample = <ConnectionProblem>[
       const ConnectionProblem(
@@ -658,7 +662,27 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
       ConnectionProblem(
         kind: ConnectionProblemKind.signal,
         label: '',
-        vars: {'{signal}': iso('-68 dBm')},
+        vars: {'{signal}': iso('${_t.signalDbm - 8} dBm')},
+      ),
+      ConnectionProblem(
+        kind: ConnectionProblemKind.ccq,
+        label: '',
+        vars: {'{ccq}': iso('${(_t.ccqPct - 10).clamp(5, 100)}%')},
+      ),
+      ConnectionProblem(
+        kind: ConnectionProblemKind.fiberRx,
+        label: '',
+        vars: {'{rx_power}': iso('${_fmt(_t.fiberRxDbm - 1.5)} dBm')},
+      ),
+      ConnectionProblem(
+        kind: ConnectionProblemKind.fiberTemp,
+        label: '',
+        vars: {'{temperature}': iso('${_t.fiberTempC + 3}°C')},
+      ),
+      ConnectionProblem(
+        kind: ConnectionProblemKind.fiberVolt,
+        label: '',
+        vars: {'{voltage}': iso('2.95 V')},
       ),
     ];
     final body = ConnectionAlerts.compose(
@@ -679,9 +703,17 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
         borderRadius: BorderRadius.circular(R.lg),
         border: Border.all(color: AppColors.border),
       ),
-      child: Text(
-        text,
-        style: AppType.body(color: AppColors.textHi).copyWith(height: 1.7),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            text,
+            key: const ValueKey('ca-preview-text'),
+            style: AppType.body(color: AppColors.textHi).copyWith(height: 1.7),
+          ),
+          const SizedBox(height: Sp.sm),
+          Text('conn_alerts.preview_all_hint'.tr(), style: AppType.micro(color: AppColors.textLow)),
+        ],
       ),
     );
   }

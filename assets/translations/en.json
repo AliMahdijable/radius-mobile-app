@@ -1248,7 +1248,8 @@
     "name_mode": "Subscriber name in the message",
     "name_mode_name": "Arabic name",
     "name_mode_username": "Username",
-    "name_mode_hint": "{subscriber_name} becomes the name or the username — whichever exists"
+    "name_mode_hint": "{subscriber_name} becomes the name or the username — whichever exists",
+    "preview_all_hint": "All lines with examples past your limits — a subscriber gets only the lines of his own device"
   },
   "sp": {
     "title": "Subscriber prices",
