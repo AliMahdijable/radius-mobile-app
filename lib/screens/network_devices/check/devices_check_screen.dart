@@ -26,7 +26,11 @@ class DevicesCheckScreen extends StatefulWidget {
 class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
   late final DevicesCheckRunner _run = DevicesCheckRunner(widget.devices, viaVpn: widget.viaVpn);
   CheckState? _filter;
-  final _open = <int>{};
+
+  /// القسم المفتوح بعينه: `<المعرّف>:subs` أو `<المعرّف>:ports` — المالك ٦ نوفمبر: «من انقر توكل ع اي قسم يفتح كل الاقسام».
+  final _open = <String>{};
+
+  void _toggle(String key) => setState(() => _open.contains(key) ? _open.remove(key) : _open.add(key));
 
   @override
   void initState() {
@@ -237,7 +241,6 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
 
   Widget _card(DeviceCheckReport r) {
     final tone = _stateTone(r.state);
-    final open = _open.contains(r.device.id);
     final sub = [r.roleLabel, r.device.ip].where((x) => x.isNotEmpty).join(' · ');
     return Container(
       key: ValueKey('check-card-${r.device.id}'),
@@ -246,7 +249,7 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => setState(() => open ? _open.remove(r.device.id) : _open.add(r.device.id)),
+          // الضغط المطوّل ينسخ تقرير الجهاز؛ والفتح لكلّ قسمٍ بزرّه وحده
           onLongPress: () => copyToClipboard(context, r.toText(), label: 'تقرير ${r.device.name}'),
           child: Padding(
             padding: const EdgeInsets.all(Sp.md),
@@ -272,8 +275,8 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
                 const SizedBox(height: Sp.sm),
                 for (final f in r.findings) _finding(f),
               ],
-              if ((r.role == CheckRole.sector || r.role == CheckRole.olt) && r.subs.isNotEmpty) _subs(r, open),
-              if (r.ports.isNotEmpty) _ports(r, open),
+              if ((r.role == CheckRole.sector || r.role == CheckRole.olt) && r.subs.isNotEmpty) _subs(r),
+              if (r.ports.isNotEmpty) _ports(r),
             ]),
           ),
         ),
@@ -314,16 +317,19 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
         ]),
       );
 
-  Widget _more(DeviceCheckReport r, bool open, int hidden, String what) => Align(
+  Widget _more(String key, bool open, int hidden, String what) => Align(
         alignment: AlignmentDirectional.centerStart,
         child: TextButton.icon(
-          onPressed: () => setState(() => open ? _open.remove(r.device.id) : _open.add(r.device.id)),
+          key: ValueKey('check-more-$key'),
+          onPressed: () => _toggle(key),
           icon: Icon(open ? LucideIcons.chevronUp : LucideIcons.chevronDown, size: 16),
           label: Text(open ? 'إخفاء' : 'عرض $what ($hidden)'),
         ),
       );
 
-  Widget _subs(DeviceCheckReport r, bool open) {
+  Widget _subs(DeviceCheckReport r) {
+    final key = '${r.device.id}:subs';
+    final open = _open.contains(key);
     final bad = r.subs.where((s) => s.bad).toList();
     final shown = open ? r.subs : bad.take(3).toList();
     final olt = r.role == CheckRole.olt;
@@ -333,7 +339,7 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       _sectionHead(LucideIcons.users, head),
       for (final s in shown) _subRow(s),
-      if (r.subs.length > shown.length || open) _more(r, open, r.subs.length - shown.length, 'كلّ المشتركين'),
+      if (r.subs.length > shown.length || open) _more(key, open, r.subs.length - shown.length, 'كلّ المشتركين'),
     ]);
   }
 
@@ -376,16 +382,36 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
         ],
         if (s.rxRate != null || s.txRate != null) ...[
           const SizedBox(width: Sp.xs),
-          Directionality(
-            textDirection: TextDirection.ltr,
-            child: Text('↓${s.rxRate ?? '—'} ↑${s.txRate ?? '—'}', style: AppType.micro(color: AppColors.textMid)),
+          // كبطاقة الجهاز الكبيرة: ↓الاستقبال ↑الإرسال ثمّ Mbps (المالك ٦ نوفمبر: «مابيها Mbps بس ارقام») — يصغر على الضيّق
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerEnd,
+              child: Directionality(
+                textDirection: TextDirection.ltr,
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  if (s.rxRate != null) ...[
+                    Icon(LucideIcons.arrowDown, size: 10, color: AppColors.chartLine),
+                    Text('${s.rxRate}', style: AppType.microBold(color: AppColors.textHi)),
+                  ],
+                  if (s.rxRate != null && s.txRate != null) const SizedBox(width: 4),
+                  if (s.txRate != null) ...[
+                    Icon(LucideIcons.arrowUp, size: 10, color: AppColors.info),
+                    Text('${s.txRate}', style: AppType.microBold(color: AppColors.textHi)),
+                  ],
+                  Text(' Mbps', style: AppType.micro(color: AppColors.textLow)),
+                ]),
+              ),
+            ),
           ),
         ],
       ]),
     );
   }
 
-  Widget _ports(DeviceCheckReport r, bool open) {
+  Widget _ports(DeviceCheckReport r) {
+    final key = '${r.device.id}:ports';
+    final open = _open.contains(key);
     final flagged = r.ports.where((p) => p.flagged).toList();
     final shown = open ? r.ports : flagged.take(4).toList();
     final head = 'المنافذ ${r.portsUp ?? 0}/${r.portsTotal ?? r.ports.length} شغّالة'
@@ -393,7 +419,7 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       _sectionHead(LucideIcons.cable, head),
       for (final p in shown) _portRow(p),
-      if (r.ports.length > shown.length || open) _more(r, open, r.ports.length - shown.length, 'كلّ المنافذ'),
+      if (r.ports.length > shown.length || open) _more(key, open, r.ports.length - shown.length, 'كلّ المنافذ'),
     ]);
   }
 

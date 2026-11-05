@@ -123,6 +123,34 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
 
+  testWidgets('٦ نوفمبر: كلّ قسمٍ يُفتح وحده (المشتركون لا يفتحون المنافذ)، والسرعة بـMbps', (t) async {
+    final mt = _d(7, 'سكتر مايكروتك', 'sector');
+    DevicesCheckRunner.debugFetch = (d) async => _r(const DeviceDetail(glance: DeviceGlance(isAp: true), peers: [
+          PeerLink(name: 'weak.one', signal: -80, txSignal: -79, ccq: 90, txRate: 86, rxRate: 13),
+          PeerLink(name: 'good.one', signal: -55, txSignal: -57, ccq: 99, txRate: 130, rxRate: 117),
+        ], ports: [
+          PortTraffic(name: 'ether1', up: true, linkSpeed: '1Gbps'),
+          PortTraffic(name: 'ether2', up: true, linkSpeed: '10Mbps'),
+          PortTraffic(name: 'ether3', up: true, linkSpeed: '1Gbps'),
+        ]));
+    await pumpSim(t, const SimVariant(390, dark: false), settle: false, home: (_) => DevicesCheckScreen(devices: [mt], viaVpn: false));
+    await settle(t);
+    expect(find.text('weak.one'), findsOneWidget);
+    expect(find.text('good.one'), findsNothing);
+    expect(find.text('ether3'), findsNothing, reason: 'المنفذ السليم مطويّ');
+    expect(find.text(' Mbps'), findsOneWidget, reason: 'السرعة بوحدتها');
+    await see(t, find.byKey(const ValueKey('check-more-7:subs')));
+    await t.tap(find.byKey(const ValueKey('check-more-7:subs')));
+    await settle(t);
+    await see(t, find.text('good.one'));
+    expect(find.text('ether3'), findsNothing, reason: 'فتح المشتركين لا يفتح المنافذ');
+    await see(t, find.byKey(const ValueKey('check-more-7:ports')));
+    await t.tap(find.byKey(const ValueKey('check-more-7:ports')));
+    await settle(t);
+    await see(t, find.text('ether3'));
+    await t.pumpWidget(const SizedBox());
+  });
+
   testWidgets('٣٢٠ داكن وخطّ ١٫٢: بلا فيضان', (t) async {
     t.platformDispatcher.textScaleFactorTestValue = 1.2;
     addTearDown(t.platformDispatcher.clearTextScaleFactorTestValue);
