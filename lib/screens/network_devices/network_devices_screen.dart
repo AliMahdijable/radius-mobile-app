@@ -47,6 +47,9 @@ import '../../core/widgets/app_sheet.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../desktop/desk_table_scroll.dart';
 import 'widgets/device_ip_link.dart';
+import '../../services/vpn_now.dart';
+import '../../widgets/vpn_now_bar.dart';
+import '../whatsapp/conn_vpn_screen.dart';
 
 /// قائمة أجهزة الشبكة. راجع project_devices_monitoring_plan.
 ///
@@ -956,6 +959,17 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     );
     return Scaffold(
       backgroundColor: AppColors.bg,
+      // ٥ نوفمبر (المالك: «… وكذلك الاجهزة»): لا يردّ أيّ جهاز ⇒ «أنت خارج شبكتك — تفحص أجهزتك عبر الـVPN؟» (أو الفحص/نتيجته)
+      bottomNavigationBar: _selectionMode
+          ? null
+          : VpnNowBar(
+              kind: VpnNowKind.devices,
+              offNetwork: _offNetwork,
+              onOpenVpn: () async {
+                await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ConnVpnScreen()));
+                unawaited(VpnNow.route(force: true));
+              },
+            ),
       body: SafeArea(
         bottom: false,
         child: _loading || _error != null
@@ -2200,6 +2214,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                         ),
                       ]),
                     ],
+                    // ٥ نوفمبر: آخر «فحص الآن» عبر الـVPN (خارج شبكتك) — «واصل · 41 ms» أو «لا يستجيب»
+                    VpnDevicePill(id: d.id),
                   ],
                 ),
               ),

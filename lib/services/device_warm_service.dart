@@ -203,6 +203,37 @@ class DeviceWarmService with WidgetsBindingObserver {
     return custom != null && custom.isNotEmpty ? custom : (s.ipAddress ?? '').trim();
   }
 
+  /// «هل الهاتف على شبكة الوكيل؟» بالعيّنة نفسها (ما ردّ سابقاً + متّصلون الآن، ١٫٢ث بالتوازي) — لهنت «أنت خارج شبكتك» بقسم
+  /// المشتركين (٥ نوفمبر). null: شركةٌ بلا عناوين أجهزة (الوطنيّ وفايبر اكس)، أو لا قائمة (حسابٌ كبير/تعذّر)، أو لا عنوان يُسأل.
+  static Future<bool?> onAgentNetwork() {
+    final f = debugPresence;
+    if (f != null) return f();
+    // اختبارات الواجهة تبني الشاشات — لا شبكة حقيقيّة فيها (كـ[start])
+    if (debugDisabled || Platform.environment.containsKey('FLUTTER_TEST')) return Future.value(null);
+    return _i._presence();
+  }
+
+  @visibleForTesting
+  static Future<bool?> Function()? debugPresence;
+
+  Future<bool?> _presence() async {
+    if (!_providerHasDevices) return null;
+    try {
+      final list = await SubscribersApi.loadAll();
+      if (list == null || list.isEmpty) return null;
+      final subs = list.where((s) => s.companyKey == null && s.username.isNotEmpty).toList();
+      final ips = await _sample(subs);
+      if (ips.isEmpty) return null;
+      final ok = await Future.wait(ips.map((ip) => TcpReachability.isReachable(ip)));
+      final on = ok.contains(true);
+      _offNet = !on;
+      if (on) unawaited(_rememberGood(subs));
+      return on;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// العيّنة: ما ردّ في جلساتٍ سابقة (حتى [_sampleKnown]) + متّصلون الآن عشوائيّاً من القائمة كلّها (حتى [_sampleOnline])؛
   /// وإن لم يكن أيٌّ منهما فعناوين عشوائيّة من الكلّ. جهازٌ مطفأ أو بلا وصولٍ في أوّل القائمة لا يحسم شيئاً بعد اليوم.
   Future<List<String>> _sample(List<Subscriber> subs) async {

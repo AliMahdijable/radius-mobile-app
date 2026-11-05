@@ -62,6 +62,11 @@ import 'widgets/subscribers_desktop_header.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/platform/desk_nav_guard.dart';
 import '../desktop/desk_table_scroll.dart';
+import '../../services/device_warm_service.dart';
+import '../../services/vpn_now.dart';
+import '../../widgets/vpn_now_bar.dart';
+import '../whatsapp/conn_vpn_screen.dart';
+import '../whatsapp/connection_alerts_screen.dart';
 
 /// Default sort field + direction per filter — mirrors v1's
 /// `_defaultSortByFilter`. Without this the 'قارب الانتهاء' chip
@@ -375,6 +380,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   @override
   void initState() {
     super.initState();
+    _netTimer = Timer(const Duration(seconds: 4), _checkNet);
     _scrollCtrl.addListener(_onScroll);
     WidgetsBinding.instance.addObserver(this);
     _filter = widget.filterCmd?.value ?? SubscriberFilter.all;
@@ -435,6 +441,46 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   /// نلغي ونعيد التشغيل عند resume، ونوقف تماماً في pause/inactive.
   /// الشاشة حيّة **ومرئيّة** معاً.
   bool get _mayRefresh => widget.isActive?.value ?? true;
+
+  // ── «أنت خارج شبكتك» (٥ نوفمبر — المالك: «من يتحسس النظام هو مو ضمن الشبكة… البينج مو ناصي… يطلع له فد هنت صغير») ──
+  // ثلاث محاولاتٍ متتالية (عيّنة الأجهزة نفسها: ما ردّ سابقاً + متّصلون الآن) لا يردّ فيها أحد ⇒ الهنت؛ وأوّل ردٍّ يخفيه.
+  // الفحص عبر الـVPN نفسه لا يبدأ إلّا بضغطة «فحص الآن» ([VpnNowBar]).
+  Timer? _netTimer;
+  int _offStreak = 0;
+  bool _offNet = false;
+
+  Future<void> _checkNet() async {
+    _netTimer?.cancel();
+    if (!mounted) return;
+    if (!_mayRefresh) {
+      _netTimer = Timer(const Duration(minutes: 1), _checkNet);
+      return;
+    }
+    final on = await DeviceWarmService.onAgentNetwork();
+    if (!mounted) return;
+    var next = const Duration(minutes: 2);
+    if (on == false) {
+      _offStreak++;
+      if (_offStreak < 3) {
+        next = const Duration(seconds: 15);
+      } else if (!_offNet) {
+        setState(() => _offNet = true);
+      }
+    } else {
+      _offStreak = 0;
+      if (_offNet) setState(() => _offNet = false);
+    }
+    _netTimer = Timer(next, _checkNet);
+  }
+
+  Future<void> _openVpnPage() async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ConnVpnScreen()));
+    unawaited(VpnNow.route(force: true));
+  }
+
+  void _openConnAlerts() {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ConnectionAlertsScreen()));
+  }
 
   void _onActiveChanged() {
     if (_locked) return;
@@ -597,6 +643,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
   @override
   void dispose() {
+    _netTimer?.cancel();
     _scrollCtrl.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _autoRefreshTimer?.cancel();
@@ -2253,6 +2300,14 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                 color: AppColors.brand,
                 backgroundColor: Colors.transparent,
                 minHeight: 2,
+              ),
+            // ٥ نوفمبر: «أنت خارج شبكتك — تفحص عبر الـVPN؟» (أو الفحص الجاري/نتيجته)
+            if (!_selectionMode)
+              VpnNowBar(
+                kind: VpnNowKind.subscribers,
+                offNetwork: _offNet,
+                onOpenVpn: _openVpnPage,
+                onShowProblems: _openConnAlerts,
               ),
           ],
         ),

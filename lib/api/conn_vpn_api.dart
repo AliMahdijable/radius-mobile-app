@@ -34,6 +34,7 @@ class ConnVpnStatus {
     this.profileSaved = false,
     this.profileHasAuth = false,
     this.profileError,
+    this.profileUser,
     this.reverse = false,
     this.lastTest,
     this.sweepAtMs,
@@ -52,6 +53,9 @@ class ConnVpnStatus {
   final bool profileSaved;
   final bool profileHasAuth;
   final String? profileError;
+
+  /// يوزر الـVPN المحفوظ مع ملفّه (لنافذة «تعديل اليوزر والباسورد» — الباسورد لا يرجع أبداً)
+  final String? profileUser;
   final bool reverse;
   final ConnVpnTest? lastTest;
   final int? sweepAtMs;
@@ -81,6 +85,7 @@ class ConnVpnStatus {
       profileSaved: p is Map && p['saved'] == true,
       profileHasAuth: p is Map && p['has_auth'] == true,
       profileError: p is Map ? p['last_error']?.toString() : null,
+      profileUser: p is Map ? p['user']?.toString() : null,
       reverse: j['reverse_enabled'] == true,
       lastTest: ConnVpnTest.fromJson(j['last_test']),
       sweepAtMs: s is Map ? (s['at_ms'] as num?)?.toInt() : null,
@@ -163,6 +168,24 @@ class ConnVpnApi {
       final r = await ApiClient.dio.put<Map<String, dynamic>>('/api/v2/conn-vpn/profile', data: {
         'ovpn': ovpn,
         if (username != null && username.isNotEmpty) 'username': username,
+        if (password != null && password.isNotEmpty) 'password': password,
+        if (keyPassword != null && keyPassword.isNotEmpty) 'key_password': keyPassword,
+      });
+      return (ok: r.data?['success'] == true, message: r.data?['message']?.toString());
+    } catch (e) {
+      return (ok: false, message: _msg(e, 'تعذّر الحفظ'));
+    }
+  }
+
+  /// «تعديل اليوزر والباسورد» (٥ نوفمبر — المالك: «اتاحة تعديل الملف»): بلا ملفّ ⇒ الخادم يعدّل الملفّ المحفوظ وحده.
+  static Future<({bool ok, String? message})> updateCredentials({
+    String? username,
+    String? password,
+    String? keyPassword,
+  }) async {
+    try {
+      final r = await ApiClient.dio.put<Map<String, dynamic>>('/api/v2/conn-vpn/profile', data: {
+        if (username != null) 'username': username,
         if (password != null && password.isNotEmpty) 'password': password,
         if (keyPassword != null && keyPassword.isNotEmpty) 'key_password': keyPassword,
       });

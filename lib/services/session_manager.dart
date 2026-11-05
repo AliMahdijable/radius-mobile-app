@@ -38,6 +38,7 @@ import 'permissions_service.dart';
 import 'provider_service.dart';
 import 'saved_profiles_store.dart';
 import 'subscriber_usage_store.dart';
+import 'vpn_now.dart';
 
 /// Central place that wipes every in-memory + persistent cache tied to
 /// a user session. Called from:
@@ -87,6 +88,7 @@ class SessionManager {
     _guardSync('ElDepositPassword.reset', () => ElDepositPassword.reset());
     // استهلاك المشتركين (القائمة) — أرقام حساب المدير السابق.
     _guardSync('SubscriberUsageStore.reset', () => SubscriberUsageStore.reset());
+    _guardSync('VpnNow.reset', () => VpnNow.reset());
     // «شحن رصيد الصفحة» — وسائل الدفع ورصيد صفحة المدير السابق. (عمليّات زين
     // كاش المعلّقة **لا** تُمسح هنا: خروجٌ وسط الدفع لا يمحو ماله —
     // SelfDepositPendingStore يحفظها لصاحبها وحده.)

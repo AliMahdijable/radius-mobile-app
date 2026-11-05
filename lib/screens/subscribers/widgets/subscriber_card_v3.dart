@@ -17,6 +17,8 @@ import '../../../widgets/company_tag.dart';
 import 'debt_age.dart';
 import 'device_chip_micro.dart' show DeviceProbeBus;
 import 'usage_on_demand.dart';
+import '../../../services/vpn_now.dart';
+import '../../../widgets/vpn_now_bar.dart' show VpnTag;
 
 /// فعل شريط «آخر حركة ماليّة» الأخضر — ما قبل «قبل 5 د».
 ///
@@ -882,11 +884,12 @@ class SubscriberNetworkMetrics extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<int>(
-      valueListenable: DeviceProbeBus.tick,
-      builder: (_, __, ___) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([DeviceProbeBus.tick, VpnNow.version]),
+      builder: (_, __) {
         final snap = snapshotOf(sub);
-        if (snap == null) return const SizedBox.shrink();
+        // ٥ نوفمبر: لا قراءة من موبايلك (خارج شبكتك) ⇒ آخر «فحص الآن» عبر الـVPN (٣٠ دقيقة) بعلامة VPN
+        if (snap == null) return _vpn(VpnNow.readingFor(sub.username));
 
         final items = <Widget>[];
         if (snap.kind == DeviceKind.ubiquiti && snap.ubnt != null) {
@@ -925,6 +928,47 @@ class SubscriberNetworkMetrics extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+
+  Widget _vpn(VpnSubReading? r) {
+    if (r == null) return const SizedBox.shrink();
+    final items = <Widget>[];
+    if (r.src == 'cpe' || r.src == 'sector') {
+      final sig = r.sig;
+      if (sig != null) {
+        items.add(_metric(Icons.network_wifi_rounded, '$sig dBm',
+            sig >= -65 ? AppColors.success : sig >= -75 ? AppColors.warning : AppColors.error));
+      }
+      final ccq = r.ccq;
+      if (ccq != null) {
+        items.add(_metric(Icons.speed_rounded, 'CCQ $ccq%', ccq >= 75 ? AppColors.success : ccq >= 50 ? AppColors.warning : AppColors.error));
+      }
+      if (r.lan == 'unplugged') items.add(_metric(Icons.lan_rounded, 'الكيبل مفصول', AppColors.error));
+      if (r.lan == '10') items.add(_metric(Icons.lan_rounded, '10M', AppColors.warning));
+    } else if (r.src == 'olt') {
+      final rx = r.rx;
+      if (rx != null) {
+        items.add(_metric(Icons.network_wifi_rounded, '${rx.toStringAsFixed(1)} dBm', rx >= -27 ? AppColors.success : AppColors.error));
+      }
+      final t = r.temp;
+      if (t != null) items.add(_metric(Icons.device_thermostat_rounded, '${t.round()}°C', t < 70 ? AppColors.success : AppColors.warning));
+    } else if (r.src == 'ping') {
+      items.add(_metric(Icons.check_circle_outline_rounded, r.ms != null ? 'واصل · ${r.ms} ms' : 'واصل', AppColors.success));
+    } else if (r.dead) {
+      items.add(_metric(Icons.portable_wifi_off_rounded, 'لا يستجيب', AppColors.error));
+    }
+    if (items.isEmpty) return const SizedBox.shrink();
+    items.add(const VpnTag());
+    if (wrap) return Wrap(spacing: 8, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: items);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < items.length; i++) ...[
+          if (i > 0) const SizedBox(width: 9),
+          Flexible(child: items[i]),
+        ],
+      ],
     );
   }
 

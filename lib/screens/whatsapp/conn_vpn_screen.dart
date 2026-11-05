@@ -170,6 +170,55 @@ class _ConnVpnScreenState extends State<ConnVpnScreen> {
     await _load();
   }
 
+  /// «تعديل اليوزر والباسورد» بلا رفع الملفّ من جديد (٥ نوفمبر) — نافذةٌ ثمّ «حفظ وفحص الاتصال».
+  Future<void> _editCredentials(ConnVpnStatus st) async {
+    final user = TextEditingController(text: st.profileUser ?? '');
+    final pass = TextEditingController();
+    final keyPass = TextEditingController();
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      barrierColor: AppColors.scrim,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(R.sheet))),
+      builder: (c) => Padding(
+        padding: EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, MediaQuery.of(c).viewInsets.bottom + Sp.xl),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text('تعديل بيانات الـVPN', style: AppType.sheetTitle()),
+          const SizedBox(height: 2),
+          Text('الملفّ نفسه يبقى — تغيّر اليوزر والباسورد وحدهما. الباسورد الفارغ يبقى كما هو.',
+              style: AppType.micro(color: AppColors.textMid)),
+          const SizedBox(height: Sp.md),
+          _field(user, 'يوزر الـVPN'),
+          const SizedBox(height: Sp.sm),
+          _field(pass, 'باسورد الـVPN الجديد', secret: true),
+          const SizedBox(height: Sp.sm),
+          _field(keyPass, 'كلمة سرّ المفتاح (إن وُجدت)', secret: true),
+          const SizedBox(height: Sp.md),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50), backgroundColor: AppColors.brand),
+            child: const Text('حفظ وفحص الاتصال'),
+          ),
+        ]),
+      ),
+    );
+    final u = user.text.trim();
+    final p = pass.text;
+    final k = keyPass.text;
+    user.dispose();
+    pass.dispose();
+    keyPass.dispose();
+    if (saved != true || !mounted) return;
+    setState(() => _busy = 'save');
+    final r = await ConnVpnApi.updateCredentials(
+        username: u != (st.profileUser ?? '') ? u : null, password: p, keyPassword: k);
+    if (!mounted) return;
+    setState(() => _busy = null);
+    _say(r.message ?? (r.ok ? 'حُفظ' : 'تعذّر الحفظ'));
+    if (r.ok) await _runTest();
+  }
+
   Future<void> _reverse(bool on) async {
     setState(() => _busy = 'reverse');
     final r = await ConnVpnApi.reverse(on);
@@ -214,10 +263,27 @@ class _ConnVpnScreenState extends State<ConnVpnScreen> {
     final shown = _test ?? st.lastTest;
     return [
       Text(
-        'الفحص من موبايلك وأنت على شبكتك دائماً. وإن فعّلت «الاتصال العكسي» أدناه يقيس النظام أيضاً عبر نفق VPN حين لا يكون '
-        'تطبيقك على شبكتك (خارج المكتب، أو الحاسبة مطفأة) — كلّ نصف ساعة نهاراً وكلّ ساعة ليلاً؛ وبلا تفعيله لا يفحص النظام شبكتك.',
+        'ملفٌّ واحد يفحص مشتركينك وأجهزتك وأنت خارج شبكتك — حين تضغط «فحص الآن» بقسم المشتركين أو الأجهزة. '
+        'وعلى شبكتك يفحص موبايلك بنفسه. وإن فعّلت «الاتصال العكسي» أدناه يقيس النظام وحده للتنبيهات كلّ نصف ساعة نهاراً وساعة ليلاً.',
         style: AppType.muted(color: AppColors.textMid),
       ),
+      const SizedBox(height: Sp.sm),
+      Wrap(spacing: Sp.sm, children: [
+        for (final t in const ['المشتركين', 'الأجهزة'])
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 3),
+            decoration: BoxDecoration(
+              color: AppColors.brandSoftBg,
+              borderRadius: BorderRadius.circular(R.pill),
+              border: Border.all(color: AppColors.brandSoftBorder),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(LucideIcons.check, size: 13, color: AppColors.brandOnSoft),
+              const SizedBox(width: 3),
+              Text(t, style: AppType.micro(color: AppColors.brandOnSoft).copyWith(fontWeight: FontWeight.w700)),
+            ]),
+          ),
+      ]),
       const SizedBox(height: Sp.sm),
       // ⛔ المالك ٤ نوفمبر: النظام يفحص من ربط VPN وفعّل «الاتصال العكسي» وحده — الحال بكلمةٍ واحدة
       _box(
@@ -236,12 +302,25 @@ class _ConnVpnScreenState extends State<ConnVpnScreen> {
         ]),
       ),
       const SizedBox(height: Sp.md),
-      if (st.covered)
+      if (st.covered && !st.profileSaved && _analysis == null) ...[
         _note(
           text: 'شركتك (${st.companyLabel}) متاحة عبر نفق النظام — لا تحتاج ملفّاً. ${st.companyHealthy ? 'النفق قائم' : 'النفق يعيد الاتّصال'}',
-          hint: st.reverse ? null : 'يُستعمل حين تفعّل «الاتصال العكسي» أدناه.',
-        )
-      else ...[
+          hint: 'نفق الشركة ما يوصل أجهزتك؟ أضف ملفّك ويُستعمل هو أوّلاً.',
+        ),
+        const SizedBox(height: Sp.sm),
+        OutlinedButton.icon(
+          onPressed: _busy == null ? _pick : null,
+          icon: _busy == 'analyze'
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(LucideIcons.upload, size: 18),
+          label: const Text('أضف ملفّك (اختياريّ)'),
+          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+        ),
+      ] else ...[
+        if (st.covered && st.profileSaved && _analysis == null) ...[
+          _note(text: 'ملفّك يُستعمل أوّلاً، ونفق شركتك (${st.companyLabel}) احتياط.'),
+          const SizedBox(height: Sp.sm),
+        ],
         if (st.autoLinked && _analysis == null) ...[
           _note(
             text: 'متاحٌ ربطك عبر ${st.autoLabel} بحسابك ${iso(st.autoUser ?? '')} بلا ملف — جرّب «فحص الاتصال» ثمّ فعّل «الاتصال العكسي».',
@@ -255,9 +334,18 @@ class _ConnVpnScreenState extends State<ConnVpnScreen> {
               Icon(LucideIcons.fileLock, size: 18, color: AppColors.brand),
               const SizedBox(width: Sp.sm),
               Expanded(
-                child: Text('ملفّك محفوظ مشفّراً${st.profileHasAuth ? ' مع اليوزر والباسورد' : ''}',
-                    maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.body(color: AppColors.textHi)),
+                child: Text(
+                    'ملفّك محفوظ مشفّراً${st.profileUser != null ? ' · اليوزر ${st.profileUser}' : st.profileHasAuth ? ' مع اليوزر والباسورد' : ''}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.body(color: AppColors.textHi)),
               ),
+              if (st.profileHasAuth)
+                IconButton(
+                  tooltip: 'تعديل اليوزر والباسورد',
+                  onPressed: _busy == null ? () => _editCredentials(st) : null,
+                  icon: Icon(LucideIcons.pencil, size: 18, color: AppColors.textMid),
+                ),
               TextButton.icon(
                 onPressed: _busy == null ? _pick : null,
                 icon: const Icon(LucideIcons.upload, size: 16),
