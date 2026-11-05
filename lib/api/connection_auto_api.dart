@@ -22,7 +22,7 @@ class ConnAutoSettings {
     this.kinds = kAllKinds,
   });
 
-  static const kAllKinds = <String>['cable', 'signal', 'ccq', 'fiber_rx', 'fiber_temp'];
+  static const kAllKinds = <String>['cable', 'signal', 'ccq', 'fiber_rx', 'fiber_temp', 'fiber_volt'];
 
   /// خيارات «تأكّد من المشكلة بعد» بالدقائق (٣ نوفمبر — المالك؛ الخادم AUTO_LIMITS.confirm_min.steps).
   static const kConfirmSteps = <int>[3, 5, 10, 15, 20, 25, 30];

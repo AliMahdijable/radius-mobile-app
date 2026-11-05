@@ -339,6 +339,8 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
                   ),
                   _divider(),
                   _fixedCableRow(),
+                  _divider(),
+                  _fixedRow(LucideIcons.zap, 'conn_alerts.volt_fixed'.tr()),
                 ]),
                 const SizedBox(height: Sp.lg),
                 Row(
@@ -358,6 +360,8 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
                 ),
                 const SizedBox(height: Sp.sm),
                 _card(children: [
+                  _nameMode(),
+                  _divider(),
                   _field(
                     ConnectionAlertTemplates.envelopeType,
                     title: _typeTitle(ConnectionAlertTemplates.envelopeType),
@@ -535,8 +539,56 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
         'conn_alert_ccq' => 'conn_alerts.line_ccq'.tr(),
         'conn_alert_fiber_rx' => 'conn_alerts.line_fiber_rx'.tr(),
         'conn_alert_fiber_temp' => 'conn_alerts.line_fiber_temp'.tr(),
+        'conn_alert_fiber_volt' => 'conn_alerts.line_fiber_volt'.tr(),
         _ => type,
       };
+
+  /// اسم المشترك بالرسالة (٥ نوفمبر — المالك: «متغير اختيار يخلي اسم المشترك بالعربي او يوزره»): يُحفظ مع الحدود.
+  Widget _nameMode() {
+    Widget chip(String mode, String label) => ChoiceChip(
+          key: ValueKey('ca-name-$mode'),
+          label: Text(label),
+          selected: _t.nameMode == mode,
+          onSelected: _canEdit ? (_) => setState(() => _t = _t.copyWith(nameMode: mode)) : null,
+        );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Sp.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('conn_alerts.name_mode'.tr(), style: AppType.bodyStrong()),
+          const SizedBox(height: Sp.xs),
+          Wrap(spacing: Sp.x6, children: [
+            chip('name', 'conn_alerts.name_mode_name'.tr()),
+            chip('username', 'conn_alerts.name_mode_username'.tr()),
+          ]),
+          const SizedBox(height: 2),
+          Text('conn_alerts.name_mode_hint'.tr(), style: AppType.micro(color: AppColors.textLow)),
+        ],
+      ),
+    );
+  }
+
+  /// حدٌّ ثابت (لا منزلق): عنوانه وشارة «ثابت» — الكيبل والفولتيّة.
+  Widget _fixedRow(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Sp.sm),
+      child: Row(
+        children: [
+          Icon(icon, size: 15, color: AppColors.textMid),
+          const SizedBox(width: Sp.x6),
+          Expanded(
+            child: Text(text, style: AppType.body(color: AppColors.textHi), maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(color: AppColors.surfaceInput, borderRadius: BorderRadius.circular(R.sm)),
+            child: Text('conn_alerts.fixed'.tr(), style: AppType.label(color: AppColors.textMid)),
+          ),
+        ],
+      ),
+    );
+  }
 
   String _lineHint(String type) {
     final v = ConnectionAlertTemplates.lineVariable[type];
@@ -617,7 +669,7 @@ class _ConnectionAlertsScreenState extends State<ConnectionAlertsScreen> {
       problems: sample,
     );
     final text = body
-        .replaceAll('{subscriber_name}', 'محمد علي')
+        .replaceAll('{subscriber_name}', _t.subscriberName(name: 'محمد علي', username: 'mohammed.ali'))
         .replaceAll('{firstname}', 'محمد')
         .replaceAll('{username}', 'sample.user');
     return Container(

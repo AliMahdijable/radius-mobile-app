@@ -142,6 +142,12 @@ class ConnectionReadingsUploader {
         m['temp'] = t;
         any = true;
       }
+      // فولتيّة الموديول (ملّي فولت ⇒ فولت) — الخادم يقرّر (خارج ٣٫١–٣٫٥ V)
+      final mv = double.tryParse(o.voltage.trim());
+      if (mv != null && mv > 0) {
+        m['volt'] = double.parse((mv / 1000).toStringAsFixed(3));
+        any = true;
+      }
     }
     return any ? m : null;
   }

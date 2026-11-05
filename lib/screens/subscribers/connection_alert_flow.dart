@@ -99,8 +99,11 @@ Future<void> showConnectionAlertFlow(
   );
   // {agent_code} يُملأ هنا: اليدويّ لا يمرّ بالخادم الذي يملؤه (وسيط البوّابة §10).
   // {package_name}: اسمها في «بوابة المشترك» إن كُتب، وإلّا اسم الساس (كرسائل الخادم).
+  // {subscriber_name}: الاسم بالعربي أو اليوزر — اختيار الوكيل كالإرسال التلقائيّ (٥ نوفمبر)؛ كان اليوزر دائماً هنا والاسم هناك
+  final named = body.replaceAll('{subscriber_name}',
+      thresholds.subscriberName(name: sub.fullName, username: sub.username));
   final message = await PortalSettingsApi.fillAgentCode(WhatsAppApi.renderForSubscriber(
-      body, sub, names: await WhatsAppApi.packageNamesFor(sub)));
+      named, sub, names: await WhatsAppApi.packageNamesFor(sub)));
   if (!context.mounted) return;
 
   // ── ٤. المعاينة ──────────────────────────────────────────────

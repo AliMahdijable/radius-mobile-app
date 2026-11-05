@@ -42,8 +42,16 @@ class ConnectionAlertThresholds {
     this.ccqPct = 50,
     this.fiberRxDbm = -27,
     this.fiberTempC = 70,
+    this.nameMode = 'name',
     this.isDefault = true,
   });
+
+  /// {subscriber_name} بالرسالة (٥ نوفمبر — المالك: «متغير اختيار يخلي اسم المشترك بالعربي او يوزره»): `name` | `username`.
+  final String nameMode;
+
+  /// فولتيّة جهاز الفايبر الطبيعيّة (ملّي فولت) — حدٌّ ثابتٌ كالكيبل (والخادم FIBER_VOLT_MIN/MAX، وكارت الجهاز voltageOk).
+  static const fiberVoltMinMv = 3100;
+  static const fiberVoltMaxMv = 3500;
 
   /// الميزة **متوقّفة حتّى يفعّلها المدير** (قرار المستخدم ٢٠٢٦-١٠-٠١):
   /// بدونه لا شريط في القائمة ولا زرّ في الكارت.
@@ -86,6 +94,7 @@ class ConnectionAlertThresholds {
       ccqPct: i('ccq_pct', defaults.ccqPct),
       fiberRxDbm: d('fiber_rx_dbm', defaults.fiberRxDbm),
       fiberTempC: i('fiber_temp_c', defaults.fiberTempC),
+      nameMode: j['name_mode'] == 'username' ? 'username' : 'name',
       isDefault: j['is_default'] == true,
     );
   }
@@ -96,6 +105,7 @@ class ConnectionAlertThresholds {
         'ccq_pct': ccqPct,
         'fiber_rx_dbm': fiberRxDbm,
         'fiber_temp_c': fiberTempC,
+        'name_mode': nameMode,
       };
 
   ConnectionAlertThresholds copyWith({
@@ -104,6 +114,7 @@ class ConnectionAlertThresholds {
     int? ccqPct,
     double? fiberRxDbm,
     int? fiberTempC,
+    String? nameMode,
   }) =>
       ConnectionAlertThresholds(
         enabled: enabled ?? this.enabled,
@@ -111,8 +122,17 @@ class ConnectionAlertThresholds {
         ccqPct: ccqPct ?? this.ccqPct,
         fiberRxDbm: fiberRxDbm ?? this.fiberRxDbm,
         fiberTempC: fiberTempC ?? this.fiberTempC,
+        nameMode: nameMode ?? this.nameMode,
         isDefault: false,
       );
+
+  /// قيمة {subscriber_name}: الاسم أو اليوزر بحسب [nameMode] — وما غاب أحدهما ⇒ الآخر.
+  String subscriberName({String? name, String? username}) {
+    final n = (name ?? '').trim();
+    final u = (username ?? '').trim();
+    if (nameMode == 'username') return u.isNotEmpty ? u : n;
+    return n.isNotEmpty ? n : u;
+  }
 }
 
 /// حدود المدير الحاليّ — مخزَّنةٌ في الذاكرة ومربوطةٌ بصاحبها.
@@ -191,7 +211,7 @@ class ConnectionAlertSettings {
   }
 }
 
-enum ConnectionProblemKind { cable, signal, ccq, fiberRx, fiberTemp }
+enum ConnectionProblemKind { cable, signal, ccq, fiberRx, fiberTemp, fiberVolt }
 
 /// مشكلةٌ مكتشفة في آخر فحص لجهاز المشترك.
 class ConnectionProblem {
@@ -278,6 +298,17 @@ class ConnectionAlerts {
           vars: {'{temperature}': v},
         ));
       }
+      // فولتيّة الموديول (ملّي فولت) خارج ٣٫١–٣٫٥ V — صفرٌ أو غائبٌ ليس قراءة
+      final mv = double.tryParse(o.voltage.trim());
+      if (mv != null && mv > 0 &&
+          (mv < ConnectionAlertThresholds.fiberVoltMinMv || mv > ConnectionAlertThresholds.fiberVoltMaxMv)) {
+        final v = iso('${(mv / 1000).toStringAsFixed(2)} V');
+        out.add(ConnectionProblem(
+          kind: ConnectionProblemKind.fiberVolt,
+          label: 'conn_alerts.p_fiber_volt'.tr(args: [v]),
+          vars: {'{voltage}': v},
+        ));
+      }
     }
     return out;
   }
@@ -351,6 +382,7 @@ class ConnectionAlertTemplates {
     'conn_alert_ccq',
     'conn_alert_fiber_rx',
     'conn_alert_fiber_temp',
+    'conn_alert_fiber_volt',
   ];
 
   static const allTypes = <String>[envelopeType, ...lineTypes];
@@ -363,6 +395,7 @@ class ConnectionAlertTemplates {
         ConnectionProblemKind.ccq => 'conn_alert_ccq',
         ConnectionProblemKind.fiberRx => 'conn_alert_fiber_rx',
         ConnectionProblemKind.fiberTemp => 'conn_alert_fiber_temp',
+        ConnectionProblemKind.fiberVolt => 'conn_alert_fiber_volt',
       };
 
   static const labels = <String, String>{
@@ -372,6 +405,7 @@ class ConnectionAlertTemplates {
     'conn_alert_ccq': 'سطر: جودة ربط منخفضة',
     'conn_alert_fiber_rx': 'سطر: إشارة ضوئيّة ضعيفة',
     'conn_alert_fiber_temp': 'سطر: حرارة جهاز الفايبر',
+    'conn_alert_fiber_volt': 'سطر: فولتيّة جهاز الفايبر',
   };
 
   /// المتغيّر الخاصّ بكلّ سطر — يُعرض للمدير تحت حقله.
@@ -381,6 +415,7 @@ class ConnectionAlertTemplates {
     'conn_alert_ccq': '{ccq}',
     'conn_alert_fiber_rx': '{rx_power}',
     'conn_alert_fiber_temp': '{temperature}',
+    'conn_alert_fiber_volt': '{voltage}',
   };
 
   static String defaultFor(String type) => _defaults[type] ?? '';
@@ -402,5 +437,7 @@ class ConnectionAlertTemplates {
         '• الإشارة الضوئيّة ضعيفة ({rx_power})، يرجى التأكّد من كيبل الفايبر وعدم ثنيه أو كسره.',
     'conn_alert_fiber_temp':
         '• حرارة جهاز الفايبر مرتفعة ({temperature})، يرجى وضعه بمكان مهوّى بعيداً عن الحرارة.',
+    'conn_alert_fiber_volt':
+        '• فولتيّة جهاز الفايبر غير طبيعيّة ({voltage})، يرجى التأكّد من أدابتر الجهاز والكهرباء.',
   };
 }

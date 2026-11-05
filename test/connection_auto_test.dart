@@ -79,7 +79,7 @@ void main() {
         s, _snapU(_ubnt(lan: const [LanPort(name: 'eth0', speed: null, plugged: false)])))!;
     expect(unplugged['lan'], 'unplugged');
     final o = ConnectionReadingsUploader.readingFor(s, _snapO(rx: '-28.4', temp: '71'))!;
-    expect((o['device'], o['rx'], o['temp']), ('ont', -28.4, 71.0));
+    expect((o['device'], o['rx'], o['temp'], o['volt']), ('ont', -28.4, 71.0, 3.3), reason: 'الفولتيّة بالفولت (٥ نوفمبر)');
     expect(ConnectionReadingsUploader.readingFor(s, _snapU(_ubnt(signal: 0, ccq: 0, lan: const []))), isNull, reason: 'لم نقرأ شيئاً');
     final expired = _sub('7', expiration: DateTime.now().subtract(const Duration(days: 1)).toIso8601String());
     expect(ConnectionReadingsUploader.readingFor(expired, _snapU(_ubnt()))!['active'], false);

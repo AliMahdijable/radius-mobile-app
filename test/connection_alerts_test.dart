@@ -42,14 +42,14 @@ void main() {
   DeviceHealthSnapshot snapU(UbiquitiStatus u) =>
       DeviceHealthSnapshot(kind: DeviceKind.ubiquiti, ip: '10.0.0.2', ubnt: u);
 
-  DeviceHealthSnapshot snapO({String rx = '-20.5', String temp = '45'}) =>
+  DeviceHealthSnapshot snapO({String rx = '-20.5', String temp = '45', String volt = '3300'}) =>
       DeviceHealthSnapshot(
         kind: DeviceKind.ont,
         ip: '10.0.0.3',
         ont: OntOpticalInfo(
           txPower: '2.1',
           rxPower: rx,
-          voltage: '3300',
+          voltage: volt,
           temperature: temp,
           bias: '10',
           sendStatus: 'ok',
@@ -291,6 +291,38 @@ void main() {
           lines: const {},
           problems: problems);
       expect(msg, contains('الإشارة ضعيفة'));
+    });
+  });
+
+  group('فولتيّة جهاز الفايبر واسم المشترك (٥ نوفمبر)', () {
+    test('خارج ٣٫١–٣٫٥ V مشكلة بسطرها؛ الطبيعيّ والفارغ والصفر لا', () {
+      expect(kinds(snapO(volt: '2950')), [ConnectionProblemKind.fiberVolt]);
+      expect(kinds(snapO(volt: '3620')), [ConnectionProblemKind.fiberVolt]);
+      expect(kinds(snapO(volt: '3300')), isEmpty);
+      expect(kinds(snapO(volt: '3100')), isEmpty, reason: 'الحدّ نفسه طبيعيّ');
+      expect(kinds(snapO(volt: '')), isEmpty);
+      expect(kinds(snapO(volt: '0')), isEmpty);
+      final p = ConnectionAlerts.detect(snapO(volt: '2950'), t).single;
+      expect(p.templateType, 'conn_alert_fiber_volt');
+      expect(p.vars['{voltage}'], contains('2.95 V'));
+      expect(ConnectionAlertTemplates.lineTypes, contains('conn_alert_fiber_volt'));
+      final msg = ConnectionAlerts.compose(
+          envelope: ConnectionAlertTemplates.defaultFor(ConnectionAlertTemplates.envelopeType),
+          lines: const {},
+          problems: [p]);
+      expect(msg, contains('فولتيّة جهاز الفايبر غير طبيعيّة'));
+    });
+
+    test('{subscriber_name}: الاسم بالعربي أو اليوزر بحسب الاختيار — وما غاب أحدهما ⇒ الآخر؛ يُحفظ مع الحدود', () {
+      const byName = ConnectionAlertThresholds();
+      final byUser = ConnectionAlertThresholds.fromJson({'name_mode': 'username'});
+      expect(byName.subscriberName(name: 'علي', username: 'ali@popq'), 'علي');
+      expect(byUser.subscriberName(name: 'علي', username: 'ali@popq'), 'ali@popq');
+      expect(byName.subscriberName(name: ' ', username: 'ali@popq'), 'ali@popq');
+      expect(byUser.subscriberName(name: 'علي', username: ''), 'علي');
+      expect(byUser.toJson()['name_mode'], 'username');
+      expect(ConnectionAlertThresholds.fromJson({'name_mode': 'x'}).nameMode, 'name');
+      expect(byName.copyWith(nameMode: 'username').nameMode, 'username');
     });
   });
 }

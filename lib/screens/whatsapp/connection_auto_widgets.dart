@@ -21,6 +21,7 @@ const _kindLabel = <String, String>{
   'ccq': 'CCQ',
   'fiber_rx': 'الضوئيّ',
   'fiber_temp': 'الحرارة',
+  'fiber_volt': 'الفولتيّة',
 };
 
 const _modes = <(String, String, String)>[
