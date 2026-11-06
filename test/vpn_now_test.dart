@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
+import 'package:rad_mysvcs/api/vpn_now_api.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/subscribers/widgets/subscriber_card_v3.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
@@ -415,6 +416,26 @@ void main() {
       VpnNow.exitMode();
       await run;
       expect(VpnNow.devices.phase, VpnBarPhase.idle, reason: 'نتيجة فحصٍ بعد الإيقاف لا تُعرض');
+    });
+
+    test('٦ نوفمبر: الوطنيّ/فايبر اكس (الطريق subscribers=false) ⇒ الوضع يفحص الأجهزة وحدها — لا فحص للمشتركين ولو كان قسمهم ظاهراً أو الضغطة منه', () async {
+      server.done = _devDone;
+      VpnNowApi.lastSubscribers = false;
+      addTearDown(() => VpnNowApi.lastSubscribers = true);
+      expect(VpnNow.subscribersOk, isFalse);
+      VpnNow.attach(VpnNowKind.subscribers);
+      addTearDown(() => VpnNow.detach(VpnNowKind.subscribers));
+      await VpnNow.enterMode(from: VpnNowKind.subscribers);
+      await settleJobs();
+      expect(posts(), 0, reason: 'لا check-now للمشتركين');
+      expect(VpnNow.mode.value, isTrue, reason: 'الوضع نفسه يعمل (للأجهزة)');
+      VpnNow.attach(VpnNowKind.devices);
+      addTearDown(() => VpnNow.detach(VpnNowKind.devices));
+      await VpnNow.tick();
+      await settleJobs();
+      expect(posts(), 1, reason: 'الأجهزة وحدها');
+      expect(server.asked.where((a) => a.startsWith('POST')).length, 1);
+      VpnNow.exitMode();
     });
 
     test('ملفّه أو قالب شركته (غرفةٌ مؤقّتة) ⇒ إيقاعٌ أبطأ', () async {

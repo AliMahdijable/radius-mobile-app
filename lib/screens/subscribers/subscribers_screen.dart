@@ -482,7 +482,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   }
 
   /// زرّ VPN بالرأس: لمن له طريق VPN، خارج شبكته (أو والحال مجهولة) وطول ما الوضع شغّال.
-  bool get _vpnButton => _vpnLinked && (VpnNow.mode.value || !AgentNetPresence.isOn);
+  // مشتركو الوطنيّ/فايبر اكس على شبكة الشركة ⇒ لا زرّ «وضع VPN» بقسمهم (الخادم بـ«الطريق»: subscribers=false — ٦ نوفمبر)
+  bool get _vpnButton => _vpnLinked && VpnNow.subscribersOk && (VpnNow.mode.value || !AgentNetPresence.isOn);
 
   void _toggleVpn() => VpnNow.mode.value ? VpnNow.exitMode() : VpnNow.enterMode(from: VpnNowKind.subscribers);
 
@@ -934,7 +935,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   void _runProbeWave({bool force = false}) {
     // «وضع VPN»: لا موجة من الموبايل (خارج شبكتك لا تصل شيئاً) — الرادار (force) يحدّث الفحص عبر الـVPN الآن
     if (VpnNow.mode.value) {
-      if (force) unawaited(VpnNow.subscribers.run());
+      if (force && VpnNow.subscribersOk) unawaited(VpnNow.subscribers.run());
       return;
     }
     _probeRunId += 1;

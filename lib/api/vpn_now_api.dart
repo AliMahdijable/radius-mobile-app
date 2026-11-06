@@ -139,6 +139,10 @@ class VpnNowResult {
 class VpnNowApi {
   VpnNowApi._();
 
+  /// مشتركو الوكيل يُفحصون عبر VPN؟ من آخر جوابٍ لـ[route] (٦ نوفمبر: الوطنيّ وفايبر اكس مشتركوهما على شبكة الشركة ⇒ false).
+  /// خادمٌ أقدم بلا الحقل ⇒ true كما كان.
+  static bool lastSubscribers = true;
+
   /// هل للوكيل طريق VPN؟ ⇒ (linked, via) — أو null حين الميزة مغلقة لحسابه/لا صلاحيّة/تعذّر (لا هنت).
   static Future<({bool linked, String? via})?> route() async {
     try {
@@ -147,6 +151,7 @@ class VpnNowApi {
       if (r.statusCode != 200 || r.data?['success'] != true) return null;
       final d = r.data?['data'];
       if (d is! Map) return null;
+      lastSubscribers = d['subscribers'] != false;
       return (linked: d['linked'] == true, via: d['via'] == null ? null : '${d['via']}');
     } catch (_) {
       return null;

@@ -223,8 +223,10 @@ class VpnNow {
 
   /// يشغّل الوضع ويفحص [from] فوراً (والأقسام الظاهرة).
   static Future<void> enterMode({VpnNowKind? from}) async {
+    // مشتركو الوطنيّ/فايبر اكس لا يُفحصون عبر الـVPN ⇒ الضغطة من قسمهم تشغّل الوضع بلا فحصٍ لهم (الأجهزة وحدها)
+    final runFrom = from != null && (from != VpnNowKind.subscribers || subscribersOk) ? from : null;
     if (mode.value) {
-      if (from != null) unawaited(jobOf(from).run());
+      if (runFrom != null) unawaited(jobOf(runFrom).run());
       return;
     }
     _noticeTimer?.cancel();
@@ -234,7 +236,7 @@ class VpnNow {
     mode.value = true;
     _loop?.cancel();
     _loop = Timer.periodic(loopEvery, (_) => unawaited(_tick()));
-    if (from != null) unawaited(jobOf(from).run());
+    if (runFrom != null) unawaited(jobOf(runFrom).run());
     unawaited(route().then((r) => _via = r?.via));
     unawaited(_tick());
   }
@@ -311,6 +313,8 @@ class VpnNow {
       }
     }
     for (final k in _attached.keys.toList()) {
+      // مشتركو الوطنيّ/فايبر اكس على شبكة الشركة ⇒ لا فحص لهم عبر الـVPN (الأجهزة تُفحص)
+      if (k == VpnNowKind.subscribers && !subscribersOk) continue;
       final job = jobOf(k);
       if (job.busy) continue;
       final last = job.startedAt;
@@ -382,6 +386,9 @@ class VpnNow {
   // ── طريق الوكيل (مربوط أم لا) — خمس دقائق ──
   static ({bool linked, String? via})? _route;
   static DateTime? _routeAt;
+
+  /// مشتركوه يُفحصون عبر الـVPN؟ (الخادم بـ«الطريق» — الوطنيّ وفايبر اكس لا: زرّ المشتركين وهنتهم وفحصهم بالوضع يختفون).
+  static bool get subscribersOk => VpnNowApi.lastSubscribers;
   static Future<({bool linked, String? via})?>? _routeP;
 
   @visibleForTesting
@@ -448,6 +455,7 @@ class VpnNow {
     _devAt = null;
     _route = null;
     _routeAt = null;
+    VpnNowApi.lastSubscribers = true;
     subscribers.reset();
     devices.reset();
     version.value++;

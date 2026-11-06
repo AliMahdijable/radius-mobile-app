@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/agent_alerts_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/subscribers_api.dart';
+import 'package:rad_mysvcs/api/vpn_now_api.dart';
 import 'package:rad_mysvcs/screens/network_devices/check/devices_check_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/network_devices_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/widgets/device_big_card.dart';
@@ -277,6 +278,22 @@ void main() {
     addTearDown(() => PermissionsService.debugSet(isEmployee: false));
     await openMore(t);
     expect(vpnItem, findsNothing);
+    await close(t);
+  });
+
+  testWidgets('٦ نوفمبر: الوطنيّ/فايبر اكس (الطريق subscribers=false) ⇒ لا زرّ VPN ولا هنت بالمشتركين — والأجهزة كما هي', (t) async {
+    VpnNow.routeSource = () async => (linked: true, via: 'own');
+    VpnNowApi.lastSubscribers = false;
+    AgentNetPresence.debugSet(NetPresence.off);
+    await openSubscribers(t);
+    expect(subsVpn, findsNothing);
+    expect(find.text('تشغيل VPN'), findsNothing);
+    expect(find.text('ربط VPN'), findsNothing);
+    await close(t);
+    VpnNowApi.lastSubscribers = false;
+    addTearDown(() => VpnNowApi.lastSubscribers = true);
+    await openDevices(t);
+    expect(devVpn, findsOneWidget, reason: 'أجهزة الوكيل تُفحص عبر ملفّه');
     await close(t);
   });
 }

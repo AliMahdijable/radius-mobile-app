@@ -99,6 +99,10 @@ class _VpnNowBarState extends State<VpnNowBar> {
     Theme.of(context); // theme-dep (dark-mode)
     final job = _job;
     Widget? child;
+    // مشتركو الوطنيّ/فايبر اكس لا يُفحصون عبر الـVPN ⇒ لا شريط بقسم المشتركين (لا هنت ولا «يتّصل…» دائرٌ بالوضع)
+    if (widget.kind == VpnNowKind.subscribers && !VpnNow.subscribersOk) {
+      return const SizedBox(width: double.infinity);
+    }
     if (VpnNow.mode.value) {
       switch (job.phase) {
         case VpnBarPhase.running:
