@@ -124,6 +124,30 @@ void main() {
       expect(server.calls('POST', '/api/v2/connection-alerts/readings'), isEmpty);
     });
 
+    test('٦ نوفمبر — بعد الإرسال: سطر آخر فحصٍ عبر الـVPN يُعاد من الخادم (أين صاروا الآن) بلا فحصٍ جديد', () async {
+      DeviceWarmService.debugCheckNow = (_) async => (onNet: false, subs: <Subscriber>[], probed: 0, reason: 'off_net');
+      server.reply('POST', '/api/v2/conn-vpn/check-now', 200, {'success': true, 'data': {'check_id': 'c9', 'state': 'running'}});
+      server.reply('GET', '/api/v2/conn-vpn/check-now/c9', 200, {
+        'success': true,
+        'data': {'state': 'done', 'result': {'ok': true, 'message': '… — 6 بمشكلة: 3 بانتظار موافقتك · 3 وصلهم التنبيه', 'problems': 6}},
+      });
+      await ConnCheckNow.run();
+      expect(ConnCheckNow.last.value!.message, contains('3 بانتظار موافقتك'));
+      final gets = server.calls('GET', '/api/v2/conn-vpn/check-now/c9').length;
+      // الوكيل أرسل ⇒ الخادم يعيد العدّ
+      server.reply('GET', '/api/v2/conn-vpn/check-now/c9', 200, {
+        'success': true,
+        'data': {'state': 'done', 'result': {'ok': true, 'message': '… — 6 بمشكلة: 6 وصلهم التنبيه', 'problems': 6}},
+      });
+      ConnectionAutoApi.changes.value++;
+      for (var i = 0; i < 10; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(ConnCheckNow.last.value!.message, contains('6 وصلهم التنبيه'));
+      expect(server.calls('GET', '/api/v2/conn-vpn/check-now/c9').length, gets + 1, reason: 'استطلاعٌ واحد لا فحصٌ جديد');
+      expect(server.calls('POST', '/api/v2/conn-vpn/check-now').length, 1);
+    });
+
     test('بعد تبديل الشركة: نتيجة فحص حسابٍ آخر لا تظهر (كان «لا مشاكل» لشركةٍ فوق مشاكل غيرها)؛ والحساب نفسه تبقى له', () async {
       DeviceWarmService.debugCheckNow = (_) async => (onNet: false, subs: <Subscriber>[], probed: 0, reason: 'off_net');
       server.reply('POST', '/api/v2/conn-vpn/check-now', 200, {'success': true, 'data': {'check_id': 'c2', 'state': 'running'}});

@@ -24,6 +24,33 @@ class ConnCheckNow {
 
   static Future<ConnCheckResult>? _flight;
 
+  static bool _listening = false;
+  static bool _selfBump = false;
+  static bool _refreshing = false;
+
+  /// بعد إجراء الوكيل (أرسل/وافق/تجاهل…): سطر آخر فحصٍ عبر الـVPN يُعاد من الخادم — أين صار من بمشكلة الآن — بلا فحصٍ جديد
+  /// (٦ نوفمبر — المالك: «من فحص ورسلت ارجع افحص يطنطي نفس النتيجة… تربك الوكيل»).
+  static void _listen() {
+    if (_listening) return;
+    _listening = true;
+    ConnectionAutoApi.changes.addListener(() {
+      if (!_selfBump) _refreshVpn();
+    });
+  }
+
+  static Future<void> _refreshVpn() async {
+    final cur = last.value;
+    if (_refreshing || running.value || cur == null || cur.via != 'vpn' || !cur.ok) return;
+    _refreshing = true;
+    try {
+      final r = await ConnectionAutoApi.vpnCheckRefresh();
+      if (r != null && r.ok && identical(last.value, cur)) last.value = r;
+    } catch (_) {
+    } finally {
+      _refreshing = false;
+    }
+  }
+
   @visibleForTesting
   static void debugReset() {
     _flight = null;
@@ -81,7 +108,10 @@ class ConnCheckNow {
     }
     _lastAdmin = admin;
     last.value = res;
+    _selfBump = true;
     ConnectionAutoApi.changes.value++;
+    _selfBump = false;
+    _listen();
     ConnectionAutoApi.unawaitedLoad();
     return res;
   }

@@ -300,6 +300,7 @@ class ConnectionAutoApi {
     _at = null;
     _flight = null;
     _companies.clear();
+    _lastCheckId = null;
   }
 
   static Future<ConnAutoStatus> load({bool force = false}) {
@@ -424,6 +425,7 @@ class ConnectionAutoApi {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>('/api/v2/conn-vpn/check-now');
       final id = (r.data?['data'] as Map?)?['check_id']?.toString();
+      if (id != null && id.isNotEmpty) _lastCheckId = id;
       if (id == null || id.isEmpty) {
         return ConnCheckResult(ok: false, via: 'vpn', message: r.data?['message']?.toString() ?? 'تعذّر الفحص الآن — حاول بعد قليل');
       }
@@ -437,6 +439,21 @@ class ConnectionAutoApi {
     } catch (e) {
       return ConnCheckResult(ok: false, via: 'vpn', message: _msg(e, 'تعذّر الفحص الآن — حاول بعد قليل'));
     }
+  }
+
+  static String? _lastCheckId;
+
+  /// نتيجة آخر «افحص الآن» عبر الـVPN من جديد — بعد إجراء الوكيل يعيد الخادم عدّ «أين صاروا» بلا فحص (٦ نوفمبر — المالك: «من فحص
+  /// ورسلت ارجع افحص يطنطي نفس النتيجة»). null = لا فحص أو تعذّر.
+  static Future<ConnCheckResult?> vpnCheckRefresh() async {
+    final id = _lastCheckId;
+    if (id == null) return null;
+    try {
+      final p = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/conn-vpn/check-now/$id');
+      final d = p.data?['data'];
+      if (d is Map && d['state'] == 'done') return ConnCheckResult.fromVpn(d['result']);
+    } catch (_) {}
+    return null;
   }
 
   /// «أرسل الآن» لمشتركٍ واحد (من «تحت المراقبة» أو «بانتظار موافقتك»): رسالةٌ مباشرة بطلبك.
