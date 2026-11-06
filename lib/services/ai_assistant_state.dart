@@ -47,6 +47,12 @@ class AiAssistantState {
     return s != null && (s.canAsk || (s.locked && s.mode == AiMode.company));
   }
 
+  /// زرّ «أمر صوتي» يظهر: الخادم فتحه لهذا الحساب (جلسة شركة) والمساعد نفسه مفعّلٌ له.
+  static bool get voice {
+    final s = gate.value;
+    return s != null && s.enabled && s.voice && s.mode == AiMode.company;
+  }
+
   /// زرّ «اشرحلي» يظهر.
   static bool get canExplain => gate.value?.canExplain ?? false;
 

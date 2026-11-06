@@ -7,6 +7,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
+import '../../core/util/arabic_text.dart';
 import '../../api/big_subscribers_api.dart';
 import '../../core/platform/app_platform.dart';
 import '../../api/subscribers_api.dart';
@@ -713,35 +714,7 @@ class _ResultsState extends State<_Results> {
   ///
   /// كما نوحّد أشكال الأحرف المتشابهة (أ/إ/آ → ا، ى → ي، ة → ه) — الاسم
   /// المُخزَّن قد يكون بشكل، والمنطوق يُترجم بشكل آخر.
-  static String _normalizeArabic(String s) {
-    if (s.isEmpty) return s;
-    var t = s;
-    // 1) شيل الأحرف غير المرئيّة + التشكيل + التطويل (\u escapes صريحة):
-    //    ​-\u200F  ZWSP, ZWNJ, ZWJ, LRM, RLM
-    //    \u202A-\u202E  LRE, RLE, PDF, LRO, RLO
-    //    \u2066-\u2069  LRI, RLI, FSI, PDI
-    //    ً-ٟ  التشكيل العربيّ (فتحة/ضمّة/كسرة/شدّة/سكون/تنوين)
-    //    ٰ          الألف الخنجريّة العلويّة
-    //    ـ          التطويل (ـ)
-    t = t.replaceAll(
-      RegExp(r'[​-\u200F\u202A-\u202E\u2066-\u2069ً-ٰٟـ]'),
-      '',
-    );
-    // 2) NBSP + غيرها من المسافات الخاصّة → مسافة عاديّة.
-    t = t.replaceAll(RegExp(r'[  -   　]'), ' ');
-    // 3) توحيد أحرف عربيّة متبادلة (المتحدّث/المُخزَّن قد يستخدم أشكالاً
-    //    مختلفة لنفس الحرف — أشكال أسفل تنقص التطابق بلا سبب).
-    t = t
-        .replaceAll('أ', 'ا')
-        .replaceAll('إ', 'ا')
-        .replaceAll('آ', 'ا')
-        .replaceAll('ى', 'ي')
-        .replaceAll('ئ', 'ي')
-        .replaceAll('ة', 'ه');
-    // 4) دمج المسافات المتعدّدة.
-    t = t.replaceAll(RegExp(r'\s+'), ' ').trim();
-    return t;
-  }
+  static String _normalizeArabic(String s) => normalizeArabic(s);
 
   /// Normalize Iraqi phone numbers to a canonical core so the same
   /// subscriber matches regardless of whether the number is stored as

@@ -138,6 +138,7 @@ class AiStatus {
     this.reason,
     this.lockedText,
     this.mode = AiMode.none,
+    this.voice = false,
   });
 
   /// المطفأ — والافتراضيّ لكلّ ما لا يقوله الخادم صراحةً.
@@ -161,6 +162,9 @@ class AiStatus {
   final String? reason;
   final String? lockedText;
   final AiMode mode;
+
+  /// «الأوامر الصوتيّة» (٦ نوفمبر) مفتوحةٌ لهذا الحساب — زرّ المايك بالأعلى. الخادم يقولها لجلسة الشركة وحدها.
+  final bool voice;
 
   bool get usable => enabled && canUse == true;
 
@@ -193,6 +197,7 @@ class AiStatus {
       reason: _str(j['reason']),
       lockedText: _str(j['locked_text']),
       mode: mode,
+      voice: j['voice'] == true,
     );
   }
 
@@ -210,6 +215,7 @@ class AiStatus {
         reason: reason,
         lockedText: lockedText,
         mode: mode,
+        voice: voice,
       );
 }
 

@@ -19,6 +19,10 @@ class VoiceSearchButton extends StatefulWidget {
     required this.controller,
     this.size = 20,
     this.onResult,
+    this.onFinal,
+    this.onListening,
+    this.autoStart = false,
+    this.idleColor,
   });
 
   final TextEditingController controller;
@@ -26,6 +30,18 @@ class VoiceSearchButton extends StatefulWidget {
 
   /// يُستدعى بعد كتابة النصّ — لمن يحتاج تشغيل بحث فوري.
   final ValueChanged<String>? onResult;
+
+  /// النصّ النهائيّ وحده (انتهى الكلام) — «الأمر الصوتيّ» ينفّذ عنده لا مع كلّ كلمة.
+  final ValueChanged<String>? onFinal;
+
+  /// بدأ/توقّف الاستماع — لشاشةٍ تعرض «أسمعك…».
+  final ValueChanged<bool>? onListening;
+
+  /// يبدأ الاستماع بنفسه بعد أوّل إطار (الإذن في سياقه: الوكيل فتح «أمر صوتي» بنفسه).
+  final bool autoStart;
+
+  /// لون الأيقونة وهو لا يسمع (الافتراضيّ رماديّ).
+  final Color? idleColor;
 
   @override
   State<VoiceSearchButton> createState() => _VoiceSearchButtonState();
@@ -45,9 +61,25 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
   Future<void>? _initFuture;
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.autoStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_listening) _toggle();
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _speech.stop();
     super.dispose();
+  }
+
+  void _setListening(bool v) {
+    if (_listening == v) return;
+    setState(() => _listening = v);
+    widget.onListening?.call(v);
   }
 
   Future<void> _init() async {
@@ -56,7 +88,7 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
         onStatus: (s) {
           // ثلاث حالات تُطلَق؛ `listening` تأكيد تسجيل لا تغيير واجهة.
           if (s == 'done' || s == 'notListening') {
-            if (mounted) setState(() => _listening = false);
+            if (mounted) _setListening(false);
           }
         },
         onError: (err) {
@@ -64,7 +96,7 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
           // ⚠️ إعادة الضبط أوّلاً دائماً: بعض الأخطاء (error_unknown 300
           // و error_no_match) تعود **بلا** status='done' مقابل، فيبقى
           // الزرّ عالقاً على «إيقاف» إلى الأبد — بلاغ مستخدم.
-          setState(() => _listening = false);
+          _setListening(false);
           _snack(_messageFor(err.errorMsg));
         },
       );
@@ -144,7 +176,7 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
     HapticFeedback.selectionClick();
     if (_listening) {
       await _speech.stop();
-      if (mounted) setState(() => _listening = false);
+      if (mounted) _setListening(false);
       return;
     }
     if (!_ready) {
@@ -159,7 +191,7 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
         return;
       }
     }
-    setState(() => _listening = true);
+    _setListening(true);
     // 'ar' احتياطاً حين يفشل الاستكشاف: أجهزة بمحرّك خاصّ تشترط
     // localeId وترفض null، ومعظمها يقبل الرمز العامّ.
     final locale = _arLocale ?? 'ar';
@@ -177,6 +209,7 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
           widget.controller.selection =
               TextSelection.collapsed(offset: txt.length);
           widget.onResult?.call(txt);
+          if (r.finalResult) widget.onFinal?.call(txt);
         },
         listenOptions: SpeechListenOptions(
           localeId: locale,
@@ -188,7 +221,7 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
       );
     } catch (e) {
       if (kDebugMode) debugPrint('🎙️ listen() threw: $e');
-      if (mounted) setState(() => _listening = false);
+      if (mounted) _setListening(false);
     }
   }
 
@@ -203,7 +236,7 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
         child: Icon(
           _listening ? Icons.stop_rounded : Icons.mic_none_rounded,
           size: widget.size,
-          color: _listening ? AppColors.error : AppColors.textLow,
+          color: _listening ? AppColors.error : (widget.idleColor ?? AppColors.textLow),
         ),
       ),
     );

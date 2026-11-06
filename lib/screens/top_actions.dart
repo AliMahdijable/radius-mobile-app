@@ -19,6 +19,7 @@ import '../theme/typography.dart';
 import 'account/company_switch_sheet.dart';
 import 'accounts/accounts_screen.dart';
 import 'assistant/assistant_sheet.dart';
+import 'voice/voice_command_sheet.dart';
 import 'notifications/inbox_screen.dart';
 import 'settings_screen.dart';
 
@@ -116,6 +117,17 @@ class TopActions extends StatelessWidget {
                 icon: Icons.swap_horiz_rounded,
                 label: 'accounts.title'.tr(),
                 onTap: () => _open(context, const AccountsScreen()),
+              ),
+              SizedBox(width: gap),
+            ],
+            // «أمر صوتي» (٧ نوفمبر): الخادم فتحه لهذا الحساب (ai_assistant.voice) — بجنب المساعد
+            if (AiAssistantState.voice) ...[
+              TopActionChip(
+                key: const ValueKey('top-actions-voice'),
+                icon: LucideIcons.mic,
+                label: 'أمر صوتي',
+                iconColor: AppColors.brandAccent,
+                onTap: () => showVoiceCommandSheet(context),
               ),
               SizedBox(width: gap),
             ],

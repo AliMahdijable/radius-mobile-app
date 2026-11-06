@@ -76,9 +76,15 @@ import '../national/national_subscriber_extras.dart';
 /// Info cards are intentionally tight (smaller padding, 4px row gaps)
 /// so the operations grid has room to breathe without scrolling on
 /// most phones.
+/// ما يفتحه «الأمر الصوتيّ» فوق صفحة المشترك لحظة فتحها (٧ نوفمبر) — نافذة العمليّة نفسها بأقفالها وتأكيدها؛ لا تنفيذ بلا ضغطة.
+enum SubscriberAutoAction { activate, disable, enable }
+
 class SubscriberDetailScreen extends StatefulWidget {
-  const SubscriberDetailScreen({super.key, required this.sub});
+  const SubscriberDetailScreen({super.key, required this.sub, this.autoAction});
   final Subscriber sub;
+
+  /// «فعّل/طفّي/شغّل فلان» من الأمر الصوتيّ ⇒ الصفحة تُفتح ثمّ نافذة العمليّة كما لو ضغط زرّها.
+  final SubscriberAutoAction? autoAction;
 
   @override
   State<SubscriberDetailScreen> createState() => _SubscriberDetailScreenState();
@@ -152,6 +158,12 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   @override
   void initState() {
     super.initState();
+    final auto = widget.autoAction;
+    if (auto != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_runAutoAction(auto));
+      });
+    }
     // حدود «تنبيه المشترك» وتفعيله — الكارت قد يُفتح من البحث لا من
     // القائمة، فلا نفترض أنّ أحداً جلبها قبلنا.
     ConnectionAlertSettings.ensureLoaded();
@@ -598,6 +610,38 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   /// المشروع الوطنيّ (١ نوفمبر): «تعليق/تشغيل» المشترك في بوّابته لا «تعطيل/تفعيل الحساب» — لمشترك الجلسة نفسها (صفّ «كل
   /// الشركات» من شركةٍ أخرى بكلماته العامّة).
   bool get _suspendVocab => sub.companyKey == null && ProviderService.togglesAsSuspend;
+
+  /// «الأمر الصوتيّ»: زرّ العمليّة نفسه بشروطه — ما لا يظهر/مقفلٌ/الحال المطلوبة قائمة ⇒ سطرٌ يقول لماذا، ولا نافذة.
+  Future<void> _runAutoAction(SubscriberAutoAction a) async {
+    switch (a) {
+      case SubscriberAutoAction.activate:
+        if (!permShown(const ['subscribers.activate']) || _providerHides('subscribers.activate')) {
+          showSheetSnack(context, 'التجديد غير متاح لهذا المشترك من حسابك', isError: true);
+          return;
+        }
+        if (_locked('subscribers.activate')) {
+          showSheetSnack(context, 'ما عندك صلاحيّة التجديد — اطلبها من مديرك', isError: true);
+          return;
+        }
+        await showActivateSheet(context, sub);
+      case SubscriberAutoAction.disable:
+      case SubscriberAutoAction.enable:
+        final wantEnable = a == SubscriberAutoAction.enable;
+        if (sub.idx == null || !_shows('subscribers.toggle')) {
+          showSheetSnack(context, 'التطفية والتشغيل غير متاحين لهذا المشترك من حسابك', isError: true);
+          return;
+        }
+        if (_locked('subscribers.toggle')) {
+          showSheetSnack(context, 'ما عندك صلاحيّة التطفية والتشغيل — اطلبها من مديرك', isError: true);
+          return;
+        }
+        if (wantEnable != sub.isDisabled) {
+          showSheetSnack(context, wantEnable ? 'المشترك شغّال أصلاً' : 'المشترك مطفي أصلاً');
+          return;
+        }
+        await _confirmToggleEnabled();
+    }
+  }
 
   Future<void> _confirmToggleEnabled() async {
     final wantEnable = sub.isDisabled;
