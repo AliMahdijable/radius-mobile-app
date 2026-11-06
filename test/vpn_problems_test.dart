@@ -29,6 +29,23 @@ void main() {
         ],
       });
 
+  test('٦ نوفمبر — أين صار من بمشكلة: الوسم من الخادم (st)، والتفصيل بأسماء تبويبات «تنبيهات المشتركين»', () {
+    final r = VpnNowResult.fromJson({
+      'ok': true,
+      'readings': [
+        {'u': 'a', 'src': 'cpe', 'sig': -80, 'st': 'watching'},
+        {'u': 'b', 'src': 'cpe', 'lan': 'unplugged', 'st': 'watching'},
+        {'u': 'c', 'src': 'olt', 'rx': -28, 'st': 'sent'},
+        {'u': 'd', 'src': 'cpe', 'sig': -50},
+      ],
+    }).readings;
+    expect(r['a']!.state, 'watching');
+    expect(r['d']!.state, isNull, reason: 'السليم بلا وسم');
+    expect(vpnCasesText(['watching', 'watching', 'sent', null]), '2 تحت المراقبة · 1 وصله التنبيه');
+    expect(vpnCasesText(['sent', 'sent', 'pending', 'muted']), '1 بانتظار موافقتك · 2 وصلهم التنبيه · 1 أوقفت تنبيهه');
+    expect(vpnCasesText([null, 'x']), isNull, reason: 'خادمٌ أقدم ⇒ كما كان');
+  });
+
   test('مشاكل القراءة بحدود الوكيل: الكيبل والإشارة وCCQ والضوئيّ والحرارة؛ السليم والبنگ والساقط بلا مشكلة', () {
     const t = ConnectionAlertThresholds();
     final r = result().readings;

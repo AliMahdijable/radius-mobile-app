@@ -11,6 +11,30 @@ import '../theme/typography.dart';
 import 'vpn_now_bar.dart' show VpnTag;
 
 /// مشاكل مشتركٍ من قراءته عبر الـVPN بحدود الوكيل (كالخادم: الكيبل، الإشارة وCCQ من جهازه أو سكتره، الضوئيّ والحرارة من الأولت).
+/// أين صار المشترك بـ«تنبيهات المشتركين» — بأسماء تبويباتها (الخادم agentRoutes.STATE_WORDS بالصيغ نفسها).
+const vpnCaseWords = <String, (String, String)>{
+  'pending': ('بانتظار موافقتك', 'بانتظار موافقتك'),
+  'queued': ('بالطابور', 'بالطابور'),
+  'watching': ('تحت المراقبة', 'تحت المراقبة'),
+  'sent': ('وصله التنبيه', 'وصلهم التنبيه'),
+  'skipped': ('تجاهلته', 'تجاهلتهم'),
+  'muted': ('أوقفت تنبيهه', 'أوقفت تنبيههم'),
+  'other': ('خارج المتابعة', 'خارج المتابعة'),
+};
+
+/// «3 تحت المراقبة · 3 وصلهم التنبيه» من وسوم الصفوف؛ null بلا وسوم (خادمٌ أقدم أو ظلّ).
+String? vpnCasesText(Iterable<String?> states) {
+  final n = <String, int>{};
+  for (final s in states) {
+    if (s != null && vpnCaseWords.containsKey(s)) n[s] = (n[s] ?? 0) + 1;
+  }
+  final parts = [
+    for (final e in vpnCaseWords.entries)
+      if ((n[e.key] ?? 0) > 0) '${n[e.key]} ${n[e.key] == 1 ? e.value.$1 : e.value.$2}',
+  ];
+  return parts.isEmpty ? null : parts.join(' · ');
+}
+
 List<String> vpnProblemsOf(VpnSubReading r, ConnectionAlertThresholds t) {
   final out = <String>[];
   if (r.lan == 'unplugged') out.add('الكيبل غير مربوط');
@@ -37,11 +61,12 @@ Future<void> showVpnProblemsSheet(
   final t = await ConnectionAlertSettings.ensureLoaded();
   if (!context.mounted) return;
   final byUser = {for (final s in subscribers) s.username.trim().toLowerCase(): s};
-  final rows = <({Subscriber? sub, String user, List<String> problems})>[];
+  final rows = <({Subscriber? sub, String user, List<String> problems, String? state})>[];
   VpnNow.readings.forEach((u, r) {
     final p = vpnProblemsOf(r, t);
-    if (p.isNotEmpty) rows.add((sub: byUser[u], user: u, problems: p));
+    if (p.isNotEmpty) rows.add((sub: byUser[u], user: u, problems: p, state: r.state));
   });
+  final where = vpnCasesText(rows.map((r) => r.state));
   rows.sort((a, b) => b.problems.length.compareTo(a.problems.length));
   await showModalBottomSheet<void>(
     context: context,
@@ -62,7 +87,7 @@ Future<void> showVpnProblemsSheet(
                 Icon(LucideIcons.triangleAlert, size: 18, color: AppColors.warningOnSoft),
                 const SizedBox(width: Sp.sm),
                 Expanded(
-                  child: Text(rows.isEmpty ? 'لا مشاكل بآخر فحص' : '${rows.length} بمشكلة بآخر فحص',
+                  child: Text(rows.isEmpty ? 'لا مشاكل بآخر فحص' : '${rows.length} بمشكلة بآخر فحص${where == null ? '' : ': $where'}',
                       style: AppType.bodyStrong()),
                 ),
                 const VpnTag(),
@@ -111,6 +136,18 @@ Future<void> showVpnProblemsSheet(
                                       border: Border.all(color: AppColors.dangerSoftBorder),
                                     ),
                                     child: Text(p, style: AppType.micro(color: AppColors.dangerOnSoft).copyWith(fontWeight: FontWeight.w700)),
+                                  ),
+                                // أين صار بـ«تنبيهات المشتركين» (تحت المراقبة/وصله التنبيه/…)
+                                if (vpnCaseWords[r.state] case final w?)
+                                  Container(
+                                    key: ValueKey('vpn-case-${r.user}'),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.infoSoftBg,
+                                      borderRadius: BorderRadius.circular(R.pill),
+                                      border: Border.all(color: AppColors.infoSoftBorder),
+                                    ),
+                                    child: Text(w.$1, style: AppType.micro(color: AppColors.info).copyWith(fontWeight: FontWeight.w700)),
                                   ),
                               ]),
                             ],

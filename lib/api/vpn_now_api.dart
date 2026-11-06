@@ -14,8 +14,12 @@ extension VpnNowKindX on VpnNowKind {
 
 /// قراءة مشتركٍ واحد عبر الـVPN — من جهازه (cpe)، أو سكتره، أو أولته، أو البنك وحده (ping)، أو لا يستجيب (dead).
 class VpnSubReading {
-  const VpnSubReading({required this.src, this.sig, this.ccq, this.lan, this.ms, this.rx, this.temp});
+  const VpnSubReading({required this.src, this.sig, this.ccq, this.lan, this.ms, this.rx, this.temp, this.state});
   final String src;
+
+  /// أين صار بـ«تنبيهات المشتركين» بعد هذا الفحص (٦ نوفمبر — المالك: «الوكيل يدوخ ميعرف شنو ال ٦ هاي»): watching · pending ·
+  /// queued · sent · skipped · muted · other — للمشترك بمشكلة وحده، ومن خادمٍ يعطيه.
+  final String? state;
   final int? sig;
   final int? ccq;
   final String? lan;
@@ -40,6 +44,7 @@ class VpnSubReading {
       ms: _i(j['ms']),
       rx: _d(j['rx']),
       temp: _d(j['t']),
+      state: j['st'] == null || '${j['st']}'.isEmpty ? null : '${j['st']}',
     );
   }
 }
