@@ -2501,7 +2501,10 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       Map<SubscriberFilter, int> counts, List<String> managers, List<String> packages) {
     final total = counts[SubscriberFilter.all] ?? 0;
     final online = counts[SubscriberFilter.online] ?? 0;
-    final canAddHere = !_mergedOn;
+    // ٧ نوفمبر (المالك بصورة ويندوز: «مايظهر اضافة مشترك» بـ«كل الشركات»): كان مخفيّاً بالوضع المدموج — والهاتف يضيف فيه للشركة
+    // المفتوحة («+»). الآن كالهاتف: يبقى، ويُضاف للشركة المفتوحة (أعلى يمين الشاشة) واسمها على الزرّ فلا يُظنّ لغيرها.
+    final sessionName = ActiveCompany.current?.label.trim() ?? '';
+    final addLabel = _mergedOn && sessionName.isNotEmpty ? 'مشترك جديد · $sessionName' : null;
     return SubscribersDesktopHeader(
       title: 'subscribers.title'.tr(),
       subtitle: ValueListenableBuilder<bool>(
@@ -2532,13 +2535,15 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       onRefresh: () => _refresh(pull: true),
       probing: _probing,
       onScanDevices: _probing ? null : () => _runProbeWave(force: true),
-      onAdd: canAddHere
-          ? () async {
+      // ما لا يخدمه مزوّد الجلسة (شركةٌ مُضافة محوّلها لا ينشئ) لا يظهر — كبند «+» بالهاتف ([providerHidesAction])
+      onAdd: providerHidesAction('subscribers.add')
+          ? null
+          : () async {
               final added = await showAddSubscriberSheet(context);
               if (added == true && mounted) _refresh();
-            }
-          : null,
+            },
       addLocked: !Perms.hasAny(const ['subscribers.add']),
+      addLabel: addLabel,
     );
   }
 

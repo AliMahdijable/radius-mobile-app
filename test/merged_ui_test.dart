@@ -9,6 +9,7 @@ import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/company_route.dart';
 import 'package:rad_mysvcs/api/merged_dashboard_api.dart';
 import 'package:rad_mysvcs/api/subscribers_api.dart';
+import 'package:rad_mysvcs/core/platform/desktop_layout.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/account/company_switch_sheet.dart';
 import 'package:rad_mysvcs/screens/dashboard/dashboard_screen.dart';
@@ -169,6 +170,25 @@ void main() {
     final batches = srv.routed.where((o) => o.uri.path == '/api/v2/subscribers/device-batch');
     expect(batches.map((o) => o.headers['x-company-key']).toSet(), {_kA, _kB},
         reason: 'دفعة إعداداتٍ لكلّ شركةٍ في القائمة');
+    await down(t);
+  });
+
+  testWidgets('٧ نوفمبر (صورة المالك من ويندوز): الحاسبة بـ«كل الشركات» — «مشترك جديد» يبقى ويسمّي الشركة المفتوحة', (t) async {
+    await up();
+    await t.runAsync(() => MergedMode.enter());
+    expect(MergedMode.active.value, isTrue);
+    final cmd = ValueNotifier<SubscriberFilter?>(SubscriberFilter.all);
+    await pumpVisual(t, const VisualDevice('_desk', Size(1440, 900), 1),
+        home: (_) => DesktopScope(child: SubscribersScreen(filterCmd: cmd)));
+    await settle(t, seconds: 3);
+    expect(find.text('مشترك جديد · سوبرنت'), findsOneWidget, reason: 'كان مخفيّاً بالوضع المدموج — يُضاف للشركة المفتوحة');
+    await down(t);
+    // خارج الوضع المدموج: كما كان
+    await up();
+    await pumpVisual(t, const VisualDevice('_desk', Size(1440, 900), 1),
+        home: (_) => DesktopScope(child: SubscribersScreen(filterCmd: ValueNotifier<SubscriberFilter?>(SubscriberFilter.all))));
+    await settle(t, seconds: 3);
+    expect(find.text('مشترك جديد'), findsOneWidget);
     await down(t);
   });
 

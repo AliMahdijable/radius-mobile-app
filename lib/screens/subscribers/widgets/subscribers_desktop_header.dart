@@ -34,6 +34,7 @@ class SubscribersDesktopHeader extends StatelessWidget {
     required this.onScanDevices,
     required this.onAdd,
     required this.addLocked,
+    this.addLabel,
   });
 
   final String title;
@@ -63,6 +64,9 @@ class SubscribersDesktopHeader extends StatelessWidget {
   final VoidCallback? onAdd;
   final bool addLocked;
 
+  /// نصّ زرّ الإضافة — بـ«كل الشركات» يسمّي الشركة التي يُضاف إليها (المفتوحة)؛ null ⇒ «مشترك جديد».
+  final String? addLabel;
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
@@ -82,7 +86,7 @@ class SubscribersDesktopHeader extends StatelessWidget {
             if (onAdd != null)
               DeskPrimaryButton(
                 icon: LucideIcons.userPlus,
-                label: 'desktop.new_subscriber'.tr(),
+                label: addLabel ?? 'desktop.new_subscriber'.tr(),
                 locked: addLocked,
                 onTap: onAdd!,
               ),
