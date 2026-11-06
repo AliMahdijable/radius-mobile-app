@@ -743,6 +743,18 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   }
 
   Future<void> _openDetails(NetworkDevice d) async {
+    // ٧ نوفمبر (المالك: «بوضع vpn… من يفوت لكارت الجهاز كلشي ميظهر»): صفحة الجهاز الحيّة تتّصل به من الهاتف فلا تصله خارج
+    // الشبكة ⇒ بالوضع: تقريره عبر الـVPN (الحال والمعلومات والمنافذ ومشتركو السكتر)، و«الصفحة الكاملة» للتعديل منه.
+    if (VpnNow.mode.value) {
+      await Navigator.of(context).push<void>(MaterialPageRoute(
+        builder: (ctx) => DevicesCheckScreen(
+          devices: [d],
+          viaVpn: true,
+          onOpenFull: () => Navigator.of(ctx).push(MaterialPageRoute(builder: (_) => NetworkDeviceDetailsScreen(device: d))),
+        ),
+      ));
+      return;
+    }
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => NetworkDeviceDetailsScreen(device: d)),
     );

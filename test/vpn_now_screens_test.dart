@@ -11,6 +11,7 @@ import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/subscribers_api.dart';
 import 'package:rad_mysvcs/api/vpn_now_api.dart';
 import 'package:rad_mysvcs/screens/network_devices/check/devices_check_screen.dart';
+import 'package:rad_mysvcs/screens/network_devices/network_device_details_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/network_devices_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/widgets/device_big_card.dart';
 import 'package:rad_mysvcs/screens/subscribers/subscribers_screen.dart';
@@ -294,6 +295,38 @@ void main() {
     addTearDown(() => VpnNowApi.lastSubscribers = true);
     await openDevices(t);
     expect(devVpn, findsOneWidget, reason: 'أجهزة الوكيل تُفحص عبر ملفّه');
+    await close(t);
+  });
+  testWidgets('٧ نوفمبر: بوضع VPN الضغط على الجهاز يفتح تقريره عبر الـVPN (لا صفحته الحيّة التي لا تصله خارج الشبكة)، و«الصفحة الكاملة» للتعديل', (t) async {
+    VpnNow.routeSource = () async => (linked: true, via: 'own');
+    AgentNetPresence.debugSet(NetPresence.off);
+    DevicesCheckRunner.debugLimits = () async => const CheckLimits();
+    DevicesCheckRunner.debugSubscribers = () async => const [];
+    addTearDown(() {
+      DevicesCheckRunner.debugLimits = null;
+      DevicesCheckRunner.debugSubscribers = null;
+    });
+    await openDevices(t);
+    await t.tap(devVpn);
+    await settleFor(t, seconds: 1);
+    expect(VpnNow.mode.value, isTrue);
+    VpnNow.debugApply(VpnNowKind.devices, VpnNowResult.fromJson({
+      'ok': true,
+      'message': 'فُحصت أجهزتك ✓',
+      'devices': [
+        for (var id = 1; id <= 14; id++) {'id': id, 'alive': true, 'ms': 20},
+      ],
+    }));
+    await settleFor(t, seconds: 1);
+    final name = find.text('راوتر المركز CCR');
+    expect(name, findsOneWidget, reason: 'أوّل أجهزة القائمة');
+    await t.tap(name.first, warnIfMissed: false);
+    await settleFor(t, seconds: 2);
+    final scr = t.widget<DevicesCheckScreen>(find.byType(DevicesCheckScreen));
+    expect([scr.single, scr.viaVpn], [true, true]);
+    expect(scr.devices.first.name, 'راوتر المركز CCR');
+    expect(find.byType(NetworkDeviceDetailsScreen), findsNothing);
+    expect(find.byKey(const ValueKey('check-open-full')), findsOneWidget);
     await close(t);
   });
 }

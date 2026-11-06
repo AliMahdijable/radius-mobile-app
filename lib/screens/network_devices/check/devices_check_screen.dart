@@ -16,10 +16,17 @@ import '../../../theme/typography.dart';
 import '../widgets/_grade.dart';
 
 class DevicesCheckScreen extends StatefulWidget {
-  const DevicesCheckScreen({super.key, required this.devices, required this.viaVpn});
+  const DevicesCheckScreen({super.key, required this.devices, required this.viaVpn, this.onOpenFull});
 
   final List<NetworkDevice> devices;
   final bool viaVpn;
+
+  /// جهازٌ واحد بوضع VPN (٧ نوفمبر — المالك: «بوضع vpn… من يفوت لكارت الجهاز كلشي ميظهر»): الضغط على الجهاز بالقائمة يفتح تقريره
+  /// عبر الـVPN هنا بدل صفحته الحيّة (تتّصل بالجهاز من الهاتف فلا تصله خارج الشبكة) — و«الصفحة الكاملة» لتعديله.
+  final VoidCallback? onOpenFull;
+
+  /// «صفحة الجهاز عبر الـVPN» (فُتحت من الجهاز نفسه) — لا الفحص الشامل لحسابٍ له جهازٌ واحد.
+  bool get single => onOpenFull != null && devices.length == 1;
 
   @override
   State<DevicesCheckScreen> createState() => _DevicesCheckScreenState();
@@ -37,6 +44,8 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
   @override
   void initState() {
     super.initState();
+    // جهازٌ واحد: أقسامه مفتوحة (لا قائمة أجهزةٍ يُختصر لها)
+    if (widget.single) _open.addAll(['${widget.devices.first.id}:subs', '${widget.devices.first.id}:ports']);
     _run.run();
   }
 
@@ -81,8 +90,15 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
-        title: const Text('الفحص الشامل'),
+        title: Text(widget.single ? widget.devices.first.name : 'الفحص الشامل', maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
+          if (widget.onOpenFull != null)
+            IconButton(
+              key: const ValueKey('check-open-full'),
+              tooltip: 'الصفحة الكاملة (التعديل)',
+              onPressed: widget.onOpenFull,
+              icon: const Icon(LucideIcons.settings2, size: 20),
+            ),
           ListenableBuilder(
             listenable: _run,
             builder: (_, __) => Row(mainAxisSize: MainAxisSize.min, children: [
@@ -112,8 +128,19 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
             children: [
               _head(rs),
               if (_run.error != null && !_run.running) ...[const SizedBox(height: Sp.sm), _errorBox()],
-              if (rs.isNotEmpty) ...[const SizedBox(height: Sp.md), _counts(rs)],
+              if (rs.isNotEmpty && !widget.single) ...[const SizedBox(height: Sp.md), _counts(rs)],
               for (final r in shown) ...[const SizedBox(height: Sp.sm), _card(r)],
+              // يردّ عبر الـVPN ولا معلومات: السبب بكلمة (لا صفحةٌ فارغة بلا تفسير)
+              if (widget.single && widget.viaVpn && !_run.running && rs.length == 1 && rs.first.vitals.isEmpty &&
+                  rs.first.state != CheckState.down) ...[
+                const SizedBox(height: Sp.sm),
+                Text(
+                  'عبر الـVPN وصلنا الجهاز ويردّ، بس معلوماته الحيّة ما انقرت — للمايكروتك تحتاج خدمة API مفعّلة بالراوتر، ولليوبيكويتي '
+                  'يوزر وباسورد الويب الصحيحين (من «الصفحة الكاملة» ⇐ التعديل).',
+                  key: const ValueKey('check-no-vitals'),
+                  style: AppType.muted(color: AppColors.textMid),
+                ),
+              ],
               if (!_run.running && rs.isEmpty && _run.error == null)
                 Padding(
                   padding: const EdgeInsets.all(Sp.xl),
@@ -146,10 +173,12 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
     final running = _run.running;
     final total = _run.total;
     final title = running
-        ? 'يفحص أجهزتك…'
+        ? (widget.single ? 'يقرأ الجهاز…' : 'يفحص أجهزتك…')
         : _run.error != null
             ? 'ما اكتمل الفحص'
-            : 'فُحصت ${rs.length} ${rs.length == 1 ? 'جهاز' : 'أجهزة'}';
+            : widget.single
+                ? 'قُرئ الجهاز'
+                : 'فُحصت ${rs.length} ${rs.length == 1 ? 'جهاز' : 'أجهزة'}';
     return Container(
       key: const ValueKey('check-head'),
       padding: const EdgeInsets.all(Sp.md),
@@ -163,7 +192,9 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
               Text(title, style: AppType.bodyStrong(color: AppColors.textHi)),
               const SizedBox(height: 2),
               Text(
-                vpn ? 'عبر الـVPN — الخادم يفحصها وأنت بعيد' : 'من شبكتك — الجهاز نفسه، ومشتركو السكترات، ومنافذ السويجات',
+                vpn
+                    ? (widget.single ? 'عبر الـVPN — الخادم يقرؤه وأنت بعيد' : 'عبر الـVPN — الخادم يفحصها وأنت بعيد')
+                    : 'من شبكتك — الجهاز نفسه، ومشتركو السكترات، ومنافذ السويجات',
                 style: AppType.micro(color: AppColors.textMid),
               ),
             ]),
