@@ -252,6 +252,13 @@ void main() {
       await t.pumpAndSettle();
       expect(server.bodies('POST', '/api/v2/connection-alerts/queue/action').single, {'action': 'send_now', 'keys': ['i:7']});
       expect(find.textContaining('محاكاة'), findsWidgets);
+      // ٦ نوفمبر: «أرسل للكلّ» بنفس القسم ⇒ approve all من «تحت المراقبة»
+      final all = find.byKey(const ValueKey('ca-send-all-watching'));
+      expect(all, findsOneWidget);
+      expect(find.text('أرسل للكلّ (1)'), findsOneWidget);
+      await t.tap(all);
+      await t.pumpAndSettle();
+      expect(server.bodies('POST', '/api/v2/connection-alerts/queue/action').last, {'action': 'approve', 'all': true, 'from': 'watching'});
       await simDrain(t);
     });
 

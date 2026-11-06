@@ -483,10 +483,11 @@ class ConnectionAutoApi {
   }
 
   /// approve · skip · mute · unmute · requeue — أو «أرسل للكلّ» ([all])
-  static Future<({bool ok, int done, String? message})> act(String action, List<String> keys, {bool all = false}) async {
+  /// [from] مع [all]: «بانتظار موافقتك» (pending — الافتراضيّ) أو «تحت المراقبة» (watching — ٦ نوفمبر).
+  static Future<({bool ok, int done, String? message})> act(String action, List<String> keys, {bool all = false, String? from}) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>('/api/v2/connection-alerts/queue/action',
-          data: {'action': action, if (all) 'all': true else 'keys': keys});
+          data: {'action': action, if (all) 'all': true else 'keys': keys, if (all && from != null) 'from': from});
       final d = r.data?['data'];
       final done = d is Map && d['done'] is num ? (d['done'] as num).toInt() : 0;
       unawaitedLoad();

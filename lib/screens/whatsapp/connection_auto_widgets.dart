@@ -683,7 +683,7 @@ class _CaseListState extends State<_CaseList> with AutomaticKeepAliveClientMixin
       return;
     }
     setState(() => _busy.addAll(all ? (_items ?? const []).map((e) => e.key) : keys));
-    final r = await ConnectionAutoApi.act(action, keys, all: all);
+    final r = await ConnectionAutoApi.act(action, keys, all: all, from: all && widget.state == 'watching' ? 'watching' : null);
     if (!mounted) return;
     _busy.clear();
     final msg = !r.ok
@@ -710,13 +710,16 @@ class _CaseListState extends State<_CaseList> with AutomaticKeepAliveClientMixin
         padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
         children: [
           if (_err != null) Text(_err!, style: AppType.muted(color: AppColors.error)),
-          if (widget.state == 'pending' && (items?.isNotEmpty ?? false)) ...[
+          // «أرسل للكلّ» في «بانتظار موافقتك»، و«تحت المراقبة» كذلك (٦ نوفمبر — المالك: «نسوي ميزه ارسال الكل بنفس القسم»): يتأكّدون الآن
+          // ويُرسل لهم تدريجيّاً ضمن ساعات الإرسال؛ المكتوم لا.
+          if ((widget.state == 'pending' || widget.state == 'watching') && (items?.any((e) => !e.muted) ?? false)) ...[
             FilledButton.icon(
+              key: ValueKey('ca-send-all-${widget.state}'),
               style: FilledButton.styleFrom(backgroundColor: AppColors.brand, foregroundColor: AppColors.onBrand, minimumSize: const Size.fromHeight(46)),
               onPressed: _busy.isEmpty ? () => _act('approve', const [], all: true) : null,
               icon: const Icon(LucideIcons.sendHorizontal, size: 18),
               // العدد من الخادم (كلّ ما ينتظر) لا من الصفحة المعروضة وحدها
-              label: Text('أرسل للكلّ (${ConnectionAutoApi.status.value.count('pending') > 0 ? ConnectionAutoApi.status.value.count('pending') : items!.where((e) => !e.muted).length})'),
+              label: Text('أرسل للكلّ (${widget.state == 'pending' && ConnectionAutoApi.status.value.count('pending') > 0 ? ConnectionAutoApi.status.value.count('pending') : items!.where((e) => !e.muted).length})'),
             ),
             const SizedBox(height: Sp.md),
           ],
