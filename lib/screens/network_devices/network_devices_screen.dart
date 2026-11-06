@@ -157,7 +157,27 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
   /// للحساب طريق VPN (ملفّه/نفق شركته/قالبها) ⇒ زرّ VPN بجنب البحث.
   bool _vpnLinked = false;
+
+  /// «ربط VPN» مفتوحٌ لحسابه (الخادم أجاب عن الطريق، مربوطاً أو لا) ⇒ مدخله الثابت في «المزيد».
+  bool _vpnAvailable = false;
   bool _vpnAttached = false;
+
+  /// يسأل الخادم عن طريق الـVPN ويحدّث الزرّ ومدخل «المزيد» — عند الفتح وبعد الرجوع من «ربط VPN».
+  Future<void> _refreshVpnRoute({bool force = false}) async {
+    final r = await VpnNow.route(force: force);
+    if (!mounted) return;
+    setState(() {
+      _vpnAvailable = r != null;
+      _vpnLinked = r?.linked == true;
+    });
+  }
+
+  /// ٦ نوفمبر (المالك: «ايرثلنك وكل الشركات البقية مجاي الكه بيها مكان اضيف ملف vpn» ثمّ «ابدي بي»): مدخلٌ ثابت لـ«ربط VPN»
+  /// في «المزيد» — كان مدخله الوحيد بطاقة «الإرسال التلقائيّ» في إعدادات «تنبيه المشترك»، وشريط «خارج شبكتك».
+  Future<void> _openVpnLink() async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ConnVpnScreen()));
+    await _refreshVpnRoute(force: true);
+  }
   void _onPresence() {
     if (mounted) setState(() {});
   }
@@ -256,9 +276,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     VpnNow.version.addListener(_onPresence);
     VpnNow.mode.addListener(_onVpnMode);
     VpnNow.guardSources['devices'] = _guardDevices;
-    VpnNow.route().then((r) {
-      if (mounted) setState(() => _vpnLinked = r?.linked == true);
-    });
+    unawaited(_refreshVpnRoute());
     _syncVpnAttach();
     // أجهزةٌ بعناوين عامّة أو أقلّ من ثلاثة خاصّة لا تحسم «على شبكتك؟» ⇒ عيّنة المشتركين المشتركة (مخبّأة، ١٫٢ث)
     if (AgentNetPresence.current == NetPresence.unknown) unawaited(DeviceWarmService.onAgentNetwork());
@@ -1122,10 +1140,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
             child: VpnNowBar(
               kind: VpnNowKind.devices,
               offNetwork: _offNet,
-              onOpenVpn: () async {
-                await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ConnVpnScreen()));
-                unawaited(VpnNow.route(force: true));
-              },
+              onOpenVpn: _openVpnLink,
             ),
           ),
       ]),
@@ -1461,6 +1476,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       _openTower();
                     case 'fiber':
                       _openFiber();
+                    case 'vpn':
+                      _openVpnLink();
                     case 'sort':
                       _pickSort();
                     case 'detect':
@@ -1474,6 +1491,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       _probing || (VpnNow.mode.value && VpnNow.devices.busy) ? 'يُحدّث الآن…' : (VpnNow.mode.value ? 'تحديث عبر VPN' : 'تحديث فوري')),
                   if (_all.isNotEmpty) _menuItem('tower', LucideIcons.radioTower, 'عرض البرج'),
                   _menuItem('fiber', Perms.has('devices.monitor') ? LucideIcons.cable : LucideIcons.lock, 'شبكة الألياف'),
+                  // «ربط VPN» لصاحب الحساب وحده (أسرار شبكته — الخادم يرفض الموظّف) ولمن فُتح له؛ الدرع بعلامةٍ حين يكون مربوطاً
+                  if (_vpnAvailable && !PermissionsService.isEmployee)
+                    _menuItem('vpn', _vpnLinked ? LucideIcons.shieldCheck : LucideIcons.shieldPlus, 'ربط VPN'),
                   // الترتيب الحاليّ في التسمية — القائمة المطويّة تُخفي
                   // الأيقونة التي كانت تدلّ عليه.
                   _menuItem(

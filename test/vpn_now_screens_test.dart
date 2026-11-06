@@ -14,6 +14,9 @@ import 'package:rad_mysvcs/screens/network_devices/network_devices_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/widgets/device_big_card.dart';
 import 'package:rad_mysvcs/screens/subscribers/subscribers_screen.dart';
 import 'package:rad_mysvcs/screens/subscribers/widgets/filter_chips_bar.dart';
+import 'package:rad_mysvcs/screens/whatsapp/conn_vpn_screen.dart';
+import 'package:rad_mysvcs/services/permissions_service.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:rad_mysvcs/services/agent_net_presence.dart';
 import 'package:rad_mysvcs/services/ai_assistant_state.dart';
 import 'package:rad_mysvcs/services/device_alerts_service.dart';
@@ -215,6 +218,65 @@ void main() {
     AgentNetPresence.debugSet(NetPresence.on);
     await openDevices(t);
     expect(devVpn, findsNothing);
+    await close(t);
+  });
+
+  // ٦ نوفمبر (المالك: «ايرثلنك وكل الشركات البقية مجاي الكه بيها مكان اضيف ملف vpn» ثمّ «ابدي بي»): «ربط VPN» مدخلٌ ثابت في «المزيد»
+  // بقسم الأجهزة — على شبكتك أو خارجها، مربوطاً أو لا؛ لصاحب الحساب حين يُفتح له، لا للموظّف.
+  Future<void> openMore(WidgetTester t) async {
+    await t.tap(find.byTooltip('المزيد'));
+    await settleFor(t, seconds: 1);
+  }
+
+  final vpnItem = find.text('ربط VPN');
+
+  testWidgets('«ربط VPN» في «المزيد»: يفتح صفحته وعلى شبكتك أيضاً، وبعد الرجوع يُسأل الطريق من جديد', (t) async {
+    var asks = 0;
+    VpnNow.routeSource = () async {
+      asks++;
+      return (linked: false, via: null);
+    };
+    AgentNetPresence.debugSet(NetPresence.on);
+    await openDevices(t);
+    await openMore(t);
+    expect(vpnItem, findsOneWidget, reason: 'مكانٌ ثابت لا يحتاج «خارج شبكتك»');
+    expect(find.byIcon(LucideIcons.shieldPlus), findsOneWidget, reason: 'غير مربوط ⇒ درعٌ بـ«+»');
+    final before = asks;
+    await t.tap(vpnItem);
+    await settleFor(t, seconds: 1);
+    expect(find.byType(ConnVpnScreen), findsOneWidget);
+    Navigator.of(t.element(find.byType(ConnVpnScreen))).pop();
+    await settleFor(t, seconds: 1);
+    expect(find.byType(ConnVpnScreen), findsNothing);
+    expect(asks, greaterThan(before), reason: 'ربطه هناك ⇒ زرّ «وضع VPN» يظهر بلا إعادة فتح القسم');
+    await close(t);
+  });
+
+  testWidgets('«ربط VPN» مربوطاً: نفس المكان بدرع العلامة', (t) async {
+    VpnNow.routeSource = () async => (linked: true, via: 'company');
+    AgentNetPresence.debugSet(NetPresence.on);
+    await openDevices(t);
+    await openMore(t);
+    expect(vpnItem, findsOneWidget);
+    expect(find.byIcon(LucideIcons.shieldCheck), findsOneWidget);
+    await close(t);
+  });
+
+  testWidgets('لا «ربط VPN» في «المزيد»: الميزة غير مفتوحة لحسابه، أو موظّف (أسرار شبكة صاحب الحساب)', (t) async {
+    VpnNow.routeSource = () async => null;
+    AgentNetPresence.debugSet(NetPresence.on);
+    await openDevices(t);
+    await openMore(t);
+    expect(vpnItem, findsNothing);
+    expect(find.text('شبكة الألياف'), findsOneWidget, reason: 'القائمة نفسها مفتوحة');
+    await close(t);
+
+    VpnNow.routeSource = () async => (linked: true, via: 'company');
+    await openDevices(t);
+    PermissionsService.debugSet(isEmployee: true, permissions: const {'devices.monitor': true, 'devices.manage': true});
+    addTearDown(() => PermissionsService.debugSet(isEmployee: false));
+    await openMore(t);
+    expect(vpnItem, findsNothing);
     await close(t);
   });
 }
