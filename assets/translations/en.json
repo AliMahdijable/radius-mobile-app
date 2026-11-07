@@ -1489,6 +1489,7 @@
   "company_switch": {
     "title": "Switch company",
     "subtitle": "Your account’s companies",
+    "pages_sub": "Switch between this company’s managers",
     "current": "Open now",
     "inside_as": "Open now as {} — tap for its page",
     "opening": "Opening {}…",

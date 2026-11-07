@@ -21,40 +21,16 @@ import '../../core/widgets/app_sheet.dart';
 /// ثاني جنب زر تبديل بين المدراء بالتطبيق التبديل بين الشركات»، و«تنتبه لدينا
 /// بالأصل زر تبديل بين المدراء وتحسب حساب التنقّل بينهم».
 ///
-/// كان المدير يخرج إلى «شركاتي» ليفتح شركةً أخرى. الآن مربّعٌ بجانب «الصفحات»
-/// في ترويسة الرئيسيّة (أو سطر الشركة نفسه حين لا يتّسع العرض — [fitsSquare])
-/// يفتح ورقةً بشركات الحساب، والدخول **مسار «شركاتي» نفسه** ([CompanyOpenFlow]).
+/// كان المدير يخرج إلى «شركاتي» ليفتح شركةً أخرى. الآن ورقةٌ بشركات الحساب، والدخول **مسار «شركاتي» نفسه**
+/// ([CompanyOpenFlow]). منذ ٧ نوفمبر تُفتح من سطر الشركة تحت عنوان كلّ تبويب (`HeaderSwitch` في top_actions.dart) لا من
+/// مربّعٍ في الرأس (المالك: «القوائم والازرار صارت بتزاحم كبير»)، و«الصفحات» صفٌّ أعلاها ([showCompanySwitchSheet] onPages).
 ///
-/// الزرّان لا يتداخلان:
+/// الاثنان لا يتداخلان:
 /// • «الصفحات» = المدراء الفرعيّون **داخل** الشركة المفتوحة (مرجع «العودة
 ///   للأصل» يخصّ شركته وحدها — `SavedProfilesStore.originalFor`).
 /// • «الشركات» = صفحات الحساب المربوطة؛ فتح إحداها يدخل صفحتها المربوطة من
 ///   جديد، فينتهي أيّ تبديلٍ لمديرٍ فرعيٍّ سبقه.
 /// للمالك وحده ولحسابٍ بشركتين فأكثر ([LinkedCompanies.switcherVisible]).
-class CompanySwitch {
-  CompanySwitch._();
-
-  /// أقلّ عرضٍ يبقى لاسم المدير وسطر شركته (عند سلّم خطّ 1) بجانب المربّعات —
-  /// أغلب الأسماء ٧٠–١٣٠ نقطة («مهدي العبيدي» ٩٨). أضيق منه ⇒ لا مربّع، وسطر
-  /// الشركة تحت الاسم هو الزرّ (بسهم ⌄).
-  static const double minNameRoom = 104;
-
-  /// يتّسع رأس الرئيسيّة لمربّع «الشركات»؟ [squares] = كلّ مربّعات الصفّ
-  /// معه (الشركات · الصفحات · المساعد · الجرس · الترس)، و[side]/[gap] مقاسها
-  /// على هذه الشاشة (`TopActionChip.sizeOf/gapOf`).
-  static bool fitsSquare({
-    required double width,
-    required double textScale,
-    required int squares,
-    required double side,
-    required double gap,
-  }) {
-    // حشوة الرأس ١٦ من الجانبين + فاصل ٨ بين الاسم والمربّعات.
-    final room =
-        width - Sp.lg * 2 - Sp.sm - squares * side - (squares - 1) * gap;
-    return room >= minNameRoom * textScale;
-  }
-}
 
 /// حال صفّ الشركة في الورقة من الجلسة القائمة.
 enum CompanyRowState {
@@ -103,8 +79,10 @@ List<CompanyRowState> companyRowStates(
 ///
 /// [autoOpen] («إشعارات كلّ شركاتي»، ٤ نوفمبر): نقرة إشعار شركةٍ غير المفتوحة ⇒ الورقة تفتحها بنفسها كأنّ المدير نقرها،
 /// و[notice] سطرٌ أعلاها يقول لماذا (اسم شركة الإشعار).
+///
+/// [onPages] (٧ نوفمبر): صفّ «الصفحات» أعلى الورقة — يغلقها ثمّ يفتح «الصفحات» (null ⇒ لا صفّ: بلا `managers.edit`).
 Future<void> showCompanySwitchSheet(BuildContext context,
-    {LinkedCompany? autoOpen, String? notice}) {
+    {LinkedCompany? autoOpen, String? notice, VoidCallback? onPages}) {
   HapticFeedback.selectionClick();
   return showAppSheet<void>(
     context: context,
@@ -112,18 +90,22 @@ Future<void> showCompanySwitchSheet(BuildContext context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,
-    builder: (_) => CompanySwitchSheet(autoOpen: autoOpen, notice: notice),
+    builder: (_) =>
+        CompanySwitchSheet(autoOpen: autoOpen, notice: notice, onPages: onPages),
   );
 }
 
 class CompanySwitchSheet extends StatefulWidget {
-  const CompanySwitchSheet({super.key, this.autoOpen, this.notice});
+  const CompanySwitchSheet({super.key, this.autoOpen, this.notice, this.onPages});
 
   /// تُفتح بنفسها عند ظهور الورقة (إشعارٌ لها).
   final LinkedCompany? autoOpen;
 
   /// اسم شركة الإشعار — سطرٌ أعلى الورقة.
   final String? notice;
+
+  /// صفّ «الصفحات» أعلى الورقة (المدراء الفرعيّون داخل الشركة المفتوحة).
+  final VoidCallback? onPages;
 
   @override
   State<CompanySwitchSheet> createState() => _CompanySwitchSheetState();
@@ -272,6 +254,16 @@ class _CompanySwitchSheetState extends State<CompanySwitchSheet> {
               _ErrorBanner(text: _error!),
               const SizedBox(height: Sp.md),
             ],
+            if (widget.onPages != null) ...[
+              _PagesRow(
+                locked: _busyKey != null || _entering,
+                onTap: () {
+                  Navigator.of(context).maybePop();
+                  widget.onPages!();
+                },
+              ),
+              const SizedBox(height: Sp.md),
+            ],
             ValueListenableBuilder(
               valueListenable: MergedMode.data,
               builder: (context, _, __) => MergedMode.eligible
@@ -337,6 +329,63 @@ class _CompanySwitchSheetState extends State<CompanySwitchSheet> {
         ),
       ],
     ];
+  }
+}
+
+/// «الصفحات» أعلى الورقة (٧ نوفمبر): التبديل بين مدراء **الشركة المفتوحة** — كان مربّعاً بجانب «الشركات» في رأس كلّ تبويب.
+class _PagesRow extends StatelessWidget {
+  const _PagesRow({required this.onTap, required this.locked});
+
+  final VoidCallback onTap;
+
+  /// شركةٌ تُفتح الآن ⇒ لا نقر.
+  final bool locked;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Material(
+      key: const ValueKey('company-switch-pages'),
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(R.md),
+      child: InkWell(
+        onTap: locked ? null : onTap,
+        borderRadius: BorderRadius.circular(R.md),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.md),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.md),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(color: AppColors.brandSoftBg, borderRadius: BorderRadius.circular(R.sm)),
+                child: Icon(Icons.swap_horiz_rounded, size: 22, color: AppColors.brand),
+              ),
+              const SizedBox(width: Sp.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('accounts.title'.tr(), style: AppType.bodyStrong(color: AppColors.textHi)),
+                    const SizedBox(height: 3),
+                    Text(
+                      'company_switch.pages_sub'.tr(),
+                      style: AppType.muted().copyWith(fontSize: 12.5, height: 1.45),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: Sp.sm),
+              Icon(Icons.chevron_left_rounded, color: AppColors.textMid),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -646,15 +695,15 @@ class _SwitchingRoute extends PageRouteBuilder<void> {
         );
 }
 
-/// اسم المدير وسطر شركته زرّاً واحداً لـ«تبديل الشركة» — حين لا يتّسع الرأس
-/// لمربّعه ([CompanySwitch.fitsSquare]). السهم خارج السطر فلا يبتره «…» اسمٌ
-/// طويل، والارتفاع كما هو (لا حشوة).
+/// سطر الشركة (والرئيسيّة: اسم المدير معه) زرّاً واحداً لـ«التبديل» — مكان مربّعَي «الشركات» و«الصفحات» منذ ٧ نوفمبر
+/// (`HeaderSwitch`). السهم خارج السطر فلا يبتره «…» اسمٌ طويل، والارتفاع كما هو (لا حشوة).
 class CompanySwitchTap extends StatelessWidget {
   const CompanySwitchTap({
     super.key,
     required this.label,
     required this.onTap,
     required this.child,
+    this.action,
   });
 
   /// اسم الشركة المفتوحة — لقارئ الشاشة.
@@ -662,11 +711,15 @@ class CompanySwitchTap extends StatelessWidget {
   final VoidCallback onTap;
   final Widget child;
 
+  /// اسم الفعل لقارئ الشاشة — «تبديل الشركة» افتراضاً، و«الصفحات» لمن لا شركات له.
+  final String? action;
+
   @override
   Widget build(BuildContext context) {
+    final what = action ?? 'company_switch.title'.tr();
     return Semantics(
       button: true,
-      label: '${'company_switch.title'.tr()} — $label',
+      label: label.isEmpty ? what : '$what — $label',
       onTap: onTap,
       excludeSemantics: true,
       child: InkWell(

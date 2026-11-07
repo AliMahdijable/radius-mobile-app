@@ -971,6 +971,28 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     );
   }
 
+  /// «عرض قائمة» / «عرض بطاقات كبيرة» في «المزيد» — المختار بلون العلامة وعلامة ✓ (كقائمة زرّ «نوع العرض» على الحاسبة).
+  PopupMenuItem<String> _viewMenuItem(DevicesView v) {
+    final on = v == _view;
+    return PopupMenuItem<String>(
+      key: ValueKey('devices-view-${v.key}'),
+      value: 'view:${v.key}',
+      child: Row(
+        children: [
+          Icon(v.iconFor(desk: false), size: 16, color: on ? AppColors.brand : AppColors.textMid),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text('عرض ${v.labelFor(desk: false)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: on ? AppType.bodyBold(color: AppColors.brand) : null),
+          ),
+          if (on) Icon(LucideIcons.check, size: 16, color: AppColors.brand),
+        ],
+      ),
+    );
+  }
+
   /// المرشّحات الثلاثة قيمةً واحدة — لشريط التوزيع وورقة «فلاتر». الحقول نفسها باقية كما كانت (عرض البرج ومسح الفلتر
   /// من الحالة الفارغة يقرأانها).
   DevicesFilter get _filter =>
@@ -1402,10 +1424,10 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     // الأدوات بمقاس أزرار الأعلى وفراغها، وطرفها على حشوة الرأس (‎16) — فكلّ
     // أداةٍ تحت نظيرها فوقها، والبحث على حافّة المحتوى تحته (‎12).
     final gap = TopActionChip.gapOf(context);
-    // هاتفٌ ضيّق (العرض مقسوماً على سلّم الخطّ ‎< 375): زرّ «نوع العرض» يأخذ مكان «تحديث فوري» وينتقل التحديث إلى «المزيد»
-    // — وإلّا ضاق البحث حتّى يُبتر تلميحه «بحث» (٣٢٠، و٣٧٥ بخطٍّ ١٫٢). السحب للتحديث باقٍ، و«المزيد» طريق إعادة المحاولة بعد
-    // فشل التحميل.
-    final narrow = MediaQuery.sizeOf(context).width / MediaQuery.textScalerOf(context).scale(1) < 375;
+    // ٧ نوفمبر (المالك: «القوائم والازرار صارت بتزاحم كبير فكرلي بتصميم عصري ويحافظ ع الدوال والقوائم»): على الهاتف جنب البحث
+    // ما يُنظر إليه دائماً — VPN (حين يظهر) · التنبيهات بعددها · المزيد · الإضافة؛ و«فحص شامل» و«تحديث» و«نوع العرض» داخل «المزيد»
+    // أعلاه. السحب للتحديث باقٍ، و«المزيد» طريق إعادة المحاولة بعد فشل التحميل. الحاسبة كما كانت (أزرارها ظاهرة).
+    final slim = !DesktopScope.of(context);
     return ColoredBox(
       color: AppColors.bg,
       child: Padding(
@@ -1443,14 +1465,14 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 );
               },
             ),
-            // نوع العرض — قائمة · بطاقات كبيرة · (جدول على الحاسبة). كان على الحاسبة زرّ جدول ⇄ بطاقات وحده.
             SizedBox(width: gap),
-            _viewButton(),
-            SizedBox(width: gap),
+            // الحاسبة: نوع العرض — بطاقات · بطاقات كبيرة · جدول. على الهاتف داخل «المزيد».
             // «فحص شامل» (٦ نوفمبر — المالك: «فحص عام… ويخضع لل vpn» · «يفحص الجهاز نفسه ويفحص المشتركين الي بداخلة ويعطي تقرير
-            // منفصل لكل جهاز»): مكان «تحديث فوري» — الفحص الشامل يحدّث الحال أيضاً، والتحديث انتقل إلى «المزيد» (والسحب باقٍ).
+            // منفصل لكل جهاز»): مكان «تحديث فوري» — الفحص الشامل يحدّث الحال أيضاً، والتحديث في «المزيد» (والسحب باقٍ).
             // بلا أجهزة (أو فشل التحميل) يبقى «تحديث» ظاهراً — طريق إعادة المحاولة.
-            if (!narrow) ...[
+            if (!slim) ...[
+              _viewButton(),
+              SizedBox(width: gap),
               if (_all.isNotEmpty)
                 _ToolButton(
                   key: const ValueKey('devices-deep-check'),
@@ -1474,6 +1496,11 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 tooltip: 'المزيد',
                 borderRadius: BorderRadius.circular(R.icon),
                 onSelected: (v) {
+                  if (v.startsWith('view:')) {
+                    final view = DevicesView.parse(v.substring(5));
+                    if (view != null) _setView(view);
+                    return;
+                  }
                   switch (v) {
                     case 'refresh':
                       _refresh();
@@ -1492,10 +1519,17 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                   }
                 },
                 itemBuilder: (_) => [
-                  if (narrow && _all.isNotEmpty) _menuItem('deep', LucideIcons.radar, 'فحص شامل'),
-                  if (narrow || _all.isNotEmpty)
+                  if (slim && _all.isNotEmpty) _menuItem('deep', LucideIcons.radar, 'فحص شامل'),
+                  if (slim || _all.isNotEmpty)
                     _menuItem('refresh', LucideIcons.refreshCw,
                       _probing ? 'يُحدّث الآن…' : (VpnNow.mode.value ? 'تحديث (عبر VPN)' : 'تحديث فوري')),
+                  // «نوع العرض» مجموعةً بعلامةٍ على المختار (لا «جدول» على الهاتف).
+                  if (slim) ...[
+                    const PopupMenuDivider(),
+                    for (final v in DevicesView.values)
+                      if (v != DevicesView.table) _viewMenuItem(v),
+                    const PopupMenuDivider(),
+                  ],
                   if (_all.isNotEmpty) _menuItem('tower', LucideIcons.radioTower, 'عرض البرج'),
                   _menuItem('fiber', Perms.has('devices.monitor') ? LucideIcons.cable : LucideIcons.lock, 'شبكة الألياف'),
                   // «ربط VPN» لصاحب الحساب وحده (أسرار شبكته — الخادم يرفض الموظّف) ولمن فُتح له؛ الدرع بعلامةٍ حين يكون مربوطاً

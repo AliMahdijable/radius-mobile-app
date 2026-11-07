@@ -15,20 +15,34 @@ import '../../core/widgets/app_sheet.dart';
 /// لا ضمان، وأنّ الجواب قد يخطئ، وما يحفظه خادمنا ومدّته (٢٤ ساعة، حتى ٣٠ يوماً)
 /// وأنّه قد يُفحص آليّاً للدقّة — بلغةٍ بسيطة ورابط سياسة الخصوصيّة (البند ٣).
 /// `true` = «موافق»؛ أيّ إغلاقٍ آخر (السحب، ×، «مو هسه») = لا، ولا يُرسل شيء.
-Future<bool> showAssistantConsentSheet(BuildContext context) async {
-  final ok = await showAppSheet<bool>(
+///
+/// [onVoice] (٧ نوفمبر): «أمر صوتي» تحت النصّ — يُفهم على الجهاز ولا يمرّ بالمساعد، فمن لا يوافق يصله مع ذلك. النقر يغلق
+/// الموافقة بلا موافقة (false) ثمّ يفتحه.
+Future<bool> showAssistantConsentSheet(BuildContext context,
+    {VoidCallback? onVoice}) async {
+  final ok = await showAppSheet<Object>(
     context: context,
     isScrollControlled: true,
     useRootNavigator: true,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,
-    builder: (_) => const AssistantConsentSheet(),
+    builder: (_) => AssistantConsentSheet(voice: onVoice != null),
   );
+  if (ok == AssistantConsentSheet.voiceResult) {
+    onVoice?.call();
+    return false;
+  }
   return ok == true;
 }
 
 class AssistantConsentSheet extends StatelessWidget {
-  const AssistantConsentSheet({super.key});
+  const AssistantConsentSheet({super.key, this.voice = false});
+
+  /// «أمر صوتي» تحت النصّ.
+  final bool voice;
+
+  /// ما تُغلق به الورقة حين يختار «أمر صوتي».
+  static const String voiceResult = 'voice';
 
   @override
   Widget build(BuildContext context) {
@@ -66,6 +80,16 @@ class AssistantConsentSheet extends StatelessWidget {
               label: Text('account.privacy_policy'.tr()),
             ),
           ),
+          if (voice)
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton.icon(
+                key: const ValueKey('consent-voice'),
+                onPressed: () => nav.pop(voiceResult),
+                icon: const Icon(LucideIcons.mic, size: 16),
+                label: const Text('«أمر صوتي» — يعمل بلا المساعد'),
+              ),
+            ),
         ],
       ),
       footer: SheetFooterBar(

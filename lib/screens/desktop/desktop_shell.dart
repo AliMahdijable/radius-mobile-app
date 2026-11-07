@@ -576,7 +576,7 @@ class _TopBar extends StatelessWidget {
           _SearchBox(shortcut: shortcut, onTap: onSearch),
           const SizedBox(width: Sp.md),
           // «الشركات» في بطاقة الشركة يميناً — فلا يتكرّر مربّعها هنا.
-          TopActions(switchers: true, companySquare: false, inDesktopBar: true, openPage: openPage),
+          TopActions(switchers: true, inDesktopBar: true, openPage: openPage),
           const SizedBox(width: Sp.sm),
           const _ThemeToggle(),
           const SizedBox(width: Sp.sm),

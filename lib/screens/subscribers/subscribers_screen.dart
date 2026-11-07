@@ -2674,7 +2674,8 @@ class _ListHeader extends StatelessWidget {
             child: ValueListenableBuilder<ActiveCompanyInfo?>(
             valueListenable: ActiveCompany.listenable,
             builder: (context, company, _) {
-              final counts = '$total مشترك • $online متصل الآن';
+              // «متصل» لا «متصل الآن» (٧ نوفمبر): السطر صار زرّ التبديل بسهم ⌄ — «الآن» كانت تُبتر («4 متصل ا…»)، وشريحة «متصل» تحته.
+              final counts = '$total مشترك • $online متصل';
               if (company == null) {
                 return Text(
                   counts,

@@ -61,16 +61,9 @@ class MoreModulesScreen extends StatelessWidget {
               // ‎8 تحت الشقّ: أزرار الأعلى في موضعها من الرئيسيّة نفسه.
               padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.huge),
               children: [
-                // ٢٠ أكتوبر: رأس التبويب الموحّد — العنوان والوصف يميناً، وأزرار
-                // الأعلى المشتركة (المساعد · الجرس · الترس) يساراً. وبطاقة «كيف
-                // أسوّي؟» تحته باقيةٌ كما هي.
-                TabHeader(
-                  title: 'more.title'.tr(),
-                  subtitle: Text(
-                    'more.subtitle'.tr(),
-                    style: AppType.subtitle(color: AppColors.textMid),
-                  ),
-                ),
+                // ٢٠ أكتوبر: رأس التبويب الموحّد — العنوان يميناً، وأزرار الأعلى المشتركة (المساعد · الجرس · الترس) يساراً.
+                // ٧ نوفمبر: تحت العنوان سطر الشركة (زرّ التبديل) مكان الوصف «المديولات الإضافية للنظام» — كبقيّة التبويبات.
+                TabHeader(title: 'more.title'.tr()),
                 // «كل الشركات»: هذه الأقسام للشركة المفتوحة وحدها — تُسمّى
                 const MergedOpenCompanyNote(padding: EdgeInsets.only(top: Sp.md)),
                 const SizedBox(height: Sp.lg),

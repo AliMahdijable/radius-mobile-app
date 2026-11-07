@@ -940,8 +940,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 showSubscription: !_elEmployee,
                 // الشركة المفتوحة — سطرٌ تحت الاسم بدل شريطٍ أعلى التطبيق.
                 company: ActiveCompany.current,
-                // «تبديل الشركة» — يظهر لمالكٍ بشركتين فأكثر ([LinkedCompanies]).
-                onSwitchCompany: () => showCompanySwitchSheet(context),
+                // «التبديل» (الشركات للمالك بشركتين فأكثر، و«الصفحات» بـmanagers.edit) — الاسم وسطر الشركة زرّه ([HeaderSwitch]).
+                onSwitchCompany: () => HeaderSwitch.open(context),
                 topInset: MediaQuery.paddingOf(context).top,
                 // ⚠️ قراءةٌ مقصودة لا زائدة: `paddingOf` تبعيّة
                 // **مقصورة على الحشوة**، فالشاشة لا تُعاد بناؤها عند
@@ -1370,31 +1370,21 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
       // «تبديل الشركة» يتبع شركات الحساب (تصل بعد الفتح) وظهور المساعد (مربّعٌ
       // يأخذ من عرض الاسم): يُعاد بناء الصفّ وحده حين تتغيّر إحداهما.
       child: ListenableBuilder(
-        listenable:
-            Listenable.merge([LinkedCompanies.items, AiAssistantState.gate]),
+        listenable: Listenable.merge([
+          LinkedCompanies.items,
+          AiAssistantState.gate,
+          // «الصفحات» (managers.edit) تُحمَّل بعد الإقلاع — والسطر يصير زرّاً لها.
+          PermissionsService.changes,
+        ]),
         builder: (context, _) => _row(context, t, fade),
       ),
     );
   }
 
   Widget _row(BuildContext context, double t, double fade) {
-    final managers = Perms.has('managers.edit');
-    final switcher = onSwitchCompany != null && LinkedCompanies.switcherVisible;
-    // ٢١ أكتوبر: مربّع «الشركات» جنب «الصفحات» (طلب المالك) — إن بقي للاسم
-    // عرضه. شاشةٌ أضيق (٣٧٥ فما دون بالمساعد) ⇒ الاسم وسطر الشركة هما الزرّ.
-    // بلا سطر شركة (لم تُعرف بعد) ⇒ المربّع على كلّ حال، فلا يغيب الزرّ.
-    final companySquare = switcher &&
-        (company == null ||
-            CompanySwitch.fitsSquare(
-              width: MediaQuery.sizeOf(context).width,
-              textScale: textScale,
-              // الشركات + الجرس + الترس، و«الصفحات» والمساعد إن ظهرا.
-              squares:
-                  3 + (managers ? 1 : 0) + (AiAssistantState.visible ? 1 : 0),
-              side: TopActionChip.sizeOf(context),
-              gap: TopActionChip.gapOf(context),
-            ));
-    final lineSwitch = switcher && !companySquare;
+    // ٧ نوفمبر (المالك: «القوائم والازرار صارت بتزاحم كبير»): لا مربّع «الشركات» ولا «الصفحات» في الرأس — الاسم وسطر الشركة
+    // زرّ التبديل كلّما كان للحساب تبديل ([HeaderSwitch])، بسهم ⌄ والارتفاع نفسه.
+    final lineSwitch = onSwitchCompany != null && HeaderSwitch.available;
     final name = Text(
       displayName.isEmpty ? 'dashboard.hello'.tr() : displayName,
       style: AppType.title(color: AppColors.textHi).copyWith(
@@ -1433,22 +1423,35 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
               SizedBox(height: 2 * (1 - t)),
               // الشركة المفتوحة مع الاسم — خارج الطيّ عمداً (انظر
               // `_collapsedCompanyText`). الاسم فوقه إن طابق يوزر المدير
-              // لا يُكرَّر فيه. وحين لا مربّع لـ«تبديل الشركة»: الاسم والسطر
-              // زرٌّ واحد له، وبعد السطر سهم ⌄ (الارتفاع نفسه).
-              if (lineSwitch && company != null)
+              // لا يُكرَّر فيه. وللحساب تبديل: الاسم والسطر زرٌّ واحد له،
+              // وبعد السطر سهم ⌄ (الارتفاع نفسه). بلا سطر شركة (لم تُعرف
+              // بعد): السهم بعد الاسم فلا يغيب الزرّ.
+              if (lineSwitch)
                 CompanySwitchTap(
-                  label: company!.label,
+                  key: const ValueKey('header-switch'),
+                  label: company?.label ?? '',
+                  action: HeaderSwitch.label,
                   onTap: onSwitchCompany!,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      name,
-                      const SizedBox(height: _companyGap),
-                      CompanySwitchLine(
-                          info: company!, omitUsername: displayName),
-                    ],
-                  ),
+                  child: company != null
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            name,
+                            const SizedBox(height: _companyGap),
+                            CompanySwitchLine(
+                                info: company!, omitUsername: displayName),
+                          ],
+                        )
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(child: name),
+                            const SizedBox(width: 2),
+                            Icon(Icons.expand_more_rounded,
+                                size: 18, color: AppColors.textMid),
+                          ],
+                        ),
                 )
               else ...[
                 name,
@@ -1493,11 +1496,8 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
         // فاصلٌ عن الأيقونات: سطر الشركة يبلغ حافّة العمود عند تكبير الخطّ،
         // وبلا فاصل يلتصق اليوزر بزرّ «الصفحات».
         const SizedBox(width: Sp.sm),
-        // «تبديل الشركة» و«الصفحات» ثمّ المساعد · الجرس · الترس — أزرار الأعلى
-        // المشتركة بين التبويبات كلّها ([TopActions]، طلب المالك ٢٢ أكتوبر).
-        // الرئيسيّة وحدها تُسقط مربّع الشركة حين لا يتّسع لاسم المدير، فيصير
-        // سطر الشركة تحت الاسم هو الزرّ (`lineSwitch`).
-        TopActions(switchers: true, companySquare: companySquare),
+        // المساعد · الجرس · الترس — أزرار الأعلى المشتركة بين التبويبات كلّها ([TopActions]).
+        const TopActions(switchers: true),
       ],
     );
   }

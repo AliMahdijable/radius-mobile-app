@@ -238,7 +238,7 @@ void main() {
     await close(t);
   });
 
-  testWidgets('«فحص شامل» (٦ نوفمبر): الرادار مكان «تحديث» بوجود أجهزة — على شبكتك يفحص منها، وبوضع VPN عبر الـVPN', (t) async {
+  testWidgets('«فحص شامل» (٦ نوفمبر) أوّل «المزيد» بوجود أجهزة (٧ نوفمبر) — على شبكتك يفحص منها، وبوضع VPN عبر الـVPN', (t) async {
     DevicesCheckRunner.debugLimits = () async => const CheckLimits();
     DevicesCheckRunner.debugSubscribers = () async => const [];
     DevicesCheckRunner.debugProbe = (d) async => (status: 'offline', responseMs: null, packetLoss: null, serviceOk: null);
@@ -250,9 +250,13 @@ void main() {
     VpnNow.routeSource = () async => (linked: true, via: 'company');
     AgentNetPresence.debugSet(NetPresence.on);
     await openDevices(t);
-    final deep = find.byKey(const ValueKey('devices-deep-check'));
+    expect(find.byKey(const ValueKey('devices-deep-check')), findsNothing, reason: 'الهاتف: داخل «المزيد» (المالك: «بتزاحم كبير»)');
+    expect(find.byTooltip('تحديث فوري'), findsNothing, reason: 'التحديث في «المزيد»');
+    await t.tap(find.byTooltip('المزيد'));
+    await settleFor(t, seconds: 1);
+    final deep = find.text('فحص شامل');
     expect(deep, findsOneWidget);
-    expect(find.byTooltip('تحديث فوري'), findsNothing, reason: 'التحديث انتقل إلى «المزيد»');
+    expect(find.byIcon(LucideIcons.refreshCw), findsOneWidget, reason: '«تحديث» معه (نصّه «يُحدّث الآن…» أثناء الجولة)');
     await t.tap(deep);
     await settleFor(t, seconds: 2);
     final screen = t.widget<DevicesCheckScreen>(find.byType(DevicesCheckScreen));

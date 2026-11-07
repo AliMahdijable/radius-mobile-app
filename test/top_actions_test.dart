@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -17,6 +18,7 @@ import 'package:rad_mysvcs/screens/notifications/inbox_screen.dart';
 import 'package:rad_mysvcs/screens/settings_screen.dart';
 import 'package:rad_mysvcs/screens/subscribers/subscribers_screen.dart';
 import 'package:rad_mysvcs/screens/top_actions.dart';
+import 'package:rad_mysvcs/screens/voice/voice_command_sheet.dart';
 import 'package:rad_mysvcs/services/ai_assistant_state.dart';
 import 'package:rad_mysvcs/services/ai_consent.dart';
 import 'package:rad_mysvcs/services/alerts_service.dart';
@@ -196,6 +198,81 @@ void main() {
       await settleFetch(t);
       expect(server.statusCalls, 2);
       expect(assistant, findsOneWidget);
+      await finish(t);
+    });
+  });
+
+  // ٧ نوفمبر (المالك: «القوائم والازرار صارت بتزاحم كبير»): «أمر صوتي» لم يعد مربّعاً رابعاً — بطاقةٌ أوّل ورقة المساعد، وفي
+  // الموافقة لمن لا يوافق (يُفهم على الجهاز ولا يمرّ بالمساعد). موظّفٌ مساعده مقفل ⇒ مربّعه بمكانه (لا ورقة تحمله).
+  group('«أمر صوتي» داخل المساعد', () {
+    const voiceOn = <String, dynamic>{...aiStatusOn, 'voice': true};
+    final voiceChip = find.byKey(const ValueKey('top-actions-voice'));
+    final voicePill = find.byKey(const ValueKey('assistant-voice'));
+
+    setUp(() {
+      // المايك يبدأ بنفسه حين تُفتح ورقة الأمر — لا منصّة تعرّف هنا.
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+          const MethodChannel('plugin.csdcorp.com/speech_to_text'), (call) async => false);
+    });
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(const MethodChannel('plugin.csdcorp.com/speech_to_text'), null);
+    });
+
+    testWidgets('مفتوحٌ للحساب ⇒ ثلاثة مربّعات، وبطاقته أوّل المساعد تغلقه وتفتح ورقة الأمر', (t) async {
+      await setUpActor(s1bSasOwner, voiceOn);
+      AiConsent.debugAccepted = true;
+      await pumpHeader(t);
+      expect(voiceChip, findsNothing);
+      expect(find.byType(TopActionChip), findsNWidgets(3));
+      await t.tap(find.byIcon(LucideIcons.sparkles));
+      await t.pumpAndSettle();
+      expect(find.byType(AssistantSheet), findsOneWidget);
+      expect(voicePill, findsOneWidget);
+      expect(find.text('أمر صوتي'), findsOneWidget, reason: 'اسمه ظاهر بأمثلته');
+      await t.tap(voicePill);
+      await t.pumpAndSettle();
+      expect(find.byType(AssistantSheet), findsNothing);
+      expect(find.byType(VoiceCommandSheet), findsOneWidget);
+      expect(server.aiCalls, isEmpty);
+      await finish(t);
+    });
+
+    testWidgets('بلا موافقة ⇒ «أمر صوتي» في الموافقة يفتحه بلا موافقةٍ على المساعد', (t) async {
+      await setUpActor(s1bSasOwner, voiceOn);
+      SharedPreferences.setMockInitialValues({});
+      await pumpHeader(t);
+      await t.tap(find.byIcon(LucideIcons.sparkles));
+      await t.pumpAndSettle();
+      expect(find.byType(AssistantConsentSheet), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('consent-voice')));
+      await t.pumpAndSettle();
+      expect(find.byType(AssistantConsentSheet), findsNothing);
+      expect(find.byType(AssistantSheet), findsNothing);
+      expect(find.byType(VoiceCommandSheet), findsOneWidget);
+      expect(await AiConsent.accepted(), isFalse, reason: 'لم يوافق على المساعد');
+      await finish(t);
+    });
+
+    testWidgets('غير مفتوحٍ للحساب ⇒ لا زرّ في رأس المساعد ولا في الموافقة', (t) async {
+      await setUpActor(s1bSasOwner, aiStatusOn);
+      SharedPreferences.setMockInitialValues({});
+      await pumpHeader(t);
+      await t.tap(find.byIcon(LucideIcons.sparkles));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('consent-voice')), findsNothing);
+      await t.tap(find.text('موافق، كمّل'));
+      await t.pumpAndSettle();
+      expect(find.byType(AssistantSheet), findsOneWidget);
+      expect(voicePill, findsNothing);
+      await finish(t);
+    });
+
+    testWidgets('موظّفٌ مساعده مقفل ⇒ مربّع «أمر صوتي» بمكانه', (t) async {
+      await setUpActor(sasEmployee, <String, dynamic>{...aiStatusLocked, 'voice': true});
+      await pumpHeader(t);
+      expect(voiceChip, findsOneWidget);
+      expect(find.descendant(of: assistant, matching: find.byType(PermLockIcon)), findsOneWidget);
       await finish(t);
     });
   });
@@ -443,21 +520,21 @@ void main() {
       await settleShell(t);
       expect(t.takeException(), isNull);
       final home = await rects(t);
-      // «الصفحات» يمين المساعد — في الرئيسيّة وفي كلّ تبويب (المالك ٢٢ أكتوبر:
-      // «زرّ التبديل بين الأدمنية والصفحات مو موجود بكلّ صفحات التطبيق»).
-      final pages = find.byIcon(Icons.swap_horiz_rounded);
-      expect(pages, findsOneWidget);
-      final homePages = t.getRect(pages);
-      expect(homePages.left, greaterThan(home[0].right));
+      // «الصفحات» في الرئيسيّة وفي كلّ تبويب (المالك ٢٢ أكتوبر: «زرّ التبديل بين الأدمنية والصفحات مو موجود بكلّ صفحات
+      // التطبيق») — منذ ٧ نوفمبر سطر الشركة تحت العنوان (زرّ التبديل) لا مربّعٌ بجنب المساعد (المالك: «بتزاحم كبير»).
+      final line = find.byKey(const ValueKey('header-switch'));
+      expect(find.byIcon(Icons.swap_horiz_rounded), findsNothing);
+      expect(line, findsOneWidget);
+      expect(find.byType(TopActionChip), findsNWidgets(3), reason: 'المساعد · الجرس · الترس');
 
       for (final tab in ['nav.subscribers', 'nav.devices', 'nav.more']) {
         await openTab(t, tab);
         expect(t.takeException(), isNull, reason: tab);
         expect(await rects(t), home, reason: '$tab: الموضع نفسه حرفيّاً');
-        expect(find.byIcon(Icons.swap_horiz_rounded), findsOneWidget,
-            reason: '$tab: «الصفحات» بكلّ تبويب');
-        expect(t.getRect(find.byIcon(Icons.swap_horiz_rounded)), homePages,
-            reason: '$tab: «الصفحات» بالموضع نفسه');
+        expect(find.byIcon(Icons.swap_horiz_rounded), findsNothing, reason: '$tab: لا مربّع «الصفحات»');
+        expect(line, findsOneWidget, reason: '$tab: سطر التبديل بكلّ تبويب');
+        expect(t.getRect(line).top, greaterThan(home[0].top), reason: '$tab: تحت العنوان');
+        expect(find.byType(TopActionChip), findsNWidgets(3), reason: tab);
       }
       // «قوائم أخرى»: لا بطاقة «كيف أسوّي؟» — المساعد زرّ الأعلى وحده (المالك ٢٠ أكتوبر).
       expect(find.text('كيف أسوّي؟'), findsNothing);

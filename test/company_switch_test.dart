@@ -10,6 +10,7 @@ import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/auth_api.dart';
 import 'package:rad_mysvcs/screens/account/company_open_flow.dart';
 import 'package:rad_mysvcs/screens/account/company_switch_sheet.dart';
+import 'package:rad_mysvcs/screens/accounts/accounts_screen.dart';
 import 'package:rad_mysvcs/screens/dashboard/dashboard_screen.dart';
 import 'package:rad_mysvcs/screens/login_screen.dart';
 import 'package:rad_mysvcs/services/account_service.dart';
@@ -53,37 +54,6 @@ void main() {
           sasUrl: url,
           username: user,
           isEmployee: emp);
-
-  group('مربّع «الشركات» حين يبقى للاسم عرضه', () {
-    bool fits(double w, int squares, {double scale = 1}) {
-      final narrow = w < 360;
-      return CompanySwitch.fitsSquare(
-          width: w,
-          textScale: scale,
-          squares: squares,
-          side: narrow ? 38 : 42,
-          gap: narrow ? 6 : 8);
-    }
-
-    test('خمسة مربّعات (الشركات · الصفحات · المساعد · الجرس · الترس)', () {
-      expect(fits(430, 5), isTrue); // يبقى للاسم 148
-      expect(fits(412, 5), isTrue); // 130
-      expect(fits(390, 5), isTrue); // 108
-      expect(fits(375, 5), isFalse); // 93 ⇒ الاسم والسطر زرّه
-      expect(fits(360, 5), isFalse); // 78
-      expect(fits(320, 5), isFalse); // 66
-    });
-
-    test('بلا المساعد (أربعة مربّعات) يتّسع حتى ٣٢٠', () {
-      expect(fits(360, 4), isTrue); // 128
-      expect(fits(320, 4), isTrue); // 110
-    });
-
-    test('خطّ النظام المكبَّر يحتاج عرضاً أكبر', () {
-      expect(fits(390, 5, scale: 1.2), isFalse); // 108 < 124.8
-      expect(fits(430, 5, scale: 1.2), isTrue);
-    });
-  });
 
   group('حال صفوف الورقة من الجلسة القائمة', () {
     final two = [co('supernet', supernetUrl, 'mahdi'), co('jt', jtUrl, 'ali.jt')];
@@ -184,7 +154,11 @@ void main() {
   group('الترويسة والورقة', () {
     setUpAll(visualSetUpAll);
 
+    // ٧ نوفمبر (المالك: «القوائم والازرار صارت بتزاحم كبير»): لا مربّع «الشركات» ولا «الصفحات» — سطر الشركة زرّهما.
     final square = find.byKey(const ValueKey('top-actions-company-switch'));
+    final pagesSquare = find.byKey(const ValueKey('top-actions-accounts'));
+    final headerSwitch = find.byKey(const ValueKey('header-switch'));
+    final pagesRow = find.byKey(const ValueKey('company-switch-pages'));
     const longName = 'جي تي نت للاتصالات وخدمات الإنترنت — فرع الكرادة الشرقية';
     final linked = [
       co('supernet', supernetUrl, 'mahdi', label: 'سوبرنت'),
@@ -255,21 +229,24 @@ void main() {
       expect(t.takeException(), isNull);
     }
 
-    testWidgets('عرضٌ يتّسع ⇒ مربّع «الشركات» جنب «الصفحات» من جهة الاسم',
+    testWidgets('الرئيسيّة: لا مربّعات — الاسم وسطر الشركة زرّ التبديل، و«الصفحات» أعلى الورقة',
         (t) async {
-      await setUpOwner(s1bSasOwner);
+      await setUpOwner(s1bSasOwner, ai: aiStatusOn);
       await openDashboard(t, 430);
-      expect(square, findsOneWidget);
-      expect(find.byType(CompanySwitchLine), findsNothing);
-      // «الصفحات» بمكانه، والشركات يمينه (أقرب للاسم بالعربيّة).
-      final pages = find.byTooltip('الصفحات');
-      expect(pages, findsOneWidget);
-      expect(t.getRect(square).left, greaterThan(t.getRect(pages).right));
-      await t.tap(square);
+      expect(square, findsNothing);
+      expect(pagesSquare, findsNothing);
+      expect(find.byType(CompanySwitchLine), findsOneWidget);
+      await t.tap(headerSwitch);
       await settle(t, seconds: 2);
       expect(find.text('تبديل الشركة'), findsWidgets);
       expect(find.text(longName), findsOneWidget, reason: 'الاسم كاملاً بسطرين');
       expect(find.text('مفتوحة الآن'), findsOneWidget);
+      expect(pagesRow, findsOneWidget, reason: 'managers.edit ⇒ «الصفحات» صفٌّ أعلى الورقة');
+      expect(t.getRect(pagesRow).top, lessThan(t.getRect(find.text(longName)).top));
+      await t.tap(pagesRow);
+      await settle(t, seconds: 2);
+      expect(find.byType(CompanySwitchSheet), findsNothing, reason: 'الورقة تُغلق');
+      expect(find.byType(AccountsScreen), findsOneWidget);
       await finish(t);
     });
 
@@ -291,10 +268,10 @@ void main() {
       await finish(t);
     });
 
-    // ٢٢ أكتوبر (المالك: «زرّ التبديل بين الأدمنية والصفحات مو موجود بكلّ صفحات
-    // التطبيق»): رأس كلّ تبويب ([TabHeader]) يحمل «الشركات» و«الصفحات» كالرئيسيّة.
+    // ٢٢ أكتوبر (المالك: «زرّ التبديل بين الأدمنية والصفحات مو موجود بكلّ صفحات التطبيق»): رأس كلّ تبويب ([TabHeader]) يحمل
+    // التبديل — منذ ٧ نوفمبر سطره تحت العنوان لا مربّعان بجانبه.
     for (final w in [320.0, 360.0, 430.0]) {
-      testWidgets('رأس التبويب على $w: «الشركات» و«الصفحات» والعنوان كاملاً', (t) async {
+      testWidgets('رأس التبويب على $w: السطر زرّ التبديل، والعنوان كاملاً، وثلاثة مربّعات', (t) async {
         await setUpOwner(s1bSasOwner, ai: aiStatusOn);
         await pumpVisual(t, VisualDevice('', Size(w, 932), 3),
             home: (_) => Scaffold(
@@ -307,21 +284,33 @@ void main() {
                 ));
         await settle(t);
         expect(t.takeException(), isNull, reason: 'لا فيضان على $w');
-        expect(square, findsOneWidget);
-        expect(find.byTooltip('الصفحات'), findsOneWidget);
-        expect(find.text('المشتركون'), findsOneWidget, reason: 'يصغر ولا يُبتر');
-        await t.tap(square);
+        expect(square, findsNothing);
+        expect(pagesSquare, findsNothing);
+        expect(find.byType(TopActionChip), findsNWidgets(3), reason: 'المساعد · الجرس · الترس');
+        expect(find.text('المشتركون'), findsOneWidget);
+        expect(find.descendant(of: headerSwitch, matching: find.text('سطر')), findsOneWidget,
+            reason: 'السطر نفسه هو الزرّ');
+        // العنوان بحجمه: لا تصغير (FittedBox) — ٣ مربّعات تترك له مكانه.
+        final title = find.text('المشتركون');
+        final box = find.ancestor(of: title, matching: find.byType(FittedBox)).first;
+        expect(t.getSize(title).width, lessThanOrEqualTo(t.getSize(box).width + 0.5));
+        await t.tap(headerSwitch);
         await settle(t, seconds: 2);
         expect(find.text('تبديل الشركة'), findsWidgets);
+        expect(pagesRow, findsOneWidget);
         await finish(t);
       });
     }
 
-    testWidgets('شركةٌ واحدة ⇒ لا زرّ ولا سهم', (t) async {
+    testWidgets('شركةٌ واحدة ⇒ السطر زرّ «الصفحات» وحده (بلا ورقة الشركات)', (t) async {
       await setUpOwner(s1bSasOwner, companies: [linked.first]);
       await openDashboard(t, 430);
       expect(square, findsNothing);
-      expect(find.byType(CompanySwitchLine), findsNothing);
+      expect(find.byType(CompanySwitchLine), findsOneWidget, reason: 'managers.edit ⇒ للسطر نقرة');
+      await t.tap(headerSwitch);
+      await settle(t, seconds: 2);
+      expect(find.byType(CompanySwitchSheet), findsNothing);
+      expect(find.byType(AccountsScreen), findsOneWidget);
       await finish(t);
     });
 
@@ -329,6 +318,7 @@ void main() {
       await setUpOwner(s2ElEmpSubs);
       await openDashboard(t, 430);
       expect(square, findsNothing);
+      expect(headerSwitch, findsNothing);
       expect(find.byType(CompanySwitchLine), findsNothing);
       expect(account.calls, 0);
       await finish(t);
@@ -349,7 +339,7 @@ void main() {
       await SavedProfilesStore.setOriginal(
           username: 'mahdi', plainPassword: 'pw-main', sasUrl: supernetUrl);
       await openDashboard(t, 430);
-      await t.tap(square);
+      await t.tap(headerSwitch);
       await settle(t, seconds: 2);
 
       // الصفحة المفتوحة لا تُنقر.
@@ -405,7 +395,7 @@ void main() {
       await SavedProfilesStore.setOriginal(
           username: 'mahdi', plainPassword: 'pw-main', sasUrl: supernetUrl);
       await openDashboard(t, 430);
-      await t.tap(square);
+      await t.tap(headerSwitch);
       await settle(t, seconds: 2);
       await t.tap(find.text(longName));
       await settle(t, seconds: 3);
@@ -453,7 +443,7 @@ void main() {
       await CompanyCredsStore.upsert(
           sasUrl: jtUrl, username: 'ali.jt', password: 'pw-jt');
       await openDashboard(t, 430);
-      await t.tap(square);
+      await t.tap(headerSwitch);
       await settle(t, seconds: 2);
       await t.tap(find.text(longName));
       await settle(t, seconds: 3);
@@ -481,7 +471,7 @@ void main() {
       await CompanyCredsStore.upsert(sasUrl: jtUrl, username: 'ali.jt', password: 'pw-jt');
       await CompanyCredsStore.forgetAll();
       await openDashboard(t, 430);
-      await t.tap(square);
+      await t.tap(headerSwitch);
       await settle(t, seconds: 2);
       await t.tap(find.text(longName));
       await settle(t, seconds: 3);
@@ -506,7 +496,7 @@ void main() {
       await CompanyCredsStore.forgetAll();
       await CompanyCredsStore.upsert(sasUrl: jtUrl, username: 'ali.jt', password: 'pw-jt');
       await openDashboard(t, 430);
-      await t.tap(square);
+      await t.tap(headerSwitch);
       await settle(t, seconds: 2);
       await t.tap(find.text(longName));
       await settle(t, seconds: 3);
@@ -535,7 +525,7 @@ void main() {
       await SavedProfilesStore.setOriginal(
           username: 'mahdi', plainPassword: 'pw-main', sasUrl: supernetUrl);
       await openDashboard(t, 430);
-      await t.tap(square);
+      await t.tap(headerSwitch);
       await settle(t, seconds: 2);
       await t.tap(find.text(longName));
       await settle(t, seconds: 3);

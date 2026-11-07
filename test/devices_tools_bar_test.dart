@@ -80,7 +80,9 @@ void main() {
     AgentAlertsApi.forget();
   }
 
-  testWidgets('المالك: العنوان الموحّد، والبحث وأدواته الأربع بترتيبها',
+  // ٧ نوفمبر (المالك: «القوائم والازرار صارت بتزاحم كبير»): جنب البحث على الهاتف التنبيهات · المزيد · الإضافة (و VPN حين
+  // يظهر) — «نوع العرض» و«تحديث»/«فحص شامل» داخل «المزيد».
+  testWidgets('المالك: العنوان الموحّد، والبحث وأدواته الثلاث بترتيبها',
       (t) async {
     await open(t, s1bSasOwner);
     expect(t.takeException(), isNull);
@@ -88,12 +90,14 @@ void main() {
     expect(find.byType(TabHeader), findsOneWidget);
     expect(find.text('الأجهزة'), findsOneWidget);
     expect(find.byType(TopActions), findsOneWidget);
-    for (final f in [siren, view, refresh, more, add]) {
+    for (final f in [siren, more, add]) {
       expect(f, findsOneWidget);
     }
-    // من اليمين: البحث ← التنبيهات ← نوع العرض ← التحديث ← المزيد ← الإضافة.
+    expect(view, findsNothing, reason: 'نوع العرض داخل «المزيد»');
+    expect(refresh, findsNothing, reason: 'التحديث داخل «المزيد»');
+    // من اليمين: البحث ← التنبيهات ← المزيد ← الإضافة.
     final search = t.getRect(find.byType(TextField));
-    final xs = [siren, view, refresh, more, add].map((f) => t.getCenter(f).dx);
+    final xs = [siren, more, add].map((f) => t.getCenter(f).dx);
     expect(search.left, greaterThan(xs.first));
     final list = xs.toList();
     for (var i = 1; i < list.length; i++) {
@@ -113,9 +117,9 @@ void main() {
     await open(t, viewer);
     expect(add, findsNothing);
     expect(siren, findsOneWidget);
-    expect(refresh, findsOneWidget);
     await t.tap(more);
     await t.pumpAndSettle();
+    expect(find.text('تحديث فوري'), findsOneWidget);
     expect(find.text('نظرة عامّة'), findsNothing, reason: 'أُلغيت (٣١ أكتوبر) — مكانها نوع العرض');
     expect(find.text('إدارة المناطق'), findsNothing);
     expect(find.text('اكتشاف أجهزة الشبكة'), findsNothing);
@@ -146,33 +150,42 @@ void main() {
     await finish(t);
   });
 
-  testWidgets('نوع العرض: «قائمة» ⇄ «بطاقات كبيرة» (لا «جدول» على الهاتف) — والاختيار يبقى', (t) async {
+  testWidgets('نوع العرض داخل «المزيد»: «قائمة» ⇄ «بطاقات كبيرة» (لا «جدول» على الهاتف) — والاختيار يبقى', (t) async {
     await open(t, s1bSasOwner);
     expect(find.byType(DeviceBigCard), findsNothing, reason: 'الافتراضيّ على الهاتف القائمة');
-    await t.tap(view);
+    final listItem = find.byKey(const ValueKey('devices-view-list'));
+    final bigItem = find.byKey(const ValueKey('devices-view-big'));
+    bool checked(Finder item) =>
+        find.descendant(of: item, matching: find.byIcon(LucideIcons.check)).evaluate().isNotEmpty;
+    await t.tap(more);
     await t.pumpAndSettle();
-    expect(find.text('قائمة'), findsOneWidget);
-    expect(find.text('بطاقات كبيرة'), findsOneWidget);
-    expect(find.text('جدول'), findsNothing, reason: 'الجدول للحاسبة وحدها');
-    await t.tap(find.text('بطاقات كبيرة'));
+    expect(find.text('عرض قائمة'), findsOneWidget);
+    expect(find.text('عرض بطاقات كبيرة'), findsOneWidget);
+    expect(find.text('عرض جدول'), findsNothing, reason: 'الجدول للحاسبة وحدها');
+    expect(checked(listItem), isTrue, reason: 'المختار عليه ✓');
+    expect(checked(bigItem), isFalse);
+    await t.tap(bigItem);
     await settle(t);
     expect(t.takeException(), isNull);
     // (هذا الحساب بلا أجهزة — البطاقات نفسها في device_big_card_test.)
-    expect(find.byIcon(LucideIcons.galleryVerticalEnd), findsOneWidget, reason: 'أيقونة الزرّ تقول النوع المختار');
-    expect(view, findsNothing);
     // يبقى بعد إعادة بناء الشاشة (الخروج من التبويب والعودة)
     await t.pumpWidget(const SizedBox());
     await t.pump(const Duration(seconds: 1));
     await pumpSim(t, const SimVariant(390, dark: false),
         settle: false, home: (_) => NetworkDevicesScreen(isActive: ValueNotifier<bool>(true)));
     await settle(t);
-    expect(find.byIcon(LucideIcons.galleryVerticalEnd), findsOneWidget, reason: 'الاختيار يبقى بين الزيارات');
-    await t.tap(find.byIcon(LucideIcons.galleryVerticalEnd));
+    await t.tap(more);
     await t.pumpAndSettle();
-    await t.tap(find.text('قائمة'));
+    expect(checked(bigItem), isTrue, reason: 'الاختيار يبقى بين الزيارات');
+    expect(checked(listItem), isFalse);
+    await t.tap(listItem);
     await settle(t);
-    expect(view, findsOneWidget);
     expect(find.byType(DeviceBigCard), findsNothing);
+    await t.tap(more);
+    await t.pumpAndSettle();
+    expect(checked(listItem), isTrue);
+    await t.tapAt(const Offset(10, 700));
+    await t.pumpAndSettle();
     await finish(t);
   });
 
@@ -180,12 +193,14 @@ void main() {
       (t) async {
     await open(t, s1bSasOwner, failing: {'GET $devicesPath'});
     expect(find.text('لا توجد أجهزة'), findsNothing);
-    expect(refresh, findsOneWidget, reason: 'طريق إعادة المحاولة الوحيد');
+    expect(more, findsOneWidget, reason: '«تحديث» فيه — طريق إعادة المحاولة الوحيد');
     expect(add, findsOneWidget);
     expect(find.byType(TopActions), findsOneWidget);
     final before = server.requests.where((r) => r.path == devicesPath).length;
     server.failing.clear();
-    await t.tap(refresh);
+    await t.tap(more);
+    await t.pumpAndSettle();
+    await t.tap(find.text('تحديث فوري'));
     await settle(t);
     expect(server.requests.where((r) => r.path == devicesPath).length,
         greaterThan(before));

@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../api/renew_requests_api.dart';
 import '../core/platform/desktop_layout.dart';
 import '../core/widgets/permission_locked.dart';
+import '../services/active_company.dart';
 import '../services/ai_assistant_state.dart';
 import '../services/alerts_service.dart';
 import '../services/app_resumed_signal.dart';
@@ -16,12 +17,52 @@ import '../services/permissions_service.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import '../widgets/active_company_line.dart';
 import 'account/company_switch_sheet.dart';
 import 'accounts/accounts_screen.dart';
 import 'assistant/assistant_sheet.dart';
 import 'voice/voice_command_sheet.dart';
 import 'notifications/inbox_screen.dart';
 import 'settings_screen.dart';
+
+/// «التبديل» من رأس كلّ تبويب — **سطر الشركة تحت العنوان هو زرّه** (وفي الرئيسيّة: الاسم وسطره).
+///
+/// ٧ نوفمبر (المالك: «القوائم والازرار صارت بتزاحم كبير فكرلي بتصميم عصري ويحافظ ع الدوال والقوائم هاي»): كان الرأس ستّة
+/// مربّعات (الشركات · الصفحات · أمر صوتي · المساعد · الجرس · الترس) فيصغر العنوان أو يُبتر. صار ثلاثة ([TopActions])، و«الشركات»
+/// و«الصفحات» نزلا لسطر الشركة: النقر يفتح ورقة الشركات وأعلاها «الصفحات»، أو «الصفحات» مباشرةً لمن ليست له شركتان.
+class HeaderSwitch {
+  HeaderSwitch._();
+
+  /// شركات الحساب — المالك بشركتين فأكثر ([LinkedCompanies.switcherVisible]).
+  static bool get companies => LinkedCompanies.switcherVisible;
+
+  /// «الصفحات» (المدراء الفرعيّون داخل الشركة المفتوحة). ⚠️ `managers.edit` لا `managers.view`: التبديل يستعمل كلمة سرّ المدير
+  /// الفرعيّ — فهو أقوى من رؤيتها ولا يقلّ عنها حرساً.
+  static bool get pages => Perms.has('managers.edit');
+
+  /// للسطر نقرة؟
+  static bool get available => companies || pages;
+
+  /// اسم الفعل — لقارئ الشاشة، ونصّ السطر حين لا تُعرف الشركة بعد.
+  static String get label =>
+      companies ? 'company_switch.title'.tr() : 'accounts.title'.tr();
+
+  /// يفتح ورقة الشركات («الصفحات» صفٌّ أعلاها)، أو «الصفحات» مباشرةً.
+  static Future<void> open(BuildContext context,
+      {void Function(Widget page)? openPage}) async {
+    void openPages() {
+      if (!context.mounted) return;
+      if (openPage != null) return openPage(const AccountsScreen());
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const AccountsScreen()));
+    }
+
+    if (companies) {
+      return showCompanySwitchSheet(context, onPages: pages ? openPages : null);
+    }
+    if (pages) openPages();
+  }
+}
 
 /// أزرار الأعلى — **المساعد الذكيّ · الإشعارات · الإعدادات** — في رأس كلّ
 /// تبويبٍ رئيسيّ وبالمكان نفسه: الزاوية العليا اليسرى، ‎16 من الحافّة و‎8 تحت
@@ -43,24 +84,19 @@ import 'settings_screen.dart';
 /// والبطاقة في «قوائم أخرى» باقيةٌ كما هي. ولا شيء هنا يبيع أو يجدّد (آيفون).
 ///
 /// ٢٢ أكتوبر (المالك: «زرّ التبديل بين الأدمنية والتبديل بين الصفحات مو موجود
-/// بكلّ صفحات التطبيق»): مع [switchers] يسبقها **«تبديل الشركة»** (صفحات الحساب
-/// المربوطة — للمالك بشركتين فأكثر) و**«الصفحات»** (المدراء الفرعيّون داخل
-/// الشركة المفتوحة — بصلاحيّة `managers.edit`)، كما في الرئيسيّة حرفاً.
+/// بكلّ صفحات التطبيق») كانت تسبقها «تبديل الشركة» و«الصفحات» و(٧ نوفمبر) «أمر صوتي» — ستّة مربّعات تزاحم العنوان. منذ ٧ نوفمبر
+/// (المالك: «القوائم والازرار صارت بتزاحم كبير»): على الهاتف **ثلاثة** — المساعد · الجرس · الترس. التبديل في سطر الشركة تحت
+/// العنوان ([HeaderSwitch])، و«أمر صوتي» داخل المساعد (زرٌّ برأس ورقته). شريط الحاسبة كما كان («الصفحات» و«أمر صوتي» فيه).
 class TopActions extends StatelessWidget {
   const TopActions({
     super.key,
     this.switchers = false,
-    this.companySquare = true,
     this.inDesktopBar = false,
     this.openPage,
   });
 
-  /// «تبديل الشركة» و«الصفحات» قبل المساعد.
+  /// الرأس يحمل التبديل: شركات الحساب تُسأل لمهلتها (سطر الشركة يقرؤها)، و«الصفحات» مربّعٌ في شريط الحاسبة.
   final bool switchers;
-
-  /// مربّع «تبديل الشركة» نفسه — الرئيسيّة تُسقطه حين لا يتّسع لاسم المدير
-  /// فيصير سطر الشركة تحت الاسم هو الزرّ.
-  final bool companySquare;
 
   /// في شريط الحاسبة العلويّ: الترس في القائمة الجانبيّة فلا يتكرّر هنا.
   final bool inDesktopBar;
@@ -94,24 +130,17 @@ class TopActions extends StatelessWidget {
         scheduleMicrotask(AiAssistantState.ensureFresh);
         // وشركات الحساب كذلك: مرّةً لمهلتها، وللمالك وحده (لا طلب لموظّف).
         if (switchers) scheduleMicrotask(LinkedCompanies.ensureFresh);
+        // «أمر صوتي» (الخادم فتحه لهذا الحساب — ai_assistant.voice) داخل ورقة المساعد. مربّعه منفصلاً حين لا تحمله الورقة:
+        // شريط الحاسبة (كما كان)، أو مساعدٌ مقفلٌ لهذا الموظّف (الأمر الصوتيّ يُفهم على الجهاز ولا يسأل المساعد).
+        final voiceInside = AiAssistantState.voice &&
+            AiAssistantState.visible &&
+            !AiAssistantState.askLocked;
+        final voiceSquare = AiAssistantState.voice && (inDesktopBar || !voiceInside);
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // «الشركات» جنب «الصفحات» من جهة الاسم، فيبقى «الصفحات» بمكانه.
-            if (switchers &&
-                companySquare &&
-                LinkedCompanies.switcherVisible) ...[
-              TopActionChip(
-                key: const ValueKey('top-actions-company-switch'),
-                icon: Icons.apartment_rounded,
-                label: 'company_switch.title'.tr(),
-                onTap: () => showCompanySwitchSheet(context),
-              ),
-              SizedBox(width: gap),
-            ],
-            // ⚠️ `managers.edit` لا `managers.view`: التبديل يستعمل كلمة سرّ
-            // المدير الفرعيّ — فهو أقوى من رؤيتها ولا يقلّ عنها حرساً.
-            if (switchers && Perms.has('managers.edit')) ...[
+            // «الصفحات» مربّعٌ في شريط الحاسبة وحده — على الهاتف في سطر الشركة ([HeaderSwitch]).
+            if (switchers && inDesktopBar && HeaderSwitch.pages) ...[
               TopActionChip(
                 key: const ValueKey('top-actions-accounts'),
                 icon: Icons.swap_horiz_rounded,
@@ -120,8 +149,7 @@ class TopActions extends StatelessWidget {
               ),
               SizedBox(width: gap),
             ],
-            // «أمر صوتي» (٧ نوفمبر): الخادم فتحه لهذا الحساب (ai_assistant.voice) — بجنب المساعد
-            if (AiAssistantState.voice) ...[
+            if (voiceSquare) ...[
               TopActionChip(
                 key: const ValueKey('top-actions-voice'),
                 icon: LucideIcons.mic,
@@ -138,7 +166,12 @@ class TopActions extends StatelessWidget {
                 label: 'ai.title'.tr(),
                 iconColor: AppColors.brandAccent,
                 locked: AiAssistantState.askLocked,
-                onTap: () => AssistantSheet.showAsk(context),
+                onTap: () => AssistantSheet.showAsk(
+                  context,
+                  onVoice: voiceInside && !inDesktopBar
+                      ? () => showVoiceCommandSheet(context)
+                      : null,
+                ),
               ),
               SizedBox(width: gap),
             ],
@@ -346,12 +379,14 @@ class TopActionChip extends StatelessWidget {
 ///
 /// يُلفّ بحشوةٍ ‎`fromLTRB(Sp.lg, Sp.sm, Sp.lg, …)` تحت المنطقة الآمنة — حشوة
 /// ترويسة الرئيسيّة نفسها.
+///
+/// ٧ نوفمبر: على الهاتف سطر الشركة تحت العنوان دائماً ([HeaderSubline]) — وهو زرّ «التبديل» ([HeaderSwitch]) بسهم ⌄.
 class TabHeader extends StatelessWidget {
   const TabHeader({super.key, required this.title, this.subtitle});
 
   final String title;
 
-  /// سطرٌ تحت العنوان (الشركة والعدد في المشتركين، الوصف في «قوائم أخرى»).
+  /// سطرٌ تحت العنوان بدل سطر الشركة (المشتركون: الشركة والعدد). على الهاتف يصير زرّ التبديل كسطر الشركة.
   final Widget? subtitle;
 
   @override
@@ -396,9 +431,7 @@ class TabHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // ⚠️ يصغر ولا يُبتر: مع «الشركات» و«الصفحات» خمسة مربّعات، وعلى
-                // شاشة ٣٦٠ لا يبقى للعنوان إلّا ~٧٨ نقطة — «المشتركو…» أسوأ من
-                // عنوانٍ أصغر قليلاً.
+                // ⚠️ يصغر ولا يُبتر: شاشة ٣٢٠ بخطٍّ مكبَّر — «المشتركو…» أسوأ من عنوانٍ أصغر قليلاً.
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: AlignmentDirectional.centerStart,
@@ -408,10 +441,7 @@ class TabHeader extends StatelessWidget {
                     style: AppType.title(),
                   ),
                 ),
-                if (subtitle != null) ...[
-                  const SizedBox(height: 2),
-                  subtitle!,
-                ],
+                HeaderSubline(subtitle: subtitle),
               ],
             ),
           ),
@@ -419,6 +449,67 @@ class TabHeader extends StatelessWidget {
         const SizedBox(width: Sp.sm),
         const TopActions(switchers: true),
       ],
+    );
+  }
+}
+
+/// السطر تحت عنوان التبويب: [subtitle] إن وُجد وإلّا سطر الشركة المفتوحة ([ActiveCompanyLine])، وحين يكون للحساب تبديل
+/// ([HeaderSwitch.available]) يصير السطر زرّه وبعده سهم ⌄ — مكان مربّعَي «الشركات» و«الصفحات» (٧ نوفمبر).
+///
+/// شركةٌ لم تُعرف بعد وللحساب تبديل ⇒ اسم الفعل نفسه («تبديل الشركة ⌄») فلا يغيب الزرّ؛ وبلا تبديلٍ ولا شركة ⇒ لا سطر.
+class HeaderSubline extends StatelessWidget {
+  const HeaderSubline({super.key, this.subtitle});
+
+  final Widget? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        ActiveCompany.listenable,
+        LinkedCompanies.items,
+        PermissionsService.changes,
+      ]),
+      builder: (context, _) {
+        final company = ActiveCompany.current;
+        final line = subtitle ??
+            (company == null ? null : ActiveCompanyLine(info: company));
+        final Widget? shown;
+        if (HeaderSwitch.available) {
+          shown = CompanySwitchTap(
+            key: const ValueKey('header-switch'),
+            label: company?.label ?? '',
+            action: HeaderSwitch.label,
+            onTap: () => HeaderSwitch.open(context),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: line ??
+                      Text(
+                        HeaderSwitch.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppType.label(color: AppColors.brand)
+                            .copyWith(fontSize: 12.5),
+                      ),
+                ),
+                const SizedBox(width: 2),
+                Icon(Icons.expand_more_rounded,
+                    size: 15, color: AppColors.textMid),
+              ],
+            ),
+          );
+        } else {
+          shown = line;
+        }
+        if (shown == null) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: shown,
+        );
+      },
     );
   }
 }

@@ -35,8 +35,11 @@ import '../../core/widgets/app_sheet.dart';
 /// وقبل أوّل فتحٍ على الجهاز موافقةٌ صريحة ([AiConsent]): النصّ يذهب لمزوّد
 /// ذكاءٍ اصطناعيّ خارجيّ — فلا نافذة ولا طلب قبل «موافق». ولكلّ جوابٍ «مفيد» /
 /// «الجواب غلط» (`POST /api/v2/ai/feedback` بمرجعه وحده).
+///
+/// ٧ نوفمبر: «أمر صوتي» (الخادم فتحه للحساب) بطاقةٌ أوّل «كيف أسوّي؟» بأمثلتها ([onVoice]) — كان مربّعاً في رأس كلّ تبويب (المالك:
+/// «القوائم والازرار صارت بتزاحم كبير»). الأمر الصوتيّ يُفهم على الجهاز ولا يمرّ بالمساعد، فيُعرض في الموافقة أيضاً لمن لا يريده.
 class AssistantSheet extends StatefulWidget {
-  const AssistantSheet({super.key, this.explain, this.screen});
+  const AssistantSheet({super.key, this.explain, this.screen, this.onVoice});
 
   /// الخطأ المطلوب شرحه — `null` = «كيف أسوّي؟».
   final ExplainRequest? explain;
@@ -44,18 +47,27 @@ class AssistantSheet extends StatefulWidget {
   /// الشاشة التي فُتحت منها (من قائمة [ExplainRequest.aiScreens]).
   final String? screen;
 
+  /// «أمر صوتي»: يُغلق الورقة ثمّ يفتح ورقته (من سياق الرأس الباقي). null ⇒ لا زرّ.
+  final VoidCallback? onVoice;
+
   static Future<void> showExplain(
           BuildContext context, ExplainRequest request) =>
       _open(context, AssistantSheet(explain: request, screen: request.screen));
 
-  static Future<void> showAsk(BuildContext context, {String? screen}) =>
-      _open(context, AssistantSheet(screen: screen));
+  static Future<void> showAsk(BuildContext context,
+          {String? screen, VoidCallback? onVoice}) =>
+      _open(context, AssistantSheet(screen: screen, onVoice: onVoice),
+          onVoice: onVoice);
 
-  static Future<void> _open(BuildContext context, Widget sheet) async {
+  static Future<void> _open(BuildContext context, Widget sheet,
+      {VoidCallback? onVoice}) async {
     // الموافقة أوّلاً (مرّةً على الجهاز) — «اشرحلي» يطلب لحظة فتح النافذة،
     // فلا نافذة قبلها. الرفض لا يُحفظ ولا يُرسل شيئاً.
     if (!await AiConsent.accepted()) {
-      if (!context.mounted || !await showAssistantConsentSheet(context)) return;
+      if (!context.mounted ||
+          !await showAssistantConsentSheet(context, onVoice: onVoice)) {
+        return;
+      }
       await AiConsent.accept();
     }
     if (!context.mounted) return;
@@ -341,6 +353,12 @@ class _AssistantSheetState extends State<AssistantSheet> {
           suggestions:
               _lang == 'ar' ? (status?.suggestions ?? const []) : const [],
           onPick: (s) => _send(s),
+          onVoice: widget.onVoice != null && AiAssistantState.voice
+              ? () {
+                  Navigator.of(context).pop();
+                  widget.onVoice!();
+                }
+              : null,
         ),
       for (final e in _exchanges) ...[
         _UserBubble(text: e.question),
@@ -914,9 +932,13 @@ class _UserBubble extends StatelessWidget {
 /// أوّل المحادثة: ما يستطيعه المساعد + أسئلةٌ مقترحة من الخادم (حسب مزوّد
 /// الحساب ودوره).
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.suggestions, required this.onPick});
+  const _EmptyState(
+      {required this.suggestions, required this.onPick, this.onVoice});
   final List<String> suggestions;
   final ValueChanged<String> onPick;
+
+  /// «أمر صوتي» — بطاقةٌ قبل الاقتراحات (null ⇒ لا بطاقة).
+  final VoidCallback? onVoice;
 
   @override
   Widget build(BuildContext context) {
@@ -948,6 +970,10 @@ class _EmptyState extends StatelessWidget {
           textAlign: TextAlign.center,
           style: AppType.body(color: AppColors.textMid),
         ),
+        if (onVoice != null) ...[
+          const SizedBox(height: Sp.lg),
+          VoiceCommandTile(onTap: onVoice!),
+        ],
         if (suggestions.isNotEmpty) ...[
           const SizedBox(height: Sp.lg),
           for (final s in suggestions)
@@ -957,6 +983,65 @@ class _EmptyState extends StatelessWidget {
             ),
         ],
       ],
+    );
+  }
+}
+
+/// «أمر صوتي» في «كيف أسوّي؟»: الفعل واسمه بمثالين — يُغلق المساعد ويفتح ورقة الأمر (المايك يبدأ بنفسه).
+class VoiceCommandTile extends StatelessWidget {
+  const VoiceCommandTile({super.key, required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Semantics(
+      button: true,
+      label: 'أمر صوتي',
+      onTap: onTap,
+      excludeSemantics: true,
+      child: Material(
+        key: const ValueKey('assistant-voice'),
+        color: AppColors.brandSoftBg,
+        borderRadius: BorderRadius.circular(R.md),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(R.md),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.md),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(color: AppColors.surface, shape: BoxShape.circle),
+                  child: Icon(LucideIcons.mic, size: 20, color: AppColors.brand),
+                ),
+                const SizedBox(width: Sp.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('أمر صوتي', style: AppType.bodyStrong(color: AppColors.brand)),
+                      const SizedBox(height: 2),
+                      Text(
+                        'قل: «فعّل علي» · «سدّد دين أحمد ٢٥ ألف»',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppType.muted().copyWith(fontSize: 12.5, height: 1.45),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: Sp.sm),
+                Icon(Icons.chevron_left_rounded, color: AppColors.textMid),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
