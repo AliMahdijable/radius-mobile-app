@@ -1159,12 +1159,9 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           busy: _printingReceipt,
           onTap: _printingReceipt ? null : _printReceipt,
         ),
-        // رمز QR / رابط البوّابة — ايرث لنك وFTTH: مخفيّ (بطاقة الرابط SAS4
-        // وحده، وQR ايرث لنك لتطبيق 2.0.7 وحده — [hasPortalQrCard]) — المزوّد
-        // لا الصلاحيّة.
-        if (_shows('subscribers.send_whatsapp') &&
-            // «كل الشركات»: مزوّد شركة المشترك (بطاقة الرابط لساسٍ SAS4 وحده)
-            (MergedOps.isEarthlink(sub) == null ? ProviderService.hasPortalQrCard : MergedOps.isEarthlink(sub) == false))
+        // رمز QR لتطبيق المشترك — كلّ شركةٍ لها بوّابة (٧ نوفمبر: كان لسوبرنت والساسات وحدها؛ ايرث لنك مخفيّ) — FTTH القديم وحده
+        // بلا ([hasPortalQrCard]). «كل الشركات»: شركاتها كلّها لها بوّابة (والخادم يوجّه الرمز لشركة المشترك).
+        if (_shows('subscribers.send_whatsapp') && (MergedOps.isEarthlink(sub) != null || ProviderService.hasPortalQrCard))
           SubAction(
             icon: LucideIcons.qrCode,
             label: 'subscribers.op_qr_login'.tr(),

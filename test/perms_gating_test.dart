@@ -441,12 +441,12 @@ void main() {
       expect(ProviderService.hasSubscriberPortal, isFalse);
     });
 
-    test('رمز QR/رابط المعلومات: SAS4 وحده بعد', () {
-      // بطاقة `/api/user-info` لا تقرأ ايرث لنك، وQR ايرث لنك لتطبيق 2.0.7.
-      ProviderService.debugSet(null);
-      expect(ProviderService.hasPortalQrCard, isTrue);
-      ProviderService.debugSet('earthlink');
-      expect(ProviderService.hasPortalQrCard, isFalse);
+    test('رمز QR/رابط المعلومات: كلّ شركةٍ لها بوّابة (٧ نوفمبر — «qr كود لبقية الشركات») · FTTH القديم لا', () {
+      // الدخول بالرمز (/api/portal/qr-login) وبطاقة الرابط (/api/user-info — من جلسة الوسيط) لكلّ الشركات بالخادم.
+      for (final p in [null, 'earthlink', 'fiberx', 'nabd', 'accessgate', 'watani']) {
+        ProviderService.debugSet(p);
+        expect(ProviderService.hasPortalQrCard, isTrue, reason: '$p');
+      }
       ProviderService.debugSet('ftth');
       expect(ProviderService.hasPortalQrCard, isFalse);
     });
