@@ -5,7 +5,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../api/package_report_api.dart';
 import '../../core/util/format.dart';
+import '../../models/merged_company.dart';
 import '../../services/merged_mode.dart';
+import '../../services/merged_report_loader.dart';
+import '../../widgets/company_tag.dart';
+import '../../widgets/merged_breakdown.dart';
+import '../../widgets/merged_company_strip.dart';
 import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -30,7 +35,13 @@ String packagePartText(String part) {
 ///
 /// لكلّ باقة: المشتركون الآن (الكلّ/الفعّال — للحساب كلّه بعد «نطاق العرض») · تفعيلات الفترة وتمديداتها · الإيراد (سعر البيع)
 /// · ولصاحب الحساب وحده الكلفة والربح الكلّي والمقدَّر (قرار الخادم). بصلاحيّة «التقرير الماليّ» — المقفل لا يطلب شيئاً.
-/// النطاق نطاق تقارير التطبيق (المدير المسجّل، loadScopeUserIds)؛ «كل الشركات»: الشركة المختارة في الشريط موجَّهاً.
+/// النطاق نطاق تقارير التطبيق (المدير المسجّل، loadScopeUserIds).
+///
+/// «كل الشركات» (٧ نوفمبر — المالك: «التقارير… بنفس فكرة عرض المشتركين والاختيار بين الكل وشركة»): الشاشة نفسها وشريط الشركات
+/// أعلاها. تقرير كلّ شركةٍ بطلبٍ موجَّه بنطاقها هي (معرّف مديرها — كما تراه وحدها)؛ «الكل»: البطاقات مجموعة (المشتركون والتفعيلات من
+/// كلّ شركةٍ قُرئت، والإيراد بالدينار وحده، والربح مجموع ربح كلّ شركةٍ بقاعدتها — المعفاة بلا كلفة — ومن لا يُعرف ربحها تُسمّى)،
+/// و«حسب الشركة» (الضغط يعرضها وحدها)، وباقات الشركات معاً بشارة شركتها. الشركة المختارة: تقريرها كما هو من الجمع المحفوظ (بلا
+/// طلبٍ جديد). كان «الكل» يعرض الشركة المفتوحة وحدها بلا ذكرٍ لذلك.
 class PackageDistributionScreen extends StatefulWidget {
   const PackageDistributionScreen({super.key});
 
@@ -51,8 +62,48 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
   bool _requested = false;
   int _gen = 0;
 
-  /// الباقات المفتوحة — كلّها مطويّة أوّلاً، والنقر على عنوانها يفتح تفاصيلها (المالك ٢٥ أكتوبر).
+  /// الباقات المفتوحة — كلّها مطويّة أوّلاً، والنقر على عنوانها يفتح تفاصيلها (المالك ٢٥ أكتوبر). «كل الشركات»: «مفتاح الشركة|الباقة».
   final Set<String> _open = {};
+
+  // ── «كل الشركات» ──
+  bool get _mergedOn => MergedMode.active.value;
+  MergedReport<PackageReport>? _merged;
+
+  void _onMergedMode() {
+    if (!mounted) return;
+    _merged = null;
+    _data = null;
+    _open.clear();
+    _filters = const ReportFilters();
+    if (_requested) _load();
+  }
+
+  void _onMergedFocus() {
+    if (!mounted || !_mergedOn || _merged == null) return;
+    setState(_applyMergedFocus);
+  }
+
+  /// الشركة المختارة من الجمع المحفوظ (بلا طلب)، أو «الكل» (_data فارغ).
+  void _applyMergedFocus() {
+    final m = _merged;
+    if (m == null) return;
+    final f = MergedMode.focused;
+    if (f == null) {
+      _data = null;
+      _error = m.parts.any((p) => p.ok) ? null : 'pkgdist.fetch_failed'.tr();
+      return;
+    }
+    final p = m.partOf(f.key);
+    _data = p?.rows?.firstOrNull;
+    _error = _data != null
+        ? null
+        : (p?.unsupported == true ? 'لا تقرير باقاتٍ لنوعها' : (p?.error ?? 'pkgdist.fetch_failed'.tr()));
+  }
+
+  /// أرقام شركةٍ بعملتها: الدينار بـ«د.ع»، وغيره برمزه.
+  String _moneyOf(MergedCompany c, num? v) =>
+      v == null ? '—' : '${formatIQD(v)} ${c.currency == 'IQD' ? 'common.currency'.tr() : (c.currency ?? '')}';
+  String _signedOf(MergedCompany c, num? v) => v == null ? '—' : '${v < 0 ? '-' : ''}${_moneyOf(c, v.abs())}';
 
   /// التنبيهات الزرقاء التي أخفاها المستخدم — على هذا الجهاز، لا تعود.
   Set<String> _dismissed = {};
@@ -73,6 +124,8 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
   void initState() {
     super.initState();
     PermissionsService.changes.addListener(_maybeLoad);
+    MergedMode.active.addListener(_onMergedMode);
+    MergedMode.focus.addListener(_onMergedFocus);
     _maybeLoad();
     _loadDismissed();
   }
@@ -95,7 +148,10 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
 
   @override
   void dispose() {
+    _gen++;
     PermissionsService.changes.removeListener(_maybeLoad);
+    MergedMode.active.removeListener(_onMergedMode);
+    MergedMode.focus.removeListener(_onMergedFocus);
     super.dispose();
   }
 
@@ -112,17 +168,33 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
       _loading = true;
       _error = null;
     });
-    final focused = MergedMode.active.value ? MergedMode.focused : null;
-    final ids = focused == null ? await loadScopeUserIds() : null;
+    if (_mergedOn) {
+      // كلّ شركةٍ بنطاقها هي (معرّف مديرها) — طلبٌ موجَّه لكلٍّ منها
+      final m = await loadMergedReport<PackageReport>(
+        supports: (c) => c.provider != MergedProvider.ftth && c.provider != MergedProvider.fiberx,
+        fetch: (c) async {
+          final r = await PackageReportApi.fetch(from: _range.from, to: _range.to, userIds: [c.adminId]);
+          return (ok: r.data != null, rows: r.data == null ? const <PackageReport>[] : [r.data!], error: r.error, note: null);
+        },
+      );
+      if (!mounted || gen != _gen || !_mergedOn) return;
+      setState(() {
+        _loading = false;
+        _merged = m;
+        _applyMergedFocus();
+      });
+      return;
+    }
+    final ids = await loadScopeUserIds();
     final r = await PackageReportApi.fetch(
       from: _range.from,
       to: _range.to,
       userIds: ids,
       employeeId: _filters.employeeId,
-      companyKey: focused?.key,
     );
-    if (!mounted || gen != _gen) return;
+    if (!mounted || gen != _gen || _mergedOn) return;
     setState(() {
+      _merged = null;
       _loading = false;
       _data = r.data;
       _error = r.data == null ? (r.error ?? 'pkgdist.fetch_failed'.tr()) : null;
@@ -140,6 +212,7 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
       : (v < 0 ? AppColors.error : AppColors.success);
 
   List<String> get _exportColumns => [
+        if (_mergedAllRows != null) 'merged.col_company'.tr(),
         'pkgdist.card_title'.tr(),
         'pkgdist.subscribers_now'.tr(),
         'pkgdist.active'.tr(),
@@ -147,7 +220,7 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
         'pkgdist.extensions'.tr(),
         'pkgdist.price'.tr(),
         'pkgdist.revenue'.tr(),
-        if (_data?.owner == true) ...[
+        if (_data?.owner == true || _mergedAllRows != null) ...[
           'pkgdist.unit_cost'.tr(),
           'pkgdist.cost'.tr(),
           'pkgdist.profit_total'.tr(),
@@ -156,6 +229,26 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
       ];
 
   List<List<String>> get _exportRows => [
+        // «كل الشركات» (الكلّ): باقات كلّ شركةٍ بعمودها أوّلاً
+        if (_mergedAllRows case final rows?)
+          for (final e in rows)
+            [
+              e.c.name,
+              e.r.name,
+              _count(e.r.subscribersTotal),
+              _count(e.r.subscribersActive),
+              '${e.r.activations}',
+              '${e.r.extensions}',
+              e.r.price == null ? '' : formatIQD(e.r.price!),
+              formatIQD(e.r.revenue),
+              ...[
+                e.r.unitCost == null ? '' : formatIQD(e.r.unitCost!),
+                e.r.cost == null ? '' : formatIQD(e.r.cost!),
+                e.r.profitTotal == null ? '' : '${e.r.profitTotal! < 0 ? '-' : ''}${formatIQD(e.r.profitTotal!)}',
+                e.r.profitEstimated == null ? '' : '${e.r.profitEstimated! < 0 ? '-' : ''}${formatIQD(e.r.profitEstimated!)}',
+              ],
+            ]
+        else
         for (final r in _data?.rows ?? const <PackageReportRow>[])
           [
             r.name,
@@ -209,6 +302,17 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
               padding: EdgeInsets.fromLTRB(
                   Sp.lg, desk ? Sp.xs : Sp.md, Sp.lg, Sp.huge),
               children: [
+                // «كل الشركات»: الشركات بعدد تفعيلات كلٍّ منها في الفترة، ومن لم يُقرأ ولماذا
+                if (_mergedOn && _merged != null) ...[
+                  MergedCompanyStrip(
+                    countOf: (c) => _merged!.partOf(c.key)?.rows?.firstOrNull?.totals.activations,
+                    total: [for (final p in _merged!.parts) ...?p.rows].fold<int>(0, (s, r) => s + r.totals.activations),
+                    problemOf: (c) => _merged!.problemOf(c,
+                        failedLabel: 'merged.chip_failed'.tr(), unsupportedLabel: 'merged.web_only'.tr()),
+                    note: _mergedNote(_merged!),
+                  ),
+                  const SizedBox(height: Sp.md),
+                ],
                 DateRangeChipBar(
                   value: _range,
                   onChanged: (r) {
@@ -218,6 +322,8 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
                 ),
                 const SizedBox(height: Sp.sm),
                 // الموظّف المنفِّذ وحده: لا نوع حركة (التقرير تفعيلٌ وتمديد) ولا مدير (النطاق من الخادم).
+                // «كل الشركات»: قائمة الموظّفين للشركة المفتوحة وحدها — يُخفى
+                if (!_mergedOn)
                 ReportFiltersPanel(
                   value: _filters,
                   includeActionTypes: false,
@@ -250,6 +356,8 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
                 style: AppType.micro(color: AppColors.textLow))),
       ];
     }
+    // «كل الشركات» (الكلّ): المجموع وحسب الشركة وباقات الشركات معاً
+    if (_mergedOn && _merged != null && MergedMode.focused == null) return _mergedContent(desk);
     final d = _data;
     if (d == null) {
       return [
@@ -427,6 +535,223 @@ class _PackageDistributionScreenState extends State<PackageDistributionScreen> {
         final v = r.subscribersTotal ?? 0;
         return v > m ? v : m;
       });
+
+  // ═══════════════ «كل الشركات» (الكلّ) ═══════════════
+
+  /// شركاتٌ قُرئ تقريرها، بترتيب الشريط.
+  List<({MergedCompany c, PackageReport r})> get _mergedOk => [
+        for (final p in _merged?.parts ?? const <MergedReportPart<PackageReport>>[])
+          if (p.ok && p.rows!.isNotEmpty) (c: p.company, r: p.rows!.first),
+      ];
+
+  /// باقات الشركات معاً (الأكثر تفعيلاً أوّلاً) — null خارج «الكل».
+  List<({MergedCompany c, PackageReportRow r})>? get _mergedAllRows {
+    if (!_mergedOn || _merged == null || MergedMode.focused != null) return null;
+    final rows = [
+      for (final e in _mergedOk)
+        for (final r in e.r.rows) (c: e.c, r: r),
+    ];
+    rows.sort((a, b) {
+      final x = b.r.activations.compareTo(a.r.activations);
+      return x != 0 ? x : b.r.revenue.compareTo(a.r.revenue);
+    });
+    return rows;
+  }
+
+  /// سطر الشريط: من لم يُقرأ ولماذا، وشركاتٌ بعملةٍ أخرى إيرادها خارج المجموع.
+  String? _mergedNote(MergedReport<PackageReport> m) {
+    final focus = MergedMode.focused;
+    final lines = <String>[
+      if (m.noteFor(focus?.key,
+              unsupportedText: 'لا تقرير باقاتٍ لنوعها',
+              missingText: 'merged.missing'.tr(args: [m.missing.map((c) => c.name).join('، ')]))
+          case final n?)
+        n,
+      if (focus == null)
+        for (final e in _mergedOk)
+          if (e.c.currency != 'IQD')
+            'merged.not_in_sum'.tr(args: ['إيراد «${e.c.name}» وربحها (${e.c.currency ?? 'عملةٌ غير معروفة'})']),
+    ];
+    return lines.isEmpty ? null : lines.join('\n');
+  }
+
+  List<Widget> _mergedContent(bool desk) {
+    final ok = _mergedOk;
+    if (ok.isEmpty) {
+      return [
+        _Notice(icon: LucideIcons.triangleAlert, color: AppColors.error, text: 'pkgdist.fetch_failed'.tr()),
+        const SizedBox(height: Sp.sm),
+        Center(
+          child: OutlinedButton.icon(
+            onPressed: _load,
+            icon: const Icon(LucideIcons.refreshCw, size: 16),
+            label: Text('pkgdist.retry'.tr()),
+          ),
+        ),
+      ];
+    }
+    final iqd = ok.where((e) => e.c.currency == 'IQD').toList();
+    // شركاتٌ لم يُقرأ تقريرها — تُسمّى تحت كلّ رقمٍ مجموع (لا صفرٌ صامت)
+    final unread = [for (final p in _merged!.parts) if (!p.ok || p.rows!.isEmpty) p.company.name];
+    int sumOf(int? Function(PackageReport r) f) => ok.fold<int>(0, (s, e) => s + (f(e.r) ?? 0));
+    final subsMissing = [...unread, for (final e in ok) if (e.r.totals.subscribersTotal == null) e.c.name];
+    final revenue = iqd.fold<num>(0, (s, e) => s + e.r.totals.revenue);
+    final revenueOut = [...unread, for (final e in ok) if (e.c.currency != 'IQD') e.c.name];
+    // الربح: مجموع ربح كلّ شركةٍ بقاعدتها (المعفاة = إيرادها، وغيرها بعد كلفتها) — من لا يُعرف ربحها أو عملتها أخرى تُسمّى
+    final withProfit = [for (final e in iqd) if (e.r.owner && e.r.totals.profitTotal != null) e];
+    final profitOut = [...unread, for (final e in ok) if (!withProfit.contains(e)) e.c.name];
+    final profit = withProfit.isEmpty ? null : withProfit.fold<num>(0, (s, e) => s + e.r.totals.profitTotal!);
+    final withEst = [for (final e in iqd) if (e.r.owner && e.r.totals.profitEstimated != null) e];
+    final estOut = [...unread, for (final e in ok) if (!withEst.contains(e)) e.c.name];
+    final est = withEst.isEmpty ? null : withEst.fold<num>(0, (s, e) => s + e.r.totals.profitEstimated!);
+    final anyExempt = withProfit.any((e) => e.r.costExempt);
+    final owner = ok.any((e) => e.r.owner);
+    String notIn(List<String> names) => 'لا يشمل: ${names.join('، ')}';
+    final kpis = <Widget>[
+      _Kpi(
+        icon: LucideIcons.users,
+        color: AppColors.brand,
+        label: 'pkgdist.subscribers_now'.tr(),
+        value: _count(sumOf((r) => r.totals.subscribersTotal)),
+        hint: subsMissing.isNotEmpty
+            ? notIn(subsMissing)
+            : 'pkgdist.active_n'.tr(namedArgs: {'n': _count(sumOf((r) => r.totals.subscribersActive))}),
+      ),
+      _Kpi(
+        icon: LucideIcons.zap,
+        color: AppColors.info,
+        label: 'pkgdist.activations'.tr(),
+        value: _count(sumOf((r) => r.totals.activations)),
+        hint: unread.isNotEmpty
+            ? notIn(unread)
+            : 'pkgdist.extensions_n'.tr(namedArgs: {'n': _count(sumOf((r) => r.totals.extensions))}),
+      ),
+      _Kpi(
+        icon: LucideIcons.coins,
+        color: AppColors.anomaly,
+        label: 'pkgdist.revenue'.tr(),
+        value: _money(revenue),
+        hint: revenueOut.isEmpty ? 'pkgdist.revenue_hint'.tr() : notIn(revenueOut),
+      ),
+      if (owner)
+        _Kpi(
+          icon: LucideIcons.trendingUp,
+          color: AppColors.success,
+          label: 'pkgdist.profit_total'.tr(),
+          value: _signed(profit),
+          valueColor: _profitColor(profit),
+          hint: profitOut.isNotEmpty
+              ? notIn(profitOut)
+              : (anyExempt ? 'كلّ شركةٍ بقاعدتها — المعفاة بلا كلفة' : 'pkgdist.profit_after_cost'.tr(namedArgs: {
+                  'cost': _money(withProfit.fold<num>(0, (s, e) => s + (e.r.totals.cost ?? 0))),
+                })),
+        ),
+      if (owner)
+        _Kpi(
+          icon: LucideIcons.sparkles,
+          color: AppColors.warning,
+          label: 'pkgdist.profit_est'.tr(),
+          value: _signed(est),
+          valueColor: _profitColor(est),
+          hint: estOut.isEmpty ? 'pkgdist.profit_est_hint'.tr() : notIn(estOut),
+        ),
+    ];
+    final rows = _mergedAllRows ?? const [];
+    final maxSubs = rows.fold<int>(0, (m, e) => (e.r.subscribersTotal ?? 0) > m ? e.r.subscribersTotal! : m);
+    final cards = [
+      for (final e in rows)
+        Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: 4, bottom: 4),
+            child: CompanyTag(companyKey: e.c.key, fontSize: 11),
+          ),
+          _PackageCard(
+              row: e.r,
+              owner: _mergedOk.firstWhere((x) => x.c.key == e.c.key).r.owner,
+              money: (v) => _moneyOf(e.c, v),
+              signed: (v) => _signedOf(e.c, v),
+              count: _count,
+              profitColor: _profitColor,
+              maxSubs: maxSubs,
+              expanded: _open.contains('${e.c.key}|${e.r.key}'),
+              onToggle: () => setState(() {
+                    final k = '${e.c.key}|${e.r.key}';
+                    if (!_open.remove(k)) _open.add(k);
+                  })),
+        ]),
+    ];
+    final breakdown = <MergedBreakdownRow>[
+      for (final p in _merged!.parts)
+        if (p.ok && p.rows!.isNotEmpty)
+          (() {
+            final t = p.rows!.first.totals;
+            final profitText = p.rows!.first.owner && t.profitTotal != null
+                ? ' · ${'pkgdist.profit_total'.tr()}: ${_signedOf(p.company, t.profitTotal)}'
+                : '';
+            return (
+              key: p.company.key,
+              value: '${_count(t.activations)} ${'pkgdist.activations'.tr()}',
+              sub: '${_moneyOf(p.company, t.revenue)}$profitText',
+              reason: null,
+            );
+          })()
+        else
+          (
+            key: p.company.key,
+            value: null,
+            sub: null,
+            reason: p.unsupported ? 'لا تقرير باقاتٍ لنوعها' : (p.error ?? 'pkgdist.fetch_failed'.tr()),
+          ),
+    ];
+    return [
+      if (desk) DeskGrid(minTileWidth: 200, spacing: Sp.md, children: kpis) else _KpiGrid(children: kpis),
+      // ما تعذّر من تقرير كلّ شركة — باسمها (لا صفر)
+      for (final e in ok)
+        for (final part in e.r.unavailableParts) ...[
+          const SizedBox(height: Sp.sm),
+          _Notice(icon: LucideIcons.triangleAlert, color: AppColors.warning, text: '«${e.c.name}»: ${packagePartText(part)}'),
+        ],
+      for (final e in ok)
+        if (e.r.subscribersPartial) ...[
+          const SizedBox(height: Sp.sm),
+          _Notice(icon: LucideIcons.info, color: AppColors.info, text: '«${e.c.name}»: ${'pkgdist.partial'.tr()}'),
+        ],
+      const SizedBox(height: Sp.md),
+      MergedBreakdownCard(rows: breakdown),
+      const SizedBox(height: Sp.md),
+      if (rows.isEmpty)
+        _Notice(icon: LucideIcons.package, color: AppColors.textLow, text: 'pkgdist.empty_period'.tr())
+      else ...[
+        Align(
+          alignment: AlignmentDirectional.centerEnd,
+          child: ReportExportBar(
+            title: 'pkgdist.title'.tr(),
+            subtitle: _range.label,
+            fileNameBase: 'package-distribution',
+            columns: _exportColumns,
+            rows: _exportRows,
+          ),
+        ),
+        const SizedBox(height: Sp.sm),
+        if (desk)
+          DeskGrid(minTileWidth: 320, spacing: Sp.md, children: cards)
+        else
+          for (final c in cards) ...[c, const SizedBox(height: Sp.sm)],
+      ],
+      const SizedBox(height: Sp.md),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(LucideIcons.info, size: 14, color: AppColors.textLow),
+          ),
+          const SizedBox(width: 6),
+          Expanded(child: Text('pkgdist.footnote'.tr(), style: AppType.micro(color: AppColors.textLow))),
+        ],
+      ),
+    ];
+  }
 }
 
 class _KpiGrid extends StatelessWidget {

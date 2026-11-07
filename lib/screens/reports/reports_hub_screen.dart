@@ -102,6 +102,7 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
               // ليست أيقونة «حسب الباقة» (تقرير ايرث لنك) — بطاقتان متجاورتان لموزّعها لا تتشابهان.
               icon: LucideIcons.chartPie,
               color: AppColors.success,
+              merged: true,
               title: 'reports.packages'.tr(),
               subtitle: 'reports.packages_hint'.tr(),
               onTap: () => Navigator.of(context).push(

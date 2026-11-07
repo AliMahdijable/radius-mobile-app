@@ -12,6 +12,7 @@ import 'package:rad_mysvcs/models/merged_company.dart';
 import 'package:rad_mysvcs/screens/reports/activations_report_screen.dart';
 import 'package:rad_mysvcs/screens/reports/activity_log_report_screen.dart';
 import 'package:rad_mysvcs/screens/reports/daily_activations_report_screen.dart';
+import 'package:rad_mysvcs/screens/reports/package_distribution_screen.dart';
 import 'package:rad_mysvcs/screens/reports/sessions_report_screen.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
 import 'package:rad_mysvcs/services/merged_report_loader.dart';
@@ -61,6 +62,31 @@ class _Srv implements HttpClientAdapter {
       return inner.fetch(o, rs, cf);
     }
     final h = {'x-company-key': [key]};
+    if (path == '/api/reports/finance/packages') {
+      Map<String, Object?> rep(String name, int acts, int revenue, {int? cost, bool exempt = false, bool unknown = false}) {
+        final profit = unknown ? null : (exempt ? revenue : revenue - (cost ?? 0));
+        return {
+          'success': true,
+          'data': {
+            'owner': true,
+            'cost_exempt': exempt,
+            'rows': [
+              {'key': 'p-$name', 'name': name, 'activations': acts, 'revenue': revenue, 'subscribers_total': acts * 10,
+                'subscribers_active': acts * 8, 'cost': unknown ? null : cost, 'profit_total': profit, 'cost_exempt': exempt},
+            ],
+            'totals': {'packages': 1, 'activations': acts, 'extensions': 0, 'revenue': revenue, 'subscribers_total': acts * 10,
+              'subscribers_active': acts * 8, 'cost': unknown ? null : cost, 'profit_total': profit},
+          },
+        };
+      }
+      final body = switch (key) {
+        _kA => rep('Gold 50M', 4, 100000, exempt: true),
+        _kB => rep('JT 40M', 2, 60000, cost: 40000),
+        _kU => rep('XS 20M', 1, 15000, unknown: true),
+        _ => {'success': false, 'message': 'لا تقرير'},
+      };
+      return _json(200, body, headers: h);
+    }
     if (path == '/api/activities') {
       final today = DateTime.now().toIso8601String().substring(0, 10);
       var seq = 0;
@@ -248,6 +274,34 @@ void main() {
     expect(srv.asked.where((a) => a.contains('/api/admin/expenses')), isEmpty);
     expect(find.textContaining('الصرفيات لا تُخلط هنا'), findsOneWidget);
     expect(find.textContaining('دخول المدير'), findsOneWidget, reason: 'السجلّ كلّه لا التفعيلات وحدها');
+    await down(t);
+  });
+
+  testWidgets('توزيع الباقات: الربح مجموع ربح كلّ شركةٍ بقاعدتها، ومن لا يُعرف ربحها تُسمّى، والمختارة تقريرها بلا طلبٍ جديد', (t) async {
+    await up(unknownCurrency: true);
+    await t.runAsync(() => MergedMode.enter());
+    await pumpVisual(t, const VisualDevice('', Size(390, 2600), 1), home: (_) => const PackageDistributionScreen());
+    await settle(t, seconds: 3);
+    final asked = srv.asked.where((a) => a.startsWith('GET /api/reports/finance/packages c')).toList();
+    expect(asked.toSet(), {
+      'GET /api/reports/finance/packages $_kA ids=2',
+      'GET /api/reports/finance/packages $_kB ids=jt:22',
+      'GET /api/reports/finance/packages $_kN ids=nabd:5',
+      'GET /api/reports/finance/packages $_kU ids=xs:9',
+    });
+    // الإيراد: سوبرنت 100,000 + الجزيرة 60,000 (اكس نت بعملةٍ مجهولة خارجه)؛ الربح: 100,000 (المعفاة = إيرادها) + 20,000
+    expect(find.text('160,000 د.ع'), findsOneWidget);
+    expect(find.text('120,000 د.ع'), findsOneWidget);
+    expect(find.textContaining('لا يشمل: نبض، اكس نت'), findsWidgets, reason: 'نبض تعذّر تقريرها واكس نت بلا ربحٍ معروف ⇒ تُسمّيان');
+    expect(find.byKey(const ValueKey('merged-breakdown')), findsOneWidget);
+    expect(find.text('Gold 50M'), findsOneWidget);
+    expect(find.text('JT 40M'), findsOneWidget);
+    final before = srv.asked.length;
+    MergedMode.focus.value = _kB;
+    await settle(t, seconds: 1);
+    expect(srv.asked.length, before, reason: 'المختارة من الجمع المحفوظ — بلا طلب');
+    expect(find.text('Gold 50M'), findsNothing);
+    expect(find.text('JT 40M'), findsOneWidget);
     await down(t);
   });
 }
