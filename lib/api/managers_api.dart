@@ -33,7 +33,12 @@ class Manager {
     this.rewardPoints = 0,
     this.telegramLinked = false,
     this.telegramChannel,
+    this.debtUnavailable = false,
   });
+
+  /// الخادم لم يقرأ دين هذا المدير من الساس (`debt_unavailable`، ٨ نوفمبر): [totalDebt] صفرٌ لأنّه لم يُقرأ لا لأنّه لا دين
+  /// عليه — يُسمّى ولا يُجمع.
+  final bool debtUnavailable;
 
   final int id;
   final String username;
@@ -135,6 +140,7 @@ class Manager {
       debtForMe: _toDouble(j['debt_for_me']).abs(),
       telegramLinked: _toBool(j['telegram_linked'] ?? false),
       telegramChannel: j['telegram_channel']?.toString(),
+      debtUnavailable: _toBool(j['debt_unavailable'] ?? false),
       // v1 manager_model:74 — reward_points lives in many places
       // depending on the endpoint. Mirror the full fallback list.
       rewardPoints: _toInt(
@@ -183,6 +189,7 @@ class Manager {
     int? rewardPoints,
     bool? telegramLinked,
     String? telegramChannel,
+    bool? debtUnavailable,
   }) =>
       Manager(
         id: id ?? this.id,
@@ -207,6 +214,7 @@ class Manager {
         rewardPoints: rewardPoints ?? this.rewardPoints,
         telegramLinked: telegramLinked ?? this.telegramLinked,
         telegramChannel: telegramChannel ?? this.telegramChannel,
+        debtUnavailable: debtUnavailable ?? this.debtUnavailable,
       );
 }
 

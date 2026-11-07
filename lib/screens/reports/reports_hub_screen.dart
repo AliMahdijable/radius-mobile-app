@@ -63,6 +63,17 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
     _loadDeletedDebts();
   }
 
+  /// «كل الشركات» وفيها شركة ساس صالحة — ديون مدرائها تُقرأ من هنا مهما كانت المفتوحة.
+  bool get _mergedSas =>
+      MergedMode.active.value && MergedMode.usable.any((c) => c.provider == MergedProvider.sas4);
+
+  /// «كل الشركات» وفيها شركةٌ تُقرأ ديون محذوفيها (ساس، ايرث لنك، المُضافة).
+  bool get _mergedDd =>
+      MergedMode.active.value &&
+      Perms.has('deleted_debts.view') &&
+      MergedMode.usable.any((c) =>
+          c.provider == MergedProvider.sas4 || c.provider == MergedProvider.earthlink || c.provider == MergedProvider.kit);
+
   Future<void> _loadDeletedDebts() async {
     final p = await DeletedDebtsHubSummary.fetch(previous: _deletedDebts);
     if (mounted) setState(() => _deletedDebts = p);
@@ -114,11 +125,14 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
           // كانت في الشاشتين بنفس الأيقونة والعنوان والوجهة — مدخلان
           // إلى صفحةٍ واحدة يجعلان المستخدم يظنّهما شيئين مختلفين
           // ويظلّ يبحث عن الفرق. (حُذفت من هنا بطلب صاحب المشروع.)
-          if (permShown(const ['reports.manager_debts']) && !providerHidesAction('reports.manager_debts'))
+          // «كل الشركات» (٨ نوفمبر): ديون مدراء كلّ شركات الساس — تظهر ولو كانت المفتوحة بلا مدراء فرعيّين بنوعها (ايرث لنك/المُضافة)
+          if (permShown(const ['reports.manager_debts']) &&
+              (!providerHidesAction('reports.manager_debts') || _mergedSas))
             _ReportCard(
-              locked: !Perms.has('reports.manager_debts'),
+              locked: !Perms.has('reports.manager_debts') && !_mergedSas,
               icon: LucideIcons.users,
               color: AppColors.warning,
+              merged: true,
               title: 'reports.manager_debts'.tr(),
               subtitle: 'reports.manager_debts_hint'.tr(),
               // 2026-07-14: كانت stub بس (رسالة "افتح من مكان ثاني").
@@ -129,12 +143,16 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
                 ),
               ),
             ),
-          if (_deletedDebts case final dd?)
+          // «كل الشركات» (٨ نوفمبر): ديون محذوفي كلّ الشركات — العنوان الفرعيّ عامّ (عدد المفتوحة وحدها يضلّل)
+          if (_deletedDebts != null || _mergedDd)
             _ReportCard(
+              merged: true,
               icon: LucideIcons.userX,
               color: AppColors.error,
               title: 'reports.deleted_debts'.tr(),
-              subtitle: DeletedDebtsHubSummary.subtitle(dd),
+              subtitle: MergedMode.active.value || _deletedDebts == null
+                  ? 'reports.deleted_debts_hint'.tr()
+                  : DeletedDebtsHubSummary.subtitle(_deletedDebts!),
               onTap: () async {
                 await Navigator.of(context).push(
                   MaterialPageRoute(

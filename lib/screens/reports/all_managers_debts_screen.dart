@@ -5,6 +5,13 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../api/manager_debts_api.dart';
 import '../../api/manager_movements_api.dart';
 import '../../api/managers_api.dart';
+import '../../api/merged_dashboard_api.dart';
+import '../../models/merged_company.dart';
+import '../../services/merged_manager_debts.dart';
+import '../../services/merged_mode.dart';
+import '../../services/merged_report_loader.dart';
+import '../../widgets/company_tag.dart';
+import '../../widgets/merged_breakdown.dart';
 import '../../core/util/ar_date.dart';
 import '../../core/util/format.dart';
 import '../../theme/colors.dart';
@@ -55,10 +62,14 @@ class _MgrEvent {
     required this.manager,
     required this.movement,
     this.isFullPayment = false,
+    this.companyKey,
   });
 
   final Manager manager;
   final ManagerMovement movement;
+
+  /// «كل الشركات»: شركة المدير — معرّفات المدراء الفرعيّين أرقام ساس كلّ شركة فتتكرّر بين الشركات.
+  final String? companyKey;
 
   /// true = تسديد كامل (لآخر جزء من دين). يُحسب post-fetch من الملاحظات.
   final bool isFullPayment;
@@ -157,11 +168,26 @@ class _MgrEvent {
   }
 }
 
+/// ما يُعرض لشركة: الوضع العاديّ = المفتوحة (key null)، و«كل الشركات» = كلّ شركةٍ قُرئت بمدرائها.
+typedef _View = ({String? key, List<Manager> managers, ManagerDebtsSummary? summary, List<_MgrEvent> events});
+
+const _noSubAdmins = 'بلا مدراء فرعيّين';
+
 class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
   List<Manager> _managers = const [];
   List<_MgrEvent> _events = const [];
   ManagerDebtsSummary? _summary;
   bool _loading = true;
+
+  // ── «كل الشركات» (٨ نوفمبر — المالك: «نعم لازم نسوي كلشي»): الشاشة نفسها وشريط الشركات أعلاها، والأرقام مجموع الشركات
+  // التي قُرئت — المتعذّرة تُسمّى ولا تُجمع، ودين مديرٍ لم يُقرأ يُسمّى ولا يُعدّ صفراً. كلّ حركةٍ بشارة شركتها، و«حسب
+  // الشركة» تحت الملخّص؛ الضغط على شركة يعرضها وحدها. التسديد والإضافة تبقى من «المدراء» للشركة المفتوحة.
+  bool get _mergedOn => MergedMode.active.value;
+  MergedReport<_MgrEvent>? _merged;
+  Map<String, CompanyManagerDebts> _mergedData = const {};
+  int _gen = 0;
+
+  CompanyManagerDebts? _dataOf(String key) => _mergedData[MergedDashboardApi.canonicalKey(key)];
 
   _TypeFilter _typeFilter = _TypeFilter.all;
   String _managerFilter = '';
@@ -173,48 +199,43 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
   @override
   void initState() {
     super.initState();
+    MergedMode.active.addListener(_onMergedMode);
+    MergedMode.focus.addListener(_onMergedFocus);
     _load();
   }
 
   @override
   void dispose() {
+    _gen++;
+    MergedMode.active.removeListener(_onMergedMode);
+    MergedMode.focus.removeListener(_onMergedFocus);
     _managerSearchCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
-    // 1) fetch managers + summary + custom debts (لحساب "تسديد كامل" لاحقاً)
-    final coreResults = await Future.wait([
-      ManagersApi.listFull(count: 500),
-      ManagerDebtsApi.summary(
-        from: _dateFrom == null ? null : _fmtDate(_dateFrom!),
-        to: _dateTo == null ? null : _fmtDate(_dateTo!),
-      ),
-      ManagerDebtsApi.list(),
-    ]);
+  void _onMergedMode() {
     if (!mounted) return;
-    final mgrs = (coreResults[0] as ({List<Manager> rows, int total})).rows;
-    final summary = coreResults[1] as ManagerDebtsSummary?;
-    final customDebts = coreResults[2] as List<ManagerDebt>;
+    _merged = null;
+    _mergedData = const {};
+    _load();
+  }
 
-    // 2) concurrent fetch movements — قيد للـtop 60 مدير لتفادي الإرهاق.
-    final targets = mgrs.take(60).toList();
-    final moveResults = await Future.wait(
-      targets.map(
-          (m) => ManagerMovementsApi.list(targetAdminId: m.id, limit: 100)),
-    );
+  void _onMergedFocus() {
+    if (mounted && _mergedOn) setState(() {});
+  }
 
-    // 3) اربط الديون بالـid — عشان نميّز "تسديد كامل" من "جزئي".
-    // debt_payment movement.foreignId (لو موجود) يشير للـdebt. نتحقّق:
-    //   remainingAmount == 0 و آخر دفعة على هذا الدين → تسديد كامل.
-    final debtsById = {for (final d in customDebts) d.id: d};
-
-    // 4) flatten + sort + apply date filter (client-side لأن movements API
-    // ما تدعم from/to حالياً).
+  /// حركات المدراء ⇒ أحداث التقرير بالفترة (والتسديد الكامل من الديون الأخرى) — للمفتوحة وحدها ولكلّ شركةٍ في الوضع.
+  List<_MgrEvent> _eventsOf(
+    List<({Manager manager, List<ManagerMovement> rows})> moves,
+    List<ManagerDebt> debts, {
+    String? companyKey,
+  }) {
+    // اربط الديون بالـid — عشان نميّز "تسديد كامل" من "جزئي": remainingAmount == 0 → تسديد كامل.
+    final debtsById = {for (final d in debts) d.id: d};
+    // التاريخ client-side لأن movements API ما تدعم from/to حالياً.
     final events = <_MgrEvent>[];
-    for (int i = 0; i < targets.length; i++) {
-      for (final mv in moveResults[i]) {
+    for (final m in moves) {
+      for (final mv in m.rows) {
         if (_dateFrom != null && mv.eventAt.isBefore(_dateFrom!)) continue;
         if (_dateTo != null &&
             mv.eventAt.isAfter(_dateTo!.add(const Duration(days: 1)))) {
@@ -229,15 +250,93 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
           }
         }
         events.add(_MgrEvent(
-          manager: targets[i],
+          manager: m.manager,
           movement: mv,
           isFullPayment: full,
+          companyKey: companyKey,
         ));
       }
     }
     events.sort((a, b) => b.date.compareTo(a.date));
+    return events;
+  }
+
+  /// ملاحظة الشركة في الشريط: ما لم يُقرأ كاملاً منها.
+  String? _companyNote(CompanyManagerDebts d) {
+    final parts = <String>[
+      if (d.managersTotal > d.managers.length)
+        'أوّل ${d.managers.length} مدير من ${d.managersTotal}',
+      if (d.managers.length > kManagerMovementsCap)
+        'حركات أوّل $kManagerMovementsCap مديراً',
+      if (d.movementsFailed > 0) 'حركات ${d.movementsFailed} مدير لم تُقرأ',
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
+
+  Future<void> _load() async {
+    final gen = ++_gen;
+    setState(() => _loading = true);
+    if (_mergedOn) {
+      // كلّ شركة ساس بطلباتٍ موجَّهة لها (اثنتين اثنتين) — ايرث لنك والوطني والمُضافة بلا مدراء فرعيّين
+      final from = _dateFrom == null ? null : _fmtDate(_dateFrom!);
+      final to = _dateTo == null ? null : _fmtDate(_dateTo!);
+      final data = <String, CompanyManagerDebts>{};
+      final m = await loadMergedReport<_MgrEvent>(
+        supports: (c) => c.provider == MergedProvider.sas4,
+        fetch: (c) async {
+          final r = await loadCompanyManagerDebts(from: from, to: to);
+          final d = r.data;
+          if (d == null) {
+            return (ok: false, rows: const <_MgrEvent>[], error: r.error, note: null);
+          }
+          data[c.key] = d;
+          return (
+            ok: true,
+            rows: _eventsOf(d.movements, d.debts, companyKey: c.key),
+            error: null,
+            note: _companyNote(d),
+          );
+        },
+      );
+      if (!mounted || gen != _gen || !_mergedOn) return;
+      setState(() {
+        _merged = m;
+        _mergedData = data;
+        _loading = false;
+      });
+      return;
+    }
+    // 1) fetch managers + summary + custom debts (لحساب "تسديد كامل" لاحقاً)
+    final coreResults = await Future.wait([
+      ManagersApi.listFull(count: 500),
+      ManagerDebtsApi.summary(
+        from: _dateFrom == null ? null : _fmtDate(_dateFrom!),
+        to: _dateTo == null ? null : _fmtDate(_dateTo!),
+      ),
+      ManagerDebtsApi.list(),
+    ]);
+    if (!mounted || gen != _gen || _mergedOn) return;
+    final mgrs = (coreResults[0] as ({List<Manager> rows, int total})).rows;
+    final summary = coreResults[1] as ManagerDebtsSummary?;
+    final customDebts = coreResults[2] as List<ManagerDebt>;
+
+    // 2) concurrent fetch movements — قيد للـtop 60 مدير لتفادي الإرهاق.
+    final targets = mgrs.take(60).toList();
+    final moveResults = await Future.wait(
+      targets.map(
+          (m) => ManagerMovementsApi.list(targetAdminId: m.id, limit: 100)),
+    );
+    if (!mounted || gen != _gen || _mergedOn) return;
+
+    // 3+4) اربط الديون بالـid ثمّ flatten + sort + فلتر التاريخ
+    final events = _eventsOf(
+      [for (int i = 0; i < targets.length; i++) (manager: targets[i], rows: moveResults[i])],
+      customDebts,
+    );
 
     setState(() {
+      _merged = null;
+      _mergedData = const {};
       _managers = mgrs;
       _events = events;
       _summary = summary;
@@ -247,9 +346,39 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
 
   // ─── filtered view ─────────────────────────
 
+  /// الشركات المعروضة: الوضع العاديّ = المفتوحة؛ «كل الشركات» = كلّ شركةٍ قُرئت بمدراء فرعيّين، أو المختارة وحدها.
+  List<_View> get _views {
+    final m = _mergedOn ? _merged : null;
+    if (m == null) {
+      return [(key: null, managers: _managers, summary: _summary, events: _events)];
+    }
+    final focus = MergedMode.focused;
+    final parts = focus == null ? m.parts : [if (m.partOf(focus.key) case final p?) p];
+    return [
+      for (final p in parts)
+        if (p.ok && _dataOf(p.company.key)?.noSubAdmins == false)
+          (
+            key: p.company.key,
+            managers: _dataOf(p.company.key)!.managers,
+            summary: _dataOf(p.company.key)!.summary,
+            events: p.rows!,
+          ),
+    ];
+  }
+
+  /// «الكل» في الوضع: أكثر من شركةٍ معاً — كلّ حركةٍ بشارة شركتها.
+  bool get _mergedAll => _mergedOn && _merged != null && MergedMode.focused == null;
+
   List<_MgrEvent> get _visible {
+    final views = _views;
+    final all = [for (final v in views) ...v.events];
+    if (views.length > 1) all.sort((a, b) => b.date.compareTo(a.date));
+    return _filterEvents(all);
+  }
+
+  List<_MgrEvent> _filterEvents(List<_MgrEvent> events) {
     final q = _managerFilter.trim().toLowerCase();
-    return _events.where((e) {
+    return events.where((e) {
       if (_typeFilter != _TypeFilter.all && e.typeFilter != _typeFilter) {
         return false;
       }
@@ -266,29 +395,61 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
 
   /// المدراء المطابقون لبحث اسم المدير — يُستعملون لـSAS totals + عدد
   /// المدينين. لا يتأثر بفلتر النوع/التاريخ (SAS current state).
-  List<Manager> get _filteredManagers {
+  List<Manager> _filteredOf(_View v) {
     final q = _managerFilter.trim().toLowerCase();
-    if (q.isEmpty) return _managers;
-    return _managers
+    if (q.isEmpty) return v.managers;
+    return v.managers
         .where((m) =>
             m.username.toLowerCase().contains(q) ||
             m.fullName.toLowerCase().contains(q))
         .toList();
   }
 
-  double get _totalSasDebt =>
-      _filteredManagers.fold<double>(0, (acc, m) => acc + m.totalDebt);
+  // دين مديرٍ لم يُقرأ صفرٌ في الحقل — لا يدخل المجموع، ويُسمّى تحته (_summaryWarnings)
+  double _sasOf(_View v) => _filteredOf(v)
+      .where((m) => !m.debtUnavailable)
+      .fold<double>(0, (acc, m) => acc + m.totalDebt);
 
-  double get _totalCustomRemaining {
-    if (_summary == null) return 0;
+  double _customOf(_View v) {
+    final s = v.summary;
+    if (s == null) return 0;
     final q = _managerFilter.trim().toLowerCase();
-    if (q.isEmpty) return _summary!.totals.totalRemaining;
-    return _summary!.perDebtor
+    if (q.isEmpty) return s.totals.totalRemaining;
+    return s.perDebtor
         .where((d) => (d.debtorAdminUsername ?? '').toLowerCase().contains(q))
         .fold<double>(0, (acc, d) => acc + d.totalRemaining);
   }
 
+  double get _totalSasDebt =>
+      _views.fold<double>(0, (acc, v) => acc + _sasOf(v));
+
+  double get _totalCustomRemaining =>
+      _views.fold<double>(0, (acc, v) => acc + _customOf(v));
+
   double get _grandRemaining => _totalSasDebt + _totalCustomRemaining;
+
+  /// تحت الملخّص: ما لم يدخل المجموع — شركةٌ تعذّرت ودين مديرٍ لم يُقرأ — كلٌّ باسمه.
+  List<String> get _summaryWarnings {
+    final out = <String>[];
+    final m = _mergedOn ? _merged : null;
+    if (m != null && MergedMode.focused == null) {
+      final failed = [
+        for (final p in m.parts)
+          if (!p.ok && !p.unsupported) '«${p.company.name}»',
+      ];
+      if (failed.isNotEmpty) {
+        out.add('merged.not_in_sum'.tr(args: [failed.join('، ')]));
+      }
+    }
+    for (final v in _views) {
+      final n = _filteredOf(v).where((x) => x.debtUnavailable).length;
+      if (n == 0) continue;
+      final name = v.key == null ? null : MergedMode.companyOf(v.key!)?.name;
+      final text = 'دين $n مدير لم يُقرأ من الساس — خارج «متبقّي SAS»';
+      out.add(name == null ? text : '«$name»: $text');
+    }
+    return out;
+  }
 
   /// إيرادات مستحصَلة من المدراء (من _visible events — تتأثر بكل الفلاتر:
   /// نوع/تاريخ/بحث مدير):
@@ -297,9 +458,11 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
   ///   • تسديد دين أخرى (debt_payment) = المدير سدّد دين أخرى
   /// النقاط و deposit_loan (رصيد آجل = دين، ليس إيراد) و withdraw
   /// (نحن ندفع للمدير) لا تُحسب.
-  double get _totalIncoming {
+  double get _totalIncoming => _incomingOf(_visible);
+
+  double _incomingOf(List<_MgrEvent> events) {
     double sum = 0;
-    for (final e in _visible) {
+    for (final e in events) {
       final sk = e.movement.subKind;
       if (sk == 'deposit_cash' || sk == 'sas_pay_debt') {
         sum += e.amount;
@@ -310,14 +473,19 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
     return sum;
   }
 
-  int get _debtorsCount {
+  // المدين بشركته — معرّف المدير الفرعيّ رقمٌ في ساس شركته وحده
+  int get _debtorsCount =>
+      _views.fold<int>(0, (acc, v) => acc + _debtorsOf(v).length);
+
+  Set<int> _debtorsOf(_View v) {
     final ids = <int>{};
-    for (final m in _filteredManagers) {
-      if (m.totalDebt > 0) ids.add(m.id);
+    for (final m in _filteredOf(v)) {
+      if (m.totalDebt > 0 && !m.debtUnavailable) ids.add(m.id);
     }
-    if (_summary != null) {
+    final s = v.summary;
+    if (s != null) {
       final q = _managerFilter.trim().toLowerCase();
-      for (final row in _summary!.perDebtor) {
+      for (final row in s.perDebtor) {
         if (row.totalRemaining <= 0) continue;
         if (q.isNotEmpty &&
             !(row.debtorAdminUsername ?? '').toLowerCase().contains(q)) {
@@ -326,7 +494,62 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
         ids.add(row.debtorAdminId);
       }
     }
-    return ids.length;
+    return ids;
+  }
+
+  // ─── «كل الشركات» ──────────────────────────
+
+  String? _mergedNote(MergedReport<_MgrEvent> m) => m.noteFor(
+        MergedMode.focused?.key,
+        unsupportedText: _noSubAdmins,
+        missingText: 'merged.missing'
+            .tr(args: [m.missing.map((c) => c.name).join('، ')]),
+        nameUnsupported: false,
+      );
+
+  /// «حسب الشركة»: متبقّي كلّ شركة (بالبحث نفسه) ومدينوها وحركاتها، والمتعذّرة بسببها.
+  List<MergedBreakdownRow> _breakdown(MergedReport<_MgrEvent> m) => [
+        for (final p in m.parts)
+          if (!p.ok && !p.unsupported)
+            (
+              key: p.company.key,
+              value: null,
+              sub: null,
+              reason: p.error ?? 'تعذّر جلب ديون مدرائها الآن',
+            )
+          else if (p.ok && _dataOf(p.company.key)?.noSubAdmins == false)
+            (() {
+              final d = _dataOf(p.company.key)!;
+              final v = (key: p.company.key, managers: d.managers, summary: d.summary, events: p.rows!);
+              final unread = _filteredOf(v).where((x) => x.debtUnavailable).length;
+              return (
+                key: p.company.key,
+                value: '${formatIQD((_sasOf(v) + _customOf(v)).round())} د.ع',
+                sub: [
+                  '${_debtorsOf(v).length} مدين',
+                  '${_filterEvents(v.events).length} حركة',
+                  if (unread > 0) 'دين $unread لم يُقرأ',
+                ].join(' · '),
+                reason: null,
+              );
+            })(),
+      ];
+
+  /// لا أرقام لعرضها في الوضع: الكلّ تعذّر، أو المختارة تعذّرت/بلا مدراء فرعيّين — سببها لا أصفار.
+  String? get _mergedEmptyReason {
+    final m = _mergedOn ? _merged : null;
+    if (m == null || _views.isNotEmpty) return null;
+    final focus = MergedMode.focused;
+    if (focus != null) {
+      final p = m.partOf(focus.key);
+      if (p == null) return null;
+      if (p.unsupported || _dataOf(p.company.key)?.noSubAdmins == true) {
+        return '«${p.company.name}» $_noSubAdmins';
+      }
+      return '«${p.company.name}»: ${p.error ?? 'تعذّر جلب ديون مدرائها الآن'}';
+    }
+    if (m.parts.any((p) => !p.ok && !p.unsupported)) return 'تعذّر جلب ديون المدراء الآن';
+    return 'لا مدراء فرعيّين في شركاتك';
   }
 
   // ─── actions ───────────────────────────────
@@ -391,7 +614,8 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                     ? DateRange.rangeText(_dateFrom!, _dateTo!)
                     : 'كل الفترات',
                 fileNameBase: 'manager_debts_timeline',
-                columns: const [
+                columns: [
+                  if (_mergedOn) 'merged.col_company'.tr(),
                   'المدير',
                   'اسم المستخدم',
                   'التاريخ',
@@ -403,6 +627,8 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                 ],
                 rows: visible
                     .map((e) => [
+                          if (_mergedOn)
+                            MergedMode.companyOf(e.companyKey ?? '')?.name ?? '',
                           e.manager.fullName.isEmpty
                               ? e.manager.username
                               : e.manager.fullName,
@@ -417,7 +643,10 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                           (e.movement.note ?? '').trim(),
                         ])
                     .toList(),
-                columnWeights: const [1.4, 1.2, 1.2, 1.5, 1.0, 0.6, 0.7, 2.0],
+                columnWeights: [
+                  if (_mergedOn) 1.2,
+                  1.4, 1.2, 1.2, 1.5, 1.0, 0.6, 0.7, 2.0,
+                ],
               ),
             ),
             IconButton(
@@ -436,14 +665,37 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
               onRefresh: _load,
               child: CustomScrollView(
                 slivers: [
-                  // «كل الشركات»: هذا التقرير للشركة المفتوحة وحدها — يُسمّيها (كديون المحذوفين) فلا يُظنّ رقمه للكلّ
-                  const SliverToBoxAdapter(
-                    child: MergedOpenCompanyNote(
-                      textKey: 'merged.manager_debts_note',
-                      padding: EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
+                  // «كل الشركات»: الشركات بعدد حركات كلٍّ منها، ومن لم يُقرأ ولماذا
+                  if (_mergedOn && _merged != null)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
+                        child: MergedCompanyStrip(
+                          countOf: _merged!.countOf,
+                          total: _merged!.total,
+                          problemOf: (c) => _dataOf(c.key)?.noSubAdmins == true
+                              ? _noSubAdmins
+                              : _merged!.problemOf(c,
+                                  failedLabel: 'merged.chip_failed'.tr(),
+                                  unsupportedLabel: _noSubAdmins),
+                          note: _mergedNote(_merged!),
+                        ),
+                      ),
                     ),
-                  ),
+                  if (_mergedEmptyReason case final reason?)
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: _empty(reason: reason),
+                    )
+                  else ...[
                   SliverToBoxAdapter(child: _summaryCard()),
+                  if (_mergedAll && _merged!.parts.where((p) => !p.unsupported).length > 1)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(Sp.lg, 0, Sp.lg, Sp.sm),
+                        child: MergedBreakdownCard(rows: _breakdown(_merged!)),
+                      ),
+                    ),
                   SliverToBoxAdapter(child: _managerSearch()),
                   SliverToBoxAdapter(child: _typeFilters()),
                   SliverToBoxAdapter(child: _dateRangeBar()),
@@ -475,13 +727,31 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
                       sliver: SliverList.separated(
                         itemCount: visible.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 6),
-                        itemBuilder: (_, i) => _eventTile(visible[i]),
+                        itemBuilder: (_, i) => _companyTagged(visible[i]),
                       ),
                     ),
+                  ],
                   ],
                 ],
               ),
             ),
+    );
+  }
+
+  /// «الكل»: شركة الحركة فوق بطاقتها (كسجلّ النشاط).
+  Widget _companyTagged(_MgrEvent e) {
+    final tile = _eventTile(e);
+    if (!_mergedAll || e.companyKey == null) return tile;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsetsDirectional.only(start: 4, bottom: 2),
+          child: CompanyTag(companyKey: e.companyKey!, fontSize: 11),
+        ),
+        tile,
+      ],
     );
   }
 
@@ -557,6 +827,28 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
               ),
             ],
           ),
+          // ما لم يدخل المجموع — باسمه (لا صفرٌ صامت)
+          for (final w in _summaryWarnings) ...[
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Icon(LucideIcons.triangleAlert,
+                      size: 12, color: AppColors.warning),
+                ),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    w,
+                    style: AppType.muted(color: AppColors.textMid)
+                        .copyWith(fontSize: 11, height: 1.4),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -860,7 +1152,7 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
 
   // ─── Empty state ───────────────────────────
 
-  Widget _empty() {
+  Widget _empty({String? reason}) {
     final hasAnyFilter = _managerFilter.isNotEmpty ||
         _typeFilter != _TypeFilter.all ||
         _dateFrom != null;
@@ -873,12 +1165,21 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
             Icon(LucideIcons.receipt, size: 56, color: AppColors.textLow),
             const SizedBox(height: 12),
             Text(
-              hasAnyFilter
-                  ? 'لا توجد حركات للفلاتر المحدّدة'
-                  : 'لا توجد حركات على المدراء',
+              reason ??
+                  (hasAnyFilter
+                      ? 'لا توجد حركات للفلاتر المحدّدة'
+                      : 'لا توجد حركات على المدراء'),
               style: AppType.subtitle(color: AppColors.textMid),
               textAlign: TextAlign.center,
             ),
+            if (reason != null) ...[
+              const SizedBox(height: Sp.md),
+              OutlinedButton.icon(
+                onPressed: _loading ? null : _load,
+                icon: const Icon(LucideIcons.refreshCw, size: 16),
+                label: Text('common.refresh'.tr()),
+              ),
+            ],
           ],
         ),
       ),

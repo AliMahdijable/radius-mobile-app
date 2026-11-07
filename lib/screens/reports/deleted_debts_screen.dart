@@ -11,12 +11,19 @@ import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/permission_locked.dart';
 import '../../core/widgets/sheet_scaffold.dart';
+import '../../models/merged_company.dart';
+import '../../services/auth_storage.dart';
+import '../../services/merged_mode.dart';
+import '../../services/merged_report_loader.dart';
 import '../../services/permissions_service.dart';
 import '../../services/provider_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../widgets/company_tag.dart';
+import '../../widgets/merged_breakdown.dart';
 import '../../widgets/merged_company_strip.dart';
+import '../account/company_switch_sheet.dart';
 import 'widgets/report_permission_gate.dart';
 
 /// «ديون المشتركين المحذوفين» (٢٣ أكتوبر) — GET/POST /api/v2/deleted-debts
@@ -27,7 +34,8 @@ import 'widgets/report_permission_gate.dart';
 /// وأكّد الساس حذفه، رصيده من دفتر الخادم)، «يدويّ»، و«من ملف» (الاستيراد
 /// بالويب). التسديد يدخل التقرير الماليّ محصَّلاً؛ الشطب يُسقطه بلا تحصيل.
 /// المفاتيح `deleted_debts.view/add/pay/write_off` — ما لا يملكه الموظّف يبقى
-/// بمكانه مقفلاً. «كل الشركات»: للشركة المفتوحة وحدها (كبقيّة التقارير).
+/// بمكانه مقفلاً. «كل الشركات» (٨ نوفمبر): ديون محذوفي كلّ الشركات معاً، كلّ دينٍ بشارة شركته، والتسديد/الشطب/الإضافة/القرار
+/// للشركة المفتوحة وحدها — دين شركةٍ أخرى يُفتح من شركته.
 class DeletedDebtsScreen extends StatefulWidget {
   const DeletedDebtsScreen({super.key});
 
@@ -44,9 +52,19 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
   /// قرار دينٍ مكرّر قيد الإرسال (مفتاح صفّه اليدويّ) — زرٌّ واحد في المرّة.
   String? _twinBusy;
 
+  // ── «كل الشركات» (٨ نوفمبر — المالك: «نعم لازم نسوي كلشي»): الشاشة نفسها وشريط الشركات أعلاها؛ قائمة كلّ شركةٍ بطلبٍ موجَّه
+  // لها، والأرقام مجموع المقروء وحده — المتعذّرة تُسمّى لا تُعدّ صفراً. [_page] في الوضع = صفحة الشركة المفتوحة (القرار والإضافة
+  // لها وحدها، بلا مفتاح)، ودين شركةٍ أخرى يُدار من داخلها.
+  bool get _mergedOn => MergedMode.active.value;
+  MergedReport<DeletedDebtsPage>? _merged;
+  String? _openKey;
+  int _gen = 0;
+
   @override
   void initState() {
     super.initState();
+    MergedMode.active.addListener(_onMergedMode);
+    MergedMode.focus.addListener(_onMergedFocus);
     if (Perms.has('deleted_debts.view')) {
       _load();
     } else {
@@ -56,18 +74,82 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
 
   @override
   void dispose() {
+    _gen++;
+    MergedMode.active.removeListener(_onMergedMode);
+    MergedMode.focus.removeListener(_onMergedFocus);
     _search.dispose();
     super.dispose();
   }
 
+  void _onMergedMode() {
+    if (!mounted || !Perms.has('deleted_debts.view')) return;
+    _merged = null;
+    _openKey = null;
+    _page = null;
+    _load();
+  }
+
+  void _onMergedFocus() {
+    if (mounted && _mergedOn) setState(() {});
+  }
+
+  static bool _servedFor(MergedCompany c) =>
+      c.provider == MergedProvider.sas4 || c.provider == MergedProvider.earthlink || c.provider == MergedProvider.kit;
+
   Future<void> _load() async {
+    final gen = ++_gen;
+    if (_mergedOn) {
+      setState(() {
+        _loading = _merged == null;
+        _error = null;
+      });
+      String? openAdmin;
+      try {
+        openAdmin = (await AuthStorage.readAdminId())?.trim();
+      } catch (_) {
+        openAdmin = null;
+      }
+      // الوطني بلا ديون محذوفين بعد (الخادم يرفضها)، وفايبر اكس من الموقع — لا تُطلبان
+      final m = await loadMergedReport<DeletedDebtsPage>(
+        supports: _servedFor,
+        fetch: (c) async {
+          final r = await DeletedDebtsApi.list();
+          final p = r.page;
+          return (
+            ok: p != null,
+            rows: p == null ? const <DeletedDebtsPage>[] : [p],
+            error: r.error,
+            note: p != null && p.enabled && p.truncated ? 'dd.truncated'.tr() : null,
+          );
+        },
+      );
+      if (!mounted || gen != _gen || !_mergedOn) return;
+      String? openKey;
+      DeletedDebtsPage? openPage;
+      for (final p in m.parts) {
+        if (openAdmin != null && openAdmin.isNotEmpty && p.company.adminId == openAdmin) {
+          openKey = p.company.key;
+          openPage = p.rows?.firstOrNull;
+        }
+      }
+      setState(() {
+        _loading = false;
+        _merged = m;
+        _openKey = openKey;
+        _page = openPage;
+        _error = m.parts.any((p) => p.ok) ? null : 'dd.load_failed'.tr();
+      });
+      return;
+    }
     setState(() {
       _loading = _page == null;
       _error = null;
     });
     final r = await DeletedDebtsApi.list();
-    if (!mounted) return;
+    if (!mounted || gen != _gen || _mergedOn) return;
     setState(() {
+      _merged = null;
+      _openKey = null;
       _loading = false;
       if (r.page != null) {
         _page = r.page;
@@ -212,21 +294,272 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
     final rows = _page?.rows ?? const <DeletedDebt>[];
     final s = _search.text.trim().toLowerCase();
     if (s.isEmpty) return rows;
+    return rows.where((r) => _matches(r, s)).toList();
+  }
+
+  static bool _matches(DeletedDebt r, String s) {
     final sd = _digits(s);
-    return rows.where((r) {
-      final text = [r.name, r.username, r.managerUsername]
-          .any((v) => (v ?? '').toLowerCase().contains(s));
-      return text ||
-          (sd.length >= 3 &&
-              (r.phone ?? '').contains(sd.replaceFirst(RegExp(r'^0'), '')));
-    }).toList();
+    final text = [r.name, r.username, r.managerUsername]
+        .any((v) => (v ?? '').toLowerCase().contains(s));
+    return text ||
+        (sd.length >= 3 &&
+            (r.phone ?? '').contains(sd.replaceFirst(RegExp(r'^0'), '')));
+  }
+
+  /* ── «كل الشركات» ── */
+
+  /// صفحات الشركات المعروضة المفعّلة: الكلّ بترتيب الشريط أو المختارة وحدها.
+  List<({MergedCompany c, DeletedDebtsPage page})> get _mergedPages {
+    final m = _merged;
+    if (m == null) return const [];
+    final focus = MergedMode.focused;
+    final parts = focus == null ? m.parts : [if (m.partOf(focus.key) case final p?) p];
+    return [
+      for (final p in parts)
+        if (p.ok && p.rows!.isNotEmpty && p.rows!.first.enabled) (c: p.company, page: p.rows!.first),
+    ];
+  }
+
+  /// صفحة الشركة في التقرير — مقروءةٌ (مفعّلةً أو لا)، وإلّا null.
+  DeletedDebtsPage? _pageOf(MergedCompany c) {
+    final p = _merged?.partOf(c.key);
+    return p != null && p.ok && p.rows!.isNotEmpty ? p.rows!.first : null;
+  }
+
+  String? _problemOf(MergedCompany c) {
+    if (_pageOf(c)?.enabled == false) return 'غير مفعّلة';
+    return _merged!.problemOf(c,
+        failedLabel: 'merged.chip_failed'.tr(),
+        unsupportedLabel: c.provider == MergedProvider.ftth ? 'غير متاحة' : 'merged.web_only'.tr());
+  }
+
+  String? _mergedNote(MergedReport<DeletedDebtsPage> m) => m.noteFor(
+        MergedMode.focused?.key,
+        unsupportedText: 'ديون المحذوفين لنوعها ليست هنا',
+        missingText: 'merged.missing'.tr(args: [m.missing.map((c) => c.name).join('، ')]),
+        nameUnsupported: false,
+      );
+
+  List<MergedBreakdownRow> _breakdown(MergedReport<DeletedDebtsPage> m) => [
+        for (final p in m.parts)
+          if (!p.ok && !p.unsupported)
+            (key: p.company.key, value: null, sub: null, reason: p.error ?? 'dd.load_failed'.tr())
+          else if (p.ok && p.rows!.isNotEmpty && !p.rows!.first.enabled)
+            (key: p.company.key, value: null, sub: null, reason: 'غير مفعّلة لها')
+          else if (p.ok && p.rows!.isNotEmpty)
+            (
+              key: p.company.key,
+              value: _money(p.rows!.first.total),
+              sub: '${formatIQD(p.rows!.first.count)} مدين',
+              reason: null,
+            ),
+      ];
+
+  /// دينٌ في شركةٍ غير المفتوحة: تسديده وشطبه من داخلها.
+  Future<void> _openOther(String key) async {
+    final name = MergedMode.companyOf(key)?.name ?? 'شركته';
+    final go = await showConfirmSheet(
+      context,
+      title: 'هذا الدين في «$name»',
+      message: 'التسديد والشطب من داخل «$name» — افتحها لتديره',
+      confirmLabel: 'فتح «$name»',
+      cancelLabel: 'إلغاء',
+      icon: LucideIcons.arrowLeftRight,
+    );
+    if (go == true && mounted) await showCompanySwitchSheet(context);
+  }
+
+  List<Widget> _mergedContent() {
+    final m = _merged!;
+    final focus = MergedMode.focused;
+    final pages = _mergedPages;
+    Widget retry() => TextButton.icon(
+          onPressed: _load,
+          icon: const Icon(LucideIcons.refreshCw, size: 16),
+          label: Text('common.retry'.tr()),
+        );
+    if (pages.isEmpty) {
+      // لا أصفار لما لم يُقرأ: سبب المختارة، أو الكلّ تعذّر/غير مفعّل
+      final p = focus == null ? null : m.partOf(focus.key);
+      final text = p == null
+          ? (m.parts.any((x) => x.ok) ? 'dd.off'.tr() : (_error ?? 'dd.load_failed'.tr()))
+          : p.unsupported
+              ? '«${p.company.name}»: ديون المحذوفين لنوعها ليست هنا'
+              : !p.ok
+                  ? '«${p.company.name}»: ${p.error ?? 'dd.load_failed'.tr()}'
+                  : '«${p.company.name}»: ${'dd.off'.tr()}';
+      return [_Notice(icon: LucideIcons.userX, text: text, action: retry())];
+    }
+    final count = pages.fold<int>(0, (s, e) => s + e.page.count);
+    final total = pages.fold<double>(0, (s, e) => s + e.page.total);
+    final failed = focus != null
+        ? const <String>[]
+        : [for (final p in m.parts) if (!p.ok && !p.unsupported) '«${p.company.name}»'];
+    final s = _search.text.trim().toLowerCase();
+    final rows = [
+      for (final e in pages)
+        for (final r in e.page.rows)
+          if (s.isEmpty || _matches(r, s)) (key: e.c.key, row: r),
+    ];
+    final anyRows = pages.any((e) => e.page.rows.isNotEmpty);
+    final openShown = _openKey != null && (focus == null || focus.key == _openKey);
+    final openTwins = openShown ? (_page?.pendingTwins ?? const <PendingTwin>[]) : const <PendingTwin>[];
+    final otherTwins = [
+      for (final e in pages)
+        if (e.c.key != _openKey && e.page.pendingTwins.isNotEmpty) e,
+    ];
+    return [
+      Row(
+        children: [
+          Expanded(
+            child: _Kpi(
+              icon: LucideIcons.userX,
+              label: 'dd.kpi_count'.tr(),
+              value: formatIQD(count),
+              tone: AppTone.danger,
+            ),
+          ),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: _Kpi(
+              icon: LucideIcons.handCoins,
+              label: 'dd.kpi_total'.tr(),
+              value: _money(total),
+              tone: AppTone.warning,
+            ),
+          ),
+        ],
+      ),
+      // ما لم يدخل المجموع — باسمه
+      if (failed.isNotEmpty) ...[
+        const SizedBox(height: Sp.sm),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(LucideIcons.triangleAlert, size: 13, color: AppColors.warning),
+            ),
+            const SizedBox(width: Sp.x6),
+            Expanded(
+              child: Text(
+                'merged.not_in_sum'.tr(args: [failed.join('، ')]),
+                style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.5),
+              ),
+            ),
+          ],
+        ),
+      ],
+      const SizedBox(height: Sp.md),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(LucideIcons.info, size: 14, color: AppColors.textLow),
+          ),
+          const SizedBox(width: Sp.x6),
+          Expanded(
+            child: Text(
+              'dd.info'.tr(),
+              style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.6),
+            ),
+          ),
+        ],
+      ),
+      if (focus == null && m.parts.where((p) => !p.unsupported).length > 1) ...[
+        const SizedBox(height: Sp.md),
+        MergedBreakdownCard(rows: _breakdown(m)),
+      ],
+      // الدين المكرّر: قرار المفتوحة هنا، وغيرها من داخلها
+      if (openTwins.isNotEmpty) ...[
+        const SizedBox(height: Sp.md),
+        if (focus == null) ...[
+          CompanyTag(companyKey: _openKey!, fontSize: 11),
+          const SizedBox(height: Sp.xs),
+        ],
+        _TwinsCard(
+          twins: openTwins,
+          decide: _page!.twinsApi >= 2,
+          busyKey: _twinBusy,
+          onSame: _twinSame,
+          onDistinct: _twinDistinct,
+        ),
+      ],
+      for (final e in otherTwins) ...[
+        const SizedBox(height: Sp.sm),
+        Material(
+          color: AppColors.warningSoftBg,
+          borderRadius: BorderRadius.circular(R.card),
+          child: InkWell(
+            key: ValueKey('dd-other-twins-${e.c.key}'),
+            borderRadius: BorderRadius.circular(R.card),
+            onTap: () => _openOther(e.c.key),
+            child: Padding(
+              padding: const EdgeInsets.all(Sp.md),
+              child: Row(children: [
+                Icon(LucideIcons.copy, size: 16, color: AppColors.warningOnSoft),
+                const SizedBox(width: Sp.x6),
+                Expanded(
+                  child: Text(
+                    '«${e.c.name}»: ديونٌ مكرّرة تنتظر قرارك (${e.page.pendingTwins.length}) — القرار من داخلها',
+                    style: AppType.label(color: AppColors.warningOnSoft).copyWith(fontSize: 12.5, height: 1.5),
+                  ),
+                ),
+                Icon(Icons.chevron_left_rounded, size: 18, color: AppColors.warningOnSoft),
+              ]),
+            ),
+          ),
+        ),
+      ],
+      if (anyRows) ...[
+        const SizedBox(height: Sp.md),
+        SheetSearchField(
+          controller: _search,
+          hint: 'dd.search_hint'.tr(),
+          onChanged: (_) => setState(() {}),
+        ),
+      ],
+      const SizedBox(height: Sp.md),
+      if (!anyRows)
+        _Notice(icon: LucideIcons.userX, text: 'dd.empty'.tr())
+      else if (rows.isEmpty)
+        _Notice(icon: LucideIcons.search, text: 'dd.no_results'.tr())
+      else
+        for (int i = 0; i < rows.length; i++) ...[
+          if (i > 0) const SizedBox(height: Sp.sm),
+          if (focus == null) ...[
+            Padding(
+              padding: const EdgeInsetsDirectional.only(start: 4, bottom: 2),
+              child: CompanyTag(companyKey: rows[i].key, fontSize: 11),
+            ),
+          ],
+          _DebtTile(
+            row: rows[i].row,
+            onPay: rows[i].key == _openKey
+                ? () => _afterSheet(_showPaySheet(context, rows[i].row))
+                : () => _openOther(rows[i].key),
+            onWriteOff: rows[i].key == _openKey
+                ? () => _afterSheet(_showWriteOffSheet(context, rows[i].row))
+                : () => _openOther(rows[i].key),
+          ),
+        ],
+    ];
+  }
+
+  /// زرّ الإضافة: للشركة المفتوحة — في الوضع باسمها، ويختفي حين تُعرض شركةٌ غيرها وحدها.
+  Widget? _fab() {
+    if (!_mergedOn || _merged == null) return _page?.enabled == true ? _addButton() : null;
+    final focus = MergedMode.focused;
+    if (_openKey == null || _page?.enabled != true || (focus != null && focus.key != _openKey)) return null;
+    return _addButton(company: MergedMode.companyOf(_openKey!)?.name);
   }
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final page = _page;
-    final enabled = page?.enabled == true;
+    final merged = _mergedOn ? _merged : null;
     return ReportPermissionGate(
       permission: 'deleted_debts.view',
       title: 'reports.deleted_debts'.tr(),
@@ -243,7 +576,7 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
           ),
           iconTheme: IconThemeData(color: AppColors.textHi),
         ),
-        floatingActionButton: enabled ? _addButton() : null,
+        floatingActionButton: _fab(),
         body: SafeArea(
           child: RefreshIndicator(
             onRefresh: _load,
@@ -253,11 +586,20 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
               padding: const EdgeInsets.fromLTRB(
                   Sp.lg, Sp.md, Sp.lg, Sp.huge + Sp.huge),
               children: [
-                const MergedOpenCompanyNote(
-                  textKey: 'merged.deleted_debts_note',
-                  padding: EdgeInsets.only(bottom: Sp.md),
-                ),
-                ..._content(page),
+                // «كل الشركات»: الشركات بعدد مديني كلٍّ منها، ومن لم يُقرأ ولماذا
+                if (merged != null) ...[
+                  MergedCompanyStrip(
+                    countOf: (c) => _pageOf(c)?.enabled == true ? _pageOf(c)!.count : null,
+                    total: [
+                      for (final p in merged.parts)
+                        if (p.ok && p.rows!.isNotEmpty && p.rows!.first.enabled) p.rows!.first.count,
+                    ].fold<int>(0, (a, b) => a + b),
+                    problemOf: _problemOf,
+                    note: _mergedNote(merged),
+                  ),
+                  const SizedBox(height: Sp.md),
+                ],
+                if (merged != null && !_loading) ..._mergedContent() else ..._content(page),
               ],
             ),
           ),
@@ -376,7 +718,7 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
     ];
   }
 
-  Widget _addButton() {
+  Widget _addButton({String? company}) {
     final can = Perms.has('deleted_debts.add');
     return FloatingActionButton.extended(
       backgroundColor: can ? AppColors.warningFill : LockedStyle.box,
@@ -385,7 +727,7 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
           ? () => _afterSheet(_showAddSheet(context))
           : () => showNoPermission(context, action: true),
       icon: Icon(can ? LucideIcons.plus : LucideIcons.lock, size: 16),
-      label: Text('dd.add'.tr()),
+      label: Text(company == null ? 'dd.add'.tr() : '${'dd.add'.tr()} · $company'),
     );
   }
 }
