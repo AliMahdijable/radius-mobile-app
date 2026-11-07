@@ -1333,7 +1333,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                 : () => Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) =>
-                            SessionsReportScreen(initialUsername: sub.username),
+                            SessionsReportScreen(initialUsername: sub.username, companyKey: sub.companyKey),
                       ),
                     ),
           ),

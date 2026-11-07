@@ -3,7 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/company_route.dart';
 import '../../api/reports_api.dart';
+import '../../models/merged_company.dart';
+import '../../services/merged_mode.dart';
+import '../../services/merged_report_loader.dart';
+import '../../widgets/company_tag.dart';
+import '../../widgets/merged_company_strip.dart';
 import '../../core/util/server_time.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -22,9 +28,12 @@ import '../../core/widgets/copyable.dart';
 /// باسم دخوله كاملاً — SAS4 يفلتر UserSessions به، وايرث لنك تعطي سجلّ ذلك
 /// المشترك من `usersession/user` (آخر ٣٠ يوماً — مؤكَّد حيّاً).
 class SessionsReportScreen extends StatefulWidget {
-  const SessionsReportScreen({super.key, this.initialUsername});
+  const SessionsReportScreen({super.key, this.initialUsername, this.companyKey});
 
   final String? initialUsername;
+
+  /// «كل الشركات»: «سجلّ الجلسات» لمشتركٍ من شركةٍ غير المفتوحة — يُطلب من شركته (موجَّهاً) لا من المفتوحة.
+  final String? companyKey;
 
   @override
   State<SessionsReportScreen> createState() => _SessionsReportScreenState();
@@ -47,6 +56,40 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
   /// فلتر مدير المستخدم — client-side (SAS4 sessions ما تستقبل هذا الـparam).
   ReportFilters _filters = const ReportFilters();
 
+  // ── «كل الشركات» (٧ نوفمبر — المالك: «التقارير… بنفس فكرة عرض المشتركين والاختيار بين الكل وشركة»): الشاشة نفسها، وشريط
+  // الشركات أعلاها بعدد جلسات كلٍّ منها، وكلّ جلسةٍ بشارة شركتها. جلسات كلّ شركةٍ بطلبٍ موجَّه لها (ساس وايرث لنك — الخادم
+  // لا يوجّه الجلسات لغيرهما فتُسمّى)، والمتعذّرة تُسمّى في سطر الشريط. فلتر المدير لقوائم الشركة المفتوحة فيُخفى هنا.
+  // سجلّ مشتركٍ بعينه (من نافذته) ليس «كل الشركات»: يُطلب من شركته وحدها ([SessionsReportScreen.companyKey]).
+  bool get _mergedOn => MergedMode.active.value && widget.initialUsername == null;
+  MergedReport<SessionRow>? _merged;
+  int _gen = 0;
+
+  static bool _servesSessions(MergedCompany c) =>
+      c.provider == MergedProvider.sas4 || c.provider == MergedProvider.earthlink;
+
+  /// الصفوف المعروضة — كلٌّ بمفتاح شركته في «كل الشركات» (الأحدث أوّلاً بين الشركات)، وبلا مفتاحٍ خارجها.
+  List<({String? key, SessionRow row})> get _shown {
+    final m = _merged;
+    if (_mergedOn && m != null) {
+      final rows = [for (final e in m.rowsFor(MergedMode.focused?.key)) (key: e.key as String?, row: e.row)];
+      int at(SessionRow s) => parseSasLocal((s.startedAt ?? '').trim())?.millisecondsSinceEpoch ?? 0;
+      rows.sort((a, b) => at(b.row).compareTo(at(a.row)));
+      return rows;
+    }
+    return [for (final s in _visibleRows) (key: null, row: s)];
+  }
+
+  void _onMergedMode() {
+    if (!mounted || widget.initialUsername != null) return;
+    _merged = null;
+    _filters = const ReportFilters();
+    _load();
+  }
+
+  void _onMergedFocus() {
+    if (mounted && _mergedOn) setState(() => _visibleCount = kReportPageStep);
+  }
+
   List<SessionRow> get _visibleRows {
     final um = _filters.userManager;
     if (um == null || um.isEmpty) return _rows;
@@ -63,29 +106,51 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
       _searchValue = u;
       _searchCtrl.text = u;
     }
+    MergedMode.active.addListener(_onMergedMode);
+    MergedMode.focus.addListener(_onMergedFocus);
     _load();
   }
 
   @override
   void dispose() {
+    _gen++;
+    MergedMode.active.removeListener(_onMergedMode);
+    MergedMode.focus.removeListener(_onMergedFocus);
     _searchCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
+    final gen = ++_gen;
     setState(() {
       _loading = true;
       _error = null;
     });
-    final r = await ReportsApi.sessions(
-      onlineOnly: _onlineOnly,
-      limit: 2000,
-      username: _searchField == 'username' ? _searchValue : null,
-      ip: _searchField == 'ip' ? _searchValue : null,
-      mac: _searchField == 'mac' ? _searchValue : null,
-    );
-    if (!mounted) return;
+    Future<({bool ok, List<SessionRow> rows, String? error, String? note})> fetch() => ReportsApi.sessions(
+          onlineOnly: _onlineOnly,
+          limit: 2000,
+          username: _searchField == 'username' ? _searchValue : null,
+          ip: _searchField == 'ip' ? _searchValue : null,
+          mac: _searchField == 'mac' ? _searchValue : null,
+        );
+    if (_mergedOn) {
+      final m = await loadMergedReport<SessionRow>(supports: _servesSessions, fetch: (_) => fetch());
+      if (!mounted || gen != _gen || !_mergedOn) return;
+      setState(() {
+        _loading = false;
+        _merged = m;
+        _rows = const [];
+        // كلّها لم تُقرأ ⇒ حالة الخطأ (وأسبابها بأسمائها في سطر الشريط فوقها)
+        _error = m.parts.any((p) => p.ok) ? null : 'common.load_failed'.tr();
+        _historyNote = null;
+        _visibleCount = kReportPageStep;
+      });
+      return;
+    }
+    final r = await CompanyRoute.run(widget.companyKey, fetch);
+    if (!mounted || gen != _gen || _mergedOn) return;
     setState(() {
+      _merged = null;
       _loading = false;
       _rows = r.rows;
       _error = r.ok ? null : (r.error ?? 'common.load_failed'.tr());
@@ -94,32 +159,35 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
     });
   }
 
-  // الـexport يعكس الفلتر (visible فقط).
-  List<List<String>> get _exportRows => _visibleRows
-      .map((s) => [
-            s.username ?? '',
-            s.ipAddress ?? '',
-            s.mac ?? '',
-            s.userManager ?? '',
-            _humanBytes(s.bytesIn),
-            _humanBytes(s.bytesOut),
-            s.startedAt ?? '',
-            s.endedAt ?? '',
-            s.isOnline
+  // الـexport يعكس الفلتر (visible فقط) — و«كل الشركات» بعمود الشركة أوّلاً.
+  List<List<String>> get _exportRows => [
+        for (final e in _shown)
+          [
+            if (_mergedOn) MergedMode.companyOf(e.key)?.name ?? '',
+            e.row.username ?? '',
+            e.row.ipAddress ?? '',
+            e.row.mac ?? '',
+            e.row.userManager ?? '',
+            _humanBytes(e.row.bytesIn),
+            _humanBytes(e.row.bytesOut),
+            e.row.startedAt ?? '',
+            e.row.endedAt ?? '',
+            e.row.isOnline
                 ? 'subscribers.status_online'.tr()
                 : 'subscribers.status_expired'.tr(),
-          ])
-      .toList();
+          ],
+      ];
 
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep
-    final visible = _visibleRows;
+    final visible = _shown;
     final shown = _visibleCount.clamp(0, visible.length);
     final remaining = visible.length - shown;
     final pageRows = visible.isEmpty
-        ? const <SessionRow>[]
+        ? const <({String? key, SessionRow row})>[]
         : visible.take(_visibleCount).toList();
+    final merged = _mergedOn ? _merged : null;
 
     return ReportPermissionGate(
       permission: 'reports.sessions',
@@ -147,6 +215,27 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                 padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.sm),
                 child: Column(
                   children: [
+                    // «كل الشركات»: الشركات بعدد جلسات كلٍّ منها، ومن لم يُقرأ ولماذا
+                    if (merged != null) ...[
+                      MergedCompanyStrip(
+                        countOf: merged.countOf,
+                        total: merged.total,
+                        problemOf: (c) => merged.problemOf(c,
+                            failedLabel: 'merged.chip_failed'.tr(), unsupportedLabel: 'بلا جلسات'),
+                        note: merged.noteFor(MergedMode.focused?.key,
+                            unsupportedText: 'لا تقرير جلساتٍ لنوعها',
+                            missingText: 'merged.missing'.tr(args: [merged.missing.map((c) => c.name).join('، ')])),
+                      ),
+                      const SizedBox(height: Sp.md),
+                    ],
+                    // سجلّ مشتركٍ من شركةٍ غير المفتوحة: شركته
+                    if (widget.companyKey != null && MergedMode.active.value) ...[
+                      Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: CompanyTag(companyKey: widget.companyKey!, fontSize: 12.5),
+                      ),
+                      const SizedBox(height: Sp.sm),
+                    ],
                     SegmentedButton<bool>(
                       segments: [
                         ButtonSegment(
@@ -239,6 +328,8 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                   children: [
                     // فلتر مدير المستخدم فقط (لا actionManager/employee/actionTypes
                     // لأن مصدر الجلسات هو SAS4 UserSessions، ليس activity_logs).
+                    // «كل الشركات»: قائمة المدراء للشركة المفتوحة وحدها ⇒ يُخفى
+                    if (!_mergedOn)
                     ReportFiltersPanel(
                       value: _filters,
                       includeActionTypes: false,
@@ -280,7 +371,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                       ? const Center(child: CircularProgressIndicator())
                       : _error != null
                           ? _errorState()
-                          : _rows.isEmpty
+                          : visible.isEmpty
                               ? _emptyState()
                               : ListView(
                                   padding: const EdgeInsets.fromLTRB(
@@ -304,6 +395,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                                               ? 'sessions_online'
                                               : 'sessions_all',
                                           columns: [
+                                            if (_mergedOn) 'merged.col_company'.tr(),
                                             'reports.col_username'.tr(),
                                             'IP',
                                             'MAC',
@@ -319,8 +411,8 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                                       ],
                                     ),
                                     const SizedBox(height: Sp.sm),
-                                    for (final s in pageRows) ...[
-                                      _sessionTile(s),
+                                    for (final e in pageRows) ...[
+                                      _sessionTile(e.row, company: e.key),
                                       const SizedBox(height: 6),
                                     ],
                                     if (remaining > 0)
@@ -340,7 +432,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
     );
   }
 
-  Widget _sessionTile(SessionRow s) {
+  Widget _sessionTile(SessionRow s, {String? company}) {
     final online = s.isOnline;
     final dot = online ? AppColors.success : AppColors.textLow;
     return Container(
@@ -445,6 +537,11 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                       ),
                     ],
                   ),
+                ],
+                // «كل الشركات»: شركة الجلسة
+                if (company != null) ...[
+                  const SizedBox(height: 3),
+                  CompanyTag(companyKey: company),
                 ],
                 if (s.bytesIn > 0 || s.bytesOut > 0) ...[
                   const SizedBox(height: 2),
