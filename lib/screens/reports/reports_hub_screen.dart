@@ -10,6 +10,7 @@ import '../../services/permissions_service.dart';
 import '../../services/provider_limits.dart';
 import '../../services/provider_service.dart';
 import '../../services/merged_mode.dart';
+import '../../models/merged_company.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -205,8 +206,11 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
         // ثمّ يردّ الخادم 403): التجريبي والباقات ← activations، والسجلّ
         // ← activity_log.
         final earthlink = <Widget>[
-          if (ProviderService.isEarthlink) ...[
+          // «كل الشركات»: تقارير ايرث لنك لشركات ايرث لنك في الحساب ولو كانت المفتوحة غيرها (موجَّهةً لها)
+          if (ProviderService.isEarthlink ||
+              (MergedMode.active.value && MergedMode.usable.any((c) => c.provider == MergedProvider.earthlink))) ...[
             _ReportCard(
+              merged: true,
               locked: !Perms.has('reports.activations'),
               icon: LucideIcons.flaskConical,
               color: AppColors.info,
@@ -218,6 +222,7 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
             ),
             // «سجلّ ايرث لنك» أُلغي (٣ نوفمبر — المالك: «سجل ايرث لنك هذا الغي»): كان يُظهر عنوان خادمنا لكلّ وكيل.
             _ReportCard(
+              merged: true,
               locked: !Perms.has('reports.activations'),
               icon: LucideIcons.package,
               color: AppColors.brand,

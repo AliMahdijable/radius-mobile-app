@@ -9,6 +9,7 @@ import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/company_route.dart';
 import 'package:rad_mysvcs/api/subscribers_api.dart';
 import 'package:rad_mysvcs/models/merged_company.dart';
+import 'package:rad_mysvcs/screens/el/el_reports.dart';
 import 'package:rad_mysvcs/screens/reports/activations_report_screen.dart';
 import 'package:rad_mysvcs/screens/reports/activity_log_report_screen.dart';
 import 'package:rad_mysvcs/screens/reports/daily_activations_report_screen.dart';
@@ -26,6 +27,8 @@ const _kB = 'c0000000000bb';
 const _kN = 'c0000000000cc'; // شركة مُضافة (kit) — لا جلسات تُوجَّه لها
 const _kA2 = 'c0000000000ee'; // ربطٌ ثانٍ لمدير سوبرنت نفسه
 const _kU = 'c0000000000ff'; // ساسٌ بعيد لم تُقرأ عملته (currency null)
+const _kL1 = 'c00000000e101'; // ايرث لنك (حسابان)
+const _kL2 = 'c00000000e102';
 
 ResponseBody _json(int status, Object body, {Map<String, List<String>> headers = const {}}) =>
     ResponseBody.fromString(jsonEncode(body), status, headers: {
@@ -62,6 +65,16 @@ class _Srv implements HttpClientAdapter {
       return inner.fetch(o, rs, cf);
     }
     final h = {'x-company-key': [key]};
+    if (path == '/api/v2/el/by-package') {
+      final rows = key == _kL1
+          ? [{'name': 'FTTH 50M', 'count': 30}, {'name': 'FTTH 100M', 'count': 5}]
+          : [{'name': 'FTTH 50M', 'count': 12}];
+      return _json(200, {'success': true, 'data': rows}, headers: h);
+    }
+    if (path == '/api/v2/el/test-usage') {
+      final rows = key == _kL1 ? [{'name': 'تجربة ١', 'username': 't1@el'}] : [{'name': 'تجربة ٢', 'username': 't2@el'}];
+      return _json(200, {'success': true, 'data': rows}, headers: h);
+    }
     if (path == '/api/reports/finance/packages') {
       Map<String, Object?> rep(String name, int acts, int revenue, {int? cost, bool exempt = false, bool unknown = false}) {
         final profit = unknown ? null : (exempt ? revenue : revenue - (cost ?? 0));
@@ -121,13 +134,15 @@ class _Srv implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
-Map<String, Object?> _companies({bool twin = false, bool unknownCurrency = false}) => {
+Map<String, Object?> _companies({bool twin = false, bool unknownCurrency = false, bool earthlink = false}) => {
       'routing': true,
       'writes': true,
       'companies': [
         {'key': _kA, 'code': 'supernet', 'username': 'mahdi', 'name': 'سوبرنت', 'status': 'ok', 'admin_id': '2', 'ns': 'nA', 'currency': 'IQD', 'color_index': 0},
         {'key': _kB, 'code': 'jt', 'username': 'admin@b', 'name': 'الجزيرة', 'status': 'ok', 'admin_id': 'jt:22', 'ns': 'nB', 'currency': 'IQD', 'color_index': 1},
         {'key': _kN, 'code': 'nabd', 'username': 'n', 'name': 'نبض', 'provider': 'kit', 'status': 'ok', 'admin_id': 'nabd:5', 'ns': 'nN', 'currency': 'IQD', 'color_index': 2},
+        if (earthlink) {'key': _kL1, 'code': 'earthlink', 'provider': 'earthlink', 'username': 'el1', 'name': 'ايرث لنك ١', 'status': 'ok', 'admin_id': 'earthlink:31', 'ns': 'nL1', 'currency': 'IQD', 'color_index': 6},
+        if (earthlink) {'key': _kL2, 'code': 'earthlink', 'provider': 'earthlink', 'username': 'el2', 'name': 'ايرث لنك ٢', 'status': 'ok', 'admin_id': 'earthlink:32', 'ns': 'nL2', 'currency': 'IQD', 'color_index': 7},
         if (unknownCurrency) {'key': _kU, 'code': 'xs', 'username': 'x', 'name': 'اكس نت', 'status': 'ok', 'admin_id': 'xs:9', 'ns': 'nU', 'currency': null, 'color_index': 5},
         if (twin) {'key': _kA2, 'code': 'supernet', 'username': 'mahdi2', 'name': 'سوبرنت ٢', 'status': 'ok', 'admin_id': '2', 'ns': 'nA', 'currency': 'IQD', 'color_index': 4},
         {'key': 'c0000000000dd', 'code': 'hs', 'username': 'u', 'name': 'هلا سات', 'status': 'needs_login', 'admin_id': 'hs:44', 'ns': 'nD'},
@@ -138,13 +153,14 @@ void main() {
   setUpAll(visualSetUpAll);
   late _Srv srv;
 
-  Future<void> up({bool twin = false, bool unknownCurrency = false}) async {
+  Future<void> up({bool twin = false, bool unknownCurrency = false, bool earthlink = false}) async {
     final inner = await visualSetUp(s1bSasOwner);
     srv = _Srv(inner);
     ApiClient.dio.httpClientAdapter = srv;
     AccountApi.tokenSource = ({bool force = false}) async => 'acct';
     MergedMode.reset();
-    MergedMode.fetchRaw = () async => Map<String, dynamic>.from(_companies(twin: twin, unknownCurrency: unknownCurrency));
+    MergedMode.fetchRaw = () async =>
+        Map<String, dynamic>.from(_companies(twin: twin, unknownCurrency: unknownCurrency, earthlink: earthlink));
     SubscribersApi.clearAllCaches();
   }
 
@@ -302,6 +318,35 @@ void main() {
     expect(srv.asked.length, before, reason: 'المختارة من الجمع المحفوظ — بلا طلب');
     expect(find.text('Gold 50M'), findsNothing);
     expect(find.text('JT 40M'), findsOneWidget);
+    await down(t);
+  });
+
+  testWidgets('تقارير ايرث لنك: شركات ايرث لنك وحدها بمفاتيحها، والباقة باسمها مجموعة منها، وغيرها «ليست ايرث لنك»', (t) async {
+    await up(earthlink: true);
+    await t.runAsync(() => MergedMode.enter());
+    await pumpVisual(t, const VisualDevice('', Size(390, 1600), 1), home: (_) => const ElByPackageScreen());
+    await settle(t, seconds: 3);
+    expect(srv.asked.where((a) => a.startsWith('GET /api/v2/el/by-package')).toSet(),
+        {'GET /api/v2/el/by-package $_kL1', 'GET /api/v2/el/by-package $_kL2'});
+    expect(find.text('FTTH 50M'), findsOneWidget, reason: 'الباقة نفسها من الحسابين سطرٌ واحد');
+    expect(find.text('42 مشترك'), findsOneWidget, reason: '30 + 12');
+    expect(find.textContaining('ليست ايرث لنك'), findsWidgets, reason: 'على شارات الشركات الأخرى');
+    expect(find.textContaining('«سوبرنت»: ليست ايرث لنك'), findsNothing, reason: 'لا ضجيج في سطر الشريط');
+    MergedMode.focus.value = _kL2;
+    await settle(t, seconds: 1);
+    expect(find.text('12 مشترك'), findsWidgets);
+    expect(find.text('FTTH 100M'), findsNothing);
+    await down(t);
+  });
+
+  testWidgets('استخدام التجريبيّ: مشتركو الحسابين بشارة شركتهم', (t) async {
+    await up(earthlink: true);
+    await t.runAsync(() => MergedMode.enter());
+    await pumpVisual(t, const VisualDevice('', Size(390, 1600), 1), home: (_) => const ElTestUsageScreen());
+    await settle(t, seconds: 3);
+    expect(find.text('تجربة ١'), findsOneWidget);
+    expect(find.text('تجربة ٢'), findsOneWidget);
+    expect(find.text('ايرث لنك ١'), findsWidgets);
     await down(t);
   });
 }

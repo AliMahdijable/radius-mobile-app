@@ -7,6 +7,11 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/earthlink_api.dart';
 import '../../core/util/format.dart';
+import '../../models/merged_company.dart';
+import '../../services/merged_mode.dart';
+import '../../services/merged_report_loader.dart';
+import '../../widgets/company_tag.dart';
+import '../../widgets/merged_company_strip.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -38,18 +43,58 @@ class _ElTestUsageScreenState extends State<ElTestUsageScreen> {
   String? _error;
   int _req = 0;
 
+  // «كل الشركات» (٧ نوفمبر): شركات ايرث لنك كلّها بطلبٍ موجَّه لكلٍّ منها، وكلّ مشتركٍ بشارة شركته (راجع [_ElMerged]).
+  MergedReport<ElTestUsageRow>? _merged;
+  bool get _mergedOn => MergedMode.active.value;
+
+  void _onMerged() {
+    if (!mounted) return;
+    _merged = null;
+    _items = null;
+    _load();
+  }
+
+  void _onFocus() {
+    if (mounted && _mergedOn) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
+    MergedMode.active.addListener(_onMerged);
+    MergedMode.focus.addListener(_onFocus);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _req++;
+    MergedMode.active.removeListener(_onMerged);
+    MergedMode.focus.removeListener(_onFocus);
+    super.dispose();
   }
 
   Future<void> _load() async {
     final req = ++_req;
     if (mounted) setState(() => _loading = true);
+    if (_mergedOn) {
+      final m = await _ElMerged.load<ElTestUsageRow>(() async {
+        final r = await EarthlinkApi.testUsage();
+        return (ok: r.message == null, rows: r.items, error: r.message, note: null);
+      });
+      if (!mounted || req != _req || !_mergedOn) return;
+      setState(() {
+        _loading = false;
+        _merged = m;
+        _items = const [];
+        _error = m.parts.any((p) => p.ok) ? null : 'تعذّر جلب استخدام التجريبيّ';
+      });
+      return;
+    }
     final r = await EarthlinkApi.testUsage();
-    if (!mounted || req != _req) return;
+    if (!mounted || req != _req || _mergedOn) return;
     setState(() {
+      _merged = null;
       _loading = false;
       if (r.message == null) {
         _items = r.items;
@@ -62,7 +107,12 @@ class _ElTestUsageScreenState extends State<ElTestUsageScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final items = _items;
+    final m = _mergedOn ? _merged : null;
+    // «كل الشركات»: صفوف شركات ايرث لنك (أو المختارة) كلٌّ بمفتاح شركته
+    final rows = m == null
+        ? [for (final r in _items ?? const <ElTestUsageRow>[]) (key: null as String?, row: r)]
+        : [for (final e in m.rowsFor(MergedMode.focused?.key)) (key: e.key as String?, row: e.row)];
+    final items = m == null ? _items : [for (final e in rows) e.row];
     return _ElReadScaffold(
       title: 'el.test_usage_title'.tr(),
       subtitle: 'el.test_usage_hint'.tr(),
@@ -73,6 +123,7 @@ class _ElTestUsageScreenState extends State<ElTestUsageScreen> {
       emptyIcon: LucideIcons.flaskConical,
       emptyText: 'el.test_usage_empty'.tr(),
       onRefresh: _load,
+      header: m == null ? null : _ElMerged.strip(m),
       content: items == null
           ? const SizedBox.shrink()
           : Column(
@@ -89,9 +140,14 @@ class _ElTestUsageScreenState extends State<ElTestUsageScreen> {
                   title: 'el.test_usage_title'.tr(),
                   countLabel: _subsCount(items.length),
                   children: [
-                    for (var i = 0; i < items.length; i++) ...[
+                    for (var i = 0; i < rows.length; i++) ...[
                       if (i > 0) const SizedBox(height: Sp.sm),
-                      _TestUsageRow(row: items[i]),
+                      if (m != null && MergedMode.focused == null && rows[i].key != null)
+                        Padding(
+                          padding: const EdgeInsetsDirectional.only(start: 4, bottom: 4),
+                          child: CompanyTag(companyKey: rows[i].key!, fontSize: 11),
+                        ),
+                      _TestUsageRow(row: rows[i].row),
                     ],
                   ],
                 ),
@@ -331,18 +387,69 @@ class _ElByPackageScreenState extends State<ElByPackageScreen> {
   String? _error;
   int _req = 0;
 
+  // «كل الشركات» (٧ نوفمبر): شركات ايرث لنك كلّها بطلبٍ موجَّه، والباقة الواحدة (اسمها في ايرث لنك واحد) تُجمع من الشركات.
+  MergedReport<ElPackageCount>? _merged;
+  bool get _mergedOn => MergedMode.active.value;
+
+  void _onMerged() {
+    if (!mounted) return;
+    _merged = null;
+    _items = null;
+    _load();
+  }
+
+  void _onFocus() {
+    if (mounted && _mergedOn) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
+    MergedMode.active.addListener(_onMerged);
+    MergedMode.focus.addListener(_onFocus);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _req++;
+    MergedMode.active.removeListener(_onMerged);
+    MergedMode.focus.removeListener(_onFocus);
+    super.dispose();
+  }
+
+  /// «كل الشركات»: الباقة باسمها مجموعةً من شركات النطاق (الأكثر أوّلاً).
+  List<ElPackageCount> _combined(MergedReport<ElPackageCount> m) {
+    final byName = <String, int>{};
+    for (final e in m.rowsFor(MergedMode.focused?.key)) {
+      byName[e.row.name] = (byName[e.row.name] ?? 0) + e.row.count;
+    }
+    final out = [for (final e in byName.entries) ElPackageCount(name: e.key, count: e.value)];
+    out.sort((a, b) => b.count.compareTo(a.count));
+    return out;
   }
 
   Future<void> _load() async {
     final req = ++_req;
     if (mounted) setState(() => _loading = true);
+    if (_mergedOn) {
+      final m = await _ElMerged.load<ElPackageCount>(() async {
+        final r = await EarthlinkApi.byPackage();
+        return (ok: r.message == null, rows: r.items, error: r.message, note: null);
+      });
+      if (!mounted || req != _req || !_mergedOn) return;
+      setState(() {
+        _loading = false;
+        _merged = m;
+        _items = const [];
+        _error = m.parts.any((p) => p.ok) ? null : 'تعذّر جلب الباقات';
+      });
+      return;
+    }
     final r = await EarthlinkApi.byPackage();
-    if (!mounted || req != _req) return;
+    if (!mounted || req != _req || _mergedOn) return;
     setState(() {
+      _merged = null;
       _loading = false;
       if (r.message == null) {
         _items = r.items;
@@ -355,7 +462,8 @@ class _ElByPackageScreenState extends State<ElByPackageScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final items = _items;
+    final m = _mergedOn ? _merged : null;
+    final items = m == null ? _items : _combined(m);
     final total =
         items == null ? 0 : items.fold<int>(0, (s, p) => s + p.count);
     final max = items == null || items.isEmpty
@@ -371,6 +479,7 @@ class _ElByPackageScreenState extends State<ElByPackageScreen> {
       emptyIcon: LucideIcons.package,
       emptyText: 'el.by_package_empty'.tr(),
       onRefresh: _load,
+      header: m == null ? null : _ElMerged.strip(m),
       content: items == null
           ? const SizedBox.shrink()
           : Column(
@@ -452,6 +561,26 @@ class _PackageRow extends StatelessWidget {
       ),
     );
   }
+}
+
+// ═════════════════ «كل الشركات» ═════════════════
+
+/// تقارير ايرث لنك في «كل الشركات» (٧ نوفمبر — المالك: «التقارير… بنفس فكرة عرض المشتركين والاختيار بين الكل وشركة»): كلّ
+/// شركة ايرث لنك بطلبٍ موجَّه لها (مدخلات الخادم el-test-usage / el-by-package — ايرث لنك وحدها)، والشريط أعلى التقرير؛ الشركات
+/// الأخرى على شارتها «ليست ايرث لنك» ولا تُذكر في سطره.
+class _ElMerged {
+  static Future<MergedReport<T>> load<T>(Future<({bool ok, List<T> rows, String? error, String? note})> Function() fetch) =>
+      loadMergedReport<T>(supports: (c) => c.provider == MergedProvider.earthlink, fetch: (_) => fetch());
+
+  static Widget strip<T>(MergedReport<T> m) => MergedCompanyStrip(
+        countOf: m.countOf,
+        total: m.total,
+        problemOf: (c) => m.problemOf(c, failedLabel: 'merged.chip_failed'.tr(), unsupportedLabel: 'ليست ايرث لنك'),
+        note: m.noteFor(MergedMode.focused?.key,
+            unsupportedText: 'ليست ايرث لنك',
+            nameUnsupported: false,
+            missingText: 'merged.missing'.tr(args: [m.missing.map((c) => c.name).join('، ')])),
+      );
 }
 
 // ═════════════════ الهيكل المشترك ═════════════════

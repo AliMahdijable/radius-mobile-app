@@ -59,16 +59,18 @@ class MergedReport<T> {
   }
 
   /// سطر الشريط: من لم يُقرأ ولماذا، وملاحظات الخادم — كلٌّ باسم شركته. شركةٌ مختارة: ما يخصّها وحده.
-  String? noteFor(String? focusKey, {required String unsupportedText, required String missingText}) {
+  /// [nameUnsupported] false: لا تُذكر في «الكل» شركاتٌ لا يخدمها التقرير أصلاً (تقارير ايرث لنك — شارتها تقول ذلك).
+  String? noteFor(String? focusKey,
+      {required String unsupportedText, required String missingText, bool nameUnsupported = true}) {
     final focus = focusKey == null ? null : partOf(focusKey);
     final shown = focus == null ? parts : [focus];
     final lines = <String>[
       for (final p in shown)
-        if (p.unsupported)
+        if (p.unsupported && (nameUnsupported || focus != null))
           '«${p.company.name}»: $unsupportedText'
-        else if (!p.ok)
+        else if (!p.unsupported && !p.ok)
           '«${p.company.name}»: ${p.error ?? 'تعذّر جلب التقرير الآن'}'
-        else if (p.note != null)
+        else if (p.ok && p.note != null)
           '«${p.company.name}»: ${p.note}',
       if (focus == null && missing.isNotEmpty) missingText,
     ];
