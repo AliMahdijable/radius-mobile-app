@@ -34,11 +34,15 @@ class VpnNowJob extends ChangeNotifier {
   DateTime? startedAt;
   int _gen = 0;
 
-  bool get busy => phase == VpnBarPhase.running;
+  bool get busy => phase == VpnBarPhase.running || _checking;
+
+  /// تأكّد الطريق جارٍ (الأجهزة) — والشريط على حاله («متّصل» لا دائرة كلّ دقيقة).
+  bool _checking = false;
   String get _what => kind == VpnNowKind.devices ? 'أجهزتك' : 'مشتركينك';
 
   Future<void> run() async {
     if (busy) return;
+    if (kind == VpnNowKind.devices) return _runRoute();
     final gen = ++_gen;
     startedAt = VpnNow.now();
     phase = VpnBarPhase.running;
@@ -80,6 +84,45 @@ class VpnNowJob extends ChangeNotifier {
         return;
       }
     }
+  }
+
+  /// «وضع VPN» بقسم الأجهزة (٧ نوفمبر — المالك: «كانما الوكيل يفعل vpn خارجي»): لا فحص من الخادم — قرّاء القسم نفسها (الحال
+  /// والبنك والقراءات والتحديث) تمرّ عبر الـVPN ([DeviceNet])؛ هنا يُتأكّد أنّ طريقه قائم (ويبقى ملفّه/قالبه متّصلاً) ويُقال له.
+  Future<void> _runRoute() async {
+    final gen = ++_gen;
+    startedAt = VpnNow.now();
+    _checking = true;
+    try {
+      await _routeOnce(gen);
+    } finally {
+      if (gen == _gen) _checking = false;
+    }
+  }
+
+  Future<void> _routeOnce(int gen) async {
+    if (phase != VpnBarPhase.done) {
+      phase = VpnBarPhase.running;
+      line = 'يتّصل بالـVPN…';
+      sub = 'أجهزتك كأنّك على شبكتك';
+      value = null;
+      result = null;
+      reason = null;
+      notifyListeners();
+    }
+    final r = await VpnNow.pipeRoute();
+    if (gen != _gen) return;
+    if (!r.ok) {
+      _fail(r.message ?? 'الـVPN ما اتّصل الآن — حاول بعد قليل', reason: r.reason);
+      return;
+    }
+    final again = phase == VpnBarPhase.done;
+    phase = VpnBarPhase.done;
+    line = 'متّصل عبر الـVPN ✓';
+    sub = 'أجهزتك تُقرأ وتتحدّث عبره — كأنّك على شبكتك';
+    value = null;
+    reason = null;
+    notifyListeners();
+    if (!again) VpnNow._doneInMode(kind);
   }
 
   void _progress(VpnNowProgress? pr) {
@@ -124,6 +167,7 @@ class VpnNowJob extends ChangeNotifier {
     sub = r.detail;
     value = null;
     notifyListeners();
+    VpnNow._doneInMode(kind);
   }
 
   void _fail(String msg, {String? reason}) {
@@ -133,11 +177,14 @@ class VpnNowJob extends ChangeNotifier {
     value = null;
     this.reason = reason;
     notifyListeners();
+    // الفشل يحتاج عيناً — يظهر الشريط وإن أُخفي
+    VpnNow._showBar(kind);
   }
 
   /// يترك الفحص الجاري (الخادم يكمله وحده) ويرجع بلا نتيجة — إطفاء «وضع VPN».
   void cancel() {
     _gen++;
+    _checking = false;
     phase = VpnBarPhase.idle;
     line = null;
     sub = null;
@@ -161,6 +208,7 @@ class VpnNowJob extends ChangeNotifier {
   /// تبديل الحساب/الخروج: يُنسى كلّ شيء ويُترك أيّ استطلاعٍ جارٍ.
   void reset() {
     _gen++;
+    _checking = false;
     startedAt = null;
     phase = VpnBarPhase.idle;
     line = null;
@@ -215,11 +263,50 @@ class VpnNow {
 
   static bool get isOn => mode.value;
 
-  /// كم بين فحصين بالوضع — نفق الشركة الدائم أخفّ من الغرفة المؤقّتة.
+  /// كم بين فحصين بالوضع — نفق الشركة الدائم أخفّ من الغرفة المؤقّتة. الأجهزة: تأكّد الطريق كلّ دقيقة (قرّاؤها تتحدّث بإيقاعها هي).
   static Duration intervalOf(VpnNowKind k) {
     final company = _via == 'company';
-    if (k == VpnNowKind.devices) return Duration(seconds: company ? 60 : 180);
+    if (k == VpnNowKind.devices) return const Duration(seconds: 60);
     return Duration(seconds: company ? 180 : 300);
+  }
+
+  /// طريق الوكيل عبر الـVPN الآن (ممرّ الأجهزة: الشريط والفحص الشامل) — يُستبدل في الاختبار.
+  static Future<PipeRoute> Function() pipeRoute = VpnPipe.route;
+
+  // ── الشريط بالوضع لا يبقى ظاهراً (٧ نوفمبر — المالك: «تنبيه متصل على ال vpn امكانيه خفاء مايبقى ظاهر ع طول… بصفحه المشتركين
+  //    وصحفه الاجهزه»): بعد نجاح الاتّصال يختفي وحده بعد ثوانٍ، و[×] يخفيه الآن؛ الفشل يُظهره؛ والوضع يبقى (درعه ممتلئ بالأدوات). ──
+  static final ValueNotifier<Set<VpnNowKind>> hidden = ValueNotifier<Set<VpnNowKind>>(<VpnNowKind>{});
+  static final Map<VpnNowKind, Timer> _hideTimers = {};
+  @visibleForTesting
+  static Duration autoHideAfter = const Duration(seconds: 6);
+
+  static bool isHidden(VpnNowKind k) => hidden.value.contains(k);
+
+  static void hideBar(VpnNowKind k) {
+    _hideTimers.remove(k)?.cancel();
+    if (!hidden.value.contains(k)) hidden.value = {...hidden.value, k};
+  }
+
+  static void _showBar(VpnNowKind k) {
+    _hideTimers.remove(k)?.cancel();
+    if (hidden.value.contains(k)) hidden.value = {...hidden.value}..remove(k);
+  }
+
+  static void _doneInMode(VpnNowKind k) {
+    if (!mode.value || hidden.value.contains(k)) return;
+    _hideTimers.remove(k)?.cancel();
+    _hideTimers[k] = Timer(autoHideAfter, () {
+      _hideTimers.remove(k);
+      if (mode.value) hideBar(k);
+    });
+  }
+
+  static void _resetBars() {
+    for (final t in _hideTimers.values) {
+      t.cancel();
+    }
+    _hideTimers.clear();
+    if (hidden.value.isNotEmpty) hidden.value = <VpnNowKind>{};
   }
 
   /// يشغّل الوضع ويفحص [from] فوراً (والأقسام الظاهرة).
@@ -232,6 +319,7 @@ class VpnNow {
     }
     _noticeTimer?.cancel();
     notice.value = null;
+    _resetBars();
     _armed = AgentNetPresence.current != NetPresence.on;
     _guardAt = now(); // لا حارس بالثواني الأولى — الضغطة نفسها قرار
     mode.value = true;
@@ -248,6 +336,7 @@ class VpnNow {
     _loop?.cancel();
     _loop = null;
     mode.value = false;
+    _resetBars();
     subscribers.cancel();
     devices.cancel();
     // ممرّ التطبيق (٧ نوفمبر): اتّصالاته وغرفة نفقه الباقية (ملفّه/قالب شركته) تُغلق الآن لا بعد خمولها
@@ -449,6 +538,7 @@ class VpnNow {
     _noticeTimer?.cancel();
     mode.value = false;
     notice.value = null;
+    _resetBars();
     _armed = false;
     _guardAt = null;
     _via = null;

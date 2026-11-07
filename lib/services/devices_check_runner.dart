@@ -150,7 +150,19 @@ class DevicesCheckRunner extends ChangeNotifier {
       final (limits, memos, macs) = await (loadLimits(), DevicesCheckMemoStore.load(), _macIndex()).wait;
       if (gen != _gen) return;
       if (viaVpn) {
-        await _viaVpn(limits, memos, macs, gen);
+        // ٧ نوفمبر (المالك: «كانما الوكيل يفعل vpn خارجي»): الفحص نفسه — بنكه واتّصالاته وقراءاته عبر الـVPN (DeviceNet.vpn)؛
+        // الطريق أوّلاً: لا VPN أو لم يتّصل ⇒ السبب بكلمةٍ لا «كلّها طافية»
+        line = 'يتّصل بالـVPN…';
+        notifyListeners();
+        final route = await VpnNow.pipeRoute();
+        if (gen != _gen) return;
+        if (!route.ok) {
+          error = route.message ?? 'الـVPN ما اتّصل الآن — حاول بعد قليل';
+          errorReason = route.reason;
+          return;
+        }
+        line = null;
+        await DeviceNet.vpn(() => _local(limits, memos, macs, gen));
       } else {
         await _local(limits, memos, macs, gen);
       }
@@ -197,8 +209,10 @@ class DevicesCheckRunner extends ChangeNotifier {
 
   static Future<DeviceCheckReport> _checkLocal(NetworkDevice d, CheckLimits limits, CheckMemo? prev, Map<String, String> macs) async {
     DeviceProbe? probe;
+    // عبر الـVPN كلّ رحلةٍ أطول (الموبايل ⇄ الخادم ⇄ النفق) ⇒ مهلٌ أوسع
+    final piped = DeviceNet.viaPipe(d.ip);
     try {
-      probe = await (debugProbe?.call(d) ?? NetworkDevicesApi.probeDevice(d, ping: true)).timeout(const Duration(seconds: 15));
+      probe = await (debugProbe?.call(d) ?? NetworkDevicesApi.probeDevice(d, ping: true)).timeout(Duration(seconds: piped ? 25 : 15));
     } catch (_) {}
     final alive = switch (probe?.status) { 'online' => true, 'offline' => false, _ => null };
     if (alive == false) return DevicesCheck.evaluate(d: d, alive: false, limits: limits, prev: prev);
@@ -211,7 +225,7 @@ class DevicesCheckRunner extends ChangeNotifier {
           d: d, alive: alive, ms: probe?.responseMs, loss: probe?.packetLoss, unreadReason: '$hard — الحال فقط', limits: limits, prev: prev);
     }
     try {
-      final p = await (debugFetch?.call(d) ?? DeviceVitals.fetch(d, detailed: true)).timeout(const Duration(seconds: 25));
+      final p = await (debugFetch?.call(d) ?? DeviceVitals.fetch(d, detailed: true)).timeout(Duration(seconds: piped ? 45 : 25));
       return DevicesCheck.evaluate(
         d: d,
         alive: true,
@@ -237,90 +251,5 @@ class DevicesCheckRunner extends ChangeNotifier {
         prev: prev,
       );
     }
-  }
-
-  // ── عبر الـVPN ──────────────────────────────────────────────────────
-
-  Future<void> _viaVpn(CheckLimits limits, Map<int, CheckMemo> memos, Map<String, String> macs, int gen) async {
-    final job = VpnNow.devices;
-    void onJob() {
-      line = job.line;
-      notifyListeners();
-    }
-
-    job.addListener(onJob);
-    try {
-      if (job.busy) {
-        // فحصٌ جارٍ (وضع VPN) — ننتظره لا نبدأ ثانياً
-        final c = Completer<void>();
-        void wait() {
-          if (!job.busy && !c.isCompleted) c.complete();
-        }
-
-        job.addListener(wait);
-        await c.future.timeout(const Duration(minutes: 4), onTimeout: () {});
-        job.removeListener(wait);
-      } else {
-        await job.run();
-      }
-    } finally {
-      job.removeListener(onJob);
-    }
-    if (gen != _gen) return;
-    if (job.phase == VpnBarPhase.failed || job.result == null) {
-      error = job.line ?? 'تعذّر الفحص عبر الـVPN';
-      errorReason = job.reason;
-      return;
-    }
-    // ٧ نوفمبر (المالك: «بمجرد نقر الوكيل ع وضع vpn كل الفحصوات تمر من vpn»): الحال من فحص الخادم، والمعلومات بقرّاء التطبيق نفسها
-    // عبر ممرّ الـVPN (كلّ البروتوكولات: منافذ السويج، عملاء السكتر، ميموزا وروجي والأولت بـSNMP، سسكو…) — تعذّرت ⇒ ما قرأه الخادم
-    final queue = Queue<NetworkDevice>.from(devices);
-    Future<void> worker() async {
-      while (queue.isNotEmpty && gen == _gen) {
-        final d = queue.removeFirst();
-        final rep = await _vpnReport(d, limits, memos[d.id], macs);
-        if (gen != _gen) return;
-        reports[d.id] = rep;
-        done++;
-        notifyListeners();
-      }
-    }
-
-    // ثلاثةٌ معاً: كلّ جلسةٍ عبر الممرّ أبطأ من الشبكة — لا نزاحم الخادم ولا النفق
-    await Future.wait([for (var i = 0; i < 3; i++) worker()]);
-    notifyListeners();
-  }
-
-  static Future<DeviceCheckReport> _vpnReport(NetworkDevice d, CheckLimits limits, CheckMemo? prev, Map<String, String> macs) async {
-    final r = VpnNow.deviceFor(d.id);
-    if (r == null) {
-      return DevicesCheck.evaluate(
-          d: d, alive: null, unreadReason: 'لم يشمله الفحص عبر الـVPN — عنوانه خارج طريق الشركة', limits: limits, prev: prev, viaVpn: true);
-    }
-    if (r.alive) {
-      final skip = DeviceVitals.skipReason(d);
-      final hard = skip == null || skip == DeviceVitals.offNetworkReason || skip == 'غير متّصل' ? null : skip;
-      if (hard == null) {
-        try {
-          final p = await DeviceNet.vpn(() => debugFetch?.call(d) ?? DeviceVitals.fetch(d, detailed: true)).timeout(const Duration(seconds: 45));
-          return DevicesCheck.evaluate(
-              d: d, alive: true, ms: r.ms, detail: p.detail, raw: p.raw, limits: limits, prev: prev, viaVpn: true, macUsers: macs);
-        } catch (_) {/* ما قرأه الخادم أدناه */}
-      }
-    }
-    final v = r.vitals;
-    final st = v == null ? null : DeviceVitals.fromVpn(v);
-    return DevicesCheck.evaluate(
-      d: d,
-      alive: r.alive,
-      ms: r.ms,
-      detail: st?.detail,
-      unreadReason: r.alive && st == null ? 'يردّ عبر الـVPN — معلوماته ما انقرت عن بُعد' : null,
-      limits: limits,
-      prev: prev,
-      viaVpn: true,
-      portsCountsOnly: v?['pl'] is! List,
-      macUsers: macs,
-    );
   }
 }

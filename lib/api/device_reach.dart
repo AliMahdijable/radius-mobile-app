@@ -1,8 +1,9 @@
 import 'dart:async';
-import 'dart:io' show Socket, SocketException;
+import 'dart:io' show SocketException;
 
 import 'package:flutter/foundation.dart';
 
+import '../core/net/device_net.dart';
 import '../models/network_device.dart';
 import 'olt_profile.dart';
 
@@ -159,8 +160,9 @@ class DeviceReach {
   static Future<PortAnswer> _connect(String host, int port, Duration timeout) async {
     final sw = Stopwatch()..start();
     try {
-      final s = await Socket.connect(host, port, timeout: timeout);
-      final ms = sw.elapsedMilliseconds;
+      // «وضع VPN» (٧ نوفمبر): الاتّصال عبر الممرّ وزمنه من داخل النفق (كأنّه على شبكة الوكيل)
+      final s = await DeviceNet.connect(host, port, timeout: timeout);
+      final ms = DeviceNet.connectMs(s) ?? sw.elapsedMilliseconds;
       s.destroy();
       return (port: port, reply: PortReply.open, ms: ms);
     } catch (e) {
@@ -202,9 +204,11 @@ class DeviceReach {
   }
 
   /// يصدّق ردّاً على منفذ خدمةٍ مسجّل (ويب) — اتّصالٌ على :80 عبر وسيط الموبايل ليس ردّاً من الجهاز.
-  static Future<bool> trusts(int port, PortReply reply) async {
+  /// [ip] عبر ممرّ «وضع VPN» ⇒ الردّ من داخل النفق (لا وسيط موبايلٍ بالطريق) فلا شاهد.
+  static Future<bool> trusts(int port, PortReply reply, {String? ip}) async {
     if (reply == PortReply.silent) return false;
     if (!needsCanary(port, reply)) return true;
+    if (ip != null && DeviceNet.viaPipe(ip)) return true;
     return counts(port, reply, await canary(port));
   }
 
@@ -239,12 +243,14 @@ class DeviceReach {
       if (left == 0 && !done.isCompleted) done.complete(null);
     }
 
+    // عبر ممرّ «وضع VPN»: الردّ من داخل النفق — لا وسيط موبايلٍ يختلقه، فلا شاهد
+    final piped = DeviceNet.viaPipe(ip);
     for (final p in ports) {
       Future.sync(() => connect(ip, p, timeout)).then((a) async {
         try {
           if (done.isCompleted) return;
           if (a.reply == PortReply.silent) return settle();
-          if (!needsCanary(p, a.reply)) return done.complete((port: p, ms: a.ms, reply: a.reply));
+          if (piped || !needsCanary(p, a.reply)) return done.complete((port: p, ms: a.ms, reply: a.reply));
           final c = await canary(p);
           if (done.isCompleted) return;
           if (counts(p, a.reply, c)) return done.complete((port: p, ms: a.ms, reply: a.reply));

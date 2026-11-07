@@ -17,6 +17,7 @@ import 'package:rad_mysvcs/api/vpn_now_api.dart';
 import 'package:rad_mysvcs/core/net/vpn_pipe.dart';
 import 'package:rad_mysvcs/screens/network_devices/check/devices_check_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/network_device_details_screen.dart';
+import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
 import 'package:rad_mysvcs/screens/network_devices/network_devices_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/widgets/device_big_card.dart';
 import 'package:rad_mysvcs/screens/subscribers/subscribers_screen.dart';
@@ -42,7 +43,7 @@ class _NoLocalNotifications extends FlutterLocalNotificationsPlatform {}
 class _NoPipe implements VpnPipeTransport {
   final opens = <String>[];
   @override
-  Future<String> open(String host, int port, Duration timeout) async {
+  Future<({String id, int? ms})> open(String host, int port, Duration timeout) async {
     opens.add('$host:$port');
     throw SocketException('لا ممرّ في الاختبار', port: port);
   }
@@ -54,13 +55,33 @@ class _NoPipe implements VpnPipeTransport {
   @override
   Future<void> close(String id) async {}
   @override
-  Future<Uint8List> udp(String host, int port, Uint8List data, Duration timeout) async {
+  Future<({Uint8List data, int? ms})> udp(String host, int port, Uint8List data, Duration timeout) async {
     opens.add('udp $host:$port');
     throw TimeoutException('لا ممرّ في الاختبار');
   }
 
   @override
+  Future<List<int>> ping(String host, int count, Duration timeout) async {
+    opens.add('ping $host');
+    return const [];
+  }
+
+  @override
+  Future<PipeRoute> route() async => const PipeRoute.ok('company');
+
+  @override
   Future<void> release() async {}
+}
+
+/// ممرّ «وضع VPN» يردّ بنكه من داخل النفق لكلّ عنوانٍ إلّا [dead]؛ الاتّصالات (TCP/UDP) لا تصل — كجهازٍ يردّ على ping وخدمته مغلقة.
+class _PingPipe extends _NoPipe {
+  _PingPipe(this.dead);
+  final Set<String> dead;
+  @override
+  Future<List<int>> ping(String host, int count, Duration timeout) async {
+    opens.add('ping $host');
+    return dead.contains(host) ? const [] : [for (var i = 0; i < count; i++) 20 + i];
+  }
 }
 
 void main() {
@@ -159,36 +180,37 @@ void main() {
   Finder chipCount(String key, String n) =>
       find.descendant(of: find.byKey(ValueKey(key)), matching: find.text(n));
 
-  testWidgets('الأجهزة: زرّ VPN ⇒ الوضع؛ الأعداد والبطاقات من نتيجة الـVPN (لا «مفصول» لما لم يُفحص)؛ الإطفاء يرجع حال الموبايل', (t) async {
+  testWidgets('٧ نوفمبر (المالك: «كانما الوكيل يفعل vpn خارجي»): زرّ VPN ⇒ جولة القسم نفسها عبر الممرّ — البنك من داخل النفق يعدّ «متّصل/مفصول» كما على شبكته؛ الإطفاء يرجعها مباشرة', (t) async {
+    final pipes = _PingPipe({'10.70.0.1'});
+    final orig = VpnPipe.transport;
+    VpnPipe.transport = pipes;
+    addTearDown(() => VpnPipe.transport = orig);
     VpnNow.routeSource = () async => (linked: true, via: 'company');
     AgentNetPresence.debugSet(NetPresence.off);
     await openDevices(t);
     expect(devVpn, findsOneWidget);
     await t.tap(devVpn);
-    await settleFor(t, seconds: 1);
+    await settleFor(t, seconds: 2);
     expect(VpnNow.mode.value, isTrue);
     expect(VpnNow.attached, contains(VpnNowKind.devices));
-    // لا نتيجة بعد ⇒ الكلّ «غير معروف»: لا متّصل ولا مفصول (كانت ١٤ مفصولة حمراء)
-    expect(chipCount('devices-status-online', '0'), findsOneWidget);
-    expect(chipCount('devices-status-offline', '0'), findsOneWidget);
-    VpnNow.debugApply(VpnNowKind.devices, VpnNowResult.fromJson({
-      'ok': true,
-      'message': 'فُحصت أجهزتك ✓ — 12 من 13 واصل',
-      'devices': [
-        for (var id = 1; id <= 13; id++) {'id': id, 'name': 'd$id', 'alive': id != 5, 'ms': id != 5 ? 30 + id : null},
-      ],
-    }));
-    await settleFor(t, seconds: 1);
-    expect(chipCount('devices-status-online', '12'), findsOneWidget, reason: 'من الـVPN — منها جهازا «مفصول» عند الموبايل');
-    expect(chipCount('devices-status-offline', '1'), findsOneWidget);
+    expect(pipes.opens.where((o) => o.startsWith('ping ')), isNotEmpty, reason: 'بنك الأجهزة عبر الـVPN');
+    for (final o in pipes.opens) {
+      final ip = o.split(' ').last.split(':').first;
+      expect(RegExp(r'^(10|192\.168)\.').hasMatch(ip), isTrue, reason: 'عناوين شبكة الوكيل وحدها عبر الممرّ: $o');
+    }
+    // ١١ عنواناً خاصّاً بُنكت من داخل النفق (١٠ ردّت)؛ الأولتان بحالهما من قارئ الألياف (الجولة لا تبنكهما) — أحدهما مفصول بالعرض
+    expect(chipCount('devices-status-online', '12'), findsOneWidget, reason: 'ردّوا من داخل النفق — منهم ما كان «مفصولاً» عند الموبايل');
+    expect(chipCount('devices-status-offline', '2'), findsOneWidget, reason: 'الذي لا يردّ حتى عبر النفق، والأولت المفصول');
+    expect(pipes.opens.where((o) => o.startsWith('ping ')).length, 11);
+    expect(find.text('متّصل عبر الـVPN ✓'), findsOneWidget, reason: 'الشريط: الطريق قائم');
     await t.tap(devVpn);
     await settleFor(t, seconds: 1);
     expect(VpnNow.mode.value, isFalse);
     await close(t);
   });
 
-  testWidgets('الأجهزة بالبطاقات الكبيرة + «وضع VPN»: البطاقة تقرأ بقارئها عبر الممرّ، وتعذّر ⇒ المعالج والحرارة من الخادم عبر الـVPN (المالك: «المعلومات الحيه… عبر vpn هم»)', (t) async {
-    final pipes = _NoPipe();
+  testWidgets('الأجهزة بالبطاقات الكبيرة + «وضع VPN»: حالها من جولة القسم عبر الممرّ ولا سطر «خارج شبكتك» — كأنّه على شبكته', (t) async {
+    final pipes = _PingPipe(const {});
     final orig = VpnPipe.transport;
     VpnPipe.transport = pipes;
     addTearDown(() => VpnPipe.transport = orig);
@@ -203,28 +225,15 @@ void main() {
     await pumpSim(t, const SimVariant(412, dark: false),
         settle: false, home: (_) => NetworkDevicesScreen(isActive: ValueNotifier<bool>(true)));
     await settleFor(t);
+    expect(find.byType(DeviceBigCard).evaluate().map((e) => (e.widget as DeviceBigCard).state.error), contains(DeviceVitals.offNetworkReason),
+        reason: 'قبل الوضع: خارج شبكتك');
     await t.tap(devVpn);
-    await settleFor(t, seconds: 1);
-    expect(find.textContaining('737', findRichText: true), findsNothing);
-    VpnNow.debugApply(VpnNowKind.devices, VpnNowResult.fromJson({
-      'ok': true,
-      'message': 'فُحصت أجهزتك ✓',
-      'devices': [
-        for (var id = 1; id <= 14; id++)
-          {'id': id, 'alive': true, 'ms': 20, 'v': {'kind': 'ros', 'cpu': 737, 'mem': 41, 'temp': 52, 'up': 3600}},
-      ],
-    }));
     await settleFor(t, seconds: 2);
     final cards = t.widgetList<DeviceBigCard>(find.byType(DeviceBigCard)).toList();
     expect(cards, isNotEmpty, reason: 'البطاقات الكبيرة');
     for (final c in cards) {
-      expect(c.state.error, isNull, reason: 'لا سطر «خارج شبكتك» لجهازٍ له معلومات من الـVPN');
-      expect(c.state.vitals?.map((v) => v.value), contains('737'), reason: 'المعالج من الخادم عبر الـVPN');
-      expect(c.device.lastStatus, 'online');
-    }
-    // ٧ نوفمبر: ما يُفتح عبر الممرّ (أجهزة العرض بلا كلمات دخول فلا قراءة) لعناوين شبكة الوكيل وحدها — الممرّ نفسه بـvpn_pipe_test
-    for (final o in pipes.opens) {
-      expect(RegExp(r'(^| )(10|192\.168|172\.(1[6-9]|2\d|3[01])|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7]))\.').hasMatch(o), isTrue, reason: o);
+      expect(c.state.error, isNot(DeviceVitals.offNetworkReason), reason: 'لا «خارج شبكتك» بالوضع');
+      expect(c.device.lastStatus, 'online', reason: 'ردّ بنكه من داخل النفق');
     }
     await close(t);
   });

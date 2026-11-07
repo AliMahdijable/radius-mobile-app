@@ -13,6 +13,8 @@ import '../theme/typography.dart';
 /// * «وضع VPN» ([VpnNow.mode]) ⇒ الشريط يبقى: يتّصل/يفحص (دائرة + «١٢٠ من ٣١٠» + خطّ تقدّم) ⇒ النتيجة + «يتحدّث كلّ دقيقة»
 ///   [المشاكل] [إيقاف]؛ فشل ⇒ أحمر [صفحة VPN] [أعد] [إيقاف].
 /// * الحارس أطفأ الوضع ⇒ «رجعت لشبكتك — الفحص صار مباشر» لحظات.
+/// * ٧ نوفمبر (المالك: «تنبيه متصل على ال vpn امكانيه خفاء مايبقى ظاهر ع طول»): بالوضع، بعد نجاحه يختفي وحده بعد ثوانٍ، و[×] يخفيه
+///   الآن؛ يرجع للفشل وحده. الوضع يبقى شغّالاً (درعه الممتلئ بأدوات القسم يطفئه). الأجهزة: «متّصل عبر الـVPN» — قرّاؤها نفسها عبره.
 /// ظهوره لا يفتح أيّ اتّصال — الخادم يدخل الـVPN فقط بعد الضغط.
 class VpnNowBar extends StatefulWidget {
   const VpnNowBar({
@@ -48,6 +50,7 @@ class _VpnNowBarState extends State<VpnNowBar> {
     VpnNow.dismissals.addListener(_reloadDismiss);
     VpnNow.mode.addListener(_changed);
     VpnNow.notice.addListener(_changed);
+    VpnNow.hidden.addListener(_changed);
     if (widget.offNetwork) _resolve();
   }
 
@@ -63,6 +66,7 @@ class _VpnNowBarState extends State<VpnNowBar> {
     VpnNow.dismissals.removeListener(_reloadDismiss);
     VpnNow.mode.removeListener(_changed);
     VpnNow.notice.removeListener(_changed);
+    VpnNow.hidden.removeListener(_changed);
     super.dispose();
   }
 
@@ -103,7 +107,9 @@ class _VpnNowBarState extends State<VpnNowBar> {
     if (widget.kind == VpnNowKind.subscribers && !VpnNow.subscribersOk) {
       return const SizedBox(width: double.infinity);
     }
-    if (VpnNow.mode.value) {
+    if (VpnNow.mode.value && VpnNow.isHidden(widget.kind) && job.phase != VpnBarPhase.failed) {
+      child = null; // أُخفي — الوضع شغّال ودرعه بالأدوات يقول ذلك
+    } else if (VpnNow.mode.value) {
       switch (job.phase) {
         case VpnBarPhase.running:
           child = _running(job, stop: true);
@@ -162,10 +168,10 @@ class _VpnNowBarState extends State<VpnNowBar> {
         _close(VpnNow.dismissNotice),
       ]);
 
-  /// الوضع شغّال وآخر فحصٍ انتهى: النتيجة + إيقاعه، و[إيقاف].
+  /// الوضع شغّال وآخر فحصٍ انتهى: النتيجة (+ إيقاع المشتركين)، و[إيقاف]، و[×] يخفيه (يختفي وحده بعد ثوانٍ أيضاً).
   Widget _modeDone(VpnNowJob job) {
-    final sub = [if ((job.sub ?? '').isNotEmpty) job.sub!, _every].join(' · ');
-    return Row(children: [
+    final sub = [if ((job.sub ?? '').isNotEmpty) job.sub!, if (widget.kind == VpnNowKind.subscribers) _every].join(' · ');
+    return Row(key: const ValueKey('vpn-now-mode-done'), children: [
       _circle(LucideIcons.shieldCheck, AppColors.brandOnSoft, AppColors.brandSoftBg),
       const SizedBox(width: Sp.sm),
       Expanded(child: _texts(job.line ?? 'الفحص عبر VPN', sub)),
@@ -173,6 +179,7 @@ class _VpnNowBarState extends State<VpnNowBar> {
         _secondary('المشاكل', null, widget.onShowProblems!),
       const SizedBox(width: 4),
       _stop(),
+      KeyedSubtree(key: const ValueKey('vpn-now-hide'), child: _close(() => VpnNow.hideBar(widget.kind))),
     ]);
   }
 

@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/vpn_now_api.dart';
+import 'package:rad_mysvcs/core/net/vpn_pipe.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/subscribers/widgets/subscriber_card_v3.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
@@ -83,15 +84,27 @@ Future<void> _drain(WidgetTester t) async {
 
 void main() {
   late _NowServer server;
+  // ٧ نوفمبر: الأجهزة بالوضع تتأكّد الطريق وحده (ممرّ التطبيق) — لا check-now
+  var routeCalls = 0;
+  PipeRoute routeResult = const PipeRoute.ok('company');
   setUp(() {
     FlutterSecureStorage.setMockInitialValues({});
     SharedPreferences.setMockInitialValues({});
     server = _NowServer()..done = _subsDone;
     ApiClient.dio.httpClientAdapter = server;
     VpnNow.pollEvery = const Duration(milliseconds: 1);
+    routeCalls = 0;
+    routeResult = const PipeRoute.ok('company');
+    VpnNow.pipeRoute = () async {
+      routeCalls++;
+      return routeResult;
+    };
+    VpnNow.autoHideAfter = const Duration(hours: 1);
     VpnNow.reset();
   });
   tearDown(() {
+    VpnNow.pipeRoute = VpnPipe.route;
+    VpnNow.autoHideAfter = const Duration(seconds: 6);
     VpnNow.routeSource = () async => null;
     VpnNow.guardProbe = null;
     VpnNow.now = DateTime.now;
@@ -121,15 +134,22 @@ void main() {
     expect(VpnNow.readingFor('nobody'), isNull);
   });
 
-  test('الأجهزة: فحصٌ منفصل (what=devices) ⇒ حال كلّ جهاز برقمه؛ والمشتركون لا يتأثّرون', () async {
-    server.done = _devDone;
+  test('٧ نوفمبر: الأجهزة بالوضع لا يفحصها الخادم — قرّاؤها نفسها عبر الـVPN؛ «فحصها» تأكّد الطريق ⇒ «متّصل عبر الـVPN ✓»', () async {
     await VpnNow.devices.run();
-    expect(server.what, 'devices');
-    expect(VpnNow.devices.line, 'فُحصت أجهزتك ✓ — 1 من 2 واصل');
-    expect(VpnNow.deviceFor(11)?.stations, 38);
-    expect(VpnNow.deviceFor(13)?.alive, isFalse);
+    expect(routeCalls, 1);
+    expect(server.asked, isEmpty, reason: 'لا check-now للأجهزة');
+    expect(VpnNow.devices.phase, VpnBarPhase.done);
+    expect(VpnNow.devices.line, 'متّصل عبر الـVPN ✓');
+    expect(VpnNow.devices.sub, 'أجهزتك تُقرأ وتتحدّث عبره — كأنّك على شبكتك');
     expect(VpnNow.subscribers.phase, VpnBarPhase.idle);
     expect(VpnNow.readingFor('u0'), isNull);
+    // التأكّد التالي لا يعيد الدائرة (الشريط «متّصل» كما هو)، ومشغولٌ أثناءه فلا يتكرّر
+    final again = VpnNow.devices.run();
+    expect(VpnNow.devices.busy, isTrue);
+    expect(VpnNow.devices.phase, VpnBarPhase.done);
+    await again;
+    expect(routeCalls, 2);
+    expect(VpnNow.devices.busy, isFalse);
   });
 
   test('الفشل: الخادم يرفض البدء ⇒ رسالته؛ النتيجة tunnel_failed ⇒ فشلٌ بسببه (زرّ صفحة VPN)؛ reset ينسى كلّ شيء', () async {
@@ -138,12 +158,11 @@ void main() {
     await VpnNow.subscribers.run();
     expect(VpnNow.subscribers.phase, VpnBarPhase.failed);
     expect(VpnNow.subscribers.line, '«تنبيه المشترك» غير مفعّل لحسابك بعد');
-    server.startStatus = 200;
-    server.startReply = {'success': true, 'data': {'check_id': 'c2'}};
-    server.done = (_) => {'ok': false, 'reason': 'tunnel_failed', 'message': 'ما اتّصل الـVPN — تأكّد من الملفّ أو اليوزر والباسورد'};
+    routeResult = const PipeRoute.failed('ما اتّصل الـVPN — تأكّد من الملفّ أو اليوزر والباسورد', reason: 'tunnel_failed');
     await VpnNow.devices.run();
     expect(VpnNow.devices.phase, VpnBarPhase.failed);
     expect(VpnNow.devices.reason, 'tunnel_failed');
+    expect(VpnNow.devices.line, 'ما اتّصل الـVPN — تأكّد من الملفّ أو اليوزر والباسورد');
     VpnNow.debugApply(VpnNowKind.devices, VpnNowResult.fromJson(_devDone('devices')));
     expect(VpnNow.deviceFor(11), isNotNull);
     VpnNow.reset();
@@ -278,7 +297,7 @@ void main() {
     expect(find.text('فُحص عبر VPN ✓ — قُرئ 60 من 70 متّصلاً — 2 بمشكلة'), findsOneWidget);
     expect(find.textContaining('يتحدّث كلّ'), findsOneWidget, reason: 'الوضع يبقى ويتحدّث');
     expect(find.text('إيقاف'), findsOneWidget);
-    expect(find.byTooltip('إخفاء'), findsNothing, reason: 'بالوضع لا ×: «إيقاف» وحده');
+    expect(find.byKey(const ValueKey('vpn-now-hide')), findsOneWidget, reason: '٧ نوفمبر: × يخفيه والوضع باقٍ');
     expect(find.text('-61 dBm'), findsOneWidget);
     expect(find.text('CCQ 93%'), findsOneWidget);
     expect(find.text('VPN'), findsOneWidget, reason: 'كرت المشترك وحده (الأجهزة لم تُفحص بعد)');
@@ -291,6 +310,44 @@ void main() {
     expect(VpnNow.mode.value, isFalse);
     expect(find.text('إيقاف'), findsNothing);
     expect(find.text('أنت خارج شبكتك'), findsOneWidget, reason: 'أُطفئ يدويّاً وهو خارج شبكته ⇒ العرض يرجع');
+    VpnNow.reset();
+  });
+
+  testWidgets('٧ نوفمبر (المالك: «تنبيه متصل على ال vpn امكانيه خفاء مايبقى ظاهر ع طول»): × يخفي الشريط والوضع باقٍ؛ يختفي وحده بعد ثوانٍ؛ الفشل يُظهره؛ الوضع من جديد يُظهره', (t) async {
+    VpnNow.routeSource = () async => (linked: true, via: 'company');
+    VpnNow.autoHideAfter = const Duration(seconds: 6);
+    await t.pumpWidget(host(VpnNowBar(kind: VpnNowKind.devices, offNetwork: true, onOpenVpn: () {})));
+    await _drain(t);
+    await t.tap(find.text('تشغيل VPN'));
+    await _drain(t);
+    expect(VpnNow.mode.value, isTrue);
+    expect(find.text('متّصل عبر الـVPN ✓'), findsOneWidget);
+    expect(find.textContaining('يتحدّث كلّ'), findsNothing, reason: 'الأجهزة: قرّاؤها تتحدّث بإيقاعها — لا «كلّ دقيقة»');
+    await t.tap(find.byKey(const ValueKey('vpn-now-hide')));
+    await t.pump();
+    expect(find.text('متّصل عبر الـVPN ✓'), findsNothing);
+    expect(VpnNow.mode.value, isTrue, reason: 'الإخفاء لا يطفئ الوضع');
+    // فشل الطريق ⇒ يظهر أحمر
+    routeResult = const PipeRoute.failed('الـVPN ما اتّصل الآن — حاول بعد قليل', reason: 'tunnel_failed');
+    await t.runAsync(() => VpnNow.devices.run());
+    await t.pump();
+    expect(find.text('الـVPN ما اتّصل الآن — حاول بعد قليل'), findsOneWidget);
+    // رجع ⇒ «متّصل» ثمّ يختفي وحده بعد ثوانٍ (المؤقّت بساعة الاختبار — لا runAsync)
+    routeResult = const PipeRoute.ok('company');
+    final back = VpnNow.devices.run();
+    await t.pump();
+    await back;
+    await t.pump();
+    expect(find.text('متّصل عبر الـVPN ✓'), findsOneWidget);
+    await t.pump(const Duration(seconds: 7));
+    expect(find.text('متّصل عبر الـVPN ✓'), findsNothing, reason: 'يختفي وحده');
+    expect(VpnNow.mode.value, isTrue);
+    // إطفاءٌ ثمّ تشغيل ⇒ يظهر من جديد
+    VpnNow.exitMode();
+    await t.pump();
+    await t.runAsync(() => VpnNow.enterMode(from: VpnNowKind.devices));
+    await _drain(t);
+    expect(find.text('متّصل عبر الـVPN ✓'), findsOneWidget);
     VpnNow.reset();
   });
 
@@ -387,30 +444,28 @@ void main() {
       expect(VpnNow.mode.value, isFalse);
     });
 
-    test('القسم الظاهر يُحدَّث بإيقاعه (الأجهزة كلّ دقيقة على نفق الشركة) والمختفي لا؛ «إيقاف» يترك الفحص الجاري', () async {
-      server.done = _devDone;
+    test('القسم الظاهر يُحدَّث بإيقاعه (الأجهزة: تأكّد الطريق كلّ دقيقة) والمختفي لا؛ «إيقاف» يترك الجاري', () async {
       VpnNow.attach(VpnNowKind.devices);
       addTearDown(() => VpnNow.detach(VpnNowKind.devices));
       await VpnNow.enterMode();
       await settleJobs();
-      expect(posts(), 1, reason: 'الدخول يفحص القسم الظاهر');
+      expect(routeCalls, 1, reason: 'الدخول يتأكّد طريق القسم الظاهر');
+      expect(posts(), 0, reason: 'لا check-now للأجهزة');
       expect(VpnNow.intervalOf(VpnNowKind.devices), const Duration(minutes: 1));
       clock = clock.add(const Duration(seconds: 30));
       await VpnNow.tick();
       await settleJobs();
-      expect(posts(), 1, reason: 'قبل الدقيقة لا');
+      expect(routeCalls, 1, reason: 'قبل الدقيقة لا');
       clock = clock.add(const Duration(seconds: 35));
-      server.polls = 0;
       await VpnNow.tick();
       await settleJobs();
-      expect(posts(), 2, reason: 'بعد الدقيقة يُعاد');
+      expect(routeCalls, 2, reason: 'بعد الدقيقة يُعاد');
       VpnNow.detach(VpnNowKind.devices);
       clock = clock.add(const Duration(minutes: 5));
       await VpnNow.tick();
       await settleJobs();
-      expect(posts(), 2, reason: 'القسم مختفٍ ⇒ لا فحص');
+      expect(routeCalls, 2, reason: 'القسم مختفٍ ⇒ لا شيء');
       VpnNow.attach(VpnNowKind.devices);
-      server.polls = 0;
       final run = VpnNow.devices.run();
       expect(VpnNow.devices.busy, isTrue);
       VpnNow.exitMode();
@@ -433,16 +488,16 @@ void main() {
       addTearDown(() => VpnNow.detach(VpnNowKind.devices));
       await VpnNow.tick();
       await settleJobs();
-      expect(posts(), 1, reason: 'الأجهزة وحدها');
-      expect(server.asked.where((a) => a.startsWith('POST')).length, 1);
+      expect(routeCalls, 1, reason: 'الأجهزة وحدها (طريقها)');
+      expect(posts(), 0);
       VpnNow.exitMode();
     });
 
-    test('ملفّه أو قالب شركته (غرفةٌ مؤقّتة) ⇒ إيقاعٌ أبطأ', () async {
+    test('ملفّه أو قالب شركته (غرفةٌ تبقى) ⇒ المشتركون أبطأ؛ الأجهزة تأكّد طريقها كلّ دقيقة (يُبقي غرفته حيّة)', () async {
       VpnNow.routeSource = () async => (linked: true, via: 'own');
       await VpnNow.enterMode();
       await Future<void>.delayed(const Duration(milliseconds: 5));
-      expect(VpnNow.intervalOf(VpnNowKind.devices), const Duration(minutes: 3));
+      expect(VpnNow.intervalOf(VpnNowKind.devices), const Duration(minutes: 1));
       expect(VpnNow.intervalOf(VpnNowKind.subscribers), const Duration(minutes: 5));
     });
   });

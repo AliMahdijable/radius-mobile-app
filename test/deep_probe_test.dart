@@ -499,10 +499,13 @@ void main() {
       final wall = File('lib/screens/network_devices/device_live_card.dart')
           .readAsStringSync();
       expect(wall.contains('first: urgent || st.vitals == null'), isTrue);
-      // والطازج يُحترم حتّى مع الاستعجال — لا جلسة لجهازٍ قُرئ قبل ثوانٍ.
+      // والطازج يُحترم حتّى مع الاستعجال — لا جلسة لجهازٍ قُرئ قبل ثوانٍ. يتخطّاه [force] وحده: الطريق تغيّر («وضع VPN»
+      // شُغّل/أُطفئ — ٧ نوفمبر) فما قيل قبله («خارج شبكتك») لم يعد صادقاً.
       expect(
-          wall.contains('if (_inFlight || (st.isFresh && !needsDetail)) return;'),
+          wall.contains('if (_inFlight || (!force && st.isFresh && !needsDetail)) return;'),
           isTrue);
+      expect(RegExp(r'force: true').allMatches(wall).length, 1, reason: 'مُستدعٍ واحد يتخطّى الطزاجة: تبديل «وضع VPN»');
+      expect(wall.contains('_kick(urgent: true, force: true)'), isTrue);
 
       // 🚨 والحارس لا يقرأ `loading` من المخزن — هذا هو العطل بعينه.
       //

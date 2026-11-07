@@ -183,14 +183,15 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     if (mounted) setState(() {});
   }
 
-  /// خارج شبكة الوكيل: من جولة هذا القسم، أو من قسم المشتركين (الحال المشتركة).
-  bool get _offNet => _offNetwork || AgentNetPresence.isOff;
+  /// خارج شبكة الوكيل: من جولة هذا القسم، أو من قسم المشتركين (الحال المشتركة). بـ«وضع VPN» لا (٧ نوفمبر — المالك: «كانما الوكيل
+  /// يفعل vpn خارجي»): كلّ ما يقرؤه القسم يمرّ عبر الـVPN فهو على شبكته.
+  bool get _offNet => !VpnNow.mode.value && (_offNetwork || AgentNetPresence.isOff);
 
-  /// «وضع VPN» شُغّل أو أُطفئ (زرّه، أو الحارس رأى شبكتك) ⇒ إعادة رسم؛ والرجوع للمباشر جولةٌ فوريّة من الموبايل.
+  /// «وضع VPN» شُغّل أو أُطفئ (زرّه، أو الحارس رأى شبكتك) ⇒ جولةٌ فوريّة بطريقه الجديد: عبر الـVPN (كأنّه على شبكته) أو مباشرة.
   void _onVpnMode() {
     if (!mounted) return;
     setState(() {});
-    if (!VpnNow.mode.value && _mayProbe && _all.isNotEmpty) _probeAll(force: true);
+    if (_mayProbe && _all.isNotEmpty) _probeAll(force: true);
   }
 
   /// القسم ظاهر ⇒ «وضع VPN» يحدّث أجهزته؛ مختفٍ ⇒ لا.
@@ -221,9 +222,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     return pick.length >= AgentNetPresence.minAttempts ? false : null;
   }
 
-  /// خارج الشبكة أو «وضع VPN»: الحال المعروضة من آخر فحصٍ عبر الـVPN، وما لم يُفحص «غير معروف» (رماديّ) — لا «غير متّصل» أحمر:
-  /// الجهاز لم يطفِ، موبايلك هو البعيد (المالك ٥ نوفمبر: الفحص قال «١٤ من ١٤ واصل» والبطاقات بقيت حمراء).
-  bool get _overlay => VpnNow.mode.value || _offNet;
+  /// خارج الشبكة بلا «وضع VPN»: الحال «غير معروف» (رماديّ) — لا «غير متّصل» أحمر: الجهاز لم يطفِ، موبايلك هو البعيد (المالك ٥
+  /// نوفمبر). بالوضع لا غطاء: الحال من جولة القسم نفسها عبر الـVPN (٧ نوفمبر).
+  bool get _overlay => _offNet;
 
   NetworkDevice _shown(NetworkDevice d) {
     final v = VpnNow.deviceFor(d.id);
@@ -457,8 +458,6 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
   bool _refreshing = false;
   Future<void> _refresh() async {
-    // «وضع VPN»: التحديث = فحص أجهزتك عبر الـVPN الآن (والقائمة من الخادم كما هي)
-    if (VpnNow.mode.value) unawaited(VpnNow.devices.run());
     if (_refreshing) return; // تكرار الإشارة + الرجوع من التفاصيل لا يُضاعف العمل.
     _refreshing = true;
     _loadAgentAlerts();
@@ -541,8 +540,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// تقسم دورتُه رقمَ الجولة وحده — أقلّيّةٌ تتبدّل في كلّ مرّة، وثلاث
   /// دخلاتٍ تلزم لتغطية الجميع. وهو بالضبط ما وصفه المستخدم.
   Future<void> _probeAll({bool force = false}) async {
-    // «وضع VPN»: الفحص من الخادم عبر الـVPN — جولة الموبايل لا تُطلق (كانت تعيد كلّ الأجهزة «غير متّصل» فوق نتيجته)
-    if (VpnNow.mode.value) return;
+    // «وضع VPN» (٧ نوفمبر): الجولة نفسها — اتّصالاتها وبنكها عبر الـVPN (DeviceNet) كأنّ الموبايل على شبكة الوكيل
     // ⚠️ جولةٌ جارية لا تُسقط طلب المستخدم بل تؤجّله.
     //
     // المؤقّت يطلق كلّ ٢٠ ثانية، فاحتمال أن يدخل المدير التبويب أثناء
@@ -557,6 +555,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     // لتبديل CPI ↔ زرّ. تغيير الـflag بلا setState → الأيقونة تعلق.
     setState(() => _probing = true);
     _probeRoundCount++;
+    // جولةٌ عبر الـVPN (DeviceNet يمرّرها) — نتائجها لا تقول أين الموبايل
+    final vpnRound = VpnNow.mode.value;
     try {
       // اجمع الـtransitions المُحتملة + التحديثات (بلا setState لكل جهاز).
       // كان: N setState = N × rebuild كامل للـCustomScrollView (dropped frames)
@@ -671,9 +671,12 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       // وسيط الجولة — «بطيء» نسبيّ (ضعف الوسيط) لا عتبةٌ ثابتة: الجولة تفحص العشرات معاً فيحمل كلّ رقمٍ إزاحة ازدحامٍ مشتركة.
       final lat = probed.map((p) => p.responseMs).whereType<int>().toList()..sort();
       if (lat.isNotEmpty) _roundMedianMs = lat[lat.length ~/ 2];
-      // ٥ نوفمبر: جولةٌ جزئيّة (المؤقّت يخفّف الفاشل) لا تمسح «خارج الشبكة» — كانت تُخفي الهنت بعد ٢٠ث
-      AgentNetPresence.report(attempted: privAttempted, reached: privReached);
-      _offNetwork = AgentNetPresence.isOff;
+      // ٥ نوفمبر: جولةٌ جزئيّة (المؤقّت يخفّف الفاشل) لا تمسح «خارج الشبكة» — كانت تُخفي الهنت بعد ٢٠ث.
+      // بـ«وضع VPN» الردود عبر النفق لا تقول أين الموبايل — الحارس وحده (مباشرٌ) يقرّر «رجعت لشبكتك».
+      if (!vpnRound) {
+        AgentNetPresence.report(attempted: privAttempted, reached: privReached);
+        _offNetwork = AgentNetPresence.isOff;
+      }
 
       // كشف تغيير شبكة الهاتف (بدل مشكلة الأجهزة):
       // - "خروج من الشبكة": ≥70% من الأجهزة راحت offline في جولة واحدة → suppress
@@ -1492,7 +1495,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                   if (narrow && _all.isNotEmpty) _menuItem('deep', LucideIcons.radar, 'فحص شامل'),
                   if (narrow || _all.isNotEmpty)
                     _menuItem('refresh', LucideIcons.refreshCw,
-                      _probing || (VpnNow.mode.value && VpnNow.devices.busy) ? 'يُحدّث الآن…' : (VpnNow.mode.value ? 'تحديث عبر VPN' : 'تحديث فوري')),
+                      _probing ? 'يُحدّث الآن…' : (VpnNow.mode.value ? 'تحديث (عبر VPN)' : 'تحديث فوري')),
                   if (_all.isNotEmpty) _menuItem('tower', LucideIcons.radioTower, 'عرض البرج'),
                   _menuItem('fiber', Perms.has('devices.monitor') ? LucideIcons.cable : LucideIcons.lock, 'شبكة الألياف'),
                   // «ربط VPN» لصاحب الحساب وحده (أسرار شبكته — الخادم يرفض الموظّف) ولمن فُتح له؛ الدرع بعلامةٍ حين يكون مربوطاً

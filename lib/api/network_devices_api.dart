@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'snmp_client.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/net/device_net.dart';
 import '../models/device_region.dart';
 import '../models/network_device.dart';
 import '../services/device_events.dart';
@@ -284,7 +285,7 @@ class NetworkDevicesApi {
     }
     final s = await _service(d);
     if (s.status == 'online') return (status: 'online', responseMs: s.responseMs, packetLoss: s.packetLoss, serviceOk: true);
-    final icmp = icmpUsable ? await icmpProbe(d.ip, 1) : null;
+    final icmp = icmpUsableFor(d.ip) ? await icmpProbe(d.ip, 1) : null;
     final hit = icmp != null
         ? null
         : await DeviceReach.sweep(d.ip, DeviceReach.portsFor(d, periodic: true, exclude: {d.apiPort ?? d.port}));
@@ -297,7 +298,7 @@ class NetworkDevicesApi {
   static Future<DeviceCheck> checkDevice(NetworkDevice d, {int pings = 3}) async {
     final port = d.apiPort ?? d.port;
     final (ping, svc, hit) = await (
-      icmpUsable ? icmpProbe(d.ip, pings).then<Probe3?>((r) => r) : Future<Probe3?>.value(null),
+      icmpUsableFor(d.ip) ? icmpProbe(d.ip, pings).then<Probe3?>((r) => r) : Future<Probe3?>.value(null),
       _service(d),
       DeviceReach.sweep(d.ip, DeviceReach.portsFor(d, exclude: {port}), allowGuarded: true),
     ).wait;
@@ -341,7 +342,7 @@ class NetworkDevicesApi {
             ? mikrotikProbe(d.ip, port, MikrotikApi.fallbackPorts(protocol: d.protocol, apiPort: d.apiPort))
             : localIcmpPing(ip: d.ip, tcpPort: port, snmpCommunity: community));
     // منفذ ويب مسجّل (80 · 443 · 8080): وسيط الموبايل يقبله عن أيّ عنوان — الاتّصال وحده ليس ردّاً من الجهاز حتى يسكت الشاهد.
-    if (!snmp && s.status == 'online' && DeviceReach.webPorts.contains(port) && !await DeviceReach.trusts(port, PortReply.open)) {
+    if (!snmp && s.status == 'online' && DeviceReach.webPorts.contains(port) && !await DeviceReach.trusts(port, PortReply.open, ip: d.ip)) {
       return (status: 'offline', responseMs: null, packetLoss: 100.0);
     }
     return s;
@@ -352,6 +353,9 @@ class NetworkDevicesApi {
   static bool get icmpUsable => debugIcmpUsable ?? (!kIsWeb && !Platform.isIOS);
   @visibleForTesting
   static bool? debugIcmpUsable;
+
+  /// ping لهذا العنوان: بـ«وضع VPN» ينفّذه الخادم من داخل النفق (على الآيفون أيضاً — ٧ نوفمبر)، وإلّا [icmpUsable].
+  static bool icmpUsableFor(String ip) => (debugIcmpUsable == null && DeviceNet.viaPipe(ip)) || icmpUsable;
 
   /// ping بعدد الحزم ⇒ نتيجة [_icmpProbe] (قابلٌ للحقن في الاختبار).
   @visibleForTesting
@@ -377,9 +381,10 @@ class NetworkDevicesApi {
     var left = ports.length;
     int? refusedMs;
     for (final p in ports) {
-      Socket.connect(ip, p, timeout: timeout).then((s) {
+      DeviceNet.connect(ip, p, timeout: timeout).then((s) {
+        final ms = DeviceNet.connectMs(s) ?? sw.elapsedMilliseconds;
         s.destroy();
-        if (!done.isCompleted) done.complete((ms: sw.elapsedMilliseconds, refused: refusedMs != null, refusedMs: refusedMs));
+        if (!done.isCompleted) done.complete((ms: ms, refused: refusedMs != null, refusedMs: refusedMs));
       }, onError: (Object e) {
         if (_refused(e)) {
           refusedMs ??= sw.elapsedMilliseconds;
@@ -456,7 +461,8 @@ class NetworkDevicesApi {
       }
       return (
         status: 'online',
-        responseMs: sw.elapsedMilliseconds,
+        // عبر ممرّ «وضع VPN»: زمن الردّ من داخل النفق (كأنّه على شبكة الوكيل)
+        responseMs: (DeviceNet.viaPipe(ip) ? DeviceNet.udpMs(ip) : null) ?? sw.elapsedMilliseconds,
         packetLoss: 0.0
       );
     } catch (e) {
@@ -490,6 +496,13 @@ class NetworkDevicesApi {
     required Duration timeout,
   }) async {
     try {
+      // «وضع VPN» (٧ نوفمبر — المالك: «كانما الوكيل يفعل vpn خارجي»): البنك من داخل نفق الوكيل — ICMP لا يمرّ بممرّ TCP
+      if (DeviceNet.viaPipe(ip)) {
+        final times = await DeviceNet.ping(ip, count: count, timeout: timeout);
+        if (times.isEmpty) return (status: 'offline', responseMs: null, packetLoss: 100.0);
+        final avg = (times.reduce((a, b) => a + b) / times.length).round();
+        return (status: 'online', responseMs: avg, packetLoss: ((count - times.length).clamp(0, count) / count) * 100.0);
+      }
       if (AppPlatform.isWindows) {
         // ويندوز: من النظام مباشرةً (windows_icmp.dart) — لا نافذة سوداء تومض مع كلّ فحص، ولا
         // ردودٌ مترجمة (ويندوز العربيّ) يعجز عنها محلّل ping فيبدو الجهاز «مفصولاً».

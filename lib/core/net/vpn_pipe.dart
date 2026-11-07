@@ -21,10 +21,26 @@ class PipeRetry implements Exception {
   const PipeRetry();
 }
 
+/// طريق الوكيل عبر الـVPN الآن: قائم ([ok] + [via]: company · own · template)، أو السبب بكلمة الخادم و[reason] (no_vpn، tunnel_failed…).
+class PipeRoute {
+  const PipeRoute.ok(this.via)
+      : ok = true,
+        message = null,
+        reason = null;
+  const PipeRoute.failed(this.message, {this.reason})
+      : ok = false,
+        via = null;
+  final bool ok;
+  final String? via;
+  final String? message;
+  final String? reason;
+}
+
 /// نداءات ممرّ الخادم (server/connVpn/pipe.js) — تُستبدل في الاختبار.
 abstract class VpnPipeTransport {
-  /// اتّصالٌ بالجهاز من غرفة نفق الوكيل ⇒ رقم الممرّ، أو [SocketException] كفشل الاتّصال المباشر (رفضٌ/مهلة برمزهما).
-  Future<String> open(String host, int port, Duration timeout);
+  /// اتّصالٌ بالجهاز من غرفة نفق الوكيل ⇒ رقم الممرّ وزمن الاتّصال من داخل النفق (ms)، أو [SocketException] كفشل الاتّصال
+  /// المباشر (رفضٌ/مهلة برمزهما).
+  Future<({String id, int? ms})> open(String host, int port, Duration timeout);
 
   /// بايتاتٌ للجهاز ⇒ false إن أُغلق الممرّ.
   Future<bool> write(String id, Uint8List data);
@@ -34,8 +50,14 @@ abstract class VpnPipeTransport {
 
   Future<void> close(String id);
 
-  /// رسالة UDP بردّها (SNMP) ⇒ الردّ، أو [TimeoutException] / [SocketException].
-  Future<Uint8List> udp(String host, int port, Uint8List data, Duration timeout);
+  /// رسالة UDP بردّها (SNMP) وزمنها من داخل النفق ⇒ الردّ، أو [TimeoutException] / [SocketException].
+  Future<({Uint8List data, int? ms})> udp(String host, int port, Uint8List data, Duration timeout);
+
+  /// بنك ICMP من داخل النفق ⇒ أزمنة الردود الصحيحة (فارغة = لا ردّ)، أو [SocketException] إن تعذّر السؤال.
+  Future<List<int>> ping(String host, int count, Duration timeout);
+
+  /// طريق الوكيل الآن (يُبقي غرفة ملفّه/قالبه حيّة).
+  Future<PipeRoute> route();
 
   /// ترك «وضع VPN»: ممرّاته وغرفته الباقية تُغلق بالخادم.
   Future<void> release();
@@ -62,12 +84,24 @@ class VpnPipe {
   /// فُتح ممرٌّ بهذه الجلسة ⇒ ترك «وضع VPN» يُطلق غرفته بالخادم.
   static bool used = false;
 
+  /// زمن الاتّصال بالجهاز من داخل النفق لكلّ مقبسٍ فُتح عبر الممرّ — يُعرض بدل زمن الطريق إلى خادمنا (كأنّه على شبكته).
+  static final Expando<int> _connectMs = Expando<int>('vpnConnectMs');
+
+  /// آخر زمن ردٍّ UDP من داخل النفق لكلّ عنوان (فحص SNMP يقيس به).
+  static final Map<String, int> _udpMs = {};
+
+  static int? connectMsOf(Socket s) => _connectMs[s];
+  static int? udpMsOf(String host) => _udpMs[host];
+
   /// [Socket] متّصلٌ بالجهاز [host]:[port] عبر الممرّ — أو [SocketException] كالمباشر.
   static Future<Socket> connect(String host, int port, {Duration? timeout}) async {
     used = true;
-    final id = await transport.open(host, port, timeout ?? const Duration(seconds: 6));
+    final o = await transport.open(host, port, timeout ?? const Duration(seconds: 6));
+    final id = o.id;
     try {
-      return await _bridge(id);
+      final s = await _bridge(id);
+      if (o.ms != null) _connectMs[s] = o.ms!;
+      return s;
     } catch (e) {
       unawaited(transport.close(id).catchError((Object _) {}));
       if (e is SocketException) rethrow;
@@ -76,9 +110,30 @@ class VpnPipe {
   }
 
   /// رسالة UDP بردّها عبر الممرّ (SNMP).
-  static Future<Uint8List> udp(String host, int port, Uint8List data, Duration timeout) {
+  static Future<Uint8List> udp(String host, int port, Uint8List data, Duration timeout) async {
     used = true;
-    return transport.udp(host, port, data, timeout);
+    final r = await transport.udp(host, port, data, timeout);
+    if (r.ms != null) {
+      if (_udpMs.length > 500) _udpMs.remove(_udpMs.keys.first);
+      _udpMs[host] = r.ms!;
+    }
+    return r.data;
+  }
+
+  /// بنك ICMP عبر الممرّ (ينفّذه الخادم من داخل النفق — وعلى الآيفون أيضاً).
+  static Future<List<int>> ping(String host, {int count = 1, Duration timeout = const Duration(seconds: 2)}) {
+    used = true;
+    return transport.ping(host, count, timeout);
+  }
+
+  /// طريق الوكيل الآن («وضع VPN» شُغّل، وكلّ دقيقةٍ ما دام).
+  static Future<PipeRoute> route() async {
+    used = true;
+    try {
+      return await transport.route();
+    } catch (_) {
+      return const PipeRoute.failed('تعذّر الوصول للخادم — تأكّد من الإنترنت');
+    }
   }
 
   /// ترك «وضع VPN» — بلا انتظار.
@@ -292,7 +347,7 @@ class _HttpPipeTransport implements VpnPipeTransport {
       e.type == DioExceptionType.connectionError || e.type == DioExceptionType.connectionTimeout;
 
   @override
-  Future<String> open(String host, int port, Duration timeout) async {
+  Future<({String id, int? ms})> open(String host, int port, Duration timeout) async {
     final ms = timeout.inMilliseconds.clamp(1000, 15000);
     final Response<dynamic> r;
     try {
@@ -304,8 +359,10 @@ class _HttpPipeTransport implements VpnPipeTransport {
     }
     final body = r.data;
     if (r.statusCode == 200 && body is Map && body['success'] == true && body['data'] is Map) {
-      final id = '${(body['data'] as Map)['id'] ?? ''}';
-      if (_id.hasMatch(id)) return id;
+      final data = body['data'] as Map;
+      final id = '${data['id'] ?? ''}';
+      final ms = data['ms'];
+      if (_id.hasMatch(id)) return (id: id, ms: ms is num && ms > 0 ? ms.round() : null);
     }
     throw VpnPipe.failure(body, port: port);
   }
@@ -347,7 +404,7 @@ class _HttpPipeTransport implements VpnPipeTransport {
   }
 
   @override
-  Future<Uint8List> udp(String host, int port, Uint8List data, Duration timeout) async {
+  Future<({Uint8List data, int? ms})> udp(String host, int port, Uint8List data, Duration timeout) async {
     final ms = timeout.inMilliseconds.clamp(300, 15000);
     final Response<dynamic> r;
     try {
@@ -358,10 +415,66 @@ class _HttpPipeTransport implements VpnPipeTransport {
     }
     final body = r.data;
     if (r.statusCode == 200 && body is Map && body['data'] is Map) {
-      return base64Decode('${(body['data'] as Map)['d'] ?? ''}');
+      final d = body['data'] as Map;
+      final t = d['ms'];
+      return (data: base64Decode('${d['d'] ?? ''}'), ms: t is num && t > 0 ? t.round() : null);
     }
     if (r.statusCode == 504) throw TimeoutException('SNMP عبر الـVPN: الجهاز ما ردّ', Duration(milliseconds: ms));
     throw VpnPipe.failure(body, port: port);
+  }
+
+  @override
+  Future<List<int>> ping(String host, int count, Duration timeout) async {
+    final ms = timeout.inMilliseconds.clamp(500, 5000);
+    final Response<dynamic> r;
+    try {
+      r = await _post('/api/v2/conn-vpn/pipe/ping', {'ip': host, 'count': count, 'timeout_ms': ms},
+          receive: Duration(milliseconds: count * (ms + 1000) + 45000));
+    } on DioException catch (e) {
+      throw SocketException('تعذّر الوصول للخادم (${e.type.name})');
+    }
+    final body = r.data;
+    if (r.statusCode == 200 && body is Map && body['data'] is Map) {
+      final t = (body['data'] as Map)['times'];
+      return [
+        if (t is List)
+          for (final x in t)
+            if (x is num && x > 0) x.round(),
+      ];
+    }
+    throw VpnPipe.failure(body);
+  }
+
+  @override
+  Future<PipeRoute> route() async {
+    final Response<dynamic> r;
+    try {
+      // أوّل تشغيلٍ لملفّ الوكيل أو قالب شركته يتّصل النفق (حتى دقيقة ونصف مع المخرج)
+      r = await _post('/api/v2/conn-vpn/pipe/route', const <String, dynamic>{}, receive: const Duration(seconds: 100));
+    } on DioException catch (_) {
+      return const PipeRoute.failed('تعذّر الوصول للخادم — تأكّد من الإنترنت');
+    }
+    final body = r.data;
+    if (r.statusCode == 200 && body is Map && body['success'] == true && body['data'] is Map) {
+      return PipeRoute.ok('${(body['data'] as Map)['via'] ?? ''}');
+    }
+    final m = body is Map ? body : const {};
+    final code = '${m['code'] ?? ''}';
+    final reason = switch (code) {
+      'NO_VPN' => 'no_vpn',
+      'TUNNEL_FAILED' => 'tunnel_failed',
+      'CONN_VPN_OFF' || 'PIPE_OFF' => 'off',
+      'PERMISSION_DENIED' => 'permission',
+      _ => null,
+    };
+    final why = '${m['why'] ?? ''}';
+    final msg = '${m['message'] ?? ''}'.trim();
+    final text = why == 'cert'
+        ? 'خادم الـVPN رفض شهادة ملفّك — ارفع الملفّ الجديد من صفحة VPN'
+        : why == 'auth'
+            ? 'خادم الـVPN رفض اليوزر أو الباسورد — صحّحهما من صفحة VPN'
+            : (msg.isEmpty ? 'الـVPN ما اتّصل الآن — حاول بعد قليل' : msg);
+    return PipeRoute.failed(text, reason: reason);
   }
 
   @override

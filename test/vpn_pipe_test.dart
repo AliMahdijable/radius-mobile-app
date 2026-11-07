@@ -7,6 +7,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/device_reach.dart';
+import 'package:rad_mysvcs/api/network_devices_api.dart';
 import 'package:rad_mysvcs/api/snmp_client.dart';
 import 'package:rad_mysvcs/core/net/device_net.dart';
 import 'package:rad_mysvcs/core/net/vpn_pipe.dart';
@@ -25,11 +26,17 @@ class FakePipes implements VpnPipeTransport {
   Map<String, Object?>? failOpen;
   Uint8List Function(Uint8List)? udpReply;
   final udpSeen = <String>[];
+  final pinged = <String>[];
+  List<int> pingTimes = const [80, 82];
+  PipeRoute routeResult = const PipeRoute.ok('company');
   var releases = 0;
   var _n = 0;
 
+  /// زمن الاتّصال كما يقيسه الخادم داخل النفق.
+  int? connectMs = 37;
+
   @override
-  Future<String> open(String host, int port, Duration timeout) async {
+  Future<({String id, int? ms})> open(String host, int port, Duration timeout) async {
     final f = failOpen;
     if (f != null) throw VpnPipe.failure(f, port: port);
     final id = (++_n).toRadixString(16).padLeft(24, '0');
@@ -44,7 +51,7 @@ class FakePipes implements VpnPipeTransport {
       _ended.add(id);
       _waiters.remove(id)?.complete();
     }, onError: (Object _) {});
-    return id;
+    return (id: id, ms: connectMs);
   }
 
   @override
@@ -75,12 +82,21 @@ class FakePipes implements VpnPipeTransport {
   }
 
   @override
-  Future<Uint8List> udp(String host, int port, Uint8List data, Duration timeout) async {
+  Future<({Uint8List data, int? ms})> udp(String host, int port, Uint8List data, Duration timeout) async {
     udpSeen.add('$host:$port');
     final f = udpReply;
     if (f == null) throw TimeoutException('لا ردّ');
-    return f(data);
+    return (data: f(data), ms: 19);
   }
+
+  @override
+  Future<List<int>> ping(String host, int count, Duration timeout) async {
+    pinged.add('$host×$count');
+    return pingTimes;
+  }
+
+  @override
+  Future<PipeRoute> route() async => routeResult;
 
   @override
   Future<void> release() async => releases++;
@@ -225,6 +241,52 @@ void main() {
     expect(pipes.udpSeen, ['10.72.1.5:161']);
     pipes.udpReply = null;
     await expectLater(snmp.get(['1.3.6.1.2.1.1.5.0']), throwsA(isA<SnmpTimeoutException>()));
+  });
+
+  test('٧ نوفمبر «كأنّه على شبكته»: الزمن من داخل النفق لا طريق الموبايل إلى الخادم — TCP (DeviceReach) وSNMP', () async {
+    final s = await DeviceNet.connect('10.72.1.1', 8728);
+    expect(DeviceNet.connectMs(s), 37);
+    s.destroy();
+    final a = await DeviceReach.connect('10.72.1.1', 22, const Duration(seconds: 2));
+    expect([a.reply, a.ms], [PortReply.open, 37], reason: 'زمن الجهاز من الغرفة');
+    pipes.connectMs = null;
+    final b = await DeviceReach.connect('10.72.1.1', 22, const Duration(seconds: 2));
+    expect(b.reply, PortReply.open);
+    expect(b.ms, isNotNull, reason: 'خادمٌ قديم بلا زمن ⇒ ما قسناه نحن');
+    pipes.udpReply = asResponse;
+    await SnmpV2c(host: '10.72.1.5', community: 'public', timeout: const Duration(seconds: 2)).get(['1.3.6.1.2.1.1.3.0']);
+    expect(DeviceNet.udpMs('10.72.1.5'), 19);
+  });
+
+  test('٧ نوفمبر: البنك بالوضع من داخل النفق (الآيفون أيضاً) — أزمنته وفقدانه؛ خارج الوضع كما كان؛ الحارس مباشرٌ لا يمرّ به', () async {
+    expect(NetworkDevicesApi.icmpUsableFor('10.72.1.1'), isTrue);
+    final r = await NetworkDevicesApi.icmpProbe('10.72.1.1', 3);
+    expect([r.status, r.responseMs], ['online', 81]);
+    expect(r.packetLoss!.round(), 33, reason: 'حزمتان من ثلاث');
+    expect(pipes.pinged, ['10.72.1.1×3']);
+    pipes.pingTimes = const [];
+    final d = await NetworkDevicesApi.icmpProbe('10.72.1.1', 1);
+    expect([d.status, d.packetLoss], ['offline', 100.0]);
+    // الحارس («رجعت لشبكتك؟») مباشرٌ: لا بنك عبر الخادم
+    pipes.pinged.clear();
+    await DeviceNet.direct(() => NetworkDevicesApi.icmpProbe('10.72.1.1', 1));
+    expect(pipes.pinged, isEmpty);
+  });
+
+  test('٧ نوفمبر: منفذ ويب ردّ عبر الممرّ ⇒ يُصدَّق بلا «شاهد» (لا وسيط موبايلٍ بالطريق)؛ والعامّ يُسأل عنه الشاهد كما كان', () async {
+    DeviceReach.resetForTest();
+    final asked = <String>[];
+    DeviceReach.debugConnect = (h, p, t) async {
+      asked.add('$h:$p');
+      return (port: p, reply: PortReply.open, ms: 5);
+    };
+    addTearDown(DeviceReach.resetForTest);
+    expect(await DeviceReach.trusts(80, PortReply.open, ip: '10.72.1.1'), isTrue);
+    expect(asked, isEmpty, reason: 'لا شاهد عبر الممرّ');
+    expect(await DeviceReach.trusts(80, PortReply.open, ip: '185.1.2.3'), isFalse, reason: 'الشاهد «اتّصل» ⇒ وسيطٌ يختلق');
+    expect(asked, ['192.0.2.1:80']);
+    final hit = await DeviceReach.sweep('10.72.1.1', [80]);
+    expect(hit?.port, 80, reason: 'الجولة عبر الممرّ تصدّق منفذ الويب');
   });
 
   test('ترك «وضع VPN» يُطلق الممرّ وغرفته بالخادم — مرّةً، ولمن استعمله وحده', () async {

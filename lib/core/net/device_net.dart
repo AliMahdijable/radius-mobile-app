@@ -81,6 +81,16 @@ class DeviceNet {
 
   /// رسالة UDP بردّها عبر الممرّ (SNMP بالوضع — [viaPipe] يقرّر).
   static Future<Uint8List> udp(String host, int port, Uint8List data, Duration timeout) => VpnPipe.udp(host, port, data, timeout);
+
+  /// بنك ICMP عبر الممرّ (ينفّذه الخادم من داخل النفق) ⇒ أزمنة الردود الصحيحة — [viaPipe] يقرّر.
+  static Future<List<int>> ping(String host, {int count = 1, Duration timeout = const Duration(seconds: 2)}) =>
+      VpnPipe.ping(host, count: count, timeout: timeout);
+
+  /// زمن الاتّصال بالجهاز من داخل النفق لمقبسٍ فُتح عبر الممرّ (null للمباشر) — يُعرض كأنّه على شبكته.
+  static int? connectMs(Socket s) => VpnPipe.connectMsOf(s);
+
+  /// آخر زمن ردٍّ UDP من داخل النفق لهذا العنوان.
+  static int? udpMs(String host) => VpnPipe.udpMsOf(host);
 }
 
 /// SSH فوق مقبس الممرّ — كمقبس dartssh2 الأصليّ تماماً.

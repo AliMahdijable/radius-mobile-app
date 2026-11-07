@@ -132,7 +132,7 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
 
   /// «وضع VPN» شُغّل أو أُطفئ ⇒ قراءةٌ الآن بطريقه الجديد (الممرّ أو الشبكة) — لا تنتظر النبضة.
   void _onMode() {
-    if (mounted) _kick();
+    if (mounted) _kick(urgent: true, force: true);
   }
 
   /// قراءةٌ أحدث لهذا الجهاز كتبها غيرنا (شاشات الألياف للأولت، البرج) ⇒ نعرضها الآن بلا جلسة (المالك ٢٨ أكتوبر: «تتحدث مع
@@ -212,7 +212,7 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
   /// آخر جلسةٍ ناجحة لهذه البطاقة — راجع [_kick].
   DateTime? _ownAt;
 
-  void _kick({bool urgent = false}) {
+  void _kick({bool urgent = false, bool force = false}) {
     if (!mounted) return;
     final st = widget.vitals.value;
     // ⚠️ الطازج يُحترم — إلّا عند الفتح بلا تفاصيل.
@@ -227,14 +227,15 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
     final own = _ownAt != null && DateTime.now().difference(_ownAt!) < DeviceVitals.freshFor;
     final hasDetail = own || DeviceStatsCache.instance.isDetailed(widget.device.id);
     final needsDetail = !hasDetail && st.error == null;
-    if (_inFlight || (st.isFresh && !needsDetail)) return;
+    // [force]: الطريق تغيّر («وضع VPN» شُغّل/أُطفئ) — ما قيل قبله (حتى «خارج شبكتك») لا يُعدّ طازجاً
+    if (_inFlight || (!force && st.isFresh && !needsDetail)) return;
 
     // ⚠️ والمخزن مرجعٌ ثانٍ — لأنّ حالة الشاشة تموت مع الشاشة.
     //
     // `st.isFresh` أعلاه يكفي ما دام المستخدم في القسم. أمّا بعد خروجٍ
     // وعودة فهي دائماً `false`، والمخزن وحده يعرف أنّ الجهاز قُرئ قبل
     // ثوانٍ. بلا هذا السطر يبقى كلّ رجوعٍ جولةَ فحصٍ كاملة.
-    if (!needsDetail && !urgent) {
+    if (!force && !needsDetail && !urgent) {
       final age = DeviceStatsCache.instance.ageOf(widget.device.id);
       if (age != null && age < DeviceVitals.freshFor) return;
     }
