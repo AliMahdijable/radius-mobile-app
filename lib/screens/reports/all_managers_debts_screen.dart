@@ -14,6 +14,7 @@ import '../../core/widgets/app_date_picker.dart';
 import 'widgets/date_range_chip.dart';
 import 'widgets/report_export.dart';
 import '../desktop/desk_widgets.dart';
+import '../../widgets/merged_company_strip.dart';
 
 /// تقرير موحّد للحركات المالية على المدراء الفرعيين — timeline.
 ///
@@ -435,6 +436,13 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
               onRefresh: _load,
               child: CustomScrollView(
                 slivers: [
+                  // «كل الشركات»: هذا التقرير للشركة المفتوحة وحدها — يُسمّيها (كديون المحذوفين) فلا يُظنّ رقمه للكلّ
+                  const SliverToBoxAdapter(
+                    child: MergedOpenCompanyNote(
+                      textKey: 'merged.manager_debts_note',
+                      padding: EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
+                    ),
+                  ),
                   SliverToBoxAdapter(child: _summaryCard()),
                   SliverToBoxAdapter(child: _managerSearch()),
                   SliverToBoxAdapter(child: _typeFilters()),
