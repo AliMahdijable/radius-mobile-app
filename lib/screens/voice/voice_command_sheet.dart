@@ -1,5 +1,7 @@
 import 'dart:async';
 
+// `hide TextDirection`: الحزمة تصدّر نوع intl الذي يحجب نوع dart:ui.
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -8,16 +10,19 @@ import '../../api/network_devices_api.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
+import '../../core/widgets/permission_locked.dart';
 import '../../core/widgets/voice_search_button.dart';
 import '../../models/network_device.dart';
 import '../../models/subscriber.dart';
 import '../../services/agent_net_presence.dart';
+import '../../services/ai_assistant_state.dart';
 import '../../services/voice/voice_command.dart';
 import '../../services/voice/voice_resolver.dart';
 import '../../services/vpn_now.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../assistant/assistant_sheet.dart';
 import '../network_devices/check/devices_check_screen.dart';
 import '../network_devices/network_device_details_screen.dart';
 import '../subscribers/subscriber_detail_screen.dart';
@@ -27,6 +32,9 @@ import '../subscribers/subscriber_detail_screen.dart';
 /// المايك يسمع بنفسه حين تُفتح، والنصّ يُعدَّل أو يُكتب. الفهم والمطابقة على الجهاز ([VoiceCommand]، [VoiceResolver]) — لا شيء
 /// يُرسل لنموذج ذكاء. والنتيجة كرت تأكيد: المشترك (أو الجهاز) بتفاصيله وزرّ العمليّة، والزرّ يفتح **شاشة العمليّة نفسها** بأقفالها
 /// (التفعيل بسعره ودفعه، التطفية بتأكيدها) — لا تنفيذ بلا ضغطة الوكيل هناك.
+///
+/// ٧ نوفمبر (المالك: «لوتخلي الامر الصوتي مجرد نقر والمساعد الذكاء نخلي هو الثانوي»): تُفتح بنقرةٍ من رأس كلّ تبويب، و«المساعد
+/// الذكي» صفٌّ ثانويٌّ أسفلها ([_assistantRow]) — قبل الأمر وحين لا يُفهم.
 Future<void> showVoiceCommandSheet(BuildContext context) {
   HapticFeedback.selectionClick();
   final root = context;
@@ -200,7 +208,8 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
       header: SheetHeaderBar(
         icon: LucideIcons.mic,
         title: 'أمر صوتي',
-        subtitle: 'احچي أو اكتب — والتنفيذ بشاشته بعد تأكيدك',
+        // قصيرٌ ليُقرأ كاملاً على ٣٢٠ («…بعد تأ…» كان يُبتر).
+        subtitle: 'احچي أو اكتب — وتأكّد قبل التنفيذ',
         onClose: () => Navigator.of(context).pop(),
       ),
       body: Column(
@@ -210,7 +219,78 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
           _input(),
           const SizedBox(height: Sp.md),
           ..._result(),
+          // المساعد ثانويّ: قبل الأمر وحين لا يُفهم — لا بجانب كرت تأكيد. حاله من الخادم كزرّه القديم بالرأس.
+          ValueListenableBuilder(
+            valueListenable: AiAssistantState.gate,
+            builder: (context, _, __) =>
+                AiAssistantState.visible && (_intent == null || _intent!.action == VoiceAction.unknown)
+                    ? Padding(padding: const EdgeInsets.only(top: Sp.lg), child: _assistantRow())
+                    : const SizedBox.shrink(),
+          ),
         ],
+      ),
+    );
+  }
+
+  /// «المساعد الذكي» — يغلق الورقة ويفتح «كيف أسوّي؟» من سياق الرأس (الموافقة أوّلاً). موظّفٌ بلا صلاحيّته ⇒ الصفّ بمكانه مقفلاً
+  /// والنقر رسالة القفل بلا طلب (والورقة باقية) — قاعدة «مقفل لا مخفيّ».
+  Widget _assistantRow() {
+    final locked = AiAssistantState.askLocked;
+    void tap() {
+      if (locked) return showNoPermission(context);
+      Navigator.of(context).pop();
+      unawaited(AssistantSheet.showAsk(widget.rootContext));
+    }
+
+    Widget box = Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: locked ? LockedStyle.box : AppColors.brandSoftBg,
+        borderRadius: BorderRadius.circular(R.icon),
+      ),
+      child: Icon(LucideIcons.sparkles, size: 18, color: locked ? LockedStyle.glyph : AppColors.brandAccent),
+    );
+    if (locked) box = PermLockBadge(child: box);
+    return Semantics(
+      button: true,
+      label: locked ? 'locked.a11y'.tr(args: ['ai.title'.tr()]) : 'ai.title'.tr(),
+      onTap: tap,
+      excludeSemantics: true,
+      child: Material(
+        key: const ValueKey('voice-assistant'),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.md),
+        child: InkWell(
+          onTap: tap,
+          borderRadius: BorderRadius.circular(R.md),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(R.md),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(children: [
+              box,
+              const SizedBox(width: Sp.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('ai.title'.tr(),
+                        style: AppType.bodyStrong(color: locked ? LockedStyle.title : AppColors.textHi)),
+                    Text('ai.empty_title'.tr(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppType.muted(color: locked ? LockedStyle.subtitle : AppColors.textMid)),
+                  ],
+                ),
+              ),
+              Icon(LucideIcons.chevronLeft, size: 18, color: AppColors.textLow),
+            ]),
+          ),
+        ),
       ),
     );
   }

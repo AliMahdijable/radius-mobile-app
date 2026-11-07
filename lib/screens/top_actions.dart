@@ -85,8 +85,9 @@ class HeaderSwitch {
 ///
 /// ٢٢ أكتوبر (المالك: «زرّ التبديل بين الأدمنية والتبديل بين الصفحات مو موجود
 /// بكلّ صفحات التطبيق») كانت تسبقها «تبديل الشركة» و«الصفحات» و(٧ نوفمبر) «أمر صوتي» — ستّة مربّعات تزاحم العنوان. منذ ٧ نوفمبر
-/// (المالك: «القوائم والازرار صارت بتزاحم كبير»): على الهاتف **ثلاثة** — المساعد · الجرس · الترس. التبديل في سطر الشركة تحت
-/// العنوان ([HeaderSwitch])، و«أمر صوتي» داخل المساعد (زرٌّ برأس ورقته). شريط الحاسبة كما كان («الصفحات» و«أمر صوتي» فيه).
+/// (المالك: «القوائم والازرار صارت بتزاحم كبير»): على الهاتف **ثلاثة** — «أمر صوتي» (أو المساعد لحسابٍ بلاه) · الجرس · الترس.
+/// التبديل في سطر الشركة تحت العنوان ([HeaderSwitch])، والمساعد ثانويٌّ داخل ورقة «أمر صوتي» (المالك: «لوتخلي الامر الصوتي مجرد
+/// نقر والمساعد الذكاء نخلي هو الثانوي»). شريط الحاسبة كما كان («الصفحات» و«أمر صوتي» والمساعد فيه).
 class TopActions extends StatelessWidget {
   const TopActions({
     super.key,
@@ -130,12 +131,12 @@ class TopActions extends StatelessWidget {
         scheduleMicrotask(AiAssistantState.ensureFresh);
         // وشركات الحساب كذلك: مرّةً لمهلتها، وللمالك وحده (لا طلب لموظّف).
         if (switchers) scheduleMicrotask(LinkedCompanies.ensureFresh);
-        // «أمر صوتي» (الخادم فتحه لهذا الحساب — ai_assistant.voice) داخل ورقة المساعد. مربّعه منفصلاً حين لا تحمله الورقة:
-        // شريط الحاسبة (كما كان)، أو مساعدٌ مقفلٌ لهذا الموظّف (الأمر الصوتيّ يُفهم على الجهاز ولا يسأل المساعد).
-        final voiceInside = AiAssistantState.voice &&
-            AiAssistantState.visible &&
-            !AiAssistantState.askLocked;
-        final voiceSquare = AiAssistantState.voice && (inDesktopBar || !voiceInside);
+        // «أمر صوتي» (الخادم فتحه لهذا الحساب — ai_assistant.voice) **بنقرةٍ واحدة** مكان المساعد، والمساعد ثانويٌّ داخل ورقته
+        // (٧ نوفمبر — المالك: «لوتخلي الامر الصوتي مجرد نقر والمساعد الذكاء نخلي هو الثانوي»؛ مقفلٌ لموظّفٍ ⇒ بمكانه هناك مقفلاً).
+        // بلا «أمر صوتي» ⇒ المساعد بمكانه كما كان. شريط الحاسبة كما كان: المربّعان معاً.
+        final voice = AiAssistantState.voice;
+        final assistantSquare =
+            AiAssistantState.visible && (inDesktopBar || !voice);
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -149,7 +150,7 @@ class TopActions extends StatelessWidget {
               ),
               SizedBox(width: gap),
             ],
-            if (voiceSquare) ...[
+            if (voice) ...[
               TopActionChip(
                 key: const ValueKey('top-actions-voice'),
                 icon: LucideIcons.mic,
@@ -159,19 +160,14 @@ class TopActions extends StatelessWidget {
               ),
               SizedBox(width: gap),
             ],
-            if (AiAssistantState.visible) ...[
+            if (assistantSquare) ...[
               TopActionChip(
                 key: const ValueKey('top-actions-assistant'),
                 icon: LucideIcons.sparkles,
                 label: 'ai.title'.tr(),
                 iconColor: AppColors.brandAccent,
                 locked: AiAssistantState.askLocked,
-                onTap: () => AssistantSheet.showAsk(
-                  context,
-                  onVoice: voiceInside && !inDesktopBar
-                      ? () => showVoiceCommandSheet(context)
-                      : null,
-                ),
+                onTap: () => AssistantSheet.showAsk(context),
               ),
               SizedBox(width: gap),
             ],

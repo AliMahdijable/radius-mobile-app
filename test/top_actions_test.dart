@@ -202,12 +202,12 @@ void main() {
     });
   });
 
-  // ٧ نوفمبر (المالك: «القوائم والازرار صارت بتزاحم كبير»): «أمر صوتي» لم يعد مربّعاً رابعاً — بطاقةٌ أوّل ورقة المساعد، وفي
-  // الموافقة لمن لا يوافق (يُفهم على الجهاز ولا يمرّ بالمساعد). موظّفٌ مساعده مقفل ⇒ مربّعه بمكانه (لا ورقة تحمله).
-  group('«أمر صوتي» داخل المساعد', () {
+  // ٧ نوفمبر (المالك بعد تجربة «أمر صوتي داخل المساعد»: «تحسها صارت طويله مال الامر صوتي… لوتخلي الامر الصوتي مجرد نقر والمساعد
+  // الذكاء نخلي هو الثانوي»): حسابٌ له «أمر صوتي» ⇒ المايك مكان المساعد بالرأس (نقرةٌ واحدة)، والمساعد صفٌّ ثانويٌّ داخل ورقته.
+  group('«أمر صوتي» بنقرة — والمساعد ثانويٌّ داخل ورقته', () {
     const voiceOn = <String, dynamic>{...aiStatusOn, 'voice': true};
     final voiceChip = find.byKey(const ValueKey('top-actions-voice'));
-    final voicePill = find.byKey(const ValueKey('assistant-voice'));
+    final assistantRow = find.byKey(const ValueKey('voice-assistant'));
 
     setUp(() {
       // المايك يبدأ بنفسه حين تُفتح ورقة الأمر — لا منصّة تعرّف هنا.
@@ -219,60 +219,72 @@ void main() {
           .setMockMethodCallHandler(const MethodChannel('plugin.csdcorp.com/speech_to_text'), null);
     });
 
-    testWidgets('مفتوحٌ للحساب ⇒ ثلاثة مربّعات، وبطاقته أوّل المساعد تغلقه وتفتح ورقة الأمر', (t) async {
+    testWidgets('مفتوحٌ للحساب ⇒ المايك مكان المساعد (ثلاثة مربّعات)، ونقرةٌ واحدة تفتح ورقة الأمر', (t) async {
       await setUpActor(s1bSasOwner, voiceOn);
-      AiConsent.debugAccepted = true;
       await pumpHeader(t);
-      expect(voiceChip, findsNothing);
+      expect(voiceChip, findsOneWidget);
+      expect(assistant, findsNothing, reason: 'المساعد ثانويّ — داخل ورقة الأمر');
       expect(find.byType(TopActionChip), findsNWidgets(3));
-      await t.tap(find.byIcon(LucideIcons.sparkles));
+      // بمكان المساعد: يمين الجرس بفراغٍ واحد.
+      final v = t.getRect(voiceChip);
+      final b = t.getRect(bell);
+      final g = t.getRect(gear);
+      expect(v.left, greaterThan(b.right));
+      expect(v.left - b.right, moreOrLessEquals(b.left - g.right));
+      await t.tap(voiceChip);
       await t.pumpAndSettle();
-      expect(find.byType(AssistantSheet), findsOneWidget);
-      expect(voicePill, findsOneWidget);
-      expect(find.text('أمر صوتي'), findsOneWidget, reason: 'اسمه ظاهر بأمثلته');
-      await t.tap(voicePill);
-      await t.pumpAndSettle();
-      expect(find.byType(AssistantSheet), findsNothing);
       expect(find.byType(VoiceCommandSheet), findsOneWidget);
+      expect(find.byType(AssistantSheet), findsNothing);
+      expect(find.byType(AssistantConsentSheet), findsNothing, reason: 'الأمر الصوتيّ لا يحتاج موافقة المساعد');
+      expect(assistantRow, findsOneWidget);
       expect(server.aiCalls, isEmpty);
       await finish(t);
     });
 
-    testWidgets('بلا موافقة ⇒ «أمر صوتي» في الموافقة يفتحه بلا موافقةٍ على المساعد', (t) async {
+    testWidgets('المساعد من ورقة الأمر: يغلقها ويفتح «كيف أسوّي؟» — والموافقة أوّلاً', (t) async {
       await setUpActor(s1bSasOwner, voiceOn);
       SharedPreferences.setMockInitialValues({});
       await pumpHeader(t);
-      await t.tap(find.byIcon(LucideIcons.sparkles));
+      await t.tap(voiceChip);
       await t.pumpAndSettle();
+      await t.tap(assistantRow);
+      await t.pumpAndSettle();
+      expect(find.byType(VoiceCommandSheet), findsNothing);
       expect(find.byType(AssistantConsentSheet), findsOneWidget);
-      await t.tap(find.byKey(const ValueKey('consent-voice')));
-      await t.pumpAndSettle();
-      expect(find.byType(AssistantConsentSheet), findsNothing);
-      expect(find.byType(AssistantSheet), findsNothing);
-      expect(find.byType(VoiceCommandSheet), findsOneWidget);
-      expect(await AiConsent.accepted(), isFalse, reason: 'لم يوافق على المساعد');
-      await finish(t);
-    });
-
-    testWidgets('غير مفتوحٍ للحساب ⇒ لا زرّ في رأس المساعد ولا في الموافقة', (t) async {
-      await setUpActor(s1bSasOwner, aiStatusOn);
-      SharedPreferences.setMockInitialValues({});
-      await pumpHeader(t);
-      await t.tap(find.byIcon(LucideIcons.sparkles));
-      await t.pumpAndSettle();
-      expect(find.byKey(const ValueKey('consent-voice')), findsNothing);
       await t.tap(find.text('موافق، كمّل'));
       await t.pumpAndSettle();
       expect(find.byType(AssistantSheet), findsOneWidget);
-      expect(voicePill, findsNothing);
+      expect(server.aiCalls, isEmpty, reason: 'لا سؤال قبل أن يكتب المدير');
       await finish(t);
     });
 
-    testWidgets('موظّفٌ مساعده مقفل ⇒ مربّع «أمر صوتي» بمكانه', (t) async {
+    testWidgets('غير مفتوحٍ للحساب ⇒ المساعد بمكانه بالرأس ولا مايك', (t) async {
+      await setUpActor(s1bSasOwner, aiStatusOn);
+      await pumpHeader(t);
+      expect(voiceChip, findsNothing);
+      expect(assistant, findsOneWidget);
+      expect(find.byType(TopActionChip), findsNWidgets(3));
+      await finish(t);
+    });
+
+    testWidgets('🚨 موظّفٌ مساعده مقفل ⇒ المايك بالرأس، والمساعد بورقته مقفلاً: رسالةٌ بلا طلب والورقة باقية', (t) async {
       await setUpActor(sasEmployee, <String, dynamic>{...aiStatusLocked, 'voice': true});
       await pumpHeader(t);
       expect(voiceChip, findsOneWidget);
-      expect(find.descendant(of: assistant, matching: find.byType(PermLockIcon)), findsOneWidget);
+      expect(assistant, findsNothing);
+      await t.tap(voiceChip);
+      await t.pumpAndSettle();
+      expect(find.descendant(of: assistantRow, matching: find.byType(PermLockIcon)), findsOneWidget,
+          reason: 'مقفلٌ لا مخفيّ');
+      final before = server.requests.length;
+      await t.tap(assistantRow);
+      await t.pump();
+      expect(find.byType(VoiceCommandSheet), findsOneWidget, reason: 'الورقة باقية');
+      expect(find.byType(AssistantConsentSheet), findsNothing);
+      expect(find.byType(AssistantSheet), findsNothing);
+      expect(find.textContaining('اطلبها من مديرك'), findsOneWidget);
+      expect(server.requests.length, before, reason: 'المقفل لا يجلب');
+      await t.pump(const Duration(seconds: 3)); // مؤقّت رسالة القفل
       await finish(t);
     });
   });
