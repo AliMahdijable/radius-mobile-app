@@ -27,10 +27,13 @@ class _WindowsVoiceButtonState extends State<WindowsVoiceButton>
     with WidgetsBindingObserver {
   late final DesktopVoiceSession _session;
   bool _asking = false;
+  bool _foreground = true;
 
   @override
   void initState() {
     super.initState();
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    _foreground = lifecycle == null || lifecycle == AppLifecycleState.resumed;
     WidgetsBinding.instance.addObserver(this);
     _session = DesktopVoiceSession(onText: (text) {
       if (!mounted) return;
@@ -59,11 +62,12 @@ class _WindowsVoiceButtonState extends State<WindowsVoiceButton>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) unawaited(_session.cancel());
+    _foreground = state == AppLifecycleState.resumed;
+    if (!_foreground) unawaited(_session.cancel());
   }
 
   Future<void> _toggle() async {
-    if (_asking) return;
+    if (_asking || !_foreground) return;
     if (_session.phase == DesktopVoicePhase.listening) {
       await _session.stop();
       return;
@@ -75,7 +79,7 @@ class _WindowsVoiceButtonState extends State<WindowsVoiceButton>
       // never sent to Anthropic. The key remains scoped to the current person.
       final key = 'windows.voice.v1.${await AiConsent.currentKey()}';
       final prefs = await SharedPreferences.getInstance();
-      if (!mounted) return;
+      if (!mounted || !_foreground) return;
       if (prefs.getBool(key) != true) {
         final accepted = await showDialog<bool>(
             context: context,
@@ -92,10 +96,19 @@ class _WindowsVoiceButtonState extends State<WindowsVoiceButton>
                         child: const Text('ابدأ'))
                   ],
                 ));
-        if (accepted != true || !mounted) return;
+        if (accepted != true || !mounted || !_foreground) return;
         await prefs.setBool(key, true);
       }
-      if (mounted) await _session.start();
+      // Consent belongs to the person who saw the dialog. Awaiting preferences
+      // must not start a microphone after backgrounding or changing accounts.
+      final currentKey = 'windows.voice.v1.${await AiConsent.currentKey()}';
+      if (mounted && _foreground && currentKey == key) await _session.start();
+    } catch (_) {
+      if (mounted && _foreground) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content:
+                Text('تعذّر بدء الميكروفون — حاول مجدّداً أو اكتب الأمر')));
+      }
     } finally {
       _asking = false;
     }
