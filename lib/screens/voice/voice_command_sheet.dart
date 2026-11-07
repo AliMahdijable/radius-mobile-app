@@ -7,11 +7,13 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/network_devices_api.dart';
+import '../../core/platform/app_platform.dart';
 import '../../core/util/format.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/permission_locked.dart';
 import '../../core/widgets/voice_search_button.dart';
+import '../../core/widgets/windows_voice_button.dart';
 import '../../models/network_device.dart';
 import '../../models/subscriber.dart';
 import '../../services/agent_net_presence.dart';
@@ -30,7 +32,8 @@ import '../subscribers/subscriber_detail_screen.dart';
 /// «أمر صوتي» (٧ نوفمبر — المالك: «المساعد الصوتي… وكيل يامره يفعل مشترك يطفي مشترك يفحص جهاز»).
 ///
 /// المايك يسمع بنفسه حين تُفتح، والنصّ يُعدَّل أو يُكتب. الفهم والمطابقة على الجهاز ([VoiceCommand]، [VoiceResolver]) — لا شيء
-/// يُرسل لنموذج ذكاء. والنتيجة كرت تأكيد: المشترك (أو الجهاز) بتفاصيله وزرّ العمليّة، والزرّ يفتح **شاشة العمليّة نفسها** بأقفالها
+/// يُرسل لفهمه بنموذج ذكاء. ويندوز يحوّل التسجيل لنص عربي على خادمنا بعد الموافقة، ثم يفهم النص محلياً مثل الهاتف.
+/// والنتيجة كرت تأكيد: المشترك (أو الجهاز) بتفاصيله وزرّ العمليّة، والزرّ يفتح **شاشة العمليّة نفسها** بأقفالها
 /// (التفعيل بسعره ودفعه، التطفية بتأكيدها) — لا تنفيذ بلا ضغطة الوكيل هناك.
 ///
 /// ٧ نوفمبر (المالك: «لوتخلي الامر الصوتي مجرد نقر والمساعد الذكاء نخلي هو الثانوي»): تُفتح بنقرةٍ من رأس كلّ تبويب، و«المساعد
@@ -334,7 +337,12 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
             color: _listening ? AppColors.dangerSoftBg : AppColors.brandSoftBg,
           ),
           alignment: Alignment.center,
-          child: VoiceSearchButton(
+          child: AppPlatform.isWindows ? WindowsVoiceButton(
+            controller: _ctrl,
+            autoStart: widget.autoListen,
+            onListening: (v) { if (mounted) setState(() => _listening = v); },
+            onFinal: _run,
+          ) : VoiceSearchButton(
             controller: _ctrl,
             size: 24,
             autoStart: widget.autoListen,

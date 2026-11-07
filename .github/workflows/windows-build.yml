@@ -118,7 +118,7 @@ jobs:
             --identity-name "$MSIX_IDENTITY_NAME" \
             --publisher "$MSIX_PUBLISHER" \
             --logo-path windows/msix/logo.png \
-            --capabilities "internetClient,privateNetworkClientServer" \
+            --capabilities "internetClient,privateNetworkClientServer,microphone" \
             --languages "ar,en-us" \
             --toast-activator-clsid "ce03d489-16ca-4fec-8cfc-95b07a9c437d" \
             --toast-activator-arguments "msix-args" \

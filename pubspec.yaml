@@ -1,7 +1,7 @@
 name: rad_mysvcs
 description: "MyServices Pro — subscriber and network device management for internet service agents"
 publish_to: 'none'
-version: 3.0.16+176
+version: 3.0.17+177
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -75,6 +75,7 @@ dependencies:
   # recognizer (no server round-trip), supports Arabic via the iOS /
   # Android system recognizers.
   speech_to_text: ^7.0.0
+  record: 6.2.0
 
   # Same icon set v1 uses (lucide). Keeps v2 visually consistent with
   # the v1 mobile app the users already know.
