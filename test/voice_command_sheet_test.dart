@@ -1,6 +1,9 @@
 // «أمر صوتي» (٧ نوفمبر): الجملة ⇒ كرت التأكيد ⇒ صفحة المشترك ونافذة العمليّة نفسها (لا تنفيذ بلا ضغطة الوكيل هناك).
 // المايك لا يُشغَّل بالاختبار (autoListen:false) — النصّ يُكتب كما لو أملاه.
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/core/widgets/app_sheet.dart';
@@ -80,6 +83,37 @@ void main() {
     await t.pump(const Duration(seconds: 2));
     await visualTearDown();
   }
+
+  testWidgets('مايك الآيفون: نص جزئي ثم سكوت ⇒ كرت الأمر بلا إنتر وبلا تنفيذ', (t) async {
+    const channel = MethodChannel('plugin.csdcorp.com/speech_to_text');
+    void native(String method, Object value) => t.binding.channelBuffers.push(
+        channel.name, const StandardMethodCodec().encodeMethodCall(MethodCall(method, value)), (_) {});
+    t.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'locales') return ['ar-IQ:العربية العراقية'];
+      if (call.method == 'stop') {
+        native('notifyStatus', 'notListening');
+        native('notifyStatus', 'done');
+      }
+      return true;
+    });
+    addTearDown(() => t.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null));
+    await open(t);
+    await t.tap(find.byIcon(Icons.mic_none_rounded));
+    await t.pump();
+    await settle(t, ms: 200);
+    native('notifyStatus', 'listening');
+    native('textRecognition', jsonEncode({
+      'alternates': [{'recognizedWords': 'طفي علي حسين.', 'confidence': 0.95}],
+      'resultType': 0,
+    }));
+    await settle(t, ms: 5000);
+    expect(find.byKey(const ValueKey('voice-sub-card')), findsOneWidget);
+    expect(find.text('علي حسين'), findsOneWidget);
+    expect(find.byKey(const ValueKey('voice-confirm')), findsOneWidget);
+    expect(find.byType(SubscriberDetailScreen), findsNothing,
+        reason: 'الكلام يجهّز كرت التأكيد فقط، لا يفتح العملية أو ينفّذها');
+    await close(t);
+  });
 
   testWidgets('«طفي علي حسين» ⇒ كرتٌ واحد بزرّ «طفّي» ⇒ صفحته ونافذة التطفية للتأكيد (لا تطفية قبلها)', (t) async {
     await open(t);

@@ -72,7 +72,8 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
 
   @override
   void dispose() {
-    _speech.stop();
+    // Leaving the sheet must not turn an unfinished command into a result.
+    _speech.cancel();
     super.dispose();
   }
 
@@ -82,23 +83,31 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
     widget.onListening?.call(v);
   }
 
+  void _attachSpeechListeners() {
+    // SpeechToText is shared; initialize() keeps the first widget's callbacks.
+    // Rebind them when this button starts a new session (including after search).
+    _speech.statusListener = (s) {
+      // ثلاث حالات تُطلَق؛ `listening` تأكيد تسجيل لا تغيير واجهة.
+      if (s == 'done' || s == 'notListening') {
+        if (mounted) _setListening(false);
+      }
+    };
+    _speech.errorListener = (err) {
+      if (!mounted) return;
+      // ⚠️ إعادة الضبط أوّلاً دائماً: بعض الأخطاء (error_unknown 300
+      // و error_no_match) تعود **بلا** status='done' مقابل، فيبقى
+      // الزرّ عالقاً على «إيقاف» إلى الأبد — بلاغ مستخدم.
+      _setListening(false);
+      _snack(_messageFor(err.errorMsg));
+    };
+  }
+
   Future<void> _init() async {
     try {
+      _attachSpeechListeners();
       final ok = await _speech.initialize(
-        onStatus: (s) {
-          // ثلاث حالات تُطلَق؛ `listening` تأكيد تسجيل لا تغيير واجهة.
-          if (s == 'done' || s == 'notListening') {
-            if (mounted) _setListening(false);
-          }
-        },
-        onError: (err) {
-          if (!mounted) return;
-          // ⚠️ إعادة الضبط أوّلاً دائماً: بعض الأخطاء (error_unknown 300
-          // و error_no_match) تعود **بلا** status='done' مقابل، فيبقى
-          // الزرّ عالقاً على «إيقاف» إلى الأبد — بلاغ مستخدم.
-          _setListening(false);
-          _snack(_messageFor(err.errorMsg));
-        },
+        onStatus: _speech.statusListener,
+        onError: _speech.errorListener,
       );
       if (!mounted) return;
       setState(() => _ready = ok);
@@ -191,6 +200,7 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
         return;
       }
     }
+    _attachSpeechListeners();
     _setListening(true);
     // 'ar' احتياطاً حين يفشل الاستكشاف: أجهزة بمحرّك خاصّ تشترط
     // localeId وترفض null، ومعظمها يقبل الرمز العامّ.
@@ -209,7 +219,16 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
           widget.controller.selection =
               TextSelection.collapsed(offset: txt.length);
           widget.onResult?.call(txt);
-          if (r.finalResult) widget.onFinal?.call(txt);
+          if (r.finalResult) {
+            _setListening(false);
+            widget.onFinal?.call(txt);
+          } else if (widget.onFinal != null && _speech.isListening) {
+            // iOS dictation can keep producing partial text without isFinal.
+            // Stop after a short pause; the package then delivers its final
+            // result (or its existing last-partial fallback). Give the first
+            // word more time so a slow recognizer is not cut off at startup.
+            _speech.changePauseFor(const Duration(seconds: 2));
+          }
         },
         listenOptions: SpeechListenOptions(
           localeId: locale,
@@ -217,6 +236,9 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
           cancelOnError: true,
           listenMode: ListenMode.dictation,
           onDevice: false,
+          pauseFor: widget.onFinal != null ? const Duration(seconds: 8) : null,
+          listenFor:
+              widget.onFinal != null ? const Duration(seconds: 15) : null,
         ),
       );
     } catch (e) {
@@ -236,7 +258,9 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton> {
         child: Icon(
           _listening ? Icons.stop_rounded : Icons.mic_none_rounded,
           size: widget.size,
-          color: _listening ? AppColors.error : (widget.idleColor ?? AppColors.textLow),
+          color: _listening
+              ? AppColors.error
+              : (widget.idleColor ?? AppColors.textLow),
         ),
       ),
     );
