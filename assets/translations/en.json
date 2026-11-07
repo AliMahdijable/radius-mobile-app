@@ -1482,7 +1482,7 @@
     "finance_profit_rule": "Net profit here sums each company by its own rule — Supernet without package cost",
     "finance_by_company": "By company",
     "col_company": "Company",
-    "reports_note": "The financial and sessions reports cover all companies; the other reports are for the open company: “{}”",
+    "reports_note": "Financial, sessions and daily activations cover all companies; the other reports are for the open company: “{}”",
     "deleted_debts_note": "Deleted subscribers' debts are for the open company only: \"{}\"",
     "sales_note": "Sales is for the open company only: «{}»"
   },

@@ -4,6 +4,10 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/reports_api.dart';
 import '../../core/util/format.dart';
+import '../../models/merged_company.dart';
+import '../../services/merged_mode.dart';
+import '../../services/merged_report_loader.dart';
+import '../../widgets/merged_company_strip.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -42,9 +46,77 @@ class _DailyActivationsReportScreenState
   /// فلتر: all / cash_only (يوم بأي نقدي) / non_cash_only / no_revenue
   String _typeFilter = 'all';
 
-  List<DailyActivationRow> get _visibleRows {
-    if (_typeFilter == 'all') return _rows;
-    return _rows.where((r) {
+  // ── «كل الشركات» (٧ نوفمبر — المالك: «التقارير… بنفس فكرة عرض المشتركين والاختيار بين الكل وشركة»): الشاشة نفسها وشريط
+  // الشركات أعلاها. تفعيلات كلّ شركةٍ بطلبٍ موجَّه لها بنطاقها (معرّف مديرها — كما تراها وحدها)؛ «الكل» سطرٌ لكلّ شركة (الضغط
+  // يعرضها وحدها بأيّامها)، والمجموع: العدد من كلّ شركةٍ قُرئت، والنقد بالدينار وحده — شركةٌ بعملةٍ أخرى أو مجهولة تُسمّى ولا
+  // يُجمع نقدها، والمتعذّرة تُسمّى ولا تُعدّ صفراً. فلاتر المدير والموظّف لقوائم الشركة المفتوحة فتُخفى هنا.
+  bool get _mergedOn => MergedMode.active.value;
+  MergedReport<DailyActivationRow>? _merged;
+  int _gen = 0;
+
+  /// صفوف الشاشة قبل فلتر النوع: «الكل» سطرٌ لكلّ شركة (مجموع أيّامها)، والمختارة أيّامها، وخارج الوضع كما كان.
+  List<({String? key, DailyActivationRow row})> get _base {
+    final m = _mergedOn ? _merged : null;
+    if (m == null) return [for (final r in _rows) (key: null, row: r)];
+    final f = MergedMode.focused;
+    if (f != null) return [for (final e in m.rowsFor(f.key)) (key: e.key as String?, row: e.row)];
+    return [
+      for (final p in m.parts)
+        if (p.ok) (key: p.company.key as String?, row: _sumRows(p.rows!)),
+    ];
+  }
+
+  static DailyActivationRow _sumRows(List<DailyActivationRow> rows) => DailyActivationRow(
+        day: '',
+        count: rows.fold(0, (s, r) => s + r.count),
+        cashSum: rows.fold<num>(0, (s, r) => s + r.cashSum),
+        nonCashCount: rows.fold(0, (s, r) => s + r.nonCashCount),
+      );
+
+  /// نقد الصفّ يدخل المجموع؟ خارج الوضع دائماً؛ فيه للدينار وحده.
+  bool _cashCounts(String? key) {
+    if (key == null) return true;
+    return MergedMode.companyOf(key)?.currency == 'IQD';
+  }
+
+  void _onMergedMode() {
+    if (!mounted) return;
+    _merged = null;
+    _filters = const ReportFilters();
+    _load();
+  }
+
+  void _onMergedFocus() {
+    if (mounted && _mergedOn) {
+      setState(() {
+        _typeFilter = 'all';
+        _visibleCount = kReportPageStep;
+      });
+    }
+  }
+
+  /// سطر الشريط: من لم يُقرأ ولماذا، وشركاتٌ بعملةٍ أخرى نقدها خارج المجموع.
+  String? _mergedNote(MergedReport<DailyActivationRow> m) {
+    final focus = MergedMode.focused;
+    final lines = <String>[
+      if (m.noteFor(focus?.key,
+              unsupportedText: 'لا تفعيلاتٍ تُقرأ لنوعها من هنا',
+              missingText: 'merged.missing'.tr(args: [m.missing.map((c) => c.name).join('، ')]))
+          case final n?)
+        n,
+      if (focus == null)
+        for (final p in m.parts)
+          if (p.ok && p.company.currency != 'IQD')
+            'merged.not_in_sum'.tr(args: ['نقد «${p.company.name}» (${p.company.currency ?? 'عملةٌ غير معروفة'})']),
+    ];
+    return lines.isEmpty ? null : lines.join('\n');
+  }
+
+  List<({String? key, DailyActivationRow row})> get _visibleRows {
+    final base = _base;
+    if (_typeFilter == 'all') return base;
+    return base.where((e) {
+      final r = e.row;
       switch (_typeFilter) {
         case 'cash_only':
           return r.count > 0;
@@ -61,14 +133,44 @@ class _DailyActivationsReportScreenState
   @override
   void initState() {
     super.initState();
+    MergedMode.active.addListener(_onMergedMode);
+    MergedMode.focus.addListener(_onMergedFocus);
     _load();
   }
 
+  @override
+  void dispose() {
+    _gen++;
+    MergedMode.active.removeListener(_onMergedMode);
+    MergedMode.focus.removeListener(_onMergedFocus);
+    super.dispose();
+  }
+
   Future<void> _load() async {
+    final gen = ++_gen;
     setState(() {
       _loading = true;
       _error = null;
     });
+    if (_mergedOn) {
+      // كلّ شركةٍ بنطاقها هي (معرّف مديرها) — نطاق المفتوحة لا يُرسل لغيرها
+      final m = await loadMergedReport<DailyActivationRow>(
+        supports: (c) => c.provider != MergedProvider.ftth && c.provider != MergedProvider.fiberx,
+        fetch: (c) async {
+          final r = await ReportsApi.dailyActivations(from: _range.from, to: _range.to, userIds: [c.adminId]);
+          return (ok: r.ok, rows: r.rows, error: r.error, note: null);
+        },
+      );
+      if (!mounted || gen != _gen || !_mergedOn) return;
+      setState(() {
+        _loading = false;
+        _merged = m;
+        _rows = const [];
+        _error = m.parts.any((p) => p.ok) ? null : 'common.load_failed'.tr();
+        _visibleCount = kReportPageStep;
+      });
+      return;
+    }
     _scopeIds ??= await loadScopeUserIds();
     final r = await ReportsApi.dailyActivations(
       from: _range.from,
@@ -78,8 +180,9 @@ class _DailyActivationsReportScreenState
       userManager: _filters.userManager,
       employeeId: _filters.employeeId,
     );
-    if (!mounted) return;
+    if (!mounted || gen != _gen || _mergedOn) return;
     setState(() {
+      _merged = null;
       _loading = false;
       _rows = r.rows;
       _error = r.ok ? null : (r.error ?? 'common.load_failed'.tr());
@@ -88,17 +191,20 @@ class _DailyActivationsReportScreenState
   }
 
   List<List<String>> get _exportRows => _visibleRows
-      .map((r) => [
-            r.day,
-            '${r.count}',
-            '${r.nonCashCount}',
-            r.cashSum.toString(),
+      .map((e) => [
+            if (_mergedOn) MergedMode.companyOf(e.key)?.name ?? '',
+            e.row.day.isEmpty ? _dateStr(_range.from) : e.row.day,
+            '${e.row.count}',
+            '${e.row.nonCashCount}',
+            e.row.cashSum.toString(),
           ])
       .toList();
 
   int get _totalActivations =>
-      _visibleRows.fold(0, (s, r) => s + r.count + r.nonCashCount);
-  num get _totalRevenue => _visibleRows.fold<num>(0, (s, r) => s + r.cashSum);
+      _visibleRows.fold(0, (s, e) => s + e.row.count + e.row.nonCashCount);
+  // «كل الشركات»: نقد الدينار وحده يُجمع (غيره مسمّى في سطر الشريط)
+  num get _totalRevenue =>
+      _visibleRows.fold<num>(0, (s, e) => s + (_cashCounts(e.key) ? e.row.cashSum : 0));
 
   int get _totalCount => _totalActivations;
   num get _totalCash => _totalRevenue;
@@ -110,8 +216,9 @@ class _DailyActivationsReportScreenState
     final shown = _visibleCount.clamp(0, visible.length);
     final remaining = visible.length - shown;
     final pageRows = visible.isEmpty
-        ? const <DailyActivationRow>[]
+        ? const <({String? key, DailyActivationRow row})>[]
         : visible.take(_visibleCount).toList();
+    final merged = _mergedOn ? _merged : null;
     return ReportPermissionGate(
       permission: 'reports.daily_activations',
       title: 'reports.daily_activations'.tr(),
@@ -138,9 +245,22 @@ class _DailyActivationsReportScreenState
             child: ListView(
               padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
               children: [
+                // «كل الشركات»: الشركات بعدد تفعيلات اليوم لكلٍّ منها، ومن لم يُقرأ ولماذا
+                if (merged != null) ...[
+                  MergedCompanyStrip(
+                    countOf: (c) => merged.partOf(c.key)?.rows?.fold<int>(0, (s, r) => s + r.count + r.nonCashCount),
+                    total: [for (final p in merged.parts) ...?p.rows].fold<int>(0, (s, r) => s + r.count + r.nonCashCount),
+                    problemOf: (c) => merged.problemOf(c,
+                        failedLabel: 'merged.chip_failed'.tr(), unsupportedLabel: 'merged.web_only'.tr()),
+                    note: _mergedNote(merged),
+                  ),
+                  const SizedBox(height: Sp.md),
+                ],
                 // شريط "اليوم" ثابت — تنبيه بصري بأن الصفحة scope=today.
                 _todayBadge(),
                 const SizedBox(height: Sp.sm),
+                // «كل الشركات»: قوائم المدراء والموظّفين للشركة المفتوحة وحدها — تُخفى
+                if (!_mergedOn)
                 ReportFiltersPanel(
                   value: _filters,
                   // بلا actionTypes — الشاشة scope=تفعيلات-اليوم-أصلاً.
@@ -156,8 +276,11 @@ class _DailyActivationsReportScreenState
                 const SizedBox(height: Sp.md),
                 _summary(),
                 const SizedBox(height: Sp.md),
-                _typeChips(),
-                const SizedBox(height: Sp.sm),
+                // «كل الشركات» (الكلّ): السطور شركاتٌ لا أيّام — شرائح الأيّام للشركة المختارة
+                if (!(_mergedOn && MergedMode.focused == null)) ...[
+                  _typeChips(),
+                  const SizedBox(height: Sp.sm),
+                ],
                 if (_loading)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: Sp.huge),
@@ -165,7 +288,7 @@ class _DailyActivationsReportScreenState
                   )
                 else if (_error != null)
                   _errorBlock()
-                else if (_rows.isEmpty)
+                else if (_base.isEmpty)
                   _emptyBlock()
                 else ...[
                   Row(
@@ -182,6 +305,7 @@ class _DailyActivationsReportScreenState
                             '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
                         fileNameBase: 'daily_activations',
                         columns: [
+                          if (_mergedOn) 'merged.col_company'.tr(),
                           'reports.col_day'.tr(),
                           'sheets.pay_cash'.tr(),
                           'actions.activate_non_cash'.tr(),
@@ -192,10 +316,17 @@ class _DailyActivationsReportScreenState
                     ],
                   ),
                   const SizedBox(height: Sp.sm),
-                  for (final r in pageRows) ...[
-                    _dayRow(r),
-                    const SizedBox(height: 6),
-                  ],
+                  // «الكل»: سطرٌ لكلّ شركة (الضغط يعرضها وحدها)؛ وإلّا الأيّام
+                  if (_mergedOn && MergedMode.focused == null)
+                    for (final e in pageRows) ...[
+                      _companyRow(e.key!, e.row),
+                      const SizedBox(height: 6),
+                    ]
+                  else
+                    for (final e in pageRows) ...[
+                      _dayRow(e.row),
+                      const SizedBox(height: 6),
+                    ],
                   if (remaining > 0)
                     ReportLoadMore(
                       remaining: remaining,
@@ -317,6 +448,77 @@ class _DailyActivationsReportScreenState
     );
   }
 
+  /// «كل الشركات» (الكلّ): سطر شركةٍ بمجموع يومها — بتصميم سطر اليوم، واسمها مكان التاريخ؛ الضغط يعرضها وحدها.
+  Widget _companyRow(String key, DailyActivationRow r) {
+    final c = MergedMode.companyOf(key);
+    final color = c == null ? AppColors.brand : AppColors.company(c.colorIndex);
+    final cash = _cashCounts(key);
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(R.md),
+      child: InkWell(
+        key: ValueKey('daily-company-$key'),
+        borderRadius: BorderRadius.circular(R.md),
+        onTap: () => MergedMode.focus.value = key,
+        child: Container(
+          padding: const EdgeInsets.all(Sp.md),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.md),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                constraints: const BoxConstraints(maxWidth: 130),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(R.sm),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(c?.name ?? '—',
+                        maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bodyBold(color: AppColors.textHi)),
+                  ),
+                ]),
+              ),
+              const SizedBox(width: Sp.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(LucideIcons.zap, size: 12, color: AppColors.success),
+                        const SizedBox(width: 4),
+                        Text('${r.count} نقدي',
+                            style: AppType.label(color: AppColors.textHi).copyWith(fontSize: 11, fontWeight: FontWeight.w700)),
+                        const SizedBox(width: 10),
+                        Icon(LucideIcons.creditCard, size: 12, color: AppColors.warning),
+                        const SizedBox(width: 4),
+                        Text('${r.nonCashCount} غير نقدي',
+                            style: AppType.label(color: AppColors.textHi).copyWith(fontSize: 11, fontWeight: FontWeight.w700)),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                        cash
+                            ? 'إيراد: ${formatIQD(r.cashSum)} د.ع'
+                            : 'إيراد: ${formatIQD(r.cashSum)} ${c?.currency ?? ''} — خارج المجموع',
+                        style: AppType.muted().copyWith(fontSize: 11, color: AppColors.brand)),
+                  ],
+                ),
+              ),
+              Icon(LucideIcons.chevronLeft, size: 16, color: AppColors.textLow),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   static String _dateStr(DateTime? d) {
     if (d == null) return '';
     String p(int v) => v.toString().padLeft(2, '0');
@@ -352,10 +554,11 @@ class _DailyActivationsReportScreenState
 
   Widget _typeChips() {
     // كل chip: (key, label, count, color)
-    final all = _rows.length;
-    final cashOnly = _rows.where((r) => r.count > 0).length;
-    final nonCashOnly = _rows.where((r) => r.nonCashCount > 0).length;
-    final noRev = _rows.where((r) => r.count == 0).length;
+    final rows = [for (final e in _base) e.row];
+    final all = rows.length;
+    final cashOnly = rows.where((r) => r.count > 0).length;
+    final nonCashOnly = rows.where((r) => r.nonCashCount > 0).length;
+    final noRev = rows.where((r) => r.count == 0).length;
     final chips = [
       ('all', 'الكل', all, AppColors.success),
       ('cash_only', 'أيام نقدي', cashOnly, AppColors.success),
