@@ -8,6 +8,8 @@ import '../../../core/util/clipboard_helper.dart';
 import '../../../models/network_device.dart';
 import '../../../services/devices_check.dart';
 import '../../../services/devices_check_runner.dart';
+import '../../../services/merged_devices_check.dart';
+import '../../../widgets/company_tag.dart';
 import '../../../services/notification_router.dart';
 import '../../subscribers/subscriber_detail_screen.dart';
 import '../../../theme/colors.dart';
@@ -16,10 +18,14 @@ import '../../../theme/typography.dart';
 import '../widgets/_grade.dart';
 
 class DevicesCheckScreen extends StatefulWidget {
-  const DevicesCheckScreen({super.key, required this.devices, required this.viaVpn, this.onOpenFull});
+  const DevicesCheckScreen({super.key, required this.devices, required this.viaVpn, this.onOpenFull, this.runner});
 
   final List<NetworkDevice> devices;
   final bool viaVpn;
+
+  /// «كل الشركات»: الفاحص المدموج (MergedDevicesCheckRunner) — أجهزة كلّ شركةٍ بطريقها، وبطاقة «الشركات» بحال كلٍّ منها. الشاشة
+  /// تملكه وتتخلّص منه.
+  final DevicesCheckRunner? runner;
 
   /// جهازٌ واحد بوضع VPN (٧ نوفمبر — المالك: «بوضع vpn… من يفوت لكارت الجهاز كلشي ميظهر»): الضغط على الجهاز بالقائمة يفتح تقريره
   /// عبر الـVPN هنا بدل صفحته الحيّة (تتّصل بالجهاز من الهاتف فلا تصله خارج الشبكة) — و«الصفحة الكاملة» لتعديله.
@@ -33,7 +39,13 @@ class DevicesCheckScreen extends StatefulWidget {
 }
 
 class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
-  late final DevicesCheckRunner _run = DevicesCheckRunner(widget.devices, viaVpn: widget.viaVpn);
+  late final DevicesCheckRunner _run = widget.runner ?? DevicesCheckRunner(widget.devices, viaVpn: widget.viaVpn);
+
+  /// «كل الشركات» — null خارجها.
+  MergedDevicesCheckRunner? get _merged {
+    final r = _run;
+    return r is MergedDevicesCheckRunner ? r : null;
+  }
   CheckState? _filter;
 
   /// القسم المفتوح بعينه: `<المعرّف>:subs` أو `<المعرّف>:ports` — المالك ٦ نوفمبر: «من انقر توكل ع اي قسم يفتح كل الاقسام».
@@ -82,7 +94,24 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
   Future<void> _copyAll() async {
     final rs = _reports;
     if (rs.isEmpty) return;
-    await copyToClipboard(context, DevicesCheck.reportText(rs, viaVpn: widget.viaVpn), label: 'تقرير الفحص');
+    final m = _merged;
+    if (m == null) {
+      await copyToClipboard(context, DevicesCheck.reportText(rs, viaVpn: widget.viaVpn), label: 'تقرير الفحص');
+      return;
+    }
+    // «كل الشركات»: تقرير كلّ شركةٍ تحت اسمها، وسطر من لم تُفحص ولماذا
+    final parts = <String>[];
+    for (final s in m.states.values) {
+      final mine = [for (final r in rs) if (m.companyOf[r.device.id] == s.part.company.key) r];
+      final head = '— ${s.part.company.name} —';
+      if (mine.isEmpty) {
+        if (s.message != null) parts.add('$head\n${s.message}');
+        continue;
+      }
+      parts.add('$head\n${DevicesCheck.reportText(mine, viaVpn: s.viaVpn)}');
+    }
+    if (!mounted) return;
+    await copyToClipboard(context, parts.join('\n\n'), label: 'تقرير الفحص');
   }
 
   @override
@@ -127,6 +156,7 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
             padding: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, Sp.xxl),
             children: [
               _head(rs),
+              if (_merged != null) ...[const SizedBox(height: Sp.sm), _companies(_merged!)],
               if (_run.error != null && !_run.running) ...[const SizedBox(height: Sp.sm), _errorBox()],
               if (rs.isNotEmpty && !widget.single) ...[const SizedBox(height: Sp.md), _counts(rs)],
               for (final r in shown) ...[const SizedBox(height: Sp.sm), _card(r)],
@@ -169,7 +199,8 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
       );
 
   Widget _head(List<DeviceCheckReport> rs) {
-    final vpn = widget.viaVpn;
+    final merged = _merged != null;
+    final vpn = widget.viaVpn && !merged;
     final running = _run.running;
     final total = _run.total;
     final title = running
@@ -185,16 +216,19 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
       decoration: _cardDeco(),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
-          _iconBox(vpn ? LucideIcons.shieldCheck : LucideIcons.wifi, vpn ? AppTone.brand : AppTone.success),
+          _iconBox(merged ? LucideIcons.layers : (vpn ? LucideIcons.shieldCheck : LucideIcons.wifi),
+              vpn || merged ? AppTone.brand : AppTone.success),
           const SizedBox(width: Sp.sm),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(title, style: AppType.bodyStrong(color: AppColors.textHi)),
               const SizedBox(height: 2),
               Text(
-                vpn
-                    ? (widget.single ? 'عبر الـVPN — الخادم يقرؤه وأنت بعيد' : 'عبر الـVPN — الخادم يفحصها وأنت بعيد')
-                    : 'من شبكتك — الجهاز نفسه، ومشتركو السكترات، ومنافذ السويجات',
+                merged
+                    ? 'كل الشركات — كلّ شركةٍ بطريقها'
+                    : vpn
+                        ? (widget.single ? 'عبر الـVPN — الخادم يقرؤه وأنت بعيد' : 'عبر الـVPN — الخادم يفحصها وأنت بعيد')
+                        : 'من شبكتك — الجهاز نفسه، ومشتركو السكترات، ومنافذ السويجات',
                 style: AppType.micro(color: AppColors.textMid),
               ),
             ]),
@@ -206,14 +240,70 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
             borderRadius: BorderRadius.circular(R.pill),
             child: LinearProgressIndicator(
               minHeight: 6,
-              value: vpn || total == 0 ? null : _run.done / total,
+              value: (vpn && !merged) || total == 0 ? null : _run.done / total,
               backgroundColor: AppColors.surfaceInput,
               color: AppColors.brand,
             ),
           ),
           const SizedBox(height: Sp.xs),
-          Text(vpn ? (_run.line ?? 'يتّصل بالـVPN…') : 'يفحص ${_run.done} من $total…', style: AppType.micro(color: AppColors.textMid)),
+          Text(
+              merged
+                  ? (_run.line ?? 'يفحص ${_run.done} من $total…')
+                  : vpn
+                      ? (_run.line ?? 'يتّصل بالـVPN…')
+                      : 'يفحص ${_run.done} من $total…',
+              style: AppType.micro(color: AppColors.textMid)),
         ],
+      ]),
+    );
+  }
+
+  /// «كل الشركات»: سطرٌ لكلّ شركة — طريقها وعدد أجهزتها، أو لماذا لم تُفحص (بلا VPN تُسمّى، لا «طافية»).
+  Widget _companies(MergedDevicesCheckRunner m) {
+    return Container(
+      key: const ValueKey('check-companies'),
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+      decoration: _cardDeco(),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        for (final s in m.states.values) _companyRow(s),
+      ]),
+    );
+  }
+
+  Widget _companyRow(MergedCheckCompanyState s) {
+    final c = s.part.company;
+    final n = s.part.devices.length;
+    final count = '$n ${n == 1 ? 'جهاز' : 'أجهزة'}';
+    final (IconData icon, AppTone tone, String text) = switch (s.status) {
+      MergedCheckStatus.waiting => (LucideIcons.hourglass, AppTone.neutral, 'بانتظار دورها · $count'),
+      MergedCheckStatus.running => (LucideIcons.loader, AppTone.brand, '${s.viaVpn ? 'تُفحص عبر VPN الشركة' : 'تُفحص من شبكتك'}… · $count'),
+      MergedCheckStatus.done => (
+          LucideIcons.circleCheck,
+          AppTone.success,
+          '${s.viaVpn ? 'عبر VPN الشركة' : 'من شبكتك'} · $count${s.defaultLimits ? ' · بالحدود الافتراضيّة (تعذّرت قراءة إعداداتها)' : ''}'
+        ),
+      MergedCheckStatus.noVpn => (LucideIcons.shieldOff, AppTone.warning, s.message ?? 'تحتاج VPN للفحص الشامل'),
+      MergedCheckStatus.failed => (LucideIcons.triangleAlert, AppTone.danger, s.message ?? 'تعذّر الفحص'),
+    };
+    return Padding(
+      key: ValueKey('check-company-${c.key}'),
+      padding: const EdgeInsets.symmetric(vertical: Sp.xs + 2),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Container(
+              width: 8, height: 8, decoration: BoxDecoration(color: AppColors.company(c.colorIndex), shape: BoxShape.circle)),
+        ),
+        const SizedBox(width: Sp.sm),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(c.name, style: AppType.bodyStrong(color: AppColors.textHi)),
+            const SizedBox(height: 2),
+            Text(text, style: AppType.micro(color: s.status == MergedCheckStatus.done ? AppColors.textMid : tone.onSoft)),
+          ]),
+        ),
+        const SizedBox(width: Sp.sm),
+        Icon(icon, size: 18, color: s.status == MergedCheckStatus.waiting ? AppColors.textLow : tone.fill),
       ]),
     );
   }
@@ -297,6 +387,11 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
                     Text(r.device.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bodyStrong(color: AppColors.textHi)),
                     const SizedBox(height: 2),
                     Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.micro(color: AppColors.textMid)),
+                    // «كل الشركات»: شركة الجهاز
+                    if (_merged?.companyOf[r.device.id] case final key?) ...[
+                      const SizedBox(height: 3),
+                      CompanyTag(companyKey: key),
+                    ],
                   ]),
                 ),
                 const SizedBox(width: Sp.xs),
@@ -373,19 +468,21 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
         : 'المشتركون ${r.subs.length}${r.subsBad > 0 ? ' — ${r.subsBad} فيهم مشكلة' : ' — كلّهم بخير'}';
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       _sectionHead(LucideIcons.users, head),
-      for (final s in shown) _subRow(s),
+      for (final s in shown) _subRow(s, r.device.id),
       if (r.subs.length > shown.length || open) _more(key, open, r.subs.length - shown.length, 'كلّ المشتركين'),
     ]);
   }
 
   /// النقر: صفحة المشترك المطابق بماك جلسته، وإلّا نسخ الماك؛ والضغط المطوّل ينسخ الماك دائماً — المالك ٦ نوفمبر: «لازم تفعل
   /// امكانيه نسخ الماك حتى يعرف وين يحدد او النقر عليه يفتحله اليوزر المشابه ونفس الشي للسكاتر».
-  Future<void> _tapSub(CheckSub s) async {
+  Future<void> _tapSub(CheckSub s, int deviceId) async {
     final user = s.user;
     if (user == null) return _copyMac(s);
     final nav = Navigator.of(context);
     final messenger = ScaffoldMessenger.maybeOf(context);
-    final sub = _run.subscriberFor(user) ?? await NotificationRouter.findSubscriber(user);
+    // «كل الشركات»: مشترك جهاز شركةٍ أخرى من قائمة شركته (موجَّهاً لها) — لا بحث في المفتوحة: اليوزر نفسه قد يكون فيها لغيره
+    final sub = _run.subscriberOn(deviceId, user) ??
+        (_run.isRemote(deviceId) ? null : await NotificationRouter.findSubscriber(user));
     if (sub == null) {
       messenger?.showSnackBar(SnackBar(content: Text('تعذّر فتح «$user» الآن — ابحث عنه من «المشتركين»')));
       return;
@@ -398,7 +495,7 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
     await copyToClipboard(context, m == null ? s.title : DevicesCheck.fmtMac(m), label: m == null ? 'الاسم' : 'الماك');
   }
 
-  Widget _subRow(CheckSub s) {
+  Widget _subRow(CheckSub s, int deviceId) {
     final sigTone = s.weak ? AppTone.warning : (s.light != null ? AppTone.success : Grade.signal(s.signal));
     final mac = s.mac == null ? null : DevicesCheck.fmtMac(s.mac!);
     final showMac = mac != null && mac.toLowerCase() != s.title.toLowerCase();
@@ -413,7 +510,7 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
         color: Colors.transparent,
         child: InkWell(
           key: ValueKey('check-sub-${s.mac ?? s.name}'),
-          onTap: () => _tapSub(s),
+          onTap: () => _tapSub(s, deviceId),
           onLongPress: () => _copyMac(s),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: Sp.xs + 2),

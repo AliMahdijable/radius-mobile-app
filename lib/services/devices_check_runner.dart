@@ -80,6 +80,12 @@ class DevicesCheckRunner extends ChangeNotifier {
   final _subsByUser = <String, Subscriber>{};
   Subscriber? subscriberFor(String user) => _subsByUser[user];
 
+  /// مشترك صفٍّ في تقرير الجهاز [deviceId] — «كل الشركات» (MergedDevicesCheckRunner) تحصره بشركة الجهاز.
+  Subscriber? subscriberOn(int deviceId, String user) => subscriberFor(user);
+
+  /// جهازٌ من شركةٍ غير المفتوحة — لا يُبحث عن مشتركه في قائمة المفتوحة.
+  bool isRemote(int deviceId) => false;
+
   @visibleForTesting
   static Future<List<Subscriber>> Function()? debugSubscribers;
 

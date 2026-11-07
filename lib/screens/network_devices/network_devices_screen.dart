@@ -59,6 +59,7 @@ import '../../api/merged_devices_api.dart';
 import '../../models/merged_company.dart';
 import '../../services/auth_storage.dart';
 import '../../services/merged_mode.dart';
+import '../../services/merged_devices_check.dart';
 import '../../widgets/company_tag.dart';
 import '../../widgets/merged_company_strip.dart';
 import '../account/company_switch_sheet.dart';
@@ -1680,6 +1681,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// «الفحص الشامل»: عبر الـVPN بوضعه أو وأنت خارج شبكتك ولك طريق؛ وخارجها بلا طريق لا فحص (المحلّيّ سيقول «طافي» كذباً).
   void _openDeepCheck() {
     final viaVpn = VpnNow.mode.value || (_vpnLinked && !AgentNetPresence.isOn);
+    if (_merged) return _openMergedCheck(viaVpn);
     if (!viaVpn && AgentNetPresence.isOff) {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('خارج شبكتك — اربط VPN حتى تُفحص أجهزتك عن بُعد')));
@@ -1689,6 +1691,29 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     if (devices.isEmpty) return;
     Navigator.of(context).push(MaterialPageRoute<void>(
       builder: (_) => DevicesCheckScreen(devices: List<NetworkDevice>.of(devices), viaVpn: viaVpn),
+    ));
+  }
+
+  /// «كل الشركات»: «الفحص الشامل» لشركات النطاق (الكلّ، أو المختارة في الشريط) — كلٌّ بطريقها: المفتوحة كالمعتاد (من شبكتك أو
+  /// عبر الـVPN؛ وخارج شبكتها بلا طريق يُقال لا يُفحص)، وكلّ شركةٍ أخرى بفحص الخادم عبر VPN شركتها، وبلا طريقٍ تُسمّى.
+  void _openMergedCheck(bool viaVpn) {
+    final focus = _focusKey;
+    final parts = <MergedCheckPart>[
+      for (final p in _parts)
+        if (!p.failed && (focus == null || p.company.key == focus))
+          MergedCheckPart(
+            company: p.company,
+            open: p.open,
+            devices: [for (final d in _all) if (_companyOf[d.id] == p.company.key) d],
+          ),
+    ]..removeWhere((p) => p.devices.isEmpty);
+    if (parts.isEmpty) return;
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => DevicesCheckScreen(
+        devices: [for (final p in parts) ...p.devices],
+        viaVpn: viaVpn,
+        runner: MergedDevicesCheckRunner(parts, openViaVpn: viaVpn, openOffNetwork: !viaVpn && AgentNetPresence.isOff),
+      ),
     ));
   }
 
@@ -1802,7 +1827,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                   }
                 },
                 itemBuilder: (_) => [
-                  if (slim && _mine.isNotEmpty) _menuItem('deep', LucideIcons.radar, 'فحص شامل'),
+                  if (slim && _all.isNotEmpty) _menuItem('deep', LucideIcons.radar, 'فحص شامل'),
                   if (slim || _all.isNotEmpty)
                     _menuItem('refresh', LucideIcons.refreshCw,
                       _probing ? 'يُحدّث الآن…' : (VpnNow.mode.value ? 'تحديث (عبر VPN)' : 'تحديث فوري')),
