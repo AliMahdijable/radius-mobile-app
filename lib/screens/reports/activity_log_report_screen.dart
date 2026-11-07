@@ -5,6 +5,12 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../api/archive_info.dart';
 import '../../api/expenses_api.dart';
 import '../../api/reports_api.dart';
+import '../../core/util/format.dart';
+import '../../models/merged_company.dart';
+import '../../services/merged_mode.dart';
+import '../../services/merged_report_loader.dart';
+import '../../widgets/company_tag.dart';
+import '../../widgets/merged_company_strip.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -50,35 +56,113 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
     'AUTO_NOTIFICATION',
   };
 
+  // ── «كل الشركات» (٧ نوفمبر — المالك: «التقارير… بنفس فكرة عرض المشتركين والاختيار بين الكل وشركة»): الشاشة نفسها وشريط
+  // الشركات أعلاها، والحركات معاً الأحدث أوّلاً بشارة شركتها. حركات كلّ شركةٍ بطلبٍ موجَّه بنطاقها هي (معرّف مديرها)، والمتعذّرة
+  // تُسمّى، وشركةٌ بلغت سقف الحركات «قد تنقص». الصرفيات من قائمةٍ لا يوجّهها الخادم لغير الشركة المفتوحة ⇒ لا تُخلط هنا (سطرٌ
+  // في الشريط يقول ذلك). فلاتر المدير والموظّف لقوائم المفتوحة فتُخفى، ونوع الحركة يبقى.
+  bool get _mergedOn => MergedMode.active.value;
+  MergedReport<ActivityRow>? _merged;
+  int _gen = 0;
+  static const _rowCap = 5000;
+
+  /// الصفوف قبل فلتر النوع — كلٌّ بمفتاح شركته في الوضع (الأحدث أوّلاً بين الشركات).
+  List<({String? key, ActivityRow row})> get _base {
+    final m = _mergedOn ? _merged : null;
+    if (m == null) return [for (final r in _rows) (key: null, row: r)];
+    final rows = [for (final e in m.rowsFor(MergedMode.focused?.key)) (key: e.key as String?, row: e.row)];
+    rows.sort((a, b) => b.row.createdAt.compareTo(a.row.createdAt));
+    return rows;
+  }
+
+  void _onMergedMode() {
+    if (!mounted) return;
+    _merged = null;
+    _filters = ReportFilters(actionTypes: _filters.actionTypes);
+    _load();
+  }
+
+  void _onMergedFocus() {
+    if (mounted && _mergedOn) setState(() => _visibleCount = kReportPageStep);
+  }
+
+  String? _mergedNote(MergedReport<ActivityRow> m) {
+    final focus = MergedMode.focused;
+    final lines = <String>[
+      if (m.noteFor(focus?.key,
+              unsupportedText: 'لا حركاتٍ تُقرأ لنوعها من هنا',
+              missingText: 'merged.missing'.tr(args: [m.missing.map((c) => c.name).join('، ')]))
+          case final n?)
+        n,
+      'الصرفيات لا تُخلط هنا — تظهر في سجلّ كلّ شركةٍ حين تفتحها وحدها',
+    ];
+    return lines.join('\n');
+  }
+
   // فلتر النوع القديم استُبدل بـReportFiltersPanel multi-select.
-  List<ActivityRow> get _visibleRows {
-    final base = _rows.where(
-        (r) => !_excludedTypes.contains(r.actionType.toUpperCase().trim()));
+  List<({String? key, ActivityRow row})> get _visibleRows {
+    final base = _base.where(
+        (e) => !_excludedTypes.contains(e.row.actionType.toUpperCase().trim()));
     final types = _filters.actionTypes;
     if (types == null || types.isEmpty) return base.toList();
     final wanted = types.toSet();
     return base
-        .where((r) => wanted.contains(r.actionType.toUpperCase().trim()))
+        .where((e) => wanted.contains(e.row.actionType.toUpperCase().trim()))
         .toList();
   }
 
   @override
   void initState() {
     super.initState();
+    MergedMode.active.addListener(_onMergedMode);
+    MergedMode.focus.addListener(_onMergedFocus);
     _load();
   }
 
   @override
   void dispose() {
+    _gen++;
+    MergedMode.active.removeListener(_onMergedMode);
+    MergedMode.focus.removeListener(_onMergedFocus);
     _searchCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
+    final gen = ++_gen;
     setState(() {
       _loading = true;
       _error = null;
     });
+    if (_mergedOn) {
+      // كلّ شركةٍ بنطاقها هي (معرّف مديرها) — نطاق المفتوحة لا يُرسل لغيرها
+      final m = await loadMergedReport<ActivityRow>(
+        supports: (c) => c.provider != MergedProvider.ftth && c.provider != MergedProvider.fiberx,
+        fetch: (c) async {
+          final r = await ReportsApi.activities(
+            from: _range.from,
+            to: _range.to,
+            search: _search.isEmpty ? null : _search,
+            userIds: [c.adminId],
+            limit: _rowCap,
+          );
+          return (
+            ok: r.ok,
+            rows: r.rows,
+            error: r.error,
+            note: r.ok && r.rows.length >= _rowCap ? 'بلغت ${formatIQD(_rowCap)} حركة — قد تنقص' : null,
+          );
+        },
+      );
+      if (!mounted || gen != _gen || !_mergedOn) return;
+      setState(() {
+        _loading = false;
+        _merged = m;
+        _rows = const [];
+        _error = m.parts.any((p) => p.ok) ? null : 'common.load_failed'.tr();
+        _visibleCount = kReportPageStep;
+      });
+      return;
+    }
     _scopeIds ??= await loadScopeUserIds();
     // نجلب activities + expenses بالتوازي.
     // الصرفيات في جدول منفصل ولا تظهر في /api/activities — نجلبها من
@@ -123,7 +207,7 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
       ArchiveInfo? archive
     });
 
-    if (!mounted) return;
+    if (!mounted || gen != _gen || _mergedOn) return;
 
     // نحوّل الصرفيات لـActivityRow-shaped rows. نصنع id مركّب مع فارق
     // كبير حتى لا يتصادم مع IDs الحقيقية.
@@ -151,6 +235,7 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
     setState(() {
+      _merged = null;
       _loading = false;
       _rows = merged;
       _error = r.ok ? null : (r.error ?? 'common.load_failed'.tr());
@@ -166,17 +251,19 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
 
   // ترتيب أعمدة Excel/PDF المطلوب (2026-07-12): اسم المشترك بالعربي أولاً
   // → يوزر → مبلغ → تاريخ → وصف → نوع (عربي) → منفّذ.
-  List<List<String>> get _exportRows => _visibleRows
-      .map((r) => [
-            r.userFullName ?? r.targetName ?? r.userUsername ?? '',
-            r.userUsername ?? '',
-            r.amount == 0 ? '' : r.amount.toString(),
-            r.createdAt,
-            (r.actionDescription ?? '').replaceAll('\n', ' '),
-            arabicActionLabel(r.actionType, r.actionDescription ?? ''),
-            r.actingEmployeeFullName ?? r.adminUsername ?? '',
-          ])
-      .toList();
+  List<List<String>> get _exportRows => [
+        for (final e in _visibleRows)
+          [
+            if (_mergedOn) MergedMode.companyOf(e.key)?.name ?? '',
+            e.row.userFullName ?? e.row.targetName ?? e.row.userUsername ?? '',
+            e.row.userUsername ?? '',
+            e.row.amount == 0 ? '' : e.row.amount.toString(),
+            e.row.createdAt,
+            (e.row.actionDescription ?? '').replaceAll('\n', ' '),
+            arabicActionLabel(e.row.actionType, e.row.actionDescription ?? ''),
+            e.row.actingEmployeeFullName ?? e.row.adminUsername ?? '',
+          ],
+      ];
 
   static const List<double> _pdfWeights = [2.2, 1.4, 1.2, 1.4, 2.6, 1.1, 1.3];
 
@@ -187,8 +274,10 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
     final shown = _visibleCount.clamp(0, visible.length);
     final remaining = visible.length - shown;
     final pageRows = visible.isEmpty
-        ? const <ActivityRow>[]
+        ? const <({String? key, ActivityRow row})>[]
         : visible.take(_visibleCount).toList();
+    final merged = _mergedOn ? _merged : null;
+    final mergedAll = merged != null && MergedMode.focused == null;
 
     return ReportPermissionGate(
       permission: 'reports.activity_log',
@@ -216,6 +305,17 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
                 padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.sm),
                 child: Column(
                   children: [
+                    // «كل الشركات»: الشركات بعدد حركات كلٍّ منها، ومن لم يُقرأ ولماذا
+                    if (merged != null) ...[
+                      MergedCompanyStrip(
+                        countOf: merged.countOf,
+                        total: merged.total,
+                        problemOf: (c) => merged.problemOf(c,
+                            failedLabel: 'merged.chip_failed'.tr(), unsupportedLabel: 'merged.web_only'.tr()),
+                        note: _mergedNote(merged),
+                      ),
+                      const SizedBox(height: Sp.md),
+                    ],
                     DateRangeChipBar(
                       value: _range,
                       onChanged: (r) {
@@ -252,6 +352,11 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
                     ),
                     const SizedBox(height: Sp.sm),
                     ReportFiltersPanel(
+                      // «كل الشركات»: قوائم المدراء والموظّفين للشركة المفتوحة وحدها — تُخفى
+                      key: ValueKey(_mergedOn),
+                      includeActionManager: !_mergedOn,
+                      includeUserManager: !_mergedOn,
+                      includeEmployee: !_mergedOn,
                       value: _filters,
                       onChanged: (v) {
                         setState(() {
@@ -272,7 +377,7 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
                       ? const Center(child: CircularProgressIndicator())
                       : _error != null
                           ? _errorState()
-                          : _rows.isEmpty
+                          : _base.isEmpty
                               ? _emptyState()
                               : ListView(
                                   padding: const EdgeInsets.fromLTRB(
@@ -292,6 +397,7 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
                                               '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
                                           fileNameBase: 'activity_log',
                                           columns: [
+                                            if (_mergedOn) 'merged.col_company'.tr(),
                                             'reports.col_subscriber'.tr(),
                                             'reports.col_username'.tr(),
                                             'reports.col_amount'.tr(),
@@ -300,13 +406,20 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
                                             'reports.col_type'.tr(),
                                             'reports.col_executor'.tr(),
                                           ],
-                                          columnWeights: _pdfWeights,
+                                          columnWeights: [if (_mergedOn) 1.4, ..._pdfWeights],
                                           rows: _exportRows,
                                         ),
                                       ],
                                     ),
                                     const SizedBox(height: Sp.sm),
-                                    for (final r in pageRows) ...[
+                                    for (final e in pageRows) ...[
+                                      // «كل الشركات»: شركة الحركة فوق سطرها
+                                      if (mergedAll && e.key != null)
+                                        Padding(
+                                          padding: const EdgeInsetsDirectional.only(start: 4, bottom: 2),
+                                          child: CompanyTag(companyKey: e.key!, fontSize: 11),
+                                        ),
+                                      if (e.row case final r)
                                       ReportLogTile(
                                         actionType: r.actionType,
                                         description: r.actionDescription ?? '',

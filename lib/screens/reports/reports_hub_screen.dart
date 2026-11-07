@@ -9,6 +9,7 @@ import '../../core/widgets/permission_locked.dart';
 import '../../services/permissions_service.dart';
 import '../../services/provider_limits.dart';
 import '../../services/provider_service.dart';
+import '../../services/merged_mode.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -73,6 +74,7 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
       listenable: Listenable.merge([
         PermissionsService.changes,
         ProviderService.changes,
+        MergedMode.active,
       ]),
       builder: (context, _) {
         // ٢٤ أكتوبر (المالك: «التقارير لونها ليش هيج أسود وأبيض — اهتمّ بالتصميم»): مجموعاتٌ بعناوين، ولكلّ عائلةٍ
@@ -84,6 +86,7 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
               locked: !Perms.has('reports.financial'),
               icon: LucideIcons.wallet,
               color: AppColors.success,
+              merged: true,
               title: 'reports.financial'.tr(),
               subtitle: 'reports.financial_hint'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -145,6 +148,7 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
               locked: !Perms.has('reports.activations'),
               icon: LucideIcons.zap,
               color: AppColors.brand,
+              merged: true,
               title: 'reports.activations'.tr(),
               subtitle: 'reports.activations_hint'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -157,6 +161,7 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
               locked: !Perms.has('reports.daily_activations'),
               icon: LucideIcons.calendarDays,
               color: AppColors.info,
+              merged: true,
               title: 'reports.daily_activations'.tr(),
               subtitle: 'reports.daily_activations_hint'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -171,6 +176,7 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
               locked: !Perms.has('reports.sessions'),
               icon: LucideIcons.activity,
               color: AppColors.info,
+              merged: true,
               title: 'reports.sessions'.tr(),
               subtitle: 'reports.sessions_hint'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -182,6 +188,7 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
               locked: !Perms.has('reports.activity_log'),
               icon: LucideIcons.history,
               color: AppColors.anomaly,
+              merged: true,
               title: 'reports.activity_log'.tr(),
               subtitle: 'reports.activity_log_hint'.tr(),
               onTap: () => Navigator.of(context).push(
@@ -355,8 +362,12 @@ class _ReportCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.merged = false,
   });
   final IconData icon;
+
+  /// «كل الشركات»: التقرير يجمع الشركات — علامة الطبقات بجانب اسمه (كعلامة سطر الشركة المفتوحة أعلى الصفحة)، والبطاقة لا تكبر.
+  final bool merged;
 
   /// لون عائلة التقرير (الدلاليّ من اللوحة): شريط البطاقة، صندوق الأيقونة، والإطار والظلّ عند المرور.
   final Color color;
@@ -395,13 +406,21 @@ class _ReportCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppType.label(color: locked ? LockedStyle.title : AppColors.textHi)
-                .copyWith(fontSize: desk ? 16 : 14, fontWeight: FontWeight.w700),
-          ),
+          Row(children: [
+            Flexible(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppType.label(color: locked ? LockedStyle.title : AppColors.textHi)
+                    .copyWith(fontSize: desk ? 16 : 14, fontWeight: FontWeight.w700),
+              ),
+            ),
+            if (merged && MergedMode.active.value) ...[
+              const SizedBox(width: 6),
+              Icon(Icons.layers_rounded, key: const ValueKey('report-merged-mark'), size: desk ? 16 : 14, color: AppColors.brand),
+            ],
+          ]),
           SizedBox(height: desk ? 4 : 2),
           Text(
             subtitle,

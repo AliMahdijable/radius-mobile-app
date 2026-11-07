@@ -9,6 +9,8 @@ import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/company_route.dart';
 import 'package:rad_mysvcs/api/subscribers_api.dart';
 import 'package:rad_mysvcs/models/merged_company.dart';
+import 'package:rad_mysvcs/screens/reports/activations_report_screen.dart';
+import 'package:rad_mysvcs/screens/reports/activity_log_report_screen.dart';
 import 'package:rad_mysvcs/screens/reports/daily_activations_report_screen.dart';
 import 'package:rad_mysvcs/screens/reports/sessions_report_screen.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
@@ -61,14 +63,18 @@ class _Srv implements HttpClientAdapter {
     final h = {'x-company-key': [key]};
     if (path == '/api/activities') {
       final today = DateTime.now().toIso8601String().substring(0, 10);
-      Map<String, Object?> act(String desc, int price) => {
-            'action_type': 'SUBSCRIBER_ACTIVATE',
+      var seq = 0;
+      Map<String, Object?> act(String desc, int price, {String type = 'SUBSCRIBER_ACTIVATE'}) => {
+            'id': '${key.hashCode % 1000}${seq++}',
+            'action_type': type,
             'action_description': desc,
             'action_data': jsonEncode({'final_price': price}),
-            'created_at': '$today 10:00:00',
+            'amount': price,
+            'user_username': 'u$seq',
+            'created_at': '$today 1$seq:00:00',
           };
       final rows = switch (key) {
-        _kA => [act('تفعيل نقدي', 10000), act('تفعيل نقدي', 15000), act('تفعيل غير نقدي', 30000)],
+        _kA => [act('تفعيل نقدي', 10000), act('تفعيل نقدي', 15000), act('تفعيل غير نقدي', 30000), act('دخول المدير', 0, type: 'ADMIN_LOGIN')],
         _kB => [act('تفعيل نقدي', 20000)],
         _kU => [act('تفعيل نقدي', 5000)],
         _ => <Map<String, Object?>>[],
@@ -206,6 +212,42 @@ void main() {
     await settle(t, seconds: 1);
     expect(MergedMode.focus.value, _kB);
     expect(find.text('20,000'), findsOneWidget, reason: 'الجزيرة وحدها');
+    await down(t);
+  });
+
+  testWidgets('التفعيلات: كلّ شركةٍ بنطاقها، «حسب الشركة»، الإيراد بالدينار وحده، وشارة الشركة فوق الحركة', (t) async {
+    await up(unknownCurrency: true);
+    await t.runAsync(() => MergedMode.enter());
+    await pumpVisual(t, const VisualDevice('', Size(390, 2400), 1), home: (_) => const ActivationsReportScreen());
+    await settle(t, seconds: 3);
+    expect(srv.asked.where((a) => a.startsWith('GET /api/activities c')).length, 4);
+    // سوبرنت 3 (بلا «دخول المدير») + الجزيرة 1 + اكس نت 1 = 5؛ الإيراد النقديّ: 10,000 + 15,000 + 20,000 = 45,000
+    expect(find.text('45,000'), findsOneWidget);
+    expect(find.byKey(const ValueKey('merged-breakdown')), findsOneWidget);
+    expect(find.byKey(const ValueKey('merged-breakdown-$_kU')), findsOneWidget);
+    expect(find.textContaining('خارج المجموع'), findsWidgets);
+    expect(find.textContaining('إيراد «اكس نت»'), findsOneWidget, reason: 'سطر الشريط يسمّيها');
+    await t.tap(find.byKey(const ValueKey('merged-breakdown-$_kB')));
+    await settle(t, seconds: 1);
+    expect(MergedMode.focus.value, _kB);
+    expect(find.text('20,000'), findsWidgets);
+    expect(find.byKey(const ValueKey('merged-breakdown')), findsNothing, reason: 'الشركة المختارة وحدها');
+    await down(t);
+  });
+
+  testWidgets('سجلّ النشاط: الحركات من كلّ شركةٍ بنطاقها، والصرفيات لا تُخلط (ولا تُطلب) ويقول السطر ذلك', (t) async {
+    await up();
+    await t.runAsync(() => MergedMode.enter());
+    await pumpVisual(t, const VisualDevice('', Size(390, 2400), 1), home: (_) => const ActivityLogReportScreen());
+    await settle(t, seconds: 3);
+    expect(srv.asked.where((a) => a.startsWith('GET /api/activities c')).toSet(), {
+      'GET /api/activities $_kA ids=2',
+      'GET /api/activities $_kB ids=jt:22',
+      'GET /api/activities $_kN ids=nabd:5',
+    });
+    expect(srv.asked.where((a) => a.contains('/api/admin/expenses')), isEmpty);
+    expect(find.textContaining('الصرفيات لا تُخلط هنا'), findsOneWidget);
+    expect(find.textContaining('دخول المدير'), findsOneWidget, reason: 'السجلّ كلّه لا التفعيلات وحدها');
     await down(t);
   });
 }
