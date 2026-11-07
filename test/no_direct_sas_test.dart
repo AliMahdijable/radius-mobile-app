@@ -89,5 +89,10 @@ void main() {
       reason: 'عدد عملاء Dio في ApiClient يجب أن يبقى واحداً '
           '(`dio` → rad.mysvcs.net):\n${clients.join('\n')}',
     );
+    // ممرّ «وضع VPN» (٧ نوفمبر): حوض اتّصالاتٍ ثانٍ للخادم نفسه — لا وجهة ثانية. كلّ بناءٍ لعميلٍ هنا على baseUrl وحده.
+    final all = src.join('\n');
+    final builds = RegExp(r'_buildDio\(([^,)]+)').allMatches(all).map((m) => m.group(1)!.trim()).where((a) => a != 'String url').toList();
+    expect(builds, everyElement('baseUrl'), reason: 'عميلٌ يُبنى على غير baseUrl = وجهةٌ ثانية');
+    expect(all, contains('_pipe ??= _buildDio(baseUrl'));
   });
 }

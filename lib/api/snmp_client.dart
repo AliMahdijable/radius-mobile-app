@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../core/net/device_net.dart';
+
 /// **SNMP v2c client خفيف** — pure Dart، بدون تبعيّات خارجيّة.
 ///
 /// **لماذا داخلي بدل مكتبة**: كل مكتبات SNMP على pub.dev قديمة (Dart 2.x)
@@ -116,6 +118,15 @@ class SnmpV2c {
   // ═══════════════════════════════════════════════════════════
 
   Future<Uint8List> _send(Uint8List packet) async {
+    // «وضع VPN» (٧ نوفمبر): الرسالة وردّها عبر ممرّ الخادم وغرفة نفق الوكيل (الإعادة عند ٤٥٪ هناك) — كلّ قارئ SNMP كما هو
+    if (DeviceNet.viaPipe(host)) {
+      try {
+        return await DeviceNet.udp(host, port, packet, timeout);
+      } on TimeoutException {
+        throw SnmpTimeoutException('SNMP timeout بعد ${timeout.inSeconds}s عبر الـVPN — $host:$port. '
+            'تحقّق: الـcommunity المحفوظة، SNMP مفعّل على الجهاز، الـport مفتوح.');
+      }
+    }
     RawDatagramSocket? socket;
     StreamSubscription? sub;
     Timer? resend;

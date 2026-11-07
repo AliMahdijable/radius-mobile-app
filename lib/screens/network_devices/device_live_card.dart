@@ -113,13 +113,26 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
     _timer = Timer.periodic(_pulse, (_) => _kick());
     DeviceStatsCache.instance.updated.addListener(_onCache);
     VpnNow.version.addListener(_onVpn);
+    VpnNow.mode.addListener(_onMode);
   }
 
   /// نتيجة فحصٍ عبر الـVPN وصلت ⇒ البطاقة تأخذ معلوماتها الآن — لا تنتظر نبضتها ولا طزاجة سطر «خارج شبكتك» (٢٠ث).
+  /// بـ«وضع VPN» (٧ نوفمبر) القراءة من قارئنا عبر الممرّ، وما قرأه الخادم يملأ البطاقة حتى تصل (أو إن تعذّرت).
   void _onVpn() {
-    if (!mounted || DeviceVitals.skipReason(widget.device) != DeviceVitals.offNetworkReason) return;
+    if (!mounted) return;
     final v = VpnNow.deviceFor(widget.device.id)?.vitals;
-    if (v != null) widget.onVitals(DeviceVitals.fromVpn(v));
+    if (v == null) return;
+    if (DeviceVitals.skipReason(widget.device) == DeviceVitals.offNetworkReason) {
+      widget.onVitals(DeviceVitals.fromVpn(v));
+      return;
+    }
+    final st = widget.vitals.value;
+    if (VpnNow.mode.value && (st.vitals == null || st.error != null)) widget.onVitals(DeviceVitals.fromVpn(v));
+  }
+
+  /// «وضع VPN» شُغّل أو أُطفئ ⇒ قراءةٌ الآن بطريقه الجديد (الممرّ أو الشبكة) — لا تنتظر النبضة.
+  void _onMode() {
+    if (mounted) _kick();
   }
 
   /// قراءةٌ أحدث لهذا الجهاز كتبها غيرنا (شاشات الألياف للأولت، البرج) ⇒ نعرضها الآن بلا جلسة (المالك ٢٨ أكتوبر: «تتحدث مع
@@ -148,6 +161,7 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
     _timer?.cancel();
     DeviceStatsCache.instance.updated.removeListener(_onCache);
     VpnNow.version.removeListener(_onVpn);
+    VpnNow.mode.removeListener(_onMode);
     // ⚠️ نصف فائدة المجدول: بطاقة خرجت من الشاشة قبل دورها تُسحب من
     // الطابور فلا تُفتح لها جلسة أصلاً.
     DeepProbeScheduler.instance.cancel(this);
@@ -230,7 +244,7 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
     final skip = DeviceVitals.skipReason(widget.device);
     if (skip != null) {
       // خارج شبكتك / «وضع VPN» (٥ نوفمبر): المعلومات الحيّة من آخر فحصٍ عبر الـVPN إن وُجدت، وإلّا السطر
-      final vpn = skip == DeviceVitals.offNetworkReason ? VpnNow.deviceFor(widget.device.id)?.vitals : null;
+      final vpn = skip == DeviceVitals.offNetworkReason || VpnNow.mode.value ? VpnNow.deviceFor(widget.device.id)?.vitals : null;
       widget.onVitals(vpn != null ? DeviceVitals.fromVpn(vpn) : VitalsState(error: skip, at: DateTime.now()));
       return;
     }
@@ -294,6 +308,12 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
         // شاشة الجهاز تجمعها مع فحصها: يردّ على الاتصال وقراءته تفشل = إعداداته (١ نوفمبر).
         DeviceReadHealth.instance.failed(widget.device.id, 'تعذّر الاتّصال');
         if (!mounted) return;
+        // «وضع VPN» (٧ نوفمبر): الممرّ تعذّر ⇒ ما قرأه الخادم عبر الـVPN إن وُجد (لا سطر خطأ لجهازٍ معلوماته عندنا)
+        final vpn = VpnNow.mode.value ? VpnNow.deviceFor(widget.device.id)?.vitals : null;
+        if (vpn != null) {
+          widget.onVitals(DeviceVitals.fromVpn(vpn));
+          return;
+        }
         widget.onVitals(VitalsState(
           vitals: st.vitals,
           detail: st.detail,

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/net/device_net.dart';
 import '../core/util/dev_log.dart';
 import 'mikrotik_binary_api.dart';
 
@@ -90,9 +91,9 @@ class RestRouterOsChannel implements RouterOsChannel {
 
   @override
   Future<void> open() async {
-    final h = HttpClient()
+    final h = DeviceNet.adopt(HttpClient()
       ..connectionTimeout = timeout
-      ..idleTimeout = const Duration(seconds: 5);
+      ..idleTimeout = const Duration(seconds: 5));
     // شهادة RouterOS الافتراضيّة موقّعةٌ ذاتيّاً — تُقبل لعنوان هذا الجهاز وحده.
     h.badCertificateCallback = (cert, h, p) => h == host;
     _http = h;
@@ -210,7 +211,7 @@ class SshRouterOsChannel implements RouterOsChannel {
 
   @override
   Future<void> open() async {
-    final socket = await SSHSocket.connect(host, port, timeout: timeout);
+    final socket = await DeviceNet.ssh(host, port, timeout: timeout);
     _socket = socket;
     final c = SSHClient(
       socket,

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/net/device_net.dart';
 import '../core/util/dev_log.dart';
 
 import 'mikrotik_binary_api.dart';
@@ -101,7 +102,7 @@ class MikrotikApi {
 
   static Future<bool> _probePort(String ip, int port) async {
     try {
-      final s = await Socket.connect(ip, port, timeout: const Duration(milliseconds: 2500));
+      final s = await DeviceNet.connect(ip, port, timeout: const Duration(milliseconds: 2500));
       s.destroy();
       return true;
     } catch (_) {
@@ -936,7 +937,7 @@ class MikrotikApi {
     SSHSocket? socket;
     try {
       socket =
-          await SSHSocket.connect(ip, 22, timeout: const Duration(seconds: 6));
+          await DeviceNet.ssh(ip, 22, timeout: const Duration(seconds: 6));
       client = SSHClient(
         socket,
         username: user,

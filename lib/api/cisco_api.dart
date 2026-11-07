@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/net/device_net.dart';
+
 /// **Cisco IOS API** — CLI عبر SSH أو Telnet، قراءة فقط.
 ///
 /// **لماذا جلسة تفاعليّة لا `client.run()`**:
@@ -863,7 +865,7 @@ class _SshTransport implements _Transport {
     SSHSocket? socket;
     SSHClient? client;
     try {
-      socket = await SSHSocket.connect(host, port, timeout: timeout);
+      socket = await DeviceNet.ssh(host, port, timeout: timeout);
       client = SSHClient(
         socket,
         username: user,
@@ -948,7 +950,7 @@ class _TelnetTransport implements _Transport {
     required void Function() onClosed,
   }) async {
     try {
-      final socket = await Socket.connect(host, port, timeout: timeout);
+      final socket = await DeviceNet.connect(host, port, timeout: timeout);
       socket.setOption(SocketOption.tcpNoDelay, true);
       final t = _TelnetTransport(socket, onData);
       socket.listen(t._feed,

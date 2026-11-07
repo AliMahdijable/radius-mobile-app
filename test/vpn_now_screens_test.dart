@@ -2,6 +2,10 @@
 // يحول الفحص للشبكه بدون vpn»، وصورته: «فُحصت أجهزتك ✓ — 14 من 14 واصل» والبطاقات حمراء «غير متّصل»):
 // زرّ VPN بجنب البحث بالقسمين لمن له طريق VPN — خارج شبكته (أو والحال مجهولة) وطول ما الوضع شغّال؛ على شبكته لا زرّ.
 // والأجهزة بالوضع تُعرض بحالها من الـVPN (الأعداد والبطاقات)، وما لم يُفحص «غير معروف» لا «مفصول».
+import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -10,6 +14,7 @@ import 'package:rad_mysvcs/api/agent_alerts_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/subscribers_api.dart';
 import 'package:rad_mysvcs/api/vpn_now_api.dart';
+import 'package:rad_mysvcs/core/net/vpn_pipe.dart';
 import 'package:rad_mysvcs/screens/network_devices/check/devices_check_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/network_device_details_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/network_devices_screen.dart';
@@ -32,6 +37,31 @@ import 'support/devices_demo_data.dart';
 import 'visual_perm/visual_perm_harness.dart';
 
 class _NoLocalNotifications extends FlutterLocalNotificationsPlatform {}
+
+/// ممرّ «وضع VPN» بلا خادم: يسجّل ما فُتح عبره ويرفض (كممرٍّ لم يصل) — القارئ يرجع لما قرأه الخادم.
+class _NoPipe implements VpnPipeTransport {
+  final opens = <String>[];
+  @override
+  Future<String> open(String host, int port, Duration timeout) async {
+    opens.add('$host:$port');
+    throw SocketException('لا ممرّ في الاختبار', port: port);
+  }
+
+  @override
+  Future<bool> write(String id, Uint8List data) async => false;
+  @override
+  Future<PipeRead?> read(String id, Duration wait) async => null;
+  @override
+  Future<void> close(String id) async {}
+  @override
+  Future<Uint8List> udp(String host, int port, Uint8List data, Duration timeout) async {
+    opens.add('udp $host:$port');
+    throw TimeoutException('لا ممرّ في الاختبار');
+  }
+
+  @override
+  Future<void> release() async {}
+}
 
 void main() {
   setUpAll(() async {
@@ -157,7 +187,11 @@ void main() {
     await close(t);
   });
 
-  testWidgets('الأجهزة بالبطاقات الكبيرة + «وضع VPN»: المعالج والحرارة من الخادم عبر الـVPN على البطاقة (المالك: «المعلومات الحيه… عبر vpn هم»)', (t) async {
+  testWidgets('الأجهزة بالبطاقات الكبيرة + «وضع VPN»: البطاقة تقرأ بقارئها عبر الممرّ، وتعذّر ⇒ المعالج والحرارة من الخادم عبر الـVPN (المالك: «المعلومات الحيه… عبر vpn هم»)', (t) async {
+    final pipes = _NoPipe();
+    final orig = VpnPipe.transport;
+    VpnPipe.transport = pipes;
+    addTearDown(() => VpnPipe.transport = orig);
     VpnNow.routeSource = () async => (linked: true, via: 'company');
     AgentNetPresence.debugSet(NetPresence.off);
     NetworkDevicesScreen.debugResetView();
@@ -187,6 +221,10 @@ void main() {
       expect(c.state.error, isNull, reason: 'لا سطر «خارج شبكتك» لجهازٍ له معلومات من الـVPN');
       expect(c.state.vitals?.map((v) => v.value), contains('737'), reason: 'المعالج من الخادم عبر الـVPN');
       expect(c.device.lastStatus, 'online');
+    }
+    // ٧ نوفمبر: ما يُفتح عبر الممرّ (أجهزة العرض بلا كلمات دخول فلا قراءة) لعناوين شبكة الوكيل وحدها — الممرّ نفسه بـvpn_pipe_test
+    for (final o in pipes.opens) {
+      expect(RegExp(r'(^| )(10|192\.168|172\.(1[6-9]|2\d|3[01])|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7]))\.').hasMatch(o), isTrue, reason: o);
     }
     await close(t);
   });
@@ -297,7 +335,11 @@ void main() {
     expect(devVpn, findsOneWidget, reason: 'أجهزة الوكيل تُفحص عبر ملفّه');
     await close(t);
   });
-  testWidgets('٧ نوفمبر: بوضع VPN الضغط على الجهاز يفتح تقريره عبر الـVPN (لا صفحته الحيّة التي لا تصله خارج الشبكة)، و«الصفحة الكاملة» للتعديل', (t) async {
+  testWidgets('٧ نوفمبر: بوضع VPN الضغط على الجهاز يفتح صفحته الحيّة نفسها — قرّاؤها عبر ممرّ الـVPN (المالك: «كل الفحصوات تمر من vpn»)', (t) async {
+    final pipes = _NoPipe();
+    final orig = VpnPipe.transport;
+    VpnPipe.transport = pipes;
+    addTearDown(() => VpnPipe.transport = orig);
     VpnNow.routeSource = () async => (linked: true, via: 'own');
     AgentNetPresence.debugSet(NetPresence.off);
     DevicesCheckRunner.debugLimits = () async => const CheckLimits();
@@ -320,13 +362,11 @@ void main() {
     await settleFor(t, seconds: 1);
     final name = find.text('راوتر المركز CCR');
     expect(name, findsOneWidget, reason: 'أوّل أجهزة القائمة');
+    pipes.opens.clear();
     await t.tap(name.first, warnIfMissed: false);
-    await settleFor(t, seconds: 2);
-    final scr = t.widget<DevicesCheckScreen>(find.byType(DevicesCheckScreen));
-    expect([scr.single, scr.viaVpn], [true, true]);
-    expect(scr.devices.first.name, 'راوتر المركز CCR');
-    expect(find.byType(NetworkDeviceDetailsScreen), findsNothing);
-    expect(find.byKey(const ValueKey('check-open-full')), findsOneWidget);
+    await settleFor(t, seconds: 3);
+    expect(find.byType(NetworkDeviceDetailsScreen), findsOneWidget, reason: 'الصفحة الحيّة نفسها كما على شبكته');
+    expect(find.byType(DevicesCheckScreen), findsNothing);
     await close(t);
   });
 }

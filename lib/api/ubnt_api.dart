@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/net/device_net.dart';
 import '../core/util/dev_log.dart';
 import 'ubnt_udapi.dart';
 
@@ -146,7 +147,7 @@ class UbntApi {
     SSHClient? client;
     SSHSocket? socket;
     try {
-      socket = await SSHSocket.connect(ip, port, timeout: timeout);
+      socket = await DeviceNet.ssh(ip, port, timeout: timeout);
       client = SSHClient(
         socket,
         username: user,
@@ -211,7 +212,7 @@ class UbntApi {
     SSHClient? client;
     SSHSocket? socket;
     try {
-      socket = await SSHSocket.connect(ip, port, timeout: timeout);
+      socket = await DeviceNet.ssh(ip, port, timeout: timeout);
       // ندعم البروتوكولين: password auth (airOS العادي) + keyboard-interactive
       // (بعض airFiber ومعظم Debian-based servers) — كل الـchallenges نُجيبها
       // بنفس الـpass. بدون هذا، السيرفرات الي تدعم keyboard-interactive فقط
@@ -1747,7 +1748,7 @@ class UbntTrafficSession {
     SSHClient? client;
     SSHSocket? socket;
     try {
-      socket = await SSHSocket.connect(ip, port, timeout: timeout);
+      socket = await DeviceNet.ssh(ip, port, timeout: timeout);
       client = SSHClient(
         socket,
         username: user,

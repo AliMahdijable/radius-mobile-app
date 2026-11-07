@@ -72,6 +72,11 @@ class ApiClient {
 
   static final Dio dio = _buildDio(baseUrl);
 
+  /// ممرّ «وضع VPN» (٧ نوفمبر — [VpnPipe]): الخادم نفسه ([baseUrl]) بمعترضاته نفسها، لكن بحوض اتّصالاتٍ منفصل — كلّ اتّصالٍ بجهاز
+  /// عبر الـVPN يُبقي قراءةً معلّقة (≤ ١٥ث) تنتظر بايتاته، فلا تزاحم نداءات التطبيق الأخرى على اتّصالاتها الثمانية.
+  static Dio get pipe => _pipe ??= _buildDio(baseUrl, maxConnections: 32);
+  static Dio? _pipe;
+
   /// رقم النسخة لكلّ عميلٍ — والعملاء المستقلّون عن [dio] (التجديد، الحساب، المساعد بوضع الحساب) يضمّونه بأنفسهم: بوّابة
   /// التحديث (server/appGate.js) تحكم به، و3.0.15 لم يرسله منها فرُدّت «نسخةً قديمة» (٥ نوفمبر: «انتهاء الجلسة» بالهواتف —
   /// الخادم يمرّرها بلا رقمٍ منذ da9dcea، وهذا كي لا يحتاج استثناءً بعد اليوم).
@@ -94,7 +99,7 @@ class ApiClient {
   static Future<RefreshOutcome> refreshSession() =>
       _AuthInterceptor.sharedRefresh();
 
-  static Dio _buildDio(String url) {
+  static Dio _buildDio(String url, {int maxConnections = 8}) {
     final d = Dio(BaseOptions(
       baseUrl: url,
       connectTimeout: const Duration(seconds: 20),
@@ -122,7 +127,7 @@ class ApiClient {
         // وأقصر من مهلة الإبقاء على معظم الخوادم فيقلّ احتمال
         // إرسال طلب في مقبس أغلقه الطرف الآخر.
         ..idleTimeout = const Duration(seconds: 15)
-        ..maxConnectionsPerHost = 8,
+        ..maxConnectionsPerHost = maxConnections,
     );
     d.interceptors.add(_AuthInterceptor(d));
     // «اشرحلي» (المساعد الذكيّ): آخر ردودٍ مرفوضة في الذاكرة — الرمز والرسالة

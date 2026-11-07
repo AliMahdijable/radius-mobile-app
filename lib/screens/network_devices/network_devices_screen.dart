@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../../core/net/device_net.dart';
 import '../../api/agent_alerts_api.dart';
 import '../../api/network_devices_api.dart';
 import '../../api/olt_profile.dart';
@@ -211,8 +212,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       ..sort((a, b) => (b.lastStatus == 'online' ? 1 : 0) - (a.lastStatus == 'online' ? 1 : 0));
     final pick = cand.take(4).toList();
     if (pick.isEmpty) return null;
-    final rs = await Future.wait(pick.map((d) =>
-        NetworkDevicesApi.probeDevice(d).then((r) => r.status == 'online').catchError((Object _) => false)));
+    // مباشرٌ دائماً (DeviceNet.direct): ردّ الجهاز عبر ممرّ «وضع VPN» لا يعني أنّك رجعت لشبكتك
+    final rs = await DeviceNet.direct(() => Future.wait(pick.map((d) =>
+        NetworkDevicesApi.probeDevice(d).then((r) => r.status == 'online').catchError((Object _) => false))));
     final reached = rs.where((x) => x).length;
     AgentNetPresence.report(attempted: pick.length, reached: reached);
     if (reached > 0) return true;
@@ -743,18 +745,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   }
 
   Future<void> _openDetails(NetworkDevice d) async {
-    // ٧ نوفمبر (المالك: «بوضع vpn… من يفوت لكارت الجهاز كلشي ميظهر»): صفحة الجهاز الحيّة تتّصل به من الهاتف فلا تصله خارج
-    // الشبكة ⇒ بالوضع: تقريره عبر الـVPN (الحال والمعلومات والمنافذ ومشتركو السكتر)، و«الصفحة الكاملة» للتعديل منه.
-    if (VpnNow.mode.value) {
-      await Navigator.of(context).push<void>(MaterialPageRoute(
-        builder: (ctx) => DevicesCheckScreen(
-          devices: [d],
-          viaVpn: true,
-          onOpenFull: () => Navigator.of(ctx).push(MaterialPageRoute(builder: (_) => NetworkDeviceDetailsScreen(device: d))),
-        ),
-      ));
-      return;
-    }
+    // ٧ نوفمبر (المالك: «بمجرد نقر الوكيل ع وضع vpn كل الفحصوات تمر من vpn»): صفحة الجهاز الحيّة نفسها بكلّ بروتوكولاتها —
+    // بـ«وضع VPN» تتّصل به عبر ممرّ الخادم (DeviceNet) كما على شبكته.
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => NetworkDeviceDetailsScreen(device: d)),
     );

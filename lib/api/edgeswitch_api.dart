@@ -4,6 +4,8 @@ import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/net/device_net.dart';
+
 /// طبقة قراءةٍ لسويتشات **Ubiquiti EdgeSwitch** عبر واجهة REST الرسميّة.
 ///
 /// لماذا REST لا SSH — وقد كتبنا سسكو على SSH؟
@@ -55,7 +57,7 @@ class EdgeSwitchApi {
       final c = HttpClient();
       // شهادة الجهاز موقَّعةٌ ذاتيّاً — كحال كلّ معدّات الشبكة المحلّيّة.
       c.badCertificateCallback = (_, __, ___) => true;
-      return c;
+      return DeviceNet.adopt(c);
     };
     return dio;
   }

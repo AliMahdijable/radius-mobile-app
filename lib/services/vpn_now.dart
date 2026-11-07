@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart' show AppLifecycleState, WidgetsBinding;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/vpn_now_api.dart';
+import '../core/net/vpn_pipe.dart';
 import 'agent_net_presence.dart';
 import 'device_warm_service.dart';
 
@@ -249,6 +250,8 @@ class VpnNow {
     mode.value = false;
     subscribers.cancel();
     devices.cancel();
+    // ممرّ التطبيق (٧ نوفمبر): اتّصالاته وغرفة نفقه الباقية (ملفّه/قالب شركته) تُغلق الآن لا بعد خمولها
+    if (VpnPipe.used) VpnPipe.release();
     if (auto) {
       notice.value = 'رجعت لشبكتك — الفحص صار مباشر من موبايلك';
       _noticeTimer?.cancel();

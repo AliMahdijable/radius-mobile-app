@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../api/agent_alerts_api.dart';
 import '../api/big_subscribers_api.dart';
 import '../api/subscribers_api.dart';
+import '../core/net/device_net.dart';
 import '../models/subscriber.dart';
 import '../api/network_devices_api.dart';
 import '../models/network_device.dart';
@@ -271,30 +272,55 @@ class DevicesCheckRunner extends ChangeNotifier {
       errorReason = job.reason;
       return;
     }
-    for (final d in devices) {
-      final r = VpnNow.deviceFor(d.id);
-      final prev = memos[d.id];
-      if (r == null) {
-        reports[d.id] = DevicesCheck.evaluate(
-            d: d, alive: null, unreadReason: 'لم يشمله الفحص عبر الـVPN — عنوانه خارج طريق الشركة', limits: limits, prev: prev, viaVpn: true);
-      } else {
-        final v = r.vitals;
-        final st = v == null ? null : DeviceVitals.fromVpn(v);
-        reports[d.id] = DevicesCheck.evaluate(
-          d: d,
-          alive: r.alive,
-          ms: r.ms,
-          detail: st?.detail,
-          unreadReason: r.alive && st == null ? 'يردّ عبر الـVPN — معلوماته لا تُقرأ عن بُعد لهذا النوع' : null,
-          limits: limits,
-          prev: prev,
-          viaVpn: true,
-          portsCountsOnly: v?['pl'] is! List,
-          macUsers: macs,
-        );
+    // ٧ نوفمبر (المالك: «بمجرد نقر الوكيل ع وضع vpn كل الفحصوات تمر من vpn»): الحال من فحص الخادم، والمعلومات بقرّاء التطبيق نفسها
+    // عبر ممرّ الـVPN (كلّ البروتوكولات: منافذ السويج، عملاء السكتر، ميموزا وروجي والأولت بـSNMP، سسكو…) — تعذّرت ⇒ ما قرأه الخادم
+    final queue = Queue<NetworkDevice>.from(devices);
+    Future<void> worker() async {
+      while (queue.isNotEmpty && gen == _gen) {
+        final d = queue.removeFirst();
+        final rep = await _vpnReport(d, limits, memos[d.id], macs);
+        if (gen != _gen) return;
+        reports[d.id] = rep;
+        done++;
+        notifyListeners();
       }
-      done++;
     }
+
+    // ثلاثةٌ معاً: كلّ جلسةٍ عبر الممرّ أبطأ من الشبكة — لا نزاحم الخادم ولا النفق
+    await Future.wait([for (var i = 0; i < 3; i++) worker()]);
     notifyListeners();
+  }
+
+  static Future<DeviceCheckReport> _vpnReport(NetworkDevice d, CheckLimits limits, CheckMemo? prev, Map<String, String> macs) async {
+    final r = VpnNow.deviceFor(d.id);
+    if (r == null) {
+      return DevicesCheck.evaluate(
+          d: d, alive: null, unreadReason: 'لم يشمله الفحص عبر الـVPN — عنوانه خارج طريق الشركة', limits: limits, prev: prev, viaVpn: true);
+    }
+    if (r.alive) {
+      final skip = DeviceVitals.skipReason(d);
+      final hard = skip == null || skip == DeviceVitals.offNetworkReason || skip == 'غير متّصل' ? null : skip;
+      if (hard == null) {
+        try {
+          final p = await DeviceNet.vpn(() => debugFetch?.call(d) ?? DeviceVitals.fetch(d, detailed: true)).timeout(const Duration(seconds: 45));
+          return DevicesCheck.evaluate(
+              d: d, alive: true, ms: r.ms, detail: p.detail, raw: p.raw, limits: limits, prev: prev, viaVpn: true, macUsers: macs);
+        } catch (_) {/* ما قرأه الخادم أدناه */}
+      }
+    }
+    final v = r.vitals;
+    final st = v == null ? null : DeviceVitals.fromVpn(v);
+    return DevicesCheck.evaluate(
+      d: d,
+      alive: r.alive,
+      ms: r.ms,
+      detail: st?.detail,
+      unreadReason: r.alive && st == null ? 'يردّ عبر الـVPN — معلوماته ما انقرت عن بُعد' : null,
+      limits: limits,
+      prev: prev,
+      viaVpn: true,
+      portsCountsOnly: v?['pl'] is! List,
+      macUsers: macs,
+    );
   }
 }

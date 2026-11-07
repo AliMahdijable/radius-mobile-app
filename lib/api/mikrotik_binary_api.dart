@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
+import '../core/net/device_net.dart';
 import '../core/util/dev_log.dart';
 
 /// Mikrotik RouterOS Binary API client (port 8728/8729).
@@ -43,7 +44,7 @@ class MikrotikBinaryClient {
   });
 
   Future<void> connect() async {
-    _socket = await Socket.connect(host, port, timeout: timeout);
+    _socket = await DeviceNet.connect(host, port, timeout: timeout);
     _sub = _socket!.listen(
       (data) {
         _receivedBytes.addAll(data);

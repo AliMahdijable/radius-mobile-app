@@ -5,6 +5,8 @@ import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/net/device_net.dart';
+
 import 'ubnt_api.dart';
 
 /// أجهزة Ubiquiti من الجيل الحديث (UISP «gen3»: Wave Pro · Wave AP · Wave Long-Range · Wave Nano · LTU…) —
@@ -43,7 +45,7 @@ class UbntUdapi {
       final c = HttpClient();
       // شهادة الجهاز موقَّعةٌ ذاتيّاً كحال معدّات الشبكة المحلّيّة.
       c.badCertificateCallback = (_, __, ___) => true;
-      return c;
+      return DeviceNet.adopt(c);
     };
     return dio;
   }
