@@ -54,6 +54,14 @@ import '../../widgets/vpn_now_bar.dart';
 import '../whatsapp/conn_vpn_screen.dart';
 import '../../services/agent_net_presence.dart';
 import '../../services/device_warm_service.dart';
+import 'package:easy_localization/easy_localization.dart' show StringTranslateExtension;
+import '../../api/merged_devices_api.dart';
+import '../../models/merged_company.dart';
+import '../../services/auth_storage.dart';
+import '../../services/merged_mode.dart';
+import '../../widgets/company_tag.dart';
+import '../../widgets/merged_company_strip.dart';
+import '../account/company_switch_sheet.dart';
 
 /// قائمة أجهزة الشبكة. راجع project_devices_monitoring_plan.
 ///
@@ -163,6 +171,70 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   bool _vpnAvailable = false;
   bool _vpnAttached = false;
 
+  // ═══════════════ «كل الشركات» (٧ نوفمبر) ═══════════════
+  // المالك: «دمج الأجهزة والفحص الشامل وفحص المشتركين والتقارير في كل الشركات، بنفس فكرة عرض المشتركين والاختيار بين الكل
+  // وشركة». القسم نفسه بأدواته: شريط الشركات تحت الأدوات، وكلّ جهازٍ بشارة شركته، واختيار شركةٍ يعرض أجهزتها وحدها.
+  // أجهزة الشركة المفتوحة تُدار كما هي؛ أجهزة غيرها تُعرض ويُفحص حالها، وصفحتها الحيّة وتعديلها من شركتها — الخادم لا يوجّه
+  // كلمات سرّ الأجهزة ولا كتاباتها لغير الشركة المفتوحة (companyRoutingAllow: قائمة الأجهزة وطريق الـVPN وحدهما).
+
+  /// الوضع مفعّلٌ الآن (صاحب الحساب وحده).
+  bool get _merged => MergedMode.active.value;
+
+  /// آخر جمعٍ للشركات: شركةٌ ⇒ أجهزتها أو تعذّرها. فارغٌ خارج الوضع.
+  List<MergedDevicesPart> _parts = const [];
+
+  /// شركة كلّ جهاز في الوضع: المعرّف ⇒ مفتاحها.
+  Map<int, String> _companyOf = const {};
+
+  /// مفتاح الشركة المفتوحة بين شركات الحساب — null: الجلسة المفتوحة ليست منها (صفحة مديرٍ فرعيّ مثلاً).
+  String? _openKey;
+
+  /// يُسقط تحميلاً قديماً وصل بعد أحدث منه (دخول الوضع أو الخروج منه أثناء الجلب).
+  int _loadGen = 0;
+
+  /// جهازٌ يُدار من هنا: كلّ جهازٍ خارج الوضع، وفيه أجهزة الشركة المفتوحة وحدها.
+  bool _isMine(NetworkDevice d) => !_merged || (_openKey != null && _companyOf[d.id] == _openKey);
+
+  /// أجهزة الشركة المفتوحة — لكلّ ما يقرأ بكلمات سرّ الأجهزة أو يكتب: التسخين، البطاقات الحيّة، الطُرُز، البرج، المسح، الحارس.
+  List<NetworkDevice> get _mine => _merged ? [for (final d in _all) if (_isMine(d)) d] : _all;
+
+  /// جزء الشركة [c] من آخر جمع — وصفحتان لمديرٍ واحد قائمتهما واحدة (جُلبت للأولى).
+  MergedDevicesPart? _partFor(MergedCompany c) {
+    for (final p in _parts) {
+      if (p.company.key == c.key) return p;
+    }
+    for (final p in _parts) {
+      if (p.company.adminId.trim() == c.adminId.trim()) return p;
+    }
+    return null;
+  }
+
+  /// الشركة المختارة في الشريط (null: الكلّ) — بمفتاح جزئها.
+  String? get _focusKey {
+    if (!_merged) return null;
+    final f = MergedMode.focused;
+    if (f == null) return null;
+    return _partFor(f)?.company.key ?? f.key;
+  }
+
+  /// دخل «كل الشركات» أو خرج ⇒ القائمة من جديد، ولا يُخلط شيءٌ من القديمة (الحالات والتباطؤ والتحديد).
+  void _onMergedMode() {
+    if (!mounted) return;
+    _loadGen++;
+    _parts = const [];
+    _companyOf = const {};
+    _openKey = null;
+    _lastKnownStatus.clear();
+    _consecutiveFailures.clear();
+    _selectedIds.clear();
+    _selectionMode = false;
+    _initialLoad();
+  }
+
+  void _onMergedFocus() {
+    if (mounted && _merged) setState(() {});
+  }
+
   /// يسأل الخادم عن طريق الـVPN ويحدّث الزرّ ومدخل «المزيد» — عند الفتح وبعد الرجوع من «ربط VPN».
   Future<void> _refreshVpnRoute({bool force = false}) async {
     final r = await VpnNow.route(force: force);
@@ -209,7 +281,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// حارس «وضع VPN» (المالك: «حارس فحص بداخل التطبيق يفحص متى يكون بنك ناصي»): أجهزتك بعناوينها الخاصّة — حتى ٤، ما ردّ قبلاً
   /// أوّلاً. ردٌّ واحد ⇒ رجعت لشبكتك. (العامّ يردّ من أيّ مكان فلا يدلّ.)
   Future<bool?> _guardDevices() async {
-    final cand = _all.where((d) => AgentNetPresence.isPrivate(d.ip)).toList()
+    final cand = _mine.where((d) => AgentNetPresence.isPrivate(d.ip)).toList()
       ..sort((a, b) => (b.lastStatus == 'online' ? 1 : 0) - (a.lastStatus == 'online' ? 1 : 0));
     final pick = cand.take(4).toList();
     if (pick.isEmpty) return null;
@@ -233,7 +305,17 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   }
 
   /// ما تعرضه القائمة والبطاقات والجدول وأعداد الشريط — والفحص يبقى على [_all].
-  List<NetworkDevice> get _allShown => _overlay ? [for (final d in _all) _shown(d)] : _all;
+  List<NetworkDevice> get _allShown {
+    // «كل الشركات»: شركةٌ مختارة في الشريط ⇒ أجهزتها وحدها (كالمشتركين)
+    final focus = _focusKey;
+    final base = focus == null ? _all : [for (final d in _all) if (_companyOf[d.id] == focus) d];
+    if (_overlay) return [for (final d in base) _shown(d)];
+    // «وضع VPN» لشبكة الشركة المفتوحة: أجهزة غيرها لا تُفحص فيه ⇒ «غير معروف» لا آخر حالٍ رأيناه قبله
+    if (_merged && VpnNow.mode.value) {
+      return [for (final d in base) _isMine(d) || d.lastStatus == 'unknown' ? d : d.withLive(status: 'unknown')];
+    }
+    return base;
+  }
   final Set<int> _selectedIds = <int>{};
   bool _bulkDeleting = false;
 
@@ -279,6 +361,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     VpnNow.version.addListener(_onPresence);
     VpnNow.mode.addListener(_onVpnMode);
     VpnNow.guardSources['devices'] = _guardDevices;
+    MergedMode.active.addListener(_onMergedMode);
+    MergedMode.focus.addListener(_onMergedFocus);
     unawaited(_refreshVpnRoute());
     _syncVpnAttach();
     // أجهزةٌ بعناوين عامّة أو أقلّ من ثلاثة خاصّة لا تحسم «على شبكتك؟» ⇒ عيّنة المشتركين المشتركة (مخبّأة، ١٫٢ث)
@@ -306,6 +390,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     VpnNow.version.removeListener(_onPresence);
     VpnNow.mode.removeListener(_onVpnMode);
     if (VpnNow.guardSources['devices'] == _guardDevices) VpnNow.guardSources.remove('devices');
+    MergedMode.active.removeListener(_onMergedMode);
+    MergedMode.focus.removeListener(_onMergedFocus);
     if (_vpnAttached) {
       _vpnAttached = false;
       VpnNow.detach(VpnNowKind.devices);
@@ -337,7 +423,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       if (_all.isNotEmpty) {
         _probeAll(force: true);
         // يستأنف من حيث وقف — ما سُخِّن لا يُعاد.
-        if (_viewChoice != DevicesView.big) DeviceWarmup.instance.start(_all);
+        if (_viewChoice != DevicesView.big) DeviceWarmup.instance.start(_mine);
       }
     }
   }
@@ -372,6 +458,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// أول تحميل عند فتح الشاشة: قائمة من backend + probe فوري.
   /// الفرق عن _refresh: يظهر spinner كبير في المنتصف (الشاشة فارغة).
   Future<void> _initialLoad() async {
+    if (_merged) return _loadMerged(initial: true);
+    final gen = ++_loadGen;
     setState(() {
       _loading = true;
       _error = null;
@@ -384,7 +472,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       ]);
       final rows = results[0] as List<NetworkDevice>;
       final regions = results[1] as List<DeviceRegion>;
-      if (!mounted) return;
+      if (!mounted || gen != _loadGen || _merged) return;
       // **مهم**: نعمل reset لـ _lastKnownStatus بلا القيم القديمة من backend.
       // السبب: backend يحمل last_status من ساعات مضت (cache). لو استعملناه
       // كـbaseline، أوّل probe يعطي transitions وهميّة (لو المدير قفل
@@ -404,13 +492,99 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       _probeAll(force: true);
       _loadAgentAlerts();
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || gen != _loadGen || _merged) return;
       setState(() {
         _error = humanError(e, fallback: 'فشل التحميل');
         _loading = false;
       });
     }
   }
+
+  /// «كل الشركات»: أجهزة شركات الحساب الصالحة (قائمتان معاً، كلٌّ بطلبٍ موجَّه لشركته) ومناطق الشركة المفتوحة. [initial]:
+  /// الهيكل مكان القائمة؛ والتحديث يحفظ حال الجهاز المعروف حتى يردّ الفحص. شركةٌ تعذّرت تُسمّى في الشريط ولا تُعدّ «لا أجهزة».
+  Future<void> _loadMerged({bool initial = false}) async {
+    final gen = ++_loadGen;
+    if (initial) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
+    final data = await MergedMode.load();
+    String? openAdmin;
+    try {
+      openAdmin = (await AuthStorage.readAdminId())?.trim();
+    } catch (_) {
+      openAdmin = null;
+    }
+    final results = await Future.wait<Object>([
+      MergedDevicesApi.load(data.usable, openAdminId: openAdmin),
+      NetworkDevicesApi.listRegions().catchError((_) => <DeviceRegion>[]),
+    ]);
+    if (!mounted || gen != _loadGen || !_merged) return;
+    final parts = results[0] as List<MergedDevicesPart>;
+    final regions = results[1] as List<DeviceRegion>;
+    final oldById = {for (final d in _all) d.id: d};
+    final devices = <NetworkDevice>[];
+    final companyOf = <int, String>{};
+    String? openKey;
+    for (final p in parts) {
+      if (p.open) openKey = p.company.key;
+      for (final d in p.devices ?? const <NetworkDevice>[]) {
+        // معرّف الجهاز فريدٌ في قاعدتنا — تكرارٌ بين شركتين لا يُنسب لاثنتين
+        if (companyOf.containsKey(d.id)) continue;
+        companyOf[d.id] = p.company.key;
+        final old = oldById[d.id];
+        devices.add(old == null
+            ? d
+            : d.copyWith(lastStatus: old.lastStatus, lastResponseMs: old.lastResponseMs, lastProbedAt: old.lastProbedAt));
+      }
+    }
+    if (initial) _lastKnownStatus.clear();
+    setState(() {
+      _parts = parts;
+      _companyOf = companyOf;
+      _openKey = openKey;
+      _all = devices;
+      _regionsById = {for (final r in regions) r.id: r};
+      _recomputeRegionCounts();
+      _loading = false;
+      _error = null;
+    });
+    if (initial) {
+      if (_viewChoice != DevicesView.big) DeviceWarmup.instance.start(_mine);
+      _loadAgentAlerts();
+      unawaited(_probeAll(force: true));
+    } else {
+      await _probeAll(force: true);
+    }
+  }
+
+  /// سطر الشريط: ما لم يدخل ولماذا — شركةٌ تعذّرت قائمتها، وشركاتٌ لا تُعرض هنا. شركةٌ مختارة: ما يخصّها وحده.
+  String? _mergedNote() {
+    final focus = _focusKey;
+    if (focus != null) {
+      final p = _parts.where((x) => x.company.key == focus).firstOrNull;
+      return p != null && p.failed ? (p.error ?? 'merged.failed'.tr(args: [p.company.name])) : null;
+    }
+    final missing = MergedMode.companies.where((c) => !c.usable).map((c) => c.name).toList();
+    final lines = <String>[
+      for (final p in _parts)
+        if (p.failed) p.error ?? 'merged.failed'.tr(args: [p.company.name]),
+      if (missing.isNotEmpty) 'merged.missing'.tr(args: [missing.join('، ')]),
+    ];
+    return lines.isEmpty ? null : lines.join('\n');
+  }
+
+  Widget _mergedStrip() => Padding(
+        padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.xs, Sp.lg, 0),
+        child: MergedCompanyStrip(
+          countOf: (c) => _partFor(c)?.devices?.length,
+          total: _all.length,
+          problemOf: (c) => _partFor(c)?.failed == true ? 'merged.chip_failed'.tr() : null,
+          note: _mergedNote(),
+        ),
+      );
 
   /// Refresh يدوي (زر أو pull-to-refresh) + بعد add/delete/region-change.
   ///
@@ -429,7 +603,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     setState(() => _detecting = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final r = await ModelDetector.run(_all, isCanceled: () => !mounted);
+      final r = await ModelDetector.run(_mine, isCanceled: () => !mounted);
       if (!mounted) return;
       if (r.updated.isNotEmpty) {
         // نُحدّث القائمة من الخادم: الكشف كتب فيها، والصور تُبنى من
@@ -460,6 +634,16 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   Future<void> _refresh() async {
     if (_refreshing) return; // تكرار الإشارة + الرجوع من التفاصيل لا يُضاعف العمل.
     _refreshing = true;
+    if (_merged) {
+      _loadAgentAlerts();
+      try {
+        await _loadMerged();
+      } finally {
+        _refreshing = false;
+      }
+      return;
+    }
+    final gen = _loadGen;
     _loadAgentAlerts();
     try {
       // devices + regions معاً — يضمن ظهور مناطق مُنشأة من شاشة أخرى.
@@ -469,7 +653,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       ]);
       final fresh = results[0] as List<NetworkDevice>;
       final regions = results[1] as List<DeviceRegion>;
-      if (!mounted) return;
+      if (!mounted || gen != _loadGen || _merged) return;
       // Preserve status حسب id — الأجهزة الموجودة تحتفظ بحالتها القديمة
       // مؤقّتاً، الجديدة تدخل بـstatus من backend (unknown غالباً).
       final oldById = {for (final d in _all) d.id: d};
@@ -606,20 +790,44 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       // حساب اليوم. يعمل لأنّ فحص TCP رخيص، لكن لا سقف يمنع حساباً
       // بثلاثمئة جهاز من فتح ثلاثمئة مقبس. السقف نفسه المُختبَر في
       // `bulkScanSubnet`.
-      final queue = Queue<NetworkDevice>.from(
-          _all.where((d) => _shouldProbeInRound(d.id, force: force)));
+      // «كل الشركات»: جهاز شركةٍ أخرى يُفحص مباشرةً من الموبايل — لا عبر ممرّ «وضع VPN» (لشبكة الشركة المفتوحة وحدها، وعنوانٌ
+      // خاصٌّ مثله في شبكتها قد يردّ بدله)، وبـ«وضع VPN» لا يُفحص هنا أصلاً (حاله من «الفحص الشامل» لشركته).
+      final queue = Queue<NetworkDevice>.from(_all.where(
+          (d) => (!vpnRound || _isMine(d)) && _shouldProbeInRound(d.id, force: force)));
       // العناوين الخاصّة وحدها تقرّر «خارج الشبكة» (العامّ يردّ من أيّ مكان) — AgentNetPresence
       var privAttempted = 0;
       var privReached = 0;
+      // شركاتٌ أخرى ردّ منها عنوانٌ خاصّ في هذه الجولة (الموبايل على شبكتها)، وعناوينها الخاصّة التي سكتت
+      final otherReached = <String>{};
+      final otherSilent = <int>{};
+      final otherMs = <int>[];
       Future<void> probeWorker() async {
         while (queue.isNotEmpty) {
           final d = queue.removeFirst();
+          final mine = _isMine(d);
           final priv = AgentNetPresence.isPrivate(d.ip);
-          if (priv) privAttempted++;
+          if (priv && mine) privAttempted++;
           try {
             // الطريقة تتبع البروتوكول: TCP لميكروتك وUBNT، وSNMP على
             // UDP لمنفذ ١٦١، وICMP لمن لا منفذ له. راجع [probeDevice].
-            final r = await NetworkDevicesApi.probeDevice(d);
+            final r = mine
+                ? await NetworkDevicesApi.probeDevice(d)
+                : await DeviceNet.direct(() => NetworkDevicesApi.probeDevice(d));
+            if (!mine) {
+              // لا تنبيه محلّيّ ولا حفظ لجهاز شركةٍ أخرى (حاله يحفظه تطبيق شركته، وتنبيهه من خادمها). وصمتُ عنوانٍ خاصّ
+              // «غير معروف» ما لم يردّ عنوانٌ خاصٌّ آخر من شركته: صمتها كلّها يعني أنّ الموبايل ليس على شبكتها، لا أنّ
+              // أجهزتها طافية (المالك ٥ نوفمبر: الجهاز لم يطفِ، موبايلك هو البعيد).
+              final on = r.status == 'online';
+              _consecutiveFailures[d.id] = on ? 0 : (_consecutiveFailures[d.id] ?? 0) + 1;
+              final key = _companyOf[d.id];
+              if (on && priv && key != null) otherReached.add(key);
+              if (on && r.responseMs != null) otherMs.add(r.responseMs!);
+              final status = !on && priv ? 'unknown' : r.status;
+              if (status == 'unknown') otherSilent.add(d.id);
+              updates[d.id] = d.withLive(status: status, ms: on ? r.responseMs : null).copyWith(lastProbedAt: DateTime.now());
+              scheduleFlush();
+              continue;
+            }
             final oldStatus = _lastKnownStatus[d.id] ?? 'unknown';
             final newStatus = r.status;
             if (newStatus == 'online' && priv) privReached++;
@@ -665,11 +873,17 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
             NetworkDevicesApi.saveProbeResults(probed).catchError((_) => false));
       }
 
+      // شركةٌ أخرى ردّ منها عنوانٌ خاصّ ⇒ الموبايل على شبكتها، فمن سكت من عناوينها «مفصول» فعلاً
+      for (final id in otherSilent) {
+        final u = updates[id];
+        if (u != null && otherReached.contains(_companyOf[id])) updates[id] = u.withLive(status: 'offline').copyWith(lastProbedAt: u.lastProbedAt);
+      }
+
       // رسمةٌ ختاميّة: تضمن وصول ما جاء بعد آخر خنق.
       flush();
 
       // وسيط الجولة — «بطيء» نسبيّ (ضعف الوسيط) لا عتبةٌ ثابتة: الجولة تفحص العشرات معاً فيحمل كلّ رقمٍ إزاحة ازدحامٍ مشتركة.
-      final lat = probed.map((p) => p.responseMs).whereType<int>().toList()..sort();
+      final lat = [...probed.map((p) => p.responseMs).whereType<int>(), ...otherMs]..sort();
       if (lat.isNotEmpty) _roundMedianMs = lat[lat.length ~/ 2];
       // ٥ نوفمبر: جولةٌ جزئيّة (المؤقّت يخفّف الفاشل) لا تمسح «خارج الشبكة» — كانت تُخفي الهنت بعد ٢٠ث.
       // بـ«وضع VPN» الردود عبر النفق لا تقول أين الموبايل — الحارس وحده (مباشرٌ) يقرّر «رجعت لشبكتك».
@@ -681,7 +895,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       // كشف تغيير شبكة الهاتف (بدل مشكلة الأجهزة):
       // - "خروج من الشبكة": ≥70% من الأجهزة راحت offline في جولة واحدة → suppress
       // - "عودة للشبكة": ≥70% من الأجهزة رجعت online في جولة واحدة → suppress
-      final totalDevices = _all.length;
+      final totalDevices = _mine.length;
       final offlineTransitions =
           pendingTransitions.where((t) => t.newStatus == 'offline').length;
       final onlineTransitions =
@@ -748,6 +962,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   }
 
   Future<void> _openDetails(NetworkDevice d) async {
+    if (!_isMine(d)) return _openOtherDevice(d);
     // ٧ نوفمبر (المالك: «بمجرد نقر الوكيل ع وضع vpn كل الفحصوات تمر من vpn»): صفحة الجهاز الحيّة نفسها بكلّ بروتوكولاتها —
     // بـ«وضع VPN» تتّصل به عبر ممرّ الخادم (DeviceNet) كما على شبكته.
     final changed = await Navigator.of(context).push<bool>(
@@ -767,6 +982,60 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       // يبقى محفوظاً لما بعدها.
       _probeAll(force: true);
     }
+  }
+
+  /// «كل الشركات»: جهاز شركةٍ غير المفتوحة — ورقةٌ بحاله وعنوانه وشركته. صفحته الحيّة وتعديله من شركته (الخادم لا يوجّه كلمات
+  /// سرّ الأجهزة لغيرها)، والتبديل إليها من الورقة نفسها.
+  Future<void> _openOtherDevice(NetworkDevice d) async {
+    final c = MergedMode.companyOf(_companyOf[d.id]);
+    final shown = _overlay ? _shown(d) : d;
+    final go = await showAppSheet<bool>(
+      context: context,
+      barrierColor: AppColors.scrim,
+      backgroundColor: AppColors.surface,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.md),
+          child: Column(
+            key: const ValueKey('merged-device-sheet'),
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(children: [
+                DeviceImage(brand: d.brand, model: d.model, size: 52),
+                const SizedBox(width: Sp.md),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                    Text(d.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.cardTitleBold()),
+                    const SizedBox(height: 3),
+                    DeviceIpLink(d.ip, style: AppType.muted()),
+                  ]),
+                ),
+                const SizedBox(width: Sp.sm),
+                _statusPill(shown),
+              ]),
+              if (c != null) ...[
+                const SizedBox(height: Sp.md),
+                CompanyTag(companyKey: c.key, fontSize: 13),
+              ],
+              const SizedBox(height: Sp.sm),
+              Text(
+                'صفحته الحيّة وتعديله من «${c?.name ?? 'شركته'}» — افتحها لتديره',
+                style: AppType.body(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.5),
+              ),
+              const SizedBox(height: Sp.md),
+              FilledButton.icon(
+                key: const ValueKey('merged-device-open-company'),
+                onPressed: () => Navigator.pop(ctx, true),
+                icon: const Icon(LucideIcons.arrowLeftRight, size: 18),
+                label: Text('فتح «${c?.name ?? 'شركته'}»'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (go == true && mounted) await showCompanySwitchSheet(context);
   }
 
   /// «تنبيهات أجهزتي» من الخادم (server/agentAlerts.js — ٤ نوفمبر): مفتوحةٌ لهذه الشركة ⇒ زرّ التنبيهات يفتحها وعدّاده الطافية الآن،
@@ -905,7 +1174,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     }
     final none = id == _kNoRegion;
     final devices = [
-      for (final d in _all)
+      for (final d in _mine)
         if (none ? d.regionId == null : d.regionId == id) d,
     ];
     await Navigator.of(context).push(MaterialPageRoute(
@@ -918,7 +1187,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   }
 
   Future<void> _openBulkScan() async {
-    final existingIps = _all.map((d) => d.ip).toSet();
+    final existingIps = _mine.map((d) => d.ip).toSet();
     final added = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => BulkScanScreen(existingIps: existingIps),
@@ -1039,7 +1308,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
   void _recomputeRegionCounts() {
     final m = <int?, int>{};
-    for (final d in _all) {
+    for (final d in _mine) {
       m[d.regionId] = (m[d.regionId] ?? 0) + 1;
     }
     _regionCounts = m;
@@ -1123,6 +1392,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                     const SliverToBoxAdapter(child: header),
                     // البحث والأدوات — مثبَّتان أعلى القائمة (مكان الشريط).
                     PinnedHeaderSliver(child: _toolsBar()),
+                    // «كل الشركات»: الشركات بعدد أجهزة كلٍّ منها — اضغط شركة لعرض أجهزتها وحدها
+                    if (_merged && _parts.isNotEmpty) SliverToBoxAdapter(child: _mergedStrip()),
                     // «فلاتر» + التوزيع في شريطٍ رفيعٍ واحد — كانت بلاطات الإجمالي/المتّصل/المفصول وصفّا الأنواع
                     // والمناطق، نحو ثلث شاشة الهاتف قبل أوّل جهاز (المالك ١ نوفمبر). وحسابٌ بلا أجهزة لا شريط له:
                     // «الكلّ ٠ · متّصل ٠ · مفصول ٠» فوق «لا توجد أجهزة» ضجيجٌ لا معلومة.
@@ -1133,7 +1404,18 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                         sliver: SliverToBoxAdapter(child: _OffNetworkBanner()),
                       ),
                     // List
-                    devices.isEmpty
+                    devices.isEmpty && _merged && _all.isEmpty && _parts.isNotEmpty && _parts.every((p) => p.failed)
+                        ? SliverFillRemaining(
+                            hasScrollBody: false,
+                            child: Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(Sp.xl),
+                                child: Text('merged.unavailable'.tr(),
+                                    textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMid)),
+                              ),
+                            ),
+                          )
+                        : devices.isEmpty
                         ? SliverFillRemaining(
                             hasScrollBody: false,
                             child: _EmptyDevices(
@@ -1277,7 +1559,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     HapticFeedback.selectionClick();
     setState(() {
       for (final d in _filtered) {
-        _selectedIds.add(d.id);
+        if (_isMine(d)) _selectedIds.add(d.id);
       }
     });
   }
@@ -1403,9 +1685,10 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
           const SnackBar(content: Text('خارج شبكتك — اربط VPN حتى تُفحص أجهزتك عن بُعد')));
       return;
     }
-    if (_all.isEmpty) return;
+    final devices = _mine;
+    if (devices.isEmpty) return;
     Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => DevicesCheckScreen(devices: List<NetworkDevice>.of(_all), viaVpn: viaVpn),
+      builder: (_) => DevicesCheckScreen(devices: List<NetworkDevice>.of(devices), viaVpn: viaVpn),
     ));
   }
 
@@ -1519,7 +1802,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                   }
                 },
                 itemBuilder: (_) => [
-                  if (slim && _all.isNotEmpty) _menuItem('deep', LucideIcons.radar, 'فحص شامل'),
+                  if (slim && _mine.isNotEmpty) _menuItem('deep', LucideIcons.radar, 'فحص شامل'),
                   if (slim || _all.isNotEmpty)
                     _menuItem('refresh', LucideIcons.refreshCw,
                       _probing ? 'يُحدّث الآن…' : (VpnNow.mode.value ? 'تحديث (عبر VPN)' : 'تحديث فوري')),
@@ -1530,7 +1813,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                       if (v != DevicesView.table) _viewMenuItem(v),
                     const PopupMenuDivider(),
                   ],
-                  if (_all.isNotEmpty) _menuItem('tower', LucideIcons.radioTower, 'عرض البرج'),
+                  if (_mine.isNotEmpty) _menuItem('tower', LucideIcons.radioTower, 'عرض البرج'),
                   _menuItem('fiber', Perms.has('devices.monitor') ? LucideIcons.cable : LucideIcons.lock, 'شبكة الألياف'),
                   // «ربط VPN» لصاحب الحساب وحده (أسرار شبكته — الخادم يرفض الموظّف) ولمن فُتح له؛ الدرع بعلامةٍ حين يكون مربوطاً
                   if (_vpnAvailable && !PermissionsService.isEmployee)
@@ -1543,7 +1826,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                   // كشف الطُرُز — لا يظهر إلّا حين يوجد جهاز يحتاجه، ولا
                   // يُشغَّل تلقائيّاً لأنّه يفتح جلسة مصادَقة على كلّ
                   // جهاز، وذلك قرار المستخدم لا سلوك خفيّ.
-                  if (_all.any(DetectedModel.needsDetection))
+                  if (_mine.any(DetectedModel.needsDetection))
                     _menuItem('detect', LucideIcons.scanSearch,
                         'كشف طُرُز الأجهزة'),
                 ],
@@ -1552,8 +1835,10 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
               child: Icon(LucideIcons.ellipsisVertical,
                   size: 20, color: AppColors.textBody),
             ),
-            // «+» — الإضافات كلّها في قائمة، لمن يملك الإدارة وحده (كما كان زرّ الإضافة).
-            if (Perms.has('devices.manage')) ...[
+            // «+» — الإضافات كلّها في قائمة، لمن يملك الإدارة وحده (كما كان زرّ الإضافة). «كل الشركات»: للشركة المفتوحة وحدها
+            // (باسمها)، ويختفي وشركةٌ أخرى مختارة — الإضافة لا تُوجَّه لغيرها.
+            if (Perms.has('devices.manage') &&
+                (!_merged || (_openKey != null && (_focusKey == null || _focusKey == _openKey)))) ...[
               SizedBox(width: gap),
               _ToolButton(
                 filled: true,
@@ -1572,7 +1857,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                     }
                   },
                   itemBuilder: (_) => [
-                    _menuItem('device', LucideIcons.circlePlus, 'إضافة جهاز'),
+                    _menuItem('device', LucideIcons.circlePlus, _merged ? 'إضافة جهاز · ${_openName()}' : 'إضافة جهاز'),
                     _menuItem('scan', LucideIcons.radar, 'اكتشاف أجهزة الشبكة'),
                     _menuItem('regions', LucideIcons.mapPinPlus, 'إدارة المناطق'),
                   ],
@@ -1587,6 +1872,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       ),
     );
   }
+
+  /// اسم الشركة المفتوحة في «كل الشركات».
+  String _openName() => MergedMode.companyOf(_openKey)?.name ?? '';
 
   /// حقل البحث وحده — في سطر الأدوات ([_toolsBar]) وفي وضع التحديد.
   Widget _searchField() {
@@ -1752,6 +2040,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
         // فوق اسم برجٍ غيره. والقراءة نفسها في [_vitals] لا في البطاقة.
         key: ValueKey(('big', d.id)),
         device: d,
+        // «كل الشركات»: جهاز شركةٍ أخرى بلا قراءةٍ حيّة (كلمات سرّه عند شركته) — شارتها مكان الأرقام
+        blocked: _isMine(d) ? null : 'قراءته الحيّة من «${MergedMode.companyOf(_companyOf[d.id])?.name ?? 'شركته'}»',
+        companyKey: _merged ? _companyOf[d.id] : null,
         vitals: _vitals.of(d.id),
         onVitals: (v) => _vitals.set(d.id, v),
         medianMs: _roundMedianMs,
@@ -2013,7 +2304,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
   Widget _deskRow(NetworkDevice d, Map<String, double> w, double content, {required bool last}) {
     final selected = _selectionMode && _selectedIds.contains(d.id);
-    final canManage = Perms.has('devices.manage');
+    final canManage = Perms.has('devices.manage') && _isMine(d);
+    final company = _merged ? _companyOf[d.id] : null;
     final online = d.lastStatus == 'online';
     final since = _since(d.statusSince);
     final region = _deskRegion(d);
@@ -2080,8 +2372,11 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: cell.copyWith(fontSize: 14, fontWeight: FontWeight.w700)),
-                                Text(NetworkDeviceLabels.typeLabel(d.type),
-                                    maxLines: 1, overflow: TextOverflow.ellipsis, style: sub),
+                                if (company != null)
+                                  CompanyTag(companyKey: company)
+                                else
+                                  Text(NetworkDeviceLabels.typeLabel(d.type),
+                                      maxLines: 1, overflow: TextOverflow.ellipsis, style: sub),
                               ],
                             ),
                           ),
@@ -2142,7 +2437,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
 
   Widget _deskDeviceCard(NetworkDevice d) {
     final selected = _selectionMode && _selectedIds.contains(d.id);
-    final canManage = Perms.has('devices.manage');
+    final canManage = Perms.has('devices.manage') && _isMine(d);
+    final company = _merged ? _companyOf[d.id] : null;
     final online = d.lastStatus == 'online';
     final statusCol = _statusColor(d.lastStatus);
     final since = _since(d.statusSince);
@@ -2220,7 +2516,10 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                   const SizedBox(width: 4),
                   DeviceIpLink(d.ip, style: sub),
                   const SizedBox(width: Sp.md),
-                  if (region != null)
+                  // «كل الشركات»: شركة الجهاز مكان منطقته (المناطق للشركة المفتوحة) — الارتفاع ثابتٌ بالشبكة
+                  if (company != null)
+                    Flexible(child: CompanyTag(companyKey: company, fontSize: 12.5))
+                  else if (region != null)
                     Flexible(child: region)
                   else if ((d.location ?? '').isNotEmpty) ...[
                     Icon(LucideIcons.building2, size: 13, color: AppColors.textLow),
@@ -2251,7 +2550,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   Widget _deviceCard(NetworkDevice d) {
     final statusCol = _statusColor(d.lastStatus);
     final selected = _selectionMode && _selectedIds.contains(d.id);
-    final canManage = Perms.has('devices.manage');
+    final canManage = Perms.has('devices.manage') && _isMine(d);
+    final company = _merged ? _companyOf[d.id] : null;
     return Material(
       color: selected ? AppColors.brandSoftBg : AppColors.surface,
       borderRadius: BorderRadius.circular(R.md),
@@ -2418,6 +2718,11 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                           ),
                         ),
                       ]),
+                    ],
+                    // «كل الشركات»: شركة الجهاز (منها يُدار)
+                    if (company != null) ...[
+                      const SizedBox(height: 4),
+                      CompanyTag(companyKey: company),
                     ],
                     // ٥ نوفمبر: آخر «فحص الآن» عبر الـVPN (خارج شبكتك) — «واصل · 41 ms» أو «لا يستجيب»
                     VpnDevicePill(id: d.id),

@@ -14,6 +14,7 @@ import 'brand_badge.dart';
 import 'desk_device_kit.dart' show deskUptimeAr;
 import 'device_image.dart';
 import 'device_ip_link.dart';
+import '../../../widgets/company_tag.dart';
 
 /// «البطاقات الكبيرة» بقسم الأجهزة — بدل «النظرة العامّة» (المالك ٣١ أكتوبر: «نظرة عامه ع الاجهز نلغيها ونستبدل بدالها تغير
 /// نوع العرض مثل الي بالحاسوب، نخلي عرض كارتات كبار بيها المعلومات المهمّة وملوّنة: للسكتر المعلومات الحسّاسة وعدد المتصلين
@@ -118,12 +119,16 @@ class DeviceBigCard extends StatelessWidget {
     this.onOpen,
     this.rows = 4,
     this.now,
+    this.companyKey,
   });
 
   final NetworkDevice device;
   final VitalsState state;
   final int? medianMs;
   final VoidCallback? onOpen;
+
+  /// «كل الشركات»: شركة الجهاز — شارتها تحت عنوانه.
+  final String? companyKey;
 
   /// كم سطراً في قسم التفاصيل (متّصلون/منافذ/PON) قبل «و N آخرين».
   final int rows;
@@ -156,7 +161,7 @@ class DeviceBigCard extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _Header(device: device, role: role, tone: tone, medianMs: medianMs, down: down),
+                _Header(device: device, role: role, tone: tone, medianMs: medianMs, down: down, companyKey: companyKey),
                 if (down)
                   _DownLine(device: device, now: now)
                 else ...[
@@ -175,12 +180,13 @@ class DeviceBigCard extends StatelessWidget {
 // ═══════════════════════════════ الرأس ═══════════════════════════════
 
 class _Header extends StatelessWidget {
-  const _Header({required this.device, required this.role, required this.tone, required this.medianMs, required this.down});
+  const _Header({required this.device, required this.role, required this.tone, required this.medianMs, required this.down, this.companyKey});
   final NetworkDevice device;
   final DeviceRole role;
   final AppTone tone;
   final int? medianMs;
   final bool down;
+  final String? companyKey;
 
   @override
   Widget build(BuildContext context) {
@@ -240,6 +246,10 @@ class _Header extends StatelessWidget {
                     Flexible(child: DeviceIpLink(device.ip, style: AppType.muted())),
                   ],
                 ),
+                if (companyKey != null) ...[
+                  const SizedBox(height: 4),
+                  CompanyTag(companyKey: companyKey!),
+                ],
               ],
             ),
           ),

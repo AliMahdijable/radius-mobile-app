@@ -32,6 +32,8 @@ class DeviceLiveCard extends StatefulWidget {
     required this.onSample,
     required this.onOpen,
     this.rows = 4,
+    this.blocked,
+    this.companyKey,
   });
 
   final NetworkDevice device;
@@ -44,6 +46,12 @@ class DeviceLiveCard extends StatefulWidget {
 
   /// كم سطراً في قسم التفاصيل — راجع [DeviceBigCard.rows].
   final int rows;
+
+  /// «كل الشركات»: لا قراءة حيّة لهذا الجهاز (جهاز شركةٍ أخرى — كلمات سرّه عند شركته) — النصّ مكان الأرقام، ولا جلسة.
+  final String? blocked;
+
+  /// «كل الشركات»: شركة الجهاز — شارتها في الرأس.
+  final String? companyKey;
 
   @override
   State<DeviceLiveCard> createState() => _DeviceLiveCardState();
@@ -72,8 +80,9 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
     //
     // والمخزن العالميّ كان يحمل الحمولة طازجةً طوال الوقت — لكنّ أحداً
     // لم يسأله. الآن نبذر منه، فتظهر الأرقام فوراً ويصمت الحاجز.
-    final seed = DeviceStatsCache.instance
-        .vitalsOf(widget.device.id, DeviceVitals.freshFor);
+    final seed = widget.blocked != null
+        ? null
+        : DeviceStatsCache.instance.vitalsOf(widget.device.id, DeviceVitals.freshFor);
     if (seed != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -119,7 +128,7 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
   /// نتيجة فحصٍ عبر الـVPN وصلت ⇒ البطاقة تأخذ معلوماتها الآن — لا تنتظر نبضتها ولا طزاجة سطر «خارج شبكتك» (٢٠ث).
   /// بـ«وضع VPN» (٧ نوفمبر) القراءة من قارئنا عبر الممرّ، وما قرأه الخادم يملأ البطاقة حتى تصل (أو إن تعذّرت).
   void _onVpn() {
-    if (!mounted) return;
+    if (!mounted || widget.blocked != null) return;
     final v = VpnNow.deviceFor(widget.device.id)?.vitals;
     if (v == null) return;
     if (DeviceVitals.skipReason(widget.device) == DeviceVitals.offNetworkReason) {
@@ -139,7 +148,7 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
   /// تزامن تحديث الاجهزه»). كتابتنا نحن تعود بنفس الوقت تقريباً فتُترك.
   void _onCache() {
     final u = DeviceStatsCache.instance.updated.value;
-    if (!mounted || u.id != widget.device.id || _inFlight) return;
+    if (!mounted || widget.blocked != null || u.id != widget.device.id || _inFlight) return;
     final v = DeviceStatsCache.instance.vitalsOf(widget.device.id, DeviceVitals.freshFor);
     if (v == null) return;
     final at = widget.vitals.value.at;
@@ -215,6 +224,11 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
   void _kick({bool urgent = false, bool force = false}) {
     if (!mounted) return;
     final st = widget.vitals.value;
+    final blocked = widget.blocked;
+    if (blocked != null) {
+      if (st.error != blocked) widget.onVitals(VitalsState(error: blocked, at: DateTime.now()));
+      return;
+    }
     // ⚠️ الطازج يُحترم — إلّا عند الفتح بلا تفاصيل.
     //
     // القراءة المطويّة خفيفة (ثلاثة أرقام بلا عملاء ولا منافذ)، فطزاجتُها
@@ -337,6 +351,7 @@ class _DeviceLiveCardState extends State<DeviceLiveCard> {
         medianMs: widget.medianMs,
         onOpen: widget.onOpen,
         rows: widget.rows,
+        companyKey: widget.companyKey,
       ),
     );
   }
