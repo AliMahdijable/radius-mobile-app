@@ -30,20 +30,23 @@ import '../../../core/widgets/app_sheet.dart';
 ///   6. Confirm dialog before submit — keeps admins from accidentally
 ///      saddling a subscriber.
 ///   7. Submit → /api/v2/subscribers/:idx/add-debt.
-Future<bool?> showAddDebtSheet(BuildContext context, Subscriber sub) {
+Future<bool?> showAddDebtSheet(BuildContext context, Subscriber sub, {int? initialAmount}) {
   return showAppSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _AddDebtSheet(sub: sub),
+    builder: (_) => _AddDebtSheet(sub: sub, initialAmount: initialAmount),
   );
 }
 
 class _AddDebtSheet extends StatefulWidget {
-  const _AddDebtSheet({required this.sub});
+  const _AddDebtSheet({required this.sub, this.initialAmount});
   final Subscriber sub;
+
+  /// مبلغٌ مسبق من الأمر الصوتيّ (٧ نوفمبر): يظهر بالخانة، والتنفيذ بضغطة الوكيل كالعادة.
+  final int? initialAmount;
 
   @override
   State<_AddDebtSheet> createState() => _AddDebtSheetState();
@@ -65,6 +68,12 @@ class _AddDebtSheetState extends State<_AddDebtSheet> {
   @override
   void initState() {
     super.initState();
+    // مبلغٌ مسبق (الأمر الصوتيّ): بفواصله قبل المستمع — لا setState أثناء البناء الأوّل
+    final init = widget.initialAmount;
+    if (init != null && init > 0) {
+      _amount = init;
+      _amountCtrl.text = _formatThousands(init);
+    }
     _amountCtrl.addListener(_onAmountChanged);
   }
 

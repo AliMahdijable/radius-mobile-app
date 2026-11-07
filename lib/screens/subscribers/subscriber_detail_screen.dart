@@ -77,14 +77,38 @@ import '../national/national_subscriber_extras.dart';
 /// so the operations grid has room to breathe without scrolling on
 /// most phones.
 /// ما يفتحه «الأمر الصوتيّ» فوق صفحة المشترك لحظة فتحها (٧ نوفمبر) — نافذة العمليّة نفسها بأقفالها وتأكيدها؛ لا تنفيذ بلا ضغطة.
-enum SubscriberAutoAction { activate, disable, enable }
+/// ما يفتحه الأمر الصوتيّ فور فتح الصفحة — نافذة العمليّة نفسها بأقفالها (٦–٧ نوفمبر).
+enum SubscriberAutoAction {
+  activate,
+  disable,
+  enable,
+  payDebt,
+  addDebt,
+  addCredit,
+  discount,
+  debtReminder,
+  expiryWarning,
+  sendInfo,
+  printReceipt,
+  qr,
+  statement,
+  movements,
+  call,
+  whatsapp,
+}
 
 class SubscriberDetailScreen extends StatefulWidget {
-  const SubscriberDetailScreen({super.key, required this.sub, this.autoAction});
+  const SubscriberDetailScreen({super.key, required this.sub, this.autoAction, this.autoAmount, this.autoFullDebt = false});
   final Subscriber sub;
 
-  /// «فعّل/طفّي/شغّل فلان» من الأمر الصوتيّ ⇒ الصفحة تُفتح ثمّ نافذة العمليّة كما لو ضغط زرّها.
+  /// «فعّل/طفّي/شغّل/سدّد… فلان» من الأمر الصوتيّ ⇒ الصفحة تُفتح ثمّ نافذة العمليّة كما لو ضغط زرّها.
   final SubscriberAutoAction? autoAction;
+
+  /// المبلغ كما فُهم («سدّد دينه ٢٥ الف») — يظهر بخانة النافذة، والتنفيذ بضغطة الوكيل.
+  final int? autoAmount;
+
+  /// «سدّد دينه كله» ⇒ الدين كاملاً بخانة التسديد.
+  final bool autoFullDebt;
 
   @override
   State<SubscriberDetailScreen> createState() => _SubscriberDetailScreenState();
@@ -640,7 +664,81 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
           return;
         }
         await _confirmToggleEnabled();
+      case SubscriberAutoAction.payDebt:
+        if (!_autoAllowed('subscribers.pay_debt', 'التسديد')) return;
+        if (!sub.hasDebt) {
+          showSheetSnack(context, 'ما عليه دين');
+          return;
+        }
+        final amount = widget.autoFullDebt ? sub.debtAbs.round() : widget.autoAmount;
+        await showPayDebtSheet(context, sub, initialAmount: amount);
+      case SubscriberAutoAction.addDebt:
+        if (!_autoAllowed('subscribers.add_debt', 'إضافة الدين')) return;
+        await showAddDebtSheet(context, sub, initialAmount: widget.autoAmount);
+      case SubscriberAutoAction.addCredit:
+        if (!_autoAllowed('subscribers.add_credit', 'إضافة الرصيد')) return;
+        await showAddCreditSheet(context, sub, initialAmount: widget.autoAmount);
+      case SubscriberAutoAction.discount:
+        if (!_autoAllowed('discounts.manage', 'الخصم')) return;
+        await showQuickDiscountSheet(context, sub);
+      case SubscriberAutoAction.debtReminder:
+        if (!_autoAllowed('subscribers.send_whatsapp', 'إرسال الرسائل')) return;
+        if (!sub.hasDebt) {
+          showSheetSnack(context, 'ما عليه دين — لا تذكير');
+          return;
+        }
+        await _sendTemplate('debt_reminder');
+      case SubscriberAutoAction.expiryWarning:
+        if (!_autoAllowed('subscribers.send_whatsapp', 'إرسال الرسائل')) return;
+        await _sendTemplate('expiry_warning');
+      case SubscriberAutoAction.sendInfo:
+        if (!_autoAllowed('subscribers.send_whatsapp', 'إرسال الرسائل')) return;
+        await _sendTemplate('subscriber_info');
+      case SubscriberAutoAction.printReceipt:
+        await _printReceipt();
+      case SubscriberAutoAction.qr:
+        if (!(MergedOps.isEarthlink(sub) != null || ProviderService.hasPortalQrCard)) {
+          showSheetSnack(context, 'رمز الدخول غير متاح لهذه الشركة', isError: true);
+          return;
+        }
+        if (!_autoAllowed('subscribers.send_whatsapp', 'رمز الدخول')) return;
+        await showQrLoginSheet(context, sub);
+      case SubscriberAutoAction.statement:
+        if (!_autoAllowed('reports.account_statement', 'كشف الحساب')) return;
+        await Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => AccountStatementScreen(
+            username: sub.username,
+            displayName: sub.fullName.trim().isEmpty ? null : sub.fullName.trim(),
+            phone: sub.phone,
+          ),
+        ));
+      case SubscriberAutoAction.movements:
+        if (!_autoAllowed('subscribers.view_activity', 'سجل الحركات')) return;
+        await showMovementsSheet(context, sub);
+      case SubscriberAutoAction.call:
+      case SubscriberAutoAction.whatsapp:
+        final phone = (sub.phone ?? '').trim();
+        if (phone.isEmpty) {
+          showSheetSnack(context, 'ما عنده رقم هاتف مسجّل', isError: true);
+          return;
+        }
+        await _launchUri(a == SubscriberAutoAction.call
+            ? Uri.parse('tel:${localPhone(phone)}')
+            : Uri.parse('https://wa.me/${_digits(phone)}'));
     }
+  }
+
+  /// العمليّة متاحةٌ له (كظهورها بـ«المزيد») ⇒ true؛ وإلّا سطرٌ بالسبب.
+  bool _autoAllowed(String perm, String what) {
+    if (!_shows(perm)) {
+      showSheetSnack(context, '$what غير متاح لهذا المشترك من حسابك', isError: true);
+      return false;
+    }
+    if (_locked(perm)) {
+      showSheetSnack(context, 'ما عندك صلاحيّة $what — اطلبها من مديرك', isError: true);
+      return false;
+    }
+    return true;
   }
 
   Future<void> _confirmToggleEnabled() async {

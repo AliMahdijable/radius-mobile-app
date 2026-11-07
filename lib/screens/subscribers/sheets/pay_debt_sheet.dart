@@ -43,7 +43,7 @@ import '../../../core/widgets/print_feedback.dart';
 /// بالضبط الموضع الذي تتحوّل فيه اللقطة البائتة إلى رقمٍ مُلزِم.
 ///
 /// ويبقى كلّ شيءٍ آخر مقروءاً بلا نت — وهو غرض الكاش أصلاً.
-Future<bool?> showPayDebtSheet(BuildContext context, Subscriber sub) {
+Future<bool?> showPayDebtSheet(BuildContext context, Subscriber sub, {int? initialAmount}) {
   // ⚠️ حارسٌ قبل العرض لا داخله: الشيت المفتوح يحمل الرقم القديم في
   // حالته، فلا يكفي أن نُعطّل زرّ الإرسال.
   if (SubscribersApi.offlineSnapshotAt != null) {
@@ -60,13 +60,16 @@ Future<bool?> showPayDebtSheet(BuildContext context, Subscriber sub) {
     barrierColor: AppColors.scrim,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _PayDebtSheet(sub: sub),
+    builder: (_) => _PayDebtSheet(sub: sub, initialAmount: initialAmount),
   );
 }
 
 class _PayDebtSheet extends StatefulWidget {
-  const _PayDebtSheet({required this.sub});
+  const _PayDebtSheet({required this.sub, this.initialAmount});
   final Subscriber sub;
+
+  /// مبلغٌ مسبق («سدّد دين فلان ٢٥ الف» من الأمر الصوتيّ — ٧ نوفمبر): يظهر بالخانة، والتنفيذ بضغطة الوكيل كالعادة.
+  final int? initialAmount;
 
   @override
   State<_PayDebtSheet> createState() => _PayDebtSheetState();
@@ -91,6 +94,12 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
   @override
   void initState() {
     super.initState();
+    // مبلغٌ مسبق (الأمر الصوتيّ): بفواصله قبل المستمع — لا setState أثناء البناء الأوّل
+    final init = widget.initialAmount;
+    if (init != null && init > 0) {
+      _amount = init;
+      _amountCtrl.text = _formatThousands(init);
+    }
     _amountCtrl.addListener(_onAmountChanged);
     _loadAutoPrint();
   }

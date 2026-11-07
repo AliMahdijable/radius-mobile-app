@@ -20,20 +20,23 @@ import '../../../core/widgets/app_sheet.dart';
 /// بإشارةٍ موجبة ولونٍ أخضر: الرصيد يزيد (`balance + amount`)، والمعاينة تُظهر
 /// الناتج (دائن إن صار موجباً، أو ديناً متبقّياً إن بقي سالباً). يرسل إلى
 /// `/api/v2/subscribers/:idx/add-credit`.
-Future<bool?> showAddCreditSheet(BuildContext context, Subscriber sub) {
+Future<bool?> showAddCreditSheet(BuildContext context, Subscriber sub, {int? initialAmount}) {
   return showAppSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _AddCreditSheet(sub: sub),
+    builder: (_) => _AddCreditSheet(sub: sub, initialAmount: initialAmount),
   );
 }
 
 class _AddCreditSheet extends StatefulWidget {
-  const _AddCreditSheet({required this.sub});
+  const _AddCreditSheet({required this.sub, this.initialAmount});
   final Subscriber sub;
+
+  /// مبلغٌ مسبق من الأمر الصوتيّ (٧ نوفمبر): يظهر بالخانة، والتنفيذ بضغطة الوكيل كالعادة.
+  final int? initialAmount;
 
   @override
   State<_AddCreditSheet> createState() => _AddCreditSheetState();
@@ -55,6 +58,12 @@ class _AddCreditSheetState extends State<_AddCreditSheet> {
   @override
   void initState() {
     super.initState();
+    // مبلغٌ مسبق (الأمر الصوتيّ): بفواصله قبل المستمع — لا setState أثناء البناء الأوّل
+    final init = widget.initialAmount;
+    if (init != null && init > 0) {
+      _amount = init;
+      _amountCtrl.text = _formatThousands(init);
+    }
     _amountCtrl.addListener(_onAmountChanged);
   }
 

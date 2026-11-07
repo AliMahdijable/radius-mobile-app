@@ -85,6 +85,69 @@ void main() {
       expect(p('افحص').action, VoiceAction.checkAll);
     });
 
+    test('٧ نوفمبر «العمليات المهمه كلها»: الدين تسديداً وإضافةً، الرصيد، الخصم — بالمبلغ كما يُنطق', () {
+      var a = p('سدد دين احمد ٢٥ الف');
+      expect([a.action, a.query, a.amount], [VoiceAction.payDebt, 'احمد', 25000]);
+      a = p('علي حسين دفع خمسة وعشرين الف');
+      expect([a.action, a.query, a.amount], [VoiceAction.payDebt, 'علي حسين', 25000]);
+      a = p('سدد دين علي كله');
+      expect([a.action, a.query, a.fullAmount, a.amount], [VoiceAction.payDebt, 'علي', true, null]);
+      a = p('سدد دين كامل');
+      expect([a.query, a.fullAmount], ['كامل', false], reason: '«كامل» وحدها اسم');
+      a = p('ضيف دين على زينب ١٠ آلاف');
+      expect([a.action, a.query, a.amount], [VoiceAction.addDebt, 'زينب', 10000]);
+      a = p('حط على محمد كاظم 15,000');
+      expect([a.action, a.query, a.amount], [VoiceAction.addDebt, 'محمد كاظم', 15000]);
+      a = p('محمد عليه ٣٥ الف');
+      expect([a.action, a.amount], [VoiceAction.addDebt, 35000]);
+      expect(p('شكد عليه دين احمد').action, VoiceAction.debt, reason: 'السؤال يبقى سؤالاً');
+      a = p('اضف رصيد لزينب ٥٠ الف');
+      expect([a.action, a.query, a.amount], [VoiceAction.addCredit, 'لزينب', 50000]);
+      a = p('اشحن رصيد علي نص مليون');
+      expect([a.action, a.amount], [VoiceAction.addCredit, 500000]);
+      expect(p('اشحن محمد كاظم').action, VoiceAction.activate, reason: 'بلا «رصيد» تجديد كما كان');
+      a = p('سوي خصم لعلي ٥ الاف');
+      expect([a.action, a.amount], [VoiceAction.discount, 5000]);
+    });
+
+    test('المبالغ المنطوقة: الأرقام والكلمات والآلاف والملايين و«نص»؛ ما دون الألف بلا «الف» بالآلاف؛ العدد وحده ليس مبلغاً', () {
+      int? amt(String s) => VoiceCommand.parseAmount(s.split(' '))?.$1;
+      expect(amt('مية وخمسين الف'.replaceAll('ة', 'ه')), 150000);
+      expect(amt('مليون ونص'), 1500000);
+      expect(amt('نص مليون'), 500000);
+      expect(amt('ربع مليون'), 250000);
+      expect(amt('الفين'), 2000);
+      expect(amt('عشرتلاف'), 10000);
+      expect(amt('خمسه وعشرين'), 25000, reason: 'العراقيّ: «دفع خمسة وعشرين» = ٢٥ الف');
+      expect(amt('250 الف'), 250000);
+      expect(amt('الف وخمسميه'), 1500);
+      expect(amt('ست'), isNull, reason: '«ست» وحدها قد تكون «ست زينب»');
+      expect(p('سدد دين علي ٢٥٬٠٠٠').amount, 25000);
+      expect(p('سدد دين علي 25.000').amount, 25000);
+    });
+
+    test('المراسلة والوصل والرمز والكشف والحركات والاتّصال', () {
+      expect(p('ذكر علي بالدين').action, VoiceAction.debtReminder);
+      expect(p('ذكر علي بالدين').query, 'علي');
+      expect(p('ارسل تذكير دين لعلي').action, VoiceAction.debtReminder);
+      expect(p('نبهه بالانتهاء احمد').action, VoiceAction.expiryWarning);
+      expect(p('دز معلومات حسين').action, VoiceAction.sendInfo);
+      expect(p('دز معلومات حسين').query, 'حسين');
+      expect(p('ارسل المعلومات لحسين').action, VoiceAction.sendInfo);
+      expect([p('اطبع وصل حسين').action, p('اطبع وصل حسين').query], [VoiceAction.printReceipt, 'حسين']);
+      expect(p('رمز qr علي').action, VoiceAction.qr);
+      expect(p('ارسل رمز علي').action, VoiceAction.qr);
+      expect([p('كشف حساب علي').action, p('كشف حساب علي').query], [VoiceAction.statement, 'علي']);
+      expect(p('حركات زينب').action, VoiceAction.movements);
+      expect(p('سجل حركات زينب').action, VoiceAction.movements);
+      expect([p('اتصل بعلي').action, p('اتصل بعلي').query], [VoiceAction.call, 'بعلي']);
+      expect(p('واتساب احمد').action, VoiceAction.whatsapp);
+      expect(p('افتح واتساب احمد').action, VoiceAction.whatsapp);
+      // ما كان يعمل يبقى
+      expect(p('معلومات زينب').action, VoiceAction.open);
+      expect(p('افتح اشتراك زينب').action, VoiceAction.open);
+    });
+
     test('ما لا يُفهم ⇒ unknown بلا رمي، والأرقام العربيّة لاتينيّة، والترقيم يُهمل', () {
       expect(p('').action, VoiceAction.unknown);
       expect(p('   ').action, VoiceAction.unknown);

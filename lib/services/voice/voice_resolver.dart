@@ -211,8 +211,8 @@ class VoiceResolver {
     for (var i = from; i < words.length; i++) {
       final x = words[i];
       if (x == b || (b.length >= 2 && x.startsWith(b))) return i;
-      // «لعلي» = لـ + علي
-      if (b.length > 3 && b.startsWith('ل') && (x == b.substring(1) || x.startsWith(b.substring(1)))) return i;
+      // «لعلي» = لـ + علي، و«بعلي» = بـ + علي («اتصل بعلي» — ٧ نوفمبر)
+      if (b.length > 3 && (b.startsWith('ل') || b.startsWith('ب')) && (x == b.substring(1) || x.startsWith(b.substring(1)))) return i;
     }
     return -1;
   }

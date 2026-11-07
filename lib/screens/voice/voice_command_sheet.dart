@@ -66,8 +66,10 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
   static const _examples = [
     'فعّل علي حسين',
     'طفّي محمد كاظم',
-    'شغّل زينب',
-    'شكد على أحمد دين',
+    'سدّد دين أحمد ٢٥ ألف',
+    'ضيف دين على زينب ١٠ آلاف',
+    'ذكّر علي بالدين',
+    'اطبع وصل حسين',
     'افحص سكتر الشمال',
     'فحص شامل',
   ];
@@ -118,17 +120,35 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
 
   // ───────────────────────── التنفيذ (شاشة العمليّة نفسها) ─────────────────────────
 
-  Future<void> _openSubscriber(Subscriber s, VoiceAction a) async {
+  Future<void> _openSubscriber(Subscriber s, VoiceIntent intent) async {
     final root = widget.rootContext;
-    final auto = switch (a) {
+    final auto = switch (intent.action) {
       VoiceAction.activate => SubscriberAutoAction.activate,
       VoiceAction.disable => SubscriberAutoAction.disable,
       VoiceAction.enable => SubscriberAutoAction.enable,
+      VoiceAction.payDebt => SubscriberAutoAction.payDebt,
+      VoiceAction.addDebt => SubscriberAutoAction.addDebt,
+      VoiceAction.addCredit => SubscriberAutoAction.addCredit,
+      VoiceAction.discount => SubscriberAutoAction.discount,
+      VoiceAction.debtReminder => SubscriberAutoAction.debtReminder,
+      VoiceAction.expiryWarning => SubscriberAutoAction.expiryWarning,
+      VoiceAction.sendInfo => SubscriberAutoAction.sendInfo,
+      VoiceAction.printReceipt => SubscriberAutoAction.printReceipt,
+      VoiceAction.qr => SubscriberAutoAction.qr,
+      VoiceAction.statement => SubscriberAutoAction.statement,
+      VoiceAction.movements => SubscriberAutoAction.movements,
+      VoiceAction.call => SubscriberAutoAction.call,
+      VoiceAction.whatsapp => SubscriberAutoAction.whatsapp,
       _ => null,
     };
     Navigator.of(context).pop();
     await Navigator.of(root).push(MaterialPageRoute<void>(
-      builder: (_) => SubscriberDetailScreen(sub: s, autoAction: auto),
+      builder: (_) => SubscriberDetailScreen(
+        sub: s,
+        autoAction: auto,
+        autoAmount: voiceMoneyActions.contains(intent.action) ? intent.amount : null,
+        autoFullDebt: intent.action == VoiceAction.payDebt && intent.fullAmount,
+      ),
     ));
   }
 
@@ -379,11 +399,35 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
       if (intent.payment == VoicePayment.cash) 'نقد',
     ];
     if (reminder.isNotEmpty) lines.add('قلت: ${reminder.join(' ')} — تختارها بشاشة التفعيل');
+    // المبلغ كما فُهم — بخانة النافذة ويُصحَّح هناك (٧ نوفمبر: «العمليات المهمه كلها»)
+    final amount = intent.amount;
+    if (voiceMoneyActions.contains(intent.action)) {
+      if (intent.action == VoiceAction.payDebt && intent.fullAmount && s.hasDebt) {
+        lines.add('المبلغ: الدين كلّه ${formatIQD(s.debtAbs.round())}');
+      } else if (amount != null) {
+        lines.add('المبلغ: ${formatIQD(amount)}');
+      } else {
+        lines.add('المبلغ تكتبه بالنافذة');
+      }
+    }
     final (String button, IconData icon) = switch (intent.action) {
       VoiceAction.activate => ('فعّل', LucideIcons.refreshCw),
       VoiceAction.disable => ('طفّي', LucideIcons.ban),
       VoiceAction.enable => ('شغّل', LucideIcons.circleCheck),
       VoiceAction.debt => ('افتح المشترك', LucideIcons.wallet),
+      VoiceAction.payDebt => ('سدّد الدين', LucideIcons.banknote),
+      VoiceAction.addDebt => ('أضف الدين', LucideIcons.plus),
+      VoiceAction.addCredit => ('أضف الرصيد', LucideIcons.badgeDollarSign),
+      VoiceAction.discount => ('الخصم', LucideIcons.tag),
+      VoiceAction.debtReminder => ('ذكّره بالدين', LucideIcons.bellRing),
+      VoiceAction.expiryWarning => ('نبّهه بالانتهاء', LucideIcons.clockAlert),
+      VoiceAction.sendInfo => ('أرسل المعلومات', LucideIcons.info),
+      VoiceAction.printReceipt => ('اطبع الوصل', LucideIcons.printer),
+      VoiceAction.qr => ('رمز QR', LucideIcons.qrCode),
+      VoiceAction.statement => ('كشف الحساب', LucideIcons.fileText),
+      VoiceAction.movements => ('سجل الحركات', LucideIcons.history),
+      VoiceAction.call => ('اتّصل', LucideIcons.phone),
+      VoiceAction.whatsapp => ('واتساب', LucideIcons.messageCircle),
       _ => ('افتح المشترك', LucideIcons.userRound),
     };
     return _actionCard(
@@ -393,7 +437,7 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
       lines: lines,
       button: button,
       warn: intent.action == VoiceAction.disable,
-      onTap: () => _openSubscriber(s, intent.action),
+      onTap: () => _openSubscriber(s, intent),
     );
   }
 

@@ -121,6 +121,33 @@ void main() {
     await close(t);
   });
 
+  testWidgets('٧ نوفمبر: «ضيف دين على علي حسين ١٠ آلاف» ⇒ الكرت بالمبلغ ⇒ نافذة إضافة الدين نفسها والمبلغ بخانتها (التنفيذ بضغطته)', (t) async {
+    await open(t);
+    await say(t, 'ضيف دين على علي حسين ١٠ آلاف');
+    expect(find.byKey(const ValueKey('voice-sub-card')), findsOneWidget);
+    expect(find.text('أضف الدين'), findsOneWidget);
+    expect(find.textContaining('المبلغ: '), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('voice-confirm')));
+    await settle(t, ms: 2500);
+    final det = t.widget<SubscriberDetailScreen>(find.byType(SubscriberDetailScreen));
+    expect([det.autoAction, det.autoAmount], [SubscriberAutoAction.addDebt, 10000]);
+    expect(find.byWidgetPredicate((w) => w is TextField && (w.controller?.text ?? '') == '10,000'), findsOneWidget,
+        reason: 'المبلغ بخانة النافذة بفواصله');
+    await close(t);
+  });
+
+  testWidgets('٧ نوفمبر: «سدد دين علي حسين» وما عليه دين ⇒ الصفحة تقول «ما عليه دين» بلا نافذة', (t) async {
+    await open(t);
+    await say(t, 'سدد دين علي حسين');
+    expect(find.text('سدّد الدين'), findsOneWidget);
+    expect(find.text('المبلغ تكتبه بالنافذة'), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('voice-confirm')));
+    await settle(t, ms: 2500);
+    expect(t.widget<SubscriberDetailScreen>(find.byType(SubscriberDetailScreen)).autoAction, SubscriberAutoAction.payDebt);
+    expect(find.text('ما عليه دين'), findsOneWidget);
+    await close(t);
+  });
+
   testWidgets('«فحص شامل» ⇒ كرت الفحص الشامل', (t) async {
     await open(t);
     await say(t, 'فحص شامل');
