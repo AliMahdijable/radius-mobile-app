@@ -4,14 +4,20 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show AppLifecycleState, WidgetsBinding;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../api/api_client.dart';
+import '../api/company_route.dart';
 import '../api/vpn_now_api.dart';
 import '../core/net/vpn_pipe.dart';
 import 'agent_net_presence.dart';
+import 'connection_alerts.dart';
 import 'device_warm_service.dart';
 
 export '../api/vpn_now_api.dart' show VpnNowKind, VpnSubReading, VpnDeviceResult, VpnNowResult;
 
 enum VpnBarPhase { idle, running, done, failed }
+
+/// «كل الشركات»: شركةٌ في نطاق فحص المشتركين عبر الـVPN (مفتاحها واسمها).
+typedef VpnMergedCompany = ({String key, String name});
 
 /// فحصٌ واحد عبر الـVPN (المشتركون أو الأجهزة) — الشريط يرسمه: يتّصل ⇒ «يفحص… ١٢٠ من ٣١٠» ⇒ النتيجة أو السبب.
 /// الضغطة والفحص جارٍ لا تبدأ ثانياً (والخادم نفسه يعيد الفحص نفسه خلال دقيقتين).
@@ -43,6 +49,8 @@ class VpnNowJob extends ChangeNotifier {
   Future<void> run() async {
     if (busy) return;
     if (kind == VpnNowKind.devices) return _runRoute();
+    final merged = VpnNow._mergedNow;
+    if (merged != null) return _runMerged(merged);
     final gen = ++_gen;
     startedAt = VpnNow.now();
     phase = VpnBarPhase.running;
@@ -84,6 +92,97 @@ class VpnNowJob extends ChangeNotifier {
         return;
       }
     }
+  }
+
+  /// «كل الشركات» (٧ نوفمبر — المالك: «فحص المشتركين… في كل الشركات… تنبيه الوكيل باسم الشركة إذا احتاج فحصها إلى VPN ولم يتوفر
+  /// طريق لها»): شركات النطاق واحدةً بعد واحدة، كلٌّ بطلبٍ موجَّه بمفتاحها (بدء الفحص ونتيجته وحدود تنبيهها)، وقراءات كلّ شركةٍ في
+  /// مكانها لا تختلط (اليوزر نفسه قد يكون في شركتين). الشريط نفسه: «يفحص مشتركي «الشركة»…» ثمّ النتيجة؛ ومن لم تُفحص تُسمّى بسببها.
+  Future<void> _runMerged(List<VpnMergedCompany> scope) async {
+    final gen = ++_gen;
+    startedAt = VpnNow.now();
+    phase = VpnBarPhase.running;
+    line = 'يتّصل بالـVPN…';
+    sub = 'تقدر تطلع من الشاشة — الفحص يكمل';
+    value = null;
+    result = null;
+    reason = null;
+    notifyListeners();
+    var ok = 0;
+    var bad = 0;
+    var badKnown = false;
+    final notes = <String>[];
+    for (var i = 0; i < scope.length; i++) {
+      final c = scope[i];
+      if (gen != _gen) return;
+      final head = scope.length == 1 ? 'يفحص مشتركي «${c.name}»' : 'يفحص مشتركي «${c.name}» (${i + 1} من ${scope.length})';
+      line = '$head…';
+      value = null;
+      notifyListeners();
+      final r = await CompanyRoute.run(c.key, () => _sweepCompany(head, gen));
+      if (gen != _gen) return;
+      if (r.ok) {
+        VpnNow._applyCompany(c.key, r);
+        ok++;
+        if (r.problems != null) {
+          badKnown = true;
+          bad += r.problems!;
+        }
+        // حدود تنبيهها لورقة «المشاكل» (بحدود كلّ شركة) — تعذّرت ⇒ حدود المفتوحة
+        if ((r.problems ?? 0) > 0) {
+          final t = await CompanyRoute.run(c.key, VpnNow._companyLimitsFetch);
+          if (gen != _gen) return;
+          if (t != null) VpnNow._companyLimits[c.key] = t;
+        }
+      } else {
+        VpnNow._dropCompany(c.key);
+        notes.add(VpnNow.mergedReason(c, r));
+      }
+    }
+    if (gen != _gen) return;
+    if (ok == 0) {
+      _fail(notes.isEmpty ? 'تعذّر الفحص الآن — حاول بعد قليل' : notes.join(' · '));
+      return;
+    }
+    phase = VpnBarPhase.done;
+    line = ok == scope.length
+        ? (scope.length == 1 ? 'فُحص مشتركو «${scope.first.name}» عبر VPN ✓' : 'فُحصت ${scope.length} شركات عبر VPN ✓')
+        : 'فُحصت $ok من ${scope.length} شركات عبر VPN';
+    sub = [if (badKnown) (bad > 0 ? '$bad بمشكلة' : 'لا مشاكل'), ...notes].join(' · ');
+    value = null;
+    notifyListeners();
+    VpnNow._doneInMode(kind);
+  }
+
+  /// فحصٌ واحد لشركة النطاق الحاليّ (موجَّه) ⇒ نتيجته؛ لا يرمي. التقدّم على الشريط باسمها.
+  Future<VpnNowResult> _sweepCompany(String head, int gen) async {
+    final st = await VpnNowApi.start(kind);
+    if (gen != _gen) return const VpnNowResult(ok: false, message: 'أُلغي الفحص');
+    final id = st.id;
+    if (id == null) return VpnNowResult(ok: false, message: st.error ?? 'تعذّر الفحص الآن — حاول بعد قليل');
+    final started = DateTime.now();
+    var misses = 0;
+    while (gen == _gen) {
+      await Future<void>.delayed(VpnNow.pollEvery);
+      if (gen != _gen) break;
+      final p = await VpnNowApi.poll(id);
+      if (gen != _gen) break;
+      if (p == null) {
+        if (++misses >= 6) return const VpnNowResult(ok: false, message: 'انقطع الاتّصال بالخادم — أعد المحاولة');
+        continue;
+      }
+      misses = 0;
+      if (p.done) return p.result ?? const VpnNowResult(ok: false, message: 'تعذّر الفحص الآن — حاول بعد قليل');
+      final pr = p.progress;
+      if (pr != null && pr.phase == 'probing' && pr.total > 0) {
+        line = '$head… ${pr.done} من ${pr.total}';
+        value = (pr.done / pr.total).clamp(0.0, 1.0);
+        notifyListeners();
+      }
+      if (DateTime.now().difference(started) > VpnNow.maxWait) {
+        return const VpnNowResult(ok: false, message: 'الفحص أطول من المعتاد — أعد بعد قليل');
+      }
+    }
+    return const VpnNowResult(ok: false, message: 'أُلغي الفحص');
   }
 
   /// «وضع VPN» بقسم الأجهزة (٧ نوفمبر — المالك: «كانما الوكيل يفعل vpn خارجي»): لا فحص من الخادم — قرّاء القسم نفسها (الحال
@@ -433,6 +532,74 @@ class VpnNow {
   static final devices = VpnNowJob(VpnNowKind.devices);
   static VpnNowJob jobOf(VpnNowKind k) => k == VpnNowKind.devices ? devices : subscribers;
 
+  // ── «كل الشركات» (٧ نوفمبر): فحص المشتركين لكلّ شركةٍ في نطاق القسم، وقراءاتها في مكانها ──
+
+  /// نطاق الفحص الآن — يضبطه قسم المشتركين (الكلّ أو المختارة)؛ null أو فارغ ⇒ الشركة المفتوحة كما كان.
+  static List<VpnMergedCompany>? Function()? mergedScope;
+
+  static List<VpnMergedCompany>? get _mergedNow {
+    final s = mergedScope?.call();
+    return s == null || s.isEmpty ? null : s;
+  }
+
+  static final _companyReadings = <String, Map<String, VpnSubReading>>{};
+  static final _companyReadAt = <String, DateTime>{};
+  static final _companyLimits = <String, ConnectionAlertThresholds>{};
+
+  static void _applyCompany(String company, VpnNowResult r) {
+    _companyReadings[company] = Map.of(r.readings);
+    _companyReadAt[company] = DateTime.now();
+    _companyLimits.remove(company);
+    version.value++;
+  }
+
+  /// فحصٌ لم ينجح لشركة ⇒ تُسقط قراءاتها السابقة (لا تبدو حديثة).
+  static void _dropCompany(String company) {
+    final hadReadings = _companyReadings.remove(company) != null;
+    final hadAt = _companyReadAt.remove(company) != null;
+    _companyLimits.remove(company);
+    if (hadReadings || hadAt) version.value++;
+  }
+
+  static void clearCompanyReadings() {
+    if (_companyReadings.isEmpty && _companyReadAt.isEmpty) return;
+    _companyReadings.clear();
+    _companyReadAt.clear();
+    _companyLimits.clear();
+    version.value++;
+  }
+
+  @visibleForTesting
+  static void debugApplyCompany(String company, VpnNowResult r) => _applyCompany(company, r);
+
+  /// قراءات كلّ شركةٍ الحديثة (٣٠ د): المفتاح ⇒ (اليوزر صغيراً ⇒ قراءته).
+  static Map<String, Map<String, VpnSubReading>> get companyReadings => {
+        for (final e in _companyReadings.entries)
+          if (_fresh(_companyReadAt[e.key])) e.key: Map.unmodifiable(e.value),
+      };
+
+  /// حدود تنبيه شركةٍ كما قُرئت بفحصها (null: لم تُقرأ ⇒ حدود المفتوحة).
+  static ConnectionAlertThresholds? limitsOf(String company) => _companyLimits[company];
+
+  /// حدود تنبيه الشركة داخل نطاقها الموجَّه — بلا مخبأ المفتوحة؛ null إن تعذّرت.
+  static Future<ConnectionAlertThresholds?> _companyLimitsFetch() async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/connection-alerts/settings');
+      final d = r.data?['data'];
+      if (r.data?['success'] == true && d is Map) return ConnectionAlertThresholds.fromJson(Map<String, dynamic>.from(d));
+    } catch (_) {}
+    return null;
+  }
+
+  /// لماذا لم تُفحص شركة — باسمها (لا «حسابك»: الرسالة تخصّ شركةً من شركاتك).
+  static String mergedReason(VpnMergedCompany c, VpnNowResult r) => switch (r.reason) {
+        'no_vpn' => '«${c.name}» تحتاج VPN',
+        'na' => '«${c.name}»: مشتركوها على شبكة الشركة',
+        'tunnel_failed' => '«${c.name}»: نفق الـVPN لم يتّصل',
+        'off' || 'no_company' => '«${c.name}»: الفحص عبر VPN غير مفتوح لها',
+        _ => '«${c.name}»: ${r.message}',
+      };
+
   /// يرتفع مع كلّ نتيجة — كروت القائمة تستمع له.
   static final ValueNotifier<int> version = ValueNotifier<int>(0);
 
@@ -443,10 +610,22 @@ class VpnNow {
 
   static bool _fresh(DateTime? at) => at != null && DateTime.now().difference(at) < ttl;
 
-  /// قراءة مشتركٍ من آخر فحصٍ عبر الـVPN (≤ ٣٠ دقيقة) — null إن لم يُفحص.
-  static VpnSubReading? readingFor(String username) {
+  /// قراءة مشتركٍ من آخر فحصٍ عبر الـVPN (≤ ٣٠ دقيقة) — null إن لم يُفحص. [company] (صفّ «كل الشركات»): من فحص شركته وحدها —
+  /// لا من فحص المفتوحة: اليوزر نفسه قد يكون في شركتين.
+  static VpnSubReading? readingFor(String username, {String? company}) {
+    if (company != null) {
+      if (!_fresh(_companyReadAt[company])) return null;
+      return _companyReadings[company]?[username.trim().toLowerCase()];
+    }
     if (!_fresh(_readAt)) return null;
     return _readings[username.trim().toLowerCase()];
+  }
+
+  /// متى آخر فحصٍ لمشتركي الشركة [company] (null: المفتوحة كما كان).
+  static DateTime? readingsAtFor(String? company) {
+    if (company == null) return readingsAt;
+    final at = _companyReadAt[company];
+    return _fresh(at) ? at : null;
   }
 
   static VpnDeviceResult? deviceFor(int id) => _fresh(_devAt) ? _devices[id] : null;
@@ -480,7 +659,8 @@ class VpnNow {
   static DateTime? _routeAt;
 
   /// مشتركوه يُفحصون عبر الـVPN؟ (الخادم بـ«الطريق» — الوطنيّ وفايبر اكس لا: زرّ المشتركين وهنتهم وفحصهم بالوضع يختفون).
-  static bool get subscribersOk => VpnNowApi.lastSubscribers;
+  /// «كل الشركات»: نعم — كلّ شركةٍ يقول الخادم عنها، ومن مشتركوها على شبكة الشركة تُسمّى بسببها.
+  static bool get subscribersOk => _mergedNow != null || VpnNowApi.lastSubscribers;
   static Future<({bool linked, String? via})?>? _routeP;
 
   @visibleForTesting
@@ -546,6 +726,9 @@ class VpnNow {
     _devices.clear();
     _readAt = null;
     _devAt = null;
+    _companyReadings.clear();
+    _companyReadAt.clear();
+    _companyLimits.clear();
     _route = null;
     _routeAt = null;
     VpnNowApi.lastSubscribers = true;

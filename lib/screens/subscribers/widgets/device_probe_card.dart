@@ -882,7 +882,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
   /// خارج شبكتك / «وضع VPN»: آخر قراءةٍ لهذا المشترك عبر الـVPN (٣٠ د) — null إن لم تُقرأ أو كنت على شبكتك.
   VpnSubReading? _vpnReading() {
     if (!(VpnNow.mode.value || AgentNetPresence.isOff)) return null;
-    return VpnNow.readingFor(widget.username);
+    return VpnNow.readingFor(widget.username, company: widget.company);
   }
 
   Widget _body() {
@@ -1004,7 +1004,7 @@ class _DeviceProbeCardState extends State<DeviceProbeCard>
 
   /// قراءة المشترك من آخر فحصٍ عبر الـVPN: جهازه (الإشارة، CCQ، الكيبل) أو سكتره، أو الأولت (الضوء والحرارة)، أو البنگ وحده.
   Widget _vpnBody(VpnSubReading r) {
-    final at = VpnNow.readingsAt;
+    final at = VpnNow.readingsAtFor(widget.company);
     final mins = at == null ? null : DateTime.now().difference(at).inMinutes;
     final when = mins == null ? '' : (mins < 1 ? 'الآن' : 'قبل $mins د');
     final from = switch (r.src) {

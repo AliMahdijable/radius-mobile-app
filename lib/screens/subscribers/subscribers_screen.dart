@@ -401,6 +401,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     SubscriberEvents.dataChanged.addListener(_onDataChanged);
     MergedMode.active.addListener(_onMergedModeChanged);
     MergedMode.focus.addListener(_onMergedFocus);
+    VpnNow.mergedScope = _vpnMergedScope;
     PermissionsService.changes.addListener(_onPermsChanged);
     SubscriberColumnPrefs.layout.addListener(_onColumnsChanged);
     SubscriberColumnPrefs.widths.addListener(_onColumnsChanged);
@@ -689,6 +690,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     SubscriberEvents.dataChanged.removeListener(_onDataChanged);
     MergedMode.active.removeListener(_onMergedModeChanged);
     MergedMode.focus.removeListener(_onMergedFocus);
+    if (VpnNow.mergedScope == _vpnMergedScope) VpnNow.mergedScope = null;
     PermissionsService.changes.removeListener(_onPermsChanged);
     SubscriberColumnPrefs.layout.removeListener(_onColumnsChanged);
     SubscriberColumnPrefs.widths.removeListener(_onColumnsChanged);
@@ -700,9 +702,25 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     super.dispose();
   }
 
+  /// «كل الشركات»: نطاق فحص المشتركين عبر الـVPN (VpnNow) — الشركة المختارة، أو كلّ شركةٍ صفوفها في القائمة المدموجة (الكبيرة
+  /// «افتحها وحدها» والمتعذّرة لا صفوف لها هنا). خارج الوضع null ⇒ الشركة المفتوحة كما كان.
+  List<VpnMergedCompany>? _vpnMergedScope() {
+    if (!_mergedOn) return null;
+    final r = _merged;
+    if (r == null) return null;
+    final f = MergedMode.focused;
+    return [
+      for (final p in r.parts)
+        if (p.rows != null && (f == null || p.company.key == f.key)) (key: p.company.key, name: p.company.name),
+    ];
+  }
+
   /// دخول «كل الشركات» أو الخروج منه: القائمة من جديد (لا يُعرض خليطٌ من الوضعين).
   void _onMergedModeChanged() {
     if (!mounted) return;
+    // قراءات «كل الشركات» عبر الـVPN لا تبقى بعد الخروج منه (ولا قبل الدخول) — والفحص الجاري للوضع الآخر يُترك
+    VpnNow.clearCompanyReadings();
+    if (VpnNow.subscribers.busy) VpnNow.subscribers.cancel();
     setState(() {
       _all = const [];
       _merged = null;

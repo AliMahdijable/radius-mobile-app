@@ -8,6 +8,7 @@ import '../services/vpn_now.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import 'company_tag.dart';
 import 'vpn_now_bar.dart' show VpnTag;
 
 /// مشاكل مشتركٍ من قراءته عبر الـVPN بحدود الوكيل (كالخادم: الكيبل، الإشارة وCCQ من جهازه أو سكتره، الضوئيّ والحرارة من الأولت).
@@ -60,12 +61,27 @@ Future<void> showVpnProblemsSheet(
 }) async {
   final t = await ConnectionAlertSettings.ensureLoaded();
   if (!context.mounted) return;
-  final byUser = {for (final s in subscribers) s.username.trim().toLowerCase(): s};
-  final rows = <({Subscriber? sub, String user, List<String> problems, String? state})>[];
-  VpnNow.readings.forEach((u, r) {
-    final p = vpnProblemsOf(r, t);
-    if (p.isNotEmpty) rows.add((sub: byUser[u], user: u, problems: p, state: r.state));
-  });
+  final rows = <({Subscriber? sub, String user, String? company, List<String> problems, String? state})>[];
+  // «كل الشركات» (صفوفٌ بشركاتها): قراءات كلّ شركةٍ من فحصها وبحدود تنبيهها، والصفّ يطابق بشركته ويوزره معاً
+  if (subscribers.any((s) => s.companyKey != null)) {
+    final byKey = {
+      for (final s in subscribers)
+        if (s.companyKey != null) '${s.companyKey}|${s.username.trim().toLowerCase()}': s,
+    };
+    VpnNow.companyReadings.forEach((company, readings) {
+      final lim = VpnNow.limitsOf(company) ?? t;
+      readings.forEach((u, r) {
+        final p = vpnProblemsOf(r, lim);
+        if (p.isNotEmpty) rows.add((sub: byKey['$company|$u'], user: u, company: company, problems: p, state: r.state));
+      });
+    });
+  } else {
+    final byUser = {for (final s in subscribers) s.username.trim().toLowerCase(): s};
+    VpnNow.readings.forEach((u, r) {
+      final p = vpnProblemsOf(r, t);
+      if (p.isNotEmpty) rows.add((sub: byUser[u], user: u, company: null, problems: p, state: r.state));
+    });
+  }
   final where = vpnCasesText(rows.map((r) => r.state));
   rows.sort((a, b) => b.problems.length.compareTo(a.problems.length));
   await showModalBottomSheet<void>(
@@ -125,6 +141,10 @@ Future<void> showVpnProblemsSheet(
                             children: [
                               Text(name, style: AppType.bodyStrong(), maxLines: 1, overflow: TextOverflow.ellipsis),
                               Text(iso(r.user), style: AppType.micro(color: AppColors.textMid)),
+                              if (r.company != null) ...[
+                                const SizedBox(height: 2),
+                                CompanyTag(companyKey: r.company!),
+                              ],
                               const SizedBox(height: Sp.xs),
                               Wrap(spacing: Sp.xs, runSpacing: Sp.xs, children: [
                                 for (final p in r.problems)

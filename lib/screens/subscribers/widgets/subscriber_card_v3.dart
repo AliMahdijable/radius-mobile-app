@@ -888,13 +888,14 @@ class SubscriberNetworkMetrics extends StatelessWidget {
       listenable: Listenable.merge([DeviceProbeBus.tick, VpnNow.version, VpnNow.mode]),
       builder: (_, __) {
         // «وضع VPN»: قراءة الـVPN أوّلاً (قراءة الموبايل المخبّأة أقدم — خارج شبكتك لا تتجدّد)
+        // «كل الشركات»: قراءة صفٍّ من فحص شركته وحدها (اليوزر نفسه قد يكون في شركتين)
         if (VpnNow.mode.value) {
-          final vr = VpnNow.readingFor(sub.username);
+          final vr = VpnNow.readingFor(sub.username, company: sub.companyKey);
           if (vr != null) return _vpn(vr);
         }
         final snap = snapshotOf(sub);
         // ٥ نوفمبر: لا قراءة من موبايلك (خارج شبكتك) ⇒ آخر «فحص الآن» عبر الـVPN (٣٠ دقيقة) بعلامة VPN
-        if (snap == null) return _vpn(VpnNow.readingFor(sub.username));
+        if (snap == null) return _vpn(VpnNow.readingFor(sub.username, company: sub.companyKey));
 
         final items = <Widget>[];
         if (snap.kind == DeviceKind.ubiquiti && snap.ubnt != null) {

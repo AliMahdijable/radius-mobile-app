@@ -92,11 +92,15 @@ class VpnNowResult {
     this.readings = const {},
     this.devices = const [],
     this.atMs,
+    this.problems,
   });
   final bool ok;
   final String message;
   final String? detail;
   final String? reason;
+
+  /// كم مشتركاً بمشكلة بحدود الوكيل (معاينة الخادم) — null من خادمٍ أقدم أو بلا أهداف.
+  final int? problems;
 
   /// يوزر المشترك (بأحرفٍ صغيرة) ⇒ قراءته.
   final Map<String, VpnSubReading> readings;
@@ -132,6 +136,7 @@ class VpnNowResult {
       readings: rd,
       devices: devs,
       atMs: j['at_ms'] is num ? (j['at_ms'] as num).toInt() : null,
+      problems: j['problems'] is num ? (j['problems'] as num).toInt() : null,
     );
   }
 }
