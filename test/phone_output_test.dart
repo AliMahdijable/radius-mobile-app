@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,6 +22,7 @@ import 'visual_perm/visual_perm_harness.dart';
 ///   ٣. التقرير صورةً: صفحاتٌ بعرض الهاتف، وما زاد على الصور يُقال لا يُقصّ صامتاً.
 ///   ٤. زرّ «صورة» في شريط التصدير بالهاتف وحده.
 ///   ٥. وقت التصدير مقروءٌ («2026-11-07 21:21») لا «…T21:21:56.000Z».
+///   ٦. الصورة على خلفيّةٍ بيضاء — رسم أندرويد يترك ما حول الحبر شفّافاً (المالك: «يطلع بدون خلفيه يعني شفافه»).
 
 class _FakeBackend implements PrintBackend {
   final calls = <String>[];
@@ -215,5 +217,24 @@ void main() {
     expect(exportTime('2026-11-07'), '2026-11-07', reason: 'الصرفيات بتاريخٍ وحده');
     expect(exportTime(''), '');
     expect(exportTime('غير معروف'), 'غير معروف');
+  });
+  testWidgets('٦ الصورة على خلفيّةٍ بيضاء: الشفّاف يصير أبيض والحبر يبقى', (t) async {
+    late List<int> corner, mid;
+    await t.runAsync(() async {
+      // صفحةٌ كما يرسمها أندرويد: مربّعٌ أسود في الوسط وما حوله شفّاف
+      final rec = ui.PictureRecorder();
+      ui.Canvas(rec).drawRect(const Rect.fromLTWH(8, 8, 8, 8), Paint()..color = const Color(0xFF000000));
+      final pic = rec.endRecording();
+      final page = await pic.toImage(24, 24);
+      final png = await PhoneOutput.onWhite(page);
+      final codec = await ui.instantiateImageCodec(png);
+      final frame = await codec.getNextFrame();
+      final px = (await frame.image.toByteData(format: ui.ImageByteFormat.rawRgba))!.buffer.asUint8List();
+      List<int> at(int x, int y) => px.sublist((y * 24 + x) * 4, (y * 24 + x) * 4 + 4);
+      corner = at(1, 1);
+      mid = at(12, 12);
+    });
+    expect(corner, [255, 255, 255, 255], reason: 'ما حول الحبر أبيض معتم لا شفّاف');
+    expect(mid, [0, 0, 0, 255]);
   });
 }

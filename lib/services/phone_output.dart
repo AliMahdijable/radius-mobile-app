@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -54,10 +55,38 @@ class PhoneOutput {
   static Future<List<Uint8List>> _raster(Uint8List pdf, double dpi) async {
     final out = <Uint8List>[];
     await for (final page in Printing.raster(pdf, dpi: dpi)) {
-      out.add(await page.toPng());
+      final img = await page.toImage();
+      try {
+        out.add(await onWhite(img));
+      } finally {
+        img.dispose();
+      }
       if (out.length >= maxImages) break;
     }
     return out;
+  }
+
+  /// الصفحة على خلفيّةٍ بيضاء ⇒ PNG. 🐛 ٨ نوفمبر (المالك: «الوصل من اسوي صورة يطلع بدون خلفيه يعني شفافه وكلشي ميبين منه
+  /// بس pdf طبيعي»): رسم أندرويد للـPDF يترك ما حول الحبر شفّافاً، فيعرضه واتساب والمعرض على خلفيّةٍ داكنة ويختفي النصّ الأسود.
+  @visibleForTesting
+  static Future<Uint8List> onWhite(ui.Image img) async {
+    final rec = ui.PictureRecorder();
+    final canvas = ui.Canvas(rec);
+    canvas.drawRect(
+      ui.Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+      ui.Paint()..color = const ui.Color(0xFFFFFFFF),
+    );
+    canvas.drawImage(img, ui.Offset.zero, ui.Paint());
+    final pic = rec.endRecording();
+    final flat = await pic.toImage(img.width, img.height);
+    pic.dispose();
+    try {
+      final data = await flat.toByteData(format: ui.ImageByteFormat.png);
+      if (data == null) throw StateError('png');
+      return data.buffer.asUint8List();
+    } finally {
+      flat.dispose();
+    }
   }
 
   static Future<bool> _share(List<XFile> files, {String? text, Rect? origin}) async {
