@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../services/auth_storage.dart';
 import 'api_client.dart';
+import 'company_route.dart';
 
 /// نوع رسالة (intent) — مطابق للـweb + backend.
 enum MessageIntent {
@@ -293,7 +294,8 @@ class BroadcastApi {
     int limit = 50,
   }) async {
     try {
-      final adminId = await AuthStorage.readAdminId();
+      // «كل الشركات» (٨ نوفمبر): قسمٌ مفتوحٌ بشركةٍ أخرى ⇒ مديرها (الخادم يطابق :adminId بجلستها)
+      final adminId = CompanyRoute.sectionAdminIdFor('/api/whatsapp/message-logs') ?? await AuthStorage.readAdminId();
       if (adminId == null || adminId.isEmpty) {
         return (
           ok: false,
@@ -374,7 +376,7 @@ class BroadcastApi {
   /// GET /api/whatsapp/broadcasts/:adminId — حملات الوكيل (كلّ بثٍّ أرسله، بأعداده وحالته).
   static Future<({bool ok, List<BroadcastCampaign> campaigns, String? message})> listCampaigns() async {
     try {
-      final adminId = await AuthStorage.readAdminId();
+      final adminId = CompanyRoute.sectionAdminIdFor('/api/whatsapp/broadcasts') ?? await AuthStorage.readAdminId();
       if (adminId == null || adminId.isEmpty) {
         return (ok: false, campaigns: const <BroadcastCampaign>[], message: null);
       }
@@ -403,7 +405,7 @@ class BroadcastApi {
   /// إيقاف مؤقّت / استئناف / حذف حملةٍ بمعرّفها. action ∈ {pause, resume, delete}.
   static Future<({bool ok, int affected, String? message})> campaignAction(String batchId, String action) async {
     try {
-      final adminId = await AuthStorage.readAdminId();
+      final adminId = CompanyRoute.sectionAdminIdFor('/api/whatsapp/broadcast') ?? await AuthStorage.readAdminId();
       if (adminId == null || adminId.isEmpty) return (ok: false, affected: 0, message: null);
       final path = '/api/whatsapp/broadcast/${Uri.encodeComponent(batchId)}${action == 'delete' ? '' : '/$action'}';
       final body = {'adminId': adminId};

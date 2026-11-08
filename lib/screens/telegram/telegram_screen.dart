@@ -14,6 +14,8 @@ import 'sheets/telegram_broadcast_sheet.dart';
 import 'sheets/telegram_bulk_links_sheet.dart';
 import 'sheets/telegram_link_generator_sheet.dart';
 import '../desktop/desk_widgets.dart';
+import '../../api/company_route.dart';
+import '../../widgets/merged_section.dart';
 
 /// TelegramScreen — 2026-08-26. نقل من client-v2 web للـmobile-app-v2.
 ///
@@ -55,7 +57,8 @@ class _TelegramScreenState extends State<TelegramScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    _adminId = await AuthStorage.readAdminId();
+    // «كل الشركات» (٨ نوفمبر): القسم بشركةٍ أخرى ⇒ مديرها (الخادم يطابق :adminId بجلستها)
+    _adminId = CompanyRoute.sectionAdminIdFor('/api/telegram') ?? await AuthStorage.readAdminId();
     _adminUsername = await AuthStorage.readAdminUsername();
     if (_adminId == null) {
       if (mounted) setState(() => _loading = false);
@@ -137,7 +140,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
           iconTheme: IconThemeData(color: AppColors.textHi),
         ),
       ),
-      body: SafeArea(
+      body: MergedSectionBody(child: SafeArea(
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : _adminId == null
@@ -156,7 +159,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
                       ],
                     ),
                   ),
-      ),
+      )),
     );
   }
 

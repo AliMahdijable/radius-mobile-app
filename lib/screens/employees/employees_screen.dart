@@ -19,6 +19,7 @@ import '../../theme/typography.dart';
 import 'sheets/employee_editor_sheet.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
+import '../../widgets/merged_section.dart';
 
 /// شاشة الموظفين — مديرو الفرع يدخلون عبر حساب رئيسي، والموظفون
 /// الفرعيون يحصلون على صلاحيات محددة. القائمة + add/edit/delete.
@@ -224,7 +225,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
               icon: const Icon(LucideIcons.userPlus, size: 16),
               label: const Text('موظف جديد'),
             ),
-      body: SafeArea(
+      body: MergedSectionBody(child: SafeArea(
         child: RefreshIndicator(
           onRefresh: _load,
           color: accent,
@@ -266,7 +267,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                           ],
                         ),
         ),
-      ),
+      )),
     );
   }
 

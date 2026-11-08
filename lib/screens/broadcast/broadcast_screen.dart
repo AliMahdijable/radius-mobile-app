@@ -18,6 +18,7 @@ import '../message_logs/message_logs_screen.dart';
 import 'broadcast_campaigns_screen.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
+import '../../widgets/merged_section.dart';
 
 /// شاشة "التبليغات" (Broadcast) — نقل حرفي من client-v2/Notifications.tsx.
 /// يسمح للمدير بإرسال رسائل واتساب جماعيّة للمشتركين حسب فلتر (كل/مدينون/
@@ -688,7 +689,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           iconTheme: IconThemeData(color: AppColors.textHi),
         ),
       ),
-      body: _loading
+      body: MergedSectionBody(child: _loading
           ? const Center(child: CircularProgressIndicator())
           : DesktopScope.of(context)
               ? _desktopBody()
@@ -730,7 +731,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
                 ),
                 _buildActionBar(),
               ],
-            ),
+            )),
     );
   }
 

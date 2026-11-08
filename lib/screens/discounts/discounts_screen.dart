@@ -17,6 +17,7 @@ import 'sheets/existing_discounts_sheet.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../desktop/desk_bulk_picker.dart';
+import '../../widgets/merged_section.dart';
 
 /// شاشة الخصومات — مطلب 2026-06-11 (تصميم جديد):
 ///   • الـscreen الأساسية = browse + apply: قيمة الخصم + بحث + جميع
@@ -336,7 +337,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
           iconTheme: IconThemeData(color: AppColors.textHi),
         ),
       ),
-      body: DesktopScope.of(context)
+      body: MergedSectionBody(child: DesktopScope.of(context)
           ? _desktopBody(filtered, accent)
           : SafeArea(
         bottom: false,
@@ -447,7 +448,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
             ),
           ],
         ),
-      ),
+      )),
       // زرّ التطبيق ثابت أسفل الشاشة — زرّ النظام نفسه (SheetFooterBar)
       // كشاشة الأسعار، فيتطابق الشريطان. يتفعّل مع amount + مشتركين
       // مختارين، ويختفي كاملاً لمن لا يملك discounts.manage (يشاهد فقط).

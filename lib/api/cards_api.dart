@@ -884,7 +884,8 @@ class CardsApi {
         );
       }
       final s = CardsSummary.fromJson(body);
-      CardsState.applySummary(s, epoch: epoch);
+      // «كل الشركات» (٨ نوفمبر): ملخّص شركةٍ أخرى (قسمٌ موجَّه) لا يُكتب فوق شارة الجلسة المفتوحة ولا آخر ملخّصها.
+      if (r.requestOptions.headers['x-company-key'] == null) CardsState.applySummary(s, epoch: epoch);
       return (data: s, message: null, code: null);
     } catch (e) {
       _log('summary', e);

@@ -352,7 +352,8 @@ List<AppModule> buildAppModules() {
             ? (ProviderService.isEarthlink ? 'cards.module_hint_pkg' : 'cards.module_hint').tr()
             : (ProviderService.isEarthlink ? 'cards.module_hint_pkg_n' : 'cards.module_hint_n')
                 .tr(namedArgs: {'n': formatIQD(stock.remaining!)}),
-        page: () => const CardsScreen(),
+        // «كل الشركات» (٨ نوفمبر): كارتات الشركة المختارة للعرض (الشراء والنقل من صفحتها)
+        page: () => const MergedSection(readOnly: true, prefixes: ['/api/v2/cards'], child: CardsScreen()),
       ),
     // 2026-08-26: تلغرام — إعداد بوت + ربط مشتركين + بث. محكوم بنفس صلاحيّة إعدادات الواتساب.
     if (permShown(tgGate))
@@ -365,7 +366,7 @@ List<AppModule> buildAppModules() {
         brandGlyph: AppColors.channelTelegram,
         title: 'تلغرام',
         subtitle: 'ربط بوت + إشعارات المشتركين عبر تلغرام',
-        page: () => const TelegramScreen(),
+        page: () => const MergedSection(readOnly: true, prefixes: ['/api/telegram'], child: TelegramScreen()),
       ),
     // التبليغات (broadcast) — إرسال جماعي لجميع/المدينين/المنتهين/قرب انتهاء. موظّف ايرث لنك لا يراها.
     if (permShown(const ['whatsapp.broadcast']))
@@ -378,7 +379,10 @@ List<AppModule> buildAppModules() {
         brandGlyph: AppColors.channelWhatsApp,
         title: 'more.broadcast'.tr(),
         subtitle: 'more.broadcast_hint'.tr(),
-        page: () => const BroadcastScreen(),
+        page: () => const MergedSection(
+            readOnly: true,
+            prefixes: ['/api/whatsapp/broadcast', '/api/whatsapp/broadcasts', '/api/whatsapp/send-scope', '/api/v2/whatsapp'],
+            child: BroadcastScreen()),
       ),
     // حالة الرسائل — كل رسائل WhatsApp بأنواعها مع فلاتر + بحث + retry.
     if (permShown(logKeys))
@@ -390,7 +394,10 @@ List<AppModule> buildAppModules() {
         tone: AppTone.brand,
         title: 'more.message_logs'.tr(),
         subtitle: 'more.message_logs_hint'.tr(),
-        page: () => const MessageLogsScreen(),
+        page: () => const MergedSection(
+            readOnly: true,
+            prefixes: ['/api/whatsapp/message-logs', '/api/whatsapp/broadcasts', '/api/whatsapp/broadcast'],
+            child: MessageLogsScreen()),
       ),
     // «طلبات التفعيل» (٤ نوفمبر): طلبات تجديد المشتركين من تطبيقهم بصورة التحويل — حين يُفتح المفتاح العامّ للحساب، ومقفلٌ بمكانه
     // لموظّفٍ بلا «طلبات التفعيل»، والمقيَّد بمديرٍ فرعيّ بسببه (القسم يشمل كلّ مشتركي الحساب). الرقم: بانتظارك.
@@ -425,7 +432,10 @@ List<AppModule> buildAppModules() {
         tone: AppTone.brand,
         title: 'more.managers'.tr(),
         subtitle: 'more.managers_hint'.tr(),
-        page: () => const ManagersScreen(),
+        page: () => const MergedSection(
+            readOnly: true,
+            prefixes: ['/api/v2/managers', '/api/v2/acl-list', '/api/admin/manager-debts', '/api/admin/managers', '/api/admin/manager-movements'],
+            child: ManagersScreen()),
       ),
     if (permShown(pkgKeys))
       AppModule(
@@ -447,7 +457,7 @@ List<AppModule> buildAppModules() {
         tone: AppTone.success,
         title: 'more.discounts'.tr(),
         subtitle: 'more.discounts_hint'.tr(),
-        page: () => const DiscountsScreen(),
+        page: () => const MergedSection(readOnly: true, prefixes: ['/api/discounts', '/api/v2/discounts'], child: DiscountsScreen()),
       ),
     // «أسعار المشتركين» — سعر بيعٍ ثابت لمشتركٍ بعينه، بجانب الخصومات لأنّه أخوها.
     if (permShown(const ['subscriber_prices.view']))
@@ -471,7 +481,7 @@ List<AppModule> buildAppModules() {
         tone: AppTone.brand,
         title: 'more.employees'.tr(),
         subtitle: 'more.employees_hint'.tr(),
-        page: () => const EmployeesScreen(),
+        page: () => const MergedSection(readOnly: true, prefixes: ['/api/v2/employees'], child: EmployeesScreen()),
       ),
     // بوابة المشترك — مفتوحةٌ لكلّ فاعل (الرمز يحتاجه الموظّف أيضاً)، والتخصيص داخلها بـ`settings.edit`.
     // الوطنيّ وحده بمكانه مقفلاً بالسبب.
@@ -483,7 +493,10 @@ List<AppModule> buildAppModules() {
       tone: AppTone.brand,
       title: 'portal.title'.tr(),
       subtitle: 'portal.subtitle_more'.tr(),
-      page: () => const PortalSettingsScreen(),
+      page: () => const MergedSection(
+          readOnly: true,
+          prefixes: ['/api/v2/portal', '/api/v2/admin/branding', '/api/v2/admin/portal-packages'],
+          child: PortalSettingsScreen()),
     ),
     // ── ايرث لنك — لموزِّعي EarthLink وحدهم (من `ProviderService.isEarthlink`، لا صلاحيّة ساس).
     if (ProviderService.isEarthlink) ...[

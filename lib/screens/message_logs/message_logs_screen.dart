@@ -12,6 +12,7 @@ import '../../theme/typography.dart';
 import '../../core/util/server_time.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/widgets/app_sheet.dart';
+import '../../widgets/merged_section.dart';
 
 /// شاشة "حالة الرسائل" — نُقلت من v1 mobile-app/message_logs_screen.
 ///
@@ -189,7 +190,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
           ],
         ),
       ),
-      body: Column(
+      body: MergedSectionBody(child: Column(
         children: [
           _searchBar(),
           _statsRow(),
@@ -227,7 +228,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
             ),
           ),
         ],
-      ),
+      )),
     );
   }
 

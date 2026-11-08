@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 
 import '../services/auth_storage.dart';
 import 'api_client.dart';
+import 'company_route.dart';
 
 /// نطاق الإرسال (Send Scope) — يحدّد أي مشتركين تشملهم الرسائل
 /// (تذكيرات دين/انتهاء/تبليغ) اللي يُطلقها المدير الرئيسي:
@@ -48,7 +49,7 @@ class SendScopeApi {
   /// GET /api/whatsapp/send-scope/:adminId
   static Future<SendScope?> fetch() async {
     try {
-      final adminId = await AuthStorage.readAdminId();
+      final adminId = CompanyRoute.sectionAdminIdFor('/api/whatsapp/send-scope') ?? await AuthStorage.readAdminId();
       if (adminId == null || adminId.isEmpty) return null;
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/whatsapp/send-scope/$adminId',
@@ -71,7 +72,7 @@ class SendScopeApi {
     required List<String> managedUsernames,
   }) async {
     try {
-      final adminId = await AuthStorage.readAdminId();
+      final adminId = CompanyRoute.sectionAdminIdFor('/api/whatsapp/send-scope') ?? await AuthStorage.readAdminId();
       if (adminId == null || adminId.isEmpty) {
         return (ok: false, message: 'admin_id مفقود');
       }

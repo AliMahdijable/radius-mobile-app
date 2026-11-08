@@ -7,7 +7,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/account_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/company_route.dart';
+import 'package:rad_mysvcs/api/cards_api.dart';
+import 'package:rad_mysvcs/screens/cards/cards_screen.dart';
 import 'package:rad_mysvcs/screens/expenses/expenses_screen.dart';
+import 'package:rad_mysvcs/screens/telegram/telegram_screen.dart';
 import 'package:rad_mysvcs/screens/settlements/settlements_screen.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
 import 'package:rad_mysvcs/widgets/merged_section.dart';
@@ -72,6 +75,12 @@ class _Srv implements HttpClientAdapter {
         'total': el ? 7000 : 15000,
         if (key != null) 'routed_writes': el && elWrites,
       }, headers: h);
+    }
+    if (path.startsWith('/api/telegram/status/')) {
+      return _json(200, {'success': true, 'connected': false, 'bot_username': null}, headers: h);
+    }
+    if (path == '/api/v2/cards/summary') {
+      return _json(200, {'success': true, 'enabled': true, 'totals': {'available': el ? 7 : 40, 'used': 0}, 'series': []}, headers: h);
     }
     if (path.startsWith('/api/v2/expenses/recurring')) {
       return _json(200, {'success': true, 'enabled': true, 'templates': [], 'pending': []}, headers: h);
@@ -185,6 +194,33 @@ void main() {
     expect(find.textContaining('كهرباء ايرث'), findsWidgets);
     expect(find.textContaining('إيجار'), findsNothing);
     expect(find.textContaining('«ايرث لنك» للعرض هنا'), findsOneWidget);
+    await down(t);
+  });
+
+  testWidgets('٤ تلغرام (قراءةٌ وحدها): حال الشركة المختارة بمعرّف مديرها لا المفتوحة، و«للعرض هنا»', (t) async {
+    await up(t);
+    const screen = MergedSection(readOnly: true, prefixes: ['/api/telegram'], child: TelegramScreen());
+    MergedMode.focus.value = _kEl;
+    await pumpVisual(t, const VisualDevice('', Size(390, 1400), 1), home: (_) => screen);
+    await settleReal(t);
+    expect(t.takeException(), isNull);
+    final st = srv.asked.where((a) => a.startsWith('GET /api/telegram/status/')).toList();
+    expect(st, isNotEmpty);
+    expect(st.every((a) => a.contains('earthlink') && a.endsWith(_kEl)), isTrue, reason: '$st');
+    expect(find.textContaining('«ايرث لنك» للعرض هنا'), findsOneWidget);
+    await down(t);
+  });
+
+  testWidgets('٥ الكارتات (قراءةٌ وحدها): ملخّص الشركة المختارة لا يُكتب فوق شارة المفتوحة، وملخّص المفتوحة لا يُرسم تحتها', (t) async {
+    await up(t);
+    CardsState.reset();
+    const screen = MergedSection(readOnly: true, prefixes: ['/api/v2/cards'], child: CardsScreen());
+    MergedMode.focus.value = _kEl;
+    await pumpVisual(t, const VisualDevice('', Size(390, 1400), 1), home: (_) => screen);
+    await settleReal(t);
+    expect(t.takeException(), isNull);
+    expect(srv.asked, contains('GET /api/v2/cards/summary $_kEl'));
+    expect(CardsState.lastSummary, isNull, reason: 'ملخّص ايرث لنك لا يصير «آخر ملخّص» للجلسة المفتوحة');
     await down(t);
   });
 }

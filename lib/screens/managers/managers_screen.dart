@@ -24,6 +24,7 @@ import '../../services/permissions_service.dart';
 import '../../services/subscriber_events.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
+import '../../widgets/merged_section.dart';
 
 /// مديول "المدراء الفرعيون" — قائمة + بحث + add/edit/delete + عمليات
 /// رصيد (شحن/سحب/نقاط). v1 web parity.
@@ -323,7 +324,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
               label: Text('mgr.new'.tr()),
             )
           : null,
-      body: SafeArea(
+      body: MergedSectionBody(child: SafeArea(
         child: RefreshIndicator(
           onRefresh: _load,
           color: accent,
@@ -360,7 +361,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
             ],
           ),
         ),
-      ),
+      )),
     );
   }
 

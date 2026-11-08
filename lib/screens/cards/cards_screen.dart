@@ -19,6 +19,8 @@ import 'sheets/card_purchase_sheet.dart';
 import 'sheets/card_transfer_sheet.dart';
 import 'sheets/series_cards_sheet.dart';
 import '../desktop/desk_widgets.dart';
+import '../../widgets/merged_section.dart';
+import '../../api/company_route.dart';
 
 /// «الكارتات» — مخزون كارتات التعبئة للوكيل (البند ٤ §١٢).
 ///
@@ -74,7 +76,8 @@ class _CardsScreenState extends State<CardsScreen> {
   @override
   void initState() {
     super.initState();
-    _setSummary(CardsState.lastSummary);
+    // «كل الشركات» (٨ نوفمبر): آخر ملخّصٍ للجلسة المفتوحة لا يُرسم تحت اسم شركةٍ أخرى (قسمٌ موجَّه) — يُنتظر ملخّصها.
+    if (CompanyRoute.sectionKeyFor('/api/v2/cards/summary') == null) _setSummary(CardsState.lastSummary);
     _load();
     _loadPurchase();
   }
@@ -192,14 +195,14 @@ class _CardsScreenState extends State<CardsScreen> {
           ],
         ),
       ),
-      body: SafeArea(
+      body: MergedSectionBody(child: SafeArea(
         bottom: false,
         child: RefreshIndicator(
           onRefresh: _refresh,
           color: AppColors.brandAccent,
           child: _body(),
         ),
-      ),
+      )),
     );
   }
 

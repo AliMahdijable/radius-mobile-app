@@ -15,6 +15,7 @@ import 'widgets/link_image_preview.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/platform/desktop_layout.dart';
+import '../../widgets/merged_section.dart';
 
 /// شاشة "بوابة المشترك" — مطابقة PortalSettings.tsx في client-v2.
 /// tabs:
@@ -90,7 +91,7 @@ class _PortalSettingsScreenState extends State<PortalSettingsScreen>
                 ),
         ),
       ),
-      body: tab == null
+      body: MergedSectionBody(child: tab == null
           ? const AgentCodeTab()
           : TabBarView(
               controller: tab,
@@ -102,7 +103,7 @@ class _PortalSettingsScreenState extends State<PortalSettingsScreen>
                 else
                   const _LockedTab(),
               ],
-            ),
+            )),
     );
   }
 }

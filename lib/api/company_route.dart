@@ -45,11 +45,19 @@ class CompanyRoute {
   /// «قوائم أخرى» بـ«كل الشركات» (٨ نوفمبر — المالك: «كل الاقسام مال قائمة المزيد لازم تخضع لهذا النظام شركتين بدقة»): قسمٌ
   /// مفتوحٌ بشركةٍ غير المفتوحة ⇒ طلبات بادئات مساراته — من أيّ زرٍّ أو شيتٍ فيه — موجَّهةٌ لها، وما سواها كما هو (الرئيسيّة
   /// والإشعارات بالخلفيّة لا تتأثّر). [MergedSection] (lib/widgets/merged_section.dart) يضعه ويرفعه.
-  static ({Object owner, String key, List<String> prefixes})? _section;
+  static ({Object owner, String key, List<String> prefixes, String? adminId})? _section;
 
-  static void enterSection(Object owner, String key, List<String> prefixes) {
+  /// [adminId] معرّف مدير الشركة المختارة — لمسارات `/:adminId` في القسم ([sectionAdminIdFor]) بدل المفتوحة.
+  static void enterSection(Object owner, String key, List<String> prefixes, {String? adminId}) {
     if (!keyRe.hasMatch(key)) return;
-    _section = (owner: owner, key: key, prefixes: List.unmodifiable(prefixes));
+    _section = (owner: owner, key: key, prefixes: List.unmodifiable(prefixes), adminId: adminId);
+  }
+
+  /// معرّف مدير الشركة المختارة إن كان [path] من بادئات القسم المفتوح — وإلّا null (المفتوحة كما كانت).
+  static String? sectionAdminIdFor(String path) {
+    final s = _section;
+    if (s == null || s.adminId == null || sectionKeyFor(path) == null) return null;
+    return s.adminId;
   }
 
   /// يرفعه صاحبه وحده (قسمٌ أُغلق بعد أن فتح غيره لا يرفع قسم الآخر).

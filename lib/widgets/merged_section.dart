@@ -14,7 +14,10 @@ import 'merged_company_strip.dart';
 
 /// ما يعرضه قسمٌ من «قوائم أخرى» الآن في «كل الشركات».
 class MergedSectionInfo {
-  const MergedSectionInfo({required this.company, required this.open});
+  const MergedSectionInfo({required this.company, required this.open, this.readOnly = false});
+
+  /// القسم قراءةٌ وحدها لغير المفتوحة (كتاباته غير موجَّهة بعد) ⇒ الشريط يقول «للعرض هنا».
+  final bool readOnly;
 
   /// الشركة المختارة في الشريط — null = «الكل» (تُعرض المفتوحة كما كانت).
   final MergedCompany? company;
@@ -31,11 +34,14 @@ class MergedSectionInfo {
 /// شيتٍ فيه موجَّهةٌ لها ما دام مفتوحاً ([CompanyRoute.enterSection]) — و«الكل» ⇒ الشركة المفتوحة كما كانت. الشاشة تُبنى من
 /// جديد لكلّ شركة (لا تبقى أرقام شركةٍ تحت اسم أخرى). خارج «كل الشركات» لا أثر له.
 class MergedSection extends StatefulWidget {
-  const MergedSection({super.key, required this.prefixes, required this.child});
+  const MergedSection({super.key, required this.prefixes, required this.child, this.readOnly = false});
 
   /// بادئات مسارات القسم كلّها (قراءاتٍ وكتابات) — ما لم يُذكر يذهب للشركة المفتوحة، فيُذكر كلّ ما يطلبه القسم وشيتاته.
   final List<String> prefixes;
   final Widget child;
+
+  /// كتابات القسم غير موجَّهة بعد ⇒ غير المفتوحة للعرض وحده (والخادم يرفض كتابتها الموجَّهة أصلاً).
+  final bool readOnly;
 
   /// ما يعرضه أقرب قسم — null خارج قسمٍ أو خارج «كل الشركات».
   static MergedSectionInfo? of(BuildContext context) =>
@@ -84,13 +90,13 @@ class _MergedSectionState extends State<MergedSection> {
     final f = MergedMode.focused;
     if (f == null) return const MergedSectionInfo(company: null, open: true);
     final open = (_openAdmin ?? '').isNotEmpty && f.adminId == _openAdmin;
-    return MergedSectionInfo(company: f, open: open);
+    return MergedSectionInfo(company: f, open: open, readOnly: widget.readOnly);
   }
 
   /// وجهة طلبات القسم — تُضبط قبل بناء الشاشة فيبدأ جلبها الأوّل موجَّهاً.
   void _apply(MergedSectionInfo? i) {
     if (i != null && i.routed) {
-      CompanyRoute.enterSection(this, i.company!.key, widget.prefixes);
+      CompanyRoute.enterSection(this, i.company!.key, widget.prefixes, adminId: i.company!.adminId);
     } else {
       CompanyRoute.leaveSection(this);
     }
@@ -159,6 +165,9 @@ class MergedSectionBar extends StatelessWidget {
     } else if (lockedText != null) {
       text = lockedText;
       warn = true;
+    } else if (info.routed && info.readOnly) {
+      text = 'merged.section_locked'.tr(args: [info.company!.name]);
+      warn = true;
     } else if (info.routed) {
       text = 'merged.section_routed'.tr(args: [info.company!.name]);
       warn = false;
@@ -206,6 +215,24 @@ class MergedSectionBar extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// جسم شاشة قسمٍ في «كل الشركات»: [MergedSectionBar] فوقه — خارج الوضع أو خارج [MergedSection] الجسمُ نفسه حرفاً.
+class MergedSectionBody extends StatelessWidget {
+  const MergedSectionBody({super.key, required this.child, this.lockedText});
+  final Widget child;
+  final String? lockedText;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!MergedMode.active.value || MergedSection.of(context) == null) return child;
+    return Column(
+      children: [
+        MergedSectionBar(lockedText: lockedText),
+        Expanded(child: child),
+      ],
     );
   }
 }
