@@ -161,7 +161,15 @@ class DeviceBigCard extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _Header(device: device, role: role, tone: tone, medianMs: medianMs, down: down, companyKey: companyKey),
+                _Header(
+                  device: device,
+                  role: role,
+                  tone: tone,
+                  medianMs: medianMs,
+                  down: down,
+                  companyKey: companyKey,
+                  voltage: down ? null : state.detail?.glance.voltage,
+                ),
                 if (down)
                   _DownLine(device: device, now: now)
                 else ...[
@@ -180,13 +188,25 @@ class DeviceBigCard extends StatelessWidget {
 // ═══════════════════════════════ الرأس ═══════════════════════════════
 
 class _Header extends StatelessWidget {
-  const _Header({required this.device, required this.role, required this.tone, required this.medianMs, required this.down, this.companyKey});
+  const _Header({
+    required this.device,
+    required this.role,
+    required this.tone,
+    required this.medianMs,
+    required this.down,
+    this.companyKey,
+    this.voltage,
+  });
   final NetworkDevice device;
   final DeviceRole role;
   final AppTone tone;
   final int? medianMs;
   final bool down;
   final String? companyKey;
+
+  /// فولتيّة الجهاز كما قرأها (مايكروتك وما يقرؤه الخادم) — بجانب عنوانه في الرأس لكلّ دور (٨ نوفمبر — المالك: «بعرض الاجهزه
+  /// بشكل كارات كبيره… لازم الفولتيه»)، لا خانةً رابعة ولا سطراً يكبّر البطاقة. ما لا يقرؤه الجهاز لا يظهر (لا صفر).
+  final double? voltage;
 
   @override
   Widget build(BuildContext context) {
@@ -244,6 +264,16 @@ class _Header extends StatelessWidget {
                     Text(' · ', style: AppType.muted()),
                     // العنوان رابطٌ يفتح الجهاز بالمتصفّح (المالك ٣٠ أكتوبر)، والمطوّل ينسخه.
                     Flexible(child: DeviceIpLink(device.ip, style: AppType.muted())),
+                    if (voltage != null && voltage! > 0) ...[
+                      Text(' · ', style: AppType.muted()),
+                      Icon(LucideIcons.zap, size: 12, color: Grade.voltage(voltage).fill),
+                      const SizedBox(width: 2),
+                      Text(
+                        iso('${voltage!.toStringAsFixed(1)}V'),
+                        key: const ValueKey('big-card-voltage'),
+                        style: AppType.pillBold(color: Grade.voltage(voltage).fill),
+                      ),
+                    ],
                   ],
                 ),
                 if (companyKey != null) ...[
@@ -515,7 +545,7 @@ class _Body extends StatelessWidget {
       case DeviceRole.other:
         final facts = <_Fact>[
           if (g.ppp != null) _Fact('جلسات PPP', '${g.ppp}', LucideIcons.users),
-          if (g.voltage != null) _Fact('الفولتيّة', '${g.voltage!.toStringAsFixed(1)} V', LucideIcons.zap, Grade.voltage(g.voltage)),
+          // الفولتيّة في رأس البطاقة لكلّ دور (٨ نوفمبر) — لا تُكرَّر هنا
           if (g.poeWatts != null) _Fact('PoE', '${g.poeWatts!.toStringAsFixed(1)} W', LucideIcons.plug),
         ];
         final hasPorts = ports.any((p) => p.up);

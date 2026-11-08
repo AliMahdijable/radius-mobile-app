@@ -407,9 +407,54 @@ void main() {
       expect(find.text('راوتر'), findsOneWidget);
       expect(find.text('جلسات PPP '), findsOneWidget);
       expect(shows('1284'), isTrue);
-      expect(shows('24.1 V'), isTrue);
+      // الفولتيّة في الرأس بجانب العنوان (٨ نوفمبر) — لا تُكرَّر في الحقائق
+      expect(shows('24.1V'), isTrue);
+      expect(find.byKey(const ValueKey('big-card-voltage')), findsOneWidget);
+      expect(shows('24.1 V'), isFalse);
       expect(shows('sfp-sfpplus1-WAN'), isTrue);
       expect(find.text('المنافذ الأعلى حِملاً'), findsOneWidget);
+    });
+
+    testWidgets('🆕 الفولتيّة لكلّ دور في رأس البطاقة (سكتر هنا) — وما لا يقرؤه الجهاز لا يظهر، ولا تكبر البطاقة', (t) async {
+      Future<double> heightWith(double? volt) async {
+        final base = fx.stateOf(fx.sector);
+        final g = base.detail!.glance;
+        final st = VitalsState(
+          at: base.at,
+          vitals: base.vitals,
+          detail: DeviceDetail(
+            uptime: base.detail!.uptime,
+            model: base.detail!.model,
+            ports: base.detail!.ports,
+            peers: base.detail!.peers,
+            glance: DeviceGlance(isAp: g.isAp, peersKnown: g.peersKnown, voltage: volt),
+          ),
+        );
+        t.view.physicalSize = const Size(390, 1400);
+        t.view.devicePixelRatio = 1;
+        addTearDown(t.view.reset);
+        await t.pumpWidget(MaterialApp(
+          theme: ThemeData(fontFamily: 'IBMPlexSansArabic'),
+          home: Directionality(
+            textDirection: TextDirection.rtl,
+            child: Scaffold(
+              body: Align(
+                alignment: Alignment.topCenter,
+                child: DeviceBigCard(key: const ValueKey('card'), device: fx.sector, state: st, medianMs: 12, now: now),
+              ),
+            ),
+          ),
+        ));
+        await t.pump();
+        return t.getSize(find.byKey(const ValueKey('card'))).height;
+      }
+
+      final without = await heightWith(null);
+      expect(find.byKey(const ValueKey('big-card-voltage')), findsNothing, reason: 'لا قراءة ⇒ لا «0V»');
+      final withVolt = await heightWith(24.3);
+      expect(shows('24.3V'), isTrue);
+      expect(withVolt, without, reason: 'الفولتيّة في سطر العنوان — البطاقة لا تكبر');
+      expect(t.takeException(), isNull);
     });
 
     testWidgets('المعطّل: سطر «آخر ظهور» وحده بلا خانات؛ وبلا بيانات دخول: سببٌ صريح؛ وقبل القراءة: «…»', (t) async {
