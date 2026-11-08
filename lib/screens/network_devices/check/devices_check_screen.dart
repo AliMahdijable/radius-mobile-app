@@ -48,6 +48,23 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
   }
   CheckState? _filter;
 
+  /// «كل الشركات»: شركةٌ مختارة من بطاقة «الشركات» ⇒ أجهزتها وحدها وعدّاداتها (٨ نوفمبر — المالك: «خلي امكانيه ان ينقر ع الشركه
+  /// ويعرض بس الاجهزه بعد نتيجه الفحص»). الضغط ثانيةً يعيد الكلّ.
+  String? _company;
+
+  /// تقارير الشركة المختارة وحدها (أو الكلّ).
+  List<DeviceCheckReport> _scoped(List<DeviceCheckReport> rs) {
+    final m = _merged;
+    final k = _company;
+    if (m == null || k == null) return rs;
+    return [for (final r in rs) if (m.companyOf[r.device.id] == k) r];
+  }
+
+  void _pickCompany(String key) => setState(() {
+        _company = _company == key ? null : key;
+        _filter = null;
+      });
+
   /// القسم المفتوح بعينه: `<المعرّف>:subs` أو `<المعرّف>:ports` — المالك ٦ نوفمبر: «من انقر توكل ع اي قسم يفتح كل الاقسام».
   final _open = <String>{};
 
@@ -99,9 +116,10 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
       await copyToClipboard(context, DevicesCheck.reportText(rs, viaVpn: widget.viaVpn), label: 'تقرير الفحص');
       return;
     }
-    // «كل الشركات»: تقرير كلّ شركةٍ تحت اسمها، وسطر من لم تُفحص ولماذا
+    // «كل الشركات»: تقرير كلّ شركةٍ تحت اسمها، وسطر من لم تُفحص ولماذا — والمختارة وحدها إن اختيرت
     final parts = <String>[];
     for (final s in m.states.values) {
+      if (_company != null && s.part.company.key != _company) continue;
       final mine = [for (final r in rs) if (m.companyOf[r.device.id] == s.part.company.key) r];
       final head = '— ${s.part.company.name} —';
       if (mine.isEmpty) {
@@ -151,14 +169,15 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
         listenable: _run,
         builder: (context, _) {
           final rs = _reports;
-          final shown = _filter == null ? rs : rs.where((r) => r.state == _filter).toList();
+          final scoped = _scoped(rs);
+          final shown = _filter == null ? scoped : scoped.where((r) => r.state == _filter).toList();
           return ListView(
             padding: const EdgeInsets.fromLTRB(Sp.md, Sp.md, Sp.md, Sp.xxl),
             children: [
               _head(rs),
-              if (_merged != null) ...[const SizedBox(height: Sp.sm), _companies(_merged!)],
+              if (_merged != null) ...[const SizedBox(height: Sp.sm), _companies(_merged!, rs)],
               if (_run.error != null && !_run.running) ...[const SizedBox(height: Sp.sm), _errorBox()],
-              if (rs.isNotEmpty && !widget.single) ...[const SizedBox(height: Sp.md), _counts(rs)],
+              if (rs.isNotEmpty && !widget.single) ...[const SizedBox(height: Sp.md), _counts(scoped)],
               for (final r in shown) ...[const SizedBox(height: Sp.sm), _card(r)],
               // يردّ عبر الـVPN ولا معلومات: السبب بكلمة (لا صفحةٌ فارغة بلا تفسير)
               if (widget.single && widget.viaVpn && !_run.running && rs.length == 1 && rs.first.vitals.isEmpty &&
@@ -258,20 +277,42 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
     );
   }
 
-  /// «كل الشركات»: سطرٌ لكلّ شركة — طريقها وعدد أجهزتها، أو لماذا لم تُفحص (بلا VPN تُسمّى، لا «طافية»).
-  Widget _companies(MergedDevicesCheckRunner m) {
+  /// «كل الشركات»: سطرٌ لكلّ شركة — طريقها وعدد أجهزتها، أو لماذا لم تُفحص (بلا VPN تُسمّى، لا «طافية»). شركةٌ لها نتائج تُضغط
+  /// فتُعرض أجهزتها وحدها.
+  Widget _companies(MergedDevicesCheckRunner m, List<DeviceCheckReport> rs) {
+    final withResults = <String>{for (final r in rs) if (m.companyOf[r.device.id] != null) m.companyOf[r.device.id]!};
+    final picked = _company == null ? null : m.states[_company]?.part.company;
+    final hint = picked != null
+        ? '«${picked.name}» وحدها — اضغطها ثانيةً لعرض الكلّ'
+        : (withResults.length > 1 ? 'اضغط شركةً لعرض أجهزتها وحدها' : null);
     return Container(
       key: const ValueKey('check-companies'),
-      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+      padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: Sp.sm),
       decoration: _cardDeco(),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        for (final s in m.states.values) _companyRow(s),
+        for (final s in m.states.values) _companyRow(s, tappable: withResults.contains(s.part.company.key)),
+        if (hint != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Sp.sm, Sp.xs, Sp.sm, 0),
+            child: Row(children: [
+              Icon(picked != null ? LucideIcons.filter : LucideIcons.mousePointerClick, size: 13, color: AppColors.textLow),
+              const SizedBox(width: Sp.x6),
+              Expanded(
+                child: Text(hint,
+                    key: const ValueKey('check-companies-hint'),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.micro(color: AppColors.textMid)),
+              ),
+            ]),
+          ),
       ]),
     );
   }
 
-  Widget _companyRow(MergedCheckCompanyState s) {
+  Widget _companyRow(MergedCheckCompanyState s, {bool tappable = false}) {
     final c = s.part.company;
+    final on = _company == c.key;
     final n = s.part.devices.length;
     final count = '$n ${n == 1 ? 'جهاز' : 'أجهزة'}';
     final (IconData icon, AppTone tone, String text) = switch (s.status) {
@@ -285,26 +326,42 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
       MergedCheckStatus.noVpn => (LucideIcons.shieldOff, AppTone.warning, s.message ?? 'تحتاج VPN للفحص الشامل'),
       MergedCheckStatus.failed => (LucideIcons.triangleAlert, AppTone.danger, s.message ?? 'تعذّر الفحص'),
     };
-    return Padding(
+    return Material(
       key: ValueKey('check-company-${c.key}'),
-      padding: const EdgeInsets.symmetric(vertical: Sp.xs + 2),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Container(
-              width: 8, height: 8, decoration: BoxDecoration(color: AppColors.company(c.colorIndex), shape: BoxShape.circle)),
-        ),
-        const SizedBox(width: Sp.sm),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(c.name, style: AppType.bodyStrong(color: AppColors.textHi)),
-            const SizedBox(height: 2),
-            Text(text, style: AppType.micro(color: s.status == MergedCheckStatus.done ? AppColors.textMid : tone.onSoft)),
+      color: on ? AppTone.brand.softBg : Colors.transparent,
+      borderRadius: BorderRadius.circular(R.md),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(R.md),
+        onTap: tappable || on ? () => _pickCompany(c.key) : null,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: Sp.xs + 2),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.md),
+            border: Border.all(color: on ? AppTone.brand.softBorder : Colors.transparent),
+          ),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Container(
+                  width: 8, height: 8, decoration: BoxDecoration(color: AppColors.company(c.colorIndex), shape: BoxShape.circle)),
+            ),
+            const SizedBox(width: Sp.sm),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(c.name, style: AppType.bodyStrong(color: AppColors.textHi)),
+                const SizedBox(height: 2),
+                Text(text, style: AppType.micro(color: s.status == MergedCheckStatus.done ? AppColors.textMid : tone.onSoft)),
+              ]),
+            ),
+            const SizedBox(width: Sp.sm),
+            if (on) ...[
+              _pill('معروضة', AppTone.brand),
+              const SizedBox(width: Sp.x6),
+            ],
+            Icon(icon, size: 18, color: s.status == MergedCheckStatus.waiting ? AppColors.textLow : tone.fill),
           ]),
         ),
-        const SizedBox(width: Sp.sm),
-        Icon(icon, size: 18, color: s.status == MergedCheckStatus.waiting ? AppColors.textLow : tone.fill),
-      ]),
+      ),
     );
   }
 

@@ -229,5 +229,63 @@ void main() {
       MergedMode.reset();
       await visualTearDown();
     });
+
+    testWidgets('الضغط على شركةٍ بعد الفحص يعرض أجهزتها وحدها وعدّاداتها — والضغط ثانيةً يعيد الكلّ', (t) async {
+      // ٨ نوفمبر — المالك: «خلي امكانيه ان ينقر ع الشركه ويعرض بس الاجهزه بعد نتيجه الفحص»
+      await visualSetUp(s1bSasOwner);
+      MergedMode.reset();
+      MergedMode.data.value = MergedCompaniesData.from({
+        'routing': true,
+        'writes': true,
+        'companies': [
+          {'key': _kA, 'code': 'supernet', 'username': 'u0', 'name': 'سوبرنت', 'status': 'ok', 'admin_id': 'supernet:12', 'ns': 'a', 'color_index': 0},
+          {'key': _kB, 'code': 'jt', 'username': 'u1', 'name': 'الجزيرة', 'status': 'ok', 'admin_id': 'jt:22', 'ns': 'b', 'color_index': 1},
+          {'key': _kE, 'code': 'earthlink', 'username': 'u3', 'name': 'ايرث لنك', 'status': 'ok', 'admin_id': 'earthlink:77', 'ns': 'e', 'color_index': 3},
+        ],
+      });
+      final ps = parts();
+      await pumpVisual(t, const VisualDevice('', Size(390, 2200), 1),
+          home: (_) => DevicesCheckScreen(
+                devices: [for (final p in ps) ...p.devices],
+                viaVpn: false,
+                runner: MergedDevicesCheckRunner(ps, openViaVpn: false),
+              ));
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+      await settle(t, seconds: 2);
+      Finder card(int id) => find.byKey(ValueKey('check-card-$id'));
+      int countOf(String state) {
+        final chip = find.byKey(ValueKey('check-count-$state'));
+        final texts = t.widgetList<Text>(find.descendant(of: chip, matching: find.byType(Text))).map((w) => w.data).toList();
+        return int.parse(texts.first!);
+      }
+
+      expect(card(101), findsOneWidget);
+      expect(card(201), findsOneWidget);
+      expect(find.text('اضغط شركةً لعرض أجهزتها وحدها'), findsOneWidget);
+      final all = CheckState.values.map((s) => countOf(s.name)).fold<int>(0, (a, b) => a + b);
+      expect(all, 4, reason: '101 + ثلاثة الجزيرة');
+
+      await t.tap(find.byKey(const ValueKey('check-company-$_kB')));
+      await settle(t, seconds: 1);
+      expect(card(101), findsNothing, reason: 'جهاز سوبرنت يختفي');
+      expect(card(201), findsOneWidget);
+      expect(card(203), findsOneWidget);
+      expect(CheckState.values.map((s) => countOf(s.name)).fold<int>(0, (a, b) => a + b), 3, reason: 'عدّادات الجزيرة وحدها');
+      expect(find.text('«الجزيرة» وحدها — اضغطها ثانيةً لعرض الكلّ'), findsOneWidget);
+      expect(find.text('معروضة'), findsOneWidget);
+
+      // ايرث لنك بلا نتائج (تحتاج VPN) ⇒ لا تُختار
+      await t.tap(find.byKey(const ValueKey('check-company-$_kE')));
+      await settle(t, seconds: 1);
+      expect(card(201), findsOneWidget, reason: 'الاختيار باقٍ على الجزيرة');
+
+      await t.tap(find.byKey(const ValueKey('check-company-$_kB')));
+      await settle(t, seconds: 1);
+      expect(card(101), findsOneWidget, reason: 'الضغط ثانيةً يعيد الكلّ');
+      expect(find.text('معروضة'), findsNothing);
+      await t.pumpWidget(const SizedBox());
+      MergedMode.reset();
+      await visualTearDown();
+    });
   });
 }
