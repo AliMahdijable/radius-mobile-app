@@ -8,8 +8,6 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:rad_mysvcs/core/util/server_time.dart';
-import 'package:rad_mysvcs/screens/reports/widgets/report_export.dart';
-import 'package:rad_mysvcs/screens/reports/widgets/report_image.dart';
 import 'package:rad_mysvcs/services/phone_output.dart';
 import 'package:rad_mysvcs/services/print_output.dart';
 import 'package:share_plus/share_plus.dart';
@@ -19,8 +17,7 @@ import 'visual_perm/visual_perm_harness.dart';
 /// «صورة» بالهاتف (٨ نوفمبر — المالك: «الوصولات بالهاتف صوره تكون اختيار افضل من pdf»):
 ///   ١. الوصل بالهاتف يسأل «صورة أم طباعة»: الصورة من صفحات الوصل نفسه بدقّةٍ تناسب عرضه، والطباعة كما كانت، والإغلاق لا شيء.
 ///   ٢. الحاسبة كما كانت: نافذة الطباعة بلا سؤال.
-///   ٣. التقرير صورةً: صفحاتٌ بعرض الهاتف، وما زاد على الصور يُقال لا يُقصّ صامتاً.
-///   ٤. زرّ «صورة» في شريط التصدير بالهاتف وحده.
+///   (التقرير صورةً أُزيل بطلب المالك — report_pdf_test.dart)
 ///   ٥. وقت التصدير مقروءٌ («2026-11-07 21:21») لا «…T21:21:56.000Z».
 ///   ٦. الصورة على خلفيّةٍ بيضاء — رسم أندرويد يترك ما حول الحبر شفّافاً (المالك: «يطلع بدون خلفيه يعني شفافه»).
 
@@ -148,65 +145,6 @@ void main() {
     expect(r.outcome, PrintOutcome.printed);
     expect(backend.calls, ['layout']);
     expect(find.byKey(const ValueKey('output-image')), findsNothing);
-  });
-
-  test('٣ التقرير صورةً: بعرض الهاتف، وما زاد على الصور يُقال لا يُقصّ صامتاً', () async {
-    final cols = ['اسم المشترك', 'اليوزر', 'المبلغ', 'التاريخ', 'الوصف', 'النوع', 'المنفّذ'];
-    List<String> row(int i) =>
-        ['مشترك $i', 'u$i', '${i * 1000}', '2026-11-07 21:21', 'تفعيل غير نقدي — السعر 35000 د.ع', 'تفعيل', 'admin'];
-    final small = await ReportImageDoc.build(title: 'التفعيلات', subtitle: 'الفترة', columns: cols, rows: [for (var i = 0; i < 12; i++) row(i)]);
-    expect(small.shownRows, 12);
-    expect(small.pages, inInclusiveRange(1, 4));
-    expect(String.fromCharCodes(small.bytes.take(5)), '%PDF-');
-
-    final big = await ReportImageDoc.build(title: 'التفعيلات', columns: cols, rows: [for (var i = 0; i < 300; i++) row(i)]);
-    expect(big.shownRows, lessThanOrEqualTo(ReportImageDoc.maxRows));
-    expect(big.shownRows, lessThan(300));
-    expect(big.pages, lessThanOrEqualTo(PhoneOutput.maxImages), reason: 'كلّ صفحةٍ صورة — لا صفحةٌ تُسقط');
-    expect(ReportImageDoc.page.width, 400);
-    expect(PhoneOutput.dpiFor(ReportImageDoc.page.width), closeTo(194.4, 0.1));
-  });
-
-  testWidgets('٤ زرّ «صورة» في شريط التصدير بالهاتف وحده — ويشارك صفحات التقرير', (t) async {
-    Widget bar() => MaterialApp(
-          navigatorKey: navKey,
-          home: Directionality(
-            textDirection: TextDirection.rtl,
-            child: Scaffold(
-              body: Center(
-                child: ReportExportBar(
-                  title: 'التفعيلات',
-                  subtitle: 'الفترة',
-                  fileNameBase: 'activations',
-                  columns: const ['اسم المشترك', 'المبلغ'],
-                  rows: const [
-                    ['علي', '15000'],
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-    PhoneOutput.debugActive = false;
-    await t.pumpWidget(bar());
-    expect(find.byKey(const ValueKey('report-share-image')), findsNothing);
-
-    PhoneOutput.debugActive = true;
-    await t.pumpWidget(const SizedBox());
-    await t.pumpWidget(bar());
-    expect(find.byKey(const ValueKey('report-share-image')), findsOneWidget);
-    final btn = t.widget<InkResponse>(
-        find.descendant(of: find.byKey(const ValueKey('report-share-image')), matching: find.byType(InkResponse)));
-    await t.runAsync(() async {
-      btn.onTap!();
-      for (var i = 0; i < 100 && shared.isEmpty; i++) {
-        await Future<void>.delayed(const Duration(milliseconds: 50));
-      }
-    });
-    await t.pump();
-    expect(shared, hasLength(1));
-    expect(shared.single.first.path, contains('activations_'));
-    expect(dpis.single, closeTo(194.4, 0.1));
   });
 
   test('٥ وقت التصدير مقروء', () {
