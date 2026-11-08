@@ -19,6 +19,7 @@ import 'screens/notifications/in_app_notification_banner.dart';
 import 'screens/splash_screen.dart';
 import 'api/device_probe_api.dart';
 import 'api/renew_requests_api.dart';
+import 'api/tickets_api.dart';
 import 'api/subscribers_api.dart';
 import 'services/app_resumed_signal.dart';
 import 'services/device_alerts_service.dart';
@@ -301,6 +302,8 @@ class _MyServicesAppState extends State<MyServicesApp>
     FcmService.onNotificationTap = NotificationRouter.handle;
     // «طلبات التفعيل» (٤ نوفمبر): إشعار طلب تجديدٍ وصل (FCM بالواجهة أو تغذية الحاسبة — كلاهما يمرّ بالصندوق) ⇒ الجرس يعدّه فوراً.
     InboxService.changes.addListener(RenewRequestsState.onInboxChanged);
+    // «التذاكر» (٩ نوفمبر): إشعار تذكرةٍ وصل ⇒ شارة «قوائم أخرى» تُقرأ فوراً.
+    InboxService.changes.addListener(TicketsState.onInboxChanged);
   }
 
   @override

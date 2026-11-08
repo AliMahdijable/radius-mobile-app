@@ -8,6 +8,7 @@ import '../api/national_more_api.dart';
 import '../api/renew_requests_api.dart';
 import '../api/sales_api.dart';
 import '../api/self_deposit_api.dart';
+import '../api/tickets_api.dart';
 import '../core/util/format.dart';
 import '../core/widgets/permission_locked.dart';
 import '../services/app_resumed_signal.dart';
@@ -42,6 +43,7 @@ import 'sales/sales_screen.dart';
 import 'settlements/settlements_screen.dart';
 import 'subscriber_prices/subscriber_prices_screen.dart';
 import 'telegram/telegram_screen.dart';
+import 'tickets/tickets_screen.dart';
 import 'topup/fiberx_topup_screen.dart';
 import 'topup/jtpay_screen.dart';
 import 'topup/topup_screen.dart';
@@ -64,6 +66,7 @@ class AppModule {
     this.brandGlyph,
     this.locked = false,
     this.unavailable,
+    this.badge,
   });
 
   final String id;
@@ -82,6 +85,9 @@ class AppModule {
 
   /// ميزةٌ لا تملكها الشركة (لا صلاحيّةٌ ناقصة) — السبب مكان الوصف. يتقدّم على [locked].
   final String? unavailable;
+
+  /// عددٌ ينتظر صاحبه (غير المقروءة في «التذاكر») — رقمٌ صغير بجانب السهم. null/0 ⇒ لا شيء.
+  final int? badge;
 
   bool get isLocked => locked || unavailable != null;
 }
@@ -103,6 +109,8 @@ Listenable appModulesListenable() => Listenable.merge([
       NationalMoreState.gate,
       // «طلبات التفعيل» — المفتاح العامّ portal_renew وما يملكه المستخدم (الاستماع يطلبها).
       RenewRequestsState.gate,
+      // «التذاكر» — المفتاح العامّ portal_tickets وما يملكه المستخدم وغير المقروءة (الاستماع يطلبها).
+      TicketsState.gate,
     ]);
 
 /// الأقسام بترتيب الهاتف («قوائم أخرى»). الحاسبة ترتّبها بمجموعاتها.
@@ -405,6 +413,26 @@ List<AppModule> buildAppModules() {
         title: 'more.message_logs'.tr(),
         subtitle: 'more.message_logs_hint'.tr(),
         page: MessageLogsScreen.mergedPage,
+      ),
+    // «التذاكر» (٩ نوفمبر — المالك: «للشركات كلها ما عدا الوطني»): تذاكر المشتركين من تطبيقهم — حين يُفتح المفتاح العامّ للحساب،
+    // ومقفلٌ بمكانه لموظّفٍ بلا «التذاكر — العرض»، والمقيَّد بمديرٍ فرعيّ بسببه. الرقم: غير المقروءة.
+    if (TicketsApi.servedByProvider && (TicketsState.gate.value?.available ?? false) && permShown(const ['tickets.view']))
+      AppModule(
+        id: 'tickets',
+        group: AppModuleGroup.comms,
+        locked: !Perms.has('tickets.view'),
+        unavailable: TicketsState.gate.value!.scoped ? 'لموظّفي الحساب كلّه' : null,
+        icon: LucideIcons.ticket,
+        tone: AppTone.info,
+        title: 'التذاكر',
+        subtitle: switch (TicketsState.unread) {
+          0 => 'تذاكر مشتركيك من تطبيقهم — ردّ وتابع حتى الحلّ',
+          1 => 'تذكرةٌ فيها جديدٌ لم تقرأه',
+          2 => 'تذكرتان فيهما جديدٌ لم تقرأه',
+          final n => '$n تذاكر فيها جديدٌ لم تقرأه',
+        },
+        badge: TicketsState.unread,
+        page: TicketsScreen.mergedPage,
       ),
     // «طلبات التفعيل» (٤ نوفمبر): طلبات تجديد المشتركين من تطبيقهم بصورة التحويل — حين يُفتح المفتاح العامّ للحساب، ومقفلٌ بمكانه
     // لموظّفٍ بلا «طلبات التفعيل»، والمقيَّد بمديرٍ فرعيّ بسببه (القسم يشمل كلّ مشتركي الحساب). الرقم: بانتظارك.

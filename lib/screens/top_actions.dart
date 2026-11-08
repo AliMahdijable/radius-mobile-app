@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../api/renew_requests_api.dart';
+import '../api/tickets_api.dart';
 import '../core/platform/desktop_layout.dart';
 import '../core/widgets/permission_locked.dart';
 import '../services/active_company.dart';
@@ -230,7 +231,10 @@ class _NotificationsChipState extends State<_NotificationsChip> {
     super.dispose();
   }
 
-  void _onResume() => unawaited(RenewRequestsState.onResume());
+  void _onResume() {
+    unawaited(RenewRequestsState.onResume());
+    unawaited(TicketsState.onResume());
+  }
 
   @override
   Widget build(BuildContext context) {

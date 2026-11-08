@@ -48,6 +48,7 @@ class MoreModulesScreen extends StatelessWidget {
               brandGlyph: m.brandGlyph,
               title: m.title,
               subtitle: m.subtitle,
+              badge: m.badge,
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => m.page()),
               ),
@@ -113,8 +114,12 @@ class _ModuleCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.badge,
   });
   final IconData icon;
+
+  /// عددٌ ينتظر صاحبه (غير المقروءة) — رقمٌ صغير قبل السهم؛ المقفل بلا رقم.
+  final int? badge;
 
   /// نغمة دلاليّة لا لون: الخلفيّة والأيقونة تأتيان من اللوحة معاً،
   /// فلا اشتقاق بشفافيّة لا يعرف الوضع الليلي.
@@ -204,6 +209,23 @@ class _ModuleCard extends StatelessWidget {
                   ],
                 ),
               ),
+              if (!locked && (badge ?? 0) > 0) ...[
+                Container(
+                  key: const ValueKey('module-badge'),
+                  constraints: const BoxConstraints(minWidth: 22),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.warningSoftBg,
+                    borderRadius: BorderRadius.circular(R.pill),
+                  ),
+                  child: Text(
+                    badge! > 99 ? '99+' : '$badge',
+                    textAlign: TextAlign.center,
+                    style: AppType.microBold(color: AppColors.warningOnSoft),
+                  ),
+                ),
+                const SizedBox(width: Sp.xs),
+              ],
               if (locked)
                 const PermLockIcon()
               else

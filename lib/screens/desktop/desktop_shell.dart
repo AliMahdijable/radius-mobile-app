@@ -93,6 +93,7 @@ class _DesktopShellState extends State<DesktopShell> {
     'sales',
     'broadcast',
     'message_logs',
+    'tickets',
     'telegram',
     'portal',
     'el_transfer',
@@ -385,7 +386,8 @@ class _DesktopShellState extends State<DesktopShell> {
                 subtitle: m.subtitle,
                 root: m.page,
                 locked: m.locked,
-                unavailable: m.unavailable),
+                unavailable: m.unavailable,
+                badge: (m.badge ?? 0) > 0 ? m.badge : null),
         ];
     final finance = group(AppModuleGroup.finance);
     final comms = group(AppModuleGroup.comms);
