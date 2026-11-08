@@ -14,9 +14,11 @@ import 'package:rad_mysvcs/screens/reports/activations_report_screen.dart';
 import 'package:rad_mysvcs/screens/reports/activity_log_report_screen.dart';
 import 'package:rad_mysvcs/screens/reports/daily_activations_report_screen.dart';
 import 'package:rad_mysvcs/screens/reports/package_distribution_screen.dart';
+import 'package:rad_mysvcs/screens/reports/reports_hub_screen.dart';
 import 'package:rad_mysvcs/screens/reports/sessions_report_screen.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
 import 'package:rad_mysvcs/services/merged_report_loader.dart';
+import 'package:rad_mysvcs/services/provider_service.dart';
 
 import 'visual_perm/visual_perm_harness.dart';
 
@@ -321,7 +323,7 @@ void main() {
     await down(t);
   });
 
-  testWidgets('تقارير ايرث لنك: شركات ايرث لنك وحدها بمفاتيحها، والباقة باسمها مجموعة منها، وغيرها «ليست ايرث لنك»', (t) async {
+  testWidgets('تقارير ايرث لنك: شركات ايرث لنك وحدها بمفاتيحها وشاراتها، والباقة باسمها مجموعة منها', (t) async {
     await up(earthlink: true);
     await t.runAsync(() => MergedMode.enter());
     await pumpVisual(t, const VisualDevice('', Size(390, 1600), 1), home: (_) => const ElByPackageScreen());
@@ -330,12 +332,34 @@ void main() {
         {'GET /api/v2/el/by-package $_kL1', 'GET /api/v2/el/by-package $_kL2'});
     expect(find.text('FTTH 50M'), findsOneWidget, reason: 'الباقة نفسها من الحسابين سطرٌ واحد');
     expect(find.text('42 مشترك'), findsOneWidget, reason: '30 + 12');
-    expect(find.textContaining('ليست ايرث لنك'), findsWidgets, reason: 'على شارات الشركات الأخرى');
-    expect(find.textContaining('«سوبرنت»: ليست ايرث لنك'), findsNothing, reason: 'لا ضجيج في سطر الشريط');
+    // ٨ نوفمبر (المالك: «مافهمته… ولاشركه يظهر بيها الباقات»): شارات ايرث لنك وحدها — لا «ليست ايرث لنك» لكلّ ساس
+    expect(find.textContaining('ليست ايرث لنك'), findsNothing);
+    expect(find.textContaining('سوبرنت'), findsNothing, reason: 'شركات الساس لا شارة لها هنا');
     MergedMode.focus.value = _kL2;
     await settle(t, seconds: 1);
     expect(find.text('12 مشترك'), findsWidgets);
     expect(find.text('FTTH 100M'), findsNothing);
+    await down(t);
+  });
+
+  testWidgets('قائمة التقارير: قسم ايرث لنك لصفحة ايرث لنك وحدها — لا بـ«كل الشركات» وصفحة ساس مفتوحة', (t) async {
+    // ٨ نوفمبر — المالك عن «المشتركون حسب الباقة» بـ«كل الشركات»: «هذا القسم مافهمته شو ولاشركه يظهر بيها الباقات»
+    await up(earthlink: true);
+    await t.runAsync(() => MergedMode.enter());
+    expect(MergedMode.usable.any((c) => c.provider == MergedProvider.earthlink), isTrue);
+    ProviderService.debugSet('sas4');
+    await pumpVisual(t, const VisualDevice('', Size(390, 2400), 1), home: (_) => const ReportsHubScreen());
+    await settle(t, seconds: 2);
+    expect(find.text('المشتركون حسب الباقة'), findsNothing);
+    expect(find.text('تقارير ايرث لنك'), findsNothing);
+    await down(t);
+
+    await up(earthlink: true);
+    ProviderService.debugSet('earthlink');
+    await pumpVisual(t, const VisualDevice('', Size(390, 2400), 1), home: (_) => const ReportsHubScreen());
+    await settle(t, seconds: 2);
+    expect(find.text('المشتركون حسب الباقة'), findsOneWidget, reason: 'صفحة ايرث لنك نفسها: كما كان');
+    ProviderService.debugSet(null);
     await down(t);
   });
 

@@ -22,7 +22,11 @@ class MergedCompanyStrip extends StatelessWidget {
     this.note,
     this.onExit,
     this.onProblem,
+    this.only,
   });
+
+  /// الشركات التي تُعرض شاراتها وحدها (تقارير ايرث لنك: شركات ايرث لنك — لا شاراتٌ «ليست ايرث لنك» لكلّ ساس).
+  final bool Function(MergedCompany c)? only;
 
   /// عدد الشركة على شارتها (null: لا عدد).
   final int? Function(MergedCompany c)? countOf;
@@ -69,7 +73,8 @@ class MergedCompanyStrip extends StatelessWidget {
       valueListenable: MergedMode.focus,
       builder: (context, _, __) {
         final focused = MergedMode.focused;
-        final companies = MergedMode.companies;
+        final companies = [for (final c in MergedMode.companies) if (only?.call(c) ?? true) c];
+        final usable = [for (final c in MergedMode.usable) if (only?.call(c) ?? true) c];
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -79,7 +84,7 @@ class MergedCompanyStrip extends StatelessWidget {
                 Icon(Icons.layers_rounded, size: 16, color: AppColors.brand),
                 const SizedBox(width: 6),
                 Text(
-                  '${'merged.header'.tr()} · ${MergedMode.usable.length}',
+                  '${'merged.header'.tr()} · ${usable.length}',
                   style: AppType.bodyStrong(color: AppColors.textHi).copyWith(fontSize: 13),
                 ),
                 const SizedBox(width: Sp.sm),

@@ -573,6 +573,8 @@ class _ElMerged {
       loadMergedReport<T>(supports: (c) => c.provider == MergedProvider.earthlink, fetch: (_) => fetch());
 
   static Widget strip<T>(MergedReport<T> m) => MergedCompanyStrip(
+        // شركات ايرث لنك وحدها (٨ نوفمبر — المالك: «مافهمته… ولاشركه يظهر بيها الباقات»)
+        only: (c) => c.provider == MergedProvider.earthlink,
         countOf: m.countOf,
         total: m.total,
         problemOf: (c) => m.problemOf(c, failedLabel: 'merged.chip_failed'.tr(), unsupportedLabel: 'ليست ايرث لنك'),

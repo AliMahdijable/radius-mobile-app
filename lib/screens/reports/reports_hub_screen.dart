@@ -224,9 +224,9 @@ class _ReportsHubScreenState extends State<ReportsHubScreen> {
         // ثمّ يردّ الخادم 403): التجريبي والباقات ← activations، والسجلّ
         // ← activity_log.
         final earthlink = <Widget>[
-          // «كل الشركات»: تقارير ايرث لنك لشركات ايرث لنك في الحساب ولو كانت المفتوحة غيرها (موجَّهةً لها)
-          if (ProviderService.isEarthlink ||
-              (MergedMode.active.value && MergedMode.usable.any((c) => c.provider == MergedProvider.earthlink))) ...[
+          // ايرث لنك وحدها — ولو بـ«كل الشركات» (٨ نوفمبر — المالك: «هذا القسم مافهمته شو ولاشركه يظهر بيها الباقات»: كان
+          // يظهر وصفحتا ساس مفتوحة، فشاراتها كلّها «ليست ايرث لنك»). «توزيع الباقات والأرباح» يجمع باقات كلّ الشركات.
+          if (ProviderService.isEarthlink) ...[
             _ReportCard(
               merged: true,
               locked: !Perms.has('reports.activations'),
