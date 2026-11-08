@@ -9,16 +9,19 @@ import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../core/util/arabic_text.dart';
 import '../../api/big_subscribers_api.dart';
+import '../../api/company_route.dart';
 import '../../core/platform/app_platform.dart';
 import '../../api/subscribers_api.dart';
 import '../../core/util/format.dart';
 import '../../models/subscriber.dart';
+import '../../services/merged_mode.dart';
 import '../../services/provider_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../subscribers/subscriber_detail_screen.dart';
 import '../../core/platform/desktop_layout.dart';
+import '../../widgets/company_tag.dart';
 
 /// Spotlight-style search overlay: TextField at the top, mic button on
 /// the trailing side for voice input, suggestion list below.
@@ -102,11 +105,29 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
   /// كاش لكلّ ضغطة مفتاح، والأسوأ أنّ `connectionState` يعود
   /// `waiting` فتُمحى النتائج المعروضة وتُستبدل بدوّارة — أي أنّ
   /// الكتابة السريعة كانت تُظهر دوّارةً لا نتائج.
-  late final Future<List<Subscriber>?> _subsFuture =
-      SubscribersApi.loadAllWithOnline();
+  ///
+  /// «كل الشركات» (٨ نوفمبر — المالك: «سوي فحص عام لكليشي وطبق مبدا الخدمتين»): قوائم الشركات المدموجة (كلّ صفٍّ بشركته،
+  /// والفتح موجَّهٌ لها) — «الكل» أو الشركة المختارة في الشريط — لا قائمة المفتوحة وحدها؛ والكبيرة تُبحث بنصّها موجَّهةً لها.
+  late final Future<List<Subscriber>?> _subsFuture = _merged
+      ? _mergedFuture.then((r) => r?.rowsFor(MergedMode.focused?.key))
+      : SubscribersApi.loadAllWithOnline();
+
+  /// «كل الشركات» عند فتح البحث (لا يتبدّل وهو مفتوح).
+  final bool _merged = MergedMode.active.value;
+
+  late final Future<MergedListResult?> _mergedFuture = _merged ? _loadMerged() : Future<MergedListResult?>.value(null);
+
+  static Future<MergedListResult?> _loadMerged() async {
+    try {
+      return await MergedSubscribers.withSessions(await MergedSubscribers.load());
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// الحساب الكبير (≥ ٥٠٠٠): البحث في الساس نفسه (اليوزر/الاسم/الهاتف) بدل القائمة الكاملة — ولا يُلمس [_subsFuture].
-  late final Future<int> _bigProbe = BigSubscribersApi.probe();
+  /// «كل الشركات»: لا سؤال للمفتوحة وحدها — كبيرات الوضع تُبحث كلٌّ بمفتاحها ([_MergedBigResults]).
+  late final Future<int> _bigProbe = _merged ? Future<int>.value(0) : BigSubscribersApi.probe();
 
   Timer? _queryDebounce;
 
@@ -457,6 +478,35 @@ class _QuickSearchOverlayState extends State<QuickSearchOverlay> {
                                       );
                               }
                               if ((snap.data ?? 0) > 0) return _BigResults(query: _q);
+                              if (_merged) {
+                                return FutureBuilder<MergedListResult?>(
+                                  future: _mergedFuture,
+                                  builder: (_, m) {
+                                    final r = m.data;
+                                    final focus = MergedMode.focused?.key;
+                                    final big = [
+                                      for (final p in r?.big ?? const <MergedCompanyList>[])
+                                        if (focus == null || p.company.key == focus) p,
+                                    ];
+                                    // الشركة المختارة كبيرة ⇒ بحثها وحده (لا «لا يوجد» من قائمةٍ لم تُجلب أصلاً)
+                                    final lists = r == null || focus == null || r.partOf(focus)?.bigTotal == null;
+                                    return Column(
+                                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                                      children: [
+                                        if (lists)
+                                          _Results(
+                                            query: _q,
+                                            future: _subsFuture,
+                                            emptyText: big.isEmpty ? null : 'لا نتائج في قوائم الشركات الأخرى',
+                                          ),
+                                        if (_q.trim().isNotEmpty)
+                                          for (final p in big)
+                                            _MergedBigResults(key: ValueKey('qs-big-${p.company.key}'), query: _q, part: p),
+                                      ],
+                                    );
+                                  },
+                                );
+                              }
                               return _Results(query: _q, future: _subsFuture);
                             },
                           ),
@@ -566,8 +616,11 @@ class _MicButton extends StatelessWidget {
 /// uses, with all its operations live (activate / extend / pay-debt /
 /// toggle / disconnect).
 class _Results extends StatefulWidget {
-  const _Results({required this.query, required this.future});
+  const _Results({required this.query, required this.future, this.emptyText});
   final String query;
+
+  /// «كل الشركات» وفيها كبيرةٌ تُبحث وحدها تحته: «لا نتائج» هنا لا تعني لا أحد.
+  final String? emptyText;
 
   /// يُمرَّر من الأعلى ولا يُنشأ هنا — إنشاؤه داخل `build` كان يُطلق
   /// طلباً جديداً ويمحو النتائج مع كلّ ضغطة مفتاح.
@@ -636,7 +689,7 @@ class _ResultsState extends State<_Results> {
                   Icon(LucideIcons.searchX, color: AppColors.textLow, size: 32),
                   const SizedBox(height: Sp.sm),
                   Text(
-                    'لا يوجد مشترك يطابق "$trimmed"',
+                    widget.emptyText ?? 'لا يوجد مشترك يطابق "$trimmed"',
                     style: AppType.subtitle(color: AppColors.textMid),
                     textAlign: TextAlign.center,
                   ),
@@ -905,6 +958,104 @@ class _BigResultsState extends State<_BigResults> {
   }
 }
 
+/// «كل الشركات»: شركةٌ كبيرة (≥ ٥٠٠٠) لا تُجلب قائمتها الكاملة — بحثها بالنصّ في ساسها موجَّهاً لها ([_BigResults] نفسه بمفتاحها)،
+/// والصفوف مربوطةٌ بها فيُفتح المشترك موجَّهاً.
+class _MergedBigResults extends StatefulWidget {
+  const _MergedBigResults({super.key, required this.query, required this.part});
+  final String query;
+  final MergedCompanyList part;
+
+  @override
+  State<_MergedBigResults> createState() => _MergedBigResultsState();
+}
+
+class _MergedBigResultsState extends State<_MergedBigResults> {
+  int _gen = 0;
+  bool _loading = false;
+  String? _error;
+  List<Subscriber>? _rows;
+  int _total = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  @override
+  void didUpdateWidget(_MergedBigResults old) {
+    super.didUpdateWidget(old);
+    if (old.query != widget.query) _fetch();
+  }
+
+  Future<void> _fetch() async {
+    final q = widget.query.trim();
+    final gen = ++_gen;
+    if (q.isEmpty) {
+      setState(() {
+        _rows = null;
+        _error = null;
+        _loading = false;
+      });
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final key = widget.part.company.key;
+    try {
+      final p = await CompanyRoute.run(key, () => BigSubscribersApi.page(page: 1, size: 20, tab: 'all', query: q));
+      if (!mounted || gen != _gen) return;
+      setState(() {
+        _rows = [for (final s in p.rows) s.withCompany(key)];
+        _total = p.total;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted || gen != _gen) return;
+      setState(() {
+        _error = e is BigListException ? e.message : 'تعذّر البحث في «${widget.part.company.name}» الآن';
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final rows = _rows;
+    final name = widget.part.company.name;
+    final String head;
+    if (_loading && rows == null) {
+      head = 'أبحث في «$name»…';
+    } else if (_error != null) {
+      head = _error!;
+    } else if (rows == null || rows.isEmpty) {
+      head = 'لا نتائج في «$name»';
+    } else {
+      head = _total > rows.length ? '«$name»: أول ${rows.length} من $_total نتيجة' : '«$name»: ${rows.length} نتيجة';
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Sp.sm, 0, Sp.sm, Sp.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Sp.sm, Sp.sm, Sp.sm, 4),
+            child: Text(
+              head,
+              style: AppType.muted(color: _error != null ? AppColors.error : AppColors.textLow)
+                  .copyWith(fontSize: 10.5, letterSpacing: 0.4),
+            ),
+          ),
+          for (final s in rows ?? const <Subscriber>[]) _ResultRow(sub: s),
+        ],
+      ),
+    );
+  }
+}
+
 class _EmptyHints extends StatelessWidget {
   const _EmptyHints();
 
@@ -1050,6 +1201,10 @@ class _ResultRow extends StatelessWidget {
                         ],
                       ],
                     ),
+                    if (sub.companyKey != null && MergedMode.active.value) ...[
+                      const SizedBox(height: 2),
+                      CompanyTag(companyKey: sub.companyKey!, fontSize: 11),
+                    ],
                     const SizedBox(height: 2),
                     Row(
                       children: [

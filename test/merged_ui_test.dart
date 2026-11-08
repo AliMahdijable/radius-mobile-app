@@ -15,6 +15,7 @@ import 'package:rad_mysvcs/screens/account/company_switch_sheet.dart';
 import 'package:rad_mysvcs/screens/dashboard/dashboard_screen.dart';
 import 'package:rad_mysvcs/screens/dashboard/widgets/subscribers_card.dart';
 import 'package:rad_mysvcs/screens/reports/financial_report_screen.dart';
+import 'package:rad_mysvcs/screens/search/quick_search_overlay.dart';
 import 'package:rad_mysvcs/screens/subscribers/sheets/movements_sheet.dart';
 import 'package:rad_mysvcs/screens/subscribers/subscribers_screen.dart';
 import 'package:rad_mysvcs/screens/subscribers/widgets/filter_chips_bar.dart';
@@ -63,6 +64,16 @@ class _Srv implements HttpClientAdapter {
     final path = o.uri.path;
     if (o.method == 'GET' && path == '/api/v2/subscribers') {
       if (o.queryParameters['page'] != null) {
+        // البحث بالنصّ في الكبيرة (البحث السريع): صفٌّ واحد يطابق
+        if (o.queryParameters['q'] != null) {
+          final rows = key == _kC
+              ? [
+                  {'idx': 501, 'username': 'big501', 'firstname': 'مشترك', 'lastname': 'كبير', 'enabled': 1, 'remaining_days': 5,
+                    'expiration': '2026-12-01 00:00:00'},
+                ]
+              : const <Map<String, Object?>>[];
+          return _json(200, {'success': true, 'paged': true, 'total': rows.length, 'last_page': 1, 'data': rows}, headers: h);
+        }
         return _json(200, {'success': true, 'paged': true, 'total': key == _kC ? 89217 : 3}, headers: h);
       }
       final rows = key == _kA
@@ -356,6 +367,37 @@ void main() {
     expect(srv.routed.where((o) => o.uri.path == '/api/reports/finance').length, before, reason: 'تقريرها في المجموع المحفوظ');
     expect(find.textContaining('20,000'), findsWidgets);
     expect(find.text('حسب الشركة'), findsNothing);
+    await down(t);
+  });
+
+  testWidgets('البحث السريع بـ«كل الشركات»: مشتركو كلّ الشركات بشارة كلٍّ منها، والكبيرة بنصّها موجَّهةً لها — لا قائمة المفتوحة وحدها', (t) async {
+    await up();
+    await t.runAsync(() => MergedMode.enter());
+    await pumpVisual(t, phone, home: (_) => const QuickSearchOverlay());
+    await settle(t, seconds: 2);
+    await t.enterText(find.byType(TextField), 'مشترك');
+    await settle(t, seconds: 3);
+    expect(t.takeException(), isNull);
+    expect(find.text('شركة ألف'), findsWidgets, reason: 'شارة الشركة تحت كلّ نتيجة');
+    expect(find.text('شركة باء'), findsWidgets);
+    expect(find.textContaining('«شركة كبيرة»: 1 نتيجة'), findsOneWidget, reason: 'الكبيرة تُبحث بنصّها');
+    expect(find.textContaining('big501'), findsOneWidget);
+    final big = srv.routed.where((o) => o.uri.path == '/api/v2/subscribers' && o.queryParameters['q'] != null).toList();
+    expect(big.map((o) => o.headers['x-company-key']).toSet(), {_kC}, reason: 'بحث النصّ في الكبيرة وحدها، بمفتاحها');
+    final open = (srv.inner as VisualServer).log.where((l) => l.startsWith('GET /api/v2/subscribers '));
+    expect(open, isEmpty, reason: 'لا قائمة المفتوحة وحدها في «كل الشركات»');
+
+    // الشركة المختارة في الشريط: نتائجها وحدها
+    MergedMode.focus.value = _kB;
+    await t.pumpWidget(const SizedBox());
+    await pumpVisual(t, phone, home: (_) => const QuickSearchOverlay());
+    await settle(t, seconds: 2);
+    await t.enterText(find.byType(TextField), 'مشترك');
+    await settle(t, seconds: 3);
+    expect(find.text('شركة باء'), findsWidgets);
+    expect(find.text('شركة ألف'), findsNothing);
+    expect(find.textContaining('big501'), findsNothing);
+    MergedMode.focus.value = null;
     await down(t);
   });
 }
