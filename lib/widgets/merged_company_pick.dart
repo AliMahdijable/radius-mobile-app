@@ -41,7 +41,16 @@ Future<void> switchToMergedCompany(BuildContext context, MergedCompany c) async 
 /// «كل الشركات» — «في أيّ شركة؟» (كالموقع، P1c): عمليّةٌ لا يحدّد صفٌّ شركتها ([action]، مثل «مشترك جديد») تُسأل شركتها أوّلاً
 /// فلا تذهب لشركةٍ لم يقصدها المدير. تُنفَّذ اليوم في الشركة المفتوحة وحدها: غيرها بمكانها مقفلةً بسببها ([reason]) و«بدّل إليها».
 /// true = اختار المفتوحة (تُكمل العمليّة كما هي). خارج «كل الشركات»: true فوراً بلا سؤال.
-Future<bool> pickOpenCompanyFor(BuildContext context, {required String action, required String reason}) async {
+///
+/// [onOther]: ما يُفعل بشركةٍ غير المفتوحة (افتراضاً «بدّل إليها») — قسمٌ موجَّهٌ لها مثلاً («إضافة صرفية» ⇒ صرفياتها بمكانها)؛
+/// [otherHint] سطرها حينئذٍ بدل «<reason> — بدّل إليها».
+Future<bool> pickOpenCompanyFor(
+  BuildContext context, {
+  required String action,
+  required String reason,
+  Future<void> Function(MergedCompany c)? onOther,
+  String? otherHint,
+}) async {
   if (!MergedMode.active.value) return true;
   String? open;
   try {
@@ -55,12 +64,16 @@ Future<bool> pickOpenCompanyFor(BuildContext context, {required String action, r
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,
     isScrollControlled: true,
-    builder: (_) => _PickSheet(action: action, reason: reason, openAdmin: open),
+    builder: (_) => _PickSheet(action: action, reason: reason, openAdmin: open, otherHint: otherHint),
   );
   if (picked == null || !context.mounted) return false;
   final other = picked.other;
   if (other == null) return true;
-  await switchToMergedCompany(context, other);
+  if (onOther != null) {
+    await onOther(other);
+  } else {
+    await switchToMergedCompany(context, other);
+  }
   return false;
 }
 
@@ -71,10 +84,11 @@ class _Pick {
 }
 
 class _PickSheet extends StatelessWidget {
-  const _PickSheet({required this.action, required this.reason, required this.openAdmin});
+  const _PickSheet({required this.action, required this.reason, required this.openAdmin, this.otherHint});
   final String action;
   final String reason;
   final String? openAdmin;
+  final String? otherHint;
 
   @override
   Widget build(BuildContext context) {
@@ -97,7 +111,7 @@ class _PickSheet extends StatelessWidget {
           if (!hasOpen)
             _Row(company: null, open: true, reason: reason, label: ActiveCompany.current?.label),
           for (final c in companies)
-            if (c.adminId != openAdmin) _Row(company: c, open: false, reason: reason),
+            if (c.adminId != openAdmin) _Row(company: c, open: false, reason: reason, otherHint: otherHint),
         ],
       ),
     );
@@ -105,11 +119,12 @@ class _PickSheet extends StatelessWidget {
 }
 
 class _Row extends StatelessWidget {
-  const _Row({required this.company, required this.open, required this.reason, this.label});
+  const _Row({required this.company, required this.open, required this.reason, this.label, this.otherHint});
   final MergedCompany? company;
   final bool open;
   final String reason;
   final String? label;
+  final String? otherHint;
 
   @override
   Widget build(BuildContext context) {
@@ -154,7 +169,7 @@ class _Row extends StatelessWidget {
                           style: AppType.label(color: AppColors.textHi).copyWith(fontSize: 14, fontWeight: FontWeight.w700)),
                       const SizedBox(height: 2),
                       Text(
-                        open ? 'المفتوحة — تُضاف هنا' : '$reason — بدّل إليها',
+                        open ? 'المفتوحة — تُضاف هنا' : (otherHint ?? '$reason — بدّل إليها'),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: AppType.body(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.4),
@@ -163,7 +178,7 @@ class _Row extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: Sp.sm),
-                Icon(open ? LucideIcons.chevronLeft : LucideIcons.arrowLeftRight,
+                Icon(open || otherHint != null ? LucideIcons.chevronLeft : LucideIcons.arrowLeftRight,
                     size: 16, color: open ? AppColors.brand : AppColors.textMid),
               ],
             ),

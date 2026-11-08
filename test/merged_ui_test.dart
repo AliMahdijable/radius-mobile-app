@@ -10,6 +10,7 @@ import 'package:rad_mysvcs/api/company_route.dart';
 import 'package:rad_mysvcs/api/merged_dashboard_api.dart';
 import 'package:rad_mysvcs/api/subscribers_api.dart';
 import 'package:rad_mysvcs/core/platform/desktop_layout.dart';
+import 'package:rad_mysvcs/models/merged_company.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/account/company_switch_sheet.dart';
 import 'package:rad_mysvcs/screens/dashboard/dashboard_screen.dart';
@@ -20,6 +21,7 @@ import 'package:rad_mysvcs/screens/subscribers/sheets/add_subscriber_sheet.dart'
 import 'package:rad_mysvcs/screens/subscribers/sheets/subscriber_picker_sheet.dart';
 import 'package:rad_mysvcs/screens/search/quick_search_overlay.dart';
 import 'package:rad_mysvcs/services/alerts_service.dart';
+import 'package:rad_mysvcs/widgets/merged_company_pick.dart';
 import 'package:rad_mysvcs/screens/subscribers/sheets/movements_sheet.dart';
 import 'package:rad_mysvcs/screens/subscribers/subscribers_screen.dart';
 import 'package:rad_mysvcs/screens/subscribers/widgets/filter_chips_bar.dart';
@@ -503,6 +505,37 @@ void main() {
     await settle(t, seconds: 2);
     expect(find.text('أدخل بيانات المشترك'), findsNothing, reason: 'لا إضافة لشركةٍ غير المفتوحة من هنا');
     expect(find.text('تبديل الشركة'), findsWidgets, reason: 'ورقة «شركاتي» لتبدّل إليها');
+    await down(t);
+  });
+
+  testWidgets('«+ إضافة صرفية» بـ«كل الشركات»: «في أيّ شركة؟» — المفتوحة تُكمل، وغيرها يذهب لقسمها (onOther) لا للمفتوحة', (t) async {
+    await up();
+    await t.runAsync(() => MergedMode.enter());
+    bool? result;
+    MergedCompany? other;
+    await pumpVisual(t, phone, home: (_) => Builder(
+          builder: (ctx) => Scaffold(
+            body: Center(
+              child: TextButton(
+                onPressed: () async => result = await pickOpenCompanyFor(ctx,
+                    action: 'صرفية جديدة',
+                    reason: 'الصرفيّة لها من صرفياتها',
+                    otherHint: 'تُضاف من صرفياتها — تُفتح هنا',
+                    onOther: (c) async => other = c),
+                child: const Text('صرفية'),
+              ),
+            ),
+          ),
+        ));
+    await settle(t, seconds: 1);
+    await t.tap(find.text('صرفية'));
+    await settle(t, seconds: 2);
+    expect(find.text('في أيّ شركة؟'), findsOneWidget);
+    expect(find.textContaining('تُضاف من صرفياتها — تُفتح هنا'), findsWidgets);
+    await t.tap(find.byKey(const ValueKey('merged-pick-$_kB')));
+    await settle(t, seconds: 1);
+    expect(result, isFalse, reason: 'لا شيت إضافةٍ للمفتوحة');
+    expect(other?.key, _kB, reason: 'قسم صرفيات «شركة باء» هو ما يُفتح');
     await down(t);
   });
 }

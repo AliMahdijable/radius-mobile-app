@@ -272,7 +272,7 @@ List<AppModule> buildAppModules() {
         title: 'more.expenses'.tr(),
         subtitle: 'more.expenses_hint'.tr(),
         // «كل الشركات» (٨ نوفمبر): الشركة المختارة بمكانها — القائمة والإضافة والتعديل والحذف لسيرفرها (expenses_routed)
-        page: () => const MergedSection(prefixes: ['/api/admin/expenses', '/api/v2/expenses'], child: ExpensesScreen()),
+        page: ExpensesScreen.mergedPage,
       ),
     // 2026-10-02: «تسوية الحساب» — صندوق المدير بجانب الصرفيات، فهي إدارةٌ تُنشئ سندات.
     if (permShown(const ['settlements.view']))

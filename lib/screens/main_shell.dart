@@ -39,6 +39,8 @@ import 'top_actions.dart';
 import '../core/platform/desktop_layout.dart';
 import 'desktop/desktop_shell.dart';
 import '../core/widgets/app_sheet.dart';
+import '../widgets/merged_company_pick.dart';
+import 'expenses/expenses_screen.dart';
 
 /// Round 10 redesign — floating pill bar with a brand-green indicator
 /// that slides between tabs. The bar is a single cohesive surface
@@ -856,7 +858,21 @@ class _QuickAddSheet extends StatelessWidget {
               color: AppColors.brandAccent,
               title: 'dashboard.add_expense'.tr(),
               subtitle: 'dashboard.add_expense_hint'.tr(),
-              onTap: () => showAddExpenseSheet(rootContext),
+              // «كل الشركات» (٨ نوفمبر — وُجد على المحاكي): «في أيّ شركة؟» — كانت تُسجَّل للمفتوحة ولو كانت غيرها مختارة. المفتوحة
+              // ⇒ الشيت كما كان؛ غيرها ⇒ صرفياتها هي بمكانها (موجَّهة، والإضافة فيها إن فتحها الخادم — وإلّا مقفلةٌ بسببها).
+              onTap: () async {
+                final open = await pickOpenCompanyFor(
+                  rootContext,
+                  action: 'صرفية جديدة',
+                  reason: 'الصرفيّة لها من صرفياتها',
+                  otherHint: 'تُضاف من صرفياتها — تُفتح هنا',
+                  onOther: (c) async {
+                    MergedMode.focus.value = c.key;
+                    await Navigator.of(rootContext).push(MaterialPageRoute<void>(builder: (_) => ExpensesScreen.mergedPage()));
+                  },
+                );
+                if (open && rootContext.mounted) await showAddExpenseSheet(rootContext);
+              },
             ),
         ],
       ),
