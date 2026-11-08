@@ -343,8 +343,17 @@ class MikrotikApi {
     }
   }
 
+  /// آخر جلسة SSH احتياطيّة لجدول التسجيل لكلّ عنوان — [sshClientsFallbackEvery] بينها على الأقلّ.
+  static final Map<String, DateTime> _sshClientsFallbackAt = {};
+
+  @visibleForTesting
+  static Duration sshClientsFallbackEvery = const Duration(minutes: 10);
+
+  @visibleForTesting
+  static void resetSshFallbackForTest() => _sshClientsFallbackAt.clear();
+
   /// بقيّة الجلسة بعد الدخول — مشتركةٌ بين الـAPI والويب وSSH (كلّها تُرجع صفوف الـAPI نفسها، راجع
-  /// [RouterOsChannel]). جلسة SSH الاحتياطيّة لجدول التسجيل للـAPI الثنائيّ وحده: علّتها فيه (6.49).
+  /// [RouterOsChannel]). جلسة SSH الاحتياطيّة لجدول التسجيل للـAPI الثنائيّ وحده (نادرة — مرّةً كلّ ١٠ دقائق).
   static Future<MikrotikStats> _collect(
     RouterOsChannel ch, {
     required String ip,
@@ -716,7 +725,13 @@ class MikrotikApi {
     // (user admin/full، الأمر ينجح بلا !trap لكن سطر واحد !done فقط).
     // الحلّ الوحيد المضمون: SSH fallback — نفس interface الي يستعمله Winbox
     // terminal، بلا الـAPI quirks.
-    if (wirelessClients.isEmpty && failureMsg == null && hasRadio && ch.via == 'API') {
+    // ٨ نوفمبر: علّة «الصفر» كانت في قارئنا (`!done` بعد `!trap` يُترك فتتأخّر الردود — MikrotikBinaryClient._query)،
+    // فجدول التسجيل يصل الآن بصفوفه. SSH يبقى احتياطاً نادراً: مرّةً كلّ ١٠ دقائق للجهاز على الأكثر — جلسة SSH لكلّ قراءة
+    // لنقطة وصولٍ بلا عملاء فعلاً تُطلق قواعد brute-force في RouterOS فتحظر عنوان المدير.
+    final sshAt = _sshClientsFallbackAt[ip];
+    final sshAllowed = sshAt == null || DateTime.now().difference(sshAt) >= sshClientsFallbackEvery;
+    if (wirelessClients.isEmpty && failureMsg == null && hasRadio && ch.via == 'API' && sshAllowed) {
+      _sshClientsFallbackAt[ip] = DateTime.now();
       if (kDebugMode) {
         debugPrint('🔁 [mikrotik] Binary API رجع 0 — جرّب SSH fallback');
       }

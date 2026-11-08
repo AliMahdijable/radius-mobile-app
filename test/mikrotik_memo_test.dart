@@ -57,8 +57,8 @@ void main() {
       }
       // أضجّ ثلاثة أسطر في السجلّ: كلّ أمرٍ، كلّ جملة، كلّ حمولة خام.
       expect(binary.contains("DevLog.trace(() => '▶️ [mtk-api] send:"), isTrue);
-      expect(binary.contains('DevLog.trace(() =>\n            \'◀️ [mtk-api] sentence'),
-          isTrue);
+      // المسافة البادئة لا تهمّ (٨ نوفمبر: صار داخل try في `_query`) — المهمّ أنّه DevLog.trace.
+      expect(RegExp(r"DevLog\.trace\(\(\) =>\s*'◀️ \[mtk-api\] sentence").hasMatch(binary), isTrue);
       expect(api.contains("DevLog.trace(() => '📥 [mikrotik SSH] raw:"), isTrue);
     });
 

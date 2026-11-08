@@ -85,52 +85,105 @@ class MikrotikBinaryClient {
     }
   }
 
-  /// إرسال command واستقبال كل الـreplies حتى !done أو !trap
+  /// أمرٌ واحدٌ في كلّ مرّة على هذا الاتّصال — مَن تخلّى عن انتظاره (`Future.timeout` عند المنادي) يبقى يقرأ، فلا
+  /// يبدأ أمرٌ بعده قارئاً ثانياً على طابور البايتات نفسه (كانت الردود تختلط).
+  Future<void> _lock = Future<void>.value();
+
+  /// الاتّصال لم يعد يُوثَق بترتيب ردوده (مهلةٌ وسط ردّ، أو !fatal) — كلّ أمرٍ بعده يُرفض فوراً بهذا السبب بدل أن يقرأ
+  /// بقايا أمرٍ سابق على أنّها ردّه.
+  String? _broken;
+
+  /// إرسال command واستقبال كل الـreplies حتى !done
   ///
   /// [debugLog]: إذا true (kDebugMode + للـqueries المشتبه بها)، يطبع
   /// كل sentence مستلمة — للتشخيص عندما query يرجع empty بلا سبب واضح.
   Future<List<Map<String, String>>> query(List<String> command,
+      {bool debugLog = false}) {
+    final prev = _lock;
+    final mine = Completer<void>();
+    _lock = mine.future;
+    return prev
+        .then((_) => _query(command, debugLog: debugLog))
+        .whenComplete(mine.complete);
+  }
+
+  /// ٨ نوفمبر (المالك: سكتر BaseBox 5 · RouterOS 6.49.19 — WinBox ستّة عملاء والتطبيق «registration-table فارغ»):
+  /// RouterOS يُنهي الأمر الذي فشل بـ`!trap` **ثمّ `!done`** (التوثيق الرسميّ: «Command is finished when the !done
+  /// reply is received»). كان `!trap` يُرمى فوراً ويبقى `!done` في الطابور، فيقرأه الأمر التالي ردّاً له (صفر صفوف)
+  /// ويتأخّر كلّ ردٍّ بعده أمراً: على RouterOS 6 يُرفض `/interface/w60g/print` و`/interface/wifi/print` (لا حزمتهما)
+  /// فيصل جدول التسجيل فارغاً وتذهب صفوفه لقراءة DHCP. ما سُمّي «علّة 6.49 في الـAPI» (٢٠ أغسطس) كان هذا.
+  Future<List<Map<String, String>>> _query(List<String> command,
       {bool debugLog = false}) async {
+    final broken = _broken;
+    if (broken != null) throw MikrotikBinaryException(broken);
     if (kDebugMode && debugLog) {
       DevLog.trace(() => '▶️ [mtk-api] send: ${command.join(" ")}');
     }
-    await _writeSentence(command);
     final results = <Map<String, String>>[];
+    MikrotikBinaryException? trap;
     int sentenceCount = 0;
-    while (true) {
-      final sentence = await _readSentence();
-      sentenceCount++;
-      if (sentence.isEmpty) continue;
-      final tag = sentence.first;
-      if (kDebugMode && debugLog) {
-        DevLog.trace(() =>
-            '◀️ [mtk-api] sentence #$sentenceCount tag=$tag words=${sentence.length}');
-        if (tag == '!re' && sentence.length > 1) {
-          // اطبع أول 3 keys لنتأكّد من شكل الحقول
-          final keys = sentence.skip(1).take(3).join(', ');
-          debugPrint('   preview: $keys');
+    try {
+      await _writeSentence(command);
+      while (true) {
+        // بعد !trap يُنتظر !done قليلاً — يصل معه عادةً بالدفعة نفسها.
+        final sentence = await _readSentence(
+            deadline: trap == null ? null : DateTime.now().add(trapDoneWait));
+        sentenceCount++;
+        if (sentence.isEmpty) continue;
+        final tag = sentence.first;
+        if (kDebugMode && debugLog) {
+          DevLog.trace(() =>
+              '◀️ [mtk-api] sentence #$sentenceCount tag=$tag words=${sentence.length}');
+          if (tag == '!re' && sentence.length > 1) {
+            // اطبع أول 3 keys لنتأكّد من شكل الحقول
+            final keys = sentence.skip(1).take(3).join(', ');
+            debugPrint('   preview: $keys');
+          }
+        }
+        if (tag == '!re') {
+          if (trap == null) results.add(_sentenceToMap(sentence));
+        } else if (tag == '!done') {
+          break;
+        } else if (tag == '!trap') {
+          final err = sentence.firstWhere((w) => w.startsWith('=message='),
+              orElse: () => '=message=unknown error');
+          trap ??= MikrotikBinaryException(err.substring('=message='.length));
+        } else if (tag == '!fatal') {
+          // 2026-08-20: RouterOS 6.4x قد ترسل !fatal عند خطأ ماحد يعالجه — ما
+          // كنّا نُلاحظه فيقطع الـconnection ويرجع 0 results بصمت.
+          final msg =
+              sentence.length > 1 ? sentence.skip(1).join(' ') : 'fatal error';
+          _poison('fatal: $msg');
+          throw MikrotikBinaryException('fatal: $msg');
         }
       }
-      if (tag == '!re') {
-        results.add(_sentenceToMap(sentence));
-      } else if (tag == '!done') {
-        break;
-      } else if (tag == '!trap') {
-        final err = sentence.firstWhere((w) => w.startsWith('=message='),
-            orElse: () => '=message=unknown error');
-        throw MikrotikBinaryException(err.substring('=message='.length));
-      } else if (tag == '!fatal') {
-        // 2026-08-20: RouterOS 6.4x قد ترسل !fatal عند خطأ ماحد يعالجه — ما
-        // كنّا نُلاحظه فيقطع الـconnection ويرجع 0 results بصمت.
-        final msg =
-            sentence.length > 1 ? sentence.skip(1).join(' ') : 'fatal error';
-        throw MikrotikBinaryException('fatal: $msg');
-      }
+    } on MikrotikBinaryException catch (e) {
+      // مهلةٌ أو انقطاعٌ وسط الردّ: ما بقي منه سيصل لاحقاً ⇒ لا أمر بعده على هذا الاتّصال. وإن سبقها !trap فهو
+      // سبب الفشل المفهوم («no such command» يقرّر به المنادي طريقاً آخر) — لا مهلة انتظار !done.
+      if (_broken == null) _poison(e.message);
+      if (trap != null) throw trap;
+      rethrow;
+    } catch (e) {
+      _poison(e.toString());
+      if (trap != null) throw trap;
+      rethrow;
     }
+    if (trap != null) throw trap;
     if (kDebugMode && debugLog) {
       DevLog.trace(() => '✅ [mtk-api] query done — ${results.length} rows');
     }
     return results;
+  }
+
+  /// مهلة `!done` بعد `!trap` — إن لم يصل الاتّصال يُعدّ مكسوراً (لا يُخمَّن أين انتهى الردّ).
+  @visibleForTesting
+  static Duration trapDoneWait = const Duration(seconds: 2);
+
+  void _poison(String reason) {
+    _broken = 'انقطع ترتيب الردود ($reason) — أُعيد الاتّصال في القراءة التالية';
+    try {
+      _socket?.destroy();
+    } catch (_) {}
   }
 
   // ═══════════════════════════════════════════════════════
@@ -151,9 +204,9 @@ class MikrotikBinaryClient {
   }
 
   /// اقرأ sentence كامل — words حتى empty word
-  Future<List<String>> _readSentence() async {
+  Future<List<String>> _readSentence({DateTime? deadline}) async {
     final words = <String>[];
-    final deadline = DateTime.now().add(timeout);
+    deadline ??= DateTime.now().add(timeout);
     while (true) {
       final len = await _readLength(deadline);
       if (len == 0) break; // sentence terminator
