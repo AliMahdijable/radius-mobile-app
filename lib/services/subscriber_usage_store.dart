@@ -228,6 +228,86 @@ class SubscriberUsageStore {
     }
   }
 
+  // ── الترتيب بالاستهلاك (٨ نوفمبر — المالك: «فترتب المشتركين… اضف حسب الاستهلاك الشهري واليوم تصاعدي وتنازلي») ──
+  // الساس لا يعطي استهلاك الشهر في صفّ القائمة ولا تقريراً جماعيّاً له — يُقرأ لكلّ مشتركٍ من خادمنا (تقرير user/traffic، ويخبّئه
+  // الخادم ١٠ دقائق). فالترتيب به طلبٌ صريح: يُجلب لصفوف القائمة كلّها دفعةً بعد دفعة (٤٠، شركةً شركة، طلبٌ واحد في وقته — لا
+  // ضغطٌ على الساس)، بلا شرط «عرض الاستهلاك»، وما جُلب قبل ٥ دقائق لا يُعاد. «كل الشركات»: كلّ صفٍّ لشركته موجَّهاً لها.
+
+  static int _sortGen = 0;
+
+  /// يوقف جلب الترتيب الجاري (ترتيبٌ آخر أو مغادرة القائمة) — ما وصل يبقى في الكاش.
+  static void cancelSortFetch() => _sortGen++;
+
+  /// يجلب استهلاك [rows] (idx وشركة الصفّ) الناقص أو القديم. [onProgress] بعد كلّ دفعة (ما قُرئ من الكلّ). صفوف شركةٍ «عند الطلب»
+  /// (الوطنيّ) لا تُجلب هنا — تبقى بلا قيمة. يعود حين ينتهي أو يُلغى ([cancelSortFetch]) أو تتبدّل الجلسة.
+  static Future<void> ensureFor(
+    List<({String idx, String? company})> rows, {
+    void Function(int done, int total)? onProgress,
+  }) async {
+    final myGen = ++_sortGen;
+    final gen = _gen;
+    final now = DateTime.now();
+    final need = <String>[];
+    final seen = <String>{};
+    for (final r in rows) {
+      if (r.idx.isEmpty || isOnDemand(r.company)) continue;
+      final k = _key(r.idx, r.company);
+      if (!seen.add(k)) continue;
+      final e = _cache[k];
+      if (e != null && now.difference(e.at) < (e.v != null ? _ttl : _failTtl)) continue;
+      need.add(k);
+    }
+    final total = need.length;
+    var done = 0;
+    onProgress?.call(done, total);
+    while (need.isNotEmpty) {
+      if (myGen != _sortGen || gen != _gen) return;
+      final company = _companyOf(need.first);
+      final batch = need.where((k) => _companyOf(k) == company).take(_batch).toList();
+      need.removeWhere(batch.contains);
+      final ids = [for (final k in batch) company == null ? k : k.substring(company.length + 1)];
+      Map<String, dynamic> data = const {};
+      var ok = false;
+      var od = false;
+      try {
+        final r = await CompanyRoute.run(
+          company,
+          () => ApiClient.dio.get<Map<String, dynamic>>(
+            '/api/v2/subscribers-usage',
+            queryParameters: {'ids': ids.join(',')},
+          ),
+        );
+        final body = r.data ?? const {};
+        ok = body['success'] == true;
+        od = body['on_demand'] == true;
+        final d = body['data'];
+        if (d is Map<String, dynamic>) data = d;
+      } catch (e) {
+        if (kDebugMode) debugPrint('🔴 subscribers-usage (sort): $e');
+      }
+      if (gen != _gen) return; // حسابٌ آخر الآن
+      if (od) {
+        _onDemand.add(company ?? '');
+        need.removeWhere((k) => _companyOf(k) == company);
+      }
+      final at = DateTime.now();
+      for (var i = 0; i < batch.length; i++) {
+        final u = data[ids[i]];
+        if (od && u is! Map) continue;
+        _cache[batch[i]] = (
+          at: at,
+          v: ok && u is Map ? SubscriberUsage(today: _int(u['today']), month: _int(u['month'])) : null,
+        );
+      }
+      while (_cache.length > 5000) {
+        _cache.remove(_cache.keys.first);
+      }
+      done += batch.length;
+      version.value++;
+      if (myGen == _sortGen) onProgress?.call(done > total ? total : done, total);
+    }
+  }
+
   static int? _int(Object? v) {
     if (v == null) return null;
     if (v is num) return v.round();

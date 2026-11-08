@@ -70,9 +70,64 @@ class _Srv implements HttpClientAdapter {
   /// الجرس: صفٌّ قريب الانتهاء لكلّ شركة (لا يُلمس عدد المشتركين في الاختبارات الأخرى).
   bool nearRows = false;
 
+  /// الترتيب بالاستهلاك: صفوفٌ بأسماء مميّزة واستهلاكٌ معروف لكلّ شركة (ومثلها للشركة المفتوحة وحدها).
+  bool usage = false;
+  final usageAsked = <String>[];
+
+  static const _usageRows = {
+    _kA: [
+      {'idx': 1, 'username': 'a1', 'firstname': 'ألف', 'lastname': 'واحد', 'daily_traffic': {'traffic': 50}},
+      {'idx': 2, 'username': 'a2', 'firstname': 'ألف', 'lastname': 'اثنان', 'daily_traffic': {'traffic': 300}},
+    ],
+    _kB: [
+      {'idx': 1, 'username': 'b1', 'firstname': 'باء', 'lastname': 'واحد', 'daily_traffic': {'traffic': 10}},
+      {'idx': 9, 'username': 'b9', 'firstname': 'باء', 'lastname': 'تسعة', 'daily_traffic': {'traffic': 700}},
+    ],
+    '-': [
+      {'idx': 1, 'username': 's1', 'firstname': 'سين', 'lastname': 'واحد'},
+      {'idx': 2, 'username': 's2', 'firstname': 'سين', 'lastname': 'اثنان'},
+      {'idx': 3, 'username': 's3', 'firstname': 'سين', 'lastname': 'ثلاثة'},
+    ],
+  };
+  static const _usageMonth = {
+    _kA: {'1': 500, '2': 100},
+    _kB: {'1': 300, '9': 900},
+    '-': {'1': 200, '2': 900, '3': 400},
+  };
+
+  ResponseBody? _usageFetch(RequestOptions o, String? key) {
+    final path = o.uri.path;
+    final k = key ?? '-';
+    if (o.method == 'GET' && path == '/api/v2/subscribers' && o.queryParameters['page'] == null && _usageRows.containsKey(k)) {
+      return _json(200, {
+        'success': true,
+        'data': [
+          for (final r in _usageRows[k]!) {...r, 'profile_name': 'Gold', 'remaining_days': 10, 'expiration': '2026-12-01 00:00:00', 'enabled': 1},
+        ],
+      }, headers: key == null ? const {} : {'x-company-key': [key]});
+    }
+    if (o.method == 'GET' && path == '/api/v2/subscribers-usage') {
+      final ids = '${o.queryParameters['ids'] ?? ''}'.split(',').where((x) => x.isNotEmpty).toList();
+      usageAsked.add('$k:${ids.join(',')}');
+      final m = _usageMonth[k] ?? const <String, int>{};
+      return _json(200, {
+        'success': true,
+        'data': {for (final id in ids) if (m[id] != null) id: {'today': m[id]! ~/ 10, 'month': m[id]}},
+      }, headers: key == null ? const {} : {'x-company-key': [key]});
+    }
+    return null;
+  }
+
   @override
   Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? rs, Future<void>? cf) async {
     final key = o.headers['x-company-key'] as String?;
+    if (usage) {
+      final u = _usageFetch(o, key);
+      if (u != null) {
+        if (key != null) routed.add(o);
+        return u;
+      }
+    }
     if (key == null) return inner.fetch(o, rs, cf);
     routed.add(o);
     final h = {'x-company-key': [key]};
@@ -525,6 +580,66 @@ void main() {
     expect(add.single.headers['x-company-key'], _kB);
     expect((add.single.data as Map)['parent_id'], 22, reason: 'مدير شركة باء (jt:22) لا مدير المفتوحة');
     expect((add.single.data as Map)['profile_id'], 7);
+    await down(t);
+  });
+
+  testWidgets('ترتيب المشتركين باستهلاك الشهر واليوم (٨ نوفمبر): بالشركتين وبالشركة الواحدة، تنازليّاً وتصاعديّاً — والقراءة لشركة كلّ صفّ', (t) async {
+    await up();
+    srv.usage = true;
+    Future<void> sortBy(String field, String dir) async {
+      await t.tap(find.byIcon(Icons.swap_vert_rounded));
+      await settle(t, seconds: 1);
+      await t.tap(find.text(field).last);
+      await t.tap(find.text(dir).last);
+      await t.tap(find.text('تطبيق').last);
+      await settle(t, seconds: 3);
+    }
+
+    List<String> order(List<String> names) {
+      final ys = {for (final n in names) n: t.getTopLeft(find.text(n).first).dy};
+      final out = [...names]..sort((a, b) => ys[a]!.compareTo(ys[b]!));
+      return out;
+    }
+
+    // ── بالشركتين ──
+    await t.runAsync(() => MergedMode.enter());
+    final cmd = ValueNotifier<SubscriberFilter?>(SubscriberFilter.all);
+    // شاشةٌ طويلة: الصفوف كلّها مبنيّة (القائمة كسولة)
+    const tall = VisualDevice('', Size(390, 2600), 1);
+    await pumpVisual(t, tall, home: (_) => SubscribersScreen(filterCmd: cmd));
+    await settle(t, seconds: 3);
+    expect(t.takeException(), isNull);
+    const merged = ['ألف واحد', 'ألف اثنان', 'باء واحد', 'باء تسعة'];
+    await sortBy('استهلاك الشهر', 'تنازلي');
+    expect(t.takeException(), isNull);
+    expect(order(merged), ['باء تسعة', 'ألف واحد', 'باء واحد', 'ألف اثنان'], reason: '900 · 500 · 300 · 100');
+    expect(srv.usageAsked.toSet(), {'$_kA:1,2', '$_kB:1,9'}, reason: 'كلّ شركةٍ بطلبها الموجَّه لصفوفها وحدها');
+    await sortBy('استهلاك الشهر', 'تصاعدي');
+    expect(order(merged), ['ألف اثنان', 'باء واحد', 'ألف واحد', 'باء تسعة']);
+    expect(srv.usageAsked, hasLength(2), reason: 'المقروء قبل ٥ دقائق لا يُعاد');
+    // اليوم: من صفّ الساس نفسه بلا طلب (700 · 300 · 50 · 10)
+    await sortBy('استهلاك اليوم', 'تنازلي');
+    expect(order(merged), ['باء تسعة', 'ألف اثنان', 'ألف واحد', 'باء واحد']);
+    await sortBy('استهلاك اليوم', 'تصاعدي');
+    expect(order(merged), ['باء واحد', 'ألف واحد', 'ألف اثنان', 'باء تسعة']);
+    expect(srv.usageAsked, hasLength(2), reason: 'اليوم لا يحتاج قراءة للساس');
+    await t.pumpWidget(const SizedBox());
+    await t.pump(const Duration(seconds: 6));
+    MergedMode.reset();
+
+    // ── بالشركة الواحدة ──
+    SubscribersApi.clearAllCaches();
+    srv.usageAsked.clear();
+    final cmd2 = ValueNotifier<SubscriberFilter?>(SubscriberFilter.all);
+    await pumpVisual(t, tall, home: (_) => SubscribersScreen(filterCmd: cmd2));
+    await settle(t, seconds: 3);
+    const single = ['سين واحد', 'سين اثنان', 'سين ثلاثة'];
+    await sortBy('استهلاك الشهر', 'تنازلي');
+    expect(order(single), ['سين اثنان', 'سين ثلاثة', 'سين واحد'], reason: '900 · 400 · 200');
+    expect(srv.usageAsked, ['-:1,2,3'], reason: 'طلبٌ واحد للمفتوحة بلا توجيه');
+    await sortBy('استهلاك الشهر', 'تصاعدي');
+    expect(order(single), ['سين واحد', 'سين ثلاثة', 'سين اثنان']);
+    srv.usage = false;
     await down(t);
   });
 

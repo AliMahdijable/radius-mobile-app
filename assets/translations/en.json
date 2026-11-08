@@ -807,7 +807,10 @@
     "device_signal": "Wireless signal",
     "device_ccq": "Link quality (CCQ)",
     "device_lan": "LAN port speed",
-    "daily_traffic": "Today's usage"
+    "daily_traffic": "Today's usage",
+    "monthly_traffic": "This month's usage",
+    "usage_progress": "Reading {} to sort — {} of {}",
+    "usage_missing": "{} without a usage reading — at the end of the list"
   },
   "more": {
     "title": "More",

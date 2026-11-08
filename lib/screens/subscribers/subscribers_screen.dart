@@ -766,6 +766,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     _hscroll.dispose();
     widget.isActive?.removeListener(_onActiveChanged);
     UsagePrefs.enabled.removeListener(_onUsagePref);
+    SubscriberUsageStore.cancelSortFetch();
     _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
@@ -1395,6 +1396,21 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       });
       return;
     }
+    // استهلاك اليوم والشهر (٨ نوفمبر — المالك: «حسب الاستهلاك الشهري واليوم تصاعدي وتنازلي»): مفتاحٌ لكلّ صفٍّ مرّةً، ومن لم
+    // يُقرأ استهلاكه (لم يصل بعد أو تعذّر) أسفلَ القائمة بالاتّجاهين — كمقاييس الأجهزة. «كل الشركات»: كلّ صفٍّ بمفتاح شركته.
+    if (_sortField == SortField.dailyTraffic || _sortField == SortField.monthlyTraffic) {
+      final asc = _sortDir == SortDirection.asc;
+      final keys = <Subscriber, int?>{for (final s in list) s: _usageSortKey(_sortField, s)};
+      list.sort((a, b) {
+        final ka = keys[a];
+        final kb = keys[b];
+        if (ka == null && kb == null) return 0;
+        if (ka == null) return 1;
+        if (kb == null) return -1;
+        return asc ? ka.compareTo(kb) : kb.compareTo(ka);
+      });
+      return;
+    }
     // مقاييس الأجهزة مسارٌ مستقلّ: قيمتها تأتي من كاش الفحص لا من صفّ
     // المشترك، وغير المفحوص يغوص في الاتّجاهين معاً — وهو ما لا يعبّر
     // عنه مقارنٌ عاديّ.
@@ -1473,7 +1489,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
         // استهلاك اليوم — الرقم في الصفّ أصلاً، فالفرز بلا كلفة.
         // ومن لم يستهلك يُعدّ صفراً لا مجهولاً: صفرٌ حقيقة لا نقص بيانات.
         case SortField.dailyTraffic:
-          return (a.dailyTrafficTotal ?? 0).compareTo(b.dailyTrafficTotal ?? 0);
+        case SortField.monthlyTraffic:
+          // مسارهما المستقلّ أعلى الدالّة يعود قبل هذا المقارن (_usageSortKey).
+          return 0;
         case SortField.parentUsername:
           return alphaCmp(a.parentUsername, b.parentUsername);
         case SortField.sessionTime:
@@ -1498,6 +1516,62 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     }
 
     list.sort(_sortDir == SortDirection.asc ? cmp : (a, b) => -cmp(a, b));
+  }
+
+  /// صفٌّ يحمل استهلاك اليوم من قائمته (الساس: daily_traffic_details) — غيابه فيه صفرٌ حقيقيّ (كما كان) لا مجهول؛ وايرث لنك
+  /// والمُضافة والوطنيّ لا تحمله فيُقرأ من خادمنا.
+  bool _rowCarriesDaily(Subscriber s) {
+    final key = s.companyKey;
+    if (key != null) return MergedMode.companyOf(key)?.provider == MergedProvider.sas4;
+    return !(ProviderService.isEarthlink || ProviderService.isKit || ProviderService.isFtth || ProviderService.isFiberx);
+  }
+
+  /// مفتاح الترتيب بالاستهلاك (بايت) — null = لم يُقرأ (أسفل القائمة).
+  int? _usageSortKey(SortField f, Subscriber s) {
+    final idx = s.idx;
+    final u = idx == null || idx.isEmpty ? null : SubscriberUsageStore.get(idx, company: s.companyKey)?.v;
+    if (f == SortField.monthlyTraffic) return u?.month;
+    // اليوم: رقم الصفّ أوّلاً (بلا كلفة)، ثمّ المقروء من خادمنا
+    final row = s.dailyTrafficTotal;
+    if (row != null) return row;
+    if (u?.today != null) return u!.today;
+    return _rowCarriesDaily(s) ? 0 : null;
+  }
+
+  // الترتيب بالاستهلاك: ما ينقص من القائمة يُجلب (الشهر لكلّ صفّ؛ اليوم لصفوفٍ لا تحمله) — مرّةً لكلّ مجموعة صفوف (التوقيع لا
+  // يتأثّر بالترتيب نفسه)، والتقدّم سطرٌ فوق القائمة؛ وكلّ دفعةٍ تُعيد الترتيب.
+  int? _usageSortSig;
+  ({int done, int total})? _usageSortProgress;
+
+  void _syncUsageSort(List<Subscriber> filtered) {
+    final f = _sortField;
+    final want = !_big && (f == SortField.monthlyTraffic || f == SortField.dailyTraffic);
+    if (!want) {
+      if (_usageSortSig != null) {
+        _usageSortSig = null;
+        _usageSortProgress = null;
+        SubscriberUsageStore.cancelSortFetch();
+      }
+      return;
+    }
+    final rows = <({String idx, String? company})>[
+      for (final s in filtered)
+        if ((s.idx ?? '').isNotEmpty &&
+            (f == SortField.monthlyTraffic || (s.dailyTrafficTotal == null && !_rowCarriesDaily(s))))
+          (idx: s.idx!, company: s.companyKey),
+    ];
+    final sig = Object.hash(f, rows.length, Object.hashAllUnordered([for (final r in rows) '${r.company}|${r.idx}']));
+    if (sig == _usageSortSig) return;
+    _usageSortSig = sig;
+    _usageSortProgress = null;
+    if (rows.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _usageSortSig != sig) return;
+      SubscriberUsageStore.ensureFor(rows, onProgress: (done, total) {
+        if (!mounted || _usageSortSig != sig) return;
+        setState(() => _usageSortProgress = done >= total ? null : (done: done, total: total));
+      });
+    });
   }
 
   /// يحوّل مقياس جهاز إلى رقم واحد قابل للمقارنة.
@@ -2044,6 +2118,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     // مضمونةً بالبناء.
     // الكبير: الخادم فلتر ورتّب وبحث — الصفوف المحمَّلة كما وصلت، والباقي من مجموع التبويب كلّه.
     final filtered = _big ? _bigRows : _filteredAll;
+    _syncUsageSort(filtered);
     final counts = _big ? _bigCountsMap() : _counts();
     final managers = _availableManagers;
     final packages = _availablePackages;
@@ -2213,6 +2288,16 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                     sortLabel: _sortLabel(),
                                     descending: _sortDir == SortDirection.desc,
                                     onTap: _openSortSheet,
+                                  ),
+                                // الترتيب بالاستهلاك: التقدّم حتى تكتمل القراءة، ثمّ من بقي بلا قراءة (أسفل القائمة)
+                                if (!_selectionMode && !_big &&
+                                    (_sortField == SortField.monthlyTraffic || _sortField == SortField.dailyTraffic))
+                                  _UsageSortNote(
+                                    progress: _usageSortProgress,
+                                    label: _sortLabel(),
+                                    missing: _usageSortProgress != null
+                                        ? 0
+                                        : filtered.where((s) => _usageSortKey(_sortField, s) == null).length,
                                   ),
                                 // مطلب 2026-07-14: كارت "إجمالي الديون" (نظير v1 —
                                 // subscribers_screen.dart:875) — يظهر عند فلتر "المدينون"
@@ -2987,6 +3072,46 @@ class _HeaderIconButton extends StatelessWidget {
 
 /// شريط «{n} نتيجة» ← «{حقل الفرز}» بسهم الاتجاه. الضغط على الطرف
 /// الأيسر يفتح شيت الفرز (نفس سلوك المخطّط).
+/// سطر الترتيب بالاستهلاك: «يُقرأ استهلاك الشهر للترتيب — ١٢٠ من ٣٤٠» أثناء الجلب، ثمّ «N بلا قراءة استهلاك — في آخر القائمة»
+/// إن بقي أحد؛ وإلّا لا شيء.
+class _UsageSortNote extends StatelessWidget {
+  const _UsageSortNote({required this.progress, required this.label, required this.missing});
+  final ({int done, int total})? progress;
+  final String label;
+  final int missing;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final p = progress;
+    if (p == null && missing == 0) return const SizedBox.shrink();
+    final text = p != null
+        ? 'sort.usage_progress'.tr(args: [label, '${p.done}', '${p.total}'])
+        : 'sort.usage_missing'.tr(args: ['$missing']);
+    return Padding(
+      key: const ValueKey('usage-sort-note'),
+      padding: const EdgeInsets.fromLTRB(22, 0, 22, Sp.sm),
+      child: Row(
+        children: [
+          if (p != null) ...[
+            SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.6, color: AppColors.brandAccent)),
+            const SizedBox(width: Sp.sm),
+          ] else ...[
+            Icon(LucideIcons.info, size: 13, color: AppColors.textLow),
+            const SizedBox(width: Sp.sm),
+          ],
+          Expanded(
+            child: Text(text,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: AppType.muted(color: AppColors.textLow).copyWith(fontSize: 11.5)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ResultSortBar extends StatelessWidget {
   const _ResultSortBar({
     required this.count,

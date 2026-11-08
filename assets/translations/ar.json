@@ -807,7 +807,10 @@
     "device_signal": "إشارة اللاسلكي",
     "device_ccq": "جودة الاتصال CCQ",
     "device_lan": "سرعة منفذ LAN",
-    "daily_traffic": "استهلاك اليوم"
+    "daily_traffic": "استهلاك اليوم",
+    "monthly_traffic": "استهلاك الشهر",
+    "usage_progress": "يُقرأ {} للترتيب — {} من {}",
+    "usage_missing": "{} بلا قراءة استهلاك — في آخر القائمة"
   },
   "more": {
     "title": "قوائم أخرى",

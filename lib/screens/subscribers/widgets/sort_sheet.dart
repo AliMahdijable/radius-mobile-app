@@ -34,6 +34,10 @@ enum SortField {
   /// يُظهر فوراً مَن يشرب سعة البرج.
   dailyTraffic,
 
+  /// استهلاك الشهر (٨ نوفمبر — المالك: «حسب الاستهلاك الشهري واليوم تصاعدي وتنازلي») — لا يأتي في صفّ المشترك: يُجلب لصفوف
+  /// القائمة كلّها عند اختياره (SubscriberUsageStore.ensureFor)، ومن لم يُقرأ استهلاكه أسفل القائمة بالاتّجاهين.
+  monthlyTraffic,
+
   deviceRx, // قوّة الاستقبال الضوئي (ONT) — سالبة، الأقرب للصفر أقوى
   deviceTemp, // حرارة الـONU — موجبة، الأعلى أخطر (طلب المستخدم 2026-10-01)
   deviceSignal, // إشارة اللاسلكي (UBNT) — سالبة كذلك
@@ -56,6 +60,7 @@ const _fieldDefs = <(SortField, String, IconData)>[
   (SortField.debtAge, 'sort.debt_age', LucideIcons.clock3),
   (SortField.parentUsername, 'sort.parent', LucideIcons.userCog),
   (SortField.dailyTraffic, 'sort.daily_traffic', LucideIcons.activity),
+  (SortField.monthlyTraffic, 'sort.monthly_traffic', LucideIcons.calendarRange),
   (SortField.deviceRx, 'sort.device_rx', LucideIcons.zap),
   (SortField.deviceTemp, 'sort.device_temp', LucideIcons.thermometer),
   (SortField.deviceSignal, 'sort.device_signal', LucideIcons.wifi),
