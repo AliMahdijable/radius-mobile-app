@@ -14,6 +14,7 @@ import '../../../theme/typography.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import 'el_add_subscriber_sheet.dart';
 import '../../../core/widgets/app_sheet.dart';
+import '../../../widgets/merged_company_pick.dart';
 
 /// Add new subscriber sheet — focused port of v1's add_subscriber_sheet
 /// (mobile-app/lib/widgets/add_subscriber_sheet.dart) into v2's design
@@ -28,6 +29,10 @@ import '../../../core/widgets/app_sheet.dart';
 /// AuthStorage). expiration is left blank so SAS4 falls back to the
 /// package's default duration on first activation — matches v1.
 Future<bool?> showAddSubscriberSheet(BuildContext context) async {
+  // «كل الشركات» (٨ نوفمبر — الفحص العامّ): «في أيّ شركة؟» أوّلاً كالموقع — الإضافة تذهب للمفتوحة وحدها اليوم، فلا يُضاف
+  // مشتركٌ لشركةٍ لم يقصدها المدير وهو يرى أخرى في الشريط؛ غيرها ⇒ «بدّل إليها». خارج الوضع لا سؤال.
+  if (!await pickOpenCompanyFor(context, action: 'مشترك جديد', reason: 'الإضافة لها من صفحتها')) return null;
+  if (!context.mounted) return null;
   final earthlink = await _isEarthlinkSession();
   if (!context.mounted) return null;
   return showAppSheet<bool>(

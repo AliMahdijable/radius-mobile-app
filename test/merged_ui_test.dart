@@ -16,6 +16,8 @@ import 'package:rad_mysvcs/screens/dashboard/dashboard_screen.dart';
 import 'package:rad_mysvcs/screens/dashboard/widgets/subscribers_card.dart';
 import 'package:rad_mysvcs/screens/reports/financial_report_screen.dart';
 import 'package:rad_mysvcs/screens/notifications/inbox_screen.dart';
+import 'package:rad_mysvcs/screens/subscribers/sheets/add_subscriber_sheet.dart';
+import 'package:rad_mysvcs/screens/subscribers/sheets/subscriber_picker_sheet.dart';
 import 'package:rad_mysvcs/screens/search/quick_search_overlay.dart';
 import 'package:rad_mysvcs/services/alerts_service.dart';
 import 'package:rad_mysvcs/screens/subscribers/sheets/movements_sheet.dart';
@@ -442,6 +444,65 @@ void main() {
     final open = (srv.inner as VisualServer).log.where((l) => l.startsWith('GET /api/v2/subscribers '));
     expect(open, isEmpty, reason: 'لا قائمة المفتوحة وحدها في «كل الشركات»');
     srv.nearRows = false;
+    await down(t);
+  });
+
+  testWidgets('منتقي «+» (تجديد/تسديد/دين) بـ«كل الشركات»: مشتركو كلّ الشركات بشارتها، والكبيرة بنصّها موجَّهةً، والمختار يحمل شركته', (t) async {
+    await up();
+    await t.runAsync(() => MergedMode.enter());
+    Subscriber? picked;
+    await pumpVisual(t, phone, home: (_) => Builder(
+          builder: (ctx) => Scaffold(
+            body: Center(
+              child: TextButton(
+                onPressed: () async => picked = await showSubscriberPickerSheet(ctx, title: 'تسديد دين', debtorsOnly: true),
+                child: const Text('افتح المنتقي'),
+              ),
+            ),
+          ),
+        ));
+    await settle(t, seconds: 1);
+    await t.tap(find.text('افتح المنتقي'));
+    await settle(t, seconds: 3);
+    expect(t.takeException(), isNull);
+    expect(find.textContaining('من كلّ شركاتك'), findsOneWidget);
+    // المدينون: u2 (ألف) و u9 (باء) بشارتي شركتيهما
+    expect(find.text('شركة ألف'), findsWidgets);
+    expect(find.text('شركة باء'), findsWidgets);
+    await t.enterText(find.byType(TextField), 'u9');
+    await settle(t, seconds: 2);
+    expect(srv.routed.where((o) => o.headers['x-company-key'] == _kC && o.queryParameters['q'] == 'u9'), isNotEmpty,
+        reason: 'الكبيرة تُبحث بالنصّ موجَّهةً لها');
+    expect(find.textContaining('big501'), findsNothing, reason: '«تسديد دين»: صفّ الكبيرة بلا دين لا يظهر');
+    await t.tap(find.textContaining('(u9)'));
+    await settle(t, seconds: 1);
+    expect(picked?.companyKey, _kB, reason: 'الشيت التالي يعمل موجَّهاً لشركة المختار');
+    expect(picked?.username, 'u9');
+    await down(t);
+  });
+
+  testWidgets('«مشترك جديد» بـ«كل الشركات»: «في أيّ شركة؟» أوّلاً — المفتوحة تُكمل للإضافة، وغيرها «بدّل إليها» لا إضافة', (t) async {
+    await up();
+    await t.runAsync(() => MergedMode.enter());
+    await pumpVisual(t, phone, home: (_) => Builder(
+          builder: (ctx) => Scaffold(
+            body: Center(
+              child: TextButton(onPressed: () => showAddSubscriberSheet(ctx), child: const Text('أضف')),
+            ),
+          ),
+        ));
+    await settle(t, seconds: 1);
+    await t.tap(find.text('أضف'));
+    await settle(t, seconds: 2);
+    expect(t.takeException(), isNull);
+    expect(find.text('في أيّ شركة؟'), findsOneWidget);
+    expect(find.textContaining('بدّل إليها'), findsWidgets, reason: 'غير المفتوحة بمكانها بسببها');
+    expect(find.text('مشترك جديد'), findsOneWidget, reason: 'العنوان الفرعيّ للورقة (لا شيت الإضافة بعد)');
+    // شركة باء (غير المفتوحة) ⇒ لا شيت إضافة؛ «شركاتي» تُفتح
+    await t.tap(find.byKey(const ValueKey('merged-pick-$_kB')));
+    await settle(t, seconds: 2);
+    expect(find.text('أدخل بيانات المشترك'), findsNothing, reason: 'لا إضافة لشركةٍ غير المفتوحة من هنا');
+    expect(find.text('تبديل الشركة'), findsWidgets, reason: 'ورقة «شركاتي» لتبدّل إليها');
     await down(t);
   });
 }

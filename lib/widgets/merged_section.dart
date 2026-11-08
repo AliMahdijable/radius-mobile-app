@@ -2,18 +2,16 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../api/account_api.dart';
 import '../api/company_route.dart';
 import '../models/merged_company.dart';
-import '../screens/account/company_switch_sheet.dart';
 import '../screens/desktop/desk_widgets.dart';
 import '../services/active_company.dart';
 import '../services/auth_storage.dart';
-import '../services/linked_companies.dart';
 import '../services/merged_mode.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import 'merged_company_pick.dart';
 import 'merged_company_strip.dart';
 
 /// ما يعرضه قسمٌ من «قوائم أخرى» الآن في «كل الشركات».
@@ -183,27 +181,14 @@ class _OpenOnlyPage extends StatefulWidget {
 class _OpenOnlyPageState extends State<_OpenOnlyPage> {
   bool _busy = false;
 
-  /// صفّ «شركاتي» لمدير الشركة المختارة (لا صفّ موظّف) — كما تختار نقرة إشعار شركةٍ غير المفتوحة.
-  static LinkedCompany? _linkedOf(List<LinkedCompany>? items, String adminId) {
-    for (final c in items ?? const <LinkedCompany>[]) {
-      if (!c.isEmployee && c.adminId == adminId) return c;
-    }
-    return null;
-  }
-
   Future<void> _switch() async {
     if (_busy) return;
     setState(() => _busy = true);
-    LinkedCompany? c;
     try {
-      c = _linkedOf(LinkedCompanies.items.value, widget.company.adminId) ??
-          _linkedOf(await LinkedCompanies.load(), widget.company.adminId);
-    } catch (_) {
-      c = null; // بلا قائمة ⇒ الورقة نفسها والمدير يختار
+      await switchToMergedCompany(context, widget.company);
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
-    if (!mounted) return;
-    setState(() => _busy = false);
-    await showCompanySwitchSheet(context, autoOpen: c, notice: c == null ? null : widget.company.name);
   }
 
   @override

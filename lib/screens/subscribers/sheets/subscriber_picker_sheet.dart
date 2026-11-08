@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/big_subscribers_api.dart';
+import '../../../api/company_route.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../core/util/format.dart';
 import '../../../models/subscriber.dart';
@@ -13,6 +14,8 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/app_sheet.dart';
+import '../../../services/merged_mode.dart';
+import '../../../widgets/company_tag.dart';
 
 /// Bottom sheet that lets the admin pick a subscriber to operate on.
 /// Used by the FAB → 'إضافة سريعة' shortcuts for تفعيل / تجديد /
@@ -63,6 +66,13 @@ class _PickerSheetState extends State<_PickerSheet> {
   int _bigGen = 0;
   Timer? _bigDebounce;
 
+  /// «كل الشركات» (٨ نوفمبر — الفحص العامّ: «طبق مبدا الخدمتين»): مشتركو كلّ الشركات («الكل» أو المختارة في الشريط) بشارة كلٍّ
+  /// منها — والشيت التالي (تجديد/تسديد/دين) يعمل موجَّهاً لشركة المختار (Subscriber.companyKey). الكبيرة بحثها بنصّه موجَّهاً لها.
+  final bool _merged = MergedMode.active.value;
+  List<MergedCompanyList> _mergedBig = const [];
+  List<Subscriber> _mergedBigRows = const [];
+  int _mergedBigGen = 0;
+
   @override
   void initState() {
     super.initState();
@@ -73,6 +83,10 @@ class _PickerSheetState extends State<_PickerSheet> {
       if (_big && changed) {
         _bigDebounce?.cancel();
         _bigDebounce = Timer(const Duration(milliseconds: 350), _bigSearch);
+      }
+      if (_merged && _mergedBig.isNotEmpty && changed) {
+        _bigDebounce?.cancel();
+        _bigDebounce = Timer(const Duration(milliseconds: 350), _mergedBigSearch);
       }
     });
     _load();
@@ -90,6 +104,7 @@ class _PickerSheetState extends State<_PickerSheet> {
   }
 
   Future<void> _load() async {
+    if (_merged) return _loadMerged();
     if (await BigSubscribersApi.probe() > 0) {
       if (!mounted) return;
       setState(() {
@@ -105,6 +120,47 @@ class _PickerSheetState extends State<_PickerSheet> {
       _all = list;
       _loading = false;
     });
+  }
+
+  Future<void> _loadMerged() async {
+    final focus = MergedMode.focused?.key;
+    MergedListResult? r;
+    try {
+      r = await MergedSubscribers.withSessions(await MergedSubscribers.load());
+    } catch (_) {
+      r = null;
+    }
+    if (!mounted) return;
+    setState(() {
+      _all = r?.rowsFor(focus);
+      _mergedBig = [
+        for (final p in r?.big ?? const <MergedCompanyList>[])
+          if (focus == null || p.company.key == focus) p,
+      ];
+      _loading = false;
+    });
+    if (_mergedBig.isNotEmpty) unawaited(_mergedBigSearch());
+  }
+
+  /// «كل الشركات»: الكبيرة (≥ ٥٠٠٠) بنصّ البحث في ساسها موجَّهةً لها — كلّ صفٍّ بشركته.
+  Future<void> _mergedBigSearch() async {
+    final gen = ++_mergedBigGen;
+    final q = _query.trim();
+    if (q.isEmpty) {
+      if (_mergedBigRows.isNotEmpty) setState(() => _mergedBigRows = const []);
+      return;
+    }
+    final out = <Subscriber>[];
+    for (final p in _mergedBig) {
+      final key = p.company.key;
+      try {
+        final page = await CompanyRoute.run(key, () => BigSubscribersApi.page(page: 1, size: 30, tab: 'all', query: q));
+        out.addAll(page.rows.map((s) => s.withCompany(key)));
+      } catch (_) {/* كبيرةٌ تعذّرت: البقيّة تُعرض */}
+      if (!mounted || gen != _mergedBigGen) return;
+    }
+    if (!mounted || gen != _mergedBigGen) return;
+    setState(() => _mergedBigRows = out);
   }
 
   Future<void> _bigSearch() async {
@@ -147,7 +203,14 @@ class _PickerSheetState extends State<_PickerSheet> {
     final list = _all ?? const [];
     Iterable<Subscriber> it = list;
     if (widget.debtorsOnly) it = it.where((s) => s.hasDebt);
+    // «كل الشركات»: نتائج الكبيرة (بحثها بالنصّ) بعد نتائج القوائم
+    final bigRows = widget.debtorsOnly ? _mergedBigRows.where((s) => s.hasDebt) : _mergedBigRows;
     if (_query.trim().isEmpty) return it.take(50).toList();
+    if (bigRows.isNotEmpty) return [..._scored(it), ...bigRows].take(60).toList();
+    return _scored(it);
+  }
+
+  List<Subscriber> _scored(Iterable<Subscriber> it) {
     final q = _query.toLowerCase().trim();
     final qDigits = q.replaceAll(RegExp(r'\D'), '');
     final scored = <(int, Subscriber)>[];
@@ -183,7 +246,12 @@ class _PickerSheetState extends State<_PickerSheet> {
       header: SheetHeaderBar(
         icon: LucideIcons.userSearch,
         title: widget.title,
-        subtitle: widget.debtorsOnly ? 'اختر مشتركاً عليه دين' : 'اختر مشتركاً',
+        subtitle: (widget.debtorsOnly ? 'اختر مشتركاً عليه دين' : 'اختر مشتركاً') +
+            (!_merged
+                ? ''
+                : MergedMode.focused == null
+                    ? ' — من كلّ شركاتك'
+                    : ' — من «${MergedMode.focused!.name}»'),
         onClose: () => Navigator.of(context).pop(),
       ),
       scrollable: false,
@@ -281,6 +349,19 @@ class _PickerSheetState extends State<_PickerSheet> {
               label: const Text('إعادة المحاولة'),
             ),
           ],
+        ),
+      );
+    }
+    // «كل الشركات» والمختارة كبيرة: قائمتها لا تُجلب — تُبحث بالاسم
+    if (_merged && _mergedBig.isNotEmpty && (_all?.isEmpty ?? true) && _query.trim().isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(Sp.lg),
+          child: Text(
+            'اكتب اسم المشترك أو يوزره أو هاتفه — «${_mergedBig.first.company.name}» كبيرة تُبحث بالاسم',
+            style: AppType.subtitle(color: AppColors.textMid),
+            textAlign: TextAlign.center,
+          ),
         ),
       );
     }
@@ -405,6 +486,11 @@ class _Row extends StatelessWidget {
                         ],
                       ],
                     ),
+                    // «كل الشركات»: شركة المشترك بلونها — الشيت التالي يعمل على سيرفرها
+                    if (sub.companyKey != null && MergedMode.active.value) ...[
+                      const SizedBox(height: 2),
+                      CompanyTag(companyKey: sub.companyKey!, fontSize: 11),
+                    ],
                     if (sub.profileName != null || sub.hasDebt) ...[
                       const SizedBox(height: 2),
                       Row(
