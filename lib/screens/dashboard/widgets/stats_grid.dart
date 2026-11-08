@@ -73,11 +73,29 @@ class StatsGrid extends StatelessWidget {
             icon: LucideIcons.wallet,
             footer: const _CardsBadgeLine(),
           )
-        : _BalancePointsCard(wallet: wallet, lines: walletLines);
+        : _BalancePointsCard(wallet: wallet);
     final debt = debtLocked
         ? LockedCard(
             title: 'dashboard.debtors'.tr(), icon: LucideIcons.creditCard)
         : _DebtCard(debtors: debtors, onTap: onOpenDebtors);
+    // «كل الشركات» بلا شركةٍ مختارة (٨ نوفمبر — المالك: «الرصيد شوف شون صاير! يحتاج تفكر بطريقة اخرى»): بطاقة الرصيد بعرض الصفّ،
+    // خانةٌ لكلّ شركة بعمودين (علامتها وحسابها ورصيدها كبيراً)، والمدينون تحتها بعرضه — لا أسطرٌ مقصوصة في نصف بطاقة.
+    if (walletLines != null && !balanceLocked) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _ShellCard(
+            icon: LucideIcons.wallet,
+            iconAccent: AppColors.brand,
+            title: '${'dashboard.balance'.tr()} — لكلّ شركة',
+            body: MergedBalanceTiles(lines: walletLines!),
+          ),
+          const SizedBox(height: Sp.md),
+          debt,
+        ],
+      );
+    }
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -95,9 +113,8 @@ class StatsGrid extends StatelessWidget {
 /// The reward-points chip sits below, slightly muted so it doesn't
 /// compete with the hero number.
 class _BalancePointsCard extends StatelessWidget {
-  const _BalancePointsCard({required this.wallet, this.lines});
+  const _BalancePointsCard({required this.wallet});
   final WalletResult? wallet;
-  final List<MergedBalanceLine>? lines;
 
   // getter لا حقل: القيمة theme-aware ويجب أن تُقرأ عند كل بناء
   static Color get _accent => AppColors.brand;
@@ -109,11 +126,8 @@ class _BalancePointsCard extends StatelessWidget {
       icon: LucideIcons.wallet,
       iconAccent: _accent,
       title: 'dashboard.balance'.tr(),
-      body: wallet == null && lines == null
+      body: wallet == null
           ? _Spinner(color: _accent)
-          // «كل الشركات»: كلّ صفحةٍ برصيدها (لا مجموع ولا نقاطٌ مختلطة)
-          : lines != null
-          ? MergedBalanceLines(lines: lines!)
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
