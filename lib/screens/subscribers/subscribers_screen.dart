@@ -69,6 +69,7 @@ import '../../widgets/vpn_problems_sheet.dart';
 import '../whatsapp/conn_vpn_screen.dart';
 import '../whatsapp/connection_alerts_screen.dart';
 import '../../services/agent_net_presence.dart';
+import 'subscribers_check_screen.dart';
 
 /// Default sort field + direction per filter — mirrors v1's
 /// `_defaultSortByFilter`. Without this the 'قارب الانتهاء' chip
@@ -150,6 +151,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   /// موجة فحصٍ جارية — يقرؤها زرّ «فحص الأجهزة» وحده ليعرض دوّارته.
   /// ولا عدّاد معها: المقدار المعروض حُذف، فلا داعي لتتبّعه.
   bool _probing = false;
+
+  /// [_probing] لشاشة «الفحص العامّ» — تعرض «يحدّث…» ما دامت الموجة جارية (٨ نوفمبر).
+  final ValueNotifier<bool> _probingN = ValueNotifier<bool>(false);
 
   /// آخر إيقاظٍ لبطاقات الأجهزة — لخنق تواتره أثناء الموجة.
   DateTime? _lastProbeBump;
@@ -498,8 +502,36 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     _netTimer = Timer(const Duration(minutes: 2), _checkNet);
   }
 
-  /// الرادار: فحص أجهزة المشتركين من موبايلك — و«وضع VPN» يحدّث الفحص عبر الـVPN الآن ([_runProbeWave]).
-  void _onRadar() => _runProbeWave(force: true);
+  /// الرادار = «الفحص العامّ» (٨ نوفمبر — المالك: «أ»): تقريرٌ فوريّ من قراءات الكارتات، والموجة تعيد القديم وحده (خفيف)؛ عبر
+  /// الـVPN من فحص الخادم. على الشبكة أو عبر VPN بصلاحيّة كلٍّ منهما للموظّف (الاثنان مطفآن ⇒ لا زرّ).
+  void _onRadar() {
+    final net = PermissionsService.subsCheckNet;
+    final vpn = PermissionsService.subsCheckVpn;
+    var viaVpn = VpnNow.mode.value || (_offNet && _vpnLinked);
+    // «عبر VPN» وحده ⇒ عبر الـVPN ولو على شبكته
+    if (!viaVpn && !net && vpn && _vpnLinked) viaVpn = true;
+    if (viaVpn && !vpn) {
+      return showNoPermission(context,
+          message: net ? 'الفحص العامّ عبر VPN غير مفعّل لك — يشتغل وأنت على الشبكة' : 'الفحص العامّ غير مفعّل لك — اطلبه من مديرك');
+    }
+    if (!viaVpn && !net) {
+      return showNoPermission(context,
+          message: vpn ? 'الفحص العامّ على الشبكة غير مفعّل لك — يشتغل عبر VPN، اربطه أوّلاً' : 'الفحص العامّ غير مفعّل لك — اطلبه من مديرك');
+    }
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => SubscribersCheckScreen(
+        subscribers: () => _big ? _bigRows : _all,
+        viaVpn: viaVpn,
+        probing: _probingN,
+        onRefreshStale: () => _runProbeWave(),
+        onForceAll: () => _runProbeWave(force: true),
+        big: _big,
+      ),
+    ));
+  }
+
+  /// زرّ الفحص العامّ للموظّف: على الشبكة أو عبر VPN (الاثنان مطفآن ⇒ يختفي — المالك ٨ نوفمبر).
+  bool get _scanAllowed => PermissionsService.subsCheckNet || PermissionsService.subsCheckVpn;
 
   Future<void> _openVpnPage() async {
     if (!PermissionsService.canLinkVpn) return showNoPermission(context, action: true);
@@ -679,6 +711,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   @override
   void dispose() {
     _netTimer?.cancel();
+    _probingN.dispose();
     AgentNetPresence.state.removeListener(_onPresence);
     VpnNow.mode.removeListener(_onVpnMode);
     if (_vpnAttached) {
@@ -999,6 +1032,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       setState(() {
         _probing = false;
       });
+      _probingN.value = false;
       // «تنبيه المشترك» التلقائيّ: الكلّ طازجٌ في الكاش ⇒ قراءاته للخادم (مخنوقةٌ لكلّ مشترك؛ لا شيء إن لم يُفتح للحساب)
       unawaited(ConnectionReadingsUploader.collect(_big ? _bigRows : _all));
       return;
@@ -1013,6 +1047,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     }
     _lastProbeBump = null;
     setState(() => _probing = true);
+    _probingN.value = true;
     // مطلب المستخدم 2026-07-12: أولوية للـviewport-visible subs.
     // الـwave يفحص هؤلاء أوّلاً حتى المستخدم يشوف حالتهم فوراً بدون
     // انتظار الـ500 مشترك يخلصون. الـpage الحالية أفضل تقريب متاح.
@@ -1053,6 +1088,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       //    أوّل تمرير.
       DeviceProbeBus.bump();
       setState(() => _probing = false);
+      _probingN.value = false;
       // «تنبيه المشترك» التلقائيّ (٣ نوفمبر): القراءات الخام للخادم — هو يقرّر ويؤكّد ويرسل
       unawaited(ConnectionReadingsUploader.collect(_big ? _bigRows : _all));
     });
@@ -2071,7 +2107,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
                                           // 2026-08-29: زرّ فحص الأجهزة انتقل من شريط شرائح
                                           // الفرز إلى هنا بجانب الفرز والتصفية — طلب المستخدم.
                                           probing: _probing,
-                                          onScanDevices: _probing ? null : _onRadar,
+                                          onScanDevices: _onRadar,
+                                          showScan: _scanAllowed,
                                           vpnOn: VpnNow.mode.value,
                                           onVpn: _vpnButton ? _toggleVpn : null,
                                         ),
@@ -2554,7 +2591,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       refreshing: _refreshing,
       onRefresh: () => _refresh(pull: true),
       probing: _probing,
-      onScanDevices: _probing ? null : () => _runProbeWave(force: true),
+      onScanDevices: _scanAllowed ? _onRadar : null,
       // ما لا يخدمه مزوّد الجلسة (شركةٌ مُضافة محوّلها لا ينشئ) لا يظهر — كبند «+» بالهاتف ([providerHidesAction])
       onAdd: providerHidesAction('subscribers.add')
           ? null
@@ -2635,6 +2672,7 @@ class _ListHeader extends StatelessWidget {
     required this.onScanDevices,
     this.vpnOn = false,
     this.onVpn,
+    this.showScan = true,
   });
 
   final TextEditingController controller;
@@ -2656,6 +2694,9 @@ class _ListHeader extends StatelessWidget {
   /// null أثناء الفحص فقط. الزرّ يبقى ظاهراً دائماً (بخلاف زرّ التصفية)
   /// لأنّه لا يعتمد على وجود مدراء فرعيّين.
   final VoidCallback? onScanDevices;
+
+  /// زرّ «الفحص العامّ» — يختفي لموظّفٍ بلا وجهيه (٨ نوفمبر).
+  final bool showScan;
 
   /// «وضع VPN» (٥ نوفمبر — المالك: «المشتركين مابي زر فحص ع vpn»): null ⇒ لا زرّ (لا طريق VPN، أو على شبكتك والوضع مطفأ).
   final VoidCallback? onVpn;
@@ -2789,15 +2830,18 @@ class _ListHeader extends StatelessWidget {
               ),
               SizedBox(width: TopActionChip.gapOf(context)),
             ],
-            _HeaderIconButton(
-              icon: Icons.radar_rounded,
-              active: false,
-              busy: probing,
-              onTap: onScanDevices ?? () {},
-              tooltip: 'subscribers.probe_devices'.tr(),
-              size: TopActionChip.sizeOf(context),
-            ),
-            SizedBox(width: TopActionChip.gapOf(context)),
+            if (showScan) ...[
+              _HeaderIconButton(
+                key: const ValueKey('subs-general-check'),
+                icon: Icons.radar_rounded,
+                active: false,
+                busy: probing,
+                onTap: onScanDevices ?? () {},
+                tooltip: 'الفحص العامّ للمشتركين',
+                size: TopActionChip.sizeOf(context),
+              ),
+              SizedBox(width: TopActionChip.gapOf(context)),
+            ],
             _HeaderIconButton(
               icon: Icons.swap_vert_rounded,
               active: sortActive,

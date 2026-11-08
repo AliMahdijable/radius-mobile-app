@@ -31,6 +31,7 @@ import 'package:rad_mysvcs/services/device_alerts_service.dart';
 import 'package:rad_mysvcs/services/devices_check.dart';
 import 'package:rad_mysvcs/services/devices_check_runner.dart';
 import 'package:rad_mysvcs/services/vpn_now.dart';
+import 'package:rad_mysvcs/screens/subscribers/subscribers_check_screen.dart';
 
 import 'sim_el/sim_harness.dart';
 import 'support/ai_status_overlay.dart';
@@ -141,11 +142,16 @@ void main() {
     expect(VpnNow.attached, contains(VpnNowKind.subscribers), reason: 'القسم الظاهر يُحدَّث بالوضع');
     expect(find.text('إيقاف'), findsOneWidget, reason: 'شريط الوضع');
     final before = VpnNow.subscribers.startedAt;
+    // الرادار = «الفحص العامّ» (٨ نوفمبر): تقريره عبر الـVPN بالوضع، والفحص عبر الخادم لا موجة من الموبايل
     await t.tap(find.byIcon(Icons.radar_rounded));
     await settleFor(t, seconds: 1);
+    expect(find.byType(SubscribersCheckScreen), findsOneWidget);
+    expect(find.textContaining('عبر VPN'), findsWidgets);
     expect(VpnNow.subscribers.startedAt, isNotNull);
     expect(VpnNow.subscribers.startedAt == before || VpnNow.subscribers.phase != VpnBarPhase.idle, isTrue,
         reason: 'الرادار بالوضع = فحصٌ عبر الـVPN لا موجة من الموبايل');
+    Navigator.of(t.element(find.byType(SubscribersCheckScreen))).pop();
+    await settleFor(t, seconds: 1);
     await t.tap(subsVpn);
     await settleFor(t, seconds: 1);
     expect(VpnNow.mode.value, isFalse);
