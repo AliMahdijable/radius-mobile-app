@@ -102,7 +102,10 @@ void main() {
     });
     MergedCompany co(String k) => MergedMode.companies.firstWhere((c) => c.key == k);
     Subscriber sub(String u, String k) => _s(u, u).withCompany(k);
-    final subs = [sub('s.bad', kS), sub('s.ok', kS), sub('e.bad', kE), sub('e.ok', kE), sub('e.none', kE), sub('x.one', kX)];
+    final subs = [
+      sub('s.bad', kS), sub('s.ok', kS), sub('e.bad', kE), sub('e.ok', kE), sub('e.none', kE), sub('x.one', kX),
+      sub('x.near', kX), // الجزيرة بلا VPN لكنّ جهاز هذا يصله موبايلك (شبكته)
+    ];
     UbiquitiStatus ubnt(int sig) => UbiquitiStatus(
         hostname: 'h', firmware: 'XC.v8', uptimeSeconds: 1, ssid: 's', mode: 'sta', signalDbm: sig, noiseFloorDbm: -95,
         ccqPercent: 95, distanceMeters: 1, txRateKbps: 1, rxRateKbps: 1, lanPorts: const [], peerMac: null, peerCount: 1,
@@ -110,6 +113,7 @@ void main() {
     final snaps = {
       's.bad': DeviceHealthSnapshot(kind: DeviceKind.ubiquiti, ip: '1', ubnt: ubnt(-80)),
       's.ok': DeviceHealthSnapshot(kind: DeviceKind.ubiquiti, ip: '2', ubnt: ubnt(-50)),
+      'x.near': DeviceHealthSnapshot(kind: DeviceKind.ubiquiti, ip: '3', ubnt: ubnt(-48)),
     };
     SubscribersCheck.debugPeek =
         (s) => snaps[s.username] == null ? null : (snap: snaps[s.username], stale: false, at: DateTime.now());
@@ -145,7 +149,8 @@ void main() {
     expect(find.descendant(of: company(kE), matching: find.textContaining('عبر VPN الشركة')), findsOneWidget);
     expect(find.descendant(of: company(kE), matching: find.textContaining('قُرئ 2 من 3')), findsOneWidget);
     expect(find.descendant(of: company(kE), matching: find.text('1 بمشكلة')), findsOneWidget);
-    expect(find.descendant(of: company(kX), matching: find.text('«الجزيرة» تحتاج VPN')), findsOneWidget);
+    // الجزيرة بلا VPN: من وصله موبايلك قُرئ «من شبكتك»، والباقي يُقال
+    expect(find.descendant(of: company(kX), matching: find.text('من شبكتك · قُرئ 1 من 2 · بلا VPN للباقي')), findsOneWidget);
     // المشاكل من الطريقين معاً
     expect(find.byKey(ValueKey('subs-check-row-$kS|s.bad')), findsOneWidget);
     expect(find.byKey(ValueKey('subs-check-row-$kE|e.bad')), findsOneWidget);

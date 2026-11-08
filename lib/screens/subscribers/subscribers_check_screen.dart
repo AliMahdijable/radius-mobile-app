@@ -510,15 +510,27 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
             ? (LucideIcons.loader, AppTone.brand, 'يُفحص عبر VPN الشركة… · $counts')
             : job.busy && job.queue.contains(c.key)
                 ? (LucideIcons.hourglass, AppTone.neutral, 'بانتظار دورها عبر VPN · $counts')
-                : note != null
+                // شركةٌ غير المفتوحة قُرئ بعض مشتركيها من شبكتك (أجهزتهم يصلها موبايلك) — يُقال ذلك قبل حال الـVPN
+                : read > viaVpn && (note != null || at == null)
                     ? (
-                        note.contains('تحتاج VPN') ? LucideIcons.shieldOff : LucideIcons.triangleAlert,
-                        AppTone.warning,
-                        note
+                        LucideIcons.circleCheck,
+                        AppTone.success,
+                        '${viaVpn > 0 ? 'من شبكتك وعبر VPN الشركة' : 'من شبكتك'} · $counts'
+                            '${note != null ? ' · ${note.contains('تحتاج VPN') ? 'بلا VPN للباقي' : 'تعذّر VPN للباقي'}' : ''}'
                       )
-                    : at != null
-                        ? (LucideIcons.circleCheck, AppTone.success, 'عبر VPN الشركة · ${timeAgoAr(at)} · $counts')
-                        : (LucideIcons.circleDashed, AppTone.neutral, 'لم تُفحص بعد عبر VPN · $counts');
+                    : note != null
+                        ? (
+                            note.contains('تحتاج VPN') ? LucideIcons.shieldOff : LucideIcons.triangleAlert,
+                            AppTone.warning,
+                            note
+                          )
+                        : at != null
+                            ? (
+                                LucideIcons.circleCheck,
+                                AppTone.success,
+                                '${read > viaVpn ? 'من شبكتك وعبر VPN الشركة' : 'عبر VPN الشركة'} · ${timeAgoAr(at)} · $counts'
+                              )
+                            : (LucideIcons.circleDashed, AppTone.neutral, 'لم تُفحص بعد عبر VPN · $counts');
     final waiting = tone == AppTone.neutral;
     return Material(
       key: ValueKey('subs-check-company-${c.key}'),
