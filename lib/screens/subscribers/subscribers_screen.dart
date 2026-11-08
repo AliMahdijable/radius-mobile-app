@@ -504,9 +504,43 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
   /// الرادار = «الفحص العامّ» (٨ نوفمبر — المالك: «أ»): تقريرٌ فوريّ من قراءات الكارتات، والموجة تعيد القديم وحده (خفيف)؛ عبر
   /// الـVPN من فحص الخادم. على الشبكة أو عبر VPN بصلاحيّة كلٍّ منهما للموظّف (الاثنان مطفآن ⇒ لا زرّ).
-  void _onRadar() {
+  Future<void> _onRadar() async {
     final net = PermissionsService.subsCheckNet;
     final vpn = PermissionsService.subsCheckVpn;
+    // «كل الشركات» (٨ نوفمبر — المالك: «مايعرض مثل الاجهزه مشتركين كل شركه ونتيجه فحوصاتهم… ايرث لنك رابطلها vpn والسوبرنت
+    // تشتغل لوكل»): كلّ شركةٍ بطريقها كـ«الفحص الشامل» — المفتوحة من شبكتك (إن أُذن لك وكنت عليها)، وغيرها عبر VPN شركتها.
+    final merged = _merged;
+    if (_mergedOn && merged != null) {
+      if (!net && !vpn) return showNoPermission(context, message: 'الفحص العامّ غير مفعّل لك — اطلبه من مديرك');
+      final focus = MergedMode.focused?.key;
+      final companies = [
+        for (final p in merged.parts)
+          if ((p.rows ?? const <Subscriber>[]).isNotEmpty && (focus == null || p.company.key == focus)) p.company,
+      ];
+      String? openAdmin;
+      try {
+        openAdmin = (await AuthStorage.readAdminId())?.trim();
+      } catch (_) {
+        openAdmin = null;
+      }
+      if (!mounted) return;
+      final open = openAdmin == null || openAdmin.isEmpty
+          ? null
+          : companies.where((c) => c.adminId.trim() == openAdmin).firstOrNull;
+      Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => SubscribersCheckScreen(
+          subscribers: () => _all,
+          viaVpn: VpnNow.mode.value || _offNet || !net,
+          probing: _probingN,
+          onRefreshStale: () => _runProbeWave(),
+          onForceAll: () => _runProbeWave(force: true),
+          companies: companies,
+          openCompany: open?.key,
+          vpnAllowed: vpn,
+        ),
+      ));
+      return;
+    }
     var viaVpn = VpnNow.mode.value || (_offNet && _vpnLinked);
     // «عبر VPN» وحده ⇒ عبر الـVPN ولو على شبكته
     if (!viaVpn && !net && vpn && _vpnLinked) viaVpn = true;

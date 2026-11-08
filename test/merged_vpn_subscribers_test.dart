@@ -173,6 +173,39 @@ void main() {
     expect(VpnNow.readingFor('ali', company: _kB)?.sig, -58, reason: 'قراءة الجزيرة باقية بمكانها');
   });
 
+  test('«الفحص العامّ»: الفحص لشركاتٍ بعينها بترتيبها (only)، وسبب كلّ شركةٍ لم تُفحص، والتي تُفحص الآن', () async {
+    // ٨ نوفمبر — المالك: «مايعرض مثل الاجهزه مشتركين كل شركه ونتيجه فحوصاتهم»
+    VpnNow.mergedScope = () => scopeAll;
+    final job = VpnNow.subscribers;
+    final seen = <String>[];
+    void l() {
+      if (job.current != null) seen.add('${job.current}|${job.queue.join(',')}');
+    }
+
+    job.addListener(l);
+    await job.run(only: [(key: _kE, name: 'ايرث لنك'), (key: _kB, name: 'الجزيرة')]);
+    job.removeListener(l);
+    expect(srv.asked.where((a) => a.startsWith('POST')).toList(),
+        ['POST /api/v2/conn-vpn/check-now $_kE', 'POST /api/v2/conn-vpn/check-now $_kB'],
+        reason: 'الشركات المطلوبة وحدها وبترتيبها — لا نطاق الشاشة كلّه');
+    expect(seen.first, '$_kE|$_kE,$_kB');
+    expect(seen.last, '$_kB|$_kE,$_kB');
+    expect(VpnNow.noteOf(_kE), '«ايرث لنك» تحتاج VPN');
+    expect(VpnNow.noteOf(_kB), isNull);
+    expect(job.current, isNull);
+    expect(job.queue, isEmpty);
+    // نجحت لاحقاً ⇒ يزول سببها؛ والقائمة الفارغة لا تبدأ فحصاً
+    srv.results[_kE] = _ok([{'u': 'x', 'src': 'ping', 'ms': 3}], 0);
+    srv.polls.clear();
+    await job.run(only: [(key: _kE, name: 'ايرث لنك')]);
+    expect(VpnNow.noteOf(_kE), isNull);
+    srv.asked.clear();
+    await job.run(only: const []);
+    expect(srv.asked, isEmpty);
+    VpnNow.clearCompanyReadings();
+    expect(VpnNow.noteOf(_kE), isNull);
+  });
+
   test('الإلغاء (الخروج من الوضع) يوقف الجولة ولا يكتب قراءاتٍ بعده', () async {
     VpnNow.mergedScope = () => scopeAll;
     final run = VpnNow.subscribers.run();

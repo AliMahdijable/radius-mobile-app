@@ -12,8 +12,7 @@ Subscriber _sub(String u, {String? company, bool online = true}) => Subscriber.f
       'firstname': u,
       'lastname': '',
       'online_status': online ? 1 : 0,
-      if (company != null) 'company_key': company,
-    });
+    }).withCompany(company);
 
 UbiquitiStatus _ubnt(int sig, int ccq, {List<LanPort> lan = const [], String host = 'h'}) => UbiquitiStatus(
     hostname: host, firmware: 'XC.v8', uptimeSeconds: 100, ssid: 's', mode: 'sta', signalDbm: sig, noiseFloorDbm: -95,
@@ -119,5 +118,43 @@ void main() {
     expect(r.healthy.first.reading!.via, 'الأولت');
     expect(r.healthy.last.reading!.ms, 12);
     expect([for (final m in r.missing) m.why], [SubsMissWhy.dead, SubsMissWhy.offline], reason: 'الميّت أوّلاً');
+  });
+  test('«كل الشركات»: كلّ مشتركٍ بأحدث قراءته — الهاتف لشركةٍ والـVPN لأخرى، ومن لم يُقرأ وشركته لم تُفحص يُقال سببها', () {
+    // المالك ٨ نوفمبر: «مايعرض مثل الاجهزه مشتركين كل شركه ونتيجه فحوصاتهم… ايرث لنك رابطلها vpn والسوبرنت تشتغل لوكل»
+    final subs = [
+      _sub('s1', company: 'kS'), _sub('s2', company: 'kS'), // سوبرنت — من الهاتف
+      _sub('e1', company: 'kE'), _sub('e2', company: 'kE'), // ايرث لنك — عبر VPN
+      _sub('x1', company: 'kX'), // شركةٌ ثالثة بلا VPN
+      _sub('both', company: 'kE'), // الاثنان: الأحدث يغلب
+    ];
+    final phoneAt = DateTime(2026, 11, 8, 10, 0);
+    final vpnAt = DateTime(2026, 11, 8, 10, 5);
+    final snaps = <String, DeviceHealthSnapshot>{
+      's1': DeviceHealthSnapshot(kind: DeviceKind.ubiquiti, ip: '1', ubnt: _ubnt(-80, 95)),
+      's2': DeviceHealthSnapshot(kind: DeviceKind.ubiquiti, ip: '2', ubnt: _ubnt(-50, 95)),
+      'both': DeviceHealthSnapshot(kind: DeviceKind.ubiquiti, ip: '3', ubnt: _ubnt(-50, 95)),
+    };
+    final reads = <String, VpnSubReading>{
+      'e1': const VpnSubReading(src: 'cpe', sig: -55, ccq: 40, lan: '100'),
+      'e2': const VpnSubReading(src: 'dead'),
+      'both': const VpnSubReading(src: 'cpe', sig: -85, ccq: 90),
+    };
+    final r = SubscribersCheck.mixed(
+      subs,
+      limits,
+      peek: (s) => snaps[s.username] == null ? null : (snap: snaps[s.username], stale: false, at: phoneAt),
+      reading: (s) => reads[s.username],
+      readAt: (c) => c == 'kE' ? vpnAt : null,
+      companyNote: (c) => c == 'kX' ? '«ثالثة» تحتاج VPN' : null,
+    );
+    expect([r.total, r.read], [6, 4]);
+    expect({for (final x in r.rows) x.sub.username}, {'s1', 'e1', 'both'});
+    expect(r.rows.firstWhere((x) => x.sub.username == 'both').reading!.sig, -85,
+        reason: 'قراءة الـVPN (10:05) أحدث من الهاتف (10:00)');
+    expect(r.rows.firstWhere((x) => x.sub.username == 'e1').reading!.at, vpnAt);
+    expect(r.healthy.single.sub.username, 's2');
+    final miss = {for (final m in r.missing) m.sub.username: (m.why, m.note)};
+    expect(miss['e2'], (SubsMissWhy.dead, null));
+    expect(miss['x1'], (SubsMissWhy.company, '«ثالثة» تحتاج VPN'));
   });
 }

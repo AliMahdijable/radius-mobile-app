@@ -42,14 +42,20 @@ class VpnNowJob extends ChangeNotifier {
 
   bool get busy => phase == VpnBarPhase.running || _checking;
 
+  /// «كل الشركات»: شركات الفحص الجاري بترتيبها، والتي تُفحص الآن — لبطاقة «الشركات» في «الفحص العامّ» (بانتظار دورها/تُفحص).
+  List<String> queue = const [];
+  String? current;
+
   /// تأكّد الطريق جارٍ (الأجهزة) — والشريط على حاله («متّصل» لا دائرة كلّ دقيقة).
   bool _checking = false;
   String get _what => kind == VpnNowKind.devices ? 'أجهزتك' : 'مشتركينك';
 
-  Future<void> run() async {
+  /// [only] («كل الشركات»): هذه الشركات وحدها — «الفحص العامّ» يقرأ المفتوحة من شبكتك ويفحص غيرها عبر VPN شركتها.
+  Future<void> run({List<VpnMergedCompany>? only}) async {
     if (busy) return;
     if (kind == VpnNowKind.devices) return _runRoute();
-    final merged = VpnNow._mergedNow;
+    if (only != null && only.isEmpty) return;
+    final merged = only ?? VpnNow._mergedNow;
     if (merged != null) return _runMerged(merged);
     final gen = ++_gen;
     startedAt = VpnNow.now();
@@ -111,17 +117,20 @@ class VpnNowJob extends ChangeNotifier {
     var bad = 0;
     var badKnown = false;
     final notes = <String>[];
+    queue = [for (final c in scope) c.key];
     for (var i = 0; i < scope.length; i++) {
       final c = scope[i];
       if (gen != _gen) return;
       final head = scope.length == 1 ? 'يفحص مشتركي «${c.name}»' : 'يفحص مشتركي «${c.name}» (${i + 1} من ${scope.length})';
       line = '$head…';
       value = null;
+      current = c.key;
       notifyListeners();
       final r = await CompanyRoute.run(c.key, () => _sweepCompany(head, gen));
       if (gen != _gen) return;
       if (r.ok) {
         VpnNow._applyCompany(c.key, r);
+        VpnNow._companyNotes.remove(c.key);
         ok++;
         if (r.problems != null) {
           badKnown = true;
@@ -135,10 +144,14 @@ class VpnNowJob extends ChangeNotifier {
         }
       } else {
         VpnNow._dropCompany(c.key);
-        notes.add(VpnNow.mergedReason(c, r));
+        final why = VpnNow.mergedReason(c, r);
+        VpnNow._companyNotes[c.key] = why;
+        notes.add(why);
       }
     }
     if (gen != _gen) return;
+    current = null;
+    queue = const [];
     if (ok == 0) {
       _fail(notes.isEmpty ? 'تعذّر الفحص الآن — حاول بعد قليل' : notes.join(' · '));
       return;
@@ -284,6 +297,8 @@ class VpnNowJob extends ChangeNotifier {
   void cancel() {
     _gen++;
     _checking = false;
+    queue = const [];
+    current = null;
     phase = VpnBarPhase.idle;
     line = null;
     sub = null;
@@ -308,6 +323,8 @@ class VpnNowJob extends ChangeNotifier {
   void reset() {
     _gen++;
     _checking = false;
+    queue = const [];
+    current = null;
     startedAt = null;
     phase = VpnBarPhase.idle;
     line = null;
@@ -562,12 +579,21 @@ class VpnNow {
   }
 
   static void clearCompanyReadings() {
+    _companyNotes.clear();
     if (_companyReadings.isEmpty && _companyReadAt.isEmpty) return;
     _companyReadings.clear();
     _companyReadAt.clear();
     _companyLimits.clear();
     version.value++;
   }
+
+  /// «كل الشركات»: لماذا لم تُفحص شركةٌ عبر الـVPN في آخر فحص (««ايرث لنك» تحتاج VPN»…) — null إن نجحت أو لم تُفحص.
+  static final _companyNotes = <String, String>{};
+  static String? noteOf(String company) => _companyNotes[company];
+
+  @visibleForTesting
+  static void debugNote(String company, String? note) =>
+      note == null ? _companyNotes.remove(company) : _companyNotes[company] = note;
 
   @visibleForTesting
   static void debugApplyCompany(String company, VpnNowResult r) => _applyCompany(company, r);
@@ -729,6 +755,7 @@ class VpnNow {
     _companyReadings.clear();
     _companyReadAt.clear();
     _companyLimits.clear();
+    _companyNotes.clear();
     _route = null;
     _routeAt = null;
     VpnNowApi.lastSubscribers = true;

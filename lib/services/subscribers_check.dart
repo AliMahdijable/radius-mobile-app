@@ -1,4 +1,5 @@
 import 'package:easy_localization/easy_localization.dart' show StringTranslateExtension;
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../api/device_probe_api.dart';
 import '../core/util/bidi.dart';
@@ -13,7 +14,21 @@ typedef SubsCheckProblem = ({ConnectionProblemKind kind, String label});
 /// قراءة مشتركٍ كما تُعرض في «الفحص العامّ» (٨ نوفمبر — المالك: «اظهار معلومات ال ccq كذلك»): كلّ مقاييسه لا المشكلة وحدها —
 /// من الهاتف (قراءة الكارت نفسها) أو عبر الـVPN. الصفر ليس قراءة (كـ[ConnectionAlerts.detect]).
 class SubsReading {
-  const SubsReading({this.sig, this.ccq, this.lan, this.rx, this.temp, this.ms, this.device, this.via, this.at});
+  const SubsReading({
+    this.sig,
+    this.ccq,
+    this.lan,
+    this.rx,
+    this.temp,
+    this.ms,
+    this.device,
+    this.via,
+    this.at,
+    this.vpn = false,
+  });
+
+  /// من فحص الخادم عبر الـVPN (لا من الهاتف).
+  final bool vpn;
 
   /// الإشارة dBm (يوبيكويتي).
   final int? sig;
@@ -85,6 +100,7 @@ class SubsReading {
       ms: r.src == 'ping' ? r.ms : null,
       via: r.src == 'sector' ? 'السكتر' : (r.src == 'olt' ? 'الأولت' : null),
       at: at,
+      vpn: true,
     );
   }
 
@@ -124,6 +140,9 @@ enum SubsMissWhy {
   /// عبر الـVPN: الخادم وصله ولا يجيب.
   dead,
 
+  /// «كل الشركات»: شركته لم تُفحص عبر الـVPN (بلا طريق، أو تعذّر) — السبب في [SubsMissing] note.
+  company,
+
   /// غير متّصلٍ الآن.
   offline,
 
@@ -134,7 +153,7 @@ enum SubsMissWhy {
   noMetrics,
 }
 
-typedef SubsMissing = ({Subscriber sub, SubsMissWhy why});
+typedef SubsMissing = ({Subscriber sub, SubsMissWhy why, String? note});
 
 /// تقرير «الفحص العامّ» للمشتركين: كم قُرئ من كم، ومن بمشكلة مصنّفين بنوعها، والسليم، ومن لم يُقرأ ولماذا.
 class SubsCheckReport {
@@ -167,7 +186,10 @@ class SubsCheckReport {
   int get unread => total - read;
 
   /// من بمشكلة بهذا النوع.
-  List<SubsCheckRow> of(ConnectionProblemKind k) => [for (final r in rows) if (r.problems.any((p) => p.kind == k)) r];
+  List<SubsCheckRow> of(ConnectionProblemKind k) => [
+        for (final r in rows)
+          if (r.problems.any((p) => p.kind == k)) r
+      ];
 }
 
 /// «الفحص العامّ» للمشتركين (٨ نوفمبر — المالك: «أ» ثمّ «تره فحص المشتركين ثكيل كلش مو مثل فحص الاجهزه ولا مثل مايعرضون
@@ -176,6 +198,10 @@ class SubsCheckReport {
 /// فحص الخادم ([VpnNow.readingFor]) بالحدود نفسها لكلّ شركة.
 class SubscribersCheck {
   SubscribersCheck._();
+
+  /// للاختبار: قراءات الهاتف بدل ذاكرة الفحص (الشاشة تنادي بلا [local]/[mixed] peek).
+  @visibleForTesting
+  static ({DeviceHealthSnapshot? snap, bool stale, DateTime at})? Function(Subscriber s)? debugPeek;
 
   /// ترتيب الأنواع: الأسوأ أوّلاً.
   static const order = [
@@ -253,8 +279,8 @@ class SubscribersCheck {
     ConnectionAlertThresholds Function(String? company) limits, {
     ({DeviceHealthSnapshot? snap, bool stale, DateTime at})? Function(Subscriber s)? peek,
   }) {
-    final look = peek ??
-        (s) => DeviceProbeApi.peek(username: s.username, ip: s.ipAddress, company: s.companyKey);
+    final look =
+        peek ?? debugPeek ?? (s) => DeviceProbeApi.peek(username: s.username, ip: s.ipAddress, company: s.companyKey);
     DateTime? oldest;
     final rows = <SubsCheckRow>[];
     final healthy = <SubsCheckRow>[];
@@ -268,6 +294,7 @@ class SubscribersCheck {
         missing.add((
           sub: s,
           why: snap != null ? SubsMissWhy.noMetrics : (s.isOnline ? SubsMissWhy.noReply : SubsMissWhy.offline),
+          note: null,
         ));
         continue;
       }
@@ -297,6 +324,7 @@ class SubscribersCheck {
         missing.add((
           sub: s,
           why: r != null ? SubsMissWhy.dead : (s.isOnline ? SubsMissWhy.noReply : SubsMissWhy.offline),
+          note: null,
         ));
         continue;
       }
@@ -305,6 +333,61 @@ class SubscribersCheck {
       (probs.isEmpty ? healthy : rows).add(row);
     }
     return _report(subs.length, rows, healthy, missing, limits);
+  }
+
+  /// «كل الشركات» (٨ نوفمبر — المالك: «فحص المشتركين… مايعرض مثل الاجهزه مشتركين كل شركه ونتيجه فحوصاتهم… ايرث لنك رابطلها vpn
+  /// والسوبرنت تشتغل لوكل»): كلّ مشتركٍ بأحدث قراءةٍ له — من الهاتف (جهازه وصله موبايلك) أو من فحص شركته عبر الـVPN؛ ومن لم يُقرأ
+  /// وشركته لم تُفحص عبر الـVPN يُقال سببها ([companyNote]: ««ايرث لنك» تحتاج VPN»…).
+  static SubsCheckReport mixed(
+    List<Subscriber> subs,
+    ConnectionAlertThresholds Function(String? company) limits, {
+    ({DeviceHealthSnapshot? snap, bool stale, DateTime at})? Function(Subscriber s)? peek,
+    VpnSubReading? Function(Subscriber s)? reading,
+    DateTime? Function(String? company)? readAt,
+    String? Function(String? company)? companyNote,
+  }) {
+    final look =
+        peek ?? debugPeek ?? (s) => DeviceProbeApi.peek(username: s.username, ip: s.ipAddress, company: s.companyKey);
+    final vpnLook = reading ?? (s) => VpnNow.readingFor(s.username, company: s.companyKey);
+    final when = readAt ?? (c) => c == null ? VpnNow.readingsAt : VpnNow.readingsAtFor(c);
+    DateTime? oldest;
+    final rows = <SubsCheckRow>[];
+    final healthy = <SubsCheckRow>[];
+    final missing = <SubsMissing>[];
+    for (final s in subs) {
+      final p = look(s);
+      final local = p == null ? null : SubsReading.ofSnapshot(p.snap, p.at);
+      final v = vpnLook(s);
+      final vAt = v == null ? null : when(s.companyKey);
+      final t = limits(s.companyKey);
+      // الأحدث يغلب: قراءة الـVPN إن لم تكن قراءة الهاتف أو كانت أقدم منها
+      final useVpn = v != null && !v.dead && (local == null || (vAt != null && vAt.isAfter(p!.at)));
+      if (useVpn) {
+        final probs = fromVpn(v, t);
+        (probs.isEmpty ? healthy : rows).add(SubsCheckRow(s, probs, reading: SubsReading.ofVpn(v, vAt)));
+        continue;
+      }
+      if (local != null) {
+        if (oldest == null || p!.at.isBefore(oldest)) oldest = p!.at;
+        final probs = ConnectionAlerts.detect(p.snap!, t);
+        (probs.isEmpty ? healthy : rows)
+            .add(SubsCheckRow(s, [for (final q in probs) (kind: q.kind, label: q.label)], reading: local));
+        continue;
+      }
+      final note = companyNote?.call(s.companyKey);
+      missing.add((
+        sub: s,
+        why: v != null
+            ? SubsMissWhy.dead
+            : note != null
+                ? SubsMissWhy.company
+                : p?.snap != null
+                    ? SubsMissWhy.noMetrics
+                    : (s.isOnline ? SubsMissWhy.noReply : SubsMissWhy.offline),
+        note: note,
+      ));
+    }
+    return _report(subs.length, rows, healthy, missing, limits, oldest: oldest);
   }
 
   /// قراءة الخادم ⇒ المشاكل بحدود المدير — كـ[ConnectionAlerts.detect] حرفاً (الصفر ليس قراءة).
@@ -325,11 +408,17 @@ class SubscribersCheck {
     }
     final rx = r.rx;
     if (rx != null && rx < 0 && rx < t.fiberRxDbm) {
-      out.add((kind: ConnectionProblemKind.fiberRx, label: 'conn_alerts.p_fiber_rx'.tr(args: [iso('${rx.toStringAsFixed(1)} dBm')])));
+      out.add((
+        kind: ConnectionProblemKind.fiberRx,
+        label: 'conn_alerts.p_fiber_rx'.tr(args: [iso('${rx.toStringAsFixed(1)} dBm')])
+      ));
     }
     final temp = r.temp;
     if (temp != null && temp > t.fiberTempC) {
-      out.add((kind: ConnectionProblemKind.fiberTemp, label: 'conn_alerts.p_fiber_temp'.tr(args: [iso('${temp.toStringAsFixed(0)}°C')])));
+      out.add((
+        kind: ConnectionProblemKind.fiberTemp,
+        label: 'conn_alerts.p_fiber_temp'.tr(args: [iso('${temp.toStringAsFixed(0)}°C')])
+      ));
     }
     return out;
   }

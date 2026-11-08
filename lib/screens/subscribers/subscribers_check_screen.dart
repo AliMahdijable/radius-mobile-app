@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../core/util/bidi.dart';
 import '../../core/util/format.dart';
 import '../../core/util/server_time.dart';
+import '../../models/merged_company.dart';
 import '../../models/subscriber.dart';
 import '../../services/connection_alerts.dart';
 import '../../services/merged_mode.dart';
@@ -33,7 +34,19 @@ class SubscribersCheckScreen extends StatefulWidget {
     this.onRefreshStale,
     this.onForceAll,
     this.big = false,
+    this.companies,
+    this.openCompany,
+    this.vpnAllowed = true,
   });
+
+  /// «كل الشركات» (٨ نوفمبر — المالك: «مايعرض مثل الاجهزه مشتركين كل شركه ونتيجه فحوصاتهم… ايرث لنك رابطلها vpn والسوبرنت
+  /// تشتغل لوكل»): شركات القائمة بترتيبها — كلٌّ بطريقها كـ«الفحص الشامل»: المفتوحة [openCompany] من شبكتك (ما لم يكن [viaVpn])،
+  /// وغيرها بفحص الخادم عبر VPN شركتها، وبلا طريقٍ تُسمّى. null خارج الوضع.
+  final List<MergedCompany>? companies;
+  final String? openCompany;
+
+  /// الفحص عبر VPN مفعّلٌ للموظّف (صاحب الحساب دائماً).
+  final bool vpnAllowed;
 
   /// القائمة الحيّة (المحمّلة) من شاشة المشتركين.
   final List<Subscriber> Function() subscribers;
@@ -70,6 +83,27 @@ class _Group {
 class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
   _Seg _seg = _Seg.problems;
   ConnectionProblemKind? _kind;
+
+  /// «كل الشركات»: شركةٌ مختارة من بطاقة «الشركات» ⇒ مشتركوها وحدهم (والضغط ثانيةً يعيد الكلّ).
+  String? _company;
+
+  bool get _merged => (widget.companies ?? const []).isNotEmpty;
+
+  /// الشركة المفتوحة تُقرأ من شبكتك (الموجة) ما لم يكن الفحص عبر الـVPN.
+  bool _isLocal(String key) => !widget.viaVpn && key == widget.openCompany;
+
+  /// شركاتٌ تُفحص عبر VPN شركتها (بطلبٍ موجَّه بمفتاحها) — وآخرها المفتوحة نفسها تكملةً لموجة الهاتف: مشتركو الفايبر (ONU بلا
+  /// عنوانٍ يصله الموبايل) ضوؤهم من الأولت يقرؤه الخادم عبر نفق الشركة (صورة المالك ٨ نوفمبر: «قُرئ 0 من 80» وأولته «ONU 80/101»).
+  /// فشل تكملتها لا يُسمّى (طريقها شبكتك).
+  List<VpnMergedCompany> get _vpnCompanies {
+    final cs = widget.companies ?? const <MergedCompany>[];
+    return [
+      for (final c in cs)
+        if (!_isLocal(c.key)) (key: c.key, name: c.name),
+      for (final c in cs)
+        if (_isLocal(c.key)) (key: c.key, name: c.name),
+    ];
+  }
 
   /// (النوع، اسم الشريحة، عنوان المجموعة، الأيقونة)
   static const _kinds = [
@@ -110,7 +144,22 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
   }
 
   /// الفتح والتحديث: على الشبكة الموجة للقديم وحده؛ عبر الـVPN فحص الخادم إن قدُمت قراءته (أو بالتحديث صراحةً).
+  /// «كل الشركات»: الموجة للمفتوحة، وفحص الخادم لغيرها — عند الفتح لمن قدُمت قراءاته (١٠ د) أو لم تُفحص، وبالتحديث للكلّ.
   void _refresh({bool initial = false}) {
+    if (_merged) {
+      if (!widget.viaVpn && widget.openCompany != null) widget.onRefreshStale?.call();
+      if (!widget.vpnAllowed || VpnNow.subscribers.busy) return;
+      final now = DateTime.now();
+      final todo = [
+        for (final c in _vpnCompanies)
+          if (!initial ||
+              VpnNow.readingsAtFor(c.key) == null ||
+              now.difference(VpnNow.readingsAtFor(c.key)!) > const Duration(minutes: 10))
+            c,
+      ];
+      if (todo.isNotEmpty) VpnNow.subscribers.run(only: todo);
+      return;
+    }
     if (!widget.viaVpn) {
       widget.onRefreshStale?.call();
       return;
@@ -125,7 +174,21 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
   ConnectionAlertThresholds _limits(String? company) =>
       (company == null ? null : VpnNow.limitsOf(company)) ?? ConnectionAlertSettings.current.value;
 
-  bool get _busy => widget.viaVpn ? VpnNow.subscribers.busy : (widget.probing?.value ?? false);
+  bool get _busy => _merged
+      ? ((widget.probing?.value ?? false) || VpnNow.subscribers.busy)
+      : (widget.viaVpn ? VpnNow.subscribers.busy : (widget.probing?.value ?? false));
+
+  SubsCheckReport _report(List<Subscriber> subs) {
+    if (_merged) return SubscribersCheck.mixed(subs, _limits, companyNote: _companyNote);
+    return widget.viaVpn ? SubscribersCheck.vpn(subs, _limits) : SubscribersCheck.local(subs, _limits);
+  }
+
+  /// سبب شركةٍ لم تُفحص عبر الـVPN (لمن لم يُقرأ من مشتركيها) — والموظّف بلا مفتاحه يُقال له.
+  String? _companyNote(String? key) {
+    if (key == null || _isLocal(key)) return null;
+    if (!widget.vpnAllowed) return 'الفحص عبر VPN غير مفعّل لك';
+    return VpnNow.noteOf(key);
+  }
 
   void _open(Subscriber s) => Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => SubscriberDetailScreen(sub: s),
@@ -135,8 +198,15 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    final subs = widget.subscribers();
-    final r = widget.viaVpn ? SubscribersCheck.vpn(subs, _limits) : SubscribersCheck.local(subs, _limits);
+    final all = widget.subscribers();
+    final full = _merged ? _report(all) : null;
+    final subs = _company == null
+        ? all
+        : [
+            for (final x in all)
+              if (x.companyKey == _company) x
+          ];
+    final r = _company == null && full != null ? full : _report(subs);
     final mergedAll = MergedMode.active.value && MergedMode.focused == null;
     final items = _items(r);
     return Scaffold(
@@ -174,6 +244,10 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 _summary(r),
                 const SizedBox(height: Sp.md),
+                if (_merged && full != null) ...[
+                  _companiesCard(all, full),
+                  const SizedBox(height: Sp.md),
+                ],
                 if (_seg == _Seg.problems && r.rows.isNotEmpty) ...[
                   _kindChips(r),
                   const SizedBox(height: Sp.xs),
@@ -243,7 +317,9 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
     final tone = none ? AppTone.neutral : (bad == 0 ? AppTone.success : AppTone.danger);
     final title = none ? 'لا قراءات بعد' : (bad == 0 ? 'لا مشاكل' : '${formatIQD(bad)} بمشكلة');
     final at = widget.viaVpn ? VpnNow.readingsAt : null;
-    final source = widget.viaVpn ? 'عبر VPN${at != null ? ' · ${timeAgoAr(at)}' : ''}' : 'من موبايلك على الشبكة';
+    final source = _merged
+        ? 'كل الشركات — كلّ شركةٍ بطريقها'
+        : (widget.viaVpn ? 'عبر VPN${at != null ? ' · ${timeAgoAr(at)}' : ''}' : 'من موبايلك على الشبكة');
     final pct = r.total == 0 ? 0.0 : r.read / r.total;
     return Container(
       key: const ValueKey('subs-check-summary'),
@@ -350,6 +426,165 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
       ),
     );
   }
+
+  // ─────────────────── «كل الشركات»: الشركات ───────────────────
+
+  /// سطرٌ لكلّ شركة كـ«الفحص الشامل»: طريقها (من شبكتك / عبر VPN الشركة / لماذا لم تُفحص) وكم قُرئ من مشتركيها وكم بمشكلة —
+  /// والضغط يعرض مشتركيها وحدهم.
+  Widget _companiesCard(List<Subscriber> all, SubsCheckReport full) {
+    final total = <String, int>{};
+    for (final x in all) {
+      final k = x.companyKey;
+      if (k != null) total[k] = (total[k] ?? 0) + 1;
+    }
+    final read = <String, int>{};
+    final viaVpn = <String, int>{};
+    final bad = <String, int>{};
+    for (final row in [...full.healthy, ...full.rows]) {
+      final k = row.sub.companyKey;
+      if (k == null) continue;
+      read[k] = (read[k] ?? 0) + 1;
+      if (row.reading?.vpn ?? false) viaVpn[k] = (viaVpn[k] ?? 0) + 1;
+    }
+    for (final row in full.rows) {
+      final k = row.sub.companyKey;
+      if (k != null) bad[k] = (bad[k] ?? 0) + 1;
+    }
+    final shown = [
+      for (final c in widget.companies!)
+        if ((total[c.key] ?? 0) > 0) c
+    ];
+    final picked = _company == null ? null : shown.where((c) => c.key == _company).firstOrNull;
+    final hint = picked != null
+        ? '«${picked.name}» وحدها — اضغطها ثانيةً لعرض الكلّ'
+        : (shown.length > 1 ? 'اضغط شركةً لعرض مشتركيها وحدهم' : null);
+    return Container(
+      key: const ValueKey('subs-check-companies'),
+      padding: const EdgeInsets.all(Sp.sm),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.lg),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        for (final c in shown)
+          _companyRow(c,
+              total: total[c.key] ?? 0, read: read[c.key] ?? 0, viaVpn: viaVpn[c.key] ?? 0, bad: bad[c.key] ?? 0),
+        if (hint != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Sp.sm, Sp.xs, Sp.sm, 2),
+            child: Row(children: [
+              Icon(picked != null ? LucideIcons.filter : LucideIcons.mousePointerClick,
+                  size: 13, color: AppColors.textLow),
+              const SizedBox(width: Sp.x6),
+              Expanded(
+                child: Text(hint,
+                    key: const ValueKey('subs-check-companies-hint'),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5)),
+              ),
+            ]),
+          ),
+      ]),
+    );
+  }
+
+  Widget _companyRow(MergedCompany c, {required int total, required int read, required int viaVpn, required int bad}) {
+    final on = _company == c.key;
+    final counts = 'قُرئ ${formatIQD(read)} من ${formatIQD(total)}';
+    final job = VpnNow.subscribers;
+    final local = _isLocal(c.key);
+    final note = _companyNote(c.key);
+    final at = VpnNow.readingsAtFor(c.key);
+    final probing = widget.probing?.value ?? false;
+    // المفتوحة: من الهاتف أوّلاً، وما قُرئ عبر VPN شركتها (ضوء الأولت) يُقال
+    final localWay = viaVpn == 0 ? 'من شبكتك' : (viaVpn == read ? 'عبر VPN الشركة' : 'من شبكتك وعبر VPN الشركة');
+    final (IconData icon, AppTone tone, String text) = local
+        ? (probing
+            ? (LucideIcons.loader, AppTone.brand, 'يُقرأ من شبكتك… · $counts')
+            : job.busy && job.current == c.key
+                ? (LucideIcons.loader, AppTone.brand, 'يُكمَّل عبر VPN الشركة… · $counts')
+                : (LucideIcons.circleCheck, AppTone.success, '$localWay · $counts'))
+        : job.busy && job.current == c.key
+            ? (LucideIcons.loader, AppTone.brand, 'يُفحص عبر VPN الشركة… · $counts')
+            : job.busy && job.queue.contains(c.key)
+                ? (LucideIcons.hourglass, AppTone.neutral, 'بانتظار دورها عبر VPN · $counts')
+                : note != null
+                    ? (
+                        note.contains('تحتاج VPN') ? LucideIcons.shieldOff : LucideIcons.triangleAlert,
+                        AppTone.warning,
+                        note
+                      )
+                    : at != null
+                        ? (LucideIcons.circleCheck, AppTone.success, 'عبر VPN الشركة · ${timeAgoAr(at)} · $counts')
+                        : (LucideIcons.circleDashed, AppTone.neutral, 'لم تُفحص بعد عبر VPN · $counts');
+    final waiting = tone == AppTone.neutral;
+    return Material(
+      key: ValueKey('subs-check-company-${c.key}'),
+      color: on ? AppTone.brand.softBg : Colors.transparent,
+      borderRadius: BorderRadius.circular(R.md),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(R.md),
+        onTap: () => setState(() {
+          _company = on ? null : c.key;
+          _kind = null;
+        }),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: Sp.sm),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.md),
+            border: Border.all(color: on ? AppTone.brand.softBorder : Colors.transparent),
+          ),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(color: AppColors.company(c.colorIndex), shape: BoxShape.circle),
+              ),
+            ),
+            const SizedBox(width: Sp.sm),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                Text(c.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style:
+                        AppType.label(color: AppColors.textHi).copyWith(fontSize: 13.5, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text(text,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.muted(color: tone == AppTone.warning ? tone.onSoft : AppColors.textMid)
+                        .copyWith(fontSize: 11.5)),
+              ]),
+            ),
+            const SizedBox(width: Sp.x6),
+            if (on) ...[
+              _pillSmall('معروضة', AppTone.brand),
+              const SizedBox(width: Sp.x6),
+            ] else if (bad > 0) ...[
+              _pillSmall('${formatIQD(bad)} بمشكلة', AppTone.danger),
+              const SizedBox(width: Sp.x6),
+            ],
+            Icon(icon, size: 18, color: waiting ? AppColors.textLow : tone.fill),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _pillSmall(String text, AppTone tone) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 2),
+        decoration: BoxDecoration(
+          color: tone.softBg,
+          borderRadius: BorderRadius.circular(R.pill),
+          border: Border.all(color: tone.softBorder),
+        ),
+        child: Text(text, style: AppType.label(color: tone.onSoft).copyWith(fontSize: 11, fontWeight: FontWeight.w700)),
+      );
 
   // ─────────────────── شرائح الأنواع ───────────────────
 
@@ -580,6 +815,10 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
     final s = m.sub;
     final (text, tone) = switch (m.why) {
       SubsMissWhy.dead => ('لا يستجيب', AppTone.danger),
+      SubsMissWhy.company => (
+          (m.note ?? '').contains('تحتاج VPN') ? 'شركته تحتاج VPN' : 'لم تُفحص شركته',
+          AppTone.warning
+        ),
       SubsMissWhy.offline => ('غير متّصل', AppTone.neutral),
       SubsMissWhy.noMetrics => ('جهازٌ بلا قياسات', AppTone.neutral),
       SubsMissWhy.noReply => (
