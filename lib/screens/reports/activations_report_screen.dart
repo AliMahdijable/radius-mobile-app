@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../core/util/server_time.dart';
 import '../../api/reports_api.dart';
 import '../../core/util/format.dart';
 import '../../models/merged_company.dart';
@@ -236,8 +237,8 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
             if (_mergedOn) MergedMode.companyOf(e.key)?.name ?? '',
             e.row.userFullName ?? e.row.targetName ?? e.row.userUsername ?? '',
             e.row.userUsername ?? '',
-            e.row.amount == 0 ? '0' : e.row.amount.toString(),
-            e.row.createdAt,
+            e.row.amount == 0 ? '' : e.row.amount.toString(),
+            exportTime(e.row.createdAt),
             (e.row.actionDescription ?? '').replaceAll('\n', ' '),
             _actionLabel(e.row),
             e.row.actingEmployeeFullName ?? e.row.adminUsername ?? '',

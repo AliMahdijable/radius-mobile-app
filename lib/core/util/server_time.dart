@@ -77,6 +77,17 @@ DateTime? parseServerUtc(String? raw) {
   return dt?.toLocal();
 }
 
+/// وقتٌ من قاعدتنا للتصدير (Excel/PDF/الصورة): «2026-11-07 21:21» بتوقيت الجهاز — لا «2026-11-07T21:21:56.000Z» الذي
+/// خرج به تقرير التفعيلات على هاتف المالك (٨ نوفمبر). تاريخٌ بلا وقت (الصرفيات) يبقى كما هو؛ وما لا يُقرأ يُعاد كما جاء.
+String exportTime(String? raw) {
+  final s = raw?.trim() ?? '';
+  if (s.isEmpty || RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(s)) return s;
+  final t = parseServerUtc(s);
+  if (t == null) return s;
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${t.year}-${two(t.month)}-${two(t.day)} ${two(t.hour)}:${two(t.minute)}';
+}
+
 /// يقرأ تاريخاً **من الساس** — وهو بتوقيت بغداد.
 ///
 /// يُترك كما هو عمداً: الأجهزة في العراق، فقراءتُه محلّيّاً صحيحة.

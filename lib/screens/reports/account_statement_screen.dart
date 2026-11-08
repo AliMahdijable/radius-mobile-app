@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../core/util/server_time.dart';
 import '../../api/reports_api.dart';
 import '../../core/util/format.dart';
 import '../../theme/colors.dart';
@@ -81,7 +82,7 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
               displayName,
               widget.username,
               r.amount == 0 ? '' : r.amount.toString(),
-              r.createdAt,
+              exportTime(r.createdAt),
               (r.description ?? '').replaceAll('\n', ' '),
               arabicActionLabel(r.actionType ?? '', r.description ?? ''),
               r.adminName ?? '',

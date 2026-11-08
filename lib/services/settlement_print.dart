@@ -22,13 +22,17 @@ class SettlementPrint {
       final company = await AuthStorage.readDisplayName();
       final manager = await AuthStorage.readAdminUsername();
       final doc = await _build(s, format, company: company, manager: manager);
-      return PrintOutput.send(await PrintDoc.of(
-        doc,
-        name: s.isOpening ? 'Account-Opening' : 'Settlement-${s.number}',
-        requested: format,
-        // ويندوز: يُعاد رسمه على ورق الطابعة كالوصل ([PrintOutput.bytesFor]).
-        refit: (paper) async => (await _build(s, format, company: company, manager: manager, paper: paper)).save(),
-      ));
+      // الهاتف: «صورة» للمشاركة أو الطباعة (٨ نوفمبر)
+      return PrintOutput.sendOrShare(
+        await PrintDoc.of(
+          doc,
+          name: s.isOpening ? 'Account-Opening' : 'Settlement-${s.number}',
+          requested: format,
+          // ويندوز: يُعاد رسمه على ورق الطابعة كالوصل ([PrintOutput.bytesFor]).
+          refit: (paper) async => (await _build(s, format, company: company, manager: manager, paper: paper)).save(),
+        ),
+        title: s.isOpening ? 'سند فتح الحساب' : 'سند التسوية',
+      );
     } catch (e) {
       if (kDebugMode) debugPrint('[SettlementPrint] failed: $e');
       return PrintResult.failed('$e');

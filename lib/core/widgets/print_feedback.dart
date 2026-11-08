@@ -12,6 +12,8 @@ void showPrintResult(BuildContext context, PrintResult r) {
   switch (r.outcome) {
     case PrintOutcome.printed:
       if (r.printer != null) showSheetSnack(context, 'printer.sent_to'.tr(args: [r.printer!]));
+    // نافذة المشاركة نفسها تقول ما جرى (صورة الوصل بالهاتف)
+    case PrintOutcome.shared:
     case PrintOutcome.cancelled:
       break;
     case PrintOutcome.failed:

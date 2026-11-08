@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:csv/csv.dart';
+import 'package:easy_localization/easy_localization.dart' show StringTranslateExtension;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path_provider/path_provider.dart';
@@ -11,7 +12,9 @@ import 'package:share_plus/share_plus.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../core/widgets/print_feedback.dart';
+import '../../../services/phone_output.dart';
 import '../../../services/print_output.dart';
+import 'report_image.dart';
 
 /// ================================================================
 /// Report export — CSV/Excel + PDF/Print للتقارير.
@@ -28,7 +31,7 @@ import '../../../services/print_output.dart';
 /// التصدير يشمل الـfiltered set كامل.
 /// ================================================================
 
-class ReportExportBar extends StatelessWidget {
+class ReportExportBar extends StatefulWidget {
   const ReportExportBar({
     super.key,
     required this.title,
@@ -53,6 +56,23 @@ class ReportExportBar extends StatelessWidget {
   /// نفس العرض (flex=1). المطلب 2026-07-12: اسم/يوزر/وصف أوسع، نوع/منفّذ أضيق.
   final List<double>? columnWeights;
 
+  /// عمود الشركة في «كل الشركات» — شارةٌ فوق بطاقة الصورة لا سطرٌ فيها.
+  static String get companyColumn => 'merged.col_company'.tr();
+
+  @override
+  State<ReportExportBar> createState() => _ReportExportBarState();
+}
+
+class _ReportExportBarState extends State<ReportExportBar> {
+  bool _imageBusy = false;
+
+  String get title => widget.title;
+  String? get subtitle => widget.subtitle;
+  List<String> get columns => widget.columns;
+  List<List<String>> get rows => widget.rows;
+  String get fileNameBase => widget.fileNameBase;
+  List<double>? get columnWeights => widget.columnWeights;
+
   bool get _hasData => rows.isNotEmpty;
 
   @override
@@ -68,6 +88,19 @@ class ReportExportBar extends StatelessWidget {
           enabled: _hasData,
           onTap: () => _exportCsv(context),
         ),
+        // الهاتف: «صورة» تُقرأ عليه وتُرسل بواتساب (٨ نوفمبر — المالك: «صوره تكون اختيار افضل من pdf»)
+        if (PhoneOutput.active) ...[
+          const SizedBox(width: 6),
+          _IconBtn(
+            key: const ValueKey('report-share-image'),
+            icon: LucideIcons.image,
+            tooltip: 'مشاركة صورة',
+            color: const Color(0xFF16624A),
+            enabled: _hasData && !_imageBusy,
+            busy: _imageBusy,
+            onTap: () => _shareImage(context),
+          ),
+        ],
         const SizedBox(width: 6),
         _IconBtn(
           icon: LucideIcons.printer,
@@ -78,6 +111,32 @@ class ReportExportBar extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  /// صفحات الهاتف ([ReportImageDoc]) ⇒ صور ⇒ نافذة المشاركة.
+  Future<void> _shareImage(BuildContext context) async {
+    if (_imageBusy) return;
+    setState(() => _imageBusy = true);
+    final box = context.findRenderObject() as RenderBox?;
+    final origin = box != null && box.hasSize ? box.localToGlobal(Offset.zero) & box.size : null;
+    PrintResult r;
+    try {
+      final ci = columns.indexOf(ReportExportBar.companyColumn);
+      final img = await ReportImageDoc.build(
+        title: title,
+        subtitle: subtitle,
+        columns: columns,
+        rows: rows,
+        titleColumn: ci == 0 && columns.length > 1 ? 1 : 0,
+        tagColumn: ci >= 0 ? ci : null,
+      );
+      r = await PhoneOutput.sharePdf(img.bytes,
+          widthPt: ReportImageDoc.page.width, name: fileNameBase, text: title, origin: origin);
+    } catch (e) {
+      r = PrintResult.failed('report image: $e');
+    }
+    if (mounted) setState(() => _imageBusy = false);
+    if (context.mounted) showPrintResult(context, r);
   }
 
   Future<void> _exportCsv(BuildContext context) async {
@@ -202,17 +261,20 @@ class ReportExportBar extends StatelessWidget {
 
 class _IconBtn extends StatelessWidget {
   const _IconBtn({
+    super.key,
     required this.icon,
     required this.tooltip,
     required this.color,
     required this.enabled,
     required this.onTap,
+    this.busy = false,
   });
   final IconData icon;
   final String tooltip;
   final Color color;
   final bool enabled;
   final VoidCallback onTap;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -234,8 +296,9 @@ class _IconBtn extends StatelessWidget {
             ),
           ),
           alignment: Alignment.center,
-          child:
-              Icon(icon, size: 17, color: active ? color : AppColors.textLow),
+          child: busy
+              ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: color))
+              : Icon(icon, size: 17, color: active ? color : AppColors.textLow),
         ),
       ),
     );

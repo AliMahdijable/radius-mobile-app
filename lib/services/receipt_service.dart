@@ -276,6 +276,7 @@ class ReceiptService {
 
   static Future<PrintResult> _print(ReceiptDoc doc) async {
     final pdf = await ReceiptPdf.build(doc, a4: PrintPrefs.currentTemplateType == 'a4');
-    return PrintOutput.send(pdf);
+    // الهاتف: «صورة» للمشاركة أو الطباعة (٨ نوفمبر)
+    return PrintOutput.sendOrShare(pdf, title: doc.kind.title);
   }
 }

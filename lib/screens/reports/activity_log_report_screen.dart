@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../core/util/server_time.dart';
 import '../../api/archive_info.dart';
 import '../../api/expenses_api.dart';
 import '../../api/reports_api.dart';
@@ -258,7 +259,7 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
             e.row.userFullName ?? e.row.targetName ?? e.row.userUsername ?? '',
             e.row.userUsername ?? '',
             e.row.amount == 0 ? '' : e.row.amount.toString(),
-            e.row.createdAt,
+            exportTime(e.row.createdAt),
             (e.row.actionDescription ?? '').replaceAll('\n', ' '),
             arabicActionLabel(e.row.actionType, e.row.actionDescription ?? ''),
             e.row.actingEmployeeFullName ?? e.row.adminUsername ?? '',

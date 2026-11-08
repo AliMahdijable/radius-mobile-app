@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../core/util/server_time.dart';
 import '../../api/merged_finance_api.dart';
 import '../../api/reports_api.dart';
 import '../settlements/widgets/archive_bar.dart';
@@ -951,7 +952,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               l.amount == 0 ? '' : l.amount.toString(),
               if (showCost)
                 l.packageCost == null ? '' : _plainNumber(l.packageCost!),
-              l.createdAt,
+              exportTime(l.createdAt),
               (l.actionDescription ?? '').replaceAll('\n', ' '),
               arabicActionLabel(l.actionType, l.actionDescription ?? ''),
               l.actingEmployeeFullName ?? l.adminUsername ?? '',

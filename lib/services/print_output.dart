@@ -8,6 +8,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../core/platform/app_platform.dart';
+import 'phone_output.dart';
 import 'print_prefs.dart';
 
 /// يعيد بناء المستند على ورق الطابعة كما أرسله النظام قبل الطباعة (عرضه وحواشيه غير المطبوعة).
@@ -81,14 +82,16 @@ class PdfFonts {
   }
 }
 
-enum PrintOutcome { printed, cancelled, failed }
+enum PrintOutcome { printed, shared, cancelled, failed }
 
 @immutable
 class PrintResult {
-  const PrintResult._(this.outcome, {this.printer, this.error});
+  const PrintResult._(this.outcome, {this.printer, this.error, this.images = 0});
 
   /// [printer] = اسم الطابعة إن أُرسل إليها مباشرةً (بلا نافذة).
   const PrintResult.printed({String? printer}) : this._(PrintOutcome.printed, printer: printer);
+  /// شوركت صوراً بالهاتف ([PhoneOutput]) — [images] عددها.
+  const PrintResult.shared({int images = 1}) : this._(PrintOutcome.shared, images: images);
   const PrintResult.cancelled() : this._(PrintOutcome.cancelled);
   const PrintResult.failed(String error) : this._(PrintOutcome.failed, error: error);
 
@@ -96,7 +99,8 @@ class PrintResult {
   final String? printer;
   final String? error;
 
-  bool get ok => outcome == PrintOutcome.printed;
+  final int images;
+  bool get ok => outcome == PrintOutcome.printed || outcome == PrintOutcome.shared;
 }
 
 /// ما يكلّم مكتبة الطباعة — تُستبدل في الاختبارات.
@@ -199,6 +203,27 @@ class PrintOutput {
       if (kDebugMode) debugPrint('[PrintOutput] layout failed: $e');
       return PrintResult.failed('layout: $e');
     }
+  }
+
+  /// الوصل والسند وفاتورة البيع بالهاتف ([PhoneOutput]، ٨ نوفمبر): «صورة» للمشاركة أو نافذة الطباعة — يُسأل لكلّ وصل، والإغلاق
+  /// لا يفعل شيئاً. الحاسبة: [send] كما كان حرفاً.
+  static Future<PrintResult> sendOrShare(PrintDoc doc, {required String title, bool allowDirect = true}) async {
+    if (PhoneOutput.active) {
+      final ctx = PhoneOutput.navigatorKey?.currentContext;
+      if (ctx != null && ctx.mounted) {
+        final choice = await PhoneOutput.choose(ctx, title: title);
+        if (choice == null) return const PrintResult.cancelled();
+        if (choice == OutputChoice.image) {
+          return PhoneOutput.sharePdf(
+            doc.bytes,
+            widthPt: doc.format.width,
+            name: doc.name.replaceAll(RegExp(r'\.pdf$'), ''),
+            text: title,
+          );
+        }
+      }
+    }
+    return send(doc, allowDirect: allowDirect);
   }
 
   /// طابعات النظام (للاختيار) — فارغةٌ على أيّ فشل.
