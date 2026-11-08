@@ -37,6 +37,8 @@ class CompanyRoute {
     '/api/v2/subscribers/device-batch',
     '/api/v2/subscribers/last-macs',
     '/api/v2/connection-alerts/readings',
+    // «المبيعات» (٨ نوفمبر): حالة تسديد البيع على الدين قراءةٌ بـPOST — لا تُسقط قائمة الشركة كلّما فُتح القسم
+    '/api/v2/sales/debt-status',
   };
 
   /// مفتاح شركة الطلب: `extra['companyKey']` صراحةً أوّلاً، ثمّ النطاق.

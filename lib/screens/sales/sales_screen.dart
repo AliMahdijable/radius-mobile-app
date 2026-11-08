@@ -4,6 +4,8 @@ import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/company_route.dart';
+import '../../api/merged_dashboard_api.dart';
 import '../../api/sales_api.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../../core/util/ar_date.dart';
@@ -14,6 +16,10 @@ import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/permission_locked.dart';
 import '../../core/widgets/sheet_scaffold.dart';
+import '../../models/merged_company.dart';
+import '../../services/active_company.dart';
+import '../../services/auth_storage.dart';
+import '../../services/merged_mode.dart';
 import '../../services/permissions_service.dart';
 import '../../services/print_prefs.dart';
 import '../../services/sale_print.dart';
@@ -35,7 +41,12 @@ import '../../core/widgets/print_feedback.dart';
 /// (الشراء، الجرد، الحركات). البيع نقداً يدخل الصندوق والمحصَّل، وعلى دين
 /// المشترك عبر مسار إضافة الدين نفسه بالخادم. الكلفة المتوسّطة يحسبها الخادم
 /// لحظة البيع — الشاشة تعرض تقديرها فقط. المفاتيح `sales.view/sell/items/void`
-/// — ما لا يملكه الموظّف يبقى بمكانه مقفلاً. «كل الشركات»: للشركة المفتوحة.
+/// — ما لا يملكه الموظّف يبقى بمكانه مقفلاً.
+///
+/// «كل الشركات» (٨ نوفمبر — المالك: «قسم المبيعات هم من ضمن الاقسام المدموجه هم اريد»): شريط الشركات أعلى القسم؛
+/// «الكل» مجموع الفترة وبطاقةٌ لكلّ شركة (مبيعاتها وربحها ومخزونها)، والضغط على شركةٍ يعرض مبيعاتها وموادّها في
+/// مكانها — قراءةٌ موجَّهة لها ([SalesApi.routeKey]). البيع والمخزون والإلغاء للشركة المفتوحة وحدها: شركةٌ أخرى
+/// أزرارها مقفلةٌ بسببها (والخادم يرفض كتابتها الموجَّهة).
 class SalesScreen extends StatefulWidget {
   const SalesScreen({super.key});
 
@@ -65,30 +76,262 @@ class _SalesScreenState extends State<SalesScreen> {
   bool _loadingItems = true;
   bool _loadingSales = true;
 
+  // ─── «كل الشركات» ───
+  /// مدير الجلسة المفتوحة — شركتها يُباع منها كما كان، وغيرها للعرض.
+  String? _openAdmin;
+
+  /// «الكل»: مبيعات كلّ شركةٍ وموادّها بالفترة — null حتى تُقرأ.
+  List<_CoSales>? _overview;
+  bool _loadingOverview = false;
+
+  /// جيل النطاق (الوضع/الشركة): ردٌّ وصل بعد التبديل لا يُعرض. [_ovSeq] لجلبات «الكل» المتداخلة (تغيير الفترة).
+  int _gen = 0;
+  int _ovSeq = 0;
+
+  /// الشركة التي تعرض الشاشة بياناتها (null = المفتوحة أو الوضع العاديّ).
+  String? _shownKey;
+
   @override
   void initState() {
     super.initState();
     if (Perms.has('sales.view')) {
-      _loadItems();
-      _loadSales();
+      if (MergedMode.active.value) {
+        _loadingOverview = true;
+        unawaited(_initMerged());
+      } else {
+        _loadItems();
+        _loadSales();
+      }
     } else {
       _loadingItems = false;
       _loadingSales = false;
     }
     // تسديد دين مشترك (أو أيّ عمليّة عليه) من صفحته والشاشة مفتوحة تحتها ⇒ حالة بيعه («مسدّد») تُقرأ من جديد.
     SubscriberEvents.dataChanged.addListener(_onDataChanged);
+    MergedMode.active.addListener(_onScope);
+    MergedMode.focus.addListener(_onScope);
   }
 
   @override
   void dispose() {
     SubscriberEvents.dataChanged.removeListener(_onDataChanged);
+    MergedMode.active.removeListener(_onScope);
+    MergedMode.focus.removeListener(_onScope);
+    // القسم أُغلق: طلبات المبيعات بعده للجلسة المفتوحة كما كانت.
+    SalesApi.routeKey = null;
     _search.dispose();
     super.dispose();
   }
 
   void _onDataChanged() {
     if (!mounted || _selfChange || !Perms.has('sales.view')) return;
+    if (_overviewMode) {
+      unawaited(_loadOverview());
+      return;
+    }
     _loadSales();
+  }
+
+  // ─────────────────────── «كل الشركات» ───────────────────────
+  bool get _merged => MergedMode.active.value;
+
+  /// «الكل»: ملخّص الشركات بدل قوائم شركةٍ واحدة.
+  bool get _overviewMode => _merged && MergedMode.focused == null;
+
+  bool _isOpen(MergedCompany c) => (_openAdmin ?? '').isNotEmpty && c.adminId == _openAdmin;
+
+  /// شركةٌ غير المفتوحة معروضة: قراءةٌ موجَّهة لها، والبيع والمخزون والإلغاء مقفلةٌ بسببها.
+  MergedCompany? get _readOnlyCompany {
+    if (!_merged) return null;
+    final f = MergedMode.focused;
+    return f == null || _isOpen(f) ? null : f;
+  }
+
+  String _lockText(MergedCompany c) => 'sales.merged_readonly'.tr(args: [c.name]);
+
+  Future<void> _initMerged() async {
+    try {
+      _openAdmin = (await AuthStorage.readAdminId())?.trim();
+    } catch (_) {
+      _openAdmin = null; // لا تُعرف المفتوحة ⇒ كلّ شركةٍ للعرض (لا بيع لشركةٍ غير مؤكَّدة)
+    }
+    if (!mounted) return;
+    _applyScope();
+  }
+
+  void _onScope() {
+    if (!mounted || !Perms.has('sales.view')) return;
+    _applyScope();
+  }
+
+  /// النطاق تغيّر (دخول الوضع أو خروجه، أو الشركة المختارة): وجهة طلبات القسم ثمّ الجلب من جديد.
+  void _applyScope() {
+    final key = _readOnlyCompany?.key;
+    SalesApi.routeKey = key;
+    _gen++;
+    if (_overviewMode) {
+      setState(() => _loadingOverview = _overview == null);
+      unawaited(_loadOverview());
+      return;
+    }
+    setState(() {
+      if (key != _shownKey) {
+        // شركةٌ أخرى: لا تبقى أرقام سابقتها تحت اسمها حتى يصل ردّها.
+        _shownKey = key;
+        _items = null;
+        _sales = null;
+        _debts = const {};
+        _debtsComplete = false;
+        _itemsError = null;
+        _salesError = null;
+        _loadingItems = true;
+        _loadingSales = true;
+      }
+    });
+    _loadItems();
+    _loadSales();
+  }
+
+  /// «الكل»: مبيعات كلّ شركةٍ وموادّها بالفترة — ثلاثٌ معاً على الأكثر.
+  Future<void> _loadOverview() async {
+    final gen = _gen;
+    final seq = ++_ovSeq;
+    final from = _day(_range.from);
+    final to = _day(_range.to);
+    final cs = MergedDashboardApi.countable();
+    final out = List<_CoSales?>.filled(cs.length, null);
+    var next = 0;
+    Future<void> worker() async {
+      while (next < cs.length) {
+        final i = next++;
+        out[i] = await _loadCompany(cs[i], from, to);
+      }
+    }
+
+    await Future.wait([for (var w = 0; w < 3 && w < cs.length; w++) worker()]);
+    if (!mounted || gen != _gen || seq != _ovSeq) return;
+    setState(() {
+      _overview = out.whereType<_CoSales>().toList();
+      _loadingOverview = false;
+    });
+  }
+
+  /// شركةٌ واحدة: المفتوحة كما هي، وغيرها موجَّهٌ لها (قراءةٌ وحدها).
+  Future<_CoSales> _loadCompany(MergedCompany c, String from, String to) async {
+    final open = _isOpen(c);
+    try {
+      final (s, it) = await CompanyRoute.run(
+        open ? null : c.key,
+        () => (SalesApi.list(from: from, to: to), SalesApi.items()).wait,
+      );
+      return _CoSales(
+        company: c,
+        open: open,
+        sales: s.page,
+        items: it.page,
+        error: s.page == null ? (s.error ?? 'sales.load_failed'.tr()) : null,
+      );
+    } catch (_) {
+      return _CoSales(company: c, open: open, error: 'sales.load_failed'.tr());
+    }
+  }
+
+  /// «الكل»: مجموع الفترة، ثمّ بطاقةٌ لكلّ شركة — الضغط يعرضها وحدها. شركةٌ لم تُقرأ تُسمّى ولا تُجمع صفراً.
+  List<Widget> _overviewContent() {
+    final parts = _overview;
+    final rangeBar = DateRangeChipBar(
+      value: _range,
+      onChanged: (r) {
+        setState(() {
+          _range = r;
+          _loadingOverview = true;
+        });
+        unawaited(_loadOverview());
+      },
+    );
+    if (parts == null) {
+      return [
+        rangeBar,
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 48),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ];
+    }
+    final read = [for (final p in parts) if (p.sales != null) p.sales!.totals];
+    final failed = [for (final p in parts) if (p.sales == null) p.company.name];
+    num sum(num Function(SalesTotals t) f) => read.fold<num>(0, (a, t) => a + f(t));
+    final count = read.fold<int>(0, (a, t) => a + t.count);
+    final profit = sum((t) => t.profit);
+    return [
+      rangeBar,
+      const SizedBox(height: Sp.md),
+      ..._kpiRows([
+        _Kpi(
+          icon: LucideIcons.shoppingCart,
+          label: 'sales.kpi_revenue'.tr(),
+          value: _money(sum((t) => t.revenue)),
+          sub: 'sales.count_n'.tr(namedArgs: {'n': '$count'}),
+          tone: AppTone.brand,
+        ),
+        _Kpi(
+          icon: LucideIcons.trendingUp,
+          label: 'sales.kpi_profit'.tr(),
+          value: _signedMoney(profit),
+          sub: 'sales.cost_n'.tr(namedArgs: {'amount': _money(sum((t) => t.cost))}),
+          tone: profit < 0 ? AppTone.danger : AppTone.success,
+        ),
+        _Kpi(
+          icon: LucideIcons.wallet,
+          label: 'sales.kpi_cash'.tr(),
+          value: _money(sum((t) => t.cash)),
+          sub: 'sales.kpi_cash_hint'.tr(),
+          tone: AppTone.info,
+        ),
+        _Kpi(
+          icon: LucideIcons.handCoins,
+          label: 'sales.kpi_debt'.tr(),
+          value: _money(sum((t) => t.debt)),
+          sub: 'sales.kpi_debt_hint'.tr(),
+          tone: AppTone.warning,
+        ),
+      ]),
+      if (failed.isNotEmpty) ...[
+        const SizedBox(height: Sp.md),
+        _Banner(
+          icon: LucideIcons.triangleAlert,
+          text: 'sales.merged_failed'.tr(args: [failed.map((n) => '«$n»').join('، ')]),
+        ),
+      ],
+      // الجلسة المفتوحة ليست من شركات «كل الشركات» (الوطني مثلاً — من الموقع) ⇒ لا بطاقة لها: يُقال أين يُباع منها.
+      if ((_openAdmin ?? '').isNotEmpty && !parts.any((p) => p.open)) ...[
+        const SizedBox(height: Sp.md),
+        _Banner(
+          icon: LucideIcons.info,
+          text: 'sales.merged_open_outside'.tr(args: [ActiveCompany.current?.label ?? '—']),
+        ),
+      ],
+      const SizedBox(height: Sp.lg),
+      Text(
+        'sales.merged_hint'.tr(),
+        style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5),
+      ),
+      const SizedBox(height: Sp.sm),
+      if (_loadingOverview)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: Sp.xl),
+          child: Center(child: CircularProgressIndicator()),
+        )
+      else
+        ..._cards([
+          for (final p in parts)
+            _CompanySalesCard(
+              key: ValueKey('sales-co-${p.company.key}'),
+              part: p,
+              onTap: () => MergedMode.focus.value = p.company.key,
+            ),
+        ]),
+    ];
   }
 
   /// مفعّلة؟ من ردّ القائمة نفسها (المفتاح يُقرأ بالخادم).
@@ -98,8 +341,9 @@ class _SalesScreenState extends State<SalesScreen> {
       (_items?.items.isNotEmpty ?? false) || (_sales?.sales.isNotEmpty ?? false);
 
   Future<void> _loadItems() async {
+    final gen = _gen;
     final r = await SalesApi.items(includeInactive: _showInactive);
-    if (!mounted) return;
+    if (!mounted || gen != _gen) return;
     setState(() {
       _loadingItems = false;
       if (r.page != null) {
@@ -115,8 +359,9 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Future<void> _loadSales() async {
+    final gen = _gen;
     final r = await SalesApi.list(from: _day(_range.from), to: _day(_range.to));
-    if (!mounted) return;
+    if (!mounted || gen != _gen) return;
     setState(() {
       _loadingSales = false;
       if (r.page != null) {
@@ -146,7 +391,7 @@ class _SalesScreenState extends State<SalesScreen> {
     });
   }
 
-  Future<void> _refresh() => Future.wait([_loadItems(), _loadSales()]);
+  Future<void> _refresh() => _overviewMode ? _loadOverview() : Future.wait([_loadItems(), _loadSales()]);
 
   /// تحت «بيع بالدين»: ما بقي منه على المشتركين الآن — حين قُرئت حالات المبيعات كلّها، وإلّا «على المشتركين» كما كان.
   String _debtSub(num sold) {
@@ -186,9 +431,9 @@ class _SalesScreenState extends State<SalesScreen> {
             ),
             iconTheme: IconThemeData(color: AppColors.textHi),
           ),
-          primary: _enabled ? _deskPrimary() : null,
+          primary: _enabled && !_overviewMode ? _deskPrimary() : null,
         ),
-        floatingActionButton: _enabled && !DesktopScope.of(context) ? _fab() : null,
+        floatingActionButton: _enabled && !_overviewMode && !DesktopScope.of(context) ? _fab() : null,
         body: SafeArea(
           child: RefreshIndicator(
             onRefresh: _refresh,
@@ -197,11 +442,15 @@ class _SalesScreenState extends State<SalesScreen> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge + Sp.huge),
               children: [
-                const MergedOpenCompanyNote(
-                  textKey: 'merged.sales_note',
-                  padding: EdgeInsets.only(bottom: Sp.md),
-                ),
-                ..._content(),
+                if (_merged) ...[
+                  const MergedCompanyStrip(),
+                  const SizedBox(height: Sp.md),
+                  if (_readOnlyCompany != null) ...[
+                    _Banner(icon: LucideIcons.eye, text: _lockText(_readOnlyCompany!)),
+                    const SizedBox(height: Sp.md),
+                  ],
+                ],
+                ...(_overviewMode ? _overviewContent() : _content()),
               ],
             ),
           ),
@@ -212,6 +461,15 @@ class _SalesScreenState extends State<SalesScreen> {
 
   /// زرّ الحاسبة: نفس فعل الزرّ العائم للتبويب المفتوح.
   Widget _deskPrimary() {
+    final ro = _readOnlyCompany;
+    if (ro != null) {
+      return DeskPrimaryButton(
+        icon: _tab == 1 ? LucideIcons.plus : LucideIcons.shoppingCart,
+        label: (_tab == 1 ? 'sales.new_item' : 'sales.new').tr(),
+        locked: true,
+        onTap: () => showNoPermission(context, action: true, message: _lockText(ro)),
+      );
+    }
     if (_tab == 1) {
       final can = Perms.has('sales.items');
       return DeskPrimaryButton(
@@ -265,6 +523,17 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Widget _fab() {
+    final ro = _readOnlyCompany;
+    if (ro != null) {
+      return FloatingActionButton.extended(
+        heroTag: 'sales-fab-readonly',
+        backgroundColor: LockedStyle.box,
+        foregroundColor: LockedStyle.glyph,
+        onPressed: () => showNoPermission(context, action: true, message: _lockText(ro)),
+        icon: const Icon(LucideIcons.lock, size: 16),
+        label: Text((_tab == 1 ? 'sales.new_item' : 'sales.new').tr()),
+      );
+    }
     if (_tab == 1) {
       final can = Perms.has('sales.items');
       return FloatingActionButton.extended(
@@ -317,7 +586,12 @@ class _SalesScreenState extends State<SalesScreen> {
       ];
     }
     if (!_enabled && !_hasData) {
-      return [_Notice(icon: LucideIcons.shoppingCart, text: 'sales.off'.tr())];
+      return [
+        _Notice(
+          icon: LucideIcons.shoppingCart,
+          text: (_readOnlyCompany != null ? 'sales.merged_off' : 'sales.off').tr(),
+        ),
+      ];
     }
     return [
       if (!_enabled) ...[
@@ -339,8 +613,9 @@ class _SalesScreenState extends State<SalesScreen> {
   List<Widget> _salesTab() {
     final page = _sales;
     final t = page?.totals ?? const SalesTotals();
-    final canVoid = Perms.has('sales.void') && _enabled;
-    final canResolve = Perms.has('sales.sell') && _enabled;
+    final ro = _readOnlyCompany;
+    final canVoid = Perms.has('sales.void') && _enabled && ro == null;
+    final canResolve = Perms.has('sales.sell') && _enabled && ro == null;
     return [
       DateRangeChipBar(
         value: _range,
@@ -413,6 +688,8 @@ class _SalesScreenState extends State<SalesScreen> {
                 debt: _debts[sale.id],
                 canVoid: canVoid,
                 canResolve: canResolve,
+                lockMessage: ro == null ? null : _lockText(ro),
+                printCompany: ro?.key,
                 onVoid: () => _after(_showSheet(context, _VoidSheet(sale: sale))),
                 onResolve: () => _after(_showSheet(context, _ResolveSheet(sale: sale))),
               ),
@@ -435,7 +712,8 @@ class _SalesScreenState extends State<SalesScreen> {
     if (page == null) {
       return [_Notice(icon: LucideIcons.boxes, text: _itemsError ?? 'sales.load_failed'.tr())];
     }
-    final canItems = Perms.has('sales.items') && _enabled;
+    final ro = _readOnlyCompany;
+    final canItems = Perms.has('sales.items') && _enabled && ro == null;
     final s = _search.text.trim().toLowerCase();
     final shown = s.isEmpty
         ? page.items
@@ -515,6 +793,7 @@ class _SalesScreenState extends State<SalesScreen> {
             _ItemTile(
               item: item,
               locked: !canItems,
+              lockMessage: ro == null ? null : _lockText(ro),
               onStock: () => _after(_showSheet(context, _StockSheet(item: item))),
               onDefect: () => _after(_showSheet(context, _DefectSheet(item: item))),
               onEdit: () => _after(_showSheet(context, _ItemSheet(item: item))),
@@ -712,6 +991,148 @@ class _Banner extends StatelessWidget {
   }
 }
 
+/// «كل الشركات» — شركةٌ واحدة في «الكل»: مبيعاتها وموادّها بالفترة، أو سبب تعذّرها (لا يُجمع صفراً).
+class _CoSales {
+  const _CoSales({required this.company, required this.open, this.sales, this.items, this.error});
+  final MergedCompany company;
+
+  /// شركة الجلسة المفتوحة (يُباع منها).
+  final bool open;
+  final SalesPage? sales;
+  final SaleItemsPage? items;
+  final String? error;
+}
+
+/// بطاقة شركةٍ في «الكل»: لونها واسمها، أرقام فترتها الأربعة، وعدد مبيعاتها ومخزونها — الضغط يعرضها وحدها.
+class _CompanySalesCard extends StatelessWidget {
+  const _CompanySalesCard({super.key, required this.part, required this.onTap});
+  final _CoSales part;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final c = part.company;
+    final s = part.sales;
+    final it = part.items;
+    Widget stat(String label, String value, Color color) => Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.micro()),
+              const SizedBox(height: 2),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: AlignmentDirectional.centerStart,
+                child: Text(
+                  value,
+                  style: AppType.label(color: color).copyWith(fontSize: 14, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+        );
+    final List<Widget> body;
+    if (s == null) {
+      body = [
+        Text(
+          part.error ?? 'sales.load_failed'.tr(),
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+          style: AppType.muted(color: AppTone.danger.fill).copyWith(fontSize: 12.5),
+        ),
+      ];
+    } else if (!s.enabled && s.totals.count == 0 && (it?.items.isEmpty ?? true)) {
+      body = [
+        Text('sales.merged_off'.tr(), style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5)),
+      ];
+    } else {
+      final t = s.totals;
+      body = [
+        Row(
+          children: [
+            stat('sales.kpi_revenue'.tr(), formatIQD(t.revenue), AppTone.brand.fill),
+            const SizedBox(width: Sp.sm),
+            stat('sales.kpi_profit'.tr(), '${t.profit < 0 ? '-' : ''}${formatIQD(t.profit)}',
+                t.profit < 0 ? AppTone.danger.fill : AppTone.success.fill),
+            const SizedBox(width: Sp.sm),
+            stat('sales.kpi_cash'.tr(), formatIQD(t.cash), AppTone.info.fill),
+            const SizedBox(width: Sp.sm),
+            stat('sales.kpi_debt'.tr(), formatIQD(t.debt), AppTone.warning.fill),
+          ],
+        ),
+        const SizedBox(height: Sp.sm),
+        Text(
+          [
+            'sales.count_n'.tr(namedArgs: {'n': '${t.count}'}),
+            if (it != null) 'sales.merged_stock'.tr(namedArgs: {'amount': _money(it.stockValue), 'n': '${it.outOfStock}'}),
+            if (s.unresolved > 0) 'sales.merged_unresolved'.tr(namedArgs: {'n': '${s.unresolved}'}),
+            if (!s.enabled) 'sales.merged_paused'.tr(),
+          ].join(' · '),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5),
+        ),
+      ];
+    }
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(R.lg),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(R.lg),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(Sp.md),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(R.lg),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(color: AppColors.company(c.colorIndex), shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: Sp.sm),
+                  // الاسم وشارة «المفتوحة» معاً، والسهم بالطرف — لا يقتسم السهمُ الفراغ مع الاسم فيقع وسط البطاقة.
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            c.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppType.bodyStrong(color: AppColors.textHi),
+                          ),
+                        ),
+                        if (part.open) ...[
+                          const SizedBox(width: Sp.x6),
+                          _Chip('sales.merged_open'.tr(), AppTone.brand),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: Sp.sm),
+                  Icon(LucideIcons.chevronLeft, size: 16, color: AppColors.textLow),
+                ],
+              ),
+              const SizedBox(height: Sp.sm),
+              ...body,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// شارة حالة صغيرة.
 class _Chip extends StatelessWidget {
   const _Chip(this.text, this.tone);
@@ -739,12 +1160,16 @@ class _ActionButton extends StatelessWidget {
     required this.tone,
     required this.locked,
     required this.onTap,
+    this.lockMessage,
   });
   final String label;
   final IconData icon;
   final AppTone tone;
   final bool locked;
   final VoidCallback onTap;
+
+  /// سبب القفل إن لم يكن الصلاحيّة («كل الشركات»: شركةٌ للعرض).
+  final String? lockMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -755,7 +1180,7 @@ class _ActionButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(R.md),
       child: InkWell(
         borderRadius: BorderRadius.circular(R.md),
-        onTap: locked ? () => showNoPermission(context, action: true) : onTap,
+        onTap: locked ? () => showNoPermission(context, action: true, message: lockMessage) : onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: Sp.md),
           child: SizedBox(
@@ -820,7 +1245,15 @@ class _SaleTile extends StatelessWidget {
     required this.onVoid,
     required this.onResolve,
     this.debt,
+    this.lockMessage,
+    this.printCompany,
   });
+
+  /// سبب قفل الإلغاء والحسم إن لم يكن الصلاحيّة.
+  final String? lockMessage;
+
+  /// «كل الشركات»: شركة البيع لوصله (تصميمها واسمها) — null الجلسة المفتوحة.
+  final String? printCompany;
   final Sale sale;
 
   /// حالة تسديده إن كان على الدين ومكتملاً.
@@ -943,7 +1376,7 @@ class _SaleTile extends StatelessWidget {
                 IconButton(
                   tooltip: 'sales.print_receipt'.tr(),
                   onPressed: () async {
-                    final r = await SalePrint.printReceipt(sale);
+                    final r = await SalePrint.printReceipt(sale, companyKey: printCompany);
                     if (context.mounted) showPrintResult(context, r);
                   },
                   icon: Icon(LucideIcons.printer, size: 17, color: AppColors.textBody),
@@ -955,6 +1388,7 @@ class _SaleTile extends StatelessWidget {
                   icon: LucideIcons.undo2,
                   tone: AppTone.danger,
                   locked: !canVoid,
+                  lockMessage: lockMessage,
                   onTap: onVoid,
                 ),
               if (sale.resolvable())
@@ -964,6 +1398,7 @@ class _SaleTile extends StatelessWidget {
                   tone: AppTone.warning,
                   // حسم إلغاءٍ «غير مؤكَّد» بصلاحيّة الإلغاء، وحسم بيعٍ بصلاحيّة البيع.
                   locked: sale.resolvesVoid ? !canVoid : !canResolve,
+                  lockMessage: lockMessage,
                   onTap: onResolve,
                 ),
             ],
@@ -982,9 +1417,13 @@ class _ItemTile extends StatelessWidget {
     required this.onDefect,
     required this.onEdit,
     required this.onMoves,
+    this.lockMessage,
   });
   final SaleItem item;
   final bool locked;
+
+  /// سبب القفل إن لم يكن الصلاحيّة.
+  final String? lockMessage;
   final VoidCallback onStock;
 
   /// حسم العطلان (تصلّحت / ما تتصلّح / رجّعتها للمورّد) — شارةٌ حين يوجد.
@@ -1033,7 +1472,7 @@ class _ItemTile extends StatelessWidget {
               const SizedBox(height: Sp.x6),
               Align(
                 alignment: AlignmentDirectional.centerStart,
-                child: _DefectiveChip(item: item, locked: locked, onTap: onDefect),
+                child: _DefectiveChip(item: item, locked: locked, lockMessage: lockMessage, onTap: onDefect),
               ),
             ],
             const SizedBox(height: Sp.sm),
@@ -1082,6 +1521,7 @@ class _ItemTile extends StatelessWidget {
                     label: 'sales.stock_btn'.tr(),
                     tooltip: 'sales.stock'.tr(),
                     locked: locked,
+                    lockMessage: lockMessage,
                     onTap: onStock,
                   ),
                 ),
@@ -1092,6 +1532,7 @@ class _ItemTile extends StatelessWidget {
                     label: 'sales.edit'.tr(),
                     tooltip: 'sales.edit'.tr(),
                     locked: locked,
+                    lockMessage: lockMessage,
                     onTap: onEdit,
                   ),
                 ),
@@ -1163,12 +1604,14 @@ class _TileButton extends StatelessWidget {
     required this.tooltip,
     required this.locked,
     required this.onTap,
+    this.lockMessage,
   });
   final IconData icon;
   final String label;
   final String tooltip;
   final bool locked;
   final VoidCallback onTap;
+  final String? lockMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -1181,7 +1624,7 @@ class _TileButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(R.md),
         child: InkWell(
           borderRadius: BorderRadius.circular(R.md),
-          onTap: locked ? () => showNoPermission(context, action: true) : onTap,
+          onTap: locked ? () => showNoPermission(context, action: true, message: lockMessage) : onTap,
           child: Container(
             height: 38,
             padding: const EdgeInsets.symmetric(horizontal: Sp.x6),
@@ -1213,10 +1656,11 @@ class _TileButton extends StatelessWidget {
 
 /// شارة «عطلان N» على المادّة — تفتح حسمها، ومقفلةٌ بمكانها بلا صلاحيّة الموادّ.
 class _DefectiveChip extends StatelessWidget {
-  const _DefectiveChip({required this.item, required this.locked, required this.onTap});
+  const _DefectiveChip({required this.item, required this.locked, required this.onTap, this.lockMessage});
   final SaleItem item;
   final bool locked;
   final VoidCallback onTap;
+  final String? lockMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -1227,7 +1671,7 @@ class _DefectiveChip extends StatelessWidget {
       borderRadius: BorderRadius.circular(R.sm),
       child: InkWell(
         borderRadius: BorderRadius.circular(R.sm),
-        onTap: locked ? () => showNoPermission(context, action: true) : onTap,
+        onTap: locked ? () => showNoPermission(context, action: true, message: lockMessage) : onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: Sp.x6, vertical: 2),
           child: Row(

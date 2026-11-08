@@ -536,6 +536,18 @@ class SalesApi {
     return List.generate(32, (_) => r.nextInt(16).toRadixString(16)).join();
   }
 
+  /// «كل الشركات» (٨ نوفمبر — المالك: «قسم المبيعات هم من ضمن الاقسام المدموجه هم اريد»): الشركة التي يعرضها قسم المبيعات
+  /// الآن — null = المفتوحة (الطلب كما كان). كلّ نداءٍ هنا يحملها (`extra['companyKey']` ⇒ CompanyRoute.keyFor)، فالخادم يبدّل
+  /// جلستها؛ القراءات وحدها موجَّهة (companyRoutingAllow sales-*)، والكتابة لشركةٍ أخرى يقفلها القسم ويرفضها الخادم.
+  static String? routeKey;
+
+  static Options _routed([Options? base]) {
+    final k = routeKey;
+    final o = base ?? Options();
+    if (k == null) return o;
+    return o.copyWith(extra: {...?o.extra, 'companyKey': k});
+  }
+
   /// `null` = تعذّر الوصول (يُعاد لاحقاً) — لا شيء يظهر بلا تأكيد.
   static Future<SalesProbe?> probe() async {
     String? token;
@@ -563,7 +575,7 @@ class SalesApi {
     try {
       final r = await ApiClient.dio.get<Object?>(
         '$_base/items',
-        queryParameters: includeInactive ? const {'all': 1} : null,
+        queryParameters: includeInactive ? const {'all': 1} : null, options: _routed(),
       );
       final body = _map(r.data);
       if (body['success'] != true) {
@@ -603,7 +615,7 @@ class SalesApi {
         'from': from,
         'to': to,
         if (employeeId != null) 'employee_id': employeeId,
-      });
+      }, options: _routed());
       final body = _map(r.data);
       if (body['success'] != true) {
         return (page: null, error: _str(body['message']) ?? 'تعذّر جلب المبيعات');
@@ -649,12 +661,12 @@ class SalesApi {
           if (qty != null) 'qty': qty,
           if (qty != null) 'unit_cost': unitCost ?? 0,
           if (qty != null && paidFrom != null) 'paid_from': paidFrom,
-        }), 'تعذّر الحفظ');
+        }, options: _routed()), 'تعذّر الحفظ');
   }
 
   /// تعديل: الحقول المتغيّرة وحدها (الاسم/السعر/الوحدة/الرمز/الملاحظة/الإيقاف).
   static Future<({bool ok, String? message})> updateItem(int id, Map<String, dynamic> patch) {
-    return _write(() => ApiClient.dio.put<Object?>('$_base/items/$id', data: patch), 'تعذّر الحفظ');
+    return _write(() => ApiClient.dio.put<Object?>('$_base/items/$id', data: patch, options: _routed()), 'تعذّر الحفظ');
   }
 
   /// حركة مخزون (قرار المالك ٢٣ أكتوبر): شراء (`purchase`: كمّيّة + كلفة الوحدة + [paidFrom] إجباريّ) ·
@@ -683,7 +695,7 @@ class SalesApi {
         if (kind == 'supplier_return' && (refund ?? 0) > 0 && refundTo != null) 'refund_to': refundTo,
         if (note != null && note.isNotEmpty) 'note': note,
         'client_ref': clientRef,
-      });
+      }, options: _routed());
       final body = _map(r.data);
       final ok = body['success'] == true;
       return (
@@ -708,7 +720,7 @@ class SalesApi {
   /// (+ ثمن شراءٍ عاد لصندوق من دفعه، − مبلغٌ رجّعه المورّد خرج من صندوق من استلمه)؛ [refund] ثمن الشراء العائد.
   static Future<({bool ok, String? message, num refund, num boxDelta})> voidMove(int itemId, int moveId, String reason) async {
     try {
-      final r = await ApiClient.dio.post<Object?>('$_base/items/$itemId/moves/$moveId/void', data: {'reason': reason});
+      final r = await ApiClient.dio.post<Object?>('$_base/items/$itemId/moves/$moveId/void', data: {'reason': reason}, options: _routed());
       final body = _map(r.data);
       final ok = body['success'] == true;
       final refund = _num(body['refund']);
@@ -728,7 +740,7 @@ class SalesApi {
 
   static Future<({List<StockMove>? rows, String? error})> moves(int id) async {
     try {
-      final r = await ApiClient.dio.get<Object?>('$_base/items/$id/moves', queryParameters: const {'limit': 200});
+      final r = await ApiClient.dio.get<Object?>('$_base/items/$id/moves', queryParameters: const {'limit': 200}, options: _routed());
       final body = _map(r.data);
       if (body['success'] != true) return (rows: null, error: _str(body['message']) ?? 'تعذّر جلب الحركات');
       final raw = body['data'];
@@ -755,7 +767,7 @@ class SalesApi {
     try {
       final r = await ApiClient.dio.post<Object?>(
         _base,
-        options: _sell,
+        options: _routed(_sell),
         data: {
           'client_ref': clientRef,
           'payment': payment,
@@ -793,7 +805,7 @@ class SalesApi {
     try {
       final r = await ApiClient.dio.get<Object?>(
         '/api/subscribers/search',
-        queryParameters: {'search': term, 'count': 10},
+        queryParameters: {'search': term, 'count': 10}, options: _routed(),
       );
       final raw = _map(r.data)['data'];
       if (raw is! List) return const [];
@@ -820,7 +832,7 @@ class SalesApi {
   /// (بصلاحيّته)، بلا كتابة.
   static Future<({VoidPreview? preview, String? error})> voidPreview(int id) async {
     try {
-      final r = await ApiClient.dio.get<Object?>('$_base/$id/void-preview', options: _sell);
+      final r = await ApiClient.dio.get<Object?>('$_base/$id/void-preview', options: _routed(_sell));
       final body = _map(r.data);
       if (body['success'] != true) {
         return (preview: null, error: _str(body['message']) ?? 'تعذّرت قراءة دين المشترك');
@@ -841,7 +853,7 @@ class SalesApi {
   static Future<({Map<int, SaleDebtStatus> map, bool partial})> debtStatus(List<int> ids) async {
     if (ids.isEmpty) return (map: const <int, SaleDebtStatus>{}, partial: false);
     try {
-      final r = await ApiClient.dio.post<Object?>('$_base/debt-status', data: {'ids': ids.take(100).toList()}, options: _sell);
+      final r = await ApiClient.dio.post<Object?>('$_base/debt-status', data: {'ids': ids.take(100).toList()}, options: _routed(_sell));
       final body = _map(r.data);
       if (body['success'] != true) return (map: const <int, SaleDebtStatus>{}, partial: true);
       final out = <int, SaleDebtStatus>{};
@@ -871,7 +883,7 @@ class SalesApi {
     num? expectedPaid,
   }) async {
     try {
-      final r = await ApiClient.dio.post<Object?>('$_base/$id/void', options: _void, data: {
+      final r = await ApiClient.dio.post<Object?>('$_base/$id/void', options: _routed(_void), data: {
         'reason': reason,
         if (refund != null) 'refund': refund,
         if (expectedPaid != null) 'expected_paid': expectedPaid,
@@ -889,12 +901,12 @@ class SalesApi {
 
   /// حسم بيعٍ على الدين بنتيجةٍ مجهولة بعد فحص دين المشترك.
   static Future<({bool ok, String? message})> resolve(int id, {required bool applied}) {
-    return _write(() => ApiClient.dio.post<Object?>('$_base/$id/resolve', data: {'applied': applied}), 'تعذّر الحسم');
+    return _write(() => ApiClient.dio.post<Object?>('$_base/$id/resolve', data: {'applied': applied}, options: _routed()), 'تعذّر الحسم');
   }
 
   /// حسم إلغاء بيعٍ على الدين لم يتأكّد إنقاص دينه — بعد فحص دين المشترك.
   static Future<({bool ok, String? message})> resolveVoid(int id, {required bool applied}) {
-    return _write(() => ApiClient.dio.post<Object?>('$_base/$id/resolve-void', data: {'applied': applied}), 'تعذّر الحسم');
+    return _write(() => ApiClient.dio.post<Object?>('$_base/$id/resolve-void', data: {'applied': applied}, options: _routed()), 'تعذّر الحسم');
   }
 
   static Future<({bool ok, String? message})> _write(Future<Response<Object?>> Function() call, String fallback) async {

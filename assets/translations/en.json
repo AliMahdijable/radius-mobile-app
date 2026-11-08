@@ -1893,6 +1893,15 @@
     "wo_confirm_body": "{amount} owed by \"{name}\" will be written off without collection."
   },
   "sales": {
+    "merged_readonly": "«{}» is view-only here — sell, stock and void from its own page (switch to it)",
+    "merged_hint": "By company — tap one to see its sales and items",
+    "merged_open": "Open",
+    "merged_failed": "Not in the total: {}",
+    "merged_off": "Sales is not enabled for it",
+    "merged_stock": "Stock {amount} · {n} out",
+    "merged_unresolved": "{n} unresolved",
+    "merged_open_outside": "Sales of the open company «{}» are outside «All companies» — exit the mode to sell from it",
+    "merged_paused": "Paused",
     "title": "Sales",
     "module_hint": "Your items and stock — sell for cash or on a subscriber's debt, with profit per sale",
     "scoped": "Not available to an employee scoped to a sub-manager",
