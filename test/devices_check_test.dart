@@ -115,8 +115,8 @@ void main() {
       expect(texts(r), contains('إشارة ضعيفة: 1 · CCQ واطي: 1 — من 4 مشترك'));
       expect(r.subs.last.ccq, isNull);
       final txt = r.toText();
-      expect(txt, contains('omar: -78 dBm · CCQ 88٪'));
-      expect(txt, contains('zaid: -65 dBm · CCQ 40٪'));
+      expect(txt, contains('omar: rx -78 dBm · CCQ 88٪'));
+      expect(txt, contains('zaid: rx -65 dBm · CCQ 40٪'));
       expect(txt, isNot(contains('ali:')), reason: 'السليم لا يُسرد بالنسخ');
       expect(r.memo!.peers, 4);
     });
@@ -328,8 +328,10 @@ void main() {
       expect((by['abo']!.signal, by['abo']!.rxSignal, by['abo']!.weak), (-62, -76, false));
       expect((by['seed']!.signal, by['seed']!.rxSignal, by['seed']!.weak), (-74, -60, true));
       expect((by['old']!.signal, by['old']!.rxSignal, by['old']!.weak), (-75, null, true));
-      expect(DevicesCheck.subLine(by['seed']!), '-74 dBm (rx -60) · CCQ 94٪');
-      expect(DevicesCheck.subLine(by['old']!), '-75 dBm · CCQ 90٪');
+      // ٨ نوفمبر: كلّ رقمٍ باسمه — tx إشارته من جهتنا، وrx حين لا يعطيها الطراز
+      expect((by['abo']!.rxOnly, by['seed']!.rxOnly, by['old']!.rxOnly), (false, false, true));
+      expect(DevicesCheck.subLine(by['seed']!), 'tx -74 dBm (rx -60) · CCQ 94٪');
+      expect(DevicesCheck.subLine(by['old']!), 'rx -75 dBm · CCQ 90٪');
     });
 
     test('الوصلة: الإشارتان بالحيويّات، والحكم على الأضعف (عند الطرف الثاني)', () {
@@ -397,7 +399,7 @@ void main() {
       expect(sec.subs.first.title, 'ali@popq');
       expect(sec.subs.first.mac, 'a0b1c2d3e4f5');
       expect(sec.subs.last.user, isNull);
-      expect(sec.toText(), contains('ali@popq (A0:B1:C2:D3:E4:F5): -80 dBm'));
+      expect(sec.toText(), contains('ali@popq (A0:B1:C2:D3:E4:F5): rx -80 dBm'));
       final olt = DevicesCheck.evaluate(
         d: dev(8, type: 'other', brand: 'vsol'),
         alive: true,

@@ -1295,8 +1295,11 @@ class UbntStats {
         //   airOS 7+:   s['tx']['signal'] أو s['tx_signal']
         //   airFiber:   prs_sta.dl_signal_expect (متوقّع، أقرب مؤشّر)
         // 🐛 ٨ نوفمبر (المالك مع صورتين لمشتركٍ واحد: كارت جهازه ‎-49 والتنبيه ‎-60): «الإشارة RX هي مو… المفروض بالعكس TX» —
-        // remote.signal لم يكن يُقرأ فيُحكم بما يستقبله السكتر (rx) بدل إشارة المشترك.
-        int txSig = _n(s['remote_signal'] ?? s['ap_signal'] ?? s['tx_signal'] ?? remote['signal']);
+        // remote.signal لم يكن يُقرأ فيُحكم بما يستقبله السكتر (rx) بدل إشارة المشترك؛ ومساءً بنسخة الويندوز («الفحص الشامل»: «يطلع rx
+        // وليس الاشاره tx») لأنّ الإصلاح لم يصل فرع الإصدار.
+        int txSig = _n(s['remote_signal'] ?? s['ap_signal'] ?? s['tx_signal']);
+        if (txSig == 0) txSig = _n(remote['signal']);
+        if (txSig > 0) txSig = 0; // إشارةٌ بالـdBm سالبة دائماً — غيرها ليس إشارة (لا رقم مخترع)
         if (txSig == 0 && s['tx'] is Map) {
           txSig = _n((s['tx'] as Map)['signal']);
         }

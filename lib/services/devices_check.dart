@@ -40,8 +40,12 @@ class CheckSub {
     this.mac,
     this.user,
     this.approx = false,
+    this.rxOnly = false,
   });
   final String name;
+
+  /// الطراز لم يعطِ إشارة المشترك من جهتنا (tx) ⇒ [signal] هو ما نستقبله منه (rx) ويُكتب باسمه (٨ نوفمبر).
+  final bool rxOnly;
 
   /// ماك المحطّة/الـONU (للنسخ)، ويوزر المشترك المطابق بماك جلسته — [approx] = ماكٌ قريب لا مطابق (جهاز الضوئي كثيراً ما يأخذ
   /// ماك الجلسة بفرقٍ صغير عن ماكه) — المالك ٦ نوفمبر: «او النقر عليه يفتحله اليوزر المشابه».
@@ -329,7 +333,9 @@ class DevicesCheck {
 
   static String subLine(CheckSub s) => [
         if (s.light != null) '${s.light!.toStringAsFixed(1)} dBm',
-        if (s.signal != null) '${s.signal} dBm${s.rxSignal != null && s.rxSignal != s.signal ? ' (rx ${s.rxSignal})' : ''}',
+        // ٨ نوفمبر: كلّ رقمٍ باسمه — tx (كيف يستقبلنا المشترك) أو rx (ما نستقبله منه) — فلا يُقرأ الـrx إشارةً للمشترك
+        if (s.signal != null)
+          '${s.rxOnly ? 'rx' : 'tx'} ${s.signal} dBm${s.rxSignal != null && s.rxSignal != s.signal ? ' (rx ${s.rxSignal})' : ''}',
         if (s.ccq != null && s.ccq! > 0) 'CCQ ${s.ccq}٪',
         if (s.rxRate != null || s.txRate != null) '↓${s.rxRate ?? '—'} ↑${s.txRate ?? '—'} Mbps',
       ].join(' · ');
@@ -458,6 +464,7 @@ class DevicesCheck {
             // المالك ٦ نوفمبر: «مفروض تقره الاشارة من عدنا وليس rx» — إشارته من جهتنا أوّلاً، والـrx بجانبها
             signal: p.txSignal ?? p.signal,
             rxSignal: p.txSignal != null ? p.signal : null,
+            rxOnly: p.txSignal == null && p.signal != null,
             ccq: p.hasCcq ? p.ccq : null,
             txRate: p.txRate,
             rxRate: p.rxRate,

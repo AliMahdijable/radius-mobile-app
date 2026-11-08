@@ -603,9 +603,10 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
                 const SizedBox(width: Sp.xs),
                 // إشارته من جهتنا (عليها الحكم) وتحتها ما نستقبله منه (rx) — المالك: «او تظهرهن الاثنين»
                 Column(crossAxisAlignment: CrossAxisAlignment.end, mainAxisSize: MainAxisSize.min, children: [
+                  // ٨ نوفمبر: الرقم باسمه — tx إشارة المشترك من جهتنا، أو rx حين لا يعطيها الطراز («يطلع rx وليس الاشاره tx»)
                   Directionality(
                     textDirection: TextDirection.ltr,
-                    child: Text('${s.signal} dBm', style: AppType.label(color: sigTone.fill)),
+                    child: Text('${s.rxOnly ? 'rx' : 'tx'} ${s.signal} dBm', style: AppType.label(color: sigTone.fill)),
                   ),
                   if (s.rxSignal != null && s.rxSignal != s.signal)
                     Directionality(
