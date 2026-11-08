@@ -10,6 +10,7 @@ import '../../../core/widgets/permission_locked.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
+import '../../../widgets/merged_balance_lines.dart';
 
 /// Pair of hero metric cards on the dashboard:
 ///   • Balance + Points (manager wallet, brand-colored accent)
@@ -32,9 +33,13 @@ class StatsGrid extends StatelessWidget {
     this.onOpenDebtors,
     this.balanceLocked = false,
     this.debtLocked = false,
+    this.walletLines,
   });
 
   final WalletResult? wallet;
+
+  /// «كل الشركات» بلا شركةٍ مختارة: رصيد كلّ شركةٍ بسطره (لا مجموع — ٨ نوفمبر). null ⇒ الرصيد الواحد كما كان.
+  final List<MergedBalanceLine>? walletLines;
   final DebtorsResult? debtors;
 
   /// Tapping the debt card opens the subscribers screen with the
@@ -68,7 +73,7 @@ class StatsGrid extends StatelessWidget {
             icon: LucideIcons.wallet,
             footer: const _CardsBadgeLine(),
           )
-        : _BalancePointsCard(wallet: wallet);
+        : _BalancePointsCard(wallet: wallet, lines: walletLines);
     final debt = debtLocked
         ? LockedCard(
             title: 'dashboard.debtors'.tr(), icon: LucideIcons.creditCard)
@@ -90,8 +95,9 @@ class StatsGrid extends StatelessWidget {
 /// The reward-points chip sits below, slightly muted so it doesn't
 /// compete with the hero number.
 class _BalancePointsCard extends StatelessWidget {
-  const _BalancePointsCard({required this.wallet});
+  const _BalancePointsCard({required this.wallet, this.lines});
   final WalletResult? wallet;
+  final List<MergedBalanceLine>? lines;
 
   // getter لا حقل: القيمة theme-aware ويجب أن تُقرأ عند كل بناء
   static Color get _accent => AppColors.brand;
@@ -103,8 +109,11 @@ class _BalancePointsCard extends StatelessWidget {
       icon: LucideIcons.wallet,
       iconAccent: _accent,
       title: 'dashboard.balance'.tr(),
-      body: wallet == null
+      body: wallet == null && lines == null
           ? _Spinner(color: _accent)
+          // «كل الشركات»: كلّ صفحةٍ برصيدها (لا مجموع ولا نقاطٌ مختلطة)
+          : lines != null
+          ? MergedBalanceLines(lines: lines!)
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,

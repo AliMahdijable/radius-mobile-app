@@ -12,6 +12,7 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../desktop/desk_widgets.dart';
 import '../../subscribers/widgets/filter_chips_bar.dart';
+import '../../../widgets/merged_balance_lines.dart';
 
 /// رأس الرئيسيّة على الحاسبة — أربع بطاقات أرقام: المشتركون، المتّصلون، الرصيد، ديون المشتركين.
 ///
@@ -25,6 +26,7 @@ class DesktopOverview extends StatelessWidget {
     super.key,
     required this.stats,
     required this.wallet,
+    this.walletLines,
     required this.debtors,
     required this.subsLocked,
     required this.balanceLocked,
@@ -40,6 +42,9 @@ class DesktopOverview extends StatelessWidget {
 
   final SubscribersStats? stats;
   final WalletResult? wallet;
+
+  /// «كل الشركات» بلا شركةٍ مختارة: رصيد كلّ شركةٍ بسطره (٨ نوفمبر).
+  final List<MergedBalanceLine>? walletLines;
   final DebtorsResult? debtors;
   final bool subsLocked;
   final bool balanceLocked;
@@ -87,12 +92,13 @@ class DesktopOverview extends StatelessWidget {
           accent: AppColors.warning,
           soft: AppColors.warningSoftBg,
           label: 'dashboard.balance'.tr(),
-          value: balanceLocked ? null : wallet == null ? '…' : formatIQD(wallet!.balance.round()),
+          value: balanceLocked ? null : wallet == null && walletLines == null ? '…' : formatIQD((wallet?.balance ?? 0).round()),
           unit: currency,
           locked: balanceLocked,
-          caption: balanceLocked || wallet == null
+          caption: balanceLocked || wallet == null || walletLines != null
               ? null
               : '${formatIQD(wallet!.points.round())} ${'dashboard.points_singular'.tr()}',
+          body: balanceLocked || walletLines == null ? null : MergedBalanceLines(lines: walletLines!, fontSize: 14),
         ),
         _KpiCard(
           icon: LucideIcons.creditCard,
@@ -148,7 +154,11 @@ class _KpiCard extends StatelessWidget {
     this.ratio,
     this.live = false,
     this.onTap,
+    this.body,
   });
+
+  /// مكان الرقم والسطر تحته («كل الشركات»: أرصدة الشركات) — null ⇒ الرقم كما كان.
+  final Widget? body;
 
   final IconData icon;
   final Color accent;
@@ -234,7 +244,9 @@ class _KpiCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: Sp.md),
-            if (loading)
+            if (body != null)
+              body!
+            else if (loading)
               const _Skeleton(width: 120, height: 28, top: 4, bottom: 4)
             else
               Row(

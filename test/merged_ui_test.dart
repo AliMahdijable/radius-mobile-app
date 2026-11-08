@@ -284,6 +284,25 @@ void main() {
     await down(t);
   });
 
+  testWidgets('٨ نوفمبر (المالك: «الارصده افصلهن… رصيد كل صفحه بيبن منفصل ولكن بنفس الكارت»): بطاقة الرصيد سطرٌ لكلّ شركة بلا مجموع، والمختارة رصيدها وحده', (t) async {
+    await up();
+    await t.runAsync(() => MergedMode.enter());
+    await pumpVisual(t, phone, home: (_) => const DashboardScreen());
+    await settle(t, seconds: 3);
+    expect(find.byKey(const ValueKey('merged-balance-lines')), findsOneWidget);
+    expect(find.byKey(const ValueKey('merged-balance-$_kA')), findsOneWidget);
+    expect(find.byKey(const ValueKey('merged-balance-$_kB')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('merged-balance-$_kA')), matching: find.text('100,000')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('merged-balance-$_kB')), matching: find.text('50,000')), findsOneWidget);
+    expect(find.text('200,000'), findsNothing, reason: 'لا مجموع يخلط أرصدة الصفحات');
+    // الشركة المختارة: رصيدها وحده كما كان
+    await t.tap(chip('شركة باء'));
+    await settle(t, seconds: 1);
+    expect(find.byKey(const ValueKey('merged-balance-lines')), findsNothing);
+    expect(find.text('50,000'), findsWidgets);
+    await down(t);
+  });
+
   testWidgets('التقرير الماليّ: تقريرٌ لكلّ شركة بمديرها ثمّ المجموع وتفصيلٌ لكلّ شركة، والشركة المختارة بلا طلبٍ جديد', (t) async {
     await up();
     await t.runAsync(() => MergedMode.enter());

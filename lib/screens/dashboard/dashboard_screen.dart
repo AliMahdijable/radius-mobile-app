@@ -11,6 +11,7 @@ import '../../core/util/format.dart';
 import '../../models/merged_company.dart';
 import '../../services/merged_mode.dart';
 import '../../widgets/merged_company_strip.dart';
+import '../../widgets/merged_balance_lines.dart';
 import '../../api/merged_dashboard_api.dart';
 import '../../api/cards_api.dart';
 import '../../api/dashboard_api.dart';
@@ -92,6 +93,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // المجاميع محفوظةٌ كما وصلت، والمعروض منها الكلّ أو الشركة المختارة في الشريط (_applyMerged) — بلا طلبٍ عند الاختيار.
   MergedListResult? _mergedList;
   MergedSum<WalletResult>? _mergedWallet;
+
+  /// «كل الشركات» بلا شركةٍ مختارة: رصيد كلّ شركةٍ بسطره في بطاقة الرصيد (٨ نوفمبر — المالك: «الارصده افصلهن… رصيد كل صفحه
+  /// بيبن منفصل ولكن بنفس الكارت»). null ⇒ الرصيد الواحد (الوضع العاديّ أو شركةٌ مختارة).
+  List<MergedBalanceLine>? _walletLines;
   MergedSum<DailyActivationsResult>? _mergedDaily;
   List<String> _mergedWalletExcluded = const [];
   List<String> _mergedDailyExcluded = const [];
@@ -317,6 +322,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() {
       _debtorsLive = null;
       _walletLive = null;
+      _walletLines = null;
       _activationsLive = null;
       _mergedList = null;
       _mergedWallet = null;
@@ -347,7 +353,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (w != null) {
       final v = f == null ? w : w.only(f);
       _walletLive = v.value;
-      _mergedWalletExcluded = v.excluded;
+      // «الكل»: كلّ شركةٍ برصيدها أو سبب غيابه في البطاقة نفسها — فلا يُكرَّر السبب تحت الشريط
+      _walletLines = f == null
+          ? [
+              for (final c in MergedDashboardApi.countable())
+                (key: c.key, balance: w.byKey[c.key]?.balance, reason: w.reasons[c.key]),
+            ]
+          : null;
+      _mergedWalletExcluded = f == null ? const [] : v.excluded;
       _walletLoaded = true;
     }
     final d = _mergedDaily;
@@ -761,6 +774,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ? null
         : StatsGrid(
             wallet: _walletLoaded ? _walletLive : null,
+            walletLines: _walletLoaded && MergedMode.active.value ? _walletLines : null,
             debtors: _debtorsLoaded ? _debtorsLive : null,
             balanceLocked: !_canMoney,
             debtLocked: !_canSubs,
@@ -987,6 +1001,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       DesktopOverview(
                         stats: _canSubs ? _subscribersStats : null,
                         wallet: _walletLoaded ? _walletLive : null,
+                        walletLines: _walletLoaded && MergedMode.active.value ? _walletLines : null,
                         debtors: _debtorsLoaded ? _debtorsLive : null,
                         subsLocked: !_canSubs,
                         balanceLocked: !_canMoney,
