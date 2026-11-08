@@ -12,7 +12,9 @@ import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/permission_locked.dart' show LockedStyle;
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../services/ai_assistant_state.dart';
+import '../../services/active_company.dart';
 import '../../services/ai_consent.dart';
+import '../../services/merged_mode.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -250,7 +252,10 @@ class _AssistantSheetState extends State<AssistantSheet> {
           header: SheetHeaderBar(
             icon: LucideIcons.sparkles,
             title: 'ai.title'.tr(),
-            subtitle: 'ai.slogan'.tr(),
+            // «كل الشركات» (٨ نوفمبر — الفحص العامّ): المساعد يقرأ الشركة المفتوحة وحدها — يُقال بدل الشعار
+            subtitle: MergedMode.active.value
+                ? 'ai.merged_scope'.tr(args: [ActiveCompany.current?.label ?? '—'])
+                : 'ai.slogan'.tr(),
             onClose: () => Navigator.of(context).pop(),
           ),
           scrollable: !asking,

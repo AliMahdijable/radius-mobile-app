@@ -157,7 +157,7 @@ class _Row extends StatelessWidget {
                         open ? 'المفتوحة — تُضاف هنا' : '$reason — بدّل إليها',
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: AppType.body(color: AppColors.textMid).copyWith(fontSize: 12, height: 1.4),
+                        style: AppType.body(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.4),
                       ),
                     ],
                   ),

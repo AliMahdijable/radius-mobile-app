@@ -5,6 +5,7 @@
   "ai": {
     "title": "Smart assistant",
     "slogan": "Iraq's first agent system with a smart assistant",
+    "merged_scope": "Answers about the open company «{}» — switch to ask about another",
     "explain": "Explain",
     "explain_a11y": "Explain this error — smart assistant",
     "ask_entry": "How do I…?",
