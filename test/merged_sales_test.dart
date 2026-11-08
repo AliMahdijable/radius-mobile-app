@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:rad_mysvcs/api/account_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
+import 'package:rad_mysvcs/api/company_route.dart';
 import 'package:rad_mysvcs/api/sales_api.dart';
 import 'package:rad_mysvcs/screens/sales/sales_screen.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
@@ -48,6 +49,13 @@ class _Srv implements HttpClientAdapter {
   final asked = <String>[];
   final writes = <String>[];
 
+  /// الخطوة ٢: الخادم يفتح كتابة ايرث لنك الموجَّهة (routed_writes) — وإلّا للعرض.
+  bool elWrites = false;
+
+  /// البيع الموجَّه: ترويسة المرجع مع كلّ POST /api/v2/sales (null = بلا مرجع).
+  final saleRefs = <String?>[];
+  static const ref = 'r_AbCdEfGhIjKlMnOpQrStUv';
+
   @override
   Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? rs, Future<void>? cf) async {
     final key = o.headers['x-company-key'] as String?;
@@ -56,6 +64,15 @@ class _Srv implements HttpClientAdapter {
     asked.add('${o.method} $path ${key ?? '-'}');
     if (!get && path != '/api/v2/sales/debt-status') writes.add('${o.method} $path ${key ?? '-'}');
     final h = key == null ? const <String, List<String>>{} : {'x-company-key': [key]};
+    // نافذة المشترك (G2): قراءته من شركته تسكّ مرجعاً
+    if (path == '/api/v2/subscribers/88' && get) {
+      return _json(200, {'success': true, 'data': {'idx': '88', 'username': 'zaid.el', 'firstname': 'زيد'}},
+          headers: {...h, if (key != null) 'x-company-ref': [ref]});
+    }
+    if (path == '/api/v2/sales' && !get) {
+      saleRefs.add(o.headers['x-company-ref'] as String?);
+      return _json(200, {'success': true, 'data': _sale(30, total: 40000, cost: 30000)}, headers: h);
+    }
     if (key == _kJt) {
       return _json(409, {'success': false, 'code': 'COMPANY_SESSION_EXPIRED', 'message': 'انتهت جلسة «الجزيرة»'}, headers: h);
     }
@@ -68,6 +85,7 @@ class _Srv implements HttpClientAdapter {
             ? {'count': 1, 'revenue': 40000, 'cost': 30000, 'profit': 10000, 'cash': 40000, 'debt': 0}
             : {'count': 2, 'revenue': 90000, 'cost': 64500, 'profit': 25500, 'cash': 55000, 'debt': 35000},
         'unresolved': 0,
+        if (key != null) 'routed_writes': el && elWrites,
       }, headers: h);
     }
     if (path == '/api/v2/sales/items' && get) {
@@ -77,6 +95,7 @@ class _Srv implements HttpClientAdapter {
         'totals': el
             ? {'count': 1, 'stock_value': 96000, 'out_of_stock': 0, 'defective_items': 0, 'defective_value': 0}
             : {'count': 2, 'stock_value': 160000, 'out_of_stock': 1, 'defective_items': 0, 'defective_value': 0},
+        if (key != null) 'routed_writes': el && elWrites,
       }, headers: h);
     }
     if (path == '/api/v2/sales/debt-status') return _json(200, {'success': true, 'data': []}, headers: h);
@@ -230,6 +249,74 @@ void main() {
     await settleReal(t);
     expect(MergedMode.focus.value, isNull);
     expect(find.byKey(const ValueKey('sales-co-$_kEl')), findsOneWidget);
+    await down(t);
+  });
+
+  testWidgets('الخطوة ٢: الخادم يفتح كتابة شركةٍ موجَّهة (routed_writes) ⇒ الأزرار مفتوحة واسمها فوقها', (t) async {
+    await up(t);
+    srv.elWrites = true;
+    await pumpVisual(t, const VisualDevice('', Size(390, 1600), 1), home: (_) => const SalesScreen());
+    await settleReal(t);
+    await t.tap(find.byKey(const ValueKey('sales-co-$_kEl')));
+    await settleReal(t);
+    expect(t.takeException(), isNull);
+    expect(SalesApi.routeKey, _kEl);
+    expect(find.textContaining('للعرض هنا'), findsNothing);
+    expect(find.textContaining('البيع والمخزون هنا لشركة «ايرث لنك»'), findsOneWidget);
+    final fab = find.byType(FloatingActionButton);
+    expect(find.descendant(of: fab, matching: find.byIcon(LucideIcons.shoppingCart)), findsOneWidget, reason: 'البيع مفتوح');
+    expect(find.descendant(of: fab, matching: find.byIcon(LucideIcons.lock)), findsNothing);
+    await down(t);
+  });
+
+  testWidgets('الخطوة ٢: البيع لمشتركٍ في شركةٍ موجَّهة يقرأ المشترك منها أوّلاً ثمّ يُرسل بمرجعه؛ العابر بلا مرجع؛ العاديّ كما كان', (t) async {
+    await up(t);
+    addTearDown(() {
+      SalesApi.routeKey = null;
+      CompanyRefs.reset();
+    });
+    const lines = [SaleLineInput(itemId: 7, qty: 1, unitPrice: 40000)];
+    SalesApi.routeKey = _kEl;
+    final r = await t.runAsync(() => SalesApi.sell(
+          clientRef: 'a' * 32,
+          payment: 'debt',
+          lines: lines,
+          customer: const {'kind': 'subscriber', 'idx': '88', 'username': 'zaid.el', 'name': 'زيد'},
+        ));
+    expect(r!.ok, isTrue, reason: r.message);
+    final iGet = srv.asked.indexOf('GET /api/v2/subscribers/88 $_kEl');
+    final iPost = srv.asked.indexOf('POST /api/v2/sales $_kEl');
+    expect(iGet >= 0 && iPost > iGet, isTrue, reason: 'المشترك يُقرأ من شركته قبل البيع: ${srv.asked}');
+    expect(srv.saleRefs.last, _Srv.ref, reason: 'البيع بمرجع نافذة المشترك');
+
+    // زبونٌ عابر: لا قراءة مشترك ولا مرجع
+    srv.asked.clear();
+    final w = await t.runAsync(() => SalesApi.sell(
+          clientRef: 'b' * 32, payment: 'cash', lines: lines, customer: const {'kind': 'walkin', 'name': 'زبون'}));
+    expect(w!.ok, isTrue);
+    expect(srv.asked.where((a) => a.startsWith('GET /api/v2/subscribers/')), isEmpty);
+    expect(srv.saleRefs.last, isNull);
+
+    // الوضع العاديّ (المفتوحة): لا قراءة مسبقة ولا مفتاح
+    SalesApi.routeKey = null;
+    srv.asked.clear();
+    final n = await t.runAsync(() => SalesApi.sell(
+          clientRef: 'c' * 32,
+          payment: 'debt',
+          lines: lines,
+          customer: const {'kind': 'subscriber', 'idx': '88', 'username': 'zaid.el'},
+        ));
+    expect(n!.ok, isTrue);
+    expect(srv.asked, ['POST /api/v2/sales -']);
+
+    // المطلوب من الجسم كالخادم حرفاً
+    expect(CompanyRefs.requireOf('POST', '/api/v2/sales', {'customer': {'kind': 'subscriber', 'idx': ' 88 '}}),
+        (idx: '88', kind: CompanyRefKind.subject));
+    expect(CompanyRefs.requireOf('POST', '/api/v2/sales', {'customer': {'kind': 'subscriber', 'idx': 88}})?.idx, '88');
+    expect(CompanyRefs.requireOf('POST', '/api/v2/sales', {'customer': {'kind': 'walkin', 'idx': '88'}}), isNull);
+    expect(CompanyRefs.requireOf('POST', '/api/v2/sales', {'customer': {'kind': 'subscriber', 'idx': 'x1'}}), isNull);
+    expect(CompanyRefs.requireOf('POST', '/api/v2/sales'), isNull);
+    expect(CompanyRefs.requireOf('POST', '/api/v2/subscribers/88/pay-debt'), (idx: '88', kind: CompanyRefKind.subject));
     await down(t);
   });
 }

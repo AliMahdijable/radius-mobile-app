@@ -374,8 +374,13 @@ class SalesPage {
     required this.totals,
     this.unresolved = 0,
     this.truncated = false,
+    this.routedWrites,
   });
   final bool enabled;
+
+  /// «كل الشركات» — الخطوة ٢ (٨ نوفمبر): في الطلب الموجَّه وحده — هل يقبل الخادم البيع والمخزون والإلغاء لهذه الشركة من هنا
+  /// (القسم مفعّلٌ لها + pro_settings.sales_routed). null = طلبٌ غير موجَّه أو خادمٌ أقدم ⇒ كما كان.
+  final bool? routedWrites;
   final List<Sale> sales;
   final SalesTotals totals;
 
@@ -393,8 +398,12 @@ class SaleItemsPage {
     this.outOfStock = 0,
     this.defectiveItems = 0,
     this.defectiveValue = 0,
+    this.routedWrites,
   });
   final bool enabled;
+
+  /// كـ[SalesPage.routedWrites].
+  final bool? routedWrites;
   final List<SaleItem> items;
   final int count;
   final num stockValue;
@@ -595,6 +604,7 @@ class SalesApi {
           outOfStock: _int(t['out_of_stock']) ?? 0,
           defectiveItems: _int(t['defective_items']) ?? 0,
           defectiveValue: _num(t['defective_value']),
+          routedWrites: body['routed_writes'] is bool ? body['routed_writes'] as bool : null,
         ),
         error: null,
       );
@@ -631,6 +641,7 @@ class SalesApi {
           totals: SalesTotals.fromJson(_map(body['totals'])),
           unresolved: _int(body['unresolved']) ?? 0,
           truncated: body['truncated'] == true,
+          routedWrites: body['routed_writes'] is bool ? body['routed_writes'] as bool : null,
         ),
         error: null,
       );
@@ -764,6 +775,17 @@ class SalesApi {
     required Map<String, dynamic> customer,
     String? note,
   }) async {
+    // «كل الشركات» — الخطوة ٢: البيع لمشتركٍ في شركةٍ موجَّهة يطلب مرجع نافذته (الخادم يربط البيع بالمشترك الذي قُرئ من الشركة
+    // نفسها — companyRoutingAllow sales-sell) ⇒ قراءة المشترك منها أوّلاً: يسكّ الخادم المرجع ويحفظه CompanyRefs ثمّ يُرفق بالبيع.
+    // تعذّرت القراءة ⇒ البيع بلا مرجع ⇒ الخادم يرفضه 409 قبل أيّ شيء (لا بيع ولا دين).
+    final subIdx = customer['kind'] == 'subscriber' ? '${customer['idx'] ?? ''}'.trim() : '';
+    if (routeKey != null && subIdx.isNotEmpty) {
+      try {
+        await ApiClient.dio.get<Object?>('/api/v2/subscribers/${Uri.encodeComponent(subIdx)}', options: _routed());
+      } catch (e) {
+        _log('sell-subject', e);
+      }
+    }
     try {
       final r = await ApiClient.dio.post<Object?>(
         _base,

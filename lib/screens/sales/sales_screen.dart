@@ -140,11 +140,21 @@ class _SalesScreenState extends State<SalesScreen> {
 
   bool _isOpen(MergedCompany c) => (_openAdmin ?? '').isNotEmpty && c.adminId == _openAdmin;
 
-  /// شركةٌ غير المفتوحة معروضة: قراءةٌ موجَّهة لها، والبيع والمخزون والإلغاء مقفلةٌ بسببها.
-  MergedCompany? get _readOnlyCompany {
+  /// شركةٌ غير المفتوحة معروضة: طلبات القسم كلّها موجَّهة لها ([SalesApi.routeKey]).
+  MergedCompany? get _routedCompany {
     if (!_merged) return null;
     final f = MergedMode.focused;
     return f == null || _isOpen(f) ? null : f;
+  }
+
+  /// الخطوة ٢ (٨ نوفمبر): الخادم يقبل البيع والمخزون والإلغاء لها من هنا — routed_writes في ردّ قائمتها (المفتاح sales_routed).
+  /// قبل وصول الردّ أو بخادمٍ أقدم ⇒ false (مقفلة حتى يقول الخادم نعم).
+  bool get _routedWritable => (_sales?.routedWrites ?? _items?.routedWrites) == true;
+
+  /// شركةٌ معروضةٌ للعرض وحده: موجَّهةٌ ولم يفتح الخادم كتابتها — الأزرار مقفلةٌ بسببها.
+  MergedCompany? get _readOnlyCompany {
+    final c = _routedCompany;
+    return c == null || _routedWritable ? null : c;
   }
 
   String _lockText(MergedCompany c) => 'sales.merged_readonly'.tr(args: [c.name]);
@@ -166,7 +176,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
   /// النطاق تغيّر (دخول الوضع أو خروجه، أو الشركة المختارة): وجهة طلبات القسم ثمّ الجلب من جديد.
   void _applyScope() {
-    final key = _readOnlyCompany?.key;
+    final key = _routedCompany?.key;
     SalesApi.routeKey = key;
     _gen++;
     if (_overviewMode) {
@@ -448,6 +458,10 @@ class _SalesScreenState extends State<SalesScreen> {
                   if (_readOnlyCompany != null) ...[
                     _Banner(icon: LucideIcons.eye, text: _lockText(_readOnlyCompany!)),
                     const SizedBox(height: Sp.md),
+                  ] else if (_routedCompany != null) ...[
+                    // الخطوة ٢: البيع والمخزون لها من هنا — اسمها ظاهرٌ فوق الأزرار فلا يُباع لشركةٍ وهو يظنّها غيرها.
+                    _RoutedNote(company: _routedCompany!),
+                    const SizedBox(height: Sp.md),
                   ],
                 ],
                 ...(_overviewMode ? _overviewContent() : _content()),
@@ -689,7 +703,7 @@ class _SalesScreenState extends State<SalesScreen> {
                 canVoid: canVoid,
                 canResolve: canResolve,
                 lockMessage: ro == null ? null : _lockText(ro),
-                printCompany: ro?.key,
+                printCompany: _routedCompany?.key,
                 onVoid: () => _after(_showSheet(context, _VoidSheet(sale: sale))),
                 onResolve: () => _after(_showSheet(context, _ResolveSheet(sale: sale))),
               ),
@@ -983,6 +997,43 @@ class _Banner extends StatelessWidget {
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
               style: AppType.muted(color: AppTone.warning.onSoft).copyWith(fontSize: 12.5, height: 1.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// «كل الشركات» — الخطوة ٢: سطرٌ هادئ أعلى قسم شركةٍ موجَّهة مفتوحةٍ كتابتُها — «البيع والمخزون هنا لشركة «X»» بلونها.
+class _RoutedNote extends StatelessWidget {
+  const _RoutedNote({required this.company});
+  final MergedCompany company;
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSunken,
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(color: AppColors.company(company.colorIndex), shape: BoxShape.circle),
+          ),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: Text(
+              'sales.merged_routed'.tr(args: [company.name]),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.body(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.5),
             ),
           ),
         ],

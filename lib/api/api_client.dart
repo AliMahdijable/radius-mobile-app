@@ -208,7 +208,7 @@ class _AuthInterceptor extends Interceptor {
       }
       if (acct != null) options.headers['x-account-token'] = acct;
       options.headers['x-company-key'] = routeKey;
-      final need = CompanyRefs.requireOf(options.method, options.uri.path);
+      final need = CompanyRefs.requireOf(options.method, options.uri.path, options.data);
       if (need != null) {
         final ref = CompanyRefs.lookup(routeKey, need.idx, need.kind);
         if (ref != null) options.headers['x-company-ref'] = ref;

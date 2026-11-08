@@ -96,10 +96,23 @@ class CompanyRefs {
     };
   }
 
-  /// كتابةٌ يطلب الخادم لها مرجعاً — (idx، النوع) أو null.
-  static ({String idx, CompanyRefKind kind})? requireOf(String method, String path) {
+  /// البيع من «المبيعات» (٨ نوفمبر — companyRoutingAllow sales-sell bodySubject): المشترك في الجسم — customer.kind ==
+  /// 'subscriber' (تفسير الخادم حرفاً) ⇒ مرجع نافذته لـ customer.idx المقصوص؛ الزبون العابر بلا مرجع.
+  static String? _bodySubject(String method, String path, Object? data) {
+    if (method != 'POST' || path != '/api/v2/sales' || data is! Map) return null;
+    final c = data['customer'];
+    if (c is! Map || c['kind'] != 'subscriber') return null;
+    final raw = c['idx'];
+    final idx = (raw is String || raw is num) ? '$raw'.trim() : '';
+    return RegExp(r'^\d{1,12}$').hasMatch(idx) ? idx : null;
+  }
+
+  /// كتابةٌ يطلب الخادم لها مرجعاً — (idx، النوع) أو null. [data] جسم الطلب (للمشترك في الجسم).
+  static ({String idx, CompanyRefKind kind})? requireOf(String method, String path, [Object? data]) {
     final m = method.toUpperCase();
     if (m == 'GET') return null;
+    final body = _bodySubject(m, path, data);
+    if (body != null) return (idx: body, kind: CompanyRefKind.subject);
     final p = _parse(path);
     if (p == null) return null;
     if (m == 'POST' && p.tail == 'activate') return (idx: p.idx, kind: CompanyRefKind.activate);
