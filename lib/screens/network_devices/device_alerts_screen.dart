@@ -5,6 +5,7 @@ import '../../services/device_alerts_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../widgets/alerts_pager.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
 import 'widgets/desk_device_kit.dart';
@@ -21,6 +22,10 @@ class DeviceAlertsScreen extends StatefulWidget {
 }
 
 class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
+  /// عشرةٌ أوّلاً و«تحميل المزيد» يكشف عشرةً أخرى (٩ نوفمبر — المالك: «تنبيهات المشتركين والأجهزة — خلّي بيها ١٠ قراءات وتحميل
+  /// المزيد»)؛ الهاتف يحفظ آخر ١٠٠ وحدها.
+  final _reveal = AlertsReveal();
+
   @override
   void initState() {
     super.initState();
@@ -81,12 +86,16 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
     );
   }
 
+  Widget _more() => AlertsMoreButton(key: const ValueKey('da-more'), onTap: () => setState(_reveal.more));
+
   Widget _list(List<DeviceAlert> alerts) {
+    final shown = _reveal.take(alerts);
+    final more = _reveal.hasMore(alerts);
     return ListView.separated(
       padding: const EdgeInsets.all(Sp.md),
-      itemCount: alerts.length,
+      itemCount: shown.length + (more ? 1 : 0),
       separatorBuilder: (_, __) => const SizedBox(height: 6),
-      itemBuilder: (_, i) => _alertRow(alerts[i]),
+      itemBuilder: (_, i) => i == shown.length ? _more() : _alertRow(shown[i]),
     );
   }
 
@@ -96,7 +105,7 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
       DeskTable(
         columns: const [('الجهاز', 4), ('الحالة', 3), ('العنوان', 3), ('الوقت', 2), ('', 1)],
         rows: [
-          for (final a in alerts)
+          for (final a in _reveal.take(alerts))
             () {
               final off = a.kind == DeviceAlertKind.offline;
               return <Widget>[
@@ -122,6 +131,7 @@ class _DeviceAlertsScreenState extends State<DeviceAlertsScreen> {
             }(),
         ],
       ),
+      if (_reveal.hasMore(alerts)) ...[const SizedBox(height: Sp.md), _more()],
     ]);
   }
 

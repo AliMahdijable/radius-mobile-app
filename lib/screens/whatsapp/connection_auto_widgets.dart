@@ -10,6 +10,7 @@ import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../widgets/alerts_pager.dart';
 import 'conn_vpn_screen.dart';
 
 /// «تنبيه المشترك» التلقائيّ (٣ نوفمبر): الوضع والضوابط بشاشة الإعدادات، وقائمة «بانتظار موافقتك».
@@ -411,23 +412,6 @@ class _QueueTile extends StatelessWidget {
   }
 }
 
-/// «تحميل المزيد» — عشرةٌ أخرى (المالك ٣ نوفمبر).
-class _MoreButton extends StatelessWidget {
-  const _MoreButton({required this.busy, required this.onTap});
-  final bool busy;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => OutlinedButton.icon(
-        onPressed: busy ? null : onTap,
-        icon: busy
-            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-            : const Icon(LucideIcons.chevronDown, size: 18),
-        label: const Text('تحميل المزيد'),
-        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
-      );
-}
-
 class _NavTile extends StatelessWidget {
   const _NavTile({required this.icon, required this.title, required this.subtitle, required this.onTap});
   final IconData icon;
@@ -625,12 +609,15 @@ class _CaseList extends StatefulWidget {
 }
 
 class _CaseListState extends State<_CaseList> with AutomaticKeepAliveClientMixin {
-  List<ConnAlertCase>? _items;
-  String? _err;
+  /// عشرةٌ ثمّ «تحميل المزيد» يجلب العشرة التالية وحدها (٩ نوفمبر — المالك: «تنبيهات المشتركين والأجهزة — خلّي بيها ١٠ قراءات وتحميل
+  /// المزيد»؛ كانت كلّ ضغطةٍ تعيد جلب كلّ ما عُرض، وتقف عند سقف الخادم ٥٠٠ كأنّه لا مزيد).
+  late final AlertsPager<ConnAlertCase> _pager = AlertsPager<ConnAlertCase>(
+    fetch: ({String? before, required int have, required int size}) =>
+        ConnectionAutoApi.queuePage(widget.state, before: before, have: have, size: size),
+    keyOf: (c) => c.key,
+    pageSize: ConnectionAutoApi.pageSize,
+  );
   final Set<String> _busy = {};
-  int _limit = ConnectionAutoApi.pageSize;
-  bool _more = false;
-  bool _loadingMore = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -638,39 +625,34 @@ class _CaseListState extends State<_CaseList> with AutomaticKeepAliveClientMixin
   @override
   void initState() {
     super.initState();
-    ConnectionAutoApi.changes.addListener(_load);
-    _load();
+    _pager.reload();
+    _pager.addListener(_onPager);
+    ConnectionAutoApi.changes.addListener(_onChanges);
   }
 
   @override
   void dispose() {
-    ConnectionAutoApi.changes.removeListener(_load);
+    ConnectionAutoApi.changes.removeListener(_onChanges);
+    _pager.removeListener(_onPager);
+    _pager.dispose();
     super.dispose();
   }
 
-  /// الصفحات المعروضة كما هي (لا ترجع للأولى بعد إجراء) — صفحةٌ + ١ لتعرف أنّ هناك المزيد.
-  Future<void> _load() async {
-    try {
-      final items = await ConnectionAutoApi.queue(widget.state, limit: _limit + 1);
-      if (mounted) {
-        setState(() {
-          _more = items.length > _limit;
-          _items = items.take(_limit).toList();
-          _err = null;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _err = 'تعذّر التحميل — اسحب للتحديث');
-    }
+  void _onPager() {
+    if (mounted) setState(() {});
   }
 
-  Future<void> _loadMore() async {
-    setState(() {
-      _loadingMore = true;
-      _limit += ConnectionAutoApi.pageSize;
-    });
-    await _load();
-    if (mounted) setState(() => _loadingMore = false);
+  /// إجراءٌ بأيّ تبويب ⇒ هذا التبويب يُعاد بعمق ما عُرض (لا يرجع للعشرة الأولى بعد إجراء).
+  void _onChanges() => _pager.reload(keepDepth: true);
+
+  /// «أرسل للكلّ (N)»: N من الخادم (كلّ من بهذه الحالة ولا «لا ترسل له») لا عدد الصفحة المعروضة. خادمٌ أقدم بلا عدد ⇒ عدّاد الحال
+  /// والقائمة لم تُحمَّل كلّها، وإلّا المعروض.
+  int _sendAllCount(List<ConnAlertCase> items) {
+    final s = _pager.sendable;
+    if (s != null) return s;
+    final shown = items.where((e) => !e.muted).length;
+    final c = ConnectionAutoApi.status.value.count(widget.state);
+    return _pager.hasMore && c > shown ? c : shown;
   }
 
   Future<void> _act(String action, List<String> keys, {bool all = false}) async {
@@ -681,10 +663,10 @@ class _CaseListState extends State<_CaseList> with AutomaticKeepAliveClientMixin
       _busy.clear();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(!r.ok ? (r.message ?? 'تعذّر الإرسال الآن') : r.dry ? 'أُرسل (محاكاة — لم يصل للمشترك)' : 'أُرسل التنبيه للمشترك')));
-      if (!r.ok) await _load(); // الناجح يعيد تحميل كلّ التبويبات (changes)
+      if (!r.ok) await _pager.reload(keepDepth: true); // الناجح يعيد تحميل كلّ التبويبات (changes)
       return;
     }
-    setState(() => _busy.addAll(all ? (_items ?? const []).map((e) => e.key) : keys));
+    setState(() => _busy.addAll(all ? _pager.items.map((e) => e.key) : keys));
     final r = await ConnectionAutoApi.act(action, keys, all: all, from: all && widget.state == 'watching' ? 'watching' : null);
     if (!mounted) return;
     _busy.clear();
@@ -698,34 +680,36 @@ class _CaseListState extends State<_CaseList> with AutomaticKeepAliveClientMixin
             _ => 'تم',
           };
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-    if (!r.ok) await _load(); // الناجح يعيد تحميل كلّ التبويبات (changes)
+    if (!r.ok) await _pager.reload(keepDepth: true); // الناجح يعيد تحميل كلّ التبويبات (changes)
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final items = _items;
-    if (items == null && _err == null) return const Center(child: CircularProgressIndicator());
+    final p = _pager;
+    if (!p.loaded && !p.failed) return const Center(child: CircularProgressIndicator());
+    final items = p.items;
+    final sendAll = _sendAllCount(items);
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: p.reload,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
         children: [
-          if (_err != null) Text(_err!, style: AppType.muted(color: AppColors.error)),
+          if (p.failed) Text('تعذّر التحميل — اسحب للتحديث', style: AppType.muted(color: AppColors.error)),
           // «أرسل للكلّ» في «بانتظار موافقتك»، و«تحت المراقبة» كذلك (٦ نوفمبر — المالك: «نسوي ميزه ارسال الكل بنفس القسم»): يتأكّدون الآن
           // ويُرسل لهم تدريجيّاً ضمن ساعات الإرسال؛ المكتوم لا.
-          if ((widget.state == 'pending' || widget.state == 'watching') && (items?.any((e) => !e.muted) ?? false)) ...[
+          if ((widget.state == 'pending' || widget.state == 'watching') && sendAll > 0) ...[
             FilledButton.icon(
               key: ValueKey('ca-send-all-${widget.state}'),
               style: FilledButton.styleFrom(backgroundColor: AppColors.brand, foregroundColor: AppColors.onBrand, minimumSize: const Size.fromHeight(46)),
               onPressed: _busy.isEmpty ? () => _act('approve', const [], all: true) : null,
               icon: const Icon(LucideIcons.sendHorizontal, size: 18),
               // العدد من الخادم (كلّ ما ينتظر) لا من الصفحة المعروضة وحدها
-              label: Text('أرسل للكلّ (${widget.state == 'pending' && ConnectionAutoApi.status.value.count('pending') > 0 ? ConnectionAutoApi.status.value.count('pending') : items!.where((e) => !e.muted).length})'),
+              label: Text('أرسل للكلّ ($sendAll)'),
             ),
             const SizedBox(height: Sp.md),
           ],
-          if (items != null && items.isEmpty)
+          if (p.loaded && items.isEmpty)
             Padding(
               padding: const EdgeInsets.only(top: Sp.huge),
               child: Column(children: [
@@ -734,11 +718,13 @@ class _CaseListState extends State<_CaseList> with AutomaticKeepAliveClientMixin
                 Text(_emptyText, textAlign: TextAlign.center, style: AppType.muted(color: AppColors.textMid)),
               ]),
             ),
-          for (final c in items ?? const <ConnAlertCase>[]) ...[
+          for (final c in items) ...[
             _CaseCard(c: c, busy: _busy.contains(c.key), onAct: (a) => _act(a, [c.key])),
             const SizedBox(height: Sp.sm),
           ],
-          if (_more) _MoreButton(busy: _loadingMore, onTap: _loadMore),
+          if (p.hasMore)
+            AlertsMoreButton(
+                key: ValueKey('ca-more-${widget.state}'), busy: p.loadingMore, failed: p.moreFailed, onTap: p.loadMore),
         ],
       ),
     );
@@ -870,10 +856,14 @@ class _LogList extends StatefulWidget {
 }
 
 class _LogListState extends State<_LogList> with AutomaticKeepAliveClientMixin {
-  List<ConnAlertLogEntry>? _items;
-  int _limit = ConnectionAutoApi.pageSize;
-  bool _more = false;
-  bool _loadingMore = false;
+  /// عشرةٌ ثمّ «تحميل المزيد» (٩ نوفمبر)؛ فشل التحميل لا يُقال «السجلّ فارغ» (كان يمسح ما عُرض).
+  late final AlertsPager<ConnAlertLogEntry> _pager = AlertsPager<ConnAlertLogEntry>(
+    fetch: ({String? before, required int have, required int size}) =>
+        ConnectionAutoApi.logPage(before: before, have: have, size: size),
+    // رقم السطر من الخادم؛ الخادم الأقدم بلا رقم ⇒ كلّ سطرٍ بنفسه (صفحاته بالعدد فلا تكرار)
+    keyOf: (e) => e.id ?? e,
+    pageSize: ConnectionAutoApi.pageSize,
+  );
 
   @override
   bool get wantKeepAlive => true;
@@ -881,38 +871,24 @@ class _LogListState extends State<_LogList> with AutomaticKeepAliveClientMixin {
   @override
   void initState() {
     super.initState();
-    ConnectionAutoApi.changes.addListener(_load);
-    _load();
+    _pager.reload();
+    _pager.addListener(_onPager);
+    ConnectionAutoApi.changes.addListener(_onChanges);
   }
 
   @override
   void dispose() {
-    ConnectionAutoApi.changes.removeListener(_load);
+    ConnectionAutoApi.changes.removeListener(_onChanges);
+    _pager.removeListener(_onPager);
+    _pager.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
-    try {
-      final items = await ConnectionAutoApi.log(limit: _limit + 1);
-      if (mounted) {
-        setState(() {
-          _more = items.length > _limit;
-          _items = items.take(_limit).toList();
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _items = const []);
-    }
+  void _onPager() {
+    if (mounted) setState(() {});
   }
 
-  Future<void> _loadMore() async {
-    setState(() {
-      _loadingMore = true;
-      _limit += ConnectionAutoApi.pageSize;
-    });
-    await _load();
-    if (mounted) setState(() => _loadingMore = false);
-  }
+  void _onChanges() => _pager.reload(keepDepth: true);
 
   static const _action = <String, String>{
     'confirmed': 'تأكّدت مشكلة',
@@ -931,25 +907,39 @@ class _LogListState extends State<_LogList> with AutomaticKeepAliveClientMixin {
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final items = _items;
-    if (items == null) return const Center(child: CircularProgressIndicator());
+    final p = _pager;
+    if (!p.loaded && !p.failed) return const Center(child: CircularProgressIndicator());
+    final items = p.items;
+    // تحديثٌ تعذّر والسطور باقية ⇒ سطر الخطأ أعلاها
+    final head = p.failed && items.isNotEmpty ? 1 : 0;
+    Widget failedLine({double top = 0}) => Padding(
+          padding: EdgeInsets.only(top: top, bottom: Sp.sm),
+          child: Text('تعذّر التحميل — اسحب للتحديث', textAlign: TextAlign.center, style: AppType.muted(color: AppColors.error)),
+        );
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: p.reload,
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
-        itemCount: items.isEmpty ? 1 : items.length + (_more ? 1 : 0),
+        itemCount: items.isEmpty ? 1 : head + items.length + (p.hasMore ? 1 : 0),
         separatorBuilder: (_, __) => Divider(height: 1, color: AppColors.divider),
         itemBuilder: (_, i) {
-          if (i == items.length && _more) {
-            return Padding(padding: const EdgeInsets.only(top: Sp.sm), child: _MoreButton(busy: _loadingMore, onTap: _loadMore));
-          }
           if (items.isEmpty) {
+            return p.failed
+                ? failedLine(top: Sp.huge)
+                : Padding(
+                    padding: const EdgeInsets.only(top: Sp.huge),
+                    child: Text('السجلّ فارغ', textAlign: TextAlign.center, style: AppType.muted(color: AppColors.textMid)),
+                  );
+          }
+          if (i < head) return failedLine();
+          final j = i - head;
+          if (j == items.length) {
             return Padding(
-              padding: const EdgeInsets.only(top: Sp.huge),
-              child: Text('السجلّ فارغ', textAlign: TextAlign.center, style: AppType.muted(color: AppColors.textMid)),
+              padding: const EdgeInsets.only(top: Sp.sm),
+              child: AlertsMoreButton(key: const ValueKey('ca-more-log'), busy: p.loadingMore, failed: p.moreFailed, onTap: p.loadMore),
             );
           }
-          final e = items[i];
+          final e = items[j];
           final kinds = e.kinds.map((k) => _kindLabel[k] ?? k).join('، ');
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: Sp.sm),

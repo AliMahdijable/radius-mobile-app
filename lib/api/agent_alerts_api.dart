@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import 'alerts_page.dart';
 import 'api_client.dart';
 
 /// «تنبيهات أجهزتي» (٤ نوفمبر — الخادم server/agentAlerts.js): «طفى/رجع» لأجهزة شبكة الوكيل يقرّرها الخادم من جولات هذا التطبيق على
@@ -434,7 +435,17 @@ class AgentAlertsApi {
     }
   }
 
-  /// الأحدث أوّلاً؛ before = أقدم ما عندك (لـ«الأقدم»). null = تعذّر.
+  /// صفحةٌ من السجلّ («تحميل المزيد» — ٩ نوفمبر، المالك: «تنبيهات المشتركين والأجهزة — خلّي بيها ١٠ قراءات وتحميل المزيد»): [size]
+  /// الأحدث قبل السطر [before] (رقم آخر ما عُرض — الخادم يقبله منذ ٤ نوفمبر)، و+١ لتعرف أنّ بعدها المزيد. null = تعذّر.
+  static Future<AlertsPage<AgentAlertEvent>?> logPage({String? before, int size = 10}) async {
+    final rows = await log(limit: size + 1, before: before == null ? null : int.tryParse(before));
+    if (rows == null) return null;
+    final page = rows.take(size).toList();
+    final more = rows.length > size;
+    return AlertsPage(page, hasMore: more, next: more && page.isNotEmpty ? '${page.last.id}' : null);
+  }
+
+  /// الأحدث أوّلاً؛ before = أقدم ما عندك (رقم السطر). null = تعذّر.
   static Future<List<AgentAlertEvent>?> log({int limit = 50, int? before}) async {
     try {
       final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/agent-alerts/log', queryParameters: {

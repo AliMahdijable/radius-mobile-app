@@ -80,7 +80,15 @@ void main() {
       AgentAlertsApi.forget();
       server = await simSetUp(secure: {'auth.admin_id': '2', 'auth.admin_username': 'admin@m'});
       server.reply('GET', '/api/v2/agent-alerts/status', 200, real['status_down']);
-      server.reply('GET', '/api/v2/agent-alerts/log', 200, real['log']);
+      // السجلّ كمسار الخادم (server/agentAlerts.js): الأحدث أوّلاً، و limit وbefore (رقم السطر) — الشاشة تطلب ١٠ + ١ ثمّ «تحميل
+      // المزيد» (٩ نوفمبر)؛ الأسطر نفسها من الردّ الحقيقيّ
+      server.on('GET', '/api/v2/agent-alerts/log', (o) {
+        final all = (_data(real['log'])['items'] as List).cast<Map>();
+        final before = int.tryParse('${o.queryParameters['before'] ?? ''}');
+        final limit = int.tryParse('${o.queryParameters['limit'] ?? ''}') ?? 50;
+        final rows = all.where((x) => before == null || (x['id'] as num) < before).take(limit).toList();
+        return SimReply(200, {'success': true, 'data': {'available': true, 'items': rows}});
+      });
     });
 
     for (final v in [const SimVariant(390, dark: false), const SimVariant(320, dark: true)]) {
@@ -100,6 +108,12 @@ void main() {
         await t.pumpAndSettle();
         expect(find.text('20.4V'), findsOneWidget);
         expect(find.textContaining('←'), findsNothing);
+        // السجلّ عشرةٌ أوّلاً (٢٠ سطراً بالخادم) — «تحميل المزيد» يجلب ما قبل آخرها
+        expect(server.calls('GET', '/api/v2/agent-alerts/log').single.queryParameters['limit'], 11);
+        await t.scrollUntilVisible(find.byKey(const ValueKey('aa-more-log')), 300, scrollable: find.byType(Scrollable).first);
+        await t.tap(find.byKey(const ValueKey('aa-more-log')));
+        await t.pumpAndSettle();
+        expect(server.calls('GET', '/api/v2/agent-alerts/log').last.queryParameters['before'], 11);
         await t.scrollUntilVisible(find.textContaining('يطفي ويشتغل'), 300, scrollable: find.byType(Scrollable).first);
         expect(t.takeException(), isNull);
         await simDrain(t);
