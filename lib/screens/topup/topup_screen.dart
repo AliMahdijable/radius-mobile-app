@@ -25,6 +25,7 @@ import 'pay_nav_policy.dart';
 import 'topup_pay_page.dart';
 import 'topup_widgets.dart';
 import '../desktop/desk_widgets.dart';
+import '../../widgets/merged_section.dart';
 
 /// «شحن رصيد الصفحة» — الإيداع الذاتيّ في الساس من التطبيق.
 ///
@@ -550,7 +551,7 @@ class _TopupScreenState extends State<TopupScreen> {
           ),
         ),
       ),
-      body: SafeArea(
+      body: MergedSectionBody(child: SafeArea(
         bottom: false,
         child: RefreshIndicator(
           color: AppColors.brandAccent,
@@ -562,7 +563,7 @@ class _TopupScreenState extends State<TopupScreen> {
             children: _children(),
           ),
         ),
-      ),
+      )),
     );
   }
 

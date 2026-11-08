@@ -317,9 +317,11 @@ List<AppModule> buildAppModules() {
             : SelfDepositState.gate.value!.block == SelfDepositBlock.paused
                 ? 'متوقّف مؤقّتاً — تابِع عمليّاتك التي لم تُحسم'
                 : 'زين كاش أو كارت تعبئة — يُضاف لرصيد صفحتك بالساس',
-        page: () => ProviderService.isFiberx
-            ? const FiberxTopupScreen()
-            : const TopupScreen(),
+        // «كل الشركات» (٨ نوفمبر): للمفتوحة وحدها — الشحن مالٌ يُضاف لرصيد صفحتها (لا يُوجَّه)
+        page: () => MergedSection.openOnly(
+            title: 'شحن رصيد الصفحة',
+            reason: 'merged.reason_topup'.tr(),
+            child: ProviderService.isFiberx ? const FiberxTopupScreen() : const TopupScreen()),
       ),
     // ٣٠ أكتوبر: «شحن من pay الجزيرة» — لوكلاء شركة الجزيرة (jt لاسلكي / ftth فايبر) حين يقول الخادم إنّها
     // مفتوحة لحسابهم: تعبئة رصيد pay بزين كاش أو بطاقة ثمّ تحويله لصفحتهم بالساس أو لصفحة ثانية. الموظّف
@@ -335,7 +337,8 @@ List<AppModule> buildAppModules() {
         subtitle: JtpayState.gate.value!.paused
             ? 'متوقّف مؤقّتاً — تابِع عمليّاتك التي لم تُحسم'
             : 'زين كاش أو بطاقة ← رصيد pay ← صفحتك بالساس',
-        page: () => const JtpayScreen(),
+        page: () => MergedSection.openOnly(
+            title: 'شحن من pay الجزيرة', reason: 'merged.reason_topup'.tr(), child: const JtpayScreen()),
       ),
     // §١٢ «الكارتات» — مخزون كارتات التعبئة. الخادم يقول `enabled` في admin-widgets والبطاقة تتبعه،
     // ومجهولة الشارة لا تُظهرها. الموظّف يفتحه بصلاحيّة التفعيل/التمديد وحدها.
@@ -413,7 +416,8 @@ List<AppModule> buildAppModules() {
         subtitle: RenewRequestsState.pending > 0
             ? '${RenewRequestsState.pending} بانتظارك — طلبات تجديد من تطبيق المشترك'
             : 'طلبات تجديد مشتركيك من تطبيقهم مع صورة التحويل',
-        page: () => const RenewRequestsScreen(),
+        page: () => MergedSection.openOnly(
+            title: 'طلبات التفعيل', reason: 'merged.reason_renew'.tr(), child: const RenewRequestsScreen()),
       ),
     // المدراء والموظّفون: مفتاحان لا يُمنحان لموظّف ايرث لنك أصلاً — مخفيّان عنده ومقفلان عند غيره.
     if (permShown(const ['managers.view']))
@@ -446,7 +450,9 @@ List<AppModule> buildAppModules() {
         tone: AppTone.brand,
         title: 'more.packages'.tr(),
         subtitle: 'more.packages_hint'.tr(),
-        page: () => const PackagesScreen(),
+        // «كل الشركات»: للمفتوحة وحدها — الأسعار لكلّ شركةٍ على حدة (نطاق التسعير لا يُوجَّه)
+        page: () => MergedSection.openOnly(
+            title: 'more.packages'.tr(), reason: 'merged.reason_prices'.tr(), child: const PackagesScreen()),
       ),
     if (permShown(const ['discounts.view']))
       AppModule(
@@ -469,7 +475,8 @@ List<AppModule> buildAppModules() {
         tone: AppTone.brand,
         title: 'sp.title'.tr(),
         subtitle: 'sp.module_hint'.tr(),
-        page: () => const SubscriberPricesScreen(),
+        page: () => MergedSection.openOnly(
+            title: 'sp.title'.tr(), reason: 'merged.reason_prices'.tr(), child: const SubscriberPricesScreen()),
       ),
     if (permShown(const ['employees.view']))
       AppModule(
@@ -509,7 +516,8 @@ List<AppModule> buildAppModules() {
           tone: AppTone.brand,
           title: 'تحويل الرصيد',
           subtitle: 'تحويل الرصيد بين الوكلاء + كشف الحساب',
-          page: () => const ElTransferScreen(),
+          page: () => MergedSection.openOnly(
+              title: 'تحويل الرصيد', reason: 'merged.reason_transfer'.tr(), child: const ElTransferScreen()),
         ),
       // «الكارتات المطلوبة» — توقّع الكارتات والرصيد لمدّة؛ من «التقارير الماليّة».
       if (permShown(const ['reports.financial']))
@@ -521,7 +529,8 @@ List<AppModule> buildAppModules() {
           tone: AppTone.brand,
           title: 'الكارتات المطلوبة',
           subtitle: 'كم كارتاً ورصيداً تحتاج ليوم / ٣ أيام / أسبوع / شهر',
-          page: () => const ElRequiredCardsScreen(),
+          page: () => MergedSection.openOnly(
+              title: 'الكارتات المطلوبة', reason: 'merged.reason_el_cards'.tr(), child: const ElRequiredCardsScreen()),
         ),
     ],
   ];

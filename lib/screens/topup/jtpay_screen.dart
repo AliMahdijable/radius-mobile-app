@@ -23,6 +23,7 @@ import 'paged_history.dart';
 import 'pay_nav_policy.dart';
 import 'topup_pay_page.dart';
 import 'topup_widgets.dart';
+import '../../widgets/merged_section.dart';
 
 /// «شحن من pay الجزيرة» — لوكلاء شركة الجزيرة (لاسلكي/فايبر).
 ///
@@ -410,7 +411,7 @@ class _JtpayScreenState extends State<JtpayScreen> {
           ),
         ),
       ),
-      body: SafeArea(
+      body: MergedSectionBody(child: SafeArea(
         bottom: false,
         child: RefreshIndicator(
           color: AppColors.brandAccent,
@@ -421,7 +422,7 @@ class _JtpayScreenState extends State<JtpayScreen> {
             children: _children(),
           ),
         ),
-      ),
+      )),
     );
   }
 

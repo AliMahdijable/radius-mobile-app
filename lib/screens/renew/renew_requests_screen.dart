@@ -8,6 +8,7 @@ import '../../theme/typography.dart';
 import '../desktop/desk_widgets.dart';
 import '../portal_settings/portal_settings_screen.dart';
 import 'renew_widgets.dart';
+import '../../widgets/merged_section.dart';
 
 /// «طلبات التفعيل» (٤ نوفمبر — المالك): مشتركوك يطلبون التجديد من تطبيقهم مع صورة التحويل. المفتوحة (بانتظارك ثمّ المقبولة) أو
 /// آخر ٣٠ يوماً، والنقر يفتح الطلب بصورته وإجراءاته. الموظّف بلا «طلبات التفعيل» يراها مقفلةً لا مخفيّة.
@@ -76,7 +77,7 @@ class _RenewRequestsScreenState extends State<RenewRequestsScreen> {
         ),
         title: 'طلبات التفعيل',
       ),
-      body: _loading
+      body: MergedSectionBody(child: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _load,
@@ -84,7 +85,7 @@ class _RenewRequestsScreenState extends State<RenewRequestsScreen> {
                 padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
                 children: _body(),
               ),
-            ),
+            )),
     );
   }
 

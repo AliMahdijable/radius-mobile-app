@@ -21,6 +21,8 @@ import 'visual_perm/visual_perm_harness.dart';
 ///   ١. وجهة القسم: بادئاته وحدها موجَّهة للمختارة (لا طلبات التطبيق الأخرى)، ويرفعها صاحبها وحده.
 ///   ٢. التسويات: «الكل» = المفتوحة بلا توجيه؛ شركةٌ أخرى ⇒ صندوقها موجَّهاً، مقفلةً حتى يقول الخادم routed_writes، ثمّ «تسوية الآن».
 ///   ٣. المصاريف: قائمتها موجَّهة، والقفل بسببها، وقوالب «الصرفيات الثابتة» لا تُعرض تحت اسم غير المفتوحة.
+///   ٤–٥. أقسام «للعرض هنا» (تلغرام، الكارتات): قراءاتها لمدير المختارة، وحال الجلسة المفتوحة لا يتلوّث.
+///   ٦. «للمفتوحة وحدها» (الشحن، الأسعار، التحويل…): لا توجيه أبداً، وغيرها ⇒ صفحة القفل بسببها.
 const _kOpen = 'c0000000000a1';
 const _kEl = 'c0000000000e1';
 
@@ -223,4 +225,66 @@ void main() {
     expect(CardsState.lastSummary, isNull, reason: 'ملخّص ايرث لنك لا يصير «آخر ملخّص» للجلسة المفتوحة');
     await down(t);
   });
+
+  testWidgets('٦ «للمفتوحة وحدها» (الشحن/الأسعار/التحويل): لا توجيه أبداً، غيرها ⇒ صفحة القفل بسببها، ولا إعادة جلبٍ بين «الكل» والمفتوحة', (t) async {
+    await up(t);
+    _OpenOnlyProbe.built = 0;
+    final screen = MergedSection.openOnly(title: 'شحن رصيد الصفحة', reason: 'الشحن يُضاف لرصيد صفحة الشركة المفتوحة', child: const _OpenOnlyProbe());
+    await pumpVisual(t, const VisualDevice('', Size(390, 1400), 1), home: (_) => screen);
+    await settleReal(t);
+    expect(t.takeException(), isNull);
+    // «الكل» ⇒ الشاشة نفسها للمفتوحة، والشريط يقول لمن ولماذا
+    expect(find.text('probe-body'), findsOneWidget);
+    expect(find.textContaining('للشركة المفتوحة «سوبرنت» وحدها'), findsOneWidget);
+    expect(CompanyRoute.sectionKey, isNull);
+    expect(_OpenOnlyProbe.built, 1);
+
+    // ايرث لنك ⇒ لا شاشة ولا توجيه: بطاقة القفل باسمها و«بدّل إليها»
+    MergedMode.focus.value = _kEl;
+    await settleReal(t);
+    expect(t.takeException(), isNull);
+    expect(find.text('probe-body'), findsNothing, reason: 'لا شاشة المفتوحة تحت اسم ايرث لنك');
+    expect(find.byKey(const ValueKey('merged-open-only-card')), findsOneWidget);
+    expect(find.textContaining('«شحن رصيد الصفحة» لـ«ايرث لنك» من صفحتها'), findsOneWidget);
+    expect(find.textContaining('بدّل إلى «ايرث لنك»'), findsOneWidget);
+    expect(find.textContaining('الشحن يُضاف لرصيد صفحة الشركة المفتوحة — بدّل إليها'), findsOneWidget);
+    expect(CompanyRoute.sectionKey, isNull, reason: 'القسم لا يُوجَّه أبداً');
+    expect(CompanyRoute.sectionKeyFor('/api/v2/self-deposit/options'), isNull);
+
+    // المفتوحة نفسها ⇒ الشاشة، ثمّ «الكل» ⇒ الشاشة نفسها بلا إعادة بناء (لا جلب ثانٍ)
+    MergedMode.focus.value = _kOpen;
+    await settleReal(t);
+    expect(find.text('probe-body'), findsOneWidget);
+    expect(find.textContaining('للشركة المفتوحة «سوبرنت» وحدها'), findsOneWidget);
+    final afterOpen = _OpenOnlyProbe.built;
+    MergedMode.focus.value = null;
+    await settleReal(t);
+    expect(find.text('probe-body'), findsOneWidget);
+    expect(_OpenOnlyProbe.built, afterOpen, reason: '«الكل» والمفتوحة شاشةٌ واحدة');
+    expect(srv.asked.where((a) => !a.endsWith(' -')), isEmpty, reason: 'لا طلب موجَّه من قسمٍ للمفتوحة وحدها: ${srv.asked}');
+    await down(t);
+  });
+}
+
+/// شاشةٌ وهميّة لقسم «للمفتوحة وحدها»: جسمها بـ[MergedSectionBody] كالشاشات الحقيقيّة، وتعدّ مرّات إنشائها (= مرّات جلبها).
+class _OpenOnlyProbe extends StatefulWidget {
+  const _OpenOnlyProbe();
+  static int built = 0;
+
+  @override
+  State<_OpenOnlyProbe> createState() => _OpenOnlyProbeState();
+}
+
+class _OpenOnlyProbeState extends State<_OpenOnlyProbe> {
+  @override
+  void initState() {
+    super.initState();
+    _OpenOnlyProbe.built++;
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('شحن رصيد الصفحة')),
+        body: MergedSectionBody(child: ListView(children: const [Text('probe-body')])),
+      );
 }

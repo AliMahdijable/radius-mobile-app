@@ -14,6 +14,7 @@ import '../../theme/typography.dart';
 import '../../widgets/el_deposit_password_field.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/widgets/app_sheet.dart';
+import '../../widgets/merged_section.dart';
 
 /// ايرث لنك — تحويل الرصيد + كشف الحساب (البند ٤، EarthLink وحدهم).
 ///
@@ -235,7 +236,7 @@ class _ElTransferScreenState extends State<ElTransferScreen> {
             ),
           ),
         ),
-        body: SafeArea(
+        body: MergedSectionBody(child: SafeArea(
           child: RefreshIndicator(
             onRefresh: _loadAll,
             color: AppColors.brandAccent,
@@ -251,7 +252,7 @@ class _ElTransferScreenState extends State<ElTransferScreen> {
               ],
             ),
           ),
-        ),
+        )),
       ),
     );
   }

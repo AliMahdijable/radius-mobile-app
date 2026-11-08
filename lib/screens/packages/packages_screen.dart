@@ -15,6 +15,7 @@ import '../../core/util/amount_input.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../../core/widgets/app_sheet.dart';
+import '../../widgets/merged_section.dart';
 
 /// مديول تسعير الباقات. شاشة في-المكان: قائمة الباقات، كل باقة فيها
 /// حقل سعر بيع قابل للتعديل. أسفل الشاشة زر "حفظ" واحد ينفّذ
@@ -310,7 +311,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
                 ),
               ),
             ),
-      body: SafeArea(
+      body: MergedSectionBody(child: SafeArea(
         child: RefreshIndicator(
           onRefresh: _load,
           color: accent,
@@ -388,7 +389,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
             ],
           ),
         ),
-      ),
+      )),
     );
   }
 

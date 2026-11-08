@@ -20,6 +20,7 @@ import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../desktop/desk_bulk_picker.dart';
 import '../../core/widgets/app_sheet.dart';
+import '../../widgets/merged_section.dart';
 
 /// «أسعار المشتركين» — على نمط شاشة الخصومات عمداً (طلب المستخدم: «أشبه
 /// بقسم الخصومات»): سعرٌ يُكتب، ومشتركون يُحدَّدون، وزرّ تطبيق. ومعها
@@ -280,7 +281,7 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
           iconTheme: IconThemeData(color: AppColors.textHi),
         ),
       ),
-      body: DesktopScope.of(context)
+      body: MergedSectionBody(child: DesktopScope.of(context)
           ? _desktopBody(filtered, accent)
           : SafeArea(
         bottom: false,
@@ -354,7 +355,7 @@ class _SubscriberPricesScreenState extends State<SubscriberPricesScreen> {
             ),
           ],
         ),
-      ),
+      )),
       // 🐛 كان `FilledButton` بنصٍّ لونه أبيض صراحةً — فغلب لون المعطّل
       // وصار أبيضَ على رماديّ فاتح لا يُقرأ. الآن زرّ النظام نفسه.
       bottomNavigationBar: !_canManage || DesktopScope.of(context)

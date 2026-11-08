@@ -1493,6 +1493,15 @@
     "section_open": "Showing the open company «{}» — pick a company in the strip to show it here",
     "section_routed": "«{}» is managed here — every action goes to its server",
     "section_locked": "«{}» is view-only here — change it from its own page (switch to it)",
+    "section_open_only": "This section is for the open company «{}» only — {}",
+    "open_only_title": "«{}» for «{}» is on its own page",
+    "open_only_body": "{} — switch to it to work on it here.",
+    "open_only_switch": "Switch to «{}»",
+    "reason_topup": "A top-up goes to its own page balance",
+    "reason_transfer": "Transfers come out of its own account balance",
+    "reason_prices": "Prices are kept per company",
+    "reason_renew": "Requests reach its own page and are activated there",
+    "reason_el_cards": "The forecast comes from its own account's cards",
     "sales_note": "Sales is for the open company only: «{}»"
   },
   "company_switch": {

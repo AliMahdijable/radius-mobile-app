@@ -13,6 +13,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../desktop/desk_widgets.dart';
 import 'topup_widgets.dart';
+import '../../widgets/merged_section.dart';
 
 /// شحن محفظة فايبر اكس (زين كاش / كي كارد): رصيد + طريقة + مبلغ ← رابط دفعٍ
 /// يُفتح بمتصفّح الوكيل ← «تحقّقت» يتابع النتيجة بـtransactionId.
@@ -180,7 +181,7 @@ class _FiberxTopupScreenState extends State<FiberxTopupScreen> {
           ),
         ),
       ),
-      body: SafeArea(
+      body: MergedSectionBody(child: SafeArea(
         bottom: false,
         child: RefreshIndicator(
           color: AppColors.brandAccent,
@@ -191,7 +192,7 @@ class _FiberxTopupScreenState extends State<FiberxTopupScreen> {
             children: _children(),
           ),
         ),
-      ),
+      )),
     );
   }
 

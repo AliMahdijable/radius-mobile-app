@@ -10,6 +10,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/skeleton.dart';
 import '../desktop/desk_widgets.dart';
+import '../../widgets/merged_section.dart';
 
 /// ايرث لنك — «الكارتات المطلوبة» (البند ٤، EarthLink وحدهم).
 ///
@@ -165,7 +166,7 @@ class _ElRequiredCardsScreenState extends State<ElRequiredCardsScreen> {
             ],
           ),
         ),
-        body: SafeArea(
+        body: MergedSectionBody(child: SafeArea(
           child: RefreshIndicator(
             onRefresh: _load,
             color: AppColors.brandAccent,
@@ -200,7 +201,7 @@ class _ElRequiredCardsScreenState extends State<ElRequiredCardsScreen> {
               ],
             ),
           ),
-        ),
+        )),
       ),
     );
   }
