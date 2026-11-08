@@ -1,44 +1,57 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/services/permissions_service.dart';
 
-/// صلاحيّات الموظّف (٨ نوفمبر — المالك: «صلاحيه موظف يربط vpn ويفحص شامل ويفحص مشترك»): كما يفرضها الخادم (agentRoutes):
-/// صاحب الحساب كلّ شيء؛ الموظّف بمفتاحه — «ربط VPN» لا يفتح الفحصين، و«الفحص الشامل» لا يفتح فحص المشتركين، و«تنبيهات المشتركين»
-/// يفتح الفحصين كما كان.
+/// صلاحيّتا الفحصين بوجهين (٨ نوفمبر — المالك: «تفصله للموظف… بتخيره بوضع vpn او على الشبكه هم يكدر يختارهن الاثنين او واحد ع
+/// الاقل… الافتراضي يكون لديه صلاحيه على شبكه فقط»): على الشبكة مفعّلٌ افتراضاً (والموظّف القديم بلا المفتاح يأخذه)، وعبر VPN بمفتاحه
+/// — كما يفرضه الخادم (agentRoutes).
 void main() {
   tearDown(PermissionsService.debugReset);
 
+  List<bool> all() => [
+        PermissionsService.canLinkVpn,
+        PermissionsService.deepCheckNet,
+        PermissionsService.deepCheckVpn,
+        PermissionsService.subsCheckNet,
+        PermissionsService.subsCheckVpn,
+        PermissionsService.canDevicesVpn,
+      ];
+
   test('صاحب الحساب: كلّ شيء', () {
     PermissionsService.debugSet(isEmployee: false);
-    expect([
-      PermissionsService.canLinkVpn,
-      PermissionsService.canDeepCheck,
-      PermissionsService.canSubsVpnCheck,
-      PermissionsService.canDevicesVpn,
-    ], [true, true, true, true]);
+    expect(all(), [true, true, true, true, true, true]);
   });
 
-  test('الموظّف بلا مفاتيح: لا شيء (مكانها مقفلاً بالواجهة)', () {
+  test('موظّفٌ قديم بلا المفاتيح الجديدة: على الشبكة وحده (الافتراضيّ)', () {
     PermissionsService.debugSet(isEmployee: true, permissions: const {'devices.view': true, 'subscribers.view': true});
-    expect([
-      PermissionsService.canLinkVpn,
-      PermissionsService.canDeepCheck,
-      PermissionsService.canSubsVpnCheck,
-      PermissionsService.canDevicesVpn,
-    ], [false, false, false, false]);
+    expect(all(), [false, true, false, true, false, false]);
   });
 
-  test('كلّ مفتاحٍ يفتح ما له وحده', () {
-    PermissionsService.debugSet(isEmployee: true, permissions: const {'conn_vpn.link': true});
-    expect([PermissionsService.canLinkVpn, PermissionsService.canDeepCheck, PermissionsService.canSubsVpnCheck, PermissionsService.canDevicesVpn],
-        [true, false, false, true], reason: '«ربط VPN»: الشاشة ووضع VPN للأجهزة');
-    PermissionsService.debugSet(isEmployee: true, permissions: const {'devices.deep_check': true});
-    expect([PermissionsService.canLinkVpn, PermissionsService.canDeepCheck, PermissionsService.canSubsVpnCheck, PermissionsService.canDevicesVpn],
-        [false, true, false, true]);
-    PermissionsService.debugSet(isEmployee: true, permissions: const {'subscribers.vpn_check': true});
-    expect([PermissionsService.canLinkVpn, PermissionsService.canDeepCheck, PermissionsService.canSubsVpnCheck, PermissionsService.canDevicesVpn],
-        [false, false, true, false]);
+  test('المدير أطفأ «على الشبكة» صراحةً ولم يفعّل VPN ⇒ لا شيء (الميزة تختفي)', () {
+    PermissionsService.debugSet(
+        isEmployee: true, permissions: const {'devices.deep_check': false, 'subscribers.check': false});
+    expect(all(), [false, false, false, false, false, false]);
+  });
+
+  test('عبر VPN وحده، أو الوجهان معاً', () {
+    PermissionsService.debugSet(isEmployee: true, permissions: const {
+      'devices.deep_check': false,
+      'devices.deep_check_vpn': true,
+      'subscribers.check': false,
+      'subscribers.vpn_check': true,
+    });
+    expect(all(), [false, false, true, false, true, true]);
+    PermissionsService.debugSet(isEmployee: true, permissions: const {
+      'devices.deep_check': true,
+      'devices.deep_check_vpn': true,
+      'subscribers.check': true,
+      'subscribers.vpn_check': true,
+      'conn_vpn.link': true,
+    });
+    expect(all(), [true, true, true, true, true, true]);
+  });
+
+  test('قسم «تنبيهات المشتركين» يفتح فحص المشتركين عبر VPN وحده (لا الأجهزة ولا الممرّ)', () {
     PermissionsService.debugSet(isEmployee: true, permissions: const {'conn_alerts.use': true});
-    expect([PermissionsService.canLinkVpn, PermissionsService.canDeepCheck, PermissionsService.canSubsVpnCheck, PermissionsService.canDevicesVpn],
-        [false, true, true, true], reason: 'قسم «تنبيهات المشتركين» يفتح الفحصين كما كان');
+    expect(all(), [false, true, false, true, true, false]);
   });
 }

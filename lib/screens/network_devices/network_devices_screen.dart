@@ -1682,7 +1682,21 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// زرّ «وضع VPN»: مطفأ ⇒ درعٌ بإطار؛ شغّال ⇒ ممتلئ بلون العلامة. الضغط يشغّله (ويفحص أجهزتك فوراً) أو يطفئه.
   /// «الفحص الشامل»: عبر الـVPN بوضعه أو وأنت خارج شبكتك ولك طريق؛ وخارجها بلا طريق لا فحص (المحلّيّ سيقول «طافي» كذباً).
   void _openDeepCheck() {
-    final viaVpn = VpnNow.mode.value || (_vpnLinked && !AgentNetPresence.isOn);
+    var viaVpn = VpnNow.mode.value || (_vpnLinked && !AgentNetPresence.isOn);
+    // الموظّف بوجهٍ واحد (٨ نوفمبر): «عبر VPN» وحده ⇒ عبر الـVPN ولو على شبكته؛ وما لا يملكه يُقال
+    if (!viaVpn && !PermissionsService.deepCheckNet && PermissionsService.deepCheckVpn && _vpnLinked) viaVpn = true;
+    if (viaVpn && !PermissionsService.deepCheckVpn) {
+      return showNoPermission(context,
+          message: PermissionsService.deepCheckNet
+              ? 'الفحص الشامل عبر VPN غير مفعّل لك — يشتغل وأنت على الشبكة'
+              : 'الفحص الشامل غير مفعّل لك — اطلبه من مديرك');
+    }
+    if (!viaVpn && !PermissionsService.deepCheckNet) {
+      return showNoPermission(context,
+          message: PermissionsService.deepCheckVpn
+              ? 'الفحص الشامل على الشبكة غير مفعّل لك — يشتغل عبر VPN، اربطه أوّلاً'
+              : 'الفحص الشامل غير مفعّل لك — اطلبه من مديرك');
+    }
     if (_merged) return _openMergedCheck(viaVpn);
     if (!viaVpn && AgentNetPresence.isOff) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1784,17 +1798,15 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
               _viewButton(),
               SizedBox(width: gap),
               if (_all.isNotEmpty)
-                _ToolButton(
-                  key: const ValueKey('devices-deep-check'),
-                  tooltip: 'فحص شامل',
-                  // الموظّف بلا صلاحيّة «الفحص الشامل» (٨ نوفمبر): مكانه مقفلاً لا مخفيّاً
-                  onTap: PermissionsService.canDeepCheck
-                      ? _openDeepCheck
-                      : () => showNoPermission(context, action: true),
-                  child: PermissionsService.canDeepCheck
-                      ? Icon(LucideIcons.radar, size: 20, color: AppColors.textBody)
-                      : PermLockBadge(child: Icon(LucideIcons.radar, size: 20, color: AppColors.textLow)),
-                )
+                // الموظّف بلا وجهي «الفحص الشامل» (٨ نوفمبر — المالك: «او يخفي الميزة بالكامل»): لا زرّ
+                (PermissionsService.deepCheckNet || PermissionsService.deepCheckVpn)
+                    ? _ToolButton(
+                        key: const ValueKey('devices-deep-check'),
+                        tooltip: 'فحص شامل',
+                        onTap: _openDeepCheck,
+                        child: Icon(LucideIcons.radar, size: 20, color: AppColors.textBody),
+                      )
+                    : const SizedBox.shrink()
               else
                 _ToolButton(
                   tooltip: 'تحديث فوري',

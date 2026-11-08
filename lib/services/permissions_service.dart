@@ -259,18 +259,36 @@ class PermissionsService {
     return true;
   }
 
-  /// «ربط VPN» (٨ نوفمبر — المالك: «صلاحيه موظف يربط vpn ويفحص شامل ويفحص مشترك»): صاحب الحساب دائماً، والموظّف بمفتاحه
-  /// `conn_vpn.link` (الخادم يفرضه: server/connVpn/agentRoutes.js).
+  /// مفتاحٌ مفعّلٌ افتراضاً: موظّفٌ قديمٌ بلا المفتاح في صلاحيّاته المحفوظة يأخذ [missing] (كمحرّر الموظّفين: الكتالوج ثمّ المحفوظ).
+  static bool _hasOr(String key, bool missing) {
+    if (!_loaded) return true;
+    if (!_isEmployee) return has(key);
+    final c = _cached;
+    if (c == null || !c.containsKey(key)) return missing;
+    return c[key] == true;
+  }
+
+  // ── الفحصان بوجهين (٨ نوفمبر — المالك: «تفصله للموظف… بتخيره بوضع vpn او على الشبكه هم يكدر يختارهن الاثنين او واحد ع الاقل…
+  //    الافتراضي يكون لديه صلاحيه على شبكه فقط»): على الشبكة مفعّلٌ افتراضاً، وعبر VPN بمفتاحه — والاثنان مطفآن ⇒ الميزة تختفي.
+  //    الخادم يفرض ما عبر VPN (server/connVpn/agentRoutes.js). ──
+
+  /// «ربط VPN»: صاحب الحساب، والموظّف بـ`conn_vpn.link`.
   static bool get canLinkVpn => !_isEmployee || has('conn_vpn.link');
 
-  /// «الفحص الشامل» للأجهزة: الموظّف بمفتاحه `devices.deep_check` أو بقسم «تنبيهات المشتركين» (كما يفتحه الخادم عبر VPN).
-  static bool get canDeepCheck => !_isEmployee || has('devices.deep_check') || has('conn_alerts.use');
+  /// الفحص الشامل للأجهزة من الموبايل على شبكة الوكيل — `devices.deep_check` (مفعّلٌ افتراضاً).
+  static bool get deepCheckNet => !_isEmployee || _hasOr('devices.deep_check', true);
 
-  /// فحص المشتركين عبر VPN («وضع VPN» و«فحص الآن» بقسم المشتركين): `subscribers.vpn_check` أو قسم «تنبيهات المشتركين».
-  static bool get canSubsVpnCheck => !_isEmployee || has('subscribers.vpn_check') || has('conn_alerts.use');
+  /// الفحص الشامل للأجهزة عبر VPN — `devices.deep_check_vpn` (مطفأ افتراضاً).
+  static bool get deepCheckVpn => !_isEmployee || has('devices.deep_check_vpn');
 
-  /// «وضع VPN» بقسم الأجهزة (الممرّ): «ربط VPN» أو «الفحص الشامل» أو قسم «تنبيهات المشتركين» — كما يفتحه الخادم.
-  static bool get canDevicesVpn => !_isEmployee || has('conn_vpn.link') || has('devices.deep_check') || has('conn_alerts.use');
+  /// الفحص العامّ للمشتركين على الشبكة — `subscribers.check` (مفعّلٌ افتراضاً).
+  static bool get subsCheckNet => !_isEmployee || _hasOr('subscribers.check', true);
+
+  /// الفحص العامّ للمشتركين عبر VPN — `subscribers.vpn_check`، أو قسم «تنبيهات المشتركين» (زرّ «افحص الآن» منه، ٤ نوفمبر).
+  static bool get subsCheckVpn => !_isEmployee || has('subscribers.vpn_check') || has('conn_alerts.use');
+
+  /// «وضع VPN» بقسم الأجهزة (الممرّ): الفحص الشامل عبر VPN أو «ربط VPN».
+  static bool get canDevicesVpn => !_isEmployee || has('devices.deep_check_vpn') || has('conn_vpn.link');
 
   /// true إذا الـactor يملك واحدة على الأقل من المفاتيح.
   /// useful للشاشات اللي تجمع أكثر من tab/زر.
