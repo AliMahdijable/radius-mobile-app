@@ -33,6 +33,12 @@ import '../../widgets/merged_section.dart';
 class MessageLogsScreen extends StatefulWidget {
   const MessageLogsScreen({super.key});
 
+  /// «كل الشركات»: بغلاف قسمها (للعرض لكلّ شركة) — من «قوائم أخرى» ومن «الإرسال الجماعيّ» معاً.
+  static Widget mergedPage() => const MergedSection(
+      readOnly: true,
+      prefixes: ['/api/whatsapp/message-logs', '/api/whatsapp/broadcasts', '/api/whatsapp/broadcast'],
+      child: MessageLogsScreen());
+
   @override
   State<MessageLogsScreen> createState() => _MessageLogsScreenState();
 }

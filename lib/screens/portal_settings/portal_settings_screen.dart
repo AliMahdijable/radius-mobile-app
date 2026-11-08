@@ -31,6 +31,12 @@ import '../../widgets/merged_section.dart';
 class PortalSettingsScreen extends StatefulWidget {
   const PortalSettingsScreen({super.key});
 
+  /// «كل الشركات»: بغلاف قسمها (للعرض لكلّ شركة) — من «قوائم أخرى» ومن «طلبات التفعيل» معاً.
+  static Widget mergedPage() => const MergedSection(
+      readOnly: true,
+      prefixes: ['/api/v2/portal', '/api/v2/admin/branding', '/api/v2/admin/portal-packages'],
+      child: PortalSettingsScreen());
+
   @override
   State<PortalSettingsScreen> createState() => _PortalSettingsScreenState();
 }

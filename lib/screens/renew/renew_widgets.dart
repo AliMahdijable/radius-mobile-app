@@ -648,7 +648,7 @@ Future<bool> openRenewRequestPush(NavigatorState nav, Map<String, String> data) 
     await showRenewRequestSheet(nav.context, hit);
   } else {
     // لم يعد مفتوحاً (قُبل وفُعّل/رُفض) أو بلا صلاحيّة ⇒ القائمة تقول حاله
-    await nav.push(MaterialPageRoute(builder: (_) => const RenewRequestsScreen()));
+    await nav.push(MaterialPageRoute(builder: (_) => RenewRequestsScreen.mergedPage()));
   }
   return true;
 }
@@ -682,7 +682,7 @@ class RenewInboxSection extends StatelessWidget {
               const Spacer(),
               TextButton(
                 key: const ValueKey('renew-inbox-all'),
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RenewRequestsScreen())),
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RenewRequestsScreen.mergedPage())),
                 child: const Text('الكلّ'),
               ),
             ]),
@@ -695,7 +695,7 @@ class RenewInboxSection extends StatelessWidget {
             Align(
               alignment: AlignmentDirectional.centerStart,
               child: TextButton(
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RenewRequestsScreen())),
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RenewRequestsScreen.mergedPage())),
                 child: Text('و${items.length - max} غيرها…'),
               ),
             ),

@@ -31,6 +31,12 @@ import '../../widgets/merged_section.dart';
 class ManagersScreen extends StatefulWidget {
   const ManagersScreen({super.key});
 
+  /// «كل الشركات»: بغلاف قسمها (للعرض لكلّ شركة) — من «قوائم أخرى» ومن نقرة إشعار المدراء معاً.
+  static Widget mergedPage() => const MergedSection(
+      readOnly: true,
+      prefixes: ['/api/v2/managers', '/api/v2/acl-list', '/api/admin/manager-debts', '/api/admin/managers', '/api/admin/manager-movements'],
+      child: ManagersScreen());
+
   @override
   State<ManagersScreen> createState() => _ManagersScreenState();
 }

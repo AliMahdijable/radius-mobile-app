@@ -120,7 +120,7 @@ class ArchiveBar extends StatelessWidget {
                   dense: true,
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => const SettlementsScreen(),
+                      builder: (_) => SettlementsScreen.mergedPage(),
                     ),
                   ),
                 ),

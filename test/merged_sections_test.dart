@@ -264,6 +264,44 @@ void main() {
     expect(srv.asked.where((a) => !a.endsWith(' -')), isEmpty, reason: 'لا طلب موجَّه من قسمٍ للمفتوحة وحدها: ${srv.asked}');
     await down(t);
   });
+
+  testWidgets('٧ قسمٌ داخل قسم («تسوية الحساب ←» من الصرفيات): التسوية بغلافها لشركة الصرفيات، وإغلاقها لا يمسح وجهة الصرفيات', (t) async {
+    // المكدّس وحده أوّلاً: الخارجيّ يبقى يوجّه بادئاته والداخليّ فوقه، وإغلاق الداخليّ لا يرفعه
+    final outer = Object(), inner = Object();
+    CompanyRoute.enterSection(outer, _kEl, const ['/api/admin/expenses']);
+    CompanyRoute.enterSection(inner, _kEl, const ['/api/v2/settlements']);
+    expect(CompanyRoute.sectionKeyFor('/api/admin/expenses'), _kEl, reason: 'الخارجيّ يوجّه وهو تحت');
+    expect(CompanyRoute.sectionKeyFor('/api/v2/settlements/current'), _kEl);
+    CompanyRoute.leaveSection(inner);
+    expect(CompanyRoute.sectionKeyFor('/api/admin/expenses'), _kEl, reason: 'إغلاق الداخليّ لا يمسح وجهة الخارجيّ');
+    expect(CompanyRoute.sectionKeyFor('/api/v2/settlements'), isNull);
+    CompanyRoute.leaveSection(outer);
+    expect(CompanyRoute.sectionKey, isNull);
+
+    // الشاشات: الصرفيات لايرث لنك ثمّ «تسوية الحساب» فوقها بغلافها، ثمّ الرجوع
+    await up(t);
+    MergedMode.focus.value = _kEl;
+    final nav = GlobalKey<NavigatorState>();
+    await pumpVisual(t, const VisualDevice('', Size(390, 1400), 1),
+        home: (_) => Navigator(
+              key: nav,
+              onGenerateRoute: (_) => MaterialPageRoute<void>(
+                builder: (_) => const MergedSection(prefixes: ['/api/admin/expenses', '/api/v2/expenses'], child: ExpensesScreen()),
+              ),
+            ));
+    await settleReal(t);
+    srv.asked.clear();
+    nav.currentState!.push(MaterialPageRoute<void>(builder: (_) => SettlementsScreen.mergedPage()));
+    await settleReal(t);
+    expect(t.takeException(), isNull);
+    expect(srv.asked, contains('GET /api/v2/settlements/current $_kEl'), reason: 'صندوق ايرث لنك لا المفتوحة');
+    expect(find.descendant(of: find.byType(SettlementsScreen), matching: find.textContaining('«ايرث لنك» للعرض هنا')), findsOneWidget,
+        reason: 'شريطها وسببها فوقها');
+    nav.currentState!.pop();
+    await settleReal(t);
+    expect(CompanyRoute.sectionKeyFor('/api/admin/expenses'), _kEl, reason: 'الصرفيات تحتها ما زالت لايرث لنك');
+    await down(t);
+  });
 }
 
 /// شاشةٌ وهميّة لقسم «للمفتوحة وحدها»: جسمها بـ[MergedSectionBody] كالشاشات الحقيقيّة، وتعدّ مرّات إنشائها (= مرّات جلبها).

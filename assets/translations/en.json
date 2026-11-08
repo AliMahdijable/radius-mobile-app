@@ -1466,7 +1466,7 @@
     "unavailable": "“All companies” is unavailable now — open the company alone",
     "header": "All companies",
     "header_sub": "{} companies",
-    "others_note": "These sections are for the open company only: “{}” — home, subscribers and the financial report cover all companies",
+    "others_note": "Each section here picks its company from the strip inside it — open now: “{}”",
     "missing": "Not shown here: {}",
     "big": "“{}” is large ({} subscribers) — open it alone",
     "failed": "Couldn't load “{}” now",

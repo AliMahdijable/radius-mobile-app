@@ -216,7 +216,7 @@ class _RenewSettingsCardState extends State<RenewSettingsCard> {
             Divider(height: 1, color: AppColors.divider),
             InkWell(
               key: const ValueKey('renew-open-list'),
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RenewRequestsScreen())),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RenewRequestsScreen.mergedPage())),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: Sp.lg, vertical: Sp.md),
                 child: Row(children: [

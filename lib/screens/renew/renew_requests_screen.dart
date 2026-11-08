@@ -9,11 +9,16 @@ import '../desktop/desk_widgets.dart';
 import '../portal_settings/portal_settings_screen.dart';
 import 'renew_widgets.dart';
 import '../../widgets/merged_section.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 /// «طلبات التفعيل» (٤ نوفمبر — المالك): مشتركوك يطلبون التجديد من تطبيقهم مع صورة التحويل. المفتوحة (بانتظارك ثمّ المقبولة) أو
 /// آخر ٣٠ يوماً، والنقر يفتح الطلب بصورته وإجراءاته. الموظّف بلا «طلبات التفعيل» يراها مقفلةً لا مخفيّة.
 class RenewRequestsScreen extends StatefulWidget {
   const RenewRequestsScreen({super.key});
+
+  /// «كل الشركات»: للمفتوحة وحدها (الطلبات تصل لصفحتها وتُفعَّل منها) — من «قوائم أخرى» والجرس وإعدادات البوّابة معاً.
+  static Widget mergedPage() => MergedSection.openOnly(
+      title: 'طلبات التفعيل', reason: 'merged.reason_renew'.tr(), child: const RenewRequestsScreen());
 
   @override
   State<RenewRequestsScreen> createState() => _RenewRequestsScreenState();
@@ -114,7 +119,7 @@ class _RenewRequestsScreenState extends State<RenewRequestsScreen> {
             if (a.canEdit) ...[
               const SizedBox(height: Sp.sm),
               OutlinedButton(
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PortalSettingsScreen())),
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => PortalSettingsScreen.mergedPage())),
                 child: const Text('فتح الإعداد'),
               ),
             ],

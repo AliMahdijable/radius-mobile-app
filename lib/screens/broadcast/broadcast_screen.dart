@@ -520,7 +520,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
     // مباشرةً بحالة "انتظار" ثم تتحول لـ"أُرسلت" تلقائياً.
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => const MessageLogsScreen(),
+        builder: (_) => MessageLogsScreen.mergedPage(),
       ),
     );
   }

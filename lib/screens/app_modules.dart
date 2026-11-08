@@ -285,7 +285,7 @@ List<AppModule> buildAppModules() {
         title: 'more.settlements'.tr(),
         subtitle: 'more.settlements_hint'.tr(),
         // «كل الشركات» (٨ نوفمبر): صندوق الشركة المختارة وتسويتها بمكانها (settlements_routed)
-        page: () => const MergedSection(prefixes: ['/api/v2/settlements'], child: SettlementsScreen()),
+        page: SettlementsScreen.mergedPage,
       ),
     // ٢٣ أكتوبر: «المبيعات» — موادّ الوكيل ومخزونه وبيعها نقداً أو على دين المشترك. تظهر حين يقول الخادم إنّها
     // مفتوحةٌ للحساب (مفتاحٌ مطفأ افتراضيّاً)؛ الموظّف بلا `sales.view` يراها مقفلةً بمكانها، والمقيَّد بمديرٍ فرعيّ بسببها.
@@ -397,10 +397,7 @@ List<AppModule> buildAppModules() {
         tone: AppTone.brand,
         title: 'more.message_logs'.tr(),
         subtitle: 'more.message_logs_hint'.tr(),
-        page: () => const MergedSection(
-            readOnly: true,
-            prefixes: ['/api/whatsapp/message-logs', '/api/whatsapp/broadcasts', '/api/whatsapp/broadcast'],
-            child: MessageLogsScreen()),
+        page: MessageLogsScreen.mergedPage,
       ),
     // «طلبات التفعيل» (٤ نوفمبر): طلبات تجديد المشتركين من تطبيقهم بصورة التحويل — حين يُفتح المفتاح العامّ للحساب، ومقفلٌ بمكانه
     // لموظّفٍ بلا «طلبات التفعيل»، والمقيَّد بمديرٍ فرعيّ بسببه (القسم يشمل كلّ مشتركي الحساب). الرقم: بانتظارك.
@@ -416,8 +413,7 @@ List<AppModule> buildAppModules() {
         subtitle: RenewRequestsState.pending > 0
             ? '${RenewRequestsState.pending} بانتظارك — طلبات تجديد من تطبيق المشترك'
             : 'طلبات تجديد مشتركيك من تطبيقهم مع صورة التحويل',
-        page: () => MergedSection.openOnly(
-            title: 'طلبات التفعيل', reason: 'merged.reason_renew'.tr(), child: const RenewRequestsScreen()),
+        page: RenewRequestsScreen.mergedPage,
       ),
     // المدراء والموظّفون: مفتاحان لا يُمنحان لموظّف ايرث لنك أصلاً — مخفيّان عنده ومقفلان عند غيره.
     if (permShown(const ['managers.view']))
@@ -436,10 +432,7 @@ List<AppModule> buildAppModules() {
         tone: AppTone.brand,
         title: 'more.managers'.tr(),
         subtitle: 'more.managers_hint'.tr(),
-        page: () => const MergedSection(
-            readOnly: true,
-            prefixes: ['/api/v2/managers', '/api/v2/acl-list', '/api/admin/manager-debts', '/api/admin/managers', '/api/admin/manager-movements'],
-            child: ManagersScreen()),
+        page: ManagersScreen.mergedPage,
       ),
     if (permShown(pkgKeys))
       AppModule(
@@ -500,10 +493,7 @@ List<AppModule> buildAppModules() {
       tone: AppTone.brand,
       title: 'portal.title'.tr(),
       subtitle: 'portal.subtitle_more'.tr(),
-      page: () => const MergedSection(
-          readOnly: true,
-          prefixes: ['/api/v2/portal', '/api/v2/admin/branding', '/api/v2/admin/portal-packages'],
-          child: PortalSettingsScreen()),
+      page: PortalSettingsScreen.mergedPage,
     ),
     // ── ايرث لنك — لموزِّعي EarthLink وحدهم (من `ProviderService.isEarthlink`، لا صلاحيّة ساس).
     if (ProviderService.isEarthlink) ...[

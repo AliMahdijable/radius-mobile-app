@@ -326,7 +326,7 @@ class _MainShellState extends State<MainShell> {
       case NotificationDestination.managers:
         // المدراء ليسوا تبويباً بل داخل «قوائم أخرى» — فندفع شاشتهم.
         Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const ManagersScreen()),
+          MaterialPageRoute(builder: (_) => ManagersScreen.mergedPage()),
         );
     }
   }

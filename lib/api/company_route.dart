@@ -45,38 +45,46 @@ class CompanyRoute {
   /// «قوائم أخرى» بـ«كل الشركات» (٨ نوفمبر — المالك: «كل الاقسام مال قائمة المزيد لازم تخضع لهذا النظام شركتين بدقة»): قسمٌ
   /// مفتوحٌ بشركةٍ غير المفتوحة ⇒ طلبات بادئات مساراته — من أيّ زرٍّ أو شيتٍ فيه — موجَّهةٌ لها، وما سواها كما هو (الرئيسيّة
   /// والإشعارات بالخلفيّة لا تتأثّر). [MergedSection] (lib/widgets/merged_section.dart) يضعه ويرفعه.
-  static ({Object owner, String key, List<String> prefixes, String? adminId})? _section;
+  ///
+  /// مكدّس (٨ نوفمبر): قسمٌ يُفتح من داخل قسم («تسوية الحساب ←» من الصرفيات، «سجلّ الرسائل» من الإرسال الجماعيّ) يُضاف فوقه
+  /// ولا يمحوه — كان مفرداً فيمسح إغلاقُ الداخليّ وجهةَ الخارجيّ فتذهب طلباته للمفتوحة وهو يعرض غيرها. المسار يأخذ وجهة أعلى
+  /// قسمٍ تطابقه بادئاته.
+  static final List<({Object owner, String key, List<String> prefixes, String? adminId})> _sections = [];
 
   /// [adminId] معرّف مدير الشركة المختارة — لمسارات `/:adminId` في القسم ([sectionAdminIdFor]) بدل المفتوحة.
   static void enterSection(Object owner, String key, List<String> prefixes, {String? adminId}) {
     if (!keyRe.hasMatch(key)) return;
-    _section = (owner: owner, key: key, prefixes: List.unmodifiable(prefixes), adminId: adminId);
+    final e = (owner: owner, key: key, prefixes: List<String>.unmodifiable(prefixes), adminId: adminId);
+    final i = _sections.indexWhere((s) => identical(s.owner, owner));
+    if (i >= 0) {
+      _sections[i] = e;
+    } else {
+      _sections.add(e);
+    }
   }
 
-  /// معرّف مدير الشركة المختارة إن كان [path] من بادئات القسم المفتوح — وإلّا null (المفتوحة كما كانت).
-  static String? sectionAdminIdFor(String path) {
-    final s = _section;
-    if (s == null || s.adminId == null || sectionKeyFor(path) == null) return null;
-    return s.adminId;
-  }
-
-  /// يرفعه صاحبه وحده (قسمٌ أُغلق بعد أن فتح غيره لا يرفع قسم الآخر).
-  static void leaveSection(Object owner) {
-    if (identical(_section?.owner, owner)) _section = null;
-  }
-
-  /// مفتاح القسم المفتوح لمسار الطلب — البادئة نفسها أو ما تحتها (`/x` لا `/xy`) — أو null.
-  static String? sectionKeyFor(String path) {
-    final s = _section;
-    if (s == null) return null;
-    for (final p in s.prefixes) {
-      if (path == p || path.startsWith('$p/')) return s.key;
+  /// أعلى قسمٍ مفتوح تطابق بادئةٌ منه [path] — البادئة نفسها أو ما تحتها (`/x` لا `/xy`).
+  static ({Object owner, String key, List<String> prefixes, String? adminId})? _sectionFor(String path) {
+    for (var i = _sections.length - 1; i >= 0; i--) {
+      final s = _sections[i];
+      for (final p in s.prefixes) {
+        if (path == p || path.startsWith('$p/')) return s;
+      }
     }
     return null;
   }
 
+  /// معرّف مدير الشركة المختارة إن كان [path] من بادئات قسمٍ مفتوح — وإلّا null (المفتوحة كما كانت).
+  static String? sectionAdminIdFor(String path) => _sectionFor(path)?.adminId;
+
+  /// يرفعه صاحبه وحده (قسمٌ أُغلق بعد أن فتح غيره لا يرفع قسم الآخر).
+  static void leaveSection(Object owner) => _sections.removeWhere((s) => identical(s.owner, owner));
+
+  /// مفتاح القسم المفتوح لمسار الطلب — أو null.
+  static String? sectionKeyFor(String path) => _sectionFor(path)?.key;
+
   @visibleForTesting
-  static String? get sectionKey => _section?.key;
+  static String? get sectionKey => _sections.isEmpty ? null : _sections.last.key;
 
   /// مفتاح شركة الطلب: `extra['companyKey']` صراحةً أوّلاً، ثمّ النطاق، ثمّ القسم المفتوح ([enterSection]) لمساره.
   static String? keyFor(RequestOptions o) {
