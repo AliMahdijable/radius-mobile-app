@@ -97,6 +97,11 @@ class _Srv implements HttpClientAdapter {
         },
       }, headers: h);
     }
+    // واتساب كلّ صفحة (٨ نوفمبر): ألف متّصلة، باء منقطعة، الكبيرة تعذّر فحصها
+    if (o.method == 'GET' && path.startsWith('/api/whatsapp/connection-status/')) {
+      if (key == _kC) return _json(409, {'success': false, 'code': 'COMPANY_UPSTREAM_UNAVAILABLE', 'message': 'x'}, headers: h);
+      return _json(200, {'success': true, 'connected': key == _kA, 'phone': key == _kA ? '+9647701112222' : null}, headers: h);
+    }
     if (o.method == 'GET' && path == '/api/v2/admin-widgets') {
       return _json(200, {'success': true, 'balance': key == _kA ? 100000 : 50000, 'points': 0}, headers: h);
     }
@@ -267,6 +272,38 @@ void main() {
     await t.tap(chip('شركة كبيرة'));
     await settle(t, seconds: 1);
     expect(MergedMode.focus.value, isNull, reason: 'الكبيرة لا تُختار — تقول سببها');
+    await down(t);
+  });
+
+  testWidgets('واتساب «كل الشركات» (المالك ٨ نوفمبر: «يضل جاري التحقق»): كلّ صفحةٍ بمعرّف مديرها، «واتساب N/M»، وقائمتها بالضغط', (t) async {
+    await up();
+    await t.runAsync(() => MergedMode.enter());
+    await pumpVisual(t, phone, home: (_) => const DashboardScreen());
+    await settle(t, seconds: 3);
+    expect(t.takeException(), isNull);
+    // كلّ صفحةٍ بطلبٍ موجَّهٍ لها بمعرّف مديرها (المكرَّر لا — والتي تحتاج دخولاً لا تُطلب)
+    final wa = srv.routed.where((o) => o.uri.path.startsWith('/api/whatsapp/connection-status/')).toList();
+    final byKey = {for (final o in wa) o.headers['x-company-key'] as String: Uri.decodeComponent(o.uri.path.split('/').last)};
+    expect(byKey, {_kA: '11', _kB: 'jt:22', _kC: '33'});
+    expect(wa.every((o) => o.uri.queryParameters['live'] == null), isTrue, reason: 'لا إعادة ربطٍ من الرئيسية');
+    expect(find.text('جارٍ التحقق…'), findsNothing, reason: 'لا تبقى «جارٍ التحقق» في الوضع');
+    expect(find.text('واتساب 1/3'), findsOneWidget, reason: 'المتعذّرة لا تُعدّ متّصلة ولا تُخفى');
+    await t.tap(find.text('واتساب 1/3'));
+    await settle(t, seconds: 1);
+    Finder row(String k) => find.byKey(ValueKey('wa-co-$k'));
+    expect(find.descendant(of: row(_kA), matching: find.text('واتساب متصل')), findsOneWidget);
+    expect(find.descendant(of: row(_kA), matching: find.text('+9647701112222')), findsOneWidget);
+    expect(find.descendant(of: row(_kB), matching: find.text('واتساب منقطع')), findsOneWidget);
+    expect(find.descendant(of: row(_kC), matching: find.text('تعذّر الفحص')), findsOneWidget);
+    expect(find.textContaining('بدّل إليها'), findsOneWidget);
+    Navigator.of(t.element(row(_kA))).pop();
+    await settle(t, seconds: 1);
+    // الشركة المختارة: حالها وحده
+    await t.tap(chip('شركة ألف'));
+    await settle(t, seconds: 1);
+    expect(find.text('واتساب متصل'), findsOneWidget);
+    await t.tap(chip('شركة كبيرة'));
+    await settle(t, seconds: 1);
     await down(t);
   });
 

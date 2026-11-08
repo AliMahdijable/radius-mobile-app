@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:easy_localization/easy_localization.dart';
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -8,6 +8,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../core/platform/app_platform.dart';
 import '../../core/util/ar_date.dart';
 import '../../core/util/format.dart';
+import '../../core/widgets/app_sheet.dart';
+import '../../core/widgets/design_sheet.dart';
 import '../../models/merged_company.dart';
 import '../../services/merged_mode.dart';
 import '../../widgets/merged_company_strip.dart';
@@ -93,6 +95,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // المجاميع محفوظةٌ كما وصلت، والمعروض منها الكلّ أو الشركة المختارة في الشريط (_applyMerged) — بلا طلبٍ عند الاختيار.
   MergedListResult? _mergedList;
   MergedSum<WalletResult>? _mergedWallet;
+
+  /// «كل الشركات» (٨ نوفمبر): واتساب كلّ صفحة — الحبّة «واتساب N/M» وقائمتها بالضغط.
+  MergedWhatsApp? _mergedWa;
 
   /// «كل الشركات» بلا شركةٍ مختارة: رصيد كلّ شركةٍ بسطره في بطاقة الرصيد (٨ نوفمبر — المالك: «الارصده افصلهن… رصيد كل صفحه
   /// بيبن منفصل ولكن بنفس الكارت»). null ⇒ الرصيد الواحد (الوضع العاديّ أو شركةٌ مختارة).
@@ -375,14 +380,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// «كل الشركات»: المشتركون والديون من الصفوف المدموجة، والرصيد وتفعيلات اليوم مجموعةً بالدينار — ولا شيء يُحفظ في
   /// مخبأ الإقلاع (هو للشركة المفتوحة). [fresh]: سحبٌ يدويّ يتخطّى مخبأ قوائم الشركات (٤٥ث).
   Future<void> _refreshMerged({required bool silent, bool fresh = false}) async {
+    final wa = _shown('wa_banner') && _canWa;
     if (!silent) {
       setState(() {
         _activationsLoaded = false;
         _debtorsLoaded = false;
         _walletLoaded = false;
+        if (wa) _waLoaded = false;
       });
     }
     final jobs = <Future<void>>[];
+    // واتساب كلّ صفحة (المالك ٨ نوفمبر: «واتساب يضل جاري التحقق ميعرف يحفص كل الصفحات بيها واتساب او لا») — كان لا يُطلب
+    // في الوضع فتبقى الحبّة «جارٍ التحقق» أبداً.
+    if (wa) {
+      jobs.add(MergedDashboardApi.whatsApp().then((w) {
+        if (!mounted || !MergedMode.active.value) return;
+        setState(() {
+          _mergedWa = w;
+          _waLoaded = true;
+        });
+      }));
+    }
     if (_canSubs) {
       jobs.add(MergedSubscribers.load(fresh: fresh).then((r) {
         if (!mounted || !MergedMode.active.value) return;
@@ -734,6 +752,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   WhatsAppStatus? get _waStatus {
     if (!_waLoaded) return null;
+    if (MergedMode.active.value) return _mergedWaStatus();
     if (_waLive == null) return null;
     return WhatsAppStatus(
       connected: _waLive!.connected,
@@ -742,6 +761,63 @@ class _DashboardScreenState extends State<DashboardScreen> {
       sendingRestricted: _waLive!.sendingRestricted,
       cappingWarning: _waLive!.cappingWarning,
     );
+  }
+
+  /// «كل الشركات»: الشركة المختارة بحالها وحده (تعذّر ⇒ unknown)، والكلّ «واتساب N/M» بأسوأ تنبيهٍ فيها.
+  WhatsAppStatus? _mergedWaStatus() {
+    final w = _mergedWa;
+    if (w == null || w.rows.isEmpty) return null;
+    final f = MergedMode.focused;
+    if (f != null) {
+      final s = w.of(f.key)?.status;
+      if (s == null) return const WhatsAppStatus(connected: false, phone: '', unknown: true);
+      return WhatsAppStatus(
+        connected: s.connected,
+        phone: s.phone,
+        needsPairing: s.needsPairing,
+        sendingRestricted: s.sendingRestricted,
+        cappingWarning: s.cappingWarning,
+      );
+    }
+    return WhatsAppStatus(
+      connected: w.allConnected,
+      phone: '',
+      needsPairing: w.rows.any((r) => r.status?.needsPairing == true),
+      sendingRestricted: w.rows.any((r) => r.status?.sendingRestricted == true),
+      cappingWarning: w.rows.any((r) => r.status?.cappingWarning == true),
+      mergedOn: w.connected,
+      mergedTotal: w.total,
+    );
+  }
+
+  /// الضغط على حبّة واتساب: «كل الشركات» ⇒ قائمة الصفحات بحالها (والمفتوحة تُفتح منها)؛ وإلّا شاشته كما كانت.
+  void _onWhatsAppTap() {
+    if (MergedMode.active.value && _mergedWa != null) {
+      unawaited(_showMergedWa());
+      return;
+    }
+    unawaited(_openWhatsApp());
+  }
+
+  Future<void> _showMergedWa() async {
+    final w = _mergedWa;
+    if (w == null) return;
+    String? openAdmin;
+    try {
+      openAdmin = (await AuthStorage.readAdminId())?.trim();
+    } catch (_) {
+      openAdmin = null;
+    }
+    if (!mounted) return;
+    final openWa = await showAppSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: AppColors.scrim,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) => _MergedWaSheet(wa: w, openAdmin: openAdmin, canOpen: Perms.has('whatsapp.connect')),
+    );
+    if (openWa == true && mounted) await _openWhatsApp();
   }
 
   @override
@@ -910,7 +986,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           !(Perms.isEmployee && _waLoaded && _waLive == null))
                         GestureDetector(
                           behavior: HitTestBehavior.opaque,
-                          onTap: Perms.has('whatsapp.connect') ? _openWhatsApp : null,
+                          onTap: Perms.has('whatsapp.connect') || MergedMode.active.value ? _onWhatsAppTap : null,
                           child: _WAStatusChip(status: _waStatus, loaded: _waLoaded),
                         ),
                       if (!_elEmployee) const SubscriptionChip(),
@@ -935,8 +1011,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 waLoaded: _waLoaded,
                 // بلا `whatsapp.connect`: رسالة القفل لا شيء — ما دام المفتاح
                 // ممّا يُمنح لهذا الدور (موظّف ايرث لنك لا يُمنحه: null كما كان).
-                onWhatsAppTap: Perms.has('whatsapp.connect')
-                    ? _openWhatsApp
+                onWhatsAppTap: Perms.has('whatsapp.connect') || MergedMode.active.value
+                    ? _onWhatsAppTap
                     : permShown(const ['whatsapp.connect'])
                         ? () => showNoPermission(context)
                         : null,
@@ -1532,6 +1608,9 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
       old.whatsApp?.needsPairing != whatsApp?.needsPairing ||
       old.whatsApp?.sendingRestricted != whatsApp?.sendingRestricted ||
       old.whatsApp?.cappingWarning != whatsApp?.cappingWarning ||
+      old.whatsApp?.mergedOn != whatsApp?.mergedOn ||
+      old.whatsApp?.mergedTotal != whatsApp?.mergedTotal ||
+      old.whatsApp?.unknown != whatsApp?.unknown ||
       old.isDark != isDark ||
       // بلا هذين لا يُعاد بناء الرأس عند تدوير الجهاز (يتغيّر الشقّ
       // العلوي) ولا عند تغيير سلّم الخطّ — فيبقى بارتفاعه القديم بينما
@@ -1558,9 +1637,20 @@ class _WAStatusChip extends StatelessWidget {
     // بـ`.withValues(.1)` و`.25`، وهو ما ينهار ليلاً.
     final AppTone tone;
     final String label;
+    final on = status?.mergedOn;
+    final total = status?.mergedTotal;
     if (!loaded) {
       tone = AppTone.neutral;
       label = 'dashboard.wa_checking'.tr();
+    } else if (on != null && total != null) {
+      // «كل الشركات»: كم صفحةً واتسابها متّصل من كم — الأسماء في قائمتها بالضغط
+      tone = on == total
+          ? (status!.sendingRestricted ? AppTone.danger : AppTone.success)
+          : (on == 0 ? AppTone.danger : AppTone.warning);
+      label = 'dashboard.wa_merged'.tr(args: ['$on', '$total']);
+    } else if (status?.unknown == true) {
+      tone = AppTone.neutral;
+      label = 'dashboard.wa_unknown'.tr();
     } else if (status?.needsPairing == true) {
       tone = AppTone.warning;
       label = 'wa.needs_pairing'.tr();
@@ -1660,6 +1750,123 @@ class _AllHidden extends StatelessWidget {
             textAlign: TextAlign.center,
             style: AppType.micro(color: AppColors.textLow),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+
+/// «كل الشركات» — واتساب كلّ صفحة (٨ نوفمبر — المالك: «ميعرف يحفص كل الصفحات بيها واتساب او لا»): اسمها بلونها وحالها ورقمها،
+/// والمفتوحة بشارتها وزرّ شاشتها؛ ربط واتساب صفحةٍ أخرى من صفحتها (التبديل إليها).
+class _MergedWaSheet extends StatelessWidget {
+  const _MergedWaSheet({required this.wa, required this.openAdmin, required this.canOpen});
+  final MergedWhatsApp wa;
+  final String? openAdmin;
+  final bool canOpen;
+
+  ({String text, AppTone tone}) _state(WhatsAppStatusResult? s) {
+    if (s == null) return (text: 'dashboard.wa_row_unknown'.tr(), tone: AppTone.neutral);
+    if (s.needsPairing) return (text: 'wa.needs_pairing'.tr(), tone: AppTone.warning);
+    if (s.connected && s.sendingRestricted) return (text: 'wa.connected_limited'.tr(), tone: AppTone.danger);
+    if (s.connected) return (text: 'dashboard.wa_connected'.tr(), tone: AppTone.success);
+    return (text: 'dashboard.wa_disconnected'.tr(), tone: AppTone.danger);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Theme.of(context); // theme-dep (dark-mode)
+    final hasOpen = wa.rows.any((r) => openAdmin != null && openAdmin!.isNotEmpty && r.company.adminId == openAdmin);
+    return DesignSheet(
+      header: SheetHeaderBar(
+        icon: LucideIcons.messageCircle,
+        title: 'dashboard.wa_sheet_title'.tr(),
+        subtitle: 'dashboard.wa_merged'.tr(args: ['${wa.connected}', '${wa.total}']),
+        onClose: () => Navigator.of(context).pop(),
+      ),
+      footer: canOpen && hasOpen
+          ? SheetFooterBar(
+              label: 'dashboard.wa_open_mine'.tr(),
+              icon: LucideIcons.messageCircle,
+              enabled: true,
+              busy: false,
+              onPressed: () => Navigator.of(context).pop(true),
+            )
+          : null,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final r in wa.rows) ...[
+            Builder(builder: (context) {
+              final st = _state(r.status);
+              final open = openAdmin != null && openAdmin!.isNotEmpty && r.company.adminId == openAdmin;
+              final phone = r.status?.phone.trim() ?? '';
+              return Container(
+                key: ValueKey('wa-co-${r.company.key}'),
+                padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(R.md),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(color: AppColors.company(r.company.colorIndex), shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: Sp.sm),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  r.company.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppType.bodyStrong(color: AppColors.textHi),
+                                ),
+                              ),
+                              if (open) ...[
+                                const SizedBox(width: Sp.x6),
+                                Text('dashboard.wa_open_badge'.tr(),
+                                    style: AppType.micro(color: AppTone.brand.fill).copyWith(fontWeight: FontWeight.w700)),
+                              ],
+                            ],
+                          ),
+                          if (phone.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(phone,
+                                textDirection: TextDirection.ltr,
+                                style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5)),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: Sp.sm),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 4),
+                      decoration: BoxDecoration(color: st.tone.softBg, borderRadius: BorderRadius.circular(R.sm)),
+                      child: Text(st.text,
+                          style: AppType.micro(color: st.tone.onSoft).copyWith(fontWeight: FontWeight.w700)),
+                    ),
+                  ],
+                ),
+              );
+            }),
+            const SizedBox(height: Sp.sm),
+          ],
+          if (wa.rows.any((r) => r.status?.connected != true &&
+              !(openAdmin != null && r.company.adminId == openAdmin)))
+            Text(
+              'dashboard.wa_other_hint'.tr(),
+              style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.5),
+            ),
         ],
       ),
     );

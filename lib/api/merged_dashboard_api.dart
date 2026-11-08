@@ -34,6 +34,25 @@ class MergedSum<T> {
   }
 }
 
+/// واتساب كلّ شركة في «كل الشركات» (٨ نوفمبر): الحال بمفتاحها، وnull = تعذّر فحصها (يُسمّى لا يُعدّ منقطعاً).
+class MergedWhatsApp {
+  const MergedWhatsApp(this.rows);
+  final List<({MergedCompany company, WhatsAppStatusResult? status})> rows;
+
+  int get total => rows.length;
+  int get connected => rows.where((r) => r.status?.connected == true).length;
+  bool get allConnected => rows.isNotEmpty && connected == rows.length;
+
+  /// صفّ الشركة (ربطٌ ثانٍ للمدير نفسه يُقرأ من أصله — جلسة واتساب واحدة).
+  ({MergedCompany company, WhatsAppStatusResult? status})? of(String key) {
+    final k = MergedDashboardApi.canonicalKey(key);
+    for (final r in rows) {
+      if (r.company.key == k) return r;
+    }
+    return null;
+  }
+}
+
 /// الرئيسية في «كل الشركات» (٢١ أكتوبر): كلّ رقمٍ = نداءٌ موجَّهٌ لكلّ شركةٍ على المعالج الحقيقيّ نفسه ثمّ الجمع بقواعد الويب
 /// (client-v2 pages/Dashboard.tsx sumMoney/sumDaily): الدينار وحده يُجمع، وشركةٌ بعملةٍ أخرى أو مجهولة تُسمّى ولا تُجمع؛ قراءةٌ
 /// متعذّرة (علم balance_unavailable/unavailable أو فشل) تُسمّى ولا تدخل؛ وربطان للمدير نفسه (sameManagerOf) يُعدّان مرّة.
@@ -54,6 +73,19 @@ class MergedDashboardApi {
 
   static Future<List<R>> _each<R>(List<MergedCompany> cs, Future<R> Function(MergedCompany c) f) =>
       Future.wait([for (final c in cs) CompanyRoute.run(c.key, () => f(c))]);
+
+  /// واتساب كلّ شركة: GET /api/whatsapp/connection-status/:adminId موجَّهاً لها بمعرّف مديرها، ٢٠ث لكلٍّ (لا ينتظر الكلّ
+  /// شركةً معلّقة).
+  static Future<MergedWhatsApp> whatsApp() async {
+    final cs = countable();
+    final res = await _each(
+      cs,
+      (c) => DashboardApi.fetchWhatsAppStatusAt(c.adminId)
+          .timeout(const Duration(seconds: 20), onTimeout: () => null)
+          .catchError((_) => null),
+    );
+    return MergedWhatsApp([for (var i = 0; i < cs.length; i++) (company: cs[i], status: res[i])]);
+  }
 
   /// الرصيد (بإشارته) والنقاط.
   static Future<MergedSum<WalletResult>> wallet() async {

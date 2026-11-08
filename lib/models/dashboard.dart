@@ -52,6 +52,9 @@ class WhatsAppStatus {
     this.needsPairing = false,
     this.sendingRestricted = false,
     this.cappingWarning = false,
+    this.mergedOn,
+    this.mergedTotal,
+    this.unknown = false,
   });
 
   final bool connected;
@@ -59,4 +62,11 @@ class WhatsAppStatus {
   final bool needsPairing;
   final bool sendingRestricted;
   final bool cappingWarning;
+
+  /// «كل الشركات» (٨ نوفمبر): كم صفحةً واتسابها متّصل من كم — الحبّة «واتساب N/M» بدل «متصل/منقطع». null خارج الوضع.
+  final int? mergedOn;
+  final int? mergedTotal;
+
+  /// تعذّر الفحص (الشركة المختارة في «كل الشركات» لم يصل ردّها) — «تعذّر فحص واتساب» لا «منقطع» كاذبة.
+  final bool unknown;
 }

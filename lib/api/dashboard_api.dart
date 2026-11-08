@@ -534,15 +534,7 @@ class DashboardApi {
         '/api/whatsapp/connection-status/$adminId',
         options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
-      final body = r.data ?? const {};
-      final status = WhatsConnectionStatus.fromJson(body);
-      return WhatsAppStatusResult(
-        connected: status.connected,
-        phone: (body['phone'] ?? body['whatsappPhone'] ?? '').toString(),
-        needsPairing: status.needsPairing,
-        sendingRestricted: status.hasSendingRestriction,
-        cappingWarning: status.messageCapping?.isWarning == true,
-      );
+      return _waFrom(r.data ?? const {});
     } on DioException catch (e) {
       _logErr('whatsapp/connection-status', e);
       return null;
@@ -550,6 +542,34 @@ class DashboardApi {
       _logErr('whatsapp/connection-status', e);
       return null;
     }
+  }
+
+  /// «كل الشركات» (٨ نوفمبر — المالك: «واتساب يضل جاري التحقق ميعرف يحفص كل الصفحات بيها واتساب او لا»): حال واتساب
+  /// شركةٍ بمعرّف مديرها — يُنادى داخل CompanyRoute.run(شركتها) (الخادم يطابق :adminId بمدير جلستها، companyRoutingAllow
+  /// whatsapp-connection-status). بلا live: لا إعادة ربط من هنا. null = تعذّر (لا «منقطع» كاذبة).
+  static Future<WhatsAppStatusResult?> fetchWhatsAppStatusAt(String adminId) async {
+    try {
+      final r = await ApiClient.dio.get<Map<String, dynamic>>(
+        '/api/whatsapp/connection-status/${Uri.encodeComponent(adminId)}',
+      );
+      final body = r.data ?? const {};
+      if (body['success'] == false) return null;
+      return _waFrom(body);
+    } catch (e) {
+      _logErr('whatsapp/connection-status (company)', e);
+      return null;
+    }
+  }
+
+  static WhatsAppStatusResult _waFrom(Map<String, dynamic> body) {
+    final status = WhatsConnectionStatus.fromJson(body);
+    return WhatsAppStatusResult(
+      connected: status.connected,
+      phone: (body['phone'] ?? body['whatsappPhone'] ?? '').toString(),
+      needsPairing: status.needsPairing,
+      sendingRestricted: status.hasSendingRestriction,
+      cappingWarning: status.messageCapping?.isWarning == true,
+    );
   }
 
   static int? _toInt(dynamic v) {
