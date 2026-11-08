@@ -10,24 +10,156 @@ import 'vpn_now.dart';
 /// مشكلة مشتركٍ في «الفحص العامّ»: نوعها وسطرها كما يُعرض.
 typedef SubsCheckProblem = ({ConnectionProblemKind kind, String label});
 
-/// مشتركٌ بمشكلة (أو أكثر) في التقرير.
-class SubsCheckRow {
-  const SubsCheckRow(this.sub, this.problems);
-  final Subscriber sub;
-  final List<SubsCheckProblem> problems;
+/// قراءة مشتركٍ كما تُعرض في «الفحص العامّ» (٨ نوفمبر — المالك: «اظهار معلومات ال ccq كذلك»): كلّ مقاييسه لا المشكلة وحدها —
+/// من الهاتف (قراءة الكارت نفسها) أو عبر الـVPN. الصفر ليس قراءة (كـ[ConnectionAlerts.detect]).
+class SubsReading {
+  const SubsReading({this.sig, this.ccq, this.lan, this.rx, this.temp, this.ms, this.device, this.via, this.at});
+
+  /// الإشارة dBm (يوبيكويتي).
+  final int? sig;
+
+  /// جودة الربط ٪.
+  final int? ccq;
+
+  /// الكيبل: `unplugged` · `10` · `100` · `1000` (ميكا) · `on` (موصولٌ بسرعةٍ لا تُعرف) — null لم يُقرأ.
+  final String? lan;
+
+  /// ضوء الفايبر dBm وحرارة الوحدة °C.
+  final double? rx;
+  final double? temp;
+
+  /// زمن الاستجابة (قراءة VPN بالبنك وحده).
+  final int? ms;
+
+  /// اسم الجهاز: اسم النانو أو طراز الوحدة.
+  final String? device;
+
+  /// من أين جاءت قراءة الـVPN حين لا تكون من جهازه: «السكتر» · «الأولت».
+  final String? via;
+
+  final DateTime? at;
+
+  /// من لقطة الهاتف — null إن لم تحمل مقاييس (جهازٌ غير النانو والوحدة الضوئيّة).
+  static SubsReading? ofSnapshot(DeviceHealthSnapshot? snap, DateTime at) {
+    if (snap == null) return null;
+    if (snap.kind == DeviceKind.ubiquiti && snap.ubnt != null) {
+      final u = snap.ubnt!;
+      final s = u.signalDbm;
+      final c = u.ccqPercent;
+      final h = u.hostname.trim();
+      return SubsReading(
+        sig: s != null && s < 0 ? s : null,
+        ccq: c != null && c > 0 ? c : null,
+        lan: lanOf(u),
+        device: h.isEmpty ? null : h,
+        at: at,
+      );
+    }
+    if (snap.kind == DeviceKind.ont && snap.ont != null) {
+      final o = snap.ont!;
+      final rx = double.tryParse(o.rxPower);
+      final t = double.tryParse(o.temperature);
+      final m = o.model.trim();
+      return SubsReading(
+        rx: rx != null && rx < 0 ? rx : null,
+        temp: t,
+        device: m.isNotEmpty ? m : (o.vendor == 'zte' ? 'ZTE' : 'Huawei'),
+        at: at,
+      );
+    }
+    return null;
+  }
+
+  /// من فحص الخادم عبر الـVPN.
+  static SubsReading ofVpn(VpnSubReading r, DateTime? at) {
+    final s = r.sig;
+    final c = r.ccq;
+    final rx = r.rx;
+    final lan = (r.lan ?? '').trim();
+    return SubsReading(
+      sig: s != null && s < 0 ? s : null,
+      ccq: c != null && c > 0 ? c : null,
+      lan: lan.isEmpty ? null : (lan == '0' ? 'unplugged' : lan),
+      rx: rx != null && rx < 0 ? rx : null,
+      temp: r.temp,
+      ms: r.src == 'ping' ? r.ms : null,
+      via: r.src == 'sector' ? 'السكتر' : (r.src == 'olt' ? 'الأولت' : null),
+      at: at,
+    );
+  }
+
+  /// كيبل النانو كما يُعرض — ومنطق «مفصول»/«10» نفسه في [ConnectionAlerts.lanState].
+  static String? lanOf(UbiquitiStatus u) {
+    if (u.lanPorts.isEmpty) return null;
+    final p = u.primaryLan;
+    if (p == null) return null;
+    if (!p.plugged) return 'unplugged';
+    if (p.speedUnknown) return 'on';
+    final m = RegExp(r'^(\d+)Mbps').firstMatch(p.speed ?? '');
+    final mbps = m == null ? null : int.tryParse(m.group(1)!);
+    if (mbps == null) return 'on';
+    return mbps == 0 ? 'unplugged' : '$mbps';
+  }
 }
 
-/// تقرير «الفحص العامّ» للمشتركين: كم قُرئ من كم، ومن بمشكلة مصنّفين بنوعها.
+/// مشتركٌ مقروء في التقرير — بمشاكله (فارغة = سليم) وقراءته.
+class SubsCheckRow {
+  const SubsCheckRow(this.sub, this.problems, {this.reading});
+  final Subscriber sub;
+  final List<SubsCheckProblem> problems;
+  final SubsReading? reading;
+
+  /// أسوأ مشاكله (الكيبل ثمّ الإشارة…) — null إن كان سليماً.
+  ConnectionProblemKind? get worst {
+    ConnectionProblemKind? w;
+    for (final p in problems) {
+      if (w == null || SubscribersCheck.order.indexOf(p.kind) < SubscribersCheck.order.indexOf(w)) w = p.kind;
+    }
+    return w;
+  }
+}
+
+/// لماذا لم يُقرأ مشترك.
+enum SubsMissWhy {
+  /// عبر الـVPN: الخادم وصله ولا يجيب.
+  dead,
+
+  /// غير متّصلٍ الآن.
+  offline,
+
+  /// متّصلٌ ولا قراءة له (جهازه لا يردّ، أو بلا عنوان، أو لم يصله الفحص بعد).
+  noReply,
+
+  /// جهازه يُقرأ بلا مقاييس (ليس نانو ولا وحدةً ضوئيّة).
+  noMetrics,
+}
+
+typedef SubsMissing = ({Subscriber sub, SubsMissWhy why});
+
+/// تقرير «الفحص العامّ» للمشتركين: كم قُرئ من كم، ومن بمشكلة مصنّفين بنوعها، والسليم، ومن لم يُقرأ ولماذا.
 class SubsCheckReport {
-  const SubsCheckReport({required this.total, required this.read, required this.rows, this.oldest});
+  const SubsCheckReport({
+    required this.total,
+    required this.read,
+    required this.rows,
+    this.healthy = const [],
+    this.missing = const [],
+    this.oldest,
+  });
 
   final int total;
 
   /// مشتركون لهم قراءةٌ معروفة (من الكارت/الذاكرة أو من فحص الـVPN).
   final int read;
 
-  /// من بمشكلة — الأسوأ أوّلاً (الكيبل ثمّ الإشارة…).
+  /// من بمشكلة — الأسوأ أوّلاً (الكيبل ثمّ الإشارة…، وداخل النوع الأشدّ).
   final List<SubsCheckRow> rows;
+
+  /// المقروء بلا مشكلة — الأقرب للحدّ أوّلاً.
+  final List<SubsCheckRow> healthy;
+
+  /// من لم يُقرأ — الميّت عبر الـVPN أوّلاً.
+  final List<SubsMissing> missing;
 
   /// أقدم قراءةٍ داخلة (للسطر «آخر قراءة قبل…»).
   final DateTime? oldest;
@@ -45,7 +177,8 @@ class SubsCheckReport {
 class SubscribersCheck {
   SubscribersCheck._();
 
-  static const _order = [
+  /// ترتيب الأنواع: الأسوأ أوّلاً.
+  static const order = [
     ConnectionProblemKind.cable,
     ConnectionProblemKind.signal,
     ConnectionProblemKind.ccq,
@@ -53,8 +186,66 @@ class SubscribersCheck {
     ConnectionProblemKind.fiberTemp,
   ];
 
-  static int _rank(SubsCheckRow r) =>
-      r.problems.map((p) => _order.indexOf(p.kind)).fold<int>(_order.length, (a, b) => b < a ? b : a);
+  /// داخل النوع الواحد: الأشدّ أوّلاً (المفصول قبل 10، الأضعف إشارةً، الأقلّ CCQ، الأضعف ضوءاً، الأسخن).
+  static double _severity(SubsCheckRow r) {
+    final x = r.reading;
+    switch (r.worst) {
+      case ConnectionProblemKind.cable:
+        return x?.lan == 'unplugged' ? 0 : 1;
+      case ConnectionProblemKind.signal:
+        return (x?.sig ?? 0).toDouble();
+      case ConnectionProblemKind.ccq:
+        return (x?.ccq ?? 100).toDouble();
+      case ConnectionProblemKind.fiberRx:
+        return x?.rx ?? 0;
+      case ConnectionProblemKind.fiberTemp:
+        return -(x?.temp ?? 0);
+      case null:
+        return 0;
+    }
+  }
+
+  static int _byWorst(SubsCheckRow a, SubsCheckRow b) {
+    final k = order.indexOf(a.worst!).compareTo(order.indexOf(b.worst!));
+    return k != 0 ? k : _severity(a).compareTo(_severity(b));
+  }
+
+  /// كم يبعد السليم عن حدّ المشكلة (بالديسيبل تقريباً) — الأقرب أوّلاً في قائمة «سليم».
+  static double margin(SubsReading x, ConnectionAlertThresholds t) {
+    var m = double.infinity;
+    void take(double v) => m = v < m ? v : m;
+    if (x.sig != null) take((x.sig! - t.signalDbm).toDouble());
+    if (x.ccq != null) take((x.ccq! - t.ccqPct) / 2);
+    if (x.rx != null) take(x.rx! - t.fiberRxDbm);
+    if (x.temp != null) take((t.fiberTempC - x.temp!) / 2);
+    return m;
+  }
+
+  static int _missRank(SubsMissing m) => SubsMissWhy.values.indexOf(m.why);
+
+  static SubsCheckReport _report(
+    int total,
+    List<SubsCheckRow> rows,
+    List<SubsCheckRow> healthy,
+    List<SubsMissing> missing,
+    ConnectionAlertThresholds Function(String? company) limits, {
+    DateTime? oldest,
+  }) {
+    rows.sort(_byWorst);
+    final margins = <SubsCheckRow, double>{
+      for (final h in healthy) h: h.reading == null ? double.infinity : margin(h.reading!, limits(h.sub.companyKey)),
+    };
+    healthy.sort((a, b) => margins[a]!.compareTo(margins[b]!));
+    missing.sort((a, b) => _missRank(a).compareTo(_missRank(b)));
+    return SubsCheckReport(
+      total: total,
+      read: rows.length + healthy.length,
+      rows: rows,
+      healthy: healthy,
+      missing: missing,
+      oldest: oldest,
+    );
+  }
 
   /// من قراءات الهاتف (الكارت): [peek] يُستبدل في الاختبار.
   static SubsCheckReport local(
@@ -64,43 +255,56 @@ class SubscribersCheck {
   }) {
     final look = peek ??
         (s) => DeviceProbeApi.peek(username: s.username, ip: s.ipAddress, company: s.companyKey);
-    var read = 0;
     DateTime? oldest;
     final rows = <SubsCheckRow>[];
+    final healthy = <SubsCheckRow>[];
+    final missing = <SubsMissing>[];
     for (final s in subs) {
       final p = look(s);
       final snap = p?.snap;
       // قراءةٌ بمقاييس (يوبيكويتي أو ONT) وحدها — جهازٌ آخر بلا أرقام ليس «مقروءاً»
-      final metrics = snap != null &&
-          ((snap.kind == DeviceKind.ubiquiti && snap.ubnt != null) || (snap.kind == DeviceKind.ont && snap.ont != null));
-      if (!metrics) continue;
-      read++;
+      final x = p == null ? null : SubsReading.ofSnapshot(snap, p.at);
+      if (x == null) {
+        missing.add((
+          sub: s,
+          why: snap != null ? SubsMissWhy.noMetrics : (s.isOnline ? SubsMissWhy.noReply : SubsMissWhy.offline),
+        ));
+        continue;
+      }
       if (oldest == null || p!.at.isBefore(oldest)) oldest = p!.at;
-      final probs = ConnectionAlerts.detect(snap, limits(s.companyKey));
-      if (probs.isNotEmpty) rows.add(SubsCheckRow(s, [for (final x in probs) (kind: x.kind, label: x.label)]));
+      final probs = ConnectionAlerts.detect(snap!, limits(s.companyKey));
+      final row = SubsCheckRow(s, [for (final q in probs) (kind: q.kind, label: q.label)], reading: x);
+      (probs.isEmpty ? healthy : rows).add(row);
     }
-    rows.sort((a, b) => _rank(a).compareTo(_rank(b)));
-    return SubsCheckReport(total: subs.length, read: read, rows: rows, oldest: oldest);
+    return _report(subs.length, rows, healthy, missing, limits, oldest: oldest);
   }
 
-  /// من قراءات فحص الخادم عبر الـVPN: [reading] يُستبدل في الاختبار.
+  /// من قراءات فحص الخادم عبر الـVPN: [reading] يُستبدل في الاختبار، و[readAt] وقت فحص شركة المشترك.
   static SubsCheckReport vpn(
     List<Subscriber> subs,
     ConnectionAlertThresholds Function(String? company) limits, {
     VpnSubReading? Function(Subscriber s)? reading,
+    DateTime? Function(String? company)? readAt,
   }) {
     final look = reading ?? (s) => VpnNow.readingFor(s.username, company: s.companyKey);
-    var read = 0;
+    final when = readAt ?? (c) => VpnNow.readingsAtFor(c) ?? VpnNow.readingsAt;
     final rows = <SubsCheckRow>[];
+    final healthy = <SubsCheckRow>[];
+    final missing = <SubsMissing>[];
     for (final s in subs) {
       final r = look(s);
-      if (r == null || r.dead) continue;
-      read++;
+      if (r == null || r.dead) {
+        missing.add((
+          sub: s,
+          why: r != null ? SubsMissWhy.dead : (s.isOnline ? SubsMissWhy.noReply : SubsMissWhy.offline),
+        ));
+        continue;
+      }
       final probs = fromVpn(r, limits(s.companyKey));
-      if (probs.isNotEmpty) rows.add(SubsCheckRow(s, probs));
+      final row = SubsCheckRow(s, probs, reading: SubsReading.ofVpn(r, when(s.companyKey)));
+      (probs.isEmpty ? healthy : rows).add(row);
     }
-    rows.sort((a, b) => _rank(a).compareTo(_rank(b)));
-    return SubsCheckReport(total: subs.length, read: read, rows: rows);
+    return _report(subs.length, rows, healthy, missing, limits);
   }
 
   /// قراءة الخادم ⇒ المشاكل بحدود المدير — كـ[ConnectionAlerts.detect] حرفاً (الصفر ليس قراءة).

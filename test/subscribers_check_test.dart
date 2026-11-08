@@ -7,8 +7,18 @@ import 'package:rad_mysvcs/services/subscribers_check.dart';
 
 /// «الفحص العامّ» للمشتركين (٨ نوفمبر — المالك: «أ» و«فحص المشتركين ثكيل كلش»): من قراءات الكارتات نفسها وبحدود «تنبيه المشترك»
 /// — المقروء يُعدّ، والمشكلة بنوعها (الكيبل أوّلاً)، والصفر ليس قراءة؛ وعبر الـVPN بالحدود نفسها.
-Subscriber _sub(String u, {String? company}) =>
-    Subscriber.fromJson({'username': u, 'firstname': u, 'lastname': '', if (company != null) 'company_key': company});
+Subscriber _sub(String u, {String? company, bool online = true}) => Subscriber.fromJson({
+      'username': u,
+      'firstname': u,
+      'lastname': '',
+      'online_status': online ? 1 : 0,
+      if (company != null) 'company_key': company,
+    });
+
+UbiquitiStatus _ubnt(int sig, int ccq, {List<LanPort> lan = const [], String host = 'h'}) => UbiquitiStatus(
+    hostname: host, firmware: 'XC.v8', uptimeSeconds: 100, ssid: 's', mode: 'sta', signalDbm: sig, noiseFloorDbm: -95,
+    ccqPercent: ccq, distanceMeters: 300, txRateKbps: 100000, rxRateKbps: 100000, lanPorts: lan, peerMac: null,
+    peerCount: 1, baseUrl: 'http://x');
 
 void main() {
   const t = ConnectionAlertThresholds(signalDbm: -70, ccqPct: 70, fiberRxDbm: -25, fiberTempC: 70);
@@ -54,5 +64,60 @@ void main() {
     expect(r.of(ConnectionProblemKind.ccq).single.sub.username, 'b', reason: 'إشارة صفرٌ لا تُعدّ ضعيفة');
     expect(r.of(ConnectionProblemKind.fiberRx).single.sub.username, 'c');
     expect(r.of(ConnectionProblemKind.fiberTemp).single.sub.username, 'c');
+  });
+  test('القراءة كاملةً لكلّ مقروء (المالك: «اظهار معلومات ال ccq كذلك») — والسليم الأقرب للحدّ أوّلاً', () {
+    final subs = [_sub('a'), _sub('b'), _sub('c'), _sub('d'), _sub('e', online: false), _sub('f'), _sub('g')];
+    final at = DateTime(2026, 11, 8, 4);
+    final snaps = <String, DeviceHealthSnapshot>{
+      // سليم بعيدٌ عن الحدّ (-70): -50 ⇒ هامش 20
+      'a': DeviceHealthSnapshot(kind: DeviceKind.ubiquiti, ip: '1', ubnt: _ubnt(-50, 95, host: 'Nano-A',
+          lan: const [LanPort(name: 'eth0', speed: '100Mbps-Full', plugged: true)])),
+      // سليم قريب: -67 ⇒ هامش 3
+      'b': DeviceHealthSnapshot(kind: DeviceKind.ubiquiti, ip: '2', ubnt: _ubnt(-67, 90,
+          lan: const [LanPort(name: 'eth0', speed: null, plugged: true)])),
+      // كيبل مفصول
+      'c': DeviceHealthSnapshot(kind: DeviceKind.ubiquiti, ip: '3', ubnt: _ubnt(-60, 95,
+          lan: const [LanPort(name: 'eth0', speed: null, plugged: false)])),
+      'd': const DeviceHealthSnapshot(
+          kind: DeviceKind.ont,
+          ip: '4',
+          ont: OntOpticalInfo(txPower: '2.1', rxPower: '-20.5', voltage: '3.3', temperature: '41', bias: '10', sendStatus: 'ok', model: 'MH80', vendor: 'zte')),
+      // جهازٌ بلا مقاييس
+      'g': const DeviceHealthSnapshot(kind: DeviceKind.other, ip: '7'),
+    };
+    final r = SubscribersCheck.local(subs, limits,
+        peek: (s) => snaps[s.username] == null ? null : (snap: snaps[s.username], stale: false, at: at));
+    expect(r.healthy.map((x) => x.sub.username).toList(), ['b', 'd', 'a'],
+        reason: 'b هامشه 3 · d الضوء ‎-20.5 وحدّه ‎-25 ⇒ 4.5 · a هامشه 20');
+    final a = r.healthy.last.reading!;
+    expect([a.sig, a.ccq, a.lan, a.device, a.at], [-50, 95, '100', 'Nano-A', at]);
+    expect(r.healthy.first.reading!.lan, 'on', reason: 'موصولٌ بسرعةٍ لا تُعرف ليس مفصولاً');
+    final d = r.healthy[1].reading!;
+    expect([d.rx, d.temp, d.device], [-20.5, 41.0, 'MH80']);
+    expect(r.rows.single.sub.username, 'c');
+    expect(r.rows.single.reading!.lan, 'unplugged');
+    expect({for (final m in r.missing) m.sub.username: m.why},
+        {'e': SubsMissWhy.offline, 'f': SubsMissWhy.noReply, 'g': SubsMissWhy.noMetrics});
+    expect([r.total, r.read, r.unread], [7, 4, 3]);
+  });
+
+  test('داخل النوع الواحد: الأشدّ أوّلاً — والـVPN: من السكتر/الأولت، والبنك وحده، والميّت «لا يستجيب»', () {
+    final subs = [_sub('w1'), _sub('w2'), _sub('w3'), _sub('p'), _sub('x'), _sub('o', online: false)];
+    final reads = <String, VpnSubReading>{
+      'w1': const VpnSubReading(src: 'cpe', sig: -74, ccq: 90, lan: '100'),
+      'w2': const VpnSubReading(src: 'sector', sig: -82, ccq: 85),
+      'w3': const VpnSubReading(src: 'olt', rx: -24.0, temp: 50),
+      'p': const VpnSubReading(src: 'ping', ms: 12),
+      'x': const VpnSubReading(src: 'dead'),
+    };
+    final when = DateTime(2026, 11, 8, 5);
+    final r = SubscribersCheck.vpn(subs, limits, reading: (s) => reads[s.username], readAt: (_) => when);
+    expect(r.rows.map((x) => x.sub.username).toList(), ['w2', 'w1'], reason: '‎-82 قبل ‎-74');
+    expect(r.rows.first.reading!.via, 'السكتر');
+    expect(r.rows.first.reading!.at, when);
+    expect(r.healthy.map((x) => x.sub.username).toList(), ['w3', 'p'], reason: 'البنك وحده بلا مقاييس ⇒ آخراً');
+    expect(r.healthy.first.reading!.via, 'الأولت');
+    expect(r.healthy.last.reading!.ms, 12);
+    expect([for (final m in r.missing) m.why], [SubsMissWhy.dead, SubsMissWhy.offline], reason: 'الميّت أوّلاً');
   });
 }

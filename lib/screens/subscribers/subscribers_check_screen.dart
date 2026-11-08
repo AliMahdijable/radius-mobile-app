@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/util/bidi.dart';
 import '../../core/util/format.dart';
+import '../../core/util/server_time.dart';
 import '../../models/subscriber.dart';
 import '../../services/connection_alerts.dart';
 import '../../services/merged_mode.dart';
@@ -17,8 +18,12 @@ import 'subscriber_detail_screen.dart';
 import 'widgets/device_chip_micro.dart';
 
 /// «الفحص العامّ» للمشتركين (٨ نوفمبر — المالك: «أ» و«تره فحص المشتركين ثكيل كلش… مو مثل مايعرضون الاشارات وسرعته بكارت
-/// المشتركين»): تقريرٌ فوريّ من قراءات الكارتات نفسها، والموجة تعيد القديم وحده في الخلفيّة (التقرير يتحدّث معها)؛ عبر الـVPN من
-/// فحص الخادم الأخير (يُعاد إن قدُم). المشكلة بحدود «تنبيه المشترك» ([SubscribersCheck]). الضغط على مشترك يفتح نافذته.
+/// المشتركين»، ثمّ مع صورة الصفحة: «يحتاجلها ترتيب اكثر واظهار معلومات ال ccq كذلك وتصميم افضل»): تقريرٌ فوريّ من قراءات
+/// الكارتات نفسها، والموجة تعيد القديم وحده في الخلفيّة (التقرير يتحدّث معها)؛ عبر الـVPN من فحص الخادم الأخير (يُعاد إن قدُم).
+///
+/// الترتيب: بطاقة ملخّص بثلاثة أقسام تُفتح بالضغط — «بمشكلة» (مجموعاتٍ بنوعها، الأسوأ أوّلاً) · «سليم» (الأقرب للحدّ أوّلاً) ·
+/// «لم يُقرأ» (ولماذا). وكلّ مشتركٍ بمقاييسه كلّها كالكارت: الإشارة وCCQ والكيبل (أو ضوء الفايبر وحرارته) — المشكلة حمراء،
+/// والقريب من الحدّ برتقاليّ. المشكلة بحدود «تنبيه المشترك» ([SubscribersCheck]). الضغط على مشترك يفتح نافذته.
 class SubscribersCheckScreen extends StatefulWidget {
   const SubscribersCheckScreen({
     super.key,
@@ -50,16 +55,35 @@ class SubscribersCheckScreen extends StatefulWidget {
   State<SubscribersCheckScreen> createState() => _SubscribersCheckScreenState();
 }
 
+enum _Seg { problems, healthy, missing }
+
+/// درجة المقياس: سليم · قريبٌ من الحدّ · مشكلة.
+enum _Lvl { ok, near, bad }
+
+/// رأس مجموعةٍ في قسم «بمشكلة».
+class _Group {
+  const _Group(this.kind, this.count);
+  final ConnectionProblemKind kind;
+  final int count;
+}
+
 class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
+  _Seg _seg = _Seg.problems;
   ConnectionProblemKind? _kind;
 
+  /// (النوع، اسم الشريحة، عنوان المجموعة، الأيقونة)
   static const _kinds = [
-    (ConnectionProblemKind.cable, 'الكيبل', LucideIcons.cable),
-    (ConnectionProblemKind.signal, 'الإشارة', LucideIcons.signalLow),
-    (ConnectionProblemKind.ccq, 'CCQ', LucideIcons.activity),
-    (ConnectionProblemKind.fiberRx, 'ضوء الفايبر', LucideIcons.sun),
-    (ConnectionProblemKind.fiberTemp, 'حرارة الفايبر', LucideIcons.thermometer),
+    (ConnectionProblemKind.cable, 'الكيبل', 'الكيبل مفصول أو 10 ميكا', LucideIcons.cable),
+    (ConnectionProblemKind.signal, 'الإشارة', 'إشارة ضعيفة', LucideIcons.signal),
+    (ConnectionProblemKind.ccq, 'CCQ', 'CCQ منخفض', LucideIcons.activity),
+    (ConnectionProblemKind.fiberRx, 'ضوء الفايبر', 'ضوء الفايبر ضعيف', LucideIcons.sun),
+    (ConnectionProblemKind.fiberTemp, 'حرارة الفايبر', 'حرارة الفايبر عالية', LucideIcons.thermometer),
   ];
+
+  static ({ConnectionProblemKind kind, String chip, String group, IconData icon}) _kindOf(ConnectionProblemKind k) {
+    final x = _kinds.firstWhere((e) => e.$1 == k);
+    return (kind: x.$1, chip: x.$2, group: x.$3, icon: x.$4);
+  }
 
   @override
   void initState() {
@@ -103,21 +127,25 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
 
   bool get _busy => widget.viaVpn ? VpnNow.subscribers.busy : (widget.probing?.value ?? false);
 
+  void _open(Subscriber s) => Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => SubscriberDetailScreen(sub: s),
+        fullscreenDialog: true,
+      ));
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final subs = widget.subscribers();
     final r = widget.viaVpn ? SubscribersCheck.vpn(subs, _limits) : SubscribersCheck.local(subs, _limits);
-    final rows = _kind == null ? r.rows : r.of(_kind!);
     final mergedAll = MergedMode.active.value && MergedMode.focused == null;
+    final items = _items(r);
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
         backgroundColor: AppColors.surface,
         elevation: 0,
         scrolledUnderElevation: 0,
-        title: Text('الفحص العامّ للمشتركين',
-            style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
+        title: Text('الفحص العامّ للمشتركين', style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
         iconTheme: IconThemeData(color: AppColors.textHi),
         actions: [
           if (!widget.viaVpn && widget.onForceAll != null)
@@ -132,51 +160,91 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
             tooltip: 'تحديث',
             onPressed: _busy ? null : () => _refresh(),
             icon: _busy
-                ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brand))
+                ? SizedBox(
+                    width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brand))
                 : Icon(LucideIcons.refreshCw, size: 19, color: AppColors.textMid),
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
-        children: [
-          _summary(r),
-          const SizedBox(height: Sp.md),
-          if (r.rows.isNotEmpty) ...[
-            _kindChips(r),
-            const SizedBox(height: Sp.sm),
-          ],
-          if (r.read == 0 && !_busy)
-            _notice(LucideIcons.info, widget.viaVpn
-                ? 'لا قراءات عبر الـVPN بعد — اضغط «تحديث» ليفحص الخادم'
-                : 'لا قراءات بعد — يُفحص المشتركون الآن من موبايلك')
-          else if (r.rows.isEmpty && r.read > 0)
-            _notice(LucideIcons.circleCheck, 'لا مشاكل ✓ — كلّ المقروئين ضمن حدود «تنبيه المشترك»', good: true)
-          else
-            for (final row in rows) ...[
-              _row(row, mergedAll),
-              const SizedBox(height: Sp.sm),
-            ],
-          if (r.unread > 0) ...[
-            const SizedBox(height: Sp.xs),
-            Text(
-              'لم يُقرأ ${formatIQD(r.unread)} — بلا عنوانٍ لجهازه، أو جهازه لا يردّ${widget.viaVpn ? ' عبر الـVPN' : ''}',
-              style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5),
+      body: CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, 0),
+            sliver: SliverToBoxAdapter(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                _summary(r),
+                const SizedBox(height: Sp.md),
+                if (_seg == _Seg.problems && r.rows.isNotEmpty) ...[
+                  _kindChips(r),
+                  const SizedBox(height: Sp.xs),
+                ],
+                if (_seg == _Seg.healthy && r.healthy.isNotEmpty)
+                  _caption(LucideIcons.arrowDownWideNarrow, 'الأقرب إلى حدّ المشكلة أوّلاً'),
+                if (_seg == _Seg.missing && r.missing.isNotEmpty)
+                  _caption(LucideIcons.info, 'بلا قراءةٍ لجهازه — اضغط المشترك لتفتح نافذته'),
+              ]),
             ),
-          ],
-          if (widget.big) ...[
-            const SizedBox(height: Sp.xs),
-            Text('الحساب كبير — الفحص للصفوف المحمّلة في القائمة',
-                style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5)),
-          ],
+          ),
+          if (items.isEmpty)
+            SliverToBoxAdapter(child: _empty(r))
+          else
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: Sp.lg),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate((_, i) => _item(items[i], mergedAll), childCount: items.length),
+              ),
+            ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.xs, Sp.lg, Sp.huge),
+            sliver: SliverToBoxAdapter(child: _footer(mergedAll)),
+          ),
         ],
       ),
     );
   }
 
+  /// صفوف القسم المفتوح: «بمشكلة» مجموعاتٍ بأسوأ نوع (أو نوعٌ واحد بالشريحة)، «سليم»، أو «لم يُقرأ».
+  List<Object> _items(SubsCheckReport r) {
+    switch (_seg) {
+      case _Seg.problems:
+        if (_kind != null) return r.of(_kind!);
+        final counts = <ConnectionProblemKind, int>{};
+        for (final row in r.rows) {
+          counts[row.worst!] = (counts[row.worst!] ?? 0) + 1;
+        }
+        final out = <Object>[];
+        ConnectionProblemKind? last;
+        for (final row in r.rows) {
+          if (row.worst != last) {
+            last = row.worst;
+            out.add(_Group(last!, counts[last]!));
+          }
+          out.add(row);
+        }
+        return out;
+      case _Seg.healthy:
+        return r.healthy;
+      case _Seg.missing:
+        return r.missing;
+    }
+  }
+
+  Widget _item(Object it, bool mergedAll) {
+    if (it is _Group) return _groupHeader(it);
+    if (it is SubsCheckRow) return _row(it, mergedAll);
+    return _missRow(it as SubsMissing, mergedAll);
+  }
+
+  // ─────────────────── الملخّص ───────────────────
+
   Widget _summary(SubsCheckReport r) {
     final bad = r.rows.length;
-    final tone = bad == 0 ? AppTone.success : AppTone.danger;
+    final none = r.read == 0;
+    final tone = none ? AppTone.neutral : (bad == 0 ? AppTone.success : AppTone.danger);
+    final title = none ? 'لا قراءات بعد' : (bad == 0 ? 'لا مشاكل' : '${formatIQD(bad)} بمشكلة');
+    final at = widget.viaVpn ? VpnNow.readingsAt : null;
+    final source = widget.viaVpn ? 'عبر VPN${at != null ? ' · ${timeAgoAr(at)}' : ''}' : 'من موبايلك على الشبكة';
+    final pct = r.total == 0 ? 0.0 : r.read / r.total;
     return Container(
       key: const ValueKey('subs-check-summary'),
       padding: const EdgeInsets.all(Sp.md),
@@ -185,99 +253,95 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
         borderRadius: BorderRadius.circular(R.lg),
         border: Border.all(color: AppColors.border),
       ),
-      child: Row(children: [
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(color: tone.softBg, borderRadius: BorderRadius.circular(R.md)),
-          child: Icon(bad == 0 ? LucideIcons.shieldCheck : LucideIcons.triangleAlert, size: 22, color: tone.fill),
-        ),
-        const SizedBox(width: Sp.md),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            Text(bad == 0 ? 'لا مشاكل' : '${formatIQD(bad)} بمشكلة',
-                style: AppType.title(color: tone.fill).copyWith(fontSize: 17, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 2),
-            Text(
-              'قُرئ ${formatIQD(r.read)} من ${formatIQD(r.total)} · ${widget.viaVpn ? 'عبر VPN' : 'من موبايلك على الشبكة'}'
-              '${_busy ? ' · يحدّث…' : ''}',
-              style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(color: tone.softBg, borderRadius: BorderRadius.circular(R.md)),
+            child: Icon(
+              none ? LucideIcons.radar : (bad == 0 ? LucideIcons.shieldCheck : LucideIcons.triangleAlert),
+              size: 22,
+              color: tone.fill,
             ),
-          ]),
-        ),
-      ]),
-    );
-  }
-
-  Widget _kindChips(SubsCheckReport r) {
-    Widget chip(String label, int n, bool on, VoidCallback tap, {Key? key}) => Padding(
-          padding: const EdgeInsetsDirectional.only(end: Sp.x6),
-          child: ChoiceChip(
-            key: key,
-            label: Text('$label $n'),
-            selected: on,
-            onSelected: (_) => tap(),
-            labelStyle: AppType.label(color: on ? AppColors.onBrand : AppColors.textHi).copyWith(fontSize: 12.5),
-            selectedColor: AppColors.brand,
-            backgroundColor: AppColors.surface,
-            side: BorderSide(color: on ? AppColors.brand : AppColors.border),
-            showCheckmark: false,
           ),
-        );
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(children: [
-        chip('الكل', r.rows.length, _kind == null, () => setState(() => _kind = null)),
-        for (final (k, label, _) in _kinds)
-          if (r.of(k).isNotEmpty)
-            chip(label, r.of(k).length, _kind == k, () => setState(() => _kind = k), key: ValueKey('subs-check-kind-${k.name}')),
+          const SizedBox(width: Sp.md),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              Text(title,
+                  style: AppType.title(color: none ? AppColors.textHi : tone.fill)
+                      .copyWith(fontSize: 17, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 2),
+              Text('$source${_busy ? ' · يحدّث…' : ''}',
+                  style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5)),
+            ]),
+          ),
+        ]),
+        const SizedBox(height: Sp.md),
+        Row(children: [
+          Expanded(
+            child: Text('قُرئ ${formatIQD(r.read)} من ${formatIQD(r.total)}',
+                style: AppType.label(color: AppColors.textMid).copyWith(fontSize: 12.5)),
+          ),
+          Text('${(pct * 100).round()}%',
+              textDirection: TextDirection.ltr,
+              style: AppType.label(color: AppColors.textHi).copyWith(fontSize: 12.5, fontWeight: FontWeight.w700)),
+        ]),
+        const SizedBox(height: Sp.x6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(R.pill),
+          child: LinearProgressIndicator(
+            value: pct,
+            minHeight: 6,
+            backgroundColor: AppColors.surfaceSunken,
+            color: AppColors.brand,
+          ),
+        ),
+        const SizedBox(height: Sp.md),
+        Row(children: [
+          Expanded(child: _segTile(_Seg.problems, bad, 'بمشكلة', AppTone.danger, LucideIcons.triangleAlert)),
+          const SizedBox(width: Sp.sm),
+          Expanded(child: _segTile(_Seg.healthy, r.healthy.length, 'سليم', AppTone.success, LucideIcons.circleCheck)),
+          const SizedBox(width: Sp.sm),
+          Expanded(child: _segTile(_Seg.missing, r.missing.length, 'لم يُقرأ', AppTone.info, LucideIcons.circleDashed)),
+        ]),
       ]),
     );
   }
 
-  Widget _row(SubsCheckRow row, bool mergedAll) {
-    final s = row.sub;
-    final name = s.fullName.trim().isEmpty ? s.username : s.fullName.trim();
+  Widget _segTile(_Seg seg, int n, String label, AppTone tone, IconData icon) {
+    final on = _seg == seg;
     return Material(
-      color: AppColors.surface,
+      color: on ? tone.softBg : AppColors.surfaceSunken,
       borderRadius: BorderRadius.circular(R.md),
-      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        key: ValueKey('subs-check-row-${s.companyKey ?? ''}|${s.username}'),
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => SubscriberDetailScreen(sub: s),
-          fullscreenDialog: true,
-        )),
+        key: ValueKey('subs-check-seg-${seg.name}'),
+        borderRadius: BorderRadius.circular(R.md),
+        onTap: () => setState(() {
+          _seg = seg;
+          _kind = null;
+        }),
         child: Container(
-          padding: const EdgeInsets.all(Sp.md),
+          padding: const EdgeInsets.symmetric(vertical: Sp.sm, horizontal: Sp.xs),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(R.md),
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: on ? tone.softBorder : Colors.transparent, width: BW.selected),
           ),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Expanded(
-                child: Text(name,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(formatIQD(n),
+                style: AppType.title(color: n == 0 ? AppColors.textLow : tone.fill)
+                    .copyWith(fontSize: 19, fontWeight: FontWeight.w700, height: 1.2)),
+            const SizedBox(height: 2),
+            Row(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
+              Icon(icon, size: 13, color: on ? tone.fill : AppColors.textLow),
+              const SizedBox(width: Sp.xs),
+              Flexible(
+                child: Text(label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppType.label(color: AppColors.textHi).copyWith(fontSize: 13.5, fontWeight: FontWeight.w700)),
+                    style: AppType.label(color: on ? AppColors.textHi : AppColors.textMid)
+                        .copyWith(fontSize: 12.5, fontWeight: on ? FontWeight.w700 : FontWeight.w600)),
               ),
-              if (mergedAll && s.companyKey != null) CompanyTag(companyKey: s.companyKey!, fontSize: 11),
-            ]),
-            const SizedBox(height: 2),
-            Text(iso(s.username), style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5)),
-            const SizedBox(height: Sp.x6),
-            Wrap(spacing: Sp.x6, runSpacing: Sp.xs, children: [
-              for (final p in row.problems)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: AppTone.danger.softBg,
-                    borderRadius: BorderRadius.circular(R.pill),
-                    border: Border.all(color: AppTone.danger.softBorder),
-                  ),
-                  child: Text(p.label, style: AppType.label(color: AppTone.danger.fill).copyWith(fontSize: 12.5)),
-                ),
             ]),
           ]),
         ),
@@ -285,8 +349,338 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
     );
   }
 
+  // ─────────────────── شرائح الأنواع ───────────────────
+
+  Widget _kindChips(SubsCheckReport r) {
+    Widget chip(String label, IconData? icon, int n, bool on, VoidCallback tap, Key key) => Material(
+          color: on ? AppTone.danger.softBg : AppColors.surface,
+          borderRadius: BorderRadius.circular(R.pill),
+          child: InkWell(
+            key: key,
+            borderRadius: BorderRadius.circular(R.pill),
+            onTap: tap,
+            child: Container(
+              height: H.chipSm,
+              padding: const EdgeInsets.symmetric(horizontal: Sp.md),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(R.pill),
+                border: Border.all(color: on ? AppTone.danger.softBorder : AppColors.border),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 14, color: on ? AppTone.danger.fill : AppColors.textMid),
+                  const SizedBox(width: Sp.xs),
+                ],
+                Text(label,
+                    style: AppType.label(color: on ? AppTone.danger.onSoft : AppColors.textHi)
+                        .copyWith(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                const SizedBox(width: Sp.x6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: Sp.x6, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: on ? AppTone.danger.fill : AppColors.surfaceSunken,
+                    borderRadius: BorderRadius.circular(R.pill),
+                  ),
+                  child: Text(formatIQD(n),
+                      style: AppType.label(color: on ? AppColors.onBrand : AppColors.textMid)
+                          .copyWith(fontSize: 11, fontWeight: FontWeight.w700)),
+                ),
+              ]),
+            ),
+          ),
+        );
+    // سطرٌ ثانٍ لا تمريرٌ جانبيّ — كلّ الأنواع ظاهرة
+    return Wrap(
+      spacing: Sp.x6,
+      runSpacing: Sp.x6,
+      children: [
+        chip('الكل', null, r.rows.length, _kind == null, () => setState(() => _kind = null),
+            const ValueKey('subs-check-kind-all')),
+        for (final (k, label, _, icon) in _kinds)
+          if (r.of(k).isNotEmpty)
+            chip(label, icon, r.of(k).length, _kind == k, () => setState(() => _kind = k),
+                ValueKey('subs-check-kind-${k.name}')),
+      ],
+    );
+  }
+
+  Widget _groupHeader(_Group g) {
+    final k = _kindOf(g.kind);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, Sp.sm, 2, Sp.sm),
+      child: Row(children: [
+        Icon(k.icon, size: 15, color: AppTone.danger.fill),
+        const SizedBox(width: Sp.x6),
+        Text(k.group,
+            style: AppType.label(color: AppColors.textHi).copyWith(fontSize: 13, fontWeight: FontWeight.w700)),
+        const SizedBox(width: Sp.x6),
+        Text('(${formatIQD(g.count)})', style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5)),
+        const SizedBox(width: Sp.sm),
+        Expanded(child: Container(height: 1, color: AppColors.border)),
+      ]),
+    );
+  }
+
+  Widget _caption(IconData icon, String text) => Padding(
+        padding: const EdgeInsets.fromLTRB(2, 0, 2, Sp.sm),
+        child: Row(children: [
+          Icon(icon, size: 14, color: AppColors.textLow),
+          const SizedBox(width: Sp.x6),
+          Expanded(child: Text(text, style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5))),
+        ]),
+      );
+
+  // ─────────────────── صفّ مشترك ───────────────────
+
+  String _nameOf(Subscriber s) => s.fullName.trim().isEmpty ? s.username : s.fullName.trim();
+
+  Widget _row(SubsCheckRow row, bool mergedAll) {
+    final s = row.sub;
+    final x = row.reading;
+    final bad = {for (final p in row.problems) p.kind};
+    final problem = bad.isNotEmpty;
+    final meta = <String>[
+      iso(s.username),
+      if (x?.device != null) iso(x!.device!),
+      if (x?.via != null) 'من ${x!.via}',
+      if (!widget.viaVpn && x?.at != null) timeAgoAr(x!.at),
+    ];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Sp.sm),
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.md),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          key: ValueKey('subs-check-row-${s.companyKey ?? ''}|${s.username}'),
+          onTap: () => _open(s),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(R.md),
+              border: Border.all(color: problem ? AppTone.danger.softBorder : AppColors.border),
+            ),
+            child: Stack(children: [
+              Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(Sp.md + 2, Sp.md, Sp.sm, Sp.md),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    Expanded(
+                      child: Text(_nameOf(s),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppType.label(color: AppColors.textHi)
+                              .copyWith(fontSize: 13.5, fontWeight: FontWeight.w700)),
+                    ),
+                    if (mergedAll && s.companyKey != null) ...[
+                      const SizedBox(width: Sp.x6),
+                      CompanyTag(companyKey: s.companyKey!, fontSize: 11),
+                    ],
+                    const SizedBox(width: Sp.xs),
+                    Icon(LucideIcons.chevronLeft, size: 17, color: AppColors.textLow),
+                  ]),
+                  const SizedBox(height: 2),
+                  Text(meta.join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5)),
+                  if (x != null) ...[
+                    const SizedBox(height: Sp.sm),
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(end: Sp.xs),
+                      child: _metrics(x, bad, _limits(s.companyKey)),
+                    ),
+                  ],
+                ]),
+              ),
+              PositionedDirectional(
+                start: 0,
+                top: 0,
+                bottom: 0,
+                child: Container(width: 3, color: problem ? AppTone.danger.fill : AppColors.success),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// مقاييس المشترك خاناتٍ متساوية كالكارت — المشكلة حمراء (بحدود المدير)، والقريب من الحدّ برتقاليّ.
+  Widget _metrics(SubsReading x, Set<ConnectionProblemKind> bad, ConnectionAlertThresholds t) {
+    _Lvl lvl(ConnectionProblemKind k, bool near) => bad.contains(k) ? _Lvl.bad : (near ? _Lvl.near : _Lvl.ok);
+    final cells = <Widget>[
+      if (x.sig != null) _cell('الإشارة', '${x.sig} dBm', lvl(ConnectionProblemKind.signal, x.sig! - t.signalDbm <= 5)),
+      if (x.ccq != null) _cell('CCQ', '${x.ccq}%', lvl(ConnectionProblemKind.ccq, x.ccq! - t.ccqPct <= 10)),
+      if (x.lan != null) _cell('الكيبل', _lanText(x.lan!), lvl(ConnectionProblemKind.cable, false)),
+      if (x.rx != null)
+        _cell(
+            'الضوء', '${x.rx!.toStringAsFixed(1)} dBm', lvl(ConnectionProblemKind.fiberRx, x.rx! - t.fiberRxDbm <= 2)),
+      if (x.temp != null)
+        _cell('الحرارة', '${x.temp!.round()}°C', lvl(ConnectionProblemKind.fiberTemp, t.fiberTempC - x.temp! <= 5)),
+    ];
+    if (cells.isEmpty && x.ms != null) cells.add(_cell('الاستجابة', '${x.ms} ms', _Lvl.ok));
+    if (cells.isEmpty) return const SizedBox.shrink();
+    return Row(children: [
+      for (var i = 0; i < cells.length; i++) ...[
+        if (i > 0) const SizedBox(width: Sp.x6),
+        Expanded(child: cells[i]),
+      ],
+    ]);
+  }
+
+  static String _lanText(String lan) => switch (lan) {
+        'unplugged' => 'مفصول',
+        'on' => 'موصول',
+        '1000' => '1G',
+        _ => int.tryParse(lan) != null ? '${lan}M' : lan,
+      };
+
+  Widget _cell(String label, String value, _Lvl l) {
+    final fg = switch (l) {
+      _Lvl.bad => AppTone.danger.fill,
+      _Lvl.near => AppColors.warning,
+      _Lvl.ok => AppColors.textHi,
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: Sp.x6),
+      decoration: BoxDecoration(
+        color: l == _Lvl.bad ? AppTone.danger.softBg : AppColors.surfaceSunken,
+        borderRadius: BorderRadius.circular(R.sm),
+        border: Border.all(color: l == _Lvl.bad ? AppTone.danger.softBorder : Colors.transparent),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+        Text(label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style:
+                AppType.muted(color: l == _Lvl.bad ? AppTone.danger.onSoft : AppColors.textLow).copyWith(fontSize: 11)),
+        const SizedBox(height: 1),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: AlignmentDirectional.centerStart,
+          child: Text(
+            value,
+            textDirection: TextDirection.ltr,
+            style: AppType.label(color: fg).copyWith(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  // ─────────────────── من لم يُقرأ ───────────────────
+
+  Widget _missRow(SubsMissing m, bool mergedAll) {
+    final s = m.sub;
+    final (text, tone) = switch (m.why) {
+      SubsMissWhy.dead => ('لا يستجيب', AppTone.danger),
+      SubsMissWhy.offline => ('غير متّصل', AppTone.neutral),
+      SubsMissWhy.noMetrics => ('جهازٌ بلا قياسات', AppTone.neutral),
+      SubsMissWhy.noReply => (
+          _busy ? 'بانتظار الفحص' : (widget.viaVpn ? 'لم يُقرأ عبر VPN' : 'جهازه لم يردّ'),
+          AppTone.warning
+        ),
+    };
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Sp.sm),
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.md),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          key: ValueKey('subs-check-miss-${s.companyKey ?? ''}|${s.username}'),
+          onTap: () => _open(s),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm + 2),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(R.md),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(children: [
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                  Text(_nameOf(s),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style:
+                          AppType.label(color: AppColors.textHi).copyWith(fontSize: 13.5, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text(iso(s.username),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5)),
+                ]),
+              ),
+              if (mergedAll && s.companyKey != null) ...[
+                CompanyTag(companyKey: s.companyKey!, fontSize: 11),
+                const SizedBox(width: Sp.x6),
+              ],
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 3),
+                decoration: BoxDecoration(
+                  color: tone.softBg,
+                  borderRadius: BorderRadius.circular(R.pill),
+                  border: Border.all(color: tone.softBorder),
+                ),
+                child: Text(text,
+                    style: AppType.label(color: tone.onSoft).copyWith(fontSize: 11.5, fontWeight: FontWeight.w600)),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────── الفراغ والتذييل ───────────────────
+
+  Widget _empty(SubsCheckReport r) {
+    if (r.read == 0 && _seg != _Seg.missing) {
+      if (_busy) {
+        return _notice(LucideIcons.radar,
+            widget.viaVpn ? 'يفحص الخادم المشتركين عبر الـVPN…' : 'يُقرأ المشتركون الآن من موبايلك…');
+      }
+      return _notice(
+          LucideIcons.info,
+          widget.viaVpn
+              ? 'لا قراءات عبر الـVPN بعد — اضغط «تحديث» ليفحص الخادم'
+              : 'لا قراءات بعد — يُفحص المشتركون الآن من موبايلك');
+    }
+    return switch (_seg) {
+      _Seg.problems =>
+        _notice(LucideIcons.circleCheck, 'لا مشاكل ✓ — كلّ المقروئين ضمن حدود «تنبيه المشترك»', good: true),
+      _Seg.healthy => _notice(LucideIcons.triangleAlert, 'لا أحد سليم — كلّ المقروئين بمشكلة'),
+      _Seg.missing => _notice(LucideIcons.circleCheck, 'قُرئ الجميع ✓', good: true),
+    };
+  }
+
+  static String _num(double v) => v == v.roundToDouble() ? '${v.round()}' : '$v';
+
+  Widget _footer(bool mergedAll) {
+    final t = _limits(null);
+    final lines = <String>[
+      // «كل الشركات»: الحدود لكلّ شركةٍ وحدها — لا سطرٌ واحد يصدق على الكلّ
+      if (!mergedAll)
+        'حدّ المشكلة من «تنبيه المشترك»: الإشارة أضعف من ${iso('${t.signalDbm} dBm')} · CCQ ${iso('${t.ccqPct}%')} أو أقلّ'
+            ' · الضوء أضعف من ${iso('${_num(t.fiberRxDbm)} dBm')} · الحرارة فوق ${iso('${t.fiberTempC}°C')}',
+      if (widget.big) 'الحساب كبير — الفحص للصفوف المحمّلة في القائمة',
+    ];
+    if (lines.isEmpty) return const SizedBox.shrink();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      for (final l in lines)
+        Padding(
+          padding: const EdgeInsets.only(top: Sp.xs),
+          child: Text(l, style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 11.5, height: 1.5)),
+        ),
+    ]);
+  }
+
   Widget _notice(IconData icon, String text, {bool good = false}) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: Sp.huge),
+        padding: const EdgeInsets.symmetric(vertical: Sp.huge, horizontal: Sp.lg),
         child: Column(children: [
           Icon(icon, size: 34, color: good ? AppColors.success : AppColors.textLow),
           const SizedBox(height: 10),

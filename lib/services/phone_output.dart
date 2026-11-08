@@ -240,7 +240,7 @@ class _ChoiceTile extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.chevron_left_rounded, size: 20, color: AppColors.textLow),
+            Icon(LucideIcons.chevronLeft, size: 18, color: AppColors.textLow),
           ]),
         ),
       ),
