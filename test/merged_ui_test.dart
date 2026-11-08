@@ -26,6 +26,7 @@ import 'package:rad_mysvcs/screens/subscribers/sheets/movements_sheet.dart';
 import 'package:rad_mysvcs/screens/subscribers/subscribers_screen.dart';
 import 'package:rad_mysvcs/screens/subscribers/widgets/filter_chips_bar.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
+import 'package:rad_mysvcs/services/subscriber_usage_store.dart';
 import 'package:rad_mysvcs/widgets/merged_company_strip.dart';
 
 import 'visual_perm/visual_perm_harness.dart';
@@ -586,6 +587,9 @@ void main() {
   testWidgets('ترتيب المشتركين باستهلاك الشهر واليوم (٨ نوفمبر): بالشركتين وبالشركة الواحدة، تنازليّاً وتصاعديّاً — والقراءة لشركة كلّ صفّ', (t) async {
     await up();
     srv.usage = true;
+    // قوائم «كل الشركات» محفوظة ٤٥ث واستهلاكها ٥ د من اختباراتٍ سابقة في الملفّ — هذا الاختبار بصفوفه هو
+    MergedSubscribers.reset();
+    SubscriberUsageStore.reset();
     Future<void> sortBy(String field, String dir) async {
       await t.tap(find.byIcon(Icons.swap_vert_rounded));
       await settle(t, seconds: 1);
