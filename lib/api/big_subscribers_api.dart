@@ -240,6 +240,20 @@ class BigSubscribersApi {
     _probeInFlight = null;
     _summaryCache.clear();
     _summaryInFlight.clear();
+    _pageMemo.clear();
+  }
+
+  /// آخر صفحةٍ أولى لكلّ تبويبٍ أعادها الخادم — الجرس يعرضها فوراً ثمّ يحدّثها (٨ نوفمبر — المالك: «الاشعارات… يتاخر بشكل مو
+  /// طبيعي بالاعداد الكبيرة والصغيرة»). تُمسح بالخروج وتبديل الشركة ([reset]).
+  static final Map<String, ({DateTime at, BigPage page})> _pageMemo = {};
+
+  static void remember(String tab, int size, BigPage p) => _pageMemo['$tab/$size'] = (at: DateTime.now(), page: p);
+
+  /// الصفحة الأولى لـ[tab] كما أعادها الخادم آخر مرّة (≤ [maxAge]) — null إن لم تُجلب بعد.
+  static BigPage? lastFirstPage(String tab, int size, {Duration maxAge = const Duration(minutes: 10)}) {
+    final m = _pageMemo['$tab/$size'];
+    if (m == null || DateTime.now().difference(m.at) > maxAge) return null;
+    return m.page;
   }
 
   @visibleForTesting

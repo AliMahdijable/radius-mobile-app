@@ -493,9 +493,31 @@ class SubscribersApi {
     ]);
     final base = results[0] as List<Subscriber>?;
     if (base == null) return null;
-    final onlineMap =
-        (results[1] as Map<String, OnlineSessionInfo>?) ?? const {};
-    if (onlineMap.isEmpty) return base;
+    return withOnline(base, results[1] as Map<String, OnlineSessionInfo>?);
+  }
+
+  /// آخر قائمةٍ كاملة بحال اتّصالها كما جُلبت (٨ نوفمبر — المالك: «الاشعارات… الي يظهر المنتهي وقريب الانتهاء يتاخر»): الجرس
+  /// يعرضها فوراً ثمّ يحدّثها، بدل الانتظار خلف القائمة والمتّصلين معاً (المتّصلون p99 ‏٥٫٦ث وأقصاه ٢٢ث). تُمسح بالخروج وتبديل
+  /// الشركة ([clearAllCaches])، ولا تُعرض أقدم من [maxAge].
+  static List<Subscriber>? _lastWithOnline;
+  static DateTime? _lastWithOnlineAt;
+
+  static List<Subscriber>? lastWithOnline({Duration maxAge = const Duration(minutes: 15)}) {
+    final at = _lastWithOnlineAt;
+    if (_lastWithOnline == null || at == null || DateTime.now().difference(at) > maxAge) return null;
+    return _lastWithOnline;
+  }
+
+  /// [base] بجلسات المتّصلين [onlineMap] (null/فارغة ⇒ كما هي). تحفظ النتيجة لـ[lastWithOnline] حين تحمل حال الاتّصال.
+  static List<Subscriber> withOnline(List<Subscriber> base, Map<String, OnlineSessionInfo>? onlineMap) {
+    if (onlineMap == null) return base;
+    final merged = onlineMap.isEmpty ? base : _mergeOnline(base, onlineMap);
+    _lastWithOnline = merged;
+    _lastWithOnlineAt = DateTime.now();
+    return merged;
+  }
+
+  static List<Subscriber> _mergeOnline(List<Subscriber> base, Map<String, OnlineSessionInfo> onlineMap) {
     return base.map((s) {
       final sess = onlineMap[s.username.toLowerCase()];
       if (sess == null) return s;
@@ -514,6 +536,8 @@ class SubscribersApi {
   /// تسجيل الخروج عشان admin جديد ما يشوف بيانات admin السابق.
   static void clearAllCaches() {
     _SubsListCache.reset();
+    _lastWithOnline = null;
+    _lastWithOnlineAt = null;
     // ⚠️ ومسحُ القرص **ليس هنا** بل في `SessionManager` ضمن كتلته
     // المنتظَرة: هذه الدالّة متزامنة، و`unawaited` فيها يترك نافذةً
     // يموت فيها التطبيق بعد الخروج والملفّ لم يُحذف بعد.

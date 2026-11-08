@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
@@ -43,6 +45,12 @@ class _InboxScreenState extends State<InboxScreen> {
   List<Subscriber> _nearExpiry = const [];
   bool _loaded = false;
 
+  /// القائمتان معروضتان من آخر قائمةٍ معروفة والطازجة في الطريق — مؤشّرٌ صغير بالعنوان لا شاشة انتظار.
+  bool _refreshing = false;
+
+  /// كم ينتظر الجرس جلسات المتّصلين قبل أن يعرض القائمة الطازجة بدونها (ثمّ يدمجها حين تصل).
+  static const Duration onlineBudget = Duration(seconds: 3);
+
   // ── الحسابات الكبيرة (≥ ٥٠٠٠): القائمتان من الساس صفحةً صفحة (expired_today / expiring_24h) بالتعريفين نفسيهما،
   // والعنوان يحمل مجموع كلٍّ منهما لا ما حُمِّل. ──
   static const int _kBigInboxPage = 100;
@@ -58,14 +66,43 @@ class _InboxScreenState extends State<InboxScreen> {
     _loadLists();
   }
 
+  // ٨ نوفمبر (المالك: «الاشعارات زر… الي يظهر المنتهي وقريب الانتهاء يتاخر بشكل مو طبيعي»): كان الجرس ينتظر القائمة الكاملة
+  // والمتّصلين معاً قبل أيّ شيء (المتّصلون p99 ‏٥٫٦ث وأقصاه ٢٢ث بسجلّ الخادم). الآن: ① آخر قائمةٍ معروفة (≤١٥ د) فوراً،
+  // ② القائمة الطازجة حين تصل ولا تنتظر المتّصلين أكثر من [onlineBudget]، ③ حال الاتّصال حين يصل.
   Future<void> _loadLists() async {
     if (await BigSubscribersApi.probe() > 0) return _loadBig();
-    final list = await SubscribersApi.loadAllWithOnline();
     if (!mounted) return;
-    if (list == null) {
-      setState(() => _loaded = true);
+    final snap = SubscribersApi.lastWithOnline();
+    if (snap != null) _apply(snap, refreshing: true);
+    final onlineF = SubscribersApi.loadOnline();
+    final base = await SubscribersApi.loadAll();
+    if (!mounted) return;
+    if (base == null) {
+      // تعذّر الجلب: ما عُرض يبقى (إن وُجد)
+      setState(() {
+        _loaded = true;
+        _refreshing = false;
+      });
       return;
     }
+    Map<String, OnlineSessionInfo>? online;
+    var late = false;
+    try {
+      online = await onlineF.timeout(onlineBudget);
+    } on TimeoutException {
+      late = true;
+    }
+    if (!mounted) return;
+    _apply(SubscribersApi.withOnline(base, online), refreshing: late);
+    if (late) {
+      final o = await onlineF;
+      if (!mounted) return;
+      _apply(SubscribersApi.withOnline(base, o), refreshing: false);
+    }
+  }
+
+  /// القائمة ⇒ «انتهوا اليوم» و«أقلّ من ٢٤ ساعة» بتوقيت الآن.
+  void _apply(List<Subscriber> list, {required bool refreshing}) {
     // منطق 2026-07-11:
     // • expiredToday = expDay == today && expDate.isBefore(now)
     // • nearExpiry = متبقّي < 24 ساعة (حتى دقيقة/ثانية) && لم ينتهِ بعد.
@@ -99,35 +136,58 @@ class _InboxScreenState extends State<InboxScreen> {
       _expiredToday = expiredToday;
       _nearExpiry = nearExpiry;
       _loaded = true;
+      _refreshing = refreshing;
     });
   }
 
   Future<void> _loadBig() async {
+    // آخر صفحتين معروفتين (≤١٠ د) فوراً، والطازجتان في الطريق (٨ نوفمبر)
+    final e0 = BigSubscribersApi.lastFirstPage('expired_today', _kBigInboxPage);
+    final n0 = BigSubscribersApi.lastFirstPage('expiring_24h', _kBigInboxPage);
+    if (e0 != null && n0 != null && mounted) _applyBig(e0, n0, refreshing: true);
     try {
       final r = await Future.wait([
         BigSubscribersApi.page(page: 1, size: _kBigInboxPage, tab: 'expired_today'),
         BigSubscribersApi.page(page: 1, size: _kBigInboxPage, tab: 'expiring_24h'),
       ]);
+      BigSubscribersApi.remember('expired_today', _kBigInboxPage, r[0]);
+      BigSubscribersApi.remember('expiring_24h', _kBigInboxPage, r[1]);
       if (!mounted) return;
-      AlertsService.setCounts(near: r[1].total, expiredToday: r[0].total);
-      setState(() {
-        _big = true;
-        _expiredToday = r[0].rows;
-        _nearExpiry = r[1].rows;
-        _expiredTotal = r[0].total;
-        _nearTotal = r[1].total;
-        _expiredPage = _nearPage = 1;
-        _expiredLast = r[0].lastPage;
-        _nearLast = r[1].lastPage;
-        _loaded = true;
-      });
+      // حمّل المدير صفحاتٍ أخرى من المعروضة أثناء التحديث ⇒ لا تُمسح، والطازج يحدّث العدّاد وحده
+      if (_expiredPage > 1 || _nearPage > 1) {
+        AlertsService.setCounts(near: r[1].total, expiredToday: r[0].total);
+        setState(() {
+          _expiredTotal = r[0].total;
+          _nearTotal = r[1].total;
+          _refreshing = false;
+        });
+        return;
+      }
+      _applyBig(r[0], r[1], refreshing: false);
     } on BigListException catch (_) {
       if (!mounted) return;
       setState(() {
         _big = true;
         _loaded = true;
+        _refreshing = false;
       });
     }
+  }
+
+  void _applyBig(BigPage expired, BigPage near, {required bool refreshing}) {
+    AlertsService.setCounts(near: near.total, expiredToday: expired.total);
+    setState(() {
+      _big = true;
+      _expiredToday = expired.rows;
+      _nearExpiry = near.rows;
+      _expiredTotal = expired.total;
+      _nearTotal = near.total;
+      _expiredPage = _nearPage = 1;
+      _expiredLast = expired.lastPage;
+      _nearLast = near.lastPage;
+      _loaded = true;
+      _refreshing = refreshing;
+    });
   }
 
   /// الصفحة التالية لإحدى القائمتين (بلا تكرار صفٍّ ظهر).
@@ -245,6 +305,19 @@ class _InboxScreenState extends State<InboxScreen> {
           ),
           iconTheme: IconThemeData(color: AppColors.textHi),
           actions: [
+            // القائمتان من آخر قائمةٍ معروفة والطازجة في الطريق
+            if (_refreshing)
+              Padding(
+                key: const ValueKey('inbox-refreshing'),
+                padding: const EdgeInsetsDirectional.only(end: Sp.md),
+                child: Center(
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.brand),
+                  ),
+                ),
+              ),
             ValueListenableBuilder<int>(
               valueListenable: InboxService.changes,
               builder: (context, _, __) {
