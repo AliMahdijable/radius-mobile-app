@@ -1290,10 +1290,13 @@ class UbntStats {
         // إشارة: airFiber → prs_sta.rssi_data | airMax → s.signal
         final signal = _n(prs?['rssi_data'] ?? s['signal'] ?? s['rssi']);
         // TX signal (كيف العميل يستقبل منّا) — أسماء متعدّدة حسب الإصدار:
+        //   airOS 6/8 (wstalist/sta.cgi): s['remote']['signal'] — إشارة جهاز المشترك نفسه كما يقرؤها هو
         //   airOS 5/6:  s['remote_signal'] أو s['ap_signal']
         //   airOS 7+:   s['tx']['signal'] أو s['tx_signal']
         //   airFiber:   prs_sta.dl_signal_expect (متوقّع، أقرب مؤشّر)
-        int txSig = _n(s['remote_signal'] ?? s['ap_signal'] ?? s['tx_signal']);
+        // 🐛 ٨ نوفمبر (المالك مع صورتين لمشتركٍ واحد: كارت جهازه ‎-49 والتنبيه ‎-60): «الإشارة RX هي مو… المفروض بالعكس TX» —
+        // remote.signal لم يكن يُقرأ فيُحكم بما يستقبله السكتر (rx) بدل إشارة المشترك.
+        int txSig = _n(s['remote_signal'] ?? s['ap_signal'] ?? s['tx_signal'] ?? remote['signal']);
         if (txSig == 0 && s['tx'] is Map) {
           txSig = _n((s['tx'] as Map)['signal']);
         }
