@@ -7,11 +7,14 @@ import '../../services/notification_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/big_subscribers_api.dart';
+import '../../api/company_route.dart';
 import '../../api/subscribers_api.dart';
 import '../../models/app_notification.dart';
 import '../../models/subscriber.dart';
 import '../../services/alerts_service.dart';
 import '../../services/inbox_service.dart';
+import '../../services/merged_mode.dart';
+import '../../widgets/company_tag.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -60,6 +63,9 @@ class _InboxScreenState extends State<InboxScreen> {
   int _expiredLast = 1, _nearLast = 1;
   bool _expiredMore = false, _nearMore = false;
 
+  /// «كل الشركات» وفيها كبيرة: العنوان بالمجموع الحقيقيّ ([_expiredTotal]/[_nearTotal]) لا بما حُمِّل من صفحتها الأولى.
+  bool _mergedTotals = false;
+
   @override
   void initState() {
     super.initState();
@@ -70,6 +76,7 @@ class _InboxScreenState extends State<InboxScreen> {
   // والمتّصلين معاً قبل أيّ شيء (المتّصلون p99 ‏٥٫٦ث وأقصاه ٢٢ث بسجلّ الخادم). الآن: ① آخر قائمةٍ معروفة (≤١٥ د) فوراً،
   // ② القائمة الطازجة حين تصل ولا تنتظر المتّصلين أكثر من [onlineBudget]، ③ حال الاتّصال حين يصل.
   Future<void> _loadLists() async {
+    if (MergedMode.active.value) return _loadMerged();
     if (await BigSubscribersApi.probe() > 0) return _loadBig();
     if (!mounted) return;
     final snap = SubscribersApi.lastWithOnline();
@@ -98,6 +105,57 @@ class _InboxScreenState extends State<InboxScreen> {
       final o = await onlineF;
       if (!mounted) return;
       _apply(SubscribersApi.withOnline(base, o), refreshing: false);
+    }
+  }
+
+  /// «كل الشركات» (٨ نوفمبر — الفحص العامّ: «طبق مبدا الخدمتين»): القائمتان من قوائم الشركات المدموجة — «الكل» أو المختارة
+  /// في الشريط — كلّ صفٍّ بشارة شركته والفتح موجَّهٌ لها، لا قائمة المفتوحة وحدها. الكبيرة: أوّل صفحةٍ من تبويبيها موجَّهةً
+  /// لها، والعنوان بمجموعها الحقيقيّ.
+  Future<void> _loadMerged() async {
+    final focus = MergedMode.focused?.key;
+    final last = MergedSubscribers.last.value;
+    if (last != null && _expiredToday.isEmpty && _nearExpiry.isEmpty) _apply(last.rowsFor(focus), refreshing: true);
+    MergedListResult r;
+    try {
+      r = await MergedSubscribers.withSessions(await MergedSubscribers.load());
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loaded = true;
+        _refreshing = false;
+      });
+      return;
+    }
+    if (!mounted) return;
+    final rows = <Subscriber>[...r.rowsFor(focus)];
+    var extraExpired = 0, extraNear = 0;
+    for (final p in r.big) {
+      if (focus != null && p.company.key != focus) continue;
+      final key = p.company.key;
+      try {
+        final pages = await CompanyRoute.run(key, () => Future.wait([
+              BigSubscribersApi.page(page: 1, size: _kBigInboxPage, tab: 'expired_today'),
+              BigSubscribersApi.page(page: 1, size: _kBigInboxPage, tab: 'expiring_24h'),
+            ]));
+        for (final pg in pages) {
+          rows.addAll(pg.rows.map((s) => s.withCompany(key)));
+        }
+        extraExpired += pages[0].total - pages[0].rows.length;
+        extraNear += pages[1].total - pages[1].rows.length;
+      } catch (_) {/* كبيرةٌ تعذّرت: البقيّة تُعرض */}
+      if (!mounted) return;
+    }
+    _apply(rows, refreshing: false);
+    if (extraExpired > 0 || extraNear > 0) {
+      final e = _expiredToday.length + extraExpired, n = _nearExpiry.length + extraNear;
+      AlertsService.setCounts(near: n, expiredToday: e);
+      setState(() {
+        _mergedTotals = true;
+        _expiredTotal = e;
+        _nearTotal = n;
+      });
+    } else if (_mergedTotals) {
+      setState(() => _mergedTotals = false);
     }
   }
 
@@ -370,7 +428,7 @@ class _InboxScreenState extends State<InboxScreen> {
                   if (hasExpiredToday) ...[
                     _SectionHeader(
                       title: 'notifications.expired_today'.tr(),
-                      count: _big ? _expiredTotal : _expiredToday.length,
+                      count: _big || _mergedTotals ? _expiredTotal : _expiredToday.length,
                       color: AppColors.error,
                       icon: LucideIcons.circleAlert,
                     ),
@@ -390,7 +448,7 @@ class _InboxScreenState extends State<InboxScreen> {
                   if (hasNearExpiry) ...[
                     _SectionHeader(
                       title: 'notifications.near_expiry_section'.tr(),
-                      count: _big ? _nearTotal : _nearExpiry.length,
+                      count: _big || _mergedTotals ? _nearTotal : _nearExpiry.length,
                       color: AppColors.warning,
                       icon: LucideIcons.triangleAlert,
                     ),
@@ -664,6 +722,11 @@ class _SubscriberAlertRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
+                    // «كل الشركات»: شركة المشترك بلونها (الفتح موجَّهٌ لها)
+                    if (sub.companyKey != null && MergedMode.active.value) ...[
+                      const SizedBox(height: 2),
+                      CompanyTag(companyKey: sub.companyKey!, fontSize: 11),
+                    ],
                     const SizedBox(height: 3),
                     Text(
                       detail,

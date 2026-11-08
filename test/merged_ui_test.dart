@@ -15,7 +15,9 @@ import 'package:rad_mysvcs/screens/account/company_switch_sheet.dart';
 import 'package:rad_mysvcs/screens/dashboard/dashboard_screen.dart';
 import 'package:rad_mysvcs/screens/dashboard/widgets/subscribers_card.dart';
 import 'package:rad_mysvcs/screens/reports/financial_report_screen.dart';
+import 'package:rad_mysvcs/screens/notifications/inbox_screen.dart';
 import 'package:rad_mysvcs/screens/search/quick_search_overlay.dart';
+import 'package:rad_mysvcs/services/alerts_service.dart';
 import 'package:rad_mysvcs/screens/subscribers/sheets/movements_sheet.dart';
 import 'package:rad_mysvcs/screens/subscribers/subscribers_screen.dart';
 import 'package:rad_mysvcs/screens/subscribers/widgets/filter_chips_bar.dart';
@@ -50,10 +52,19 @@ ResponseBody _json(int status, Object body, {Map<String, List<String>> headers =
       ...headers,
     });
 
+String _inHours(int h) {
+  final d = DateTime.now().add(Duration(hours: h));
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${d.year}-${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}:${two(d.second)}';
+}
+
 class _Srv implements HttpClientAdapter {
   _Srv(this.inner);
   final HttpClientAdapter inner;
   final routed = <RequestOptions>[];
+
+  /// الجرس: صفٌّ قريب الانتهاء لكلّ شركة (لا يُلمس عدد المشتركين في الاختبارات الأخرى).
+  bool nearRows = false;
 
   @override
   Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? rs, Future<void>? cf) async {
@@ -64,6 +75,16 @@ class _Srv implements HttpClientAdapter {
     final path = o.uri.path;
     if (o.method == 'GET' && path == '/api/v2/subscribers') {
       if (o.queryParameters['page'] != null) {
+        // تبويبا الجرس للكبيرة: «أقلّ من ٢٤ ساعة» ٢٥٠ (صفحتها الأولى صفٌّ هنا) و«انتهوا اليوم» صفر
+        final tab = o.queryParameters['tab'];
+        if (tab == 'expiring_24h' || tab == 'expired_today') {
+          final rows = tab == 'expiring_24h' && key == _kC
+              ? [
+                  {'idx': 777, 'username': 'big777', 'firstname': 'قريب', 'lastname': 'كبير', 'enabled': 1, 'expiration': _inHours(3)},
+                ]
+              : const <Map<String, Object?>>[];
+          return _json(200, {'success': true, 'paged': true, 'total': rows.isEmpty ? 0 : 250, 'last_page': 3, 'data': rows}, headers: h);
+        }
         // البحث بالنصّ في الكبيرة (البحث السريع): صفٌّ واحد يطابق
         if (o.queryParameters['q'] != null) {
           final rows = key == _kC
@@ -79,6 +100,7 @@ class _Srv implements HttpClientAdapter {
       final rows = key == _kA
           ? [_row(1), _row(2, debt: '-5000')]
           : [_row(1, parent: 'admin@b'), _row(9, parent: 'admin@b', debt: '-2500')];
+      if (nearRows) rows.add({..._row(key == _kA ? 3 : 10, parent: key == _kA ? 'admin@a' : 'admin@b'), 'expiration': _inHours(5)});
       return _json(200, {'success': true, 'data': rows}, headers: h);
     }
     if (o.method == 'GET' && RegExp(r'^/api/v2/subscribers/\d+$').hasMatch(path)) {
@@ -398,6 +420,28 @@ void main() {
     expect(find.text('شركة ألف'), findsNothing);
     expect(find.textContaining('big501'), findsNothing);
     MergedMode.focus.value = null;
+    await down(t);
+  });
+
+  testWidgets('الجرس بـ«كل الشركات»: قريبو الانتهاء من كلّ الشركات بشارة كلٍّ منها، والكبيرة بتبويبها موجَّهاً ومجموعها الحقيقيّ', (t) async {
+    await up();
+    srv.nearRows = true;
+    await t.runAsync(() => MergedMode.enter());
+    await pumpVisual(t, phone, home: (_) => const InboxScreen());
+    await settle(t, seconds: 3);
+    expect(t.takeException(), isNull);
+    expect(find.text('شركة ألف'), findsWidgets);
+    expect(find.text('شركة باء'), findsWidgets);
+    expect(find.text('شركة كبيرة'), findsWidgets, reason: 'صفّ الكبيرة من تبويبها بشارتها');
+    expect(find.textContaining('big777'), findsOneWidget);
+    // ألف + باء + صفّ الكبيرة + ٢٤٩ لم تُحمَّل من صفحتها الأولى
+    expect(find.text('252'), findsOneWidget, reason: 'العنوان بالمجموع الحقيقيّ');
+    expect(AlertsService.count.value, 252, reason: 'شارة الجرس على الرقم نفسه');
+    final tabs = srv.routed.where((o) => o.uri.path == '/api/v2/subscribers' && o.queryParameters['tab'] == 'expiring_24h');
+    expect(tabs.map((o) => o.headers['x-company-key']).toSet(), {_kC}, reason: 'تبويب الكبيرة وحدها بمفتاحها');
+    final open = (srv.inner as VisualServer).log.where((l) => l.startsWith('GET /api/v2/subscribers '));
+    expect(open, isEmpty, reason: 'لا قائمة المفتوحة وحدها في «كل الشركات»');
+    srv.nearRows = false;
     await down(t);
   });
 }
