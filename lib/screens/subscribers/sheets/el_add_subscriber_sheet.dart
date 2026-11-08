@@ -19,6 +19,8 @@ import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../widgets/el_deposit_password_field.dart';
 import '../../../widgets/package_picker_field.dart';
+import '../../../api/company_route.dart';
+import '../../../models/merged_company.dart';
 
 /// «مشترك جديد» لجلسات ايرث لنك — يفتحه `showAddSubscriberSheet` بدل شيت
 /// SAS4 حين يكون معرّف المدير المحفوظ `earthlink:<idx>`، بلا سحبٍ للإغلاق.
@@ -36,7 +38,11 @@ import '../../../widgets/package_picker_field.dart';
 /// يُقفل الزرّ حتى يُعاد فتح الشيت بعد مراجعة القائمة، ورسالته (وقد تحمل مبلغ
 /// الدين الذي يُسجَّل يدويّاً) باقيةٌ فوق الزرّ المقفل.
 class ElAddSubscriberSheet extends StatefulWidget {
-  const ElAddSubscriberSheet({super.key});
+  const ElAddSubscriberSheet({super.key, this.company});
+
+  /// «كل الشركات» (٨ نوفمبر — المالك: «اضافة مشترك هم سويها»): الإضافة داخل هذه الشركة — كلّ طلبٍ موجَّهٌ لها (الخيارات،
+  /// فحص الاسم، الكارت، الإنشاء، حال باسورد الإيداع) كنافذة الموقع داخل CompanyProvider (P1c، G2 PASS). null = المفتوحة كما كانت.
+  final MergedCompany? company;
 
   @override
   State<ElAddSubscriberSheet> createState() => _ElAddSubscriberSheetState();
@@ -63,7 +69,13 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
   final _username = TextEditingController();
   final _password = TextEditingController();
   // باسورد الإيداع: المحفوظ على الخادم («محفوظ · تغيير») أو يُكتب (+ «احفظه» للمالك).
-  final _deposit = ElDepositPasswordController();
+  late final _deposit = ElDepositPasswordController(companyKey: widget.company?.key);
+
+  /// طلبٌ لشركة النافذة ([ElAddSubscriberSheet.company]) — خارج «كل الشركات» الطلب كما هو حرفاً.
+  Future<T> _co<T>(Future<T> Function() f) {
+    final c = widget.company;
+    return c == null ? f() : CompanyRoute.run(c.key, f);
+  }
   final _identifierCtrl = TextEditingController(); // رقم الكارت
   final _pinCtrl = TextEditingController(); // Pin الكارت
   final _partialCtrl = TextEditingController();
@@ -138,7 +150,7 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
       _loading = true;
       _loadError = null;
     });
-    final r = await EarthlinkApi.createOptions();
+    final r = await _co(() => EarthlinkApi.createOptions());
     if (!mounted) return;
     setState(() {
       _loading = false;
@@ -271,7 +283,7 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
 
   Future<void> _checkUsername(String u) async {
     final append = _appendSuffix;
-    final r = await EarthlinkApi.checkUsername(u, appendSuffix: append);
+    final r = await _co(() => EarthlinkApi.checkUsername(u, appendSuffix: append));
     // ردٌّ متأخّر لاسمٍ (أو خيار لاحقةٍ) تغيّر بعده — يُهمل.
     if (!mounted || u != _normalizedUsername || append != _appendSuffix) return;
     setState(() {
@@ -324,7 +336,7 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
         _cardError = null;
       });
     }
-    final r = await EarthlinkApi.cardInfo(identifier: id, pin: pin);
+    final r = await _co(() => EarthlinkApi.cardInfo(identifier: id, pin: pin));
     if (_cardReadingKey == key) _cardReadingKey = null;
     if (!mounted ||
         id != _identifierCtrl.text.trim() ||
@@ -373,7 +385,7 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
     // الدفتر وإشعار النجاح — عليها، لا تضيع مع `!mounted`.
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     setState(() => _submitting = true);
-    final r = await EarthlinkApi.createSubscriber(
+    final r = await _co(() => EarthlinkApi.createSubscriber(
       method: method.name,
       username: _normalizedUsername,
       password: _password.text,
@@ -393,7 +405,7 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
       paidAmount: method == _Method.test ? null : paidAmount,
       appendSuffix: _appendSuffix,
       affiliateIndex: _affiliateToSend,
-    );
+    ));
     final duplicate = r.code == EarthlinkApi.codeRecentDuplicate;
     // ربّما أُضيف (`unclear`: مهلة/بوّابة/CREATE_UNCONFIRMED/
     // CREATE_LATE_SUSPECTED) أو «أُرسلت قبل لحظات»: الزرّ يُقفل حتى يُعاد
@@ -486,7 +498,9 @@ class _ElAddSubscriberSheetState extends State<ElAddSubscriberSheet> {
         header: SheetHeaderBar(
           icon: LucideIcons.userPlus,
           title: 'sheets.el_add.title'.tr(),
-          subtitle: 'sheets.el_add.subtitle'.tr(),
+          subtitle: widget.company == null
+              ? 'sheets.el_add.subtitle'.tr()
+              : '${'sheets.el_add.subtitle'.tr()} — في «${widget.company!.name}»',
           onClose: _submitting ? () {} : () => Navigator.of(context).pop(),
         ),
         footer: SheetFooterBar(

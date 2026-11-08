@@ -15,6 +15,9 @@ import '../../../core/widgets/sheet_scaffold.dart';
 import 'el_add_subscriber_sheet.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../widgets/merged_company_pick.dart';
+import '../../../api/company_route.dart';
+import '../../../models/merged_company.dart';
+import '../../../services/merged_mode.dart';
 
 /// Add new subscriber sheet — focused port of v1's add_subscriber_sheet
 /// (mobile-app/lib/widgets/add_subscriber_sheet.dart) into v2's design
@@ -29,11 +32,23 @@ import '../../../widgets/merged_company_pick.dart';
 /// AuthStorage). expiration is left blank so SAS4 falls back to the
 /// package's default duration on first activation — matches v1.
 Future<bool?> showAddSubscriberSheet(BuildContext context) async {
-  // «كل الشركات» (٨ نوفمبر — الفحص العامّ): «في أيّ شركة؟» أوّلاً كالموقع — الإضافة تذهب للمفتوحة وحدها اليوم، فلا يُضاف
-  // مشتركٌ لشركةٍ لم يقصدها المدير وهو يرى أخرى في الشريط؛ غيرها ⇒ «بدّل إليها». خارج الوضع لا سؤال.
-  if (!await pickOpenCompanyFor(context, action: 'مشترك جديد', reason: 'الإضافة لها من صفحتها')) return null;
+  // «كل الشركات» (٨ نوفمبر): «في أيّ شركة؟» أوّلاً كالموقع (P1c) — فلا يُضاف مشتركٌ لشركةٍ لم يقصدها المدير وهو يرى أخرى في
+  // الشريط. المفتوحة ⇒ الإضافة كما كانت حرفاً؛ غيرها (المالك: «اضافة مشترك هم سويها») ⇒ نافذة الإضافة داخلها: نموذج مزوّدها
+  // (ايرث لنك أو الساس/المُضافة) وكلّ طلبٍ فيه موجَّهٌ لها — مسار الموقع نفسه (subscriber-add، G2 PASS). خارج الوضع لا سؤال.
+  MergedCompany? target;
+  if (MergedMode.active.value) {
+    final open = await pickOpenCompanyFor(
+      context,
+      action: 'مشترك جديد',
+      reason: 'الإضافة لها من صفحتها',
+      otherHint: 'يُضاف إليها من هنا',
+      onOther: (c) async => target = c,
+    );
+    if (!open && target == null) return null;
+  }
   if (!context.mounted) return null;
-  final earthlink = await _isEarthlinkSession();
+  final t = target;
+  final earthlink = t != null ? t.provider == MergedProvider.earthlink : await _isEarthlinkSession();
   if (!context.mounted) return null;
   return showAppSheet<bool>(
     context: context,
@@ -47,8 +62,7 @@ Future<bool?> showAddSubscriberSheet(BuildContext context) async {
     // النقر خارجه (وكلّها تحترم `PopScope`) — كنمط `main_shell`.
     enableDrag: !earthlink,
     // ايرث لنك: شيتٌ مستقلّ (رصيد أونلاين/كارت/تجريبي) — مسار SAS4 كما هو.
-    builder: (_) =>
-        earthlink ? const ElAddSubscriberSheet() : const _AddSheet(),
+    builder: (_) => earthlink ? ElAddSubscriberSheet(company: t) : _AddSheet(company: t),
   );
 }
 
@@ -73,7 +87,11 @@ Future<bool> _isEarthlinkSession() async {
 }
 
 class _AddSheet extends StatefulWidget {
-  const _AddSheet();
+  const _AddSheet({this.company});
+
+  /// «كل الشركات»: الإضافة داخل هذه الشركة — الباقات والمدراء والإنشاء موجَّهةٌ لها، والمدير الأب الافتراضيّ مديرها (لا مدير
+  /// المفتوحة). null = المفتوحة كما كانت.
+  final MergedCompany? company;
 
   @override
   State<_AddSheet> createState() => _AddSheetState();
@@ -116,7 +134,29 @@ class _AddSheetState extends State<_AddSheet> {
     _resolveSuperAdmin();
   }
 
+  /// طلبٌ لشركة النافذة ([_AddSheet.company]) — خارج «كل الشركات» الطلب كما هو حرفاً.
+  Future<T> _co<T>(Future<T> Function() f) {
+    final c = widget.company;
+    return c == null ? f() : CompanyRoute.run(c.key, f);
+  }
+
   Future<void> _resolveSuperAdmin() async {
+    final c = widget.company;
+    if (c != null) {
+      // شركةٌ غير المفتوحة: صلاحيّات المحفوظة للمفتوحة لا تخصّها — كالموقع: «مدير فوق مدراء» = قائمة مدرائها غير فارغة، وبها
+      // يختار المدير الفرعيّ وتاريخ النفاذ؛ وإلّا يُنشأ تحت مديرها نفسه (الخادم: بلا parent ⇒ هويّة جلستها الموجَّهة).
+      setState(() => _loadingManagers = true);
+      final list = await _co(() => SubscribersApi.loadManagers());
+      if (!mounted) return;
+      final isSuper = (list?.isNotEmpty ?? false);
+      setState(() {
+        _managers = list;
+        _loadingManagers = false;
+        _canPickParent = isSuper;
+        _canEditExpiration = isSuper;
+      });
+      return;
+    }
     final canManagers = await AuthStorage.readCanAccessManagers();
     final canPackages = await AuthStorage.readCanAccessPackages();
     if (!mounted) return;
@@ -136,7 +176,7 @@ class _AddSheetState extends State<_AddSheet> {
   }
 
   Future<void> _loadPackages() async {
-    final pkgs = await SubscribersApi.loadPackages();
+    final pkgs = await _co(() => SubscribersApi.loadPackages());
     if (!mounted) return;
     setState(() {
       _packages = pkgs;
@@ -168,7 +208,8 @@ class _AddSheetState extends State<_AddSheet> {
       showSheetSnack(context, err, isError: true);
       return;
     }
-    final adminId = await AuthStorage.readAdminId();
+    // «كل الشركات»: مدير الشركة المختارة لا المفتوحة (معرّفها المؤهَّل «jt:22» ⇒ 22؛ المُضافة نصّيّ ⇒ بلا parent ⇒ هويّة جلستها).
+    final adminId = widget.company?.adminId ?? await AuthStorage.readAdminId();
     // Permission-aware parent: if the admin can pick parent AND
     // chose one in the dropdown, use it; otherwise fall back to
     // their own admin id (default for sub-managers without the
@@ -181,7 +222,8 @@ class _AddSheetState extends State<_AddSheet> {
         : int.tryParse((adminId ?? '').split(':').last);
     // الشركة المُضافة (٣١ أكتوبر): معرّف جلستها نصّيّ (`accessgate:admin@kdm`) — بلا مديرٍ مختار يُنشأ المشترك تحت حسابها نفسه
     // (الخادم: بلا parent_id ⇒ حساب الجلسة)، فلا «تعذّر تحديد المدير الأصلي» لها.
-    if (parentId == null && !ProviderService.isKit) {
+    final isKit = widget.company != null ? widget.company!.provider == MergedProvider.kit : ProviderService.isKit;
+    if (parentId == null && !isKit && widget.company == null) {
       if (!mounted) return;
       showSheetSnack(context, 'تعذّر تحديد المدير الأصلي — أعد تسجيل الدخول',
           isError: true);
@@ -195,7 +237,7 @@ class _AddSheetState extends State<_AddSheet> {
       expirationStr =
           '${d.year}-${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}:${two(d.second)}';
     }
-    final result = await SubscribersApi.createSubscriber(
+    final result = await _co(() => SubscribersApi.createSubscriber(
       username: _username.text.trim(),
       password: _password.text,
       profileId: _profileId!,
@@ -204,7 +246,7 @@ class _AddSheetState extends State<_AddSheet> {
       lastname: _lastname.text.trim(),
       phone: _phone.text.trim(),
       expiration: expirationStr,
-    );
+    ));
     if (!mounted) return;
     setState(() => _saving = false);
     if (result.ok) SubscriberEvents.notifyChange();
@@ -225,7 +267,7 @@ class _AddSheetState extends State<_AddSheet> {
       header: SheetHeaderBar(
         icon: LucideIcons.userPlus,
         title: 'مشترك جديد',
-        subtitle: 'أدخل بيانات المشترك',
+        subtitle: widget.company == null ? 'أدخل بيانات المشترك' : 'أدخل بيانات المشترك — في «${widget.company!.name}»',
         onClose: _saving ? () {} : () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(

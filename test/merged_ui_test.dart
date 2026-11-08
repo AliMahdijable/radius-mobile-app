@@ -139,6 +139,13 @@ class _Srv implements HttpClientAdapter {
       if (key == _kC) return _json(409, {'success': false, 'code': 'COMPANY_UPSTREAM_UNAVAILABLE', 'message': 'x'}, headers: h);
       return _json(200, {'success': true, 'connected': key == _kA, 'phone': key == _kA ? '+9647701112222' : null}, headers: h);
     }
+    // «مشترك جديد» داخل شركة: باقاتها ومدراؤها (لا مدراء ⇒ يُنشأ تحت مديرها نفسه)
+    if (o.method == 'GET' && path == '/api/v2/packages') {
+      return _json(200, {'success': true, 'data': [{'id': 7, 'name': 'Gold', 'price': 25000}]}, headers: h);
+    }
+    if (o.method == 'GET' && path == '/api/v2/managers') {
+      return _json(200, {'success': true, 'data': const []}, headers: h);
+    }
     if (o.method == 'GET' && path == '/api/v2/admin-widgets') {
       return _json(200, {'success': true, 'balance': key == _kA ? 100000 : 50000, 'points': 0}, headers: h);
     }
@@ -483,7 +490,7 @@ void main() {
     await down(t);
   });
 
-  testWidgets('«مشترك جديد» بـ«كل الشركات»: «في أيّ شركة؟» أوّلاً — المفتوحة تُكمل للإضافة، وغيرها «بدّل إليها» لا إضافة', (t) async {
+  testWidgets('«مشترك جديد» بـ«كل الشركات»: «في أيّ شركة؟» ثمّ نافذة الإضافة داخل المختارة — باقاتها وإنشاؤها موجَّهة والمدير الأب مديرها', (t) async {
     await up();
     await t.runAsync(() => MergedMode.enter());
     await pumpVisual(t, phone, home: (_) => Builder(
@@ -498,13 +505,26 @@ void main() {
     await settle(t, seconds: 2);
     expect(t.takeException(), isNull);
     expect(find.text('في أيّ شركة؟'), findsOneWidget);
-    expect(find.textContaining('بدّل إليها'), findsWidgets, reason: 'غير المفتوحة بمكانها بسببها');
-    expect(find.text('مشترك جديد'), findsOneWidget, reason: 'العنوان الفرعيّ للورقة (لا شيت الإضافة بعد)');
-    // شركة باء (غير المفتوحة) ⇒ لا شيت إضافة؛ «شركاتي» تُفتح
+    expect(find.textContaining('يُضاف إليها من هنا'), findsWidgets);
+    // شركة باء (غير المفتوحة) ⇒ نافذة الإضافة داخلها
     await t.tap(find.byKey(const ValueKey('merged-pick-$_kB')));
     await settle(t, seconds: 2);
-    expect(find.text('أدخل بيانات المشترك'), findsNothing, reason: 'لا إضافة لشركةٍ غير المفتوحة من هنا');
-    expect(find.text('تبديل الشركة'), findsWidgets, reason: 'ورقة «شركاتي» لتبدّل إليها');
+    expect(find.textContaining('في «شركة باء»'), findsOneWidget);
+    expect(srv.routed.where((o) => o.uri.path == '/api/v2/packages').map((o) => o.headers['x-company-key']).toSet(), {_kB},
+        reason: 'باقاتها لا باقات المفتوحة');
+    await t.enterText(find.widgetWithText(TextField, 'مثال: ahmed@rezz'), 'new.user');
+    await t.enterText(find.widgetWithText(TextField, '••••••••'), 'pw123456');
+    await t.tap(find.byType(DropdownButton<int>));
+    await settle(t, seconds: 1);
+    await t.tap(find.text('Gold').last);
+    await settle(t, seconds: 1);
+    await t.tap(find.text('إضافة المشترك'));
+    await settle(t, seconds: 2);
+    final add = srv.routed.where((o) => o.method == 'POST' && o.uri.path == '/api/v2/subscribers').toList();
+    expect(add, hasLength(1), reason: 'إنشاءٌ واحد موجَّه');
+    expect(add.single.headers['x-company-key'], _kB);
+    expect((add.single.data as Map)['parent_id'], 22, reason: 'مدير شركة باء (jt:22) لا مدير المفتوحة');
+    expect((add.single.data as Map)['profile_id'], 7);
     await down(t);
   });
 

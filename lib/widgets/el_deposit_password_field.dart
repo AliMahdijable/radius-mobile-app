@@ -14,18 +14,22 @@ import '../theme/typography.dart';
 ///
 /// الشيت يستمع إليه (`addListener` ← `setState`) فيتحدّث تفعيل زرّ الإرسال.
 class ElDepositPasswordController extends ChangeNotifier {
-  ElDepositPasswordController() {
-    _lastSaved = ElDepositPassword.status.value?.saved;
-    ElDepositPassword.status.addListener(_onStatus);
+  /// [companyKey] «كل الشركات»: حال باسورد تلك الشركة (نافذة إضافةٍ أو تفعيلٍ لمشتركٍ منها) — null = المفتوحة كما كانت.
+  ElDepositPasswordController({this.companyKey}) : _n = ElDepositPassword.statusOf(companyKey) {
+    _lastSaved = _n.value?.saved;
+    _n.addListener(_onStatus);
     text.addListener(notifyListeners);
   }
+
+  final String? companyKey;
+  final ValueNotifier<ElDepositStatus?> _n;
 
   final text = TextEditingController();
   bool _changing = false;
   bool _remember = true;
   bool? _lastSaved;
 
-  ElDepositStatus? get status => ElDepositPassword.status.value;
+  ElDepositStatus? get status => _n.value;
   bool get loading => status == null;
   bool get saved => status?.saved == true;
   bool get canManage => status?.canManage == true;
@@ -77,7 +81,7 @@ class ElDepositPasswordController extends ChangeNotifier {
 
   @override
   void dispose() {
-    ElDepositPassword.status.removeListener(_onStatus);
+    _n.removeListener(_onStatus);
     text.removeListener(notifyListeners);
     text.dispose();
     super.dispose();
@@ -108,7 +112,7 @@ class _ElDepositPasswordFieldState extends State<ElDepositPasswordField> {
   @override
   void initState() {
     super.initState();
-    ElDepositPassword.load();
+    ElDepositPassword.load(key: widget.controller.companyKey);
   }
 
   @override

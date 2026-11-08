@@ -184,7 +184,10 @@ void main() {
       expect(sent[1]['parent_id'], 7);
       // النموذج لا يقف عند «تعذّر تحديد المدير الأصلي» للشركة المُضافة وحدها
       final sheet = File('lib/screens/subscribers/sheets/add_subscriber_sheet.dart').readAsStringSync();
-      expect(sheet.contains('if (parentId == null && !ProviderService.isKit) {'), isTrue);
+      // ٨ نوفمبر: والشركة المختارة في «كل الشركات» كذلك (مزوّدها لا مزوّد المفتوحة؛ ومعرّفٌ نصّيّ ⇒ هويّة جلستها الموجَّهة)
+      expect(sheet.contains('final isKit = widget.company != null ? widget.company!.provider == MergedProvider.kit : ProviderService.isKit;'),
+          isTrue);
+      expect(sheet.contains('if (parentId == null && !isKit && widget.company == null) {'), isTrue);
     });
 
     final sub = Subscriber.fromJson({

@@ -12,6 +12,7 @@ import 'package:rad_mysvcs/screens/cards/cards_screen.dart';
 import 'package:rad_mysvcs/screens/expenses/expenses_screen.dart';
 import 'package:rad_mysvcs/screens/telegram/telegram_screen.dart';
 import 'package:rad_mysvcs/screens/settlements/settlements_screen.dart';
+import 'package:rad_mysvcs/screens/subscribers/sheets/add_subscriber_sheet.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
 import 'package:rad_mysvcs/widgets/merged_section.dart';
 
@@ -83,6 +84,21 @@ class _Srv implements HttpClientAdapter {
     }
     if (path == '/api/v2/cards/summary') {
       return _json(200, {'success': true, 'enabled': true, 'totals': {'available': el ? 7 : 40, 'used': 0}, 'series': []}, headers: h);
+    }
+    // «مشترك جديد» في ايرث لنك: خياراتها (رصيدٌ وكارت، باقةٌ واحدة) — فيُبنى حقل باسورد الإيداع ويُسأل حاله
+    if (path == '/api/v2/el/create-options') {
+      return _json(200, {
+        'success': true,
+        'data': {
+          'user_suffix': '@najaf',
+          'methods': {'deposit': true, 'card': true},
+          'packages': [{'id': '11', 'name': 'Economy', 'price': 35000}],
+          'deposit_balance': 100000,
+        },
+      }, headers: h);
+    }
+    if (path == '/api/v2/el/deposit-password') {
+      return _json(200, {'success': true, 'data': {'saved': false, 'can_manage': true}}, headers: h);
     }
     if (path.startsWith('/api/v2/expenses/recurring')) {
       return _json(200, {'success': true, 'enabled': true, 'templates': [], 'pending': []}, headers: h);
@@ -300,6 +316,26 @@ void main() {
     nav.currentState!.pop();
     await settleReal(t);
     expect(CompanyRoute.sectionKeyFor('/api/admin/expenses'), _kEl, reason: 'الصرفيات تحتها ما زالت لايرث لنك');
+    await down(t);
+  });
+
+  testWidgets('٨ «مشترك جديد» في شركة ايرث لنك غير المفتوحة: نموذج ايرث لنك وطلباته (الخيارات وحال باسورد الإيداع) موجَّهةٌ لها', (t) async {
+    await up(t);
+    await pumpVisual(t, const VisualDevice('', Size(390, 1400), 1),
+        home: (_) => Builder(
+              builder: (ctx) => Scaffold(
+                body: Center(child: TextButton(onPressed: () => showAddSubscriberSheet(ctx), child: const Text('أضف'))),
+              ),
+            ));
+    await settleReal(t);
+    await t.tap(find.text('أضف'));
+    await settleReal(t);
+    await t.tap(find.byKey(const ValueKey('merged-pick-$_kEl')));
+    await settleReal(t);
+    expect(t.takeException(), isNull);
+    expect(srv.asked, contains('GET /api/v2/el/create-options $_kEl'), reason: 'خيارات الإضافة لايرث لنك المختارة');
+    expect(srv.asked, contains('GET /api/v2/el/deposit-password $_kEl'), reason: 'حال باسورد إيداعها هي لا المفتوحة');
+    expect(srv.asked.where((a) => a.contains('/api/v2/el/') && a.endsWith(' -')), isEmpty, reason: '${srv.asked}');
     await down(t);
   });
 }

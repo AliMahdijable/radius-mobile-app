@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import 'api_client.dart';
+import 'company_route.dart';
 
 /// حالة باسورد إيداع ايرث لنك المحفوظ — بلا نصّه أبداً.
 @immutable
@@ -42,7 +43,18 @@ class ElDepositPassword {
   /// جيل الجلسة — ردٌّ سُئل عنه قبل [reset] يخصّ حساباً سابقاً فلا يُطبَّق.
   static int _gen = 0;
 
-  static Future<ElDepositStatus> load({bool force = false}) {
+  /// «كل الشركات» (٨ نوفمبر): حال كلّ شركةٍ بمفتاحها — شركتا ايرث لنك في الحساب لكلٍّ منهما باسوردها المحفوظ (كالموقع:
+  /// مفتاح الاستعلام بالشركة). كان مفرداً للمفتوحة فتُظهر نافذة إضافةٍ/تفعيلٍ لشركةٍ أخرى «محفوظ» وهو ليس لها، ويمسح رفضُها
+  /// محفوظَ المفتوحة. null = الشركة المفتوحة ([status]).
+  static final Map<String, ValueNotifier<ElDepositStatus?>> _byCo = {};
+  static final Map<String, DateTime> _atCo = {};
+  static final Map<String, Future<ElDepositStatus>> _inflightCo = {};
+
+  static ValueNotifier<ElDepositStatus?> statusOf(String? key) =>
+      key == null ? status : _byCo.putIfAbsent(key, () => ValueNotifier<ElDepositStatus?>(null));
+
+  static Future<ElDepositStatus> load({bool force = false, String? key}) {
+    if (key != null) return _loadCo(key, force: force);
     final cur = status.value;
     final at = _at;
     if (!force &&
@@ -56,13 +68,40 @@ class ElDepositPassword {
 
   static Future<ElDepositStatus> _fetch() async {
     final gen = _gen;
-    ElDepositStatus st;
+    final st = await _read(status.value);
+    if (gen != _gen) return ElDepositStatus.none;
+    status.value = st;
+    _at = DateTime.now();
+    return st;
+  }
+
+  /// حال شركةٍ في «كل الشركات»: الطلب موجَّهٌ لها ([CompanyRoute.run]) — كقراءة الموقع داخل نافذة شركتها.
+  static Future<ElDepositStatus> _loadCo(String key, {bool force = false}) {
+    final n = statusOf(key);
+    final cur = n.value;
+    final at = _atCo[key];
+    if (!force && cur != null && at != null && DateTime.now().difference(at) < const Duration(minutes: 5)) {
+      return Future.value(cur);
+    }
+    final gen = _gen;
+    return _inflightCo[key] ??= CompanyRoute.run(key, () => _read(cur)).then((st) {
+      if (gen == _gen) {
+        n.value = st;
+        _atCo[key] = DateTime.now();
+      }
+      return st;
+    }).whenComplete(() {
+      _inflightCo.remove(key);
+    });
+  }
+
+  static Future<ElDepositStatus> _read(ElDepositStatus? fallback) async {
     try {
       final r = await ApiClient.dio
           .get<Map<String, dynamic>>('/api/v2/el/deposit-password');
       final body = r.data ?? const {};
       final d = body['data'];
-      st = body['success'] == true && d is Map
+      return body['success'] == true && d is Map
           ? ElDepositStatus(
               saved: d['saved'] == true,
               canManage: d['can_manage'] == true,
@@ -72,24 +111,23 @@ class ElDepositPassword {
           : ElDepositStatus.none;
     } catch (e) {
       _log(e);
-      st = status.value ?? ElDepositStatus.none;
+      return fallback ?? ElDepositStatus.none;
     }
-    if (gen != _gen) return ElDepositStatus.none;
-    status.value = st;
-    _at = DateTime.now();
-    return st;
   }
 
   /// يُنادى بجسم كلّ ردٍّ لعمليّة رصيد (نجاحاً أو رفضاً): حُفظ الآن، أو مُسح
   /// لأنّ ايرث لنك رفضته.
+  ///
+  /// «كل الشركات»: ردّ طلبٍ موجَّه (داخل [CompanyRoute.run]) يخصّ حال شركته لا المفتوحة.
   static void observe(Object? body) {
     if (body is! Map) return;
-    final cur = status.value ?? ElDepositStatus.none;
+    final n = statusOf(CompanyRoute.currentKey);
+    final cur = n.value ?? ElDepositStatus.none;
     if (body['saved_cleared'] == true ||
         (body['code'] == 'DEPOSIT_PASSWORD_REQUIRED' && cur.saved)) {
-      status.value = ElDepositStatus(saved: false, canManage: cur.canManage);
+      n.value = ElDepositStatus(saved: false, canManage: cur.canManage);
     } else if (body['deposit_password_saved'] == true && !cur.saved) {
-      status.value = ElDepositStatus(
+      n.value = ElDepositStatus(
         saved: true,
         canManage: cur.canManage,
         updatedAt: DateTime.now().toUtc().toIso8601String(),
@@ -171,6 +209,11 @@ class ElDepositPassword {
     _inflight = null;
     _at = null;
     status.value = null;
+    for (final n in _byCo.values) {
+      n.value = null;
+    }
+    _atCo.clear();
+    _inflightCo.clear();
   }
 
   static void _log(Object e) {

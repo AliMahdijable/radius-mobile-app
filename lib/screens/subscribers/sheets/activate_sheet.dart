@@ -133,7 +133,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
   String? _quoteErr;
   bool _quoting = false;
   // باسورد الإيداع (deposit): المحفوظ على الخادم («محفوظ · تغيير») أو يُكتب.
-  final _deposit = ElDepositPasswordController();
+  // «كل الشركات»: باسورد إيداع شركة المشترك نفسها (شركتا ايرث لنك لكلٍّ منهما محفوظها) — null خارج الوضع.
+  late final _deposit = ElDepositPasswordController(companyKey: widget.sub.companyKey);
   final _identifierCtrl = TextEditingController();  // رقم الكارت (card)
   final _pinCtrl = TextEditingController();         // Pin الكارت (card)
   // RECENT_DUPLICATE (409) من خادم البرو: يُؤكَّد ويُعاد مع confirmRepeat=true.
