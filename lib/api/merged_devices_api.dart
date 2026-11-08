@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/merged_company.dart';
 import '../models/network_device.dart';
+import '../services/merged_mode.dart';
 import 'api_client.dart';
 import 'company_route.dart';
 
@@ -58,13 +59,9 @@ class MergedDevicesApi {
     return out;
   }
 
-  static String _err(Object? body, String fallback) {
-    if (body is Map) {
-      final m = body['message'];
-      if (m is String && m.trim().isNotEmpty) return m.trim();
-    }
-    return fallback;
-  }
+  /// [MergedMode.failText]: للمالك رسالة الخادم أو [fallback] كما كان؛ للموظّف باسم الصفحة دائماً (رفض صلاحيّةٍ هناك يُسمّيها).
+  static String _err(MergedCompany c, Object? body, String fallback, [int? status]) =>
+      MergedMode.failText(c, body, fallback, status: status);
 
   /// أجهزة [c] — موجَّهةً لشركتها، أو بطلب الجلسة نفسها إن كانت المفتوحة ([open]). لا يرمي.
   static Future<MergedDevicesPart> one(MergedCompany c, {bool open = false}) async {
@@ -76,10 +73,10 @@ class MergedDevicesApi {
       try {
         final r = await ApiClient.dio.get<Map<String, dynamic>>('/api/v2/admin/devices');
         final rows = parse(c, r.data);
-        if (rows == null) return MergedDevicesPart(company: c, error: _err(r.data, failed), open: open);
+        if (rows == null) return MergedDevicesPart(company: c, error: _err(c, r.data, failed, r.statusCode), open: open);
         return MergedDevicesPart(company: c, devices: List.unmodifiable(rows), open: open);
       } on DioException catch (e) {
-        return MergedDevicesPart(company: c, error: _err(e.response?.data, failed), open: open);
+        return MergedDevicesPart(company: c, error: _err(c, e.response?.data, failed, e.response?.statusCode), open: open);
       } catch (_) {
         return MergedDevicesPart(company: c, error: failed, open: open);
       }

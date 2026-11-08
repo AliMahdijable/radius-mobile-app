@@ -8,6 +8,7 @@ import '../core/platform/app_platform.dart';
 import '../services/auth_storage.dart';
 import '../services/device_id.dart';
 import '../services/employee_session.dart';
+import '../services/permissions_service.dart';
 import '../services/session_manager.dart';
 import 'account_api.dart';
 import 'api_error_tap.dart';
@@ -197,6 +198,8 @@ class _AuthInterceptor extends Interceptor {
     // «كل الشركات»: نداءٌ لشركةٍ من شركات الحساب — توكن الحساب وحده + مفتاحها (lib/api/company_route.dart). لا Bearer الشركة
     // المفتوحة: الخادم يرفض الهويّتين معاً (COMPANY_ROUTE_CONFLICT)، ولا يصل الهاتفَ توكنُ الشركة أبداً.
     final routeKey = CompanyRoute.keyFor(options);
+    // «كل الصفحات» (٩ نوفمبر): جلسة موظّف ⇒ طريقه هو (توكنه كطلبه العاديّ + المفتاح) — طريق المالك أدناه كما هو حرفاً.
+    if (routeKey != null && _employeeSession) return _onEmployeeRoutedRequest(routeKey, options, handler);
     if (routeKey != null) {
       options.headers.remove('Authorization');
       options.headers.remove('x-auth-token');
@@ -234,6 +237,46 @@ class _AuthInterceptor extends Interceptor {
         options.headers['x-auth-token'] = token;
       }
     }
+    handler.next(options);
+  }
+
+  /// «كل الصفحات» (٩ نوفمبر): الجلسة جلسة موظّف — كـ`MergedMode.employeeSession` حرفاً (موظّفٌ مباشر، أو صفّ موظّفٍ من «شركاتي»).
+  static bool get _employeeSession => PermissionsService.isEmployee || EmployeeSession.isActive;
+
+  /// طلب موظّفٍ موجَّهٌ لصفحةٍ من صفحاته: **توكنه هو** كما يرسله طلبه العاديّ (Bearer + x-auth-token) + `x-company-key` ومرجع
+  /// النافذة كالمالك — ولا `x-account-token` أبداً (لا حساب له). الخادم ينفّذه بصفّه في تلك الصفحة وبصلاحيّاتها هي.
+  /// كتابةٌ على مشترك صفحةٍ كتابتها مغلقةٌ من هنا ([CompanyRoute.writeLockOf]) لا تُرسل: ردٌّ محلّيّ بسببها.
+  Future<void> _onEmployeeRoutedRequest(String key, RequestOptions options, RequestInterceptorHandler handler) async {
+    options.headers.remove('x-account-token');
+    String? token;
+    try {
+      token = await AuthStorage.readToken();
+    } catch (_) {
+      token = null; // بلا توكن يردّ الخادم 401 بلا صدى ⇒ مسار الجلسة العاديّ
+    }
+    if (token != null) {
+      options.headers['Authorization'] = 'Bearer $token';
+      options.headers['x-auth-token'] = token;
+    } else {
+      options.headers.remove('Authorization');
+      options.headers.remove('x-auth-token');
+    }
+    options.headers['x-company-key'] = key;
+    final need = CompanyRefs.requireOf(options.method, options.uri.path, options.data);
+    if (need != null) {
+      final lock = CompanyRoute.writeLockOf?.call(key);
+      if (lock != null) {
+        return handler.resolve(Response(
+          requestOptions: options,
+          statusCode: 409,
+          data: {'success': false, 'code': CompanyRouteCodes.writesPaused, 'message': lock, 'local': true},
+        ));
+      }
+      final ref = CompanyRefs.lookup(key, need.idx, need.kind);
+      if (ref != null) options.headers['x-company-ref'] = ref;
+    }
+    options.extra['_routed'] = key;
+    options.extra['_routedEmp'] = true;
     handler.next(options);
   }
 
@@ -297,6 +340,7 @@ class _AuthInterceptor extends Interceptor {
   Future<void> _onRoutedResponse(String key, Response response, ResponseInterceptorHandler handler) async {
     final o = response.requestOptions;
     final data = response.data;
+    if (o.extra['_routedEmp'] == true) return _onEmployeeRoutedResponse(key, response, handler);
     if (response.statusCode == 401 &&
         data is Map &&
         (data['error'] == 'account-token-expired' || data['error'] == 'invalid-account-token') &&
@@ -321,6 +365,42 @@ class _AuthInterceptor extends Interceptor {
           'message': 'تعذّر التأكّد من الشركة — أعد المحاولة',
         },
       ));
+    }
+    CompanyRefs.capture(key, o.method, o.uri.path, response.headers);
+    if (o.method.toUpperCase() != 'GET' && !CompanyRoute.keepsList.contains(o.uri.path)) CompanyRoute.onWrite?.call(key);
+    final ok = (response.statusCode ?? 0) < 300 && !(data is Map && data['success'] == false);
+    if (ok) CompanyRefs.consume(key, o.method, o.uri.path);
+    handler.next(response);
+  }
+
+  /// ردٌّ على طلب موظّفٍ موجَّه. لا تجديد لتوكن حساب (لا حساب له). و**٤٠١ بلا صدى المفتاح** = جلسته هو انتهت عند وسيط
+  /// الموظّفين قبل التوجيه (EMPLOYEE_SESSION_REVOKED / EMPLOYEE_DISABLED / SESSION_SUPERSEDED) ⇒ مسار طلبه العاديّ نفسه: السبب
+  /// ([_noteSuperseded]) ثمّ التجديد (مرفوضٌ للموظّف) ⇒ طردٌ برسالته — لا 409 الصدى المصطنع. رفض صفحةٍ (بصداه، ولو ٤٠١) يمرّ
+  /// برسالته ولا يمسّ جلسته. «كل الصفحات» أُطفئ (COMPANY_ROUTE_DISABLED) ⇒ [CompanyRoute.onEmployeeRouteStopped].
+  Future<void> _onEmployeeRoutedResponse(String key, Response response, ResponseInterceptorHandler handler) async {
+    final o = response.requestOptions;
+    final data = response.data;
+    final echo = response.headers.value('x-company-key');
+    if (response.statusCode == 401 && echo != key) {
+      _noteSuperseded(401, data);
+      final retry = await _refreshAndRetry(o);
+      if (retry != null) return handler.resolve(retry);
+      return handler.next(response);
+    }
+    final routeRejection = data is Map && CompanyRouteCodes.isEmployeeRouteCode(data['code']) && data['success'] == false;
+    if (echo != key && !routeRejection) {
+      return handler.resolve(Response(
+        requestOptions: o,
+        statusCode: 409,
+        data: const {
+          'success': false,
+          'code': CompanyRouteCodes.echo,
+          'message': 'تعذّر التأكّد من الصفحة — أعد المحاولة',
+        },
+      ));
+    }
+    if (data is Map && data['success'] == false && data['code'] == CompanyRouteCodes.disabled) {
+      CompanyRoute.onEmployeeRouteStopped?.call(data['message']?.toString());
     }
     CompanyRefs.capture(key, o.method, o.uri.path, response.headers);
     if (o.method.toUpperCase() != 'GET' && !CompanyRoute.keepsList.contains(o.uri.path)) CompanyRoute.onWrite?.call(key);
@@ -386,9 +466,13 @@ class _AuthInterceptor extends Interceptor {
     if (err.response?.statusCode != 401) {
       return handler.next(err);
     }
-    // الموجَّه لا يلمس جلسة الشركة المفتوحة (لا تجديد ولا مسح)
-    if (err.requestOptions.extra['_routed'] is String) {
-      return handler.next(err);
+    // الموجَّه لا يلمس جلسة الشركة المفتوحة (لا تجديد ولا مسح) — إلّا طلب موظّفٍ عاد ٤٠١ بلا صدى المفتاح: جلسته هو انتهت
+    // قبل التوجيه ⇒ مسار طلبه العاديّ أدناه (كـ[_onEmployeeRoutedResponse]).
+    final routed = err.requestOptions.extra['_routed'];
+    if (routed is String) {
+      final ownSession =
+          err.requestOptions.extra['_routedEmp'] == true && err.response?.headers.value('x-company-key') != routed;
+      if (!ownSession) return handler.next(err);
     }
     if (err.requestOptions.path.contains('/api/auth/')) {
       return handler.next(err);

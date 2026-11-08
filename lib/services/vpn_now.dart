@@ -11,6 +11,7 @@ import '../core/net/vpn_pipe.dart';
 import 'agent_net_presence.dart';
 import 'connection_alerts.dart';
 import 'device_warm_service.dart';
+import 'merged_text.dart';
 
 export '../api/vpn_now_api.dart' show VpnNowKind, VpnSubReading, VpnDeviceResult, VpnNowResult;
 
@@ -158,8 +159,8 @@ class VpnNowJob extends ChangeNotifier {
     }
     phase = VpnBarPhase.done;
     line = ok == scope.length
-        ? (scope.length == 1 ? 'فُحص مشتركو «${scope.first.name}» عبر VPN ✓' : 'فُحصت ${scope.length} شركات عبر VPN ✓')
-        : 'فُحصت $ok من ${scope.length} شركات عبر VPN';
+        ? (scope.length == 1 ? 'فُحص مشتركو «${scope.first.name}» عبر VPN ✓' : 'فُحصت ${scope.length} ${mergedWord('شركات', 'صفحات')} عبر VPN ✓')
+        : 'فُحصت $ok من ${scope.length} ${mergedWord('شركات', 'صفحات')} عبر VPN';
     sub = [if (badKnown) (bad > 0 ? '$bad بمشكلة' : 'لا مشاكل'), ...notes].join(' · ');
     value = null;
     notifyListeners();

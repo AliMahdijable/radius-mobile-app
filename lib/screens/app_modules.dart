@@ -46,6 +46,7 @@ import 'topup/fiberx_topup_screen.dart';
 import 'topup/jtpay_screen.dart';
 import 'topup/topup_screen.dart';
 import '../widgets/merged_section.dart';
+import '../services/merged_text.dart';
 
 /// مجموعات القائمة الجانبيّة على الحاسبة — بترتيب الموقع (nav-config.ts).
 enum AppModuleGroup { manage, finance, comms, customize, earthlink }
@@ -321,7 +322,7 @@ List<AppModule> buildAppModules() {
         // «كل الشركات» (٨ نوفمبر): للمفتوحة وحدها — الشحن مالٌ يُضاف لرصيد صفحتها (لا يُوجَّه)
         page: () => MergedSection.openOnly(
             title: 'شحن رصيد الصفحة',
-            reason: 'merged.reason_topup'.tr(),
+            reason: 'merged.reason_topup'.trm(),
             child: ProviderService.isFiberx ? const FiberxTopupScreen() : const TopupScreen()),
       ),
     // ٣٠ أكتوبر: «شحن من pay الجزيرة» — لوكلاء شركة الجزيرة (jt لاسلكي / ftth فايبر) حين يقول الخادم إنّها
@@ -339,7 +340,7 @@ List<AppModule> buildAppModules() {
             ? 'متوقّف مؤقّتاً — تابِع عمليّاتك التي لم تُحسم'
             : 'زين كاش أو بطاقة ← رصيد pay ← صفحتك بالساس',
         page: () => MergedSection.openOnly(
-            title: 'شحن من pay الجزيرة', reason: 'merged.reason_topup'.tr(), child: const JtpayScreen()),
+            title: 'شحن من pay الجزيرة', reason: 'merged.reason_topup'.trm(), child: const JtpayScreen()),
       ),
     // §١٢ «الكارتات» — مخزون كارتات التعبئة. الخادم يقول `enabled` في admin-widgets والبطاقة تتبعه،
     // ومجهولة الشارة لا تُظهرها. الموظّف يفتحه بصلاحيّة التفعيل/التمديد وحدها.
@@ -361,7 +362,7 @@ List<AppModule> buildAppModules() {
             readOnly: true,
             prefixes: const ['/api/v2/cards'],
             serves: (c) => c.provider == MergedProvider.sas4 || c.provider == MergedProvider.earthlink,
-            servesNote: 'merged.serves_sas_el'.tr(),
+            servesNote: 'merged.serves_sas_el'.trm(),
             lockTitle: 'cards.title'.tr(),
             child: const CardsScreen()),
       ),
@@ -452,7 +453,7 @@ List<AppModule> buildAppModules() {
         subtitle: 'more.packages_hint'.tr(),
         // «كل الشركات»: للمفتوحة وحدها — الأسعار لكلّ شركةٍ على حدة (نطاق التسعير لا يُوجَّه)
         page: () => MergedSection.openOnly(
-            title: 'more.packages'.tr(), reason: 'merged.reason_prices'.tr(), child: const PackagesScreen()),
+            title: 'more.packages'.tr(), reason: 'merged.reason_prices'.trm(), child: const PackagesScreen()),
       ),
     if (permShown(const ['discounts.view']))
       AppModule(
@@ -476,7 +477,7 @@ List<AppModule> buildAppModules() {
         title: 'sp.title'.tr(),
         subtitle: 'sp.module_hint'.tr(),
         page: () => MergedSection.openOnly(
-            title: 'sp.title'.tr(), reason: 'merged.reason_prices'.tr(), child: const SubscriberPricesScreen()),
+            title: 'sp.title'.tr(), reason: 'merged.reason_prices'.trm(), child: const SubscriberPricesScreen()),
       ),
     if (permShown(const ['employees.view']))
       AppModule(
@@ -515,9 +516,9 @@ List<AppModule> buildAppModules() {
           subtitle: 'تحويل الرصيد بين الوكلاء + كشف الحساب',
           page: () => MergedSection.openOnly(
               title: 'تحويل الرصيد',
-              reason: 'merged.reason_transfer'.tr(),
+              reason: 'merged.reason_transfer'.trm(),
               serves: (c) => c.provider == MergedProvider.earthlink,
-              servesNote: 'merged.serves_el'.tr(),
+              servesNote: 'merged.serves_el'.trm(),
               child: const ElTransferScreen()),
         ),
       // «الكارتات المطلوبة» — توقّع الكارتات والرصيد لمدّة؛ من «التقارير الماليّة».
@@ -535,7 +536,7 @@ List<AppModule> buildAppModules() {
               readOnly: true,
               prefixes: const ['/api/v2/el/prepaid-needed'],
               serves: (c) => c.provider == MergedProvider.earthlink,
-              servesNote: 'merged.serves_el'.tr(),
+              servesNote: 'merged.serves_el'.trm(),
               lockTitle: 'الكارتات المطلوبة',
               child: const ElRequiredCardsScreen()),
         ),

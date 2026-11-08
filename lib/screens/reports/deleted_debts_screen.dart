@@ -12,7 +12,6 @@ import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/permission_locked.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/merged_company.dart';
-import '../../services/auth_storage.dart';
 import '../../services/merged_mode.dart';
 import '../../services/merged_report_loader.dart';
 import '../../services/permissions_service.dart';
@@ -25,6 +24,7 @@ import '../../widgets/merged_breakdown.dart';
 import '../../widgets/merged_company_strip.dart';
 import '../account/company_switch_sheet.dart';
 import 'widgets/report_permission_gate.dart';
+import '../../services/merged_text.dart';
 
 /// «ديون المشتركين المحذوفين» (٢٣ أكتوبر) — GET/POST /api/v2/deleted-debts
 /// (الخادم 5ab928a، الويب b412016). المالك: «مرات شركه تحذف يوزرات معينه احنه
@@ -103,12 +103,7 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
         _loading = _merged == null;
         _error = null;
       });
-      String? openAdmin;
-      try {
-        openAdmin = (await AuthStorage.readAdminId())?.trim();
-      } catch (_) {
-        openAdmin = null;
-      }
+      final openAdmin = await MergedMode.openAdminId();
       // الوطني بلا ديون محذوفين بعد (الخادم يرفضها)، وفايبر اكس من الموقع — لا تُطلبان
       final m = await loadMergedReport<DeletedDebtsPage>(
         supports: _servedFor,
@@ -329,14 +324,14 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
   String? _problemOf(MergedCompany c) {
     if (_pageOf(c)?.enabled == false) return 'غير مفعّلة';
     return _merged!.problemOf(c,
-        failedLabel: 'merged.chip_failed'.tr(),
-        unsupportedLabel: c.provider == MergedProvider.ftth ? 'غير متاحة' : 'merged.web_only'.tr());
+        failedLabel: 'merged.chip_failed'.trm(),
+        unsupportedLabel: c.provider == MergedProvider.ftth ? 'غير متاحة' : 'merged.web_only'.trm());
   }
 
   String? _mergedNote(MergedReport<DeletedDebtsPage> m) => m.noteFor(
         MergedMode.focused?.key,
         unsupportedText: 'ديون المحذوفين لنوعها ليست هنا',
-        missingText: 'merged.missing'.tr(args: [m.missing.map((c) => c.name).join('، ')]),
+        missingText: 'merged.missing'.trm(args: [m.missing.map((c) => c.name).join('، ')]),
         nameUnsupported: false,
       );
 
@@ -357,7 +352,7 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
 
   /// دينٌ في شركةٍ غير المفتوحة: تسديده وشطبه من داخلها.
   Future<void> _openOther(String key) async {
-    final name = MergedMode.companyOf(key)?.name ?? 'شركته';
+    final name = MergedMode.companyOf(key)?.name ?? mergedWord('شركته', 'صفحته');
     final go = await showConfirmSheet(
       context,
       title: 'هذا الدين في «$name»',
@@ -443,7 +438,7 @@ class _DeletedDebtsScreenState extends State<DeletedDebtsScreen> {
             const SizedBox(width: Sp.x6),
             Expanded(
               child: Text(
-                'merged.not_in_sum'.tr(args: [failed.join('، ')]),
+                'merged.not_in_sum'.trm(args: [failed.join('، ')]),
                 style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.5),
               ),
             ),

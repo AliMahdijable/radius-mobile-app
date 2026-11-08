@@ -37,6 +37,7 @@ import '../assistant/assistant_sheet.dart';
 import '../network_devices/check/devices_check_screen.dart';
 import '../network_devices/network_device_details_screen.dart';
 import '../subscribers/subscriber_detail_screen.dart';
+import '../../services/merged_text.dart';
 
 /// «أمر صوتي» (٧ نوفمبر — المالك: «المساعد الصوتي… وكيل يامره يفعل مشترك يطفي مشترك يفحص جهاز»).
 ///
@@ -511,7 +512,7 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
             child: Text(
               intent.action == VoiceAction.checkAll
                   ? 'أجلب أجهزتك…'
-                  : 'أدوّر على «${intent.query}»${_merged ? ' بكلّ الشركات' : ''}…',
+                  : 'أدوّر على «${intent.query}»${_merged ? mergedWord(' بكلّ الشركات', ' بكلّ الصفحات') : ''}…',
               style: AppType.body(color: AppColors.textMid),
             ),
           ),

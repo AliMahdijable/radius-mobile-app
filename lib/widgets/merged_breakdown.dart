@@ -6,6 +6,7 @@ import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'company_tag.dart';
+import '../services/merged_text.dart';
 
 /// سطرٌ في «حسب الشركة»: رقمها وسطرٌ تحته، أو سبب غيابها.
 typedef MergedBreakdownRow = ({String key, String? value, String? sub, String? reason});
@@ -32,7 +33,7 @@ class MergedBreakdownCard extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsetsDirectional.fromSTEB(Sp.md, Sp.md, Sp.md, Sp.xs),
-            child: Text('merged.finance_by_company'.tr(),
+            child: Text('merged.finance_by_company'.trm(),
                 style: AppType.label(color: AppColors.textHi).copyWith(fontSize: 13, fontWeight: FontWeight.w700)),
           ),
           for (final r in rows)

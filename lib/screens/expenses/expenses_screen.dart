@@ -21,6 +21,8 @@ import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../../widgets/merged_section.dart';
 import '../../core/widgets/permission_locked.dart';
+import '../../services/merged_text.dart';
+import '../../services/merged_mode.dart';
 
 /// مديول "الصرفيات" — قائمة الصرفيات + فلتر نطاق التواريخ + كرت
 /// إجمالي + add/edit/delete. منقول لـv2 من ضمن "قوائم أخرى".
@@ -61,9 +63,13 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   MergedSectionInfo? _section;
 
   /// مقفلة: شركةٌ موجَّهة لم يفتح الخادم كتابتها (أو لم يصل ردّها بعد).
-  bool get _locked => _section != null && _section!.routed && _routedWrites != true;
+  /// «كل الصفحات» للموظّف (٩ نوفمبر): وصفحةٌ كتابتها مغلقةٌ له من هنا (غير صفحته الحاليّة) — ولو فتحها الخادم لمالكها.
+  bool get _locked =>
+      _section != null &&
+      _section!.routed &&
+      (_routedWrites != true || MergedOps.writeLockAt(_section!.company?.key) != null);
 
-  String get _lockText => 'merged.section_locked'.tr(args: [_section?.company?.name ?? '—']);
+  String get _lockText => 'merged.section_locked'.trm(args: [_section?.company?.name ?? '—']);
   // النطاق الافتراضي: أول الشهر إلى اليوم (مطابق الويب)، بشريط الفترات نفسه الذي في التقارير.
   DateRange _range = DateRange.thisMonth();
 

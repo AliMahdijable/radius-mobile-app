@@ -109,9 +109,16 @@ class MergedDashboardApi {
       reasons[c.key] = why;
     }
 
+    // «كل الصفحات» للموظّف (٩ نوفمبر): صلاحيّاته في كلّ صفحةٍ غيرها في الأخرى — رفضٌ (403) أو رصيدٌ يقنّعه الخادم (null بلا
+    // reports.financial هناك) يُسمّى بالصفحة ولا يُجمع صفراً. المالك كما كان حرفاً.
+    final emp = MergedMode.employeeSession;
     for (var i = 0; i < cs.length; i++) {
       final c = cs[i];
       final b = res[i];
+      if (emp && b != null && (b['code'] == 'PERMISSION_DENIED' || (b['success'] != false && b['balance'] == null))) {
+        skip(c, 'لا صلاحيّة لك على رصيدها');
+        continue;
+      }
       if (b == null || b['success'] == false || b['balance_unavailable'] == true) {
         skip(c, 'تعذّرت قراءة الرصيد');
         continue;

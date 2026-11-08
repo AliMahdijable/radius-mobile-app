@@ -16,6 +16,7 @@ import 'sheets/telegram_link_generator_sheet.dart';
 import '../desktop/desk_widgets.dart';
 import '../../api/company_route.dart';
 import '../../widgets/merged_section.dart';
+import '../../services/merged_text.dart';
 
 /// TelegramScreen — 2026-08-26. نقل من client-v2 web للـmobile-app-v2.
 ///
@@ -173,7 +174,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
         _compactHeader(
           icon: LucideIcons.send,
           title: 'البوت غير مربوط لـ«${section!.company!.name}»',
-          subtitle: 'يُربط من صفحتها — بدّل الشركة إليها',
+          subtitle: mergedWord('يُربط من صفحتها — بدّل الشركة إليها', 'يُربط من صفحتها — انتقل إليها من «صفحاتي»'),
           color: _tgBlue,
         ),
       ];

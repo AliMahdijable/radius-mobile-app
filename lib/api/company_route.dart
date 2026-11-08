@@ -38,6 +38,17 @@ class CompanyRoute {
   /// بعد كلّ كتابةٍ موجَّهة وصلت الخادم — أيّاً كان ردّها — تُسقط قائمة شركتها فتُجلب من جديد (كبطاقتها في «لوحة حسابي»).
   static void Function(String key)? onWrite;
 
+  // ── «كل الصفحات» للموظّف (٩ نوفمبر — المالك: «الموظف… يشوف كل الصفحات مثل المدير… حسب الصلاحيات المعطاه اله») ──
+  // الموظّف يوجَّه بتوكنه هو (Bearer + x-auth-token كطلبه العاديّ) + المفتاح — لا توكن حسابٍ له ولا يُرسل أبداً. والخادم ينفّذ
+  // الطلب بصفّه في تلك الصفحة وبصلاحيّاتها هي. المعترض (api_client.dart) يقرّر بالجلسة نفسها؛ وهذه منافذ [MergedMode] إليه.
+
+  /// سبب قفل الكتابة على صفحة [key] من «كل الصفحات» (null = مفتوحة) — يضبطه MergedMode من ردّ صفحاته (`writes` لكلّ صفحة).
+  /// كتابةٌ على مشترك صفحةٍ مقفلة لا تُرسل أصلاً: ردٌّ محلّيّ 409 COMPANY_ROUTE_WRITES_PAUSED بهذا السبب.
+  static String? Function(String key)? writeLockOf;
+
+  /// الخادم أطفأ «كل الصفحات» (409 COMPANY_ROUTE_DISABLED على طلبٍ موجَّهٍ للموظّف) — MergedMode يعيده لصفحته برسالة الخادم.
+  static void Function(String? message)? onEmployeeRouteStopped;
+
   /// طلباتٌ غير GET لا تغيّر قائمة مشتركي الشركة فلا تُسقطها ([onWrite]): قراءةٌ بـPOST، أو قراءات «تنبيه المشترك» إلى جدولنا
   /// (٤ نوفمبر — تُرفع بعد كلّ موجة فحص، فإسقاطها كان يعيد جلب قائمة كلّ شركةٍ معها).
   static const Set<String> keepsList = {
@@ -212,4 +223,26 @@ class CompanyRouteCodes {
   static const echo = 'COMPANY_ROUTE_ECHO';
 
   static bool isRouteCode(Object? code) => code is String && (code.startsWith('COMPANY_') || code == 'OWNER_ONLY');
+
+  // ── «كل الصفحات» للموظّف (٩ نوفمبر): رفض حرّاس التوجيه لطلبه — نصّه العربيّ في message، ويحمل صدى المفتاح ──
+  static const employeeOnly = 'EMPLOYEE_ONLY';
+  static const sessionRequired = 'SESSION_REQUIRED';
+  static const personDisabled = 'PERSON_DISABLED';
+  static const employeeDisabled = 'EMPLOYEE_DISABLED';
+  static const pageUnsupported = 'PAGE_UNSUPPORTED';
+  static const employeeDeviceLimit = 'EMPLOYEE_DEVICE_LIMIT';
+  static const deviceIdRequired = 'DEVICE_ID_REQUIRED';
+
+  static const _employeeCodes = {
+    employeeOnly,
+    sessionRequired,
+    personDisabled,
+    employeeDisabled,
+    pageUnsupported,
+    employeeDeviceLimit,
+    deviceIdRequired,
+  };
+
+  /// رفضٌ من حرّاس التوجيه لطلب الموظّف (رموز المالك + رموزه) — لا بيانات فيه تُنسب لصفحةٍ خطأ.
+  static bool isEmployeeRouteCode(Object? code) => isRouteCode(code) || _employeeCodes.contains(code);
 }

@@ -20,6 +20,7 @@ import 'widgets/report_pagination.dart';
 import 'widgets/report_permission_gate.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/widgets/copyable.dart';
+import '../../services/merged_text.dart';
 
 /// تقرير الجلسات — الـonline حالياً + history.
 /// Toggle بين "متصلون الآن" و "كل الجلسات (أحدث 200)".
@@ -221,10 +222,10 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                         countOf: merged.countOf,
                         total: merged.total,
                         problemOf: (c) => merged.problemOf(c,
-                            failedLabel: 'merged.chip_failed'.tr(), unsupportedLabel: 'بلا جلسات'),
+                            failedLabel: 'merged.chip_failed'.trm(), unsupportedLabel: 'بلا جلسات'),
                         note: merged.noteFor(MergedMode.focused?.key,
                             unsupportedText: 'لا تقرير جلساتٍ لنوعها',
-                            missingText: 'merged.missing'.tr(args: [merged.missing.map((c) => c.name).join('، ')])),
+                            missingText: 'merged.missing'.trm(args: [merged.missing.map((c) => c.name).join('، ')])),
                       ),
                       const SizedBox(height: Sp.md),
                     ],
@@ -395,7 +396,7 @@ class _SessionsReportScreenState extends State<SessionsReportScreen> {
                                               ? 'sessions_online'
                                               : 'sessions_all',
                                           columns: [
-                                            if (_mergedOn) 'merged.col_company'.tr(),
+                                            if (_mergedOn) 'merged.col_company'.trm(),
                                             'reports.col_username'.tr(),
                                             'IP',
                                             'MAC',

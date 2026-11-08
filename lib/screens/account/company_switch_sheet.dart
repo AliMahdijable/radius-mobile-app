@@ -12,10 +12,12 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/active_company_line.dart';
+import '../../widgets/merged_all_row.dart';
 import 'account_gate_screen.dart';
 import 'company_open_flow.dart';
 import 'subscription_screen.dart';
 import '../../core/widgets/app_sheet.dart';
+import '../../services/merged_text.dart';
 
 /// «تبديل الشركة» من داخل التطبيق — طلب المالك ٢١ أكتوبر: «اريدك اضيف زر
 /// ثاني جنب زر تبديل بين المدراء بالتطبيق التبديل بين الشركات»، و«تنتبه لدينا
@@ -152,7 +154,7 @@ class _CompanySwitchSheetState extends State<CompanySwitchSheet> {
     if (!mounted) return;
     setState(() => _entering = false);
     if (!ok) {
-      setState(() => _error = 'merged.unavailable'.tr());
+      setState(() => _error = 'merged.unavailable'.trm());
       return;
     }
     Navigator.of(context).maybePop();
@@ -271,7 +273,7 @@ class _CompanySwitchSheetState extends State<CompanySwitchSheet> {
                       padding: const EdgeInsets.only(bottom: Sp.md),
                       child: ValueListenableBuilder<bool>(
                         valueListenable: MergedMode.active,
-                        builder: (context, on, _) => _AllCompaniesRow(
+                        builder: (context, on, _) => MergedAllRow(
                           active: on,
                           busy: _entering,
                           onTap: _toggleAll,
@@ -390,88 +392,6 @@ class _PagesRow extends StatelessWidget {
 }
 
 /// «كل الشركات» أعلى الورقة: نقاط الشركات الصالحة بألوانها، والحال (مفعّل ⇒ العودة للشركة المفتوحة).
-class _AllCompaniesRow extends StatelessWidget {
-  const _AllCompaniesRow({required this.active, required this.busy, required this.onTap});
-
-  final bool active;
-  final bool busy;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    Theme.of(context); // theme-dep (dark-mode)
-    final usable = MergedMode.usable;
-    return Material(
-      color: active ? AppColors.brandSoftBg : AppColors.surface,
-      borderRadius: BorderRadius.circular(R.md),
-      child: InkWell(
-        onTap: busy ? null : onTap,
-        borderRadius: BorderRadius.circular(R.md),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.md),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(R.md),
-            border: Border.all(color: active ? AppColors.brand : AppColors.border, width: active ? 1.5 : 1),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(color: AppColors.brandSoftBg, borderRadius: BorderRadius.circular(R.sm)),
-                child: Icon(Icons.layers_rounded, size: 22, color: AppColors.brand),
-              ),
-              const SizedBox(width: Sp.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('merged.all_title'.tr(), style: AppType.bodyStrong(color: AppColors.textHi)),
-                    const SizedBox(height: 3),
-                    Text(
-                      busy
-                          ? 'merged.entering'.tr()
-                          : active
-                              ? 'merged.all_active'.tr()
-                              : 'merged.all_sub'.tr(args: ['${usable.length}']),
-                      style: AppType.muted().copyWith(fontSize: 12.5, height: 1.45),
-                    ),
-                    if (usable.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 4,
-                        runSpacing: 4,
-                        children: [
-                          for (final c in usable)
-                            Container(
-                              width: 10,
-                              height: 10,
-                              decoration: BoxDecoration(color: AppColors.company(c.colorIndex), shape: BoxShape.circle),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: Sp.sm),
-              if (busy)
-                SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(color: AppColors.brand, strokeWidth: 2.2),
-                )
-              else
-                Icon(active ? Icons.check_circle_rounded : Icons.chevron_left_rounded,
-                    color: active ? AppColors.brand : AppColors.textMid),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// لماذا فُتحت الورقة: إشعارٌ لشركةٍ غير المفتوحة («إشعارات كلّ شركاتي»).
 class _NoticeBanner extends StatelessWidget {
   const _NoticeBanner({required this.text});

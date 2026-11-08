@@ -39,6 +39,7 @@ import 'top_actions.dart';
 import '../core/platform/desktop_layout.dart';
 import 'desktop/desktop_shell.dart';
 import '../core/widgets/app_sheet.dart';
+import '../core/widgets/sheet_scaffold.dart';
 import '../widgets/merged_company_pick.dart';
 import 'expenses/expenses_screen.dart';
 
@@ -358,6 +359,15 @@ class _MainShellState extends State<MainShell> {
     authExpiredSignal.addListener(_onAuthExpired);
     _accessBlockedSeen = accessBlockedSignal.value;
     accessBlockedSignal.addListener(_onAccessBlocked);
+    MergedMode.fellBack.addListener(_onMergedFellBack);
+  }
+
+  /// «كل الصفحات» للموظّف (٩ نوفمبر): الخادم أطفأه وهو فيه ⇒ عاد لصفحته — سطرٌ يقول لماذا (رسالة الخادم) مرّةً.
+  void _onMergedFellBack() {
+    if (!mounted) return;
+    final msg = MergedMode.stopped.value;
+    if (msg == null || msg.trim().isEmpty) return;
+    showSheetSnack(context, msg, duration: const Duration(seconds: 5));
   }
 
   @override
@@ -365,6 +375,7 @@ class _MainShellState extends State<MainShell> {
     DeviceWarmService.stop();
     authExpiredSignal.removeListener(_onAuthExpired);
     accessBlockedSignal.removeListener(_onAccessBlocked);
+    MergedMode.fellBack.removeListener(_onMergedFellBack);
     _subsFilterCmd.dispose();
     _devicesActive.dispose();
     _subsActive.dispose();

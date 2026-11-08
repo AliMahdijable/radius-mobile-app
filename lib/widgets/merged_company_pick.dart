@@ -6,10 +6,11 @@ import '../core/widgets/app_sheet.dart';
 import '../core/widgets/design_sheet.dart';
 import '../models/merged_company.dart';
 import '../screens/account/company_switch_sheet.dart';
+import '../screens/employees/sheets/employee_pages_sheet.dart';
 import '../services/active_company.dart';
-import '../services/auth_storage.dart';
 import '../services/linked_companies.dart';
 import '../services/merged_mode.dart';
+import '../services/merged_text.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
@@ -31,8 +32,13 @@ Future<LinkedCompany?> linkedCompanyOf(String adminId) async {
   }
 }
 
-/// «بدّل إلى «X»»: ورقة «شركاتي» تفتح [c] بنفسها (دخولها كما لو نقرها المدير).
+/// «بدّل إلى «X»»: ورقة «شركاتي» تفتح [c] بنفسها (دخولها كما لو نقرها المدير). الموظّف («كل الصفحات»، ٩ نوفمبر): ورقة
+/// «صفحاتي» تنقله إلى صفحته فيها بصفّه هناك (`employee_id`) — كما لو نقرها.
 Future<void> switchToMergedCompany(BuildContext context, MergedCompany c) async {
+  if (MergedMode.employeeSession) {
+    await showEmployeePagesSheet(context, autoSwitchTo: c.employeeId);
+    return;
+  }
   final linked = await linkedCompanyOf(c.adminId);
   if (!context.mounted) return;
   await showCompanySwitchSheet(context, autoOpen: linked, notice: linked == null ? null : c.name);
@@ -52,12 +58,7 @@ Future<bool> pickOpenCompanyFor(
   String? otherHint,
 }) async {
   if (!MergedMode.active.value) return true;
-  String? open;
-  try {
-    open = (await AuthStorage.readAdminId())?.trim();
-  } catch (_) {
-    open = null;
-  }
+  final open = await MergedMode.openAdminId();
   if (!context.mounted) return false;
   final picked = await showAppSheet<_Pick>(
     context: context,
@@ -98,7 +99,7 @@ class _PickSheet extends StatelessWidget {
     return DesignSheet(
       header: SheetHeaderBar(
         icon: LucideIcons.building2,
-        title: 'في أيّ شركة؟',
+        title: mergedWord('في أيّ شركة؟', 'في أيّ صفحة؟'),
         subtitle: action,
         onClose: () => Navigator.of(context).pop(),
       ),
@@ -169,7 +170,9 @@ class _Row extends StatelessWidget {
                           style: AppType.label(color: AppColors.textHi).copyWith(fontSize: 14, fontWeight: FontWeight.w700)),
                       const SizedBox(height: 2),
                       Text(
-                        open ? 'المفتوحة — تُضاف هنا' : (otherHint ?? '$reason — بدّل إليها'),
+                        open
+                            ? mergedWord('المفتوحة — تُضاف هنا', 'صفحتك الحاليّة — تُضاف هنا')
+                            : (otherHint ?? '$reason — ${mergedWord('بدّل إليها', 'انتقل إليها من «صفحاتي»')}'),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: AppType.body(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.4),

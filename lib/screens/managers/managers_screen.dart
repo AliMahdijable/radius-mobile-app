@@ -26,6 +26,7 @@ import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../../widgets/merged_section.dart';
 import '../../models/merged_company.dart';
+import '../../services/merged_text.dart';
 
 /// مديول "المدراء الفرعيون" — قائمة + بحث + add/edit/delete + عمليات
 /// رصيد (شحن/سحب/نقاط). v1 web parity.
@@ -38,7 +39,7 @@ class ManagersScreen extends StatefulWidget {
       readOnly: true,
       prefixes: const ['/api/v2/managers', '/api/v2/acl-list', '/api/admin/manager-debts', '/api/admin/managers', '/api/admin/manager-movements'],
       serves: (c) => c.provider == MergedProvider.sas4,
-      servesNote: 'merged.serves_sas'.tr(),
+      servesNote: 'merged.serves_sas'.trm(),
       lockTitle: 'mgr.title'.tr(),
       child: const ManagersScreen());
 

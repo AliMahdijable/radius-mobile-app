@@ -1,4 +1,3 @@
-import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -6,13 +5,13 @@ import '../api/company_route.dart';
 import '../models/merged_company.dart';
 import '../screens/desktop/desk_widgets.dart';
 import '../services/active_company.dart';
-import '../services/auth_storage.dart';
 import '../services/merged_mode.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'merged_company_pick.dart';
 import 'merged_company_strip.dart';
+import '../services/merged_text.dart';
 
 /// ما يعرضه قسمٌ من «قوائم أخرى» الآن في «كل الشركات».
 class MergedSectionInfo {
@@ -130,11 +129,9 @@ class _MergedSectionState extends State<MergedSection> {
   }
 
   Future<void> _readOpen() async {
-    try {
-      _openAdmin = (await AuthStorage.readAdminId())?.trim();
-    } catch (_) {
-      _openAdmin = null; // لا تُعرف المفتوحة ⇒ كلّ شركةٍ مختارة موجَّهة (الكتابة يحكمها الخادم)
-    }
+    // المالك: معرّف جلسته المحفوظ كما كان؛ الموظّف: صفحته الحاليّة من ردّ صفحاته (MergedMode.openAdminId). لا تُعرف ⇒ null ⇒
+    // كلّ شركةٍ مختارة موجَّهة (الكتابة يحكمها الخادم).
+    _openAdmin = await MergedMode.openAdminId();
     if (!mounted) return;
     setState(() => _ready = true);
   }
@@ -288,13 +285,13 @@ class _OpenOnlyPageState extends State<_OpenOnlyPage> {
                       Icon(LucideIcons.lock, size: 26, color: AppColors.textMid),
                       const SizedBox(height: Sp.md),
                       Text(
-                        (widget.served ? 'merged.open_only_title' : 'merged.not_served_title').tr(args: [widget.title, name]),
+                        (widget.served ? 'merged.open_only_title' : 'merged.not_served_title').trm(args: [widget.title, name]),
                         textAlign: TextAlign.center,
                         style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 15, height: 1.5),
                       ),
                       const SizedBox(height: Sp.sm),
                       Text(
-                        widget.served ? 'merged.open_only_body'.tr(args: [widget.reason]) : widget.reason,
+                        widget.served ? 'merged.open_only_body'.trm(args: [widget.reason]) : widget.reason,
                         textAlign: TextAlign.center,
                         style: AppType.body(color: AppColors.textMid).copyWith(fontSize: 13, height: 1.6),
                       ),
@@ -306,7 +303,7 @@ class _OpenOnlyPageState extends State<_OpenOnlyPage> {
                           icon: _busy
                               ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                               : const Icon(LucideIcons.arrowLeftRight, size: 18),
-                          label: Text('merged.open_only_switch'.tr(args: [name])),
+                          label: Text('merged.open_only_switch'.trm(args: [name])),
                         ),
                       ],
                     ],
@@ -359,22 +356,22 @@ class MergedSectionBar extends StatelessWidget {
         text = lockedText;
         warn = lockedText != null;
       } else {
-        final open = info.company?.name ?? ActiveCompany.current?.label ?? '—';
-        text = 'merged.section_open_only'.tr(args: [open, info.openOnlyReason!]);
+        final open = info.company?.name ?? MergedMode.currentPageName ?? ActiveCompany.current?.label ?? '—';
+        text = 'merged.section_open_only'.trm(args: [open, info.openOnlyReason!]);
         warn = false;
       }
     } else if (info == null || info.company == null) {
       final open = ActiveCompany.current;
-      text = 'merged.section_open'.tr(args: [open?.label ?? '—']);
+      text = 'merged.section_open'.trm(args: [MergedMode.currentPageName ?? open?.label ?? '—']);
       warn = false;
     } else if (lockedText != null) {
       text = lockedText;
       warn = true;
     } else if (info.routed && info.readOnly) {
-      text = 'merged.section_locked'.tr(args: [info.company!.name]);
+      text = 'merged.section_locked'.trm(args: [info.company!.name]);
       warn = true;
     } else if (info.routed) {
-      text = 'merged.section_routed'.tr(args: [info.company!.name]);
+      text = 'merged.section_routed'.trm(args: [info.company!.name]);
       warn = false;
     } else {
       text = null;

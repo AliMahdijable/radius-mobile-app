@@ -55,15 +55,15 @@ import '../../widgets/vpn_now_bar.dart';
 import '../whatsapp/conn_vpn_screen.dart';
 import '../../services/agent_net_presence.dart';
 import '../../services/device_warm_service.dart';
-import 'package:easy_localization/easy_localization.dart' show StringTranslateExtension;
 import '../../api/merged_devices_api.dart';
 import '../../models/merged_company.dart';
-import '../../services/auth_storage.dart';
 import '../../services/merged_mode.dart';
 import '../../services/merged_devices_check.dart';
 import '../../widgets/company_tag.dart';
 import '../../widgets/merged_company_strip.dart';
 import '../account/company_switch_sheet.dart';
+import '../../services/merged_text.dart';
+import '../../widgets/merged_company_pick.dart';
 
 /// قائمة أجهزة الشبكة. راجع project_devices_monitoring_plan.
 ///
@@ -514,12 +514,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       });
     }
     final data = await MergedMode.load();
-    String? openAdmin;
-    try {
-      openAdmin = (await AuthStorage.readAdminId())?.trim();
-    } catch (_) {
-      openAdmin = null;
-    }
+    // المفتوحة: المالك بمعرّف جلسته كما كان، والموظّف بصفحته الحاليّة («كل الصفحات» — MergedMode.openAdminId)
+    final openAdmin = await MergedMode.openAdminId();
     final results = await Future.wait<Object>([
       MergedDevicesApi.load(data.usable, openAdminId: openAdmin),
       NetworkDevicesApi.listRegions().catchError((_) => <DeviceRegion>[]),
@@ -568,13 +564,13 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
     final focus = _focusKey;
     if (focus != null) {
       final p = _parts.where((x) => x.company.key == focus).firstOrNull;
-      return p != null && p.failed ? (p.error ?? 'merged.failed'.tr(args: [p.company.name])) : null;
+      return p != null && p.failed ? (p.error ?? 'merged.failed'.trm(args: [p.company.name])) : null;
     }
     final missing = MergedMode.companies.where((c) => !c.usable).map((c) => c.name).toList();
     final lines = <String>[
       for (final p in _parts)
-        if (p.failed) p.error ?? 'merged.failed'.tr(args: [p.company.name]),
-      if (missing.isNotEmpty) 'merged.missing'.tr(args: [missing.join('، ')]),
+        if (p.failed) p.error ?? 'merged.failed'.trm(args: [p.company.name]),
+      if (missing.isNotEmpty) 'merged.missing'.trm(args: [missing.join('، ')]),
     ];
     return lines.isEmpty ? null : lines.join('\n');
   }
@@ -584,7 +580,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
         child: MergedCompanyStrip(
           countOf: (c) => _partFor(c)?.devices?.length,
           total: _all.length,
-          problemOf: (c) => _partFor(c)?.failed == true ? 'merged.chip_failed'.tr() : null,
+          problemOf: (c) => _partFor(c)?.failed == true ? 'merged.chip_failed'.trm() : null,
           note: _mergedNote(),
         ),
       );
@@ -1023,7 +1019,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
               ],
               const SizedBox(height: Sp.sm),
               Text(
-                'صفحته الحيّة وتعديله من «${c?.name ?? 'شركته'}» — افتحها لتديره',
+                mergedWord('صفحته الحيّة وتعديله من «${c?.name ?? 'شركته'}» — افتحها لتديره',
+                    'صفحته الحيّة وتعديله من «${c?.name ?? 'صفحته'}» — انتقل إليها من «صفحاتي» لتديره'),
                 style: AppType.body(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.5),
               ),
               const SizedBox(height: Sp.md),
@@ -1031,14 +1028,20 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 key: const ValueKey('merged-device-open-company'),
                 onPressed: () => Navigator.pop(ctx, true),
                 icon: const Icon(LucideIcons.arrowLeftRight, size: 18),
-                label: Text('فتح «${c?.name ?? 'شركته'}»'),
+                label: Text(mergedWord('فتح «${c?.name ?? 'شركته'}»', 'انتقل إلى «${c?.name ?? 'صفحته'}»')),
               ),
             ],
           ),
         ),
       ),
     );
-    if (go == true && mounted) await showCompanySwitchSheet(context);
+    if (go != true || !mounted) return;
+    // الموظّف («كل الصفحات»): «صفحاتي» تنقله إلى صفحة الجهاز بصفّه هناك — المالك كما كان («تبديل الشركة»)
+    if (MergedMode.employeeSession && c != null) {
+      await switchToMergedCompany(context, c);
+    } else {
+      await showCompanySwitchSheet(context);
+    }
   }
 
   /// «تنبيهات أجهزتي» من الخادم (server/agentAlerts.js — ٤ نوفمبر): مفتوحةٌ لهذه الشركة ⇒ زرّ التنبيهات يفتحها وعدّاده الطافية الآن،
@@ -1413,7 +1416,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                             child: Center(
                               child: Padding(
                                 padding: const EdgeInsets.all(Sp.xl),
-                                child: Text('merged.unavailable'.tr(),
+                                child: Text('merged.unavailable'.trm(),
                                     textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMid)),
                               ),
                             ),
@@ -2085,7 +2088,9 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
         key: ValueKey(('big', d.id)),
         device: d,
         // «كل الشركات»: جهاز شركةٍ أخرى بلا قراءةٍ حيّة (كلمات سرّه عند شركته) — شارتها مكان الأرقام
-        blocked: _isMine(d) ? null : 'قراءته الحيّة من «${MergedMode.companyOf(_companyOf[d.id])?.name ?? 'شركته'}»',
+        blocked: _isMine(d)
+            ? null
+            : 'قراءته الحيّة من «${MergedMode.companyOf(_companyOf[d.id])?.name ?? mergedWord('شركته', 'صفحته')}»',
         companyKey: _merged ? _companyOf[d.id] : null,
         vitals: _vitals.of(d.id),
         onVitals: (v) => _vitals.set(d.id, v),

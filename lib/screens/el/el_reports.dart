@@ -18,6 +18,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../widgets/skeleton.dart';
 import '../desktop/desk_widgets.dart';
+import '../../services/merged_text.dart';
 
 /// ايرث لنك — ثلاث شاشاتٍ للقراءة فقط (البند ٤، EarthLink وحدهم):
 ///   • «استخدام التجريبيّ» → GET /api/v2/el/test-usage
@@ -577,11 +578,11 @@ class _ElMerged {
         only: (c) => c.provider == MergedProvider.earthlink,
         countOf: m.countOf,
         total: m.total,
-        problemOf: (c) => m.problemOf(c, failedLabel: 'merged.chip_failed'.tr(), unsupportedLabel: 'ليست ايرث لنك'),
+        problemOf: (c) => m.problemOf(c, failedLabel: 'merged.chip_failed'.trm(), unsupportedLabel: 'ليست ايرث لنك'),
         note: m.noteFor(MergedMode.focused?.key,
             unsupportedText: 'ليست ايرث لنك',
             nameUnsupported: false,
-            missingText: 'merged.missing'.tr(args: [m.missing.map((c) => c.name).join('، ')])),
+            missingText: 'merged.missing'.trm(args: [m.missing.map((c) => c.name).join('، ')])),
       );
 }
 

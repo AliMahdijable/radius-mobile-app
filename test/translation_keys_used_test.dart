@@ -31,7 +31,8 @@ void main() {
     final ar = load('ar');
     final en = load('en');
     const key = r'''[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)+''';
-    final dotForm = RegExp('''(['"])($key)\\1\\s*\\)?\\s*\\.\\s*(?:tr|plural)\\s*\\(''');
+    // `.trm(` («كل الصفحات» للموظّف، lib/services/merged_text.dart) يقرأ المفتاح نفسه — يُفحص كغيره.
+    final dotForm = RegExp('''(['"])($key)\\1\\s*\\)?\\s*\\.\\s*(?:tr|trm|plural)\\s*\\(''');
     final callForm = RegExp('''\\b(?:tr|plural)\\(\\s*(['"])($key)\\1''');
     bool known(String k, Map<String, Object?> lang) =>
         lang.containsKey(k) || lang.keys.any((x) => x.startsWith('$k.'));

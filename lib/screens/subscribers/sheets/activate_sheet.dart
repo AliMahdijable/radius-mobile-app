@@ -33,6 +33,7 @@ import '../../../core/widgets/print_feedback.dart';
 import '../../../services/receipt_pdf.dart';
 import '../../../api/national_wallet_api.dart' show CustomerWalletInfo;
 import '../../national/national_wallet_topup_sheet.dart';
+import '../../../widgets/merged_write_lock.dart';
 
 /// Bottom sheet for activating a subscriber's package — direct port of
 /// v1's `_activateSubscriber` flow from
@@ -58,6 +59,7 @@ import '../../national/national_wallet_topup_sheet.dart';
 /// Returns true on success so callers (subscribers list, detail screen)
 /// can refresh their cached rows.
 Future<bool?> showActivateSheet(BuildContext context, Subscriber sub) {
+  if (mergedWriteBlocked(context, sub)) return Future.value(false);
   return showAppSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,

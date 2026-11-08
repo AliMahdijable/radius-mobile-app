@@ -22,6 +22,7 @@ import 'widgets/report_pagination.dart';
 import 'widgets/report_permission_gate.dart';
 import 'widgets/scope_helper.dart';
 import '../desktop/desk_widgets.dart';
+import '../../services/merged_text.dart';
 
 /// التفعيلات — تفعيلات + تمديدات في الفترة، ضمن scope المدير الحالي.
 /// نجلب الكل من backend ونفلتر client-side (مطابق web Activations.tsx).
@@ -101,13 +102,13 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
     final lines = <String>[
       if (m.noteFor(focus?.key,
               unsupportedText: 'لا حركاتٍ تُقرأ لنوعها من هنا',
-              missingText: 'merged.missing'.tr(args: [m.missing.map((c) => c.name).join('، ')]))
+              missingText: 'merged.missing'.trm(args: [m.missing.map((c) => c.name).join('، ')]))
           case final n?)
         n,
       if (focus == null)
         for (final p in m.parts)
           if (p.ok && p.company.currency != 'IQD')
-            'merged.not_in_sum'.tr(args: ['إيراد «${p.company.name}» (${p.company.currency ?? 'عملةٌ غير معروفة'})']),
+            'merged.not_in_sum'.trm(args: ['إيراد «${p.company.name}» (${p.company.currency ?? 'عملةٌ غير معروفة'})']),
     ];
     return lines.isEmpty ? null : lines.join('\n');
   }
@@ -298,7 +299,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
                     countOf: merged.countOf,
                     total: merged.total,
                     problemOf: (c) => merged.problemOf(c,
-                        failedLabel: 'merged.chip_failed'.tr(), unsupportedLabel: 'merged.web_only'.tr()),
+                        failedLabel: 'merged.chip_failed'.trm(), unsupportedLabel: 'merged.web_only'.trm()),
                     note: _mergedNote(merged),
                   ),
                   const SizedBox(height: Sp.md),
@@ -358,7 +359,7 @@ class _ActivationsReportScreenState extends State<ActivationsReportScreen> {
                             '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
                         fileNameBase: 'activations',
                         columns: [
-                          if (_mergedOn) 'merged.col_company'.tr(),
+                          if (_mergedOn) 'merged.col_company'.trm(),
                           'reports.col_subscriber'.tr(),
                           'reports.col_username'.tr(),
                           'reports.col_amount'.tr(),

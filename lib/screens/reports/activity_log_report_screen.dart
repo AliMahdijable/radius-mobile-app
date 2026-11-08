@@ -24,6 +24,7 @@ import 'widgets/report_pagination.dart';
 import 'widgets/report_permission_gate.dart';
 import 'widgets/scope_helper.dart';
 import '../desktop/desk_widgets.dart';
+import '../../services/merged_text.dart';
 
 /// سجل النشاط الكامل — كل العمليات في النظام، مع filter فترة + بحث +
 /// pagination + تصدير.
@@ -91,10 +92,11 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
     final lines = <String>[
       if (m.noteFor(focus?.key,
               unsupportedText: 'لا حركاتٍ تُقرأ لنوعها من هنا',
-              missingText: 'merged.missing'.tr(args: [m.missing.map((c) => c.name).join('، ')]))
+              missingText: 'merged.missing'.trm(args: [m.missing.map((c) => c.name).join('، ')]))
           case final n?)
         n,
-      'الصرفيات لا تُخلط هنا — تظهر في سجلّ كلّ شركةٍ حين تفتحها وحدها',
+      mergedWord('الصرفيات لا تُخلط هنا — تظهر في سجلّ كلّ شركةٍ حين تفتحها وحدها',
+          'الصرفيات لا تُخلط هنا — تظهر في سجلّ كلّ صفحةٍ حين تفتحها وحدها'),
     ];
     return lines.join('\n');
   }
@@ -312,7 +314,7 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
                         countOf: merged.countOf,
                         total: merged.total,
                         problemOf: (c) => merged.problemOf(c,
-                            failedLabel: 'merged.chip_failed'.tr(), unsupportedLabel: 'merged.web_only'.tr()),
+                            failedLabel: 'merged.chip_failed'.trm(), unsupportedLabel: 'merged.web_only'.trm()),
                         note: _mergedNote(merged),
                       ),
                       const SizedBox(height: Sp.md),
@@ -398,7 +400,7 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
                                               '${_dateStr(_range.from)} → ${_dateStr(_range.to)}',
                                           fileNameBase: 'activity_log',
                                           columns: [
-                                            if (_mergedOn) 'merged.col_company'.tr(),
+                                            if (_mergedOn) 'merged.col_company'.trm(),
                                             'reports.col_subscriber'.tr(),
                                             'reports.col_username'.tr(),
                                             'reports.col_amount'.tr(),

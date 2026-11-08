@@ -22,6 +22,7 @@ import '_print_receipt_checkbox.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../core/widgets/print_feedback.dart';
+import '../../../widgets/merged_write_lock.dart';
 
 /// Extend-subscription sheet — direct port of v1's _extendSubscription.
 ///   1. Fetch /api/v2/subscribers/:idx/extension-options. Spinner while
@@ -34,6 +35,7 @@ import '../../../core/widgets/print_feedback.dart';
 ///   5. Submit → /api/v2/subscribers/:idx/extend with {profile_id,
 ///      method}.
 Future<bool?> showExtendSheet(BuildContext context, Subscriber sub) {
+  if (mergedWriteBlocked(context, sub)) return Future.value(false);
   return showAppSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,

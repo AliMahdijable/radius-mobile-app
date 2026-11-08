@@ -16,6 +16,8 @@ import 'sheets/settle_sheet.dart';
 import 'sheets/settlement_detail_sheet.dart';
 import '../desktop/desk_widgets.dart';
 import '../../widgets/merged_section.dart';
+import '../../services/merged_text.dart';
+import '../../services/merged_mode.dart';
 
 /// «تسوية الحساب» — صندوق المدير (2026-10-02).
 ///
@@ -78,7 +80,11 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
   MergedSectionInfo? _section;
 
   /// مقفلة: شركةٌ موجَّهة لم يفتح الخادم كتابتها (settlements_routed) — لا بداية ولا تسوية ولا إلغاء من هنا.
-  bool get _locked => _section != null && _section!.routed && _cur?.routedWrites != true;
+  /// «كل الصفحات» للموظّف (٩ نوفمبر): وصفحةٌ كتابتها مغلقةٌ له من هنا (غير صفحته الحاليّة) — ولو فتحها الخادم لمالكها.
+  bool get _locked =>
+      _section != null &&
+      _section!.routed &&
+      (_cur?.routedWrites != true || MergedOps.writeLockAt(_section!.company?.key) != null);
 
   bool get _canSettle => (_cur?.canSettle ?? false) && !_locked;
 
@@ -295,7 +301,7 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
             // «كل الشركات»: الشركات ومن تُعرض (والمقفلة بسببها)
             MergedSectionBar(
               lockedText: _locked && _cur != null
-                  ? 'merged.section_locked'.tr(args: [_section?.company?.name ?? '—'])
+                  ? 'merged.section_locked'.trm(args: [_section?.company?.name ?? '—'])
                   : null,
             ),
             Expanded(

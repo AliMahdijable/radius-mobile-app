@@ -14,6 +14,7 @@ import '../../../core/util/amount_input.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../core/widgets/app_sheet.dart';
+import '../../../widgets/merged_write_lock.dart';
 
 /// Bottom sheet for adding to a subscriber's debt — port of v1's
 /// `_showAddDebtSheet` from mobile-app/lib/screens/subscribers/
@@ -31,6 +32,7 @@ import '../../../core/widgets/app_sheet.dart';
 ///      saddling a subscriber.
 ///   7. Submit → /api/v2/subscribers/:idx/add-debt.
 Future<bool?> showAddDebtSheet(BuildContext context, Subscriber sub, {int? initialAmount}) {
+  if (mergedWriteBlocked(context, sub)) return Future.value(false);
   return showAppSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,

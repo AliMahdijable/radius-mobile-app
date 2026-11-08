@@ -18,7 +18,6 @@ import '../../core/widgets/permission_locked.dart';
 import '../../core/widgets/sheet_scaffold.dart';
 import '../../models/merged_company.dart';
 import '../../services/active_company.dart';
-import '../../services/auth_storage.dart';
 import '../../services/merged_mode.dart';
 import '../../services/permissions_service.dart';
 import '../../services/print_prefs.dart';
@@ -32,6 +31,7 @@ import '../desktop/desk_widgets.dart';
 import '../reports/widgets/date_range_chip.dart';
 import '../reports/widgets/report_permission_gate.dart';
 import '../../core/widgets/print_feedback.dart';
+import '../../services/merged_text.dart';
 
 /// «المبيعات» (٢٣ أكتوبر) — `/api/v2/sales/*` (الخادم server/sales.js، الويب
 /// pages/Sales.tsx). المالك: «وكيل انترنت عنده مواد يبيعها ويعرف شكد سعرها
@@ -149,7 +149,9 @@ class _SalesScreenState extends State<SalesScreen> {
 
   /// الخطوة ٢ (٨ نوفمبر): الخادم يقبل البيع والمخزون والإلغاء لها من هنا — routed_writes في ردّ قائمتها (المفتاح sales_routed).
   /// قبل وصول الردّ أو بخادمٍ أقدم ⇒ false (مقفلة حتى يقول الخادم نعم).
-  bool get _routedWritable => (_sales?.routedWrites ?? _items?.routedWrites) == true;
+  /// «كل الصفحات» للموظّف (٩ نوفمبر): وصفحته الحاليّة وحدها تُكتب من هنا — غيرها للعرض ولو فتحها الخادم لمالكها.
+  bool get _routedWritable =>
+      (_sales?.routedWrites ?? _items?.routedWrites) == true && MergedOps.writeLockAt(_routedCompany?.key) == null;
 
   /// شركةٌ معروضةٌ للعرض وحده: موجَّهةٌ ولم يفتح الخادم كتابتها — الأزرار مقفلةٌ بسببها.
   MergedCompany? get _readOnlyCompany {
@@ -157,14 +159,11 @@ class _SalesScreenState extends State<SalesScreen> {
     return c == null || _routedWritable ? null : c;
   }
 
-  String _lockText(MergedCompany c) => 'sales.merged_readonly'.tr(args: [c.name]);
+  String _lockText(MergedCompany c) => 'sales.merged_readonly'.trm(args: [c.name]);
 
   Future<void> _initMerged() async {
-    try {
-      _openAdmin = (await AuthStorage.readAdminId())?.trim();
-    } catch (_) {
-      _openAdmin = null; // لا تُعرف المفتوحة ⇒ كلّ شركةٍ للعرض (لا بيع لشركةٍ غير مؤكَّدة)
-    }
+    // لا تُعرف المفتوحة ⇒ null ⇒ كلّ شركةٍ للعرض (لا بيع لشركةٍ غير مؤكَّدة). الموظّف: صفحته الحاليّة (MergedMode.openAdminId).
+    _openAdmin = await MergedMode.openAdminId();
     if (!mounted) return;
     _applyScope();
   }
@@ -318,12 +317,12 @@ class _SalesScreenState extends State<SalesScreen> {
         const SizedBox(height: Sp.md),
         _Banner(
           icon: LucideIcons.info,
-          text: 'sales.merged_open_outside'.tr(args: [ActiveCompany.current?.label ?? '—']),
+          text: 'sales.merged_open_outside'.trm(args: [MergedMode.currentPageName ?? ActiveCompany.current?.label ?? '—']),
         ),
       ],
       const SizedBox(height: Sp.lg),
       Text(
-        'sales.merged_hint'.tr(),
+        'sales.merged_hint'.trm(),
         style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5),
       ),
       const SizedBox(height: Sp.sm),
@@ -1030,7 +1029,7 @@ class _RoutedNote extends StatelessWidget {
           const SizedBox(width: Sp.sm),
           Expanded(
             child: Text(
-              'sales.merged_routed'.tr(args: [company.name]),
+              'sales.merged_routed'.trm(args: [company.name]),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: AppType.body(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.5),
@@ -1165,7 +1164,7 @@ class _CompanySalesCard extends StatelessWidget {
                         ),
                         if (part.open) ...[
                           const SizedBox(width: Sp.x6),
-                          _Chip('sales.merged_open'.tr(), AppTone.brand),
+                          _Chip('sales.merged_open'.trm(), AppTone.brand),
                         ],
                       ],
                     ),
@@ -1861,7 +1860,7 @@ Future<bool> showSellToSubscriber(
     }
     final companyName = companyKey == null ? null : (MergedMode.companyOf(companyKey)?.name ?? '—');
     if (companyName != null && page.enabled && page.routedWrites != true) {
-      showSheetSnack(context, 'sales.merged_readonly'.tr(args: [companyName]));
+      showSheetSnack(context, 'sales.merged_readonly'.trm(args: [companyName]));
       return false;
     }
     if (!page.enabled) {

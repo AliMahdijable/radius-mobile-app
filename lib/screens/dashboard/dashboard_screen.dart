@@ -55,6 +55,7 @@ import '../desktop/desk_widgets.dart';
 import 'widgets/stats_grid.dart';
 import 'widgets/subscribers_card.dart';
 import '../reports/financial_report_screen.dart';
+import '../../services/merged_text.dart';
 
 /// Dashboard with a SLIVER-pinned header — header stays on screen while
 /// the body scrolls underneath. All data is LIVE — there are no mock
@@ -438,11 +439,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final f = MergedMode.focused;
     final parts = <String>[
       if (r != null && f == null) ...[
-        for (final b in r.big) 'merged.big'.tr(args: [b.company.name, formatIQD(b.bigTotal!)]),
-        for (final x in r.failed) x.error ?? 'merged.failed'.tr(args: [x.company.name]),
-        for (final p in r.partial) 'merged.partial'.tr(args: [p.company.name]),
-        if (r.missing.isNotEmpty) 'merged.missing'.tr(args: [r.missing.map((c) => c.name).join('، ')]),
-        if (r.folded > 0) 'merged.folded'.tr(args: [formatIQD(r.folded)]),
+        for (final b in r.big) 'merged.big'.trm(args: [b.company.name, formatIQD(b.bigTotal!)]),
+        for (final x in r.failed) x.error ?? 'merged.failed'.trm(args: [x.company.name]),
+        for (final p in r.partial) 'merged.partial'.trm(args: [p.company.name]),
+        if (r.missing.isNotEmpty) 'merged.missing'.trm(args: [r.missing.map((c) => c.name).join('، ')]),
+        if (r.folded > 0) 'merged.folded'.trm(args: [formatIQD(r.folded)]),
       ],
       if (r != null && f != null) ..._focusListNote(r, f),
       ..._mergedWalletExcluded,
@@ -455,9 +456,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<String> _focusListNote(MergedListResult r, MergedCompany f) {
     final p = r.partOf(f.key);
     if (p == null) return const [];
-    if (p.bigTotal != null) return ['merged.big'.tr(args: [f.name, formatIQD(p.bigTotal!)])];
-    if (p.rows == null) return [p.error ?? 'merged.failed'.tr(args: [f.name])];
-    if (p.partial) return ['merged.partial'.tr(args: [f.name])];
+    if (p.bigTotal != null) return ['merged.big'.trm(args: [f.name, formatIQD(p.bigTotal!)])];
+    if (p.rows == null) return [p.error ?? 'merged.failed'.trm(args: [f.name])];
+    if (p.partial) return ['merged.partial'.trm(args: [f.name])];
     return const [];
   }
 
@@ -465,8 +466,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _mergedProblem(MergedCompany c) {
     final p = _mergedList?.partOf(c.key);
     if (p == null) return null;
-    if (p.bigTotal != null) return 'merged.chip_big'.tr();
-    if (p.rows == null) return 'merged.chip_failed'.tr();
+    if (p.bigTotal != null) return 'merged.chip_big'.trm();
+    if (p.rows == null) return 'merged.chip_failed'.trm();
     return null;
   }
 
@@ -802,12 +803,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _showMergedWa() async {
     final w = _mergedWa;
     if (w == null) return;
-    String? openAdmin;
-    try {
-      openAdmin = (await AuthStorage.readAdminId())?.trim();
-    } catch (_) {
-      openAdmin = null;
-    }
+    final openAdmin = await MergedMode.openAdminId();
     if (!mounted) return;
     final openWa = await showAppSheet<bool>(
       context: context,
@@ -1786,7 +1782,7 @@ class _MergedWaSheet extends StatelessWidget {
       ),
       footer: canOpen && hasOpen
           ? SheetFooterBar(
-              label: 'dashboard.wa_open_mine'.tr(),
+              label: 'dashboard.wa_open_mine'.trm(),
               icon: LucideIcons.messageCircle,
               enabled: true,
               busy: false,
@@ -1834,7 +1830,7 @@ class _MergedWaSheet extends StatelessWidget {
                               ),
                               if (open) ...[
                                 const SizedBox(width: Sp.x6),
-                                Text('dashboard.wa_open_badge'.tr(),
+                                Text('dashboard.wa_open_badge'.trm(),
                                     style: AppType.micro(color: AppTone.brand.fill).copyWith(fontWeight: FontWeight.w700)),
                               ],
                             ],
@@ -1864,7 +1860,7 @@ class _MergedWaSheet extends StatelessWidget {
           if (wa.rows.any((r) => r.status?.connected != true &&
               !(openAdmin != null && r.company.adminId == openAdmin)))
             Text(
-              'dashboard.wa_other_hint'.tr(),
+              'dashboard.wa_other_hint'.trm(),
               style: AppType.muted(color: AppColors.textMid).copyWith(fontSize: 12.5, height: 1.5),
             ),
         ],
