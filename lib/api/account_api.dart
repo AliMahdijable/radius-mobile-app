@@ -155,14 +155,26 @@ class AccountApi {
 
   /// يضيف [employeeId] (من صفحةٍ في الحساب) إلى الصفحة [toPageId] بصلاحيّاته الحاليّة — صفٌّ خاصٌّ بها مربوطٌ بشخصه، ويدخل باسمه
   /// الأصليّ ويتنقّل بين صفحاته. الرفض برسالة الخادم العربيّة (ليس في حسابك، مضافٌ أصلاً، حدّ الموظّفين…).
-  static Future<({bool ok, String? message})> linkEmployee({required int employeeId, required String toPageId}) async {
+  /// ⇒ ok، أو رسالة الرفض. أوّل إضافةٍ للشخص لصفحةٍ أخرى (مراجعة ٨ نوفمبر): [newPassword] كلمة مروره الجديدة — مرّةً واحدة يسلّمها
+  /// المالك له (القديمة لم تعد تعمل: من كان يعرفها لا يدخل صفحات الحساب الأخرى)، و[loginUsername] اسم دخوله.
+  static Future<({bool ok, String? message, String? newPassword, String? loginUsername})> linkEmployee(
+      {required int employeeId, required String toPageId}) async {
     try {
       final res = await _send('POST', '/api/account/employees/link', data: {'employee_id': employeeId, 'to_page_id': toPageId});
-      if (res.statusCode == 200 && res.data?['success'] == true) return (ok: true, message: null);
+      if (res.statusCode == 200 && res.data?['success'] == true) {
+        final pw = (res.data?['new_password'] as String?)?.trim();
+        final login = (res.data?['login_username'] as String?)?.trim();
+        return (
+          ok: true,
+          message: null,
+          newPassword: (pw == null || pw.isEmpty) ? null : pw,
+          loginUsername: (login == null || login.isEmpty) ? null : login,
+        );
+      }
       final m = (res.data?['message'] as String?)?.trim();
-      return (ok: false, message: (m == null || m.isEmpty) ? 'تعذّرت الإضافة — حاول بعد قليل' : m);
+      return (ok: false, message: (m == null || m.isEmpty) ? 'تعذّرت الإضافة — حاول بعد قليل' : m, newPassword: null, loginUsername: null);
     } on AccountApiException catch (e) {
-      return (ok: false, message: e.message.startsWith('account.') ? null : e.message);
+      return (ok: false, message: e.message.startsWith('account.') ? null : e.message, newPassword: null, loginUsername: null);
     }
   }
 

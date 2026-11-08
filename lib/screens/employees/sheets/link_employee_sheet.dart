@@ -34,8 +34,8 @@ class LinkEmployeeSheet extends StatefulWidget {
   @visibleForTesting
   static Future<AccountEmployees> Function() load = AccountApi.employees;
   @visibleForTesting
-  static Future<({bool ok, String? message})> Function({required int employeeId, required String toPageId}) link =
-      AccountApi.linkEmployee;
+  static Future<({bool ok, String? message, String? newPassword, String? loginUsername})> Function(
+      {required int employeeId, required String toPageId}) link = AccountApi.linkEmployee;
 
   @override
   State<LinkEmployeeSheet> createState() => _LinkEmployeeSheetState();
@@ -89,7 +89,8 @@ class _LinkEmployeeSheetState extends State<LinkEmployeeSheet> {
         title: Text('إضافة $name لهذه الصفحة؟'),
         content: Text(
           'يعمل في هذه الصفحة أيضاً، ويدخل باسم الدخول نفسه (${e.loginUsername}) ويتنقّل بين صفحاته من «صفحاتي».'
-          ' صلاحيّاته هنا تبدأ مثل صلاحيّاته في «$pageName» الآن — وتقدر تغيّرها من «الموظفون».',
+          ' صلاحيّاته هنا تبدأ مثل صلاحيّاته في «$pageName» الآن — وتقدر تغيّرها من «الموظفون».'
+          '${e.pages.length < 2 ? '\n\nأوّل إضافةٍ لصفحةٍ أخرى تغيّر كلمة مروره (للأمان) — نعطيك الجديدة بعد الإضافة لتسلّمها له.' : ''}',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('إلغاء')),
@@ -106,6 +107,12 @@ class _LinkEmployeeSheetState extends State<LinkEmployeeSheet> {
     if (!mounted) return;
     if (r.ok) {
       HapticFeedback.lightImpact();
+      final pw = r.newPassword;
+      if (pw != null) {
+        setState(() => _busy = null); // لا مؤشّر دوّارٌ خلف النافذة
+        await _showNewPassword(name: name, login: r.loginUsername ?? e.loginUsername, password: pw);
+      }
+      if (!mounted) return;
       Navigator.of(context).pop(true);
       return;
     }
@@ -114,6 +121,62 @@ class _LinkEmployeeSheetState extends State<LinkEmployeeSheet> {
       _busy = null;
       _error = r.message ?? 'تعذّرت الإضافة — حاول بعد قليل';
     });
+  }
+
+  /// كلمة مرور الشخص الجديدة (أوّل إضافةٍ لصفحةٍ أخرى) — مرّةً واحدة، بزرّ نسخ؛ تُعرض لاحقاً من «عرض كلمة المرور» بصفحته الأصليّة.
+  Future<void> _showNewPassword({required String name, required String login, required String password}) {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        var copied = false;
+        return StatefulBuilder(
+          builder: (ctx, setD) => AlertDialog(
+            key: const ValueKey('link-employee-new-password'),
+            title: Text('أُضيف $name — كلمة مروره الجديدة'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'أوّل إضافةٍ لصفحةٍ أخرى تغيّر كلمة مروره للأمان (من كان يعرف القديمة لا يدخل صفحاتك). أعطه هذه — يدخل باسمه ($login)'
+                  ' ثمّ يتنقّل من «صفحاتي». تجدها لاحقاً في «عرض كلمة المرور» بصفحته الأصليّة.',
+                  style: AppType.body(color: AppColors.textMid),
+                ),
+                const SizedBox(height: Sp.md),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm),
+                  decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(R.md)),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: SelectableText(
+                          password,
+                          key: const ValueKey('link-employee-password-text'),
+                          textDirection: TextDirection.ltr,
+                          style: AppType.listName(color: AppColors.textHi),
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: () async {
+                          await Clipboard.setData(ClipboardData(text: password));
+                          setD(() => copied = true);
+                        },
+                        icon: Icon(copied ? Icons.check_rounded : Icons.copy_rounded, size: 18),
+                        label: Text(copied ? 'نُسخت' : 'نسخ'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              FilledButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('تمّ')),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/account_api.dart';
 import 'package:rad_mysvcs/api/auth_api.dart';
@@ -155,6 +156,12 @@ void main() {
   group('موظف من صفحة أخرى (المالك)', () {
     testWidgets('الورقة: موظّفو الصفحات الأخرى مجمَّعين، والتأكيد ثمّ الربط بالصفحة المفتوحة', (t) async {
       final linked = <List<Object>>[];
+      final clip = <String>[];
+      t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.setData') clip.add(((call.arguments as Map)['text'] ?? '').toString());
+        return null;
+      });
+      addTearDown(() => t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
       LinkEmployeeSheet.load = () async => AccountEmployees.fromJson({
             'pages': [
               {'id': '2251', 'name': 'سوبرنت'},
@@ -167,7 +174,7 @@ void main() {
           });
       LinkEmployeeSheet.link = ({required int employeeId, required String toPageId}) async {
         linked.add([employeeId, toPageId]);
-        return (ok: true, message: null);
+        return (ok: true, message: null, newPassword: 'k7m3pq9xab', loginUsername: 'ali');
       };
       bool? result;
       await pumpSim(t, const SimVariant(390, dark: false),
@@ -180,11 +187,22 @@ void main() {
       await t.tap(find.byKey(const ValueKey('link-employee-1')));
       await t.pumpAndSettle();
       expect(find.text('إضافة علي لهذه الصفحة؟'), findsOneWidget);
+      expect(find.textContaining('أوّل إضافةٍ لصفحةٍ أخرى تغيّر كلمة مروره'), findsOneWidget, reason: 'غير مربوطٍ بعد ⇒ يُقال قبل الإضافة');
       await t.tap(find.text('إضافة'));
       await t.pumpAndSettle();
       expect(linked, [
         [1, 'earthlink:1025']
       ]);
+      // أوّل ربطٍ للشخص: كلمة مروره الجديدة مرّةً واحدة، بزرّ نسخ، ثمّ تُغلق الورقة
+      expect(find.byKey(const ValueKey('link-employee-new-password')), findsOneWidget);
+      expect(find.text('k7m3pq9xab'), findsOneWidget);
+      expect(find.text('أُضيف علي — كلمة مروره الجديدة'), findsOneWidget);
+      await t.tap(find.text('نسخ'));
+      await t.pumpAndSettle();
+      expect(find.text('نُسخت'), findsOneWidget);
+      expect(clip, ['k7m3pq9xab'], reason: 'الكلمة في الحافظة');
+      await t.tap(find.text('تمّ'));
+      await t.pumpAndSettle();
       expect(result, isTrue);
     });
 
@@ -199,7 +217,7 @@ void main() {
             ],
           });
       LinkEmployeeSheet.link = ({required int employeeId, required String toPageId}) async =>
-          (ok: false, message: 'بلغت حدّ الموظّفين لهذه الصفحة (5)');
+          (ok: false, message: 'بلغت حدّ الموظّفين لهذه الصفحة (5)', newPassword: null, loginUsername: null);
       await pumpSim(t, const SimVariant(360, dark: true),
           home: (_) => simLauncher((c) => showLinkEmployeeSheet(c, pageId: 'earthlink:1025')));
       await simOpen(t);
