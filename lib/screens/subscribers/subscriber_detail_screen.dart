@@ -1157,8 +1157,9 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                 : () => showPayDebtSheet(context, sub),
           ),
         // «بيع مادّة» (المالك ٢٣ أكتوبر: «من صفحه المشتركين … الكه زر بيع ماده للمشترك») — «بيع جديد» والمشترك مختار.
-        // حين تكون «المبيعات» مفعّلةً للحساب، وللشركة المفتوحة وحدها (مشترك شركةٍ أخرى في «كل الشركات» لا).
-        if (SalesState.visible && sub.companyKey == null && sub.idx != null && _shows('sales.sell'))
+        // حين تكون «المبيعات» مفعّلةً للحساب. «كل الشركات» (٨ نوفمبر — المالك: «مجاي اكدر ابيع»): مشترك أيّ شركة ⇒ البيع
+        // موجَّهٌ لشركته (موادّها ودين المشترك عليها) خلف sales_routed — مطفأ لشركته ⇒ يُقال السبب عند الضغط.
+        if (SalesState.visible && sub.idx != null && _shows('sales.sell'))
           SubAction(
             icon: LucideIcons.shoppingCart,
             label: 'sales.sell_to_sub'.tr(),
@@ -1172,6 +1173,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                       username: sub.username,
                       name: sub.fullName.trim(),
                       phone: sub.displayPhone.isEmpty ? null : sub.displayPhone,
+                      companyKey: sub.companyKey,
                     ),
           ),
         if (_shows('discounts.manage'))

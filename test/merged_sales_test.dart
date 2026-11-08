@@ -319,4 +319,42 @@ void main() {
     expect(CompanyRefs.requireOf('POST', '/api/v2/subscribers/88/pay-debt'), (idx: '88', kind: CompanyRefKind.subject));
     await down(t);
   });
+
+  testWidgets('«بيع مادّة» من صفحة مشترك شركةٍ في «كل الشركات»: موادّ شركته وبيعٌ موجَّهٌ لها — مطفأة ⇒ السبب ولا شيت؛ والوجهة تعود', (t) async {
+    await up(t);
+    late BuildContext ctx;
+    await pumpVisual(t, const VisualDevice('', Size(390, 1600), 1), home: (_) => Scaffold(
+          body: Builder(builder: (c) {
+            ctx = c;
+            return const SizedBox.expand();
+          }),
+        ));
+    await settleReal(t);
+
+    // مفتاح الشركة مطفأ (routed_writes false) ⇒ السبب، لا شيت، والوجهة كما كانت
+    srv.asked.clear();
+    final f1 = showSellToSubscriber(ctx, idx: '88', username: 'zaid.el', companyKey: _kEl);
+    await settleReal(t);
+    expect(await t.runAsync(() => f1), isFalse);
+    expect(srv.asked, contains('GET /api/v2/sales/items $_kEl'), reason: 'موادّ شركته لا المفتوحة');
+    expect(find.textContaining('«ايرث لنك» للعرض هنا'), findsOneWidget);
+    expect(find.textContaining('البيع لشركة'), findsNothing);
+    expect(SalesApi.routeKey, isNull);
+    await t.pump(const Duration(seconds: 3));
+
+    // مفتوح ⇒ شيت البيع باسم شركته وموادّها، والمشترك مختار
+    srv.elWrites = true;
+    srv.asked.clear();
+    final f2 = showSellToSubscriber(ctx, idx: '88', username: 'zaid.el', name: 'زيد', companyKey: _kEl);
+    await settleReal(t);
+    expect(find.textContaining('البيع لشركة «ايرث لنك»'), findsOneWidget);
+    expect(SalesApi.routeKey, _kEl, reason: 'طلبات الشيت (البحث والبيع) لشركته ما دام مفتوحاً');
+    expect(srv.asked, contains('GET /api/v2/sales/items $_kEl'));
+    Navigator.of(ctx).pop();
+    await settleReal(t);
+    expect(await t.runAsync(() => f2), isFalse);
+    expect(SalesApi.routeKey, isNull, reason: 'الوجهة تعود بعد الإغلاق');
+    expect(srv.writes, isEmpty);
+    await down(t);
+  });
 }

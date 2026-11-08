@@ -505,7 +505,7 @@ class _SalesScreenState extends State<SalesScreen> {
           ? () => showNoPermission(context, action: true)
           : items.isEmpty
               ? () => showSheetSnack(context, 'sales.add_item_first'.tr())
-              : () => _after(_showSheet(context, _NewSaleSheet(items: items))),
+              : () => _after(_showSheet(context, _NewSaleSheet(items: items, company: _routedCompany?.name))),
     );
   }
 
@@ -571,7 +571,7 @@ class _SalesScreenState extends State<SalesScreen> {
           ? () => showNoPermission(context, action: true)
           : items.isEmpty
               ? () => showSheetSnack(context, 'sales.add_item_first'.tr())
-              : () => _after(_showSheet(context, _NewSaleSheet(items: items))),
+              : () => _after(_showSheet(context, _NewSaleSheet(items: items, company: _routedCompany?.name))),
       icon: Icon(can ? LucideIcons.shoppingCart : LucideIcons.lock, size: 16),
       label: Text('sales.new'.tr()),
     );
@@ -1837,37 +1837,54 @@ class _CartLine {
 /// «بيع مادّة» للمشترك من صفحته (المالك ٢٣ أكتوبر: «من صفحه المشتركين … الكه زر بيع ماده للمشترك»): «بيع جديد» نفسه
 /// والمشترك مختارٌ مسبقاً. الموادّ تُجلب هنا؛ بلا مادّةٍ فعّالة (أو المبيعات مطفأة) يقول ذلك ولا يفتح. بعد البيع: دين المشترك
 /// والرئيسيّة يتحدّثان ([SubscriberEvents.notifyChange]). ⇒ `true` إن سُجّل بيع.
+///
+/// «كل الشركات» (٨ نوفمبر — المالك: «مجاي اكدر ابيع… بس لشركه وحده»): [companyKey] شركة المشترك ⇒ البيع موجَّهٌ لها ككلّ كتابات
+/// المشترك في الوضع (MergedOps): موادّها ومخزونها ودين المشترك على سيرفرها، والمشترك بمرجع نافذته ([SalesApi.sell] يقرؤه
+/// أوّلاً). خلف sales_routed: ردّ موادّها بلا routed_writes ⇒ يُقال السبب ولا يُفتح. وجهة طلبات المبيعات تعود كما كانت بعده.
 Future<bool> showSellToSubscriber(
   BuildContext context, {
   required String idx,
   required String username,
   String name = '',
   String? phone,
+  String? companyKey,
 }) async {
-  final r = await SalesApi.items();
-  if (!context.mounted) return false;
-  final page = r.page;
-  if (page == null) {
-    showSheetSnack(context, r.error ?? 'sales.load_failed'.tr(), isError: true);
-    return false;
+  final prev = SalesApi.routeKey;
+  if (companyKey != null) SalesApi.routeKey = companyKey;
+  try {
+    final r = await SalesApi.items();
+    if (!context.mounted) return false;
+    final page = r.page;
+    if (page == null) {
+      showSheetSnack(context, r.error ?? 'sales.load_failed'.tr(), isError: true);
+      return false;
+    }
+    final companyName = companyKey == null ? null : (MergedMode.companyOf(companyKey)?.name ?? '—');
+    if (companyName != null && page.enabled && page.routedWrites != true) {
+      showSheetSnack(context, 'sales.merged_readonly'.tr(args: [companyName]));
+      return false;
+    }
+    if (!page.enabled) {
+      showSheetSnack(context, (companyName != null ? 'sales.merged_off' : 'sales.off').tr());
+      return false;
+    }
+    if (page.active.isEmpty) {
+      showSheetSnack(context, 'sales.add_item_first'.tr());
+      return false;
+    }
+    final done = await _showSheet(
+      context,
+      _NewSaleSheet(
+        items: page.active,
+        initial: _Hit(idx: idx, username: username, name: name, phone: phone),
+        company: companyName,
+      ),
+    );
+    if (done == true) SubscriberEvents.notifyChange();
+    return done == true;
+  } finally {
+    if (companyKey != null) SalesApi.routeKey = prev;
   }
-  if (!page.enabled) {
-    showSheetSnack(context, 'sales.off'.tr());
-    return false;
-  }
-  if (page.active.isEmpty) {
-    showSheetSnack(context, 'sales.add_item_first'.tr());
-    return false;
-  }
-  final done = await _showSheet(
-    context,
-    _NewSaleSheet(
-      items: page.active,
-      initial: _Hit(idx: idx, username: username, name: name, phone: phone),
-    ),
-  );
-  if (done == true) SubscriberEvents.notifyChange();
-  return done == true;
 }
 
 class _Hit {
@@ -1879,8 +1896,11 @@ class _Hit {
 }
 
 class _NewSaleSheet extends StatefulWidget {
-  const _NewSaleSheet({required this.items, this.initial});
+  const _NewSaleSheet({required this.items, this.initial, this.company});
   final List<SaleItem> items;
+
+  /// «كل الشركات»: اسم الشركة الموجَّه لها البيع (موادّها ودين مشتركها عليها) — يُقال في رأس الشيت؛ null = المفتوحة كما كانت.
+  final String? company;
 
   /// «بيع مادّة» من صفحة المشترك: الزبون مختارٌ مسبقاً، والدفع على دينه إن ملك «إضافة دين» (والتأكيد قبل الإرسال كما هو).
   final _Hit? initial;
@@ -2076,7 +2096,7 @@ class _NewSaleSheetState extends State<_NewSaleSheet> {
       header: SheetHeaderBar(
         icon: LucideIcons.shoppingCart,
         title: 'sales.sell_title'.tr(),
-        subtitle: 'sales.sell_subtitle'.tr(),
+        subtitle: widget.company == null ? 'sales.sell_subtitle'.tr() : 'sales.sell_for'.tr(args: [widget.company!]),
         onClose: () {
           if (!_busy) Navigator.of(context).pop();
         },
