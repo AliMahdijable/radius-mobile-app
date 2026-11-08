@@ -44,6 +44,7 @@ import 'telegram/telegram_screen.dart';
 import 'topup/fiberx_topup_screen.dart';
 import 'topup/jtpay_screen.dart';
 import 'topup/topup_screen.dart';
+import '../widgets/merged_section.dart';
 
 /// مجموعات القائمة الجانبيّة على الحاسبة — بترتيب الموقع (nav-config.ts).
 enum AppModuleGroup { manage, finance, comms, customize, earthlink }
@@ -270,7 +271,8 @@ List<AppModule> buildAppModules() {
         tone: AppTone.warning,
         title: 'more.expenses'.tr(),
         subtitle: 'more.expenses_hint'.tr(),
-        page: () => const ExpensesScreen(),
+        // «كل الشركات» (٨ نوفمبر): الشركة المختارة بمكانها — القائمة والإضافة والتعديل والحذف لسيرفرها (expenses_routed)
+        page: () => const MergedSection(prefixes: ['/api/admin/expenses', '/api/v2/expenses'], child: ExpensesScreen()),
       ),
     // 2026-10-02: «تسوية الحساب» — صندوق المدير بجانب الصرفيات، فهي إدارةٌ تُنشئ سندات.
     if (permShown(const ['settlements.view']))
@@ -282,7 +284,8 @@ List<AppModule> buildAppModules() {
         tone: AppTone.brand,
         title: 'more.settlements'.tr(),
         subtitle: 'more.settlements_hint'.tr(),
-        page: () => const SettlementsScreen(),
+        // «كل الشركات» (٨ نوفمبر): صندوق الشركة المختارة وتسويتها بمكانها (settlements_routed)
+        page: () => const MergedSection(prefixes: ['/api/v2/settlements'], child: SettlementsScreen()),
       ),
     // ٢٣ أكتوبر: «المبيعات» — موادّ الوكيل ومخزونه وبيعها نقداً أو على دين المشترك. تظهر حين يقول الخادم إنّها
     // مفتوحةٌ للحساب (مفتاحٌ مطفأ افتراضيّاً)؛ الموظّف بلا `sales.view` يراها مقفلةً بمكانها، والمقيَّد بمديرٍ فرعيّ بسببها.

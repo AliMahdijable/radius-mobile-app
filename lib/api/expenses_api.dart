@@ -82,7 +82,7 @@ class ExpensesApi {
   /// و[includeArchived] تُرجعه. ووصف الأرشيف في `archive` على **جذر**
   /// الجسم بجوار `expenses` و`total`، لا تحت `data`
   /// (`docs/settlements-prompt.md` §٤).
-  static Future<({List<ExpenseRow> rows, num total, ArchiveInfo? archive})>
+  static Future<({List<ExpenseRow> rows, num total, ArchiveInfo? archive, bool? routedWrites})>
       list({
     String? from,
     String? to,
@@ -101,10 +101,12 @@ class ExpensesApi {
       );
       final body = r.data ?? const {};
       if (body['success'] != true) {
-        return (rows: const <ExpenseRow>[], total: 0, archive: null);
+        return (rows: const <ExpenseRow>[], total: 0, archive: null, routedWrites: null);
       }
+      // «كل الشركات» (٨ نوفمبر): الطلب الموجَّه وحده يحمل routed_writes (expenses_routed) — null عاديّاً.
+      final rw = body['routed_writes'] is bool ? body['routed_writes'] as bool : null;
       final list = body['expenses'];
-      if (list is! List) return (rows: const <ExpenseRow>[], total: 0, archive: null);
+      if (list is! List) return (rows: const <ExpenseRow>[], total: 0, archive: null, routedWrites: rw);
       final rows = list
           .whereType<Map>()
           .map((m) => ExpenseRow.fromJson(Map<String, dynamic>.from(m)))
@@ -118,13 +120,14 @@ class ExpensesApi {
         rows: rows,
         total: total,
         archive: ArchiveInfo.fromJson(body['archive']),
+        routedWrites: rw,
       );
     } on DioException catch (e) {
       _log('admin/expenses (GET)', e);
-      return (rows: const <ExpenseRow>[], total: 0, archive: null);
+      return (rows: const <ExpenseRow>[], total: 0, archive: null, routedWrites: null);
     } catch (e) {
       _log('admin/expenses (GET)', e);
-      return (rows: const <ExpenseRow>[], total: 0, archive: null);
+      return (rows: const <ExpenseRow>[], total: 0, archive: null, routedWrites: null);
     }
   }
 

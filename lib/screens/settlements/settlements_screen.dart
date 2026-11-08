@@ -15,6 +15,7 @@ import 'settle_widgets.dart';
 import 'sheets/settle_sheet.dart';
 import 'sheets/settlement_detail_sheet.dart';
 import '../desktop/desk_widgets.dart';
+import '../../widgets/merged_section.dart';
 
 /// «تسوية الحساب» — صندوق المدير (2026-10-02).
 ///
@@ -68,6 +69,14 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
   /// سابقاً، فيُهمَل. «بداية الشهر» أثقل من «الآن»، وبلا العدّاد تكتب
   /// أرقامُ الأوّل نفسها تحت تسمية الثاني.
   int _previewGen = 0;
+
+  /// «كل الشركات» (٨ نوفمبر): الشركة المعروضة من [MergedSection] — تُقرأ في build.
+  MergedSectionInfo? _section;
+
+  /// مقفلة: شركةٌ موجَّهة لم يفتح الخادم كتابتها (settlements_routed) — لا بداية ولا تسوية ولا إلغاء من هنا.
+  bool get _locked => _section != null && _section!.routed && _cur?.routedWrites != true;
+
+  bool get _canSettle => (_cur?.canSettle ?? false) && !_locked;
 
   @override
   void initState() {
@@ -243,7 +252,7 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
       context,
       id: id,
       headId: (cur != null && cur.started) ? cur.head?.id : null,
-      canVoid: cur?.canVoid ?? false,
+      canVoid: (cur?.canVoid ?? false) && !_locked,
     );
     if (changed == true && mounted) _load();
   }
@@ -251,6 +260,7 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
+    _section = MergedSection.of(context);
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: deskPageBar(
@@ -276,10 +286,22 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
       ),
       bottomNavigationBar: _footer(),
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _load,
-          color: AppColors.brandAccent,
-          child: _body(),
+        child: Column(
+          children: [
+            // «كل الشركات»: الشركات ومن تُعرض (والمقفلة بسببها)
+            MergedSectionBar(
+              lockedText: _locked && _cur != null
+                  ? 'merged.section_locked'.tr(args: [_section?.company?.name ?? '—'])
+                  : null,
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _load,
+                color: AppColors.brandAccent,
+                child: _body(),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -288,7 +310,7 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
   /// زرّ الإجراء الأساسي — زرّ النظام نفسه أسفل الشاشة.
   Widget? _footer() {
     final cur = _cur;
-    if (cur == null || !cur.canSettle) return null;
+    if (cur == null || !_canSettle) return null;
     final Widget bar;
     if (!cur.started) {
       bar = SheetFooterBar(
@@ -350,7 +372,7 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: pad,
         children: [
-          if (cur.canSettle)
+          if (_canSettle)
             _startCard(cur)
           else
             _StateCard(

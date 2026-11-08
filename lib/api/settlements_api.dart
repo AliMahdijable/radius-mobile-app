@@ -243,10 +243,15 @@ class CurrentAccount {
     required this.monthStart,
     this.salesCash = const MoneyCount(0, 0),
     this.goodsPurchases = const MoneyCount(0, 0),
+    this.routedWrites,
   });
 
   final bool started;
   final SettlementRecord? head;
+
+  /// «كل الشركات» (٨ نوفمبر): في الطلب الموجَّه وحده — هل يقبل الخادم بدء الحساب والتسوية والإلغاء لهذه الشركة من هنا
+  /// (settlements_routed). null = طلبٌ عاديّ أو خادمٌ أقدم.
+  final bool? routedWrites;
   final DateTime? periodStart;
   final SettlementCut? cut;
   final num openingBalance;
@@ -298,6 +303,7 @@ class CurrentAccount {
       monthStart: _str(j['month_start']),
       salesCash: MoneyCount.fromJson(t['sales_cash']),
       goodsPurchases: MoneyCount.fromJson(t['goods_purchases']),
+      routedWrites: j['routed_writes'] is bool ? j['routed_writes'] as bool : null,
     );
   }
 }

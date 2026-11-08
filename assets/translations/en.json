@@ -1490,6 +1490,9 @@
     "finance_by_company": "By company",
     "col_company": "Company",
     "reports_note": "Reports with this mark next to their name cover all your companies; the others are for the open company: “{}”",
+    "section_open": "Showing the open company «{}» — pick a company in the strip to show it here",
+    "section_routed": "«{}» is managed here — every action goes to its server",
+    "section_locked": "«{}» is view-only here — change it from its own page (switch to it)",
     "sales_note": "Sales is for the open company only: «{}»"
   },
   "company_switch": {

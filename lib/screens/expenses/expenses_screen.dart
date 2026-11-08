@@ -19,6 +19,8 @@ import 'sheets/add_expense_sheet.dart';
 import 'sheets/edit_expense_sheet.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
+import '../../widgets/merged_section.dart';
+import '../../core/widgets/permission_locked.dart';
 
 /// مديول "الصرفيات" — قائمة الصرفيات + فلتر نطاق التواريخ + كرت
 /// إجمالي + add/edit/delete. منقول لـv2 من ضمن "قوائم أخرى".
@@ -46,6 +48,17 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
 
   /// يتغيّر مع كلّ تحديث فيُعيد قسم «الصرفيات الثابتة» جلبه.
   int _recurringToken = 0;
+
+  /// «كل الشركات» (٨ نوفمبر): ردّ القائمة الموجَّهة — هل يقبل الخادم إضافة/تعديل/حذف صرفيات هذه الشركة من هنا (expenses_routed).
+  bool? _routedWrites;
+
+  /// شركةٌ معروضة غير المفتوحة (من [MergedSection]) — تُقرأ في build.
+  MergedSectionInfo? _section;
+
+  /// مقفلة: شركةٌ موجَّهة لم يفتح الخادم كتابتها (أو لم يصل ردّها بعد).
+  bool get _locked => _section != null && _section!.routed && _routedWrites != true;
+
+  String get _lockText => 'merged.section_locked'.tr(args: [_section?.company?.name ?? '—']);
   // النطاق الافتراضي: أول الشهر إلى اليوم (مطابق الويب)، بشريط الفترات نفسه الذي في التقارير.
   DateRange _range = DateRange.thisMonth();
 
@@ -75,16 +88,25 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       _rows = r.rows;
       _total = r.total;
       _archive = r.archive;
+      _routedWrites = r.routedWrites;
       _loading = false;
     });
   }
 
   Future<void> _openAdd() async {
+    if (_locked) {
+      showNoPermission(context, action: true, message: _lockText);
+      return;
+    }
     final added = await showAddExpenseSheet(context);
     if (added == true) _load();
   }
 
   Future<void> _openEdit(ExpenseRow row) async {
+    if (_locked) {
+      showNoPermission(context, action: true, message: _lockText);
+      return;
+    }
     if (row.isLocked) {
       showSheetSnack(
         context,
@@ -98,6 +120,10 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   }
 
   Future<void> _confirmDelete(ExpenseRow row) async {
+    if (_locked) {
+      showNoPermission(context, action: true, message: _lockText);
+      return;
+    }
     final ok = await showDialog<bool>(
       context: context,
       builder: (dialogCtx) => AlertDialog(
@@ -139,6 +165,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final accent = AppColors.brandAccent;
+    _section = MergedSection.of(context);
+    final routed = _section?.routed == true;
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: deskPageBar(
@@ -176,6 +204,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             padding: EdgeInsets.only(
                 bottom: MediaQuery.paddingOf(context).bottom + 96),
             children: [
+              // «كل الشركات»: الشركات ومن تُعرض (والمقفلة بسببها)
+              MergedSectionBar(lockedText: _locked && !_loading ? _lockText : null),
               // 2026-08-26 redesign: header صف واحد كثيف — إجمالي + نطاق
               // + عدد. بلا gradient بلا حواف ثقيلة.
               DeskSection(children: [
@@ -190,11 +220,13 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   },
                 ),
               ]),
-              // «الصرفيات الثابتة» — حين يفتحها الخادم للحساب (وإلّا لا شيء هنا).
-              RecurringExpensesSection(
-                reloadToken: _recurringToken,
-                onExpensesChanged: () => _load(withRecurring: false),
-              ),
+              // «الصرفيات الثابتة» — حين يفتحها الخادم للحساب (وإلّا لا شيء هنا). شركةٌ موجَّهة: قوالبها من صفحتها (مساراتها غير
+              // موجَّهة بعد) — لا تُعرض قوالب المفتوحة تحت اسمها.
+              if (!routed)
+                RecurringExpensesSection(
+                  reloadToken: _recurringToken,
+                  onExpensesChanged: () => _load(withRecurring: false),
+                ),
               ArchiveBar(
                 archive: _archive,
                 includeArchived: _withArchive,

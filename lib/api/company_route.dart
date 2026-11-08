@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 /// «كل الشركات» في التطبيق (٢١ أكتوبر، المالك: «ابدي بيها خل نكملها» — تصميمنا لا كودكس).
 ///
@@ -41,11 +42,39 @@ class CompanyRoute {
     '/api/v2/sales/debt-status',
   };
 
-  /// مفتاح شركة الطلب: `extra['companyKey']` صراحةً أوّلاً، ثمّ النطاق.
+  /// «قوائم أخرى» بـ«كل الشركات» (٨ نوفمبر — المالك: «كل الاقسام مال قائمة المزيد لازم تخضع لهذا النظام شركتين بدقة»): قسمٌ
+  /// مفتوحٌ بشركةٍ غير المفتوحة ⇒ طلبات بادئات مساراته — من أيّ زرٍّ أو شيتٍ فيه — موجَّهةٌ لها، وما سواها كما هو (الرئيسيّة
+  /// والإشعارات بالخلفيّة لا تتأثّر). [MergedSection] (lib/widgets/merged_section.dart) يضعه ويرفعه.
+  static ({Object owner, String key, List<String> prefixes})? _section;
+
+  static void enterSection(Object owner, String key, List<String> prefixes) {
+    if (!keyRe.hasMatch(key)) return;
+    _section = (owner: owner, key: key, prefixes: List.unmodifiable(prefixes));
+  }
+
+  /// يرفعه صاحبه وحده (قسمٌ أُغلق بعد أن فتح غيره لا يرفع قسم الآخر).
+  static void leaveSection(Object owner) {
+    if (identical(_section?.owner, owner)) _section = null;
+  }
+
+  /// مفتاح القسم المفتوح لمسار الطلب — البادئة نفسها أو ما تحتها (`/x` لا `/xy`) — أو null.
+  static String? sectionKeyFor(String path) {
+    final s = _section;
+    if (s == null) return null;
+    for (final p in s.prefixes) {
+      if (path == p || path.startsWith('$p/')) return s.key;
+    }
+    return null;
+  }
+
+  @visibleForTesting
+  static String? get sectionKey => _section?.key;
+
+  /// مفتاح شركة الطلب: `extra['companyKey']` صراحةً أوّلاً، ثمّ النطاق، ثمّ القسم المفتوح ([enterSection]) لمساره.
   static String? keyFor(RequestOptions o) {
     final x = o.extra['companyKey'];
     if (x is String && keyRe.hasMatch(x)) return x;
-    return currentKey;
+    return currentKey ?? sectionKeyFor(o.uri.path);
   }
 }
 
