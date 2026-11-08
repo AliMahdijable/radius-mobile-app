@@ -145,6 +145,27 @@ class AccountApi {
         : const [];
   }
 
+  /// ٨ نوفمبر — «موظّفٌ بأكثر من صفحة»: موظّفو صفحات الحساب وصفحاته (`GET /api/account/employees`) لورقة «إضافة من صفحةٍ أخرى».
+  /// يرمي [AccountApiException] (رسالةٌ عربيّة أو مفتاح ترجمة `account.`).
+  static Future<AccountEmployees> employees() async {
+    final res = await _send('GET', '/api/account/employees');
+    if (res.statusCode != 200 || res.data?['success'] != true) throw _fail(res);
+    return AccountEmployees.fromJson(res.data ?? const {});
+  }
+
+  /// يضيف [employeeId] (من صفحةٍ في الحساب) إلى الصفحة [toPageId] بصلاحيّاته الحاليّة — صفٌّ خاصٌّ بها مربوطٌ بشخصه، ويدخل باسمه
+  /// الأصليّ ويتنقّل بين صفحاته. الرفض برسالة الخادم العربيّة (ليس في حسابك، مضافٌ أصلاً، حدّ الموظّفين…).
+  static Future<({bool ok, String? message})> linkEmployee({required int employeeId, required String toPageId}) async {
+    try {
+      final res = await _send('POST', '/api/account/employees/link', data: {'employee_id': employeeId, 'to_page_id': toPageId});
+      if (res.statusCode == 200 && res.data?['success'] == true) return (ok: true, message: null);
+      final m = (res.data?['message'] as String?)?.trim();
+      return (ok: false, message: (m == null || m.isEmpty) ? 'تعذّرت الإضافة — حاول بعد قليل' : m);
+    } on AccountApiException catch (e) {
+      return (ok: false, message: e.message.startsWith('account.') ? null : e.message);
+    }
+  }
+
   /// «كل الشركات»: شركات الحساب وحال كلٍّ منها (`GET /api/account/merged/companies` — لا قائمة مشتركين ولا توكن). الجسم كما
   /// وصل، أو `null`: التوجيه مطفأٌ لهذا الحساب (409 COMPANY_ROUTE_DISABLED) أو تعذّر — فلا وضع «كل الشركات».
   static Future<Map<String, dynamic>?> mergedCompaniesRaw() async {
@@ -565,4 +586,72 @@ class DirectoryCompany {
         name: (j['name'] ?? '').toString(),
         url: (j['url'] ?? '').toString(),
       );
+}
+
+/// ٨ نوفمبر — «موظّفٌ بأكثر من صفحة»: صفحات الحساب وموظّفوها (`GET /api/account/employees`).
+class AccountEmployees {
+  const AccountEmployees({required this.pages, required this.employees});
+  final List<AccountPage> pages;
+  final List<AccountEmployee> employees;
+
+  factory AccountEmployees.fromJson(Map<String, dynamic> j) => AccountEmployees(
+        pages: [
+          for (final m in (j['pages'] is List ? j['pages'] as List : const []).whereType<Map>())
+            AccountPage(
+              id: (m['id'] ?? '').toString(),
+              name: ((m['name'] ?? '').toString().trim().isEmpty ? (m['id'] ?? '').toString() : m['name'].toString().trim()),
+              code: m['code']?.toString(),
+            ),
+        ].where((p) => p.id.isNotEmpty).toList(),
+        employees: [
+          for (final m in (j['employees'] is List ? j['employees'] as List : const []).whereType<Map>())
+            if (int.tryParse(m['id']?.toString() ?? '') != null)
+              AccountEmployee(
+                id: int.parse(m['id'].toString()),
+                username: (m['username'] ?? '').toString(),
+                loginUsername: (m['login_username'] ?? m['username'] ?? '').toString(),
+                fullName: (m['full_name'] as String?)?.trim().isEmpty == true ? null : m['full_name']?.toString(),
+                pageId: (m['page_id'] ?? '').toString(),
+                isActive: m['is_active'] == true,
+                primary: m['primary'] != false,
+                pages: [for (final p in (m['pages'] is List ? m['pages'] as List : const [])) p.toString()],
+              ),
+        ],
+      );
+
+  /// موظّفون يُضافون لـ[pageId]: من صفحةٍ أخرى، فعّالون، صفّهم الأصليّ (لا نسخة)، وليس للشخص صفٌّ فيها أصلاً.
+  List<AccountEmployee> addableTo(String pageId) => [
+        for (final e in employees)
+          if (e.pageId != pageId && e.isActive && e.primary && !e.pages.contains(pageId)) e,
+      ];
+
+  String pageName(String id) => pages.firstWhere((p) => p.id == id, orElse: () => AccountPage(id: id, name: id)).name;
+}
+
+class AccountPage {
+  const AccountPage({required this.id, required this.name, this.code});
+  final String id;
+  final String name;
+  final String? code;
+}
+
+class AccountEmployee {
+  const AccountEmployee({
+    required this.id,
+    required this.username,
+    required this.loginUsername,
+    this.fullName,
+    required this.pageId,
+    required this.isActive,
+    required this.primary,
+    required this.pages,
+  });
+  final int id;
+  final String username;
+  final String loginUsername;
+  final String? fullName;
+  final String pageId;
+  final bool isActive;
+  final bool primary;
+  final List<String> pages;
 }

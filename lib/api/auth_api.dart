@@ -456,6 +456,39 @@ class AuthApi {
         '/api/auth/employee-login',
         data: {'username': username.trim(), 'password': password},
       );
+      return _employeeLoginResult(res);
+    } on DioException catch (e) {
+      return LoginFailure(_friendlyDioError(e));
+    } catch (_) {
+      return const LoginFailure('حدث خطأ غير متوقع. حاول مجدداً.');
+    }
+  }
+
+  /// ٨ نوفمبر — «موظّفٌ بأكثر من صفحة»: التنقّل إلى صفّه في صفحةٍ أخرى ([employeeId] من «صفحاتي») بتوكنه القائم لا بكلمة مرور —
+  /// المسار نفسه بـ`switch_to` (الخادم يتحقّق أنّها من صفحاته وجلسته قائمة، ثمّ يصدر دخول تلك الصفحة كاملاً). الردّ كردّ الدخول.
+  /// ⚠️ المعترض يتخطّى `/api/auth/*` فلا يلصق التوكن — نلصقه هنا يدويّاً (كالخروج).
+  static Future<LoginResult> employeeSwitch(int employeeId, {String? token}) async {
+    try {
+      token ??= await AuthStorage.readToken();
+      if (token == null || token.isEmpty) {
+        return const LoginFailure('انتهت الجلسة — سجّل الدخول من جديد.', code: 'SESSION_REQUIRED');
+      }
+      final res = await ApiClient.dio.post<Map<String, dynamic>>(
+        '/api/auth/employee-login',
+        data: {'switch_to': employeeId},
+        options: Options(headers: {'Authorization': 'Bearer $token', 'x-auth-token': token}),
+      );
+      return _employeeLoginResult(res);
+    } on DioException catch (e) {
+      return LoginFailure(_friendlyDioError(e));
+    } catch (_) {
+      return const LoginFailure('حدث خطأ غير متوقع. حاول مجدداً.');
+    }
+  }
+
+  /// ردّ `employee-login` (الدخول والتنقّل) ⇒ [LoginResult].
+  static LoginResult _employeeLoginResult(Response<Map<String, dynamic>> res) {
+    {
       final body = res.data ?? const {};
       final status = res.statusCode ?? 0;
       final serverMsg = (body['message'] as String?)?.trim() ?? '';
@@ -525,10 +558,6 @@ class AuthApi {
         provider: (user['provider'] ?? '').toString().trim().isEmpty ? null : user['provider'].toString().trim(),
         providerLabel: (user['providerLabel'] ?? '').toString().trim().isEmpty ? null : user['providerLabel'].toString().trim(),
       );
-    } on DioException catch (e) {
-      return LoginFailure(_friendlyDioError(e));
-    } catch (_) {
-      return const LoginFailure('حدث خطأ غير متوقع. حاول مجدداً.');
     }
   }
 

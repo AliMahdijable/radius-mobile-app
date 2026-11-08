@@ -21,6 +21,7 @@ import '../widgets/active_company_line.dart';
 import 'account/company_switch_sheet.dart';
 import 'accounts/accounts_screen.dart';
 import 'assistant/assistant_sheet.dart';
+import 'employees/sheets/employee_pages_sheet.dart';
 import 'voice/voice_command_sheet.dart';
 import 'notifications/inbox_screen.dart';
 import 'settings_screen.dart';
@@ -40,12 +41,18 @@ class HeaderSwitch {
   /// الفرعيّ — فهو أقوى من رؤيتها ولا يقلّ عنها حرساً.
   static bool get pages => Perms.has('managers.edit');
 
+  /// ٨ نوفمبر — «موظّفٌ بأكثر من صفحة»: «صفحاتي» لموظّفٍ يعمل في صفحتين فأكثر ([PermissionsService.employeePages]).
+  static bool get employeePages => PermissionsService.employeePages.length >= 2;
+
   /// للسطر نقرة؟
-  static bool get available => companies || pages;
+  static bool get available => companies || pages || employeePages;
 
   /// اسم الفعل — لقارئ الشاشة، ونصّ السطر حين لا تُعرف الشركة بعد.
-  static String get label =>
-      companies ? 'company_switch.title'.tr() : 'accounts.title'.tr();
+  static String get label => employeePages
+      ? 'صفحاتي'
+      : companies
+          ? 'company_switch.title'.tr()
+          : 'accounts.title'.tr();
 
   /// يفتح ورقة الشركات («الصفحات» صفٌّ أعلاها)، أو «الصفحات» مباشرةً.
   static Future<void> open(BuildContext context,
@@ -57,6 +64,10 @@ class HeaderSwitch {
           .push(MaterialPageRoute(builder: (_) => const AccountsScreen()));
     }
 
+    // موظّفٌ بأكثر من صفحة: «صفحاتي» (و«الصفحات» صفٌّ أعلاها إن ملك تبديل المدراء الفرعيّين) — الموظّف لا «شركاتي» له
+    if (employeePages) {
+      return showEmployeePagesSheet(context, onManagers: pages ? openPages : null);
+    }
     if (companies) {
       return showCompanySwitchSheet(context, onPages: pages ? openPages : null);
     }

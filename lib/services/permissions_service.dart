@@ -37,6 +37,8 @@ class PermissionsService {
   //   employee (flag=1) → كل شي ممنوع إلا الـكلمات الموجودة بالـmap
   static const _kEmployeePerms = 'perms.employee_map';
   static const _kIsEmployee = 'perms.is_employee';
+  /// ٨ نوفمبر — «موظّفٌ بأكثر من صفحة»: صفحات الموظّف (JSON) من `/api/v2/employees/me`.
+  static const _kEmployeePages = 'perms.employee_pages';
   // Pro: قدرات المدير المعياريّة (subscribers.delete/show_password/…) من الساس.
   // المدير الفرعيّ فاعلٌ مقيَّد: الأزرار تُضبَط بهذه الخريطة، منفصلةً عن مسار
   // الموظّف. دلالةٌ مختلفة: مفتاحٌ **غير موجود** في الخريطة = مسموح (ميزةٌ
@@ -61,6 +63,7 @@ class PermissionsService {
   // الذاكرة الجارية — نقرأ منها مباشرةً، ونحدّثها عند save/load.
   static Map<String, bool>? _cached;
   static bool _isEmployee = false;
+  static List<EmployeePageRef> _pages = const [];
   static Map<String, bool>? _managerCaps;
   static bool _managerRestricted = false;
   static bool _loaded = false;
@@ -72,6 +75,9 @@ class PermissionsService {
 
   static bool get isLoaded => _loaded;
   static bool get isEmployee => _isEmployee;
+
+  /// ٨ نوفمبر — صفحات الموظّف (صفحتان فأكثر)، وإلّا [] — «صفحاتي» في سطر الشركة وورقتها ([HeaderSwitch]).
+  static List<EmployeePageRef> get employeePages => _isEmployee ? _pages : const [];
 
   /// يُستدعى مرّة واحدة عند بدء التشغيل (main / Splash). يقرأ
   /// المخزّن في الـsecure storage ويحمّله للذاكرة.
@@ -88,6 +94,10 @@ class PermissionsService {
             for (final e in j.entries) e.key.toString(): e.value == true,
           };
         }
+      }
+      if (_isEmployee) {
+        final praw = await _storage.read(key: _kEmployeePages);
+        if (praw != null && praw.isNotEmpty) _pages = EmployeePageRef.listFrom(jsonDecode(praw));
       }
       // Pro: استعادة تقييد المدير كي يبقى بعد إعادة التشغيل/الدخول التلقائيّ
       // (وإلّا رجع المدير الفرعيّ كامل الصلاحيّات عند كلّ إقلاع).
@@ -125,6 +135,17 @@ class PermissionsService {
       return false;
     }
     if (me.isEmployee && me.permissions != null) {
+      // الصفحات قبل الحفظ: _saveEmployee يرفع [changes] فيُعاد رسم سطر الشركة بها
+      _pages = me.pages;
+      try {
+        if (_pages.isEmpty) {
+          await _storage.delete(key: _kEmployeePages);
+        } else {
+          await _storage.write(key: _kEmployeePages, value: jsonEncode([for (final p in _pages) p.toJson()]));
+        }
+      } catch (e) {
+        if (kDebugMode) debugPrint('PermissionsService.pages: $e');
+      }
       await _saveEmployee(me.permissions!);
     } else {
       // admin = full access
@@ -146,9 +167,11 @@ class PermissionsService {
   static Future<void> _clearEmployee() async {
     _isEmployee = false;
     _cached = null;
+    _pages = const [];
     await Future.wait([
       _storage.delete(key: _kIsEmployee),
       _storage.delete(key: _kEmployeePerms),
+      _storage.delete(key: _kEmployeePages),
     ]);
     _version.value = _version.value + 1;
   }
@@ -163,6 +186,7 @@ class PermissionsService {
   }) async {
     _isEmployee = false;
     _cached = null;
+    _pages = const [];
     // [retiredManagerKeys] لا تُحفظ ولا تُقرأ — فخريطةٌ لم يبقَ فيها غيرها فارغة.
     final caps = _dropRetired(canonical);
     if (isSuperAdmin || caps.isEmpty) {
@@ -171,6 +195,7 @@ class PermissionsService {
       await Future.wait([
         _storage.delete(key: _kIsEmployee),
         _storage.delete(key: _kEmployeePerms),
+        _storage.delete(key: _kEmployeePages),
         _storage.delete(key: _kManagerRestricted),
         _storage.delete(key: _kManagerCaps),
       ]);
@@ -180,6 +205,7 @@ class PermissionsService {
       await Future.wait([
         _storage.delete(key: _kIsEmployee),
         _storage.delete(key: _kEmployeePerms),
+        _storage.delete(key: _kEmployeePages),
         _storage.write(key: _kManagerRestricted, value: '1'),
         _storage.write(key: _kManagerCaps, value: jsonEncode(caps)),
       ]);
@@ -192,11 +218,13 @@ class PermissionsService {
   static Future<void> clear() async {
     _isEmployee = false;
     _cached = null;
+    _pages = const [];
     _managerRestricted = false;
     _managerCaps = null;
     await Future.wait([
       _storage.delete(key: _kIsEmployee),
       _storage.delete(key: _kEmployeePerms),
+      _storage.delete(key: _kEmployeePages),
       _storage.delete(key: _kManagerRestricted),
       _storage.delete(key: _kManagerCaps),
     ]);
@@ -221,10 +249,12 @@ class PermissionsService {
     Map<String, bool> permissions = const {},
     bool managerRestricted = false,
     Map<String, bool> managerCaps = const {},
+    List<EmployeePageRef> pages = const [],
   }) {
     _loaded = true;
     _isEmployee = isEmployee;
     _cached = isEmployee ? Map<String, bool>.from(permissions) : null;
+    _pages = isEmployee ? pages : const [];
     _managerRestricted = !isEmployee && managerRestricted;
     _managerCaps =
         _managerRestricted ? Map<String, bool>.from(managerCaps) : null;
@@ -237,6 +267,7 @@ class PermissionsService {
     _loaded = false;
     _isEmployee = false;
     _cached = null;
+    _pages = const [];
     _managerRestricted = false;
     _managerCaps = null;
     _version.value = _version.value + 1;

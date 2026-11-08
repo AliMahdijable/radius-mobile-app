@@ -17,6 +17,9 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import 'sheets/employee_editor_sheet.dart';
+import 'sheets/link_employee_sheet.dart';
+import '../../services/auth_storage.dart';
+import '../../services/linked_companies.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../../widgets/merged_section.dart';
@@ -193,6 +196,22 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     );
   }
 
+  /// ٨ نوفمبر — «موظّفٌ بأكثر من صفحة»: المالك بحساب «شركاتي» فيه صفحتان فأكثر يضيف موظّفاً من صفحةٍ أخرى إلى هذه.
+  bool get _canLinkFromOtherPages =>
+      _catalog != null && Perms.has('employees.manage') && LinkedCompanies.switcherVisible;
+
+  Future<void> _linkFromOtherPage() async {
+    final pageId = await AuthStorage.readAdminId();
+    if (!mounted || pageId == null || pageId.isEmpty) return;
+    final added = await showLinkEmployeeSheet(context, pageId: pageId);
+    if (!mounted || !added) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('أُضيف الموظف لهذه الصفحة — يدخل باسمه نفسه ويتنقّل من «صفحاتي»'),
+      behavior: SnackBarBehavior.floating,
+    ));
+    _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
@@ -221,7 +240,25 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
               style:
                   AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
           iconTheme: IconThemeData(color: AppColors.textHi),
+          actions: [
+            if (_canLinkFromOtherPages && canManage)
+              IconButton(
+                key: const ValueKey('employees-link-other-page'),
+                icon: Icon(Icons.group_add_outlined, color: AppColors.textHi),
+                tooltip: 'موظف من صفحة أخرى',
+                onPressed: _linkFromOtherPage,
+              ),
+          ],
         ),
+        actions: _canLinkFromOtherPages && canManage
+            ? [
+                IconButton(
+                  icon: Icon(Icons.group_add_outlined, color: AppColors.textHi),
+                  tooltip: 'موظف من صفحة أخرى',
+                  onPressed: _linkFromOtherPage,
+                ),
+              ]
+            : null,
         primary: (_catalog == null || !canManage)
             ? null
             : DeskPrimaryButton(
@@ -276,7 +313,8 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                   onDelete: canManage
                                       ? () => _confirmDelete(e)
                                       : null,
-                                  onShowPassword: canManage
+                                  // نسخة صفحةٍ مضافة يدخل صاحبها باسمه الأصليّ — لا كلمة مرورٍ لها هنا
+                                  onShowPassword: canManage && !e.isLinkedCopy
                                       ? () => _showEmployeePassword(e)
                                       : null,
                                 ),
@@ -579,7 +617,8 @@ class _EmployeeTile extends StatelessWidget {
                     Row(
                       children: [
                         Text(
-                          emp.username,
+                          // نسخة صفحةٍ مضافة: اسم دخوله الأصليّ لا الداخليّ
+                          emp.linked?.loginUsername ?? emp.username,
                           style: TextStyle(
                             fontSize: 11, height: 1.25,
                             fontWeight: FontWeight.w600,
@@ -599,6 +638,27 @@ class _EmployeeTile extends StatelessWidget {
                         ),
                       ],
                     ),
+                    // ٨ نوفمبر — «موظّفٌ بأكثر من صفحة»
+                    if (emp.linked != null) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        key: ValueKey('employee-linked-${emp.id}'),
+                        children: [
+                          Icon(Icons.layers_outlined, size: 11, color: AppColors.brand),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              emp.isLinkedCopy
+                                  ? 'مضاف من صفحةٍ أخرى — يدخل باسمه نفسه'
+                                  : 'يعمل في ${emp.linked!.pages} صفحات',
+                              style: AppType.microBold(color: AppColors.brand),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     // 2026-08-26: شارة قيد الـscope — الموظّف مقيَّد بمدير فرعي.
                     if (showScope && emp.isScoped) ...[
                       const SizedBox(height: 3),
@@ -627,7 +687,7 @@ class _EmployeeTile extends StatelessWidget {
               IconButton(
                 icon:
                     Icon(LucideIcons.copy, color: AppColors.textMid, size: 15),
-                onPressed: () => copyToClipboard(context, emp.username,
+                onPressed: () => copyToClipboard(context, emp.linked?.loginUsername ?? emp.username,
                     label: 'اسم المستخدم'),
                 tooltip: 'نسخ اسم المستخدم',
                 splashRadius: 18,

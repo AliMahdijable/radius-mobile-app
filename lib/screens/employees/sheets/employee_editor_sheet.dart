@@ -125,7 +125,8 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
     super.initState();
     _tab = TabController(length: 2, vsync: this);
     final e = widget.employee;
-    _userCtrl = TextEditingController(text: e?.username ?? '');
+    // نسخة صفحةٍ مضافة: اسم دخوله الأصليّ (للعرض — الاسم لا يُرسَل بالتعديل)
+    _userCtrl = TextEditingController(text: e?.linked?.loginUsername ?? e?.username ?? '');
     _fullNameCtrl = TextEditingController(text: e?.fullName ?? '');
     _phoneCtrl = TextEditingController(text: e?.phone ?? '');
     _passCtrl = TextEditingController();
@@ -491,6 +492,11 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
           _fieldNote('حروف إنجليزيّة وأرقام و . _ - @ — '
               'الاسم فريد على مستوى النظام كلّه'),
         const SizedBox(height: Sp.md),
+        // ٨ نوفمبر — «موظّفٌ بأكثر من صفحة»: نسخة صفحةٍ مضافة يدخل صاحبها باسمه وكلمة مروره في صفحته الأصليّة — لا كلمة مرورٍ هنا
+        if (widget.employee?.isLinkedCopy ?? false)
+          _fieldNote('يدخل باسمه (${widget.employee!.linked!.loginUsername ?? widget.employee!.username}) وكلمة مروره '
+              'في صفحته الأصليّة — غيّرها هناك')
+        else
         _field(
           ctrl: _passCtrl,
           hint: _isEdit

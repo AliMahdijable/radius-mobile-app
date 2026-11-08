@@ -17,9 +17,16 @@ class Employee {
     this.scopeAdminId,
     this.scopeAdminUsername,
     this.deleted = false,
+    this.linked,
   });
   final int id;
   final String username;
+
+  /// ٨ نوفمبر — «موظّفٌ بأكثر من صفحة»: صفٌّ مربوطٌ بشخصٍ يعمل في صفحاتٍ أخرى ([EmployeeLink])، وإلّا null.
+  final EmployeeLink? linked;
+
+  /// صفّ صفحةٍ مضافٌ من صفحةٍ أخرى — يدخل الشخص باسمه الأصليّ، فلا كلمة مرورٍ تُعرض أو تُغيَّر لهذا الصفّ.
+  bool get isLinkedCopy => linked != null && !linked!.primary;
   final String? fullName;
   final String? phone;
   final bool isActive;
@@ -62,7 +69,93 @@ class Employee {
       scopeAdminId: j['scope_admin_id']?.toString(),
       scopeAdminUsername: j['scope_admin_username']?.toString(),
       deleted: j['deleted'] == true,
+      linked: j['linked'] is Map ? EmployeeLink.fromJson(Map<String, dynamic>.from(j['linked'] as Map)) : null,
     );
+  }
+}
+
+/// ٨ نوفمبر — «موظّفٌ بأكثر من صفحة» (الخادم `linked` في قائمة الموظّفين): اسم دخوله (صفّه الأصليّ)، وهل هذا الصفّ هو الأصليّ،
+/// وعدد صفحاته.
+class EmployeeLink {
+  const EmployeeLink({required this.loginUsername, required this.primary, required this.pages});
+  final String? loginUsername;
+  final bool primary;
+  final int pages;
+
+  static EmployeeLink? fromJson(Map<String, dynamic> j) {
+    final pages = int.tryParse(j['pages']?.toString() ?? '') ?? 1;
+    final login = j['login_username']?.toString().trim();
+    return EmployeeLink(
+      loginUsername: login == null || login.isEmpty ? null : login,
+      primary: j['primary'] == true,
+      pages: pages < 1 ? 1 : pages,
+    );
+  }
+}
+
+/// ٨ نوفمبر — صفحةٌ من صفحات الموظّف (`pages` في `/api/v2/employees/me` وردّ الدخول): صفّه فيها، واسمها، وهل هي الحاليّة
+/// أو الأصليّة (التي يدخل بها) أو معطَّلة.
+class EmployeePageRef {
+  const EmployeePageRef({
+    required this.employeeId,
+    required this.pageId,
+    required this.pageName,
+    this.sasCode,
+    this.active = true,
+    this.primary = false,
+    this.current = false,
+    this.loginUsername,
+  });
+  final int employeeId;
+  final String pageId;
+  final String pageName;
+  final String? sasCode;
+  final bool active;
+  final bool primary;
+  final bool current;
+
+  /// اسم الدخول (صفّه الأصليّ) — يُحفظ مع جلسة التنقّل كما يُحفظ مع الدخول.
+  final String? loginUsername;
+
+  static EmployeePageRef? fromJson(Map<String, dynamic> j) {
+    final id = int.tryParse(j['employee_id']?.toString() ?? '') ?? 0;
+    final page = (j['page_id'] ?? '').toString().trim();
+    if (id <= 0 || page.isEmpty) return null;
+    final name = (j['page_name'] ?? '').toString().trim();
+    final code = (j['sas_code'] ?? '').toString().trim();
+    final login = (j['login_username'] ?? '').toString().trim();
+    return EmployeePageRef(
+      employeeId: id,
+      pageId: page,
+      pageName: name.isEmpty ? page : name,
+      sasCode: code.isEmpty ? null : code,
+      active: j['active'] != false,
+      primary: j['primary'] == true,
+      current: j['current'] == true,
+      loginUsername: login.isEmpty ? null : login,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'employee_id': employeeId,
+        'page_id': pageId,
+        'page_name': pageName,
+        if (sasCode != null) 'sas_code': sasCode,
+        'active': active,
+        'primary': primary,
+        'current': current,
+        if (loginUsername != null) 'login_username': loginUsername,
+      };
+
+  /// صفحاتٌ من JSON (قائمة) — يُسقط التالف، وأقلّ من صفحتين ⇒ [] (موظّفٌ بصفحةٍ واحدة).
+  static List<EmployeePageRef> listFrom(Object? raw) {
+    if (raw is! List) return const [];
+    final out = raw
+        .whereType<Map>()
+        .map((m) => EmployeePageRef.fromJson(Map<String, dynamic>.from(m)))
+        .whereType<EmployeePageRef>()
+        .toList();
+    return out.length >= 2 ? List.unmodifiable(out) : const [];
   }
 }
 
@@ -608,8 +701,12 @@ class CurrentIdentity {
     this.employeeId,
     this.employeeUsername,
     this.permissions,
+    this.pages = const [],
   });
   final bool isEmployee;
+
+  /// ٨ نوفمبر — «موظّفٌ بأكثر من صفحة»: صفحاته (صفحتان فأكثر)، وإلّا [].
+  final List<EmployeePageRef> pages;
   final String? adminId;
   final String? adminUsername;
   final int? employeeId;
@@ -632,6 +729,7 @@ class CurrentIdentity {
       employeeId: j['employee_id'] is int ? j['employee_id'] as int : int.tryParse(j['employee_id']?.toString() ?? ''),
       employeeUsername: j['employee_username']?.toString(),
       permissions: m,
+      pages: EmployeePageRef.listFrom(j['pages']),
     );
   }
 }

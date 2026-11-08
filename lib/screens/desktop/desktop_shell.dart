@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../employees/sheets/employee_pages_sheet.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../../core/widgets/permission_locked.dart';
 import '../../core/widgets/desk_pressable.dart';
@@ -559,15 +560,18 @@ class _TopBar extends StatelessWidget {
             child: Align(
               alignment: AlignmentDirectional.centerStart,
               child: ListenableBuilder(
-                listenable: Listenable.merge([ActiveCompany.listenable, LinkedCompanies.items]),
+                listenable: Listenable.merge([ActiveCompany.listenable, LinkedCompanies.items, PermissionsService.changes]),
                 builder: (context, _) {
                   final info = ActiveCompany.current;
                   if (info == null) return const SizedBox.shrink();
                   return _CompanyCard(
                     info: info,
-                    onTap: LinkedCompanies.switcherVisible
-                        ? () => showCompanySwitchSheet(context)
-                        : null,
+                    // ٨ نوفمبر: موظّفٌ بأكثر من صفحة ⇒ «صفحاتي»؛ المالك بشركتين ⇒ «شركاتي»
+                    onTap: HeaderSwitch.employeePages
+                        ? () => showEmployeePagesSheet(context)
+                        : LinkedCompanies.switcherVisible
+                            ? () => showCompanySwitchSheet(context)
+                            : null,
                   );
                 },
               ),
