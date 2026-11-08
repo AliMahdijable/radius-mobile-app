@@ -316,6 +316,29 @@ void main() {
       expect(ser.usable, isFalse, reason: 'المعلّقة لا يُسحب منها');
     });
 
+    test('ايرث لنك الصالحة (٨ نوفمبر): valid_only وused_days تُقرأ، والخادم الأقدم بلاهما ⇒ المعتاد', () {
+      final s = CardsSummary.fromJson({
+        'success': true,
+        'enabled': true,
+        'source': 'earthlink',
+        'valid_only': true,
+        'used_days': 30,
+        'totals': {'remaining': 12, 'used': 37, 'qty': 49, 'series': 3},
+        'profiles': [],
+        'series': [
+          {'series': 'el-105', 'profile_name': 'Economy', 'qty': 34, 'used': 24, 'remaining': 10},
+        ],
+      });
+      expect(s.validOnly, isTrue);
+      expect(s.usedDays, 30);
+      expect(s.seriesArePackages, isTrue);
+      expect(s.totals.remaining, 12);
+      expect(s.totals.used, 37);
+      final old = CardsSummary.fromJson({'enabled': true, 'source': 'earthlink', 'totals': {'remaining': 0, 'used': 3, 'qty': 3}});
+      expect(old.validOnly, isFalse);
+      expect(old.usedDays, 30);
+    });
+
     test('المنتهية والفارغة لا يُسحب منها', () {
       final expired = CardSeries.fromJson({
         'series': 'a',

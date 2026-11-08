@@ -383,7 +383,9 @@ void main() {
     declined = true;
     await t.pump(const Duration(seconds: 5));
     await t.pump(const Duration(milliseconds: 300));
-    expect(find.text('لم يكتمل الدفع — لم يُخصم شيء'), findsOneWidget);
+    // ٨ نوفمبر: «فشل» البنك لا يُوثَق به — لا «لم يُخصم شيء» (الطلب ١٥ رجع فاشلاً وخُصم)
+    expect(find.textContaining('البنك لم يؤكّد الدفع — قد يكون خُصم'), findsOneWidget);
+    expect(find.textContaining('لم يُخصم شيء'), findsNothing);
     expect(find.textContaining('بانتظار الدفع'), findsNothing);
     expect(find.text('افتح صفحة الدفع'), findsNothing);
     expect(find.textContaining('تلقائيّاً حين يكتمل الدفع'), findsNothing, reason: 'لا وعدٌ بتسجيلٍ تلقائيّ لدفعٍ رُفض');
@@ -420,7 +422,9 @@ void main() {
     expect(find.text('افتح صفحة الدفع'), findsOneWidget, reason: 'قبل أيّ سؤال: رابط الإنشاء نفسه');
     await t.pump(const Duration(seconds: 5));
     await t.pump(const Duration(milliseconds: 300));
-    expect(find.text('لم يكتمل الدفع — لم يُخصم شيء'), findsOneWidget);
+    // ٨ نوفمبر: «فشل» البنك لا يُوثَق به — لا «لم يُخصم شيء» (الطلب ١٥ رجع فاشلاً وخُصم)
+    expect(find.textContaining('البنك لم يؤكّد الدفع — قد يكون خُصم'), findsOneWidget);
+    expect(find.textContaining('لم يُخصم شيء'), findsNothing);
     await t.ensureVisible(find.text('محاولة جديدة'));
     await t.tap(find.text('محاولة جديدة'));
     await t.pumpAndSettle();

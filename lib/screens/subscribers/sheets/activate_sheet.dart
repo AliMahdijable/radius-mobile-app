@@ -1477,11 +1477,13 @@ class _ActivateSheetState extends State<_ActivateSheet> {
     final waiting = !declined && (st == 'link' || st == 'creating');
     final ended = declined || st == 'failed' || st == 'expired';
     final (text, tone, icon) = switch (st) {
-      'link' when declined => ('لم يكتمل الدفع — لم يُخصم شيء', AppColors.error, LucideIcons.triangleAlert),
+      // ٨ نوفمبر: «فشل» البنك لا يُوثَق به (الطلب ١٥ رجع فاشلاً وخُصم وتفعّل بعد ٥ دقائق) — لا «لم يُخصم شيء» فيدفع الوكيل مرّتين.
+      'link' when declined => ('البنك لم يؤكّد الدفع — قد يكون خُصم؛ ننتظر ونفعّل تلقائيّاً. لا تدفع مرّةً ثانية قبل ١٠ دقائق',
+          AppColors.warning, LucideIcons.triangleAlert),
       'link' || 'creating' => ('بانتظار الدفع بالبطاقة…', AppColors.textMid, LucideIcons.loader),
       'paid' || 'applying' => ('تمّ الدفع — جارٍ تفعيل المشترك…', AppColors.brandAccent, LucideIcons.loader),
       'applied' => ('تمّ التفعيل ✓', AppColors.brandAccent, LucideIcons.circleCheck),
-      'failed' => ('لم يكتمل الدفع — لم يُخصم شيء', AppColors.error, LucideIcons.triangleAlert),
+      'failed' => ('لم يكتمل الدفع — لم يظهر خصمٌ خلال ساعة؛ افحص كشف بطاقتك قبل أيّ إعادة', AppColors.error, LucideIcons.triangleAlert),
       'expired' when o.noReturn => ('انتهى رابط الدفع ولم يصلنا رجوعٌ من صفحة الدفع', AppColors.warning, LucideIcons.triangleAlert),
       'expired' => ('انتهى رابط الدفع بلا دفع', AppColors.error, LucideIcons.triangleAlert),
       _ when o.paidSeen => ('وصلنا أنّ الدفع تمّ ولم يظهر التفعيل — افحص المشترك في $_kitName قبل أيّ إعادة', AppColors.warning,

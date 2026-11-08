@@ -277,6 +277,7 @@ class _CardsScreenState extends State<CardsScreen> {
                 remaining: s.totals.remaining,
                 totals: s.totals,
                 byPackage: byPackage,
+                validDays: s.validOnly ? s.usedDays : null,
               ),
               if (_purchase.enabled) ...[
                 const SizedBox(height: Sp.md),
@@ -344,6 +345,7 @@ class _CardsScreenState extends State<CardsScreen> {
               itemBuilder: (_, i) => _SeriesTile(
                 series: paged[i],
                 onTap: () => _openSeries(paged[i]),
+                usedDays: s.validOnly ? s.usedDays : null,
               ),
             ),
           ),
@@ -373,9 +375,13 @@ class _TotalCard extends StatelessWidget {
     required this.remaining,
     required this.totals,
     this.byPackage = false,
+    this.validDays,
   });
   final int? remaining;
   final CardsTotals? totals;
+
+  /// ملخّص ايرث لنك الصالح ([CardsSummary.validOnly]): «الصالحة بيدك» و«مستعمل آخر N يوماً» بلا «من الكلّ». null = المعتاد.
+  final int? validDays;
 
   /// ايرث لنك: «السلاسل» باقات — العدد يُقال «باقة» لا «سلسلة».
   final bool byPackage;
@@ -411,7 +417,7 @@ class _TotalCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('cards.remaining_total'.tr(), style: AppType.label()),
+                Text((validDays != null ? 'cards.valid_total' : 'cards.remaining_total').tr(), style: AppType.label()),
                 const SizedBox(height: Sp.xxs),
                 if (n == null)
                   const SkeletonBox(width: 56, height: 27, borderRadius: R.sm)
@@ -432,11 +438,16 @@ class _TotalCard extends StatelessWidget {
                   )
                 else
                   Text(
-                    (byPackage ? 'cards.totals_line_pkg' : 'cards.totals_line')
+                    (validDays != null
+                            ? 'cards.totals_line_valid'
+                            : byPackage
+                                ? 'cards.totals_line_pkg'
+                                : 'cards.totals_line')
                         .tr(namedArgs: {
                       'used': iso(formatIQD(t.used)),
                       'qty': iso(formatIQD(t.qty)),
                       'series': iso(formatIQD(t.series)),
+                      'days': iso('${validDays ?? 30}'),
                     }),
                     style: AppType.muted(),
                     maxLines: 2,
@@ -562,9 +573,12 @@ class _StockCount extends StatelessWidget {
 /// صفّ سلسلة: رقمها، وباقتها وانتهاؤها، وحبّات حالها. ينقر ← كارتاتها.
 /// المستهلكة كلّها باهتة، وتبقى تُفتح: لمن ذهبت كارتاتها سؤالٌ قائم.
 class _SeriesTile extends StatelessWidget {
-  const _SeriesTile({required this.series, required this.onTap});
+  const _SeriesTile({required this.series, required this.onTap, this.usedDays});
   final CardSeries series;
   final VoidCallback onTap;
+
+  /// ملخّص ايرث لنك الصالح ⇒ «مستعمل آخر N يوماً».
+  final int? usedDays;
 
   @override
   Widget build(BuildContext context) {
@@ -627,7 +641,7 @@ class _SeriesTile extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: Sp.sm),
-                      SeriesChips(series: s),
+                      SeriesChips(series: s, usedDays: usedDays),
                     ],
                   ),
                 ),

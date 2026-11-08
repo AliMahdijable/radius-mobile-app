@@ -439,7 +439,14 @@ class CardsSummary {
     this.unsupportedMessage,
     this.partial = false,
     this.transferEnabled = false,
+    this.validOnly = false,
+    this.usedDays = 30,
   });
+
+  /// ايرث لنك (٨ نوفمبر — المالك: «اقرة بس الصالحات» ثمّ «اظهر بس اخر شهر»): الملخّص من «المتوفّر» — الكارتات الصالحة وحدها،
+  /// و[CardsTotals.used] المستعمل آخر [usedDays] يوماً لا السجلّ كلّه (`valid_only` · `used_days`). خادمٌ أقدم ⇒ false.
+  final bool validOnly;
+  final int usedDays;
 
   /// `false` = لا صلاحيّة كارت أو لا سلاسل له إطلاقاً (والمصفوفتان فارغتان).
   final bool enabled;
@@ -481,6 +488,8 @@ class CardsSummary {
             _bool(body['unsupported']) ? _str(body['message']) : null,
         partial: _bool(body['partial']),
         transferEnabled: _bool(body['transfer_enabled']),
+        validOnly: _bool(body['valid_only']),
+        usedDays: int.tryParse('${body['used_days'] ?? ''}') ?? 30,
       );
 }
 

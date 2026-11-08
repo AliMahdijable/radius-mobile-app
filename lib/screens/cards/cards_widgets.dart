@@ -75,8 +75,11 @@ List<CardSeries> newestFirst(List<CardSeries> list) {
 /// الباقي بنغمة البراند حين يُسحب منه فعلاً؛ والباقي في سلسلةٍ منتهية أو
 /// معلّقة محايدٌ — موجودٌ لكنّه لا يصلح للتفعيل.
 class SeriesChips extends StatelessWidget {
-  const SeriesChips({super.key, required this.series});
+  const SeriesChips({super.key, required this.series, this.usedDays});
   final CardSeries series;
+
+  /// ملخّص ايرث لنك الصالح: «مستعمل» هو آخر [usedDays] يوماً لا السجلّ كلّه. null = المعتاد.
+  final int? usedDays;
 
   @override
   Widget build(BuildContext context) {
@@ -92,7 +95,9 @@ class SeriesChips extends StatelessWidget {
           dense: true,
         ),
         ToneChip(
-          label: 'cards.chip_used'.tr(namedArgs: {'n': formatIQD(s.used)}),
+          label: usedDays != null
+              ? 'cards.chip_used_days'.tr(namedArgs: {'n': formatIQD(s.used), 'days': '$usedDays'})
+              : 'cards.chip_used'.tr(namedArgs: {'n': formatIQD(s.used)}),
           dense: true,
         ),
         if (s.expired)
