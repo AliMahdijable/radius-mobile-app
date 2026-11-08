@@ -510,7 +510,10 @@ class DevicesCheck {
     }
 
     // ── المنافذ (السويج والراوتر وكلّ ما له إيثر) ──
-    final phys = detail.ports.where((p) => p.physical).toList();
+    // قفص SFP فارغ ليس منفذاً مستعمَلاً (٨ نوفمبر — المالك: «بالفحص الشامل اكو سكاتر يقره اسم الايثر sfp! وهو مبي sfp»):
+    // بيس بوكس ونت ميتال وأخواتها يسمّيها راوتر OS ‏sfp1 وإن لم تُركَّب فيها وحدة ⇒ طافٍ دائماً بجانب الإيثر الحقيقيّ. لا يُعرض
+    // ولا يُعدّ ما دام طافياً ولم يُرَ شغّالاً في فحصٍ سابق؛ الشغّال يبقى (بضوئه)، وما كان شغّالاً ثمّ طفى يبقى ليُقال «طفى».
+    final phys = detail.ports.where((p) => p.physical && !_emptySfpCage(p, prev)).toList();
     final ports = <CheckPort>[];
     final memoPorts = <String, PortMemo>{};
     if (!portsCountsOnly) {
@@ -611,6 +614,12 @@ class DevicesCheck {
       ),
     );
   }
+
+  static final _sfpName = RegExp(r'^(q?sfp)', caseSensitive: false);
+
+  /// قفص SFP طافٍ لم يُرَ شغّالاً في الفحص السابق — بلا وحدةٍ غالباً (انظر المنافذ أعلاه).
+  static bool _emptySfpCage(PortTraffic p, CheckMemo? prev) =>
+      !p.up && _sfpName.hasMatch(p.name.trim()) && prev?.ports[p.name]?.up != true;
 
   /// ترتيب العرض: طافي ⇒ ملاحظات ⇒ لم يُقرأ ⇒ سليم، ثمّ الأكثر ملاحظاتٍ، ثمّ الاسم.
   static List<DeviceCheckReport> sorted(Iterable<DeviceCheckReport> rs) => rs.toList()

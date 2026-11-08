@@ -208,6 +208,46 @@ void main() {
       expect(r.memo!.ports['ether1']!.up, isFalse);
     });
 
+    test('قفص SFP فارغ (سكتر بيس بوكس: ether1 + sfp1 بلا وحدة) لا يُعرض ولا يُعدّ — وما كان شغّالاً ثمّ طفى يبقى', () {
+      final sector = dev(8, type: 'sector');
+      final r = DevicesCheck.evaluate(
+        d: sector,
+        alive: true,
+        detail: detail(glance: uptime, ports: const [
+          PortTraffic(name: 'ether1', up: true, linkSpeed: '1Gbps'),
+          PortTraffic(name: 'sfp1', up: false),
+        ]),
+      );
+      expect(r.ports.map((p) => p.name), ['ether1'], reason: 'لا «sfp» لجهازٍ بلا وحدة');
+      expect([r.portsUp, r.portsTotal], [1, 1]);
+      expect(r.memo!.ports.containsKey('sfp1'), isFalse);
+
+      // كان شغّالاً في الفحص السابق ثمّ طفى ⇒ يبقى ويُقال
+      final down = DevicesCheck.evaluate(
+        d: sector,
+        alive: true,
+        prev: const CheckMemo(ports: {'sfp1': PortMemo(up: true, mbps: 1000)}),
+        detail: detail(glance: uptime, ports: const [
+          PortTraffic(name: 'ether1', up: true, linkSpeed: '1Gbps'),
+          PortTraffic(name: 'sfp1', up: false),
+        ]),
+      );
+      final by = {for (final p in down.ports) p.name: p};
+      expect(by['sfp1']!.notes, ['طفى من الفحص السابق']);
+      expect(down.portsTotal, 2);
+
+      // شغّالٌ بوحدة ⇒ منفذٌ عاديّ بضوئه
+      final fiber = DevicesCheck.evaluate(
+        d: sector,
+        alive: true,
+        detail: detail(glance: uptime, ports: const [
+          PortTraffic(name: 'ether1', up: false),
+          PortTraffic(name: 'sfp1', up: true, linkSpeed: '1Gbps', sfpRx: -12.0),
+        ]),
+      );
+      expect(fiber.ports.map((p) => p.name).toSet(), {'ether1', 'sfp1'}, reason: 'الإيثر الطافي يبقى — منفذٌ حقيقيّ');
+    });
+
     test('بلا لقطةٍ سابقة: الانقطاعات والأخطاء بمعدّلها اليوميّ منذ الإقلاع', () {
       final r = DevicesCheck.evaluate(
         d: sw,
