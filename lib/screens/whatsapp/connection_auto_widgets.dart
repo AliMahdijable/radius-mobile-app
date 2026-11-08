@@ -239,16 +239,18 @@ class _ConnAutoCardState extends State<ConnAutoCard> {
           // موظّفٌ بلا مفتاح القسم (conn_alerts.use) أو مقيَّدٌ بمديرٍ فرعيّ: مكانها مقفلةً لا مخفيّة (٤ نوفمبر)
           PermissionLocked(locked: !_st.canUse, label: 'تنبيهات المشتركين', child: _QueueTile(st: _st, onTap: _openQueue)),
         ],
-        // «ربط VPN» (٣ نوفمبر): لصاحب الحساب وحده — أسرار شبكته
-        if (!PermissionsService.isEmployee) ...[
-          const SizedBox(height: Sp.sm),
-          _NavTile(
+        // «ربط VPN» (٣ نوفمبر): لصاحب الحساب، وللموظّف بصلاحيّته «ربط VPN» (٨ نوفمبر) — وبدونها مكانه مقفلاً لا مخفيّاً
+        const SizedBox(height: Sp.sm),
+        PermissionLocked(
+          locked: !PermissionsService.canLinkVpn,
+          label: 'ربط VPN',
+          child: _NavTile(
             icon: LucideIcons.shieldCheck,
             title: 'ربط VPN',
             subtitle: 'فعّل «الاتصال العكسي» ليقيس النظام وأنت خارج شبكتك — بدونه الفحص من موبايلك على شبكتك فقط',
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ConnVpnScreen())),
           ),
-        ],
+        ),
       ]),
     );
   }

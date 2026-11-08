@@ -484,7 +484,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
 
   /// زرّ VPN بالرأس: لمن له طريق VPN، خارج شبكته (أو والحال مجهولة) وطول ما الوضع شغّال.
   // مشتركو الوطنيّ/فايبر اكس على شبكة الشركة ⇒ لا زرّ «وضع VPN» بقسمهم (الخادم بـ«الطريق»: subscribers=false — ٦ نوفمبر)
-  bool get _vpnButton => _vpnLinked && VpnNow.subscribersOk && (VpnNow.mode.value || !AgentNetPresence.isOn);
+  bool get _vpnButton =>
+      _vpnLinked && VpnNow.subscribersOk && PermissionsService.canSubsVpnCheck && (VpnNow.mode.value || !AgentNetPresence.isOn);
 
   void _toggleVpn() => VpnNow.mode.value ? VpnNow.exitMode() : VpnNow.enterMode(from: VpnNowKind.subscribers);
 
@@ -501,6 +502,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   void _onRadar() => _runProbeWave(force: true);
 
   Future<void> _openVpnPage() async {
+    if (!PermissionsService.canLinkVpn) return showNoPermission(context, action: true);
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ConnVpnScreen()));
     unawaited(VpnNow.route(force: true));
   }

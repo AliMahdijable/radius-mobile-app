@@ -18,6 +18,7 @@ import '../../services/device_events.dart';
 import '../../services/device_sweep_coordinator.dart';
 import '../../services/device_warmup.dart';
 import '../../services/permissions_service.dart';
+import '../../core/widgets/permission_locked.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../widgets/skeleton.dart';
@@ -249,6 +250,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
   /// ٦ نوفمبر (المالك: «ايرثلنك وكل الشركات البقية مجاي الكه بيها مكان اضيف ملف vpn» ثمّ «ابدي بي»): مدخلٌ ثابت لـ«ربط VPN»
   /// في «المزيد» — كان مدخله الوحيد بطاقة «الإرسال التلقائيّ» في إعدادات «تنبيه المشترك»، وشريط «خارج شبكتك».
   Future<void> _openVpnLink() async {
+    if (!PermissionsService.canLinkVpn) return showNoPermission(context, action: true);
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ConnVpnScreen()));
     await _refreshVpnRoute(force: true);
   }
@@ -1747,7 +1749,7 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
             const SizedBox(width: Sp.sm),
             // ٥ نوفمبر (المالك: «اريد من ينقر ع vpn يتفعل الفحص يتوجه ع vpn»): زرّ «وضع VPN» لمن له طريق VPN — يظهر خارج شبكتك
             // (أو والحال مجهولة) وطول ما الوضع شغّال؛ على شبكتك لا حاجة له فلا يأخذ من البحث.
-            if (_vpnLinked && (VpnNow.mode.value || !AgentNetPresence.isOn)) ...[
+            if (_vpnLinked && PermissionsService.canDevicesVpn && (VpnNow.mode.value || !AgentNetPresence.isOn)) ...[
               _vpnButton(),
               SizedBox(width: gap),
             ],
@@ -1785,8 +1787,13 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
                 _ToolButton(
                   key: const ValueKey('devices-deep-check'),
                   tooltip: 'فحص شامل',
-                  onTap: _openDeepCheck,
-                  child: Icon(LucideIcons.radar, size: 20, color: AppColors.textBody),
+                  // الموظّف بلا صلاحيّة «الفحص الشامل» (٨ نوفمبر): مكانه مقفلاً لا مخفيّاً
+                  onTap: PermissionsService.canDeepCheck
+                      ? _openDeepCheck
+                      : () => showNoPermission(context, action: true),
+                  child: PermissionsService.canDeepCheck
+                      ? Icon(LucideIcons.radar, size: 20, color: AppColors.textBody)
+                      : PermLockBadge(child: Icon(LucideIcons.radar, size: 20, color: AppColors.textLow)),
                 )
               else
                 _ToolButton(

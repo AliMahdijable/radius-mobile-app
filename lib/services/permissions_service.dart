@@ -259,6 +259,19 @@ class PermissionsService {
     return true;
   }
 
+  /// «ربط VPN» (٨ نوفمبر — المالك: «صلاحيه موظف يربط vpn ويفحص شامل ويفحص مشترك»): صاحب الحساب دائماً، والموظّف بمفتاحه
+  /// `conn_vpn.link` (الخادم يفرضه: server/connVpn/agentRoutes.js).
+  static bool get canLinkVpn => !_isEmployee || has('conn_vpn.link');
+
+  /// «الفحص الشامل» للأجهزة: الموظّف بمفتاحه `devices.deep_check` أو بقسم «تنبيهات المشتركين» (كما يفتحه الخادم عبر VPN).
+  static bool get canDeepCheck => !_isEmployee || has('devices.deep_check') || has('conn_alerts.use');
+
+  /// فحص المشتركين عبر VPN («وضع VPN» و«فحص الآن» بقسم المشتركين): `subscribers.vpn_check` أو قسم «تنبيهات المشتركين».
+  static bool get canSubsVpnCheck => !_isEmployee || has('subscribers.vpn_check') || has('conn_alerts.use');
+
+  /// «وضع VPN» بقسم الأجهزة (الممرّ): «ربط VPN» أو «الفحص الشامل» أو قسم «تنبيهات المشتركين» — كما يفتحه الخادم.
+  static bool get canDevicesVpn => !_isEmployee || has('conn_vpn.link') || has('devices.deep_check') || has('conn_alerts.use');
+
   /// true إذا الـactor يملك واحدة على الأقل من المفاتيح.
   /// useful للشاشات اللي تجمع أكثر من tab/زر.
   static bool hasAny(Iterable<String> keys) {
