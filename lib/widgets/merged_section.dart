@@ -44,16 +44,30 @@ class MergedSectionInfo {
 /// شيتٍ فيه موجَّهةٌ لها ما دام مفتوحاً ([CompanyRoute.enterSection]) — و«الكل» ⇒ الشركة المفتوحة كما كانت. الشاشة تُبنى من
 /// جديد لكلّ شركة (لا تبقى أرقام شركةٍ تحت اسم أخرى). خارج «كل الشركات» لا أثر له.
 class MergedSection extends StatefulWidget {
-  const MergedSection({super.key, required this.prefixes, required this.child, this.readOnly = false})
-      : openOnlyTitle = null,
+  const MergedSection({
+    super.key,
+    required this.prefixes,
+    required this.child,
+    this.readOnly = false,
+    this.serves,
+    this.servesNote,
+    this.lockTitle,
+  })  : openOnlyTitle = null,
         openOnlyReason = null;
 
   /// قسمٌ للشركة المفتوحة وحدها (مالٌ يُشحن أو يُحوَّل، أو أسعارٌ لكلّ شركةٍ على حدة — لا يُوجَّه أبداً): الشريط يظهر، و«الكل»
   /// أو المفتوحة ⇒ الشاشة نفسها، وشركةٌ غيرها ⇒ صفحةٌ مقفلةٌ بسببها ([reason]) مكان الشاشة و«بدّل إليها» — لا أرقام شركةٍ تحت
   /// اسم أخرى، ولا زرّ يعمل على المفتوحة وهي غير المختارة.
-  const MergedSection.openOnly({super.key, required String title, required String reason, required this.child})
-      : prefixes = const [],
+  const MergedSection.openOnly({
+    super.key,
+    required String title,
+    required String reason,
+    required this.child,
+    this.serves,
+    this.servesNote,
+  })  : prefixes = const [],
         readOnly = false,
+        lockTitle = null,
         openOnlyTitle = title,
         openOnlyReason = reason;
 
@@ -67,6 +81,14 @@ class MergedSection extends StatefulWidget {
   /// [MergedSection.openOnly]: عنوان القسم لصفحة القفل، وسببه.
   final String? openOnlyTitle;
   final String? openOnlyReason;
+
+  /// قسمٌ لمزوّدٍ بعينه (٨ نوفمبر — «الكارتات المطلوبة» وتحويل الرصيد لايرث لنك، الكارتات للساس): شركةٌ لا يخدمها ([serves] false)
+  /// ⇒ صفحة قفلٍ بـ[servesNote] بلا «بدّل إليها» ولا طلب — لا خطأ رفضٍ من الخادم. null = يخدم كلّ شركة.
+  final bool Function(MergedCompany c)? serves;
+  final String? servesNote;
+
+  /// عنوان القسم لصفحة القفل (قسمٌ موجَّه لا يخدم الشركة المختارة).
+  final String? lockTitle;
 
   /// ما يعرضه أقرب قسم — null خارج قسمٍ أو خارج «كل الشركات».
   static MergedSectionInfo? of(BuildContext context) =>
@@ -144,6 +166,20 @@ class _MergedSectionState extends State<MergedSection> {
       );
     }
     final i = _info;
+    final f = i?.company;
+    if (i != null && f != null && widget.serves != null && !widget.serves!(f)) {
+      CompanyRoute.leaveSection(this);
+      return _MergedSectionScope(
+        info: i,
+        child: _OpenOnlyPage(
+          key: ValueKey('merged-not-served-${f.key}'),
+          title: widget.openOnlyTitle ?? widget.lockTitle ?? '',
+          reason: widget.servesNote ?? '',
+          company: f,
+          served: false,
+        ),
+      );
+    }
     _apply(i);
     if (i != null && i.openOnly && i.other) {
       return _MergedSectionScope(
@@ -169,10 +205,13 @@ class _MergedSectionState extends State<MergedSection> {
 
 /// [MergedSection.openOnly] وشركةٌ غير المفتوحة مختارة: الشريط ثمّ بطاقة القفل بسببها و«بدّل إليها» (ورقة «شركاتي» تفتحها بنفسها).
 class _OpenOnlyPage extends StatefulWidget {
-  const _OpenOnlyPage({super.key, required this.title, required this.reason, required this.company});
+  const _OpenOnlyPage({super.key, required this.title, required this.reason, required this.company, this.served = true});
   final String title;
   final String reason;
   final MergedCompany company;
+
+  /// false = القسم لا يخدم هذه الشركة أصلاً ([MergedSection.serves]) — السبب وحده بلا «بدّل إليها».
+  final bool served;
 
   @override
   State<_OpenOnlyPage> createState() => _OpenOnlyPageState();
@@ -229,18 +268,19 @@ class _OpenOnlyPageState extends State<_OpenOnlyPage> {
                       Icon(LucideIcons.lock, size: 26, color: AppColors.textMid),
                       const SizedBox(height: Sp.md),
                       Text(
-                        'merged.open_only_title'.tr(args: [widget.title, name]),
+                        (widget.served ? 'merged.open_only_title' : 'merged.not_served_title').tr(args: [widget.title, name]),
                         textAlign: TextAlign.center,
                         style: AppType.title(color: AppColors.textHi).copyWith(fontSize: 15, height: 1.5),
                       ),
                       const SizedBox(height: Sp.sm),
                       Text(
-                        'merged.open_only_body'.tr(args: [widget.reason]),
+                        widget.served ? 'merged.open_only_body'.tr(args: [widget.reason]) : widget.reason,
                         textAlign: TextAlign.center,
                         style: AppType.body(color: AppColors.textMid).copyWith(fontSize: 13, height: 1.6),
                       ),
-                      const SizedBox(height: Sp.lg),
-                      FilledButton.icon(
+                      if (widget.served) ...[
+                        const SizedBox(height: Sp.lg),
+                        FilledButton.icon(
                         key: const ValueKey('merged-open-only-switch'),
                         onPressed: _busy ? null : _switch,
                         icon: _busy
@@ -248,6 +288,7 @@ class _OpenOnlyPageState extends State<_OpenOnlyPage> {
                             : const Icon(LucideIcons.arrowLeftRight, size: 18),
                         label: Text('merged.open_only_switch'.tr(args: [name])),
                       ),
+                      ],
                     ],
                   ),
                 ),

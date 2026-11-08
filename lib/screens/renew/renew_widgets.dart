@@ -306,8 +306,19 @@ class _ReceiptViewer extends StatelessWidget {
 
 /// تفاصيل الطلب والإجراءات — داخل النافذة السريعة وصفحة القائمة. [onChanged] بعد كلّ إجراءٍ نجح (الطلب كما صار).
 class RenewRequestDetails extends StatefulWidget {
-  const RenewRequestDetails({super.key, required this.request, this.onChanged, this.onOpenSubscriber, this.imageHeight = 260});
+  const RenewRequestDetails({
+    super.key,
+    required this.request,
+    this.onChanged,
+    this.onOpenSubscriber,
+    this.imageHeight = 260,
+    this.readOnlyCompany,
+  });
   final RenewRequest request;
+
+  /// «كل الشركات» (٨ نوفمبر): طلبٌ من شركةٍ غير المفتوحة للعرض هنا — لا قبول ولا رفض ولا «تمّ» ولا فتح مشتركه (كتاباتها وصفحة
+  /// مشتركها لشركتها)؛ سطرٌ يقول ذلك باسمها. null = المفتوحة كما كانت.
+  final String? readOnlyCompany;
   final void Function(RenewRequest r, String action)? onChanged;
   final VoidCallback? onOpenSubscriber;
   final double imageHeight;
@@ -451,7 +462,10 @@ class _RenewRequestDetailsState extends State<RenewRequestDetails> {
         _note(AppColors.dangerSoftBg, AppColors.dangerOnSoft, 'رُفض${r.rejectReason != null ? ': ${r.rejectReason}' : ''}'),
       ],
       const SizedBox(height: Sp.lg),
-      if (r.isPending)
+      if (widget.readOnlyCompany != null)
+        _note(AppColors.warningSoftBg, AppTone.warning.onSoft,
+            '«${widget.readOnlyCompany}» للعرض هنا — القبول والرفض و«تمّ التفعيل» من صفحتها (بدّل إليها)'),
+      if (r.isPending && widget.readOnlyCompany == null)
         SizedBox(
           height: H.button,
           child: FilledButton.icon(
@@ -467,7 +481,7 @@ class _RenewRequestDetailsState extends State<RenewRequestDetails> {
             ),
           ),
         ),
-      if (r.isOpen) ...[
+      if (r.isOpen && widget.readOnlyCompany == null) ...[
         if (r.isPending) const SizedBox(height: Sp.sm),
         Row(children: [
           Expanded(
@@ -500,7 +514,7 @@ class _RenewRequestDetailsState extends State<RenewRequestDetails> {
           ),
         ]),
       ],
-      if (widget.onOpenSubscriber != null) ...[
+      if (widget.onOpenSubscriber != null && widget.readOnlyCompany == null) ...[
         const SizedBox(height: Sp.xs),
         TextButton.icon(
           key: const ValueKey('renew-open-subscriber'),
@@ -601,7 +615,7 @@ Future<void> openRenewSubscriber(BuildContext context, RenewRequest r) async {
 
 /// النافذة السريعة (الجرس والإشعار): الطلب كاملاً — الصورة والإجراءات — بلا مغادرة الشاشة. بعد الرفض/«تمّ التفعيل» تُغلق،
 /// وبعد «قبول» تبقى (التالي: صفحته للتجديد).
-Future<void> showRenewRequestSheet(BuildContext context, RenewRequest request) {
+Future<void> showRenewRequestSheet(BuildContext context, RenewRequest request, {String? readOnlyCompany}) {
   return showAppSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
@@ -618,6 +632,7 @@ Future<void> showRenewRequestSheet(BuildContext context, RenewRequest request) {
       body: RenewRequestDetails(
         request: request,
         imageHeight: 300,
+        readOnlyCompany: readOnlyCompany,
         onChanged: (r, action) {
           if (action != 'accept' && Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
         },

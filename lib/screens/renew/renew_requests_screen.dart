@@ -9,7 +9,6 @@ import '../desktop/desk_widgets.dart';
 import '../portal_settings/portal_settings_screen.dart';
 import 'renew_widgets.dart';
 import '../../widgets/merged_section.dart';
-import 'package:easy_localization/easy_localization.dart';
 
 /// «طلبات التفعيل» (٤ نوفمبر — المالك): مشتركوك يطلبون التجديد من تطبيقهم مع صورة التحويل. المفتوحة (بانتظارك ثمّ المقبولة) أو
 /// آخر ٣٠ يوماً، والنقر يفتح الطلب بصورته وإجراءاته. الموظّف بلا «طلبات التفعيل» يراها مقفلةً لا مخفيّة.
@@ -17,8 +16,12 @@ class RenewRequestsScreen extends StatefulWidget {
   const RenewRequestsScreen({super.key});
 
   /// «كل الشركات»: للمفتوحة وحدها (الطلبات تصل لصفحتها وتُفعَّل منها) — من «قوائم أخرى» والجرس وإعدادات البوّابة معاً.
-  static Widget mergedPage() => MergedSection.openOnly(
-      title: 'طلبات التفعيل', reason: 'merged.reason_renew'.tr(), child: const RenewRequestsScreen());
+  ///
+  /// ٨ نوفمبر (الخادم 99e1913): القائمة والصورة والإعدادات قراءةٌ موجَّهة لكلّ شركة — غير المفتوحة للعرض (القرارات من صفحتها).
+  static Widget mergedPage() => const MergedSection(
+      readOnly: true,
+      prefixes: ['/api/v2/portal/renew-requests', '/api/v2/portal/renew-settings'],
+      child: RenewRequestsScreen());
 
   @override
   State<RenewRequestsScreen> createState() => _RenewRequestsScreenState();
@@ -53,8 +56,10 @@ class _RenewRequestsScreenState extends State<RenewRequestsScreen> {
       }
       _loading = false;
     });
-    // الجرس يتبع ما رأيته هنا
-    if (l != null && !_all) await RenewRequestsState.ensureFresh(force: true);
+    // الجرس يتبع ما رأيته هنا — للمفتوحة وحدها (شركةٌ أخرى معروضة هنا لا تكتب عدّادها فوق جرس المفتوحة)
+    if (l != null && !_all && !(MergedSection.of(context)?.routed ?? false)) {
+      await RenewRequestsState.ensureFresh(force: true);
+    }
   }
 
   void _setView(bool all) {
@@ -153,7 +158,8 @@ class _RenewRequestsScreenState extends State<RenewRequestsScreen> {
           RenewRequestTile(
             request: r,
             onTap: () async {
-              await showRenewRequestSheet(context, r);
+              final info = MergedSection.of(context);
+              await showRenewRequestSheet(context, r, readOnlyCompany: (info?.routed ?? false) ? info!.company!.name : null);
               if (mounted) await _load();
             },
           ),

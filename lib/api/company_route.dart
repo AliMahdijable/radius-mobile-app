@@ -23,6 +23,12 @@ class CompanyRoute {
     return runZoned(body, zoneValues: {_zoneKey: key});
   }
 
+  static const Symbol _openKey = #companyRouteOpen;
+
+  /// يشغّل [body] للشركة المفتوحة صراحةً — لا يأخذ وجهة قسمٍ مفتوح ([enterSection]) ولو طابقت بادئاته (٨ نوفمبر): حال المفتوحة
+  /// المشترك (عدّاد «طلبات التفعيل» بالجرس…) يُحدَّث بالخلفيّة وقسمٌ موجَّه لغيرها مفتوحٌ بالبادئات نفسها — فلا يُكتب فوقه رقم غيرها.
+  static Future<T> runOpen<T>(Future<T> Function() body) => runZoned(body, zoneValues: {_openKey: true, _zoneKey: null});
+
   /// مفتاح النطاق الحاليّ (null خارج أيّ نطاق).
   static String? get currentKey {
     final z = Zone.current[_zoneKey];
@@ -90,6 +96,7 @@ class CompanyRoute {
   static String? keyFor(RequestOptions o) {
     final x = o.extra['companyKey'];
     if (x is String && keyRe.hasMatch(x)) return x;
+    if (Zone.current[_openKey] == true) return null; // [runOpen]: المفتوحة صراحةً
     return currentKey ?? sectionKeyFor(o.uri.path);
   }
 }

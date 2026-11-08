@@ -14,6 +14,9 @@ import 'package:rad_mysvcs/screens/telegram/telegram_screen.dart';
 import 'package:rad_mysvcs/screens/settlements/settlements_screen.dart';
 import 'package:rad_mysvcs/screens/subscribers/sheets/add_subscriber_sheet.dart';
 import 'package:rad_mysvcs/services/merged_mode.dart';
+import 'package:rad_mysvcs/models/merged_company.dart';
+import 'package:rad_mysvcs/api/renew_requests_api.dart';
+import 'package:rad_mysvcs/screens/renew/renew_requests_screen.dart';
 import 'package:rad_mysvcs/widgets/merged_section.dart';
 
 import 'visual_perm/visual_perm_harness.dart';
@@ -96,6 +99,24 @@ class _Srv implements HttpClientAdapter {
           'deposit_balance': 100000,
         },
       }, headers: h);
+    }
+    // «طلبات التفعيل» (للعرض لكلّ شركة): المتاح والقائمة — طلبٌ معلّق لكلّ شركة باسمٍ يميّزها
+    if (path == '/api/v2/portal/renew-settings') {
+      return _json(200, {'success': true, 'available': true, 'can_use': true, 'can_edit': true, 'enabled': true}, headers: h);
+    }
+    if (path == '/api/v2/portal/renew-requests') {
+      return _json(200, {
+        'success': true,
+        'items': [
+          {'id': el ? 902 : 102, 'status': 'pending', 'months': 1, 'amount': 25000, 'created_at': '2026-11-08T10:00:00Z',
+            'subscriber': {'idx': el ? '77' : '7', 'username': el ? 'eluser' : 'snuser', 'name': el ? 'مشترك ايرث' : 'مشترك سوبرنت'},
+            'package': {'id': '5', 'name': 'Gold', 'same': true}},
+        ],
+        'counts': {'pending': 1, 'accepted': 0},
+      }, headers: h);
+    }
+    if (path == '/api/v2/el/prepaid-needed') {
+      return _json(200, {'success': true, 'data': {'items': const []}}, headers: h);
     }
     if (path == '/api/v2/el/deposit-password') {
       return _json(200, {'success': true, 'data': {'saved': false, 'can_manage': true}}, headers: h);
@@ -336,6 +357,51 @@ void main() {
     expect(srv.asked, contains('GET /api/v2/el/create-options $_kEl'), reason: 'خيارات الإضافة لايرث لنك المختارة');
     expect(srv.asked, contains('GET /api/v2/el/deposit-password $_kEl'), reason: 'حال باسورد إيداعها هي لا المفتوحة');
     expect(srv.asked.where((a) => a.contains('/api/v2/el/') && a.endsWith(' -')), isEmpty, reason: '${srv.asked}');
+    await down(t);
+  });
+
+  testWidgets('٩ «طلبات التفعيل» لايرث لنك غير المفتوحة: قائمتها موجَّهة للعرض — لا قبول ولا رفض، وجرس المفتوحة لا يتغيّر', (t) async {
+    await up(t);
+    RenewRequestsState.debugSet(null);
+    MergedMode.focus.value = _kEl;
+    await pumpVisual(t, const VisualDevice('', Size(390, 1400), 1), home: (_) => RenewRequestsScreen.mergedPage());
+    await settleReal(t);
+    expect(t.takeException(), isNull);
+    expect(srv.asked, contains('GET /api/v2/portal/renew-requests $_kEl'));
+    expect(srv.asked.where((a) => a.contains('/api/v2/portal/renew-') && a.endsWith(' -')), isEmpty,
+        reason: 'لا قراءة للمفتوحة تكتب فوق جرسها: ${srv.asked}');
+    expect(RenewRequestsState.gate.value, isNull, reason: 'عدّاد الجرس للمفتوحة كما كان');
+    expect(find.textContaining('مشترك ايرث'), findsWidgets);
+    await t.tap(find.textContaining('مشترك ايرث').first);
+    await settleReal(t);
+    expect(find.byKey(const ValueKey('renew-accept')), findsNothing, reason: 'لا قبول لشركةٍ غير المفتوحة هنا');
+    expect(find.byKey(const ValueKey('renew-reject')), findsNothing);
+    expect(find.textContaining('«ايرث لنك» للعرض هنا — القبول والرفض'), findsOneWidget);
+    await down(t);
+  });
+
+  testWidgets('١٠ «الكارتات المطلوبة» (ايرث لنك وحدها): شركة الساس «غير متاح» بلا طلب، وايرث لنك قراءتها موجَّهة', (t) async {
+    await up(t);
+    final screen = MergedSection(
+      readOnly: true,
+      prefixes: const ['/api/v2/el/prepaid-needed'],
+      serves: (c) => c.provider == MergedProvider.earthlink,
+      servesNote: 'هذا القسم لشركات ايرث لنك وحدها',
+      lockTitle: 'الكارتات المطلوبة',
+      child: const _OpenOnlyProbe(),
+    );
+    MergedMode.focus.value = _kOpen;
+    await pumpVisual(t, const VisualDevice('', Size(390, 1400), 1), home: (_) => screen);
+    await settleReal(t);
+    expect(t.takeException(), isNull);
+    expect(find.textContaining('«الكارتات المطلوبة» غير متاح لـ«سوبرنت»'), findsOneWidget);
+    expect(find.text('probe-body'), findsNothing);
+    expect(find.byKey(const ValueKey('merged-open-only-switch')), findsNothing, reason: 'لا «بدّل إليها» لقسمٍ لا يخدمها');
+    expect(CompanyRoute.sectionKey, isNull);
+    MergedMode.focus.value = _kEl;
+    await settleReal(t);
+    expect(find.text('probe-body'), findsOneWidget);
+    expect(CompanyRoute.sectionKeyFor('/api/v2/el/prepaid-needed'), _kEl);
     await down(t);
   });
 }

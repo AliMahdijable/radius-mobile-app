@@ -13,6 +13,7 @@ import '../core/widgets/permission_locked.dart';
 import '../services/app_resumed_signal.dart';
 import '../services/permissions_service.dart';
 import '../services/provider_limits.dart';
+import '../models/merged_company.dart';
 import '../services/provider_service.dart';
 import '../theme/colors.dart';
 import 'broadcast/broadcast_screen.dart';
@@ -356,7 +357,13 @@ List<AppModule> buildAppModules() {
             : (ProviderService.isEarthlink ? 'cards.module_hint_pkg_n' : 'cards.module_hint_n')
                 .tr(namedArgs: {'n': formatIQD(stock.remaining!)}),
         // «كل الشركات» (٨ نوفمبر): كارتات الشركة المختارة للعرض (الشراء والنقل من صفحتها)
-        page: () => const MergedSection(readOnly: true, prefixes: ['/api/v2/cards'], child: CardsScreen()),
+        page: () => MergedSection(
+            readOnly: true,
+            prefixes: const ['/api/v2/cards'],
+            serves: (c) => c.provider == MergedProvider.sas4,
+            servesNote: 'merged.serves_sas'.tr(),
+            lockTitle: 'cards.title'.tr(),
+            child: const CardsScreen()),
       ),
     // 2026-08-26: تلغرام — إعداد بوت + ربط مشتركين + بث. محكوم بنفس صلاحيّة إعدادات الواتساب.
     if (permShown(tgGate))
@@ -507,7 +514,11 @@ List<AppModule> buildAppModules() {
           title: 'تحويل الرصيد',
           subtitle: 'تحويل الرصيد بين الوكلاء + كشف الحساب',
           page: () => MergedSection.openOnly(
-              title: 'تحويل الرصيد', reason: 'merged.reason_transfer'.tr(), child: const ElTransferScreen()),
+              title: 'تحويل الرصيد',
+              reason: 'merged.reason_transfer'.tr(),
+              serves: (c) => c.provider == MergedProvider.earthlink,
+              servesNote: 'merged.serves_el'.tr(),
+              child: const ElTransferScreen()),
         ),
       // «الكارتات المطلوبة» — توقّع الكارتات والرصيد لمدّة؛ من «التقارير الماليّة».
       if (permShown(const ['reports.financial']))
@@ -519,8 +530,14 @@ List<AppModule> buildAppModules() {
           tone: AppTone.brand,
           title: 'الكارتات المطلوبة',
           subtitle: 'كم كارتاً ورصيداً تحتاج ليوم / ٣ أيام / أسبوع / شهر',
-          page: () => MergedSection.openOnly(
-              title: 'الكارتات المطلوبة', reason: 'merged.reason_el_cards'.tr(), child: const ElRequiredCardsScreen()),
+          // ٨ نوفمبر (الخادم 99e1913): قراءةٌ موجَّهة لكلّ شركة ايرث لنك — غيرها «غير متاح» بسببه
+          page: () => MergedSection(
+              readOnly: true,
+              prefixes: const ['/api/v2/el/prepaid-needed'],
+              serves: (c) => c.provider == MergedProvider.earthlink,
+              servesNote: 'merged.serves_el'.tr(),
+              lockTitle: 'الكارتات المطلوبة',
+              child: const ElRequiredCardsScreen()),
         ),
     ],
   ];

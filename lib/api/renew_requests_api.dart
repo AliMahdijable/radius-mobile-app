@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../services/auth_storage.dart';
 import '../services/inbox_service.dart';
 import 'api_client.dart';
+import 'company_route.dart';
 
 /// «طلبات التفعيل» (٤ نوفمبر — الخادم server/portalRenew.js): المشترك يطلب تجديد اشتراكه من تطبيقه (أو /mysub) مع صورة التحويل
 /// (زين كاش/ماستر)، والمدير يقبل أو يرفض، وأوّل تفعيلٍ للمشترك بعد الطلب (أو «تمّ التفعيل») يبلّغه «تم تفعيل اشتراكك بنجاح».
@@ -334,7 +335,7 @@ class RenewRequestsState {
     if (failed != null && now.difference(failed) < _cooldown) return Future<void>.value();
     final epoch = _epoch;
     late final Future<void> run;
-    run = _fetch(epoch, force).whenComplete(() {
+    run = CompanyRoute.runOpen(() => _fetch(epoch, force)).whenComplete(() {
       if (identical(_inflight, run)) _inflight = null;
     });
     _inflight = run;
