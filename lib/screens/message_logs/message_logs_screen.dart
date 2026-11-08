@@ -168,7 +168,8 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(R.card)),
       ),
-      builder: (_) => _MessageDetailSheet(message: m, onRetry: _retry),
+      // «كل الشركات»: رسالة شركةٍ غير المفتوحة للعرض — بلا «إعادة المحاولة» (من صفحتها)
+      builder: (_) => _MessageDetailSheet(message: m, onRetry: MergedSection.viewOnlyOf(context) ? null : _retry),
     );
   }
 
@@ -713,7 +714,7 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
 class _MessageDetailSheet extends StatelessWidget {
   const _MessageDetailSheet({required this.message, required this.onRetry});
   final MessageLog message;
-  final Future<void> Function(MessageLog) onRetry;
+  final Future<void> Function(MessageLog)? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -813,13 +814,13 @@ class _MessageDetailSheet extends StatelessWidget {
                   ),
                 ),
               ),
-              if (message.isFailed) ...[
+              if (message.isFailed && onRetry != null) ...[
                 const SizedBox(width: 8),
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () async {
                       Navigator.of(context).pop();
-                      await onRetry(message);
+                      await onRetry!(message);
                     },
                     icon: const Icon(LucideIcons.rotateCw, size: 14),
                     label: const Text('إعادة المحاولة'),

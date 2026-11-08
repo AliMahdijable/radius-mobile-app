@@ -11,7 +11,10 @@ import '../../theme/typography.dart';
 /// كلّ بثٍّ أرسله الوكيل = حملة (صفوف طابورٍ تحمل نفس المعرّف). تُعرض بأعدادها (أُرسل/معلّق/فشل) ونصّها ووقتها، ومع التحكّم:
 /// إيقافٌ مؤقّت (يمنع إرسال المتبقّي)، استئناف، وحذف (إلغاء المعلّق). المُرسَل لا يتأثّر.
 class BroadcastCampaignsScreen extends StatefulWidget {
-  const BroadcastCampaignsScreen({super.key});
+  const BroadcastCampaignsScreen({super.key, this.readOnly = false});
+
+  /// «كل الشركات»: حملات شركةٍ غير المفتوحة للعرض — بلا إيقافٍ ولا استئنافٍ ولا حذف (من صفحتها).
+  final bool readOnly;
 
   @override
   State<BroadcastCampaignsScreen> createState() => _BroadcastCampaignsScreenState();
@@ -171,7 +174,7 @@ class _BroadcastCampaignsScreenState extends State<BroadcastCampaignsScreen> {
           if (c.failed > 0) _stat('فشل', c.failed, AppColors.error),
           if (c.cancelled > 0) _stat('أُلغي', c.cancelled, AppColors.textLow),
         ]),
-        if (c.active || c.pending > 0) ...[
+        if (!widget.readOnly && (c.active || c.pending > 0)) ...[
           const SizedBox(height: Sp.md),
           Row(children: [
             if (c.paused)

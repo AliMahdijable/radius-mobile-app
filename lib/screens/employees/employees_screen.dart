@@ -20,6 +20,8 @@ import 'sheets/employee_editor_sheet.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../../widgets/merged_section.dart';
+import '../../api/company_route.dart';
+import '../../models/merged_company.dart';
 
 /// شاشة الموظفين — مديرو الفرع يدخلون عبر حساب رئيسي، والموظفون
 /// الفرعيون يحصلون على صلاحيات محددة. القائمة + add/edit/delete.
@@ -79,9 +81,12 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     unawaited(AiAssistantState.ensureFresh());
     // الـcatalog مهم للـeditor؛ نحمّله مع القائمة. لو الـcatalog فشل
     // الـeditor ما يفتح (يحتاج presets لرسم الـUI).
+    // «كل الشركات» (٨ نوفمبر — صورة المالك «تعذّر تحميل كتالوج الصلاحيات»): شركةٌ غير المفتوحة هنا للعرض وحده — لا محرّر،
+    // فلا كتالوج يُطلب (ليس في قائمة التوجيه) ولا يُعرض فشله خطأً فوق قائمةٍ وصلت.
+    final viewOnly = CompanyRoute.sectionKeyFor('/api/v2/employees') != null;
     final results = await Future.wait([
       EmployeesApi.list(),
-      EmployeesApi.catalog(),
+      viewOnly ? Future<PermissionsCatalog?>.value(null) : EmployeesApi.catalog(),
     ]);
     if (!mounted) return;
     final listResult = results[0] as ({List<Employee> rows, String? error});
@@ -90,7 +95,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       _rows = listResult.rows;
       _catalog = cat;
       _error = listResult.error ??
-          (cat == null ? 'تعذّر تحميل كتالوج الصلاحيات' : null);
+          (cat == null && !viewOnly ? 'تعذّر تحميل كتالوج الصلاحيات' : null);
       _loading = false;
     });
   }
@@ -192,7 +197,18 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final accent = AppColors.brandAccent;
-    final isEl = _isEarthlink;
+    // «كل الشركات»: شركةٌ غير المفتوحة ⇒ مزوّدها هي (عدّ الصلاحيّات بمفاتيحها) وللعرض وحده (لا إضافة ولا تعديل ولا حذف ولا
+    // كلمة سرّ — من صفحتها).
+    final section = MergedSection.of(context);
+    final routed = section?.routed ?? false;
+    final viewOnly = section?.viewOnly ?? false;
+    final focusedProvider = section?.company?.provider;
+    final isEl = routed && focusedProvider != null
+        ? (focusedProvider == MergedProvider.earthlink ||
+            focusedProvider == MergedProvider.fiberx ||
+            focusedProvider == MergedProvider.kit)
+        : _isEarthlink;
+    final canManage = Perms.has('employees.manage') && !viewOnly;
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: deskPageBar(
@@ -206,7 +222,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                   AppType.title(color: AppColors.textHi).copyWith(fontSize: 16)),
           iconTheme: IconThemeData(color: AppColors.textHi),
         ),
-        primary: (_catalog == null || !Perms.has('employees.manage'))
+        primary: (_catalog == null || !canManage)
             ? null
             : DeskPrimaryButton(
                 icon: LucideIcons.userPlus,
@@ -216,7 +232,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       ),
       floatingActionButton: (DesktopScope.of(context) ||
               _catalog == null ||
-              !Perms.has('employees.manage'))
+              !canManage)
           ? null
           : FloatingActionButton.extended(
               backgroundColor: accent,
@@ -234,13 +250,14 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
               : _error != null
                   ? _errorState(_error!)
                   : _rows.isEmpty
-                      ? _emptyState(isEl: isEl)
+                      ? _emptyState(isEl: isEl, viewOnly: viewOnly)
                       : ListView(
                           padding: EdgeInsets.only(
                               bottom:
                                   MediaQuery.paddingOf(context).bottom + 96),
                           children: [
-                            DeskSection(children: [_compactHero(accent, isEl: isEl)]),
+                            // سطر «موظفو <الشركة المفتوحة>» لا يُرسم تحت شركةٍ أخرى (شريط القسم يسمّيها)
+                            DeskSection(children: [_compactHero(accent, isEl: isEl && !routed)]),
                             // الهاتف: فسحةٌ بين الرأس وأوّل بطاقة (الحاسبة يفصلها DeskSection نفسه).
                             if (!DesktopScope.of(context)) const SizedBox(height: Sp.md),
                             DeskSection(children: [
@@ -253,13 +270,13 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                       ? ElEmployeePerms.activeCount(e.permissions)
                                       : e.activePermsCount,
                                   showScope: !isEl,
-                                  onTap: Perms.has('employees.manage')
+                                  onTap: canManage
                                       ? () => _openEditor(employee: e)
                                       : null,
-                                  onDelete: Perms.has('employees.manage')
+                                  onDelete: canManage
                                       ? () => _confirmDelete(e)
                                       : null,
-                                  onShowPassword: Perms.has('employees.manage')
+                                  onShowPassword: canManage
                                       ? () => _showEmployeePassword(e)
                                       : null,
                                 ),
@@ -423,7 +440,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
 
   /// ايرث لنك: الموظفون مدعومون الآن — الحالة الفارغة تقول كيف يعمل الموظف
   /// (يتبع هذه الشركة ويدخل من «دخول موظف») بدل أن توحي بأنّ القسم لا يخصّها.
-  Widget _emptyState({bool isEl = false}) {
+  Widget _emptyState({bool isEl = false, bool viewOnly = false}) {
     return ListView(
       padding: const EdgeInsets.all(Sp.huge),
       children: [
@@ -438,14 +455,15 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                 style: AppType.label(color: AppColors.textMid),
               ),
               const SizedBox(height: 4),
-              Text(
-                isEl
-                    ? 'اضغط "موظف جديد" لإضافة موظف لهذه الشركة — يدخل من '
-                        'شاشة «دخول موظف» باسم المستخدم وكلمة المرور.'
-                    : 'اضغط "موظف جديد" لإضافة أول موظف.',
-                style: AppType.muted().copyWith(fontSize: 12.5),
-                textAlign: TextAlign.center,
-              ),
+              if (!viewOnly)
+                Text(
+                  isEl
+                      ? 'اضغط "موظف جديد" لإضافة موظف لهذه الشركة — يدخل من '
+                          'شاشة «دخول موظف» باسم المستخدم وكلمة المرور.'
+                      : 'اضغط "موظف جديد" لإضافة أول موظف.',
+                  style: AppType.muted().copyWith(fontSize: 12.5),
+                  textAlign: TextAlign.center,
+                ),
             ],
           ),
         ),

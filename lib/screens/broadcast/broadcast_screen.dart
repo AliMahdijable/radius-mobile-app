@@ -14,6 +14,7 @@ import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../api/company_route.dart';
 import '../message_logs/message_logs_screen.dart';
 import 'broadcast_campaigns_screen.dart';
 import '../desktop/desk_widgets.dart';
@@ -118,9 +119,17 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   /// 'telegram' = يفلتر المربوطين بتلغرام فقط (الباقي يُتخطى).
   String _forceChannel = 'auto';
 
+  /// «كل الشركات» (٨ نوفمبر): شركةٌ غير المفتوحة — للعرض وحده (حملاتها وحالة رسائلها)؛ لا قائمة مشتركين تُقرأ هنا (كانت
+  /// تُقرأ قائمة المفتوحة فتُعرض أعدادها وأسماؤها تحت شركةٍ أخرى) ولا إرسال — من صفحتها.
+  bool get _viewOnly => CompanyRoute.sectionKeyFor('/api/whatsapp/broadcast') != null;
+
   @override
   void initState() {
     super.initState();
+    if (_viewOnly) {
+      _loading = false;
+      return;
+    }
     _load();
     _loadScope();
   }
@@ -509,8 +518,53 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   }
 
   void _openCampaigns() {
+    final ro = _viewOnly;
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const BroadcastCampaignsScreen()),
+      MaterialPageRoute(builder: (_) => BroadcastCampaignsScreen(readOnly: ro)),
+    );
+  }
+
+  /// للعرض وحده: حملات الشركة وحالة رسائلها — كلاهما يُقرأ موجَّهاً لها.
+  Widget _viewOnlyBody() {
+    Widget tile(IconData icon, String title, String subtitle, VoidCallback onTap, Key key) => Padding(
+          padding: const EdgeInsets.only(bottom: Sp.sm),
+          child: Material(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(R.md),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              key: key,
+              onTap: onTap,
+              child: Container(
+                padding: const EdgeInsets.all(Sp.md),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(R.md),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(children: [
+                  Icon(icon, size: 20, color: AppColors.brand),
+                  const SizedBox(width: Sp.md),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(title, style: AppType.bodyBold(color: AppColors.textHi)),
+                      const SizedBox(height: 2),
+                      Text(subtitle, style: AppType.micro(color: AppColors.textMid)),
+                    ]),
+                  ),
+                  Icon(LucideIcons.chevronLeft, size: 18, color: AppColors.textMid),
+                ]),
+              ),
+            ),
+          ),
+        );
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.huge),
+      children: [
+        tile(LucideIcons.listChecks, 'حملات التبليغ', 'كلّ بثٍّ أُرسل بأعداده وحاله', _openCampaigns,
+            const ValueKey('broadcast-view-campaigns')),
+        tile(LucideIcons.history, 'حالة الرسائل', 'ما أُرسل وما فشل وما ينتظر', _openLogs,
+            const ValueKey('broadcast-view-logs')),
+      ],
     );
   }
 
@@ -689,7 +743,9 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
           iconTheme: IconThemeData(color: AppColors.textHi),
         ),
       ),
-      body: MergedSectionBody(child: _loading
+      body: MergedSectionBody(child: _viewOnly
+          ? _viewOnlyBody()
+          : _loading
           ? const Center(child: CircularProgressIndicator())
           : DesktopScope.of(context)
               ? _desktopBody()

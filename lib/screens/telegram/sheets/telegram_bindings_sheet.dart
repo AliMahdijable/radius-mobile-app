@@ -11,29 +11,38 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/app_sheet.dart';
+import '../../../services/merged_mode.dart';
 
 /// telegramBindingsSheet — قائمة المشتركين المربوطين ببوت تلغرام.
 /// - بحث نصّي (اسم / يوزر / phone)
 /// - Unbind بضغطة (بتأكيد)
 /// - عرض اسم المشترك الحقيقي (join مع subscribers list محلياً)
+///
+/// «كل الشركات» (٨ نوفمبر): [companyKey] = شركةٌ غير المفتوحة (قسم تلغرام موجَّهٌ لها) ⇒ أسماء المرتبطين من قائمة مشتركيها
+/// هي ([MergedSubscribers.fetchCompany] — كانت تُقرأ من قائمة المفتوحة فيظهر اسم مشتركٍ آخر بنفس الرقم)، و[readOnly] ⇒ بلا
+/// «فكّ الربط» (للعرض — من صفحتها).
 Future<void> showTelegramBindingsSheet(
   BuildContext context, {
   required String adminId,
   required VoidCallback onChanged,
+  bool readOnly = false,
+  String? companyKey,
 }) {
   return showAppSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,
-    builder: (_) => _BindingsSheet(adminId: adminId, onChanged: onChanged),
+    builder: (_) => _BindingsSheet(adminId: adminId, onChanged: onChanged, readOnly: readOnly, companyKey: companyKey),
   );
 }
 
 class _BindingsSheet extends StatefulWidget {
-  const _BindingsSheet({required this.adminId, required this.onChanged});
+  const _BindingsSheet({required this.adminId, required this.onChanged, this.readOnly = false, this.companyKey});
   final String adminId;
   final VoidCallback onChanged;
+  final bool readOnly;
+  final String? companyKey;
 
   @override
   State<_BindingsSheet> createState() => _BindingsSheetState();
@@ -60,6 +69,24 @@ class _BindingsSheetState extends State<_BindingsSheet> {
   Future<void> _load() async {
     if (!mounted) return;
     setState(() => _loading = true);
+    final key = widget.companyKey;
+    if (key != null) {
+      // شركةٌ غير المفتوحة: الارتباطات موجَّهةٌ لها (بادئة القسم) والأسماء من قائمتها هي — كبيرةٌ أو تعذّرت ⇒ بلا أسماء
+      // (اسمه في تلغرام ورقمه)، لا قائمة المفتوحة.
+      final company = MergedMode.companyOf(key);
+      final results = await Future.wait([
+        TelegramApi.listBindings(widget.adminId),
+        company == null ? Future<MergedCompanyList?>.value(null) : MergedSubscribers.fetchCompany(company),
+      ]);
+      if (!mounted) return;
+      final rows = (results[1] as MergedCompanyList?)?.rows ?? const <Subscriber>[];
+      setState(() {
+        _all = results[0] as List<TelegramBinding>;
+        _subsByIdx = {for (final s in rows) if (s.idx != null) s.idx!: s};
+        _loading = false;
+      });
+      return;
+    }
     // الحساب الكبير (≥ ٥٠٠٠): أصحاب الارتباطات بأعيانهم من الساس (≤ ١٠٠) — لا القائمة الكاملة
     final big = await BigSubscribersApi.probe() > 0;
     final results = await Future.wait([
@@ -323,6 +350,7 @@ class _BindingsSheetState extends State<_BindingsSheet> {
                   ],
                 ),
               ),
+              if (!widget.readOnly)
               IconButton(
                 icon:
                     Icon(LucideIcons.unlink, size: 15, color: AppColors.error),

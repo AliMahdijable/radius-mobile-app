@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:rad_mysvcs/api/account_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/company_route.dart';
@@ -18,6 +19,10 @@ import 'package:rad_mysvcs/models/merged_company.dart';
 import 'package:rad_mysvcs/api/renew_requests_api.dart';
 import 'package:rad_mysvcs/screens/renew/renew_requests_screen.dart';
 import 'package:rad_mysvcs/widgets/merged_section.dart';
+import 'package:rad_mysvcs/screens/broadcast/broadcast_screen.dart';
+import 'package:rad_mysvcs/screens/discounts/discounts_screen.dart';
+import 'package:rad_mysvcs/screens/employees/employees_screen.dart';
+import 'package:rad_mysvcs/screens/portal_settings/portal_settings_screen.dart';
 
 import 'visual_perm/visual_perm_harness.dart';
 
@@ -39,6 +44,7 @@ ResponseBody _json(int status, Object body, {Map<String, List<String>> headers =
 class _Srv implements HttpClientAdapter {
   final asked = <String>[];
   bool elWrites = false;
+  bool tgConnected = false;
 
   @override
   Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? rs, Future<void>? cf) async {
@@ -83,7 +89,46 @@ class _Srv implements HttpClientAdapter {
       }, headers: h);
     }
     if (path.startsWith('/api/telegram/status/')) {
+      if (tgConnected) {
+        return _json(200, {
+          'success': true,
+          'status': {'exists': true, 'connected': true, 'botUsername': el ? 'el_bot' : 'sn_bot', 'bindings': {'total': 1, 'active': 1, 'blocked': 0}},
+        }, headers: h);
+      }
       return _json(200, {'success': true, 'connected': false, 'bot_username': null}, headers: h);
+    }
+    if (path.startsWith('/api/telegram/bindings/')) {
+      return _json(200, {
+        'success': true,
+        'bindings': [
+          {'id': 1, 'admin_id': el ? 'earthlink:77' : 'supernet:12', 'sas4_idx': '77', 'chat_id': '1', 'tg_username': 'tg77', 'is_blocked': 0},
+        ],
+      }, headers: h);
+    }
+    // قائمة المشتركين: نفس الرقم ٧٧ في الشركتين لشخصين مختلفين — فاسم المفتوحة تحت ايرث لنك خلطٌ يُكشف
+    if (path == '/api/v2/subscribers') {
+      return _json(200, {
+        'success': true,
+        'data': [
+          {'idx': '77', 'username': el ? 'eluser' : 'snuser77', 'firstname': el ? 'مشترك' : 'سوبرنت', 'lastname': el ? 'ايرث' : 'خطأ'},
+        ],
+      }, headers: h);
+    }
+    if (path == '/api/discounts') {
+      return _json(200, {
+        'success': true,
+        'data': [
+          {'id': el ? 5 : 1, 'subscriber_username': el ? 'eluser' : 'snuser77', 'discount_amount': el ? 3000 : 1000, 'package_name': 'Economy'},
+        ],
+      }, headers: h);
+    }
+    if (path == '/api/v2/portal/settings') {
+      return _json(200, {
+        'success': true,
+        'enabled': true,
+        'agent_code': el ? '200301' : '100200',
+        'sections': {'connection': true, 'usage': false, 'device': false},
+      }, headers: h);
     }
     if (path == '/api/v2/cards/summary') {
       return _json(200, {'success': true, 'enabled': true, 'totals': {'available': el ? 7 : 40, 'used': 0}, 'series': []}, headers: h);
@@ -394,14 +439,123 @@ void main() {
     await pumpVisual(t, const VisualDevice('', Size(390, 1400), 1), home: (_) => screen);
     await settleReal(t);
     expect(t.takeException(), isNull);
-    expect(find.textContaining('«الكارتات المطلوبة» غير متاح لـ«سوبرنت»'), findsOneWidget);
-    expect(find.text('probe-body'), findsNothing);
-    expect(find.byKey(const ValueKey('merged-open-only-switch')), findsNothing, reason: 'لا «بدّل إليها» لقسمٍ لا يخدمها');
+    // المفتوحة صفحتها نفسها كما تعرضها «الكل» — «غير متاح» لغير المفتوحة وحدها (صورة المالك: كارتات ايرث لنك المفتوحة
+    // تحت «الكل» و«غير متاح» تحت زرّها)
+    expect(find.textContaining('غير متاح'), findsNothing);
+    expect(find.text('probe-body'), findsOneWidget);
     expect(CompanyRoute.sectionKey, isNull);
     MergedMode.focus.value = _kEl;
     await settleReal(t);
     expect(find.text('probe-body'), findsOneWidget);
     expect(CompanyRoute.sectionKeyFor('/api/v2/el/prepaid-needed'), _kEl);
+    await down(t);
+  });
+
+  testWidgets('١١ قسمٌ للساس وحده (المدراء): ايرث لنك غير المفتوحة «غير متاح» بلا سطر «للعرض هنا» فوقه؛ والمفتوحة صفحتها', (t) async {
+    await up(t);
+    final screen = MergedSection(
+      readOnly: true,
+      prefixes: const ['/api/v2/managers'],
+      serves: (c) => c.provider == MergedProvider.sas4,
+      servesNote: 'هذا القسم لشركات الساس وحدها',
+      lockTitle: 'المدراء',
+      child: const _OpenOnlyProbe(),
+    );
+    MergedMode.focus.value = _kEl;
+    await pumpVisual(t, const VisualDevice('', Size(390, 1400), 1), home: (_) => screen);
+    await settleReal(t);
+    expect(t.takeException(), isNull);
+    expect(find.textContaining('«المدراء» غير متاح لـ«ايرث لنك»'), findsOneWidget);
+    expect(find.textContaining('للعرض هنا'), findsNothing, reason: 'لا «للعرض هنا» فوق «غير متاح» (صورة المالك: الكارتات المطلوبة)');
+    expect(CompanyRoute.sectionKey, isNull, reason: 'لا طلب يُوجَّه لشركةٍ لا يخدمها القسم');
+    MergedMode.focus.value = _kOpen;
+    await settleReal(t);
+    expect(find.text('probe-body'), findsOneWidget);
+    expect(CompanyRoute.sectionKey, isNull, reason: 'المفتوحة بلا توجيه');
+    await down(t);
+  });
+
+  testWidgets('١٢ الموظّفون لشركةٍ للعرض: القائمة موجَّهة بلا كتالوج ولا «تعذّر تحميل كتالوج الصلاحيات»، ولا «موظف جديد»', (t) async {
+    await up(t);
+    const screen = MergedSection(readOnly: true, prefixes: ['/api/v2/employees'], child: EmployeesScreen());
+    MergedMode.focus.value = _kEl;
+    await pumpVisual(t, const VisualDevice('', Size(390, 1400), 1), home: (_) => screen);
+    await settleReal(t);
+    expect(t.takeException(), isNull);
+    expect(srv.asked, contains('GET /api/v2/employees $_kEl'));
+    expect(srv.asked.where((a) => a.contains('permissions-catalog')), isEmpty, reason: 'لا محرّر للعرض ⇒ لا كتالوج');
+    expect(find.textContaining('كتالوج'), findsNothing, reason: 'صورة المالك: «تعذّر تحميل كتالوج الصلاحيات»');
+    expect(find.text('موظف جديد'), findsNothing);
+    // «الكل» = المفتوحة: الكتالوج يُطلب لها كما كان
+    srv.asked.clear();
+    MergedMode.focus.value = null;
+    await settleReal(t);
+    expect(srv.asked.where((a) => a.startsWith('GET /api/v2/employees/permissions-catalog -')), isNotEmpty);
+    await down(t);
+  });
+
+  testWidgets('١٣ بوّابة المشترك لشركةٍ للعرض: رمزها موجَّه بلا «تغيير الرمز»؛ والمفتوحة به', (t) async {
+    await up(t);
+    MergedMode.focus.value = _kEl;
+    await pumpVisual(t, const VisualDevice('', Size(390, 1600), 1), home: (_) => PortalSettingsScreen.mergedPage());
+    await settleReal(t);
+    expect(t.takeException(), isNull);
+    expect(srv.asked, contains('GET /api/v2/portal/settings $_kEl'));
+    expect(find.text('تغيير الرمز'), findsNothing, reason: 'صورة المالك: «تغيير الرمز» ظاهرٌ لشركةٍ للعرض');
+    MergedMode.focus.value = null;
+    await settleReal(t);
+    expect(find.text('تغيير الرمز'), findsOneWidget);
+    await down(t);
+  });
+
+  testWidgets('١٤ الخصومات لشركةٍ للعرض: خصوماتها بأسماء مشتركيها هي — لا قائمة المفتوحة ولا «تطبيق الخصم»', (t) async {
+    await up(t);
+    const screen = MergedSection(readOnly: true, prefixes: ['/api/discounts', '/api/v2/discounts'], child: DiscountsScreen());
+    MergedMode.focus.value = _kEl;
+    await pumpVisual(t, const VisualDevice('', Size(390, 1400), 1), home: (_) => screen);
+    await settleReal(t);
+    expect(t.takeException(), isNull);
+    expect(srv.asked, contains('GET /api/discounts $_kEl'));
+    expect(srv.asked.where((a) => a.startsWith('GET /api/v2/subscribers ') && a.endsWith(' -')), isEmpty,
+        reason: 'قائمة المفتوحة لا تُقرأ تحت ايرث لنك');
+    expect(find.text('مشترك ايرث'), findsOneWidget);
+    expect(find.textContaining('سوبرنت خطأ'), findsNothing);
+    expect(find.text('تطبيق الخصم'), findsNothing);
+    await down(t);
+  });
+
+  testWidgets('١٥ التبليغات لشركةٍ للعرض: حملاتها وحالة رسائلها — لا قائمة مشتركي المفتوحة ولا إرسال', (t) async {
+    await up(t);
+    const screen = MergedSection(
+        readOnly: true,
+        prefixes: ['/api/whatsapp/broadcast', '/api/whatsapp/broadcasts', '/api/whatsapp/send-scope', '/api/v2/whatsapp'],
+        child: BroadcastScreen());
+    MergedMode.focus.value = _kEl;
+    await pumpVisual(t, const VisualDevice('', Size(390, 1400), 1), home: (_) => screen);
+    await settleReal(t);
+    expect(t.takeException(), isNull);
+    expect(srv.asked.where((a) => a.contains('/api/v2/subscribers')), isEmpty);
+    expect(find.byKey(const ValueKey('broadcast-view-campaigns')), findsOneWidget);
+    expect(find.byKey(const ValueKey('broadcast-view-logs')), findsOneWidget);
+    await down(t);
+  });
+
+  testWidgets('١٦ تلغرام لشركةٍ للعرض: «المرتبطون» وحدها بأسماء مشتركيها هي (لا المفتوحة)، بلا فكّ ربطٍ ولا فصل', (t) async {
+    await up(t);
+    srv.tgConnected = true;
+    const screen = MergedSection(readOnly: true, prefixes: ['/api/telegram'], child: TelegramScreen());
+    MergedMode.focus.value = _kEl;
+    await pumpVisual(t, const VisualDevice('', Size(390, 1400), 1), home: (_) => screen);
+    await settleReal(t);
+    expect(t.takeException(), isNull);
+    expect(find.text('ربط مشترك'), findsNothing);
+    expect(find.text('فصل البوت'), findsNothing);
+    await t.tap(find.text('المرتبطون'));
+    await settleReal(t);
+    expect(srv.asked.where((a) => a.startsWith('GET /api/telegram/bindings/') && a.endsWith(_kEl)), isNotEmpty);
+    expect(find.textContaining('مشترك ايرث'), findsWidgets, reason: 'اسم مشترك ايرث لنك نفسه');
+    expect(find.textContaining('سوبرنت خطأ'), findsNothing, reason: 'لا اسم مشترك المفتوحة بنفس الرقم');
+    expect(find.byIcon(LucideIcons.unlink), findsNothing);
     await down(t);
   });
 }

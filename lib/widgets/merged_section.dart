@@ -16,7 +16,17 @@ import 'merged_company_strip.dart';
 
 /// ما يعرضه قسمٌ من «قوائم أخرى» الآن في «كل الشركات».
 class MergedSectionInfo {
-  const MergedSectionInfo({required this.company, required this.open, this.readOnly = false, this.openOnlyReason});
+  const MergedSectionInfo({
+    required this.company,
+    required this.open,
+    this.readOnly = false,
+    this.openOnlyReason,
+    this.served = true,
+  });
+
+  /// false = القسم لا يخدم الشركة المختارة أصلاً ([MergedSection.serves]) — صفحة «غير متاح» وحدها، والشريط بلا سطرٍ تحته
+  /// (كان يقول «للعرض هنا» فوق «غير متاح»).
+  final bool served;
 
   /// القسم قراءةٌ وحدها لغير المفتوحة (كتاباته غير موجَّهة بعد) ⇒ الشريط يقول «للعرض هنا».
   final bool readOnly;
@@ -37,6 +47,11 @@ class MergedSectionInfo {
 
   /// شركةٌ غير المفتوحة: طلبات القسم موجَّهةٌ لها (قسم «للمفتوحة وحدها» لا يُوجَّه أبداً).
   bool get routed => other && !openOnly;
+
+  /// للعرض وحده (٨ نوفمبر — صور المالك: «تغيير الرمز» ظاهرٌ لشركةٍ «للعرض»): شركةٌ غير المفتوحة في قسمٍ قراءته وحدها
+  /// موجَّهة ([MergedSection.readOnly]) ⇒ الشاشة تُخفي كلّ زرّ كتابة (إضافة، تعديل، حذف، إرسال، شراء، تغيير الرمز…) — التعديل
+  /// من صفحة الشركة نفسها، والخادم يرفض الكتابة على كلّ حال.
+  bool get viewOnly => routed && readOnly;
 }
 
 /// «قوائم أخرى» بـ«كل الشركات» (٨ نوفمبر — المالك: «كل الاقسام مال قائمة المزيد لازم تخضع لهذا النظام شركتين بدقة»): يلفّ
@@ -91,8 +106,11 @@ class MergedSection extends StatefulWidget {
   final String? lockTitle;
 
   /// ما يعرضه أقرب قسم — null خارج قسمٍ أو خارج «كل الشركات».
-  static MergedSectionInfo? of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_MergedSectionScope>()?.info;
+  static MergedSectionInfo? of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<_MergedSectionScope>()?.info;
+
+  /// [MergedSectionInfo.viewOnly] لأقرب قسم — false خارج قسمٍ أو خارج «كل الشركات». شيتٌ أو شاشةٌ تُدفع من القسم ليست
+  /// تحته في الشجرة: تُمرَّر لها القيمة من شاشته.
+  static bool viewOnlyOf(BuildContext context) => of(context)?.viewOnly ?? false;
 
   @override
   State<MergedSection> createState() => _MergedSectionState();
@@ -167,10 +185,12 @@ class _MergedSectionState extends State<MergedSection> {
     }
     final i = _info;
     final f = i?.company;
-    if (i != null && f != null && widget.serves != null && !widget.serves!(f)) {
+    // لا يخدم الشركة المختارة — لغير المفتوحة وحدها: المفتوحة تُعرض كما هي في الوضع العاديّ (صفحتها نفسها، كما تعرضها «الكل»).
+    // (كانت «الكارتات» لشركة ايرث لنك المفتوحة تُعرض تحت «الكل» و«غير متاح» تحت زرّها.)
+    if (i != null && f != null && !i.open && widget.serves != null && !widget.serves!(f)) {
       CompanyRoute.leaveSection(this);
       return _MergedSectionScope(
-        info: i,
+        info: MergedSectionInfo(company: f, open: false, readOnly: widget.readOnly, served: false),
         child: _OpenOnlyPage(
           key: ValueKey('merged-not-served-${f.key}'),
           title: widget.openOnlyTitle ?? widget.lockTitle ?? '',
@@ -281,13 +301,13 @@ class _OpenOnlyPageState extends State<_OpenOnlyPage> {
                       if (widget.served) ...[
                         const SizedBox(height: Sp.lg),
                         FilledButton.icon(
-                        key: const ValueKey('merged-open-only-switch'),
-                        onPressed: _busy ? null : _switch,
-                        icon: _busy
-                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(LucideIcons.arrowLeftRight, size: 18),
-                        label: Text('merged.open_only_switch'.tr(args: [name])),
-                      ),
+                          key: const ValueKey('merged-open-only-switch'),
+                          onPressed: _busy ? null : _switch,
+                          icon: _busy
+                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(LucideIcons.arrowLeftRight, size: 18),
+                          label: Text('merged.open_only_switch'.tr(args: [name])),
+                        ),
                       ],
                     ],
                   ),
@@ -306,8 +326,7 @@ class _MergedSectionScope extends InheritedWidget {
   final MergedSectionInfo? info;
 
   @override
-  bool updateShouldNotify(_MergedSectionScope old) =>
-      old.info?.company?.key != info?.company?.key || old.info?.open != info?.open;
+  bool updateShouldNotify(_MergedSectionScope old) => old.info?.company?.key != info?.company?.key || old.info?.open != info?.open;
 }
 
 /// شريط القسم في «كل الشركات» أعلى الشاشة: الشركات (والمختارة تُعرض بمكانها) ثمّ سطرٌ يقول ما يُعرض — المفتوحة («الكل»)،
@@ -329,7 +348,11 @@ class MergedSectionBar extends StatelessWidget {
     final info = MergedSection.of(context);
     final String? text;
     final bool warn;
-    if (info != null && info.openOnly) {
+    if (info != null && !info.served) {
+      // لا يخدم الشركة المختارة: الشريط وحده — بطاقة «غير متاح» تحته تقول لماذا (لا «للعرض هنا» فوقها).
+      text = null;
+      warn = false;
+    } else if (info != null && info.openOnly) {
       // «للمفتوحة وحدها»: غيرها مختارة ⇒ الشريط وحده (بطاقة القفل تحته تقول لماذا — لا سطرٌ يكرّرها)؛ «الكل» أو هي ⇒ القسم
       // لها وحدها ولماذا.
       if (info.other) {
@@ -387,8 +410,7 @@ class MergedSectionBar extends StatelessWidget {
                       text,
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
-                      style: AppType.body(color: warn ? AppTone.warning.onSoft : AppColors.textMid)
-                          .copyWith(fontSize: 12.5, height: 1.5),
+                      style: AppType.body(color: warn ? AppTone.warning.onSoft : AppColors.textMid).copyWith(fontSize: 12.5, height: 1.5),
                     ),
                   ),
                 ],

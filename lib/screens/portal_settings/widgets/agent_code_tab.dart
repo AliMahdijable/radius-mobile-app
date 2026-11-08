@@ -17,6 +17,7 @@ import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import 'portal_switch_tile.dart';
+import '../../../widgets/merged_section.dart';
 
 /// تطبيق المشترك كما يجده في المتجر — المصدر الوحيد لنصّ «مشاركة».
 abstract final class SubscriberApp {
@@ -365,11 +366,20 @@ class _AgentCodeTabState extends State<AgentCodeTab> {
 
   // ─── الرسم ───
 
+  /// «كل الشركات»: نقرةٌ على مفتاحٍ مقفلٍ لشركةٍ للعرض — تقول لماذا (لا «اطلبها من مديرك»).
+  void _viewOnlyTap() {
+    final name = MergedSection.of(context)?.company?.name ?? '—';
+    _snack('merged.view_only_tap'.tr(args: [name]));
+  }
+
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     final a = _access;
     final code = a?.agentCode;
+    // «كل الشركات» (٨ نوفمبر — صورة المالك: «تغيير الرمز» ظاهرٌ لشركةٍ للعرض): غير المفتوحة ⇒ الرمز وحاله ونسخه ومشاركته
+    // وحدها؛ تغيير الرمز يختفي والمفاتيح مقفلةٌ بمكانها بسببها.
+    final ro = MergedSection.viewOnlyOf(context);
     return RefreshIndicator(
       onRefresh: _load,
       color: AppColors.brand,
@@ -381,7 +391,7 @@ class _AgentCodeTabState extends State<AgentCodeTab> {
           _AgentCodeCard(
             loading: _loading,
             access: a,
-            showRotate: _isOwner,
+            showRotate: _isOwner && !ro,
             rotating: _rotating,
             onRetry: _retryAccess,
             onCopy: code == null
@@ -402,9 +412,9 @@ class _AgentCodeTabState extends State<AgentCodeTab> {
             _PortalSwitchRow(
               value: a.enabled,
               busy: _savingSwitch,
-              locked: !_canToggle,
+              locked: !_canToggle || ro,
               onChanged: _setEnabled,
-              onLockedTap: () => _lockedTap('portal.switch_owner_only'.tr()),
+              onLockedTap: ro ? _viewOnlyTap : () => _lockedTap('portal.switch_owner_only'.tr()),
             ),
           ],
           if (a?.sections case final sections?) ...[
@@ -421,10 +431,11 @@ class _AgentCodeTabState extends State<AgentCodeTab> {
                 section: s,
                 value: _pendingSections[s] ?? sections.of(s),
                 busy: _pendingSections.containsKey(s),
-                locked: !_canToggle,
+                locked: !_canToggle || ro,
                 onChanged: (v) => _setSection(s, v),
-                onLockedTap: () =>
-                    _lockedTap('portal.sections_owner_only'.tr()),
+                onLockedTap: ro
+                    ? _viewOnlyTap
+                    : () => _lockedTap('portal.sections_owner_only'.tr()),
               ),
             ],
           ],

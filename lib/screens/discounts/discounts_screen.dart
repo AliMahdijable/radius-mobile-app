@@ -18,6 +18,8 @@ import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../desktop/desk_bulk_picker.dart';
 import '../../widgets/merged_section.dart';
+import '../../api/company_route.dart';
+import '../../services/merged_mode.dart';
 
 /// شاشة الخصومات — مطلب 2026-06-11 (تصميم جديد):
 ///   • الـscreen الأساسية = browse + apply: قيمة الخصم + بحث + جميع
@@ -57,6 +59,13 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
   Map<String, PackageInfo> _packages = const {};
 
   bool get _canManage => Perms.has('discounts.manage');
+
+  /// «كل الشركات» (٨ نوفمبر): شركةٌ غير المفتوحة — للعرض وحده: خصوماتها كما هي (يوزر المشترك وخصمه واسمه من قائمتها هي).
+  /// لا شبكة مشتركين للاختيار ولا تطبيق ولا حذف: كانت الشبكة قائمة المفتوحة ومعها خصومات الأخرى مطابقةً باليوزر — شركتان
+  /// في صفٍّ واحد.
+  bool get _viewOnly => CompanyRoute.sectionKeyFor('/api/discounts') != null;
+  List<Discount> _viewRows = const [];
+  Map<String, String> _viewNames = const {};
 
   @override
   void initState() {
@@ -109,6 +118,26 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
+    if (_viewOnly) {
+      final key = CompanyRoute.sectionKeyFor('/api/discounts');
+      final company = MergedMode.companyOf(key);
+      final r = await Future.wait([
+        DiscountsApi.list(),
+        company == null ? Future<MergedCompanyList?>.value(null) : MergedSubscribers.fetchCompany(company),
+      ]);
+      if (!mounted) return;
+      final rows = (r[1] as MergedCompanyList?)?.rows ?? const <Subscriber>[];
+      setState(() {
+        _viewRows = r[0] as List<Discount>;
+        _existing = {for (final d in _viewRows) d.subscriberUsername.toLowerCase(): d.discountAmount};
+        _viewNames = {
+          for (final s in rows)
+            if (s.fullName.trim().isNotEmpty && s.fullName.trim() != s.username) s.username.toLowerCase(): s.fullName.trim(),
+        };
+        _loading = false;
+      });
+      return;
+    }
     final results = await Future.wait([
       SubscribersApi.loadAll(),
       DiscountsApi.list(),
@@ -337,7 +366,9 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
           iconTheme: IconThemeData(color: AppColors.textHi),
         ),
       ),
-      body: MergedSectionBody(child: DesktopScope.of(context)
+      body: MergedSectionBody(child: _viewOnly
+          ? _viewOnlyBody(accent)
+          : DesktopScope.of(context)
           ? _desktopBody(filtered, accent)
           : SafeArea(
         bottom: false,
@@ -452,7 +483,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
       // زرّ التطبيق ثابت أسفل الشاشة — زرّ النظام نفسه (SheetFooterBar)
       // كشاشة الأسعار، فيتطابق الشريطان. يتفعّل مع amount + مشتركين
       // مختارين، ويختفي كاملاً لمن لا يملك discounts.manage (يشاهد فقط).
-      bottomNavigationBar: !_canManage || DesktopScope.of(context)
+      bottomNavigationBar: !_canManage || _viewOnly || DesktopScope.of(context)
           ? null
           : ColoredBox(
               color: AppColors.surface,
@@ -642,6 +673,59 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
   // ============================================================
   // Sub-widgets
   // ============================================================
+
+  /// للعرض وحده: الملخّص ثمّ خصومات الشركة صفّاً صفّاً (الأكبر أوّلاً).
+  Widget _viewOnlyBody(Color accent) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    final rows = [..._viewRows]..sort((a, b) => b.discountAmount.compareTo(a.discountAmount));
+    return RefreshIndicator(
+      onRefresh: _load,
+      color: accent,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
+        children: [
+          _hero(accent),
+          const SizedBox(height: Sp.md),
+          if (rows.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: Sp.xl),
+              child: Text('لا خصومات مطبّقة', textAlign: TextAlign.center, style: AppType.label(color: AppColors.textMid)),
+            )
+          else
+            for (final d in rows)
+              Container(
+                key: ValueKey('discount-view-${d.id}'),
+                margin: const EdgeInsets.only(bottom: Sp.sm),
+                padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(R.md),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(children: [
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(_viewNames[d.subscriberUsername.toLowerCase()] ?? d.subscriberUsername,
+                          maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bodyBold(color: AppColors.textHi)),
+                      const SizedBox(height: 2),
+                      Text(
+                        [d.subscriberUsername, if ((d.packageName ?? '').isNotEmpty) d.packageName!].join(' · '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textDirection: TextDirection.ltr,
+                        textAlign: TextAlign.end,
+                        style: AppType.micro(color: AppColors.textMid),
+                      ),
+                    ]),
+                  ),
+                  const SizedBox(width: Sp.sm),
+                  Text('−${_fmt(d.discountAmount.round())}', style: AppType.bodyBold(color: accent)),
+                ]),
+              ),
+        ],
+      ),
+    );
+  }
 
   Widget _hero(Color accent) {
     return Container(

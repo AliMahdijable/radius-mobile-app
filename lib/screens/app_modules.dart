@@ -356,12 +356,12 @@ List<AppModule> buildAppModules() {
             ? (ProviderService.isEarthlink ? 'cards.module_hint_pkg' : 'cards.module_hint').tr()
             : (ProviderService.isEarthlink ? 'cards.module_hint_pkg_n' : 'cards.module_hint_n')
                 .tr(namedArgs: {'n': formatIQD(stock.remaining!)}),
-        // «كل الشركات» (٨ نوفمبر): كارتات الشركة المختارة للعرض (الشراء والنقل من صفحتها)
+        // «كل الشركات» (٨ نوفمبر): كارتات الشركة المختارة للعرض (الشراء والنقل من صفحتها) — الساس وايرث لنك (الخادم b42e0dc)
         page: () => MergedSection(
             readOnly: true,
             prefixes: const ['/api/v2/cards'],
-            serves: (c) => c.provider == MergedProvider.sas4,
-            servesNote: 'merged.serves_sas'.tr(),
+            serves: (c) => c.provider == MergedProvider.sas4 || c.provider == MergedProvider.earthlink,
+            servesNote: 'merged.serves_sas_el'.tr(),
             lockTitle: 'cards.title'.tr(),
             child: const CardsScreen()),
       ),

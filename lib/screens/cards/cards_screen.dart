@@ -82,7 +82,11 @@ class _CardsScreenState extends State<CardsScreen> {
     _loadPurchase();
   }
 
+  /// «كل الشركات»: كارتات شركةٍ غير المفتوحة للعرض — لا شراء ولا نقل (من صفحتها).
+  bool get _viewOnly => CompanyRoute.sectionKeyFor('/api/v2/cards/summary') != null;
+
   Future<void> _loadPurchase() async {
+    if (_viewOnly) return;
     final o = await CardsApi.purchaseOptions();
     if (mounted) setState(() => _purchase = o);
   }
@@ -130,6 +134,7 @@ class _CardsScreenState extends State<CardsScreen> {
   Future<void> _openSeries(CardSeries s) async {
     final summary = _summary;
     final canTransfer = summary != null &&
+        !_viewOnly &&
         summary.transferEnabled &&
         !summary.seriesArePackages &&
         !PermissionsService.isEmployee;

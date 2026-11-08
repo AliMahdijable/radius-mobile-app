@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/renew_requests_api.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../widgets/merged_section.dart';
 import 'renew_requests_screen.dart';
 
 /// «طلب التجديد من التطبيق» في «بوابة المشترك» (٤ نوفمبر): مفتاح الوكيل (مشتركوه يرون زرّ الطلب) + أين يحوّلون (زين كاش/الماستر)
@@ -133,8 +135,10 @@ class _RenewSettingsCardState extends State<RenewSettingsCard> {
     Theme.of(context); // theme-dep (dark-mode)
     final a = _a;
     if (a == null || !a.available) return const SizedBox.shrink();
-    final canEdit = a.canEdit;
-    if (!canEdit && !a.canUse) return const SizedBox.shrink();
+    // «كل الشركات»: شركةٌ غير المفتوحة للعرض ⇒ الإعداد يُقرأ (مفتاحه وأرقامه) ولا يُحفظ — سطر «للعرض» بدل «حفظ»
+    final viewOnly = MergedSection.viewOnlyOf(context);
+    final canEdit = a.canEdit && !viewOnly;
+    if (!a.canEdit && !a.canUse) return const SizedBox.shrink();
     final edit = canEdit && !_busy;
     return Padding(
       padding: const EdgeInsets.only(top: Sp.xl),
@@ -206,7 +210,10 @@ class _RenewSettingsCardState extends State<RenewSettingsCard> {
                   Icon(LucideIcons.lock, size: 14, color: AppColors.textLow),
                   const SizedBox(width: Sp.xs),
                   Expanded(
-                    child: Text('ليس لديك صلاحيّة لتغيير هذا الإعداد — «تعديل إعدادات النظام»',
+                    child: Text(
+                        viewOnly
+                            ? 'merged.view_only_tap'.tr(args: [MergedSection.of(context)?.company?.name ?? '—'])
+                            : 'ليس لديك صلاحيّة لتغيير هذا الإعداد — «تعديل إعدادات النظام»',
                         style: AppType.micro(color: AppColors.textLow)),
                   ),
                 ]),

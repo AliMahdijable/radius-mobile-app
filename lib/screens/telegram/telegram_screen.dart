@@ -166,6 +166,18 @@ class _TelegramScreenState extends State<TelegramScreen> {
   // ─── SETUP (not connected) ─────────────────────────────────────
 
   List<Widget> _setupContent() {
+    // «كل الشركات»: شركةٌ غير المفتوحة للعرض — لا ربط بوتٍ لها من هنا (رمز البوت سرّها): البوت غير مربوط ويُربط من صفحتها
+    final section = MergedSection.of(context);
+    if (section?.viewOnly ?? false) {
+      return [
+        _compactHeader(
+          icon: LucideIcons.send,
+          title: 'البوت غير مربوط لـ«${section!.company!.name}»',
+          subtitle: 'يُربط من صفحتها — بدّل الشركة إليها',
+          color: _tgBlue,
+        ),
+      ];
+    }
     return [
       _compactHeader(
         icon: LucideIcons.send,
@@ -216,6 +228,10 @@ class _TelegramScreenState extends State<TelegramScreen> {
 
   List<Widget> _connectedContent() {
     final s = _status!;
+    // «كل الشركات»: شركةٌ غير المفتوحة للعرض — حال البوت وأرقامه و«المرتبطون» (بأسماء مشتركيها هي) وحدها؛ الربط والبثّ والفصل
+    // من صفحتها.
+    final section = MergedSection.of(context);
+    final viewOnly = section?.viewOnly ?? false;
     return [
       _compactHeader(
         icon: LucideIcons.circleCheck,
@@ -225,9 +241,11 @@ class _TelegramScreenState extends State<TelegramScreen> {
       ),
       _statsRow(s),
       const SizedBox(height: 12),
-      _actionsGrid(),
-      const SizedBox(height: 16),
-      _disconnectRow(),
+      _actionsGrid(viewOnly: viewOnly, companyKey: section?.routed == true ? section!.company!.key : null),
+      if (!viewOnly) ...[
+        const SizedBox(height: 16),
+        _disconnectRow(),
+      ],
     ];
   }
 
@@ -318,8 +336,16 @@ class _TelegramScreenState extends State<TelegramScreen> {
     }
   }
 
-  Widget _actionsGrid() {
-    final actions = <_TgAction>[
+  Widget _actionsGrid({bool viewOnly = false, String? companyKey}) {
+    final bindings = _TgAction(
+      icon: LucideIcons.users,
+      color: AppColors.success,
+      title: 'المرتبطون',
+      subtitle: 'قائمة المشتركين المربوطين + بحث',
+      onTap: () => showTelegramBindingsSheet(context,
+          adminId: _adminId!, onChanged: _load, readOnly: viewOnly, companyKey: companyKey),
+    );
+    final actions = viewOnly ? <_TgAction>[bindings] : <_TgAction>[
       // ⚠️ الأولى عمداً: بلا ربط قناة المدير لا يصل ردّ أيّ مشترك.
       // الميزة كلّها معلَّقة على فتح هذا الرابط مرّة واحدة.
       _TgAction(
@@ -345,14 +371,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
         onTap: () => showTelegramBulkLinksSheet(context,
             adminId: _adminId!, onDone: _load),
       ),
-      _TgAction(
-        icon: LucideIcons.users,
-        color: AppColors.success,
-        title: 'المرتبطون',
-        subtitle: 'قائمة المشتركين المربوطين + بحث',
-        onTap: () => showTelegramBindingsSheet(context,
-            adminId: _adminId!, onChanged: _load),
-      ),
+      bindings,
       _TgAction(
         icon: LucideIcons.messageCircle,
         color: AppColors.brandAccent,

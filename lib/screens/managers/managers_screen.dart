@@ -25,17 +25,22 @@ import '../../services/subscriber_events.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../../widgets/merged_section.dart';
+import '../../models/merged_company.dart';
 
 /// مديول "المدراء الفرعيون" — قائمة + بحث + add/edit/delete + عمليات
 /// رصيد (شحن/سحب/نقاط). v1 web parity.
 class ManagersScreen extends StatefulWidget {
   const ManagersScreen({super.key});
 
-  /// «كل الشركات»: بغلاف قسمها (للعرض لكلّ شركة) — من «قوائم أخرى» ومن نقرة إشعار المدراء معاً.
-  static Widget mergedPage() => const MergedSection(
+  /// «كل الشركات»: بغلاف قسمها (للعرض لكلّ شركة) — من «قوائم أخرى» ومن نقرة إشعار المدراء معاً. قائمة المدراء وأرصدتهم
+  /// (managers/full) قراءةٌ موجَّهة للساس وحده — شركة ايرث لنك أو غيرها غير المفتوحة ⇒ «غير متاح» بسببه (لا خطأ رفض).
+  static Widget mergedPage() => MergedSection(
       readOnly: true,
-      prefixes: ['/api/v2/managers', '/api/v2/acl-list', '/api/admin/manager-debts', '/api/admin/managers', '/api/admin/manager-movements'],
-      child: ManagersScreen());
+      prefixes: const ['/api/v2/managers', '/api/v2/acl-list', '/api/admin/manager-debts', '/api/admin/managers', '/api/admin/manager-movements'],
+      serves: (c) => c.provider == MergedProvider.sas4,
+      servesNote: 'merged.serves_sas'.tr(),
+      lockTitle: 'mgr.title'.tr(),
+      child: const ManagersScreen());
 
   @override
   State<ManagersScreen> createState() => _ManagersScreenState();
@@ -299,6 +304,9 @@ class _ManagersScreenState extends State<ManagersScreen> {
     Theme.of(context); // theme-dep (dark-mode)
     final accent = AppColors.brandAccent;
     final filtered = _filtered;
+    // «كل الشركات»: شركةٌ غير المفتوحة للعرض — القائمة وأرصدتها وديونها؛ لا إضافة ولا إجراءات (شحن/سحب/تعديل… من صفحتها)
+    final viewOnly = MergedSection.viewOnlyOf(context);
+    final canAdd = Perms.has('managers.add') && !viewOnly;
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: deskPageBar(
@@ -313,7 +321,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
           ),
           iconTheme: IconThemeData(color: AppColors.textHi),
         ),
-        primary: Perms.has('managers.add')
+        primary: canAdd
             ? DeskPrimaryButton(
                 icon: LucideIcons.userPlus,
                 label: 'mgr.new'.tr(),
@@ -321,7 +329,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
               )
             : null,
       ),
-      floatingActionButton: !DesktopScope.of(context) && Perms.has('managers.add')
+      floatingActionButton: !DesktopScope.of(context) && canAdd
           ? FloatingActionButton.extended(
               backgroundColor: accent,
               foregroundColor: AppColors.onBrand,
@@ -361,7 +369,7 @@ class _ManagersScreenState extends State<ManagersScreen> {
                     _ManagerTile(
                       manager: m,
                       extraDebt: _customDebtByManager[m.id] ?? 0,
-                      onTap: () => _openActions(m),
+                      onTap: viewOnly ? null : () => _openActions(m),
                     ),
                 ]),
             ],
@@ -568,7 +576,7 @@ class _ManagerTile extends StatelessWidget {
   /// مطلب 2026-06-12: نقر الـtile يفتح actions sheet ضامناً 9 عمليات
   /// مطابقة v1 (تعديل / شحن / سحب / تسديد / نقاط / ديون أخرى / حركات
   /// / إرسال معلومات / حذف). الـtile نفسه ما عاد فيه أزرار.
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   /// مطلب 2026-06-11: مجموع الديون الخارجية (manager-debts) المستحقّة
   /// على هذا المدير. تُجمع مع `manager.debt` لتعرض chip دين موحّد

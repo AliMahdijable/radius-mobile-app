@@ -314,6 +314,8 @@ class _InfoTabState extends State<_InfoTab> {
         what: 'portal.unsupported_info'.tr(),
       );
     }
+    // «كل الشركات»: شركةٌ غير المفتوحة للعرض — الحقول تُقرأ ولا تُحرَّر (فلا «حفظ»: لا يتّسخ النموذج)
+    final ro = MergedSection.viewOnlyOf(context);
     return Stack(
       children: [
         ListView(
@@ -336,6 +338,7 @@ class _InfoTabState extends State<_InfoTab> {
               label: 'portal.display_name'.tr(),
               hint: 'portal.display_name_hint'.tr(),
               controller: _displayName,
+              readOnly: ro,
               onChanged: (_) => _mark(),
               maxLength: 200,
             ),
@@ -344,6 +347,7 @@ class _InfoTabState extends State<_InfoTab> {
               label: 'portal.logo_url'.tr(),
               hint: 'https://example.com/logo.png',
               controller: _logoUrl,
+              readOnly: ro,
               onChanged: (_) => _mark(),
               maxLength: 500,
               keyboardType: TextInputType.url,
@@ -354,6 +358,7 @@ class _InfoTabState extends State<_InfoTab> {
               label: 'portal.about'.tr(),
               hint: 'portal.about_hint'.tr(),
               controller: _about,
+              readOnly: ro,
               onChanged: (_) => _mark(),
               maxLength: 5000,
               maxLines: 4,
@@ -366,6 +371,7 @@ class _InfoTabState extends State<_InfoTab> {
               label: 'portal.support_phone'.tr(),
               hint: '07XXXXXXXXX',
               controller: _supportPhone,
+              readOnly: ro,
               onChanged: (_) => _mark(),
               maxLength: 30,
               keyboardType: TextInputType.phone,
@@ -375,6 +381,7 @@ class _InfoTabState extends State<_InfoTab> {
               label: 'portal.whatsapp_number'.tr(),
               hint: '07XXXXXXXXX',
               controller: _whatsappNumber,
+              readOnly: ro,
               onChanged: (_) => _mark(),
               maxLength: 30,
               keyboardType: TextInputType.phone,
@@ -384,6 +391,7 @@ class _InfoTabState extends State<_InfoTab> {
               label: 'portal.telegram'.tr(),
               hint: '@channel or https://t.me/...',
               controller: _telegramUrl,
+              readOnly: ro,
               onChanged: (_) => _mark(),
               maxLength: 500,
               keyboardType: TextInputType.url,
@@ -393,6 +401,7 @@ class _InfoTabState extends State<_InfoTab> {
               label: 'portal.facebook'.tr(),
               hint: 'https://facebook.com/...',
               controller: _facebookUrl,
+              readOnly: ro,
               onChanged: (_) => _mark(),
               maxLength: 500,
               keyboardType: TextInputType.url,
@@ -402,6 +411,7 @@ class _InfoTabState extends State<_InfoTab> {
               label: 'portal.instagram'.tr(),
               hint: 'https://instagram.com/...',
               controller: _instagramUrl,
+              readOnly: ro,
               onChanged: (_) => _mark(),
               maxLength: 500,
               keyboardType: TextInputType.url,
@@ -682,10 +692,12 @@ class _PackagesTabState extends State<_PackagesTab> {
         separatorBuilder: (_, __) => const SizedBox(height: Sp.sm),
         itemBuilder: (_, i) {
           final p = _packages[i];
+          // «كل الشركات»: شركةٌ غير المفتوحة للعرض — الباقة تُقرأ بوصفها وحالها، بلا تحريرٍ ولا إخفاء
+          final ro = MergedSection.viewOnlyOf(context);
           return _PackageRow(
             pkg: p,
-            onEdit: () => _editPackage(p),
-            onToggleHidden: () => _toggleHidden(p),
+            onEdit: ro ? null : () => _editPackage(p),
+            onToggleHidden: ro ? null : () => _toggleHidden(p),
           );
         },
       ),
@@ -743,8 +755,8 @@ class _PackageRow extends StatelessWidget {
     required this.onToggleHidden,
   });
   final PortalPackage pkg;
-  final VoidCallback onEdit;
-  final VoidCallback onToggleHidden;
+  final VoidCallback? onEdit;
+  final VoidCallback? onToggleHidden;
 
   @override
   Widget build(BuildContext context) {
@@ -866,7 +878,7 @@ class _PackageRow extends StatelessWidget {
                     : 'portal.hide_from_subs'.tr(),
                 onPressed: onToggleHidden,
               ),
-              Icon(LucideIcons.chevronLeft, size: 18, color: AppColors.textMid),
+              if (onEdit != null) Icon(LucideIcons.chevronLeft, size: 18, color: AppColors.textMid),
             ],
           ),
         ),
@@ -1125,6 +1137,7 @@ Widget _labeledField({
   required String label,
   required String hint,
   required TextEditingController controller,
+  bool readOnly = false,
   ValueChanged<String>? onChanged,
   int? maxLength,
   int? maxLines = 1,
@@ -1140,6 +1153,7 @@ Widget _labeledField({
       const SizedBox(height: 4),
       TextField(
         controller: controller,
+        readOnly: readOnly,
         onChanged: onChanged,
         maxLength: maxLength,
         maxLines: maxLines,
