@@ -365,6 +365,8 @@
     "section_connection_on": "متصل أو لا، ومن متى، وتحميل ورفع الجلسة، وآخر اتصال",
     "section_usage": "الاستهلاك",
     "section_usage_on": "التحميل والرفع لكل يوم وكل شهر",
+    "section_finance": "الحركات الماليّة",
+    "section_finance_on": "التفعيل والتمديد والدين والتسديد، بالتاريخ والمبلغ",
     "section_off_hint": "مخفي عن مشتركيك",
     "section_shown": "يظهر",
     "section_hidden": "مخفي",

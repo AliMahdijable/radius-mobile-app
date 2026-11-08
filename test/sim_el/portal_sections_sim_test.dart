@@ -9,6 +9,7 @@ import 'sim_harness.dart';
 /// محاكاة «ما يراه مشتركوك» — مفتاحا «حالة الاتصال» و«الاستهلاك» (وسيط
 /// البوّابة §11) تحت مفتاح البوّابة في تبويب «رمز الوكيل»، كما يراها المالك
 /// والموظّف، بالعروض الثلاثة وبالوضعين. اللقطات في `shots/portal_sections/`.
+/// و«الحركات الماليّة» (٩ نوفمبر) ثالثها حين يرسلها الخادم (owner_finance*).
 /// السلوك مفحوصٌ في `test/portal_sections_test.dart`؛ هنا الرسم: لا فيضان حتى
 /// ٣٢٠، ولا نصّ خام، والمفتاحان بشكل مفتاح البوّابة نفسه.
 ///
@@ -39,12 +40,17 @@ void main() {
     ProviderService.debugSet('earthlink');
   }
 
-  void serve({bool connection = true, bool usage = true}) {
+  void serve({bool connection = true, bool usage = true, bool? finance}) {
     server.reply('GET', '/api/v2/portal/settings', 200, {
       'success': true,
       'enabled': true,
       'agent_code': '402917',
-      'sections': {'connection': connection, 'usage': usage, 'device': false},
+      'sections': {
+        'connection': connection,
+        'usage': usage,
+        'device': false,
+        if (finance != null) 'finance': finance,
+      },
     });
     server.reply(
         'GET', '/api/v2/portal/logins', 200, {'success': true, 'data': []});
@@ -75,6 +81,26 @@ void main() {
     await open(t, v);
     expect(find.text('مخفي عن مشتركيك'), findsNWidgets(2));
     await simCheck(t, v, _shot, 'owner_hidden', allow: _allowVariable);
+  });
+
+  simCase(_shot, 'owner_finance', (t, v) async {
+    await sas4();
+    PermissionsService.debugSet(isEmployee: false);
+    serve(finance: true);
+    await open(t, v);
+    expect(find.text('الحركات الماليّة'), findsOneWidget);
+    expect(find.byType(Switch), findsNWidgets(4));
+    await simCheck(t, v, _shot, 'owner_finance', allow: _allowVariable);
+  });
+
+  simCase(_shot, 'owner_finance_hidden', (t, v) async {
+    await sas4();
+    PermissionsService.debugSet(isEmployee: false);
+    serve(finance: false);
+    await open(t, v);
+    expect(find.text('الحركات الماليّة'), findsOneWidget);
+    expect(find.text('مخفي عن مشتركيك'), findsOneWidget);
+    await simCheck(t, v, _shot, 'owner_finance_hidden', allow: _allowVariable);
   });
 
   simCase(_shot, 'employee', (t, v) async {

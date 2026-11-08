@@ -176,7 +176,12 @@ enum PortalSection {
 
   /// قراءات جهاز المشترك — مطفأٌ افتراضاً ولا يقرؤه تطبيق المشترك بعد، فلا
   /// مفتاح له في الشاشة: يُحمَل كما وصل ويُعاد كما هو مع كلّ حفظ.
-  device('device');
+  device('device'),
+
+  /// «الحركات الماليّة» («سجل الحركات»: التفعيل والتمديد والدين والتسديد) —
+  /// ظاهرةٌ افتراضاً؛ أُضيفت بعد البقيّة (المالك ٩ نوفمبر)، فمفتاحها يُرسم حين
+  /// يرسلها الخادم وحده ([PortalSections.knows]). أخفاها ⇒ الخادم يرفض السجلّ.
+  finance('finance');
 
   const PortalSection(this.key);
 
@@ -185,33 +190,44 @@ enum PortalSection {
 }
 
 /// ما يظهر لمشتركي الوكيل في تطبيقهم. الافتراض (لا صفّ، أو مفتاحٌ ناقص):
-/// «حالة الاتصال» و«الاستهلاك» ظاهران، والجهاز مطفأ.
+/// «حالة الاتصال» و«الاستهلاك» و«الحركات الماليّة» ظاهرة، والجهاز مطفأ.
 @immutable
 class PortalSections {
   const PortalSections({
     this.connection = true,
     this.usage = true,
     this.device = false,
+    this.finance,
   });
 
   final bool connection;
   final bool usage;
   final bool device;
 
+  /// «الحركات الماليّة» — `null` = خادمٌ لا يرسلها (أقدم، أو قبل هجرتها):
+  /// لا مفتاح لها في الشاشة (حفظها يُرفض)، وهي عند المشترك ظاهرةٌ كما كانت.
+  final bool? finance;
+
+  /// يعرف الخادم هذا القسم؟ (لا يُرسم مفتاحٌ لا يُحفظ.)
+  bool knows(PortalSection s) => s != PortalSection.finance || finance != null;
+
   bool of(PortalSection s) => switch (s) {
         PortalSection.connection => connection,
         PortalSection.usage => usage,
         PortalSection.device => device,
+        PortalSection.finance => finance ?? true,
       };
 
   PortalSections withValue(PortalSection s, bool value) => PortalSections(
         connection: s == PortalSection.connection ? value : connection,
         usage: s == PortalSection.usage ? value : usage,
         device: s == PortalSection.device ? value : device,
+        finance: s == PortalSection.finance ? value : finance,
       );
 
   /// مفتاحٌ غائبٌ أو غير مفهوم يأخذ قيمته من [fallback]: الافتراض عند
   /// القراءة، وما أُرسل عند ردّ الحفظ — فلا يقلب ردٌّ جزئيّ قسماً لم يُلمس.
+  /// و«الحركات الماليّة» الغائبة تبقى كما في [fallback] (غير معروفةٍ عند القراءة).
   static PortalSections fromJson(
     Map<String, dynamic> j, {
     PortalSections fallback = const PortalSections(),
@@ -220,10 +236,14 @@ class PortalSections {
         connection: _flag(j[PortalSection.connection.key], fallback.connection),
         usage: _flag(j[PortalSection.usage.key], fallback.usage),
         device: _flag(j[PortalSection.device.key], fallback.device),
+        finance: j.containsKey(PortalSection.finance.key)
+            ? _flag(j[PortalSection.finance.key], fallback.finance ?? true)
+            : fallback.finance,
       );
 
   Map<String, bool> toJson() => {
-        for (final s in PortalSection.values) s.key: of(s),
+        for (final s in PortalSection.values)
+          if (knows(s)) s.key: of(s),
       };
 
   @override
@@ -231,10 +251,11 @@ class PortalSections {
       other is PortalSections &&
       other.connection == connection &&
       other.usage == usage &&
-      other.device == device;
+      other.device == device &&
+      other.finance == finance;
 
   @override
-  int get hashCode => Object.hash(connection, usage, device);
+  int get hashCode => Object.hash(connection, usage, device, finance);
 
   @override
   String toString() => 'PortalSections(${toJson()})';

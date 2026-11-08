@@ -71,9 +71,10 @@ String portalLoginWhen(DateTime? at, {DateTime? now}) {
 ///   و«تغيير الرمز» لصاحب الحساب وحده (الخادم يردّ الموظّف ٤٠٣ OWNER_ONLY).
 /// • تلميح المتغيّر [kAgentCodeVariable] لرسائل الواتساب.
 /// • مفتاح «تفعيل بوابة مشتركيّ» (مفتوحةٌ افتراضاً) — `settings.edit`.
-/// • «ما يراه مشتركوك»: مفتاحا «حالة الاتصال» و«الاستهلاك» (ظاهران
-///   افتراضاً، §11) — `settings.edit`. كلّ نقرةٍ تُحفظ فوراً وترجع عند الرفض،
-///   ولا يظهران لخادمٍ لا يرسل `sections`.
+/// • «ما يراه مشتركوك»: مفاتيح «حالة الاتصال» و«الاستهلاك» و«الحركات الماليّة»
+///   (ظاهرةٌ افتراضاً، §11) — `settings.edit`. كلّ نقرةٍ تُحفظ فوراً وترجع عند
+///   الرفض، ولا تظهر لخادمٍ لا يرسل `sections` (و«الحركات الماليّة» لخادمٍ لا
+///   يرسلها هي — [PortalSections.knows]).
 /// • «آخر دخول المشتركين» (آخر ٢٠) — `subscribers.view`.
 ///
 /// ── الموظّف (المقفل لا المخفيّ) ─────────────────────────────────────
@@ -424,9 +425,8 @@ class _AgentCodeTabState extends State<AgentCodeTab> {
               icon: LucideIcons.eye,
             ),
             const SizedBox(height: Sp.sm),
-            for (final s in _SectionSwitchRow.shown) ...[
-              if (s != _SectionSwitchRow.shown.first)
-                const SizedBox(height: Sp.sm),
+            for (final (i, s) in _SectionSwitchRow.shownFor(sections).indexed) ...[
+              if (i > 0) const SizedBox(height: Sp.sm),
               _SectionSwitchRow(
                 section: s,
                 value: _pendingSections[s] ?? sections.of(s),
@@ -993,9 +993,18 @@ class _SectionSwitchRow extends StatelessWidget {
       hint: 'portal.section_usage_on',
       icon: LucideIcons.activity,
     ),
+    PortalSection.finance: (
+      title: 'portal.section_finance',
+      hint: 'portal.section_finance_on',
+      icon: LucideIcons.receipt,
+    ),
   };
 
   static Iterable<PortalSection> get shown => _copy.keys;
+
+  /// ما يُرسم لهذا الردّ: قسمٌ لا يعرفه الخادم بعد لا مفتاح له.
+  static List<PortalSection> shownFor(PortalSections sections) =>
+      shown.where(sections.knows).toList();
 
   final PortalSection section;
   final bool value;
