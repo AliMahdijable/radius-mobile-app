@@ -7,10 +7,18 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/core/widgets/app_sheet.dart';
+import 'package:rad_mysvcs/models/device_health.dart';
+import 'package:rad_mysvcs/models/network_device.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
+import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
 import 'package:rad_mysvcs/screens/subscribers/subscriber_detail_screen.dart';
 import 'package:rad_mysvcs/screens/voice/voice_command_sheet.dart';
+import 'package:rad_mysvcs/services/agent_net_presence.dart';
+import 'package:rad_mysvcs/services/devices_check.dart';
+import 'package:rad_mysvcs/services/devices_check_runner.dart';
+import 'package:rad_mysvcs/services/voice/voice_check.dart';
 import 'package:rad_mysvcs/services/voice/voice_resolver.dart';
+import 'package:rad_mysvcs/services/vpn_now.dart';
 
 import 'visual_perm/visual_perm_harness.dart';
 
@@ -187,6 +195,84 @@ void main() {
     await say(t, 'فحص شامل');
     expect(find.byKey(const ValueKey('voice-check-all')), findsOneWidget);
     expect(find.text('ابدأ الفحص'), findsOneWidget);
+    await close(t);
+  });
+  testWidgets('٨ نوفمبر: «افحص المشترك علي حسين» ⇒ الجواب أوّلاً: حاله ثمّ جهازه (الإشارة وCCQ) ثمّ «افتح المشترك»', (t) async {
+    // المالك: «الكارت مباشره يجاوبه قبل يا اما مخلص متصل ومخلص طافي اذا متصل وفعال شنو حاله السي سي كيو، حاله الاشاره»
+    VoiceResolver.loadSubscribers = () async => [
+          Subscriber.fromJson({
+            'idx': '11', 'username': 'ali.hussein', 'firstname': 'علي', 'lastname': 'حسين', 'online_status': 1,
+            'remaining_days': 12, 'ip_address': '10.0.0.7',
+          }),
+        ];
+    SubscriberVoiceCheck.debugLocalAllowed = () => true;
+    SubscriberVoiceCheck.debugProbe = (_) async => DeviceHealthSnapshot(
+        kind: DeviceKind.ubiquiti,
+        ip: '10.0.0.7',
+        ubnt: UbiquitiStatus(
+            hostname: 'Nano-Ali', firmware: 'XC', uptimeSeconds: 1, ssid: 's', mode: 'sta', signalDbm: -55,
+            noiseFloorDbm: -95, ccqPercent: 92, distanceMeters: 1, txRateKbps: 1, rxRateKbps: 1,
+            lanPorts: const [LanPort(name: 'eth0', speed: '100Mbps-Full', plugged: true)], peerMac: null, peerCount: 1,
+            baseUrl: 'http://x'));
+    addTearDown(() {
+      SubscriberVoiceCheck.debugLocalAllowed = null;
+      SubscriberVoiceCheck.debugProbe = null;
+    });
+    await open(t);
+    await say(t, 'افحص المشترك علي حسين');
+    expect(find.byKey(const ValueKey('voice-sub-answer')), findsOneWidget);
+    expect(find.text('فعّال ومتّصل'), findsOneWidget);
+    expect(find.text('باقي 12 يوماً'), findsOneWidget);
+    expect(find.text('92%'), findsOneWidget, reason: 'CCQ ظاهر');
+    expect(find.text('-55 dBm'), findsOneWidget);
+    expect(find.text('100M'), findsOneWidget);
+    expect(find.text('الإشارة، CCQ والكيبل سليمة'), findsOneWidget);
+    expect(find.text('افتح المشترك'), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('voice-confirm')));
+    await settle(t, ms: 2500);
+    expect(find.byType(SubscriberDetailScreen), findsOneWidget);
+    await close(t);
+  });
+
+  testWidgets('٨ نوفمبر: «افحص سكتر الشمال» ⇒ كرت الجهاز بنتيجة فحصه مباشرةً (حاله وما به) و«التقرير الكامل»', (t) async {
+    // المالك: «يقول افحص سكتر فلان… يجيب له الكارت مباشره يعطي نتيجه الجهاز شنو اللي بي»
+    final sector = NetworkDevice(
+      id: 2, adminId: '2', name: 'سكتر الشمال', type: 'sector', brand: 'ubnt', ip: '10.9.0.2', port: 443,
+      protocol: 'https', hasCredentials: true, lastStatus: 'online', createdAt: DateTime(2026, 11, 1),
+    );
+    VoiceResolver.loadDevices = () async => [sector];
+    final route = VpnNow.routeSource;
+    VpnNow.routeSource = () async => (linked: false, via: null);
+    AgentNetPresence.debugSet(NetPresence.on);
+    DevicesCheckRunner.debugLimits = () async => const CheckLimits(subSignal: -70, subCcq: 50);
+    DevicesCheckRunner.debugSubscribers = () async => const [];
+    DevicesCheckRunner.debugProbe = (d) async => (status: 'online', responseMs: 4, packetLoss: 0.0, serviceOk: true);
+    DevicesCheckRunner.debugFetch = (d) async => ProbeResult(
+          vitals: const [],
+          counters: const {},
+          detail: const DeviceDetail(glance: DeviceGlance(isAp: true, cpu: 20), peers: [
+            PeerLink(name: 'ali.home', signal: -61, ccq: 95),
+            PeerLink(name: 'omar.weak', signal: -79, ccq: 80),
+          ]),
+        );
+    addTearDown(() {
+      VoiceResolver.loadDevices = () async => const [];
+      VpnNow.routeSource = route;
+      DevicesCheckRunner.debugLimits = null;
+      DevicesCheckRunner.debugSubscribers = null;
+      DevicesCheckRunner.debugProbe = null;
+      DevicesCheckRunner.debugFetch = null;
+    });
+    await open(t);
+    await say(t, 'افحص سكتر الشمال');
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+    await settle(t);
+    expect(find.byKey(const ValueKey('voice-dev-answer')), findsOneWidget);
+    expect(find.byKey(const ValueKey('voice-dev-state')), findsOneWidget, reason: 'حاله: طافي/ملاحظات/سليم');
+    expect(find.textContaining('إشارة ضعيفة: 1'), findsOneWidget, reason: 'ما به');
+    expect(find.textContaining('omar.weak (-79 dBm)'), findsOneWidget, reason: 'والضعيف باسمه');
+    expect(find.text('التقرير الكامل'), findsOneWidget);
+    expect(find.text('صفحة الجهاز'), findsOneWidget);
     await close(t);
   });
 }

@@ -1,9 +1,14 @@
 import '../../api/big_subscribers_api.dart';
+import '../../api/company_route.dart';
+import '../../api/merged_devices_api.dart';
 import '../../api/network_devices_api.dart';
 import '../../api/subscribers_api.dart';
 import '../../core/util/arabic_text.dart';
+import '../../models/merged_company.dart';
 import '../../models/network_device.dart';
 import '../../models/subscriber.dart';
+import '../auth_storage.dart';
+import '../merged_mode.dart';
 
 /// مرشّحٌ بدرجة تطابقه (٠–١٠٠).
 class VoiceMatch<T> {
@@ -27,8 +32,15 @@ class VoiceMatches<T> {
       items.isNotEmpty && items.first.score >= 80 && (items.length == 1 || items.first.score - items[1].score >= 15);
 }
 
+/// جهازٌ بشركته («كل الشركات») — [company] null خارج الوضع، و[open] للشركة المفتوحة (تُفحص بطريقها المعتاد).
+typedef VoiceDeviceCompany = ({MergedCompany company, bool open});
+
 /// مطابقة اسم الأمر الصوتيّ بمشتركي الوكيل وأجهزته — على الجهاز، من القوائم نفسها التي يعرضها التطبيق (والحساب الكبير
 /// ≥٥٠٠٠ من بحث الشركة لا القائمة الكاملة — pro-big-lists).
+///
+/// «كل الشركات» (٨ نوفمبر — المالك: «البحث الصوتي ان يتعمم على جميع الشركات… جلب اسماء الاجهزه للوكيل شركه كانت ام عده شركات
+/// والبحث باسم الجهاز»): المشتركون من قوائم كلّ الشركات (كلُّ صفٍّ بمفتاح شركته فتذهب عمليّته لها)، والكبيرة ببحثها الموجَّه؛
+/// والأجهزة من أجهزة كلّ شركة ([companyOfDevice]).
 class VoiceResolver {
   VoiceResolver._();
 
@@ -38,22 +50,73 @@ class VoiceResolver {
   static Future<List<Subscriber>> Function(String q) bigSearch = _bigSearch;
   static Future<List<NetworkDevice>> Function() loadDevices = () => NetworkDevicesApi.list();
 
+  /// «كل الشركات» فعّال الآن.
+  static bool Function() mergedOn = () => MergedMode.active.value;
+
+  /// «كل الشركات»: مشتركو كلّ الشركات لهذا الاسم (الصغيرة من قوائمها، والكبيرة ببحثها) — كلٌّ بمفتاح شركته.
+  static Future<List<Subscriber>> Function(String q) mergedSubscribers = _mergedSubscribers;
+
+  /// «كل الشركات»: أجهزة كلّ شركة بشركتها.
+  static Future<List<({NetworkDevice device, VoiceDeviceCompany company})>> Function() mergedDevices = _mergedDevices;
+
+  static final Map<int, VoiceDeviceCompany> _deviceCompany = {};
+
+  /// شركة جهازٍ من آخر جلب («كل الشركات») — null خارج الوضع.
+  static VoiceDeviceCompany? companyOfDevice(int id) => _deviceCompany[id];
+
   static Future<List<Subscriber>> _bigSearch(String q) async =>
       (await BigSubscribersApi.page(page: 1, size: 30, tab: 'all', query: q)).rows;
+
+  /// بحث الحساب الكبير بالنصّ كما هو ثمّ بأطول كلمة (الاسم الكامل قد لا يُطابَق حرفيّاً هناك).
+  static Future<List<Subscriber>> _bigWithFallback(String q, Future<List<Subscriber>> Function(String q) search) async {
+    var pool = await search(q);
+    if (pool.isEmpty) {
+      final words = q.split(' ')..sort((a, b) => b.length.compareTo(a.length));
+      if (words.first != q && words.first.length >= 2) pool = await search(words.first);
+    }
+    return pool;
+  }
+
+  static Future<List<Subscriber>> _mergedSubscribers(String q) async {
+    final r = await MergedSubscribers.withSessions(await MergedSubscribers.load());
+    final pool = <Subscriber>[...r.rows];
+    // الكبيرة: لا قائمة كاملة لها هنا — بحثها الموجَّه بمفتاحها
+    for (final p in r.big) {
+      try {
+        final rows = await CompanyRoute.run(p.company.key, () => _bigWithFallback(q, _bigSearch));
+        pool.addAll(rows.map((s) => s.withCompany(p.company.key)));
+      } catch (_) {}
+    }
+    return pool;
+  }
+
+  static Future<List<({NetworkDevice device, VoiceDeviceCompany company})>> _mergedDevices() async {
+    final data = await MergedMode.load();
+    String? openAdmin;
+    try {
+      openAdmin = (await AuthStorage.readAdminId())?.trim();
+    } catch (_) {
+      openAdmin = null;
+    }
+    final parts = await MergedDevicesApi.load(data.usable, openAdminId: openAdmin);
+    final seen = <int>{};
+    return [
+      for (final p in parts)
+        for (final d in p.devices ?? const <NetworkDevice>[])
+          // معرّف الجهاز فريدٌ في قاعدتنا — تكرارٌ بين شركتين لا يُنسب لاثنتين
+          if (seen.add(d.id)) (device: d, company: (company: p.company, open: p.open)),
+    ];
+  }
 
   static Future<VoiceMatches<Subscriber>> subscribers(String query, {int limit = 6}) async {
     final q = query.trim();
     if (q.isEmpty) return const VoiceMatches([]);
     try {
-      final big = await bigProbe();
       List<Subscriber> pool;
-      if (big > 0) {
-        // الكبير: بحث الشركة بالنصّ كما هو ثمّ بأطول كلمة (الاسم الكامل قد لا يُطابَق حرفيّاً هناك)
-        pool = await bigSearch(q);
-        if (pool.isEmpty) {
-          final words = q.split(' ')..sort((a, b) => b.length.compareTo(a.length));
-          if (words.first != q && words.first.length >= 2) pool = await bigSearch(words.first);
-        }
+      if (mergedOn()) {
+        pool = await mergedSubscribers(q);
+      } else if (await bigProbe() > 0) {
+        pool = await _bigWithFallback(q, bigSearch);
       } else {
         pool = await loadSubscribers() ?? const [];
       }
@@ -65,7 +128,17 @@ class VoiceResolver {
 
   static Future<VoiceMatches<NetworkDevice>> devices(String query, {String? kind, int limit = 6}) async {
     try {
-      final all = await loadDevices();
+      List<NetworkDevice> all;
+      if (mergedOn()) {
+        final rows = await mergedDevices();
+        _deviceCompany
+          ..clear()
+          ..addEntries(rows.map((r) => MapEntry(r.device.id, r.company)));
+        all = [for (final r in rows) r.device];
+      } else {
+        _deviceCompany.clear();
+        all = await loadDevices();
+      }
       return VoiceMatches(rankDevices(all, query, kind: kind, limit: limit));
     } catch (_) {
       return const VoiceMatches([], error: 'تعذّر جلب الأجهزة الآن — حاول بعد قليل');

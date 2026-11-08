@@ -18,9 +18,18 @@ import '../../models/network_device.dart';
 import '../../models/subscriber.dart';
 import '../../services/agent_net_presence.dart';
 import '../../services/ai_assistant_state.dart';
+import '../../services/devices_check.dart';
+import '../../services/devices_check_runner.dart';
+import '../../services/merged_devices_check.dart';
+import '../../services/merged_mode.dart';
+import '../../services/permissions_service.dart';
+import '../../services/subscribers_check.dart';
+import '../../services/voice/voice_check.dart';
 import '../../services/voice/voice_command.dart';
 import '../../services/voice/voice_resolver.dart';
 import '../../services/vpn_now.dart';
+import '../../widgets/company_tag.dart';
+import '../subscribers/widgets/subs_metric_strip.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -74,7 +83,16 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
   Subscriber? _sub;
   NetworkDevice? _dev;
 
+  /// «افحص المشترك فلان»: جوابه (حاله ثمّ جهازه).
+  SubscriberVoiceCheck? _subCheck;
+
+  /// «افحص سكتر فلان»: فحص الجهاز نفسه وتقريره — أو لماذا لا يُفحص ([_devNote]).
+  DevicesCheckRunner? _devRun;
+  String? _devNote;
+  bool _devViaVpn = false;
+
   static const _examples = [
+    'افحص المشترك علي حسين',
     'فعّل علي حسين',
     'طفّي محمد كاظم',
     'سدّد دين أحمد ٢٥ ألف',
@@ -86,9 +104,100 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    VpnNow.subscribers.addListener(_changed);
+  }
+
+  @override
   void dispose() {
+    VpnNow.subscribers.removeListener(_changed);
+    _clearChecks();
     _ctrl.dispose();
     super.dispose();
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  void _clearChecks() {
+    _subCheck?.removeListener(_changed);
+    _subCheck?.dispose();
+    _subCheck = null;
+    _devRun?.removeListener(_changed);
+    _devRun?.dispose();
+    _devRun = null;
+    _devNote = null;
+    _devViaVpn = false;
+  }
+
+  /// «كل الشركات»: شركة الصفّ (للاسم والشارة ونطاق فحصه) — null خارج الوضع.
+  static bool get _merged => MergedMode.active.value;
+
+  /// جواب «افحص المشترك فلان»: حاله فوراً ثمّ جهازه.
+  void _startSubCheck(Subscriber s) {
+    _subCheck?.removeListener(_changed);
+    _subCheck?.dispose();
+    final c = _merged ? MergedMode.companyOf(s.companyKey) : null;
+    final job = SubscriberVoiceCheck(s, company: c)..addListener(_changed);
+    setState(() {
+      _sub = s;
+      _subCheck = job;
+      if (_intent != null && _intent!.action != VoiceAction.checkSubscriber) {
+        _intent = VoiceIntent(VoiceAction.checkSubscriber, query: _intent!.query, raw: _intent!.raw);
+      }
+    });
+    unawaited(job.run());
+  }
+
+  /// «افحص سكتر فلان»: فحص هذا الجهاز وحده بطريقه — المفتوحة من شبكتك (أو عبر VPN بوضعه/خارج شبكتك)، وجهاز شركةٍ أخرى عبر
+  /// VPN شركته (كـ«الفحص الشامل» بـ«كل الشركات»).
+  Future<void> _startDeviceCheck(NetworkDevice d) async {
+    _devRun?.removeListener(_changed);
+    _devRun?.dispose();
+    _devRun = null;
+    setState(() {
+      _dev = d;
+      _devNote = null;
+      if (_intent != null && _intent!.action != VoiceAction.checkDevice) {
+        _intent = VoiceIntent(VoiceAction.checkDevice, query: _intent!.query, raw: _intent!.raw);
+      }
+    });
+    final co = VoiceResolver.companyOfDevice(d.id);
+    DevicesCheckRunner runner;
+    if (co != null && !co.open) {
+      if (!PermissionsService.deepCheckVpn) {
+        setState(() => _devNote = 'الفحص الشامل عبر VPN غير مفعّل لك');
+        return;
+      }
+      runner = MergedDevicesCheckRunner([
+        MergedCheckPart(company: co.company, devices: [d])
+      ], openViaVpn: false);
+      _devViaVpn = true;
+    } else {
+      bool viaVpn;
+      try {
+        final r = await VpnNow.route();
+        viaVpn = VpnNow.mode.value || (r?.linked == true && !AgentNetPresence.isOn);
+      } catch (_) {
+        viaVpn = VpnNow.mode.value;
+      }
+      if (!mounted || _dev?.id != d.id) return;
+      if (!viaVpn && AgentNetPresence.isOff) {
+        setState(() => _devNote = 'خارج شبكتك — اربط VPN حتى يُفحص الجهاز عن بُعد');
+        return;
+      }
+      if (viaVpn ? !PermissionsService.deepCheckVpn : !PermissionsService.deepCheckNet) {
+        setState(() => _devNote = 'الفحص الشامل غير مفعّل لك — افتح صفحة الجهاز');
+        return;
+      }
+      runner = DevicesCheckRunner([d], viaVpn: viaVpn);
+      _devViaVpn = viaVpn;
+    }
+    _devRun = runner..addListener(_changed);
+    setState(() {});
+    unawaited(runner.run());
   }
 
   Future<void> _run(String text) async {
@@ -96,6 +205,7 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
     if (t.isEmpty) return;
     final gen = ++_gen;
     final intent = VoiceCommand.parse(t);
+    _clearChecks();
     setState(() {
       _intent = intent;
       _subs = null;
@@ -108,7 +218,7 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
     if (intent.action == VoiceAction.checkDevice) {
       final d = await VoiceResolver.devices(intent.query, kind: intent.deviceKind);
       if (!mounted || gen != _gen) return;
-      // لا جهاز بهذا الاسم ⇒ لعلّه مشترك («افحص علي») — مرشّحوه للفتح
+      // لا جهاز بهذا الاسم ⇒ لعلّه مشترك («افحص جهاز علي») — فحصه هو
       VoiceMatches<Subscriber>? s;
       if (d.isEmpty && d.error == null && intent.query.isNotEmpty) s = await VoiceResolver.subscribers(intent.query);
       if (!mounted || gen != _gen) return;
@@ -116,8 +226,35 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
         _busy = false;
         _devs = d;
         _subs = s;
-        if (d.sure) _dev = d.items.first.item;
       });
+      if (d.sure) {
+        unawaited(_startDeviceCheck(d.items.first.item));
+      } else if (s != null && s.sure) {
+        _startSubCheck(s.items.first.item);
+      }
+      return;
+    }
+    if (intent.action == VoiceAction.check) {
+      // «افحص فلان» بلا نوع: الأجهزة والمشتركون معاً، والأوضح يُفحص (والتعادل للمشترك — الأكثر سؤالاً)
+      final r = await Future.wait([
+        VoiceResolver.devices(intent.query),
+        VoiceResolver.subscribers(intent.query),
+      ]);
+      if (!mounted || gen != _gen) return;
+      final d = r[0] as VoiceMatches<NetworkDevice>;
+      final s = r[1] as VoiceMatches<Subscriber>;
+      setState(() {
+        _busy = false;
+        _devs = d;
+        _subs = s;
+      });
+      final dTop = d.isEmpty ? 0 : d.items.first.score;
+      final sTop = s.isEmpty ? 0 : s.items.first.score;
+      if (d.sure && (!s.sure || dTop > sTop)) {
+        unawaited(_startDeviceCheck(d.items.first.item));
+      } else if (s.sure) {
+        _startSubCheck(s.items.first.item);
+      }
       return;
     }
     final m = await VoiceResolver.subscribers(intent.query);
@@ -125,8 +262,9 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
     setState(() {
       _busy = false;
       _subs = m;
-      if (m.sure) _sub = m.items.first.item;
+      if (m.sure && intent.action != VoiceAction.checkSubscriber) _sub = m.items.first.item;
     });
+    if (m.sure && intent.action == VoiceAction.checkSubscriber) _startSubCheck(m.items.first.item);
   }
 
   // ───────────────────────── التنفيذ (شاشة العمليّة نفسها) ─────────────────────────
@@ -337,21 +475,25 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
             color: _listening ? AppColors.dangerSoftBg : AppColors.brandSoftBg,
           ),
           alignment: Alignment.center,
-          child: AppPlatform.isWindows ? WindowsVoiceButton(
-            controller: _ctrl,
-            autoStart: widget.autoListen,
-            onListening: (v) { if (mounted) setState(() => _listening = v); },
-            onFinal: _run,
-          ) : VoiceSearchButton(
-            controller: _ctrl,
-            size: 24,
-            autoStart: widget.autoListen,
-            idleColor: AppColors.brandOnSoft,
-            onListening: (v) {
-              if (mounted) setState(() => _listening = v);
-            },
-            onFinal: _run,
-          ),
+          child: AppPlatform.isWindows
+              ? WindowsVoiceButton(
+                  controller: _ctrl,
+                  autoStart: widget.autoListen,
+                  onListening: (v) {
+                    if (mounted) setState(() => _listening = v);
+                  },
+                  onFinal: _run,
+                )
+              : VoiceSearchButton(
+                  controller: _ctrl,
+                  size: 24,
+                  autoStart: widget.autoListen,
+                  idleColor: AppColors.brandOnSoft,
+                  onListening: (v) {
+                    if (mounted) setState(() => _listening = v);
+                  },
+                  onFinal: _run,
+                ),
         ),
       ]),
     );
@@ -367,7 +509,9 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
           const SizedBox(width: Sp.sm),
           Expanded(
             child: Text(
-              intent.action == VoiceAction.checkAll ? 'أجلب أجهزتك…' : 'أدوّر على «${intent.query}»…',
+              intent.action == VoiceAction.checkAll
+                  ? 'أجلب أجهزتك…'
+                  : 'أدوّر على «${intent.query}»${_merged ? ' بكلّ الشركات' : ''}…',
               style: AppType.body(color: AppColors.textMid),
             ),
           ),
@@ -395,25 +539,312 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
         ];
       case VoiceAction.checkDevice:
         return _deviceResult(intent);
+      case VoiceAction.checkSubscriber:
+        final c = _subCheck;
+        if (c != null) return [_subAnswer(c)];
+        return _subscriberResult(intent, _subs);
+      case VoiceAction.check:
+        // بلا نوع ولا واحدٌ واضح: المشتركون ثمّ الأجهزة — الضغط يفحص
+        final s = _subs;
+        final d = _devs;
+        if ((s == null || s.isEmpty) && (d == null || d.isEmpty)) {
+          final err = s?.error ?? d?.error;
+          return [
+            _box(Text(err ?? 'ما لكيت مشترك ولا جهاز باسم «${intent.query}»',
+                style: AppType.body(color: AppColors.textMid)))
+          ];
+        }
+        return [
+          if (s != null && s.items.isNotEmpty) ...[
+            _hint('مشتركين — اختار للفحص:'),
+            ..._subscriberPicks(s, VoiceAction.checkSubscriber)
+          ],
+          if (d != null && d.items.isNotEmpty) ...[
+            const SizedBox(height: Sp.xs),
+            _hint('أجهزة:'),
+            ..._devicePicks(d),
+          ],
+        ];
       default:
         return _subscriberResult(intent, _subs);
     }
   }
 
+  // ───────────────────────── جواب «افحص المشترك» ─────────────────────────
+
+  Widget _subAnswer(SubscriberVoiceCheck c) {
+    final s = c.sub;
+    final name = s.fullName.trim().isEmpty ? s.username : s.fullName;
+    final tone = c.disabled
+        ? AppTone.neutral
+        : c.expired
+            ? AppTone.danger
+            : (c.online ? AppTone.success : AppTone.warning);
+    final r = c.row;
+    final bad = {for (final p in r?.problems ?? const <SubsCheckProblem>[]) p.kind};
+    final busy = c.phase == VoiceCheckPhase.probing || c.phase == VoiceCheckPhase.vpn;
+    final vpnLine = c.phase == VoiceCheckPhase.vpn ? VpnNow.subscribers.line : null;
+    final source = r?.reading == null
+        ? null
+        : [
+            r!.reading!.vpn ? 'عبر VPN الشركة' : 'من شبكتك',
+            if (r.reading!.via != null) 'من ${r.reading!.via}',
+            if (r.reading!.device != null) r.reading!.device!,
+          ].join(' · ');
+    Widget chip(String text, AppTone t) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 3),
+          decoration: BoxDecoration(
+            color: t.softBg,
+            borderRadius: BorderRadius.circular(R.pill),
+            border: Border.all(color: t.softBorder),
+          ),
+          child:
+              Text(text, style: AppType.label(color: t.onSoft).copyWith(fontSize: 12.5, fontWeight: FontWeight.w700)),
+        );
+    return Container(
+      key: const ValueKey('voice-sub-answer'),
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.card),
+        border: Border.all(color: tone.softBorder),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Icon(LucideIcons.userRoundSearch, size: 18, color: tone.fill),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: Text(name,
+                maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bodyStrong(color: AppColors.textHi)),
+          ),
+          if (_merged && s.companyKey != null) CompanyTag(companyKey: s.companyKey!, fontSize: 11),
+        ]),
+        const SizedBox(height: 2),
+        Text(s.username, style: AppType.muted(color: AppColors.textMid)),
+        const SizedBox(height: Sp.sm),
+        // الجواب أوّلاً: حاله (المالك: «يا اما مخلص متصل ومخلص طافي»)
+        Wrap(spacing: Sp.x6, runSpacing: Sp.x6, children: [
+          if (c.disabled)
+            chip('مطفي', AppTone.neutral)
+          else
+            chip(c.expired ? 'منتهي' : 'فعّال', c.expired ? AppTone.danger : AppTone.success),
+          chip(c.online ? 'متّصل' : 'طافي', c.online ? AppTone.success : AppTone.warning),
+        ]),
+        Padding(
+          padding: const EdgeInsets.only(top: Sp.x6),
+          child: Text(c.headline,
+              key: const ValueKey('voice-answer-headline'), style: AppType.bodyStrong(color: tone.fill)),
+        ),
+        if (c.daysLine != null) Text(c.daysLine!, style: AppType.muted(color: AppColors.textMid)),
+        // ثمّ جهازه: متّصلٌ وفعّال ⇒ CCQ والإشارة والكيبل (أو الضوء) بحدود المدير
+        if (c.wantsDevice) ...[
+          const SizedBox(height: Sp.sm),
+          if (busy)
+            Row(children: [
+              const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+              const SizedBox(width: Sp.sm),
+              Expanded(
+                child: Text(vpnLine ?? c.deviceLine ?? '', style: AppType.muted(color: AppColors.textMid)),
+              ),
+            ])
+          else if (r?.reading != null) ...[
+            SubsMetricStrip(reading: r!.reading!, bad: bad, limits: c.limits),
+            const SizedBox(height: Sp.x6),
+            Text(c.deviceLine ?? '',
+                key: const ValueKey('voice-answer-device'),
+                style: AppType.label(color: bad.isEmpty ? AppColors.success : AppTone.danger.fill)
+                    .copyWith(fontSize: 13, fontWeight: FontWeight.w700)),
+            if (source != null) Text(source, style: AppType.muted(color: AppColors.textLow)),
+          ] else if (c.deviceLine != null)
+            Text(c.deviceLine!,
+                key: const ValueKey('voice-answer-device'), style: AppType.label(color: AppColors.warning)),
+        ],
+        const SizedBox(height: Sp.sm),
+        FilledButton(
+          key: const ValueKey('voice-confirm'),
+          onPressed: () => _openSubscriber(s, VoiceIntent(VoiceAction.open, query: _intent?.query ?? '', raw: '')),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+          child: const Text('افتح المشترك'),
+        ),
+      ]),
+    );
+  }
+
+  // ───────────────────────── جواب «افحص سكتر فلان» ─────────────────────────
+
+  static AppTone _stateTone(CheckState s) => switch (s) {
+        CheckState.down => AppTone.danger,
+        CheckState.warn => AppTone.warning,
+        CheckState.unread => AppTone.neutral,
+        CheckState.ok => AppTone.success,
+      };
+
+  static AppTone _levelTone(CheckLevel l) => switch (l) {
+        CheckLevel.bad => AppTone.danger,
+        CheckLevel.warn => AppTone.warning,
+        CheckLevel.info => AppTone.info,
+      };
+
+  Widget _devAnswer(NetworkDevice d) {
+    final run = _devRun;
+    final rep = run?.reports[d.id];
+    final co = VoiceResolver.companyOfDevice(d.id);
+    final remote = co != null && !co.open;
+    final note = _devNote;
+    final tone = rep == null ? AppTone.brand : _stateTone(rep.state);
+    final way = remote ? 'عبر VPN الشركة' : (_devViaVpn ? 'عبر VPN' : 'من شبكتك');
+    final findings = [...?rep?.findings]..sort((a, b) => a.level.index.compareTo(b.level.index));
+    return Container(
+      key: const ValueKey('voice-dev-answer'),
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(R.card),
+        border: Border.all(color: tone.softBorder),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Icon(LucideIcons.router, size: 18, color: tone.fill),
+          const SizedBox(width: Sp.sm),
+          Expanded(
+            child: Text(d.name,
+                maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bodyStrong(color: AppColors.textHi)),
+          ),
+          if (co != null) CompanyTag(companyKey: co.company.key, fontSize: 11),
+        ]),
+        const SizedBox(height: 2),
+        Text([if (rep != null) rep.roleLabel, d.ip, if (note == null) way].where((x) => x.isNotEmpty).join(' · '),
+            style: AppType.muted(color: AppColors.textMid)),
+        const SizedBox(height: Sp.sm),
+        if (note != null)
+          Text(note, key: const ValueKey('voice-dev-note'), style: AppType.label(color: AppColors.warning))
+        else if (run == null || run.running)
+          Row(children: [
+            const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+            const SizedBox(width: Sp.sm),
+            Expanded(child: Text(run?.line ?? 'يفحص الجهاز…', style: AppType.muted(color: AppColors.textMid))),
+          ])
+        else if (rep == null)
+          Text(run.error ?? 'ما انقرى الجهاز', style: AppType.label(color: AppColors.warning))
+        else ...[
+          // الجواب: حاله ثمّ ما به
+          Row(children: [
+            Container(
+              key: const ValueKey('voice-dev-state'),
+              padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 3),
+              decoration: BoxDecoration(
+                color: tone.softBg,
+                borderRadius: BorderRadius.circular(R.pill),
+                border: Border.all(color: tone.softBorder),
+              ),
+              child: Text(rep.stateLabel,
+                  style: AppType.label(color: tone.onSoft).copyWith(fontSize: 12.5, fontWeight: FontWeight.w700)),
+            ),
+          ]),
+          if (rep.vitals.isNotEmpty) ...[
+            const SizedBox(height: Sp.x6),
+            Wrap(spacing: Sp.x6, runSpacing: Sp.x6, children: [
+              for (final v in rep.vitals.take(4))
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceSunken,
+                    borderRadius: BorderRadius.circular(R.sm),
+                  ),
+                  child: Text('${v.k} ${v.v}', style: AppType.label(color: AppColors.textHi).copyWith(fontSize: 12.5)),
+                ),
+            ]),
+          ],
+          if (findings.isNotEmpty) ...[
+            const SizedBox(height: Sp.x6),
+            for (final f in findings.take(4))
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(color: _levelTone(f.level).fill, shape: BoxShape.circle),
+                    ),
+                  ),
+                  const SizedBox(width: Sp.x6),
+                  Expanded(
+                    child: Text(f.text,
+                        maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.body(color: AppColors.textHi)),
+                  ),
+                ]),
+              ),
+          ] else if (rep.state == CheckState.ok)
+            Padding(
+              padding: const EdgeInsets.only(top: Sp.x6),
+              child: Text('ما به شي ✓', style: AppType.label(color: AppColors.success)),
+            ),
+          // السكتر/الأولت: من هم الضعاف بأسمائهم (المالك: «يعطي نتيجه الجهاز شنو اللي بي»)
+          if (rep.subs.any((x) => x.bad || (x.light != null && x.light! < -27))) ...[
+            const SizedBox(height: Sp.x6),
+            Text(
+              'الأضعف: ${[
+                for (final x in rep.subs.where((x) => x.bad || (x.light != null && x.light! < -27)).take(3))
+                  '${x.title} (${x.light != null ? '${x.light!.toStringAsFixed(1)} dBm' : x.weak && x.signal != null ? '${x.signal} dBm' : 'CCQ ${x.ccq ?? '-'}%'})',
+              ].join(' · ')}',
+              key: const ValueKey('voice-dev-weak'),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.muted(color: AppColors.textMid),
+            ),
+          ],
+        ],
+        const SizedBox(height: Sp.sm),
+        Row(children: [
+          if (rep != null)
+            Expanded(
+              child: FilledButton(
+                key: const ValueKey('voice-dev-report'),
+                onPressed: () => _openDeviceReport(d),
+                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+                child: const Text('التقرير الكامل'),
+              ),
+            ),
+          if (rep != null && !remote) const SizedBox(width: Sp.sm),
+          if (!remote)
+            Expanded(
+              child: OutlinedButton(
+                key: const ValueKey('voice-dev-page'),
+                onPressed: () => _openDevice(d),
+                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+                child: const Text('صفحة الجهاز'),
+              ),
+            ),
+        ]),
+      ]),
+    );
+  }
+
+  /// التقرير الكامل للجهاز نفسه (تقرير «الفحص الشامل» لجهازٍ واحد) — بطريقه.
+  Future<void> _openDeviceReport(NetworkDevice d) async {
+    final root = widget.rootContext;
+    final co = VoiceResolver.companyOfDevice(d.id);
+    final remote = co != null && !co.open;
+    final viaVpn = _devViaVpn;
+    Navigator.of(context).pop();
+    await Navigator.of(root).push(MaterialPageRoute<void>(
+      builder: (_) => DevicesCheckScreen(
+        devices: [d],
+        viaVpn: viaVpn,
+        runner: remote
+            ? MergedDevicesCheckRunner([
+                MergedCheckPart(company: co.company, devices: [d])
+              ], openViaVpn: false)
+            : null,
+      ),
+    ));
+  }
+
   List<Widget> _deviceResult(VoiceIntent intent) {
     final d = _dev;
-    if (d != null) {
-      return [
-        _actionCard(
-          key: const ValueKey('voice-device-card'),
-          icon: LucideIcons.router,
-          title: d.name,
-          lines: [d.ip, if (d.lastStatus == 'online') 'آخر حال: يردّ' else if (d.lastStatus == 'offline') 'آخر حال: لا يردّ'],
-          button: 'افحص الجهاز',
-          onTap: () => _openDevice(d),
-        ),
-      ];
-    }
+    if (d != null) return [_devAnswer(d)];
     final m = _devs;
     if (m == null) return const [];
     if (m.error != null) return [_box(Text(m.error!, style: AppType.body(color: AppColors.textMid)))];
@@ -421,24 +852,30 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
       final s = _subs;
       if (s != null && s.items.isNotEmpty) {
         return [
-          _box(Text('ما لكيت جهاز باسم «${intent.query}» — بالمشتركين:', style: AppType.body(color: AppColors.textMid))),
+          _box(
+              Text('ما لكيت جهاز باسم «${intent.query}» — بالمشتركين:', style: AppType.body(color: AppColors.textMid))),
           const SizedBox(height: Sp.xs),
-          ..._subscriberPicks(s, VoiceAction.open),
+          ..._subscriberPicks(s, VoiceAction.checkSubscriber),
         ];
       }
       return [_box(Text('ما لكيت جهاز باسم «${intent.query}»', style: AppType.body(color: AppColors.textMid)))];
     }
-    return [
-      _hint('اختار الجهاز:'),
-      for (final x in m.items)
-        _pickTile(
-          key: ValueKey('voice-dev-${x.item.id}'),
-          title: x.item.name,
-          subtitle: x.item.ip,
-          onTap: () => setState(() => _dev = x.item),
-        ),
-    ];
+    return [_hint('اختار الجهاز:'), ..._devicePicks(m)];
   }
+
+  List<Widget> _devicePicks(VoiceMatches<NetworkDevice> m) => [
+        for (final x in m.items)
+          _pickTile(
+            key: ValueKey('voice-dev-${x.item.id}'),
+            title: x.item.name,
+            subtitle: [
+              x.item.ip,
+              if (VoiceResolver.companyOfDevice(x.item.id) != null)
+                VoiceResolver.companyOfDevice(x.item.id)!.company.name
+            ].join(' · '),
+            onTap: () => _startDeviceCheck(x.item),
+          ),
+      ];
 
   List<Widget> _subscriberResult(VoiceIntent intent, VoiceMatches<Subscriber>? m) {
     final s = _sub;
@@ -454,15 +891,24 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
   List<Widget> _subscriberPicks(VoiceMatches<Subscriber> m, VoiceAction a) => [
         for (final x in m.items)
           _pickTile(
-            key: ValueKey('voice-sub-${x.item.idx ?? x.item.username}'),
+            key: ValueKey('voice-sub-${x.item.companyKey ?? ''}${x.item.idx ?? x.item.username}'),
             title: x.item.fullName.trim().isEmpty ? x.item.username : x.item.fullName,
-            subtitle: [x.item.username, if ((x.item.profileName ?? '').isNotEmpty) x.item.profileName!].join(' · '),
-            onTap: () => setState(() {
-              _sub = x.item;
-              if (_intent != null && _intent!.action == VoiceAction.checkDevice) {
-                _intent = VoiceIntent(a, query: _intent!.query, raw: _intent!.raw);
-              }
-            }),
+            subtitle: [
+              x.item.username,
+              if ((x.item.profileName ?? '').isNotEmpty) x.item.profileName!,
+              // «كل الشركات»: الشركة باسمها — اليوزر نفسه قد يكون بشركتين
+              if (_merged && MergedMode.companyOf(x.item.companyKey) != null)
+                MergedMode.companyOf(x.item.companyKey)!.name,
+            ].join(' · '),
+            onTap: () {
+              if (a == VoiceAction.checkSubscriber) return _startSubCheck(x.item);
+              setState(() {
+                _sub = x.item;
+                if (_intent != null && _intent!.action == VoiceAction.checkDevice) {
+                  _intent = VoiceIntent(a, query: _intent!.query, raw: _intent!.raw);
+                }
+              });
+            },
           ),
       ];
 
@@ -476,13 +922,20 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
             ? 'منتهي منذ ${-days} يوم'
             : 'باقي $days يوم';
     final debt = s.hasDebt ? 'عليه ${formatIQD(s.debtAbs.round())}' : 'ما عليه دين';
+    final co = _merged ? MergedMode.companyOf(s.companyKey) : null;
     final lines = <String>[
       [s.username, if ((s.profileName ?? '').isNotEmpty) s.profileName!].join(' · '),
       [status, if (expiry != null) expiry].join(' · '),
       debt,
+      if (co != null) 'الشركة: ${co.name}',
     ];
     final reminder = <String>[
-      if (intent.months != null) intent.months == 1 ? 'شهر' : intent.months == 2 ? 'شهرين' : '${intent.months} اشهر',
+      if (intent.months != null)
+        intent.months == 1
+            ? 'شهر'
+            : intent.months == 2
+                ? 'شهرين'
+                : '${intent.months} اشهر',
       if (intent.payment == VoicePayment.debt) 'بالدين',
       if (intent.payment == VoicePayment.cash) 'نقد',
     ];
@@ -575,7 +1028,8 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
         for (final l in lines)
           Padding(
             padding: const EdgeInsets.only(top: 2),
-            child: Text(l, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.muted(color: AppColors.textMid)),
+            child:
+                Text(l, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppType.muted(color: AppColors.textMid)),
           ),
         const SizedBox(height: Sp.sm),
         FilledButton(
@@ -611,9 +1065,11 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
             child: Row(children: [
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bodyStrong(color: AppColors.textHi)),
+                  Text(title,
+                      maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bodyStrong(color: AppColors.textHi)),
                   if (subtitle.isNotEmpty)
-                    Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.muted(color: AppColors.textMid)),
+                    Text(subtitle,
+                        maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.muted(color: AppColors.textMid)),
                 ]),
               ),
               Icon(LucideIcons.chevronLeft, size: 18, color: AppColors.textLow),

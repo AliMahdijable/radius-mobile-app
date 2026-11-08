@@ -61,8 +61,15 @@ enum VoiceAction {
   /// «واتساب فلان» / «راسله».
   whatsapp,
 
-  /// فحص جهازٍ من «الأجهزة».
+  /// فحص جهازٍ من «الأجهزة» — «افحص سكتر الشمال»: كرت الجهاز بنتيجة فحصه (٨ نوفمبر).
   checkDevice,
+
+  /// «افحص المشترك فلان» / «شنو حالة فلان» (٨ نوفمبر — المالك: «الكارت مباشره يجاوبه قبل يا اما مخلص متصل ومخلص طافي اذا متصل
+  /// وفعال شنو حاله السي سي كيو، حاله الاشاره اذا كان موجود مانجمنت»): الجواب أوّلاً ثمّ صفحته.
+  checkSubscriber,
+
+  /// «افحص فلان» بلا «مشترك» ولا «جهاز» — يُبحث بالأجهزة والمشتركين معاً، والأوضح يُفحص.
+  check,
 
   /// الفحص الشامل لكلّ الأجهزة.
   checkAll,
@@ -126,7 +133,16 @@ class VoiceCommand {
   };
   static const _open = {
     'افتح', 'افتحه', 'افتحلي', 'افتحها', 'اعرض', 'اعرضلي', 'وريني', 'شوف', 'شوفلي', 'ابحث', 'ابحثلي', 'دور', 'دورلي', 'فتش',
-    'فتشلي', 'معلومات', 'تفاصيل', 'حاله', 'حالته', 'وين', 'open', 'show', 'find',
+    'فتشلي', 'معلومات', 'تفاصيل', 'وين', 'open', 'show', 'find',
+  };
+
+  /// «حالة فلان» / «شلونه» ⇒ جواب حاله (فحص المشترك) لا فتح صفحته وحده.
+  static const _status = {'حاله', 'حالته', 'حالتها', 'وضع', 'وضعه', 'وضعها', 'شلونه', 'شلونها', 'status'};
+
+  /// كلمةٌ تقول إنّ المقصود مشتركٌ لا جهاز («افحص المشترك علي»).
+  static const _subscriberWords = {
+    'مشترك', 'المشترك', 'مشتركه', 'المشتركه', 'يوزر', 'اليوزر', 'زبون', 'الزبون', 'خط', 'الخط', 'حساب', 'الحساب', 'حسابه',
+    'اشتراك', 'الاشتراك', 'اشتراكه', 'subscriber', 'user',
   };
   static const _check = {
     'افحص', 'افحصلي', 'افحصه', 'فحص', 'افحصها', 'شيك', 'شيكلي', 'اختبر', 'ping', 'check',
@@ -191,6 +207,8 @@ class VoiceCommand {
     'مال', 'مالت', 'اشتراك', 'الاشتراك', 'اشتراكه', 'اشتراكها', 'المشترك', 'مشترك', 'المشتركه', 'حساب', 'الحساب', 'حسابه',
     'يوزر', 'اليوزر', 'خط', 'الخط', 'خطه', 'عند', 'هذا', 'هاذا', 'هذي', 'هاي', 'الاخ', 'الاستاذ', 'please', 'the',
     'له', 'لها', 'الها', 'اله', 'بيه', 'بيها', 'ب', 'ل', 'و', 'جديد', 'جديده', 'مبلغ', 'المبلغ', 'بمبلغ',
+    // أدوات السؤال («شنو حالة علي») — ليست من الاسم
+    'شنو', 'شو', 'ايش', 'شلون', 'اشلون', 'كيف',
   };
 
   static const _numberWords = {
@@ -382,6 +400,8 @@ class VoiceCommand {
         action = VoiceAction.enable;
       } else if (_check.contains(t)) {
         action = VoiceAction.checkDevice;
+      } else if (_status.contains(t)) {
+        action = VoiceAction.checkSubscriber;
       } else if (_pay.contains(t)) {
         action = VoiceAction.payDebt;
       } else if (_add.contains(t)) {
@@ -407,9 +427,11 @@ class VoiceCommand {
       }
       if (action != null) used.add(i);
     }
-    // «افتح/وريني» + ما يُفتح: الكشف، الحركات، الرمز، الواتساب، الدين
+    // «افتح/وريني» + ما يُفتح: الكشف، الحركات، الرمز، الواتساب، الدين — و«شوف حالة فلان» جواب حاله
     if (action == VoiceAction.open) {
-      if (hasStatement) {
+      if (has(_status)) {
+        action = VoiceAction.checkSubscriber;
+      } else if (hasStatement) {
         action = VoiceAction.statement;
       } else if (hasMovements) {
         action = VoiceAction.movements;
@@ -425,7 +447,9 @@ class VoiceCommand {
     final hasHowMuch = has(_howMuch);
     final hasOnHim = has(_onHim);
     if (action == null) {
-      if (hasStatement) {
+      if (has(_status)) {
+        action = VoiceAction.checkSubscriber;
+      } else if (hasStatement) {
         action = VoiceAction.statement;
       } else if (hasMovements) {
         action = VoiceAction.movements;
@@ -508,16 +532,28 @@ class VoiceCommand {
       }
     }
 
-    // ٤) الفحص: «كلّ الأجهزة»/«فحص شامل» ⇒ الشامل؛ وكلمة الجهاز تُحذف من الاسم
-    if (action == VoiceAction.checkDevice) {
+    // ٤) الفحص: «كلّ الأجهزة»/«فحص شامل» ⇒ الشامل؛ «افحص المشترك فلان» ⇒ المشترك؛ وكلمة الجهاز تُحذف من الاسم
+    if (action == VoiceAction.checkDevice || action == VoiceAction.checkSubscriber) {
       final all = has(_allWords);
       final plural = has(_devicesPlural);
       final rest = <String>[];
       for (var i = 0; i < tokens.length; i++) {
         if (used.contains(i)) continue;
         final t = tokens[i];
-        if (_deviceWords.contains(t) || _allWords.contains(t) || _devicesPlural.contains(t) || _filler.contains(t)) continue;
+        if (_deviceWords.contains(t) ||
+            _allWords.contains(t) ||
+            _devicesPlural.contains(t) ||
+            _filler.contains(t) ||
+            _subscriberWords.contains(t) ||
+            _status.contains(t)) {
+          continue;
+        }
         rest.add(t);
+      }
+      if (action == VoiceAction.checkSubscriber || has(_subscriberWords)) {
+        return rest.isEmpty
+            ? VoiceIntent(VoiceAction.unknown, raw: raw)
+            : VoiceIntent(VoiceAction.checkSubscriber, query: rest.join(' '), raw: raw);
       }
       if ((all || plural || tokens.contains('شامل') || tokens.contains('الشامل')) && rest.isEmpty) {
         return VoiceIntent(VoiceAction.checkAll, raw: raw);
@@ -530,6 +566,8 @@ class VoiceCommand {
         }
       }
       if (rest.isEmpty && kind == null) return VoiceIntent(VoiceAction.checkAll, raw: raw);
+      // «افحص علي حسين» بلا «جهاز/سكتر» ولا «مشترك» ⇒ يُبحث بالاثنين
+      if (!tokens.any(_deviceWords.contains)) return VoiceIntent(VoiceAction.check, query: rest.join(' '), raw: raw);
       return VoiceIntent(VoiceAction.checkDevice, query: rest.join(' '), deviceKind: kind, raw: raw);
     }
 
