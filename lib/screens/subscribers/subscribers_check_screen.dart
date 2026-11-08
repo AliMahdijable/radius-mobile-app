@@ -281,6 +281,8 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
         Row(children: [
           Expanded(
             child: Text('قُرئ ${formatIQD(r.read)} من ${formatIQD(r.total)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: AppType.label(color: AppColors.textMid).copyWith(fontSize: 12.5)),
           ),
           Text('${(pct * 100).round()}%',

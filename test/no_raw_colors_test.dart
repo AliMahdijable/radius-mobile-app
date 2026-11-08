@@ -23,6 +23,8 @@ void main() {
               '— هويّة طرف ثالث لا حالة في واجهتنا',
       'lib/screens/reports/widgets/report_export.dart':
           'PdfColors — مستند مطبوع على ورق أبيض، خارج ثيم التطبيق',
+      'lib/services/phone_output.dart':
+          'صورة الوصل بالهاتف: الصفحة تُلصق على ورقٍ أبيض — رسم أندرويد يتركها شفّافة فيختفي الحبر على خلفيّة واتساب الداكنة',
       'lib/screens/subscribers/sheets/qr_login_sheet.dart':
           'بطاقة QR — الأبيض والحبر شرط لقراءة الرمز بالكاميرا',
       'lib/screens/telegram/sheets/telegram_link_generator_sheet.dart':
