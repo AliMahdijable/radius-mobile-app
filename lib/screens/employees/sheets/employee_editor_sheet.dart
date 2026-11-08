@@ -663,7 +663,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
         const SizedBox(height: Sp.lg),
         // الصلاحيات بحسب الفئة
         for (final entry in byCat.entries) ...[
-          _categoryHeader(cats[entry.key]?.label ?? entry.key, entry.value),
+          _categoryHeader(cats[entry.key]?.label ?? 'أخرى', entry.value),
           for (final p in entry.value) _permRow(p),
           const SizedBox(height: Sp.md),
         ],
@@ -728,7 +728,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
         ),
         const SizedBox(height: Sp.lg),
         for (final entry in byCat.entries) ...[
-          _categoryHeader(cats[entry.key]?.label ?? entry.key, entry.value),
+          _categoryHeader(cats[entry.key]?.label ?? 'أخرى', entry.value),
           for (final p in entry.value)
             _permRow(p, hint: ElEmployeePerms.hintFor(p.key)),
           const SizedBox(height: Sp.md),
@@ -824,13 +824,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
                 ),
                 if (hint != null)
                   Text(hint, style: AppType.micro(color: AppColors.brandAccent)),
-                Text(
-                  p.key,
-                  style: TextStyle(
-                    color: AppColors.textLow,
-                    fontSize: 10.5, height: 1.3,
-                  ),
-                ),
+                // ٨ نوفمبر — المالك: «بس الاسماء بالعربي… الخاصيه ميحتاج تذكر مفتاحها اجنبي» ⇒ لا مفتاح تحت الاسم
               ],
             ),
           ),

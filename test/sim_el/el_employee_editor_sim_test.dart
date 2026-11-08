@@ -75,7 +75,7 @@ final _catalog = PermissionsCatalog.fromJson({
 
 /// مفاتيح الصلاحيّات تُعرض تحت كلّ تسمية — قرارٌ قائمٌ في المحرّر (SAS4
 /// أيضاً)، تُستثنى من فحص النصّ الخام في الحالات العاديّة ولها حالتها
-/// المستقلّة [perm_keys_visible].
+/// المستقلّة [perm_keys_hidden].
 final _permKey = RegExp(r'^[a-z_]+\.[a-z_]+$');
 
 /// خطأ Flutter المعروف في تبويب المعلومات: `SwitchListTile` («الحساب مفعّل»)
@@ -180,7 +180,7 @@ void main() {
     await permsTab(t);
     expect(find.text(_addLabel), findsOneWidget);
     expect(find.text(_addHint), findsOneWidget);
-    expect(find.text('subscribers.add'), findsOneWidget);
+    expect(find.text('subscribers.add'), findsNothing, reason: 'المفتاح الأجنبيّ لا يظهر (المالك ٨ نوفمبر)');
     // ما ليس لموظّفي ايرث لنك لا يُعرض. (و«عرض الأجهزة» ليس منها: يُمنح،
     // وكان هنا خطأً يمرّ لأنّ صفّه أسفل القائمة الكسولة فلا يُبنى.)
     for (final hidden in [
@@ -283,16 +283,14 @@ void main() {
     await simCheck(t, v, _screen, 'create_success_credentials');
   });
 
-  _case('perm_keys_visible', (t, v) async {
+  _case('perm_keys_hidden', (t, v) async {
     await open(t, v);
     await permsTab(t);
     await reveal(t, find.text(_addHint));
-    await simCheck(t, v, _screen, 'perm_keys_visible', allow: [_permKey]);
-    // مفاتيح الصلاحيّات تُعرض تحت كلّ تسمية عمداً — قرارٌ قائمٌ في المحرّر
-    // (SAS4 أيضاً)، لا عطلٌ يُخفى. فنتأكّد أنّها ظاهرةٌ فعلاً.
+    await simCheck(t, v, _screen, 'perm_keys_hidden');
+    // ٨ نوفمبر — المالك: «قسم صلاحيات الموظفين بي ليجوة رمز اجنبي هذا الغي بس الاسماء بالعربي… الخاصيه ميحتاج تذكر مفتاحها
+    // اجنبي» ⇒ ينقلب القرار القديم (المفتاح تحت كلّ تسمية): لا مفتاح صلاحيّةٍ ظاهر أبداً.
     final keys = simVisibleTexts().where(_permKey.hasMatch).toList();
-    expect(keys, isNotEmpty,
-        reason: 'مفاتيح الصلاحيّات يجب أن تظهر تحت كلّ تسمية (قرارٌ مقصود)');
-    expect(keys, contains('subscribers.add'));
+    expect(keys, isEmpty, reason: 'الأسماء بالعربي وحدها — لا مفاتيح أجنبيّة تحت الصلاحيّات');
   });
 }
