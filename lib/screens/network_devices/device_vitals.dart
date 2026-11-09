@@ -823,13 +823,14 @@ class DeviceVitals {
     // مجهولة لا «لا أحد» (المراجعة الثانية)
     final covered = {for (final w in s.wirelessInterfaces) w.name, for (final l in s.w60gLinks) l.iface};
     final uncovered = detailed && s.clientsRead && radioIfs.any((i) => !covered.contains(i.name));
-    // مقروءٌ ومفعّل ولا يعمل: محطّةٌ فقدت نقطتها، أو نقطة وصولٍ راديوها لا يشتغل (المراجعة الثانية)
-    final enabledRadios = [for (final w in s.wirelessInterfaces) if (!w.disabled) w];
+    // مقروءٌ ومفعّل ولا يعمل: محطّةٌ فقدت نقطتها، أو نقطة وصولٍ راديوها لا يشتغل (المراجعة الثانية). الحال من `/interface/print`
+    // (الطبقة الأولى — running فيها دائماً) لا من صفوف قوائم اللاسلكيّ (قائمةٌ بلا running كانت ستُقرأ «طافٍ» لراديو شغّال)
     final linkDown = detailed &&
         s.clientsRead &&
         s.portsRead &&
-        enabledRadios.isNotEmpty &&
-        !enabledRadios.any((w) => w.running) &&
+        s.wirelessInterfaces.isNotEmpty &&
+        radioIfs.isNotEmpty &&
+        !radioIfs.any((i) => i.running) &&
         !s.w60gLinks.any((l) => l.connected);
     final glance = DeviceGlance(
       uptimeSec: routerOsSeconds(s.uptime),

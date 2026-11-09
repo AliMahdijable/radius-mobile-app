@@ -282,6 +282,29 @@ void main() {
       expect(texts(r), contains('الوصلة مقطوعة — لا إشارة'));
     });
 
+    test('راديو wifi شغّالٌ بقائمة لا تحمل حاله (running غائب في /interface/wifi/print) ⇒ ليس «مقطوعاً» — الحال من /interface/print',
+        () async {
+      MikrotikApi.channelFactory = (route, ip, port, user, pass, timeout) => _Ros({
+            ..._resource,
+            '/interface/print': [
+              {'name': 'ether1', 'type': 'ether', 'running': 'true', 'disabled': 'false'},
+              {'name': 'wifi1', 'type': 'wifi', 'running': 'true', 'disabled': 'false'},
+            ],
+            '/interface/wifi/print': [
+              {'name': 'wifi1', 'configuration': 'SEC', 'mode': 'ap'}
+            ],
+            '/interface/wifi/registration-table/print': [
+              {'mac-address': 'AA:BB:CC:00:00:01', 'signal': '-61', 'interface': 'wifi1'},
+            ],
+          });
+      final s = await MikrotikApi.fetchStatsFor(ip: '10.0.0.40', protocol: 'api', creds: const {'user': 'admin', 'pass': 'x'});
+      final d = dev(40, type: 'sector');
+      final g = DeviceVitals.mikrotikResult(d, s, null, detailed: true).detail.glance;
+      expect(g.linkDown, isFalse);
+      expect(texts(judge(d, DeviceVitals.mikrotikResult(d, s, null, detailed: true))).where((t) => t.contains('الراديو لا يعمل')),
+          isEmpty);
+    });
+
     test('🚨 محطّة يوبيكويتي إشارتها 0 بلا طرفٍ ولا سرعة ⇒ «الوصلة مقطوعة» لا «وصلة · سليم»', () async {
       UbntApi.debugFetch = () async => UbntStats.fromMcaStatus(const {
             'deviceName': 'NanoBeam',
