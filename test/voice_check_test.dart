@@ -517,5 +517,48 @@ void main() {
       await l.run();
       expect([l.row?.reading?.vpn, l.vpnAge], [false, null]);
     });
+
+    // المراجعة الثانية: آخر فحصٍ لايرث لنك (دون ٣٠ د) قرأه ميّتاً، و«الفحص العامّ» يعيد فحصها الآن ودورها بعد
+    // شركةٍ أخرى
+    testWidgets(
+        'المراجعة الثانية: آخر قراءته «لا يستجيب» وشركته بالدور حين انتهت المهلة ⇒ الجواب منها كصفّه الآن، ثمّ من '
+        'نتيجة دورها حين يكتمل', (t) async {
+      final b = _co('c0000000000b1', 'ايرث لنك');
+      SubscriberVoiceCheck.debugLocalAllowed = () => false;
+      SubscriberVoiceCheck.debugVpnAllowed = () => true;
+      VpnNow.debugApplyCompany(
+          b.key, const VpnNowResult(ok: true, message: 'تم', readings: {'d.u': VpnSubReading(src: 'dead')}));
+      final job = VpnNow.subscribers
+        ..phase = VpnBarPhase.running
+        ..queue = [kX, b.key]
+        ..current = kX;
+      final s = _sub('d.u', company: b.key);
+      final c = SubscriberVoiceCheck(s, company: b);
+      // «الفحص العامّ» في اللحظة نفسها (الهاتف لا يشهد على جهاز ايرث لنك)
+      SubsCheckReport screen() =>
+          SubscribersCheck.mixed([s], (_) => c.limits, peek: (_) => null, localFailsFor: (_) => false);
+      var told = 0;
+      c.addListener(() => told++);
+      final run = c.run();
+      await t.pump(SubscriberVoiceCheck.vpnTimeout + const Duration(seconds: 1));
+      await run;
+      final m = screen().missing.single;
+      expect([c.cat, c.deviceLine], [SubscribersCheck.catOf(m.why), 'جهازه ما ردّ — ${SubscribersCheck.missText(m)}']);
+      expect(c.deviceLine, 'جهازه ما ردّ — لا يستجيب');
+      // دورها يكتمل وقرأه سليماً ⇒ الجواب يتحدّث وحده كصفّه (كان يبقى «جهازه ما ردّ»)
+      final before = told;
+      VpnNow.debugApplyCompany(
+          b.key,
+          const VpnNowResult(ok: true, message: 'تم', readings: {
+            'd.u': VpnSubReading(src: 'cpe', sig: -55, ccq: 95, lan: '100'),
+          }));
+      finish(job);
+      await t.pump();
+      expect(screen().healthy.single.sub.username, 'd.u');
+      expect(told, greaterThan(before), reason: 'الجواب يتحدّث وحده');
+      expect([c.cat, c.row?.reading?.vpn, c.deviceLine], [null, true, 'الإشارة، CCQ والكيبل سليمة']);
+      expect(job.busy, isFalse, reason: 'بلا فحصٍ جديد');
+      c.dispose();
+    });
   });
 }
