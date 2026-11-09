@@ -121,6 +121,20 @@ void main() {
       expect(ReceiptPrinterPrefs.mode.value, ReceiptPrinterMode.system);
     });
 
+    test('طابعة الجهاز: قبل فحصها كما كانت (لا فحص عند الإقلاع)؛ فحصٌ قال «لا خدمة» ⇒ مطفأةٌ وتعود نافذة الطباعة وتُحفظ', () async {
+      await ReceiptPrinterPrefs.setMode(ReceiptPrinterMode.builtin);
+      expect(ReceiptPrinterPrefs.enabled, isTrue);
+      await ReceiptPrinterPrefs.setBuiltinPresent(true);
+      expect(ReceiptPrinterPrefs.enabled, isTrue);
+      await ReceiptPrinterPrefs.setBuiltinPresent(false);
+      expect(ReceiptPrinterPrefs.enabled, isFalse);
+      expect(ReceiptPrinterPrefs.choice, isNull);
+      expect(ReceiptPrinterPrefs.mode.value, ReceiptPrinterMode.system);
+      ReceiptPrinterPrefs.reset();
+      await ReceiptPrinterPrefs.load();
+      expect(ReceiptPrinterPrefs.mode.value, ReceiptPrinterMode.system, reason: 'حُفظت');
+    });
+
     test('الحاسبة/الويب: لا يُقرأ ولا يُفعَّل ولو بقي محفوظاً', () async {
       FlutterSecureStorage.setMockInitialValues({
         'app.receipt_printer.mode': 'bluetooth',

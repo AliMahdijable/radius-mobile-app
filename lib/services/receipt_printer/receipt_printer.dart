@@ -161,10 +161,13 @@ class ReceiptPrinter {
     } catch (_) {}
   }
 
-  /// طابعة الجهاز المدمجة: موجودةٌ وجاهزة؟ (null على فشل القناة).
+  /// طابعة الجهاز المدمجة: موجودةٌ وجاهزة؟ (null على فشل القناة). جهازٌ بلا خدمة طابعةٍ مدمجة أصلاً (هاتفٌ عاديّ) ⇒
+  /// [ReceiptPrinterPrefs.builtinPresent] = false فلا تُختار ولا تبقى مختارة.
   Future<BuiltinInfo?> builtinInfo() async {
     try {
-      return await bridge.builtinInfo();
+      final info = await bridge.builtinInfo();
+      await ReceiptPrinterPrefs.setBuiltinPresent(!info.absent);
+      return info;
     } on PrinterFailure {
       return null;
     }
@@ -290,6 +293,12 @@ class ReceiptPrinter {
       }
     } on PrinterFailure catch (f) {
       return fail(f.code == 'unsupported' ? PrintIssue.builtinMissing : PrintIssue.builtinFault, f);
+    }
+    await ReceiptPrinterPrefs.setBuiltinPresent(!info.absent);
+    if (info.absent) {
+      // لا خدمة طابعةٍ مدمجة في الجهاز أصلاً (هاتفٌ عاديّ): «نافذة الطباعة» عادت للوصل التالي (لا تبقى طريقةً كلّ
+      // وصلٍ عليها يفشل)، ولا «حاول ثانيةً» لما لن يتغيّر.
+      return PrintResult.failed('builtin: no service', printer: name, issue: PrintIssue.builtinMissing);
     }
     if (!info.available) return fail(PrintIssue.builtinMissing, 'no built-in printer');
     if (info.model.isNotEmpty) name = info.model;

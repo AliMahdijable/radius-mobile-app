@@ -263,12 +263,37 @@ void main() {
     expect(find.text('«SUNMI T2» جاهزة · ورق 80 ملم'), findsOneWidget);
     expect(ReceiptPrinterPrefs.paper.value, ReceiptPaper.mm80);
     expect(ReceiptPrinterPrefs.enabled, isTrue);
-    h.bridge.builtin = const BuiltinInfo(available: false);
+    // خدمة SUNMI موجودةٌ ولم تُربط (الشركة معروفة): سببٌ وتلميح InnerPrinter، والطريقة تبقى.
+    h.bridge.builtin = const BuiltinInfo(available: false, vendor: 'sunmi');
     await t.ensureVisible(find.text('إعادة الفحص'));
     await t.pumpAndSettle();
     await t.tap(find.text('إعادة الفحص'));
     await t.pumpAndSettle();
     expect(find.textContaining('InnerPrinter'), findsOneWidget);
+    expect(ReceiptPrinterPrefs.mode.value, ReceiptPrinterMode.builtin);
+  });
+
+  testWidgets('٤ب هاتفٌ عاديّ (لا خدمة طابعةٍ مدمجة): «طابعة الجهاز» معطّلةٌ بسببها ولا تُختار', (t) async {
+    // الوهميّة افتراضاً: available:false بلا شركة
+    await openSheet(t);
+    expect(find.text('لم نجد طابعةً مدمجة مدعومة في هذا الجهاز (المدعوم الآن: SUNMI).'), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('receipt-mode-builtin')));
+    await t.pumpAndSettle();
+    expect(ReceiptPrinterPrefs.mode.value, ReceiptPrinterMode.system);
+    expect(ReceiptPrinterPrefs.enabled, isFalse);
+    expect(find.text('طباعة تجريبيّة'), findsNothing);
+    expect(h.bridge.builtinJobs, isEmpty);
+  });
+
+  testWidgets('٤ج «طابعة الجهاز» محفوظةٌ على هاتفٍ بلا خدمتها ⇒ تعود «نافذة الطباعة» حين تُفتح الإعدادات', (t) async {
+    ReceiptPrinterPrefs.mode.value = ReceiptPrinterMode.builtin;
+    expect(ReceiptPrinterPrefs.enabled, isTrue, reason: 'قبل الفحص كما كانت');
+    await openSheet(t);
+    expect(ReceiptPrinterPrefs.mode.value, ReceiptPrinterMode.system);
+    expect(ReceiptPrinterPrefs.enabled, isFalse);
+    ReceiptPrinterPrefs.reset();
+    await ReceiptPrinterPrefs.load();
+    expect(ReceiptPrinterPrefs.mode.value, ReceiptPrinterMode.system, reason: 'حُفظت');
   });
 
   testWidgets('٥ بعد التفعيل: «غير مؤكَّدة» ⇒ ورقةٌ بإعادة الطباعة تطبع ثانيةً', (t) async {

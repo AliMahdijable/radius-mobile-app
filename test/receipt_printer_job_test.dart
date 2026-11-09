@@ -288,6 +288,28 @@ void main() {
       expect(r.issue, PrintIssue.builtinMissing);
     });
 
+    test('هاتفٌ بلا طابعةٍ مدمجة أصلاً ⇒ بلا «حاول ثانيةً»، و«نافذة الطباعة» تعود للوصل التالي (لا تبقى مختارة)', () async {
+      h.useBuiltin();
+      // الوهميّة افتراضاً: available:false بلا شركة = لا خدمة طابعةٍ مدمجة في الجهاز
+      final r = await p().send(_doc('x'));
+      expect(r.issue, PrintIssue.builtinMissing);
+      expect(r.retry, isNull, reason: 'لن يتغيّر بإعادة');
+      expect(ReceiptPrinterPrefs.builtinPresent.value, isFalse);
+      expect(ReceiptPrinterPrefs.mode.value, ReceiptPrinterMode.system);
+      expect(ReceiptPrinterPrefs.enabled, isFalse);
+      expect(h.bridge.builtinJobs, isEmpty);
+    });
+
+    test('خدمة SUNMI موجودةٌ ولم تُربط بعد (الشركة معروفة) ⇒ «حاول ثانيةً» والطريقة تبقى', () async {
+      h.useBuiltin();
+      h.bridge.builtin = const BuiltinInfo(available: false, vendor: 'sunmi');
+      final r = await p().send(_doc('x'));
+      expect(r.issue, PrintIssue.builtinMissing);
+      expect(r.retry, isNotNull);
+      expect(ReceiptPrinterPrefs.mode.value, ReceiptPrinterMode.builtin);
+      expect(ReceiptPrinterPrefs.enabled, isTrue);
+    });
+
     test('بلا ردٍّ في المهلة أو «لم تُكمل» ⇒ غير مؤكَّد؛ بلا معاملة ⇒ «أُرسل»؛ انقطاع الخدمة ⇒ غير مؤكَّد', () async {
       h.useBuiltin();
       h.bridge.builtin = const BuiltinInfo(available: true, status: 1);
