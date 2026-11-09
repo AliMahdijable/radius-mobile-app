@@ -145,6 +145,13 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
                         _Note(text: s.limits.isEmpty
                             ? 'لم تُضبط حدودٌ لهذا الموظف بعد — اضبط سقفاً أو ربحاً ليبدأ العدّ من الآن.'
                             : 'يبدأ العدّ من لحظة ضبط الحدود.')
+                      else if (s.statusUnavailable)
+                        // الخادم قرأ حدوده وتعذّرت أرقام حاله الآن ⇒ السبب لا أصفار (مراجعة المال ٧)؛ الحدود والتسوية باقيتان
+                        _Note(
+                          key: const ValueKey('emp-status-unavailable'),
+                          text: s.note ?? 'تعذّرت قراءة حال هذا الموظف الآن — حاول بعد قليل',
+                          warn: true,
+                        )
                       else
                         EmployeeLimitsPanel(status: s, title: 'الفترة الحاليّة'),
                       const SizedBox(height: Sp.md),
@@ -190,13 +197,18 @@ class _EmployeeAccountScreenState extends State<EmployeeAccountScreen> {
 }
 
 class _Note extends StatelessWidget {
-  const _Note({required this.text});
+  const _Note({super.key, required this.text, this.warn = false});
   final String text;
+  final bool warn;
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(Sp.md),
-        decoration: BoxDecoration(color: AppColors.brandSoftBg, borderRadius: BorderRadius.circular(R.md)),
-        child: Text(text, style: AppType.body(color: AppColors.textMid)),
+        decoration: BoxDecoration(
+          color: warn ? AppColors.warning.withValues(alpha: 0.10) : AppColors.brandSoftBg,
+          borderRadius: BorderRadius.circular(R.md),
+          border: warn ? Border.all(color: AppColors.warning.withValues(alpha: 0.45)) : null,
+        ),
+        child: Text(text, style: AppType.body(color: warn ? AppColors.warning : AppColors.textMid)),
       );
 }
 

@@ -82,9 +82,15 @@ class EmployeeLimitStatus {
     this.breakdown = const {},
     this.holds = const [],
     this.settlements = const [],
+    this.statusUnavailable = false,
+    this.note,
   });
 
   final int employeeId;
+
+  /// الخادم قرأ الحدود وتعذّرت أرقام الحال الآن (`status_unavailable`) ⇒ تُعرض [note] لا أصفار؛ الحدود تُعدَّل كالعادة.
+  final bool statusUnavailable;
+  final String? note;
   final String? username;
   final String? name;
   final bool featureEnabled;
@@ -168,6 +174,8 @@ class EmployeeLimitStatus {
       settlements: (raw['settlements'] is List)
           ? (raw['settlements'] as List).map(EmployeeSettlement.fromJson).whereType<EmployeeSettlement>().toList()
           : const [],
+      statusUnavailable: raw['status_unavailable'] == true,
+      note: raw['note']?.toString(),
     );
   }
 }

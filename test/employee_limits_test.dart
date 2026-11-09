@@ -360,6 +360,18 @@ void main() {
       expect(posts.single['expected'], {'cash_in': 350000, 'debt_out': 120000, 'ops_count': 4, 'profit': 20000});
     });
 
+    testWidgets('حساب الموظف وحاله متعذّرة (status_unavailable) ⇒ الملاحظة لا الأرقام، والحدود وزرّ التسوية باقيان', (t) async {
+      await phone(t);
+      server.statusUnavailable = true;
+      await t.pumpWidget(app(const EmployeeAccountScreen(employeeId: 7, title: 'موظف')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('emp-status-unavailable')), findsOneWidget);
+      expect(find.textContaining('تعذّرت قراءة حال هذا الموظف'), findsOneWidget);
+      expect(find.text('الفترة الحاليّة'), findsNothing, reason: 'لا لوحة أرقام (لا أصفار)');
+      expect(find.textContaining('سقف الإيرادات النقديّة: 500,000'), findsOneWidget);
+      expect(find.byKey(const ValueKey('emp-settle-open')), findsOneWidget);
+    });
+
     test('الضبط: حُفظ وتعذّر عرض الحال (status_unavailable) ⇒ نجاحٌ لا «تعذّر الحفظ»', () async {
       server.putStatusUnavailable = true;
       final r = await EmployeeLimitsApi.put(7, const EmployeeLimits(debtCap: 120000));
@@ -411,6 +423,7 @@ class _DiskLoader extends AssetLoader {
 class _Server implements HttpClientAdapter {
   bool meFeature = true;
   bool putStatusUnavailable = false;
+  bool statusUnavailable = false;
   Map<String, dynamic> previewExtra = const {};
   final List<(int, Map<String, dynamic>)> settleReplies = [];
   final _reqs = <RequestOptions>[];
@@ -427,6 +440,23 @@ class _Server implements HttpClientAdapter {
     (int, Map<String, dynamic>) reply = (404, {'success': false});
     if (o.path == '/api/v2/employee-limits/me') {
       reply = (200, {'success': true, 'data': {'is_employee': false, 'feature_enabled': meFeature, 'enforcement_off': false}});
+    } else if (o.path == '/api/v2/employee-limits/7' && o.method == 'GET' && statusUnavailable) {
+      // مراجعة المال ٧: الحدود وحدها + السبب، بلا أرقام
+      reply = (200, {
+        'success': true,
+        'data': {
+          'employee': {'id': 7, 'username': 'emp1', 'name': 'موظف'},
+          'feature_enabled': true,
+          'enforcement_off': false,
+          'installed': true,
+          'limits': {'debt_cap': 200000, 'cash_cap': 500000, 'profit_per_op': 5000},
+          'started': true,
+          'status_unavailable': true,
+          'note': 'تعذّرت قراءة حال هذا الموظف الآن — حاول بعد قليل',
+          'holds_list': [],
+          'settlements': [],
+        },
+      });
     } else if (o.path == '/api/v2/employee-limits/7' && o.method == 'GET') {
       reply = (200, {
         'success': true,
