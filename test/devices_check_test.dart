@@ -616,6 +616,62 @@ void main() {
       expect(srv.calls, 4, reason: 'طلبان لكلّ قراءة — لا إعادةٌ فوق إعادة ApiClient');
     });
 
+    test('المراجعة: ٥٠٠ (عطلٌ حقيقيّ) لا يأخذ القديم؛ والانقطاع يأخذه — كتعريف ApiClient للعابر', () async {
+      NetworkDevicesApi.debugSeedCredentials(7, {'user': 'old'}, DateTime.now().subtract(const Duration(minutes: 2)));
+      srv.codes.addAll([500]);
+      await expectLater(NetworkDevicesApi.getCredentials(7), throwsA(isA<DioException>()));
+      expect(srv.calls, 1, reason: 'ApiClient لا يعيد ٥٠٠');
+      srv.codes.addAll([-1, -1]);
+      expect((await NetworkDevicesApi.getCredentials(7))['user'], 'old');
+      expect(NetworkDevicesApi.servedStaleCredentials(7), isTrue);
+      srv.codes.add(200);
+      expect((await NetworkDevicesApi.getCredentials(7, forceRefresh: true))['user'], 'admin');
+      expect(NetworkDevicesApi.servedStaleCredentials(7), isFalse);
+    });
+
+    test('المراجعة: تعديلٌ من مكانٍ آخر (updated_at تغيّر بالقائمة) ينسى المخبّأ والاحتياطيّ؛ والخروج ينساها كلّها', () async {
+      srv.updatedAt[7] = '2026-11-09 10:00:00';
+      await NetworkDevicesApi.list();
+      expect((await NetworkDevicesApi.getCredentials(7))['user'], 'admin');
+      expect(srv.credCalls, 1);
+      await NetworkDevicesApi.getCredentials(7);
+      expect(srv.credCalls, 1, reason: 'من المخبأ (٦٠ث)');
+      srv.updatedAt[7] = '2026-11-09 10:05:00';
+      await NetworkDevicesApi.list();
+      srv.codes.addAll([503, 503]);
+      await expectLater(NetworkDevicesApi.getCredentials(7), throwsA(isA<DioException>()),
+          reason: 'عُدّل ⇒ لا رمزٌ قديم احتياطاً');
+      // الخروج (SessionManager) ينسى المخبّأ كلّه
+      NetworkDevicesApi.debugSeedCredentials(8, {'user': 'x'}, DateTime.now().subtract(const Duration(minutes: 2)));
+      NetworkDevicesApi.invalidateCredentialsCache();
+      srv.codes.addAll([503, 503]);
+      await expectLater(NetworkDevicesApi.getCredentials(8), throwsA(isA<DioException>()));
+      final sm = File('lib/services/session_manager.dart').readAsStringSync();
+      expect(sm, contains('NetworkDevicesApi.invalidateCredentialsCache()'));
+      expect(sm, contains('DeviceStatsCache.instance.clear()'));
+    });
+
+    test('المراجعة: رُفض الدخول ببياناتٍ احتياطيّة ⇒ «ببيانات دخولٍ محفوظة… أعد الفحص» لا «تأكّد من الرمز»', () async {
+      SharedPreferences.setMockInitialValues({});
+      NetworkDevicesApi.debugSeedCredentials(9, {'user': 'old'}, DateTime.now().subtract(const Duration(minutes: 2)));
+      srv.codes.addAll([503, 503]);
+      await NetworkDevicesApi.getCredentials(9);
+      DevicesCheckRunner.debugLimits = () async => const CheckLimits();
+      DevicesCheckRunner.debugSubscribers = () async => const [];
+      DevicesCheckRunner.debugProbe = (d) async => (status: 'online', responseMs: 4, packetLoss: 0.0, serviceOk: true);
+      DevicesCheckRunner.debugFetch = (d) => Future<ProbeResult>.error(MikrotikException('invalid user name or password (6)', code: 'auth'));
+      addTearDown(() {
+        DevicesCheckRunner.debugLimits = null;
+        DevicesCheckRunner.debugSubscribers = null;
+        DevicesCheckRunner.debugProbe = null;
+        DevicesCheckRunner.debugFetch = null;
+      });
+      final run = DevicesCheckRunner([dev(9)], viaVpn: false);
+      await run.run();
+      expect(texts(run.reports[9]!), ['رُفض الدخول ببيانات دخولٍ محفوظة (الخادم ما ردّ وقتها) — أعد الفحص بعد قليل']);
+      run.dispose();
+    });
+
     test('الرفض الصريح (٤٠٤ بجسم success:false) لا يأخذ القديم؛ والتحديث القسريّ لا يأخذ القديم', () async {
       srv.codes.addAll([404]);
       NetworkDevicesApi.debugSeedCredentials(7, {'user': 'old'}, DateTime.now().subtract(const Duration(minutes: 2)));
@@ -1219,10 +1275,30 @@ void main() {
 class _CredsReplies implements HttpClientAdapter {
   final codes = <int>[];
   var calls = 0;
+  /// قائمة الأجهزة (`/api/v2/admin/devices`) بحقل updated_at لكلّ جهاز.
+  final updatedAt = <int, String>{};
+  var credCalls = 0;
+
   @override
   Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? body, Future<void>? cancel) async {
+    if (o.path == '/api/v2/admin/devices') {
+      return ResponseBody.fromString(
+          jsonEncode({
+            'success': true,
+            'data': [
+              for (final e in updatedAt.entries)
+                {'id': e.key, 'admin_id': 2, 'name': 'd${e.key}', 'type': 'router', 'brand': 'mikrotik', 'ip': '10.0.0.${e.key}',
+                  'port': 8728, 'has_credentials': 1, 'created_at': '2026-11-01 10:00:00', 'updated_at': e.value},
+            ],
+          }),
+          200,
+          headers: {Headers.contentTypeHeader: ['application/json']});
+    }
     calls++;
+    credCalls++;
     final code = codes.isEmpty ? 200 : codes.removeAt(0);
+    // -1: انقطاعٌ (لا ردّ) — كما يرميه Dio للشبكة
+    if (code == -1) throw DioException.connectionError(requestOptions: o, reason: 'Connection refused');
     final data = code == 200
         ? {'success': true, 'credentials': {'user': 'admin', 'pass': 'x'}}
         : {'success': false, 'message': 'x'};

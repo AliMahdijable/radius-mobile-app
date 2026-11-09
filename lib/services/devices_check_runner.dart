@@ -418,7 +418,11 @@ class DevicesCheckRunner extends ChangeNotifier {
     }
 
     // فشلٌ من داخل القارئ (المهلة الكلّيّة لا ترمي هنا — يُسابَق بها): مهلته الداخليّة تُفصل بجواب الخدمة بالبنك
-    String why(Object e) => unreadReason(e, serviceOk: probe?.serviceOk);
+    String why(Object e) {
+      final r = unreadReason(e, serviceOk: probe?.serviceOk);
+      // رُفض الدخول ببياناتٍ محفوظة أُعطيت لتعثّر الخادم ⇒ ليس «تأكّد من الرمز» (قد تكون عُدّلت) — المراجعة
+      return r == _login && NetworkDevicesApi.servedStaleCredentials(d.id) ? _loginStale : r;
+    }
 
     // ١) المهلة الأولى
     final first = await _race(outcome, t.soft);
@@ -524,13 +528,15 @@ class DevicesCheckRunner extends ChangeNotifier {
 
   static const _service = 'يردّ، لكن خدمة الإدارة لا تجيب — تأكّد من المنفذ والبروتوكول';
   static const _login = 'يردّ، لكن رُفض الدخول — تأكّد من اسم المستخدم والرمز';
+  static const _loginStale = 'رُفض الدخول ببيانات دخولٍ محفوظة (الخادم ما ردّ وقتها) — أعد الفحص بعد قليل';
   static const _permission = 'يردّ، لكن مستخدمه بلا صلاحيّة قراءة — راجع صلاحيّاته على الجهاز';
   static const _noCreds = 'بيانات دخوله ناقصة — أكملها من صفحة الجهاز';
   static const _unsupported = 'علامته لا تُقرأ بالفحص';
 
   /// آخر قراءةٍ تنفع مع هذا السبب؟ لا مع ما يُصلَح بالإعداد (رفض الدخول، الصلاحيّة، النقص) — يُقال وحده بلا أرقامٍ قديمة تغطّيه.
   @visibleForTesting
-  static bool lastReadingHelps(String reason) => !const {_login, _permission, _noCreds, _unsupported}.contains(reason);
+  static bool lastReadingHelps(String reason) =>
+      !const {_login, _loginStale, _permission, _noCreds, _unsupported}.contains(reason);
 
   /// لماذا لم تُقرأ معلومات جهازٍ يردّ — السبب الحقيقيّ بكلمة.
   ///
