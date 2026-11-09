@@ -249,4 +249,14 @@ void main() {
     final all = await OltFiberReads.rxColumn(FakeSnmpAgent(data), vsol, onus);
     expect(all!.length, 200);
   });
+
+  test('المراجعة: ضوء HSGQ/C-Data يقف بالإلغاء كذلك (كان يكمل دفعةً دفعة بعد مهلة الفحص وإغلاقه)', () async {
+    const hsgq = OltProfile(vendor: OltVendor.hsgq, oltLikely: true, identified: true);
+    final agent = FakeSnmpAgent(const {});
+    final onus = [for (var i = 1; i <= 40; i++) o(1, i, ifIndex: 0x01000000 | (1 << 8) | i)];
+    int? asked;
+    await OltFiberReads.rxColumn(agent, hsgq, onus, cancelled: () => agent.gets.isNotEmpty, counts: (n, got) => asked = n);
+    expect(agent.gets, hasLength(1), reason: 'دفعةٌ واحدة ثمّ وقف');
+    expect(asked, 40);
+  });
 }

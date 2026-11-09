@@ -179,13 +179,16 @@ class DeviceDetail {
     this.glance = const DeviceGlance(),
     this.onuLights = const [],
     this.onuLightsWanted,
+    this.onuLightsAnswered,
   });
 
   /// أولت: ضوء كلّ ONU متّصلة مقروء (الأضعف أوّلاً) — «الفحص الشامل» وحده يطلبه (`withOnuLights`).
   final List<OnuLight> onuLights;
 
-  /// كم ONU متّصلة طُلب ضوؤها (null = لم يُطلب) — أقلّ من [onuLights] المقروءة ⇒ «قُرئ n من N» لا «ضوءهم كلّه جيّد» (٩ نوفمبر).
+  /// كم ONU متّصلة يسألها قارئ الضوء فعلاً (null = لم يُطلب أو لا قارئ للطراز) — أكثر من [onuLights] المقروءة ⇒ «قُرئ n من N» لا
+  /// «ضوءهم كلّه جيّد» (٩ نوفمبر)؛ و[onuLightsAnswered] كم أجاب منها (بقيمةٍ صالحة أو بلا) — يفصل «ما لحق» عن «بلا قراءة».
   final int? onuLightsWanted;
+  final int? onuLightsAnswered;
 
   final String? uptime;
   final String? firmware;
@@ -1152,24 +1155,33 @@ Future<ProbeResult> _olt(NetworkDevice d, Map<String, dynamic> creds,
   // [isCancelled] بين طلبٍ وآخر ويُرجع ما قرأه، و«قُرئ n من N» يقول الباقي.
   var lights = const <OnuLight>[];
   int? wanted;
-  if (withOnuLights) {
+  var replied = const <int>{};
+  // ما يسأله قارئ الضوء فعلاً لهذا الطراز (المراجعة) — لا كلّ المتّصل: VSOL بطاقة صفر، BDCOM EPON، وطرازٌ بلا قارئ لا سطر له
+  final targets = withOnuLights ? OltFiberReads.lightTargets(s.profile, s.onus) : 0;
+  if (targets > 0) {
+    wanted = targets;
     // تناوبٌ بين الفحوص: يبدأ من حيث وقف آخر ضوءٍ لم يكتمل — فحوصٌ متتالية تغطّي أولتاً كبيراً كلّه (كشرائح شبكة الألياف)
     final online = [for (final o in s.onus) if (o.online) o]..sort((a, b) => a.ifIndex.compareTo(b.ifIndex));
-    wanted = online.length;
     final from = DeviceVitals._lightsFrom[d.id] ?? 0;
     final start = online.indexWhere((o) => o.ifIndex >= from);
     final ordered = start <= 0 ? online : [...online.sublist(start), ...online.sublist(0, start)];
     bool stop() => (isCancelled?.call() ?? false) || (lightsUntil != null && !DateTime.now().isBefore(lightsUntil));
     try {
       final snmp = DeviceVitals.snmpFor(d.ip, port, community);
-      final rx = wanted == 0 || stop() ? null : await OltFiberReads.rxColumn(snmp, s.profile, ordered, cancelled: stop);
+      final ran = !stop();
+      final rx = ran
+          ? await OltFiberReads.rxColumn(snmp, s.profile, ordered, cancelled: stop, counts: (n, got) => replied = got)
+          : null;
+      // المؤشّر بآخر من أجاب (لا آخر قيمةٍ صالحة) — جهازٌ بلا قراءة ضوءٍ لا يُعيد التناوب إليه كلّ مرّة؛ ومسحٌ لم يبدأ لا يمسّه
+      final last = ordered.lastIndexWhere((o) => replied.contains(o.ifIndex));
+      if (!ran || last < 0) {
+        // لم يُجب أحد — يبقى من حيث هو
+      } else if (replied.length >= targets || last == ordered.length - 1) {
+        DeviceVitals._lightsFrom.remove(d.id);
+      } else {
+        DeviceVitals._lightsFrom[d.id] = ordered[last + 1].ifIndex;
+      }
       if (rx != null) {
-        final last = ordered.lastIndexWhere((o) => rx.containsKey(o.ifIndex));
-        if (rx.length >= ordered.length || last < 0 || last == ordered.length - 1) {
-          DeviceVitals._lightsFrom.remove(d.id);
-        } else if (last >= 0) {
-          DeviceVitals._lightsFrom[d.id] = ordered[last + 1].ifIndex;
-        }
         lights = [
           for (final o in s.onus)
             if (o.online && rx[o.ifIndex] != null)
@@ -1182,7 +1194,7 @@ Future<ProbeResult> _olt(NetworkDevice d, Map<String, dynamic> creds,
       }
     } catch (_) {}
   }
-  return oltProbeResult(s, lights: lights, lightsWanted: wanted);
+  return oltProbeResult(s, lights: lights, lightsWanted: wanted, lightsAnswered: wanted == null ? null : replied.length);
 }
 
 /// ضوء ONU واحدة (dBm) — لتقرير الأولت.
@@ -1195,7 +1207,7 @@ class OnuLight {
 }
 
 /// خانات بطاقة الأولت وتفصيلها من لقطةٍ واحدة — الجدار وشاشات الألياف بالحساب نفسه ([bridgeFiberVitals]).
-ProbeResult oltProbeResult(VsolOltStats s, {List<OnuLight> lights = const [], int? lightsWanted}) {
+ProbeResult oltProbeResult(VsolOltStats s, {List<OnuLight> lights = const [], int? lightsWanted, int? lightsAnswered}) {
   final cpu = s.chassis?.cpuPct;
   final pct = s.onusTotal == 0 ? null : s.onusOnline * 100 / s.onusTotal;
   return ProbeResult(
@@ -1238,6 +1250,7 @@ ProbeResult oltProbeResult(VsolOltStats s, {List<OnuLight> lights = const [], in
     detail: DeviceDetail(
       onuLights: lights,
       onuLightsWanted: lightsWanted,
+      onuLightsAnswered: lightsAnswered,
       uptime: s.uptime == null ? null : DeviceVitals.fmtUptime(s.uptime!.inSeconds),
       model: s.profile.model,
       ports: [

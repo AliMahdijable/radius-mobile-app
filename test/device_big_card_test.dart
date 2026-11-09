@@ -97,8 +97,8 @@ void main() {
       expect(rep.memo!.peers, 6);
     });
 
-    test('٩ نوفمبر: الأولت — الحكم من البنية فوراً، والضوء للفحص وحده بمهلته وجزئيّاً «قُرئ n من N»، والبطاقة لا تطلبه', () async {
-      // VSOL بـ١٩٥ متّصلاً (أحد أولتات الإنتاج): الضوء وحده ~٦٩ث — كان «لم يُقرأ» كلّ مرّة
+    test('٩ نوفمبر: الأولت — الحكم من البنية فوراً، والضوء للفحص وحده ويقف بإلغائه جزئيّاً «قُرئ n من N»، والبطاقة لا تطلبه', () async {
+      // VSOL بـ١٩٥ متّصلاً (أحد أولتات الإنتاج): الضوء وحده ~٦٩ث — كان «لم يُقرأ» كلّ مرّة. الإيقاف بعدد الطلبات (لا ساعة)
       const prof = OltProfile(vendor: OltVendor.vsol, oltLikely: true, identified: true, model: 'V1600D');
       final onus = [
         for (var i = 1; i <= 200; i++)
@@ -113,7 +113,7 @@ void main() {
             ],
             onus: onus,
           );
-      final agent = _SlowAgent({
+      final agent = FakeSnmpAgent({
         for (final o in onus)
           if (o.online) '${OltFiberReads.vsolEponOptics}.7.${o.ponPort}.${o.onuId}': snmpText('', o.ifIndex == 7 ? '-29.5' : '-21.5'),
       });
@@ -129,28 +129,57 @@ void main() {
       expect(agent.gets, isEmpty, reason: 'البطاقة لا تعرض الضوء — كان يخنق وكيل VSOL كلّ ١٥ث');
       expect(card.detail.onuLightsWanted, isNull);
 
-      // الفحص: مهلةٌ قصيرة ⇒ جزءٌ من الضوء، والحكم كاملٌ من البنية
-      final t0 = DateTime.now();
-      final r = await DeviceVitals.fetch(d,
-          detailed: true, withOnuLights: true, lightsUntil: DateTime.now().add(const Duration(milliseconds: 120)));
-      expect(DateTime.now().difference(t0), lessThan(const Duration(seconds: 2)));
+      // الفحص: يقف بعد طلبين (٨ أجهزة) ⇒ جزءٌ من الضوء، والحكم كاملٌ من البنية
+      final r = await DeviceVitals.fetch(d, detailed: true, withOnuLights: true, isCancelled: () => agent.gets.length >= 2);
+      expect(agent.gets, hasLength(2));
       expect(r.detail.onuLightsWanted, 195);
-      final n = r.detail.onuLights.length;
-      expect(n, inInclusiveRange(4, 60));
+      expect(r.detail.onuLightsAnswered, 8);
+      expect(r.detail.onuLights, hasLength(8));
       final rep = DevicesCheck.evaluate(d: d, alive: true, detail: r.detail, raw: r.raw);
       expect(rep.state, isNot(CheckState.unread));
       expect([rep.onusOnline, rep.onusTotal], [195, 200]);
-      expect([for (final f in rep.findings) f.text], contains('الضوء: قُرئ $n من 195 — الباقي ما لحق'));
+      expect([for (final f in rep.findings) f.text], contains('الضوء: قُرئ 8 من 195 — الباقي ما لحق'));
       expect(rep.lightsWanted, 195);
       // الضعيف يُعدّ من المقروء وحده: ONU رقم 7 ضمن الشريحة الأولى
-      expect([for (final f in rep.findings) f.text], contains('ضوء ضعيف: 1 — من $n مشترك'));
+      expect([for (final f in rep.findings) f.text], contains('ضوء ضعيف: 1 — من 8 مشترك'));
 
-      // الفحص التالي يبدأ من حيث وقف (تناوب) — لا الشريحة نفسها
+      // الفحص التالي يبدأ من حيث وقف (تناوب) — لا الشريحة نفسها، ولا فارغاً
       final asked1 = agent.gets.expand((g) => g).toSet();
       agent.gets.clear();
-      await DeviceVitals.fetch(d, detailed: true, withOnuLights: true, lightsUntil: DateTime.now().add(const Duration(milliseconds: 120)));
+      await DeviceVitals.fetch(d, detailed: true, withOnuLights: true, isCancelled: () => agent.gets.length >= 2);
       final asked2 = agent.gets.expand((g) => g).toSet();
+      expect(asked2, hasLength(8));
       expect(asked2.intersection(asked1), isEmpty, reason: 'الشريحة التالية');
+    });
+
+    test('المراجعة: «الباقي ما لحق» لما لم يُسأل وحده — بطاقة VSOL الثانية لا تُعدّ، والجواب بلا قيمةٍ «بلا قراءة ضوء»', () async {
+      const prof = OltProfile(vendor: OltVendor.vsol, oltLikely: true, identified: true, model: 'V1600D');
+      // ١٠ على البطاقة صفر (٢ منها بلا قيمةٍ صالحة) و٥ على البطاقة ١ (لا يسألها القارئ)
+      final onus = [
+        for (var i = 1; i <= 10; i++) VsolOnu(ifIndex: i, slot: 0, ponPort: 1, onuId: i, online: true),
+        for (var i = 11; i <= 15; i++) VsolOnu(ifIndex: i, slot: 1, ponPort: 1, onuId: i, online: true),
+      ];
+      VsolOltApi.debugFetch = () async => VsolOltStats(
+            profile: prof,
+            ponPorts: const [VsolPonPort(index: 101, slot: 0, port: 1, up: true, rxBytes: 0, txBytes: 0, onuTotal: 15, onuOnline: 15)],
+            onus: onus,
+          );
+      final agent = FakeSnmpAgent({
+        for (var i = 1; i <= 10; i++) '${OltFiberReads.vsolEponOptics}.7.1.$i': snmpText('', i <= 2 ? 'N/A' : '-20.5'),
+      });
+      DeviceVitals.snmpFor = (h, p, c) => agent;
+      DeviceVitals.resetLightsCursorForTest();
+      addTearDown(() => DeviceVitals.snmpFor = (h, p, c) => SnmpV2c(host: h, port: p, community: c));
+      final d = NetworkDevice(
+          id: 32, adminId: '1', name: 'olt2', type: 'olt', brand: 'vsol', ip: '10.0.0.32', port: 161, protocol: 'snmp',
+          hasCredentials: true, lastStatus: 'online', createdAt: DateTime(2026));
+      final r = await DeviceVitals.fetch(d, detailed: true, withOnuLights: true);
+      expect([r.detail.onuLightsWanted, r.detail.onuLightsAnswered, r.detail.onuLights.length], [10, 10, 8]);
+      final texts = [for (final f in DevicesCheck.evaluate(d: d, alive: true, detail: r.detail, raw: r.raw).findings) f.text];
+      expect(texts.where((t) => t.contains('ما لحق')), isEmpty, reason: 'سُئلت كلّها وأجابت');
+      expect(texts, contains('بلا قراءة ضوء: 2'));
+      // طرازٌ لا قارئ ضوءٍ له ⇒ لا سطر
+      expect(OltFiberReads.lightTargets(const OltProfile(), onus), 0);
     });
 
     testWidgets('٩ نوفمبر: الفحص الشامل مفتوح ⇒ البطاقة الكبيرة لا تقرأ جهازها؛ وبخروجه تعود بنبضتها', (t) async {
@@ -670,16 +699,6 @@ MikrotikStats _mtk({required String mode, required int clients, bool temp = true
     ],
     wirelessClients: [for (var i = 1; i <= clients; i++) c(i, -36 - i + 1)],
   );
-}
-
-/// وكيل SNMP بطيء (كـVSOL: ~١٫٤ث للطلب — هنا ٢٠ مللي) لقياس الوقوف عند المهلة.
-class _SlowAgent extends FakeSnmpAgent {
-  _SlowAgent(super.data);
-  @override
-  Future<List<Varbind>> get(List<String> oids) async {
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    return super.get(oids);
-  }
 }
 
 /// يدير الزمنين معاً (الوهميّ للمؤقّتات والحقيقيّ لسلسلة الطلب) حتى يتحقّق [done] أو ثانيتان.

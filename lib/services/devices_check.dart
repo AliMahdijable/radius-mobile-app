@@ -593,12 +593,15 @@ class DevicesCheck {
       // ضوء كلّ ONU (المالك: «+ الاولتي… مفروض هم تظهرهن») — بحدّ «تنبيه المشترك» للفايبر. ٩ نوفمبر: الحكم من البنية، والضوء
       // جزئيٌّ إن لم يكتمل بمهلته — يُقال كم قُرئ، والضعيف يُعدّ من المقروء وحده (لا «ضوء ضعيف: 0» لما لم يُقرأ)
       final wanted = detail.onuLightsWanted;
-      if (wanted != null && wanted > 0 && detail.onuLights.length < wanted) {
-        f.add(CheckFinding(
-            CheckLevel.info,
-            detail.onuLights.isEmpty
-                ? 'ضوء المشتركين ما انقرأ هالمرّة'
-                : 'الضوء: قُرئ ${detail.onuLights.length} من $wanted — الباقي ما لحق'));
+      if (wanted != null && wanted > 0) {
+        final read = detail.onuLights.length;
+        final answered = detail.onuLightsAnswered ?? read;
+        // «ما لحق» لما لم يُسأل/لم يجب بمهلته وحده، و«بلا قراءة ضوء» لما أجاب بلا قيمةٍ صالحة (المراجعة)
+        if (answered < wanted) {
+          f.add(CheckFinding(
+              CheckLevel.info, read == 0 ? 'ضوء المشتركين ما انقرأ هالمرّة' : 'الضوء: قُرئ $read من $wanted — الباقي ما لحق'));
+        }
+        if (answered > read) f.add(CheckFinding(CheckLevel.info, 'بلا قراءة ضوء: ${answered - read}'));
       }
       if (detail.onuLights.isNotEmpty) {
         subsKnown = true;
