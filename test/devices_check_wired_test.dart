@@ -5,7 +5,10 @@
 //       «أولت · سليم» ولا «ONU 0/0».
 //   F18 «كل الشركات»: الخادم يقرأ ضوء الأولت كلّه ويرسل الأضعف ≤300 ⇒ «أضعف 300 من N — الباقي أقوى منها أو لم يقرأه
 //       الخادم» لا «الباقي لم يقرأه الخادم»، والضعيف «300+» حين تكون القائمة المقطوعة كلّها ضعيفة.
+//   F20 ميكروتك SNMP: جدول الواجهات بلغ سقف القراءة (٦٠٠ صفّ بالأعمدة المتوازية، ٢٠٠٠ بالمسح المنفرد) وفيه بقيّة
+//       ⇒ «جلسات PPP» مجهولة («—») لا رقمٌ ناقص يُعرض كأنّه العدد.
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rad_mysvcs/api/mikrotik_snmp.dart';
 import 'package:rad_mysvcs/api/network_devices_api.dart';
 import 'package:rad_mysvcs/api/ruijie_api.dart';
 import 'package:rad_mysvcs/api/snmp_client.dart';
@@ -88,6 +91,9 @@ void main() {
     VpnPipe.transport = pipeBefore;
     VpnPipe.used = false;
     RuijieApi.debugFetch = null;
+    MikrotikSnmp.snmpFor =
+        (host, port, community, timeout) => SnmpV2c(host: host, port: port, community: community, timeout: timeout);
+    MikrotikSnmp.resetForTest();
     NetworkDevicesApi.invalidateCredentialsCache();
   });
 
@@ -223,4 +229,59 @@ void main() {
       expect(texts(r), contains('ضوء ضعيف: 3 — من 120 مشترك'));
     });
   });
+
+  group('F20 ميكروتك SNMP: جدول واجهاتٍ مقطوع', () {
+    /// راوتر PPPoE: [ethers] منفذاً (الخمسة الأولى شغّالة) ثمّ جلسات PPP شغّالة حتى [n] واجهة.
+    Map<String, Varbind> pppoe(int n, {int ethers = 8}) => {
+          MikrotikSnmp.sysDescr: snmpText('', 'RouterOS CCR2004-1G-12S+2XS'),
+          MikrotikSnmp.sysUpTime: snmpTicks('', 3 * 86400 * 100),
+          for (var k = 1; k <= n; k++) ...{
+            '${MikrotikSnmp.ifName}.$k': snmpText('', k <= ethers ? 'ether$k' : '<pppoe-user$k>'),
+            '${MikrotikSnmp.ifType}.$k': snmpInt('', k <= ethers ? 6 : 23),
+            '${MikrotikSnmp.ifAdmin}.$k': snmpInt('', 1),
+            '${MikrotikSnmp.ifOper}.$k': snmpInt('', k <= 5 || k > ethers ? 1 : 2),
+          },
+        };
+
+    test('🚨 700 واجهة (692 جلسة) والأعمدة المتوازية تقف عند 600 ⇒ «جلسات PPP» مجهولة لا 592؛ والمنافذ مقروءة',
+        () async {
+      final d = dev(71, protocol: 'snmp');
+      MikrotikSnmp.snmpFor = (h, p, c, t) => FakeSnmpAgent(pppoe(700));
+      final s = await MikrotikSnmp.fetch(host: '10.0.0.71', community: 'public');
+      final res = DeviceVitals.mikrotikResult(d, s, null, detailed: true);
+      expect(res.detail.glance.ppp, isNull, reason: 'لا «592» عن 692 جلسة');
+      final r = judge(d, res);
+      expect(r.vitals.where((v) => v.k == 'جلسات PPP'), isEmpty);
+      expect(r.vitals.firstWhere((v) => v.k == 'المنافذ').v, '5/8', reason: 'المنافذ في أوّل الجدول — قُرئت');
+      // جدولٌ قُرئ كلّه ⇒ عدده كما هو
+      MikrotikSnmp.snmpFor = (h, p, c, t) => FakeSnmpAgent(pppoe(300));
+      final full = await MikrotikSnmp.fetch(host: '10.0.0.72', community: 'public');
+      expect(DeviceVitals.mikrotikResult(d, full, null, detailed: true).detail.glance.ppp, 292);
+    });
+
+    test('🚨 وكيلٌ لا يقبل الأعمدة المتوازية: المسح المنفرد يقف عند 2000 صفّ ⇒ «جلسات PPP» مجهولة لا 1992', () async {
+      final d = dev(73, protocol: 'snmp');
+      MikrotikSnmp.snmpFor = (h, p, c, t) => _CappedWalk(pppoe(2100));
+      final s = await MikrotikSnmp.fetch(host: '10.0.0.73', community: 'public');
+      expect(DeviceVitals.mikrotikResult(d, s, null, detailed: true).detail.glance.ppp, isNull);
+      MikrotikSnmp.snmpFor = (h, p, c, t) => _CappedWalk(pppoe(1500));
+      final full = await MikrotikSnmp.fetch(host: '10.0.0.74', community: 'public');
+      expect(DeviceVitals.mikrotikResult(d, full, null, detailed: true).detail.glance.ppp, 1492);
+    });
+  });
+}
+
+/// وكيلٌ يرفض الأعمدة المتوازية، ومسحه يقف عند سقف [SnmpV2c.walk] (chunkSize × maxIterations) كالعميل الحقيقيّ.
+class _CappedWalk extends FakeSnmpAgent {
+  _CappedWalk(super.data);
+
+  @override
+  Future<List<Varbind>> getBulkColumns(List<String> cursors, {int maxRepetitions = 25}) async =>
+      throw SnmpTimeoutException('SNMP عبر الـVPN: الجهاز ما ردّ');
+
+  @override
+  Future<List<Varbind>> walk(String baseOid, {int chunkSize = 25, int maxIterations = 100}) async =>
+      (await super.walk(baseOid, chunkSize: chunkSize, maxIterations: maxIterations))
+          .take(chunkSize * maxIterations)
+          .toList();
 }
