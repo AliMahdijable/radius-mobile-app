@@ -61,8 +61,30 @@ class SubscriberUsageStore {
   static const _batch = 40;
   static const _ttl = Duration(minutes: 5);
   static const _failTtl = Duration(minutes: 1);
+  static const _cap = 5000;
 
   static final _cache = <String, ({DateTime at, SubscriberUsage? v})>{};
+
+  /// صفوف الترتيب بالاستهلاك القائم ([ensureFor]) — مفتاح الترتيب يُقرأ منها في الكاش، فلا تُطرد حتى [cancelSortFetch].
+  static Set<String> _sortKeep = const {};
+
+  /// حدّ الكاش (الأقدم يُطرد أوّلاً) — إلّا صفوف الترتيب القائم: الحدّ يتّسع لها و٥٠٠ للصفوف الظاهرة، ولا يُطرد منها شيء.
+  /// كان الترتيب فوق ٥٠٠٠ صفّ يطرد أوّل نتائجه بنفسه فتغوص أسفل القائمة «بلا قراءة» ولا تُجلب ثانيةً.
+  static void _trim() {
+    final keep = _sortKeep;
+    final cap = keep.length + 500 > _cap ? keep.length + 500 : _cap;
+    var over = _cache.length - cap;
+    if (over <= 0) return;
+    final drop = <String>[];
+    for (final k in _cache.keys) {
+      if (over == 0) break;
+      if (keep.contains(k)) continue;
+      drop.add(k);
+      over--;
+    }
+    drop.forEach(_cache.remove);
+  }
+
   static final _queue = <String>{};
   static final _busy = <String>{};
   static Timer? _timer;
@@ -218,9 +240,7 @@ class SubscriberUsageStore {
                 : null,
           );
         }
-        if (_cache.length > 5000) {
-          _cache.remove(_cache.keys.first);
-        }
+        _trim();
         version.value++;
       }
     } finally {
@@ -235,8 +255,11 @@ class SubscriberUsageStore {
 
   static int _sortGen = 0;
 
-  /// يوقف جلب الترتيب الجاري (ترتيبٌ آخر أو مغادرة القائمة) — ما وصل يبقى في الكاش.
-  static void cancelSortFetch() => _sortGen++;
+  /// يوقف جلب الترتيب الجاري (ترتيبٌ آخر أو مغادرة القائمة) — ما وصل يبقى في الكاش، ويعود للحدّ المعتاد مع الدفعة التالية.
+  static void cancelSortFetch() {
+    _sortGen++;
+    _sortKeep = const {};
+  }
 
   /// يجلب استهلاك [rows] (idx وشركة الصفّ) الناقص أو القديم. [onProgress] بعد كلّ دفعة (ما قُرئ من الكلّ). صفوف شركةٍ «عند الطلب»
   /// (الوطنيّ) لا تُجلب هنا — تبقى بلا قيمة. يعود حين ينتهي أو يُلغى ([cancelSortFetch]) أو تتبدّل الجلسة.
@@ -246,6 +269,8 @@ class SubscriberUsageStore {
   }) async {
     final myGen = ++_sortGen;
     final gen = _gen;
+    // صفوف هذا الترتيب كلّها (المقروءة قبله والتي تُجلب الآن) تبقى في الكاش ما دام قائماً ([_trim])
+    _sortKeep = {for (final r in rows) if (r.idx.isNotEmpty) _key(r.idx, r.company)};
     final now = DateTime.now();
     final need = <String>[];
     final seen = <String>{};
@@ -299,9 +324,7 @@ class SubscriberUsageStore {
           v: ok && u is Map ? SubscriberUsage(today: _int(u['today']), month: _int(u['month'])) : null,
         );
       }
-      while (_cache.length > 5000) {
-        _cache.remove(_cache.keys.first);
-      }
+      _trim();
       done += batch.length;
       version.value++;
       if (myGen == _sortGen) onProgress?.call(done > total ? total : done, total);
@@ -322,6 +345,7 @@ class SubscriberUsageStore {
     _queue.clear();
     _busy.clear();
     _cache.clear();
+    _sortKeep = const {};
     _onDemand.clear();
     _oneBusy.clear();
     _err.clear();

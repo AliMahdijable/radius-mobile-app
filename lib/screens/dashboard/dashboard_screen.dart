@@ -807,6 +807,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       unawaited(_showMergedWa());
       return;
     }
+    // «كل الصفحات» وحال الصفحات لم تصل بعد («جارٍ التحقق»): الحبّة تُنقر في الوضع، وبلا `whatsapp.connect` لا تُفتح شاشة
+    // الربط — رسالة القفل كخارج الوضع (ولا شيء لدورٍ لا يُمنح المفتاح).
+    if (!Perms.has('whatsapp.connect')) {
+      if (permShown(const ['whatsapp.connect'])) showNoPermission(context);
+      return;
+    }
     unawaited(_openWhatsApp());
   }
 

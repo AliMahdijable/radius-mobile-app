@@ -63,6 +63,9 @@ class _TicketThreadScreenState extends State<TicketThreadScreen> {
   String? _goneMessage;
   bool _sending = false;
   String? _busy;
+
+  /// يرتفع مع كلّ ردٍّ أو تغيير حالة قبل إرساله — قراءةٌ بدأت قبله لقطتها أقدم منه ([_load]).
+  int _writeGen = 0;
   Timer? _poll;
   final _ctl = TextEditingController();
 
@@ -101,14 +104,26 @@ class _TicketThreadScreenState extends State<TicketThreadScreen> {
 
   Future<void> _load({bool quiet = false}) async {
     if (quiet && (_sending || _busy != null)) return;
+    final gen = _writeGen;
     final r = await _api(() => TicketsApi.thread(widget.ticketId));
     if (!mounted) return;
+    // ردٌّ أو تغيير حالةٍ بدأ أثناء هذه القراءة: لقطتها قد تسبقه — الدوريّة تُسقَط (التالية تجلب الجديد)، واليدويّة تضمّ رسائلها
+    // بالمعرّف ولا تُرجع التذكرة لحالها القديمة (كانت تمحو الردّ المُرسَل أو تعيد المغلقة مفتوحة حتى القراءة التالية).
+    final stale = gen != _writeGen || _sending || _busy != null;
+    if (stale && quiet) return;
     final wasUnread = _ticket?.unread ?? true;
     setState(() {
       _loading = false;
       if (r.thread != null) {
-        _ticket = r.thread!.ticket;
-        _messages = r.thread!.messages;
+        if (stale) {
+          final fetched = r.thread!.messages;
+          final ids = {for (final m in fetched) m.id};
+          _messages = [...fetched, ..._messages.where((m) => !ids.contains(m.id))];
+          _ticket ??= r.thread!.ticket;
+        } else {
+          _ticket = r.thread!.ticket;
+          _messages = r.thread!.messages;
+        }
         _failed = false;
         _gone = false;
       } else if (r.gone) {
@@ -132,6 +147,7 @@ class _TicketThreadScreenState extends State<TicketThreadScreen> {
       _snack('الرسالة أطول من ٢٠٠٠ حرف');
       return;
     }
+    _writeGen++;
     setState(() => _sending = true);
     final r = await _api(() => TicketsApi.reply(widget.ticketId, text, image: image));
     if (!mounted) return;
@@ -184,6 +200,7 @@ class _TicketThreadScreenState extends State<TicketThreadScreen> {
       );
       if (yes != true || !mounted) return;
     }
+    _writeGen++;
     setState(() => _busy = action);
     final r = await _api(() => action == 'reopen' ? TicketsApi.reopen(widget.ticketId) : TicketsApi.setStatus(widget.ticketId, action));
     if (!mounted) return;
