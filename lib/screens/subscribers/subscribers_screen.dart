@@ -533,7 +533,11 @@ class _SubscribersScreenState extends State<SubscribersScreen>
           subscribers: () => _all,
           viaVpn: VpnNow.mode.value || _offNet || !net,
           wave: _waveN,
-          onRefreshStale: () => _runProbeWave(),
+          // الفتح و«تحديث» والموجة جارية (الرادار يُفتح أثناءها — ١٠ نوفمبر): تبقى هي — موجةٌ جديدة تترك الجارية
+          // ([_probeRunId]) فيرجع العدّاد صفراً
+          onRefreshStale: () {
+            if (!_probing) _runProbeWave();
+          },
           onForceAll: () => _runProbeWave(force: true),
           companies: companies,
           openCompany: open?.key,
@@ -558,7 +562,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
         subscribers: () => _big ? _bigRows : _all,
         viaVpn: viaVpn,
         wave: _waveN,
-        onRefreshStale: () => _runProbeWave(),
+        onRefreshStale: () {
+          if (!_probing) _runProbeWave();
+        },
         onForceAll: () => _runProbeWave(force: true),
         big: _big,
       ),
@@ -2989,6 +2995,8 @@ class _ListHeader extends StatelessWidget {
                 icon: Icons.radar_rounded,
                 active: false,
                 busy: probing,
+                // ١٠ نوفمبر (المالك: «الافضل سوي»): يُفتح والصفحة تفحص — فيعرض «يفحص… n من N» للموجة نفسها
+                tapWhileBusy: true,
                 onTap: onScanDevices ?? () {},
                 tooltip: 'الفحص العامّ للمشتركين',
                 size: TopActionChip.sizeOf(context),
@@ -3026,6 +3034,7 @@ class _HeaderIconButton extends StatelessWidget {
     required this.active,
     required this.onTap,
     this.busy = false,
+    this.tapWhileBusy = false,
     this.tooltip,
     this.size = H.iconBtn,
   });
@@ -3035,6 +3044,9 @@ class _HeaderIconButton extends StatelessWidget {
 
   /// يستبدل الأيقونة بدوّارة ويقفل النقر — زرّ فحص الأجهزة أثناء الموجة.
   final bool busy;
+
+  /// الدوّارة لا تقفل النقر ([busy]) — الرادار يفتح «الفحص العامّ» والموجة جارية.
+  final bool tapWhileBusy;
   final String? tooltip;
 
   /// الضلع — ‎38 افتراضاً، وفي سطر البحث بمقاس أزرار الأعلى فوقه
@@ -3055,7 +3067,7 @@ class _HeaderIconButton extends StatelessWidget {
           color: active ? AppColors.brandSoftBg : AppColors.surface,
           borderRadius: BorderRadius.circular(R.icon),
           child: InkWell(
-            onTap: busy ? null : onTap,
+            onTap: busy && !tapWhileBusy ? null : onTap,
             borderRadius: BorderRadius.circular(R.icon),
             child: Container(
               width: size,
