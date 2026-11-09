@@ -192,6 +192,35 @@ class NetworkDevicesApi {
         return cached.creds;
       }
     }
+    // ٩ نوفمبر (التحقيق R6): الطلب يتعثّر دفعاتٍ عابرة (٥٠٣ بجسمٍ قصير على عدّة مسارات معاً — ٩٩ اليوم، ٦٣ منها خلال ٩
+    // دقائق) فكانت كلّ قراءةٍ بلحظتها «لم يُقرأ». العابر (٥٠٢/٥٠٣/٥٠٤ أو انقطاع) يعيده ApiClient نفسه مرّةً (GET)؛ فإن بقي ⇒
+    // آخر بياناتٍ صالحة عمرها ≤ ١٠ دقائق (هي نفسها ما لم تُعدَّل — والتعديل يمسحها). الرفض الصريح (٤xx، success:false)
+    // والتحديث القسريّ يُرميان كما هما.
+    try {
+      return await _fetchCredentials(id);
+    } catch (e) {
+      final last = forceRefresh || !_transient(e) ? null : _credsCache[id];
+      if (last != null && DateTime.now().difference(last.at) <= _credsStaleOk) return last.creds;
+      rethrow;
+    }
+  }
+
+  /// آخر بيانات صالحة تُستعمل حين يتعثّر الطلب عابراً.
+  static const _credsStaleOk = Duration(minutes: 10);
+
+  /// يبذر المخبأ بعمرٍ معيّن — للاختبار.
+  @visibleForTesting
+  static void debugSeedCredentials(int id, Map<String, dynamic> creds, DateTime at) =>
+      _credsCache[id] = (creds: creds, at: at);
+
+  /// تعثّرٌ عابر: انقطاعٌ أو مهلة أو ٥xx — لا رفضٌ صريح.
+  static bool _transient(Object e) {
+    if (e is! DioException) return false;
+    if (e.type == DioExceptionType.badResponse) return (e.response?.statusCode ?? 0) >= 500;
+    return e.type != DioExceptionType.cancel && e.type != DioExceptionType.badCertificate;
+  }
+
+  static Future<Map<String, dynamic>> _fetchCredentials(int id) async {
     final r = await ApiClient.dio.get<Map<String, dynamic>>(
       '/api/v2/admin/devices/$id/credentials',
     );

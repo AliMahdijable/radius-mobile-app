@@ -2,12 +2,16 @@
 // من حيث المتغيرات الحيوية فكر بيها بدقة»): المقيِّم النقيّ — الحال، حيويّات الجهاز، مشتركو السكتر، منافذ السويج، الأولت، والمقارنة
 // بالفحص السابق؛ وقراءة حقول منافذ مايكروتك الجديدة.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/cisco_api.dart';
 import 'package:rad_mysvcs/api/mikrotik_api.dart';
+import 'package:rad_mysvcs/api/network_devices_api.dart';
 import 'package:rad_mysvcs/api/ubnt_api.dart';
 import 'package:rad_mysvcs/api/vsol_olt_api.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
@@ -579,4 +583,59 @@ void main() {
       run.dispose();
     });
   });
+
+  group('٩ نوفمبر — جلب بيانات الدخول يتعثّر عابراً (٥٠٣): إعادة ApiClient مرّةً، ثمّ آخر بياناتٍ ≤ ١٠ د', () {
+    late _CredsReplies srv;
+    setUp(() {
+      srv = _CredsReplies();
+      ApiClient.dio.httpClientAdapter = srv;
+      NetworkDevicesApi.invalidateCredentialsCache();
+    });
+    tearDown(NetworkDevicesApi.invalidateCredentialsCache);
+
+    test('٥٠٣ ثمّ ٢٠٠ ⇒ تُقرأ (إعادة ApiClient العابرة)', () async {
+      srv.codes.addAll([503, 200]);
+      expect((await NetworkDevicesApi.getCredentials(7))['user'], 'admin');
+      expect(srv.calls, 2);
+    });
+
+    test('٥٠٣ مرّتين ⇒ آخر بياناتٍ عمرها ٤ د؛ وعمرها ١١ د ⇒ يُرمى (ولا تُختلق)', () async {
+      srv.codes.addAll([503, 503, 503, 503]);
+      NetworkDevicesApi.debugSeedCredentials(7, {'user': 'old'}, DateTime.now().subtract(const Duration(minutes: 4)));
+      expect((await NetworkDevicesApi.getCredentials(7))['user'], 'old');
+      NetworkDevicesApi.debugSeedCredentials(7, {'user': 'old'}, DateTime.now().subtract(const Duration(minutes: 11)));
+      await expectLater(NetworkDevicesApi.getCredentials(7), throwsA(isA<DioException>()));
+      expect(srv.calls, 4, reason: 'طلبان لكلّ قراءة — لا إعادةٌ فوق إعادة ApiClient');
+    });
+
+    test('الرفض الصريح (٤٠٤ بجسم success:false) لا يأخذ القديم؛ والتحديث القسريّ لا يأخذ القديم', () async {
+      srv.codes.addAll([404]);
+      NetworkDevicesApi.debugSeedCredentials(7, {'user': 'old'}, DateTime.now().subtract(const Duration(minutes: 2)));
+      await expectLater(NetworkDevicesApi.getCredentials(7), throwsA(isA<Exception>()));
+      expect(srv.calls, 1);
+      srv.codes.addAll([503, 503]);
+      await expectLater(NetworkDevicesApi.getCredentials(7, forceRefresh: true), throwsA(isA<DioException>()));
+      expect(srv.calls, 3);
+    });
+  });
+}
+
+/// خادمٌ يردّ بالرموز بالترتيب (٢٠٠ = بيانات الدخول).
+class _CredsReplies implements HttpClientAdapter {
+  final codes = <int>[];
+  var calls = 0;
+  @override
+  Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? body, Future<void>? cancel) async {
+    calls++;
+    final code = codes.isEmpty ? 200 : codes.removeAt(0);
+    final data = code == 200
+        ? {'success': true, 'credentials': {'user': 'admin', 'pass': 'x'}}
+        : {'success': false, 'message': 'x'};
+    return ResponseBody.fromString(jsonEncode(data), code, headers: {
+      Headers.contentTypeHeader: ['application/json'],
+    });
+  }
+
+  @override
+  void close({bool force = false}) {}
 }
