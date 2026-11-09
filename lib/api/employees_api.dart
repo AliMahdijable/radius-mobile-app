@@ -201,6 +201,23 @@ class PermPreset {
   final String description;
   final Map<String, bool> permissions;
 
+  /// القالب فوق الصلاحيّات الحاليّة [current] (٩ نوفمبر — المنسّق بتفويض المالك): مفاتيحه كما هي، إلّا
+  /// [ElEmployeePerms.roleFreeKeys] (الفحصان على الشبكة وما عبر VPN والتنبيهات) فتبقى على قيمتها في [current] — تُمنح فرادى، وقوالب
+  /// الخادم (كاشير/مساعد مدير/مشاهد) لا تحملها فكانت تُطفئ الفحصين المفعّلين افتراضاً. والغائب عن [current] يبقى غائباً (الخادم
+  /// يُبقيه على المحفوظ/الافتراضيّ).
+  Map<String, bool> applyTo(Map<String, bool> current) {
+    final out = Map<String, bool>.from(permissions);
+    for (final k in ElEmployeePerms.roleFreeKeys) {
+      final v = current[k];
+      if (v == null) {
+        out.remove(k);
+      } else {
+        out[k] = v;
+      }
+    }
+    return out;
+  }
+
   static PermPreset? fromJson(String key, dynamic raw) {
     if (raw is! Map) return null;
     final perms = <String, bool>{};

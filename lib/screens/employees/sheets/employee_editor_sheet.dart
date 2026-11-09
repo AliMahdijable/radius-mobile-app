@@ -245,8 +245,9 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
     super.dispose();
   }
 
+  /// دورٌ جاهز من كتالوج الخادم: يضبط المفاتيح كلّها إلّا الفحصين وما عبر VPN والتنبيهات — تبقى كما هي ([PermPreset.applyTo]).
   void _applyPreset(PermPreset p) {
-    setState(() => _perms = Map<String, bool>.from(p.permissions));
+    setState(() => _perms = p.applyTo(_perms));
     showSheetSnack(context, 'تم تطبيق ${p.label}', isError: false);
   }
 
