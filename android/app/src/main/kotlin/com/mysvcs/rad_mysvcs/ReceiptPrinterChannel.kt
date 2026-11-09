@@ -15,6 +15,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import com.sunmi.peripheral.printer.InnerPrinterCallback
+import com.sunmi.peripheral.printer.InnerPrinterException
 import com.sunmi.peripheral.printer.InnerPrinterManager
 import com.sunmi.peripheral.printer.InnerResultCallback
 import com.sunmi.peripheral.printer.SunmiPrinterService
@@ -427,7 +428,21 @@ class SunmiBuiltin(private val app: Context) : BuiltinPrinter {
                 s.sendRAWData(c, null)
                 sent++
             }
-            if (transaction) s.exitPrinterBufferWithCallback(true, callback) else s.lineWrap(1, callback)
+            if (transaction) {
+                try {
+                    s.exitPrinterBufferWithCallback(true, callback)
+                } catch (_: InnerPrinterException) {
+                    // SUNMI V1 أو خدمة طابعةٍ أقدم: المكتبة ترفض «إنهاء المعاملة بنتيجة» قبل أن يصل الخدمةَ شيء
+                    // ("this model/version does not support this method!") — فلم يُطبع شيء بعد. يُطبع المخزَّن كما هو
+                    // (exitPrinterBuffer(true) تعرفه تلك الخدمات) بلا تأكيد، ونهايته سطرٌ بنتيجة ⇒ «أُرسل» لا «عطل».
+                    // فشل الإطباع نفسه ⇒ المعاملة لم تُطبع فتُلغى كما كانت (الـcatch أدناه)؛ وبعده لا إلغاء: قد خرج.
+                    s.exitPrinterBuffer(true)
+                    transaction = false
+                    s.lineWrap(1, callback)
+                }
+            } else {
+                s.lineWrap(1, callback)
+            }
         } catch (e: Exception) {
             if (transaction) {
                 // معاملةٌ لم تكتمل تُلغى — لم يُطبع منها شيء.
