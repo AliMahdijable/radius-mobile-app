@@ -7,17 +7,22 @@
 //       الخادم» لا «الباقي لم يقرأه الخادم»، والضعيف «300+» حين تكون القائمة المقطوعة كلّها ضعيفة.
 //   F20 ميكروتك SNMP: جدول الواجهات بلغ سقف القراءة (٦٠٠ صفّ بالأعمدة المتوازية، ٢٠٠٠ بالمسح المنفرد) وفيه بقيّة
 //       ⇒ «جلسات PPP» مجهولة («—») لا رقمٌ ناقص يُعرض كأنّه العدد.
+//   F12 سويتش EdgeSwitch (علامة ubnt): يُقرأ بـREST كصفحته — بطرازه، أو بلا طرازٍ حين لا تقرؤه جلسة airOS؛ وفشل REST
+//       بسببه الصادق لا «مستخدمه بلا صلاحيّة قراءة».
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rad_mysvcs/api/edgeswitch_api.dart';
 import 'package:rad_mysvcs/api/mikrotik_snmp.dart';
 import 'package:rad_mysvcs/api/network_devices_api.dart';
 import 'package:rad_mysvcs/api/ruijie_api.dart';
 import 'package:rad_mysvcs/api/snmp_client.dart';
+import 'package:rad_mysvcs/api/ubnt_api.dart';
 import 'package:rad_mysvcs/api/vsol_olt_api.dart';
 import 'package:rad_mysvcs/core/net/device_net.dart';
 import 'package:rad_mysvcs/core/net/vpn_pipe.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
 import 'package:rad_mysvcs/services/devices_check.dart';
+import 'package:rad_mysvcs/services/devices_check_runner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fake_snmp_agent.dart';
@@ -267,6 +272,115 @@ void main() {
       MikrotikSnmp.snmpFor = (h, p, c, t) => _CappedWalk(pppoe(1500));
       final full = await MikrotikSnmp.fetch(host: '10.0.0.74', community: 'public');
       expect(DeviceVitals.mikrotikResult(d, full, null, detailed: true).detail.glance.ppp, 1492);
+    });
+  });
+
+  group('F12 سويتش EdgeSwitch: REST كصفحته', () {
+    // ما تعطيه جلسة airOS على EdgeSwitch (أمرٌ لا يعرفه ⇒ لا بيانات airOS)
+    Future<UbntStats> sshOnSwitch() async => throw UbntException('لم نستلم بيانات — تحقّق من صلاحيّات المستخدم');
+    EdgeSwitchStats snapshot() => const EdgeSwitchStats(
+          model: 'ES-8-150W',
+          firmware: 'v1.9.3',
+          uptimeSeconds: 9 * 86400,
+          cpuPercent: 7,
+          ramPercent: 41,
+          temperatureC: 52,
+          ports: [
+            EdgeSwitchPort(id: '0/1', enabled: true, plugged: true, speed: 1000, speedRaw: '1000-full', poe: 'active',
+                poeWatts: 6.5, txRate: 8000000, rxRate: 2000000, errors: 0),
+            EdgeSwitchPort(id: '0/2', enabled: true, plugged: true, speed: 100, speedRaw: '100-half', errors: 0),
+            EdgeSwitchPort(id: '0/3', enabled: true, plugged: true, speed: 1000, speedRaw: '1000-full'),
+            EdgeSwitchPort(id: '0/4', enabled: true, plugged: false),
+          ],
+        );
+    late int ssh, rest;
+
+    setUp(() {
+      ssh = 0;
+      rest = 0;
+      DevicesCheckRunner.debugLimits = () async => const CheckLimits();
+      DevicesCheckRunner.debugSubscribers = () async => const [];
+      DevicesCheckRunner.debugProbe = (d) async => (status: 'online', responseMs: 3, packetLoss: 0.0, serviceOk: true);
+    });
+    tearDown(() {
+      DevicesCheckRunner.debugLimits = null;
+      DevicesCheckRunner.debugSubscribers = null;
+      DevicesCheckRunner.debugProbe = null;
+      UbntApi.debugFetch = null;
+      EdgeSwitchApi.debugFetch = null;
+    });
+
+    Future<DeviceCheckReport> check(NetworkDevice d,
+        {required Future<UbntStats> Function() viaSsh, EdgeSwitchStats? Function()? viaRest}) async {
+      UbntApi.debugFetch = () {
+        ssh++;
+        return viaSsh();
+      };
+      EdgeSwitchApi.debugFetch = () async {
+        rest++;
+        return viaRest?.call();
+      };
+      NetworkDevicesApi.debugSeedCredentials(d.id, {'user': 'ubnt', 'pass': 'x'}, DateTime.now());
+      final run = DevicesCheckRunner([d], viaVpn: false);
+      await run.run();
+      run.dispose();
+      return run.reports[d.id]!;
+    }
+
+    test('🚨 ES-8-150W محفوظ بطرازه ⇒ يُقرأ بـREST: المنافذ والمعالج والـPoE وملاحظة المنفذ، لا «بلا صلاحيّة قراءة»',
+        () async {
+      final d = dev(80, type: 'switch', brand: 'ubnt', protocol: 'ssh', model: 'ES-8-150W');
+      final r = await check(d, viaSsh: sshOnSwitch, viaRest: snapshot);
+      expect(r.state, CheckState.warn, reason: 'قُرئ — والمنفذ 0/2 half-duplex ملاحظة');
+      expect(r.role, CheckRole.switcher);
+      expect(texts(r), isNot(contains(contains('صلاحيّة'))));
+      expect(texts(r), contains('المنفذ 0/2: half-duplex — كيبل أو إعداد'));
+      final v = {for (final x in r.vitals) x.k: x.v};
+      expect([v['المنافذ'], v['المعالج'], v['الذاكرة'], v['الحرارة'], v['PoE']], ['3/4', '7٪', '41٪', '52°', '6.5W']);
+      expect(ssh, 0, reason: 'لا جلسة airOS على سويتش');
+    });
+
+    test('🚨 EdgeSwitch بلا طرازٍ محفوظ: جلسة airOS لم تقرأه ⇒ REST كصفحته، ويُتذكّر فلا تُعاد الجلسة', () async {
+      final d = dev(81, brand: 'ubnt', protocol: 'ssh');
+      final r = await check(d, viaSsh: sshOnSwitch, viaRest: snapshot);
+      expect(r.state, isNot(CheckState.unread));
+      expect(r.vitals.firstWhere((x) => x.k == 'المنافذ').v, '3/4');
+      final again = await check(d, viaSsh: sshOnSwitch, viaRest: snapshot);
+      expect(again.state, isNot(CheckState.unread));
+      expect(ssh, 1, reason: 'الثانية بـREST مباشرة');
+      // وسويتش يوبيكويتي بلا طراز (نوعه «سويتش») ⇒ REST أوّلاً: لا مهلة جلسة airOS كاملة
+      final sw = dev(82, type: 'switch', brand: 'ubnt', protocol: 'ssh');
+      expect((await check(sw, viaSsh: sshOnSwitch, viaRest: snapshot)).state, isNot(CheckState.unread));
+      expect(ssh, 1);
+    });
+
+    test('🚨 EdgeSwitch وصفحته لم تفتح ⇒ سببٌ صادق («صفحة السويتش ما فتحت»)، لا «مستخدمه بلا صلاحيّة قراءة»', () async {
+      final d = dev(83, type: 'switch', brand: 'ubnt', protocol: 'ssh', model: 'ES-8-150W');
+      final r = await check(d, viaSsh: sshOnSwitch, viaRest: () => null);
+      expect(r.state, CheckState.unread);
+      expect(texts(r), ['يردّ، لكن صفحة السويتش ما فتحت — تأكّد من اسم المستخدم والرمز والمنفذ']);
+    });
+
+    test('راديو airOS: قراءته الناجحة لا تلمس REST؛ وفشله بسببه هو (REST ليس EdgeSwitch) — مرّةً لكلّ عنوان', () async {
+      final ok = dev(84, type: 'sector', brand: 'ubnt', protocol: 'ssh');
+      final good = await check(ok,
+          viaSsh: () async => UbntStats.fromMcaStatus(const {
+                'deviceName': 'Rocket M5',
+                'wlanMode': 'master',
+                'wlanEssid': 'SEC',
+                'wlanConnections': '0',
+                'cpuload': '7',
+                'uptime': '864000',
+              }),
+          viaRest: snapshot);
+      expect(good.state, isNot(CheckState.unread));
+      expect(rest, 0, reason: 'المسار الشائع بلا طلبٍ زائد');
+      final bad = dev(85, type: 'sector', brand: 'ubnt', protocol: 'ssh');
+      Future<UbntStats> refused() async => throw UbntException('اسم المستخدم أو كلمة المرور خطأ (SSH auth failed)');
+      final r = await check(bad, viaSsh: refused, viaRest: () => null);
+      expect(texts(r), ['يردّ، لكن رُفض الدخول — تأكّد من اسم المستخدم والرمز']);
+      await check(bad, viaSsh: refused, viaRest: () => null);
+      expect(rest, 1, reason: 'ليس EdgeSwitch ⇒ لا يُسأل REST في كلّ قراءة');
     });
   });
 }
