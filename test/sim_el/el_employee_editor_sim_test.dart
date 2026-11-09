@@ -270,13 +270,16 @@ void main() {
     await t.pumpAndSettle();
     await t.tap(find.text('حفظ'));
     await t.pumpAndSettle();
-    final perms = Map<String, dynamic>.from(
-        server.bodies('POST', '/api/v2/employees').single['permissions'] as Map);
+    final body = server.bodies('POST', '/api/v2/employees').single;
+    final perms = Map<String, dynamic>.from(body['permissions'] as Map);
     expect(perms['subscribers.add'], isTrue);
     expect(perms['subscribers.view'], isTrue);
-    expect(perms['managers.view'], isFalse, reason: 'ما لم يره المالك لا يُمنح');
-    expect(perms['devices.view'], isFalse);
-    expect(perms['whatsapp.send'], isFalse,
+    // ٩ نوفمبر (مراجعة 3.0.18): المحرّر يرسل ما عرضه وحده (perms_shown_only) — غير المعروض غائبٌ لا false، والخادم يحفظ الغائب
+    // false لكلّ مفتاحٍ خارج KEEP_WHEN_MISSING (server/employees.js sanitizePermissions) ⇒ «ما لم يره المالك لا يُمنح» كما كان.
+    expect(body['perms_shown_only'], isTrue);
+    expect(perms['managers.view'], anyOf(isNull, isFalse), reason: 'ما لم يره المالك لا يُمنح');
+    expect(perms['devices.view'], anyOf(isNull, isFalse));
+    expect(perms['whatsapp.send'], anyOf(isNull, isFalse),
         reason: 'يتبع «إرسال واتساب» — والمالك لم يمنحه');
     expect(find.text('تمّ إنشاء الموظف'), findsOneWidget);
     expect(find.text('sara.el'), findsWidgets, reason: 'اليوزر كما حفظه الخادم');
