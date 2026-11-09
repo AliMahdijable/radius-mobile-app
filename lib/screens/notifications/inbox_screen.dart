@@ -25,6 +25,7 @@ import '../desktop/desk_widgets.dart';
 import '../renew/renew_widgets.dart';
 import '../tickets/ticket_widgets.dart';
 import '../../api/renew_requests_api.dart';
+import '../../api/tickets_api.dart';
 
 /// شاشة inbox — تعرض 3 أقسام (نفس منطق v1 mobile-app):
 ///   1. **إشعارات التطبيق** — FCM inbox items (المستلمة).
@@ -33,6 +34,7 @@ import '../../api/renew_requests_api.dart';
 ///   3. **قريب الانتهاء** — قائمة مشتركين متبقّي لهم 0..3 أيام
 ///      (مطلوب من المستخدم 2026-07-11: يظهروا لغاية ما ينتهي اشتراكهم).
 /// كل صف مشترك قابل للنقر ويفتح SubscriberDetailScreen مثل v1.
+/// وفوقها — حين يوجد ما ينتظر وحده: «طلبات التجديد» (٤ نوفمبر) ثمّ «تذاكر المشتركين» (٩ نوفمبر)، للشركة المفتوحة.
 class InboxScreen extends StatefulWidget {
   const InboxScreen({super.key, this.onTapNotification});
 
@@ -401,24 +403,32 @@ class _InboxScreenState extends State<InboxScreen> {
       ),
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: () => Future.wait([_loadLists(), RenewRequestsState.ensureFresh(force: true)]),
+          onRefresh: () => Future.wait([
+            _loadLists(),
+            RenewRequestsState.ensureFresh(force: true),
+            TicketsState.ensureFresh(force: true),
+          ]),
           color: AppColors.brand,
-          child: ValueListenableBuilder<int>(
-            valueListenable: InboxService.changes,
-            builder: (context, _, __) {
+          // الصندوق + حال القسمين بالأعلى (طلبات التجديد، تذاكر المشتركين) — فلا يُقال «لا إشعارات» وأحدهما وصل بعد البناء
+          child: ListenableBuilder(
+            listenable: Listenable.merge([InboxService.changes, RenewRequestsState.gate, TicketsState.gate, TicketsState.bell]),
+            builder: (context, _) {
               final items = InboxService.all;
               final hasApp = items.isNotEmpty;
               final hasExpiredToday = _expiredToday.isNotEmpty;
               final hasNearExpiry = _nearExpiry.isNotEmpty;
               final hasRenew = RenewRequestsState.on && (RenewRequestsState.gate.value?.items.isNotEmpty ?? false);
+              final hasTickets = TicketsState.inBell && TicketsState.bell.value.items.isNotEmpty;
               final allEmpty =
-                  _loaded && !hasApp && !hasExpiredToday && !hasNearExpiry && !hasRenew;
+                  _loaded && !hasApp && !hasExpiredToday && !hasNearExpiry && !hasRenew && !hasTickets;
               return ListView(
                 padding:
                     const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.huge),
                 children: [
                   // «طلبات التجديد» بالأعلى — حين يوجد طلبٌ مفتوح وحده
                   const RenewInboxSection(),
+                  // «تذاكر المشتركين» بعدها — حين ينتظرك شيءٌ منها وحده، ولمن يرى القسم (٩ نوفمبر)
+                  const TicketInboxSection(),
                   if (hasApp) ...[
                     _SectionHeader(
                       title: 'notifications.app_notifications'.tr(),

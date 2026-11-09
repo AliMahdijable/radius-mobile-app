@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/company_route.dart';
 import '../../api/tickets_api.dart';
 import '../../core/util/bidi.dart';
 import '../../core/util/server_time.dart';
@@ -23,7 +24,7 @@ import 'ticket_widgets.dart';
 /// الصور (٩ نوفمبر): زرّ إرفاقٍ بجانب الردّ (الكاميرا أو المعرض، والحاسبة ملفٌّ من الجهاز) يضغطها (ticket_image.dart) ويعرضها
 /// بزرّ إزالة قبل الإرسال، والنصّ اختياريٌّ معها؛ وصور المحادثة مصغّرةٌ في فقاعاتها وبالنقر ملء الشاشة.
 class TicketThreadScreen extends StatefulWidget {
-  const TicketThreadScreen({super.key, required this.ticketId, this.initial, this.viewOnly = false});
+  const TicketThreadScreen({super.key, required this.ticketId, this.initial, this.viewOnly = false, this.openCompany = false});
   final int ticketId;
 
   /// ما عُرف من القائمة — يُرسم فوراً حتى تصل المحادثة.
@@ -31,6 +32,11 @@ class TicketThreadScreen extends StatefulWidget {
 
   /// «كل الشركات»: شركةٌ غير المفتوحة — قراءةٌ وحدها (لا ردّ ولا حالة ولا صفحة مشترك).
   final bool viewOnly;
+
+  /// تذكرة الشركة المفتوحة (من الجرس أو الإشعار — ٩ نوفمبر): كلّ طلباتها لها صراحةً ([CompanyRoute.runOpen]) ولو بقي تحتها قسمٌ
+  /// موجَّهٌ لشركةٍ أخرى ببادئةٍ تطابق (التذاكر أو «بوابة المشترك» على الحاسبة، أو صفحةٌ تحت الإشعار) — فلا تُقرأ ولا يُردّ عليها
+  /// بشركةٍ غير شركتها.
+  final bool openCompany;
 
   /// قراءةٌ دوريّة ما دامت المحادثة مفتوحة (احتياطاً لإشعارٍ لم يصل). null في الاختبارات.
   @visibleForTesting
@@ -66,6 +72,17 @@ class _TicketThreadScreenState extends State<TicketThreadScreen> {
 
   bool get _canWrite => !widget.viewOnly && Perms.has('tickets.view') && Perms.has('tickets.reply');
 
+  /// طلبٌ للتذكرة — للشركة المفتوحة صراحةً حين [TicketThreadScreen.openCompany].
+  Future<T> _api<T>(Future<T> Function() call) => widget.openCompany ? CompanyRoute.runOpen(call) : call();
+
+  /// صور الفقاعات بالقاعدة نفسها (null = الافتراضيّ: الخادم كما هو).
+  TicketImageLoader? get _imageLoader {
+    final custom = TicketThreadScreen.imageLoader;
+    if (!widget.openCompany) return custom;
+    final load = custom ?? TicketsApi.imageBytes;
+    return (ticketId, messageId) => CompanyRoute.runOpen(() => load(ticketId, messageId));
+  }
+
   @override
   void initState() {
     super.initState();
@@ -84,7 +101,7 @@ class _TicketThreadScreenState extends State<TicketThreadScreen> {
 
   Future<void> _load({bool quiet = false}) async {
     if (quiet && (_sending || _busy != null)) return;
-    final r = await TicketsApi.thread(widget.ticketId);
+    final r = await _api(() => TicketsApi.thread(widget.ticketId));
     if (!mounted) return;
     final wasUnread = _ticket?.unread ?? true;
     setState(() {
@@ -116,7 +133,7 @@ class _TicketThreadScreenState extends State<TicketThreadScreen> {
       return;
     }
     setState(() => _sending = true);
-    final r = await TicketsApi.reply(widget.ticketId, text, image: image);
+    final r = await _api(() => TicketsApi.reply(widget.ticketId, text, image: image));
     if (!mounted) return;
     setState(() {
       _sending = false;
@@ -168,7 +185,7 @@ class _TicketThreadScreenState extends State<TicketThreadScreen> {
       if (yes != true || !mounted) return;
     }
     setState(() => _busy = action);
-    final r = action == 'reopen' ? await TicketsApi.reopen(widget.ticketId) : await TicketsApi.setStatus(widget.ticketId, action);
+    final r = await _api(() => action == 'reopen' ? TicketsApi.reopen(widget.ticketId) : TicketsApi.setStatus(widget.ticketId, action));
     if (!mounted) return;
     setState(() {
       _busy = null;
@@ -249,7 +266,7 @@ class _TicketThreadScreenState extends State<TicketThreadScreen> {
                       );
                     }
                     final m = _messages[_messages.length - 1 - (i - (_failed ? 1 : 0))];
-                    return m.isEvent ? _EventRow(message: m) : _Bubble(message: m, ticketId: widget.ticketId);
+                    return m.isEvent ? _EventRow(message: m) : _Bubble(message: m, ticketId: widget.ticketId, loader: _imageLoader);
                   },
                 ),
         ),
@@ -419,9 +436,10 @@ class _TicketThreadScreenState extends State<TicketThreadScreen> {
 
 /// فقاعة رسالة: المشترك في جهة البداية، والوكيل (المدير/الموظّف باسمه) في الجهة الأخرى بلون العلامة؛ وصورتها فوق نصّها.
 class _Bubble extends StatelessWidget {
-  const _Bubble({required this.message, required this.ticketId});
+  const _Bubble({required this.message, required this.ticketId, this.loader});
   final TicketMessage message;
   final int ticketId;
+  final TicketImageLoader? loader;
 
   @override
   Widget build(BuildContext context) {
@@ -449,7 +467,7 @@ class _Bubble extends StatelessWidget {
                   ticketId: ticketId,
                   messageId: m.id,
                   image: m.image!,
-                  loader: TicketThreadScreen.imageLoader,
+                  loader: loader,
                 ),
               ),
               if (m.hasText) const SizedBox(height: Sp.xs),

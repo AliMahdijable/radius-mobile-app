@@ -209,6 +209,8 @@ class TopActions extends StatelessWidget {
 /// في خطر (قربوا الانتهاء + انتهوا اليوم)، رقمٌ واحد لكلّ ما يحتاج انتباهاً.
 /// `AlertsService.count` يتحدّث من قائمة المشتركين ومن شاشة الإشعارات.
 /// + «طلبات التجديد» بانتظارك (٤ نوفمبر — المالك: «في حال اكو طلب يظهر بالجرس»): الاستماع نفسه يقرؤها، والعودة للتطبيق كذلك.
+/// + «تذاكر المشتركين» (٩ نوفمبر — كجرس الويب): غير المقروءة ([TicketsState.bellBadge] — قاعدتها سطرٌ واحد [kTicketsBadgeRule])،
+///   لمن يرى القسم وحده؛ الاستماع يقرؤها للشركة المفتوحة، والعودة للتطبيق وإشعار التذكرة كذلك.
 class _NotificationsChip extends StatefulWidget {
   const _NotificationsChip({required this.onOpen});
 
@@ -244,12 +246,15 @@ class _NotificationsChipState extends State<_NotificationsChip> {
         valueListenable: AlertsService.count,
         builder: (context, alerts, __) => ValueListenableBuilder<RenewSnapshot?>(
           valueListenable: RenewRequestsState.gate,
-          builder: (context, _, __) => TopActionChip(
-            key: const ValueKey('top-actions-notifications'),
-            icon: Icons.notifications_none_rounded,
-            label: 'notifications.title'.tr(),
-            badge: InboxService.unreadCount + alerts + RenewRequestsState.pending,
-            onTap: () => widget.onOpen(const InboxScreen()),
+          builder: (context, _, __) => ValueListenableBuilder<TicketsAccess?>(
+            valueListenable: TicketsState.gate,
+            builder: (context, _, __) => TopActionChip(
+              key: const ValueKey('top-actions-notifications'),
+              icon: Icons.notifications_none_rounded,
+              label: 'notifications.title'.tr(),
+              badge: InboxService.unreadCount + alerts + RenewRequestsState.pending + TicketsState.bellBadge,
+              onTap: () => widget.onOpen(const InboxScreen()),
+            ),
           ),
         ),
       ),

@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../services/auth_storage.dart';
 import '../services/inbox_service.dart';
+import '../services/permissions_service.dart';
 import '../services/provider_service.dart';
 import 'api_client.dart';
 import 'company_route.dart';
@@ -234,6 +236,52 @@ class TicketCounts {
       };
 }
 
+/// ما يعدّه رقم الجرس من التذاكر (٩ نوفمبر). المالك لم يحسم بعد هل يعدّ كلّ «بانتظارك» — **[kTicketsBadgeRule] هو السطر الوحيد
+/// الذي يقلبه** (رقم الجرس ورقم رأس القسم فيه معاً)، والاختبار يفحص الوجهين (test/tickets_bell_test.dart).
+enum TicketsBadgeRule {
+  /// غير المقروءة وحدها (كجرس الويب 2e6f9a4): لا يبقى الجرس مضاءً لتذكرةٍ قرأتها وهي قيد المعالجة.
+  unread,
+
+  /// كلّ «بانتظارك» (جديدة أو قيد المعالجة) حتى يُردّ عليها أو تُحلّ.
+  waiting,
+}
+
+/// قاعدة رقم الجرس — اقلبها هنا وحدها.
+const TicketsBadgeRule kTicketsBadgeRule = TicketsBadgeRule.unread;
+
+/// رقم التذاكر على الجرس من أعداد الخادم بالقاعدة [rule].
+int ticketsBadgeCount(TicketCounts c, [TicketsBadgeRule rule = kTicketsBadgeRule]) => switch (rule) {
+      TicketsBadgeRule.unread => c.unread,
+      TicketsBadgeRule.waiting => c.open,
+    };
+
+/// قسم «تذاكر المشتركين» في الجرس: ما ينتظر عملاً — غير المقروءة أوّلاً ثمّ «بانتظارك» — بأحدث [TicketsState.bellMax] منها،
+/// و[total] كلّ ما ينتظر (لسطر «و N غيرها…»).
+@immutable
+class TicketsBell {
+  const TicketsBell({this.items = const [], this.total = 0});
+  final List<Ticket> items;
+  final int total;
+
+  static const empty = TicketsBell();
+
+  /// ما لم يُعرض منها.
+  int get more => math.max(0, total - items.length);
+}
+
+/// ترتيب الجرس كترتيب الخادم: غير المقروءة أوّلاً، ثمّ الأحدث نشاطاً.
+List<Ticket> sortBellFirst(Iterable<Ticket> list) {
+  final out = list.toList();
+  out.sort((a, b) {
+    if (a.unread != b.unread) return a.unread ? -1 : 1;
+    final ta = a.lastActivityAt, tb = b.lastActivityAt;
+    if (ta != null && tb != null && ta != tb) return tb.compareTo(ta);
+    if ((ta == null) != (tb == null)) return ta == null ? 1 : -1;
+    return b.id.compareTo(a.id);
+  });
+  return out;
+}
+
 /// ما يملكه المستخدم من القسم — يُقرأ لكلّ مستخدمٍ للحساب (الموظّف بلا صلاحيّة يرى القسم مقفلاً لا مخفيّاً).
 class TicketsAccess {
   const TicketsAccess({required this.available, this.canView = false, this.canReply = false, this.scoped = false, this.counts});
@@ -421,17 +469,34 @@ class TicketsApi {
   static Future<TicketWrite> reopen(int id) => _write('$base/$id/reopen', const {});
 }
 
-/// حال «التذاكر» للجلسة — شارة «قوائم أخرى» وقائمة الحاسبة الجانبيّة يستمعان له. يُقرأ عند أوّل مستمع، وعند العودة للتطبيق،
-/// وحين يصل إشعار تذكرة (FCM أو تغذية الحاسبة — كلاهما يمرّ بصندوق الإشعارات)، وبعد كلّ إجراء. للشركة المفتوحة دائماً.
+/// حال «التذاكر» للجلسة — شارة «قوائم أخرى» وقائمة الحاسبة الجانبيّة والجرس (رقمه وقسم «تذاكر المشتركين») يستمعون له. يُقرأ عند
+/// أوّل مستمع، وعند العودة للتطبيق، وحين يصل إشعار تذكرة (FCM أو تغذية الحاسبة — كلاهما يمرّ بصندوق الإشعارات)، وبعد كلّ إجراء.
+/// للشركة المفتوحة دائماً ([CompanyRoute.runOpen]) — بـ«كل الشركات» لا يُكتب فوقه رقم شركةٍ أخرى ولا تذاكرها.
 class TicketsState {
   TicketsState._();
 
   /// null = لم يُعرف بعد.
   static final ValueNotifier<TicketsAccess?> gate = _TicketsGate();
 
+  /// «تذاكر المشتركين» في الجرس (٩ نوفمبر) — تُقرأ مع الملخّص حين يوجد ما ينتظر وحده، ولمن يرى القسم وحده ([inBell]).
+  static final ValueNotifier<TicketsBell> bell = ValueNotifier<TicketsBell>(TicketsBell.empty);
+
+  /// أقصى ما يُعرض في الجرس (كطلبات التجديد وجرس الويب).
+  static const bellMax = 5;
+
+  /// قاعدة رقم الجرس — [kTicketsBadgeRule] دائماً؛ الاختبار وحده يبدّلها ([debugSetBadgeRule]) ليفحص الوجهين.
+  static TicketsBadgeRule get badgeRule => _badgeRule;
+  static TicketsBadgeRule _badgeRule = kTicketsBadgeRule;
+
+  @visibleForTesting
+  static void debugSetBadgeRule(TicketsBadgeRule rule) => _badgeRule = rule;
+
   static int _epoch = 0;
   static DateTime? _fetchedAt;
   static DateTime? _failedAt;
+
+  /// قائمة الجرس تعذّرت والملخّص وصل: تُعاد بعد التبريد مع أوّل سؤالٍ تالٍ ولو لم تنتهِ المهلة — ولا تحبس الملخّص نفسه.
+  static DateTime? _bellFailedAt;
   static Future<void>? _inflight;
   static String? _lastInboxId;
 
@@ -443,13 +508,24 @@ class TicketsState {
   /// غير المقروءة لطرف الوكيل (الشارة).
   static int get unread => on ? gate.value!.counts?.unread ?? 0 : 0;
 
+  /// الجرس: القسم متاحٌ ويملكه المستخدم (الخادم)، غير مقيَّدٍ بمديرٍ فرعيّ، وصلاحيّته عندنا — الموظّف بلا «التذاكر — العرض» لا يرى
+  /// شيئاً هناك ولا يُطلب له شيء (والقسم مقفلٌ بمكانه في «قوائم أخرى»).
+  static bool get inBell => _bellFor(gate.value);
+
+  static bool _bellFor(TicketsAccess? a) => a != null && a.on && !a.scoped && Perms.has('tickets.view');
+
+  /// رقم التذاكر على الجرس ورأس قسمها ([ticketsBadgeCount] بالقاعدة [badgeRule]).
+  static int get bellBadge => inBell ? ticketsBadgeCount(gate.value!.counts ?? const TicketCounts(), badgeRule) : 0;
+
   static Future<void> ensureFresh({bool force = false}) {
     final running = _inflight;
     if (running != null) return running;
     final now = DateTime.now();
     if (!force) {
       final at = _fetchedAt;
-      if (at != null && now.difference(at) < ttl) return Future<void>.value();
+      final bellFailed = _bellFailedAt;
+      final bellRetry = bellFailed != null && now.difference(bellFailed) >= _cooldown;
+      if (at != null && now.difference(at) < ttl && !bellRetry) return Future<void>.value();
     }
     final failed = _failedAt;
     if (failed != null && now.difference(failed) < _cooldown) return Future<void>.value();
@@ -469,9 +545,49 @@ class TicketsState {
       _failedAt = DateTime.now();
       return;
     }
+    // الجرس: لمن يرى القسم وحده، وبلا نداءٍ ثانٍ حين لا شيء ينتظر
+    TicketsBell? b = TicketsBell.empty;
+    if (_bellFor(a)) {
+      b = await _readBell(a.counts ?? const TicketCounts());
+      if (epoch != _epoch) return;
+    }
     _fetchedAt = DateTime.now();
     _failedAt = null;
+    if (b == null) {
+      // الملخّص وصل وقائمة الجرس تعذّرت: الأرقام تتحدّث، وما عُرض يبقى حتى المحاولة التالية (بعد التبريد)
+      _bellFailedAt = DateTime.now();
+    } else {
+      _bellFailedAt = null;
+      bell.value = b;
+    }
     gate.value = a;
+  }
+
+  /// ما ينتظر عملاً للجرس: «بانتظارك» (غير المقروءة أوّلاً — ترتيب الخادم)، وغير المقروءة خارجها (ألغاها المشترك — يعدّها الخادم في
+  /// unread) حين لا تملأ الأولى الجرس — كلٌّ بنداءٍ حين يلزم وحده. null = تعذّر.
+  static Future<TicketsBell?> _readBell(TicketCounts c) async {
+    if (c.open <= 0 && c.unread <= 0) return TicketsBell.empty;
+    var items = const <Ticket>[];
+    if (c.open > 0) {
+      final p = await TicketsApi.list(filter: TicketFilter.open, limit: bellMax);
+      if (p == null) return null;
+      items = p.items;
+    }
+    final unreadOpen = items.where((t) => t.unread).length;
+    // غير المقروءة أوّل «بانتظارك»: الصفحة تحويها كلّها ما لم تمتلئ بها — فالباقي من العدد خارجها
+    final complete = items.length < bellMax || unreadOpen < items.length;
+    final outside = complete ? math.max(0, c.unread - unreadOpen) : 0;
+    var extra = const <Ticket>[];
+    if (outside > 0) {
+      final p = await TicketsApi.list(filter: TicketFilter.closed, limit: bellMax);
+      if (p == null) return null;
+      extra = p.items.where((t) => t.unread).toList();
+    }
+    final all = sortBellFirst([...extra, ...items]);
+    return TicketsBell(
+      items: List<Ticket>.unmodifiable(all.take(bellMax)),
+      total: [c.open + outside, c.unread, all.length].reduce(math.max),
+    );
   }
 
   /// العودة للتطبيق: إشعارٌ وصل والتطبيق بالخلفيّة لم يمرّ هنا — يُقرأ ثانيةً (بمهلةٍ قصيرة لا كلّ رجوع).
@@ -503,17 +619,21 @@ class TicketsState {
     _epoch++;
     _fetchedAt = null;
     _failedAt = null;
+    _bellFailedAt = null;
     _inflight = null;
+    bell.value = TicketsBell.empty;
     gate.value = null;
     TicketsApi._images.clear();
   }
 
   @visibleForTesting
-  static void debugSet(TicketsAccess? a) {
+  static void debugSet(TicketsAccess? a, {TicketsBell bell = TicketsBell.empty}) {
     _epoch++;
     _inflight = null;
     _failedAt = null;
+    _bellFailedAt = null;
     _fetchedAt = a == null ? null : DateTime.now();
+    TicketsState.bell.value = bell;
     gate.value = a;
   }
 
