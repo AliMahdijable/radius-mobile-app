@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:pdf/pdf.dart';
 
 import '../core/platform/app_platform.dart';
+import 'receipt_printer/receipt_printer_prefs.dart';
 
 /// نوع الطابعة الافتراضية للـmobile receipts.
 ///   • pos → 80mm thermal (الأشهر بين المكاتب)
@@ -94,6 +95,8 @@ class PrintPrefs {
     } catch (_) {
       saleInvoice.value = false;
     }
+    // «طابعة الوصولات» بالهاتف (بلوتوث / طابعة الجهاز، ٩ نوفمبر) — الافتراضيّ نافذة الطباعة كما كان.
+    await ReceiptPrinterPrefs.load();
   }
 
   static Future<void> setSaleInvoice(bool on) async {

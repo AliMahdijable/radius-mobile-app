@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -15,9 +16,11 @@ import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import 'print_output.dart';
+import 'receipt_printer/receipt_printer_prefs.dart';
 
-/// ما يختاره المستخدم بالهاتف: صورةٌ للمشاركة أو نافذة الطباعة (PDF).
-enum OutputChoice { image, print }
+/// ما يختاره المستخدم بالهاتف: صورةٌ للمشاركة أو نافذة الطباعة (PDF) — أو «طابعة الوصولات» (بلوتوث / طابعة الجهاز)
+/// حين اختارها المدير من الإعدادات (٩ نوفمبر).
+enum OutputChoice { image, print, receiptPrinter }
 
 /// «صورة» بالهاتف (٨ نوفمبر — المالك: «الوصولات بالهاتف صوره تكون اختيار افضل من pdf»): الوصل والسند يُشارَكان صورةً
 /// (واتساب وغيره) بدل ملف PDF بمقاس الورق — الصورة من المستند نفسه كما يُطبع. التقارير لا (المالك: «التقرير المالي اني
@@ -102,7 +105,9 @@ class PhoneOutput {
   }
 
   /// صورةٌ أم طباعة؟ — null إن أُغلقت بلا اختيار (لا شيء يحدث).
-  static Future<OutputChoice?> choose(BuildContext context, {required String title}) {
+  ///
+  /// [printer] طابعة الوصولات المختارة (بلوتوث / الجهاز): خيارٌ أوّل «اطبع على …» فوق الخيارين. بلاها النافذة كما كانت حرفاً.
+  static Future<OutputChoice?> choose(BuildContext context, {required String title, ReceiptPrinterChoice? printer}) {
     return showAppSheet<OutputChoice>(
       context: context,
       isScrollControlled: true,
@@ -119,12 +124,27 @@ class PhoneOutput {
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (printer != null) ...[
+              _ChoiceTile(
+                key: const ValueKey('output-receipt-printer'),
+                icon: printer.mode == ReceiptPrinterMode.builtin ? LucideIcons.tabletSmartphone : LucideIcons.bluetooth,
+                title: printer.mode == ReceiptPrinterMode.builtin
+                    ? 'receipt_printer.print_on_builtin'.tr()
+                    : 'receipt_printer.print_on'.tr(args: [printer.name]),
+                hint: printer.mode == ReceiptPrinterMode.builtin
+                    ? 'receipt_printer.choice_hint_builtin'.tr(args: ['${printer.paper.mm}'])
+                    : 'receipt_printer.choice_hint_bluetooth'.tr(args: ['${printer.paper.mm}']),
+                primary: true,
+                onTap: () => Navigator.of(ctx).pop(OutputChoice.receiptPrinter),
+              ),
+              const SizedBox(height: Sp.sm),
+            ],
             _ChoiceTile(
               key: const ValueKey('output-image'),
               icon: LucideIcons.image,
               title: 'صورة',
               hint: 'للمشاركة — واتساب وتلغرام وغيرهما',
-              primary: true,
+              primary: printer == null,
               onTap: () => Navigator.of(ctx).pop(OutputChoice.image),
             ),
             const SizedBox(height: Sp.sm),

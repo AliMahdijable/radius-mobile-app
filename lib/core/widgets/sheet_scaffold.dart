@@ -102,6 +102,9 @@ Future<void> showSheetSnackOn(
 /// الإشعار الحيّ لكلّ وسم — انظر `tag` في [showSheetSnack].
 final _liveByTag = <Object, _SheetSnackEntry>{};
 
+/// يُزيل إشعار الوسم [tag] إن كان ظاهراً — «جاري الطباعة…» حين تنتهي الطباعة بورقة سببٍ لا بإشعار.
+void dismissSheetSnack(Object tag) => _liveByTag.remove(tag)?._dismiss();
+
 class _SheetSnackEntry {
   _SheetSnackEntry({
     required this.message,
