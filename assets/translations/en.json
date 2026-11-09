@@ -365,6 +365,8 @@
     "section_connection_on": "Online or not, since when, session download and upload, and last connection",
     "section_usage": "Usage",
     "section_usage_on": "Download and upload for each day and month",
+    "section_finance": "Financial transactions",
+    "section_finance_on": "Activations, extensions, debts and payments, with date and amount",
     "section_off_hint": "Hidden from your subscribers",
     "section_shown": "Shown",
     "section_hidden": "Hidden",

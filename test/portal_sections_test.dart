@@ -612,4 +612,125 @@ void main() {
       await simDrain(t);
     });
   });
+
+  // ═════════════════════════ «الحركات الماليّة» (المالك ٩ نوفمبر) ═════════════════════════
+  // «بوابة المشترك — إضافة إمكانية إخفاء وإظهار قسم الحركات المالية»: مفتاحٌ ثالث بالمفتاحين نفسهما
+  // (الشكل والحفظ والقفل)، يُرسم حين يرسله الخادم وحده — خادمٌ أقدم (أو قبل هجرته 079) يرفض حفظه.
+  group('الحركات الماليّة', () {
+    const finance = 'الحركات الماليّة';
+    const financeHint = 'التفعيل والتمديد والدين والتسديد، بالتاريخ والمبلغ';
+    const withFinance = {'connection': true, 'usage': true, 'device': false, 'finance': true};
+
+    test('العقد: غائبٌ = لا يعرفه الخادم (null، ظاهرٌ عند المشترك) · 0/false مخفيّ · toJson بما يعرفه', () {
+      const d = PortalSections();
+      expect(d.finance, isNull);
+      expect(d.knows(PortalSection.finance), isFalse);
+      expect(d.knows(PortalSection.usage), isTrue);
+      expect(d.of(PortalSection.finance), isTrue, reason: 'الافتراض عند المشترك: ظاهرة');
+      expect(PortalSections.fromJson(const {'usage': false}).finance, isNull);
+      expect(PortalSections.fromJson(const {'finance': false}).finance, isFalse);
+      expect(PortalSections.fromJson(const {'finance': 0}).finance, isFalse);
+      expect(PortalSections.fromJson(const {'finance': '1'}).finance, isTrue);
+      expect(PortalSections.fromJson(const {'finance': 'x'}).finance, isTrue,
+          reason: 'حاضرٌ غير مفهوم ⇒ افتراضه (ظاهرة)');
+      expect(d.toJson().containsKey('finance'), isFalse);
+      final f = PortalSections.fromJson(withFinance);
+      expect(f.knows(PortalSection.finance), isTrue);
+      expect(f.toJson(), withFinance);
+      final off = f.withValue(PortalSection.finance, false);
+      expect(off.finance, isFalse);
+      expect(off.connection, isTrue);
+      expect(off == f, isFalse);
+      expect(d.withValue(PortalSection.usage, false).finance, isNull,
+          reason: 'نقرةٌ على غيرها لا تجعلها معروفة');
+      // ردّ حفظٍ جزئيّ: الناقص من current (ومنه finance) — ولا يقلبها.
+      expect(PortalSections.fromJson(const {'usage': false}, fallback: off).finance, isFalse);
+      expect(PortalAccess.fromJson(const {'sections': withFinance}).sections?.finance, isTrue);
+    });
+
+    test('🚨 الحفظ: {sections:{finance}} وحده، والمحفوظ من ردّ الخادم', () async {
+      server.reply('PUT', _settings, 200, {
+        'success': true,
+        'sections': {'connection': true, 'usage': true, 'device': false, 'finance': false},
+      });
+      final r = await PortalSettingsApi.setPortalSections(PortalSection.finance, false,
+          current: PortalSections.fromJson(withFinance));
+      expect(server.bodies('PUT', _settings).single, {
+        'sections': {'finance': false},
+      });
+      expect(r.ok, isTrue);
+      expect(r.sections?.finance, isFalse);
+      expect(r.sections?.connection, isTrue);
+    });
+
+    testWidgets('🚨 المالك: ثالث المفاتيح بعد «الاستهلاك» بحالته من الخادم، والنقرة تُحفظ بمفتاحها وحده',
+        (t) async {
+      settings(sections: withFinance);
+      final stored = mergingServer(Map<String, bool>.from(withFinance));
+      await open(t);
+      expect(find.byType(Switch), findsNWidgets(4), reason: 'البوّابة + الأقسام الثلاثة');
+      expect(valueOf(t, finance), isTrue);
+      expect(find.text(financeHint), findsOneWidget);
+      expect(find.byIcon(LucideIcons.receipt), findsOneWidget);
+      double y(String s) => t.getTopLeft(find.text(s)).dy;
+      expect(y(_usage), lessThan(y(finance)));
+      expect(y(finance), lessThan(y('آخر دخول المشتركين')));
+
+      await t.tap(switchOf(finance));
+      await t.pumpAndSettle();
+      expect(sentSections(), [
+        {'finance': false},
+      ]);
+      expect(stored['finance'], isFalse);
+      expect(valueOf(t, finance), isFalse);
+      expect(valueOf(t, _connection), isTrue);
+      expect(valueOf(t, _usage), isTrue);
+      expect(find.descendant(of: tile(finance), matching: find.text(_hiddenHint)), findsOneWidget);
+      expect(find.text(financeHint), findsNothing);
+      expect(find.byType(SnackBar), findsNothing);
+
+      await t.tap(switchOf(finance));
+      await t.pumpAndSettle();
+      expect(sentSections().last, {'finance': true});
+      expect(valueOf(t, finance), isTrue);
+    });
+
+    testWidgets('🚨 خادمٌ لا يرسلها: لا مفتاح لها (حفظها يُرفض) — والمفتاحان كما كانا', (t) async {
+      settings(sections: const {'connection': true, 'usage': false});
+      mergingServer(const {'connection': true, 'usage': false, 'device': false});
+      await open(t);
+      expect(find.text(finance), findsNothing);
+      expect(find.byType(Switch), findsNWidgets(3));
+      await t.tap(switchOf(_usage));
+      await t.pumpAndSettle();
+      expect(find.text(finance), findsNothing, reason: 'نقرةٌ على غيرها لا تُظهرها');
+      expect(server.bodies('PUT', _settings).every((b) => !(b['sections'] as Map).containsKey('finance')), isTrue);
+    });
+
+    testWidgets('🚨 موظّفٌ بلا settings.edit: بمكانها مقفلة بحالتها — والنقر لا يحفظ', (t) async {
+      PermissionsService.debugSet(isEmployee: true);
+      settings(sections: const {'connection': true, 'usage': true, 'device': false, 'finance': false});
+      await open(t);
+      expect(find.text(finance), findsOneWidget);
+      expect(find.byType(Switch), findsNothing);
+      expect(find.descendant(of: tile(finance), matching: find.text('مخفي')), findsOneWidget);
+      expect(find.descendant(of: tile(finance), matching: find.byType(PermLockIcon)), findsOneWidget);
+      await t.tap(find.text(finance));
+      await t.pump();
+      expect(find.text(_askManager), findsOneWidget);
+      expect(server.calls('PUT', _settings), isEmpty);
+      await simDrain(t);
+    });
+
+    testWidgets('ايرث لنك: لصاحب الحساب كبقيّة الأقسام', (t) async {
+      ProviderService.debugSet('earthlink');
+      settings(sections: withFinance);
+      mergingServer(Map<String, bool>.from(withFinance));
+      await open(t);
+      expect(valueOf(t, finance), isTrue);
+      await t.tap(switchOf(finance));
+      await t.pumpAndSettle();
+      expect(sentSections().single, {'finance': false});
+    });
+  });
 }
