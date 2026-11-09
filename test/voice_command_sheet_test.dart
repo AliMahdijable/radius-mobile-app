@@ -209,13 +209,13 @@ void main() {
           }),
         ];
     SubscriberVoiceCheck.debugLocalAllowed = () => true;
-    SubscriberVoiceCheck.debugProbe = (_) async => DeviceHealthSnapshot(
+    SubscriberVoiceCheck.debugProbe = (_) async => const DeviceHealthSnapshot(
         kind: DeviceKind.ubiquiti,
         ip: '10.0.0.7',
         ubnt: UbiquitiStatus(
             hostname: 'Nano-Ali', firmware: 'XC', uptimeSeconds: 1, ssid: 's', mode: 'sta', signalDbm: -55,
             noiseFloorDbm: -95, ccqPercent: 92, distanceMeters: 1, txRateKbps: 1, rxRateKbps: 1,
-            lanPorts: const [LanPort(name: 'eth0', speed: '100Mbps-Full', plugged: true)], peerMac: null, peerCount: 1,
+            lanPorts: [LanPort(name: 'eth0', speed: '100Mbps-Full', plugged: true)], peerMac: null, peerCount: 1,
             baseUrl: 'http://x'));
     addTearDown(() {
       SubscriberVoiceCheck.debugLocalAllowed = null;
@@ -237,6 +237,38 @@ void main() {
     await close(t);
   });
 
+  testWidgets('المراجعة ١٠ نوفمبر: «افحص المشترك» من آخر قراءةٍ عبر الـVPN ⇒ مصدرها بعمرها كـ«الفحص العامّ»',
+      (t) async {
+    // آخر فحصٍ عبر الـVPN قبل ١٢ دقيقة (يُقبل حتى ٣٠ د) — كان «عبر VPN الشركة» بلا عمر كأنّه الآن
+    VoiceResolver.loadSubscribers = () async => [
+          Subscriber.fromJson({
+            'idx': '11', 'username': 'ali.hussein', 'firstname': 'علي', 'lastname': 'حسين', 'online_status': 1,
+            'remaining_days': 12, 'ip_address': '10.0.0.7',
+          }),
+        ];
+    SubscriberVoiceCheck.debugLocalAllowed = () => false;
+    SubscriberVoiceCheck.debugVpnAllowed = () => true;
+    SubscriberVoiceCheck.debugVpnRun = (s, c) async {};
+    VpnNow.debugApply(
+        VpnNowKind.subscribers,
+        const VpnNowResult(
+            ok: true, message: 'تم', readings: {'ali.hussein': VpnSubReading(src: 'sector', sig: -58, ccq: 93)}));
+    SubscriberVoiceCheck.debugNow = () => DateTime.now().add(const Duration(minutes: 12));
+    addTearDown(() {
+      SubscriberVoiceCheck.debugLocalAllowed = null;
+      SubscriberVoiceCheck.debugVpnAllowed = null;
+      SubscriberVoiceCheck.debugVpnRun = null;
+      SubscriberVoiceCheck.debugNow = null;
+      VpnNow.reset();
+    });
+    await open(t);
+    await say(t, 'افحص المشترك علي حسين');
+    expect(find.byKey(const ValueKey('voice-sub-answer')), findsOneWidget);
+    expect(find.text('الإشارة وCCQ سليمة'), findsOneWidget);
+    expect(find.text('عبر VPN الشركة · منذ 12 دقيقة · من السكتر'), findsOneWidget);
+    await close(t);
+  });
+
   testWidgets('٨ نوفمبر: «افحص سكتر الشمال» ⇒ كرت الجهاز بنتيجة فحصه مباشرةً (حاله وما به) و«التقرير الكامل»', (t) async {
     // المالك: «يقول افحص سكتر فلان… يجيب له الكارت مباشره يعطي نتيجه الجهاز شنو اللي بي»
     final sector = NetworkDevice(
@@ -250,10 +282,10 @@ void main() {
     DevicesCheckRunner.debugLimits = () async => const CheckLimits(subSignal: -70, subCcq: 50);
     DevicesCheckRunner.debugSubscribers = () async => const [];
     DevicesCheckRunner.debugProbe = (d) async => (status: 'online', responseMs: 4, packetLoss: 0.0, serviceOk: true);
-    DevicesCheckRunner.debugFetch = (d) async => ProbeResult(
-          vitals: const [],
-          counters: const {},
-          detail: const DeviceDetail(glance: DeviceGlance(isAp: true, cpu: 20), peers: [
+    DevicesCheckRunner.debugFetch = (d) async => const ProbeResult(
+          vitals: [],
+          counters: {},
+          detail: DeviceDetail(glance: DeviceGlance(isAp: true, cpu: 20), peers: [
             PeerLink(name: 'ali.home', signal: -61, ccq: 95),
             PeerLink(name: 'omar.weak', signal: -79, ccq: 80),
           ]),

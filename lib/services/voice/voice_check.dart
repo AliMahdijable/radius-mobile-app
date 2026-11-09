@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../api/device_probe_api.dart';
 import '../../core/util/format.dart';
+import '../../core/util/server_time.dart';
 import '../../models/device_health.dart';
 import '../../models/merged_company.dart';
 import '../../models/subscriber.dart';
@@ -68,6 +69,9 @@ class SubscriberVoiceCheck extends ChangeNotifier {
   bool _localWitness = true;
   bool _localNoMetrics = false;
 
+  /// وقت قراءة الـVPN التي جاء منها الجواب — null لجوابٍ من فحص الهاتف أو بلا قراءة.
+  DateTime? _vpnFrom;
+
   // انتظار فحص الـVPN: المهلة أو الإغلاق ⇒ يتوقّف ولا يبدأ فحصاً بعدها؛ ومتابعة الجاري حتى يكتمل.
   bool _gaveUp = false;
   Completer<void>? _wait;
@@ -84,6 +88,8 @@ class SubscriberVoiceCheck extends ChangeNotifier {
   static bool Function()? debugVpnAllowed;
   @visibleForTesting
   static Future<bool> Function(MergedCompany c)? debugIsOpen;
+  @visibleForTesting
+  static DateTime Function()? debugNow;
 
   static const probeTimeout = Duration(seconds: 15);
   static const vpnTimeout = Duration(minutes: 3);
@@ -139,8 +145,20 @@ class SubscriberVoiceCheck extends ChangeNotifier {
     return '${parts.length == 1 ? parts.first : '${parts.sublist(0, parts.length - 1).join('، ')} و${parts.last}'} سليمة';
   }
 
-  /// الجواب بجملةٍ واحدة (للنسخ ولردٍّ صوتيٍّ لاحقاً).
-  String get spoken => [headline, daysLine, deviceLine].whereType<String>().join(' · ');
+  /// الجواب بجملةٍ واحدة (للنسخ ولردٍّ صوتيٍّ لاحقاً) — وقراءة الـVPN القديمة بعمرها.
+  String get spoken {
+    final age = vpnAge;
+    return [headline, daysLine, deviceLine, if (age != null) 'عبر VPN الشركة · $age'].whereType<String>().join(' · ');
+  }
+
+  /// عمر قراءة الـVPN التي جاء منها الجواب بكلمات «الفحص العامّ» («منذ 12 دقيقة») — null لفحص الهاتف الطازج أو
+  /// لقراءةٍ من هذه الدقيقة (المراجعة ١٠ نوفمبر: آخر قراءةٍ عبر الـVPN — حتى ٣٠ د — كانت تُعرض بلا عمر كأنّها الآن).
+  String? get vpnAge {
+    final at = _vpnFrom;
+    final now = debugNow?.call() ?? DateTime.now();
+    if (at == null || now.difference(at).inMinutes < 1) return null;
+    return timeAgoAr(at, now: now);
+  }
 
   bool get _localAllowed =>
       debugLocalAllowed?.call() ?? (!VpnNow.mode.value && !AgentNetPresence.isOff && PermissionsService.subsCheckNet);
@@ -157,6 +175,7 @@ class SubscriberVoiceCheck extends ChangeNotifier {
   void _unmeasured(VpnSubReading v) {
     final m = SubscribersCheck.unmeasured(sub, v);
     _miss(SubscribersCheck.catOf(m.why), m.why == SubsMissWhy.noMetrics ? _noMetricsWhy : SubscribersCheck.missText(m));
+    _vpnFrom = _vpnAt();
   }
 
   static const _noMetricsWhy = 'جهازه ليس نانو ولا وحدةً ضوئيّة';
@@ -177,6 +196,7 @@ class SubscriberVoiceCheck extends ChangeNotifier {
       readAt: (_) => vpnAt,
     );
     row = [...r.rows, ...r.healthy].firstOrNull;
+    _vpnFrom = row?.reading?.vpn == true ? row!.reading!.at : null;
   }
 
   Future<void> run() async {
@@ -255,6 +275,7 @@ class SubscriberVoiceCheck extends ChangeNotifier {
     row = null;
     cat = null;
     note = null;
+    _vpnFrom = null;
     waitingVpn = false;
     final v = VpnNow.readingFor(sub.username, company: sub.companyKey);
     if (v != null && !v.dead && !v.measured) {
@@ -263,6 +284,7 @@ class SubscriberVoiceCheck extends ChangeNotifier {
       _apply(vpn: v, vpnAt: _vpnAt());
     } else if (v?.dead == true) {
       _miss(SubsCheckCat.noReply, 'لا يستجيب');
+      _vpnFrom = _vpnAt();
     } else if (_vpnPending) {
       waitingVpn = true;
       _miss(SubsCheckCat.unchecked,

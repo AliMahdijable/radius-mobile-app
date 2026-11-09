@@ -598,10 +598,13 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
     final bad = {for (final p in r?.problems ?? const <SubsCheckProblem>[]) p.kind};
     final busy = c.phase == VoiceCheckPhase.probing || c.phase == VoiceCheckPhase.vpn;
     final vpnLine = c.phase == VoiceCheckPhase.vpn ? VpnNow.subscribers.line : null;
+    // قراءة الـVPN ليست من هذه اللحظة ⇒ بعمرها كبطاقة «الشركات» في «الفحص العامّ» (المراجعة ١٠ نوفمبر)
+    final age = c.vpnAge;
     final source = r?.reading == null
-        ? null
+        ? (age == null ? null : 'عبر VPN الشركة · $age')
         : [
             r!.reading!.vpn ? 'عبر VPN الشركة' : 'من شبكتك',
+            if (age != null) age,
             if (r.reading!.via != null) 'من ${r.reading!.via}',
             if (r.reading!.device != null) r.reading!.device!,
           ].join(' · ');
@@ -670,9 +673,11 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
                 style: AppType.label(color: bad.isEmpty ? AppColors.success : AppTone.danger.fill)
                     .copyWith(fontSize: 13, fontWeight: FontWeight.w700)),
             if (source != null) Text(source, style: AppType.muted(color: AppColors.textLow)),
-          ] else if (c.deviceLine != null)
+          ] else if (c.deviceLine != null) ...[
             Text(c.deviceLine!,
                 key: const ValueKey('voice-answer-device'), style: AppType.label(color: AppColors.warning)),
+            if (source != null) Text(source, style: AppType.muted(color: AppColors.textLow)),
+          ],
         ],
         const SizedBox(height: Sp.sm),
         FilledButton(

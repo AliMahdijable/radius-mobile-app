@@ -481,5 +481,41 @@ void main() {
       expect(job.busy, isFalse, reason: 'لا فحصٌ ثانٍ لشركةٍ فُحصت للتوّ');
       c.dispose();
     });
+
+    test('جوابٌ من آخر قراءةٍ عبر الـVPN ليست من هذه اللحظة ⇒ بعمرها بكلمات «الفحص العامّ»، والجديدة بلا عمر',
+        () async {
+      addTearDown(() => SubscriberVoiceCheck.debugNow = null);
+      final b = _co('c0000000000b1', 'ايرث لنك');
+      SubscriberVoiceCheck.debugLocalAllowed = () => false;
+      SubscriberVoiceCheck.debugVpnAllowed = () => true;
+      var runs = 0;
+      SubscriberVoiceCheck.debugVpnRun = (s, c) async => runs++;
+      VpnNow.debugApplyCompany(
+          b.key,
+          const VpnNowResult(ok: true, message: 'تم', readings: {
+            'old.u': VpnSubReading(src: 'cpe', sig: -55, ccq: 95, lan: '100'),
+            'ping.u': VpnSubReading(src: 'ping', ms: 7),
+          }));
+      final c = SubscriberVoiceCheck(_sub('old.u', company: b.key), company: b);
+      await c.run();
+      expect(runs, 0, reason: 'آخر قراءةٍ تكفي (السرعة أوّلاً) — بعمرها');
+      expect(c.vpnAge, isNull, reason: 'من هذه الدقيقة');
+      expect(c.spoken, 'فعّال ومتّصل · باقي 20 يوماً · الإشارة، CCQ والكيبل سليمة');
+      // بعد ١٢ دقيقة: القراءة نفسها (آخر فحصٍ عبر الـVPN حتى ٣٠ د) بعمرها
+      SubscriberVoiceCheck.debugNow = () => DateTime.now().add(const Duration(minutes: 12));
+      expect(c.vpnAge, 'منذ 12 دقيقة');
+      expect(c.spoken, 'فعّال ومتّصل · باقي 20 يوماً · الإشارة، CCQ والكيبل سليمة · عبر VPN الشركة · منذ 12 دقيقة');
+      // يردّ بلا مقاييس من القراءة نفسها ⇒ بعمرها كذلك
+      final p = SubscriberVoiceCheck(_sub('ping.u', company: b.key), company: b);
+      await p.run();
+      expect(p.spoken, endsWith('جهازه ما ردّ — يردّ، ما انقرت مقاييسه · عبر VPN الشركة · منذ 12 دقيقة'));
+      // وفحص الهاتف الطازج بلا عمر
+      SubscriberVoiceCheck.debugLocalAllowed = () => true;
+      SubscriberVoiceCheck.debugProbe =
+          (_) async => DeviceHealthSnapshot(kind: DeviceKind.ubiquiti, ip: '10.0.0.7', ubnt: _ubnt(-55, 95));
+      final l = SubscriberVoiceCheck(_sub('l'));
+      await l.run();
+      expect([l.row?.reading?.vpn, l.vpnAge], [false, null]);
+    });
   });
 }
