@@ -368,8 +368,13 @@ class ElEmployeePerms {
   /// والمشروع الوطنيّ يزيد [nationalExtraKeys] بلا تصفيةٍ بقدرات صاحبه (لا تخصّ الساس — أقسام بوّابته).
   static Set<String> _kitKeysForSession() {
     final base = PermissionsService.isEmployee ? kitKeys : kitKeys.where(Perms.has).toSet();
-    return isNationalSession ? {...base, ...nationalExtraKeys} : base;
+    // «التذاكر» لكلّ الشركات ما عدا الوطنيّ (المالك ٩ نوفمبر) — مفتاحاها لا يُعرضان لموظّفه
+    return isNationalSession ? {...base, ...nationalExtraKeys}.difference(ticketKeys) : base;
   }
+
+  /// «التذاكر» (٩ نوفمبر، الخادم server/tickets.js): العرض والإشعار، والردّ والحالة والإغلاق — مطفأان افتراضاً، ويُمنحان فرادى
+  /// (خارج «موظّف عام»). لموظّفي ايرث لنك وفايبر اكس والشركات المُضافة كموظّفي الساس، ما عدا المشروع الوطنيّ.
+  static const ticketKeys = <String>{'tickets.view', 'tickets.reply'};
 
   /// جلسة المشروع الوطنيّ (شركةٌ مُضافة أبو مشتركها الزون — watani).
   static bool get isNationalSession => ProviderService.isKit && ProviderService.parentIsZone;
@@ -434,6 +439,7 @@ class ElEmployeePerms {
     'devices.monitor',
     'devices.manage',
     'assistant.use',
+    ...ticketKeys,
   };
 
   /// موظّفونا لحساب فايبر اكس (٣١ أكتوبر — المالك: «فايبر اكس خلي موظفينا فقط… احنه اصلا موفرين هلمزية»): ما يفرضه
@@ -476,6 +482,7 @@ class ElEmployeePerms {
     'devices.monitor',
     'devices.manage',
     assistantKey,
+    ...ticketKeys,
   };
 
   /// ما يختلف معناه لموظّف فايبر اكس عن ايرث لنك.
@@ -524,6 +531,8 @@ class ElEmployeePerms {
     'deleted_debts.write_off',
     // إلغاء بيعٍ نقديّ — يُرجع مالاً من الصندوق، فيُمنح وحده (خارج «موظّف عام»).
     'sales.void',
+    // «التذاكر» (٩ نوفمبر) — تُمنح وحدها (خارج «موظّف عام»).
+    ...ticketKeys,
   };
 
   /// المفاتيح بلا الأجهزة — «موظّف عام» يأخذها كلّها (الأجهزة تُمنح فرادى كما في

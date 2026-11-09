@@ -23,6 +23,7 @@ import '../whatsapp/connection_auto_widgets.dart';
 import '../subscribers/subscriber_detail_screen.dart';
 import '../desktop/desk_widgets.dart';
 import '../renew/renew_widgets.dart';
+import '../tickets/ticket_widgets.dart';
 import '../../api/renew_requests_api.dart';
 
 /// شاشة inbox — تعرض 3 أقسام (نفس منطق v1 mobile-app):
@@ -318,6 +319,9 @@ class _InboxScreenState extends State<InboxScreen> {
     // «طلب تجديد اشتراك» ⇒ الطلب نفسه بصورته وإجراءاته (لا كرت المشترك)
     if (!mounted) return;
     if (await openRenewRequestPush(Navigator.of(context), n.data)) return;
+    // «التذاكر» ⇒ المحادثة نفسها (الحمولة تحمل يوزر المشترك لنسخٍ أقدم — لا كرته هنا)
+    if (!mounted) return;
+    if (await openTicketPush(Navigator.of(context), n.data)) return;
     final username = _extractUsername(n);
     if (username != null && username.isNotEmpty) {
       final sub = await _findSubscriber(username);

@@ -10,6 +10,7 @@ import '../screens/network_devices/agent_alerts_screen.dart';
 import '../screens/network_devices/fiber/fiber_push.dart';
 import '../screens/notifications/inbox_screen.dart';
 import '../screens/renew/renew_widgets.dart';
+import '../screens/tickets/ticket_widgets.dart';
 import '../screens/subscribers/subscriber_detail_screen.dart';
 import 'company_push.dart';
 
@@ -93,6 +94,9 @@ class NotificationRouter {
 
     // (٠د) «طلب تجديد اشتراك» من تطبيق المشترك ⇒ الطلب نفسه بصورته وإجراءاته (٤ نوفمبر).
     if (await openRenewRequestPush(nav, n.data)) return;
+
+    // (٠هـ) «التذاكر» (٩ نوفمبر): تذكرةٌ جديدة أو ردّ مشترك أو إلغاؤه ⇒ المحادثة نفسها (لا كرت المشترك).
+    if (await openTicketPush(nav, n.data)) return;
 
     // (١) حمولةٌ تحمل مشتركاً بعينه ⇒ افتح كرته. وهذا أدقّ من النوع:
     //     ملخّصٌ جماعيّ قد يحمل مشتركاً واحداً حين يكون وحده.
