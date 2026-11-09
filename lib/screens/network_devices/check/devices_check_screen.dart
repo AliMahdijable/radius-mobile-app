@@ -95,6 +95,7 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
         CheckState.warn => AppTone.warning,
         CheckState.unread => AppTone.neutral,
         CheckState.ok => AppTone.success,
+        CheckState.statusOnly => AppTone.neutral,
       };
 
   static AppTone _levelTone(CheckLevel l) => switch (l) {
@@ -278,6 +279,19 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
               key: const ValueKey('check-progress'),
               style: AppType.micro(color: AppColors.textMid)),
         ],
+        // ٩ نوفمبر: ما لم يُقرأ وحده — بلا فحصٍ كامل من جديد («كل الشركات» لا: أجهزة غيرها بفحص الخادم)
+        if (!running && !merged && _run.error == null && _run.unreadCount > 0) ...[
+          const SizedBox(height: Sp.xs),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+              key: const ValueKey('check-rerun-unread'),
+              onPressed: _run.rerunUnread,
+              icon: const Icon(LucideIcons.refreshCw, size: 16),
+              label: Text('أعد قراءة غير المقروء (${_run.unreadCount})'),
+            ),
+          ),
+        ],
       ]),
     );
   }
@@ -397,12 +411,7 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
       final n = rs.where((r) => r.state == s).length;
       final tone = _stateTone(s);
       final on = _filter == s;
-      final label = switch (s) {
-        CheckState.down => 'طافي',
-        CheckState.warn => 'ملاحظات',
-        CheckState.unread => 'لم يُقرأ',
-        CheckState.ok => 'سليم',
-      };
+      final label = DevicesCheck.stateName(s);
       return InkWell(
         key: ValueKey('check-count-${s.name}'),
         borderRadius: BorderRadius.circular(R.pill),
@@ -424,7 +433,11 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
       );
     }
 
-    return Wrap(spacing: Sp.sm, runSpacing: Sp.sm, children: [for (final s in CheckState.values) chip(s)]);
+    // «الحال فقط» (٩ نوفمبر) قسمٌ وحده حين يوجد — لا يُعدّ «لم يُقرأ» (لا يُقرأ أصلاً بإعداده)
+    return Wrap(spacing: Sp.sm, runSpacing: Sp.sm, children: [
+      for (final s in CheckState.values)
+        if (s != CheckState.statusOnly || rs.any((r) => r.state == s)) chip(s),
+    ]);
   }
 
   Widget _pill(String text, AppTone tone) => Container(
@@ -436,7 +449,8 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
 
   Widget _card(DeviceCheckReport r) {
     final tone = _stateTone(r.state);
-    final sub = [r.roleLabel, r.device.ip].where((x) => x.isNotEmpty).join(' · ');
+    // ٩ نوفمبر: طريق القراءة وزمنها على السطر («SSH · 18ث») — السبب في الميدان يُرى
+    final sub = [r.roleLabel, r.device.ip, if (r.readLine != null) r.readLine!].where((x) => x.isNotEmpty).join(' · ');
     return Container(
       key: ValueKey('check-card-${r.device.id}'),
       decoration: _cardDeco(border: r.state == CheckState.ok ? null : tone.softBorder),
@@ -466,9 +480,7 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
                 ),
                 const SizedBox(width: Sp.xs),
                 // سطرٌ مؤقّت: قراءته جارية بعد المهلة الأولى؛ ومن آخر قراءةٍ بعمرها — لا يُقدَّم طازجاً (٩ نوفمبر)
-                r.pending
-                    ? _pill('يقرأ…', AppTone.neutral)
-                    : _pill(r.staleAt == null ? r.stateLabel : '${r.stateLabel} · ${r.staleAge}', tone),
+                r.pending ? _pill('يقرأ…', AppTone.neutral) : _pill(r.stateLabel, tone),
               ]),
               if (r.vitals.isNotEmpty) ...[
                 const SizedBox(height: Sp.sm),

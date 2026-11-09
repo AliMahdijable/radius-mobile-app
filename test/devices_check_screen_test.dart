@@ -236,4 +236,29 @@ void main() {
     expect(find.textContaining('آخر قراءة؛ الجديدة:'), findsOneWidget);
     await t.pumpWidget(const SizedBox());
   });
+
+  testWidgets('٩ نوفمبر: «الحال فقط» شريحةٌ وحدها، و«أعد قراءة غير المقروء» تعيد ما لم يُقرأ وحده', (t) async {
+    final calls = <int, int>{};
+    final base = DevicesCheckRunner.debugFetch!;
+    var fail = true;
+    DevicesCheckRunner.debugFetch = (d) {
+      calls[d.id] = (calls[d.id] ?? 0) + 1;
+      if (d.id == 6 && fail) return Future<ProbeResult>.error(const SocketException('Connection refused'));
+      return base(d);
+    };
+    await pumpSim(t, const SimVariant(390, dark: false), settle: false,
+        home: (_) => DevicesCheckScreen(devices: devices, viaVpn: false));
+    await settle(t);
+    expect(find.byKey(const ValueKey('check-count-statusOnly')), findsOneWidget, reason: 'الكاميرا بلا بيانات دخول');
+    final rerun = find.byKey(const ValueKey('check-rerun-unread'));
+    expect(rerun, findsOneWidget);
+    expect(find.text('أعد قراءة غير المقروء (1)'), findsOneWidget);
+    fail = false;
+    await t.tap(rerun);
+    await settle(t);
+    expect(calls[6], 2);
+    expect(calls[1], 1, reason: 'المقروء لا يُعاد');
+    expect(rerun, findsNothing);
+    await t.pumpWidget(const SizedBox());
+  });
 }

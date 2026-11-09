@@ -255,6 +255,8 @@ void main() {
       Finder card(int id) => find.byKey(ValueKey('check-card-$id'));
       int countOf(String state) {
         final chip = find.byKey(ValueKey('check-count-$state'));
+        // «الحال فقط» (٩ نوفمبر) شريحتها حين يوجد منها وحده
+        if (chip.evaluate().isEmpty) return 0;
         final texts = t.widgetList<Text>(find.descendant(of: chip, matching: find.byType(Text))).map((w) => w.data).toList();
         return int.parse(texts.first!);
       }

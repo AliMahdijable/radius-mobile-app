@@ -678,6 +678,7 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
         CheckState.warn => AppTone.warning,
         CheckState.unread => AppTone.neutral,
         CheckState.ok => AppTone.success,
+        CheckState.statusOnly => AppTone.neutral,
       };
 
   static AppTone _levelTone(CheckLevel l) => switch (l) {

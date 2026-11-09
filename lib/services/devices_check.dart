@@ -12,8 +12,9 @@ import '../api/olt_profile.dart';
 import '../models/network_device.dart';
 import '../screens/network_devices/device_vitals.dart';
 
-/// حال الجهاز بالتقرير — بترتيب العرض (الأسوأ أوّلاً).
-enum CheckState { down, warn, unread, ok }
+/// حال الجهاز بالتقرير — بترتيب العرض (الأسوأ أوّلاً). [statusOnly] (٩ نوفمبر): يُعرف حاله وحده (بلا بيانات دخول، علامةٌ بلا
+/// مقاييس، بروتوكولٌ لا يُقرأ) — قسمٌ وحده لا «لم يُقرأ».
+enum CheckState { down, warn, unread, ok, statusOnly }
 
 enum CheckLevel { bad, warn, info }
 
@@ -184,6 +185,8 @@ class DeviceCheckReport {
     this.pending = false,
     this.staleAt,
     this.staleFrom,
+    this.readVia,
+    this.readMs,
   });
 
   final NetworkDevice device;
@@ -225,6 +228,19 @@ class DeviceCheckReport {
   /// «قبل 3 د» — عمر [staleAt].
   String? get staleAge => staleAt == null ? null : DevicesCheck.ago(staleAt!, at);
 
+  /// طريق القراءة (API · SSH · الويب · SNMP · Telnet، و«عبر الـVPN») وزمنها بالمللي — يُكتبان على السطر («SSH · 18ث»).
+  final String? readVia;
+  final int? readMs;
+
+  /// «SSH · 18ث» — null إن لم يُعرفا.
+  String? get readLine {
+    final parts = <String>[
+      if (readVia != null) readVia!,
+      if (readMs != null) '${readMs! < 10000 ? (readMs! / 1000).toStringAsFixed(1) : (readMs! / 1000).round()}ث',
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
+
   int get subsWeak => subs.where((s) => s.weak).length;
   int get subsLowCcq => subs.where((s) => s.lowCcq).length;
   int get subsBad => subs.where((s) => s.bad).length;
@@ -232,12 +248,11 @@ class DeviceCheckReport {
 
   String get roleLabel => DevicesCheck.roleLabel(role, device);
 
-  String get stateLabel => switch (state) {
-        CheckState.down => 'طافي',
-        CheckState.warn => 'ملاحظات',
-        CheckState.unread => 'لم يُقرأ',
-        CheckState.ok => 'سليم',
-      };
+  /// الحال كما تُعرض — ومن آخر قراءةٍ بعمرها («سليم · قبل 3 د»)، لا تُقدَّم طازجة.
+  String get stateLabel {
+    final s = DevicesCheck.stateName(state);
+    return staleAt == null ? s : '$s · $staleAge';
+  }
 
   /// الحيويّات كما تُعرض وتُنسخ: (العنوان، القيمة).
   List<({String k, String v})> get vitals => [
@@ -258,7 +273,7 @@ class DeviceCheckReport {
 
   /// تقرير الجهاز نصّاً (للنسخ/الإرسال لفنّي).
   String toText() {
-    final b = StringBuffer('${device.name} ($roleLabel) — $stateLabel${staleAt != null ? ' (${staleFrom ?? 'آخر قراءة'} $staleAge)' : ''}');
+    final b = StringBuffer('${device.name} ($roleLabel) — $stateLabel');
     final v = vitals;
     if (v.isNotEmpty) b.write('\n${v.map((e) => '${e.k} ${e.v}').join(' · ')}');
     for (final f in findings) {
@@ -347,6 +362,14 @@ class DevicesCheck {
     return best == null || tie ? null : (user: best, approx: true);
   }
 
+  static String stateName(CheckState s) => switch (s) {
+        CheckState.down => 'طافي',
+        CheckState.warn => 'ملاحظات',
+        CheckState.unread => 'لم يُقرأ',
+        CheckState.ok => 'سليم',
+        CheckState.statusOnly => 'الحال فقط',
+      };
+
   /// «قبل لحظات» · «قبل 3 د» — عمر قراءةٍ سابقة.
   static String ago(DateTime then, DateTime now) {
     final m = now.difference(then).inMinutes;
@@ -399,6 +422,9 @@ class DevicesCheck {
     bool pending = false,
     DateTime? staleAt,
     String? staleFrom,
+    bool statusOnly = false,
+    String? readVia,
+    int? readMs,
   }) {
     ({String user, bool approx})? who(String? mac) => matchMac(mac, macUsers);
     final at = now ?? DateTime.now();
@@ -424,13 +450,15 @@ class DevicesCheck {
       return DeviceCheckReport(
         device: d,
         role: role,
-        state: CheckState.unread,
+        state: statusOnly ? CheckState.statusOnly : CheckState.unread,
         at: at,
         viaVpn: viaVpn,
         ms: ms,
         findings: [CheckFinding(CheckLevel.info, unreadReason ?? 'يردّ، لكن ما انقرت معلوماته')],
         memo: prev,
         pending: pending,
+        readVia: readVia,
+        readMs: readMs,
       );
     }
 
@@ -671,6 +699,8 @@ class DevicesCheck {
       pending: pending,
       staleAt: staleAt,
       staleFrom: staleFrom,
+      readVia: stale ? null : readVia,
+      readMs: stale ? null : readMs,
       // قراءةٌ سابقة لا تكتب اللقطة — المقارنة التالية بما قُرئ فعلاً
       memo: stale
           ? prev
@@ -706,6 +736,7 @@ class DevicesCheck {
       if (c[CheckState.warn]! > 0) 'ملاحظات ${c[CheckState.warn]}',
       if (c[CheckState.unread]! > 0) 'لم يُقرأ ${c[CheckState.unread]}',
       'سليم ${c[CheckState.ok]}',
+      if (c[CheckState.statusOnly]! > 0) 'الحال فقط ${c[CheckState.statusOnly]}',
     ].join(' · ')}';
     return [head, for (final r in sorted(rs)) r.toText()].join('\n\n');
   }

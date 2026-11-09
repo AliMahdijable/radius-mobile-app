@@ -765,7 +765,8 @@ void main() {
       expect(r.staleAge, 'قبل لحظات');
       expect(texts(r).first, startsWith('آخر قراءة؛ الجديدة: بطيء — لم تكتمل قراءته خلال'));
       expect(texts(r).where((t) => t.contains('طفى')), isEmpty, reason: 'لا مقارنة منافذ من قراءةٍ سابقة');
-      expect(r.toText(), contains('(آخر قراءة قبل لحظات)'), reason: 'النسخ يحمل عمرها');
+      expect(r.stateLabel, 'سليم · قبل لحظات', reason: 'الحال بعمرها — لا تُقدَّم طازجة');
+      expect(r.toText(), startsWith('جهاز 9 (سويج) — سليم · قبل لحظات'), reason: 'النسخ يحمل عمرها');
       expect((await DevicesCheckMemoStore.load())[9]!.ports['ether1']!.up, isTrue, reason: 'اللقطة لا تُكتب من قراءةٍ سابقة');
       run.dispose();
     });
@@ -801,6 +802,77 @@ void main() {
       expect(last.detail.glance.cpu, 17);
       expect(DevicesCheck.ago(DateTime(2026, 11, 9, 10), DateTime(2026, 11, 9, 10, 4)), 'قبل 4 د');
       r.dispose();
+    });
+  });
+
+  group('٩ نوفمبر — «الحال فقط» قسمٌ وحده، «أعد قراءة غير المقروء»، وطريق القراءة وزمنها على السطر', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      DevicesCheckRunner.debugLimits = () async => const CheckLimits();
+      DevicesCheckRunner.debugSubscribers = () async => const [];
+      DevicesCheckRunner.debugProbe = (d) async => (status: 'online', responseMs: 4, packetLoss: 0.0, serviceOk: true);
+    });
+    tearDown(() {
+      DevicesCheckRunner.debugLimits = null;
+      DevicesCheckRunner.debugSubscribers = null;
+      DevicesCheckRunner.debugProbe = null;
+      DevicesCheckRunner.debugFetch = null;
+    });
+
+    test('بلا بيانات دخول ⇒ «الحال فقط» بسببه (لا «لم يُقرأ»)، آخراً بالترتيب ومعدودٌ وحده', () async {
+      DevicesCheckRunner.debugFetch =
+          (d) async => const ProbeResult(vitals: [], detail: DeviceDetail(glance: DeviceGlance(cpu: 3)), counters: {});
+      final noCreds = NetworkDevice(
+          id: 21, adminId: '2', name: 'كاميرا', type: 'camera', brand: 'other', ip: '10.0.0.21', port: 80,
+          hasCredentials: false, lastStatus: 'online', createdAt: DateTime(2026, 11, 1));
+      final run = DevicesCheckRunner([noCreds, dev(22)], viaVpn: false);
+      await run.run();
+      final r = run.reports[21]!;
+      expect(r.state, CheckState.statusOnly);
+      expect(r.stateLabel, 'الحال فقط');
+      expect(texts(r), ['بلا بيانات دخول']);
+      expect(run.unreadCount, 0, reason: 'ليس «لم يُقرأ» — لا يُعاد');
+      expect(DevicesCheck.sorted(run.reports.values).last.device.id, 21);
+      expect(DevicesCheck.reportText(run.reports.values.toList(), viaVpn: false), contains('سليم 1 · الحال فقط 1'));
+      run.dispose();
+    });
+
+    test('«أعد قراءة غير المقروء» يقرأ ما لم يُقرأ وحده — والباقي بتقريره بلا جلسةٍ ثانية', () async {
+      final calls = <int, int>{};
+      var fail = true;
+      DevicesCheckRunner.debugFetch = (d) async {
+        calls[d.id] = (calls[d.id] ?? 0) + 1;
+        if (d.id == 32 && fail) throw const SocketException('Connection refused');
+        return const ProbeResult(vitals: [], detail: DeviceDetail(glance: DeviceGlance(cpu: 4)), counters: {});
+      };
+      final run = DevicesCheckRunner([dev(31), dev(32), dev(33)], viaVpn: false);
+      await run.run();
+      expect(run.unreadCount, 1);
+      final kept = run.reports[31];
+      fail = false;
+      await run.rerunUnread();
+      expect(calls, {31: 1, 32: 2, 33: 1});
+      expect(run.reports[32]!.state, CheckState.ok);
+      expect(identical(run.reports[31], kept), isTrue, reason: 'المقروء يبقى بتقريره');
+      expect([run.done, run.total], [3, 3]);
+      expect(run.unreadCount, 0);
+      run.dispose();
+    });
+
+    test('الطريق والزمن: ميكروتك من جلسته، وSNMP للأولت وميموزا وروجي، وسسكو ببروتوكوله، وعبر الممرّ يُقال؛ يوبيكويتي لا يُخمَّن', () {
+      const ssh = MikrotikStats(
+          cpuLoad: 1, memUsedPercent: 1, memTotalBytes: 1, memFreeBytes: 1, uptime: '', version: '', boardName: '',
+          architectureName: '', cpuCount: 1, cpuFrequencyMhz: 1, interfaces: [], pppActiveCount: 0, via: 'SSH');
+      expect(DevicesCheckRunner.viaOf(dev(1), ssh, piped: false), 'SSH');
+      expect(DevicesCheckRunner.viaOf(dev(1), ssh, piped: true), 'SSH عبر الـVPN');
+      expect(DevicesCheckRunner.viaOf(dev(2, brand: 'mimosa'), null, piped: false), 'SNMP');
+      expect(DevicesCheckRunner.viaOf(dev(3, brand: 'ubnt'), null, piped: false), isNull);
+      final r = DevicesCheck.evaluate(
+          d: dev(4), alive: true, detail: detail(glance: const DeviceGlance(cpu: 5)), readVia: 'SSH', readMs: 18300);
+      expect(r.readLine, 'SSH · 18ث');
+      final fast = DevicesCheck.evaluate(
+          d: dev(4), alive: true, detail: detail(glance: const DeviceGlance(cpu: 5)), readVia: 'API', readMs: 420);
+      expect(fast.readLine, 'API · 0.4ث');
     });
   });
 }

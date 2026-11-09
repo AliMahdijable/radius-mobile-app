@@ -150,19 +150,39 @@ class DevicesCheckRunner extends ChangeNotifier {
     );
   }
 
-  Future<void> run() async {
+  /// حدود الفحص الأخير ومطابقته بالماك — «أعد قراءة غير المقروء» لا يجلبها ثانيةً.
+  ({CheckLimits limits, Map<String, String> macs})? _setup;
+
+  Future<void> run() => _runFor(devices);
+
+  /// «أعد قراءة غير المقروء» (٩ نوفمبر): ما لم يُقرأ وحده — والباقي يبقى بتقريره، بلا فحصٍ كامل من جديد.
+  Future<void> rerunUnread() {
+    final again = [for (final d in devices) if (reports[d.id]?.state == CheckState.unread) d];
+    if (again.isEmpty) return Future<void>.value();
+    return _runFor(again);
+  }
+
+  /// كم جهازاً «لم يُقرأ» (بلا المؤقّت الجاري).
+  int get unreadCount => reports.values.where((r) => r.state == CheckState.unread && !r.pending).length;
+
+  Future<void> _runFor(List<NetworkDevice> list) async {
     if (running) return;
+    final whole = identical(list, devices);
     final gen = ++_gen;
     running = true;
-    done = 0;
+    done = whole ? 0 : devices.length - list.length;
     error = null;
     errorReason = null;
     line = null;
-    reports.clear();
+    if (whole) reports.clear();
     _slow.clear();
     notifyListeners();
     try {
-      final (limits, memos, macs) = await (loadLimits(), DevicesCheckMemoStore.load(), _macIndex()).wait;
+      final setup = whole ? null : _setup;
+      final (limits, memos, macs) = setup != null
+          ? (setup.limits, await DevicesCheckMemoStore.load(), setup.macs)
+          : await (loadLimits(), DevicesCheckMemoStore.load(), _macIndex()).wait;
+      _setup = (limits: limits, macs: macs);
       if (gen != _gen) return;
       if (viaVpn) {
         // ٧ نوفمبر (المالك: «كانما الوكيل يفعل vpn خارجي»): الفحص نفسه — بنكه واتّصالاته وقراءاته عبر الـVPN (DeviceNet.vpn)؛
@@ -177,15 +197,15 @@ class DevicesCheckRunner extends ChangeNotifier {
           return;
         }
         line = null;
-        await DeviceNet.vpn(() => _local(limits, memos, macs, gen));
+        await DeviceNet.vpn(() => _local(list, limits, memos, macs, gen));
       } else {
-        await _local(limits, memos, macs, gen);
+        await _local(list, limits, memos, macs, gen);
       }
       if (gen != _gen) return;
       at = DateTime.now();
       await DevicesCheckMemoStore.save({
-        for (final r in reports.values)
-          if (r.memo != null) r.device.id: r.memo!,
+        for (final d in list)
+          if (reports[d.id]?.memo case final m?) d.id: m,
       });
     } catch (e) {
       error ??= 'تعذّر إكمال الفحص';
@@ -224,8 +244,9 @@ class DevicesCheckRunner extends ChangeNotifier {
   @visibleForTesting
   static ({Duration soft, Duration hard})? debugTimes;
 
-  Future<void> _local(CheckLimits limits, Map<int, CheckMemo> memos, Map<String, String> macs, int gen) async {
-    final queue = Queue<NetworkDevice>.from(devices);
+  Future<void> _local(
+      List<NetworkDevice> list, CheckLimits limits, Map<int, CheckMemo> memos, Map<String, String> macs, int gen) async {
+    final queue = Queue<NetworkDevice>.from(list);
     Future<void> worker() async {
       while (queue.isNotEmpty && gen == _gen) {
         final d = queue.removeFirst();
@@ -283,13 +304,22 @@ class DevicesCheckRunner extends ChangeNotifier {
     final skip = DeviceVitals.skipReason(d);
     final hard = skip == null || skip == DeviceVitals.offNetworkReason || skip == 'غير متّصل' ? null : skip;
     if (hard != null) {
+      // «الحال فقط» (٩ نوفمبر): قسمٌ وحده لا «لم يُقرأ» — لا يُقرأ أصلاً بإعداده، والسبب سطره
       return _final(
           d,
           DevicesCheck.evaluate(
-              d: d, alive: alive, ms: probe?.responseMs, loss: probe?.packetLoss, unreadReason: '$hard — الحال فقط', limits: limits, prev: prev),
+              d: d,
+              alive: alive,
+              ms: probe?.responseMs,
+              loss: probe?.packetLoss,
+              unreadReason: hard,
+              statusOnly: true,
+              limits: limits,
+              prev: prev),
           gen);
     }
     final t = timesFor(piped: piped);
+    final sw = Stopwatch()..start();
     // ميكروتك: الطبقة الأولى (الموارد والصحّة والمنافذ) حين تصل — إن تأخّر الباقي يُحكم بها وعملاؤه «لم تُقرأ»
     ProbeResult? partial;
     // الأولت: الحكم من البنية، والضوء بما بقي (حتى ٥ث قبل المهلة الأولى) ويقف بإغلاق الفحص — راجع [DeviceVitals.fetch]
@@ -312,6 +342,8 @@ class DevicesCheckRunner extends ChangeNotifier {
           limits: limits,
           prev: prev,
           macUsers: macs,
+          readVia: viaOf(d, p.raw, piped: piped),
+          readMs: sw.elapsedMilliseconds,
         );
     // ما يُعرض حين لم تكتمل القراءة: الطبقة الأولى إن وصلت (حيويّاته ومنافذه — مقروءةٌ الآن)، وإلّا آخر قراءةٍ ≤ ٥ د بعمرها
     // (ما لم يكن السبب رفضاً يُصلَح بالإعداد)، وإلّا «لم يُقرأ» بسببه
@@ -348,6 +380,8 @@ class DevicesCheckRunner extends ChangeNotifier {
           macUsers: macs,
           readNote: 'قراءةٌ جزئيّة — $reason',
           pending: pending,
+          readVia: viaOf(d, p.raw, piped: piped),
+          readMs: sw.elapsedMilliseconds,
         );
       }
       return DevicesCheck.evaluate(
@@ -389,6 +423,22 @@ class DevicesCheckRunner extends ChangeNotifier {
       if (r.memo != null) unawaited(DevicesCheckMemoStore.save({d.id: r.memo!}));
       notifyListeners();
     }));
+  }
+
+  /// طريق القراءة كما يُكتب على السطر — ما يُعرف وحده: ميكروتك من جلسته، والأولت وميموزا وروجي SNMP، وسسكو ببروتوكوله؛
+  /// وعبر ممرّ الـVPN يُقال. يوبيكويتي (SSH أو ويب الطُرُز الجديدة) لا يُخمَّن.
+  @visibleForTesting
+  static String? viaOf(NetworkDevice d, Object? raw, {required bool piped}) {
+    final b = d.brand.toLowerCase();
+    final v = raw is MikrotikStats
+        ? raw.via
+        : raw is VsolOltStats || b == 'mimosa' || b == 'ruijie'
+            ? 'SNMP'
+            : b == 'cisco'
+                ? (d.protocol == 'telnet' ? 'Telnet' : 'SSH')
+                : null;
+    if (!piped) return v;
+    return v == null ? 'عبر الـVPN' : '$v عبر الـVPN';
   }
 
   // ── آخر قراءة (٩ نوفمبر) ──────────────────────────────────────────
