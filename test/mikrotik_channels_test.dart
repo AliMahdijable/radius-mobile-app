@@ -134,6 +134,9 @@ class _Scripted implements RouterOsChannel {
   final Map<String, Object> replies;
   final String name;
   final asked = <String>[];
+
+  /// الأوامر بكلماتها كاملةً (للأعمدة المطلوبة `.proplist` و`count-only`).
+  final words = <String>[];
   @override
   String get via => name;
   @override
@@ -141,14 +144,36 @@ class _Scripted implements RouterOsChannel {
   @override
   Future<List<Map<String, String>>> query(List<String> words, {bool debugLog = false}) async {
     asked.add(words.first);
+    this.words.add(words.join(' '));
     final r = replies[words.first];
     if (r == null) throw MikrotikBinaryException('no such command prefix');
     if (r is Exception) throw r;
-    return [for (final m in r as List) Map<String, String>.from(m as Map)];
+    final rows = [for (final m in r as List) Map<String, String>.from(m as Map)];
+    // كـRouterOS: العدد وحده في ردٍّ واحد
+    if (words.contains('=count-only=')) return [{'ret': '${rows.length}'}];
+    return rows;
   }
 
   @override
   Future<void> close() async {}
+}
+
+/// غلافٌ يرفض `count-only` (كإصدارٍ أو طريقٍ لا يقبله) ويمرّر غيره.
+class _CountOnlyRejected implements RouterOsChannel {
+  _CountOnlyRejected(this.inner);
+  final _Scripted inner;
+  @override
+  String get via => inner.via;
+  @override
+  Future<void> open() => inner.open();
+  @override
+  Future<List<Map<String, String>>> query(List<String> words, {bool debugLog = false}) {
+    if (words.contains('=count-only=')) throw MikrotikBinaryException('unknown parameter count-only');
+    return inner.query(words, debugLog: debugLog);
+  }
+
+  @override
+  Future<void> close() => inner.close();
 }
 
 /// سكتر بيس بوكس (ap-bridge) بجدول تسجيله — [reg] صفوفه أو خطؤه، و[wireless] كذلك.
@@ -557,6 +582,96 @@ void main() {
     test('القراءة الخفيفة لا تدّعي قراءة العملاء', () async {
       final s = await read(_sector(), vitalsOnly: true);
       expect(s.clientsRead, isFalse);
+    });
+  });
+
+  group('٩ نوفمبر — حِمية القراءة الكاملة (R1a/R1c): لا جداول بلا عملاء، PPP بالعدد، وSSH لراديو شغّال وحده', () {
+    var sshCalls = 0;
+    final realSsh = MikrotikApi.sshClients;
+    setUp(() {
+      sshCalls = 0;
+      MikrotikApi.resetSshFallbackForTest();
+      MikrotikApi.sshClients = (ip, user, pass) async {
+        sshCalls++;
+        return const [];
+      };
+    });
+    tearDown(() => MikrotikApi.sshClients = realSsh);
+
+    Future<(MikrotikStats, _Scripted)> read(Map<String, Object> replies, {String via = 'API'}) async {
+      final ch = _Scripted(replies, name: via);
+      MikrotikApi.channelFactory = (route, ip, port, user, pass, timeout) => ch;
+      final s = await MikrotikApi.fetchStatsFor(ip: '127.0.0.1', creds: {'user': 'admin', 'pass': 'pw'});
+      return (s, ch);
+    }
+
+    test('🚨 راوتر بلا عملاء لاسلكيّين (CCR) ⇒ لا DHCP ولا قائمة الوصول ولا ARP', () async {
+      final r = _sector()
+        ..remove('/interface/wireless/print')
+        ..remove('/interface/wireless/registration-table/print');
+      final (s, ch) = await read(r);
+      expect(s.wirelessClients, isEmpty);
+      for (final t in ['/ip/dhcp-server/lease/print', '/interface/wireless/access-list/print', '/ip/arp/print']) {
+        expect(ch.asked, isNot(contains(t)), reason: t);
+      }
+    });
+
+    test('سكترٌ بعملائه ⇒ الجداول الثلاثة بأعمدتها وحدها، والاسم والعنوان يصلان', () async {
+      final r = _sector()
+        ..['/ip/dhcp-server/lease/print'] = [
+          {'mac-address': 'AA:BB:CC:00:00:01', 'host-name': 'ali-home', 'active-address': '10.1.1.9'}
+        ];
+      final (s, ch) = await read(r);
+      expect(s.wirelessClients.single.hostname, 'ali-home');
+      expect(s.wirelessClients.single.ip, '10.1.1.9');
+      expect(ch.words, contains('/ip/dhcp-server/lease/print =.proplist=mac-address,host-name,comment,active-address,address'));
+      expect(ch.words, contains('/interface/wireless/access-list/print =.proplist=mac-address,comment'));
+      expect(ch.words, contains('/ip/arp/print =.proplist=mac-address,address,comment'));
+    });
+
+    test('جلسات PPP بالعدد (count-only) لا بالقائمة', () async {
+      final r = _sector()
+        ..['/ppp/active/print'] = [
+          for (var i = 0; i < 340; i++) {'name': 'u$i', 'service': 'pppoe'}
+        ];
+      final (s, ch) = await read(r);
+      expect(s.pppActiveCount, 340);
+      expect(ch.words.where((w) => w.startsWith('/ppp/active/print')), ['/ppp/active/print =count-only=']);
+    });
+
+    test('count-only مرفوضٌ (طريقٌ/إصدارٌ لا يقبله) ⇒ القائمة بعمود المعرّف — لا صفر كاذب', () async {
+      final ch = _Scripted(_sector()..['/ppp/active/print'] = [for (var i = 0; i < 7; i++) {'.id': '*$i'}]);
+      MikrotikApi.channelFactory = (route, ip, port, user, pass, timeout) => _CountOnlyRejected(ch);
+      final s = await MikrotikApi.fetchStatsFor(ip: '127.0.0.1', creds: {'user': 'admin', 'pass': 'pw'});
+      expect(s.pppActiveCount, 7);
+      expect(ch.words.where((w) => w.startsWith('/ppp/active/print')), ['/ppp/active/print =.proplist=.id']);
+    });
+
+    test('🚨 راديو معطّل وجدولٌ فارغ ⇒ لا جلسة SSH؛ وراديو شغّال وجدولٌ فارغ ⇒ مرّةً واحدة', () async {
+      final off = _sector(
+        reg: const <Map<String, String>>[],
+        wireless: [
+          {'name': 'wlan1', 'mode': 'ap-bridge', 'band': '5ghz-a/n', 'disabled': 'true', 'running': 'false'}
+        ],
+      );
+      await read(off);
+      expect(sshCalls, 0, reason: 'واجهة wlan معطّلة لا عملاء لها — جلسة SSH بلا طائل');
+      final on = _sector(reg: const <Map<String, String>>[]);
+      await read(on);
+      expect(sshCalls, 1);
+    });
+
+    test('العدّ والسكربت والويب', () {
+      expect(MikrotikApi.countOf(const [{'ret': '12'}]), 12);
+      expect(MikrotikApi.countOf(const [{'.id': '*1'}]), 1, reason: 'صفٌّ حقيقيّ واحد ليس «ret»');
+      expect(MikrotikApi.countOf(const []), 0);
+      final script = SshRouterOsChannel.scriptFor(['/ppp/active/print', '=count-only='])!;
+      expect(script, contains('[:len [/ppp active find]]'));
+      expect(SshRouterOsChannel.parseRows('START|ret=12\r\n'), [
+        {'ret': '12'}
+      ]);
+      final rest = RestRouterOsChannel.requestFor(['/ppp/active/print', '=count-only=']);
+      expect([rest.method, rest.path, rest.query], ['GET', '/rest/ppp/active', {'.proplist': '.id'}]);
     });
   });
 }

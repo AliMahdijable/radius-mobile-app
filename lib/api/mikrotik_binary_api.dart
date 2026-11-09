@@ -143,6 +143,10 @@ class MikrotikBinaryClient {
         if (tag == '!re') {
           if (trap == null) results.add(_sentenceToMap(sentence));
         } else if (tag == '!done') {
+          // `print =count-only=` يُرجع العدد في !done نفسه (`=ret=N`) لا صفوفاً — يُعاد صفّاً واحداً {ret: N}
+          if (trap == null && results.isEmpty && sentence.length > 1 && command.contains('=count-only=')) {
+            results.add(_sentenceToMap(sentence));
+          }
           break;
         } else if (tag == '!trap') {
           final err = sentence.firstWhere((w) => w.startsWith('=message='),

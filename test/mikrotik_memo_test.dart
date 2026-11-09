@@ -37,7 +37,8 @@ void main() {
     test('🚨 SSH في المسار المفصَّل وحده', () {
       // الجدار والخلفيّة يقفان عند vitalsOnly قبل قسم اللاسلكيّ.
       final iVitals = api.indexOf('if (vitalsOnly) return tier1;');
-      final iSsh = api.indexOf('_fetchClientsViaSsh(ip, user, pass)');
+      // ٩ نوفمبر: النداء عبر بديل الاختبار [MikrotikApi.sshClients] (افتراضيّه _fetchClientsViaSsh)
+      final iSsh = api.indexOf('MikrotikApi.sshClients(ip, user, pass)');
       expect(iVitals, greaterThan(0));
       expect(iSsh, greaterThan(iVitals),
           reason: 'SSH قبل مخرج الوضع الخفيف — الجدار سيدفع ثمنه');

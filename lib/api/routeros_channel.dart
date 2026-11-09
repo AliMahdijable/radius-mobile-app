@@ -108,7 +108,8 @@ class RestRouterOsChannel implements RouterOsChannel {
     final cmd = words.first;
     final params = routerOsParams(words);
     if (cmd.endsWith('/print')) {
-      final pl = params['.proplist'];
+      // `count-only` لا يُطلب عبر GET — يُعدّ ما يعود، بعمود المعرّف وحده (أخفّ ما يُرسل)
+      final pl = params['.proplist'] ?? (params.containsKey('count-only') ? '.id' : null);
       return (
         method: 'GET',
         path: '/rest${cmd.substring(0, cmd.length - '/print'.length)}',
@@ -239,6 +240,10 @@ class SshRouterOsChannel implements RouterOsChannel {
     if (cmd == '/system/reboot') return '/system reboot';
     if (cmd.endsWith('/print')) {
       final menu = _menu(cmd.substring(0, cmd.length - '/print'.length));
+      // `count-only` (جلسات PPP — ٩ نوفمبر): العدد وحده بلا طباعة كلّ حقلٍ لكلّ صفّ — صفٌّ واحد `ret=N` كالـAPI.
+      if (routerOsParams(words).containsKey('count-only')) {
+        return ':do {:put ("START|ret=" . [:len [$menu find]])} on-error={:put "ERR|no such command"}';
+      }
       // قائمةٌ ⇒ find/get لكلّ صفّ؛ مفردة ⇒ `find` يخطئ فـget بلا رقم؛ قائمةٌ لا يعرفها الجهاز ⇒ سطر ERR.
       return (r':local emit do={:local o "START"; :foreach k,v in=$1 do={:set o ($o . "|" . $k . "=" . [:tostr $v])}; :put $o}; '
               r':do {:foreach i in=[MENU find] do={$emit [MENU get $i]}} on-error={'

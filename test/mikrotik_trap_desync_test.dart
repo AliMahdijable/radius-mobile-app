@@ -103,6 +103,11 @@ class _FakeRouterOs {
       if (!omitDoneAfterTrap) s.add(_enc(['!done']));
       return;
     }
+    // `print =count-only=` (٩ نوفمبر): العدد في !done نفسه كـRouterOS — لا صفوف
+    if (sentence.contains('=count-only=')) {
+      s.add(_enc(['!done', '=ret=${r.length}']));
+      return;
+    }
     for (final w in r) {
       s.add(_enc(w));
     }
@@ -270,6 +275,23 @@ void main() {
       ]);
     } finally {
       await c.close();
+      await fake.stop();
+    }
+  });
+
+  test('٩ نوفمبر: جلسات PPP بـcount-only — العدد من !done =ret= (لا تُسرد ٣٤٠ جلسة بحقولها)', () async {
+    final rows = _baseBox5()
+      ..['/ppp/active/print'] = [
+        for (var i = 0; i < 3; i++) ['!re', '=name=user$i', '=service=pppoe', '=caller-id=AA:BB:CC:00:00:0$i', '=address=10.9.0.$i'],
+      ];
+    final fake = _FakeRouterOs(rows);
+    final port = await fake.start();
+    try {
+      final s = await MikrotikApi.fetchStatsFor(
+          ip: '127.0.0.1', protocol: 'api', apiPort: port, creds: const {'user': 'admin', 'pass': 'x'}, vitalsOnly: true);
+      expect(s.pppActiveCount, 3);
+      expect(fake.asked.where((c) => c == '/ppp/active/print'), hasLength(1), reason: 'طلبٌ واحد بالعدد');
+    } finally {
       await fake.stop();
     }
   });
