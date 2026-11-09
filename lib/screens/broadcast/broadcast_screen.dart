@@ -74,7 +74,7 @@ bool broadcastExpiring(Subscriber s, {DateTime? now}) {
 
 enum _Scope { all, specific }
 
-class _BroadcastScreenState extends State<BroadcastScreen> {
+class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingObserver {
   _Filter _filter = _Filter.all;
   _Scope _scope = _Scope.all;
   final Set<String> _selected = <String>{};
@@ -142,6 +142,16 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   int _dfSeq = 0;
   Timer? _dfDebounce;
 
+  /// أسئلة «نحسب…» المعادة لهذا التحديد — تقف عند [_kPendingPolls] (~٣ دقائق كانتظار الإرسال) بسببها وزرّ «إعادة»، لا إلى ما لا نهاية.
+  int _dfPolls = 0;
+
+  /// معاينةٌ أُوقفت لأنّ التطبيق ذهب للخلفيّة (أو طُلبت وهو هناك) — تُعاد عند الرجوع.
+  bool _dfPausedInBackground = false;
+  bool _inBackground = false;
+
+  static const _kPendingEvery = Duration(seconds: 4);
+  static const _kPendingPolls = 45;
+
   /// «كل الشركات» (٨ نوفمبر): شركةٌ غير المفتوحة — للعرض وحده (حملاتها وحالة رسائلها)؛ لا قائمة مشتركين تُقرأ هنا (كانت
   /// تُقرأ قائمة المفتوحة فتُعرض أعدادها وأسماؤها تحت شركةٍ أخرى) ولا إرسال — من صفحتها.
   bool get _viewOnly => CompanyRoute.sectionKeyFor('/api/whatsapp/broadcast') != null;
@@ -153,9 +163,29 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       _loading = false;
       return;
     }
+    WidgetsBinding.instance.addObserver(this);
     _load();
     _loadScope();
     _loadDebtCap();
+  }
+
+  /// التطبيق في الخلفيّة (أو أُخفيت نافذته): معاينة التحديد لا تُسأل هناك — تقف، وتُعاد عند الرجوع إن بقي التحديد قائماً.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.hidden || AppLifecycleState.paused || AppLifecycleState.detached:
+        _inBackground = true;
+        if (_dfPreviewBusy && !_dfPausedInBackground) {
+          _dfDebounce?.cancel();
+          _dfSeq++; // ردٌّ يصل بعد الآن لا يُطبَّق ولا يعيد السؤال
+          _dfPausedInBackground = true;
+        }
+      case AppLifecycleState.resumed:
+        _inBackground = false;
+        if (_dfPausedInBackground) _schedulePreview();
+      case AppLifecycleState.inactive:
+        break;
+    }
   }
 
   Future<void> _loadDebtCap() async {
@@ -172,6 +202,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _dfDebounce?.cancel();
     _bigSearch.dispose();
     _msg.dispose();
@@ -296,12 +327,33 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
   void _schedulePreview() {
     _dfDebounce?.cancel();
     final seq = ++_dfSeq;
+    _dfPolls = 0;
+    _dfPausedInBackground = false;
     if (!_debtFilterOn || _df.problem() != null) {
       setState(() => _dfPreviewBusy = false);
       return;
     }
-    setState(() => _dfPreviewBusy = true);
+    // «إعادة» بعد خطأٍ أو مهلة: «يحسب…» يظهر مكان السبب لا تحته
+    setState(() {
+      _dfPreviewBusy = true;
+      _dfPreviewError = null;
+    });
+    // طُلبت والتطبيق في الخلفيّة (إرسالٌ انتهى هناك مثلاً): تُسأل عند الرجوع لا هناك
+    if (_inBackground) {
+      _dfPausedInBackground = true;
+      return;
+    }
     _dfDebounce = Timer(const Duration(milliseconds: 600), () => _runPreview(seq));
+  }
+
+  /// اللوحة اختفت (فئةٌ غير «المدينون»): لا سؤال بعدها ولا ردٌّ متأخّرٌ يُطبَّق — والعودة إليها تعيد المعاينة ([_selectFilter]).
+  void _stopPreview() {
+    _dfDebounce?.cancel();
+    _dfSeq++;
+    _dfPolls = 0;
+    _dfPausedInBackground = false;
+    _dfPreviewBusy = false;
+    _dfPending = null;
   }
 
   Future<void> _runPreview(int seq) async {
@@ -311,16 +363,26 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       targetUsernames: _managerScopedUsernames,
     );
     if (!mounted || seq != _dfSeq) return;
-    // الحساب الكبير: الخادم يحسب في الخلفيّة — السؤال نفسه بعد ٤ ثوانٍ (يُجاب من ذاكرته بلا ساس) ما لم يتغيّر التحديد
+    // الحساب الكبير: الخادم يحسب في الخلفيّة — السؤال نفسه بعد ٤ ثوانٍ (يُجاب من ذاكرته بلا ساس) ما لم يتغيّر التحديد، وما دامت
+    // اللوحة ظاهرةً والتطبيق أمامه — حتى [_kPendingPolls] سؤالاً، ثمّ السبب و«إعادة»
     if (r.preview?.pending == true) {
+      if (_dfPolls >= _kPendingPolls) {
+        setState(() {
+          _dfPreviewBusy = false;
+          _dfPending = null;
+          _dfPreviewError = 'ما زالت المعاينة تُحسب — أعد المحاولة بعد قليل';
+        });
+        return;
+      }
+      _dfPolls++;
       setState(() {
         _dfPreviewBusy = true;
         _dfPending = r.preview!.pendingMessage ?? 'حسابك كبير: نحسب من يطابق في الخلفيّة — تظهر النتيجة خلال دقيقة تقريباً';
         _dfPreviewError = null;
       });
       _dfDebounce?.cancel();
-      _dfDebounce = Timer(const Duration(seconds: 4), () {
-        if (mounted && seq == _dfSeq) _runPreview(seq);
+      _dfDebounce = Timer(_kPendingEvery, () {
+        if (mounted && seq == _dfSeq && _debtFilterOn) _runPreview(seq);
       });
       return;
     }
@@ -402,6 +464,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       _filter = f;
       _selected.clear();
       _bigPicked.clear();
+      if (f != _Filter.debtors) _stopPreview();
     });
     if (f == _Filter.debtors && _df.active) _schedulePreview();
   }
@@ -540,8 +603,8 @@ class _BroadcastScreenState extends State<BroadcastScreen> {
       targetUsernames: specific ? picked : _managerScopedUsernames,
     );
     // الكبير: معاينةٌ قديمة تُحسب من جديد في الخلفيّة — ننتظرها (حتى ٣ دقائق) قبل ورقة التأكيد
-    for (var i = 0; i < 45 && mounted && pv.preview?.pending == true; i++) {
-      await Future<void>.delayed(const Duration(seconds: 4));
+    for (var i = 0; i < _kPendingPolls && mounted && pv.preview?.pending == true; i++) {
+      await Future<void>.delayed(_kPendingEvery);
       if (!mounted) return;
       pv = await BroadcastApi.preview(intent: MessageIntent.debtors, debtFilter: _df, targetUsernames: specific ? picked : _managerScopedUsernames);
     }
