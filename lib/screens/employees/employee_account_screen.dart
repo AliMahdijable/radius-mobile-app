@@ -491,7 +491,7 @@ class _EmployeeSettleSheetState extends State<EmployeeSettleSheet> {
         padding: const EdgeInsets.symmetric(vertical: 3),
         child: Row(
           children: [
-            Expanded(child: Text(count > 0 ? '$label ($count)' : label, style: AppType.body(color: AppColors.textMid))),
+            Expanded(child: Text(count > 0 ? '$label ($count)' : label, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.body(color: AppColors.textMid))),
             Text('${formatIQD(sum)} د.ع', style: strong ? AppType.bodyBold(color: AppColors.textHi) : AppType.body(color: AppColors.textHi)),
           ],
         ),

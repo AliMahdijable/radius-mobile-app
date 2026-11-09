@@ -91,7 +91,7 @@ class EmployeeLimitsPanel extends StatelessWidget {
               Icon(LucideIcons.walletCards, size: 16, color: AppColors.brand),
               const SizedBox(width: Sp.sm),
               Expanded(
-                child: Text(title ?? 'حساب الموظف', style: AppType.bodyBold(color: AppColors.textHi)),
+                child: Text(title ?? 'حساب الموظف', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.bodyBold(color: AppColors.textHi)),
               ),
               if (since != null)
                 Text('منذ ${_dateAr(since)}', style: AppType.micro(color: AppColors.textLow)),
@@ -188,7 +188,7 @@ class _CapRow extends StatelessWidget {
       children: [
         Row(
           children: [
-            Expanded(child: Text(label, style: AppType.body(color: AppColors.textMid))),
+            Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.body(color: AppColors.textMid))),
             Text(
               c == null ? '${formatIQD(used)} د.ع · بلا حدّ' : '${formatIQD(used)} / ${formatIQD(c)} د.ع',
               textDirection: TextDirection.rtl,
