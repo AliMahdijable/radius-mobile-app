@@ -29,6 +29,11 @@ class MonoImage {
   /// بكسلات RGBA (كما يرسمها أندرويد وآيفون للـPDF: ألفا مضروبةٌ مسبقاً، وما حول الحبر **شفّاف**) ⇒ نقاطٌ بعرض
   /// [targetWidth] تبدأ من العمود [left] في الصورة. الشفّاف أبيض (الورق)، والأغمق من [threshold] أسود.
   /// ما يقع خارج الصورة أبيض — لا يُخترع حبر.
+  ///
+  /// والخطوط الرماديّة الرفيعة (أغمق من [lineThreshold]) سوداء أيضاً: فواصل الصفوف المنقّطة وخطّ الذيل وإطار الملاحظة
+  /// مرسومةٌ في الوصل بالرماديّ (grey500 = ١٥٨) فكانت تختفي على الحراريّة (مراجعة 179). «رفيعة» = بسُمك [maxThinDots]
+  /// نقاطٍ فأقلّ بين ورقٍ وورق، وطولها نقطتان فأكثر (لا نقطةٌ شاردة)، ولا تلمس حبراً — فحوافّ الحروف المنعَّمة تبقى كما
+  /// كانت حرفاً، والمساحات الرماديّة الواسعة (خلفيّات) تبقى بيضاء.
   static MonoImage fromRgba(
     Uint8List rgba,
     int width,
@@ -36,6 +41,7 @@ class MonoImage {
     required int targetWidth,
     int left = 0,
     int threshold = defaultThreshold,
+    int lineThreshold = defaultLineThreshold,
   }) {
     if (rgba.length < width * height * 4) {
       throw ArgumentError('rgba: ${rgba.length} bytes for ${width}x$height');
@@ -44,9 +50,14 @@ class MonoImage {
     final out = Uint8List(rb * height);
     // اللمعان × ١٠٠٠ مقارنةً بالعتبة × ١٠٠٠ — أعدادٌ صحيحة بلا كسور في الحلقة.
     final cut = threshold * 1000;
+    final lineCut = lineThreshold * 1000;
+    // صنف كلّ نقطة: ورق · رماديّ (بين العتبتين) · حبر.
+    final kind = Uint8List(targetWidth * height);
+    var grey = false;
     for (var y = 0; y < height; y++) {
       final src = y * width * 4;
       final dst = y * rb;
+      final row = y * targetWidth;
       for (var x = 0; x < targetWidth; x++) {
         final sx = left + x;
         if (sx < 0 || sx >= width) continue;
@@ -61,15 +72,89 @@ class MonoImage {
         if (r > 255) r = 255;
         if (g > 255) g = 255;
         if (b > 255) b = 255;
-        if (299 * r + 587 * g + 114 * b < cut) out[dst + (x >> 3)] |= 0x80 >> (x & 7);
+        final lum = 299 * r + 587 * g + 114 * b;
+        if (lum < cut) {
+          out[dst + (x >> 3)] |= 0x80 >> (x & 7);
+          kind[row + x] = _ink;
+        } else if (lum < lineCut) {
+          kind[row + x] = _grey;
+          grey = true;
+        }
       }
     }
+    if (grey) _thinGreyToInk(kind, out, targetWidth, height, rb);
     return MonoImage(targetWidth, height, out);
   }
 
   /// عتبة الأسود: أغمق قليلاً من المنتصف — حواف الحروف المنعَّمة تُحسب حبراً فلا تنقطع خطوط العربيّ الرفيعة
   /// على الورق الحراريّ، والرماديّ الفاتح (خلفيّات الأقسام) يبقى أبيض.
   static const int defaultThreshold = 150;
+
+  /// عتبة الخطّ الرماديّ الرفيع: grey500 (١٥٨) وgrey400 (١٨٩) ولو غطّى الخطُّ نصف النقطة؛ وgrey300 (٢٢٤) الباهت جدّاً
+  /// يبقى أبيض كالخلفيّات.
+  static const int defaultLineThreshold = 215;
+
+  /// أقصى سُمك خطٍّ رماديّ يُطبع أسود (نقاط طابعة): خطوط الوصل ٠٫٥–٠٫٨ نقطة PDF (١٫٤–٢٫٣ نقطة طابعة) وخطوط مصمّم
+  /// الشبكة حتى ٢ نقطة PDF (٥٫٦)، بحافّتيها المنعَّمتين. ما هو أعرض مساحةٌ تبقى بالعتبة كما كانت.
+  static const int maxThinDots = 7;
+
+  static const int _grey = 1;
+  static const int _ink = 2;
+
+  /// الرماديّ الرفيع ⇒ حبر: كلّ مقطعٍ رماديّ أفقيّ أو عموديّ بطول [maxThinDots] فأقلّ، بين ورقٍ وورق (أو حافّة الصورة)،
+  /// لا تلمس نقطةٌ منه حبراً، وللشكل امتدادٌ في الاتّجاه الآخر (لا نقطةٌ شاردة وحدها).
+  static void _thinGreyToInk(Uint8List kind, Uint8List out, int w, int h, int rb) {
+    bool at(int x, int y, int k) => x >= 0 && x < w && y >= 0 && y < h && kind[y * w + x] == k;
+    bool nearInk(int x, int y) => at(x - 1, y, _ink) || at(x + 1, y, _ink) || at(x, y - 1, _ink) || at(x, y + 1, _ink);
+    void mark(int x, int y) => out[y * rb + (x >> 3)] |= 0x80 >> (x & 7);
+
+    // مقاطع أفقيّة رفيعة (خطٌّ عموديّ أو نقطة خطٍّ منقّط): امتدادها فوقها أو تحتها.
+    for (var y = 0; y < h; y++) {
+      var x = 0;
+      while (x < w) {
+        if (kind[y * w + x] != _grey) {
+          x++;
+          continue;
+        }
+        final start = x;
+        var ok = true;
+        var spans = false;
+        while (x < w && kind[y * w + x] == _grey) {
+          if (nearInk(x, y)) ok = false;
+          if (at(x, y - 1, _grey) || at(x, y + 1, _grey)) spans = true;
+          x++;
+        }
+        if (ok && spans && x - start <= maxThinDots) {
+          for (var i = start; i < x; i++) {
+            mark(i, y);
+          }
+        }
+      }
+    }
+    // مقاطع عموديّة رفيعة (خطٌّ أفقيّ: الفواصل، خطّ الذيل، حافّتا الإطار): امتدادها يمينها أو يسارها.
+    for (var x = 0; x < w; x++) {
+      var y = 0;
+      while (y < h) {
+        if (kind[y * w + x] != _grey) {
+          y++;
+          continue;
+        }
+        final start = y;
+        var ok = true;
+        var spans = false;
+        while (y < h && kind[y * w + x] == _grey) {
+          if (nearInk(x, y)) ok = false;
+          if (at(x - 1, y, _grey) || at(x + 1, y, _grey)) spans = true;
+          y++;
+        }
+        if (ok && spans && y - start <= maxThinDots) {
+          for (var i = start; i < y; i++) {
+            mark(x, i);
+          }
+        }
+      }
+    }
+  }
 
   /// بلا الأسطر البيضاء في الذيل (يُبقي [keep] منها) — الطابعة تُخرج الورق بعدها بأمر التغذية.
   MonoImage trimBottom({int keep = 8}) {
