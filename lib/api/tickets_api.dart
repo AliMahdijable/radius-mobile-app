@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -17,6 +18,8 @@ import 'company_route.dart';
 ///   POST /api/v2/portal/tickets/:id/reply        { body } ⇒ ticket · message
 ///   POST /api/v2/portal/tickets/:id/status       { status: in_progress|resolved|closed } ⇒ ticket · message
 ///   POST /api/v2/portal/tickets/:id/reopen       ⇒ ticket · message
+///   GET  /api/v2/portal/tickets/:id/messages/:mid/image ⇒ بايتات صورة الرسالة (موثَّقٌ بملكيّة المحادثة؛ ٤١٠ بعد حذفها)
+/// الصور (٩ نوفمبر): الردّ يحمل `image` (JPEG مضغوطاً بـdata URL) والنصّ اختياريٌّ معها.
 /// الموظّف: tickets.view (القسم والإشعار) وtickets.reply (الردّ والحالة). المقيَّد بمديرٍ فرعيّ لا يأخذ القسم.
 
 DateTime? _time(Object? v) => v is String && v.isNotEmpty ? DateTime.tryParse(v)?.toLocal() : null;
@@ -67,6 +70,7 @@ class Ticket {
     this.canReopen = false,
     this.actions = const [],
     this.moved = false,
+    this.imageCount = 0,
   });
 
   final int id;
@@ -102,6 +106,9 @@ class Ticket {
   /// انتقل المشترك لوكيلٍ آخر (أو تبدّل مديره المباشر) بعد فتحها — للقراءة وحدها (الخادم يردّ الكتابة TICKET_MOVED).
   final bool moved;
 
+  /// صورٌ أُرفقت بالتذكرة (الحدّ ٢٠ — الخادم يردّ ما فوقه TICKET_IMAGES_FULL).
+  final int imageCount;
+
   bool get isFinal => status == 'closed' || status == 'cancelled';
   bool get waitingForAgent => status == 'open' || status == 'in_progress';
 
@@ -132,12 +139,35 @@ class Ticket {
       canReopen: j['can_reopen'] == true,
       actions: acts is List ? acts.map((x) => x.toString()).toList() : const [],
       moved: j['moved'] == true,
+      imageCount: _int(j['image_count']),
     );
   }
 }
 
+/// صورة رسالة (٩ نوفمبر): تُجلب بمسارها الموثَّق ([TicketsApi.imageBytes]) — لا رابط عامّ. available=false بعد حذفها (٣٠ يوماً
+/// بعد انتهاء التذكرة).
+class TicketImage {
+  const TicketImage({required this.available, this.mime, this.width, this.height, this.bytes});
+  final bool available;
+  final String? mime;
+  final int? width;
+  final int? height;
+  final int? bytes;
+
+  /// نسبة العرض للارتفاع — مكان الصورة قبل وصول بايتاتها.
+  double get aspect => (width ?? 0) > 0 && (height ?? 0) > 0 ? (width! / height!).clamp(0.4, 2.5) : 4 / 3;
+
+  static TicketImage? fromJson(Object? j) {
+    if (j is! Map) return null;
+    int? n(Object? v) => v is num && v > 0 ? v.round() : null;
+    return TicketImage(
+        available: j['available'] == true, mime: _str(j['mime']), width: n(j['width']), height: n(j['height']), bytes: n(j['bytes']));
+  }
+}
+
 class TicketMessage {
-  const TicketMessage({required this.id, required this.side, this.author, this.kind = 'text', this.event, this.body, this.createdAt});
+  const TicketMessage(
+      {required this.id, required this.side, this.author, this.kind = 'text', this.event, this.body, this.image, this.createdAt});
   final int id;
 
   /// subscriber · manager · employee · system
@@ -152,9 +182,13 @@ class TicketMessage {
   /// in_progress · resolved · closed · reopened · cancelled
   final String? event;
   final String? body;
+
+  /// صورة الرسالة إن كانت (نصّها قد يكون فارغاً معها).
+  final TicketImage? image;
   final DateTime? createdAt;
 
   bool get isEvent => kind == 'event';
+  bool get hasText => (body ?? '').trim().isNotEmpty;
   bool get fromSubscriber => side == 'subscriber';
 
   static TicketMessage? fromJson(Object? j) {
@@ -168,6 +202,7 @@ class TicketMessage {
       kind: _str(j['kind']) ?? 'text',
       event: _str(j['event']),
       body: j['body']?.toString(),
+      image: TicketImage.fromJson(j['image']),
       createdAt: _time(j['created_at']),
     );
   }
@@ -243,6 +278,9 @@ class TicketThread {
 
 typedef TicketWrite = ({bool ok, String? message, Ticket? ticket, TicketMessage? posted});
 
+/// بايتات صورة رسالة، أو expired = حُذفت (٤١٠)؛ كلاهما null/false = تعذّر (شبكة/خادم).
+typedef TicketImageResult = ({Uint8List? bytes, bool expired});
+
 class TicketsApi {
   TicketsApi._();
 
@@ -277,8 +315,8 @@ class TicketsApi {
   /// null = تعذّر.
   static Future<TicketsPage?> list({TicketFilter filter = TicketFilter.open, int offset = 0, int limit = 30}) async {
     try {
-      final r = await ApiClient.dio.get<Map<String, dynamic>>(base,
-          queryParameters: {'filter': filter.name, 'offset': '$offset', 'limit': '$limit'});
+      final r = await ApiClient.dio
+          .get<Map<String, dynamic>>(base, queryParameters: {'filter': filter.name, 'offset': '$offset', 'limit': '$limit'});
       final d = r.data;
       if (r.statusCode == 200 && d != null && d['success'] == true) {
         final items = d['items'];
@@ -305,8 +343,8 @@ class TicketsApi {
       if (r.statusCode == 200 && d?['success'] == true && t != null) {
         final ms = d?['messages'];
         return (
-          thread: TicketThread(
-              ticket: t, messages: ms is List ? ms.map(TicketMessage.fromJson).whereType<TicketMessage>().toList() : const []),
+          thread:
+              TicketThread(ticket: t, messages: ms is List ? ms.map(TicketMessage.fromJson).whereType<TicketMessage>().toList() : const []),
           gone: false,
           message: null,
         );
@@ -336,7 +374,46 @@ class TicketsApi {
     }
   }
 
-  static Future<TicketWrite> reply(int id, String body) => _write('$base/$id/reply', {'body': body});
+  /// [image] JPEG مضغوطٌ بلا EXIF (lib/screens/tickets/ticket_image.dart) — النصّ اختياريٌّ معه.
+  static Future<TicketWrite> reply(int id, String body, {Uint8List? image}) => _write('$base/$id/reply', {
+        'body': body,
+        if (image != null) 'image': 'data:image/jpeg;base64,${base64Encode(image)}',
+      });
+
+  // آخر ٤٠ صورة في الذاكرة (المحادثة تُعاد قراءتها كلّ ٣٠ث) — تُمسح بتبديل الحساب ([TicketsState.reset]).
+  static final Map<String, Uint8List> _images = {};
+
+  /// صورة رسالة بمسارها الموثَّق (والموجَّه في «كل الشركات» ببادئة القسم).
+  static Future<TicketImageResult> imageBytes(int ticketId, int messageId) async {
+    final key = '$ticketId/$messageId';
+    final hit = _images.remove(key);
+    if (hit != null) {
+      _images[key] = hit;
+      return (bytes: hit, expired: false);
+    }
+    try {
+      final r = await ApiClient.dio
+          .get<List<int>>('$base/$ticketId/messages/$messageId/image', options: Options(responseType: ResponseType.bytes));
+      final data = r.data;
+      if (r.statusCode == 200 && data != null && data.isNotEmpty) {
+        final b = data is Uint8List ? data : Uint8List.fromList(data);
+        _images[key] = b;
+        while (_images.length > 40) {
+          _images.remove(_images.keys.first);
+        }
+        return (bytes: b, expired: false);
+      }
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 410) return (bytes: null, expired: true);
+      if (kDebugMode) debugPrint('⚠️ ticket image: $e');
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ ticket image: $e');
+    }
+    return (bytes: null, expired: false);
+  }
+
+  @visibleForTesting
+  static void debugClearImages() => _images.clear();
 
   /// in_progress · resolved · closed
   static Future<TicketWrite> setStatus(int id, String status) => _write('$base/$id/status', {'status': status});
@@ -428,6 +505,7 @@ class TicketsState {
     _failedAt = null;
     _inflight = null;
     gate.value = null;
+    TicketsApi._images.clear();
   }
 
   @visibleForTesting
