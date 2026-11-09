@@ -1,11 +1,14 @@
 import 'package:easy_localization/easy_localization.dart' show StringTranslateExtension;
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show immutable, visibleForTesting;
 
 import '../api/device_probe_api.dart';
 import '../core/util/bidi.dart';
+import '../core/util/format.dart';
+import '../core/util/server_time.dart';
 import '../models/device_health.dart';
 import '../models/subscriber.dart';
 import 'connection_alerts.dart';
+import 'merged_text.dart';
 import 'vpn_now.dart';
 
 /// مشكلة مشتركٍ في «الفحص العامّ»: نوعها وسطرها كما يُعرض.
@@ -135,30 +138,120 @@ class SubsCheckRow {
   }
 }
 
-/// لماذا لم يُقرأ مشترك.
+/// لماذا لم يُقرأ مشترك — وقسمه في الملخّص بـ[SubscribersCheck.catOf]. الترتيب ترتيب القائمة.
 enum SubsMissWhy {
-  /// عبر الـVPN: الخادم وصله ولا يجيب.
+  /// عبر الـVPN: الخادم وصله ولا يجيب ⇒ «جهازه ما ردّ».
   dead,
 
   /// عبر الـVPN: يردّ (البنك) ولم تُقرأ مقاييسه — رمز جهازه، أو واجهته مقفولة (السطر في [SubsMissing] note). ٩ نوفمبر: كان «سليم».
+  /// ⇒ «جهازه ما ردّ» بسببه.
   unmeasured,
 
-  /// «كل الشركات»: شركته لم تُفحص عبر الـVPN (بلا طريق، أو تعذّر) — السبب في [SubsMissing] note.
-  company,
-
-  /// غير متّصلٍ الآن.
-  offline,
-
-  /// متّصلٌ ولا قراءة له (جهازه لا يردّ، أو بلا عنوان، أو لم يصله الفحص بعد).
+  /// متّصلٌ وفُحص ولا قراءة له: جهازه ما ردّ من شبكتك، أو فحص الخادم المكتمل بلا قراءةٍ له (note) ⇒ «جهازه ما ردّ».
   noReply,
 
-  /// جهازه يُقرأ بلا مقاييس (ليس نانو ولا وحدةً ضوئيّة).
+  /// جهازه يردّ بلا مقاييس (ليس نانو ولا وحدةً ضوئيّة) ⇒ «بلا مقاييس».
   noMetrics,
+
+  /// متّصلٌ ولم يصله الفحص: الجاري لم يبلغه بعد (note null)، أو لا فحص له أصلاً — بلا عنوان، أو لم يُفحص عبر الـVPN بعد (note)
+  /// ⇒ «لم يُفحص». ١٠ نوفمبر: كان «لم يُقرأ — جهازه لم يردّ» ولم يُسأل جهازه.
+  unchecked,
+
+  /// «كل الشركات»: شركته لم تُفحص عبر الـVPN (بلا طريق، أو تعذّر) — السبب في [SubsMissing] note ⇒ «لم يُفحص».
+  company,
+
+  /// غير متّصلٍ الآن ولا قراءة له ⇒ «غير متّصل الآن» — ليس عطلاً بجهازه (١٠ نوفمبر: كان داخل «لم يُقرأ»).
+  offline,
 }
 
 typedef SubsMissing = ({Subscriber sub, SubsMissWhy why, String? note});
 
-/// تقرير «الفحص العامّ» للمشتركين: كم قُرئ من كم، ومن بمشكلة مصنّفين بنوعها، والسليم، ومن لم يُقرأ ولماذا.
+/// أقسام «الفحص العامّ» (١٠ نوفمبر — المالك مع صورة «قُرئ 58 من 113» و«لم يُقرأ 55»: «شنو علاقة العداد بالعدد مفروض العداد
+/// يمثل الفحص هيج راح يبرك الوكيل»): المقروء بمشكلة أو سليم، والمتّصل الذي ما ردّ جهازه، ثمّ من لا يُقرأ أصلاً — غير المتّصل
+/// (ليس عطلاً)، وجهازٌ بلا مقاييس، ومن لم يصله الفحص. الكلمات نفسها في الشاشة والتقرير المنسوخ وجواب الأمر الصوتيّ.
+enum SubsCheckCat {
+  problems('بمشكلة'),
+  healthy('سليم'),
+  noReply('جهازه ما ردّ'),
+  offline('غير متّصل الآن'),
+  noMetrics('بلا مقاييس'),
+  unchecked('لم يُفحص');
+
+  const SubsCheckCat(this.label);
+  final String label;
+
+  /// «لم يُفحص بعد» ما دام الفحص جارياً.
+  String labelFor({bool running = false}) => this == unchecked && running ? 'لم يُفحص بعد' : label;
+}
+
+/// موجة فحص الهاتف كما يقرؤها «الفحص العامّ» (١٠ نوفمبر): جاريةٌ أم انتهت، وكم فُحص من كم — تقدّمها هي
+/// ([DeviceProbeApi.warmProbe]) لا نسبة المقروء — ومن تشمل (من لم يبلغه دوره «لم يُفحص بعد» لا «ما ردّ»)، ومتى انتهت آخر موجة.
+@immutable
+class SubsWave {
+  const SubsWave({
+    this.running = false,
+    this.done = 0,
+    this.total = 0,
+    this.startedAt,
+    this.endedAt,
+    this.keys = const {},
+  });
+
+  static const idle = SubsWave();
+
+  final bool running;
+  final int done;
+
+  /// صفرٌ قبل أوّل نتيجة (تجهيز الإعدادات وقياس الخطّ) ⇒ «يفحص…» بلا عدد.
+  final int total;
+  final DateTime? startedAt;
+
+  /// متى اكتملت آخر موجة — «انتهى الفحص» بوقته.
+  final DateTime? endedAt;
+
+  /// أهداف الموجة الجارية ([keyOf]).
+  final Set<String> keys;
+
+  static String keyOf(String? company, String username) => '${company ?? ''}|${username.trim().toLowerCase()}';
+
+  bool covers(Subscriber s) => keys.contains(keyOf(s.companyKey, s.username));
+
+  /// موجةٌ تبدأ لهؤلاء ([keyOf]) — وآخر انتهاءٍ محفوظ.
+  SubsWave start(Iterable<String> targets, DateTime at) =>
+      SubsWave(running: true, startedAt: at, endedAt: endedAt, keys: targets.toSet());
+
+  SubsWave progress(int done, int total) =>
+      SubsWave(running: running, done: done, total: total, startedAt: startedAt, endedAt: endedAt, keys: keys);
+
+  SubsWave finish(DateTime at) => SubsWave(done: done, total: total, startedAt: startedAt, endedAt: at);
+
+  /// لا شيء يحتاج الفحص (الكلّ طازج): الجارية — إن قطعتها هذه — تنتهي الآن، وإلّا كما هي.
+  SubsWave settle(DateTime at) => running ? finish(at) : this;
+}
+
+enum SubsRunState { running, finished, failed, idle }
+
+/// شريط «الفحص العامّ»: الفحص نفسه لا نسبة المقروء (١٠ نوفمبر) — جارٍ «يفحص… 12 من 30»، ثمّ «انتهى الفحص — 113 مشترك»
+/// بوقته والشريط ممتلئ (لا يبقى نصفاً بعد الانتهاء)، أو لماذا تعذّر، أو «لم يُفحص بعد».
+@immutable
+class SubsCheckProgress {
+  const SubsCheckProgress(this.state, this.text, {this.value, this.at});
+  final SubsRunState state;
+  final String text;
+
+  /// جارٍ: المفحوص ÷ المطلوب (null = غير محدّد)؛ انتهى: 1؛ غير ذلك null.
+  final double? value;
+
+  /// انتهى: وقت آخر فحص.
+  final DateTime? at;
+
+  bool get running => state == SubsRunState.running;
+}
+
+/// فحص الخادم عبر الـVPN كما يقرؤه الشريط ([SubscribersCheck.vpnRunOf]).
+typedef SubsVpnRun = ({bool busy, bool failed, String? line, int done, int total, double? value});
+
+/// تقرير «الفحص العامّ» للمشتركين: من بمشكلة مصنّفين بنوعها، والسليم، ومن لم يُقرأ ولماذا — وأقسامه [SubsCheckCat].
 class SubsCheckReport {
   const SubsCheckReport({
     required this.total,
@@ -167,6 +260,7 @@ class SubsCheckReport {
     this.healthy = const [],
     this.missing = const [],
     this.oldest,
+    this.newest,
   });
 
   final int total;
@@ -180,11 +274,12 @@ class SubsCheckReport {
   /// المقروء بلا مشكلة — الأقرب للحدّ أوّلاً.
   final List<SubsCheckRow> healthy;
 
-  /// من لم يُقرأ — الميّت عبر الـVPN أوّلاً.
+  /// من لم يُقرأ — الميّت عبر الـVPN أوّلاً ([SubsMissWhy] بترتيبه).
   final List<SubsMissing> missing;
 
-  /// أقدم قراءةٍ داخلة (للسطر «آخر قراءة قبل…»).
+  /// أقدم قراءة هاتفٍ داخلة وأحدثها — الأحدث وقت آخر فحصٍ حين لا تُعرف موجته.
   final DateTime? oldest;
+  final DateTime? newest;
 
   int get unread => total - read;
 
@@ -193,6 +288,19 @@ class SubsCheckReport {
         for (final r in rows)
           if (r.problems.any((p) => p.kind == k)) r
       ];
+
+  /// من لم يُقرأ في القسم [c] (فارغة لـ«بمشكلة» و«سليم»).
+  List<SubsMissing> missingIn(SubsCheckCat c) => [
+        for (final m in missing)
+          if (SubscribersCheck.catOf(m.why) == c) m
+      ];
+
+  /// عدد القسم [c].
+  int count(SubsCheckCat c) => switch (c) {
+        SubsCheckCat.problems => rows.length,
+        SubsCheckCat.healthy => healthy.length,
+        _ => missing.where((m) => SubscribersCheck.catOf(m.why) == c).length,
+      };
 }
 
 /// «الفحص العامّ» للمشتركين (٨ نوفمبر — المالك: «أ» ثمّ «تره فحص المشتركين ثكيل كلش مو مثل فحص الاجهزه ولا مثل مايعرضون
@@ -252,6 +360,125 @@ class SubscribersCheck {
 
   static int _missRank(SubsMissing m) => SubsMissWhy.values.indexOf(m.why);
 
+  /// قسم من لم يُقرأ.
+  static SubsCheckCat catOf(SubsMissWhy why) => switch (why) {
+        SubsMissWhy.dead || SubsMissWhy.unmeasured || SubsMissWhy.noReply => SubsCheckCat.noReply,
+        SubsMissWhy.noMetrics => SubsCheckCat.noMetrics,
+        SubsMissWhy.unchecked || SubsMissWhy.company => SubsCheckCat.unchecked,
+        SubsMissWhy.offline => SubsCheckCat.offline,
+      };
+
+  /// سبب من لم يُقرأ بكلمات الوكيل — بجانب اسمه في الشاشة، وفي التقرير المنسوخ، وفي جواب الأمر الصوتيّ.
+  static String missText(SubsMissing m, {bool running = false}) => switch (m.why) {
+        SubsMissWhy.dead => 'لا يستجيب',
+        SubsMissWhy.unmeasured => m.note ?? 'يردّ، ما انقرت مقاييسه',
+        SubsMissWhy.noReply => m.note ?? 'ما ردّ من شبكتك',
+        SubsMissWhy.noMetrics => 'جهازه بلا مقاييس',
+        SubsMissWhy.unchecked => m.note ?? (running ? 'بانتظار الفحص' : 'لم يصله الفحص'),
+        SubsMissWhy.company => (m.note ?? '').contains('تحتاج VPN')
+            ? mergedWord('شركته تحتاج VPN', 'صفحته تحتاج VPN')
+            : mergedWord('لم تُفحص شركته', 'لم تُفحص صفحته'),
+        SubsMissWhy.offline => 'غير متّصل',
+      };
+
+  /// الفحص عبر الـVPN كما يقرؤه الشريط.
+  static SubsVpnRun vpnRunOf(VpnNowJob j) => (
+        busy: j.busy,
+        failed: j.phase == VpnBarPhase.failed,
+        line: j.line,
+        done: j.done,
+        total: j.total,
+        value: j.value,
+      );
+
+  /// شريط الفحص (١٠ نوفمبر — المالك: «مفروض العداد يمثل الفحص»): [subs] مشتركو التقرير · [wave] موجة الهاتف (null: ليست من
+  /// هذا الفحص) · [vpn] فحص الخادم (null: ليس منه) · [merged] «كل الشركات» و[vpnCompany] الشركة التي يفحصها الخادم الآن ·
+  /// [at] متى اكتمل آخر فحص (الموجة، أو الخادم، أو أحدث قراءة).
+  static SubsCheckProgress progress({
+    required int subs,
+    SubsWave? wave,
+    SubsVpnRun? vpn,
+    bool merged = false,
+    String? vpnCompany,
+    DateTime? at,
+  }) {
+    final w = wave;
+    if (w != null && w.running) {
+      final head = merged ? 'يفحص من شبكتك…' : 'يفحص…';
+      if (w.total <= 0) return SubsCheckProgress(SubsRunState.running, head);
+      return SubsCheckProgress(SubsRunState.running, '$head ${formatIQD(w.done)} من ${formatIQD(w.total)}',
+          value: (w.done / w.total).clamp(0.0, 1.0));
+    }
+    final v = vpn;
+    if (v != null && v.busy) {
+      final named = merged && vpnCompany != null;
+      if (v.total > 0) {
+        return SubsCheckProgress(
+            SubsRunState.running,
+            // العدد أوّلاً: اسمٌ طويل يُقصّ ولا يُقصّ العدد
+            'يفحص… ${formatIQD(v.done)} من ${formatIQD(v.total)}${named ? ' · «$vpnCompany» عبر VPN' : ''}',
+            value: (v.done / v.total).clamp(0.0, 1.0));
+      }
+      // ما قبل الأجهزة وما بعدها (يتّصل، المتّصلون، السكترات، الأولت، يجمع النتيجة) — بكلمات شريط الـVPN نفسه
+      return SubsCheckProgress(
+          SubsRunState.running, named ? 'يفحص «$vpnCompany» عبر VPN…' : (v.line ?? 'يتّصل بالـVPN…'),
+          value: v.value);
+    }
+    // فحص الخادم وحده تعذّر (لا موجة هاتفٍ معه) — سببه بكلماته
+    if (v != null && v.failed && w == null) {
+      return SubsCheckProgress(SubsRunState.failed, v.line ?? 'تعذّر الفحص الآن — حاول بعد قليل');
+    }
+    if (at == null) return const SubsCheckProgress(SubsRunState.idle, 'لم يُفحص بعد');
+    return SubsCheckProgress(SubsRunState.finished, 'انتهى الفحص — ${formatIQD(subs)} مشترك', value: 1, at: at);
+  }
+
+  /// التقرير منسوخاً (١٠ نوفمبر) بأقسام الشاشة وكلماتها: سطر الفحص، ثمّ الأعداد، ثمّ من بمشكلة بمشاكله ومن ما ردّ جهازه ومن بلا
+  /// مقاييس ومن لم يُفحص بأسبابهم — السليم وغير المتّصل عددٌ وحده (لا عطل يُتابَع). [companyOf] «كل الشركات»: اسم شركة المشترك.
+  static String reportText(
+    SubsCheckReport r, {
+    required SubsCheckProgress progress,
+    String? source,
+    String? Function(Subscriber s)? companyOf,
+  }) {
+    final running = progress.running;
+    final at = progress.at;
+    final out = <String>[
+      'الفحص العامّ للمشتركين${source == null ? '' : ' — $source'}',
+      running ? '${progress.text} — لم يكتمل' : (at == null ? progress.text : '${progress.text} · ${timeAgoAr(at)}'),
+      [
+        for (final c in SubsCheckCat.values)
+          if (c == SubsCheckCat.problems || c == SubsCheckCat.healthy || r.count(c) > 0)
+            '${c.labelFor(running: running)} ${formatIQD(r.count(c))}',
+      ].join(' · '),
+    ];
+    String who(Subscriber s) {
+      final name = s.fullName.trim().isEmpty ? s.username : s.fullName.trim();
+      final co = companyOf?.call(s);
+      return '$name (${s.username}${co == null ? '' : ' · $co'})';
+    }
+
+    if (r.rows.isNotEmpty) {
+      out
+        ..add('')
+        ..add('${SubsCheckCat.problems.label} (${formatIQD(r.rows.length)}):');
+      for (final row in r.rows) {
+        out.add('• ${who(row.sub)} — ${row.problems.map((p) => p.label).join(' · ')}');
+      }
+    }
+    for (final c in const [SubsCheckCat.noReply, SubsCheckCat.noMetrics, SubsCheckCat.unchecked]) {
+      final ms = r.missingIn(c);
+      if (ms.isEmpty) continue;
+      out
+        ..add('')
+        ..add('${c.labelFor(running: running)} (${formatIQD(ms.length)}):');
+      for (final m in ms) {
+        final why = missText(m, running: running);
+        out.add('• ${who(m.sub)}${why == c.label ? '' : ' — $why'}');
+      }
+    }
+    return out.join('\n');
+  }
+
   static SubsCheckReport _report(
     int total,
     List<SubsCheckRow> rows,
@@ -259,32 +486,62 @@ class SubscribersCheck {
     List<SubsMissing> missing,
     ConnectionAlertThresholds Function(String? company) limits, {
     DateTime? oldest,
+    DateTime? newest,
   }) {
     rows.sort(_byWorst);
     final margins = <SubsCheckRow, double>{
       for (final h in healthy) h: h.reading == null ? double.infinity : margin(h.reading!, limits(h.sub.companyKey)),
     };
     healthy.sort((a, b) => margins[a]!.compareTo(margins[b]!));
-    missing.sort((a, b) => _missRank(a).compareTo(_missRank(b)));
+    // داخل السبب الواحد بترتيب القائمة نفسه (sort في Dart غير مستقرّ — كانت الصفوف تتقافز: 76، 71، 72…)
+    final order = List<int>.generate(missing.length, (i) => i)
+      ..sort((a, b) {
+        final k = _missRank(missing[a]).compareTo(_missRank(missing[b]));
+        return k != 0 ? k : a.compareTo(b);
+      });
+    final sortedMissing = [for (final i in order) missing[i]];
     return SubsCheckReport(
       total: total,
       read: rows.length + healthy.length,
       rows: rows,
       healthy: healthy,
-      missing: missing,
+      missing: sortedMissing,
       oldest: oldest,
+      newest: newest,
     );
   }
 
-  /// من قراءات الهاتف (الكارت): [peek] يُستبدل في الاختبار.
+  /// لم يبلغه الفحص الجاري بعد: من أهداف الموجة، ولا نتيجة له منذ بدأت.
+  static bool _awaitsWave(Subscriber s, ({DeviceHealthSnapshot? snap, bool stale, DateTime at})? p, SubsWave? w) {
+    if (w == null || !w.running || !w.covers(s)) return false;
+    final from = w.startedAt;
+    return p == null || from == null || p.at.isBefore(from);
+  }
+
+  /// من لا قراءة بمقاييس له من الهاتف: غير المتّصل أوّلاً (ليس عطلاً)، ثمّ من لم تبلغه الموجة الجارية، ثمّ جهازٌ ردّ بلا مقاييس،
+  /// أو فُحص وما ردّ، أو لم يُفحص أصلاً (بلا عنوان).
+  static SubsMissing _missLocal(Subscriber s, ({DeviceHealthSnapshot? snap, bool stale, DateTime at})? p, SubsWave? w) {
+    if (!s.isOnline) return (sub: s, why: SubsMissWhy.offline, note: null);
+    if (_awaitsWave(s, p, w)) return (sub: s, why: SubsMissWhy.unchecked, note: null);
+    if (p?.snap != null) return (sub: s, why: SubsMissWhy.noMetrics, note: null);
+    if (p != null) return (sub: s, why: SubsMissWhy.noReply, note: null);
+    return (sub: s, why: SubsMissWhy.unchecked, note: _noAddress(s));
+  }
+
+  /// لا عنوان من الراديوس ولا نتيجة فحص ⇒ الموجة لم تسأل جهازه (المحفوظ يدويّاً يُفحص ويُقرأ باسمه).
+  static String? _noAddress(Subscriber s) => (s.ipAddress ?? '').trim().isEmpty ? 'بلا عنوان IP' : null;
+
+  /// من قراءات الهاتف (الكارت): [peek] يُستبدل في الاختبار، و[wave] الموجة الجارية (من لم تبلغه «لم يُفحص بعد»).
   static SubsCheckReport local(
     List<Subscriber> subs,
     ConnectionAlertThresholds Function(String? company) limits, {
     ({DeviceHealthSnapshot? snap, bool stale, DateTime at})? Function(Subscriber s)? peek,
+    SubsWave? wave,
   }) {
     final look =
         peek ?? debugPeek ?? (s) => DeviceProbeApi.peek(username: s.username, ip: s.ipAddress, company: s.companyKey);
     DateTime? oldest;
+    DateTime? newest;
     final rows = <SubsCheckRow>[];
     final healthy = <SubsCheckRow>[];
     final missing = <SubsMissing>[];
@@ -294,46 +551,38 @@ class SubscribersCheck {
       // قراءةٌ بمقاييس (يوبيكويتي أو ONT) وحدها — جهازٌ آخر بلا أرقام ليس «مقروءاً»
       final x = p == null ? null : SubsReading.ofSnapshot(snap, p.at);
       if (x == null) {
-        missing.add((
-          sub: s,
-          why: snap != null ? SubsMissWhy.noMetrics : (s.isOnline ? SubsMissWhy.noReply : SubsMissWhy.offline),
-          note: null,
-        ));
+        missing.add(_missLocal(s, p, wave));
         continue;
       }
       if (oldest == null || p!.at.isBefore(oldest)) oldest = p!.at;
+      if (newest == null || p.at.isAfter(newest)) newest = p.at;
       final probs = ConnectionAlerts.detect(snap!, limits(s.companyKey));
       final row = SubsCheckRow(s, [for (final q in probs) (kind: q.kind, label: q.label)], reading: x);
       (probs.isEmpty ? healthy : rows).add(row);
     }
-    return _report(subs.length, rows, healthy, missing, limits, oldest: oldest);
+    return _report(subs.length, rows, healthy, missing, limits, oldest: oldest, newest: newest);
   }
 
-  /// من قراءات فحص الخادم عبر الـVPN: [reading] يُستبدل في الاختبار، و[readAt] وقت فحص شركة المشترك.
+  /// من قراءات فحص الخادم عبر الـVPN: [reading] يُستبدل في الاختبار، و[readAt] وقت فحص شركة المشترك (null: لم تُفحص)،
+  /// و[running] فحص الخادم جارٍ (من لا قراءة له «لم يُفحص بعد» لا «ما ردّ»).
   static SubsCheckReport vpn(
     List<Subscriber> subs,
     ConnectionAlertThresholds Function(String? company) limits, {
     VpnSubReading? Function(Subscriber s)? reading,
     DateTime? Function(String? company)? readAt,
+    bool? running,
   }) {
     final look = reading ?? (s) => VpnNow.readingFor(s.username, company: s.companyKey);
     final when = readAt ?? (c) => VpnNow.readingsAtFor(c) ?? VpnNow.readingsAt;
+    final busy = running ?? VpnNow.subscribers.busy;
     final rows = <SubsCheckRow>[];
     final healthy = <SubsCheckRow>[];
     final missing = <SubsMissing>[];
     for (final s in subs) {
       final r = look(s);
-      if (r == null || r.dead) {
-        missing.add((
-          sub: s,
-          why: r != null ? SubsMissWhy.dead : (s.isOnline ? SubsMissWhy.noReply : SubsMissWhy.offline),
-          note: null,
-        ));
-        continue;
-      }
       // ٩ نوفمبر: يردّ بلا مقاييس (البنك وحده) ⇒ «لم يُقرأ» بسببه — لا «سليم» (خادمٌ قديم أو جديد سواء)
-      if (!r.measured) {
-        missing.add(_unmeasured(s, r));
+      if (r == null || r.dead || !r.measured) {
+        missing.add(_missVpn(s, r, busy: busy, checkedAt: when(s.companyKey)));
         continue;
       }
       final probs = fromVpn(r, limits(s.companyKey));
@@ -343,9 +592,25 @@ class SubscribersCheck {
     return _report(subs.length, rows, healthy, missing, limits);
   }
 
+  /// من لا قراءة بمقاييس له عبر الـVPN: غير المتّصل أوّلاً، ثمّ من لا نتيجة له (الفحص جارٍ ⇒ لم يبلغه بعد؛ لا فحص مكتمل ⇒ لم
+  /// يُفحص؛ فحصٌ مكتمل بلا قراءةٍ له ⇒ ما ردّ)، ثمّ الميّت، ومن يردّ بلا مقاييس.
+  static SubsMissing _missVpn(Subscriber s, VpnSubReading? r, {required bool busy, required DateTime? checkedAt}) {
+    if (!s.isOnline) return (sub: s, why: SubsMissWhy.offline, note: null);
+    if (r == null) {
+      if (busy) return (sub: s, why: SubsMissWhy.unchecked, note: null);
+      if (checkedAt == null) return (sub: s, why: SubsMissWhy.unchecked, note: 'لم يُفحص عبر VPN بعد');
+      return (sub: s, why: SubsMissWhy.noReply, note: 'لم يُقرأ عبر VPN');
+    }
+    if (r.dead) return (sub: s, why: SubsMissWhy.dead, note: null);
+    return unmeasured(s, r);
+  }
+
   /// «كل الشركات» (٨ نوفمبر — المالك: «فحص المشتركين… مايعرض مثل الاجهزه مشتركين كل شركه ونتيجه فحوصاتهم… ايرث لنك رابطلها vpn
   /// والسوبرنت تشتغل لوكل»): كلّ مشتركٍ بأحدث قراءةٍ له — من الهاتف (جهازه وصله موبايلك) أو من فحص شركته عبر الـVPN؛ ومن لم يُقرأ
   /// وشركته لم تُفحص عبر الـVPN يُقال سببها ([companyNote]: ««ايرث لنك» تحتاج VPN»…).
+  ///
+  /// ١٠ نوفمبر: [wave] موجة الهاتف الجارية و[vpnWaits] شركةٌ يفحصها الخادم الآن أو بعد قليل — من لم يبلغه أيٌّ منهما «لم يُفحص
+  /// بعد» لا «ما ردّ»؛ وغير المتّصل وحده قسمه.
   static SubsCheckReport mixed(
     List<Subscriber> subs,
     ConnectionAlertThresholds Function(String? company) limits, {
@@ -353,12 +618,16 @@ class SubscribersCheck {
     VpnSubReading? Function(Subscriber s)? reading,
     DateTime? Function(String? company)? readAt,
     String? Function(String? company)? companyNote,
+    SubsWave? wave,
+    bool Function(String? company)? vpnWaits,
   }) {
     final look =
         peek ?? debugPeek ?? (s) => DeviceProbeApi.peek(username: s.username, ip: s.ipAddress, company: s.companyKey);
     final vpnLook = reading ?? (s) => VpnNow.readingFor(s.username, company: s.companyKey);
     final when = readAt ?? (c) => c == null ? VpnNow.readingsAt : VpnNow.readingsAtFor(c);
+    final waits = vpnWaits ?? (c) => c != null && VpnNow.subscribers.waits(c);
     DateTime? oldest;
+    DateTime? newest;
     final rows = <SubsCheckRow>[];
     final healthy = <SubsCheckRow>[];
     final missing = <SubsMissing>[];
@@ -366,7 +635,8 @@ class SubscribersCheck {
       final p = look(s);
       final local = p == null ? null : SubsReading.ofSnapshot(p.snap, p.at);
       final v = vpnLook(s);
-      final vAt = v == null ? null : when(s.companyKey);
+      final checkedAt = when(s.companyKey);
+      final vAt = v == null ? null : checkedAt;
       final t = limits(s.companyKey);
       // الأحدث يغلب: قراءة الـVPN إن لم تكن قراءة الهاتف أو كانت أقدم منها — وبمقاييس (البنك وحده لا يغلب قراءةً حقيقيّة)
       final useVpn = v != null && !v.dead && v.measured && (local == null || (vAt != null && vAt.isAfter(p!.at)));
@@ -377,34 +647,45 @@ class SubscribersCheck {
       }
       if (local != null) {
         if (oldest == null || p!.at.isBefore(oldest)) oldest = p!.at;
+        if (newest == null || p.at.isAfter(newest)) newest = p.at;
         final probs = ConnectionAlerts.detect(p.snap!, t);
         (probs.isEmpty ? healthy : rows)
             .add(SubsCheckRow(s, [for (final q in probs) (kind: q.kind, label: q.label)], reading: local));
         continue;
       }
+      if (!s.isOnline) {
+        missing.add((sub: s, why: SubsMissWhy.offline, note: null));
+        continue;
+      }
       // يردّ عبر الـVPN بلا مقاييس ولا قراءة هاتف ⇒ «لم يُقرأ» بسببه
       if (v != null && !v.dead && p?.snap == null) {
-        missing.add(_unmeasured(s, v));
+        missing.add(unmeasured(s, v));
+        continue;
+      }
+      if (_awaitsWave(s, p, wave) || (v == null && waits(s.companyKey))) {
+        missing.add((sub: s, why: SubsMissWhy.unchecked, note: null));
         continue;
       }
       final note = companyNote?.call(s.companyKey);
-      missing.add((
-        sub: s,
-        why: v != null && v.dead
-            ? SubsMissWhy.dead
-            : note != null
-                ? SubsMissWhy.company
-                : p?.snap != null
-                    ? SubsMissWhy.noMetrics
-                    : (s.isOnline ? SubsMissWhy.noReply : SubsMissWhy.offline),
-        note: note,
-      ));
+      missing.add(v != null && v.dead
+          ? (sub: s, why: SubsMissWhy.dead, note: null)
+          : note != null
+              ? (sub: s, why: SubsMissWhy.company, note: note)
+              : p?.snap != null
+                  ? (sub: s, why: SubsMissWhy.noMetrics, note: null)
+                  : p != null
+                      ? (sub: s, why: SubsMissWhy.noReply, note: null)
+                      // فحص الخادم لشركته اكتمل بلا قراءةٍ له ⇒ ما ردّ؛ ولا فحص له بأيّ طريق ⇒ لم يُفحص
+                      : checkedAt != null
+                          ? (sub: s, why: SubsMissWhy.noReply, note: 'لم يُقرأ عبر VPN')
+                          : (sub: s, why: SubsMissWhy.unchecked, note: _noAddress(s)));
     }
-    return _report(subs.length, rows, healthy, missing, limits, oldest: oldest);
+    return _report(subs.length, rows, healthy, missing, limits, oldest: oldest, newest: newest);
   }
 
-  /// قراءة VPN بلا مقاييس ⇒ سطر «لم يُقرأ»: البنك وحده ⇒ «يردّ» بسببه إن أعطاه الخادم؛ وجهازٌ قُرئ بلا أرقام ⇒ «بلا قياسات».
-  static SubsMissing _unmeasured(Subscriber s, VpnSubReading r) => r.src == 'ping'
+  /// قراءة VPN بلا مقاييس ⇒ سطر من لم يُقرأ: البنك وحده ⇒ «يردّ» بسببه إن أعطاه الخادم («جهازه ما ردّ»)؛ وجهازٌ قُرئ بلا أرقام ⇒
+  /// «بلا مقاييس». وجواب الأمر الصوتيّ به كذلك.
+  static SubsMissing unmeasured(Subscriber s, VpnSubReading r) => r.src == 'ping'
       ? (sub: s, why: SubsMissWhy.unmeasured, note: unmeasuredLabel(r))
       : (sub: s, why: SubsMissWhy.noMetrics, note: null);
 

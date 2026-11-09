@@ -33,6 +33,11 @@ class VpnNowJob extends ChangeNotifier {
 
   /// التقدّم ٠..١ — null = غير محدّد (يتّصل/يقرأ السكترات).
   double? value;
+
+  /// مرحلة فحص الأجهزة نفسها («يفحص… done من total») — صفران خارجها (يتّصل، السكترات، الأولت، يجمع النتيجة). يقرؤها شريط
+  /// «الفحص العامّ» ليعدّ الفحص لا المقروء (١٠ نوفمبر — المالك: «مفروض العداد يمثل الفحص»).
+  int done = 0;
+  int total = 0;
   VpnNowResult? result;
 
   /// سبب الفشل من الخادم (tunnel_failed، no_vpn…) — يقرّر زرّ «صفحة VPN».
@@ -47,6 +52,15 @@ class VpnNowJob extends ChangeNotifier {
   /// «كل الشركات»: شركات الفحص الجاري بترتيبها، والتي تُفحص الآن — لبطاقة «الشركات» في «الفحص العامّ» (بانتظار دورها/تُفحص).
   List<String> queue = const [];
   String? current;
+
+  /// الشركة [key] في الفحص الجاري ولم يُنتهَ منها بعد: الحاليّة أو بعدها بالدور — ما قبل الحاليّة فُحص في هذا الفحص نفسه.
+  bool waits(String key) {
+    if (!busy) return false;
+    final i = queue.indexOf(key);
+    if (i < 0) return false;
+    final c = current;
+    return i >= (c == null ? 0 : queue.indexOf(c));
+  }
 
   /// تأكّد الطريق جارٍ (الأجهزة) — والشريط على حاله («متّصل» لا دائرة كلّ دقيقة).
   bool _checking = false;
@@ -65,6 +79,7 @@ class VpnNowJob extends ChangeNotifier {
     line = 'يتّصل بالـVPN…';
     sub = 'تقدر تطلع من الشاشة — الفحص يكمل';
     value = null;
+    done = total = 0;
     result = null;
     reason = null;
     notifyListeners();
@@ -112,6 +127,7 @@ class VpnNowJob extends ChangeNotifier {
     line = 'يتّصل بالـVPN…';
     sub = 'تقدر تطلع من الشاشة — الفحص يكمل';
     value = null;
+    done = total = 0;
     result = null;
     reason = null;
     notifyListeners();
@@ -135,6 +151,7 @@ class VpnNowJob extends ChangeNotifier {
       final head = scope.length == 1 ? 'يفحص مشتركي «${c.name}»' : 'يفحص مشتركي «${c.name}» (${i + 1} من ${scope.length})';
       line = '$head…';
       value = null;
+      done = total = 0;
       current = c.key;
       notifyListeners();
       final r = await CompanyRoute.run(c.key, () => _sweepCompany(head, gen));
@@ -163,6 +180,7 @@ class VpnNowJob extends ChangeNotifier {
     if (gen != _gen) return;
     current = null;
     queue = const [];
+    done = total = 0;
     if (ok == 0) {
       _fail(notes.isEmpty ? 'تعذّر الفحص الآن — حاول بعد قليل' : notes.join(' · '));
       return;
@@ -200,6 +218,12 @@ class VpnNowJob extends ChangeNotifier {
       if (pr != null && pr.phase == 'probing' && pr.total > 0) {
         line = '$head… ${pr.done} من ${pr.total}';
         value = (pr.done / pr.total).clamp(0.0, 1.0);
+        done = pr.done;
+        total = pr.total;
+        notifyListeners();
+      } else if (pr != null && pr.phase != 'probing' && total > 0) {
+        // بعد الأجهزة (يجمع النتيجة…): لا «310 من 310» عالقة
+        done = total = 0;
         notifyListeners();
       }
       if (DateTime.now().difference(started) > VpnNow.maxWait) {
@@ -250,6 +274,7 @@ class VpnNowJob extends ChangeNotifier {
 
   void _progress(VpnNowProgress? pr) {
     if (pr == null) return;
+    done = total = 0;
     switch (pr.phase) {
       case 'online':
         line = 'يجلب المتّصلين…';
@@ -264,6 +289,8 @@ class VpnNowJob extends ChangeNotifier {
         if (pr.total > 0) {
           line = 'يفحص $_what… ${pr.done} من ${pr.total}';
           value = (pr.done / pr.total).clamp(0.0, 1.0);
+          done = pr.done;
+          total = pr.total;
         } else {
           line = 'يفحص $_what…';
           value = null;
@@ -289,6 +316,7 @@ class VpnNowJob extends ChangeNotifier {
     line = r.message;
     sub = r.detail;
     value = null;
+    done = total = 0;
     notifyListeners();
     VpnNow._doneInMode(kind);
   }
@@ -298,6 +326,7 @@ class VpnNowJob extends ChangeNotifier {
     line = msg;
     sub = null;
     value = null;
+    done = total = 0;
     this.reason = reason;
     notifyListeners();
     // الفشل يحتاج عيناً — يظهر الشريط وإن أُخفي
@@ -314,6 +343,7 @@ class VpnNowJob extends ChangeNotifier {
     line = null;
     sub = null;
     value = null;
+    done = total = 0;
     result = null;
     reason = null;
     notifyListeners();
@@ -341,6 +371,7 @@ class VpnNowJob extends ChangeNotifier {
     line = null;
     sub = null;
     value = null;
+    done = total = 0;
     result = null;
     reason = null;
     notifyListeners();

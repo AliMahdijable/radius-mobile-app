@@ -34,6 +34,7 @@ import '../../services/permissions_service.dart';
 import '../../services/provider_service.dart';
 import '../../services/subscriber_events.dart';
 import '../../services/subscriber_usage_store.dart';
+import '../../services/subscribers_check.dart' show SubsWave;
 import '../../core/widgets/design_sheet.dart';
 import '../../core/widgets/voice_search_button.dart';
 import '../../theme/colors.dart';
@@ -156,8 +157,9 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   /// ولا عدّاد معها: المقدار المعروض حُذف، فلا داعي لتتبّعه.
   bool _probing = false;
 
-  /// [_probing] لشاشة «الفحص العامّ» — تعرض «يحدّث…» ما دامت الموجة جارية (٨ نوفمبر).
-  final ValueNotifier<bool> _probingN = ValueNotifier<bool>(false);
+  /// الموجة لشاشة «الفحص العامّ» (١٠ نوفمبر — المالك: «مفروض العداد يمثل الفحص»): جاريةٌ أم انتهت، وكم فُحص من كم (تقدّمها
+  /// هي)، ومن تشمل — شريطها «يفحص… 12 من 30» ثمّ «انتهى الفحص» بوقته، ومن لم يبلغه دوره «لم يُفحص بعد» لا «ما ردّ».
+  final ValueNotifier<SubsWave> _waveN = ValueNotifier<SubsWave>(SubsWave.idle);
 
   /// آخر إيقاظٍ لبطاقات الأجهزة — لخنق تواتره أثناء الموجة.
   DateTime? _lastProbeBump;
@@ -530,7 +532,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
         builder: (_) => SubscribersCheckScreen(
           subscribers: () => _all,
           viaVpn: VpnNow.mode.value || _offNet || !net,
-          probing: _probingN,
+          wave: _waveN,
           onRefreshStale: () => _runProbeWave(),
           onForceAll: () => _runProbeWave(force: true),
           companies: companies,
@@ -555,7 +557,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       builder: (_) => SubscribersCheckScreen(
         subscribers: () => _big ? _bigRows : _all,
         viaVpn: viaVpn,
-        probing: _probingN,
+        wave: _waveN,
         onRefreshStale: () => _runProbeWave(),
         onForceAll: () => _runProbeWave(force: true),
         big: _big,
@@ -744,7 +746,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
   @override
   void dispose() {
     _netTimer?.cancel();
-    _probingN.dispose();
+    _waveN.dispose();
     AgentNetPresence.state.removeListener(_onPresence);
     VpnNow.mode.removeListener(_onVpnMode);
     if (_vpnAttached) {
@@ -1066,7 +1068,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       setState(() {
         _probing = false;
       });
-      _probingN.value = false;
+      // لا شيء قديم: موجةٌ جارية قطعتها هذه تنتهي الآن، وإلّا يبقى آخر انتهاء
+      _waveN.value = _waveN.value.settle(DateTime.now());
       // «تنبيه المشترك» التلقائيّ: الكلّ طازجٌ في الكاش ⇒ قراءاته للخادم (مخنوقةٌ لكلّ مشترك؛ لا شيء إن لم يُفتح للحساب)
       unawaited(ConnectionReadingsUploader.collect(_big ? _bigRows : _all));
       return;
@@ -1081,7 +1084,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     }
     _lastProbeBump = null;
     setState(() => _probing = true);
-    _probingN.value = true;
+    _waveN.value = _waveN.value.start([for (final t in targets) SubsWave.keyOf(t.company, t.username)], DateTime.now());
     // مطلب المستخدم 2026-07-12: أولوية للـviewport-visible subs.
     // الـwave يفحص هؤلاء أوّلاً حتى المستخدم يشوف حالتهم فوراً بدون
     // انتظار الـ500 مشترك يخلصون. الـpage الحالية أفضل تقريب متاح.
@@ -1110,6 +1113,8 @@ class _SubscribersScreenState extends State<SubscribersScreen>
             _lastProbeBump == null ||
             now.difference(_lastProbeBump!) >= const Duration(milliseconds: 250)) {
           _lastProbeBump = now;
+          // عدّاد «الفحص العامّ» بالخنق نفسه — لا إعادة بناءٍ لكلّ هدف
+          _waveN.value = _waveN.value.progress(done, total);
           DeviceProbeBus.bump();
         }
       },
@@ -1122,7 +1127,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
       //    أوّل تمرير.
       DeviceProbeBus.bump();
       setState(() => _probing = false);
-      _probingN.value = false;
+      _waveN.value = _waveN.value.finish(DateTime.now());
       // «تنبيه المشترك» التلقائيّ (٣ نوفمبر): القراءات الخام للخادم — هو يقرّر ويؤكّد ويرسل
       unawaited(ConnectionReadingsUploader.collect(_big ? _bigRows : _all));
     });
