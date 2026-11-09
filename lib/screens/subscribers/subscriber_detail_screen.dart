@@ -135,6 +135,14 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   bool _alerting = false;
   bool _toggling = false;
 
+  /// «تعذّر تحديث بيانات المشترك» (مراجعة 179): جلبُ صفّه وحده (حسابٌ كبير بلا قائمةٍ كاملة، أو «كل الشركات» من شركته) لم يجده
+  /// أو تعذّر — الدين المعروض قد يكون قبل تسديدٍ تمّ للتوّ، فـ«تسديد» و«إضافة دين» مقفلان بهذا السبب حتى ينجح تحديث (السحب،
+  /// أو العودة للتطبيق، أو عمليّةٌ أخرى). null = الأرقام من آخر تحديثٍ ناجح.
+  String? _staleLock;
+
+  static const _staleText = 'تعذّر تحديث بيانات المشترك — الأرقام قد تكون قديمة';
+  static const _staleLockText = '$_staleText. اسحب الصفحة للتحديث';
+
   /// Currently in-flight template send, or null. Drives the tile
   /// 'جاري...' label so the admin sees activity for the right chip
   /// (the operations grid has 3 template chips — debt reminder /
@@ -266,6 +274,8 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     // يحمّل قائمة ثقيلة). بدون timeout، الـFuture يعلق ويبقى الصف
     // stale بلا مؤشّر بصري.
     List<Subscriber>? list;
+    // صفّه وحده (لا قائمةٌ كاملة): ما لم يُوجد ⇒ الأرقام المعروضة قد تكون قديمة
+    var targeted = false;
     try {
       // السحب اليدويّ يتجاوز المخزن **ويجلب حالة الاتّصال معها**.
       //
@@ -277,11 +287,14 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
       // الحساب الكبير: صفّه وحده من الساس بيوزره — لا قائمة كاملة.
       // «كل الشركات»: صفّه من قائمة شركته الطازجة (لا قائمة الشركة المفتوحة)
       if (sub.companyKey != null) {
+        targeted = true;
         final one = await MergedOps.refetch(sub).timeout(const Duration(seconds: 30));
         list = one == null ? null : [one];
       } else if (await BigSubscribersApi.probe() > 0) {
+        targeted = true;
+        // صفحات بحثٍ حتى يُوجد (BigSubscribersApi.findMaxPages) — مهلةٌ تتّسع لها
         final one = await BigSubscribersApi.findOne(idx: sub.idx, username: sub.username)
-            .timeout(const Duration(seconds: 20));
+            .timeout(const Duration(seconds: 30));
         list = one == null ? null : [one];
       } else {
         list = await (force
@@ -292,26 +305,35 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     } catch (_) {
       list = null;
     }
-    if (!mounted || list == null) return;
+    if (!mounted) return;
     // Match by idx first (canonical, survives username renames),
     // then fall back to username for any rows where idx didn't land.
     Subscriber? fresh;
-    for (final s in list) {
+    for (final s in list ?? const <Subscriber>[]) {
       if (s.idx != null && s.idx == sub.idx) {
         fresh = s;
         break;
       }
     }
-    fresh ??= list.cast<Subscriber?>().firstWhere(
+    fresh ??= (list ?? const <Subscriber>[]).cast<Subscriber?>().firstWhere(
           (s) => s?.username == sub.username,
           orElse: () => null,
         );
-    if (fresh == null) return;
+    if (fresh == null) {
+      // صفّه لم يُوجد: لا تُعرض أرقامٌ قد تكون قبل تسديدٍ للتوّ على أنّها حيّة — يُقال، ويُقفل المال حتى ينجح تحديث
+      if (targeted) {
+        final first = _staleLock == null;
+        setState(() => _staleLock = _staleLockText);
+        if (first || force) showSheetSnack(context, _staleText, isError: true);
+      }
+      return;
+    }
     // Preserve the live online overlay (IP / DL/UL / session time)
     // — the refreshed row comes from /api/v2/subscribers and doesn't
     // carry online state. Without this, an open detail screen of a
     // currently-connected subscriber would lose its session card.
     setState(() {
+      _staleLock = null;
       // عند الجلب المُجبَر يحمل الصفّ حالة اتّصالٍ حقيقيّة فنأخذها؛
       // وإلّا نحفظ القديمة كي لا يفقد المتّصل كرت جلسته.
       sub = force
@@ -413,17 +435,19 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
                       // على الرصيد لا يطرح منه، فمشتركٌ له ٣٠٬٠٠٠ يصير له
                       // ٦٠٬٠٠٠. ومَن أراد استهلاك رصيدٍ دائن فبابه «إضافة
                       // دين» وهو ظاهرٌ له أصلاً.
-                      onPay: sub.hasDebt && _has('subscribers.pay_debt') && _pageLock == null
+                      onPay: sub.hasDebt && _has('subscribers.pay_debt') && _debtLock('subscribers.pay_debt') == null
                           ? () => showPayDebtSheet(context, sub)
                           : null,
                       payLocked: sub.hasDebt &&
                           (_locked('subscribers.pay_debt') ||
-                              (_pageLock != null && _has('subscribers.pay_debt'))),
-                      onAddDebt: _has('subscribers.add_debt') && _pageLock == null
+                              (_debtLock('subscribers.pay_debt') != null && _has('subscribers.pay_debt'))),
+                      payLockedMessage: _debtLock('subscribers.pay_debt'),
+                      onAddDebt: _has('subscribers.add_debt') && _debtLock('subscribers.add_debt') == null
                           ? () => showAddDebtSheet(context, sub)
                           : null,
                       addDebtLocked: _locked('subscribers.add_debt') ||
-                          (_pageLock != null && _has('subscribers.add_debt')),
+                          (_debtLock('subscribers.add_debt') != null && _has('subscribers.add_debt')),
+                      addDebtLockedMessage: _debtLock('subscribers.add_debt'),
                       lockedMessage: _pageLock,
                     ),
                     // صفّ الإجراءات الأربعة — المخطّط يضعه مباشرةً تحت
@@ -986,6 +1010,10 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
   /// والقراءات (الحركات، الجلسات، الاستهلاك، النسخ، الطباعة) كما هي.
   String? get _pageLock => MergedOps.writeLock(sub);
 
+  /// سبب قفل زرّ مالٍ يُبنى على الدين المعروض ([key]: «تسديد»، «إضافة دين»): قفل الصفحة أوّلاً، ثمّ أرقامٌ لم تتحدّث ([_staleLock])
+  /// لمن يملك المفتاح — ومن لا يملكه يبقى قفله قفل الصلاحيّة. null ⇒ لا قفل غير الصلاحيّة.
+  String? _debtLock(String key) => _pageLock ?? (_has(key) ? _staleLock : null);
+
   /// يُعرض الإجراء أصلاً (حيّاً أو مقفلاً)؟
   bool _shows(String key) =>
       !_providerHides(key) && (_has(key) || _locked(key));
@@ -1151,7 +1179,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             label: 'subscribers.op_add_debt'.tr(),
             color: AppColors.warningFill,
             locked: _locked('subscribers.add_debt'),
-            unavailable: _pageLock,
+            unavailable: _debtLock('subscribers.add_debt'),
             onTap: _locked('subscribers.add_debt')
                 ? null
                 : () => showAddDebtSheet(context, sub),
@@ -1180,7 +1208,7 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
             label: 'subscribers.op_pay_debt'.tr(),
             color: AppColors.brandAccent,
             locked: _locked('subscribers.pay_debt'),
-            unavailable: _pageLock,
+            unavailable: _debtLock('subscribers.pay_debt'),
             meta: _locked('subscribers.pay_debt')
                 ? null
                 : formatIQD(sub.debtAbs.round()),

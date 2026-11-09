@@ -209,6 +209,9 @@ class _QrLoginSheetState extends State<_QrLoginSheet> {
         phone: phone,
         messagePreview: message,
         accent: const Color(0xFF7C3AED),
+        // «كل الشركات»: التلقائيّ يخرج من واتساب المفتوحة ⇒ مشترك شركةٍ أخرى «افتح واتسابي» وحده، والسبب قبل التأكيد لا بعده
+        // (مراجعة 179) — والحارس قبل الإرسال أدناه يبقى.
+        autoBlockedReason: MergedOps.unsupported(widget.sub),
       );
       if (!mounted || choice == null || !choice.confirmed) return;
 

@@ -368,8 +368,9 @@ class _MainShellState extends State<MainShell> {
       unawaited(AiAssistantState.ensureFresh());
       // «كل الشركات»: يعود الوضع إن كان مفعّلاً لهذا الحساب وما زال متاحاً.
       unawaited(MergedMode.restore());
-      // فحص أجهزة المشتركين بالخلفيّة من فتح البرنامج (٣ نوفمبر): بعد ٨ث، بعمّالٍ أقلّ، يتنحّى للموجة الأماميّة وللخلفيّة
-      DeviceWarmService.start();
+      // فحص أجهزة المشتركين بالخلفيّة من فتح البرنامج (٣ نوفمبر): بعد ٨ث، بعمّالٍ أقلّ، يتنحّى للموجة الأماميّة وللخلفيّة.
+      // باسم هذا الغلاف: غلافٌ قديم يُنهى بعد أن يبدأ الجديد (البصمة، تبديل الشركة/المدير/الصفحة) لا يوقفه عنه (مراجعة 179)
+      if (mounted) DeviceWarmService.start(this);
     });
     _authExpiredSeen = authExpiredSignal.value;
     authExpiredSignal.addListener(_onAuthExpired);
@@ -388,7 +389,7 @@ class _MainShellState extends State<MainShell> {
 
   @override
   void dispose() {
-    DeviceWarmService.stop();
+    DeviceWarmService.stop(this);
     authExpiredSignal.removeListener(_onAuthExpired);
     accessBlockedSignal.removeListener(_onAccessBlocked);
     MergedMode.fellBack.removeListener(_onMergedFellBack);

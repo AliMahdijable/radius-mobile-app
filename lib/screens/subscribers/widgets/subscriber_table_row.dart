@@ -132,6 +132,9 @@ void resizeSubscriberColumn(SubscriberTableColumns cols, String key, double delt
 /// رأس الجدول: تسمياتٌ خافتة، وما يُرتَّب به سهمٌ يدلّ على الترتيب الحاليّ واتّجاهه — نقرةٌ ترتّب ونقرةٌ ثانية
 /// تعكس. وعلى نهاية كلّ عمودٍ مقبضٌ يُسحب لتوسيعه أو تضييقه (والنقر المزدوج يعيده).
 class SubscriberTableHeader extends StatelessWidget {
+  /// خانة «تحديد الكلّ» برأس الجدول — للاختبار (لا تُعرض في «كل الشركات»: لا جماعيّ على صفوف شركاتٍ أخرى).
+  static const selectAllKey = ValueKey<String>('subs-table-select-all');
+
   const SubscriberTableHeader({
     super.key,
     required this.columns,
@@ -245,7 +248,9 @@ class SubscriberTableHeader extends StatelessWidget {
             const SizedBox(width: SubscriberTableColumns.stripe + Sp.sm - 4),
             SizedBox(
               width: SubscriberTableColumns.check,
-              child: onSelectAll == null ? null : _CheckBox(value: allSelected, onTap: onSelectAll!),
+              child: onSelectAll == null
+                  ? null
+                  : _CheckBox(key: selectAllKey, value: allSelected, onTap: onSelectAll!),
             ),
             const SizedBox(width: SubscriberTableColumns.avatar),
             cell(
@@ -295,6 +300,9 @@ Widget _cellBox(SubscriberTableColumns cols, SubCol c, Widget child) => SizedBox
 /// بالأحرف الأولى ونقطة الاتّصال، الاسم واليوزر، ثمّ الأعمدة المختارة بترتيبها، ثمّ الإجراءات
 /// (تجديد وتمديد عند المرور + «…» بكلّ الإجراءات، والزرّ الأيمن يفتح القائمة نفسها).
 class SubscriberTableRow extends StatefulWidget {
+  /// خانة تحديد الصفّ — للاختبار (لا تُعرض في «كل الشركات»).
+  static const selectKey = ValueKey<String>('subs-table-row-select');
+
   const SubscriberTableRow({
     super.key,
     required this.sub,
@@ -399,7 +407,7 @@ class _SubscriberTableRowState extends State<SubscriberTableRow> {
                 width: SubscriberTableColumns.check,
                 child: widget.onToggleSelect == null
                     ? null
-                    : _CheckBox(value: widget.selected, onTap: widget.onToggleSelect!),
+                    : _CheckBox(key: SubscriberTableRow.selectKey, value: widget.selected, onTap: widget.onToggleSelect!),
               ),
               SizedBox(
                 width: SubscriberTableColumns.avatar,
@@ -1206,7 +1214,7 @@ class _Avatar extends StatelessWidget {
 }
 
 class _CheckBox extends StatelessWidget {
-  const _CheckBox({required this.value, required this.onTap});
+  const _CheckBox({super.key, required this.value, required this.onTap});
 
   final bool value;
   final VoidCallback onTap;

@@ -123,6 +123,8 @@ class _AccountStatementScreenState extends State<AccountStatementScreen> {
     return ReportPermissionGate(
       permission: 'reports.account_statement',
       title: 'reports.account_statement'.tr(),
+      // «كل الصفحات» للموظّف: صلاحيّته في صفحة المشترك لا في المفتوحة
+      companyKey: widget.companyKey,
       child: Scaffold(
         backgroundColor: AppColors.bg,
         appBar: deskPageBar(

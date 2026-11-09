@@ -47,6 +47,8 @@ class BalanceCard extends StatelessWidget {
     this.remindLocked = false,
     this.payLocked = false,
     this.lockedMessage,
+    this.payLockedMessage,
+    this.addDebtLockedMessage,
   });
 
   final Subscriber sub;
@@ -65,6 +67,11 @@ class BalanceCard extends StatelessWidget {
 
   /// سبب القفل غير الصلاحيّة (٩ نوفمبر — «كل الصفحات» للموظّف: صفحةٌ كتابتها من «صفحاتي») مكان «اطلبها من مديرك».
   final String? lockedMessage;
+
+  /// سبب قفل «تسديد» و«إضافة دين» وحدهما — يغلب [lockedMessage] لهما (مراجعة 179: بيانات المشترك لم تتحدّث، فالدين المعروض
+  /// قد يكون قبل تسديدٍ للتوّ). null ⇒ [lockedMessage].
+  final String? payLockedMessage;
+  final String? addDebtLockedMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -98,7 +105,7 @@ class BalanceCard extends StatelessWidget {
           color: AppColors.warning,
           borderColor: AppColors.warningSoftBorder,
           locked: addDebtLocked,
-          lockedMessage: lockedMessage,
+          lockedMessage: addDebtLockedMessage ?? lockedMessage,
           onTap: onAddDebt,
         ),
       if (onRemind != null || remindLocked)
@@ -119,7 +126,7 @@ class BalanceCard extends StatelessWidget {
           filled: true,
           color: isDebt ? AppColors.errorFill : AppColors.successFill,
           locked: payLocked,
-          lockedMessage: lockedMessage,
+          lockedMessage: payLockedMessage ?? lockedMessage,
           onTap: onPay,
         ),
     ];

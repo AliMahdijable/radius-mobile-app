@@ -102,6 +102,9 @@ const _defaultSortByFilter = <SubscriberFilter, (SortField, SortDirection)>{
 class SubscribersScreen extends StatefulWidget {
   const SubscribersScreen({super.key, this.filterCmd, this.isActive});
 
+  /// شريط العمليّات الجماعيّة (وضع التحديد) — للاختبار.
+  static const bulkBarKey = ValueKey<String>('subs-bulk-bar');
+
   /// هل هذا التبويب مرئيّ الآن؟ (يمرّرها `MainShell`)
   ///
   /// 🐛 تدقيق أداء 2026-08-31: الاستطلاع كان محروساً بـ`_appActive`
@@ -1693,6 +1696,14 @@ class _SubscribersScreenState extends State<SubscribersScreen>
     unawaited(BulkActivateApi.capability());
   }
 
+  /// للاختبار (مراجعة 179): تحديدٌ كما لو حُدّد صفّاً صفّاً — «كل الشركات» لا يدخل التحديد من الواجهة، والاختبار يثبت أنّ العمليّات
+  /// الجماعيّة ترفض صفوفه ولو وصلت ([_bulkRowsOrRefuse]) ولا يُرسل شيء.
+  @visibleForTesting
+  void debugSelect(Iterable<Subscriber> rows) => setState(() {
+        _selected.addAll(rows.where((s) => s.idx != null).map(_selKey));
+        _selectionMode = _selected.isNotEmpty;
+      });
+
   void _exitSelection() {
     setState(() {
       _selectionMode = false;
@@ -2562,6 +2573,7 @@ class _SubscribersScreenState extends State<SubscribersScreen>
           ? ValueListenableBuilder<BulkActivateCapability?>(
               valueListenable: BulkActivateApi.listenable,
               builder: (_, __, ___) => _BulkActionBar(
+                key: SubscribersScreen.bulkBarKey,
                 selectedCount: _selected.length,
                 debtorCount: _selectedDebtorCount,
                 enabledCount: _enabledInSelection,
@@ -3375,6 +3387,7 @@ class _SelectionHeader extends StatelessWidget {
 /// a tap (مطلب 2026-06-09).
 class _BulkActionBar extends StatelessWidget {
   const _BulkActionBar({
+    super.key,
     required this.selectedCount,
     required this.debtorCount,
     required this.enabledCount,
