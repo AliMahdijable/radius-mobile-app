@@ -1086,8 +1086,10 @@ class DeviceVitals {
     var clientsRead = false;
     if (detailed && isAp == true) {
       try {
-        clients = await MimosaApi.fetchClients(host: d.ip, port: d.apiPort ?? 161, community: community);
-        clientsRead = true;
+        final r = await MimosaApi.fetchClientsRead(host: d.ip, port: d.apiPort ?? 161, community: community);
+        clients = r.clients;
+        // مقروءةٌ حين أجاب جدولها وحده — مسحٌ انتهت مهلته كان «ما عليه أحد الآن · سليم» (مراجعة 180)
+        clientsRead = r.read;
       } catch (_) {/* بلا محطّات — الخانات الثلاث تكفي */}
     }
     int? worst(Iterable<double?> xs, {required bool low}) {
