@@ -430,6 +430,8 @@ class _NetworkDevicesScreenState extends State<NetworkDevicesScreen>
       DeviceWarmup.instance.stop();
     } else if (state == AppLifecycleState.resumed) {
       _appVisible = true;
+      // فحصٌ انتهى والتطبيق بالخلفيّة: إفلاته هناك لم يُعِد «وضع VPN» (التطبيق مختفٍ) — العودة تعيده (المراجعة الثالثة)
+      _syncVpnAttach();
       _startProbeTimer();
       // probe فوري لتحديث الحالة بعد العودة
       if (_all.isNotEmpty) {

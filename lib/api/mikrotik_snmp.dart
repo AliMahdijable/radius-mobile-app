@@ -105,7 +105,7 @@ class MikrotikSnmp {
     /// true = قُرئ (والجدول الذي لا يدعمه الإصدار يُرجع فارغاً بلا خطأ)؛ false = مهلةٌ أو خطأ — يبقى فارغاً ولا يُعدّ مقروءاً.
     Future<bool> walk(String base, {int chunk = 20}) async {
       try {
-        put(await snmp.walk(base, chunkSize: chunk));
+        put(await snmp.walk(base, chunkSize: chunk, maxIterations: _walkRounds));
         return true;
       } catch (_) {
         return false;
@@ -127,9 +127,14 @@ class MikrotikSnmp {
     }
     final single = swos || _noPairedBulk.contains('$host:$port');
     var paired = false;
+    // جدول الواجهات بلغ سقف القراءة وفيه بقيّة (راوتر PPPoE بمئات الجلسات) ⇒ جلساته لا تُعدّ منه: «—» لا رقمٌ ناقص
+    // يُعرض كأنّه العدد (المراجعة الثالثة). المنافذ في أوّل الجدول — تبقى مقروءة
+    var ifCut = false;
     if (!single) {
       try {
-        put(await _pairedColumns(snmp, ifColumns));
+        final t = await _pairedColumns(snmp, ifColumns);
+        put(t.rows);
+        ifCut = t.cut;
         paired = true;
         _pairedFails.remove('$host:$port');
       } catch (_) {
@@ -148,6 +153,8 @@ class MikrotikSnmp {
       for (final c in ifColumns) {
         if (!await walk(c) && ifCritical.contains(c)) portsRead = false;
       }
+      // المسح المنفرد يقف عند سقفه (٢٠ × [_walkRounds] صفّاً) — بلغه عمود النوع ⇒ مقطوع
+      ifCut = _column(all, ifType).length >= 20 * _walkRounds;
     }
     // ٩ نوفمبر: جدولٌ لاسلكيّ انتهت مهلته ⇒ عملاؤه مجهولون لا «لا أحد» ([MikrotikStats.clientsRead]).
     var clientsRead = true;
@@ -156,8 +163,11 @@ class MikrotikSnmp {
         if (!await walk(t)) clientsRead = false;
       }
     }
-    return build(all, vitalsOnly: vitalsOnly, clientsRead: clientsRead, portsRead: portsRead);
+    return build(all, vitalsOnly: vitalsOnly, clientsRead: clientsRead, portsRead: portsRead, interfacesCut: ifCut);
   }
+
+  /// جولات المسح المنفرد لعمودٍ واحد (سقف [SnmpV2c.walk]).
+  static const _walkRounds = 100;
 
   /// أعمدة الواجهات التي لا تُبنى المنافذ بدونها (الاسم، النوع، الحال، التفعيل) — العدّادات والسرعة والـMTU تكميل.
   static const ifCritical = {ifName, ifType, ifOper, ifAdmin};
@@ -178,34 +188,45 @@ class MikrotikSnmp {
   static bool singleColumnFor(String host, int port) => _noPairedBulk.contains('$host:$port');
 
   /// أعمدةٌ متوازية بطلبٍ واحد لكلّ دفعة صفوف — راوتر PPPoE فيه مئات الواجهات، وثمانية مسوحٍ منفصلة تعني مئة طلب.
-  static Future<List<Varbind>> _pairedColumns(SnmpV2c snmp, List<String> columns,
+  /// [cut]: بلغ [maxRounds] والعمود الأوّل ما زال داخل جدوله — الصفوف بعدها لم تُقرأ (المراجعة الثالثة).
+  static Future<({List<Varbind> rows, bool cut})> _pairedColumns(SnmpV2c snmp, List<String> columns,
       {int rows = 10, int maxRounds = 60}) async {
     final out = <Varbind>[];
     var cursors = [...columns];
+    var ended = false;
     for (var round = 0; round < maxRounds; round++) {
       final vbs = await snmp.getBulkColumns(cursors, maxRepetitions: rows);
-      if (vbs.isEmpty) break;
+      if (vbs.isEmpty) return (rows: out, cut: false);
       final next = [...cursors];
       var progressed = false;
+      ended = false;
       for (var i = 0; i < vbs.length; i++) {
         final col = i % columns.length;
         final v = vbs[i];
-        if (v.isAbsent || !v.oid.startsWith('${columns[col]}.')) continue;
+        if (v.isAbsent || !v.oid.startsWith('${columns[col]}.')) {
+          if (col == 0) ended = true;
+          continue;
+        }
         out.add(v);
         next[col] = v.oid;
         progressed = true;
       }
       // العمود الأوّل (الاسم) يقود: خرج من شجرته ⇒ انتهى الجدول.
-      if (!progressed || next[0] == cursors[0]) break;
+      if (!progressed || next[0] == cursors[0]) return (rows: out, cut: false);
       cursors = next;
     }
-    return out;
+    return (rows: out, cut: !ended);
   }
 
   /// المجموعة المقروءة (OID ← قيمة) ← إحصاءات. مكشوفة للاختبار بقيمٍ ثابتة. [clientsRead]: جداول اللاسلكيّ قُرئت كلّها (لا مهلة).
+  /// [interfacesCut]: جدول الواجهات مقطوعٌ بسقف القراءة ⇒ جلسات PPP لا تُعدّ منه (0 = لا تُعرض).
   @visibleForTesting
   static MikrotikStats build(Map<String, Varbind> all,
-      {bool vitalsOnly = false, bool withInterfaces = true, bool clientsRead = true, bool portsRead = true}) {
+      {bool vitalsOnly = false,
+      bool withInterfaces = true,
+      bool clientsRead = true,
+      bool portsRead = true,
+      bool interfacesCut = false}) {
     int? i(String oid) => all[oid]?.isNumeric == true ? all[oid]!.asInt : null;
     String? s(String oid) {
       final v = all[oid];
@@ -347,7 +368,8 @@ class MikrotikSnmp {
       fans: fans,
       extraTemps: temps,
       interfaces: interfaces,
-      pppActiveCount: ppp,
+      // جدولٌ مقطوع: العدّ ناقص ⇒ مجهول (لا يُعرض) لا «592» عن ٦٩٢ (المراجعة الثالثة)
+      pppActiveCount: interfacesCut ? 0 : ppp,
       via: 'SNMP',
       cpuKnown: loads.isNotEmpty,
       memKnown: memTotal > 0,

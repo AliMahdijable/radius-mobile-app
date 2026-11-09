@@ -6,6 +6,7 @@ import '../../services/vitals_reporter.dart';
 import '../../services/vpn_now.dart';
 import '../../api/bdcom_epon.dart';
 import '../../api/cisco_api.dart';
+import '../../api/edgeswitch_api.dart';
 import '../../api/hsgq_olt.dart';
 import '../../api/mikrotik_api.dart';
 import '../../api/mimosa_api.dart';
@@ -404,6 +405,10 @@ class DeviceVitals {
   @visibleForTesting
   static void resetLightsCursorForTest() => _lightsFrom.clear();
 
+  /// ملخّص أولت الخادم يرسل الأضعف من ضوء ما قرأه حتى هذا العدد (`rememberOltSummary` بـserver/connVpn/sweeper.js) —
+  /// قائمةٌ بلغته قد تكون مقطوعة: ما بعدها أقوى منها أو لم يُقرأ، لا يُعرف أيّهما (المراجعة الثالثة).
+  static const serverLightsMax = 300;
+
   /// وكيل SNMP لقراءة ضوء الأولت — يُستبدل في الاختبار.
   @visibleForTesting
   static SnmpV2c Function(String host, int port, String community) snmpFor =
@@ -659,7 +664,22 @@ class DeviceVitals {
       case 'mikrotik':
         return _mikrotik(d, creds, prev, detailed, onPartial: onPartial);
       case 'ubnt':
-        return _ubnt(d, creds, prev);
+        // سويتش EdgeSwitch: REST كصفحته (EdgeSwitchLivePanel) — جلسة airOS عليه «لم نستلم بيانات» أو تنتظر مهلتها
+        // (المراجعة الثالثة: كان «لم يُقرأ — مستخدمه بلا صلاحيّة» في كلّ فحص وصفحته تقرؤه)
+        if (isEdgeSwitch(d)) return _edgeSwitch(d, creds);
+        // سويتش يوبيكويتي بلا طراز: REST أوّلاً — لا مهلة جلسة airOS كاملة
+        if (d.type.toLowerCase() == 'switch') {
+          final es = await _edgeSwitchTry(d, creds);
+          if (es != null) return es;
+        }
+        try {
+          return await _ubnt(d, creds, prev);
+        } catch (_) {
+          // airOS لم يقرأه: لعلّه EdgeSwitch بلا طرازٍ محفوظ (صفحة الجهاز تكشفه وتقرؤه بـREST) — مرّةً لكلّ عنوان
+          final es = await _edgeSwitchTry(d, creds);
+          if (es != null) return es;
+          rethrow;
+        }
       case 'mimosa':
         return _mimosa(d, creds, detailed);
       case 'cisco':
@@ -1544,6 +1564,139 @@ Future<ProbeResult> _ruijie(NetworkDevice d, Map<String, dynamic> creds, Counter
       ),
     ),
     counters: counters,
+    raw: s,
+  );
+}
+
+// ── سويتش EdgeSwitch (علامة ubnt): REST كصفحته — المعالج · الذاكرة · المنافذ ───────────────────────────────
+
+/// سويتش EdgeSwitch: من طرازه (‏ES-8-150W · «EdgeSwitch 24» — كاشف الطُرُز يكتبه)، أو عنوانٌ قُرئ بـREST قبلاً. الاسم
+/// وحده لا (سكتر «Tower-ES-1» راديو airOS) — اسمٌ بلا طراز يُكشف بـREST حين لا تقرؤه جلسة airOS.
+bool isEdgeSwitch(NetworkDevice d) {
+  if (d.brand.toLowerCase() != 'ubnt') return false;
+  return _edgeSwitchName(d.model ?? '') || _edgeSwitchHosts.contains(d.ip);
+}
+
+bool _edgeSwitchName(String s) {
+  final c = s.toLowerCase();
+  return c.contains('edgeswitch') || RegExp(r'\bes-\d').hasMatch(c);
+}
+
+/// عناوين قُرئت بـREST وطرازها غير محفوظ — تُقرأ بعدها بـREST مباشرة (كـ`_udapiHosts` في UbntApi).
+final Set<String> _edgeSwitchHosts = {};
+
+/// عناوين لم تُجب REST (ليست EdgeSwitch) ولحظتها — لا تُسأل ثانيةً قبل [_edgeSwitchRetry]: فشل راديو airOS لا يدفع
+/// طلباً كلّ نبضة.
+final Map<String, DateTime> _notEdgeSwitchAt = {};
+const _edgeSwitchRetry = Duration(minutes: 10);
+
+/// قراءة EdgeSwitch بـREST لم تتمّ — رُفض الدخول أو صفحته لا تجيب (REST لا يقول أيّهما).
+class EdgeSwitchUnread implements Exception {
+  const EdgeSwitchUnread();
+  @override
+  String toString() => 'EdgeSwitch: صفحة السويتش ما فتحت';
+}
+
+/// لقطة REST كلوحته — والمنفذ كلوحته: ٢٢ (منفذ SSH الذي يقترحه نموذج الإضافة لكلّ UBNT) ليس منفذ REST ⇒ ٤٤٣.
+Future<EdgeSwitchStats?> _edgeSwitchRead(NetworkDevice d, Map<String, dynamic> creds) {
+  final user = (creds['user'] ?? '').toString();
+  if (user.isEmpty) throw StateError('بيانات دخول ناقصة');
+  final p = d.apiPort;
+  return EdgeSwitchApi.fetchStats(
+      host: d.ip,
+      user: user,
+      pass: (creds['pass'] ?? '').toString(),
+      port: p == null || p == 22 ? EdgeSwitchApi.defaultPort : p);
+}
+
+Future<ProbeResult> _edgeSwitch(NetworkDevice d, Map<String, dynamic> creds) async {
+  final s = await _edgeSwitchRead(d, creds);
+  if (s == null) throw const EdgeSwitchUnread();
+  return _edgeSwitchResult(s);
+}
+
+/// جهاز ubnt بلا طرازٍ يقول EdgeSwitch: REST نفسه (طلب دخولٍ واحد يُرفض على غيره) — أجاب بهويّة EdgeSwitch ⇒ يُتذكّر
+/// ويُقرأ به؛ وإلّا null. الهويّة شرط: راديوات UISP (‏Wave · LTU) تجيب `/api/v1.0` نفسه وليست سويتشات.
+Future<ProbeResult?> _edgeSwitchTry(NetworkDevice d, Map<String, dynamic> creds) async {
+  final no = _notEdgeSwitchAt[d.ip];
+  if (no != null && DateTime.now().difference(no) < _edgeSwitchRetry) return null;
+  if ((creds['user'] ?? '').toString().isEmpty) return null;
+  final s = await _edgeSwitchRead(d, creds);
+  if (s == null || !_edgeSwitchName('${s.model ?? ''} ${s.product ?? ''}')) {
+    _notEdgeSwitchAt[d.ip] = DateTime.now();
+    return null;
+  }
+  _notEdgeSwitchAt.remove(d.ip);
+  _edgeSwitchHosts.add(d.ip);
+  return _edgeSwitchResult(s);
+}
+
+ProbeResult _edgeSwitchResult(EdgeSwitchStats s) {
+  final cpu = s.cpuPercent?.round();
+  final mem = s.ramPercent?.round();
+  final temp = s.temperatureC?.round();
+  final up = s.uptimeSeconds;
+  final poe = s.poeTotalWatts.toDouble();
+  return ProbeResult(
+    vitals: [
+      cpu == null
+          ? Vital.empty.withIcon(LucideIcons.cpu)
+          : Vital(
+              label: 'المعالج',
+              value: '$cpu',
+              unit: '٪',
+              icon: LucideIcons.cpu,
+              tone: Grade.percentLowerBetter(cpu)),
+      mem == null
+          ? Vital.empty.withIcon(LucideIcons.memoryStick)
+          : Vital(
+              label: 'الذاكرة',
+              value: '$mem',
+              unit: '٪',
+              icon: LucideIcons.memoryStick,
+              tone: Grade.percentLowerBetter(mem)),
+      s.ports.isEmpty
+          ? Vital.empty.withIcon(LucideIcons.network)
+          : Vital(
+              label: 'المنافذ',
+              value: '${s.portsUp}',
+              unit: '/${s.portsTotal}',
+              icon: LucideIcons.network,
+              tone: AppTone.neutral),
+    ],
+    detail: DeviceDetail(
+      uptime: up == null || up <= 0 ? null : DeviceVitals.fmtUptime(up),
+      firmware: s.firmware,
+      model: s.model ?? s.product,
+      // المعرّف (0/1) ثابتٌ لمقارنة الفحص التالي؛ والمعدّلات من الجهاز جاهزةً (بت/ث)
+      ports: [
+        for (final p in s.ports)
+          PortTraffic(
+            name: p.id,
+            up: p.up,
+            rxBps: p.rxRate,
+            txBps: p.txRate,
+            linkSpeed: p.up && (p.speed ?? 0) > 0 ? '${p.speed}M' : null,
+            halfDuplex: p.up && (p.speedRaw ?? '').toLowerCase().contains('half'),
+            errors: p.errors,
+          ),
+      ],
+      extras: [
+        if (poe > 0) (k: 'PoE', v: '${poe.toStringAsFixed(1)} W'),
+        if (temp != null) (k: 'الحرارة', v: '$temp°C'),
+      ],
+      glance: DeviceGlance(
+        uptimeSec: up != null && up > 0 ? up : null,
+        cpu: cpu,
+        mem: mem,
+        temp: temp,
+        poeWatts: poe > 0 ? poe : null,
+        // سويتشٌ بلا منفذٍ مقروء ⇒ «المنافذ ما انقرت» لا «سليم»
+        portsUnread: s.ports.isEmpty,
+        hasRadio: false,
+      ),
+    ),
+    counters: const {},
     raw: s,
   );
 }

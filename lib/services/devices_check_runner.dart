@@ -562,6 +562,9 @@ class DevicesCheckRunner extends ChangeNotifier {
   static const _noCreds = 'بيانات دخوله ناقصة — أكملها من صفحة الجهاز';
   static const _unsupported = 'علامته لا تُقرأ بالفحص';
 
+  /// سويتش EdgeSwitch: REST لم يتمّ (رُفض الدخول أو صفحته لا تجيب — لا يقول أيّهما) — كلوحته: الدخول والمنفذ.
+  static const _edgeSwitchRest = 'يردّ، لكن صفحة السويتش ما فتحت — تأكّد من اسم المستخدم والرمز والمنفذ';
+
   /// آخر قراءةٍ تنفع مع هذا السبب؟ لا مع ما يُصلَح بالإعداد (رفض الدخول، الصلاحيّة، النقص) — يُقال وحده بلا أرقامٍ قديمة تغطّيه.
   @visibleForTesting
   static bool lastReadingHelps(String reason) =>
@@ -575,6 +578,7 @@ class DevicesCheckRunner extends ChangeNotifier {
   /// وسطرها [capText])، و[serviceOk] جواب خدمة الإدارة بالبنك (null = لم يُعرف) — يفصل «بطيء» عن «لا يُفتح».
   @visibleForTesting
   static String unreadReason(Object e, {bool? serviceOk}) {
+    if (e is EdgeSwitchUnread) return _edgeSwitchRest;
     final s = e.toString();
     final low = s.toLowerCase();
     // ٢) ممرّ الـVPN وخادمنا (رسائل الخادم كما هي: «اتّصالاتٌ كثيرة الآن — لحظات»، «الـVPN ما اتّصل الآن…»)

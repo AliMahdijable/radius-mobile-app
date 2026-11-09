@@ -616,12 +616,22 @@ class DevicesCheck {
     }
 
     // ── الأولت ──
+    // قراءتنا لم يخرج منها منفذ PON ولا مشترك (فيرموير بتسمياتٍ لا يعرفها المحلّل، عرض SNMP مقيّد، منافذ الصعود
+    // وحدها) ⇒ بنيته لم تُقرأ: «لم يُقرأ» لا «أولت · سليم»، ولا «ONU 0/0» (المراجعة الثالثة). ملخّص الخادم (منافذه من
+    // مشتركيه، وقراءته تمّت عنده) يُحكم به كما كان
+    final oltGap = role == CheckRole.olt && !detail.onuLightsServer && g.pons.isEmpty && (g.onusTotal ?? 0) == 0;
+    if (oltGap) f.add(const CheckFinding(CheckLevel.info, 'منافذ PON ما انقرت'));
     if (role == CheckRole.olt) {
       final downPons = [for (final p in g.pons) if (!p.up && p.total > 0) p.label];
       if (downPons.isNotEmpty) f.add(CheckFinding(CheckLevel.warn, 'منفذ PON طافي: ${downPons.join('، ')}'));
       // ضوء كلّ ONU (المالك: «+ الاولتي… مفروض هم تظهرهن») — بحدّ «تنبيه المشترك» للفايبر. ٩ نوفمبر: الحكم من البنية، والضوء
       // جزئيٌّ إن لم يكتمل بمهلته — يُقال كم قُرئ، والضعيف يُعدّ من المقروء وحده (لا «ضوء ضعيف: 0» لما لم يُقرأ)
       final wanted = detail.onuLightsWanted;
+      // ملخّص الخادم يرسل الأضعف حتى [DeviceVitals.serverLightsMax] ممّا قرأه — قائمةٌ بلغته (والمتّصل أكثر منها) ما
+      // بعدها أقوى منها أو لم يُقرأ، لا «لم يقرأه الخادم» وقد قرأه (المراجعة الثالثة)
+      final cut = detail.onuLightsServer &&
+          detail.onuLights.length >= DeviceVitals.serverLightsMax &&
+          (wanted ?? 0) > detail.onuLights.length;
       if (wanted != null && wanted > 0) {
         final read = detail.onuLights.length;
         final answered = detail.onuLightsAnswered ?? read;
@@ -633,7 +643,9 @@ class DevicesCheck {
               CheckLevel.info,
               read == 0
                   ? (srv ? 'ضوء المشتركين لم يقرأه الخادم' : 'ضوء المشتركين ما انقرأ هالمرّة')
-                  : 'الضوء: قُرئ $read من $wanted — ${srv ? 'الباقي لم يقرأه الخادم' : 'الباقي ما لحق'}'));
+                  : cut
+                      ? 'الضوء: أضعف $read من $wanted — الباقي أقوى منها أو لم يقرأه الخادم'
+                      : 'الضوء: قُرئ $read من $wanted — ${srv ? 'الباقي لم يقرأه الخادم' : 'الباقي ما لحق'}'));
         }
         if (answered > read) f.add(CheckFinding(CheckLevel.info, 'بلا قراءة ضوء: ${answered - read}'));
       }
@@ -651,7 +663,12 @@ class DevicesCheck {
             ),
         ]..sort((a, b) => a.light!.compareTo(b.light!));
         final w = subs.where((x) => x.weak).length;
-        if (w > 0) f.add(CheckFinding(CheckLevel.warn, 'ضوء ضعيف: $w — من ${subs.length} مشترك'));
+        // المقطوعة: الضعيف كلّه فيها ما دام فيها غير ضعيف؛ وكلّها ضعيفة ⇒ قد يكون غيرها («300+»)
+        if (w > 0) {
+          final n = cut && w == subs.length ? '$w+' : '$w';
+          f.add(CheckFinding(CheckLevel.warn,
+              cut ? 'ضوء ضعيف: $n — من أضعف ${subs.length}' : 'ضوء ضعيف: $w — من ${subs.length} مشترك'));
+        }
       }
     }
 
@@ -753,7 +770,9 @@ class DevicesCheck {
     // «سليم» للسكتر حكمٌ عليه وعلى مشتركيه — قائمتهم لم تُقرأ ⇒ «لم يُقرأ» بحيويّاته وسطرها، لا «سليم» (٩ نوفمبر)
     final state = f.any((x) => x.level != CheckLevel.info)
         ? CheckState.warn
-        : ((role == CheckRole.sector && !subsKnown) || radioGap || portsGap ? CheckState.unread : CheckState.ok);
+        : ((role == CheckRole.sector && !subsKnown) || radioGap || portsGap || oltGap
+            ? CheckState.unread
+            : CheckState.ok);
     return DeviceCheckReport(
       device: d,
       role: role,
@@ -778,8 +797,8 @@ class DevicesCheck {
       ports: ports,
       portsUp: phys.isEmpty ? null : phys.where((p) => p.up).length,
       portsTotal: phys.isEmpty ? null : phys.length,
-      onusOnline: g.onusOnline,
-      onusTotal: g.onusTotal,
+      onusOnline: oltGap ? null : g.onusOnline,
+      onusTotal: oltGap ? null : g.onusTotal,
       lightsWanted: role == CheckRole.olt ? detail.onuLightsWanted : null,
       pending: pending,
       staleAt: staleAt,
