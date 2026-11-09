@@ -110,6 +110,7 @@ void main() {
   });
 
   group('بطاقة الموظّف', () {
+    setUp(EmployeeLimitsCard.resetForTest);
     testWidgets('تعرض النقد/السقف والدين والربح، وتحذيراً عند بلوغ السقف', (t) async {
       await phone(t);
       final json = _statusJson()
@@ -119,7 +120,17 @@ void main() {
         body: EmployeeLimitsCard(loader: () async => EmployeeLimitStatus.fromJson(json)),
       )));
       await t.pumpAndSettle();
+      // مطويّةٌ افتراضيّاً (المالك ٩ نوفمبر): العنوان والأرقام الثلاثة وحدها
+      expect(find.byKey(const ValueKey('emp-limits-collapsed')), findsOneWidget);
       expect(find.text('حسابي مع المدير'), findsOneWidget);
+      expect(find.text('500,000 / 500,000'), findsOneWidget);
+      expect(find.text('90,000 / 200,000'), findsOneWidget);
+      expect(find.text('20,000'), findsOneWidget);
+      expect(find.textContaining('سوِّ حسابك مع المدير'), findsNothing, reason: 'التفصيل بعد الفتح');
+      // النقر يفتح التفصيل
+      await t.tap(find.byKey(const ValueKey('emp-limits-collapsed')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('emp-limits-open')), findsOneWidget);
       expect(find.textContaining('500,000 / 500,000'), findsOneWidget);
       expect(find.textContaining('200,000'), findsWidgets);
       expect(find.text('20,000 د.ع'), findsOneWidget);
@@ -127,6 +138,10 @@ void main() {
       // الدين = ديونه المفتوحة عند المشتركين (لا ديون الفترة)
       expect(find.text('ديونك المفتوحة عند المشتركين'), findsOneWidget);
       expect(find.textContaining('90,000 / 200,000'), findsOneWidget);
+      // والنقر على العنوان يطويها
+      await t.tap(find.text('حسابي مع المدير'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('emp-limits-collapsed')), findsOneWidget);
     });
 
     testWidgets('بلوغ سقف الديون المفتوحة ⇒ «حتى يسدّد المشتركون» لا «سوِّ حسابك»', (t) async {
@@ -138,6 +153,8 @@ void main() {
       await t.pumpWidget(app(Scaffold(
         body: EmployeeLimitsCard(loader: () async => EmployeeLimitStatus.fromJson(json)),
       )));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('emp-limits-collapsed')));
       await t.pumpAndSettle();
       expect(find.textContaining('ديونك المفتوحة بلغت السقف'), findsOneWidget);
       expect(find.textContaining('حتى يسدّد المشتركون'), findsOneWidget);
