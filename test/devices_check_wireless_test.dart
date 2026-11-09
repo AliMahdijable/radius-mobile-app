@@ -7,6 +7,8 @@
 //       و`ru:false` ⇒ «الراديو لا يعمل» / «الوصلة مقطوعة» كقراءة موبايلك.
 //   F11 مدير CAPsMAN v1 (واجهات «cap» بأسمائها الافتراضيّة) ⇒ جدوله يُسأل، وأجاب ⇒ «راوتر · سليم» بإشارات عملائه
 //       (rx-signal لا «0 dBm»)؛ ولم يُجب ⇒ «لم يُقرأ».
+//   R2-1 (الجولة ٢) طرف وصلة يوبيكويتي المرسل (AF60/airMAX بوضع AP) سقط طرفه الثاني ⇒ «الوصلة بلا طرفٍ ثانٍ» —
+//       إشارة mca-status (أرضيّة الضجيج، واجهة الإدارة) ليست وصلته؛ ميموزا وحدها تُحكم بإشارتها (F10).
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -18,6 +20,7 @@ import 'package:rad_mysvcs/api/mimosa_api.dart';
 import 'package:rad_mysvcs/api/network_devices_api.dart';
 import 'package:rad_mysvcs/api/routeros_channel.dart';
 import 'package:rad_mysvcs/api/snmp_client.dart';
+import 'package:rad_mysvcs/api/ubnt_api.dart';
 import 'package:rad_mysvcs/api/vpn_now_api.dart';
 import 'package:rad_mysvcs/core/net/device_net.dart';
 import 'package:rad_mysvcs/core/net/vpn_pipe.dart';
@@ -515,6 +518,52 @@ void main() {
       final c = MikrotikWirelessClient.fromApiMap(
           const {'interface': 'cap1', 'mac-address': 'AA:BB:CC:00:01:01', 'rx-signal': '-63'});
       expect(c.signalStrength, -63);
+    });
+  });
+
+  group('R2-1 طرف وصلة يوبيكويتي المرسل سقط طرفه الثاني: «الوصلة بلا طرفٍ ثانٍ» — إشارة mca ليست وصلته', () {
+    tearDown(() => UbntApi.debugFetch = null);
+
+    test('🚨 AF60/airMAX بوضع AP مسجّلٌ «وصلة» بلا محطّة وإشارة mca −96/−93/−55 ⇒ «بلا طرفٍ ثانٍ» لا «ضعيفة» ولا «سليم»',
+        () async {
+      final d = dev(61, type: 'link', brand: 'ubnt', protocol: 'ssh');
+      NetworkDevicesApi.debugSeedCredentials(d.id, {'user': 'ubnt', 'pass': 'x'}, DateTime.now());
+      for (final sig in ['-96', '-93', '-55']) {
+        UbntApi.debugFetch = () async => UbntStats.fromMcaStatus({
+              'deviceName': 'AF60-master',
+              'wlanOpmode': 'ap',
+              'essid': 'BH',
+              'signal': sig,
+              'wlanConnections': '0',
+              'cpuload': '5',
+              'uptime': '864000',
+            });
+        final p = await DeviceVitals.fetch(d, detailed: true);
+        expect([p.detail.glance.isAp, p.detail.glance.peersKnown, p.detail.peers.length], [true, true, 0], reason: sig);
+        final r = judge(d, p);
+        expect(r.role, CheckRole.link, reason: sig);
+        expect(texts(r), ['الوصلة بلا طرفٍ ثانٍ'], reason: sig);
+        expect(r.state, CheckState.warn, reason: sig);
+      }
+      // والجهاز نفسه من «كل الشركات» (الخادم: sig فارغة لنقطة وصول airOS) ⇒ الحكم نفسه
+      final srv = remote(d, {'kind': 'airos', 'cpu': 5, 'up': 864000, 'ap': true, 'mode': 'ap-ptp', 'sig': null,
+        'peers': const <Map>[]});
+      expect(texts(srv), ['الوصلة بلا طرفٍ ثانٍ']);
+    });
+
+    test('ميموزا وحدها تُحكم بإشارتها (قدرة استقبال الـPtP — F10): الحالة نفسها بعلامتين', () {
+      DeviceCheckReport link(String brand) => DevicesCheck.evaluate(
+          d: dev(62, type: 'link', brand: brand),
+          alive: true,
+          detail: const DeviceDetail(
+              glance: DeviceGlance(isAp: true, peersKnown: true, signal: -61, uptimeSec: 864000)));
+      final ubnt = link('ubnt');
+      expect(texts(ubnt), ['الوصلة بلا طرفٍ ثانٍ']);
+      expect(ubnt.state, CheckState.warn);
+      final mimosa = link('mimosa');
+      expect(mimosa.state, CheckState.ok);
+      expect(mimosa.signal, -61);
+      expect(texts(link('mikrotik')), ['الوصلة بلا طرفٍ ثانٍ']);
     });
   });
 }

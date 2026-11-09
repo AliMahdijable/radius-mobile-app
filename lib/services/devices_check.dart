@@ -549,13 +549,17 @@ class DevicesCheck {
     // إشارتها هنا، محطّةً كان أو نقطة وصول (مراجعة 180)؛ ولا «0 dBm»
     final rx1 = g.isAp == null ? one?.signal : null;
     final here = g.signal ?? (rx1 != null && rx1 < 0 ? rx1 : null);
+    // إشارة وصلة الطرف المرسل هو: ميموزا وحدها (قدرة استقبال الـPtP). إشارة يوبيكويتي بوضع AP من mca-status
+    // أرضيّة الضجيج أو واجهة الإدارة (−96، −93) لا وصلته — طرفها الثاني سقط ⇒ «بلا طرفٍ ثانٍ» كقراءة الخادم
+    // (مراجعة 180، الجولة ٢)
+    final ownRx = d.brand.toLowerCase() == 'mimosa' ? g.signal : null;
     // حكمٌ على الوصلة نفسها (مقطوعة أو بلا طرف) — يغني عن «إشارتها ما انقرت»
     var linkJudged = false;
     if (role == CheckRole.link) {
       if (g.linkDown) {
         f.add(const CheckFinding(CheckLevel.bad, 'الوصلة مقطوعة — لا إشارة'));
         linkJudged = true;
-      } else if (linkAp && g.peersKnown && !stale && detail.peers.isEmpty && g.signal == null && g.signalPct == null) {
+      } else if (linkAp && g.peersKnown && !stale && detail.peers.isEmpty && ownRx == null && g.signalPct == null) {
         // وطرفٌ يقرأ إشارة وصلته هو (ميموزا PtP: قدرة استقباله، ولا جدول محطّاتٍ له) يُحكم بها أدناه (مراجعة 180)
         f.add(const CheckFinding(CheckLevel.bad, 'الوصلة بلا طرفٍ ثانٍ'));
         linkJudged = true;
