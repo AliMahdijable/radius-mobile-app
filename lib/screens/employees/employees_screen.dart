@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../widgets/reveal_password_sheet.dart';
 
+import '../../api/employee_limits_api.dart';
 import '../../api/employees_api.dart';
 import '../../core/util/bidi.dart';
 import '../../core/util/clipboard_helper.dart';
@@ -16,6 +17,7 @@ import '../../services/provider_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import 'employee_account_screen.dart';
 import 'sheets/employee_editor_sheet.dart';
 import 'sheets/link_employee_sheet.dart';
 import '../../services/auth_storage.dart';
@@ -44,6 +46,24 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   bool _loading = true;
   String? _error;
 
+  /// «حدود الموظّف» (٩ نوفمبر): مفتوحةٌ لصفحة هذا المدير؟ — زرّ «حساب الموظف» لكلّ موظف (المدير وحده).
+  bool _limitsFeature = false;
+
+  Future<void> _loadLimitsFeature() async {
+    if (PermissionsService.isEmployee) return;
+    final me = await EmployeeLimitsApi.me();
+    if (!mounted) return;
+    final on = me != null && !me.isEmployee && me.featureEnabled;
+    if (on != _limitsFeature) setState(() => _limitsFeature = on);
+  }
+
+  void _openAccount(Employee e) {
+    final name = (e.fullName?.isNotEmpty == true) ? e.fullName! : e.username;
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => EmployeeAccountScreen(employeeId: e.id, title: name),
+    ));
+  }
+
   /// المالك موزّع ايرث لنك؟ المصدر `ProviderService` (من `/api/auth/me`)،
   /// وكود الشركة المفتوحة احتياطٌ يُعرف لحظة الدخول قبل أن يردّ ذلك النداء
   /// (لا يُنتظر بعد الدخول) — كي لا يرى مالك ايرث لنك محرّر SAS4.
@@ -62,6 +82,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     ProviderService.changes.addListener(_onContextChanged);
     ActiveCompany.listenable.addListener(_onContextChanged);
     _load();
+    _loadLimitsFeature();
   }
 
   @override
@@ -317,6 +338,10 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                                   onShowPassword: canManage && !e.isLinkedCopy
                                       ? () => _showEmployeePassword(e)
                                       : null,
+                                  // حساب الموظف مع مديره (حدوده وتسويته) — المدير وحده، والميزة مفتوحة لصفحته
+                                  onAccount: _limitsFeature && !viewOnly && !PermissionsService.isEmployee
+                                      ? () => _openAccount(e)
+                                      : null,
                                 ),
                             ]),
                           ],
@@ -518,8 +543,12 @@ class _EmployeeTile extends StatelessWidget {
     this.showScope = true,
     this.onDelete,
     this.onShowPassword,
+    this.onAccount,
   });
   final Employee emp;
+
+  /// «حساب الموظف» (حدوده وتسويته) — null يُخفي الزرّ (ليس المدير أو الميزة مطفأة).
+  final VoidCallback? onAccount;
 
   /// عدد الصلاحيّات المعروض — ايرث لنك يعدّ مفاتيحه وحدها.
   final int permsCount;
@@ -694,6 +723,16 @@ class _EmployeeTile extends StatelessWidget {
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               ),
+              if (onAccount != null)
+                IconButton(
+                  key: ValueKey('employee-account-${emp.id}'),
+                  icon: Icon(LucideIcons.handCoins, color: AppColors.brand, size: 16),
+                  onPressed: onAccount,
+                  tooltip: 'حساب الموظف',
+                  splashRadius: 18,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                ),
               if (onShowPassword != null)
                 IconButton(
                   icon: Icon(LucideIcons.keyRound,

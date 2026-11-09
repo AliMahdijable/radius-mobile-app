@@ -55,6 +55,7 @@ import '../desktop/desk_widgets.dart';
 import 'widgets/stats_grid.dart';
 import 'widgets/subscribers_card.dart';
 import '../reports/financial_report_screen.dart';
+import '../../widgets/employee_limits_card.dart';
 
 /// Dashboard with a SLIVER-pinned header — header stays on screen while
 /// the body scrolls underneath. All data is LIVE — there are no mock
@@ -1071,6 +1072,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   // (بلاغ ٢٠٢٦-١٠-١٤) — لا اختفاء يترك فراغاً، ولا نداء.
                   // ⚠️ التفرّع على `_canSubs` **قبل** حالة التحميل: المقفل لا
                   // يجلب، فلو بُني الحيّ لبقي على هيكله دوّارةً أبداً.
+                  // «حسابي مع المدير» (٩ نوفمبر — حدود الموظّف): للموظّف وحده، وحين يضبط مديره سقفاً أو ربحاً — وإلّا لا شيء.
+                  if (Perms.isEmployee && !MergedMode.active.value) const EmployeeLimitsCard(),
                   if (wide) ...[
                     // الحاسبة: صفّ الأرقام الرئيسيّة + شريط الحالات، ثمّ الإيرادات بجانب آخر النشاطات.
                     if (_shown('subscribers') || _shown('wallet'))

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../api/employee_limits_api.dart';
 import '../../../api/employees_api.dart';
 import '../../../api/subscribers_api.dart';
 import '../../../core/platform/store_policy.dart';
@@ -9,11 +10,13 @@ import '../../../core/util/bidi.dart';
 import '../../../core/widgets/design_sheet.dart';
 import '../../../services/active_company.dart';
 import '../../../services/auth_storage.dart';
+import '../../../services/permissions_service.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
 import '../../../theme/typography.dart';
 import '../../../core/widgets/sheet_scaffold.dart';
 import '../../../core/widgets/app_sheet.dart';
+import '../employee_account_screen.dart' show EmployeeLimitsFields;
 
 /// Sheet إنشاء/تعديل موظف. tab1 = معلومات، tab2 = صلاحيات. الـpresets
 /// (3 افتراضية من backend: cashier/assistant_manager/viewer) تطبّق
@@ -120,6 +123,45 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
   bool get _isEdit => widget.employee != null;
   bool get _el => widget.isEarthlink;
 
+  // ── «حدود الموظّف» (٩ نوفمبر): المدير وحده يرى الحقول الثلاثة ويضبطها — الموظّف (ولو مَلَك employees.manage) لا يراها، والخادم
+  //    يرفض غير المدير. تظهر حين يقول الخادم إنّ الميزة مفتوحة لصفحته؛ تُحفظ بعد حفظ الموظف (PUT /api/v2/employee-limits/:id). ──
+  bool _limitsShown = false;
+  EmployeeLimits _limitsBefore = const EmployeeLimits();
+  final _debtCapCtrl = TextEditingController();
+  final _cashCapCtrl = TextEditingController();
+  final _profitCtrl = TextEditingController();
+
+  Future<void> _loadLimits() async {
+    if (PermissionsService.isEmployee) return;
+    final me = await EmployeeLimitsApi.me();
+    if (!mounted || me == null || me.isEmployee || !me.featureEnabled) return;
+    final e = widget.employee;
+    if (e != null) {
+      final r = await EmployeeLimitsApi.get(e.id);
+      if (!mounted) return;
+      final l = r.data?.limits;
+      if (l == null) return; // تعذّر ⇒ لا حقول (لا نكتب فوق قيمٍ لم نقرأها)
+      _limitsBefore = l;
+      _debtCapCtrl.text = EmployeeLimitsFields.initialText(l.debtCap);
+      _cashCapCtrl.text = EmployeeLimitsFields.initialText(l.cashCap);
+      _profitCtrl.text = EmployeeLimitsFields.initialText(l.profitPerOp);
+    }
+    setState(() => _limitsShown = true);
+  }
+
+  /// يحفظ الحدود إن تغيّرت — null نجاح/لا تغيير، وإلّا رسالة الخادم.
+  Future<String?> _saveLimits(int? employeeId) async {
+    if (!_limitsShown || employeeId == null) return null;
+    final want = EmployeeLimitsFields.read(_debtCapCtrl, _cashCapCtrl, _profitCtrl);
+    if (want.sameAs(_limitsBefore)) return null;
+    final r = await EmployeeLimitsApi.put(employeeId, want);
+    if (r.ok) {
+      _limitsBefore = want;
+      return null;
+    }
+    return r.message ?? 'تعذّر حفظ الحدود';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -186,6 +228,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
     listen(_passCtrl);
     listen(_fullNameCtrl);
     listen(_phoneCtrl);
+    _loadLimits();
   }
 
   @override
@@ -196,6 +239,9 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
     _phoneCtrl.dispose();
     _passCtrl.dispose();
     _userFocus.dispose();
+    _debtCapCtrl.dispose();
+    _cashCapCtrl.dispose();
+    _profitCtrl.dispose();
     super.dispose();
   }
 
@@ -292,6 +338,7 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
     String? message;
     int? status;
     String? createdUsername;
+    int? savedId = widget.employee?.id;
     if (_isEdit) {
       // scopeAdminId ثلاثيّ: null (لا تغيير)، '' (مسح)، id (تحديد).
       // نستفسر: هل الـscope تغيّر عن الأصلي؟
@@ -327,9 +374,17 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
       message = r.message;
       status = r.status;
       createdUsername = r.employee?.username;
+      savedId = r.employee?.id;
     }
+    // الحدود بعد حفظ الموظف (المدير وحده) — فشلها لا يلغي حفظه: يُقال صراحةً.
+    final limitsError = ok ? await _saveLimits(savedId) : null;
     if (!mounted) return;
     setState(() => _saving = false);
+    if (ok && limitsError != null && _isEdit) {
+      _showError('حُفظ الموظف، لكن لم تُحفظ الحدود: $limitsError');
+      return;
+    }
+    if (ok && limitsError != null) _snack('حُفظ الموظف، لكن لم تُحفظ الحدود: $limitsError', warn: true);
     if (ok) {
       if (_el && !_isEdit) {
         // ايرث لنك: لوحة بيانات الدخول بدل الإغلاق، والقائمة تُحدَّث خلفها.
@@ -550,6 +605,20 @@ class _EmployeeEditorSheetState extends State<_EmployeeEditorSheet>
             activeThumbColor: AppColors.brand,
           ),
         ),
+        if (_limitsShown) ...[
+          const SizedBox(height: Sp.lg),
+          Text('حدود الموظف', key: const ValueKey('emp-limits-section'),
+              style: AppType.bodyBold(color: AppColors.textHi)),
+          const SizedBox(height: Sp.sm),
+          EmployeeLimitsFields(
+            debtCtrl: _debtCapCtrl,
+            cashCtrl: _cashCapCtrl,
+            profitCtrl: _profitCtrl,
+            onChanged: () {
+              if (_error != null) setState(() => _error = null);
+            },
+          ),
+        ],
       ],
     );
   }
