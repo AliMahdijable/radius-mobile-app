@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../api/device_config_api.dart';
+import '../../../core/util/ip_input.dart';
 import '../../../api/device_probe_api.dart';
 import '../../../models/device_health.dart';
 import '../../../theme/colors.dart';
@@ -207,7 +208,9 @@ class _DeviceConfigSheetState extends State<DeviceConfigSheet> {
                     icon: LucideIcons.network,
                     child: TextField(
                       controller: _ip,
-                      keyboardType: TextInputType.number,
+                      // على الآيفون TextInputType.number بلا نقطة ⇒ لوحةٌ عشريّة + تحويل «٫/،» والأرقام العربيّة
+                      keyboardType: ipKeyboard,
+                      inputFormatters: const [IpInputFormatter()],
                       textDirection: ui.TextDirection.ltr,
                       style: AppType.input(),
                       decoration: InputDecoration(

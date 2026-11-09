@@ -15,6 +15,7 @@ import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import 'regions_screen.dart';
 import '../../theme/typography.dart';
+import '../../core/util/ip_input.dart';
 
 /// bottom sheet لإضافة/تعديل جهاز شبكة — مع اختيار protocol + credentials.
 class NetworkDeviceFormSheet extends StatefulWidget {
@@ -320,9 +321,10 @@ class _NetworkDeviceFormSheetState extends State<NetworkDeviceFormSheet> {
                 icon: LucideIcons.globe,
                 // 2026-08-25: numberWithOptions(decimal:true) يُظهر نقطة
                 // على iOS numeric keypad — TextInputType.number لا يُظهرها
-                // (يظهر فقط 0-9 كأنّه رقم تلفون).
-                keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true, signed: false), validator: (v) {
+                // (يظهر فقط 0-9 كأنّه رقم تلفون). ٩ نوفمبر: الفاصل «٫/،» بلغة
+                // الجهاز العربيّة والأرقام العربيّة ⇒ نقطة وأرقام لاتينيّة.
+                keyboardType: ipKeyboard,
+                formatters: const [IpInputFormatter()], validator: (v) {
               if (v == null || v.trim().isEmpty) return 'مطلوب';
               if (!RegExp(r'^(\d{1,3}\.){3}\d{1,3}$').hasMatch(v.trim())) {
                 return 'IP غير صالح';
