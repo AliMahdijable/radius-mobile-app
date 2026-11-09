@@ -9,6 +9,7 @@ import '../../models/merged_company.dart';
 import '../../models/subscriber.dart';
 import '../agent_net_presence.dart';
 import '../connection_alerts.dart';
+import '../merged_mode.dart';
 import '../permissions_service.dart';
 import '../subscribers_check.dart';
 import '../vpn_now.dart';
@@ -65,6 +66,8 @@ class SubscriberVoiceCheck extends ChangeNotifier {
   static bool Function()? debugLocalAllowed;
   @visibleForTesting
   static bool Function()? debugVpnAllowed;
+  @visibleForTesting
+  static Future<bool> Function(MergedCompany c)? debugIsOpen;
 
   static const probeTimeout = Duration(seconds: 15);
   static const vpnTimeout = Duration(minutes: 3);
@@ -166,7 +169,13 @@ class SubscriberVoiceCheck extends ChangeNotifier {
     }
     // ١) من شبكتك: فحصٌ طازج لجهازه
     var localNoMetrics = false;
+    // فشله شهادةٌ على جهازه لشركةٍ تُقرأ من شبكتك وحدها (خارج «كل الشركات»، أو المفتوحة) — غيرها طريقه VPN شركته، كـ«الفحص
+    // العامّ» (١٠ نوفمبر). والقراءة الناجحة قراءةٌ من أيّ شركة.
+    var localWitness = true;
     if (_localAllowed) {
+      final c = company;
+      if (c != null) localWitness = await (debugIsOpen?.call(c) ?? MergedMode.isOpenKey(c.key));
+      if (_disposed) return;
       _set(VoiceCheckPhase.probing);
       DeviceHealthSnapshot? snap;
       try {
@@ -205,8 +214,10 @@ class SubscriberVoiceCheck extends ChangeNotifier {
         _miss(SubsCheckCat.unchecked, 'الفحص عبر VPN غير مفعّل لك');
       } else if (localNoMetrics) {
         _miss(SubsCheckCat.noMetrics, _noMetricsWhy);
-      } else {
+      } else if (localWitness) {
         _miss(SubsCheckCat.noReply, 'من شبكتك');
+      } else {
+        _miss(SubsCheckCat.unchecked, 'الفحص عبر VPN غير مفعّل لك');
       }
       return _set(VoiceCheckPhase.done);
     }
@@ -232,7 +243,7 @@ class SubscriberVoiceCheck extends ChangeNotifier {
       } else if (localNoMetrics) {
         _miss(SubsCheckCat.noMetrics, _noMetricsWhy);
       } else {
-        _localAllowed
+        _localAllowed && localWitness
             ? _miss(SubsCheckCat.noReply, 'من شبكتك')
             : _miss(SubsCheckCat.unchecked, SubscribersCheck.vpnUnreadNote);
       }
