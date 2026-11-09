@@ -21,6 +21,7 @@ import '../../services/theme_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../widgets/merged_section.dart';
 import '../account/company_switch_sheet.dart';
 import '../app_modules.dart';
 import '../search/quick_search_overlay.dart';
@@ -283,16 +284,20 @@ class _DesktopShellState extends State<DesktopShell> {
                 index: _opened.indexOf(_section),
                 children: [
                   for (final id in _opened)
-                    DeskZoom(
-                      scale: id == 'tab:2' ? _devicesZoom : 1,
-                      child: Navigator(
-                        key: _navKeys[id],
-                        // النقرة المزدوجة لا تفتح الصفحة مرّتين (DeskNavGuard)، ومراقب القمّة يمنع تكديس صفحة الشريط.
-                        observers: [
-                          _guards[id] ??= DeskNavGuard.observer(),
-                          _stackObs[id] ??= DeskNavStack(),
-                        ],
-                        onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => _rootOf(id)),
+                    // «كل الشركات»: قسمٌ مخفيّ هنا لا يوجِّه طلبات بادئاته لشركة الشريط (MergedPaneVisibility).
+                    MergedPaneVisibility(
+                      visible: id == _section,
+                      child: DeskZoom(
+                        scale: id == 'tab:2' ? _devicesZoom : 1,
+                        child: Navigator(
+                          key: _navKeys[id],
+                          // النقرة المزدوجة لا تفتح الصفحة مرّتين (DeskNavGuard)، ومراقب القمّة يمنع تكديس صفحة الشريط.
+                          observers: [
+                            _guards[id] ??= DeskNavGuard.observer(),
+                            _stackObs[id] ??= DeskNavStack(),
+                          ],
+                          onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => _rootOf(id)),
+                        ),
                       ),
                     ),
                 ],

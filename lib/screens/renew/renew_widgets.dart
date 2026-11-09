@@ -4,12 +4,14 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/company_route.dart';
 import '../../api/renew_requests_api.dart';
 import '../../core/util/bidi.dart';
 import '../../core/util/format.dart';
 import '../../core/util/server_time.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
+import '../../services/merged_mode.dart';
 import '../../services/notification_router.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -147,9 +149,12 @@ class RenewRequestTile extends StatelessWidget {
 
 /// صورة التحويل: من الخادم بالتوثيق (ذاكرة الجلسة)، والنقر يكبّرها بملء الشاشة. حُذفت ⇒ سطرٌ يقول ذلك.
 class RenewReceiptImage extends StatefulWidget {
-  const RenewReceiptImage({super.key, required this.request, this.height = 220});
+  const RenewReceiptImage({super.key, required this.request, this.height = 220, this.openCompany = false});
   final RenewRequest request;
   final double height;
+
+  /// طلب الشركة المفتوحة صراحةً ([RenewRequestDetails.openCompany]).
+  final bool openCompany;
 
   @override
   State<RenewReceiptImage> createState() => _RenewReceiptImageState();
@@ -174,7 +179,8 @@ class _RenewReceiptImageState extends State<RenewReceiptImage> {
       });
       return;
     }
-    final r = await RenewRequestsApi.image(widget.request.id);
+    Future<({Uint8List? bytes, bool gone})> load() => RenewRequestsApi.image(widget.request.id);
+    final r = await (widget.openCompany ? CompanyRoute.runOpen(load) : load());
     if (!mounted) return;
     setState(() {
       _bytes = r.bytes;
@@ -313,8 +319,14 @@ class RenewRequestDetails extends StatefulWidget {
     this.onOpenSubscriber,
     this.imageHeight = 260,
     this.readOnlyCompany,
+    this.openCompany = false,
   });
   final RenewRequest request;
+
+  /// طلبٌ للشركة المفتوحة (من الجرس أو الإشعار أو لافتته — ٩ نوفمبر، كمحادثة التذكرة): الصورة والقبول والرفض و«تمّ» لها صراحةً
+  /// ([CompanyRoute.runOpen]) ولو بقي تحتها قسمٌ موجَّهٌ لشركةٍ أخرى ببادئةٍ تطابق («طلبات التفعيل» أو «بوابة المشترك»). false =
+  /// كما هو (القائمة في قسمها: لشركة القسم).
+  final bool openCompany;
 
   /// «كل الشركات» (٨ نوفمبر): طلبٌ من شركةٍ غير المفتوحة للعرض هنا — لا قبول ولا رفض ولا «تمّ» ولا فتح مشتركه (كتاباتها وصفحة
   /// مشتركها لشركتها)؛ سطرٌ يقول ذلك باسمها. null = المفتوحة كما كانت.
@@ -339,7 +351,8 @@ class _RenewRequestDetailsState extends State<RenewRequestDetails> {
 
   Future<void> _act(String action, {String? reason}) async {
     setState(() => _busy = action);
-    final res = await RenewRequestsApi.act(_r.id, action, reason: reason);
+    Future<({bool ok, String? message, RenewRequest? request})> act() => RenewRequestsApi.act(_r.id, action, reason: reason);
+    final res = await (widget.openCompany ? CompanyRoute.runOpen(act) : act());
     if (!mounted) return;
     setState(() {
       _busy = null;
@@ -445,7 +458,7 @@ class _RenewRequestDetailsState extends State<RenewRequestDetails> {
       ],
       if (r.isOpen || r.status == 'done' || r.status == 'rejected') ...[
         const SizedBox(height: Sp.md),
-        RenewReceiptImage(key: ValueKey('receipt-${r.id}'), request: r, height: widget.imageHeight),
+        RenewReceiptImage(key: ValueKey('receipt-${r.id}'), request: r, height: widget.imageHeight, openCompany: widget.openCompany),
       ],
       if (r.status == 'accepted') ...[
         const SizedBox(height: Sp.md),
@@ -614,8 +627,8 @@ Future<void> openRenewSubscriber(BuildContext context, RenewRequest r) async {
 }
 
 /// النافذة السريعة (الجرس والإشعار): الطلب كاملاً — الصورة والإجراءات — بلا مغادرة الشاشة. بعد الرفض/«تمّ التفعيل» تُغلق،
-/// وبعد «قبول» تبقى (التالي: صفحته للتجديد).
-Future<void> showRenewRequestSheet(BuildContext context, RenewRequest request, {String? readOnlyCompany}) {
+/// وبعد «قبول» تبقى (التالي: صفحته للتجديد). [openCompany]: طلب الشركة المفتوحة صراحةً ([RenewRequestDetails.openCompany]).
+Future<void> showRenewRequestSheet(BuildContext context, RenewRequest request, {String? readOnlyCompany, bool openCompany = false}) {
   return showAppSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
@@ -633,6 +646,7 @@ Future<void> showRenewRequestSheet(BuildContext context, RenewRequest request, {
         request: request,
         imageHeight: 300,
         readOnlyCompany: readOnlyCompany,
+        openCompany: openCompany,
         onChanged: (r, action) {
           if (action != 'accept' && Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
         },
@@ -660,12 +674,23 @@ Future<bool> openRenewRequestPush(NavigatorState nav, Map<String, String> data) 
   }
   if (!nav.mounted) return true;
   if (hit != null) {
-    await showRenewRequestSheet(nav.context, hit);
+    // الإشعار لشركته المفتوحة (الموجِّه يبدّل لها أوّلاً — CompanyPush) ⇒ الطلب لها صراحةً
+    await showRenewRequestSheet(nav.context, hit, openCompany: true);
   } else {
-    // لم يعد مفتوحاً (قُبل وفُعّل/رُفض) أو بلا صلاحيّة ⇒ القائمة تقول حاله
+    // لم يعد مفتوحاً (قُبل وفُعّل/رُفض) أو بلا صلاحيّة ⇒ القائمة تقول حاله — قائمة المفتوحة لا مختارة الشريط
+    await MergedMode.focusOpenCompany();
+    if (!nav.mounted) return true;
     await nav.push(MaterialPageRoute(builder: (_) => RenewRequestsScreen.mergedPage()));
   }
   return true;
+}
+
+/// «الكلّ» من الجرس: قسم الطلبات للشركة المفتوحة التي يعرض الجرس طلباتها ([MergedMode.focusOpenCompany]) لا لمختارة الشريط.
+Future<void> _openAllRenew(BuildContext context) async {
+  final nav = Navigator.of(context);
+  await MergedMode.focusOpenCompany();
+  if (!nav.mounted) return;
+  await nav.push(MaterialPageRoute(builder: (_) => RenewRequestsScreen.mergedPage()));
 }
 
 /// قسم «طلبات التجديد» في صندوق الإشعارات — يظهر حين يوجد طلبٌ مفتوح وحده (المالك: «في حال اكو طلب يظهر بالجرس»).
@@ -697,20 +722,20 @@ class RenewInboxSection extends StatelessWidget {
               const Spacer(),
               TextButton(
                 key: const ValueKey('renew-inbox-all'),
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RenewRequestsScreen.mergedPage())),
+                onPressed: () => unawaited(_openAllRenew(context)),
                 child: const Text('الكلّ'),
               ),
             ]),
           ),
           for (final r in items.take(max)) ...[
-            RenewRequestTile(request: r, onTap: () => showRenewRequestSheet(context, r)),
+            RenewRequestTile(request: r, onTap: () => showRenewRequestSheet(context, r, openCompany: true)),
             const SizedBox(height: Sp.sm),
           ],
           if (items.length > max)
             Align(
               alignment: AlignmentDirectional.centerStart,
               child: TextButton(
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RenewRequestsScreen.mergedPage())),
+                onPressed: () => unawaited(_openAllRenew(context)),
                 child: Text('و${items.length - max} غيرها…'),
               ),
             ),

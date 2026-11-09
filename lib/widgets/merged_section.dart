@@ -125,6 +125,17 @@ class _MergedSectionState extends State<MergedSection> {
   String? _openAdmin;
   bool _ready = false;
 
+  /// ظاهرٌ الآن ([MergedPaneVisibility]) — الهاتف دائماً. مخفيٌّ ⇒ لا يوجِّه.
+  bool _visible = true;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _visible = MergedPaneVisibility.of(context);
+    // يُرفع لحظة الإخفاء لا في البناء التالي.
+    if (!_visible) CompanyRoute.leaveSection(this);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -161,9 +172,9 @@ class _MergedSectionState extends State<MergedSection> {
     return MergedSectionInfo(company: f, open: open, readOnly: widget.readOnly, openOnlyReason: widget.openOnlyReason);
   }
 
-  /// وجهة طلبات القسم — تُضبط قبل بناء الشاشة فيبدأ جلبها الأوّل موجَّهاً.
+  /// وجهة طلبات القسم — تُضبط قبل بناء الشاشة فيبدأ جلبها الأوّل موجَّهاً. قسمٌ مخفيّ لا يوجِّه ([MergedPaneVisibility]).
   void _apply(MergedSectionInfo? i) {
-    if (i != null && i.routed) {
+    if (_visible && i != null && i.routed) {
       CompanyRoute.enterSection(this, i.company!.key, widget.prefixes, adminId: i.company!.adminId);
     } else {
       CompanyRoute.leaveSection(this);
@@ -222,6 +233,9 @@ class _MergedSectionState extends State<MergedSection> {
       );
     }
     _apply(i);
+    // مخفيٌّ لشركةٍ غير المفتوحة: لا تبقى شاشتها مركّبةً بلا وجهتها — مؤقّتها ومستمعوها كانوا سيجلبون للمفتوحة تحت اسمها. تُبنى
+    // لها من جديد (جلبٌ موجَّه) حين يظهر.
+    if (!_visible && i != null && i.routed) return const SizedBox.shrink();
     if (i != null && i.openOnly && i.other) {
       return _MergedSectionScope(
         info: i,
@@ -356,6 +370,20 @@ class _OpenOnlyPageState extends State<_OpenOnlyPage> {
       ),
     );
   }
+}
+
+/// الحاسبة (٩ نوفمبر — مانع إصدار 179): DesktopShell يُبقي كلّ قسمٍ فُتح مركّباً في IndexedStack، فكان قسمٌ موجَّهٌ لشركةٍ غير
+/// المفتوحة يبقى يوجِّه بادئاته وهو مخفيّ — «إضافة صرفية» للمفتوحة من الرئيسيّة (Ctrl/⌘+N) سُجِّلت في مال شركة الشريط. الجزء غير
+/// الظاهر [visible] false ⇒ أقسامه ([MergedSection]) لا توجِّه، وتعود لوجهتها حين يظهر. خارجه (الهاتف: أقسامه صفحاتٌ تُدفع وتُغلق)
+/// ظاهرٌ دائماً كما كان. لا TickerMode: الإطار يطفئها لكلّ صفحةٍ تغطّيها أخرى، فيسقط توجيه ما يُفتح من القسم فوقه.
+class MergedPaneVisibility extends InheritedWidget {
+  const MergedPaneVisibility({super.key, required this.visible, required super.child});
+  final bool visible;
+
+  static bool of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<MergedPaneVisibility>()?.visible ?? true;
+
+  @override
+  bool updateShouldNotify(MergedPaneVisibility old) => old.visible != visible;
 }
 
 class _MergedSectionScope extends InheritedWidget {

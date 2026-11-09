@@ -134,10 +134,13 @@ class _AddSheetState extends State<_AddSheet> {
     _resolveSuperAdmin();
   }
 
-  /// طلبٌ لشركة النافذة ([_AddSheet.company]) — خارج «كل الشركات» الطلب كما هو حرفاً.
+  /// طلبٌ لشركة النافذة ([_AddSheet.company]) — خارج «كل الشركات» الطلب كما هو حرفاً. وفيها والمفتوحة هي المختارة: لها صراحةً
+  /// ([CompanyRoute.runOpen]، ٩ نوفمبر — مانع 179) — قسمٌ موجَّهٌ لغيرها ببادئةٍ تطابق (المدراء على الحاسبة) كان يعطي «تابع إلى»
+  /// مدراءَ شركة الشريط فيُنشأ المشترك هنا بمديرٍ منها.
   Future<T> _co<T>(Future<T> Function() f) {
     final c = widget.company;
-    return c == null ? f() : CompanyRoute.run(c.key, f);
+    if (c != null) return CompanyRoute.run(c.key, f);
+    return MergedMode.active.value ? CompanyRoute.runOpen(f) : f();
   }
 
   Future<void> _resolveSuperAdmin() async {
@@ -166,7 +169,7 @@ class _AddSheetState extends State<_AddSheet> {
       _loadingManagers = canManagers;
     });
     if (canManagers) {
-      final list = await SubscribersApi.loadManagers();
+      final list = await _co(() => SubscribersApi.loadManagers());
       if (!mounted) return;
       setState(() {
         _managers = list;

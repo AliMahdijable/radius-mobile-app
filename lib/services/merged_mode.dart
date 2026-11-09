@@ -125,6 +125,24 @@ class MergedMode {
     }
   }
 
+  /// ما يخصّ المفتوحة صراحةً يُفتح قسمه لها (٩ نوفمبر): «الكلّ» في الجرس (تذاكره وطلباته للمفتوحة) وإشعارها بلا عنصرٍ بعينه —
+  /// كانت تفتح القسم موجَّهاً لمختارة الشريط. شركةٌ غيرها مختارة ⇒ تُختار المفتوحة (أو «الكل» = المفتوحة كما كانت، إن لم تُعرف
+  /// بين الصالحة)؛ «الكل» أو المفتوحة ⇒ لا تغيير. خارج الوضع لا شيء.
+  static Future<void> focusOpenCompany() async {
+    if (!active.value || focused == null) return;
+    final open = (await openAdminId()) ?? '';
+    final f = focused;
+    if (!active.value || f == null || (open.isNotEmpty && f.adminId == open)) return;
+    String? key;
+    for (final c in usable) {
+      if (open.isNotEmpty && c.adminId == open) {
+        key = c.key;
+        break;
+      }
+    }
+    focus.value = key;
+  }
+
   /// اسم المفتوحة لسطور «للمفتوحة وحدها» — الموظّف: اسم صفحته الحاليّة من ردّ صفحاته؛ null ⇒ يبقى ما كان يُعرض.
   static String? get currentPageName {
     final n = currentPage?.name.trim() ?? '';
