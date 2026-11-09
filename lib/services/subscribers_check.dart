@@ -154,8 +154,8 @@ enum SubsMissWhy {
   /// جهازه يردّ بلا مقاييس (ليس نانو ولا وحدةً ضوئيّة) ⇒ «بلا مقاييس».
   noMetrics,
 
-  /// متّصلٌ ولم يصله الفحص: الجاري لم يبلغه بعد (note null)، أو لا فحص له أصلاً — بلا عنوان، أو لم يُفحص عبر الـVPN بعد، أو فحص
-  /// الخادم اكتمل ولم يسأل جهازه ([SubscribersCheck.vpnUnreadNote]) (note)
+  /// متّصلٌ ولم يصله الفحص: الجاري لم يبلغه بعد (note null)، أو لا فحص له أصلاً — بلا عنوان، أو لم يُفحص عبر الـVPN بعد
+  /// ([SubscribersCheck.vpnNotYetNote])، أو فحص الخادم اكتمل ولم يسأل جهازه ([SubscribersCheck.vpnUnreadNote]) (note)
   /// ⇒ «لم يُفحص». ١٠ نوفمبر: كان «لم يُقرأ — جهازه لم يردّ» ولم يُسأل جهازه.
   unchecked,
 
@@ -367,6 +367,11 @@ class SubscribersCheck {
   /// بلا قراءة سُمّوا «ما ردّ»): الخادم يسأل أجهزة يوبيكويتي وحدها ويؤجّل رافض كلمة السرّ والساقط وبلا إدارة (connVpn
   /// targetsState.plan) — ومن سأله وما ردّ تأتي قراءته `dead` («لا يستجيب»)، فغياب القراءة يعني أنّ جهازه لم يُسأل.
   static const vpnUnreadNote = 'لم يُقرأ عبر VPN';
+
+  /// شركته طريقها VPN ولم يكتمل لها فحصٌ عبره (لم يجرِ، أو أُلغي) ⇒ «لم يُفحص» بهذا السبب: سببٌ واحد بكلماتٍ واحدة
+  /// في صفّه والتقرير المنسوخ وجواب الأمر الصوتيّ، كبطاقة «الشركات» («لم تُفحص بعد عبر VPN») — المراجعة الثانية: كان
+  /// «لم يصله الفحص»/«بانتظار الفحص» في صفّه و«لم يُفحص — لم يُفحص عبر VPN بعد» في الجواب.
+  static const vpnNotYetNote = 'لم يُفحص بعد عبر VPN';
 
   /// قسم من لم يُقرأ.
   static SubsCheckCat catOf(SubsMissWhy why) => switch (why) {
@@ -625,7 +630,7 @@ class SubscribersCheck {
     if (!s.isOnline) return (sub: s, why: SubsMissWhy.offline, note: null);
     if (r == null) {
       if (busy) return (sub: s, why: SubsMissWhy.unchecked, note: null);
-      if (checkedAt == null) return (sub: s, why: SubsMissWhy.unchecked, note: 'لم يُفحص عبر VPN بعد');
+      if (checkedAt == null) return (sub: s, why: SubsMissWhy.unchecked, note: vpnNotYetNote);
       return (sub: s, why: SubsMissWhy.unchecked, note: vpnUnreadNote);
     }
     if (r.dead) return (sub: s, why: SubsMissWhy.dead, note: null);
@@ -637,7 +642,8 @@ class SubscribersCheck {
   /// وشركته لم تُفحص عبر الـVPN يُقال سببها ([companyNote]: ««ايرث لنك» تحتاج VPN»…).
   ///
   /// ١٠ نوفمبر: [wave] موجة الهاتف الجارية و[vpnWaits] شركةٌ يفحصها الخادم الآن أو بعد قليل — من لم يبلغه أيٌّ منهما «لم يُفحص
-  /// بعد» لا «ما ردّ»؛ وغير المتّصل وحده قسمه.
+  /// بعد» لا «ما ردّ»؛ وغير المتّصل وحده قسمه. والموجة طريق شركةٍ تُقرأ من شبكتك ([localFailsFor]) وحدها: غيرها بلا
+  /// فحصٍ مكتملٍ عبر VPN شركته ⇒ [vpnNotYetNote].
   static SubsCheckReport mixed(
     List<Subscriber> subs,
     ConnectionAlertThresholds Function(String? company) limits, {
@@ -696,7 +702,10 @@ class SubscribersCheck {
         missing.add(unmeasured(s, v));
         continue;
       }
-      if (_awaitsWave(s, p, wave) || (v == null && waits(s.companyKey))) {
+      // موجة الهاتف طريق فحصه وفشلها شهادةٌ على جهازه لشركةٍ تُقرأ من شبكتك وحدها — غيرها طريقه VPN شركته: لا «بانتظار
+      // الفحص» لموجةٍ لا يُعدّ فشلها (المراجعة الثانية)، وقراءتها الناجحة تُعدّ كما هي
+      final witness = localFails(s.companyKey);
+      if ((witness && _awaitsWave(s, p, wave)) || (v == null && waits(s.companyKey))) {
         missing.add((sub: s, why: SubsMissWhy.unchecked, note: null));
         continue;
       }
@@ -707,12 +716,15 @@ class SubscribersCheck {
               ? (sub: s, why: SubsMissWhy.company, note: note)
               : p?.snap != null
                   ? (sub: s, why: SubsMissWhy.noMetrics, note: null)
-                  : p != null && localFails(s.companyKey)
+                  : p != null && witness
                       ? (sub: s, why: SubsMissWhy.noReply, note: null)
-                      // فحص الخادم لشركته اكتمل بلا قراءةٍ له ⇒ لم يُسأل جهازه ([vpnUnreadNote])؛ ولا فحص له بأيّ طريق ⇒ لم يُفحص
+                      // فحص الخادم لشركته اكتمل بلا قراءةٍ له ⇒ لم يُسأل جهازه ([vpnUnreadNote])؛ وطريقه VPN شركته ولم
+                      // يكتمل لها فحص ⇒ [vpnNotYetNote]؛ ولا فحص له بأيّ طريق ⇒ لم يُفحص
                       : checkedAt != null
                           ? (sub: s, why: SubsMissWhy.unchecked, note: vpnUnreadNote)
-                          : (sub: s, why: SubsMissWhy.unchecked, note: _noAddress(s)));
+                          : !witness
+                              ? (sub: s, why: SubsMissWhy.unchecked, note: vpnNotYetNote)
+                              : (sub: s, why: SubsMissWhy.unchecked, note: _noAddress(s)));
     }
     return _report(subs.length, rows, healthy, missing, limits, oldest: oldest, newest: newest);
   }
