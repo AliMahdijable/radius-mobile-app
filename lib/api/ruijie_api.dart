@@ -305,7 +305,8 @@ class RuijieApi {
       final linkCols = await _readRjTable(snmp, _oidRjLink);
       if (linkCols == null) linkRead = false;
       if (linkCols != null && linkCols.isNotEmpty) {
-        // رقمٌ بوسمٍ عدديّ وحده (`asInt` يُعيد صفراً لغيره)؛ والإشارة والضجيج صفراً «لم تُقرأ» — 0 dBm ليست قراءة (كيوبيكويتي وميكروتك)
+        // رقمٌ بوسمٍ عدديّ وحده (`asInt` يُعيد صفراً لغيره)؛ والإشارة والضجيج صفراً «لم تُقرأ» — 0 dBm ليست قراءة
+        // (كيوبيكويتي وميكروتك)
         int? n(int c) => linkCols[c]?.isNumeric == true ? linkCols[c]!.asInt : null;
         int? dbm(int c) => n(c) == 0 ? null : n(c);
         String? t(int c) {
@@ -395,8 +396,8 @@ class RuijieApi {
   /// مفتاح الصفّ هنا **عنوان MAC** لا رقماً، فلا يصلح `_mapByLastIndex`
   /// الذي يقرأ أوّل جزءٍ بعد الأساس.
   ///
-  /// `null` = لم يُقرأ (مهلةٌ، أو ممرّ الـVPN/الشبكة انقطع) — الجدول مجهولٌ لا «ليس جسراً» (المراجعة الثالثة: كانت المهلة تُبلع
-  /// هنا فلا يصل `linkRead = false` أبداً، والجسر «راوتر · سليم»). ردّ الوكيل بخطأ ⇒ لا يدعمه ⇒ فارغ.
+  /// `null` = لم يُقرأ (مهلةٌ، أو ممرّ الـVPN/الشبكة انقطع) — الجدول مجهولٌ لا «ليس جسراً» (المراجعة الثالثة: كانت
+  /// المهلة تُبلع هنا فلا يصل `linkRead = false` أبداً، والجسر «راوتر · سليم»). ردّ الوكيل بخطأ ⇒ لا يدعمه ⇒ فارغ.
   static Future<Map<int, Varbind>?> _readRjTable(
       SnmpV2c snmp, String base) async {
     final out = <int, Varbind>{};
