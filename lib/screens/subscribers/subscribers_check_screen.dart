@@ -760,6 +760,8 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
     final s = m.sub;
     final (text, tone) = switch (m.why) {
       SubsMissWhy.dead => ('لا يستجيب', AppTone.danger),
+      // ٩ نوفمبر: يردّ عبر الـVPN ولم تُقرأ مقاييسه — كان يُعدّ «سليم»
+      SubsMissWhy.unmeasured => (m.note ?? 'يردّ، ما انقرت مقاييسه', AppTone.warning),
       SubsMissWhy.company => (
           (m.note ?? '').contains('تحتاج VPN')
               ? mergedWord('شركته تحتاج VPN', 'صفحته تحتاج VPN')

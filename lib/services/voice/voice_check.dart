@@ -167,9 +167,13 @@ class SubscriberVoiceCheck extends ChangeNotifier {
         if (row != null) return _set(VoiceCheckPhase.done);
       }
     }
-    // ٢) آخر قراءةٍ عبر VPN شركته (٣٠ د)
+    // ٢) آخر قراءةٍ عبر VPN شركته (٣٠ د) — والبنك وحده (يردّ بلا مقاييس) جوابٌ بسببه لا «سليم» (٩ نوفمبر)
     var v = VpnNow.readingFor(sub.username, company: sub.companyKey);
     if (v != null && !v.dead) {
+      if (!v.measured) {
+        note = SubscribersCheck.unmeasuredLabel(v);
+        return _set(VoiceCheckPhase.done);
+      }
       _apply(vpn: v, vpnAt: _vpnAt());
       if (row != null) return _set(VoiceCheckPhase.done);
     }
@@ -184,7 +188,9 @@ class SubscriberVoiceCheck extends ChangeNotifier {
     } catch (_) {}
     if (_disposed) return;
     v = VpnNow.readingFor(sub.username, company: sub.companyKey);
-    if (v != null && !v.dead) {
+    if (v != null && !v.dead && !v.measured) {
+      note = SubscribersCheck.unmeasuredLabel(v);
+    } else if (v != null && !v.dead) {
       _apply(vpn: v, vpnAt: _vpnAt());
     } else {
       note = v?.dead == true

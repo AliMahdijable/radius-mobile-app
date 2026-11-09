@@ -114,10 +114,64 @@ void main() {
     expect(r.rows.map((x) => x.sub.username).toList(), ['w2', 'w1'], reason: '‎-82 قبل ‎-74');
     expect(r.rows.first.reading!.via, 'السكتر');
     expect(r.rows.first.reading!.at, when);
-    expect(r.healthy.map((x) => x.sub.username).toList(), ['w3', 'p'], reason: 'البنك وحده بلا مقاييس ⇒ آخراً');
+    // ٩ نوفمبر: البنك وحده (يردّ بلا مقاييس) «لم يُقرأ» لا «سليم» — كان هنا آخر «سليم»
+    expect(r.healthy.map((x) => x.sub.username).toList(), ['w3']);
     expect(r.healthy.first.reading!.via, 'الأولت');
-    expect(r.healthy.last.reading!.ms, 12);
-    expect([for (final m in r.missing) m.why], [SubsMissWhy.dead, SubsMissWhy.offline], reason: 'الميّت أوّلاً');
+    expect([for (final m in r.missing) m.why], [SubsMissWhy.dead, SubsMissWhy.unmeasured, SubsMissWhy.offline],
+        reason: 'الميّت أوّلاً ثمّ من يردّ بلا مقاييس');
+    expect(r.missing[1].sub.username, 'p');
+    expect(r.missing[1].note, 'يردّ، ما انقرت مقاييسه');
+    expect([r.total, r.read], [6, 3]);
+  });
+
+  group('٩ نوفمبر — «فحص المشتركين» عبر الـVPN: من يردّ ولم تُقرأ مقاييسه ليس «سليم»', () {
+    test('🚨 ضغطة نفق الشركة: يردّ 156 وقُرئ 0 (رُفض الدخول 153) ⇒ لا أحد «سليم» — كلّهم «لم يُقرأ» بسببهم', () {
+      // من فحص الخادم كما يُرجعه اليوم (src: ping بلا مقاييس)، وخادمٌ لاحق يضيف err
+      final subs = [for (var i = 0; i < 156; i++) _sub('u$i')];
+      final reads = <String, VpnSubReading>{
+        for (var i = 0; i < 156; i++)
+          'u$i': VpnSubReading.fromJson({'u': 'u$i', 'src': 'ping', 'ms': 20 + i % 5, if (i < 153) 'err': 'login_failed'})!,
+      };
+      final r = SubscribersCheck.vpn(subs, limits, reading: (s) => reads[s.username]);
+      expect(r.healthy, isEmpty);
+      expect(r.rows, isEmpty);
+      expect([r.read, r.unread], [0, 156]);
+      expect(r.missing.every((m) => m.why == SubsMissWhy.unmeasured), isTrue);
+      expect(r.missing.where((m) => m.note == 'يردّ، ما انفتح برمزه المحفوظ').length, 153);
+      expect(r.missing.where((m) => m.note == 'يردّ، ما انقرت مقاييسه').length, 3, reason: 'خادمٌ بلا err ⇒ السطر العامّ');
+    });
+
+    test('الأسباب من الخادم إن أعطاها، والحقل اختياريّ؛ وجهازٌ قُرئ بلا أرقام «بلا قياسات»', () {
+      expect(VpnSubReading.fromJson({'src': 'ping', 'ms': 4})!.err, isNull);
+      expect(VpnSubReading.fromJson({'src': 'ping', 'err': 'no_web'})!.err, 'no_web');
+      expect(SubscribersCheck.unmeasuredLabel(const VpnSubReading(src: 'ping', err: 'no_web')), 'يردّ، واجهة إدارته ما تفتح');
+      expect(const VpnSubReading(src: 'ping', ms: 4).measured, isFalse);
+      expect(const VpnSubReading(src: 'cpe', sig: -60).measured, isTrue);
+      expect(const VpnSubReading(src: 'cpe', lan: 'ok').measured, isTrue);
+      expect(const VpnSubReading(src: 'cpe', sig: 0, ccq: 0).measured, isFalse, reason: 'الصفر ليس قراءة');
+      final r = SubscribersCheck.vpn([_sub('c')], limits, reading: (_) => const VpnSubReading(src: 'cpe'));
+      expect(r.missing.single.why, SubsMissWhy.noMetrics);
+    });
+
+    test('«كل الشركات»: البنك وحده لا يغلب قراءة الهاتف الحقيقيّة ولو أحدث؛ وبلا قراءة هاتف ⇒ «لم يُقرأ» لا «سليم»', () {
+      final phoneAt = DateTime(2026, 11, 9, 10, 0);
+      final vpnAt = DateTime(2026, 11, 9, 10, 5);
+      final subs = [_sub('both', company: 'kE'), _sub('ping', company: 'kE')];
+      final r = SubscribersCheck.mixed(
+        subs,
+        limits,
+        peek: (s) => s.username == 'both'
+            ? (snap: DeviceHealthSnapshot(kind: DeviceKind.ubiquiti, ip: '3', ubnt: _ubnt(-50, 95)), stale: false, at: phoneAt)
+            : null,
+        reading: (s) => const VpnSubReading(src: 'ping', ms: 9, err: 'login_failed'),
+        readAt: (_) => vpnAt,
+      );
+      expect(r.healthy.single.sub.username, 'both');
+      expect(r.healthy.single.reading!.vpn, isFalse, reason: 'قراءة الهاتف بمقاييسها');
+      expect(r.missing.single.sub.username, 'ping');
+      expect(r.missing.single.why, SubsMissWhy.unmeasured);
+      expect(r.missing.single.note, 'يردّ، ما انفتح برمزه المحفوظ');
+    });
   });
   test('«كل الشركات»: كلّ مشتركٍ بأحدث قراءته — الهاتف لشركةٍ والـVPN لأخرى، ومن لم يُقرأ وشركته لم تُفحص يُقال سببها', () {
     // المالك ٨ نوفمبر: «مايعرض مثل الاجهزه مشتركين كل شركه ونتيجه فحوصاتهم… ايرث لنك رابطلها vpn والسوبرنت تشتغل لوكل»

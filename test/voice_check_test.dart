@@ -188,6 +188,36 @@ void main() {
       expect(c.row?.problems.single.kind, ConnectionProblemKind.fiberRx);
     });
 
+    test('٩ نوفمبر: يردّ عبر الـVPN بلا مقاييس ⇒ «بلا إدارة» بسببه لا «سليم»، وبلا فحصٍ ثانٍ', () async {
+      final b = _co('c0000000000b1', 'ايرث لنك');
+      SubscriberVoiceCheck.debugLocalAllowed = () => false;
+      SubscriberVoiceCheck.debugVpnAllowed = () => true;
+      var runs = 0;
+      SubscriberVoiceCheck.debugVpnRun = (s, c) async => runs++;
+      VpnNow.debugApplyCompany(
+          b.key,
+          const VpnNowResult(ok: true, message: 'تم', readings: {
+            'auth.u': VpnSubReading(src: 'ping', ms: 9, err: 'login_failed'),
+          }));
+      final c = SubscriberVoiceCheck(_sub('auth.u', company: b.key), company: b);
+      await c.run();
+      expect(c.row, isNull);
+      expect(c.deviceLine, 'بلا إدارة — يردّ، ما انفتح برمزه المحفوظ');
+      expect(runs, 0, reason: 'آخر قراءةٍ تكفي — لا فحص VPN جديد');
+
+      // ولا قراءة سابقة: الفحص الآن يُرجع البنك وحده ⇒ السطر نفسه (لا جوابٌ فارغ)
+      VpnNow.reset();
+      SubscriberVoiceCheck.debugVpnRun = (s, c) async {
+        runs++;
+        VpnNow.debugApplyCompany(b.key, const VpnNowResult(ok: true, message: 'تم', readings: {'p.u': VpnSubReading(src: 'ping', ms: 5)}));
+      };
+      final p = SubscriberVoiceCheck(_sub('p.u', company: b.key), company: b);
+      await p.run();
+      expect(runs, 1);
+      expect(p.row, isNull);
+      expect(p.deviceLine, 'بلا إدارة — يردّ، ما انقرت مقاييسه');
+    });
+
     test('لا طريق ⇒ «بلا إدارة» بسببه', () async {
       final b = _co('c0000000000b1', 'ايرث لنك');
       SubscriberVoiceCheck.debugLocalAllowed = () => false;
