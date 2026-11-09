@@ -17,20 +17,25 @@ import '../../../core/widgets/app_sheet.dart';
 ///  • Submit يستدعي PUT /api/admin/expenses/:id
 ///
 /// يرجع true عند الحفظ الناجح فالـcaller يعيد تحميل القائمة.
-Future<bool?> showEditExpenseSheet(BuildContext context, ExpenseRow row) {
+///
+/// [companyKey] («كل الشركات»، ٩ نوفمبر — مراجعة 179): شركة الصرفيّة كما كانت لحظة فتح الشيت (null = المفتوحة) — الحفظ لها
+/// صراحةً ([ExpensesApi.update]) مهما تبدّل تحته. [companyName] اسمها تحت العنوان.
+Future<bool?> showEditExpenseSheet(BuildContext context, ExpenseRow row, {required String? companyKey, String? companyName}) {
   return showAppSheet<bool>(
     barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _EditExpenseSheet(row: row),
+    builder: (_) => _EditExpenseSheet(row: row, companyKey: companyKey, companyName: companyName),
   );
 }
 
 class _EditExpenseSheet extends StatefulWidget {
-  const _EditExpenseSheet({required this.row});
+  const _EditExpenseSheet({required this.row, required this.companyKey, this.companyName});
   final ExpenseRow row;
+  final String? companyKey;
+  final String? companyName;
 
   @override
   State<_EditExpenseSheet> createState() => _EditExpenseSheetState();
@@ -108,6 +113,7 @@ class _EditExpenseSheetState extends State<_EditExpenseSheet> {
       amount: _amount,
       note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
       expenseDate: dateStr,
+      companyKey: widget.companyKey,
     );
     if (!mounted) return;
     setState(() => _submitting = false);
@@ -126,7 +132,7 @@ class _EditExpenseSheetState extends State<_EditExpenseSheet> {
       header: SheetHeaderBar(
         icon: LucideIcons.pencil,
         title: 'تعديل الصرفيّة',
-        subtitle: '',
+        subtitle: (widget.companyName ?? '').trim().isEmpty ? '' : 'في «${widget.companyName!.trim()}»',
         onClose: _submitting ? () {} : () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(

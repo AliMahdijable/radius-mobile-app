@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../services/manual_wa_prefs.dart';
 import '../api/wa_contact_risk.dart';
+import '../api/company_route.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
@@ -185,7 +186,8 @@ class _WaPreviewSheetState extends State<_WaPreviewSheet> {
   }
 
   Future<void> _loadRisk() async {
-    final r = await WaContactRiskApi.one(widget.phone);
+    // الإرسال اليدويّ يخرج من واتساب الشركة المفتوحة — خطر الرقم لها صراحةً (لا لقسمٍ ظاهرٍ لشركةٍ أخرى ببادئته)
+    final r = await CompanyRoute.runOpen(() => WaContactRiskApi.one(widget.phone));
     if (!mounted) return;
     setState(() => _risk = r);
   }

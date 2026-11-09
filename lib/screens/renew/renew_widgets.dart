@@ -11,7 +11,6 @@ import '../../core/util/format.dart';
 import '../../core/util/server_time.dart';
 import '../../core/widgets/app_sheet.dart';
 import '../../core/widgets/design_sheet.dart';
-import '../../services/merged_mode.dart';
 import '../../services/notification_router.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -677,21 +676,17 @@ Future<bool> openRenewRequestPush(NavigatorState nav, Map<String, String> data) 
     // الإشعار لشركته المفتوحة (الموجِّه يبدّل لها أوّلاً — CompanyPush) ⇒ الطلب لها صراحةً
     await showRenewRequestSheet(nav.context, hit, openCompany: true);
   } else {
-    // لم يعد مفتوحاً (قُبل وفُعّل/رُفض) أو بلا صلاحيّة ⇒ القائمة تقول حاله — قائمة المفتوحة لا مختارة الشريط
-    await MergedMode.focusOpenCompany();
-    if (!nav.mounted) return true;
-    await nav.push(MaterialPageRoute(builder: (_) => RenewRequestsScreen.mergedPage()));
+    // لم يعد مفتوحاً (قُبل وفُعّل/رُفض) أو بلا صلاحيّة ⇒ القائمة تقول حاله — قائمة المفتوحة مثبَّتةً لها، والشريط كما هو (لا
+    // يُعاد توجيه قسمٍ مفتوحٍ تحت الإشعار ولا شيت كتابته)
+    await nav.push(MaterialPageRoute(builder: (_) => RenewRequestsScreen.mergedPage(openCompany: true)));
   }
   return true;
 }
 
-/// «الكلّ» من الجرس: قسم الطلبات للشركة المفتوحة التي يعرض الجرس طلباتها ([MergedMode.focusOpenCompany]) لا لمختارة الشريط.
-Future<void> _openAllRenew(BuildContext context) async {
-  final nav = Navigator.of(context);
-  await MergedMode.focusOpenCompany();
-  if (!nav.mounted) return;
-  await nav.push(MaterialPageRoute(builder: (_) => RenewRequestsScreen.mergedPage()));
-}
+/// «الكلّ» من الجرس: طلبات الشركة المفتوحة التي يعرضها الجرس، مثبَّتةً لها ([MergedSection.openCompany]) — لا مختارة الشريط،
+/// ولا يتبدّل الشريط (٩ نوفمبر — مراجعة 179: تبديله كان يعيد توجيه قسمٍ مفتوحٍ تحت الجرس وشيت كتابته).
+Future<void> _openAllRenew(BuildContext context) =>
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => RenewRequestsScreen.mergedPage(openCompany: true)));
 
 /// قسم «طلبات التجديد» في صندوق الإشعارات — يظهر حين يوجد طلبٌ مفتوح وحده (المالك: «في حال اكو طلب يظهر بالجرس»).
 class RenewInboxSection extends StatelessWidget {

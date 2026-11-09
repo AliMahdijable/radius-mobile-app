@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../api/company_route.dart';
 import '../../../api/employees_api.dart';
 import '../../../api/managers_api.dart';
 import '../../../services/auth_storage.dart';
@@ -190,12 +191,13 @@ class _ReportFiltersPanelState extends State<ReportFiltersPanel> {
   }
 
   Future<void> _load() async {
-    final results = await Future.wait([
-      ManagersApi.lite(),
-      // المحذوف الذي له حركات يبقى بالقائمة بعلامته — وإلّا حركاته بلا طريق.
-      EmployeesApi.list(withDeleted: true),
-      AuthStorage.readAdminId(),
-    ]);
+    // فلاتر تقارير الشركة المفتوحة — لها صراحةً
+    final results = await CompanyRoute.runOpen(() => Future.wait([
+          ManagersApi.lite(),
+          // المحذوف الذي له حركات يبقى بالقائمة بعلامته — وإلّا حركاته بلا طريق.
+          EmployeesApi.list(withDeleted: true),
+          AuthStorage.readAdminId(),
+        ]));
     if (!mounted) return;
     setState(() {
       _managers = (results[0] as List<ManagerLite>?) ?? const [];

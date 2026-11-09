@@ -176,7 +176,6 @@ void main() {
 
     expect(find.byType(FloatingActionButton), findsNothing, reason: '«الكل» لا يُعرف لأيّ شركةٍ يُباع');
     expect(srv.writes, isEmpty);
-    expect(SalesApi.routeKey, isNull);
     await down(t);
   });
 
@@ -190,7 +189,6 @@ void main() {
     await settleReal(t);
     expect(t.takeException(), isNull);
     expect(MergedMode.focus.value, _kEl);
-    expect(SalesApi.routeKey, _kEl);
     expect(srv.asked, containsAll(['GET /api/v2/sales $_kEl', 'GET /api/v2/sales/items $_kEl']));
     expect(srv.asked.where((a) => a.endsWith(' -') && a.contains('/api/v2/sales')), isEmpty,
         reason: 'لا طلب مبيعاتٍ للمفتوحة وهي غير معروضة');
@@ -223,7 +221,10 @@ void main() {
     expect(srv.writes, isEmpty, reason: 'لا كتابة لشركةٍ معروضةٍ للعرض');
     await t.pump(const Duration(seconds: 3));
     await down(t);
-    expect(SalesApi.routeKey, isNull, reason: 'إغلاق القسم يعيد طلباته للجلسة المفتوحة');
+    // لا وجهة مشتركة بعد إغلاق القسم (مراجعة 179): نداءٌ بلا شركة ⇒ المفتوحة
+    srv.asked.clear();
+    await t.runAsync(() => SalesApi.items(companyKey: null));
+    expect(srv.asked, ['GET /api/v2/sales/items -']);
   });
 
   testWidgets('المفتوحة: القسم كما كان — بلا توجيه والبيع مفتوح', (t) async {
@@ -235,7 +236,6 @@ void main() {
     await t.tap(find.byKey(const ValueKey('sales-co-$_kOpen')));
     await settleReal(t);
     expect(t.takeException(), isNull);
-    expect(SalesApi.routeKey, isNull);
     expect(srv.asked, containsAll(['GET /api/v2/sales -', 'GET /api/v2/sales/items -']));
     expect(srv.asked.where((a) => !a.endsWith(' -')), isEmpty);
     expect(find.textContaining('للعرض هنا'), findsNothing);
@@ -260,7 +260,7 @@ void main() {
     await t.tap(find.byKey(const ValueKey('sales-co-$_kEl')));
     await settleReal(t);
     expect(t.takeException(), isNull);
-    expect(SalesApi.routeKey, _kEl);
+    expect(srv.asked, contains('GET /api/v2/sales/items $_kEl'));
     expect(find.textContaining('للعرض هنا'), findsNothing);
     expect(find.textContaining('البيع والمخزون هنا لشركة «ايرث لنك»'), findsOneWidget);
     final fab = find.byType(FloatingActionButton);
@@ -271,17 +271,14 @@ void main() {
 
   testWidgets('الخطوة ٢: البيع لمشتركٍ في شركةٍ موجَّهة يقرأ المشترك منها أوّلاً ثمّ يُرسل بمرجعه؛ العابر بلا مرجع؛ العاديّ كما كان', (t) async {
     await up(t);
-    addTearDown(() {
-      SalesApi.routeKey = null;
-      CompanyRefs.reset();
-    });
+    addTearDown(CompanyRefs.reset);
     const lines = [SaleLineInput(itemId: 7, qty: 1, unitPrice: 40000)];
-    SalesApi.routeKey = _kEl;
     final r = await t.runAsync(() => SalesApi.sell(
           clientRef: 'a' * 32,
           payment: 'debt',
           lines: lines,
           customer: const {'kind': 'subscriber', 'idx': '88', 'username': 'zaid.el', 'name': 'زيد'},
+          companyKey: _kEl,
         ));
     expect(r!.ok, isTrue, reason: r.message);
     final iGet = srv.asked.indexOf('GET /api/v2/subscribers/88 $_kEl');
@@ -292,19 +289,23 @@ void main() {
     // زبونٌ عابر: لا قراءة مشترك ولا مرجع
     srv.asked.clear();
     final w = await t.runAsync(() => SalesApi.sell(
-          clientRef: 'b' * 32, payment: 'cash', lines: lines, customer: const {'kind': 'walkin', 'name': 'زبون'}));
+        clientRef: 'b' * 32,
+        payment: 'cash',
+        lines: lines,
+        customer: const {'kind': 'walkin', 'name': 'زبون'},
+        companyKey: _kEl));
     expect(w!.ok, isTrue);
     expect(srv.asked.where((a) => a.startsWith('GET /api/v2/subscribers/')), isEmpty);
     expect(srv.saleRefs.last, isNull);
 
     // الوضع العاديّ (المفتوحة): لا قراءة مسبقة ولا مفتاح
-    SalesApi.routeKey = null;
     srv.asked.clear();
     final n = await t.runAsync(() => SalesApi.sell(
           clientRef: 'c' * 32,
           payment: 'debt',
           lines: lines,
           customer: const {'kind': 'subscriber', 'idx': '88', 'username': 'zaid.el'},
+          companyKey: null,
         ));
     expect(n!.ok, isTrue);
     expect(srv.asked, ['POST /api/v2/sales -']);
@@ -339,7 +340,6 @@ void main() {
     expect(srv.asked, contains('GET /api/v2/sales/items $_kEl'), reason: 'موادّ شركته لا المفتوحة');
     expect(find.textContaining('«ايرث لنك» للعرض هنا'), findsOneWidget);
     expect(find.textContaining('البيع لشركة'), findsNothing);
-    expect(SalesApi.routeKey, isNull);
     await t.pump(const Duration(seconds: 3));
 
     // مفتوح ⇒ شيت البيع باسم شركته وموادّها، والمشترك مختار
@@ -348,13 +348,19 @@ void main() {
     final f2 = showSellToSubscriber(ctx, idx: '88', username: 'zaid.el', name: 'زيد', companyKey: _kEl);
     await settleReal(t);
     expect(find.textContaining('البيع لشركة «ايرث لنك»'), findsOneWidget);
-    expect(SalesApi.routeKey, _kEl, reason: 'طلبات الشيت (البحث والبيع) لشركته ما دام مفتوحاً');
     expect(srv.asked, contains('GET /api/v2/sales/items $_kEl'));
     Navigator.of(ctx).pop();
     await settleReal(t);
     expect(await t.runAsync(() => f2), isFalse);
-    expect(SalesApi.routeKey, isNull, reason: 'الوجهة تعود بعد الإغلاق');
     expect(srv.writes, isEmpty);
+    // لا وجهة باقيةٌ بعد الشيت: مشترك المفتوحة (بلا مفتاح) ⇒ موادّ المفتوحة بلا مفتاح
+    srv.asked.clear();
+    final f3 = showSellToSubscriber(ctx, idx: '12', username: 'ali.open', companyKey: null);
+    await settleReal(t);
+    expect(srv.asked.where((a) => a.contains('/api/v2/sales')), ['GET /api/v2/sales/items -']);
+    Navigator.of(ctx).pop();
+    await settleReal(t);
+    await t.runAsync(() => f3);
     await down(t);
   });
 }

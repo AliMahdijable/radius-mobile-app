@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/company_route.dart';
 import '../../api/manager_debts_api.dart';
 import '../../api/manager_movements_api.dart';
 import '../../api/managers_api.dart';
@@ -309,14 +310,15 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
       return;
     }
     // 1) fetch managers + summary + custom debts (لحساب "تسديد كامل" لاحقاً)
-    final coreResults = await Future.wait([
-      ManagersApi.listFull(count: 500),
-      ManagerDebtsApi.summary(
-        from: _dateFrom == null ? null : _fmtDate(_dateFrom!),
-        to: _dateTo == null ? null : _fmtDate(_dateTo!),
-      ),
-      ManagerDebtsApi.list(),
-    ]);
+    // تقرير الشركة المفتوحة — لها صراحةً (لا لقسم «المدراء» ظاهرٍ لشركةٍ أخرى ببادئاته)
+    final coreResults = await CompanyRoute.runOpen(() => Future.wait([
+          ManagersApi.listFull(count: 500),
+          ManagerDebtsApi.summary(
+            from: _dateFrom == null ? null : _fmtDate(_dateFrom!),
+            to: _dateTo == null ? null : _fmtDate(_dateTo!),
+          ),
+          ManagerDebtsApi.list(),
+        ]));
     if (!mounted || gen != _gen || _mergedOn) return;
     final mgrs = (coreResults[0] as ({List<Manager> rows, int total})).rows;
     final summary = coreResults[1] as ManagerDebtsSummary?;
@@ -324,10 +326,9 @@ class _AllManagersDebtsScreenState extends State<AllManagersDebtsScreen> {
 
     // 2) concurrent fetch movements — قيد للـtop 60 مدير لتفادي الإرهاق.
     final targets = mgrs.take(60).toList();
-    final moveResults = await Future.wait(
-      targets.map(
-          (m) => ManagerMovementsApi.list(targetAdminId: m.id, limit: 100)),
-    );
+    final moveResults = await CompanyRoute.runOpen(() => Future.wait(
+          targets.map((m) => ManagerMovementsApi.list(targetAdminId: m.id, limit: 100)),
+        ));
     if (!mounted || gen != _gen || _mergedOn) return;
 
     // 3+4) اربط الديون بالـid ثمّ flatten + sort + فلتر التاريخ

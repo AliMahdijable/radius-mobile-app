@@ -4,6 +4,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/company_route.dart';
 import '../../api/recurring_expenses_api.dart';
 import '../../core/util/amount_input.dart';
 import '../../core/util/format.dart';
@@ -13,6 +14,7 @@ import '../../core/widgets/sheet_scaffold.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../../widgets/merged_section.dart';
 
 /// «الصرفيات الثابتة» (٢٣ أكتوبر ٢٠٢٦) — قسمٌ أعلى شاشة الصرفيات: القوالب، والمعلَّقة بانتظار التأكيد، والإنشاء
 /// والتعديل والإيقاف و«دفعتها الآن» والحذف. كلّ استحقاقٍ صرفيّةٌ عاديّة تظهر بالقائمة تحته بشارة «ثابتة». يظهر حين يفتحه
@@ -43,6 +45,10 @@ class _RecurringExpensesSectionState extends State<RecurringExpensesSection> {
   RecurringPage? _page;
   String? _busyKey;
 
+  /// «كل الشركات» (٩ نوفمبر — مراجعة 179): شركة القسم لحظة الإجراء أو فتح الشيت — صراحةً (null = المفتوحة؛ القسم لا يُعرض لشركةٍ
+  /// موجَّهة أصلاً)، فلا يأخذ وجهته ممّا يتبدّل تحته وهو مفتوح.
+  String? get _companyKey => MergedSection.routeKeyOf(context);
+
   @override
   void initState() {
     super.initState();
@@ -56,7 +62,7 @@ class _RecurringExpensesSectionState extends State<RecurringExpensesSection> {
   }
 
   Future<void> _load() async {
-    final r = await RecurringExpensesApi.list();
+    final r = await CompanyRoute.pin(_companyKey, RecurringExpensesApi.list);
     if (!mounted) return;
     setState(() => _page = r.page ?? _page);
   }
@@ -85,7 +91,8 @@ class _RecurringExpensesSectionState extends State<RecurringExpensesSection> {
       tone: AppTone.warning,
     );
     if (ok != true || !mounted) return;
-    await _act('skip${r.id}', () => RecurringExpensesApi.skip(r.id), 'rexp.skipped'.tr());
+    final key = _companyKey;
+    await _act('skip${r.id}', () => RecurringExpensesApi.skip(r.id, companyKey: key), 'rexp.skipped'.tr());
   }
 
   Future<void> _delete(RecurringTemplate t) async {
@@ -98,13 +105,14 @@ class _RecurringExpensesSectionState extends State<RecurringExpensesSection> {
       tone: AppTone.danger,
     );
     if (ok != true || !mounted) return;
-    await _act('del${t.id}', () => RecurringExpensesApi.delete(t.id), 'rexp.deleted'.tr());
+    final key = _companyKey;
+    await _act('del${t.id}', () => RecurringExpensesApi.delete(t.id, companyKey: key), 'rexp.deleted'.tr());
   }
 
   Future<void> _openTemplate(RecurringTemplate? t) async {
     final page = _page;
     if (page == null) return;
-    final done = await _sheet<bool>(context, _TemplateSheet(template: t, today: page.today));
+    final done = await _sheet<bool>(context, _TemplateSheet(template: t, today: page.today, companyKey: _companyKey));
     if (done == true) _changed();
   }
 
@@ -199,7 +207,7 @@ class _RecurringExpensesSectionState extends State<RecurringExpensesSection> {
                       enabled: enabled && !busy,
                       busySkip: _busyKey == 'skip${r.id}',
                       onConfirm: () async {
-                        final done = await _sheet<bool>(context, _ConfirmRunSheet(run: r));
+                        final done = await _sheet<bool>(context, _ConfirmRunSheet(run: r, companyKey: _companyKey));
                         if (done == true) _changed();
                       },
                       onSkip: () => _skip(r),
@@ -227,11 +235,13 @@ class _RecurringExpensesSectionState extends State<RecurringExpensesSection> {
                 onDelete: () => _delete(t),
                 onToggle: () => _act(
                   'st${t.id}',
-                  () => t.isActive ? RecurringExpensesApi.pause(t.id) : RecurringExpensesApi.resume(t.id),
+                  () => t.isActive
+                      ? RecurringExpensesApi.pause(t.id, companyKey: _companyKey)
+                      : RecurringExpensesApi.resume(t.id, companyKey: _companyKey),
                   (t.isActive ? 'rexp.paused_done' : 'rexp.resumed_done').tr(),
                 ),
                 onPayNow: () async {
-                  final done = await _sheet<bool>(context, _PayNowSheet(template: t, today: page.today));
+                  final done = await _sheet<bool>(context, _PayNowSheet(template: t, today: page.today, companyKey: _companyKey));
                   if (done == true) _changed();
                 },
               ),
@@ -572,8 +582,11 @@ class _Money extends StatelessWidget {
 }
 
 class _TemplateSheet extends StatefulWidget {
-  const _TemplateSheet({required this.template, required this.today});
+  const _TemplateSheet({required this.template, required this.today, required this.companyKey});
   final RecurringTemplate? template;
+
+  /// شركة القالب لحظة فتح الشيت (null = المفتوحة) — الحفظ لها صراحةً.
+  final String? companyKey;
   final String today;
 
   @override
@@ -621,7 +634,7 @@ class _TemplateSheetState extends State<_TemplateSheet> {
         'end_period': _end,
         'mode': _mode,
         'note': note.isEmpty ? null : note,
-      });
+      }, companyKey: widget.companyKey);
     } else {
       r = await RecurringExpensesApi.create(
         name: name,
@@ -633,6 +646,7 @@ class _TemplateSheetState extends State<_TemplateSheet> {
         mode: _mode!,
         note: note,
         clientRef: _ref,
+        companyKey: widget.companyKey,
       );
     }
     if (!mounted) return;
@@ -856,8 +870,9 @@ class _TemplateSheetState extends State<_TemplateSheet> {
 }
 
 class _ConfirmRunSheet extends StatefulWidget {
-  const _ConfirmRunSheet({required this.run});
+  const _ConfirmRunSheet({required this.run, required this.companyKey});
   final RecurringRun run;
+  final String? companyKey;
 
   @override
   State<_ConfirmRunSheet> createState() => _ConfirmRunSheetState();
@@ -878,7 +893,8 @@ class _ConfirmRunSheetState extends State<_ConfirmRunSheet> {
 
   Future<void> _submit() async {
     setState(() => _busy = true);
-    final r = await RecurringExpensesApi.confirm(widget.run.id, amount: _value, note: _note.text.trim());
+    final r = await RecurringExpensesApi.confirm(widget.run.id,
+        amount: _value, note: _note.text.trim(), companyKey: widget.companyKey);
     if (!mounted) return;
     setState(() => _busy = false);
     if (!r.ok) {
@@ -933,8 +949,9 @@ class _ConfirmRunSheetState extends State<_ConfirmRunSheet> {
 }
 
 class _PayNowSheet extends StatefulWidget {
-  const _PayNowSheet({required this.template, required this.today});
+  const _PayNowSheet({required this.template, required this.today, required this.companyKey});
   final RecurringTemplate template;
+  final String? companyKey;
   final String today;
 
   @override
@@ -954,7 +971,7 @@ class _PayNowSheetState extends State<_PayNowSheet> {
 
   Future<void> _submit() async {
     setState(() => _busy = true);
-    final r = await RecurringExpensesApi.payNow(widget.template.id, amount: _value);
+    final r = await RecurringExpensesApi.payNow(widget.template.id, amount: _value, companyKey: widget.companyKey);
     if (!mounted) return;
     setState(() => _busy = false);
     if (!r.ok) {

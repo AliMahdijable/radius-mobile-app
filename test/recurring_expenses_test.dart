@@ -138,25 +138,25 @@ void main() {
       final server = _RecServer(await visualSetUp(s1bSasOwner));
       ApiClient.dio.httpClientAdapter = server;
       var w = (await t.runAsync(() => RecurringExpensesApi.create(
-            name: 'إيجار', amount: 250000, day: 1, every: 1, startPeriod: '2026-10', mode: 'auto', note: 'الطابق ٢', clientRef: 'ref0000000001')))!;
+            name: 'إيجار', amount: 250000, day: 1, every: 1, startPeriod: '2026-10', mode: 'auto', note: 'الطابق ٢', clientRef: 'ref0000000001', companyKey: null)))!;
       expect((w.ok, w.generated.single.period), (true, '2026-10'));
       expect(server.posts.last.$3, {
         'name': 'إيجار', 'amount': 250000, 'day': 1, 'every': 1, 'start_period': '2026-10', 'end_period': null, 'mode': 'auto',
         'note': 'الطابق ٢', 'client_ref': 'ref0000000001',
       });
-      w = (await t.runAsync(() => RecurringExpensesApi.confirm(12, amount: 80000, note: 'زادت')))!;
+      w = (await t.runAsync(() => RecurringExpensesApi.confirm(12, amount: 80000, note: 'زادت', companyKey: null)))!;
       expect((w.ok, w.run!.how, server.posts.last.$2), (true, 'confirm', '/api/v2/expenses/recurring/runs/12/confirm'));
       expect(server.posts.last.$3, {'amount': 80000, 'note': 'زادت'});
-      w = (await t.runAsync(() => RecurringExpensesApi.payNow(1, amount: 45000)))!;
+      w = (await t.runAsync(() => RecurringExpensesApi.payNow(1, amount: 45000, companyKey: null)))!;
       expect(w.run!.how, 'now');
       expect(server.posts.last.$3, {'amount': 45000});
-      await t.runAsync(() => RecurringExpensesApi.skip(12));
+      await t.runAsync(() => RecurringExpensesApi.skip(12, companyKey: null));
       expect(server.posts.last.$2, '/api/v2/expenses/recurring/runs/12/skip');
-      await t.runAsync(() => RecurringExpensesApi.update(1, {'amount': 275000, 'day': 20}));
+      await t.runAsync(() => RecurringExpensesApi.update(1, {'amount': 275000, 'day': 20}, companyKey: null));
       expect((server.posts.last.$1, server.posts.last.$2), ('PUT', '/api/v2/expenses/recurring/1'));
       expect(server.posts.last.$3, {'amount': 275000, 'day': 20});
-      await t.runAsync(() => RecurringExpensesApi.pause(1));
-      await t.runAsync(() => RecurringExpensesApi.delete(1));
+      await t.runAsync(() => RecurringExpensesApi.pause(1, companyKey: null));
+      await t.runAsync(() => RecurringExpensesApi.delete(1, companyKey: null));
       expect(server.posts.map((p) => '${p.$1} ${p.$2}').skip(5), ['POST /api/v2/expenses/recurring/1/pause', 'DELETE /api/v2/expenses/recurring/1']);
     });
   });

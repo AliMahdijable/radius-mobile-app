@@ -323,21 +323,30 @@ class _MainShellState extends State<MainShell> {
     if (!mounted) return;
     switch (dest) {
       case NotificationDestination.subscribersNearExpiry:
-        _openSubscribers(SubscriberFilter.nearExpiry);
+        unawaited(_openSubscribersForOpen(SubscriberFilter.nearExpiry));
       case NotificationDestination.subscribersExpired:
-        _openSubscribers(SubscriberFilter.expired);
+        unawaited(_openSubscribersForOpen(SubscriberFilter.expired));
       case NotificationDestination.managers:
         // المدراء ليسوا تبويباً بل داخل «قوائم أخرى» — فندفع شاشتهم، للشركة المفتوحة صاحبة الإشعار لا لمختارة الشريط.
         unawaited(_openManagersForOpen());
     }
   }
 
-  Future<void> _openManagersForOpen() async {
-    final nav = Navigator.of(context);
-    await MergedMode.focusOpenCompany();
-    if (!nav.mounted) return;
-    await nav.push(MaterialPageRoute(builder: (_) => ManagersScreen.mergedPage()));
+  /// ملخّص الشركة المفتوحة («انتهت اليوم»/«قرب الانتهاء» — مراجعة 179): تبويب المشتركين يعرض مختارة الشريط، فشركةٌ غيرها مختارة
+  /// ⇒ تُختار المفتوحة ليعرض قائمتها — **ولا شيء مفتوحٌ فوق الغلاف** (الشريط مشتركٌ بين الأقسام: لا يتبدّل تحت شيتٍ أو صفحةٍ
+  /// مفتوحة؛ حينها التبويب كما كان).
+  Future<void> _openSubscribersForOpen(SubscriberFilter filter) async {
+    final route = ModalRoute.of(context);
+    if (MergedMode.active.value && (route == null || route.isCurrent)) {
+      await MergedMode.selectOpenForSubscribersTab();
+      if (!mounted) return;
+    }
+    _openSubscribers(filter);
   }
+
+  /// مدراء الشركة المفتوحة صاحبة الإشعار، مثبَّتين لها ([MergedSection.openCompany]) — لا يتبدّل الشريط تحت ما هو مفتوح.
+  Future<void> _openManagersForOpen() =>
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => ManagersScreen.mergedPage(openCompany: true)));
 
   @override
   void initState() {
@@ -888,9 +897,9 @@ class _QuickAddSheet extends StatelessWidget {
                   },
                 );
                 // المفتوحة ⇒ لها صراحةً (٩ نوفمبر — مانع 179): صرفيات شركةٍ أخرى موجَّهةٌ تحت (الحاسبة: قسمٌ مفتوح، أو ظاهرٌ الآن)
-                // كانت تأخذ التسجيل لمال شركة الشريط.
+                // كانت تأخذ التسجيل لمال شركة الشريط. والوضع العاديّ كذلك: null = المفتوحة.
                 if (open && rootContext.mounted) {
-                  await showAddExpenseSheet(rootContext, openCompany: MergedMode.active.value);
+                  await showAddExpenseSheet(rootContext, companyKey: null);
                 }
               },
             ),

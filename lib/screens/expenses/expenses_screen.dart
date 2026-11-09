@@ -3,6 +3,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/company_route.dart';
 import '../../api/expenses_api.dart';
 import '../reports/widgets/date_range_chip.dart';
 import '../settlements/widgets/archive_bar.dart';
@@ -88,15 +89,19 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   }
 
   Future<void> _load({bool withRecurring = true}) async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       if (withRecurring) _recurringToken++;
     });
-    final r = await ExpensesApi.list(
-      from: _fmtDate(_range.from),
-      to: _fmtDate(_range.to),
-      includeArchived: _withArchive,
-    );
+    // شركة القسم من شجرته صراحةً (مراجعة 179): يُعاد الجلب بعد شيتٍ أُغلق والقسم ربّما أُخفي أو غُطّي — لا يأخذ وجهة ما فوقه
+    final r = await CompanyRoute.pin(
+        _companyKey,
+        () => ExpensesApi.list(
+              from: _fmtDate(_range.from),
+              to: _fmtDate(_range.to),
+              includeArchived: _withArchive,
+            ));
     if (!mounted) return;
     setState(() {
       _rows = r.rows;
@@ -107,13 +112,19 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     });
   }
 
+  /// «كل الشركات» (٩ نوفمبر — مراجعة 179): شركة القسم لحظة فتح الشيت أو التأكيد — تُمرَّر صراحةً فيُسجَّل لها ولو تبدّل الشريط أو
+  /// أُخفي القسم أو غطّته صفحةٌ وهو مفتوح. null = المفتوحة.
+  String? get _companyKey => MergedSection.routeKeyOf(context);
+  String? get _companyName => MergedSection.routedCompanyOf(context)?.name;
+
   Future<void> _openAdd() async {
     if (_locked) {
       showNoPermission(context, action: true, message: _lockText);
       return;
     }
-    final added = await showAddExpenseSheet(context);
-    if (added == true) _load();
+    final added = await showAddExpenseSheet(context, companyKey: _companyKey, companyName: _companyName);
+    // القسم قد يكون أُعيد بناؤه لشركةٍ أخرى أو أُخفي وهو مفتوح — لا تحديث لشاشةٍ زالت.
+    if (added == true && mounted) _load();
   }
 
   Future<void> _openEdit(ExpenseRow row) async {
@@ -129,8 +140,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       );
       return;
     }
-    final changed = await showEditExpenseSheet(context, row);
-    if (changed == true) _load();
+    final changed = await showEditExpenseSheet(context, row, companyKey: _companyKey, companyName: _companyName);
+    if (changed == true && mounted) _load();
   }
 
   Future<void> _confirmDelete(ExpenseRow row) async {
@@ -138,6 +149,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       showNoPermission(context, action: true, message: _lockText);
       return;
     }
+    final companyKey = _companyKey;
     final ok = await showDialog<bool>(
       context: context,
       builder: (dialogCtx) => AlertDialog(
@@ -161,7 +173,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       ),
     );
     if (ok != true || !mounted) return;
-    final result = await ExpensesApi.delete(row.id);
+    final result = await ExpensesApi.delete(row.id, companyKey: companyKey);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

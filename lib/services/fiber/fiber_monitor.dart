@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../api/bdcom_epon.dart';
+import '../../api/company_route.dart';
 import '../../api/bridge_fdb.dart';
 import '../../api/broadcast_api.dart';
 import '../../api/fiber_api.dart';
@@ -764,12 +765,14 @@ class FiberMonitor extends ChangeNotifier {
   }
 
   /// «رجع النت» للمشتركين المربوطين بأجهزة العطل — مرّةً واحدة بين كلّ الأجهزة (الخادم يحجز الإرسال لأوّل من يطلبه).
-  Future<void> _sendBack(FiberEventRecord e) async {
-    final users = FiberText.linkedUsers(FiberStore.layout.value, oltId, e.onuKeys, onus);
-    if (users.isEmpty) return;
-    if (!await FiberApi.claimBack(e.id)) return;
-    await BroadcastApi.broadcast(intent: MessageIntent.general, message: settings.backMessage, targetUsernames: users);
-  }
+  /// للشركة المفتوحة صراحةً («كل الشركات»، مراجعة 179): أجهزتها ومشتركوها وواتسابها — قسم تبليغاتٍ ظاهرٌ لشركةٍ أخرى لا يأخذه
+  /// (كان يذهب لها فيُرفض ويضيع الإرسال المحجوز).
+  Future<void> _sendBack(FiberEventRecord e) => CompanyRoute.runOpen(() async {
+        final users = FiberText.linkedUsers(FiberStore.layout.value, oltId, e.onuKeys, onus);
+        if (users.isEmpty) return;
+        if (!await FiberApi.claimBack(e.id)) return;
+        await BroadcastApi.broadcast(intent: MessageIntent.general, message: settings.backMessage, targetUsernames: users);
+      });
 
   Future<void> _probeCaps(SnmpV2c snmp, VsolOltStats s, DateTime now) async {
     try {

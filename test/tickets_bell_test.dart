@@ -554,7 +554,7 @@ void main() {
       await simDrain(t);
     });
 
-    testWidgets('«كل الشركات»: «الكلّ» وإشعارٌ بلا تذكرة ⇒ تذاكر المفتوحة التي يعرضها الجرس، لا مختارة الشريط', (t) async {
+    testWidgets('«كل الشركات»: «الكلّ» وإشعارٌ بلا تذكرة ⇒ تذاكر المفتوحة التي يعرضها الجرس مثبَّتةً لها — والشريط لا يتبدّل', (t) async {
       final prevToken = AccountApi.tokenSource;
       AccountApi.tokenSource = ({bool force = false}) async => 'acct';
       addTearDown(() => AccountApi.tokenSource = prevToken);
@@ -581,7 +581,8 @@ void main() {
       await t.tap(find.byKey(const ValueKey('tickets-inbox-all')));
       await t.pumpAndSettle();
       expect(find.byType(TicketsScreen), findsOneWidget);
-      expect(MergedMode.focus.value, kOpen, reason: 'الشريط على المفتوحة التي عرض الجرس تذاكرها');
+      // مراجعة 179: الشريط لا يتبدّل — القائمة مثبَّتةٌ للمفتوحة
+      expect(MergedMode.focus.value, _kOther, reason: 'الشريط كما اختاره');
       final asked = server.requests.skip(before).where((r) => r.path.startsWith(_listPath)).toList();
       expect(asked, isNotEmpty);
       expect(asked.map(keyOf).toSet(), {null}, reason: 'قائمة المفتوحة لا الجزيرة');
@@ -595,7 +596,7 @@ void main() {
       final f = openTicketPush(nav.currentState!, {'type': 'portal_ticket', 'event': 'new'});
       await t.pumpAndSettle();
       expect(find.byType(TicketsScreen), findsOneWidget);
-      expect(MergedMode.focus.value, kOpen);
+      expect(MergedMode.focus.value, _kOther);
       expect(server.requests.skip(before2).where((r) => r.path.startsWith(_listPath)).map(keyOf).toSet(), {null});
       nav.currentState!.pop();
       await t.pumpAndSettle();

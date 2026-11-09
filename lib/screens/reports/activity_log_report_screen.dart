@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/util/server_time.dart';
+import '../../api/company_route.dart';
 import '../../api/archive_info.dart';
 import '../../api/expenses_api.dart';
 import '../../api/reports_api.dart';
@@ -188,12 +189,13 @@ class _ActivityLogReportScreenState extends State<ActivityLogReportScreen> {
       // شاشات «الآن». أمّا هنا فسجلّ تدقيق: بدون هذه الراية تختفي
       // الصرفيات المسوّاة بينما تبقى التفعيلات، فيبدو السجلّ ناقصاً
       // بلا سبب. (`docs/settlements-prompt.md` §٦-٦)
-      ExpensesApi.list(
-        from: _fmt(_range.from),
-        to: _fmt(_range.to),
-        limit: 2000,
-        includeArchived: true,
-      ),
+      // صرفيات الشركة المفتوحة صراحةً (لا لقسم «الصرفيات» ظاهرٍ لشركةٍ أخرى ببادئته)
+      CompanyRoute.runOpen(() => ExpensesApi.list(
+            from: _fmt(_range.from),
+            to: _fmt(_range.to),
+            limit: 2000,
+            includeArchived: true,
+          )),
     ]);
     final r = results[0] as ({bool ok, List<ActivityRow> rows, String? error});
     // ⚠️ **لا تُحوِّل السجلّ بشكله.**

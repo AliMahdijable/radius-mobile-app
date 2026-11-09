@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../core/util/error_text.dart';
 import '../core/util/server_time.dart';
 import 'api_client.dart';
+import 'company_route.dart';
 
 /// «الكارتات» — التفعيل التلقائيّ بالكارت ومخزون الوكيل (البند ٤ §١٢).
 ///
@@ -835,7 +836,8 @@ class CardsState {
       return Future<void>.value();
     }
     late final Future<void> run;
-    run = CardsApi.summary().then((r) {
+    // شارة الجلسة المفتوحة — لها صراحةً (لا لقسم «الكارتات» ظاهرٍ لشركةٍ أخرى — مراجعة 179)
+    run = CompanyRoute.runOpen(CardsApi.summary).then((r) {
       if (r.data == null && identical(_ensuring, run)) {
         _ensureFailedAt = DateTime.now();
       }

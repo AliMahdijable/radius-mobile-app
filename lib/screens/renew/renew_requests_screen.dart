@@ -18,12 +18,15 @@ class RenewRequestsScreen extends StatefulWidget {
   /// «كل الشركات»: للمفتوحة وحدها (الطلبات تصل لصفحتها وتُفعَّل منها) — من «قوائم أخرى» والجرس وإعدادات البوّابة معاً.
   ///
   /// ٨ نوفمبر (الخادم 99e1913): القائمة والصورة والإعدادات قراءةٌ موجَّهة لكلّ شركة — غير المفتوحة للعرض (القرارات من صفحتها).
-  static Widget mergedPage() => const MergedSection(
+  /// [openCompany] (٩ نوفمبر — «الكلّ» في الجرس وإشعارٌ لم يعد طلبه مفتوحاً): طلبات المفتوحة التي يعرضها الجرس، مثبَّتةً لها بلا
+  /// تبديل الشريط ([MergedSection.openCompany]).
+  static Widget mergedPage({bool openCompany = false}) => MergedSection(
       readOnly: true,
-      prefixes: ['/api/v2/portal/renew-requests', '/api/v2/portal/renew-settings'],
-      perms: ['renew_requests.use'],
+      prefixes: const ['/api/v2/portal/renew-requests', '/api/v2/portal/renew-settings'],
+      perms: const ['renew_requests.use'],
       lockTitle: 'طلبات التفعيل',
-      child: RenewRequestsScreen());
+      openCompany: openCompany,
+      child: const RenewRequestsScreen());
 
   @override
   State<RenewRequestsScreen> createState() => _RenewRequestsScreenState();

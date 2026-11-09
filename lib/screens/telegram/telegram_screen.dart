@@ -14,7 +14,6 @@ import 'sheets/telegram_broadcast_sheet.dart';
 import 'sheets/telegram_bulk_links_sheet.dart';
 import 'sheets/telegram_link_generator_sheet.dart';
 import '../desktop/desk_widgets.dart';
-import '../../api/company_route.dart';
 import '../../widgets/merged_section.dart';
 import '../../services/merged_text.dart';
 
@@ -59,7 +58,7 @@ class _TelegramScreenState extends State<TelegramScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     // «كل الشركات» (٨ نوفمبر): القسم بشركةٍ أخرى ⇒ مديرها (الخادم يطابق :adminId بجلستها)
-    _adminId = CompanyRoute.sectionAdminIdFor('/api/telegram') ?? await AuthStorage.readAdminId();
+    _adminId = MergedSection.routedCompanyOf(context)?.adminId ?? await AuthStorage.readAdminId();
     _adminUsername = await AuthStorage.readAdminUsername();
     if (_adminId == null) {
       if (mounted) setState(() => _loading = false);

@@ -7,7 +7,6 @@ import '../../api/tickets_api.dart';
 import '../../core/util/bidi.dart';
 import '../../core/util/format.dart';
 import '../../core/util/server_time.dart';
-import '../../services/merged_mode.dart';
 import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
@@ -179,10 +178,8 @@ Future<bool> openTicketPush(NavigatorState nav, Map<String, String> data) async 
   if (id != null && TicketsState.on) {
     await nav.push(MaterialPageRoute(builder: (_) => TicketThreadScreen(ticketId: id, openCompany: true)));
   } else {
-    // القائمة للمفتوحة كذلك — لا لمختارة الشريط ([MergedMode.focusOpenCompany])
-    await MergedMode.focusOpenCompany();
-    if (!nav.mounted) return true;
-    await nav.push(MaterialPageRoute(builder: (_) => TicketsScreen.mergedPage()));
+    // القائمة للمفتوحة كذلك — مثبَّتةً لها، والشريط كما هو
+    await nav.push(MaterialPageRoute(builder: (_) => TicketsScreen.mergedPage(openCompany: true)));
   }
   return true;
 }
@@ -288,13 +285,7 @@ Future<void> _openBellTicket(BuildContext context, Ticket t) async {
   unawaited(TicketsState.ensureFresh(force: true));
 }
 
-/// «الكلّ»: قسم التذاكر بغلافه («كل الشركات» — لا يُفتح قسمٌ خاماً) — للشركة المفتوحة التي يعرض الجرس تذاكرها
-/// ([MergedMode.focusOpenCompany]، ٩ نوفمبر) لا لمختارة الشريط.
-void _openAllTickets(BuildContext context) {
-  final nav = Navigator.of(context);
-  unawaited(() async {
-    await MergedMode.focusOpenCompany();
-    if (!nav.mounted) return;
-    await nav.push(MaterialPageRoute(builder: (_) => TicketsScreen.mergedPage()));
-  }());
-}
+/// «الكلّ»: قسم التذاكر بغلافه («كل الشركات» — لا يُفتح قسمٌ خاماً) — تذاكر الشركة المفتوحة التي يعرضها الجرس، مثبَّتةً لها
+/// ([MergedSection.openCompany]، ٩ نوفمبر) — لا مختارة الشريط، ولا يتبدّل الشريط.
+void _openAllTickets(BuildContext context) =>
+    unawaited(Navigator.of(context).push(MaterialPageRoute(builder: (_) => TicketsScreen.mergedPage(openCompany: true))));

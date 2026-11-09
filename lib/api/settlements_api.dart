@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../core/util/server_time.dart';
 import 'api_client.dart';
+import 'company_route.dart';
 
 /// «تسوية الحساب» — صندوق المدير (2026-10-02).
 ///
@@ -637,14 +638,19 @@ class SettlementsApi {
 
   /// POST /api/v2/settlements/open — بداية الحساب.
   /// [start]: `now` أو `YYYY-MM-DD` بتوقيت بغداد.
+  ///
+  /// [companyKey] («كل الشركات»، ٩ نوفمبر — مراجعة 179): شركة الصندوق **صراحةً** — مفتاحها أو null للمفتوحة؛ كتابات التسوية لا
+  /// تأخذ وجهةً ممّا يُعرض لحظة الإرسال ([CompanyRoute.explicit]).
   static Future<({bool ok, String? message})> open({
     required String start,
     num openingBalance = 0,
+    required String? companyKey,
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
         '/api/v2/settlements/open',
         data: {'start': start, 'opening_balance': openingBalance},
+        options: CompanyRoute.explicit(companyKey),
       );
       final body = r.data ?? const {};
       return (
@@ -677,6 +683,7 @@ class SettlementsApi {
     required num received,
     String? note,
     required String idempotencyKey,
+    required String? companyKey,
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -688,6 +695,7 @@ class SettlementsApi {
           if (note != null && note.isNotEmpty) 'note': note,
           'idempotency_key': idempotencyKey,
         },
+        options: CompanyRoute.explicit(companyKey),
       );
       final body = r.data ?? const {};
       // ⚠️ **الرفض يصل هنا لا في `on DioException`.**
@@ -742,15 +750,17 @@ class SettlementsApi {
     }
   }
 
-  /// POST /api/v2/settlements/:id/void — لآخر سجلٍّ فعّال، وللمدير وحده.
+  /// POST /api/v2/settlements/:id/void — لآخر سجلٍّ فعّال، وللمدير وحده. [companyKey] كـ[open] (صراحةً).
   static Future<({bool ok, String? message})> voidSettlement(
     int id,
-    String reason,
-  ) async {
+    String reason, {
+    required String? companyKey,
+  }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
         '/api/v2/settlements/$id/void',
         data: {'reason': reason},
+        options: CompanyRoute.explicit(companyKey),
       );
       final body = r.data ?? const {};
       return (

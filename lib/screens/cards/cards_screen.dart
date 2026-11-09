@@ -20,7 +20,6 @@ import 'sheets/card_transfer_sheet.dart';
 import 'sheets/series_cards_sheet.dart';
 import '../desktop/desk_widgets.dart';
 import '../../widgets/merged_section.dart';
-import '../../api/company_route.dart';
 
 /// «الكارتات» — مخزون كارتات التعبئة للوكيل (البند ٤ §١٢).
 ///
@@ -77,13 +76,14 @@ class _CardsScreenState extends State<CardsScreen> {
   void initState() {
     super.initState();
     // «كل الشركات» (٨ نوفمبر): آخر ملخّصٍ للجلسة المفتوحة لا يُرسم تحت اسم شركةٍ أخرى (قسمٌ موجَّه) — يُنتظر ملخّصها.
-    if (CompanyRoute.sectionKeyFor('/api/v2/cards/summary') == null) _setSummary(CardsState.lastSummary);
+    if (MergedSection.routeKeyOf(context) == null) _setSummary(CardsState.lastSummary);
     _load();
     _loadPurchase();
   }
 
   /// «كل الشركات»: كارتات شركةٍ غير المفتوحة للعرض — لا شراء ولا نقل (من صفحتها).
-  bool get _viewOnly => CompanyRoute.sectionKeyFor('/api/v2/cards/summary') != null;
+  /// من شجرة القسم لا من الوجهة الحاضرة (مراجعة 179): تبقى للعرض وهي مخفيّةٌ أو مغطّاة.
+  bool get _viewOnly => MergedSection.viewOnlyNow(context);
 
   Future<void> _loadPurchase() async {
     if (_viewOnly) return;

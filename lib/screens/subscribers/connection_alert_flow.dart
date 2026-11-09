@@ -102,8 +102,11 @@ Future<void> showConnectionAlertFlow(
   // {subscriber_name}: الاسم بالعربي أو اليوزر — اختيار الوكيل كالإرسال التلقائيّ (٥ نوفمبر)؛ كان اليوزر دائماً هنا والاسم هناك
   final named = body.replaceAll('{subscriber_name}',
       thresholds.subscriberName(name: sub.fullName, username: sub.username));
-  final message = await PortalSettingsApi.fillAgentCode(WhatsAppApi.renderForSubscriber(
-      named, sub, names: await WhatsAppApi.packageNamesFor(sub)));
+  // رمز وكيل شركة المشترك صراحةً (بلا مفتاح ⇒ المفتوحة) — لا رمز قسم «بوابة المشترك» الظاهر لشركةٍ أخرى (مراجعة 179)
+  final message = await MergedOps.run(
+      sub,
+      () async => PortalSettingsApi.fillAgentCode(
+          WhatsAppApi.renderForSubscriber(named, sub, names: await WhatsAppApi.packageNamesFor(sub))));
   if (!context.mounted) return;
 
   // ── ٤. المعاينة ──────────────────────────────────────────────

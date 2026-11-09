@@ -3,6 +3,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 
 import 'api_client.dart';
+import 'company_route.dart';
 
 /// «الصرفيات الثابتة» (٢٣ أكتوبر ٢٠٢٦) — عقد /api/v2/expenses/recurring* (server/recurringExpenses.js والويب
 /// lib/recurring-expenses.ts). المالك: «وكيل عنده مصاريف شهريه ثابته كل شهر تستقطع ايجار مولد او ماشابه، هو يكتبه
@@ -193,6 +194,7 @@ class RecurringExpensesApi {
     required String mode,
     String? note,
     required String clientRef,
+    required String? companyKey,
   }) =>
       _write(() => ApiClient.dio.post<Object?>(_base, data: {
             'name': name,
@@ -204,27 +206,33 @@ class RecurringExpensesApi {
             'mode': mode,
             if (note != null && note.isNotEmpty) 'note': note,
             'client_ref': clientRef,
-          }));
+          }, options: CompanyRoute.explicit(companyKey)));
 
   /// تعديل — للقادم وحده (المضافة سابقاً كما هي).
-  static Future<RecurringWrite> update(int id, Map<String, dynamic> patch) =>
-      _write(() => ApiClient.dio.put<Object?>('$_base/$id', data: patch));
+  static Future<RecurringWrite> update(int id, Map<String, dynamic> patch, {required String? companyKey}) =>
+      _write(() => ApiClient.dio.put<Object?>('$_base/$id', data: patch, options: CompanyRoute.explicit(companyKey)));
 
-  static Future<RecurringWrite> pause(int id) => _write(() => ApiClient.dio.post<Object?>('$_base/$id/pause'));
-  static Future<RecurringWrite> resume(int id) => _write(() => ApiClient.dio.post<Object?>('$_base/$id/resume'));
-  static Future<RecurringWrite> delete(int id) => _write(() => ApiClient.dio.delete<Object?>('$_base/$id'));
+  static Future<RecurringWrite> pause(int id, {required String? companyKey}) =>
+      _write(() => ApiClient.dio.post<Object?>('$_base/$id/pause', options: CompanyRoute.explicit(companyKey)));
+  static Future<RecurringWrite> resume(int id, {required String? companyKey}) =>
+      _write(() => ApiClient.dio.post<Object?>('$_base/$id/resume', options: CompanyRoute.explicit(companyKey)));
+  static Future<RecurringWrite> delete(int id, {required String? companyKey}) =>
+      _write(() => ApiClient.dio.delete<Object?>('$_base/$id', options: CompanyRoute.explicit(companyKey)));
 
   /// «دفعتها الآن»: أقرب استحقاقٍ قادم يُكتب اليوم بالمبلغ المدفوع.
-  static Future<RecurringWrite> payNow(int id, {required int amount}) =>
-      _write(() => ApiClient.dio.post<Object?>('$_base/$id/now', data: {'amount': amount}));
+  static Future<RecurringWrite> payNow(int id, {required int amount, required String? companyKey}) => _write(
+      () => ApiClient.dio.post<Object?>('$_base/$id/now', data: {'amount': amount}, options: CompanyRoute.explicit(companyKey)));
 
-  static Future<RecurringWrite> confirm(int runId, {required int amount, String? note}) =>
-      _write(() => ApiClient.dio.post<Object?>('$_base/runs/$runId/confirm', data: {
+  static Future<RecurringWrite> confirm(int runId, {required int amount, String? note, required String? companyKey}) =>
+      _write(() => ApiClient.dio.post<Object?>('$_base/runs/$runId/confirm',
+          data: {
             'amount': amount,
             if (note != null && note.isNotEmpty) 'note': note,
-          }));
+          },
+          options: CompanyRoute.explicit(companyKey)));
 
-  static Future<RecurringWrite> skip(int runId) => _write(() => ApiClient.dio.post<Object?>('$_base/runs/$runId/skip'));
+  static Future<RecurringWrite> skip(int runId, {required String? companyKey}) =>
+      _write(() => ApiClient.dio.post<Object?>('$_base/runs/$runId/skip', options: CompanyRoute.explicit(companyKey)));
 
   static Future<RecurringWrite> _write(Future<Response<Object?>> Function() call) async {
     try {

@@ -15,6 +15,7 @@ import '../../services/alerts_service.dart';
 import '../../services/inbox_service.dart';
 import '../../services/merged_mode.dart';
 import '../../widgets/company_tag.dart';
+import '../../widgets/merged_section.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -352,8 +353,12 @@ class _InboxScreenState extends State<InboxScreen> {
   Future<Subscriber?> _findSubscriber(String usernameOrId) =>
       NotificationRouter.findSubscriber(usernameOrId);
 
+  /// الجرس صفحةٌ للشركة المفتوحة ([OpenCompanyScope]، مراجعة 179): ما يُفتح منه فوق قسمٍ ظاهرٍ لشركةٍ أخرى (الحاسبة: الجرس داخل
+  /// الجزء الظاهر) لا يتبعه — وصفوف «كل الشركات» فيه بمفاتيح شركاتها صراحةً كما كانت.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => OpenCompanyScope(child: Builder(builder: _build));
+
+  Widget _build(BuildContext context) {
     Theme.of(context);
     return Scaffold(
       backgroundColor: AppColors.bg,

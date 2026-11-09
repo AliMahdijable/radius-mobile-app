@@ -13,6 +13,7 @@ import '../../theme/typography.dart';
 import '../../core/util/server_time.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/widgets/app_sheet.dart';
+import '../../api/company_route.dart';
 import '../../widgets/merged_section.dart';
 
 /// شاشة "حالة الرسائل" — نُقلت من v1 mobile-app/message_logs_screen.
@@ -99,13 +100,16 @@ class _MessageLogsScreenState extends State<MessageLogsScreen> {
       }
     });
     final page = refresh ? 1 : _page;
-    final r = await BroadcastApi.messageLogs(
-      statusFilter: _statusFilter,
-      typeFilter: _typeFilter,
-      search: _search,
-      page: page,
-      limit: 50,
-    );
+    // شركة القسم من شجرته صراحةً (مراجعة 179): التحديث الدوريّ (١٥ث) يجري والقسم مخفيٌّ أو مغطّى — لا يأخذ وجهة ما فوقه
+    final r = await CompanyRoute.pin(
+        MergedSection.routeKeyOf(context),
+        () => BroadcastApi.messageLogs(
+              statusFilter: _statusFilter,
+              typeFilter: _typeFilter,
+              search: _search,
+              page: page,
+              limit: 50,
+            ));
     if (!mounted) return;
     setState(() {
       _messages = refresh ? r.messages : [..._messages, ...r.messages];

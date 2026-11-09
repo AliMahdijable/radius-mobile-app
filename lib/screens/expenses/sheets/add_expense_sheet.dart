@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../../api/company_route.dart';
 import '../../../api/expenses_api.dart';
 import '../../../core/util/ar_date.dart';
 import '../../../core/util/format.dart';
@@ -21,23 +20,25 @@ import '../../../core/widgets/app_sheet.dart';
 ///   • ملاحظة       — optional free text
 /// Submit → POST /api/admin/expenses.
 ///
-/// [openCompany] («كل الشركات»، ٩ نوفمبر): المدير اختار الشركة المفتوحة («في أيّ شركة؟» من الإضافة السريعة) ⇒ التسجيل لها صراحةً
-/// ([CompanyRoute.runOpen]) ولو كانت صرفيات شركةٍ أخرى مفتوحةً موجَّهة (الحاسبة) — كانت تُسجَّل في مال شركة الشريط. من داخل قسم
-/// الصرفيات نفسه: كما هو (لشركة القسم).
-Future<bool?> showAddExpenseSheet(BuildContext context, {bool openCompany = false}) {
+/// [companyKey] («كل الشركات»، ٩ نوفمبر — مراجعة 179): شركة الصرفيّة **كما كانت لحظة فتح الشيت** — مفتاحها، أو null للمفتوحة
+/// (الإضافة السريعة بعد «في أيّ شركة؟»، أو قسم الصرفيات يعرض المفتوحة). التسجيل لها صراحةً ([ExpensesApi.create]) مهما تبدّل
+/// تحته وهو مفتوح: الشريط، أو إخفاء جزء القسم (الحاسبة)، أو صفحةٌ فوقه من إشعار — كان يُحسم لحظة «تسجيل» فيذهب لغيرها.
+/// [companyName] اسمها تحت العنوان (شركةٌ غير المفتوحة).
+Future<bool?> showAddExpenseSheet(BuildContext context, {required String? companyKey, String? companyName}) {
   return showAppSheet<bool>(
     barrierColor: AppColors.scrim,
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => _AddExpenseSheet(openCompany: openCompany),
+    builder: (_) => _AddExpenseSheet(companyKey: companyKey, companyName: companyName),
   );
 }
 
 class _AddExpenseSheet extends StatefulWidget {
-  const _AddExpenseSheet({this.openCompany = false});
-  final bool openCompany;
+  const _AddExpenseSheet({required this.companyKey, this.companyName});
+  final String? companyKey;
+  final String? companyName;
 
   @override
   State<_AddExpenseSheet> createState() => _AddExpenseSheetState();
@@ -112,12 +113,12 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
     setState(() => _submitting = true);
     String two(int n) => n.toString().padLeft(2, '0');
     final dateStr = '${_date.year}-${two(_date.month)}-${two(_date.day)}';
-    Future<({bool ok, String? message, int? id})> create() => ExpensesApi.create(
-          amount: _amount,
-          note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
-          expenseDate: dateStr,
-        );
-    final result = await (widget.openCompany ? CompanyRoute.runOpen(create) : create());
+    final result = await ExpensesApi.create(
+      amount: _amount,
+      note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+      expenseDate: dateStr,
+      companyKey: widget.companyKey,
+    );
     if (!mounted) return;
     setState(() => _submitting = false);
     showSheetSnack(context,
@@ -136,7 +137,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
       header: SheetHeaderBar(
         icon: LucideIcons.receipt,
         title: 'صرفيّة جديدة',
-        subtitle: '',
+        subtitle: _companyLine(widget.companyName),
         onClose: _submitting ? () {} : () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
@@ -371,3 +372,6 @@ class _AmountField extends StatelessWidget {
     );
   }
 }
+
+/// سطر الشركة تحت عنوان شيت الصرفيّة («كل الشركات»): شركةٌ غير المفتوحة ⇒ اسمها — لا يُسجَّل مالٌ في شركةٍ لا تُرى.
+String _companyLine(String? name) => (name == null || name.trim().isEmpty) ? '' : 'في «${name.trim()}»';

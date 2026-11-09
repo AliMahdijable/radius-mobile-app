@@ -533,6 +533,7 @@ void main() {
             payment: payment,
             lines: lines,
             customer: const {'kind': 'walkin'},
+            companyKey: null,
           )))!;
 
       var r = await sell('cash');
@@ -573,9 +574,9 @@ void main() {
     testWidgets('debtStatus: الصالح وحده، وبلا معرّفات لا طلب', (t) async {
       final server = _SalesServer(await visualSetUp(s1bSasOwner));
       ApiClient.dio.httpClientAdapter = server;
-      expect((await t.runAsync(() => SalesApi.debtStatus(const [])))!.map, isEmpty);
+      expect((await t.runAsync(() => SalesApi.debtStatus(const [], companyKey: null)))!.map, isEmpty);
       expect(server.debtStatusIds, isEmpty);
-      final r = (await t.runAsync(() => SalesApi.debtStatus(const [11, 999])))!;
+      final r = (await t.runAsync(() => SalesApi.debtStatus(const [11, 999], companyKey: null)))!;
       final m = r.map;
       expect(m.keys, [11], reason: 'حالةٌ غير معروفة تُسقط');
       expect(r.partial, isFalse);
@@ -591,19 +592,19 @@ void main() {
       final server = _SalesServer(await visualSetUp(s1bSasOwner));
       ApiClient.dio.httpClientAdapter = server;
       final r = (await t.runAsync(() => SalesApi.stock(1,
-          kind: 'supplier_return', qty: 1, refund: 15000, refundTo: 'box', note: 'المورّد', clientRef: 'ref0000001')))!;
+          kind: 'supplier_return', qty: 1, refund: 15000, refundTo: 'box', note: 'المورّد', clientRef: 'ref0000001', companyKey: null)))!;
       expect((r.ok, r.loss), (true, 10000));
       expect(server.posts.last.$2, {
         'kind': 'supplier_return', 'qty': 1, 'refund': 15000, 'refund_to': 'box', 'note': 'المورّد', 'client_ref': 'ref0000001',
       });
-      await t.runAsync(() => SalesApi.stock(1, kind: 'supplier_return', qty: 1, refund: 0, refundTo: 'box', clientRef: 'ref0000002'));
+      await t.runAsync(() => SalesApi.stock(1, kind: 'supplier_return', qty: 1, refund: 0, refundTo: 'box', clientRef: 'ref0000002', companyKey: null));
       expect(server.posts.last.$2.containsKey('refund_to'), isFalse, reason: 'بلا مبلغ لا وجهة');
       expect(server.posts.last.$2['refund'], 0);
-      await t.runAsync(() => SalesApi.stock(1, kind: 'damage', qty: 1, note: 'انكسر', clientRef: 'ref0000003'));
+      await t.runAsync(() => SalesApi.stock(1, kind: 'damage', qty: 1, note: 'انكسر', clientRef: 'ref0000003', companyKey: null));
       expect(server.posts.last.$2.containsKey('refund'), isFalse, reason: 'المبلغ للإرجاع وحده');
-      final v = (await t.runAsync(() => SalesApi.voidMove(2, 50, 'خطأ')))!;
+      final v = (await t.runAsync(() => SalesApi.voidMove(2, 50, 'خطأ', companyKey: null)))!;
       expect((v.ok, v.boxDelta, v.refund), (true, -15000, 0));
-      final p = (await t.runAsync(() => SalesApi.voidMove(1, 40, 'سعرٌ خاطئ')))!;
+      final p = (await t.runAsync(() => SalesApi.voidMove(1, 40, 'سعرٌ خاطئ', companyKey: null)))!;
       expect((p.ok, p.boxDelta, p.refund), (true, 270000, 270000), reason: 'خادمٌ بلا box_delta ⇒ ثمن الشراء العائد');
     });
   });
@@ -695,7 +696,7 @@ void main() {
                 body: Builder(
                   builder: (ctx) => Center(
                     child: TextButton(
-                      onPressed: () => showSellToSubscriber(ctx, idx: '77', username: 'ali.k@sn', name: 'علي كريم'),
+                      onPressed: () => showSellToSubscriber(ctx, idx: '77', username: 'ali.k@sn', name: 'علي كريم', companyKey: null),
                       child: const Text('SELL'),
                     ),
                   ),

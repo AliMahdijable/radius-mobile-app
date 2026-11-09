@@ -24,6 +24,7 @@ import '../../services/permissions_service.dart';
 import '../../services/subscriber_events.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
+import '../../api/company_route.dart';
 import '../../widgets/merged_section.dart';
 import '../../models/merged_company.dart';
 import '../../services/merged_text.dart';
@@ -35,8 +36,10 @@ class ManagersScreen extends StatefulWidget {
 
   /// «كل الشركات»: بغلاف قسمها (للعرض لكلّ شركة) — من «قوائم أخرى» ومن نقرة إشعار المدراء معاً. قائمة المدراء وأرصدتهم
   /// (managers/full) قراءةٌ موجَّهة للساس وحده — شركة ايرث لنك أو غيرها غير المفتوحة ⇒ «غير متاح» بسببه (لا خطأ رفض).
-  static Widget mergedPage() => MergedSection(
+  /// [openCompany] (٩ نوفمبر): إشعار المدراء (دينٌ أو رصيدٌ في الشركة المفتوحة) ⇒ مدراؤها مثبَّتين لها بلا تبديل الشريط.
+  static Widget mergedPage({bool openCompany = false}) => MergedSection(
       readOnly: true,
+      openCompany: openCompany,
       perms: const ['managers.view'],
       prefixes: const ['/api/v2/managers', '/api/v2/acl-list', '/api/admin/manager-debts', '/api/admin/managers', '/api/admin/manager-movements'],
       serves: (c) => c.provider == MergedProvider.sas4,
@@ -95,10 +98,14 @@ class _ManagersScreenState extends State<ManagersScreen> {
     setState(() => _loading = true);
     // اجلب القائمة + ملخّص الديون الخارجية بالتوازي. أيّاً منهما لو فشل
     // تُكمل الأخرى بشكل طبيعي.
-    final results = await Future.wait([
-      ManagersApi.listFull(page: 1, count: 200),
-      ManagerDebtsApi.summary(),
-    ]);
+    // شركة القسم من شجرته صراحةً (مراجعة 179): يُعاد الجلب بعد عمليّةٍ على مشتركٍ في أيّ مكان والقسم مخفيٌّ أو مغطّى — لا يأخذ
+    // وجهة ما فوقه. والمثبَّت للمفتوحة (إشعار المدراء) لها.
+    final results = await CompanyRoute.pin(
+        MergedSection.routeKeyOf(context),
+        () => Future.wait([
+              ManagersApi.listFull(page: 1, count: 200),
+              ManagerDebtsApi.summary(),
+            ]));
     if (!mounted) return;
     final list = results[0] as ({List<Manager> rows, int total});
     final summary = results[1] as ManagerDebtsSummary?;

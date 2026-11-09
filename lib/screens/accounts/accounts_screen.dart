@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../api/auth_api.dart';
+import '../../api/company_route.dart';
 import '../../api/managers_api.dart';
 import '../../services/active_company.dart';
 import '../../services/auth_storage.dart';
@@ -18,6 +19,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../core/platform/store_policy.dart';
 import '../../core/util/error_text.dart';
+import '../../widgets/merged_section.dart';
 import '../../widgets/sas_captcha_sheet.dart';
 import '../account/my_devices_screen.dart';
 import '../desktop/desk_widgets.dart';
@@ -92,12 +94,14 @@ class _AccountsScreenState extends State<AccountsScreen> {
     // جلب كل المدراء (نجرّب page=1 count=200 حتى نغطّي الحسابات).
     // قد يفشل للفرعي (ما عنده مدراء تحته) — نعرض قائمة فاضية + return only.
     try {
-      final res = await ManagersApi.listFull(
-        page: 1,
-        count: 200,
-        sortBy: 'username',
-        direction: 'asc',
-      );
+      // «الصفحات» = المدراء الفرعيّون تحت الجلسة المفتوحة — لها صراحةً («كل الشركات»، مراجعة 179): شريط الحاسبة يفتحها داخل الجزء
+      // الظاهر، فكان قسم «المدراء» الموجَّه لشركةٍ أخرى يعطيها مدراء تلك الشركة (وكلمات سرّهم) كأنّهم صفحات المفتوحة.
+      final res = await CompanyRoute.runOpen(() => ManagersApi.listFull(
+            page: 1,
+            count: 200,
+            sortBy: 'username',
+            direction: 'asc',
+          ));
       final rows = res.rows
           .map((m) => _AccountRow(
                 id: m.id,
@@ -161,7 +165,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
     setState(() => _switching.add(row.id));
     try {
       // 1) اجلب كلمة السر للفرعي
-      final pw = await ManagersApi.fetchPassword(row.id);
+      final pw = await CompanyRoute.runOpen(() => ManagersApi.fetchPassword(row.id));
       if (!mounted) return;
       if (pw.password == null) {
         _snack(pw.message ?? 'تعذّر جلب كلمة السر', error: true);
@@ -405,8 +409,11 @@ class _AccountsScreenState extends State<AccountsScreen> {
     ));
   }
 
+  /// صفحةٌ للشركة المفتوحة وحدها ([OpenCompanyScope]) — ما تحتها لا يتبع قسماً ظاهراً لشركةٍ أخرى.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => OpenCompanyScope(child: Builder(builder: _build));
+
+  Widget _build(BuildContext context) {
     Theme.of(context); // theme-dep
     // ⚠️ حارسٌ ثانٍ في الشاشة لا في مدخلها وحده: مدخلٌ يُضاف غداً
     // (إشعارٌ أو رابطٌ عميق) لا يعرف أن يفحص.

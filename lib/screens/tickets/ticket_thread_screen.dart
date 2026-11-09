@@ -24,7 +24,8 @@ import 'ticket_widgets.dart';
 /// الصور (٩ نوفمبر): زرّ إرفاقٍ بجانب الردّ (الكاميرا أو المعرض، والحاسبة ملفٌّ من الجهاز) يضغطها (ticket_image.dart) ويعرضها
 /// بزرّ إزالة قبل الإرسال، والنصّ اختياريٌّ معها؛ وصور المحادثة مصغّرةٌ في فقاعاتها وبالنقر ملء الشاشة.
 class TicketThreadScreen extends StatefulWidget {
-  const TicketThreadScreen({super.key, required this.ticketId, this.initial, this.viewOnly = false, this.openCompany = false});
+  const TicketThreadScreen(
+      {super.key, required this.ticketId, this.initial, this.viewOnly = false, this.openCompany = false, this.companyKey});
   final int ticketId;
 
   /// ما عُرف من القائمة — يُرسم فوراً حتى تصل المحادثة.
@@ -37,6 +38,10 @@ class TicketThreadScreen extends StatefulWidget {
   /// موجَّهٌ لشركةٍ أخرى ببادئةٍ تطابق (التذاكر أو «بوابة المشترك» على الحاسبة، أو صفحةٌ تحت الإشعار) — فلا تُقرأ ولا يُردّ عليها
   /// بشركةٍ غير شركتها.
   final bool openCompany;
+
+  /// شركة المحادثة كما كانت لحظة فتحها من القائمة («كل الشركات»، ٩ نوفمبر — مراجعة 179): كلّ طلباتها — والقراءة الدوريّة —
+  /// لها صراحةً (null = المفتوحة)، فلا تقرأ تذكرة شركةٍ أخرى برقمها إن أُخفي قسمها أو غطّته صفحةٌ وهي مفتوحة.
+  final String? companyKey;
 
   /// قراءةٌ دوريّة ما دامت المحادثة مفتوحة (احتياطاً لإشعارٍ لم يصل). null في الاختبارات.
   @visibleForTesting
@@ -75,15 +80,16 @@ class _TicketThreadScreenState extends State<TicketThreadScreen> {
 
   bool get _canWrite => !widget.viewOnly && Perms.has('tickets.view') && Perms.has('tickets.reply');
 
-  /// طلبٌ للتذكرة — للشركة المفتوحة صراحةً حين [TicketThreadScreen.openCompany].
-  Future<T> _api<T>(Future<T> Function() call) => widget.openCompany ? CompanyRoute.runOpen(call) : call();
+  /// طلبٌ للتذكرة — لشركتها صراحةً: المفتوحة حين [TicketThreadScreen.openCompany]، وإلّا شركتها لحظة الفتح
+  /// ([TicketThreadScreen.companyKey]؛ null = المفتوحة).
+  Future<T> _api<T>(Future<T> Function() call) =>
+      widget.openCompany ? CompanyRoute.runOpen(call) : CompanyRoute.pin(widget.companyKey, call);
 
   /// صور الفقاعات بالقاعدة نفسها (null = الافتراضيّ: الخادم كما هو).
   TicketImageLoader? get _imageLoader {
     final custom = TicketThreadScreen.imageLoader;
-    if (!widget.openCompany) return custom;
     final load = custom ?? TicketsApi.imageBytes;
-    return (ticketId, messageId) => CompanyRoute.runOpen(() => load(ticketId, messageId));
+    return (ticketId, messageId) => _api(() => load(ticketId, messageId));
   }
 
   @override

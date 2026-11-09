@@ -1082,8 +1082,10 @@ class WhatsAppApi {
     }
     // {agent_code}: يُملأ هنا لا في الخادم وحده — اليدويّ يخرج من واتساب المدير
     // مباشرةً، والمعاينة تُري ما سيصل حرفيّاً (وسيط البوّابة §10).
-    final rendered = await PortalSettingsApi.fillAgentCode(_renderTemplate(
-        active.first.messageContent, sub, await packageNamesFor(sub)));
+    // رمز وكيل **شركة المشترك** صراحةً («كل الشركات»، مراجعة 179): بلا مفتاح ⇒ المفتوحة — لا رمز قسم «بوابة المشترك» الظاهر
+    // لشركةٍ أخرى (كان يصل مشترك المفتوحة رمزُ غيرها).
+    final rendered = await CompanyRoute.pin(sub.companyKey,
+        () async => PortalSettingsApi.fillAgentCode(_renderTemplate(active.first.messageContent, sub, await packageNamesFor(sub))));
 
     if (!context.mounted) {
       return const WhatsSendResult(
@@ -1134,9 +1136,10 @@ class WhatsAppApi {
           {PackageNames names = PackageNames.empty}) =>
       _renderTemplate(body, sub, names);
 
-  /// أسماء باقات حساب المشترك في «بوابة المشترك» — بشركة صفّه في «كل الشركات». التعذّر ⇒ لا أسماء (اسم الساس).
+  /// أسماء باقات حساب المشترك في «بوابة المشترك» — بشركة صفّه في «كل الشركات»، وصفٌّ بلا مفتاح للمفتوحة صراحةً (لا لقسم «بوابة
+  /// المشترك» ظاهرٍ لشركةٍ أخرى — مراجعة 179). التعذّر ⇒ لا أسماء (اسم الساس).
   static Future<PackageNames> packageNamesFor(Subscriber sub) =>
-      CompanyRoute.run(sub.companyKey, PackageNamesApi.fetch);
+      CompanyRoute.pin(sub.companyKey, PackageNamesApi.fetch);
 
   /// Replaces every {placeholder} in the template body. Mirrors v1's
   /// var set from subscriber_details_screen.dart line ~2012 — same
