@@ -551,7 +551,8 @@ class DevicesCheck {
       if (g.linkDown) {
         f.add(const CheckFinding(CheckLevel.bad, 'الوصلة مقطوعة — لا إشارة'));
         linkJudged = true;
-      } else if (linkAp && g.peersKnown && !stale && detail.peers.isEmpty) {
+      } else if (linkAp && g.peersKnown && !stale && detail.peers.isEmpty && g.signal == null && g.signalPct == null) {
+        // وطرفٌ يقرأ إشارة وصلته هو (ميموزا PtP: قدرة استقباله، ولا جدول محطّاتٍ له) يُحكم بها أدناه (مراجعة 180)
         f.add(const CheckFinding(CheckLevel.bad, 'الوصلة بلا طرفٍ ثانٍ'));
         linkJudged = true;
       } else {

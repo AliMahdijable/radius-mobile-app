@@ -1,6 +1,7 @@
 // «الفحص الشامل» — أحكام الأجهزة اللاسلكيّة (مراجعة 180، findings_devwl): لا «سليم» ولا «لا أحد» ولا «بلا طرف»
 // من قراءةٍ لم تكتمل، ولا «لم يُقرأ» لما قُرئ.
 //   F1  سكتر ميموزا PtMP: مسح محطّاته انتهت مهلته ⇒ «قائمة مشتركيه ما انقرت» لا «سكتر · سليم» + «ما عليه أحد الآن».
+//   F10 طرف وصلة ميموزا PtP المرسل (نقطة وصول) مسجّلٌ «وصلة» يقرأ إشارته ⇒ يُحكم بها لا «الوصلة بلا طرفٍ ثانٍ».
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
@@ -264,6 +265,34 @@ void main() {
       expect(list.length, 2);
       VpnPipe.transport = SnmpPipe(mimosaAgent(rssi: [-52]), lose: {_stats, _legacy});
       expect(await DeviceNet.vpn(() => MimosaApi.fetchClients(host: '10.0.0.14', community: 'public')), isEmpty);
+    });
+  });
+
+  group('F10 طرف وصلة ميموزا PtP المرسل مسجّلٌ «وصلة»: يُحكم بإشارته لا «الوصلة بلا طرفٍ ثانٍ»', () {
+    test('🚨 B5c بوضع AP (wirelessMode 1) استقباله −58 ولا جدول محطّاتٍ في PtP ⇒ «وصلة · سليم»؛ و−85 ⇒ «ضعيفة»',
+        () async {
+      final d = dev(21, type: 'link');
+      final r = judge(d, await readMimosa(d, SnmpPipe(mimosaAgent())));
+      expect(r.role, CheckRole.link);
+      expect(texts(r), isNot(contains('الوصلة بلا طرفٍ ثانٍ')));
+      expect(r.state, CheckState.ok);
+      expect(r.signal, -58);
+      final weak = judge(d, await readMimosa(d, SnmpPipe(mimosaAgent()), rx: -85));
+      expect(weak.state, CheckState.warn);
+      expect(texts(weak), ['إشارة الوصلة -85 dBm — ضعيفة']);
+    });
+
+    test('🚨 نقطة وصولٍ «وصلة» جدولها فارغ وإشارتها مقروءة ⇒ تُحكم بها؛ وبلا إشارةٍ ولا طرف ⇒ «الوصلة بلا طرفٍ ثانٍ»',
+        () {
+      DeviceCheckReport link(DeviceGlance g) =>
+          DevicesCheck.evaluate(d: dev(22, type: 'link'), alive: true, detail: DeviceDetail(glance: g));
+      final own = link(const DeviceGlance(isAp: true, peersKnown: true, signal: -61, uptimeSec: 864000));
+      expect(own.role, CheckRole.link);
+      expect(own.state, CheckState.ok);
+      expect(own.signal, -61);
+      final none = link(const DeviceGlance(isAp: true, peersKnown: true, uptimeSec: 864000));
+      expect(none.state, CheckState.warn);
+      expect(texts(none), ['الوصلة بلا طرفٍ ثانٍ']);
     });
   });
 }
