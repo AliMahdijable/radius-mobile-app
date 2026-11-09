@@ -3,7 +3,10 @@
 //   F1  سكتر ميموزا PtMP: مسح محطّاته انتهت مهلته ⇒ «قائمة مشتركيه ما انقرت» لا «سكتر · سليم» + «ما عليه أحد الآن».
 //   F10 طرف وصلة ميموزا PtP المرسل (نقطة وصول) مسجّلٌ «وصلة» يقرأ إشارته ⇒ يُحكم بها لا «الوصلة بلا طرفٍ ثانٍ».
 //   F19 وصلة RouterOS وضعها لم يُقرأ (الخادم بلا ap، حزمة wifi) بطرفٍ واحد ⇒ إشارة صفّه لا «إشارة الوصلة ما انقرت».
+//   F2  «كل الشركات»: سكتر الخادم بلا ap وradio/reg_ok وقائمةٍ فارغة ⇒ «لم يُقرأ» ما لم يقل إنّ راديوه يعمل (ru)؛
+//       و`ru:false` ⇒ «الراديو لا يعمل» / «الوصلة مقطوعة» كقراءة موبايلك.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -411,6 +414,59 @@ void main() {
       ]}));
       expect(zero.signal, isNull);
       expect(texts(zero), ['إشارة الوصلة ما انقرت']);
+    });
+  });
+
+  group('F2 «كل الشركات»: نقطة وصولٍ بلا ap وقائمةٍ فارغة — «لا أحد» حين يعمل راديوها وحده', () {
+    final none = {'ap': null, 'radio': true, 'reg_ok': true, 'peers': const <Map>[]};
+
+    test('🚨 سكتر والخادم (2edbcb5، بلا ru) قرأ جدوله فارغاً ووضعه مجهول ⇒ «قائمة مشتركيه ما انقرت» لا «سليم»', () {
+      final d = dev(41, brand: 'mikrotik', protocol: 'api');
+      final r = remote(d, ros(none));
+      expect(r.role, CheckRole.sector);
+      expect(r.state, CheckState.unread);
+      expect(texts(r), ['قائمة مشتركيه ما انقرت']);
+      final was = remote(d, ros(none), prev: const CheckMemo(peers: 7));
+      expect(was.state, CheckState.unread);
+      expect(was.memo!.peers, 7, reason: 'لا صفرٌ يجعل كلّ فحصٍ بعده «سليم»');
+    });
+
+    test('🚨 والخادم يقول راديوه لا يعمل (ru:false) ⇒ «الراديو لا يعمل» للسكتر و«الوصلة مقطوعة» للوصلة — كموبايلك', () {
+      final down = ros({...none, 'ru': false});
+      final sec = remote(dev(42, brand: 'mikrotik', protocol: 'api'), down, prev: const CheckMemo(peers: 7));
+      expect(sec.state, CheckState.warn);
+      expect(texts(sec), ['الراديو لا يعمل — كانوا 7 بالفحص السابق']);
+      expect(sec.memo!.peers, 7);
+      final link = remote(dev(43, type: 'link', brand: 'mikrotik', protocol: 'api'), down);
+      expect(link.state, CheckState.warn);
+      expect(texts(link), ['الوصلة مقطوعة — لا إشارة']);
+    });
+
+    test('ويعمل (ru:true) بلا عملاء ⇒ «ما عليه أحد الآن» صادقة؛ وap:true كما كانت؛ وصفوفٌ مقروءة لا «مقطوعة»', () {
+      final up = remote(dev(44, brand: 'mikrotik', protocol: 'api'), ros({...none, 'ru': true}));
+      expect(up.state, CheckState.ok);
+      expect(texts(up), ['ما عليه أحد الآن']);
+      final ap = remote(dev(45, brand: 'mikrotik', protocol: 'api'), ros({...none, 'ap': true}));
+      expect(texts(ap), ['ما عليه أحد الآن']);
+      final rows = remote(dev(46, brand: 'mikrotik', protocol: 'api'), ros({...none, 'ru': false, 'peers': [
+        {'n': 'ali.home', 's': -55},
+        {'n': 'zaid.home', 's': -57},
+      ]}));
+      expect(rows.state, CheckState.ok);
+      expect(rows.subs.length, 2);
+    });
+
+    test('خرج الخادم المقترح نفسه (server_patch_devwl.diff، readRouterOsVitals على مايكروتك وهميّ) بأحكامه', () {
+      Map<String, dynamic> v(String json) => jsonDecode(json) as Map<String, dynamic>;
+      const head = '{"kind":"ros","cpu":4,"mem":null,"up":86400,"model":"RB912UAG-5HPnD","fw":"6.49.10","temp":null,'
+          '"volt":null,"ppp":null,"ports":{"up":1,"total":1},"pl":[{"n":"ether1","r":true}],"ap":null,"radio":true,';
+      const tail = '"mode":null,"ssid":null,"freq":null,"width":null,"sig":null,"ccq":null,"tx":null,"rx":null,'
+          '"peers":[],"reg_ok":true}';
+      final dfs = remote(dev(47, brand: 'mikrotik', protocol: 'api'), v('$head"ru":false,$tail'));
+      expect(texts(dfs), ['الراديو لا يعمل']);
+      final idle = remote(dev(48, brand: 'mikrotik', protocol: 'api'), v('$head"ru":true,$tail'));
+      expect(texts(idle), ['ما عليه أحد الآن']);
+      expect(idle.state, CheckState.ok);
     });
   });
 }

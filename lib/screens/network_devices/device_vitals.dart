@@ -520,14 +520,22 @@ class DeviceVitals {
     final cut = ros && pt0 is Map && portsTotal == 0 && list(v['pl']).isEmpty;
     final isAp = apFlag ?? (ros && peerRows.length >= 2 ? true : null);
     final sig = n(v['sig']);
+    // مراجعة 180: راديوه المفعّل يعمل؟ (`ru` من الخادم: running في /interface/print). بلا وضعٍ مقروء (ap) فراغ القائمة
+    // «لا أحد» حين يعمل وحده — مفعّلٌ لا يعمل (DFS، بلا قناة، عطل) كان «سكتر · سليم» + «ما عليه أحد الآن»؛
+    // وخادمٌ لا يرسله ⇒ لم تُقرأ
+    final radioUp = v['ru'] is bool ? v['ru'] as bool : null;
     final glance = DeviceGlance(
       uptimeSec: up,
-      peersKnown: v['peers'] is List && (!ros || peerRows.isNotEmpty || v['reg_ok'] == true),
+      peersKnown: v['peers'] is List &&
+          (!ros ||
+              peerRows.isNotEmpty ||
+              (v['reg_ok'] == true && (isAp != null || radioFlag == false || radioUp == true))),
       radioUnread: ros && isAp == null && (radioFlag == true || peerRows.isNotEmpty),
       apUnknown: ros && isAp == null && radioFlag != false,
       portsUnread: cut,
-      // محطّة airOS: إشارة 0 = غير مرتبطة (لا «0 dBm» ممتازة) — الوصلة مقطوعة
-      linkDown: airos && apFlag == false && v['sig'] is num && (v['sig'] as num) == 0,
+      // محطّة airOS: إشارة 0 = غير مرتبطة (لا «0 dBm» ممتازة) — الوصلة مقطوعة؛ وRouterOS: راديوٌ مفعّل لا يعمل
+      linkDown: (airos && apFlag == false && v['sig'] is num && (v['sig'] as num) == 0) ||
+          (ros && radioFlag == true && radioUp == false && peerRows.isEmpty),
       hasRadio: airos ? true : (ros ? (radioFlag ?? (isAp != null || peerRows.isNotEmpty ? true : null)) : null),
       cpu: n(v['cpu']),
       mem: n(v['mem']),
