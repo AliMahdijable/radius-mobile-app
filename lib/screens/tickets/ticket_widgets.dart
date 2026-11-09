@@ -53,12 +53,17 @@ String _initials(String name) {
 }
 
 class TicketStatusChip extends StatelessWidget {
-  const TicketStatusChip({super.key, required this.status});
+  const TicketStatusChip({super.key, required this.status, this.moved = false});
   final String status;
+
+  /// انتقل المشترك لوكيلٍ آخر — للقراءة وحدها.
+  final bool moved;
 
   @override
   Widget build(BuildContext context) {
-    final m = ticketStatusMeta(status);
+    final m = moved
+        ? (label: 'انتقل المشترك', fg: AppColors.textMid, bg: AppColors.surfaceSunken, icon: LucideIcons.arrowRightLeft)
+        : ticketStatusMeta(status);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: Sp.sm, vertical: 3),
       decoration: BoxDecoration(color: m.bg, borderRadius: BorderRadius.circular(R.pill)),
@@ -125,7 +130,7 @@ class TicketTile extends StatelessWidget {
                         style: t.unread ? AppType.bodyBold(color: AppColors.textHi) : AppType.bodyStrong(color: AppColors.textHi)),
                   ),
                   const SizedBox(width: Sp.sm),
-                  TicketStatusChip(status: t.status),
+                  TicketStatusChip(status: t.status, moved: t.moved),
                 ]),
                 const SizedBox(height: 2),
                 Text(isoJoin([ticketCategoryLabel(t.category), if ((t.subject ?? '').isNotEmpty) t.subject!], ' · '),

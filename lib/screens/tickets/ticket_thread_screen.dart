@@ -225,7 +225,7 @@ class _TicketThreadScreenState extends State<TicketThreadScreen> {
       padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.lg, Sp.md),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          TicketStatusChip(status: t.status),
+          TicketStatusChip(status: t.status, moved: t.moved),
           const SizedBox(width: Sp.sm),
           Expanded(
             child: Text(
@@ -277,6 +277,8 @@ class _TicketThreadScreenState extends State<TicketThreadScreen> {
     String? note;
     if (widget.viewOnly) {
       note = 'للعرض هنا — الردّ وتغيير الحالة من صفحة الشركة نفسها';
+    } else if (t.moved) {
+      note = 'انتقل المشترك لوكيلٍ آخر — التذكرة للقراءة فقط';
     } else if (!_canWrite) {
       note = 'الردّ يحتاج صلاحيّة «التذاكر — الردّ وتغيير الحالة والإغلاق» — اطلبها من مديرك';
     } else if (t.status == 'cancelled') {
