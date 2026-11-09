@@ -439,6 +439,18 @@ class SubscribersCheck {
     return SubsCheckProgress(SubsRunState.finished, 'انتهى الفحص — ${formatIQD(subs)} مشترك', value: 1, at: at);
   }
 
+  /// آخر سؤالٍ من الهاتف لأجهزة [subs] — ردّ أو ما ردّ، لا المقروء وحده: وقت «انتهى الفحص» حين لا تُعرف موجته (قائمةٌ
+  /// فُتحت من جديد وقراءاتها طازجة فلا موجة) — أجهزةٌ سُئلت قبل دقائق لا تُقال «لم يُفحص بعد» (المراجعة F6).
+  static DateTime? lastAsked(Iterable<Subscriber> subs) {
+    final look = debugPeek ?? (s) => DeviceProbeApi.peek(username: s.username, ip: s.ipAddress, company: s.companyKey);
+    DateTime? out;
+    for (final s in subs) {
+      final at = look(s)?.at;
+      if (at != null && (out == null || at.isAfter(out))) out = at;
+    }
+    return out;
+  }
+
   /// التقرير منسوخاً (١٠ نوفمبر) بأقسام الشاشة وكلماتها: سطر الفحص، ثمّ الأعداد، ثمّ من بمشكلة بمشاكله ومن ما ردّ جهازه ومن بلا
   /// مقاييس ومن لم يُفحص بأسبابهم — السليم وغير المتّصل عددٌ وحده (لا عطل يُتابَع). [companyOf] «كل الشركات»: اسم شركة المشترك.
   static String reportText(

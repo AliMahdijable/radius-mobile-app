@@ -192,4 +192,95 @@ void main() {
       await _done(t);
     });
   });
+
+  // ───────────── F6: فحصٌ انتهى بلا قراءات لا يُقال «يُفحص الآن» ─────────────
+
+  group('F6 — انتهى بلا قراءات: ما حدث بأعداده، لا «يُفحص الآن»', () {
+    String title(WidgetTester t) {
+      final summary = find.byKey(const ValueKey('subs-check-summary'));
+      return t.widgetList<Text>(find.descendant(of: summary, matching: find.byType(Text))).first.data!;
+    }
+
+    String bar(WidgetTester t) => t.widget<Text>(find.byKey(const ValueKey('subs-check-progress-text'))).data!;
+
+    testWidgets('من الهاتف (وحدات ضوئيّة لا يصلها الموبايل): الموجة انتهت و«جهازه ما ردّ» الكلّ', (t) async {
+      await visualSetUp(s1bSasOwner);
+      final at = DateTime.now().subtract(const Duration(minutes: 1));
+      final subs = [_s('f1.u', ip: '1'), _s('f2.u', ip: '2'), _s('off.u', online: false)];
+      SubscribersCheck.debugPeek = (s) => s.isOnline ? (snap: null, stale: false, at: at) : null;
+      final wave = ValueNotifier(SubsWave.idle.start([for (final s in subs) SubsWave.keyOf(null, s.username)], at)
+          .progress(3, 3)
+          .finish(at));
+      addTearDown(() {
+        SubscribersCheck.debugPeek = null;
+        wave.dispose();
+      });
+      await pumpVisual(t, _phone,
+          home: (_) => SubscribersCheckScreen(subscribers: () => subs, viaVpn: false, wave: wave, onForceAll: () {}));
+      await settle(t, seconds: 1);
+      expect(find.textContaining('يُفحص المشتركون الآن'), findsNothing, reason: 'الموجة انتهت');
+      expect(find.text('انتهى الفحص بلا قراءات\nجهازه ما ردّ 2 · غير متّصل الآن 1'), findsOneWidget);
+      expect(bar(t), 'انتهى الفحص — 3 مشترك');
+      expect(title(t), 'لا قراءات');
+      await _done(t);
+    });
+
+    testWidgets('قائمةٌ فُتحت من جديد وقراءاتها طازجة (لا موجة): الشريط بآخر سؤال — لا «لم يُفحص بعد» لأجهزةٍ سُئلت',
+        (t) async {
+      await visualSetUp(s1bSasOwner);
+      final at = DateTime.now().subtract(const Duration(minutes: 3));
+      final subs = [_s('f1.u', ip: '1'), _s('f2.u', ip: '2')];
+      SubscribersCheck.debugPeek = (s) => (snap: null, stale: false, at: at);
+      final wave = ValueNotifier(SubsWave.idle);
+      addTearDown(() {
+        SubscribersCheck.debugPeek = null;
+        wave.dispose();
+      });
+      await pumpVisual(t, _phone,
+          home: (_) => SubscribersCheckScreen(subscribers: () => subs, viaVpn: false, wave: wave));
+      await settle(t, seconds: 1);
+      expect(bar(t), 'انتهى الفحص — 2 مشترك');
+      expect(find.descendant(of: find.byKey(const ValueKey('subs-check-progress')), matching: find.text('منذ 3 دقائق')),
+          findsOneWidget);
+      expect(find.textContaining('يُفحص المشتركون الآن'), findsNothing);
+      expect(find.text('انتهى الفحص بلا قراءات\nجهازه ما ردّ 2'), findsOneWidget);
+      await _done(t);
+    });
+
+    testWidgets('عبر الـVPN (٩ نوفمبر: يردّون بلا مقاييس): الخادم انتهى ⇒ لا «اضغط تحديث ليفحص الخادم»', (t) async {
+      await visualSetUp(s1bSasOwner);
+      final subs = [_s('p1.u'), _s('p2.u'), _s('off.u', online: false)];
+      addTearDown(() {
+        VpnNow.subscribers.reset();
+        VpnNow.reset();
+      });
+      VpnNow.debugApply(VpnNowKind.subscribers, const VpnNowResult(ok: true, message: 'تم', readings: {
+        'p1.u': VpnSubReading(src: 'ping', ms: 12),
+        'p2.u': VpnSubReading(src: 'ping', ms: 9, err: 'login_failed'),
+      }));
+      await pumpVisual(t, _phone, home: (_) => SubscribersCheckScreen(subscribers: () => subs, viaVpn: true));
+      await settle(t, seconds: 1);
+      expect(find.textContaining('ليفحص الخادم'), findsNothing, reason: 'الخادم فحص للتوّ');
+      expect(find.text('انتهى الفحص بلا قراءات\nجهازه ما ردّ 2 · غير متّصل الآن 1'), findsOneWidget);
+      expect(bar(t), 'انتهى الفحص — 3 مشترك');
+      expect(title(t), 'لا قراءات');
+      await _done(t);
+    });
+
+    testWidgets('عبر الـVPN: الفحص تعذّر بلا قراءات ⇒ «لم يكتمل الفحص» بأعداده — لا «لا قراءات بعد»', (t) async {
+      await visualSetUp(s1bSasOwner);
+      final subs = [_s('a.u'), _s('b.u'), _s('off.u', online: false)];
+      addTearDown(() {
+        VpnNow.subscribers.reset();
+        VpnNow.reset();
+      });
+      await pumpVisual(t, _phone, home: (_) => SubscribersCheckScreen(subscribers: () => subs, viaVpn: true));
+      await settle(t, seconds: 1);
+      expect(VpnNow.subscribers.phase, VpnBarPhase.failed);
+      expect(find.textContaining('ليفحص الخادم'), findsNothing, reason: 'حاول الخادم وتعذّر — السبب على الشريط');
+      expect(find.text('لم يكتمل الفحص\nلم يُفحص 2 · غير متّصل الآن 1'), findsOneWidget);
+      expect(title(t), 'لا قراءات');
+      await _done(t);
+    });
+  });
 }
