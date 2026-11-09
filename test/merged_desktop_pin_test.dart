@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/account_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/company_route.dart';
+import 'package:rad_mysvcs/api/expenses_api.dart';
 import 'package:rad_mysvcs/api/subscribers_api.dart';
 import 'package:rad_mysvcs/core/platform/app_platform.dart';
 import 'package:rad_mysvcs/core/widgets/design_sheet.dart';
@@ -233,7 +234,7 @@ void main() {
     }
   });
 
-  testWidgets('٢ الجزء غير الظاهر: لا توجيه ولا شاشة لغير المفتوحة، ولا يعود بتبديل الشريط وهو مخفيّ، ويعود ويُجلب لشركته حين يظهر',
+  testWidgets('٢ الجزء غير الظاهر: لا توجيه، وشاشته تبقى بحالها ما دامت لشركتها (لا جلب عند العودة)، وتُبنى من جديد إن اختيرت غيرها أو ذهب طلبٌ ضمنيّ من بادئاتها لغيرها',
       (t) async {
     await up(t);
     MergedMode.focus.value = _kEl;
@@ -247,22 +248,47 @@ void main() {
     expect(t.takeException(), isNull);
     expect(srv.asked, contains('GET /api/admin/expenses $_kEl'));
     expect(CompanyRoute.sectionKeyFor('/api/admin/expenses'), _kEl);
+    final screen = t.state(find.byType(ExpensesScreen));
 
+    // مخفيٌّ: لا وجهة — والشاشة باقيةٌ بحالها (مراجعة 179، ثانويّة: كانت تُهدم وتُجلب عند كلّ عودة)
     visible.value = false;
     await settleReal(t);
     expect(CompanyRoute.sectionKeyFor('/api/admin/expenses'), isNull);
-    expect(find.byType(ExpensesScreen), findsNothing, reason: 'لا تبقى شاشة ايرث لنك مركّبةً بلا وجهتها');
+    expect(find.byType(ExpensesScreen, skipOffstage: false), findsOneWidget, reason: 'شاشة ايرث لنك بحالها وهي مخفيّة');
+    srv.asked.clear();
+    visible.value = true;
+    await settleReal(t);
+    expect(CompanyRoute.sectionKeyFor('/api/admin/expenses'), _kEl);
+    expect(identical(t.state(find.byType(ExpensesScreen)), screen), isTrue, reason: 'الحالة نفسها (الفترة، التمرير)');
+    expect(srv.asked.where((a) => a.startsWith('GET /api/admin/expenses')), isEmpty, reason: 'لا جلب عند العودة: ${srv.asked}');
+
+    // شركةٌ أخرى اختيرت وهو مخفيّ ⇒ لا تُبنى لها مخفيّةً، ولا تبقى شاشة ايرث لنك
+    visible.value = false;
+    await settleReal(t);
     MergedMode.focus.value = _kJt;
     await settleReal(t);
     expect(CompanyRoute.sectionKeyFor('/api/admin/expenses'), isNull, reason: 'شركةٌ أخرى مختارة وهو مخفيّ ⇒ لا وجهة');
-
+    expect(find.byType(ExpensesScreen, skipOffstage: false), findsNothing);
     srv.asked.clear();
     MergedMode.focus.value = _kEl;
     visible.value = true;
     await settleReal(t);
     expect(CompanyRoute.sectionKeyFor('/api/admin/expenses'), _kEl);
-    expect(srv.asked, contains('GET /api/admin/expenses $_kEl'));
+    expect(srv.asked, contains('GET /api/admin/expenses $_kEl'), reason: 'تُبنى لشركتها حين تظهر');
     expect(find.textContaining('كهرباء ايرث'), findsWidgets);
+
+    // طلبٌ ضمنيّ من بادئاته وهو مخفيّ (كجلبٍ بالخلفيّة) ذهب للمفتوحة ⇒ لا تبقى الشاشة بما وصلها، وتُجلب لشركتها حين تظهر
+    visible.value = false;
+    await settleReal(t);
+    await t.runAsync(() => ExpensesApi.list());
+    await settleReal(t);
+    expect(srv.asked.last, 'GET /api/admin/expenses -');
+    expect(find.byType(ExpensesScreen, skipOffstage: false), findsNothing, reason: 'شاشةٌ قد تكون استلمت أرقام المفتوحة لا تبقى');
+    srv.asked.clear();
+    visible.value = true;
+    await settleReal(t);
+    expect(srv.asked, contains('GET /api/admin/expenses $_kEl'));
+    expect(srv.asked.where((a) => a.startsWith('GET /api/admin/expenses') && a.endsWith(' -')), isEmpty);
     expect(t.takeException(), isNull);
     await down(t);
     expect(CompanyRoute.sectionKey, isNull);

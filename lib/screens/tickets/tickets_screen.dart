@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../api/company_route.dart';
 import '../../api/tickets_api.dart';
 import '../../models/merged_company.dart';
 import '../../theme/colors.dart';
@@ -21,12 +20,14 @@ class TicketsScreen extends StatefulWidget {
 
   /// «كل الشركات»: القائمة والمحادثة قراءةٌ موجَّهة لكلّ شركة (الخادم companyRoutingAllow) — غير المفتوحة للعرض، والردّ والحالة
   /// من صفحتها. الوطنيّ لا تذاكر له.
-  static Widget mergedPage() => MergedSection(
+  /// [openCompany] (٩ نوفمبر — «الكلّ» في الجرس وإشعارٌ بلا تذكرة): تذاكر المفتوحة التي يعرضها الجرس، مثبَّتةً لها بلا تبديل الشريط.
+  static Widget mergedPage({bool openCompany = false}) => MergedSection(
       readOnly: true,
       prefixes: const [TicketsApi.base],
       serves: (c) => c.provider != MergedProvider.ftth && !c.code.toLowerCase().startsWith('watani'),
       servesNote: 'التذاكر لكلّ الشركات ما عدا المشروع الوطني',
       lockTitle: 'التذاكر',
+      openCompany: openCompany,
       child: const TicketsScreen());
 
   @override
@@ -51,7 +52,8 @@ class _TicketsScreenState extends State<TicketsScreen> {
   @override
   void initState() {
     super.initState();
-    _viewOnly = CompanyRoute.sectionKeyFor(TicketsApi.base) != null;
+    // من شجرة القسم لا من الوجهة الحاضرة (مراجعة 179): تبقى للعرض وهي مخفيّةٌ أو مغطّاة
+    _viewOnly = MergedSection.viewOnlyNow(context);
     _load();
   }
 
@@ -106,8 +108,10 @@ class _TicketsScreenState extends State<TicketsScreen> {
   }
 
   Future<void> _open(Ticket t) async {
+    // شركة القائمة لحظة الفتح — المحادثة (وقراءتها الدوريّة) لها صراحةً (مراجعة 179)
+    final key = MergedSection.routeKeyOf(context);
     await Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => TicketThreadScreen(ticketId: t.id, initial: t, viewOnly: _viewOnly),
+      builder: (_) => TicketThreadScreen(ticketId: t.id, initial: t, viewOnly: _viewOnly, companyKey: key),
     ));
     if (mounted) await _load();
   }
@@ -115,7 +119,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
   @override
   Widget build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
-    _viewOnly = MergedSection.viewOnlyOf(context) || CompanyRoute.sectionKeyFor(TicketsApi.base) != null;
+    _viewOnly = MergedSection.viewOnlyOf(context);
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: deskPageBar(

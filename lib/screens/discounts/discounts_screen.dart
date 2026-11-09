@@ -17,7 +17,6 @@ import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../desktop/desk_bulk_picker.dart';
 import '../../widgets/merged_section.dart';
-import '../../api/company_route.dart';
 import '../../services/merged_mode.dart';
 import '../../widgets/list_kit.dart';
 
@@ -63,7 +62,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
   /// «كل الشركات» (٨ نوفمبر): شركةٌ غير المفتوحة — للعرض وحده: خصوماتها كما هي (يوزر المشترك وخصمه واسمه من قائمتها هي).
   /// لا شبكة مشتركين للاختيار ولا تطبيق ولا حذف: كانت الشبكة قائمة المفتوحة ومعها خصومات الأخرى مطابقةً باليوزر — شركتان
   /// في صفٍّ واحد.
-  bool get _viewOnly => CompanyRoute.sectionKeyFor('/api/discounts') != null;
+  bool get _viewOnly => MergedSection.viewOnlyNow(context);
   List<Discount> _viewRows = const [];
   Map<String, String> _viewNames = const {};
 
@@ -119,7 +118,7 @@ class _DiscountsScreenState extends State<DiscountsScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     if (_viewOnly) {
-      final key = CompanyRoute.sectionKeyFor('/api/discounts');
+      final key = MergedSection.routeKeyOf(context);
       final company = MergedMode.companyOf(key);
       final r = await Future.wait([
         DiscountsApi.list(),

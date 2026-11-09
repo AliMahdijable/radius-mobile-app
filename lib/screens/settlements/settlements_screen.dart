@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../api/company_route.dart';
 import '../../api/settlements_api.dart';
 import '../../core/util/amount_input.dart';
 import '../../core/util/bidi.dart';
@@ -104,8 +105,12 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
     super.dispose();
   }
 
+  /// شركة القسم من شجرته — قراءاته وكتاباته لها صراحةً (مراجعة 179): لا يأخذ وجهة ما فوقه وهو مخفيٌّ أو مغطّى. null = المفتوحة.
+  String? get _companyKey => MergedSection.routeKeyOf(context);
+
   Future<void> _load() async {
-    final r = await SettlementsApi.current();
+    final key = _companyKey;
+    final r = await CompanyRoute.pin(key, SettlementsApi.current);
     if (!mounted) return;
     final cur = r.data;
     if (cur == null) {
@@ -123,8 +128,8 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
     var total = 0;
     if (cur.started) {
       // متوازيان: يبدآن معاً ويُنتظَران بعد ذلك.
-      final movesF = SettlementsApi.movements(limit: _movesLimit);
-      final historyF = SettlementsApi.list(limit: 50);
+      final movesF = CompanyRoute.pin(key, () => SettlementsApi.movements(limit: _movesLimit));
+      final historyF = CompanyRoute.pin(key, () => SettlementsApi.list(limit: 50));
       final m = await movesF;
       final h = await historyF;
       if (!mounted) return;
@@ -155,7 +160,7 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
       _movesLoading = true;
       _movesLimit = _movesLimit + 100 > 500 ? 500 : _movesLimit + 100;
     });
-    final m = await SettlementsApi.movements(limit: _movesLimit);
+    final m = await CompanyRoute.pin(_companyKey, () => SettlementsApi.movements(limit: _movesLimit));
     if (!mounted) return;
     setState(() {
       _moves = m.items;
@@ -184,7 +189,7 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
       _previewLoading = true;
       _previewError = null;
     });
-    final r = await SettlementsApi.previewStart(start);
+    final r = await CompanyRoute.pin(_companyKey, () => SettlementsApi.previewStart(start));
     if (!mounted || gen != _previewGen) return;
     setState(() {
       _previewLoading = false;
@@ -240,7 +245,8 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
       return;
     }
     setState(() => _starting = true);
-    final r = await SettlementsApi.open(start: start, openingBalance: _opening);
+    // «كل الشركات» (٩ نوفمبر — مراجعة 179): صندوق شركة القسم لحظة الضغط، صراحةً (null = المفتوحة)
+    final r = await SettlementsApi.open(start: start, openingBalance: _opening, companyKey: _companyKey);
     if (!mounted) return;
     setState(() => _starting = false);
     showSheetSnack(
@@ -252,7 +258,9 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
   }
 
   Future<void> _openSettle() async {
-    final saved = await showSettleSheet(context);
+    // شركة القسم لحظة فتح الشيت — تبقى له مهما تبدّل تحته (مانع مراجعة 179)
+    final saved = await showSettleSheet(context,
+        companyKey: _companyKey, companyName: MergedSection.routedCompanyOf(context)?.name);
     if (!mounted || saved == null) return;
     await _load();
     if (!mounted) return;
@@ -267,6 +275,7 @@ class _SettlementsScreenState extends State<SettlementsScreen> {
       id: id,
       headId: (cur != null && cur.started) ? cur.head?.id : null,
       canVoid: (cur?.canVoid ?? false) && !_locked,
+      companyKey: _companyKey,
     );
     if (changed == true && mounted) _load();
   }

@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../api/company_route.dart';
 import '../../../api/settlements_api.dart';
 import '../../../core/util/amount_input.dart';
 import '../../../core/util/format.dart';
@@ -15,19 +16,24 @@ import '../../../core/widgets/app_sheet.dart';
 
 /// شيت التسوية: معاينةٌ طازجة ← المبلغ المستلَم فعلاً ← تأكيد.
 /// يُرجع السند المحفوظ عند النجاح، و`null` عند الإغلاق.
-Future<SettlementRecord?> showSettleSheet(BuildContext context) {
+///
+/// [companyKey] («كل الشركات»، ٩ نوفمبر — مراجعة 179): شركة الصندوق كما كانت لحظة فتح الشيت (null = المفتوحة) — المعاينة
+/// والتسوية لها صراحةً مهما تبدّل تحته وهو مفتوح (كانت تُحسم لحظة الإرسال فتذهب لصندوقٍ آخر). [companyName] اسمها تحت العنوان.
+Future<SettlementRecord?> showSettleSheet(BuildContext context, {required String? companyKey, String? companyName}) {
   return showAppSheet<SettlementRecord>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,
-    builder: (_) => const _SettleSheet(),
+    builder: (_) => _SettleSheet(companyKey: companyKey, companyName: companyName),
   );
 }
 
 class _SettleSheet extends StatefulWidget {
-  const _SettleSheet();
+  const _SettleSheet({required this.companyKey, this.companyName});
+  final String? companyKey;
+  final String? companyName;
 
   @override
   State<_SettleSheet> createState() => _SettleSheetState();
@@ -60,7 +66,7 @@ class _SettleSheetState extends State<_SettleSheet> {
 
   /// معاينة طازجة لا ما في الشاشة: ما يراه المدير هنا هو ما يُسوّى.
   Future<void> _load() async {
-    final r = await SettlementsApi.current();
+    final r = await CompanyRoute.pin(widget.companyKey, SettlementsApi.current);
     if (!mounted) return;
     final d = r.data;
     if (d == null || !d.started || d.cut == null) {
@@ -106,6 +112,7 @@ class _SettleSheetState extends State<_SettleSheet> {
       received: _received,
       note: _noteCtrl.text.trim(),
       idempotencyKey: _key,
+      companyKey: widget.companyKey,
     );
     if (!mounted) return;
     setState(() => _submitting = false);
@@ -137,10 +144,12 @@ class _SettleSheetState extends State<_SettleSheet> {
       header: SheetHeaderBar(
         icon: LucideIcons.handCoins,
         title: 'settle.sheet_title'.tr(),
-        subtitle: p == null
-            ? 'settle.loading'.tr()
-            : 'settle.sheet_from'.tr(
-                namedArgs: {'when': settleWhen(p.periodStart, weekday: true)}),
+        subtitle: [
+          if ((widget.companyName ?? '').trim().isNotEmpty) '«${widget.companyName!.trim()}»',
+          p == null
+              ? 'settle.loading'.tr()
+              : 'settle.sheet_from'.tr(namedArgs: {'when': settleWhen(p.periodStart, weekday: true)}),
+        ].join(' · '),
         onClose: _submitting ? () {} : () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(

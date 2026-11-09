@@ -21,7 +21,12 @@ class MergedSectionInfo {
     this.readOnly = false,
     this.openOnlyReason,
     this.served = true,
+    this.pinned = false,
   });
+
+  /// مثبَّتٌ للشركة المفتوحة ([MergedSection.openCompany] — «الكلّ» في الجرس وإشعارٌ بلا عنصر): يعرضها أيّاً كانت مختارة
+  /// الشريط، بلا شريطٍ يبدّلها (سطرٌ يقول ذلك).
+  final bool pinned;
 
   /// false = القسم لا يخدم الشركة المختارة أصلاً ([MergedSection.serves]) — صفحة «غير متاح» وحدها، والشريط بلا سطرٍ تحته
   /// (كان يقول «للعرض هنا» فوق «غير متاح»).
@@ -67,6 +72,7 @@ class MergedSection extends StatefulWidget {
     this.servesNote,
     this.lockTitle,
     this.perms = const [],
+    this.openCompany = false,
   })  : openOnlyTitle = null,
         openOnlyReason = null;
 
@@ -84,6 +90,7 @@ class MergedSection extends StatefulWidget {
         readOnly = false,
         lockTitle = null,
         perms = const [],
+        openCompany = false,
         openOnlyTitle = title,
         openOnlyReason = reason;
 
@@ -110,12 +117,33 @@ class MergedSection extends StatefulWidget {
   /// بخريطتها ⇒ لا توجيه ولا طلب، وبطاقة «لا صلاحيّة» باسمها. المالك أو خادمٌ بلا خرائط ⇒ كما كان.
   final List<String> perms;
 
+  /// مثبَّتٌ للشركة المفتوحة (٩ نوفمبر — مراجعة 179: «الكلّ» في الجرس، وإشعارٌ بلا عنصرٍ بعينه): يعرض المفتوحة أيّاً كانت مختارة
+  /// الشريط **ولا يغيّرها** (كان الجرس يبدّل الشريط فيُعاد توجيه قسمٍ مفتوحٍ تحته وشيت كتابته)، وكلّ طلبٍ تحته — أيّ مسار —
+  /// للمفتوحة ([CompanyRoute.enterOpen]) فيغطّي ما تحته من أقسامٍ موجَّهة حتى يُغلق. لا شريط شركاتٍ فيه — سطرٌ يقول لمن هو.
+  final bool openCompany;
+
   /// ما يعرضه أقرب قسم — null خارج قسمٍ أو خارج «كل الشركات».
   static MergedSectionInfo? of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<_MergedSectionScope>()?.info;
 
   /// [MergedSectionInfo.viewOnly] لأقرب قسم — false خارج قسمٍ أو خارج «كل الشركات». شيتٌ أو شاشةٌ تُدفع من القسم ليست
   /// تحته في الشجرة: تُمرَّر لها القيمة من شاشته.
   static bool viewOnlyOf(BuildContext context) => of(context)?.viewOnly ?? false;
+
+  /// ما يعرضه أقرب قسمٍ **بلا اعتماد** — يصلح في initState وفي الاستدعاءات (لحظة فتح شيت).
+  static MergedSectionInfo? peek(BuildContext context) => context.getInheritedWidgetOfExactType<_MergedSectionScope>()?.info;
+
+  /// الشركة التي يعرضها أقرب قسمٍ موجَّه — null: المفتوحة، أو خارج قسم، أو خارج «كل الشركات». بلا اعتماد ([peek]).
+  static MergedCompany? routedCompanyOf(BuildContext context) {
+    final i = peek(context);
+    return i != null && i.routed ? i.company : null;
+  }
+
+  /// مفتاح شركة القسم لنداءٍ صريح ([CompanyRoute.pin]/[CompanyRoute.explicit]) — null = المفتوحة. شيتُ كتابةٍ يأخذه **لحظة
+  /// فتحه** من شاشة قسمه، فلا يغيّر وجهته شريطٌ يتبدّل أو قسمٌ يُخفى أو يُغطّى وهو مفتوح (مانعا مراجعة 179).
+  static String? routeKeyOf(BuildContext context) => routedCompanyOf(context)?.key;
+
+  /// [viewOnlyOf] بلا اعتماد ([peek]) — لـinitState.
+  static bool viewOnlyNow(BuildContext context) => peek(context)?.viewOnly ?? false;
 
   @override
   State<MergedSection> createState() => _MergedSectionState();
@@ -128,12 +156,24 @@ class _MergedSectionState extends State<MergedSection> {
   /// ظاهرٌ الآن ([MergedPaneVisibility]) — الهاتف دائماً. مخفيٌّ ⇒ لا يوجِّه.
   bool _visible = true;
 
+  /// موضع صفحة القسم ([CompanyRoute.orderOf]) — صفحةٌ للمفتوحة فوقه تغطّيه، وقسمٌ يُفتح منه فوقه.
+  ScopeOrder? _order;
+
+  /// طلبٌ ضمنيّ يطابق بادئاته ذهب لغير شركته وهو مخفيٌّ أو مغطّى ([CompanyRoute.enterSection] onTaint) — شاشته ربّما طلبته فلا
+  /// تبقى مركّبةً بما وصلها: تُبنى من جديد لشركتها حين يعود ظاهراً.
+  bool _tainted = false;
+  int _gen = 0;
+
+  /// الشركة التي بُنيت لها الشاشة المركّبة الآن (null = لا شاشة مركّبة).
+  String? _builtFor;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _visible = MergedPaneVisibility.of(context);
-    // يُرفع لحظة الإخفاء لا في البناء التالي.
-    if (!_visible) CompanyRoute.leaveSection(this);
+    _order = CompanyRoute.orderOf(context);
+    // يُركن لحظة الإخفاء لا في البناء التالي: لا يوجِّه، ويبقى معروفاً لما يمسّ بادئاته.
+    if (!_visible) _park();
   }
 
   @override
@@ -141,6 +181,7 @@ class _MergedSectionState extends State<MergedSection> {
     super.initState();
     MergedMode.active.addListener(_changed);
     MergedMode.focus.addListener(_changed);
+    CompanyRoute.scopes.addListener(_scopesChanged);
     _ready = !MergedMode.active.value;
     if (!_ready) _readOpen();
   }
@@ -164,18 +205,64 @@ class _MergedSectionState extends State<MergedSection> {
     setState(() {});
   }
 
+  /// صفحةٌ للمفتوحة فُتحت فوقه أو أُغلقت — يُعاد حساب «مغطّى».
+  void _scopesChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _onTaint() {
+    if (!mounted || _tainted) return;
+    setState(() {
+      _tainted = true;
+      _gen++;
+    });
+  }
+
+  void _park() {
+    final i = _ready ? _info : null;
+    if (!widget.openCompany && i != null && i.routed) {
+      CompanyRoute.enterSection(this, i.company!.key, widget.prefixes,
+          adminId: i.company!.adminId, order: _order, onTaint: _onTaint, parked: true);
+    } else {
+      CompanyRoute.leaveSection(this);
+    }
+  }
+
   MergedSectionInfo? get _info {
     if (!MergedMode.active.value) return null;
+    if (widget.openCompany) {
+      MergedCompany? open;
+      final a = _openAdmin ?? '';
+      if (a.isNotEmpty) {
+        for (final c in MergedMode.usable) {
+          if (c.adminId == a) {
+            open = c;
+            break;
+          }
+        }
+      }
+      return MergedSectionInfo(company: open, open: true, readOnly: widget.readOnly, pinned: true);
+    }
     final f = MergedMode.focused;
     if (f == null) return MergedSectionInfo(company: null, open: true, openOnlyReason: widget.openOnlyReason);
     final open = (_openAdmin ?? '').isNotEmpty && f.adminId == _openAdmin;
     return MergedSectionInfo(company: f, open: open, readOnly: widget.readOnly, openOnlyReason: widget.openOnlyReason);
   }
 
-  /// وجهة طلبات القسم — تُضبط قبل بناء الشاشة فيبدأ جلبها الأوّل موجَّهاً. قسمٌ مخفيّ لا يوجِّه ([MergedPaneVisibility]).
+  /// وجهة طلبات القسم — تُضبط قبل بناء الشاشة فيبدأ جلبها الأوّل موجَّهاً. قسمٌ مخفيّ لا يوجِّه ([MergedPaneVisibility]):
+  /// يُركن. والمثبَّت للمفتوحة نطاقٌ مفتوحٌ فوق ما تحته.
   void _apply(MergedSectionInfo? i) {
-    if (_visible && i != null && i.routed) {
-      CompanyRoute.enterSection(this, i.company!.key, widget.prefixes, adminId: i.company!.adminId);
+    if (widget.openCompany && i != null) {
+      if (_visible) {
+        CompanyRoute.enterOpen(this, order: _order);
+      } else {
+        CompanyRoute.leaveSection(this);
+      }
+      return;
+    }
+    if (i != null && i.routed) {
+      CompanyRoute.enterSection(this, i.company!.key, widget.prefixes,
+          adminId: i.company!.adminId, order: _order, onTaint: _onTaint, parked: !_visible);
     } else {
       CompanyRoute.leaveSection(this);
     }
@@ -185,6 +272,7 @@ class _MergedSectionState extends State<MergedSection> {
   void dispose() {
     MergedMode.active.removeListener(_changed);
     MergedMode.focus.removeListener(_changed);
+    CompanyRoute.scopes.removeListener(_scopesChanged);
     CompanyRoute.leaveSection(this);
     super.dispose();
   }
@@ -203,6 +291,7 @@ class _MergedSectionState extends State<MergedSection> {
     // (كانت «الكارتات» لشركة ايرث لنك المفتوحة تُعرض تحت «الكل» و«غير متاح» تحت زرّها.)
     if (i != null && f != null && !i.open && widget.serves != null && !widget.serves!(f)) {
       CompanyRoute.leaveSection(this);
+      _builtFor = null;
       return _MergedSectionScope(
         info: MergedSectionInfo(company: f, open: false, readOnly: widget.readOnly, served: false),
         child: _OpenOnlyPage(
@@ -220,6 +309,7 @@ class _MergedSectionState extends State<MergedSection> {
         widget.perms.isNotEmpty &&
         MergedMode.pagePermAny(f.key, widget.perms) == false) {
       CompanyRoute.leaveSection(this);
+      _builtFor = null;
       return _MergedSectionScope(
         info: MergedSectionInfo(company: f, open: false, readOnly: widget.readOnly, served: false),
         child: _OpenOnlyPage(
@@ -233,10 +323,8 @@ class _MergedSectionState extends State<MergedSection> {
       );
     }
     _apply(i);
-    // مخفيٌّ لشركةٍ غير المفتوحة: لا تبقى شاشتها مركّبةً بلا وجهتها — مؤقّتها ومستمعوها كانوا سيجلبون للمفتوحة تحت اسمها. تُبنى
-    // لها من جديد (جلبٌ موجَّه) حين يظهر.
-    if (!_visible && i != null && i.routed) return const SizedBox.shrink();
     if (i != null && i.openOnly && i.other) {
+      _builtFor = null;
       return _MergedSectionScope(
         info: i,
         child: _OpenOnlyPage(
@@ -247,15 +335,92 @@ class _MergedSectionState extends State<MergedSection> {
         ),
       );
     }
+    // «للمفتوحة وحدها» والمثبَّت لها: الشاشة نفسها للمفتوحة أيّاً كان الاختيار — لا يُعاد جلبها بالتبديل.
+    final shownFor = (i?.openOnly ?? false) || (i?.pinned ?? false) ? 'open' : (i?.company?.key ?? 'open');
+    if (i != null && i.routed) {
+      final active = _visible && !CompanyRoute.shadowed(this);
+      if (!active) {
+        // مخفيٌّ أو مغطّى (٩ نوفمبر — مراجعة 179): الشاشة تبقى بحالها (الفترة، التمرير) ما دامت لشركتها ولم يذهب طلبٌ ضمنيّ من
+        // بادئاتها لغيرها — وإلّا لا تبقى مركّبةً بما وصلها، وتُبنى لشركتها حين تظهر. وشركةٌ اختيرت وهو مخفيّ لا تُبنى له مخفيّاً
+        // (طلباته ستذهب للمفتوحة).
+        if (_tainted || _builtFor != shownFor) {
+          _builtFor = null;
+          return const SizedBox.shrink();
+        }
+      } else if (_tainted) {
+        _tainted = false;
+      }
+    } else {
+      _tainted = false;
+    }
+    _builtFor = shownFor;
     return _MergedSectionScope(
       info: i,
       child: KeyedSubtree(
-        // «للمفتوحة وحدها»: الشاشة نفسها للمفتوحة أيّاً كان الاختيار («الكل» أو هي) — لا يُعاد جلبها بالتبديل بينهما.
-        key: ValueKey('merged-section-${(i?.openOnly ?? false) ? 'open' : (i?.company?.key ?? 'open')}'),
+        key: ValueKey('merged-section-$shownFor-$_gen'),
         child: widget.child,
       ),
     );
   }
+}
+
+/// صفحةٌ للشركة المفتوحة صراحةً (٩ نوفمبر — مراجعة 179): ما تحتها من طلباتٍ — أيّ مسار — للمفتوحة، وما تحتها من أقسامٍ موجَّهة
+/// مغطّى حتى تُغلق ([CompanyRoute.enterOpen]). لما يخصّ المفتوحة وحدها ويُفتح فوق أيّ شيء: «الصفحات» من شريط الحاسبة، الإشعارات،
+/// ومشتركٌ بلا مفتاح (من إشعارٍ أو الجرس أو طلبٍ أو تذكرة) — كانت قراءاته تتبع قسماً ظاهراً لشركةٍ أخرى («تابع إلى» مدراؤها،
+/// ورمز وكيلها في رسالة مشترك المفتوحة). خارج «كل الشركات» أو [enabled] false ⇒ الابن نفسه بلا أثر.
+class OpenCompanyScope extends StatefulWidget {
+  const OpenCompanyScope({super.key, required this.child, this.enabled = true});
+  final Widget child;
+  final bool enabled;
+
+  @override
+  State<OpenCompanyScope> createState() => _OpenCompanyScopeState();
+}
+
+class _OpenCompanyScopeState extends State<OpenCompanyScope> {
+  ScopeOrder? _order;
+  bool _visible = true;
+
+  bool get _on => widget.enabled && MergedMode.active.value;
+
+  @override
+  void initState() {
+    super.initState();
+    MergedMode.active.addListener(_sync);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _visible = MergedPaneVisibility.of(context);
+    _order = CompanyRoute.orderOf(context);
+    _sync();
+  }
+
+  @override
+  void didUpdateWidget(OpenCompanyScope old) {
+    super.didUpdateWidget(old);
+    if (old.enabled != widget.enabled) _sync();
+  }
+
+  void _sync() {
+    if (!mounted) return;
+    if (_on && _visible) {
+      CompanyRoute.enterOpen(this, order: _order);
+    } else {
+      CompanyRoute.leaveSection(this);
+    }
+  }
+
+  @override
+  void dispose() {
+    MergedMode.active.removeListener(_sync);
+    CompanyRoute.leaveSection(this);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// [MergedSection.openOnly] وشركةٌ غير المفتوحة مختارة: الشريط ثمّ بطاقة القفل بسببها و«بدّل إليها» (ورقة «شركاتي» تفتحها بنفسها).
@@ -374,8 +539,9 @@ class _OpenOnlyPageState extends State<_OpenOnlyPage> {
 
 /// الحاسبة (٩ نوفمبر — مانع إصدار 179): DesktopShell يُبقي كلّ قسمٍ فُتح مركّباً في IndexedStack، فكان قسمٌ موجَّهٌ لشركةٍ غير
 /// المفتوحة يبقى يوجِّه بادئاته وهو مخفيّ — «إضافة صرفية» للمفتوحة من الرئيسيّة (Ctrl/⌘+N) سُجِّلت في مال شركة الشريط. الجزء غير
-/// الظاهر [visible] false ⇒ أقسامه ([MergedSection]) لا توجِّه، وتعود لوجهتها حين يظهر. خارجه (الهاتف: أقسامه صفحاتٌ تُدفع وتُغلق)
-/// ظاهرٌ دائماً كما كان. لا TickerMode: الإطار يطفئها لكلّ صفحةٍ تغطّيها أخرى، فيسقط توجيه ما يُفتح من القسم فوقه.
+/// الظاهر [visible] false ⇒ أقسامه ([MergedSection]) لا توجِّه (تُركن)، وتعود لوجهتها حين يظهر — وشاشتها تبقى بحالها ما لم يذهب
+/// طلبٌ ضمنيّ من بادئاتها لغير شركتها وهو مخفيّ (حينها تُبنى من جديد لشركتها). خارجه (الهاتف: أقسامه صفحاتٌ تُدفع وتُغلق) ظاهرٌ
+/// دائماً كما كان. لا TickerMode: الإطار يطفئها لكلّ صفحةٍ تغطّيها أخرى، فيسقط توجيه ما يُفتح من القسم فوقه.
 class MergedPaneVisibility extends InheritedWidget {
   const MergedPaneVisibility({super.key, required this.visible, required super.child});
   final bool visible;
@@ -391,7 +557,8 @@ class _MergedSectionScope extends InheritedWidget {
   final MergedSectionInfo? info;
 
   @override
-  bool updateShouldNotify(_MergedSectionScope old) => old.info?.company?.key != info?.company?.key || old.info?.open != info?.open;
+  bool updateShouldNotify(_MergedSectionScope old) =>
+      old.info?.company?.key != info?.company?.key || old.info?.open != info?.open || old.info?.pinned != info?.pinned;
 }
 
 /// شريط القسم في «كل الشركات» أعلى الشاشة: الشركات (والمختارة تُعرض بمكانها) ثمّ سطرٌ يقول ما يُعرض — المفتوحة («الكل»)،
@@ -413,7 +580,14 @@ class MergedSectionBar extends StatelessWidget {
     final info = MergedSection.of(context);
     final String? text;
     final bool warn;
-    if (info != null && !info.served) {
+    var strip = true;
+    if (info != null && info.pinned) {
+      // مثبَّتٌ للمفتوحة (الجرس/الإشعار): لا شريط يبدّلها — سطرٌ يقول لمن هي.
+      final open = info.company?.name ?? MergedMode.currentPageName ?? ActiveCompany.current?.label ?? '—';
+      text = 'merged.section_pinned'.trm(args: [open]);
+      warn = false;
+      strip = false;
+    } else if (info != null && !info.served) {
       // لا يخدم الشركة المختارة: الشريط وحده — بطاقة «غير متاح» تحته تقول لماذا (لا «للعرض هنا» فوقها).
       text = null;
       warn = false;
@@ -451,9 +625,9 @@ class MergedSectionBar extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          const MergedCompanyStrip(),
+          if (strip) const MergedCompanyStrip(),
           if (text != null) ...[
-            const SizedBox(height: Sp.sm),
+            if (strip) const SizedBox(height: Sp.sm),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 10),
               decoration: BoxDecoration(

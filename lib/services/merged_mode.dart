@@ -125,10 +125,11 @@ class MergedMode {
     }
   }
 
-  /// ما يخصّ المفتوحة صراحةً يُفتح قسمه لها (٩ نوفمبر): «الكلّ» في الجرس (تذاكره وطلباته للمفتوحة) وإشعارها بلا عنصرٍ بعينه —
-  /// كانت تفتح القسم موجَّهاً لمختارة الشريط. شركةٌ غيرها مختارة ⇒ تُختار المفتوحة (أو «الكل» = المفتوحة كما كانت، إن لم تُعرف
-  /// بين الصالحة)؛ «الكل» أو المفتوحة ⇒ لا تغيير. خارج الوضع لا شيء.
-  static Future<void> focusOpenCompany() async {
+  /// تبويب المشتركين من ملخّص الشركة المفتوحة («انتهت اليوم»/«قرب الانتهاء» — مراجعة 179): التبويب يعرض مختارة الشريط، فشركةٌ
+  /// غيرها مختارة ⇒ تُختار المفتوحة في الشريط (أو «الكل» إن لم تُعرف بين الصالحة) ليعرض قائمتها. **لا يُنادى إلّا ولا شيء
+  /// مفتوحٌ فوق الغلاف** ([MainShell]): الشريط مشتركٌ بين الأقسام، فلا يتبدّل تحت قسمٍ أو شيتٍ مفتوح. «الكلّ» في الجرس والإشعار
+  /// بلا عنصر لا يبدّل الشريط أبداً — يفتح القسم مثبَّتاً للمفتوحة (`mergedPage(openCompany: true)`).
+  static Future<void> selectOpenForSubscribersTab() async {
     if (!active.value || focused == null) return;
     final open = (await openAdminId()) ?? '';
     final f = focused;
@@ -227,6 +228,10 @@ class MergedMode {
     if (!fresh && cur != null && at != null && DateTime.now().difference(at) < freshFor) return Future.value(cur);
     final emp = employeeSession;
     if (emp) _installEmployeeHooks();
+    // اسم الشركة وكلمة «صفحة» لرسالة رفض الكتابة بلا شركةٍ صريحة (CompanyRoute.ambiguousText)
+    CompanyRoute.nameOf ??= (k) => companyOf(k)?.name;
+    CompanyRoute.employeeWords ??= () => employeeSession;
+    CompanyRoute.adminIdOf ??= (k) => companyOf(k)?.adminId;
     final running = _inFlight;
     if (running != null) return running;
     final gen = _generation;
@@ -653,17 +658,26 @@ class MergedSubscribers {
 class MergedOps {
   MergedOps._();
 
-  /// قراءةٌ أو نداءٌ بمرجعه الخاصّ (عرض السعر للتفعيل والتمديد) — موجَّهٌ لشركة [s].
-  static Future<T> run<T>(Subscriber s, Future<T> Function() body) => CompanyRoute.run(s.companyKey, body);
+  /// قراءةٌ أو نداءٌ بمرجعه الخاصّ (عرض السعر للتفعيل والتمديد) — موجَّهٌ لشركة [s]. صفٌّ بلا مفتاح في «كل الشركات» ⇒
+  /// للمفتوحة صراحةً ([pinned]).
+  static Future<T> run<T>(Subscriber s, Future<T> Function() body) => pinned(s.companyKey, body);
 
   /// كتابةٌ على [s] (تسديد، دين، خصم، فصل، تعطيل، تعديل، حذف…): مرجع النافذة أوّلاً ثمّ النداء موجَّهاً.
   static Future<T> write<T>(Subscriber s, Future<T> Function() body) => writeAt(s.companyKey, s.idx, body);
 
   /// [write] بمفتاح الشركة والـidx (شاشاتٌ لا تحمل الصفّ كاملاً: السعر الثابت).
   static Future<T> writeAt<T>(String? key, String? idx, Future<T> Function() body) async {
-    if (key == null) return body();
+    if (key == null) return pinned(null, body);
     await ensureSubjectAt(key, idx);
     return CompanyRoute.run(key, body);
+  }
+
+  /// شركة صفٍّ لنداءٍ يخصّه (٩ نوفمبر — مراجعة 179): مفتاحٌ ⇒ له؛ وبلا مفتاح في «كل الشركات» ⇒ **المفتوحة صراحةً**
+  /// ([CompanyRoute.runOpen]) — مشتركٌ فُتح من إشعارٍ أو الجرس أو طلبٍ أو تذكرة (صفٌّ من قائمة المفتوحة بلا مفتاح) كان يرث قسماً
+  /// ظاهراً لشركةٍ أخرى («تابع إلى» مدراؤها في نافذة تعديله). خارج الوضع النداء كما هو حرفاً.
+  static Future<T> pinned<T>(String? key, Future<T> Function() body) {
+    if (key != null) return CompanyRoute.run(key, body);
+    return MergedMode.active.value ? CompanyRoute.runOpen(body) : body();
   }
 
   /// يسكّ مرجع النافذة لـ[s] إن لم يكن محفوظاً. فشله لا يرمي: الكتابة بعده يرفضها الخادم برسالته («لم يُنفَّذ شيء»).

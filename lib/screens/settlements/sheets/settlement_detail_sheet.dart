@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../api/company_route.dart';
 import '../../../api/settlements_api.dart';
 import '../../../core/util/format.dart';
 import '../../../core/widgets/design_sheet.dart';
@@ -16,11 +17,15 @@ import '../../../core/widgets/print_feedback.dart';
 
 /// سند التسوية: اللقطة، وحصص المنفّذين، والحركات، والطباعة، والإلغاء.
 /// يُرجع `true` حين أُلغي السجلّ (فتعيد الشاشة الحساب).
+///
+/// [companyKey] («كل الشركات»، ٩ نوفمبر — مراجعة 179): شركة الصندوق لحظة فتح السند (null = المفتوحة) — قراءته وإلغاؤه لها
+/// صراحةً مهما تبدّل تحته وهو مفتوح.
 Future<bool?> showSettlementDetailSheet(
   BuildContext context, {
   required int id,
   required int? headId,
   required bool canVoid,
+  required String? companyKey,
 }) {
   return showAppSheet<bool>(
     context: context,
@@ -28,7 +33,7 @@ Future<bool?> showSettlementDetailSheet(
     useSafeArea: true,
     backgroundColor: Colors.transparent,
     barrierColor: AppColors.scrim,
-    builder: (_) => _DetailSheet(id: id, headId: headId, canVoid: canVoid),
+    builder: (_) => _DetailSheet(id: id, headId: headId, canVoid: canVoid, companyKey: companyKey),
   );
 }
 
@@ -37,10 +42,12 @@ class _DetailSheet extends StatefulWidget {
     required this.id,
     required this.headId,
     required this.canVoid,
+    required this.companyKey,
   });
   final int id;
   final int? headId;
   final bool canVoid;
+  final String? companyKey;
 
   @override
   State<_DetailSheet> createState() => _DetailSheetState();
@@ -64,7 +71,7 @@ class _DetailSheetState extends State<_DetailSheet> {
   }
 
   Future<void> _load() async {
-    final r = await SettlementsApi.get(widget.id);
+    final r = await CompanyRoute.pin(widget.companyKey, () => SettlementsApi.get(widget.id));
     if (!mounted) return;
     setState(() {
       _s = r.data;
@@ -89,7 +96,7 @@ class _DetailSheetState extends State<_DetailSheet> {
       _movesLoading = _moves.isEmpty;
     });
     if (_moves.isNotEmpty) return;
-    final r = await SettlementsApi.movements(settlement: '${widget.id}', limit: 200);
+    final r = await CompanyRoute.pin(widget.companyKey, () => SettlementsApi.movements(settlement: '${widget.id}', limit: 200));
     if (!mounted) return;
     setState(() {
       _moves = r.items;
@@ -114,7 +121,7 @@ class _DetailSheetState extends State<_DetailSheet> {
     final reason = await _askVoidReason(context, opening: s.isOpening);
     if (reason == null || !mounted) return;
     setState(() => _voiding = true);
-    final r = await SettlementsApi.voidSettlement(s.id, reason);
+    final r = await SettlementsApi.voidSettlement(s.id, reason, companyKey: widget.companyKey);
     if (!mounted) return;
     setState(() => _voiding = false);
     showSheetSnack(

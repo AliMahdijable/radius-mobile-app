@@ -4,7 +4,6 @@ import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../api/company_route.dart';
 import '../../api/merged_dashboard_api.dart';
 import '../../api/sales_api.dart';
 import '../../core/platform/desktop_layout.dart';
@@ -45,8 +44,8 @@ import '../../services/merged_text.dart';
 ///
 /// «كل الشركات» (٨ نوفمبر — المالك: «قسم المبيعات هم من ضمن الاقسام المدموجه هم اريد»): شريط الشركات أعلى القسم؛
 /// «الكل» مجموع الفترة وبطاقةٌ لكلّ شركة (مبيعاتها وربحها ومخزونها)، والضغط على شركةٍ يعرض مبيعاتها وموادّها في
-/// مكانها — قراءةٌ موجَّهة لها ([SalesApi.routeKey]). البيع والمخزون والإلغاء للشركة المفتوحة وحدها: شركةٌ أخرى
-/// أزرارها مقفلةٌ بسببها (والخادم يرفض كتابتها الموجَّهة).
+/// مكانها — كلّ نداءٍ يحمل شركتها صراحةً ([_SalesScreenState._co]؛ لا وجهة مشتركة — مراجعة 179)، وكلّ شيتٍ يأخذها لحظة فتحه.
+/// البيع والمخزون والإلغاء لها حين يفتحها الخادم (routed_writes)، وإلّا أزرارها مقفلةٌ بسببها.
 class SalesScreen extends StatefulWidget {
   const SalesScreen({super.key});
 
@@ -117,8 +116,6 @@ class _SalesScreenState extends State<SalesScreen> {
     SubscriberEvents.dataChanged.removeListener(_onDataChanged);
     MergedMode.active.removeListener(_onScope);
     MergedMode.focus.removeListener(_onScope);
-    // القسم أُغلق: طلبات المبيعات بعده للجلسة المفتوحة كما كانت.
-    SalesApi.routeKey = null;
     _search.dispose();
     super.dispose();
   }
@@ -140,7 +137,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
   bool _isOpen(MergedCompany c) => (_openAdmin ?? '').isNotEmpty && c.adminId == _openAdmin;
 
-  /// شركةٌ غير المفتوحة معروضة: طلبات القسم كلّها موجَّهة لها ([SalesApi.routeKey]).
+  /// شركةٌ غير المفتوحة معروضة: طلبات القسم كلّها لها — صراحةً ([_co]).
   MergedCompany? get _routedCompany {
     if (!_merged) return null;
     final f = MergedMode.focused;
@@ -176,7 +173,6 @@ class _SalesScreenState extends State<SalesScreen> {
   /// النطاق تغيّر (دخول الوضع أو خروجه، أو الشركة المختارة): وجهة طلبات القسم ثمّ الجلب من جديد.
   void _applyScope() {
     final key = _routedCompany?.key;
-    SalesApi.routeKey = key;
     _gen++;
     if (_overviewMode) {
       setState(() => _loadingOverview = _overview == null);
@@ -250,10 +246,8 @@ class _SalesScreenState extends State<SalesScreen> {
       return _CoSales(company: c, open: open, error: MergedMode.noAccess('مبيعاتها'));
     }
     try {
-      final (s, it) = await CompanyRoute.run(
-        open ? null : c.key,
-        () => (SalesApi.list(from: from, to: to), SalesApi.items()).wait,
-      );
+      final key = open ? null : c.key;
+      final (s, it) = await (SalesApi.list(from: from, to: to, companyKey: key), SalesApi.items(companyKey: key)).wait;
       return _CoSales(
         company: c,
         open: open,
@@ -370,9 +364,12 @@ class _SalesScreenState extends State<SalesScreen> {
   bool get _hasData =>
       (_items?.items.isNotEmpty ?? false) || (_sales?.sales.isNotEmpty ?? false);
 
+  /// شركة ما تعرضه الشاشة الآن لكلّ نداء — صراحةً (null = المفتوحة). الشيت يأخذها لحظة فتحه، فلا يغيّرها تبديلٌ بعده.
+  String? get _co => _routedCompany?.key;
+
   Future<void> _loadItems() async {
     final gen = _gen;
-    final r = await SalesApi.items(includeInactive: _showInactive);
+    final r = await SalesApi.items(includeInactive: _showInactive, companyKey: _co);
     if (!mounted || gen != _gen) return;
     setState(() {
       _loadingItems = false;
@@ -390,7 +387,8 @@ class _SalesScreenState extends State<SalesScreen> {
 
   Future<void> _loadSales() async {
     final gen = _gen;
-    final r = await SalesApi.list(from: _day(_range.from), to: _day(_range.to));
+    final key = _co;
+    final r = await SalesApi.list(from: _day(_range.from), to: _day(_range.to), companyKey: key);
     if (!mounted || gen != _gen) return;
     setState(() {
       _loadingSales = false;
@@ -404,16 +402,16 @@ class _SalesScreenState extends State<SalesScreen> {
     if (r.page == null && _sales != null) {
       showSheetSnack(context, r.error ?? 'sales.load_failed'.tr(), isError: true);
     }
-    if (r.page != null) unawaited(_loadDebts(r.page!));
+    if (r.page != null) unawaited(_loadDebts(r.page!, key));
   }
 
   /// «مسدّد» للبيع على الدين (المالك ٢٣ أكتوبر: «اسدد دين كيبل بيعت … يبقى معروض اجل») — رصيد المشترك الآن، طلبٌ واحد.
-  Future<void> _loadDebts(SalesPage page) async {
+  Future<void> _loadDebts(SalesPage page, String? companyKey) async {
     final ids = [
       for (final s in page.sales)
         if (s.isDebt && s.isDone && (s.idx ?? '').isNotEmpty) s.id,
     ];
-    final r = await SalesApi.debtStatus(ids);
+    final r = await SalesApi.debtStatus(ids, companyKey: companyKey);
     if (!mounted || !identical(_sales, page)) return;
     setState(() {
       _debts = r.map;
@@ -511,7 +509,7 @@ class _SalesScreenState extends State<SalesScreen> {
         label: 'sales.new_item'.tr(),
         locked: !can,
         onTap: can
-            ? () => _after(_showSheet(context, const _ItemSheet()))
+            ? () => _after(_showSheet(context, _ItemSheet(companyKey: _co)))
             : () => showNoPermission(context, action: true),
       );
     }
@@ -525,7 +523,7 @@ class _SalesScreenState extends State<SalesScreen> {
           ? () => showNoPermission(context, action: true)
           : items.isEmpty
               ? () => showSheetSnack(context, 'sales.add_item_first'.tr())
-              : () => _after(_showSheet(context, _NewSaleSheet(items: items, company: _routedCompany?.name))),
+              : () => _after(_showSheet(context, _NewSaleSheet(items: items, company: _routedCompany?.name, companyKey: _co))),
     );
   }
 
@@ -575,7 +573,7 @@ class _SalesScreenState extends State<SalesScreen> {
         backgroundColor: can ? AppColors.brand : LockedStyle.box,
         foregroundColor: can ? AppColors.onBrand : LockedStyle.glyph,
         onPressed: can
-            ? () => _after(_showSheet(context, const _ItemSheet()))
+            ? () => _after(_showSheet(context, _ItemSheet(companyKey: _co)))
             : () => showNoPermission(context, action: true),
         icon: Icon(can ? LucideIcons.plus : LucideIcons.lock, size: 16),
         label: Text('sales.new_item'.tr()),
@@ -591,7 +589,7 @@ class _SalesScreenState extends State<SalesScreen> {
           ? () => showNoPermission(context, action: true)
           : items.isEmpty
               ? () => showSheetSnack(context, 'sales.add_item_first'.tr())
-              : () => _after(_showSheet(context, _NewSaleSheet(items: items, company: _routedCompany?.name))),
+              : () => _after(_showSheet(context, _NewSaleSheet(items: items, company: _routedCompany?.name, companyKey: _co))),
       icon: Icon(can ? LucideIcons.shoppingCart : LucideIcons.lock, size: 16),
       label: Text('sales.new'.tr()),
     );
@@ -724,8 +722,8 @@ class _SalesScreenState extends State<SalesScreen> {
                 canResolve: canResolve,
                 lockMessage: ro == null ? null : _lockText(ro),
                 printCompany: _routedCompany?.key,
-                onVoid: () => _after(_showSheet(context, _VoidSheet(sale: sale))),
-                onResolve: () => _after(_showSheet(context, _ResolveSheet(sale: sale))),
+                onVoid: () => _after(_showSheet(context, _VoidSheet(sale: sale, companyKey: _co))),
+                onResolve: () => _after(_showSheet(context, _ResolveSheet(sale: sale, companyKey: _co))),
               ),
           ]),
         if (page.truncated) ...[
@@ -828,10 +826,11 @@ class _SalesScreenState extends State<SalesScreen> {
               item: item,
               locked: !canItems,
               lockMessage: ro == null ? null : _lockText(ro),
-              onStock: () => _after(_showSheet(context, _StockSheet(item: item))),
-              onDefect: () => _after(_showSheet(context, _DefectSheet(item: item))),
-              onEdit: () => _after(_showSheet(context, _ItemSheet(item: item))),
-              onMoves: () => _showSheet(context, _MovesSheet(item: item, canItems: canItems, onChanged: _refresh)),
+              onStock: () => _after(_showSheet(context, _StockSheet(item: item, companyKey: _co))),
+              onDefect: () => _after(_showSheet(context, _DefectSheet(item: item, companyKey: _co))),
+              onEdit: () => _after(_showSheet(context, _ItemSheet(item: item, companyKey: _co))),
+              onMoves: () =>
+                  _showSheet(context, _MovesSheet(item: item, canItems: canItems, onChanged: _refresh, companyKey: _co)),
             ),
         ]),
     ];
@@ -1860,51 +1859,48 @@ class _CartLine {
 ///
 /// «كل الشركات» (٨ نوفمبر — المالك: «مجاي اكدر ابيع… بس لشركه وحده»): [companyKey] شركة المشترك ⇒ البيع موجَّهٌ لها ككلّ كتابات
 /// المشترك في الوضع (MergedOps): موادّها ومخزونها ودين المشترك على سيرفرها، والمشترك بمرجع نافذته ([SalesApi.sell] يقرؤه
-/// أوّلاً). خلف sales_routed: ردّ موادّها بلا routed_writes ⇒ يُقال السبب ولا يُفتح. وجهة طلبات المبيعات تعود كما كانت بعده.
+/// أوّلاً). خلف sales_routed: ردّ موادّها بلا routed_writes ⇒ يُقال السبب ولا يُفتح. null = **المفتوحة صراحةً** (مشتركٌ بلا مفتاح:
+/// من إشعارٍ أو الجرس أو طلبٍ أو تذكرة — ٩ نوفمبر، مراجعة 179: كان يرث شركة قسم المبيعات المختارة فيبيع موادّها لمشتركٍ برقمه
+/// فيها). كلّ نداءٍ في الشيت يحملها صراحةً — لا وجهة مشتركة تُضبط وتُعاد.
 Future<bool> showSellToSubscriber(
   BuildContext context, {
   required String idx,
   required String username,
   String name = '',
   String? phone,
-  String? companyKey,
+  required String? companyKey,
 }) async {
-  final prev = SalesApi.routeKey;
-  if (companyKey != null) SalesApi.routeKey = companyKey;
-  try {
-    final r = await SalesApi.items();
-    if (!context.mounted) return false;
-    final page = r.page;
-    if (page == null) {
-      showSheetSnack(context, r.error ?? 'sales.load_failed'.tr(), isError: true);
-      return false;
-    }
-    final companyName = companyKey == null ? null : (MergedMode.companyOf(companyKey)?.name ?? '—');
-    if (companyName != null && page.enabled && page.routedWrites != true) {
-      showSheetSnack(context, 'sales.merged_readonly'.trm(args: [companyName]));
-      return false;
-    }
-    if (!page.enabled) {
-      showSheetSnack(context, (companyName != null ? 'sales.merged_off' : 'sales.off').tr());
-      return false;
-    }
-    if (page.active.isEmpty) {
-      showSheetSnack(context, 'sales.add_item_first'.tr());
-      return false;
-    }
-    final done = await _showSheet(
-      context,
-      _NewSaleSheet(
-        items: page.active,
-        initial: _Hit(idx: idx, username: username, name: name, phone: phone),
-        company: companyName,
-      ),
-    );
-    if (done == true) SubscriberEvents.notifyChange();
-    return done == true;
-  } finally {
-    if (companyKey != null) SalesApi.routeKey = prev;
+  final r = await SalesApi.items(companyKey: companyKey);
+  if (!context.mounted) return false;
+  final page = r.page;
+  if (page == null) {
+    showSheetSnack(context, r.error ?? 'sales.load_failed'.tr(), isError: true);
+    return false;
   }
+  final companyName = companyKey == null ? null : (MergedMode.companyOf(companyKey)?.name ?? '—');
+  if (companyName != null && page.enabled && page.routedWrites != true) {
+    showSheetSnack(context, 'sales.merged_readonly'.trm(args: [companyName]));
+    return false;
+  }
+  if (!page.enabled) {
+    showSheetSnack(context, (companyName != null ? 'sales.merged_off' : 'sales.off').tr());
+    return false;
+  }
+  if (page.active.isEmpty) {
+    showSheetSnack(context, 'sales.add_item_first'.tr());
+    return false;
+  }
+  final done = await _showSheet(
+    context,
+    _NewSaleSheet(
+      items: page.active,
+      initial: _Hit(idx: idx, username: username, name: name, phone: phone),
+      company: companyName,
+      companyKey: companyKey,
+    ),
+  );
+  if (done == true) SubscriberEvents.notifyChange();
+  return done == true;
 }
 
 class _Hit {
@@ -1916,8 +1912,11 @@ class _Hit {
 }
 
 class _NewSaleSheet extends StatefulWidget {
-  const _NewSaleSheet({required this.items, this.initial, this.company});
+  const _NewSaleSheet({required this.items, this.initial, this.company, required this.companyKey});
   final List<SaleItem> items;
+
+  /// شركة البيع كما كانت لحظة فتح الشيت (null = المفتوحة) — البحث والبيع لها صراحةً مهما تبدّل تحته.
+  final String? companyKey;
 
   /// «كل الشركات»: اسم الشركة الموجَّه لها البيع (موادّها ودين مشتركها عليها) — يُقال في رأس الشيت؛ null = المفتوحة كما كانت.
   final String? company;
@@ -2011,7 +2010,7 @@ class _NewSaleSheetState extends State<_NewSaleSheet> {
 
   Future<void> _search(String t) async {
     setState(() => _searching = true);
-    final rows = await SalesApi.searchSubscribers(t);
+    final rows = await SalesApi.searchSubscribers(t, companyKey: widget.companyKey);
     if (!mounted || _term.text.trim() != t) return;
     setState(() {
       _searching = false;
@@ -2049,6 +2048,7 @@ class _NewSaleSheetState extends State<_NewSaleSheet> {
               if (_walkPhone.text.trim().isNotEmpty) 'phone': _walkPhone.text.trim(),
             },
       note: _note.text.trim(),
+      companyKey: widget.companyKey,
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -2560,8 +2560,11 @@ class _ItemPickSheetState extends State<_ItemPickSheet> {
 // ═══════════════════════════ الإلغاء والحسم ═══════════════════════════
 
 class _VoidSheet extends StatefulWidget {
-  const _VoidSheet({required this.sale});
+  const _VoidSheet({required this.sale, required this.companyKey});
   final Sale sale;
+
+  /// شركة البيع لحظة فتح الشيت (null = المفتوحة).
+  final String? companyKey;
 
   @override
   State<_VoidSheet> createState() => _VoidSheetState();
@@ -2599,7 +2602,7 @@ class _VoidSheetState extends State<_VoidSheet> {
       _pvLoading = true;
       _pvError = null;
     });
-    final r = await SalesApi.voidPreview(_s.id);
+    final r = await SalesApi.voidPreview(_s.id, companyKey: widget.companyKey);
     if (!mounted) return;
     setState(() {
       _pvLoading = false;
@@ -2617,6 +2620,7 @@ class _VoidSheetState extends State<_VoidSheet> {
       _reason.text.trim(),
       refund: choice ? _refund : null,
       expectedPaid: choice ? _pv!.paid : null,
+      companyKey: widget.companyKey,
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -2894,8 +2898,11 @@ class _ChoiceCard extends StatelessWidget {
 }
 
 class _ResolveSheet extends StatefulWidget {
-  const _ResolveSheet({required this.sale});
+  const _ResolveSheet({required this.sale, required this.companyKey});
   final Sale sale;
+
+  /// شركة البيع لحظة فتح الشيت (null = المفتوحة).
+  final String? companyKey;
 
   @override
   State<_ResolveSheet> createState() => _ResolveSheetState();
@@ -2914,8 +2921,8 @@ class _ResolveSheetState extends State<_ResolveSheet> {
     // إلغاءٌ على الدين لم يتأكّد إنقاص دينه ⇒ مساره (resolve-void)؛ وإلّا بيعٌ لم يتأكّد إضافة دينه.
     final isVoid = widget.sale.resolvesVoid;
     final r = isVoid
-        ? await SalesApi.resolveVoid(widget.sale.id, applied: applied)
-        : await SalesApi.resolve(widget.sale.id, applied: applied);
+        ? await SalesApi.resolveVoid(widget.sale.id, applied: applied, companyKey: widget.companyKey)
+        : await SalesApi.resolve(widget.sale.id, applied: applied, companyKey: widget.companyKey);
     if (!mounted) return;
     setState(() => _busy = false);
     if (r.ok) {
@@ -3004,8 +3011,11 @@ class _ResolveSheetState extends State<_ResolveSheet> {
 // ═══════════════════════════ الموادّ ═══════════════════════════
 
 class _ItemSheet extends StatefulWidget {
-  const _ItemSheet({this.item});
+  const _ItemSheet({this.item, required this.companyKey});
   final SaleItem? item;
+
+  /// شركة المادّة لحظة فتح الشيت (null = المفتوحة).
+  final String? companyKey;
 
   @override
   State<_ItemSheet> createState() => _ItemSheetState();
@@ -3060,6 +3070,7 @@ class _ItemSheetState extends State<_ItemSheet> {
         qty: _qtyValue,
         unitCost: _qtyValue == null ? null : _costValue,
         paidFrom: _qtyValue == null ? null : _paidFrom,
+        companyKey: widget.companyKey,
       );
     } else {
       final patch = <String, dynamic>{
@@ -3074,7 +3085,7 @@ class _ItemSheetState extends State<_ItemSheet> {
         Navigator.of(context).pop(false);
         return;
       }
-      r = await SalesApi.updateItem(it.id, patch);
+      r = await SalesApi.updateItem(it.id, patch, companyKey: widget.companyKey);
     }
     if (!mounted) return;
     setState(() => _busy = false);
@@ -3217,8 +3228,11 @@ class _ItemSheetState extends State<_ItemSheet> {
 }
 
 class _StockSheet extends StatefulWidget {
-  const _StockSheet({required this.item});
+  const _StockSheet({required this.item, required this.companyKey});
   final SaleItem item;
+
+  /// شركة المادّة لحظة فتح الشيت (null = المفتوحة).
+  final String? companyKey;
 
   @override
   State<_StockSheet> createState() => _StockSheetState();
@@ -3299,6 +3313,7 @@ class _StockSheetState extends State<_StockSheet> {
       note: _note.text.trim(),
       paidFrom: _buy ? _paidFrom : null,
       clientRef: _ref,
+      companyKey: widget.companyKey,
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -3521,8 +3536,11 @@ class _RefundToChoice extends StatelessWidget {
 }
 
 class _DefectSheet extends StatefulWidget {
-  const _DefectSheet({required this.item});
+  const _DefectSheet({required this.item, required this.companyKey});
   final SaleItem item;
+
+  /// شركة المادّة لحظة فتح الشيت (null = المفتوحة).
+  final String? companyKey;
 
   @override
   State<_DefectSheet> createState() => _DefectSheetState();
@@ -3601,6 +3619,7 @@ class _DefectSheetState extends State<_DefectSheet> {
       refund: a == 'supplier_return' ? _refundValue : null,
       refundTo: a == 'supplier_return' && _refundValue > 0 ? _refundTo : null,
       clientRef: _ref,
+      companyKey: widget.companyKey,
     );
     if (!mounted) return;
     setState(() => _busy = false);
@@ -3772,8 +3791,11 @@ class _DefectSheetState extends State<_DefectSheet> {
 }
 
 class _MovesSheet extends StatefulWidget {
-  const _MovesSheet({required this.item, this.canItems = false, this.onChanged});
+  const _MovesSheet({required this.item, this.canItems = false, this.onChanged, required this.companyKey});
   final SaleItem item;
+
+  /// شركة المادّة لحظة فتح الشيت (null = المفتوحة).
+  final String? companyKey;
 
   /// إلغاء الحركة اليدويّة الخاطئة بصلاحيّة الموادّ (والقسم مفعّل).
   final bool canItems;
@@ -3808,7 +3830,7 @@ class _MovesSheetState extends State<_MovesSheet> {
   }
 
   void _load() {
-    SalesApi.moves(widget.item.id).then((r) {
+    SalesApi.moves(widget.item.id, companyKey: widget.companyKey).then((r) {
       if (!mounted) return;
       setState(() {
         _rows = r.rows;
@@ -3821,7 +3843,7 @@ class _MovesSheetState extends State<_MovesSheet> {
     final m = _voiding;
     if (m == null) return;
     setState(() => _busy = true);
-    final r = await SalesApi.voidMove(widget.item.id, m.id, _reason.text.trim());
+    final r = await SalesApi.voidMove(widget.item.id, m.id, _reason.text.trim(), companyKey: widget.companyKey);
     if (!mounted) return;
     setState(() => _busy = false);
     if (r.ok) {

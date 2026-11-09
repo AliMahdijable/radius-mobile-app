@@ -4,8 +4,10 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rad_mysvcs/api/account_api.dart';
 import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/bdcom_epon.dart';
+import 'package:rad_mysvcs/api/company_route.dart';
 import 'package:rad_mysvcs/api/olt_fiber_reads.dart';
 import 'package:rad_mysvcs/api/olt_profile.dart';
 import 'package:rad_mysvcs/api/snmp_client.dart';
@@ -245,6 +247,30 @@ void main() {
     final b = server.to('/api/whatsapp/broadcast').single.data as Map;
     expect(b['targetUsernames'], ['sub1', 'sub2']);
     expect(b['message'], FiberOltSettings.defaultBackMessage);
+  });
+
+  test('«كل الشركات» (مراجعة 179): «رجع النت» للشركة المفتوحة ولو كان قسم «التبليغات» ظاهراً لشركةٍ أخرى ⇒ الحجز والرسالة بلا مفتاحها',
+      () async {
+    final prevToken = AccountApi.tokenSource;
+    AccountApi.tokenSource = ({bool force = false}) async => 'acct';
+    addTearDown(() => AccountApi.tokenSource = prevToken);
+    // كجزء «التبليغات»/«حالة الرسائل» لشركةٍ أخرى ظاهرٍ على الحاسبة
+    final owner = Object();
+    CompanyRoute.enterSection(owner, 'c0000000000b2', const ['/api/whatsapp/broadcast', '/api/whatsapp/broadcasts', '/api/v2/whatsapp']);
+    addTearDown(() => CompanyRoute.leaveSection(owner));
+    server.autoBack = true;
+    final m = FiberMonitor.of(_dev());
+    await m.tick();
+    olt.drop([for (var i = 1; i <= 12; i++) i]);
+    now = now.add(const Duration(seconds: 15));
+    await m.tick();
+    olt.restore([for (var i = 1; i <= 12; i++) i]);
+    now = now.add(const Duration(minutes: 5));
+    await m.tick();
+    final sent = server.to('/api/whatsapp/broadcast');
+    expect(sent.length, 1, reason: 'الرسالة أُرسلت (لا رفض ولا ضياع)');
+    expect(sent.single.headers['x-company-key'], isNull, reason: 'من واتساب المفتوحة لا الشركة الظاهرة');
+    expect(server.to('/api/v2/admin/devices/fiber/events/40/back-claim').single.headers['x-company-key'], isNull);
   });
 
   test('أولتٌ لا يعطي ifLastChange: سقوط الدورة الواحدة يتجمّع بلحظة رصدنا فيُكشف العطل نفسه', () async {

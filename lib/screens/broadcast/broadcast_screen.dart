@@ -16,7 +16,6 @@ import '../../services/permissions_service.dart';
 import '../../theme/colors.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
-import '../../api/company_route.dart';
 import '../message_logs/message_logs_screen.dart';
 import 'broadcast_campaigns_screen.dart';
 import '../desktop/desk_widgets.dart';
@@ -154,7 +153,7 @@ class _BroadcastScreenState extends State<BroadcastScreen> with WidgetsBindingOb
 
   /// «كل الشركات» (٨ نوفمبر): شركةٌ غير المفتوحة — للعرض وحده (حملاتها وحالة رسائلها)؛ لا قائمة مشتركين تُقرأ هنا (كانت
   /// تُقرأ قائمة المفتوحة فتُعرض أعدادها وأسماؤها تحت شركةٍ أخرى) ولا إرسال — من صفحتها.
-  bool get _viewOnly => CompanyRoute.sectionKeyFor('/api/whatsapp/broadcast') != null;
+  bool get _viewOnly => MergedSection.viewOnlyNow(context);
 
   @override
   void initState() {

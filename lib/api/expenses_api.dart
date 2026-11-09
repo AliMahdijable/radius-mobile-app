@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 
 import 'api_client.dart';
 import 'archive_info.dart';
+import 'company_route.dart';
 
 /// One row from /api/admin/expenses. Backend returns ISO dates; we
 /// parse to DateTime so the UI can sort and format consistently.
@@ -132,11 +133,15 @@ class ExpensesApi {
   }
 
   /// PUT /api/admin/expenses/:id — edit an existing row.
+  ///
+  /// [companyKey] («كل الشركات»، ٩ نوفمبر — مراجعة 179): شركة الصرفيّة **صراحةً** — مفتاحها، أو null للمفتوحة. مالٌ في شركةٍ
+  /// بعينها: لا يأخذ وجهةً ممّا يُعرض لحظة الإرسال ([CompanyRoute.explicit])، فيلتقطه الشيت لحظة فتحه.
   static Future<({bool ok, String? message})> update({
     required int id,
     required num amount,
     String? note,
     String? expenseDate,
+    required String? companyKey,
   }) async {
     try {
       final r = await ApiClient.dio.put<Map<String, dynamic>>(
@@ -146,6 +151,7 @@ class ExpensesApi {
           'note': note,
           'expenseDate': expenseDate,
         },
+        options: CompanyRoute.explicit(companyKey),
       );
       final body = r.data ?? const {};
       return (
@@ -163,11 +169,12 @@ class ExpensesApi {
     }
   }
 
-  /// DELETE /api/admin/expenses/:id
-  static Future<({bool ok, String? message})> delete(int id) async {
+  /// DELETE /api/admin/expenses/:id — [companyKey] كـ[update] (صراحةً، null = المفتوحة).
+  static Future<({bool ok, String? message})> delete(int id, {required String? companyKey}) async {
     try {
       final r = await ApiClient.dio.delete<Map<String, dynamic>>(
         '/api/admin/expenses/$id',
+        options: CompanyRoute.explicit(companyKey),
       );
       final body = r.data ?? const {};
       return (
@@ -188,10 +195,13 @@ class ExpensesApi {
   /// POST /api/admin/expenses — create a new expense row for the
   /// logged-in admin. expenseDate accepts 'YYYY-MM-DD' or null (the
   /// backend defaults to today's date in Baghdad time).
+  ///
+  /// [companyKey] كـ[update] (صراحةً، null = المفتوحة).
   static Future<({bool ok, String? message, int? id})> create({
     required num amount,
     String? note,
     String? expenseDate,
+    required String? companyKey,
   }) async {
     try {
       final r = await ApiClient.dio.post<Map<String, dynamic>>(
@@ -202,6 +212,7 @@ class ExpensesApi {
           if (expenseDate != null && expenseDate.isNotEmpty)
             'expenseDate': expenseDate,
         },
+        options: CompanyRoute.explicit(companyKey),
       );
       final body = r.data ?? const {};
       final ok = body['success'] == true;

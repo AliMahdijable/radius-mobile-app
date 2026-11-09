@@ -49,7 +49,7 @@ class SendScopeApi {
   /// GET /api/whatsapp/send-scope/:adminId
   static Future<SendScope?> fetch() async {
     try {
-      final adminId = CompanyRoute.sectionAdminIdFor('/api/whatsapp/send-scope') ?? await AuthStorage.readAdminId();
+      final adminId = CompanyRoute.adminIdFor('/api/whatsapp/send-scope') ?? await AuthStorage.readAdminId();
       if (adminId == null || adminId.isEmpty) return null;
       final r = await ApiClient.dio.get<Map<String, dynamic>>(
         '/api/whatsapp/send-scope/$adminId',
@@ -72,7 +72,7 @@ class SendScopeApi {
     required List<String> managedUsernames,
   }) async {
     try {
-      final adminId = CompanyRoute.sectionAdminIdFor('/api/whatsapp/send-scope') ?? await AuthStorage.readAdminId();
+      final adminId = CompanyRoute.adminIdFor('/api/whatsapp/send-scope') ?? await AuthStorage.readAdminId();
       if (adminId == null || adminId.isEmpty) {
         return (ok: false, message: 'admin_id مفقود');
       }

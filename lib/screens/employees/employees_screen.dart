@@ -25,7 +25,6 @@ import '../../services/linked_companies.dart';
 import '../desktop/desk_widgets.dart';
 import '../../core/platform/desktop_layout.dart';
 import '../../widgets/merged_section.dart';
-import '../../api/company_route.dart';
 import '../../models/merged_company.dart';
 
 /// شاشة الموظفين — مديرو الفرع يدخلون عبر حساب رئيسي، والموظفون
@@ -107,7 +106,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     // الـeditor ما يفتح (يحتاج presets لرسم الـUI).
     // «كل الشركات» (٨ نوفمبر — صورة المالك «تعذّر تحميل كتالوج الصلاحيات»): شركةٌ غير المفتوحة هنا للعرض وحده — لا محرّر،
     // فلا كتالوج يُطلب (ليس في قائمة التوجيه) ولا يُعرض فشله خطأً فوق قائمةٍ وصلت.
-    final viewOnly = CompanyRoute.sectionKeyFor('/api/v2/employees') != null;
+    final viewOnly = MergedSection.viewOnlyNow(context);
     final results = await Future.wait([
       EmployeesApi.list(),
       viewOnly ? Future<PermissionsCatalog?>.value(null) : EmployeesApi.catalog(),

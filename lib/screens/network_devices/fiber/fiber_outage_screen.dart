@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../api/broadcast_api.dart';
+import '../../../api/company_route.dart';
 import '../../../api/fiber_api.dart';
 import '../../../core/platform/desktop_layout.dart';
 import '../../../core/util/bidi.dart';
@@ -534,7 +535,9 @@ class _FiberOutageScreenState extends State<FiberOutageScreen> {
 
   Future<void> _send(FiberEventRecord? rec, List<String> targets, String message) async {
     setState(() => _sending = true);
-    final r = await BroadcastApi.broadcast(intent: MessageIntent.general, message: message, targetUsernames: targets);
+    // مشتركو أجهزة الشركة المفتوحة من واتسابها — صراحةً (لا يأخذه قسم تبليغاتٍ ظاهرٌ لشركةٍ أخرى)
+    final r = await CompanyRoute.runOpen(
+        () => BroadcastApi.broadcast(intent: MessageIntent.general, message: message, targetUsernames: targets));
     if (!mounted) return;
     setState(() => _sending = false);
     if (!r.ok) {

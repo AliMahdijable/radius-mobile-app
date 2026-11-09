@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../api/company_route.dart';
 import '../api/employees_api.dart';
 
 /// عنوان موحّد للتحقّق من صلاحيات العامل الحالي (admin أو employee).
@@ -129,7 +130,8 @@ class PermissionsService {
   /// هل يكمل للـMainShell — لا نريد employee يدخل والـcache في حالة
   /// غير محدّدة (قد يرتفع لصلاحيات admin من بقايا جلسة سابقة).
   static Future<bool> refreshFromBackend() async {
-    final me = await EmployeesApi.me();
+    // صلاحيّات الجلسة المفتوحة — لها صراحةً (لا لقسم «الموظّفين» ظاهرٍ لشركةٍ أخرى ببادئته — مراجعة 179)
+    final me = await CompanyRoute.runOpen(EmployeesApi.me);
     if (me == null) {
       // لا نُسقط الـcache الحالي — قد يكون فقط فشل شبكة. الـcaller يقرر.
       return false;

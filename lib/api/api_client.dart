@@ -186,6 +186,9 @@ class _AuthInterceptor extends Interceptor {
   @override
   void onRequest(
       RequestOptions options, RequestInterceptorHandler handler) async {
+    // «كل الشركات»: الوجهة تُحسم أوّلاً — في دورة النداء نفسها قبل أيّ انتظار، فلا يغيّرها قسمٌ يُخفى أو يُغطّى بعده
+    // (CompanyRoute.decide: الصريح أوّلاً، والكتابة لا تأخذ وجهة قسمٍ أبداً).
+    final decision = CompanyRoute.decide(options);
     // معرّف الجهاز على كلّ طلب (حتى /api/auth/*) — الخادم يفحصه لحدّ الأجهزة
     // (ضدّ مشاركة الحساب). gateLogin يقرأه عند الدخول وتجديد التوكن.
     try {
@@ -195,9 +198,23 @@ class _AuthInterceptor extends Interceptor {
     options.headers['x-device-label'] = AppPlatform.deviceLabel;
     // نسخة التطبيق (٣ نوفمبر — إجبار التحديث، server/appGate.js): ما قبل 3.0.15 لا يرسلها فيُعرف قديماً.
     options.headers.addAll(ApiClient.versionHeaders());
+    // كتابةٌ لم تحدّد شركتها وقسمٌ يعرض شركةً أخرى لمسارها ⇒ لا تُرسل أبداً (لا للمفتوحة ولا لتلك): ردٌّ محلّيّ «لم يُنفَّذ شيء».
+    final refused = decision.refusedFor;
+    if (refused != null) {
+      return handler.resolve(Response(
+        requestOptions: options,
+        statusCode: 409,
+        data: {
+          'success': false,
+          'code': CompanyRouteCodes.ambiguous,
+          'message': CompanyRoute.ambiguousText(refused),
+          'local': true,
+        },
+      ));
+    }
     // «كل الشركات»: نداءٌ لشركةٍ من شركات الحساب — توكن الحساب وحده + مفتاحها (lib/api/company_route.dart). لا Bearer الشركة
     // المفتوحة: الخادم يرفض الهويّتين معاً (COMPANY_ROUTE_CONFLICT)، ولا يصل الهاتفَ توكنُ الشركة أبداً.
-    final routeKey = CompanyRoute.keyFor(options);
+    final routeKey = decision.key;
     // «كل الصفحات» (٩ نوفمبر): جلسة موظّف ⇒ طريقه هو (توكنه كطلبه العاديّ + المفتاح) — طريق المالك أدناه كما هو حرفاً.
     if (routeKey != null && _employeeSession) return _onEmployeeRoutedRequest(routeKey, options, handler);
     if (routeKey != null) {

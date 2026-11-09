@@ -55,6 +55,7 @@ import 'widgets/subscriber_actions.dart';
 import 'widgets/kit_fiber_card.dart';
 import 'widgets/private_note_card.dart';
 import 'connection_alert_flow.dart';
+import '../../widgets/merged_section.dart';
 import '../../services/receipt_service.dart';
 import '../../core/widgets/print_feedback.dart';
 import '../network_devices/fiber/fiber_subscriber_card.dart';
@@ -324,8 +325,14 @@ class _SubscriberDetailScreenState extends State<SubscriberDetailScreen> {
     });
   }
 
+  /// «كل الشركات» (٩ نوفمبر — مراجعة 179): مشتركٌ بلا مفتاح شركة (من إشعارٍ أو الجرس أو طلبٍ أو تذكرة — صفٌّ من قائمة الشركة
+  /// المفتوحة) ⇒ صفحته للمفتوحة صراحةً ([OpenCompanyScope]): لا تتبع قراءاتها ولا نوافذها («تابع إلى»، رمز الوكيل، خطر الرقم…)
+  /// قسماً ظاهراً لشركةٍ أخرى تحتها. صفّ شركةٍ بمفتاحها كما كان (كلّ نداءٍ بـMergedOps لشركته).
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      OpenCompanyScope(enabled: sub.companyKey == null, child: Builder(builder: _build));
+
+  Widget _build(BuildContext context) {
     Theme.of(context); // theme-dep (dark-mode)
     return Scaffold(
       backgroundColor: AppColors.bg,

@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import '../core/util/error_text.dart';
 import '../services/auth_storage.dart';
 import 'api_client.dart';
+import 'company_route.dart';
 
 /// قسم «المبيعات» (٢٣ أكتوبر) — عقد `/api/v2/sales/*` (الخادم server/sales.js،
 /// الويب pages/Sales.tsx). المالك: «وكيل انترنت عنده مواد يبيعها ويعرف شكد
@@ -545,17 +546,11 @@ class SalesApi {
     return List.generate(32, (_) => r.nextInt(16).toRadixString(16)).join();
   }
 
-  /// «كل الشركات» (٨ نوفمبر — المالك: «قسم المبيعات هم من ضمن الاقسام المدموجه هم اريد»): الشركة التي يعرضها قسم المبيعات
-  /// الآن — null = المفتوحة (الطلب كما كان). كلّ نداءٍ هنا يحملها (`extra['companyKey']` ⇒ CompanyRoute.keyFor)، فالخادم يبدّل
-  /// جلستها؛ القراءات وحدها موجَّهة (companyRoutingAllow sales-*)، والكتابة لشركةٍ أخرى يقفلها القسم ويرفضها الخادم.
-  static String? routeKey;
-
-  static Options _routed([Options? base]) {
-    final k = routeKey;
-    final o = base ?? Options();
-    if (k == null) return o;
-    return o.copyWith(extra: {...?o.extra, 'companyKey': k});
-  }
+  /// «كل الشركات» (٨ نوفمبر — المالك: «قسم المبيعات هم من ضمن الاقسام المدموجه هم اريد»؛ ٩ نوفمبر — مراجعة 179): كلّ نداءٍ هنا
+  /// يحمل شركته **صراحةً** من مستدعيه — [companyKey] مفتاحها، أو null للمفتوحة (`CompanyRoute.explicit`) — فلا وجهة مشتركةٌ
+  /// تُضبط من الشاشة وتبقى لما بعدها: كانت `routeKey` واحدةً للتطبيق كلّه، فـ«بيع مادّة» لمشترك المفتوحة من إشعارٍ ذهب لشركة
+  /// قسم المبيعات المختارة (موادّها، ومرجع مشتركٍ برقمه فيها، والبيع والدين).
+  static Options _routed(String? companyKey, [Options? base]) => CompanyRoute.explicit(companyKey, base);
 
   /// `null` = تعذّر الوصول (يُعاد لاحقاً) — لا شيء يظهر بلا تأكيد.
   static Future<SalesProbe?> probe() async {
@@ -567,7 +562,8 @@ class SalesApi {
     }
     if (token == null || token.isEmpty) return null;
     try {
-      final r = await ApiClient.dio.get<Object?>('$_base/probe');
+      // حال القسم للجلسة المفتوحة (بطاقة «قوائم أخرى») — لها صراحةً
+      final r = await ApiClient.dio.get<Object?>('$_base/probe', options: _routed(null));
       final code = r.statusCode ?? 0;
       // ٤٠٤ = خادمٌ أقدم بلا المسار ⇒ مطفأة.
       if (code == 404) return SalesProbe.off;
@@ -580,11 +576,11 @@ class SalesApi {
     }
   }
 
-  static Future<({SaleItemsPage? page, String? error})> items({bool includeInactive = false}) async {
+  static Future<({SaleItemsPage? page, String? error})> items({bool includeInactive = false, required String? companyKey}) async {
     try {
       final r = await ApiClient.dio.get<Object?>(
         '$_base/items',
-        queryParameters: includeInactive ? const {'all': 1} : null, options: _routed(),
+        queryParameters: includeInactive ? const {'all': 1} : null, options: _routed(companyKey),
       );
       final body = _map(r.data);
       if (body['success'] != true) {
@@ -619,13 +615,14 @@ class SalesApi {
     required String from,
     required String to,
     int? employeeId,
+    required String? companyKey,
   }) async {
     try {
       final r = await ApiClient.dio.get<Object?>(_base, queryParameters: {
         'from': from,
         'to': to,
         if (employeeId != null) 'employee_id': employeeId,
-      }, options: _routed());
+      }, options: _routed(companyKey));
       final body = _map(r.data);
       if (body['success'] != true) {
         return (page: null, error: _str(body['message']) ?? 'تعذّر جلب المبيعات');
@@ -662,6 +659,7 @@ class SalesApi {
     num? qty,
     int? unitCost,
     String? paidFrom,
+    required String? companyKey,
   }) {
     return _write(() => ApiClient.dio.post<Object?>('$_base/items', data: {
           'name': name,
@@ -672,12 +670,13 @@ class SalesApi {
           if (qty != null) 'qty': qty,
           if (qty != null) 'unit_cost': unitCost ?? 0,
           if (qty != null && paidFrom != null) 'paid_from': paidFrom,
-        }, options: _routed()), 'تعذّر الحفظ');
+        }, options: _routed(companyKey)), 'تعذّر الحفظ');
   }
 
   /// تعديل: الحقول المتغيّرة وحدها (الاسم/السعر/الوحدة/الرمز/الملاحظة/الإيقاف).
-  static Future<({bool ok, String? message})> updateItem(int id, Map<String, dynamic> patch) {
-    return _write(() => ApiClient.dio.put<Object?>('$_base/items/$id', data: patch, options: _routed()), 'تعذّر الحفظ');
+  static Future<({bool ok, String? message})> updateItem(int id, Map<String, dynamic> patch, {required String? companyKey}) {
+    return _write(
+        () => ApiClient.dio.put<Object?>('$_base/items/$id', data: patch, options: _routed(companyKey)), 'تعذّر الحفظ');
   }
 
   /// حركة مخزون (قرار المالك ٢٣ أكتوبر): شراء (`purchase`: كمّيّة + كلفة الوحدة + [paidFrom] إجباريّ) ·
@@ -695,6 +694,7 @@ class SalesApi {
     int? refund,
     String? refundTo,
     required String clientRef,
+    required String? companyKey,
   }) async {
     try {
       final r = await ApiClient.dio.post<Object?>('$_base/items/$id/stock', data: {
@@ -706,7 +706,7 @@ class SalesApi {
         if (kind == 'supplier_return' && (refund ?? 0) > 0 && refundTo != null) 'refund_to': refundTo,
         if (note != null && note.isNotEmpty) 'note': note,
         'client_ref': clientRef,
-      }, options: _routed());
+      }, options: _routed(companyKey));
       final body = _map(r.data);
       final ok = body['success'] == true;
       return (
@@ -729,9 +729,11 @@ class SalesApi {
   /// إلغاء حركةٍ يدويّة خاطئة (شراء، فرق عدّ، تالف، عطلان، تصليح، شطب، إرجاعٌ للمورّد) — آخر حركةٍ على
   /// المادّة وحدها: يرجع كلّ شيءٍ كما كان، والخسارة تُلغى، والنقد بعكسه. [boxDelta] ما تغيّر بالصندوق
   /// (+ ثمن شراءٍ عاد لصندوق من دفعه، − مبلغٌ رجّعه المورّد خرج من صندوق من استلمه)؛ [refund] ثمن الشراء العائد.
-  static Future<({bool ok, String? message, num refund, num boxDelta})> voidMove(int itemId, int moveId, String reason) async {
+  static Future<({bool ok, String? message, num refund, num boxDelta})> voidMove(int itemId, int moveId, String reason,
+      {required String? companyKey}) async {
     try {
-      final r = await ApiClient.dio.post<Object?>('$_base/items/$itemId/moves/$moveId/void', data: {'reason': reason}, options: _routed());
+      final r = await ApiClient.dio
+          .post<Object?>('$_base/items/$itemId/moves/$moveId/void', data: {'reason': reason}, options: _routed(companyKey));
       final body = _map(r.data);
       final ok = body['success'] == true;
       final refund = _num(body['refund']);
@@ -749,9 +751,10 @@ class SalesApi {
     }
   }
 
-  static Future<({List<StockMove>? rows, String? error})> moves(int id) async {
+  static Future<({List<StockMove>? rows, String? error})> moves(int id, {required String? companyKey}) async {
     try {
-      final r = await ApiClient.dio.get<Object?>('$_base/items/$id/moves', queryParameters: const {'limit': 200}, options: _routed());
+      final r = await ApiClient.dio
+          .get<Object?>('$_base/items/$id/moves', queryParameters: const {'limit': 200}, options: _routed(companyKey));
       final body = _map(r.data);
       if (body['success'] != true) return (rows: null, error: _str(body['message']) ?? 'تعذّر جلب الحركات');
       final raw = body['data'];
@@ -774,14 +777,16 @@ class SalesApi {
     required List<SaleLineInput> lines,
     required Map<String, dynamic> customer,
     String? note,
+    required String? companyKey,
   }) async {
     // «كل الشركات» — الخطوة ٢: البيع لمشتركٍ في شركةٍ موجَّهة يطلب مرجع نافذته (الخادم يربط البيع بالمشترك الذي قُرئ من الشركة
     // نفسها — companyRoutingAllow sales-sell) ⇒ قراءة المشترك منها أوّلاً: يسكّ الخادم المرجع ويحفظه CompanyRefs ثمّ يُرفق بالبيع.
     // تعذّرت القراءة ⇒ البيع بلا مرجع ⇒ الخادم يرفضه 409 قبل أيّ شيء (لا بيع ولا دين).
     final subIdx = customer['kind'] == 'subscriber' ? '${customer['idx'] ?? ''}'.trim() : '';
-    if (routeKey != null && subIdx.isNotEmpty) {
+    final routed = companyKey != null && CompanyRoute.keyRe.hasMatch(companyKey);
+    if (routed && subIdx.isNotEmpty) {
       try {
-        await ApiClient.dio.get<Object?>('/api/v2/subscribers/${Uri.encodeComponent(subIdx)}', options: _routed());
+        await ApiClient.dio.get<Object?>('/api/v2/subscribers/${Uri.encodeComponent(subIdx)}', options: _routed(companyKey));
       } catch (e) {
         _log('sell-subject', e);
       }
@@ -789,7 +794,7 @@ class SalesApi {
     try {
       final r = await ApiClient.dio.post<Object?>(
         _base,
-        options: _routed(_sell),
+        options: _routed(companyKey, _sell),
         data: {
           'client_ref': clientRef,
           'payment': payment,
@@ -823,11 +828,11 @@ class SalesApi {
   /// بحث مشتركٍ للبيع على الدين — GET /api/subscribers/search (SAS4 وايرث لنك،
   /// والحساب الكبير يبحث في الساس نفسه لا في القائمة). فشلٌ ⇒ قائمةٌ فارغة.
   static Future<List<({String idx, String username, String name, String? phone})>> searchSubscribers(
-      String term) async {
+      String term, {required String? companyKey}) async {
     try {
       final r = await ApiClient.dio.get<Object?>(
         '/api/subscribers/search',
-        queryParameters: {'search': term, 'count': 10}, options: _routed(),
+        queryParameters: {'search': term, 'count': 10}, options: _routed(companyKey),
       );
       final raw = _map(r.data)['data'];
       if (raw is! List) return const [];
@@ -852,9 +857,9 @@ class SalesApi {
 
   /// قبل إلغاء بيعٍ على الدين: رصيد المشترك وما سُدّد من البيع — بمسار الدين نفسه
   /// (بصلاحيّته)، بلا كتابة.
-  static Future<({VoidPreview? preview, String? error})> voidPreview(int id) async {
+  static Future<({VoidPreview? preview, String? error})> voidPreview(int id, {required String? companyKey}) async {
     try {
-      final r = await ApiClient.dio.get<Object?>('$_base/$id/void-preview', options: _routed(_sell));
+      final r = await ApiClient.dio.get<Object?>('$_base/$id/void-preview', options: _routed(companyKey, _sell));
       final body = _map(r.data);
       if (body['success'] != true) {
         return (preview: null, error: _str(body['message']) ?? 'تعذّرت قراءة دين المشترك');
@@ -872,10 +877,11 @@ class SalesApi {
 
   /// حالات تسديد المبيعات على الدين المكتملة ([ids] — الظاهرة). [partial]: بعضها لم يُقرأ (سقف المشتركين أو تعذّر) — فلا
   /// يُجمع «الباقي» منها. تعذّر الطلب كلّه ⇒ خريطةٌ فارغة و`partial` («على الدين» كما كان، لا ادّعاء).
-  static Future<({Map<int, SaleDebtStatus> map, bool partial})> debtStatus(List<int> ids) async {
+  static Future<({Map<int, SaleDebtStatus> map, bool partial})> debtStatus(List<int> ids, {required String? companyKey}) async {
     if (ids.isEmpty) return (map: const <int, SaleDebtStatus>{}, partial: false);
     try {
-      final r = await ApiClient.dio.post<Object?>('$_base/debt-status', data: {'ids': ids.take(100).toList()}, options: _routed(_sell));
+      final r = await ApiClient.dio.post<Object?>('$_base/debt-status',
+          data: {'ids': ids.take(100).toList()}, options: _routed(companyKey, _sell));
       final body = _map(r.data);
       if (body['success'] != true) return (map: const <int, SaleDebtStatus>{}, partial: true);
       final out = <int, SaleDebtStatus>{};
@@ -903,9 +909,10 @@ class SalesApi {
     String reason, {
     String? refund,
     num? expectedPaid,
+    required String? companyKey,
   }) async {
     try {
-      final r = await ApiClient.dio.post<Object?>('$_base/$id/void', options: _routed(_void), data: {
+      final r = await ApiClient.dio.post<Object?>('$_base/$id/void', options: _routed(companyKey, _void), data: {
         'reason': reason,
         if (refund != null) 'refund': refund,
         if (expectedPaid != null) 'expected_paid': expectedPaid,
@@ -922,13 +929,17 @@ class SalesApi {
   }
 
   /// حسم بيعٍ على الدين بنتيجةٍ مجهولة بعد فحص دين المشترك.
-  static Future<({bool ok, String? message})> resolve(int id, {required bool applied}) {
-    return _write(() => ApiClient.dio.post<Object?>('$_base/$id/resolve', data: {'applied': applied}, options: _routed()), 'تعذّر الحسم');
+  static Future<({bool ok, String? message})> resolve(int id, {required bool applied, required String? companyKey}) {
+    return _write(
+        () => ApiClient.dio.post<Object?>('$_base/$id/resolve', data: {'applied': applied}, options: _routed(companyKey)),
+        'تعذّر الحسم');
   }
 
   /// حسم إلغاء بيعٍ على الدين لم يتأكّد إنقاص دينه — بعد فحص دين المشترك.
-  static Future<({bool ok, String? message})> resolveVoid(int id, {required bool applied}) {
-    return _write(() => ApiClient.dio.post<Object?>('$_base/$id/resolve-void', data: {'applied': applied}, options: _routed()), 'تعذّر الحسم');
+  static Future<({bool ok, String? message})> resolveVoid(int id, {required bool applied, required String? companyKey}) {
+    return _write(
+        () => ApiClient.dio.post<Object?>('$_base/$id/resolve-void', data: {'applied': applied}, options: _routed(companyKey)),
+        'تعذّر الحسم');
   }
 
   static Future<({bool ok, String? message})> _write(Future<Response<Object?>> Function() call, String fallback) async {

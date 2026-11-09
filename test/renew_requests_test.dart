@@ -337,7 +337,7 @@ void main() {
       await simDrain(t);
     });
 
-    testWidgets('«كل الشركات»: «الكلّ» في الجرس ورقمٌ لم يعد مفتوحاً من الإشعار ⇒ قائمة المفتوحة (التي يعرضها الجرس) لا مختارة الشريط',
+    testWidgets('«كل الشركات»: «الكلّ» في الجرس ورقمٌ لم يعد مفتوحاً من الإشعار ⇒ قائمة المفتوحة (التي يعرضها الجرس) مثبَّتةً لها — والشريط لا يتبدّل',
         (t) async {
       server.reply('GET', '/api/v2/portal/renew-settings', 200, _settings());
       server.reply('GET', '/api/v2/portal/renew-requests', 200, _list([_req(41, 'pending')]));
@@ -349,7 +349,9 @@ void main() {
       await t.tap(find.byKey(const ValueKey('renew-inbox-all')));
       await t.pumpAndSettle();
       expect(find.byType(RenewRequestsScreen), findsOneWidget);
-      expect(MergedMode.focus.value, _kOpen, reason: 'الشريط على المفتوحة التي عرض الجرس طلباتها');
+      // مراجعة 179: الشريط لا يتبدّل (كان يُعاد توجيه قسمٍ مفتوحٍ تحت الجرس وشيت كتابته) — القائمة مثبَّتةٌ للمفتوحة
+      expect(MergedMode.focus.value, _kOther, reason: 'الشريط كما اختاره');
+      expect(find.textContaining('كما في الإشعارات'), findsOneWidget, reason: 'سطرٌ يقول لمن هي، بلا شريط');
       final listAsked = server.requests.skip(before).where((r) => r.path.startsWith('/api/v2/portal/renew-')).toList();
       expect(listAsked, isNotEmpty);
       expect(listAsked.map(_keyOf).toSet(), {null}, reason: 'قائمة المفتوحة لا الجزيرة');
@@ -362,7 +364,7 @@ void main() {
       final g = openRenewRequestPush(nav.currentState!, {'type': 'renew_request', 'request_id': '99'});
       await t.pumpAndSettle();
       expect(find.byType(RenewRequestsScreen), findsOneWidget);
-      expect(MergedMode.focus.value, _kOpen);
+      expect(MergedMode.focus.value, _kOther);
       expect(server.requests.skip(before2).where((r) => r.path.startsWith('/api/v2/portal/renew-')).map(_keyOf).toSet(), {null});
       nav.currentState!.pop();
       await t.pumpAndSettle();
