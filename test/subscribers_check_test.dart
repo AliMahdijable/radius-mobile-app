@@ -346,7 +346,7 @@ void main() {
         'l.ok': (snap: ok('6'), stale: false, at: at),
       };
       SubsCheckReport run({required bool onNet, DateTime? checked}) => SubscribersCheck.mixed(subs, limits,
-          peek: (s) => peeks[s.username], reading: (_) => null, readAt: (_) => checked, localFailsCount: onNet);
+          peek: (s) => peeks[s.username], reading: (_) => null, readAt: (_) => checked, localFailsFor: (_) => onNet);
       final on = run(onNet: true);
       expect(on.missingIn(SubsCheckCat.noReply).single.sub.username, 'l.fail', reason: 'على الشبكة: سُئل جهازه وما ردّ');
       expect(SubscribersCheck.missText(on.missingIn(SubsCheckCat.noReply).single), 'ما ردّ من شبكتك');
@@ -356,7 +356,16 @@ void main() {
       final offChecked = run(onNet: false, checked: at);
       expect(SubscribersCheck.missText(offChecked.missingIn(SubsCheckCat.unchecked).single), 'لم يُقرأ عبر VPN',
           reason: 'شركته فُحصت عبر الـVPN ولم يُسأل جهازه');
-      for (final r in [on, off, offChecked]) {
+      // على شبكة المفتوحة: مشترك شركةٍ أخرى طريقها VPN شركتها — فشل الهاتف معه ليس شهادةً على جهازه
+      final other = SubscribersCheck.mixed([_sub('v.fail', company: 'kV', ip: '10.9.0.5'), ...subs], limits,
+          peek: (s) => s.username == 'v.fail' ? (snap: null, stale: false, at: at) : peeks[s.username],
+          reading: (_) => null,
+          readAt: (_) => at,
+          localFailsFor: (c) => c == 'kL');
+      expect(other.missingIn(SubsCheckCat.noReply).map((m) => m.sub.username), ['l.fail']);
+      expect([for (final m in other.missingIn(SubsCheckCat.unchecked)) (m.sub.username, m.note)],
+          [('v.fail', 'لم يُقرأ عبر VPN')]);
+      for (final r in [on, off, offChecked, other]) {
         expect(r.healthy.single.sub.username, 'l.ok', reason: 'القراءة الناجحة قراءةٌ من أيّ مكان');
         expect(SubsCheckCat.values.fold<int>(0, (n, c) => n + r.count(c)), r.total, reason: 'كلّ مشتركٍ بقسمٍ واحد');
       }

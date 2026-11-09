@@ -627,13 +627,15 @@ class SubscribersCheck {
     String? Function(String? company)? companyNote,
     SubsWave? wave,
     bool Function(String? company)? vpnWaits,
-    bool? localFailsCount,
+    bool Function(String? company)? localFailsFor,
   }) {
     final look =
         peek ?? debugPeek ?? (s) => DeviceProbeApi.peek(username: s.username, ip: s.ipAddress, company: s.companyKey);
     // فشل فحص الهاتف شهادةٌ على جهازه وهو على الشبكة وحده (كالأمر الصوتيّ): خارجها أو بـ«وضع VPN» لا يصل الهاتف شيئاً، فـ«ما ردّ من
-    // شبكتك» كاذبة (١٠ نوفمبر، المحاكي خارج الشبكة) — القراءة الناجحة تبقى قراءةً من أيّ مكان.
-    final localFails = localFailsCount ?? (!VpnNow.mode.value && !AgentNetPresence.isOff);
+    // شبكتك» كاذبة (١٠ نوفمبر، المحاكي خارج الشبكة) — والشاشة تحصره بشركةٍ تُقرأ من شبكتك (المفتوحة): غيرها طريقه VPN شركته.
+    // القراءة الناجحة تبقى قراءةً من أيّ مكان.
+    final onNet = !VpnNow.mode.value && !AgentNetPresence.isOff;
+    final localFails = localFailsFor ?? ((_) => onNet);
     final vpnLook = reading ?? (s) => VpnNow.readingFor(s.username, company: s.companyKey);
     final when = readAt ?? (c) => c == null ? VpnNow.readingsAt : VpnNow.readingsAtFor(c);
     final waits = vpnWaits ?? (c) => c != null && VpnNow.subscribers.waits(c);
@@ -684,7 +686,7 @@ class SubscribersCheck {
               ? (sub: s, why: SubsMissWhy.company, note: note)
               : p?.snap != null
                   ? (sub: s, why: SubsMissWhy.noMetrics, note: null)
-                  : p != null && localFails
+                  : p != null && localFails(s.companyKey)
                       ? (sub: s, why: SubsMissWhy.noReply, note: null)
                       // فحص الخادم لشركته اكتمل بلا قراءةٍ له ⇒ لم يُسأل جهازه ([vpnUnreadNote])؛ ولا فحص له بأيّ طريق ⇒ لم يُفحص
                       : checkedAt != null
