@@ -123,20 +123,48 @@ void main() {
 
     test('سكترٌ فرغ وكان عليه ٥ ⇒ ملاحظة؛ فارغٌ بلا تاريخ ⇒ معلومة لا خطأ', () {
       final d = dev(5, type: 'sector', brand: 'ubnt');
+      // جدولٌ قُرئ فعلاً (peersKnown) وجاء فارغاً — «لا أحد» صادقة
       final emptied = DevicesCheck.evaluate(
-          d: d, alive: true, detail: detail(glance: const DeviceGlance(isAp: true)), limits: lim, prev: const CheckMemo(peers: 5));
+          d: d,
+          alive: true,
+          detail: detail(glance: const DeviceGlance(isAp: true, peersKnown: true)),
+          limits: lim,
+          prev: const CheckMemo(peers: 5));
       expect(emptied.state, CheckState.warn);
       expect(texts(emptied), ['ما عليه أحد الآن — كانوا 5 بالفحص السابق']);
-      final fresh = DevicesCheck.evaluate(d: d, alive: true, detail: detail(glance: const DeviceGlance(isAp: true)), limits: lim);
+      final fresh = DevicesCheck.evaluate(
+          d: d, alive: true, detail: detail(glance: const DeviceGlance(isAp: true, peersKnown: true)), limits: lim);
       expect(fresh.state, CheckState.ok);
       expect(fresh.findings.single.level, CheckLevel.info);
     });
 
-    test('عبر الـVPN بلا جدولٍ مقروء لا يُقال «ما عليه أحد»', () {
+    test('عبر الـVPN بلا جدولٍ مقروء لا يُقال «ما عليه أحد» — يُقال إنّ قائمتهم ما انقرت', () {
       final r = DevicesCheck.evaluate(
           d: dev(5, type: 'sector', brand: 'ubnt'), alive: true, detail: detail(glance: const DeviceGlance(isAp: true)), viaVpn: true);
       expect(r.subsKnown, isFalse);
-      expect(r.findings, isEmpty);
+      expect(texts(r), ['قائمة مشتركيه ما انقرت']);
+      expect(r.state, CheckState.unread, reason: '«سليم» حكمٌ على مشتركيه أيضاً — وهم لم يُقرؤوا');
+    });
+
+    test('٩ نوفمبر: من شبكتك وجدول التسجيل لم يُقرأ (مهلة) ⇒ لا «ما عليه أحد الآن — كانوا N»، والعدد السابق يبقى للمقارنة', () {
+      // كان `|| !viaVpn` يجعل كلّ سكترٍ من شبكتك «مقروء الجدول» — فجدولٌ انتهت مهلته يقول «ما عليه أحد الآن — كانوا 5»
+      final r = DevicesCheck.evaluate(
+        d: dev(5, type: 'sector'),
+        alive: true,
+        detail: detail(glance: const DeviceGlance(isAp: true, cpu: 9)),
+        limits: lim,
+        prev: const CheckMemo(peers: 5),
+      );
+      expect(r.subsKnown, isFalse);
+      expect(texts(r).where((t) => t.contains('ما عليه أحد')), isEmpty);
+      expect(texts(r), ['قائمة مشتركيه ما انقرت']);
+      expect(r.state, CheckState.unread, reason: 'لا «سليم» لسكترٍ مشتركوه مجهولون');
+      expect(r.cpu, 9, reason: 'ما قُرئ من الجهاز نفسه يُعرض');
+      expect(r.memo!.peers, 5, reason: 'المجهول لا يمسح العدد السابق');
+      // وبملاحظةٍ حقيقيّة (المعالج عالٍ) ⇒ «ملاحظات» كما كانت
+      final hot = DevicesCheck.evaluate(
+          d: dev(5, type: 'sector'), alive: true, detail: detail(glance: const DeviceGlance(isAp: true, cpu: 97)), limits: lim);
+      expect(hot.state, CheckState.warn);
     });
 
     test('الوصلة (محطّة): إشارتها وCCQ بحدود الوكيل', () {

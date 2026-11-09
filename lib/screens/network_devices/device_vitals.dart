@@ -710,7 +710,8 @@ class DeviceVitals {
     int? pos(int? v) => v != null && v > 0 ? v : null;
     final glance = DeviceGlance(
       uptimeSec: routerOsSeconds(s.uptime),
-      peersKnown: detailed,
+      // ٩ نوفمبر: المفصّلة وحدها لا تكفي — جدول تسجيلٍ انتهت مهلته يصل فارغاً ([MikrotikStats.clientsRead])
+      peersKnown: detailed && s.clientsRead,
       cpu: s.cpuKnown ? s.cpuLoad : null,
       mem: s.memKnown ? s.memUsedPercent : null,
       temp: s.temperature,

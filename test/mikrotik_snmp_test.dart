@@ -159,6 +159,12 @@ void main() {
       final light = MikrotikSnmp.build(_lhg(), vitalsOnly: true);
       expect(light.wirelessInterfaces, isEmpty);
       expect(light.cpuLoad, 15);
+      expect(light.clientsRead, isFalse, reason: 'بلا جداول اللاسلكيّ ⇒ العملاء لم يُقرؤوا');
+    });
+
+    test('٩ نوفمبر: جدولٌ لاسلكيّ انتهت مهلته ⇒ العملاء غير مقروئين؛ والكاملة مقروءة', () {
+      expect(MikrotikSnmp.build(_lhg()).clientsRead, isTrue);
+      expect(MikrotikSnmp.build(_lhg(), clientsRead: false).clientsRead, isFalse);
     });
   });
 

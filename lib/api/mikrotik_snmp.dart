@@ -97,10 +97,14 @@ class MikrotikSnmp {
     if (all.isEmpty) {
       throw MikrotikException('الجهاز ردّ بلا قيم — الـcommunity لا تملك صلاحيّة القراءة');
     }
-    Future<void> walk(String base, {int chunk = 20}) async {
+    /// true = قُرئ (والجدول الذي لا يدعمه الإصدار يُرجع فارغاً بلا خطأ)؛ false = مهلةٌ أو خطأ — يبقى فارغاً ولا يُعدّ مقروءاً.
+    Future<bool> walk(String base, {int chunk = 20}) async {
       try {
         put(await snmp.walk(base, chunkSize: chunk));
-      } catch (_) {/* جدولٌ لا يدعمه الإصدار — يبقى فارغاً */}
+        return true;
+      } catch (_) {
+        return false;
+      }
     }
 
     // SwOS (CSS/netPower Lite — sysDescr «… SwOS v2.21»، حيّاً ٢٧ أكتوبر): لا معالج ولا ذاكرة ولا لاسلكيّ، ووكيله لا
@@ -132,12 +136,14 @@ class MikrotikSnmp {
         await walk(c);
       }
     }
+    // ٩ نوفمبر: جدولٌ لاسلكيّ انتهت مهلته ⇒ عملاؤه مجهولون لا «لا أحد» ([MikrotikStats.clientsRead]).
+    var clientsRead = true;
     if (!vitalsOnly && !swos) {
       for (final t in [wlApEntry, wlStatEntry, wlRtabEntry, w60gEntry, w60gStaEntry]) {
-        await walk(t);
+        if (!await walk(t)) clientsRead = false;
       }
     }
-    return build(all, vitalsOnly: vitalsOnly);
+    return build(all, vitalsOnly: vitalsOnly, clientsRead: clientsRead);
   }
 
   /// وكلاء لا يقبلون GETBULK بأكثر من عمود (عنوان:منفذ) — يُقرأ منهم عموداً عموداً.
@@ -171,9 +177,10 @@ class MikrotikSnmp {
     return out;
   }
 
-  /// المجموعة المقروءة (OID ← قيمة) ← إحصاءات. مكشوفة للاختبار بقيمٍ ثابتة.
+  /// المجموعة المقروءة (OID ← قيمة) ← إحصاءات. مكشوفة للاختبار بقيمٍ ثابتة. [clientsRead]: جداول اللاسلكيّ قُرئت كلّها (لا مهلة).
   @visibleForTesting
-  static MikrotikStats build(Map<String, Varbind> all, {bool vitalsOnly = false, bool withInterfaces = true}) {
+  static MikrotikStats build(Map<String, Varbind> all,
+      {bool vitalsOnly = false, bool withInterfaces = true, bool clientsRead = true}) {
     int? i(String oid) => all[oid]?.isNumeric == true ? all[oid]!.asInt : null;
     String? s(String oid) {
       final v = all[oid];
@@ -317,6 +324,8 @@ class MikrotikSnmp {
       via: 'SNMP',
       cpuKnown: loads.isNotEmpty,
       memKnown: memTotal > 0,
+      // الخفيفة بلا جداول اللاسلكيّ — والكاملة تضعها أدناه
+      clientsRead: false,
     );
     if (vitalsOnly) return stats;
 
@@ -447,7 +456,8 @@ class MikrotikSnmp {
       ));
     }
 
-    return stats.copyWith(wirelessInterfaces: wireless, wirelessClients: clients, w60gLinks: links);
+    return stats.copyWith(
+        wirelessInterfaces: wireless, wirelessClients: clients, w60gLinks: links, clientsRead: clientsRead);
   }
 
   /// «1Gbps» · «2.5Gbps» · «100Mbps» — كما يكتبها `ethernet monitor` فتُلوَّن بالقاعدة نفسها.

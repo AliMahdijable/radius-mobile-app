@@ -15,6 +15,7 @@ import 'package:rad_mysvcs/core/util/bidi.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
 import 'package:rad_mysvcs/screens/network_devices/widgets/device_big_card.dart';
+import 'package:rad_mysvcs/services/devices_check.dart';
 import 'package:rad_mysvcs/theme/colors.dart';
 
 import 'support/app_fonts.dart';
@@ -75,6 +76,17 @@ void main() {
       final g = r.detail.glance;
       expect(g.isAp, isFalse);
       expect([g.signal, g.ccq, g.snr, g.rxRateMbps, g.txRateMbps], [-36, 100, 40, 78, 86]);
+    });
+
+    test('٩ نوفمبر: جدول التسجيل لم يُقرأ (مهلة) ⇒ لا «0 متّصل» ولو مفصّلة — ولا «ما عليه أحد الآن — كانوا N» بالفحص', () async {
+      MikrotikApi.debugFetch = () async => _mtk(mode: 'ap-bridge', clients: 0).copyWith(clientsRead: false);
+      final d = dev(14, 'sector', 'mikrotik');
+      final r = await DeviceVitals.fetch(d, detailed: true);
+      expect(r.detail.glance.peersKnown, isFalse);
+      final rep = DevicesCheck.evaluate(d: d, alive: true, detail: r.detail, raw: r.raw, prev: const CheckMemo(peers: 6));
+      expect([for (final f in rep.findings) f.text], ['قائمة مشتركيه ما انقرت']);
+      expect(rep.state, CheckState.unread);
+      expect(rep.memo!.peers, 6);
     });
 
     test('ميكروتك بلا مجسّ حرارة ولا SwOS معالج: «—» لا صفر', () async {
