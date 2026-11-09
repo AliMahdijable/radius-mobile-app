@@ -280,7 +280,9 @@ class _SettlementTile extends StatelessWidget {
           style: AppType.bodyBold(color: st.voided ? AppColors.textLow : AppColors.textHi),
         ),
         subtitle: Text(
-          'نقد ${formatIQD(st.cashIn)} · دين ${formatIQD(st.debtOut)} · ${st.opsCount} عمليّة · ربح ${formatIQD(st.profit)}',
+          'نقد ${formatIQD(st.cashIn)} · '
+          '${st.openDebt != null ? 'ديونه المفتوحة وقتها ${formatIQD(st.openDebt!)}' : 'دين ${formatIQD(st.debtOut)}'} · '
+          '${st.opsCount} عمليّة · ربح ${formatIQD(st.profit)}',
           style: AppType.micro(color: AppColors.textMid),
         ),
         trailing: onVoid == null ? null : TextButton(onPressed: onVoid, child: const Text('إلغاء')),
@@ -335,8 +337,9 @@ class EmployeeLimitsFields extends StatelessWidget {
         _row('سقف الإيرادات النقديّة', 'بلا حدّ', cashCtrl, const ValueKey('emp-limit-cash')),
         _row('ربح الموظف لكلّ عمليّة', 'لا ربح', profitCtrl, const ValueKey('emp-limit-profit')),
         Text(
-          'بعد سقف الديون لا بيع ولا تفعيل بالآجل ولا إضافة دين، وبعد سقف الإيرادات لا تفعيل نقديّ ولا بيعٌ نقداً ولا استلام دين '
-          'حتى تسوّي حسابه. الربح لكلّ عمليّةٍ كاملة (تفعيلٌ نقديّ كامل، بيعٌ نقداً، تسديدٌ يصفّر الدين). فارغ = بلا حدّ.',
+          'سقف الديون على ديونه المفتوحة عند المشتركين (تنقص حين يسدّدون، ولا تصفّرها التسوية): بعده لا بيع ولا تفعيل بالآجل ولا إضافة دين. '
+          'وبعد سقف الإيرادات لا تفعيل نقديّ ولا بيعٌ نقداً ولا استلام دين حتى تسوّي حسابه. '
+          'الربح لكلّ عمليّةٍ كاملة (تفعيلٌ نقديّ كامل، بيعٌ نقداً، تسديدٌ يصفّر الدين). فارغ = بلا حدّ.',
           style: AppType.micro(color: AppColors.textLow),
         ),
       ],
@@ -511,7 +514,7 @@ class _EmployeeSettleSheetState extends State<EmployeeSettleSheet> {
       footer: p == null
           ? null
           : SheetFooterBar(
-              label: _submitting ? 'جاري التسوية...' : 'تأكيد التسوية — تصفير الحساب',
+              label: _submitting ? 'جاري التسوية...' : 'تأكيد التسوية — تصفير النقد',
               icon: LucideIcons.check,
               busy: _submitting,
               onPressed: _confirm,
@@ -531,7 +534,8 @@ class _EmployeeSettleSheetState extends State<EmployeeSettleSheet> {
                     _line('تسديد ديون', b('debt_payments').sum, b('debt_payments').count),
                     _line('بيع مواد نقداً', b('sales_cash').sum, b('sales_cash').count),
                     const Divider(),
-                    _line('الديون التي أنشأها', p.debtOut, 0, strong: true),
+                    _line('ديونه المفتوحة عند المشتركين (لا تُصفَّر)', p.openDebt, 0, strong: true),
+                    _line('ديونٌ أعطاها في الفترة', p.debtOut, 0),
                     _line('تفعيل بالآجل', b('credit_activations').sum, b('credit_activations').count),
                     _line('غير المدفوع من الجزئيّ', b('partial_unpaid').sum, b('partial_unpaid').count),
                     _line('ديون مضافة (ومنها بيعٌ بالآجل)', b('debts_added').sum, b('debts_added').count),
@@ -543,7 +547,7 @@ class _EmployeeSettleSheetState extends State<EmployeeSettleSheet> {
                       Text(
                         'غير مؤكَّد (لا يدخل المبلغ): ${p.holdsCount} عمليّة'
                         '${p.holdsCash > 0 ? ' · ${formatIQD(p.holdsCash)} نقداً' : ''}'
-                        '${p.holdsDebt > 0 ? ' · ${formatIQD(p.holdsDebt)} ديناً' : ''} — تُصفَّر بالتسوية.',
+                        '${p.holdsDebt > 0 ? ' · ${formatIQD(p.holdsDebt)} ديناً' : ''} — نقدها يُصفَّر بالتسوية، ودينها يبقى حتى يُحرَّر.',
                         style: AppType.micro(color: AppColors.warning),
                       ),
                     ],

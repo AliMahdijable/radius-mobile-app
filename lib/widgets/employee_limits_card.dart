@@ -108,7 +108,7 @@ class EmployeeLimitsPanel extends StatelessWidget {
           const SizedBox(height: Sp.sm),
           _CapRow(
             key: const ValueKey('emp-limits-debt'),
-            label: 'الديون',
+            label: selfView ? 'ديونك المفتوحة عند المشتركين' : 'ديونه المفتوحة عند المشتركين',
             used: s.debtUsed,
             cap: s.limits.debtCap,
             blocked: s.debtBlocked,
@@ -149,8 +149,8 @@ class EmployeeLimitsPanel extends StatelessWidget {
                 selfView
                     ? (s.cashBlocked
                         ? 'وصلت سقف الإيرادات النقديّة — سوِّ حسابك مع المدير ليُصفَّر'
-                        : 'وصلت سقف الديون — لا بيع ولا تفعيل بالآجل ولا إضافة دين')
-                    : (s.cashBlocked ? 'بلغ سقف الإيرادات النقديّة — يحتاج تسوية' : 'بلغ سقف الديون'),
+                        : 'ديونك المفتوحة بلغت السقف — لا بيع ولا تفعيل بالآجل ولا إضافة دين حتى يسدّد المشتركون')
+                    : (s.cashBlocked ? 'بلغ سقف الإيرادات النقديّة — يحتاج تسوية' : 'ديونه المفتوحة بلغت السقف — تنقص حين يسدّد المشتركون'),
                 style: AppType.micro(color: AppColors.error).copyWith(fontWeight: FontWeight.w700),
               ),
             ),

@@ -69,6 +69,9 @@ void main() {
       expect(s.limits.debtCap, 200000);
       expect(s.limits.profitPerOp, 5000);
       expect(s.cashIn, 350000);
+      expect(s.openDebt, 90000);
+      expect(s.debtUsed, 90000);
+      expect(s.openDebtApprox, isFalse);
       expect(s.cashUsed, 385000);
       expect(s.holdsCount, 1);
       expect(s.opsCount, 4);
@@ -121,6 +124,24 @@ void main() {
       expect(find.textContaining('200,000'), findsWidgets);
       expect(find.text('20,000 د.ع'), findsOneWidget);
       expect(find.textContaining('سوِّ حسابك مع المدير'), findsOneWidget);
+      // الدين = ديونه المفتوحة عند المشتركين (لا ديون الفترة)
+      expect(find.text('ديونك المفتوحة عند المشتركين'), findsOneWidget);
+      expect(find.textContaining('90,000 / 200,000'), findsOneWidget);
+    });
+
+    testWidgets('بلوغ سقف الديون المفتوحة ⇒ «حتى يسدّد المشتركون» لا «سوِّ حسابك»', (t) async {
+      await phone(t);
+      final json = _statusJson()
+        ..['open_debt'] = 200000
+        ..['debt_used'] = 200000
+        ..['debt_blocked'] = true;
+      await t.pumpWidget(app(Scaffold(
+        body: EmployeeLimitsCard(loader: () async => EmployeeLimitStatus.fromJson(json)),
+      )));
+      await t.pumpAndSettle();
+      expect(find.textContaining('ديونك المفتوحة بلغت السقف'), findsOneWidget);
+      expect(find.textContaining('حتى يسدّد المشتركون'), findsOneWidget);
+      expect(find.textContaining('سوِّ حسابك'), findsNothing);
     });
 
     testWidgets('لم يبدأ العدّ (لا حدود) ⇒ لا شيء ولا مساحة', (t) async {
@@ -228,7 +249,10 @@ void main() {
       await t.pumpAndSettle();
       expect(find.byKey(const ValueKey('emp-settle-cash')), findsOneWidget);
       expect(find.text('350,000 د.ع'), findsWidgets);
-      await t.tap(find.text('تأكيد التسوية — تصفير الحساب'));
+      // الدين للعلم ولا يُصفَّر (قرار المالك ٩ نوفمبر)
+      expect(find.text('ديونه المفتوحة عند المشتركين (لا تُصفَّر)'), findsOneWidget);
+      expect(find.textContaining('تصفير الحساب'), findsNothing);
+      await t.tap(find.text('تأكيد التسوية — تصفير النقد'));
       await settle(t, frames: 40);
       final posts = server.bodiesOf('POST', '/api/v2/employee-limits/7/settlement');
       expect(posts, hasLength(1));
@@ -253,7 +277,7 @@ void main() {
       await t.pumpAndSettle();
       await t.tap(find.text('سوِّ'));
       await t.pumpAndSettle();
-      await t.tap(find.text('تأكيد التسوية — تصفير الحساب'));
+      await t.tap(find.text('تأكيد التسوية — تصفير النقد'));
       await settle(t, frames: 40);
       expect(server.paths.where((p) => p == '/api/v2/employee-limits/7/settlement/preview').length, 2);
       expect(find.byKey(const ValueKey('emp-settle-cash')), findsOneWidget);
@@ -281,9 +305,11 @@ Map<String, dynamic> _statusJson() => {
       'period': {'start_at': '2026-11-09T05:00:00.000Z', 'head_id': 3},
       'cash_in': 350000,
       'debt_out': 120000,
+      'open_debt': 90000,
+      'open_debt_approx': false,
       'holds': {'count': 1, 'cash': 35000, 'debt': 0},
       'cash_used': 385000,
-      'debt_used': 120000,
+      'debt_used': 90000,
       'cash_remaining': 115000,
       'debt_remaining': 80000,
       'cash_blocked': false,
@@ -349,6 +375,8 @@ class _Server implements HttpClientAdapter {
           'period': {'start_at': '2026-11-09T05:00:00.000Z'},
           'cash_in': 350000,
           'debt_out': 120000,
+          'open_debt': 90000,
+          'settles': ['cash_in', 'ops_count', 'profit'],
           'holds': {'count': 1, 'cash': 35000, 'debt': 0},
           'ops_count': 4,
           'profit': 20000,

@@ -66,6 +66,8 @@ class EmployeeLimitStatus {
     this.periodStart,
     this.cashIn = 0,
     this.debtOut = 0,
+    this.openDebt = 0,
+    this.openDebtApprox = false,
     this.holdsCount = 0,
     this.holdsCash = 0,
     this.holdsDebt = 0,
@@ -93,12 +95,21 @@ class EmployeeLimitStatus {
   final bool started;
   final DateTime? periodStart;
   final double cashIn;
+
+  /// ديونٌ أعطاها في هذه الفترة (للعلم — لا يُقاس بها السقف).
   final double debtOut;
+
+  /// «ديونه المفتوحة عند المشتركين»: ما زالوا يدينون به من ديونٍ أعطاها منذ فُتحت له الميزة — تنقص حين يسدّد المشترك،
+  /// ولا تصفّرها التسوية (قرار المالك ٩ نوفمبر). سقف الديون يُقاس بها.
+  final double openDebt;
+
+  /// تقريبيّ (سوبرنت: من سجلّ النشاط — تسديدٌ خارج التطبيق لا يُرى فيبقى مفتوحاً).
+  final bool openDebtApprox;
   final int holdsCount;
   final double holdsCash;
   final double holdsDebt;
 
-  /// المعدود في السقف (السجلّ + المحجوز غير المؤكَّد).
+  /// المعدود في السقف (السجلّ + المحجوز غير المؤكَّد؛ والدين = ديونه المفتوحة + محجوزها).
   final double cashUsed;
   final double debtUsed;
   final double? cashRemaining;
@@ -137,6 +148,8 @@ class EmployeeLimitStatus {
       periodStart: period is Map ? _d(period['start_at']) : null,
       cashIn: EmployeeLimits._n(raw['cash_in']) ?? 0,
       debtOut: EmployeeLimits._n(raw['debt_out']) ?? 0,
+      openDebt: EmployeeLimits._n(raw['open_debt']) ?? EmployeeLimits._n(raw['debt_used']) ?? 0,
+      openDebtApprox: raw['open_debt_approx'] == true,
       holdsCount: holds is Map ? int.tryParse('${holds['count'] ?? 0}') ?? 0 : 0,
       holdsCash: holds is Map ? EmployeeLimits._n(holds['cash']) ?? 0 : 0,
       holdsDebt: holds is Map ? EmployeeLimits._n(holds['debt']) ?? 0 : 0,
@@ -211,6 +224,7 @@ class EmployeeSettlement {
     this.cutAt,
     this.cashIn = 0,
     this.debtOut = 0,
+    this.openDebt,
     this.opsCount = 0,
     this.profit = 0,
     this.holdsCount = 0,
@@ -224,6 +238,9 @@ class EmployeeSettlement {
   final DateTime? cutAt;
   final double cashIn;
   final double debtOut;
+
+  /// ديونه المفتوحة وقت التسوية (لقطةٌ للعلم — التسوية لا تصفّرها)؛ null في تسوياتٍ قبل ٩ نوفمبر.
+  final double? openDebt;
   final int opsCount;
   final double profit;
   final int holdsCount;
@@ -245,6 +262,7 @@ class EmployeeSettlement {
       cutAt: EmployeeLimitStatus._d(raw['cut_at']),
       cashIn: EmployeeLimits._n(raw['cash_in']) ?? 0,
       debtOut: EmployeeLimits._n(raw['debt_out']) ?? 0,
+      openDebt: EmployeeLimits._n(raw['open_debt']),
       opsCount: int.tryParse('${raw['ops_count'] ?? 0}') ?? 0,
       profit: EmployeeLimits._n(raw['profit']) ?? 0,
       holdsCount: holds is Map ? int.tryParse('${holds['count'] ?? 0}') ?? 0 : 0,
@@ -265,12 +283,16 @@ class SettlementPreview {
     required this.holdsCount,
     required this.holdsCash,
     required this.holdsDebt,
+    this.openDebt = 0,
     this.periodStart,
     this.breakdown = const {},
   });
   final Map<String, dynamic> cut;
   final double cashIn;
   final double debtOut;
+
+  /// ديونه المفتوحة عند المشتركين الآن — للعلم، التسوية لا تصفّرها.
+  final double openDebt;
   final int opsCount;
   final double profit;
   final int holdsCount;
@@ -295,6 +317,7 @@ class SettlementPreview {
       holdsCount: holds is Map ? int.tryParse('${holds['count'] ?? 0}') ?? 0 : 0,
       holdsCash: holds is Map ? EmployeeLimits._n(holds['cash']) ?? 0 : 0,
       holdsDebt: holds is Map ? EmployeeLimits._n(holds['debt']) ?? 0 : 0,
+      openDebt: EmployeeLimits._n(raw['open_debt']) ?? 0,
       periodStart: period is Map ? EmployeeLimitStatus._d(period['start_at']) : null,
       breakdown: bd,
     );
