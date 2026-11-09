@@ -236,7 +236,8 @@ class _ExtendSheetState extends State<_ExtendSheet> {
         price: _method == _Method.points ? 0 : _selectedPrice,
         packageName: pkg['name']?.toString(),
       );
-      if (mounted) showPrintResult(context, printed);
+      // ورقة سبب طابعة الوصولات تُفتح فوق هذه الورقة: تُنتظر قبل pop، وإلّا أغلقها pop بدل هذه (مراجعة 179).
+      if (mounted) await showPrintResult(context, printed);
     }
     if (!mounted) return;
     // 2026-08-26: preview WA بعد نجاح التمديد.

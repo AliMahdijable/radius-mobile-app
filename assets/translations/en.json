@@ -2602,6 +2602,7 @@
     "try_again": "Try again",
     "reprint": "Print again",
     "close": "Close",
+    "failed_again": "We tried again — it didn't work this time either.",
     "issue_permission": "Allow the app to use Bluetooth (“Nearby devices”) so it can reach the printer.",
     "issue_permission_blocked": "Bluetooth permission is denied — open the app settings and allow “Nearby devices” (Bluetooth).",
     "issue_bt_unsupported": "This device has no Bluetooth.",

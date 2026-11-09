@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -23,6 +24,8 @@ import 'support/fake_receipt_printer.dart';
 ///   ٣. الإذن المرفوض والبلوتوث المطفأ ⇒ سببٌ مفهوم وزرّه.
 ///   ٤. طابعة الجهاز: «SUNMI … جاهزة · ورق ٨٠» وورقها يُعتمد؛ وبلاها سببٌ وتلميح InnerPrinter.
 ///   ٥. نتيجة طباعةٍ غير مؤكَّدة بعد التفعيل ⇒ ورقة «الطباعة غير مؤكَّدة» و«إعادة الطباعة» تطبع ثانيةً.
+///   (مراجعة 179) الآيفون: البلوتوث المرفوض ⇒ «فتح الإعدادات» بكلمات الآيفون؛ الهاتف العاديّ: «طابعة الجهاز» معطّلةٌ بسببها
+///   ولا تبقى مختارة؛ ورقة السبب: جوابها بنقرةٍ وحدها، والإعادة داخلها، وما بدأ منها يُنتظر ولو أُغلقت.
 
 class _DiskLoader extends AssetLoader {
   const _DiskLoader();
@@ -252,6 +255,99 @@ void main() {
     expect(retried, 1);
     expect(find.text('طُبع الوصل على «MPT-II» — أكّدت الطابعة'), findsOneWidget);
     // الإشعار وتشخيص الفشل (مهلته ٦ ث) ينقضيان
+    await t.pump(const Duration(seconds: 7));
+  });
+  testWidgets('٥ب إعادةٌ تفشل ثانيةً ⇒ الورقة نفسها بسببها الجديد و«أعدنا المحاولة»؛ ثمّ تُغلق بلا طباعةٍ أخرى', (t) async {
+    var retried = 0;
+    late PrintResult again;
+    again = PrintResult.failed(
+      'bt: connect',
+      printer: 'MPT-II',
+      issue: PrintIssue.connectFailed,
+      retry: () async {
+        retried++;
+        return again;
+      },
+    );
+    final r = PrintResult.failed(
+      'bt: io',
+      printer: 'MPT-II',
+      issue: PrintIssue.disconnectedMidway,
+      retry: () async {
+        retried++;
+        return again;
+      },
+    );
+    var finished = false;
+    await pumpApp(
+      t,
+      (c) => Center(
+        child: TextButton(
+          onPressed: () async {
+            await showPrintResult(c, r);
+            finished = true;
+          },
+          child: const Text('done'),
+        ),
+      ),
+    );
+    await t.tap(find.text('done'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('إعادة الطباعة'));
+    await t.pumpAndSettle();
+    expect(retried, 1);
+    expect(find.text('لم يُطبع الوصل'), findsOneWidget);
+    expect(find.textContaining('تعذّر الاتصال بالطابعة «MPT-II»'), findsOneWidget);
+    expect(find.byKey(const ValueKey('receipt-problem-again')), findsOneWidget);
+    expect(find.text('حاول مرّة ثانية'), findsOneWidget);
+    expect(finished, isFalse, reason: 'من فتحها ينتظر قرار الوكيل');
+    await t.tap(find.text('إغلاق'));
+    await t.pumpAndSettle();
+    expect(retried, 1);
+    expect(finished, isTrue);
+    await t.pump(const Duration(seconds: 7));
+  });
+
+  testWidgets('٥ج أُغلقت الورقة أثناء الإعادة ⇒ من فتحها ينتظرها ويقول نتيجتها (لا ضياع ولا إعادةٌ ثانية)', (t) async {
+    var retried = 0;
+    final gate = Completer<PrintResult>();
+    final r = PrintResult.failed(
+      'bt: io',
+      printer: 'MPT-II',
+      issue: PrintIssue.disconnectedMidway,
+      retry: () {
+        retried++;
+        return gate.future;
+      },
+    );
+    var finished = false;
+    await pumpApp(
+      t,
+      (c) => Center(
+        child: TextButton(
+          onPressed: () async {
+            await showPrintResult(c, r);
+            finished = true;
+          },
+          child: const Text('done'),
+        ),
+      ),
+    );
+    await t.tap(find.text('done'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('إعادة الطباعة'));
+    await t.pump();
+    expect(retried, 1);
+    // يُغلقها الوكيل والإعادة جارية
+    await t.tap(find.text('إغلاق'));
+    await t.pumpAndSettle();
+    expect(find.text('الطباعة غير مؤكَّدة'), findsNothing);
+    expect(finished, isFalse, reason: 'الإعادة الجارية تُنتظر');
+    gate.complete(const PrintResult.printed(printer: 'MPT-II', ack: PrintAck.confirmed));
+    await t.pumpAndSettle();
+    expect(finished, isTrue);
+    expect(find.text('طُبع الوصل على «MPT-II» — أكّدت الطابعة'), findsOneWidget);
+    expect(retried, 1);
     await t.pump(const Duration(seconds: 7));
   });
 }

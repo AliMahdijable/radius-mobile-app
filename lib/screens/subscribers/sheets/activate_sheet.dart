@@ -659,7 +659,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
               ? int.tryParse('${_elSelectedPkg?['id'] ?? ''}')
               : _profileId,
         );
-        if (mounted) showPrintResult(context, printed);
+        // ورقة سبب طابعة الوصولات تُفتح فوق هذه الورقة: تُنتظر قبل pop، وإلّا أغلقها pop بدل هذه (مراجعة 179).
+        if (mounted) await showPrintResult(context, printed);
       }
       if (!mounted) return;
       if (manualMode && result.waPreview != null) {
@@ -730,7 +731,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         packageName: _profileName,
         packageId: _profileId,
       );
-      if (mounted) showPrintResult(context, printed);
+      // ورقة سبب طابعة الوصولات تُفتح فوق هذه الورقة: تُنتظر قبل pop، وإلّا أغلقها pop بدل هذه (مراجعة 179).
+      if (mounted) await showPrintResult(context, printed);
     }
     if (!mounted) return;
     // 2026-08-26: preview WA بعد نجاح التفعيل.
@@ -1458,7 +1460,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         partialAmount: _partialAmount,
         packageName: _elSelectedPkg?['name']?.toString() ?? _profileName,
       );
-      if (mounted) showPrintResult(context, printed);
+      // ورقة سبب طابعة الوصولات تُفتح فوق هذه الورقة: تُنتظر قبل pop، وإلّا أغلقها pop بدل هذه (مراجعة 179).
+      if (mounted) await showPrintResult(context, printed);
     }
     if (!mounted || unsure) return;
     Navigator.of(context).pop(true);
@@ -1728,7 +1731,8 @@ class _ActivateSheetState extends State<_ActivateSheet> {
         partialAmount: _kitCust ? null : _partialAmount,
         packageName: _elSelectedPkg?['name']?.toString() ?? _profileName,
       );
-      if (mounted) showPrintResult(context, printed);
+      // ورقة سبب طابعة الوصولات تُفتح فوق هذه الورقة: تُنتظر قبل pop، وإلّا أغلقها pop بدل هذه (مراجعة 179).
+      if (mounted) await showPrintResult(context, printed);
     }
     if (!mounted) return;
     if (manualMode && result.waPreview != null) {

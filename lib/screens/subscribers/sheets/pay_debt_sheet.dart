@@ -232,7 +232,8 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
         sub: widget.sub,
         paid: _effectiveAmount,
       );
-      if (mounted) showPrintResult(context, printed);
+      // ورقة سبب طابعة الوصولات تُفتح فوق هذه الورقة: تُنتظر قبل pop، وإلّا أغلقها pop بدل هذه (مراجعة 179).
+      if (mounted) await showPrintResult(context, printed);
     }
     if (!mounted) return;
     // 2026-08-26: preview WA بعد النجاح.
