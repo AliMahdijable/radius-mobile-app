@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -14,10 +15,13 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../desktop/desk_widgets.dart';
 import '../subscribers/subscriber_detail_screen.dart';
+import 'ticket_image.dart';
 import 'ticket_widgets.dart';
 
 /// محادثة تذكرة (المالك ٩ نوفمبر): رسائل المشترك والوكيل وأحداث الحالة، والردّ، وأزرار الحالة (قيد المعالجة · تمّ الحلّ · إغلاق ·
 /// إعادة فتح). الموظّف يردّ ويغيّر الحالة بـ«التذاكر — الردّ» وحدها؛ «كل الشركات» لشركةٍ غير المفتوحة للعرض.
+/// الصور (٩ نوفمبر): زرّ إرفاقٍ بجانب الردّ (الكاميرا أو المعرض، والحاسبة ملفٌّ من الجهاز) يضغطها (ticket_image.dart) ويعرضها
+/// بزرّ إزالة قبل الإرسال، والنصّ اختياريٌّ معها؛ وصور المحادثة مصغّرةٌ في فقاعاتها وبالنقر ملء الشاشة.
 class TicketThreadScreen extends StatefulWidget {
   const TicketThreadScreen({super.key, required this.ticketId, this.initial, this.viewOnly = false});
   final int ticketId;
@@ -31,6 +35,14 @@ class TicketThreadScreen extends StatefulWidget {
   /// قراءةٌ دوريّة ما دامت المحادثة مفتوحة (احتياطاً لإشعارٍ لم يصل). null في الاختبارات.
   @visibleForTesting
   static Duration? pollEvery = const Duration(seconds: 30);
+
+  /// اختيار الصورة وضغطها — يُبدَّل في الاختبار.
+  @visibleForTesting
+  static TicketImagePicker pickImage = pickTicketImage;
+
+  /// جلب صور الفقاعات — يُبدَّل في الاختبار (null = الخادم).
+  @visibleForTesting
+  static TicketImageLoader? imageLoader;
 
   @override
   State<TicketThreadScreen> createState() => _TicketThreadScreenState();
@@ -47,6 +59,10 @@ class _TicketThreadScreenState extends State<TicketThreadScreen> {
   String? _busy;
   Timer? _poll;
   final _ctl = TextEditingController();
+
+  /// الصورة المختارة (مضغوطةً) قبل الإرسال، و«تجهيزها» أثناء الضغط.
+  Uint8List? _attach;
+  bool _preparing = false;
 
   bool get _canWrite => !widget.viewOnly && Perms.has('tickets.view') && Perms.has('tickets.reply');
 
@@ -93,24 +109,50 @@ class _TicketThreadScreenState extends State<TicketThreadScreen> {
 
   Future<void> _send() async {
     final text = _ctl.text.trim();
-    if (text.isEmpty || _sending) return;
+    final image = _attach;
+    if ((text.isEmpty && image == null) || _sending || _preparing) return;
     if (text.characters.length > 2000) {
       _snack('الرسالة أطول من ٢٠٠٠ حرف');
       return;
     }
     setState(() => _sending = true);
-    final r = await TicketsApi.reply(widget.ticketId, text);
+    final r = await TicketsApi.reply(widget.ticketId, text, image: image);
     if (!mounted) return;
     setState(() {
       _sending = false;
       if (r.ticket != null) _ticket = r.ticket;
       if (r.ok) {
         _ctl.clear();
+        _attach = null;
         final m = r.posted;
         if (m != null && !_messages.any((x) => x.id == m.id)) _messages = [..._messages, m];
       }
     });
     if (!r.ok) _snack(r.message ?? 'تعذّر الإرسال');
+  }
+
+  /// إرفاق صورة: المصدر (الكاميرا/المعرض) ثمّ الاختيار والضغط — الإلغاء لا يفعل شيئاً.
+  Future<void> _pickImage() async {
+    if (_sending || _preparing) return;
+    final camera = await askTicketImageSource(context);
+    if (camera == null || !mounted) return;
+    setState(() => _preparing = true);
+    try {
+      final b = await TicketThreadScreen.pickImage(camera: camera);
+      if (!mounted) return;
+      setState(() {
+        _preparing = false;
+        if (b != null) _attach = b;
+      });
+    } on TicketImageError catch (e) {
+      if (!mounted) return;
+      setState(() => _preparing = false);
+      _snack(e.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _preparing = false);
+      _snack(const TicketImageError('decode').message);
+    }
   }
 
   Future<void> _act(String action) async {
@@ -202,11 +244,12 @@ class _TicketThreadScreenState extends State<TicketThreadScreen> {
                     if (_failed && i == 0) {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: Sp.sm),
-                        child: Text('تعذّر تحديث المحادثة — اسحب للأسفل', textAlign: TextAlign.center, style: AppType.micro(color: AppColors.textLow)),
+                        child: Text('تعذّر تحديث المحادثة — اسحب للأسفل',
+                            textAlign: TextAlign.center, style: AppType.micro(color: AppColors.textLow)),
                       );
                     }
                     final m = _messages[_messages.length - 1 - (i - (_failed ? 1 : 0))];
-                    return m.isEvent ? _EventRow(message: m) : _Bubble(message: m);
+                    return m.isEvent ? _EventRow(message: m) : _Bubble(message: m, ticketId: widget.ticketId);
                   },
                 ),
         ),
@@ -298,42 +341,57 @@ class _TicketThreadScreenState extends State<TicketThreadScreen> {
         ),
       );
     }
+    final attach = _attach;
     return SafeArea(
       top: false,
       child: Container(
         color: AppColors.surface,
         padding: const EdgeInsets.fromLTRB(Sp.md, Sp.sm, Sp.sm, Sp.sm),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Expanded(
-            child: TextField(
-              key: const ValueKey('ticket-composer'),
-              controller: _ctl,
-              minLines: 1,
-              maxLines: 5,
-              maxLength: 2000,
-              textInputAction: TextInputAction.newline,
-              keyboardType: TextInputType.multiline,
-              style: AppType.body(color: AppColors.textHi),
-              decoration: InputDecoration(
-                hintText: 'اكتب ردّك للمشترك…',
-                counterText: '',
-                isDense: true,
-                filled: true,
-                fillColor: AppColors.surfaceSunken,
-                contentPadding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm + 2),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(R.lg), borderSide: BorderSide.none),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (attach != null) ...[
+            TicketAttachPreview(bytes: attach, onRemove: _sending ? null : () => setState(() => _attach = null)),
+            const SizedBox(height: Sp.xs),
+          ],
+          Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            IconButton(
+              key: const ValueKey('ticket-attach'),
+              tooltip: 'إرفاق صورة',
+              onPressed: _sending || _preparing ? null : _pickImage,
+              icon: _preparing
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  : Icon(LucideIcons.imagePlus, color: AppColors.textMid),
+            ),
+            Expanded(
+              child: TextField(
+                key: const ValueKey('ticket-composer'),
+                controller: _ctl,
+                minLines: 1,
+                maxLines: 5,
+                maxLength: 2000,
+                textInputAction: TextInputAction.newline,
+                keyboardType: TextInputType.multiline,
+                style: AppType.body(color: AppColors.textHi),
+                decoration: InputDecoration(
+                  hintText: attach == null ? 'اكتب ردّك للمشترك…' : 'أضف نصّاً مع الصورة (اختياريّ)…',
+                  counterText: '',
+                  isDense: true,
+                  filled: true,
+                  fillColor: AppColors.surfaceSunken,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: Sp.sm + 2),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(R.lg), borderSide: BorderSide.none),
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: Sp.xs),
-          IconButton(
-            key: const ValueKey('ticket-send'),
-            tooltip: 'إرسال',
-            onPressed: _sending ? null : _send,
-            icon: _sending
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                : Icon(Icons.send_rounded, color: AppColors.brand),
-          ),
+            const SizedBox(width: Sp.xs),
+            IconButton(
+              key: const ValueKey('ticket-send'),
+              tooltip: 'إرسال',
+              onPressed: _sending || _preparing ? null : _send,
+              icon: _sending
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  : Icon(Icons.send_rounded, color: AppColors.brand),
+            ),
+          ]),
         ]),
       ),
     );
@@ -359,10 +417,11 @@ class _TicketThreadScreenState extends State<TicketThreadScreen> {
       );
 }
 
-/// فقاعة رسالة: المشترك في جهة البداية، والوكيل (المدير/الموظّف باسمه) في الجهة الأخرى بلون العلامة.
+/// فقاعة رسالة: المشترك في جهة البداية، والوكيل (المدير/الموظّف باسمه) في الجهة الأخرى بلون العلامة؛ وصورتها فوق نصّها.
 class _Bubble extends StatelessWidget {
-  const _Bubble({required this.message});
+  const _Bubble({required this.message, required this.ticketId});
   final TicketMessage message;
+  final int ticketId;
 
   @override
   Widget build(BuildContext context) {
@@ -383,7 +442,20 @@ class _Bubble extends StatelessWidget {
             border: Border.all(color: mine ? AppColors.brandSoftBorder : AppColors.border),
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            SelectableText(m.body ?? '', style: AppType.body(color: AppColors.textHi).copyWith(height: 1.5)),
+            if (m.image != null) ...[
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 260, maxHeight: 320),
+                child: TicketImageThumb(
+                  ticketId: ticketId,
+                  messageId: m.id,
+                  image: m.image!,
+                  loader: TicketThreadScreen.imageLoader,
+                ),
+              ),
+              if (m.hasText) const SizedBox(height: Sp.xs),
+            ],
+            if (m.hasText || m.image == null)
+              SelectableText(m.body ?? '', style: AppType.body(color: AppColors.textHi).copyWith(height: 1.5)),
             if (meta.isNotEmpty) ...[
               const SizedBox(height: 2),
               Text(meta, style: AppType.micro(color: AppColors.textLow)),
