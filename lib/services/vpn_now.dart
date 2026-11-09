@@ -667,6 +667,9 @@ class VpnNow {
 
   static VpnDeviceResult? deviceFor(int id) => _fresh(_devAt) ? _devices[id] : null;
 
+  /// متى آخر فحصٍ للأجهزة عبر الـVPN (null: لا فحص حديث) — عمر «من فحص الخادم» بالفحص الشامل (٩ نوفمبر).
+  static DateTime? get devicesAt => _fresh(_devAt) ? _devAt : null;
+
   /// قراءات المشتركين من آخر فحصٍ عبر الـVPN (باليوزر صغيراً) — فارغة إن قدمت (٣٠ د).
   static Map<String, VpnSubReading> get readings => _fresh(_readAt) ? Map.unmodifiable(_readings) : const {};
 

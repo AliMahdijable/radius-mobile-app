@@ -8,6 +8,7 @@ import 'package:rad_mysvcs/models/network_device.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/screens/network_devices/check/devices_check_screen.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
+import 'package:rad_mysvcs/services/device_stats_cache.dart';
 import 'package:rad_mysvcs/services/device_sweep_coordinator.dart';
 import 'package:rad_mysvcs/services/devices_check.dart';
 import 'package:rad_mysvcs/services/devices_check_runner.dart';
@@ -216,6 +217,23 @@ void main() {
     expect(find.text('فُحصت 6 أجهزة'), findsOneWidget);
     await see(t, find.byKey(const ValueKey('check-card-6')));
     expect(find.descendant(of: find.byKey(const ValueKey('check-card-6')), matching: find.text('يقرأ…')), findsNothing);
+    await t.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('٩ نوفمبر: من آخر قراءة ⇒ الحال بعمرها «… · قبل لحظات» — لا يُقدَّم طازجاً', (t) async {
+    DeviceStatsCache.instance.clear();
+    addTearDown(DeviceStatsCache.instance.clear);
+    DeviceStatsCache.instance.putVitals(
+        6, const [], const DeviceDetail(glance: DeviceGlance(cpu: 8, uptimeSec: 86400 * 2)));
+    DevicesCheckRunner.debugFetch = (d) => Future<ProbeResult>.error(const SocketException('Connection timed out'));
+    await pumpSim(t, const SimVariant(390, dark: false), settle: false,
+        home: (_) => DevicesCheckScreen(devices: [devices.last], viaVpn: false));
+    // فقدان الحزم ٣٣٪ من بنك هذا الفحص ⇒ «ملاحظات» — والعمر بجانبها
+    for (var i = 0; i < 40 && find.text('ملاحظات · قبل لحظات').evaluate().isEmpty; i++) {
+      await t.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('ملاحظات · قبل لحظات'), findsOneWidget);
+    expect(find.textContaining('آخر قراءة؛ الجديدة:'), findsOneWidget);
     await t.pumpWidget(const SizedBox());
   });
 }

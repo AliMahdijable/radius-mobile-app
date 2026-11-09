@@ -182,6 +182,8 @@ class DeviceCheckReport {
     this.lightsWanted,
     this.memo,
     this.pending = false,
+    this.staleAt,
+    this.staleFrom,
   });
 
   final NetworkDevice device;
@@ -214,6 +216,14 @@ class DeviceCheckReport {
 
   /// سطرٌ مؤقّت: الجهاز تجاوز المهلة الأولى وقراءته جارية (٩ نوفمبر) — يحلّ محلّه تقريره حين تصل أو عند السقف.
   final bool pending;
+
+  /// التقرير من **آخر قراءةٍ** لا من هذا الفحص (٩ نوفمبر — الجديدة لم تكتمل): لحظتها ومصدرها («آخر قراءة» · «فحص الخادم»).
+  /// يُعرض عمرها بجانب الحال دائماً — لا يُقدَّم طازجاً.
+  final DateTime? staleAt;
+  final String? staleFrom;
+
+  /// «قبل 3 د» — عمر [staleAt].
+  String? get staleAge => staleAt == null ? null : DevicesCheck.ago(staleAt!, at);
 
   int get subsWeak => subs.where((s) => s.weak).length;
   int get subsLowCcq => subs.where((s) => s.lowCcq).length;
@@ -248,7 +258,7 @@ class DeviceCheckReport {
 
   /// تقرير الجهاز نصّاً (للنسخ/الإرسال لفنّي).
   String toText() {
-    final b = StringBuffer('${device.name} ($roleLabel) — $stateLabel');
+    final b = StringBuffer('${device.name} ($roleLabel) — $stateLabel${staleAt != null ? ' (${staleFrom ?? 'آخر قراءة'} $staleAge)' : ''}');
     final v = vitals;
     if (v.isNotEmpty) b.write('\n${v.map((e) => '${e.k} ${e.v}').join(' · ')}');
     for (final f in findings) {
@@ -337,6 +347,12 @@ class DevicesCheck {
     return best == null || tie ? null : (user: best, approx: true);
   }
 
+  /// «قبل لحظات» · «قبل 3 د» — عمر قراءةٍ سابقة.
+  static String ago(DateTime then, DateTime now) {
+    final m = now.difference(then).inMinutes;
+    return m < 1 ? 'قبل لحظات' : 'قبل $m د';
+  }
+
   static String fmtMbps(int mbps) => mbps >= 1000 && mbps % 1000 == 0 ? '${mbps ~/ 1000}G' : (mbps >= 1000 ? '${mbps / 1000}G' : '${mbps}M');
 
   static String subLine(CheckSub s) => [
@@ -381,11 +397,16 @@ class DevicesCheck {
     DateTime? now,
     String? readNote,
     bool pending = false,
+    DateTime? staleAt,
+    String? staleFrom,
   }) {
     ({String user, bool approx})? who(String? mac) => matchMac(mac, macUsers);
     final at = now ?? DateTime.now();
     final g = detail?.glance;
     final role = roleOf(d, g);
+    // آخر قراءةٍ لا هذا الفحص (٩ نوفمبر): لا مقارنة منافذ ولا «ما عليه أحد الآن» ولا لقطة — أرقامها بعمرها وحدها
+    final stale = staleAt != null;
+    final countsOnly = portsCountsOnly || stale;
 
     if (alive == false) {
       final since = d.lastStatus == 'offline' ? NetworkDeviceLabels.since(d.statusSince, now: at) : null;
@@ -471,8 +492,8 @@ class DevicesCheck {
     var subsKnown = false;
     if (role == CheckRole.sector) {
       // ٩ نوفمبر: الفراغ «ما عليه أحد» حين قُرئ جدوله فعلاً وحده — لا لأنّ الفحص من شبكتك: جدول تسجيلٍ انتهت مهلته كان يُعدّ
-      // فارغاً فيقول «ما عليه أحد الآن — كانوا N».
-      subsKnown = detail.peers.isNotEmpty || g.peersKnown;
+      // فارغاً فيقول «ما عليه أحد الآن — كانوا N». وقراءةٌ سابقة لا تقول «الآن».
+      subsKnown = detail.peers.isNotEmpty || (g.peersKnown && !stale);
       subs = [
         for (final p in detail.peers)
           CheckSub(
@@ -551,7 +572,7 @@ class DevicesCheck {
     final phys = detail.ports.where((p) => p.physical && !_emptySfpCage(p, prev)).toList();
     final ports = <CheckPort>[];
     final memoPorts = <String, PortMemo>{};
-    if (!portsCountsOnly) {
+    if (!countsOnly) {
       for (final p in phys) {
         final notes = <(CheckLevel, String)>[];
         final mb = mbpsOf(p.linkSpeed);
@@ -648,10 +669,15 @@ class DevicesCheck {
       onusTotal: g.onusTotal,
       lightsWanted: role == CheckRole.olt ? detail.onuLightsWanted : null,
       pending: pending,
-      memo: CheckMemo(
-        ports: portsCountsOnly ? (prev?.ports ?? const {}) : memoPorts,
-        peers: role == CheckRole.sector && subsKnown ? subs.length : prev?.peers,
-      ),
+      staleAt: staleAt,
+      staleFrom: staleFrom,
+      // قراءةٌ سابقة لا تكتب اللقطة — المقارنة التالية بما قُرئ فعلاً
+      memo: stale
+          ? prev
+          : CheckMemo(
+              ports: countsOnly ? (prev?.ports ?? const {}) : memoPorts,
+              peers: role == CheckRole.sector && subsKnown ? subs.length : prev?.peers,
+            ),
     );
   }
 

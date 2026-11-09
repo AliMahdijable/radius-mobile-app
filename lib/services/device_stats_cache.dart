@@ -96,6 +96,15 @@ class DeviceStatsCache {
     return r is T ? r : null;
   }
 
+  /// الحمولة الخام ولحظتها إن كانت أحدث من [maxAge] (٩ نوفمبر — «آخر قراءة» للفحص الشامل حين لا تكتمل قراءته).
+  /// ⚠️ [detailed] true قد تحمل لحظةً جدّدتها قراءةٌ خفيفة بعدها ([putRaw]) — أرقامها أقدم من لحظتها.
+  ({Object raw, DateTime at, bool detailed})? rawOf(int deviceId, Duration maxAge) {
+    final e = _byId[deviceId];
+    if (e == null || e.raw == null || e.rawAt == null) return null;
+    if (DateTime.now().difference(e.rawAt!) > maxAge) return null;
+    return (raw: e.raw!, at: e.rawAt!, detailed: e.detailed);
+  }
+
   /// عمر الحمولة المحفوظة — لعرض «آخر قراءة قبل…».
   Duration? ageOf(int deviceId) {
     final at = _byId[deviceId]?.rawAt;

@@ -18,7 +18,9 @@ import 'package:rad_mysvcs/api/vsol_olt_api.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
 import 'package:rad_mysvcs/screens/network_devices/device_vitals.dart';
 import 'package:rad_mysvcs/services/devices_check.dart';
+import 'package:rad_mysvcs/services/device_stats_cache.dart';
 import 'package:rad_mysvcs/services/devices_check_runner.dart';
+import 'package:rad_mysvcs/services/vpn_now.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 NetworkDevice dev(int id, {String type = 'router', String brand = 'mikrotik', String status = 'online', String name = 'جهاز'}) =>
@@ -717,6 +719,88 @@ void main() {
       expect(texts(r).any((t) => t.startsWith('قراءةٌ جزئيّة — بطيء — لم تكتمل قراءته خلال')), isTrue);
       expect(r.state, CheckState.unread);
       run.dispose();
+    });
+  });
+
+  group('٩ نوفمبر — آخر قراءةٍ ≤ ٥ د حين لا تكتمل الجديدة: بعمرها، لا تُقدَّم طازجةً ولا تكتب اللقطة', () {
+    setUp(() {
+      DeviceStatsCache.instance.clear();
+      DevicesCheckRunner.debugLimits = () async => const CheckLimits();
+      DevicesCheckRunner.debugSubscribers = () async => const [];
+      DevicesCheckRunner.debugProbe = (d) async => (status: 'online', responseMs: 4, packetLoss: 0.0, serviceOk: true);
+      DevicesCheckRunner.debugTimes = (soft: const Duration(milliseconds: 80), hard: const Duration(milliseconds: 250));
+    });
+    tearDown(() {
+      DeviceStatsCache.instance.clear();
+      DevicesCheckRunner.debugLimits = null;
+      DevicesCheckRunner.debugSubscribers = null;
+      DevicesCheckRunner.debugProbe = null;
+      DevicesCheckRunner.debugFetch = null;
+      DevicesCheckRunner.debugTimes = null;
+      VpnNow.reset();
+    });
+
+    const shown = DeviceDetail(
+        glance: DeviceGlance(cpu: 33, temp: 41, uptimeSec: 86400 * 6),
+        ports: [PortTraffic(name: 'ether1', up: false), PortTraffic(name: 'ether2', up: true, linkSpeed: '1Gbps')]);
+
+    test('🚨 بطاقةٌ تعرض أرقاماً ⇒ الفحص يعرضها بعمرها مؤقّتاً وعند السقف — والمنفذ لا يُقارَن ولا تُكتب اللقطة', () async {
+      SharedPreferences.setMockInitialValues({});
+      await DevicesCheckMemoStore.save({
+        9: const CheckMemo(ports: {'ether1': PortMemo(up: true, mbps: 1000)})
+      });
+      DeviceStatsCache.instance.putVitals(9, const [], shown);
+      DevicesCheckRunner.debugFetch = (d) => Completer<ProbeResult>().future;
+      final run = DevicesCheckRunner([dev(9, type: 'switch')], viaVpn: false);
+      DeviceCheckReport? interim;
+      run.addListener(() {
+        final r = run.reports[9];
+        if (r != null && r.pending) interim ??= r;
+      });
+      await run.run();
+      expect(interim!.cpu, 33, reason: 'الأرقام من آخر قراءة منذ المهلة الأولى');
+      expect(interim!.staleAt, isNotNull);
+      final r = run.reports[9]!;
+      expect(r.cpu, 33);
+      expect(r.staleAge, 'قبل لحظات');
+      expect(texts(r).first, startsWith('آخر قراءة؛ الجديدة: بطيء — لم تكتمل قراءته خلال'));
+      expect(texts(r).where((t) => t.contains('طفى')), isEmpty, reason: 'لا مقارنة منافذ من قراءةٍ سابقة');
+      expect(r.toText(), contains('(آخر قراءة قبل لحظات)'), reason: 'النسخ يحمل عمرها');
+      expect((await DevicesCheckMemoStore.load())[9]!.ports['ether1']!.up, isTrue, reason: 'اللقطة لا تُكتب من قراءةٍ سابقة');
+      run.dispose();
+    });
+
+    test('رفض الدخول يُقال وحده — لا أرقامٌ قديمة تغطّيه؛ وبلا قراءةٍ محفوظة «لم يُقرأ» بسببه', () async {
+      SharedPreferences.setMockInitialValues({});
+      DeviceStatsCache.instance.putVitals(10, const [], shown);
+      DevicesCheckRunner.debugFetch = (d) => Future<ProbeResult>.error(d.id == 10
+          ? MikrotikException('invalid user name or password (6)', code: 'auth')
+          : const SocketException('Connection refused'));
+      final run = DevicesCheckRunner([dev(10), dev(11)], viaVpn: false);
+      await run.run();
+      expect(run.reports[10]!.staleAt, isNull);
+      expect(run.reports[10]!.cpu, isNull);
+      expect(texts(run.reports[10]!), ['يردّ، لكن رُفض الدخول — تأكّد من اسم المستخدم والرمز']);
+      expect(run.reports[11]!.state, CheckState.unread);
+      expect(run.reports[11]!.staleAt, isNull);
+      run.dispose();
+    });
+
+    test('أقدم من ٥ د أو قراءةٌ بلا أرقام لا تُستعمل؛ وعبر الـVPN ما قرأه الخادم «من فحص الخادم»', () async {
+      final r = DevicesCheckRunner([dev(12)], viaVpn: true);
+      expect(r.lastReadingFor(dev(12)), isNull);
+      DeviceStatsCache.instance.putVitals(12, const [], const DeviceDetail());
+      expect(r.lastReadingFor(dev(12)), isNull, reason: 'لا رقم فيها');
+      VpnNow.debugApply(
+          VpnNowKind.devices,
+          const VpnNowResult(ok: true, message: 'تم', devices: [
+            VpnDeviceResult(id: 12, alive: true, vitals: {'kind': 'ros', 'cpu': 17, 'up': 3600})
+          ]));
+      final last = r.lastReadingFor(dev(12))!;
+      expect(last.from, 'آخر قراءة من فحص الخادم');
+      expect(last.detail.glance.cpu, 17);
+      expect(DevicesCheck.ago(DateTime(2026, 11, 9, 10), DateTime(2026, 11, 9, 10, 4)), 'قبل 4 د');
+      r.dispose();
     });
   });
 }

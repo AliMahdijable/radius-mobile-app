@@ -12,15 +12,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/agent_alerts_api.dart';
 import '../api/big_subscribers_api.dart';
+import '../api/mikrotik_api.dart' show MikrotikStats;
 import '../api/mikrotik_binary_api.dart' show MikrotikBinaryException;
 import '../api/snmp_client.dart' show SnmpException, SnmpTimeoutException;
 import '../api/subscribers_api.dart';
+import '../api/vsol_olt_api.dart' show VsolOltStats;
 import '../core/net/device_net.dart';
 import '../models/subscriber.dart';
 import '../api/network_devices_api.dart';
 import '../models/network_device.dart';
 import '../screens/network_devices/device_vitals.dart';
 import 'connection_alerts.dart';
+import 'device_stats_cache.dart';
 import 'devices_check.dart';
 import 'vpn_now.dart';
 
@@ -310,9 +313,28 @@ class DevicesCheckRunner extends ChangeNotifier {
           prev: prev,
           macUsers: macs,
         );
-    // ما يُعرض حين لم تكتمل القراءة: الطبقة الأولى إن وصلت (حيويّاته ومنافذه — مقروءةٌ الآن)، وإلّا «لم يُقرأ» بسببه
+    // ما يُعرض حين لم تكتمل القراءة: الطبقة الأولى إن وصلت (حيويّاته ومنافذه — مقروءةٌ الآن)، وإلّا آخر قراءةٍ ≤ ٥ د بعمرها
+    // (ما لم يكن السبب رفضاً يُصلَح بالإعداد)، وإلّا «لم يُقرأ» بسببه
     DeviceCheckReport short(String reason, {bool pending = false}) {
       final p = partial;
+      final last = p == null && lastReadingHelps(reason) ? _lastReading(d) : null;
+      if (last != null) {
+        return DevicesCheck.evaluate(
+          d: d,
+          alive: true,
+          ms: probe?.responseMs,
+          loss: probe?.packetLoss,
+          detail: last.detail,
+          raw: last.raw,
+          limits: limits,
+          prev: prev,
+          macUsers: macs,
+          readNote: '${last.from}؛ الجديدة: $reason',
+          pending: pending,
+          staleAt: last.at,
+          staleFrom: last.from,
+        );
+      }
       if (p != null) {
         return DevicesCheck.evaluate(
           d: d,
@@ -369,9 +391,63 @@ class DevicesCheckRunner extends ChangeNotifier {
     }));
   }
 
+  // ── آخر قراءة (٩ نوفمبر) ──────────────────────────────────────────
+
+  /// آخر قراءةٍ لهذا الجهاز عمرها ≤ ٥ دقائق — حين لا تكتمل قراءة الفحص («كلّما عرضت البطاقة أرقاماً عرضها الفحص»): المعروضة
+  /// (البطاقة الكبيرة، البرج، شاشات الألياف)، ثمّ الخفيفة الخام (التسخين — ميكروتك والأولت)، ثمّ عبر الـVPN ما قرأه الخادم.
+  /// تُعرض بعمرها ولا تكتب اللقطة ([DevicesCheck.evaluate] staleAt).
+  ({DeviceDetail detail, Object? raw, DateTime at, String from})? _lastReading(NetworkDevice d) {
+    const maxAge = Duration(minutes: 5);
+    final shown = DeviceStatsCache.instance.vitalsOf(d.id, maxAge);
+    final det = shown?.detail;
+    if (shown != null && det is DeviceDetail && _hasNumbers(det)) return (detail: det, raw: null, at: shown.at, from: 'آخر قراءة');
+    // الخام الكاملة قد تحمل لحظةً جدّدتها قراءةٌ خفيفة ([DeviceStatsCache.rawOf]) — فالخفيفة وحدها (أرقامها بلحظتها)
+    final raw = DeviceStatsCache.instance.rawOf(d.id, maxAge);
+    if (raw != null && !raw.detailed) {
+      final r = raw.raw;
+      final p = r is MikrotikStats
+          ? DeviceVitals.mikrotikResult(d, r, null, detailed: false)
+          : (r is VsolOltStats ? oltProbeResult(r) : null);
+      if (p != null && _hasNumbers(p.detail)) return (detail: p.detail, raw: r, at: raw.at, from: 'آخر قراءة');
+    }
+    if (viaVpn) {
+      final at = VpnNow.devicesAt;
+      final v = VpnNow.deviceFor(d.id)?.vitals;
+      if (v != null && at != null && DateTime.now().difference(at) <= maxAge) {
+        final det = DeviceVitals.fromVpn(v, at: at).detail;
+        if (det != null && _hasNumbers(det)) return (detail: det, raw: null, at: at, from: 'آخر قراءة من فحص الخادم');
+      }
+    }
+    return null;
+  }
+
+  @visibleForTesting
+  ({DeviceDetail detail, Object? raw, DateTime at, String from})? lastReadingFor(NetworkDevice d) => _lastReading(d);
+
+  /// تفصيلٌ يحمل رقماً واحداً على الأقلّ — «سليم» من قراءةٍ فارغة ادّعاء.
+  static bool _hasNumbers(DeviceDetail x) {
+    final g = x.glance;
+    return x.ports.isNotEmpty ||
+        x.peers.isNotEmpty ||
+        g.cpu != null ||
+        g.mem != null ||
+        g.temp != null ||
+        g.signal != null ||
+        g.onusTotal != null ||
+        g.uptimeSec != null;
+  }
+
   // ── لماذا لم يُقرأ ────────────────────────────────────────────────
 
   static const _service = 'يردّ، لكن خدمة الإدارة لا تجيب — تأكّد من المنفذ والبروتوكول';
+  static const _login = 'يردّ، لكن رُفض الدخول — تأكّد من اسم المستخدم والرمز';
+  static const _permission = 'يردّ، لكن مستخدمه بلا صلاحيّة قراءة — راجع صلاحيّاته على الجهاز';
+  static const _noCreds = 'بيانات دخوله ناقصة — أكملها من صفحة الجهاز';
+  static const _unsupported = 'علامته لا تُقرأ بالفحص';
+
+  /// آخر قراءةٍ تنفع مع هذا السبب؟ لا مع ما يُصلَح بالإعداد (رفض الدخول، الصلاحيّة، النقص) — يُقال وحده بلا أرقامٍ قديمة تغطّيه.
+  @visibleForTesting
+  static bool lastReadingHelps(String reason) => !const {_login, _permission, _noCreds, _unsupported}.contains(reason);
 
   /// لماذا لم تُقرأ معلومات جهازٍ يردّ — السبب الحقيقيّ بكلمة.
   ///
@@ -399,11 +475,11 @@ class DevicesCheckRunner extends ChangeNotifier {
         (s.contains('رُفض') && s.contains('اسم المستخدم')) ||
         low.contains('auth failed') ||
         low.contains('invalid user name or password')) {
-      return 'يردّ، لكن رُفض الدخول — تأكّد من اسم المستخدم والرمز';
+      return _login;
     }
     // ٤) دخل وصلاحيّته لا تكفي للقراءة (مجموعة المستخدم، community بلا قراءة)
     if (low.contains('not enough permissions') || s.contains('صلاحيّة القراءة') || s.contains('صلاحيّات المستخدم')) {
-      return 'يردّ، لكن مستخدمه بلا صلاحيّة قراءة — راجع صلاحيّاته على الجهاز';
+      return _permission;
     }
     // ٥) بيانات دخوله من خادمنا: الطلب فشل (٥٠٣ عابرة…) أو ناقصة
     if (e is DioException || s.contains('فشل جلب المعلومات')) {
@@ -413,9 +489,9 @@ class DevicesCheckRunner extends ChangeNotifier {
         s.contains('لم يتم إعداد بيانات الدخول') ||
         s.contains('لم تُحفظ الـcommunity') ||
         s.contains('أدخل الـcommunity')) {
-      return 'بيانات دخوله ناقصة — أكملها من صفحة الجهاز';
+      return _noCreds;
     }
-    if (s.contains('غير مدعومة')) return 'علامته لا تُقرأ بالفحص';
+    if (s.contains('غير مدعومة')) return _unsupported;
     final inTime = e is TimeoutException ||
         e is SnmpTimeoutException ||
         low.contains('timeout') ||

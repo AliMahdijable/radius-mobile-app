@@ -465,8 +465,10 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
                   ]),
                 ),
                 const SizedBox(width: Sp.xs),
-                // سطرٌ مؤقّت: قراءته جارية بعد المهلة الأولى
-                r.pending ? _pill('يقرأ…', AppTone.neutral) : _pill(r.stateLabel, tone),
+                // سطرٌ مؤقّت: قراءته جارية بعد المهلة الأولى؛ ومن آخر قراءةٍ بعمرها — لا يُقدَّم طازجاً (٩ نوفمبر)
+                r.pending
+                    ? _pill('يقرأ…', AppTone.neutral)
+                    : _pill(r.staleAt == null ? r.stateLabel : '${r.stateLabel} · ${r.staleAge}', tone),
               ]),
               if (r.vitals.isNotEmpty) ...[
                 const SizedBox(height: Sp.sm),
