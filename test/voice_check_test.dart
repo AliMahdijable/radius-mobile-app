@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rad_mysvcs/api/vpn_now_api.dart';
 import 'package:rad_mysvcs/models/device_health.dart';
 import 'package:rad_mysvcs/models/merged_company.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
 import 'package:rad_mysvcs/models/subscriber.dart';
 import 'package:rad_mysvcs/services/connection_alerts.dart';
+import 'package:rad_mysvcs/services/subscribers_check.dart';
 import 'package:rad_mysvcs/services/voice/voice_check.dart';
 import 'package:rad_mysvcs/services/voice/voice_command.dart';
 import 'package:rad_mysvcs/services/voice/voice_resolver.dart';
@@ -15,8 +15,8 @@ import 'package:rad_mysvcs/services/vpn_now.dart';
 /// كيو، حاله الاشاره اذا كان موجود مانجمنت… يقول افحص سكتر فلان… يجيب له الكارت مباشره يعطي نتيجه الجهاز»):
 ///   ١. الفهم: «افحص المشترك فلان»/«حالة فلان» ⇒ فحص المشترك؛ «افحص سكتر فلان» ⇒ الجهاز؛ «افحص فلان» بلا نوع ⇒ الاثنان.
 ///   ٢. «كل الشركات»: المشتركون والأجهزة من كلّ الشركات، كلٌّ بشركته.
-///   ٣. الجواب: حاله فوراً (فعّال/منتهي، متّصل/طافي)، ثمّ جهازه إن كان متّصلاً وفعّالاً — من شبكتك، وإلّا عبر VPN شركته، وإلّا
-///      «بلا إدارة» بسببه.
+///   ٣. الجواب: حاله فوراً (فعّال/منتهي، متّصل/غير متّصل الآن)، ثمّ جهازه إن كان متّصلاً وفعّالاً — من شبكتك، وإلّا عبر VPN
+///      شركته، وإلّا قسمه بكلمات «الفحص العامّ» وسببه (١٠ نوفمبر — كان «بلا إدارة»: «جهازه ما ردّ — …»، «لم يُفحص — …»).
 Subscriber _sub(String u, {bool online = true, int days = 20, bool enabled = true, String? company}) => Subscriber.fromJson({
       'username': u,
       'firstname': u,
@@ -125,7 +125,7 @@ void main() {
       ConnectionAlertSettings.current.value = const ConnectionAlertThresholds();
     });
 
-    test('طافي أو منتهي أو مطفي ⇒ حاله وحده بلا فحص جهاز', () async {
+    test('غير متّصل أو منتهي أو مطفي ⇒ حاله وحده بلا فحص جهاز — وغير المتّصل بكلمة قسمه «غير متّصل الآن»', () async {
       var probed = 0;
       SubscriberVoiceCheck.debugProbe = (_) async {
         probed++;
@@ -133,7 +133,8 @@ void main() {
       };
       final off = SubscriberVoiceCheck(_sub('a', online: false));
       await off.run();
-      expect(off.headline, 'فعّال وطافي');
+      // ١٠ نوفمبر: كان «فعّال وطافي» — والفحص العامّ يسمّيه «غير متّصل الآن»
+      expect(off.headline, 'فعّال وغير متّصل الآن');
       expect(off.daysLine, 'باقي 20 يوماً');
       expect(off.deviceLine, isNull);
       final exp = SubscriberVoiceCheck(_sub('b', days: -3));
@@ -156,7 +157,8 @@ void main() {
       expect(c.row?.reading?.vpn, isFalse);
       expect(c.row?.reading?.ccq, 92);
       expect(c.row?.problems.map((x) => x.kind), [ConnectionProblemKind.signal]);
-      expect(c.deviceLine, c.row!.problems.map((x) => x.label).join(' · '), reason: 'مشكلته بسطرها كـ«الفحص العامّ»');
+      expect(c.deviceLine, 'بمشكلة — ${c.row!.problems.map((x) => x.label).join(' · ')}',
+          reason: 'قسمه «بمشكلة» ثمّ مشكلته بسطرها كـ«الفحص العامّ»');
       expect(c.phase, VoiceCheckPhase.done);
 
       SubscriberVoiceCheck.debugProbe =
@@ -188,7 +190,7 @@ void main() {
       expect(c.row?.problems.single.kind, ConnectionProblemKind.fiberRx);
     });
 
-    test('٩ نوفمبر: يردّ عبر الـVPN بلا مقاييس ⇒ «بلا إدارة» بسببه لا «سليم»، وبلا فحصٍ ثانٍ', () async {
+    test('٩ نوفمبر: يردّ عبر الـVPN بلا مقاييس ⇒ «جهازه ما ردّ» بسببه لا «سليم»، وبلا فحصٍ ثانٍ', () async {
       final b = _co('c0000000000b1', 'ايرث لنك');
       SubscriberVoiceCheck.debugLocalAllowed = () => false;
       SubscriberVoiceCheck.debugVpnAllowed = () => true;
@@ -202,7 +204,8 @@ void main() {
       final c = SubscriberVoiceCheck(_sub('auth.u', company: b.key), company: b);
       await c.run();
       expect(c.row, isNull);
-      expect(c.deviceLine, 'بلا إدارة — يردّ، ما انفتح برمزه المحفوظ');
+      expect(c.deviceLine, 'جهازه ما ردّ — يردّ، ما انفتح برمزه المحفوظ');
+      expect(c.cat, SubsCheckCat.noReply);
       expect(runs, 0, reason: 'آخر قراءةٍ تكفي — لا فحص VPN جديد');
 
       // ولا قراءة سابقة: الفحص الآن يُرجع البنك وحده ⇒ السطر نفسه (لا جوابٌ فارغ)
@@ -215,10 +218,10 @@ void main() {
       await p.run();
       expect(runs, 1);
       expect(p.row, isNull);
-      expect(p.deviceLine, 'بلا إدارة — يردّ، ما انقرت مقاييسه');
+      expect(p.deviceLine, 'جهازه ما ردّ — يردّ، ما انقرت مقاييسه');
     });
 
-    test('لا طريق ⇒ «بلا إدارة» بسببه', () async {
+    test('لا طريق ⇒ «لم يُفحص» بسببه (كان «بلا إدارة»)', () async {
       final b = _co('c0000000000b1', 'ايرث لنك');
       SubscriberVoiceCheck.debugLocalAllowed = () => false;
       SubscriberVoiceCheck.debugVpnAllowed = () => true;
@@ -226,13 +229,67 @@ void main() {
       final c = SubscriberVoiceCheck(_sub('x', company: b.key), company: b);
       await c.run();
       expect(c.row, isNull);
-      expect(c.deviceLine, 'بلا إدارة — «ايرث لنك» تحتاج VPN');
+      expect(c.deviceLine, 'لم يُفحص — «ايرث لنك» تحتاج VPN');
+      expect(c.cat, SubsCheckCat.unchecked);
       VpnNow.debugNote(b.key, null);
 
       SubscriberVoiceCheck.debugVpnAllowed = () => false;
       final e = SubscriberVoiceCheck(_sub('y'));
       await e.run();
-      expect(e.deviceLine, 'بلا إدارة — الفحص عبر VPN غير مفعّل لك');
+      expect(e.deviceLine, 'لم يُفحص — الفحص عبر VPN غير مفعّل لك');
+    });
+
+    // ١٠ نوفمبر: الجواب بأقسام «الفحص العامّ» وكلماتها — القسم نفسه الذي يضع فيه الفحص العامّ المشتركَ نفسه، والسبب بنصّ صفّه
+    test('١٠ نوفمبر: الميّت عبر الـVPN «جهازه ما ردّ — لا يستجيب» كصفّه في الفحص العامّ', () async {
+      final b = _co('c0000000000b1', 'ايرث لنك');
+      SubscriberVoiceCheck.debugLocalAllowed = () => false;
+      SubscriberVoiceCheck.debugVpnAllowed = () => true;
+      SubscriberVoiceCheck.debugVpnRun = (s, c) async =>
+          VpnNow.debugApplyCompany(b.key, const VpnNowResult(ok: true, message: 'تم', readings: {'d.u': VpnSubReading(src: 'dead')}));
+      final s = _sub('d.u', company: b.key);
+      final c = SubscriberVoiceCheck(s, company: b);
+      await c.run();
+      final r = SubscribersCheck.mixed([s], (_) => c.limits, peek: (_) => null, vpnWaits: (_) => false);
+      final m = r.missing.single;
+      expect(c.cat, SubscribersCheck.catOf(m.why));
+      expect(c.deviceLine, '${SubsCheckCat.noReply.label} — ${SubscribersCheck.missText(m)}');
+      expect(c.deviceLine, 'جهازه ما ردّ — لا يستجيب');
+      expect(c.spoken, 'فعّال ومتّصل · باقي 20 يوماً · جهازه ما ردّ — لا يستجيب');
+    });
+
+    test('١٠ نوفمبر: ما ردّ من شبكتك (بلا VPN لك) · ولا من شبكتك ولا عبر VPN · ردّ بلا مقاييس · تعذّر الفحص ⇒ «لم يُفحص»', () async {
+      SubscriberVoiceCheck.debugLocalAllowed = () => true;
+      SubscriberVoiceCheck.debugVpnAllowed = () => false;
+      SubscriberVoiceCheck.debugProbe = (_) async => null;
+      final a = SubscriberVoiceCheck(_sub('a'));
+      await a.run();
+      expect([a.cat, a.deviceLine], [SubsCheckCat.noReply, 'جهازه ما ردّ — من شبكتك']);
+
+      // جهازٌ ردّ بلا مقاييس (ليس نانو ولا ضوئيّاً) ⇒ «بلا مقاييس» لا «ما ردّ»
+      SubscriberVoiceCheck.debugProbe = (_) async => const DeviceHealthSnapshot(kind: DeviceKind.other, ip: '10.0.0.7');
+      final n = SubscriberVoiceCheck(_sub('n'));
+      await n.run();
+      expect([n.cat, n.deviceLine], [SubsCheckCat.noMetrics, 'بلا مقاييس — جهازه ليس نانو ولا وحدةً ضوئيّة']);
+
+      // فحص الخادم اكتمل ولا قراءة له
+      SubscriberVoiceCheck.debugProbe = (_) async => null;
+      SubscriberVoiceCheck.debugVpnAllowed = () => true;
+      SubscriberVoiceCheck.debugVpnRun = (s, c) async =>
+          VpnNow.debugApply(VpnNowKind.subscribers, const VpnNowResult(ok: true, message: 'تم', readings: {'other': VpnSubReading(src: 'dead')}));
+      final v = SubscriberVoiceCheck(_sub('v'));
+      await v.run();
+      expect([v.cat, v.deviceLine], [SubsCheckCat.noReply, 'جهازه ما ردّ — لا من شبكتك ولا عبر VPN']);
+
+      // الفحص عبر الـVPN تعذّر ⇒ لم يُفحص بسببه (لا «ما ردّ» كاذبة)
+      VpnNow.reset();
+      SubscriberVoiceCheck.debugVpnRun = (s, c) async {
+        VpnNow.subscribers
+          ..phase = VpnBarPhase.failed
+          ..line = 'الـVPN ما اتّصل الآن — حاول بعد قليل';
+      };
+      final f = SubscriberVoiceCheck(_sub('f'));
+      await f.run();
+      expect([f.cat, f.deviceLine], [SubsCheckCat.unchecked, 'لم يُفحص — الـVPN ما اتّصل الآن — حاول بعد قليل']);
     });
   });
 }

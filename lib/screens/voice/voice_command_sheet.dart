@@ -642,7 +642,8 @@ class _VoiceCommandSheetState extends State<VoiceCommandSheet> {
             chip('مطفي', AppTone.neutral)
           else
             chip(c.expired ? 'منتهي' : 'فعّال', c.expired ? AppTone.danger : AppTone.success),
-          chip(c.online ? 'متّصل' : 'طافي', c.online ? AppTone.success : AppTone.warning),
+          // غير المتّصل بكلمة قسمه في «الفحص العامّ» (١٠ نوفمبر)
+          chip(c.online ? 'متّصل' : 'غير متّصل', c.online ? AppTone.success : AppTone.warning),
         ]),
         Padding(
           padding: const EdgeInsets.only(top: Sp.x6),

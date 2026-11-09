@@ -30,10 +30,11 @@ enum VoiceCheckPhase {
 /// جواب «افحص المشترك فلان» (٨ نوفمبر — المالك: «حتى لو فاتح اكثر من شركه او شركه فرديه، من يسوي مثلا فحص المشترك فلان… الكارت
 /// مباشره يجاوبه قبل يا اما مخلص متصل ومخلص طافي اذا متصل وفعال شنو حاله السي سي كيو، حاله الاشاره اذا كان موجود مانجمنت»):
 ///
-/// ١. حاله من القائمة فوراً: فعّال/منتهي، متّصل/طافي (أو مطفي).
+/// ١. حاله من القائمة فوراً: فعّال/منتهي، متّصل/غير متّصل الآن (أو مطفي).
 /// ٢. متّصلٌ وفعّال ⇒ جهازه: فحصٌ طازج من شبكتك ([DeviceProbeApi.probe] بشركته)، وإلّا آخر قراءةٍ عبر VPN شركته (٣٠ د)، وإلّا
 ///    فحصٌ عبر VPN شركته الآن (نفق الشركة يقرأ ضوء الأولت كذلك). والإشارة وCCQ والكيبل/الضوء بحدود «تنبيه المشترك».
-/// ٣. جهازٌ لا يُقرأ بأيّ طريق ⇒ «بلا إدارة» بسببه (لا يردّ، شركته تحتاج VPN، الفحص غير مفعّل لك).
+/// ٣. جهازٌ لا يُقرأ بأيّ طريق ⇒ قسمه بكلمات «الفحص العامّ» وسببه (١٠ نوفمبر — كان «بلا إدارة»): «جهازه ما ردّ — لا يستجيب»،
+///    «لم يُفحص — «ايرث لنك» تحتاج VPN»، «بلا مقاييس — …»؛ وغير المتّصل «غير متّصل الآن» كقسمه هناك.
 class SubscriberVoiceCheck extends ChangeNotifier {
   SubscriberVoiceCheck(this.sub, {this.company});
 
@@ -47,7 +48,10 @@ class SubscriberVoiceCheck extends ChangeNotifier {
   /// القراءة ومشاكلها بحدود المدير — null حتى تُقرأ أو إن لم تُقرأ.
   SubsCheckRow? row;
 
-  /// لماذا لا قراءة لجهازه (حين [phase] done و[row] null).
+  /// قسمه حين لا قراءة لجهازه ([phase] done و[row] null) — كـ«الفحص العامّ»: «جهازه ما ردّ» · «بلا مقاييس» · «لم يُفحص».
+  SubsCheckCat? cat;
+
+  /// وسببه بعد اسم القسم.
   String? note;
 
   bool _disposed = false;
@@ -75,10 +79,10 @@ class SubscriberVoiceCheck extends ChangeNotifier {
   ConnectionAlertThresholds get limits =>
       (sub.companyKey == null ? null : VpnNow.limitsOf(sub.companyKey!)) ?? ConnectionAlertSettings.current.value;
 
-  /// «فعّال ومتّصل» · «منتهي وطافي» · «مطفي (معطّل)».
+  /// «فعّال ومتّصل» · «منتهي وغير متّصل الآن» · «مطفي (معطّل)» — غير المتّصل بكلمة قسمه في «الفحص العامّ».
   String get headline {
     if (disabled) return 'مطفي (معطّل)${online ? ' — ومتّصل' : ''}';
-    return '${expired ? 'منتهي' : 'فعّال'} و${online ? 'متّصل' : 'طافي'}';
+    return '${expired ? 'منتهي' : 'فعّال'} و${online ? 'متّصل' : SubsCheckCat.offline.label}';
   }
 
   /// «باقي ١٢ يوم» / «منتهي منذ ٣ أيّام».
@@ -90,18 +94,20 @@ class SubscriberVoiceCheck extends ChangeNotifier {
     return 'باقي ${arDays(d)}';
   }
 
-  /// سطر الجهاز: مشاكله بحدود المدير، أو «سليم»، أو لماذا لم يُقرأ — والجواب كلّه بجملة ([spoken]).
+  /// سطر الجهاز بأقسام «الفحص العامّ»: «بمشكلة — مشاكله» بحدود المدير، أو «… سليمة»، أو قسم من لم يُقرأ وسببه — والجواب كلّه
+  /// بجملة ([spoken]).
   String? get deviceLine {
     if (!wantsDevice) return null;
     final r = row;
     if (r == null) {
+      final c = cat;
       return switch (phase) {
         VoiceCheckPhase.probing => 'يُقرأ جهازه من شبكتك…',
         VoiceCheckPhase.vpn => 'يُقرأ جهازه عبر VPN الشركة…',
-        _ => note == null ? null : 'بلا إدارة — $note',
+        _ => c == null ? null : (note == null ? c.label : '${c.label} — $note'),
       };
     }
-    if (r.problems.isNotEmpty) return r.problems.map((p) => p.label).join(' · ');
+    if (r.problems.isNotEmpty) return '${SubsCheckCat.problems.label} — ${r.problems.map((p) => p.label).join(' · ')}';
     final x = r.reading;
     final parts = <String>[
       if (x?.sig != null) 'الإشارة',
@@ -121,6 +127,20 @@ class SubscriberVoiceCheck extends ChangeNotifier {
       (!VpnNow.mode.value && !AgentNetPresence.isOff && PermissionsService.subsCheckNet);
 
   bool get _vpnAllowed => debugVpnAllowed?.call() ?? PermissionsService.subsCheckVpn;
+
+  /// لا قراءة: قسمه وسببه.
+  void _miss(SubsCheckCat c, String? why) {
+    cat = c;
+    note = why;
+  }
+
+  /// قراءة الـVPN بلا مقاييس كسطرها في «الفحص العامّ»: البنك وحده ⇒ «جهازه ما ردّ» بسببه، وجهازٌ قُرئ بلا أرقام ⇒ «بلا مقاييس».
+  void _unmeasured(VpnSubReading v) {
+    final m = SubscribersCheck.unmeasured(sub, v);
+    _miss(SubscribersCheck.catOf(m.why), m.why == SubsMissWhy.noMetrics ? _noMetricsWhy : SubscribersCheck.missText(m));
+  }
+
+  static const _noMetricsWhy = 'جهازه ليس نانو ولا وحدةً ضوئيّة';
 
   void _set(VoiceCheckPhase p) {
     if (_disposed) return;
@@ -146,6 +166,7 @@ class SubscriberVoiceCheck extends ChangeNotifier {
       return;
     }
     // ١) من شبكتك: فحصٌ طازج لجهازه
+    var localNoMetrics = false;
     if (_localAllowed) {
       _set(VoiceCheckPhase.probing);
       DeviceHealthSnapshot? snap;
@@ -166,12 +187,14 @@ class SubscriberVoiceCheck extends ChangeNotifier {
         _apply(snap: snap);
         if (row != null) return _set(VoiceCheckPhase.done);
       }
+      // ردّ جهازه بلا مقاييس (ليس نانو ولا ضوئيّاً) — يُقال إن لم يُقرأ عبر الـVPN
+      localNoMetrics = snap != null;
     }
     // ٢) آخر قراءةٍ عبر VPN شركته (٣٠ د) — والبنك وحده (يردّ بلا مقاييس) جوابٌ بسببه لا «سليم» (٩ نوفمبر)
     var v = VpnNow.readingFor(sub.username, company: sub.companyKey);
     if (v != null && !v.dead) {
       if (!v.measured) {
-        note = SubscribersCheck.unmeasuredLabel(v);
+        _unmeasured(v);
         return _set(VoiceCheckPhase.done);
       }
       _apply(vpn: v, vpnAt: _vpnAt());
@@ -179,7 +202,13 @@ class SubscriberVoiceCheck extends ChangeNotifier {
     }
     // ٣) فحصٌ عبر VPN شركته الآن
     if (!_vpnAllowed) {
-      note = _localAllowed ? 'جهازه ما ردّ من شبكتك' : 'الفحص عبر VPN غير مفعّل لك';
+      if (!_localAllowed) {
+        _miss(SubsCheckCat.unchecked, 'الفحص عبر VPN غير مفعّل لك');
+      } else if (localNoMetrics) {
+        _miss(SubsCheckCat.noMetrics, _noMetricsWhy);
+      } else {
+        _miss(SubsCheckCat.noReply, 'من شبكتك');
+      }
       return _set(VoiceCheckPhase.done);
     }
     _set(VoiceCheckPhase.vpn);
@@ -189,15 +218,22 @@ class SubscriberVoiceCheck extends ChangeNotifier {
     if (_disposed) return;
     v = VpnNow.readingFor(sub.username, company: sub.companyKey);
     if (v != null && !v.dead && !v.measured) {
-      note = SubscribersCheck.unmeasuredLabel(v);
+      _unmeasured(v);
     } else if (v != null && !v.dead) {
       _apply(vpn: v, vpnAt: _vpnAt());
+    } else if (v?.dead == true) {
+      _miss(SubsCheckCat.noReply, 'لا يستجيب');
     } else {
-      note = v?.dead == true
-          ? 'جهازه ما يردّ'
-          : (company != null ? VpnNow.noteOf(company!.key) : null) ??
-              (VpnNow.subscribers.phase == VpnBarPhase.failed ? VpnNow.subscribers.line : null) ??
-              'جهازه ما ردّ لا من شبكتك ولا عبر VPN';
+      // لا قراءة له بأيّ طريق: شركته بلا طريق أو الفحص تعذّر ⇒ لم يُفحص؛ وفحصٌ مكتمل بلا قراءةٍ له ⇒ ما ردّ
+      final why = (company != null ? VpnNow.noteOf(company!.key) : null) ??
+          (VpnNow.subscribers.phase == VpnBarPhase.failed ? VpnNow.subscribers.line : null);
+      if (why != null) {
+        _miss(SubsCheckCat.unchecked, why);
+      } else if (localNoMetrics) {
+        _miss(SubsCheckCat.noMetrics, _noMetricsWhy);
+      } else {
+        _miss(SubsCheckCat.noReply, _localAllowed ? 'لا من شبكتك ولا عبر VPN' : 'لم يُقرأ عبر VPN');
+      }
     }
     _set(VoiceCheckPhase.done);
   }
