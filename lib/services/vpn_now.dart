@@ -43,6 +43,10 @@ class VpnNowJob extends ChangeNotifier {
   /// سبب الفشل من الخادم (tunnel_failed، no_vpn…) — يقرّر زرّ «صفحة VPN».
   String? reason;
 
+  /// فحصٌ جارٍ تُرك قبل أن يكمل ولماذا («توقّف الفحص — رجعت لشبكتك»): «الفحص العامّ» يقوله لا «انتهى الفحص» فحصٍ أقدم
+  /// (المراجعة F14/F22) — null إن لم يُترك، ويُمسح ببدء فحصٍ جديد.
+  String? stopped;
+
   /// بدء آخر فحص — «وضع VPN» يعيده بعد [VpnNow.intervalOf].
   DateTime? startedAt;
   int _gen = 0;
@@ -82,6 +86,7 @@ class VpnNowJob extends ChangeNotifier {
     done = total = 0;
     result = null;
     reason = null;
+    stopped = null;
     notifyListeners();
     final st = await VpnNowApi.start(kind);
     if (gen != _gen) return;
@@ -130,6 +135,7 @@ class VpnNowJob extends ChangeNotifier {
     done = total = 0;
     result = null;
     reason = null;
+    stopped = null;
     notifyListeners();
     var ok = 0;
     var bad = 0;
@@ -333,8 +339,10 @@ class VpnNowJob extends ChangeNotifier {
     VpnNow._showBar(kind);
   }
 
-  /// يترك الفحص الجاري (الخادم يكمله وحده) ويرجع بلا نتيجة — إطفاء «وضع VPN».
-  void cancel() {
+  /// يترك الفحص الجاري (الخادم يكمله وحده) ويرجع بلا نتيجة — إطفاء «وضع VPN». [why]: سطر الفحص المتروك ([stopped]) إن
+  /// كان جارياً.
+  void cancel({String? why}) {
+    stopped = phase == VpnBarPhase.running ? why : null;
     _gen++;
     _checking = false;
     queue = const [];
@@ -367,6 +375,7 @@ class VpnNowJob extends ChangeNotifier {
     queue = const [];
     current = null;
     startedAt = null;
+    stopped = null;
     phase = VpnBarPhase.idle;
     line = null;
     sub = null;
@@ -495,7 +504,8 @@ class VpnNow {
     _loop = null;
     mode.value = false;
     _resetBars();
-    subscribers.cancel();
+    // فحص المشتركين الجاري يُترك ⇒ «الفحص العامّ» المفتوح يقول «توقّف الفحص» لا «انتهى» فحصٍ أقدم (المراجعة F14/F22)
+    subscribers.cancel(why: auto ? 'توقّف الفحص — رجعت لشبكتك' : 'توقّف الفحص عبر VPN');
     devices.cancel();
     // ممرّ التطبيق (٧ نوفمبر): اتّصالاته وغرفة نفقه الباقية (ملفّه/قالب شركته) تُغلق الآن لا بعد خمولها
     if (VpnPipe.used) VpnPipe.release();

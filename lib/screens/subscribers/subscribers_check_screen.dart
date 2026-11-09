@@ -487,8 +487,10 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
       SubsRunState.running => (AppTone.brand, null),
       SubsRunState.finished => (AppTone.success, LucideIcons.circleCheck),
       SubsRunState.failed => (AppTone.warning, LucideIcons.triangleAlert),
+      SubsRunState.stopped => (AppTone.warning, LucideIcons.circlePause),
       SubsRunState.idle => (AppTone.neutral, LucideIcons.circleDashed),
     };
+    final halted = p.state == SubsRunState.failed || p.state == SubsRunState.stopped;
     final v = p.value;
     final side = p.running ? (v == null ? null : '${(v * 100).round()}%') : (p.at == null ? null : timeAgoAr(p.at));
     final done = p.state == SubsRunState.finished;
@@ -507,12 +509,12 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
           Expanded(
             child: Text(p.text,
                 key: const ValueKey('subs-check-progress-text'),
-                maxLines: p.state == SubsRunState.failed ? 2 : 1,
+                maxLines: halted ? 2 : 1,
                 overflow: TextOverflow.ellipsis,
                 style: AppType.label(
                         color: done
                             ? AppColors.textHi
-                            : (p.state == SubsRunState.failed ? tone.onSoft : AppColors.textMid))
+                            : (halted ? tone.onSoft : AppColors.textMid))
                     .copyWith(fontSize: 12.5, fontWeight: done ? FontWeight.w700 : FontWeight.w600)),
           ),
           if (side != null) ...[
@@ -1050,7 +1052,7 @@ class _SubscribersCheckScreenState extends State<SubscribersCheckScreen> {
       ];
       final head = switch (p.state) {
         SubsRunState.finished => 'انتهى الفحص بلا قراءات',
-        SubsRunState.failed => 'لم يكتمل الفحص',
+        SubsRunState.failed || SubsRunState.stopped => 'لم يكتمل الفحص',
         _ => 'لا قراءات',
       };
       return _notice(LucideIcons.info, parts.isEmpty ? head : '$head\n${parts.join(' · ')}');

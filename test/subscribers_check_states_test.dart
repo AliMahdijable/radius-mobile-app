@@ -354,4 +354,46 @@ void main() {
       });
     }
   });
+
+  // ───────────── F14/F22: «وضع VPN» انطفأ وفحص الخادم جارٍ تحت «الفحص العامّ» المفتوح ─────────────
+
+  group('F14/F22 — فحص الخادم المتروك يُقال، لا «انتهى» فحصٍ أقدم', () {
+    for (final earlier in [true, false]) {
+      testWidgets('رجعت لشبكتك و«يفحص… 50 من 113» — ${earlier ? 'وقراءاتٌ سابقة' : 'بلا قراءاتٍ سابقة'}', (t) async {
+        await visualSetUp(s1bSasOwner);
+        final subs = [_s('a.u'), _s('b.u')];
+        final job = VpnNow.subscribers;
+        addTearDown(() {
+          job.reset();
+          VpnNow.reset();
+        });
+        if (earlier) {
+          VpnNow.debugApply(VpnNowKind.subscribers, const VpnNowResult(ok: true, message: 'تم', readings: {
+            'a.u': VpnSubReading(src: 'cpe', sig: -52, ccq: 96, lan: '100'),
+            'b.u': VpnSubReading(src: 'cpe', sig: -80, ccq: 90, lan: '100'),
+          }));
+        }
+        VpnNow.mode.value = true;
+        job
+          ..phase = VpnBarPhase.running
+          ..done = 50
+          ..total = 113;
+        await pumpVisual(t, _phone, home: (_) => SubscribersCheckScreen(subscribers: () => subs, viaVpn: true));
+        await settle(t, seconds: 1);
+        expect(_barText(t), 'يفحص… 50 من 113');
+
+        // الحارس رأى شبكة الوكيل ⇒ الوضع ينطفي ويُترك فحص الخادم
+        VpnNow.exitMode(auto: true);
+        await settle(t, seconds: 1);
+        expect(job.phase, VpnBarPhase.idle);
+        expect(_barText(t), 'توقّف الفحص — رجعت لشبكتك');
+        expect(find.textContaining('انتهى الفحص'), findsNothing, reason: 'لا «✓ انتهى» فحصٍ أقدم');
+        expect(find.text('لم يُفحص بعد'), findsNothing);
+        expect(find.byKey(const ValueKey('subs-check-progress-bar')), findsNothing);
+        expect((await _copy(t)).split('\n')[1], 'توقّف الفحص — رجعت لشبكتك');
+        await t.pump(const Duration(seconds: 9)); // سطر «رجعت لشبكتك» يختفي بعد ٨ ث
+        await _done(t);
+      });
+    }
+  });
 }
