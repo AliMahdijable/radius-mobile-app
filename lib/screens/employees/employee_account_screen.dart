@@ -281,7 +281,7 @@ class _SettlementTile extends StatelessWidget {
         ),
         subtitle: Text(
           'نقد ${formatIQD(st.cashIn)} · '
-          '${st.openDebt != null ? 'ديونه المفتوحة وقتها ${formatIQD(st.openDebt!)}' : 'دين ${formatIQD(st.debtOut)}'} · '
+          '${st.openDebt != null ? 'ديونه المفتوحة وقتها ${formatIQD(st.openDebt!)}' : st.openDebtUnavailable ? 'ديونه المفتوحة وقتها —' : 'دين ${formatIQD(st.debtOut)}'} · '
           '${st.opsCount} عمليّة · ربح ${formatIQD(st.profit)}',
           style: AppType.micro(color: AppColors.textMid),
         ),
@@ -490,12 +490,14 @@ class _EmployeeSettleSheetState extends State<EmployeeSettleSheet> {
     showSheetSnack(context, r.message ?? 'تعذّرت التسوية', isError: true);
   }
 
-  Widget _line(String label, double sum, int count, {bool strong = false}) => Padding(
+  /// سطر مبلغ؛ sum = null ⇒ «—» (قراءةٌ تعذّرت لا تُعرض صفراً).
+  Widget _line(String label, double? sum, int count, {bool strong = false, Key? valueKey}) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 3),
         child: Row(
           children: [
             Expanded(child: Text(count > 0 ? '$label ($count)' : label, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppType.body(color: AppColors.textMid))),
-            Text('${formatIQD(sum)} د.ع', style: strong ? AppType.bodyBold(color: AppColors.textHi) : AppType.body(color: AppColors.textHi)),
+            Text(sum == null ? '—' : '${formatIQD(sum)} د.ع',
+                key: valueKey, style: strong ? AppType.bodyBold(color: AppColors.textHi) : AppType.body(color: AppColors.textHi)),
           ],
         ),
       );
@@ -534,7 +536,11 @@ class _EmployeeSettleSheetState extends State<EmployeeSettleSheet> {
                     _line('تسديد ديون', b('debt_payments').sum, b('debt_payments').count),
                     _line('بيع مواد نقداً', b('sales_cash').sum, b('sales_cash').count),
                     const Divider(),
-                    _line('ديونه المفتوحة عند المشتركين (لا تُصفَّر)', p.openDebt, 0, strong: true),
+                    _line(p.openDebtApprox && p.openDebt != null ? 'ديونه المفتوحة (تقريبيّة، لا تُصفَّر)' : 'ديونه المفتوحة عند المشتركين (لا تُصفَّر)',
+                        p.openDebt, 0, strong: true, valueKey: const ValueKey('emp-settle-open-debt')),
+                    if (p.openDebtUnavailable)
+                      Text('تعذّرت قراءة ديونه المفتوحة الآن — التسوية تشمل النقد وحده، والديون باقية عليه.',
+                          key: const ValueKey('emp-settle-open-debt-unavailable'), style: AppType.micro(color: AppColors.warning)),
                     _line('ديونٌ أعطاها في الفترة', p.debtOut, 0),
                     _line('تفعيل بالآجل', b('credit_activations').sum, b('credit_activations').count),
                     _line('غير المدفوع من الجزئيّ', b('partial_unpaid').sum, b('partial_unpaid').count),

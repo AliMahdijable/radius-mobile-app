@@ -311,6 +311,64 @@ void main() {
       expect(find.textContaining('سقف الإيرادات النقديّة: 500,000'), findsOneWidget);
     });
   });
+
+  // مراجعة المال ٦ (U1/M9): قراءة الديون المفتوحة تتعذّر ⇒ «—» لا «0 د.ع»، والتسوية تمضي بالنقد وحده؛ والضبط حُفظ ولو تعذّر عرض الحال.
+  group('مراجعة المال ٦ — قراءةٌ تعذّرت لا تُعرض صفراً', () {
+    test('النماذج: open_debt null/open_debt_unavailable ⇒ null، والتسوية المحفوظة تحمل العلامة', () {
+      Map<String, dynamic> pv(Map<String, dynamic> extra) => {
+            'cut': {'head_id': 3},
+            'cash_in': 1000,
+            ...extra,
+          };
+      expect(SettlementPreview.fromJson(pv({'open_debt': null, 'open_debt_approx': true, 'open_debt_unavailable': true}))!.openDebt, isNull);
+      expect(SettlementPreview.fromJson(pv({'open_debt_unavailable': true, 'open_debt': 5}))!.openDebt, isNull);
+      final old = SettlementPreview.fromJson(pv({}))!;
+      expect(old.openDebt, isNull, reason: 'غائبٌ (خادمٌ أقدم) ⇒ «—» لا 0');
+      expect(old.openDebtUnavailable, isFalse, reason: 'ولا يُدّعى «تعذّرت» لخادمٍ لم يقلها');
+      expect(SettlementPreview.fromJson(pv({'open_debt_unavailable': true}))!.openDebtUnavailable, isTrue);
+      final ok = SettlementPreview.fromJson(pv({'open_debt': 25000, 'open_debt_approx': true}))!;
+      expect(ok.openDebt, 25000);
+      expect(ok.openDebtApprox, isTrue);
+      final st = EmployeeSettlement.fromJson({'id': 9, 'status': 'active', 'open_debt': null, 'open_debt_unavailable': true, 'debt_out': 35000})!;
+      expect(st.openDebt, isNull);
+      expect(st.openDebtUnavailable, isTrue);
+      expect(EmployeeSettlement.fromJson({'id': 8, 'status': 'active', 'debt_out': 35000})!.openDebtUnavailable, isFalse);
+    });
+
+    testWidgets('معاينة بديونٍ تعذّرت قراءتها ⇒ «—» + «التسوية تشمل النقد وحده»، والتأكيد يرسل النقد', (t) async {
+      await phone(t);
+      server.previewExtra = {'open_debt': null, 'open_debt_approx': true, 'open_debt_unavailable': true};
+      await t.pumpWidget(app(Builder(
+        builder: (c) => Scaffold(
+          body: TextButton(
+            onPressed: () => showEmployeeSettleSheet(c, employeeId: 7, name: 'موظف'),
+            child: const Text('سوِّ'),
+          ),
+        ),
+      )));
+      await t.pumpAndSettle();
+      await t.tap(find.text('سوِّ'));
+      await t.pumpAndSettle();
+      final v = t.widget<Text>(find.byKey(const ValueKey('emp-settle-open-debt')));
+      expect(v.data, '—');
+      expect(find.byKey(const ValueKey('emp-settle-open-debt-unavailable')), findsOneWidget);
+      expect(find.textContaining('التسوية تشمل النقد وحده'), findsOneWidget);
+      await t.tap(find.text('تأكيد التسوية — تصفير النقد'));
+      await settle(t, frames: 40);
+      final posts = server.bodiesOf('POST', '/api/v2/employee-limits/7/settlement');
+      expect(posts, hasLength(1));
+      expect(posts.single['expected'], {'cash_in': 350000, 'debt_out': 120000, 'ops_count': 4, 'profit': 20000});
+    });
+
+    test('الضبط: حُفظ وتعذّر عرض الحال (status_unavailable) ⇒ نجاحٌ لا «تعذّر الحفظ»', () async {
+      server.putStatusUnavailable = true;
+      final r = await EmployeeLimitsApi.put(7, const EmployeeLimits(debtCap: 120000));
+      expect(r.ok, isTrue);
+      expect(r.message, isNull);
+      server.putStatusUnavailable = false;
+      expect((await EmployeeLimitsApi.put(7, const EmployeeLimits(debtCap: 120000))).ok, isTrue);
+    });
+  });
 }
 
 Map<String, dynamic> _statusJson() => {
@@ -352,6 +410,8 @@ class _DiskLoader extends AssetLoader {
 
 class _Server implements HttpClientAdapter {
   bool meFeature = true;
+  bool putStatusUnavailable = false;
+  Map<String, dynamic> previewExtra = const {};
   final List<(int, Map<String, dynamic>)> settleReplies = [];
   final _reqs = <RequestOptions>[];
 
@@ -381,7 +441,9 @@ class _Server implements HttpClientAdapter {
         },
       });
     } else if (o.path == '/api/v2/employee-limits/7' && o.method == 'PUT') {
-      reply = (200, {'success': true, 'data': _statusJson()});
+      reply = putStatusUnavailable
+          ? (200, {'success': true, 'changed': true, 'opened': false, 'data': null, 'status_unavailable': true, 'message': 'حُفظت القيم — تعذّر عرض الحال الآن'})
+          : (200, {'success': true, 'data': _statusJson()});
     } else if (o.path == '/api/v2/employees/7' && o.method == 'PUT') {
       reply = (200, {'success': true, 'data': {'id': 7, 'username': 'emp1'}});
     } else if (o.path == '/api/v2/employee-limits/7/settlement/preview') {
@@ -398,6 +460,7 @@ class _Server implements HttpClientAdapter {
           'ops_count': 4,
           'profit': 20000,
           'breakdown': _statusJson()['breakdown'],
+          ...previewExtra,
         },
       });
     } else if (o.path == '/api/v2/employee-limits/7/settlement' && o.method == 'POST') {

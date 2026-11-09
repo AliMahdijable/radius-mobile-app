@@ -225,6 +225,7 @@ class EmployeeSettlement {
     this.cashIn = 0,
     this.debtOut = 0,
     this.openDebt,
+    this.openDebtUnavailable = false,
     this.opsCount = 0,
     this.profit = 0,
     this.holdsCount = 0,
@@ -241,6 +242,9 @@ class EmployeeSettlement {
 
   /// ديونه المفتوحة وقت التسوية (لقطةٌ للعلم — التسوية لا تصفّرها)؛ null في تسوياتٍ قبل ٩ نوفمبر.
   final double? openDebt;
+
+  /// تعذّرت قراءة ديونه المفتوحة وقت التسوية ⇒ «—» (لا «دين الفترة» ولا صفر).
+  final bool openDebtUnavailable;
   final int opsCount;
   final double profit;
   final int holdsCount;
@@ -263,6 +267,7 @@ class EmployeeSettlement {
       cashIn: EmployeeLimits._n(raw['cash_in']) ?? 0,
       debtOut: EmployeeLimits._n(raw['debt_out']) ?? 0,
       openDebt: EmployeeLimits._n(raw['open_debt']),
+      openDebtUnavailable: raw['open_debt_unavailable'] == true,
       opsCount: int.tryParse('${raw['ops_count'] ?? 0}') ?? 0,
       profit: EmployeeLimits._n(raw['profit']) ?? 0,
       holdsCount: holds is Map ? int.tryParse('${holds['count'] ?? 0}') ?? 0 : 0,
@@ -283,7 +288,9 @@ class SettlementPreview {
     required this.holdsCount,
     required this.holdsCash,
     required this.holdsDebt,
-    this.openDebt = 0,
+    this.openDebt,
+    this.openDebtApprox = false,
+    this.openDebtUnavailable = false,
     this.periodStart,
     this.breakdown = const {},
   });
@@ -291,8 +298,14 @@ class SettlementPreview {
   final double cashIn;
   final double debtOut;
 
-  /// ديونه المفتوحة عند المشتركين الآن — للعلم، التسوية لا تصفّرها.
-  final double openDebt;
+  /// ديونه المفتوحة عند المشتركين الآن — للعلم، التسوية لا تصفّرها. null = غير معروفة ⇒ «—» (لا صفر، مراجعة المال ٦).
+  final double? openDebt;
+
+  /// تقريبيّة (سوبرنت: من سجلّ النشاط) — أو تعذّرت.
+  final bool openDebtApprox;
+
+  /// الخادم قالها صراحةً: تعذّرت قراءتها الآن، والتسوية تمضي بالنقد وحده (لا يُستنتج من غيابها — خادمٌ أقدم لا يرسلها).
+  final bool openDebtUnavailable;
   final int opsCount;
   final double profit;
   final int holdsCount;
@@ -317,7 +330,10 @@ class SettlementPreview {
       holdsCount: holds is Map ? int.tryParse('${holds['count'] ?? 0}') ?? 0 : 0,
       holdsCash: holds is Map ? EmployeeLimits._n(holds['cash']) ?? 0 : 0,
       holdsDebt: holds is Map ? EmployeeLimits._n(holds['debt']) ?? 0 : 0,
-      openDebt: EmployeeLimits._n(raw['open_debt']) ?? 0,
+      // null/غائب أو open_debt_unavailable ⇒ null (لا ?? 0 — قراءةٌ تعذّرت لا تُعرض صفراً)
+      openDebt: raw['open_debt_unavailable'] == true ? null : EmployeeLimits._n(raw['open_debt']),
+      openDebtApprox: raw['open_debt_approx'] == true,
+      openDebtUnavailable: raw['open_debt_unavailable'] == true,
       periodStart: period is Map ? EmployeeLimitStatus._d(period['start_at']) : null,
       breakdown: bd,
     );
@@ -389,8 +405,9 @@ class EmployeeLimitsApi {
     }
   }
 
-  /// المدير: ضبط القيم الثلاث (null = بلا حدّ / بلا ربح).
-  static Future<LimitsResult<EmployeeLimitStatus>> put(int id, EmployeeLimits l) async {
+  /// المدير: ضبط القيم الثلاث (null = بلا حدّ / بلا ربح). data = true حين حُفظت — ولو تعذّر عرض الحال بعدها
+  /// (`status_unavailable`: الخادم حفظها ثمّ لم يقرأ الحال ⇒ نجاحٌ لا «تعذّر الحفظ»، مراجعة المال ٦).
+  static Future<LimitsResult<bool>> put(int id, EmployeeLimits l) async {
     try {
       final r = await ApiClient.dio.put<Map<String, dynamic>>('$_base/$id', data: {
         'debt_cap': l.debtCap,
@@ -398,11 +415,13 @@ class EmployeeLimitsApi {
         'profit_per_op': l.profitPerOp,
       });
       final body = r.data ?? const {};
-      final s = EmployeeLimitStatus.fromJson(body['data']);
-      if (body['success'] != true || s == null) {
+      if (body['success'] != true) {
         return LimitsResult(message: body['message']?.toString() ?? 'تعذّر حفظ الحدود', code: body['code']?.toString());
       }
-      return LimitsResult(data: s);
+      if (body['status_unavailable'] == true || EmployeeLimitStatus.fromJson(body['data']) != null) {
+        return const LimitsResult(data: true);
+      }
+      return LimitsResult(message: body['message']?.toString() ?? 'تعذّر حفظ الحدود', code: body['code']?.toString());
     } catch (e) {
       return _fail(e, 'تعذّر حفظ الحدود');
     }
