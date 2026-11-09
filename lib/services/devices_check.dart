@@ -181,6 +181,7 @@ class DeviceCheckReport {
     this.onusTotal,
     this.lightsWanted,
     this.memo,
+    this.pending = false,
   });
 
   final NetworkDevice device;
@@ -210,6 +211,9 @@ class DeviceCheckReport {
 
   /// للحفظ والمقارنة بالفحص التالي.
   final CheckMemo? memo;
+
+  /// سطرٌ مؤقّت: الجهاز تجاوز المهلة الأولى وقراءته جارية (٩ نوفمبر) — يحلّ محلّه تقريره حين تصل أو عند السقف.
+  final bool pending;
 
   int get subsWeak => subs.where((s) => s.weak).length;
   int get subsLowCcq => subs.where((s) => s.lowCcq).length;
@@ -375,6 +379,8 @@ class DevicesCheck {
     bool portsCountsOnly = false,
     Map<String, String> macUsers = const {},
     DateTime? now,
+    String? readNote,
+    bool pending = false,
   }) {
     ({String user, bool approx})? who(String? mac) => matchMac(mac, macUsers);
     final at = now ?? DateTime.now();
@@ -403,10 +409,14 @@ class DevicesCheck {
         ms: ms,
         findings: [CheckFinding(CheckLevel.info, unreadReason ?? 'يردّ، لكن ما انقرت معلوماته')],
         memo: prev,
+        pending: pending,
       );
     }
 
-    final f = <CheckFinding>[];
+    final f = <CheckFinding>[
+      // عن القراءة نفسها (جزئيّة، بطيئة) — معلومةٌ لا ملاحظة على الجهاز
+      if (readNote != null) CheckFinding(CheckLevel.info, readNote),
+    ];
     // فقدان الحزم من بنك الفحص الشامل (ثلاث حزم) — الجهاز يردّ لكنّ الطريق إليه متقطّع
     if (loss != null && loss > 0) {
       f.add(CheckFinding(loss >= 50 ? CheckLevel.bad : CheckLevel.warn, 'فقدان حزم ${loss.round()}٪ — الطريق إليه متقطّع'));
@@ -637,6 +647,7 @@ class DevicesCheck {
       onusOnline: g.onusOnline,
       onusTotal: g.onusTotal,
       lightsWanted: role == CheckRole.olt ? detail.onuLightsWanted : null,
+      pending: pending,
       memo: CheckMemo(
         ports: portsCountsOnly ? (prev?.ports ?? const {}) : memoPorts,
         peers: role == CheckRole.sector && subsKnown ? subs.length : prev?.peers,

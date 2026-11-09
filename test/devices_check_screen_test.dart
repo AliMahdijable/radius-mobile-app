@@ -190,4 +190,32 @@ void main() {
     expect(screen, contains('DeviceSweep.holders.removeListener(_onActiveChanged)'));
     expect(screen, contains('!DeviceSweep.suspended'));
   });
+
+  testWidgets('٩ نوفمبر: الجهاز البطيء «يقرأ…» بسطره، والرأس «بانتظار 1 جهاز بطيء…»، والنسخ متاحٌ أثناءه — ثمّ تقريره', (t) async {
+    DevicesCheckRunner.debugTimes = (soft: const Duration(seconds: 1), hard: const Duration(seconds: 8));
+    addTearDown(() => DevicesCheckRunner.debugTimes = null);
+    final base = DevicesCheckRunner.debugFetch!;
+    DevicesCheckRunner.debugFetch = (d) => d.id == 6
+        ? Future.delayed(const Duration(seconds: 4), () => _r(const DeviceDetail(glance: DeviceGlance(cpu: 5, uptimeSec: 86400))))
+        : base(d);
+    await pumpSim(t, const SimVariant(390, dark: false), settle: false,
+        home: (_) => DevicesCheckScreen(devices: devices, viaVpn: false));
+    // الترجمة تُحمَّل أوّلاً — ننتظر حتى يبلغ الجهاز البطيء مهلته الأولى
+    const waiting = 'بانتظار 1 جهاز بطيء…';
+    for (var i = 0; i < 40 && find.text(waiting).evaluate().isEmpty; i++) {
+      await t.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text(waiting), findsOneWidget);
+    await see(t, find.byKey(const ValueKey('check-card-6')));
+    expect(find.descendant(of: find.byKey(const ValueKey('check-card-6')), matching: find.text('يقرأ…')), findsOneWidget);
+    expect(t.widget<IconButton>(find.byKey(const ValueKey('check-copy'))).onPressed, isNotNull, reason: 'يُنسخ ما اكتمل');
+    await t.scrollUntilVisible(find.byKey(const ValueKey('check-head')), -300, scrollable: find.byType(Scrollable).first);
+    for (var i = 0; i < 60 && find.text('فُحصت 6 أجهزة').evaluate().isEmpty; i++) {
+      await t.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('فُحصت 6 أجهزة'), findsOneWidget);
+    await see(t, find.byKey(const ValueKey('check-card-6')));
+    expect(find.descendant(of: find.byKey(const ValueKey('check-card-6')), matching: find.text('يقرأ…')), findsNothing);
+    await t.pumpWidget(const SizedBox());
+  });
 }

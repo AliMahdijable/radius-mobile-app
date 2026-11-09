@@ -156,6 +156,7 @@ class DevicesCheckRunner extends ChangeNotifier {
     errorReason = null;
     line = null;
     reports.clear();
+    _slow.clear();
     notifyListeners();
     try {
       final (limits, memos, macs) = await (loadLimits(), DevicesCheckMemoStore.load(), _macIndex()).wait;
@@ -196,78 +197,176 @@ class DevicesCheckRunner extends ChangeNotifier {
   @override
   void dispose() {
     _gen++;
+    for (final t in _timers) {
+      t.cancel();
+    }
+    _timers.clear();
     super.dispose();
   }
 
   // ── من شبكتك ──────────────────────────────────────────────────────
+
+  /// أجهزةٌ تجاوزت المهلة الأولى وبسطرٍ مؤقّت تنتظر قراءتها حتى السقف — «بانتظار n أجهزة بطيئة» (٩ نوفمبر).
+  final _slow = <int>{};
+  Set<int> get slowPending => Set.unmodifiable(_slow);
+
+  /// المهلة الأولى ثمّ السقف: بعد الأولى يُعرض ما عُرف («بطيء — يكمل قراءته…») ويبقى الانتظار حتى الثاني — كصفحة المشتركين
+  /// (`_keepLate`): القراءة البطيئة لا تُرمى. من شبكتك ٢٥ث/٩٠ث، وعبر الممرّ ٤٥ث/١٢٠ث (كلّ رحلةٍ أطول).
+  static ({Duration soft, Duration hard}) timesFor({required bool piped}) =>
+      debugTimes ??
+      (piped
+          ? (soft: const Duration(seconds: 45), hard: const Duration(seconds: 120))
+          : (soft: const Duration(seconds: 25), hard: const Duration(seconds: 90)));
+
+  @visibleForTesting
+  static ({Duration soft, Duration hard})? debugTimes;
 
   Future<void> _local(CheckLimits limits, Map<int, CheckMemo> memos, Map<String, String> macs, int gen) async {
     final queue = Queue<NetworkDevice>.from(devices);
     Future<void> worker() async {
       while (queue.isNotEmpty && gen == _gen) {
         final d = queue.removeFirst();
-        final r = await _checkLocal(d, limits, memos[d.id], macs, () => gen != _gen);
-        if (gen != _gen) return;
-        reports[d.id] = r;
-        done++;
-        notifyListeners();
+        await _checkOne(d, limits, memos[d.id], macs, gen);
       }
     }
 
-    // ستّةٌ معاً: القراءة المفصّلة تفتح جلسة إدارةٍ على الجهاز — لا نغرق الشبكة ولا الأجهزة الضعيفة، والنتائج تظهر أوّلاً بأوّل
+    // ستّةٌ معاً: القراءة المفصّلة تفتح جلسة إدارةٍ على الجهاز — لا نغرق الشبكة ولا الأجهزة الضعيفة، والنتائج تظهر أوّلاً بأوّل.
+    // العامل ينتظر جهازه البطيء حتى السقف (لا جلساتٌ فوق الستّ)، وسطره المؤقّت ظاهرٌ منذ المهلة الأولى.
     await Future.wait([for (var i = 0; i < 6; i++) worker()]);
   }
 
-  static Future<DeviceCheckReport> _checkLocal(
-      NetworkDevice d, CheckLimits limits, CheckMemo? prev, Map<String, String> macs, bool Function() cancelled) async {
+  /// مؤقّتات المهل الجارية — تُلغى بانتهاء القراءة أو بإغلاق الفحص (لا مؤقّتٌ يبقى لكلّ جهاز).
+  final _timers = <Timer>{};
+
+  /// القراءة أو انقضاء [d] أيّهما أسبق — [_Slow] حين تنقضي.
+  Future<Object> _race(Future<Object> outcome, Duration d) {
+    final c = Completer<Object>();
+    late final Timer timer;
+    timer = Timer(d, () {
+      _timers.remove(timer);
+      if (!c.isCompleted) c.complete(_Slow.instance);
+    });
+    _timers.add(timer);
+    outcome.then((v) {
+      timer.cancel();
+      _timers.remove(timer);
+      if (!c.isCompleted) c.complete(v);
+    });
+    return c.future;
+  }
+
+  /// تقرير الجهاز النهائيّ ⇒ القائمة والعدّاد.
+  void _final(NetworkDevice d, DeviceCheckReport r, int gen) {
+    if (gen != _gen) return;
+    _slow.remove(d.id);
+    reports[d.id] = r;
+    done++;
+    notifyListeners();
+  }
+
+  Future<void> _checkOne(NetworkDevice d, CheckLimits limits, CheckMemo? prev, Map<String, String> macs, int gen) async {
+    bool live() => gen == _gen;
     DeviceProbe? probe;
     // عبر الـVPN كلّ رحلةٍ أطول (الموبايل ⇄ الخادم ⇄ النفق) ⇒ مهلٌ أوسع
     final piped = DeviceNet.viaPipe(d.ip);
     try {
       probe = await (debugProbe?.call(d) ?? NetworkDevicesApi.probeDevice(d, ping: true)).timeout(Duration(seconds: piped ? 25 : 15));
     } catch (_) {}
+    if (!live()) return;
     final alive = switch (probe?.status) { 'online' => true, 'offline' => false, _ => null };
-    if (alive == false) return DevicesCheck.evaluate(d: d, alive: false, limits: limits, prev: prev);
+    if (alive == false) return _final(d, DevicesCheck.evaluate(d: d, alive: false, limits: limits, prev: prev), gen);
 
     // ما يمنع القراءة (بلا بيانات دخول، علامةٌ بلا مقاييس، بروتوكولٌ لا يُقرأ) — «غير متّصل/خارج شبكتك» حسمهما البنك أعلاه
     final skip = DeviceVitals.skipReason(d);
     final hard = skip == null || skip == DeviceVitals.offNetworkReason || skip == 'غير متّصل' ? null : skip;
     if (hard != null) {
-      return DevicesCheck.evaluate(
-          d: d, alive: alive, ms: probe?.responseMs, loss: probe?.packetLoss, unreadReason: '$hard — الحال فقط', limits: limits, prev: prev);
+      return _final(
+          d,
+          DevicesCheck.evaluate(
+              d: d, alive: alive, ms: probe?.responseMs, loss: probe?.packetLoss, unreadReason: '$hard — الحال فقط', limits: limits, prev: prev),
+          gen);
     }
-    final deadline = piped ? 45 : 25;
-    try {
-      // الأولت: الحكم من البنية، والضوء بما بقي (حتى ٥ث قبل المهلة) ويقف بإغلاق الفحص — راجع [DeviceVitals.fetch]
-      final p = await (debugFetch?.call(d) ??
-              DeviceVitals.fetch(d,
-                  detailed: true,
-                  withOnuLights: true,
-                  lightsUntil: DateTime.now().add(Duration(seconds: deadline - 5)),
-                  isCancelled: cancelled))
-          .timeout(Duration(seconds: deadline));
+    final t = timesFor(piped: piped);
+    // ميكروتك: الطبقة الأولى (الموارد والصحّة والمنافذ) حين تصل — إن تأخّر الباقي يُحكم بها وعملاؤه «لم تُقرأ»
+    ProbeResult? partial;
+    // الأولت: الحكم من البنية، والضوء بما بقي (حتى ٥ث قبل المهلة الأولى) ويقف بإغلاق الفحص — راجع [DeviceVitals.fetch]
+    final read = debugFetch?.call(d) ??
+        DeviceVitals.fetch(d,
+            detailed: true,
+            withOnuLights: true,
+            lightsUntil: DateTime.now().add(t.soft - const Duration(seconds: 5)),
+            isCancelled: () => !live(),
+            onPartial: (p) => partial = p);
+    final outcome = read.then<Object>((p) => p, onError: (Object e) => _Failed(e));
+
+    DeviceCheckReport full(ProbeResult p) => DevicesCheck.evaluate(
+          d: d,
+          alive: true,
+          ms: probe?.responseMs,
+          loss: probe?.packetLoss,
+          detail: p.detail,
+          raw: p.raw,
+          limits: limits,
+          prev: prev,
+          macUsers: macs,
+        );
+    // ما يُعرض حين لم تكتمل القراءة: الطبقة الأولى إن وصلت (حيويّاته ومنافذه — مقروءةٌ الآن)، وإلّا «لم يُقرأ» بسببه
+    DeviceCheckReport short(String reason, {bool pending = false}) {
+      final p = partial;
+      if (p != null) {
+        return DevicesCheck.evaluate(
+          d: d,
+          alive: true,
+          ms: probe?.responseMs,
+          loss: probe?.packetLoss,
+          detail: p.detail,
+          raw: p.raw,
+          limits: limits,
+          prev: prev,
+          macUsers: macs,
+          readNote: 'قراءةٌ جزئيّة — $reason',
+          pending: pending,
+        );
+      }
       return DevicesCheck.evaluate(
-        d: d,
-        alive: true,
-        ms: probe?.responseMs,
-        loss: probe?.packetLoss,
-        detail: p.detail,
-        raw: p.raw,
-        limits: limits,
-        prev: prev,
-        macUsers: macs,
-      );
-    } catch (e) {
-      return DevicesCheck.evaluate(
-        d: d,
-        alive: alive ?? true,
-        ms: probe?.responseMs,
-        loss: probe?.packetLoss,
-        unreadReason: unreadReason(e, deadline: deadline, serviceOk: probe?.serviceOk),
-        limits: limits,
-        prev: prev,
-      );
+          d: d,
+          alive: alive ?? true,
+          ms: probe?.responseMs,
+          loss: probe?.packetLoss,
+          unreadReason: reason,
+          limits: limits,
+          prev: prev,
+          pending: pending);
     }
+
+    // فشلٌ من داخل القارئ (المهلة الكلّيّة لا ترمي هنا — يُسابَق بها): مهلته الداخليّة تُفصل بجواب الخدمة بالبنك
+    String why(Object e) => unreadReason(e, serviceOk: probe?.serviceOk);
+
+    // ١) المهلة الأولى
+    final first = await _race(outcome, t.soft);
+    if (!live()) return;
+    if (first is ProbeResult) return _final(d, full(first), gen);
+    if (first is _Failed) return _final(d, short(why(first.error)), gen);
+
+    // ٢) بطيء: سطرٌ مؤقّت بما عُرف، والانتظار حتى السقف
+    _slow.add(d.id);
+    reports[d.id] = short('بطيء — يكمل قراءته (تجاوز ${t.soft.inSeconds}ث)…', pending: true);
+    notifyListeners();
+    final second = await _race(outcome, t.hard - t.soft);
+    if (!live()) return;
+    if (second is ProbeResult) return _final(d, full(second), gen);
+    if (second is _Failed) return _final(d, short(why(second.error)), gen);
+
+    // ٣) السقف: «بطيء» بثوانيه — وما يصل بعده يُحفظ ويحلّ محلّه ما دام الفحص نفسه قائماً (لا يُرمى)
+    final capped = short('بطيء — لم تكتمل قراءته خلال ${t.hard.inSeconds}ث');
+    _final(d, capped, gen);
+    unawaited(outcome.then((late) {
+      if (late is! ProbeResult || !live() || !identical(reports[d.id], capped)) return;
+      final r = full(late);
+      reports[d.id] = r;
+      if (r.memo != null) unawaited(DevicesCheckMemoStore.save({d.id: r.memo!}));
+      notifyListeners();
+    }));
   }
 
   // ── لماذا لم يُقرأ ────────────────────────────────────────────────
@@ -278,12 +377,12 @@ class DevicesCheckRunner extends ChangeNotifier {
   ///
   /// ٩ نوفمبر (المالك: «مرات اكو اجهزه بالنظام يتفحها ويعرض معلومات بس بقسم فحص الاجهزه يكول لم يقرا»): كان كلّ فشلٍ «تأكّد من
   /// اسم المستخدم والرمز» — ومهلة الجهاز البطيء، والمنفذ المقفول، وزحمة ممرّ الـVPN، وتعذّر جلب بيانات الدخول من خادمنا كلّها غيره.
-  /// رسالة الدخول الآن لرفض الدخول الحقيقيّ وحده. [deadline] مهلة القراءة كلّها (ث)، و[serviceOk] جواب خدمة الإدارة بالبنك (null
-  /// = لم يُعرف) — يفصل «بطيء» عن «لا يُفتح» حين تأتي المهلة من داخل القارئ.
+  /// رسالة الدخول الآن لرفض الدخول الحقيقيّ وحده. [deadline] مهلة القراءة كلّها (ث) حين تكون [e] هي (null = فشلٌ من داخل
+  /// القارئ)، و[serviceOk] جواب خدمة الإدارة بالبنك (null = لم يُعرف) — يفصل «بطيء» عن «لا يُفتح» حين تأتي المهلة من الداخل.
   @visibleForTesting
-  static String unreadReason(Object e, {required int deadline, bool? serviceOk}) {
+  static String unreadReason(Object e, {int? deadline, bool? serviceOk}) {
     // ١) المهلة كلّها — الجهاز يردّ لكنّ قراءته الكاملة أطول منها
-    if (e is TimeoutException) return 'بطيء — لم تكتمل قراءته خلال $deadlineث';
+    if (e is TimeoutException && deadline != null) return 'بطيء — لم تكتمل قراءته خلال $deadlineث';
     final s = e.toString();
     final low = s.toLowerCase();
     // ٢) ممرّ الـVPN وخادمنا (رسائل الخادم كما هي: «اتّصالاتٌ كثيرة الآن — لحظات»، «الـVPN ما اتّصل الآن…»)
@@ -317,7 +416,8 @@ class DevicesCheckRunner extends ChangeNotifier {
       return 'بيانات دخوله ناقصة — أكملها من صفحة الجهاز';
     }
     if (s.contains('غير مدعومة')) return 'علامته لا تُقرأ بالفحص';
-    final inTime = e is SnmpTimeoutException ||
+    final inTime = e is TimeoutException ||
+        e is SnmpTimeoutException ||
         low.contains('timeout') ||
         low.contains('timed out') ||
         s.contains('مهلة') ||
@@ -342,4 +442,16 @@ class DevicesCheckRunner extends ChangeNotifier {
     if (inTime) return serviceOk == false ? _service : 'بطيء — ما كمّل جوابه بالوقت';
     return serviceOk == false ? _service : 'يردّ، لكن ما انقرت معلوماته';
   }
+}
+
+/// قراءةٌ فشلت — بسببها (لا يُخلط بالمهلة).
+class _Failed {
+  const _Failed(this.error);
+  final Object error;
+}
+
+/// انقضت المهلة والقراءة لم تكتمل.
+class _Slow {
+  const _Slow._();
+  static const instance = _Slow._();
 }

@@ -12,6 +12,7 @@ import 'package:rad_mysvcs/api/api_client.dart';
 import 'package:rad_mysvcs/api/cisco_api.dart';
 import 'package:rad_mysvcs/api/mikrotik_api.dart';
 import 'package:rad_mysvcs/api/network_devices_api.dart';
+import 'package:rad_mysvcs/api/routeros_channel.dart';
 import 'package:rad_mysvcs/api/ubnt_api.dart';
 import 'package:rad_mysvcs/api/vsol_olt_api.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
@@ -566,20 +567,25 @@ void main() {
       DevicesCheckRunner.debugLimits = () async => const CheckLimits();
       DevicesCheckRunner.debugSubscribers = () async => const [];
       DevicesCheckRunner.debugProbe = (d) async => (status: 'online', responseMs: 4, packetLoss: 0.0, serviceOk: true);
-      DevicesCheckRunner.debugFetch = (d) async => d.id == 1
-          ? throw TimeoutException('read', const Duration(seconds: 25))
-          : throw MikrotikException('invalid user name or password (6)', code: 'auth');
+      // ٩ نوفمبر (المرحلة ٢): المهلة لا تقطع — البطيء من لا تكتمل قراءته حتى السقف
+      DevicesCheckRunner.debugTimes = (soft: const Duration(milliseconds: 50), hard: const Duration(milliseconds: 150));
+      DevicesCheckRunner.debugFetch = (d) => d.id == 1
+          ? Completer<ProbeResult>().future
+          : Future<ProbeResult>.error(MikrotikException('invalid user name or password (6)', code: 'auth'));
       addTearDown(() {
         DevicesCheckRunner.debugLimits = null;
         DevicesCheckRunner.debugSubscribers = null;
         DevicesCheckRunner.debugProbe = null;
         DevicesCheckRunner.debugFetch = null;
+        DevicesCheckRunner.debugTimes = null;
       });
       final run = DevicesCheckRunner([dev(1, type: 'sector'), dev(2)], viaVpn: false);
       await run.run();
       expect(run.reports[1]!.state, CheckState.unread);
-      expect(texts(run.reports[1]!), ['بطيء — لم تكتمل قراءته خلال 25ث']);
+      expect(texts(run.reports[1]!), ['بطيء — لم تكتمل قراءته خلال 0ث']);
       expect(texts(run.reports[2]!), [login]);
+      // ومهلةٌ من داخل القارئ (لا الكلّيّة) والخدمة أجابت البنك ⇒ بطيء بلا ثوانٍ مدّعاة
+      expect(DevicesCheckRunner.unreadReason(TimeoutException('ssh'), serviceOk: true), 'بطيء — ما كمّل جوابه بالوقت');
       run.dispose();
     });
   });
@@ -618,6 +624,101 @@ void main() {
       expect(srv.calls, 3);
     });
   });
+
+  group('٩ نوفمبر — المهلة الأولى لا تقطع: سطرٌ مؤقّت ثمّ التقرير، والسقف «بطيء»، والمتأخّر يحلّ محلّه', () {
+    ProbeResult res(DeviceDetail detail) => ProbeResult(vitals: const [], detail: detail, counters: const {});
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      DevicesCheckRunner.debugLimits = () async => const CheckLimits();
+      DevicesCheckRunner.debugSubscribers = () async => const [];
+      DevicesCheckRunner.debugProbe = (d) async => (status: 'online', responseMs: 4, packetLoss: 0.0, serviceOk: true);
+      DevicesCheckRunner.debugTimes = (soft: const Duration(milliseconds: 150), hard: const Duration(milliseconds: 600));
+    });
+    tearDown(() {
+      DevicesCheckRunner.debugLimits = null;
+      DevicesCheckRunner.debugSubscribers = null;
+      DevicesCheckRunner.debugProbe = null;
+      DevicesCheckRunner.debugFetch = null;
+      DevicesCheckRunner.debugTimes = null;
+    });
+
+    test('🚨 قراءةٌ أطول من المهلة الأولى وأقصر من السقف ⇒ «يقرأ…» مؤقّتاً ثمّ تقريرها — لا «لم يُقرأ»', () async {
+      DevicesCheckRunner.debugFetch = (d) => Future.delayed(
+          const Duration(milliseconds: 350), () => res(const DeviceDetail(glance: DeviceGlance(cpu: 12, uptimeSec: 86400 * 4))));
+      final run = DevicesCheckRunner([dev(1)], viaVpn: false);
+      final seen = <String>[];
+      String? interim;
+      run.addListener(() {
+        final r = run.reports[1];
+        if (r == null) return;
+        seen.add('${r.pending ? 'pending' : r.state.name}|${run.slowPending.length}|${run.done}');
+        if (r.pending) interim ??= texts(r).single;
+      });
+      await run.run();
+      expect(seen.first, 'pending|1|0', reason: 'سطرٌ مؤقّت عند المهلة الأولى، والعدّاد لا يحسبه');
+      expect(interim, startsWith('بطيء — يكمل قراءته'));
+      expect(seen.last, 'ok|0|1');
+      expect(run.reports[1]!.cpu, 12);
+      run.dispose();
+    });
+
+    test('السقف ⇒ «بطيء — لم تكتمل قراءته خلال…»، والقراءة المتأخّرة بعده تحلّ محلّه (لا تُرمى) وتُحفظ لقطتها', () async {
+      final late = Completer<ProbeResult>();
+      DevicesCheckRunner.debugFetch = (d) => late.future;
+      final run = DevicesCheckRunner([dev(2, type: 'switch')], viaVpn: false);
+      await run.run();
+      expect(run.running, isFalse);
+      expect(run.reports[2]!.state, CheckState.unread);
+      expect(texts(run.reports[2]!).single, startsWith('بطيء — لم تكتمل قراءته خلال'));
+      expect(run.slowPending, isEmpty);
+      late.complete(res(const DeviceDetail(glance: DeviceGlance(cpu: 7), ports: [PortTraffic(name: 'ether1', up: true, linkSpeed: '1Gbps')])));
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(run.reports[2]!.state, CheckState.ok);
+      expect(run.reports[2]!.cpu, 7);
+      expect((await DevicesCheckMemoStore.load())[2]!.ports['ether1']!.mbps, 1000);
+      run.dispose();
+    });
+
+    test('أُغلق الفحص قبل أن تصل ⇒ لا تحديث بعد التخلّص (ولا استثناء)', () async {
+      final late = Completer<ProbeResult>();
+      DevicesCheckRunner.debugFetch = (d) => late.future;
+      final run = DevicesCheckRunner([dev(3)], viaVpn: false);
+      final f = run.run();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      run.dispose();
+      late.complete(res(const DeviceDetail(glance: DeviceGlance(cpu: 1))));
+      await f;
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      expect(run.reports[3], isNull);
+    });
+
+    test('🚨 ميكروتك بطيء بجدول التسجيل: الطبقة الأولى تُعرض عند المهلة الأولى، وعند السقف تبقى بحيويّاتها ومنافذها', () async {
+      // القارئ الحقيقيّ (لا debugFetch): RouterOS يجيب الموارد والمنافذ فوراً وجدول التسجيل بعد ثانيتين
+      ApiClient.dio.httpClientAdapter = _CredsReplies();
+      NetworkDevicesApi.invalidateCredentialsCache();
+      MikrotikApi.channelFactory = (route, ip, port, user, pass, timeout) => _SlowRegTable();
+      addTearDown(() {
+        MikrotikApi.channelFactory = (route, ip, port, user, pass, timeout) => throw UnimplementedError(route);
+        MikrotikApi.resetRoutesForTest();
+      });
+      final run = DevicesCheckRunner([dev(4, type: 'sector')], viaVpn: false);
+      String? interim;
+      run.addListener(() {
+        final r = run.reports[4];
+        if (r != null && r.pending) interim ??= '${r.cpu}|${texts(r).join(',')}';
+      });
+      await run.run();
+      expect(interim, startsWith('9|'), reason: 'المعالج من الطبقة الأولى منذ المهلة الأولى');
+      expect(interim, contains('قراءةٌ جزئيّة — بطيء — يكمل قراءته'));
+      final r = run.reports[4]!;
+      expect(r.cpu, 9);
+      expect(r.portsTotal, 1);
+      expect(texts(r), contains('قائمة مشتركيه ما انقرت'), reason: 'لا «ما عليه أحد» من طبقةٍ بلا جدول');
+      expect(texts(r).any((t) => t.startsWith('قراءةٌ جزئيّة — بطيء — لم تكتمل قراءته خلال')), isTrue);
+      expect(r.state, CheckState.unread);
+      run.dispose();
+    });
+  });
 }
 
 /// خادمٌ يردّ بالرموز بالترتيب (٢٠٠ = بيانات الدخول).
@@ -638,4 +739,40 @@ class _CredsReplies implements HttpClientAdapter {
 
   @override
   void close({bool force = false}) {}
+}
+
+/// RouterOS يجيب الطبقة الأولى فوراً وجدول التسجيل بعد ثانيتين (سكتر بطيء عبر SSH).
+class _SlowRegTable implements RouterOsChannel {
+  @override
+  String get via => 'SSH';
+  @override
+  Future<void> open() async {}
+  @override
+  Future<List<Map<String, String>>> query(List<String> words, {bool debugLog = false}) async {
+    switch (words.first) {
+      case '/system/resource/print':
+        return [
+          {'board-name': 'BaseBox 5', 'version': '6.34.3', 'cpu-load': '9', 'total-memory': '67108864', 'free-memory': '40000000', 'uptime': '2w'}
+        ];
+      case '/interface/print':
+        return [
+          {'name': 'ether1', 'type': 'ether', 'running': 'true', 'disabled': 'false'},
+          {'name': 'wlan1', 'type': 'wlan', 'running': 'true', 'disabled': 'false'},
+        ];
+      case '/interface/wireless/print':
+        return [
+          {'name': 'wlan1', 'mode': 'ap-bridge', 'band': '5ghz-a/n', 'disabled': 'false', 'running': 'true'}
+        ];
+      case '/interface/wireless/registration-table/print':
+        await Future<void>.delayed(const Duration(seconds: 2));
+        return const [];
+      case '/system/health/print':
+      case '/ppp/active/print':
+        return const [];
+    }
+    throw MikrotikException('no such command');
+  }
+
+  @override
+  Future<void> close() async {}
 }

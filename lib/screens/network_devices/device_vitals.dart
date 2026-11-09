@@ -564,18 +564,22 @@ class DeviceVitals {
 
   /// [withOnuLights] (٩ نوفمبر — «الفحص الشامل» وحده): ضوء كلّ ONU متّصلة بعد البنية، حتى [lightsUntil] أو [isCancelled] —
   /// والحكم من البنية نفسها ولو لم يكتمل الضوء. البطاقة الكبيرة والبرج لا يطلبانه (لا يعرضانه، وكان يخنق وكيل VSOL ٣٤–١٠٢ث).
+  ///
+  /// [onPartial] (ميكروتك المفصّلة): الطبقة الأولى حين تصل، قبل جدول التسجيل وما بعده.
   static Future<ProbeResult> fetch(NetworkDevice d,
       {CounterSample? prev,
       bool detailed = false,
       bool withOnuLights = false,
       DateTime? lightsUntil,
-      bool Function()? isCancelled}) async {
+      bool Function()? isCancelled,
+      void Function(ProbeResult partial)? onPartial}) async {
     final r = await _fetch(d,
         prev: prev,
         detailed: detailed,
         withOnuLights: withOnuLights,
         lightsUntil: lightsUntil,
-        isCancelled: isCancelled);
+        isCancelled: isCancelled,
+        onPartial: onPartial);
     // «القراءات الحسّاسة» (٤ نوفمبر): ما قُرئ يُرفع للخادم — المعالج والحرارة والفولتيّة والإشارة وCCQ ([VitalsReporter]؛ لا شيء ما لم
     // تُفتح للشركة)
     VitalsReporter.instance.record(d, r.detail.glance, peers: r.detail.peers);
@@ -587,14 +591,15 @@ class DeviceVitals {
       bool detailed = false,
       bool withOnuLights = false,
       DateTime? lightsUntil,
-      bool Function()? isCancelled}) async {
+      bool Function()? isCancelled,
+      void Function(ProbeResult partial)? onPartial}) async {
     final creds = await NetworkDevicesApi.getCredentials(d.id);
     if (_isOlt(d)) {
       return _olt(d, creds, withOnuLights: withOnuLights, lightsUntil: lightsUntil, isCancelled: isCancelled);
     }
     switch (d.brand.toLowerCase()) {
       case 'mikrotik':
-        return _mikrotik(d, creds, prev, detailed);
+        return _mikrotik(d, creds, prev, detailed, onPartial: onPartial);
       case 'ubnt':
         return _ubnt(d, creds, prev);
       case 'mimosa':
@@ -662,15 +667,22 @@ class DeviceVitals {
   // ── ميكروتك: معالج · ذاكرة · حرارة ───────────────────────────────
 
   static Future<ProbeResult> _mikrotik(NetworkDevice d,
-      Map<String, dynamic> creds, CounterSample? prev, bool detailed) async {
+      Map<String, dynamic> creds, CounterSample? prev, bool detailed,
+      {void Function(ProbeResult partial)? onPartial}) async {
     final s = await MikrotikApi.fetchStatsFor(
       ip: d.ip,
       protocol: d.protocol,
       apiPort: d.apiPort,
       creds: creds,
       vitalsOnly: !detailed,
+      // الطبقة الأولى (الموارد والصحّة والمنافذ) لمن يطلبها — «الفحص الشامل» يحكم بها إن تأخّر الباقي (٩ نوفمبر)
+      onPartialReady: onPartial == null || !detailed ? null : (t1) => onPartial(mikrotikResult(d, t1, prev, detailed: true)),
     );
+    return mikrotikResult(d, s, prev, detailed: detailed);
+  }
 
+  /// قراءة ميكروتك ⇒ الخانات والتفصيل — من جلسةٍ كاملة أو من طبقتها الأولى (عملاؤها «لم تُقرأ»: [MikrotikStats.clientsRead]).
+  static ProbeResult mikrotikResult(NetworkDevice d, MikrotikStats s, CounterSample? prev, {required bool detailed}) {
     final counters = <String, ({int rx, int tx})>{};
     final ports = <PortTraffic>[];
     for (final i in s.interfaces) {

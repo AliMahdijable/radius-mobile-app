@@ -158,7 +158,8 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
               IconButton(
                 key: const ValueKey('check-copy'),
                 tooltip: 'نسخ التقرير',
-                onPressed: _run.running || _run.reports.isEmpty ? null : _copyAll,
+                // ٩ نوفمبر: يُنسخ ما اكتمل ولو بقي جهازٌ بطيء يُقرأ
+                onPressed: _run.reports.isEmpty ? null : _copyAll,
                 icon: const Icon(LucideIcons.copy, size: 20),
               ),
               IconButton(
@@ -265,22 +266,28 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
             borderRadius: BorderRadius.circular(R.pill),
             child: LinearProgressIndicator(
               minHeight: 6,
-              value: (vpn && !merged) || total == 0 ? null : _run.done / total,
+              // عبر ممرّ الـVPN الفحص نفسه جهازاً جهازاً (٧ نوفمبر) ⇒ عدّادٌ حقيقيّ؛ ويتّصل بالـVPN أوّلاً بلا عدّ
+              value: (vpn && !merged && _run.line != null) || total == 0 ? null : _run.done / total,
               backgroundColor: AppColors.surfaceInput,
               color: AppColors.brand,
             ),
           ),
           const SizedBox(height: Sp.xs),
           Text(
-              merged
-                  ? (_run.line ?? 'يفحص ${_run.done} من $total…')
-                  : vpn
-                      ? (_run.line ?? 'يتّصل بالـVPN…')
-                      : 'يفحص ${_run.done} من $total…',
+              merged || vpn ? (_run.line ?? _progress()) : _progress(),
+              key: const ValueKey('check-progress'),
               style: AppType.micro(color: AppColors.textMid)),
         ],
       ]),
     );
+  }
+
+  /// سطر التقدّم: «يفحص n من N…» — وحين لا يبقى إلّا البطيء «بانتظار n أجهزة بطيئة…» (٩ نوفمبر: البطيء لا يُقطع عند ٢٥ث).
+  String _progress() {
+    final slow = _run.slowPending.length;
+    final left = _run.total - _run.done;
+    if (slow > 0 && left <= slow) return 'بانتظار $slow ${slow == 1 ? 'جهاز بطيء' : 'أجهزة بطيئة'}…';
+    return 'يفحص ${_run.done} من ${_run.total}…${slow > 0 ? ' · بطيء $slow' : ''}';
   }
 
   /// «كل الشركات»: سطرٌ لكلّ شركة — طريقها وعدد أجهزتها، أو لماذا لم تُفحص (بلا VPN تُسمّى، لا «طافية»). شركةٌ لها نتائج تُضغط
@@ -458,7 +465,8 @@ class _DevicesCheckScreenState extends State<DevicesCheckScreen> {
                   ]),
                 ),
                 const SizedBox(width: Sp.xs),
-                _pill(r.stateLabel, tone),
+                // سطرٌ مؤقّت: قراءته جارية بعد المهلة الأولى
+                r.pending ? _pill('يقرأ…', AppTone.neutral) : _pill(r.stateLabel, tone),
               ]),
               if (r.vitals.isNotEmpty) ...[
                 const SizedBox(height: Sp.sm),
