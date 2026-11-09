@@ -574,9 +574,22 @@ class MimosaApi {
     int port = 161,
     required String community,
     Duration timeout = const Duration(seconds: 5),
+  }) async =>
+      (await fetchClientsRead(host: host, port: port, community: community, timeout: timeout)).clients;
+
+  /// [fetchClients] ومعها هل قُرئت القائمة فعلاً ([read]) — «ما عليه أحد الآن» في «الفحص الشامل» بها (مراجعة 180).
+  ///
+  /// قُرئت = أجاب جدولٌ بلا مهلة: الرسميّان أو البديل القديم بصفوفه، أو كلاهما فارغين (سكترٌ بلا محطّات، PtP بلا جدول).
+  /// مهلة الرسميّين (٥٠٤ ممرّ الـVPN، جهازٌ مشغول) والبديل فارغ — برنامجٌ بالرسميّين وحدهما بديله غائب — أو فشل
+  /// البديل ⇒ read=false: كان الفشل يُبتلع قائمةً فارغة فيُقرأ السكتر «ما عليه أحد الآن · سليم» ويُحفظ عدده صفراً.
+  static Future<({List<MimosaClient> clients, bool read})> fetchClientsRead({
+    required String host,
+    int port = 161,
+    required String community,
+    Duration timeout = const Duration(seconds: 5),
   }) async {
     final fakeClients = debugClients;
-    if (fakeClients != null) return fakeClients();
+    if (fakeClients != null) return (clients: await fakeClients(), read: true);
     final snmp = SnmpV2c(
       host: host,
       port: port,
@@ -585,14 +598,16 @@ class MimosaApi {
     );
 
     // الجدولان الرسميّان أوّلاً — مسحتان لا اثنتا عشرة.
+    var officialRead = false;
     try {
       final official = await Future.wait([
         snmp.walk(_ptmpInfoEntry, chunkSize: 24),
         snmp.walk(_ptmpStatsEntry, chunkSize: 24),
       ]);
       final list = clientsFromOfficial(official[0], official[1]);
-      if (list.isNotEmpty) return list;
-    } catch (_) {/* برنامجٌ بلا الجدولين — البديل القديم */}
+      if (list.isNotEmpty) return (clients: list, read: true);
+      officialRead = true;
+    } catch (_) {/* برنامجٌ بلا الجدولين أو مهلة — البديل القديم، ولا «قُرئت» بلا جوابهما */}
 
     try {
       // 6 أعمدة بالتوازي — كلها walks على نفس الجدول
@@ -660,12 +675,11 @@ class MimosaApi {
         final rb = b.rssiDbm ?? -999;
         return rb.compareTo(ra);
       });
-      return clients;
-    } on SnmpException catch (_) {
-      // الجهاز لا يدعم PtMP MIB — قائمة فارغة بدلاً من exception
-      return const [];
+      // البديل بصفوفه قراءة؛ وفراغه «لا أحد» حين أجاب الرسميّان فارغين أيضاً
+      return (clients: clients, read: clients.isNotEmpty || officialRead);
     } catch (_) {
-      return const [];
+      // مهلةٌ أو خطأٌ في البديل — قائمةٌ فارغة للوحة بدل exception، و«لم تُقرأ» لا «لا أحد»
+      return (clients: const <MimosaClient>[], read: false);
     }
   }
 

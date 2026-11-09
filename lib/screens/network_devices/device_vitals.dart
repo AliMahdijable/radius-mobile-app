@@ -525,14 +525,22 @@ class DeviceVitals {
     final cut = ros && pt0 is Map && portsTotal == 0 && list(v['pl']).isEmpty;
     final isAp = apFlag ?? (ros && peerRows.length >= 2 ? true : null);
     final sig = n(v['sig']);
+    // مراجعة 180: راديوه المفعّل يعمل؟ (`ru` من الخادم: running في /interface/print). بلا وضعٍ مقروء (ap) فراغ القائمة
+    // «لا أحد» حين يعمل وحده — مفعّلٌ لا يعمل (DFS، بلا قناة، عطل) كان «سكتر · سليم» + «ما عليه أحد الآن»؛
+    // وخادمٌ لا يرسله ⇒ لم تُقرأ
+    final radioUp = v['ru'] is bool ? v['ru'] as bool : null;
     final glance = DeviceGlance(
       uptimeSec: up,
-      peersKnown: v['peers'] is List && (!ros || peerRows.isNotEmpty || v['reg_ok'] == true),
+      peersKnown: v['peers'] is List &&
+          (!ros ||
+              peerRows.isNotEmpty ||
+              (v['reg_ok'] == true && (isAp != null || radioFlag == false || radioUp == true))),
       radioUnread: ros && isAp == null && (radioFlag == true || peerRows.isNotEmpty),
       apUnknown: ros && isAp == null && radioFlag != false,
       portsUnread: cut,
-      // محطّة airOS: إشارة 0 = غير مرتبطة (لا «0 dBm» ممتازة) — الوصلة مقطوعة
-      linkDown: airos && apFlag == false && v['sig'] is num && (v['sig'] as num) == 0,
+      // محطّة airOS: إشارة 0 = غير مرتبطة (لا «0 dBm» ممتازة) — الوصلة مقطوعة؛ وRouterOS: راديوٌ مفعّل لا يعمل
+      linkDown: (airos && apFlag == false && v['sig'] is num && (v['sig'] as num) == 0) ||
+          (ros && radioFlag == true && radioUp == false && peerRows.isEmpty),
       hasRadio: airos ? true : (ros ? (radioFlag ?? (isAp != null || peerRows.isNotEmpty ? true : null)) : null),
       cpu: n(v['cpu']),
       mem: n(v['mem']),
@@ -839,9 +847,16 @@ class DeviceVitals {
     // SwOS (CSS/netPower Lite) سويجٌ لا لاسلكيّ له أصلاً — واجهاتٌ لم تُقرأ لا تجعله «راديو مجهولاً»
     final swos = s.version.startsWith('SwOS');
     final radio = !swos && (s.interfaces.isEmpty || radioIfs.isNotEmpty);
-    // راديو بالطبقة الأولى لا يغطّيه صفٌّ لاسلكيّ مقروء ولا وصلة 60 — حزمةٌ لا يسألها القارئ (wifiwave2، CAPsMAN «cap»): عملاؤه ووضعه
-    // مجهولة لا «لا أحد» (المراجعة الثانية)
-    final covered = {for (final w in s.wirelessInterfaces) w.name, for (final l in s.w60gLinks) l.iface};
+    // راديو بالطبقة الأولى لا يغطّيه صفٌّ لاسلكيّ مقروء ولا وصلة 60 — حزمةٌ لا يسألها القارئ (wifiwave2، أو CAPsMAN
+    // «cap» لم يُجب جدوله): عملاؤه ووضعه مجهولة لا «لا أحد» (المراجعة الثانية)
+    final covered = {
+      for (final w in s.wirelessInterfaces) w.name,
+      for (final l in s.w60gLinks) l.iface,
+      // CAPsMAN v1: واجهات «cap» على مديرها يغطّيها جدول تسجيله حين أجاب (مراجعة 180 — كانت «لم يُقرأ» دائماً)
+      if (s.capsRead)
+        for (final i in radioIfs)
+          if (i.type.toLowerCase() == 'cap') i.name,
+    };
     final uncovered = detailed && s.clientsRead && radioIfs.any((i) => !covered.contains(i.name));
     // مقروءٌ ومفعّل ولا يعمل: محطّةٌ فقدت نقطتها، أو نقطة وصولٍ راديوها لا يشتغل (المراجعة الثانية). الحال من `/interface/print`
     // (الطبقة الأولى — running فيها دائماً) لا من صفوف قوائم اللاسلكيّ (قائمةٌ بلا running كانت ستُقرأ «طافٍ» لراديو شغّال)
@@ -1106,8 +1121,10 @@ class DeviceVitals {
     var clientsRead = false;
     if (detailed && isAp == true) {
       try {
-        clients = await MimosaApi.fetchClients(host: d.ip, port: d.apiPort ?? 161, community: community);
-        clientsRead = true;
+        final r = await MimosaApi.fetchClientsRead(host: d.ip, port: d.apiPort ?? 161, community: community);
+        clients = r.clients;
+        // مقروءةٌ حين أجاب جدولها وحده — مسحٌ انتهت مهلته كان «ما عليه أحد الآن · سليم» (مراجعة 180)
+        clientsRead = r.read;
       } catch (_) {/* بلا محطّات — الخانات الثلاث تكفي */}
     }
     int? worst(Iterable<double?> xs, {required bool low}) {

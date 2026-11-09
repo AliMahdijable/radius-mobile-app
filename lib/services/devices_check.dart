@@ -545,19 +545,25 @@ class DevicesCheck {
     final linkAp = role == CheckRole.link && g.isAp == true;
     final one = role == CheckRole.link && detail.peers.length == 1 ? detail.peers.first : null;
     final remote = one == null ? null : (linkAp ? (one.txSignal ?? one.signal) : one.txSignal);
+    // ووضعه لم يُقرأ (الخادم بلا ap، حزمة wifi) بطرفٍ واحد: إشارة صفّه بجدول التسجيل ما يستقبله هذا الجهاز من طرفه —
+    // إشارتها هنا، محطّةً كان أو نقطة وصول (مراجعة 180)؛ ولا «0 dBm»
+    final rx1 = g.isAp == null ? one?.signal : null;
+    final here = g.signal ?? (rx1 != null && rx1 < 0 ? rx1 : null);
     // حكمٌ على الوصلة نفسها (مقطوعة أو بلا طرف) — يغني عن «إشارتها ما انقرت»
     var linkJudged = false;
     if (role == CheckRole.link) {
       if (g.linkDown) {
         f.add(const CheckFinding(CheckLevel.bad, 'الوصلة مقطوعة — لا إشارة'));
         linkJudged = true;
-      } else if (linkAp && g.peersKnown && !stale && detail.peers.isEmpty) {
+      } else if (linkAp && g.peersKnown && !stale && detail.peers.isEmpty && g.signal == null && g.signalPct == null) {
+        // وطرفٌ يقرأ إشارة وصلته هو (ميموزا PtP: قدرة استقباله، ولا جدول محطّاتٍ له) يُحكم بها أدناه (مراجعة 180)
         f.add(const CheckFinding(CheckLevel.bad, 'الوصلة بلا طرفٍ ثانٍ'));
         linkJudged = true;
       } else {
-        final worst = [g.signal, remote].whereType<int>().fold<int?>(null, (a, b) => a == null || b < a ? b : a);
+        final worst = [here, remote].whereType<int>().fold<int?>(null, (a, b) => a == null || b < a ? b : a);
         if (worst != null && worst <= limits.linkSignalMin) {
-          f.add(CheckFinding(CheckLevel.warn, 'إشارة الوصلة $worst dBm — ضعيفة${worst == remote && remote != g.signal ? ' (عند الطرف الثاني)' : ''}'));
+          final far = worst == remote && remote != here ? ' (عند الطرف الثاني)' : '';
+          f.add(CheckFinding(CheckLevel.warn, 'إشارة الوصلة $worst dBm — ضعيفة$far'));
         }
         if (g.ccq != null && g.ccq! > 0 && g.ccq! < limits.linkCcqMin) {
           f.add(CheckFinding(CheckLevel.warn, 'CCQ الوصلة ${g.ccq}٪ — واطي'));
@@ -749,7 +755,7 @@ class DevicesCheck {
     // قُرئت واجهاتها بلا راديو
     var radioGap = false;
     if (role == CheckRole.link) {
-      if (!linkJudged && g.signal == null && g.signalPct == null && remote == null && g.hasRadio != false) {
+      if (!linkJudged && here == null && g.signalPct == null && remote == null && g.hasRadio != false) {
         f.add(const CheckFinding(CheckLevel.info, 'إشارة الوصلة ما انقرت'));
         radioGap = true;
       }
@@ -780,7 +786,7 @@ class DevicesCheck {
       at: at,
       viaVpn: viaVpn,
       ms: ms,
-      signal: role == CheckRole.link ? g.signal : null,
+      signal: role == CheckRole.link ? here : null,
       remoteSignal: remote,
       linkCcq: role == CheckRole.link ? g.ccq : null,
       cpu: g.cpu,
