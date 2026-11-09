@@ -87,6 +87,12 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
   bool _submitting = false;
   bool _suppressFormat = false;
 
+  /// قال الخادم «سُدّد» — والشيت يُغلق بعد الوصل والواتساب: لا تسديد ثانٍ بأيّ طريق حتى يُغلق (مراجعة 179).
+  bool _done = false;
+
+  /// وصل التسديد يُطبع الآن ⇒ «تمّ — جارٍ الطباعة…».
+  bool _printingReceipt = false;
+
   late final double _currentDebt = widget.sub.debtAbs;
   // Signed current balance (negative=debt, positive=credit). The live
   // preview adds the payment to it so the displayed "after" reflects
@@ -186,13 +192,15 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
   double get _effectiveAmount => _payAll ? _currentDebt : _amount.toDouble();
 
   bool get _canSubmit {
-    if (_submitting) return false;
+    if (_submitting || _done) return false;
     if (widget.sub.idx == null) return false;
     if (_currentDebt <= 0) return false;
     return _effectiveAmount > 0;
   }
 
   Future<void> _submit() async {
+    // سُدّد للتوّ ⇒ لا تسديد ثانٍ (الزرّ «تمّ» معطّل؛ وهذا لما يصل غيره — Enter على الحاسبة).
+    if (_done) return;
     final idx = widget.sub.idx;
     if (idx == null) return;
     setState(() => _submitting = true);
@@ -211,7 +219,10 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
       skipAutoWa: manualMode,
     ));
     if (!mounted) return;
-    setState(() => _submitting = false);
+    setState(() {
+      _submitting = false;
+      _done = result.ok;
+    });
     if (!result.ok) {
       showSheetSnack(context, result.message ?? 'فشل التسديد', isError: true);
       return;
@@ -228,12 +239,14 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
     }
     // 2026-07-13: طباعة تلقائية بعد النجاح لو الـcheckbox داخل المودل مُفعَّل.
     if (_printReceiptChecked) {
+      setState(() => _printingReceipt = true);
       final printed = await ReceiptService.printDebtPayment(
         sub: widget.sub,
         paid: _effectiveAmount,
       );
       // ورقة سبب طابعة الوصولات تُفتح فوق هذه الورقة: تُنتظر قبل pop، وإلّا أغلقها pop بدل هذه (مراجعة 179).
       if (mounted) await showPrintResult(context, printed);
+      if (mounted) setState(() => _printingReceipt = false);
     }
     if (!mounted) return;
     // 2026-08-26: preview WA بعد النجاح.
@@ -282,7 +295,9 @@ class _PayDebtSheetState extends State<_PayDebtSheet> {
         onClose: () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
-        label: _submitting ? 'جاري التسديد...' : 'تسديد الآن',
+        label: _done
+            ? (_printingReceipt ? 'sheets.done_printing'.tr() : 'common.done'.tr())
+            : (_submitting ? 'جاري التسديد...' : 'تسديد الآن'),
         icon: LucideIcons.banknote,
         color: AppColors.brandAccent,
         enabled: _canSubmit,

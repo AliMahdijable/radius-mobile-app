@@ -62,6 +62,12 @@ class _ExtendSheetState extends State<_ExtendSheet> {
   bool _submitting = false;
   String? _loadError;
 
+  /// قال الخادم «تمدّد» — والشيت يُغلق بعد الوصل والواتساب: لا تمديد ثانٍ بأيّ طريق حتى يُغلق (مراجعة 179).
+  bool _done = false;
+
+  /// وصل التمديد يُطبع الآن ⇒ «تمّ — جارٍ الطباعة…».
+  bool _printingReceipt = false;
+
   Map<String, dynamic>? _selectedPkg;
   _Method _method = _Method.balance;
   bool _printReceiptChecked = false;
@@ -159,6 +165,7 @@ class _ExtendSheetState extends State<_ExtendSheet> {
   String? get _selectedDuration => _selectedPkg?['duration']?.toString();
 
   bool get _canSubmit {
+    if (_done) return false;
     if (_loading || _submitting || _data == null || _selectedPkg == null) {
       return false;
     }
@@ -186,6 +193,8 @@ class _ExtendSheetState extends State<_ExtendSheet> {
   }
 
   Future<void> _submit() async {
+    // تمدّد للتوّ ⇒ لا تمديد ثانٍ (الزرّ «تمّ» معطّل؛ وهذا لما يصل غيره — Enter على الحاسبة).
+    if (_done) return;
     final idx = widget.sub.idx;
     final pkg = _selectedPkg;
     if (idx == null || pkg == null) return;
@@ -203,7 +212,10 @@ class _ExtendSheetState extends State<_ExtendSheet> {
       confirmRepeat: _confirmRepeat,
     ));
     if (!mounted) return;
-    setState(() => _submitting = false);
+    setState(() {
+      _submitting = false;
+      _done = result.ok;
+    });
     // حارس التكرار (كالتجديد): 409 RECENT_DUPLICATE من خادم البرو — أكّد
     // الإعادة ثمّ أعِد الإرسال بـconfirmRepeat بدل انتظار المهلة (٩٠ث). خادم
     // SAS4 لا يرسل هذا الرمز، فمسار التمديد العاديّ لا يُمَسّ.
@@ -231,6 +243,7 @@ class _ExtendSheetState extends State<_ExtendSheet> {
     showSheetSnack(context, 'sheets.extend_ok'.tr(), isError: false);
     // 2026-07-13: طباعة تلقائية بعد النجاح لو الـcheckbox مُفعَّل.
     if (_printReceiptChecked) {
+      setState(() => _printingReceipt = true);
       final printed = await ReceiptService.printExtension(
         sub: widget.sub,
         price: _method == _Method.points ? 0 : _selectedPrice,
@@ -238,6 +251,7 @@ class _ExtendSheetState extends State<_ExtendSheet> {
       );
       // ورقة سبب طابعة الوصولات تُفتح فوق هذه الورقة: تُنتظر قبل pop، وإلّا أغلقها pop بدل هذه (مراجعة 179).
       if (mounted) await showPrintResult(context, printed);
+      if (mounted) setState(() => _printingReceipt = false);
     }
     if (!mounted) return;
     // 2026-08-26: preview WA بعد نجاح التمديد.
@@ -273,8 +287,9 @@ class _ExtendSheetState extends State<_ExtendSheet> {
         onClose: () => Navigator.of(context).pop(),
       ),
       footer: SheetFooterBar(
-        label:
-            _submitting ? 'جاري التمديد...' : (_disabledReason ?? 'تمديد الآن'),
+        label: _done
+            ? (_printingReceipt ? 'sheets.done_printing'.tr() : 'common.done'.tr())
+            : (_submitting ? 'جاري التمديد...' : (_disabledReason ?? 'تمديد الآن')),
         icon: LucideIcons.calendarPlus,
         enabled: _canSubmit,
         busy: _submitting,

@@ -1030,6 +1030,7 @@
     "renew_now": "Renew now",
     "renewing": "Renewing…",
     "renew_ok": "Renewed successfully",
+    "done_printing": "Done — printing…",
     "print_receipt": "Print receipt",
     "print_receipt_after": "Print receipt after confirmation",
     "print_receipt_prompt": "Do you want to print a receipt for this operation?",

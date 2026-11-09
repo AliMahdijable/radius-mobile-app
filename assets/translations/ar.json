@@ -1030,6 +1030,7 @@
     "renew_now": "تجديد الآن",
     "renewing": "جاري التجديد...",
     "renew_ok": "تم التجديد بنجاح",
+    "done_printing": "تمّ — جارٍ الطباعة…",
     "print_receipt": "طباعة الوصل",
     "print_receipt_after": "طباعة وصل بعد التأكيد",
     "print_receipt_prompt": "هل تريد طباعة وصل هذه العملية؟",

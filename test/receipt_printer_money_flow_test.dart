@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -30,6 +31,8 @@ import 'support/fake_receipt_printer.dart';
 ///   ١. «غير مؤكَّد» يظهر، ولا طباعة ثانية حتى يُغلق؛ و«إغلاق» يُغلق ورقة العمليّة نفسها (true) بلا طباعة ثانية.
 ///   ٢. «إعادة الطباعة» بنقرة ⇒ طباعةٌ ثانية واحدة، ثمّ تُغلق ورقة العمليّة.
 ///   ٣. `pop(true)` من غير ورقة السبب (ما فعله الـpop القديم) لا يُفهم «إعادة الطباعة».
+///   ٤. بعد نجاح العمليّة وأثناء طباعة وصلها (تُنتظر قبل الإغلاق) زرّ الورقة «تمّ — جارٍ الطباعة…» لا يُعيدها: لا نقرته
+///      ولا ما يصله من غير النقر (Enter على الحاسبة) — ثمّ تُغلق الورقة حين تنتهي الطباعة.
 void main() {
   late _Server server;
   late ReceiptPrinterHarness h;
@@ -113,13 +116,16 @@ void main() {
   }
 
   /// ما يجري خارج الوقت المزيّف (بناء PDF الوصل) — يُنتظر حقيقةً حتى يظهر [f] (أو تنقضي المهلة).
-  Future<void> settleUntil(WidgetTester t, Finder f, {bool gone = false}) async {
-    for (var i = 0; i < 100 && f.evaluate().isEmpty != gone; i++) {
+  Future<void> settleWhile(WidgetTester t, bool Function() waiting) async {
+    for (var i = 0; i < 100 && waiting(); i++) {
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
       await t.pump(const Duration(milliseconds: 50));
     }
     await t.pumpAndSettle();
   }
+
+  Future<void> settleUntil(WidgetTester t, Finder f, {bool gone = false}) =>
+      settleWhile(t, () => f.evaluate().isEmpty != gone);
 
   /// ينفّذ العمليّة بزرّها ويختار «اطبع على «MPT-II»» ⇒ الطابعة تنقطع أثناء الوصل.
   Future<void> runAndPrint(WidgetTester t, String submit) async {
@@ -156,12 +162,12 @@ void main() {
       expect(h.bridge.connects, 1);
       expect(find.text('الطباعة غير مؤكَّدة'), findsOneWidget, reason: 'السبب يُرى — لم يُغلقه pop العمليّة');
       expect(find.textContaining('قد يكون خرج جزءٌ من الوصل'), findsOneWidget);
-      expect(find.text(submit), findsOneWidget, reason: 'ورقة العمليّة تحته تنتظر قرار الوكيل');
+      expect(find.text('تمّ — جارٍ الطباعة…'), findsOneWidget, reason: 'ورقة العمليّة تحته تنتظر قرار الوكيل، وزرّها «تمّ»');
       expect(closed.value, #open);
       await t.tap(problemClose());
       await t.pumpAndSettle();
       expect(find.text('الطباعة غير مؤكَّدة'), findsNothing);
-      expect(find.text(submit), findsNothing, reason: 'ورقة العمليّة أُغلقت بـpop نفسه');
+      expect(find.text('تمّ — جارٍ الطباعة…'), findsNothing, reason: 'ورقة العمليّة أُغلقت بـpop نفسه');
       expect(closed.value, isTrue);
       expect(h.bridge.connects, 1, reason: 'لا طباعة ثانية بلا نقرة');
       expect(server.ops(op), 1, reason: 'العمليّة نفسها مرّة');
@@ -184,6 +190,39 @@ void main() {
       expect(server.ops(op), 1);
       await drain(t);
       expect(h.bridge.connects, 2);
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('$name ٤: بعد النجاح وأثناء الطباعة الزرّ لا يُعيد العمليّة (نقرةٌ ولا Enter)، وتُغلق الورقة بعدها', (t) async {
+      h.bridge.dropAtWrite = null;
+      // الطابعة تأخذ وقتها: كلّ كتابةٍ محجوزةٌ حتى يُفتح الباب.
+      final gate = h.bridge.gate = Completer<void>();
+      final closed = await open(t, show);
+      await t.tap(find.text(submit));
+      final choice = find.byKey(const ValueKey('output-receipt-printer'));
+      await settleUntil(t, choice);
+      await t.tap(choice);
+      await settleWhile(t, () => h.bridge.connects == 0);
+      // إشعار نجاح العمليّة يمضي؛ الطباعة ما زالت جارية وورقة العمليّة مكشوفة.
+      await t.pump(const Duration(seconds: 4));
+      await t.pumpAndSettle();
+      expect(server.ops(op), 1);
+      expect(h.bridge.connects, 1);
+      final button = find.descendant(of: find.byType(SheetFooterBar), matching: find.byType(InkWell)).last;
+      await t.tap(button);
+      await t.pumpAndSettle();
+      // ما يصل الزرّ من غير النقر (Enter/Space على الحاسبة) يمرّ بـonPressed نفسه.
+      t.widget<SheetFooterBar>(find.byType(SheetFooterBar)).onPressed!();
+      await t.pumpAndSettle();
+      expect(server.ops(op), 1, reason: 'لا عمليّة ثانية بعد النجاح');
+      expect(find.text('تمّ — جارٍ الطباعة…'), findsOneWidget);
+      expect(closed.value, #open, reason: 'الطباعة لم تنتهِ — الورقة تنتظرها');
+      gate.complete();
+      await settleWhile(t, () => identical(closed.value, #open));
+      expect(closed.value, isTrue, reason: 'تُغلق بعد الطباعة');
+      expect(server.ops(op), 1);
+      expect(h.bridge.connects, 1);
+      await drain(t);
       expect(t.takeException(), isNull);
     });
 
