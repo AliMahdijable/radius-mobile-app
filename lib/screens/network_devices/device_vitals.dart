@@ -254,6 +254,7 @@ class DeviceGlance {
     this.radioUnread = false,
     this.apUnknown = false,
     this.linkDown = false,
+    this.radioRunUnread = false,
     this.portsUnread = false,
     this.hasRadio,
   });
@@ -278,6 +279,11 @@ class DeviceGlance {
   /// الراديو مقروءٌ ومفعّل ولا يعمل/لا يتّصل: ميكروتك (واجهة wlan/wifi/w60g مفعّلة وجداولها قُرئت ولا واحدة running/connected)،
   /// محطّة يوبيكويتي بإشارة 0 بلا طرف، airFiber حال وصلته ليست operational ⇒ «الوصلة مقطوعة — لا إشارة» (المراجعة الثانية).
   final bool linkDown;
+
+  /// راديوه مفعّل وقائمة عملائه قُرئت فارغة، وهل يعمل لم يُقرأ: قراءة الخادم لنقطة وصولٍ بلا `ap` (حزمة wifi،
+  /// أو wireless لا واجهة شغّالة فيها) من خادمٍ لا يرسل `ru`. «ما عليه أحد الآن» صادقة و«سليم» لا — راديو طافٍ
+  /// يُقرأ كذلك ⇒ «حال الراديو ما انقرأ» و«لم يُقرأ» (مراجعة 180، الجولة ٢).
+  final bool radioRunUnread;
 
   /// جدول المنافذ لم يُقرأ هذه المرّة (مسح SNMP لاسم/نوع/حال الواجهات انتهت مهلته، سسكو بلا أمرَي المنافذ، جلسة الخادم انقطعت) —
   /// «المنافذ ما انقرت» و«لم يُقرأ»، لا «سليم» بلا منافذ ولا «0/N» (المراجعة الثانية).
@@ -520,16 +526,15 @@ class DeviceVitals {
     final cut = ros && pt0 is Map && portsTotal == 0 && list(v['pl']).isEmpty;
     final isAp = apFlag ?? (ros && peerRows.length >= 2 ? true : null);
     final sig = n(v['sig']);
-    // مراجعة 180: راديوه المفعّل يعمل؟ (`ru` من الخادم: running في /interface/print). بلا وضعٍ مقروء (ap) فراغ القائمة
-    // «لا أحد» حين يعمل وحده — مفعّلٌ لا يعمل (DFS، بلا قناة، عطل) كان «سكتر · سليم» + «ما عليه أحد الآن»؛
-    // وخادمٌ لا يرسله ⇒ لم تُقرأ
+    // مراجعة 180: راديوه المفعّل يعمل؟ (`ru` من الخادم: running في /interface/print). بلا وضعٍ مقروء (ap)
+    // مفعّلٌ لا يعمل (DFS، بلا قناة، عطل) كان «سكتر · سليم» + «ما عليه أحد الآن». الجولة ٢: قائمةٌ قرأها الخادم
+    // (`reg_ok`) مقروءةٌ بفراغها — «ما عليه أحد الآن» صادقة وعدد اللقطة صفرٌ قُرئ؛ والمجهول هل يعمل راديوه وحده
+    // (خادمٌ لا يرسل `ru`) ⇒ `radioRunUnread`
     final radioUp = v['ru'] is bool ? v['ru'] as bool : null;
     final glance = DeviceGlance(
       uptimeSec: up,
-      peersKnown: v['peers'] is List &&
-          (!ros ||
-              peerRows.isNotEmpty ||
-              (v['reg_ok'] == true && (isAp != null || radioFlag == false || radioUp == true))),
+      peersKnown: v['peers'] is List && (!ros || peerRows.isNotEmpty || v['reg_ok'] == true),
+      radioRunUnread: ros && isAp == null && radioFlag == true && radioUp == null && peerRows.isEmpty,
       radioUnread: ros && isAp == null && (radioFlag == true || peerRows.isNotEmpty),
       apUnknown: ros && isAp == null && radioFlag != false,
       portsUnread: cut,
