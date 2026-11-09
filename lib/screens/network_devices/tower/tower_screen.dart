@@ -17,6 +17,7 @@ import '../../../services/deep_probe_scheduler.dart';
 import '../../../services/device_events.dart';
 import '../../../services/device_read_health.dart';
 import '../../../services/device_stats_cache.dart';
+import '../../../services/device_sweep_coordinator.dart';
 import '../../../services/permissions_service.dart';
 import '../../../theme/colors.dart';
 import '../../../theme/spacing.dart';
@@ -258,6 +259,9 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
   }
 
   void _probeAll({bool first = false, int? only}) {
+    // «الفحص الشامل» يجري (صوتيّاً أو فوق القسم على الحاسبة) — لا قراءات ٢٠ث المفصّلة على سكتراته نفسها؛ الجولة التالية بعده
+    // (المراجعة الثانية)
+    if (DeviceSweep.suspended) return;
     for (final d in _devices) {
       if (only != null && d.id != only) continue;
       // لا يردّ (لقطة السجلّ أو فحص البرج): لا جلسة قراءة — فحص وصولٍ خفيف كلّ ~٣٠ث، ويُقرأ حين يعود.
@@ -267,9 +271,12 @@ class _TowerScreenState extends State<TowerScreen> with TickerProviderStateMixin
       }
       if (_inFlight.contains(d.id)) continue;
       if (DeviceVitals.skipReason(d) != null) continue;
+      if (DeviceSweep.busy(d.id)) continue;
       _inFlight.add(d.id);
       DeepProbeScheduler.instance.submit(_ownerOf(d.id), first: first && !_readings.containsKey(d.id), () async {
         try {
+          // انتظرت دورها والفحص بدأ بعدها — لا جلسة (المراجعة الثانية)
+          if (DeviceSweep.suspended || DeviceSweep.busy(d.id)) return;
           final prev = DeviceStatsCache.instance.sampleOf(d.id);
           final r = await DeviceVitals.fetch(
             d,

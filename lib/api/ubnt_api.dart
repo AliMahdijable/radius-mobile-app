@@ -319,7 +319,8 @@ class UbntApi {
           final partial = UbntStats.fromMcaStatus(
               Map<String, String>.from(parsed), // نسخة عشان لا نعدّلها
               interfaces: const [],
-              wstalistStations: const []);
+              wstalistStations: const [],
+              stationsRead: false);
           onPartialReady(partial);
         } catch (_) {}
       }
@@ -429,6 +430,8 @@ class UbntApi {
 
       // wstalist — نحفظه أوّلاً للاستعمال في الـstations lookup (المكرّر السابق)
       List<Map<String, dynamic>> stations = const [];
+      // قائمة المحطّات قُرئت فعلاً (المراجعة الثانية): wstalist قائمةٌ صالحة — مهلةٌ أو مخرجٌ مقطوع أو JSON تالف ⇒ لا نعرف (لا «لا أحد»)
+      var wstaRead = false;
       if (wstaOut.startsWith('[')) {
         _mergeStationsFromWstalist(parsed, wstaOut);
         try {
@@ -438,6 +441,7 @@ class UbntApi {
                 .whereType<Map>()
                 .map((e) => e.cast<String, dynamic>())
                 .toList();
+            wstaRead = true;
           }
         } catch (_) {}
       }
@@ -536,7 +540,7 @@ class UbntApi {
       // wstalist سبق واستخرجناه أعلاه من الـbatched command (stations متغيّر
       // مُعبّأ فوق). لا نُكرّر الأمر — كان يستهلك 4s إضافيّة بلا فائدة.
       return UbntStats.fromMcaStatus(parsed,
-          interfaces: ifaceRaws, wstalistStations: stations);
+          interfaces: ifaceRaws, wstalistStations: stations, stationsRead: wstaRead);
     } on SSHAuthAbortError {
       throw UbntException('اسم المستخدم أو كلمة المرور خطأ (SSH auth failed)');
     } on SSHAuthFailError {
@@ -651,6 +655,8 @@ class UbntApi {
       } else if (root['peers'] is List) {
         sta = root['peers'] as List;
       }
+      // القائمة نفسها وصلت (ولو فارغة) — فراغها «لا أحد» صادقة ([UbntStats.stationsRead])
+      if (w?['sta'] is List || root['stations'] is List || root['peers'] is List) map[UbntStats.staListKey] = '1';
       // airFiber remote peer
       final remote = (root['remote'] as Map?)?.cast<String, dynamic>();
       if (sta.isEmpty && remote != null) sta = [remote];
@@ -883,6 +889,10 @@ class UbntApi {
   static Map<String, String> parseMcaStatusForTest(String o) =>
       _parseMcaStatus(o);
 
+  /// mca-dump مسطّحاً (للاختبار) — ومعه علامة «القائمة وصلت» ([UbntStats.staListKey]).
+  @visibleForTesting
+  static Map<String, String> flattenMcaDumpForTest(String json) => _flattenMcaDump(json);
+
   /// mca-status output: أسطر key=value، بعض القيم متعدّدة (station1_ip=...)
   static Map<String, String> _parseMcaStatus(String output) {
     final map = <String, String>{};
@@ -1044,6 +1054,14 @@ class UbntStats {
   /// والسعة والتعديل…). تُعرض كما هي في لوحات يوبيكويتي وتفصيل البطاقة.
   final List<({String k, String v})> extras;
 
+  /// قائمة المحطّات قُرئت فعلاً — فراغ [stations] «لا أحد» صادقة. wstalist انتهت مهلته أو جاء مقطوعاً/تالفاً (والأمر المجمَّع
+  /// وإعادته فشلا) كانت تصل فارغةً كأنّها قُرئت ⇒ «سكتر · سليم» + «ما عليه أحد الآن» (المراجعة الثانية). المبنيّ يدويّاً (اختبار،
+  /// udapi الذي يرمي إن لم تُقرأ إحصاءاته) قراءةٌ كاملة.
+  final bool stationsRead;
+
+  /// الوصلة مقطوعة كما قرأها الجهاز نفسه: محطّةٌ إشارتها 0 بلا طرفٍ ولا سرعة، أو airFiber حال وصلته ليست operational.
+  final bool linkDown;
+
   const UbntStats({
     this.apiVersion = 5,
     required this.host,
@@ -1057,7 +1075,12 @@ class UbntStats {
     this.memBuffersKb,
     this.lanSpeed,
     this.extras = const [],
+    this.stationsRead = true,
+    this.linkDown = false,
   });
+
+  /// مفتاحٌ داخليّ في خريطة mca-dump المسطّحة: الجهاز أعاد قائمة محطّاته (ولو فارغة).
+  static const staListKey = '_staList';
 
   // 2026-08-18: أقواس صريحة — `??` أدنى precedence من `||` فالكود الأصلي
   // كان يقرأ: `contains('ap') ?? (false || contains('master'))` → الـfallback
@@ -1117,6 +1140,7 @@ class UbntStats {
     Map<String, String> m, {
     List<Map<String, String>> interfaces = const [],
     List<Map<String, dynamic>> wstalistStations = const [],
+    bool stationsRead = true,
   }) {
     // mca-status keys شائعة (تختلف قليلاً حسب الإصدار):
     // deviceId, firmwareVersion, deviceName, uptime,
@@ -1473,12 +1497,33 @@ class UbntStats {
       ];
     }
 
+    // قائمة المحطّات قُرئت: wstalist (من المنادي)، أو قائمة mca-dump، أو airFiber X (طرفه من mca-status)، أو العدّاد نفسه صفر
+    final listed = stationsRead ||
+        stations.isNotEmpty ||
+        m[staListKey] == '1' ||
+        afx ||
+        (m['wlanConnections'] != null && _n(m['wlanConnections']) == 0);
+    // الوصلة مقطوعة: airFiber بحالٍ غير operational، أو محطّةٌ أعطت إشارتها صفراً بلا طرفٍ ولا سرعة
+    final af = (m['afLinkState'] ?? '').trim().toLowerCase();
+    final mode = wireless?.mode.toLowerCase() ?? '';
+    final sta = mode.contains('sta') || mode.contains('managed');
+    final down = (afx && af.isNotEmpty && af != 'operational') ||
+        (!afx &&
+            sta &&
+            wireless != null &&
+            (m.containsKey('wlanSignal') || m.containsKey('signal')) &&
+            wireless.signal == 0 &&
+            wireless.txRate == 0 &&
+            wireless.rxRate == 0 &&
+            stations.isEmpty);
     return UbntStats(
       host: host,
       wireless: wireless,
       interfaces: ports,
       stations: stations,
       extras: extras,
+      stationsRead: listed,
+      linkDown: down,
       latitude: double.tryParse(m['latitude'] ?? ''),
       longitude: double.tryParse(m['longitude'] ?? ''),
       memTotalKb: _n(m['memTotal']) > 0 ? _n(m['memTotal']) : null,

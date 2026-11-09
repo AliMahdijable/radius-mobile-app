@@ -150,15 +150,20 @@ class CiscoApi {
         uptime: version.uptime,
         mainMemKb: version.mainMemKb,
         ioMemKb: version.ioMemKb,
+        // الهويّة وحدها — المنافذ لم تُقرأ بعد
+        portsRead: false,
       );
       onPartialReady?.call(stats);
 
       // ═══ Tier 2: المنافذ وحالتها (صغير وسريع) ═══
       var ifaces = <CiscoInterface>[];
+      // المنافذ قُرئت إن أعاد أحد أمرَيها صفوفاً — كلاهما فشل ⇒ «المنافذ ما انقرت» لا «سليم» بلا منافذ (المراجعة الثانية)
+      var portsRead = false;
       try {
         ifaces = CiscoParse.interfacesStatus(
             await cli.run(_cmdIfStatus, timeout: timeout));
-        stats = stats.copyWith(ifaces: ifaces);
+        portsRead = ifaces.isNotEmpty;
+        stats = stats.copyWith(ifaces: ifaces, portsRead: portsRead);
         onPartialReady?.call(stats);
       } catch (e) {
         if (kDebugMode) debugPrint('⚠️ Cisco $_cmdIfStatus فشل: $e');
@@ -184,7 +189,7 @@ class CiscoApi {
         if (kDebugMode) debugPrint('ℹ️ Cisco memory غير متاحة: $e');
       }
 
-      stats = stats.copyWith(cpuPercent: cpuPercent, memory: memory);
+      stats = stats.copyWith(cpuPercent: cpuPercent, memory: memory, portsRead: portsRead);
       onPartialReady?.call(stats);
 
       // ═══ Tier 4 (اختياريّ، الأثقل): العدّادات ═══
@@ -192,7 +197,8 @@ class CiscoApi {
         try {
           final detail = CiscoParse.interfacesDetail(
               await cli.run(_cmdIfDetail, timeout: timeout));
-          stats = stats.copyWith(ifaces: CiscoParse.merge(ifaces, detail));
+          if (detail.isNotEmpty) portsRead = true;
+          stats = stats.copyWith(ifaces: CiscoParse.merge(ifaces, detail), portsRead: portsRead);
         } catch (e) {
           if (kDebugMode) debugPrint('⚠️ Cisco $_cmdIfDetail فشل: $e');
         }
@@ -774,6 +780,9 @@ class CiscoStats {
   final CiscoMemory? memory;
   final List<CiscoInterface> ifaces;
 
+  /// أحد أمرَي المنافذ (`show interfaces status` أو `show interfaces`) أعاد صفوفاً. المبنيّ يدويّاً (اختبار) قراءةٌ كاملة.
+  final bool portsRead;
+
   const CiscoStats({
     this.model,
     this.iosVersion,
@@ -785,6 +794,7 @@ class CiscoStats {
     this.cpuPercent,
     this.memory,
     this.ifaces = const [],
+    this.portsRead = true,
   });
 
   double? get memPercent => memory?.usedPercent;
@@ -802,6 +812,7 @@ class CiscoStats {
     double? cpuPercent,
     CiscoMemory? memory,
     List<CiscoInterface>? ifaces,
+    bool? portsRead,
   }) =>
       CiscoStats(
         model: model,
@@ -814,6 +825,7 @@ class CiscoStats {
         cpuPercent: cpuPercent ?? this.cpuPercent,
         memory: memory ?? this.memory,
         ifaces: ifaces ?? this.ifaces,
+        portsRead: portsRead ?? this.portsRead,
       );
 }
 

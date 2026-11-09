@@ -206,7 +206,8 @@ void main() {
         .withRecord(const FiberOnuRecord(oltId: 12, key: 'EPON0/1:1', username: 'x')));
     FiberWatch.devices = () async => [_olt(9), _olt(10), _olt(11), _olt(12), _olt(13, brand: 'mikrotik', model: 'CCR')];
     FiberMonitor.backend = const _Silent();
-    FiberWatch.start();
+    final shell = Object();
+    FiberWatch.start(shell);
     await FiberWatch.sync();
     expect(FiberWatch.held, {9, 12}, reason: '10 لم يُرتَّب، و11 تنبيهاته مطفأة، و13 ليس أولت');
     expect(FiberMonitor.existing(9)!.background, isTrue);
@@ -216,16 +217,46 @@ void main() {
     expect(FiberWatch.held, {12});
     expect(FiberMonitor.existing(9)!.running, isFalse);
 
-    FiberWatch.stop();
+    FiberWatch.stop(shell);
     expect(FiberWatch.held, isEmpty);
     expect(FiberMonitor.existing(12)!.running, isFalse);
+  });
+
+  test('المراجعة الثانية: غلافٌ جديد يبدأ قبل أن يُنهى القديم (البصمة، تبديل الشركة/الصفحة) ⇒ إيقاف القديم لا يُطفئ المراقبة؛ والخروج يوقفها كلّها',
+      () async {
+    FiberStore.debugSet(FiberLayout.empty.withBox(const FiberBox(id: 1, oltId: 9, pon: 'EPON0/3', name: 'صندوق')));
+    FiberWatch.devices = () async => [_olt(9)];
+    FiberMonitor.backend = const _Silent();
+    final oldShell = Object();
+    final newShell = Object();
+    FiberWatch.start(oldShell);
+    await FiberWatch.sync();
+    expect(FiberWatch.held, {9});
+    // pushAndRemoveUntil: الجديد يُركَّب أوّلاً، والقديم يُنهى بعد انتقاله
+    FiberWatch.start(newShell);
+    FiberWatch.stop(oldShell);
+    expect(FiberWatch.debugRunning, isTrue, reason: 'الغلاف الجديد ما زال يملكها');
+    expect(FiberWatch.held, {9});
+    expect(FiberMonitor.existing(9)!.running, isTrue);
+    await FiberWatch.sync();
+    expect(FiberWatch.held, {9}, reason: 'والتحديث بعد الحفظ يعمل (لا يعود مبكّراً)');
+    // الخروج من الحساب: إيقافٌ كامل قبل غلاف الجلسة التالية — وإنهاء الغلاف القديم بعدها لا يمسّ الجديد
+    FiberWatch.halt();
+    expect(FiberWatch.debugRunning, isFalse);
+    expect(FiberWatch.held, isEmpty);
+    final next = Object();
+    FiberWatch.start(next);
+    FiberWatch.stop(newShell);
+    expect(FiberWatch.debugRunning, isTrue);
+    FiberWatch.stop(next);
+    expect(FiberWatch.debugRunning, isFalse);
   });
 
   test('مراقبة الحاسبة: بلا صلاحيّة مراقبة الأجهزة لا يُقرأ أيّ أولت', () async {
     PermissionsService.debugSet(isEmployee: true, permissions: const {'devices.view': true});
     FiberStore.debugSet(FiberLayout.empty.withBox(const FiberBox(id: 1, oltId: 9, pon: 'EPON0/3', name: 'صندوق')));
     FiberWatch.devices = () async => [_olt(9)];
-    FiberWatch.start();
+    FiberWatch.start(Object());
     await FiberWatch.sync();
     expect(FiberWatch.held, isEmpty);
     expect(FiberMonitor.existing(9), isNull);

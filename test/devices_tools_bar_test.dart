@@ -349,6 +349,46 @@ void main() {
     expect(DeviceSweep.suspended, isFalse);
     await finish(t);
   });
+
+  testWidgets('المراجعة الثانية: فحصٌ انتهى والتطبيق بالخلفيّة ⇒ لا تعود حلقة العشرين ثانية هناك؛ والعودة تعيدها بجولةٍ فوريّة',
+      (t) async {
+    var probes = 0;
+    NetworkDevicesApi.debugService = (d) async {
+      probes++;
+      return (status: 'online', responseMs: 3, packetLoss: 0.0);
+    };
+    addTearDown(() => NetworkDevicesApi.debugService = null);
+    await open(t, s1bSasOwner, routes: {
+      'GET $devicesPath': {
+        'success': true,
+        'data': [
+          {'id': 1, 'admin_id': 2, 'name': 'راوتر التوزيع', 'type': 'router', 'brand': 'mikrotik', 'ip': '10.0.0.1',
+            'port': 8728, 'has_credentials': 1, 'last_status': 'online', 'created_at': '2026-11-01T10:00:00Z'},
+        ],
+      },
+    });
+    void life(List<AppLifecycleState> states) {
+      for (final s in states) {
+        t.binding.handleAppLifecycleStateChanged(s);
+      }
+    }
+
+    DeviceSweep.acquire(); // فحصٌ شامل يجري
+    // الوكيل انتقل لتطبيقٍ آخر
+    life(const [AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused]);
+    await t.pump();
+    final before = probes;
+    DeviceSweep.release(); // انتهى بالخلفيّة
+    for (var i = 0; i < 7; i++) {
+      await t.pump(const Duration(seconds: 10));
+    }
+    expect(probes, before, reason: '٧٠ث بالخلفيّة بلا جولة حال ولا رفع نتائج');
+    life(const [AppLifecycleState.hidden, AppLifecycleState.inactive, AppLifecycleState.resumed]);
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 200));
+    expect(probes, greaterThan(before), reason: 'العودة ⇒ جولةٌ فوريّة');
+    await finish(t);
+  });
 }
 
 /// صفحةٌ تمسك القسم ما دامت ظاهرة وتفلته من dispose — كفاحصٍ أُغلق وهو يجري.

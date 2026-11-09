@@ -22,22 +22,39 @@ class FiberWatch {
   static Timer? _timer;
   static bool _running = false;
 
+  /// من بدأ المراقبة ولم يوقفها بعد — غلاف الحاسبة ([DesktopShell]) يبدأ بها ويوقفها بنفسه (المراجعة الثانية، كـ3e992035 لفحص
+  /// أجهزة المشتركين): استبدال الغلاف (البصمة، تبديل الشركة/المدير/الصفحة — pushAndRemoveUntil) يُنهي القديم **بعد** أن يبدأ
+  /// الجديد، فكان إيقافه يُطفئ مراقبة الأعطال بقيّة الجلسة. تعمل ما دام لها مالك، وإيقاف مالكٍ لا يمسّ غيره.
+  static final Set<Object> _owners = Set<Object>.identity();
+
+  /// المراقبة تعمل الآن (مؤقّتها قائم).
+  @visibleForTesting
+  static bool get debugRunning => _running;
+
   /// للاختبار: قائمة الأجهزة.
   @visibleForTesting
   static Future<List<NetworkDevice>> Function() devices = NetworkDevicesApi.list;
 
   static Set<int> get held => Set.unmodifiable(_held);
 
-  /// من غلاف الحاسبة عند تركيبه.
-  static void start() {
+  /// من غلاف الحاسبة عند تركيبه — باسمه [owner]؛ تعمل أصلاً ⇒ يُضاف مالكاً وتستمرّ كما هي.
+  static void start(Object owner) {
+    _owners.add(owner);
     if (_running) return;
     _running = true;
     unawaited(sync());
     _timer = Timer.periodic(_every, (_) => unawaited(sync()));
   }
 
-  /// عند إزالة الغلاف والخروج.
-  static void stop() {
+  /// [owner] (الغلاف عند إزالته) لم يعد يريدها — تتوقّف حين لا يبقى مالك. مالكٌ غير مسجَّل لا يمسّ شيئاً.
+  static void stop(Object owner) {
+    if (!_owners.remove(owner) || _owners.isNotEmpty) return;
+    halt();
+  }
+
+  /// إيقافٌ كامل بلا مالكين — الخروج من الحساب ([SessionManager]) قبل أن يبدأ غلاف الجلسة التالية.
+  static void halt() {
+    _owners.clear();
     _timer?.cancel();
     _timer = null;
     _running = false;
@@ -99,7 +116,7 @@ class FiberWatch {
 
   @visibleForTesting
   static void debugReset() {
-    stop();
+    halt();
     devices = NetworkDevicesApi.list;
   }
 }

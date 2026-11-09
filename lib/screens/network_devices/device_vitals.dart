@@ -180,6 +180,7 @@ class DeviceDetail {
     this.onuLights = const [],
     this.onuLightsWanted,
     this.onuLightsAnswered,
+    this.onuLightsServer = false,
   });
 
   /// أولت: ضوء كلّ ONU متّصلة مقروء (الأضعف أوّلاً) — «الفحص الشامل» وحده يطلبه (`withOnuLights`).
@@ -189,6 +190,10 @@ class DeviceDetail {
   /// «ضوءهم كلّه جيّد» (٩ نوفمبر)؛ و[onuLightsAnswered] كم أجاب منها (بقيمةٍ صالحة أو بلا) — يفصل «ما لحق» عن «بلا قراءة».
   final int? onuLightsWanted;
   final int? onuLightsAnswered;
+
+  /// الضوء من ملخّص فحص الخادم (شركةٌ أخرى/عبر الـVPN) لا من قراءة هذا الفحص — الخادم يقرأ بعضها (المربوطة بشبكة الألياف، ≤٤٠٠)
+  /// ويُبقي الأضعف ≤٣٠٠: «الباقي لم يقرأه الخادم» لا «ما لحق» (المراجعة الثانية).
+  final bool onuLightsServer;
 
   final String? uptime;
   final String? firmware;
@@ -247,6 +252,10 @@ class DeviceGlance {
     this.linkUptime = false,
     this.peersKnown = false,
     this.radioUnread = false,
+    this.apUnknown = false,
+    this.linkDown = false,
+    this.portsUnread = false,
+    this.hasRadio,
   });
 
   /// مدّة التشغيل بالثواني — أو مدّة **الوصلة** حين [linkUptime] (ميموزا: عمر وكيل SNMP يُصفَّر بلا سقوط، فلا يُعرض).
@@ -261,6 +270,21 @@ class DeviceGlance {
   /// اللاسلكيّ فشل. دوره (سكتر/وصلة) ومشتركوه وإشارته مجهولة: «الفحص الشامل» لا يحكم عليه من نوع سجلّه (٩ نوفمبر — المراجعة:
   /// سكتر بيس بوكس محفوظٌ «راوتر» كان «راوتر · سليم» ولم يُقرأ مشتركوه).
   final bool radioUnread;
+
+  /// وضعه اللاسلكيّ (نقطة وصول/محطّة) لم تقله القراءة — لا لأنّه بلا راديو: قراءة الخادم بلا `ap` (حزمة wifi في RouterOS 7،
+  /// محطّةٌ مفصولة، جلسةٌ انقطعت). دوره من آخر قراءةٍ قُرئ فيها لاسلكيّه لا من نوع سجلّه (المراجعة الثانية) — بلا سطرٍ وحده.
+  final bool apUnknown;
+
+  /// الراديو مقروءٌ ومفعّل ولا يعمل/لا يتّصل: ميكروتك (واجهة wlan/wifi/w60g مفعّلة وجداولها قُرئت ولا واحدة running/connected)،
+  /// محطّة يوبيكويتي بإشارة 0 بلا طرف، airFiber حال وصلته ليست operational ⇒ «الوصلة مقطوعة — لا إشارة» (المراجعة الثانية).
+  final bool linkDown;
+
+  /// جدول المنافذ لم يُقرأ هذه المرّة (مسح SNMP لاسم/نوع/حال الواجهات انتهت مهلته، سسكو بلا أمرَي المنافذ، جلسة الخادم انقطعت) —
+  /// «المنافذ ما انقرت» و«لم يُقرأ»، لا «سليم» بلا منافذ ولا «0/N» (المراجعة الثانية).
+  final bool portsUnread;
+
+  /// للجهاز راديو (true)، أو قُرئت واجهاته ولا راديو فيها (false — وصلةٌ سلكيّة لا تُطالَب بإشارة)، أو لا يُعرف (null).
+  final bool? hasRadio;
 
   /// المعالج والذاكرة ٪، الحرارة °م، الفولتيّة، استهلاك PoE (واط)، جلسات PPP.
   final int? cpu, mem, temp;
@@ -469,6 +493,11 @@ class DeviceVitals {
             for (final o in list(v['onus']))
               if (d(o['rx']) case final rx?) OnuLight(name: s(o['n']) ?? s(o['k']) ?? '—', rx: rx, mac: s(o['m'])),
           ],
+          // الخادم يقرأ ضوء بعضها ويُبقي الأضعف ≤٣٠٠ — كم سُئل (`lw`، وإلّا المتّصلة كلّها) لا «ضوءهم كلّه جيّد» عن ٧٠٠ لم تُقرأ
+          // (المراجعة الثانية)
+          onuLightsWanted: online > 0 ? (n(v['lw']) ?? online) : null,
+          onuLightsAnswered: n(v['lr']),
+          onuLightsServer: true,
         ),
         at: when,
       );
@@ -476,15 +505,36 @@ class DeviceVitals {
 
     final up = n(v['up']);
     final ppp = n(v['ppp']);
+    // ── قواعد «لم يُقرأ» نفسها على قراءة الخادم (المراجعة الثانية) ──
+    // RouterOS: q() بالخادم يحوّل أيّ خطأ إلى null ويُكمل — جدول تسجيلٍ فشل يصل `peers: []` كأنّه قُرئ، و`ap` من حزمة wireless وحدها
+    // (حزمة wifi في RouterOS 7.13+، أو محطّةٌ مفصولة ⇒ null). فراغ القائمة «لا أحد» حين يقول الخادم إنّه قرأها (`reg_ok`) وحده؛
+    // ونقطة الوصول تُستنتج من محطّتين فأكثر (المحطّة لها طرفٌ واحد)؛ ووضعٌ مجهول ⇒ الدور من آخر قراءةٍ قُرئ فيها لاسلكيّه.
+    final ros = kind == 'ros';
+    final airos = kind == 'airos';
+    final peerRows = list(v['peers']);
+    final apFlag = v['ap'] is bool ? v['ap'] as bool : null;
+    final radioFlag = v['radio'] is bool ? v['radio'] as bool : null;
+    final pt0 = v['ports'];
+    final portsTotal = pt0 is Map ? n(pt0['total']) : null;
+    // جلسة الخادم انقطعت بعد الموارد: عدّ المنافذ وصل صفراً بلا منفذ إيثر واحد مقروء (لا عدّ أصلاً = خادمٌ لا يرسله، لا يُدّعى)
+    final cut = ros && pt0 is Map && portsTotal == 0 && list(v['pl']).isEmpty;
+    final isAp = apFlag ?? (ros && peerRows.length >= 2 ? true : null);
+    final sig = n(v['sig']);
     final glance = DeviceGlance(
       uptimeSec: up,
-      peersKnown: v['peers'] is List,
+      peersKnown: v['peers'] is List && (!ros || peerRows.isNotEmpty || v['reg_ok'] == true),
+      radioUnread: ros && isAp == null && (radioFlag == true || peerRows.isNotEmpty),
+      apUnknown: ros && isAp == null && radioFlag != false,
+      portsUnread: cut,
+      // محطّة airOS: إشارة 0 = غير مرتبطة (لا «0 dBm» ممتازة) — الوصلة مقطوعة
+      linkDown: airos && apFlag == false && v['sig'] is num && (v['sig'] as num) == 0,
+      hasRadio: airos ? true : (ros ? (radioFlag ?? (isAp != null || peerRows.isNotEmpty ? true : null)) : null),
       cpu: n(v['cpu']),
       mem: n(v['mem']),
       temp: n(v['temp']),
       voltage: d(v['volt']),
       ppp: ppp != null && ppp > 0 ? ppp : null,
-      signal: n(v['sig']),
+      signal: sig == 0 ? null : sig,
       ccq: n(v['ccq']),
       freqMhz: n(v['freq']),
       widthMhz: n(v['width']),
@@ -493,7 +543,7 @@ class DeviceVitals {
       txRateMbps: n(v['tx']),
       ssid: s(v['ssid']),
       mode: s(v['mode']),
-      isAp: v['ap'] is bool ? v['ap'] as bool : null,
+      isAp: isAp,
     );
     final ports = <PortTraffic>[];
     final pt = v['ports'];
@@ -532,7 +582,6 @@ class DeviceVitals {
           uptimeSec: n(p['up']),
         ),
     ];
-    final airos = kind == 'airos';
     return VitalsState(
       vitals: airos
           ? [
@@ -766,12 +815,32 @@ class DeviceVitals {
     final upstream = isAp == false && s.wirelessClients.isNotEmpty ? s.wirelessClients.first : null;
     int? pos(int? v) => v != null && v > 0 ? v : null;
     // راديو مفعّل بواجهات الطبقة الأولى (wlan/wifi/w60g…) — أو واجهاتٌ لم تُقرأ أصلاً (طبقة SNMP الأولى)
-    final radio = s.interfaces.isEmpty || s.interfaces.any((i) => !i.disabled && radioInterfaceTypes.contains(i.type.toLowerCase()));
+    final radioIfs = [for (final i in s.interfaces) if (!i.disabled && radioInterfaceTypes.contains(i.type.toLowerCase())) i];
+    // SwOS (CSS/netPower Lite) سويجٌ لا لاسلكيّ له أصلاً — واجهاتٌ لم تُقرأ لا تجعله «راديو مجهولاً»
+    final swos = s.version.startsWith('SwOS');
+    final radio = !swos && (s.interfaces.isEmpty || radioIfs.isNotEmpty);
+    // راديو بالطبقة الأولى لا يغطّيه صفٌّ لاسلكيّ مقروء ولا وصلة 60 — حزمةٌ لا يسألها القارئ (wifiwave2، CAPsMAN «cap»): عملاؤه ووضعه
+    // مجهولة لا «لا أحد» (المراجعة الثانية)
+    final covered = {for (final w in s.wirelessInterfaces) w.name, for (final l in s.w60gLinks) l.iface};
+    final uncovered = detailed && s.clientsRead && radioIfs.any((i) => !covered.contains(i.name));
+    // مقروءٌ ومفعّل ولا يعمل: محطّةٌ فقدت نقطتها، أو نقطة وصولٍ راديوها لا يشتغل (المراجعة الثانية). الحال من `/interface/print`
+    // (الطبقة الأولى — running فيها دائماً) لا من صفوف قوائم اللاسلكيّ (قائمةٌ بلا running كانت ستُقرأ «طافٍ» لراديو شغّال)
+    final linkDown = detailed &&
+        s.clientsRead &&
+        s.portsRead &&
+        s.wirelessInterfaces.isNotEmpty &&
+        radioIfs.isNotEmpty &&
+        !radioIfs.any((i) => i.running) &&
+        !s.w60gLinks.any((l) => l.connected);
     final glance = DeviceGlance(
       uptimeSec: routerOsSeconds(s.uptime),
       // ٩ نوفمبر: المفصّلة وحدها لا تكفي — جدول تسجيلٍ انتهت مهلته يصل فارغاً ([MikrotikStats.clientsRead])
-      peersKnown: detailed && s.clientsRead,
-      radioUnread: radio && !s.clientsRead,
+      peersKnown: detailed && s.clientsRead && !uncovered,
+      // ومسح الواجهات الضائع يُخفي حال الراديو نفسه (running من ifOper) — المراجعة الثانية
+      radioUnread: radio && (!s.clientsRead || !s.portsRead || uncovered),
+      linkDown: linkDown,
+      portsUnread: !s.portsRead,
+      hasRadio: swos ? false : (s.interfaces.isEmpty ? null : radio),
       cpu: s.cpuKnown ? s.cpuLoad : null,
       mem: s.memKnown ? s.memUsedPercent : null,
       temp: s.temperature,
@@ -971,7 +1040,11 @@ class DeviceVitals {
         // نقطة الوصول (ap / ap-ptmp / ap-ptp) إشارتها عند محطّاتها؛ والمحطّة/airFiber إشارتها هي إشارة الوصلة.
         glance: DeviceGlance(
           uptimeSec: s.host.uptime > 0 ? s.host.uptime : null,
-          peersKnown: true,
+          // قائمة المحطّات قُرئت فعلاً (wstalist قائمةٌ صالحة، أو mca-dump بقائمته، أو العدّاد صفر) — wstalist فشل ⇒ «لم تُقرأ» لا
+          // «ما عليه أحد الآن» (المراجعة الثانية، كإصلاح ميكروتك)
+          peersKnown: s.stationsRead || s.stations.isNotEmpty,
+          linkDown: s.linkDown,
+          hasRadio: true,
           cpu: s.host.cpuload,
           temp: s.host.temperature == 0 ? null : s.host.temperature,
           signal: (w == null || w.signal == 0) ? null : w.signal,
@@ -1366,7 +1439,13 @@ Future<ProbeResult> _cisco(NetworkDevice d, Map<String, dynamic> creds, bool det
       extras: [
         if (s.serial != null) (k: 'التسلسل', v: s.serial!),
       ],
-      glance: DeviceGlance(uptimeSec: s.uptime?.inSeconds, cpu: s.cpuPercent?.round(), mem: mem?.round()),
+      glance: DeviceGlance(
+          uptimeSec: s.uptime?.inSeconds,
+          cpu: s.cpuPercent?.round(),
+          mem: mem?.round(),
+          // لا أمرٌ من أمرَي المنافذ أعاد صفوفاً ⇒ «المنافذ ما انقرت» لا «سليم» بلا منافذ (المراجعة الثانية)
+          portsUnread: !s.portsRead,
+          hasRadio: false),
     ),
     counters: const {},
     raw: s,
@@ -1460,6 +1539,8 @@ Future<ProbeResult> _ruijie(NetworkDevice d, Map<String, dynamic> creds, Counter
         txRateMbps: link?.txRateMbps,
         ssid: link?.ssid,
         isAp: link == null ? null : false,
+        // جدول الجسر اللاسلكيّ انتهت مهلته ⇒ وصلته مجهولة لا «بلا وصلة» (المراجعة الثانية) — السويج لا لاسلكيّ له
+        radioUnread: !s.linkRead && d.type.toLowerCase() != 'switch',
       ),
     ),
     counters: counters,

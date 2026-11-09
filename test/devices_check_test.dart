@@ -1037,7 +1037,13 @@ void main() {
       ProbeResult r(MikrotikStats s) => DeviceVitals.mikrotikResult(dev(1), s, null, detailed: true);
       expect(r(tier1()).detail.glance.radioUnread, isTrue);
       expect(r(tier1(wlan: false)).detail.glance.radioUnread, isFalse, reason: 'لا واجهة لاسلكيّة — راوترٌ فعلاً');
-      expect(r(tier1(clientsRead: true)).detail.glance.radioUnread, isFalse);
+      expect(
+          r(tier1(clientsRead: true, wireless: const [
+            MikrotikWireless(
+                name: 'wlan1', ssid: 'S', mode: 'ap-bridge', band: '5ghz-a/n', frequency: 5180, channelWidth: 20, txPower: 20,
+                disabled: false, running: true),
+          ])).detail.glance.radioUnread,
+          isFalse);
       // طبقة SNMP الأولى بلا واجهات أصلاً ⇒ مجهول
       expect(r(tier1(wlan: false).copyWith(interfaces: const [])).detail.glance.radioUnread, isTrue);
     });

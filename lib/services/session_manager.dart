@@ -118,7 +118,7 @@ class SessionManager {
     // «كل الشركات»: لا يرث أحدٌ وضع سابقه ولا مراجعه ولا قوائم شركاته.
     _guardSync('MergedMode.reset', () => MergedMode.reset());
     // شبكة الألياف: مراقبات الأولتات تتوقّف (لا يُقرأ أولت سابقه ولا يُبلَّغ عن عطله)، وتخطيطه يفرغ من الذاكرة.
-    _guardSync('FiberWatch.stop', () => FiberWatch.stop());
+    _guardSync('FiberWatch.halt', FiberWatch.halt);
     _guardSync('FiberMonitor.resetAll', () => FiberMonitor.resetAll());
     _guardSync('FiberStore.reset', () => FiberStore.reset());
     // الأجهزة (٩ نوفمبر — المراجعة): بيانات دخولها المخبّأة (والاحتياطيّة) وقراءاتها لا تعبر لجلسةٍ أخرى على الهاتف

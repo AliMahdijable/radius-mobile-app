@@ -16,6 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'connection_readings_uploader.dart';
 import 'provider_service.dart';
 import 'agent_net_presence.dart';
+import 'device_sweep_coordinator.dart';
 import 'vpn_now.dart';
 
 /// فحص أجهزة المشتركين بالخلفيّة من فتح البرنامج (٣ نوفمبر — المالك: «ليش مانخلي الدالة بالخلفية تشتغل بمجرد فتح البرنامج… حتى يكون
@@ -118,7 +119,14 @@ class DeviceWarmService with WidgetsBindingObserver {
     if (_resumed) unawaited(_step());
   }
 
-  bool get _yield => !_running || !_resumed || DeviceProbeApi.foregroundWaves > 0;
+  bool get _yield => !_running || _paused;
+
+  /// يتنحّى وهو يعمل: التطبيق بالخلفيّة، أو موجةٌ أماميّة، أو «الفحص الشامل» يجري ([DeviceSweep] — المراجعة الثانية: موجة أجهزة
+  /// المشتركين بعمّالها الـ١٢ وإعادة القياس كانت تزاحم عمّال الفحص الستّة على الهاتف نفسه وعلى روابط السكترات نفسها).
+  bool get _paused => !_resumed || DeviceProbeApi.foregroundWaves > 0 || DeviceSweep.suspended;
+
+  @visibleForTesting
+  static bool get debugPaused => _i._paused;
 
   /// المشروع الوطنيّ وفايبر اكس: لا عنوان جهازٍ للمشترك من بوّابتهما (جهازه تديره الشركة — «الباور» يُقرأ من البوّابة)، فلا شيء يُفحص.
   /// بقيّة الشركات المُضافة (نبض، AccessGate…) كالساس: من له عنوانٌ يُفحص.

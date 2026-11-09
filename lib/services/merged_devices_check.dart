@@ -3,6 +3,7 @@
 // شركةٍ أخرى بفحص الخادم عبر نفق تلك الشركة — طلباتٌ موجَّهة بمفتاحها (companyRoutingAllow: الطريق، الحدود، بدء الفحص ونتيجته)؛
 // كلمات سرّ أجهزتها لا تصل الهاتف أبداً. شركةٌ بلا طريق VPN تُسمّى ولا تُعدّ أجهزتها طافية.
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -92,6 +93,11 @@ class MergedDevicesCheckRunner extends DevicesCheckRunner {
   /// أجهزة الشركة المفتوحة البطيئة (سطرها مؤقّت) — «بانتظار n أجهزة بطيئة».
   @override
   Set<int> get slowPending => _inner?.slowPending ?? const {};
+
+  /// الهاتف يقرأ أجهزة الشركة المفتوحة وحدها — الشركات الأخرى يفحصها الخادم (دقائق لكلّ شركة) والهاتف لا يقرأ شيئاً، فلا يُمسك
+  /// قسم الأجهزة لأجلها؛ وفحصٌ لشركةٍ أخرى وحدها («افحص سكتر» صوتيّاً) لا يمسكه أبداً (المراجعة الثانية).
+  @override
+  bool get readsLocally => running && (_inner?.running ?? false);
 
   @override
   bool isRemote(int deviceId) {
@@ -277,7 +283,7 @@ class MergedDevicesCheckRunner extends DevicesCheckRunner {
       if (!result.ok) return fail(MergedCheckStatus.failed, result.message);
       final byId = {for (final d in result.devices) d.id: d};
       for (final d in p.devices) {
-        reports[d.id] = remoteReport(d, byId[d.id], lim.limits, memos[d.id], macs);
+        reports[d.id] = remoteReport(d, byId[d.id], lim.limits, memos[d.id], macs, serverAtMs: result.atMs);
         done++;
       }
       st.status = MergedCheckStatus.done;
@@ -285,17 +291,49 @@ class MergedDevicesCheckRunner extends DevicesCheckRunner {
     notifyListeners();
   }
 
+  /// أقدم ما قد يكون ملخّص أولت الخادم (`OLT_SUMMARY_FRESH_MS` بـserver/connVpn/sweeper.js) — بلا لحظته يُعرض «حتى 30 د».
+  static const serverOltSummaryMaxAge = Duration(minutes: 30);
+
   /// تقرير جهاز شركةٍ أخرى من فحص الخادم — كما كان «الفحص الشامل» عبر الـVPN قبل الممرّ (d6524c20): الجهاز الغائب عن النتيجة
   /// «لم يُقرأ» لا «طافي»، والمعلومات ما قرأه الخادم.
+  ///
+  /// المراجعة الثانية: قراءةٌ أقدم من الفحص نفسه بعمرها لا طازجة — العمر بساعة الخادم وحدها ([serverAtMs] نهاية فحصه − `v_at_ms`
+  /// لحظة قراءته) ثمّ على ساعة الهاتف ([now] لحظة وصول النتيجة)، فلا يخلط ساعتين؛ ≤ نافذة إعادة الاستعمال (١٥٠ث) قراءة هذا
+  /// الفحص. وملخّص الأولت بلا لحظته «حتى 30 د» في «آخر قراءة» لا «سليم» طازجاً.
   @visibleForTesting
   static DeviceCheckReport remoteReport(
-      NetworkDevice d, VpnDeviceResult? r, CheckLimits limits, CheckMemo? prev, Map<String, String> macs) {
+      NetworkDevice d, VpnDeviceResult? r, CheckLimits limits, CheckMemo? prev, Map<String, String> macs,
+      {int? serverAtMs, DateTime? now}) {
+    final at = now ?? DateTime.now();
     if (r == null) {
       return DevicesCheck.evaluate(
-          d: d, alive: null, unreadReason: 'لم يشمله الفحص عبر الـVPN — عنوانه خارج طريق الشركة', limits: limits, prev: prev, viaVpn: true);
+          d: d,
+          alive: null,
+          unreadReason: 'لم يشمله الفحص عبر الـVPN — عنوانه خارج طريق الشركة',
+          limits: limits,
+          prev: prev,
+          viaVpn: true,
+          now: at);
     }
     final v = r.vitals;
-    final st = v == null ? null : DeviceVitals.fromVpn(v);
+    final st = v == null ? null : DeviceVitals.fromVpn(v, at: at);
+    DateTime? staleAt;
+    var upTo = false;
+    String? note;
+    if (st?.detail != null) {
+      final own = r.readAtMs;
+      if (own != null && serverAtMs != null) {
+        final age = Duration(milliseconds: math.max(0, serverAtMs - own));
+        if (age > DevicesCheckRunner.serverVitalsReuse) {
+          staleAt = at.subtract(age);
+          note = 'من فحص الخادم ${DevicesCheck.ago(staleAt, at)}';
+        }
+      } else if ('${v?['kind'] ?? ''}' == 'olt') {
+        staleAt = at.subtract(serverOltSummaryMaxAge);
+        upTo = true;
+        note = 'ملخّص الأولت من فحص الخادم — عمره حتى ${serverOltSummaryMaxAge.inMinutes} د';
+      }
+    }
     return DevicesCheck.evaluate(
       d: d,
       alive: r.alive,
@@ -307,6 +345,11 @@ class MergedDevicesCheckRunner extends DevicesCheckRunner {
       viaVpn: true,
       portsCountsOnly: v?['pl'] is! List,
       macUsers: macs,
+      now: at,
+      readNote: note,
+      staleAt: staleAt,
+      staleFrom: staleAt == null ? null : 'فحص الخادم',
+      staleUpTo: upTo,
     );
   }
 

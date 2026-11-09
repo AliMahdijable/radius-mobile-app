@@ -116,13 +116,14 @@ class _DesktopShellState extends State<DesktopShell> {
     super.initState();
     _open(_section);
     DesktopLayout.shellMounted();
-    // أعطال الألياف بالخلفيّة ما دام البرنامج مفتوحاً — الحاسبة بالمكتب على شبكة الأولت، والإشعار يصل للهاتف.
-    FiberWatch.start();
+    // أعطال الألياف بالخلفيّة ما دام البرنامج مفتوحاً — الحاسبة بالمكتب على شبكة الأولت، والإشعار يصل للهاتف. باسم هذا الغلاف:
+    // غلافٌ قديم يُنهى بعد أن يبدأ الجديد لا يوقفها عنه (المراجعة الثانية)
+    FiberWatch.start(this);
   }
 
   @override
   void dispose() {
-    FiberWatch.stop();
+    FiberWatch.stop(this);
     DesktopLayout.shellUnmounted();
     super.dispose();
   }

@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io' show SocketException;
+import 'dart:math' as math;
 
 import 'package:dartssh2/dartssh2.dart' show SSHAuthFailError;
 import 'package:dio/dio.dart' show DioException;
@@ -170,6 +171,11 @@ class DevicesCheckRunner extends ChangeNotifier {
   /// كم جهازاً لم يُقرأ هذه المرّة («لم يُقرأ» أو من آخر قراءة) — بلا المؤقّت الجاري.
   int get unreadCount => reports.values.where(_needsRead).length;
 
+  /// الهاتف نفسه يقرأ الأجهزة الآن (من شبكتك أو عبر الممرّ) — [CheckSectionHold] يمسك القسم بهذا لا بـ[running]: «كل الشركات»
+  /// تفحص الشركات الأخرى على الخادم دقائق والهاتف لا يقرأ شيئاً (المراجعة الثانية).
+  bool get readsLocally => running;
+
+
   Future<void> _runFor(List<NetworkDevice> list) async {
     if (running) return;
     final whole = identical(list, devices);
@@ -335,11 +341,12 @@ class DevicesCheckRunner extends ChangeNotifier {
           gen);
     }
     final t = timesFor(piped: piped);
-    final sw = Stopwatch()..start();
     // قراءةٌ جارية لهذا الجهاز (تجاوزت سقف فحصٍ سابق) ⇒ تُنتظر هي — لا جلسةٌ ثانية على الجهاز البطيء (المراجعة)
     var rd = _inflight[d.id];
     if (rd == null) {
       final fresh = rd = _Read();
+      // بطاقته والتسخين والبرج لا يفتحون عليه جلسةً ما دامت جارية — ولو انتهت الجولة وفُكّ الإمساك (المراجعة الثانية)
+      DeviceSweep.readStarted(d.id);
       // ميكروتك: الطبقة الأولى (الموارد والصحّة والمنافذ) حين تصل — إن تأخّر الباقي يُحكم بها وعملاؤه «لم تُقرأ».
       // الأولت: الحكم من البنية، والضوء بما بقي (حتى ٥ث قبل المهلة الأولى) ويقف بإغلاق الفحص — راجع [DeviceVitals.fetch]
       final read = debugFetch?.call(d) ??
@@ -353,10 +360,13 @@ class DevicesCheckRunner extends ChangeNotifier {
       _inflight[d.id] = fresh;
       unawaited(fresh.outcome.whenComplete(() {
         if (identical(_inflight[d.id], fresh)) _inflight.remove(d.id);
+        DeviceSweep.readEnded(d.id);
       }));
     }
     final outcome = rd.outcome;
     final reading = rd;
+    // زمن القراءة من بدئها هي — «أعد قراءة غير المقروء» ينتظر قراءةً جارية منذ ١١٠ث لا تُكتب «3ث» (المراجعة الثانية)
+    final sw = reading.sw;
 
     DeviceCheckReport full(ProbeResult p) => DevicesCheck.evaluate(
           d: d,
@@ -496,10 +506,24 @@ class DevicesCheckRunner extends ChangeNotifier {
     if (viaVpn) {
       // لحظة قراءة الخادم (المراجعة — لا لحظة وصولها للتطبيق): من الجهاز إن أعطاها، وإلّا نهاية فحصه (`at_ms`) ناقص نافذة إعادة
       // استعماله للقراءات — الأقدم المحتمل، فلا تُقدَّم أحدث ممّا هي. وملخّص الأولت قد يبلغ ٣٠ د بلا لحظته ⇒ لا يُستعمل.
+      // المراجعة الثانية: العمر بساعة الخادم وحدها (نهاية فحصه − لحظة قراءته، لا سالب)، واللحظة الأقدم من «وصولها − العمر» (ساعة
+      // الهاتف) و«نهاية فحصه − العمر» (ساعة الخادم): هاتفٌ ساعته متأخّرة لا يرى قراءةً عمرها ٧ د «قبل لحظات» ولا تتحرّك بوّابة الخمس
+      // دقائق، ونتيجةٌ وصلت متأخّرة لا تُقدَّم أحدث ممّا هي
       final r = VpnNow.deviceFor(d.id);
       final v = r?.vitals;
       final own = r?.readAtMs;
-      final at = own != null ? DateTime.fromMillisecondsSinceEpoch(own) : VpnNow.devicesServerAt?.subtract(serverVitalsReuse);
+      final serverAt = VpnNow.devicesServerAt;
+      final gotAt = VpnNow.devicesAt;
+      DateTime? at;
+      if (serverAt != null && gotAt != null) {
+        final age = Duration(
+            milliseconds: own != null
+                ? math.max(0, serverAt.millisecondsSinceEpoch - own)
+                : serverVitalsReuse.inMilliseconds);
+        final byPhone = gotAt.subtract(age);
+        final byServer = serverAt.subtract(age);
+        at = byServer.isBefore(byPhone) ? byServer : byPhone;
+      }
       final olt = '${v?['kind'] ?? ''}' == 'olt';
       if (v != null && at != null && (own != null || !olt) && DateTime.now().difference(at) <= maxAge) {
         final det = DeviceVitals.fromVpn(v, at: at).detail;
@@ -624,10 +648,11 @@ class _Slow {
   static const instance = _Slow._();
 }
 
-/// قراءة جهازٍ جارية: نتيجتها (أو فشلها) وطبقتها الأولى إن وصلت.
+/// قراءة جهازٍ جارية: نتيجتها (أو فشلها) وطبقتها الأولى إن وصلت، وزمنها منذ بدئها.
 class _Read {
   late Future<Object> outcome;
   ProbeResult? partial;
+  final Stopwatch sw = Stopwatch()..start();
 }
 
 /// يمسك قسم الأجهزة ([DeviceSweep]) ما دام الفحص **يجري** — لا ما دام تقريره مفتوحاً (المراجعة): بعد انتهائه تعود جولة الحال
@@ -642,10 +667,11 @@ class CheckSectionHold {
   bool _held = false;
 
   void _sync() {
-    if (run.running && !_held) {
+    final reading = run.readsLocally;
+    if (reading && !_held) {
       _held = true;
       DeviceSweep.acquire();
-    } else if (!run.running && _held) {
+    } else if (!reading && _held) {
       _held = false;
       DeviceSweep.release();
     }

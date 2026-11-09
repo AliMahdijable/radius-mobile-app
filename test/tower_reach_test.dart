@@ -16,6 +16,7 @@ import 'package:rad_mysvcs/screens/network_devices/tower/tower_screen.dart';
 import 'package:rad_mysvcs/services/deep_probe_scheduler.dart';
 import 'package:rad_mysvcs/services/device_read_health.dart';
 import 'package:rad_mysvcs/services/device_stats_cache.dart';
+import 'package:rad_mysvcs/services/device_sweep_coordinator.dart';
 import 'package:rad_mysvcs/theme/typography.dart';
 
 import 'visual_perm/visual_perm_harness.dart';
@@ -270,6 +271,26 @@ void main() {
       expect(find.text('تعذّر الاتّصال'), findsNothing);
       expect(find.text('تحقّق من الإعدادات'), findsOneWidget, reason: 'بطاقة الجهاز المختار');
       expect(find.text('يردّ — تأكّد من إعدادات الجهاز'), findsOneWidget, reason: 'صفّ الكابينة');
+      await finish(t);
+    });
+
+    testWidgets('المراجعة الثانية: «الفحص الشامل» يجري ⇒ البرج لا يفتح قراءات ٢٠ث المفصّلة على سكتراته؛ وبعده يعود', (t) async {
+      await setUpTower(t);
+      var reads = 0;
+      MikrotikApi.debugFetch = () async {
+        reads++;
+        throw MikrotikException('انتهت مهلة الاتّصال بالجهاز', code: 'timeout');
+      };
+      DeviceSweep.acquire(); // فحصٌ شامل (صوتيّ أو فوق القسم على الحاسبة) يقرأ السكترات نفسها
+      addTearDown(() {
+        if (DeviceSweep.suspended) DeviceSweep.release();
+      });
+      await pumpTower(t, [_dev(1, 'سكتر 1', 'sector', '10.0.0.1', 'online')]);
+      await settle(t, const Duration(seconds: 65));
+      expect(reads, 0, reason: 'لا جلسة قراءةٍ مفصّلة والفحص يجري');
+      DeviceSweep.release();
+      await settle(t, const Duration(seconds: 25));
+      expect(reads, greaterThan(0), reason: 'الجولة التالية بعده تقرأ');
       await finish(t);
     });
   });

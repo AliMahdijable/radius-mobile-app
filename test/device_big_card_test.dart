@@ -291,6 +291,92 @@ void main() {
       DeviceStatsCache.instance.clear();
     });
 
+    testWidgets('المراجعة الثانية: الجولة انتهت عند السقف وقراءة الجهاز المسقوف جارية ⇒ بطاقته والتسخين لا يفتحان عليه جلسةً ثانية حتى تنتهي',
+        (t) async {
+      var fetches = 0;
+      MikrotikApi.debugFetch = () async {
+        fetches++;
+        return _mtk(mode: 'ap-bridge', clients: 2);
+      };
+      DeviceStatsCache.instance.clear();
+      DeviceWarmup.instance.reset();
+      final d = dev(918, 'sector', 'mikrotik');
+      // قراءة الفحص الشامل لهذا الجهاز ما زالت جارية بعد سقفه (الإمساك انتهى بانتهاء الجولة)
+      DeviceSweep.readStarted(918);
+      addTearDown(() {
+        DeviceSweep.resetBusyForTest();
+        DeviceWarmup.instance.reset();
+      });
+      expect(DeviceSweep.suspended, isFalse);
+      final vitals = ValueNotifier(VitalsState.idle);
+      await t.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: DeviceLiveCard(
+              device: d,
+              vitals: vitals,
+              onVitals: (v) => vitals.value = v,
+              medianMs: null,
+              prevSample: () => null,
+              onSample: (_) {},
+              onOpen: () {},
+            ),
+          ),
+        ),
+      ));
+      DeviceWarmup.instance.start([d]);
+      for (var i = 0; i < 3; i++) {
+        await t.pump(const Duration(seconds: 10));
+      }
+      await _drain(t, () => fetches > 0, rounds: 15);
+      expect(fetches, 0, reason: 'لا جلسة بطاقةٍ ولا تسخينٍ على جهازٍ قراءته جارية');
+      DeviceSweep.readEnded(918);
+      await t.pump(const Duration(seconds: 16));
+      await _drain(t, () => fetches > 0);
+      expect(fetches, greaterThan(0), reason: 'انتهت ⇒ النبضة التالية تقرأ');
+      await t.pumpWidget(const SizedBox());
+      DeviceWarmup.instance.reset();
+      DeviceStatsCache.instance.clear();
+    });
+
+    testWidgets('المراجعة الثانية: إيقاف التسخين ثمّ تشغيله وقراءةٌ جارية ⇒ سلسلةٌ واحدة (لا جلستان معاً)', (t) async {
+      final calls = <Completer<MikrotikStats>>[];
+      MikrotikApi.debugFetch = () {
+        final c = Completer<MikrotikStats>();
+        calls.add(c);
+        return c.future;
+      };
+      DeviceStatsCache.instance.clear();
+      DeviceWarmup.instance.reset();
+      addTearDown(() {
+        for (final c in calls) {
+          if (!c.isCompleted) c.complete(_mtk(mode: 'ap-bridge', clients: 0));
+        }
+        DeviceWarmup.instance.reset();
+      });
+      final list = [dev(931, 'router', 'mikrotik'), dev(932, 'router', 'mikrotik'), dev(933, 'router', 'mikrotik')];
+      DeviceWarmup.instance.start(list);
+      await _drain(t, () => calls.isNotEmpty, rounds: 15);
+      expect(calls, hasLength(1), reason: 'الأوّل جارٍ');
+      // الحاسبة: نافذةٌ أخرى أمامها ثمّ العودة (stop ثمّ start) والقراءة الأولى جارية
+      DeviceWarmup.instance.stop();
+      DeviceWarmup.instance.start(list);
+      await _drain(t, () => calls.length > 1, rounds: 15);
+      expect(calls, hasLength(2), reason: 'السلسلة الجديدة بدأت بالتالي');
+      calls.first.complete(_mtk(mode: 'ap-bridge', clients: 0));
+      await t.pump(const Duration(seconds: 4));
+      await _drain(t, () => calls.length > 2, rounds: 15);
+      expect(calls, hasLength(2), reason: 'السلسلة القديمة لا تكمل بجانب الجديدة — الثالث بعد الثاني لا معه');
+      calls[1].complete(_mtk(mode: 'ap-bridge', clients: 0));
+      await t.pump(const Duration(seconds: 4));
+      await _drain(t, () => calls.length > 2);
+      expect(calls, hasLength(3));
+      calls[2].complete(_mtk(mode: 'ap-bridge', clients: 0));
+      await _drain(t, () => false, rounds: 5);
+      DeviceWarmup.instance.reset();
+      DeviceStatsCache.instance.clear();
+    });
+
     test('ميكروتك بلا مجسّ حرارة ولا SwOS معالج: «—» لا صفر', () async {
       MikrotikApi.debugFetch = () async => _mtk(mode: 'ap-bridge', clients: 0, temp: false, cpuKnown: false);
       final g = (await DeviceVitals.fetch(dev(13, 'sector', 'mikrotik'), detailed: true)).detail.glance;
