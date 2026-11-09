@@ -143,20 +143,40 @@ class BigSubscribersApi {
     }
   }
 
+  /// صفحات [findOne] بعد أن تُخطئ الأولى: بحث الساس «يحتوي» (والاسم والملاحظات معه، و`_` فيه يطابق أيّ حرف)، فيوزرٌ قصيرٌ أو
+  /// شائعٌ أو فيه `_` قد يأتي صفّه بعد عشرين غيره (مراجعة 179). ١٠٠ صفّ للصفحة، ٥ صفحاتٍ على الأكثر (≈٥٠٠ نتيجة).
+  static const int findPageSize = 100;
+  static const int findMaxPages = 5;
+
   /// مشتركٌ واحد بيوزره (ومعرّفه إن عُرف) — للحساب الكبير بدل البحث في القائمة الكاملة (فتح إشعار، تحديث شاشة التفاصيل).
-  /// `null` إن لم يُوجد أو فشل — لا يرمي.
-  static Future<Subscriber?> findOne({String? idx, required String username}) async {
+  /// الصفحة الأولى (٢٠) تكفي غالباً؛ وإن أخطأته ونتائج البحث أكثر منها تُقرأ صفحاتٌ من [findPageSize] حتى [findMaxPages] —
+  /// بالترتيب نفسه، المعرّف أوّلاً ثمّ اليوزر في كلّ صفحة. `null` إن لم يُوجد ضمنها أو فشل — لا يرمي (والمستدعي لا يعرض
+  /// أرقاماً قديمة على أنّها حيّة: شاشة المشترك تقول «تعذّر التحديث» وتقفل المال).
+  /// [deepPages]: الصفحات الإضافيّة — ٠ = الأولى وحدها (كما كان)، لمن يحلّ عشرات اليوزرات معاً لعرضٍ لا لمال (أجهزة الألياف).
+  static Future<Subscriber?> findOne({String? idx, required String username, int deepPages = findMaxPages}) async {
     final u = username.trim();
     if (u.isEmpty) return null;
-    try {
-      final p = await page(page: 1, size: 20, tab: 'all', query: u);
+    Subscriber? pick(List<Subscriber> rows) {
       if (idx != null) {
-        for (final s in p.rows) {
+        for (final s in rows) {
           if (s.idx == idx) return s;
         }
       }
-      for (final s in p.rows) {
+      for (final s in rows) {
         if (s.username.toLowerCase() == u.toLowerCase()) return s;
+      }
+      return null;
+    }
+
+    try {
+      final first = await page(page: 1, size: 20, tab: 'all', query: u);
+      final hit = pick(first.rows);
+      if (hit != null || first.lastPage <= 1) return hit;
+      for (var n = 1; n <= deepPages; n++) {
+        final p = await page(page: n, size: findPageSize, tab: 'all', query: u);
+        final found = pick(p.rows);
+        if (found != null) return found;
+        if (p.rows.isEmpty || n >= p.lastPage) break;
       }
       return null;
     } catch (_) {

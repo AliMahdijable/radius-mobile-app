@@ -17,7 +17,8 @@ class FiberSubs {
       final list = want.take(cap).toList();
       for (var i = 0; i < list.length; i += 4) {
         final got = await Future.wait([
-          for (final u in list.skip(i).take(4)) BigSubscribersApi.findOne(username: u),
+          // حتى ٦٤ يوزراً معاً لعرض حالها — الصفحة الأولى وحدها كما كانت (لا صفحات بحثٍ إضافيّة لكلٍّ منها في قسم الأجهزة)
+          for (final u in list.skip(i).take(4)) BigSubscribersApi.findOne(username: u, deepPages: 0),
         ]);
         for (final s in got) {
           if (s != null) out[s.username.toLowerCase()] = s;
