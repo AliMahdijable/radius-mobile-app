@@ -616,6 +616,10 @@ class DevicesCheck {
     }
 
     // ── الأولت ──
+    // لا منفذ PON ولا مشترك مقروء (فيرموير بتسمياتٍ لا يعرفها المحلّل، عرض SNMP مقيّد، منافذ الصعود وحدها) ⇒ بنيته لم تُقرأ: «لم يُقرأ»
+    // لا «أولت · سليم»، ولا «ONU 0/0» (المراجعة الثالثة). عددٌ مقروء بلا قائمة منافذه (ملخّص الخادم) يُحكم به كما كان
+    final oltGap = role == CheckRole.olt && g.pons.isEmpty && (g.onusTotal ?? 0) == 0;
+    if (oltGap) f.add(const CheckFinding(CheckLevel.info, 'منافذ PON ما انقرت'));
     if (role == CheckRole.olt) {
       final downPons = [for (final p in g.pons) if (!p.up && p.total > 0) p.label];
       if (downPons.isNotEmpty) f.add(CheckFinding(CheckLevel.warn, 'منفذ PON طافي: ${downPons.join('، ')}'));
@@ -753,7 +757,9 @@ class DevicesCheck {
     // «سليم» للسكتر حكمٌ عليه وعلى مشتركيه — قائمتهم لم تُقرأ ⇒ «لم يُقرأ» بحيويّاته وسطرها، لا «سليم» (٩ نوفمبر)
     final state = f.any((x) => x.level != CheckLevel.info)
         ? CheckState.warn
-        : ((role == CheckRole.sector && !subsKnown) || radioGap || portsGap ? CheckState.unread : CheckState.ok);
+        : ((role == CheckRole.sector && !subsKnown) || radioGap || portsGap || oltGap
+            ? CheckState.unread
+            : CheckState.ok);
     return DeviceCheckReport(
       device: d,
       role: role,
@@ -778,8 +784,8 @@ class DevicesCheck {
       ports: ports,
       portsUp: phys.isEmpty ? null : phys.where((p) => p.up).length,
       portsTotal: phys.isEmpty ? null : phys.length,
-      onusOnline: g.onusOnline,
-      onusTotal: g.onusTotal,
+      onusOnline: oltGap ? null : g.onusOnline,
+      onusTotal: oltGap ? null : g.onusTotal,
       lightsWanted: role == CheckRole.olt ? detail.onuLightsWanted : null,
       pending: pending,
       staleAt: staleAt,

@@ -1,10 +1,13 @@
 // «الفحص الشامل» — المراجعة الثالثة لإصدار 180 (devwired): الأجهزة السلكيّة والأولت.
 //   F3  روجي: جدول الجسر انتهت مهلته ⇒ لاسلكيّه مجهول لا «راوتر · سليم» (القارئ الحقيقيّ عبر ممرّ الـVPN، لا لقطةٌ محقونة)؛
 //       وإشارة 0 من صفّ الوصلة «لم تُقرأ» لا «0 dBm».
+//   F17 أولتٌ لم يُقرأ له منفذ PON واحد (لا شيء، أو منافذ الصعود وحدها) ⇒ «منافذ PON ما انقرت» و«لم يُقرأ» لا «أولت · سليم» ولا
+//       «ONU 0/0».
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rad_mysvcs/api/network_devices_api.dart';
 import 'package:rad_mysvcs/api/ruijie_api.dart';
 import 'package:rad_mysvcs/api/snmp_client.dart';
+import 'package:rad_mysvcs/api/vsol_olt_api.dart';
 import 'package:rad_mysvcs/core/net/device_net.dart';
 import 'package:rad_mysvcs/core/net/vpn_pipe.dart';
 import 'package:rad_mysvcs/models/network_device.dart';
@@ -135,6 +138,45 @@ void main() {
       expect(ok.detail.glance.snr, 34);
       final r2 = judge(d, ok);
       expect([r2.role, r2.state, r2.signal], [CheckRole.link, CheckState.ok, -61]);
+    });
+  });
+
+  group('F17 أولتٌ بلا منفذ PON مقروء', () {
+    final olt = dev(60, type: 'other', brand: 'vsol', protocol: 'snmp', model: 'V1600D8');
+    const ge1 = VsolUplink(index: 1, name: 'GE1', up: true, speedMbps: 1000, rxBytes: 0, txBytes: 0);
+
+    test('🚨 قراءةٌ بمنافذ الصعود وحدها ⇒ «منافذ PON ما انقرت» و«لم يُقرأ» بلا «ONU 0/0»؛ وبلا شيءٍ (الهويّة وحدها) كذلك', () {
+      final r = judge(olt, oltProbeResult(const VsolOltStats(sysName: 'OLT', uptime: Duration(days: 9), uplinks: [ge1])));
+      expect(r.role, CheckRole.olt);
+      expect(r.state, CheckState.unread);
+      expect(texts(r), contains('منافذ PON ما انقرت'));
+      expect(r.vitals.where((v) => v.k == 'ONU'), isEmpty, reason: 'لا «0/0» عن أولتٍ لم تُقرأ بنيته');
+      final bare = judge(olt, oltProbeResult(const VsolOltStats(sysName: 'OLT', uptime: Duration(days: 9))));
+      expect(bare.state, CheckState.unread);
+      expect(texts(bare), contains('منافذ PON ما انقرت'));
+    });
+
+    test('ملخّص الخادم بلا منفذٍ ولا مشترك ⇒ «لم يُقرأ»؛ وبعدده بلا قائمة منافذه، أو ببنيته كاملة ⇒ يُحكم كما كان', () {
+      DeviceCheckReport remote(Map<String, dynamic> v) =>
+          DevicesCheck.evaluate(d: olt, alive: true, detail: DeviceVitals.fromVpn(v).detail);
+      final none = remote({'kind': 'olt', 'total': 0, 'online': 0, 'pons': []});
+      expect(none.state, CheckState.unread);
+      expect(texts(none), contains('منافذ PON ما انقرت'));
+      expect(none.vitals.where((v) => v.k == 'ONU'), isEmpty);
+      final counted = remote({'kind': 'olt', 'total': 120, 'online': 100, 'pons': []});
+      expect(counted.state, CheckState.ok, reason: 'عدد المشتركين مقروء — لا «لم يُقرأ» كاذب');
+      expect(counted.vitals.firstWhere((v) => v.k == 'ONU').v, '100/120');
+      final full = remote({
+        'kind': 'olt',
+        'total': 120,
+        'online': 100,
+        'pons': [
+          {'label': 'PON1', 'up': true, 'online': 100, 'total': 120}
+        ],
+      });
+      expect(full.state, CheckState.ok);
+      expect(texts(full), isNot(contains('منافذ PON ما انقرت')));
+      expect(texts(counted), isNot(contains('منافذ PON ما انقرت')));
     });
   });
 }
