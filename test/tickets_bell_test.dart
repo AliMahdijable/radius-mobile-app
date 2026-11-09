@@ -14,6 +14,7 @@ import 'package:rad_mysvcs/api/renew_requests_api.dart';
 import 'package:rad_mysvcs/api/subscribers_api.dart';
 import 'package:rad_mysvcs/api/tickets_api.dart';
 import 'package:rad_mysvcs/models/app_notification.dart';
+import 'package:rad_mysvcs/screens/notifications/in_app_notification_banner.dart';
 import 'package:rad_mysvcs/screens/notifications/inbox_screen.dart';
 import 'package:rad_mysvcs/screens/tickets/ticket_thread_screen.dart';
 import 'package:rad_mysvcs/screens/tickets/ticket_widgets.dart';
@@ -21,6 +22,7 @@ import 'package:rad_mysvcs/screens/tickets/tickets_screen.dart';
 import 'package:rad_mysvcs/screens/top_actions.dart';
 import 'package:rad_mysvcs/services/alerts_service.dart';
 import 'package:rad_mysvcs/services/inbox_service.dart';
+import 'package:rad_mysvcs/services/notification_router.dart';
 import 'package:rad_mysvcs/services/permissions_service.dart';
 import 'package:rad_mysvcs/services/provider_service.dart';
 
@@ -572,6 +574,45 @@ void main() {
       expect(find.text('حسين جاسم'), findsOneWidget);
       expect(TicketsState.bell.value.items.first.id, 12, reason: 'غير المقروءة أوّلاً');
       expect(find.descendant(of: find.byKey(const ValueKey('tickets-inbox-count')), matching: find.text('2')), findsOneWidget);
+      await t.runAsync(InboxService.clear);
+      await simDrain(t);
+    });
+
+    testWidgets('لافتة إشعار التذكرة والتطبيق مفتوح: نقرها يفتح المحادثة نفسها (للشركة المفتوحة) لا صندوق الإشعارات', (t) async {
+      final world = [_ticket(9, 'open', unread: true)];
+      _serve(server, world);
+      server.on('GET', '/api/v2/portal/tickets/9', (_) => SimReply(200, {
+            'success': true,
+            'ticket': {...world.first, 'unread': false},
+            'messages': [
+              {'id': 1, 'side': 'subscriber', 'kind': 'text', 'body': 'النت مقطوع من الصبح', 'created_at': _iso(const Duration(minutes: 7))},
+            ],
+          }));
+      await t.runAsync(InboxService.clear);
+      final nav = GlobalKey<NavigatorState>();
+      await pumpSim(t, _v, navigatorKey: nav, home: (_) => const Scaffold(body: SizedBox()));
+      NotificationRouter.attach(nav);
+      NotificationRouter.markReady();
+      addTearDown(NotificationRouter.reset);
+      InAppNotificationBanner.show(t.element(find.byType(Scaffold)),
+          notification: AppNotification.fromFcmPayload(
+            messageId: 'tk-banner',
+            title: 'تذكرة جديدة من مشترك',
+            body: 'علي عباس — انقطاع أو بطء: النت مقطوع من الصبح',
+            data: {'type': 'portal_ticket', 'ticket_id': '9', 'event': 'created', 'subscriber_username': 'ali.abbas'},
+          ));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400)); // انزلاق اللافتة
+      await t.tap(find.text('تذكرة جديدة من مشترك'));
+      await t.pumpAndSettle();
+      expect(find.byType(TicketThreadScreen), findsOneWidget, reason: 'المحادثة نفسها');
+      expect(find.text('النت مقطوع من الصبح'), findsOneWidget);
+      expect(find.byType(InboxScreen), findsNothing, reason: 'لا صندوق الإشعارات');
+      final thread = server.calls('GET', '/api/v2/portal/tickets/9');
+      expect(thread, hasLength(1));
+      expect(thread.single.headers['x-company-key'], isNull, reason: 'للشركة المفتوحة');
+      nav.currentState!.pop();
+      await t.pumpAndSettle();
       await t.runAsync(InboxService.clear);
       await simDrain(t);
     });

@@ -97,8 +97,10 @@ class _BannerCardState extends State<_BannerCard>
     await InboxService.markRead(widget.notification.id);
     if (!mounted) return;
     widget.onDismiss();
-    // «طلب تجديد اشتراك» ⇒ الطلب نفسه بصورته لا الصندوق — أسرع للتفعيل، والموجِّه يبدّل الشركة أوّلاً إن كان لغيرها (٤ نوفمبر)
-    if (widget.notification.data['type'] == 'renew_request') {
+    // «طلب تجديد اشتراك» ⇒ الطلب نفسه بصورته لا الصندوق — أسرع للتفعيل، والموجِّه يبدّل الشركة أوّلاً إن كان لغيرها (٤ نوفمبر).
+    // و«التذاكر» (٩ نوفمبر) كذلك ⇒ المحادثة نفسها (للشركة المفتوحة صراحةً — openTicketPush).
+    final type = widget.notification.data['type'];
+    if (type == 'renew_request' || type == 'portal_ticket') {
       unawaited(NotificationRouter.handle(widget.notification));
       return;
     }
